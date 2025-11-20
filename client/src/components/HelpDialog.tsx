@@ -116,6 +116,10 @@ export default function HelpDialog() {
                 <span className="text-muted-foreground">Drag to backpack (stacks up to 10 items, click to use top item)</span>
               </div>
               <div className="flex items-start gap-2">
+                <Badge variant="outline" className="mt-0.5">Hand</Badge>
+                <span className="text-muted-foreground">Drag cards to bottom hand area (max 5 cards) to save for later use</span>
+              </div>
+              <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">Amulet</Badge>
                 <span className="text-muted-foreground">Equip amulet in dedicated slot for passive bonuses (+HP, +Attack, or +Defense)</span>
               </div>

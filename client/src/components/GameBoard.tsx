@@ -5,6 +5,7 @@ import GameCard, { type GameCardData } from './GameCard';
 import EquipmentSlot, { type SlotType } from './EquipmentSlot';
 import AmuletSlot from './AmuletSlot';
 import GraveyardZone from './GraveyardZone';
+import HandArea from './HandArea';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import HelpDialog from './HelpDialog';
 import DeckViewerModal from './DeckViewerModal';
@@ -187,6 +188,7 @@ export default function GameBoard() {
   const [totalHealed, setTotalHealed] = useState(0);
   const [deckViewerOpen, setDeckViewerOpen] = useState(false);
   const [discardedCards, setDiscardedCards] = useState<GameCardData[]>([]);
+  const [handCards, setHandCards] = useState<GameCardData[]>([]); // Hand system - max 5 cards
 
   // Calculate passive bonuses from amulet
   const getAmuletBonus = (type: 'health' | 'attack' | 'defense'): number => {
@@ -221,6 +223,8 @@ export default function GameBoard() {
     setMonstersDefeated(0);
     setTotalDamageTaken(0);
     setTotalHealed(0);
+    setDiscardedCards([]);
+    setHandCards([]);
   };
 
   // Equipment slot helpers
@@ -658,6 +662,37 @@ export default function GameBoard() {
     return remainingDeck.length + activeCards.length;
   };
 
+  // Hand system handlers
+  const handleDropToHand = (card: GameCardData) => {
+    if (handCards.length >= 5) {
+      toast({
+        title: 'Hand Full!',
+        description: 'Maximum 5 cards in hand',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // Add card to hand and remove from active cards
+    setHandCards(prev => [...prev, card]);
+    setActiveCards(prev => prev.filter(c => c.id !== card.id));
+    setCardsPlayed(prev => prev + 1); // Count it as played
+    toast({
+      title: 'Card Saved!',
+      description: `${card.name} added to hand (${handCards.length + 1}/5)`
+    });
+  };
+
+  const handleDragCardFromHand = (card: GameCardData) => {
+    setDraggedCard(card);
+    // Remove the card from hand when it's dragged out
+    setHandCards(prev => prev.filter(c => c.id !== card.id));
+  };
+
+  const handleDragEndFromHand = () => {
+    setDraggedCard(null);
+  };
+
   return (
     <div className="h-screen bg-background flex flex-col relative overflow-hidden">
       <GameHeader 
@@ -681,8 +716,8 @@ export default function GameBoard() {
         />
       </div>
 
-      {/* Main game area - use viewport units for better space usage */}
-      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw' }}>
+      {/* Main game area - adjust padding for hand area at bottom */}
+      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(180px, 25vh, 320px) + 2vh)' }}>
         {/* Card grid - larger on big screens */}
         <div className="grid grid-cols-5 w-full" style={{ 
           maxWidth: '95vw',
@@ -784,6 +819,16 @@ export default function GameBoard() {
         open={deckViewerOpen}
         onOpenChange={setDeckViewerOpen}
         remainingCards={[...activeCards, ...remainingDeck]}
+      />
+
+      {/* Hand Area - fixed at bottom */}
+      <HandArea
+        handCards={handCards}
+        onDropToHand={handleDropToHand}
+        onDragCardFromHand={handleDragCardFromHand}
+        onDragEndFromHand={handleDragEndFromHand}
+        isDropTarget={draggedCard !== null && handCards.length < 5}
+        maxHandSize={5}
       />
     </div>
   );
