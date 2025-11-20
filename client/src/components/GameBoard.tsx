@@ -420,6 +420,7 @@ export default function GameBoard() {
         maxHp={INITIAL_HP} 
         gold={gold} 
         cardsRemaining={getRemainingCards()}
+        monstersDefeated={monstersDefeated}
       />
 
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-4 max-w-6xl mx-auto w-full">
