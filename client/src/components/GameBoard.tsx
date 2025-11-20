@@ -3,6 +3,7 @@ import GameHeader from './GameHeader';
 import HeroCard from './HeroCard';
 import GameCard, { type GameCardData } from './GameCard';
 import EquipmentSlot, { type SlotType } from './EquipmentSlot';
+import SellZone, { SELLABLE_TYPES } from './SellZone';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -77,8 +78,8 @@ export default function GameBoard() {
   const { toast } = useToast();
   const [hp, setHp] = useState(INITIAL_HP);
   const [gold, setGold] = useState(0);
-  const [deck, setDeck] = useState<GameCardData[]>([]);
   const [activeCards, setActiveCards] = useState<GameCardData[]>([]);
+  const [remainingDeck, setRemainingDeck] = useState<GameCardData[]>([]);
   const [weaponSlot, setWeaponSlot] = useState<{ name: string; value: number; image?: string } | null>(null);
   const [shieldSlot, setShieldSlot] = useState<{ name: string; value: number; image?: string } | null>(null);
   const [backpackSlot, setBackpackSlot] = useState<{ name: string; value: number; image?: string } | null>(null);
@@ -86,6 +87,7 @@ export default function GameBoard() {
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
   const [draggedCard, setDraggedCard] = useState<GameCardData | null>(null);
+  const [drawPending, setDrawPending] = useState(false);
 
   useEffect(() => {
     initGame();
@@ -93,7 +95,7 @@ export default function GameBoard() {
 
   const initGame = () => {
     const newDeck = createDeck();
-    setDeck(newDeck);
+    setRemainingDeck(newDeck.slice(4));
     setActiveCards(newDeck.slice(0, 4));
     setHp(INITIAL_HP);
     setGold(0);
@@ -103,32 +105,66 @@ export default function GameBoard() {
     setCardsPlayed(0);
     setGameOver(false);
     setVictory(false);
+    setDrawPending(false);
   };
 
-  const drawCards = () => {
-    const remainingDeck = deck.slice(activeCards.length);
-    const cardsToDraw = Math.min(3, remainingDeck.length);
+  useEffect(() => {
+    if (!drawPending) return;
     
-    if (cardsToDraw === 0) {
-      setVictory(true);
-      setGameOver(true);
-      return;
-    }
+    const timer = setTimeout(() => {
+      setRemainingDeck(prevRemaining => {
+        setActiveCards(prevActive => {
+          const unplayedCard = prevActive.length === 1 ? prevActive[0] : null;
+          const cardsToDraw = Math.min(3, prevRemaining.length);
+          
+          if (cardsToDraw === 0 && !unplayedCard) {
+            setVictory(true);
+            setGameOver(true);
+            return prevActive;
+          }
 
-    const newCards = remainingDeck.slice(0, cardsToDraw);
-    setActiveCards(newCards);
-    setCardsPlayed(0);
-  };
+          const newCards = prevRemaining.slice(0, cardsToDraw);
+          setCardsPlayed(0);
+          setDrawPending(false);
+          
+          return unplayedCard ? [unplayedCard, ...newCards] : newCards;
+        });
+        
+        return prevRemaining.slice(Math.min(3, prevRemaining.length));
+      });
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [drawPending]);
 
   const removeCard = (cardId: string) => {
-    setActiveCards(prev => prev.filter(c => c.id !== cardId));
-    setCardsPlayed(prev => prev + 1);
-
-    if (cardsPlayed + 1 >= 3) {
-      setTimeout(() => {
-        drawCards();
-      }, 500);
-    }
+    setActiveCards(prev => {
+      const updated = prev.filter(c => c.id !== cardId);
+      
+      setCardsPlayed(count => {
+        const newCount = count + 1;
+        
+        if (newCount >= 3 || updated.length === 0) {
+          if (updated.length === 0) {
+            setRemainingDeck(remaining => {
+              if (remaining.length === 0) {
+                setVictory(true);
+                setGameOver(true);
+              } else {
+                setDrawPending(true);
+              }
+              return remaining;
+            });
+          } else {
+            setDrawPending(true);
+          }
+        }
+        
+        return newCount;
+      });
+      
+      return updated;
+    });
   };
 
   const handleCardToHero = (card: GameCardData) => {
@@ -191,8 +227,27 @@ export default function GameBoard() {
     }
   };
 
+  const handleSellCard = (card: GameCardData) => {
+    if (!SELLABLE_TYPES.includes(card.type)) {
+      toast({
+        title: 'Cannot Sell!',
+        description: `You cannot sell ${card.type}s`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    const sellValue = card.value;
+    setGold(prev => prev + sellValue);
+    toast({
+      title: 'Item Sold!',
+      description: `+${sellValue} Gold`,
+    });
+    removeCard(card.id);
+  };
+
   const getRemainingCards = () => {
-    return deck.length - activeCards.length;
+    return remainingDeck.length + activeCards.length;
   };
 
   return (
@@ -250,9 +305,15 @@ export default function GameBoard() {
           />
         </div>
 
-        <Button onClick={initGame} variant="outline" data-testid="button-new-game">
-          New Game
-        </Button>
+        <div className="flex gap-4 items-center justify-center">
+          <SellZone
+            onDrop={handleSellCard}
+            isDropTarget={draggedCard !== null && SELLABLE_TYPES.includes(draggedCard.type)}
+          />
+          <Button onClick={initGame} variant="outline" data-testid="button-new-game">
+            New Game
+          </Button>
+        </div>
       </div>
 
       <VictoryDefeatModal

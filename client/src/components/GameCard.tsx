@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skull, Sword, Shield, Heart, Coins } from 'lucide-react';
 
-export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'coin';
+export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'coin' | 'ability';
 
 export interface GameCardData {
   id: string;
