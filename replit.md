@@ -23,7 +23,10 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 5. **Gold/Coin**: Add to gold total
 
 ### Actions
-- **Attack Monster**: Drag monster to hero card (uses equipped weapon if available)
+- **Attack Monster**: Drag monster to hero card
+  - **With Weapon**: If weapon value >= monster value, monster is defeated with no damage to player. Weapon is consumed.
+  - **With Weapon (weak)**: If weapon value < monster value, monster counterattacks for (monster value - weapon value) damage. Shield can reduce this damage. Weapon is consumed.
+  - **Without Weapon**: Player takes full monster value as damage. Shield can reduce damage.
 - **Heal**: Drag potion to hero card
 - **Collect Gold**: Drag coin to hero card
 - **Equip**: Drag weapon/shield to respective equipment slot
@@ -54,14 +57,28 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 - `design_guidelines.md`: Design system and color palette
 
 ## Recent Changes (November 20, 2025)
+- **Combat System**: Implemented proper Card Crawl-style combat mechanics
+  - Weapons now consume after use (single-use items)
+  - Monster defeat requires weapon value >= monster value
+  - Monster counterattack damage = monster value - weapon value
+  - Shields provide permanent damage reduction
+  - Different toast messages for various combat outcomes
 - Fixed critical game loop bugs using `drawPending` flag to prevent race conditions
 - Removed redundant `deck` state variable (only `remainingDeck` tracked now)
 - Implemented consistent sell validation using `SELLABLE_TYPES` constant
 - Refactored draw logic to use useEffect with proper cleanup to prevent double draws
 - Ensured card carry-over mechanic works correctly with functional state setters
 
+## Combat System
+- **Weapon Usage**: Weapons are single-use items consumed when attacking monsters
+- **Shield Mechanics**: Shields are permanent and reduce incoming damage from monster counterattacks
+- **Damage Calculation**:
+  - With weapon: damage = max(0, monster value - weapon value - shield value)
+  - Without weapon: damage = max(0, monster value - shield value)
+- **Victory Conditions**: Monster defeated when weapon value >= monster value
+
 ## Known Constraints
 - Monsters cannot be sold (only weapon, shield, potion, coin)
 - Backpack holds only 1 item at a time
-- Shield reduces damage but doesn't block completely
-- Weapon increases attack but is consumed after use
+- Shields are permanent but weapons are single-use
+- Weapon is consumed after each combat (win or lose)

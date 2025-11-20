@@ -169,23 +169,61 @@ export default function GameBoard() {
 
   const handleCardToHero = (card: GameCardData) => {
     if (card.type === 'monster') {
-      let damage = card.value;
+      const monsterValue = card.value;
+      let damageToPlayer = 0;
       
       if (weaponSlot) {
-        damage = Math.max(0, damage - weaponSlot.value);
-      }
-      if (shieldSlot) {
-        damage = Math.max(0, damage - shieldSlot.value);
+        // Player attacks with weapon
+        if (weaponSlot.value >= monsterValue) {
+          // Monster defeated, player takes no damage
+          toast({
+            title: 'Monster Defeated!',
+            description: `Your ${weaponSlot.name} (${weaponSlot.value}) destroyed the monster (${monsterValue})!`,
+          });
+          damageToPlayer = 0;
+        } else {
+          // Monster survives and counterattacks
+          damageToPlayer = monsterValue - weaponSlot.value;
+          toast({
+            title: 'Monster Counterattack!',
+            description: `Your ${weaponSlot.name} (${weaponSlot.value}) dealt damage, but the monster (${monsterValue}) fights back!`,
+            variant: 'destructive',
+          });
+        }
+        // Weapon is consumed after use
+        setWeaponSlot(null);
+      } else {
+        // No weapon equipped - player takes full monster damage
+        damageToPlayer = monsterValue;
       }
 
-      const newHp = Math.max(0, hp - damage);
+      // Apply shield damage reduction
+      if (shieldSlot && damageToPlayer > 0) {
+        const originalDamage = damageToPlayer;
+        damageToPlayer = Math.max(0, damageToPlayer - shieldSlot.value);
+        
+        if (damageToPlayer === 0) {
+          toast({
+            title: 'Shield Blocked Attack!',
+            description: `Your ${shieldSlot.name} (${shieldSlot.value}) blocked ${originalDamage} damage!`,
+          });
+        } else {
+          toast({
+            title: 'Shield Reduced Damage!',
+            description: `Your ${shieldSlot.name} (${shieldSlot.value}) reduced damage from ${originalDamage} to ${damageToPlayer}!`,
+          });
+        }
+      } else if (damageToPlayer > 0 && !weaponSlot) {
+        toast({
+          title: 'Damage Taken!',
+          description: `Monster dealt ${damageToPlayer} damage!`,
+          variant: 'destructive',
+        });
+      }
+
+      // Apply damage to player
+      const newHp = Math.max(0, hp - damageToPlayer);
       setHp(newHp);
-
-      toast({
-        title: damage > 0 ? 'Damage Taken!' : 'Attack Blocked!',
-        description: damage > 0 ? `-${damage} HP` : 'Your equipment protected you!',
-        variant: damage > 0 ? 'destructive' : 'default',
-      });
 
       removeCard(card.id);
 
