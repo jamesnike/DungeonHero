@@ -1039,38 +1039,128 @@ export default function GameBoard() {
   };
 
   const handleCardToHero = (card: GameCardData) => {
-    // Check if card is from hand (allowed) or from dungeon (not allowed anymore)
+    // Check if card is from hand (play normally) or from dungeon (purchase)
     const isFromHand = handCards.some(c => c.id === card.id);
     
-    if (!isFromHand) {
-      toast({
-        title: 'Cannot Play From Dungeon!',
-        description: 'Move cards to hand first, then play them',
-        variant: 'destructive'
-      });
-      return; // Prevent direct play from dungeon
-    }
-    
-    // Remove from hand when playing
-    setHandCards(prev => prev.filter(c => c.id !== card.id));
-    
-    if (card.type === 'monster') {
-      resolveMonsterEncounter(card);
-    } else if (card.type === 'potion') {
-      const newHp = Math.min(maxHp, hp + card.value);
-      const healAmount = newHp - hp;
-      setHealing(true);
-      setTimeout(() => setHealing(false), 500);
-      setTotalHealed(prev => prev + healAmount);
-      setHp(newHp);
-      toast({ title: 'Healed!', description: `+${healAmount} HP` });
-      removeCard(card.id);
-    } else if (card.type === 'skill') {
-      handleSkillCard(card);
-    } else if (card.type === 'event') {
-      setCurrentEventCard(card);
-      setEventModalOpen(true);
-      removeCard(card.id, false); // Don't add to graveyard yet
+    if (isFromHand) {
+      // Playing from hand - normal play logic
+      setHandCards(prev => prev.filter(c => c.id !== card.id));
+      
+      if (card.type === 'monster') {
+        resolveMonsterEncounter(card);
+      } else if (card.type === 'potion') {
+        const newHp = Math.min(maxHp, hp + card.value);
+        const healAmount = newHp - hp;
+        setHealing(true);
+        setTimeout(() => setHealing(false), 500);
+        setTotalHealed(prev => prev + healAmount);
+        setHp(newHp);
+        toast({ title: 'Healed!', description: `+${healAmount} HP` });
+        removeCard(card.id);
+      } else if (card.type === 'skill') {
+        handleSkillCard(card);
+      } else if (card.type === 'event') {
+        setCurrentEventCard(card);
+        setEventModalOpen(true);
+        removeCard(card.id, false);
+      }
+    } else {
+      // Purchasing from dungeon - auto-equip/use
+      if (card.type === 'weapon' || card.type === 'shield') {
+        // Auto-equip to an empty slot
+        const slots = getEquipmentSlots();
+        const emptySlot = slots.find(s => !s.item);
+        
+        if (emptySlot) {
+          setEquipmentSlotById(emptySlot.id, {
+            name: card.name,
+            value: card.value,
+            image: card.image,
+            type: card.type,
+            durability: card.durability
+          });
+          
+          // Apply equipment bonuses
+          if (emptySlot.id === 'equipmentSlot1') {
+            setEquipmentSlot1Bonus(card.type === 'weapon' ? weaponMasterBonus : shieldMasterBonus);
+          } else {
+            setEquipmentSlot2Bonus(card.type === 'weapon' ? weaponMasterBonus : shieldMasterBonus);
+          }
+          
+          toast({ 
+            title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`, 
+            description: `${card.name} equipped to ${emptySlot.id === 'equipmentSlot1' ? 'Slot 1' : 'Slot 2'}`
+          });
+        } else {
+          // If no empty slots, add to backpack
+          if (backpackItems.length < 10) {
+            setBackpackItems(prev => [card, ...prev]);
+            toast({ title: 'Item Stored!', description: `${card.name} stored in backpack (equipment slots full)` });
+          } else {
+            toast({ 
+              title: 'Cannot Purchase!', 
+              description: 'Equipment slots and backpack are full',
+              variant: 'destructive'
+            });
+            return;
+          }
+        }
+        removeCard(card.id, false);
+        drawFromBackpackToHand();
+      } else if (card.type === 'amulet') {
+        // Auto-equip amulet
+        setAmuletSlot({ 
+          name: card.name, 
+          value: card.value, 
+          image: card.image, 
+          type: 'amulet', 
+          effect: card.effect! 
+        });
+        toast({ 
+          title: 'Amulet Equipped!',
+          description: `${card.name} provides passive bonuses`
+        });
+        removeCard(card.id, false);
+        drawFromBackpackToHand();
+      } else if (card.type === 'potion') {
+        // Auto-use potion for healing
+        const newHp = Math.min(maxHp, hp + card.value);
+        const healAmount = newHp - hp;
+        setHealing(true);
+        setTimeout(() => setHealing(false), 500);
+        setTotalHealed(prev => prev + healAmount);
+        setHp(newHp);
+        toast({ title: 'Healed!', description: `+${healAmount} HP` });
+        removeCard(card.id);
+        drawFromBackpackToHand();
+      } else if (card.type === 'coin') {
+        // Auto-collect gold
+        setGold(prev => prev + card.value);
+        toast({ title: 'Gold Collected!', description: `+${card.value} gold` });
+        removeCard(card.id);
+        drawFromBackpackToHand();
+      } else if (card.type === 'monster') {
+        // Monsters can't be purchased - must fight from hand
+        toast({
+          title: 'Cannot Purchase Monsters!',
+          description: 'Add monsters to hand first, then fight them',
+          variant: 'destructive'
+        });
+      } else {
+        // Other card types go to backpack
+        if (backpackItems.length < 10) {
+          setBackpackItems(prev => [card, ...prev]);
+          toast({ title: 'Item Stored!', description: `${card.name} added to backpack` });
+          removeCard(card.id, false);
+          drawFromBackpackToHand();
+        } else {
+          toast({ 
+            title: 'Backpack Full!', 
+            description: 'Cannot store more items',
+            variant: 'destructive'
+          });
+        }
+      }
     }
   };
 
