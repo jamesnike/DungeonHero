@@ -1088,25 +1088,28 @@ export default function GameBoard() {
         description: `${card.name} provides passive bonuses`
       });
       removeCard(card.id, false); 
-    } else if (slotId === 'slot-backpack' && (card.type === 'potion' || card.type === 'weapon' || card.type === 'shield')) {
+    } else if (slotId === 'slot-backpack') {
+      // Handle event cards immediately
+      if (card.type === 'event') {
+        setCurrentEventCard(card);
+        setEventModalOpen(true);
+        removeCard(card.id, false);
+        return;
+      }
+      
+      // Check if backpack is full
       if (backpackItems.length >= 10) {
         toast({ title: 'Backpack Full!', description: 'Maximum 10 items', variant: 'destructive' });
         return;
       }
-      // Preserve durability for weapons/shields in backpack
-      const backpackItem: any = { 
-        name: card.name, 
-        value: card.value, 
-        image: card.image, 
-        type: card.type 
-      };
-      if (card.type === 'weapon' || card.type === 'shield') {
-        backpackItem.durability = card.durability;
-        backpackItem.maxDurability = card.maxDurability;
-      }
-      setBackpackItems(prev => [...prev, backpackItem]);
+      
+      // Add card to bottom of backpack (unshift for LIFO)
+      setBackpackItems(prev => [card, ...prev]);
       toast({ title: 'Item Stored!', description: `${backpackItems.length + 1}/10 items in backpack` });
-      removeCard(card.id, false); 
+      removeCard(card.id, false);
+      
+      // Auto-draw from backpack to hand after processing
+      setTimeout(() => drawFromBackpackToHand(), 300); 
     } else if (slotId.startsWith('slot-equipment')) {
       const equipSlot: EquipmentSlotId = slotId === 'slot-equipment-1' ? 'equipmentSlot1' : 'equipmentSlot2';
       const equippedItem = equipSlot === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
@@ -1959,7 +1962,7 @@ export default function GameBoard() {
             item={backpackItems[0] || null}
             backpackCount={backpackItems.length}
             onDrop={(card) => handleCardToSlot(card, 'slot-backpack')}
-            isDropTarget={backpackItems.length < 10 && (draggedCard?.type === 'potion' || draggedCard?.type === 'weapon' || draggedCard?.type === 'shield')}
+            isDropTarget={backpackItems.length < 10 && draggedCard !== null}
             onClick={handleBackpackClick}
           />
           

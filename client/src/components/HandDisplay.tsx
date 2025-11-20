@@ -166,15 +166,15 @@ export default function HandDisplay({
       {/* Hand Acquisition Zone - Shows when dragging */}
       {isDraggingToHand && handCards.length < maxHandSize && (
         <div 
-          className="fixed bottom-0 left-0 right-0 pointer-events-auto"
-          style={{ height: '250px', zIndex: 15 }}
+          className="fixed bottom-0 left-1/4 right-1/4 pointer-events-auto"
+          style={{ height: '100px', zIndex: 5 }}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
           <div className="h-full flex items-center justify-center">
             <div 
               className={`
-                w-4/5 max-w-2xl h-32 rounded-xl
+                w-full h-20 rounded-xl
                 border-4 border-dashed border-primary
                 bg-primary/20 backdrop-blur-sm
                 flex items-center justify-center
@@ -184,13 +184,10 @@ export default function HandDisplay({
               data-testid="hand-acquisition-zone"
             >
               <div className="text-center">
-                <Hand className="w-12 h-12 text-primary mx-auto mb-2" />
-                <p className="text-lg font-bold text-primary">
-                  Drop here to add to hand
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {handCards.length}/{maxHandSize} cards in hand
-                </p>
+                <Hand className="w-8 h-8 text-primary mx-auto mb-1 inline-block mr-2" />
+                <span className="text-sm font-bold text-primary">
+                  Drop to add to hand ({handCards.length}/{maxHandSize})
+                </span>
               </div>
             </div>
           </div>
