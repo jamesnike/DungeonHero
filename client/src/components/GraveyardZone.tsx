@@ -59,25 +59,26 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
   // Get the top card for display
   const topCard = discardedCards.length > 0 ? discardedCards[discardedCards.length - 1] : null;
 
-  // Render card stack visualization
+  // Render card stack visualization with enhanced thickness
   const renderCardStack = () => {
     const hasCards = discardedCards.length > 0;
+    const stackDepth = Math.min(discardedCards.length, 10); // Cap at 10 for performance
     
     return (
       <div className="relative w-full h-full">
-        {/* Base card shadows for stack effect */}
-        {hasCards && discardedCards.length > 2 && (
-          <div 
-            className="absolute inset-0 bg-gradient-to-b from-destructive/5 to-destructive/10 rounded-lg"
-            style={{ transform: 'translateY(4px) translateX(2px)' }}
+        {/* Enhanced stack effect - render multiple shadow layers based on card count */}
+        {hasCards && [...Array(Math.floor(stackDepth / 2))].map((_, i) => (
+          <div
+            key={i}
+            className="absolute inset-0 rounded-lg"
+            style={{
+              background: `linear-gradient(to bottom, hsl(var(--destructive) / ${0.02 + i * 0.02}), hsl(var(--destructive) / ${0.04 + i * 0.02}))`,
+              transform: `translateY(${(i + 1) * 2}px) translateX(${(i + 1) * 1}px)`,
+              boxShadow: `0 ${i + 1}px ${(i + 1) * 2}px rgba(0, 0, 0, 0.1)`,
+              zIndex: -i - 1
+            }}
           />
-        )}
-        {hasCards && discardedCards.length > 1 && (
-          <div 
-            className="absolute inset-0 bg-gradient-to-b from-destructive/10 to-destructive/15 rounded-lg"
-            style={{ transform: 'translateY(2px) translateX(1px)' }}
-          />
-        )}
+        ))}
         
         {/* Top card or empty state */}
         <div className={`

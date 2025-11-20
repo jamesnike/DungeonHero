@@ -47,7 +47,7 @@ import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
 import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 
 const INITIAL_HP = 20;
-const SELLABLE_TYPES = ['potion', 'weapon', 'shield', 'amulet', 'skill'] as const;
+const SELLABLE_TYPES = ['potion', 'weapon', 'shield', 'amulet', 'magic'] as const;
 const DECK_SIZE = 64; // Updated: 54 + 6 skills + 4 events = 64
 
 type EquipmentItem = { 
@@ -172,13 +172,14 @@ function createDeck(): GameCardData[] {
     'Health Potion', 'Healing Elixir', 'Restorative Brew'
   ];
   
-  for (let i = 0; i < 12; i++) {
+  // Reduced to 8 potions with slightly higher values for balance
+  for (let i = 0; i < 8; i++) {
     const potionName = potionTypes[i % potionTypes.length];
     deck.push({
       id: `potion-${id++}`,
       type: 'potion',
       name: potionName,
-      value: Math.floor(Math.random() * 4) + 2,
+      value: Math.floor(Math.random() * 4) + 3, // 3-6 HP instead of 2-5
       image: potionImage,
     });
   }
@@ -205,67 +206,67 @@ function createDeck(): GameCardData[] {
     });
   }
 
-  // Skill cards (4 instant, 2 permanent = 6 total) 
-  // Instant skills
+  // Magic cards (4 instant, 2 permanent = 6 total) 
+  // Instant magic spells
   deck.push({
-    id: `skill-${id++}`,
-    type: 'skill',
+    id: `magic-${id++}`,
+    type: 'magic',
     name: 'Healing Wave',
     value: 0,
     image: skillScrollImage,
-    skillType: 'instant',
-    skillEffect: 'Heal 5 HP'
+    magicType: 'instant',
+    magicEffect: 'Heal 5 HP'
   });
   
   deck.push({
-    id: `skill-${id++}`,
-    type: 'skill', 
+    id: `magic-${id++}`,
+    type: 'magic', 
     name: 'Lightning Strike',
     value: 0,
     image: skillScrollImage,
-    skillType: 'instant',
-    skillEffect: 'Deal 4 damage to any monster'
+    magicType: 'instant',
+    magicEffect: 'Deal 4 damage to any monster'
   });
 
   deck.push({
-    id: `skill-${id++}`,
-    type: 'skill',
+    id: `magic-${id++}`,
+    type: 'magic',
     name: 'Shield Bash',
     value: 0,
     image: skillScrollImage,
-    skillType: 'instant',
-    skillEffect: 'Block next 3 damage'
+    magicType: 'instant',
+    magicEffect: 'Block next 3 damage'
   });
 
   deck.push({
-    id: `skill-${id++}`,
-    type: 'skill',
+    id: `magic-${id++}`,
+    type: 'magic',
     name: 'Gold Rush',
     value: 0,
     image: skillScrollImage,
-    skillType: 'instant',
-    skillEffect: 'Gain 8 gold'
+    magicType: 'instant',
+    magicEffect: 'Gain 8 gold'
   });
 
   // Permanent skills
   deck.push({
-    id: `skill-${id++}`,
-    type: 'skill',
+    id: `magic-${id++}`,
+    type: 'magic',
     name: 'Iron Skin',
     value: 0,
     image: skillScrollImage,
-    skillType: 'permanent',
-    skillEffect: 'Reduce all damage by 1'
+    magicType: 'permanent',
+    magicEffect: 'Reduce all damage by 1'
   });
 
   deck.push({
-    id: `skill-${id++}`,
-    type: 'skill',
+    id: `magic-${id++}`,
+    type: 'magic',
     name: 'Weapon Master',
     value: 0,
     image: skillScrollImage,
-    skillType: 'permanent',
-    skillEffect: 'All weapons +1 damage'
+    magicType: 'permanent',
+    magicEffect: 'All weapons +1 damage'
   });
 
   // Event cards (4 total)
@@ -1772,14 +1773,11 @@ export default function GameBoard() {
             )
           ))}
           
-          {/* Row 1, Col 6: DiceRoller - with darker background */}
-          <div 
-            className="relative bg-card-foreground/5 rounded-lg p-2"
-            style={{ 
-              width: 'clamp(80px, 12vw, 160px)', 
-              height: 'clamp(112px, 16.8vw, 224px)' 
-            }}
-          >
+          {/* Row 1, Col 6: DiceRoller - fixed dimensions to match preview cards */}
+          <div style={{ 
+            width: 'clamp(80px, 12vw, 160px)', 
+            height: 'clamp(112px, 16.8vw, 224px)' 
+          }}>
             <DiceRoller 
               onRoll={(value) => console.log('Rolled:', value)}
               className="w-full h-full"

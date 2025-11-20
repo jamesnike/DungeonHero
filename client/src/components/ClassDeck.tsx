@@ -24,26 +24,27 @@ export default function ClassDeck({
 }: ClassDeckProps) {
   const [viewerOpen, setViewerOpen] = useState(false);
   
-  // Create stacked cards visual effect
+  // Create stacked cards visual effect with enhanced thickness
   const renderCardStack = () => {
     const hasCards = classCards.length > 0;
     const topCard = hasCards ? classCards[0] : null;
+    const stackDepth = Math.min(classCards.length, 8); // Cap at 8 for performance
     
     return (
       <div className="relative w-full h-full">
-        {/* Base card shadows for stack effect */}
-        {hasCards && classCards.length > 2 && (
-          <div 
-            className="absolute inset-0 bg-gradient-to-b from-primary/5 to-primary/10 rounded-lg"
-            style={{ transform: 'translateY(4px) translateX(2px)' }}
+        {/* Enhanced stack effect - render multiple shadow layers based on card count */}
+        {hasCards && [...Array(Math.floor(stackDepth / 2))].map((_, i) => (
+          <div
+            key={i}
+            className="absolute inset-0 rounded-lg"
+            style={{
+              background: `linear-gradient(to bottom, hsl(var(--primary) / ${0.03 + i * 0.02}), hsl(var(--primary) / ${0.05 + i * 0.02}))`,
+              transform: `translateY(${(i + 1) * 2}px) translateX(${(i + 1) * 1}px)`,
+              boxShadow: `0 ${i + 1}px ${(i + 1) * 2}px rgba(0, 0, 0, 0.08)`,
+              zIndex: -i - 1
+            }}
           />
-        )}
-        {hasCards && classCards.length > 1 && (
-          <div 
-            className="absolute inset-0 bg-gradient-to-b from-primary/10 to-primary/15 rounded-lg"
-            style={{ transform: 'translateY(2px) translateX(1px)' }}
-          />
-        )}
+        ))}
         
         {/* Top card or empty state */}
         <div className="relative w-full h-full bg-gradient-to-b from-primary/15 to-primary/20 rounded-lg border-2 border-primary/30 flex flex-col items-center justify-center p-2">

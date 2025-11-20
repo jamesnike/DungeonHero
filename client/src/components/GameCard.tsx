@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from 'lucide-react';
 
-export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'amulet' | 'skill' | 'event';
+export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'amulet' | 'magic' | 'event';
 
 export interface GameCardData {
   id: string;
@@ -11,8 +11,8 @@ export interface GameCardData {
   value: number;
   image?: string;
   effect?: 'health' | 'attack' | 'defense'; // For amulets
-  skillType?: 'instant' | 'permanent'; // For skill cards
-  skillEffect?: string; // Description of skill effect
+  magicType?: 'instant' | 'permanent'; // For magic cards
+  magicEffect?: string; // Description of magic effect
   eventChoices?: { text: string; effect: string }[]; // For event cards
   // Monster-specific properties
   attack?: number; // Monster attack value
@@ -82,7 +82,7 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         return <Heart className="w-8 h-8 text-green-500" />;
       case 'amulet':
         return <Sparkles className="w-8 h-8 text-purple-500" />;
-      case 'skill':
+      case 'magic':
         return <Zap className="w-8 h-8 text-cyan-500" />;
       case 'event':
         return <Scroll className="w-8 h-8 text-violet-500" />;
@@ -106,7 +106,7 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         return 'border-green-900';
       case 'amulet':
         return 'border-purple-900';
-      case 'skill':
+      case 'magic':
         return 'border-cyan-900';
       case 'event':
         return 'border-violet-700';
@@ -271,12 +271,66 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
             )}
           </div>
           
-          <div className="h-[40%] p-2 flex flex-col items-center justify-center bg-card">
-            <h3 className="font-serif font-semibold text-sm md:text-base text-center" data-testid={`card-name-${card.id}`}>
+          <div className="h-[40%] p-1 flex flex-col items-start justify-between bg-card">
+            <h3 className="font-serif font-semibold text-xs text-center w-full" data-testid={`card-name-${card.id}`}>
               {card.name}
             </h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              {card.type.charAt(0).toUpperCase() + card.type.slice(1)}
+            
+            {/* Yu-Gi-Oh style card effect description */}
+            <div className="flex-1 w-full px-1 overflow-y-auto">
+              <p className="text-[10px] leading-tight text-muted-foreground text-center">
+                {/* Monster descriptions */}
+                {card.type === 'monster' && (
+                  <>ATK: {card.attack} | HP: {card.hp}<br/>
+                  {card.hpLayers && card.hpLayers > 1 && `Has ${card.hpLayers} HP layers. `}
+                  A fearsome {card.name.toLowerCase()} that blocks your path.</>
+                )}
+                
+                {/* Weapon descriptions */}
+                {card.type === 'weapon' && (
+                  <>DMG: {card.value} | Uses: {card.durability || 1}<br/>
+                  {card.healOnKill && `Heals ${card.healOnKill} HP on kill. `}
+                  {card.description || `Deals ${card.value} damage to monsters.`}</>
+                )}
+                
+                {/* Shield descriptions */}
+                {card.type === 'shield' && (
+                  <>DEF: {card.value} | Uses: {card.durability || 1}<br/>
+                  {card.damageReflect && `Reflects ${card.damageReflect} damage. `}
+                  {card.description || `Blocks ${card.value} damage from attacks.`}</>
+                )}
+                
+                {/* Potion descriptions */}
+                {card.type === 'potion' && (
+                  <>Healing: +{card.value} HP<br/>
+                  Restores your health when consumed. Use wisely in battle.</>
+                )}
+                
+                {/* Amulet descriptions */}
+                {card.type === 'amulet' && (
+                  <>Bonus: +{card.value} {card.effect}<br/>
+                  {card.description || 
+                    (card.effect === 'health' ? 'Increases maximum health.' :
+                     card.effect === 'attack' ? 'Boosts weapon damage.' :
+                     'Enhances shield defense.')}</>
+                )}
+                
+                {/* Magic card descriptions */}
+                {card.type === 'magic' && (
+                  <>Type: {card.magicType || 'Instant'}<br/>
+                  {card.magicEffect || card.description || 'Powerful magical effect.'}</>
+                )}
+                
+                {/* Event descriptions */}
+                {card.type === 'event' && (
+                  <>Event Card<br/>
+                  {card.description || 'Make a choice that will affect your journey.'}</>
+                )}
+              </p>
+            </div>
+            
+            <p className="text-[10px] text-muted-foreground/70 text-center w-full border-t pt-0.5">
+              [{card.type.toUpperCase()}{card.classCard ? ' • KNIGHT' : ''}]
             </p>
           </div>
         </div>
