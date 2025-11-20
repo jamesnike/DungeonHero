@@ -49,7 +49,7 @@ export default function EquipmentSlot({ type, item, onDrop, isDropTarget }: Equi
     <div 
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="w-28 h-40"
+      className="w-32 h-44 md:w-40 md:h-56"
       data-testid={`slot-${type}`}
     >
       {item ? (

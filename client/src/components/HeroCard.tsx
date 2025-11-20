@@ -39,7 +39,7 @@ export default function HeroCard({
     <div 
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="w-48 h-64 md:w-56 md:h-80"
+      className="w-32 h-44 md:w-40 md:h-56"
       data-testid="hero-card"
     >
       <Card className={`
@@ -57,29 +57,29 @@ export default function HeroCard({
               />
             )}
             
-            <div className="absolute top-3 left-3 right-3">
-              <div className="bg-background/90 backdrop-blur-sm rounded-lg p-2">
-                <div className="flex items-center justify-between mb-1">
-                  <Heart className="w-5 h-5 text-destructive" />
-                  <span className="font-mono text-2xl font-bold" data-testid="hero-hp">
+            <div className="absolute top-2 left-2 right-2">
+              <div className="bg-background/90 backdrop-blur-sm rounded-lg p-1.5">
+                <div className="flex items-center justify-between mb-0.5">
+                  <Heart className="w-4 h-4 text-destructive" />
+                  <span className="font-mono text-lg font-bold" data-testid="hero-hp">
                     {hp}/{maxHp}
                   </span>
                 </div>
-                <Progress value={hpPercentage} className="h-2" />
+                <Progress value={hpPercentage} className="h-1.5" />
               </div>
             </div>
 
             {(equippedWeapon || equippedShield) && (
-              <div className="absolute bottom-3 left-3 right-3 flex gap-2">
+              <div className="absolute bottom-2 left-2 right-2 flex gap-1">
                 {equippedWeapon && (
-                  <div className="bg-background/90 backdrop-blur-sm rounded-md px-2 py-1 flex items-center gap-1 flex-1">
-                    <Sword className="w-4 h-4 text-amber-500" />
+                  <div className="bg-background/90 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-1 flex-1">
+                    <Sword className="w-3 h-3 text-amber-500" />
                     <span className="text-xs font-mono">{equippedWeapon.value}</span>
                   </div>
                 )}
                 {equippedShield && (
-                  <div className="bg-background/90 backdrop-blur-sm rounded-md px-2 py-1 flex items-center gap-1 flex-1">
-                    <Shield className="w-4 h-4 text-blue-500" />
+                  <div className="bg-background/90 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-1 flex-1">
+                    <Shield className="w-3 h-3 text-blue-500" />
                     <span className="text-xs font-mono">{equippedShield.value}</span>
                   </div>
                 )}
@@ -87,8 +87,8 @@ export default function HeroCard({
             )}
           </div>
           
-          <div className="h-[30%] p-3 flex flex-col items-center justify-center bg-card">
-            <h2 className="font-serif font-bold text-xl text-center" data-testid="hero-name">
+          <div className="h-[30%] p-2 flex flex-col items-center justify-center bg-card">
+            <h2 className="font-serif font-bold text-base text-center" data-testid="hero-name">
               Hero
             </h2>
             <p className="text-xs text-muted-foreground">Adventurer</p>

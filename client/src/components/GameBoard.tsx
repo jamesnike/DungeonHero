@@ -205,7 +205,22 @@ export default function GameBoard() {
       />
 
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-4 max-w-6xl mx-auto w-full">
-        <div className="flex gap-4 items-center justify-center flex-wrap">
+        <div className="grid grid-cols-4 gap-4 w-full max-w-4xl">
+          {/* Dungeon Row - Top */}
+          {activeCards.concat(Array(4 - activeCards.length).fill(null)).slice(0, 4).map((card, index) => (
+            card ? (
+              <GameCard
+                key={card.id}
+                card={card}
+                onDragStart={setDraggedCard}
+                onDragEnd={() => setDraggedCard(null)}
+              />
+            ) : (
+              <div key={`empty-${index}`} className="w-32 h-44 md:w-40 md:h-56" />
+            )
+          ))}
+
+          {/* Hero Row - Bottom */}
           <EquipmentSlot 
             type="weapon" 
             item={weaponSlot}
@@ -227,30 +242,17 @@ export default function GameBoard() {
             onDrop={(card) => handleCardToSlot(card, 'shield')}
             isDropTarget={draggedCard?.type === 'shield'}
           />
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="active-cards">
-          {activeCards.map(card => (
-            <GameCard
-              key={card.id}
-              card={card}
-              onDragStart={setDraggedCard}
-              onDragEnd={() => setDraggedCard(null)}
-            />
-          ))}
-        </div>
-
-        <div className="flex gap-4">
           <EquipmentSlot 
             type="backpack" 
             item={backpackSlot}
             onDrop={(card) => handleCardToSlot(card, 'backpack')}
             isDropTarget={draggedCard?.type === 'potion'}
           />
-          <Button onClick={initGame} variant="outline" data-testid="button-new-game">
-            New Game
-          </Button>
         </div>
+
+        <Button onClick={initGame} variant="outline" data-testid="button-new-game">
+          New Game
+        </Button>
       </div>
 
       <VictoryDefeatModal
