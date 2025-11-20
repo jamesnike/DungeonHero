@@ -3,21 +3,34 @@ import GameHeader from './GameHeader';
 import HeroCard from './HeroCard';
 import GameCard, { type GameCardData } from './GameCard';
 import EquipmentSlot, { type SlotType } from './EquipmentSlot';
-import SellZone, { SELLABLE_TYPES } from './SellZone';
+import GraveyardZone from './GraveyardZone';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import HelpDialog from './HelpDialog';
 import DeckViewerModal from './DeckViewerModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
-import dragonImage from '@assets/generated_images/dragon_monster_card_art.png';
-import skeletonImage from '@assets/generated_images/skeleton_warrior_card_art.png';
-import swordImage from '@assets/generated_images/magical_sword_weapon_card.png';
-import shieldImage from '@assets/generated_images/medieval_shield_card_art.png';
-import potionImage from '@assets/generated_images/healing_potion_card_art.png';
+// Cute chibi-style monster images
+import dragonImage from '@assets/generated_images/cute_chibi_dragon_monster.png';
+import skeletonImage from '@assets/generated_images/cute_chibi_skeleton_monster.png';
+import goblinImage from '@assets/generated_images/cute_chibi_goblin_monster.png';
+import ogreImage from '@assets/generated_images/cute_chibi_ogre_monster.png';
+
+// Cute cartoon weapon images
+import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
+import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
+import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
+
+// Cute cartoon shield and potion
+import shieldImage from '@assets/generated_images/cute_cartoon_medieval_shield.png';
+import potionImage from '@assets/generated_images/cute_cartoon_healing_potion.png';
+import coinImage from '@assets/generated_images/cute_cartoon_gold_coins.png';
+
+// Hero image (keep original)
 import heroImage from '@assets/generated_images/hero_character_portrait.png';
 
 const INITIAL_HP = 20;
+const SELLABLE_TYPES = ['potion', 'coin', 'weapon', 'shield'] as const;
 const DECK_SIZE = 54;
 
 type EquipmentItem = { name: string; value: number; image?: string; type: 'weapon' | 'shield' };
@@ -31,8 +44,8 @@ function createDeck(): GameCardData[] {
   const monsterTypes = [
     { name: 'Dragon', image: dragonImage, minValue: 5, maxValue: 7 },
     { name: 'Skeleton', image: skeletonImage, minValue: 2, maxValue: 4 },
-    { name: 'Goblin', image: skeletonImage, minValue: 2, maxValue: 3 },
-    { name: 'Ogre', image: dragonImage, minValue: 4, maxValue: 6 },
+    { name: 'Goblin', image: goblinImage, minValue: 2, maxValue: 3 },
+    { name: 'Ogre', image: ogreImage, minValue: 4, maxValue: 6 },
   ];
 
   // 12 monsters total: 3 of each type
@@ -49,19 +62,23 @@ function createDeck(): GameCardData[] {
 
   // Weapon variety with improved values (2-6 range)
   const weaponTypes = [
-    'Sword', 'Axe', 'Dagger', 'Mace', 'Spear'
+    { name: 'Sword', image: swordImage },
+    { name: 'Axe', image: axeImage },
+    { name: 'Dagger', image: daggerImage },
+    { name: 'Mace', image: swordImage }, // Reuse sword
+    { name: 'Spear', image: daggerImage }, // Reuse dagger
   ];
   
   for (let i = 0; i < 10; i++) {
-    const weaponName = weaponTypes[i % weaponTypes.length];
+    const weaponType = weaponTypes[i % weaponTypes.length];
     // Balanced weapon values: 2-6
     const value = Math.floor(Math.random() * 5) + 2;
     deck.push({
       id: `weapon-${id++}`,
       type: 'weapon',
-      name: weaponName,
+      name: weaponType.name,
       value: value,
-      image: swordImage,
+      image: weaponType.image,
     });
   }
 
@@ -104,6 +121,7 @@ function createDeck(): GameCardData[] {
       type: 'coin',
       name: 'Gold',
       value: Math.floor(Math.random() * 4) + 1,
+      image: coinImage,
     });
   }
 
@@ -134,6 +152,7 @@ export default function GameBoard() {
   const [totalDamageTaken, setTotalDamageTaken] = useState(0);
   const [totalHealed, setTotalHealed] = useState(0);
   const [deckViewerOpen, setDeckViewerOpen] = useState(false);
+  const [discardedCards, setDiscardedCards] = useState<GameCardData[]>([]);
 
   useEffect(() => {
     initGame();
@@ -215,7 +234,17 @@ export default function GameBoard() {
     return () => clearTimeout(timer);
   }, [drawPending]);
 
+  const addToGraveyard = (card: GameCardData) => {
+    setDiscardedCards(prev => [...prev, card]);
+  };
+
   const removeCard = (cardId: string) => {
+    // Find the card to add to graveyard
+    const cardToRemove = activeCards.find(c => c.id === cardId);
+    if (cardToRemove) {
+      addToGraveyard(cardToRemove);
+    }
+    
     // Add card to removing set for animation
     setRemovingCards(prev => new Set(prev).add(cardId));
     
@@ -352,24 +381,26 @@ export default function GameBoard() {
     }
     
     if (weaponValue >= monsterValue) {
+      // Weapon defeats monster - remove it
       setMonstersDefeated(prev => prev + 1);
       toast({
         title: 'Monster Defeated!',
         description: `Your ${weapon.name} (${weaponValue}) destroyed the ${monster.name} (${monsterValue})!`
       });
+      removeCard(monster.id);
     } else {
+      // Monster survives - stays on the board, counterattacks
       const counterDamage = monsterValue - weaponValue;
       toast({
         title: 'Monster Survives!',
-        description: `${weapon.name} weakened ${monster.name}, but it counterattacks for ${counterDamage} damage!`,
+        description: `${weapon.name} weakened it, but ${monster.name} (${monsterValue - weaponValue} HP left) counterattacks for ${counterDamage} damage!`,
         variant: 'destructive'
       });
       
       // Apply counterattack damage (shield can still block)
       applyCounterattackDamage(counterDamage);
+      // Monster stays in dungeon - player must deal with it again
     }
-    
-    removeCard(monster.id);
   };
 
   const handleCardToHero = (card: GameCardData) => {
@@ -396,21 +427,63 @@ export default function GameBoard() {
       setBackpackSlot({ name: card.name, value: card.value, image: card.image, type: card.type });
       toast({ title: 'Item Stored!' });
       removeCard(card.id);
-    } else if (slotId.startsWith('slot-equipment') && (card.type === 'weapon' || card.type === 'shield')) {
+    } else if (slotId.startsWith('slot-equipment')) {
       const equipSlot: EquipmentSlotId = slotId === 'slot-equipment-1' ? 'equipmentSlot1' : 'equipmentSlot2';
-      setEquipmentSlotById(equipSlot, { name: card.name, value: card.value, image: card.image, type: card.type });
-      toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!` });
-      removeCard(card.id);
+      const equippedItem = equipSlot === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+      
+      // Handle monster dropped on equipment slot
+      if (card.type === 'monster') {
+        if (!equippedItem) {
+          toast({
+            title: 'No Equipment!',
+            description: 'Equip a weapon or shield first',
+            variant: 'destructive'
+          });
+          return;
+        }
+        
+        if (equippedItem.type === 'shield') {
+          // Shield blocks damage
+          const monsterValue = card.value;
+          const shieldValue = equippedItem.value;
+          const damageToPlayer = Math.max(0, monsterValue - shieldValue);
+          
+          toast({
+            title: damageToPlayer === 0 ? 'Shield Blocked!' : 'Shield Reduced Damage!',
+            description: `${equippedItem.name} absorbed damage!${damageToPlayer > 0 ? ` ${monsterValue} → ${damageToPlayer}` : ''}`
+          });
+          
+          // Shield is consumed
+          clearEquipmentSlotById(equipSlot);
+          
+          // Apply remaining damage if any
+          if (damageToPlayer > 0) {
+            applyDamage(damageToPlayer);
+          }
+          
+          // Remove monster
+          removeCard(card.id);
+        } else if (equippedItem.type === 'weapon') {
+          // Weapon attacks monster
+          handleWeaponToMonster({ ...equippedItem, fromSlot: equipSlot }, card);
+        }
+      } else if (card.type === 'weapon' || card.type === 'shield') {
+        // Equip weapon or shield
+        setEquipmentSlotById(equipSlot, { name: card.name, value: card.value, image: card.image, type: card.type });
+        toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!` });
+        removeCard(card.id);
+      }
     }
   };
 
   const handleSellCard = (item: any) => {
     const itemType = item.type;
     
-    if (!SELLABLE_TYPES.includes(itemType) && itemType !== 'weapon' && itemType !== 'shield') {
+    // Only allow selling potions, coins, weapons, and shields (NOT monsters)
+    if (!SELLABLE_TYPES.includes(itemType)) {
       toast({
         title: 'Cannot Sell!',
-        description: `You cannot sell this item`,
+        description: `You cannot sell ${itemType}s!`,
         variant: 'destructive'
       });
       return;
@@ -423,12 +496,23 @@ export default function GameBoard() {
       description: `+${sellValue} Gold from ${item.name}`,
     });
 
+    // Add to graveyard
+    const cardToGraveyard: GameCardData = {
+      id: item.id || `sold-${Date.now()}`,
+      type: item.type,
+      name: item.name,
+      value: item.value,
+      image: item.image
+    };
+    addToGraveyard(cardToGraveyard);
+
     // If item came from equipment slot, clear it
     if (item.fromSlot) {
       clearEquipmentSlotById(item.fromSlot as EquipmentSlotId);
     } else {
-      // Item from dungeon - remove it
-      removeCard(item.id);
+      // Item from dungeon - just remove it from active cards (already added to graveyard above)
+      setActiveCards(prev => prev.filter(c => c.id !== item.id));
+      setCardsPlayed(prev => prev + 1);
     }
   };
 
@@ -472,7 +556,7 @@ export default function GameBoard() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
       <GameHeader 
         hp={hp} 
         maxHp={INITIAL_HP} 
@@ -481,6 +565,18 @@ export default function GameBoard() {
         monstersDefeated={monstersDefeated}
         onDeckClick={() => setDeckViewerOpen(true)}
       />
+      
+      {/* Graveyard in top right corner */}
+      <div className="absolute top-4 right-4 z-10">
+        <GraveyardZone
+          onDrop={handleSellCard}
+          isDropTarget={
+            (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
+            (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
+          }
+          discardedCards={discardedCards}
+        />
+      </div>
 
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-4 max-w-6xl mx-auto w-full">
         <div className="grid grid-cols-4 gap-4 w-full max-w-4xl">
@@ -547,17 +643,11 @@ export default function GameBoard() {
           />
         </div>
 
-        <div className="flex gap-4 items-center justify-center flex-wrap">
-          <SellZone
-            onDrop={handleSellCard}
-            isDropTarget={draggedCard !== null && SELLABLE_TYPES.includes(draggedCard.type)}
-          />
-          <div className="flex gap-2">
-            <Button onClick={initGame} variant="outline" data-testid="button-new-game">
-              New Game
-            </Button>
-            <HelpDialog />
-          </div>
+        <div className="flex gap-2 items-center justify-center">
+          <Button onClick={initGame} variant="outline" data-testid="button-new-game">
+            New Game
+          </Button>
+          <HelpDialog />
         </div>
       </div>
 
