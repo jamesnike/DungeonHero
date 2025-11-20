@@ -14,6 +14,13 @@ export interface GameCardData {
   skillType?: 'instant' | 'permanent'; // For skill cards
   skillEffect?: string; // Description of skill effect
   eventChoices?: { text: string; effect: string }[]; // For event cards
+  // Monster-specific properties
+  attack?: number; // Monster attack value
+  hp?: number; // Monster current HP
+  maxHp?: number; // Monster original HP
+  hpLayers?: number; // Number of HP layers (1-3)
+  currentLayer?: number; // Current layer (starts at 1)
+  layerShift?: number; // Visual shift amount (0-4)
 }
 
 interface GameCardProps {
@@ -101,6 +108,14 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
     }
   };
 
+  // Calculate visual shift based on layer damage
+  const getLayerShift = () => {
+    if (card.type !== 'monster' || !card.hpLayers || !card.currentLayer) return 0;
+    // Each depleted layer shifts the card right
+    const depletedLayers = (card.currentLayer || 1) - 1;
+    return depletedLayers * 15; // 15px per layer
+  };
+
   return (
     <div
       draggable
@@ -122,6 +137,7 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         width: 'clamp(100px, 15vw, 200px)', 
         height: 'clamp(140px, 21vw, 280px)',
         filter: isDragging ? 'brightness(1.1)' : 'none',
+        transform: card.type === 'monster' ? `translateX(${getLayerShift()}px)` : undefined,
       }}
       data-testid={`card-${card.type}-${card.id}`}
     >
@@ -142,13 +158,74 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
             <div className="absolute top-2 right-2">
               {getCardIcon()}
             </div>
-            <div className="absolute top-2 left-2">
-              <div className="bg-background/80 backdrop-blur-sm rounded-full w-8 h-8 flex items-center justify-center">
-                <span className="font-mono font-bold text-sm" data-testid={`card-value-${card.id}`}>
-                  {card.value}
-                </span>
+            {/* For monsters, show attack and HP; for others show value */}
+            {card.type === 'monster' && card.attack !== undefined && card.hp !== undefined ? (
+              <>
+                {/* HP Layers in background */}
+                {card.hpLayers && card.hpLayers > 1 && (
+                  <div className="absolute inset-0 flex items-center justify-end pr-12 pointer-events-none">
+                    <div className="flex gap-1">
+                      {[...Array(card.hpLayers)].map((_, i) => (
+                        <div 
+                          key={i} 
+                          className={`text-6xl font-bold ${
+                            i < (card.currentLayer || 1) - 1 
+                              ? 'text-muted/20' 
+                              : 'text-foreground/10'
+                          }`}
+                        >
+                          {card.hpLayers - i}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Attack value (sword icon) */}
+                <div className="absolute top-2 left-2">
+                  <div className="bg-background/90 backdrop-blur-sm rounded px-2 py-1 flex items-center gap-1">
+                    <Sword className="w-4 h-4 text-amber-500" />
+                    <span className="font-mono font-bold text-sm" data-testid={`card-attack-${card.id}`}>
+                      {card.attack}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* HP value (heart icon) */}
+                <div className="absolute bottom-2 left-2">
+                  <div className="bg-background/90 backdrop-blur-sm rounded px-2 py-1 flex items-center gap-1">
+                    <Heart className="w-4 h-4 text-red-500" />
+                    <span className="font-mono font-bold text-sm" data-testid={`card-hp-${card.id}`}>
+                      {card.hp}/{card.maxHp}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* HP Layer dots */}
+                {card.hpLayers && (
+                  <div className="absolute bottom-2 right-2 flex gap-1">
+                    {[...Array(card.hpLayers)].map((_, i) => (
+                      <div 
+                        key={i}
+                        className={`w-2 h-2 rounded-full ${
+                          i < (card.currentLayer || 1) 
+                            ? 'bg-red-500' 
+                            : 'bg-muted/30'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="absolute top-2 left-2">
+                <div className="bg-background/80 backdrop-blur-sm rounded-full w-8 h-8 flex items-center justify-center">
+                  <span className="font-mono font-bold text-sm" data-testid={`card-value-${card.id}`}>
+                    {card.value}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
           
           <div className="h-[40%] p-2 flex flex-col items-center justify-center bg-card">

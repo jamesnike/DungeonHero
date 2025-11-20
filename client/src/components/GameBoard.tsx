@@ -57,22 +57,55 @@ function createDeck(): GameCardData[] {
   const deck: GameCardData[] = [];
   let id = 0;
 
-  // Monster variety with balanced values (2-7 range)
+  // Monster variety with attack/HP separation and layers
   const monsterTypes = [
-    { name: 'Dragon', image: dragonImage, minValue: 5, maxValue: 7 },
-    { name: 'Skeleton', image: skeletonImage, minValue: 2, maxValue: 4 },
-    { name: 'Goblin', image: goblinImage, minValue: 2, maxValue: 3 },
-    { name: 'Ogre', image: ogreImage, minValue: 4, maxValue: 6 },
+    { 
+      name: 'Dragon', 
+      image: dragonImage, 
+      minAttack: 3, maxAttack: 4,
+      minHp: 5, maxHp: 7,
+      minLayers: 2, maxLayers: 3
+    },
+    { 
+      name: 'Skeleton', 
+      image: skeletonImage, 
+      minAttack: 1, maxAttack: 2,
+      minHp: 2, maxHp: 4,
+      minLayers: 1, maxLayers: 2
+    },
+    { 
+      name: 'Goblin', 
+      image: goblinImage, 
+      minAttack: 1, maxAttack: 2,
+      minHp: 2, maxHp: 3,
+      minLayers: 1, maxLayers: 1
+    },
+    { 
+      name: 'Ogre', 
+      image: ogreImage, 
+      minAttack: 2, maxAttack: 3,
+      minHp: 4, maxHp: 6,
+      minLayers: 2, maxLayers: 2
+    },
   ];
 
   // 12 monsters total: 3 of each type
   for (let i = 0; i < 12; i++) {
     const monsterType = monsterTypes[i % monsterTypes.length];
+    const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
+    const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
+    const layers = Math.floor(Math.random() * (monsterType.maxLayers - monsterType.minLayers + 1)) + monsterType.minLayers;
+    
     deck.push({
       id: `monster-${id++}`,
       type: 'monster',
       name: monsterType.name,
-      value: Math.floor(Math.random() * (monsterType.maxValue - monsterType.minValue + 1)) + monsterType.minValue,
+      value: attack, // Keep value for backwards compatibility
+      attack: attack,
+      hp: hp,
+      maxHp: hp,
+      hpLayers: layers,
+      currentLayer: 1,
       image: monsterType.image,
     });
   }
@@ -323,6 +356,29 @@ export default function GameBoard() {
     return 0;
   };
 
+  // Function to damage a monster and update its HP layers
+  const damageMonster = (monster: GameCardData, damage: number): GameCardData => {
+    if (!monster.hp || !monster.maxHp || !monster.hpLayers) {
+      // Fallback for old monsters
+      return {
+        ...monster,
+        hp: Math.max(0, (monster.hp || monster.value) - damage),
+        value: Math.max(0, (monster.hp || monster.value) - damage)
+      };
+    }
+
+    const newHp = Math.max(0, monster.hp - damage);
+    const hpPerLayer = monster.maxHp / monster.hpLayers;
+    const currentLayer = Math.ceil(newHp / hpPerLayer) || 1;
+    
+    return {
+      ...monster,
+      hp: newHp,
+      currentLayer: currentLayer,
+      layerShift: (monster.hpLayers - currentLayer) // Shift increases as layers deplete
+    };
+  };
+
   const maxHp = INITIAL_HP + getAmuletBonus('health') + (permanentSkills.includes('Iron Will') ? 3 : 0);
   const attackBonus = getAmuletBonus('attack') + (permanentSkills.includes('Weapon Master') ? 1 : 0);
   const defenseBonus = getAmuletBonus('defense') + (permanentSkills.includes('Iron Skin') ? 1 : 0);
@@ -487,7 +543,9 @@ export default function GameBoard() {
   };
 
   const resolveMonsterEncounter = (monster: GameCardData) => {
-    const monsterValue = monster.value;
+    // Use monster's attack and HP if available, fall back to value for backwards compatibility
+    const monsterAttack = monster.attack ?? monster.value;
+    const monsterHp = monster.hp ?? monster.value;
     const weaponSlot = findWeaponSlot();
     let damageToPlayer = 0;
     let shieldAlreadyLogged = false;
@@ -499,24 +557,43 @@ export default function GameBoard() {
       // Apply attack bonus from amulet
       const weaponDamage = weaponSlot.item.value + attackBonus;
       
-      // Attack with weapon
-      if (weaponDamage >= monsterValue) {
+      // Attack with weapon - damage the monster's HP
+      if (weaponDamage >= monsterHp) {
+        // Monster defeated
         setMonstersDefeated(prev => prev + 1);
         toast({
           title: 'Monster Defeated!',
-          description: `Your ${weaponSlot.item.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) destroyed the ${monster.name} (${monsterValue})!`
+          description: `Your ${weaponSlot.item.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) destroyed the ${monster.name} (HP: ${monsterHp})!`
         });
       } else {
-        damageToPlayer = monsterValue - weaponDamage;
+        // Monster survives, counterattacks with its attack value
+        damageToPlayer = monsterAttack;
+        
+        // Update monster HP and layers for persistent state
+        const updatedMonster = damageMonster(monster, weaponDamage);
+        
         toast({
           title: 'Monster Counterattack!',
-          description: `${weaponSlot.item.name} dealt damage, but ${monster.name} fights back!`,
+          description: `${weaponSlot.item.name} dealt ${weaponDamage} damage, but ${monster.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP) counterattacks for ${monsterAttack} damage!`,
           variant: 'destructive'
         });
+        
+        // Update the monster in active cards with reduced HP
+        setActiveCards(prev => prev.map(c => c.id === monster.id ? updatedMonster : c));
+        
+        // Don't remove the monster - it survived!
+        clearEquipmentSlotById(weaponSlot.id);
+        
+        // Apply counterattack damage after updating cards
+        if (damageToPlayer > 0) {
+          applyCounterattackDamage(damageToPlayer);
+        }
+        return; // Exit early - monster survived
       }
       clearEquipmentSlotById(weaponSlot.id);
     } else {
-      damageToPlayer = monsterValue;
+      // No weapon - take full monster attack damage
+      damageToPlayer = monsterAttack;
     }
 
     // Apply shield damage reduction (shield is consumed)
@@ -591,33 +668,38 @@ export default function GameBoard() {
 
   const handleWeaponToMonster = (weapon: any, monster: GameCardData) => {
     const weaponDamage = weapon.value + attackBonus;
-    const monsterValue = monster.value;
+    const monsterHp = monster.hp ?? monster.value;
+    const monsterAttack = monster.attack ?? monster.value;
     
     // Clear the weapon from its slot
     if (weapon.fromSlot) {
       clearEquipmentSlotById(weapon.fromSlot as EquipmentSlotId);
     }
     
-    if (weaponDamage >= monsterValue) {
+    if (weaponDamage >= monsterHp) {
       // Weapon defeats monster - remove it and add to graveyard
       setMonstersDefeated(prev => prev + 1);
       toast({
         title: 'Monster Defeated!',
-        description: `Your ${weapon.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) destroyed the ${monster.name} (${monsterValue})!`
+        description: `Your ${weapon.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) destroyed the ${monster.name} (HP: ${monsterHp})!`
       });
       addToGraveyard(monster);
       removeCard(monster.id, false);
     } else {
-      // Monster survives - stays on the board, counterattacks
-      const counterDamage = monsterValue - weaponDamage;
+      // Monster survives - update its HP and layers
+      const updatedMonster = damageMonster(monster, weaponDamage);
+      
       toast({
         title: 'Monster Survives!',
-        description: `${weapon.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) weakened it, but ${monster.name} (${monsterValue - weaponDamage} HP left) counterattacks for ${counterDamage} damage!`,
+        description: `${weapon.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) dealt ${weaponDamage} damage! ${monster.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP) counterattacks for ${monsterAttack} damage!`,
         variant: 'destructive'
       });
       
-      // Apply counterattack damage (shield can still block)
-      applyCounterattackDamage(counterDamage);
+      // Update the monster in active cards with reduced HP
+      setActiveCards(prev => prev.map(c => c.id === monster.id ? updatedMonster : c));
+      
+      // Apply counterattack damage using monster's attack value
+      applyCounterattackDamage(monsterAttack);
       // Monster stays in dungeon - player must deal with it again
       // Do NOT remove the card or add to graveyard - monster survives!
     }
@@ -686,14 +768,14 @@ export default function GameBoard() {
         }
         
         if (equippedItem.type === 'shield') {
-          // Shield blocks damage
-          const monsterValue = card.value;
+          // Shield blocks damage - uses monster's attack value
+          const monsterAttack = card.attack ?? card.value;
           const shieldValue = equippedItem.value + defenseBonus;
-          const damageToPlayer = Math.max(0, monsterValue - shieldValue);
+          const damageToPlayer = Math.max(0, monsterAttack - shieldValue);
           
           toast({
             title: damageToPlayer === 0 ? 'Shield Blocked!' : 'Shield Reduced Damage!',
-            description: `${equippedItem.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed damage!${damageToPlayer > 0 ? ` ${monsterValue} → ${damageToPlayer}` : ''}`
+            description: `${equippedItem.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed damage from ${card.name}'s ${monsterAttack} attack!${damageToPlayer > 0 ? ` ${monsterAttack} → ${damageToPlayer}` : ''}`
           });
           
           // Add shield and monster to graveyard
@@ -784,14 +866,22 @@ export default function GameBoard() {
           if (monsters.length > 0) {
             const target = monsters[Math.floor(Math.random() * monsters.length)];
             const damage = 4;
-            if (damage >= target.value) {
+            const targetHp = target.hp ?? target.value;
+            
+            if (damage >= targetHp) {
               toast({ title: 'Lightning Strike!', description: `Destroyed ${target.name}!` });
               setMonstersDefeated(prev => prev + 1);
               addToGraveyard(target);
               removeCard(target.id, false);
             } else {
-              toast({ title: 'Lightning Strike!', description: `Damaged ${target.name} but it survived!` });
-              // Monster survives with reduced health (we'd need to track this separately)
+              // Monster survives with reduced HP
+              const updatedMonster = damageMonster(target, damage);
+              toast({ 
+                title: 'Lightning Strike!', 
+                description: `Dealt ${damage} damage to ${target.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP remaining)!` 
+              });
+              // Update the monster in active cards
+              setActiveCards(prev => prev.map(c => c.id === target.id ? updatedMonster : c));
             }
           } else {
             toast({ title: 'No Target', description: 'No monsters to strike', variant: 'destructive' });
