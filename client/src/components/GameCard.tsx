@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Skull, Sword, Shield, Heart, Coins, Sparkles } from 'lucide-react';
+import { Skull, Sword, Shield, Heart, Coins, Sparkles, Zap, Calendar } from 'lucide-react';
 
-export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'coin' | 'amulet';
+export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'coin' | 'amulet' | 'skill' | 'event';
 
 export interface GameCardData {
   id: string;
@@ -11,6 +11,9 @@ export interface GameCardData {
   value: number;
   image?: string;
   effect?: 'health' | 'attack' | 'defense'; // For amulets
+  skillType?: 'instant' | 'permanent'; // For skill cards
+  skillEffect?: string; // Description of skill effect
+  eventChoices?: { text: string; effect: string }[]; // For event cards
 }
 
 interface GameCardProps {
@@ -68,6 +71,10 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         return <Coins className="w-8 h-8 text-yellow-500" />;
       case 'amulet':
         return <Sparkles className="w-8 h-8 text-purple-500" />;
+      case 'skill':
+        return <Zap className="w-8 h-8 text-cyan-500" />;
+      case 'event':
+        return <Calendar className="w-8 h-8 text-pink-500" />;
     }
   };
 
@@ -85,6 +92,10 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         return 'border-yellow-900';
       case 'amulet':
         return 'border-purple-900';
+      case 'skill':
+        return 'border-cyan-900';
+      case 'event':
+        return 'border-pink-900';
       default:
         return 'border-card-border';
     }

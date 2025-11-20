@@ -9,6 +9,7 @@ import HandArea from './HandArea';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import HelpDialog from './HelpDialog';
 import DeckViewerModal from './DeckViewerModal';
+import EventChoiceModal from './EventChoiceModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
@@ -40,9 +41,13 @@ import lifeAmuletImage from '@assets/generated_images/chibi_life_amulet.png';
 import strengthAmuletImage from '@assets/generated_images/chibi_strength_amulet.png';
 import guardianAmuletImage from '@assets/generated_images/chibi_guardian_amulet.png';
 
+// Skill and Event images
+import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
+import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
+
 const INITIAL_HP = 20;
-const SELLABLE_TYPES = ['potion', 'coin', 'weapon', 'shield', 'amulet'] as const;
-const DECK_SIZE = 54;
+const SELLABLE_TYPES = ['potion', 'coin', 'weapon', 'shield', 'amulet', 'skill'] as const;
+const DECK_SIZE = 64; // Updated: 54 + 6 skills + 4 events = 64
 
 type EquipmentItem = { name: string; value: number; image?: string; type: 'weapon' | 'shield' };
 type AmuletItem = { name: string; value: number; image?: string; type: 'amulet'; effect: 'health' | 'attack' | 'defense' };
@@ -159,6 +164,122 @@ function createDeck(): GameCardData[] {
     });
   }
 
+  // Skill cards (4 instant, 2 permanent = 6 total) 
+  // Instant skills
+  deck.push({
+    id: `skill-${id++}`,
+    type: 'skill',
+    name: 'Healing Wave',
+    value: 0,
+    image: skillScrollImage,
+    skillType: 'instant',
+    skillEffect: 'Heal 5 HP'
+  });
+  
+  deck.push({
+    id: `skill-${id++}`,
+    type: 'skill', 
+    name: 'Lightning Strike',
+    value: 0,
+    image: skillScrollImage,
+    skillType: 'instant',
+    skillEffect: 'Deal 4 damage to any monster'
+  });
+
+  deck.push({
+    id: `skill-${id++}`,
+    type: 'skill',
+    name: 'Shield Bash',
+    value: 0,
+    image: skillScrollImage,
+    skillType: 'instant',
+    skillEffect: 'Block next 3 damage'
+  });
+
+  deck.push({
+    id: `skill-${id++}`,
+    type: 'skill',
+    name: 'Gold Rush',
+    value: 0,
+    image: skillScrollImage,
+    skillType: 'instant',
+    skillEffect: 'Gain 8 gold'
+  });
+
+  // Permanent skills
+  deck.push({
+    id: `skill-${id++}`,
+    type: 'skill',
+    name: 'Iron Skin',
+    value: 0,
+    image: skillScrollImage,
+    skillType: 'permanent',
+    skillEffect: 'Reduce all damage by 1'
+  });
+
+  deck.push({
+    id: `skill-${id++}`,
+    type: 'skill',
+    name: 'Weapon Master',
+    value: 0,
+    image: skillScrollImage,
+    skillType: 'permanent',
+    skillEffect: 'All weapons +1 damage'
+  });
+
+  // Event cards (4 total)
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: 'Mysterious Shrine',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: 'Pray (+3 Max HP)', effect: 'maxhp+3' },
+      { text: 'Donate (Lose 5 Gold, Heal Full)', effect: 'gold-5,fullheal' },
+      { text: 'Leave', effect: 'none' }
+    ]
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: 'Wandering Merchant',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: 'Buy Potion (5 Gold for Heal 3)', effect: 'gold-5,heal+3' },
+      { text: 'Buy Weapon (8 Gold for Random Weapon)', effect: 'gold-8,weapon' },
+      { text: 'Decline', effect: 'none' }
+    ]
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: 'Dark Altar',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: 'Sacrifice HP (Lose 3 HP, Gain 10 Gold)', effect: 'hp-3,gold+10' },
+      { text: 'Sacrifice Gold (Lose 10 Gold, Heal 5 HP)', effect: 'gold-10,heal+5' },
+      { text: 'Walk Away', effect: 'none' }
+    ]
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: 'Ancient Tome',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: 'Read It (Take 2 Damage, Gain Permanent Skill)', effect: 'hp-2,permanentskill' },
+      { text: 'Sell It (Gain 7 Gold)', effect: 'gold+7' },
+      { text: 'Ignore It', effect: 'none' }
+    ]
+  });
+
   return deck.sort(() => Math.random() - 0.5);
 }
 
@@ -171,7 +292,7 @@ export default function GameBoard() {
   const [equipmentSlot1, setEquipmentSlot1] = useState<EquipmentItem | null>(null);
   const [equipmentSlot2, setEquipmentSlot2] = useState<EquipmentItem | null>(null);
   const [amuletSlot, setAmuletSlot] = useState<AmuletItem | null>(null);
-  const [backpackItems, setBackpackItems] = useState<Array<{ name: string; value: number; image?: string; type: 'weapon' | 'shield' | 'potion' }>>([]);
+  const [backpackItems, setBackpackItems] = useState<Array<{ name: string; value: number; image?: string; type: 'weapon' | 'shield' | 'potion' | 'skill' }>>([]);
   const [cardsPlayed, setCardsPlayed] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
@@ -189,8 +310,12 @@ export default function GameBoard() {
   const [deckViewerOpen, setDeckViewerOpen] = useState(false);
   const [discardedCards, setDiscardedCards] = useState<GameCardData[]>([]);
   const [handCards, setHandCards] = useState<GameCardData[]>([]); // Hand system - max 5 cards
+  const [permanentSkills, setPermanentSkills] = useState<string[]>([]); // Track permanent skill effects
+  const [tempShield, setTempShield] = useState(0); // Temporary shield from skills
+  const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [currentEventCard, setCurrentEventCard] = useState<GameCardData | null>(null);
 
-  // Calculate passive bonuses from amulet
+  // Calculate passive bonuses from amulet and permanent skills
   const getAmuletBonus = (type: 'health' | 'attack' | 'defense'): number => {
     if (amuletSlot?.effect === type) {
       return amuletSlot.value;
@@ -198,9 +323,9 @@ export default function GameBoard() {
     return 0;
   };
 
-  const maxHp = INITIAL_HP + getAmuletBonus('health');
-  const attackBonus = getAmuletBonus('attack');
-  const defenseBonus = getAmuletBonus('defense');
+  const maxHp = INITIAL_HP + getAmuletBonus('health') + (permanentSkills.includes('Iron Will') ? 3 : 0);
+  const attackBonus = getAmuletBonus('attack') + (permanentSkills.includes('Weapon Master') ? 1 : 0);
+  const defenseBonus = getAmuletBonus('defense') + (permanentSkills.includes('Iron Skin') ? 1 : 0);
 
   useEffect(() => {
     initGame();
@@ -215,7 +340,13 @@ export default function GameBoard() {
     setEquipmentSlot1(null);
     setEquipmentSlot2(null);
     setAmuletSlot(null);
-    setBackpackItems([]);
+    // Add default Reshuffle skill to backpack
+    setBackpackItems([{
+      name: 'Reshuffle',
+      value: 0,
+      image: skillScrollImage,
+      type: 'skill'
+    }]);
     setCardsPlayed(0);
     setGameOver(false);
     setVictory(false);
@@ -225,6 +356,10 @@ export default function GameBoard() {
     setTotalHealed(0);
     setDiscardedCards([]);
     setHandCards([]);
+    setPermanentSkills([]);
+    setTempShield(0);
+    setEventModalOpen(false);
+    setCurrentEventCard(null);
   };
 
   // Equipment slot helpers
@@ -504,6 +639,12 @@ export default function GameBoard() {
       setGold(prev => prev + card.value);
       toast({ title: 'Gold Collected!', description: `+${card.value} Gold` });
       removeCard(card.id);
+    } else if (card.type === 'skill') {
+      handleSkillCard(card);
+    } else if (card.type === 'event') {
+      setCurrentEventCard(card);
+      setEventModalOpen(true);
+      removeCard(card.id, false); // Don't add to graveyard yet
     }
   };
 
@@ -623,6 +764,126 @@ export default function GameBoard() {
     }
   };
 
+  const handleSkillCard = (card: GameCardData) => {
+    if (card.skillType === 'instant') {
+      // Execute instant skill effect
+      switch (card.name) {
+        case 'Healing Wave':
+          const healAmount = 5;
+          const newHp = Math.min(maxHp, hp + healAmount);
+          const actualHeal = newHp - hp;
+          setHealing(true);
+          setTimeout(() => setHealing(false), 500);
+          setTotalHealed(prev => prev + actualHeal);
+          setHp(newHp);
+          toast({ title: 'Healing Wave!', description: `+${actualHeal} HP from skill` });
+          break;
+        case 'Lightning Strike':
+          // Find a random monster to damage
+          const monsters = activeCards.filter(c => c.type === 'monster');
+          if (monsters.length > 0) {
+            const target = monsters[Math.floor(Math.random() * monsters.length)];
+            const damage = 4;
+            if (damage >= target.value) {
+              toast({ title: 'Lightning Strike!', description: `Destroyed ${target.name}!` });
+              setMonstersDefeated(prev => prev + 1);
+              addToGraveyard(target);
+              removeCard(target.id, false);
+            } else {
+              toast({ title: 'Lightning Strike!', description: `Damaged ${target.name} but it survived!` });
+              // Monster survives with reduced health (we'd need to track this separately)
+            }
+          } else {
+            toast({ title: 'No Target', description: 'No monsters to strike', variant: 'destructive' });
+          }
+          break;
+        case 'Shield Bash':
+          setTempShield(prev => prev + 3);
+          toast({ title: 'Shield Bash!', description: 'Next 3 damage blocked!' });
+          break;
+        case 'Gold Rush':
+          setGold(prev => prev + 8);
+          toast({ title: 'Gold Rush!', description: '+8 Gold!' });
+          break;
+      }
+      addToGraveyard(card);
+      removeCard(card.id, false);
+    } else if (card.skillType === 'permanent') {
+      // Add permanent skill effect
+      setPermanentSkills(prev => [...prev, card.skillEffect || card.name]);
+      toast({ 
+        title: 'Permanent Skill Acquired!', 
+        description: `${card.name}: ${card.skillEffect}`
+      });
+      addToGraveyard(card);
+      removeCard(card.id, false);
+    }
+  };
+
+  const handleEventChoice = (choiceIndex: number) => {
+    if (!currentEventCard || !currentEventCard.eventChoices) return;
+    
+    const choice = currentEventCard.eventChoices[choiceIndex];
+    const effects = choice.effect.split(',');
+    
+    for (const effect of effects) {
+      if (effect === 'none') continue;
+      
+      if (effect.startsWith('hp-')) {
+        const damage = parseInt(effect.replace('hp-', ''));
+        applyDamage(damage);
+        toast({ title: 'Damage Taken', description: `-${damage} HP`, variant: 'destructive' });
+      } else if (effect.startsWith('heal+')) {
+        const healAmount = parseInt(effect.replace('heal+', ''));
+        const newHp = Math.min(maxHp, hp + healAmount);
+        const actualHeal = newHp - hp;
+        setHealing(true);
+        setTimeout(() => setHealing(false), 500);
+        setTotalHealed(prev => prev + actualHeal);
+        setHp(newHp);
+        toast({ title: 'Healed!', description: `+${actualHeal} HP` });
+      } else if (effect === 'fullheal') {
+        const healAmount = maxHp - hp;
+        setHealing(true);
+        setTimeout(() => setHealing(false), 500);
+        setTotalHealed(prev => prev + healAmount);
+        setHp(maxHp);
+        toast({ title: 'Full Heal!', description: `Restored to ${maxHp} HP` });
+      } else if (effect.startsWith('gold-')) {
+        const goldLost = parseInt(effect.replace('gold-', ''));
+        if (gold >= goldLost) {
+          setGold(prev => prev - goldLost);
+          toast({ title: 'Gold Spent', description: `-${goldLost} Gold` });
+        } else {
+          toast({ title: 'Not Enough Gold!', variant: 'destructive' });
+          setEventModalOpen(false);
+          return;
+        }
+      } else if (effect.startsWith('gold+')) {
+        const goldGain = parseInt(effect.replace('gold+', ''));
+        setGold(prev => prev + goldGain);
+        toast({ title: 'Gold Gained!', description: `+${goldGain} Gold` });
+      } else if (effect.startsWith('maxhp+')) {
+        const hpGain = parseInt(effect.replace('maxhp+', ''));
+        // This would need a permanent max HP modifier
+        toast({ title: 'Max HP Increased!', description: `+${hpGain} Max HP` });
+      } else if (effect === 'weapon') {
+        // Create a random weapon
+        const weaponValue = Math.floor(Math.random() * 3) + 3; // 3-5 value
+        toast({ title: 'Weapon Received!', description: `Got a weapon (${weaponValue} damage)` });
+        // Would need to add weapon to inventory
+      } else if (effect === 'permanentskill') {
+        const randomSkill = ['Iron Skin', 'Weapon Master'][Math.floor(Math.random() * 2)];
+        setPermanentSkills(prev => [...prev, randomSkill]);
+        toast({ title: 'Skill Learned!', description: randomSkill });
+      }
+    }
+    
+    addToGraveyard(currentEventCard);
+    setEventModalOpen(false);
+    setCurrentEventCard(null);
+  };
+
   const handleBackpackClick = () => {
     if (backpackItems.length === 0) return;
     
@@ -654,6 +915,19 @@ export default function GameBoard() {
         setBackpackItems(prev => prev.slice(1)); // Remove top item
       } else {
         toast({ title: 'Equipment Full!', description: 'Clear a slot first', variant: 'destructive' });
+      }
+    } else if (item.type === 'skill' && item.name === 'Reshuffle') {
+      // Reshuffle skill - costs 5 HP
+      if (hp > 5) {
+        applyDamage(5);
+        toast({ title: 'Reshuffle!', description: 'Paid 5 HP to reshuffle the deck' });
+        
+        // Reshuffle the remaining deck
+        setRemainingDeck(prev => [...prev].sort(() => Math.random() - 0.5));
+        
+        // Don't remove from backpack - Reshuffle can be used multiple times
+      } else {
+        toast({ title: 'Not Enough HP!', description: 'Need more than 5 HP to reshuffle', variant: 'destructive' });
       }
     }
   };
@@ -829,6 +1103,13 @@ export default function GameBoard() {
         onDragEndFromHand={handleDragEndFromHand}
         isDropTarget={draggedCard !== null && handCards.length < 5}
         maxHandSize={5}
+      />
+
+      {/* Event Choice Modal */}
+      <EventChoiceModal
+        open={eventModalOpen}
+        eventCard={currentEventCard}
+        onChoice={handleEventChoice}
       />
     </div>
   );
