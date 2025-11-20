@@ -49,7 +49,14 @@ const INITIAL_HP = 20;
 const SELLABLE_TYPES = ['potion', 'coin', 'weapon', 'shield', 'amulet', 'skill'] as const;
 const DECK_SIZE = 64; // Updated: 54 + 6 skills + 4 events = 64
 
-type EquipmentItem = { name: string; value: number; image?: string; type: 'weapon' | 'shield' };
+type EquipmentItem = { 
+  name: string; 
+  value: number; 
+  image?: string; 
+  type: 'weapon' | 'shield';
+  durability?: number;
+  maxDurability?: number;
+};
 type AmuletItem = { name: string; value: number; image?: string; type: 'amulet'; effect: 'health' | 'attack' | 'defense' };
 type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
@@ -123,12 +130,16 @@ function createDeck(): GameCardData[] {
     const weaponType = weaponTypes[i % weaponTypes.length];
     // Balanced weapon values: 2-6
     const value = Math.floor(Math.random() * 5) + 2;
+    // Random durability 1-3
+    const durability = Math.floor(Math.random() * 3) + 1;
     deck.push({
       id: `weapon-${id++}`,
       type: 'weapon',
       name: weaponType.name,
       value: value,
       image: weaponType.image,
+      durability: durability,
+      maxDurability: durability,
     });
   }
 
@@ -142,12 +153,16 @@ function createDeck(): GameCardData[] {
   // 3-4 shields of each type (10 total)
   for (let i = 0; i < 10; i++) {
     const shieldType = shieldTypes[i % shieldTypes.length];
+    // Random durability 1-3
+    const durability = Math.floor(Math.random() * 3) + 1;
     deck.push({
       id: `shield-${id++}`,
       type: 'shield',
       name: shieldType.name,
       value: shieldType.value,
       image: shieldType.image,
+      durability: durability,
+      maxDurability: durability,
     });
   }
 
@@ -551,9 +566,6 @@ export default function GameBoard() {
     let shieldAlreadyLogged = false;
 
     if (weaponSlot) {
-      // Add weapon to graveyard
-      addToGraveyard({ ...weaponSlot.item, id: `weapon-used-${Date.now()}` });
-      
       // Apply attack bonus from amulet
       const weaponDamage = weaponSlot.item.value + attackBonus;
       
@@ -581,8 +593,26 @@ export default function GameBoard() {
         // Update the monster in active cards with reduced HP
         setActiveCards(prev => prev.map(c => c.id === monster.id ? updatedMonster : c));
         
-        // Don't remove the monster - it survived!
-        clearEquipmentSlotById(weaponSlot.id);
+        // Decrement weapon durability instead of immediately removing
+        const currentDurability = weaponSlot.item.durability ?? 1;
+        if (currentDurability <= 1) {
+          // Weapon breaks after this use
+          addToGraveyard({ ...weaponSlot.item, id: `weapon-broken-${Date.now()}` });
+          clearEquipmentSlotById(weaponSlot.id);
+          toast({
+            title: 'Weapon Broken!',
+            description: `${weaponSlot.item.name} has broken!`,
+            variant: 'destructive'
+          });
+        } else {
+          // Weapon survives with reduced durability
+          const updatedWeapon = { ...weaponSlot.item, durability: currentDurability - 1 };
+          setEquipmentSlotById(weaponSlot.id, updatedWeapon);
+          toast({
+            title: 'Weapon Damaged',
+            description: `${weaponSlot.item.name} has ${currentDurability - 1}/${weaponSlot.item.maxDurability || currentDurability} uses left`
+          });
+        }
         
         // Apply counterattack damage after updating cards
         if (damageToPlayer > 0) {
@@ -590,13 +620,29 @@ export default function GameBoard() {
         }
         return; // Exit early - monster survived
       }
-      clearEquipmentSlotById(weaponSlot.id);
+      
+      // Monster defeated - decrement weapon durability
+      const currentDurability = weaponSlot.item.durability ?? 1;
+      if (currentDurability <= 1) {
+        // Weapon breaks after this use
+        addToGraveyard({ ...weaponSlot.item, id: `weapon-broken-${Date.now()}` });
+        clearEquipmentSlotById(weaponSlot.id);
+        toast({
+          title: 'Weapon Broken!',
+          description: `${weaponSlot.item.name} has broken after defeating ${monster.name}!`,
+          variant: 'destructive'
+        });
+      } else {
+        // Weapon survives with reduced durability
+        const updatedWeapon = { ...weaponSlot.item, durability: currentDurability - 1 };
+        setEquipmentSlotById(weaponSlot.id, updatedWeapon);
+      }
     } else {
       // No weapon - take full monster attack damage
       damageToPlayer = monsterAttack;
     }
 
-    // Apply shield damage reduction (shield is consumed)
+    // Apply shield damage reduction (shield durability is reduced)
     if (damageToPlayer > 0) {
       const shieldSlot = findShieldSlot();
       if (shieldSlot) {
@@ -607,11 +653,28 @@ export default function GameBoard() {
           title: damageToPlayer === 0 ? 'Shield Blocked Attack!' : 'Shield Reduced Damage!',
           description: `${shieldSlot.item.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed damage!${damageToPlayer > 0 ? ` ${originalDamage} → ${damageToPlayer}` : ''}`
         });
-        // Add shield to graveyard
-        addToGraveyard({ ...shieldSlot.item, id: `shield-used-${Date.now()}` });
+        
+        // Decrement shield durability
+        const currentDurability = shieldSlot.item.durability ?? 1;
+        if (currentDurability <= 1) {
+          // Shield breaks after this use
+          addToGraveyard({ ...shieldSlot.item, id: `shield-broken-${Date.now()}` });
+          clearEquipmentSlotById(shieldSlot.id);
+          toast({
+            title: 'Shield Broken!',
+            description: `${shieldSlot.item.name} has broken!`,
+            variant: 'destructive'
+          });
+        } else {
+          // Shield survives with reduced durability
+          const updatedShield = { ...shieldSlot.item, durability: currentDurability - 1 };
+          setEquipmentSlotById(shieldSlot.id, updatedShield);
+          toast({
+            title: 'Shield Damaged',
+            description: `${shieldSlot.item.name} has ${currentDurability - 1}/${shieldSlot.item.maxDurability || currentDurability} uses left`
+          });
+        }
         shieldAlreadyLogged = true;
-        // Shield is consumed after use
-        clearEquipmentSlotById(shieldSlot.id);
       } else if (!weaponSlot) {
         toast({
           title: 'Damage Taken!',
@@ -654,11 +717,29 @@ export default function GameBoard() {
         title: 'Shield Blocks Counterattack!',
         description: `${shieldSlot.item.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed ${blocked} damage!${remainingDamage > 0 ? ` ${damage} → ${remainingDamage}` : ''}`
       });
-      // Only add shield to graveyard if not already logged
-      if (!alreadyLoggedShield) {
-        addToGraveyard({ ...shieldSlot.item, id: `shield-counter-${Date.now()}` });
+      
+      // Decrement shield durability
+      const currentDurability = shieldSlot.item.durability ?? 1;
+      if (currentDurability <= 1) {
+        // Shield breaks after this use
+        if (!alreadyLoggedShield) {
+          addToGraveyard({ ...shieldSlot.item, id: `shield-counter-broken-${Date.now()}` });
+        }
+        clearEquipmentSlotById(shieldSlot.id);
+        toast({
+          title: 'Shield Broken!',
+          description: `${shieldSlot.item.name} has broken!`,
+          variant: 'destructive'
+        });
+      } else {
+        // Shield survives with reduced durability
+        const updatedShield = { ...shieldSlot.item, durability: currentDurability - 1 };
+        setEquipmentSlotById(shieldSlot.id, updatedShield);
+        toast({
+          title: 'Shield Damaged',
+          description: `${shieldSlot.item.name} has ${currentDurability - 1}/${shieldSlot.item.maxDurability || currentDurability} uses left`
+        });
       }
-      clearEquipmentSlotById(shieldSlot.id);
     }
     
     if (remainingDamage > 0) {
@@ -671,13 +752,12 @@ export default function GameBoard() {
     const monsterHp = monster.hp ?? monster.value;
     const monsterAttack = monster.attack ?? monster.value;
     
-    // Clear the weapon from its slot
-    if (weapon.fromSlot) {
-      clearEquipmentSlotById(weapon.fromSlot as EquipmentSlotId);
-    }
+    // Handle weapon durability
+    const currentDurability = weapon.durability ?? 1;
+    const weaponBreaks = currentDurability <= 1;
     
     if (weaponDamage >= monsterHp) {
-      // Weapon defeats monster - remove it and add to graveyard
+      // Weapon defeats monster
       setMonstersDefeated(prev => prev + 1);
       toast({
         title: 'Monster Defeated!',
@@ -685,6 +765,29 @@ export default function GameBoard() {
       });
       addToGraveyard(monster);
       removeCard(monster.id, false);
+      
+      // Handle weapon durability after defeating monster
+      if (weapon.fromSlot) {
+        if (weaponBreaks) {
+          // Weapon breaks
+          addToGraveyard({ ...weapon, id: `weapon-direct-broken-${Date.now()}` });
+          clearEquipmentSlotById(weapon.fromSlot as EquipmentSlotId);
+          toast({
+            title: 'Weapon Broken!',
+            description: `${weapon.name} has broken after defeating ${monster.name}!`,
+            variant: 'destructive'
+          });
+        } else {
+          // Weapon survives with reduced durability
+          const updatedWeapon = { ...weapon, durability: currentDurability - 1 };
+          delete updatedWeapon.fromSlot; // Remove the fromSlot property before setting
+          setEquipmentSlotById(weapon.fromSlot as EquipmentSlotId, updatedWeapon);
+          toast({
+            title: 'Weapon Damaged',
+            description: `${weapon.name} has ${currentDurability - 1}/${weapon.maxDurability || currentDurability} uses left`
+          });
+        }
+      }
     } else {
       // Monster survives - update its HP and layers
       const updatedMonster = damageMonster(monster, weaponDamage);
@@ -697,6 +800,29 @@ export default function GameBoard() {
       
       // Update the monster in active cards with reduced HP
       setActiveCards(prev => prev.map(c => c.id === monster.id ? updatedMonster : c));
+      
+      // Handle weapon durability after failing to defeat monster
+      if (weapon.fromSlot) {
+        if (weaponBreaks) {
+          // Weapon breaks
+          addToGraveyard({ ...weapon, id: `weapon-direct-broken-${Date.now()}` });
+          clearEquipmentSlotById(weapon.fromSlot as EquipmentSlotId);
+          toast({
+            title: 'Weapon Broken!',
+            description: `${weapon.name} has broken!`,
+            variant: 'destructive'
+          });
+        } else {
+          // Weapon survives with reduced durability
+          const updatedWeapon = { ...weapon, durability: currentDurability - 1 };
+          delete updatedWeapon.fromSlot; // Remove the fromSlot property before setting
+          setEquipmentSlotById(weapon.fromSlot as EquipmentSlotId, updatedWeapon);
+          toast({
+            title: 'Weapon Damaged',
+            description: `${weapon.name} has ${currentDurability - 1}/${weapon.maxDurability || currentDurability} uses left`
+          });
+        }
+      }
       
       // Apply counterattack damage using monster's attack value
       applyCounterattackDamage(monsterAttack);
@@ -749,7 +875,18 @@ export default function GameBoard() {
         toast({ title: 'Backpack Full!', description: 'Maximum 10 items', variant: 'destructive' });
         return;
       }
-      setBackpackItems(prev => [...prev, { name: card.name, value: card.value, image: card.image, type: card.type }]);
+      // Preserve durability for weapons/shields in backpack
+      const backpackItem: any = { 
+        name: card.name, 
+        value: card.value, 
+        image: card.image, 
+        type: card.type 
+      };
+      if (card.type === 'weapon' || card.type === 'shield') {
+        backpackItem.durability = card.durability;
+        backpackItem.maxDurability = card.maxDurability;
+      }
+      setBackpackItems(prev => [...prev, backpackItem]);
       toast({ title: 'Item Stored!', description: `${backpackItems.length + 1}/10 items in backpack` });
       removeCard(card.id, false); 
     } else if (slotId.startsWith('slot-equipment')) {
@@ -778,12 +915,29 @@ export default function GameBoard() {
             description: `${equippedItem.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed damage from ${card.name}'s ${monsterAttack} attack!${damageToPlayer > 0 ? ` ${monsterAttack} → ${damageToPlayer}` : ''}`
           });
           
-          // Add shield and monster to graveyard
-          addToGraveyard({ ...equippedItem, id: `shield-used-${Date.now()}` });
-          addToGraveyard(card);
+          // Decrement shield durability
+          const currentDurability = equippedItem.durability ?? 1;
+          if (currentDurability <= 1) {
+            // Shield breaks after this use
+            addToGraveyard({ ...equippedItem, id: `shield-direct-broken-${Date.now()}` });
+            clearEquipmentSlotById(equipSlot);
+            toast({
+              title: 'Shield Broken!',
+              description: `${equippedItem.name} has broken!`,
+              variant: 'destructive'
+            });
+          } else {
+            // Shield survives with reduced durability
+            const updatedShield = { ...equippedItem, durability: currentDurability - 1 };
+            setEquipmentSlotById(equipSlot, updatedShield);
+            toast({
+              title: 'Shield Damaged',
+              description: `${equippedItem.name} has ${currentDurability - 1}/${equippedItem.maxDurability || currentDurability} uses left`
+            });
+          }
           
-          // Shield is consumed
-          clearEquipmentSlotById(equipSlot);
+          // Add monster to graveyard
+          addToGraveyard(card);
           
           // Apply remaining damage if any
           if (damageToPlayer > 0) {
@@ -793,14 +947,24 @@ export default function GameBoard() {
           // Remove monster (already added to graveyard above)
           removeCard(card.id, false);
         } else if (equippedItem.type === 'weapon') {
-          // Weapon attacks monster - add weapon to graveyard
-          addToGraveyard({ ...equippedItem, id: `weapon-used-${Date.now()}` });
+          // Weapon attacks monster - pass weapon with durability
           handleWeaponToMonster({ ...equippedItem, fromSlot: equipSlot }, card);
         }
       } else if (card.type === 'weapon' || card.type === 'shield') {
         // Equip weapon or shield (don't add to graveyard yet - only when consumed)
-        setEquipmentSlotById(equipSlot, { name: card.name, value: card.value, image: card.image, type: card.type });
-        toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!` });
+        // Preserve durability from the card
+        setEquipmentSlotById(equipSlot, { 
+          name: card.name, 
+          value: card.value, 
+          image: card.image, 
+          type: card.type,
+          durability: card.durability,
+          maxDurability: card.maxDurability
+        });
+        toast({ 
+          title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`,
+          description: card.durability ? `${card.durability}/${card.maxDurability} uses` : undefined
+        });
         removeCard(card.id, false);
       }
     }
@@ -991,8 +1155,18 @@ export default function GameBoard() {
     } else if (item.type === 'shield') {
       const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
       if (emptySlot) {
-        setEquipmentSlotById(emptySlot, { name: item.name, value: item.value, image: item.image, type: 'shield' });
-        toast({ title: 'Shield Equipped!', description: `${item.name} equipped from backpack` });
+        setEquipmentSlotById(emptySlot, { 
+          name: item.name, 
+          value: item.value, 
+          image: item.image, 
+          type: 'shield',
+          durability: item.durability,
+          maxDurability: item.maxDurability
+        });
+        toast({ 
+          title: 'Shield Equipped!', 
+          description: `${item.name} equipped from backpack${item.durability ? ` (${item.durability}/${item.maxDurability} uses)` : ''}` 
+        });
         setBackpackItems(prev => prev.slice(1)); // Remove top item
       } else {
         toast({ title: 'Equipment Full!', description: 'Clear a slot first', variant: 'destructive' });
@@ -1000,8 +1174,18 @@ export default function GameBoard() {
     } else if (item.type === 'weapon') {
       const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
       if (emptySlot) {
-        setEquipmentSlotById(emptySlot, { name: item.name, value: item.value, image: item.image, type: 'weapon' });
-        toast({ title: 'Weapon Equipped!', description: `${item.name} equipped from backpack` });
+        setEquipmentSlotById(emptySlot, { 
+          name: item.name, 
+          value: item.value, 
+          image: item.image, 
+          type: 'weapon',
+          durability: item.durability,
+          maxDurability: item.maxDurability
+        });
+        toast({ 
+          title: 'Weapon Equipped!', 
+          description: `${item.name} equipped from backpack${item.durability ? ` (${item.durability}/${item.maxDurability} uses)` : ''}` 
+        });
         setBackpackItems(prev => prev.slice(1)); // Remove top item
       } else {
         toast({ title: 'Equipment Full!', description: 'Clear a slot first', variant: 'destructive' });

@@ -6,7 +6,7 @@ export type SlotType = 'equipment' | 'backpack';
 interface EquipmentSlotProps {
   type: SlotType;
   slotId?: string;
-  item?: { name: string; value: number; image?: string; type?: string } | null;
+  item?: { name: string; value: number; image?: string; type?: string; durability?: number; maxDurability?: number } | null;
   backpackCount?: number; // Number of items in backpack stack
   onDrop?: (card: any) => void;
   onDragStart?: (item: any) => void;
@@ -80,23 +80,64 @@ export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, o
             ${type === 'backpack' ? 'cursor-pointer hover-elevate active-elevate-2' : 'cursor-grab active:cursor-grabbing hover-elevate'}
           `}
           onClick={type === 'backpack' ? onClick : undefined}
+          style={{
+            // Shift the card to the right as durability decreases (visual feedback)
+            transform: (item.durability && item.maxDurability && item.durability < item.maxDurability) 
+              ? `translateX(${(item.maxDurability - item.durability) * 8}px)` 
+              : undefined
+          }}
         >
           <div className="h-full flex flex-col">
             <div className="relative h-[60%] bg-gradient-to-b from-muted to-card overflow-hidden">
+              {/* Background durability numbers for visual tracking */}
+              {item.durability && item.maxDurability && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="flex gap-2">
+                    {[...Array(item.maxDurability)].map((_, i) => (
+                      <div 
+                        key={i} 
+                        className={`text-5xl font-bold ${
+                          i < item.durability
+                            ? 'text-foreground/10' 
+                            : 'text-muted/5'
+                        }`}
+                      >
+                        {item.maxDurability - i}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               {item.image && (
                 <img 
                   src={item.image} 
                   alt={item.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover relative z-10"
+                  style={{ opacity: 0.9 }} // Slightly transparent to show durability numbers
                 />
               )}
-              <div className="absolute top-1 right-1">
+              
+              {/* Value indicator */}
+              <div className="absolute top-1 right-1 z-20">
                 <div className="bg-background/80 backdrop-blur-sm rounded-full w-6 h-6 flex items-center justify-center">
                   <span className="font-mono font-bold text-xs" data-testid={`${testId}-value`}>
                     {item.value}
                   </span>
                 </div>
               </div>
+              
+              {/* Durability indicator */}
+              {item.durability && item.maxDurability && (
+                <div className="absolute bottom-1 right-1 z-20">
+                  <div className="bg-background/90 backdrop-blur-sm rounded px-2 py-1 flex items-center gap-1">
+                    <Shield className="w-3 h-3 text-blue-500" />
+                    <span className="font-mono font-bold text-xs" data-testid={`${testId}-durability`}>
+                      {item.durability}/{item.maxDurability}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="h-[40%] p-2 flex flex-col items-center justify-center bg-card">
               <p className="text-xs font-medium text-center">{item.name}</p>

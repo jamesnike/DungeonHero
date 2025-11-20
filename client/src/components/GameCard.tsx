@@ -21,6 +21,9 @@ export interface GameCardData {
   hpLayers?: number; // Number of HP layers (1-3)
   currentLayer?: number; // Current layer (starts at 1)
   layerShift?: number; // Visual shift amount (0-4)
+  // Equipment durability
+  durability?: number; // Current durability for weapons/shields
+  maxDurability?: number; // Maximum durability for weapons/shields
 }
 
 interface GameCardProps {
@@ -218,13 +221,48 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
                 )}
               </>
             ) : (
-              <div className="absolute top-2 left-2">
-                <div className="bg-background/80 backdrop-blur-sm rounded-full w-8 h-8 flex items-center justify-center">
-                  <span className="font-mono font-bold text-sm" data-testid={`card-value-${card.id}`}>
-                    {card.value}
-                  </span>
+              <>
+                {/* Durability background numbers for weapons/shields */}
+                {(card.type === 'weapon' || card.type === 'shield') && card.durability && card.maxDurability && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="flex gap-2">
+                      {[...Array(card.maxDurability)].map((_, i) => (
+                        <div 
+                          key={i} 
+                          className={`text-5xl font-bold ${
+                            i < card.durability
+                              ? 'text-foreground/10' 
+                              : 'text-muted/5'
+                          }`}
+                        >
+                          {card.maxDurability - i}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Value indicator */}
+                <div className="absolute top-2 left-2">
+                  <div className="bg-background/80 backdrop-blur-sm rounded-full w-8 h-8 flex items-center justify-center">
+                    <span className="font-mono font-bold text-sm" data-testid={`card-value-${card.id}`}>
+                      {card.value}
+                    </span>
+                  </div>
                 </div>
-              </div>
+                
+                {/* Durability indicator for weapons/shields */}
+                {(card.type === 'weapon' || card.type === 'shield') && card.durability && card.maxDurability && (
+                  <div className="absolute bottom-2 left-2">
+                    <div className="bg-background/90 backdrop-blur-sm rounded px-2 py-1 flex items-center gap-1">
+                      <Shield className="w-3 h-3 text-blue-500" />
+                      <span className="font-mono font-bold text-xs" data-testid={`card-durability-${card.id}`}>
+                        {card.durability}/{card.maxDurability}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
           
