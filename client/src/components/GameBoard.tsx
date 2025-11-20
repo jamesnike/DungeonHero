@@ -27,7 +27,7 @@ import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
 // Cute cartoon shields (different tiers) - NEW Q-version style
 import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
 import ironShieldImage from '@assets/generated_images/cute_iron_shield.png';
-import heavyShieldImage from '@assets/generated_images/cute_heavy_shield.png';
+import heavyShieldImage from '@assets/generated_images/super_cute_heavy_shield.png';
 
 // Cute cartoon potion and coin
 import potionImage from '@assets/generated_images/cute_cartoon_healing_potion.png';
