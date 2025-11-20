@@ -1292,7 +1292,7 @@ export default function GameBoard() {
       </div>
 
       {/* Main game area - adjust padding for hand area at bottom */}
-      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(180px, 25vh, 320px) + 2vh)' }}>
+      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(140px, 18vh, 240px) + 2vh)' }}>
         {/* 3×5 Card Grid */}
         <div className="grid grid-cols-5 w-full" style={{ 
           maxWidth: '95vw',
@@ -1306,8 +1306,8 @@ export default function GameBoard() {
                 key={card.id}
                 className="opacity-60 pointer-events-none"
                 style={{ 
-                  width: 'clamp(100px, 15vw, 200px)', 
-                  height: 'clamp(140px, 21vw, 280px)' 
+                  width: 'clamp(80px, 12vw, 160px)', 
+                  height: 'clamp(112px, 16.8vw, 224px)' 
                 }}
                 data-testid={`preview-card-${index}`}
               >
@@ -1321,8 +1321,8 @@ export default function GameBoard() {
               <div 
                 key={`preview-empty-${index}`} 
                 style={{ 
-                  width: 'clamp(100px, 15vw, 200px)', 
-                  height: 'clamp(140px, 21vw, 280px)' 
+                  width: 'clamp(80px, 12vw, 160px)', 
+                  height: 'clamp(112px, 16.8vw, 224px)' 
                 }} 
               />
             )

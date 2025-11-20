@@ -44,8 +44,8 @@ export default function HeroCard({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       style={{ 
-        width: 'clamp(100px, 15vw, 200px)', 
-        height: 'clamp(140px, 21vw, 280px)' 
+        width: 'clamp(80px, 12vw, 160px)', 
+        height: 'clamp(112px, 16.8vw, 224px)' 
       }}
       data-testid="hero-card"
     >

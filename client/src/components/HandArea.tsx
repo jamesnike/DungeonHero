@@ -37,7 +37,7 @@ export default function HandArea({
   return (
     <div 
       className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t-2 border-card-border shadow-2xl"
-      style={{ height: 'clamp(180px, 25vh, 320px)' }}
+      style={{ height: 'clamp(140px, 18vh, 240px)' }}
     >
       <div className="h-full px-4 py-2 lg:px-8">
         {/* Hand header */}
