@@ -11,6 +11,7 @@ import DeckViewerModal from './DeckViewerModal';
 import EventChoiceModal from './EventChoiceModal';
 import DiceRoller from './DiceRoller';
 import ClassDeck from './ClassDeck';
+import HeroSkillSelection from './HeroSkillSelection';
 import { useToast } from '@/hooks/use-toast';
 import { generateKnightDeck, createKnightDiscoveryEvents, type KnightCardData } from '@/lib/knightDeck';
 
@@ -413,7 +414,8 @@ export default function GameBoard() {
   // Hero class system state
   const [heroClass] = useState<'knight' | 'mage' | 'rogue'>('knight'); // Default to Knight
   const [classCardsInHand, setClassCardsInHand] = useState<KnightCardData[]>([]);
-  const [selectedHeroSkill] = useState<string>('Weapon Master'); // Starting Knight skill
+  const [selectedHeroSkill, setSelectedHeroSkill] = useState<string | null>(null); // Selected Knight skill
+  const [showSkillSelection, setShowSkillSelection] = useState(true); // Show skill selection modal on game start
   
   // Knight-specific buffs and states
   const [nextWeaponBonus, setNextWeaponBonus] = useState(0); // Temporary weapon bonus
@@ -423,6 +425,10 @@ export default function GameBoard() {
   const [vampiricNextAttack, setVampiricNextAttack] = useState(false); // Next attack heals
   const [unbreakableNext, setUnbreakableNext] = useState(false); // Next equipment won't break
   const [defensiveStanceActive, setDefensiveStanceActive] = useState(false); // Damage reduction this turn
+  
+  // Equipment slot bonuses
+  const [equipmentSlot1Bonus, setEquipmentSlot1Bonus] = useState(0);
+  const [equipmentSlot2Bonus, setEquipmentSlot2Bonus] = useState(0);
 
   // Calculate passive bonuses from amulet and permanent skills
   const getAmuletBonus = (type: 'health' | 'attack' | 'defense'): number => {
@@ -455,10 +461,11 @@ export default function GameBoard() {
     };
   };
 
-  const maxHp = INITIAL_HP + getAmuletBonus('health') + (permanentSkills.includes('Iron Will') ? 3 : 0);
+  const maxHp = INITIAL_HP + getAmuletBonus('health') + (permanentSkills.includes('Iron Will') ? 3 : 0) + (selectedHeroSkill === 'iron-will' ? 5 : 0);
   const attackBonus = getAmuletBonus('attack') + 
     (permanentSkills.includes('Weapon Master') ? 1 : 0) +
     weaponMasterBonus + // Knight class bonus to all weapons
+    (selectedHeroSkill === 'weapon-master' ? 1 : 0) + // Hero skill bonus
     (permanentSkills.includes('Berserker Rage') ? Math.floor((maxHp - hp) / 2) : 0) + // +1 per 2 HP missing
     (permanentSkills.includes('Battle Frenzy') && hp < maxHp / 2 ? 2 : 0); // Bonus when low HP
   const defenseBonus = getAmuletBonus('defense') + 
@@ -511,20 +518,40 @@ export default function GameBoard() {
       const knightDeck = generateKnightDeck();
       setClassDeck(knightDeck);
       setClassCardsInHand([]);
-      // Apply starting Knight skill
-      if (selectedHeroSkill === 'Weapon Master') {
-        setWeaponMasterBonus(1);
-      }
     }
     
     // Reset Knight-specific states
     setNextWeaponBonus(0);
     setNextShieldBonus(0);
-    setWeaponMasterBonus(selectedHeroSkill === 'Weapon Master' ? 1 : 0);
+    setWeaponMasterBonus(0); // Will be set after skill selection
     setShieldMasterBonus(0);
     setVampiricNextAttack(false);
     setUnbreakableNext(false);
     setDefensiveStanceActive(false);
+    
+    // Reset equipment slot bonuses
+    setEquipmentSlot1Bonus(0);
+    setEquipmentSlot2Bonus(0);
+    
+    // Reset and show skill selection
+    setSelectedHeroSkill(null);
+    setShowSkillSelection(true);
+  };
+
+  // Handle skill selection
+  const handleSkillSelection = (skillId: string) => {
+    setSelectedHeroSkill(skillId);
+    setShowSkillSelection(false);
+    
+    // Apply skill effects immediately
+    if (skillId === 'iron-will') {
+      // Iron Will adds +5 max HP, so also increase current HP
+      setHp(prev => prev + 5);
+    } else if (skillId === 'weapon-master') {
+      // Weapon Master adds +1 damage to all weapons
+      setWeaponMasterBonus(1);
+    }
+    // Bloodthirsty effect is handled when monsters are killed
   };
 
   // Equipment slot helpers
@@ -684,8 +711,10 @@ export default function GameBoard() {
     let shieldAlreadyLogged = false;
 
     if (weaponSlot) {
+      // Get the slot bonus for the weapon slot
+      const slotBonus = weaponSlot.id === 'equipmentSlot1' ? equipmentSlot1Bonus : equipmentSlot2Bonus;
       // Apply attack bonus from amulet and Knight bonuses
-      const weaponDamage = weaponSlot.item.value + attackBonus + nextWeaponBonus;
+      const weaponDamage = weaponSlot.item.value + attackBonus + nextWeaponBonus + slotBonus;
       
       // Attack with weapon - damage the monster's HP
       if (weaponDamage >= monsterHp) {
@@ -705,6 +734,20 @@ export default function GameBoard() {
             toast({ title: 'Vampiric Strike!', description: `Healed ${actualHeal} HP` });
           }
           setVampiricNextAttack(false);
+        }
+        
+        // Apply Bloodthirsty skill healing (heal 2 HP on kill)
+        if (selectedHeroSkill === 'bloodthirsty') {
+          const healAmount = 2;
+          const newHp = Math.min(maxHp, hp + healAmount);
+          const actualHeal = newHp - hp;
+          if (actualHeal > 0) {
+            setHealing(true);
+            setTimeout(() => setHealing(false), 500);
+            setTotalHealed(prev => prev + actualHeal);
+            setHp(newHp);
+            toast({ title: 'Bloodthirsty!', description: `Healed ${actualHeal} HP from the kill!` });
+          }
         }
         
         // Reset next weapon bonus after use
@@ -786,7 +829,8 @@ export default function GameBoard() {
       const shieldSlot = findShieldSlot();
       if (shieldSlot) {
         const originalDamage = damageToPlayer;
-        const shieldValue = shieldSlot.item.value + defenseBonus;
+        const slotBonus = shieldSlot.id === 'equipmentSlot1' ? equipmentSlot1Bonus : equipmentSlot2Bonus;
+        const shieldValue = shieldSlot.item.value + defenseBonus + slotBonus;
         damageToPlayer = Math.max(0, damageToPlayer - shieldValue);
         toast({
           title: damageToPlayer === 0 ? 'Shield Blocked Attack!' : 'Shield Reduced Damage!',
@@ -1790,6 +1834,7 @@ export default function GameBoard() {
             type="equipment" 
             slotId="slot-equipment-1"
             item={equipmentSlot1}
+            slotBonus={equipmentSlot1Bonus}
             onDrop={(card) => handleCardToSlot(card, 'slot-equipment-1')}
             onDragStart={(equipment) => {
               setDraggedEquipment(equipment);
@@ -1813,6 +1858,7 @@ export default function GameBoard() {
             type="equipment"
             slotId="slot-equipment-2"
             item={equipmentSlot2}
+            slotBonus={equipmentSlot2Bonus}
             onDrop={(card) => handleCardToSlot(card, 'slot-equipment-2')}
             onDragStart={(equipment) => {
               setDraggedEquipment(equipment);
@@ -1880,6 +1926,12 @@ export default function GameBoard() {
         open={eventModalOpen}
         eventCard={currentEventCard}
         onChoice={handleEventChoice}
+      />
+      
+      {/* Hero Skill Selection Modal */}
+      <HeroSkillSelection
+        isOpen={showSkillSelection}
+        onSelectSkill={handleSkillSelection}
       />
     </div>
   );

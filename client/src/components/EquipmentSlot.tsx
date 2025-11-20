@@ -8,6 +8,7 @@ interface EquipmentSlotProps {
   slotId?: string;
   item?: { name: string; value: number; image?: string; type?: string; durability?: number; maxDurability?: number } | null;
   backpackCount?: number; // Number of items in backpack stack
+  slotBonus?: number; // Bonus value for this equipment slot
   onDrop?: (card: any) => void;
   onDragStart?: (item: any) => void;
   onDragEnd?: () => void;
@@ -15,7 +16,7 @@ interface EquipmentSlotProps {
   onClick?: () => void;
 }
 
-export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, onDrop, onDragStart, onDragEnd, isDropTarget, onClick }: EquipmentSlotProps) {
+export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, slotBonus = 0, onDrop, onDragStart, onDragEnd, isDropTarget, onClick }: EquipmentSlotProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
@@ -60,8 +61,17 @@ export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, o
 
   const testId = slotId || `slot-${type}`;
 
+  // Determine bonus badge color based on the item type in the slot
+  const getBonusColor = () => {
+    if (!item) return 'bg-gray-500';
+    if (item.type === 'weapon') return 'bg-red-500'; // Red for attack bonus
+    if (item.type === 'shield') return 'bg-blue-500'; // Blue for defense bonus
+    return 'bg-gray-500';
+  };
+
   return (
     <div 
+      className="relative"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       style={{ 
@@ -70,6 +80,14 @@ export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, o
       }}
       data-testid={testId}
     >
+      {/* Slot bonus badge - only show for equipment slots */}
+      {type === 'equipment' && (
+        <div className={`absolute -top-2 -right-2 z-30 ${getBonusColor()} text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg`}>
+          <span className="font-mono font-bold text-sm">
+            +{slotBonus}
+          </span>
+        </div>
+      )}
       {item ? (
         <Card 
           draggable={type !== 'backpack'}
