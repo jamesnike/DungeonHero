@@ -107,6 +107,15 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 - All combat paths now add cards to graveyard (weapons, shields, monsters)
 - Equipment slots accept both weapons and shields dynamically
 
+### Graveyard System Implementation
+- **removeCard Function**: Enhanced with `addToGraveyardAutomatically` parameter (default: true)
+  - `removeCard(id)`: Removes from dungeon AND adds to graveyard (for potions/coins)
+  - `removeCard(id, false)`: Removes from dungeon WITHOUT adding to graveyard (for equipment/backpack/already-logged cards)
+- **Equipping Items**: Weapons/shields/potions moved to equipment slots or backpack do NOT add to graveyard until consumed/used/sold
+- **Combat Consumption**: All combat paths manually add cards to graveyard before calling removeCard(id, false) to prevent duplicates
+- **Duplicate Prevention**: Flag system ensures each card appears in graveyard exactly once per use
+- **Counterattack Shield Handling**: Shield consumed during counterattacks properly added to graveyard without duplicates
+
 ## Combat System
 - **Weapon Usage**: Weapons are single-use items consumed when attacking monsters. Added to graveyard after use.
 - **Shield Mechanics**: Shields are single-use and consumed when blocking damage. Added to graveyard after use.
