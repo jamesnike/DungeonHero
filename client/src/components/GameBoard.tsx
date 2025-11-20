@@ -5,7 +5,7 @@ import GameCard, { type GameCardData } from './GameCard';
 import EquipmentSlot, { type SlotType } from './EquipmentSlot';
 import AmuletSlot from './AmuletSlot';
 import GraveyardZone from './GraveyardZone';
-import HandArea from './HandArea';
+import HandDisplay from './HandDisplay';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import DeckViewerModal from './DeckViewerModal';
 import EventChoiceModal from './EventChoiceModal';
@@ -388,7 +388,7 @@ export default function GameBoard() {
   const [equipmentSlot1, setEquipmentSlot1] = useState<EquipmentItem | null>(null);
   const [equipmentSlot2, setEquipmentSlot2] = useState<EquipmentItem | null>(null);
   const [amuletSlot, setAmuletSlot] = useState<AmuletItem | null>(null);
-  const [backpackItems, setBackpackItems] = useState<Array<{ name: string; value: number; image?: string; type: 'weapon' | 'shield' | 'potion' | 'skill' }>>([]);
+  const [backpackItems, setBackpackItems] = useState<GameCardData[]>([]); // Full card storage LIFO stack
   const [cardsPlayed, setCardsPlayed] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
@@ -405,7 +405,9 @@ export default function GameBoard() {
   const [totalHealed, setTotalHealed] = useState(0);
   const [deckViewerOpen, setDeckViewerOpen] = useState(false);
   const [discardedCards, setDiscardedCards] = useState<GameCardData[]>([]);
-  const [handCards, setHandCards] = useState<GameCardData[]>([]); // Hand system - max 5 cards
+  const [handCards, setHandCards] = useState<GameCardData[]>([]); // Hand system - max 7 cards
+  const [isDraggingToHand, setIsDraggingToHand] = useState(false); // Show hand acquisition zone
+  const [isDraggingFromDungeon, setIsDraggingFromDungeon] = useState(false); // Track if dragging from dungeon
   const [permanentSkills, setPermanentSkills] = useState<string[]>([]); // Track permanent skill effects
   const [tempShield, setTempShield] = useState(0); // Temporary shield from skills
   const [classDeck, setClassDeck] = useState<GameCardData[]>([]); // Class deck cards
@@ -473,6 +475,23 @@ export default function GameBoard() {
     (permanentSkills.includes('Iron Skin') ? 1 : 0) +
     shieldMasterBonus + // Knight class bonus to all shields
     (defensiveStanceActive ? 1 : 0); // Defensive stance damage reduction
+  
+  // Auto-draw mechanism - draw from top of backpack to hand
+  const drawFromBackpackToHand = () => {
+    if (handCards.length >= 7 || backpackItems.length === 0) {
+      return; // Hand full or backpack empty
+    }
+    
+    // Draw from top (pop from end)
+    const cardToDraw = backpackItems[backpackItems.length - 1];
+    setBackpackItems(prev => prev.slice(0, -1)); // Remove from top
+    setHandCards(prev => [...prev, cardToDraw]); // Add to hand
+    
+    toast({
+      title: 'Card Drawn!',
+      description: `Drew ${cardToDraw.name} from backpack to hand`,
+    });
+  };
 
   useEffect(() => {
     initGame();
@@ -493,12 +512,16 @@ export default function GameBoard() {
     setEquipmentSlot1(null);
     setEquipmentSlot2(null);
     setAmuletSlot(null);
-    // Add default Reshuffle skill to backpack
+    // Add default Reshuffle skill card to backpack (LIFO - added to bottom)
     setBackpackItems([{
+      id: 'reshuffle-skill',
       name: 'Reshuffle',
+      type: 'skill' as const,
       value: 0,
       image: skillScrollImage,
-      type: 'skill'
+      description: 'Pay 5 HP to reshuffle the deck',
+      skillType: 'instant',
+      skillEffect: 'Reshuffle remaining deck'
     }]);
     setCardsPlayed(0);
     setGameOver(false);
@@ -1016,6 +1039,21 @@ export default function GameBoard() {
   };
 
   const handleCardToHero = (card: GameCardData) => {
+    // Check if card is from hand (allowed) or from dungeon (not allowed anymore)
+    const isFromHand = handCards.some(c => c.id === card.id);
+    
+    if (!isFromHand) {
+      toast({
+        title: 'Cannot Play From Dungeon!',
+        description: 'Move cards to hand first, then play them',
+        variant: 'destructive'
+      });
+      return; // Prevent direct play from dungeon
+    }
+    
+    // Remove from hand when playing
+    setHandCards(prev => prev.filter(c => c.id !== card.id));
+    
     if (card.type === 'monster') {
       resolveMonsterEncounter(card);
     } else if (card.type === 'potion') {
@@ -1625,83 +1663,56 @@ export default function GameBoard() {
   const handleBackpackClick = () => {
     if (backpackItems.length === 0) return;
     
-    const item = backpackItems[0]; // Use top item
+    // Draw from top (last item in array - LIFO)
+    const topCard = backpackItems[backpackItems.length - 1];
     
-    if (item.type === 'potion') {
-      const newHp = Math.min(maxHp, hp + item.value);
-      const healAmount = newHp - hp;
-      setHealing(true);
-      setTimeout(() => setHealing(false), 500);
-      setTotalHealed(prev => prev + healAmount);
-      setHp(newHp);
-      toast({ title: 'Potion Used!', description: `+${healAmount} HP from backpack` });
-      setBackpackItems(prev => prev.slice(1)); // Remove top item
-    } else if (item.type === 'shield') {
-      const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
-      if (emptySlot) {
-        setEquipmentSlotById(emptySlot, { 
-          name: item.name, 
-          value: item.value, 
-          image: item.image, 
-          type: 'shield',
-          durability: item.durability,
-          maxDurability: item.maxDurability
-        });
-        toast({ 
-          title: 'Shield Equipped!', 
-          description: `${item.name} equipped from backpack${item.durability ? ` (${item.durability}/${item.maxDurability} uses)` : ''}` 
-        });
-        setBackpackItems(prev => prev.slice(1)); // Remove top item
-      } else {
-        toast({ title: 'Equipment Full!', description: 'Clear a slot first', variant: 'destructive' });
-      }
-    } else if (item.type === 'weapon') {
-      const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
-      if (emptySlot) {
-        setEquipmentSlotById(emptySlot, { 
-          name: item.name, 
-          value: item.value, 
-          image: item.image, 
-          type: 'weapon',
-          durability: item.durability,
-          maxDurability: item.maxDurability
-        });
-        toast({ 
-          title: 'Weapon Equipped!', 
-          description: `${item.name} equipped from backpack${item.durability ? ` (${item.durability}/${item.maxDurability} uses)` : ''}` 
-        });
-        setBackpackItems(prev => prev.slice(1)); // Remove top item
-      } else {
-        toast({ title: 'Equipment Full!', description: 'Clear a slot first', variant: 'destructive' });
-      }
-    } else if (item.type === 'skill' && item.name === 'Reshuffle') {
-      // Reshuffle skill - costs 5 HP
+    // Special case: Reshuffle skill can be used directly
+    if (topCard.id === 'reshuffle-skill' && topCard.name === 'Reshuffle') {
       if (hp > 5) {
         applyDamage(5);
         toast({ title: 'Reshuffle!', description: 'Paid 5 HP to reshuffle the deck' });
-        
-        // Reshuffle the remaining deck
         setRemainingDeck(prev => [...prev].sort(() => Math.random() - 0.5));
-        
         // Don't remove from backpack - Reshuffle can be used multiple times
       } else {
         toast({ title: 'Not Enough HP!', description: 'Need more than 5 HP to reshuffle', variant: 'destructive' });
       }
+      return;
     }
+    
+    // Otherwise, try to draw card to hand
+    if (handCards.length >= 7) {
+      toast({
+        title: 'Hand Full!',
+        description: 'Clear hand space to draw from backpack',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // Draw the top card to hand
+    drawFromBackpackToHand();
   };
 
   const getRemainingCards = () => {
     return remainingDeck.length + previewCards.length + activeCards.length;
   };
 
-  // Hand system handlers
+  // Hand system handlers - NEW FLOW
   const handleDropToHand = (card: GameCardData) => {
-    if (handCards.length >= 5) {
+    if (handCards.length >= 7) {
       toast({
         title: 'Hand Full!',
-        description: 'Maximum 5 cards in hand',
+        description: 'Maximum 7 cards in hand',
         variant: 'destructive'
       });
+      return;
+    }
+    
+    // Handle event cards immediately
+    if (card.type === 'event') {
+      setCurrentEventCard(card);
+      setEventModalOpen(true);
+      removeCard(card.id, false); // Remove from dungeon
       return;
     }
     
@@ -1710,19 +1721,96 @@ export default function GameBoard() {
     removeCard(card.id, false); // Don't add to graveyard when saving to hand
     setCardsPlayed(prev => prev + 1); // Count it as played
     toast({
-      title: 'Card Saved!',
-      description: `${card.name} added to hand (${handCards.length + 1}/5)`
+      title: 'Card Added to Hand!',
+      description: `${card.name} added to hand (${handCards.length + 1}/7)`
+    });
+  };
+  
+  // Handler for dropping cards to backpack
+  const handleDropToBackpack = (card: GameCardData) => {
+    if (backpackItems.length >= 10) {
+      toast({
+        title: 'Backpack Full!',
+        description: 'Maximum 10 cards in backpack',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    // Handle event cards immediately
+    if (card.type === 'event') {
+      setCurrentEventCard(card);
+      setEventModalOpen(true);
+      removeCard(card.id, false); // Remove from dungeon
+      return;
+    }
+    
+    // Add to bottom of backpack (LIFO - unshift)
+    setBackpackItems(prev => [card, ...prev]);
+    removeCard(card.id, false); // Remove from dungeon
+    setCardsPlayed(prev => prev + 1);
+    toast({
+      title: 'Card Stored!',
+      description: `${card.name} added to backpack (${backpackItems.length + 1}/10)`
     });
   };
 
   const handleDragCardFromHand = (card: GameCardData) => {
     setDraggedCard(card);
-    // Remove the card from hand when it's dragged out
-    setHandCards(prev => prev.filter(c => c.id !== card.id));
+    // Card stays in hand until successfully dropped
   };
 
   const handleDragEndFromHand = () => {
     setDraggedCard(null);
+  };
+  
+  // Handle drag start from dungeon cards
+  const handleDragStartFromDungeon = (card: GameCardData) => {
+    setDraggedCard(card);
+    setIsDraggingFromDungeon(true);
+    setIsDraggingToHand(true); // Show hand acquisition zone
+  };
+  
+  // Handle drag end from dungeon  
+  const handleDragEndFromDungeon = () => {
+    setDraggedCard(null);
+    setIsDraggingFromDungeon(false);
+    setIsDraggingToHand(false);
+  };
+  
+  // Play card from hand (when dragged to valid target)
+  const handlePlayCardFromHand = (card: GameCardData, target?: any) => {
+    // Remove from hand
+    setHandCards(prev => prev.filter(c => c.id !== card.id));
+    
+    // Process the card play based on its type
+    if (card.type === 'potion') {
+      const newHp = Math.min(maxHp, hp + card.value);
+      const healAmount = newHp - hp;
+      setHealing(true);
+      setTimeout(() => setHealing(false), 500);
+      setTotalHealed(prev => prev + healAmount);
+      setHp(newHp);
+      toast({ title: 'Healed!', description: `+${healAmount} HP` });
+      addToGraveyard(card);
+      // Trigger auto-draw after using potion
+      setTimeout(() => drawFromBackpackToHand(), 300);
+    } else if (card.type === 'weapon' || card.type === 'shield') {
+      // Handle equipment cards
+      const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
+      if (emptySlot) {
+        setEquipmentSlotById(emptySlot, {
+          name: card.name,
+          value: card.value,
+          image: card.image,
+          type: card.type as 'weapon' | 'shield',
+          durability: card.durability,
+          maxDurability: card.maxDurability
+        });
+        toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`, description: card.name });
+      }
+    }
+    // More card types can be handled here
   };
 
   return (
@@ -1784,14 +1872,14 @@ export default function GameBoard() {
             />
           </div>
 
-          {/* Row 2: Active Row - 5 cards (fully interactive) */}
+          {/* Row 2: Active Row - 5 cards (can be dragged to hand/backpack only) */}
           {activeCards.concat(Array(5 - activeCards.length).fill(null)).slice(0, 5).map((card, index) => (
             card ? (
               <GameCard
                 key={card.id}
                 card={card}
-                onDragStart={setDraggedCard}
-                onDragEnd={() => setDraggedCard(null)}
+                onDragStart={handleDragStartFromDungeon}
+                onDragEnd={handleDragEndFromDungeon}
                 onWeaponDrop={(weapon) => handleWeaponToMonster(weapon, card)}
                 isWeaponDropTarget={draggedEquipment?.type === 'weapon' && card.type === 'monster'}
                 className={removingCards.has(card.id) ? 'animate-card-remove' : ''}
@@ -1909,14 +1997,15 @@ export default function GameBoard() {
         remainingCards={[...previewCards, ...activeCards, ...remainingDeck]}
       />
 
-      {/* Hand Area - fixed at bottom */}
-      <HandArea
+      {/* Hand Display - fixed at bottom with fan layout */}
+      <HandDisplay
         handCards={handCards}
-        onDropToHand={handleDropToHand}
+        onPlayCard={handlePlayCardFromHand}
         onDragCardFromHand={handleDragCardFromHand}
         onDragEndFromHand={handleDragEndFromHand}
-        isDropTarget={draggedCard !== null && handCards.length < 5}
-        maxHandSize={5}
+        isDraggingToHand={isDraggingToHand}
+        onDropToHand={handleDropToHand}
+        maxHandSize={7}
       />
 
       {/* Event Choice Modal */}
