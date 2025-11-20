@@ -72,11 +72,41 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 
 ## Recent Changes (November 20, 2025)
 
-### Double-Layer Dungeon Preview System (Latest)
-- **3×5 Grid Layout**: Complete redesign with preview mechanic
-  - Row 1 (Top): Preview row - 5 cards at 60% opacity, non-interactive, shows upcoming cards
-  - Row 2 (Middle): Active row - 5 cards fully interactive, current playable cards  
-  - Row 3 (Bottom): Hero row - 5 slots (Amulet, Equipment×2, Hero, Backpack)
+### Knight Hero Class System Implementation (Latest)
+- **3×6 Grid Layout**: Expanded grid with special 6th column
+  - Column 6 Row 1: 12-sided dice for probability events (auto-rolls)
+  - Column 6 Row 2: Graveyard as card stack display
+  - Column 6 Row 3: Knight class deck (50 cards)
+- **Knight Class**: First playable hero class
+  - 50 class-specific cards divided into playstyles:
+    - Weapon Enhancement (15 cards): Damage bonuses, dual strikes, blessed weapons
+    - Defensive/Shield (10 cards): Tower shields, damage reflection, shield walls
+    - Blood Knight (10 cards): HP sacrifice for power, vampiric healing
+    - Equipment/Armor (10 cards): Durability system, damage reduction
+    - Tactical Skills (5 cards): Strategic choices and combos
+- **Hero Skills System**: Choose 1 of 3 skills at game start
+  - Weapon Master: All weapons gain +1 damage
+  - Iron Will: Start with +5 max HP
+  - Bloodthirsty: Heal 2 HP when defeating monsters
+- **Equipment Slot Bonuses**: Visual badges showing bonus values
+  - Display as "+X" on each equipment slot
+  - Auto-apply to equipped weapons/shields
+  - Red badges for attack, blue for defense
+- **Class Card Discovery**: Special dungeon events
+  - "Ancient Armory": Discover 2-4 Knight cards
+  - "Knight's Cache": Equip Knight equipment
+  - "Training Ground": Use Knight skills
+- **New Mechanics**:
+  - Equipment durability tracking
+  - Blood sacrifice system (trade HP for power)
+  - Vampiric healing on kills
+  - Shield reflection damage
+
+### Double-Layer Dungeon Preview System
+- **3×5 Grid Layout** (now expanded to 3×6): Preview mechanic
+  - Row 1: Preview row - 5 cards at 60% opacity, shows upcoming cards
+  - Row 2: Active row - 5 cards fully interactive, current playable cards  
+  - Row 3: Hero row - Amulet, Equipment×2, Hero, Backpack (columns 1-5)
 - **Waterfall Mechanism**: New card refresh system
   - Triggers when exactly 1 card remains in active row
   - Preview cards "drop down" to become new active cards (4 cards)
