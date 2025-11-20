@@ -24,6 +24,9 @@ export interface GameCardData {
   // Equipment durability
   durability?: number; // Current durability for weapons/shields
   maxDurability?: number; // Maximum durability for weapons/shields
+  // Class card properties
+  classCard?: boolean; // Marks as a class card
+  description?: string; // Card effect description
 }
 
 interface GameCardProps {
@@ -87,6 +90,11 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
   };
 
   const getCardBorderColor = () => {
+    // Class cards get golden border
+    if (card.classCard) {
+      return 'border-yellow-600 shadow-yellow-500/20';
+    }
+    
     switch (card.type) {
       case 'monster':
         return 'border-red-900';

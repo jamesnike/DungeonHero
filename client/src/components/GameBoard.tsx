@@ -12,6 +12,7 @@ import EventChoiceModal from './EventChoiceModal';
 import DiceRoller from './DiceRoller';
 import ClassDeck from './ClassDeck';
 import { useToast } from '@/hooks/use-toast';
+import { generateKnightDeck, createKnightDiscoveryEvents, type KnightCardData } from '@/lib/knightDeck';
 
 // Cute chibi-style monster images
 import dragonImage from '@assets/generated_images/cute_chibi_dragon_monster.png';
@@ -408,6 +409,20 @@ export default function GameBoard() {
   const [classDeck, setClassDeck] = useState<GameCardData[]>([]); // Class deck cards
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [currentEventCard, setCurrentEventCard] = useState<GameCardData | null>(null);
+  
+  // Hero class system state
+  const [heroClass] = useState<'knight' | 'mage' | 'rogue'>('knight'); // Default to Knight
+  const [classCardsInHand, setClassCardsInHand] = useState<KnightCardData[]>([]);
+  const [selectedHeroSkill] = useState<string>('Weapon Master'); // Starting Knight skill
+  
+  // Knight-specific buffs and states
+  const [nextWeaponBonus, setNextWeaponBonus] = useState(0); // Temporary weapon bonus
+  const [nextShieldBonus, setNextShieldBonus] = useState(0); // Temporary shield bonus
+  const [weaponMasterBonus, setWeaponMasterBonus] = useState(0); // Permanent weapon bonus
+  const [shieldMasterBonus, setShieldMasterBonus] = useState(0); // Permanent shield bonus
+  const [vampiricNextAttack, setVampiricNextAttack] = useState(false); // Next attack heals
+  const [unbreakableNext, setUnbreakableNext] = useState(false); // Next equipment won't break
+  const [defensiveStanceActive, setDefensiveStanceActive] = useState(false); // Damage reduction this turn
 
   // Calculate passive bonuses from amulet and permanent skills
   const getAmuletBonus = (type: 'health' | 'attack' | 'defense'): number => {
@@ -441,8 +456,15 @@ export default function GameBoard() {
   };
 
   const maxHp = INITIAL_HP + getAmuletBonus('health') + (permanentSkills.includes('Iron Will') ? 3 : 0);
-  const attackBonus = getAmuletBonus('attack') + (permanentSkills.includes('Weapon Master') ? 1 : 0);
-  const defenseBonus = getAmuletBonus('defense') + (permanentSkills.includes('Iron Skin') ? 1 : 0);
+  const attackBonus = getAmuletBonus('attack') + 
+    (permanentSkills.includes('Weapon Master') ? 1 : 0) +
+    weaponMasterBonus + // Knight class bonus to all weapons
+    (permanentSkills.includes('Berserker Rage') ? Math.floor((maxHp - hp) / 2) : 0) + // +1 per 2 HP missing
+    (permanentSkills.includes('Battle Frenzy') && hp < maxHp / 2 ? 2 : 0); // Bonus when low HP
+  const defenseBonus = getAmuletBonus('defense') + 
+    (permanentSkills.includes('Iron Skin') ? 1 : 0) +
+    shieldMasterBonus + // Knight class bonus to all shields
+    (defensiveStanceActive ? 1 : 0); // Defensive stance damage reduction
 
   useEffect(() => {
     initGame();
@@ -450,10 +472,14 @@ export default function GameBoard() {
 
   const initGame = () => {
     const newDeck = createDeck();
+    // Add Knight discovery events to main deck
+    const knightEvents = createKnightDiscoveryEvents();
+    const deckWithClassEvents = [...newDeck, ...knightEvents].sort(() => Math.random() - 0.5);
+    
     // Initialize with 10 cards total: 5 for preview, 5 for active
-    setPreviewCards(newDeck.slice(0, 5));  // Top row (preview)
-    setActiveCards(newDeck.slice(5, 10));  // Middle row (active)
-    setRemainingDeck(newDeck.slice(10));    // Rest of deck
+    setPreviewCards(deckWithClassEvents.slice(0, 5));  // Top row (preview)
+    setActiveCards(deckWithClassEvents.slice(5, 10));  // Middle row (active)
+    setRemainingDeck(deckWithClassEvents.slice(10));    // Rest of deck
     setHp(INITIAL_HP);
     setGold(0);
     setEquipmentSlot1(null);
@@ -477,9 +503,28 @@ export default function GameBoard() {
     setHandCards([]);
     setPermanentSkills([]);
     setTempShield(0);
-    setClassDeck([]);
     setEventModalOpen(false);
     setCurrentEventCard(null);
+    
+    // Initialize Knight class deck
+    if (heroClass === 'knight') {
+      const knightDeck = generateKnightDeck();
+      setClassDeck(knightDeck);
+      setClassCardsInHand([]);
+      // Apply starting Knight skill
+      if (selectedHeroSkill === 'Weapon Master') {
+        setWeaponMasterBonus(1);
+      }
+    }
+    
+    // Reset Knight-specific states
+    setNextWeaponBonus(0);
+    setNextShieldBonus(0);
+    setWeaponMasterBonus(selectedHeroSkill === 'Weapon Master' ? 1 : 0);
+    setShieldMasterBonus(0);
+    setVampiricNextAttack(false);
+    setUnbreakableNext(false);
+    setDefensiveStanceActive(false);
   };
 
   // Equipment slot helpers
@@ -639,16 +684,37 @@ export default function GameBoard() {
     let shieldAlreadyLogged = false;
 
     if (weaponSlot) {
-      // Apply attack bonus from amulet
-      const weaponDamage = weaponSlot.item.value + attackBonus;
+      // Apply attack bonus from amulet and Knight bonuses
+      const weaponDamage = weaponSlot.item.value + attackBonus + nextWeaponBonus;
       
       // Attack with weapon - damage the monster's HP
       if (weaponDamage >= monsterHp) {
         // Monster defeated
         setMonstersDefeated(prev => prev + 1);
+        
+        // Apply vampiric healing if active
+        if (vampiricNextAttack) {
+          const healAmount = Math.floor(monsterHp / 2);
+          const newHp = Math.min(maxHp, hp + healAmount);
+          const actualHeal = newHp - hp;
+          if (actualHeal > 0) {
+            setHealing(true);
+            setTimeout(() => setHealing(false), 500);
+            setTotalHealed(prev => prev + actualHeal);
+            setHp(newHp);
+            toast({ title: 'Vampiric Strike!', description: `Healed ${actualHeal} HP` });
+          }
+          setVampiricNextAttack(false);
+        }
+        
+        // Reset next weapon bonus after use
+        if (nextWeaponBonus > 0) {
+          setNextWeaponBonus(0);
+        }
+        
         toast({
           title: 'Monster Defeated!',
-          description: `Your ${weaponSlot.item.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) destroyed the ${monster.name} (HP: ${monsterHp})!`
+          description: `Your ${weaponSlot.item.name} (${weaponDamage}${attackBonus > 0 || nextWeaponBonus > 0 ? ` +${attackBonus + nextWeaponBonus} bonus` : ''}) destroyed the ${monster.name} (HP: ${monsterHp})!`
         });
       } else {
         // Monster survives, counterattacks with its attack value
@@ -1080,9 +1146,12 @@ export default function GameBoard() {
   };
 
   const handleSkillCard = (card: GameCardData) => {
+    const knightCard = card as KnightCardData;
+    
     if (card.skillType === 'instant') {
       // Execute instant skill effect
       switch (card.name) {
+        // Base game skills
         case 'Healing Wave':
           const healAmount = 5;
           const newHp = Math.min(maxHp, hp + healAmount);
@@ -1128,16 +1197,154 @@ export default function GameBoard() {
           setGold(prev => prev + 8);
           toast({ title: 'Gold Rush!', description: '+8 Gold!' });
           break;
+          
+        // Knight weapon enhancement skills
+        case 'Sharpening Stone':
+          setWeaponMasterBonus(prev => prev + 1);
+          toast({ title: 'Sharpening Stone!', description: 'All weapons +1 damage permanently!' });
+          break;
+        case 'Dual Strike':
+          // Double attack with current weapon - would need special handling
+          toast({ title: 'Dual Strike!', description: 'Attack twice with next weapon!' });
+          break;
+        case 'Weapon Surge':
+          setNextWeaponBonus(prev => prev + 3);
+          toast({ title: 'Weapon Surge!', description: 'Next weapon attack +3 damage!' });
+          break;
+        case 'Battle Ready':
+          // Draw a weapon from class deck
+          const weaponCards = classDeck.filter(c => c.type === 'weapon');
+          if (weaponCards.length > 0) {
+            const weapon = weaponCards[Math.floor(Math.random() * weaponCards.length)];
+            setClassCardsInHand(prev => [...prev, weapon as KnightCardData]);
+            setClassDeck(prev => prev.filter(c => c.id !== weapon.id));
+            toast({ title: 'Battle Ready!', description: `Drew ${weapon.name} from class deck!` });
+          }
+          break;
+          
+        // Knight defensive skills
+        case 'Shield Wall':
+          setNextShieldBonus(prev => prev + 2);
+          setShieldMasterBonus(prev => prev + 2); // Next 3 shields
+          toast({ title: 'Shield Wall!', description: 'Next 3 shields get +2 defense!' });
+          break;
+        case 'Defensive Stance':
+          setDefensiveStanceActive(true);
+          toast({ title: 'Defensive Stance!', description: 'All damage reduced by 1 this turn!' });
+          break;
+        case 'Iron Defense':
+          setTempShield(prev => prev + 5);
+          toast({ title: 'Iron Defense!', description: 'Block next 5 damage!' });
+          break;
+          
+        // Knight blood skills
+        case 'Blood Sacrifice':
+          if (hp > 3) {
+            applyDamage(3);
+            setNextWeaponBonus(prev => prev + 3);
+            toast({ title: 'Blood Sacrifice!', description: 'Lost 3 HP, next attack +3!' });
+          } else {
+            toast({ title: 'Not Enough HP!', variant: 'destructive' });
+          }
+          break;
+        case 'Vampiric Strike':
+          setVampiricNextAttack(true);
+          toast({ title: 'Vampiric Strike!', description: 'Next attack heals for half damage!' });
+          break;
+        case 'Blood for Power':
+          if (hp > 5) {
+            applyDamage(5);
+            setGold(prev => prev + 10);
+            toast({ title: 'Blood for Power!', description: 'Traded 5 HP for 10 gold!' });
+          } else {
+            toast({ title: 'Not Enough HP!', variant: 'destructive' });
+          }
+          break;
+        case 'Crimson Shield':
+          if (hp > 2) {
+            applyDamage(2);
+            setTempShield(prev => prev + 6);
+            toast({ title: 'Crimson Shield!', description: 'Lost 2 HP, gained 6 shield!' });
+          } else {
+            toast({ title: 'Not Enough HP!', variant: 'destructive' });
+          }
+          break;
+        case 'Life Transfer':
+          if (hp > 3) {
+            applyDamage(3);
+            setNextWeaponBonus(prev => prev + 3);
+            toast({ title: 'Life Transfer!', description: 'Converted 3 HP to 3 damage!' });
+          } else {
+            toast({ title: 'Not Enough HP!', variant: 'destructive' });
+          }
+          break;
+          
+        // Knight durability skills
+        case 'Reinforced Equipment':
+          setUnbreakableNext(true);
+          toast({ title: 'Reinforced!', description: 'Next equipment won\'t break on use!' });
+          break;
+        case 'Repair Kit':
+          // Would need to select from graveyard
+          toast({ title: 'Repair Kit!', description: 'Choose equipment from graveyard to restore!' });
+          break;
+        case 'Spare Weapons':
+          // Equip 2 weapons from backpack
+          toast({ title: 'Spare Weapons!', description: 'Equip 2 weapons from backpack!' });
+          break;
+        case 'Emergency Repair':
+          // Restore durability to current equipment
+          const slots = getEquipmentSlots();
+          slots.forEach(slot => {
+            if (slot.item && slot.item.durability) {
+              const repaired = { ...slot.item, durability: Math.min(slot.item.maxDurability || 3, slot.item.durability + 2) };
+              setEquipmentSlotById(slot.id, repaired);
+            }
+          });
+          toast({ title: 'Emergency Repair!', description: 'All equipment +2 durability!' });
+          break;
+        case 'Salvage':
+          // Break equipment for gold
+          toast({ title: 'Salvage!', description: 'Break an equipment for 3 gold!' });
+          break;
+        case 'Field Maintenance':
+          // All equipment +1 durability
+          const allSlots = getEquipmentSlots();
+          allSlots.forEach(slot => {
+            if (slot.item && slot.item.durability) {
+              const maintained = { ...slot.item, durability: slot.item.durability + 1, maxDurability: (slot.item.maxDurability || slot.item.durability) + 1 };
+              setEquipmentSlotById(slot.id, maintained);
+            }
+          });
+          toast({ title: 'Field Maintenance!', description: 'All equipment +1 durability!' });
+          break;
       }
+      
+      // Handle class card removal
+      if (knightCard.classCard) {
+        setClassCardsInHand(prev => prev.filter(c => c.id !== card.id));
+      }
+      
       addToGraveyard(card);
       removeCard(card.id, false);
     } else if (card.skillType === 'permanent') {
       // Add permanent skill effect
       setPermanentSkills(prev => [...prev, card.skillEffect || card.name]);
+      
+      // Handle Knight permanent skills
+      if (card.name === 'Berserker Rage' || card.name === 'Battle Frenzy') {
+        // These are calculated in attackBonus
+      }
+      
       toast({ 
         title: 'Permanent Skill Acquired!', 
         description: `${card.name}: ${card.skillEffect}`
       });
+      
+      if (knightCard.classCard) {
+        setClassCardsInHand(prev => prev.filter(c => c.id !== card.id));
+      }
+      
       addToGraveyard(card);
       removeCard(card.id, false);
     }
@@ -1199,6 +1406,169 @@ export default function GameBoard() {
         const randomSkill = ['Iron Skin', 'Weapon Master'][Math.floor(Math.random() * 2)];
         setPermanentSkills(prev => [...prev, randomSkill]);
         toast({ title: 'Skill Learned!', description: randomSkill });
+      }
+      
+      // Knight discovery events
+      else if (effect === 'drawKnight3') {
+        // Draw 3 Knight cards to choose from
+        if (classDeck.length >= 3) {
+          const drawnCards = classDeck.slice(0, 3);
+          setClassCardsInHand(prev => [...prev, ...drawnCards as KnightCardData[]]);
+          setClassDeck(prev => prev.slice(3));
+          toast({ title: 'Knight Cards!', description: 'Drew 3 Knight cards from class deck!' });
+        }
+      } else if (effect === 'equipKnight') {
+        // Draw and immediately equip a Knight equipment
+        const equipmentCards = classDeck.filter(c => c.type === 'weapon' || c.type === 'shield');
+        if (equipmentCards.length > 0) {
+          const equipment = equipmentCards[Math.floor(Math.random() * equipmentCards.length)];
+          // Auto-equip to empty slot or first slot
+          if (!equipmentSlot1) {
+            setEquipmentSlot1({ 
+              name: equipment.name, 
+              value: equipment.value, 
+              image: equipment.image, 
+              type: equipment.type as 'weapon' | 'shield',
+              durability: (equipment as KnightCardData).durability,
+              maxDurability: (equipment as KnightCardData).maxDurability
+            });
+          } else if (!equipmentSlot2) {
+            setEquipmentSlot2({ 
+              name: equipment.name, 
+              value: equipment.value, 
+              image: equipment.image, 
+              type: equipment.type as 'weapon' | 'shield',
+              durability: (equipment as KnightCardData).durability,
+              maxDurability: (equipment as KnightCardData).maxDurability
+            });
+          }
+          setClassDeck(prev => prev.filter(c => c.id !== equipment.id));
+          toast({ title: 'Knight Equipment!', description: `Equipped ${equipment.name}!` });
+        }
+      } else if (effect === 'useKnightSkill') {
+        // Draw and use a Knight skill immediately
+        const skillCards = classDeck.filter(c => c.type === 'skill' && c.skillType === 'instant');
+        if (skillCards.length > 0) {
+          const skill = skillCards[Math.floor(Math.random() * skillCards.length)];
+          setClassDeck(prev => prev.filter(c => c.id !== skill.id));
+          handleSkillCard(skill);
+        }
+      }
+      
+      // Knight class-specific event effects
+      else if (effect === 'weaponUpgrade' || effect === 'weaponUpgrade2') {
+        // Upgrade current weapon
+        const upgradAmount = effect === 'weaponUpgrade2' ? 2 : 2;
+        if (equipmentSlot1?.type === 'weapon') {
+          setEquipmentSlot1(prev => prev ? { ...prev, value: prev.value + upgradAmount } : null);
+          toast({ title: 'Weapon Upgraded!', description: `+${upgradAmount} damage to ${equipmentSlot1.name}!` });
+        } else if (equipmentSlot2?.type === 'weapon') {
+          setEquipmentSlot2(prev => prev ? { ...prev, value: prev.value + upgradAmount } : null);
+          toast({ title: 'Weapon Upgraded!', description: `+${upgradAmount} damage to ${equipmentSlot2.name}!` });
+        }
+      } else if (effect === 'shieldUpgrade2') {
+        // Upgrade current shield
+        if (equipmentSlot1?.type === 'shield') {
+          setEquipmentSlot1(prev => prev ? { ...prev, value: prev.value + 2 } : null);
+          toast({ title: 'Shield Upgraded!', description: `+2 defense to ${equipmentSlot1.name}!` });
+        } else if (equipmentSlot2?.type === 'shield') {
+          setEquipmentSlot2(prev => prev ? { ...prev, value: prev.value + 2 } : null);
+          toast({ title: 'Shield Upgraded!', description: `+2 defense to ${equipmentSlot2.name}!` });
+        }
+      } else if (effect === 'restoreShield') {
+        // Restore a shield from graveyard
+        const shields = discardedCards.filter(c => c.type === 'shield');
+        if (shields.length > 0) {
+          const shield = shields[shields.length - 1]; // Get most recent
+          if (!equipmentSlot1) {
+            setEquipmentSlot1({ 
+              name: shield.name, 
+              value: shield.value, 
+              image: shield.image, 
+              type: 'shield',
+              durability: 3,
+              maxDurability: 3
+            });
+          } else if (!equipmentSlot2) {
+            setEquipmentSlot2({ 
+              name: shield.name, 
+              value: shield.value, 
+              image: shield.image, 
+              type: 'shield',
+              durability: 3,
+              maxDurability: 3
+            });
+          }
+          setDiscardedCards(prev => prev.filter(c => c.id !== shield.id));
+          toast({ title: 'Shield Restored!', description: `${shield.name} restored from graveyard!` });
+        }
+      } else if (effect.startsWith('tempShield+')) {
+        const shieldGain = parseInt(effect.replace('tempShield+', ''));
+        setTempShield(prev => prev + shieldGain);
+        toast({ title: 'Temporary Shield!', description: `+${shieldGain} shield value!` });
+      } else if (effect.includes('powerWeapon')) {
+        // Create a powerful weapon for blood pact
+        const powerWeapon = {
+          id: `power-weapon-${Date.now()}`,
+          type: 'weapon' as const,
+          name: 'Blood Forged Blade',
+          value: 7,
+          image: swordImage,
+          durability: 2,
+          maxDurability: 2,
+          classCard: true,
+          description: 'Forged with blood magic'
+        };
+        if (!equipmentSlot1) {
+          setEquipmentSlot1({ 
+            name: powerWeapon.name, 
+            value: powerWeapon.value, 
+            image: powerWeapon.image, 
+            type: 'weapon',
+            durability: powerWeapon.durability,
+            maxDurability: powerWeapon.maxDurability
+          });
+        } else if (!equipmentSlot2) {
+          setEquipmentSlot2({ 
+            name: powerWeapon.name, 
+            value: powerWeapon.value, 
+            image: powerWeapon.image, 
+            type: 'weapon',
+            durability: powerWeapon.durability,
+            maxDurability: powerWeapon.maxDurability
+          });
+        }
+        toast({ title: 'Blood Forged Blade!', description: 'Gained a powerful weapon!' });
+      } else if (effect === 'draw2') {
+        // Draw 2 class cards
+        if (classDeck.length >= 2) {
+          const drawnCards = classDeck.slice(0, 2);
+          setClassCardsInHand(prev => [...prev, ...drawnCards as KnightCardData[]]);
+          setClassDeck(prev => prev.slice(2));
+          toast({ title: 'Drew Cards!', description: 'Drew 2 Knight cards!' });
+        }
+      } else if (effect === 'drawClass2') {
+        // Draw 2 class cards (from Maintenance event)
+        if (classDeck.length >= 2) {
+          const drawnCards = classDeck.slice(0, 2);
+          setClassCardsInHand(prev => [...prev, ...drawnCards as KnightCardData[]]);
+          setClassDeck(prev => prev.slice(2));
+          toast({ title: 'Drew Class Cards!', description: 'Drew 2 Knight cards!' });
+        }
+      } else if (effect === 'repairAll') {
+        // Repair all equipment
+        const slots = getEquipmentSlots();
+        slots.forEach(slot => {
+          if (slot.item) {
+            const repaired = { 
+              ...slot.item, 
+              durability: slot.item.maxDurability || 3,
+              maxDurability: slot.item.maxDurability || 3
+            };
+            setEquipmentSlotById(slot.id, repaired);
+          }
+        });
+        toast({ title: 'Equipment Repaired!', description: 'All equipment restored to full durability!' });
       }
     }
     
