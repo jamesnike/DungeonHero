@@ -72,12 +72,22 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 
 ## Recent Changes (November 20, 2025)
 
-### Grid Expansion & Amulet System (Latest)
-- **2×5 Grid Layout**: Expanded from 2×4 to 2×5 grid
-  - Top row: 5 dungeon slots for drawn cards
-  - Bottom row: 5 hero slots (Amulet, Equipment×2, Hero, Backpack)
-  - Players must now play 4 of 5 cards per turn (up from 3 of 4)
-  - Unplayed card carries over to next hand
+### Double-Layer Dungeon Preview System (Latest)
+- **3×5 Grid Layout**: Complete redesign with preview mechanic
+  - Row 1 (Top): Preview row - 5 cards at 60% opacity, non-interactive, shows upcoming cards
+  - Row 2 (Middle): Active row - 5 cards fully interactive, current playable cards  
+  - Row 3 (Bottom): Hero row - 5 slots (Amulet, Equipment×2, Hero, Backpack)
+- **Waterfall Mechanism**: New card refresh system
+  - Triggers when exactly 1 card remains in active row
+  - Preview cards "drop down" to become new active cards (4 cards)
+  - The stuck card gets discarded to graveyard
+  - 5 new preview cards drawn from deck
+  - Toast notification: "Waterfall! Preview cards falling..."
+- **State Management**: Dual-layer card tracking
+  - `previewCards`: Top row upcoming cards (5)
+  - `activeCards`: Middle row playable cards (5)
+  - Initial draw: 10 cards total (5 preview + 5 active)
+- **Fixed Drag-and-Drop**: All handlers now properly use removeCard function
 - **Amulet Slot System**: New dedicated slot with passive bonuses
   - Life Amulet: +5 max HP (maxHp calculated as INITIAL_HP + bonus)
   - Strength Amulet: +1 weapon damage (applied in all combat paths)
