@@ -8,8 +8,6 @@ interface HandDisplayProps {
   onDragCardFromHand?: (card: GameCardData) => void;
   onDragEndFromHand?: () => void;
   maxHandSize?: number;
-  isDraggingToHand?: boolean;
-  onDropToHand?: (card: GameCardData) => void;
 }
 
 export default function HandDisplay({ 
@@ -17,8 +15,6 @@ export default function HandDisplay({
   onPlayCard,
   onDragCardFromHand,
   onDragEndFromHand,
-  isDraggingToHand,
-  onDropToHand,
   maxHandSize = 7
 }: HandDisplayProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -63,31 +59,13 @@ export default function HandDisplay({
     onDragEndFromHand?.();
   };
 
-  // Handle dropping cards to hand acquisition zone
-  const handleDragOver = (e: React.DragEvent) => {
-    if (isDraggingToHand && handCards.length < maxHandSize) {
-      e.preventDefault();
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const cardData = e.dataTransfer.getData('card');
-    if (cardData && handCards.length < maxHandSize) {
-      const card = JSON.parse(cardData);
-      // Only accept cards from dungeon or backpack, not from hand itself
-      if (!handCards.find(c => c.id === card.id)) {
-        onDropToHand?.(card);
-      }
-    }
-  };
 
   return (
     <>
-      {/* Main Hand Display */}
+      {/* Main Hand Display - Elevated position */}
       <div 
-        className="fixed bottom-0 left-0 right-0 pointer-events-none"
-        style={{ height: '200px', zIndex: 20 }}
+        className="fixed left-0 right-0 pointer-events-none"
+        style={{ bottom: '120px', height: '200px', zIndex: 20 }}
       >
         <div className="relative h-full flex items-end justify-center pb-4">
           {/* Hand count indicator */}
@@ -163,36 +141,6 @@ export default function HandDisplay({
         </div>
       </div>
 
-      {/* Hand Acquisition Zone - Shows when dragging */}
-      {isDraggingToHand && handCards.length < maxHandSize && (
-        <div 
-          className="fixed bottom-0 left-1/4 right-1/4 pointer-events-auto"
-          style={{ height: '100px', zIndex: 5 }}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-        >
-          <div className="h-full flex items-center justify-center">
-            <div 
-              className={`
-                w-full h-20 rounded-xl
-                border-4 border-dashed border-primary
-                bg-primary/20 backdrop-blur-sm
-                flex items-center justify-center
-                animate-pulse
-                transition-all duration-300
-              `}
-              data-testid="hand-acquisition-zone"
-            >
-              <div className="text-center">
-                <Hand className="w-8 h-8 text-primary mx-auto mb-1 inline-block mr-2" />
-                <span className="text-sm font-bold text-primary">
-                  Drop to add to hand ({handCards.length}/{maxHandSize})
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

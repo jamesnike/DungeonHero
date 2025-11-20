@@ -1829,11 +1829,12 @@ export default function GameBoard() {
       />
       {/* Main game area - adjust padding for hand area at bottom */}
       <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(140px, 18vh, 240px) + 2vh)' }}>
-        {/* 3×6 Card Grid */}
-        <div className="grid grid-cols-6 w-full" style={{ 
+        {/* 3×6 Card Grid - Uniform Sizing */}
+        <div className="grid w-full" style={{ 
+          gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
           maxWidth: '95vw',
           gap: 'min(2vw, 20px)',
-          gridTemplateRows: 'repeat(3, auto)'
+          gridTemplateRows: 'repeat(3, 1fr)'
         }}>
           {/* Row 1: Preview Row - 5 cards + DiceRoller */}
           {previewCards.concat(Array(5 - previewCards.length).fill(null)).slice(0, 5).map((card, index) => (
@@ -2006,8 +2007,6 @@ export default function GameBoard() {
         onPlayCard={handlePlayCardFromHand}
         onDragCardFromHand={handleDragCardFromHand}
         onDragEndFromHand={handleDragEndFromHand}
-        isDraggingToHand={isDraggingToHand}
-        onDropToHand={handleDropToHand}
         maxHandSize={7}
       />
 
