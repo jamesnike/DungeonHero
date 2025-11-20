@@ -7,9 +7,10 @@ interface GameHeaderProps {
   gold: number;
   cardsRemaining: number;
   monstersDefeated?: number;
+  onDeckClick?: () => void;
 }
 
-export default function GameHeader({ hp, maxHp, gold, cardsRemaining, monstersDefeated = 0 }: GameHeaderProps) {
+export default function GameHeader({ hp, maxHp, gold, cardsRemaining, monstersDefeated = 0, onDeckClick }: GameHeaderProps) {
   return (
     <div className="h-16 px-4 bg-card border-b border-card-border flex items-center justify-between flex-wrap gap-4">
       <div className="flex items-center gap-2" data-testid="header-hp">
@@ -19,12 +20,16 @@ export default function GameHeader({ hp, maxHp, gold, cardsRemaining, monstersDe
         </span>
       </div>
 
-      <div className="flex items-center gap-2" data-testid="header-deck">
+      <button 
+        onClick={onDeckClick}
+        className="flex items-center gap-2 hover-elevate active-elevate-2 p-2 rounded-md transition-all"
+        data-testid="header-deck"
+      >
         <Layers className="w-5 h-5 text-primary" />
         <Badge variant="outline" className="font-mono text-base">
           {cardsRemaining}
         </Badge>
-      </div>
+      </button>
 
       <div className="flex items-center gap-2" data-testid="stat-monsters-defeated">
         <Skull className="w-5 h-5 text-primary" />

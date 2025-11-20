@@ -16,10 +16,12 @@ interface GameCardProps {
   card: GameCardData;
   onDragStart?: (card: GameCardData) => void;
   onDragEnd?: () => void;
+  onWeaponDrop?: (weapon: any) => void;
+  isWeaponDropTarget?: boolean;
   className?: string;
 }
 
-export default function GameCard({ card, onDragStart, onDragEnd, className = '' }: GameCardProps) {
+export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, isWeaponDropTarget, className = '' }: GameCardProps) {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -32,6 +34,23 @@ export default function GameCard({ card, onDragStart, onDragEnd, className = '' 
   const handleDragEnd = () => {
     setIsDragging(false);
     onDragEnd?.();
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (card.type === 'monster') {
+      e.preventDefault();
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (card.type === 'monster') {
+      e.preventDefault();
+      const equipmentData = e.dataTransfer.getData('equipment');
+      if (equipmentData) {
+        const weapon = JSON.parse(equipmentData);
+        onWeaponDrop?.(weapon);
+      }
+    }
   };
 
   const getCardIcon = () => {
@@ -71,6 +90,8 @@ export default function GameCard({ card, onDragStart, onDragEnd, className = '' 
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       className={`
         w-32 h-44 md:w-40 md:h-56 cursor-grab active:cursor-grabbing
         transition-all duration-200 ease-out
@@ -78,6 +99,7 @@ export default function GameCard({ card, onDragStart, onDragEnd, className = '' 
           ? 'opacity-60 scale-95 -rotate-6 -translate-y-2' 
           : 'hover:scale-105 hover:-translate-y-1 hover:rotate-1'
         }
+        ${card.type === 'monster' && isWeaponDropTarget ? 'ring-4 ring-primary scale-105' : ''}
         ${className}
       `}
       style={{

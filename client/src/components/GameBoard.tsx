@@ -6,6 +6,7 @@ import EquipmentSlot, { type SlotType } from './EquipmentSlot';
 import SellZone, { SELLABLE_TYPES } from './SellZone';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import HelpDialog from './HelpDialog';
+import DeckViewerModal from './DeckViewerModal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
@@ -18,6 +19,9 @@ import heroImage from '@assets/generated_images/hero_character_portrait.png';
 
 const INITIAL_HP = 20;
 const DECK_SIZE = 54;
+
+type EquipmentItem = { name: string; value: number; image?: string; type: 'weapon' | 'shield' };
+type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
 function createDeck(): GameCardData[] {
   const deck: GameCardData[] = [];
@@ -112,13 +116,14 @@ export default function GameBoard() {
   const [gold, setGold] = useState(0);
   const [activeCards, setActiveCards] = useState<GameCardData[]>([]);
   const [remainingDeck, setRemainingDeck] = useState<GameCardData[]>([]);
-  const [weaponSlot, setWeaponSlot] = useState<{ name: string; value: number; image?: string } | null>(null);
-  const [shieldSlot, setShieldSlot] = useState<{ name: string; value: number; image?: string } | null>(null);
-  const [backpackSlot, setBackpackSlot] = useState<{ name: string; value: number; image?: string } | null>(null);
+  const [equipmentSlot1, setEquipmentSlot1] = useState<EquipmentItem | null>(null);
+  const [equipmentSlot2, setEquipmentSlot2] = useState<EquipmentItem | null>(null);
+  const [backpackSlot, setBackpackSlot] = useState<{ name: string; value: number; image?: string; type: 'weapon' | 'shield' | 'potion' } | null>(null);
   const [cardsPlayed, setCardsPlayed] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
   const [draggedCard, setDraggedCard] = useState<GameCardData | null>(null);
+  const [draggedEquipment, setDraggedEquipment] = useState<any | null>(null);
   const [drawPending, setDrawPending] = useState(false);
   const [removingCards, setRemovingCards] = useState<Set<string>>(new Set());
   const [takingDamage, setTakingDamage] = useState(false);
@@ -128,6 +133,7 @@ export default function GameBoard() {
   const [monstersDefeated, setMonstersDefeated] = useState(0);
   const [totalDamageTaken, setTotalDamageTaken] = useState(0);
   const [totalHealed, setTotalHealed] = useState(0);
+  const [deckViewerOpen, setDeckViewerOpen] = useState(false);
 
   useEffect(() => {
     initGame();
@@ -139,8 +145,8 @@ export default function GameBoard() {
     setActiveCards(newDeck.slice(0, 4));
     setHp(INITIAL_HP);
     setGold(0);
-    setWeaponSlot(null);
-    setShieldSlot(null);
+    setEquipmentSlot1(null);
+    setEquipmentSlot2(null);
     setBackpackSlot(null);
     setCardsPlayed(0);
     setGameOver(false);
@@ -149,6 +155,35 @@ export default function GameBoard() {
     setMonstersDefeated(0);
     setTotalDamageTaken(0);
     setTotalHealed(0);
+  };
+
+  // Equipment slot helpers
+  const getEquipmentSlots = (): { id: EquipmentSlotId; item: EquipmentItem | null }[] => {
+    return [
+      { id: 'equipmentSlot1', item: equipmentSlot1 },
+      { id: 'equipmentSlot2', item: equipmentSlot2 }
+    ];
+  };
+
+  const setEquipmentSlotById = (id: EquipmentSlotId, item: EquipmentItem | null) => {
+    if (id === 'equipmentSlot1') setEquipmentSlot1(item);
+    else setEquipmentSlot2(item);
+  };
+
+  const clearEquipmentSlotById = (id: EquipmentSlotId) => setEquipmentSlotById(id, null);
+
+  const findWeaponSlot = (): { id: EquipmentSlotId; item: EquipmentItem } | null => {
+    for (const slot of getEquipmentSlots()) {
+      if (slot.item?.type === 'weapon') return slot as { id: EquipmentSlotId; item: EquipmentItem };
+    }
+    return null;
+  };
+
+  const findShieldSlot = (): { id: EquipmentSlotId; item: EquipmentItem } | null => {
+    for (const slot of getEquipmentSlots()) {
+      if (slot.item?.type === 'shield') return slot as { id: EquipmentSlotId; item: EquipmentItem };
+    }
+    return null;
   };
 
   useEffect(() => {
@@ -223,135 +258,178 @@ export default function GameBoard() {
     }, 300);
   };
 
-  const handleCardToHero = (card: GameCardData) => {
-    if (card.type === 'monster') {
-      const monsterValue = card.value;
-      let damageToPlayer = 0;
-      
-      if (weaponSlot) {
-        // Player attacks with weapon
-        if (weaponSlot.value >= monsterValue) {
-          // Monster defeated, player takes no damage
-          setMonstersDefeated(prev => prev + 1);
-          toast({
-            title: 'Monster Defeated!',
-            description: `Your ${weaponSlot.name} (${weaponSlot.value}) destroyed the monster (${monsterValue})!`,
-          });
-          damageToPlayer = 0;
-        } else {
-          // Monster survives and counterattacks
-          damageToPlayer = monsterValue - weaponSlot.value;
-          toast({
-            title: 'Monster Counterattack!',
-            description: `Your ${weaponSlot.name} (${weaponSlot.value}) dealt damage, but the monster (${monsterValue}) fights back!`,
-            variant: 'destructive',
-          });
-        }
-        // Weapon is consumed after use
-        setWeaponSlot(null);
-      } else {
-        // No weapon equipped - player takes full monster damage
-        damageToPlayer = monsterValue;
-      }
+  const resolveMonsterEncounter = (monster: GameCardData) => {
+    const monsterValue = monster.value;
+    const weaponSlot = findWeaponSlot();
+    let damageToPlayer = 0;
 
-      // Apply shield damage reduction
-      if (shieldSlot && damageToPlayer > 0) {
+    if (weaponSlot) {
+      // Attack with weapon
+      if (weaponSlot.item.value >= monsterValue) {
+        setMonstersDefeated(prev => prev + 1);
+        toast({
+          title: 'Monster Defeated!',
+          description: `Your ${weaponSlot.item.name} (${weaponSlot.item.value}) destroyed the ${monster.name} (${monsterValue})!`
+        });
+      } else {
+        damageToPlayer = monsterValue - weaponSlot.item.value;
+        toast({
+          title: 'Monster Counterattack!',
+          description: `${weaponSlot.item.name} dealt damage, but ${monster.name} fights back!`,
+          variant: 'destructive'
+        });
+      }
+      clearEquipmentSlotById(weaponSlot.id);
+    } else {
+      damageToPlayer = monsterValue;
+    }
+
+    // Apply shield damage reduction (shield is consumed)
+    if (damageToPlayer > 0) {
+      const shieldSlot = findShieldSlot();
+      if (shieldSlot) {
         const originalDamage = damageToPlayer;
-        damageToPlayer = Math.max(0, damageToPlayer - shieldSlot.value);
-        
-        if (damageToPlayer === 0) {
-          toast({
-            title: 'Shield Blocked Attack!',
-            description: `Your ${shieldSlot.name} (${shieldSlot.value}) blocked ${originalDamage} damage!`,
-          });
-        } else {
-          toast({
-            title: 'Shield Reduced Damage!',
-            description: `Your ${shieldSlot.name} (${shieldSlot.value}) reduced damage from ${originalDamage} to ${damageToPlayer}!`,
-          });
-        }
-      } else if (damageToPlayer > 0 && !weaponSlot) {
+        damageToPlayer = Math.max(0, damageToPlayer - shieldSlot.item.value);
+        toast({
+          title: damageToPlayer === 0 ? 'Shield Blocked Attack!' : 'Shield Reduced Damage!',
+          description: `${shieldSlot.item.name} absorbed damage!${damageToPlayer > 0 ? ` ${originalDamage} → ${damageToPlayer}` : ''}`
+        });
+        // Shield is consumed after use
+        clearEquipmentSlotById(shieldSlot.id);
+      } else if (!weaponSlot) {
         toast({
           title: 'Damage Taken!',
           description: `Monster dealt ${damageToPlayer} damage!`,
-          variant: 'destructive',
+          variant: 'destructive'
         });
       }
+    }
 
-      // Apply damage to player
-      const newHp = Math.max(0, hp - damageToPlayer);
-      
-      if (damageToPlayer > 0) {
-        setTakingDamage(true);
-        setTimeout(() => setTakingDamage(false), 200);
-        setTotalDamageTaken(prev => prev + damageToPlayer);
-      }
-      
+    applyDamage(damageToPlayer);
+    removeCard(monster.id);
+  };
+
+  const applyDamage = (damage: number) => {
+    if (damage > 0) {
+      setTakingDamage(true);
+      setTimeout(() => setTakingDamage(false), 200);
+      setTotalDamageTaken(prev => prev + damage);
+      const newHp = Math.max(0, hp - damage);
       setHp(newHp);
-
-      removeCard(card.id);
-
       if (newHp === 0) {
         setGameOver(true);
         setVictory(false);
       }
+    }
+  };
+
+  const applyCounterattackDamage = (damage: number) => {
+    let remainingDamage = damage;
+    const shieldSlot = findShieldSlot();
+    
+    if (shieldSlot && remainingDamage > 0) {
+      const blocked = Math.min(shieldSlot.item.value, remainingDamage);
+      remainingDamage -= blocked;
+      toast({
+        title: 'Shield Blocks Counterattack!',
+        description: `${shieldSlot.item.name} absorbed ${blocked} damage!${remainingDamage > 0 ? ` ${damage} → ${remainingDamage}` : ''}`
+      });
+      clearEquipmentSlotById(shieldSlot.id);
+    }
+    
+    if (remainingDamage > 0) {
+      applyDamage(remainingDamage);
+    }
+  };
+
+  const handleWeaponToMonster = (weapon: any, monster: GameCardData) => {
+    const weaponValue = weapon.value;
+    const monsterValue = monster.value;
+    
+    // Clear the weapon from its slot
+    if (weapon.fromSlot) {
+      clearEquipmentSlotById(weapon.fromSlot as EquipmentSlotId);
+    }
+    
+    if (weaponValue >= monsterValue) {
+      setMonstersDefeated(prev => prev + 1);
+      toast({
+        title: 'Monster Defeated!',
+        description: `Your ${weapon.name} (${weaponValue}) destroyed the ${monster.name} (${monsterValue})!`
+      });
+    } else {
+      const counterDamage = monsterValue - weaponValue;
+      toast({
+        title: 'Monster Survives!',
+        description: `${weapon.name} weakened ${monster.name}, but it counterattacks for ${counterDamage} damage!`,
+        variant: 'destructive'
+      });
+      
+      // Apply counterattack damage (shield can still block)
+      applyCounterattackDamage(counterDamage);
+    }
+    
+    removeCard(monster.id);
+  };
+
+  const handleCardToHero = (card: GameCardData) => {
+    if (card.type === 'monster') {
+      resolveMonsterEncounter(card);
     } else if (card.type === 'potion') {
       const newHp = Math.min(INITIAL_HP, hp + card.value);
       const healAmount = newHp - hp;
-      
       setHealing(true);
       setTimeout(() => setHealing(false), 500);
       setTotalHealed(prev => prev + healAmount);
-      
       setHp(newHp);
-      toast({
-        title: 'Healed!',
-        description: `+${healAmount} HP`,
-      });
+      toast({ title: 'Healed!', description: `+${healAmount} HP` });
       removeCard(card.id);
     } else if (card.type === 'coin') {
       setGold(prev => prev + card.value);
-      toast({
-        title: 'Gold Collected!',
-        description: `+${card.value} Gold`,
-      });
+      toast({ title: 'Gold Collected!', description: `+${card.value} Gold` });
       removeCard(card.id);
     }
   };
 
-  const handleCardToSlot = (card: GameCardData, slotType: SlotType) => {
-    if (slotType === 'weapon' && card.type === 'weapon') {
-      setWeaponSlot({ name: card.name, value: card.value, image: card.image });
-      toast({ title: 'Weapon Equipped!' });
-      removeCard(card.id);
-    } else if (slotType === 'shield' && card.type === 'shield') {
-      setShieldSlot({ name: card.name, value: card.value, image: card.image });
-      toast({ title: 'Shield Equipped!' });
-      removeCard(card.id);
-    } else if (slotType === 'backpack' && (card.type === 'potion' || card.type === 'weapon' || card.type === 'shield')) {
-      setBackpackSlot({ name: card.name, value: card.value, image: card.image });
+  const handleCardToSlot = (card: GameCardData, slotId: string) => {
+    if (slotId === 'slot-backpack' && (card.type === 'potion' || card.type === 'weapon' || card.type === 'shield')) {
+      setBackpackSlot({ name: card.name, value: card.value, image: card.image, type: card.type });
       toast({ title: 'Item Stored!' });
       removeCard(card.id);
+    } else if (slotId.startsWith('slot-equipment') && (card.type === 'weapon' || card.type === 'shield')) {
+      const equipSlot: EquipmentSlotId = slotId === 'slot-equipment-1' ? 'equipmentSlot1' : 'equipmentSlot2';
+      setEquipmentSlotById(equipSlot, { name: card.name, value: card.value, image: card.image, type: card.type });
+      toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!` });
+      removeCard(card.id);
     }
   };
 
-  const handleSellCard = (card: GameCardData) => {
-    if (!SELLABLE_TYPES.includes(card.type)) {
+  const handleSellCard = (item: any) => {
+    const itemType = item.type;
+    
+    if (!SELLABLE_TYPES.includes(itemType) && itemType !== 'weapon' && itemType !== 'shield') {
       toast({
         title: 'Cannot Sell!',
-        description: `You cannot sell ${card.type}s`,
-        variant: 'destructive',
+        description: `You cannot sell this item`,
+        variant: 'destructive'
       });
       return;
     }
     
-    const sellValue = card.value;
+    const sellValue = item.value;
     setGold(prev => prev + sellValue);
     toast({
-      title: 'Item Sold!',
-      description: `+${sellValue} Gold`,
+      title: 'Sold!',
+      description: `+${sellValue} Gold from ${item.name}`,
     });
-    removeCard(card.id);
+
+    // If item came from equipment slot, clear it
+    if (item.fromSlot) {
+      clearEquipmentSlotById(item.fromSlot as EquipmentSlotId);
+    } else {
+      // Item from dungeon - remove it
+      removeCard(item.id);
+    }
   };
 
   const handleBackpackClick = () => {
@@ -359,52 +437,32 @@ export default function GameBoard() {
     
     const item = backpackSlot;
     
-    // Handle different item types from backpack
-    if (item.name.includes('Potion') || item.name.includes('Elixir') || item.name.includes('Brew')) {
-      // Use potion
+    if (item.type === 'potion') {
       const newHp = Math.min(INITIAL_HP, hp + item.value);
       const healAmount = newHp - hp;
       setHealing(true);
       setTimeout(() => setHealing(false), 500);
       setTotalHealed(prev => prev + healAmount);
       setHp(newHp);
-      toast({
-        title: 'Potion Used!',
-        description: `+${healAmount} HP from backpack`,
-      });
+      toast({ title: 'Potion Used!', description: `+${healAmount} HP from backpack` });
       setBackpackSlot(null);
-    } else if (item.name.includes('Shield')) {
-      // Equip shield from backpack
-      if (shieldSlot) {
-        toast({
-          title: 'Cannot Equip!',
-          description: 'Shield slot is already occupied',
-          variant: 'destructive',
-        });
-      } else {
-        setShieldSlot(item);
+    } else if (item.type === 'shield') {
+      const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
+      if (emptySlot) {
+        setEquipmentSlotById(emptySlot, { name: item.name, value: item.value, image: item.image, type: 'shield' });
+        toast({ title: 'Shield Equipped!', description: `${item.name} equipped from backpack` });
         setBackpackSlot(null);
-        toast({
-          title: 'Shield Equipped!',
-          description: `Equipped ${item.name} from backpack`,
-        });
+      } else {
+        toast({ title: 'Equipment Full!', description: 'Clear a slot first', variant: 'destructive' });
       }
-    } else if (item.name.includes('Sword') || item.name.includes('Axe') || item.name.includes('Dagger') || 
-               item.name.includes('Mace') || item.name.includes('Spear')) {
-      // Equip weapon from backpack
-      if (weaponSlot) {
-        toast({
-          title: 'Cannot Equip!',
-          description: 'Weapon slot is already occupied',
-          variant: 'destructive',
-        });
-      } else {
-        setWeaponSlot(item);
+    } else if (item.type === 'weapon') {
+      const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
+      if (emptySlot) {
+        setEquipmentSlotById(emptySlot, { name: item.name, value: item.value, image: item.image, type: 'weapon' });
+        toast({ title: 'Weapon Equipped!', description: `${item.name} equipped from backpack` });
         setBackpackSlot(null);
-        toast({
-          title: 'Weapon Equipped!',
-          description: `Equipped ${item.name} from backpack`,
-        });
+      } else {
+        toast({ title: 'Equipment Full!', description: 'Clear a slot first', variant: 'destructive' });
       }
     }
   };
@@ -421,6 +479,7 @@ export default function GameBoard() {
         gold={gold} 
         cardsRemaining={getRemainingCards()}
         monstersDefeated={monstersDefeated}
+        onDeckClick={() => setDeckViewerOpen(true)}
       />
 
       <div className="flex-1 flex flex-col items-center justify-center gap-8 p-4 max-w-6xl mx-auto w-full">
@@ -433,6 +492,8 @@ export default function GameBoard() {
                 card={card}
                 onDragStart={setDraggedCard}
                 onDragEnd={() => setDraggedCard(null)}
+                onWeaponDrop={(weapon) => handleWeaponToMonster(weapon, card)}
+                isWeaponDropTarget={draggedEquipment?.type === 'weapon' && card.type === 'monster'}
                 className={removingCards.has(card.id) ? 'animate-card-remove' : ''}
               />
             ) : (
@@ -442,32 +503,45 @@ export default function GameBoard() {
 
           {/* Hero Row - Bottom */}
           <EquipmentSlot 
-            type="weapon" 
-            item={weaponSlot}
-            onDrop={(card) => handleCardToSlot(card, 'weapon')}
-            isDropTarget={draggedCard?.type === 'weapon'}
+            type="equipment" 
+            slotId="slot-equipment-1"
+            item={equipmentSlot1}
+            onDrop={(card) => handleCardToSlot(card, 'slot-equipment-1')}
+            onDragStart={(equipment) => {
+              setDraggedEquipment(equipment);
+              setDraggedCard(null);
+            }}
+            onDragEnd={() => setDraggedEquipment(null)}
+            isDropTarget={draggedCard?.type === 'weapon' || draggedCard?.type === 'shield'}
           />
           <HeroCard 
             hp={hp}
             maxHp={INITIAL_HP}
             onDrop={handleCardToHero}
             isDropTarget={draggedCard?.type === 'monster' || draggedCard?.type === 'potion' || draggedCard?.type === 'coin'}
-            equippedWeapon={weaponSlot}
-            equippedShield={shieldSlot}
+            equippedWeapon={findWeaponSlot()?.item || null}
+            equippedShield={findShieldSlot()?.item || null}
             image={heroImage}
             takingDamage={takingDamage}
             healing={healing}
           />
           <EquipmentSlot 
-            type="shield" 
-            item={shieldSlot}
-            onDrop={(card) => handleCardToSlot(card, 'shield')}
-            isDropTarget={draggedCard?.type === 'shield'}
+            type="equipment"
+            slotId="slot-equipment-2"
+            item={equipmentSlot2}
+            onDrop={(card) => handleCardToSlot(card, 'slot-equipment-2')}
+            onDragStart={(equipment) => {
+              setDraggedEquipment(equipment);
+              setDraggedCard(null);
+            }}
+            onDragEnd={() => setDraggedEquipment(null)}
+            isDropTarget={draggedCard?.type === 'weapon' || draggedCard?.type === 'shield'}
           />
           <EquipmentSlot 
             type="backpack" 
+            slotId="slot-backpack"
             item={backpackSlot}
-            onDrop={(card) => handleCardToSlot(card, 'backpack')}
+            onDrop={(card) => handleCardToSlot(card, 'slot-backpack')}
             isDropTarget={draggedCard?.type === 'potion' || draggedCard?.type === 'weapon' || draggedCard?.type === 'shield'}
             onClick={handleBackpackClick}
           />
@@ -496,6 +570,12 @@ export default function GameBoard() {
         monstersDefeated={monstersDefeated}
         damageTaken={totalDamageTaken}
         totalHealed={totalHealed}
+      />
+      
+      <DeckViewerModal
+        open={deckViewerOpen}
+        onOpenChange={setDeckViewerOpen}
+        remainingCards={[...activeCards, ...remainingDeck]}
       />
     </div>
   );

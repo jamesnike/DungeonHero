@@ -16,9 +16,14 @@ export default function SellZone({ onDrop, isDropTarget }: SellZoneProps) {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    // Try to get card data first, then equipment data
     const cardData = e.dataTransfer.getData('card');
+    const equipmentData = e.dataTransfer.getData('equipment');
+    
     if (cardData) {
       onDrop?.(JSON.parse(cardData));
+    } else if (equipmentData) {
+      onDrop?.(JSON.parse(equipmentData));
     }
   };
 

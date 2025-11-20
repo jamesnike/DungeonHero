@@ -1,17 +1,20 @@
 import { Card } from '@/components/ui/card';
-import { Shield, Sword, Backpack } from 'lucide-react';
+import { Shield, Sword, Backpack, Package } from 'lucide-react';
 
-export type SlotType = 'weapon' | 'shield' | 'backpack';
+export type SlotType = 'equipment' | 'backpack';
 
 interface EquipmentSlotProps {
   type: SlotType;
-  item?: { name: string; value: number; image?: string } | null;
+  slotId?: string;
+  item?: { name: string; value: number; image?: string; type?: string } | null;
   onDrop?: (card: any) => void;
+  onDragStart?: (item: any) => void;
+  onDragEnd?: () => void;
   isDropTarget?: boolean;
   onClick?: () => void;
 }
 
-export default function EquipmentSlot({ type, item, onDrop, isDropTarget, onClick }: EquipmentSlotProps) {
+export default function EquipmentSlot({ type, slotId, item, onDrop, onDragStart, onDragEnd, isDropTarget, onClick }: EquipmentSlotProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
@@ -24,40 +27,53 @@ export default function EquipmentSlot({ type, item, onDrop, isDropTarget, onClic
     }
   };
 
-  const getIcon = () => {
-    switch (type) {
-      case 'weapon':
-        return <Sword className="w-8 h-8 text-muted-foreground" />;
-      case 'shield':
-        return <Shield className="w-8 h-8 text-muted-foreground" />;
-      case 'backpack':
-        return <Backpack className="w-8 h-8 text-muted-foreground" />;
+  const handleDragStart = (e: React.DragEvent) => {
+    if (item && type !== 'backpack') {
+      const equipmentData = { ...item, fromSlot: slotId };
+      e.dataTransfer.setData('equipment', JSON.stringify(equipmentData));
+      onDragStart?.(equipmentData);
     }
   };
 
-  const getLabel = () => {
-    switch (type) {
-      case 'weapon':
-        return 'Weapon';
-      case 'shield':
-        return 'Shield';
-      case 'backpack':
-        return 'Backpack';
-    }
+  const handleDragEnd = () => {
+    onDragEnd?.();
   };
+
+  const getIcon = () => {
+    if (type === 'backpack') {
+      return <Backpack className="w-8 h-8 text-muted-foreground" />;
+    }
+    // For equipment slots, show appropriate icon based on what's stored
+    if (item?.type === 'shield') {
+      return <Shield className="w-8 h-8 text-muted-foreground" />;
+    } else if (item?.type === 'weapon') {
+      return <Sword className="w-8 h-8 text-muted-foreground" />;
+    }
+    return <Package className="w-8 h-8 text-muted-foreground" />;
+  };
+
+  const getLabel = () => {
+    if (type === 'backpack') return 'Backpack';
+    return 'Equipment';
+  };
+
+  const testId = slotId || `slot-${type}`;
 
   return (
     <div 
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className="w-32 h-44 md:w-40 md:h-56"
-      data-testid={`slot-${type}`}
+      data-testid={testId}
     >
       {item ? (
         <Card 
+          draggable={type !== 'backpack'}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
           className={`
             w-full h-full border-2 border-card-border shadow-md overflow-hidden 
-            ${type === 'backpack' ? 'cursor-pointer hover-elevate active-elevate-2' : 'hover-elevate'}
+            ${type === 'backpack' ? 'cursor-pointer hover-elevate active-elevate-2' : 'cursor-grab active:cursor-grabbing hover-elevate'}
           `}
           onClick={type === 'backpack' ? onClick : undefined}
         >
@@ -72,7 +88,7 @@ export default function EquipmentSlot({ type, item, onDrop, isDropTarget, onClic
               )}
               <div className="absolute top-1 right-1">
                 <div className="bg-background/80 backdrop-blur-sm rounded-full w-6 h-6 flex items-center justify-center">
-                  <span className="font-mono font-bold text-xs" data-testid={`slot-${type}-value`}>
+                  <span className="font-mono font-bold text-xs" data-testid={`${testId}-value`}>
                     {item.value}
                   </span>
                 </div>
