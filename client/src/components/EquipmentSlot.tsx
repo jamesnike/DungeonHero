@@ -8,9 +8,10 @@ interface EquipmentSlotProps {
   item?: { name: string; value: number; image?: string } | null;
   onDrop?: (card: any) => void;
   isDropTarget?: boolean;
+  onClick?: () => void;
 }
 
-export default function EquipmentSlot({ type, item, onDrop, isDropTarget }: EquipmentSlotProps) {
+export default function EquipmentSlot({ type, item, onDrop, isDropTarget, onClick }: EquipmentSlotProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
@@ -53,7 +54,13 @@ export default function EquipmentSlot({ type, item, onDrop, isDropTarget }: Equi
       data-testid={`slot-${type}`}
     >
       {item ? (
-        <Card className="w-full h-full border-2 border-card-border shadow-md overflow-hidden hover-elevate">
+        <Card 
+          className={`
+            w-full h-full border-2 border-card-border shadow-md overflow-hidden 
+            ${type === 'backpack' ? 'cursor-pointer hover-elevate active-elevate-2' : 'hover-elevate'}
+          `}
+          onClick={type === 'backpack' ? onClick : undefined}
+        >
           <div className="h-full flex flex-col">
             <div className="relative h-[60%] bg-gradient-to-b from-muted to-card overflow-hidden">
               {item.image && (

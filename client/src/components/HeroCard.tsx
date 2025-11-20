@@ -10,6 +10,8 @@ interface HeroCardProps {
   equippedWeapon?: { name: string; value: number } | null;
   equippedShield?: { name: string; value: number } | null;
   image?: string;
+  takingDamage?: boolean;
+  healing?: boolean;
 }
 
 export default function HeroCard({ 
@@ -19,7 +21,9 @@ export default function HeroCard({
   isDropTarget,
   equippedWeapon,
   equippedShield,
-  image
+  image,
+  takingDamage = false,
+  healing = false
 }: HeroCardProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -46,6 +50,8 @@ export default function HeroCard({
         w-full h-full border-4 border-primary shadow-2xl overflow-hidden
         transition-all duration-200
         ${isDropTarget ? 'scale-105 border-destructive animate-pulse' : ''}
+        ${takingDamage ? 'animate-damage-flash' : ''}
+        ${healing ? 'animate-heal-glow' : ''}
       `}>
         <div className="h-full flex flex-col">
           <div className="relative h-[70%] bg-gradient-to-b from-primary/20 to-card overflow-hidden">

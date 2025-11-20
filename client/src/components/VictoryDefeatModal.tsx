@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Trophy, Skull, Coins, Heart } from 'lucide-react';
+import { Trophy, Skull, Coins, Heart, Swords } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface VictoryDefeatModalProps {
@@ -16,6 +16,9 @@ interface VictoryDefeatModalProps {
   gold: number;
   hpRemaining: number;
   onRestart: () => void;
+  monstersDefeated?: number;
+  damageTaken?: number;
+  totalHealed?: number;
 }
 
 export default function VictoryDefeatModal({ 
@@ -23,7 +26,10 @@ export default function VictoryDefeatModal({
   isVictory, 
   gold, 
   hpRemaining,
-  onRestart 
+  onRestart,
+  monstersDefeated = 0,
+  damageTaken = 0,
+  totalHealed = 0
 }: VictoryDefeatModalProps) {
   return (
     <Dialog open={open}>
@@ -51,27 +57,49 @@ export default function VictoryDefeatModal({
         </DialogHeader>
 
         <div className="space-y-3 py-4">
-          <div className="flex items-center justify-between p-3 bg-muted rounded-md">
-            <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col items-center gap-2 p-3 bg-muted rounded-md">
               <Coins className="w-5 h-5 text-yellow-500" />
-              <span className="font-medium">Gold Collected</span>
-            </div>
-            <Badge variant="outline" className="font-mono text-lg">
-              {gold}
-            </Badge>
-          </div>
-
-          {isVictory && (
-            <div className="flex items-center justify-between p-3 bg-muted rounded-md">
-              <div className="flex items-center gap-2">
-                <Heart className="w-5 h-5 text-destructive" />
-                <span className="font-medium">HP Remaining</span>
-              </div>
+              <span className="text-xs text-muted-foreground">Gold</span>
               <Badge variant="outline" className="font-mono text-lg">
-                {hpRemaining}
+                {gold}
               </Badge>
             </div>
-          )}
+
+            {isVictory && (
+              <div className="flex flex-col items-center gap-2 p-3 bg-muted rounded-md">
+                <Heart className="w-5 h-5 text-destructive" />
+                <span className="text-xs text-muted-foreground">HP Left</span>
+                <Badge variant="outline" className="font-mono text-lg">
+                  {hpRemaining}
+                </Badge>
+              </div>
+            )}
+            
+            <div className="flex flex-col items-center gap-2 p-3 bg-muted rounded-md">
+              <Skull className="w-5 h-5 text-primary" />
+              <span className="text-xs text-muted-foreground">Defeated</span>
+              <Badge variant="outline" className="font-mono text-lg">
+                {monstersDefeated}
+              </Badge>
+            </div>
+            
+            <div className="flex flex-col items-center gap-2 p-3 bg-muted rounded-md">
+              <Swords className="w-5 h-5 text-destructive" />
+              <span className="text-xs text-muted-foreground">Damage</span>
+              <Badge variant="outline" className="font-mono text-lg">
+                {damageTaken}
+              </Badge>
+            </div>
+            
+            <div className="flex flex-col items-center gap-2 p-3 bg-muted rounded-md">
+              <Heart className="w-5 h-5 text-green-500" />
+              <span className="text-xs text-muted-foreground">Healed</span>
+              <Badge variant="outline" className="font-mono text-lg">
+                {totalHealed}
+              </Badge>
+            </div>
+          </div>
         </div>
 
         <DialogFooter>

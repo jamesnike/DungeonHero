@@ -196,6 +196,79 @@
  * need to be distinguished from eachother visually.
  */
 @layer utilities {
+  /* Card animations */
+  @keyframes card-remove {
+    0% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.1) rotate(5deg);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.8) rotate(10deg) translateY(-20px);
+    }
+  }
+  
+  @keyframes damage-flash {
+    0%, 100% {
+      background-color: transparent;
+    }
+    50% {
+      background-color: rgba(220, 38, 38, 0.3);
+    }
+  }
+  
+  @keyframes heal-glow {
+    0%, 100% {
+      box-shadow: 0 0 0 rgba(34, 197, 94, 0);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
+    }
+  }
+  
+  .animate-card-remove {
+    animation: card-remove 300ms ease-out forwards;
+  }
+  
+  .animate-damage-flash {
+    animation: damage-flash 200ms ease-out;
+  }
+  
+  .animate-heal-glow {
+    animation: heal-glow 500ms ease-out;
+  }
+  
+  @keyframes modal-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  @keyframes modal-slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(-30px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  
+  .animate-modal-fade-in {
+    animation: modal-fade-in 200ms ease-out;
+  }
+  
+  .animate-modal-slide-in {
+    animation: modal-slide-in 400ms ease-out;
+  }
 
   /* Hide ugly search cancel button in Chrome until we can style it properly */
   input[type="search"]::-webkit-search-cancel-button {

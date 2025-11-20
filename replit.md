@@ -48,26 +48,43 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 
 ## Key Files
 - `client/src/components/GameBoard.tsx`: Main game logic and state management
-- `client/src/components/GameCard.tsx`: Card display component
-- `client/src/components/HeroCard.tsx`: Player character card
-- `client/src/components/EquipmentSlot.tsx`: Weapon/shield/backpack slots
+- `client/src/components/GameCard.tsx`: Card display component with animations
+- `client/src/components/HeroCard.tsx`: Player character card with combat effects
+- `client/src/components/EquipmentSlot.tsx`: Weapon/shield/backpack slots with click handlers
 - `client/src/components/SellZone.tsx`: Selling interface
-- `client/src/components/GameHeader.tsx`: HP/Gold display
-- `client/src/components/VictoryDefeatModal.tsx`: End game modal
+- `client/src/components/GameHeader.tsx`: HP/Gold/Cards remaining display
+- `client/src/components/VictoryDefeatModal.tsx`: End game modal with statistics
+- `client/src/components/HelpDialog.tsx`: Tutorial and game rules
+- `client/src/index.css`: Custom animations (card-remove, damage-flash, heal-glow)
 - `design_guidelines.md`: Design system and color palette
 
 ## Recent Changes (November 20, 2025)
-- **Combat System**: Implemented proper Card Crawl-style combat mechanics
-  - Weapons now consume after use (single-use items)
-  - Monster defeat requires weapon value >= monster value
-  - Monster counterattack damage = monster value - weapon value
-  - Shields provide permanent damage reduction
-  - Different toast messages for various combat outcomes
-- Fixed critical game loop bugs using `drawPending` flag to prevent race conditions
-- Removed redundant `deck` state variable (only `remainingDeck` tracked now)
-- Implemented consistent sell validation using `SELLABLE_TYPES` constant
-- Refactored draw logic to use useEffect with proper cleanup to prevent double draws
-- Ensured card carry-over mechanic works correctly with functional state setters
+
+### Animation & Visual Effects
+- **Card Animations**: Smooth drag/lift effects with rotation and scale transitions
+- **Combat Visual Feedback**: Damage flash (red) and healing glow (green) on hero card
+- **Card Removal**: Fade-out animation with rotation when cards are consumed
+- **Modal Animations**: Slide-in and fade-in effects for victory/defeat screens
+
+### Game Balance & Card Diversity
+- **Monster Balance**: 4 types with varied values (Dragon 5-7, Skeleton 2-4, Goblin 2-3, Ogre 4-6)
+- **Weapon Variety**: 5 types (Sword, Axe, Dagger, Mace, Spear) with values 2-6
+- **Shield Types**: 4 types with values 2-4 for balanced defense
+- **Potion Variety**: 3 types with healing values 2-5
+- **Gold Values**: Improved range 1-4 for better economy
+
+### Enhanced Features
+- **Backpack System**: Click to use/equip stored items (potions heal, weapons/shields equip)
+- **Statistics Tracking**: Monsters defeated, damage taken, healing received
+- **Victory Modal**: Displays comprehensive game statistics
+- **Help System**: In-game tutorial explaining all mechanics and card types
+- **Improved UI**: Enhanced sell zone with visual feedback
+
+### Technical Improvements
+- Fixed critical game loop bugs using `drawPending` flag
+- Added `removingCards` state for animation synchronization
+- Implemented proper state management for combat animations
+- Removed redundant `deck` state (only `remainingDeck` tracked)
 
 ## Combat System
 - **Weapon Usage**: Weapons are single-use items consumed when attacking monsters

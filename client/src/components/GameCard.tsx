@@ -73,13 +73,23 @@ export default function GameCard({ card, onDragStart, onDragEnd, className = '' 
       onDragEnd={handleDragEnd}
       className={`
         w-32 h-44 md:w-40 md:h-56 cursor-grab active:cursor-grabbing
-        transition-all duration-150
-        ${isDragging ? 'opacity-50 scale-95 rotate-3' : 'hover:scale-105'}
+        transition-all duration-200 ease-out
+        ${isDragging 
+          ? 'opacity-60 scale-95 -rotate-6 -translate-y-2' 
+          : 'hover:scale-105 hover:-translate-y-1 hover:rotate-1'
+        }
         ${className}
       `}
+      style={{
+        filter: isDragging ? 'brightness(1.1)' : 'none',
+      }}
       data-testid={`card-${card.type}-${card.id}`}
     >
-      <Card className={`w-full h-full border-4 ${getCardBorderColor()} shadow-lg overflow-hidden`}>
+      <Card className={`
+        w-full h-full border-4 ${getCardBorderColor()} overflow-hidden
+        transition-shadow duration-200
+        ${isDragging ? 'shadow-2xl' : 'shadow-lg hover:shadow-xl'}
+      `}>
         <div className="h-full flex flex-col">
           <div className="relative h-[60%] bg-gradient-to-b from-muted to-card overflow-hidden">
             {card.image && (

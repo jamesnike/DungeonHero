@@ -5,6 +5,7 @@ import GameCard, { type GameCardData } from './GameCard';
 import EquipmentSlot, { type SlotType } from './EquipmentSlot';
 import SellZone, { SELLABLE_TYPES } from './SellZone';
 import VictoryDefeatModal from './VictoryDefeatModal';
+import HelpDialog from './HelpDialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
@@ -22,52 +23,83 @@ function createDeck(): GameCardData[] {
   const deck: GameCardData[] = [];
   let id = 0;
 
+  // Monster variety with balanced values (2-7 range)
+  const monsterTypes = [
+    { name: 'Dragon', image: dragonImage, minValue: 5, maxValue: 7 },
+    { name: 'Skeleton', image: skeletonImage, minValue: 2, maxValue: 4 },
+    { name: 'Goblin', image: skeletonImage, minValue: 2, maxValue: 3 },
+    { name: 'Ogre', image: dragonImage, minValue: 4, maxValue: 6 },
+  ];
+
+  // 12 monsters total: 3 of each type
   for (let i = 0; i < 12; i++) {
+    const monsterType = monsterTypes[i % monsterTypes.length];
     deck.push({
       id: `monster-${id++}`,
       type: 'monster',
-      name: i % 2 === 0 ? 'Dragon' : 'Skeleton',
-      value: Math.floor(Math.random() * 6) + 3,
-      image: i % 2 === 0 ? dragonImage : skeletonImage,
+      name: monsterType.name,
+      value: Math.floor(Math.random() * (monsterType.maxValue - monsterType.minValue + 1)) + monsterType.minValue,
+      image: monsterType.image,
     });
   }
 
+  // Weapon variety with improved values (2-6 range)
+  const weaponTypes = [
+    'Sword', 'Axe', 'Dagger', 'Mace', 'Spear'
+  ];
+  
   for (let i = 0; i < 10; i++) {
+    const weaponName = weaponTypes[i % weaponTypes.length];
+    // Balanced weapon values: 2-6
+    const value = Math.floor(Math.random() * 5) + 2;
     deck.push({
       id: `weapon-${id++}`,
       type: 'weapon',
-      name: 'Sword',
-      value: Math.floor(Math.random() * 4) + 2,
+      name: weaponName,
+      value: value,
       image: swordImage,
     });
   }
 
+  // Shield variety (2-4 range for balance)
+  const shieldTypes = [
+    'Iron Shield', 'Wooden Shield', 'Steel Shield', 'Buckler'
+  ];
+  
   for (let i = 0; i < 10; i++) {
+    const shieldName = shieldTypes[i % shieldTypes.length];
     deck.push({
       id: `shield-${id++}`,
       type: 'shield',
-      name: 'Shield',
-      value: Math.floor(Math.random() * 4) + 2,
+      name: shieldName,
+      value: Math.floor(Math.random() * 3) + 2,
       image: shieldImage,
     });
   }
 
+  // Potions (2-5 range)
+  const potionTypes = [
+    'Health Potion', 'Healing Elixir', 'Restorative Brew'
+  ];
+  
   for (let i = 0; i < 8; i++) {
+    const potionName = potionTypes[i % potionTypes.length];
     deck.push({
       id: `potion-${id++}`,
       type: 'potion',
-      name: 'Potion',
+      name: potionName,
       value: Math.floor(Math.random() * 4) + 2,
       image: potionImage,
     });
   }
 
+  // Gold coins (1-4 range, more valuable)
   for (let i = 0; i < 14; i++) {
     deck.push({
       id: `coin-${id++}`,
       type: 'coin',
       name: 'Gold',
-      value: Math.floor(Math.random() * 3) + 1,
+      value: Math.floor(Math.random() * 4) + 1,
     });
   }
 
@@ -88,6 +120,14 @@ export default function GameBoard() {
   const [victory, setVictory] = useState(false);
   const [draggedCard, setDraggedCard] = useState<GameCardData | null>(null);
   const [drawPending, setDrawPending] = useState(false);
+  const [removingCards, setRemovingCards] = useState<Set<string>>(new Set());
+  const [takingDamage, setTakingDamage] = useState(false);
+  const [healing, setHealing] = useState(false);
+  
+  // Game statistics
+  const [monstersDefeated, setMonstersDefeated] = useState(0);
+  const [totalDamageTaken, setTotalDamageTaken] = useState(0);
+  const [totalHealed, setTotalHealed] = useState(0);
 
   useEffect(() => {
     initGame();
@@ -106,6 +146,9 @@ export default function GameBoard() {
     setGameOver(false);
     setVictory(false);
     setDrawPending(false);
+    setMonstersDefeated(0);
+    setTotalDamageTaken(0);
+    setTotalHealed(0);
   };
 
   useEffect(() => {
@@ -138,33 +181,46 @@ export default function GameBoard() {
   }, [drawPending]);
 
   const removeCard = (cardId: string) => {
-    setActiveCards(prev => {
-      const updated = prev.filter(c => c.id !== cardId);
-      
-      setCardsPlayed(count => {
-        const newCount = count + 1;
+    // Add card to removing set for animation
+    setRemovingCards(prev => new Set(prev).add(cardId));
+    
+    // Delay actual removal for animation
+    setTimeout(() => {
+      setActiveCards(prev => {
+        const updated = prev.filter(c => c.id !== cardId);
         
-        if (newCount >= 3 || updated.length === 0) {
-          if (updated.length === 0) {
-            setRemainingDeck(remaining => {
-              if (remaining.length === 0) {
-                setVictory(true);
-                setGameOver(true);
-              } else {
-                setDrawPending(true);
-              }
-              return remaining;
-            });
-          } else {
-            setDrawPending(true);
+        setCardsPlayed(count => {
+          const newCount = count + 1;
+          
+          if (newCount >= 3 || updated.length === 0) {
+            if (updated.length === 0) {
+              setRemainingDeck(remaining => {
+                if (remaining.length === 0) {
+                  setVictory(true);
+                  setGameOver(true);
+                } else {
+                  setDrawPending(true);
+                }
+                return remaining;
+              });
+            } else {
+              setDrawPending(true);
+            }
           }
-        }
+          
+          return newCount;
+        });
         
-        return newCount;
+        return updated;
       });
       
-      return updated;
-    });
+      // Clear from removing set
+      setRemovingCards(prev => {
+        const next = new Set(prev);
+        next.delete(cardId);
+        return next;
+      });
+    }, 300);
   };
 
   const handleCardToHero = (card: GameCardData) => {
@@ -176,6 +232,7 @@ export default function GameBoard() {
         // Player attacks with weapon
         if (weaponSlot.value >= monsterValue) {
           // Monster defeated, player takes no damage
+          setMonstersDefeated(prev => prev + 1);
           toast({
             title: 'Monster Defeated!',
             description: `Your ${weaponSlot.name} (${weaponSlot.value}) destroyed the monster (${monsterValue})!`,
@@ -223,6 +280,13 @@ export default function GameBoard() {
 
       // Apply damage to player
       const newHp = Math.max(0, hp - damageToPlayer);
+      
+      if (damageToPlayer > 0) {
+        setTakingDamage(true);
+        setTimeout(() => setTakingDamage(false), 200);
+        setTotalDamageTaken(prev => prev + damageToPlayer);
+      }
+      
       setHp(newHp);
 
       removeCard(card.id);
@@ -233,10 +297,16 @@ export default function GameBoard() {
       }
     } else if (card.type === 'potion') {
       const newHp = Math.min(INITIAL_HP, hp + card.value);
+      const healAmount = newHp - hp;
+      
+      setHealing(true);
+      setTimeout(() => setHealing(false), 500);
+      setTotalHealed(prev => prev + healAmount);
+      
       setHp(newHp);
       toast({
         title: 'Healed!',
-        description: `+${newHp - hp} HP`,
+        description: `+${healAmount} HP`,
       });
       removeCard(card.id);
     } else if (card.type === 'coin') {
@@ -284,6 +354,61 @@ export default function GameBoard() {
     removeCard(card.id);
   };
 
+  const handleBackpackClick = () => {
+    if (!backpackSlot) return;
+    
+    const item = backpackSlot;
+    
+    // Handle different item types from backpack
+    if (item.name.includes('Potion') || item.name.includes('Elixir') || item.name.includes('Brew')) {
+      // Use potion
+      const newHp = Math.min(INITIAL_HP, hp + item.value);
+      const healAmount = newHp - hp;
+      setHealing(true);
+      setTimeout(() => setHealing(false), 500);
+      setTotalHealed(prev => prev + healAmount);
+      setHp(newHp);
+      toast({
+        title: 'Potion Used!',
+        description: `+${healAmount} HP from backpack`,
+      });
+      setBackpackSlot(null);
+    } else if (item.name.includes('Shield')) {
+      // Equip shield from backpack
+      if (shieldSlot) {
+        toast({
+          title: 'Cannot Equip!',
+          description: 'Shield slot is already occupied',
+          variant: 'destructive',
+        });
+      } else {
+        setShieldSlot(item);
+        setBackpackSlot(null);
+        toast({
+          title: 'Shield Equipped!',
+          description: `Equipped ${item.name} from backpack`,
+        });
+      }
+    } else if (item.name.includes('Sword') || item.name.includes('Axe') || item.name.includes('Dagger') || 
+               item.name.includes('Mace') || item.name.includes('Spear')) {
+      // Equip weapon from backpack
+      if (weaponSlot) {
+        toast({
+          title: 'Cannot Equip!',
+          description: 'Weapon slot is already occupied',
+          variant: 'destructive',
+        });
+      } else {
+        setWeaponSlot(item);
+        setBackpackSlot(null);
+        toast({
+          title: 'Weapon Equipped!',
+          description: `Equipped ${item.name} from backpack`,
+        });
+      }
+    }
+  };
+
   const getRemainingCards = () => {
     return remainingDeck.length + activeCards.length;
   };
@@ -307,6 +432,7 @@ export default function GameBoard() {
                 card={card}
                 onDragStart={setDraggedCard}
                 onDragEnd={() => setDraggedCard(null)}
+                className={removingCards.has(card.id) ? 'animate-card-remove' : ''}
               />
             ) : (
               <div key={`empty-${index}`} className="w-32 h-44 md:w-40 md:h-56" />
@@ -328,6 +454,8 @@ export default function GameBoard() {
             equippedWeapon={weaponSlot}
             equippedShield={shieldSlot}
             image={heroImage}
+            takingDamage={takingDamage}
+            healing={healing}
           />
           <EquipmentSlot 
             type="shield" 
@@ -339,18 +467,22 @@ export default function GameBoard() {
             type="backpack" 
             item={backpackSlot}
             onDrop={(card) => handleCardToSlot(card, 'backpack')}
-            isDropTarget={draggedCard?.type === 'potion'}
+            isDropTarget={draggedCard?.type === 'potion' || draggedCard?.type === 'weapon' || draggedCard?.type === 'shield'}
+            onClick={handleBackpackClick}
           />
         </div>
 
-        <div className="flex gap-4 items-center justify-center">
+        <div className="flex gap-4 items-center justify-center flex-wrap">
           <SellZone
             onDrop={handleSellCard}
             isDropTarget={draggedCard !== null && SELLABLE_TYPES.includes(draggedCard.type)}
           />
-          <Button onClick={initGame} variant="outline" data-testid="button-new-game">
-            New Game
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={initGame} variant="outline" data-testid="button-new-game">
+              New Game
+            </Button>
+            <HelpDialog />
+          </div>
         </div>
       </div>
 
@@ -360,6 +492,9 @@ export default function GameBoard() {
         gold={gold}
         hpRemaining={hp}
         onRestart={initGame}
+        monstersDefeated={monstersDefeated}
+        damageTaken={totalDamageTaken}
+        totalHealed={totalHealed}
       />
     </div>
   );
