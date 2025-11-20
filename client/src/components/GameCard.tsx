@@ -93,7 +93,8 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className={`
-        w-32 h-44 md:w-40 md:h-56 cursor-grab active:cursor-grabbing
+        w-20 h-28 sm:w-28 sm:h-40 md:w-36 md:h-52 lg:w-40 lg:h-56 
+        cursor-grab active:cursor-grabbing
         transition-all duration-200 ease-out
         ${isDragging 
           ? 'opacity-60 scale-95 -rotate-6 -translate-y-2' 

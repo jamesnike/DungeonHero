@@ -66,7 +66,7 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
       >
         <Card 
           className={`
-            w-24 h-24 md:w-28 md:h-28 cursor-pointer
+            w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 cursor-pointer
             flex flex-col items-center justify-center gap-1
             border-2 transition-all duration-200
             ${isDropTarget ? 'border-destructive border-4 bg-destructive/10' : 'border-border bg-card'}
@@ -74,8 +74,8 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
           `}
           onClick={() => setViewerOpen(true)}
         >
-          <Skull className="w-10 h-10 md:w-12 md:h-12 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">Graveyard</span>
+          <Skull className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground hidden sm:inline">Graveyard</span>
           {discardedCards.length > 0 && (
             <Badge 
               variant="destructive" 
@@ -86,9 +86,6 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
           )}
           <Eye className="absolute bottom-1 right-1 w-4 h-4 text-muted-foreground/50" />
         </Card>
-        <div className="text-center mt-1">
-          <span className="text-xs text-muted-foreground">Sell Items</span>
-        </div>
       </div>
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>

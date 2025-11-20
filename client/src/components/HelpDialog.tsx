@@ -45,14 +45,19 @@ export default function HelpDialog() {
             </h3>
             <div className="space-y-2 text-sm text-muted-foreground">
               <div className="p-3 bg-muted rounded-md">
-                <strong className="text-foreground">Attack:</strong> Drag weapon from equipment → monster. If weapon value ≥ monster value, monster is defeated.
-                Otherwise, monster counterattacks. Weapon is consumed after use.
+                <strong className="text-foreground">Attack (Weapon→Monster):</strong> Drag equipped weapon → monster card. 
+                If weapon ≥ monster: defeated. If weapon &lt; monster: survives and counterattacks!
               </div>
               <div className="p-3 bg-muted rounded-md">
-                <strong className="text-foreground">Defend:</strong> Drag monster → hero. Take full monster damage, reduced by equipped shield.
+                <strong className="text-foreground">Attack (Monster→Weapon):</strong> Drag monster → equipped weapon slot. 
+                Same as above - weapon attacks the monster.
               </div>
               <div className="p-3 bg-muted rounded-md">
-                <strong className="text-foreground">Shields:</strong> Single-use! Consumed when blocking damage.
+                <strong className="text-foreground">Defend (Monster→Shield):</strong> Drag monster → equipped shield slot. 
+                Shield blocks damage and is consumed (single-use).
+              </div>
+              <div className="p-3 bg-muted rounded-md">
+                <strong className="text-foreground">Defend (Monster→Hero):</strong> Take full damage, reduced by shield if equipped.
               </div>
             </div>
           </div>
@@ -96,11 +101,11 @@ export default function HelpDialog() {
             <div className="space-y-2 text-sm">
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">Attack</Badge>
-                <span className="text-muted-foreground">Drag weapon from equipment → monster card</span>
+                <span className="text-muted-foreground">Drag weapon→monster OR monster→weapon slot</span>
               </div>
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">Defend</Badge>
-                <span className="text-muted-foreground">Drag monster → hero card</span>
+                <span className="text-muted-foreground">Drag monster→shield slot OR monster→hero</span>
               </div>
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">Equip</Badge>
@@ -108,24 +113,31 @@ export default function HelpDialog() {
               </div>
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">Store</Badge>
-                <span className="text-muted-foreground">Drag item to backpack (1 item max, click to use)</span>
+                <span className="text-muted-foreground">Drag to backpack (1 item, click to use)</span>
               </div>
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">Sell</Badge>
-                <span className="text-muted-foreground">Drag dungeon cards OR equipped items to sell zone</span>
+                <span className="text-muted-foreground">Drag items to graveyard (top right) for gold</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Badge variant="outline" className="mt-0.5">Graveyard</Badge>
+                <span className="text-muted-foreground">Click graveyard to view all discarded cards</span>
               </div>
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">View Deck</Badge>
-                <span className="text-muted-foreground">Click deck counter to see all remaining cards</span>
+                <span className="text-muted-foreground">Click deck counter to see remaining cards</span>
               </div>
             </div>
           </div>
 
           <div className="p-4 bg-primary/10 rounded-md border border-primary/20">
             <p className="text-sm">
-              <strong>Pro Tip:</strong> Both weapons AND shields are single-use! Use your equipment slots wisely.
-              You can drag weapons directly onto monsters to attack, or let monsters attack you to trigger shield blocking.
-              Equipped items can be sold if you need gold!
+              <strong>Pro Tips:</strong> 
+              • Weapons & shields are single-use!
+              • Drag monster→equipment for flexible combat
+              • If weapon can't defeat monster, it survives and stays on board
+              • Sell unwanted items to graveyard for gold
+              • Check graveyard to see your card history
             </p>
           </div>
         </div>

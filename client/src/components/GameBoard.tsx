@@ -238,11 +238,14 @@ export default function GameBoard() {
     setDiscardedCards(prev => [...prev, card]);
   };
 
-  const removeCard = (cardId: string) => {
-    // Find the card to add to graveyard
-    const cardToRemove = activeCards.find(c => c.id === cardId);
-    if (cardToRemove) {
-      addToGraveyard(cardToRemove);
+  // Remove card from active cards (add to graveyard automatically)
+  const removeCard = (cardId: string, addToGraveyardAutomatically: boolean = true) => {
+    // Find the card to add to graveyard if needed
+    if (addToGraveyardAutomatically) {
+      const cardToRemove = activeCards.find(c => c.id === cardId);
+      if (cardToRemove) {
+        addToGraveyard(cardToRemove);
+      }
     }
     
     // Add card to removing set for animation
@@ -291,8 +294,12 @@ export default function GameBoard() {
     const monsterValue = monster.value;
     const weaponSlot = findWeaponSlot();
     let damageToPlayer = 0;
+    let shieldAlreadyLogged = false;
 
     if (weaponSlot) {
+      // Add weapon to graveyard
+      addToGraveyard({ ...weaponSlot.item, id: `weapon-used-${Date.now()}` });
+      
       // Attack with weapon
       if (weaponSlot.item.value >= monsterValue) {
         setMonstersDefeated(prev => prev + 1);
@@ -323,6 +330,9 @@ export default function GameBoard() {
           title: damageToPlayer === 0 ? 'Shield Blocked Attack!' : 'Shield Reduced Damage!',
           description: `${shieldSlot.item.name} absorbed damage!${damageToPlayer > 0 ? ` ${originalDamage} → ${damageToPlayer}` : ''}`
         });
+        // Add shield to graveyard
+        addToGraveyard({ ...shieldSlot.item, id: `shield-used-${Date.now()}` });
+        shieldAlreadyLogged = true;
         // Shield is consumed after use
         clearEquipmentSlotById(shieldSlot.id);
       } else if (!weaponSlot) {
@@ -335,7 +345,9 @@ export default function GameBoard() {
     }
 
     applyDamage(damageToPlayer);
-    removeCard(monster.id);
+    // Add monster to graveyard and remove (don't auto-add to graveyard again)
+    addToGraveyard(monster);
+    removeCard(monster.id, false);
   };
 
   const applyDamage = (damage: number) => {
@@ -352,7 +364,8 @@ export default function GameBoard() {
     }
   };
 
-  const applyCounterattackDamage = (damage: number) => {
+  // Apply counterattack damage and optionally add shield to graveyard
+  const applyCounterattackDamage = (damage: number, alreadyLoggedShield: boolean = false) => {
     let remainingDamage = damage;
     const shieldSlot = findShieldSlot();
     
@@ -363,6 +376,10 @@ export default function GameBoard() {
         title: 'Shield Blocks Counterattack!',
         description: `${shieldSlot.item.name} absorbed ${blocked} damage!${remainingDamage > 0 ? ` ${damage} → ${remainingDamage}` : ''}`
       });
+      // Only add shield to graveyard if not already logged
+      if (!alreadyLoggedShield) {
+        addToGraveyard({ ...shieldSlot.item, id: `shield-counter-${Date.now()}` });
+      }
       clearEquipmentSlotById(shieldSlot.id);
     }
     
@@ -381,13 +398,14 @@ export default function GameBoard() {
     }
     
     if (weaponValue >= monsterValue) {
-      // Weapon defeats monster - remove it
+      // Weapon defeats monster - remove it and add to graveyard
       setMonstersDefeated(prev => prev + 1);
       toast({
         title: 'Monster Defeated!',
         description: `Your ${weapon.name} (${weaponValue}) destroyed the ${monster.name} (${monsterValue})!`
       });
-      removeCard(monster.id);
+      addToGraveyard(monster);
+      removeCard(monster.id, false);
     } else {
       // Monster survives - stays on the board, counterattacks
       const counterDamage = monsterValue - weaponValue;
@@ -400,6 +418,7 @@ export default function GameBoard() {
       // Apply counterattack damage (shield can still block)
       applyCounterattackDamage(counterDamage);
       // Monster stays in dungeon - player must deal with it again
+      // Do NOT remove the card or add to graveyard - monster survives!
     }
   };
 
@@ -453,6 +472,10 @@ export default function GameBoard() {
             description: `${equippedItem.name} absorbed damage!${damageToPlayer > 0 ? ` ${monsterValue} → ${damageToPlayer}` : ''}`
           });
           
+          // Add shield and monster to graveyard
+          addToGraveyard({ ...equippedItem, id: `shield-used-${Date.now()}` });
+          addToGraveyard(card);
+          
           // Shield is consumed
           clearEquipmentSlotById(equipSlot);
           
@@ -461,10 +484,11 @@ export default function GameBoard() {
             applyDamage(damageToPlayer);
           }
           
-          // Remove monster
-          removeCard(card.id);
+          // Remove monster (already added to graveyard above)
+          removeCard(card.id, false);
         } else if (equippedItem.type === 'weapon') {
-          // Weapon attacks monster
+          // Weapon attacks monster - add weapon to graveyard
+          addToGraveyard({ ...equippedItem, id: `weapon-used-${Date.now()}` });
           handleWeaponToMonster({ ...equippedItem, fromSlot: equipSlot }, card);
         }
       } else if (card.type === 'weapon' || card.type === 'shield') {
@@ -578,8 +602,8 @@ export default function GameBoard() {
         />
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-8 p-4 max-w-6xl mx-auto w-full">
-        <div className="grid grid-cols-4 gap-4 w-full max-w-4xl">
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 md:gap-8 p-2 md:p-4 max-w-7xl mx-auto w-full">
+        <div className="grid grid-cols-4 gap-2 md:gap-4 w-full max-w-5xl">
           {/* Dungeon Row - Top */}
           {activeCards.concat(Array(4 - activeCards.length).fill(null)).slice(0, 4).map((card, index) => (
             card ? (
