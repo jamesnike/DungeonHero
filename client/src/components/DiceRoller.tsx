@@ -44,67 +44,124 @@ export default function DiceRoller({ onRoll, className = '' }: DiceRollerProps) 
     }, stepDuration);
   };
 
-  // 3D D20 using CSS transforms
+  // 3D D20 using CSS transforms - realistic icosahedron
   const renderD20_3D = () => {
     return (
       <div 
-        className="relative w-20 h-20 preserve-3d"
+        className="relative w-24 h-24 preserve-3d"
         style={{ 
           transformStyle: 'preserve-3d',
           transform: isRolling 
             ? 'rotateX(720deg) rotateY(720deg) rotateZ(360deg)' 
-            : 'rotateX(-25deg) rotateY(25deg)',
+            : 'rotateX(-30deg) rotateY(45deg)',
           transition: isRolling ? 'transform 1.5s cubic-bezier(0.4, 0.0, 0.2, 1)' : 'transform 0.3s ease'
         }}
       >
-        {/* 3D icosahedron effect using multiple faces */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          {/* Main face */}
-          <div 
-            className="absolute w-full h-full flex items-center justify-center"
-            style={{
-              background: 'linear-gradient(135deg, hsl(var(--primary) / 0.9), hsl(var(--primary) / 0.6))',
-              clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)',
-              boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.3), inset 0 -2px 10px rgba(0, 0, 0, 0.2)',
-              backfaceVisibility: 'hidden'
-            }}
-          >
-            <span className="font-mono font-bold text-2xl text-primary-foreground drop-shadow-md">
-              {currentValue}
-            </span>
-          </div>
-          
-          {/* Additional 3D faces for depth */}
-          {[...Array(3)].map((_, i) => (
-            <div 
-              key={i}
-              className="absolute w-full h-full"
+        {/* Create multiple triangular faces for realistic D20 */}
+        <div className="absolute inset-0">
+          {/* Top pyramid */}
+          {[0, 72, 144, 216, 288].map((angle, i) => (
+            <div
+              key={`top-${i}`}
+              className="absolute w-full h-full flex items-center justify-center"
               style={{
-                background: `linear-gradient(${120 * i}deg, hsl(var(--primary) / ${0.6 - i * 0.1}), hsl(var(--primary) / ${0.4 - i * 0.1}))`,
-                clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)',
-                transform: `rotateY(${120 * (i + 1)}deg) translateZ(10px)`,
+                transform: `rotateY(${angle}deg) rotateX(26.57deg) translateZ(30px)`,
                 transformStyle: 'preserve-3d',
-                backfaceVisibility: 'visible',
-                opacity: isRolling ? 0.8 : 0.6
               }}
-            />
+            >
+              <div
+                style={{
+                  width: '50px',
+                  height: '43px',
+                  background: `linear-gradient(135deg, 
+                    hsl(280 50% ${35 + (i % 2) * 10}%) 0%, 
+                    hsl(280 40% ${25 + (i % 2) * 5}%) 100%)`,
+                  clipPath: 'polygon(50% 0%, 100% 100%, 0% 100%)',
+                  border: '1px solid hsl(280 60% 20%)',
+                  boxShadow: 'inset 0 2px 5px rgba(255,255,255,0.2), inset 0 -2px 5px rgba(0,0,0,0.3)',
+                }}
+              >
+                {i === 0 && (
+                  <div className="flex items-center justify-center h-full pt-3">
+                    <span className="font-mono font-bold text-lg text-white/90 drop-shadow-lg">
+                      {currentValue}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
           ))}
           
-          {/* Shiny effect */}
+          {/* Middle band */}
+          {[0, 36, 72, 108, 144, 180, 216, 252, 288, 324].map((angle, i) => (
+            <div
+              key={`mid-${i}`}
+              className="absolute w-full h-full"
+              style={{
+                transform: `rotateY(${angle}deg) translateZ(30px)`,
+                transformStyle: 'preserve-3d',
+              }}
+            >
+              <div
+                style={{
+                  width: '50px',
+                  height: '43px',
+                  background: `linear-gradient(135deg, 
+                    hsl(280 50% ${30 + (i % 3) * 10}%) 0%, 
+                    hsl(280 40% ${20 + (i % 3) * 5}%) 100%)`,
+                  clipPath: i % 2 === 0 
+                    ? 'polygon(50% 0%, 100% 100%, 0% 100%)' 
+                    : 'polygon(50% 100%, 100% 0%, 0% 0%)',
+                  border: '1px solid hsl(280 60% 20%)',
+                  boxShadow: 'inset 0 1px 3px rgba(255,255,255,0.15), inset 0 -1px 3px rgba(0,0,0,0.25)',
+                  opacity: 0.9
+                }}
+              />
+            </div>
+          ))}
+          
+          {/* Bottom pyramid */}
+          {[0, 72, 144, 216, 288].map((angle, i) => (
+            <div
+              key={`bottom-${i}`}
+              className="absolute w-full h-full"
+              style={{
+                transform: `rotateY(${angle}deg) rotateX(-26.57deg) translateZ(30px)`,
+                transformStyle: 'preserve-3d',
+              }}
+            >
+              <div
+                style={{
+                  width: '50px',
+                  height: '43px',
+                  background: `linear-gradient(135deg, 
+                    hsl(280 45% ${25 + (i % 2) * 8}%) 0%, 
+                    hsl(280 35% ${15 + (i % 2) * 5}%) 100%)`,
+                  clipPath: 'polygon(50% 100%, 100% 0%, 0% 0%)',
+                  border: '1px solid hsl(280 60% 15%)',
+                  boxShadow: 'inset 0 1px 3px rgba(255,255,255,0.1), inset 0 -1px 3px rgba(0,0,0,0.4)',
+                  opacity: 0.85
+                }}
+              />
+            </div>
+          ))}
+          
+          {/* Metallic shine overlay */}
           <div 
-            className="absolute inset-0 pointer-events-none"
+            className="absolute inset-0 pointer-events-none rounded-full"
             style={{
-              background: 'radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.4) 0%, transparent 50%)',
-              clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)'
+              background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,0.5) 0%, transparent 40%)',
+              filter: 'blur(2px)',
+              transform: 'scale(0.8)',
             }}
           />
         </div>
         
         {/* Shadow */}
         <div 
-          className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-16 h-3 bg-black/20 rounded-full blur-md"
+          className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 w-20 h-4 bg-black/30 rounded-full blur-lg"
           style={{
-            transform: `translateX(-50%) ${isRolling ? 'scale(0.8)' : 'scale(1)'}`,
+            transform: `translateX(-50%) ${isRolling ? 'scale(0.7)' : 'scale(1)'}`,
             transition: 'transform 0.3s ease'
           }}
         />
