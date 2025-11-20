@@ -335,6 +335,7 @@ export default function GameBoard() {
   const { toast } = useToast();
   const [hp, setHp] = useState(INITIAL_HP);
   const [gold, setGold] = useState(0);
+  const [previewCards, setPreviewCards] = useState<GameCardData[]>([]); // New state for preview row
   const [activeCards, setActiveCards] = useState<GameCardData[]>([]);
   const [remainingDeck, setRemainingDeck] = useState<GameCardData[]>([]);
   const [equipmentSlot1, setEquipmentSlot1] = useState<EquipmentItem | null>(null);
@@ -404,8 +405,10 @@ export default function GameBoard() {
 
   const initGame = () => {
     const newDeck = createDeck();
-    setRemainingDeck(newDeck.slice(5));  // Changed from 4 to 5
-    setActiveCards(newDeck.slice(0, 5));  // Changed from 4 to 5
+    // Initialize with 10 cards total: 5 for preview, 5 for active
+    setPreviewCards(newDeck.slice(0, 5));  // Top row (preview)
+    setActiveCards(newDeck.slice(5, 10));  // Middle row (active)
+    setRemainingDeck(newDeck.slice(10));    // Rest of deck
     setHp(INITIAL_HP);
     setGold(0);
     setEquipmentSlot1(null);
@@ -505,6 +508,38 @@ export default function GameBoard() {
     setDiscardedCards(prev => [...prev, card]);
   };
 
+  // Waterfall mechanism - moves preview cards down and draws new ones
+  const triggerWaterfall = () => {
+    const stuckCard = activeCards[0]; // The one card that's stuck
+    
+    // Move preview cards down to active (4 cards from preview)
+    setActiveCards(previewCards);
+    
+    // Draw 5 new cards for preview row
+    const newPreviewCards = remainingDeck.slice(0, 5);
+    if (newPreviewCards.length > 0) {
+      setPreviewCards(newPreviewCards);
+      setRemainingDeck(prev => prev.slice(5));
+    } else {
+      // No more cards in deck - clear preview
+      setPreviewCards([]);
+      if (remainingDeck.length === 0) {
+        // Victory if no cards left
+        setVictory(true);
+        setGameOver(true);
+      }
+    }
+    
+    // Add stuck card to graveyard
+    if (stuckCard) {
+      addToGraveyard(stuckCard);
+      toast({
+        title: 'Cards Waterfall!',
+        description: `${stuckCard.name} was discarded, new cards drop down!`
+      });
+    }
+  };
+
   // Remove card from active cards (add to graveyard automatically)
   const removeCard = (cardId: string, addToGraveyardAutomatically: boolean = true) => {
     // Find the card to add to graveyard if needed
@@ -523,27 +558,19 @@ export default function GameBoard() {
       setActiveCards(prev => {
         const updated = prev.filter(c => c.id !== cardId);
         
-        setCardsPlayed(count => {
-          const newCount = count + 1;
-          
-          if (newCount >= 4 || updated.length === 0) {  // Changed from 3 to 4 for 5-card layout
-            if (updated.length === 0) {
-              setRemainingDeck(remaining => {
-                if (remaining.length === 0) {
-                  setVictory(true);
-                  setGameOver(true);
-                } else {
-                  setDrawPending(true);
-                }
-                return remaining;
-              });
-            } else {
-              setDrawPending(true);
-            }
+        // Check if exactly 1 card remains - trigger waterfall
+        if (updated.length === 1) {
+          // Use setTimeout to trigger waterfall after this state update completes
+          setTimeout(() => {
+            triggerWaterfall();
+          }, 100);
+        } else if (updated.length === 0) {
+          // Should not happen with waterfall mechanism, but handle it
+          if (remainingDeck.length === 0 && previewCards.length === 0) {
+            setVictory(true);
+            setGameOver(true);
           }
-          
-          return newCount;
-        });
+        }
         
         return updated;
       });
@@ -1004,8 +1031,8 @@ export default function GameBoard() {
     if (item.fromSlot) {
       clearEquipmentSlotById(item.fromSlot as EquipmentSlotId);
     } else {
-      // Item from dungeon - just remove it from active cards (already added to graveyard above)
-      setActiveCards(prev => prev.filter(c => c.id !== item.id));
+      // Item from dungeon - use removeCard to properly trigger waterfall (don't add to graveyard again)
+      removeCard(item.id, false);
       setCardsPlayed(prev => prev + 1);
     }
   };
@@ -1207,7 +1234,7 @@ export default function GameBoard() {
   };
 
   const getRemainingCards = () => {
-    return remainingDeck.length + activeCards.length;
+    return remainingDeck.length + previewCards.length + activeCards.length;
   };
 
   // Hand system handlers
@@ -1221,9 +1248,9 @@ export default function GameBoard() {
       return;
     }
     
-    // Add card to hand and remove from active cards
+    // Add card to hand and use removeCard to properly trigger waterfall
     setHandCards(prev => [...prev, card]);
-    setActiveCards(prev => prev.filter(c => c.id !== card.id));
+    removeCard(card.id, false); // Don't add to graveyard when saving to hand
     setCardsPlayed(prev => prev + 1); // Count it as played
     toast({
       title: 'Card Saved!',
@@ -1266,13 +1293,42 @@ export default function GameBoard() {
 
       {/* Main game area - adjust padding for hand area at bottom */}
       <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(180px, 25vh, 320px) + 2vh)' }}>
-        {/* Card grid - larger on big screens */}
+        {/* 3×5 Card Grid */}
         <div className="grid grid-cols-5 w-full" style={{ 
           maxWidth: '95vw',
           gap: 'min(2vw, 20px)',
-          gridTemplateRows: 'min-content min-content'
+          gridTemplateRows: 'repeat(3, auto)'
         }}>
-          {/* Dungeon Row - Top (5 slots) */}
+          {/* Row 1: Preview Row - 5 cards (non-interactive, 60% opacity) */}
+          {previewCards.concat(Array(5 - previewCards.length).fill(null)).slice(0, 5).map((card, index) => (
+            card ? (
+              <div 
+                key={card.id}
+                className="opacity-60 pointer-events-none"
+                style={{ 
+                  width: 'clamp(100px, 15vw, 200px)', 
+                  height: 'clamp(140px, 21vw, 280px)' 
+                }}
+                data-testid={`preview-card-${index}`}
+              >
+                <GameCard
+                  card={card}
+                  onDragStart={() => {}} // Disabled
+                  onDragEnd={() => {}} // Disabled
+                />
+              </div>
+            ) : (
+              <div 
+                key={`preview-empty-${index}`} 
+                style={{ 
+                  width: 'clamp(100px, 15vw, 200px)', 
+                  height: 'clamp(140px, 21vw, 280px)' 
+                }} 
+              />
+            )
+          ))}
+
+          {/* Row 2: Active Row - 5 cards (fully interactive) */}
           {activeCards.concat(Array(5 - activeCards.length).fill(null)).slice(0, 5).map((card, index) => (
             card ? (
               <GameCard
@@ -1292,7 +1348,7 @@ export default function GameBoard() {
             )
           ))}
 
-          {/* Hero Row - Bottom (5 slots) */}
+          {/* Row 3: Hero Row - 5 slots (Amulet, Equipment×2, Hero, Backpack) */}
           <AmuletSlot
             amulet={amuletSlot}
             onDrop={(card) => handleCardToSlot(card, 'slot-amulet')}
@@ -1366,7 +1422,7 @@ export default function GameBoard() {
       <DeckViewerModal
         open={deckViewerOpen}
         onOpenChange={setDeckViewerOpen}
-        remainingCards={[...activeCards, ...remainingDeck]}
+        remainingCards={[...previewCards, ...activeCards, ...remainingDeck]}
       />
 
       {/* Hand Area - fixed at bottom */}
