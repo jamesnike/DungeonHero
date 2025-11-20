@@ -445,7 +445,7 @@ export default function GameBoard() {
     if (slotId === 'slot-backpack' && (card.type === 'potion' || card.type === 'weapon' || card.type === 'shield')) {
       setBackpackSlot({ name: card.name, value: card.value, image: card.image, type: card.type });
       toast({ title: 'Item Stored!' });
-      removeCard(card.id);
+      removeCard(card.id, false); // Don't add to graveyard yet - only when used/sold
     } else if (slotId.startsWith('slot-equipment')) {
       const equipSlot: EquipmentSlotId = slotId === 'slot-equipment-1' ? 'equipmentSlot1' : 'equipmentSlot2';
       const equippedItem = equipSlot === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
@@ -492,10 +492,10 @@ export default function GameBoard() {
           handleWeaponToMonster({ ...equippedItem, fromSlot: equipSlot }, card);
         }
       } else if (card.type === 'weapon' || card.type === 'shield') {
-        // Equip weapon or shield
+        // Equip weapon or shield (don't add to graveyard yet - only when consumed)
         setEquipmentSlotById(equipSlot, { name: card.name, value: card.value, image: card.image, type: card.type });
         toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!` });
-        removeCard(card.id);
+        removeCard(card.id, false);
       }
     }
   };
