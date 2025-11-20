@@ -56,6 +56,77 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
     }
   };
 
+  // Get the top card for display
+  const topCard = discardedCards.length > 0 ? discardedCards[discardedCards.length - 1] : null;
+
+  // Render card stack visualization
+  const renderCardStack = () => {
+    const hasCards = discardedCards.length > 0;
+    
+    return (
+      <div className="relative w-full h-full">
+        {/* Base card shadows for stack effect */}
+        {hasCards && discardedCards.length > 2 && (
+          <div 
+            className="absolute inset-0 bg-gradient-to-b from-destructive/5 to-destructive/10 rounded-lg"
+            style={{ transform: 'translateY(4px) translateX(2px)' }}
+          />
+        )}
+        {hasCards && discardedCards.length > 1 && (
+          <div 
+            className="absolute inset-0 bg-gradient-to-b from-destructive/10 to-destructive/15 rounded-lg"
+            style={{ transform: 'translateY(2px) translateX(1px)' }}
+          />
+        )}
+        
+        {/* Top card or empty state */}
+        <div className={`
+          relative w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-2
+          ${isDropTarget ? 'bg-destructive/20 border-destructive' : 'bg-gradient-to-b from-muted/40 to-muted/60 border-muted-foreground/30'}
+        `}>
+          {hasCards && topCard ? (
+            <>
+              {/* Show top card image if available */}
+              {topCard.image && (
+                <div className="absolute inset-2 opacity-30">
+                  <img 
+                    src={topCard.image} 
+                    alt={topCard.name}
+                    className="w-full h-full object-cover rounded"
+                  />
+                </div>
+              )}
+              <div className="relative z-10 text-center">
+                <Skull className="w-8 h-8 text-muted-foreground mb-1" />
+                <span className="text-xs font-medium text-muted-foreground">Graveyard</span>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Empty graveyard state */}
+              <Skull className="w-8 h-8 text-muted-foreground/50 mb-1" />
+              <span className="text-xs font-medium text-muted-foreground/70">Graveyard</span>
+              <span className="text-xs text-muted-foreground/50">Empty</span>
+            </>
+          )}
+        </div>
+        
+        {/* Card count badge */}
+        {discardedCards.length > 0 && (
+          <Badge 
+            variant="destructive" 
+            className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center p-0 rounded-full text-xs"
+          >
+            {discardedCards.length}
+          </Badge>
+        )}
+        
+        {/* View indicator */}
+        <Eye className="absolute bottom-1 right-1 w-4 h-4 text-muted-foreground/30" />
+      </div>
+    );
+  };
+
   return (
     <>
       <div 
@@ -66,25 +137,16 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
       >
         <Card 
           className={`
-            w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 cursor-pointer
-            flex flex-col items-center justify-center gap-1
-            border-2 transition-all duration-200
-            ${isDropTarget ? 'border-destructive border-4 bg-destructive/10' : 'border-border bg-card'}
+            cursor-pointer transition-all duration-200
             hover-elevate active-elevate-2
+            border-2 bg-card
+            ${isDropTarget ? 'border-destructive border-4' : 'border-card-border'}
           `}
           onClick={() => setViewerOpen(true)}
         >
-          <Skull className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground hidden sm:inline">Graveyard</span>
-          {discardedCards.length > 0 && (
-            <Badge 
-              variant="destructive" 
-              className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center p-0 rounded-full text-xs"
-            >
-              {discardedCards.length}
-            </Badge>
-          )}
-          <Eye className="absolute bottom-1 right-1 w-4 h-4 text-muted-foreground/50" />
+          <div className="w-full h-full p-2">
+            {renderCardStack()}
+          </div>
         </Card>
       </div>
 

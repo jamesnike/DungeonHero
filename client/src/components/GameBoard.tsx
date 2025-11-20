@@ -9,6 +9,8 @@ import HandArea from './HandArea';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import DeckViewerModal from './DeckViewerModal';
 import EventChoiceModal from './EventChoiceModal';
+import DiceRoller from './DiceRoller';
+import ClassDeck from './ClassDeck';
 import { useToast } from '@/hooks/use-toast';
 
 // Cute chibi-style monster images
@@ -403,6 +405,7 @@ export default function GameBoard() {
   const [handCards, setHandCards] = useState<GameCardData[]>([]); // Hand system - max 5 cards
   const [permanentSkills, setPermanentSkills] = useState<string[]>([]); // Track permanent skill effects
   const [tempShield, setTempShield] = useState(0); // Temporary shield from skills
+  const [classDeck, setClassDeck] = useState<GameCardData[]>([]); // Class deck cards
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [currentEventCard, setCurrentEventCard] = useState<GameCardData | null>(null);
 
@@ -474,6 +477,7 @@ export default function GameBoard() {
     setHandCards([]);
     setPermanentSkills([]);
     setTempShield(0);
+    setClassDeck([]);
     setEventModalOpen(false);
     setCurrentEventCard(null);
   };
@@ -1317,28 +1321,15 @@ export default function GameBoard() {
         onDeckClick={() => setDeckViewerOpen(true)}
         onNewGame={initGame}
       />
-      
-      {/* Graveyard in top right corner - bigger size */}
-      <div className="absolute top-16 right-4 z-10" style={{ transform: 'scale(1.2)' }}>
-        <GraveyardZone
-          onDrop={handleSellCard}
-          isDropTarget={
-            (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
-            (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
-          }
-          discardedCards={discardedCards}
-        />
-      </div>
-
       {/* Main game area - adjust padding for hand area at bottom */}
       <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(140px, 18vh, 240px) + 2vh)' }}>
-        {/* 3×5 Card Grid */}
-        <div className="grid grid-cols-5 w-full" style={{ 
+        {/* 3×6 Card Grid */}
+        <div className="grid grid-cols-6 w-full" style={{ 
           maxWidth: '95vw',
           gap: 'min(2vw, 20px)',
           gridTemplateRows: 'repeat(3, auto)'
         }}>
-          {/* Row 1: Preview Row - 5 cards (non-interactive, 60% opacity) */}
+          {/* Row 1: Preview Row - 5 cards + DiceRoller */}
           {previewCards.concat(Array(5 - previewCards.length).fill(null)).slice(0, 5).map((card, index) => (
             card ? (
               <div 
@@ -1366,6 +1357,20 @@ export default function GameBoard() {
               />
             )
           ))}
+          
+          {/* Row 1, Col 6: DiceRoller - with darker background */}
+          <div 
+            className="relative bg-card-foreground/5 rounded-lg p-2"
+            style={{ 
+              width: 'clamp(80px, 12vw, 160px)', 
+              height: 'clamp(112px, 16.8vw, 224px)' 
+            }}
+          >
+            <DiceRoller 
+              onRoll={(value) => console.log('Rolled:', value)}
+              className="w-full h-full"
+            />
+          </div>
 
           {/* Row 2: Active Row - 5 cards (fully interactive) */}
           {activeCards.concat(Array(5 - activeCards.length).fill(null)).slice(0, 5).map((card, index) => (
@@ -1386,6 +1391,24 @@ export default function GameBoard() {
               }} />
             )
           ))}
+          
+          {/* Row 2, Col 6: GraveyardZone - with darker background */}
+          <div 
+            className="relative bg-card-foreground/5 rounded-lg p-2"
+            style={{ 
+              width: 'clamp(100px, 15vw, 200px)', 
+              height: 'clamp(140px, 21vw, 280px)' 
+            }}
+          >
+            <GraveyardZone
+              onDrop={handleSellCard}
+              isDropTarget={
+                (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
+                (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
+              }
+              discardedCards={discardedCards}
+            />
+          </div>
 
           {/* Row 3: Hero Row - 5 slots (Amulet, Equipment×2, Hero, Backpack) */}
           <AmuletSlot
@@ -1437,6 +1460,21 @@ export default function GameBoard() {
             isDropTarget={backpackItems.length < 10 && (draggedCard?.type === 'potion' || draggedCard?.type === 'weapon' || draggedCard?.type === 'shield')}
             onClick={handleBackpackClick}
           />
+          
+          {/* Row 3, Col 6: ClassDeck - with darker background */}
+          <div 
+            className="relative bg-card-foreground/5 rounded-lg p-2"
+            style={{ 
+              width: 'clamp(100px, 15vw, 200px)', 
+              height: 'clamp(140px, 21vw, 280px)' 
+            }}
+          >
+            <ClassDeck 
+              classCards={classDeck}
+              className="w-full h-full"
+              deckName="Knight Deck"
+            />
+          </div>
         </div>
       </div>
 
