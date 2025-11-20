@@ -8,7 +8,7 @@ import {
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { type GameCardData } from './GameCard';
-import { Skull, Sword, Shield, Heart, Coins } from 'lucide-react';
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from 'lucide-react';
 
 interface DeckViewerModalProps {
   open: boolean;
@@ -22,7 +22,9 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards }: 
     weapon: remainingCards.filter(c => c.type === 'weapon'),
     shield: remainingCards.filter(c => c.type === 'shield'),
     potion: remainingCards.filter(c => c.type === 'potion'),
-    coin: remainingCards.filter(c => c.type === 'coin'),
+    amulet: remainingCards.filter(c => c.type === 'amulet'),
+    skill: remainingCards.filter(c => c.type === 'skill'),
+    event: remainingCards.filter(c => c.type === 'event'),
   };
 
   const getIcon = (type: string) => {
@@ -35,8 +37,12 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards }: 
         return <Shield className="w-5 h-5 text-blue-500" />;
       case 'potion':
         return <Heart className="w-5 h-5 text-destructive" />;
-      case 'coin':
-        return <Coins className="w-5 h-5 text-yellow-500" />;
+      case 'amulet':
+        return <Sparkles className="w-5 h-5 text-purple-500" />;
+      case 'skill':
+        return <Zap className="w-5 h-5 text-cyan-500" />;
+      case 'event':
+        return <Scroll className="w-5 h-5 text-violet-500" />;
       default:
         return null;
     }

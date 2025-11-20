@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Skull, Sword, Shield, Heart, Coins, Sparkles, Zap, Calendar } from 'lucide-react';
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from 'lucide-react';
 
-export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'coin' | 'amulet' | 'skill' | 'event';
+export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'amulet' | 'skill' | 'event';
 
 export interface GameCardData {
   id: string;
@@ -77,14 +77,12 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         return <Shield className="w-8 h-8 text-blue-500" />;
       case 'potion':
         return <Heart className="w-8 h-8 text-green-500" />;
-      case 'coin':
-        return <Coins className="w-8 h-8 text-yellow-500" />;
       case 'amulet':
         return <Sparkles className="w-8 h-8 text-purple-500" />;
       case 'skill':
         return <Zap className="w-8 h-8 text-cyan-500" />;
       case 'event':
-        return <Calendar className="w-8 h-8 text-pink-500" />;
+        return <Scroll className="w-8 h-8 text-violet-500" />;
     }
   };
 
@@ -98,14 +96,12 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         return 'border-blue-900';
       case 'potion':
         return 'border-green-900';
-      case 'coin':
-        return 'border-yellow-900';
       case 'amulet':
         return 'border-purple-900';
       case 'skill':
         return 'border-cyan-900';
       case 'event':
-        return 'border-pink-900';
+        return 'border-violet-700';
       default:
         return 'border-card-border';
     }
@@ -148,6 +144,7 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         w-full h-full border-4 ${getCardBorderColor()} overflow-hidden
         transition-shadow duration-200
         ${isDragging ? 'shadow-2xl' : 'shadow-lg hover:shadow-xl'}
+        ${card.type === 'event' ? 'shadow-violet-500/30 shadow-xl' : ''}
       `}>
         <div className="h-full flex flex-col">
           <div className="relative h-[60%] bg-gradient-to-b from-muted to-card overflow-hidden">

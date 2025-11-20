@@ -29,9 +29,8 @@ import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
 import ironShieldImage from '@assets/generated_images/cute_iron_shield.png';
 import heavyShieldImage from '@assets/generated_images/simple_heavy_shield.png';
 
-// Cute cartoon potion and coin
+// Cute cartoon potion
 import potionImage from '@assets/generated_images/cute_cartoon_healing_potion.png';
-import coinImage from '@assets/generated_images/cute_cartoon_gold_coins.png';
 
 // Hero image (chibi version)
 import heroImage from '@assets/generated_images/chibi_hero_adventurer_character.png';
@@ -46,7 +45,7 @@ import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
 import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 
 const INITIAL_HP = 20;
-const SELLABLE_TYPES = ['potion', 'coin', 'weapon', 'shield', 'amulet', 'skill'] as const;
+const SELLABLE_TYPES = ['potion', 'weapon', 'shield', 'amulet', 'skill'] as const;
 const DECK_SIZE = 64; // Updated: 54 + 6 skills + 4 events = 64
 
 type EquipmentItem = { 
@@ -182,16 +181,8 @@ function createDeck(): GameCardData[] {
     });
   }
 
-  // Gold coins (5-10 range, 4 total - rare but valuable)
-  for (let i = 0; i < 4; i++) {
-    deck.push({
-      id: `coin-${id++}`,
-      type: 'coin',
-      name: 'Gold',
-      value: Math.floor(Math.random() * 6) + 5, // 5-10 gold
-      image: coinImage,
-    });
-  }
+  // Gold Event Cards - Replaced coin cards with gold-giving events
+  // These 4 events are focused on gaining gold through choices
 
   // Amulets (3 types, 2 of each = 6 total)
   const amuletTypes = [
@@ -325,6 +316,59 @@ function createDeck(): GameCardData[] {
       { text: 'Read It (Take 2 Damage, Gain Permanent Skill)', effect: 'hp-2,permanentskill' },
       { text: 'Sell It (Gain 7 Gold)', effect: 'gold+7' },
       { text: 'Ignore It', effect: 'none' }
+    ]
+  });
+
+  // New Gold-focused Event Cards (replacing coin cards)
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: 'Treasure Chest',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: 'Open Carefully (Gain 8 Gold)', effect: 'gold+8' },
+      { text: 'Force Open (50% chance: 15 Gold or Take 3 Damage)', effect: 'random:gold+15,hp-3' },
+      { text: 'Leave It', effect: 'none' }
+    ]
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: 'Goblin Thief',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: 'Fight (Take 2 Damage, Gain 10 Gold)', effect: 'hp-2,gold+10' },
+      { text: 'Bribe (Lose 3 Gold, Avoid Combat)', effect: 'gold-3' },
+      { text: 'Run Away', effect: 'none' }
+    ]
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: 'Hidden Cache',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: 'Take Gold (Gain 6 Gold)', effect: 'gold+6' },
+      { text: 'Take All (Gain 12 Gold, Monster Appears)', effect: 'gold+12,spawnmonster' },
+      { text: 'Leave Quietly', effect: 'none' }
+    ]
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: 'Lucky Coin',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: 'Make a Wish (Gain 5 Gold)', effect: 'gold+5' },
+      { text: 'Flip It (50% chance: Double Gold or Nothing)', effect: 'random:gold+10,none' },
+      { text: 'Keep It (Gain 3 Gold)', effect: 'gold+3' }
     ]
   });
 
@@ -870,10 +914,6 @@ export default function GameBoard() {
       setHp(newHp);
       toast({ title: 'Healed!', description: `+${healAmount} HP` });
       removeCard(card.id);
-    } else if (card.type === 'coin') {
-      setGold(prev => prev + card.value);
-      toast({ title: 'Gold Collected!', description: `+${card.value} Gold` });
-      removeCard(card.id);
     } else if (card.type === 'skill') {
       handleSkillCard(card);
     } else if (card.type === 'event') {
@@ -1370,7 +1410,7 @@ export default function GameBoard() {
             hp={hp}
             maxHp={maxHp}
             onDrop={handleCardToHero}
-            isDropTarget={draggedCard?.type === 'monster' || draggedCard?.type === 'potion' || draggedCard?.type === 'coin'}
+            isDropTarget={draggedCard?.type === 'monster' || draggedCard?.type === 'potion' || draggedCard?.type === 'skill' || draggedCard?.type === 'event'}
             equippedWeapon={findWeaponSlot()?.item || null}
             equippedShield={findShieldSlot()?.item || null}
             image={heroImage}
