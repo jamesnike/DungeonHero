@@ -7,6 +7,7 @@ interface EquipmentSlotProps {
   type: SlotType;
   slotId?: string;
   item?: { name: string; value: number; image?: string; type?: string } | null;
+  backpackCount?: number; // Number of items in backpack stack
   onDrop?: (card: any) => void;
   onDragStart?: (item: any) => void;
   onDragEnd?: () => void;
@@ -14,7 +15,7 @@ interface EquipmentSlotProps {
   onClick?: () => void;
 }
 
-export default function EquipmentSlot({ type, slotId, item, onDrop, onDragStart, onDragEnd, isDropTarget, onClick }: EquipmentSlotProps) {
+export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, onDrop, onDragStart, onDragEnd, isDropTarget, onClick }: EquipmentSlotProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
@@ -96,6 +97,9 @@ export default function EquipmentSlot({ type, slotId, item, onDrop, onDragStart,
             </div>
             <div className="h-[40%] p-2 flex flex-col items-center justify-center bg-card">
               <p className="text-xs font-medium text-center">{item.name}</p>
+              {type === 'backpack' && backpackCount > 1 && (
+                <p className="text-xs text-muted-foreground mt-1">+{backpackCount - 1} more</p>
+              )}
             </div>
           </div>
         </Card>

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Skull, Sword, Shield, Heart, Coins } from 'lucide-react';
+import { Skull, Sword, Shield, Heart, Coins, Sparkles } from 'lucide-react';
 
-export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'coin' | 'ability';
+export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'coin' | 'amulet';
 
 export interface GameCardData {
   id: string;
@@ -10,6 +10,7 @@ export interface GameCardData {
   name: string;
   value: number;
   image?: string;
+  effect?: 'health' | 'attack' | 'defense'; // For amulets
 }
 
 interface GameCardProps {
@@ -65,6 +66,8 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         return <Heart className="w-8 h-8 text-green-500" />;
       case 'coin':
         return <Coins className="w-8 h-8 text-yellow-500" />;
+      case 'amulet':
+        return <Sparkles className="w-8 h-8 text-purple-500" />;
     }
   };
 
@@ -80,6 +83,8 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         return 'border-green-900';
       case 'coin':
         return 'border-yellow-900';
+      case 'amulet':
+        return 'border-purple-900';
       default:
         return 'border-card-border';
     }

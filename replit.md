@@ -16,11 +16,12 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 - **Defeat**: Hero HP reaches 0
 
 ### Card Types
-1. **Monster**: Attack hero for damage (reduced by equipped shield)
-2. **Weapon**: Equip in weapon slot or sell for gold
-3. **Shield**: Equip in shield slot or sell for gold
-4. **Potion**: Heal hero HP
+1. **Monster**: Attack hero for damage (reduced by equipped shield + defense bonus)
+2. **Weapon**: Equip in equipment slot or sell for gold (attack bonus applies when used)
+3. **Shield**: Equip in equipment slot or sell for gold (defense bonus applies when blocking)
+4. **Potion**: Heal hero HP (respects maxHp with amulet bonus)
 5. **Gold/Coin**: Add to gold total
+6. **Amulet**: Equip in amulet slot for permanent passive bonuses (health/attack/defense)
 
 ### Actions
 - **Attack (Monster→Hero)**: Drag monster to hero card
@@ -36,15 +37,18 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
   - Shield blocks damage and is consumed, both added to graveyard
 - **Heal**: Drag potion to hero card, added to graveyard
 - **Collect Gold**: Drag coin to hero card, added to graveyard
-- **Equip**: Drag weapon/shield to two generic equipment slots
-- **Store Item**: Drag item to backpack (can only hold 1 item)
-- **Sell**: Drag weapon/shield/potion/coin to graveyard zone for gold value
+- **Equip**: Drag weapon/shield to two generic equipment slots, or amulet to dedicated amulet slot
+- **Store Item**: Drag item to backpack (stacks up to 10 items, LIFO)
+- **Sell**: Drag weapon/shield/potion/coin/amulet to graveyard zone for gold value
 
 ### State Management
 - `remainingDeck`: Single source of truth for unconsumed cards
-- `activeCards`: Current 4 cards displayed in dungeon row
-- `cardsPlayed`: Counter tracking cards played this turn (resets after drawing)
+- `activeCards`: Current 5 cards displayed in dungeon row (up from 4)
+- `amuletSlot`: Stores equipped amulet with effect type
+- `backpackItems`: Array of up to 10 items (LIFO stack)
+- `cardsPlayed`: Counter tracking cards played this turn (must reach 4, up from 3)
 - `drawPending`: Boolean flag preventing race conditions in card draw logic
+- `maxHp`: Calculated value (INITIAL_HP + amulet health bonus)
 
 ### Technical Implementation
 - **Framework**: React with TypeScript
@@ -57,7 +61,8 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 - `client/src/components/GameBoard.tsx`: Main game logic and state management
 - `client/src/components/GameCard.tsx`: Card display component with animations
 - `client/src/components/HeroCard.tsx`: Player character card with combat effects
-- `client/src/components/EquipmentSlot.tsx`: Weapon/shield/backpack slots with click handlers
+- `client/src/components/EquipmentSlot.tsx`: Weapon/shield/backpack slots with click handlers and stack count display
+- `client/src/components/AmuletSlot.tsx`: Dedicated amulet slot component
 - `client/src/components/GraveyardZone.tsx`: Graveyard interface showing discarded cards
 - `client/src/components/GameHeader.tsx`: HP/Gold/Cards remaining display
 - `client/src/components/VictoryDefeatModal.tsx`: End game modal with statistics
@@ -67,12 +72,36 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 
 ## Recent Changes (November 20, 2025)
 
-### Major Gameplay Updates
+### Grid Expansion & Amulet System (Latest)
+- **2×5 Grid Layout**: Expanded from 2×4 to 2×5 grid
+  - Top row: 5 dungeon slots for drawn cards
+  - Bottom row: 5 hero slots (Amulet, Equipment×2, Hero, Backpack)
+  - Players must now play 4 of 5 cards per turn (up from 3 of 4)
+  - Unplayed card carries over to next hand
+- **Amulet Slot System**: New dedicated slot with passive bonuses
+  - Life Amulet: +5 max HP (maxHp calculated as INITIAL_HP + bonus)
+  - Strength Amulet: +1 weapon damage (applied in all combat paths)
+  - Guardian Amulet: +1 shield value (applied in all defense paths)
+  - 6 amulets total in deck (2 of each type)
+- **10-Item Backpack Stacking**: Upgraded from single-item to 10-item stack
+  - LIFO system: use top item, add new items to bottom
+  - UI shows stack count (+X more items)
+  - Click backpack to use/equip top item
+- **Deck Rebalancing for 54 Cards**:
+  - 12 monsters (3 each: Dragon, Skeleton, Goblin, Ogre)
+  - 10 weapons (values 2-6)
+  - 10 shields (values 2-4 with tier-based images)
+  - 12 potions (values 2-5) - increased for better healing
+  - 4 gold coins (values 5-10) - kept rare but valuable
+  - 6 amulets (3 types, 2 each)
+- **Draw Cycle Fix**: Updated to draw 4 cards per turn for proper 5-card hands
+
+### Major Gameplay Updates (Earlier)
 - **Monster Survival Mechanic**: When weapon value < monster value, monster now correctly survives and stays on the board instead of being removed
 - **Monster→Equipment Interactions**: Players can drag monsters onto equipped weapon slots (triggers attack) or shield slots (triggers defense)
 - **Two Generic Equipment Slots**: Replaced dedicated weapon/shield slots with two flexible equipment slots that accept both weapon and shield types
 - **Graveyard System**: Replaced sell zone with graveyard in top-right corner with tombstone icon
-  - Tracks all used/sold/discarded cards (monsters, weapons, shields, potions, coins)
+  - Tracks all used/sold/discarded cards (monsters, weapons, shields, potions, coins, amulets)
   - Click to view complete history in modal
   - Weapons and shields automatically added when consumed in combat
   - All combat paths now properly track cards to graveyard
@@ -87,17 +116,19 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 ### Game Balance & Card Diversity
 - **Monster Balance**: 4 types with varied values (Dragon 5-7, Skeleton 2-4, Goblin 2-3, Ogre 4-6)
 - **Weapon Variety**: 5 types (Sword, Axe, Dagger, Mace, Spear) with values 2-6
-- **Shield Types**: 4 types with values 2-4 for balanced defense
+- **Shield Types**: 3 types with tier-based images (Wooden Shield 2, Iron Shield 3, Heavy Shield 4)
 - **Potion Variety**: 3 types with healing values 2-5
-- **Gold Values**: Improved range 1-4 for better economy
-- **Chibi/Q-version Images**: All card types now have cute chibi-style artwork
+- **Gold Values**: 5-10 range (rare but valuable)
+- **Amulets**: 3 types with special effects (Life, Strength, Guardian)
+- **Chibi/Q-version Images**: All card types now have cute chibi-style artwork including hero, shields, and amulets
 
 ### Enhanced Features
-- **Backpack System**: Click to use/equip stored items (potions heal, weapons/shields equip)
+- **Backpack System**: 10-item LIFO stack with visual count indicator, click to use/equip top item
+- **Amulet System**: Dedicated slot with passive bonuses affecting combat and max HP
 - **Statistics Tracking**: Monsters defeated, damage taken, healing received
 - **Victory Modal**: Displays comprehensive game statistics
-- **Help System**: Updated tutorial explaining Monster→Equipment mechanics and graveyard
-- **Improved UI**: Responsive layout with proper breakpoints for mobile/tablet/desktop
+- **Help System**: Updated tutorial explaining 4-of-5 card rule, amulet mechanics, backpack stacking, Monster→Equipment mechanics, and graveyard
+- **Improved UI**: 2×5 responsive layout with proper breakpoints for mobile/tablet/desktop
 
 ### Technical Improvements
 - Fixed critical game loop bugs using `drawPending` flag

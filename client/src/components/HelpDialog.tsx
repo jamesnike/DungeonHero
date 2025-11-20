@@ -33,7 +33,7 @@ export default function HelpDialog() {
               Goal
             </h3>
             <p className="text-sm text-muted-foreground">
-              Survive all 54 cards without your HP reaching 0. You must play exactly <strong>3 of 4 cards</strong> each turn.
+              Survive all 54 cards without your HP reaching 0. You must play exactly <strong>4 of 5 cards</strong> each turn.
               The unplayed card carries over to the next hand.
             </p>
           </div>
@@ -113,7 +113,11 @@ export default function HelpDialog() {
               </div>
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">Store</Badge>
-                <span className="text-muted-foreground">Drag to backpack (1 item, click to use)</span>
+                <span className="text-muted-foreground">Drag to backpack (stacks up to 10 items, click to use top item)</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Badge variant="outline" className="mt-0.5">Amulet</Badge>
+                <span className="text-muted-foreground">Equip amulet in dedicated slot for passive bonuses (+HP, +Attack, or +Defense)</span>
               </div>
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="mt-0.5">Sell</Badge>
