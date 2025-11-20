@@ -15,7 +15,7 @@ import shieldImage from '@assets/generated_images/medieval_shield_card_art.png';
 import potionImage from '@assets/generated_images/healing_potion_card_art.png';
 import heroImage from '@assets/generated_images/hero_character_portrait.png';
 
-const INITIAL_HP = 13;
+const INITIAL_HP = 20;
 const DECK_SIZE = 54;
 
 function createDeck(): GameCardData[] {
