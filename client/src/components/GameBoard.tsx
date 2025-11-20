@@ -7,10 +7,8 @@ import AmuletSlot from './AmuletSlot';
 import GraveyardZone from './GraveyardZone';
 import HandArea from './HandArea';
 import VictoryDefeatModal from './VictoryDefeatModal';
-import HelpDialog from './HelpDialog';
 import DeckViewerModal from './DeckViewerModal';
 import EventChoiceModal from './EventChoiceModal';
-import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
 // Cute chibi-style monster images
@@ -1317,6 +1315,7 @@ export default function GameBoard() {
         cardsRemaining={getRemainingCards()}
         monstersDefeated={monstersDefeated}
         onDeckClick={() => setDeckViewerOpen(true)}
+        onNewGame={initGame}
       />
       
       {/* Graveyard in top right corner - bigger size */}
@@ -1438,13 +1437,6 @@ export default function GameBoard() {
             isDropTarget={backpackItems.length < 10 && (draggedCard?.type === 'potion' || draggedCard?.type === 'weapon' || draggedCard?.type === 'shield')}
             onClick={handleBackpackClick}
           />
-        </div>
-
-        <div className="flex gap-2 items-center justify-center">
-          <Button onClick={initGame} variant="outline" data-testid="button-new-game">
-            New Game
-          </Button>
-          <HelpDialog />
         </div>
       </div>
 

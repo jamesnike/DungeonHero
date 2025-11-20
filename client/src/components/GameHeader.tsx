@@ -1,5 +1,7 @@
 import { Heart, Coins, Layers, Skull } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import HelpDialog from './HelpDialog';
 
 interface GameHeaderProps {
   hp: number;
@@ -8,16 +10,26 @@ interface GameHeaderProps {
   cardsRemaining: number;
   monstersDefeated?: number;
   onDeckClick?: () => void;
+  onNewGame?: () => void;
 }
 
-export default function GameHeader({ hp, maxHp, gold, cardsRemaining, monstersDefeated = 0, onDeckClick }: GameHeaderProps) {
+export default function GameHeader({ hp, maxHp, gold, cardsRemaining, monstersDefeated = 0, onDeckClick, onNewGame }: GameHeaderProps) {
   return (
     <div className="h-auto py-3 px-4 lg:px-8 bg-card border-b border-card-border flex items-center justify-between flex-wrap gap-4">
-      <div className="flex items-center gap-3" data-testid="header-hp">
-        <Heart className="w-6 h-6 lg:w-8 lg:h-8 text-destructive" />
-        <span className="font-mono text-2xl lg:text-3xl font-bold">
-          {hp}/{maxHp}
-        </span>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3" data-testid="header-hp">
+          <Heart className="w-6 h-6 lg:w-8 lg:h-8 text-destructive" />
+          <span className="font-mono text-2xl lg:text-3xl font-bold">
+            {hp}/{maxHp}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button onClick={onNewGame} variant="outline" size="sm" data-testid="button-new-game">
+            New Game
+          </Button>
+          <HelpDialog />
+        </div>
       </div>
 
       <button 
