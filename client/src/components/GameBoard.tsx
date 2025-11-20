@@ -659,7 +659,7 @@ export default function GameBoard() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative">
+    <div className="h-screen bg-background flex flex-col relative overflow-hidden">
       <GameHeader 
         hp={hp} 
         maxHp={maxHp} 
@@ -669,8 +669,8 @@ export default function GameBoard() {
         onDeckClick={() => setDeckViewerOpen(true)}
       />
       
-      {/* Graveyard in top right corner */}
-      <div className="absolute top-4 right-4 z-10">
+      {/* Graveyard in top right corner - bigger size */}
+      <div className="absolute top-16 right-4 z-10" style={{ transform: 'scale(1.2)' }}>
         <GraveyardZone
           onDrop={handleSellCard}
           isDropTarget={
@@ -681,8 +681,14 @@ export default function GameBoard() {
         />
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 md:gap-8 p-2 md:p-4 max-w-7xl mx-auto w-full">
-        <div className="grid grid-cols-5 gap-2 md:gap-4 w-full max-w-6xl">
+      {/* Main game area - use viewport units for better space usage */}
+      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw' }}>
+        {/* Card grid - larger on big screens */}
+        <div className="grid grid-cols-5 w-full" style={{ 
+          maxWidth: '95vw',
+          gap: 'min(2vw, 20px)',
+          gridTemplateRows: 'min-content min-content'
+        }}>
           {/* Dungeon Row - Top (5 slots) */}
           {activeCards.concat(Array(5 - activeCards.length).fill(null)).slice(0, 5).map((card, index) => (
             card ? (
@@ -696,7 +702,10 @@ export default function GameBoard() {
                 className={removingCards.has(card.id) ? 'animate-card-remove' : ''}
               />
             ) : (
-              <div key={`empty-${index}`} className="w-32 h-44 md:w-40 md:h-56" />
+              <div key={`empty-${index}`} style={{ 
+                width: 'clamp(100px, 15vw, 200px)', 
+                height: 'clamp(140px, 21vw, 280px)' 
+              }} />
             )
           ))}
 

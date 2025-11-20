@@ -98,7 +98,6 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className={`
-        w-20 h-28 sm:w-28 sm:h-40 md:w-36 md:h-52 lg:w-40 lg:h-56 
         cursor-grab active:cursor-grabbing
         transition-all duration-200 ease-out
         ${isDragging 
@@ -109,6 +108,8 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         ${className}
       `}
       style={{
+        width: 'clamp(100px, 15vw, 200px)', 
+        height: 'clamp(140px, 21vw, 280px)',
         filter: isDragging ? 'brightness(1.1)' : 'none',
       }}
       data-testid={`card-${card.type}-${card.id}`}

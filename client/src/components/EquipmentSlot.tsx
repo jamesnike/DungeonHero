@@ -64,7 +64,10 @@ export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, o
     <div 
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="w-20 h-28 sm:w-28 sm:h-40 md:w-36 md:h-52 lg:w-40 lg:h-56"
+      style={{ 
+        width: 'clamp(100px, 15vw, 200px)', 
+        height: 'clamp(140px, 21vw, 280px)' 
+      }}
       data-testid={testId}
     >
       {item ? (
