@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Sword, Heart, Skull } from 'lucide-react';
 
 // Import skill scroll image for the cards
@@ -48,14 +46,6 @@ interface HeroSkillSelectionProps {
 }
 
 export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillSelectionProps) {
-  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
-
-  const handleConfirm = () => {
-    if (selectedSkill) {
-      onSelectSkill(selectedSkill);
-    }
-  };
-
   return (
     <div 
       className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${
@@ -78,22 +68,13 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
           {knightSkills.map((skill) => (
             <Card
               key={skill.id}
-              onClick={() => setSelectedSkill(skill.id)}
+              onClick={() => onSelectSkill(skill.id)}
               className={`
                 relative cursor-pointer transition-all duration-300 hover-elevate active-elevate-2
-                ${selectedSkill === skill.id 
-                  ? 'ring-4 ring-primary scale-105 shadow-xl' 
-                  : 'hover:scale-102 hover:shadow-lg'
-                }
+                hover:scale-105 hover:shadow-xl hover:ring-4 hover:ring-primary
               `}
               data-testid={`skill-card-${skill.id}`}
             >
-              {/* Selection indicator */}
-              {selectedSkill === skill.id && (
-                <div className="absolute -top-3 -right-3 bg-primary text-primary-foreground rounded-full w-8 h-8 flex items-center justify-center font-bold shadow-lg z-10">
-                  ✓
-                </div>
-              )}
 
               <div className="p-6">
                 {/* Icon and Title */}
@@ -112,14 +93,8 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
                   {skill.description}
                 </p>
 
-                {/* Effect - Click to directly select and confirm */}
-                <div 
-                  className="bg-primary/10 rounded-lg p-3 border border-primary/30 cursor-pointer hover:bg-primary/20 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectSkill(skill.id);
-                  }}
-                >
+                {/* Effect */}
+                <div className="bg-primary/10 rounded-lg p-3 border border-primary/30">
                   <p className="text-sm font-medium text-center">
                     {skill.effect}
                   </p>
@@ -138,21 +113,9 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
           ))}
         </div>
 
-        {/* Confirm Button */}
-        <div className="flex justify-center">
-          <Button
-            onClick={handleConfirm}
-            disabled={!selectedSkill}
-            className="px-8 py-3 text-lg font-semibold min-w-[200px]"
-            data-testid="confirm-skill-button"
-          >
-            {selectedSkill ? 'Begin Adventure' : 'Select a Skill'}
-          </Button>
-        </div>
-
         {/* Tip */}
-        <p className="text-xs text-muted-foreground text-center mt-4">
-          Click on the skill effect box to instantly select and start your adventure
+        <p className="text-sm text-muted-foreground text-center mt-6">
+          Click on any skill box above to select and start your adventure
         </p>
       </div>
     </div>
