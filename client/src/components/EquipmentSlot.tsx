@@ -1,5 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Shield, Sword, Backpack, Package } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { initMobileDrop, initMobileDrag } from '../utils/mobileDragDrop';
 
 export type SlotType = 'equipment' | 'backpack';
 
@@ -17,6 +19,41 @@ interface EquipmentSlotProps {
 }
 
 export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, slotBonus = 0, onDrop, onDragStart, onDragEnd, isDropTarget, onClick }: EquipmentSlotProps) {
+  const slotRef = useRef<HTMLDivElement>(null);
+  const itemRef = useRef<HTMLDivElement>(null);
+  
+  // Set up mobile drop support for the slot
+  useEffect(() => {
+    if (!slotRef.current || !onDrop) return;
+    
+    const cleanup = initMobileDrop(
+      slotRef.current,
+      (dragData) => {
+        if (dragData.type === 'card') {
+          onDrop(dragData.data);
+        }
+      },
+      ['card'] // Accept card drops
+    );
+    
+    return cleanup;
+  }, [onDrop]);
+  
+  // Set up mobile drag support for equipped items
+  useEffect(() => {
+    if (!itemRef.current || !item || type === 'backpack') return;
+    
+    const equipmentData = { ...item, fromSlot: slotId };
+    const cleanup = initMobileDrag(
+      itemRef.current,
+      { type: 'equipment', data: equipmentData },
+      () => onDragStart?.(equipmentData),
+      () => onDragEnd?.()
+    );
+    
+    return cleanup;
+  }, [item, type, slotId, onDragStart, onDragEnd]);
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
@@ -71,6 +108,7 @@ export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, s
 
   return (
     <div 
+      ref={slotRef}
       className="relative"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
@@ -90,6 +128,7 @@ export default function EquipmentSlot({ type, slotId, item, backpackCount = 0, s
       )}
       {item ? (
         <Card 
+          ref={itemRef}
           draggable={type !== 'backpack'}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}

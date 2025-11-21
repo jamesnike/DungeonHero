@@ -1,6 +1,8 @@
 import { Card } from '@/components/ui/card';
 import { Heart, Shield, Sword } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { useEffect, useRef } from 'react';
+import { initMobileDrop } from '../utils/mobileDragDrop';
 
 interface HeroCardProps {
   hp: number;
@@ -25,6 +27,25 @@ export default function HeroCard({
   takingDamage = false,
   healing = false
 }: HeroCardProps) {
+  const heroRef = useRef<HTMLDivElement>(null);
+  
+  // Set up mobile drop support
+  useEffect(() => {
+    if (!heroRef.current || !onDrop) return;
+    
+    const cleanup = initMobileDrop(
+      heroRef.current,
+      (dragData) => {
+        if (dragData.type === 'card') {
+          onDrop(dragData.data);
+        }
+      },
+      ['card'] // Accept only card drops
+    );
+    
+    return cleanup;
+  }, [onDrop]);
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
@@ -41,6 +62,7 @@ export default function HeroCard({
 
   return (
     <div 
+      ref={heroRef}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       style={{ 
