@@ -40,26 +40,29 @@ export default function HandDisplay({
       style={{ 
         height: `${visibleHeight}px`,
         zIndex: 50,
-        overflow: 'hidden'
+        overflow: hoveredIndex !== null ? 'visible' : 'hidden'
       }}
     >
-      <div className="relative h-full w-full flex items-end justify-center px-2">
-        <div className="relative flex items-end" style={{ height: `${cardHeight}px`, paddingBottom: '48px' }}>
+      <div className="relative h-full w-full flex items-center justify-center">
+        <div className="relative" style={{ height: `${cardHeight}px`, width: '100%' }}>
           {handCards.map((card, index) => {
             const isHovered = hoveredIndex === index;
             
-            // Simple positioning - cards overlap horizontally, lift up on hover
-            const baseOffset = (index - (handCards.length - 1) / 2) * (cardWidth * 0.7);
-            const hoverLift = isHovered ? -90 : 0; // Lift card up 90px on hover to clear clipping
+            // Position cards centered with overlap, push down to show only 2/3
+            const totalWidth = handCards.length * cardWidth * 0.4;
+            const startX = -totalWidth / 2;
+            const cardX = startX + (index * cardWidth * 0.4);
+            const pushDown = cardHeight * 0.34; // Push down by 1/3 of card height
+            const hoverLift = isHovered ? -pushDown - 10 : 0; // Lift to show full card
             
             return (
               <div
                 key={card.id}
                 className="absolute pointer-events-auto transition-all duration-200 ease-out"
                 style={{
-                  left: `${baseOffset}px`,
-                  bottom: '0px',
-                  transform: `translateY(${hoverLift}px) ${isHovered ? 'scale(1.08)' : 'scale(1)'}`,
+                  left: '50%',
+                  top: `${pushDown}px`,
+                  transform: `translateX(${cardX}px) translateY(${hoverLift}px) ${isHovered ? 'scale(1.08)' : 'scale(1)'}`,
                   zIndex: isHovered ? 100 : index + 1,
                   height: `${cardHeight}px`,
                   width: `${cardWidth}px`,
