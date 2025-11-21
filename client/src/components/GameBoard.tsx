@@ -1925,7 +1925,7 @@ export default function GameBoard() {
       <div className="flex-grow min-h-0 flex flex-col items-center justify-center px-1 lg:px-2 py-1">
         {/* 3×6 Card Grid - Viewport-constrained sizing with responsive gap */}
         <div 
-          className="grid w-full h-full gap-[2px] md:gap-1 lg:gap-1.5"
+          className="grid w-full h-full gap-[1px]"
           style={{ 
             gridTemplateColumns: 'repeat(6, 1fr)',
             gridTemplateRows: 'repeat(3, 1fr)',
@@ -1941,7 +1941,7 @@ export default function GameBoard() {
                 className="opacity-60 pointer-events-none w-full h-full flex items-center justify-center"
                 data-testid={`preview-card-${index}`}
               >
-                <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+                <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
                   <GameCard
                     card={card}
                     onDragStart={() => {}} // Disabled
@@ -1959,7 +1959,7 @@ export default function GameBoard() {
           
           {/* Row 1, Col 6: DiceRoller */}
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+            <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
               <DiceRoller 
                 onRoll={(value) => console.log('Rolled:', value)}
                 className="w-full h-full"
@@ -1975,7 +1975,7 @@ export default function GameBoard() {
                 key={`active-${index}`}
                 className="w-full h-full flex items-center justify-center"
               >
-                <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+                <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
                   <GameCard
                     card={card}
                     onDragStart={handleDragStartFromDungeon}
@@ -1996,7 +1996,7 @@ export default function GameBoard() {
           
           {/* Row 2, Col 6: GraveyardZone */}
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+            <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
               <GraveyardZone
                 onDrop={handleSellCard}
                 isDropTarget={
@@ -2010,7 +2010,7 @@ export default function GameBoard() {
 
           {/* Row 3: Hero Row - 6 slots (Amulet, Equipment×2, Hero, Backpack, ClassDeck) */}
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+            <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
               <AmuletSlot
                 amulet={amuletSlot}
                 onDrop={(card) => handleCardToSlot(card, 'slot-amulet')}
@@ -2020,7 +2020,7 @@ export default function GameBoard() {
           </div>
           
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+            <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
               <EquipmentSlot 
                 type="equipment" 
                 slotId="slot-equipment-1"
@@ -2038,7 +2038,7 @@ export default function GameBoard() {
           </div>
           
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+            <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
               <HeroCard 
                 hp={hp}
                 maxHp={maxHp}
@@ -2054,7 +2054,7 @@ export default function GameBoard() {
           </div>
           
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+            <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
               <EquipmentSlot 
                 type="equipment"
                 slotId="slot-equipment-2"
@@ -2072,7 +2072,7 @@ export default function GameBoard() {
           </div>
           
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+            <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%]">
               <EquipmentSlot 
                 type="backpack" 
                 slotId="slot-backpack"
