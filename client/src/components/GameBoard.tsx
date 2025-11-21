@@ -1927,10 +1927,11 @@ export default function GameBoard() {
           gridTemplateRows: 'repeat(3, 1fr)'
         }}>
           {/* Row 1: Preview Row - 5 cards + DiceRoller */}
-          {previewCards.concat(Array(5 - previewCards.length).fill(null)).slice(0, 5).map((card, index) => (
-            card ? (
+          {[0, 1, 2, 3, 4].map((index) => {
+            const card = previewCards[index];
+            return card ? (
               <div 
-                key={card.id}
+                key={`preview-${index}`}
                 className="opacity-60 pointer-events-none"
                 style={{ 
                   width: 'clamp(80px, 12vw, 160px)', 
@@ -1952,8 +1953,8 @@ export default function GameBoard() {
                   height: 'clamp(112px, 16.8vw, 224px)' 
                 }} 
               />
-            )
-          ))}
+            );
+          })}
           
           {/* Row 1, Col 6: DiceRoller - fixed dimensions to match preview cards */}
           <div style={{ 
@@ -1966,37 +1967,40 @@ export default function GameBoard() {
             />
           </div>
 
-          {/* Row 2: Active Row - 5 cards + ClassDeck */}
-          {activeCards.concat(Array(5 - activeCards.length).fill(null)).slice(0, 5).map((card, index) => (
-            card ? (
-              <GameCard
-                key={card.id}
-                card={card}
-                onDragStart={handleDragStartFromDungeon}
-                onDragEnd={handleDragEndFromDungeon}
-                onWeaponDrop={(weapon) => handleWeaponToMonster(weapon, card)}
-                isWeaponDropTarget={draggedEquipment?.type === 'weapon' && card.type === 'monster'}
-                className={removingCards.has(card.id) ? 'animate-card-remove' : ''}
-              />
+          {/* Row 2: Active Row - 5 cards + GraveyardZone */}
+          {[0, 1, 2, 3, 4].map((index) => {
+            const card = activeCards[index];
+            return card ? (
+              <div key={`active-${index}`} style={{ 
+                width: 'clamp(100px, 15vw, 200px)', 
+                height: 'clamp(140px, 21vw, 280px)' 
+              }}>
+                <GameCard
+                  card={card}
+                  onDragStart={handleDragStartFromDungeon}
+                  onDragEnd={handleDragEndFromDungeon}
+                  onWeaponDrop={(weapon) => handleWeaponToMonster(weapon, card)}
+                  isWeaponDropTarget={draggedEquipment?.type === 'weapon' && card.type === 'monster'}
+                  className={removingCards.has(card.id) ? 'animate-card-remove' : ''}
+                />
+              </div>
             ) : (
-              <div key={`empty-${index}`} style={{ 
+              <div key={`active-empty-${index}`} style={{ 
                 width: 'clamp(100px, 15vw, 200px)', 
                 height: 'clamp(140px, 21vw, 280px)' 
               }} />
-            )
-          ))}
+            );
+          })}
           
-          {/* Row 2, Col 6: ClassDeck */}
-          <div className="relative bg-card-foreground/5 rounded-lg" style={{
-            width: 'clamp(80px, 12vw, 160px)', 
-            height: 'clamp(112px, 16.8vw, 224px)'
-          }}>
-            <ClassDeck 
-              classCards={classDeck}
-              className="w-full h-full"
-              deckName="Knight Deck"
-            />
-          </div>
+          {/* Row 2, Col 6: GraveyardZone */}
+          <GraveyardZone
+            onDrop={handleSellCard}
+            isDropTarget={
+              (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
+              (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
+            }
+            discardedCards={discardedCards}
+          />
 
           {/* Row 3: Hero Row - 6 slots (Amulet, Equipment×2, Hero, Backpack, GraveyardZone) */}
           <AmuletSlot
@@ -2051,15 +2055,17 @@ export default function GameBoard() {
             onClick={handleBackpackClick}
           />
           
-          {/* Row 3, Col 6: GraveyardZone */}
-          <GraveyardZone
-            onDrop={handleSellCard}
-            isDropTarget={
-              (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
-              (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
-            }
-            discardedCards={discardedCards}
-          />
+          {/* Row 3, Col 6: ClassDeck */}
+          <div className="relative bg-card-foreground/5 rounded-lg" style={{
+            width: 'clamp(80px, 12vw, 160px)', 
+            height: 'clamp(112px, 16.8vw, 224px)'
+          }}>
+            <ClassDeck 
+              classCards={classDeck}
+              className="w-full h-full"
+              deckName="Knight Deck"
+            />
+          </div>
         </div>
       </div>
 
