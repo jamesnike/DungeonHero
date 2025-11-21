@@ -1966,7 +1966,7 @@ export default function GameBoard() {
             />
           </div>
 
-          {/* Row 2: Active Row - 5 cards (can be dragged to hand/backpack only) */}
+          {/* Row 2: Active Row - 5 cards + ClassDeck */}
           {activeCards.concat(Array(5 - activeCards.length).fill(null)).slice(0, 5).map((card, index) => (
             card ? (
               <GameCard
@@ -1986,17 +1986,19 @@ export default function GameBoard() {
             )
           ))}
           
-          {/* Row 2, Col 6: GraveyardZone */}
-          <GraveyardZone
-            onDrop={handleSellCard}
-            isDropTarget={
-              (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
-              (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
-            }
-            discardedCards={discardedCards}
-          />
+          {/* Row 2, Col 6: ClassDeck */}
+          <div className="relative bg-card-foreground/5 rounded-lg" style={{
+            width: 'clamp(80px, 12vw, 160px)', 
+            height: 'clamp(112px, 16.8vw, 224px)'
+          }}>
+            <ClassDeck 
+              classCards={classDeck}
+              className="w-full h-full"
+              deckName="Knight Deck"
+            />
+          </div>
 
-          {/* Row 3: Hero Row - 5 slots (Amulet, Equipment×2, Hero, Backpack) */}
+          {/* Row 3: Hero Row - 6 slots (Amulet, Equipment×2, Hero, Backpack, GraveyardZone) */}
           <AmuletSlot
             amulet={amuletSlot}
             onDrop={(card) => handleCardToSlot(card, 'slot-amulet')}
@@ -2049,17 +2051,15 @@ export default function GameBoard() {
             onClick={handleBackpackClick}
           />
           
-          {/* Row 3, Col 6: ClassDeck - with darker background */}
-          <div className="relative bg-card-foreground/5 rounded-lg" style={{
-            width: 'clamp(80px, 12vw, 160px)', 
-            height: 'clamp(112px, 16.8vw, 224px)'
-          }}>
-            <ClassDeck 
-              classCards={classDeck}
-              className="w-full h-full"
-              deckName="Knight Deck"
-            />
-          </div>
+          {/* Row 3, Col 6: GraveyardZone */}
+          <GraveyardZone
+            onDrop={handleSellCard}
+            isDropTarget={
+              (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
+              (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
+            }
+            discardedCards={discardedCards}
+          />
         </div>
       </div>
 
