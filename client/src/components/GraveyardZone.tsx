@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Skull, Eye } from 'lucide-react';
+import { Eye, Skull } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { GameCardData } from './GameCard';
 import { initMobileDrop } from '../utils/mobileDragDrop';
+import cardBackImage from '@assets/generated_images/card_back_design.png';
 
 interface GraveyardZoneProps {
   onDrop?: (item: any) => void;
@@ -74,74 +75,80 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
     }
   };
 
-  // Get the top card for display
-  const topCard = discardedCards.length > 0 ? discardedCards[discardedCards.length - 1] : null;
-
-  // Render card stack visualization with enhanced thickness
+  // Render card stack visualization with card backs
   const renderCardStack = () => {
-    const hasCards = discardedCards.length > 0;
-    const stackDepth = Math.min(discardedCards.length, 10); // Cap at 10 for performance
+    const cardCount = discardedCards.length;
+    const hasCards = cardCount > 0;
+    // Show max 5 card layers for visual effect
+    const visibleStackDepth = Math.min(cardCount, 5);
     
     return (
       <div className="relative w-full h-full">
-        {/* Enhanced stack effect - render multiple shadow layers based on card count */}
-        {hasCards && [...Array(Math.floor(stackDepth / 2))].map((_, i) => (
-          <div
-            key={i}
-            className="absolute inset-0 rounded-lg"
-            style={{
-              background: `linear-gradient(to bottom, hsl(var(--destructive) / ${0.02 + i * 0.02}), hsl(var(--destructive) / ${0.04 + i * 0.02}))`,
-              transform: `translateY(${(i + 1) * 2}px) translateX(${(i + 1) * 1}px)`,
-              boxShadow: `0 ${i + 1}px ${(i + 1) * 2}px rgba(0, 0, 0, 0.1)`,
-              zIndex: -i - 1
-            }}
+        {/* Card stack effect - render multiple card backs */}
+        {hasCards && [...Array(visibleStackDepth)].map((_, i) => {
+          const isTopCard = i === visibleStackDepth - 1;
+          const offset = (visibleStackDepth - 1 - i) * 2; // Reverse order so top card is last
+          
+          return (
+            <div
+              key={i}
+              className="absolute inset-0"
+              style={{
+                transform: `translateY(${offset}px) translateX(${offset * 0.5}px)`,
+                zIndex: i
+              }}
+            >
+              <img 
+                src={cardBackImage}
+                alt=""
+                className={`w-full h-full object-cover rounded-lg ${
+                  isTopCard ? '' : 'brightness-90'
+                }`}
+                style={{
+                  filter: isTopCard ? '' : `brightness(${0.9 - (visibleStackDepth - 1 - i) * 0.05})`
+                }}
+              />
+            </div>
+          );
+        })}
+        
+        {/* Empty state - show a single semi-transparent card back */}
+        {!hasCards && (
+          <img 
+            src={cardBackImage}
+            alt=""
+            className="w-full h-full object-cover rounded-lg opacity-30"
           />
-        ))}
-        
-        {/* Top card or empty state */}
-        <div className={`
-          relative w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-2
-          ${isDropTarget ? 'bg-destructive/20 border-destructive' : 'bg-gradient-to-b from-muted/40 to-muted/60 border-muted-foreground/30'}
-        `}>
-          {hasCards && topCard ? (
-            <>
-              {/* Show top card image if available */}
-              {topCard.image && (
-                <div className="absolute inset-2 opacity-30">
-                  <img 
-                    src={topCard.image} 
-                    alt={topCard.name}
-                    className="w-full h-full object-cover rounded"
-                  />
-                </div>
-              )}
-              <div className="relative z-10 text-center">
-                <Skull className="w-8 h-8 text-muted-foreground mb-1" />
-                <span className="text-xs font-medium text-muted-foreground">Graveyard</span>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Empty graveyard state */}
-              <Skull className="w-8 h-8 text-muted-foreground/50 mb-1" />
-              <span className="text-xs font-medium text-muted-foreground/70">Graveyard</span>
-              <span className="text-xs text-muted-foreground/50">Empty</span>
-            </>
-          )}
-        </div>
-        
-        {/* Card count badge */}
-        {discardedCards.length > 0 && (
-          <Badge 
-            variant="destructive" 
-            className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center p-0 rounded-full text-xs"
-          >
-            {discardedCards.length}
-          </Badge>
         )}
         
-        {/* View indicator */}
-        <Eye className="absolute bottom-1 right-1 w-4 h-4 text-muted-foreground/30" />
+        {/* Overlay with card count */}
+        <div className={`
+          absolute inset-0 flex items-center justify-center rounded-lg
+          ${isDropTarget ? 'bg-destructive/40 ring-4 ring-destructive' : ''}
+        `}>
+          {/* Dark overlay to make count visible */}
+          {hasCards && (
+            <div className="absolute inset-0 bg-black/40 rounded-lg" />
+          )}
+          
+          {/* Card count display */}
+          <div className="relative z-10 text-center">
+            {hasCards ? (
+              <div className="text-6xl font-bold text-white drop-shadow-2xl">
+                {cardCount}
+              </div>
+            ) : (
+              <div className="text-lg font-medium text-muted-foreground/70">
+                Empty
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Click indicator */}
+        <div className="absolute bottom-2 right-2 bg-black/50 rounded-full p-1">
+          <Eye className="w-3 h-3 text-white/70" />
+        </div>
       </div>
     );
   };
@@ -152,22 +159,15 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
         ref={graveyardRef}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        className="relative"
+        className="cursor-pointer transition-all duration-200 hover:scale-105"
+        style={{ 
+          width: 'clamp(100px, 15vw, 200px)', 
+          height: 'clamp(140px, 21vw, 280px)' 
+        }}
+        onClick={() => setViewerOpen(true)}
         data-testid="graveyard-zone"
       >
-        <Card 
-          className={`
-            cursor-pointer transition-all duration-200
-            hover-elevate active-elevate-2
-            border-2 bg-card
-            ${isDropTarget ? 'border-destructive border-4' : 'border-card-border'}
-          `}
-          onClick={() => setViewerOpen(true)}
-        >
-          <div className="w-full h-full">
-            {renderCardStack()}
-          </div>
-        </Card>
+        {renderCardStack()}
       </div>
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>

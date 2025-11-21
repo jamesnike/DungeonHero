@@ -1986,20 +1986,15 @@ export default function GameBoard() {
             )
           ))}
           
-          {/* Row 2, Col 6: GraveyardZone - with darker background */}
-          <div className="relative bg-card-foreground/5 rounded-lg" style={{
-            width: 'clamp(100px, 15vw, 200px)', 
-            height: 'clamp(140px, 21vw, 280px)'
-          }}>
-            <GraveyardZone
-              onDrop={handleSellCard}
-              isDropTarget={
-                (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
-                (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
-              }
-              discardedCards={discardedCards}
-            />
-          </div>
+          {/* Row 2, Col 6: GraveyardZone */}
+          <GraveyardZone
+            onDrop={handleSellCard}
+            isDropTarget={
+              (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
+              (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
+            }
+            discardedCards={discardedCards}
+          />
 
           {/* Row 3: Hero Row - 5 slots (Amulet, Equipment×2, Hero, Backpack) */}
           <AmuletSlot
