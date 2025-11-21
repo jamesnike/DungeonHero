@@ -132,7 +132,7 @@ export default function HandDisplay({
                     Your hand is empty
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Drag cards here or draw from backpack
+                    Draw from backpack to add cards
                   </p>
                 </div>
               </div>
