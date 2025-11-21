@@ -56,11 +56,15 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-background rounded-2xl p-8 max-w-4xl w-full mx-4 shadow-2xl border-2 border-primary">
+    <div 
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${
+        isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+      }`}
+    >
+      <div className={`bg-background rounded-2xl p-8 max-w-4xl w-full mx-4 shadow-2xl border-2 border-primary transform transition-transform duration-200 ${
+        isOpen ? 'scale-100' : 'scale-95'
+      }`}>
         {/* Header */}
         <div className="text-center mb-8">
           <h2 className="font-serif text-4xl font-bold mb-3 text-primary">Choose Your Skill</h2>
