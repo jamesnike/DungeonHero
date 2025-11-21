@@ -50,7 +50,7 @@ export default function HandDisplay({
             
             // Simple positioning - cards overlap horizontally, lift up on hover
             const baseOffset = (index - (handCards.length - 1) / 2) * (cardWidth * 0.7);
-            const hoverLift = isHovered ? -60 : 0; // Lift card up 60px on hover
+            const hoverLift = isHovered ? -90 : 0; // Lift card up 90px on hover to clear clipping
             
             return (
               <div
