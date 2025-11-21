@@ -1918,7 +1918,7 @@ export default function GameBoard() {
         onNewGame={initGame}
       />
       {/* Main game area - adjust padding for hand area at bottom */}
-      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(220px, 25vh, 320px) + 2vh)' }}>
+      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: '100px' }}>
         {/* 3×6 Card Grid - Uniform Sizing */}
         <div className="grid w-full" style={{ 
           gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
