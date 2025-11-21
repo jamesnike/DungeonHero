@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Skull, Eye } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from '@/components/ui/badge';
 import { GameCardData } from './GameCard';
+import { initMobileDrop } from '../utils/mobileDragDrop';
 
 interface GraveyardZoneProps {
   onDrop?: (item: any) => void;
@@ -19,6 +20,23 @@ interface GraveyardZoneProps {
 
 export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: GraveyardZoneProps) {
   const [viewerOpen, setViewerOpen] = useState(false);
+  const graveyardRef = useRef<HTMLDivElement>(null);
+  
+  // Set up mobile drop support
+  useEffect(() => {
+    if (!graveyardRef.current || !onDrop) return;
+    
+    const cleanup = initMobileDrop(
+      graveyardRef.current,
+      (dragData) => {
+        // Handle both card and equipment drops
+        onDrop(dragData.data);
+      },
+      ['card', 'equipment'] // Accept both card and equipment drops
+    );
+    
+    return cleanup;
+  }, [onDrop]);
   
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -131,6 +149,7 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
   return (
     <>
       <div 
+        ref={graveyardRef}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         className="relative"

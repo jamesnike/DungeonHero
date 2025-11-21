@@ -1,5 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Sparkles, Heart, Sword, Shield } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { initMobileDrop } from '../utils/mobileDragDrop';
 
 interface AmuletSlotProps {
   amulet: { 
@@ -14,6 +16,25 @@ interface AmuletSlotProps {
 }
 
 export default function AmuletSlot({ amulet, onDrop, isDropTarget }: AmuletSlotProps) {
+  const amuletRef = useRef<HTMLDivElement>(null);
+  
+  // Set up mobile drop support
+  useEffect(() => {
+    if (!amuletRef.current || !onDrop) return;
+    
+    const cleanup = initMobileDrop(
+      amuletRef.current,
+      (dragData) => {
+        if (dragData.type === 'card' && dragData.data.type === 'amulet') {
+          onDrop(dragData.data);
+        }
+      },
+      ['card'] // Accept card drops
+    );
+    
+    return cleanup;
+  }, [onDrop]);
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
@@ -55,6 +76,7 @@ export default function AmuletSlot({ amulet, onDrop, isDropTarget }: AmuletSlotP
 
   return (
     <div 
+      ref={amuletRef}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       style={{ 
