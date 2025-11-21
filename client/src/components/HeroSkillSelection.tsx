@@ -18,7 +18,7 @@ const knightSkills: HeroSkill[] = [
     id: 'weapon-master',
     name: 'Weapon Master',
     description: 'Years of training have honed your weapon expertise',
-    icon: <Sword className="w-8 h-8" />,
+    icon: <Sword className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8" />,
     effect: 'All weapons gain +1 damage permanently',
     color: 'text-red-500'
   },
@@ -26,7 +26,7 @@ const knightSkills: HeroSkill[] = [
     id: 'iron-will',
     name: 'Iron Will',
     description: 'Your unyielding spirit grants you greater vitality',
-    icon: <Heart className="w-8 h-8" />,
+    icon: <Heart className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8" />,
     effect: 'Start with +5 max HP',
     color: 'text-green-500'
   },
@@ -34,7 +34,7 @@ const knightSkills: HeroSkill[] = [
     id: 'bloodthirsty',
     name: 'Bloodthirsty',
     description: 'The thrill of battle restores your strength',
-    icon: <Skull className="w-8 h-8" />,
+    icon: <Skull className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8" />,
     effect: 'Heal 2 HP when killing monsters',
     color: 'text-purple-500'
   }
@@ -52,19 +52,19 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
         isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
-      <div className={`bg-background rounded-2xl p-8 max-w-4xl w-full mx-4 shadow-2xl border-2 border-primary transform transition-transform duration-200 ${
+      <div className={`bg-background rounded-2xl p-4 md:p-6 lg:p-8 max-w-sm md:max-w-2xl lg:max-w-4xl w-full mx-2 md:mx-4 shadow-2xl border-2 border-primary transform transition-transform duration-200 ${
         isOpen ? 'scale-100' : 'scale-95'
       }`}>
         {/* Header */}
-        <div className="text-center mb-8">
-          <h2 className="font-serif text-4xl font-bold mb-3 text-primary">Choose Your Skill</h2>
-          <p className="text-muted-foreground text-lg">
+        <div className="text-center mb-4 md:mb-6 lg:mb-8">
+          <h2 className="font-serif text-2xl md:text-3xl lg:text-4xl font-bold mb-2 md:mb-3 text-primary">Choose Your Skill</h2>
+          <p className="text-muted-foreground text-sm md:text-base lg:text-lg">
             Select one skill to master before your adventure begins
           </p>
         </div>
 
         {/* Skills Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 lg:gap-6 mb-4 md:mb-6 lg:mb-8">
           {knightSkills.map((skill) => (
             <Card
               key={skill.id}
@@ -76,26 +76,26 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
               data-testid={`skill-card-${skill.id}`}
             >
 
-              <div className="p-6">
+              <div className="p-3 md:p-4 lg:p-6">
                 {/* Icon and Title */}
-                <div className="flex items-center justify-center mb-4">
-                  <div className={`${skill.color} bg-muted rounded-full p-4`}>
+                <div className="flex items-center justify-center mb-2 md:mb-3 lg:mb-4">
+                  <div className={`${skill.color} bg-muted rounded-full p-2 md:p-3 lg:p-4`}>
                     {skill.icon}
                   </div>
                 </div>
 
-                <h3 className="font-serif text-xl font-bold text-center mb-2">
+                <h3 className="font-serif text-base md:text-lg lg:text-xl font-bold text-center mb-1 md:mb-2">
                   {skill.name}
                 </h3>
 
                 {/* Description */}
-                <p className="text-sm text-muted-foreground text-center mb-4 italic">
+                <p className="text-xs md:text-sm text-muted-foreground text-center mb-2 md:mb-3 lg:mb-4 italic">
                   {skill.description}
                 </p>
 
                 {/* Effect */}
-                <div className="bg-primary/10 rounded-lg p-3 border border-primary/30">
-                  <p className="text-sm font-medium text-center">
+                <div className="bg-primary/10 rounded-lg p-2 md:p-2.5 lg:p-3 border border-primary/30">
+                  <p className="text-xs md:text-sm font-medium text-center">
                     {skill.effect}
                   </p>
                 </div>
@@ -114,7 +114,7 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
         </div>
 
         {/* Tip */}
-        <p className="text-sm text-muted-foreground text-center mt-6">
+        <p className="text-xs md:text-sm text-muted-foreground text-center mt-3 md:mt-4 lg:mt-6">
           Click on any skill box above to select and start your adventure
         </p>
       </div>
