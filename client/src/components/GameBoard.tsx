@@ -12,7 +12,7 @@ import EventChoiceModal from './EventChoiceModal';
 import DiceRoller from './DiceRoller';
 import ClassDeck from './ClassDeck';
 import HeroSkillSelection from './HeroSkillSelection';
-import { useToast } from '@/hooks/use-toast';
+// import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
 import { generateKnightDeck, createKnightDiscoveryEvents, type KnightCardData } from '@/lib/knightDeck';
 
 // Cute chibi-style monster images
@@ -379,7 +379,7 @@ function createDeck(): GameCardData[] {
 }
 
 export default function GameBoard() {
-  const { toast } = useToast();
+  // const { toast } = useToast(); // Disabled toast notifications
   const [hp, setHp] = useState(INITIAL_HP);
   const [gold, setGold] = useState(0);
   const [previewCards, setPreviewCards] = useState<GameCardData[]>([]); // New state for preview row
@@ -487,10 +487,10 @@ export default function GameBoard() {
     setBackpackItems(prev => prev.slice(0, -1)); // Remove from top
     setHandCards(prev => [...prev, cardToDraw]); // Add to hand
     
-    toast({
-      title: 'Card Drawn!',
-      description: `Drew ${cardToDraw.name} from backpack to hand`,
-    });
+    // // toast({
+      // title: 'Card Drawn!',
+      // description: `Drew ${cardToDraw.name} from backpack to hand`,
+    // });
   };
 
   useEffect(() => {
@@ -675,10 +675,10 @@ export default function GameBoard() {
     // Add stuck card to graveyard
     if (stuckCard) {
       addToGraveyard(stuckCard);
-      toast({
-        title: 'Cards Waterfall!',
-        description: `${stuckCard.name} was discarded, new cards drop down!`
-      });
+    // // toast({
+        // title: 'Cards Waterfall!',
+        // description: `${stuckCard.name} was discarded, new cards drop down!`
+      // });
     }
   };
 
@@ -755,7 +755,7 @@ export default function GameBoard() {
             setTimeout(() => setHealing(false), 500);
             setTotalHealed(prev => prev + actualHeal);
             setHp(newHp);
-            toast({ title: 'Vampiric Strike!', description: `Healed ${actualHeal} HP` });
+    // // toast({ title: 'Vampiric Strike!', description: `Healed ${actualHeal} HP` });
           }
           setVampiricNextAttack(false);
         }
@@ -770,7 +770,7 @@ export default function GameBoard() {
             setTimeout(() => setHealing(false), 500);
             setTotalHealed(prev => prev + actualHeal);
             setHp(newHp);
-            toast({ title: 'Bloodthirsty!', description: `Healed ${actualHeal} HP from the kill!` });
+    // // toast({ title: 'Bloodthirsty!', description: `Healed ${actualHeal} HP from the kill!` });
           }
         }
         
@@ -779,10 +779,10 @@ export default function GameBoard() {
           setNextWeaponBonus(0);
         }
         
-        toast({
-          title: 'Monster Defeated!',
-          description: `Your ${weaponSlot.item.name} (${weaponDamage}${attackBonus > 0 || nextWeaponBonus > 0 ? ` +${attackBonus + nextWeaponBonus} bonus` : ''}) destroyed the ${monster.name} (HP: ${monsterHp})!`
-        });
+    // // toast({
+          // title: 'Monster Defeated!',
+          // description: `Your ${weaponSlot.item.name} (${weaponDamage}${attackBonus > 0 || nextWeaponBonus > 0 ? ` +${attackBonus + nextWeaponBonus} bonus` : ''}) destroyed the ${monster.name} (HP: ${monsterHp})!`
+        // });
       } else {
         // Monster survives, counterattacks with its attack value
         damageToPlayer = monsterAttack;
@@ -790,11 +790,11 @@ export default function GameBoard() {
         // Update monster HP and layers for persistent state
         const updatedMonster = damageMonster(monster, weaponDamage);
         
-        toast({
-          title: 'Monster Counterattack!',
-          description: `${weaponSlot.item.name} dealt ${weaponDamage} damage, but ${monster.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP) counterattacks for ${monsterAttack} damage!`,
-          variant: 'destructive'
-        });
+    // // toast({
+          // title: 'Monster Counterattack!',
+          // description: `${weaponSlot.item.name} dealt ${weaponDamage} damage, but ${monster.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP) counterattacks for ${monsterAttack} damage!`,
+          // variant: 'destructive'
+        // });
         
         // Update the monster in active cards with reduced HP
         setActiveCards(prev => prev.map(c => c.id === monster.id ? updatedMonster : c));
@@ -805,19 +805,19 @@ export default function GameBoard() {
           // Weapon breaks after this use
           addToGraveyard({ ...weaponSlot.item, id: `weapon-broken-${Date.now()}` });
           clearEquipmentSlotById(weaponSlot.id);
-          toast({
-            title: 'Weapon Broken!',
-            description: `${weaponSlot.item.name} has broken!`,
-            variant: 'destructive'
-          });
+    // // toast({
+            // title: 'Weapon Broken!',
+            // description: `${weaponSlot.item.name} has broken!`,
+            // variant: 'destructive'
+          // });
         } else {
           // Weapon survives with reduced durability
           const updatedWeapon = { ...weaponSlot.item, durability: currentDurability - 1 };
           setEquipmentSlotById(weaponSlot.id, updatedWeapon);
-          toast({
-            title: 'Weapon Damaged',
-            description: `${weaponSlot.item.name} has ${currentDurability - 1}/${weaponSlot.item.maxDurability || currentDurability} uses left`
-          });
+    // // toast({
+            // title: 'Weapon Damaged',
+            // description: `${weaponSlot.item.name} has ${currentDurability - 1}/${weaponSlot.item.maxDurability || currentDurability} uses left`
+          // });
         }
         
         // Apply counterattack damage after updating cards
@@ -833,11 +833,11 @@ export default function GameBoard() {
         // Weapon breaks after this use
         addToGraveyard({ ...weaponSlot.item, id: `weapon-broken-${Date.now()}` });
         clearEquipmentSlotById(weaponSlot.id);
-        toast({
-          title: 'Weapon Broken!',
-          description: `${weaponSlot.item.name} has broken after defeating ${monster.name}!`,
-          variant: 'destructive'
-        });
+    // // toast({
+          // title: 'Weapon Broken!',
+          // description: `${weaponSlot.item.name} has broken after defeating ${monster.name}!`,
+          // variant: 'destructive'
+        // });
       } else {
         // Weapon survives with reduced durability
         const updatedWeapon = { ...weaponSlot.item, durability: currentDurability - 1 };
@@ -856,10 +856,10 @@ export default function GameBoard() {
         const slotBonus = shieldSlot.id === 'equipmentSlot1' ? equipmentSlot1Bonus : equipmentSlot2Bonus;
         const shieldValue = shieldSlot.item.value + defenseBonus + slotBonus;
         damageToPlayer = Math.max(0, damageToPlayer - shieldValue);
-        toast({
-          title: damageToPlayer === 0 ? 'Shield Blocked Attack!' : 'Shield Reduced Damage!',
-          description: `${shieldSlot.item.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed damage!${damageToPlayer > 0 ? ` ${originalDamage} → ${damageToPlayer}` : ''}`
-        });
+    // // toast({
+          // title: damageToPlayer === 0 ? 'Shield Blocked Attack!' : 'Shield Reduced Damage!',
+          // description: `${shieldSlot.item.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed damage!${damageToPlayer > 0 ? ` ${originalDamage} → ${damageToPlayer}` : ''}`
+        // });
         
         // Decrement shield durability
         const currentDurability = shieldSlot.item.durability ?? 1;
@@ -867,27 +867,27 @@ export default function GameBoard() {
           // Shield breaks after this use
           addToGraveyard({ ...shieldSlot.item, id: `shield-broken-${Date.now()}` });
           clearEquipmentSlotById(shieldSlot.id);
-          toast({
-            title: 'Shield Broken!',
-            description: `${shieldSlot.item.name} has broken!`,
-            variant: 'destructive'
-          });
+    // // toast({
+            // title: 'Shield Broken!',
+            // description: `${shieldSlot.item.name} has broken!`,
+            // variant: 'destructive'
+          // });
         } else {
           // Shield survives with reduced durability
           const updatedShield = { ...shieldSlot.item, durability: currentDurability - 1 };
           setEquipmentSlotById(shieldSlot.id, updatedShield);
-          toast({
-            title: 'Shield Damaged',
-            description: `${shieldSlot.item.name} has ${currentDurability - 1}/${shieldSlot.item.maxDurability || currentDurability} uses left`
-          });
+    // // toast({
+            // title: 'Shield Damaged',
+            // description: `${shieldSlot.item.name} has ${currentDurability - 1}/${shieldSlot.item.maxDurability || currentDurability} uses left`
+          // });
         }
         shieldAlreadyLogged = true;
       } else if (!weaponSlot) {
-        toast({
-          title: 'Damage Taken!',
-          description: `Monster dealt ${damageToPlayer} damage!`,
-          variant: 'destructive'
-        });
+    // // toast({
+          // title: 'Damage Taken!',
+          // description: `Monster dealt ${damageToPlayer} damage!`,
+          // variant: 'destructive'
+        // });
       }
     }
 
@@ -920,10 +920,10 @@ export default function GameBoard() {
       const shieldValue = shieldSlot.item.value + defenseBonus;
       const blocked = Math.min(shieldValue, remainingDamage);
       remainingDamage -= blocked;
-      toast({
-        title: 'Shield Blocks Counterattack!',
-        description: `${shieldSlot.item.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed ${blocked} damage!${remainingDamage > 0 ? ` ${damage} → ${remainingDamage}` : ''}`
-      });
+    // // toast({
+        // title: 'Shield Blocks Counterattack!',
+        // description: `${shieldSlot.item.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed ${blocked} damage!${remainingDamage > 0 ? ` ${damage} → ${remainingDamage}` : ''}`
+      // });
       
       // Decrement shield durability
       const currentDurability = shieldSlot.item.durability ?? 1;
@@ -933,19 +933,19 @@ export default function GameBoard() {
           addToGraveyard({ ...shieldSlot.item, id: `shield-counter-broken-${Date.now()}` });
         }
         clearEquipmentSlotById(shieldSlot.id);
-        toast({
-          title: 'Shield Broken!',
-          description: `${shieldSlot.item.name} has broken!`,
-          variant: 'destructive'
-        });
+    // // toast({
+          // title: 'Shield Broken!',
+          // description: `${shieldSlot.item.name} has broken!`,
+          // variant: 'destructive'
+        // });
       } else {
         // Shield survives with reduced durability
         const updatedShield = { ...shieldSlot.item, durability: currentDurability - 1 };
         setEquipmentSlotById(shieldSlot.id, updatedShield);
-        toast({
-          title: 'Shield Damaged',
-          description: `${shieldSlot.item.name} has ${currentDurability - 1}/${shieldSlot.item.maxDurability || currentDurability} uses left`
-        });
+    // // toast({
+          // title: 'Shield Damaged',
+          // description: `${shieldSlot.item.name} has ${currentDurability - 1}/${shieldSlot.item.maxDurability || currentDurability} uses left`
+        // });
       }
     }
     
@@ -966,10 +966,10 @@ export default function GameBoard() {
     if (weaponDamage >= monsterHp) {
       // Weapon defeats monster
       setMonstersDefeated(prev => prev + 1);
-      toast({
-        title: 'Monster Defeated!',
-        description: `Your ${weapon.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) destroyed the ${monster.name} (HP: ${monsterHp})!`
-      });
+    // // toast({
+        // title: 'Monster Defeated!',
+        // description: `Your ${weapon.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) destroyed the ${monster.name} (HP: ${monsterHp})!`
+      // });
       addToGraveyard(monster);
       removeCard(monster.id, false);
       
@@ -979,31 +979,31 @@ export default function GameBoard() {
           // Weapon breaks
           addToGraveyard({ ...weapon, id: `weapon-direct-broken-${Date.now()}` });
           clearEquipmentSlotById(weapon.fromSlot as EquipmentSlotId);
-          toast({
-            title: 'Weapon Broken!',
-            description: `${weapon.name} has broken after defeating ${monster.name}!`,
-            variant: 'destructive'
-          });
+    // // toast({
+            // title: 'Weapon Broken!',
+            // description: `${weapon.name} has broken after defeating ${monster.name}!`,
+            // variant: 'destructive'
+          // });
         } else {
           // Weapon survives with reduced durability
           const updatedWeapon = { ...weapon, durability: currentDurability - 1 };
           delete updatedWeapon.fromSlot; // Remove the fromSlot property before setting
           setEquipmentSlotById(weapon.fromSlot as EquipmentSlotId, updatedWeapon);
-          toast({
-            title: 'Weapon Damaged',
-            description: `${weapon.name} has ${currentDurability - 1}/${weapon.maxDurability || currentDurability} uses left`
-          });
+    // // toast({
+            // title: 'Weapon Damaged',
+            // description: `${weapon.name} has ${currentDurability - 1}/${weapon.maxDurability || currentDurability} uses left`
+          // });
         }
       }
     } else {
       // Monster survives - update its HP and layers
       const updatedMonster = damageMonster(monster, weaponDamage);
       
-      toast({
-        title: 'Monster Survives!',
-        description: `${weapon.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) dealt ${weaponDamage} damage! ${monster.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP) counterattacks for ${monsterAttack} damage!`,
-        variant: 'destructive'
-      });
+    // // toast({
+        // title: 'Monster Survives!',
+        // description: `${weapon.name} (${weaponDamage}${attackBonus > 0 ? ` +${attackBonus} bonus` : ''}) dealt ${weaponDamage} damage! ${monster.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP) counterattacks for ${monsterAttack} damage!`,
+        // variant: 'destructive'
+      // });
       
       // Update the monster in active cards with reduced HP
       setActiveCards(prev => prev.map(c => c.id === monster.id ? updatedMonster : c));
@@ -1014,20 +1014,20 @@ export default function GameBoard() {
           // Weapon breaks
           addToGraveyard({ ...weapon, id: `weapon-direct-broken-${Date.now()}` });
           clearEquipmentSlotById(weapon.fromSlot as EquipmentSlotId);
-          toast({
-            title: 'Weapon Broken!',
-            description: `${weapon.name} has broken!`,
-            variant: 'destructive'
-          });
+    // // toast({
+            // title: 'Weapon Broken!',
+            // description: `${weapon.name} has broken!`,
+            // variant: 'destructive'
+          // });
         } else {
           // Weapon survives with reduced durability
           const updatedWeapon = { ...weapon, durability: currentDurability - 1 };
           delete updatedWeapon.fromSlot; // Remove the fromSlot property before setting
           setEquipmentSlotById(weapon.fromSlot as EquipmentSlotId, updatedWeapon);
-          toast({
-            title: 'Weapon Damaged',
-            description: `${weapon.name} has ${currentDurability - 1}/${weapon.maxDurability || currentDurability} uses left`
-          });
+    // // toast({
+            // title: 'Weapon Damaged',
+            // description: `${weapon.name} has ${currentDurability - 1}/${weapon.maxDurability || currentDurability} uses left`
+          // });
         }
       }
       
@@ -1055,7 +1055,7 @@ export default function GameBoard() {
         setTimeout(() => setHealing(false), 500);
         setTotalHealed(prev => prev + healAmount);
         setHp(newHp);
-        toast({ title: 'Healed!', description: `+${healAmount} HP` });
+    // // toast({ title: 'Healed!', description: `+${healAmount} HP` });
         removeCard(card.id);
       } else if (card.type === 'skill') {
         handleSkillCard(card);
@@ -1087,21 +1087,21 @@ export default function GameBoard() {
             setEquipmentSlot2Bonus(card.type === 'weapon' ? weaponMasterBonus : shieldMasterBonus);
           }
           
-          toast({ 
-            title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`, 
-            description: `${card.name} equipped to ${emptySlot.id === 'equipmentSlot1' ? 'Slot 1' : 'Slot 2'}`
-          });
+    // // toast({ 
+            // title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`, 
+            // description: `${card.name} equipped to ${emptySlot.id === 'equipmentSlot1' ? 'Slot 1' : 'Slot 2'}`
+          // });
         } else {
           // If no empty slots, add to backpack
           if (backpackItems.length < 10) {
             setBackpackItems(prev => [card, ...prev]);
-            toast({ title: 'Item Stored!', description: `${card.name} stored in backpack (equipment slots full)` });
+    // // toast({ title: 'Item Stored!', description: `${card.name} stored in backpack (equipment slots full)` });
           } else {
-            toast({ 
-              title: 'Cannot Purchase!', 
-              description: 'Equipment slots and backpack are full',
-              variant: 'destructive'
-            });
+    // // toast({ 
+              // title: 'Cannot Purchase!', 
+              // description: 'Equipment slots and backpack are full',
+              // variant: 'destructive'
+            // });
             return;
           }
         }
@@ -1116,10 +1116,10 @@ export default function GameBoard() {
           type: 'amulet', 
           effect: card.effect! 
         });
-        toast({ 
-          title: 'Amulet Equipped!',
-          description: `${card.name} provides passive bonuses`
-        });
+    // // toast({ 
+          // title: 'Amulet Equipped!',
+          // description: `${card.name} provides passive bonuses`
+        // });
         removeCard(card.id, false);
         drawFromBackpackToHand();
       } else if (card.type === 'potion') {
@@ -1130,35 +1130,35 @@ export default function GameBoard() {
         setTimeout(() => setHealing(false), 500);
         setTotalHealed(prev => prev + healAmount);
         setHp(newHp);
-        toast({ title: 'Healed!', description: `+${healAmount} HP` });
+    // // toast({ title: 'Healed!', description: `+${healAmount} HP` });
         removeCard(card.id);
         drawFromBackpackToHand();
       } else if (card.type === 'coin') {
         // Auto-collect gold
         setGold(prev => prev + card.value);
-        toast({ title: 'Gold Collected!', description: `+${card.value} gold` });
+    // // toast({ title: 'Gold Collected!', description: `+${card.value} gold` });
         removeCard(card.id);
         drawFromBackpackToHand();
       } else if (card.type === 'monster') {
         // Monsters can't be purchased - must fight from hand
-        toast({
-          title: 'Cannot Purchase Monsters!',
-          description: 'Add monsters to hand first, then fight them',
-          variant: 'destructive'
-        });
+    // // toast({
+          // title: 'Cannot Purchase Monsters!',
+          // description: 'Add monsters to hand first, then fight them',
+          // variant: 'destructive'
+        // });
       } else {
         // Other card types go to backpack
         if (backpackItems.length < 10) {
           setBackpackItems(prev => [card, ...prev]);
-          toast({ title: 'Item Stored!', description: `${card.name} added to backpack` });
+    // // toast({ title: 'Item Stored!', description: `${card.name} added to backpack` });
           removeCard(card.id, false);
           drawFromBackpackToHand();
         } else {
-          toast({ 
-            title: 'Backpack Full!', 
-            description: 'Cannot store more items',
-            variant: 'destructive'
-          });
+    // // toast({ 
+            // title: 'Backpack Full!', 
+            // description: 'Cannot store more items',
+            // variant: 'destructive'
+          // });
         }
       }
     }
@@ -1173,10 +1173,10 @@ export default function GameBoard() {
         type: 'amulet', 
         effect: card.effect! 
       });
-      toast({ 
-        title: 'Amulet Equipped!',
-        description: `${card.name} provides passive bonuses`
-      });
+    // // toast({ 
+        // title: 'Amulet Equipped!',
+        // description: `${card.name} provides passive bonuses`
+      // });
       removeCard(card.id, false); 
     } else if (slotId === 'slot-backpack') {
       // Handle event cards immediately
@@ -1189,13 +1189,13 @@ export default function GameBoard() {
       
       // Check if backpack is full
       if (backpackItems.length >= 10) {
-        toast({ title: 'Backpack Full!', description: 'Maximum 10 items', variant: 'destructive' });
+    // // toast({ title: 'Backpack Full!', description: 'Maximum 10 items', variant: 'destructive' });
         return;
       }
       
       // Add card to bottom of backpack (unshift for LIFO)
       setBackpackItems(prev => [card, ...prev]);
-      toast({ title: 'Item Stored!', description: `${backpackItems.length + 1}/10 items in backpack` });
+    // // toast({ title: 'Item Stored!', description: `${backpackItems.length + 1}/10 items in backpack` });
       removeCard(card.id, false);
       
       // Auto-draw from backpack to hand after processing
@@ -1207,11 +1207,11 @@ export default function GameBoard() {
       // Handle monster dropped on equipment slot
       if (card.type === 'monster') {
         if (!equippedItem) {
-          toast({
-            title: 'No Equipment!',
-            description: 'Equip a weapon or shield first',
-            variant: 'destructive'
-          });
+    // // toast({
+            // title: 'No Equipment!',
+            // description: 'Equip a weapon or shield first',
+            // variant: 'destructive'
+          // });
           return;
         }
         
@@ -1221,10 +1221,10 @@ export default function GameBoard() {
           const shieldValue = equippedItem.value + defenseBonus;
           const damageToPlayer = Math.max(0, monsterAttack - shieldValue);
           
-          toast({
-            title: damageToPlayer === 0 ? 'Shield Blocked!' : 'Shield Reduced Damage!',
-            description: `${equippedItem.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed damage from ${card.name}'s ${monsterAttack} attack!${damageToPlayer > 0 ? ` ${monsterAttack} → ${damageToPlayer}` : ''}`
-          });
+    // // toast({
+            // title: damageToPlayer === 0 ? 'Shield Blocked!' : 'Shield Reduced Damage!',
+            // description: `${equippedItem.name} (${shieldValue}${defenseBonus > 0 ? ` +${defenseBonus} bonus` : ''}) absorbed damage from ${card.name}'s ${monsterAttack} attack!${damageToPlayer > 0 ? ` ${monsterAttack} → ${damageToPlayer}` : ''}`
+          // });
           
           // Decrement shield durability
           const currentDurability = equippedItem.durability ?? 1;
@@ -1232,19 +1232,19 @@ export default function GameBoard() {
             // Shield breaks after this use
             addToGraveyard({ ...equippedItem, id: `shield-direct-broken-${Date.now()}` });
             clearEquipmentSlotById(equipSlot);
-            toast({
-              title: 'Shield Broken!',
-              description: `${equippedItem.name} has broken!`,
-              variant: 'destructive'
-            });
+    // // toast({
+              // title: 'Shield Broken!',
+              // description: `${equippedItem.name} has broken!`,
+              // variant: 'destructive'
+            // });
           } else {
             // Shield survives with reduced durability
             const updatedShield = { ...equippedItem, durability: currentDurability - 1 };
             setEquipmentSlotById(equipSlot, updatedShield);
-            toast({
-              title: 'Shield Damaged',
-              description: `${equippedItem.name} has ${currentDurability - 1}/${equippedItem.maxDurability || currentDurability} uses left`
-            });
+    // // toast({
+              // title: 'Shield Damaged',
+              // description: `${equippedItem.name} has ${currentDurability - 1}/${equippedItem.maxDurability || currentDurability} uses left`
+            // });
           }
           
           // Add monster to graveyard
@@ -1272,10 +1272,10 @@ export default function GameBoard() {
           durability: card.durability,
           maxDurability: card.maxDurability
         });
-        toast({ 
-          title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`,
-          description: card.durability ? `${card.durability}/${card.maxDurability} uses` : undefined
-        });
+    // // toast({ 
+          // title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`,
+          // description: card.durability ? `${card.durability}/${card.maxDurability} uses` : undefined
+        // });
         removeCard(card.id, false);
       }
     }
@@ -1286,20 +1286,20 @@ export default function GameBoard() {
     
     // Only allow selling potions, coins, weapons, and shields (NOT monsters)
     if (!SELLABLE_TYPES.includes(itemType)) {
-      toast({
-        title: 'Cannot Sell!',
-        description: `You cannot sell ${itemType}s!`,
-        variant: 'destructive'
-      });
+    // // toast({
+        // title: 'Cannot Sell!',
+        // description: `You cannot sell ${itemType}s!`,
+        // variant: 'destructive'
+      // });
       return;
     }
     
     const sellValue = item.value;
     setGold(prev => prev + sellValue);
-    toast({
-      title: 'Sold!',
-      description: `+${sellValue} Gold from ${item.name}`,
-    });
+    // // toast({
+      // title: 'Sold!',
+      // description: `+${sellValue} Gold from ${item.name}`,
+    // });
 
     // Add to graveyard
     const cardToGraveyard: GameCardData = {
@@ -1336,7 +1336,7 @@ export default function GameBoard() {
           setTimeout(() => setHealing(false), 500);
           setTotalHealed(prev => prev + actualHeal);
           setHp(newHp);
-          toast({ title: 'Healing Wave!', description: `+${actualHeal} HP from skill` });
+    // // toast({ title: 'Healing Wave!', description: `+${actualHeal} HP from skill` });
           break;
         case 'Lightning Strike':
           // Find a random monster to damage
@@ -1347,45 +1347,45 @@ export default function GameBoard() {
             const targetHp = target.hp ?? target.value;
             
             if (damage >= targetHp) {
-              toast({ title: 'Lightning Strike!', description: `Destroyed ${target.name}!` });
+    // // toast({ title: 'Lightning Strike!', description: `Destroyed ${target.name}!` });
               setMonstersDefeated(prev => prev + 1);
               addToGraveyard(target);
               removeCard(target.id, false);
             } else {
               // Monster survives with reduced HP
               const updatedMonster = damageMonster(target, damage);
-              toast({ 
-                title: 'Lightning Strike!', 
-                description: `Dealt ${damage} damage to ${target.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP remaining)!` 
-              });
+    // // toast({ 
+                // title: 'Lightning Strike!', 
+                // description: `Dealt ${damage} damage to ${target.name} (${updatedMonster.hp}/${updatedMonster.maxHp} HP remaining)!` 
+              // });
               // Update the monster in active cards
               setActiveCards(prev => prev.map(c => c.id === target.id ? updatedMonster : c));
             }
           } else {
-            toast({ title: 'No Target', description: 'No monsters to strike', variant: 'destructive' });
+    // // toast({ title: 'No Target', description: 'No monsters to strike', variant: 'destructive' });
           }
           break;
         case 'Shield Bash':
           setTempShield(prev => prev + 3);
-          toast({ title: 'Shield Bash!', description: 'Next 3 damage blocked!' });
+    // // toast({ title: 'Shield Bash!', description: 'Next 3 damage blocked!' });
           break;
         case 'Gold Rush':
           setGold(prev => prev + 8);
-          toast({ title: 'Gold Rush!', description: '+8 Gold!' });
+    // // toast({ title: 'Gold Rush!', description: '+8 Gold!' });
           break;
           
         // Knight weapon enhancement skills
         case 'Sharpening Stone':
           setWeaponMasterBonus(prev => prev + 1);
-          toast({ title: 'Sharpening Stone!', description: 'All weapons +1 damage permanently!' });
+    // // toast({ title: 'Sharpening Stone!', description: 'All weapons +1 damage permanently!' });
           break;
         case 'Dual Strike':
           // Double attack with current weapon - would need special handling
-          toast({ title: 'Dual Strike!', description: 'Attack twice with next weapon!' });
+    // // toast({ title: 'Dual Strike!', description: 'Attack twice with next weapon!' });
           break;
         case 'Weapon Surge':
           setNextWeaponBonus(prev => prev + 3);
-          toast({ title: 'Weapon Surge!', description: 'Next weapon attack +3 damage!' });
+    // // toast({ title: 'Weapon Surge!', description: 'Next weapon attack +3 damage!' });
           break;
         case 'Battle Ready':
           // Draw a weapon from class deck
@@ -1394,7 +1394,7 @@ export default function GameBoard() {
             const weapon = weaponCards[Math.floor(Math.random() * weaponCards.length)];
             setClassCardsInHand(prev => [...prev, weapon as KnightCardData]);
             setClassDeck(prev => prev.filter(c => c.id !== weapon.id));
-            toast({ title: 'Battle Ready!', description: `Drew ${weapon.name} from class deck!` });
+    // // toast({ title: 'Battle Ready!', description: `Drew ${weapon.name} from class deck!` });
           }
           break;
           
@@ -1402,15 +1402,15 @@ export default function GameBoard() {
         case 'Shield Wall':
           setNextShieldBonus(prev => prev + 2);
           setShieldMasterBonus(prev => prev + 2); // Next 3 shields
-          toast({ title: 'Shield Wall!', description: 'Next 3 shields get +2 defense!' });
+    // // toast({ title: 'Shield Wall!', description: 'Next 3 shields get +2 defense!' });
           break;
         case 'Defensive Stance':
           setDefensiveStanceActive(true);
-          toast({ title: 'Defensive Stance!', description: 'All damage reduced by 1 this turn!' });
+    // // toast({ title: 'Defensive Stance!', description: 'All damage reduced by 1 this turn!' });
           break;
         case 'Iron Defense':
           setTempShield(prev => prev + 5);
-          toast({ title: 'Iron Defense!', description: 'Block next 5 damage!' });
+    // // toast({ title: 'Iron Defense!', description: 'Block next 5 damage!' });
           break;
           
         // Knight blood skills
@@ -1418,55 +1418,55 @@ export default function GameBoard() {
           if (hp > 3) {
             applyDamage(3);
             setNextWeaponBonus(prev => prev + 3);
-            toast({ title: 'Blood Sacrifice!', description: 'Lost 3 HP, next attack +3!' });
+    // // toast({ title: 'Blood Sacrifice!', description: 'Lost 3 HP, next attack +3!' });
           } else {
-            toast({ title: 'Not Enough HP!', variant: 'destructive' });
+    // // toast({ title: 'Not Enough HP!', variant: 'destructive' });
           }
           break;
         case 'Vampiric Strike':
           setVampiricNextAttack(true);
-          toast({ title: 'Vampiric Strike!', description: 'Next attack heals for half damage!' });
+    // // toast({ title: 'Vampiric Strike!', description: 'Next attack heals for half damage!' });
           break;
         case 'Blood for Power':
           if (hp > 5) {
             applyDamage(5);
             setGold(prev => prev + 10);
-            toast({ title: 'Blood for Power!', description: 'Traded 5 HP for 10 gold!' });
+    // // toast({ title: 'Blood for Power!', description: 'Traded 5 HP for 10 gold!' });
           } else {
-            toast({ title: 'Not Enough HP!', variant: 'destructive' });
+    // // toast({ title: 'Not Enough HP!', variant: 'destructive' });
           }
           break;
         case 'Crimson Shield':
           if (hp > 2) {
             applyDamage(2);
             setTempShield(prev => prev + 6);
-            toast({ title: 'Crimson Shield!', description: 'Lost 2 HP, gained 6 shield!' });
+    // // toast({ title: 'Crimson Shield!', description: 'Lost 2 HP, gained 6 shield!' });
           } else {
-            toast({ title: 'Not Enough HP!', variant: 'destructive' });
+    // // toast({ title: 'Not Enough HP!', variant: 'destructive' });
           }
           break;
         case 'Life Transfer':
           if (hp > 3) {
             applyDamage(3);
             setNextWeaponBonus(prev => prev + 3);
-            toast({ title: 'Life Transfer!', description: 'Converted 3 HP to 3 damage!' });
+    // // toast({ title: 'Life Transfer!', description: 'Converted 3 HP to 3 damage!' });
           } else {
-            toast({ title: 'Not Enough HP!', variant: 'destructive' });
+    // // toast({ title: 'Not Enough HP!', variant: 'destructive' });
           }
           break;
           
         // Knight durability skills
         case 'Reinforced Equipment':
           setUnbreakableNext(true);
-          toast({ title: 'Reinforced!', description: 'Next equipment won\'t break on use!' });
+    // // toast({ title: 'Reinforced!', description: 'Next equipment won\'t break on use!' });
           break;
         case 'Repair Kit':
           // Would need to select from graveyard
-          toast({ title: 'Repair Kit!', description: 'Choose equipment from graveyard to restore!' });
+    // // toast({ title: 'Repair Kit!', description: 'Choose equipment from graveyard to restore!' });
           break;
         case 'Spare Weapons':
           // Equip 2 weapons from backpack
-          toast({ title: 'Spare Weapons!', description: 'Equip 2 weapons from backpack!' });
+    // // toast({ title: 'Spare Weapons!', description: 'Equip 2 weapons from backpack!' });
           break;
         case 'Emergency Repair':
           // Restore durability to current equipment
@@ -1477,11 +1477,11 @@ export default function GameBoard() {
               setEquipmentSlotById(slot.id, repaired);
             }
           });
-          toast({ title: 'Emergency Repair!', description: 'All equipment +2 durability!' });
+    // // toast({ title: 'Emergency Repair!', description: 'All equipment +2 durability!' });
           break;
         case 'Salvage':
           // Break equipment for gold
-          toast({ title: 'Salvage!', description: 'Break an equipment for 3 gold!' });
+    // // toast({ title: 'Salvage!', description: 'Break an equipment for 3 gold!' });
           break;
         case 'Field Maintenance':
           // All equipment +1 durability
@@ -1492,7 +1492,7 @@ export default function GameBoard() {
               setEquipmentSlotById(slot.id, maintained);
             }
           });
-          toast({ title: 'Field Maintenance!', description: 'All equipment +1 durability!' });
+    // // toast({ title: 'Field Maintenance!', description: 'All equipment +1 durability!' });
           break;
       }
       
@@ -1512,10 +1512,10 @@ export default function GameBoard() {
         // These are calculated in attackBonus
       }
       
-      toast({ 
-        title: 'Permanent Skill Acquired!', 
-        description: `${card.name}: ${card.skillEffect}`
-      });
+    // // toast({ 
+        // title: 'Permanent Skill Acquired!', 
+        // description: `${card.name}: ${card.skillEffect}`
+      // });
       
       if (knightCard.classCard) {
         setClassCardsInHand(prev => prev.filter(c => c.id !== card.id));
@@ -1538,7 +1538,7 @@ export default function GameBoard() {
       if (effect.startsWith('hp-')) {
         const damage = parseInt(effect.replace('hp-', ''));
         applyDamage(damage);
-        toast({ title: 'Damage Taken', description: `-${damage} HP`, variant: 'destructive' });
+    // // toast({ title: 'Damage Taken', description: `-${damage} HP`, variant: 'destructive' });
       } else if (effect.startsWith('heal+')) {
         const healAmount = parseInt(effect.replace('heal+', ''));
         const newHp = Math.min(maxHp, hp + healAmount);
@@ -1547,41 +1547,41 @@ export default function GameBoard() {
         setTimeout(() => setHealing(false), 500);
         setTotalHealed(prev => prev + actualHeal);
         setHp(newHp);
-        toast({ title: 'Healed!', description: `+${actualHeal} HP` });
+    // // toast({ title: 'Healed!', description: `+${actualHeal} HP` });
       } else if (effect === 'fullheal') {
         const healAmount = maxHp - hp;
         setHealing(true);
         setTimeout(() => setHealing(false), 500);
         setTotalHealed(prev => prev + healAmount);
         setHp(maxHp);
-        toast({ title: 'Full Heal!', description: `Restored to ${maxHp} HP` });
+    // // toast({ title: 'Full Heal!', description: `Restored to ${maxHp} HP` });
       } else if (effect.startsWith('gold-')) {
         const goldLost = parseInt(effect.replace('gold-', ''));
         if (gold >= goldLost) {
           setGold(prev => prev - goldLost);
-          toast({ title: 'Gold Spent', description: `-${goldLost} Gold` });
+    // // toast({ title: 'Gold Spent', description: `-${goldLost} Gold` });
         } else {
-          toast({ title: 'Not Enough Gold!', variant: 'destructive' });
+    // // toast({ title: 'Not Enough Gold!', variant: 'destructive' });
           setEventModalOpen(false);
           return;
         }
       } else if (effect.startsWith('gold+')) {
         const goldGain = parseInt(effect.replace('gold+', ''));
         setGold(prev => prev + goldGain);
-        toast({ title: 'Gold Gained!', description: `+${goldGain} Gold` });
+    // // toast({ title: 'Gold Gained!', description: `+${goldGain} Gold` });
       } else if (effect.startsWith('maxhp+')) {
         const hpGain = parseInt(effect.replace('maxhp+', ''));
         // This would need a permanent max HP modifier
-        toast({ title: 'Max HP Increased!', description: `+${hpGain} Max HP` });
+    // // toast({ title: 'Max HP Increased!', description: `+${hpGain} Max HP` });
       } else if (effect === 'weapon') {
         // Create a random weapon
         const weaponValue = Math.floor(Math.random() * 3) + 3; // 3-5 value
-        toast({ title: 'Weapon Received!', description: `Got a weapon (${weaponValue} damage)` });
+    // // toast({ title: 'Weapon Received!', description: `Got a weapon (${weaponValue} damage)` });
         // Would need to add weapon to inventory
       } else if (effect === 'permanentskill') {
         const randomSkill = ['Iron Skin', 'Weapon Master'][Math.floor(Math.random() * 2)];
         setPermanentSkills(prev => [...prev, randomSkill]);
-        toast({ title: 'Skill Learned!', description: randomSkill });
+    // // toast({ title: 'Skill Learned!', description: randomSkill });
       }
       
       // Knight discovery events
@@ -1591,7 +1591,7 @@ export default function GameBoard() {
           const drawnCards = classDeck.slice(0, 3);
           setClassCardsInHand(prev => [...prev, ...drawnCards as KnightCardData[]]);
           setClassDeck(prev => prev.slice(3));
-          toast({ title: 'Knight Cards!', description: 'Drew 3 Knight cards from class deck!' });
+    // // toast({ title: 'Knight Cards!', description: 'Drew 3 Knight cards from class deck!' });
         }
       } else if (effect === 'equipKnight') {
         // Draw and immediately equip a Knight equipment
@@ -1619,7 +1619,7 @@ export default function GameBoard() {
             });
           }
           setClassDeck(prev => prev.filter(c => c.id !== equipment.id));
-          toast({ title: 'Knight Equipment!', description: `Equipped ${equipment.name}!` });
+    // // toast({ title: 'Knight Equipment!', description: `Equipped ${equipment.name}!` });
         }
       } else if (effect === 'useKnightSkill') {
         // Draw and use a Knight skill immediately
@@ -1637,19 +1637,19 @@ export default function GameBoard() {
         const upgradAmount = effect === 'weaponUpgrade2' ? 2 : 2;
         if (equipmentSlot1?.type === 'weapon') {
           setEquipmentSlot1(prev => prev ? { ...prev, value: prev.value + upgradAmount } : null);
-          toast({ title: 'Weapon Upgraded!', description: `+${upgradAmount} damage to ${equipmentSlot1.name}!` });
+    // // toast({ title: 'Weapon Upgraded!', description: `+${upgradAmount} damage to ${equipmentSlot1.name}!` });
         } else if (equipmentSlot2?.type === 'weapon') {
           setEquipmentSlot2(prev => prev ? { ...prev, value: prev.value + upgradAmount } : null);
-          toast({ title: 'Weapon Upgraded!', description: `+${upgradAmount} damage to ${equipmentSlot2.name}!` });
+    // // toast({ title: 'Weapon Upgraded!', description: `+${upgradAmount} damage to ${equipmentSlot2.name}!` });
         }
       } else if (effect === 'shieldUpgrade2') {
         // Upgrade current shield
         if (equipmentSlot1?.type === 'shield') {
           setEquipmentSlot1(prev => prev ? { ...prev, value: prev.value + 2 } : null);
-          toast({ title: 'Shield Upgraded!', description: `+2 defense to ${equipmentSlot1.name}!` });
+    // // toast({ title: 'Shield Upgraded!', description: `+2 defense to ${equipmentSlot1.name}!` });
         } else if (equipmentSlot2?.type === 'shield') {
           setEquipmentSlot2(prev => prev ? { ...prev, value: prev.value + 2 } : null);
-          toast({ title: 'Shield Upgraded!', description: `+2 defense to ${equipmentSlot2.name}!` });
+    // // toast({ title: 'Shield Upgraded!', description: `+2 defense to ${equipmentSlot2.name}!` });
         }
       } else if (effect === 'restoreShield') {
         // Restore a shield from graveyard
@@ -1676,12 +1676,12 @@ export default function GameBoard() {
             });
           }
           setDiscardedCards(prev => prev.filter(c => c.id !== shield.id));
-          toast({ title: 'Shield Restored!', description: `${shield.name} restored from graveyard!` });
+    // // toast({ title: 'Shield Restored!', description: `${shield.name} restored from graveyard!` });
         }
       } else if (effect.startsWith('tempShield+')) {
         const shieldGain = parseInt(effect.replace('tempShield+', ''));
         setTempShield(prev => prev + shieldGain);
-        toast({ title: 'Temporary Shield!', description: `+${shieldGain} shield value!` });
+    // // toast({ title: 'Temporary Shield!', description: `+${shieldGain} shield value!` });
       } else if (effect.includes('powerWeapon')) {
         // Create a powerful weapon for blood pact
         const powerWeapon = {
@@ -1714,14 +1714,14 @@ export default function GameBoard() {
             maxDurability: powerWeapon.maxDurability
           });
         }
-        toast({ title: 'Blood Forged Blade!', description: 'Gained a powerful weapon!' });
+    // // toast({ title: 'Blood Forged Blade!', description: 'Gained a powerful weapon!' });
       } else if (effect === 'draw2') {
         // Draw 2 class cards
         if (classDeck.length >= 2) {
           const drawnCards = classDeck.slice(0, 2);
           setClassCardsInHand(prev => [...prev, ...drawnCards as KnightCardData[]]);
           setClassDeck(prev => prev.slice(2));
-          toast({ title: 'Drew Cards!', description: 'Drew 2 Knight cards!' });
+    // // toast({ title: 'Drew Cards!', description: 'Drew 2 Knight cards!' });
         }
       } else if (effect === 'drawClass2') {
         // Draw 2 class cards (from Maintenance event)
@@ -1729,7 +1729,7 @@ export default function GameBoard() {
           const drawnCards = classDeck.slice(0, 2);
           setClassCardsInHand(prev => [...prev, ...drawnCards as KnightCardData[]]);
           setClassDeck(prev => prev.slice(2));
-          toast({ title: 'Drew Class Cards!', description: 'Drew 2 Knight cards!' });
+    // // toast({ title: 'Drew Class Cards!', description: 'Drew 2 Knight cards!' });
         }
       } else if (effect === 'repairAll') {
         // Repair all equipment
@@ -1744,7 +1744,7 @@ export default function GameBoard() {
             setEquipmentSlotById(slot.id, repaired);
           }
         });
-        toast({ title: 'Equipment Repaired!', description: 'All equipment restored to full durability!' });
+    // // toast({ title: 'Equipment Repaired!', description: 'All equipment restored to full durability!' });
       }
     }
     
@@ -1763,22 +1763,22 @@ export default function GameBoard() {
     if (topCard.id === 'reshuffle-skill' && topCard.name === 'Reshuffle') {
       if (hp > 5) {
         applyDamage(5);
-        toast({ title: 'Reshuffle!', description: 'Paid 5 HP to reshuffle the deck' });
+    // // toast({ title: 'Reshuffle!', description: 'Paid 5 HP to reshuffle the deck' });
         setRemainingDeck(prev => [...prev].sort(() => Math.random() - 0.5));
         // Don't remove from backpack - Reshuffle can be used multiple times
       } else {
-        toast({ title: 'Not Enough HP!', description: 'Need more than 5 HP to reshuffle', variant: 'destructive' });
+    // // toast({ title: 'Not Enough HP!', description: 'Need more than 5 HP to reshuffle', variant: 'destructive' });
       }
       return;
     }
     
     // Otherwise, try to draw card to hand
     if (handCards.length >= 7) {
-      toast({
-        title: 'Hand Full!',
-        description: 'Clear hand space to draw from backpack',
-        variant: 'destructive'
-      });
+    // // toast({
+        // title: 'Hand Full!',
+        // description: 'Clear hand space to draw from backpack',
+        // variant: 'destructive'
+      // });
       return;
     }
     
@@ -1793,11 +1793,11 @@ export default function GameBoard() {
   // Hand system handlers - NEW FLOW
   const handleDropToHand = (card: GameCardData) => {
     if (handCards.length >= 7) {
-      toast({
-        title: 'Hand Full!',
-        description: 'Maximum 7 cards in hand',
-        variant: 'destructive'
-      });
+    // // toast({
+        // title: 'Hand Full!',
+        // description: 'Maximum 7 cards in hand',
+        // variant: 'destructive'
+      // });
       return;
     }
     
@@ -1813,20 +1813,20 @@ export default function GameBoard() {
     setHandCards(prev => [...prev, card]);
     removeCard(card.id, false); // Don't add to graveyard when saving to hand
     setCardsPlayed(prev => prev + 1); // Count it as played
-    toast({
-      title: 'Card Added to Hand!',
-      description: `${card.name} added to hand (${handCards.length + 1}/7)`
-    });
+    // // toast({
+      // title: 'Card Added to Hand!',
+      // description: `${card.name} added to hand (${handCards.length + 1}/7)`
+    // });
   };
   
   // Handler for dropping cards to backpack
   const handleDropToBackpack = (card: GameCardData) => {
     if (backpackItems.length >= 10) {
-      toast({
-        title: 'Backpack Full!',
-        description: 'Maximum 10 cards in backpack',
-        variant: 'destructive'
-      });
+    // // toast({
+        // title: 'Backpack Full!',
+        // description: 'Maximum 10 cards in backpack',
+        // variant: 'destructive'
+      // });
       return;
     }
     
@@ -1842,10 +1842,10 @@ export default function GameBoard() {
     setBackpackItems(prev => [card, ...prev]);
     removeCard(card.id, false); // Remove from dungeon
     setCardsPlayed(prev => prev + 1);
-    toast({
-      title: 'Card Stored!',
-      description: `${card.name} added to backpack (${backpackItems.length + 1}/10)`
-    });
+    // // toast({
+      // title: 'Card Stored!',
+      // description: `${card.name} added to backpack (${backpackItems.length + 1}/10)`
+    // });
   };
 
   const handleDragCardFromHand = (card: GameCardData) => {
@@ -1884,7 +1884,7 @@ export default function GameBoard() {
       setTimeout(() => setHealing(false), 500);
       setTotalHealed(prev => prev + healAmount);
       setHp(newHp);
-      toast({ title: 'Healed!', description: `+${healAmount} HP` });
+    // // toast({ title: 'Healed!', description: `+${healAmount} HP` });
       addToGraveyard(card);
       // Trigger auto-draw after using potion
       setTimeout(() => drawFromBackpackToHand(), 300);
@@ -1900,7 +1900,7 @@ export default function GameBoard() {
           durability: card.durability,
           maxDurability: card.maxDurability
         });
-        toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`, description: card.name });
+    // // toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`, description: card.name });
       }
     }
     // More card types can be handled here
