@@ -112,8 +112,14 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
                   {skill.description}
                 </p>
 
-                {/* Effect */}
-                <div className="bg-primary/10 rounded-lg p-3 border border-primary/30">
+                {/* Effect - Click to directly select and confirm */}
+                <div 
+                  className="bg-primary/10 rounded-lg p-3 border border-primary/30 cursor-pointer hover:bg-primary/20 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectSkill(skill.id);
+                  }}
+                >
                   <p className="text-sm font-medium text-center">
                     {skill.effect}
                   </p>
@@ -146,7 +152,7 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
 
         {/* Tip */}
         <p className="text-xs text-muted-foreground text-center mt-4">
-          Choose wisely - this skill will define your playstyle for the entire game
+          Click on the skill effect box to instantly select and start your adventure
         </p>
       </div>
     </div>
