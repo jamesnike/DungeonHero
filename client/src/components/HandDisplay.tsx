@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { Hand } from 'lucide-react';
 import GameCard, { type GameCardData } from './GameCard';
 
 interface HandDisplayProps {
@@ -68,16 +67,6 @@ export default function HandDisplay({
         style={{ bottom: '200px', height: '200px', zIndex: 20 }}
       >
         <div className="relative h-full flex items-end justify-center pb-4">
-          {/* Hand count indicator */}
-          <div className="absolute top-2 left-4 pointer-events-auto">
-            <div className="bg-background/90 backdrop-blur-sm rounded-lg px-3 py-1 flex items-center gap-2 shadow-lg border border-card-border">
-              <Hand className="w-4 h-4 text-primary" />
-              <span className="font-mono font-bold text-sm">
-                {handCards.length}/{maxHandSize}
-              </span>
-            </div>
-          </div>
-
           {/* Cards container with perspective */}
           <div 
             ref={containerRef}
