@@ -2087,7 +2087,7 @@ export default function GameBoard() {
           
           {/* Row 3, Col 6: ClassDeck */}
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%] bg-card-foreground/5 rounded-lg">
+            <div className="w-[94%] h-[94%] md:w-[95%] md:h-[95%] lg:w-[96%] lg:h-[96%] bg-card-foreground/5 rounded-lg">
               <ClassDeck 
                 classCards={classDeck}
                 className="w-full h-full"
