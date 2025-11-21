@@ -66,7 +66,7 @@ export default function HandDisplay({
         className="fixed left-0 right-0 pointer-events-none"
         style={{ 
           bottom: '0px', 
-          height: '160px', 
+          height: '120px', 
           zIndex: 20,
           overflow: hoveredIndex !== null ? 'visible' : 'hidden'
         }}
@@ -95,9 +95,9 @@ export default function HandDisplay({
                   style={{
                     transform: `
                       translateX(${transform.translateX}px)
-                      translateY(${isHovered ? -100 : transform.translateY + 40}px)
+                      translateY(${isHovered ? -70 : transform.translateY + 50}px)
                       rotate(${transform.rotate}deg)
-                      scale(${isHovered ? 1.1 : 1})
+                      scale(${isHovered ? 1.08 : 1})
                     `,
                     zIndex: isHovered ? 100 : index + 1,
                     transformOrigin: 'bottom center',
