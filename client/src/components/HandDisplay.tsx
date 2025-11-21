@@ -66,12 +66,12 @@ export default function HandDisplay({
         className="fixed left-0 right-0 pointer-events-none"
         style={{ 
           bottom: '0px', 
-          height: '180px', 
+          height: '160px', 
           zIndex: 20,
           overflow: hoveredIndex !== null ? 'visible' : 'hidden'
         }}
       >
-        <div className="relative h-full flex items-end justify-center" style={{ paddingBottom: '20px' }}>
+        <div className="relative h-full flex items-end justify-center">
           {/* Cards container with perspective */}
           <div 
             ref={containerRef}
@@ -95,9 +95,9 @@ export default function HandDisplay({
                   style={{
                     transform: `
                       translateX(${transform.translateX}px)
-                      translateY(${isHovered ? -120 : transform.translateY + 60}px)
+                      translateY(${isHovered ? -100 : transform.translateY + 40}px)
                       rotate(${transform.rotate}deg)
-                      scale(${isHovered ? 1.15 : 1})
+                      scale(${isHovered ? 1.1 : 1})
                     `,
                     zIndex: isHovered ? 100 : index + 1,
                     transformOrigin: 'bottom center',
