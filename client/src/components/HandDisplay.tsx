@@ -40,10 +40,11 @@ export default function HandDisplay({
       style={{ 
         height: `${visibleHeight}px`,
         zIndex: 50,
+        overflow: 'hidden'
       }}
     >
       <div className="relative h-full w-full flex items-end justify-center px-2">
-        <div className="relative flex items-end" style={{ height: `${cardHeight}px` }}>
+        <div className="relative flex items-end" style={{ height: `${cardHeight}px`, paddingBottom: '48px' }}>
           {handCards.map((card, index) => {
             const isHovered = hoveredIndex === index;
             
