@@ -1922,7 +1922,7 @@ export default function GameBoard() {
       </div>
       
       {/* Main game area - Flexible height */}
-      <div className="flex-grow min-h-0 flex flex-col items-center justify-center px-1 lg:px-2 py-1">
+      <div className="flex-grow min-h-0 flex flex-col items-center justify-center px-0.5 py-0.5">
         {/* 3×6 Card Grid - Viewport-constrained sizing with responsive gap */}
         <div 
           className="grid w-full h-full gap-[1px]"
