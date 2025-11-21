@@ -154,6 +154,7 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className={`
+        w-full h-full
         cursor-grab active:cursor-grabbing
         transition-all duration-200 ease-out
         ${isDragging 
@@ -164,8 +165,6 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
         ${className}
       `}
       style={{
-        width: 'clamp(80px, 12vw, 160px)', 
-        height: 'clamp(112px, 16.8vw, 224px)',
         filter: isDragging ? 'brightness(1.1)' : 'none',
         transform: card.type === 'monster' ? `translateX(${getLayerShift()}px)` : undefined,
       }}

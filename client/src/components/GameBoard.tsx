@@ -1908,165 +1908,205 @@ export default function GameBoard() {
 
   return (
     <div className="h-screen bg-background flex flex-col relative overflow-hidden">
-      <GameHeader 
-        hp={hp} 
-        maxHp={maxHp} 
-        gold={gold} 
-        cardsRemaining={getRemainingCards()}
-        monstersDefeated={monstersDefeated}
-        onDeckClick={() => setDeckViewerOpen(true)}
-        onNewGame={initGame}
-      />
-      {/* Main game area - adjust padding for hand area at bottom */}
-      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: '100px' }}>
-        {/* 3×6 Card Grid - Uniform Sizing */}
-        <div className="grid w-full" style={{ 
-          gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
-          maxWidth: '95vw',
-          gap: 'min(2vw, 20px)',
-          gridTemplateRows: 'repeat(3, 1fr)'
-        }}>
+      {/* Header - Fixed height */}
+      <div className="flex-shrink-0">
+        <GameHeader 
+          hp={hp} 
+          maxHp={maxHp} 
+          gold={gold} 
+          cardsRemaining={getRemainingCards()}
+          monstersDefeated={monstersDefeated}
+          onDeckClick={() => setDeckViewerOpen(true)}
+          onNewGame={initGame}
+        />
+      </div>
+      
+      {/* Main game area - Flexible height */}
+      <div className="flex-grow min-h-0 flex flex-col items-center justify-center px-1 lg:px-2 py-1">
+        {/* 3×6 Card Grid - Viewport-constrained sizing with responsive gap */}
+        <div 
+          className="grid w-full h-full gap-[2px] md:gap-1 lg:gap-1.5"
+          style={{ 
+            gridTemplateColumns: 'repeat(6, 1fr)',
+            gridTemplateRows: 'repeat(3, 1fr)',
+            maxWidth: '100%',
+            maxHeight: '100%',
+          }}>
           {/* Row 1: Preview Row - 5 cards + DiceRoller */}
           {[0, 1, 2, 3, 4].map((index) => {
             const card = previewCards[index];
             return card ? (
               <div 
                 key={`preview-${index}`}
-                className="opacity-60 pointer-events-none"
-                style={{ 
-                  width: 'clamp(80px, 12vw, 160px)', 
-                  height: 'clamp(112px, 16.8vw, 224px)' 
-                }}
+                className="opacity-60 pointer-events-none w-full h-full flex items-center justify-center"
                 data-testid={`preview-card-${index}`}
               >
-                <GameCard
-                  card={card}
-                  onDragStart={() => {}} // Disabled
-                  onDragEnd={() => {}} // Disabled
-                />
+                <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+                  <GameCard
+                    card={card}
+                    onDragStart={() => {}} // Disabled
+                    onDragEnd={() => {}} // Disabled
+                  />
+                </div>
               </div>
             ) : (
               <div 
                 key={`preview-empty-${index}`} 
-                style={{ 
-                  width: 'clamp(80px, 12vw, 160px)', 
-                  height: 'clamp(112px, 16.8vw, 224px)' 
-                }} 
+                className="w-full h-full"
               />
             );
           })}
           
-          {/* Row 1, Col 6: DiceRoller - fixed dimensions to match preview cards */}
-          <div style={{ 
-            width: 'clamp(80px, 12vw, 160px)', 
-            height: 'clamp(112px, 16.8vw, 224px)' 
-          }}>
-            <DiceRoller 
-              onRoll={(value) => console.log('Rolled:', value)}
-              className="w-full h-full"
-            />
+          {/* Row 1, Col 6: DiceRoller */}
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+              <DiceRoller 
+                onRoll={(value) => console.log('Rolled:', value)}
+                className="w-full h-full"
+              />
+            </div>
           </div>
 
           {/* Row 2: Active Row - 5 cards + GraveyardZone */}
           {[0, 1, 2, 3, 4].map((index) => {
             const card = activeCards[index];
             return card ? (
-              <div key={`active-${index}`} style={{ 
-                width: 'clamp(100px, 15vw, 200px)', 
-                height: 'clamp(140px, 21vw, 280px)' 
-              }}>
-                <GameCard
-                  card={card}
-                  onDragStart={handleDragStartFromDungeon}
-                  onDragEnd={handleDragEndFromDungeon}
-                  onWeaponDrop={(weapon) => handleWeaponToMonster(weapon, card)}
-                  isWeaponDropTarget={draggedEquipment?.type === 'weapon' && card.type === 'monster'}
-                  className={removingCards.has(card.id) ? 'animate-card-remove' : ''}
-                />
+              <div 
+                key={`active-${index}`}
+                className="w-full h-full flex items-center justify-center"
+              >
+                <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+                  <GameCard
+                    card={card}
+                    onDragStart={handleDragStartFromDungeon}
+                    onDragEnd={handleDragEndFromDungeon}
+                    onWeaponDrop={(weapon) => handleWeaponToMonster(weapon, card)}
+                    isWeaponDropTarget={draggedEquipment?.type === 'weapon' && card.type === 'monster'}
+                    className={removingCards.has(card.id) ? 'animate-card-remove' : ''}
+                  />
+                </div>
               </div>
             ) : (
-              <div key={`active-empty-${index}`} style={{ 
-                width: 'clamp(100px, 15vw, 200px)', 
-                height: 'clamp(140px, 21vw, 280px)' 
-              }} />
+              <div 
+                key={`active-empty-${index}`} 
+                className="w-full h-full"
+              />
             );
           })}
           
           {/* Row 2, Col 6: GraveyardZone */}
-          <GraveyardZone
-            onDrop={handleSellCard}
-            isDropTarget={
-              (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
-              (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
-            }
-            discardedCards={discardedCards}
-          />
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+              <GraveyardZone
+                onDrop={handleSellCard}
+                isDropTarget={
+                  (draggedCard !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedCard.type)) ||
+                  (draggedEquipment !== null && (SELLABLE_TYPES as readonly string[]).includes(draggedEquipment.type))
+                }
+                discardedCards={discardedCards}
+              />
+            </div>
+          </div>
 
-          {/* Row 3: Hero Row - 6 slots (Amulet, Equipment×2, Hero, Backpack, GraveyardZone) */}
-          <AmuletSlot
-            amulet={amuletSlot}
-            onDrop={(card) => handleCardToSlot(card, 'slot-amulet')}
-            isDropTarget={draggedCard?.type === 'amulet'}
-          />
-          <EquipmentSlot 
-            type="equipment" 
-            slotId="slot-equipment-1"
-            item={equipmentSlot1}
-            slotBonus={equipmentSlot1Bonus}
-            onDrop={(card) => handleCardToSlot(card, 'slot-equipment-1')}
-            onDragStart={(equipment) => {
-              setDraggedEquipment(equipment);
-              setDraggedCard(null);
-            }}
-            onDragEnd={() => setDraggedEquipment(null)}
-            isDropTarget={draggedCard?.type === 'weapon' || draggedCard?.type === 'shield'}
-          />
-          <HeroCard 
-            hp={hp}
-            maxHp={maxHp}
-            onDrop={handleCardToHero}
-            isDropTarget={draggedCard?.type === 'monster' || draggedCard?.type === 'potion' || draggedCard?.type === 'skill' || draggedCard?.type === 'event'}
-            equippedWeapon={findWeaponSlot()?.item || null}
-            equippedShield={findShieldSlot()?.item || null}
-            image={heroImage}
-            takingDamage={takingDamage}
-            healing={healing}
-          />
-          <EquipmentSlot 
-            type="equipment"
-            slotId="slot-equipment-2"
-            item={equipmentSlot2}
-            slotBonus={equipmentSlot2Bonus}
-            onDrop={(card) => handleCardToSlot(card, 'slot-equipment-2')}
-            onDragStart={(equipment) => {
-              setDraggedEquipment(equipment);
-              setDraggedCard(null);
-            }}
-            onDragEnd={() => setDraggedEquipment(null)}
-            isDropTarget={draggedCard?.type === 'weapon' || draggedCard?.type === 'shield'}
-          />
-          <EquipmentSlot 
-            type="backpack" 
-            slotId="slot-backpack"
-            item={backpackItems[0] || null}
-            backpackCount={backpackItems.length}
-            onDrop={(card) => handleCardToSlot(card, 'slot-backpack')}
-            isDropTarget={backpackItems.length < 10 && draggedCard !== null}
-            onClick={handleBackpackClick}
-          />
+          {/* Row 3: Hero Row - 6 slots (Amulet, Equipment×2, Hero, Backpack, ClassDeck) */}
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+              <AmuletSlot
+                amulet={amuletSlot}
+                onDrop={(card) => handleCardToSlot(card, 'slot-amulet')}
+                isDropTarget={draggedCard?.type === 'amulet'}
+              />
+            </div>
+          </div>
+          
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+              <EquipmentSlot 
+                type="equipment" 
+                slotId="slot-equipment-1"
+                item={equipmentSlot1}
+                slotBonus={equipmentSlot1Bonus}
+                onDrop={(card) => handleCardToSlot(card, 'slot-equipment-1')}
+                onDragStart={(equipment) => {
+                  setDraggedEquipment(equipment);
+                  setDraggedCard(null);
+                }}
+                onDragEnd={() => setDraggedEquipment(null)}
+                isDropTarget={draggedCard?.type === 'weapon' || draggedCard?.type === 'shield'}
+              />
+            </div>
+          </div>
+          
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+              <HeroCard 
+                hp={hp}
+                maxHp={maxHp}
+                onDrop={handleCardToHero}
+                isDropTarget={draggedCard?.type === 'monster' || draggedCard?.type === 'potion' || draggedCard?.type === 'skill' || draggedCard?.type === 'event'}
+                equippedWeapon={findWeaponSlot()?.item || null}
+                equippedShield={findShieldSlot()?.item || null}
+                image={heroImage}
+                takingDamage={takingDamage}
+                healing={healing}
+              />
+            </div>
+          </div>
+          
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+              <EquipmentSlot 
+                type="equipment"
+                slotId="slot-equipment-2"
+                item={equipmentSlot2}
+                slotBonus={equipmentSlot2Bonus}
+                onDrop={(card) => handleCardToSlot(card, 'slot-equipment-2')}
+                onDragStart={(equipment) => {
+                  setDraggedEquipment(equipment);
+                  setDraggedCard(null);
+                }}
+                onDragEnd={() => setDraggedEquipment(null)}
+                isDropTarget={draggedCard?.type === 'weapon' || draggedCard?.type === 'shield'}
+              />
+            </div>
+          </div>
+          
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%]">
+              <EquipmentSlot 
+                type="backpack" 
+                slotId="slot-backpack"
+                item={backpackItems[0] || null}
+                backpackCount={backpackItems.length}
+                onDrop={(card) => handleCardToSlot(card, 'slot-backpack')}
+                isDropTarget={backpackItems.length < 10 && draggedCard !== null}
+                onClick={handleBackpackClick}
+              />
+            </div>
+          </div>
           
           {/* Row 3, Col 6: ClassDeck */}
-          <div className="relative bg-card-foreground/5 rounded-lg" style={{
-            width: 'clamp(80px, 12vw, 160px)', 
-            height: 'clamp(112px, 16.8vw, 224px)'
-          }}>
-            <ClassDeck 
-              classCards={classDeck}
-              className="w-full h-full"
-              deckName="Knight Deck"
-            />
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-[85%] h-[85%] md:w-[88%] md:h-[88%] lg:w-[90%] lg:h-[90%] bg-card-foreground/5 rounded-lg">
+              <ClassDeck 
+                classCards={classDeck}
+                className="w-full h-full"
+                deckName="Knight Deck"
+              />
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Hand Display - Fixed height at bottom */}
+      <div className="flex-shrink-0 h-24 relative">
+        <HandDisplay
+          handCards={handCards}
+          onPlayCard={handlePlayCardFromHand}
+          onDragCardFromHand={handleDragCardFromHand}
+          onDragEndFromHand={handleDragEndFromHand}
+          maxHandSize={7}
+        />
       </div>
 
       <VictoryDefeatModal
@@ -2084,15 +2124,6 @@ export default function GameBoard() {
         open={deckViewerOpen}
         onOpenChange={setDeckViewerOpen}
         remainingCards={[...previewCards, ...activeCards, ...remainingDeck]}
-      />
-
-      {/* Hand Display - fixed at bottom with fan layout */}
-      <HandDisplay
-        handCards={handCards}
-        onPlayCard={handlePlayCardFromHand}
-        onDragCardFromHand={handleDragCardFromHand}
-        onDragEndFromHand={handleDragEndFromHand}
-        maxHandSize={7}
       />
 
       {/* Event Choice Modal */}

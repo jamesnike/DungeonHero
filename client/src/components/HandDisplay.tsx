@@ -29,40 +29,35 @@ export default function HandDisplay({
     onDragEndFromHand?.();
   };
 
-  // Simplified card sizing - use fixed sizes that work on mobile
-  const cardHeight = 140; // Fixed height for mobile compatibility
+  // Responsive card sizing based on viewport
+  const cardHeight = 80; // Base height in pixels
   const cardWidth = cardHeight * 0.714; // Maintain aspect ratio (5:7)
-  const visibleHeight = cardHeight * 0.66; // Show 2/3 of card height
   
   return (
     <div 
-      className="fixed bottom-0 left-0 right-0 pointer-events-none"
+      className="absolute inset-0 pointer-events-none"
       style={{ 
-        height: `${visibleHeight}px`,
         zIndex: 50,
         overflow: hoveredIndex !== null ? 'visible' : 'hidden'
       }}
     >
-      <div className="relative h-full w-full flex items-center justify-center">
-        <div className="relative" style={{ height: `${cardHeight}px`, width: '100%' }}>
+      <div className="relative h-full w-full flex items-end justify-center pb-1">
+        <div className="relative flex items-center justify-center">
           {handCards.map((card, index) => {
             const isHovered = hoveredIndex === index;
             
-            // Position cards centered with overlap, push down to show only 2/3
-            const totalWidth = handCards.length * cardWidth * 0.4;
+            // Position cards centered with overlap
+            const totalWidth = handCards.length * cardWidth * 0.5;
             const startX = -totalWidth / 2;
-            const cardX = startX + (index * cardWidth * 0.4);
-            const pushDown = cardHeight * 0.34; // Push down by 1/3 of card height
-            const hoverLift = isHovered ? -pushDown - 10 : 0; // Lift to show full card
+            const cardX = startX + (index * cardWidth * 0.5);
+            const baseY = isHovered ? -20 : 0; // Lift on hover
             
             return (
               <div
                 key={card.id}
                 className="absolute pointer-events-auto transition-all duration-200 ease-out"
                 style={{
-                  left: '50%',
-                  top: `${pushDown}px`,
-                  transform: `translateX(${cardX}px) translateY(${hoverLift}px) ${isHovered ? 'scale(1.08)' : 'scale(1)'}`,
+                  transform: `translateX(${cardX}px) translateY(${baseY}px) ${isHovered ? 'scale(1.1)' : 'scale(1)'}`,
                   zIndex: isHovered ? 100 : index + 1,
                   height: `${cardHeight}px`,
                   width: `${cardWidth}px`,
