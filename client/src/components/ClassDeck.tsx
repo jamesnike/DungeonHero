@@ -113,7 +113,7 @@ export default function ClassDeck({
         onClick={() => setViewerOpen(true)}
         data-testid="class-deck"
       >
-        <div className="w-full h-full p-2">
+        <div className="w-full h-full">
           {renderCardStack()}
         </div>
       </Card>

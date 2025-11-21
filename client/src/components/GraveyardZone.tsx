@@ -145,7 +145,7 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
           `}
           onClick={() => setViewerOpen(true)}
         >
-          <div className="w-full h-full p-2">
+          <div className="w-full h-full">
             {renderCardStack()}
           </div>
         </Card>

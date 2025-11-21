@@ -1987,7 +1987,10 @@ export default function GameBoard() {
           ))}
           
           {/* Row 2, Col 6: GraveyardZone - with darker background */}
-          <div className="relative bg-card-foreground/5 rounded-lg">
+          <div className="relative bg-card-foreground/5 rounded-lg" style={{
+            width: 'clamp(100px, 15vw, 200px)', 
+            height: 'clamp(140px, 21vw, 280px)'
+          }}>
             <GraveyardZone
               onDrop={handleSellCard}
               isDropTarget={
@@ -2052,7 +2055,10 @@ export default function GameBoard() {
           />
           
           {/* Row 3, Col 6: ClassDeck - with darker background */}
-          <div className="relative bg-card-foreground/5 rounded-lg">
+          <div className="relative bg-card-foreground/5 rounded-lg" style={{
+            width: 'clamp(80px, 12vw, 160px)', 
+            height: 'clamp(112px, 16.8vw, 224px)'
+          }}>
             <ClassDeck 
               classCards={classDeck}
               className="w-full h-full"
