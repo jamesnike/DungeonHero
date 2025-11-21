@@ -39,7 +39,7 @@ export default function HandDisplay({
       className="fixed bottom-0 left-0 right-0 pointer-events-none"
       style={{ 
         height: `${visibleHeight}px`,
-        zIndex: 20,
+        zIndex: 50,
       }}
     >
       <div className="relative h-full w-full flex items-end justify-center px-2">
