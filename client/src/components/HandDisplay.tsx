@@ -61,17 +61,17 @@ export default function HandDisplay({
 
   return (
     <>
-      {/* Main Hand Display - Lower position with overflow */}
+      {/* Main Hand Display - Show 2/3 of cards, allow overflow on hover */}
       <div 
-        className="fixed left-0 right-0 pointer-events-none overflow-hidden"
+        className="fixed left-0 right-0 pointer-events-none"
         style={{ 
           bottom: '0px', 
-          height: '140px', 
+          height: '180px', 
           zIndex: 20,
-          paddingBottom: '20px'
+          overflow: hoveredIndex !== null ? 'visible' : 'hidden'
         }}
       >
-        <div className="relative h-full flex items-end justify-center" style={{ paddingBottom: '50px' }}>
+        <div className="relative h-full flex items-end justify-center" style={{ paddingBottom: '20px' }}>
           {/* Cards container with perspective */}
           <div 
             ref={containerRef}
@@ -95,9 +95,9 @@ export default function HandDisplay({
                   style={{
                     transform: `
                       translateX(${transform.translateX}px)
-                      translateY(${isHovered ? -80 : transform.translateY}px)
+                      translateY(${isHovered ? -120 : transform.translateY + 60}px)
                       rotate(${transform.rotate}deg)
-                      scale(${isHovered ? 1.1 : 1})
+                      scale(${isHovered ? 1.15 : 1})
                     `,
                     zIndex: isHovered ? 100 : index + 1,
                     transformOrigin: 'bottom center',
