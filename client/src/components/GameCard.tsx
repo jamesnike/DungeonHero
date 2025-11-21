@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from 'lucide-react';
+import { initMobileDrag } from '../utils/mobileDragDrop';
 
 export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'amulet' | 'magic' | 'event';
 
@@ -40,6 +41,27 @@ interface GameCardProps {
 
 export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, isWeaponDropTarget, className = '' }: GameCardProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Set up mobile drag support
+  useEffect(() => {
+    if (!cardRef.current) return;
+    
+    const cleanup = initMobileDrag(
+      cardRef.current,
+      { type: 'card', data: card },
+      () => {
+        setIsDragging(true);
+        onDragStart?.(card);
+      },
+      () => {
+        setIsDragging(false);
+        onDragEnd?.();
+      }
+    );
+    
+    return cleanup;
+  }, [card, onDragStart, onDragEnd]);
 
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
@@ -125,6 +147,7 @@ export default function GameCard({ card, onDragStart, onDragEnd, onWeaponDrop, i
 
   return (
     <div
+      ref={cardRef}
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
