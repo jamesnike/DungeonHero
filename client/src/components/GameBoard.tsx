@@ -1987,7 +1987,7 @@ export default function GameBoard() {
           ))}
           
           {/* Row 2, Col 6: GraveyardZone - with darker background */}
-          <div className="relative bg-card-foreground/5 rounded-lg p-2">
+          <div className="relative bg-card-foreground/5 rounded-lg">
             <GraveyardZone
               onDrop={handleSellCard}
               isDropTarget={
@@ -2052,7 +2052,7 @@ export default function GameBoard() {
           />
           
           {/* Row 3, Col 6: ClassDeck - with darker background */}
-          <div className="relative bg-card-foreground/5 rounded-lg p-2">
+          <div className="relative bg-card-foreground/5 rounded-lg">
             <ClassDeck 
               classCards={classDeck}
               className="w-full h-full"
