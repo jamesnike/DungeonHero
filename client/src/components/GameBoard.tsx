@@ -1918,7 +1918,7 @@ export default function GameBoard() {
         onNewGame={initGame}
       />
       {/* Main game area - adjust padding for hand area at bottom */}
-      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(140px, 18vh, 240px) + 2vh)' }}>
+      <div className="flex-1 flex flex-col items-center justify-center" style={{ padding: '2vh 2vw', paddingBottom: 'calc(clamp(220px, 25vh, 320px) + 2vh)' }}>
         {/* 3×6 Card Grid - Uniform Sizing */}
         <div className="grid w-full" style={{ 
           gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
@@ -1987,13 +1987,7 @@ export default function GameBoard() {
           ))}
           
           {/* Row 2, Col 6: GraveyardZone - with darker background */}
-          <div 
-            className="relative bg-card-foreground/5 rounded-lg p-2"
-            style={{ 
-              width: 'clamp(100px, 15vw, 200px)', 
-              height: 'clamp(140px, 21vw, 280px)' 
-            }}
-          >
+          <div className="relative bg-card-foreground/5 rounded-lg p-2">
             <GraveyardZone
               onDrop={handleSellCard}
               isDropTarget={
@@ -2058,13 +2052,7 @@ export default function GameBoard() {
           />
           
           {/* Row 3, Col 6: ClassDeck - with darker background */}
-          <div 
-            className="relative bg-card-foreground/5 rounded-lg p-2"
-            style={{ 
-              width: 'clamp(100px, 15vw, 200px)', 
-              height: 'clamp(140px, 21vw, 280px)' 
-            }}
-          >
+          <div className="relative bg-card-foreground/5 rounded-lg p-2">
             <ClassDeck 
               classCards={classDeck}
               className="w-full h-full"

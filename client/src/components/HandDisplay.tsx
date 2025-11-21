@@ -65,7 +65,7 @@ export default function HandDisplay({
       {/* Main Hand Display - Elevated position */}
       <div 
         className="fixed left-0 right-0 pointer-events-none"
-        style={{ bottom: '120px', height: '200px', zIndex: 20 }}
+        style={{ bottom: '200px', height: '200px', zIndex: 20 }}
       >
         <div className="relative h-full flex items-end justify-center pb-4">
           {/* Hand count indicator */}
@@ -123,20 +123,6 @@ export default function HandDisplay({
               );
             })}
 
-            {/* Empty hand message */}
-            {handCards.length === 0 && (
-              <div className="pointer-events-auto">
-                <div className="bg-muted/50 backdrop-blur-sm rounded-lg px-6 py-4 text-center">
-                  <Hand className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
-                  <p className="text-sm text-muted-foreground">
-                    Your hand is empty
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Draw from backpack to add cards
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
