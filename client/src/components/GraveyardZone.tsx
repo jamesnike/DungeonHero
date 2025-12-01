@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Eye, Skull } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,17 +11,23 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { GameCardData } from './GameCard';
 import { initMobileDrop } from '../utils/mobileDragDrop';
-import cardBackImage from '@assets/generated_images/card_back_design.png';
+import StackedCardPile from './StackedCardPile';
+import { cn } from '@/lib/utils';
 
 interface GraveyardZoneProps {
   onDrop?: (item: any) => void;
   isDropTarget?: boolean;
   discardedCards: GameCardData[];
+  shouldHighlight?: boolean;
+  onCardSelect?: (card: GameCardData) => void;
 }
 
-export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: GraveyardZoneProps) {
+export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect }: GraveyardZoneProps) {
+  const [dragDepth, setDragDepth] = React.useState(0);
+  const isOver = dragDepth > 0;
   const [viewerOpen, setViewerOpen] = useState(false);
   const graveyardRef = useRef<HTMLDivElement>(null);
+  const isHighlightActive = shouldHighlight && isDropTarget && isOver;
   
   // Set up mobile drop support
   useEffect(() => {
@@ -39,12 +45,30 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
     return cleanup;
   }, [onDrop]);
   
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (isDropTarget) {
+      setDragDepth(prev => prev + 1);
+    }
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    if (isDropTarget && dragDepth === 0) {
+      setDragDepth(1);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (isDropTarget) {
+      setDragDepth(prev => Math.max(0, prev - 1));
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setDragDepth(0);
     const cardData = e.dataTransfer.getData('card');
     const equipmentData = e.dataTransfer.getData('equipment');
     
@@ -75,100 +99,42 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
     }
   };
 
-  // Render card stack visualization with card backs
-  const renderCardStack = () => {
-    const cardCount = discardedCards.length;
-    const hasCards = cardCount > 0;
-    // Show max 5 card layers for visual effect
-    const visibleStackDepth = Math.min(cardCount, 5);
-    
-    return (
-      <div className="relative w-full h-full">
-        {/* Card stack effect - render multiple card backs */}
-        {hasCards && [...Array(visibleStackDepth)].map((_, i) => {
-          const isTopCard = i === visibleStackDepth - 1;
-          const offset = (visibleStackDepth - 1 - i) * 2; // Reverse order so top card is last
-          
-          return (
-            <div
-              key={i}
-              className="absolute inset-0"
-              style={{
-                transform: `translateY(${offset}px) translateX(${offset * 0.5}px)`,
-                zIndex: i
-              }}
-            >
-              <img 
-                src={cardBackImage}
-                alt=""
-                className={`w-full h-full object-cover rounded-lg ${
-                  isTopCard ? '' : 'brightness-90'
-                }`}
-                style={{
-                  filter: isTopCard ? '' : `brightness(${0.9 - (visibleStackDepth - 1 - i) * 0.05})`
-                }}
-              />
-            </div>
-          );
-        })}
-        
-        {/* Empty state - show a single semi-transparent card back */}
-        {!hasCards && (
-          <img 
-            src={cardBackImage}
-            alt=""
-            className="w-full h-full object-cover rounded-lg opacity-30"
-          />
-        )}
-        
-        {/* Overlay with card count */}
-        <div className={`
-          absolute inset-0 flex items-center justify-center rounded-lg
-          ${isDropTarget ? 'bg-destructive/40 ring-4 ring-destructive' : ''}
-        `}>
-          {/* Dark overlay to make count visible */}
-          {hasCards && (
-            <div className="absolute inset-0 bg-black/40 rounded-lg" />
-          )}
-          
-          {/* Card count display */}
-          <div className="relative z-10 text-center">
-            {hasCards ? (
-              <div className="text-6xl font-bold text-white drop-shadow-2xl">
-                {cardCount}
-              </div>
-            ) : (
-              <div className="text-lg font-medium text-muted-foreground/70">
-                Empty
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Click indicator */}
-        <div className="absolute bottom-2 right-2 bg-black/50 rounded-full p-1">
-          <Eye className="w-3 h-3 text-white/70" />
-        </div>
-      </div>
-    );
-  };
-
   return (
     <>
-      <div 
+      <Card
         ref={graveyardRef}
+        onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className="cursor-pointer transition-all duration-200 hover:scale-105"
-        style={{ 
-          width: 'clamp(80px, 12vw, 160px)', 
-          height: 'clamp(112px, 16.8vw, 224px)' 
-        }}
         onClick={() => setViewerOpen(true)}
         data-testid="graveyard-zone"
+        className={cn(
+          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/80 via-slate-900/50 to-zinc-900/30 transition-all duration-200',
+          isHighlightActive && 'ring-4 ring-destructive/60 animate-pulse',
+          isHighlightActive && 'scale-105 ring-destructive bg-destructive/20',
+          !isDropTarget && 'hover:scale-[1.01]'
+        )}
       >
-        {renderCardStack()}
-      </div>
+        <StackedCardPile 
+          count={discardedCards.length} 
+          className="rounded-xl" 
+          variant="muted"
+          label="Graveyard"
+        />
+        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-slate-200">
+            <span className="font-semibold">Graveyard</span>
+            <Badge variant="outline" className="bg-black/40 text-white font-mono text-sm px-2 py-0.5">
+              {discardedCards.length}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-end gap-2 text-white/90">
+            <Eye className="w-4 h-4" />
+            <span className="text-[11px] font-medium">View</span>
+          </div>
+        </div>
+      </Card>
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="graveyard-viewer-modal">
@@ -197,7 +163,17 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards }: 
                     {(cards as GameCardData[]).map((card: GameCardData, idx: number) => (
                       <Card 
                         key={`${card.id}-${idx}`}
-                        className="p-2 border-2 border-card-border overflow-hidden"
+                        className={`p-2 border-2 border-card-border overflow-hidden ${onCardSelect ? 'cursor-pointer hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : ''}`.trim()}
+                        onClick={() => onCardSelect?.(card)}
+                        role={onCardSelect ? 'button' : undefined}
+                        tabIndex={onCardSelect ? 0 : undefined}
+                        onKeyDown={event => {
+                          if (!onCardSelect) return;
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onCardSelect(card);
+                          }
+                        }}
                       >
                         <div className="relative aspect-square bg-gradient-to-b from-muted to-card overflow-hidden rounded-sm mb-1">
                           {card.image && (

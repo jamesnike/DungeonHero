@@ -25,9 +25,9 @@ export function generateKnightDeck(): KnightCardData[] {
   const deck: KnightCardData[] = [];
   let id = 0;
 
-  // === BALANCED 15-CARD KNIGHT DECK ===
+  // === BALANCED 20-CARD KNIGHT DECK ===
   
-  // === WEAPONS (5 cards) ===
+  // === WEAPONS (7 cards) ===
   deck.push({
     id: `knight-${id++}`,
     type: 'weapon',
@@ -91,8 +91,34 @@ export function generateKnightDeck(): KnightCardData[] {
     maxDurability: 2,
   });
 
+  deck.push({
+    id: `knight-${id++}`,
+    type: 'weapon',
+    name: 'Stormbreaker Hammer',
+    value: 7,
+    image: axeImage,
+    classCard: true,
+    description: 'Each hit adds +1 damage for rest of combat',
+    weaponBonus: 1,
+    durability: 2,
+    maxDurability: 2,
+  });
+
+  deck.push({
+    id: `knight-${id++}`,
+    type: 'weapon',
+    name: 'Parrying Blade',
+    value: 3,
+    image: swordImage,
+    classCard: true,
+    description: '+1 shield while equipped, 4 uses',
+    shieldBonus: 1,
+    durability: 4,
+    maxDurability: 4,
+  });
+
   
-  // === SHIELDS (4 cards) ===
+  // === SHIELDS (5 cards) ===
   deck.push({
     id: `knight-${id++}`,
     type: 'shield',
@@ -143,8 +169,21 @@ export function generateKnightDeck(): KnightCardData[] {
     maxDurability: 1,
   });
 
+  deck.push({
+    id: `knight-${id++}`,
+    type: 'shield',
+    name: 'Guardian Aegis',
+    value: 4,
+    image: heavyShieldImage,
+    classCard: true,
+    description: 'Reflects 1 damage when blocking',
+    damageReflect: 1,
+    durability: 2,
+    maxDurability: 2,
+  });
+
   
-  // === MAGIC CARDS (3 cards) ===
+  // === MAGIC CARDS (4 cards) ===
   deck.push({
     id: `knight-${id++}`,
     type: 'magic',
@@ -184,7 +223,20 @@ export function generateKnightDeck(): KnightCardData[] {
     knightEffect: 'healOnMonsterKill',
   });
 
-  // === EQUIPMENT/ARMOR CARDS (3 cards) ===
+  deck.push({
+    id: `knight-${id++}`,
+    type: 'magic',
+    name: 'Battle Hymn',
+    value: 0,
+    image: skillScrollImage,
+    classCard: true,
+    description: 'Next two attacks +2 damage',
+    magicType: 'instant',
+    magicEffect: 'Double surge +2',
+    knightEffect: 'doubleSurge',
+  });
+
+  // === EQUIPMENT/ARMOR CARDS (4 cards) ===
   deck.push({
     id: `knight-${id++}`,
     type: 'shield',
@@ -207,6 +259,23 @@ export function generateKnightDeck(): KnightCardData[] {
     classCard: true,
     description: 'All shields get +1 defense',
     effect: 'defense',
+    amuletAuraBonus: {
+      defense: 1,
+    },
+  });
+
+  deck.push({
+    id: `knight-${id++}`,
+    type: 'amulet',
+    name: 'Lionheart Emblem',
+    value: 1,
+    image: guardianAmuletImage,
+    classCard: true,
+    description: '+2 maximum HP while equipped',
+    effect: 'health',
+    amuletAuraBonus: {
+      maxHp: 2,
+    },
   });
 
   deck.push({
@@ -218,6 +287,9 @@ export function generateKnightDeck(): KnightCardData[] {
     classCard: true,
     description: 'All weapons get +1 attack',
     effect: 'attack',
+    amuletAuraBonus: {
+      attack: 1,
+    },
   });
 
   // Shuffle the deck
@@ -236,6 +308,8 @@ export function createKnightDiscoveryEvents(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       { text: 'Search for weapons (Draw 3 Knight cards)', effect: 'drawKnight3' },
+      { text: 'Inspect artifacts (Draw 1 Knight card)', effect: 'drawKnight1' },
+      { text: 'Breach the inner vault (Draw 4 Knight cards)', effect: 'drawKnight4' },
       { text: 'Leave', effect: 'none' }
     ]
   });
@@ -248,6 +322,7 @@ export function createKnightDiscoveryEvents(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       { text: 'Open cache (Draw and equip Knight card)', effect: 'equipKnight' },
+      { text: 'Loot supplies (Draw 2 Knight equipment cards to backpack)', effect: 'drawEquipment' },
       { text: 'Leave', effect: 'none' }
     ]
   });
@@ -260,6 +335,8 @@ export function createKnightDiscoveryEvents(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       { text: 'Train (Draw Knight skill, use immediately)', effect: 'useKnightSkill' },
+      { text: 'Study tactics (Draw Knight skill to backpack)', effect: 'drawSkill' },
+      { text: 'Share techniques (Draw 2 Knight cards)', effect: 'drawClass2' },
       { text: 'Leave', effect: 'none' }
     ]
   });

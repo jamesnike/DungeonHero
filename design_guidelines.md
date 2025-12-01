@@ -8,6 +8,14 @@
 
 ---
 
+## Card Authenticity & Lifecycle
+
+- **Physical Card Rule**: Each card is unique and exists exactly once per run. Cards can only move between deck, preview row, active row, hero slots, backpack, equipment slots, and the graveyard—never duplicated or conjured.
+- **Use vs. Discard**: When a card is consumed (e.g., weapon swing, shield block, potion drink, event resolution), it must travel to the graveyard with the same identity so players can audit its history.
+- **Inventory Flow**: Backpack storage and equipment slots preserve the original card stats, durability, and id. Moving cards between zones reuses the same object; the graveyard is the authoritative log of retired cards.
+
+---
+
 ## Typography
 
 **Font Families** (via Google Fonts CDN):

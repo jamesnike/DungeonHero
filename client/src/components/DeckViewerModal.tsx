@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,15 +9,18 @@ import {
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { type GameCardData } from './GameCard';
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from 'lucide-react';
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2 } from 'lucide-react';
+
+const DEV_MODE = process.env.NODE_ENV !== 'production';
 
 interface DeckViewerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   remainingCards: GameCardData[];
+  onCardSelect?: (card: GameCardData) => void;
 }
 
-export default function DeckViewerModal({ open, onOpenChange, remainingCards }: DeckViewerModalProps) {
+export default function DeckViewerModal({ open, onOpenChange, remainingCards, onCardSelect }: DeckViewerModalProps) {
   const cardsByType = {
     monster: remainingCards.filter(c => c.type === 'monster'),
     weapon: remainingCards.filter(c => c.type === 'weapon'),
@@ -24,8 +28,19 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards }: 
     potion: remainingCards.filter(c => c.type === 'potion'),
     amulet: remainingCards.filter(c => c.type === 'amulet'),
     skill: remainingCards.filter(c => c.type === 'skill'),
+    magic: remainingCards.filter(c => c.type === 'magic'),
     event: remainingCards.filter(c => c.type === 'event'),
   };
+
+  useEffect(() => {
+    if (!DEV_MODE || !open) return;
+    const counts = remainingCards.reduce<Record<string, number>>((acc, card) => {
+      acc[card.type] = (acc[card.type] ?? 0) + 1;
+      return acc;
+    }, {});
+    // eslint-disable-next-line no-console
+    console.debug('[DeckViewerModal] remaining card counts', counts);
+  }, [open, remainingCards]);
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -41,6 +56,8 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards }: 
         return <Sparkles className="w-5 h-5 text-purple-500" />;
       case 'skill':
         return <Zap className="w-5 h-5 text-cyan-500" />;
+      case 'magic':
+        return <Wand2 className="w-5 h-5 text-emerald-400" />;
       case 'event':
         return <Scroll className="w-5 h-5 text-violet-500" />;
       default:
@@ -78,7 +95,17 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards }: 
                   {cards.map((card) => (
                     <Card
                       key={card.id}
-                      className="p-2 flex flex-col items-center gap-1 bg-muted/50 hover-elevate"
+                      className={`p-2 flex flex-col items-center gap-1 bg-muted/50 hover-elevate ${onCardSelect ? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : ''}`.trim()}
+                      onClick={() => onCardSelect?.(card)}
+                      role={onCardSelect ? 'button' : undefined}
+                      tabIndex={onCardSelect ? 0 : undefined}
+                      onKeyDown={event => {
+                        if (!onCardSelect) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          onCardSelect(card);
+                        }
+                      }}
                     >
                       {card.image && (
                         <div className="w-full aspect-square rounded overflow-hidden bg-gradient-to-b from-muted to-card">

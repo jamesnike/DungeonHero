@@ -230,6 +230,70 @@
     }
   }
   
+  @keyframes bleed-splatter {
+    0% {
+      opacity: 0;
+      transform: scale(0.35) rotate(-8deg);
+      filter: blur(0px);
+    }
+    35% {
+      opacity: 0.95;
+      transform: scale(1) rotate(2deg);
+      filter: blur(0px);
+    }
+    65% {
+      opacity: 0.85;
+      transform: scale(1.15) rotate(6deg);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.4) rotate(10deg);
+      filter: blur(1.5px);
+    }
+  }
+
+  @keyframes weapon-swing {
+    0% {
+      opacity: 0;
+      transform: rotate(-48deg) translateX(-65%);
+    }
+    20% {
+      opacity: 0.9;
+      transform: rotate(-12deg) translateX(-10%);
+    }
+    55% {
+      opacity: 1;
+      transform: rotate(6deg) translateX(25%);
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(52deg) translateX(70%);
+    }
+  }
+
+  @keyframes shield-block {
+    0% {
+      opacity: 0;
+      transform: scale(0.45);
+      box-shadow: 0 0 0 rgba(59, 130, 246, 0.15);
+    }
+    40% {
+      opacity: 0.9;
+      transform: scale(0.95);
+      box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+    }
+    70% {
+      opacity: 0.85;
+      transform: scale(1.2);
+      box-shadow: 0 0 40px rgba(96, 165, 250, 0.35);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.5);
+      box-shadow: 0 0 0 rgba(59, 130, 246, 0);
+    }
+  }
+
   .animate-card-remove {
     animation: card-remove 300ms ease-out forwards;
   }
@@ -240,6 +304,319 @@
   
   .animate-heal-glow {
     animation: heal-glow 500ms ease-out;
+  }
+
+  :root {
+    --combat-animation-stagger: 160ms;
+  }
+
+  .combat-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 40;
+  }
+
+  .combat-overlay__shape {
+    display: block;
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+
+  .combat-overlay__shape[data-stagger="1"] {
+    animation-delay: var(--combat-animation-stagger, 160ms);
+  }
+
+  .combat-overlay__shape[data-stagger="2"] {
+    animation-delay: calc(var(--combat-animation-stagger, 160ms) * 2);
+  }
+
+  @keyframes bleed-drip {
+    0% {
+      opacity: 0;
+      transform: translateY(-20%) scaleY(0.2);
+    }
+    30% {
+      opacity: 0.8;
+      transform: translateY(10%) scaleY(1);
+    }
+    60% {
+      opacity: 0.9;
+      transform: translateY(35%) scaleY(1.15);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(70%) scaleY(0.7);
+    }
+  }
+
+  @keyframes bleed-ring {
+    0% {
+      opacity: 0.4;
+      transform: scale(0.6);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.4);
+    }
+  }
+
+  .combat-overlay__shape--bleed {
+    width: 70%;
+    aspect-ratio: 1 / 1;
+    background: radial-gradient(circle at 30% 30%, rgba(248, 113, 113, 0.9), rgba(153, 27, 27, 0.8));
+    border-radius: 50%;
+    mix-blend-mode: multiply;
+    animation: bleed-splatter 1100ms cubic-bezier(0.25, 0.9, 0.3, 1) forwards;
+    filter: drop-shadow(0 0 12px rgba(153, 27, 27, 0.45));
+  }
+
+  .combat-overlay__shape--swing {
+    width: 75%;
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(250, 204, 21, 0.9), rgba(251, 191, 36, 0.4), transparent);
+    animation: weapon-swing 900ms cubic-bezier(0.2, 0.85, 0.25, 1) forwards;
+  }
+
+  @keyframes weapon-echo {
+    0% {
+      opacity: 0;
+      transform: rotate(-35deg) translateX(-40%);
+    }
+    25% {
+      opacity: 0.8;
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(35deg) translateX(50%);
+    }
+  }
+
+  @keyframes weapon-spark {
+    0% {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    30% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.4);
+    }
+  }
+
+  .combat-overlay__shape--block {
+    width: 65%;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    border: 4px solid rgba(59, 130, 246, 0.8);
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 65%);
+    animation: shield-block 1000ms cubic-bezier(0.2, 0.85, 0.25, 1) forwards;
+  }
+
+  @keyframes shield-ripple {
+    0% {
+      opacity: 0.7;
+      transform: scale(0.6);
+      border-width: 2px;
+    }
+    50% {
+      opacity: 0.4;
+      transform: scale(1.1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.6);
+      border-width: 1px;
+    }
+  }
+
+  @keyframes shield-spark {
+    0% {
+      opacity: 0;
+      transform: scale(0.4) rotate(0deg);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1) rotate(8deg);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.3) rotate(18deg);
+    }
+  }
+
+  .combat-overlay__shape--bleed-drip {
+    position: absolute;
+    width: 12%;
+    height: 55%;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 152, 152, 0.9), rgba(190, 24, 93, 0.7));
+    animation: bleed-drip 1200ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+    filter: drop-shadow(0 4px 6px rgba(153, 27, 27, 0.35));
+  }
+
+  .combat-overlay__shape--bleed-ring {
+    width: 85%;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    border: 2px solid rgba(248, 113, 113, 0.4);
+    animation: bleed-ring 1250ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+  }
+
+  .combat-overlay__shape--swing-echo {
+    width: 85%;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.5), transparent);
+    animation: weapon-echo 1050ms cubic-bezier(0.22, 0.9, 0.32, 1) forwards;
+  }
+
+  .combat-overlay__shape--swing-spark {
+    width: 20%;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(252, 211, 77, 0.8), transparent 60%);
+    animation: weapon-spark 800ms cubic-bezier(0.42, 0, 0.58, 1) forwards;
+  }
+
+  .combat-overlay[data-swing-variant="1"] .combat-overlay__shape--swing,
+  .combat-overlay[data-swing-variant="1"] .combat-overlay__shape--swing-echo {
+    animation-direction: reverse;
+  }
+
+  .combat-overlay[data-swing-variant="1"] .combat-overlay__shape--swing-spark {
+    animation-delay: calc(var(--combat-animation-stagger, 160ms) * 0.5);
+  }
+
+  .combat-overlay__shape--block-ripple {
+    width: 75%;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    border: 2px solid rgba(147, 197, 253, 0.6);
+    animation: shield-ripple 1250ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+  }
+
+  .combat-overlay__shape--block-spark {
+    width: 18%;
+    aspect-ratio: 1 / 1;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(191, 219, 254, 0.9), transparent 65%);
+    animation: shield-spark 950ms cubic-bezier(0.42, 0, 0.58, 1) forwards;
+    box-shadow: 0 0 14px rgba(191, 219, 254, 0.5);
+  }
+
+  .combat-overlay[data-block-variant="1"] .combat-overlay__shape--block {
+    animation-delay: calc(var(--combat-animation-stagger, 160ms) * 0.5);
+  }
+
+  .combat-overlay[data-block-variant="1"] .combat-overlay__shape--block-ripple {
+    animation-delay: calc(var(--combat-animation-stagger, 160ms) * 1.25);
+  }
+
+  .engaged-monster {
+    position: relative;
+  }
+
+  .engaged-monster .shadcn-card {
+    position: relative;
+  }
+
+  .engaged-monster .shadcn-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(145deg, rgba(248, 113, 113, 0.2), rgba(190, 24, 93, 0.25));
+    box-shadow: inset 0 0 25px rgba(190, 24, 93, 0.35);
+    opacity: 0.85;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+    z-index: 5;
+    transition: opacity 200ms ease;
+  }
+
+  .engaged-monster:hover .shadcn-card::after {
+    opacity: 0.95;
+  }
+
+  @keyframes preview-drop {
+    0% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(115%) scale(0.95);
+      opacity: 0;
+    }
+  }
+
+  .animate-preview-drop {
+    animation: preview-drop 650ms ease-in forwards;
+    pointer-events: none;
+  }
+
+  @keyframes preview-graveyard {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(var(--graveyard-offset-x, 70px), var(--graveyard-offset-y, 140px)) scale(0.6);
+      opacity: 0;
+    }
+  }
+
+  .animate-preview-graveyard {
+    animation: preview-graveyard 450ms ease-in forwards;
+    pointer-events: none;
+  }
+
+  @keyframes active-landing {
+    0% {
+      transform: translateY(-35%) scale(0.9);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
+
+  .animate-active-landing {
+    animation: active-landing 450ms ease-out;
+  }
+
+  @keyframes preview-deal {
+    0% {
+      transform: translateY(-25%) scale(0.85);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
+
+  .animate-preview-deal {
+    animation: preview-deal 550ms ease-out;
+  }
+
+  .class-flight-card {
+    pointer-events: none;
+    will-change: transform, opacity;
+    filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.45));
+    transition: opacity 220ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   
   @keyframes modal-fade-in {
@@ -280,6 +657,19 @@
     content: attr(data-placeholder);
     color: hsl(var(--muted-foreground));
     pointer-events: none;
+  }
+
+  .game-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+  }
+
+  .hero-row-frame {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 1.75rem;
+    background-color: hsl(var(--card) / 0.35);
+    transition: box-shadow 300ms ease, border-color 300ms ease, outline-color 300ms ease;
   }
 
   /* .no-default-hover-elevate/no-default-active-elevate is an escape hatch so consumers of
@@ -357,5 +747,11 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+
+  .dice-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
   }
 }

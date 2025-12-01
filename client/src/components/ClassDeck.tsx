@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Shield, Eye, Layers } from 'lucide-react';
+import { Shield, Eye } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -10,86 +10,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { GameCardData } from './GameCard';
+import StackedCardPile from './StackedCardPile';
+import { cn } from '@/lib/utils';
 
 interface ClassDeckProps {
   classCards?: GameCardData[];
   className?: string;
   deckName?: string;
+  onCardSelect?: (card: GameCardData) => void;
 }
 
 export default function ClassDeck({ 
   classCards = [], 
   className = '',
-  deckName = 'Knight Deck'
+  deckName = 'Knight Deck',
+  onCardSelect,
 }: ClassDeckProps) {
   const [viewerOpen, setViewerOpen] = useState(false);
-  
-  // Create stacked cards visual effect with enhanced thickness
-  const renderCardStack = () => {
-    const hasCards = classCards.length > 0;
-    const topCard = hasCards ? classCards[0] : null;
-    const stackDepth = Math.min(classCards.length, 8); // Cap at 8 for performance
-    
-    return (
-      <div className="relative w-full h-full">
-        {/* Enhanced stack effect - render multiple shadow layers based on card count */}
-        {hasCards && [...Array(Math.floor(stackDepth / 2))].map((_, i) => (
-          <div
-            key={i}
-            className="absolute inset-0 rounded-lg"
-            style={{
-              background: `linear-gradient(to bottom, hsl(var(--primary) / ${0.03 + i * 0.02}), hsl(var(--primary) / ${0.05 + i * 0.02}))`,
-              transform: `translateY(${(i + 1) * 2}px) translateX(${(i + 1) * 1}px)`,
-              boxShadow: `0 ${i + 1}px ${(i + 1) * 2}px rgba(0, 0, 0, 0.08)`,
-              zIndex: -i - 1
-            }}
-          />
-        ))}
-        
-        {/* Top card or empty state */}
-        <div className="relative w-full h-full bg-gradient-to-b from-primary/15 to-primary/20 rounded-lg border-2 border-primary/30 flex flex-col items-center justify-center p-2">
-          {hasCards && topCard ? (
-            <>
-              {/* Show top card image if available */}
-              {topCard.image && (
-                <div className="absolute inset-2 opacity-30">
-                  <img 
-                    src={topCard.image} 
-                    alt={topCard.name}
-                    className="w-full h-full object-cover rounded"
-                  />
-                </div>
-              )}
-              <div className="relative z-10 text-center">
-                <Shield className="w-8 h-8 text-primary mb-1" />
-                <span className="text-xs font-medium text-primary">{deckName}</span>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Empty deck state */}
-              <Shield className="w-8 h-8 text-primary/50 mb-1" />
-              <span className="text-xs font-medium text-primary/70">{deckName}</span>
-              <span className="text-xs text-muted-foreground">Empty</span>
-            </>
-          )}
-        </div>
-        
-        {/* Card count badge */}
-        {classCards.length > 0 && (
-          <Badge 
-            variant="default"
-            className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center p-0 rounded-full text-xs bg-primary"
-          >
-            {classCards.length}
-          </Badge>
-        )}
-        
-        {/* View indicator */}
-        <Eye className="absolute bottom-1 right-1 w-4 h-4 text-primary/30" />
-      </div>
-    );
-  };
   
   // Group cards by type for viewer
   const groupedCards = classCards.reduce((acc, card) => {
@@ -104,17 +41,33 @@ export default function ClassDeck({
   return (
     <>
       <Card 
-        className={`
-          relative cursor-pointer transition-all duration-200
-          hover-elevate active-elevate-2
-          bg-card border-2 border-card-border
-          ${className}
-        `}
+        className={cn(
+          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-all duration-200 hover:scale-[1.01]',
+          className
+        )}
         onClick={() => setViewerOpen(true)}
         data-testid="class-deck"
       >
-        <div className="w-full h-full">
-          {renderCardStack()}
+        <StackedCardPile 
+          count={classCards.length} 
+          className="rounded-xl"
+          variant="bright"
+          label={deckName}
+        />
+        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-indigo-100">
+            <span className="font-semibold flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              {deckName}
+            </span>
+            <Badge variant="outline" className="bg-black/30 text-white font-mono text-sm px-2 py-0.5">
+              {classCards.length}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-end gap-2 text-indigo-100">
+            <Eye className="w-4 h-4" />
+            <span className="text-[11px] font-medium">Browse</span>
+          </div>
         </div>
       </Card>
 
@@ -151,7 +104,17 @@ export default function ClassDeck({
                     {cards.map((card, idx) => (
                       <Card 
                         key={`${card.id}-${idx}`}
-                        className="p-2 border-2 border-card-border overflow-hidden"
+                        className={`p-2 border-2 border-card-border overflow-hidden ${onCardSelect ? 'cursor-pointer hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : ''}`.trim()}
+                        onClick={() => onCardSelect?.(card)}
+                        role={onCardSelect ? 'button' : undefined}
+                        tabIndex={onCardSelect ? 0 : undefined}
+                        onKeyDown={event => {
+                          if (!onCardSelect) return;
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onCardSelect(card);
+                          }
+                        }}
                       >
                         <div className="relative aspect-square bg-gradient-to-b from-primary/10 to-primary/5 overflow-hidden rounded-sm mb-1">
                           {card.image && (

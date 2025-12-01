@@ -1,22 +1,38 @@
 import { Card } from '@/components/ui/card';
-import { Sparkles, Heart, Sword, Shield } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { Sparkles } from 'lucide-react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
+import GameCard, { GameCardData } from './GameCard';
 
 interface AmuletSlotProps {
-  amulet: { 
-    name: string; 
-    value: number; 
-    image?: string; 
-    type: 'amulet'; 
-    effect: 'health' | 'attack' | 'defense';
-  } | null;
+  amulets: (GameCardData & { type: 'amulet' })[];
+  maxSlots?: number;
   onDrop?: (card: any) => void;
   isDropTarget?: boolean;
+  onDragStart?: (card: GameCardData) => void;
+  onDragEnd?: () => void;
 }
 
-export default function AmuletSlot({ amulet, onDrop, isDropTarget }: AmuletSlotProps) {
+export default function AmuletSlot({
+  amulets,
+  maxSlots = 2,
+  onDrop,
+  isDropTarget,
+  onDragStart,
+  onDragEnd,
+}: AmuletSlotProps) {
+  const [dragDepth, setDragDepth] = React.useState(0);
+  const isOver = dragDepth > 0;
   const amuletRef = useRef<HTMLDivElement>(null);
+  const effectiveMaxSlots = Math.max(1, maxSlots);
+
+  const preparedAmulets = useMemo(() => {
+    return amulets
+      .slice(-effectiveMaxSlots)
+      .map(card => ({ ...card, fromSlot: 'amulet' as const }));
+  }, [amulets, effectiveMaxSlots]);
+  const hasAmulets = preparedAmulets.length > 0;
+  const isStackedView = preparedAmulets.length >= 2;
   
   // Set up mobile drop support
   useEffect(() => {
@@ -35,12 +51,30 @@ export default function AmuletSlot({ amulet, onDrop, isDropTarget }: AmuletSlotP
     return cleanup;
   }, [onDrop]);
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (isDropTarget) {
+      setDragDepth(prev => prev + 1);
+    }
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    if (isDropTarget && dragDepth === 0) {
+      setDragDepth(1);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (isDropTarget) {
+      setDragDepth(prev => Math.max(0, prev - 1));
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setDragDepth(0);
     const cardData = e.dataTransfer.getData('card');
     if (cardData) {
       const card = JSON.parse(cardData);
@@ -51,74 +85,81 @@ export default function AmuletSlot({ amulet, onDrop, isDropTarget }: AmuletSlotP
   };
 
   const getEffectIcon = () => {
-    if (!amulet) return <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-muted-foreground" />;
-    switch (amulet.effect) {
-      case 'health':
-        return <Heart className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />;
-      case 'attack':
-        return <Sword className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />;
-      case 'defense':
-        return <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />;
-    }
+    // Used for empty state only
+    return <Sparkles className="w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 text-muted-foreground mb-2" />;
   };
 
-  const getEffectLabel = () => {
-    if (!amulet) return null;
-    switch (amulet.effect) {
-      case 'health':
-        return `+${amulet.value} Max HP`;
-      case 'attack':
-        return `+${amulet.value} ATK`;
-      case 'defense':
-        return `+${amulet.value} DEF`;
+  const getStackTransform = (index: number): React.CSSProperties => {
+    if (!isStackedView) {
+      return { zIndex: 10 };
     }
+
+    const isTopCard = index === preparedAmulets.length - 1;
+
+    if (isTopCard) {
+      return {
+        zIndex: 30,
+        transform: 'translateY(28%)',
+      };
+    }
+
+    return {
+      zIndex: 20,
+      transform: 'translateY(-6%)',
+    };
   };
+
+  const dropStateClass = isDropTarget
+    ? isOver
+      ? 'ring-4 ring-primary bg-primary/20 scale-[1.02]'
+      : 'ring-2 ring-primary/50 bg-primary/10'
+    : 'border border-muted/40';
 
   return (
     <div 
       ref={amuletRef}
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      style={{ 
-        width: 'clamp(80px, 12vw, 160px)', 
-        height: 'clamp(112px, 16.8vw, 224px)' 
-      }}
+      className={`relative h-full w-full rounded-xl transition-all duration-200 ease-out ${dropStateClass}`}
       data-testid="slot-amulet"
     >
-      <Card className={`
-        w-full h-full border-4 border-dashed overflow-hidden
-        transition-all duration-200
-        ${amulet ? 'border-purple-900 bg-purple-950/20' : 'border-muted bg-muted/20'}
-        ${isDropTarget ? 'scale-105 border-primary animate-pulse' : ''}
-      `}>
-        <div className="h-full flex flex-col items-center justify-center p-2">
-          {amulet ? (
-            <>
-              {amulet.image && (
-                <img 
-                  src={amulet.image} 
-                  alt={amulet.name}
-                  className="w-full h-[60%] object-contain mb-2"
+      {hasAmulets ? (
+        <div className="relative h-full w-full overflow-visible">
+          {preparedAmulets.map((card, index) => {
+            const isTopCard = index === preparedAmulets.length - 1;
+            return (
+              <div
+                key={card.id}
+                className="absolute inset-0"
+                style={getStackTransform(index)}
+              >
+                <GameCard 
+                  card={card}
+                  onDragStart={(dragCard) => onDragStart?.(dragCard)}
+                  onDragEnd={onDragEnd}
+                  amuletDescriptionVariant={!isTopCard && isStackedView ? 'topThird' : undefined}
                 />
-              )}
-              <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded px-2 py-1">
-                {getEffectIcon()}
-                <span className="text-xs sm:text-sm font-bold">{getEffectLabel()}</span>
               </div>
-              <span className="text-[8px] sm:text-xs text-center mt-1 text-muted-foreground line-clamp-1">
-                {amulet.name}
-              </span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 text-muted-foreground mb-2" />
-              <span className="text-[8px] sm:text-xs md:text-sm text-muted-foreground font-semibold">
-                Amulet
-              </span>
-            </>
-          )}
+            );
+          })}
         </div>
-      </Card>
+      ) : (
+        <Card className={`
+          h-full w-full border-4 border-dashed overflow-hidden
+          transition-all duration-200
+          ${isDropTarget ? 'border-primary animate-pulse bg-primary/10' : 'border-muted bg-muted/20'}
+          ${isDropTarget && isOver ? 'scale-105 ring-4 ring-primary bg-primary/20' : ''}
+        `}>
+          <div className="h-full flex flex-col items-center justify-center p-2">
+            <Sparkles className="w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 text-muted-foreground mb-2" />
+            <span className="text-[8px] sm:text-xs md:text-sm text-muted-foreground font-semibold">
+              Amulet
+            </span>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
