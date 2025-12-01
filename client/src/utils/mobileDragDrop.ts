@@ -23,19 +23,34 @@ export const initMobileDrag = (
     currentDragData = data;
     dragElement = element;
     
+    // Get the original element's dimensions before cloning
+    const rect = element.getBoundingClientRect();
+    const originalWidth = rect.width;
+    const originalHeight = rect.height;
+    
     // Create a visual drag preview
     dragPreview = element.cloneNode(true) as HTMLElement;
+    
+    // Remove classes that might cause size expansion
+    dragPreview.classList.remove('w-full', 'h-full');
+    
+    // Set explicit dimensions to prevent expansion
+    dragPreview.style.width = `${originalWidth}px`;
+    dragPreview.style.height = `${originalHeight}px`;
+    dragPreview.style.maxWidth = `${originalWidth}px`;
+    dragPreview.style.maxHeight = `${originalHeight}px`;
     dragPreview.style.position = 'fixed';
     dragPreview.style.pointerEvents = 'none';
     dragPreview.style.opacity = '0.8';
     dragPreview.style.zIndex = '9999';
     dragPreview.style.transform = 'scale(1.05)';
     dragPreview.style.transition = 'none';
+    dragPreview.style.boxSizing = 'border-box';
     
     // Position the preview at touch location
     const touch = e.touches[0];
-    dragPreview.style.left = `${touch.clientX - element.offsetWidth / 2}px`;
-    dragPreview.style.top = `${touch.clientY - element.offsetHeight / 2}px`;
+    dragPreview.style.left = `${touch.clientX - originalWidth / 2}px`;
+    dragPreview.style.top = `${touch.clientY - originalHeight / 2}px`;
     
     document.body.appendChild(dragPreview);
     
@@ -53,9 +68,12 @@ export const initMobileDrag = (
     
     const touch = e.touches[0];
     
+    // Get preview dimensions (use getBoundingClientRect for accurate size)
+    const previewRect = dragPreview.getBoundingClientRect();
+    
     // Update preview position
-    dragPreview.style.left = `${touch.clientX - dragPreview.offsetWidth / 2}px`;
-    dragPreview.style.top = `${touch.clientY - dragPreview.offsetHeight / 2}px`;
+    dragPreview.style.left = `${touch.clientX - previewRect.width / 2}px`;
+    dragPreview.style.top = `${touch.clientY - previewRect.height / 2}px`;
     
     // Find element under touch point (excluding the preview)
     dragPreview.style.display = 'none';

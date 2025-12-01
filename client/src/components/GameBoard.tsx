@@ -183,7 +183,7 @@ const isHeroRowHighlightCard = (
 
 const DUNGEON_COLUMN_COUNT = 5;
 const GRAVEYARD_VECTOR_DEFAULT = { offsetX: 60, offsetY: 160 };
-const GRID_GAP_CLASS = "gap-y-8 gap-x-12 sm:gap-y-12 sm:gap-x-20";
+const GRID_GAP_CLASS = "gap-y-3 gap-x-3 sm:gap-y-12 sm:gap-x-20";
 const HERO_GRID_PADDING_CLASS = "";
 const HERO_GAP_VARIABLE_CLASS =
   "[--hero-gap-x:clamp(1rem,3.8vw,2.8rem)] [--hero-gap-y:clamp(0.7rem,2.8vw,1.8rem)] sm:[--hero-gap-x:clamp(1.5rem,3.8vw,3.5rem)] sm:[--hero-gap-y:clamp(1rem,3vw,2.4rem)]";
