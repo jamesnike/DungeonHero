@@ -19,6 +19,7 @@ interface EquipmentSlotProps {
   isDropTarget?: boolean;
   isCombatDropTarget?: boolean;
   onClick?: () => void;
+  onCardClick?: (card: GameCardData) => void;
   heroSkillHighlight?: boolean;
   heroSkillLabel?: string;
   bleedAnimation?: boolean;
@@ -41,6 +42,7 @@ export default function EquipmentSlot({
   isDropTarget,
   isCombatDropTarget,
   onClick,
+  onCardClick,
   heroSkillHighlight = false,
   heroSkillLabel,
   bleedAnimation = false,
@@ -148,7 +150,7 @@ export default function EquipmentSlot({
     >
       {/* Permanent bonus header */}
       {type === 'equipment' && (
-        <div className="absolute -top-7 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 px-4 py-1.5 text-xs sm:text-sm font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap">
+        <div className="absolute -top-7 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 sm:gap-2 rounded-full border border-border bg-background/95 px-2 py-0.5 sm:px-4 sm:py-1.5 text-[10px] sm:text-xs md:text-sm font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap">
           <span className="text-red-500">{formatBonus(permanentDamageBonus)} DMG</span>
           <span className="text-muted-foreground/50">|</span>
           <span className="text-blue-500">{formatBonus(permanentShieldBonus)} SHD</span>
@@ -191,7 +193,7 @@ export default function EquipmentSlot({
             card={gameCardData}
             onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
             onDragEnd={onDragEnd}
-            onClick={type === 'backpack' ? onClick : undefined}
+            onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData) : undefined}
             className={`${type === 'backpack' ? 'cursor-pointer' : ''} shadow-lg`}
             bleedAnimation={bleedAnimation}
             weaponSwingAnimation={weaponSwingAnimation}

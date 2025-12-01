@@ -184,33 +184,33 @@ export default function DiceRoller({ onRoll, className = '' }: DiceRollerProps) 
       onClick={rollDice}
       data-testid="dice-roller"
     >
-      <div className="flex h-full w-full flex-col gap-2 p-3 relative">
+      <div className="flex h-full w-full flex-col gap-1 sm:gap-2 p-1 sm:p-3 relative">
         {showResultOverlay && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in zoom-in duration-300 rounded-lg">
-            <span className="text-6xl font-bold text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] animate-bounce">
+            <span className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] animate-bounce">
               {resultValue}
             </span>
           </div>
         )}
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-200">
-          <Dices className="w-4 h-4" />
+        <div className="flex items-center gap-1 sm:gap-2 text-[9px] sm:text-xs uppercase tracking-wide text-slate-200">
+          <Dices className="w-3 h-3 sm:w-4 sm:h-4" />
           <span className="font-medium">Twenty-Sided Die</span>
         </div>
         <div className="relative flex flex-1 items-center justify-center">
           <canvas ref={canvasRef} className="dice-canvas" />
           <div className="pointer-events-none absolute inset-x-10 -bottom-2 h-6 rounded-full bg-black/45 blur-lg" />
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center justify-between text-[9px] sm:text-xs text-muted-foreground">
           <span>{isRolling ? 'Rolling...' : 'Tap to roll'}</span>
-          <span className="font-mono text-sm text-white/80">Result: {currentValue}</span>
+          <span className="font-mono text-[10px] sm:text-sm text-white/80">Result: {currentValue}</span>
         </div>
         {rollHistory.length > 0 && (
-          <div className="flex gap-1">
+          <div className="flex gap-0.5 sm:gap-1">
             {rollHistory.slice(0, 3).map((value, idx) => (
               <Badge 
                 key={idx}
                 variant="outline" 
-                className={`text-xs px-2 py-0 ${idx === 0 ? 'bg-primary/20' : 'opacity-60'}`}
+                className={`text-[9px] sm:text-xs px-1 sm:px-2 py-0 ${idx === 0 ? 'bg-primary/20' : 'opacity-60'}`}
               >
                 {value}
               </Badge>
@@ -270,7 +270,9 @@ function renderDie(
     const isTopFace = face === faceEntries[faceEntries.length - 1].face;
     
     ctx.fillStyle = isTopFace ? 'rgba(255,255,255,1.0)' : 'rgba(255,255,255,0.85)';
-    ctx.font = `bold ${Math.max(12, scale * (isTopFace ? 5.0 : 0.25))}px var(--font-mono)`;
+    // Responsive font size based on canvas size
+    const baseFontSize = Math.max(8, Math.min(scale * (isTopFace ? 5.0 : 0.25), isTopFace ? scale * 5.0 : scale * 0.25));
+    ctx.font = `bold ${baseFontSize}px var(--font-mono)`;
     
     // Add glow effect for top face
     if (isTopFace) {

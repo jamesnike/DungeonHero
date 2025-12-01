@@ -1270,7 +1270,7 @@ export default function GameBoard() {
   const [pendingMagicAction, setPendingMagicAction] = useState<PendingMagicAction | null>(null);
   const [heroSkillBanner, setHeroSkillBanner] = useState<string | null>(null);
   const cellWrapperClass = "flex w-full h-full";
-  const cellInnerClass = "flex w-full h-full p-0.5 sm:p-1";
+  const cellInnerClass = "flex w-full h-full p-0 sm:p-1";
   const updateHeroRowDropHighlight = useCallback((card: GameCardData | null) => {
     setHeroRowDropState(isHeroRowHighlightCard(card) ? card.type : null);
   }, [setHeroRowDropState]);
@@ -4767,6 +4767,7 @@ export default function GameBoard() {
             setDraggedCardSource((current) => (current === 'amulet' ? null : current));
           }}
           isDropTarget={!isWaterfallLocked && draggedCard?.type === 'amulet'}
+          onCardClick={handleCardClick}
         />
       ),
     },
@@ -4809,6 +4810,7 @@ export default function GameBoard() {
                 ? () => handleSlotTargetSelection('equipmentSlot1')
                 : undefined
             }
+            onCardClick={handleCardClick}
           />
           {showBlockButtons &&
             renderBlockButton('equipmentSlot1', 'Block (Left)', !canShieldBlock('equipmentSlot1'))}
@@ -4893,6 +4895,7 @@ export default function GameBoard() {
                 ? () => handleSlotTargetSelection('equipmentSlot2')
                 : undefined
             }
+            onCardClick={handleCardClick}
           />
           {showBlockButtons &&
             renderBlockButton('equipmentSlot2', 'Block (Right)', !canShieldBlock('equipmentSlot2'))}
@@ -5365,6 +5368,7 @@ export default function GameBoard() {
           maxHandSize={7}
           cardSize={gridCardSize} // Pass the measured size to HandDisplay
           disableAnimations={isWaterfallLocked}
+          onCardClick={handleCardClick}
         />
       </div>
 

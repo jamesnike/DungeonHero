@@ -122,16 +122,16 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
           variant="muted"
           label="Graveyard"
         />
-        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-slate-200">
+        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3">
+          <div className="flex items-center justify-between text-[8px] sm:text-[10px] uppercase tracking-wide text-slate-200">
             <span className="font-semibold">Graveyard</span>
-            <Badge variant="outline" className="bg-black/40 text-white font-mono text-sm px-2 py-0.5">
+            <Badge variant="outline" className="bg-black/40 text-white font-mono text-[9px] sm:text-sm px-1 sm:px-2 py-0 sm:py-0.5">
               {discardedCards.length}
             </Badge>
           </div>
-          <div className="flex items-center justify-end gap-2 text-white/90">
-            <Eye className="w-4 h-4" />
-            <span className="text-[11px] font-medium">View</span>
+          <div className="flex items-center justify-end gap-1 sm:gap-2 text-white/90">
+            <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="text-[9px] sm:text-[11px] font-medium">View</span>
           </div>
         </div>
       </Card>

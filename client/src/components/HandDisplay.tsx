@@ -34,6 +34,7 @@ interface HandDisplayProps {
   maxHandSize?: number;
   cardSize?: { width: number, height: number }; // New prop for synchronization
   disableAnimations?: boolean;
+  onCardClick?: (card: GameCardData) => void;
 }
 
 export default function HandDisplay({ 
@@ -44,6 +45,7 @@ export default function HandDisplay({
   maxHandSize = 7,
   cardSize,
   disableAnimations = false,
+  onCardClick,
 }: HandDisplayProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isDraggingCard, setIsDraggingCard] = useState(false);
@@ -181,6 +183,7 @@ export default function HandDisplay({
                     card={card}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
+                    onClick={() => onCardClick?.(card)}
                     className={isHovered ? 'shadow-2xl' : 'shadow-lg'}
                   />
                 </div>

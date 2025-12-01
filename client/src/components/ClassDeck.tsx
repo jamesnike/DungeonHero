@@ -54,19 +54,19 @@ export default function ClassDeck({
           variant="bright"
           label={deckName}
         />
-        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-indigo-100">
-            <span className="font-semibold flex items-center gap-1">
-              <Shield className="w-3 h-3" />
+        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3">
+          <div className="flex items-center justify-between text-[8px] sm:text-[10px] uppercase tracking-wide text-indigo-100">
+            <span className="font-semibold flex items-center gap-0.5 sm:gap-1">
+              <Shield className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
               {deckName}
             </span>
-            <Badge variant="outline" className="bg-black/30 text-white font-mono text-sm px-2 py-0.5">
+            <Badge variant="outline" className="bg-black/30 text-white font-mono text-[9px] sm:text-sm px-1 sm:px-2 py-0 sm:py-0.5">
               {classCards.length}
             </Badge>
           </div>
-          <div className="flex items-center justify-end gap-2 text-indigo-100">
-            <Eye className="w-4 h-4" />
-            <span className="text-[11px] font-medium">Browse</span>
+          <div className="flex items-center justify-end gap-1 sm:gap-2 text-indigo-100">
+            <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="text-[9px] sm:text-[11px] font-medium">Browse</span>
           </div>
         </div>
       </Card>

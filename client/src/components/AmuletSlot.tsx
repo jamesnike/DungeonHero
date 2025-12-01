@@ -11,6 +11,7 @@ interface AmuletSlotProps {
   isDropTarget?: boolean;
   onDragStart?: (card: GameCardData) => void;
   onDragEnd?: () => void;
+  onCardClick?: (card: GameCardData) => void;
 }
 
 export default function AmuletSlot({
@@ -20,6 +21,7 @@ export default function AmuletSlot({
   isDropTarget,
   onDragStart,
   onDragEnd,
+  onCardClick,
 }: AmuletSlotProps) {
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
@@ -139,6 +141,7 @@ export default function AmuletSlot({
                   card={card}
                   onDragStart={(dragCard) => onDragStart?.(dragCard)}
                   onDragEnd={onDragEnd}
+                  onClick={() => onCardClick?.(card)}
                   amuletDescriptionVariant={!isTopCard && isStackedView ? 'topThird' : undefined}
                 />
               </div>
