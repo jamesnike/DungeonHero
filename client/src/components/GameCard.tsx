@@ -80,6 +80,7 @@ export default function GameCard({
 }: GameCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
   const totalDurabilityDots = Math.max(card.maxDurability ?? card.durability ?? 0, 0);
   const currentDurability = Math.max(card.durability ?? 0, 0);
   const engagedMonster = isEngaged && card.type === 'monster';
@@ -138,6 +139,38 @@ export default function GameCard({
         onWeaponDrop?.(weapon);
       }
     }
+  };
+
+  // Handle double tap for mobile devices
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (disableInteractions || !onClick) return;
+    
+    const touch = e.changedTouches[0];
+    const currentTime = Date.now();
+    const currentX = touch.clientX;
+    const currentY = touch.clientY;
+    
+    if (lastTapRef.current) {
+      const timeDiff = currentTime - lastTapRef.current.time;
+      const xDiff = Math.abs(currentX - lastTapRef.current.x);
+      const yDiff = Math.abs(currentY - lastTapRef.current.y);
+      
+      // Check if it's a double tap (within 300ms and 50px distance)
+      if (timeDiff < 300 && xDiff < 50 && yDiff < 50) {
+        e.preventDefault();
+        onClick();
+        lastTapRef.current = null; // Reset to prevent triple tap
+        return;
+      }
+    }
+    
+    // Store this tap for potential double tap detection
+    lastTapRef.current = { time: currentTime, x: currentX, y: currentY };
+    
+    // Clear the stored tap after a delay to prevent accidental double taps
+    setTimeout(() => {
+      lastTapRef.current = null;
+    }, 300);
   };
 
   const getCardIcon = () => {
@@ -231,6 +264,7 @@ const amuletEffectText =
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onClick={onClick}
+      onTouchEnd={handleTouchEnd}
       className={`
         w-full h-full
         cursor-pointer active:cursor-grabbing
@@ -394,11 +428,15 @@ const amuletEffectText =
                       {Array.from({ length: totalDurabilityDots }).map((_, i) => (
                         <div
                           key={i}
-                          className={`w-2 h-2 rounded-full border shadow-sm ${
+                          className={`rounded-full border shadow-sm ${
                             i < currentDurability
                               ? 'bg-amber-400 border-amber-500 shadow-amber-500/40'
                               : 'bg-slate-800/60 border-slate-600'
                           }`}
+                          style={{
+                            width: 'clamp(0.375rem, 1.2vw, 0.5rem)',
+                            height: 'clamp(0.375rem, 1.2vw, 0.5rem)',
+                          }}
                         />
                       ))}
                     </div>

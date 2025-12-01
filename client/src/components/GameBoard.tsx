@@ -183,7 +183,7 @@ const isHeroRowHighlightCard = (
 
 const DUNGEON_COLUMN_COUNT = 5;
 const GRAVEYARD_VECTOR_DEFAULT = { offsetX: 60, offsetY: 160 };
-const GRID_GAP_CLASS = "gap-y-3 gap-x-3 sm:gap-y-12 sm:gap-x-20";
+const GRID_GAP_CLASS = "gap-y-1 gap-x-1 sm:gap-y-12 sm:gap-x-20";
 const HERO_GRID_PADDING_CLASS = "";
 const HERO_GAP_VARIABLE_CLASS =
   "[--hero-gap-x:clamp(1rem,3.8vw,2.8rem)] [--hero-gap-y:clamp(0.7rem,2.8vw,1.8rem)] sm:[--hero-gap-x:clamp(1.5rem,3.8vw,3.5rem)] sm:[--hero-gap-y:clamp(1rem,3vw,2.4rem)]";
@@ -5105,7 +5105,10 @@ export default function GameBoard() {
           {/* Row 2: Active Row - 5 cards + GraveyardZone */}
           {[0, 1, 2, 3, 4].map((index) => {
             const card = activeCards[index];
-            const colWidth = 20; // Width of each fury column
+            // Calculate responsive fury column width based on card size
+            const colWidth = gridCardSize?.width 
+              ? Math.max(12, Math.min(20, gridCardSize.width * 0.08))
+              : 20; // Fallback to 20px if card size not available
             const isEngagedMonster = Boolean(card && card.type === 'monster' && isMonsterEngaged(card.id));
             const isResolvingCard = resolvingDungeonCardId === card?.id;
             const isMonsterTurnLock = showMonsterAttackIndicator || isWaterfallLocked;
