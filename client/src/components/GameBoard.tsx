@@ -106,6 +106,14 @@ const initialCombatState: CombatState = {
 
 type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 type EquipmentItem = GameCardData & { type: 'weapon' | 'shield'; fromSlot?: EquipmentSlotId };
+type EquipmentRepairTarget = 'weapon' | 'shield';
+
+const formatRepairTargetLabel = (targets: EquipmentRepairTarget[]) => {
+  if (targets.includes('weapon') && targets.includes('shield')) {
+    return '武器或护盾';
+  }
+  return targets[0] === 'shield' ? '护盾' : '武器';
+};
 type AmuletItem = GameCardData & { type: 'amulet'; fromSlot?: 'amulet' };
 type DragOrigin = 'hand' | 'dungeon' | 'backpack' | 'amulet' | EquipmentSlotId;
 type ActiveRowSlots = Array<GameCardData | null>;
@@ -212,8 +220,9 @@ type PendingMagicAction =
 type PendingPotionAction =
   | {
       card: GameCardData;
-      effect: 'repair-weapon';
+      effect: 'repair-equipment';
       amount: number;
+      allowedTypes: EquipmentRepairTarget[];
       step: 'slot-select';
       prompt: string;
     };
@@ -223,6 +232,17 @@ type HeroSkillArrowState = {
   end: { x: number; y: number };
 };
 
+type GridMetrics = {
+  gapX: number;
+  gapY: number;
+  padding: number;
+  cardFontScale: number;
+  cardStatScale: number;
+  cardIconScale: number;
+  cardDotSize: number;
+  heroFontScale: number;
+};
+
 const isHeroRowHighlightCard = (
   card: GameCardData | null,
 ): card is GameCardData & { type: HeroRowDropType } =>
@@ -230,7 +250,6 @@ const isHeroRowHighlightCard = (
 
 const DUNGEON_COLUMN_COUNT = 5;
 const GRAVEYARD_VECTOR_DEFAULT = { offsetX: 60, offsetY: 160 };
-const GRID_GAP_CLASS = "gap-y-1 gap-x-1 sm:gap-y-12 sm:gap-x-20";
 const MONSTER_RAGE_COLUMN_BORDER_PX = 1;
 const MONSTER_CARD_BORDER_PX = 4;
 const MONSTER_RAGE_TRANSLATE_ADJUST_PX =
@@ -287,6 +306,55 @@ const getShopPrice = (card: GameCardData, level: number): number => {
   const basePrice = getBaseShopPrice(card);
   const discounted = Math.floor(basePrice * getShopDiscountFactor(level));
   return Math.max(1, discounted);
+};
+
+const getGridMetricsForWidth = (width: number): GridMetrics => {
+  if (width <= 430) {
+    return {
+      gapX: 6,
+      gapY: 10,
+      padding: 2,
+      cardFontScale: 1.15,
+      cardStatScale: 1.2,
+      cardIconScale: 1.15,
+      cardDotSize: 9,
+      heroFontScale: 0.85,
+    };
+  }
+  if (width <= 640) {
+    return {
+      gapX: 10,
+      gapY: 14,
+      padding: 4,
+      cardFontScale: 1.08,
+      cardStatScale: 1.08,
+      cardIconScale: 1.08,
+      cardDotSize: 8,
+      heroFontScale: 0.9,
+    };
+  }
+  if (width <= 1024) {
+    return {
+      gapX: 16,
+      gapY: 18,
+      padding: 6,
+      cardFontScale: 1,
+      cardStatScale: 1,
+      cardIconScale: 1,
+      cardDotSize: 7,
+      heroFontScale: 1,
+    };
+  }
+  return {
+    gapX: 24,
+    gapY: 26,
+    padding: 8,
+    cardFontScale: 1,
+    cardStatScale: 1,
+    cardIconScale: 1,
+    cardDotSize: 7,
+    heroFontScale: 1.05,
+  };
 };
 
 const createEmptyActiveRow = (): ActiveRowSlots =>
@@ -588,8 +656,8 @@ function createDeck(): GameCardData[] {
       name: '高级修复剂',
       value: 7,
       image: potionImage,
-      potionEffect: 'repair-weapon-3',
-      description: '选择一个装备的武器，恢复3点耐久。',
+      potionEffect: 'repair-equipment-2',
+      description: '选择一个武器或护盾，恢复2点耐久。',
     },
     {
       type: 'potion',
@@ -649,7 +717,7 @@ function createDeck(): GameCardData[] {
       name: 'Guardian Amulet',
       value: 5,
       image: guardianAmuletImage,
-      description: '有护盾时候，免疫掉血',
+      description: '有护盾时候，超过格挡的部分不损失血',
       amuletEffect: 'guardian',
     },
     {
@@ -1346,6 +1414,22 @@ export default function GameBoard() {
   const [heroFramePosition, setHeroFramePosition] = useState<HeroFramePosition | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const lastPersistedStateRef = useRef<string | null>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>(
+    typeof window === 'undefined' ? 1280 : window.innerWidth,
+  );
+  const gridMetrics = useMemo(() => getGridMetricsForWidth(viewportWidth), [viewportWidth]);
+  const gridStyleVars = useMemo(() => {
+    return {
+      '--dh-grid-gap-x': `${gridMetrics.gapX}px`,
+      '--dh-grid-gap-y': `${gridMetrics.gapY}px`,
+      '--dh-card-padding': `${gridMetrics.padding}px`,
+      '--dh-card-font-scale': gridMetrics.cardFontScale.toString(),
+      '--dh-card-stat-scale': gridMetrics.cardStatScale.toString(),
+      '--dh-card-icon-scale': gridMetrics.cardIconScale.toString(),
+      '--dh-card-dot-size': `${gridMetrics.cardDotSize}px`,
+      '--dh-hero-font-scale': gridMetrics.heroFontScale.toString(),
+    } as CSSProperties;
+  }, [gridMetrics]);
   
   // Track grid card size for synchronization with hand
   const gridCellRef = useRef<HTMLDivElement | null>(null);
@@ -1439,6 +1523,13 @@ export default function GameBoard() {
   useEffect(() => {
     draggedCardRef.current = draggedCard;
   }, [draggedCard]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleViewportResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', handleViewportResize);
+    return () => window.removeEventListener('resize', handleViewportResize);
+  }, []);
 
   useEffect(() => {
     const target = gridCellRef.current;
@@ -1577,8 +1668,8 @@ export default function GameBoard() {
   const [pendingMagicAction, setPendingMagicAction] = useState<PendingMagicAction | null>(null);
   const [pendingPotionAction, setPendingPotionAction] = useState<PendingPotionAction | null>(null);
   const [heroSkillBanner, setHeroSkillBanner] = useState<string | null>(null);
-  const cellWrapperClass = "flex w-full h-full";
-  const cellInnerClass = "flex w-full h-full p-0 sm:p-1";
+  const cellWrapperClass = "flex w-full h-full min-w-0 min-h-0";
+  const cellInnerClass = "flex w-full h-full dh-grid-cell";
   const updateHeroRowDropHighlight = useCallback((card: GameCardData | null) => {
     setHeroRowDropState(isHeroRowHighlightCard(card) ? card.type : null);
   }, [setHeroRowDropState]);
@@ -2119,7 +2210,7 @@ export default function GameBoard() {
     }
 
     if (remainingDamage > 0) {
-      applyDamage(remainingDamage);
+      applyDamage(remainingDamage, 'combat');
     }
 
     decrementMonsterFury(monster);
@@ -3436,8 +3527,8 @@ export default function GameBoard() {
     setRemainingDeck(plan.nextRemainingDeck);
 
     if (plan.nextPreviewCards.length === 0) {
-    setPreviewCards(createEmptyActiveRow());
-      if (plan.shouldDeclareVictory) {
+      setPreviewCards(createEmptyActiveRow());
+      if (plan.shouldDeclareVictory && countActiveRowSlots(activeCards) === 0) {
         setVictory(true);
         setGameOver(true);
       }
@@ -3829,6 +3920,47 @@ export default function GameBoard() {
     [addToGraveyard],
   );
 
+  const resolvePotionRepairForSlot = useCallback(
+    (
+      slotId: EquipmentSlotId,
+      card: GameCardData,
+      amount: number,
+      allowedTypes: EquipmentRepairTarget[],
+    ): boolean => {
+      const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+      if (!slotItem) {
+        setHeroSkillBanner('该槽位目前没有装备。');
+        return false;
+      }
+
+      if (!slotItem.type || !allowedTypes.includes(slotItem.type)) {
+        const label = formatRepairTargetLabel(allowedTypes);
+        setHeroSkillBanner(`请选择一个${label}。`);
+        return false;
+      }
+
+      const maxDurability = slotItem.maxDurability ?? slotItem.durability ?? 0;
+      if (maxDurability === 0) {
+        setHeroSkillBanner('该装备无法修复。');
+        return false;
+      }
+
+      const currentDurability = slotItem.durability ?? maxDurability;
+      if (currentDurability >= maxDurability) {
+        setHeroSkillBanner('该装备已经满耐久。');
+        return false;
+      }
+
+      const repairedDurability = Math.min(maxDurability, currentDurability + amount);
+      const gained = repairedDurability - currentDurability;
+      setEquipmentSlotById(slotId, { ...slotItem, durability: repairedDurability });
+      const banner = `${slotItem.name} 耐久 +${gained}`;
+      finalizePotionCard(card, { banner });
+      return true;
+    },
+    [equipmentSlot1, equipmentSlot2, finalizePotionCard, setEquipmentSlotById, setHeroSkillBanner],
+  );
+
   const handlePotionConsumption = useCallback(
     (card: GameCardData) => {
       const effect = card.potionEffect;
@@ -3844,40 +3976,65 @@ export default function GameBoard() {
         return;
       }
 
-      if (effect === 'repair-weapon-2' || effect === 'repair-weapon-3') {
-        const repairAmount = effect === 'repair-weapon-2' ? 2 : 3;
-        const weaponSlots: { id: EquipmentSlotId; item: EquipmentItem }[] = [];
-        if (equipmentSlot1?.type === 'weapon') {
-          weaponSlots.push({ id: 'equipmentSlot1', item: equipmentSlot1 });
-        }
-        if (equipmentSlot2?.type === 'weapon') {
-          weaponSlots.push({ id: 'equipmentSlot2', item: equipmentSlot2 });
+      if (
+        effect === 'repair-weapon-2' ||
+        effect === 'repair-weapon-3' ||
+        effect === 'repair-equipment-2'
+      ) {
+        let repairAmount = effect === 'repair-weapon-3' ? 3 : 2;
+        let allowedTypes: EquipmentRepairTarget[] = ['weapon'];
+
+        if (effect === 'repair-equipment-2') {
+          allowedTypes = ['weapon', 'shield'];
         }
 
-        if (weaponSlots.length === 0) {
-          finalizePotionCard(card, { banner: '没有装备武器，药剂失效。' });
+        const targetLabel = formatRepairTargetLabel(allowedTypes);
+        const matchingSlots = getEquipmentSlots().filter(slot => {
+          const slotType = slot.item?.type;
+          return Boolean(slotType && allowedTypes.includes(slotType));
+        });
+
+        if (!matchingSlots.length) {
+          finalizePotionCard(card, { banner: `没有装备${targetLabel}，药剂失效。` });
           return;
         }
 
-        const hasRepairableWeapon = weaponSlots.some(({ item }) => {
+        const repairableSlots = matchingSlots.filter(slot => {
+          const item = slot.item;
+          if (!item) {
+            return false;
+          }
           const maxDurability = item.maxDurability ?? item.durability ?? 0;
           const currentDurability = item.durability ?? maxDurability;
           return maxDurability > 0 && currentDurability < maxDurability;
         });
 
-        if (!hasRepairableWeapon) {
-          finalizePotionCard(card, { banner: '所有武器已满耐久。' });
+        if (!repairableSlots.length) {
+          finalizePotionCard(card, { banner: `所有${targetLabel}已满耐久。` });
           return;
         }
 
+        if (repairableSlots.length === 1) {
+          resolvePotionRepairForSlot(
+            repairableSlots[0].id,
+            card,
+            repairAmount,
+            allowedTypes,
+          );
+          setPendingPotionAction(null);
+          return;
+        }
+
+        const prompt = `选择一个${targetLabel}恢复${repairAmount}点耐久。`;
         setPendingPotionAction({
           card,
-          effect: 'repair-weapon',
+          effect: 'repair-equipment',
           amount: repairAmount,
+          allowedTypes,
           step: 'slot-select',
-          prompt: `选择一个武器恢复${repairAmount}点耐久。`,
+          prompt,
         });
-        setHeroSkillBanner(`选择一个武器恢复${repairAmount}点耐久。`);
+        setHeroSkillBanner(prompt);
         return;
       }
 
@@ -3915,8 +4072,10 @@ export default function GameBoard() {
       equipmentSlot1,
       equipmentSlot2,
       finalizePotionCard,
+      getEquipmentSlots,
       handleDiscoverFallback,
       healHero,
+      resolvePotionRepairForSlot,
       setHeroSkillBanner,
       setPendingPotionAction,
     ],
@@ -4135,26 +4294,20 @@ export default function GameBoard() {
     });
   }, [addToGraveyard]);
 
-  const drawHeroCards = useCallback(
-    (count: number) => {
-      if (count <= 0 || remainingDeck.length === 0) {
-        return 0;
+  const drawCardsFromBackpack = (count: number) => {
+    if (count <= 0) {
+      return 0;
+    }
+    let drawn = 0;
+    for (let i = 0; i < count; i += 1) {
+      const card = drawFromBackpackToHand();
+      if (!card) {
+        break;
       }
-      const availableHandSlots = Math.max(0, 7 - handCards.length);
-      if (availableHandSlots <= 0) {
-        return 0;
-      }
-      const drawCount = Math.min(count, availableHandSlots, remainingDeck.length);
-      if (drawCount <= 0) {
-        return 0;
-      }
-      const cardsToDraw = remainingDeck.slice(0, drawCount);
-      setHandCards(prev => [...prev, ...cardsToDraw]);
-      setRemainingDeck(prev => prev.slice(drawCount));
-      return drawCount;
-    },
-    [handCards.length, remainingDeck],
-  );
+      drawn += 1;
+    }
+    return drawn;
+  };
 
   const handleDeleteCardConfirm = useCallback(
     (cardId: string, source: 'hand' | 'backpack') => {
@@ -4576,7 +4729,7 @@ export default function GameBoard() {
   };
 
   const applyDamage = useCallback(
-    (damage: number) => {
+    (damage: number, source: 'combat' | 'general' = 'general') => {
       let remainingDamage = Math.max(0, Math.floor(damage));
       if (remainingDamage <= 0) {
         return 0;
@@ -4600,7 +4753,7 @@ export default function GameBoard() {
         return 0;
       }
 
-      if (amuletEffects.hasGuardian && hadShieldProtection) {
+      if (amuletEffects.hasGuardian && hadShieldProtection && source === 'combat') {
         return 0;
       }
 
@@ -4664,6 +4817,10 @@ export default function GameBoard() {
 
     switch (selectedHeroSkillDef.id) {
       case 'armor-pact':
+        if (handCards.length === 0) {
+          setHeroSkillBanner('You need cards in hand to make this offering.');
+          return;
+        }
         setHandCards(prev => {
           if (prev.length > 0) {
             prev.forEach(card => addToGraveyard(card));
@@ -4698,6 +4855,7 @@ export default function GameBoard() {
     equipmentSlot1,
     equipmentSlot2,
     heroSkillUsedThisWave,
+    handCards,
     pendingHeroSkillAction,
     selectedHeroSkillDef,
     setHandCards,
@@ -4713,6 +4871,11 @@ export default function GameBoard() {
       }
 
       if (pendingHeroSkillAction.skillId === 'armor-pact') {
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (slotItem) {
+          setHeroSkillBanner('Select an empty slot to gain +1 permanent armor.');
+          return;
+        }
         setEquipmentSlotBonus(slotId, 'shield', current => current + 1);
         setHeroSkillUsedThisWave(true);
         setPendingHeroSkillAction(null);
@@ -4827,41 +4990,19 @@ export default function GameBoard() {
         return;
       }
 
-      if (pendingPotionAction.effect === 'repair-weapon') {
-        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-        if (!slotItem || slotItem.type !== 'weapon') {
-          setHeroSkillBanner('请选择一个已装备的武器。');
-          return;
+      if (pendingPotionAction.effect === 'repair-equipment') {
+        const succeeded = resolvePotionRepairForSlot(
+          slotId,
+          pendingPotionAction.card,
+          pendingPotionAction.amount,
+          pendingPotionAction.allowedTypes,
+        );
+        if (succeeded) {
+          setPendingPotionAction(null);
         }
-
-        const maxDurability = slotItem.maxDurability ?? slotItem.durability ?? 0;
-        if (maxDurability === 0) {
-          setHeroSkillBanner('该武器无法修复。');
-          return;
-        }
-
-        const currentDurability = slotItem.durability ?? maxDurability;
-        if (currentDurability >= maxDurability) {
-          setHeroSkillBanner('该武器已经满耐久。');
-          return;
-        }
-
-        const repairedDurability = Math.min(maxDurability, currentDurability + pendingPotionAction.amount);
-        const gained = repairedDurability - currentDurability;
-        setEquipmentSlotById(slotId, { ...slotItem, durability: repairedDurability });
-        const banner = `${slotItem.name} 耐久 +${gained}`;
-        finalizePotionCard(pendingPotionAction.card, { banner });
-        setPendingPotionAction(null);
       }
     },
-    [
-      equipmentSlot1,
-      equipmentSlot2,
-      finalizePotionCard,
-      pendingPotionAction,
-      setEquipmentSlotById,
-      setHeroSkillBanner,
-    ],
+    [resolvePotionRepairForSlot, pendingPotionAction, setPendingPotionAction],
   );
 
   const handleHeroSkillMonsterSelection = useCallback(
@@ -5335,11 +5476,11 @@ export default function GameBoard() {
         }
       } else if (effect.startsWith('drawHeroCards:')) {
         const drawCount = parseInt(effect.replace('drawHeroCards:', ''), 10) || 1;
-        const drawn = drawHeroCards(drawCount);
+        const drawn = drawCardsFromBackpack(drawCount);
         if (drawn > 0) {
-          setHeroSkillBanner(`抽到了 ${drawn} 张牌。`);
+          setHeroSkillBanner(`从背包抽到了 ${drawn} 张牌。`);
         } else {
-          setHeroSkillBanner('牌堆或手牌已满，无法抽牌。');
+          setHeroSkillBanner('背包为空或手牌已满，无法抽牌。');
         }
       } else if (effect === 'removeAllAmulets') {
         if (amuletSlots.length) {
@@ -5594,6 +5735,27 @@ export default function GameBoard() {
           disabledReason: heroSkillDisabledReason,
         }
       : null;
+
+  const isPotionSlotEligible = (slotId: EquipmentSlotId) => {
+    if (!potionSlotTargeting || !pendingPotionAction || pendingPotionAction.step !== 'slot-select') {
+      return false;
+    }
+    const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+    if (!slotItem || !slotItem.type) {
+      return false;
+    }
+    if (!pendingPotionAction.allowedTypes.includes(slotItem.type)) {
+      return false;
+    }
+    const maxDurability = slotItem.maxDurability ?? slotItem.durability ?? 0;
+    const currentDurability = slotItem.durability ?? maxDurability;
+    return maxDurability > 0 && currentDurability < maxDurability;
+  };
+
+  const equipmentSlot1Highlight =
+    slotTargetingActive && (!potionSlotTargeting || isPotionSlotEligible('equipmentSlot1'));
+  const equipmentSlot2Highlight =
+    slotTargetingActive && (!potionSlotTargeting || isPotionSlotEligible('equipmentSlot2'));
 
   const handleHeroSkillButtonClick = useCallback(() => {
     if (heroSkillTargeting) {
@@ -5992,7 +6154,7 @@ export default function GameBoard() {
             }}
             isDropTarget={equipmentSlot1DropAvailable}
             isCombatDropTarget={equipmentSlot1MonsterTarget}
-            heroSkillHighlight={slotTargetingActive}
+            heroSkillHighlight={equipmentSlot1Highlight}
             heroSkillLabel={slotTargetingLabel}
             onClick={
               slotTargetingActive
@@ -6078,7 +6240,7 @@ export default function GameBoard() {
             }}
             isDropTarget={equipmentSlot2DropAvailable}
             isCombatDropTarget={equipmentSlot2MonsterTarget}
-            heroSkillHighlight={slotTargetingActive}
+            heroSkillHighlight={equipmentSlot2Highlight}
             heroSkillLabel={slotTargetingLabel}
             onClick={
               slotTargetingActive
@@ -6205,7 +6367,7 @@ export default function GameBoard() {
   }, [showMonsterAttackIndicator, updateSwordVectors]);
 
   return (
-    <div ref={gameSurfaceRef} className="h-screen bg-background flex flex-col relative overflow-hidden">
+    <div ref={gameSurfaceRef} className="h-screen bg-background flex flex-col relative overflow-hidden" style={gridStyleVars}>
       {/* Header - Fixed height */}
       <div className="flex-shrink-0">
         <GameHeader 
@@ -6230,7 +6392,7 @@ export default function GameBoard() {
             <div ref={gridWrapperRef} className="relative flex-1 w-full">
               {/* 3×6 Card Grid */}
               <div 
-                className={`game-grid grid mx-auto h-full max-w-[1350px] ${GRID_GAP_CLASS}`}
+                className="game-grid grid mx-auto h-full max-w-[1350px]"
                 style={{ 
                   gridAutoRows: 'minmax(0, 1fr)'
                 }}>
@@ -6368,10 +6530,14 @@ export default function GameBoard() {
                   )
                 : 0;
 
+            const activeCellWrapper = isMonster
+              ? `${cellWrapperClass} relative overflow-visible`
+              : cellWrapperClass;
+
             return (
               <div 
                 key={`active-${index}`}
-                className={`${cellWrapperClass} relative overflow-visible`}
+                className={activeCellWrapper}
               >
                 {isMonster && (
                   <div className="absolute inset-0 z-0 flex flex-row-reverse overflow-hidden rounded-md bg-destructive/10">
@@ -6403,7 +6569,7 @@ export default function GameBoard() {
                 )}
                 <div
                   ref={isMonster ? registerMonsterCellRef(card.id) : undefined}
-                  className={`${cellInnerClass} ${isMonster ? 'sm:p-0' : ''} relative z-20 transition-transform duration-300 ease-out`.trim()}
+                  className={`${cellInnerClass} relative z-20 transition-transform duration-300 ease-out`.trim()}
                   style={{
                     transform:
                       isMonster && monsterLayerValue

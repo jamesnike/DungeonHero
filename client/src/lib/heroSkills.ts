@@ -22,12 +22,12 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'armor-pact',
     name: 'Bulwark Offering',
-    description: 'Abandon your current hand to empower a shield slot.',
-    effect: 'Discard all hand cards, then choose an equipment slot to gain +1 permanent armor.',
+    description: 'Sacrifice your current hand to empower an empty equipment slot.',
+    effect: 'Requires cards in hand. Discard them all, then choose an empty equipment slot to gain +1 permanent armor.',
     type: 'active',
     requiresTarget: 'slot',
     buttonLabel: 'Discard & Fortify',
-    statusHint: 'Select a slot to gain +1 permanent armor.',
+    statusHint: 'Select an empty slot to gain +1 permanent armor.',
   },
   {
     id: 'durability-for-blood',

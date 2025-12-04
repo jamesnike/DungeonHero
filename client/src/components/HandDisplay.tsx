@@ -50,6 +50,9 @@ export default function HandDisplay({
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isDraggingCard, setIsDraggingCard] = useState(false);
   const [calculatedCardHeight, setCalculatedCardHeight] = useState<number>(getCardHeight);
+  const [isCompactHand, setIsCompactHand] = useState<boolean>(
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false,
+  );
 
   // Use the prop cardSize if available, otherwise fallback to calculation
   const effectiveCardHeight = cardSize ? cardSize.height : calculatedCardHeight;
@@ -63,6 +66,13 @@ export default function HandDisplay({
       return () => window.removeEventListener('resize', handleResize);
     }
   }, [cardSize]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => setIsCompactHand(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const forceStopDragging = useCallback(() => {
     setHoveredIndex(null);
@@ -118,11 +128,13 @@ export default function HandDisplay({
   const cardWidth = effectiveCardWidth;
   const cardHeight = effectiveCardHeight;
   
-  const visibleHeight = cardHeight * CARD_VISIBLE_FRACTION;
+  const visibleFraction = isCompactHand ? 0.68 : CARD_VISIBLE_FRACTION;
+  const visibleHeight = cardHeight * visibleFraction;
   const hiddenHeight = cardHeight - visibleHeight;
   const handZoneHeight = visibleHeight + 24;
   const hoverLift = hiddenHeight + 24;
   const totalCardHeight = cardHeight + hoverLift;
+  const horizontalStepFactor = isCompactHand ? 0.42 : 0.5;
   
   const maybeActivateHover = (_event: ReactMouseEvent<HTMLDivElement>, index: number) => {
     if (disableAnimations || isDraggingCard || hoveredIndex === index) {
@@ -143,9 +155,9 @@ export default function HandDisplay({
         <div className="absolute inset-0 flex items-end justify-center pointer-events-none">
           {handCards.map((card, index) => {
             const isHovered = hoveredIndex === index;
-            const totalWidth = handCards.length * cardWidth * 0.5;
+            const totalWidth = handCards.length * cardWidth * horizontalStepFactor;
             const startX = -totalWidth / 2;
-            const cardX = startX + (index * cardWidth * 0.5);
+            const cardX = startX + (index * cardWidth * horizontalStepFactor);
             
             const hoverClass = disableAnimations ? '' : 'transition-all duration-200 ease-out';
 

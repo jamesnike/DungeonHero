@@ -115,7 +115,7 @@ function formatEffect(effect?: EventEffectExpression): string | null {
         return `Delete ${count} card(s)`;
       }
       if (token === 'graveyardDiscover') return 'Discover 1 card from the graveyard';
-      if (token.startsWith('drawHeroCards:')) return `Draw ${token.replace('drawHeroCards:', '')} card(s)`;
+      if (token.startsWith('drawHeroCards:')) return `Draw ${token.replace('drawHeroCards:', '')} card(s) from backpack`;
       if (token === 'removeAllAmulets') return 'Destroy all amulets';
       if (token === 'slotLeftDamage+1') return 'Left slot +1 permanent damage';
       if (token === 'slotRightDefense+1') return 'Right slot +1 permanent armor';

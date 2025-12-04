@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Infinity } from 'lucide-react';
-import { initMobileDrag } from '../utils/mobileDragDrop';
+import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
 
 const MAX_DURABILITY_DOTS = 4;
 
@@ -21,6 +21,7 @@ export type PotionEffectId =
   | 'heal-7'
   | 'repair-weapon-2'
   | 'repair-weapon-3'
+  | 'repair-equipment-2'
   | 'draw-backpack-3'
   | 'discover-class';
 
@@ -145,13 +146,17 @@ export default function GameCard({
   const potionDescription =
     isPotionCard && !isHealingPotion ? card.description ?? null : null;
 
+  const isEquipmentCard = card.type === 'weapon' || card.type === 'shield';
+  const mobileDragType =
+    isEquipmentCard && 'fromSlot' in card && (card as any)?.fromSlot ? 'equipment' : 'card';
+
   // Set up mobile drag support
   useEffect(() => {
     if (disableInteractions || !cardRef.current) return;
     
     const cleanup = initMobileDrag(
       cardRef.current,
-      { type: 'card', data: card },
+      { type: mobileDragType, data: card },
       () => {
         setIsDragging(true);
         onDragStart?.(card);
@@ -163,7 +168,25 @@ export default function GameCard({
     );
     
     return cleanup;
-  }, [card, onDragStart, onDragEnd, disableInteractions]);
+  }, [card, onDragStart, onDragEnd, disableInteractions, mobileDragType]);
+
+  // Enable mobile weapon drops when a monster card is a valid drop target
+  useEffect(() => {
+    if (disableInteractions || !cardRef.current) return;
+    if (card.type !== 'monster' || !onWeaponDrop) return;
+
+    const cleanup = initMobileDrop(
+      cardRef.current,
+      dragData => {
+        if (!isWeaponDropTarget) return;
+        if (dragData.type !== 'equipment') return;
+        onWeaponDrop?.(dragData.data);
+      },
+      ['equipment'],
+    );
+
+    return cleanup;
+  }, [card, onWeaponDrop, disableInteractions, isWeaponDropTarget]);
 
   const handleDragStart = (e: React.DragEvent) => {
     if (disableInteractions) return;
@@ -236,19 +259,19 @@ export default function GameCard({
   const getCardIcon = () => {
     switch (card.type) {
       case 'monster':
-        return <Skull className="w-6 h-6 text-destructive" />;
+        return <Skull className="dh-card__icon text-destructive" />;
       case 'weapon':
-        return <Sword className="w-6 h-6 text-amber-500" />;
+        return <Sword className="dh-card__icon text-amber-500" />;
       case 'shield':
-        return <Shield className="w-6 h-6 text-blue-500" />;
+        return <Shield className="dh-card__icon text-blue-500" />;
       case 'potion':
-        return <Heart className="w-6 h-6 text-green-500" />;
+        return <Heart className="dh-card__icon text-green-500" />;
       case 'amulet':
-        return <Sparkles className="w-6 h-6 text-purple-500" />;
+        return <Sparkles className="dh-card__icon text-purple-500" />;
       case 'magic':
-        return <Zap className="w-6 h-6 text-cyan-500" />;
+        return <Zap className="dh-card__icon text-cyan-500" />;
       case 'event':
-        return <Scroll className="w-6 h-6 text-violet-500" />;
+        return <Scroll className="dh-card__icon text-violet-500" />;
     }
   };
 
@@ -326,6 +349,7 @@ const amuletEffectText =
       onClick={onClick}
       onTouchEnd={handleTouchEnd}
       className={`
+        dh-card-wrapper
         w-full h-full
         cursor-pointer active:cursor-grabbing
         transition-all duration-200 ease-out
@@ -364,7 +388,7 @@ const amuletEffectText =
               />
             )}
             {showAmuletOverlay && (
-              <div className="absolute top-1.5 left-1.5 right-1.5 text-[12px] sm:text-[13px] leading-tight font-semibold text-black text-center px-1.5 py-0.5 tracking-wide pointer-events-none select-none drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
+              <div className="dh-card__body-text absolute top-1.5 left-1.5 right-1.5 font-semibold text-black text-center px-1.5 py-0.5 tracking-wide pointer-events-none select-none drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
                 {amuletEffectText}
               </div>
             )}
@@ -425,9 +449,9 @@ const amuletEffectText =
                 <div className="absolute top-1 left-1">
                   <div className="relative group flex items-center">
                     <div className="mr-1">
-                      <Sword className="w-5 h-5 text-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                      <Sword className="dh-card__icon text-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
                     </div>
-                    <span className="font-black text-xl text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                    <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                       {card.attack ?? card.value}
                     </span>
                   </div>
@@ -436,11 +460,11 @@ const amuletEffectText =
                 {/* HP - Top Right */}
                 <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
                   <div className="relative group flex items-center">
-                    <span className="font-black text-xl text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
+                    <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
                       {card.hp ?? card.value}
                     </span>
                     <div>
-                      <Heart className="w-5 h-5 text-red-500 fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                      <Heart className="dh-card__icon text-red-500 fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
                     </div>
                   </div>
 
@@ -450,7 +474,7 @@ const amuletEffectText =
                       {[...Array(card.hpLayers)].map((_, i) => (
                         <div 
                           key={i}
-                          className={`w-2 h-2 rounded-full border border-black shadow-sm ${
+                          className={`dh-card__layer-dot rounded-full border border-black shadow-sm ${
                             i < (card.currentLayer || 1) 
                               ? 'bg-red-500' 
                               : 'bg-gray-400'
@@ -470,12 +494,12 @@ const amuletEffectText =
                   <div className="relative group flex items-center">
                     <div className="mr-1">
                       {card.type === 'weapon' ? (
-                        <Sword className="w-5 h-5 text-amber-400 fill-amber-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                        <Sword className="dh-card__icon text-amber-400 fill-amber-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
                       ) : (
-                        <Shield className="w-5 h-5 text-blue-400 fill-blue-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                        <Shield className="dh-card__icon text-blue-400 fill-blue-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
                       )}
                     </div>
-                    <span className="font-black text-xl text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                    <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                       {card.value}
                     </span>
                   </div>
@@ -489,7 +513,7 @@ const amuletEffectText =
                         const dotValue = i + 1;
                         const isFilled = dotValue <= currentDurability;
                         const dotClasses = [
-                          'rounded-full border shadow-sm transition-colors',
+                          'dh-card__durability-dot rounded-full border shadow-sm transition-colors',
                           isFilled
                             ? 'bg-amber-400 border-amber-500 shadow-amber-500/40'
                             : 'bg-slate-800/50 border-slate-600 opacity-50',
@@ -500,10 +524,6 @@ const amuletEffectText =
                           <div
                             key={dotValue}
                             className={dotClasses}
-                            style={{
-                              width: 'clamp(0.32rem, 1vw, 0.45rem)',
-                              height: 'clamp(0.32rem, 1vw, 0.45rem)',
-                            }}
                           />
                         );
                       })}
@@ -516,36 +536,36 @@ const amuletEffectText =
             {isPotionCard && isHealingPotion && (
               <div className="absolute bottom-2 w-full flex justify-center">
                 <div className="relative group flex items-center">
-                  <span className="font-black text-xl text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
+                  <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
                     +{card.value}
                   </span>
-                  <Heart className="w-5 h-5 text-green-500 fill-green-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                  <Heart className="dh-card__icon text-green-500 fill-green-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
                 </div>
               </div>
             )}
           </div>
           
           {/* Text Area */}
-          <div className={`flex-1 p-1 flex flex-col items-center justify-start bg-card text-center overflow-hidden relative`}>
-            <h3 className="font-serif font-semibold text-xs leading-tight mb-1 w-full truncate px-1" title={card.name}>
+          <div className="flex-1 p-1 flex flex-col items-center justify-start bg-card text-center overflow-hidden relative">
+            <h3 className="dh-card__name font-serif font-semibold mb-1 w-full truncate px-1" title={card.name}>
               {card.name}
             </h3>
             
             {/* Magic Effect */}
             {card.type === 'magic' && (
-              <div className="w-full text-[10px] leading-tight text-muted-foreground px-1 overflow-y-auto">
+              <div className="dh-card__body-text w-full text-muted-foreground px-1 overflow-y-auto">
                 {card.magicEffect || card.description}
               </div>
             )}
 
             {/* Amulet Effect */}
             {card.type === 'amulet' && amuletEffectText && !showAmuletOverlay && (
-              <div className="w-full text-[10px] leading-tight text-muted-foreground px-1">
+              <div className="dh-card__body-text w-full text-muted-foreground px-1">
                 {amuletEffectText}
               </div>
             )}
             {isPotionCard && potionDescription && (
-              <div className="w-full text-[10px] leading-tight text-muted-foreground px-1">
+              <div className="dh-card__body-text w-full text-muted-foreground px-1">
                 {potionDescription}
               </div>
             )}
@@ -556,7 +576,7 @@ const amuletEffectText =
                 {card.eventChoices.map((choice, idx) => (
                   <div
                     key={idx}
-                    className="text-[9px] leading-tight text-muted-foreground text-left break-words"
+                    className="dh-card__caption text-muted-foreground text-left break-words"
                   >
                     • {choice.text}
                   </div>
@@ -567,8 +587,8 @@ const amuletEffectText =
             {/* Footer type indicator - Icon */}
             <div className="absolute bottom-1 right-1 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
               {isPermanentMagicCard && (
-                <span className="flex items-center gap-0.5 rounded-sm border border-cyan-400/60 bg-cyan-900/80 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-cyan-50 shadow-sm">
-                  <Infinity className="h-3 w-3" />
+                <span className="dh-card__caption flex items-center gap-0.5 rounded-sm border border-cyan-400/60 bg-cyan-900/80 px-1 py-0.5 font-bold uppercase tracking-wide text-cyan-50 shadow-sm">
+                  <Infinity className="dh-icon-inline" />
                   Perm
                 </span>
               )}

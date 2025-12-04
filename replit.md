@@ -121,7 +121,7 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 - **Amulet Slot System**: New dedicated slot with passive bonuses
   - Life Amulet: +5 max HP (maxHp calculated as INITIAL_HP + bonus)
   - Strength Amulet: +1 weapon damage (applied in all combat paths)
-  - Guardian Amulet: +1 shield value (applied in all defense paths)
+  - Guardian Amulet: Shield overflow damage ignored during combat when protected
   - 6 amulets total in deck (2 of each type)
 - **10-Item Backpack Stacking**: Upgraded from single-item to 10-item stack
   - LIFO system: use top item, add new items to bottom

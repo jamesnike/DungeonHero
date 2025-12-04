@@ -247,7 +247,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
         return `删除 ${count} 张牌`;
       }
       if (token === 'graveyardDiscover') return '从坟场发现一张卡牌';
-      if (token.startsWith('drawHeroCards:')) return `抽 ${token.replace('drawHeroCards:', '')} 张牌`;
+      if (token.startsWith('drawHeroCards:')) return `从背包抽 ${token.replace('drawHeroCards:', '')} 张牌`;
       if (token === 'removeAllAmulets') return '摧毁所有护符';
       if (token === 'discoverClass') return '发现一张专属卡';
       if (token === 'openShop') return '打开商店';

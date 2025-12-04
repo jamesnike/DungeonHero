@@ -140,13 +140,13 @@ export default function HeroCard({
       className="relative h-full w-full overflow-visible"
       data-testid="hero-card"
     >
-      <div className="pointer-events-none absolute -top-7 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 text-[10px] sm:text-xs font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap">
+      <div className="pointer-events-none absolute -top-7 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 dh-hero-small font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap">
         <span className="flex items-center gap-1 text-purple-500">
-          <Sparkles className="w-3 h-3" />
+          <Sparkles className="dh-hero-icon" />
           永久法术伤害
         </span>
         <span className="text-muted-foreground/50">|</span>
-        <span className="font-mono text-primary text-sm">+{spellDamageDisplay}</span>
+        <span className="font-mono text-primary dh-hero-chip">+{spellDamageDisplay}</span>
       </div>
       <Card className={`
         relative h-full w-full border-4 border-primary shadow-2xl overflow-hidden
@@ -158,8 +158,8 @@ export default function HeroCard({
       `}>
         {showAttackIndicator && (
           <div className="absolute top-2 left-2 z-30 bg-primary text-primary-foreground rounded-full px-2 py-1 flex items-center gap-1 shadow-lg animate-pulse">
-            <Sword className="w-4 h-4" />
-            <span className="text-[10px] font-bold uppercase">Attack</span>
+            <Sword className="dh-hero-icon" />
+            <span className="dh-hero-pill font-bold uppercase">Attack</span>
           </div>
         )}
         <div className="h-full flex flex-col">
@@ -221,8 +221,8 @@ export default function HeroCard({
             <div className="absolute top-2 left-2 right-2">
               <div className="bg-background/90 backdrop-blur-sm rounded-lg p-1.5">
                 <div className="flex items-center justify-between mb-0.5">
-                  <Heart className="w-4 h-4 text-destructive" />
-                  <span className="font-mono text-lg font-bold" data-testid="hero-hp">
+                  <Heart className="dh-hero-icon text-destructive" />
+                  <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
                     {hp}/{maxHp}
                   </span>
                 </div>
@@ -234,14 +234,14 @@ export default function HeroCard({
               <div className="absolute bottom-2 left-2 right-2 flex gap-1">
                 {equippedWeapon && (
                   <div className="bg-background/90 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-1 flex-1">
-                    <Sword className="w-3 h-3 text-amber-500" />
-                    <span className="text-xs font-mono">{equippedWeapon.value}</span>
+                    <Sword className="dh-hero-icon text-amber-500" />
+                    <span className="dh-hero-chip font-mono">{equippedWeapon.value}</span>
                   </div>
                 )}
                 {equippedShield && (
                   <div className="bg-background/90 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-1 flex-1">
-                    <Shield className="w-3 h-3 text-blue-500" />
-                    <span className="text-xs font-mono">{equippedShield.value}</span>
+                    <Shield className="dh-hero-icon text-blue-500" />
+                    <span className="dh-hero-chip font-mono">{equippedShield.value}</span>
                   </div>
                 )}
               </div>
@@ -249,21 +249,21 @@ export default function HeroCard({
           </div>
           
           <div className="h-[40%] px-2 pb-3 pt-3 flex flex-col items-center justify-start bg-card">
-            <h2 className="font-serif font-bold text-base text-center" data-testid="hero-name">
+            <h2 className="dh-hero-name font-serif font-bold text-center" data-testid="hero-name">
               {name}
             </h2>
-            <p className="text-xs text-muted-foreground">{classTitle}</p>
+            <p className="dh-hero-class text-muted-foreground">{classTitle}</p>
             {heroSkillInfo && (
               <div className="mt-2 flex flex-col items-center gap-1">
                 {isPassiveSkill ? (
-                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <span className="dh-hero-small uppercase tracking-wide text-muted-foreground">
                     Passive Skill: {heroSkillInfo.name}
                   </span>
                 ) : (
                   <div className="flex items-center gap-2 flex-wrap justify-center">
                     <button
                       type="button"
-                      className={`text-[11px] font-semibold uppercase tracking-wide px-4 py-1.5 rounded-full transition ${heroSkillButtonClasses}`}
+                      className={`dh-hero-small font-semibold uppercase tracking-wide px-4 py-1.5 rounded-full transition ${heroSkillButtonClasses}`}
                       disabled={heroSkillButtonDisabled}
                       onClick={onHeroSkillClick}
                       title={heroSkillInfo.disabledReason}
@@ -274,7 +274,7 @@ export default function HeroCard({
                     {heroSkillInfo.isPending && onHeroSkillCancel && (
                       <button
                         type="button"
-                        className="text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                        className="dh-hero-small font-semibold text-muted-foreground hover:text-foreground transition-colors"
                         onClick={onHeroSkillCancel}
                       >
                         Cancel
@@ -285,7 +285,7 @@ export default function HeroCard({
               </div>
             )}
             {heroSkillMessage && (
-              <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground text-center justify-center">
+              <div className="mt-1 flex items-center gap-1 dh-hero-small text-muted-foreground text-center justify-center">
                 <AlertTriangle className="w-3 h-3" />
                 <span>{heroSkillMessage}</span>
               </div>

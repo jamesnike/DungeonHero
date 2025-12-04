@@ -135,7 +135,7 @@ export default function HelpDialog() {
                   <strong className="text-foreground">Amulets</strong>
                   <p className="text-xs text-muted-foreground">
                     Two-slot queue. Mix heal (double recovery), balance (slot-specific attack/defense), life steal,
-                    guardian (shield immunity), flash (double strike at -3), and strength (+4 attack with blood upkeep).
+                    guardian (shield overflow damage ignored during combat), flash (double strike at -3), and strength (+4 attack with blood upkeep).
                   </p>
                 </div>
               </div>

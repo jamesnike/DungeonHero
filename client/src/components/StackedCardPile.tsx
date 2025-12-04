@@ -107,7 +107,7 @@ export default function StackedCardPile({
       ))}
 
       {!hasCards && (
-        <div className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="absolute inset-0 flex items-center justify-center dh-deck-badge uppercase tracking-widest text-muted-foreground">
           {emptyLabel}
         </div>
       )}
@@ -128,7 +128,7 @@ export default function StackedCardPile({
             }}
           >
             <div
-              className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em]"
+              className="px-3 py-1 rounded-full dh-deck-badge font-semibold uppercase tracking-[0.2em]"
               style={{
                 backgroundColor: palette.badgeBg,
                 color: palette.labelColor,
@@ -138,7 +138,7 @@ export default function StackedCardPile({
               {label || 'Deck'}
             </div>
             <p
-              className="mt-2 text-sm font-bold"
+              className="mt-2 dh-deck-count font-bold"
               style={{ color: palette.labelColor }}
             >
               {count} cards

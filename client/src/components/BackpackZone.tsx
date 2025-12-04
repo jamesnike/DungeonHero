@@ -114,13 +114,13 @@ export default function BackpackZone({
           variant="muted"
         />
         <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-2 text-white/90">
-          <div className="flex items-center justify-between text-[8px] sm:text-[10px] uppercase tracking-wide">
+          <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
             <span className="font-semibold">Backpack</span>
-            <Badge className="bg-black/50 text-white font-mono text-[9px] sm:text-xs px-1 sm:px-2">
+            <Badge className="bg-black/50 text-white font-mono dh-hero-chip px-1 sm:px-2">
               {backpackCount}/{maxCapacity}
             </Badge>
           </div>
-          <div className="flex items-center justify-end text-[9px] sm:text-[11px] font-medium">
+          <div className="flex items-center justify-end dh-hero-chip font-medium">
             查看内容
           </div>
         </div>
@@ -135,12 +135,12 @@ export default function BackpackZone({
             onDraw?.();
           }
         }}
-        className="w-full font-semibold tracking-wide text-xs sm:text-sm"
+        className="w-full font-semibold tracking-wide dh-hero-chip"
       >
         抽牌
       </Button>
 
-      <p className="text-center text-[9px] sm:text-[11px] font-medium text-muted-foreground">
+      <p className="text-center dh-hero-small font-medium text-muted-foreground">
         {statusLabel}
       </p>
     </Card>
