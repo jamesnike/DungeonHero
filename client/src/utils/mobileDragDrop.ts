@@ -2,6 +2,8 @@
 export interface DragData {
   type: 'card' | 'equipment';
   data: any;
+  clientX?: number;
+  clientY?: number;
 }
 
 let currentDragData: DragData | null = null;
@@ -15,12 +17,13 @@ export const initMobileDrag = (
   onDragStart?: () => void,
   onDragEnd?: () => void
 ) => {
+  let lastTouchPoint: { x: number; y: number } | null = null;
   // Touch event handlers
   const handleTouchStart = (e: TouchEvent) => {
     e.preventDefault();
     
     // Store the drag data
-    currentDragData = data;
+    currentDragData = { ...data };
     dragElement = element;
     
     // Get the original element's dimensions before cloning
@@ -51,6 +54,7 @@ export const initMobileDrag = (
     const touch = e.touches[0];
     dragPreview.style.left = `${touch.clientX - originalWidth / 2}px`;
     dragPreview.style.top = `${touch.clientY - originalHeight / 2}px`;
+    lastTouchPoint = { x: touch.clientX, y: touch.clientY };
     
     document.body.appendChild(dragPreview);
     
@@ -67,6 +71,7 @@ export const initMobileDrag = (
     if (!dragPreview) return;
     
     const touch = e.touches[0];
+    lastTouchPoint = { x: touch.clientX, y: touch.clientY };
     
     // Get preview dimensions (use getBoundingClientRect for accurate size)
     const previewRect = dragPreview.getBoundingClientRect();
@@ -114,13 +119,18 @@ export const initMobileDrag = (
     
     // Trigger drop if over a valid drop zone
     if (touchTarget && currentDragData) {
+      const touch = e.changedTouches[0];
+      const dropPoint = lastTouchPoint ?? (touch ? { x: touch.clientX, y: touch.clientY } : null);
+      const detail: DragData = dropPoint
+        ? { ...currentDragData, clientX: dropPoint.x, clientY: dropPoint.y }
+        : { ...currentDragData };
       // Find the closest drop zone
       const dropZone = touchTarget.closest('[data-drop-zone]') as HTMLElement;
       
       if (dropZone) {
         // Create a custom drop event
         const dropEvent = new CustomEvent('mobile-drop', {
-          detail: currentDragData,
+          detail,
           bubbles: true
         });
         dropZone.dispatchEvent(dropEvent);
@@ -131,6 +141,7 @@ export const initMobileDrag = (
     currentDragData = null;
     dragElement = null;
     touchTarget = null;
+    lastTouchPoint = null;
     
     // Call drag end callback
     onDragEnd?.();

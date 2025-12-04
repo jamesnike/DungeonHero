@@ -130,7 +130,18 @@ export default function EquipmentSlot({
   // Prepare item as GameCardData
   const gameCardData: GameCardData | null = item ? { ...item } : null;
 
-  const colWidth = 20; // Width of each durability column
+  const DURABILITY_SEGMENTS = 4;
+  const colWidth = 14; // Width of each durability column
+  const rawCurrentDurability = Math.max(gameCardData?.durability ?? 0, 0);
+  const rawMaxDurability = Math.max(
+    gameCardData?.maxDurability ?? gameCardData?.durability ?? 0,
+    0,
+  );
+  const currentDurability = Math.min(DURABILITY_SEGMENTS, rawCurrentDurability);
+  const maxDurability = Math.min(
+    DURABILITY_SEGMENTS,
+    Math.max(rawMaxDurability, currentDurability),
+  );
   const handleClick = (e: React.MouseEvent) => {
     if (!onClick) return;
     e.stopPropagation();
@@ -164,15 +175,28 @@ export default function EquipmentSlot({
             heroSkillHighlight ? 'ring-4 ring-amber-300 animate-pulse' : ''
           }`}
         >
-          {[1, 2, 3].map((num) => (
-            <div 
-              key={num} 
-              className="h-full flex items-center justify-center border-l border-border/20 bg-muted/20 text-muted-foreground font-mono font-bold text-lg"
-              style={{ width: `${colWidth}px` }}
-            >
-              {num}
-            </div>
-          ))}
+          {Array.from({ length: DURABILITY_SEGMENTS }, (_, idx) => idx + 1).map((num) => {
+            const isCurrent = currentDurability > 0 && num === currentDurability;
+            const isWithinMax = maxDurability > 0 && num <= maxDurability;
+            const columnClasses = [
+              'h-full flex items-center justify-center border-l border-border/20 font-mono font-bold text-lg transition-all',
+              isCurrent
+                ? 'bg-amber-300/80 text-amber-900 shadow-inner shadow-amber-500/40'
+                : 'bg-muted/15 text-muted-foreground/60',
+              !isWithinMax ? 'opacity-30' : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
+            return (
+              <div
+                key={num}
+                className={columnClasses}
+                style={{ width: `${colWidth}px` }}
+              >
+                {num}
+              </div>
+            );
+          })}
           {/* Fill the rest of the space */}
           <div className="flex-1 bg-background/50" />
         </div>
@@ -184,9 +208,10 @@ export default function EquipmentSlot({
             heroSkillHighlight ? 'cursor-pointer' : ''
           }`}
           style={{
-            transform: type === 'equipment' && gameCardData.durability 
-              ? `translateX(-${Math.min(3, gameCardData.durability) * colWidth}px)`
-              : 'none'
+            transform:
+              type === 'equipment' && currentDurability
+                ? `translateX(-${Math.min(DURABILITY_SEGMENTS, currentDurability) * colWidth}px)`
+                : 'none',
           }}
         >
           <GameCard 

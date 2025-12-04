@@ -550,6 +550,13 @@
     opacity: 0.95;
   }
 
+.monster-target-highlight {
+  border-radius: 1.35rem;
+  box-shadow:
+    0 0 0 3px rgba(251, 191, 36, 0.85),
+    0 0 18px rgba(251, 191, 36, 0.5);
+}
+
   @keyframes preview-drop {
     0% {
       transform: translateY(0) scale(1);

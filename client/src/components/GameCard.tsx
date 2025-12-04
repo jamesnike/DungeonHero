@@ -3,7 +3,17 @@ import { Card } from '@/components/ui/card';
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from 'lucide-react';
 import { initMobileDrag } from '../utils/mobileDragDrop';
 
+const MAX_DURABILITY_DOTS = 4;
+
 export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'amulet' | 'magic' | 'event' | 'skill' | 'coin';
+
+export type PotionEffectId =
+  | 'heal-5'
+  | 'heal-7'
+  | 'repair-weapon-2'
+  | 'repair-weapon-3'
+  | 'draw-backpack-3'
+  | 'discover-class';
 
 export type AmuletEffectId = 'heal' | 'balance' | 'life' | 'guardian' | 'flash' | 'strength';
 
@@ -41,6 +51,7 @@ export interface GameCardData {
   // Class card properties
   classCard?: boolean; // Marks as a class card
   description?: string; // Card effect description
+  potionEffect?: PotionEffectId;
 }
 
 interface GameCardProps {
@@ -81,9 +92,19 @@ export default function GameCard({
   const [isDragging, setIsDragging] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
-  const totalDurabilityDots = Math.max(card.maxDurability ?? card.durability ?? 0, 0);
-  const currentDurability = Math.max(card.durability ?? 0, 0);
+  const durabilityCapacity = Math.max(card.maxDurability ?? card.durability ?? 0, 0);
+  const totalDurabilityDots = Math.min(MAX_DURABILITY_DOTS, durabilityCapacity);
+  const currentDurability = Math.min(
+    totalDurabilityDots,
+    Math.max(card.durability ?? 0, 0),
+  );
   const engagedMonster = isEngaged && card.type === 'monster';
+  const isPotionCard = card.type === 'potion';
+  const healingPotionEffects: PotionEffectId[] = ['heal-5', 'heal-7'];
+  const isHealingPotion =
+    isPotionCard && (!card.potionEffect || healingPotionEffects.includes(card.potionEffect));
+  const potionDescription =
+    isPotionCard && !isHealingPotion ? card.description ?? null : null;
 
   // Set up mobile drag support
   useEffect(() => {
@@ -273,7 +294,7 @@ const amuletEffectText =
           ? 'opacity-60 scale-95 -rotate-6 -translate-y-2' 
           : 'hover:scale-105 hover:-translate-y-1 hover:rotate-1'
         }
-        ${card.type === 'monster' && isWeaponDropTarget ? 'ring-4 ring-primary scale-105' : ''}
+        ${card.type === 'monster' && isWeaponDropTarget ? 'scale-105' : ''}
         ${engagedMonster ? 'engaged-monster' : ''}
         ${className}
       `}
@@ -425,27 +446,35 @@ const amuletEffectText =
                 {(card.durability !== undefined || card.maxDurability !== undefined) && totalDurabilityDots > 0 && (
                   <div className="absolute top-1.5 right-1.5 flex flex-col items-end">
                     <div className="flex gap-0.5">
-                      {Array.from({ length: totalDurabilityDots }).map((_, i) => (
-                        <div
-                          key={i}
-                          className={`rounded-full border shadow-sm ${
-                            i < currentDurability
-                              ? 'bg-amber-400 border-amber-500 shadow-amber-500/40'
-                              : 'bg-slate-800/60 border-slate-600'
-                          }`}
-                          style={{
-                            width: 'clamp(0.375rem, 1.2vw, 0.5rem)',
-                            height: 'clamp(0.375rem, 1.2vw, 0.5rem)',
-                          }}
-                        />
-                      ))}
+                      {Array.from({ length: totalDurabilityDots }).map((_, i) => {
+                        const dotValue = i + 1;
+                        const isFilled = dotValue <= currentDurability;
+                        const dotClasses = [
+                          'rounded-full border shadow-sm transition-colors',
+                          isFilled
+                            ? 'bg-amber-400 border-amber-500 shadow-amber-500/40'
+                            : 'bg-slate-800/50 border-slate-600 opacity-50',
+                        ]
+                          .filter(Boolean)
+                          .join(' ');
+                        return (
+                          <div
+                            key={dotValue}
+                            className={dotClasses}
+                            style={{
+                              width: 'clamp(0.32rem, 1vw, 0.45rem)',
+                              height: 'clamp(0.32rem, 1vw, 0.45rem)',
+                            }}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 )}
               </>
             )}
 
-            {card.type === 'potion' && (
+            {isPotionCard && isHealingPotion && (
               <div className="absolute bottom-2 w-full flex justify-center">
                 <div className="relative group flex items-center">
                   <span className="font-black text-xl text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
@@ -474,6 +503,11 @@ const amuletEffectText =
             {card.type === 'amulet' && amuletEffectText && !showAmuletOverlay && (
               <div className="w-full text-[10px] leading-tight text-muted-foreground px-1">
                 {amuletEffectText}
+              </div>
+            )}
+            {isPotionCard && potionDescription && (
+              <div className="w-full text-[10px] leading-tight text-muted-foreground px-1">
+                {potionDescription}
               </div>
             )}
 
