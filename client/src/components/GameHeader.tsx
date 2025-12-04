@@ -2,6 +2,7 @@ import { Heart, Coins, Layers, Skull, ShoppingBag, Clock3 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 interface GameHeaderProps {
   hp: number;
@@ -26,18 +27,53 @@ export default function GameHeader({
   onDeckClick,
   onNewGame,
 }: GameHeaderProps) {
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerScale, setHeaderScale] = useState(1);
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const target = headerRef.current;
+    if (!target) {
+      return;
+    }
+    const BASE_WIDTH = 1180;
+    const MIN_SCALE = 0.62;
+    const MAX_SCALE = 1.35;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const updateScale = () => {
+      const width = target.getBoundingClientRect().width;
+      if (!width) return;
+      setHeaderScale(prev => {
+        const next = clamp(width / BASE_WIDTH, MIN_SCALE, MAX_SCALE);
+        return Math.abs(prev - next) > 0.01 ? next : prev;
+      });
+    };
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+  const headerStyle = {
+    '--dh-header-scale': headerScale.toString(),
+  } as CSSProperties;
+
   return (
-    <div className="h-auto py-3 px-4 lg:px-8 bg-card border-b border-card-border flex items-center justify-between flex-wrap gap-4">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-3" data-testid="header-hp">
-          <Heart className="w-6 h-6 lg:w-8 lg:h-8 text-destructive" />
-          <span className="font-mono text-2xl lg:text-3xl font-bold">
+    <div
+      ref={headerRef}
+      className="game-header h-auto py-3 px-4 bg-card border-b border-card-border flex items-center justify-between gap-4"
+      style={headerStyle}
+    >
+      <div className="game-header__group">
+        <div className="game-header__stat" data-testid="header-hp">
+          <Heart className="game-header__icon text-destructive" />
+          <span className="game-header__value font-mono font-bold">
             {hp}/{maxHp}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button onClick={onNewGame} variant="outline" size="sm" data-testid="button-new-game">
+        <div className="game-header__controls">
+          <Button onClick={onNewGame} variant="outline" size="sm" data-testid="button-new-game" className="game-header__button">
             New Game
           </Button>
           <HelpDialog />
@@ -46,42 +82,42 @@ export default function GameHeader({
 
       <button 
         onClick={onDeckClick}
-        className="flex items-center gap-3 hover-elevate active-elevate-2 p-2 lg:p-3 rounded-md transition-all"
+        className="game-header__deck hover-elevate active-elevate-2 rounded-md transition-all"
         data-testid="header-deck"
       >
-        <Layers className="w-6 h-6 lg:w-8 lg:h-8 text-primary" />
-        <Badge variant="outline" className="font-mono text-lg lg:text-xl px-3 py-1">
+        <Layers className="game-header__icon text-primary" />
+        <Badge variant="outline" className="game-header__badge font-mono">
           {cardsRemaining}
         </Badge>
       </button>
 
-      <div className="flex items-center gap-3" data-testid="header-turn-count">
-        <Clock3 className="w-6 h-6 lg:w-8 lg:h-8 text-muted-foreground" />
-        <Badge variant="outline" className="font-mono text-lg lg:text-xl px-3 py-1">
+      <div className="game-header__stat" data-testid="header-turn-count">
+        <Clock3 className="game-header__icon text-muted-foreground" />
+        <Badge variant="outline" className="game-header__badge font-mono">
           回合 {turnCount}
         </Badge>
       </div>
 
-      <div className="flex items-center gap-3" data-testid="stat-monsters-defeated">
-        <Skull className="w-6 h-6 lg:w-8 lg:h-8 text-primary" />
-        <Badge variant="outline" className="font-mono text-lg lg:text-xl px-3 py-1">
+      <div className="game-header__stat" data-testid="stat-monsters-defeated">
+        <Skull className="game-header__icon text-primary" />
+        <Badge variant="outline" className="game-header__badge font-mono">
           {monstersDefeated}
         </Badge>
       </div>
 
-      <div className="flex items-center gap-2" data-testid="header-shop-level">
-        <ShoppingBag className="w-6 h-6 lg:w-8 lg:h-8 text-amber-500" />
-        <div className="flex flex-col leading-tight">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">商店等级</span>
-          <Badge variant="secondary" className="font-mono text-base lg:text-lg px-3 py-1">
+      <div className="game-header__shop" data-testid="header-shop-level">
+        <ShoppingBag className="game-header__icon text-amber-500" />
+        <div className="game-header__shop-text leading-tight">
+          <span className="game-header__shop-label uppercase tracking-wide text-muted-foreground">商店等级</span>
+          <Badge variant="secondary" className="game-header__badge font-mono">
             Lv.{shopLevel}
           </Badge>
         </div>
       </div>
 
-      <div className="flex items-center gap-3" data-testid="header-gold">
-        <Coins className="w-6 h-6 lg:w-8 lg:h-8 text-yellow-500" />
-        <span className="font-mono text-2xl lg:text-3xl font-bold text-yellow-500">
+      <div className="game-header__stat" data-testid="header-gold">
+        <Coins className="game-header__icon text-yellow-500" />
+        <span className="game-header__value font-mono font-bold text-yellow-500">
           {gold}
         </span>
       </div>

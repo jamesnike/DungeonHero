@@ -17,9 +17,17 @@ interface CombatPanelProps {
   onEndHeroTurn: () => void;
   equipmentSlot1: (GameCardData & { type: 'weapon' | 'shield' }) | null;
   equipmentSlot2: (GameCardData & { type: 'weapon' | 'shield' }) | null;
+  stageScale?: number;
   onDragHandlePointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   isDragging?: boolean;
 }
+
+const MEASURED_PANEL_MIN = 0.65;
+const MEASURED_PANEL_MAX = 1.75;
+const FINAL_PANEL_MIN = 0.65;
+const FINAL_PANEL_MAX = 2.6;
+const BASE_PANEL_WIDTH = 360;
+const PANEL_BOOST_MULTIPLIER = 0.65;
 
 export default function CombatPanel({
   engagedMonsters,
@@ -32,6 +40,7 @@ export default function CombatPanel({
   onEndHeroTurn,
   equipmentSlot1,
   equipmentSlot2,
+  stageScale = 1,
   onDragHandlePointerDown,
   isDragging = false,
 }: CombatPanelProps) {
@@ -48,15 +57,12 @@ export default function CombatPanel({
     if (!target) {
       return;
     }
-    const BASE_WIDTH = 360;
-    const MIN_SCALE = 0.7;
-    const MAX_SCALE = 1.2;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const updateScale = () => {
       const width = target.getBoundingClientRect().width;
       if (!width) return;
       setPanelScale(prev => {
-        const next = clamp(width / BASE_WIDTH, MIN_SCALE, MAX_SCALE);
+        const next = clamp(width / BASE_PANEL_WIDTH, MEASURED_PANEL_MIN, MEASURED_PANEL_MAX);
         return Math.abs(prev - next) > 0.01 ? next : prev;
       });
     };
@@ -130,11 +136,21 @@ export default function CombatPanel({
           ? `${monsterAttackQueue.length} attack${monsterAttackQueue.length === 1 ? '' : 's'} queued`
           : 'Monsters regrouping';
 
+  const rawCombinedScale = panelScale * stageScale;
+  const boostedCombinedScale =
+    rawCombinedScale > 1
+      ? rawCombinedScale + (rawCombinedScale - 1) * PANEL_BOOST_MULTIPLIER
+      : rawCombinedScale;
+  const combinedPanelScale = Math.min(
+    FINAL_PANEL_MAX,
+    Math.max(FINAL_PANEL_MIN, boostedCombinedScale),
+  );
+
   return (
     <Card
       ref={cardRef}
       className={`relative z-10 w-full h-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
-      style={{ '--dh-combat-panel-scale': panelScale.toString() } as CSSProperties}
+      style={{ '--dh-combat-panel-scale': combinedPanelScale.toString() } as CSSProperties}
     >
       <div className="p-2 h-full flex flex-col gap-2">
         <div

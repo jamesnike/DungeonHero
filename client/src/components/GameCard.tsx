@@ -370,6 +370,31 @@ const amuletEffectText =
   const showWeaponSwing = Boolean(weaponSwingAnimation);
   const showShieldBlock = Boolean(shieldBlockAnimation);
   const showCombatOverlay = showBleedOverlay || showWeaponSwing || showShieldBlock;
+  const cardImageHeightClass =
+    card.type === 'event'
+      ? 'h-[52%]'
+      : card.type === 'magic'
+        ? 'h-[56%]'
+        : 'h-[75%]';
+  const isCompactImageType = card.type === 'magic' || card.type === 'event';
+  const cardImageWrapperClassName = [
+    'relative',
+    cardImageHeightClass,
+    'bg-gradient-to-b from-muted to-card overflow-hidden transition-all',
+    isCompactImageType
+      ? 'flex items-center justify-center pt-1 pb-1.5 transform translate-y-0.5'
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const cardImageClassName = [
+    'select-none transition-all',
+    isCompactImageType
+      ? 'w-auto max-h-[98%] max-w-[98%] object-contain transform scale-[1.05]'
+      : 'w-full h-full object-cover',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div
@@ -410,15 +435,13 @@ const amuletEffectText =
       `}>
         <div className="h-full flex flex-col">
           {/* Image Area - takes up different heights based on card type */}
-          <div className={`relative ${
-            ['event'].includes(card.type) ? 'h-[55%]' : 'h-[75%]'
-          } bg-gradient-to-b from-muted to-card overflow-hidden transition-all`}>
+          <div className={cardImageWrapperClassName}>
             {card.image && (
               <img 
                 src={card.image} 
                 alt={card.name}
                 draggable={false}
-                className="w-full h-full object-cover select-none"
+                className={cardImageClassName}
               />
             )}
             {showAmuletOverlay && (
@@ -610,7 +633,7 @@ const amuletEffectText =
                 {card.eventChoices.map((choice, idx) => (
                   <div
                     key={idx}
-                    className="dh-card__caption text-muted-foreground text-left break-words"
+                    className="dh-card__caption dh-card__event-option text-muted-foreground text-left break-words"
                   >
                     • {choice.text}
                   </div>

@@ -18,6 +18,7 @@ interface EquipmentSlotProps {
   slotId?: string;
   item?: (GameCardData & { [key: string]: any }) | null;
   backpackCount?: number; // Number of items in backpack stack
+  scaleMultiplier?: number;
   permanentDamageBonus?: number; // Permanent damage bonus for this slot
   permanentShieldBonus?: number; // Permanent shield bonus for this slot
   onDrop?: (card: any) => void;
@@ -41,6 +42,7 @@ export default function EquipmentSlot({
   slotId,
   item,
   backpackCount = 0,
+  scaleMultiplier = 1,
   permanentDamageBonus = 0,
   permanentShieldBonus = 0,
   onDrop,
@@ -202,6 +204,12 @@ export default function EquipmentSlot({
     onClick();
   };
 
+  const appliedSlotScale = clamp(
+    slotScale * scaleMultiplier,
+    SLOT_SCALE_MIN * Math.min(1, scaleMultiplier),
+    SLOT_SCALE_MAX * Math.max(1, scaleMultiplier),
+  );
+
   return (
     <div 
       ref={slotRef}
@@ -212,7 +220,7 @@ export default function EquipmentSlot({
       onDrop={handleDrop}
       data-testid={testId}
       onClick={onClick ? handleClick : undefined}
-      style={{ '--dh-hero-instance-scale': slotScale.toString() } as CSSProperties}
+      style={{ '--dh-hero-instance-scale': appliedSlotScale.toString() } as CSSProperties}
     >
       {/* Permanent bonus header */}
       {type === 'equipment' && (

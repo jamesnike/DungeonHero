@@ -7,6 +7,7 @@ interface DiceRollerProps {
   className?: string;
   interactive?: boolean;
   autoRollTrigger?: number;
+  scaleMultiplier?: number;
 }
 
 type Vec3 = [number, number, number];
@@ -31,6 +32,7 @@ export default function DiceRoller({
   className = '',
   interactive = true,
   autoRollTrigger,
+  scaleMultiplier = 1,
 }: DiceRollerProps) {
   const [isRolling, setIsRolling] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -147,7 +149,7 @@ export default function DiceRoller({
         onRoll?.(value);
       }
 
-      renderDie(ctx, canvas, vertices, faces, orientationRef.current);
+      renderDie(ctx, canvas, vertices, faces, orientationRef.current, scaleMultiplier);
       animationRef.current = requestAnimationFrame(draw);
     };
 
@@ -157,7 +159,7 @@ export default function DiceRoller({
       resizeObserver.disconnect();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [faces, onRoll, vertices]);
+  }, [faces, onRoll, vertices, scaleMultiplier]);
 
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') {
@@ -212,12 +214,13 @@ export default function DiceRoller({
   }, [autoRollTrigger, rollDice]);
 
   const diceScale = diceSize ? clamp(diceSize / BASE_DICE_SIZE, DICE_SCALE_MIN, DICE_SCALE_MAX) : 1;
+  const combinedDiceScale = diceScale * scaleMultiplier;
   const squareStyle: CSSProperties = {
     width: diceSize ? `${diceSize}px` : '100%',
     height: diceSize ? `${diceSize}px` : '100%',
     maxWidth: '100%',
     maxHeight: '100%',
-    '--dh-dice-instance-scale': diceScale.toString(),
+    '--dh-dice-instance-scale': combinedDiceScale.toString(),
   } as CSSProperties;
 
   const shadowStyle: CSSProperties = {
@@ -255,7 +258,8 @@ function renderDie(
   canvas: HTMLCanvasElement,
   vertices: Vec3[],
   faces: Face[],
-  quat: Quat
+  quat: Quat,
+  labelScale = 1,
 ) {
   const width = canvas.width;
   const height = canvas.height;
@@ -300,7 +304,7 @@ function renderDie(
     ctx.fillStyle = isTopFace ? 'rgba(255,255,255,1.0)' : 'rgba(255,255,255,0.85)';
     // Responsive font size based on canvas size
     const baseFontSize = Math.max(8, Math.min(scale * (isTopFace ? 5.0 : 0.25), isTopFace ? scale * 5.0 : scale * 0.25));
-    ctx.font = `bold ${baseFontSize}px var(--font-mono)`;
+    ctx.font = `bold ${baseFontSize * labelScale}px var(--font-mono)`;
     
     // Add glow effect for top face
     if (isTopFace) {

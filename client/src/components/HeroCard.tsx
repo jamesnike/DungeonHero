@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Heart, Shield, Sword, AlertTriangle, Sparkles } from 'lucide-react';
+import { Heart, AlertTriangle, Sparkles } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import React, { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
@@ -15,10 +15,9 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 interface HeroCardProps {
   hp: number;
   maxHp: number;
+  scaleMultiplier?: number;
   onDrop?: (card: any) => void;
   isDropTarget?: boolean;
-  equippedWeapon?: { name: string; value: number } | null;
-  equippedShield?: { name: string; value: number } | null;
   image?: string;
   name?: string;
   classTitle?: string;
@@ -50,10 +49,9 @@ interface HeroSkillUiState {
 export default function HeroCard({ 
   hp, 
   maxHp, 
+  scaleMultiplier = 1,
   onDrop, 
   isDropTarget,
-  equippedWeapon,
-  equippedShield,
   image,
   takingDamage = false,
   healing = false,
@@ -161,6 +159,11 @@ export default function HeroCard({
     ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
     : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow';
   const spellDamageDisplay = Math.max(0, spellDamageBonus);
+  const appliedHeroScale = clamp(
+    heroScale * scaleMultiplier,
+    HERO_SCALE_MIN * Math.min(1, scaleMultiplier),
+    HERO_SCALE_MAX * Math.max(1, scaleMultiplier),
+  );
 
   return (
     <div 
@@ -171,7 +174,7 @@ export default function HeroCard({
       onDrop={handleDrop}
       className="relative h-full w-full overflow-visible"
       data-testid="hero-card"
-      style={{ '--dh-hero-instance-scale': heroScale.toString() } as CSSProperties}
+      style={{ '--dh-hero-instance-scale': appliedHeroScale.toString() } as CSSProperties}
     >
       <div className="pointer-events-none absolute -top-7 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 dh-hero-small font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap">
         <span className="flex items-center gap-1 text-purple-500">
@@ -256,22 +259,6 @@ export default function HeroCard({
               </div>
             </div>
 
-            {(equippedWeapon || equippedShield) && (
-              <div className="absolute bottom-2 left-2 right-2 flex gap-1">
-                {equippedWeapon && (
-                  <div className="bg-background/90 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-1 flex-1">
-                    <Sword className="dh-hero-icon text-amber-500" />
-                    <span className="dh-hero-chip font-mono">{equippedWeapon.value}</span>
-                  </div>
-                )}
-                {equippedShield && (
-                  <div className="bg-background/90 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-1 flex-1">
-                    <Shield className="dh-hero-icon text-blue-500" />
-                    <span className="dh-hero-chip font-mono">{equippedShield.value}</span>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
           
           <div className="h-[40%] px-2 pb-3 pt-3 flex flex-col items-center justify-center bg-card">

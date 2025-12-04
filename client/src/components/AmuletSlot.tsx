@@ -1,8 +1,13 @@
 import { Card } from '@/components/ui/card';
 import { Sparkles } from 'lucide-react';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import GameCard, { GameCardData } from './GameCard';
+
+const BASE_AMULET_WIDTH = 220;
+const AMULET_SCALE_MIN = 0.7;
+const AMULET_SCALE_MAX = 1.3;
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 interface AmuletSlotProps {
   amulets: (GameCardData & { type: 'amulet' })[];
@@ -12,6 +17,7 @@ interface AmuletSlotProps {
   onDragStart?: (card: GameCardData) => void;
   onDragEnd?: () => void;
   onCardClick?: (card: GameCardData) => void;
+  scaleMultiplier?: number;
 }
 
 export default function AmuletSlot({
@@ -22,10 +28,12 @@ export default function AmuletSlot({
   onDragStart,
   onDragEnd,
   onCardClick,
+  scaleMultiplier = 1,
 }: AmuletSlotProps) {
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
   const amuletRef = useRef<HTMLDivElement>(null);
+  const [slotScale, setSlotScale] = useState(1);
   const effectiveMaxSlots = Math.max(1, maxSlots);
 
   const preparedAmulets = useMemo(() => {
@@ -86,11 +94,6 @@ export default function AmuletSlot({
     }
   };
 
-  const getEffectIcon = () => {
-    // Used for empty state only
-    return <Sparkles className="w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 text-muted-foreground mb-2" />;
-  };
-
   const getStackTransform = (index: number): React.CSSProperties => {
     if (!isStackedView) {
       return { zIndex: 10 };
@@ -117,6 +120,34 @@ export default function AmuletSlot({
       : 'ring-2 ring-primary/50 bg-primary/10'
     : 'border border-muted/40';
 
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const target = amuletRef.current;
+    if (!target) {
+      return;
+    }
+    const updateScale = () => {
+      const { width } = target.getBoundingClientRect();
+      if (!width) return;
+      setSlotScale(prev => {
+        const next = clamp(width / BASE_AMULET_WIDTH, AMULET_SCALE_MIN, AMULET_SCALE_MAX);
+        return Math.abs(prev - next) > 0.01 ? next : prev;
+      });
+    };
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  const appliedSlotScale = clamp(
+    slotScale * scaleMultiplier,
+    AMULET_SCALE_MIN * Math.min(1, scaleMultiplier),
+    AMULET_SCALE_MAX * Math.max(1, scaleMultiplier),
+  );
+
   return (
     <div 
       ref={amuletRef}
@@ -126,6 +157,7 @@ export default function AmuletSlot({
       onDrop={handleDrop}
       className={`relative h-full w-full rounded-xl transition-all duration-200 ease-out ${dropStateClass}`}
       data-testid="slot-amulet"
+      style={{ '--dh-hero-instance-scale': appliedSlotScale.toString() } as CSSProperties}
     >
       {hasAmulets ? (
         <div className="relative h-full w-full overflow-visible">
@@ -155,9 +187,9 @@ export default function AmuletSlot({
           ${isDropTarget ? 'border-primary animate-pulse bg-primary/10' : 'border-muted bg-muted/20'}
           ${isDropTarget && isOver ? 'scale-105 ring-4 ring-primary bg-primary/20' : ''}
         `}>
-          <div className="h-full flex flex-col items-center justify-center p-2">
-            <Sparkles className="w-8 h-8 sm:w-12 sm:h-12 md:w-16 md:h-16 text-muted-foreground mb-2" />
-            <span className="text-[8px] sm:text-xs md:text-sm text-muted-foreground font-semibold">
+          <div className="h-full flex flex-col items-center justify-center gap-2 p-2">
+            <Sparkles className="dh-hero-icon text-muted-foreground" />
+            <span className="dh-hero-chip text-muted-foreground font-medium">
               Amulet
             </span>
           </div>

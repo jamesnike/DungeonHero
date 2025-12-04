@@ -14,8 +14,6 @@ export default function HeroCardExample() {
           hp={13} 
           maxHp={maxHp}
           image={heroImage}
-          equippedWeapon={{ name: 'Sword', value: 5 }}
-          equippedShield={{ name: 'Shield', value: 3 }}
         />
       </div>
       <div>
