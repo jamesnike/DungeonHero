@@ -1079,6 +1079,44 @@
   .combat-panel__slot-state {
     font-size: calc(0.68rem * var(--combat-panel-scale, 1));
   }
+
+  .combat-panel-wrapper {
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
+
+  .combat-panel-wrapper--dragging {
+    cursor: grabbing;
+    z-index: 50;
+  }
+
+  .combat-panel-wrapper--dragging .combat-panel {
+    box-shadow: 0 18px 30px rgba(2, 6, 23, 0.55);
+  }
+
+  .combat-panel__drag-handle {
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    border-radius: 0.75rem;
+    padding: 0.15rem;
+    margin: -0.15rem;
+    transition: background-color 150ms ease, opacity 150ms ease;
+  }
+
+  .combat-panel__drag-handle:hover {
+    background-color: hsl(var(--muted) / 0.18);
+  }
+
+  .combat-panel__drag-handle--active,
+  .combat-panel--dragging .combat-panel__drag-handle {
+    cursor: grabbing;
+    background-color: hsl(var(--muted) / 0.28);
+  }
+
+  .combat-panel--dragging {
+    transition: box-shadow 150ms ease, opacity 150ms ease;
+    opacity: 0.98;
+  }
 }
 
 .dh-perspective {

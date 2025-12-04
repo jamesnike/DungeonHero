@@ -1,4 +1,4 @@
-import { Heart, Coins, Layers, Skull, ShoppingBag } from 'lucide-react';
+import { Heart, Coins, Layers, Skull, ShoppingBag, Clock3 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
@@ -10,6 +10,7 @@ interface GameHeaderProps {
   cardsRemaining: number;
   monstersDefeated?: number;
   shopLevel: number;
+  turnCount: number;
   onDeckClick?: () => void;
   onNewGame?: () => void;
 }
@@ -21,6 +22,7 @@ export default function GameHeader({
   cardsRemaining,
   monstersDefeated = 0,
   shopLevel,
+  turnCount,
   onDeckClick,
   onNewGame,
 }: GameHeaderProps) {
@@ -52,6 +54,13 @@ export default function GameHeader({
           {cardsRemaining}
         </Badge>
       </button>
+
+      <div className="flex items-center gap-3" data-testid="header-turn-count">
+        <Clock3 className="w-6 h-6 lg:w-8 lg:h-8 text-muted-foreground" />
+        <Badge variant="outline" className="font-mono text-lg lg:text-xl px-3 py-1">
+          回合 {turnCount}
+        </Badge>
+      </div>
 
       <div className="flex items-center gap-3" data-testid="stat-monsters-defeated">
         <Skull className="w-6 h-6 lg:w-8 lg:h-8 text-primary" />

@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Shield, Swords } from 'lucide-react';
 import type { GameCardData } from './GameCard';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 
 type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
@@ -17,6 +17,8 @@ interface CombatPanelProps {
   onEndHeroTurn: () => void;
   equipmentSlot1: (GameCardData & { type: 'weapon' | 'shield' }) | null;
   equipmentSlot2: (GameCardData & { type: 'weapon' | 'shield' }) | null;
+  onDragHandlePointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  isDragging?: boolean;
 }
 
 export default function CombatPanel({
@@ -30,6 +32,8 @@ export default function CombatPanel({
   onEndHeroTurn,
   equipmentSlot1,
   equipmentSlot2,
+  onDragHandlePointerDown,
+  isDragging = false,
 }: CombatPanelProps) {
   if (!isActive || engagedMonsters.length === 0) {
     return null;
@@ -129,11 +133,15 @@ export default function CombatPanel({
   return (
     <Card
       ref={cardRef}
-      className="relative z-10 w-full h-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel"
+      className={`relative z-10 w-full h-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
       style={{ '--dh-combat-panel-scale': panelScale.toString() } as CSSProperties}
     >
       <div className="p-2 h-full flex flex-col gap-2">
-        <div className="flex items-start justify-between gap-1.5">
+        <div
+          className={`combat-panel__drag-handle flex items-start justify-between gap-1.5${isDragging ? ' combat-panel__drag-handle--active' : ''}`}
+          onPointerDown={onDragHandlePointerDown}
+          aria-grabbed={isDragging}
+        >
           <div className="space-y-0.5">
             <p className="combat-panel__label uppercase tracking-wide text-muted-foreground">Combat</p>
             <p className="combat-panel__title font-semibold">

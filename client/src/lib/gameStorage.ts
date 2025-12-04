@@ -22,6 +22,7 @@ export interface PersistedGameState {
   timestamp: number;
   hp: number;
   gold: number;
+  turnCount: number;
   monstersDefeated: number;
   shopLevel: number;
   cardsPlayed: number;

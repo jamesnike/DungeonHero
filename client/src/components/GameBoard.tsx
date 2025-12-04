@@ -1,4 +1,14 @@
-import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo, type ReactNode, type Ref } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  type ReactNode,
+  type Ref,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type { CSSProperties, DragEvent as ReactDragEvent } from 'react';
 import GameHeader from './GameHeader';
 import HeroCard from './HeroCard';
@@ -66,6 +76,7 @@ import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 
 const INITIAL_HP = 20;
 const INITIAL_GOLD = 10;
+const INITIAL_TURN_COUNT = 1;
 const SELLABLE_TYPES = ['potion', 'weapon', 'shield', 'amulet', 'magic'] as const;
 const EQUIPMENT_TYPES = ['weapon', 'shield', 'amulet'] as const;
 const CONSUMABLE_TYPES = ['potion', 'magic'] as const;
@@ -279,6 +290,11 @@ const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
   amulet: 6,
 };
 const SHOP_LEVEL_DISCOUNT_STEP = 0.1;
+const COMBAT_PANEL_DEFAULT_WIDTH = 170;
+const COMBAT_PANEL_DEFAULT_HEIGHT = 320;
+const COMBAT_PANEL_EDGE_PADDING = 12;
+const COMBAT_PANEL_DEFAULT_POSITION_CLASS =
+  'top-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-4 sm:translate-x-0 sm:top-4';
 const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: number) =>
   Boolean(
     rect &&
@@ -1092,6 +1108,7 @@ export default function GameBoard() {
   // const { toast } = useToast(); // Disabled toast notifications
   const [hp, setHp] = useState(INITIAL_HP);
   const [gold, setGold] = useState(INITIAL_GOLD);
+  const [turnCount, setTurnCount] = useState(INITIAL_TURN_COUNT);
   const [shopLevel, setShopLevel] = useState(0);
   const [previewCards, setPreviewCards] = useState<ActiveRowSlots>(createEmptyActiveRow()); // Preview row slots
   const [activeCards, setActiveCards] = useState<ActiveRowSlots>(createEmptyActiveRow());
@@ -1201,6 +1218,22 @@ export default function GameBoard() {
     equipmentSlot2: 0,
   });
   const [heroVariant, setHeroVariant] = useState<HeroVariant>(() => getRandomHero());
+  const [combatPanelPosition, setCombatPanelPosition] = useState<{ x: number; y: number } | null>(null);
+  const [combatPanelSize, setCombatPanelSize] = useState({ width: 0, height: 0 });
+  const [isCombatPanelDragging, setIsCombatPanelDragging] = useState(false);
+  const combatPanelWrapperRef = useRef<HTMLDivElement | null>(null);
+  const combatPanelDragSessionRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const combatPanelHasCustomPositionRef = useRef(false);
+  const combatPanelWindowListenersRef = useRef<{
+    move: (event: PointerEvent) => void;
+    up: (event: PointerEvent) => void;
+  } | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const gameSurfaceRef = useRef<HTMLDivElement | null>(null);
   const gridWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -1794,13 +1827,232 @@ export default function GameBoard() {
       zIndex: heroFrameHighlightActive ? 25 : 5,
     };
   }, [heroFrameMetrics.padding, heroFramePosition, heroFrameStyle, heroFrameHighlightActive]);
-  const combatPanelStyle = useMemo<CSSProperties>(
-    () =>
-      ({
+  const isCombatPanelVisible = combatState.engagedMonsterIds.length > 0;
+  const clampCombatPanelPosition = useCallback(
+    (x: number, y: number, size?: { width: number; height: number }) => {
+      if (typeof window === 'undefined') {
+        return { x, y };
+      }
+      const width = size?.width || combatPanelSize.width || COMBAT_PANEL_DEFAULT_WIDTH;
+      const height = size?.height || combatPanelSize.height || COMBAT_PANEL_DEFAULT_HEIGHT;
+      const maxX = Math.max(COMBAT_PANEL_EDGE_PADDING, window.innerWidth - width - COMBAT_PANEL_EDGE_PADDING);
+      const maxY = Math.max(COMBAT_PANEL_EDGE_PADDING, window.innerHeight - height - COMBAT_PANEL_EDGE_PADDING);
+      return {
+        x: Math.min(Math.max(COMBAT_PANEL_EDGE_PADDING, x), maxX),
+        y: Math.min(Math.max(COMBAT_PANEL_EDGE_PADDING, y), maxY),
+      };
+    },
+    [combatPanelSize.height, combatPanelSize.width],
+  );
+  const computeDefaultCombatPanelPosition = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    const viewportWidth = window.innerWidth;
+    const width = combatPanelSize.width || COMBAT_PANEL_DEFAULT_WIDTH;
+    const height = combatPanelSize.height || COMBAT_PANEL_DEFAULT_HEIGHT;
+    const top = viewportWidth < 640 ? COMBAT_PANEL_EDGE_PADDING : COMBAT_PANEL_EDGE_PADDING * 2;
+    const left =
+      viewportWidth < 640
+        ? (viewportWidth - width) / 2
+        : viewportWidth - width - COMBAT_PANEL_EDGE_PADDING * 2;
+    return clampCombatPanelPosition(left, top, { width, height });
+  }, [clampCombatPanelPosition, combatPanelSize.height, combatPanelSize.width]);
+  const teardownCombatPanelDrag = useCallback(() => {
+    if (typeof window !== 'undefined' && combatPanelWindowListenersRef.current) {
+      window.removeEventListener('pointermove', combatPanelWindowListenersRef.current.move);
+      window.removeEventListener('pointerup', combatPanelWindowListenersRef.current.up);
+      window.removeEventListener('pointercancel', combatPanelWindowListenersRef.current.up);
+    }
+    combatPanelWindowListenersRef.current = null;
+    combatPanelDragSessionRef.current = null;
+    setIsCombatPanelDragging(false);
+  }, []);
+  useEffect(() => {
+    return () => {
+      teardownCombatPanelDrag();
+    };
+  }, [teardownCombatPanelDrag]);
+  useEffect(() => {
+    if (!isCombatPanelVisible) {
+      teardownCombatPanelDrag();
+    }
+  }, [isCombatPanelVisible, teardownCombatPanelDrag]);
+  useLayoutEffect(() => {
+    if (!isCombatPanelVisible) {
+      return;
+    }
+    setCombatPanelPosition(prev => {
+      if (prev) {
+        return prev;
+      }
+      const next = computeDefaultCombatPanelPosition();
+      return next ?? prev;
+    });
+  }, [computeDefaultCombatPanelPosition, isCombatPanelVisible]);
+  useLayoutEffect(() => {
+    if (!isCombatPanelVisible) {
+      return;
+    }
+    const target = combatPanelWrapperRef.current;
+    if (!target) {
+      return;
+    }
+    const updateSize = () => {
+      const rect = target.getBoundingClientRect();
+      setCombatPanelSize(prev => {
+        if (Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5) {
+          return prev;
+        }
+        return { width: rect.width, height: rect.height };
+      });
+    };
+    updateSize();
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      const { width, height } = entry.contentRect;
+      setCombatPanelSize(prev => {
+        if (Math.abs(prev.width - width) < 0.5 && Math.abs(prev.height - height) < 0.5) {
+          return prev;
+        }
+        return { width, height };
+      });
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [isCombatPanelVisible]);
+  useEffect(() => {
+    if (!isCombatPanelVisible) {
+      return;
+    }
+    setCombatPanelPosition(prev => {
+      if (!prev) {
+        return prev;
+      }
+      const clamped = clampCombatPanelPosition(prev.x, prev.y);
+      if (Math.abs(clamped.x - prev.x) < 0.5 && Math.abs(clamped.y - prev.y) < 0.5) {
+        return prev;
+      }
+      return clamped;
+    });
+  }, [clampCombatPanelPosition, combatPanelSize.height, combatPanelSize.width, isCombatPanelVisible]);
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const handleResize = () => {
+      if (!isCombatPanelVisible) {
+        return;
+      }
+      setCombatPanelPosition(prev => {
+        if (!prev || !combatPanelHasCustomPositionRef.current) {
+          return computeDefaultCombatPanelPosition() ?? prev;
+        }
+        const clamped = clampCombatPanelPosition(prev.x, prev.y);
+        if (Math.abs(clamped.x - prev.x) < 0.5 && Math.abs(clamped.y - prev.y) < 0.5) {
+          return prev;
+        }
+        return clamped;
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [clampCombatPanelPosition, computeDefaultCombatPanelPosition, isCombatPanelVisible]);
+  const handleCombatPanelPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isCombatPanelVisible) {
+        return;
+      }
+      if (event.button !== 0 && event.pointerType !== 'touch') {
+        return;
+      }
+      if (combatPanelDragSessionRef.current) {
+        return;
+      }
+      const resolvedPosition = combatPanelPosition ?? computeDefaultCombatPanelPosition();
+      if (!resolvedPosition) {
+        return;
+      }
+      if (!combatPanelPosition) {
+        setCombatPanelPosition(resolvedPosition);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const session = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: resolvedPosition.x,
+        originY: resolvedPosition.y,
+      };
+      combatPanelDragSessionRef.current = session;
+      combatPanelHasCustomPositionRef.current = true;
+      setIsCombatPanelDragging(true);
+      const handlePointerMove = (nativeEvent: PointerEvent) => {
+        if (!combatPanelDragSessionRef.current || nativeEvent.pointerId !== session.pointerId) {
+          return;
+        }
+        nativeEvent.preventDefault();
+        const deltaX = nativeEvent.clientX - session.startX;
+        const deltaY = nativeEvent.clientY - session.startY;
+        const nextPosition = clampCombatPanelPosition(session.originX + deltaX, session.originY + deltaY);
+        setCombatPanelPosition(prev => {
+          if (prev && Math.abs(prev.x - nextPosition.x) < 0.5 && Math.abs(prev.y - nextPosition.y) < 0.5) {
+            return prev;
+          }
+          return nextPosition;
+        });
+      };
+      const handlePointerUp = (nativeEvent: PointerEvent) => {
+        if (!combatPanelDragSessionRef.current || nativeEvent.pointerId !== session.pointerId) {
+          return;
+        }
+        nativeEvent.preventDefault();
+        teardownCombatPanelDrag();
+      };
+      combatPanelWindowListenersRef.current = {
+        move: handlePointerMove,
+        up: handlePointerUp,
+      };
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerUp);
+    },
+    [
+      clampCombatPanelPosition,
+      combatPanelPosition,
+      computeDefaultCombatPanelPosition,
+      isCombatPanelVisible,
+      teardownCombatPanelDrag,
+    ],
+  );
+  const combatPanelStyle = useMemo<CSSProperties>(() => {
+    const style: CSSProperties = {
         '--combat-panel-width': 'clamp(135px, 11vw, 170px)',
         width: 'min(var(--combat-panel-width), calc(100% - 1.5rem))',
-      }) as CSSProperties,
-    [],
+    };
+    if (combatPanelPosition) {
+      style.left = `${combatPanelPosition.x}px`;
+      style.top = `${combatPanelPosition.y}px`;
+    }
+    return style;
+  }, [combatPanelPosition]);
+  const combatPanelWrapperClassName = useMemo(
+    () =>
+      [
+        'pointer-events-auto fixed z-40 combat-panel-wrapper',
+        isCombatPanelDragging ? 'combat-panel-wrapper--dragging' : '',
+        combatPanelPosition ? '' : COMBAT_PANEL_DEFAULT_POSITION_CLASS,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    [combatPanelPosition, isCombatPanelDragging],
   );
 
   const resetDragState = useCallback(() => {
@@ -2781,6 +3033,7 @@ export default function GameBoard() {
       timestamp: 0,
       hp,
       gold,
+      turnCount,
       shopLevel,
       monstersDefeated,
       cardsPlayed,
@@ -2821,6 +3074,7 @@ export default function GameBoard() {
   }, [
     hp,
     gold,
+    turnCount,
     shopLevel,
     monstersDefeated,
     cardsPlayed,
@@ -2951,6 +3205,7 @@ export default function GameBoard() {
     setHp(INITIAL_HP);
     setGold(INITIAL_GOLD);
     setShopLevel(0);
+    setTurnCount(INITIAL_TURN_COUNT);
     setEquipmentSlot1(null);
     setEquipmentSlot2(null);
     setAmuletSlots([]);
@@ -3049,6 +3304,7 @@ export default function GameBoard() {
 
     setHp(snapshot.hp ?? INITIAL_HP);
     setGold(snapshot.gold ?? INITIAL_GOLD);
+    setTurnCount(snapshot.turnCount ?? INITIAL_TURN_COUNT);
     setShopLevel(typeof snapshot.shopLevel === 'number' ? snapshot.shopLevel : 0);
     setMonstersDefeated(snapshot.monstersDefeated ?? 0);
     setCardsPlayed(snapshot.cardsPlayed ?? 0);
@@ -3779,6 +4035,7 @@ export default function GameBoard() {
 
     waterfallPendingRef.current = false;
     const sequenceId = ++waterfallSequenceRef.current;
+    setTurnCount(prev => prev + 1);
 
     logWaterfall('trigger', {
       emptySlots: emptyColumns,
@@ -6319,7 +6576,6 @@ export default function GameBoard() {
     engagedMonsters.length > 0 &&
       (combatState.currentTurn === 'monster' || combatState.pendingBlock)
   );
-  const isCombatPanelVisible = engagedMonsters.length > 0;
   const activeSwordMonsterId = combatState.pendingBlock?.monsterId ?? null;
 
   const updateSwordVectors = useCallback(() => {
@@ -6394,6 +6650,7 @@ export default function GameBoard() {
           maxHp={maxHp} 
           gold={gold} 
           cardsRemaining={getRemainingCards()}
+          turnCount={turnCount}
           monstersDefeated={monstersDefeated}
           shopLevel={shopLevel}
           onDeckClick={() => setDeckViewerOpen(true)}
@@ -6706,9 +6963,9 @@ export default function GameBoard() {
                 );
               })}
             {isCombatPanelVisible && (
-              <div className="pointer-events-none absolute inset-0 z-40">
                 <div
-                  className="pointer-events-auto absolute top-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-4 sm:translate-x-0 sm:top-4"
+                ref={combatPanelWrapperRef}
+                className={combatPanelWrapperClassName}
                   style={combatPanelStyle}
                 >
                   <CombatPanel
@@ -6722,8 +6979,9 @@ export default function GameBoard() {
                     onEndHeroTurn={endHeroTurn}
                     equipmentSlot1={equipmentSlot1}
                     equipmentSlot2={equipmentSlot2}
+                  onDragHandlePointerDown={handleCombatPanelPointerDown}
+                  isDragging={isCombatPanelDragging}
                   />
-                </div>
               </div>
             )}
           </div>
