@@ -1,9 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Infinity } from 'lucide-react';
 import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
 
 const MAX_DURABILITY_DOTS = 4;
+const BASE_CARD_WIDTH = 180;
+const CARD_SCALE_MIN = 0.6;
+const CARD_SCALE_MAX = 1.4;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export type CardType =
   | 'monster'
@@ -129,6 +134,7 @@ export default function GameCard({
   shieldBlockVariant = 0,
 }: GameCardProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [cardScale, setCardScale] = useState(1);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
   const durabilityCapacity = Math.max(card.maxDurability ?? card.durability ?? 0, 0);
@@ -149,6 +155,33 @@ export default function GameCard({
   const isEquipmentCard = card.type === 'weapon' || card.type === 'shield';
   const mobileDragType =
     isEquipmentCard && 'fromSlot' in card && (card as any)?.fromSlot ? 'equipment' : 'card';
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const target = cardRef.current;
+    if (!target) {
+      return;
+    }
+
+    const updateScale = () => {
+      const { width } = target.getBoundingClientRect();
+      if (!width) {
+        return;
+      }
+      setCardScale(prev => {
+        const next = clamp(width / BASE_CARD_WIDTH, CARD_SCALE_MIN, CARD_SCALE_MAX);
+        return Math.abs(prev - next) > 0.01 ? next : prev;
+      });
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(target);
+
+    return () => observer.disconnect();
+  }, []);
 
   // Set up mobile drag support
   useEffect(() => {
@@ -364,7 +397,8 @@ const amuletEffectText =
       style={{
         filter: isDragging ? 'brightness(1.1)' : 'none',
         // transform handled by GameBoard wrapper for fury sliding
-      }}
+        '--dh-card-instance-scale': cardScale.toString(),
+      } as CSSProperties}
       data-engaged={engagedMonster ? 'true' : undefined}
       data-testid={`card-${card.type}-${card.id}`}
     >

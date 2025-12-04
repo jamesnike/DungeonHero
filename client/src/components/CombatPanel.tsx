@@ -2,6 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Shield, Swords } from 'lucide-react';
 import type { GameCardData } from './GameCard';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
@@ -33,6 +34,33 @@ export default function CombatPanel({
   if (!isActive || engagedMonsters.length === 0) {
     return null;
   }
+  const [panelScale, setPanelScale] = useState(1);
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const target = cardRef.current;
+    if (!target) {
+      return;
+    }
+    const BASE_WIDTH = 360;
+    const MIN_SCALE = 0.7;
+    const MAX_SCALE = 1.2;
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+    const updateScale = () => {
+      const width = target.getBoundingClientRect().width;
+      if (!width) return;
+      setPanelScale(prev => {
+        const next = clamp(width / BASE_WIDTH, MIN_SCALE, MAX_SCALE);
+        return Math.abs(prev - next) > 0.01 ? next : prev;
+      });
+    };
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
   const currentAttackerId = pendingBlock?.monsterId ?? null;
   const currentAttacker =
     pendingBlock && engagedMonsters.find(mon => mon.id === pendingBlock.monsterId);
@@ -42,15 +70,17 @@ export default function CombatPanel({
     const label = slotId === 'equipmentSlot1' ? 'Left' : 'Right';
     return (
       <div className="flex flex-col px-3 py-2 rounded-md border bg-background/50" key={slotId}>
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">{label} Slot</span>
+        <span className="combat-panel__slot-label uppercase tracking-wide text-muted-foreground">
+          {label} Slot
+        </span>
         {item ? (
-          <span className="text-sm font-semibold">
+          <span className="combat-panel__slot-name font-semibold">
             {item.name} {item.type === 'weapon' ? `(${item.value} dmg)` : `(${item.value} block)`}
           </span>
         ) : (
-          <span className="text-sm text-muted-foreground">Empty</span>
+          <span className="combat-panel__slot-name text-muted-foreground">Empty</span>
         )}
-        <span className={`text-xs font-medium ${used ? 'text-red-500' : 'text-green-500'}`}>
+        <span className={`combat-panel__slot-state font-medium ${used ? 'text-red-500' : 'text-green-500'}`}>
           {used ? 'Used this turn' : 'Ready'}
         </span>
       </div>
@@ -97,21 +127,31 @@ export default function CombatPanel({
           : 'Monsters regrouping';
 
   return (
-    <Card className="relative z-10 w-full h-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl">
+    <Card
+      ref={cardRef}
+      className="relative z-10 w-full h-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel"
+      style={{ '--dh-combat-panel-scale': panelScale.toString() } as CSSProperties}
+    >
       <div className="p-2 h-full flex flex-col gap-2">
         <div className="flex items-start justify-between gap-1.5">
           <div className="space-y-0.5">
-            <p className="text-[8px] uppercase tracking-wide text-muted-foreground">Combat</p>
-            <p className="text-[11px] font-semibold">{currentTurn === 'hero' ? 'Hero Turn' : 'Monsters Turn'}</p>
-            <p className="text-[9px] text-muted-foreground line-clamp-2">{turnSummary}</p>
+            <p className="combat-panel__label uppercase tracking-wide text-muted-foreground">Combat</p>
+            <p className="combat-panel__title font-semibold">
+              {currentTurn === 'hero' ? 'Hero Turn' : 'Monsters Turn'}
+            </p>
+            <p className="combat-panel__summary text-muted-foreground line-clamp-2">{turnSummary}</p>
           </div>
-          <div className="w-6 h-6 rounded-full bg-muted/60 flex items-center justify-center flex-shrink-0">
-            {currentTurn === 'hero' ? <Swords className="w-3 h-3 text-primary" /> : <Shield className="w-3 h-3 text-destructive" />}
+          <div className="combat-panel__icon-ring rounded-full bg-muted/60 flex items-center justify-center flex-shrink-0">
+            {currentTurn === 'hero' ? (
+              <Swords className="combat-panel__icon text-primary" />
+            ) : (
+              <Shield className="combat-panel__icon text-destructive" />
+            )}
           </div>
         </div>
 
         {pendingBlock && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+          <div className="combat-panel__alert rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-destructive">
             {pendingBlock.monsterName} will deal {pendingBlock.attackValue} damage. Choose a block target.
           </div>
         )}
@@ -128,26 +168,28 @@ export default function CombatPanel({
                 key={engaged.id}
                 className={`flex items-start gap-1 rounded-md border px-1.5 py-1 ${status.card}`}
               >
-                <div className="w-8 h-11 rounded-md overflow-hidden border border-border/40 bg-background flex-shrink-0">
+                <div className="combat-panel__thumb rounded-md overflow-hidden border border-border/40 bg-background flex-shrink-0">
                   {engaged.image ? (
                     <img src={engaged.image} alt={engaged.name} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[7px] text-muted-foreground">
+                    <div className="w-full h-full flex items-center justify-center combat-panel__thumb-fallback text-muted-foreground">
                       Monster
                     </div>
                   )}
                 </div>
                 <div className="flex-1 space-y-0.5 min-w-0">
                   <div className="flex items-center justify-between gap-0.5">
-                    <span className="text-[10px] font-semibold truncate">{engaged.name}</span>
-                    <span className={`text-[7px] font-semibold px-1 py-0.5 rounded-full whitespace-nowrap ${status.badge}`}>
+                    <span className="combat-panel__list-name font-semibold truncate">{engaged.name}</span>
+                    <span
+                      className={`combat-panel__badge font-semibold px-1 py-0.5 rounded-full whitespace-nowrap ${status.badge}`}
+                    >
                       {status.label}
                     </span>
                   </div>
-                  <p className="text-[8px] text-muted-foreground">
+                  <p className="combat-panel__stat text-muted-foreground">
                     HP {hp}/{maxHp} • Fury {fury}
                   </p>
-                  <p className="text-[8px] text-muted-foreground">ATK {attackValue}</p>
+                  <p className="combat-panel__stat text-muted-foreground">ATK {attackValue}</p>
                 </div>
               </div>
             );
@@ -158,10 +200,15 @@ export default function CombatPanel({
           {currentTurn === 'hero' ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[11px] font-semibold">
+                <span className="combat-panel__title font-semibold">
                   Attacks remaining: {heroAttacksRemaining}
                 </span>
-                <Button variant="secondary" size="sm" className="px-2 py-1 text-[10px]" onClick={onEndHeroTurn}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="px-2 py-1 combat-panel__button"
+                  onClick={onEndHeroTurn}
+                >
                   End Hero Turn
                 </Button>
               </div>
@@ -171,7 +218,7 @@ export default function CombatPanel({
               </div>
             </div>
           ) : (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="combat-panel__footer-text text-muted-foreground">
               {currentAttacker
                 ? `${currentAttacker.name} is attacking now.`
                 : monsterAttackQueue.length > 0

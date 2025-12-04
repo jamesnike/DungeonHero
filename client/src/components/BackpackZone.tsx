@@ -81,13 +81,6 @@ export default function BackpackZone({
   };
 
   const drawDisabled = !canDraw || backpackCount === 0 || isHandFull;
-  const statusLabel = !canDraw
-    ? '处理地下城以激活'
-    : isHandFull
-      ? '手牌已满'
-      : backpackCount === 0
-        ? '背包为空'
-        : '可抽一张牌';
 
   return (
     <Card
@@ -139,10 +132,6 @@ export default function BackpackZone({
       >
         抽牌
       </Button>
-
-      <p className="text-center dh-hero-small font-medium text-muted-foreground">
-        {statusLabel}
-      </p>
     </Card>
   );
 }

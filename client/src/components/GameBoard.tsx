@@ -1434,6 +1434,24 @@ export default function GameBoard() {
   // Track grid card size for synchronization with hand
   const gridCellRef = useRef<HTMLDivElement | null>(null);
   const [gridCardSize, setGridCardSize] = useState<{width: number, height: number} | undefined>(undefined);
+  const rageStripWidth = useMemo(() => {
+    if (!gridCardSize?.width) {
+      return 14;
+    }
+    return Math.max(8, Math.min(14, gridCardSize.width * 0.05));
+  }, [gridCardSize]);
+  const overlayScale = useMemo(() => {
+    if (!gridCardSize?.width) {
+      return 1;
+    }
+    const baseWidth = 180;
+    const scale = gridCardSize.width / baseWidth;
+    return clamp(scale, 0.65, 1.3);
+  }, [gridCardSize]);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.style.setProperty('--dh-rage-strip-width', `${rageStripWidth}px`);
+  }, [rageStripWidth]);
   const handAreaRef = useRef<HTMLDivElement | null>(null);
   const [waterfallAnimation, setWaterfallAnimation] = useState<WaterfallAnimationState>(initialWaterfallAnimationState);
   const [previewGraveyardVectors, setPreviewGraveyardVectors] = useState<Record<number, GraveyardVector>>({});
@@ -6073,14 +6091,15 @@ export default function GameBoard() {
               resolveBlockChoice(target);
             }
           }}
-          className={`pointer-events-auto px-6 py-4 rounded-2xl text-base font-semibold shadow-2xl transition flex flex-col items-center gap-1 ${
+          className={`block-button pointer-events-auto shadow-2xl transition flex flex-col items-center gap-1 ${
             disabled
-              ? 'bg-muted text-muted-foreground cursor-not-allowed opacity-60'
-              : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              ? 'block-button--disabled'
+              : 'block-button--active'
           }`}
+          style={{ '--dh-overlay-scale': overlayScale.toString() }}
         >
-          <span className="text-lg">{label}</span>
-          <span className="text-sm font-normal">Damage: {pendingBlock.attackValue}</span>
+          <span className="block-button__label">{label}</span>
+          <span className="block-button__meta">Damage: {pendingBlock.attackValue}</span>
         </button>
       </div>
     );
@@ -6461,10 +6480,7 @@ export default function GameBoard() {
           {/* Row 2: Active Row - 5 cards + GraveyardZone */}
           {[0, 1, 2, 3, 4].map((index) => {
             const card = activeCards[index];
-            // Calculate responsive fury column width based on card size
-            const colWidth = gridCardSize?.width 
-              ? Math.max(8, Math.min(14, gridCardSize.width * 0.05))
-              : 14; // Fallback to 14px if card size not available
+            const colWidth = rageStripWidth;
             const isEngagedMonster = Boolean(card && card.type === 'monster' && isMonsterEngaged(card.id));
             const isResolvingCard = resolvingDungeonCardId === card?.id;
             const isMonsterTurnLock = showMonsterAttackIndicator || isWaterfallLocked;
@@ -6546,7 +6562,7 @@ export default function GameBoard() {
                       const stripsToLeft = num - 1;
                       const stripOffsetPx = stripsToLeft * colWidth;
                       const furyColumnClasses = [
-                        'monster-rage-column h-full flex items-center justify-center border-l border-border/20 font-mono font-bold text-lg transition-all',
+                        'monster-rage-column h-full flex items-center justify-center border-l border-border/20 font-mono font-bold transition-all',
                         isActiveLayer
                           ? 'bg-destructive/80 text-destructive-foreground shadow-inner shadow-destructive/60'
                           : 'bg-transparent text-destructive/30 opacity-30',

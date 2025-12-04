@@ -1,8 +1,15 @@
 import { Card } from '@/components/ui/card';
 import { Shield, Sword, Backpack, Package } from 'lucide-react';
 import React, { useEffect, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import GameCard, { GameCardData } from './GameCard';
+
+const BASE_SLOT_WIDTH = 220;
+const SLOT_SCALE_MIN = 0.7;
+const SLOT_SCALE_MAX = 1.3;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export type SlotType = 'equipment' | 'backpack';
 
@@ -55,6 +62,29 @@ export default function EquipmentSlot({
   const isOver = dragDepth > 0;
   const slotRef = useRef<HTMLDivElement>(null);
   const acceptsDrop = Boolean(isDropTarget || isCombatDropTarget);
+  const [durabilityStripWidth, setDurabilityStripWidth] = React.useState(12);
+  const [slotScale, setSlotScale] = React.useState(1);
+  
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof MutationObserver === 'undefined') {
+      return;
+    }
+    const updateWidth = () => {
+      const rootStyle = getComputedStyle(document.documentElement);
+      const value = parseFloat(rootStyle.getPropertyValue('--dh-rage-strip-width'));
+      if (!Number.isNaN(value) && value > 0) {
+        setDurabilityStripWidth(value);
+      }
+    };
+    updateWidth();
+    const observer = new MutationObserver(updateWidth);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    window.addEventListener('resize', updateWidth);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateWidth);
+    };
+  }, []);
   
   // Set up mobile drop support for the slot
   useEffect(() => {
@@ -72,6 +102,30 @@ export default function EquipmentSlot({
     
     return cleanup;
   }, [onDrop]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const target = slotRef.current;
+    if (!target) return;
+
+    const updateScale = () => {
+      const rect = target.getBoundingClientRect();
+      if (!rect.width) {
+        return;
+      }
+      setSlotScale(prev => {
+        const next = clamp(rect.width / BASE_SLOT_WIDTH, SLOT_SCALE_MIN, SLOT_SCALE_MAX);
+        return Math.abs(prev - next) > 0.01 ? next : prev;
+      });
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
   
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -131,7 +185,7 @@ export default function EquipmentSlot({
   const gameCardData: GameCardData | null = item ? { ...item } : null;
 
   const DURABILITY_SEGMENTS = 4;
-  const colWidth = 14; // Width of each durability column
+  const colWidth = durabilityStripWidth || 12;
   const rawCurrentDurability = Math.max(gameCardData?.durability ?? 0, 0);
   const rawMaxDurability = Math.max(
     gameCardData?.maxDurability ?? gameCardData?.durability ?? 0,
@@ -158,6 +212,7 @@ export default function EquipmentSlot({
       onDrop={handleDrop}
       data-testid={testId}
       onClick={onClick ? handleClick : undefined}
+      style={{ '--dh-hero-instance-scale': slotScale.toString() } as CSSProperties}
     >
       {/* Permanent bonus header */}
       {type === 'equipment' && (
@@ -179,7 +234,7 @@ export default function EquipmentSlot({
             const isCurrent = currentDurability > 0 && num === currentDurability;
             const isWithinMax = maxDurability > 0 && num <= maxDurability;
             const columnClasses = [
-              'h-full flex items-center justify-center border-l border-border/20 font-mono font-bold text-lg transition-all',
+              'durability-column h-full flex items-center justify-center border-l border-border/20 font-mono font-bold transition-all',
               isCurrent
                 ? 'bg-amber-300/80 text-amber-900 shadow-inner shadow-amber-500/40'
                 : 'bg-muted/15 text-muted-foreground/60',

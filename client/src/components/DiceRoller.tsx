@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Dices } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DiceRollerProps {
@@ -22,6 +20,11 @@ const CAMERA_DISTANCE = 3.5;
 const IDENTITY: Quat = [0, 0, 0, 1];
 const DIE_BASE_COLOR = '#FFA5A5';
 const OUTLINE_COLOR = '#2B1F33';
+const BASE_DICE_SIZE = 220;
+const DICE_SCALE_MIN = 0.7;
+const DICE_SCALE_MAX = 1.4;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export default function DiceRoller({
   onRoll,
@@ -29,14 +32,12 @@ export default function DiceRoller({
   interactive = true,
   autoRollTrigger,
 }: DiceRollerProps) {
-  const [currentValue, setCurrentValue] = useState<number>(20);
-  const [showResultOverlay, setShowResultOverlay] = useState(false);
-  const [resultValue, setResultValue] = useState<number>(20);
   const [isRolling, setIsRolling] = useState(false);
-  const [rollHistory, setRollHistory] = useState<number[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>();
   const orientationRef = useRef<Quat>(IDENTITY);
+  const [diceSize, setDiceSize] = useState<number | null>(null);
   const rollStateRef = useRef<{
     start: number;
     duration: number;
@@ -143,11 +144,6 @@ export default function DiceRoller({
       if (pendingResultRef.current !== null) {
         const value = pendingResultRef.current;
         pendingResultRef.current = null;
-        setCurrentValue(value);
-        setResultValue(value);
-        setShowResultOverlay(true);
-        setTimeout(() => setShowResultOverlay(false), 1500);
-        setRollHistory((prev) => [value, ...prev.slice(0, 2)]);
         onRoll?.(value);
       }
 
@@ -162,6 +158,31 @@ export default function DiceRoller({
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [faces, onRoll, vertices]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const target = containerRef.current;
+    if (!target) {
+      return;
+    }
+
+    const updateSize = () => {
+      const rect = target.getBoundingClientRect();
+      const nextSize = Math.min(rect.width, rect.height);
+      if (!nextSize) return;
+      setDiceSize(prev => {
+        if (prev === null) return nextSize;
+        return Math.abs(prev - nextSize) > 0.5 ? nextSize : prev;
+      });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
 
   const rollDice = useCallback(() => {
     if (isRolling) return;
@@ -190,6 +211,23 @@ export default function DiceRoller({
     rollDice();
   }, [autoRollTrigger, rollDice]);
 
+  const diceScale = diceSize ? clamp(diceSize / BASE_DICE_SIZE, DICE_SCALE_MIN, DICE_SCALE_MAX) : 1;
+  const squareStyle: CSSProperties = {
+    width: diceSize ? `${diceSize}px` : '100%',
+    height: diceSize ? `${diceSize}px` : '100%',
+    maxWidth: '100%',
+    maxHeight: '100%',
+    '--dh-dice-instance-scale': diceScale.toString(),
+  } as CSSProperties;
+
+  const shadowStyle: CSSProperties = {
+    width: diceSize ? `${Math.max(48, diceSize * 0.7)}px` : '70%',
+    height: diceSize ? `${Math.max(10, diceSize * 0.1)}px` : '1rem',
+    bottom: diceSize ? `-${Math.max(8, diceSize * 0.05)}px` : '-0.5rem',
+    left: '50%',
+    transform: 'translateX(-50%)',
+  };
+
   return (
     <Card
       className={cn(
@@ -200,41 +238,13 @@ export default function DiceRoller({
       onClick={interactive ? rollDice : undefined}
       data-testid="dice-roller"
     >
-      <div className="flex h-full w-full flex-col gap-1 sm:gap-2 p-1 sm:p-3 relative">
-        {showResultOverlay && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in zoom-in duration-300 rounded-lg">
-            <span className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] animate-bounce">
-              {resultValue}
-            </span>
+      <div className="flex h-full w-full flex-col p-1 sm:p-3 relative">
+        <div className="relative flex flex-1 items-center justify-center" ref={containerRef}>
+          <div className="relative flex items-center justify-center" style={squareStyle}>
+            <canvas ref={canvasRef} className="dice-canvas" />
+            <div className="pointer-events-none absolute rounded-full bg-black/45 blur-lg" style={shadowStyle} />
           </div>
-        )}
-        <div className="flex items-center gap-1 sm:gap-2 text-[9px] sm:text-xs uppercase tracking-wide text-slate-200">
-          <Dices className="w-3 h-3 sm:w-4 sm:h-4" />
-          <span className="font-medium">Twenty-Sided Die</span>
         </div>
-        <div className="relative flex flex-1 items-center justify-center">
-          <canvas ref={canvasRef} className="dice-canvas" />
-          <div className="pointer-events-none absolute inset-x-10 -bottom-2 h-6 rounded-full bg-black/45 blur-lg" />
-        </div>
-        <div className="flex items-center justify-between text-[9px] sm:text-xs text-muted-foreground">
-          <span>
-            {isRolling ? 'Rolling...' : interactive ? 'Tap to roll' : 'Rolling automatically'}
-          </span>
-          <span className="font-mono text-[10px] sm:text-sm text-white/80">Result: {currentValue}</span>
-        </div>
-        {rollHistory.length > 0 && (
-          <div className="flex gap-0.5 sm:gap-1">
-            {rollHistory.slice(0, 3).map((value, idx) => (
-              <Badge 
-                key={idx}
-                variant="outline" 
-                className={`text-[9px] sm:text-xs px-1 sm:px-2 py-0 ${idx === 0 ? 'bg-primary/20' : 'opacity-60'}`}
-              >
-                {value}
-              </Badge>
-            ))}
-          </div>
-        )}
       </div>
     </Card>
   );
