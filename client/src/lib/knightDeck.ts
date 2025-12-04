@@ -299,47 +299,6 @@ export function generateKnightDeck(): KnightCardData[] {
 // Class card discovery events for the main deck
 export function createKnightDiscoveryEvents(): GameCardData[] {
   const events: GameCardData[] = [];
-  
-  events.push({
-    id: 'discovery-armory',
-    type: 'event',
-    name: 'Ancient Armory',
-    value: 0,
-    image: eventScrollImage,
-    eventChoices: [
-      { text: 'Search for weapons (Draw 3 Knight cards)', effect: 'drawKnight3' },
-      { text: 'Inspect artifacts (Draw 1 Knight card)', effect: 'drawKnight1' },
-      { text: 'Breach the inner vault (Draw 4 Knight cards)', effect: 'drawKnight4' },
-      { text: 'Leave', effect: 'none' }
-    ]
-  });
-
-  events.push({
-    id: 'discovery-cache',
-    type: 'event',
-    name: 'Knight\'s Cache',
-    value: 0,
-    image: eventScrollImage,
-    eventChoices: [
-      { text: 'Open cache (Draw and equip Knight card)', effect: 'equipKnight' },
-      { text: 'Loot supplies (Draw 2 Knight equipment cards to backpack)', effect: 'drawEquipment' },
-      { text: 'Leave', effect: 'none' }
-    ]
-  });
-
-  events.push({
-    id: 'discovery-training',
-    type: 'event',
-    name: 'Training Ground',
-    value: 0,
-    image: eventScrollImage,
-    eventChoices: [
-      { text: 'Train (Draw Knight skill, use immediately)', effect: 'useKnightSkill' },
-      { text: 'Study tactics (Draw Knight skill to backpack)', effect: 'drawSkill' },
-      { text: 'Share techniques (Draw 2 Knight cards)', effect: 'drawClass2' },
-      { text: 'Leave', effect: 'none' }
-    ]
-  });
-
+  // Discovery events removed to keep total event count at 12 while preserving API surface.
   return events;
 }

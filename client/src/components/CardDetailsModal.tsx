@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { GameCardData } from "./GameCard";
+import { type EventEffectExpression, type EventRequirement, type GameCardData } from "./GameCard";
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from "lucide-react";
 
 interface CardDetailsModalProps {
@@ -179,10 +179,33 @@ export default function CardDetailsModal({ card, open, onOpenChange }: CardDetai
             {/* Event Details */}
             {card.type === 'event' && card.eventChoices && (
               <div className="space-y-2">
-                <div className="font-semibold mb-1">Choices:</div>
+                <div className="font-semibold mb-1">事件选项</div>
                 {card.eventChoices.map((choice, idx) => (
-                  <div key={idx} className="bg-muted p-2 rounded text-xs border">
-                    • {choice.text}
+                  <div key={idx} className="rounded-md border border-border/60 bg-muted/40 p-3 space-y-1">
+                    <div className="text-sm font-semibold text-foreground">{choice.text}</div>
+                    {choice.hint && (
+                      <div className="text-[11px] text-muted-foreground">{choice.hint}</div>
+                    )}
+                    {choice.requires?.length ? (
+                      <div className="text-[11px] text-amber-600">
+                        需要：{formatRequirementText(choice.requires)}
+                      </div>
+                    ) : null}
+                    {choice.effect && (
+                      <div className="text-[11px] text-muted-foreground">
+                        直接效果：{describeEventEffect(choice.effect)}
+                      </div>
+                    )}
+                    {choice.diceTable?.length ? (
+                      <div className="mt-2 space-y-1 border-t border-border/50 pt-2">
+                        {choice.diceTable.map(entry => (
+                          <div key={entry.id} className="flex items-center justify-between text-[11px]">
+                            <span className="font-mono text-foreground">{formatRange(entry.range)}</span>
+                            <span className="text-muted-foreground">{entry.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -199,5 +222,75 @@ export default function CardDetailsModal({ card, open, onOpenChange }: CardDetai
       </DialogContent>
     </Dialog>
   );
+}
+
+function describeEventEffect(effect: EventEffectExpression): string {
+  const tokens = Array.isArray(effect) ? effect : effect.split(',');
+  return tokens
+    .map(token => token.trim())
+    .filter(Boolean)
+    .map(token => {
+      if (token.startsWith('hp-')) return `受到 ${token.replace('hp-', '')} 点伤害`;
+      if (token.startsWith('heal+')) return `恢复 ${token.replace('heal+', '')} 点生命`;
+      if (token.startsWith('gold+')) return `获得 ${token.replace('gold+', '')} 枚金币`;
+      if (token.startsWith('gold-')) return `失去 ${token.replace('gold-', '')} 枚金币`;
+      if (token.startsWith('maxhpperm+')) return `永久 +${token.replace('maxhpperm+', '')} 最大生命`;
+      if (token === 'flipToCurse') return '将事件卡翻为诅咒并收入背包';
+      if (token === 'addCurse') return '背包加入一张诅咒';
+      if (token === 'discardHandAll') return '弃掉全部手牌';
+      if (token.startsWith('backpackSize-')) return `背包容量 -${token.replace('backpackSize-', '')}`;
+      if (token.startsWith('shopLevel+')) return `商店等级 +${token.replace('shopLevel+', '')}`;
+      if (token.startsWith('spellDamage+')) return `法术伤害 +${token.replace('spellDamage+', '')}`;
+      if (token.startsWith('discardCards:')) return `弃置 ${token.replace('discardCards:', '')} 张牌`;
+      if (token.startsWith('deleteCard')) {
+        const [, count = '1'] = token.split(':');
+        return `删除 ${count} 张牌`;
+      }
+      if (token === 'graveyardDiscover') return '从坟场发现一张卡牌';
+      if (token.startsWith('drawHeroCards:')) return `抽 ${token.replace('drawHeroCards:', '')} 张牌`;
+      if (token === 'removeAllAmulets') return '摧毁所有护符';
+      if (token === 'discoverClass') return '发现一张专属卡';
+      if (token === 'openShop') return '打开商店';
+      if (token === 'slotLeftDamage+1') return '左槽永久伤害 +1';
+      if (token === 'slotRightDefense+1') return '右槽永久护甲 +1';
+      if (token === 'swapEquipmentSlots') return '左右装备互换';
+      if (token === 'destroyEquipment:any') return '破坏任一装备';
+      if (token === 'discardLeftForGold+15') return '破坏左槽装备并获得 15 金币';
+      if (token === 'discardRightForGold+15') return '破坏右槽装备并获得 15 金币';
+      if (token === 'amuletsToGold+10') return '摧毁所有护符并每个获得 10 金币';
+      if (token === 'classBottom+2') return '获得 class 底部两张专属卡';
+      if (token === 'none') return '无额外效果';
+      return token;
+    })
+    .join('，');
+}
+
+function formatRequirementText(requires: EventRequirement[]): string {
+  return requires
+    .map(req => {
+      switch (req.type) {
+        case 'equipment':
+          return req.slot === 'left' ? '左侧装备' : '右侧装备';
+        case 'equipmentAny':
+          return '任意装备';
+        case 'amulet':
+          return '至少 1 个护符';
+        case 'hand':
+          return `至少 ${req.min} 张手牌`;
+        case 'cardPool':
+          return `手牌/背包合计 ≥ ${req.min}`;
+        case 'graveyard':
+          return `坟场卡牌 ≥ ${req.min}`;
+        default:
+          return '';
+      }
+    })
+    .filter(Boolean)
+    .join('、');
+}
+
+function formatRange(range: [number, number]) {
+  const [min, max] = range;
+  return min === max ? `${min}` : `${min} - ${max}`;
 }
 

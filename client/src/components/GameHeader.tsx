@@ -1,4 +1,4 @@
-import { Heart, Coins, Layers, Skull } from 'lucide-react';
+import { Heart, Coins, Layers, Skull, ShoppingBag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
@@ -9,11 +9,21 @@ interface GameHeaderProps {
   gold: number;
   cardsRemaining: number;
   monstersDefeated?: number;
+  shopLevel: number;
   onDeckClick?: () => void;
   onNewGame?: () => void;
 }
 
-export default function GameHeader({ hp, maxHp, gold, cardsRemaining, monstersDefeated = 0, onDeckClick, onNewGame }: GameHeaderProps) {
+export default function GameHeader({
+  hp,
+  maxHp,
+  gold,
+  cardsRemaining,
+  monstersDefeated = 0,
+  shopLevel,
+  onDeckClick,
+  onNewGame,
+}: GameHeaderProps) {
   return (
     <div className="h-auto py-3 px-4 lg:px-8 bg-card border-b border-card-border flex items-center justify-between flex-wrap gap-4">
       <div className="flex items-center gap-4">
@@ -48,6 +58,16 @@ export default function GameHeader({ hp, maxHp, gold, cardsRemaining, monstersDe
         <Badge variant="outline" className="font-mono text-lg lg:text-xl px-3 py-1">
           {monstersDefeated}
         </Badge>
+      </div>
+
+      <div className="flex items-center gap-2" data-testid="header-shop-level">
+        <ShoppingBag className="w-6 h-6 lg:w-8 lg:h-8 text-amber-500" />
+        <div className="flex flex-col leading-tight">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">商店等级</span>
+          <Badge variant="secondary" className="font-mono text-base lg:text-lg px-3 py-1">
+            Lv.{shopLevel}
+          </Badge>
+        </div>
       </div>
 
       <div className="flex items-center gap-3" data-testid="header-gold">

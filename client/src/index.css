@@ -762,3 +762,15 @@
     display: block;
   }
 }
+
+.dh-perspective {
+  perspective: 1600px;
+}
+
+.dh-preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.dh-backface-hidden {
+  backface-visibility: hidden;
+}

@@ -5,15 +5,27 @@ interface DiscoverClassModalProps {
   open: boolean;
   cards: GameCardData[];
   onSelect: (cardId: string) => void;
+  title?: string;
+  description?: string;
 }
 
-export default function DiscoverClassModal({ open, cards, onSelect }: DiscoverClassModalProps) {
+export default function DiscoverClassModal({
+  open,
+  cards,
+  onSelect,
+  title,
+  description,
+}: DiscoverClassModalProps) {
+  const headerTitle = title ?? '发现一张 Class Card';
+  const headerDescription =
+    description ?? '从三张候选卡中挑选一张，其余卡牌会放回 Class Deck。';
+
   return (
     <Dialog open={open}>
       <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>发现一张 Class Card</DialogTitle>
-          <DialogDescription>从三张候选卡中挑选一张，其余卡牌会放回 Class Deck。</DialogDescription>
+          <DialogTitle>{headerTitle}</DialogTitle>
+          <DialogDescription>{headerDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

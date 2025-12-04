@@ -2,7 +2,13 @@ import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo, typ
 import type { CSSProperties, DragEvent as ReactDragEvent } from 'react';
 import GameHeader from './GameHeader';
 import HeroCard from './HeroCard';
-import GameCard, { type GameCardData, type CardType } from './GameCard';
+import GameCard, {
+  type CardType,
+  type EventChoiceDefinition,
+  type EventDiceRange,
+  type EventEffectExpression,
+  type GameCardData,
+} from './GameCard';
 import EquipmentSlot from './EquipmentSlot';
 import CombatPanel from './CombatPanel';
 import { Sword } from 'lucide-react';
@@ -11,7 +17,9 @@ import GraveyardZone from './GraveyardZone';
 import HandDisplay from './HandDisplay';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import DeckViewerModal from './DeckViewerModal';
-import EventChoiceModal from './EventChoiceModal';
+import EventChoiceModal, { type EventChoiceAvailability } from './EventChoiceModal';
+import EventDiceModal from './EventDiceModal';
+import EquipmentSelectModal from './EquipmentSelectModal';
 import DiceRoller from './DiceRoller';
 import ClassDeck from './ClassDeck';
 import HeroSkillSelection from './HeroSkillSelection';
@@ -24,6 +32,7 @@ import { getRandomHero, type HeroVariant } from '@/lib/heroes';
 import { clearGameState, loadGameState, saveGameState, type PersistedGameState } from '@/lib/gameStorage';
 import CardDetailsModal from './CardDetailsModal';
 import DiscoverClassModal from './DiscoverClassModal';
+import CardDeletionModal from './CardDeletionModal';
 import ShopModal, { type ShopOffering } from './ShopModal';
 import { initMobileDrop, type DragData } from '../utils/mobileDragDrop';
 
@@ -114,6 +123,34 @@ type SlotPermanentBonus = {
 
 type EquipmentSlotBonusState = Record<EquipmentSlotId, SlotPermanentBonus>;
 
+type EventDiceModalState = {
+  title: string;
+  subtitle?: string;
+  entries: EventDiceRange[];
+  rolledValue: number | null;
+  highlightedId: string | null;
+};
+
+type EquipmentPromptState = {
+  prompt: string;
+  subtext?: string;
+};
+
+type EventTransformState = {
+  fromCard: GameCardData;
+  toCard: GameCardData;
+  onComplete: () => void;
+};
+
+type CardActionContext = {
+  mode: 'shop' | 'event';
+  action: 'delete' | 'discard';
+  requiredCount: number;
+  remainingCount: number;
+  title?: string;
+  description?: string;
+};
+
 const createEmptySlotBonusState = (): EquipmentSlotBonusState => ({
   equipmentSlot1: { damage: 0, shield: 0 },
   equipmentSlot2: { damage: 0, shield: 0 },
@@ -142,7 +179,7 @@ type HeroRowSlotConfig = {
 
 type PendingHeroSkillAction =
   | { skillId: HeroSkillId; type: 'slot' }
-  | { skillId: HeroSkillId; type: 'monster' };
+  | { skillId: HeroSkillId; type: 'monster'; baseDamage?: number };
 
 type PendingMagicAction =
   | {
@@ -205,7 +242,7 @@ const HERO_GAP_VARIABLE_CLASS =
   "[--hero-gap-x:clamp(1rem,3.8vw,2.8rem)] [--hero-gap-y:clamp(0.7rem,2.8vw,1.8rem)] sm:[--hero-gap-x:clamp(1.5rem,3.8vw,3.5rem)] sm:[--hero-gap-y:clamp(1rem,3vw,2.4rem)]";
 const DEV_MODE = process.env.NODE_ENV !== 'production';
 const DUNGEON_COLUMNS = Array.from({ length: DUNGEON_COLUMN_COUNT }, (_, index) => index);
-const MAX_BACKPACK_CAPACITY = 10;
+const BASE_BACKPACK_CAPACITY = 10;
 const HERO_ROW_BACKPACK_INDEX = 4;
 const HERO_ROW_CLASS_DECK_INDEX = 5;
 const BALANCE_ATTACK_BONUS = 3;
@@ -222,6 +259,7 @@ const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
   magic: 7,
   amulet: 6,
 };
+const SHOP_LEVEL_DISCOUNT_STEP = 0.1;
 const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: number) =>
   Boolean(
     rect &&
@@ -233,11 +271,22 @@ const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: number)
 const isBackpackRestrictedCard = (card: GameCardData | null) =>
   Boolean(card && (card.type === 'magic' || card.type === 'potion'));
 
-const getShopPrice = (card: GameCardData): number => {
+const getBaseShopPrice = (card: GameCardData): number => {
   if (SHOP_TYPE_PRICES[card.type] !== undefined) {
     return SHOP_TYPE_PRICES[card.type] as number;
   }
   return Math.max(5, card.value || 5);
+};
+
+const getShopDiscountFactor = (level: number): number => Math.max(0, 1 - level * SHOP_LEVEL_DISCOUNT_STEP);
+
+const getShopDiscountPercent = (level: number): number =>
+  Math.max(0, Math.round(level * SHOP_LEVEL_DISCOUNT_STEP * 100));
+
+const getShopPrice = (card: GameCardData, level: number): number => {
+  const basePrice = getBaseShopPrice(card);
+  const discounted = Math.floor(basePrice * getShopDiscountFactor(level));
+  return Math.max(1, discounted);
 };
 
 const createEmptyActiveRow = (): ActiveRowSlots =>
@@ -417,8 +466,8 @@ function createDeck(): GameCardData[] {
       { 
         name: 'Skeleton', 
         image: skeletonImage, 
-        minAttack: 2, maxAttack: 3,
-        minHp: 3, maxHp: 5,
+        minAttack: 5, maxAttack: 7,
+        minHp: 1, maxHp: 3,
         minFury: 2, maxFury: 4
       },
       { 
@@ -437,8 +486,8 @@ function createDeck(): GameCardData[] {
       },
     ];
 
-    // 16 monsters total for heavier encounters
-    for (let i = 0; i < 16; i++) {
+    // 12 monsters total for lighter encounters
+    for (let i = 0; i < 12; i++) {
       const monsterType = monsterTypes[i % monsterTypes.length];
       const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
       const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
@@ -468,7 +517,7 @@ function createDeck(): GameCardData[] {
     { name: 'Spear', image: daggerImage }, // Reuse dagger
   ];
   
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 6; i++) {
     const weaponType = weaponTypes[i % weaponTypes.length];
     // Balanced weapon values: 2-6
     const value = Math.floor(Math.random() * 5) + 2;
@@ -492,8 +541,8 @@ function createDeck(): GameCardData[] {
     { name: 'Heavy Shield', value: 4, image: heavyShieldImage },
   ];
   
-  // 3-4 shields of each type (8 total)
-  for (let i = 0; i < 8; i++) {
+  // 2 shields of each type (6 total)
+  for (let i = 0; i < 6; i++) {
     const shieldType = shieldTypes[i % shieldTypes.length];
     // Random durability 1-4
     const durability = Math.floor(Math.random() * 4) + 1;
@@ -692,120 +741,280 @@ function createDeck(): GameCardData[] {
     magicEffect: 'Choose an equipped item and restore it to full durability.'
   });
 
-  // Event cards (4 total)
+  // Event cards rewritten (first six)
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: 'Mysterious Shrine',
+    name: '命运十字路口',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: 'Pray (+3 Max HP)', effect: 'maxhp+3' },
-      { text: 'Donate (Lose 5 Gold, Heal Full)', effect: 'gold-5,fullheal' },
-      { text: '发现一张Class Card（发现）', effect: 'discoverClass' },
-      { text: 'Leave', effect: 'none' }
-    ]
+      { text: '倾听命运的低语（发现专属卡）', effect: 'discoverClass', hint: '立即进行发现流程' },
+      { text: '与命运商贩交谈（打开商店）', effect: 'openShop', hint: '立刻开启商店' },
+      { text: '献祭体魄（永久 +3 生命上限）', effect: 'maxhpperm+3', hint: '上限提升会保留整局' },
+    ],
   });
 
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: 'Wandering Merchant',
+    name: '秘藏宝库',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: 'Buy Potion (5 Gold for Heal 3)', effect: 'gold-5,heal+3' },
-      { text: 'Buy Weapon (8 Gold for Random Weapon)', effect: 'gold-8,weapon' },
-      { text: '发现一张Class Card（发现）', effect: 'discoverClass' },
-      { text: '打开商店', effect: 'openShop' },
-      { text: 'Decline', effect: 'none' }
-    ]
+      { text: '搜刮遗物（获得两张专属卡）', effect: 'drawClass2', hint: '立刻放入背包' },
+      {
+        text: '逐层翻找黄金（掷骰 5-14 金币）',
+        hint: '展示掷骰动画，并映射为金币奖励',
+        diceTable: [
+          { id: 'gold-5', range: [1, 2], label: '+5 金币', effect: 'gold+5' },
+          { id: 'gold-6', range: [3, 4], label: '+6 金币', effect: 'gold+6' },
+          { id: 'gold-7', range: [5, 6], label: '+7 金币', effect: 'gold+7' },
+          { id: 'gold-8', range: [7, 8], label: '+8 金币', effect: 'gold+8' },
+          { id: 'gold-9', range: [9, 10], label: '+9 金币', effect: 'gold+9' },
+          { id: 'gold-10', range: [11, 12], label: '+10 金币', effect: 'gold+10' },
+          { id: 'gold-11', range: [13, 14], label: '+11 金币', effect: 'gold+11' },
+          { id: 'gold-12', range: [15, 16], label: '+12 金币', effect: 'gold+12' },
+          { id: 'gold-13', range: [17, 18], label: '+13 金币', effect: 'gold+13' },
+          { id: 'gold-14', range: [19, 20], label: '+14 金币', effect: 'gold+14' },
+        ],
+      },
+      {
+        text: '翻出治疗药剂（掷骰 2-6 治疗）',
+        hint: '示意掷骰并标出对应治疗值',
+        diceTable: [
+          { id: 'heal-2', range: [1, 4], label: '恢复 2 HP', effect: 'heal+2' },
+          { id: 'heal-3', range: [5, 8], label: '恢复 3 HP', effect: 'heal+3' },
+          { id: 'heal-4', range: [9, 12], label: '恢复 4 HP', effect: 'heal+4' },
+          { id: 'heal-5', range: [13, 16], label: '恢复 5 HP', effect: 'heal+5' },
+          { id: 'heal-6', range: [17, 20], label: '恢复 6 HP', effect: 'heal+6' },
+        ],
+      },
+    ],
   });
 
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: 'Dark Altar',
+    name: '暗影契约',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: 'Blood Pact (Lose 3 HP, Empower weapon)', effect: 'hp-3,bloodEmpower' },
-      { text: 'Sacrifice Gold (Lose 10 Gold, Heal 5 HP)', effect: 'gold-10,heal+5' },
-      { text: '发现一张Class Card（发现）', effect: 'discoverClass' },
-      { text: 'Walk Away', effect: 'none' }
-    ]
+      { text: '签下血约（受到 5 点伤害）', effect: 'hp-5' },
+      {
+        text: '献出装备（破坏任一装备）',
+        effect: 'destroyEquipment:any',
+        hint: '会要求你选择左或右装备',
+        requires: [{ type: 'equipmentAny', message: '需要至少一件装备' }],
+      },
+      { text: '支付赎金（损失 10 金币）', effect: 'gold-10' },
+    ],
   });
 
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: 'Ancient Tome',
+    name: '共鸣熔炉',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: 'Read It (Take 2 Damage, Gain Permanent Skill)', effect: 'hp-2,permanentskill' },
-      { text: 'Sell It (Gain 7 Gold)', effect: 'gold+7' },
-      { text: '发现一张Class Card（发现）', effect: 'discoverClass' },
-      { text: 'Ignore It', effect: 'none' }
-    ]
-  });
-
-  // New Gold-focused Event Cards (replacing coin cards)
-  deck.push({
-    id: `event-${id++}`,
-    type: 'event',
-    name: 'Treasure Chest',
-    value: 0,
-    image: eventScrollImage,
-    eventChoices: [
-      { text: 'Open Carefully (Gain 8 Gold)', effect: 'gold+8' },
-      { text: 'Force Open (50% chance: 15 Gold or Take 3 Damage)', effect: 'random:gold+15,hp-3' },
-      { text: '发现一张Class Card（发现）', effect: 'discoverClass' },
-      { text: '打开商店', effect: 'openShop' },
-      { text: 'Leave It', effect: 'none' }
-    ]
+      { text: '左槽淬火（左槽永久伤害 +1）', effect: 'slotLeftDamage+1' },
+      { text: '右槽固化（右槽永久护甲 +1）', effect: 'slotRightDefense+1' },
+      { text: '翻转轨道（左右装备互换）', effect: 'swapEquipmentSlots' },
+    ],
   });
 
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: 'Goblin Thief',
+    name: '贪婪祭坛',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: 'Fight (Take 2 Damage, Gain 10 Gold)', effect: 'hp-2,gold+10' },
-      { text: 'Bribe (Lose 3 Gold, Avoid Combat)', effect: 'gold-3' },
-      { text: '发现一张Class Card（发现）', effect: 'discoverClass' },
-      { text: 'Run Away', effect: 'none' }
-    ]
+      {
+        id: 'greedy-left',
+        text: '献祭左手装备（金币 +15）',
+        effect: 'discardLeftForGold+15',
+        requires: [{ type: 'equipment', slot: 'left', message: '左侧装备栏为空' }],
+      },
+      {
+        id: 'greedy-right',
+        text: '献祭右手装备（金币 +15）',
+        effect: 'discardRightForGold+15',
+        requires: [{ type: 'equipment', slot: 'right', message: '右侧装备栏为空' }],
+      },
+      {
+        id: 'greedy-amulet',
+        text: '粉碎所有护符（每个 +10 金币）',
+        effect: 'amuletsToGold+10',
+        requires: [{ type: 'amulet', message: '需要至少一个护符' }],
+      },
+      {
+        id: 'greedy-blood',
+        text: '献血离开（掉 5 HP）',
+        effect: 'hp-5',
+        hint: '仅当其他献祭方式全部不可用时可选',
+        requiresDisabledChoices: ['greedy-left', 'greedy-right', 'greedy-amulet'],
+        requiresDisabledReason: '仍有其他献祭方式可用',
+      },
+    ],
   });
 
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: 'Hidden Cache',
+    name: '荣誉回响',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: 'Take Gold (Gain 6 Gold)', effect: 'gold+6' },
-      { text: 'Take All (Gain 12 Gold, Monster Appears)', effect: 'gold+12,spawnmonster' },
-      { text: '发现一张Class Card（发现）', effect: 'discoverClass' },
-      { text: 'Leave Quietly', effect: 'none' }
-    ]
+      { text: '整理呼吸（回复 5 HP）', effect: 'heal+5' },
+      { text: '回收战利品（金币 +20）', effect: 'gold+20' },
+      { text: '唤醒底牌（获得底部两张专属卡）', effect: 'classBottom+2' },
+    ],
   });
 
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: 'Lucky Coin',
+    name: '血咒仪式',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: 'Make a Wish (Gain 5 Gold)', effect: 'gold+5' },
-      { text: 'Flip It (50% chance: Double Gold or Nothing)', effect: 'random:gold+10,none' },
-      { text: '发现一张Class Card（发现）', effect: 'discoverClass' },
-      { text: 'Keep It (Gain 3 Gold)', effect: 'gold+3' }
-    ]
+      {
+        id: 'curse-flip',
+        text: '翻转卷轴（获得血咒）',
+        effect: 'flipToCurse',
+        hint: '事件卡本身会翻转成永久诅咒并进入背包',
+      },
+      {
+        id: 'curse-discard-hand',
+        text: '献祭手牌（手牌全弃）',
+        effect: 'discardHandAll',
+        requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+      },
+      {
+        id: 'curse-pack-shrink',
+        text: '束缚空间（背包容量 -4）',
+        effect: 'backpackSize-4',
+        hint: '背包容量永久降低 4，超过的卡牌会被丢弃',
+      },
+    ],
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '深红契约',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: '血价交易（-2 HP，发现专属）', effect: 'hp-2,discoverClass' },
+      { text: '捐献财富（-4 金币，商店等级 +1）', effect: 'gold-4,shopLevel+1' },
+      {
+        text: '焚尽旧物（弃 2 张牌，法伤 +1）',
+        effect: ['discardCards:2', 'spellDamage+1'],
+        requires: [
+          {
+            type: 'cardPool',
+            pools: ['hand', 'backpack'],
+            min: 2,
+            message: '需要至少 2 张可弃置的卡牌',
+          },
+        ],
+      },
+    ],
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '墓语密室',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      {
+        text: '净化杂质（删 1 张牌）',
+        effect: 'deleteCard:1',
+        requires: [
+          {
+            type: 'cardPool',
+            pools: ['hand', 'backpack'],
+            min: 1,
+            message: '需要至少 1 张可删除的卡牌',
+          },
+        ],
+      },
+      {
+        text: '坟场召回（随机 3 选 1）',
+        effect: 'graveyardDiscover',
+        requires: [{ type: 'graveyard', min: 1, message: '坟场中没有可召回的卡牌' }],
+      },
+      { text: '召唤商贩（打开商店）', effect: 'openShop' },
+    ],
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '奇术商会',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: '思绪翻涌（抽 2 张牌）', effect: 'drawHeroCards:2' },
+      { text: '扩张人脉（商店等级 +1）', effect: 'shopLevel+1' },
+      {
+        text: '挖掘遗物（坟场发现 1 张）',
+        effect: 'graveyardDiscover',
+        requires: [{ type: 'graveyard', min: 1, message: '坟场中没有可召回的卡牌' }],
+      },
+    ],
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '命运骰盅',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      {
+        text: '掷动命运骰子',
+        hint: '20% 触发不同奖励或惩罚',
+        diceTable: [
+          { id: 'dice11-shop', range: [1, 4], label: '打开商店', effect: 'openShop' },
+          { id: 'dice11-level', range: [5, 8], label: '商店等级 +1', effect: 'shopLevel+1' },
+          { id: 'dice11-spell', range: [9, 12], label: '法术伤害 +1', effect: 'spellDamage+1' },
+          { id: 'dice11-amulets', range: [13, 16], label: '摧毁所有护符', effect: 'removeAllAmulets' },
+          { id: 'dice11-discover', range: [17, 20], label: '发现一张专属卡', effect: 'discoverClass' },
+        ],
+      },
+    ],
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '混沌骰局',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      {
+        text: '掷出混沌结果',
+        hint: '20% 概率触发不同命运',
+        diceTable: [
+          { id: 'dice12-shop', range: [1, 4], label: '打开商店', effect: 'openShop' },
+          { id: 'dice12-curse', range: [5, 8], label: '背包加入一张诅咒', effect: 'addCurse' },
+          {
+            id: 'dice12-delete',
+            range: [9, 12],
+            label: '删除 1 张牌',
+            effect: 'deleteCard:1',
+          },
+          { id: 'dice12-class', range: [13, 16], label: '获得 2 张专属卡', effect: 'drawClass2' },
+          { id: 'dice12-draw', range: [17, 20], label: '抽 2 张牌', effect: 'drawHeroCards:2' },
+        ],
+      },
+    ],
   });
 
   return deck.sort(() => Math.random() - 0.5);
@@ -815,6 +1024,7 @@ export default function GameBoard() {
   // const { toast } = useToast(); // Disabled toast notifications
   const [hp, setHp] = useState(INITIAL_HP);
   const [gold, setGold] = useState(INITIAL_GOLD);
+  const [shopLevel, setShopLevel] = useState(0);
   const [previewCards, setPreviewCards] = useState<ActiveRowSlots>(createEmptyActiveRow()); // Preview row slots
   const [activeCards, setActiveCards] = useState<ActiveRowSlots>(createEmptyActiveRow());
   const [remainingDeck, setRemainingDeck] = useState<GameCardData[]>([]);
@@ -873,6 +1083,8 @@ export default function GameBoard() {
     }, createEmptyAmuletEffects());
   }, [amuletSlots]);
   const [backpackItems, setBackpackItems] = useState<GameCardData[]>([]); // Full card storage LIFO stack
+  const [backpackCapacityModifier, setBackpackCapacityModifier] = useState(0);
+  const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
   const [canDrawFromBackpack, setCanDrawFromBackpack] = useState(false);
   const [backpackViewerOpen, setBackpackViewerOpen] = useState(false);
   const [classDeckFlights, setClassDeckFlights] = useState<ClassDeckFlight[]>([]);
@@ -881,6 +1093,15 @@ export default function GameBoard() {
   const [shopModalOpen, setShopModalOpen] = useState(false);
   const [shopOfferings, setShopOfferings] = useState<ShopOffering[]>([]);
   const [shopSourceEvent, setShopSourceEvent] = useState<GameCardData | null>(null);
+  const [shopDeleteUsed, setShopDeleteUsed] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [cardActionContext, setCardActionContext] = useState<CardActionContext | null>(null);
+  const cardActionResolverRef = useRef<(() => void) | null>(null);
+  const shopDiscountPercent = getShopDiscountPercent(shopLevel);
+  const adjustShopLevel = useCallback((delta: number) => {
+    if (!delta) return;
+    setShopLevel(prev => Math.max(0, Math.floor(prev + delta)));
+  }, []);
   const [cardsPlayed, setCardsPlayed] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
@@ -1303,6 +1524,13 @@ export default function GameBoard() {
   const [discardedCards, setDiscardedCards] = useState<GameCardData[]>([]);
   const [waveDiscardCount, setWaveDiscardCount] = useState(0);
   const [handCards, setHandCards] = useState<GameCardData[]>([]); // Hand system - max 7 cards
+  const deletableCardCount = handCards.length + backpackItems.length;
+  const canDeleteCardInShop = !shopDeleteUsed && deletableCardCount > 0;
+  const shopDeleteDisabledReason = shopDeleteUsed
+    ? '本次商店的删牌机会已用完。'
+    : deletableCardCount === 0
+      ? '当前没有可以删除的卡牌。'
+      : undefined;
   const [isDraggingToHand, setIsDraggingToHand] = useState(false); // Show hand acquisition zone
   const [isDraggingFromDungeon, setIsDraggingFromDungeon] = useState(false); // Track if dragging from dungeon
   const [permanentSkills, setPermanentSkills] = useState<string[]>([]); // Track permanent skill effects
@@ -1310,6 +1538,16 @@ export default function GameBoard() {
   const [classDeck, setClassDeck] = useState<GameCardData[]>([]); // Class deck cards
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [currentEventCard, setCurrentEventCard] = useState<GameCardData | null>(null);
+  const [permanentMaxHpBonus, setPermanentMaxHpBonus] = useState(0);
+  const [permanentSpellDamageBonus, setPermanentSpellDamageBonus] = useState(0);
+  const [eventDiceModal, setEventDiceModal] = useState<EventDiceModalState | null>(null);
+  const [eventDiceRollKey, setEventDiceRollKey] = useState(0);
+  const eventDiceResolverRef = useRef<(entry: EventDiceRange | null) => void>(null);
+  const [equipmentPrompt, setEquipmentPrompt] = useState<EquipmentPromptState | null>(null);
+  const equipmentPromptResolverRef = useRef<(slot: EquipmentSlotId | null) => void>(null);
+  const [eventTransformState, setEventTransformState] = useState<EventTransformState | null>(null);
+  const [graveyardDiscoverState, setGraveyardDiscoverState] = useState<GameCardData[] | null>(null);
+  const graveyardDiscoverResolverRef = useRef<((card: GameCardData | null) => void) | null>(null);
   
   // Hero class system state
   const [heroClass] = useState<'knight' | 'mage' | 'rogue'>('knight'); // Default to Knight
@@ -1349,6 +1587,14 @@ export default function GameBoard() {
     () => getHeroSkillById(selectedHeroSkill as HeroSkillId | null | undefined),
     [selectedHeroSkill],
   );
+
+  useEffect(() => {
+    if (!graveyardDiscoverState && graveyardDiscoverResolverRef.current) {
+      graveyardDiscoverResolverRef.current(null);
+      graveyardDiscoverResolverRef.current = null;
+    }
+  }, [graveyardDiscoverState]);
+
   const resetHeroSkillForNewWave = useCallback(() => {
     setHeroSkillUsedThisWave(false);
     setPendingHeroSkillAction(null);
@@ -1887,6 +2133,7 @@ export default function GameBoard() {
   const maxHp =
     INITIAL_HP +
     amuletEffects.aura.maxHp +
+    permanentMaxHpBonus +
     (permanentSkills.includes('Iron Will') ? 3 : 0) +
     (selectedHeroSkillDef?.initialMaxHpBonus ?? 0);
   const attackBonus = amuletEffects.aura.attack + 
@@ -1898,6 +2145,10 @@ export default function GameBoard() {
     (permanentSkills.includes('Iron Skin') ? 1 : 0) +
     shieldMasterBonus + // Knight class bonus to all shields
     (defensiveStanceActive ? 1 : 0); // Defensive stance damage reduction
+  const getSpellDamage = useCallback(
+    (baseDamage: number) => Math.max(0, baseDamage + permanentSpellDamageBonus),
+    [permanentSpellDamageBonus],
+  );
   const healHero = useCallback(
     (baseAmount: number) => {
       const multiplier = amuletEffects.hasHeal ? 2 : 1;
@@ -1951,12 +2202,31 @@ export default function GameBoard() {
     return drawnCard;
   };
 
+  const returnCardToBackpackBottom = useCallback(
+    (card: GameCardData) => {
+      setBackpackItems(prev => {
+        const { fromSlot, ...cardData } = card as GameCardData & { fromSlot?: DragOrigin };
+        const filtered = prev.filter(existing => existing.id !== cardData.id);
+        const next = [...filtered, { ...cardData }];
+        if (next.length > backpackCapacity) {
+          const overflow = next.length - backpackCapacity;
+          const kept = next.slice(overflow);
+          next.slice(0, overflow).forEach(overflowCard => addToGraveyard(overflowCard));
+          return kept;
+        }
+        return next;
+      });
+      setCanDrawFromBackpack(true);
+    },
+    [addToGraveyard, backpackCapacity, setCanDrawFromBackpack],
+  );
+
   const drawClassCardsToBackpack = useCallback(
     (count: number, source: string, filter?: (card: GameCardData) => boolean): GameCardData[] => {
       if (count <= 0) return [];
       if (classDeck.length === 0) return [];
 
-      const availableSlots = MAX_BACKPACK_CAPACITY - backpackItems.length;
+      const availableSlots = backpackCapacity - backpackItems.length;
       if (availableSlots <= 0) return [];
 
       const filteredPool = filter ? classDeck.filter(filter) : classDeck;
@@ -1996,7 +2266,7 @@ export default function GameBoard() {
 
   const beginDiscoverFlow = useCallback(
     (source: string): boolean => {
-      if (backpackItems.length >= MAX_BACKPACK_CAPACITY) {
+      if (backpackItems.length >= backpackCapacity) {
         if (DEV_MODE) {
           console.debug('[Discover] Backpack full, cannot start discover', { source });
         }
@@ -2035,6 +2305,8 @@ export default function GameBoard() {
 
     const usedIds = new Set<string>();
     const offerings: ShopOffering[] = [];
+    const reducedShopSlots = Math.max(0, SHOP_MAX_OFFERINGS - 1);
+    const maxOfferings = Math.max(SHOP_REQUIRED_TYPES.length, reducedShopSlots + shopLevel);
 
     const takeRandomCard = (filter?: (card: GameCardData) => boolean): GameCardData | null => {
       const pool = classDeck.filter(
@@ -2051,20 +2323,20 @@ export default function GameBoard() {
     SHOP_REQUIRED_TYPES.forEach(type => {
       const picked = takeRandomCard(card => card.type === type);
       if (picked) {
-        offerings.push({ card: picked, price: getShopPrice(picked), sold: false });
+        offerings.push({ card: picked, price: getShopPrice(picked, shopLevel), sold: false });
       }
     });
 
-    while (offerings.length < SHOP_MAX_OFFERINGS) {
+    while (offerings.length < maxOfferings) {
       const picked = takeRandomCard();
       if (!picked) {
         break;
       }
-      offerings.push({ card: picked, price: getShopPrice(picked), sold: false });
+      offerings.push({ card: picked, price: getShopPrice(picked, shopLevel), sold: false });
     }
 
     return offerings;
-  }, [classDeck]);
+  }, [classDeck, shopLevel]);
 
   const startShopFlow = useCallback(
     (eventCard: GameCardData | null): boolean => {
@@ -2072,7 +2344,7 @@ export default function GameBoard() {
         return false;
       }
 
-      if (backpackItems.length >= MAX_BACKPACK_CAPACITY) {
+      if (backpackItems.length >= backpackCapacity) {
         if (DEV_MODE) {
           console.debug('[Shop] Cannot open shop, backpack full');
         }
@@ -2089,6 +2361,8 @@ export default function GameBoard() {
 
       setShopOfferings(offerings);
       setShopSourceEvent(eventCard);
+      setShopDeleteUsed(false);
+      setDeleteModalOpen(false);
       setShopModalOpen(true);
       setEventModalOpen(false);
       return true;
@@ -2182,6 +2456,81 @@ export default function GameBoard() {
       triggerClassDeckFlight(fallback);
     }
   }, [drawClassCardsToBackpack, triggerClassDeckFlight]);
+
+  const requestDiceOutcome = useCallback(
+    (config: { title: string; subtitle?: string; entries: EventDiceRange[] }) => {
+      return new Promise<EventDiceRange | null>(resolve => {
+        eventDiceResolverRef.current = resolve;
+        setEventDiceModal({
+          title: config.title,
+          subtitle: config.subtitle,
+          entries: config.entries,
+          rolledValue: null,
+          highlightedId: null,
+        });
+        setEventDiceRollKey(key => key + 1);
+      });
+    },
+    [],
+  );
+
+  const handleDiceRollResult = useCallback((value: number) => {
+    setEventDiceModal(prev => {
+      if (!prev) return prev;
+      const matched =
+        prev.entries.find(entry => value >= entry.range[0] && value <= entry.range[1]) ??
+        prev.entries[prev.entries.length - 1] ??
+        null;
+
+      window.setTimeout(() => {
+        eventDiceResolverRef.current?.(matched ?? null);
+        eventDiceResolverRef.current = null;
+        setEventDiceModal(null);
+      }, 900);
+
+      return {
+        ...prev,
+        rolledValue: value,
+        highlightedId: matched?.id ?? null,
+      };
+    });
+  }, []);
+
+  const cancelDiceModal = useCallback(() => {
+    if (eventDiceResolverRef.current) {
+      eventDiceResolverRef.current(null);
+      eventDiceResolverRef.current = null;
+    }
+    setEventDiceModal(null);
+  }, []);
+
+  const requestEquipmentSelection = useCallback(
+    (prompt: EquipmentPromptState): Promise<EquipmentSlotId | null> => {
+      return new Promise(resolve => {
+        if (!equipmentSlot1 && !equipmentSlot2) {
+          resolve(null);
+          return;
+        }
+        equipmentPromptResolverRef.current = resolve;
+        setEquipmentPrompt(prompt);
+      });
+    },
+    [equipmentSlot1, equipmentSlot2],
+  );
+
+  const handleEquipmentPromptSelection = useCallback((slot: EquipmentSlotId) => {
+    equipmentPromptResolverRef.current?.(slot);
+    equipmentPromptResolverRef.current = null;
+    setEquipmentPrompt(null);
+  }, []);
+
+  const cancelEquipmentPrompt = useCallback(() => {
+    if (equipmentPromptResolverRef.current) {
+      equipmentPromptResolverRef.current(null);
+      equipmentPromptResolverRef.current = null;
+    }
+    setEquipmentPrompt(null);
+  }, []);
 
   const updateBackpackHandFlightAnimation = useCallback((timestamp: number) => {
     const flights = backpackHandFlightsRef.current;
@@ -2304,12 +2653,26 @@ export default function GameBoard() {
     setIsHydrated(true);
   }, []);
 
+  useEffect(() => {
+    if (!DEV_MODE || typeof window === 'undefined') {
+      return;
+    }
+    // Developer helper to manually tweak shop level while playtesting.
+    (window as any).__adjustShopLevel = adjustShopLevel;
+    return () => {
+      if ((window as any).__adjustShopLevel === adjustShopLevel) {
+        delete (window as any).__adjustShopLevel;
+      }
+    };
+  }, [adjustShopLevel]);
+
   const persistedState = useMemo<PersistedGameState>(() => {
     return {
       version: 1 as const,
       timestamp: 0,
       hp,
       gold,
+      shopLevel,
       monstersDefeated,
       cardsPlayed,
       totalDamageTaken,
@@ -2342,10 +2705,14 @@ export default function GameBoard() {
       shieldMasterBonus,
       gameOver,
       victory,
+      permanentMaxHpBonus,
+      permanentSpellDamageBonus,
+      backpackCapacityModifier,
     };
   }, [
     hp,
     gold,
+    shopLevel,
     monstersDefeated,
     cardsPlayed,
     totalDamageTaken,
@@ -2371,6 +2738,9 @@ export default function GameBoard() {
     shieldMasterBonus,
     gameOver,
     victory,
+    permanentMaxHpBonus,
+    permanentSpellDamageBonus,
+    backpackCapacityModifier,
   ]);
 
   useEffect(() => {
@@ -2471,10 +2841,12 @@ export default function GameBoard() {
     setRemainingDeck(deckWithClassEvents.slice(10));    // Rest of deck
     setHp(INITIAL_HP);
     setGold(INITIAL_GOLD);
+    setShopLevel(0);
     setEquipmentSlot1(null);
     setEquipmentSlot2(null);
     setAmuletSlots([]);
     setBackpackItems([]);
+    setBackpackCapacityModifier(0);
     setCanDrawFromBackpack(false);
     setBackpackViewerOpen(false);
     setHandCards([]);
@@ -2487,6 +2859,8 @@ export default function GameBoard() {
     setTotalHealed(0);
     setDiscardedCards([]);
     setPermanentSkills([]);
+    setPermanentMaxHpBonus(0);
+    setPermanentSpellDamageBonus(0);
     setTempShield(0);
     setEventModalOpen(false);
     setCurrentEventCard(null);
@@ -2566,6 +2940,7 @@ export default function GameBoard() {
 
     setHp(snapshot.hp ?? INITIAL_HP);
     setGold(snapshot.gold ?? INITIAL_GOLD);
+    setShopLevel(typeof snapshot.shopLevel === 'number' ? snapshot.shopLevel : 0);
     setMonstersDefeated(snapshot.monstersDefeated ?? 0);
     setCardsPlayed(snapshot.cardsPlayed ?? 0);
     setTotalDamageTaken(snapshot.totalDamageTaken ?? 0);
@@ -2596,6 +2971,9 @@ export default function GameBoard() {
     setHeroVariant(snapshot.heroVariant ?? getRandomHero());
 
     setPermanentSkills(Array.isArray(snapshot.permanentSkills) ? snapshot.permanentSkills : []);
+    setPermanentMaxHpBonus(snapshot.permanentMaxHpBonus ?? 0);
+    setPermanentSpellDamageBonus(snapshot.permanentSpellDamageBonus ?? 0);
+    setBackpackCapacityModifier(snapshot.backpackCapacityModifier ?? 0);
     setEquipmentSlotBonuses(mapEquipmentBonuses(snapshot.equipmentSlotBonuses));
     setWeaponMasterBonus(snapshot.weaponMasterBonus ?? 0);
     setShieldMasterBonus(snapshot.shieldMasterBonus ?? 0);
@@ -2736,6 +3114,105 @@ export default function GameBoard() {
 
   const clearEquipmentSlotById = (id: EquipmentSlotId) => setEquipmentSlotById(id, null);
 
+  const normalizeEventEffect = (expression?: EventEffectExpression): string[] => {
+    if (!expression) {
+      return [];
+    }
+    const raw = Array.isArray(expression) ? expression : expression.split(',');
+    return raw
+      .map(token => token.trim())
+      .filter(token => token.length > 0);
+  };
+
+  const evaluateChoiceRequirements = useCallback(
+    (choice?: EventChoiceDefinition): EventChoiceAvailability => {
+      if (!choice?.requires?.length) {
+        return { disabled: false };
+      }
+      for (const requirement of choice.requires) {
+        if (requirement.type === 'equipment') {
+          const slotItem = requirement.slot === 'left' ? equipmentSlot1 : equipmentSlot2;
+          if (!slotItem) {
+            return {
+              disabled: true,
+              reason:
+                requirement.message ??
+                (requirement.slot === 'left' ? '左侧装备栏为空' : '右侧装备栏为空'),
+            };
+          }
+        } else if (requirement.type === 'equipmentAny') {
+          if (!equipmentSlot1 && !equipmentSlot2) {
+            return { disabled: true, reason: requirement.message ?? '至少需要一件装备' };
+          }
+        } else if (requirement.type === 'amulet') {
+          if (!amuletSlots.length) {
+            return { disabled: true, reason: requirement.message ?? '至少需要一个护身符' };
+          }
+        } else if (requirement.type === 'hand') {
+          if (handCards.length < requirement.min) {
+            return {
+              disabled: true,
+              reason: requirement.message ?? `至少需要 ${requirement.min} 张手牌`,
+            };
+          }
+        } else if (requirement.type === 'cardPool') {
+          let total = 0;
+          if (requirement.pools.includes('hand')) {
+            total += handCards.length;
+          }
+          if (requirement.pools.includes('backpack')) {
+            total += backpackItems.length;
+          }
+          if (total < requirement.min) {
+            return {
+              disabled: true,
+              reason:
+                requirement.message ??
+                `需要至少 ${requirement.min} 张可用卡牌（手牌/背包）`,
+            };
+          }
+        } else if (requirement.type === 'graveyard') {
+          if (discardedCards.length < requirement.min) {
+            return {
+              disabled: true,
+              reason: requirement.message ?? '坟场中没有足够的卡牌',
+            };
+          }
+        }
+      }
+      return { disabled: false };
+    },
+    [amuletSlots.length, backpackItems.length, discardedCards.length, equipmentSlot1, equipmentSlot2, handCards.length],
+  );
+
+  const eventChoiceStates = useMemo<EventChoiceAvailability[]>(() => {
+    if (!currentEventCard?.eventChoices) {
+      return [];
+    }
+    const baseStates = currentEventCard.eventChoices.map(choice => evaluateChoiceRequirements(choice));
+    const availabilityLookup: Record<string, boolean> = {};
+
+    currentEventCard.eventChoices.forEach((choice, index) => {
+      if (choice.id) {
+        availabilityLookup[choice.id] = !(baseStates[index]?.disabled ?? false);
+      }
+    });
+
+    return currentEventCard.eventChoices.map((choice, index) => {
+      const baseState = baseStates[index];
+      if (!baseState.disabled && choice.requiresDisabledChoices?.length) {
+        const anyActive = choice.requiresDisabledChoices.some(id => availabilityLookup[id]);
+        if (anyActive) {
+          return {
+            disabled: true,
+            reason: choice.requiresDisabledReason ?? '其他选项仍可用',
+          };
+        }
+      }
+      return baseState;
+    });
+  }, [currentEventCard, evaluateChoiceRequirements]);
+
   const findWeaponSlot = (): { id: EquipmentSlotId; item: EquipmentItem } | null => {
     for (const slot of getEquipmentSlots()) {
       if (slot.item?.type === 'weapon') return slot as { id: EquipmentSlotId; item: EquipmentItem };
@@ -2817,7 +3294,7 @@ export default function GameBoard() {
     return { ...rest };
   };
 
-  const addToGraveyard = (card: GameCardData) => {
+  function addToGraveyard(card: GameCardData) {
     const sanitized = sanitizeCardForGraveyard(card);
     setDiscardedCards(prev => {
       if (prev.some(c => c.id === sanitized.id)) {
@@ -2826,7 +3303,121 @@ export default function GameBoard() {
       setWaveDiscardCount(count => count + 1);
       return [...prev, sanitized];
     });
-  };
+  }
+
+  const createCurseCard = (sourceCard?: GameCardData): GameCardData => ({
+    id: `curse-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type: 'magic',
+    name: '血咒之印',
+    value: 0,
+    image: sourceCard?.image ?? eventScrollImage,
+    description: '永久魔法：使用时失去 3 点生命值。',
+    magicType: 'permanent',
+    magicEffect: 'curse',
+    isCurse: true,
+  });
+
+  const addCardToBackpack = useCallback(
+    (card: GameCardData, options?: { toBottom?: boolean }) => {
+      const sanitized = { ...card };
+      setBackpackItems(prev => {
+        const next = options?.toBottom ? [...prev, sanitized] : [sanitized, ...prev];
+        if (next.length <= backpackCapacity) {
+          return next;
+        }
+        const kept = next.slice(0, backpackCapacity);
+        next.slice(backpackCapacity).forEach(overflowCard => addToGraveyard(overflowCard));
+        return kept;
+      });
+      setCanDrawFromBackpack(true);
+    },
+    [addToGraveyard, backpackCapacity],
+  );
+
+  const enforceBackpackCapacity = useCallback(() => {
+    setBackpackItems(prev => {
+      if (prev.length <= backpackCapacity) {
+        return prev;
+      }
+      const kept = prev.slice(0, backpackCapacity);
+      prev.slice(backpackCapacity).forEach(overflowCard => addToGraveyard(overflowCard));
+      return kept;
+    });
+  }, [addToGraveyard, backpackCapacity]);
+
+  useEffect(() => {
+    enforceBackpackCapacity();
+  }, [backpackCapacity, enforceBackpackCapacity]);
+
+  const triggerEventTransform = useCallback(
+    (fromCard: GameCardData, toCard: GameCardData) =>
+      new Promise<void>(resolve => {
+        setEventTransformState({
+          fromCard,
+          toCard,
+          onComplete: () => {
+            resolve();
+            setEventTransformState(null);
+          },
+        });
+      }),
+    [],
+  );
+
+  const sacrificeEquipment = useCallback(
+    (slotId: EquipmentSlotId): boolean => {
+      const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+      if (!slotItem) {
+        return false;
+      }
+      addToGraveyard(slotItem);
+      clearEquipmentSlotById(slotId);
+      return true;
+    },
+    [addToGraveyard, clearEquipmentSlotById, equipmentSlot1, equipmentSlot2],
+  );
+
+  const swapEquipmentSlots = useCallback(() => {
+    const left = equipmentSlot1;
+    const right = equipmentSlot2;
+    setEquipmentSlotById('equipmentSlot1', right ? { ...right } : null);
+    setEquipmentSlotById('equipmentSlot2', left ? { ...left } : null);
+  }, [equipmentSlot1, equipmentSlot2]);
+
+  const convertAmuletsToGold = useCallback(
+    (amountPer: number) => {
+      if (!amuletSlots.length) return 0;
+      const payout = amountPer * amuletSlots.length;
+      amuletSlots.forEach(amulet => addToGraveyard(amulet));
+      setAmuletSlots([]);
+      setGold(prev => prev + payout);
+      return payout;
+    },
+    [addToGraveyard, amuletSlots, setAmuletSlots, setGold],
+  );
+
+  const gainClassDeckBottomCards = useCallback(
+    (count: number): GameCardData[] => {
+      if (count <= 0 || classDeck.length === 0) {
+        return [];
+      }
+      const availableSlots = backpackCapacity - backpackItems.length;
+      if (availableSlots <= 0) {
+        return [];
+      }
+      const takeCount = Math.min(count, availableSlots, classDeck.length);
+      if (takeCount <= 0) {
+        return [];
+      }
+      const cards = classDeck.slice(-takeCount);
+      setClassDeck(prev => prev.slice(0, prev.length - takeCount));
+      setBackpackItems(prev => [...cards, ...prev]);
+      setCanDrawFromBackpack(true);
+      triggerClassDeckFlight(cards);
+      return cards;
+    },
+    [backpackItems.length, classDeck, setBackpackItems, setCanDrawFromBackpack, setClassDeck, triggerClassDeckFlight],
+  );
 
   const resetWaterfallAnimation = () => {
     clearWaterfallTimeouts();
@@ -3209,16 +3800,22 @@ export default function GameBoard() {
     logWaterfall('remove-pending-increment', { pending: pendingDungeonRemovalsRef.current });
   };
 
-  const finalizeInstantMagicCard = useCallback(
+  const finalizeMagicCard = useCallback(
     (card: GameCardData, options?: { banner?: string }) => {
       if (options?.banner) {
         setHeroSkillBanner(options.banner);
       }
+
+      if (isPermanentMagicCard(card)) {
+        returnCardToBackpackBottom(card);
+      } else {
       addToGraveyard(card);
+      }
+
       removeCard(card.id, false);
       setPendingMagicAction(null);
     },
-    [addToGraveyard, removeCard],
+    [addToGraveyard, removeCard, returnCardToBackpackBottom],
   );
 
   const finalizePotionCard = useCallback(
@@ -3359,7 +3956,7 @@ export default function GameBoard() {
       }
 
       if (selectedCard) {
-        if (backpackItems.length >= MAX_BACKPACK_CAPACITY) {
+        if (backpackItems.length >= backpackCapacity) {
           returnCardsToClassDeck([selectedCard]);
         } else {
           setBackpackItems(prev => [selectedCard, ...prev]);
@@ -3389,7 +3986,7 @@ export default function GameBoard() {
           return prev;
         }
 
-        if (backpackItems.length >= MAX_BACKPACK_CAPACITY) {
+        if (backpackItems.length >= backpackCapacity) {
           return prev;
         }
 
@@ -3412,8 +4009,88 @@ export default function GameBoard() {
     setShopModalOpen(false);
     setShopOfferings([]);
     setShopSourceEvent(null);
+    setDeleteModalOpen(false);
+    setCardActionContext(null);
+    cardActionResolverRef.current = null;
     completeCurrentEvent();
   }, [completeCurrentEvent]);
+
+  const requestCardAction = useCallback(
+    (action: 'delete' | 'discard', count: number, options?: { title?: string; description?: string }) => {
+      if (deletableCardCount < count) {
+        setHeroSkillBanner(options?.description ?? '当前没有足够的卡牌可供选择。');
+        return Promise.resolve(false);
+      }
+      return new Promise<boolean>(resolve => {
+        cardActionResolverRef.current = () => {
+          resolve(true);
+          cardActionResolverRef.current = null;
+        };
+        setCardActionContext({
+          mode: 'event',
+          action,
+          requiredCount: count,
+          remainingCount: count,
+          title: options?.title,
+          description: options?.description,
+        });
+        setDeleteModalOpen(true);
+      });
+    },
+    [deletableCardCount, setHeroSkillBanner],
+  );
+
+  const requestGraveyardSelection = useCallback(
+    (maxOptions: number) => {
+      if (!discardedCards.length) {
+        setHeroSkillBanner('坟场中没有可取回的卡牌。');
+        return Promise.resolve<GameCardData | null>(null);
+      }
+      const shuffled = [...discardedCards].sort(() => Math.random() - 0.5);
+      const options = shuffled.slice(0, Math.min(maxOptions, shuffled.length));
+      return new Promise<GameCardData | null>(resolve => {
+        graveyardDiscoverResolverRef.current = card => {
+          resolve(card);
+          graveyardDiscoverResolverRef.current = null;
+        };
+        setGraveyardDiscoverState(options);
+      });
+    },
+    [discardedCards, setHeroSkillBanner],
+  );
+
+  const handleGraveyardDiscoverSelect = useCallback(
+    (cardId: string) => {
+      if (!graveyardDiscoverState) {
+        return;
+      }
+      const selected = graveyardDiscoverState.find(card => card.id === cardId);
+      if (!selected) {
+        return;
+      }
+      setDiscardedCards(prev => prev.filter(card => card.id !== cardId));
+      addCardToBackpack(selected);
+      setGraveyardDiscoverState(null);
+      graveyardDiscoverResolverRef.current?.(selected);
+      graveyardDiscoverResolverRef.current = null;
+    },
+    [addCardToBackpack, graveyardDiscoverState],
+  );
+
+  const handleShopDeleteRequest = useCallback(() => {
+    if (shopDeleteUsed || deletableCardCount === 0) {
+      return;
+    }
+    setCardActionContext({
+      mode: 'shop',
+      action: 'delete',
+      requiredCount: 1,
+      remainingCount: 1,
+      title: '选择要删除的卡牌',
+      description: '从手牌或背包中删除 1 张卡牌，将其送入坟场。',
+    });
+    setDeleteModalOpen(true);
+  }, [deletableCardCount, shopDeleteUsed]);
 
   const wasDraggedFromHand = (cardId: string) =>
     draggedCardSource === 'hand' && draggedCard?.id === cardId;
@@ -3447,6 +4124,103 @@ export default function GameBoard() {
 
     return false;
   };
+
+  const discardAllHandCards = useCallback(() => {
+    setHandCards(prev => {
+      if (!prev.length) {
+        return prev;
+      }
+      prev.forEach(card => addToGraveyard(card));
+      return [];
+    });
+  }, [addToGraveyard]);
+
+  const drawHeroCards = useCallback(
+    (count: number) => {
+      if (count <= 0 || remainingDeck.length === 0) {
+        return 0;
+      }
+      const availableHandSlots = Math.max(0, 7 - handCards.length);
+      if (availableHandSlots <= 0) {
+        return 0;
+      }
+      const drawCount = Math.min(count, availableHandSlots, remainingDeck.length);
+      if (drawCount <= 0) {
+        return 0;
+      }
+      const cardsToDraw = remainingDeck.slice(0, drawCount);
+      setHandCards(prev => [...prev, ...cardsToDraw]);
+      setRemainingDeck(prev => prev.slice(drawCount));
+      return drawCount;
+    },
+    [handCards.length, remainingDeck],
+  );
+
+  const handleDeleteCardConfirm = useCallback(
+    (cardId: string, source: 'hand' | 'backpack') => {
+      let cardToDelete: GameCardData | null = null;
+
+      if (source === 'hand') {
+        cardToDelete = handCards.find(card => card.id === cardId) ?? null;
+        if (!cardToDelete) {
+          return;
+        }
+        const removed = consumeCardFromHand(cardToDelete);
+        if (!removed) {
+          return;
+        }
+      } else {
+        cardToDelete = backpackItems.find(card => card.id === cardId) ?? null;
+        if (!cardToDelete) {
+          return;
+        }
+        setBackpackItems(prev => prev.filter(card => card.id !== cardId));
+      }
+
+      addToGraveyard(cardToDelete);
+
+      if (cardActionContext?.mode === 'shop') {
+        setShopDeleteUsed(true);
+        setDeleteModalOpen(false);
+        setCardActionContext(null);
+        return;
+      }
+
+      if (cardActionContext?.mode === 'event') {
+        const remaining = Math.max(0, cardActionContext.remainingCount - 1);
+        if (remaining <= 0) {
+          setDeleteModalOpen(false);
+          setCardActionContext(null);
+          const resolver = cardActionResolverRef.current;
+          cardActionResolverRef.current = null;
+          resolver?.();
+        } else {
+          setCardActionContext(context => (context ? { ...context, remainingCount: remaining } : context));
+        }
+        return;
+      }
+
+      setDeleteModalOpen(false);
+    },
+    [addToGraveyard, backpackItems, cardActionContext, consumeCardFromHand, handCards],
+  );
+  const handleDeleteModalOpenChange = useCallback(
+    (open: boolean) => {
+      if (
+        !open &&
+        cardActionContext?.mode === 'event' &&
+        (cardActionContext.remainingCount ?? 0) > 0
+      ) {
+        setHeroSkillBanner('请完成卡牌选择才能继续。');
+        return;
+      }
+      setDeleteModalOpen(open);
+      if (!open && cardActionContext?.mode === 'shop') {
+        setCardActionContext(null);
+      }
+    },
+    [cardActionContext, setHeroSkillBanner],
+  );
 
   useEffect(() => {
     const activeCount = countActiveRowSlots(activeCards);
@@ -3492,6 +4266,12 @@ export default function GameBoard() {
   function handleSkillCard(card: GameCardData) {
     const knightCard = card as KnightCardData;
     
+    if (card.isCurse) {
+      applyDamage(3);
+      finalizeMagicCard(card, { banner: '血咒吸取了 3 点生命。' });
+      return;
+    }
+    
     if (card.magicType === 'instant') {
       // Execute instant skill effect
       switch (card.name) {
@@ -3511,29 +4291,30 @@ export default function GameBoard() {
           } else {
             triggerWaterfall();
           }
-          finalizeInstantMagicCard(card, { banner: 'Cascade Reset shuffles the current wave.' });
+          finalizeMagicCard(card, { banner: 'Cascade Reset shuffles the current wave.' });
           break;
         }
         case 'Tempest Volley': {
           const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
           if (monsters.length === 0) {
-            finalizeInstantMagicCard(card, { banner: 'Tempest Volley fizzled (no monsters).' });
+            finalizeMagicCard(card, { banner: 'Tempest Volley fizzled (no monsters).' });
             break;
           }
+          const volleyDamage = getSpellDamage(3);
           monsters.forEach((monster, index) => {
             if (!isMonsterEngaged(monster.id)) {
               beginCombat(monster, 'hero');
             }
             const animationDelay = index * Math.floor(COMBAT_ANIMATION_STAGGER * 0.75);
-            dealDamageToMonster(monster, 3, { animationDelay, pulses: 2 });
+            dealDamageToMonster(monster, volleyDamage, { animationDelay, pulses: 2 });
           });
-          finalizeInstantMagicCard(card, { banner: 'Tempest Volley strikes every foe!' });
+          finalizeMagicCard(card, { banner: `Tempest Volley strikes every foe for ${volleyDamage} damage!` });
           break;
         }
         case 'Echo Satchel': {
           const drawsRequested = waveDiscardCount;
           if (drawsRequested <= 0) {
-            finalizeInstantMagicCard(card, { banner: 'Echo Satchel had no cards to echo.' });
+            finalizeMagicCard(card, { banner: 'Echo Satchel had no cards to echo.' });
             break;
           }
           let drawsCompleted = 0;
@@ -3553,13 +4334,13 @@ export default function GameBoard() {
             drawsCompleted > 0
               ? `Echo Satchel drew ${drawsCompleted} card${drawsCompleted > 1 ? 's' : ''} from the backpack.`
               : 'Echo Satchel could not draw (hand full or backpack empty).';
-          finalizeInstantMagicCard(card, { banner });
+          finalizeMagicCard(card, { banner });
           break;
         }
         case 'Bulwark Slam': {
           const shields = getEquipmentSlots().filter(slot => slot.item?.type === 'shield');
           if (shields.length === 0) {
-            finalizeInstantMagicCard(card, { banner: 'Bulwark Slam fizzled (no shields equipped).' });
+            finalizeMagicCard(card, { banner: 'Bulwark Slam fizzled (no shields equipped).' });
             break;
           }
           setPendingMagicAction({
@@ -3574,7 +4355,7 @@ export default function GameBoard() {
         case 'Blood Reckoning': {
           const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
           if (monsters.length === 0) {
-            finalizeInstantMagicCard(card, { banner: 'No monsters available for Blood Reckoning.' });
+            finalizeMagicCard(card, { banner: 'No monsters available for Blood Reckoning.' });
             break;
           }
           setPendingMagicAction({
@@ -3594,7 +4375,7 @@ export default function GameBoard() {
             return maxDurability > 0 && currentDurability < maxDurability;
           });
           if (repairableSlots.length === 0) {
-            finalizeInstantMagicCard(card, { banner: 'All equipment is already at full durability.' });
+            finalizeMagicCard(card, { banner: 'All equipment is already at full durability.' });
             break;
           }
           setPendingMagicAction({
@@ -3733,6 +4514,11 @@ export default function GameBoard() {
     
     // Only allow selling defined card types
     if (!isSellableType(itemType)) {
+      return;
+    }
+    if (isPermanentMagicCard(item)) {
+      setHeroSkillBanner('Permanent magic returns to your backpack and cannot be discarded.');
+      resetDragState();
       return;
     }
     
@@ -3900,8 +4686,8 @@ export default function GameBoard() {
           setHeroSkillBanner('No monsters available to strike.');
           return;
         }
-        setPendingHeroSkillAction({ skillId: 'blood-strike', type: 'monster' });
-        setHeroSkillBanner(selectedHeroSkillDef.statusHint ?? 'Select a monster to deal 3 damage.');
+        setPendingHeroSkillAction({ skillId: 'blood-strike', type: 'monster', baseDamage: 3 });
+        setHeroSkillBanner(`Select a monster to deal ${getSpellDamage(3)} damage.`);
         break;
       default:
         break;
@@ -3916,6 +4702,7 @@ export default function GameBoard() {
     selectedHeroSkillDef,
     setHandCards,
     waterfallActive,
+    getSpellDamage,
   ]);
 
 
@@ -3980,20 +4767,21 @@ export default function GameBoard() {
       }
 
       if (pendingMagicAction.effect === 'bulwark-slam') {
-        const damage = calculateSlotArmorValue(slotId);
-        if (damage <= 0) {
+        const baseDamage = calculateSlotArmorValue(slotId);
+        if (baseDamage <= 0) {
           setHeroSkillBanner('Select a shield with armor to use Bulwark Slam.');
           return;
         }
+        const displayDamage = getSpellDamage(baseDamage);
         setPendingMagicAction({
           card: pendingMagicAction.card,
           effect: 'bulwark-slam',
           step: 'monster-select',
           slotId,
-          pendingDamage: damage,
-          prompt: `Select a monster to take ${damage} damage.`,
+          pendingDamage: baseDamage,
+          prompt: `Select a monster to take ${displayDamage} damage.`,
         });
-        setHeroSkillBanner(`Bulwark Slam armed for ${damage} damage.`);
+        setHeroSkillBanner(`Bulwark Slam armed for ${displayDamage} damage.`);
         return;
       }
 
@@ -4017,7 +4805,7 @@ export default function GameBoard() {
           ...slotItem,
           durability: maxDurability,
         });
-        finalizeInstantMagicCard(pendingMagicAction.card, {
+        finalizeMagicCard(pendingMagicAction.card, {
           banner: `${slotItem.name} is fully repaired.`,
         });
       }
@@ -4026,7 +4814,8 @@ export default function GameBoard() {
       calculateSlotArmorValue,
       equipmentSlot1,
       equipmentSlot2,
-      finalizeInstantMagicCard,
+      getSpellDamage,
+      finalizeMagicCard,
       pendingMagicAction,
       setEquipmentSlotById,
     ],
@@ -4089,16 +4878,18 @@ export default function GameBoard() {
       }
 
       applyDamage(3);
-      dealDamageToMonster(monster, 3, { pulses: 2 });
+      const heroSkillDamage = getSpellDamage(pendingHeroSkillAction.baseDamage ?? 3);
+      dealDamageToMonster(monster, heroSkillDamage, { pulses: 2 });
 
       setHeroSkillUsedThisWave(true);
       setPendingHeroSkillAction(null);
-      setHeroSkillBanner('Crimson Strike dealt 3 damage.');
+      setHeroSkillBanner(`Crimson Strike dealt ${heroSkillDamage} damage.`);
       setHeroSkillArrow(null);
     },
     [
       applyDamage,
       dealDamageToMonster,
+      getSpellDamage,
       pendingHeroSkillAction,
     ],
   );
@@ -4110,20 +4901,21 @@ export default function GameBoard() {
       }
 
       if (pendingMagicAction.effect === 'bulwark-slam') {
-        const damage = pendingMagicAction.pendingDamage;
-        if (damage <= 0) {
+        const baseDamage = pendingMagicAction.pendingDamage;
+        if (baseDamage <= 0) {
           setHeroSkillBanner('Bulwark Slam needs armor to deal damage.');
           return;
         }
+        const totalDamage = getSpellDamage(baseDamage);
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        dealDamageToMonster(monster, damage, {
+        dealDamageToMonster(monster, totalDamage, {
           animationDelay: Math.floor(COMBAT_ANIMATION_STAGGER / 2),
           pulses: 2,
         });
-        finalizeInstantMagicCard(pendingMagicAction.card, {
-          banner: `Bulwark Slam dealt ${damage} damage.`,
+        finalizeMagicCard(pendingMagicAction.card, {
+          banner: `Bulwark Slam dealt ${totalDamage} damage.`,
         });
         return;
       }
@@ -4131,24 +4923,26 @@ export default function GameBoard() {
       if (pendingMagicAction.effect === 'blood-reckoning') {
         const missingHp = Math.max(0, maxHp - hp);
         if (missingHp <= 0) {
-          finalizeInstantMagicCard(pendingMagicAction.card, {
+          finalizeMagicCard(pendingMagicAction.card, {
             banner: 'You are at full HP. Blood Reckoning dealt no damage.',
           });
           return;
         }
+        const totalDamage = getSpellDamage(missingHp);
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        dealDamageToMonster(monster, missingHp, { pulses: 2 });
-        finalizeInstantMagicCard(pendingMagicAction.card, {
-          banner: `Blood Reckoning dealt ${missingHp} damage.`,
+        dealDamageToMonster(monster, totalDamage, { pulses: 2 });
+        finalizeMagicCard(pendingMagicAction.card, {
+          banner: `Blood Reckoning dealt ${totalDamage} damage.`,
         });
       }
     },
     [
       beginCombat,
       dealDamageToMonster,
-      finalizeInstantMagicCard,
+      finalizeMagicCard,
+      getSpellDamage,
       hp,
       isMonsterEngaged,
       maxHp,
@@ -4271,8 +5065,13 @@ export default function GameBoard() {
     resetDragState();
   };
 
-  const isEquipmentCard = (card: GameCardData) => (EQUIPMENT_TYPES as readonly CardType[]).includes(card.type);
-  const isConsumableCard = (card: GameCardData) => (CONSUMABLE_TYPES as readonly CardType[]).includes(card.type);
+  const isEquipmentCard = (card: GameCardData) =>
+    (EQUIPMENT_TYPES as readonly CardType[]).includes(card.type);
+  const isConsumableCard = (card: GameCardData) =>
+    (CONSUMABLE_TYPES as readonly CardType[]).includes(card.type);
+  const isPermanentMagicCard = (
+    card: GameCardData | null | undefined,
+  ): card is GameCardData => Boolean(card && card.type === 'magic' && card.magicType === 'permanent');
   const canCardGoToBackpack = (card: GameCardData) => {
     if (card.type === 'event') return false;
     if (card.type === 'monster') return false;
@@ -4350,7 +5149,7 @@ export default function GameBoard() {
       }
 
       // Check if backpack is full
-      if (backpackItems.length >= 10) {
+      if (backpackItems.length >= backpackCapacity) {
     // // toast({ title: 'Backpack Full!', description: 'Maximum 10 items', variant: 'destructive' });
         return;
       }
@@ -4362,9 +5161,7 @@ export default function GameBoard() {
         setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
       }
       
-      // Add card to bottom of backpack (unshift for LIFO)
-      setBackpackItems(prev => [card, ...prev]);
-    // // toast({ title: 'Item Stored!', description: `${backpackItems.length + 1}/10 items in backpack` });
+      addCardToBackpack(card);
       if (!fromAmuletSlot) {
         removeCard(card.id, false);
       }
@@ -4409,116 +5206,226 @@ export default function GameBoard() {
     }
   };
 
-  function handleEventChoice(choiceIndex: number) {
+  const handleEventChoice = async (choiceIndex: number) => {
     if (!currentEventCard || !currentEventCard.eventChoices) return;
     
     const choice = currentEventCard.eventChoices[choiceIndex];
-    const effects = choice.effect.split(',');
+    if (!choice) return;
+
+    if (eventChoiceStates[choiceIndex]?.disabled) {
+      return;
+    }
+
+    const effects = normalizeEventEffect(choice.effect);
+    if (choice.diceTable?.length) {
+      const diceResult = await requestDiceOutcome({
+        title: currentEventCard.name,
+        subtitle: choice.text,
+        entries: choice.diceTable,
+      });
+      if (!diceResult) {
+        return;
+      }
+      effects.push(...normalizeEventEffect(diceResult.effect));
+    }
+
     let eventResolutionDeferred = false;
     
     for (const effect of effects) {
       if (effect === 'none') continue;
       
       if (effect.startsWith('hp-')) {
-        const damage = parseInt(effect.replace('hp-', ''));
+        const damage = parseInt(effect.replace('hp-', ''), 10);
         applyDamage(damage);
-    // // toast({ title: 'Damage Taken', description: `-${damage} HP`, variant: 'destructive' });
       } else if (effect.startsWith('heal+')) {
-        const healAmount = parseInt(effect.replace('heal+', ''));
+        const healAmount = parseInt(effect.replace('heal+', ''), 10);
         healHero(healAmount);
-    // // toast({ title: 'Healed!', description: `+${actualHeal} HP` });
       } else if (effect === 'fullheal') {
         healHero(maxHp);
-    // // toast({ title: 'Full Heal!', description: `Restored to ${maxHp} HP` });
       } else if (effect.startsWith('gold-')) {
-        const goldLost = parseInt(effect.replace('gold-', ''));
+        const goldLost = parseInt(effect.replace('gold-', ''), 10);
         if (gold >= goldLost) {
           setGold(prev => prev - goldLost);
-    // // toast({ title: 'Gold Spent', description: `-${goldLost} Gold` });
         } else {
-    // // toast({ title: 'Not Enough Gold!', variant: 'destructive' });
           setEventModalOpen(false);
           setCurrentEventCard(null);
           finalizeEventResolution({ removeFromDungeon: false });
           return;
         }
       } else if (effect.startsWith('gold+')) {
-        const goldGain = parseInt(effect.replace('gold+', ''));
+        const goldGain = parseInt(effect.replace('gold+', ''), 10);
         setGold(prev => prev + goldGain);
-    // // toast({ title: 'Gold Gained!', description: `+${goldGain} Gold` });
-      } else if (effect.startsWith('maxhp+')) {
-        const hpGain = parseInt(effect.replace('maxhp+', ''));
-        // This would need a permanent max HP modifier
-    // // toast({ title: 'Max HP Increased!', description: `+${hpGain} Max HP` });
+      } else if (effect.startsWith('maxhpperm+')) {
+        const bonus = parseInt(effect.replace('maxhpperm+', ''), 10);
+        if (!Number.isNaN(bonus)) {
+          setPermanentMaxHpBonus(prev => prev + bonus);
+        }
       } else if (effect === 'weapon') {
-        // Create a random weapon
-        const weaponValue = Math.floor(Math.random() * 3) + 3; // 3-5 value
-    // // toast({ title: 'Weapon Received!', description: `Got a weapon (${weaponValue} damage)` });
-        // Would need to add weapon to inventory
+        const weaponValue = Math.floor(Math.random() * 3) + 3;
+        console.debug('[Event] Placeholder weapon reward', weaponValue);
       } else if (effect === 'permanentskill') {
         const randomSkill = ['Iron Skin', 'Weapon Master'][Math.floor(Math.random() * 2)];
         setPermanentSkills(prev => [...prev, randomSkill]);
-    // // toast({ title: 'Skill Learned!', description: randomSkill });
-      }
-      
-      // Knight discovery events
-      else if (effect === 'drawKnight3') {
+      } else if (effect === 'flipToCurse') {
+        if (currentEventCard) {
+          const curseCard = createCurseCard(currentEventCard);
+          await triggerEventTransform(currentEventCard, curseCard);
+          addCardToBackpack(curseCard);
+          setHeroSkillBanner('卷轴翻转化为血咒，潜入了你的背包。');
+        }
+      } else if (effect === 'addCurse') {
+        const curseCard = createCurseCard(currentEventCard || undefined);
+        addCardToBackpack(curseCard);
+        setHeroSkillBanner('一张血咒潜入了你的背包。');
+      } else if (effect === 'discardHandAll') {
+        const hadCards = handCards.length;
+        discardAllHandCards();
+        if (hadCards > 0) {
+          setHeroSkillBanner('你弃掉了全部手牌。');
+        } else {
+          setHeroSkillBanner('没有手牌可以弃掉。');
+        }
+      } else if (effect.startsWith('backpackSize-')) {
+        const reduction = Math.abs(parseInt(effect.replace('backpackSize-', ''), 10)) || 0;
+        if (reduction > 0) {
+          setBackpackCapacityModifier(prev => prev - reduction);
+          setHeroSkillBanner(`背包容量永久降低 ${reduction}。`);
+        }
+      } else if (effect.startsWith('shopLevel+')) {
+        const amount = parseInt(effect.replace('shopLevel+', ''), 10) || 1;
+        setShopLevel(prev => {
+          const next = Math.max(0, prev + amount);
+          setHeroSkillBanner(`商店等级提升到 Lv.${next}`);
+          return next;
+        });
+      } else if (effect.startsWith('spellDamage+')) {
+        const amount = parseInt(effect.replace('spellDamage+', ''), 10) || 1;
+        setPermanentSpellDamageBonus(prev => {
+          const next = prev + amount;
+          setHeroSkillBanner(`法术伤害永久 +${amount}（当前 +${next}）。`);
+          return next;
+        });
+      } else if (effect.startsWith('discardCards:')) {
+        const discardCount = parseInt(effect.replace('discardCards:', ''), 10) || 1;
+        const success = await requestCardAction('discard', discardCount, {
+          title: `弃置 ${discardCount} 张卡牌`,
+          description: '从手牌或背包中选择要弃置的卡牌。',
+        });
+        if (!success) {
+          setHeroSkillBanner('没有足够的卡牌可供弃置。');
+          break;
+        }
+      } else if (effect.startsWith('deleteCard')) {
+        const [, countText] = effect.split(':');
+        const deleteCount = countText ? parseInt(countText, 10) : 1;
+        const success = await requestCardAction('delete', deleteCount, {
+          title: `删除 ${deleteCount} 张卡牌`,
+          description: '被删除的卡牌会被送入坟场，永久离开你的牌库。',
+        });
+        if (!success) {
+          setHeroSkillBanner('没有足够的卡牌可供删除。');
+          break;
+        }
+      } else if (effect === 'graveyardDiscover') {
+        const selected = await requestGraveyardSelection(3);
+        if (selected) {
+          setHeroSkillBanner(`你从坟场带回了 ${selected.name}。`);
+        } else {
+          setHeroSkillBanner('坟场中没有可召回的卡牌。');
+        }
+      } else if (effect.startsWith('drawHeroCards:')) {
+        const drawCount = parseInt(effect.replace('drawHeroCards:', ''), 10) || 1;
+        const drawn = drawHeroCards(drawCount);
+        if (drawn > 0) {
+          setHeroSkillBanner(`抽到了 ${drawn} 张牌。`);
+        } else {
+          setHeroSkillBanner('牌堆或手牌已满，无法抽牌。');
+        }
+      } else if (effect === 'removeAllAmulets') {
+        if (amuletSlots.length) {
+          amuletSlots.forEach(amulet => addToGraveyard(amulet));
+          setAmuletSlots([]);
+          setHeroSkillBanner('所有护符都被粉碎了。');
+        } else {
+          setHeroSkillBanner('你没有佩戴护符。');
+        }
+      } else if (effect === 'destroyEquipment:any') {
+        const slotsWithItems = getEquipmentSlots().filter(slot => slot.item);
+        if (!slotsWithItems.length) {
+          continue;
+        }
+        if (slotsWithItems.length === 1) {
+          sacrificeEquipment(slotsWithItems[0].id);
+        } else {
+          const selected = await requestEquipmentSelection({
+            prompt: '选择要破坏的装备',
+            subtext: '左或右装备栏至少保留一件。',
+          });
+          if (selected) {
+            sacrificeEquipment(selected);
+          }
+        }
+      } else if (effect === 'slotLeftDamage+1') {
+        setEquipmentSlotBonus('equipmentSlot1', 'damage', value => value + 1);
+      } else if (effect === 'slotRightDefense+1') {
+        setEquipmentSlotBonus('equipmentSlot2', 'shield', value => value + 1);
+      } else if (effect === 'swapEquipmentSlots') {
+        swapEquipmentSlots();
+      } else if (effect === 'discardLeftForGold+15') {
+        if (sacrificeEquipment('equipmentSlot1')) {
+          setGold(prev => prev + 15);
+        }
+      } else if (effect === 'discardRightForGold+15') {
+        if (sacrificeEquipment('equipmentSlot2')) {
+          setGold(prev => prev + 15);
+        }
+      } else if (effect === 'amuletsToGold+10') {
+        convertAmuletsToGold(10);
+      } else if (effect === 'classBottom+2') {
+        gainClassDeckBottomCards(2);
+      } else if (effect === 'drawKnight3') {
         const drawn = drawClassCardsToBackpack(3, 'drawKnight3');
         triggerClassDeckFlight(drawn);
       } else if (effect === 'equipKnight') {
-        // Draw and immediately equip a Knight equipment
         const equipmentCards = classDeck.filter(c => c.type === 'weapon' || c.type === 'shield');
         if (equipmentCards.length > 0) {
           const equipment = equipmentCards[Math.floor(Math.random() * equipmentCards.length)];
-          // Auto-equip to empty slot or first slot
           if (!equipmentSlot1) {
             setEquipmentSlot1({ ...equipment } as EquipmentItem);
           } else if (!equipmentSlot2) {
             setEquipmentSlot2({ ...equipment } as EquipmentItem);
           }
           setClassDeck(prev => prev.filter(c => c.id !== equipment.id));
-    // // toast({ title: 'Knight Equipment!', description: `Equipped ${equipment.name}!` });
         }
       } else if (effect === 'useKnightSkill') {
-        // Draw and use a Knight skill immediately
         const skillCards = classDeck.filter(c => c.type === 'skill' && c.skillType === 'instant');
         if (skillCards.length > 0) {
           const skill = skillCards[Math.floor(Math.random() * skillCards.length)];
           setClassDeck(prev => prev.filter(c => c.id !== skill.id));
           handleSkillCard(skill);
         }
-      }
-      
-      // Knight class-specific event effects
-      else if (effect === 'weaponUpgrade' || effect === 'weaponUpgrade2') {
-        // Upgrade current weapon
+      } else if (effect === 'weaponUpgrade' || effect === 'weaponUpgrade2') {
         const upgradAmount = effect === 'weaponUpgrade2' ? 2 : 2;
         if (equipmentSlot1?.type === 'weapon') {
-          setEquipmentSlot1(prev => prev ? { ...prev, value: prev.value + upgradAmount } : null);
-    // // toast({ title: 'Weapon Upgraded!', description: `+${upgradAmount} damage to ${equipmentSlot1.name}!` });
+          setEquipmentSlot1(prev => (prev ? { ...prev, value: prev.value + upgradAmount } : null));
         } else if (equipmentSlot2?.type === 'weapon') {
-          setEquipmentSlot2(prev => prev ? { ...prev, value: prev.value + upgradAmount } : null);
-    // // toast({ title: 'Weapon Upgraded!', description: `+${upgradAmount} damage to ${equipmentSlot2.name}!` });
+          setEquipmentSlot2(prev => (prev ? { ...prev, value: prev.value + upgradAmount } : null));
         }
       } else if (effect === 'shieldUpgrade2') {
-        // Upgrade current shield
         if (equipmentSlot1?.type === 'shield') {
-          setEquipmentSlot1(prev => prev ? { ...prev, value: prev.value + 2 } : null);
-    // // toast({ title: 'Shield Upgraded!', description: `+2 defense to ${equipmentSlot1.name}!` });
+          setEquipmentSlot1(prev => (prev ? { ...prev, value: prev.value + 2 } : null));
         } else if (equipmentSlot2?.type === 'shield') {
-          setEquipmentSlot2(prev => prev ? { ...prev, value: prev.value + 2 } : null);
-    // // toast({ title: 'Shield Upgraded!', description: `+2 defense to ${equipmentSlot2.name}!` });
+          setEquipmentSlot2(prev => (prev ? { ...prev, value: prev.value + 2 } : null));
         }
       } else if (effect === 'restoreShield') {
-        // Restore a shield from graveyard
         const shields = discardedCards.filter(c => c.type === 'shield');
         if (shields.length > 0) {
-          const shield = shields[shields.length - 1]; // Get most recent
+          const shield = shields[shields.length - 1];
           const restoredShield: EquipmentItem = {
             ...shield,
             type: 'shield',
             durability: 3,
-            maxDurability: 3
+            maxDurability: 3,
           };
           if (!equipmentSlot1) {
             setEquipmentSlot1(restoredShield);
@@ -4526,19 +5433,19 @@ export default function GameBoard() {
             setEquipmentSlot2(restoredShield);
           }
           setDiscardedCards(prev => prev.filter(c => c.id !== shield.id));
-    // // toast({ title: 'Shield Restored!', description: `${shield.name} restored from graveyard!` });
         }
       } else if (effect.startsWith('tempShield+')) {
-        const shieldGain = parseInt(effect.replace('tempShield+', ''));
+        const shieldGain = parseInt(effect.replace('tempShield+', ''), 10);
         setTempShield(prev => prev + shieldGain);
-    // // toast({ title: 'Temporary Shield!', description: `+${shieldGain} shield value!` });
       } else if (effect === 'bloodEmpower') {
         const empoweredSlot = findWeaponSlot();
         if (empoweredSlot?.item) {
-          const empoweredWeapon: EquipmentItem = { ...empoweredSlot.item, value: empoweredSlot.item.value + 2 };
+          const empoweredWeapon: EquipmentItem = {
+            ...empoweredSlot.item,
+            value: empoweredSlot.item.value + 2,
+          };
           setEquipmentSlotById(empoweredSlot.id, empoweredWeapon);
         } else {
-          // No weapon to empower, refund with gold so the choice still feels rewarding
           setGold(prev => prev + 5);
         }
       } else if (effect === 'draw2') {
@@ -4560,7 +5467,7 @@ export default function GameBoard() {
         const drawn = drawClassCardsToBackpack(
           2,
           'drawEquipment',
-          card => card.type === 'weapon' || card.type === 'shield'
+          card => card.type === 'weapon' || card.type === 'shield',
         );
         triggerClassDeckFlight(drawn);
       } else if (effect === 'discoverClass') {
@@ -4578,19 +5485,17 @@ export default function GameBoard() {
           break;
         }
       } else if (effect === 'repairAll') {
-        // Repair all equipment
         const slots = getEquipmentSlots();
         slots.forEach(slot => {
           if (slot.item) {
             const repaired = { 
               ...slot.item, 
               durability: slot.item.maxDurability || 3,
-              maxDurability: slot.item.maxDurability || 3
+              maxDurability: slot.item.maxDurability || 3,
             };
             setEquipmentSlotById(slot.id, repaired);
           }
         });
-    // // toast({ title: 'Equipment Repaired!', description: 'All equipment restored to full durability!' });
       }
     }
     
@@ -4823,7 +5728,8 @@ export default function GameBoard() {
     !isHeroRowHighlightCard(draggedCard);
   const heroRowMagicDropActive =
     !heroRowInteractionLocked && isHeroRowHighlightCard(draggedCard);
-  const canSellDraggedCard = draggedCard ? isSellableType(draggedCard.type) : false;
+  const canSellDraggedCard =
+    draggedCard ? isSellableType(draggedCard.type) && !isPermanentMagicCard(draggedCard) : false;
   const canSellDraggedEquipment =
     draggedEquipment && draggedEquipment.type
       ? isSellableType(draggedEquipment.type as CardType)
@@ -5134,6 +6040,7 @@ export default function GameBoard() {
             }
             onHeroSkillCancel={heroSkillTargeting ? cancelHeroSkillAction : undefined}
             heroSkillButtonRef={heroSkillButtonRef}
+            spellDamageBonus={permanentSpellDamageBonus}
           />
           {showBlockButtons && renderBlockButton('hero', 'Block (Hero)', false)}
         </>
@@ -5307,6 +6214,7 @@ export default function GameBoard() {
           gold={gold} 
           cardsRemaining={getRemainingCards()}
           monstersDefeated={monstersDefeated}
+          shopLevel={shopLevel}
           onDeckClick={() => setDeckViewerOpen(true)}
           onNewGame={handleNewGame}
         />
@@ -5756,15 +6664,42 @@ export default function GameBoard() {
         onSelect={handleDiscoverSelect}
       />
 
+      <DiscoverClassModal
+        open={Boolean(graveyardDiscoverState)}
+        cards={graveyardDiscoverState ?? []}
+        onSelect={handleGraveyardDiscoverSelect}
+        title="坟场召回"
+        description="从坟场随机出现的卡牌中选择一张带回背包。"
+      />
+
       <ShopModal
         open={shopModalOpen}
         offerings={shopOfferings}
         gold={gold}
         backpackCount={backpackItems.length}
-        backpackCapacity={MAX_BACKPACK_CAPACITY}
+        backpackCapacity={backpackCapacity}
+        shopLevel={shopLevel}
+        discountPercent={shopDiscountPercent}
+        canDeleteCard={canDeleteCardInShop}
+        deleteDisabledReason={shopDeleteDisabledReason}
+        onDeleteRequest={handleShopDeleteRequest}
         onBuy={handleShopPurchase}
         onFinish={handleShopClose}
         sourceEventName={shopSourceEvent?.name ?? undefined}
+      />
+
+      {eventTransformState && <EventTransformOverlay state={eventTransformState} />}
+
+      <CardDeletionModal
+        open={deleteModalOpen}
+        onOpenChange={handleDeleteModalOpenChange}
+        handCards={handCards}
+        backpackCards={backpackItems}
+        onDeleteCard={handleDeleteCardConfirm}
+        title={cardActionContext?.title}
+        description={cardActionContext?.description}
+        requiredCount={cardActionContext?.requiredCount}
+        remainingCount={cardActionContext?.remainingCount}
       />
 
       <CardDetailsModal 
@@ -5778,13 +6713,78 @@ export default function GameBoard() {
         open={eventModalOpen}
         eventCard={currentEventCard}
         onChoice={handleEventChoice}
+        choiceStates={eventChoiceStates}
       />
+
+      {eventDiceModal && (
+        <EventDiceModal
+          open
+          title={eventDiceModal.title}
+          subtitle={eventDiceModal.subtitle}
+          entries={eventDiceModal.entries}
+          rolledValue={eventDiceModal.rolledValue}
+          resolvedEntryId={eventDiceModal.highlightedId}
+          autoRollTrigger={eventDiceRollKey}
+          onRollResult={handleDiceRollResult}
+          onClose={cancelDiceModal}
+        />
+      )}
+
+      {equipmentPrompt && (
+        <EquipmentSelectModal
+          open
+          prompt={equipmentPrompt.prompt}
+          subtext={equipmentPrompt.subtext}
+          leftItem={equipmentSlot1}
+          rightItem={equipmentSlot2}
+          onSelect={handleEquipmentPromptSelection}
+          onCancel={cancelEquipmentPrompt}
+        />
+      )}
       
       {/* Hero Skill Selection Modal */}
       <HeroSkillSelection
         isOpen={showSkillSelection}
         onSelectSkill={handleSkillSelection}
       />
+    </div>
+  );
+}
+
+function EventTransformOverlay({ state }: { state: EventTransformState }) {
+  const [flipped, setFlipped] = useState(false);
+
+  useEffect(() => {
+    const flipTimer = window.setTimeout(() => setFlipped(true), 350);
+    const completeTimer = window.setTimeout(() => {
+      state.onComplete();
+    }, 1200);
+    return () => {
+      window.clearTimeout(flipTimer);
+      window.clearTimeout(completeTimer);
+    };
+  }, [state]);
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="w-full max-w-xs sm:max-w-sm text-center space-y-4">
+        <div
+          className="relative mx-auto h-[260px] sm:h-[320px] w-[170px] sm:w-[220px] rounded-xl border border-primary/40 bg-gradient-to-br from-pink-500/20 via-purple-600/10 to-black/40 p-4 shadow-2xl dh-perspective"
+        >
+          <div
+            className="absolute inset-4 transition-transform duration-700 ease-in-out dh-preserve-3d"
+            style={{ transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
+          >
+            <div className="absolute inset-0 dh-backface-hidden">
+              <GameCard card={state.fromCard} disableInteractions />
+            </div>
+            <div className="absolute inset-0 dh-backface-hidden" style={{ transform: 'rotateY(180deg)' }}>
+              <GameCard card={state.toCard} disableInteractions />
+            </div>
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">卷轴正在翻转成新的形态…</p>
+      </div>
     </div>
   );
 }

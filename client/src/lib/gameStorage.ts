@@ -23,6 +23,7 @@ export interface PersistedGameState {
   hp: number;
   gold: number;
   monstersDefeated: number;
+  shopLevel: number;
   cardsPlayed: number;
   totalDamageTaken: number;
   totalHealed: number;
@@ -47,6 +48,9 @@ export interface PersistedGameState {
   shieldMasterBonus: number;
   gameOver: boolean;
   victory: boolean;
+  permanentMaxHpBonus: number;
+  permanentSpellDamageBonus: number;
+  backpackCapacityModifier: number;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

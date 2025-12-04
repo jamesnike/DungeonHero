@@ -1,11 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from 'lucide-react';
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Infinity } from 'lucide-react';
 import { initMobileDrag } from '../utils/mobileDragDrop';
 
 const MAX_DURABILITY_DOTS = 4;
 
-export type CardType = 'monster' | 'weapon' | 'shield' | 'potion' | 'amulet' | 'magic' | 'event' | 'skill' | 'coin';
+export type CardType =
+  | 'monster'
+  | 'weapon'
+  | 'shield'
+  | 'potion'
+  | 'amulet'
+  | 'magic'
+  | 'event'
+  | 'skill'
+  | 'coin';
 
 export type PotionEffectId =
   | 'heal-5'
@@ -23,6 +32,34 @@ export type AmuletAuraBonus = {
   maxHp?: number;
 };
 
+export type EventRequirement =
+  | { type: 'equipment'; slot: 'left' | 'right'; message?: string }
+  | { type: 'equipmentAny'; message?: string }
+  | { type: 'amulet'; message?: string }
+  | { type: 'hand'; min: number; message?: string }
+  | { type: 'cardPool'; pools: Array<'hand' | 'backpack'>; min: number; message?: string }
+  | { type: 'graveyard'; min: number; message?: string };
+
+export type EventEffectExpression = string | string[];
+
+export interface EventDiceRange {
+  id: string;
+  range: [number, number];
+  label: string;
+  effect: EventEffectExpression;
+}
+
+export interface EventChoiceDefinition {
+  id?: string;
+  text: string;
+  effect?: EventEffectExpression;
+  requires?: EventRequirement[];
+  diceTable?: EventDiceRange[];
+  hint?: string;
+  requiresDisabledChoices?: string[];
+  requiresDisabledReason?: string;
+}
+
 export interface GameCardData {
   id: string;
   type: CardType;
@@ -36,7 +73,8 @@ export interface GameCardData {
   magicEffect?: string; // Description of magic effect
   skillType?: 'instant' | 'permanent'; // For class skills
   skillEffect?: string; // Description of skill effect
-  eventChoices?: { text: string; effect: string }[]; // For event cards
+  eventChoices?: EventChoiceDefinition[]; // For event cards
+  isCurse?: boolean;
   // Monster-specific properties
   attack?: number; // Monster attack value
   hp?: number; // Monster current HP
@@ -100,6 +138,7 @@ export default function GameCard({
   );
   const engagedMonster = isEngaged && card.type === 'monster';
   const isPotionCard = card.type === 'potion';
+  const isPermanentMagicCard = card.type === 'magic' && card.magicType === 'permanent';
   const healingPotionEffects: PotionEffectId[] = ['heal-5', 'heal-7'];
   const isHealingPotion =
     isPotionCard && (!card.potionEffect || healingPotionEffects.includes(card.potionEffect));
@@ -526,7 +565,13 @@ const amuletEffectText =
             )}
             
             {/* Footer type indicator - Icon */}
-            <div className="absolute bottom-1 right-1 opacity-50 hover:opacity-100 transition-opacity">
+            <div className="absolute bottom-1 right-1 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+              {isPermanentMagicCard && (
+                <span className="flex items-center gap-0.5 rounded-sm border border-cyan-400/60 bg-cyan-900/80 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-cyan-50 shadow-sm">
+                  <Infinity className="h-3 w-3" />
+                  Perm
+                </span>
+              )}
               {getCardIcon()}
             </div>
           </div>

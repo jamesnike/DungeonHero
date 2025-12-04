@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 interface DiceRollerProps {
   onRoll?: (value: number) => void;
   className?: string;
+  interactive?: boolean;
+  autoRollTrigger?: number;
 }
 
 type Vec3 = [number, number, number];
@@ -21,7 +23,12 @@ const IDENTITY: Quat = [0, 0, 0, 1];
 const DIE_BASE_COLOR = '#FFA5A5';
 const OUTLINE_COLOR = '#2B1F33';
 
-export default function DiceRoller({ onRoll, className = '' }: DiceRollerProps) {
+export default function DiceRoller({
+  onRoll,
+  className = '',
+  interactive = true,
+  autoRollTrigger,
+}: DiceRollerProps) {
   const [currentValue, setCurrentValue] = useState<number>(20);
   const [showResultOverlay, setShowResultOverlay] = useState(false);
   const [resultValue, setResultValue] = useState<number>(20);
@@ -40,6 +47,7 @@ export default function DiceRoller({ onRoll, className = '' }: DiceRollerProps) 
     faceIndex: number;
   } | null>(null);
   const pendingResultRef = useRef<number | null>(null);
+  const autoRollRef = useRef<number | null>(null);
 
   const vertices = useMemo(() => {
     const raw: Vec3[] = [
@@ -155,7 +163,7 @@ export default function DiceRoller({ onRoll, className = '' }: DiceRollerProps) 
     };
   }, [faces, onRoll, vertices]);
 
-  const rollDice = () => {
+  const rollDice = useCallback(() => {
     if (isRolling) return;
     setIsRolling(true);
     const targetFaceIndex = Math.floor(Math.random() * faces.length);
@@ -173,15 +181,23 @@ export default function DiceRoller({ onRoll, className = '' }: DiceRollerProps) 
       spinMagnitude,
       faceIndex: targetFaceIndex,
     };
-  };
+  }, [faces, isRolling]);
+
+  useEffect(() => {
+    if (autoRollTrigger === undefined) return;
+    if (autoRollRef.current === autoRollTrigger) return;
+    autoRollRef.current = autoRollTrigger;
+    rollDice();
+  }, [autoRollTrigger, rollDice]);
 
   return (
-    <Card 
+    <Card
       className={cn(
-        'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/70 via-slate-900/40 to-slate-900/20 transition-all duration-200 hover:scale-[1.01]',
-        className
+        'relative h-full w-full overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/70 via-slate-900/40 to-slate-900/20 transition-all duration-200',
+        interactive ? 'cursor-pointer hover:scale-[1.01]' : 'cursor-default opacity-95',
+        className,
       )}
-      onClick={rollDice}
+      onClick={interactive ? rollDice : undefined}
       data-testid="dice-roller"
     >
       <div className="flex h-full w-full flex-col gap-1 sm:gap-2 p-1 sm:p-3 relative">
@@ -201,7 +217,9 @@ export default function DiceRoller({ onRoll, className = '' }: DiceRollerProps) 
           <div className="pointer-events-none absolute inset-x-10 -bottom-2 h-6 rounded-full bg-black/45 blur-lg" />
         </div>
         <div className="flex items-center justify-between text-[9px] sm:text-xs text-muted-foreground">
-          <span>{isRolling ? 'Rolling...' : 'Tap to roll'}</span>
+          <span>
+            {isRolling ? 'Rolling...' : interactive ? 'Tap to roll' : 'Rolling automatically'}
+          </span>
           <span className="font-mono text-[10px] sm:text-sm text-white/80">Result: {currentValue}</span>
         </div>
         {rollHistory.length > 0 && (

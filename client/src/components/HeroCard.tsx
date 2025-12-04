@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Heart, Shield, Sword, AlertTriangle } from 'lucide-react';
+import { Heart, Shield, Sword, AlertTriangle, Sparkles } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import React, { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
@@ -26,6 +26,7 @@ interface HeroCardProps {
   bleedAnimation?: boolean;
   weaponSwingAnimation?: boolean;
   shieldBlockAnimation?: boolean;
+  spellDamageBonus?: number;
 }
 
 interface HeroSkillUiState {
@@ -60,6 +61,7 @@ export default function HeroCard({
   bleedAnimation = false,
   weaponSwingAnimation = false,
   shieldBlockAnimation = false,
+  spellDamageBonus = 0,
 }: HeroCardProps) {
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
@@ -126,6 +128,7 @@ export default function HeroCard({
   const heroSkillButtonClasses = heroSkillButtonDisabled
     ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
     : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow';
+  const spellDamageDisplay = Math.max(0, spellDamageBonus);
 
   return (
     <div 
@@ -134,9 +137,17 @@ export default function HeroCard({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="h-full w-full"
+      className="relative h-full w-full overflow-visible"
       data-testid="hero-card"
     >
+      <div className="pointer-events-none absolute -top-7 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 text-[10px] sm:text-xs font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap">
+        <span className="flex items-center gap-1 text-purple-500">
+          <Sparkles className="w-3 h-3" />
+          永久法术伤害
+        </span>
+        <span className="text-muted-foreground/50">|</span>
+        <span className="font-mono text-primary text-sm">+{spellDamageDisplay}</span>
+      </div>
       <Card className={`
         relative h-full w-full border-4 border-primary shadow-2xl overflow-hidden
         transition-all duration-200
