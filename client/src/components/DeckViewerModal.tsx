@@ -29,6 +29,7 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
     amulet: remainingCards.filter(c => c.type === 'amulet'),
     skill: remainingCards.filter(c => c.type === 'skill'),
     magic: remainingCards.filter(c => c.type === 'magic'),
+  'hero-magic': remainingCards.filter(c => c.type === 'hero-magic'),
     event: remainingCards.filter(c => c.type === 'event'),
   };
 
@@ -57,7 +58,9 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
       case 'skill':
         return <Zap className="w-5 h-5 text-cyan-500" />;
       case 'magic':
-        return <Wand2 className="w-5 h-5 text-emerald-400" />;
+        return <Zap className="w-5 h-5 text-cyan-500" />;
+      case 'hero-magic':
+        return <Wand2 className="w-5 h-5 text-rose-500" />;
       case 'event':
         return <Scroll className="w-5 h-5 text-violet-500" />;
       default:
@@ -66,6 +69,9 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
   };
 
   const getTypeLabel = (type: string) => {
+    if (type === 'hero-magic') {
+      return 'Hero Magic';
+    }
     return type.charAt(0).toUpperCase() + type.slice(1) + 's';
   };
 

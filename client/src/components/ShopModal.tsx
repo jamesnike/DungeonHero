@@ -10,6 +10,18 @@ export interface ShopOffering {
   sold?: boolean;
 }
 
+export interface ShopSkillDisplay {
+  id: string;
+  title: string;
+  description: string;
+  badge: string;
+  detail?: string;
+  cost: number;
+  purchased: boolean;
+  canAfford: boolean;
+  disabledReason?: string;
+}
+
 interface ShopModalProps {
   open: boolean;
   offerings: ShopOffering[];
@@ -22,6 +34,8 @@ interface ShopModalProps {
   deleteDisabledReason?: string;
   onDeleteRequest: () => void;
   onBuy: (cardId: string) => void;
+  skillOffer?: ShopSkillDisplay | null;
+  onBuySkill?: () => void;
   onFinish: () => void;
   sourceEventName?: string;
 }
@@ -38,6 +52,8 @@ export default function ShopModal({
   deleteDisabledReason,
   onDeleteRequest,
   onBuy,
+  skillOffer,
+  onBuySkill,
   onFinish,
   sourceEventName,
 }: ShopModalProps) {
@@ -82,6 +98,49 @@ export default function ShopModal({
               </span>
             </span>
           </div>
+
+        {skillOffer && (
+          <div
+            className={`flex flex-col gap-3 rounded-md border border-indigo-500/40 bg-indigo-500/5 p-4 shadow-sm sm:flex-row sm:items-center ${
+              skillOffer.purchased ? 'opacity-70' : ''
+            }`}
+          >
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+                  {skillOffer.badge}
+                </Badge>
+                <p className="text-base font-semibold">{skillOffer.title}</p>
+              </div>
+              <p className="text-sm text-muted-foreground">{skillOffer.description}</p>
+              {skillOffer.detail && (
+                <p className="text-xs text-muted-foreground">{skillOffer.detail}</p>
+              )}
+              {skillOffer.disabledReason && (
+                <p className="text-xs text-destructive">{skillOffer.disabledReason}</p>
+              )}
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <span className="text-sm text-muted-foreground">
+                价格：<span className="text-lg font-semibold text-yellow-500">{skillOffer.cost}</span> 金币
+              </span>
+              {!skillOffer.canAfford && !skillOffer.purchased && (
+                <span className="text-xs text-destructive">金币不足</span>
+              )}
+              <Button
+                disabled={
+                  skillOffer.purchased ||
+                  !skillOffer.canAfford ||
+                  Boolean(skillOffer.disabledReason) ||
+                  !onBuySkill
+                }
+                onClick={() => onBuySkill?.()}
+              >
+                {skillOffer.purchased ? '已学习' : '学习技能'}
+              </Button>
+            </div>
+          </div>
+        )}
 
           {offerings.length === 0 && (
             <div className="text-center text-muted-foreground py-12 text-sm">

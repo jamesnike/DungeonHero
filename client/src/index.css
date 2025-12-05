@@ -805,6 +805,10 @@
     font-size: calc(0.7rem * var(--dh-card-font-scale, 1));
   }
 
+  .monster-rage-column {
+    height: 100%;
+  }
+
   .dh-hero-name {
     font-size: calc(1.05rem * var(--dh-hero-font-scale, 1));
     line-height: 1.1;

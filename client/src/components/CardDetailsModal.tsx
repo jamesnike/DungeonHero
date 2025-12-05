@@ -1,15 +1,36 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { type EventEffectExpression, type EventRequirement, type GameCardData } from "./GameCard";
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll } from "lucide-react";
+import { calculateMonsterRage, getMonsterRageRule } from "@/lib/monsterRage";
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2 } from "lucide-react";
+
+type MonsterRewardPreview = {
+  id: string;
+  title: string;
+  description: string;
+  detail?: string;
+};
 
 interface CardDetailsModalProps {
   card: GameCardData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  currentTurn: number;
+  monsterRewards?: MonsterRewardPreview[] | null;
 }
 
-export default function CardDetailsModal({ card, open, onOpenChange }: CardDetailsModalProps) {
+export default function CardDetailsModal({ card, open, onOpenChange, currentTurn, monsterRewards }: CardDetailsModalProps) {
   if (!card) return null;
+
+  const rageRule = card.type === 'monster' ? getMonsterRageRule(card.name) : null;
+  const rageTurn = card.type === 'monster' ? (card.rageTurn ?? currentTurn) : null;
+  const computedRage =
+    card.type === 'monster' && rageRule && rageTurn
+      ? calculateMonsterRage(card.name, rageTurn) ?? null
+      : null;
+  const rageDisplayValue =
+    card.type === 'monster'
+      ? computedRage ?? card.fury ?? card.hpLayers ?? null
+      : null;
 
   const formatAmuletAuraBonus = () => {
     if (card.type !== 'amulet') return null;
@@ -59,6 +80,7 @@ export default function CardDetailsModal({ card, open, onOpenChange }: CardDetai
       case 'potion': return <Heart className="w-6 h-6 text-green-500" />;
       case 'amulet': return <Sparkles className="w-6 h-6 text-purple-500" />;
       case 'magic': return <Zap className="w-6 h-6 text-cyan-500" />;
+      case 'hero-magic': return <Wand2 className="w-6 h-6 text-rose-500" />;
       case 'event': return <Scroll className="w-6 h-6 text-violet-500" />;
       default: return null;
     }
@@ -87,6 +109,37 @@ export default function CardDetailsModal({ card, open, onOpenChange }: CardDetai
                 className="w-full h-full object-cover"
               />
             )}
+
+            {card.type === 'monster' && monsterRewards?.length ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-amber-600">
+                  <Sparkles className="w-4 h-4" />
+                  击败奖励
+                </div>
+                <div className="space-y-2">
+                  {monsterRewards.map(option => (
+                    <div
+                      key={option.id}
+                      className="rounded-md border border-amber-200/60 bg-amber-50/40 p-3 text-sm"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-foreground">{option.title}</span>
+                        {option.detail && (
+                          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-amber-700">
+                            {option.detail}
+                          </span>
+                        )}
+                      </div>
+                      {option.description && (
+                        <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          {option.description}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Detailed Stats & Description */}
@@ -105,6 +158,12 @@ export default function CardDetailsModal({ card, open, onOpenChange }: CardDetai
                 {card.hpLayers && card.hpLayers > 1 && (
                   <div className="col-span-2 text-muted-foreground text-xs">
                     Has {card.hpLayers} HP layers. Current layer: {card.currentLayer}
+                  </div>
+                )}
+                {rageRule && rageTurn && rageDisplayValue !== null && (
+                  <div className="col-span-2 text-muted-foreground text-xs leading-relaxed">
+                    <div>怒气 = 初始 {rageRule.base} + floor(回合 / {rageRule.interval})</div>
+                    <div>当前回合 {rageTurn} ⇒ 怒气 {rageDisplayValue}</div>
                   </div>
                 )}
               </div>
@@ -153,6 +212,16 @@ export default function CardDetailsModal({ card, open, onOpenChange }: CardDetai
                   Type: {card.magicType === 'instant' ? 'Instant Spell' : 'Permanent Skill'}
                 </div>
                 <div>{card.magicEffect || card.description}</div>
+              </div>
+            )}
+
+            {/* Hero Magic Details */}
+            {card.type === 'hero-magic' && (
+              <div className="bg-rose-500/10 p-3 rounded-md border border-rose-500/20">
+                <div className="mb-1 font-semibold text-rose-700 dark:text-rose-400">
+                  Hero Magic
+                </div>
+                <div>{card.heroMagicEffect || card.description}</div>
               </div>
             )}
 
@@ -212,7 +281,11 @@ export default function CardDetailsModal({ card, open, onOpenChange }: CardDetai
             )}
 
             {/* General Description */}
-            {card.description && card.type !== 'magic' && card.type !== 'event' && card.type !== 'amulet' && (
+            {card.description &&
+              card.type !== 'magic' &&
+              card.type !== 'hero-magic' &&
+              card.type !== 'event' &&
+              card.type !== 'amulet' && (
               <div className="italic text-muted-foreground border-t pt-2 mt-2">
                 "{card.description}"
               </div>

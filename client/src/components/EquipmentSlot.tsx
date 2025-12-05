@@ -3,7 +3,7 @@ import { Shield, Sword, Backpack, Package } from 'lucide-react';
 import React, { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
-import GameCard, { GameCardData } from './GameCard';
+import GameCard, { type GameCardData, type EquipmentCardStatModifier } from './GameCard';
 
 const BASE_SLOT_WIDTH = 220;
 const SLOT_SCALE_MIN = 0.7;
@@ -17,6 +17,7 @@ interface EquipmentSlotProps {
   type: SlotType;
   slotId?: string;
   item?: (GameCardData & { [key: string]: any }) | null;
+  statModifier?: EquipmentCardStatModifier | null;
   backpackCount?: number; // Number of items in backpack stack
   scaleMultiplier?: number;
   permanentDamageBonus?: number; // Permanent damage bonus for this slot
@@ -41,6 +42,7 @@ export default function EquipmentSlot({
   type,
   slotId,
   item,
+  statModifier,
   backpackCount = 0,
   scaleMultiplier = 1,
   permanentDamageBonus = 0,
@@ -279,6 +281,7 @@ export default function EquipmentSlot({
         >
           <GameCard 
             card={gameCardData}
+            equipmentStatModifier={statModifier}
             onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
             onDragEnd={onDragEnd}
             onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData) : undefined}

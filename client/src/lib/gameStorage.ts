@@ -1,6 +1,7 @@
 import type { GameCardData } from '@/components/GameCard';
 import type { HeroVariant } from '@/lib/heroes';
 import type { KnightCardData } from '@/lib/knightDeck';
+import { sanitizeHeroMagicState, type HeroMagicState } from '@/lib/heroMagic';
 
 export const GAME_STATE_STORAGE_KEY = 'dungeonhero:game-state:v1';
 const STORAGE_VERSION = 1 as const;
@@ -10,6 +11,11 @@ type BoardSlotSnapshot = Array<GameCardData | null>;
 export interface SlotBonusSnapshot {
   damage: number;
   shield: number;
+}
+
+export interface EquipmentBuffSnapshot {
+  equipmentSlot1: number;
+  equipmentSlot2: number;
 }
 
 export interface EquipmentSlotBonusSnapshot {
@@ -37,6 +43,7 @@ export interface PersistedGameState {
   equipmentSlot2: GameCardData | null;
   amuletSlots: GameCardData[];
   backpackItems: GameCardData[];
+  permanentMagicRecycleBag: GameCardData[];
   canDrawFromBackpack: boolean;
   classDeck: GameCardData[];
   classCardsInHand: KnightCardData[];
@@ -52,6 +59,10 @@ export interface PersistedGameState {
   permanentMaxHpBonus: number;
   permanentSpellDamageBonus: number;
   backpackCapacityModifier: number;
+  heroMagicState: HeroMagicState;
+  turnDamageTaken: number;
+  berserkTurnBuff: EquipmentBuffSnapshot;
+  extraAttackCharges: number;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -66,11 +77,14 @@ export const loadGameState = (): PersistedGameState | null => {
     if (!raw) {
       return null;
     }
-    const parsed = JSON.parse(raw) as PersistedGameState;
+    const parsed = JSON.parse(raw) as Partial<PersistedGameState>;
     if (parsed.version !== STORAGE_VERSION) {
       return null;
     }
-    return parsed;
+    return {
+      ...(parsed as PersistedGameState),
+      heroMagicState: sanitizeHeroMagicState(parsed.heroMagicState),
+    };
   } catch (error) {
     console.warn('[GameStorage] Failed to load state', error);
     return null;

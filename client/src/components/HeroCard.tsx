@@ -5,6 +5,7 @@ import React, { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import type { CSSProperties } from 'react';
+import type { HeroMagicId } from '@/components/GameCard';
 
 const BASE_HERO_WIDTH = 260;
 const HERO_SCALE_MIN = 0.75;
@@ -17,6 +18,7 @@ interface HeroCardProps {
   maxHp: number;
   scaleMultiplier?: number;
   onDrop?: (card: any) => void;
+  onHeroClick?: () => void;
   isDropTarget?: boolean;
   image?: string;
   name?: string;
@@ -29,6 +31,11 @@ interface HeroCardProps {
   onHeroSkillClick?: () => void;
   onHeroSkillCancel?: () => void;
   heroSkillButtonRef?: RefObject<HTMLButtonElement>;
+  heroMagicInfo?: HeroMagicUiState[] | null;
+  onHeroMagicTrigger?: (id: HeroMagicId) => void;
+  heroMagicChoice?: HeroMagicChoicePrompt | null;
+  onHeroMagicChoice?: (choice: 'heal' | 'purge') => void;
+  onHeroMagicCancel?: () => void;
   bleedAnimation?: boolean;
   weaponSwingAnimation?: boolean;
   shieldBlockAnimation?: boolean;
@@ -46,6 +53,23 @@ interface HeroSkillUiState {
   disabledReason?: string;
 }
 
+interface HeroMagicUiState {
+  id: HeroMagicId;
+  name: string;
+  gauge: number;
+  gaugeMax: number;
+  unlocked: boolean;
+  ready: boolean;
+  usedThisWave: boolean;
+  chargeHint: string;
+  disabledReason?: string;
+}
+
+type HeroMagicChoicePrompt = {
+  id: HeroMagicId;
+  prompt: string;
+};
+
 export default function HeroCard({ 
   hp, 
   maxHp, 
@@ -61,15 +85,23 @@ export default function HeroCard({
   onHeroSkillClick,
   onHeroSkillCancel,
   heroSkillButtonRef,
+  heroMagicInfo = null,
+  onHeroMagicTrigger,
+  heroMagicChoice = null,
+  onHeroMagicChoice,
+  onHeroMagicCancel,
   bleedAnimation = false,
   weaponSwingAnimation = false,
   shieldBlockAnimation = false,
   spellDamageBonus = 0,
+  onHeroClick,
 }: HeroCardProps) {
   const [dragDepth, setDragDepth] = React.useState(0);
   const [heroScale, setHeroScale] = React.useState(1);
   const isOver = dragDepth > 0;
   const heroRef = useRef<HTMLDivElement>(null);
+  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const touchTimeoutRef = useRef<number | null>(null);
   
   // Set up mobile drop support
   useEffect(() => {
@@ -87,6 +119,14 @@ export default function HeroCard({
     
     return cleanup;
   }, [onDrop]);
+
+  useEffect(() => {
+    return () => {
+      if (touchTimeoutRef.current) {
+        window.clearTimeout(touchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') {
@@ -158,12 +198,60 @@ export default function HeroCard({
   const heroSkillButtonClasses = heroSkillButtonDisabled
     ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
     : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow';
+  const heroMagicButtonClasses = (ready: boolean) =>
+    ready
+      ? 'bg-rose-500 text-white hover:bg-rose-500/90 shadow'
+      : 'bg-muted text-muted-foreground cursor-not-allowed border border-border';
   const spellDamageDisplay = Math.max(0, spellDamageBonus);
   const appliedHeroScale = clamp(
     heroScale * scaleMultiplier,
     HERO_SCALE_MIN * Math.min(1, scaleMultiplier),
     HERO_SCALE_MAX * Math.max(1, scaleMultiplier),
   );
+
+  const handleHeroCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!onHeroClick) {
+      return;
+    }
+    event.stopPropagation();
+    onHeroClick();
+  };
+
+  const handleHeroTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (!onHeroClick) {
+      return;
+    }
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
+    const currentTime = Date.now();
+    const { clientX, clientY } = touch;
+    if (lastTapRef.current) {
+      const timeDiff = currentTime - lastTapRef.current.time;
+      const xDiff = Math.abs(clientX - lastTapRef.current.x);
+      const yDiff = Math.abs(clientY - lastTapRef.current.y);
+      if (timeDiff < 300 && xDiff < 50 && yDiff < 50) {
+        event.preventDefault();
+        event.stopPropagation();
+        lastTapRef.current = null;
+        if (touchTimeoutRef.current) {
+          window.clearTimeout(touchTimeoutRef.current);
+          touchTimeoutRef.current = null;
+        }
+        onHeroClick();
+        return;
+      }
+    }
+    lastTapRef.current = { time: currentTime, x: clientX, y: clientY };
+    if (touchTimeoutRef.current) {
+      window.clearTimeout(touchTimeoutRef.current);
+    }
+    touchTimeoutRef.current = window.setTimeout(() => {
+      lastTapRef.current = null;
+      touchTimeoutRef.current = null;
+    }, 300);
+  };
 
   return (
     <div 
@@ -172,6 +260,8 @@ export default function HeroCard({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onClick={onHeroClick ? handleHeroCardClick : undefined}
+      onTouchEnd={onHeroClick ? handleHeroTouchEnd : undefined}
       className="relative h-full w-full overflow-visible"
       data-testid="hero-card"
       style={{ '--dh-hero-instance-scale': appliedHeroScale.toString() } as CSSProperties}
@@ -193,12 +283,12 @@ export default function HeroCard({
         ${healing ? 'animate-heal-glow' : ''}
       `}>
         <div className="h-full flex flex-col">
-          <div className="relative h-[60%] bg-gradient-to-b from-primary/25 via-primary/15 to-card overflow-hidden">
+          <div className="relative h-[55%] bg-gradient-to-b from-primary/25 via-primary/15 to-card overflow-hidden">
             {image && (
               <img
                 src={image}
                 alt="Hero"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transform scale-95 origin-top"
                 draggable={false}
                 onDragStart={(e) => e.preventDefault()}
               />
@@ -261,7 +351,7 @@ export default function HeroCard({
 
           </div>
           
-          <div className="h-[40%] px-2 pb-3 pt-3 flex flex-col items-center justify-center bg-card">
+          <div className="h-[40%] px-2 pb-3 pt-3 flex flex-col gap-2 items-stretch justify-start bg-card">
             {heroSkillInfo && (
               <div className="mt-2 flex flex-col items-center gap-1">
                 {isPassiveSkill ? (
@@ -274,7 +364,11 @@ export default function HeroCard({
                       type="button"
                       className={`dh-hero-small font-semibold uppercase tracking-wide px-4 py-1.5 rounded-full transition ${heroSkillButtonClasses}`}
                       disabled={heroSkillButtonDisabled}
-                      onClick={onHeroSkillClick}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onHeroSkillClick?.();
+                      }}
+                      onTouchEnd={(event) => event.stopPropagation()}
                       title={heroSkillInfo.disabledReason}
                       ref={heroSkillButtonRef}
                     >
@@ -284,7 +378,11 @@ export default function HeroCard({
                       <button
                         type="button"
                         className="dh-hero-small font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={onHeroSkillCancel}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onHeroSkillCancel();
+                        }}
+                        onTouchEnd={(event) => event.stopPropagation()}
                       >
                         Cancel
                       </button>
@@ -297,6 +395,88 @@ export default function HeroCard({
               <div className="mt-1 flex items-center gap-1 dh-hero-small text-muted-foreground text-center justify-center">
                 <AlertTriangle className="w-3 h-3" />
                 <span>{heroSkillMessage}</span>
+              </div>
+            )}
+            {heroMagicChoice && (
+              <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-2 space-y-2">
+                <span className="text-xs font-semibold text-amber-700">{heroMagicChoice.prompt}</span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="dh-hero-small font-semibold px-3 py-1 rounded-full bg-emerald-500 text-white hover:bg-emerald-500/90 transition"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onHeroMagicChoice?.('heal');
+                    }}
+                  >
+                    回满生命
+                  </button>
+                  <button
+                    type="button"
+                    className="dh-hero-small font-semibold px-3 py-1 rounded-full bg-sky-500 text-white hover:bg-sky-500/90 transition"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onHeroMagicChoice?.('purge');
+                    }}
+                  >
+                    净化怒气
+                  </button>
+                  {onHeroMagicCancel && (
+                    <button
+                      type="button"
+                      className="dh-hero-small font-semibold px-3 py-1 rounded-full border border-border text-muted-foreground hover:text-foreground transition"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onHeroMagicCancel();
+                      }}
+                    >
+                      取消
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {heroMagicInfo && heroMagicInfo.length > 0 && (
+              <div className="w-full space-y-1.5">
+                {heroMagicInfo.map(magic => (
+                  <div
+                    key={magic.id}
+                    className="w-full rounded-md border border-border/50 bg-muted/30 p-2 space-y-1"
+                  >
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className="text-foreground">{magic.name}</span>
+                      <span className="font-mono text-muted-foreground">
+                        {magic.unlocked ? `${magic.gauge}/${magic.gaugeMax}` : '未解锁'}
+                      </span>
+                    </div>
+                    <Progress
+                      value={magic.unlocked ? (magic.gauge / magic.gaugeMax) * 100 : 0}
+                      className="h-1.5"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className={`dh-hero-small font-semibold uppercase tracking-wide px-3 py-1 rounded-full transition ${heroMagicButtonClasses(
+                          Boolean(onHeroMagicTrigger) && magic.ready,
+                        )}`}
+                        disabled={!onHeroMagicTrigger || !magic.ready}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (magic.ready) {
+                            onHeroMagicTrigger?.(magic.id);
+                          }
+                        }}
+                        title={magic.disabledReason}
+                      >
+                        释放
+                      </button>
+                      <span className="text-[10px] text-muted-foreground flex-1">{magic.chargeHint}</span>
+                    </div>
+                    {magic.disabledReason && !magic.ready && (
+                      <div className="text-[10px] text-muted-foreground/80">{magic.disabledReason}</div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>

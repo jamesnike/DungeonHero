@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { Card } from '@/components/ui/card';
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Infinity } from 'lucide-react';
+import {
+  Skull,
+  Sword,
+  Shield,
+  Heart,
+  Sparkles,
+  Zap,
+  Scroll,
+  Infinity,
+  Wand2,
+} from 'lucide-react';
 import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
 
 const MAX_DURABILITY_DOTS = 4;
@@ -17,9 +27,15 @@ export type CardType =
   | 'potion'
   | 'amulet'
   | 'magic'
+  | 'hero-magic'
   | 'event'
   | 'skill'
   | 'coin';
+
+export type EquipmentCardStatModifier = {
+  appliesTo: 'weapon' | 'shield';
+  modifier: number;
+};
 
 export type PotionEffectId =
   | 'heal-5'
@@ -28,15 +44,27 @@ export type PotionEffectId =
   | 'repair-weapon-3'
   | 'repair-equipment-2'
   | 'draw-backpack-3'
-  | 'discover-class';
+  | 'discover-class'
+  | 'perm-spell-damage'
+  | 'perm-backpack-size';
 
-export type AmuletEffectId = 'heal' | 'balance' | 'life' | 'guardian' | 'flash' | 'strength';
+export type AmuletEffectId =
+  | 'heal'
+  | 'balance'
+  | 'life'
+  | 'guardian'
+  | 'flash'
+  | 'strength'
+  | 'dual-guard'
+  | 'discard-zap';
 
 export type AmuletAuraBonus = {
   attack?: number;
   defense?: number;
   maxHp?: number;
 };
+
+export type HeroMagicId = 'holy-light' | 'berserker-rage';
 
 export type EventRequirement =
   | { type: 'equipment'; slot: 'left' | 'right'; message?: string }
@@ -77,6 +105,8 @@ export interface GameCardData {
   amuletAuraBonus?: AmuletAuraBonus;
   magicType?: 'instant' | 'permanent'; // For magic cards
   magicEffect?: string; // Description of magic effect
+  heroMagicId?: HeroMagicId;
+  heroMagicEffect?: string;
   skillType?: 'instant' | 'permanent'; // For class skills
   skillEffect?: string; // Description of skill effect
   eventChoices?: EventChoiceDefinition[]; // For event cards
@@ -88,6 +118,7 @@ export interface GameCardData {
   fury?: number; // Fury (formerly hpLayers) - number of rage layers
   hpLayers?: number; // Deprecated: kept for compatibility, aliases to fury
   currentLayer?: number; // Deprecated: kept for compatibility, mapped from fury
+  rageTurn?: number; // Turn number used to calculate rage
   layerShift?: number; // Visual shift amount (0-4)
   // Equipment durability
   durability?: number; // Current durability for weapons/shields
@@ -114,6 +145,7 @@ interface GameCardProps {
   isEngaged?: boolean;
   weaponSwingVariant?: number;
   shieldBlockVariant?: number;
+  equipmentStatModifier?: EquipmentCardStatModifier | null;
 }
 
 export default function GameCard({
@@ -132,6 +164,7 @@ export default function GameCard({
   isEngaged = false,
   weaponSwingVariant = 0,
   shieldBlockVariant = 0,
+  equipmentStatModifier = null,
 }: GameCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [cardScale, setCardScale] = useState(1);
@@ -145,6 +178,7 @@ export default function GameCard({
   );
   const engagedMonster = isEngaged && card.type === 'monster';
   const isPotionCard = card.type === 'potion';
+  const isMagicLikeCard = card.type === 'magic' || card.type === 'hero-magic';
   const isPermanentMagicCard = card.type === 'magic' && card.magicType === 'permanent';
   const healingPotionEffects: PotionEffectId[] = ['heal-5', 'heal-7'];
   const isHealingPotion =
@@ -303,6 +337,8 @@ export default function GameCard({
         return <Sparkles className="dh-card__icon text-purple-500" />;
       case 'magic':
         return <Zap className="dh-card__icon text-cyan-500" />;
+      case 'hero-magic':
+        return <Wand2 className="dh-card__icon text-rose-400" />;
       case 'event':
         return <Scroll className="dh-card__icon text-violet-500" />;
     }
@@ -327,6 +363,8 @@ export default function GameCard({
         return 'border-purple-900';
       case 'magic':
         return 'border-cyan-900';
+      case 'hero-magic':
+        return 'border-rose-900';
       case 'event':
         return 'border-violet-700';
       default:
@@ -370,13 +408,10 @@ const amuletEffectText =
   const showWeaponSwing = Boolean(weaponSwingAnimation);
   const showShieldBlock = Boolean(shieldBlockAnimation);
   const showCombatOverlay = showBleedOverlay || showWeaponSwing || showShieldBlock;
-  const cardImageHeightClass =
-    card.type === 'event'
-      ? 'h-[52%]'
-      : card.type === 'magic'
-        ? 'h-[56%]'
-        : 'h-[75%]';
-  const isCompactImageType = card.type === 'magic' || card.type === 'event';
+  const isEventCard = card.type === 'event';
+  const isMagicCard = isMagicLikeCard;
+  const cardImageHeightClass = isEventCard ? 'h-[52%]' : isMagicCard ? 'h-[56%]' : 'h-[75%]';
+  const isCompactImageType = isMagicCard || isEventCard;
   const cardImageWrapperClassName = [
     'relative',
     cardImageHeightClass,
@@ -389,12 +424,25 @@ const amuletEffectText =
     .join(' ');
   const cardImageClassName = [
     'select-none transition-all',
-    isCompactImageType
-      ? 'w-auto max-h-[98%] max-w-[98%] object-contain transform scale-[1.05]'
-      : 'w-full h-full object-cover',
+    isEventCard
+      ? 'w-auto max-h-[99.8%] max-w-[99.8%] object-contain transform scale-[1.18]'
+      : isMagicCard
+        ? 'w-auto max-h-[98%] max-w-[98%] object-contain transform scale-[1.05]'
+        : 'w-full h-full object-cover',
   ]
     .filter(Boolean)
     .join(' ');
+
+  const equipmentStatModifierText =
+    equipmentStatModifier &&
+    (card.type === 'weapon' || card.type === 'shield') &&
+    equipmentStatModifier.appliesTo === card.type &&
+    equipmentStatModifier.modifier !== 0
+      ? `${equipmentStatModifier.modifier > 0 ? '+' : '-'} ${Math.abs(
+          equipmentStatModifier.modifier,
+        )}`
+      : null;
+  const equipmentStatModifierColor = 'text-emerald-600';
 
   return (
     <div
@@ -556,9 +604,18 @@ const amuletEffectText =
                         <Shield className="dh-card__icon text-blue-400 fill-blue-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
                       )}
                     </div>
-                    <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
-                      {card.value}
-                    </span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                        {card.value}
+                      </span>
+                      {equipmentStatModifierText && (
+                        <span
+                          className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}
+                        >
+                          {equipmentStatModifierText}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -608,10 +665,10 @@ const amuletEffectText =
               {card.name}
             </h3>
             
-            {/* Magic Effect */}
-            {card.type === 'magic' && (
+            {/* Magic / Hero Magic Effect */}
+            {isMagicLikeCard && (
               <div className="dh-card__body-text w-full text-muted-foreground px-1 overflow-y-auto">
-                {card.magicEffect || card.description}
+                {card.magicEffect || card.heroMagicEffect || card.description}
               </div>
             )}
 
