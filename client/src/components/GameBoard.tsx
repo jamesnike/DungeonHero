@@ -6770,9 +6770,9 @@ export default function GameBoard() {
                 ? 'backpack'
                 : null);
 
-    // Add to graveyard with original identity
-    const { fromSlot, ...cardToGraveyard } = sellItem;
-    addToGraveyard(cardToGraveyard);
+    // Route through discard helper so manual drops count as true discards
+    const sanitizedCard = sanitizeCardMetadata(sellItem);
+    discardCardToGraveyard(sanitizedCard, { owner: 'player' });
 
     switch (fallbackOrigin) {
       case 'equipmentSlot1':
