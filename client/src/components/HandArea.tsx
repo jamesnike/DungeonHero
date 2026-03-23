@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Hand } from 'lucide-react';
 import GameCard, { type GameCardData } from './GameCard';
+import { HAND_LIMIT } from './game-board/constants';
 
 interface HandAreaProps {
   handCards: GameCardData[];
@@ -17,7 +18,7 @@ export default function HandArea({
   onDragCardFromHand,
   onDragEndFromHand,
   isDropTarget,
-  maxHandSize = 5 
+  maxHandSize = HAND_LIMIT
 }: HandAreaProps) {
   const handleDragOver = (e: React.DragEvent) => {
     if (handCards.length < maxHandSize) {
@@ -83,7 +84,7 @@ export default function HandArea({
                 <p className="text-sm text-muted-foreground">
                   {handCards.length < maxHandSize 
                     ? "Your hand is empty - drag cards here to save them" 
-                    : "Hand is full (5 card limit)"
+                    : `Hand is full (${maxHandSize} card limit)`
                   }
                 </p>
               </div>

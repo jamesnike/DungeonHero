@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
+import { HAND_LIMIT } from './game-board/constants';
 
 const CARD_RATIO = 0.76;
 const CARD_VISIBLE_FRACTION = 0.58;
@@ -42,7 +43,7 @@ export default function HandDisplay({
   onPlayCard,
   onDragCardFromHand,
   onDragEndFromHand,
-  maxHandSize = 7,
+  maxHandSize = HAND_LIMIT,
   cardSize,
   disableAnimations = false,
   onCardClick,
@@ -170,6 +171,8 @@ export default function HandDisplay({
                   zIndex: isHovered ? 200 : index + 2,
                   height: `${cardHeight}px`,
                   width: `${cardWidth}px`,
+                  willChange: 'transform',
+                  backfaceVisibility: 'hidden' as const,
                 }}
               >
                 <div
@@ -178,6 +181,7 @@ export default function HandDisplay({
                     transform: disableAnimations
                       ? `translateY(${hiddenHeight}px) scale(1)`
                       : `translateY(${isHovered ? 0 : hiddenHeight}px) ${isHovered ? 'scale(1.05)' : 'scale(1)'}`,
+                    willChange: 'transform',
                   }}
                   onMouseEnter={(event) => {
                     maybeActivateHover(event, index);

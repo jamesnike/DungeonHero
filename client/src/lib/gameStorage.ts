@@ -44,7 +44,6 @@ export interface PersistedGameState {
   amuletSlots: GameCardData[];
   backpackItems: GameCardData[];
   permanentMagicRecycleBag: GameCardData[];
-  canDrawFromBackpack: boolean;
   classDeck: GameCardData[];
   classCardsInHand: KnightCardData[];
   selectedHeroSkill: string | null;

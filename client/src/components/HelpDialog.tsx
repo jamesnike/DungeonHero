@@ -81,8 +81,8 @@ export default function HelpDialog() {
               </li>
               <li>
                 <strong>Hero Row:</strong> Row 3 contains (from left to right) the two-slot amulet queue, two flexible
-                equipment slots, the hero card (with HP display and hero-skill button), the 10-item backpack with draw
-                button, and the Knight class deck viewer/discover entry.
+                equipment slots, the hero card (with HP display and hero-skill button), the 15-slot auto-draw backpack,
+                and the Knight class deck viewer/discover entry.
               </li>
             </ul>
           </div>
@@ -165,8 +165,8 @@ export default function HelpDialog() {
                 </div>
                 <p className="mt-1 text-xs">
                   Clearing the fourth card arms the Waterfall. The final active card is discarded, hero skills reset, the
-                  preview row drops, five fresh preview cards are drawn, and the backpack draw button locks until you
-                  resolve the next dungeon card.
+                  preview row drops, five fresh preview cards are drawn, and the backpack’s auto-draw trigger re-arms the
+                  moment you resolve the next dungeon card.
                 </p>
               </div>
               <div className="p-3 bg-muted rounded-md">
@@ -175,9 +175,9 @@ export default function HelpDialog() {
                   Backpack & Hand
                 </div>
                 <p className="mt-1 text-xs">
-                  Store non-monster/non-event cards in the 10-slot LIFO backpack. The draw button (once lit) flings the
-                  top item into the 7-card hand; cards drawn into the hand can’t be returned, so play, equip, or sell
-                  them. Echo Satchel draws as many cards as you’ve discarded this wave.
+                  Store non-monster/non-event cards in the 15-slot LIFO backpack. Each time you resolve a dungeon card,
+                  a random stored card auto-flies into the 7-card hand; cards drawn into the hand can’t be returned, so
+                  play, equip, or sell them. Echo Satchel draws as many cards as you’ve discarded this wave.
                 </p>
               </div>
               <div className="p-3 bg-muted rounded-md">
@@ -260,7 +260,7 @@ export default function HelpDialog() {
                   Store
                 </Badge>
                 <span>
-                  Drag any non-monster, non-event card into the backpack (capacity 10). Cards drawn from the hand cannot
+                  Drag any non-monster, non-event card into the backpack (capacity 15). Cards drawn from the hand cannot
                   be stashed back.
                 </span>
               </div>
@@ -311,8 +311,8 @@ export default function HelpDialog() {
                 final active card or the Waterfall will trash it.
               </li>
               <li>
-                Bank cards early in a wave so Echo Satchel has a high discard count and the backpack draw button is
-                armed when you need an emergency tool.
+                Bank cards early in a wave so Echo Satchel has a high discard count and the backpack auto-draw has
+                something useful queued when emergencies hit.
               </li>
               <li>
                 Resolve hero-skill prompts immediately; dragging other cards while a target selector is active will be
@@ -324,7 +324,7 @@ export default function HelpDialog() {
               </li>
               <li>
                 Click the Knight deck, deck counter, and graveyard piles often—knowing what’s left prevents wasted
-                Waterfalls and keeps the 10-slot backpack from overflowing.
+                Waterfalls and keeps the 15-slot backpack from overflowing.
               </li>
               <li>
                 Roll the D20 before choosing “Force Open” or “Flip the coin” risk options to roleplay the luck—high rolls

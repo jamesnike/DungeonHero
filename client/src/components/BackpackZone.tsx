@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import StackedCardPile from './StackedCardPile';
 import { initMobileDrop } from '../utils/mobileDragDrop';
@@ -9,26 +8,18 @@ import { GameCardData } from './GameCard';
 
 interface BackpackZoneProps {
   backpackCount: number;
+  capacity: number;
   onDrop?: (card: GameCardData) => void;
   isDropTarget?: boolean;
-  canDraw: boolean;
-  isHandFull: boolean;
-  onDraw?: () => void;
   onOpenViewer?: () => void;
-  maxCapacity?: number;
 }
-
-const DEFAULT_MAX_CAPACITY = 10;
 
 export default function BackpackZone({
   backpackCount,
+  capacity,
   onDrop,
   isDropTarget,
-  canDraw,
-  isHandFull,
-  onDraw,
   onOpenViewer,
-  maxCapacity = DEFAULT_MAX_CAPACITY,
 }: BackpackZoneProps) {
   const dropRef = useRef<HTMLDivElement>(null);
   const [dragDepth, setDragDepth] = useState(0);
@@ -80,8 +71,6 @@ export default function BackpackZone({
     }
   };
 
-  const drawDisabled = !canDraw || backpackCount === 0 || isHandFull;
-
   return (
     <Card
       ref={dropRef}
@@ -110,7 +99,7 @@ export default function BackpackZone({
           <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
             <span className="font-semibold">Backpack</span>
             <Badge className="bg-black/50 text-white font-mono dh-hero-chip px-1 sm:px-2">
-              {backpackCount}/{maxCapacity}
+              {backpackCount}/{capacity}
             </Badge>
           </div>
           <div className="flex items-center justify-end dh-hero-chip font-medium">
@@ -118,20 +107,6 @@ export default function BackpackZone({
           </div>
         </div>
       </div>
-
-      <Button
-        variant="secondary"
-        disabled={drawDisabled}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!drawDisabled) {
-            onDraw?.();
-          }
-        }}
-        className="w-full font-semibold tracking-wide dh-hero-chip"
-      >
-        抽牌
-      </Button>
     </Card>
   );
 }

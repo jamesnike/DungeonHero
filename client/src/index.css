@@ -328,6 +328,8 @@
 
   .animate-card-remove {
     animation: card-remove 300ms ease-out forwards;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
   }
   
   .animate-damage-flash {
@@ -610,6 +612,8 @@
   .animate-preview-drop {
     animation: preview-drop 650ms ease-in forwards;
     pointer-events: none;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
   }
 
   @keyframes preview-graveyard {
@@ -626,6 +630,8 @@
   .animate-preview-graveyard {
     animation: preview-graveyard 450ms ease-in forwards;
     pointer-events: none;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
   }
 
   @keyframes active-landing {
@@ -641,6 +647,8 @@
 
   .animate-active-landing {
     animation: active-landing 450ms ease-out;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
   }
 
   @keyframes preview-deal {
@@ -656,6 +664,8 @@
 
   .animate-preview-deal {
     animation: preview-deal 550ms ease-out;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
   }
 
   .class-flight-card {
@@ -713,6 +723,7 @@
 
   .dh-grid-cell {
     padding: var(--dh-card-padding, 0.25rem);
+    contain: layout style;
   }
 
   .dh-card-wrapper {
@@ -787,6 +798,22 @@
   .dh-card__durability-dot {
     width: calc(var(--dh-card-dot-size, 0.45rem) * var(--dh-card-instance-scale, 1));
     height: calc(var(--dh-card-dot-size, 0.45rem) * var(--dh-card-instance-scale, 1));
+  }
+
+  .dh-card__flip-badge {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.45rem;
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: calc(0.58rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
+    color: hsl(var(--primary-foreground));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.45), 0 4px 10px rgba(0,0,0,0.25);
+    letter-spacing: 0.06em;
+    z-index: 12;
+    pointer-events: none;
   }
 
   .dh-card__layer-dot {
@@ -1207,4 +1234,104 @@
 
 .dh-backface-hidden {
   backface-visibility: hidden;
+}
+
+/* ── Loading Screen ─────────────────────────────────────── */
+
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 40%, #1e1533 0%, #0d0a14 70%, #050308 100%);
+  transition: opacity 0.55s ease-out;
+}
+
+.loading-screen--fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-screen__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  position: relative;
+}
+
+.loading-screen__hero-glow {
+  position: absolute;
+  top: -20px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.35) 0%, transparent 70%);
+  filter: blur(30px);
+  animation: loading-pulse 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.loading-screen__hero {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 18px rgba(168, 85, 247, 0.5));
+  animation: loading-float 3s ease-in-out infinite;
+}
+
+.loading-screen__title {
+  font-family: var(--font-serif, 'Cinzel', serif);
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #e2d9f3;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 24px rgba(168, 85, 247, 0.5), 0 2px 4px rgba(0, 0, 0, 0.6);
+  margin: 0;
+}
+
+.loading-screen__bar-track {
+  width: 260px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.loading-screen__bar-fill {
+  height: 100%;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #7c3aed, #a855f7, #c084fc);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.6);
+  transition: width 0.3s ease-out;
+}
+
+.loading-screen__percent {
+  font-family: var(--font-mono, 'Roboto Mono', monospace);
+  font-size: 0.85rem;
+  color: rgba(226, 217, 243, 0.7);
+  margin: 0;
+}
+
+.loading-screen__flavor {
+  font-family: var(--font-sans, 'Lato', sans-serif);
+  font-size: 0.95rem;
+  color: rgba(226, 217, 243, 0.5);
+  font-style: italic;
+  min-height: 1.4em;
+  margin: 0;
+}
+
+@keyframes loading-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes loading-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
 }

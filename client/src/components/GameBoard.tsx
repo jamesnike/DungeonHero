@@ -40,6 +40,7 @@ import BackpackViewerModal from './BackpackViewerModal';
 import MonsterRewardModal from '@/components/MonsterRewardModal';
 import HeroDetailsModal from './HeroDetailsModal';
 // import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
+import { HAND_LIMIT } from './game-board/constants';
 import {
   generateKnightDeck,
   createKnightDiscoveryEvents,
@@ -62,7 +63,52 @@ import CardDetailsModal from './CardDetailsModal';
 import DiscoverClassModal from './DiscoverClassModal';
 import CardDeletionModal from './CardDeletionModal';
 import ShopModal, { type ShopOffering } from './ShopModal';
+import CardFlipOverlay from './CardFlipOverlay';
 import { initMobileDrop, type DragData } from '../utils/mobileDragDrop';
+import type {
+  ActiveAmuletEffects,
+  ActiveRowSlots,
+  AmuletItem,
+  BackpackDrawRequest,
+  BackpackHandFlight,
+  BlockTarget,
+  CardActionContext,
+  ClassDeckFlight,
+  CombatInitiator,
+  CombatState,
+  DeathWardPromptState,
+  DragOrigin,
+  DungeonDropAssignment,
+  EquipmentItem,
+  EquipmentRepairTarget,
+  EquipmentSlotBonusState,
+  EquipmentSlotId,
+  EquipmentSlotStatModifier,
+  EventDiceModalState,
+  EventTransformState,
+  EquipmentPromptState,
+  GraveyardVector,
+  GridMetrics,
+  HeroFramePosition,
+  HeroMagicActivationOrigin,
+  HeroRowDropType,
+  HeroRowSlotConfig,
+  HeroSkillArrowState,
+  MonsterRageInset,
+  MonsterRewardDrop,
+  MonsterRewardEffect,
+  MonsterRewardOption,
+  PendingHandInsertion,
+  PendingHeroMagicAction,
+  PendingHeroSkillAction,
+  PendingMagicAction,
+  PendingPotionAction,
+  Point,
+  SlotPermanentBonus,
+  SwordVector,
+  WaterfallAnimationState,
+  WaterfallPlan,
+} from './game-board/types';
 
 // Cute chibi-style monster images
 import dragonImage from '@assets/generated_images/cute_chibi_dragon_monster.png';
@@ -100,24 +146,29 @@ const EQUIPMENT_TYPES = ['weapon', 'shield', 'amulet'] as const;
 const CONSUMABLE_TYPES = ['potion', 'magic', 'hero-magic'] as const;
 const MAX_AMULET_SLOTS = 2;
 const DECK_SIZE = 64; // Updated: 54 + 6 skills + 4 events = 64
-type BlockTarget = EquipmentSlotId | 'hero';
 
-type CombatInitiator = 'hero' | 'monster';
-
-type CombatState = {
-  engagedMonsterIds: string[];
-  initiator: CombatInitiator | null;
-  currentTurn: CombatInitiator;
-  heroAttacksThisTurn: Record<EquipmentSlotId, boolean>;
-  heroAttacksRemaining: number;
-  heroDamageThisTurn: Record<string, number>;
-  monsterAttackQueue: string[];
-  pendingBlock: null | {
-    monsterId: string;
-    attackValue: number;
-    monsterName: string;
-  };
+const formatRepairTargetLabel = (targets: EquipmentRepairTarget[]) => {
+  if (targets.includes('weapon') && targets.includes('shield')) {
+    return '武器或护盾';
+  }
+  return targets[0] === 'shield' ? '护盾' : '武器';
 };
+
+const describeSlotLabel = (slotId: EquipmentSlotId): '左侧装备栏' | '右侧装备栏' =>
+  slotId === 'equipmentSlot1' ? '左侧装备栏' : '右侧装备栏';
+
+const describeBonusLabel = (bonusType: keyof SlotPermanentBonus): '伤害' | '护甲' =>
+  bonusType === 'damage' ? '伤害' : '护甲';
+
+const createEmptySlotBonusState = (): EquipmentSlotBonusState => ({
+  equipmentSlot1: { damage: 0, shield: 0 },
+  equipmentSlot2: { damage: 0, shield: 0 },
+});
+
+const createEmptyEquipmentBuffState = (): Record<EquipmentSlotId, number> => ({
+  equipmentSlot1: 0,
+  equipmentSlot2: 0,
+});
 
 const initialCombatState: CombatState = {
   engagedMonsterIds: [],
@@ -132,264 +183,6 @@ const initialCombatState: CombatState = {
   monsterAttackQueue: [],
   pendingBlock: null,
 };
-
-type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
-type EquipmentItem = GameCardData & { type: 'weapon' | 'shield'; fromSlot?: EquipmentSlotId };
-type EquipmentRepairTarget = 'weapon' | 'shield';
-
-const formatRepairTargetLabel = (targets: EquipmentRepairTarget[]) => {
-  if (targets.includes('weapon') && targets.includes('shield')) {
-    return '武器或护盾';
-  }
-  return targets[0] === 'shield' ? '护盾' : '武器';
-};
-type AmuletItem = GameCardData & { type: 'amulet'; fromSlot?: 'amulet' };
-type DragOrigin = 'hand' | 'dungeon' | 'backpack' | 'amulet' | EquipmentSlotId;
-type ActiveRowSlots = Array<GameCardData | null>;
-type HeroRowDropType = 'event' | 'magic' | 'potion' | 'hero-magic';
-type GraveyardVector = { offsetX: number; offsetY: number };
-type PreviewAnimationStyle = CSSProperties & {
-  '--graveyard-offset-x'?: string;
-  '--graveyard-offset-y'?: string;
-};
-type MonsterRageInset = {
-  top: number;
-  bottom: number;
-  left: number;
-  right: number;
-};
-
-type SlotPermanentBonus = {
-  damage: number;
-  shield: number;
-};
-
-type DeathWardPromptState = {
-  card: GameCardData;
-  source: 'hand' | 'backpack';
-  pendingDamage: number;
-  sourceType: 'combat' | 'general';
-};
-
-const SLOT_LABEL_MAP: Record<EquipmentSlotId, '左侧装备栏' | '右侧装备栏'> = {
-  equipmentSlot1: '左侧装备栏',
-  equipmentSlot2: '右侧装备栏',
-};
-
-const describeSlotLabel = (slotId: EquipmentSlotId): '左侧装备栏' | '右侧装备栏' =>
-  SLOT_LABEL_MAP[slotId] ?? '装备槽';
-
-const describeBonusLabel = (bonusType: keyof SlotPermanentBonus): '伤害' | '护甲' =>
-  bonusType === 'damage' ? '伤害' : '护甲';
-
-type EquipmentSlotStatModifier = EquipmentCardStatModifier;
-
-type EquipmentSlotBonusState = Record<EquipmentSlotId, SlotPermanentBonus>;
-
-type EventDiceModalState = {
-  title: string;
-  subtitle?: string;
-  entries: EventDiceRange[];
-  rolledValue: number | null;
-  highlightedId: string | null;
-};
-
-type EquipmentPromptState = {
-  prompt: string;
-  subtext?: string;
-};
-
-type EventTransformState = {
-  fromCard: GameCardData;
-  toCard: GameCardData;
-  onComplete: () => void;
-};
-
-type CardActionContext = {
-  mode: 'shop' | 'event';
-  action: 'delete' | 'discard';
-  requiredCount: number;
-  remainingCount: number;
-  title?: string;
-  description?: string;
-};
-
-type MonsterRewardEffect =
-  | { type: 'slotBonus'; slotId: EquipmentSlotId; bonusType: keyof SlotPermanentBonus; amount: number }
-  | { type: 'gold'; amount: number }
-  | { type: 'heal'; amount: number }
-  | { type: 'repair'; amount: number; targets: EquipmentRepairTarget[] }
-  | { type: 'drawBackpack'; amount: number }
-  | { type: 'discoverClass' }
-  | { type: 'maxHp'; amount: number }
-  | { type: 'spellDamage'; amount: number };
-
-type MonsterRewardOption = {
-  id: string;
-  title: string;
-  description: string;
-  detail?: string;
-  effect: MonsterRewardEffect;
-};
-
-type MonsterRewardDrop = {
-  monsterName: string;
-  options: MonsterRewardOption[];
-};
-
-const createEmptySlotBonusState = (): EquipmentSlotBonusState => ({
-  equipmentSlot1: { damage: 0, shield: 0 },
-  equipmentSlot2: { damage: 0, shield: 0 },
-});
-
-const createEmptyEquipmentBuffState = (): Record<EquipmentSlotId, number> => ({
-  equipmentSlot1: 0,
-  equipmentSlot2: 0,
-});
-type DungeonDropAssignment = {
-  previewIndex: number;
-  card: GameCardData;
-  slotIndex: number;
-};
-
-type HeroFramePosition = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-};
-
-type HeroRowSlotConfig = {
-  id: string;
-  dropZone: 'backpack' | 'other';
-  render: () => ReactNode;
-  wrapperClassName?: string;
-  innerClassName?: string;
-  innerRef?: Ref<HTMLDivElement>;
-};
-
-type PendingHeroSkillAction =
-  | { skillId: HeroSkillId; type: 'slot' }
-  | { skillId: HeroSkillId; type: 'monster'; baseDamage?: number };
-
-type HeroMagicActivationOrigin = 'gauge' | 'card';
-
-type PendingHeroMagicAction =
-  | {
-      id: 'holy-light';
-      step: 'choice';
-      origin: HeroMagicActivationOrigin;
-      prompt: string;
-    }
-  | {
-      id: 'holy-light';
-      step: 'monster-select';
-      origin: HeroMagicActivationOrigin;
-      prompt: string;
-    };
-
-type PendingMagicAction =
-  | {
-      card: GameCardData;
-      effect: 'bulwark-slam';
-      step: 'slot-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'bulwark-slam';
-      step: 'monster-select';
-      slotId: EquipmentSlotId;
-      pendingDamage: number;
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'armor-strike';
-      step: 'slot-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'armor-strike';
-      step: 'monster-select';
-      slotId: EquipmentSlotId;
-      pendingDamage: number;
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'blood-reckoning';
-      step: 'monster-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'missing-hp-smite';
-      step: 'monster-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'eternal-repair';
-      step: 'slot-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'weapon-burst';
-      step: 'slot-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'repair-one';
-      step: 'slot-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'shuffle-dungeon';
-      step: 'dungeon-select';
-      prompt: string;
-    };
-
-type PendingPotionAction =
-  | {
-      card: GameCardData;
-      effect: 'repair-equipment';
-      amount: number;
-      allowedTypes: EquipmentRepairTarget[];
-      step: 'slot-select';
-      prompt: string;
-    };
-
-type HeroSkillArrowState = {
-  start: { x: number; y: number };
-  end: { x: number; y: number };
-};
-
-type GridMetrics = {
-  gapX: number;
-  gapY: number;
-  padding: number;
-  cardFontScale: number;
-  cardStatScale: number;
-  cardIconScale: number;
-  cardDotSize: number;
-  heroFontScale: number;
-};
-
-const isHeroRowHighlightCard = (
-  card: GameCardData | null,
-): card is GameCardData & { type: HeroRowDropType } =>
-  Boolean(
-    card &&
-      (card.type === 'event' ||
-        card.type === 'magic' ||
-        card.type === 'hero-magic' ||
-        card.type === 'potion'),
-  );
 
 const DUNGEON_COLUMN_COUNT = 5;
 const GRAVEYARD_VECTOR_DEFAULT = { offsetX: 60, offsetY: 160 };
@@ -410,14 +203,18 @@ const logHeroMagic = (...args: unknown[]) => {
   }
   console.debug('[HeroMagic]', ...args);
 };
-const logBackpackDraw = (...args: unknown[]) => {
+const logBackpackDraw = (tag: string, payload?: unknown) => {
   if (!DEV_MODE) {
     return;
   }
-  console.debug('[BackpackDraw]', ...args);
+  if (typeof payload === 'undefined') {
+    console.debug('[BackpackDraw]', tag);
+  } else {
+    console.debug('[BackpackDraw]', tag, payload);
+  }
 };
 const DUNGEON_COLUMNS = Array.from({ length: DUNGEON_COLUMN_COUNT }, (_, index) => index);
-const BASE_BACKPACK_CAPACITY = 10;
+const BASE_BACKPACK_CAPACITY = 15;
 const HERO_ROW_BACKPACK_INDEX = 4;
 const HERO_ROW_CLASS_DECK_INDEX = 5;
 const BALANCE_ATTACK_BONUS = 3;
@@ -469,6 +266,17 @@ const getShopPrice = (card: GameCardData, level: number): number => {
   const discounted = Math.floor(basePrice * getShopDiscountFactor(level));
   return Math.max(1, discounted);
 };
+
+const isHeroRowHighlightCard = (
+  card: GameCardData | null,
+): card is GameCardData & { type: HeroRowDropType } =>
+  Boolean(
+    card &&
+      (card.type === 'event' ||
+        card.type === 'magic' ||
+        card.type === 'hero-magic' ||
+        card.type === 'potion'),
+  );
 
 const getGridMetricsForWidth = (width: number): GridMetrics => {
   if (width <= 430) {
@@ -555,24 +363,6 @@ const getEmptyColumns = (slots: ActiveRowSlots): number[] =>
 const getFilledPreviewColumns = (slots: ActiveRowSlots): number[] =>
   DUNGEON_COLUMNS.filter(columnIndex => Boolean(slots[columnIndex]));
 
-type AmuletAuraTotals = {
-  attack: number;
-  defense: number;
-  maxHp: number;
-};
-
-type ActiveAmuletEffects = {
-  aura: AmuletAuraTotals;
-  hasHeal: boolean;
-  hasBalance: boolean;
-  hasLife: boolean;
-  hasGuardian: boolean;
-  hasFlash: boolean;
-  hasStrength: boolean;
-  hasDualGuard: boolean;
-  hasDiscardShock: boolean;
-};
-
 const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   aura: {
     attack: 0,
@@ -609,29 +399,6 @@ const logWaterfall = (phase: string, payload?: Record<string, unknown>) => {
   }
 };
 
-type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';
-
-type WaterfallAnimationState = {
-  phase: WaterfallPhase;
-  isActive: boolean;
-  droppingSlots: number[];
-  landingSlots: number[];
-  discardSlot: number | null;
-  dealingSlots: number[];
-  sequenceId: number | null;
-};
-
-type WaterfallPlan = {
-  dropCards: GameCardData[];
-  dropPreviewIndices: number[];
-  dropTargetSlots: number[];
-  discardCard: GameCardData | null;
-  discardPreviewIndex: number | null;
-  nextPreviewCards: GameCardData[];
-  nextRemainingDeck: GameCardData[];
-  shouldDeclareVictory: boolean;
-};
-
 const WATERFALL_DROP_DURATION = 650;
 const WATERFALL_DISCARD_DURATION = 450;
 const WATERFALL_DEAL_DURATION = 550;
@@ -650,42 +417,24 @@ const initialWaterfallAnimationState: WaterfallAnimationState = {
   dealingSlots: [],
   sequenceId: null,
 };
-type SwordVector = { left: number; top: number; angle: number; length: number };
-type Point = { x: number; y: number };
-type ClassDeckFlight = {
-  id: string;
-  card: GameCardData;
-  start: Point;
-  end: Point;
-  startTime: number;
-  duration: number;
-  progress: number;
-  arcHeight: number;
-};
-
 const clamp = (value: number, min = 0, max = 1) => Math.min(Math.max(value, min), max);
 const easeInOutCubic = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const getRandomInt = (min: number, max: number) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
-type BackpackHandFlight = {
-  id: string;
-  card: GameCardData;
-  start: Point;
-  end: Point;
-  startTime: number;
-  duration: number;
-  progress: number;
-  arcHeight: number;
-};
-
-const BACKPACK_FLIGHT_BASE_DURATION = 700;
-const BACKPACK_FLIGHT_VARIANCE = 250;
-const BACKPACK_FLIGHT_STAGGER = 80;
+const BACKPACK_FLIGHT_BASE_DURATION = 600;
+const BACKPACK_FLIGHT_VARIANCE = 200;
+const BACKPACK_FLIGHT_STAGGER = 70;
 const BACKPACK_FLIGHT_ARC_MIN = 30;
 const BACKPACK_FLIGHT_ARC_VARIANCE = 45;
 const BACKPACK_FLIGHT_FALLBACK_BUFFER = 200;
+const HAND_DELIVERY_GUARD_EXTRA_BUFFER = 500;
+const HAND_DELIVERY_GUARD_DELAY =
+  BACKPACK_FLIGHT_BASE_DURATION +
+  BACKPACK_FLIGHT_VARIANCE +
+  BACKPACK_FLIGHT_FALLBACK_BUFFER +
+  HAND_DELIVERY_GUARD_EXTRA_BUFFER;
 
 function createDeck(): GameCardData[] {
   const deck: GameCardData[] = [];
@@ -795,7 +544,7 @@ function createDeck(): GameCardData[] {
   }
 
   // Potions - bespoke utility set (6 total)
-  const potionCards: GameCardData[] = [
+  const potionCards: Omit<GameCardData, 'id'>[] = [
     {
       type: 'potion',
       name: '治疗药水',
@@ -843,6 +592,28 @@ function createDeck(): GameCardData[] {
       image: potionImage,
       potionEffect: 'discover-class',
       description: '发现一张职业卡牌。',
+    },
+    {
+      type: 'potion',
+      name: '暮光翻转药剂',
+      value: 3,
+      image: potionImage,
+      description: '立即治疗 3 点生命，随后翻到另一面。',
+      flipTarget: {
+        toCard: {
+          id: 'potion-flip-twilight',
+          type: 'magic',
+          name: '余烬回响',
+          value: 0,
+          image: skillScrollImage,
+          magicType: 'permanent',
+          magicEffect: '下次抽牌时额外抽 1 张，并永久 +1 法术伤害。',
+          description: '药剂残渣翻转后留下的火光祝福。',
+        },
+        destination: 'backpack',
+        banner: '药剂翻转成“余烬回响”，已放入背包。',
+        message: '药剂残瓶翻转出新的符文光芒…',
+      },
     },
   ];
 
@@ -1165,6 +936,33 @@ function createDeck(): GameCardData[] {
   deck.push({
     id: `event-${id++}`,
     type: 'event',
+    name: '折页遗稿',
+    value: 0,
+    image: eventScrollImage,
+    eventChoices: [
+      { text: '研读残页（抽 1 张牌）', effect: 'drawHeroCards:1' },
+      { text: '用作柴火（金币 +5）', effect: 'gold+5' },
+      { text: '静待翻面（无事发生）', effect: 'none' },
+    ],
+    flipTarget: {
+      toCard: {
+        id: 'flip-event-ember',
+        type: 'potion',
+        name: '纸灰药剂',
+        value: 0,
+        image: potionImage,
+        description: '使用时永久让法术伤害 +1。',
+        potionEffect: 'perm-spell-damage',
+      },
+      destination: 'backpack',
+      banner: '遗稿翻转成了纸灰药剂，已放入背包。',
+      message: '残页翻转，药香浮现…',
+    },
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
     name: '墓语密室',
     value: 0,
     image: eventScrollImage,
@@ -1389,10 +1187,10 @@ export default function GameBoard() {
     }, createEmptyAmuletEffects());
   }, [amuletSlots]);
   const [backpackItems, setBackpackItems] = useState<GameCardData[]>([]); // Full card storage LIFO stack
+  const backpackItemsRef = useRef<GameCardData[]>([]);
   const [permanentMagicRecycleBag, setPermanentMagicRecycleBag] = useState<GameCardData[]>([]); // Perm magic waiting for waterfall
   const [backpackCapacityModifier, setBackpackCapacityModifier] = useState(0);
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
-  const [canDrawFromBackpack, setCanDrawFromBackpack] = useState(false);
   const [backpackViewerOpen, setBackpackViewerOpen] = useState(false);
   const [heroDetailsOpen, setHeroDetailsOpen] = useState(false);
   const [classDeckFlights, setClassDeckFlights] = useState<ClassDeckFlight[]>([]);
@@ -1669,6 +1467,13 @@ export default function GameBoard() {
   const backpackHandFlightsRef = useRef<BackpackHandFlight[]>([]);
   const backpackHandFlightAnimationRef = useRef<number | null>(null);
   const backpackHandFlightFallbacksRef = useRef<Map<string, number>>(new Map());
+  const pendingHandDeliveryGuardsRef = useRef<
+    Map<string, { card: GameCardData; timeoutId: number | null }>
+  >(new Map());
+  const pendingAutoDrawsRef = useRef(0);
+  const storingCardIdsRef = useRef<Set<string>>(new Set());
+  const previousActiveCardsRef = useRef<ActiveRowSlots>(createEmptyActiveRow());
+  const processedDungeonCardIdsRef = useRef<Set<string>>(new Set());
   const [heroFramePosition, setHeroFramePosition] = useState<HeroFramePosition | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const lastPersistedStateRef = useRef<string | null>(null);
@@ -2067,6 +1872,7 @@ export default function GameBoard() {
         cardId: card.id,
         name: card.name,
         prevHandSize: prev.length,
+        nextHandSize: prev.length + 1,
       });
       return [...prev, card];
     });
@@ -2090,6 +1896,18 @@ export default function GameBoard() {
     }
     backpackHandFlightFallbacksRef.current.clear();
     logBackpackDraw('fallback-clear-all');
+  }, []);
+
+  const clearAllHandDeliveryGuards = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      pendingHandDeliveryGuardsRef.current.forEach(entry => {
+        if (entry.timeoutId !== null) {
+          window.clearTimeout(entry.timeoutId);
+        }
+      });
+    }
+    pendingHandDeliveryGuardsRef.current.clear();
+    logBackpackDraw('hand-guard-clear-all');
   }, []);
 
   const scheduleBackpackHandFallback = useCallback(
@@ -2122,7 +1940,42 @@ export default function GameBoard() {
     [clearBackpackHandFallback, ensureCardInHand],
   );
 
+  const scheduleHandDeliveryGuard = useCallback(
+    (card: GameCardData) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+      const snapshot = sanitizeCardMetadata(card);
+      const guards = pendingHandDeliveryGuardsRef.current;
+      const existing = guards.get(snapshot.id);
+      if (existing && existing.timeoutId !== null) {
+        window.clearTimeout(existing.timeoutId);
+      }
+      const timeoutId = window.setTimeout(() => {
+        guards.delete(snapshot.id);
+        setHandCards(prev => {
+          if (prev.some(existingCard => existingCard.id === snapshot.id)) {
+            return prev;
+          }
+          logBackpackDraw('hand-guard-reinsert', {
+            cardId: snapshot.id,
+            name: snapshot.name,
+          });
+          return [...prev, snapshot];
+        });
+      }, HAND_DELIVERY_GUARD_DELAY);
+      guards.set(snapshot.id, { card: snapshot, timeoutId });
+      logBackpackDraw('hand-guard-scheduled', {
+        cardId: snapshot.id,
+        delay: HAND_DELIVERY_GUARD_DELAY,
+        pending: guards.size,
+      });
+    },
+    [setHandCards],
+  );
+
   const queueCardIntoHand = (card: GameCardData) => {
+    scheduleHandDeliveryGuard(card);
     ensureCardInHand(card);
     const animated = triggerBackpackHandFlight(card);
     logBackpackDraw('queue-card', {
@@ -2135,6 +1988,30 @@ export default function GameBoard() {
     }
     scheduleBackpackHandFallback(card);
   };
+
+  useEffect(() => {
+    if (pendingHandDeliveryGuardsRef.current.size === 0) {
+      return;
+    }
+    const guards = pendingHandDeliveryGuardsRef.current;
+    handCards.forEach(card => {
+      const pending = guards.get(card.id);
+      if (!pending) {
+        return;
+      }
+      if (pending.timeoutId !== null && typeof window !== 'undefined') {
+        window.clearTimeout(pending.timeoutId);
+      }
+      guards.delete(card.id);
+      logBackpackDraw('hand-guard-confirm', { cardId: card.id });
+    });
+  }, [handCards]);
+
+  useEffect(() => {
+    return () => {
+      clearAllHandDeliveryGuards();
+    };
+  }, [clearAllHandDeliveryGuards]);
 
   const consumeClassCardFromHand = useCallback((cardId: string) => {
     setClassCardsInHand(prev => prev.filter(card => card.id !== cardId));
@@ -2693,7 +2570,7 @@ export default function GameBoard() {
 
     const createDrawOption = (): MonsterRewardOption | null => {
       const handTotal = handCards.length + backpackHandFlights.length;
-      if (backpackItems.length === 0 || handTotal >= 7) {
+      if (backpackItems.length === 0 || handTotal >= HAND_LIMIT) {
         return null;
       }
       const amount = getRandomInt(1, 2);
@@ -3203,7 +3080,6 @@ export default function GameBoard() {
       });
     });
 
-    drawFromBackpackToHand();
     setBerserkerCharges(0);
 
     setCombatState(prev => ({
@@ -3612,39 +3488,47 @@ export default function GameBoard() {
     if (count <= 0) {
       return [];
     }
-    const drawnCards: GameCardData[] = [];
-    setBackpackItems(prev => {
-      if (!prev.length) {
-        return prev;
-      }
-      const pool = [...prev];
-      const drawTotal = Math.min(count, pool.length);
-      for (let i = 0; i < drawTotal; i += 1) {
-        const randomIndex = Math.floor(Math.random() * pool.length);
-        const [card] = pool.splice(randomIndex, 1);
-        if (card) {
-          drawnCards.push(card);
-        }
-      }
-      return pool;
-    });
-    if (drawnCards.length) {
-      logBackpackDraw('backpack-take', {
-        count: drawnCards.length,
-        remainingBackpack: backpackItems.length - drawnCards.length,
+    const source = backpackItemsRef.current;
+    if (!source.length) {
+      logBackpackDraw('backpack-empty-snapshot', {
+        requested: count,
+        pendingAutoDraws: pendingAutoDrawsRef.current,
       });
+      return [];
     }
+    const pool = [...source];
+    const drawTotal = Math.min(count, pool.length);
+    if (drawTotal <= 0) {
+      return [];
+    }
+    const drawnCards: GameCardData[] = [];
+    for (let i = 0; i < drawTotal; i += 1) {
+      const randomIndex = Math.floor(Math.random() * pool.length);
+      const [card] = pool.splice(randomIndex, 1);
+      if (card) {
+        drawnCards.push(card);
+      }
+    }
+    backpackItemsRef.current = pool;
+    setBackpackItems(pool);
+    logBackpackDraw('backpack-take', {
+      requested: count,
+      delivered: drawnCards.length,
+      prevCount: source.length,
+      nextCount: pool.length,
+    });
     return drawnCards;
   };
 
   // Auto-draw mechanism - draw random backpack cards to hand
   const drawFromBackpackToHand = (): GameCardData | null => {
-    const availableSlots = 7 - (handCards.length + backpackHandFlights.length);
+    const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlights.length));
     logBackpackDraw('draw-request', {
       handSize: handCards.length,
       flights: backpackHandFlights.length,
       availableSlots,
-      backpackCount: backpackItems.length,
+      backpackStateCount: backpackItems.length,
+      backpackRefCount: backpackItemsRef.current.length,
     });
     if (availableSlots <= 0) {
       return null; // Hand full
@@ -3660,9 +3544,138 @@ export default function GameBoard() {
     logBackpackDraw('draw-success', {
       cardId: drawnCard.id,
       name: drawnCard.name,
+      remainingBackpack: backpackItemsRef.current.length,
     });
     return drawnCard;
   };
+
+  const processPendingAutoDraws = useCallback(() => {
+    if (pendingAutoDrawsRef.current <= 0) {
+      return;
+    }
+
+    while (pendingAutoDrawsRef.current > 0) {
+      logBackpackDraw('auto-draw-loop', {
+        pending: pendingAutoDrawsRef.current,
+        handSize: handCards.length,
+        flights: backpackHandFlights.length,
+        backpackCount: backpackItemsRef.current.length,
+      });
+      const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlights.length));
+      if (availableSlots <= 0) {
+        logBackpackDraw('auto-draw-blocked-hand-full', {
+          pending: pendingAutoDrawsRef.current,
+          handSize: handCards.length,
+          flights: backpackHandFlights.length,
+        });
+        break;
+      }
+
+      if (backpackItemsRef.current.length === 0) {
+        logBackpackDraw('auto-draw-blocked-empty', {
+          pending: pendingAutoDrawsRef.current,
+          backpackCount: backpackItemsRef.current.length,
+        });
+        break;
+      }
+
+      const drawn = drawFromBackpackToHand();
+      if (!drawn) {
+        logBackpackDraw('auto-draw-blocked-null', {
+          pending: pendingAutoDrawsRef.current,
+          backpackCount: backpackItemsRef.current.length,
+        });
+        break;
+      }
+
+      pendingAutoDrawsRef.current -= 1;
+      logBackpackDraw('auto-draw-delivered', {
+        cardId: drawn.id,
+        pending: pendingAutoDrawsRef.current,
+        backpackCount: backpackItemsRef.current.length,
+      });
+    }
+  }, [handCards.length, backpackHandFlights.length, backpackItems.length]);
+
+  useEffect(() => {
+    processPendingAutoDraws();
+  }, [backpackItems.length, handCards.length, backpackHandFlights.length, processPendingAutoDraws]);
+
+  const enqueueAutoDraw = useCallback(
+    (source: 'remove-card' | 'slot-cleared', cardId: string) => {
+      const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlights.length));
+      if (availableSlots <= 0) {
+        logBackpackDraw('auto-draw-blocked-hand-full', {
+          source,
+          cardId,
+          pending: pendingAutoDrawsRef.current,
+          handSize: handCards.length,
+          flights: backpackHandFlights.length,
+        });
+        return;
+      }
+
+      pendingAutoDrawsRef.current += 1;
+      logBackpackDraw('auto-draw-enqueued', {
+        source,
+        cardId,
+        pending: pendingAutoDrawsRef.current,
+      });
+      processPendingAutoDraws();
+    },
+    [backpackHandFlights.length, handCards.length, processPendingAutoDraws],
+  );
+
+  const registerDungeonCardProcessed = useCallback(
+    (cardId: string | null | undefined, source: 'remove-card' | 'slot-cleared') => {
+      if (!cardId || gameOver || victory) {
+        return;
+      }
+      if (processedDungeonCardIdsRef.current.has(cardId)) {
+        return;
+      }
+      processedDungeonCardIdsRef.current.add(cardId);
+      logBackpackDraw('dungeon-processed', { cardId, source });
+      enqueueAutoDraw(source, cardId);
+    },
+    [enqueueAutoDraw, gameOver, victory],
+  );
+
+  useEffect(() => {
+    const prevSlots = previousActiveCardsRef.current;
+    for (let column = 0; column < DUNGEON_COLUMN_COUNT; column += 1) {
+      const prevCard = prevSlots[column];
+      const nextCard = activeCards[column];
+      if (prevCard && !nextCard) {
+        if (storingCardIdsRef.current.has(prevCard.id)) {
+          logBackpackDraw('slot-cleared-deferred', { cardId: prevCard.id });
+          continue;
+        }
+        registerDungeonCardProcessed(prevCard.id, 'slot-cleared');
+      }
+    }
+    previousActiveCardsRef.current = activeCards;
+  }, [activeCards, registerDungeonCardProcessed]);
+
+  useEffect(() => {
+    if (storingCardIdsRef.current.size === 0) {
+      return;
+    }
+    const readyIds: string[] = [];
+    storingCardIdsRef.current.forEach(cardId => {
+      if (backpackItems.some(card => card.id === cardId)) {
+        readyIds.push(cardId);
+      }
+    });
+    if (!readyIds.length) {
+      return;
+    }
+    readyIds.forEach(cardId => {
+      storingCardIdsRef.current.delete(cardId);
+      logBackpackDraw('backpack-store-ready', { cardId });
+      registerDungeonCardProcessed(cardId, 'backpack-store');
+    });
+  }, [backpackItems, registerDungeonCardProcessed]);
 
   const addPermanentMagicToRecycleBag = useCallback(
     (card: GameCardData) => {
@@ -3702,11 +3715,8 @@ export default function GameBoard() {
       }
       return prevBag.slice(restoredCount);
     });
-    if (restoredCount > 0) {
-      setCanDrawFromBackpack(true);
-    }
     return restoredCount;
-  }, [backpackCapacity, setBackpackItems, setCanDrawFromBackpack, setPermanentMagicRecycleBag]);
+  }, [backpackCapacity, setBackpackItems, setPermanentMagicRecycleBag]);
 
   const drawClassCardsToBackpack = useCallback(
     (count: number, source: string, filter?: (card: GameCardData) => boolean): GameCardData[] => {
@@ -3729,7 +3739,6 @@ export default function GameBoard() {
 
       setClassDeck(prev => prev.filter(card => !drawnIds.has(card.id)));
       setBackpackItems(prev => [...drawnCards, ...prev]);
-      setCanDrawFromBackpack(true);
 
       if (DEV_MODE) {
         console.debug('[ClassDeckDraw]', {
@@ -4195,7 +4204,6 @@ export default function GameBoard() {
       amuletSlots: sanitizeCardList(amuletSlots),
       backpackItems: sanitizeCardList(backpackItems),
       permanentMagicRecycleBag: sanitizeCardList(permanentMagicRecycleBag),
-      canDrawFromBackpack,
       classDeck: sanitizeCardList(classDeck),
       classCardsInHand: sanitizeCardList(classCardsInHand),
       selectedHeroSkill,
@@ -4243,7 +4251,6 @@ export default function GameBoard() {
     turnDamageTaken,
     berserkTurnBuff,
     extraAttackCharges,
-    canDrawFromBackpack,
     classDeck,
     classCardsInHand,
     selectedHeroSkill,
@@ -4358,6 +4365,9 @@ export default function GameBoard() {
   const initGame = () => {
     setCombatState(initialCombatState);
     setHeroVariant(getRandomHero());
+    clearAllHandDeliveryGuards();
+    processedDungeonCardIdsRef.current.clear();
+    previousActiveCardsRef.current = createEmptyActiveRow();
     const newDeck = createDeck();
     // Add Knight discovery events to main deck
     const knightEvents = createKnightDiscoveryEvents();
@@ -4382,7 +4392,6 @@ export default function GameBoard() {
     setBackpackItems(starterBackpack);
     setPermanentMagicRecycleBag([]);
     setBackpackCapacityModifier(0);
-    setCanDrawFromBackpack(starterBackpack.length > 0);
     setTurnDamageTaken(0);
     clearBerserkTurnBuff();
     setExtraAttackCharges(0);
@@ -4488,6 +4497,10 @@ export default function GameBoard() {
       };
     };
 
+    clearAllHandDeliveryGuards();
+    processedDungeonCardIdsRef.current.clear();
+    previousActiveCardsRef.current = createEmptyActiveRow();
+
     setHp(snapshot.hp ?? INITIAL_HP);
     setGold(snapshot.gold ?? INITIAL_GOLD);
     setTurnCount(snapshot.turnCount ?? INITIAL_TURN_COUNT);
@@ -4524,7 +4537,6 @@ export default function GameBoard() {
     setPermanentMagicRecycleBag(
       Array.isArray(snapshot.permanentMagicRecycleBag) ? snapshot.permanentMagicRecycleBag : [],
     );
-    setCanDrawFromBackpack(Boolean(snapshot.canDrawFromBackpack));
 
     setClassDeck(Array.isArray(snapshot.classDeck) ? snapshot.classDeck : []);
     setClassCardsInHand(Array.isArray(snapshot.classCardsInHand) ? snapshot.classCardsInHand : []);
@@ -4910,6 +4922,26 @@ export default function GameBoard() {
         return prev;
       }
       setWaveDiscardCount(count => count + 1);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          sessionId:'debug-session',
+          runId:'run3',
+          hypothesisId:'M',
+          location:'GameBoard.tsx:addToGraveyard',
+          message:'Added to graveyard',
+          data:{
+            cardId:sanitized.id,
+            cardType:sanitized.type,
+            prevSize:prev.length,
+            nextSize:prev.length + 1
+          },
+          timestamp:Date.now()
+        })
+      }).catch(()=>{});
+      // #endregion
       return [...prev, sanitized];
     });
   }
@@ -4949,18 +4981,36 @@ export default function GameBoard() {
   });
 
   const addCardToBackpack = useCallback(
-    (card: GameCardData, options?: { toBottom?: boolean }) => {
+    (card: GameCardData, options?: { toBottom?: boolean; pendingDungeonCardId?: string }) => {
       const sanitized = { ...card };
+      if (options?.pendingDungeonCardId) {
+        storingCardIdsRef.current.add(options.pendingDungeonCardId);
+        logBackpackDraw('backpack-store-pending', {
+          cardId: options.pendingDungeonCardId,
+          pending: storingCardIdsRef.current.size,
+        });
+      }
       setBackpackItems(prev => {
         const next = options?.toBottom ? [...prev, sanitized] : [sanitized, ...prev];
+        let finalList: GameCardData[];
         if (next.length <= backpackCapacity) {
-          return next;
+          finalList = next;
+        } else {
+          const kept = next.slice(0, backpackCapacity);
+          next.slice(backpackCapacity).forEach(overflowCard => addToGraveyard(overflowCard));
+          finalList = kept;
         }
-        const kept = next.slice(0, backpackCapacity);
-        next.slice(backpackCapacity).forEach(overflowCard => addToGraveyard(overflowCard));
-        return kept;
+        backpackItemsRef.current = finalList;
+        logBackpackDraw('backpack-add', {
+          cardId: sanitized.id,
+          fromDungeon: Boolean(options?.pendingDungeonCardId),
+          toBottom: Boolean(options?.toBottom),
+          prevLength: prev.length,
+          nextLength: finalList.length,
+          overflow: Math.max(0, next.length - finalList.length),
+        });
+        return finalList;
       });
-      setCanDrawFromBackpack(true);
     },
     [addToGraveyard, backpackCapacity],
   );
@@ -4980,12 +5030,17 @@ export default function GameBoard() {
     enforceBackpackCapacity();
   }, [backpackCapacity, enforceBackpackCapacity]);
 
+  useEffect(() => {
+    backpackItemsRef.current = backpackItems;
+  }, [backpackItems]);
+
   const triggerEventTransform = useCallback(
-    (fromCard: GameCardData, toCard: GameCardData) =>
+    (fromCard: GameCardData, toCard: GameCardData, message?: string) =>
       new Promise<void>(resolve => {
         setEventTransformState({
           fromCard,
           toCard,
+          message,
           onComplete: () => {
             resolve();
             setEventTransformState(null);
@@ -4993,6 +5048,30 @@ export default function GameBoard() {
         });
       }),
     [],
+  );
+
+  const applyCardFlip = useCallback(
+    async (card: GameCardData): Promise<boolean> => {
+      const flip = card.flipTarget;
+      if (!flip) return false;
+
+      const destination = flip.destination ?? 'graveyard';
+      await triggerEventTransform(card, flip.toCard, flip.message);
+      if (flip.banner) {
+        setHeroSkillBanner(flip.banner);
+      }
+
+      if (destination === 'backpack') {
+        addCardToBackpack(flip.toCard);
+      } else if (destination === 'hand') {
+        ensureCardInHand(flip.toCard);
+      } else {
+        addToGraveyard(flip.toCard);
+      }
+
+      return true;
+    },
+    [addCardToBackpack, addToGraveyard, ensureCardInHand, setHeroSkillBanner, triggerEventTransform],
   );
 
   const sacrificeEquipment = useCallback(
@@ -5043,11 +5122,10 @@ export default function GameBoard() {
       const cards = classDeck.slice(-takeCount);
       setClassDeck(prev => prev.slice(0, prev.length - takeCount));
       setBackpackItems(prev => [...cards, ...prev]);
-      setCanDrawFromBackpack(true);
       triggerClassDeckFlight(cards);
       return cards;
     },
-    [backpackItems.length, classDeck, setBackpackItems, setCanDrawFromBackpack, setClassDeck, triggerClassDeckFlight],
+    [backpackItems.length, classDeck, setBackpackItems, setClassDeck, triggerClassDeckFlight],
   );
 
   const resetWaterfallAnimation = () => {
@@ -5366,7 +5444,11 @@ export default function GameBoard() {
   };
 
   // Remove card from active cards (add to graveyard automatically)
-  const removeCard = (cardId: string, addToGraveyardAutomatically: boolean = true) => {
+  const removeCard = (
+    cardId: string,
+    addToGraveyardAutomatically: boolean = true,
+    options?: { skipAutoDraw?: boolean },
+  ) => {
     logWaterfall('remove-request', {
       cardId,
       pendingBefore: pendingDungeonRemovalsRef.current,
@@ -5378,8 +5460,8 @@ export default function GameBoard() {
       addToGraveyard(cardToRemove);
     }
 
-    if (cardToRemove) {
-      setCanDrawFromBackpack(true);
+    if (cardToRemove && !options?.skipAutoDraw) {
+      registerDungeonCardProcessed(cardToRemove.id, 'remove-card');
     }
     
     // Add card to removing set for animation
@@ -5460,14 +5542,18 @@ export default function GameBoard() {
   );
 
   const finalizePotionCard = useCallback(
-    (card: GameCardData, options?: { banner?: string }) => {
+    async (card: GameCardData, options?: { banner?: string }) => {
       if (options?.banner) {
         setHeroSkillBanner(options.banner);
       }
       setPendingPotionAction(current => (current && current.card.id === card.id ? null : current));
-      addToGraveyard(card);
+      if (card.flipTarget) {
+        await applyCardFlip(card);
+      } else {
+        addToGraveyard(card);
+      }
     },
-    [addToGraveyard],
+    [addToGraveyard, applyCardFlip, setHeroSkillBanner],
   );
 
   const resolvePotionRepairForSlot = useCallback(
@@ -5505,7 +5591,7 @@ export default function GameBoard() {
       const gained = repairedDurability - currentDurability;
       setEquipmentSlotById(slotId, { ...slotItem, durability: repairedDurability });
       const banner = `${slotItem.name} 耐久 +${gained}`;
-      finalizePotionCard(card, { banner });
+      void finalizePotionCard(card, { banner });
       return true;
     },
     [equipmentSlot1, equipmentSlot2, finalizePotionCard, setEquipmentSlotById, setHeroSkillBanner],
@@ -5572,30 +5658,30 @@ export default function GameBoard() {
   );
 
   const handlePotionConsumption = useCallback(
-    (card: GameCardData) => {
+    async (card: GameCardData) => {
       const effect = card.potionEffect;
 
-      const resolveHeal = (healAmount: number) => {
+      const resolveHeal = async (healAmount: number) => {
         const actualHeal = healHero(healAmount);
         const banner = actualHeal > 0 ? `回复${actualHeal}点生命。` : '生命已满。';
-        finalizePotionCard(card, { banner });
+        await finalizePotionCard(card, { banner });
       };
 
       if (!effect || effect === 'heal-5' || effect === 'heal-7') {
-        resolveHeal(effect === 'heal-7' ? 7 : effect === 'heal-5' ? 5 : card.value ?? 0);
+        await resolveHeal(effect === 'heal-7' ? 7 : effect === 'heal-5' ? 5 : card.value ?? 0);
         return;
       }
 
       if (effect === 'perm-spell-damage') {
         setPermanentSpellDamageBonus(prev => prev + 1);
-        finalizePotionCard(card, { banner: '永久法术伤害 +1。' });
+        await finalizePotionCard(card, { banner: '永久法术伤害 +1。' });
         return;
       }
 
       if (effect === 'perm-backpack-size') {
         setBackpackCapacityModifier(prev => prev + 1);
         enforceBackpackCapacity();
-        finalizePotionCard(card, { banner: '背包容量永久 +1。' });
+        await finalizePotionCard(card, { banner: '背包容量永久 +1。' });
         return;
       }
 
@@ -5618,7 +5704,7 @@ export default function GameBoard() {
         });
 
         if (!matchingSlots.length) {
-          finalizePotionCard(card, { banner: `没有装备${targetLabel}，药剂失效。` });
+          await finalizePotionCard(card, { banner: `没有装备${targetLabel}，药剂失效。` });
           return;
         }
 
@@ -5633,7 +5719,7 @@ export default function GameBoard() {
         });
 
         if (!repairableSlots.length) {
-          finalizePotionCard(card, { banner: `所有${targetLabel}已满耐久。` });
+          await finalizePotionCard(card, { banner: `所有${targetLabel}已满耐久。` });
           return;
         }
 
@@ -5672,22 +5758,22 @@ export default function GameBoard() {
         }
         const banner =
           draws > 0 ? `从背包抽出${draws}张牌。` : '背包为空或手牌已满，无法抽牌。';
-        finalizePotionCard(card, { banner });
+        await finalizePotionCard(card, { banner });
         return;
       }
 
       if (effect === 'discover-class') {
         const started = beginDiscoverFlow('potion-discover');
         if (started) {
-          finalizePotionCard(card, { banner: '发现了一张职业卡！' });
+          await finalizePotionCard(card, { banner: '发现了一张职业卡！' });
         } else {
           handleDiscoverFallback();
-          finalizePotionCard(card, { banner: '职业卡牌不可用，改为补一张。' });
+          await finalizePotionCard(card, { banner: '职业卡牌不可用，改为补一张。' });
         }
         return;
       }
 
-      resolveHeal(card.value ?? 0);
+      await resolveHeal(card.value ?? 0);
     },
     [
       beginDiscoverFlow,
@@ -5719,16 +5805,21 @@ export default function GameBoard() {
     eventResolutionRef.current = { cardId: null, source: null };
   };
 
-  const completeCurrentEvent = useCallback(() => {
+  const completeCurrentEvent = useCallback(async () => {
     if (!currentEventCard) return;
-    addToGraveyard(currentEventCard);
+    const cardToComplete = currentEventCard;
     setEventModalOpen(false);
     setCurrentEventCard(null);
     finalizeEventResolution();
-  }, [addToGraveyard, currentEventCard, finalizeEventResolution]);
+    if (cardToComplete.flipTarget) {
+      await applyCardFlip(cardToComplete);
+    } else {
+      addToGraveyard(cardToComplete);
+    }
+  }, [addToGraveyard, applyCardFlip, currentEventCard, finalizeEventResolution]);
 
   const handleDiscoverSelect = useCallback(
-    (cardId: string) => {
+    async (cardId: string) => {
       if (!discoverOptions.length) return;
       const selectedCard = discoverOptions.find(card => card.id === cardId);
       const remainingCards = discoverOptions.filter(card => card.id !== cardId);
@@ -5749,7 +5840,7 @@ export default function GameBoard() {
         }
       }
 
-      completeCurrentEvent();
+      await completeCurrentEvent();
     },
     [backpackItems.length, completeCurrentEvent, discoverOptions, returnCardsToClassDeck, triggerClassDeckFlight],
   );
@@ -5779,7 +5870,6 @@ export default function GameBoard() {
         setGold(value => value - offering.price);
         setClassDeck(deck => deck.filter(card => card.id !== purchasedCard.id));
         setBackpackItems(items => [purchasedCard, ...items]);
-        setCanDrawFromBackpack(true);
         triggerClassDeckFlight([purchasedCard]);
 
         const next = [...prev];
@@ -5790,14 +5880,14 @@ export default function GameBoard() {
     [backpackItems.length, gold, triggerClassDeckFlight],
   );
 
-  const handleShopClose = useCallback(() => {
+  const handleShopClose = useCallback(async () => {
     setShopModalOpen(false);
     setShopOfferings([]);
     setShopSourceEvent(null);
     setDeleteModalOpen(false);
     setCardActionContext(null);
     cardActionResolverRef.current = null;
-    completeCurrentEvent();
+    await completeCurrentEvent();
   }, [completeCurrentEvent]);
 
   const requestCardAction = useCallback(
@@ -5925,7 +6015,7 @@ export default function GameBoard() {
       return 0;
     }
 
-    const availableHandSlots = Math.max(0, 7 - (handCards.length + backpackHandFlights.length));
+    const availableHandSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlights.length));
     if (availableHandSlots <= 0) {
       return 0;
     }
@@ -6328,7 +6418,7 @@ export default function GameBoard() {
           }
           const sanitized = sanitizeCardMetadata(slot.item);
           clearEquipmentSlotById(slot.id);
-          if (handLoad < 7) {
+          if (handLoad < HAND_LIMIT) {
             queueCardIntoHand(sanitized);
             handLoad += 1;
           } else {
@@ -6444,7 +6534,6 @@ export default function GameBoard() {
             setRemainingDeck(prev =>
               [...activeRowCards, ...prev].sort(() => Math.random() - 0.5),
             );
-            setCanDrawFromBackpack(true);
             queueWaterfallTimeout(() => {
               triggerWaterfall();
             }, 50);
@@ -7434,17 +7523,106 @@ export default function GameBoard() {
     // Check if card is from hand (play normally) or from dungeon (purchase)
     const isFromHand = isCardFromHand(card);
     const isFromBackpack = backpackItems.some(backpackCard => backpackCard.id === card.id);
+
+    // Route spent hand cards to graveyard/recycle immediately after play
+    const recordHandCardConsumption = (spentCard: GameCardData) => {
+      if (spentCard.type === 'potion') {
+        addToGraveyard(spentCard);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            sessionId:'debug-session',
+            runId:'run3',
+            hypothesisId:'M',
+            location:'GameBoard.tsx:recordHandCardConsumption',
+            message:'Potion routed to graveyard',
+            data:{cardId:spentCard.id, cardType:spentCard.type},
+            timestamp:Date.now()
+          })
+        }).catch(()=>{});
+        // #endregion
+        return;
+      }
+      if (spentCard.type === 'magic' || spentCard.type === 'hero-magic') {
+        if (isPermanentMagicCard(spentCard)) {
+          addPermanentMagicToRecycleBag(spentCard);
+        } else {
+          addToGraveyard(spentCard);
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            sessionId:'debug-session',
+            runId:'run3',
+            hypothesisId:'M',
+            location:'GameBoard.tsx:recordHandCardConsumption',
+            message:'Magic routed',
+            data:{
+              cardId:spentCard.id,
+              cardType:spentCard.type,
+              permanent:isPermanentMagicCard(spentCard),
+              destination:isPermanentMagicCard(spentCard) ? 'recycle' : 'graveyard'
+            },
+            timestamp:Date.now()
+          })
+        }).catch(()=>{});
+        // #endregion
+        return;
+      }
+      if (spentCard.type === 'event') {
+        addToGraveyard(spentCard);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            sessionId:'debug-session',
+            runId:'run3',
+            hypothesisId:'M',
+            location:'GameBoard.tsx:recordHandCardConsumption',
+            message:'Event routed to graveyard',
+            data:{cardId:spentCard.id, cardType:spentCard.type},
+            timestamp:Date.now()
+          })
+        }).catch(()=>{});
+        // #endregion
+      }
+    };
     
     if (isFromHand) {
       if (!consumeCardFromHand(card)) {
         resetDragState();
         return;
       }
+      recordHandCardConsumption(card);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          sessionId:'debug-session',
+          runId:'run3',
+          hypothesisId:'N',
+          location:'GameBoard.tsx:handleCardToHero',
+          message:'Hand card consumed',
+          data:{
+            cardId:card.id,
+            cardType:card.type,
+            heroFrameDropIntent:heroFrameDropIntentRef.current
+          },
+          timestamp:Date.now()
+        })
+      }).catch(()=>{});
+      // #endregion
 
       if (card.type === 'monster') {
         beginCombat(card, 'monster');
       } else if (card.type === 'potion') {
-        handlePotionConsumption(card);
+        void handlePotionConsumption(card);
       } else if (card.type === 'magic' || card.type === 'hero-magic') {
         handleSkillCard(card);
       } else if (card.type === 'event') {
@@ -7458,7 +7636,7 @@ export default function GameBoard() {
       if (isFromBackpack) {
         setBackpackItems(prev => prev.filter(c => c.id !== card.id));
         if (card.type === 'potion') {
-          handlePotionConsumption(card);
+          void handlePotionConsumption(card);
         } else if (card.type === 'magic' || card.type === 'hero-magic') {
           handleSkillCard(card);
         } else if (card.type === 'event') {
@@ -7473,7 +7651,7 @@ export default function GameBoard() {
       }
       // Purchasing from dungeon - auto-equip/use
       if (card.type === 'potion') {
-        handlePotionConsumption(card);
+        void handlePotionConsumption(card);
         removeCard(card.id, false);
       } else if (card.type === 'magic' || card.type === 'hero-magic') {
         handleSkillCard(card);
@@ -7488,10 +7666,17 @@ export default function GameBoard() {
         beginCombat(card, 'monster');
       } else {
         // Other card types go to backpack
-        if (canCardGoToBackpack(card) && backpackItems.length < 10) {
-          setBackpackItems(prev => [card, ...prev]);
+        if (canCardGoToBackpack(card) && backpackItems.length < backpackCapacity) {
+          const isDungeonCard = activeCards.some(slotCard => slotCard?.id === card.id);
+          addCardToBackpack(card, {
+            pendingDungeonCardId: isDungeonCard ? card.id : undefined,
+          });
     // // toast({ title: 'Item Stored!', description: `${card.name} added to backpack` });
-          removeCard(card.id, false);
+          if (isDungeonCard) {
+            removeCard(card.id, false, { skipAutoDraw: true });
+          } else {
+            removeCard(card.id, false);
+          }
         } else {
     // // toast({ 
             // title: 'Backpack Full!', 
@@ -7589,7 +7774,7 @@ export default function GameBoard() {
 
       // Check if backpack is full
       if (backpackItems.length >= backpackCapacity) {
-    // // toast({ title: 'Backpack Full!', description: 'Maximum 10 items', variant: 'destructive' });
+    // // toast({ title: 'Backpack Full!', description: 'Maximum 15 items', variant: 'destructive' });
         return;
       }
 
@@ -7600,9 +7785,16 @@ export default function GameBoard() {
         setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
       }
       
-      addCardToBackpack(card);
+      const isDungeonCard = activeCards.some(slot => slot?.id === card.id);
+      addCardToBackpack(card, {
+        pendingDungeonCardId: isDungeonCard ? card.id : undefined,
+      });
       if (!fromAmuletSlot) {
-        removeCard(card.id, false);
+        if (isDungeonCard) {
+          removeCard(card.id, false, { skipAutoDraw: true });
+        } else {
+          removeCard(card.id, false);
+        }
       }
       resetDragState();
     } else if (slotId.startsWith('slot-equipment')) {
@@ -7942,17 +8134,17 @@ export default function GameBoard() {
       return;
     }
     
-    completeCurrentEvent();
+    await completeCurrentEvent();
   };
 
-  const handlePlayCardFromHand = (card: GameCardData, target?: any) => {
+  const handlePlayCardFromHand = async (card: GameCardData, target?: any) => {
     if (!consumeCardFromHand(card)) {
       return;
     }
 
     // Process the card play based on its type
     if (card.type === 'potion') {
-      handlePotionConsumption(card);
+      await handlePotionConsumption(card);
     } else if (card.type === 'weapon' || card.type === 'shield') {
       // Handle equipment cards
       const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
@@ -7967,12 +8159,6 @@ export default function GameBoard() {
   const handleBackpackClick = () => {
     if (playerTargetingActive) return;
     setBackpackViewerOpen(true);
-  };
-
-  const handleBackpackDrawClick = () => {
-    if (!canDrawFromBackpack || waterfallAnimation.isActive || playerTargetingActive) return;
-    drawFromBackpackToHand();
-    setCanDrawFromBackpack(false);
   };
 
   const heroSkillTargeting = Boolean(pendingHeroSkillAction);
@@ -8147,6 +8333,13 @@ export default function GameBoard() {
     [resolveHolyLightChoice],
   );
 
+  const heroFrameHoverLogCountRef = useRef(0);
+  const heroFrameEnableLogCountRef = useRef(0);
+  const heroFrameHitTestLogCountRef = useRef(0);
+  const heroFrameStateLogCountRef = useRef(0);
+  const heroFrameDragOverLogCountRef = useRef(0);
+  const heroFrameDropCalcLogCountRef = useRef(0);
+
   const updateHeroSkillArrowFromMouse = useCallback(
     (clientX?: number, clientY?: number) => {
       if (!heroSkillTargeting) {
@@ -8200,16 +8393,145 @@ export default function GameBoard() {
     const targetingActive = playerTargetingActive;
   const isSpellCard = card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion';
     if ((waterfallAnimation.isActive && !isSpellCard) || targetingActive) return;
+    heroFrameHoverLogCountRef.current = 0;
+    heroFrameEnableLogCountRef.current = 0;
+    heroFrameHitTestLogCountRef.current = 0;
+    heroFrameStateLogCountRef.current = 0;
+    heroFrameDragOverLogCountRef.current = 0;
+    heroFrameDropCalcLogCountRef.current = 0;
     setDraggedCard(card);
     setDraggedCardSource('hand');
     updateHeroRowDropHighlight(card);
     startDragSession();
     // Card stays in hand until successfully dropped
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        sessionId:'debug-session',
+        runId:'run2',
+        hypothesisId:'K',
+        location:'GameBoard.tsx:handleDragCardFromHand',
+        message:'Drag from hand started',
+        data:{cardId:card.id, cardType:card.type, waterfallActive:waterfallAnimation.isActive, targetingActive},
+        timestamp:Date.now()
+      })
+    }).catch(()=>{});
+    // #endregion
   };
 
-  const handleDragEndFromHand = () => {
-    if (heroFrameDropIntentRef.current && draggedCardRef.current && isHeroRowHighlightCard(draggedCardRef.current)) {
+  const handleDragEndFromHand = (event?: React.DragEvent) => {
+    if (draggedCardSource !== 'hand') {
       heroFrameDropIntentRef.current = false;
+      setDraggedCard(null);
+      setDraggedCardSource(current => (current === 'hand' ? null : current));
+      setHeroRowDropState(null);
+      return;
+    }
+
+    const clientX = event?.clientX ?? null;
+    const clientY = event?.clientY ?? null;
+    let insideHeroFrame: boolean | null = null;
+    let usedFallbackPos = false;
+
+    if (
+      clientX !== null &&
+      clientY !== null &&
+      draggedCardRef.current &&
+      isHeroRowHighlightCard(draggedCardRef.current)
+    ) {
+      if (!heroFrameBoundsRef.current) {
+        updateHeroFrameBounds();
+      }
+      insideHeroFrame = isPointInsideHeroRowDropArea(clientX, clientY, draggedCardRef.current);
+    }
+
+    if (
+      insideHeroFrame !== true &&
+      lastGlobalDragPosRef.current &&
+      draggedCardRef.current &&
+      isHeroRowHighlightCard(draggedCardRef.current)
+    ) {
+      const { x, y } = lastGlobalDragPosRef.current;
+      if (!heroFrameBoundsRef.current) {
+        updateHeroFrameBounds();
+      }
+      insideHeroFrame = isPointInsideHeroRowDropArea(x, y, draggedCardRef.current);
+      usedFallbackPos = true;
+    }
+
+    const dropAccepted =
+      insideHeroFrame === true &&
+      draggedCardRef.current &&
+      isHeroRowHighlightCard(draggedCardRef.current);
+
+    if (heroFrameDropCalcLogCountRef.current < 6) {
+      heroFrameDropCalcLogCountRef.current += 1;
+      fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          sessionId:'debug-session',
+          runId:'run4',
+          hypothesisId:'T',
+          location:'GameBoard.tsx:handleDragEndFromHand',
+          message:'Drop calc',
+          data:{
+            insideHeroFrame,
+            usedFallbackPos,
+            heroFrameBounds: heroFrameBoundsRef.current ? {
+              left: heroFrameBoundsRef.current.left,
+              top: heroFrameBoundsRef.current.top,
+              right: heroFrameBoundsRef.current.right,
+              bottom: heroFrameBoundsRef.current.bottom,
+              width: heroFrameBoundsRef.current.width,
+              height: heroFrameBoundsRef.current.height,
+            } : null,
+            lastGlobal:lastGlobalDragPosRef.current,
+            clientX,
+            clientY,
+            dropAccepted,
+            heroFrameDropEnabled,
+            heroRowMagicDropActive,
+            draggedCardId:draggedCardRef.current?.id,
+            draggedCardType:draggedCardRef.current?.type
+          },
+          timestamp:Date.now()
+        })
+      }).catch(()=>{});
+    }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        sessionId:'debug-session',
+        runId:'run4',
+        hypothesisId:'O',
+        location:'GameBoard.tsx:handleDragEndFromHand',
+        message: dropAccepted ? 'Drop accepted' : 'Drop rejected',
+        data:{
+          dropAccepted,
+          heroFrameDropIntent:heroFrameDropIntentRef.current,
+          draggedCardId:draggedCardRef.current?.id,
+          draggedCardType:draggedCardRef.current?.type,
+          isHighlightCard: isHeroRowHighlightCard(draggedCardRef.current),
+          insideHeroFrame,
+          usedFallbackPos,
+          clientX,
+          clientY,
+          lastGlobal: lastGlobalDragPosRef.current,
+          heroRowDropState
+        },
+        timestamp:Date.now()
+      })
+    }).catch(()=>{});
+    // #endregion
+
+    if (dropAccepted && draggedCardRef.current) {
+      heroFrameDropIntentRef.current = true;
       handleCardToHero(draggedCardRef.current);
       return;
     }
@@ -8222,6 +8544,12 @@ export default function GameBoard() {
   // Handle drag start from dungeon cards
   const handleDragStartFromDungeon = (card: GameCardData) => {
     if (waterfallAnimation.isActive || playerTargetingActive) return;
+    heroFrameHoverLogCountRef.current = 0;
+    heroFrameEnableLogCountRef.current = 0;
+    heroFrameHitTestLogCountRef.current = 0;
+    heroFrameStateLogCountRef.current = 0;
+    heroFrameDragOverLogCountRef.current = 0;
+    heroFrameDropCalcLogCountRef.current = 0;
     setDraggedCard(card);
     setDraggedCardSource('dungeon');
     setIsDraggingFromDungeon(true);
@@ -8308,7 +8636,22 @@ export default function GameBoard() {
       onDrop: heroRowMagicDrop,
     };
   };
-  const heroFrameDropEnabled = heroRowMagicDropActive;
+  // Minimal change: also enable frame when hand-drag has set heroRowDropState (highlightable)
+  const heroFrameDropEnabled =
+    heroRowMagicDropActive ||
+    (draggedCardSource === 'hand' && (isHeroRowHighlightCard(draggedCard) || heroRowDropState !== null));
+
+  const lastGlobalDragPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handleGlobalDragOver = (e: DragEvent) => {
+      lastGlobalDragPosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener('dragover', handleGlobalDragOver, true);
+    return () => {
+      window.removeEventListener('dragover', handleGlobalDragOver, true);
+    };
+  }, []);
   const isPointInsideHeroRowDropArea = useCallback(
     (clientX: number, clientY: number, card: GameCardData | null) => {
       if (!card || !isHeroRowHighlightCard(card)) {
@@ -8319,16 +8662,47 @@ export default function GameBoard() {
         heroFrameRef.current?.getBoundingClientRect() ??
         (updateHeroFrameBounds(), heroFrameBoundsRef.current);
 
-      if (!pointInsideRect(frameRect, clientX, clientY)) {
-        return false;
-      }
+      const insideFrame = pointInsideRect(frameRect, clientX, clientY);
 
+      let insideBackpack = false;
       if (isBackpackRestrictedCard(card)) {
         const backpackCell = heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX];
         const backpackRect = backpackCell?.getBoundingClientRect() ?? null;
-        if (pointInsideRect(backpackRect, clientX, clientY)) {
-          return false;
-        }
+        insideBackpack = pointInsideRect(backpackRect, clientX, clientY);
+      }
+
+      if (heroFrameHitTestLogCountRef.current < 6) {
+        heroFrameHitTestLogCountRef.current += 1;
+        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            sessionId:'debug-session',
+            runId:'run4',
+            hypothesisId:'R',
+            location:'GameBoard.tsx:isPointInsideHeroRowDropArea',
+            message:'Hit test',
+            data:{
+              clientX,
+              clientY,
+              cardId:card.id,
+              cardType:card.type,
+              frameRect: frameRect ? {
+                left: frameRect.left, top: frameRect.top, right: frameRect.right, bottom: frameRect.bottom, width: frameRect.width, height: frameRect.height
+              } : null,
+              insideFrame,
+              insideBackpack
+            },
+            timestamp:Date.now()
+          })
+        }).catch(()=>{});
+      }
+      if (!insideFrame) {
+        return false;
+      }
+
+      if (insideBackpack) {
+        return false;
       }
 
       return true;
@@ -8339,27 +8713,143 @@ export default function GameBoard() {
     if (!heroFrameDropEnabled) {
       setHeroRowFrameDropActive(false);
       heroFrameDropIntentRef.current = false;
+      if (heroFrameEnableLogCountRef.current < 4) {
+        heroFrameEnableLogCountRef.current += 1;
+        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            sessionId:'debug-session',
+            runId:'run4',
+            hypothesisId:'Q',
+            location:'GameBoard.tsx:heroFrameEffect',
+            message:'Hero frame disabled',
+            data:{
+              heroFrameDropEnabled,
+              heroRowMagicDropActive,
+              draggedCardSource,
+              draggedCardType:draggedCard?.type
+            },
+            timestamp:Date.now()
+          })
+        }).catch(()=>{});
+      }
       return;
     }
 
+    if (heroFrameEnableLogCountRef.current < 4) {
+      heroFrameEnableLogCountRef.current += 1;
+      fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          sessionId:'debug-session',
+          runId:'run4',
+          hypothesisId:'Q',
+          location:'GameBoard.tsx:heroFrameEffect',
+          message:'Hero frame enabled',
+          data:{
+            heroFrameDropEnabled,
+            heroRowMagicDropActive,
+            draggedCardSource,
+            draggedCardType:draggedCard?.type
+          },
+          timestamp:Date.now()
+        })
+      }).catch(()=>{});
+    }
+
+    // Immediately show frame highlight when enabled
+    const logHeroFrameState = (active: boolean) => {
+      if (heroFrameStateLogCountRef.current < 6) {
+        heroFrameStateLogCountRef.current += 1;
+        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            sessionId:'debug-session',
+            runId:'run4',
+            hypothesisId:'S',
+            location:'GameBoard.tsx:heroFrameState',
+            message:'Frame state set',
+            data:{active},
+            timestamp:Date.now()
+          })
+        }).catch(()=>{});
+      }
+    };
+
+    setHeroRowFrameDropActive(true);
+    logHeroFrameState(true);
+
     const setFrameActive = (active: boolean) => {
-      setHeroRowFrameDropActive(prev => (prev === active ? prev : active));
+      setHeroRowFrameDropActive(prev => {
+        if (prev === active) return prev;
+        logHeroFrameState(active);
+        return active;
+      });
     };
 
     const handleWindowDragOver = (event: WindowEventMap['dragover']) => {
+      if (heroFrameDragOverLogCountRef.current < 4) {
+        heroFrameDragOverLogCountRef.current += 1;
+        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            sessionId:'debug-session',
+            runId:'run4',
+            hypothesisId:'S',
+            location:'GameBoard.tsx:handleWindowDragOver',
+            message:'Dragover fired',
+            data:{
+              clientX:event.clientX,
+              clientY:event.clientY,
+              heroFrameDropEnabled
+            },
+            timestamp:Date.now()
+          })
+        }).catch(()=>{});
+      }
+      lastGlobalDragPosRef.current = { x: event.clientX, y: event.clientY };
       const card = draggedCardRef.current;
       if (!card || !isHeroRowHighlightCard(card)) {
-        setFrameActive(false);
         heroFrameDropIntentRef.current = false;
         return;
       }
       const insideHeroFrame = isPointInsideHeroRowDropArea(event.clientX, event.clientY, card);
+      if (heroFrameHoverLogCountRef.current < 6) {
+        heroFrameHoverLogCountRef.current += 1;
+        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            sessionId:'debug-session',
+            runId:'run4',
+            hypothesisId:'P',
+            location:'GameBoard.tsx:handleWindowDragOver',
+            message:'Hero frame hover',
+            data:{
+              cardId:card.id,
+              cardType:card.type,
+              insideHeroFrame,
+              clientX:event.clientX,
+              clientY:event.clientY,
+              heroFrameDropEnabled,
+              heroRowMagicDropActive,
+              frameRect: heroFrameRef.current ? (() => {
+                const r = heroFrameRef.current!.getBoundingClientRect();
+                return { left:r.left, top:r.top, right:r.right, bottom:r.bottom, width:r.width, height:r.height };
+              })() : null
+            },
+            timestamp:Date.now()
+          })
+        }).catch(()=>{});
+      }
       if (insideHeroFrame) {
         event.preventDefault();
-        setFrameActive(true);
         heroFrameDropIntentRef.current = true;
       } else {
-        setFrameActive(false);
         heroFrameDropIntentRef.current = false;
       }
     };
@@ -8387,9 +8877,19 @@ export default function GameBoard() {
     window.addEventListener('dragover', handleWindowDragOver, true);
     window.addEventListener('drop', handleWindowDrop, true);
 
+    const surfaceElement = gameSurfaceRef.current;
+    if (surfaceElement) {
+      surfaceElement.addEventListener('dragover', handleWindowDragOver, true);
+      surfaceElement.addEventListener('drop', handleWindowDrop, true);
+    }
+
     return () => {
       window.removeEventListener('dragover', handleWindowDragOver, true);
       window.removeEventListener('drop', handleWindowDrop, true);
+      if (surfaceElement) {
+        surfaceElement.removeEventListener('dragover', handleWindowDragOver, true);
+        surfaceElement.removeEventListener('drop', handleWindowDrop, true);
+      }
       setFrameActive(false);
       heroFrameDropIntentRef.current = false;
     };
@@ -8662,6 +9162,7 @@ export default function GameBoard() {
       render: () => (
         <BackpackZone
           backpackCount={backpackItems.length}
+          capacity={backpackCapacity}
           onDrop={(card) => {
             if (isWaterfallLocked || playerTargetingActive) return;
             handleCardToSlot(card, 'slot-backpack');
@@ -8669,15 +9170,12 @@ export default function GameBoard() {
           isDropTarget={
             !isWaterfallLocked &&
             !playerTargetingActive &&
-            backpackItems.length < 10 &&
+            backpackItems.length < backpackCapacity &&
             draggedCard !== null &&
             !draggedEquipment &&
             canCardGoToBackpack(draggedCard) &&
             !handCards.some(c => c.id === draggedCard.id)
           }
-          canDraw={canDrawFromBackpack && !isWaterfallLocked && !playerTargetingActive}
-          isHandFull={handCards.length >= 7}
-          onDraw={handleBackpackDrawClick}
           onOpenViewer={handleBackpackClick}
         />
       ),
@@ -9172,7 +9670,7 @@ export default function GameBoard() {
           onPlayCard={handlePlayCardFromHand}
           onDragCardFromHand={handleDragCardFromHand}
           onDragEndFromHand={handleDragEndFromHand}
-          maxHandSize={7}
+          maxHandSize={HAND_LIMIT}
           cardSize={gridCardSize} // Pass the measured size to HandDisplay
           disableAnimations={isWaterfallLocked}
           onCardClick={handleCardClick}
@@ -9297,7 +9795,7 @@ export default function GameBoard() {
         sourceEventName={shopSourceEvent?.name ?? undefined}
       />
 
-      {eventTransformState && <EventTransformOverlay state={eventTransformState} />}
+      {eventTransformState && <CardFlipOverlay state={eventTransformState} />}
 
       <CardDeletionModal
         open={deleteModalOpen}
@@ -9381,44 +9879,6 @@ export default function GameBoard() {
         isOpen={showSkillSelection}
         onSelectSkill={handleSkillSelection}
       />
-    </div>
-  );
-}
-
-function EventTransformOverlay({ state }: { state: EventTransformState }) {
-  const [flipped, setFlipped] = useState(false);
-
-  useEffect(() => {
-    const flipTimer = window.setTimeout(() => setFlipped(true), 350);
-    const completeTimer = window.setTimeout(() => {
-      state.onComplete();
-    }, 1200);
-    return () => {
-      window.clearTimeout(flipTimer);
-      window.clearTimeout(completeTimer);
-    };
-  }, [state]);
-
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-xs sm:max-w-sm text-center space-y-4">
-        <div
-          className="relative mx-auto h-[260px] sm:h-[320px] w-[170px] sm:w-[220px] rounded-xl border border-primary/40 bg-gradient-to-br from-pink-500/20 via-purple-600/10 to-black/40 p-4 shadow-2xl dh-perspective"
-        >
-          <div
-            className="absolute inset-4 transition-transform duration-700 ease-in-out dh-preserve-3d"
-            style={{ transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
-          >
-            <div className="absolute inset-0 dh-backface-hidden">
-              <GameCard card={state.fromCard} disableInteractions />
-            </div>
-            <div className="absolute inset-0 dh-backface-hidden" style={{ transform: 'rotateY(180deg)' }}>
-              <GameCard card={state.toCard} disableInteractions />
-            </div>
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">卷轴正在翻转成新的形态…</p>
-      </div>
     </div>
   );
 }

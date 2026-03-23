@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, useRef, memo, type CSSProperties } from 'react';
 import { Card } from '@/components/ui/card';
 import {
   Skull,
@@ -94,6 +94,15 @@ export interface EventChoiceDefinition {
   requiresDisabledReason?: string;
 }
 
+export type CardFlipDestination = 'backpack' | 'hand' | 'graveyard';
+
+export type CardFlipTarget = {
+  toCard: GameCardData;
+  destination?: CardFlipDestination;
+  banner?: string;
+  message?: string;
+};
+
 export interface GameCardData {
   id: string;
   type: CardType;
@@ -127,12 +136,13 @@ export interface GameCardData {
   classCard?: boolean; // Marks as a class card
   description?: string; // Card effect description
   potionEffect?: PotionEffectId;
+  flipTarget?: CardFlipTarget;
 }
 
 interface GameCardProps {
   card: GameCardData;
   onDragStart?: (card: GameCardData) => void;
-  onDragEnd?: () => void;
+  onDragEnd?: (event?: React.DragEvent) => void;
   onWeaponDrop?: (weapon: any) => void;
   isWeaponDropTarget?: boolean;
   className?: string;
@@ -148,7 +158,7 @@ interface GameCardProps {
   equipmentStatModifier?: EquipmentCardStatModifier | null;
 }
 
-export default function GameCard({
+function GameCardInner({
   card,
   onDragStart,
   onDragEnd,
@@ -199,14 +209,17 @@ export default function GameCard({
       return;
     }
 
+    let rafId: number | null = null;
     const updateScale = () => {
-      const { width } = target.getBoundingClientRect();
-      if (!width) {
-        return;
-      }
-      setCardScale(prev => {
-        const next = clamp(width / BASE_CARD_WIDTH, CARD_SCALE_MIN, CARD_SCALE_MAX);
-        return Math.abs(prev - next) > 0.01 ? next : prev;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const { width } = target.getBoundingClientRect();
+        if (!width) return;
+        setCardScale(prev => {
+          const next = clamp(width / BASE_CARD_WIDTH, CARD_SCALE_MIN, CARD_SCALE_MAX);
+          return Math.abs(prev - next) > 0.01 ? next : prev;
+        });
       });
     };
 
@@ -214,7 +227,10 @@ export default function GameCard({
     const observer = new ResizeObserver(updateScale);
     observer.observe(target);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   // Set up mobile drag support
@@ -266,10 +282,10 @@ export default function GameCard({
     onDragStart?.(card);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = (e?: React.DragEvent) => {
     if (disableInteractions) return;
     setIsDragging(false);
-    onDragEnd?.();
+    onDragEnd?.(e);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -412,6 +428,7 @@ const amuletEffectText =
   const isMagicCard = isMagicLikeCard;
   const cardImageHeightClass = isEventCard ? 'h-[52%]' : isMagicCard ? 'h-[56%]' : 'h-[75%]';
   const isCompactImageType = isMagicCard || isEventCard;
+  const hasFlipTarget = Boolean(card.flipTarget);
   const cardImageWrapperClassName = [
     'relative',
     cardImageHeightClass,
@@ -481,7 +498,12 @@ const amuletEffectText =
         ${isDragging ? 'shadow-2xl' : 'shadow-lg hover:shadow-xl'}
         ${card.type === 'event' ? 'shadow-violet-500/30 shadow-xl' : ''}
       `}>
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col relative">
+          {hasFlipTarget && (
+            <div className="dh-card__flip-badge" title="处理后会翻面">
+              翻转
+            </div>
+          )}
           {/* Image Area - takes up different heights based on card type */}
           <div className={cardImageWrapperClassName}>
             {card.image && (
@@ -714,3 +736,44 @@ const amuletEffectText =
     </div>
   );
 }
+
+function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
+  if (prev.card !== next.card) {
+    const a = prev.card;
+    const b = next.card;
+    if (
+      a.id !== b.id ||
+      a.name !== b.name ||
+      a.attack !== b.attack ||
+      a.hp !== b.hp ||
+      a.defense !== b.defense ||
+      a.value !== b.value ||
+      a.durability !== b.durability ||
+      a.maxDurability !== b.maxDurability ||
+      a.currentLayer !== b.currentLayer ||
+      a.hpLayers !== b.hpLayers ||
+      a.fury !== b.fury ||
+      a.image !== b.image ||
+      a.type !== b.type ||
+      a.description !== b.description
+    ) {
+      return false;
+    }
+  }
+  return (
+    prev.className === next.className &&
+    prev.isWeaponDropTarget === next.isWeaponDropTarget &&
+    prev.disableInteractions === next.disableInteractions &&
+    prev.amuletDescriptionVariant === next.amuletDescriptionVariant &&
+    prev.bleedAnimation === next.bleedAnimation &&
+    prev.weaponSwingAnimation === next.weaponSwingAnimation &&
+    prev.shieldBlockAnimation === next.shieldBlockAnimation &&
+    prev.isEngaged === next.isEngaged &&
+    prev.weaponSwingVariant === next.weaponSwingVariant &&
+    prev.shieldBlockVariant === next.shieldBlockVariant &&
+    prev.equipmentStatModifier === next.equipmentStatModifier
+  );
+}
+
+const GameCard = memo(GameCardInner, arePropsEqual);
+export default GameCard;

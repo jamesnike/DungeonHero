@@ -38,14 +38,14 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 - **Heal**: Drag potion to hero card, added to graveyard
 - **Collect Gold**: Drag coin to hero card, added to graveyard
 - **Equip**: Drag weapon/shield to two generic equipment slots, or amulet to dedicated amulet slot
-- **Store Item**: Drag item to backpack (stacks up to 10 items, LIFO)
+- **Store Item**: Drag item to backpack (stacks up to 15 items, LIFO auto-draw)
 - **Sell**: Drag weapon/shield/potion/coin/amulet to graveyard zone for gold value
 
 ### State Management
 - `remainingDeck`: Single source of truth for unconsumed cards
 - `activeCards`: Current 5 cards displayed in dungeon row (up from 4)
 - `amuletSlot`: Stores equipped amulet with effect type
-- `backpackItems`: Array of up to 10 items (LIFO stack)
+- `backpackItems`: Array of up to 15 items (LIFO stack with auto-draw)
 - `cardsPlayed`: Counter tracking cards played this turn (must reach 4, up from 3)
 - `drawPending`: Boolean flag preventing race conditions in card draw logic
 - `maxHp`: Calculated value (INITIAL_HP + amulet health bonus)
@@ -123,10 +123,10 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
   - Strength Amulet: +1 weapon damage (applied in all combat paths)
   - Guardian Amulet: Shield overflow damage ignored during combat when protected
   - 6 amulets total in deck (2 of each type)
-- **10-Item Backpack Stacking**: Upgraded from single-item to 10-item stack
-  - LIFO system: use top item, add new items to bottom
+- **15-Slot Backpack Stacking**: Upgraded from single-item to a 15-slot auto-draw stack
+  - LIFO system: auto-draws one stored card whenever a dungeon card is resolved
   - UI shows stack count (+X more items)
-  - Click backpack to use/equip top item
+  - Click the backpack to inspect contents or manually move items
 - **Deck Rebalancing for 54 Cards**:
   - 12 monsters (3 each: Dragon, Skeleton, Goblin, Ogre)
   - 10 weapons (values 2-6)
@@ -163,7 +163,7 @@ A web-based card game inspired by the "Card Crawl" mobile game. Players must sur
 - **Chibi/Q-version Images**: All card types now have cute chibi-style artwork including hero, shields, and amulets
 
 ### Enhanced Features
-- **Backpack System**: 10-item LIFO stack with visual count indicator, click to use/equip top item
+- **Backpack System**: 15-slot LIFO stack with visual count indicator and auto-draw after dungeon clears
 - **Amulet System**: Dedicated slot with passive bonuses affecting combat and max HP
 - **Statistics Tracking**: Monsters defeated, damage taken, healing received
 - **Victory Modal**: Displays comprehensive game statistics
