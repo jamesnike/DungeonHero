@@ -5980,6 +5980,15 @@ export default function GameBoard() {
     const draggedFromHand = wasDraggedFromHand(cardId);
     let removed = false;
 
+    // Cancel any pending delivery guard / flight fallback so the card
+    // cannot be re-inserted into the hand after consumption.
+    const guard = pendingHandDeliveryGuardsRef.current.get(cardId);
+    if (guard?.timeoutId !== null && guard?.timeoutId !== undefined && typeof window !== 'undefined') {
+      window.clearTimeout(guard.timeoutId);
+    }
+    pendingHandDeliveryGuardsRef.current.delete(cardId);
+    clearBackpackHandFallback(cardId);
+
     setHandCards(prev => {
       const existsInHand = prev.some(c => c.id === cardId);
       if (!existsInHand) {
@@ -6541,13 +6550,13 @@ export default function GameBoard() {
             triggerWaterfall();
           }
           finalizeMagicCard(card, { banner: 'Cascade Reset shuffles the current wave.' });
-          break;
+          return;
         }
         case 'Tempest Volley': {
           const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
           if (monsters.length === 0) {
             finalizeMagicCard(card, { banner: 'Tempest Volley fizzled (no monsters).' });
-            break;
+            return;
           }
           const volleyDamage = getSpellDamage(3);
           monsters.forEach((monster, index) => {
@@ -6558,13 +6567,13 @@ export default function GameBoard() {
             dealDamageToMonster(monster, volleyDamage, { animationDelay, pulses: 2 });
           });
           finalizeMagicCard(card, { banner: `Tempest Volley strikes every foe for ${volleyDamage} damage!` });
-          break;
+          return;
         }
         case 'Echo Satchel': {
           const drawsRequested = waveDiscardCount;
           if (drawsRequested <= 0) {
             finalizeMagicCard(card, { banner: 'Echo Satchel had no cards to echo.' });
-            break;
+            return;
           }
           let drawsCompleted = 0;
           let currentHandSize = handCards.length;
@@ -6584,13 +6593,13 @@ export default function GameBoard() {
               ? `Echo Satchel drew ${drawsCompleted} card${drawsCompleted > 1 ? 's' : ''} from the backpack.`
               : 'Echo Satchel could not draw (hand full or backpack empty).';
           finalizeMagicCard(card, { banner });
-          break;
+          return;
         }
         case 'Bulwark Slam': {
           const shields = getEquipmentSlots().filter(slot => slot.item?.type === 'shield');
           if (shields.length === 0) {
             finalizeMagicCard(card, { banner: 'Bulwark Slam fizzled (no shields equipped).' });
-            break;
+            return;
           }
           setPendingMagicAction({
             card,
@@ -6599,13 +6608,13 @@ export default function GameBoard() {
             prompt: 'Select a shield slot to convert its armor into damage.',
           });
           setHeroSkillBanner('Bulwark Slam ready. Choose a shield.');
-          break;
+          return;
         }
         case 'Blood Reckoning': {
           const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
           if (monsters.length === 0) {
             finalizeMagicCard(card, { banner: 'No monsters available for Blood Reckoning.' });
-            break;
+            return;
           }
           setPendingMagicAction({
             card,
@@ -6614,7 +6623,7 @@ export default function GameBoard() {
             prompt: 'Select a monster to suffer your missing HP as damage.',
           });
           setHeroSkillBanner('Blood Reckoning awaits your target.');
-          break;
+          return;
         }
         case 'Eternal Repair': {
           const repairableSlots = getEquipmentSlots().filter(slot => {
@@ -6625,7 +6634,7 @@ export default function GameBoard() {
           });
           if (repairableSlots.length === 0) {
             finalizeMagicCard(card, { banner: 'All equipment is already at full durability.' });
-            break;
+            return;
           }
           setPendingMagicAction({
             card,
@@ -6634,7 +6643,7 @@ export default function GameBoard() {
             prompt: 'Select equipment to restore to full durability.',
           });
           setHeroSkillBanner('Choose equipment to repair.');
-          break;
+          return;
         }
           
         // Knight weapon enhancement skills
@@ -7546,31 +7555,8 @@ export default function GameBoard() {
         return;
       }
       if (spentCard.type === 'magic' || spentCard.type === 'hero-magic') {
-        if (isPermanentMagicCard(spentCard)) {
-          addPermanentMagicToRecycleBag(spentCard);
-        } else {
-          addToGraveyard(spentCard);
-        }
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            sessionId:'debug-session',
-            runId:'run3',
-            hypothesisId:'M',
-            location:'GameBoard.tsx:recordHandCardConsumption',
-            message:'Magic routed',
-            data:{
-              cardId:spentCard.id,
-              cardType:spentCard.type,
-              permanent:isPermanentMagicCard(spentCard),
-              destination:isPermanentMagicCard(spentCard) ? 'recycle' : 'graveyard'
-            },
-            timestamp:Date.now()
-          })
-        }).catch(()=>{});
-        // #endregion
+        // Routing handled exclusively by handleSkillCard / finalizeMagicCard
+        // to avoid double graveyard/recycle-bag insertions.
         return;
       }
       if (spentCard.type === 'event') {
