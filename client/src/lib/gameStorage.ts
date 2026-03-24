@@ -90,6 +90,9 @@ export interface PersistedGameState {
   drawPending?: boolean;
   waveDiscardCount?: number;
   resolvingDungeonCardId?: string | null;
+  currentEventCard?: GameCardData | null;
+  eventModalOpen?: boolean;
+  eventModalMinimized?: boolean;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

@@ -157,6 +157,7 @@ interface GameCardProps {
   bleedAnimation?: boolean;
   weaponSwingAnimation?: boolean;
   shieldBlockAnimation?: boolean;
+  defeatAnimation?: boolean;
   isEngaged?: boolean;
   weaponSwingVariant?: number;
   shieldBlockVariant?: number;
@@ -177,6 +178,7 @@ function GameCardInner({
   bleedAnimation = false,
   weaponSwingAnimation = false,
   shieldBlockAnimation = false,
+  defeatAnimation = false,
   isEngaged = false,
   weaponSwingVariant = 0,
   shieldBlockVariant = 0,
@@ -430,7 +432,8 @@ const amuletEffectText =
   const showBleedOverlay = Boolean(bleedAnimation);
   const showWeaponSwing = Boolean(weaponSwingAnimation);
   const showShieldBlock = Boolean(shieldBlockAnimation);
-  const showCombatOverlay = showBleedOverlay || showWeaponSwing || showShieldBlock;
+  const showDefeatOverlay = Boolean(defeatAnimation);
+  const showCombatOverlay = showBleedOverlay || showWeaponSwing || showShieldBlock || showDefeatOverlay;
   const isEventCard = card.type === 'event';
   const isMagicCard = isMagicLikeCard;
   const isTextOnlyCard = isEventCard || isMagicCard;
@@ -660,6 +663,13 @@ const amuletEffectText =
                         <span className="combat-overlay__shape combat-overlay__shape--block-spark" data-stagger="2" />
                       </>
                     )}
+                    {showDefeatOverlay && (
+                      <>
+                        <span className="combat-overlay__shape combat-overlay__shape--defeat" />
+                        <span className="combat-overlay__shape combat-overlay__shape--defeat-burst" data-stagger="1" />
+                        <span className="combat-overlay__shape combat-overlay__shape--defeat-fade" data-stagger="2" />
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -832,6 +842,7 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
     prev.bleedAnimation === next.bleedAnimation &&
     prev.weaponSwingAnimation === next.weaponSwingAnimation &&
     prev.shieldBlockAnimation === next.shieldBlockAnimation &&
+    prev.defeatAnimation === next.defeatAnimation &&
     prev.isEngaged === next.isEngaged &&
     prev.weaponSwingVariant === next.weaponSwingVariant &&
     prev.shieldBlockVariant === next.shieldBlockVariant &&

@@ -107,8 +107,8 @@ export default function HeroDetailsModal({
 
         <div className="space-y-6 py-2 overflow-y-auto flex-1 min-h-0 pr-1">
           <div className="flex flex-col gap-4 lg:flex-row">
-            <div className="overflow-hidden rounded-2xl border bg-muted/40 lg:w-1/3">
-              <div className="relative aspect-[3/4] w-full bg-gradient-to-b from-background via-background/70 to-muted">
+            <div className="overflow-hidden rounded-2xl border bg-muted/40 max-h-[30vh] lg:max-h-none lg:w-1/3">
+              <div className="relative aspect-[3/4] h-full w-full bg-gradient-to-b from-background via-background/70 to-muted">
                 {heroVariant.image ? (
                   <img
                     src={heroVariant.image}

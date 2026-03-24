@@ -189,7 +189,7 @@ export default function HandDisplay({
     >
       <div 
         className="relative w-full max-w-5xl pointer-events-none"
-        style={{ height: cardHeight }}
+        style={{ height: cardHeight, transform: `translateX(${Math.round(cardWidth * 0.15)}px)` }}
       >
         <div className="absolute inset-0 flex items-end justify-center pointer-events-none">
           {handCards.map((card, index) => {

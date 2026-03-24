@@ -24,7 +24,7 @@ import GameCard, {
 import EquipmentSlot from './EquipmentSlot';
 import CombatPanel from './CombatPanel';
 import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
-import { Sword } from 'lucide-react';
+import { Sword, Calendar } from 'lucide-react';
 import AmuletSlot from './AmuletSlot';
 import GraveyardZone from './GraveyardZone';
 import HandDisplay from './HandDisplay';
@@ -235,6 +235,7 @@ const FLASH_ATTACK_PENALTY = 3;
 const STRENGTH_SELF_DAMAGE = 3;
 const COMBAT_ANIMATION_DURATION = 1200;
 const COMBAT_ANIMATION_STAGGER = 180;
+const DEFEAT_ANIMATION_DURATION = 950;
 const SHOP_MAX_OFFERINGS = 6;
 const SHOP_REQUIRED_TYPES: CardType[] = ['weapon', 'shield', 'magic', 'amulet'];
 const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
@@ -1274,6 +1275,7 @@ export default function GameBoard() {
   const [healing, setHealing] = useState(false);
   const [heroBleedActive, setHeroBleedActive] = useState(false);
   const [monsterBleedStates, setMonsterBleedStates] = useState<Record<string, number>>({});
+  const [monsterDefeatStates, setMonsterDefeatStates] = useState<Record<string, boolean>>({});
   const [weaponSwingStates, setWeaponSwingStates] = useState<Record<EquipmentSlotId, number>>({
     equipmentSlot1: 0,
     equipmentSlot2: 0,
@@ -1872,6 +1874,7 @@ export default function GameBoard() {
   const [tempShield, setTempShield] = useState(0); // Temporary shield from skills
   const [classDeck, setClassDeck] = useState<GameCardData[]>([]); // Class deck cards
   const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [eventModalMinimized, setEventModalMinimized] = useState(false);
   const [currentEventCard, setCurrentEventCard] = useState<GameCardData | null>(null);
   const [permanentMaxHpBonus, setPermanentMaxHpBonus] = useState(0);
   const [permanentSpellDamageBonus, setPermanentSpellDamageBonus] = useState(0);
@@ -2879,32 +2882,42 @@ export default function GameBoard() {
       delete next[monster.id];
       return next;
     });
-    setMonstersDefeated(prev => prev + 1);
+
+    setMonsterDefeatStates(prev => ({ ...prev, [monster.id]: true }));
     addGameLog('combat', `${monster.name} 被击败！`);
-    addToGraveyard(monster);
-    removeCard(monster.id, false);
-    queueMonsterReward(monster);
-    forgetMonsterRewardsPreview(monster.id);
-    setSelectedMonsterRewards(prev => (selectedCard?.id === monster.id ? null : prev));
-    setCombatState(prev => {
-      const remaining = prev.engagedMonsterIds.filter(id => id !== monster.id);
-      const { [monster.id]: _removedDamage, ...restDamage } = prev.heroDamageThisTurn;
-      const pendingBlock =
-        prev.pendingBlock?.monsterId === monster.id ? null : prev.pendingBlock;
-      const queue = prev.monsterAttackQueue.filter(id => id !== monster.id);
 
-      if (remaining.length === 0) {
-        return { ...initialCombatState };
-      }
+    setTimeout(() => {
+      setMonsterDefeatStates(prev => {
+        const next = { ...prev };
+        delete next[monster.id];
+        return next;
+      });
+      setMonstersDefeated(prev => prev + 1);
+      addToGraveyard(monster);
+      removeCard(monster.id, false);
+      queueMonsterReward(monster);
+      forgetMonsterRewardsPreview(monster.id);
+      setSelectedMonsterRewards(prev => (selectedCard?.id === monster.id ? null : prev));
+      setCombatState(prev => {
+        const remaining = prev.engagedMonsterIds.filter(id => id !== monster.id);
+        const { [monster.id]: _removedDamage, ...restDamage } = prev.heroDamageThisTurn;
+        const pendingBlock =
+          prev.pendingBlock?.monsterId === monster.id ? null : prev.pendingBlock;
+        const queue = prev.monsterAttackQueue.filter(id => id !== monster.id);
 
-      return {
-        ...prev,
-        engagedMonsterIds: remaining,
-        heroDamageThisTurn: restDamage,
-        pendingBlock,
-        monsterAttackQueue: queue,
-      };
-    });
+        if (remaining.length === 0) {
+          return { ...initialCombatState };
+        }
+
+        return {
+          ...prev,
+          engagedMonsterIds: remaining,
+          heroDamageThisTurn: restDamage,
+          pendingBlock,
+          monsterAttackQueue: queue,
+        };
+      });
+    }, DEFEAT_ANIMATION_DURATION);
   };
 
   const updateMonsterCard = (monsterId: string, updater: (monster: GameCardData) => GameCardData) => {
@@ -3606,7 +3619,12 @@ export default function GameBoard() {
       }
     }
     backpackItemsRef.current = pool;
-    setBackpackItems(pool);
+    const drawnIds = new Set(drawnCards.map(c => c.id));
+    setBackpackItems(prev => {
+      const result = prev.filter(c => !drawnIds.has(c.id));
+      backpackItemsRef.current = result;
+      return result;
+    });
     logBackpackDraw('backpack-take', {
       requested: count,
       delivered: drawnCards.length,
@@ -3618,10 +3636,11 @@ export default function GameBoard() {
 
   // Auto-draw mechanism - draw random backpack cards to hand
   const drawFromBackpackToHand = (): GameCardData | null => {
-    const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlights.length));
+    const flightsCount = backpackHandFlightsRef.current.length;
+    const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + flightsCount));
     logBackpackDraw('draw-request', {
       handSize: handCards.length,
-      flights: backpackHandFlights.length,
+      flights: flightsCount,
       availableSlots,
       backpackStateCount: backpackItems.length,
       backpackRefCount: backpackItemsRef.current.length,
@@ -3651,18 +3670,19 @@ export default function GameBoard() {
     }
 
     while (pendingAutoDrawsRef.current > 0) {
+      const flightsCount = backpackHandFlightsRef.current.length;
       logBackpackDraw('auto-draw-loop', {
         pending: pendingAutoDrawsRef.current,
         handSize: handCards.length,
-        flights: backpackHandFlights.length,
+        flights: flightsCount,
         backpackCount: backpackItemsRef.current.length,
       });
-      const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlights.length));
+      const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + flightsCount));
       if (availableSlots <= 0) {
         logBackpackDraw('auto-draw-blocked-hand-full', {
           pending: pendingAutoDrawsRef.current,
           handSize: handCards.length,
-          flights: backpackHandFlights.length,
+          flights: flightsCount,
         });
         break;
       }
@@ -3691,22 +3711,23 @@ export default function GameBoard() {
         backpackCount: backpackItemsRef.current.length,
       });
     }
-  }, [handCards.length, backpackHandFlights.length, backpackItems.length]);
+  }, [handCards.length]);
 
   useEffect(() => {
     processPendingAutoDraws();
-  }, [backpackItems.length, handCards.length, backpackHandFlights.length, processPendingAutoDraws]);
+  }, [backpackItems.length, handCards.length, processPendingAutoDraws]);
 
   const enqueueAutoDraw = useCallback(
     (source: 'remove-card' | 'slot-cleared', cardId: string) => {
-      const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlights.length));
+      const flightsCount = backpackHandFlightsRef.current.length;
+      const availableSlots = Math.max(0, HAND_LIMIT - (handCards.length + flightsCount));
       if (availableSlots <= 0) {
         logBackpackDraw('auto-draw-blocked-hand-full', {
           source,
           cardId,
           pending: pendingAutoDrawsRef.current,
           handSize: handCards.length,
-          flights: backpackHandFlights.length,
+          flights: flightsCount,
         });
         return;
       }
@@ -3719,7 +3740,7 @@ export default function GameBoard() {
       });
       processPendingAutoDraws();
     },
-    [backpackHandFlights.length, handCards.length, processPendingAutoDraws],
+    [handCards.length, processPendingAutoDraws],
   );
 
   const registerDungeonCardProcessed = useCallback(
@@ -3948,6 +3969,7 @@ export default function GameBoard() {
       setDeleteModalOpen(false);
       setShopModalOpen(true);
       setEventModalOpen(false);
+      setEventModalMinimized(false);
       return true;
     },
     [backpackItems.length, generateShopOfferings],
@@ -4233,6 +4255,11 @@ export default function GameBoard() {
     (card: GameCardData): boolean => {
       if (typeof window === 'undefined') return false;
 
+      if (backpackHandFlightsRef.current.some(f => f.card.id === card.id)) {
+        logBackpackDraw('flight-skip', { reason: 'duplicate-card', cardId: card.id });
+        return false;
+      }
+
       const surfaceEl = gameSurfaceRef.current;
       const backpackCell = heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX];
       const handContainer = handAreaRef.current;
@@ -4398,6 +4425,9 @@ export default function GameBoard() {
       drawPending,
       waveDiscardCount,
       resolvingDungeonCardId,
+      currentEventCard,
+      eventModalOpen,
+      eventModalMinimized,
     };
   }, [
     hp,
@@ -4449,6 +4479,9 @@ export default function GameBoard() {
     drawPending,
     waveDiscardCount,
     resolvingDungeonCardId,
+    currentEventCard,
+    eventModalOpen,
+    eventModalMinimized,
   ]);
 
   useEffect(() => {
@@ -4606,6 +4639,7 @@ export default function GameBoard() {
     setActiveMonsterReward(null);
     setTempShield(0);
     setEventModalOpen(false);
+    setEventModalMinimized(false);
     setCurrentEventCard(null);
     setPendingMagicAction(null);
     setWaveDiscardCount(0);
@@ -4742,6 +4776,14 @@ export default function GameBoard() {
     setDrawPending(Boolean(snapshot.drawPending));
     setWaveDiscardCount(snapshot.waveDiscardCount ?? 0);
     setResolvingDungeonCardId(snapshot.resolvingDungeonCardId ?? null);
+    setCurrentEventCard(snapshot.currentEventCard ?? null);
+    setEventModalOpen(snapshot.eventModalOpen ?? false);
+    setEventModalMinimized(snapshot.eventModalMinimized ?? false);
+    if (snapshot.currentEventCard && snapshot.resolvingDungeonCardId) {
+      eventResolutionRef.current = { cardId: snapshot.resolvingDungeonCardId, source: 'dungeon' };
+    } else if (snapshot.currentEventCard) {
+      eventResolutionRef.current = { cardId: null, source: 'hand' };
+    }
     setBerserkerCharges(snapshot.berserkerCharges ?? 0);
 
     if (snapshot.combatState && snapshot.combatState.engagedMonsterIds.length > 0) {
@@ -5205,6 +5247,12 @@ export default function GameBoard() {
           pending: storingCardIdsRef.current.size,
         });
       }
+      const eager = options?.toBottom
+        ? [...backpackItemsRef.current, sanitized]
+        : [sanitized, ...backpackItemsRef.current];
+      backpackItemsRef.current = eager.length <= backpackCapacity
+        ? eager
+        : eager.slice(0, backpackCapacity);
       setBackpackItems(prev => {
         const next = options?.toBottom ? [...prev, sanitized] : [sanitized, ...prev];
         let finalList: GameCardData[];
@@ -6078,6 +6126,7 @@ export default function GameBoard() {
     if (!currentEventCard) return;
     const cardToComplete = currentEventCard;
     setEventModalOpen(false);
+    setEventModalMinimized(false);
     setCurrentEventCard(null);
     const flipDest = cardToComplete.flipTarget?.destination ?? 'graveyard';
     if (cardToComplete.flipTarget && flipDest !== 'graveyard') {
@@ -6308,7 +6357,7 @@ export default function GameBoard() {
       return 0;
     }
 
-    const availableHandSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlights.length));
+    const availableHandSlots = Math.max(0, HAND_LIMIT - (handCards.length + backpackHandFlightsRef.current.length));
     if (availableHandSlots <= 0) {
       return 0;
     }
@@ -6755,7 +6804,7 @@ export default function GameBoard() {
       case 1: {
         const equipmentSlots = getEquipmentSlots();
         let returned = 0;
-        let handLoad = handCards.length + backpackHandFlights.length;
+        let handLoad = handCards.length + backpackHandFlightsRef.current.length;
         equipmentSlots.forEach(slot => {
           if (!slot.item) {
             return;
@@ -8387,6 +8436,7 @@ export default function GameBoard() {
           setGold(prev => prev - goldLost);
         } else {
           setEventModalOpen(false);
+          setEventModalMinimized(false);
           setCurrentEventCard(null);
           finalizeEventResolution({ removeFromDungeon: false });
           return;
@@ -9125,6 +9175,7 @@ export default function GameBoard() {
 
   const engagedMonsters = getEngagedMonsterCards();
   const isWaterfallLocked = waterfallActive;
+  const eventPendingLocked = eventModalMinimized && eventModalOpen && !!currentEventCard;
   const pendingBlock = combatState.pendingBlock;
   const showBlockButtons = Boolean(pendingBlock);
   useLayoutEffect(() => {
@@ -9849,7 +9900,7 @@ export default function GameBoard() {
   }, [showMonsterAttackIndicator, updateSwordVectors]);
 
   return (
-    <div ref={gameSurfaceRef} className="h-screen bg-background flex flex-col relative overflow-hidden" style={gridStyleVars}>
+    <div ref={gameSurfaceRef} className="h-screen bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...(eventPendingLocked ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
       {/* Header - Fixed height */}
       <div className="flex-shrink-0">
         <GameHeader 
@@ -9947,6 +9998,7 @@ export default function GameBoard() {
             const colWidth = rageStripWidth;
             const isEngagedMonster = Boolean(card && card.type === 'monster' && isMonsterEngaged(card.id));
             const isResolvingCard = resolvingDungeonCardId === card?.id;
+            const isEventPendingCell = isResolvingCard && eventPendingLocked;
             const isMonsterTurnLock = showMonsterAttackIndicator || isWaterfallLocked;
             const monsterTargetHighlight = Boolean(
               monsterTargetingActive && card && card.type === 'monster',
@@ -9983,9 +10035,10 @@ export default function GameBoard() {
                   card.type === 'monster'
                 }
                 bleedAnimation={Boolean(monsterBleedStates[card.id])}
+                defeatAnimation={Boolean(monsterDefeatStates[card.id])}
                 className={`${removingCards.has(card.id) ? 'animate-card-remove' : 'shadow-lg'} ${
                   (isMonsterTurnLock && !monsterTargetHighlight && !dungeonTargetHighlight) ||
-                  isResolvingCard
+                  (isResolvingCard && !isEventPendingCell)
                     ? 'opacity-60 pointer-events-none'
                     : ''
                 } ${
@@ -9993,6 +10046,10 @@ export default function GameBoard() {
                 } ${dungeonTargetHighlight ? 'dungeon-target-highlight animate-pulse' : ''}`.trim()}
                 isEngaged={isEngagedMonster}
                 onClick={() => {
+                  if (isEventPendingCell) {
+                    setEventModalMinimized(false);
+                    return;
+                  }
                   if (dungeonTargetingActive) {
                     handleDungeonCardSelection(card);
                     return;
@@ -10026,7 +10083,8 @@ export default function GameBoard() {
             return (
               <div 
                 key={`active-${index}`}
-                className={activeCellWrapper}
+                className={`${activeCellWrapper}${isEventPendingCell ? ' event-pending-cell' : ''}`}
+                style={isEventPendingCell ? { pointerEvents: 'auto' } : undefined}
               >
                 {isMonster && (
                   <div
@@ -10070,6 +10128,26 @@ export default function GameBoard() {
                   }}
                 >
                   {gameCardNode}
+                  {isEventPendingCell && (
+                    <div
+                      className="absolute inset-0 z-30 flex items-center justify-center rounded-md cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEventModalMinimized(false);
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEventModalMinimized(false);
+                      }}
+                    >
+                      <div className="absolute inset-0 rounded-md ring-2 ring-pink-500 animate-pulse" />
+                      <div className="bg-pink-600/90 rounded-full px-2.5 py-1 flex items-center gap-1 shadow-lg">
+                        <Calendar className="w-3 h-3 text-white" />
+                        <span className="text-white text-xs font-bold">待处理</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -10285,6 +10363,24 @@ export default function GameBoard() {
         </div>
       )}
 
+      {/* Event-pending floating restore button */}
+      {eventPendingLocked && (
+        <div
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-pink-600/90 px-5 py-2.5 shadow-lg cursor-pointer select-none event-pending-restore-btn hover:bg-pink-600 transition-colors"
+          style={{ pointerEvents: 'auto' }}
+          onClick={() => setEventModalMinimized(false)}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            setEventModalMinimized(false);
+          }}
+        >
+          <Calendar className="w-4 h-4 text-white" />
+          <span className="text-white text-sm font-semibold whitespace-nowrap">
+            {currentEventCard?.name ?? '事件'} — 点击恢复
+          </span>
+        </div>
+      )}
+
       {deathWardPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-sm space-y-4 rounded-lg bg-card p-6 text-center shadow-2xl">
@@ -10416,10 +10512,11 @@ export default function GameBoard() {
 
       {/* Event Choice Modal */}
       <EventChoiceModal
-        open={eventModalOpen}
+        open={eventModalOpen && !eventModalMinimized}
         eventCard={currentEventCard}
         onChoice={handleEventChoice}
         choiceStates={eventChoiceStates}
+        onMinimize={() => setEventModalMinimized(true)}
       />
 
       {eventDiceModal && (

@@ -157,7 +157,7 @@ export default function GameLogPanel({
     const w = panelSize.width || 200;
     const h = panelSize.height || 40;
     const left = EDGE_PADDING;
-    const top = EDGE_PADDING;
+    const top = 54;
     return clampPosition(left, top, { width: w, height: h });
   }, [clampPosition, panelSize.width, panelSize.height]);
 

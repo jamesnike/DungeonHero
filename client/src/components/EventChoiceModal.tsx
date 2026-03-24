@@ -14,13 +14,18 @@ interface EventChoiceModalProps {
   eventCard: GameCardData | null;
   onChoice: (choiceIndex: number) => void;
   choiceStates?: EventChoiceAvailability[];
+  onMinimize?: () => void;
 }
 
-export default function EventChoiceModal({ open, eventCard, onChoice, choiceStates }: EventChoiceModalProps) {
+export default function EventChoiceModal({ open, eventCard, onChoice, choiceStates, onMinimize }: EventChoiceModalProps) {
   if (!eventCard || !eventCard.eventChoices) return null;
 
   return (
-    <Dialog open={open}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen && onMinimize) {
+        onMinimize();
+      }
+    }}>
       <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -45,7 +50,7 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
               >
                 <div className="flex w-full flex-col gap-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-[24px]">{choice.text}</span>
+                    <span className="font-semibold text-base">{choice.text}</span>
                     {choice.diceTable && (
                       <Badge variant="secondary" className="gap-1 text-[10px] uppercase">
                         <Dice1 className="h-3 w-3" />
@@ -54,10 +59,10 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
                     )}
                   </div>
                   {choice.hint && (
-                    <span className="text-lg text-muted-foreground">{choice.hint}</span>
+                    <span className="text-sm text-muted-foreground">{choice.hint}</span>
                   )}
                   {effectText && (
-                    <span className="text-lg text-muted-foreground">{effectText}</span>
+                    <span className="text-sm text-muted-foreground">{effectText}</span>
                   )}
                   {choice.diceTable && (
                     <div className="grid gap-1 text-xs text-muted-foreground">
