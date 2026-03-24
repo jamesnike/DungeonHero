@@ -65,7 +65,7 @@ import DiscoverClassModal from './DiscoverClassModal';
 import CardDeletionModal from './CardDeletionModal';
 import ShopModal, { type ShopOffering } from './ShopModal';
 import CardFlipOverlay from './CardFlipOverlay';
-import { initMobileDrop, type DragData } from '../utils/mobileDragDrop';
+import { type DragData } from '../utils/mobileDragDrop';
 import type {
   ActiveAmuletEffects,
   ActiveRowSlots,
@@ -3318,7 +3318,7 @@ export default function GameBoard() {
 
       if (actualHeal > 0) {
         setHealing(true);
-        setTimeout(() => setHealing(false), 500);
+        setTimeout(() => setHealing(false), 1200);
         setTotalHealed(prev => prev + actualHeal);
         addGameLog('heal', `英雄回复 ${actualHeal} 点生命${amuletEffects.hasHeal ? '（治疗加倍）' : ''}`);
       }
@@ -8951,6 +8951,7 @@ export default function GameBoard() {
     heroFrameDropCalcLogCountRef.current = 0;
     setDraggedCard(card);
     setDraggedCardSource('hand');
+    updateHeroRowDropHighlight(card);
     startDragSession();
     // Card stays in hand until successfully dropped
     // #region agent log
@@ -9102,7 +9103,8 @@ export default function GameBoard() {
     setDraggedCard(card);
     setDraggedCardSource('dungeon');
     setIsDraggingFromDungeon(true);
-    setIsDraggingToHand(true); // Show hand acquisition zone
+    setIsDraggingToHand(true);
+    updateHeroRowDropHighlight(card);
     startDragSession();
   };
   
@@ -9446,46 +9448,66 @@ export default function GameBoard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heroFrameDropEnabled, isPointInsideHeroRowDropArea]);
-  const handleMobileHeroDrop = useCallback(
-    (dragData: DragData) => {
-      if (!heroFrameDropEnabled || dragData.type !== 'card') {
-        heroFrameDropIntentRef.current = false;
-        return;
-      }
-      const card = dragData.data as GameCardData | undefined;
-      if (!card || !isHeroRowHighlightCard(card)) {
-        heroFrameDropIntentRef.current = false;
-        return;
-      }
-      const clientX = typeof dragData.clientX === 'number' ? dragData.clientX : null;
-      const clientY = typeof dragData.clientY === 'number' ? dragData.clientY : null;
-      if (clientX !== null && clientY !== null) {
-        if (!heroFrameBoundsRef.current) {
-          updateHeroFrameBounds();
-        }
-        const insideHeroFrame = isPointInsideHeroRowDropArea(clientX, clientY, card);
-        if (!insideHeroFrame) {
-          heroFrameDropIntentRef.current = false;
-          return;
-        }
-      }
-      handleCardToHeroRef.current?.(card);
-      heroFrameDropIntentRef.current = false;
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [heroFrameDropEnabled, isPointInsideHeroRowDropArea, updateHeroFrameBounds],
-  );
+  // Mobile: track touch position during drag to update hero row highlight,
+  // and intercept drop via the global mobile-drag-end event.
   useEffect(() => {
-    if (!heroFrameDropEnabled) {
-      return;
-    }
-    const surfaceElement = gameSurfaceRef.current;
-    if (!surfaceElement) {
-      return;
-    }
-    const cleanup = initMobileDrop(surfaceElement, handleMobileHeroDrop, ['card']);
-    return cleanup;
-  }, [handleMobileHeroDrop, heroFrameDropEnabled]);
+    if (!heroFrameDropEnabled) return;
+
+    const handleMobileDragMove = (e: Event) => {
+      const detail = (e as CustomEvent).detail as DragData;
+      if (detail.type !== 'card') return;
+      const card = detail.data as GameCardData | undefined;
+      if (!card || !isHeroRowHighlightCard(card)) return;
+      const cx = typeof detail.clientX === 'number' ? detail.clientX : null;
+      const cy = typeof detail.clientY === 'number' ? detail.clientY : null;
+      if (cx === null || cy === null) return;
+      if (!heroFrameBoundsRef.current) updateHeroFrameBounds();
+      const inside = isPointInsideHeroRowDropArea(cx, cy, card);
+      if (inside) {
+        heroFrameDropIntentRef.current = true;
+        setHeroRowDropState(prev => prev !== (card.type as HeroRowDropType) ? (card.type as HeroRowDropType) : prev);
+        setHeroRowFrameDropActive(prev => prev || true);
+      } else {
+        heroFrameDropIntentRef.current = false;
+        setHeroRowDropState(prev => prev !== null ? null : prev);
+        setHeroRowFrameDropActive(prev => prev ? false : prev);
+      }
+    };
+
+    const handleMobileDragEnd = (e: Event) => {
+      const detail = (e as CustomEvent).detail as DragData & { _handled?: boolean };
+      if (detail.type !== 'card') return;
+      const card = detail.data as GameCardData | undefined;
+      if (!card || !isHeroRowHighlightCard(card)) {
+        setHeroRowFrameDropActive(false);
+        heroFrameDropIntentRef.current = false;
+        return;
+      }
+      const cx = typeof detail.clientX === 'number' ? detail.clientX : null;
+      const cy = typeof detail.clientY === 'number' ? detail.clientY : null;
+      if (cx !== null && cy !== null) {
+        if (!heroFrameBoundsRef.current) updateHeroFrameBounds();
+        const inside = isPointInsideHeroRowDropArea(cx, cy, card);
+        if (inside) {
+          detail._handled = true;
+          handleCardToHeroRef.current?.(card);
+        }
+      }
+      setHeroRowFrameDropActive(false);
+      setHeroRowDropState(null);
+      heroFrameDropIntentRef.current = false;
+    };
+
+    document.addEventListener('mobile-drag-move', handleMobileDragMove);
+    document.addEventListener('mobile-drag-end', handleMobileDragEnd);
+    return () => {
+      document.removeEventListener('mobile-drag-move', handleMobileDragMove);
+      document.removeEventListener('mobile-drag-end', handleMobileDragEnd);
+      setHeroRowFrameDropActive(false);
+      heroFrameDropIntentRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroFrameDropEnabled, isPointInsideHeroRowDropArea, updateHeroFrameBounds]);
   const canMonsterTargetShieldSlot = (slotItem: EquipmentItem | null) =>
     Boolean(slotItem && slotItem.type === 'shield' && draggedCard?.type === 'monster');
   const equipmentSlot1MonsterTarget =

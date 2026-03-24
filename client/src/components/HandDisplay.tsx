@@ -148,7 +148,7 @@ export default function HandDisplay({
   const visibleHeight = cardHeight * visibleFraction;
   const hiddenHeight = cardHeight - visibleHeight;
   const handZoneHeight = visibleHeight + 24;
-  const horizontalStepFactor = isCompactHand ? 0.42 : 0.5;
+  const horizontalStepFactor = isCompactHand ? 0.65 : 0.82;
 
   layoutRef.current.hiddenHeight = hiddenHeight;
   layoutRef.current.disableAnimations = disableAnimations;

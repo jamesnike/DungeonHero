@@ -87,6 +87,13 @@ export const initMobileDrag = (
     
     // Update touch target for drop detection
     touchTarget = elementUnder;
+
+    // Broadcast position for global listeners (e.g. hero row highlight)
+    if (currentDragData) {
+      document.dispatchEvent(new CustomEvent('mobile-drag-move', {
+        detail: { ...currentDragData, clientX: touch.clientX, clientY: touch.clientY },
+      }));
+    }
   };
   
   const handleTouchEnd = (e: TouchEvent) => {
@@ -105,19 +112,26 @@ export const initMobileDrag = (
     if (touchTarget && currentDragData) {
       const touch = e.changedTouches[0];
       const dropPoint = lastTouchPoint ?? (touch ? { x: touch.clientX, y: touch.clientY } : null);
-      const detail: DragData = dropPoint
+      const detail: DragData & { _handled?: boolean } = dropPoint
         ? { ...currentDragData, clientX: dropPoint.x, clientY: dropPoint.y }
         : { ...currentDragData };
-      // Find the closest drop zone
-      const dropZone = touchTarget.closest('[data-drop-zone]') as HTMLElement;
-      
-      if (dropZone) {
-        // Create a custom drop event
-        const dropEvent = new CustomEvent('mobile-drop', {
-          detail,
-          bubbles: true
-        });
-        dropZone.dispatchEvent(dropEvent);
+
+      // Broadcast globally first so area-based drop targets (hero row) can intercept
+      const globalEvent = new CustomEvent('mobile-drag-end', {
+        detail,
+      });
+      document.dispatchEvent(globalEvent);
+
+      // If a global handler already processed this drop, skip local dispatch
+      if (!detail._handled) {
+        const dropZone = touchTarget.closest('[data-drop-zone]') as HTMLElement;
+        if (dropZone) {
+          const dropEvent = new CustomEvent('mobile-drop', {
+            detail,
+            bubbles: true
+          });
+          dropZone.dispatchEvent(dropEvent);
+        }
       }
     }
     

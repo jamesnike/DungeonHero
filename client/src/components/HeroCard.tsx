@@ -195,6 +195,7 @@ export default function HeroCard({
     heroSkillInfo.isUsed ||
     !heroSkillInfo.isReady;
   const showBleedOverlay = Boolean(bleedAnimation);
+  const showHealOverlay = Boolean(healing);
   const showWeaponSwing = Boolean(weaponSwingAnimation);
   const showShieldBlock = Boolean(shieldBlockAnimation);
   const heroSkillButtonClasses = heroSkillButtonDisabled
@@ -292,13 +293,20 @@ export default function HeroCard({
           <div className="absolute inset-[6px] border border-amber-300/30 pointer-events-none rounded-sm" />
 
           {/* Combat overlays */}
-          {(showBleedOverlay || showWeaponSwing || showShieldBlock) && (
+          {(showBleedOverlay || showHealOverlay || showWeaponSwing || showShieldBlock) && (
             <div className="combat-overlay">
               {showBleedOverlay && (
                 <>
                   <span className="combat-overlay__shape combat-overlay__shape--bleed" />
                   <span className="combat-overlay__shape combat-overlay__shape--bleed-drip" data-stagger="1" />
                   <span className="combat-overlay__shape combat-overlay__shape--bleed-ring" data-stagger="2" />
+                </>
+              )}
+              {showHealOverlay && (
+                <>
+                  <span className="combat-overlay__shape combat-overlay__shape--heal" />
+                  <span className="combat-overlay__shape combat-overlay__shape--heal-rise" data-stagger="1" />
+                  <span className="combat-overlay__shape combat-overlay__shape--heal-ring" data-stagger="2" />
                 </>
               )}
               {showWeaponSwing && (
