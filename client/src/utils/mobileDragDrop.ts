@@ -87,16 +87,6 @@ export const initMobileDrag = (
     
     // Update touch target for drop detection
     touchTarget = elementUnder;
-    
-    // Add hover effect to drop zones
-    const dropZones = document.querySelectorAll('[data-drop-zone]');
-    dropZones.forEach(zone => {
-      if (zone.contains(elementUnder)) {
-        zone.classList.add('ring-4', 'ring-primary');
-      } else {
-        zone.classList.remove('ring-4', 'ring-primary');
-      }
-    });
   };
   
   const handleTouchEnd = (e: TouchEvent) => {
@@ -110,12 +100,6 @@ export const initMobileDrag = (
     
     // Remove dragging class
     element.classList.remove('opacity-50');
-    
-    // Clear hover effects
-    const dropZones = document.querySelectorAll('[data-drop-zone]');
-    dropZones.forEach(zone => {
-      zone.classList.remove('ring-4', 'ring-primary');
-    });
     
     // Trigger drop if over a valid drop zone
     if (touchTarget && currentDragData) {
@@ -180,6 +164,7 @@ export const initMobileDrop = (
       return;
     }
     
+    e.stopPropagation();
     onDrop(dragData);
   };
   

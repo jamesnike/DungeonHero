@@ -97,6 +97,17 @@ export default function GameLogPanel({
   const prevEntryCountRef = useRef(entries.length);
 
   useEffect(() => {
+    if (minimized || typeof window === 'undefined') return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setMinimized(true);
+      }
+    };
+    window.addEventListener('pointerdown', handleClickOutside, true);
+    return () => window.removeEventListener('pointerdown', handleClickOutside, true);
+  }, [minimized]);
+
+  useEffect(() => {
     if (entries.length > prevEntryCountRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = 0;
     }
@@ -288,22 +299,16 @@ export default function GameLogPanel({
       <div ref={wrapperRef} className={wrapperClassName} style={wrapperStyle}>
         <Card
           ref={cardRef}
-          className={`relative z-10 w-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
+          className={`relative z-10 w-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel cursor-pointer${isDragging ? ' combat-panel--dragging' : ''}`}
           style={{ '--dh-combat-panel-scale': combinedScale.toString() } as CSSProperties}
+          onClick={() => setMinimized(false)}
         >
           <div
             className={`p-2 flex items-center gap-2 combat-panel__drag-handle${isDragging ? ' combat-panel__drag-handle--active' : ''}`}
             onPointerDown={handlePointerDown}
             aria-grabbed={isDragging}
           >
-            <button
-              type="button"
-              className="flex-shrink-0 rounded-md p-1 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
-              onClick={() => setMinimized(false)}
-              title="Expand log panel"
-            >
-              <Maximize2 className="combat-panel__icon" />
-            </button>
+            <Maximize2 className="combat-panel__icon text-muted-foreground flex-shrink-0" />
             <span className="combat-panel__summary text-muted-foreground truncate flex-1">
               Log ({entries.length})
             </span>
