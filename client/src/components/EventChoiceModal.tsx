@@ -54,10 +54,10 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
                     )}
                   </div>
                   {choice.hint && (
-                    <span className="text-xs text-muted-foreground">{choice.hint}</span>
+                    <span className="text-sm text-muted-foreground">{choice.hint}</span>
                   )}
                   {effectText && (
-                    <span className="text-xs text-muted-foreground">{effectText}</span>
+                    <span className="text-sm text-muted-foreground">{effectText}</span>
                   )}
                   {choice.diceTable && (
                     <div className="grid gap-1 text-[11px] text-muted-foreground">
