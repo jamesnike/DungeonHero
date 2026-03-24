@@ -758,7 +758,7 @@
 
   .dh-card__caption {
     font-size: calc(
-      0.55rem *
+      0.7rem *
       var(--dh-card-font-scale, 1) *
       var(--dh-card-instance-scale, 1)
     );

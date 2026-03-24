@@ -88,7 +88,7 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             {getCardIcon()}

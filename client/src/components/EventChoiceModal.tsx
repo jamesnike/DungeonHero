@@ -21,7 +21,7 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-pink-500" />
@@ -45,7 +45,7 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
               >
                 <div className="flex w-full flex-col gap-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold">{choice.text}</span>
+                    <span className="font-semibold text-[24px]">{choice.text}</span>
                     {choice.diceTable && (
                       <Badge variant="secondary" className="gap-1 text-[10px] uppercase">
                         <Dice1 className="h-3 w-3" />
@@ -54,22 +54,22 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
                     )}
                   </div>
                   {choice.hint && (
-                    <span className="text-sm text-muted-foreground">{choice.hint}</span>
+                    <span className="text-lg text-muted-foreground">{choice.hint}</span>
                   )}
                   {effectText && (
-                    <span className="text-sm text-muted-foreground">{effectText}</span>
+                    <span className="text-lg text-muted-foreground">{effectText}</span>
                   )}
                   {choice.diceTable && (
-                    <div className="grid gap-1 text-[11px] text-muted-foreground">
+                    <div className="grid gap-1 text-xs text-muted-foreground">
                       {choice.diceTable.map(entry => (
                         <div
                           key={entry.id}
                           className="flex items-center justify-between rounded border border-border px-2 py-1"
                         >
-                          <span className="font-mono text-foreground">
+                          <span className="font-mono text-sm text-foreground">
                             {formatRange(entry.range)}
                           </span>
-                          <span className="text-right text-xs text-foreground">{entry.label}</span>
+                          <span className="text-right text-sm text-foreground">{entry.label}</span>
                         </div>
                       ))}
                     </div>

@@ -19,7 +19,7 @@ interface MonsterRewardModalProps {
 export default function MonsterRewardModal({ open, monsterName, options, onSelect }: MonsterRewardModalProps) {
   return (
     <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-400" />

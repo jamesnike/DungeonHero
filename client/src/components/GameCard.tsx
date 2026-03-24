@@ -512,7 +512,7 @@ const amuletEffectText =
             /* ========== EVENT / MAGIC: full-height text layout with decorative edges ========== */
             <div className={`h-full flex flex-col relative overflow-hidden ${
               isEventCard
-                ? 'bg-violet-900/50'
+                ? 'bg-violet-900/30'
                 : card.type === 'hero-magic'
                   ? 'bg-rose-900/40'
                   : 'bg-cyan-900/40'
@@ -532,7 +532,7 @@ const amuletEffectText =
               {/* Type label banner at top */}
               <div className={`relative z-10 flex items-center justify-center gap-1.5 py-1.5 px-2 ${
                 isEventCard
-                  ? 'bg-violet-800/40'
+                  ? 'bg-violet-800/25'
                   : card.type === 'hero-magic'
                     ? 'bg-rose-800/35'
                     : 'bg-cyan-800/35'
@@ -607,7 +607,7 @@ const amuletEffectText =
               }`} />
               <div className={`relative z-10 flex items-center justify-center py-1 ${
                 isEventCard
-                  ? 'bg-violet-800/30'
+                  ? 'bg-violet-800/20'
                   : card.type === 'hero-magic'
                     ? 'bg-rose-800/25'
                     : 'bg-cyan-800/25'

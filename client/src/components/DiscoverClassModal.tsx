@@ -22,7 +22,7 @@ export default function DiscoverClassModal({
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-4xl">
+      <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{headerTitle}</DialogTitle>
           <DialogDescription>{headerDescription}</DialogDescription>
