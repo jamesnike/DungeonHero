@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { type EventEffectExpression, type EventRequirement, type GameCardData } from "./GameCard";
-import { calculateMonsterRage, getMonsterRageRule } from "@/lib/monsterRage";
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2 } from "lucide-react";
+import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade } from "@/lib/monsterRage";
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle } from "lucide-react";
 
 type MonsterRewardPreview = {
   id: string;
@@ -146,27 +146,66 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
           {/* Detailed Stats & Description */}
           <div className="space-y-3 text-sm">
             {/* Monster Details */}
-            {card.type === 'monster' && (
-              <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
-                <div className="flex items-center gap-2">
-                  <Sword className="w-4 h-4 text-amber-500" />
-                  <span>Attack: <span className="font-bold">{card.attack ?? card.value}</span></span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Heart className="w-4 h-4 text-red-500" />
-                  <span>HP: <span className="font-bold">{card.hp ?? card.value}/{card.maxHp ?? card.value}</span></span>
-                </div>
-                {card.hpLayers && card.hpLayers > 1 && (
-                  <div className="col-span-2 text-muted-foreground text-xs">
-                    Has {card.hpLayers} HP layers. Current layer: {card.currentLayer}
+            {card.type === 'monster' && (() => {
+              const mType = card.monsterType ?? card.name;
+              const upgrades = getMonsterUpgrades(mType);
+              const activeUpgrade = rageTurn ? getActiveUpgrade(mType, rageTurn) : null;
+              const hasBonus = activeUpgrade && (activeUpgrade.attackBonus > 0 || activeUpgrade.hpBonus > 0);
+              return (
+                <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
+                  <div className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 text-amber-500" />
+                    <span>Attack: <span className="font-bold">{card.attack ?? card.value}</span>
+                      {hasBonus && card.baseAttack != null && (
+                        <span className="text-red-500 text-xs ml-1">(+{activeUpgrade!.attackBonus})</span>
+                      )}
+                    </span>
                   </div>
-                )}
-                {rageRule && rageTurn && rageDisplayValue !== null && (
-                  <div className="col-span-2 text-muted-foreground text-xs leading-relaxed">
-                    <div>怒气 = 初始 {rageRule.base} + floor(回合 / {rageRule.interval})</div>
-                    <div>当前回合 {rageTurn} ⇒ 怒气 {rageDisplayValue}</div>
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 text-red-500" />
+                    <span>HP: <span className="font-bold">{card.hp ?? card.value}/{card.maxHp ?? card.value}</span>
+                      {hasBonus && card.baseHp != null && (
+                        <span className="text-red-500 text-xs ml-1">(+{activeUpgrade!.hpBonus})</span>
+                      )}
+                    </span>
                   </div>
-                )}
+                  {card.hpLayers && card.hpLayers > 1 && (
+                    <div className="col-span-2 text-muted-foreground text-xs">
+                      Has {card.hpLayers} HP layers. Current layer: {card.currentLayer}
+                    </div>
+                  )}
+                  {rageRule && rageTurn && rageDisplayValue !== null && (
+                    <div className="col-span-2 text-muted-foreground text-xs leading-relaxed">
+                      <div>怒气 = 初始 {rageRule.base} + floor(waterfall / {rageRule.interval})</div>
+                      <div>当前 waterfall {rageTurn} ⇒ 怒气 {rageDisplayValue}</div>
+                    </div>
+                  )}
+                  {upgrades.length > 0 && (
+                    <div className="col-span-2 mt-1 space-y-1">
+                      <div className="text-xs font-semibold text-muted-foreground">升级阶段</div>
+                      {upgrades.map((u, i) => {
+                        const reached = rageTurn != null && rageTurn >= u.waterfallLevel;
+                        return (
+                          <div key={i} className={`text-xs flex items-center gap-2 ${reached ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
+                            <span>Waterfall ≥ {u.waterfallLevel}:</span>
+                            <span>攻击 +{u.attackBonus}, 血量 +{u.hpBonus}</span>
+                            {reached && <span className="text-[10px]">✓ 已激活</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Monster Waterfall Effect */}
+            {card.type === 'monster' && card.waterfallEffect && (
+              <div className="bg-orange-500/10 p-3 rounded-md border border-orange-500/20">
+                <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span className="font-bold text-sm">{card.waterfallEffect.description}</span>
+                </div>
               </div>
             )}
 
@@ -200,8 +239,16 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
             {card.type === 'potion' && (
               <div className="bg-green-500/10 p-3 rounded-md border border-green-500/20">
                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
-                   <Heart className="w-4 h-4" />
-                   <span className="font-bold">Restores {card.value} HP</span>
+                   {(card as any).potionEffect?.startsWith('heal') ? (
+                     <Heart className="w-4 h-4 shrink-0" />
+                   ) : (
+                     <Zap className="w-4 h-4 shrink-0" />
+                   )}
+                   <span className="font-bold">
+                     {(card as any).potionEffect?.startsWith('heal')
+                       ? `Restores ${card.value} HP`
+                       : card.description || '使用后触发效果'}
+                   </span>
                  </div>
               </div>
             )}
@@ -286,7 +333,8 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
               card.type !== 'magic' &&
               card.type !== 'hero-magic' &&
               card.type !== 'event' &&
-              card.type !== 'amulet' && (
+              card.type !== 'amulet' &&
+              card.type !== 'potion' && (
               <div className="italic text-muted-foreground border-t pt-2 mt-2">
                 "{card.description}"
               </div>

@@ -115,6 +115,7 @@ import dragonImage from '@assets/generated_images/cute_chibi_dragon_monster.png'
 import skeletonImage from '@assets/generated_images/cute_chibi_skeleton_monster.png';
 import goblinImage from '@assets/generated_images/cute_chibi_goblin_monster.png';
 import ogreImage from '@assets/generated_images/cute_chibi_ogre_monster.png';
+import wraithImage from '@assets/generated_images/cute_chibi_wraith_monster.png';
 
 // Cute cartoon weapon images
 import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
@@ -126,13 +127,23 @@ import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
 import ironShieldImage from '@assets/generated_images/cute_iron_shield.png';
 import heavyShieldImage from '@assets/generated_images/simple_heavy_shield.png';
 
-// Cute cartoon potion
+// Potion images
 import potionImage from '@assets/generated_images/cute_cartoon_healing_potion.png';
+import potionConcentratedHealImage from '@assets/generated_images/cute_potion_concentrated_heal.png';
+import potionWeaponRepairImage from '@assets/generated_images/cute_potion_weapon_repair.png';
+import potionEquipmentRepairImage from '@assets/generated_images/cute_potion_equipment_repair.png';
+import potionBackpackDrawImage from '@assets/generated_images/cute_potion_backpack_draw.png';
+import potionDiscoverImage from '@assets/generated_images/cute_potion_discover.png';
+import potionTwilightImage from '@assets/generated_images/cute_potion_twilight.png';
+import potionSpellDamageImage from '@assets/generated_images/cute_potion_spell_damage.png';
 
 // Amulet images
 import lifeAmuletImage from '@assets/generated_images/chibi_life_amulet.png';
 import strengthAmuletImage from '@assets/generated_images/chibi_strength_amulet.png';
 import guardianAmuletImage from '@assets/generated_images/chibi_guardian_amulet.png';
+import balanceAmuletImage from '@assets/generated_images/chibi_balance_amulet.png';
+import lifestealAmuletImage from '@assets/generated_images/chibi_lifesteal_amulet.png';
+import flashAmuletImage from '@assets/generated_images/chibi_flash_amulet.png';
 
 // Skill and Event images
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
@@ -233,6 +244,8 @@ const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
   amulet: 6,
 };
 const SHOP_LEVEL_DISCOUNT_STEP = 0.1;
+const SHOP_HEAL_COST = 5;
+const SHOP_HEAL_AMOUNT = 5;
 const COMBAT_PANEL_DEFAULT_WIDTH = 170;
 const COMBAT_PANEL_DEFAULT_HEIGHT = 320;
 const COMBAT_PANEL_EDGE_PADDING = 12;
@@ -445,6 +458,7 @@ function createDeck(): GameCardData[] {
       Skeleton: ['Cursed', 'Hollow', 'Grim', 'Wailing', 'Pale', 'Rotting', 'Vengeful', 'Shattered', 'Forsaken', 'Silent', 'Risen', 'Ghastly'],
       Goblin: ['Sly', 'Wicked', 'Cunning', 'Savage', 'Sneaky', 'Vile', 'Rabid', 'Twisted', 'Crafty', 'Foul', 'Rogue', 'Mad'],
       Ogre: ['Brutal', 'Stone', 'Hulking', 'Iron', 'Scarred', 'Raging', 'Titan', 'Gnarled', 'Vicious', 'Dusk', 'Wrathful', 'Blight'],
+      Wraith: ['Phantom', 'Spectral', 'Haunting', 'Ethereal', 'Abyssal', 'Twilight', 'Hollow', 'Veiled', 'Mourning', 'Sinister', 'Fading', 'Drifting'],
     };
     const usedPrefixes: Record<string, Set<number>> = {};
 
@@ -467,33 +481,45 @@ function createDeck(): GameCardData[] {
         image: dragonImage, 
         minAttack: 4, maxAttack: 6,
         minHp: 7, maxHp: 10,
-        minFury: 3, maxFury: 4
+        minFury: 3, maxFury: 4,
+        waterfallEffect: { type: 'turnBoost' as const, amount: 6, description: '被挤出时：waterfall 次数 +6（影响后续怪物血层）' },
       },
       { 
         name: 'Skeleton', 
         image: skeletonImage, 
         minAttack: 5, maxAttack: 7,
         minHp: 1, maxHp: 3,
-        minFury: 2, maxFury: 4
+        minFury: 2, maxFury: 4,
+        waterfallEffect: { type: 'damage' as const, amount: 8, description: '被挤出时：对英雄造成 8 点伤害' },
       },
       { 
         name: 'Goblin', 
         image: goblinImage, 
         minAttack: 2, maxAttack: 3,
         minHp: 3, maxHp: 4,
-        minFury: 1, maxFury: 4
+        minFury: 1, maxFury: 4,
+        waterfallEffect: { type: 'goldLoss' as const, amount: 6, description: '被挤出时：失去 6 金币' },
       },
       { 
         name: 'Ogre', 
         image: ogreImage, 
         minAttack: 3, maxAttack: 4,
         minHp: 5, maxHp: 7,
-        minFury: 2, maxFury: 4
+        minFury: 2, maxFury: 4,
+        waterfallEffect: { type: 'bonusDecay' as const, amount: 1, description: '被挤出时：所有永久伤害/护甲加成 -1' },
+      },
+      { 
+        name: 'Wraith', 
+        image: wraithImage, 
+        minAttack: 3, maxAttack: 5,
+        minHp: 4, maxHp: 6,
+        minFury: 2, maxFury: 3,
+        waterfallEffect: { type: 'returnToDeck' as const, amount: 0, description: '被挤出时：不进入坟场，回到牌堆' },
       },
     ];
 
-    // 12 monsters total for lighter encounters
-    for (let i = 0; i < 12; i++) {
+    // 15 monsters total (3 per type)
+    for (let i = 0; i < 15; i++) {
       const monsterType = monsterTypes[i % monsterTypes.length];
       const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
       const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
@@ -508,10 +534,13 @@ function createDeck(): GameCardData[] {
         attack: attack,
         hp: hp,
         maxHp: hp,
+        baseAttack: attack,
+        baseHp: hp,
         fury: fury,
         hpLayers: fury,
         currentLayer: fury,
         image: monsterType.image,
+        waterfallEffect: monsterType.waterfallEffect,
       });
     }
 
@@ -578,7 +607,7 @@ function createDeck(): GameCardData[] {
       type: 'potion',
       name: '浓缩治疗药水',
       value: 7,
-      image: potionImage,
+      image: potionConcentratedHealImage,
       potionEffect: 'heal-7',
       description: '立即回复7点生命。',
     },
@@ -586,7 +615,7 @@ function createDeck(): GameCardData[] {
       type: 'potion',
       name: '武器修复剂',
       value: 6,
-      image: potionImage,
+      image: potionWeaponRepairImage,
       potionEffect: 'repair-weapon-2',
       description: '选择一个装备的武器，恢复2点耐久。',
     },
@@ -594,7 +623,7 @@ function createDeck(): GameCardData[] {
       type: 'potion',
       name: '高级修复剂',
       value: 7,
-      image: potionImage,
+      image: potionEquipmentRepairImage,
       potionEffect: 'repair-equipment-2',
       description: '选择一个武器或护盾，恢复2点耐久。',
     },
@@ -602,7 +631,7 @@ function createDeck(): GameCardData[] {
       type: 'potion',
       name: '背包觉醒药',
       value: 5,
-      image: potionImage,
+      image: potionBackpackDrawImage,
       potionEffect: 'draw-backpack-3',
       description: '从背包顶部抽最多3张牌到手牌。',
     },
@@ -610,7 +639,7 @@ function createDeck(): GameCardData[] {
       type: 'potion',
       name: '洞察药剂',
       value: 6,
-      image: potionImage,
+      image: potionDiscoverImage,
       potionEffect: 'discover-class',
       description: '发现一张职业卡牌。',
     },
@@ -618,7 +647,7 @@ function createDeck(): GameCardData[] {
       type: 'potion',
       name: '暮光翻转药剂',
       value: 3,
-      image: potionImage,
+      image: potionTwilightImage,
       description: '立即治疗 3 点生命，随后翻到另一面。',
       flipTarget: {
         toCard: {
@@ -661,7 +690,7 @@ function createDeck(): GameCardData[] {
       type: 'amulet',
       name: 'Balance Amulet',
       value: 5,
-      image: guardianAmuletImage,
+      image: balanceAmuletImage,
       description: '左边Equipment攻击+3，右边Equipment护甲+3',
       amuletEffect: 'balance',
     },
@@ -669,7 +698,7 @@ function createDeck(): GameCardData[] {
       type: 'amulet',
       name: 'Life Amulet',
       value: 5,
-      image: lifeAmuletImage,
+      image: lifestealAmuletImage,
       description: '攻击时候，超出对方血量的伤害，为自己回血',
       amuletEffect: 'life',
     },
@@ -685,7 +714,7 @@ function createDeck(): GameCardData[] {
       type: 'amulet',
       name: 'Flash Amulet',
       value: 5,
-      image: strengthAmuletImage,
+      image: flashAmuletImage,
       description: '所有Equipment攻击力-3，攻击两次',
       amuletEffect: 'flash',
     },
@@ -971,7 +1000,7 @@ function createDeck(): GameCardData[] {
         type: 'potion',
         name: '纸灰药剂',
         value: 0,
-        image: potionImage,
+        image: potionSpellDamageImage,
         description: '使用时永久让法术伤害 +1。',
         potionEffect: 'perm-spell-damage',
       },
@@ -1221,6 +1250,7 @@ export default function GameBoard() {
   const [shopOfferings, setShopOfferings] = useState<ShopOffering[]>([]);
   const [shopSourceEvent, setShopSourceEvent] = useState<GameCardData | null>(null);
   const [shopDeleteUsed, setShopDeleteUsed] = useState(false);
+  const [shopHealUsed, setShopHealUsed] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [cardActionContext, setCardActionContext] = useState<CardActionContext | null>(null);
   const cardActionResolverRef = useRef<(() => void) | null>(null);
@@ -1485,9 +1515,11 @@ export default function GameBoard() {
   const [heroRowFrameDropActive, setHeroRowFrameDropActive] = useState(false);
   const classDeckFlightsRef = useRef<ClassDeckFlight[]>([]);
   const classDeckFlightAnimationRef = useRef<number | null>(null);
+  const classDeckFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const [backpackHandFlights, setBackpackHandFlights] = useState<BackpackHandFlight[]>([]);
   const backpackHandFlightsRef = useRef<BackpackHandFlight[]>([]);
   const backpackHandFlightAnimationRef = useRef<number | null>(null);
+  const backpackFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const backpackHandFlightFallbacksRef = useRef<Map<string, number>>(new Map());
   const pendingHandDeliveryGuardsRef = useRef<
     Map<string, { card: GameCardData; timeoutId: number | null }>
@@ -1524,6 +1556,7 @@ export default function GameBoard() {
   // Track grid card size for synchronization with hand
   const gridCellRef = useRef<HTMLDivElement | null>(null);
   const [gridCardSize, setGridCardSize] = useState<{width: number, height: number} | undefined>(undefined);
+  const gridCardSizeRef = useRef(gridCardSize);
   const rageStripWidth = useMemo(() => {
     if (!gridCardSize?.width) {
       return 14;
@@ -1538,6 +1571,7 @@ export default function GameBoard() {
     const scale = gridCardSize.width / baseWidth;
     return clamp(scale, 0.65, 1.3);
   }, [gridCardSize]);
+  useEffect(() => { gridCardSizeRef.current = gridCardSize; }, [gridCardSize]);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.style.setProperty('--dh-rage-strip-width', `${rageStripWidth}px`);
@@ -3871,6 +3905,7 @@ export default function GameBoard() {
       setShopOfferings(offerings);
       setShopSourceEvent(eventCard);
       setShopDeleteUsed(false);
+      setShopHealUsed(false);
       setDeleteModalOpen(false);
       setShopModalOpen(true);
       setEventModalOpen(false);
@@ -3888,25 +3923,50 @@ export default function GameBoard() {
     }
 
     let hasActive = false;
-    const nextFlights = flights
-      .map(flight => {
-        const elapsed = timestamp - flight.startTime;
-        if (elapsed < 0) {
-          hasActive = true;
-          return { ...flight, progress: 0 };
-        }
-        const progress = clamp(elapsed / flight.duration);
-        if (progress < 1) {
-          hasActive = true;
-        }
-        return { ...flight, progress };
-      })
-      .filter(flight => flight.progress < 1);
+    let hasCompleted = false;
+    const cardW = gridCardSizeRef.current?.width ?? 140;
+    const cardH = gridCardSizeRef.current?.height ?? 210;
 
-    classDeckFlightsRef.current = nextFlights;
-    setClassDeckFlights(nextFlights);
+    for (let i = 0; i < flights.length; i++) {
+      const flight = flights[i];
+      const elapsed = timestamp - flight.startTime;
+      let progress: number;
+      if (elapsed < 0) {
+        hasActive = true;
+        progress = 0;
+      } else {
+        progress = clamp(elapsed / flight.duration);
+      }
+      flight.progress = progress;
+      if (progress < 1) {
+        hasActive = true;
+      } else {
+        hasCompleted = true;
+      }
 
-    if (hasActive && nextFlights.length > 0) {
+      const el = classDeckFlightElementMapRef.current.get(flight.id);
+      if (el) {
+        const eased = easeInOutCubic(clamp(progress));
+        const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
+        const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
+        const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
+        const y = linearY - arcOffset;
+        const scale = 0.85 + eased * 0.2;
+        const fadeIn = eased < 0.12 ? clamp(eased / 0.12) : 1;
+        const fadeOut = eased > 0.88 ? clamp(1 - (eased - 0.88) / 0.12) : 1;
+        const rotate = Math.sin(eased * Math.PI * 1.2) * 5;
+        el.style.transform = `translate(${x - cardW / 2}px, ${y - cardH / 2}px) scale(${scale}) rotate(${rotate}deg)`;
+        el.style.opacity = String(fadeIn * fadeOut);
+      }
+    }
+
+    if (hasCompleted) {
+      const remaining = flights.filter(f => f.progress < 1);
+      classDeckFlightsRef.current = remaining;
+      setClassDeckFlights(remaining);
+    }
+
+    if (hasActive && classDeckFlightsRef.current.length > 0) {
       classDeckFlightAnimationRef.current = window.requestAnimationFrame(updateClassDeckFlightAnimation);
     } else {
       classDeckFlightAnimationRef.current = null;
@@ -4053,37 +4113,56 @@ export default function GameBoard() {
     let hasActive = false;
     const completedCards: GameCardData[] = [];
     const nearCompleteCards: GameCardData[] = [];
+    let hasCompleted = false;
+    const cardW = gridCardSizeRef.current?.width ?? 140;
+    const cardH = gridCardSizeRef.current?.height ?? 210;
 
-    const nextFlights = flights
-      .map(flight => {
-        const elapsed = timestamp - flight.startTime;
-        if (elapsed < 0) {
-          hasActive = true;
-          return { ...flight, progress: 0 };
+    for (let i = 0; i < flights.length; i++) {
+      const flight = flights[i];
+      const elapsed = timestamp - flight.startTime;
+      let progress: number;
+      if (elapsed < 0) {
+        hasActive = true;
+        progress = 0;
+      } else {
+        progress = clamp(elapsed / flight.duration);
+      }
+      flight.progress = progress;
+      if (progress < 1) {
+        hasActive = true;
+        if (!flight.delivered && progress >= 0.85) {
+          nearCompleteCards.push(flight.card);
+          flight.delivered = true;
         }
-        const progress = clamp(elapsed / flight.duration);
-        if (progress < 1) {
-          hasActive = true;
-          if (!flight.delivered && progress >= 0.85) {
-            nearCompleteCards.push(flight.card);
-            return { ...flight, progress, delivered: true };
-          }
-          return { ...flight, progress };
+      } else {
+        if (!flight.delivered) {
+          completedCards.push(flight.card);
+          flight.delivered = true;
         }
-        completedCards.push(flight.card);
-        return { ...flight, progress: 1, delivered: true };
-      })
-      .filter(flight => flight.progress < 1);
+        hasCompleted = true;
+      }
 
-    backpackHandFlightsRef.current = nextFlights;
-    setBackpackHandFlights(nextFlights);
+      const el = backpackFlightElementMapRef.current.get(flight.id);
+      if (el) {
+        const eased = easeInOutCubic(clamp(progress));
+        const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
+        const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
+        const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
+        const y = linearY - arcOffset;
+        const scale = 0.9 + eased * 0.15;
+        const fadeIn = eased < 0.1 ? clamp(eased / 0.1) : 1;
+        const fadeOut = eased > 0.85 ? clamp(1 - (eased - 0.85) / 0.15) : 1;
+        el.style.transform = `translate(${x - cardW / 2}px, ${y - cardH / 2}px) scale(${scale})`;
+        el.style.opacity = String(fadeIn * fadeOut);
+      }
+    }
 
     const cardsToDeliver = [...nearCompleteCards, ...completedCards];
     if (cardsToDeliver.length) {
       logBackpackDraw('flight-complete', {
         completedCount: completedCards.length,
         nearCompleteCount: nearCompleteCards.length,
-        remainingFlights: nextFlights.length,
+        remainingFlights: flights.length,
       });
       cardsToDeliver.forEach(card => {
         clearBackpackHandFallback(card.id);
@@ -4091,7 +4170,13 @@ export default function GameBoard() {
       });
     }
 
-    if (hasActive && nextFlights.length > 0) {
+    if (hasCompleted) {
+      const remaining = flights.filter(f => f.progress < 1);
+      backpackHandFlightsRef.current = remaining;
+      setBackpackHandFlights(remaining);
+    }
+
+    if (hasActive && backpackHandFlightsRef.current.length > 0) {
       backpackHandFlightAnimationRef.current = window.requestAnimationFrame(updateBackpackHandFlightAnimation);
     } else {
       backpackHandFlightAnimationRef.current = null;
@@ -4352,6 +4437,7 @@ export default function GameBoard() {
     }
     clearAllBackpackHandFallbacks();
     backpackHandFlightsRef.current = [];
+    backpackFlightElementMapRef.current.clear();
     setBackpackHandFlights([]);
   }, [gameOver, clearAllBackpackHandFallbacks]);
 
@@ -4455,6 +4541,7 @@ export default function GameBoard() {
     setExtraAttackCharges(0);
     setBackpackHandFlights([]);
     backpackHandFlightsRef.current = [];
+    backpackFlightElementMapRef.current.clear();
     if (typeof window !== 'undefined' && backpackHandFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
       backpackHandFlightAnimationRef.current = null;
@@ -4667,12 +4754,14 @@ export default function GameBoard() {
     setWaterfallAnimation(initialWaterfallAnimationState);
     setClassDeckFlights([]);
     classDeckFlightsRef.current = [];
+    classDeckFlightElementMapRef.current.clear();
     if (classDeckFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(classDeckFlightAnimationRef.current);
       classDeckFlightAnimationRef.current = null;
     }
     setBackpackHandFlights([]);
     backpackHandFlightsRef.current = [];
+    backpackFlightElementMapRef.current.clear();
     if (backpackHandFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
       backpackHandFlightAnimationRef.current = null;
@@ -5270,7 +5359,50 @@ export default function GameBoard() {
     }
 
     if (plan.discardCard) {
-      discardCardToGraveyard(plan.discardCard);
+      const wfx = plan.discardCard.waterfallEffect;
+      if (wfx && plan.discardCard.type === 'monster') {
+        const monsterName = plan.discardCard.name;
+        switch (wfx.type) {
+          case 'returnToDeck':
+            setRemainingDeck(prev => {
+              const insertIdx = Math.floor(Math.random() * (prev.length + 1));
+              const next = [...prev];
+              next.splice(insertIdx, 0, plan.discardCard!);
+              return next;
+            });
+            setHeroSkillBanner(`${monsterName} 化为幽影，回到了牌堆。`);
+            break;
+          case 'bonusDecay':
+            (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
+              (['damage', 'shield'] as (keyof SlotPermanentBonus)[]).forEach(bonusType => {
+                setEquipmentSlotBonus(slotId, bonusType, v => v - wfx.amount);
+              });
+            });
+            setHeroSkillBanner(`${monsterName} 的诅咒削弱了你的装备加成！`);
+            addToGraveyard(plan.discardCard);
+            break;
+          case 'goldLoss':
+            setGold(prev => Math.max(0, prev - wfx.amount));
+            setHeroSkillBanner(`${monsterName} 逃跑时偷走了 ${wfx.amount} 金币！`);
+            addToGraveyard(plan.discardCard);
+            break;
+          case 'damage':
+            applyDamage(wfx.amount);
+            setHeroSkillBanner(`${monsterName} 临死反扑，造成 ${wfx.amount} 点伤害！`);
+            addToGraveyard(plan.discardCard);
+            break;
+          case 'turnBoost':
+            setTurnCount(prev => prev + wfx.amount);
+            setHeroSkillBanner(`${monsterName} 的龙息加速了 waterfall 进程 +${wfx.amount}！`);
+            addToGraveyard(plan.discardCard);
+            break;
+          default:
+            discardCardToGraveyard(plan.discardCard);
+            break;
+        }
+      } else {
+        discardCardToGraveyard(plan.discardCard);
+      }
     }
 
     logWaterfall('discard-complete', {
@@ -6058,6 +6190,14 @@ export default function GameBoard() {
     setDeleteModalOpen(true);
   }, [deletableCardCount, shopDeleteUsed]);
 
+  const handleShopHealRequest = useCallback(() => {
+    if (shopHealUsed || gold < SHOP_HEAL_COST || hp >= maxHp) return;
+    setGold(prev => prev - SHOP_HEAL_COST);
+    healHero(SHOP_HEAL_AMOUNT);
+    setShopHealUsed(true);
+    setHeroSkillBanner(`花费 ${SHOP_HEAL_COST} 金币恢复了 ${SHOP_HEAL_AMOUNT} 点生命。`);
+  }, [gold, healHero, hp, maxHp, setHeroSkillBanner, shopHealUsed]);
+
   const wasDraggedFromHand = (cardId: string) =>
     draggedCardSource === 'hand' && draggedCard?.id === cardId;
 
@@ -6550,6 +6690,7 @@ export default function GameBoard() {
         setShopOfferings(offerings);
         setShopSourceEvent(card);
         setShopDeleteUsed(false);
+        setShopHealUsed(false);
         setDeleteModalOpen(false);
         setShopModalOpen(true);
         banner = '混沌骰运开启了一家临时商店！';
@@ -6901,6 +7042,15 @@ export default function GameBoard() {
             prompt: '选择一张地城卡牌，洗回牌堆。'
           });
           setHeroSkillBanner('选择一张地城卡牌，洗回牌堆。');
+          return;
+        }
+        case 'potion-flip-twilight': {
+          setPermanentSpellDamageBonus(prev => prev + 1);
+          const drawn = drawFromBackpackToHand();
+          const parts: string[] = [];
+          parts.push('法术伤害永久 +1。');
+          parts.push(drawn ? `额外抽了 1 张牌（${drawn.name}）。` : '背包为空或手牌已满，未能额外抽牌。');
+          finalizeMagicCard(card, { banner: parts.join(' ') });
           return;
         }
         default: {
@@ -9355,10 +9505,9 @@ export default function GameBoard() {
         <GameHeader 
           hp={hp} 
           maxHp={maxHp} 
-          gold={gold} 
+          gold={gold}
           cardsRemaining={getRemainingCards()}
           turnCount={turnCount}
-          monstersDefeated={monstersDefeated}
           shopLevel={shopLevel}
           onDeckClick={() => setDeckViewerOpen(true)}
           onNewGame={handleNewGame}
@@ -9620,27 +9769,20 @@ export default function GameBoard() {
                 {classDeckFlights.map(flight => {
                   const cardWidth = gridCardSize?.width ?? 140;
                   const cardHeight = gridCardSize?.height ?? 210;
-                  const eased = easeInOutCubic(clamp(flight.progress));
-                  const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
-                  const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
-                  const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
-                  const y = linearY - arcOffset;
-                  const translateX = x - cardWidth / 2;
-                  const translateY = y - cardHeight / 2;
-                  const scale = 0.85 + eased * 0.2;
-                  const fadeIn = eased < 0.12 ? clamp(eased / 0.12) : 1;
-                  const fadeOut = eased > 0.88 ? clamp(1 - (eased - 0.88) / 0.12) : 1;
-                  const opacity = fadeIn * fadeOut;
-                  const rotate = Math.sin(eased * Math.PI * 1.2) * 5;
                   return (
                     <div
                       key={flight.id}
+                      ref={el => {
+                        if (el) classDeckFlightElementMapRef.current.set(flight.id, el);
+                        else classDeckFlightElementMapRef.current.delete(flight.id);
+                      }}
                       className="absolute class-flight-card"
                       style={{
                         width: cardWidth,
                         height: cardHeight,
-                        opacity,
-                        transform: `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotate}deg)`,
+                        opacity: 0,
+                        willChange: 'transform, opacity',
+                        contain: 'layout style',
                       }}
                     >
                       <GameCard card={flight.card} disableInteractions />
@@ -9765,26 +9907,20 @@ export default function GameBoard() {
           {backpackHandFlights.map(flight => {
             const cardWidth = gridCardSize?.width ?? 140;
             const cardHeight = gridCardSize?.height ?? 210;
-            const eased = easeInOutCubic(clamp(flight.progress));
-            const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
-            const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
-            const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
-            const y = linearY - arcOffset;
-            const translateX = x - cardWidth / 2;
-            const translateY = y - cardHeight / 2;
-            const scale = 0.9 + eased * 0.15;
-            const fadeIn = eased < 0.1 ? clamp(eased / 0.1) : 1;
-            const fadeOut = eased > 0.85 ? clamp(1 - (eased - 0.85) / 0.15) : 1;
-            const opacity = fadeIn * fadeOut;
             return (
               <div
                 key={flight.id}
+                ref={el => {
+                  if (el) backpackFlightElementMapRef.current.set(flight.id, el);
+                  else backpackFlightElementMapRef.current.delete(flight.id);
+                }}
                 className="absolute"
                 style={{
                   width: cardWidth,
                   height: cardHeight,
-                  opacity,
-                  transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
+                  opacity: 0,
+                  willChange: 'transform, opacity',
+                  contain: 'layout style',
                 }}
               >
                 <GameCard card={flight.card} disableInteractions />

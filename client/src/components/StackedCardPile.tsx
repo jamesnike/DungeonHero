@@ -51,7 +51,7 @@ export default function StackedCardPile({
   label,
 }: StackedCardPileProps) {
   const hasCards = count > 0;
-  const layersToRender = hasCards ? Math.min(count, maxLayers) : 1;
+  const layersToRender = hasCards ? Math.min(count, maxLayers) : 0;
   const palette = paletteMap[variant];
 
   const layerConfigs = useMemo(() => {
@@ -71,12 +71,14 @@ export default function StackedCardPile({
 
   return (
     <div className={cn('relative h-full w-full overflow-visible', className)}>
-      <motion.div
-        className="absolute inset-x-8 bottom-1 h-6 rounded-full blur-xl"
-        style={{ backgroundColor: palette.shadow }}
-        animate={{ opacity: hasCards ? 1 : 0.35, scale: hasCards ? 1 : 0.8 }}
-        transition={{ duration: 0.6 }}
-      />
+      {hasCards && (
+        <motion.div
+          className="absolute inset-x-8 bottom-1 h-6 rounded-full blur-xl"
+          style={{ backgroundColor: palette.shadow }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6 }}
+        />
+      )}
       {layerConfigs.map((config, index) => (
         <motion.div
           key={config.id}

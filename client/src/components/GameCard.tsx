@@ -130,6 +130,9 @@ export interface GameCardData {
   currentLayer?: number; // Deprecated: kept for compatibility, mapped from fury
   rageTurn?: number; // Turn number used to calculate rage
   layerShift?: number; // Visual shift amount (0-4)
+  waterfallEffect?: { type: string; amount: number; description: string };
+  baseAttack?: number; // Original attack before waterfall upgrades
+  baseHp?: number; // Original HP before waterfall upgrades
   // Equipment durability
   durability?: number; // Current durability for weapons/shields
   maxDurability?: number; // Maximum durability for weapons/shields
@@ -357,7 +360,7 @@ function GameCardInner({
       case 'hero-magic':
         return <Wand2 className="dh-card__icon text-rose-400" />;
       case 'event':
-        return <Scroll className="dh-card__icon text-violet-500" />;
+        return <Scroll className="dh-card__icon text-violet-900" />;
     }
   };
 
@@ -377,7 +380,7 @@ function GameCardInner({
       case 'potion':
         return 'border-green-900';
       case 'amulet':
-        return 'border-purple-900';
+        return 'border-amber-700';
       case 'magic':
         return 'border-cyan-900';
       case 'hero-magic':
@@ -427,29 +430,25 @@ const amuletEffectText =
   const showCombatOverlay = showBleedOverlay || showWeaponSwing || showShieldBlock;
   const isEventCard = card.type === 'event';
   const isMagicCard = isMagicLikeCard;
-  const cardImageHeightClass = isEventCard ? 'h-[52%]' : isMagicCard ? 'h-[56%]' : 'h-[75%]';
-  const isCompactImageType = isMagicCard || isEventCard;
+  const isTextOnlyCard = isEventCard || isMagicCard;
+  const isThemedImageCard = card.type === 'amulet' || card.type === 'potion';
+  const cardImageHeightClass = isThemedImageCard ? 'h-[60%]' : 'h-[75%]';
   const hasFlipTarget = Boolean(card.flipTarget);
   const cardImageWrapperClassName = [
     'relative',
     cardImageHeightClass,
-    'bg-gradient-to-b from-muted to-card overflow-hidden transition-all',
-    isCompactImageType
-      ? 'flex items-center justify-center pt-1 pb-1.5 transform translate-y-0.5'
-      : '',
+    'overflow-hidden transition-all flex items-center justify-center',
+    isThemedImageCard
+      ? card.type === 'amulet'
+        ? 'bg-amber-200/40'
+        : 'bg-emerald-300/40'
+      : 'bg-gradient-to-b from-muted to-card',
   ]
     .filter(Boolean)
     .join(' ');
-  const cardImageClassName = [
-    'select-none transition-all',
-    isEventCard
-      ? 'w-auto max-h-[99.8%] max-w-[99.8%] object-contain transform scale-[1.18]'
-      : isMagicCard
-        ? 'w-auto max-h-[98%] max-w-[98%] object-contain transform scale-[1.05]'
-        : 'w-full h-full object-cover',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const cardImageClassName = isThemedImageCard
+    ? 'select-none transition-all w-auto max-h-[80%] max-w-[80%] object-contain opacity-70'
+    : 'select-none transition-all w-auto max-h-[92%] max-w-[92%] object-contain';
 
   const equipmentStatModifierText =
     equipmentStatModifier &&
@@ -476,7 +475,7 @@ const amuletEffectText =
         dh-card-wrapper
         w-full h-full
         cursor-pointer active:cursor-grabbing
-        transition-all duration-200 ease-out
+        transition-[transform,opacity,filter] duration-200 ease-out
         ${isDragging 
           ? 'opacity-60 scale-95 -rotate-6 -translate-y-2' 
           : 'hover:scale-105 hover:-translate-y-1 hover:rotate-1'
@@ -497,7 +496,7 @@ const amuletEffectText =
         w-full h-full border-4 ${getCardBorderColor()} overflow-hidden
         transition-shadow duration-200
         ${isDragging ? 'shadow-2xl' : 'shadow-lg hover:shadow-xl'}
-        ${card.type === 'event' ? 'shadow-violet-500/30 shadow-xl' : ''}
+        ${isEventCard ? 'shadow-violet-500/30 shadow-xl' : ''}
       `}>
         <div className="h-full flex flex-col relative">
           {hasFlipTarget && (
@@ -505,233 +504,289 @@ const amuletEffectText =
               翻转
             </div>
           )}
-          {/* Image Area - takes up different heights based on card type */}
-          <div className={cardImageWrapperClassName}>
-            {card.image && (
-              <img 
-                src={card.image} 
-                alt={card.name}
-                draggable={false}
-                className={cardImageClassName}
-              />
-            )}
-            {showAmuletOverlay && (
-              <div className="dh-card__body-text absolute top-1.5 left-1.5 right-1.5 font-semibold text-black text-center px-1.5 py-0.5 tracking-wide pointer-events-none select-none drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
-                {amuletEffectText}
-              </div>
-            )}
-            {showCombatOverlay && (
-              <div
-                className="combat-overlay"
-                data-swing-variant={showWeaponSwing ? weaponSwingVariant : undefined}
-                data-block-variant={showShieldBlock ? shieldBlockVariant : undefined}
-              >
-                {showBleedOverlay && (
-                  <>
-                    <span className="combat-overlay__shape combat-overlay__shape--bleed" />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--bleed-drip"
-                      data-stagger="1"
-                    />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--bleed-ring"
-                      data-stagger="2"
-                    />
-                  </>
-                )}
-                {showWeaponSwing && (
-                  <>
-                    <span className="combat-overlay__shape combat-overlay__shape--swing" />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--swing-echo"
-                      data-stagger="1"
-                    />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--swing-spark"
-                      data-stagger="2"
-                    />
-                  </>
-                )}
-                {showShieldBlock && (
-                  <>
-                    <span className="combat-overlay__shape combat-overlay__shape--block" />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--block-ripple"
-                      data-stagger="1"
-                    />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--block-spark"
-                      data-stagger="2"
-                    />
-                  </>
-                )}
-              </div>
-            )}
-            
-            {/* Card Type Icon - Moved to footer */}
 
-            {/* STAT OVERLAYS */}
-            {card.type === 'monster' && (
-              <>
-                {/* Attack - Top Left */}
-                <div className="absolute top-1 left-1">
-                  <div className="relative group flex items-center">
-                    <div className="mr-1">
-                      <Sword className="dh-card__icon text-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
-                    </div>
-                    <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
-                      {card.attack ?? card.value}
-                    </span>
-                  </div>
-                </div>
-                
-                {/* HP - Top Right */}
-                <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
-                  <div className="relative group flex items-center">
-                    <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
-                      {card.hp ?? card.value}
-                    </span>
-                    <div>
-                      <Heart className="dh-card__icon text-red-500 fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
-                    </div>
-                  </div>
+          {isTextOnlyCard ? (
+            /* ========== EVENT / MAGIC: full-height text layout with decorative edges ========== */
+            <div className={`h-full flex flex-col relative overflow-hidden ${
+              isEventCard
+                ? 'bg-violet-900/50'
+                : card.type === 'hero-magic'
+                  ? 'bg-rose-900/40'
+                  : 'bg-cyan-900/40'
+            }`}>
+              {/* Decorative corner ornaments */}
+              <div className={`absolute inset-0 pointer-events-none ${
+                isEventCard ? 'dh-card-deco--event' : 'dh-card-deco--magic'
+              }`} />
 
-                  {/* HP Layers Indicator - Below HP */}
-                  {card.hpLayers && card.hpLayers > 1 && (
-                    <div className="flex gap-0.5 mt-1">
-                      {[...Array(card.hpLayers)].map((_, i) => (
-                        <div 
-                          key={i}
-                          className={`dh-card__layer-dot rounded-full border border-black shadow-sm ${
-                            i < (card.currentLayer || 1) 
-                              ? 'bg-red-500' 
-                              : 'bg-gray-400'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+              {/* Inner decorative border */}
+              <div className={`absolute pointer-events-none rounded-sm ${
+                isEventCard
+                  ? 'inset-[6px] border border-violet-300/30'
+                  : 'inset-[6px] border border-cyan-300/25'
+              }`} />
 
-            {(card.type === 'weapon' || card.type === 'shield') && (
-              <>
-                {/* Attack/Defense Value - Top Left */}
-                <div className="absolute top-1 left-1">
-                  <div className="relative group flex items-center">
-                    <div className="mr-1">
-                      {card.type === 'weapon' ? (
-                        <Sword className="dh-card__icon text-amber-400 fill-amber-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
-                      ) : (
-                        <Shield className="dh-card__icon text-blue-400 fill-blue-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
-                      )}
-                    </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
-                        {card.value}
-                      </span>
-                      {equipmentStatModifierText && (
-                        <span
-                          className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}
-                        >
-                          {equipmentStatModifierText}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Durability - Top Right */}
-                {(card.durability !== undefined || card.maxDurability !== undefined) && totalDurabilityDots > 0 && (
-                  <div className="absolute top-1.5 right-1.5 flex flex-col items-end">
-                    <div className="flex gap-0.5">
-                      {Array.from({ length: totalDurabilityDots }).map((_, i) => {
-                        const dotValue = i + 1;
-                        const isFilled = dotValue <= currentDurability;
-                        const dotClasses = [
-                          'dh-card__durability-dot rounded-full border shadow-sm transition-colors',
-                          isFilled
-                            ? 'bg-amber-400 border-amber-500 shadow-amber-500/40'
-                            : 'bg-slate-800/50 border-slate-600 opacity-50',
-                        ]
-                          .filter(Boolean)
-                          .join(' ');
-                        return (
-                          <div
-                            key={dotValue}
-                            className={dotClasses}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {isPotionCard && isHealingPotion && (
-              <div className="absolute bottom-2 w-full flex justify-center">
-                <div className="relative group flex items-center">
-                  <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
-                    +{card.value}
-                  </span>
-                  <Heart className="dh-card__icon text-green-500 fill-green-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Text Area */}
-          <div className="flex-1 p-1 flex flex-col items-center justify-start bg-card text-center overflow-hidden relative">
-            <h3 className="dh-card__name font-serif font-semibold mb-1 w-full truncate px-1" title={card.name}>
-              {card.name}
-            </h3>
-            
-            {/* Magic / Hero Magic Effect */}
-            {isMagicLikeCard && (
-              <div className="dh-card__body-text w-full text-muted-foreground px-1 overflow-y-auto">
-                {card.description || card.magicEffect || card.heroMagicEffect}
-              </div>
-            )}
-
-            {/* Amulet Effect */}
-            {card.type === 'amulet' && amuletEffectText && !showAmuletOverlay && (
-              <div className="dh-card__body-text w-full text-muted-foreground px-1">
-                {amuletEffectText}
-              </div>
-            )}
-            {isPotionCard && potionDescription && (
-              <div className="dh-card__body-text w-full text-muted-foreground px-1">
-                {potionDescription}
-              </div>
-            )}
-
-            {/* Event Choices */}
-            {card.type === 'event' && card.eventChoices && (
-              <div className="w-full flex flex-col gap-0.5 px-1 pr-0.5 max-h-20 overflow-y-auto">
-                {card.eventChoices.map((choice, idx) => (
-                  <div
-                    key={idx}
-                    className="dh-card__caption dh-card__event-option text-muted-foreground text-left break-words"
-                  >
-                    • {choice.text}
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {/* Footer type indicator - Icon */}
-            <div className="absolute bottom-1 right-1 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
-              {isPermanentMagicCard && (
-                <span className="dh-card__caption flex items-center gap-0.5 rounded-sm border border-cyan-400/60 bg-cyan-900/80 px-1 py-0.5 font-bold uppercase tracking-wide text-cyan-50 shadow-sm">
-                  <Infinity className="dh-icon-inline" />
-                  Perm
+              {/* Type label banner at top */}
+              <div className={`relative z-10 flex items-center justify-center gap-1.5 py-1.5 px-2 ${
+                isEventCard
+                  ? 'bg-violet-800/40'
+                  : card.type === 'hero-magic'
+                    ? 'bg-rose-800/35'
+                    : 'bg-cyan-800/35'
+              }`}>
+                {getCardIcon()}
+                <span className={`dh-card__caption font-bold uppercase tracking-widest ${
+                  isEventCard
+                    ? 'text-violet-950'
+                    : card.type === 'hero-magic'
+                      ? 'text-rose-950'
+                      : 'text-cyan-950'
+                }`}>
+                  {isEventCard ? 'Event' : card.type === 'hero-magic' ? 'Hero Magic' : 'Magic'}
                 </span>
-              )}
-              {getCardIcon()}
+                {isPermanentMagicCard && (
+                  <span className="dh-card__caption flex items-center gap-0.5 rounded-sm border border-cyan-300/50 bg-cyan-800/50 px-1 py-0.5 font-bold uppercase tracking-wide text-cyan-50 shadow-sm">
+                    <Infinity className="dh-icon-inline" />
+                  </span>
+                )}
+              </div>
+
+              {/* Divider line */}
+              <div className={`h-px mx-3 ${
+                isEventCard
+                  ? 'bg-gradient-to-r from-transparent via-violet-400/50 to-transparent'
+                  : 'bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent'
+              }`} />
+
+              {/* Card name */}
+              <div className="relative z-10 px-2 pt-1.5 pb-0.5 text-center">
+                <h3 className={`dh-card__name font-serif font-bold w-full truncate ${
+                  isEventCard ? 'text-violet-950' : card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
+                }`} title={card.name}>
+                  {card.name}
+                </h3>
+              </div>
+
+              {/* Thin separator */}
+              <div className={`h-px mx-6 ${
+                isEventCard
+                  ? 'bg-gradient-to-r from-transparent via-violet-500/30 to-transparent'
+                  : 'bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent'
+              }`} />
+
+              {/* Description / choices area - fills remaining space */}
+              <div className="relative z-10 flex-1 overflow-y-auto px-2 py-1.5">
+                {isMagicLikeCard && (
+                  <div className="dh-card__body-text w-full text-left leading-snug text-gray-900">
+                  
+                    {card.description || card.magicEffect || card.heroMagicEffect}
+                  </div>
+                )}
+                {isEventCard && card.eventChoices && (
+                  <div className="w-full flex flex-col gap-1">
+                    {card.eventChoices.map((choice, idx) => (
+                      <div
+                        key={idx}
+                        className="dh-card__caption text-gray-900 text-left break-words leading-snug"
+                      >
+                        <span className="text-violet-700 mr-0.5">◆</span> {choice.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom decorative bar */}
+              <div className={`h-px mx-3 ${
+                isEventCard
+                  ? 'bg-gradient-to-r from-transparent via-violet-400/50 to-transparent'
+                  : 'bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent'
+              }`} />
+              <div className={`relative z-10 flex items-center justify-center py-1 ${
+                isEventCard
+                  ? 'bg-violet-800/30'
+                  : card.type === 'hero-magic'
+                    ? 'bg-rose-800/25'
+                    : 'bg-cyan-800/25'
+              }`}>
+                {getCardIcon()}
+              </div>
             </div>
-          </div>
+          ) : (
+            /* ========== STANDARD CARD LAYOUT (monsters, weapons, shields, potions, amulets) ========== */
+            <>
+              {/* Image Area */}
+              <div className={cardImageWrapperClassName}>
+                {card.image && (
+                  <img 
+                    src={card.image} 
+                    alt={card.name}
+                    draggable={false}
+                    className={cardImageClassName}
+                  />
+                )}
+                {showAmuletOverlay && (
+                  <div className="dh-card__body-text absolute top-1.5 left-1.5 right-1.5 font-semibold text-black text-center px-1.5 py-0.5 tracking-wide pointer-events-none select-none drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
+                    {amuletEffectText}
+                  </div>
+                )}
+                {showCombatOverlay && (
+                  <div
+                    className="combat-overlay"
+                    data-swing-variant={showWeaponSwing ? weaponSwingVariant : undefined}
+                    data-block-variant={showShieldBlock ? shieldBlockVariant : undefined}
+                  >
+                    {showBleedOverlay && (
+                      <>
+                        <span className="combat-overlay__shape combat-overlay__shape--bleed" />
+                        <span className="combat-overlay__shape combat-overlay__shape--bleed-drip" data-stagger="1" />
+                        <span className="combat-overlay__shape combat-overlay__shape--bleed-ring" data-stagger="2" />
+                      </>
+                    )}
+                    {showWeaponSwing && (
+                      <>
+                        <span className="combat-overlay__shape combat-overlay__shape--swing" />
+                        <span className="combat-overlay__shape combat-overlay__shape--swing-echo" data-stagger="1" />
+                        <span className="combat-overlay__shape combat-overlay__shape--swing-spark" data-stagger="2" />
+                      </>
+                    )}
+                    {showShieldBlock && (
+                      <>
+                        <span className="combat-overlay__shape combat-overlay__shape--block" />
+                        <span className="combat-overlay__shape combat-overlay__shape--block-ripple" data-stagger="1" />
+                        <span className="combat-overlay__shape combat-overlay__shape--block-spark" data-stagger="2" />
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* STAT OVERLAYS */}
+                {card.type === 'monster' && (
+                  <>
+                    <div className="absolute top-1 left-1">
+                      <div className="relative group flex items-center">
+                        <div className="mr-1">
+                          <Sword className="dh-card__icon text-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                        </div>
+                        <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                          {card.attack ?? card.value}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
+                      <div className="relative group flex items-center">
+                        <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
+                          {card.hp ?? card.value}
+                        </span>
+                        <div>
+                          <Heart className="dh-card__icon text-red-500 fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                        </div>
+                      </div>
+                      {card.hpLayers && card.hpLayers > 1 && (
+                        <div className="flex gap-0.5 mt-1">
+                          {[...Array(card.hpLayers)].map((_, i) => (
+                            <div 
+                              key={i}
+                              className={`dh-card__layer-dot rounded-full border border-black shadow-sm ${
+                                i < (card.currentLayer || 1) ? 'bg-red-500' : 'bg-gray-400'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {(card.type === 'weapon' || card.type === 'shield') && (
+                  <>
+                    <div className="absolute top-1 left-1">
+                      <div className="relative group flex items-center">
+                        <div className="mr-1">
+                          {card.type === 'weapon' ? (
+                            <Sword className="dh-card__icon text-amber-400 fill-amber-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                          ) : (
+                            <Shield className="dh-card__icon text-blue-400 fill-blue-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                          )}
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                            {card.value}
+                          </span>
+                          {equipmentStatModifierText && (
+                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}>
+                              {equipmentStatModifierText}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {(card.durability !== undefined || card.maxDurability !== undefined) && totalDurabilityDots > 0 && (
+                      <div className="absolute top-1.5 right-1.5 flex flex-col items-end">
+                        <div className="flex gap-0.5">
+                          {Array.from({ length: totalDurabilityDots }).map((_, i) => {
+                            const dotValue = i + 1;
+                            const isFilled = dotValue <= currentDurability;
+                            return (
+                              <div
+                                key={dotValue}
+                                className={`dh-card__durability-dot rounded-full border shadow-sm transition-colors ${
+                                  isFilled
+                                    ? 'bg-amber-400 border-amber-500 shadow-amber-500/40'
+                                    : 'bg-slate-800/50 border-slate-600 opacity-50'
+                                }`}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isPotionCard && isHealingPotion && (
+                  <div className="absolute bottom-2 w-full flex justify-center">
+                    <div className="relative group flex items-center">
+                      <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
+                        +{card.value}
+                      </span>
+                      <Heart className="dh-card__icon text-green-500 fill-green-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Text Area */}
+              <div className={`flex-1 p-1 flex flex-col items-center justify-start text-center overflow-hidden relative ${
+                card.type === 'amulet'
+                  ? 'bg-amber-200/40'
+                  : card.type === 'potion'
+                    ? 'bg-emerald-300/40'
+                    : 'bg-card'
+              }`}>
+                <h3 className={`dh-card__name font-serif font-semibold mb-1 w-full truncate px-1 ${
+                  isThemedImageCard ? 'text-gray-900' : ''
+                }`} title={card.name}>
+                  {card.name}
+                </h3>
+
+                {card.type === 'amulet' && amuletEffectText && !showAmuletOverlay && (
+                  <div className="dh-card__body-text w-full text-gray-800 px-1">
+                    {amuletEffectText}
+                  </div>
+                )}
+                {isPotionCard && potionDescription && (
+                  <div className="dh-card__body-text w-full text-gray-800 px-1">
+                    {potionDescription}
+                  </div>
+                )}
+                
+                <div className="absolute bottom-1 right-1 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+                  {getCardIcon()}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </Card>
     </div>

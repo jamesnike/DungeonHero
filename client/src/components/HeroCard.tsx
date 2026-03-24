@@ -77,6 +77,8 @@ export default function HeroCard({
   onDrop, 
   isDropTarget,
   image,
+  name,
+  classTitle,
   takingDamage = false,
   healing = false,
   showAttackIndicator = false,
@@ -196,12 +198,12 @@ export default function HeroCard({
   const showWeaponSwing = Boolean(weaponSwingAnimation);
   const showShieldBlock = Boolean(shieldBlockAnimation);
   const heroSkillButtonClasses = heroSkillButtonDisabled
-    ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border'
-    : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow';
+    ? 'bg-gray-400/60 text-gray-600 cursor-not-allowed border border-gray-500/40'
+    : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/30 ring-1 ring-blue-400/40';
   const heroMagicButtonClasses = (ready: boolean) =>
     ready
-      ? 'bg-rose-500 text-white hover:bg-rose-500/90 shadow'
-      : 'bg-muted text-muted-foreground cursor-not-allowed border border-border';
+      ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-lg shadow-rose-500/30 ring-1 ring-rose-400/40'
+      : 'bg-gray-400/60 text-gray-600 cursor-not-allowed border border-gray-500/40';
   const spellDamageDisplay = Math.max(0, spellDamageBonus);
   const appliedHeroScale = clamp(
     heroScale * scaleMultiplier,
@@ -275,94 +277,76 @@ export default function HeroCard({
         <span className="font-mono text-primary dh-hero-chip">+{spellDamageDisplay}</span>
       </div>
       <Card className={`
-        relative h-full w-full border-4 border-primary shadow-2xl overflow-hidden
+        relative h-full w-full border-4 border-amber-600 shadow-2xl overflow-hidden
         transition-all duration-200
         ${isDropTarget ? 'border-destructive animate-pulse' : ''}
         ${isDropTarget && isOver ? 'scale-105 ring-4 ring-destructive bg-destructive/10' : ''}
         ${takingDamage ? 'animate-damage-flash' : ''}
         ${healing ? 'animate-heal-glow' : ''}
       `}>
-        <div className="h-full flex flex-col">
-          <div className="relative h-[55%] bg-gradient-to-b from-primary/25 via-primary/15 to-card overflow-hidden">
-            {image && (
-              <img
-                src={image}
-                alt="Hero"
-                className="w-full h-full object-cover transform scale-95 origin-top"
-                draggable={false}
-                onDragStart={(e) => e.preventDefault()}
-              />
-            )}
-            {(showBleedOverlay || showWeaponSwing || showShieldBlock) && (
-              <div className="combat-overlay">
-                {showBleedOverlay && (
-                  <>
-                    <span className="combat-overlay__shape combat-overlay__shape--bleed" />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--bleed-drip"
-                      data-stagger="1"
-                    />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--bleed-ring"
-                      data-stagger="2"
-                    />
-                  </>
-                )}
-                {showWeaponSwing && (
-                  <>
-                    <span className="combat-overlay__shape combat-overlay__shape--swing" />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--swing-echo"
-                      data-stagger="1"
-                    />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--swing-spark"
-                      data-stagger="2"
-                    />
-                  </>
-                )}
-                {showShieldBlock && (
-                  <>
-                    <span className="combat-overlay__shape combat-overlay__shape--block" />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--block-ripple"
-                      data-stagger="1"
-                    />
-                    <span
-                      className="combat-overlay__shape combat-overlay__shape--block-spark"
-                      data-stagger="2"
-                    />
-                  </>
-                )}
-              </div>
-            )}
-            
-            <div className="absolute top-2 left-2 right-2">
-              <div className="bg-background/90 backdrop-blur-sm rounded-lg p-1.5">
-                <div className="flex items-center justify-between mb-0.5">
-                  <Heart className="dh-hero-icon text-destructive" />
-                  <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
-                    {hp}/{maxHp}
-                  </span>
-                </div>
-                <Progress value={hpPercentage} className="h-1.5" />
-              </div>
-            </div>
+        <div className="h-full flex flex-col relative overflow-hidden bg-amber-900/40">
+          {/* Decorative corner ornaments */}
+          <div className="absolute inset-0 pointer-events-none dh-card-deco--hero" />
 
+          {/* Inner decorative border */}
+          <div className="absolute inset-[6px] border border-amber-300/30 pointer-events-none rounded-sm" />
+
+          {/* Combat overlays */}
+          {(showBleedOverlay || showWeaponSwing || showShieldBlock) && (
+            <div className="combat-overlay">
+              {showBleedOverlay && (
+                <>
+                  <span className="combat-overlay__shape combat-overlay__shape--bleed" />
+                  <span className="combat-overlay__shape combat-overlay__shape--bleed-drip" data-stagger="1" />
+                  <span className="combat-overlay__shape combat-overlay__shape--bleed-ring" data-stagger="2" />
+                </>
+              )}
+              {showWeaponSwing && (
+                <>
+                  <span className="combat-overlay__shape combat-overlay__shape--swing" />
+                  <span className="combat-overlay__shape combat-overlay__shape--swing-echo" data-stagger="1" />
+                  <span className="combat-overlay__shape combat-overlay__shape--swing-spark" data-stagger="2" />
+                </>
+              )}
+              {showShieldBlock && (
+                <>
+                  <span className="combat-overlay__shape combat-overlay__shape--block" />
+                  <span className="combat-overlay__shape combat-overlay__shape--block-ripple" data-stagger="1" />
+                  <span className="combat-overlay__shape combat-overlay__shape--block-spark" data-stagger="2" />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* HP Section */}
+          <div className="relative z-10 px-3 py-1.5">
+            <div className="bg-background/80 backdrop-blur-sm rounded-lg p-1.5">
+              <div className="flex items-center justify-between mb-0.5">
+                <Heart className="dh-hero-icon text-destructive" />
+                <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
+                  {hp}/{maxHp}
+                </span>
+              </div>
+              <Progress value={hpPercentage} className="h-1.5" />
+            </div>
           </div>
-          
-          <div className="h-[40%] px-2 pb-3 pt-3 flex flex-col gap-2 items-stretch justify-start bg-card">
+
+          {/* Thin separator */}
+          <div className="h-px mx-6 bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
+
+          {/* Content area - skills and magic */}
+          <div className="relative z-10 flex-1 overflow-y-auto px-2 py-1.5 flex flex-col gap-1.5 items-stretch justify-start">
             {heroSkillInfo && (
-              <div className="mt-2 flex flex-col items-center gap-1">
+              <div className="flex flex-col items-center gap-1">
                 {isPassiveSkill ? (
-                  <span className="dh-hero-small uppercase tracking-wide text-muted-foreground">
-                    Passive Skill: {heroSkillInfo.name}
+                  <span className="text-xs font-semibold uppercase tracking-wide text-amber-950 bg-amber-300/30 px-3 py-1.5 rounded-full border border-amber-400/40">
+                    Passive: {heroSkillInfo.name}
                   </span>
                 ) : (
                   <div className="flex items-center gap-2 flex-wrap justify-center">
                     <button
                       type="button"
-                      className={`dh-hero-small font-semibold uppercase tracking-wide px-4 py-1.5 rounded-full transition ${heroSkillButtonClasses}`}
+                      className={`text-xs font-bold uppercase tracking-wide px-5 py-2 rounded-full transition-all ${heroSkillButtonClasses}`}
                       disabled={heroSkillButtonDisabled}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -377,7 +361,7 @@ export default function HeroCard({
                     {heroSkillInfo.isPending && onHeroSkillCancel && (
                       <button
                         type="button"
-                        className="dh-hero-small font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                        className="dh-hero-small font-semibold text-amber-900/60 hover:text-amber-950 transition-colors"
                         onClick={(event) => {
                           event.stopPropagation();
                           onHeroSkillCancel();
@@ -392,7 +376,7 @@ export default function HeroCard({
               </div>
             )}
             {heroSkillMessage && (
-              <div className="mt-1 flex items-center gap-1 dh-hero-small text-muted-foreground text-center justify-center">
+              <div className="flex items-center gap-1 dh-hero-small text-amber-900/70 text-center justify-center">
                 <AlertTriangle className="w-3 h-3" />
                 <span>{heroSkillMessage}</span>
               </div>
@@ -424,7 +408,7 @@ export default function HeroCard({
                   {onHeroMagicCancel && (
                     <button
                       type="button"
-                      className="dh-hero-small font-semibold px-3 py-1 rounded-full border border-border text-muted-foreground hover:text-foreground transition"
+                      className="dh-hero-small font-semibold px-3 py-1 rounded-full border border-border text-amber-900/60 hover:text-amber-950 transition"
                       onClick={(event) => {
                         event.stopPropagation();
                         onHeroMagicCancel();
@@ -441,11 +425,11 @@ export default function HeroCard({
                 {heroMagicInfo.map(magic => (
                   <div
                     key={magic.id}
-                    className="w-full rounded-md border border-border/50 bg-muted/30 p-2 space-y-1"
+                    className="w-full rounded-md border border-amber-400/30 bg-amber-800/15 p-2 space-y-1"
                   >
                     <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className="text-foreground">{magic.name}</span>
-                      <span className="font-mono text-muted-foreground">
+                      <span className="text-amber-950">{magic.name}</span>
+                      <span className="font-mono text-amber-800/70">
                         {magic.unlocked ? `${magic.gauge}/${magic.gaugeMax}` : '未解锁'}
                       </span>
                     </div>
@@ -456,7 +440,7 @@ export default function HeroCard({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        className={`dh-hero-small font-semibold uppercase tracking-wide px-3 py-1 rounded-full transition ${heroMagicButtonClasses(
+                        className={`text-xs font-bold uppercase tracking-wide px-4 py-1.5 rounded-full transition-all ${heroMagicButtonClasses(
                           Boolean(onHeroMagicTrigger) && magic.ready,
                         )}`}
                         disabled={!onHeroMagicTrigger || !magic.ready}
@@ -470,16 +454,20 @@ export default function HeroCard({
                       >
                         释放
                       </button>
-                      <span className="text-[10px] text-muted-foreground flex-1">{magic.chargeHint}</span>
+                      <span className="text-[10px] text-amber-900/60 flex-1">{magic.chargeHint}</span>
                     </div>
                     {magic.disabledReason && !magic.ready && (
-                      <div className="text-[10px] text-muted-foreground/80">{magic.disabledReason}</div>
+                      <div className="text-[10px] text-amber-900/50">{magic.disabledReason}</div>
                     )}
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          {/* Bottom decorative bar */}
+          <div className="h-px mx-3 bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
+          <div className="relative z-10 py-1 bg-amber-800/20" />
         </div>
       </Card>
     </div>

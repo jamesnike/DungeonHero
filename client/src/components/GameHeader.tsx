@@ -1,4 +1,4 @@
-import { Heart, Coins, Layers, Skull, ShoppingBag, Clock3 } from 'lucide-react';
+import { Heart, Coins, Layers, Waves, ShoppingBag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
@@ -9,7 +9,6 @@ interface GameHeaderProps {
   maxHp: number;
   gold: number;
   cardsRemaining: number;
-  monstersDefeated?: number;
   shopLevel: number;
   turnCount: number;
   onDeckClick?: () => void;
@@ -21,7 +20,6 @@ export default function GameHeader({
   maxHp,
   gold,
   cardsRemaining,
-  monstersDefeated = 0,
   shopLevel,
   turnCount,
   onDeckClick,
@@ -91,28 +89,18 @@ export default function GameHeader({
         </Badge>
       </button>
 
-      <div className="game-header__stat" data-testid="header-turn-count">
-        <Clock3 className="game-header__icon text-muted-foreground" />
+      <div className="game-header__stat" data-testid="stat-waterfall-count">
+        <Waves className="game-header__icon text-blue-500" />
         <Badge variant="outline" className="game-header__badge font-mono">
-          回合 {turnCount}
-        </Badge>
-      </div>
-
-      <div className="game-header__stat" data-testid="stat-monsters-defeated">
-        <Skull className="game-header__icon text-primary" />
-        <Badge variant="outline" className="game-header__badge font-mono">
-          {monstersDefeated}
+          {turnCount}
         </Badge>
       </div>
 
       <div className="game-header__shop" data-testid="header-shop-level">
         <ShoppingBag className="game-header__icon text-amber-500" />
-        <div className="game-header__shop-text leading-tight">
-          <span className="game-header__shop-label uppercase tracking-wide text-muted-foreground">商店等级</span>
-          <Badge variant="secondary" className="game-header__badge font-mono">
-            Lv.{shopLevel}
-          </Badge>
-        </div>
+        <Badge variant="secondary" className="game-header__badge font-mono">
+          Lv.{shopLevel}
+        </Badge>
       </div>
 
       <div className="game-header__stat" data-testid="header-gold">

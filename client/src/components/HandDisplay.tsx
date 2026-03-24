@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
 import { HAND_LIMIT } from './game-board/constants';
 
@@ -48,19 +48,21 @@ export default function HandDisplay({
   disableAnimations = false,
   onCardClick,
 }: HandDisplayProps) {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [isDraggingCard, setIsDraggingCard] = useState(false);
   const [calculatedCardHeight, setCalculatedCardHeight] = useState<number>(getCardHeight);
   const [isCompactHand, setIsCompactHand] = useState<boolean>(
     typeof window !== 'undefined' ? window.innerWidth < 640 : false,
   );
 
-  // Use the prop cardSize if available, otherwise fallback to calculation
   const effectiveCardHeight = cardSize ? cardSize.height : calculatedCardHeight;
   const effectiveCardWidth = cardSize ? cardSize.width : effectiveCardHeight * CARD_RATIO;
 
+  const hoveredIndexRef = useRef<number | null>(null);
+  const cardOuterRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const cardInnerRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const layoutRef = useRef({ hiddenHeight: 0, disableAnimations: false, isDragging: false });
+
   useEffect(() => {
-    // Only listen to resize if we don't have explicit cardSize passed from parent
     if (!cardSize) {
       const handleResize = () => setCalculatedCardHeight(getCardHeight());
       window.addEventListener('resize', handleResize);
@@ -78,15 +80,26 @@ export default function HandDisplay({
   const onDragEndFromHandRef = useRef(onDragEndFromHand);
   onDragEndFromHandRef.current = onDragEndFromHand;
 
+  const clearHoverDOM = useCallback(() => {
+    const idx = hoveredIndexRef.current;
+    if (idx !== null) {
+      const outer = cardOuterRefs.current[idx];
+      const inner = cardInnerRefs.current[idx];
+      if (outer) outer.style.zIndex = String(idx + 2);
+      if (inner) inner.style.transform = `translateY(${layoutRef.current.hiddenHeight}px) scale(1)`;
+      hoveredIndexRef.current = null;
+    }
+  }, []);
+
   const forceStopDragging = useCallback(() => {
-    setHoveredIndex(null);
+    clearHoverDOM();
     setIsDraggingCard(prev => {
       if (prev) {
         onDragEndFromHandRef.current?.();
       }
       return false;
     });
-  }, []);
+  }, [clearHoverDOM]);
 
   useEffect(() => {
     if (!disableAnimations) {
@@ -118,15 +131,15 @@ export default function HandDisplay({
     forceStopDragging();
   }, [handCards.length, isDraggingCard, forceStopDragging]);
 
-  const handleDragStart = (card: GameCardData) => {
-    if (disableAnimations) return;
+  const handleDragStart = useCallback((card: GameCardData) => {
+    if (layoutRef.current.disableAnimations) return;
     setIsDraggingCard(true);
     onDragCardFromHand?.(card);
-  };
+  }, [onDragCardFromHand]);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     forceStopDragging();
-  };
+  }, [forceStopDragging]);
 
   const cardWidth = effectiveCardWidth;
   const cardHeight = effectiveCardHeight;
@@ -135,16 +148,39 @@ export default function HandDisplay({
   const visibleHeight = cardHeight * visibleFraction;
   const hiddenHeight = cardHeight - visibleHeight;
   const handZoneHeight = visibleHeight + 24;
-  const hoverLift = hiddenHeight + 24;
-  const totalCardHeight = cardHeight + hoverLift;
   const horizontalStepFactor = isCompactHand ? 0.42 : 0.5;
-  
-  const maybeActivateHover = (_event: ReactMouseEvent<HTMLDivElement>, index: number) => {
-    if (disableAnimations || isDraggingCard || hoveredIndex === index) {
-      return;
+
+  layoutRef.current.hiddenHeight = hiddenHeight;
+  layoutRef.current.disableAnimations = disableAnimations;
+  layoutRef.current.isDragging = isDraggingCard;
+
+  const applyHoverToDOM = useCallback((index: number) => {
+    const outer = cardOuterRefs.current[index];
+    const inner = cardInnerRefs.current[index];
+    if (outer) outer.style.zIndex = '200';
+    if (inner) inner.style.transform = 'translateY(0px) scale(1.08)';
+  }, []);
+
+  useLayoutEffect(() => {
+    const idx = hoveredIndexRef.current;
+    if (idx !== null && !layoutRef.current.disableAnimations) {
+      applyHoverToDOM(idx);
     }
-    setHoveredIndex(index);
-  };
+  });
+
+  const activateHover = useCallback((index: number) => {
+    if (layoutRef.current.disableAnimations || layoutRef.current.isDragging) return;
+    if (hoveredIndexRef.current === index) return;
+
+    clearHoverDOM();
+    applyHoverToDOM(index);
+    hoveredIndexRef.current = index;
+  }, [clearHoverDOM, applyHoverToDOM]);
+
+  const deactivateHover = useCallback(() => {
+    if (layoutRef.current.disableAnimations) return;
+    clearHoverDOM();
+  }, [clearHoverDOM]);
 
   return (
     <div 
@@ -157,20 +193,18 @@ export default function HandDisplay({
       >
         <div className="absolute inset-0 flex items-end justify-center pointer-events-none">
           {handCards.map((card, index) => {
-            const isHovered = hoveredIndex === index;
             const totalWidth = handCards.length * cardWidth * horizontalStepFactor;
             const startX = -totalWidth / 2;
             const cardX = startX + (index * cardWidth * horizontalStepFactor);
-            
-            const hoverClass = disableAnimations ? '' : 'transition-all duration-200 ease-out';
 
             return (
               <div
                 key={card.id}
+                ref={el => { cardOuterRefs.current[index] = el; }}
                 className="absolute pointer-events-none"
                 style={{
                   transform: `translateX(${cardX}px)`,
-                  zIndex: isHovered ? 200 : index + 2,
+                  zIndex: index + 2,
                   height: `${cardHeight}px`,
                   width: `${cardWidth}px`,
                   willChange: 'transform',
@@ -178,23 +212,16 @@ export default function HandDisplay({
                 }}
               >
                 <div
-                  className={`h-full w-full flex items-end justify-center ${hoverClass} ${disableAnimations ? 'pointer-events-none' : 'pointer-events-auto'}`.trim()}
+                  ref={el => { cardInnerRefs.current[index] = el; }}
+                  className={`h-full w-full flex items-end justify-center ${disableAnimations ? 'pointer-events-none' : 'pointer-events-auto'}`.trim()}
                   style={{
-                    transform: disableAnimations
-                      ? `translateY(${hiddenHeight}px) scale(1)`
-                      : `translateY(${isHovered ? 0 : hiddenHeight}px) ${isHovered ? 'scale(1.05)' : 'scale(1)'}`,
+                    transform: `translateY(${hiddenHeight}px) scale(1)`,
                     willChange: 'transform',
+                    transition: disableAnimations ? 'none' : 'transform 200ms ease-out',
                   }}
-                  onMouseEnter={(event) => {
-                    maybeActivateHover(event, index);
-                  }}
-                  onMouseMove={(event) => {
-                    maybeActivateHover(event, index);
-                  }}
-                  onMouseLeave={() => {
-                    if (disableAnimations) return;
-                    setHoveredIndex(null);
-                  }}
+                  onMouseEnter={() => activateHover(index)}
+                  onMouseMove={() => activateHover(index)}
+                  onMouseLeave={deactivateHover}
                   data-testid={`hand-card-${index}`}
                 >
                   <GameCard
@@ -202,7 +229,7 @@ export default function HandDisplay({
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onClick={() => onCardClick?.(card)}
-                    className={isHovered ? 'shadow-2xl' : 'shadow-lg'}
+                    className="shadow-lg"
                   />
                 </div>
               </div>

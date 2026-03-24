@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Coins, ShoppingBag, Trash2 } from 'lucide-react';
+import { Coins, Heart, ShoppingBag, Trash2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
 
 export interface ShopOffering {
@@ -38,6 +38,11 @@ interface ShopModalProps {
   onBuySkill?: () => void;
   onFinish: () => void;
   sourceEventName?: string;
+  hp?: number;
+  maxHp?: number;
+  healCost?: number;
+  shopHealUsed?: boolean;
+  onHealRequest?: () => void;
 }
 
 export default function ShopModal({
@@ -56,6 +61,11 @@ export default function ShopModal({
   onBuySkill,
   onFinish,
   sourceEventName,
+  hp,
+  maxHp,
+  healCost = 5,
+  shopHealUsed,
+  onHealRequest,
 }: ShopModalProps) {
   const isBackpackFull = backpackCount >= backpackCapacity;
   const deleteOptionDisabled = !canDeleteCard;
@@ -197,33 +207,81 @@ export default function ShopModal({
               );
             })}
 
-            <div
-              className={`flex flex-col gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4 shadow-sm sm:flex-row sm:items-center ${deleteOptionDisabled ? 'opacity-70' : ''}`}
-            >
-              <div className="flex gap-3 flex-1">
-                <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-destructive/10 text-destructive flex items-center justify-center">
-                  <Trash2 className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-base font-semibold text-destructive">删一张牌</p>
-                    <Badge variant="outline" className="text-[10px] border-destructive/50 text-destructive">
-                      每次商店限一次
-                    </Badge>
+            {shopLevel >= 1 && (
+              <div
+                className={`flex flex-col gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4 shadow-sm sm:flex-row sm:items-center ${deleteOptionDisabled ? 'opacity-70' : ''}`}
+              >
+                <div className="flex gap-3 flex-1">
+                  <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-destructive/10 text-destructive flex items-center justify-center">
+                    <Trash2 className="w-6 h-6" />
                   </div>
-                  <p className="text-sm text-muted-foreground">从手牌或背包中选择一张卡牌，将其直接送入坟场。</p>
-                  {!canDeleteCard && deleteDisabledReason && (
-                    <p className="text-xs text-destructive">{deleteDisabledReason}</p>
-                  )}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-base font-semibold text-destructive">删一张牌</p>
+                      <Badge variant="outline" className="text-[10px] border-destructive/50 text-destructive">
+                        每次商店限一次
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">从手牌或背包中选择一张卡牌，将其直接送入坟场。</p>
+                    {!canDeleteCard && deleteDisabledReason && (
+                      <p className="text-xs text-destructive">{deleteDisabledReason}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="text-xs text-muted-foreground">无需花费金币</span>
+                  <Button variant="destructive" disabled={deleteOptionDisabled} onClick={onDeleteRequest}>
+                    删牌
+                  </Button>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className="text-xs text-muted-foreground">无需花费金币</span>
-                <Button variant="destructive" disabled={deleteOptionDisabled} onClick={onDeleteRequest}>
-                  删牌
-                </Button>
-              </div>
-            </div>
+            )}
+
+            {shopLevel >= 2 && (() => {
+              const isFullHp = typeof hp === 'number' && typeof maxHp === 'number' && hp >= maxHp;
+              const canAffordHeal = gold >= healCost;
+              const healDisabled = shopHealUsed || isFullHp || !canAffordHeal;
+              return (
+                <div
+                  className={`flex flex-col gap-3 rounded-md border border-green-500/40 bg-green-500/5 p-4 shadow-sm sm:flex-row sm:items-center ${healDisabled ? 'opacity-70' : ''}`}
+                >
+                  <div className="flex gap-3 flex-1">
+                    <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-green-500/10 text-green-600 flex items-center justify-center">
+                      <Heart className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-base font-semibold text-green-700 dark:text-green-400">恢复生命</p>
+                        <Badge variant="outline" className="text-[10px] border-green-500/50 text-green-700 dark:text-green-400">
+                          每次商店限一次
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        花费 {healCost} 金币恢复 5 点生命值。
+                        {typeof hp === 'number' && typeof maxHp === 'number' && (
+                          <span className="ml-1">（当前 {hp}/{maxHp}）</span>
+                        )}
+                      </p>
+                      {shopHealUsed && <p className="text-xs text-green-700 dark:text-green-400">本次商店的回血机会已用完。</p>}
+                      {!shopHealUsed && isFullHp && <p className="text-xs text-muted-foreground">生命值已满。</p>}
+                      {!shopHealUsed && !isFullHp && !canAffordHeal && <p className="text-xs text-destructive">金币不足。</p>}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      价格：<span className="text-lg font-semibold text-yellow-500">{healCost}</span> 金币
+                    </span>
+                    <Button
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      disabled={healDisabled}
+                      onClick={onHealRequest}
+                    >
+                      回血
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="flex justify-end">

@@ -800,6 +800,94 @@
     height: calc(var(--dh-card-dot-size, 0.45rem) * var(--dh-card-instance-scale, 1));
   }
 
+  /* Event card corner ornaments */
+  .dh-card-deco--event::before,
+  .dh-card-deco--event::after,
+  .dh-card-deco--magic::before,
+  .dh-card-deco--magic::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    z-index: 5;
+  }
+
+  .dh-card-deco--event::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(167, 139, 250, 0.6);
+    border-left: 2px solid rgba(167, 139, 250, 0.6);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--event::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(167, 139, 250, 0.6);
+    border-right: 2px solid rgba(167, 139, 250, 0.6);
+    border-bottom-right-radius: 4px;
+  }
+
+  .dh-card-deco--magic::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(103, 232, 249, 0.5);
+    border-left: 2px solid rgba(103, 232, 249, 0.5);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--magic::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(103, 232, 249, 0.5);
+    border-right: 2px solid rgba(103, 232, 249, 0.5);
+    border-bottom-right-radius: 4px;
+  }
+
+  /* Hero card corner ornaments (gold) */
+  .dh-card-deco--hero::before,
+  .dh-card-deco--hero::after {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    z-index: 5;
+  }
+  .dh-card-deco--hero::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(251, 191, 36, 0.6);
+    border-left: 2px solid rgba(251, 191, 36, 0.6);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--hero::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(251, 191, 36, 0.6);
+    border-right: 2px solid rgba(251, 191, 36, 0.6);
+    border-bottom-right-radius: 4px;
+  }
+
+  /* Themed scrollbars for text-only cards */
+  .dh-card-deco--event ~ div::-webkit-scrollbar,
+  .dh-card-deco--hero ~ div::-webkit-scrollbar,
+  .dh-card-deco--magic ~ div ::-webkit-scrollbar {
+    width: 3px;
+  }
+  .dh-card-deco--event ~ div::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .dh-card-deco--event ~ div::-webkit-scrollbar-thumb {
+    background: rgba(167, 139, 250, 0.35);
+    border-radius: 4px;
+  }
+  .dh-card-deco--magic ~ div ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .dh-card-deco--magic ~ div ::-webkit-scrollbar-thumb {
+    background: rgba(103, 232, 249, 0.3);
+    border-radius: 4px;
+  }
+  .dh-card-deco--hero ~ div::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .dh-card-deco--hero ~ div::-webkit-scrollbar-thumb {
+    background: rgba(251, 191, 36, 0.3);
+    border-radius: 4px;
+  }
+
   .dh-card__flip-badge {
     position: absolute;
     top: 0.4rem;

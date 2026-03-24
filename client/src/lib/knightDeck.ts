@@ -5,9 +5,10 @@ import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png
 import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
 import heavyShieldImage from '@assets/generated_images/simple_heavy_shield.png';
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
-import strengthAmuletImage from '@assets/generated_images/chibi_strength_amulet.png';
-import guardianAmuletImage from '@assets/generated_images/chibi_guardian_amulet.png';
-import potionImage from '@assets/generated_images/cute_cartoon_healing_potion.png';
+import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
+import thunderAmuletImage from '@assets/generated_images/chibi_thunder_amulet.png';
+import potionArcaneInfusionImage from '@assets/generated_images/cute_potion_arcane_infusion.png';
+import potionBackpackExpandImage from '@assets/generated_images/cute_potion_backpack_expand.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -108,7 +109,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'amulet',
     name: '双守护圣盾',
     value: 1,
-    image: guardianAmuletImage,
+    image: dualguardAmuletImage,
     classCard: true,
     description: '可使用左右两侧较低的永久护甲值来格挡伤害。',
     amuletEffect: 'dual-guard',
@@ -118,7 +119,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'amulet',
     name: '雷霆符印',
     value: 1,
-    image: strengthAmuletImage,
+    image: thunderAmuletImage,
     classCard: true,
     description: '每弃一张牌，对激活行随机怪物造成 2 点伤害。',
     amuletEffect: 'discard-zap',
@@ -129,7 +130,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'potion',
     name: '奥术灌注',
     value: 0,
-    image: potionImage,
+    image: potionArcaneInfusionImage,
     classCard: true,
     description: '永久让法术伤害 +1。',
     potionEffect: 'perm-spell-damage',
@@ -139,7 +140,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'potion',
     name: '无尽背袋灵药',
     value: 0,
-    image: potionImage,
+    image: potionBackpackExpandImage,
     classCard: true,
     description: '永久提升背包容量 +1。',
     potionEffect: 'perm-backpack-size',
