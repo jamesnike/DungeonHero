@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
 import { HAND_LIMIT } from './game-board/constants';
 
@@ -75,15 +75,18 @@ export default function HandDisplay({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const onDragEndFromHandRef = useRef(onDragEndFromHand);
+  onDragEndFromHandRef.current = onDragEndFromHand;
+
   const forceStopDragging = useCallback(() => {
     setHoveredIndex(null);
     setIsDraggingCard(prev => {
       if (prev) {
-        onDragEndFromHand?.();
+        onDragEndFromHandRef.current?.();
       }
       return false;
     });
-  }, [onDragEndFromHand]);
+  }, []);
 
   useEffect(() => {
     if (!disableAnimations) {
@@ -96,21 +99,20 @@ export default function HandDisplay({
     if (!isDraggingCard) {
       return;
     }
-    const handleGlobalPointerUp = () => {
+    const handleGlobalDragEnd = () => {
       forceStopDragging();
     };
-    window.addEventListener('pointerup', handleGlobalPointerUp);
-    window.addEventListener('pointercancel', handleGlobalPointerUp);
-    window.addEventListener('dragend', handleGlobalPointerUp);
+    window.addEventListener('dragend', handleGlobalDragEnd);
     return () => {
-      window.removeEventListener('pointerup', handleGlobalPointerUp);
-      window.removeEventListener('pointercancel', handleGlobalPointerUp);
-      window.removeEventListener('dragend', handleGlobalPointerUp);
+      window.removeEventListener('dragend', handleGlobalDragEnd);
     };
   }, [isDraggingCard, forceStopDragging]);
 
+  const prevHandLengthRef = useRef(handCards.length);
   useEffect(() => {
-    if (!isDraggingCard) {
+    const prevLength = prevHandLengthRef.current;
+    prevHandLengthRef.current = handCards.length;
+    if (!isDraggingCard || handCards.length === prevLength) {
       return;
     }
     forceStopDragging();

@@ -109,38 +109,39 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                 className="w-full h-full object-cover"
               />
             )}
+          </div>
 
-            {card.type === 'monster' && monsterRewards?.length ? (
+          {/* Monster Reward Preview */}
+          {card.type === 'monster' && monsterRewards?.length ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
+                <Sparkles className="w-4 h-4" />
+                击败奖励（二选一）
+              </div>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-semibold text-amber-600">
-                  <Sparkles className="w-4 h-4" />
-                  击败奖励
-                </div>
-                <div className="space-y-2">
-                  {monsterRewards.map(option => (
-                    <div
-                      key={option.id}
-                      className="rounded-md border border-amber-200/60 bg-amber-50/40 p-3 text-sm"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-foreground">{option.title}</span>
-                        {option.detail && (
-                          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-amber-700">
-                            {option.detail}
-                          </span>
-                        )}
-                      </div>
-                      {option.description && (
-                        <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                          {option.description}
-                        </div>
+                {monsterRewards.map(option => (
+                  <div
+                    key={option.id}
+                    className="rounded-md border border-amber-200/60 dark:border-amber-700/40 bg-amber-50/40 dark:bg-amber-900/20 p-3 text-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-foreground">{option.title}</span>
+                      {option.detail && (
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium tracking-wide text-amber-700 dark:text-amber-300">
+                          {option.detail}
+                        </span>
                       )}
                     </div>
-                  ))}
-                </div>
+                    {option.description && (
+                      <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                        {option.description}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           {/* Detailed Stats & Description */}
           <div className="space-y-3 text-sm">

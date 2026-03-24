@@ -79,32 +79,29 @@ export default function BackpackZone({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onClick={onOpenViewer}
       className={cn(
-        'relative h-full w-full border-2 border-dashed border-border bg-gradient-to-br from-amber-900/40 via-amber-800/20 to-yellow-700/10 p-3 transition-all duration-200 flex flex-col gap-3',
+        'relative h-full w-full cursor-pointer overflow-hidden border-2 border-dashed border-border bg-gradient-to-br from-amber-900/40 via-amber-800/20 to-yellow-700/10 transition-all duration-200',
         isDropTarget && 'border-primary border-4 bg-primary/10 animate-pulse',
-        isDropTarget && isOver && 'ring-4 ring-primary bg-primary/20 scale-[1.01]'
+        isDropTarget && isOver && 'ring-4 ring-primary bg-primary/20 scale-[1.01]',
+        !isDropTarget && 'hover:scale-[1.01]'
       )}
     >
-      <div
-        className="relative flex-1 cursor-pointer rounded-xl border border-white/10 bg-black/10 transition hover:bg-black/20"
-        onClick={onOpenViewer}
-      >
-        <StackedCardPile
-          count={backpackCount}
-          className="rounded-xl"
-          label="Backpack"
-          variant="muted"
-        />
-        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-2 text-white/90">
-          <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
-            <span className="font-semibold">Backpack</span>
-            <Badge className="bg-black/50 text-white font-mono dh-hero-chip px-1 sm:px-2">
-              {backpackCount}/{capacity}
-            </Badge>
-          </div>
-          <div className="flex items-center justify-end dh-hero-chip font-medium">
-            查看内容
-          </div>
+      <StackedCardPile
+        count={backpackCount}
+        className="rounded-xl"
+        label="Backpack"
+        variant="muted"
+      />
+      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3 text-white/90">
+        <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
+          <span className="font-semibold">Backpack</span>
+          <Badge className="bg-black/50 text-white font-mono dh-hero-chip px-1 sm:px-2">
+            {backpackCount}
+          </Badge>
+        </div>
+        <div className="flex items-center justify-end dh-hero-chip font-medium">
+          查看内容
         </div>
       </div>
     </Card>

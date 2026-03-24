@@ -121,6 +121,7 @@ export interface GameCardData {
   eventChoices?: EventChoiceDefinition[]; // For event cards
   isCurse?: boolean;
   // Monster-specific properties
+  monsterType?: string; // Base type for rage lookup (Dragon, Skeleton, etc.)
   attack?: number; // Monster attack value
   hp?: number; // Monster current HP
   maxHp?: number; // Monster original HP
@@ -690,7 +691,7 @@ const amuletEffectText =
             {/* Magic / Hero Magic Effect */}
             {isMagicLikeCard && (
               <div className="dh-card__body-text w-full text-muted-foreground px-1 overflow-y-auto">
-                {card.magicEffect || card.heroMagicEffect || card.description}
+                {card.description || card.magicEffect || card.heroMagicEffect}
               </div>
             )}
 

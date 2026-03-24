@@ -23,6 +23,21 @@ export interface EquipmentSlotBonusSnapshot {
   equipmentSlot2: SlotBonusSnapshot;
 }
 
+export interface CombatStateSnapshot {
+  engagedMonsterIds: string[];
+  initiator: 'hero' | 'monster' | null;
+  currentTurn: 'hero' | 'monster';
+  heroAttacksThisTurn: Record<string, boolean>;
+  heroAttacksRemaining: number;
+  heroDamageThisTurn: Record<string, number>;
+  monsterAttackQueue: string[];
+  pendingBlock: null | {
+    monsterId: string;
+    attackValue: number;
+    monsterName: string;
+  };
+}
+
 export interface PersistedGameState {
   version: typeof STORAGE_VERSION;
   timestamp: number;
@@ -62,6 +77,19 @@ export interface PersistedGameState {
   turnDamageTaken: number;
   berserkTurnBuff: EquipmentBuffSnapshot;
   extraAttackCharges: number;
+  combatState?: CombatStateSnapshot;
+  tempShield?: number;
+  nextWeaponBonus?: number;
+  nextShieldBonus?: number;
+  slotAttackBursts?: EquipmentBuffSnapshot;
+  vampiricNextAttack?: boolean;
+  unbreakableNext?: boolean;
+  defensiveStanceActive?: boolean;
+  berserkerCharges?: number;
+  heroSkillUsedThisWave?: boolean;
+  drawPending?: boolean;
+  waveDiscardCount?: number;
+  resolvingDungeonCardId?: string | null;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

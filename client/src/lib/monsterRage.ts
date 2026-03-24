@@ -43,7 +43,7 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
   if (card.type !== 'monster') {
     return card;
   }
-  const rule = getMonsterRageRule(card.name);
+  const rule = getMonsterRageRule(card.monsterType ?? card.name);
   if (!rule) {
     return card;
   }

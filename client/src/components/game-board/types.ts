@@ -283,6 +283,7 @@ export type BackpackHandFlight = {
   duration: number;
   progress: number;
   arcHeight: number;
+  delivered?: boolean;
 };
 
 export type PendingHandInsertion = {

@@ -847,7 +847,7 @@
 
   .dh-hero-chip {
     font-size: calc(
-      0.65rem *
+      0.85rem *
       var(--dh-hero-font-scale, 1) *
       var(--dh-hero-instance-scale, 1)
     );
@@ -856,7 +856,7 @@
 
   .dh-hero-small {
     font-size: calc(
-      0.58rem *
+      0.78rem *
       var(--dh-hero-font-scale, 1) *
       var(--dh-hero-instance-scale, 1)
     );
@@ -877,8 +877,8 @@
   }
 
   .dh-hero-icon {
-    width: calc(1rem * var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1));
-    height: calc(1rem * var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1));
+    width: calc(1.2rem * var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1));
+    height: calc(1.2rem * var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1));
   }
 
   .dh-deck-label {

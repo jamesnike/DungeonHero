@@ -302,9 +302,11 @@ function renderDie(
     const isTopFace = face === faceEntries[faceEntries.length - 1].face;
     
     ctx.fillStyle = isTopFace ? 'rgba(255,255,255,1.0)' : 'rgba(255,255,255,0.85)';
-    // Responsive font size based on canvas size
-    const baseFontSize = Math.max(8, Math.min(scale * (isTopFace ? 5.0 : 0.25), isTopFace ? scale * 5.0 : scale * 0.25));
-    ctx.font = `bold ${baseFontSize * labelScale}px var(--font-mono)`;
+    const faceInradius = scale * 0.30;
+    const baseFontSize = isTopFace
+      ? Math.max(16, faceInradius * 1.6)
+      : Math.max(12, faceInradius * 0.85);
+    ctx.font = `bold ${Math.round(baseFontSize * labelScale)}px 'Roboto Mono', monospace`;
     
     // Add glow effect for top face
     if (isTopFace) {
