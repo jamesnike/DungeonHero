@@ -80,7 +80,7 @@ export default function GameHeader({
 
       <button 
         onClick={onDeckClick}
-        className="game-header__deck hover-elevate active-elevate-2 rounded-md transition-all"
+        className="game-header__deck hover-elevate active-elevate-2 rounded-md transition-transform"
         data-testid="header-deck"
       >
         <Layers className="game-header__icon text-primary" />

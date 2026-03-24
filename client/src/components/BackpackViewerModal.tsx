@@ -14,6 +14,7 @@ interface BackpackViewerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   cards: GameCardData[];
+  capacity?: number;
   recycleCards?: GameCardData[];
   onCardSelect?: (card: GameCardData) => void;
 }
@@ -22,6 +23,7 @@ export default function BackpackViewerModal({
   open,
   onOpenChange,
   cards,
+  capacity,
   recycleCards = [],
   onCardSelect,
 }: BackpackViewerModalProps) {
@@ -82,7 +84,7 @@ export default function BackpackViewerModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Backpack className="w-5 h-5" />
-            背包 ({cards.length} 张)
+            背包 ({cards.length}{capacity != null ? `/${capacity}` : ''} 张)
           </DialogTitle>
           <DialogDescription>背包中的卡牌为无序存放，抽牌时会随机选择</DialogDescription>
         </DialogHeader>

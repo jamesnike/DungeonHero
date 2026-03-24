@@ -13,31 +13,33 @@ let touchTarget: HTMLElement | null = null;
 
 export const initMobileDrag = (
   element: HTMLElement,
-  data: DragData,
+  data: DragData | (() => DragData),
   onDragStart?: () => void,
   onDragEnd?: () => void
 ) => {
   let lastTouchPoint: { x: number; y: number } | null = null;
-  // Touch event handlers
+  let rafId: number | null = null;
+  let previewWidth = 0;
+  let previewHeight = 0;
+
+  const resolveData = (): DragData => typeof data === 'function' ? data() : data;
+
   const handleTouchStart = (e: TouchEvent) => {
     e.preventDefault();
     
-    // Store the drag data
-    currentDragData = { ...data };
+    currentDragData = { ...resolveData() };
     dragElement = element;
     
-    // Get the original element's dimensions before cloning
     const rect = element.getBoundingClientRect();
     const originalWidth = rect.width;
     const originalHeight = rect.height;
+    previewWidth = originalWidth;
+    previewHeight = originalHeight;
     
-    // Create a visual drag preview
     dragPreview = element.cloneNode(true) as HTMLElement;
     
-    // Remove classes that might cause size expansion
     dragPreview.classList.remove('w-full', 'h-full');
     
-    // Set explicit dimensions to prevent expansion
     dragPreview.style.width = `${originalWidth}px`;
     dragPreview.style.height = `${originalHeight}px`;
     dragPreview.style.maxWidth = `${originalWidth}px`;
@@ -49,8 +51,9 @@ export const initMobileDrag = (
     dragPreview.style.transform = 'scale(1.05)';
     dragPreview.style.transition = 'none';
     dragPreview.style.boxSizing = 'border-box';
+    dragPreview.style.willChange = 'transform';
+    dragPreview.style.contain = 'layout style paint';
     
-    // Position the preview at touch location
     const touch = e.touches[0];
     dragPreview.style.left = `${touch.clientX - originalWidth / 2}px`;
     dragPreview.style.top = `${touch.clientY - originalHeight / 2}px`;
@@ -58,57 +61,71 @@ export const initMobileDrag = (
     
     document.body.appendChild(dragPreview);
     
-    // Add dragging class to original element
     element.classList.add('opacity-50');
     
-    // Call drag start callback
     onDragStart?.();
   };
-  
+
+  let pendingTouchX = 0;
+  let pendingTouchY = 0;
+  let moveScheduled = false;
+
+  const processTouchMove = () => {
+    moveScheduled = false;
+    rafId = null;
+
+    if (!dragPreview) return;
+
+    dragPreview.style.left = `${pendingTouchX - previewWidth / 2}px`;
+    dragPreview.style.top = `${pendingTouchY - previewHeight / 2}px`;
+
+    dragPreview.style.display = 'none';
+    const elementUnder = document.elementFromPoint(pendingTouchX, pendingTouchY) as HTMLElement;
+    dragPreview.style.display = '';
+
+    touchTarget = elementUnder;
+
+    if (currentDragData) {
+      document.dispatchEvent(new CustomEvent('mobile-drag-move', {
+        detail: { ...currentDragData, clientX: pendingTouchX, clientY: pendingTouchY },
+      }));
+    }
+  };
+
   const handleTouchMove = (e: TouchEvent) => {
     e.preventDefault();
     
     if (!dragPreview) return;
     
     const touch = e.touches[0];
+    pendingTouchX = touch.clientX;
+    pendingTouchY = touch.clientY;
     lastTouchPoint = { x: touch.clientX, y: touch.clientY };
-    
-    // Get preview dimensions (use getBoundingClientRect for accurate size)
-    const previewRect = dragPreview.getBoundingClientRect();
-    
-    // Update preview position
-    dragPreview.style.left = `${touch.clientX - previewRect.width / 2}px`;
-    dragPreview.style.top = `${touch.clientY - previewRect.height / 2}px`;
-    
-    // Find element under touch point (excluding the preview)
-    dragPreview.style.display = 'none';
-    const elementUnder = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement;
-    dragPreview.style.display = '';
-    
-    // Update touch target for drop detection
-    touchTarget = elementUnder;
 
-    // Broadcast position for global listeners (e.g. hero row highlight)
-    if (currentDragData) {
-      document.dispatchEvent(new CustomEvent('mobile-drag-move', {
-        detail: { ...currentDragData, clientX: touch.clientX, clientY: touch.clientY },
-      }));
+    if (!moveScheduled) {
+      moveScheduled = true;
+      rafId = requestAnimationFrame(processTouchMove);
     }
   };
   
   const handleTouchEnd = (e: TouchEvent) => {
     e.preventDefault();
+
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    if (moveScheduled) {
+      processTouchMove();
+    }
     
-    // Clean up preview
     if (dragPreview) {
       dragPreview.remove();
       dragPreview = null;
     }
     
-    // Remove dragging class
     element.classList.remove('opacity-50');
     
-    // Trigger drop if over a valid drop zone
     if (touchTarget && currentDragData) {
       const touch = e.changedTouches[0];
       const dropPoint = lastTouchPoint ?? (touch ? { x: touch.clientX, y: touch.clientY } : null);
@@ -116,13 +133,11 @@ export const initMobileDrag = (
         ? { ...currentDragData, clientX: dropPoint.x, clientY: dropPoint.y }
         : { ...currentDragData };
 
-      // Broadcast globally first so area-based drop targets (hero row) can intercept
       const globalEvent = new CustomEvent('mobile-drag-end', {
         detail,
       });
       document.dispatchEvent(globalEvent);
 
-      // If a global handler already processed this drop, skip local dispatch
       if (!detail._handled) {
         const dropZone = touchTarget.closest('[data-drop-zone]') as HTMLElement;
         if (dropZone) {
@@ -135,26 +150,26 @@ export const initMobileDrag = (
       }
     }
     
-    // Clean up
     currentDragData = null;
     dragElement = null;
     touchTarget = null;
     lastTouchPoint = null;
+    moveScheduled = false;
     
-    // Call drag end callback
     onDragEnd?.();
   };
   
-  // Add touch event listeners
   element.addEventListener('touchstart', handleTouchStart, { passive: false });
   element.addEventListener('touchmove', handleTouchMove, { passive: false });
   element.addEventListener('touchend', handleTouchEnd, { passive: false });
   
-  // Return cleanup function
   return () => {
     element.removeEventListener('touchstart', handleTouchStart);
     element.removeEventListener('touchmove', handleTouchMove);
     element.removeEventListener('touchend', handleTouchEnd);
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+    }
   };
 };
 
@@ -163,17 +178,14 @@ export const initMobileDrop = (
   onDrop: (data: DragData) => void,
   acceptTypes?: string[]
 ) => {
-  // Mark as drop zone
   element.setAttribute('data-drop-zone', 'true');
   if (acceptTypes) {
     element.setAttribute('data-accept-types', acceptTypes.join(','));
   }
   
-  // Handle mobile drop events
   const handleMobileDrop = (e: CustomEvent) => {
     const dragData = e.detail as DragData;
     
-    // Check if this drop zone accepts this type
     if (acceptTypes && !acceptTypes.includes(dragData.type)) {
       return;
     }
@@ -184,7 +196,6 @@ export const initMobileDrop = (
   
   element.addEventListener('mobile-drop', handleMobileDrop as EventListener);
   
-  // Return cleanup function
   return () => {
     element.removeAttribute('data-drop-zone');
     element.removeAttribute('data-accept-types');

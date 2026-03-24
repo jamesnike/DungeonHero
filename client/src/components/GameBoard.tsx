@@ -2961,19 +2961,65 @@ export default function GameBoard() {
       const nextEngaged = alreadyEngaged ? prev.engagedMonsterIds : [...prev.engagedMonsterIds, monster.id];
 
       if (prev.engagedMonsterIds.length === 0) {
+        if (initiator === 'monster') {
+          // Monster initiates: immediately set pendingBlock so the monster
+          // attacks first without waiting for the useEffect chain.
+          return {
+            ...prev,
+            engagedMonsterIds: nextEngaged,
+            initiator,
+            currentTurn: 'monster',
+            heroAttacksThisTurn: {
+              equipmentSlot1: false,
+              equipmentSlot2: false,
+            },
+            heroAttacksRemaining: 2,
+            heroDamageThisTurn: {},
+            monsterAttackQueue: [],
+            pendingBlock: {
+              monsterId: monster.id,
+              attackValue: monster.attack ?? monster.value,
+              monsterName: monster.name,
+            },
+          };
+        }
         return {
           ...prev,
           engagedMonsterIds: nextEngaged,
           initiator,
-          currentTurn: initiator,
+          currentTurn: 'hero',
           heroAttacksThisTurn: {
             equipmentSlot1: false,
             equipmentSlot2: false,
           },
           heroAttacksRemaining: 2,
           heroDamageThisTurn: {},
-          monsterAttackQueue: initiator === 'monster' ? [...nextEngaged] : [],
+          monsterAttackQueue: [],
           pendingBlock: null,
+        };
+      }
+
+      if (initiator === 'monster') {
+        // Adding a monster during existing combat: if it's currently the
+        // hero's turn, switch to the monster's turn so the new monster
+        // attacks immediately.
+        if (prev.currentTurn === 'hero' && !prev.pendingBlock) {
+          return {
+            ...prev,
+            engagedMonsterIds: nextEngaged,
+            currentTurn: 'monster',
+            monsterAttackQueue: prev.monsterAttackQueue,
+            pendingBlock: {
+              monsterId: monster.id,
+              attackValue: monster.attack ?? monster.value,
+              monsterName: monster.name,
+            },
+          };
+        }
+        return {
+          ...prev,
+          engagedMonsterIds: nextEngaged,
+          monsterAttackQueue: [...prev.monsterAttackQueue, monster.id],
         };
       }
 
@@ -2981,10 +3027,6 @@ export default function GameBoard() {
         ...prev,
         engagedMonsterIds: nextEngaged,
         initiator: prev.initiator ?? initiator,
-        monsterAttackQueue:
-          initiator === 'monster'
-            ? [...prev.monsterAttackQueue, monster.id]
-            : prev.monsterAttackQueue,
       };
     });
   };
@@ -9001,7 +9043,6 @@ export default function GameBoard() {
     heroFrameDropCalcLogCountRef.current = 0;
     setDraggedCard(card);
     setDraggedCardSource('hand');
-    updateHeroRowDropHighlight(card);
     startDragSession();
     // Card stays in hand until successfully dropped
     // #region agent log
@@ -9154,7 +9195,6 @@ export default function GameBoard() {
     setDraggedCardSource('dungeon');
     setIsDraggingFromDungeon(true);
     setIsDraggingToHand(true);
-    updateHeroRowDropHighlight(card);
     startDragSession();
   };
   
@@ -9982,7 +10022,7 @@ export default function GameBoard() {
           })}
           
           {/* Row 1, Col 6: DiceRoller */}
-          <div className={`${cellWrapperClass} ${heroRowDropState ? 'ring-4 ring-violet-500/70 rounded-lg' : ''}`}>
+          <div className={cellWrapperClass}>
             <div className={cellInnerClass}>
               <DiceRoller 
                 onRoll={(value) => console.log('Rolled:', value)}
@@ -10096,7 +10136,7 @@ export default function GameBoard() {
                       const stripsToLeft = num - 1;
                       const stripOffsetPx = stripsToLeft * colWidth;
                       const furyColumnClasses = [
-                        'monster-rage-column h-full flex items-center justify-center border-l border-border/20 font-mono font-bold transition-all',
+                        'monster-rage-column h-full flex items-center justify-center border-l border-border/20 font-mono font-bold transition-colors',
                         isActiveLayer
                           ? 'bg-destructive/80 text-destructive-foreground shadow-inner shadow-destructive/60'
                           : 'bg-transparent text-destructive/30 opacity-30',
@@ -10154,7 +10194,7 @@ export default function GameBoard() {
           })}
           
           {/* Row 2, Col 6: GraveyardZone */}
-          <div className={`${cellWrapperClass} ${heroRowDropState ? 'ring-4 ring-violet-500/70 rounded-lg' : ''}`}>
+          <div className={cellWrapperClass}>
             <div className={cellInnerClass} ref={setGraveyardRef}>
               <GraveyardZone
                 onDrop={(card) => {
@@ -10431,6 +10471,7 @@ export default function GameBoard() {
         open={backpackViewerOpen}
         onOpenChange={setBackpackViewerOpen}
         cards={backpackItems}
+        capacity={backpackCapacity}
         recycleCards={permanentMagicRecycleBag}
         onCardSelect={handleCardClick}
       />

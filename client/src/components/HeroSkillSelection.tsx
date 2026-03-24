@@ -28,7 +28,7 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
 
   return (
     <div 
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 transition-opacity duration-200 ${
         isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
@@ -50,7 +50,7 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
               key={skill.id}
               onClick={() => onSelectSkill(skill.id)}
               className={`
-                relative cursor-pointer transition-all duration-300 hover-elevate active-elevate-2
+                relative cursor-pointer transition-[transform,ring,box-shadow] duration-300 hover-elevate active-elevate-2
                 hover:scale-105 hover:shadow-xl hover:ring-4 hover:ring-primary
               `}
               data-testid={`skill-card-${skill.id}`}

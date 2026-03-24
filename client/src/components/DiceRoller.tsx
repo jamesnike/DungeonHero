@@ -263,8 +263,8 @@ export default function DiceRoller({
   return (
     <Card
       className={cn(
-        'relative h-full w-full overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/70 via-slate-900/40 to-slate-900/20 transition-all duration-200',
-        interactive ? 'cursor-pointer hover:scale-[1.01]' : 'cursor-default opacity-95',
+        'relative h-full w-full overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/70 via-slate-900/40 to-slate-900/20 transition-colors duration-200',
+        interactive ? 'cursor-pointer' : 'cursor-default opacity-95',
         className,
       )}
       onClick={interactive ? rollDice : undefined}
@@ -274,7 +274,7 @@ export default function DiceRoller({
         <div className="relative flex flex-1 items-center justify-center" ref={containerRef}>
           <div className="relative flex items-center justify-center" style={squareStyle}>
             <canvas ref={canvasRef} className="dice-canvas" />
-            <div className="pointer-events-none absolute rounded-full bg-black/45 blur-lg" style={shadowStyle} />
+            <div className="pointer-events-none absolute rounded-full bg-black/30" style={shadowStyle} />
           </div>
         </div>
       </div>
@@ -337,18 +337,12 @@ function renderDie(
       : Math.max(12, faceInradius * 0.85);
     ctx.font = `bold ${Math.round(baseFontSize * labelScale)}px 'Roboto Mono', monospace`;
     
-    // Add glow effect for top face
-    if (isTopFace) {
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
-      ctx.shadowBlur = 20;
-    } else {
-      ctx.shadowBlur = 0;
-    }
-
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    if (isTopFace) {
+      ctx.fillStyle = '#fff';
+    }
     ctx.fillText(face.value.toString(), center2D.x, center2D.y);
-    ctx.shadowBlur = 0; // Reset shadow
   }
 }
 

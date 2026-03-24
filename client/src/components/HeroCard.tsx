@@ -278,8 +278,8 @@ export default function HeroCard({
         <span className="font-mono text-primary dh-hero-chip">+{spellDamageDisplay}</span>
       </div>
       <Card className={`
-        relative h-full w-full border-4 border-amber-600 shadow-2xl overflow-hidden
-        transition-all duration-200
+        relative h-full w-full border-4 border-amber-600 shadow-lg overflow-hidden
+        transition-[border-color,transform,ring] duration-200
         ${isDropTarget ? 'border-destructive animate-pulse' : ''}
         ${isDropTarget && isOver ? 'scale-105 ring-4 ring-destructive bg-destructive/10' : ''}
         ${takingDamage ? 'animate-damage-flash' : ''}
@@ -328,7 +328,7 @@ export default function HeroCard({
 
           {/* HP Section */}
           <div className="relative z-10 px-3 py-1.5">
-            <div className="bg-background/80 backdrop-blur-sm rounded-lg p-1.5">
+            <div className="bg-background/95 rounded-lg p-1.5">
               <div className="flex items-center justify-between mb-0.5">
                 <Heart className="dh-hero-icon text-destructive" />
                 <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
@@ -354,7 +354,7 @@ export default function HeroCard({
                   <div className="flex items-center gap-2 flex-wrap justify-center">
                     <button
                       type="button"
-                      className={`dh-hero-btn font-bold uppercase tracking-wide rounded-full transition-all ${heroSkillButtonClasses}`}
+                      className={`dh-hero-btn font-bold uppercase tracking-wide rounded-full transition-[background-color,opacity] ${heroSkillButtonClasses}`}
                       disabled={heroSkillButtonDisabled}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -448,7 +448,7 @@ export default function HeroCard({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        className={`dh-hero-btn-sm font-bold uppercase tracking-wide rounded-full transition-all ${heroMagicButtonClasses(
+                        className={`dh-hero-btn-sm font-bold uppercase tracking-wide rounded-full transition-[background-color,opacity] ${heroMagicButtonClasses(
                           Boolean(onHeroMagicTrigger) && magic.ready,
                         )}`}
                         disabled={!onHeroMagicTrigger || !magic.ready}

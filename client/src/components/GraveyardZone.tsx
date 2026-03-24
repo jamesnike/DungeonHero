@@ -110,7 +110,7 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
         onClick={() => setViewerOpen(true)}
         data-testid="graveyard-zone"
         className={cn(
-          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/80 via-slate-900/50 to-zinc-900/30 transition-all duration-200',
+          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/80 via-slate-900/50 to-zinc-900/30 transition-[border-color,ring] duration-200',
           isHighlightActive && 'ring-4 ring-destructive/60 animate-pulse',
           isHighlightActive && 'scale-105 ring-destructive bg-destructive/20',
           !isDropTarget && 'hover:scale-[1.01]'
@@ -183,7 +183,7 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
                               className="w-full h-full object-cover"
                             />
                           )}
-                          <div className="absolute top-0 right-0 bg-background/80 backdrop-blur-sm rounded-bl px-1">
+                          <div className="absolute top-0 right-0 bg-background/95 rounded-bl px-1">
                             <span className="font-mono font-bold text-xs">{card.value}</span>
                           </div>
                         </div>

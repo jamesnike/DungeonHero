@@ -23,9 +23,20 @@ function App() {
   const rafRef = useRef<number | null>(null);
 
   const handleReady = useCallback(() => {
+    const WARM_UP_FRAMES = 30;
     const warmUp = () => {
       gameMountedFrames.current += 1;
-      if (gameMountedFrames.current >= 10) {
+      // Force a layout calculation on first few frames to pre-compute
+      // CSS grid metrics and settle React reconciliation.
+      if (gameMountedFrames.current <= 5) {
+        const heroCard = document.querySelector('[data-testid="hero-card"]');
+        if (heroCard) void (heroCard as HTMLElement).getBoundingClientRect();
+        const canvas = document.querySelector('.dice-canvas');
+        if (canvas) void (canvas as HTMLElement).getBoundingClientRect();
+        const grid = document.querySelector('.dh-grid-cell');
+        if (grid) void (grid as HTMLElement).offsetHeight;
+      }
+      if (gameMountedFrames.current >= WARM_UP_FRAMES) {
         setShowLoading(false);
       } else {
         rafRef.current = requestAnimationFrame(warmUp);

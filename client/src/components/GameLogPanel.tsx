@@ -299,7 +299,7 @@ export default function GameLogPanel({
       <div ref={wrapperRef} className={wrapperClassName} style={wrapperStyle}>
         <Card
           ref={cardRef}
-          className={`relative z-10 w-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel cursor-pointer${isDragging ? ' combat-panel--dragging' : ''}`}
+          className={`relative z-10 w-full border border-primary/25 bg-card/95 shadow-lg combat-panel cursor-pointer${isDragging ? ' combat-panel--dragging' : ''}`}
           style={{ '--dh-combat-panel-scale': combinedScale.toString() } as CSSProperties}
           onClick={() => setMinimized(false)}
         >
@@ -322,7 +322,7 @@ export default function GameLogPanel({
     <div ref={wrapperRef} className={wrapperClassName} style={wrapperStyle}>
       <Card
         ref={cardRef}
-        className={`relative z-10 w-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
+        className={`relative z-10 w-full border border-primary/25 bg-card/95 shadow-lg combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
         style={{ '--dh-combat-panel-scale': combinedScale.toString() } as CSSProperties}
       >
         <div className="flex flex-col" style={{ maxHeight: 'min(40vh, 320px)' }}>

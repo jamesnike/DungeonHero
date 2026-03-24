@@ -20,7 +20,7 @@ export default function CardFlipOverlay({ state }: { state: EventTransformState 
   const message = state.message ?? '卷轴正在翻转成新的形态…';
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4">
       <div className="w-full max-w-xs sm:max-w-sm text-center space-y-4">
         <div
           className="relative mx-auto h-[260px] sm:h-[320px] w-[170px] sm:w-[220px] rounded-xl border border-primary/40 bg-gradient-to-br from-pink-500/20 via-purple-600/10 to-black/40 p-4 shadow-2xl dh-perspective"

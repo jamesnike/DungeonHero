@@ -42,7 +42,7 @@ export default function ClassDeck({
     <>
       <Card 
         className={cn(
-          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-all duration-200 hover:scale-[1.01]',
+          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-transform duration-200 hover:scale-[1.01]',
           className
         )}
         onClick={() => setViewerOpen(true)}

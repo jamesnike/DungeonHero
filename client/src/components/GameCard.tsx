@@ -242,25 +242,31 @@ function GameCardInner({
     };
   }, []);
 
-  // Set up mobile drag support
+  const cardRef2 = useRef(card);
+  cardRef2.current = card;
+  const onDragStartRef = useRef(onDragStart);
+  onDragStartRef.current = onDragStart;
+  const onDragEndRef = useRef(onDragEnd);
+  onDragEndRef.current = onDragEnd;
+
   useEffect(() => {
     if (disableInteractions || !cardRef.current) return;
     
     const cleanup = initMobileDrag(
       cardRef.current,
-      { type: mobileDragType, data: card },
+      () => ({ type: mobileDragType, data: cardRef2.current }),
       () => {
         setIsDragging(true);
-        onDragStart?.(card);
+        onDragStartRef.current?.(cardRef2.current);
       },
       () => {
         setIsDragging(false);
-        onDragEnd?.();
+        onDragEndRef.current?.();
       }
     );
     
     return cleanup;
-  }, [card, onDragStart, onDragEnd, disableInteractions, mobileDragType]);
+  }, [disableInteractions, mobileDragType]);
 
   // Enable mobile weapon drops when a monster card is a valid drop target
   useEffect(() => {
@@ -438,12 +444,14 @@ const amuletEffectText =
   const isMagicCard = isMagicLikeCard;
   const isTextOnlyCard = isEventCard || isMagicCard;
   const isThemedImageCard = card.type === 'amulet' || card.type === 'potion';
-  const cardImageHeightClass = isThemedImageCard ? 'h-[60%]' : 'h-[75%]';
+  const cardImageHeightClass = isThemedImageCard ? 'h-[60%]' : 'h-[65%]';
   const hasFlipTarget = Boolean(card.flipTarget);
   const cardImageWrapperClassName = [
     'relative',
     cardImageHeightClass,
-    'overflow-hidden transition-all flex items-center justify-center',
+    isThemedImageCard
+      ? 'overflow-hidden flex items-center justify-center'
+      : 'overflow-hidden flex items-end justify-center',
     isThemedImageCard
       ? card.type === 'amulet'
         ? 'bg-amber-200/40'
@@ -453,8 +461,8 @@ const amuletEffectText =
     .filter(Boolean)
     .join(' ');
   const cardImageClassName = isThemedImageCard
-    ? 'select-none transition-all w-auto max-h-[80%] max-w-[80%] object-contain opacity-70'
-    : 'select-none transition-all w-auto max-h-[92%] max-w-[92%] object-contain';
+    ? 'select-none w-auto max-h-[80%] max-w-[80%] object-contain opacity-70'
+    : 'select-none w-auto max-h-[82%] max-w-[82%] object-contain';
 
   const equipmentStatModifierText =
     equipmentStatModifier &&
@@ -482,6 +490,7 @@ const amuletEffectText =
         w-full h-full
         cursor-pointer active:cursor-grabbing
         transition-[transform,opacity,filter] duration-200 ease-out
+        touch-none
         ${isDragging 
           ? 'opacity-60 scale-95 -rotate-6 -translate-y-2' 
           : 'hover:scale-105 hover:-translate-y-1 hover:rotate-1'

@@ -246,7 +246,7 @@ export default function EquipmentSlot({
             const isCurrent = currentDurability > 0 && num === currentDurability;
             const isWithinMax = maxDurability > 0 && num <= maxDurability;
             const columnClasses = [
-              'durability-column h-full flex items-center justify-center border-l border-border/20 font-mono font-bold transition-all',
+              'durability-column h-full flex items-center justify-center border-l border-border/20 font-mono font-bold transition-colors',
               isCurrent
                 ? 'bg-amber-300/80 text-amber-900 shadow-inner shadow-amber-500/40'
                 : 'bg-muted/15 text-muted-foreground/60',
@@ -306,7 +306,7 @@ export default function EquipmentSlot({
         <Card className={`
           h-full w-full border-2 border-dashed border-border
           flex flex-col items-center justify-center gap-2
-          transition-all duration-200 relative z-10
+          transition-[border-color,background-color] duration-200 relative z-10
           ${
             acceptsDrop
               ? isCombatDropTarget

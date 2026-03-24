@@ -69,11 +69,85 @@ function preloadImage(src: string): Promise<void> {
   });
 }
 
+const FONT_LOAD_SPECS = [
+  '400 16px Lato', '700 16px Lato', '300 16px Lato', 'italic 400 16px Lato',
+  '400 16px Cinzel', '500 16px Cinzel', '600 16px Cinzel', '700 16px Cinzel',
+  '400 16px "Roboto Mono"', '500 16px "Roboto Mono"',
+  '600 16px "Roboto Mono"', '700 16px "Roboto Mono"',
+];
+
 function preloadFonts(): Promise<void> {
-  if (document.fonts?.ready) {
-    return document.fonts.ready.then(() => undefined);
+  if (!document.fonts?.load) {
+    return document.fonts?.ready
+      ? document.fonts.ready.then(() => undefined)
+      : Promise.resolve();
   }
-  return Promise.resolve();
+  const loads = FONT_LOAD_SPECS.map((spec) =>
+    document.fonts.load(spec).catch(() => undefined),
+  );
+  return Promise.all(loads).then(() => undefined);
+}
+
+const WARM_ANIMATION_CLASSES = [
+  'animate-card-remove',
+  'combat-overlay__shape--bleed',
+  'combat-overlay__shape--bleed-ring',
+  'combat-overlay__shape--heal',
+  'combat-overlay__shape--heal-rise',
+  'combat-overlay__shape--heal-ring',
+  'animate-preview-drop',
+  'animate-preview-graveyard',
+  'animate-active-landing',
+  'animate-preview-deal',
+];
+
+function warmCssAnimations(): Promise<void> {
+  return new Promise((resolve) => {
+    const container = document.createElement('div');
+    container.style.cssText =
+      'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;opacity:0';
+    WARM_ANIMATION_CLASSES.forEach((cls) => {
+      const el = document.createElement('div');
+      el.className = cls;
+      el.style.animationDuration = '1ms';
+      el.style.animationDelay = '0s';
+      el.style.animationIterationCount = '1';
+      container.appendChild(el);
+    });
+    document.body.appendChild(container);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        container.remove();
+        resolve();
+      });
+    });
+  });
+}
+
+function warmCanvas2D(): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const c = document.createElement('canvas');
+      c.width = 220;
+      c.height = 220;
+      const ctx = c.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#FFA5A5';
+        ctx.beginPath();
+        ctx.arc(110, 110, 80, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#2B1F33';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.font = 'bold 40px "Roboto Mono"';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('20', 90, 120);
+      }
+    } catch {
+      // ignore
+    }
+    resolve();
+  });
 }
 
 interface LoadingScreenProps {
@@ -102,7 +176,8 @@ export default function LoadingScreen({ onReady }: LoadingScreenProps) {
 
   useEffect(() => {
     let cancelled = false;
-    const totalTasks = ALL_IMAGES.length + 1; // +1 for fonts
+    // +1 fonts, +1 CSS animation warm, +1 canvas warm
+    const totalTasks = ALL_IMAGES.length + 3;
     let completed = 0;
 
     const tick = () => {
@@ -118,6 +193,8 @@ export default function LoadingScreen({ onReady }: LoadingScreenProps) {
       preloadImage(src).then(tick);
     });
     preloadFonts().then(tick);
+    warmCssAnimations().then(tick);
+    warmCanvas2D().then(tick);
 
     return () => { cancelled = true; };
   }, [handleComplete]);
@@ -145,6 +222,21 @@ export default function LoadingScreen({ onReady }: LoadingScreenProps) {
         <p className="loading-screen__percent">{progress}%</p>
 
         <p className="loading-screen__flavor">{FLAVOR_TEXTS[flavorIdx]}</p>
+      </div>
+      {/* Hidden font-rendering probes to force browser to rasterize all weights */}
+      <div aria-hidden style={{ position: 'absolute', top: -9999, left: -9999, opacity: 0, pointerEvents: 'none' }}>
+        <span style={{ fontFamily: 'Lato, sans-serif', fontWeight: 300 }}>x</span>
+        <span style={{ fontFamily: 'Lato, sans-serif', fontWeight: 400 }}>x</span>
+        <span style={{ fontFamily: 'Lato, sans-serif', fontWeight: 700 }}>x</span>
+        <span style={{ fontFamily: 'Lato, sans-serif', fontWeight: 400, fontStyle: 'italic' }}>x</span>
+        <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 400 }}>x</span>
+        <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 500 }}>x</span>
+        <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 600 }}>x</span>
+        <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 700 }}>x</span>
+        <span style={{ fontFamily: '"Roboto Mono", monospace', fontWeight: 400 }}>x</span>
+        <span style={{ fontFamily: '"Roboto Mono", monospace', fontWeight: 500 }}>x</span>
+        <span style={{ fontFamily: '"Roboto Mono", monospace', fontWeight: 600 }}>x</span>
+        <span style={{ fontFamily: '"Roboto Mono", monospace', fontWeight: 700 }}>x</span>
       </div>
     </div>
   );

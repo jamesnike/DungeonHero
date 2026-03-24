@@ -37,12 +37,12 @@ export default function SellZone({ onDrop, isDropTarget }: SellZoneProps) {
       <Card className={`
         w-full h-full border-2 border-dashed
         flex flex-col items-center justify-center gap-2
-        transition-all duration-200
+        transition-[border-color,background-color,transform] duration-200
         ${isDropTarget ? 'border-yellow-500 border-4 bg-yellow-500/10 scale-105' : 'border-border bg-muted/30'}
       `}>
         <div className={`
           w-12 h-12 rounded-full flex items-center justify-center
-          transition-all duration-200
+          transition-colors duration-200
           ${isDropTarget ? 'bg-yellow-500/20' : 'bg-background/50'}
         `}>
           <Coins className={`w-6 h-6 ${isDropTarget ? 'text-yellow-500' : 'text-muted-foreground'}`} />

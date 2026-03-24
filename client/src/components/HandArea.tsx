@@ -37,7 +37,7 @@ export default function HandArea({
 
   return (
     <div 
-      className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t-2 border-card-border shadow-2xl"
+      className="fixed bottom-0 left-0 right-0 bg-card border-t-2 border-card-border shadow-lg"
       style={{ height: 'clamp(140px, 18vh, 240px)' }}
     >
       <div className="h-full px-4 py-2 lg:px-8">
@@ -58,7 +58,7 @@ export default function HandArea({
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           className={`
-            h-[calc(100%-2rem)] rounded-lg border-2 transition-all duration-200
+            h-[calc(100%-2rem)] rounded-lg border-2 transition-[border-color,background-color] duration-200
             ${isDropTarget && handCards.length < maxHandSize 
               ? 'border-primary border-dashed bg-primary/10' 
               : 'border-transparent'

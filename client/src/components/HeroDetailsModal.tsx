@@ -108,16 +108,16 @@ export default function HeroDetailsModal({
         <div className="space-y-6 py-2 overflow-y-auto flex-1 min-h-0 pr-1">
           <div className="flex flex-col gap-4 lg:flex-row">
             <div className="overflow-hidden rounded-2xl border bg-muted/40 max-h-[30vh] lg:max-h-none lg:w-1/3">
-              <div className="relative aspect-[3/4] h-full w-full bg-gradient-to-b from-background via-background/70 to-muted">
+              <div className="relative h-full w-full bg-gradient-to-b from-background via-background/70 to-muted flex items-center justify-center">
                 {heroVariant.image ? (
                   <img
                     src={heroVariant.image}
                     alt={heroVariant.name}
-                    className="h-full w-full object-cover"
+                    className="max-h-full max-w-full object-contain"
                     draggable={false}
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-muted-foreground">暂无立绘</div>
+                  <div className="flex h-full items-center justify-center text-muted-foreground aspect-[3/4]">暂无立绘</div>
                 )}
               </div>
             </div>

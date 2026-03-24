@@ -155,7 +155,7 @@ export default function CombatPanel({
     return (
       <Card
         ref={cardRef}
-        className={`relative z-10 w-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
+        className={`relative z-10 w-full border border-primary/25 bg-card/95 shadow-lg combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
         style={{ '--dh-combat-panel-scale': combinedPanelScale.toString() } as CSSProperties}
       >
         <div
@@ -194,7 +194,7 @@ export default function CombatPanel({
   return (
     <Card
       ref={cardRef}
-      className={`relative z-10 w-full h-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
+      className={`relative z-10 w-full h-full border border-primary/25 bg-card/95 shadow-lg combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
       style={{ '--dh-combat-panel-scale': combinedPanelScale.toString() } as CSSProperties}
     >
       <div className="p-2 h-full flex flex-col gap-2">

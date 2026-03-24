@@ -81,7 +81,7 @@ export default function BackpackZone({
       onDrop={handleDrop}
       onClick={onOpenViewer}
       className={cn(
-        'relative h-full w-full cursor-pointer overflow-hidden border-2 border-dashed border-border bg-gradient-to-br from-amber-900/40 via-amber-800/20 to-yellow-700/10 transition-all duration-200',
+        'relative h-full w-full cursor-pointer overflow-hidden border-2 border-dashed border-border bg-gradient-to-br from-amber-900/40 via-amber-800/20 to-yellow-700/10 transition-[border-color,background-color,transform] duration-200',
         isDropTarget && 'border-primary border-4 bg-primary/10 animate-pulse',
         isDropTarget && isOver && 'ring-4 ring-primary bg-primary/20 scale-[1.01]',
         !isDropTarget && 'hover:scale-[1.01]'

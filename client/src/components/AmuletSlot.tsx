@@ -155,7 +155,7 @@ export default function AmuletSlot({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative h-full w-full rounded-xl transition-all duration-200 ease-out ${dropStateClass}`}
+      className={`relative h-full w-full rounded-xl transition-[border-color,background-color] duration-200 ease-out ${dropStateClass}`}
       data-testid="slot-amulet"
       style={{ '--dh-hero-instance-scale': appliedSlotScale.toString() } as CSSProperties}
     >
@@ -183,7 +183,7 @@ export default function AmuletSlot({
       ) : (
         <Card className={`
           h-full w-full border-4 border-dashed overflow-hidden
-          transition-all duration-200
+          transition-[border-color,background-color] duration-200
           ${isDropTarget ? 'border-primary animate-pulse bg-primary/10' : 'border-muted bg-muted/20'}
           ${isDropTarget && isOver ? 'scale-105 ring-4 ring-primary bg-primary/20' : ''}
         `}>

@@ -352,6 +352,7 @@
     justify-content: center;
     pointer-events: none;
     z-index: 40;
+    contain: layout style paint;
   }
 
   .combat-overlay__shape {
@@ -900,6 +901,7 @@
   }
 
   .dh-card-wrapper {
+    contain: layout style;
     --dh-card-title-base: clamp(0.72rem, 0.6rem + 0.8vw, 1rem);
     --dh-card-body-base: clamp(0.6rem, 0.5rem + 0.5vw, 0.9rem);
     --dh-card-stat-base: clamp(1rem, 0.85rem + 0.8vw, 1.5rem);
@@ -1307,6 +1309,7 @@
     gap: calc(0.85rem * var(--header-scale));
     flex-wrap: nowrap;
     overflow: hidden;
+    contain: layout style;
   }
 
   .game-header__group,
@@ -1398,6 +1401,7 @@
 
   .combat-panel {
     --combat-panel-scale: var(--dh-combat-panel-scale, 1);
+    contain: layout style;
   }
 
   .combat-panel__label {
