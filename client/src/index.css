@@ -964,6 +964,28 @@
     line-height: 1.25;
   }
 
+  .dh-hero-btn {
+    font-size: calc(
+      0.75rem *
+      var(--dh-hero-font-scale, 1) *
+      var(--dh-hero-instance-scale, 1)
+    );
+    padding: calc(0.4rem * var(--dh-hero-instance-scale, 1))
+             calc(1rem * var(--dh-hero-instance-scale, 1));
+    line-height: 1.2;
+  }
+
+  .dh-hero-btn-sm {
+    font-size: calc(
+      0.68rem *
+      var(--dh-hero-font-scale, 1) *
+      var(--dh-hero-instance-scale, 1)
+    );
+    padding: calc(0.3rem * var(--dh-hero-instance-scale, 1))
+             calc(0.75rem * var(--dh-hero-instance-scale, 1));
+    line-height: 1.2;
+  }
+
   .dh-hero-icon {
     width: calc(1.2rem * var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1));
     height: calc(1.2rem * var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1));
@@ -1309,6 +1331,22 @@
   .combat-panel--dragging {
     transition: box-shadow 150ms ease, opacity 150ms ease;
     opacity: 0.98;
+  }
+
+  /* Game log panel */
+  .game-log-panel-wrapper {
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
+
+  .game-log-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .game-log-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .game-log-scroll::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.25);
+    border-radius: 4px;
   }
 }
 

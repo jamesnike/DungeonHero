@@ -36,6 +36,7 @@ interface EquipmentSlotProps {
   shieldBlockAnimation?: boolean;
   weaponSwingVariant?: number;
   shieldBlockVariant?: number;
+  isExhaustedThisTurn?: boolean;
 }
 
 export default function EquipmentSlot({
@@ -61,6 +62,7 @@ export default function EquipmentSlot({
   shieldBlockAnimation = false,
   weaponSwingVariant = 0,
   shieldBlockVariant = 0,
+  isExhaustedThisTurn = false,
 }: EquipmentSlotProps) {
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
@@ -291,6 +293,7 @@ export default function EquipmentSlot({
             weaponSwingVariant={weaponSwingVariant}
             shieldBlockAnimation={shieldBlockAnimation}
             shieldBlockVariant={shieldBlockVariant}
+            showExhaustedOverlay={isExhaustedThisTurn}
           />
           {/* Backpack count overlay */}
           {type === 'backpack' && backpackCount > 1 && (

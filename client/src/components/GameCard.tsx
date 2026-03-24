@@ -10,6 +10,7 @@ import {
   Scroll,
   Infinity,
   Wand2,
+  X,
 } from 'lucide-react';
 import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
 
@@ -160,6 +161,7 @@ interface GameCardProps {
   weaponSwingVariant?: number;
   shieldBlockVariant?: number;
   equipmentStatModifier?: EquipmentCardStatModifier | null;
+  showExhaustedOverlay?: boolean;
 }
 
 function GameCardInner({
@@ -179,6 +181,7 @@ function GameCardInner({
   weaponSwingVariant = 0,
   shieldBlockVariant = 0,
   equipmentStatModifier = null,
+  showExhaustedOverlay = false,
 }: GameCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [cardScale, setCardScale] = useState(1);
@@ -787,6 +790,11 @@ const amuletEffectText =
               </div>
             </>
           )}
+          {showExhaustedOverlay && isDragging && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/10 pointer-events-none">
+              <X className="w-4/5 h-4/5 text-red-500/40 stroke-[3]" />
+            </div>
+          )}
         </div>
       </Card>
     </div>
@@ -827,7 +835,8 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
     prev.isEngaged === next.isEngaged &&
     prev.weaponSwingVariant === next.weaponSwingVariant &&
     prev.shieldBlockVariant === next.shieldBlockVariant &&
-    prev.equipmentStatModifier === next.equipmentStatModifier
+    prev.equipmentStatModifier === next.equipmentStatModifier &&
+    prev.showExhaustedOverlay === next.showExhaustedOverlay
   );
 }
 

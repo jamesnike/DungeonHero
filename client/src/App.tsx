@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -18,20 +18,31 @@ function Router() {
 }
 
 function App() {
-  const [ready, setReady] = useState(false);
-  const handleReady = useCallback(() => setReady(true), []);
+  const [showLoading, setShowLoading] = useState(true);
+  const gameMountedFrames = useRef(0);
+  const rafRef = useRef<number | null>(null);
+
+  const handleReady = useCallback(() => {
+    const warmUp = () => {
+      gameMountedFrames.current += 1;
+      if (gameMountedFrames.current >= 10) {
+        setShowLoading(false);
+      } else {
+        rafRef.current = requestAnimationFrame(warmUp);
+      }
+    };
+    rafRef.current = requestAnimationFrame(warmUp);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        {ready ? (
-          <>
-            <Toaster />
-            <Router />
-          </>
-        ) : (
-          <LoadingScreen onReady={handleReady} />
-        )}
+        <Toaster />
+        {/* Game renders immediately but is invisible under the loading screen */}
+        <div style={showLoading ? { visibility: 'hidden', position: 'fixed', inset: 0, zIndex: 0 } : undefined}>
+          <Router />
+        </div>
+        {showLoading && <LoadingScreen onReady={handleReady} />}
       </TooltipProvider>
     </QueryClientProvider>
   );

@@ -96,8 +96,8 @@ export default function HeroDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-2xl font-serif">{heroVariant.name}</DialogTitle>
           <DialogDescription className="flex items-center gap-2">
             <span className="font-semibold text-foreground">{heroVariant.classTitle}</span>
@@ -105,7 +105,7 @@ export default function HeroDetailsModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-2">
+        <div className="space-y-6 py-2 overflow-y-auto flex-1 min-h-0 pr-1">
           <div className="flex flex-col gap-4 lg:flex-row">
             <div className="overflow-hidden rounded-2xl border bg-muted/40 lg:w-1/3">
               <div className="relative aspect-[3/4] w-full bg-gradient-to-b from-background via-background/70 to-muted">

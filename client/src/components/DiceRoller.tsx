@@ -51,6 +51,10 @@ export default function DiceRoller({
   } | null>(null);
   const pendingResultRef = useRef<number | null>(null);
   const autoRollRef = useRef<number | null>(null);
+  const onRollRef = useRef(onRoll);
+  onRollRef.current = onRoll;
+  const scaleMultiplierRef = useRef(scaleMultiplier);
+  scaleMultiplierRef.current = scaleMultiplier;
 
   const vertices = useMemo(() => {
     const raw: Vec3[] = [
@@ -101,6 +105,14 @@ export default function DiceRoller({
     });
   }, [vertices]);
 
+  const drawOnce = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    renderDie(ctx, canvas, vertices, faces, orientationRef.current, scaleMultiplierRef.current);
+  }, [vertices, faces]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -118,7 +130,7 @@ export default function DiceRoller({
 
       currentCanvas.width = width * dpr;
       currentCanvas.height = height * dpr;
-      // Removed ctx.setTransform to avoid double-scaling since renderDie uses physical pixels
+      drawOnce();
     };
 
     resize();
@@ -127,6 +139,18 @@ export default function DiceRoller({
       requestAnimationFrame(resize);
     });
     resizeObserver.observe(canvas);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [faces, vertices, drawOnce]);
+
+  useEffect(() => {
+    if (!isRolling) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     const draw = (timestamp: number) => {
       const rollState = rollStateRef.current;
@@ -146,20 +170,25 @@ export default function DiceRoller({
       if (pendingResultRef.current !== null) {
         const value = pendingResultRef.current;
         pendingResultRef.current = null;
-        onRoll?.(value);
+        onRollRef.current?.(value);
       }
 
-      renderDie(ctx, canvas, vertices, faces, orientationRef.current, scaleMultiplier);
-      animationRef.current = requestAnimationFrame(draw);
+      renderDie(ctx, canvas, vertices, faces, orientationRef.current, scaleMultiplierRef.current);
+
+      if (rollStateRef.current) {
+        animationRef.current = requestAnimationFrame(draw);
+      }
     };
 
     animationRef.current = requestAnimationFrame(draw);
-
     return () => {
-      resizeObserver.disconnect();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [faces, onRoll, vertices, scaleMultiplier]);
+  }, [isRolling, faces, vertices]);
+
+  useEffect(() => {
+    if (!isRolling) drawOnce();
+  }, [scaleMultiplier, drawOnce, isRolling]);
 
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') {

@@ -339,14 +339,14 @@ export default function HeroCard({
             {heroSkillInfo && (
               <div className="flex flex-col items-center gap-1">
                 {isPassiveSkill ? (
-                  <span className="text-xs font-semibold uppercase tracking-wide text-amber-950 bg-amber-300/30 px-3 py-1.5 rounded-full border border-amber-400/40">
+                  <span className="dh-hero-btn font-semibold uppercase tracking-wide text-amber-950 bg-amber-300/30 rounded-full border border-amber-400/40">
                     Passive: {heroSkillInfo.name}
                   </span>
                 ) : (
                   <div className="flex items-center gap-2 flex-wrap justify-center">
                     <button
                       type="button"
-                      className={`text-xs font-bold uppercase tracking-wide px-5 py-2 rounded-full transition-all ${heroSkillButtonClasses}`}
+                      className={`dh-hero-btn font-bold uppercase tracking-wide rounded-full transition-all ${heroSkillButtonClasses}`}
                       disabled={heroSkillButtonDisabled}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -361,7 +361,7 @@ export default function HeroCard({
                     {heroSkillInfo.isPending && onHeroSkillCancel && (
                       <button
                         type="button"
-                        className="dh-hero-small font-semibold text-amber-900/60 hover:text-amber-950 transition-colors"
+                        className="dh-hero-btn-sm font-semibold text-amber-900/60 hover:text-amber-950 transition-colors"
                         onClick={(event) => {
                           event.stopPropagation();
                           onHeroSkillCancel();
@@ -387,7 +387,7 @@ export default function HeroCard({
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="dh-hero-small font-semibold px-3 py-1 rounded-full bg-emerald-500 text-white hover:bg-emerald-500/90 transition"
+                    className="dh-hero-btn-sm font-semibold rounded-full bg-emerald-500 text-white hover:bg-emerald-500/90 transition"
                     onClick={(event) => {
                       event.stopPropagation();
                       onHeroMagicChoice?.('heal');
@@ -397,7 +397,7 @@ export default function HeroCard({
                   </button>
                   <button
                     type="button"
-                    className="dh-hero-small font-semibold px-3 py-1 rounded-full bg-sky-500 text-white hover:bg-sky-500/90 transition"
+                    className="dh-hero-btn-sm font-semibold rounded-full bg-sky-500 text-white hover:bg-sky-500/90 transition"
                     onClick={(event) => {
                       event.stopPropagation();
                       onHeroMagicChoice?.('purge');
@@ -408,7 +408,7 @@ export default function HeroCard({
                   {onHeroMagicCancel && (
                     <button
                       type="button"
-                      className="dh-hero-small font-semibold px-3 py-1 rounded-full border border-border text-amber-900/60 hover:text-amber-950 transition"
+                      className="dh-hero-btn-sm font-semibold rounded-full border border-border text-amber-900/60 hover:text-amber-950 transition"
                       onClick={(event) => {
                         event.stopPropagation();
                         onHeroMagicCancel();
@@ -440,7 +440,7 @@ export default function HeroCard({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        className={`text-xs font-bold uppercase tracking-wide px-4 py-1.5 rounded-full transition-all ${heroMagicButtonClasses(
+                        className={`dh-hero-btn-sm font-bold uppercase tracking-wide rounded-full transition-all ${heroMagicButtonClasses(
                           Boolean(onHeroMagicTrigger) && magic.ready,
                         )}`}
                         disabled={!onHeroMagicTrigger || !magic.ready}

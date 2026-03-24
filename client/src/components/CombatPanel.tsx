@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Shield, Swords } from 'lucide-react';
+import { Shield, Swords, Minimize2, Maximize2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 
@@ -44,12 +44,13 @@ export default function CombatPanel({
   onDragHandlePointerDown,
   isDragging = false,
 }: CombatPanelProps) {
-  if (!isActive || engagedMonsters.length === 0) {
-    return null;
-  }
+  const [minimized, setMinimized] = useState(true);
   const [panelScale, setPanelScale] = useState(1);
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (!isActive || engagedMonsters.length === 0) {
+      return;
+    }
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
@@ -70,7 +71,11 @@ export default function CombatPanel({
     const observer = new ResizeObserver(updateScale);
     observer.observe(target);
     return () => observer.disconnect();
-  }, []);
+  }, [isActive, engagedMonsters.length]);
+
+  if (!isActive || engagedMonsters.length === 0) {
+    return null;
+  }
   const currentAttackerId = pendingBlock?.monsterId ?? null;
   const currentAttacker =
     pendingBlock && engagedMonsters.find(mon => mon.id === pendingBlock.monsterId);
@@ -146,6 +151,46 @@ export default function CombatPanel({
     Math.max(FINAL_PANEL_MIN, boostedCombinedScale),
   );
 
+  if (minimized) {
+    return (
+      <Card
+        ref={cardRef}
+        className={`relative z-10 w-full border border-primary/25 bg-card/60 backdrop-blur-md shadow-2xl combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
+        style={{ '--dh-combat-panel-scale': combinedPanelScale.toString() } as CSSProperties}
+      >
+        <div
+          className={`p-2 flex items-center gap-2 combat-panel__drag-handle${isDragging ? ' combat-panel__drag-handle--active' : ''}`}
+          onPointerDown={onDragHandlePointerDown}
+          aria-grabbed={isDragging}
+        >
+          <button
+            type="button"
+            className="flex-shrink-0 rounded-md p-1 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+            onClick={() => setMinimized(false)}
+            title="Expand combat panel"
+          >
+            <Maximize2 className="combat-panel__icon" />
+          </button>
+          {currentTurn === 'hero' ? (
+            <Button
+              size="sm"
+              className="combat-panel__button flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md"
+              onClick={(e) => { e.stopPropagation(); onEndHeroTurn(); }}
+            >
+              End Hero Turn
+            </Button>
+          ) : (
+            <span className="combat-panel__summary text-muted-foreground truncate flex-1">
+              {currentAttacker
+                ? `${currentAttacker.name} attacking...`
+                : 'Monsters turn'}
+            </span>
+          )}
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card
       ref={cardRef}
@@ -158,19 +203,29 @@ export default function CombatPanel({
           onPointerDown={onDragHandlePointerDown}
           aria-grabbed={isDragging}
         >
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 flex-1 min-w-0">
             <p className="combat-panel__label uppercase tracking-wide text-muted-foreground">Combat</p>
             <p className="combat-panel__title font-semibold">
               {currentTurn === 'hero' ? 'Hero Turn' : 'Monsters Turn'}
             </p>
             <p className="combat-panel__summary text-muted-foreground line-clamp-2">{turnSummary}</p>
           </div>
-          <div className="combat-panel__icon-ring rounded-full bg-muted/60 flex items-center justify-center flex-shrink-0">
-            {currentTurn === 'hero' ? (
-              <Swords className="combat-panel__icon text-primary" />
-            ) : (
-              <Shield className="combat-panel__icon text-destructive" />
-            )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              className="rounded-md p-1 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+              onClick={() => setMinimized(true)}
+              title="Minimize combat panel"
+            >
+              <Minimize2 className="combat-panel__icon" />
+            </button>
+            <div className="combat-panel__icon-ring rounded-full bg-muted/60 flex items-center justify-center">
+              {currentTurn === 'hero' ? (
+                <Swords className="combat-panel__icon text-primary" />
+              ) : (
+                <Shield className="combat-panel__icon text-destructive" />
+              )}
+            </div>
           </div>
         </div>
 
@@ -228,9 +283,8 @@ export default function CombatPanel({
                   Attacks remaining: {heroAttacksRemaining}
                 </span>
                 <Button
-                  variant="secondary"
                   size="sm"
-                  className="px-2 py-1 combat-panel__button"
+                  className="px-2 py-1 combat-panel__button bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md"
                   onClick={onEndHeroTurn}
                 >
                   End Hero Turn
