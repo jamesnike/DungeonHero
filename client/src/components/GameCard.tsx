@@ -696,13 +696,20 @@ const amuletEffectText =
                             (card.specialAttackBoost ?? 0) > 0 ? 'text-orange-500' : 'text-red-500'
                           }`} />
                         </div>
-                        <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
-                          (card.specialAttackBoost ?? 0) > 0
-                            ? 'text-orange-600 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]'
-                            : 'text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]'
-                        }`}>
-                          {card.attack ?? card.value}
-                        </span>
+                        <div className="flex items-baseline gap-1">
+                          <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
+                            (card.specialAttackBoost ?? 0) > 0
+                              ? 'text-orange-600 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]'
+                              : 'text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]'
+                          }`}>
+                            {card.attack ?? card.value}
+                          </span>
+                          {equipmentStatModifierText && (
+                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}>
+                              {equipmentStatModifierText}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="absolute top-1 right-1 flex flex-col items-end gap-0">

@@ -1174,7 +1174,7 @@ function createDeck(): GameCardData[] {
         magicEffect: '对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。',
         description: '对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。',
       },
-      destination: 'stay',
+      destination: 'backpack',
       message: '混沌骰局翻转为混沌冲击！',
     },
   });
@@ -2750,7 +2750,7 @@ export default function GameBoard() {
         title: '修复 1 点耐久',
         description: '选择一件武器或护盾，恢复 1 点耐久值。',
         detail: '装备保养',
-        effect: { type: 'repair', amount: 1, targets: ['weapon', 'shield'] },
+        effect: { type: 'repair', amount: 1, targets: ['weapon', 'shield', 'monster'] },
       };
     };
 
@@ -5061,12 +5061,12 @@ export default function GameBoard() {
     setEquipmentSlot2(mapEquipment(snapshot.equipmentSlot2 ?? null, 'equipmentSlot2'));
     setEquipmentSlot1Reserve(
       Array.isArray(snapshot.equipmentSlot1Reserve)
-        ? snapshot.equipmentSlot1Reserve.map(c => ({ ...c, type: c.type as 'weapon' | 'shield', fromSlot: 'equipmentSlot1' as const }) as EquipmentItem)
+        ? snapshot.equipmentSlot1Reserve.map(c => ({ ...c, type: c.type as 'weapon' | 'shield' | 'monster', fromSlot: 'equipmentSlot1' as const }) as EquipmentItem)
         : [],
     );
     setEquipmentSlot2Reserve(
       Array.isArray(snapshot.equipmentSlot2Reserve)
-        ? snapshot.equipmentSlot2Reserve.map(c => ({ ...c, type: c.type as 'weapon' | 'shield', fromSlot: 'equipmentSlot2' as const }) as EquipmentItem)
+        ? snapshot.equipmentSlot2Reserve.map(c => ({ ...c, type: c.type as 'weapon' | 'shield' | 'monster', fromSlot: 'equipmentSlot2' as const }) as EquipmentItem)
         : [],
     );
     if (snapshot.equipmentSlotCapacity) {
@@ -5380,7 +5380,23 @@ export default function GameBoard() {
     }
 
     if (slotItem.type === 'monster') {
-      return null;
+      const slotDamageBonus = getEquipmentSlotBonus(slotId, 'damage');
+      const slotBurstBonus = slotAttackBursts[slotId] ?? 0;
+      const balanceBonus =
+        amuletEffects.hasBalance && slotId === 'equipmentSlot1' ? BALANCE_ATTACK_BONUS : 0;
+      const flashPenalty = amuletEffects.hasFlash ? FLASH_ATTACK_PENALTY : 0;
+      const modifier =
+        attackBonus +
+        slotDamageBonus +
+        nextWeaponBonus +
+        slotBurstBonus +
+        balanceBonus -
+        flashPenalty;
+
+      return {
+        appliesTo: 'monster' as const,
+        modifier,
+      };
     }
 
     return null;
@@ -5579,14 +5595,14 @@ export default function GameBoard() {
 
   const findWeaponSlot = (): { id: EquipmentSlotId; item: EquipmentItem } | null => {
     for (const slot of getEquipmentSlots()) {
-      if (slot.item?.type === 'weapon') return slot as { id: EquipmentSlotId; item: EquipmentItem };
+      if (slot.item?.type === 'weapon' || slot.item?.type === 'monster') return slot as { id: EquipmentSlotId; item: EquipmentItem };
     }
     return null;
   };
 
   const findShieldSlot = (): { id: EquipmentSlotId; item: EquipmentItem } | null => {
     for (const slot of getEquipmentSlots()) {
-      if (slot.item?.type === 'shield') return slot as { id: EquipmentSlotId; item: EquipmentItem };
+      if (slot.item?.type === 'shield' || slot.item?.type === 'monster') return slot as { id: EquipmentSlotId; item: EquipmentItem };
     }
     return null;
   };
@@ -7200,7 +7216,7 @@ export default function GameBoard() {
 
     switch (card.knightEffect) {
       case 'armor-strike': {
-        const shieldSlots = getEquipmentSlots().filter(slot => slot.item?.type === 'shield');
+        const shieldSlots = getEquipmentSlots().filter(slot => slot.item?.type === 'shield' || slot.item?.type === 'monster');
         consumeClassCardFromHand(card.id);
         if (shieldSlots.length === 0) {
           finalizeMagicCard(card, { banner: '没有可转化为伤害的护甲。' });
@@ -7522,7 +7538,7 @@ export default function GameBoard() {
           return;
         }
         case '壁垒猛击': {
-          const shields = getEquipmentSlots().filter(slot => slot.item?.type === 'shield');
+          const shields = getEquipmentSlots().filter(slot => slot.item?.type === 'shield' || slot.item?.type === 'monster');
           if (shields.length === 0) {
             finalizeMagicCard(card, { banner: '壁垒猛击无效（未装备护盾）。' });
             return;
@@ -7772,7 +7788,7 @@ export default function GameBoard() {
       }
       switch (card.id) {
         case STARTER_CARD_IDS.weaponBurst: {
-          const weaponSlots = getEquipmentSlots().filter(slot => slot.item?.type === 'weapon');
+          const weaponSlots = getEquipmentSlots().filter(slot => slot.item?.type === 'weapon' || slot.item?.type === 'monster');
           if (weaponSlots.length === 0) {
             finalizeMagicCard(card, { banner: '当前没有可以强化的武器。' });
             return;
@@ -8296,7 +8312,7 @@ export default function GameBoard() {
 
       if (pendingMagicAction.effect === 'weapon-burst') {
         const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-        if (!slotItem || slotItem.type !== 'weapon') {
+        if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) {
           setHeroSkillBanner('请选择一个已装备的武器。');
           return;
         }
@@ -8365,7 +8381,7 @@ export default function GameBoard() {
 
       if (pendingMagicAction.effect === 'armor-strike') {
         const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-        if (!slotItem || slotItem.type !== 'shield') {
+        if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) {
           setHeroSkillBanner('请选择一面盾牌来转化护甲。');
           return;
         }
@@ -9284,7 +9300,7 @@ export default function GameBoard() {
           setHeroSkillBanner(`背包容量永久增加 ${increase}。`);
         }
       } else if (effect === 'equipBurst+4') {
-        const weaponSlots = getEquipmentSlots().filter(slot => slot.item?.type === 'weapon');
+        const weaponSlots = getEquipmentSlots().filter(slot => slot.item?.type === 'weapon' || slot.item?.type === 'monster');
         if (weaponSlots.length === 0) {
           setHeroSkillBanner('当前没有装备武器，无法施加祝福。');
         } else if (weaponSlots.length === 1) {
@@ -9299,7 +9315,7 @@ export default function GameBoard() {
           });
           if (selected) {
             const slotItem = selected === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-            if (slotItem?.type === 'weapon') {
+            if (slotItem?.type === 'weapon' || slotItem?.type === 'monster') {
               setSlotAttackBursts(prev => ({ ...prev, [selected]: (prev[selected] ?? 0) + 4 }));
               addGameLog('event', `事件效果：${slotItem.name} 下次攻击 +4`);
               setHeroSkillBanner(`${slotItem.name} 的下次攻击将额外造成 4 点伤害！`);
@@ -11000,7 +11016,7 @@ export default function GameBoard() {
                 }
                 isWeaponDropTarget={
                   !playerTargetingActive &&
-                  draggedEquipment?.type === 'weapon' &&
+                  (draggedEquipment?.type === 'weapon' || draggedEquipment?.type === 'monster') &&
                   card.type === 'monster'
                 }
                 bleedAnimation={Boolean(monsterBleedStates[card.id])}
