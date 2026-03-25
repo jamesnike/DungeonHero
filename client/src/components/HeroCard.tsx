@@ -304,7 +304,7 @@ export default function HeroCard({
           <div className="absolute inset-0 pointer-events-none dh-card-deco--hero" />
 
           {/* Inner decorative border */}
-          <div className="absolute inset-[6px] border border-amber-300/30 pointer-events-none rounded-sm" />
+          <div className={`absolute border border-amber-300/30 pointer-events-none rounded-sm ${isCompact ? 'inset-[3px]' : 'inset-[6px]'}`} />
 
           {/* Combat overlays */}
           {(showBleedOverlay || showHealOverlay || showWeaponSwing || showShieldBlock) && (
@@ -343,8 +343,8 @@ export default function HeroCard({
           {!isFlat && (
             <>
               {/* HP Section */}
-              <div className="relative z-10 px-3 py-1.5">
-                <div className="bg-background/95 rounded-lg p-1.5">
+              <div className={`relative z-10 py-1.5 ${isCompact ? 'px-1' : 'px-3'}`}>
+                <div className={`bg-background/95 rounded-lg ${isCompact ? 'p-1' : 'p-1.5'}`}>
                   <div className="flex items-center justify-between mb-0.5">
                     <Heart className="dh-hero-icon text-destructive" />
                     <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
@@ -361,7 +361,7 @@ export default function HeroCard({
           )}
 
           {/* Content area - skills and magic */}
-          <div className="relative z-10 flex-1 overflow-y-auto px-2 py-1.5 flex flex-col gap-1.5 items-stretch justify-start">
+          <div className={`relative z-10 flex-1 overflow-y-auto py-1.5 flex flex-col gap-1.5 items-stretch justify-start ${isCompact ? 'px-0.5' : 'px-2'}`}>
             {heroSkillInfo && (
               <div className="flex flex-col items-center gap-1">
                 {isPassiveSkill ? (

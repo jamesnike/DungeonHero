@@ -12737,8 +12737,9 @@ export default function GameBoard() {
 
             const isMonster = card.type === 'monster';
 
+            const rageBaseTranslate = isCompactViewport ? 1 : MONSTER_RAGE_BASE_TRANSLATE_PX;
             const monsterTranslateX = isMonster
-              ? MONSTER_RAGE_BASE_TRANSLATE_PX +
+              ? rageBaseTranslate +
                 (monsterLayerValue > 0
                   ? Math.max(
                       (monsterLayerValue - 1) * colWidth + MONSTER_RAGE_TRANSLATE_ADJUST_PX,
