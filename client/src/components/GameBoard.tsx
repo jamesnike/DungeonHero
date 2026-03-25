@@ -1390,8 +1390,9 @@ function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一张地城卡牌，洗回牌堆。',
+      magicEffect: '永久魔法：选择一张地城卡牌，洗回牌堆。\n使用后需等待 2 次瀑流才能回到背包。',
       description: '将一张地城卡牌洗回牌堆，重新扰乱命运。',
+      recycleDelay: 2,
     },
     {
       id: STARTER_CARD_IDS.dungeonSwap,
@@ -3209,6 +3210,9 @@ export default function GameBoard() {
     if (!target) {
       return;
     }
+    undoStackRef.current = [];
+    setUndoCount(0);
+    clearUndoStorage();
     const dmg = Math.max(0, 2 + permanentSpellDamageBonus);
     addGameLog('amulet', `弃牌雷击对 ${target.name} 造成 ${dmg} 点伤害`);
     dealDamageToMonster(target, dmg, { pulses: 2 });
@@ -3260,6 +3264,9 @@ export default function GameBoard() {
     if (!effect) return;
 
     if (effect === 'discard-hand-3') {
+      undoStackRef.current = [];
+      setUndoCount(0);
+      clearUndoStorage();
       const discardCount = Math.min(3, handCards.length);
       if (discardCount <= 0) {
         addGameLog('combat', `${monster.name} 的遗言：随机弃置手牌，但玩家没有手牌。`);
@@ -3284,6 +3291,9 @@ export default function GameBoard() {
     }
 
     if (effect.startsWith('wraith-haunt-')) {
+      undoStackRef.current = [];
+      setUndoCount(0);
+      clearUndoStorage();
       const atkBoost = parseInt(effect.replace('wraith-haunt-', ''), 10) || 2;
       setActiveCards(prev => {
         const otherMonsters: string[] = [];
@@ -3640,6 +3650,11 @@ export default function GameBoard() {
         flashPenalty,
     );
     const isCrit = slotItem.critChance ? Math.random() * 100 < slotItem.critChance : false;
+    if (slotItem.critChance) {
+      undoStackRef.current = [];
+      setUndoCount(0);
+      clearUndoStorage();
+    }
     const finalDamage = isCrit ? baseDamage * 2 : baseDamage;
     const attackIterations = amuletEffects.hasFlash ? 2 : 1;
 
@@ -6490,6 +6505,7 @@ export default function GameBoard() {
           (c): c is GameCardData => Boolean(c && c.type === 'monster'),
         );
         if (monsters.length > 0) {
+          clearUndoStack();
           const target = monsters[Math.floor(Math.random() * monsters.length)];
           const dmg = getSpellDamage(card.onDiscardDamage);
           dealDamageToMonster(target, dmg, { pulses: 2 });
@@ -6499,7 +6515,7 @@ export default function GameBoard() {
       }
       triggerDiscardShock();
     },
-    [activeCards, addGameLog, addPermanentMagicToRecycleBag, addToGraveyard, dealDamageToMonster, getSpellDamage, triggerDiscardShock, triggerGraveNova],
+    [activeCards, addGameLog, addPermanentMagicToRecycleBag, addToGraveyard, clearUndoStack, dealDamageToMonster, getSpellDamage, triggerDiscardShock, triggerGraveNova],
   );
 
   const createCurseCard = (sourceCard?: GameCardData): GameCardData => ({
@@ -7704,6 +7720,7 @@ export default function GameBoard() {
         setHeroSkillBanner('坟场中没有可取回的卡牌。');
         return Promise.resolve<GameCardData | null>(null);
       }
+      clearUndoStack();
       const shuffled = [...discardedCards].sort(() => Math.random() - 0.5);
       const options = shuffled.slice(0, Math.min(maxOptions, shuffled.length));
       return new Promise<GameCardData | null>(resolve => {
@@ -7714,7 +7731,7 @@ export default function GameBoard() {
         setGraveyardDiscoverState(options);
       });
     },
-    [discardedCards, setHeroSkillBanner],
+    [clearUndoStack, discardedCards, setHeroSkillBanner],
   );
 
   const handleGraveyardDiscoverSelect = useCallback(
@@ -8272,6 +8289,7 @@ export default function GameBoard() {
   };
 
   const resolveGraveyardRecall = async (card: GameCardData) => {
+    clearUndoStack();
     const eligible = discardedCards.filter(c => c.id !== card.id);
     const shuffled = [...eligible].sort(() => Math.random() - 0.5);
     const recalled = shuffled.slice(0, Math.min(3, shuffled.length));
@@ -8655,6 +8673,7 @@ export default function GameBoard() {
         case 'Battle Ready': {
           const weaponCards = classDeck.filter(c => c.type === 'weapon');
           if (weaponCards.length > 0) {
+            clearUndoStack();
             const weapon = weaponCards[Math.floor(Math.random() * weaponCards.length)];
             setClassCardsInHand(prev => [...prev, weapon as KnightCardData]);
             setClassDeck(prev => prev.filter(c => c.id !== weapon.id));
@@ -8891,9 +8910,10 @@ export default function GameBoard() {
             if (actualHandCount > 0) parts.push(`自动弃置 ${actualHandCount} 张手牌。`);
             else parts.push('没有手牌可弃。');
             finalizeMagicCard(card, { banner: parts.join('') });
-            const drawn = drawFromBackpackToHand();
-            if (drawn) {
-              setHeroSkillBanner(prev => `${prev ?? ''}从背包抽到 ${drawn.name}。`);
+            const [drawnCard] = takeRandomCardsFromBackpack(1);
+            if (drawnCard) {
+              queueCardIntoHand(drawnCard);
+              setHeroSkillBanner(prev => `${prev ?? ''}从背包抽到 ${drawnCard.name}。`);
             }
             return;
           }
@@ -8907,9 +8927,10 @@ export default function GameBoard() {
               return;
             }
             finalizeMagicCard(card, { banner: '弃置 1 张手牌。' });
-            const drawn = drawFromBackpackToHand();
-            if (drawn) {
-              setHeroSkillBanner(`弃置 1 张手牌，从背包抽到 ${drawn.name}。`);
+            const [drawnCard] = takeRandomCardsFromBackpack(1);
+            if (drawnCard) {
+              queueCardIntoHand(drawnCard);
+              setHeroSkillBanner(`弃置 1 张手牌，从背包抽到 ${drawnCard.name}。`);
             } else {
               setHeroSkillBanner('弃置 1 张手牌，但背包为空或手牌已满，未能抽牌。');
             }
@@ -9412,6 +9433,7 @@ export default function GameBoard() {
           setHeroSkillBanner('需要至少一个装备才能发动。');
           return;
         }
+        clearUndoStack();
         const discarded = handCards[Math.floor(Math.random() * handCards.length)];
         discardCardToGraveyard(discarded, { owner: 'player' });
         setHandCards(prev => prev.filter(c => c.id !== discarded.id));
@@ -10898,6 +10920,7 @@ export default function GameBoard() {
           break;
         }
       } else if (effect.startsWith('randomDiscardHand:')) {
+        clearUndoStack();
         const count = parseInt(effect.replace('randomDiscardHand:', ''), 10) || 1;
         const currentHand = handCards.filter(c => c.id !== currentEventCard?.id);
         const discarded: string[] = [];
