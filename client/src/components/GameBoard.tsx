@@ -9,8 +9,8 @@ import {
   type Ref,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { createPortal } from 'react-dom';
 import type { CSSProperties, DragEvent as ReactDragEvent } from 'react';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 import GameHeader from './GameHeader';
 import HeroCard from './HeroCard';
 import GameCard, {
@@ -1418,6 +1418,7 @@ function createStarterBackpack(): GameCardData[] {
 }
 
 export default function GameBoard() {
+  const gameViewport = useGameViewport();
   // const { toast } = useToast(); // Disabled toast notifications
   const [hp, setHp] = useState(INITIAL_HP);
   const [gold, setGold] = useState(INITIAL_GOLD);
@@ -1801,9 +1802,7 @@ export default function GameBoard() {
   const [heroFramePosition, setHeroFramePosition] = useState<HeroFramePosition | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const lastPersistedStateRef = useRef<string | null>(null);
-  const [viewportWidth, setViewportWidth] = useState<number>(
-    typeof window === 'undefined' ? 1280 : window.innerWidth,
-  );
+  const [viewportWidth, setViewportWidth] = useState<number>(gameViewport.width);
   const gridMetrics = useMemo(() => getGridMetricsForWidth(viewportWidth), [viewportWidth]);
   const stageScale = useMemo(() => {
     return clamp(viewportWidth / 1280, 0.75, 1.6);
@@ -2009,11 +2008,8 @@ export default function GameBoard() {
   }, [draggedCard]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handleViewportResize = () => setViewportWidth(window.innerWidth);
-    window.addEventListener('resize', handleViewportResize);
-    return () => window.removeEventListener('resize', handleViewportResize);
-  }, []);
+    setViewportWidth(gameViewport.width);
+  }, [gameViewport.width]);
 
   useEffect(() => {
     const target = gridCellRef.current;
@@ -2560,35 +2556,29 @@ export default function GameBoard() {
   const isCombatPanelVisible = combatState.engagedMonsterIds.length > 0;
   const clampCombatPanelPosition = useCallback(
     (x: number, y: number, size?: { width: number; height: number }) => {
-      if (typeof window === 'undefined') {
-        return { x, y };
-      }
       const width = size?.width || combatPanelSize.width || COMBAT_PANEL_DEFAULT_WIDTH;
       const height = size?.height || combatPanelSize.height || COMBAT_PANEL_DEFAULT_HEIGHT;
-      const maxX = Math.max(COMBAT_PANEL_EDGE_PADDING, window.innerWidth - width - COMBAT_PANEL_EDGE_PADDING);
-      const maxY = Math.max(COMBAT_PANEL_EDGE_PADDING, window.innerHeight - height - COMBAT_PANEL_EDGE_PADDING);
+      const maxX = Math.max(COMBAT_PANEL_EDGE_PADDING, gameViewport.width - width - COMBAT_PANEL_EDGE_PADDING);
+      const maxY = Math.max(COMBAT_PANEL_EDGE_PADDING, gameViewport.height - height - COMBAT_PANEL_EDGE_PADDING);
       return {
         x: Math.min(Math.max(COMBAT_PANEL_EDGE_PADDING, x), maxX),
         y: Math.min(Math.max(COMBAT_PANEL_EDGE_PADDING, y), maxY),
       };
     },
-    [combatPanelSize.height, combatPanelSize.width],
+    [combatPanelSize.height, combatPanelSize.width, gameViewport.width, gameViewport.height],
   );
   const computeDefaultCombatPanelPosition = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+    const vpWidth = gameViewport.width;
+    const vpHeight = gameViewport.height;
     const width = combatPanelSize.width || COMBAT_PANEL_DEFAULT_WIDTH;
     const height = combatPanelSize.height || COMBAT_PANEL_DEFAULT_HEIGHT;
     const undoBottom = 16;
     const undoButtonHeight = 44;
     const gap = 8;
-    const top = viewportHeight - undoBottom - undoButtonHeight - gap - height;
-    const left = viewportWidth - width - 16;
+    const top = vpHeight - undoBottom - undoButtonHeight - gap - height;
+    const left = vpWidth - width - 16;
     return clampCombatPanelPosition(left, top, { width, height });
-  }, [clampCombatPanelPosition, combatPanelSize.height, combatPanelSize.width]);
+  }, [clampCombatPanelPosition, combatPanelSize.height, combatPanelSize.width, gameViewport.width, gameViewport.height]);
   const teardownCombatPanelDrag = useCallback(() => {
     if (typeof window !== 'undefined' && combatPanelWindowListenersRef.current) {
       window.removeEventListener('pointermove', combatPanelWindowListenersRef.current.move);
@@ -2764,8 +2754,10 @@ export default function GameBoard() {
     ],
   );
   const combatPanelStyle = useMemo<CSSProperties>(() => {
+    const scaledMin = Math.round(135 * stageScale);
+    const scaledMax = Math.round(170 * stageScale);
     const style: CSSProperties = {
-        '--combat-panel-width': 'clamp(135px, 11vw, 170px)',
+        '--combat-panel-width': `clamp(${scaledMin}px, ${11 * stageScale}vw, ${scaledMax}px)`,
         width: 'min(var(--combat-panel-width), calc(100% - 1.5rem))',
     };
     if (combatPanelPosition) {
@@ -2773,11 +2765,11 @@ export default function GameBoard() {
       style.top = `${combatPanelPosition.y}px`;
     }
     return style;
-  }, [combatPanelPosition]);
+  }, [combatPanelPosition, stageScale]);
   const combatPanelWrapperClassName = useMemo(
     () =>
       [
-        'pointer-events-auto fixed z-40 combat-panel-wrapper',
+        'pointer-events-auto absolute z-40 combat-panel-wrapper',
         isCombatPanelDragging ? 'combat-panel-wrapper--dragging' : '',
         combatPanelPosition ? '' : COMBAT_PANEL_DEFAULT_POSITION_CLASS,
       ]
@@ -12562,7 +12554,7 @@ export default function GameBoard() {
   }, [showMonsterAttackIndicator, updateSwordVectors]);
 
   return (
-    <div ref={gameSurfaceRef} className="h-screen bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...(eventPendingLocked ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
+    <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...(eventPendingLocked ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
       {/* Header - Fixed height */}
       <div className="flex-shrink-0">
         <GameHeader 
@@ -12913,34 +12905,6 @@ export default function GameBoard() {
                   </div>
                 );
               })}
-            {isCombatPanelVisible && (
-                <div
-                ref={combatPanelWrapperRef}
-                className={combatPanelWrapperClassName}
-                  style={combatPanelStyle}
-                >
-                  <CombatPanel
-                    engagedMonsters={engagedMonsters}
-                    isActive={isCombatPanelVisible}
-                    currentTurn={combatState.currentTurn}
-                    heroAttacksRemaining={combatState.heroAttacksRemaining}
-                    heroAttacksThisTurn={combatState.heroAttacksThisTurn}
-                    pendingBlock={combatState.pendingBlock}
-                    monsterAttackQueue={combatState.monsterAttackQueue}
-                    onEndHeroTurn={endHeroTurn}
-                    equipmentSlot1={equipmentSlot1}
-                    equipmentSlot2={equipmentSlot2}
-                  stageScale={stageScale}
-                  onDragHandlePointerDown={handleCombatPanelPointerDown}
-                  isDragging={isCombatPanelDragging}
-                  />
-              </div>
-            )}
-            <GameLogPanel
-              entries={gameLogEntries}
-              onClear={clearGameLog}
-              stageScale={stageScale}
-            />
           </div>
         </div>
             {heroSkillArrow && (
@@ -12995,6 +12959,35 @@ export default function GameBoard() {
           onCardClick={handleCardClick}
         />
       </div>
+
+      {isCombatPanelVisible && (
+        <div
+          ref={combatPanelWrapperRef}
+          className={combatPanelWrapperClassName}
+          style={combatPanelStyle}
+        >
+          <CombatPanel
+            engagedMonsters={engagedMonsters}
+            isActive={isCombatPanelVisible}
+            currentTurn={combatState.currentTurn}
+            heroAttacksRemaining={combatState.heroAttacksRemaining}
+            heroAttacksThisTurn={combatState.heroAttacksThisTurn}
+            pendingBlock={combatState.pendingBlock}
+            monsterAttackQueue={combatState.monsterAttackQueue}
+            onEndHeroTurn={endHeroTurn}
+            equipmentSlot1={equipmentSlot1}
+            equipmentSlot2={equipmentSlot2}
+            stageScale={stageScale}
+            onDragHandlePointerDown={handleCombatPanelPointerDown}
+            isDragging={isCombatPanelDragging}
+          />
+        </div>
+      )}
+      <GameLogPanel
+        entries={gameLogEntries}
+        onClear={clearGameLog}
+        stageScale={stageScale}
+      />
 
       {backpackHandFlights.length > 0 && (
         <div className="pointer-events-none absolute inset-0 z-30">
@@ -13269,14 +13262,14 @@ export default function GameBoard() {
         onSelectSkill={handleSkillSelection}
       />
 
-      {/* Undo Button – rendered via portal so it escapes Dialog focus traps */}
-      {!gameOver && !showSkillSelection && createPortal(
+      {/* Undo Button */}
+      {!gameOver && !showSkillSelection && (
         <button
           onClick={(e) => { e.stopPropagation(); handleUndo(); }}
           onPointerDown={(e) => e.stopPropagation()}
           disabled={undoCount === 0}
           style={{ pointerEvents: 'auto', transform: `scale(${stageScale})`, transformOrigin: 'bottom right' }}
-          className={`fixed bottom-4 right-4 z-[9999] flex items-center gap-1.5 rounded-full px-4 py-2.5 shadow-lg transition-all select-none ${
+          className={`absolute bottom-4 right-4 z-[9999] flex items-center gap-1.5 rounded-full px-4 py-2.5 shadow-lg transition-all select-none ${
             undoCount > 0
               ? 'bg-slate-700/90 text-white hover:bg-slate-600 active:scale-95'
               : 'bg-slate-700/40 text-white/40 cursor-not-allowed'
@@ -13287,8 +13280,7 @@ export default function GameBoard() {
           {undoCount > 0 && (
             <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-xs">{undoCount}</span>
           )}
-        </button>,
-        document.body,
+        </button>
       )}
     </div>
   );

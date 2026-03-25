@@ -10,6 +10,7 @@ import {
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import * as BoardConstants from '../constants';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 
 type DragSession = {
   pointerId: number;
@@ -20,6 +21,7 @@ type DragSession = {
 };
 
 export function useBoardInteractions(isCombatPanelVisible: boolean) {
+  const gameViewport = useGameViewport();
   const [combatPanelPosition, setCombatPanelPosition] = useState<{ x: number; y: number } | null>(null);
   const [combatPanelSize, setCombatPanelSize] = useState({ width: 0, height: 0 });
   const [isCombatPanelDragging, setIsCombatPanelDragging] = useState(false);
@@ -34,44 +36,38 @@ export function useBoardInteractions(isCombatPanelVisible: boolean) {
 
   const clampCombatPanelPosition = useCallback(
     (x: number, y: number, size?: { width: number; height: number }) => {
-      if (typeof window === 'undefined') {
-        return { x, y };
-      }
       const width = size?.width || combatPanelSize.width || BoardConstants.COMBAT_PANEL_DEFAULT_WIDTH;
       const height = size?.height || combatPanelSize.height || BoardConstants.COMBAT_PANEL_DEFAULT_HEIGHT;
       const maxX = Math.max(
         BoardConstants.COMBAT_PANEL_EDGE_PADDING,
-        window.innerWidth - width - BoardConstants.COMBAT_PANEL_EDGE_PADDING,
+        gameViewport.width - width - BoardConstants.COMBAT_PANEL_EDGE_PADDING,
       );
       const maxY = Math.max(
         BoardConstants.COMBAT_PANEL_EDGE_PADDING,
-        window.innerHeight - height - BoardConstants.COMBAT_PANEL_EDGE_PADDING,
+        gameViewport.height - height - BoardConstants.COMBAT_PANEL_EDGE_PADDING,
       );
       return {
         x: Math.min(Math.max(BoardConstants.COMBAT_PANEL_EDGE_PADDING, x), maxX),
         y: Math.min(Math.max(BoardConstants.COMBAT_PANEL_EDGE_PADDING, y), maxY),
       };
     },
-    [combatPanelSize.height, combatPanelSize.width],
+    [combatPanelSize.height, combatPanelSize.width, gameViewport.width, gameViewport.height],
   );
 
   const computeDefaultCombatPanelPosition = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-    const viewportWidth = window.innerWidth;
+    const vpWidth = gameViewport.width;
     const width = combatPanelSize.width || BoardConstants.COMBAT_PANEL_DEFAULT_WIDTH;
     const height = combatPanelSize.height || BoardConstants.COMBAT_PANEL_DEFAULT_HEIGHT;
     const top =
-      viewportWidth < 640
+      vpWidth < 640
         ? BoardConstants.COMBAT_PANEL_EDGE_PADDING
         : BoardConstants.COMBAT_PANEL_EDGE_PADDING * 2;
     const left =
-      viewportWidth < 640
-        ? (viewportWidth - width) / 2
-        : viewportWidth - width - BoardConstants.COMBAT_PANEL_EDGE_PADDING * 2;
+      vpWidth < 640
+        ? (vpWidth - width) / 2
+        : vpWidth - width - BoardConstants.COMBAT_PANEL_EDGE_PADDING * 2;
     return clampCombatPanelPosition(left, top, { width, height });
-  }, [clampCombatPanelPosition, combatPanelSize.height, combatPanelSize.width]);
+  }, [clampCombatPanelPosition, combatPanelSize.height, combatPanelSize.width, gameViewport.width]);
 
   const teardownCombatPanelDrag = useCallback(() => {
     if (typeof window !== 'undefined' && combatPanelWindowListenersRef.current) {

@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { ScrollText, Minimize2, Maximize2, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 
 export type LogEntryType =
   | 'combat'
@@ -77,6 +78,7 @@ export default function GameLogPanel({
   onClear,
   stageScale = 1,
 }: GameLogPanelProps) {
+  const gameViewport = useGameViewport();
   const [minimized, setMinimized] = useState(true);
   const [panelScale, setPanelScale] = useState(1);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
@@ -144,19 +146,17 @@ export default function GameLogPanel({
 
   const clampPosition = useCallback(
     (x: number, y: number, size?: { width: number; height: number }) => {
-      if (typeof window === 'undefined') return { x, y };
       const w = size?.width || panelSize.width || 200;
       const h = size?.height || panelSize.height || 300;
       return {
-        x: Math.max(EDGE_PADDING, Math.min(window.innerWidth - w - EDGE_PADDING, x)),
-        y: Math.max(EDGE_PADDING, Math.min(window.innerHeight - h - EDGE_PADDING, y)),
+        x: Math.max(EDGE_PADDING, Math.min(gameViewport.width - w - EDGE_PADDING, x)),
+        y: Math.max(EDGE_PADDING, Math.min(gameViewport.height - h - EDGE_PADDING, y)),
       };
     },
-    [panelSize.width, panelSize.height],
+    [panelSize.width, panelSize.height, gameViewport.width, gameViewport.height],
   );
 
   const computeDefaultPosition = useCallback(() => {
-    if (typeof window === 'undefined') return null;
     const w = panelSize.width || 200;
     const h = panelSize.height || 40;
     const left = EDGE_PADDING;
@@ -288,7 +288,7 @@ export default function GameLogPanel({
   const wrapperClassName = useMemo(
     () =>
       [
-        'pointer-events-auto fixed z-40 game-log-panel-wrapper',
+        'pointer-events-auto absolute z-40 game-log-panel-wrapper',
         isDragging ? 'combat-panel-wrapper--dragging' : '',
         position ? '' : 'top-4 left-4',
       ]

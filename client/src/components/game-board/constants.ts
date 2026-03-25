@@ -124,3 +124,6 @@ export const BACKPACK_FLIGHT_STAGGER = 80;
 export const BACKPACK_FLIGHT_ARC_MIN = 30;
 export const BACKPACK_FLIGHT_ARC_VARIANCE = 45;
 export const BACKPACK_FLIGHT_FALLBACK_BUFFER = 200;
+
+export const MIN_ASPECT_RATIO = 9 / 16;
+export const MAX_ASPECT_RATIO = 21 / 9;

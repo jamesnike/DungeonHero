@@ -1,29 +1,26 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
 import { HAND_LIMIT } from './game-board/constants';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 
 const CARD_RATIO = 0.76;
 const CARD_VISIBLE_FRACTION = 0.58;
 
-const getCardHeight = () => {
-  if (typeof window === 'undefined') return 180;
-  
-  // This fallback logic mimics the GameBoard logic if cardSize prop is missing
-  const isMd = window.innerWidth >= 768;
-  const isSm = window.innerWidth >= 640;
-  
-  const paddingX = isMd ? 32 : 16; 
+const getCardHeight = (vpWidth: number) => {
+  if (vpWidth <= 0) return 180;
+
+  const isMd = vpWidth >= 768;
+  const isSm = vpWidth >= 640;
+
+  const paddingX = isMd ? 32 : 16;
   const containerMaxWidth = 1350;
-  const availableWidth = Math.min(window.innerWidth - paddingX, containerMaxWidth);
-  
+  const availableWidth = Math.min(vpWidth - paddingX, containerMaxWidth);
+
   const gapX = isSm ? 40 : 24;
-  
+
   const gridCardWidth = (availableWidth - (5 * gapX)) / 6;
-  // Use the ratio to determine height, as grid cells likely follow content or auto height
-  // If grid cells are constrained by height (flex-grow h-full), this might mismatch,
-  // but passing explicit cardSize prop solves that.
   const gridCardHeight = gridCardWidth / CARD_RATIO;
-  
+
   return gridCardHeight;
 };
 
@@ -48,11 +45,10 @@ export default function HandDisplay({
   disableAnimations = false,
   onCardClick,
 }: HandDisplayProps) {
+  const gameViewport = useGameViewport();
   const [isDraggingCard, setIsDraggingCard] = useState(false);
-  const [calculatedCardHeight, setCalculatedCardHeight] = useState<number>(getCardHeight);
-  const [isCompactHand, setIsCompactHand] = useState<boolean>(
-    typeof window !== 'undefined' ? window.innerWidth < 640 : false,
-  );
+  const [calculatedCardHeight, setCalculatedCardHeight] = useState<number>(() => getCardHeight(gameViewport.width));
+  const [isCompactHand, setIsCompactHand] = useState<boolean>(gameViewport.width < 640);
 
   const effectiveCardHeight = cardSize ? cardSize.height : calculatedCardHeight;
   const effectiveCardWidth = cardSize ? cardSize.width : effectiveCardHeight * CARD_RATIO;
@@ -64,18 +60,13 @@ export default function HandDisplay({
 
   useEffect(() => {
     if (!cardSize) {
-      const handleResize = () => setCalculatedCardHeight(getCardHeight());
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
+      setCalculatedCardHeight(getCardHeight(gameViewport.width));
     }
-  }, [cardSize]);
+  }, [cardSize, gameViewport.width]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handleResize = () => setIsCompactHand(window.innerWidth < 640);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    setIsCompactHand(gameViewport.width < 640);
+  }, [gameViewport.width]);
 
   const onDragEndFromHandRef = useRef(onDragEndFromHand);
   onDragEndFromHandRef.current = onDragEndFromHand;
