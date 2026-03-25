@@ -3,6 +3,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useGameViewport } from '@/contexts/GameViewportContext';
+import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
 interface GameHeaderProps {
   hp: number;
@@ -25,6 +27,8 @@ export default function GameHeader({
   onDeckClick,
   onNewGame,
 }: GameHeaderProps) {
+  const gameViewport = useGameViewport();
+  const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [headerScale, setHeaderScale] = useState(1);
   useEffect(() => {
@@ -59,7 +63,7 @@ export default function GameHeader({
   return (
     <div
       ref={headerRef}
-      className="game-header h-auto py-3 px-4 bg-card border-b border-card-border flex items-center justify-between gap-4"
+      className={`game-header h-auto px-4 bg-card border-b border-card-border flex items-center justify-between gap-4 ${isFlat ? 'py-0.5' : 'py-3'}`}
       style={headerStyle}
     >
       <div className="game-header__group">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
-import { HAND_LIMIT } from './game-board/constants';
+import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 
 const CARD_RATIO = 0.76;
@@ -46,6 +46,7 @@ export default function HandDisplay({
   onCardClick,
 }: HandDisplayProps) {
   const gameViewport = useGameViewport();
+  const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [isDraggingCard, setIsDraggingCard] = useState(false);
   const [calculatedCardHeight, setCalculatedCardHeight] = useState<number>(() => getCardHeight(gameViewport.width));
   const [isCompactHand, setIsCompactHand] = useState<boolean>(gameViewport.width < 640);
@@ -175,7 +176,7 @@ export default function HandDisplay({
 
   return (
     <div 
-      className="relative flex items-end justify-center w-full px-4 pb-1 overflow-visible pointer-events-none z-30"
+      className={`relative flex items-end justify-center w-full px-4 overflow-visible pointer-events-none z-30 ${isFlat ? 'pb-0' : 'pb-1'}`}
       style={{ height: handZoneHeight }}
     >
       <div 

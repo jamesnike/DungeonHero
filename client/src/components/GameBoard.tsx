@@ -2503,10 +2503,13 @@ export default function GameBoard() {
     if (!target) return;
     const computeMetrics = () => {
       const width = target.offsetWidth || 0;
-      const padding = Math.max(16, Math.min(38, width * 0.019));
-      const border = Math.max(2.5, padding * 0.32);
-      const ring = Math.max(4, padding * 0.5);
-      const shadow = Math.max(24, padding * 3.5);
+      let padding = Math.max(16, Math.min(38, width * 0.019));
+      if (isFlat) {
+        padding = Math.max(4, Math.min(12, width * 0.008));
+      }
+      const border = Math.max(isFlat ? 1.5 : 2.5, padding * 0.32);
+      const ring = Math.max(isFlat ? 2 : 4, padding * 0.5);
+      const shadow = Math.max(isFlat ? 10 : 24, padding * (isFlat ? 2 : 3.5));
       setHeroFrameMetrics(prev => {
         if (
           Math.abs(prev.padding - padding) < 0.5 &&
@@ -2523,7 +2526,7 @@ export default function GameBoard() {
     const resizeObserver = new ResizeObserver(computeMetrics);
     resizeObserver.observe(target);
     return () => resizeObserver.disconnect();
-  }, []);
+  }, [isFlat]);
   useLayoutEffect(() => {
     updateHeroFrameBounds();
   }, [heroFramePosition, updateHeroFrameBounds]);
