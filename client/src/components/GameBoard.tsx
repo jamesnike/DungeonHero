@@ -44,7 +44,7 @@ import BackpackViewerModal from './BackpackViewerModal';
 import MonsterRewardModal from '@/components/MonsterRewardModal';
 import HeroDetailsModal from './HeroDetailsModal';
 // import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
-import { HAND_LIMIT } from './game-board/constants';
+import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
   generateKnightDeck,
   createKnightDiscoveryEvents,
@@ -218,6 +218,8 @@ const MONSTER_RAGE_TRANSLATE_ADJUST_PX =
 const HERO_GRID_PADDING_CLASS = "";
 const HERO_GAP_VARIABLE_CLASS =
   "[--hero-gap-x:clamp(1rem,3.8vw,2.8rem)] [--hero-gap-y:clamp(0.7rem,2.8vw,1.8rem)] sm:[--hero-gap-x:clamp(1.5rem,3.8vw,3.5rem)] sm:[--hero-gap-y:clamp(1rem,3vw,2.4rem)]";
+const HERO_GAP_VARIABLE_CLASS_FLAT =
+  "[--hero-gap-x:clamp(0.3rem,1vw,0.8rem)] [--hero-gap-y:clamp(0.1rem,0.4vw,0.3rem)] sm:[--hero-gap-x:clamp(0.4rem,1.2vw,1rem)] sm:[--hero-gap-y:clamp(0.1rem,0.5vw,0.4rem)]";
 const DEV_MODE = process.env.NODE_ENV !== 'production';
 const logHeroMagic = (...args: unknown[]) => {
   if (!DEV_MODE) {
@@ -314,7 +316,7 @@ const getGridMetricsForWidth = (width: number): GridMetrics => {
       cardFontScale: 1.15,
       cardStatScale: 1.2,
       cardIconScale: 1.15,
-      cardDotSize: 9,
+      cardDotSize: 6,
       heroFontScale: 0.85,
     };
   }
@@ -326,7 +328,7 @@ const getGridMetricsForWidth = (width: number): GridMetrics => {
       cardFontScale: 1.08,
       cardStatScale: 1.08,
       cardIconScale: 1.08,
-      cardDotSize: 8,
+      cardDotSize: 6,
       heroFontScale: 0.9,
     };
   }
@@ -1803,7 +1805,14 @@ export default function GameBoard() {
   const [isHydrated, setIsHydrated] = useState(false);
   const lastPersistedStateRef = useRef<string | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(gameViewport.width);
-  const gridMetrics = useMemo(() => getGridMetricsForWidth(viewportWidth), [viewportWidth]);
+  const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
+  const gridMetrics = useMemo(() => {
+    const base = getGridMetricsForWidth(viewportWidth);
+    if (isFlat) {
+      return { ...base, gapY: Math.max(1, Math.round(base.gapY * 0.15)) };
+    }
+    return base;
+  }, [viewportWidth, isFlat]);
   const stageScale = useMemo(() => {
     return clamp(viewportWidth / 1280, 0.75, 1.6);
   }, [viewportWidth]);
@@ -1825,12 +1834,16 @@ export default function GameBoard() {
   const gridCellRef = useRef<HTMLDivElement | null>(null);
   const [gridCardSize, setGridCardSize] = useState<{width: number, height: number} | undefined>(undefined);
   const gridCardSizeRef = useRef(gridCardSize);
+  const isCompactViewport = gameViewport.width < 500;
   const rageStripWidth = useMemo(() => {
     if (!gridCardSize?.width) {
-      return 14;
+      return isCompactViewport ? 9 : 14;
+    }
+    if (isCompactViewport) {
+      return Math.max(5, Math.min(9, gridCardSize.width * 0.04));
     }
     return Math.max(8, Math.min(14, gridCardSize.width * 0.05));
-  }, [gridCardSize]);
+  }, [gridCardSize, isCompactViewport]);
   const overlayScale = useMemo(() => {
     if (!gridCardSize?.width) {
       return 1;
@@ -12572,8 +12585,8 @@ export default function GameBoard() {
       </div>
       
       {/* Main game area - Flexible height */}
-      <div className="flex-grow min-h-0 w-full px-2 py-3 md:px-4 md:py-4 relative z-10">
-        <div className="flex flex-col gap-3 h-full">
+      <div className={`flex-grow min-h-0 w-full px-2 relative z-10 ${isFlat ? 'py-0' : 'py-3 md:py-4'} md:px-4`}>
+        <div className={`flex flex-col h-full ${isFlat ? 'gap-0' : 'gap-3'}`}>
           <div
             ref={boardRef}
             className="flex-1 min-h-0 relative flex justify-start lg:justify-center"
@@ -12843,7 +12856,7 @@ export default function GameBoard() {
               </div>
               <div
                 ref={heroFrameRef}
-                className={`hero-row-frame ${HERO_GAP_VARIABLE_CLASS}`}
+                className={`hero-row-frame ${isFlat ? HERO_GAP_VARIABLE_CLASS_FLAT : HERO_GAP_VARIABLE_CLASS}`}
                 style={heroFrameOverlayStyle}
               />
             </div>
@@ -12949,7 +12962,7 @@ export default function GameBoard() {
       </div>
 
       {/* Hand Display - Dedicated space */}
-      <div ref={handAreaRef} className="flex-shrink-0 relative w-full px-2 pb-4 md:px-6">
+      <div ref={handAreaRef} className={`flex-shrink-0 relative w-full px-2 md:px-6 ${isFlat ? 'pb-0' : 'pb-4'}`}>
         <HandDisplay
           handCards={handCards}
           onPlayCard={handlePlayCardFromHand}

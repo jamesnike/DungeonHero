@@ -5,6 +5,8 @@ import StackedCardPile from './StackedCardPile';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import { cn } from '@/lib/utils';
 import { GameCardData } from './GameCard';
+import { useGameViewport } from '@/contexts/GameViewportContext';
+import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
 interface BackpackZoneProps {
   backpackCount: number;
@@ -21,6 +23,8 @@ export default function BackpackZone({
   isDropTarget,
   onOpenViewer,
 }: BackpackZoneProps) {
+  const gameViewport = useGameViewport();
+  const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const dropRef = useRef<HTMLDivElement>(null);
   const [dragDepth, setDragDepth] = useState(0);
   const isOver = dragDepth > 0;
@@ -87,23 +91,32 @@ export default function BackpackZone({
         !isDropTarget && 'hover:scale-[1.01]'
       )}
     >
-      <StackedCardPile
-        count={backpackCount}
-        className="rounded-xl"
-        label="Backpack"
-        variant="muted"
-      />
-      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3 text-white/90">
-        <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
-          <span className="font-semibold">Backpack</span>
-          <Badge className="bg-black/50 text-white font-mono dh-hero-chip px-1 sm:px-2">
-            {backpackCount}
-          </Badge>
+      {isFlat ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white/90">
+          <span className="dh-hero-small font-semibold uppercase tracking-wide">Backpack</span>
+          <span className="font-mono font-bold text-lg">{backpackCount}</span>
         </div>
-        <div className="flex items-center justify-end dh-hero-chip font-medium">
-          查看内容
-        </div>
-      </div>
+      ) : (
+        <>
+          <StackedCardPile
+            count={backpackCount}
+            className="rounded-xl"
+            label="Backpack"
+            variant="muted"
+          />
+          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3 text-white/90">
+            <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
+              <span className="font-semibold">Backpack</span>
+              <Badge className="bg-black/50 text-white font-mono dh-hero-chip px-1 sm:px-2">
+                {backpackCount}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-end dh-hero-chip font-medium">
+              查看内容
+            </div>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

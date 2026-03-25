@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import GameCard, { type GameCardData, type EquipmentCardStatModifier } from './GameCard';
 import { useGameViewport } from '@/contexts/GameViewportContext';
+import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
 const BASE_SLOT_WIDTH = 220;
 const SLOT_SCALE_MIN = 0.7;
@@ -75,6 +76,7 @@ export default function EquipmentSlot({
 }: EquipmentSlotProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
+  const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
   const slotRef = useRef<HTMLDivElement>(null);
@@ -240,7 +242,7 @@ export default function EquipmentSlot({
       {/* Permanent bonus header */}
       {type === 'equipment' && (
         <div
-          className="absolute left-1/2 z-30 flex items-center gap-1 sm:gap-2 rounded-full border border-border bg-background/95 px-2 py-0.5 sm:px-4 sm:py-1.5 dh-hero-chip font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap"
+          className={`absolute left-1/2 z-30 flex items-center gap-1 sm:gap-2 rounded-full border border-border bg-background/95 dh-hero-chip font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'px-1.5 py-0 sm:px-2 sm:py-0' : 'px-2 py-0.5 sm:px-4 sm:py-1.5'}`}
           style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
         >
           <span className="text-red-500">{formatBonus(permanentDamageBonus)}{!isCompact && ' DMG'}</span>

@@ -7,6 +7,7 @@ import { initMobileDrop } from '../utils/mobileDragDrop';
 import type { CSSProperties } from 'react';
 import type { HeroMagicId } from '@/components/GameCard';
 import { useGameViewport } from '@/contexts/GameViewportContext';
+import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
 const BASE_HERO_WIDTH = 260;
 const HERO_SCALE_MIN = 0.75;
@@ -107,6 +108,7 @@ export default function HeroCard({
 }: HeroCardProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
+  const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [dragDepth, setDragDepth] = React.useState(0);
   const [heroScale, setHeroScale] = React.useState(1);
   const isOver = dragDepth > 0;
@@ -279,7 +281,7 @@ export default function HeroCard({
       style={{ '--dh-hero-instance-scale': appliedHeroScale.toString() } as CSSProperties}
     >
       <div
-        className="pointer-events-none absolute left-1/2 z-30 flex items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 dh-hero-small font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap"
+        className={`pointer-events-none absolute left-1/2 z-30 flex items-center gap-2 rounded-full border border-border bg-background/95 dh-hero-small font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'px-2 py-0' : 'px-3 py-1'}`}
         style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
       >
         <span className="flex items-center gap-1 text-purple-500">
@@ -338,21 +340,25 @@ export default function HeroCard({
             </div>
           )}
 
-          {/* HP Section */}
-          <div className="relative z-10 px-3 py-1.5">
-            <div className="bg-background/95 rounded-lg p-1.5">
-              <div className="flex items-center justify-between mb-0.5">
-                <Heart className="dh-hero-icon text-destructive" />
-                <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
-                  {hp}/{maxHp}
-                </span>
+          {!isFlat && (
+            <>
+              {/* HP Section */}
+              <div className="relative z-10 px-3 py-1.5">
+                <div className="bg-background/95 rounded-lg p-1.5">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <Heart className="dh-hero-icon text-destructive" />
+                    <span className="dh-hero-hp font-mono font-bold" data-testid="hero-hp">
+                      {hp}/{maxHp}
+                    </span>
+                  </div>
+                  <Progress value={hpPercentage} className="h-1.5" />
+                </div>
               </div>
-              <Progress value={hpPercentage} className="h-1.5" />
-            </div>
-          </div>
 
-          {/* Thin separator */}
-          <div className="h-px mx-6 bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
+              {/* Thin separator */}
+              <div className="h-px mx-6 bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
+            </>
+          )}
 
           {/* Content area - skills and magic */}
           <div className="relative z-10 flex-1 overflow-y-auto px-2 py-1.5 flex flex-col gap-1.5 items-stretch justify-start">

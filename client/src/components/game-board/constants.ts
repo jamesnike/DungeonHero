@@ -127,3 +127,4 @@ export const BACKPACK_FLIGHT_FALLBACK_BUFFER = 200;
 
 export const MIN_ASPECT_RATIO = 9 / 16;
 export const MAX_ASPECT_RATIO = 21 / 9;
+export const FLAT_ASPECT_RATIO = 1.8;

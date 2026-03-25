@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
 import { useGameViewport } from '@/contexts/GameViewportContext';
+import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
 const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
@@ -224,6 +225,7 @@ function GameCardInner({
 }: GameCardProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
+  const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [isDragging, setIsDragging] = useState(false);
   const [cardScale, setCardScale] = useState(1);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -582,7 +584,7 @@ const amuletEffectText =
       `}>
         <div className="h-full flex flex-col relative">
           {hasFlipTarget && (
-            <div className="dh-card__flip-badge" title="处理后会翻面">
+            <div className={`dh-card__flip-badge ${isCompact || isFlat ? 'dh-card__flip-badge--compact' : ''}`} title="处理后会翻面">
               翻转
             </div>
           )}
@@ -617,7 +619,17 @@ const amuletEffectText =
                     : 'bg-cyan-800/35'
               }`}>
                 {getCardIcon()}
-                {!isCompact && (
+                {isFlat ? (
+                  <span className={`dh-card__caption font-bold truncate max-w-[80%] ${
+                    isEventCard
+                      ? 'text-violet-950'
+                      : card.type === 'hero-magic'
+                        ? 'text-rose-950'
+                        : 'text-cyan-950'
+                  }`}>
+                    {card.name}
+                  </span>
+                ) : !isCompact ? (
                   <span className={`dh-card__caption font-bold uppercase tracking-widest ${
                     isEventCard
                       ? 'text-violet-950'
@@ -627,10 +639,10 @@ const amuletEffectText =
                   }`}>
                     {isEventCard ? 'Event' : card.type === 'hero-magic' ? 'Hero Magic' : 'Magic'}
                   </span>
-                )}
+                ) : null}
                 {isPermanentMagicCard && (
-                  <span className="dh-card__caption flex items-center gap-0.5 rounded-sm border border-cyan-300/50 bg-cyan-800/50 px-1 py-0.5 font-bold uppercase tracking-wide text-cyan-50 shadow-sm">
-                    <Infinity className="dh-icon-inline" />
+                  <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
+                    <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
                   </span>
                 )}
               </div>
@@ -806,11 +818,11 @@ const amuletEffectText =
                         )}
                       </div>
                       {card.hpLayers && card.hpLayers > 1 && (
-                        <div className="flex gap-0.5 mt-1">
+                        <div className={`flex ${isCompact ? 'gap-px mt-0.5' : 'gap-0.5 mt-1'}`}>
                           {[...Array(card.hpLayers)].map((_, i) => (
                             <div 
                               key={i}
-                              className={`dh-card__layer-dot rounded-full border border-black shadow-sm ${
+                              className={`${isCompact ? 'dh-card__layer-dot--compact' : 'dh-card__layer-dot'} rounded-full border border-black shadow-sm ${
                                 i < (card.currentLayer || 1) ? 'bg-red-500' : 'bg-gray-400'
                               }`}
                             />
@@ -850,8 +862,8 @@ const amuletEffectText =
                       </div>
                     </div>
                     {(card.durability !== undefined || card.maxDurability !== undefined) && totalDurabilityDots > 0 && (
-                      <div className="absolute top-1.5 right-1.5 flex flex-col items-end">
-                        <div className="flex gap-0.5">
+                      <div className={`absolute ${isCompact ? 'top-1 right-1' : 'top-1.5 right-1.5'} flex flex-col items-end`}>
+                        <div className={`flex ${isCompact ? 'gap-px' : 'gap-0.5'}`}>
                           {Array.from({ length: totalDurabilityDots }).map((_, i) => {
                             const dotValue = i + 1;
                             const isFilled = dotValue <= currentDurability;
