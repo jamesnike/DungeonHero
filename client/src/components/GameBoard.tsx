@@ -7644,7 +7644,11 @@ export default function GameBoard() {
   const consumeCardFromHand = (card: GameCardData | string): boolean => {
     const cardId = typeof card === 'string' ? card : card.id;
     const draggedFromHand = wasDraggedFromHand(cardId);
-    let removed = false;
+    const existsInHand = handCards.some(c => c.id === cardId);
+
+    if (!existsInHand && !draggedFromHand) {
+      return false;
+    }
 
     // Cancel any pending delivery guard / flight fallback so the card
     // cannot be re-inserted into the hand after consumption.
@@ -7656,23 +7660,17 @@ export default function GameBoard() {
     clearBackpackHandFallback(cardId);
 
     setHandCards(prev => {
-      const existsInHand = prev.some(c => c.id === cardId);
-      if (!existsInHand) {
+      if (!prev.some(c => c.id === cardId)) {
         return prev;
       }
-      removed = true;
       return prev.filter(c => c.id !== cardId);
     });
 
-    if (removed || draggedFromHand) {
-      if (draggedFromHand) {
-        setDraggedCard(null);
-        setDraggedCardSource(current => (current === 'hand' ? null : current));
-      }
-      return true;
+    if (draggedFromHand) {
+      setDraggedCard(null);
+      setDraggedCardSource(current => (current === 'hand' ? null : current));
     }
-
-    return false;
+    return true;
   };
 
   const discardAllHandCards = useCallback(() => {
