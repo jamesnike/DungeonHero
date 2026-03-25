@@ -43,10 +43,10 @@ export type PotionEffectId =
   | 'heal-7'
   | 'repair-weapon-2'
   | 'repair-weapon-3'
-  | 'repair-equipment-2'
+  | 'boost-both-slots'
   | 'repair-choice'
-  | 'draw-backpack-3'
-  | 'discover-class'
+  | 'draw-backpack-4'
+  | 'discover-class-2'
   | 'perm-spell-damage'
   | 'perm-backpack-size';
 
@@ -74,7 +74,8 @@ export type EventRequirement =
   | { type: 'amulet'; message?: string }
   | { type: 'hand'; min: number; message?: string }
   | { type: 'cardPool'; pools: Array<'hand' | 'backpack'>; min: number; message?: string }
-  | { type: 'graveyard'; min: number; message?: string };
+  | { type: 'graveyard'; min: number; message?: string }
+  | { type: 'gold'; min: number; message?: string };
 
 export type EventEffectExpression = string | string[];
 
@@ -125,7 +126,17 @@ export interface GameCardData {
   // Monster-specific properties
   monsterType?: string; // Base type for rage lookup (Dragon, Skeleton, etc.)
   monsterSpecial?: string; // Special champion ability tag (ember-fury, bone-regen, etc.)
-  specialAttackBoost?: number; // Cumulative attack boost from special effects (e.g. ember-fury)
+  specialAttackBoost?: number; // Cumulative attack boost from bleedEffect
+  hasRevive?: boolean; // Monster revives once at 1 HP layer on first death
+  reviveUsed?: boolean; // Whether the revive has already been consumed
+  lastWords?: string; // Death trigger effect ID (fires on actual death, not revive)
+  bleedEffect?: string; // Bleed keyword: triggers on every layer lost (e.g. 'attack+1', 'attack+3')
+  eliteRegenHeroTurn?: boolean; // Elite dragon: restore 1 layer if hero turn ends without layer loss
+  enterEffect?: string; // On-enter keyword: triggers when card enters the active dungeon row
+  eliteDoubleAttack?: boolean; // Elite ogre: 50% chance to attack twice
+  onAttackEffect?: string; // On-attack keyword: triggers every time this monster attacks (e.g. 'steal-gold-2')
+  eliteLowGoldPower?: boolean; // Elite goblin: double attack & HP when player gold <= 10
+  lowGoldBuffActive?: boolean; // Whether the low-gold buff is currently applied
   attack?: number; // Monster attack value
   hp?: number; // Monster current HP
   maxHp?: number; // Monster original HP
@@ -140,12 +151,23 @@ export interface GameCardData {
   // Equipment durability
   durability?: number; // Current durability for weapons/shields
   maxDurability?: number; // Maximum durability for weapons/shields
+  weaponDurabilitySaveChance?: number; // % chance to not consume durability on attack
+  damageReflect?: number; // Damage reflected back to attacker when blocking
+  shieldPerfectBlockSaveChance?: number; // % chance to save durability on perfect block
+  reflectHalfDamage?: boolean; // Reflect half of incoming attack damage back to attacker
   // Class card properties
   classCard?: boolean; // Marks as a class card
   description?: string; // Card effect description
   potionEffect?: PotionEffectId;
   flipTarget?: CardFlipTarget;
   _flipBackCard?: GameCardData;
+  scalingDamage?: number; // Self-scaling damage for permanent magic cards
+  onDestroyHeal?: number; // Heal this amount when equipment is destroyed
+  onDestroyGold?: number; // Gain this much gold when equipment is destroyed
+  critChance?: number; // % chance to deal double damage on attack
+  restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
+  healOnAttack?: number; // Heal this amount each time this weapon attacks
+  waterfallAttackBoost?: number; // Increase weapon's own attack by this amount each waterfall
 }
 
 interface GameCardProps {
@@ -209,7 +231,7 @@ function GameCardInner({
   const potionDescription =
     isPotionCard && !isHealingPotion ? card.description ?? null : null;
 
-  const isEquipmentCard = card.type === 'weapon' || card.type === 'shield';
+  const isEquipmentCard = card.type === 'weapon' || card.type === 'shield' || (card.type === 'monster' && 'fromSlot' in card);
   const mobileDragType =
     isEquipmentCard && 'fromSlot' in card && (card as any)?.fromSlot ? 'equipment' : 'card';
 
@@ -295,7 +317,7 @@ function GameCardInner({
     setIsDragging(true);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('card', JSON.stringify(card));
-    if ((card.type === 'weapon' || card.type === 'shield') && 'fromSlot' in card && (card as any).fromSlot) {
+    if ((card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') && 'fromSlot' in card && (card as any).fromSlot) {
       e.dataTransfer.setData('equipment', JSON.stringify(card));
     }
     onDragStart?.(card);
@@ -478,6 +500,24 @@ const amuletEffectText =
         )}`
       : null;
   const equipmentStatModifierColor = 'text-emerald-600';
+
+  const monsterAttackModifier = (() => {
+    if (card.type !== 'monster') return 0;
+    const current = card.attack ?? card.value;
+    const boost = card.specialAttackBoost ?? 0;
+    const baseBeforeEffects = card.lowGoldBuffActive
+      ? Math.floor(current / 2) - boost
+      : current - boost;
+    return current - baseBeforeEffects;
+  })();
+  const monsterAttackBase = (card.attack ?? card.value) - monsterAttackModifier;
+
+  const monsterMaxHpModifier = (() => {
+    if (card.type !== 'monster') return 0;
+    const currentMax = card.maxHp ?? card.hp ?? 0;
+    if (card.lowGoldBuffActive) return Math.floor(currentMax / 2);
+    return 0;
+  })();
 
   return (
     <div
@@ -693,19 +733,20 @@ const amuletEffectText =
                       <div className="relative group flex items-center">
                         <div className="mr-1">
                           <Sword className={`dh-card__icon drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${
-                            (card.specialAttackBoost ?? 0) > 0 ? 'text-orange-500' : 'text-red-500'
+                            monsterAttackModifier > 0 ? 'text-orange-500' : 'text-red-500'
                           }`} />
                         </div>
-                        <div className="flex items-baseline gap-1">
-                          <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
-                            (card.specialAttackBoost ?? 0) > 0
-                              ? 'text-orange-600 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]'
-                              : 'text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]'
-                          }`}>
-                            {card.attack ?? card.value}
+                        <div className="flex items-baseline gap-0.5">
+                          <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                            {monsterAttackBase}
                           </span>
+                          {monsterAttackModifier > 0 && (
+                            <span className="dh-card__stat font-black text-orange-600 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]" style={{ fontSize: '85%' }}>
+                              +{monsterAttackModifier}
+                            </span>
+                          )}
                           {equipmentStatModifierText && (
-                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}>
+                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]`} style={{ fontSize: '85%' }}>
                               {equipmentStatModifierText}
                             </span>
                           )}
@@ -714,9 +755,16 @@ const amuletEffectText =
                     </div>
                     <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
                       <div className="relative group flex items-center">
-                        <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] mr-1">
-                          {card.hp ?? card.value}
-                        </span>
+                        <div className="flex items-baseline gap-0.5 mr-1">
+                          <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                            {card.hp ?? card.value}
+                          </span>
+                          {monsterMaxHpModifier > 0 && (
+                            <span className="dh-card__stat font-black text-emerald-600 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]" style={{ fontSize: '85%' }}>
+                              +{monsterMaxHpModifier}
+                            </span>
+                          )}
+                        </div>
                         <div>
                           <Heart className="dh-card__icon text-red-500 fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
                         </div>
@@ -738,6 +786,37 @@ const amuletEffectText =
                       <div className="dh-card__elite-badge" title={card.description ?? '精英怪物'}>
                         精英
                       </div>
+                    )}
+                    {card.hasRevive && (
+                      <div
+                        className={`dh-card__revive-badge ${card.reviveUsed ? 'dh-card__revive-badge--used' : ''}`}
+                        title={card.reviveUsed ? '复生已触发' : '首次死亡时以1血层复生'}
+                      >
+                        {card.reviveUsed ? '已复生' : '复生'}
+                      </div>
+                    )}
+                    {card.lastWords && (
+                      <div className="dh-card__lastwords-badge" title="死亡时触发遗言效果">
+                        遗言
+                      </div>
+                    )}
+                    {card.bleedEffect && (
+                      <div className="dh-card__bleed-badge" title={`流血：每失去一个血层，攻击力+${card.bleedEffect.replace('attack+', '')}`}>
+                        流血
+                      </div>
+                    )}
+                    {card.enterEffect && (
+                      <div className="dh-card__enter-badge" title="入场时触发效果">
+                        入场
+                      </div>
+                    )}
+                    {card.onAttackEffect && (
+                      <div className="dh-card__onattack-badge" title={`动手：每次攻击时触发`}>
+                        动手
+                      </div>
+                    )}
+                    {card.lowGoldBuffActive && (
+                      <div className="dh-card__lowgold-glow" />
                     )}
                   </>
                 )}
@@ -861,7 +940,13 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.image !== b.image ||
       a.type !== b.type ||
       a.description !== b.description ||
-      a.specialAttackBoost !== b.specialAttackBoost
+      a.specialAttackBoost !== b.specialAttackBoost ||
+      a.maxHp !== b.maxHp ||
+      a.hasRevive !== b.hasRevive ||
+      a.reviveUsed !== b.reviveUsed ||
+      a.bleedEffect !== b.bleedEffect ||
+      a.onAttackEffect !== b.onAttackEffect ||
+      a.lowGoldBuffActive !== b.lowGoldBuffActive
     ) {
       return false;
     }

@@ -1,8 +1,7 @@
 import { Card } from '@/components/ui/card';
-import { Shield, Droplet, Skull, Heart } from 'lucide-react';
+import { Shield, Droplet, Skull, Heart, Coins, Ghost, HandCoins, Waves, Swords, HeartPulse, Zap, ShieldAlert, BookOpen } from 'lucide-react';
 import { heroSkills } from '@/lib/heroSkills';
 
-// Import skill scroll image for the cards
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
 
 interface HeroSkillSelectionProps {
@@ -12,17 +11,36 @@ interface HeroSkillSelectionProps {
 
 export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillSelectionProps) {
   const getSkillIcon = (skillId: string) => {
+    const cls = "w-4 h-4 md:w-5 md:h-5";
     switch (skillId) {
       case 'armor-pact':
-        return <Shield className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8" />;
+        return <Shield className={cls} />;
       case 'durability-for-blood':
-        return <Droplet className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8" />;
+        return <Droplet className={cls} />;
       case 'blood-strike':
-        return <Skull className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8" />;
+        return <Skull className={cls} />;
       case 'vitality-well':
-        return <Heart className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8" />;
+        return <Heart className={cls} />;
+      case 'gold-discovery':
+        return <Coins className={cls} />;
+      case 'graveyard-recall':
+        return <Ghost className={cls} />;
+      case 'discard-profit':
+        return <HandCoins className={cls} />;
+      case 'waterfall-heal':
+        return <Waves className={cls} />;
+      case 'discard-empower':
+        return <Swords className={cls} />;
+      case 'heal-to-damage':
+        return <HeartPulse className={cls} />;
+      case 'early-surge':
+        return <Zap className={cls} />;
+      case 'shield-wall':
+        return <ShieldAlert className={cls} />;
+      case 'blood-draw':
+        return <BookOpen className={cls} />;
       default:
-        return <Shield className="w-5 h-5 md:w-6 md:h-6 lg:w-8 lg:h-8" />;
+        return <Shield className={cls} />;
     }
   };
 
@@ -32,50 +50,40 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
         isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
-      <div className={`bg-background rounded-2xl p-4 md:p-6 lg:p-8 max-w-sm md:max-w-2xl lg:max-w-4xl w-full mx-2 md:mx-4 shadow-2xl border-2 border-primary transform transition-transform duration-200 ${
+      <div className={`bg-background rounded-xl p-3 md:p-4 lg:p-5 max-w-xs md:max-w-xl lg:max-w-4xl w-full mx-2 md:mx-4 shadow-2xl border-2 border-primary transform transition-transform duration-200 ${
         isOpen ? 'scale-100' : 'scale-95'
       }`}>
-        {/* Header */}
-        <div className="text-center mb-4 md:mb-6 lg:mb-8">
-          <h2 className="font-serif text-2xl md:text-3xl lg:text-4xl font-bold mb-2 md:mb-3 text-primary">Choose Your Skill</h2>
-          <p className="text-muted-foreground text-sm md:text-base lg:text-lg">
-            Select one skill to master before your adventure begins
+        <div className="text-center mb-2 md:mb-3 lg:mb-4">
+          <h2 className="font-serif text-lg md:text-xl lg:text-2xl font-bold mb-1 text-primary">选择英雄技能</h2>
+          <p className="text-muted-foreground text-xs md:text-sm">
+            选择一项技能开始冒险
           </p>
         </div>
 
-        {/* Skills Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6 mb-4 md:mb-6 lg:mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-2.5 lg:gap-3 mb-2 md:mb-3 lg:mb-4">
           {heroSkills.map((skill) => (
             <Card
               key={skill.id}
               onClick={() => onSelectSkill(skill.id)}
-              className={`
-                relative cursor-pointer transition-[transform,ring,box-shadow] duration-300 hover-elevate active-elevate-2
-                hover:scale-105 hover:shadow-xl hover:ring-4 hover:ring-primary
-              `}
+              className="relative cursor-pointer transition-[transform,ring,box-shadow] duration-200 hover:scale-[1.03] hover:shadow-lg hover:ring-2 hover:ring-primary active:scale-[0.98]"
               data-testid={`skill-card-${skill.id}`}
             >
-
-              <div className="p-3 md:p-4 lg:p-6">
-                {/* Icon and Title */}
-                <div className="flex items-center justify-center mb-2 md:mb-3 lg:mb-4">
-                  <div className="text-primary bg-muted rounded-full p-2 md:p-3 lg:p-4">
+              <div className="p-2 md:p-2.5 lg:p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="text-primary bg-muted rounded-full p-1.5 shrink-0">
                     {getSkillIcon(skill.id)}
                   </div>
+                  <h3 className="font-serif text-xs md:text-sm font-bold truncate">
+                    {skill.name}
+                  </h3>
                 </div>
 
-                <h3 className="font-serif text-base md:text-lg lg:text-xl font-bold text-center mb-1 md:mb-2">
-                  {skill.name}
-                </h3>
-
-                {/* Effect */}
-                <div className="bg-primary/10 rounded-lg p-2 md:p-2.5 lg:p-3 border border-primary/30 mt-2">
-                  <p className="text-xs md:text-sm font-medium text-center leading-relaxed">
+                <div className="bg-primary/10 rounded p-1.5 border border-primary/30">
+                  <p className="text-[10px] md:text-xs font-medium leading-snug">
                     {skill.effect}
                   </p>
                 </div>
 
-                {/* Scroll image background */}
                 <div className="absolute inset-0 opacity-5 pointer-events-none">
                   <img 
                     src={skillScrollImage} 
@@ -88,9 +96,8 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
           ))}
         </div>
 
-        {/* Tip */}
-        <p className="text-xs md:text-sm text-muted-foreground text-center mt-3 md:mt-4 lg:mt-6">
-          Click on any skill box above to select and start your adventure
+        <p className="text-[10px] md:text-xs text-muted-foreground text-center">
+          点击技能卡牌以选择
         </p>
       </div>
     </div>

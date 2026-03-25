@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { type EventEffectExpression, type EventRequirement, type GameCardData } from "./GameCard";
 import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade } from "@/lib/monsterRage";
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle } from "lucide-react";
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins } from "lucide-react";
 
 type MonsterRewardPreview = {
   id: string;
@@ -202,8 +202,8 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
               );
             })()}
 
-            {/* Monster Waterfall Effect */}
-            {card.type === 'monster' && card.waterfallEffect && (
+            {/* Waterfall Effect */}
+            {(card.type === 'monster' || card.type === 'event') && card.waterfallEffect && (
               <div className="bg-orange-500/10 p-3 rounded-md border border-orange-500/20">
                 <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -225,6 +225,161 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                   </div>
                   <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">
                     {card.description}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Monster Revive Keyword */}
+            {card.type === 'monster' && card.hasRevive && (
+              <div className={`p-3 rounded-md border relative overflow-hidden ${
+                card.reviveUsed
+                  ? 'bg-gray-500/10 border-gray-500/30'
+                  : 'bg-emerald-500/15 border-emerald-500/30'
+              }`}>
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Heart className={`w-4 h-4 shrink-0 ${card.reviveUsed ? 'text-gray-400' : 'text-emerald-500'}`} />
+                    <span className={`font-extrabold text-sm tracking-wide ${
+                      card.reviveUsed
+                        ? 'text-gray-500 dark:text-gray-400 line-through'
+                        : 'text-emerald-700 dark:text-emerald-300'
+                    }`}>
+                      复生
+                    </span>
+                    {card.reviveUsed && (
+                      <span className="text-xs text-gray-400">（已触发）</span>
+                    )}
+                  </div>
+                  <p className={`text-sm pl-6 ${
+                    card.reviveUsed
+                      ? 'text-gray-500 dark:text-gray-400'
+                      : 'font-semibold text-emerald-800 dark:text-emerald-200'
+                  }`}>
+                    首次死亡时，以 1 血层的形式复生（仅一次）。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Monster Bleed Keyword */}
+            {card.type === 'monster' && card.bleedEffect && (
+              <div className="bg-orange-500/15 p-3 rounded-md border border-orange-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 shrink-0 text-orange-500" />
+                    <span className="font-extrabold text-sm text-orange-700 dark:text-orange-300 tracking-wide">
+                      流血
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">
+                    每失去一个血层，攻击力 +{card.bleedEffect.replace('attack+', '')}。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Monster Elite Dragon Regen */}
+            {card.type === 'monster' && card.eliteRegenHeroTurn && (
+              <div className="bg-amber-500/15 p-3 rounded-md border border-amber-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                      龙息回复
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
+                    若 Hero 回合结束时未掉血层，立即恢复一个血层。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Monster Enter Effect */}
+            {card.type === 'monster' && card.enterEffect && (
+              <div className="bg-amber-500/15 p-3 rounded-md border border-amber-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                      入场
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
+                    {card.enterEffect === 'auto-engage'
+                      ? '进入战斗行时自动处于激怒状态。'
+                      : '进入战斗行时触发特殊效果。'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Monster Elite Double Attack */}
+            {card.type === 'monster' && card.eliteDoubleAttack && (
+              <div className="bg-violet-500/15 p-3 rounded-md border border-violet-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 shrink-0 text-violet-500" />
+                    <span className="font-extrabold text-sm text-violet-700 dark:text-violet-300 tracking-wide">
+                      连击
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">
+                    攻击时 50% 概率攻击两次。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Monster On-Attack Effect */}
+            {card.type === 'monster' && card.onAttackEffect && (
+              <div className="bg-emerald-500/15 p-3 rounded-md border border-emerald-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Coins className="w-4 h-4 shrink-0 text-emerald-500" />
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">
+                      动手
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">
+                    每次攻击时偷取{card.onAttackEffect === 'steal-gold-5' ? ' 5 ' : ' 2 '}金币。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Elite Goblin Low-Gold Power */}
+            {card.type === 'monster' && card.eliteLowGoldPower && (
+              <div className={`p-3 rounded-md relative overflow-hidden ${card.lowGoldBuffActive ? 'bg-red-500/15 border border-red-500/30' : 'bg-yellow-500/15 border border-yellow-500/30'}`}>
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className={`w-4 h-4 shrink-0 ${card.lowGoldBuffActive ? 'text-red-500' : 'text-yellow-500'}`} />
+                    <span className={`font-extrabold text-sm tracking-wide ${card.lowGoldBuffActive ? 'text-red-700 dark:text-red-300' : 'text-yellow-700 dark:text-yellow-300'}`}>
+                      贪婪强化 {card.lowGoldBuffActive ? '（已激活）' : ''}
+                    </span>
+                  </div>
+                  <p className={`text-sm font-semibold pl-6 ${card.lowGoldBuffActive ? 'text-red-800 dark:text-red-200' : 'text-yellow-800 dark:text-yellow-200'}`}>
+                    当玩家金币 ≤ 10 时，攻击力与血量翻倍。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Monster Last Words */}
+            {card.type === 'monster' && card.lastWords && (
+              <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skull className="w-4 h-4 shrink-0 text-red-500" />
+                    <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
+                      遗言
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
+                    {card.lastWords === 'discard-hand-3'
+                      ? '死亡时随机弃置玩家 3 张手牌。'
+                      : '死亡时触发特殊效果。'}
                   </p>
                 </div>
               </div>

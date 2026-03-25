@@ -35,11 +35,11 @@ export function generateKnightDeck(): KnightCardData[] {
   // === WEAPONS (3 cards) ===
   pushCard({
     type: 'weapon',
-    name: 'Holy Blade',
+    name: '圣光之刃',
     value: 6,
     image: swordImage,
     classCard: true,
-    description: 'Heals 2 HP when defeating a monster.',
+    description: '击杀怪物时回复 2 点生命。',
     healOnKill: 2,
     durability: 2,
     maxDurability: 2,
@@ -47,22 +47,23 @@ export function generateKnightDeck(): KnightCardData[] {
 
   pushCard({
     type: 'weapon',
-    name: 'Swift Blade',
+    name: '疾风短剑',
     value: 4,
     image: swordImage,
     classCard: true,
-    description: 'Reliable light weapon with 3 uses.',
+    description: '杀死怪物时耐久度回满。',
     durability: 3,
     maxDurability: 3,
+    restoreDurabilityOnKill: true,
   });
 
   pushCard({
     type: 'weapon',
-    name: 'Stormbreaker Hammer',
+    name: '碎雷战锤',
     value: 7,
     image: axeImage,
     classCard: true,
-    description: 'Each hit gains +1 permanent damage for the battle.',
+    description: '每次攻击永久增加该装备栏 +1 伤害。',
     weaponBonus: 1,
     durability: 2,
     maxDurability: 2,
@@ -71,11 +72,11 @@ export function generateKnightDeck(): KnightCardData[] {
   // === SHIELDS (3 cards) ===
   pushCard({
     type: 'shield',
-    name: 'Tower Shield',
+    name: '铁壁塔盾',
     value: 5,
     image: heavyShieldImage,
     classCard: true,
-    description: 'Blocks the next full source of damage.',
+    description: '完全格挡一次攻击的全部伤害，无论攻击力多高。',
     durability: 1,
     maxDurability: 1,
     knightEffect: 'fullBlock',
@@ -83,24 +84,24 @@ export function generateKnightDeck(): KnightCardData[] {
 
   pushCard({
     type: 'shield',
-    name: 'Reflective Shield',
+    name: '棘刺反盾',
     value: 4,
     image: heavyShieldImage,
     classCard: true,
-    description: 'Reflects 2 damage when it blocks.',
-    damageReflect: 2,
+    description: '格挡时反弹一半的攻击伤害给攻击者（向上取整）。',
+    reflectHalfDamage: true,
     durability: 2,
     maxDurability: 2,
   });
 
   pushCard({
     type: 'shield',
-    name: 'Guardian Aegis',
+    name: '守护圣盾',
     value: 4,
     image: heavyShieldImage,
     classCard: true,
-    description: 'Reliable defender that reflects 1 damage.',
-    damageReflect: 1,
+    description: '完美格挡时，50% 概率不消耗耐久（掷骰判定）。',
+    shieldPerfectBlockSaveChance: 50,
     durability: 2,
     maxDurability: 2,
   });

@@ -26,6 +26,7 @@ export type CombatState = {
     monsterId: string;
     attackValue: number;
     monsterName: string;
+    isFollowUpAttack?: boolean;
   };
 };
 
@@ -113,6 +114,7 @@ export type MonsterRewardEffect =
   | { type: 'repair'; amount: number; targets: EquipmentRepairTarget[] }
   | { type: 'drawBackpack'; amount: number }
   | { type: 'discoverClass' }
+  | { type: 'discoverGraveyard' }
   | { type: 'maxHp'; amount: number }
   | { type: 'spellDamage'; amount: number };
 
@@ -238,6 +240,13 @@ export type PendingMagicAction =
     }
   | {
       card: GameCardData;
+      effect: 'scaling-damage';
+      step: 'monster-select';
+      pendingDamage: number;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
       effect: 'chaos-strike';
       step: 'monster-select';
       data: Record<string, unknown>;
@@ -344,6 +353,7 @@ export type ActiveAmuletEffects = {
   hasStrength: boolean;
   hasDualGuard: boolean;
   hasDiscardShock: boolean;
+  hasFlipGold: boolean;
 };
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';

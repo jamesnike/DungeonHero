@@ -35,6 +35,7 @@ export interface CombatStateSnapshot {
     monsterId: string;
     attackValue: number;
     monsterName: string;
+    isFollowUpAttack?: boolean;
   };
 }
 
@@ -49,6 +50,7 @@ export interface PersistedGameState {
   cardsPlayed: number;
   totalDamageTaken: number;
   totalHealed: number;
+  healAccumulator: number;
   previewCards: BoardSlotSnapshot;
   activeCards: BoardSlotSnapshot;
   remainingDeck: GameCardData[];
@@ -88,6 +90,7 @@ export interface PersistedGameState {
   slotAttackBursts?: EquipmentBuffSnapshot;
   vampiricNextAttack?: boolean;
   unbreakableNext?: boolean;
+  unbreakableUntilWaterfall?: Record<string, boolean>;
   defensiveStanceActive?: boolean;
   doubleNextMagic?: boolean;
   berserkerRageActive?: boolean;

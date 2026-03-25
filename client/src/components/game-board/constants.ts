@@ -114,6 +114,7 @@ export const STARTER_CARD_IDS = {
   repairOne: 'starter-perm-repair-one',
   healTwo: 'starter-perm-heal-two',
   reshuffle: 'starter-perm-reshuffle',
+  dungeonSwap: 'starter-perm-dungeon-swap',
   trainingBlade: 'starter-weapon-training-blade',
 } as const;
 

@@ -40,6 +40,7 @@ interface EquipmentSlotProps {
   weaponSwingVariant?: number;
   shieldBlockVariant?: number;
   isExhaustedThisTurn?: boolean;
+  isUnbreakable?: boolean;
 }
 
 export default function EquipmentSlot({
@@ -69,6 +70,7 @@ export default function EquipmentSlot({
   weaponSwingVariant = 0,
   shieldBlockVariant = 0,
   isExhaustedThisTurn = false,
+  isUnbreakable = false,
 }: EquipmentSlotProps) {
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
@@ -381,6 +383,11 @@ export default function EquipmentSlot({
       {heroSkillHighlight && heroSkillLabel && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 bg-amber-200 text-amber-900 dh-hero-small font-semibold px-3 py-1 rounded-full shadow">
           {heroSkillLabel}
+        </div>
+      )}
+      {isUnbreakable && gameCardData && (
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-40 bg-yellow-400/90 text-yellow-900 font-bold px-2 py-0.5 rounded-full shadow-md border border-yellow-500 text-xs whitespace-nowrap animate-pulse">
+          永恒修复
         </div>
       )}
     </div>
