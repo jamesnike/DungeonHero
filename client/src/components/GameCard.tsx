@@ -505,7 +505,7 @@ const amuletEffectText =
     ? 'select-none w-auto max-h-[80%] max-w-[80%] object-contain opacity-70'
     : 'select-none w-auto max-h-[82%] max-w-[82%] object-contain';
 
-  const modSpacer = isCompact ? '' : ' ';
+  const modSpacer = '';
   const equipmentStatModifierText =
     equipmentStatModifier &&
     (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') &&
@@ -776,7 +776,7 @@ const amuletEffectText =
                             }`} />
                           </div>
                         )}
-                        <div className={`flex items-baseline ${isCompact ? 'gap-0' : 'gap-0.5'}`}>
+                        <div className="flex items-baseline gap-0">
                           <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                             {monsterAttackBase}
                           </span>
@@ -795,7 +795,7 @@ const amuletEffectText =
                     </div>
                     <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
                       <div className="relative group flex items-center">
-                        <div className={`flex items-baseline mr-1 ${isCompact ? 'gap-0' : 'gap-0.5'}`}>
+                        <div className="flex items-baseline gap-0 mr-1">
                           <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                             {monsterHpBase}
                           </span>
@@ -850,7 +850,7 @@ const amuletEffectText =
                             )}
                           </div>
                         )}
-                        <div className={`flex items-baseline ${isCompact ? 'gap-0' : 'gap-1'}`}>
+                        <div className="flex items-baseline gap-0">
                           <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                             {card.value}
                           </span>
