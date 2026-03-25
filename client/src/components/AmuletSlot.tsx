@@ -99,19 +99,22 @@ export default function AmuletSlot({
       return { zIndex: 10 };
     }
 
-    const isTopCard = index === preparedAmulets.length - 1;
+    const total = preparedAmulets.length;
+    const isTopCard = index === total - 1;
 
-    if (isTopCard) {
-      return {
-        zIndex: 30,
-        transform: 'translateY(28%)',
-      };
+    if (total === 2) {
+      return isTopCard
+        ? { zIndex: 30, transform: 'translateY(28%)' }
+        : { zIndex: 20, transform: 'translateY(-6%)' };
     }
 
-    return {
-      zIndex: 20,
-      transform: 'translateY(-6%)',
-    };
+    if (isTopCard) {
+      return { zIndex: 30, transform: 'translateY(36%)' };
+    }
+    if (index === total - 2) {
+      return { zIndex: 20, transform: 'translateY(10%)' };
+    }
+    return { zIndex: 10, transform: 'translateY(-12%)' };
   };
 
   const dropStateClass = isDropTarget

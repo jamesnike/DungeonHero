@@ -5,6 +5,7 @@ import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png
 import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
 import heavyShieldImage from '@assets/generated_images/simple_heavy_shield.png';
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
+import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
 import thunderAmuletImage from '@assets/generated_images/chibi_thunder_amulet.png';
 import potionArcaneInfusionImage from '@assets/generated_images/cute_potion_arcane_infusion.png';
@@ -111,7 +112,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: dualguardAmuletImage,
     classCard: true,
-    description: '可使用左右两侧较低的永久护甲值来格挡伤害。',
+    description: '护盾完美格挡时（护甲值≥攻击力），该装备栏永久护甲+1。',
     amuletEffect: 'dual-guard',
   });
 
@@ -137,13 +138,18 @@ export function generateKnightDeck(): KnightCardData[] {
   });
 
   pushCard({
-    type: 'potion',
+    type: 'event',
     name: '无尽背袋灵药',
     value: 0,
     image: potionBackpackExpandImage,
     classCard: true,
-    description: '永久提升背包容量 +1。',
-    potionEffect: 'perm-backpack-size',
+    description: '四选一：护符上限+1、左装备栏容量+1、右装备栏容量+1、背包容量+3。',
+    eventChoices: [
+      { text: '护符上限 +1', hint: '护符栏可叠加更多护符', effect: 'amuletCapacity+1' },
+      { text: '左装备栏容量 +1', hint: '左装备栏可装备多件，点击切换', effect: 'equipSlot1Capacity+1' },
+      { text: '右装备栏容量 +1', hint: '右装备栏可装备多件，点击切换', effect: 'equipSlot2Capacity+1' },
+      { text: '背包容量 +3', hint: '永久增加背包空间', effect: 'backpackSize+3' },
+    ],
   });
 
   // === HERO MAGIC (2 cards) ===
@@ -164,7 +170,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '第一次使用时解锁狂战；之后可立即获得额外不耗耐久的攻击。',
+    description: '第一次使用时解锁狂战；之后可触发狂战：直到下次瀑布前，每个武器栏每回合可多攻击一次，且不消耗耐久。',
     heroMagicId: 'berserker-rage',
     heroMagicEffect: '英雄魔法：解锁或触发狂战。',
   });
@@ -266,6 +272,27 @@ export function generateKnightDeck(): KnightCardData[] {
     knightEffect: 'chaos-dice',
   });
 
+  // === GRAVEYARD RECALL (1 card) ===
+  const graveyardRecallId = nextId();
+  deck.push({
+    id: graveyardRecallId,
+    type: 'magic',
+    name: '冥途拾遗',
+    value: 0,
+    image: skillScrollImage,
+    classCard: true,
+    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。使用后翻转为事件。',
+    magicType: 'instant',
+    magicEffect: '坟场随机取回 3 张牌。',
+    knightEffect: 'graveyard-recall',
+    flipTarget: {
+      toCard: buildGraveyardRecallFlipEvent(`${graveyardRecallId}-flip`),
+      destination: 'backpack',
+      banner: '法术翻转成事件卷轴，已放入背包。',
+      message: '坟场之力翻涌，卷轴变形为新的形态…',
+    },
+  });
+
   // Shuffle the deck
   return deck.sort(() => Math.random() - 0.5);
 }
@@ -279,6 +306,51 @@ export function createKnightDiscoveryEvents(): GameCardData[] {
 
 const createDynamicKnightCardId = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+function buildGraveyardRecallFlipEvent(id: string): GameCardData {
+  return {
+    id,
+    type: 'event',
+    name: '冥途幻变',
+    value: 0,
+    image: eventScrollImage,
+    description: '掷骰子决定命运：25% 获得专属卡，25% 装备耐久 +1，25% 翻回原始法术，25% 摧毁所有装备。',
+    eventChoices: [
+      {
+        text: '掷动命运之骰',
+        hint: '25% 触发四种不同结果',
+        diceTable: [
+          { id: 'gr-class2', range: [1, 5] as [number, number], label: '获得 2 张专属卡', effect: 'drawClass2' },
+          { id: 'gr-repair', range: [6, 10] as [number, number], label: '所有装备耐久 +1', effect: 'repairAllDurability+1' },
+          { id: 'gr-flipback', range: [11, 15] as [number, number], label: '翻回原始法术', effect: 'flipBackToGraveyardRecall' },
+          { id: 'gr-destroy', range: [16, 20] as [number, number], label: '摧毁所有装备', effect: 'destroyAllEquipment' },
+        ],
+      },
+    ],
+  };
+}
+
+export const createGraveyardRecallCard = (): KnightCardData => {
+  const id = createDynamicKnightCardId('graveyard-recall');
+  return {
+    id,
+    type: 'magic',
+    name: '冥途拾遗',
+    value: 0,
+    image: skillScrollImage,
+    classCard: true,
+    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。使用后翻转为事件。',
+    magicType: 'instant',
+    magicEffect: '坟场随机取回 3 张牌。',
+    knightEffect: 'graveyard-recall',
+    flipTarget: {
+      toCard: buildGraveyardRecallFlipEvent(`${id}-flip`),
+      destination: 'backpack',
+      banner: '法术翻转成事件卷轴，已放入背包。',
+      message: '坟场之力翻涌，卷轴变形为新的形态…',
+    },
+  };
+};
 
 export const createGreedCurseCard = (): KnightCardData => ({
   id: createDynamicKnightCardId('greed'),

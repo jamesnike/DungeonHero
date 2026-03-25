@@ -155,9 +155,12 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                 <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
                   <div className="flex items-center gap-2">
                     <Sword className="w-4 h-4 text-amber-500" />
-                    <span>Attack: <span className="font-bold">{card.attack ?? card.value}</span>
+                    <span>Attack: <span className={`font-bold ${(card.specialAttackBoost ?? 0) > 0 ? 'text-orange-500' : ''}`}>{card.attack ?? card.value}</span>
                       {hasBonus && card.baseAttack != null && (
                         <span className="text-red-500 text-xs ml-1">(+{activeUpgrade!.attackBonus})</span>
+                      )}
+                      {(card.specialAttackBoost ?? 0) > 0 && (
+                        <span className="text-orange-500 text-xs ml-1">(精英 +{card.specialAttackBoost})</span>
                       )}
                     </span>
                   </div>
@@ -205,6 +208,24 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                 <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span className="font-bold text-sm">{card.waterfallEffect.description}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Monster Special Ability */}
+            {card.type === 'monster' && card.monsterSpecial && card.description && (
+              <div className="bg-violet-500/15 p-3 rounded-md border border-violet-500/30 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 to-purple-500/10 pointer-events-none" />
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 shrink-0 text-violet-500" />
+                    <span className="font-extrabold text-sm text-violet-700 dark:text-violet-300 tracking-wide">
+                      ⚔ 精英怪物
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">
+                    {card.description}
+                  </p>
                 </div>
               </div>
             )}
@@ -328,6 +349,41 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
               </div>
             )}
 
+            {/* Flip Target */}
+            {card.flipTarget && (
+              <div className="space-y-2 border-t border-violet-500/30 pt-3 mt-1">
+                <div className="flex items-center gap-2 text-sm font-semibold text-violet-600 dark:text-violet-400">
+                  <Scroll className="w-4 h-4 shrink-0" />
+                  翻转效果
+                </div>
+                <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-3 space-y-1.5">
+                  <div className="text-sm font-semibold text-foreground">
+                    → {card.flipTarget.toCard.name}
+                    <span className="ml-2 text-[11px] font-normal text-muted-foreground">
+                      ({card.flipTarget.toCard.type === 'magic'
+                        ? card.flipTarget.toCard.magicType === 'instant' ? '一次性法术' : '永久法术'
+                        : card.flipTarget.toCard.type === 'event' ? '事件'
+                        : card.flipTarget.toCard.type === 'potion' ? '药水'
+                        : card.flipTarget.toCard.type.toUpperCase()})
+                    </span>
+                  </div>
+                  {(card.flipTarget.toCard.description || card.flipTarget.toCard.magicEffect || card.flipTarget.toCard.heroMagicEffect) && (
+                    <div className="text-xs text-muted-foreground leading-relaxed">
+                      {card.flipTarget.toCard.description || card.flipTarget.toCard.magicEffect || card.flipTarget.toCard.heroMagicEffect}
+                    </div>
+                  )}
+                  {card.flipTarget.toCard.type === 'event' && card.flipTarget.toCard.eventChoices?.map((choice, idx) => (
+                    <div key={idx} className="text-xs text-muted-foreground leading-relaxed">
+                      {choice.hint || choice.text}
+                    </div>
+                  ))}
+                  {card.flipTarget.destination === 'stay' && (
+                    <div className="text-[11px] text-violet-500/80 italic">翻转后留在原位</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* General Description */}
             {card.description &&
               card.type !== 'magic' &&
@@ -381,6 +437,11 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'discardRightForGold+15') return '破坏右槽装备并获得 15 金币';
       if (token === 'amuletsToGold+10') return '摧毁所有护符并每个获得 10 金币';
       if (token === 'classBottom+2') return '获得 class 底部两张专属卡';
+      if (token === 'fate-dice-strike') return '破坏右侧相邻卡牌';
+      if (token === 'amuletCapacity+1') return '护符上限 +1';
+      if (token === 'equipSlot1Capacity+1') return '左装备栏容量 +1';
+      if (token === 'equipSlot2Capacity+1') return '右装备栏容量 +1';
+      if (token.startsWith('backpackSize+')) return `背包容量 +${token.replace('backpackSize+', '')}`;
       if (token === 'none') return '无额外效果';
       return token;
     })

@@ -34,7 +34,7 @@ export type CardType =
   | 'coin';
 
 export type EquipmentCardStatModifier = {
-  appliesTo: 'weapon' | 'shield';
+  appliesTo: 'weapon' | 'shield' | 'monster';
   modifier: number;
 };
 
@@ -44,6 +44,7 @@ export type PotionEffectId =
   | 'repair-weapon-2'
   | 'repair-weapon-3'
   | 'repair-equipment-2'
+  | 'repair-choice'
   | 'draw-backpack-3'
   | 'discover-class'
   | 'perm-spell-damage'
@@ -95,7 +96,7 @@ export interface EventChoiceDefinition {
   requiresDisabledReason?: string;
 }
 
-export type CardFlipDestination = 'backpack' | 'hand' | 'graveyard';
+export type CardFlipDestination = 'backpack' | 'hand' | 'graveyard' | 'stay';
 
 export type CardFlipTarget = {
   toCard: GameCardData;
@@ -123,6 +124,8 @@ export interface GameCardData {
   isCurse?: boolean;
   // Monster-specific properties
   monsterType?: string; // Base type for rage lookup (Dragon, Skeleton, etc.)
+  monsterSpecial?: string; // Special champion ability tag (ember-fury, bone-regen, etc.)
+  specialAttackBoost?: number; // Cumulative attack boost from special effects (e.g. ember-fury)
   attack?: number; // Monster attack value
   hp?: number; // Monster current HP
   maxHp?: number; // Monster original HP
@@ -142,6 +145,7 @@ export interface GameCardData {
   description?: string; // Card effect description
   potionEffect?: PotionEffectId;
   flipTarget?: CardFlipTarget;
+  _flipBackCard?: GameCardData;
 }
 
 interface GameCardProps {
@@ -466,7 +470,7 @@ const amuletEffectText =
 
   const equipmentStatModifierText =
     equipmentStatModifier &&
-    (card.type === 'weapon' || card.type === 'shield') &&
+    (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') &&
     equipmentStatModifier.appliesTo === card.type &&
     equipmentStatModifier.modifier !== 0
       ? `${equipmentStatModifier.modifier > 0 ? '+' : '-'} ${Math.abs(
@@ -688,9 +692,15 @@ const amuletEffectText =
                     <div className="absolute top-1 left-1">
                       <div className="relative group flex items-center">
                         <div className="mr-1">
-                          <Sword className="dh-card__icon text-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                          <Sword className={`dh-card__icon drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${
+                            (card.specialAttackBoost ?? 0) > 0 ? 'text-orange-500' : 'text-red-500'
+                          }`} />
                         </div>
-                        <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                        <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
+                          (card.specialAttackBoost ?? 0) > 0
+                            ? 'text-orange-600 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]'
+                            : 'text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]'
+                        }`}>
                           {card.attack ?? card.value}
                         </span>
                       </div>
@@ -717,6 +727,11 @@ const amuletEffectText =
                         </div>
                       )}
                     </div>
+                    {card.monsterSpecial && (
+                      <div className="dh-card__elite-badge" title={card.description ?? '精英怪物'}>
+                        精英
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -838,7 +853,8 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.fury !== b.fury ||
       a.image !== b.image ||
       a.type !== b.type ||
-      a.description !== b.description
+      a.description !== b.description ||
+      a.specialAttackBoost !== b.specialAttackBoost
     ) {
       return false;
     }

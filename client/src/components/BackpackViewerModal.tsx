@@ -68,7 +68,15 @@ export default function BackpackViewerModal({
             </Badge>
           )}
         </div>
-        <p className="text-xs text-muted-foreground capitalize">{card.type}</p>
+        <p className="text-xs text-muted-foreground capitalize">
+          {card.type}
+          {card.type === 'magic' && card.magicType && (
+            <span className="ml-1 text-muted-foreground/70">
+              ({card.magicType === 'permanent' ? '永久' : card.magicType === 'instant' ? '即时' : card.magicType})
+            </span>
+          )}
+          {card.type === 'hero-magic' && <span className="ml-1 text-muted-foreground/70">(英雄魔法)</span>}
+        </p>
         {card.description && (
           <p className="text-xs text-muted-foreground line-clamp-2">
             {card.description}

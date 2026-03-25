@@ -1,8 +1,23 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import type { HeroVariant } from '@/lib/heroes';
 import type { HeroSkillDefinition } from '@/lib/heroSkills';
-import { Coins, Heart, Shield, ShieldPlus, Sparkles, Sword, PlusCircle } from 'lucide-react';
+import type { HeroMagicId } from '@/components/GameCard';
+import { getHeroMagicDefinition } from '@/lib/heroMagic';
+import { Coins, Heart, Shield, ShieldPlus, Sparkles, Sword, PlusCircle, Flame } from 'lucide-react';
+
+export interface HeroMagicDisplayInfo {
+  id: HeroMagicId;
+  name: string;
+  gauge: number;
+  gaugeMax: number;
+  unlocked: boolean;
+  ready: boolean;
+  usedThisWave: boolean;
+  chargeHint: string;
+  disabledReason?: string;
+}
 
 interface HeroDetailsModalProps {
   open: boolean;
@@ -20,6 +35,7 @@ interface HeroDetailsModalProps {
   };
   heroSkills: HeroSkillDefinition[];
   permanentSkills: string[];
+  heroMagicInfo?: HeroMagicDisplayInfo[];
 }
 
 const permanentSkillHints: Record<string, string> = {
@@ -48,6 +64,7 @@ export default function HeroDetailsModal({
   stats,
   heroSkills,
   permanentSkills,
+  heroMagicInfo,
 }: HeroDetailsModalProps) {
   const statItems = [
     {
@@ -173,6 +190,49 @@ export default function HeroDetailsModal({
               </div>
             )}
           </div>
+
+          {heroMagicInfo && heroMagicInfo.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-semibold text-foreground">英雄魔法</h3>
+                <Badge variant="outline">{heroMagicInfo.length}</Badge>
+              </div>
+              <div className="space-y-3">
+                {heroMagicInfo.map(magic => {
+                  const def = getHeroMagicDefinition(magic.id);
+                  const gaugePercent = magic.gaugeMax > 0 ? (magic.gauge / magic.gaugeMax) * 100 : 0;
+                  return (
+                    <div
+                      key={magic.id}
+                      className="rounded-2xl border border-amber-400/40 bg-amber-50/50 dark:bg-amber-900/10 p-4 shadow-sm space-y-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-amber-500" />
+                        <span className="text-xl font-semibold text-foreground">{magic.name}</span>
+                        <Badge variant={magic.ready ? 'default' : 'secondary'} className="ml-auto">
+                          {magic.ready ? '可释放' : magic.usedThisWave ? '已使用' : '充能中'}
+                        </Badge>
+                      </div>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{def.description}</p>
+                      <div className="rounded-lg border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+                        {def.cardEffect}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{def.chargeHint}</span>
+                          <span className="font-mono font-semibold">{magic.gauge}/{magic.gaugeMax}</span>
+                        </div>
+                        <Progress value={gaugePercent} className="h-2" />
+                      </div>
+                      {magic.disabledReason && !magic.ready && (
+                        <p className="text-xs text-muted-foreground italic">{magic.disabledReason}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">

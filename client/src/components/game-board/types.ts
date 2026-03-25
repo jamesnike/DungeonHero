@@ -6,6 +6,9 @@ import type {
   GameCardData,
 } from '../GameCard';
 import type { HeroSkillId } from '@/lib/heroSkills';
+import type { ShopOffering } from '../ShopModal';
+import type { LogEntry } from '../GameLogPanel';
+import type { PersistedGameState } from '@/lib/gameStorage';
 
 export type BlockTarget = EquipmentSlotId | 'hero';
 
@@ -29,11 +32,11 @@ export type CombatState = {
 export type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
 export type EquipmentItem = GameCardData & {
-  type: 'weapon' | 'shield';
+  type: 'weapon' | 'shield' | 'monster';
   fromSlot?: EquipmentSlotId;
 };
 
-export type EquipmentRepairTarget = 'weapon' | 'shield';
+export type EquipmentRepairTarget = 'weapon' | 'shield' | 'monster';
 
 export type AmuletItem = GameCardData & { type: 'amulet'; fromSlot?: 'amulet' };
 
@@ -100,6 +103,7 @@ export type CardActionContext = {
   remainingCount: number;
   title?: string;
   description?: string;
+  handOnly?: boolean;
 };
 
 export type MonsterRewardEffect =
@@ -231,6 +235,12 @@ export type PendingMagicAction =
       effect: 'shuffle-dungeon';
       step: 'dungeon-select';
       prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'chaos-strike';
+      step: 'monster-select';
+      data: Record<string, unknown>;
     };
 
 export type PendingPotionAction =
@@ -238,6 +248,27 @@ export type PendingPotionAction =
       card: GameCardData;
       effect: 'repair-equipment';
       amount: number;
+      allowedTypes: EquipmentRepairTarget[];
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'repair-choice';
+      step: 'choice';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'repair-choice-repair';
+      amount: number;
+      allowedTypes: EquipmentRepairTarget[];
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'repair-choice-upgrade';
       allowedTypes: EquipmentRepairTarget[];
       step: 'slot-select';
       prompt: string;
@@ -360,5 +391,34 @@ export type HeroSkillSummary = {
   id: string;
   name: string;
   description: string;
+};
+
+export type UndoTransientState = {
+  monsterRewardQueue: MonsterRewardDrop[];
+  activeMonsterReward: MonsterRewardDrop | null;
+  selectedMonsterRewards: MonsterRewardOption[] | null;
+  pendingMagicAction: PendingMagicAction | null;
+  pendingPotionAction: PendingPotionAction | null;
+  pendingHeroSkillAction: PendingHeroSkillAction | null;
+  pendingHeroMagicAction: PendingHeroMagicAction | null;
+  shopModalOpen: boolean;
+  shopOfferings: ShopOffering[];
+  shopSourceEvent: GameCardData | null;
+  shopDeleteUsed: boolean;
+  shopHealUsed: boolean;
+  discoverModalOpen: boolean;
+  discoverOptions: GameCardData[];
+  deleteModalOpen: boolean;
+  deathWardPrompt: DeathWardPromptState | null;
+  equipmentPrompt: EquipmentPromptState | null;
+  graveyardDiscoverState: GameCardData[] | null;
+  cardActionContext: CardActionContext | null;
+  gameLogEntries: LogEntry[];
+  monsterRewardPreviewCache: Record<string, MonsterRewardOption[]>;
+};
+
+export type UndoSnapshot = {
+  gameState: PersistedGameState;
+  transient: UndoTransientState;
 };
 

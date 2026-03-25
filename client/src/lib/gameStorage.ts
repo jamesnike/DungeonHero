@@ -56,6 +56,10 @@ export interface PersistedGameState {
   handCards: GameCardData[];
   equipmentSlot1: GameCardData | null;
   equipmentSlot2: GameCardData | null;
+  equipmentSlot1Reserve?: GameCardData[];
+  equipmentSlot2Reserve?: GameCardData[];
+  equipmentSlotCapacity?: Record<string, number>;
+  maxAmuletSlots?: number;
   amuletSlots: GameCardData[];
   backpackItems: GameCardData[];
   permanentMagicRecycleBag: GameCardData[];
@@ -85,7 +89,9 @@ export interface PersistedGameState {
   vampiricNextAttack?: boolean;
   unbreakableNext?: boolean;
   defensiveStanceActive?: boolean;
-  berserkerCharges?: number;
+  doubleNextMagic?: boolean;
+  berserkerRageActive?: boolean;
+  berserkerSlotUsed?: Record<string, boolean>;
   heroSkillUsedThisWave?: boolean;
   drawPending?: boolean;
   waveDiscardCount?: number;
@@ -147,6 +153,38 @@ export const clearGameState = () => {
     window.localStorage.removeItem(GAME_STATE_STORAGE_KEY);
   } catch (error) {
     console.warn('[GameStorage] Failed to clear state', error);
+  }
+};
+
+const UNDO_STACK_STORAGE_KEY = 'dungeonhero:undo-stack:v1';
+
+export const saveUndoStack = (stack: unknown[]) => {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.setItem(UNDO_STACK_STORAGE_KEY, JSON.stringify(stack));
+  } catch (error) {
+    console.warn('[GameStorage] Failed to save undo stack', error);
+  }
+};
+
+export const loadUndoStack = (): unknown[] => {
+  if (!canUseStorage()) return [];
+  try {
+    const raw = window.localStorage.getItem(UNDO_STACK_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const clearUndoStorage = () => {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.removeItem(UNDO_STACK_STORAGE_KEY);
+  } catch {
+    // ignore
   }
 };
 

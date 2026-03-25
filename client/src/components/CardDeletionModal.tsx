@@ -16,6 +16,7 @@ interface CardDeletionModalProps {
   description?: string;
   requiredCount?: number;
   remainingCount?: number;
+  handOnly?: boolean;
 }
 
 const sectionIconMap: Record<CardSource, typeof Backpack> = {
@@ -33,6 +34,7 @@ export default function CardDeletionModal({
   description,
   requiredCount,
   remainingCount,
+  handOnly,
 }: CardDeletionModalProps) {
   const headerTitle = title ?? '选择要删除的卡牌';
   const headerDescription =
@@ -107,7 +109,7 @@ export default function CardDeletionModal({
 
         <div className="space-y-6 py-2">
           {renderCardSection('手牌', handCards, 'hand')}
-          {renderCardSection('背包', backpackCards, 'backpack')}
+          {!handOnly && renderCardSection('背包', backpackCards, 'backpack')}
         </div>
       </DialogContent>
     </Dialog>

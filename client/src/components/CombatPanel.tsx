@@ -15,8 +15,8 @@ interface CombatPanelProps {
   pendingBlock: { monsterId: string; attackValue: number; monsterName: string } | null;
   monsterAttackQueue: string[];
   onEndHeroTurn: () => void;
-  equipmentSlot1: (GameCardData & { type: 'weapon' | 'shield' }) | null;
-  equipmentSlot2: (GameCardData & { type: 'weapon' | 'shield' }) | null;
+  equipmentSlot1: (GameCardData & { type: 'weapon' | 'shield' | 'monster' }) | null;
+  equipmentSlot2: (GameCardData & { type: 'weapon' | 'shield' | 'monster' }) | null;
   stageScale?: number;
   onDragHandlePointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   isDragging?: boolean;
@@ -80,9 +80,15 @@ export default function CombatPanel({
   const currentAttacker =
     pendingBlock && engagedMonsters.find(mon => mon.id === pendingBlock.monsterId);
 
-  const renderSlotStatus = (slotId: EquipmentSlotId, item: (GameCardData & { type: 'weapon' | 'shield' }) | null) => {
+  const renderSlotStatus = (slotId: EquipmentSlotId, item: (GameCardData & { type: 'weapon' | 'shield' | 'monster' }) | null) => {
     const used = heroAttacksThisTurn[slotId];
     const label = slotId === 'equipmentSlot1' ? 'Left' : 'Right';
+    const getSlotLabel = (slotItem: GameCardData & { type: 'weapon' | 'shield' | 'monster' }) => {
+      if (slotItem.type === 'monster') {
+        return `(${slotItem.attack ?? slotItem.value} dmg / ${slotItem.hp ?? slotItem.value} block)`;
+      }
+      return slotItem.type === 'weapon' ? `(${slotItem.value} dmg)` : `(${slotItem.value} block)`;
+    };
     return (
       <div className="flex flex-col px-3 py-2 rounded-md border bg-background/50" key={slotId}>
         <span className="combat-panel__slot-label uppercase tracking-wide text-muted-foreground">
@@ -90,7 +96,7 @@ export default function CombatPanel({
         </span>
         {item ? (
           <span className="combat-panel__slot-name font-semibold">
-            {item.name} {item.type === 'weapon' ? `(${item.value} dmg)` : `(${item.value} block)`}
+            {item.name} {getSlotLabel(item)}
           </span>
         ) : (
           <span className="combat-panel__slot-name text-muted-foreground">Empty</span>

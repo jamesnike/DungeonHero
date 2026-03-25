@@ -22,13 +22,13 @@ export default function DiscoverClassModal({
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto w-[92vw] p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{headerTitle}</DialogTitle>
           <DialogDescription>{headerDescription}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
           {cards.length === 0 && (
             <div className="col-span-full text-center text-muted-foreground text-sm">
               暂无可发现的 Class Card
@@ -38,13 +38,13 @@ export default function DiscoverClassModal({
             <button
               key={card.id}
               type="button"
-              className="group rounded-xl border border-card-border/70 bg-card/40 p-3 transition hover:border-primary hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+              className="group rounded-xl border border-card-border/70 bg-card/40 p-1.5 sm:p-3 transition hover:border-primary hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
               onClick={() => onSelect(card.id)}
             >
               <div className="pointer-events-none">
                 <GameCard card={card} disableInteractions />
               </div>
-              <span className="mt-3 block text-center text-sm font-semibold text-foreground group-hover:text-primary">
+              <span className="mt-1.5 sm:mt-3 block text-center text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary">
                 选择这张卡
               </span>
             </button>

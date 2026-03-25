@@ -17,11 +17,14 @@ interface EquipmentSlotProps {
   type: SlotType;
   slotId?: string;
   item?: (GameCardData & { [key: string]: any }) | null;
+  reserveItems?: (GameCardData & { [key: string]: any })[];
+  slotCapacity?: number;
+  onSwapToTop?: (reserveIndex: number) => void;
   statModifier?: EquipmentCardStatModifier | null;
-  backpackCount?: number; // Number of items in backpack stack
+  backpackCount?: number;
   scaleMultiplier?: number;
-  permanentDamageBonus?: number; // Permanent damage bonus for this slot
-  permanentShieldBonus?: number; // Permanent shield bonus for this slot
+  permanentDamageBonus?: number;
+  permanentShieldBonus?: number;
   onDrop?: (card: any) => void;
   onDragStart?: (item: any) => void;
   onDragEnd?: () => void;
@@ -43,6 +46,9 @@ export default function EquipmentSlot({
   type,
   slotId,
   item,
+  reserveItems = [],
+  slotCapacity = 1,
+  onSwapToTop,
   statModifier,
   backpackCount = 0,
   scaleMultiplier = 1,
@@ -270,38 +276,83 @@ export default function EquipmentSlot({
       )}
       
       {gameCardData ? (
-        <div 
-          className={`w-full h-full relative z-20 transition-transform duration-300 ease-out ${
-            heroSkillHighlight ? 'cursor-pointer' : ''
-          }`}
-          style={{
-            transform:
-              type === 'equipment' && currentDurability
-                ? `translateX(-${Math.min(DURABILITY_SEGMENTS, currentDurability) * colWidth}px)`
-                : 'none',
-          }}
-        >
-          <GameCard 
-            card={gameCardData}
-            equipmentStatModifier={statModifier}
-            onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
-            onDragEnd={onDragEnd}
-            onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData) : undefined}
-            className={`${type === 'backpack' ? 'cursor-pointer' : ''} shadow-lg`}
-            bleedAnimation={bleedAnimation}
-            weaponSwingAnimation={weaponSwingAnimation}
-            weaponSwingVariant={weaponSwingVariant}
-            shieldBlockAnimation={shieldBlockAnimation}
-            shieldBlockVariant={shieldBlockVariant}
-            showExhaustedOverlay={isExhaustedThisTurn}
-          />
-          {/* Backpack count overlay */}
-          {type === 'backpack' && backpackCount > 1 && (
-            <div className="absolute top-[-8px] left-[-8px] z-40 bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center border-2 border-background shadow-md font-bold text-xs">
-              {backpackCount}
+        reserveItems.length > 0 ? (
+          <div className="relative w-full h-full z-20 overflow-visible">
+            {reserveItems.map((reserveCard, rIdx) => (
+              <div
+                key={reserveCard.id}
+                className="absolute inset-0 cursor-pointer"
+                style={{ zIndex: 20 + rIdx, transform: 'translateY(-8%)' }}
+                onClick={(e) => { e.stopPropagation(); onSwapToTop?.(rIdx); }}
+              >
+                <GameCard
+                  card={{ ...reserveCard, fromSlot: slotId } as GameCardData}
+                  onClick={() => onSwapToTop?.(rIdx)}
+                  amuletDescriptionVariant="topThird"
+                  className="shadow-md opacity-80"
+                />
+              </div>
+            ))}
+            <div
+              className={`absolute inset-0 transition-transform duration-300 ease-out ${
+                heroSkillHighlight ? 'cursor-pointer' : ''
+              }`}
+              style={{
+                zIndex: 30 + reserveItems.length,
+                transform: type === 'equipment' && currentDurability
+                  ? `translateY(24%) translateX(-${Math.min(DURABILITY_SEGMENTS, currentDurability) * colWidth}px)`
+                  : 'translateY(24%)',
+              }}
+            >
+              <GameCard
+                card={gameCardData}
+                equipmentStatModifier={statModifier}
+                onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
+                onDragEnd={onDragEnd}
+                onClick={onCardClick ? () => onCardClick(gameCardData) : undefined}
+                className="shadow-lg"
+                bleedAnimation={bleedAnimation}
+                weaponSwingAnimation={weaponSwingAnimation}
+                weaponSwingVariant={weaponSwingVariant}
+                shieldBlockAnimation={shieldBlockAnimation}
+                shieldBlockVariant={shieldBlockVariant}
+                showExhaustedOverlay={isExhaustedThisTurn}
+              />
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div 
+            className={`w-full h-full relative z-20 transition-transform duration-300 ease-out ${
+              heroSkillHighlight ? 'cursor-pointer' : ''
+            }`}
+            style={{
+              transform:
+                type === 'equipment' && currentDurability
+                  ? `translateX(-${Math.min(DURABILITY_SEGMENTS, currentDurability) * colWidth}px)`
+                  : 'none',
+            }}
+          >
+            <GameCard 
+              card={gameCardData}
+              equipmentStatModifier={statModifier}
+              onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
+              onDragEnd={onDragEnd}
+              onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData) : undefined}
+              className={`${type === 'backpack' ? 'cursor-pointer' : ''} shadow-lg`}
+              bleedAnimation={bleedAnimation}
+              weaponSwingAnimation={weaponSwingAnimation}
+              weaponSwingVariant={weaponSwingVariant}
+              shieldBlockAnimation={shieldBlockAnimation}
+              shieldBlockVariant={shieldBlockVariant}
+              showExhaustedOverlay={isExhaustedThisTurn}
+            />
+            {type === 'backpack' && backpackCount > 1 && (
+              <div className="absolute top-[-8px] left-[-8px] z-40 bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center border-2 border-background shadow-md font-bold text-xs">
+                {backpackCount}
+              </div>
+            )}
+          </div>
+        )
       ) : (
         <Card className={`
           h-full w-full border-2 border-dashed border-border

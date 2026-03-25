@@ -36,6 +36,9 @@ interface HeroCardProps {
   heroMagicChoice?: HeroMagicChoicePrompt | null;
   onHeroMagicChoice?: (choice: 'heal' | 'purge') => void;
   onHeroMagicCancel?: () => void;
+  potionChoice?: { prompt: string; options: { label: string; value: string }[] } | null;
+  onPotionChoice?: (value: string) => void;
+  onPotionCancel?: () => void;
   bleedAnimation?: boolean;
   weaponSwingAnimation?: boolean;
   shieldBlockAnimation?: boolean;
@@ -92,6 +95,9 @@ export default function HeroCard({
   heroMagicChoice = null,
   onHeroMagicChoice,
   onHeroMagicCancel,
+  potionChoice = null,
+  onPotionChoice,
+  onPotionCancel,
   bleedAnimation = false,
   weaponSwingAnimation = false,
   shieldBlockAnimation = false,
@@ -390,9 +396,9 @@ export default function HeroCard({
               </div>
             )}
             {heroMagicChoice && (
-              <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-2 space-y-2">
-                <span className="text-xs font-semibold text-amber-700">{heroMagicChoice.prompt}</span>
-                <div className="flex flex-wrap gap-2">
+              <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-1.5 space-y-1.5">
+                <span className="dh-hero-small font-semibold text-amber-700">{heroMagicChoice.prompt}</span>
+                <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     className="dh-hero-btn-sm font-semibold rounded-full bg-emerald-500 text-white hover:bg-emerald-500/90 transition"
@@ -428,14 +434,46 @@ export default function HeroCard({
                 </div>
               </div>
             )}
+            {potionChoice && (
+              <div className="w-full rounded-md border border-emerald-500/40 bg-emerald-500/10 p-1.5 space-y-1.5">
+                <span className="dh-hero-small font-semibold text-emerald-700">{potionChoice.prompt}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {potionChoice.options.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className="dh-hero-btn-sm font-semibold rounded-full bg-emerald-500 text-white hover:bg-emerald-600 transition"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onPotionChoice?.(opt.value);
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                  {onPotionCancel && (
+                    <button
+                      type="button"
+                      className="dh-hero-btn-sm font-semibold rounded-full border border-border text-emerald-900/60 hover:text-emerald-950 transition"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onPotionCancel();
+                      }}
+                    >
+                      取消
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {heroMagicInfo && heroMagicInfo.length > 0 && (
-              <div className="w-full space-y-1.5">
+              <div className="w-full space-y-1">
                 {heroMagicInfo.map(magic => (
                   <div
                     key={magic.id}
-                    className="w-full rounded-md border border-amber-400/30 bg-amber-800/15 p-2 space-y-1"
+                    className="w-full rounded-md border border-amber-400/30 bg-amber-800/15 p-1.5 space-y-0.5"
                   >
-                    <div className="flex items-center justify-between text-xs font-semibold">
+                    <div className="flex items-center justify-between dh-hero-small font-semibold">
                       <span className="text-amber-950">{magic.name}</span>
                       <span className="font-mono text-amber-800/70">
                         {magic.unlocked ? `${magic.gauge}/${magic.gaugeMax}` : '未解锁'}
@@ -445,7 +483,7 @@ export default function HeroCard({
                       value={magic.unlocked ? (magic.gauge / magic.gaugeMax) * 100 : 0}
                       className="h-1.5"
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-center">
                       <button
                         type="button"
                         className={`dh-hero-btn-sm font-bold uppercase tracking-wide rounded-full transition-[background-color,opacity] ${heroMagicButtonClasses(
@@ -462,11 +500,7 @@ export default function HeroCard({
                       >
                         释放
                       </button>
-                      <span className="text-[10px] text-amber-900/60 flex-1">{magic.chargeHint}</span>
                     </div>
-                    {magic.disabledReason && !magic.ready && (
-                      <div className="text-[10px] text-amber-900/50">{magic.disabledReason}</div>
-                    )}
                   </div>
                 ))}
               </div>
