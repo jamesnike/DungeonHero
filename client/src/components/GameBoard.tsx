@@ -250,7 +250,7 @@ const STRENGTH_SELF_DAMAGE = 3;
 const COMBAT_ANIMATION_DURATION = 1200;
 const COMBAT_ANIMATION_STAGGER = 180;
 const DEFEAT_ANIMATION_DURATION = 950;
-const SHOP_MAX_OFFERINGS = 6;
+const SHOP_MAX_OFFERINGS = 5;
 const SHOP_REQUIRED_TYPES: CardType[] = ['weapon', 'shield', 'magic', 'amulet'];
 const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
   weapon: 10,
