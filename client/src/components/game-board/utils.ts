@@ -371,6 +371,7 @@ export function createDeck(): GameCardData[] {
       card.description = '每次攻击时恢复 2 点生命。';
     }
     if (weaponType.name === 'Mace') {
+      card.value = Math.min(card.value, 3);
       card.description = '攻击后掷骰：50% 概率不消耗耐久。';
       card.weaponDurabilitySaveChance = 50;
     }

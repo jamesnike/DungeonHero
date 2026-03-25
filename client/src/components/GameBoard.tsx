@@ -631,6 +631,7 @@ function createDeck(): GameCardData[] {
       card.description = '每次攻击时恢复 2 点生命。';
     }
     if (weaponType.name === 'Mace') {
+      card.value = Math.min(card.value, 3);
       card.description = '攻击后掷骰：50% 概率不消耗耐久。';
       card.weaponDurabilitySaveChance = 50;
     }
@@ -5534,6 +5535,20 @@ export default function GameBoard() {
     // Add Knight discovery events to main deck
     const knightEvents = createKnightDiscoveryEvents();
     const deckWithClassEvents = [...newDeck, ...knightEvents].sort(() => Math.random() - 0.5);
+
+    // Ensure elite monsters only appear in the second half of the deck
+    const halfIdx = Math.floor(deckWithClassEvents.length / 2);
+    for (let i = 0; i < halfIdx; i++) {
+      if (deckWithClassEvents[i]?.monsterSpecial) {
+        // Find a non-elite card in the second half to swap with
+        for (let j = halfIdx; j < deckWithClassEvents.length; j++) {
+          if (!deckWithClassEvents[j]?.monsterSpecial) {
+            [deckWithClassEvents[i], deckWithClassEvents[j]] = [deckWithClassEvents[j], deckWithClassEvents[i]];
+            break;
+          }
+        }
+      }
+    }
     
     // Initialize with 10 cards total: 5 for preview, 5 for active
     const initialPreview = fillActiveRowSlots(deckWithClassEvents.slice(0, 5));  // Top row (preview)
