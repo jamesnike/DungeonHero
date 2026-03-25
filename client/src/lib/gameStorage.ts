@@ -191,3 +191,38 @@ export const clearUndoStorage = () => {
   }
 };
 
+const GAME_LOG_STORAGE_KEY = 'dungeonhero:game-log:v1';
+
+export const saveGameLog = (entries: unknown[], nextId: number) => {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.setItem(GAME_LOG_STORAGE_KEY, JSON.stringify({ entries, nextId }));
+  } catch (error) {
+    console.warn('[GameStorage] Failed to save game log', error);
+  }
+};
+
+export const loadGameLog = (): { entries: unknown[]; nextId: number } | null => {
+  if (!canUseStorage()) return null;
+  try {
+    const raw = window.localStorage.getItem(GAME_LOG_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.entries)) {
+      return { entries: parsed.entries, nextId: parsed.nextId ?? parsed.entries.length };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const clearGameLogStorage = () => {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.removeItem(GAME_LOG_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+};
+

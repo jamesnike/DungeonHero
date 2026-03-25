@@ -379,7 +379,11 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                   <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
                     {card.lastWords === 'discard-hand-3'
                       ? '死亡时随机弃置玩家 3 张手牌。'
-                      : '死亡时触发特殊效果。'}
+                      : card.lastWords === 'wraith-haunt-2'
+                        ? '死亡时同行其他怪物攻击力 +2，同行卡牌位置随机打乱。'
+                        : card.lastWords === 'wraith-haunt-4'
+                          ? '死亡时同行其他怪物攻击力 +4，同行卡牌位置随机打乱。'
+                          : '死亡时触发特殊效果。'}
                   </p>
                 </div>
               </div>
@@ -470,6 +474,11 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
             })()}
 
             {/* Event Details */}
+            {card.type === 'event' && card.description && (
+              <div className="bg-sky-500/10 p-3 rounded-md border border-sky-500/30">
+                <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{card.description}</p>
+              </div>
+            )}
             {card.type === 'event' && card.eventChoices && (
               <div className="space-y-2">
                 <div className="font-semibold mb-1">事件选项</div>

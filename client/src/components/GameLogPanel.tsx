@@ -15,6 +15,7 @@ export type LogEntryType =
   | 'shop'
   | 'monster'
   | 'skill'
+  | 'gold'
   | 'system';
 
 export interface LogEntry {
@@ -37,6 +38,7 @@ const LOG_TYPE_COLORS: Record<LogEntryType, string> = {
   shop: 'text-yellow-400',
   monster: 'text-red-500',
   skill: 'text-rose-400',
+  gold: 'text-yellow-300',
   system: 'text-gray-400',
 };
 
@@ -53,6 +55,7 @@ const LOG_TYPE_LABELS: Record<LogEntryType, string> = {
   shop: 'Shop',
   monster: 'Monster',
   skill: 'Skill',
+  gold: 'Gold',
   system: 'System',
 };
 

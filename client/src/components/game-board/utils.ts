@@ -413,6 +413,10 @@ export function createDeck(): GameCardData[] {
       card.onDestroyGold = 3;
       card.description = '毁坏时获得 3 金币。';
     }
+    if (shieldType.name === 'Heavy Shield') {
+      card.damageReflect = 1;
+      card.description = '格挡时反弹 1 点伤害给攻击者（受装备栏永久伤害加成影响）。';
+    }
     deck.push(card);
   });
 

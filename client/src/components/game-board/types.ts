@@ -225,12 +225,14 @@ export type PendingMagicAction =
       effect: 'weapon-burst';
       step: 'slot-select';
       prompt: string;
+      echoMultiplier?: number;
     }
   | {
       card: GameCardData;
       effect: 'repair-one';
       step: 'slot-select';
       prompt: string;
+      echoMultiplier?: number;
     }
   | {
       card: GameCardData;

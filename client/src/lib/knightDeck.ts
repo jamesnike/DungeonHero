@@ -1,9 +1,12 @@
 import { type GameCardData } from '@/components/GameCard';
 
 // Import images for Knight cards
-import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
-import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
-import heavyShieldImage from '@assets/generated_images/simple_heavy_shield.png';
+import holyBladeImage from '@assets/generated_images/holy_light_blade.png';
+import swiftDaggerImage from '@assets/generated_images/swift_wind_dagger.png';
+import thunderHammerImage from '@assets/generated_images/thunder_warhammer.png';
+import ironTowerShieldImage from '@assets/generated_images/iron_tower_shield.png';
+import thornedShieldImage from '@assets/generated_images/thorned_reflect_shield.png';
+import guardianShieldImage from '@assets/generated_images/guardian_holy_shield.png';
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
 import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
@@ -37,7 +40,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'weapon',
     name: '圣光之刃',
     value: 6,
-    image: swordImage,
+    image: holyBladeImage,
     classCard: true,
     description: '击杀怪物时回复 2 点生命。',
     healOnKill: 2,
@@ -49,7 +52,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'weapon',
     name: '疾风短剑',
     value: 4,
-    image: swordImage,
+    image: swiftDaggerImage,
     classCard: true,
     description: '杀死怪物时耐久度回满。',
     durability: 3,
@@ -61,7 +64,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'weapon',
     name: '碎雷战锤',
     value: 7,
-    image: axeImage,
+    image: thunderHammerImage,
     classCard: true,
     description: '每次攻击永久增加该装备栏 +1 伤害。',
     weaponBonus: 1,
@@ -74,7 +77,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'shield',
     name: '铁壁塔盾',
     value: 5,
-    image: heavyShieldImage,
+    image: ironTowerShieldImage,
     classCard: true,
     description: '完全格挡一次攻击的全部伤害，无论攻击力多高。',
     durability: 1,
@@ -86,7 +89,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'shield',
     name: '棘刺反盾',
     value: 4,
-    image: heavyShieldImage,
+    image: thornedShieldImage,
     classCard: true,
     description: '格挡时反弹一半的攻击伤害给攻击者（向上取整）。',
     reflectHalfDamage: true,
@@ -98,7 +101,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'shield',
     name: '守护圣盾',
     value: 4,
-    image: heavyShieldImage,
+    image: guardianShieldImage,
     classCard: true,
     description: '完美格挡时，50% 概率不消耗耐久（掷骰判定）。',
     shieldPerfectBlockSaveChance: 50,

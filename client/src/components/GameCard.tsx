@@ -168,6 +168,7 @@ export interface GameCardData {
   restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
   healOnAttack?: number; // Heal this amount each time this weapon attacks
   waterfallAttackBoost?: number; // Increase weapon's own attack by this amount each waterfall
+  isMinionCard?: boolean;
 }
 
 interface GameCardProps {
@@ -741,12 +742,12 @@ const amuletEffectText =
                             {monsterAttackBase}
                           </span>
                           {monsterAttackModifier > 0 && (
-                            <span className="dh-card__stat font-black text-orange-600 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]" style={{ fontSize: '85%' }}>
+                            <span className="dh-card__stat font-black text-orange-600 drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]">
                               +{monsterAttackModifier}
                             </span>
                           )}
                           {equipmentStatModifierText && (
-                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]`} style={{ fontSize: '85%' }}>
+                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]`}>
                               {equipmentStatModifierText}
                             </span>
                           )}
@@ -760,7 +761,7 @@ const amuletEffectText =
                             {card.hp ?? card.value}
                           </span>
                           {monsterMaxHpModifier > 0 && (
-                            <span className="dh-card__stat font-black text-emerald-600 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]" style={{ fontSize: '85%' }}>
+                            <span className="dh-card__stat font-black text-emerald-600 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]">
                               +{monsterMaxHpModifier}
                             </span>
                           )}
@@ -782,39 +783,6 @@ const amuletEffectText =
                         </div>
                       )}
                     </div>
-                    {card.monsterSpecial && (
-                      <div className="dh-card__elite-badge" title={card.description ?? '精英怪物'}>
-                        精英
-                      </div>
-                    )}
-                    {card.hasRevive && (
-                      <div
-                        className={`dh-card__revive-badge ${card.reviveUsed ? 'dh-card__revive-badge--used' : ''}`}
-                        title={card.reviveUsed ? '复生已触发' : '首次死亡时以1血层复生'}
-                      >
-                        {card.reviveUsed ? '已复生' : '复生'}
-                      </div>
-                    )}
-                    {card.lastWords && (
-                      <div className="dh-card__lastwords-badge" title="死亡时触发遗言效果">
-                        遗言
-                      </div>
-                    )}
-                    {card.bleedEffect && (
-                      <div className="dh-card__bleed-badge" title={`流血：每失去一个血层，攻击力+${card.bleedEffect.replace('attack+', '')}`}>
-                        流血
-                      </div>
-                    )}
-                    {card.enterEffect && (
-                      <div className="dh-card__enter-badge" title="入场时触发效果">
-                        入场
-                      </div>
-                    )}
-                    {card.onAttackEffect && (
-                      <div className="dh-card__onattack-badge" title={`动手：每次攻击时触发`}>
-                        动手
-                      </div>
-                    )}
                     {card.lowGoldBuffActive && (
                       <div className="dh-card__lowgold-glow" />
                     )}
@@ -887,11 +855,43 @@ const amuletEffectText =
                     ? 'bg-emerald-300/40'
                     : 'bg-card'
               }`}>
-                <h3 className={`dh-card__name font-serif font-semibold mb-1 w-full truncate px-1 ${
+                <h3 className={`dh-card__name font-serif font-semibold w-full truncate px-1 ${
                   isThemedImageCard ? 'text-gray-900' : ''
                 }`} title={card.name}>
                   {card.name}
                 </h3>
+
+                {card.type === 'monster' && (card.monsterSpecial || card.hasRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect) && (
+                  <div className="dh-card__keyword-row">
+                    {card.monsterSpecial && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.description ?? '精英怪物'}>精英</span>
+                    )}
+                    {card.hasRevive && (
+                      <span className={`dh-card__keyword-tag ${card.reviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
+                        title={card.reviveUsed ? '复生已触发' : '首次死亡时以1血层复生'}>
+                        {card.reviveUsed ? '已复生' : '复生'}
+                      </span>
+                    )}
+                    {card.lastWords && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="死亡时触发遗言效果">遗言</span>
+                    )}
+                    {card.bleedEffect && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`流血：每失去一个血层，攻击力+${card.bleedEffect.replace('attack+', '')}`}>流血</span>
+                    )}
+                    {card.enterEffect && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="入场时触发效果">入场</span>
+                    )}
+                    {card.onAttackEffect && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手：每次攻击时触发">动手</span>
+                    )}
+                  </div>
+                )}
+
+                {(card.type === 'weapon' || card.type === 'shield') && card.description && (
+                  <div className="dh-card__body-text w-full text-gray-800 px-1 leading-tight">
+                    {card.description}
+                  </div>
+                )}
 
                 {card.type === 'amulet' && amuletEffectText && !showAmuletOverlay && (
                   <div className="dh-card__body-text w-full text-gray-800 px-1">

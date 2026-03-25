@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Shield, Droplet, Skull, Heart, Coins, Ghost, HandCoins, Waves, Swords, HeartPulse, Zap, ShieldAlert, BookOpen } from 'lucide-react';
+import { Shield, Droplet, Skull, Heart, Coins, Ghost, HandCoins, Waves, Swords, HeartPulse, Zap, ShieldAlert, BookOpen, Cat } from 'lucide-react';
 import { heroSkills } from '@/lib/heroSkills';
 
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
@@ -39,6 +39,8 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
         return <ShieldAlert className={cls} />;
       case 'blood-draw':
         return <BookOpen className={cls} />;
+      case 'summon-minion':
+        return <Cat className={cls} />;
       default:
         return <Shield className={cls} />;
     }

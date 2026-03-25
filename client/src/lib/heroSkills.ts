@@ -11,7 +11,8 @@ export type HeroSkillId =
   | 'heal-to-damage'
   | 'early-surge'
   | 'shield-wall'
-  | 'blood-draw';
+  | 'blood-draw'
+  | 'summon-minion';
 
 export type HeroSkillTarget = 'slot' | 'monster' | null;
 
@@ -150,6 +151,14 @@ export const heroSkills: HeroSkillDefinition[] = [
     type: 'active',
     requiresTarget: null,
     buttonLabel: '血契抽牌',
+  },
+  {
+    id: 'summon-minion',
+    name: '随从召唤',
+    description: '召唤一只忠诚的小随从并肩作战。',
+    effect: '被动：开局获得随从卡（1攻1防4耐久，可装备）。每击杀一只怪物，随从攻击 +1、防御 +1。',
+    type: 'passive',
+    requiresTarget: null,
   },
 ];
 

@@ -62,7 +62,7 @@ import {
   type HeroMagicState,
 } from '@/lib/heroMagic';
 import { getRandomHero, type HeroVariant } from '@/lib/heroes';
-import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, type PersistedGameState } from '@/lib/gameStorage';
+import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, type PersistedGameState } from '@/lib/gameStorage';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import CardDetailsModal from './CardDetailsModal';
 import DiscoverClassModal from './DiscoverClassModal';
@@ -123,6 +123,7 @@ import skeletonImage from '@assets/generated_images/cute_chibi_skeleton_monster.
 import goblinImage from '@assets/generated_images/cute_chibi_goblin_monster.png';
 import ogreImage from '@assets/generated_images/cute_chibi_ogre_monster.png';
 import wraithImage from '@assets/generated_images/cute_chibi_wraith_monster.png';
+import minionImage from '@assets/generated_images/chibi_minion_follower.png';
 
 // Cute cartoon weapon images
 import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
@@ -560,6 +561,7 @@ function createDeck(): GameCardData[] {
         ...(monsterType.name === 'Skeleton' ? { hasRevive: true } : {}),
         ...(monsterType.name === 'Dragon' ? { bleedEffect: 'attack+1' } : {}),
         ...(monsterType.name === 'Ogre' ? { enterEffect: 'auto-engage' } : {}),
+        ...(monsterType.name === 'Wraith' ? { lastWords: 'wraith-haunt-2' } : {}),
         ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-2' } : {}),
       });
     }
@@ -591,6 +593,9 @@ function createDeck(): GameCardData[] {
       }
       if (type === 'Ogre') {
         chosen.eliteDoubleAttack = true;
+      }
+      if (type === 'Wraith') {
+        chosen.lastWords = 'wraith-haunt-4';
       }
       if (type === 'Goblin') {
         chosen.onAttackEffect = 'steal-gold-5';
@@ -755,7 +760,7 @@ function createDeck(): GameCardData[] {
           value: 0,
           image: skillScrollImage,
           magicType: 'permanent',
-          magicEffect: '下次抽牌时额外抽 1 张，并永久 +1 法术伤害。',
+          magicEffect: '抽 1 张牌，并永久 +1 法术伤害。',
           description: '药剂残渣翻转后留下的火光祝福。',
         },
         destination: 'backpack',
@@ -2111,14 +2116,23 @@ export default function GameBoard() {
   const [turnDamageTaken, setTurnDamageTaken] = useState(0);
   const [deckViewerOpen, setDeckViewerOpen] = useState(false);
 
-  const [gameLogEntries, setGameLogEntries] = useState<LogEntry[]>([]);
-  const gameLogIdRef = useRef(0);
+  const [gameLogEntries, setGameLogEntries] = useState<LogEntry[]>(() => {
+    const saved = loadGameLog();
+    return saved ? (saved.entries as LogEntry[]) : [];
+  });
+  const gameLogIdRef = useRef<number>(loadGameLog()?.nextId ?? 0);
   const addGameLog = useCallback((type: LogEntryType, message: string) => {
     const id = ++gameLogIdRef.current;
-    setGameLogEntries(prev => [...prev, { id, type, message, timestamp: Date.now() }]);
+    setGameLogEntries(prev => {
+      const next = [...prev, { id, type, message, timestamp: Date.now() }];
+      saveGameLog(next, gameLogIdRef.current);
+      return next;
+    });
   }, []);
   const clearGameLog = useCallback(() => {
     setGameLogEntries([]);
+    gameLogIdRef.current = 0;
+    clearGameLogStorage();
   }, []);
   const [discardedCards, setDiscardedCards] = useState<GameCardData[]>([]);
   const [waveDiscardCount, setWaveDiscardCount] = useState(0);
@@ -3268,6 +3282,51 @@ export default function GameBoard() {
       addGameLog('combat', `${monster.name} 的遗言：随机弃置了 ${discardCount} 张手牌（${names}）`);
       setHeroSkillBanner(`${monster.name} 的遗言：弃置了 ${names}！`);
     }
+
+    if (effect.startsWith('wraith-haunt-')) {
+      const atkBoost = parseInt(effect.replace('wraith-haunt-', ''), 10) || 2;
+      setActiveCards(prev => {
+        const otherMonsters: string[] = [];
+        const occupiedIndices: number[] = [];
+        const occupiedCards: (GameCardData | null)[] = [];
+
+        for (let i = 0; i < prev.length; i++) {
+          const c = prev[i];
+          if (!c || c.id === monster.id) continue;
+          occupiedIndices.push(i);
+          occupiedCards.push(c);
+          if (c.type === 'monster') {
+            otherMonsters.push(c.name);
+          }
+        }
+
+        if (occupiedIndices.length === 0) return prev;
+
+        const shuffled = [...occupiedCards].sort(() => Math.random() - 0.5);
+        const next = [...prev] as (GameCardData | null)[];
+        for (let i = 0; i < occupiedIndices.length; i++) {
+          let card = shuffled[i];
+          if (card && card.type === 'monster') {
+            card = {
+              ...card,
+              attack: (card.attack ?? card.value) + atkBoost,
+              specialAttackBoost: (card.specialAttackBoost ?? 0) + atkBoost,
+            };
+          }
+          next[occupiedIndices[i]] = card;
+        }
+        return next as typeof prev;
+      });
+
+      const parts: string[] = [];
+      const otherMons = activeCards.filter(c => c && c.id !== monster.id && c.type === 'monster');
+      if (otherMons.length > 0) {
+        parts.push(`同行怪物攻击力 +${atkBoost}`);
+      }
+      parts.push('同行卡牌位置打乱');
+      addGameLog('combat', `${monster.name} 的遗言：${parts.join('，')}！`);
+      setHeroSkillBanner(`${monster.name} 的遗言：${parts.join('，')}！`);
+    }
   };
 
   const handleMonsterDefeated = (monster: GameCardData) => {
@@ -3300,6 +3359,59 @@ export default function GameBoard() {
 
     setMonsterDefeatStates(prev => ({ ...prev, [monster.id]: true }));
     addGameLog('combat', `${monster.name} 被击败！`);
+
+    if (selectedHeroSkillRef.current === 'summon-minion') {
+      const buffMinion = (card: GameCardData): GameCardData => ({
+        ...card,
+        attack: (card.attack ?? card.value) + 1,
+        value: (card.attack ?? card.value) + 1,
+        hp: (card.hp ?? 1) + 1,
+        maxHp: (card.maxHp ?? card.hp ?? 1) + 1,
+      });
+      let found = false;
+      setBackpackItems(prev => {
+        const idx = prev.findIndex(c => c.isMinionCard);
+        if (idx === -1) return prev;
+        found = true;
+        const updated = [...prev];
+        updated[idx] = buffMinion(updated[idx]);
+        return updated;
+      });
+      if (!found) {
+        setHandCards(prev => {
+          const idx = prev.findIndex(c => c.isMinionCard);
+          if (idx === -1) return prev;
+          found = true;
+          const updated = [...prev];
+          updated[idx] = buffMinion(updated[idx]);
+          return updated;
+        });
+      }
+      if (!found) {
+        if (equipmentSlot1?.isMinionCard) {
+          setEquipmentSlot1(prev => prev ? { ...buffMinion(prev), type: 'monster' as const } as EquipmentItem : null);
+          found = true;
+        } else if (equipmentSlot2?.isMinionCard) {
+          setEquipmentSlot2(prev => prev ? { ...buffMinion(prev), type: 'monster' as const } as EquipmentItem : null);
+          found = true;
+        }
+      }
+      if (!found) {
+        const buffReserve = (prev: EquipmentItem[]) => {
+          const idx = prev.findIndex(c => (c as GameCardData).isMinionCard);
+          if (idx === -1) return prev;
+          found = true;
+          const updated = [...prev];
+          updated[idx] = { ...buffMinion(updated[idx]), type: 'monster' as const } as EquipmentItem;
+          return updated;
+        };
+        setEquipmentSlot1Reserve(buffReserve);
+        if (!found) setEquipmentSlot2Reserve(buffReserve);
+      }
+      if (found) {
+        addGameLog('skill', '随从成长：攻击 +1、防御 +1');
+      }
+    }
 
     if (monster.lastWords) {
       executeLastWords(monster);
@@ -4011,11 +4123,13 @@ export default function GameBoard() {
       setHeroSkillBanner('殉烈爆鸣没有目标。');
       return;
     }
+    const dmg = getSpellDamage(3);
+    addGameLog('combat', `殉烈爆鸣：对 ${monsters.map(m => m.name).join('、')} 各造成 ${dmg} 点法术伤害`);
     monsters.forEach(monster => {
-      dealDamageToMonster(monster, getSpellDamage(3), { pulses: 2 });
+      dealDamageToMonster(monster, dmg, { pulses: 2 });
     });
     setHeroSkillBanner('殉烈爆鸣释放，对所有怪物造成 3 点伤害！');
-  }, [activeCards, dealDamageToMonster, getSpellDamage, setHeroSkillBanner]);
+  }, [activeCards, addGameLog, dealDamageToMonster, getSpellDamage, setHeroSkillBanner]);
   const healHero = useCallback(
     (baseAmount: number) => {
       const multiplier = amuletEffects.hasHeal ? 2 : 1;
@@ -4509,7 +4623,7 @@ export default function GameBoard() {
         if (monster.enterEffect === 'auto-engage') {
           addGameLog('combat', `${monster.name} 入场：自动进入激怒状态！`);
           setHeroSkillBanner(`${monster.name} 入场即激怒！`);
-          beginCombat(monster, 'monster');
+          beginCombat(monster, 'hero');
         }
       }
     }
@@ -5826,6 +5940,7 @@ export default function GameBoard() {
     clearGameState();
     lastPersistedStateRef.current = null;
     clearUndoStack();
+    clearGameLog();
     initGame();
     setIsHydrated(true);
   };
@@ -5835,25 +5950,49 @@ export default function GameBoard() {
     const definition = getHeroSkillById(skillId as HeroSkillId);
     setSelectedHeroSkill(skillId);
     setShowSkillSelection(false);
+    addGameLog('system', `选择英雄技能：${definition?.name ?? skillId}`);
     
     const initialBonus = definition?.initialMaxHpBonus ?? 0;
     if (initialBonus) {
       setHp(prev => prev + initialBonus);
+      addGameLog('system', `开局加成：最大生命 +${initialBonus}`);
     }
     const initialGold = definition?.initialGoldBonus ?? 0;
     if (initialGold) {
       setGold(prev => prev + initialGold);
+      addGameLog('gold', `开局加成：金币 +${initialGold}`);
     }
     const initialWaterfall = definition?.initialWaterfallBonus ?? 0;
     if (initialWaterfall) {
       setTurnCount(prev => prev + initialWaterfall);
+      addGameLog('system', `开局加成：瀑流回合 +${initialWaterfall}`);
     }
     const initialDraw = definition?.initialClassCardDraw ?? 0;
     if (initialDraw) {
       const drawn = drawClassCardsToBackpack(initialDraw, 'early-surge');
       if (drawn.length > 0) {
+        addGameLog('skill', `开局加成：预抽 ${drawn.length} 张职业牌`);
         triggerClassDeckFlight(drawn);
       }
+    }
+    if (skillId === 'summon-minion') {
+      const minionCard: GameCardData = {
+        id: 'summon-minion-card',
+        type: 'monster',
+        name: '小随从',
+        value: 1,
+        attack: 1,
+        hp: 1,
+        hpLayers: 4,
+        fury: 4,
+        currentLayer: 4,
+        maxHp: 1,
+        image: minionImage,
+        description: '忠诚的小随从，可装备。每击杀一只怪物，攻击 +1、防御 +1。',
+        isMinionCard: true,
+      };
+      addCardToBackpack(minionCard);
+      addGameLog('skill', '开局加成：获得小随从');
     }
   };
 
@@ -6039,6 +6178,7 @@ export default function GameBoard() {
     }
     setEquipmentSlotById(slotId, newActive);
     setEquipmentReserve(slotId, newReserve);
+    addGameLog('equip', `装备切换：${newActive.name} 替换 ${currentActive?.name ?? '空槽'}（${slotId === 'equipmentSlot1' ? '左' : '右'}槽）`);
   };
 
   const normalizeEventEffect = (expression?: EventEffectExpression): string[] => {
@@ -6280,10 +6420,11 @@ export default function GameBoard() {
       }
       if (owner === 'player' && selectedHeroSkillRef.current === 'discard-profit') {
         setGold(prev => prev + 2);
+        addGameLog('gold', `弃牌获利：弃置「${card.name}」获得 2 金币`);
       }
       triggerDiscardShock();
     },
-    [addPermanentMagicToRecycleBag, addToGraveyard, triggerDiscardShock, triggerGraveNova],
+    [addGameLog, addPermanentMagicToRecycleBag, addToGraveyard, triggerDiscardShock, triggerGraveNova],
   );
 
   const createCurseCard = (sourceCard?: GameCardData): GameCardData => ({
@@ -6475,10 +6616,11 @@ export default function GameBoard() {
       const cards = classDeck.slice(-takeCount);
       setClassDeck(prev => prev.slice(0, prev.length - takeCount));
       setBackpackItems(prev => [...cards, ...prev]);
+      addGameLog('skill', `从职业牌组底部获得 ${takeCount} 张牌：${cards.map(c => c.name).join('、')}`);
       triggerClassDeckFlight(cards);
       return cards;
     },
-    [backpackItems.length, classDeck, setBackpackItems, setClassDeck, triggerClassDeckFlight],
+    [addGameLog, backpackItems.length, classDeck, setBackpackItems, setClassDeck, triggerClassDeckFlight],
   );
 
   const resetWaterfallAnimation = () => {
@@ -7016,11 +7158,12 @@ export default function GameBoard() {
       const repairedDurability = Math.min(maxDurability, currentDurability + amount);
       const gained = repairedDurability - currentDurability;
       setEquipmentSlotById(slotId, { ...slotItem, durability: repairedDurability });
+      addGameLog('potion', `修复 ${slotItem.name} 耐久 +${gained}（${currentDurability} → ${repairedDurability}）`);
       const banner = `${slotItem.name} 耐久 +${gained}`;
       void finalizePotionCard(card, { banner });
       return true;
     },
-    [equipmentSlot1, equipmentSlot2, finalizePotionCard, setEquipmentSlotById, setHeroSkillBanner],
+    [addGameLog, equipmentSlot1, equipmentSlot2, finalizePotionCard, setEquipmentSlotById, setHeroSkillBanner],
   );
 
   const repairEquipmentDurability = useCallback(
@@ -7101,6 +7244,7 @@ export default function GameBoard() {
 
       if (effect === 'perm-spell-damage') {
         setPermanentSpellDamageBonus(prev => prev + 1);
+        addGameLog('potion', '药水效果：永久法术伤害 +1');
         await finalizePotionCard(card, { banner: '永久法术伤害 +1。' });
         return;
       }
@@ -7108,6 +7252,7 @@ export default function GameBoard() {
       if (effect === 'perm-backpack-size') {
         setBackpackCapacityModifier(prev => prev + 1);
         enforceBackpackCapacity();
+        addGameLog('potion', '药水效果：背包容量永久 +1');
         await finalizePotionCard(card, { banner: '背包容量永久 +1。' });
         return;
       }
@@ -7211,6 +7356,7 @@ export default function GameBoard() {
         }
         const banner =
           draws > 0 ? `从背包抽出${draws}张牌。` : '背包为空或手牌已满，无法抽牌。';
+        addGameLog('potion', draws > 0 ? `药水效果：从背包抽出 ${draws} 张牌` : '药水效果：背包为空或手牌已满');
         await finalizePotionCard(card, { banner });
         return;
       }
@@ -7219,8 +7365,10 @@ export default function GameBoard() {
         const drawn = drawClassCardsToBackpack(2, 'potion-discover-2');
         if (drawn.length > 0) {
           triggerClassDeckFlight(drawn);
+          addGameLog('potion', `药水效果：获得 ${drawn.length} 张职业卡`);
           await finalizePotionCard(card, { banner: `获得了 ${drawn.length} 张职业卡！` });
         } else {
+          addGameLog('potion', '药水效果：职业卡牌不可用');
           await finalizePotionCard(card, { banner: '职业卡牌不可用。' });
         }
         return;
@@ -8108,12 +8256,13 @@ export default function GameBoard() {
       return;
     }
 
-    if (doubleNextMagic && card.type === 'magic' && card.magicEffect !== 'double-next-magic') {
+    const isEchoTriggered = doubleNextMagic && card.type === 'magic' && card.magicEffect !== 'double-next-magic';
+    if (isEchoTriggered) {
       setDoubleNextMagic(false);
-      const copy: GameCardData = { ...card, id: `${card.id}-echo-${Date.now()}` };
-      addCardToBackpack(copy);
-      addGameLog('magic', `法术回响：${card.name} 的副本已放入背包，可再次使用！`);
+      addGameLog('magic', `法术回响：${card.name} 的效果将触发两次！`);
+      setHeroSkillBanner(`法术回响！${card.name} 效果触发两次！`);
     }
+    const echoMultiplier = isEchoTriggered ? 2 : 1;
 
      if (card.type === 'hero-magic') {
        handleHeroMagicCard(card);
@@ -8150,7 +8299,7 @@ export default function GameBoard() {
             finalizeMagicCard(card, { banner: '风暴箭雨无效（没有怪物）。' });
             return;
           }
-          const volleyDamage = getSpellDamage(3);
+          const volleyDamage = getSpellDamage(3) * echoMultiplier;
           monsters.forEach((monster, index) => {
             if (!isMonsterEngaged(monster.id)) {
               beginCombat(monster, 'hero');
@@ -8158,7 +8307,7 @@ export default function GameBoard() {
             const animationDelay = index * Math.floor(COMBAT_ANIMATION_STAGGER * 0.75);
             dealDamageToMonster(monster, volleyDamage, { animationDelay, pulses: 2 });
           });
-          finalizeMagicCard(card, { banner: `风暴箭雨对每只怪物造成 ${volleyDamage} 点伤害！` });
+          finalizeMagicCard(card, { banner: `风暴箭雨对每只怪物造成 ${volleyDamage} 点伤害！${isEchoTriggered ? '（回响×2）' : ''}` });
           return;
         }
         case '回响行囊': {
@@ -8249,19 +8398,19 @@ export default function GameBoard() {
               return;
             }
             if (monsters.length === 1) {
-              const totalDamage = getSpellDamage(baseDamage);
+              const totalDamage = getSpellDamage(baseDamage) * echoMultiplier;
               if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
               dealDamageToMonster(monsters[0], totalDamage, { animationDelay: Math.floor(COMBAT_ANIMATION_STAGGER / 2), pulses: 2 });
-              finalizeMagicCard(card, { banner: `壁垒猛击造成 ${totalDamage} 点伤害！` });
+              finalizeMagicCard(card, { banner: `壁垒猛击造成 ${totalDamage} 点伤害！${isEchoTriggered ? '（回响×2）' : ''}` });
               return;
             }
-            const displayDamage = getSpellDamage(baseDamage);
+            const displayDamage = getSpellDamage(baseDamage) * echoMultiplier;
             setPendingMagicAction({
               card,
               effect: 'bulwark-slam',
               step: 'monster-select',
               slotId,
-              pendingDamage: baseDamage,
+              pendingDamage: baseDamage * echoMultiplier,
               prompt: `选择一个怪物承受 ${displayDamage} 点伤害。`,
             });
             setHeroSkillBanner(`壁垒猛击蓄力 ${displayDamage} 点伤害，请选择目标。`);
@@ -8288,10 +8437,10 @@ export default function GameBoard() {
               finalizeMagicCard(card, { banner: '你处于满血状态，血债清算没有造成伤害。' });
               return;
             }
-            const totalDamage = getSpellDamage(missingHp);
+            const totalDamage = getSpellDamage(missingHp) * echoMultiplier;
             if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
             dealDamageToMonster(monsters[0], totalDamage, { pulses: 2 });
-            finalizeMagicCard(card, { banner: `血债清算造成 ${totalDamage} 点伤害！` });
+            finalizeMagicCard(card, { banner: `血债清算造成 ${totalDamage} 点伤害！${isEchoTriggered ? '（回响×2）' : ''}` });
             return;
           }
           setPendingMagicAction({
@@ -8329,33 +8478,41 @@ export default function GameBoard() {
         // Knight weapon enhancement skills
         case 'Sharpening Stone':
           setWeaponMasterBonus(prev => prev + 1);
+          addGameLog('skill', '磨刀石：永久武器伤害 +1');
           break;
         case 'Dual Strike':
-          // Double attack with current weapon
+          addGameLog('skill', '双重打击：下次攻击双倍');
           break;
         case 'Weapon Surge':
           setNextWeaponBonus(prev => prev + 3);
+          addGameLog('skill', '武器强化：下次武器伤害 +3');
           break;
-        case 'Battle Ready':
-          // Draw a weapon from class deck
+        case 'Battle Ready': {
           const weaponCards = classDeck.filter(c => c.type === 'weapon');
           if (weaponCards.length > 0) {
             const weapon = weaponCards[Math.floor(Math.random() * weaponCards.length)];
             setClassCardsInHand(prev => [...prev, weapon as KnightCardData]);
             setClassDeck(prev => prev.filter(c => c.id !== weapon.id));
+            addGameLog('skill', `战备就绪：从职业牌组抽取武器「${weapon.name}」`);
+          } else {
+            addGameLog('skill', '战备就绪：职业牌组没有武器');
           }
           break;
+        }
           
         // Knight defensive skills
         case 'Shield Wall':
           setNextShieldBonus(prev => prev + 2);
           setShieldMasterBonus(prev => prev + 2);
+          addGameLog('skill', '盾墙：下次护盾 +2，永久护盾 +2');
           break;
         case 'Defensive Stance':
           setDefensiveStanceActive(true);
+          addGameLog('skill', '防御姿态：激活');
           break;
         case 'Iron Defense':
           setTempShield(prev => prev + 5);
+          addGameLog('skill', '铁壁防御：临时护盾 +5');
           break;
           
         // Knight blood skills
@@ -8363,42 +8520,47 @@ export default function GameBoard() {
           if (hp > 3) {
             applyDamage(3);
             setNextWeaponBonus(prev => prev + 3);
+            addGameLog('skill', '鲜血献祭：失去 3 点生命，下次武器伤害 +3');
           }
           break;
         case 'Vampiric Strike':
           setVampiricNextAttack(true);
+          addGameLog('skill', '吸血打击：下次攻击吸取生命');
           break;
         case 'Blood for Power':
           if (hp > 5) {
             applyDamage(5);
             setGold(prev => prev + 10);
+            addGameLog('skill', '以血换力：失去 5 点生命，获得 10 金币');
           }
           break;
         case 'Crimson Shield':
           if (hp > 2) {
             applyDamage(2);
             setTempShield(prev => prev + 6);
+            addGameLog('skill', '血色之盾：失去 2 点生命，临时护盾 +6');
           }
           break;
         case 'Life Transfer':
           if (hp > 3) {
             applyDamage(3);
             setNextWeaponBonus(prev => prev + 3);
+            addGameLog('skill', '生命转移：失去 3 点生命，下次武器伤害 +3');
           }
           break;
           
         // Knight durability skills
         case 'Reinforced Equipment':
           setUnbreakableNext(true);
+          addGameLog('skill', '强化装备：下次使用装备不消耗耐久');
           break;
         case 'Repair Kit':
-          // Would need to select from graveyard
+          addGameLog('skill', '修理套件');
           break;
         case 'Spare Weapons':
-          // Equip 2 weapons from backpack
+          addGameLog('skill', '备用武器');
           break;
-        case 'Emergency Repair':
-          // Restore durability to current equipment
+        case 'Emergency Repair': {
           const slots = getEquipmentSlots();
           slots.forEach(slot => {
             if (slot.item && slot.item.durability) {
@@ -8406,12 +8568,13 @@ export default function GameBoard() {
               setEquipmentSlotById(slot.id, repaired);
             }
           });
+          addGameLog('skill', '紧急修复：所有装备耐久 +2');
           break;
+        }
         case 'Salvage':
-          // Break equipment for gold
+          addGameLog('skill', '废物利用');
           break;
-        case 'Field Maintenance':
-          // All equipment +1 durability
+        case 'Field Maintenance': {
           const allSlots = getEquipmentSlots();
           allSlots.forEach(slot => {
             if (slot.item && slot.item.durability) {
@@ -8419,7 +8582,9 @@ export default function GameBoard() {
               setEquipmentSlotById(slot.id, maintained);
             }
           });
+          addGameLog('skill', '野战维护：所有装备耐久 +1 且上限 +1');
           break;
+        }
         case '混沌冲击': {
           const chaosMons = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
           if (chaosMons.length === 0) {
@@ -8481,13 +8646,14 @@ export default function GameBoard() {
             return;
           }
           if (weaponSlots.length === 1) {
+            const burstAmount = 3 * echoMultiplier;
             const slotId = weaponSlots[0].id;
             setSlotAttackBursts(prev => ({
               ...prev,
-              [slotId]: (prev[slotId] ?? 0) + 3,
+              [slotId]: (prev[slotId] ?? 0) + burstAmount,
             }));
             finalizeMagicCard(card, {
-              banner: `${weaponSlots[0].item!.name} 的下一次攻击将额外造成 3 点伤害。`,
+              banner: `${weaponSlots[0].item!.name} 的下一次攻击将额外造成 ${burstAmount} 点伤害。${isEchoTriggered ? '（回响×2）' : ''}`,
             });
             return;
           }
@@ -8495,9 +8661,10 @@ export default function GameBoard() {
             card,
             effect: 'weapon-burst',
             step: 'slot-select',
-            prompt: '选择一个武器，使其下一次攻击 +3。'
+            prompt: `选择一个武器，使其下一次攻击 +${3 * echoMultiplier}。`,
+            echoMultiplier,
           });
-          setHeroSkillBanner('选择一个武器，使其下一次攻击 +3。');
+          setHeroSkillBanner(`选择一个武器，使其下一次攻击 +${3 * echoMultiplier}。`);
           return;
         }
         case STARTER_CARD_IDS.repairOne: {
@@ -8514,24 +8681,26 @@ export default function GameBoard() {
             return;
           }
           if (repairableSlots.length === 1) {
+            const repairAmount = 1 * echoMultiplier;
             const slot = repairableSlots[0];
             const slotItem = slot.item!;
             const maxDurability = slotItem.maxDurability ?? slotItem.durability ?? 0;
             const currentDurability = slotItem.durability ?? maxDurability;
             setEquipmentSlotById(slot.id, {
               ...slotItem,
-              durability: Math.min(maxDurability, currentDurability + 1),
+              durability: Math.min(maxDurability, currentDurability + repairAmount),
             });
-            finalizeMagicCard(card, { banner: `${slotItem.name} 恢复了 1 点耐久。` });
+            finalizeMagicCard(card, { banner: `${slotItem.name} 恢复了 ${repairAmount} 点耐久。${isEchoTriggered ? '（回响×2）' : ''}` });
             return;
           }
           setPendingMagicAction({
             card,
             effect: 'repair-one',
             step: 'slot-select',
-            prompt: '选择一件装备恢复 1 点耐久。'
+            prompt: `选择一件装备恢复 ${1 * echoMultiplier} 点耐久。`,
+            echoMultiplier,
           });
-          setHeroSkillBanner('选择一件装备恢复 1 点耐久。');
+          setHeroSkillBanner(`选择一件装备恢复 ${1 * echoMultiplier} 点耐久。`);
           return;
         }
         case STARTER_CARD_IDS.discardDraw: {
@@ -8622,30 +8791,35 @@ export default function GameBoard() {
           return;
         }
         case 'potion-flip-twilight': {
-          setPermanentSpellDamageBonus(prev => prev + 1);
-          const drawn = drawFromBackpackToHand();
+          setPermanentSpellDamageBonus(prev => prev + echoMultiplier);
           const parts: string[] = [];
-          parts.push('法术伤害永久 +1。');
-          parts.push(drawn ? `额外抽了 1 张牌（${drawn.name}）。` : '背包为空或手牌已满，未能额外抽牌。');
+          parts.push(`法术伤害永久 +${echoMultiplier}。`);
+          for (let i = 0; i < echoMultiplier; i++) {
+            const drawn = drawFromBackpackToHand();
+            if (drawn) parts.push(`抽了 1 张牌（${drawn.name}）。`);
+          }
+          if (isEchoTriggered) parts.push('（回响×2）');
           finalizeMagicCard(card, { banner: parts.join(' ') });
           return;
         }
         case 'potion-flip-heal': {
-          const healed = healHero(2);
-          const banner = healed > 0 ? `治愈余韵生效，恢复 ${healed} 点生命。` : '生命值已满，治愈余韵未生效。';
+          const healed = healHero(2 * echoMultiplier);
+          const banner = healed > 0
+            ? `治愈余韵生效，恢复 ${healed} 点生命。${isEchoTriggered ? '（回响×2）' : ''}`
+            : '生命值已满，治愈余韵未生效。';
           finalizeMagicCard(card, { banner });
           return;
         }
         case 'guild-blood-gold': {
-          applyDamage(1);
-          setGold(prev => prev + 2);
-          addGameLog('magic', '血金术：受到 1 点伤害，获得 2 金币');
-          finalizeMagicCard(card, { banner: '血金术：以 1 点生命换取 2 金币。' });
+          applyDamage(1 * echoMultiplier);
+          setGold(prev => prev + 2 * echoMultiplier);
+          addGameLog('magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${2 * echoMultiplier} 金币`);
+          finalizeMagicCard(card, { banner: `血金术：以 ${1 * echoMultiplier} 点生命换取 ${2 * echoMultiplier} 金币。${isEchoTriggered ? '（回响×2）' : ''}` });
           return;
         }
         default: {
           if (card.scalingDamage != null) {
-            const currentDamage = getSpellDamage(card.scalingDamage);
+            const currentDamage = getSpellDamage(card.scalingDamage) * echoMultiplier;
             const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
             if (monsters.length === 0) {
               finalizeMagicCard(card, { banner: `${card.name}无效（没有怪物）。` });
@@ -8663,14 +8837,14 @@ export default function GameBoard() {
               removeCard(card.id, false);
               setPendingMagicAction(null);
               addGameLog('magic', `${card.name}：对 ${monsters[0].name} 造成 ${currentDamage} 点伤害（下次 ${card.scalingDamage + 1} 点）`);
-              setHeroSkillBanner(`${card.name} 刺出 ${currentDamage} 点伤害！下次将造成 ${card.scalingDamage + 1} 点。`);
+              setHeroSkillBanner(`${card.name} 刺出 ${currentDamage} 点伤害！${isEchoTriggered ? '（回响×2）' : ''}下次将造成 ${card.scalingDamage + 1} 点。`);
               return;
             }
             setPendingMagicAction({
               card: updatedCard,
               effect: 'scaling-damage',
               step: 'monster-select',
-              pendingDamage: card.scalingDamage,
+              pendingDamage: card.scalingDamage * echoMultiplier,
               prompt: `选择一个怪物，承受 ${currentDamage} 点伤害。`,
             });
             setHeroSkillBanner(`${card.name} 蓄力 ${currentDamage} 点伤害，请选择目标。`);
@@ -8777,16 +8951,18 @@ export default function GameBoard() {
         Boolean(equipmentSlot2 && equipmentSlot2.type === 'shield');
       const hadShieldProtection = tempShield > 0 || hasShieldEquipped;
 
+      let shieldAbsorbed = 0;
       setTempShield(prev => {
         if (prev <= 0 || remainingDamage <= 0) {
           return prev;
         }
-        const absorbed = Math.min(prev, remainingDamage);
-        remainingDamage -= absorbed;
-        return prev - absorbed;
+        shieldAbsorbed = Math.min(prev, remainingDamage);
+        remainingDamage -= shieldAbsorbed;
+        return prev - shieldAbsorbed;
       });
 
       if (remainingDamage <= 0) {
+        addGameLog('combat', `临时护盾吸收了 ${shieldAbsorbed} 点伤害`);
         return 0;
       }
 
@@ -8808,6 +8984,7 @@ export default function GameBoard() {
       }
 
       if (amuletEffects.hasGuardian && hadShieldProtection && source === 'combat') {
+        addGameLog('amulet', `守护护符：护盾存在时抵消了 ${remainingDamage} 点战斗伤害`);
         return 0;
       }
 
@@ -9214,12 +9391,13 @@ export default function GameBoard() {
           setHeroSkillBanner('请选择一个已装备的武器。');
           return;
         }
+        const burstAmount = 3 * (pendingMagicAction.echoMultiplier ?? 1);
         setSlotAttackBursts(prev => ({
           ...prev,
-          [slotId]: (prev[slotId] ?? 0) + 3,
+          [slotId]: (prev[slotId] ?? 0) + burstAmount,
         }));
         finalizeMagicCard(pendingMagicAction.card, {
-          banner: `${slotItem.name} 的下一次攻击将额外造成 3 点伤害。`,
+          banner: `${slotItem.name} 的下一次攻击将额外造成 ${burstAmount} 点伤害。${(pendingMagicAction.echoMultiplier ?? 1) > 1 ? '（回响×2）' : ''}`,
         });
         return;
       }
@@ -9240,12 +9418,13 @@ export default function GameBoard() {
           setHeroSkillBanner('该装备已经处于满耐久。');
           return;
         }
+        const repairAmount = 1 * (pendingMagicAction.echoMultiplier ?? 1);
         setEquipmentSlotById(slotId, {
           ...slotItem,
-          durability: Math.min(maxDurability, currentDurability + 1),
+          durability: Math.min(maxDurability, currentDurability + repairAmount),
         });
         finalizeMagicCard(pendingMagicAction.card, {
-          banner: `${slotItem.name} 恢复了 1 点耐久。`,
+          banner: `${slotItem.name} 恢复了 ${repairAmount} 点耐久。${(pendingMagicAction.echoMultiplier ?? 1) > 1 ? '（回响×2）' : ''}`,
         });
         return;
       }
@@ -9944,25 +10123,28 @@ export default function GameBoard() {
             };
           }
         }
-        if (eventCard.name === '墓语密室') {
+        if (eventCard.name === '墓语密室' && eventCard.eventChoices) {
           const cryptIdx = activeCards.findIndex(c => c?.id === eventCard.id);
-          if (cryptIdx >= 0) {
-            const leftCard = cryptIdx > 0 ? activeCards[cryptIdx - 1] : null;
-            const rightCard = cryptIdx < DUNGEON_COLUMN_COUNT - 1 ? activeCards[cryptIdx + 1] : null;
-            if (leftCard?.type === 'monster' && rightCard?.type === 'monster' && eventCard.eventChoices) {
-              eventCard = {
-                ...eventCard,
-                eventChoices: [
-                  ...eventCard.eventChoices,
-                  {
-                    text: `两侧皆为怪物（获得全部效果）`,
-                    effect: 'crypt-all-effects',
-                    hint: `左侧「${leftCard.name}」右侧「${rightCard.name}」，同时获得全部三项效果`,
-                  },
-                ],
-              };
-            }
+          const leftCard = cryptIdx > 0 ? activeCards[cryptIdx - 1] : null;
+          const rightCard = cryptIdx >= 0 && cryptIdx < DUNGEON_COLUMN_COUNT - 1 ? activeCards[cryptIdx + 1] : null;
+          const bothMonsters = leftCard?.type === 'monster' && rightCard?.type === 'monster';
+          const reasonParts: string[] = [];
+          if (!leftCard || leftCard.type !== 'monster') reasonParts.push('左侧不是怪物');
+          if (!rightCard || rightCard.type !== 'monster') reasonParts.push('右侧不是怪物');
+          const choice: EventChoiceDefinition = {
+            text: '两侧皆为怪物（获得全部效果）',
+            effect: 'crypt-all-effects',
+            hint: bothMonsters
+              ? `左侧「${leftCard!.name}」右侧「${rightCard!.name}」，同时获得全部三项效果`
+              : reasonParts.join('，'),
+          };
+          if (!bothMonsters) {
+            choice.requires = [{ type: 'hand', min: 999, message: reasonParts.join('，') }];
           }
+          eventCard = {
+            ...eventCard,
+            eventChoices: [...eventCard.eventChoices, choice],
+          };
         }
         startEventResolution(eventCard.id, 'dungeon');
         setCurrentEventCard(eventCard);
@@ -10239,6 +10421,7 @@ export default function GameBoard() {
           addGameLog('event', `事件效果：失去 ${goldLost} 金币`);
           setGold(prev => prev - goldLost);
         } else {
+          addGameLog('event', `事件失败：金币不足（需要 ${goldLost}，当前 ${gold}）`);
           setEventModalOpen(false);
           setEventModalMinimized(false);
           setCurrentEventCard(null);
@@ -10343,7 +10526,7 @@ export default function GameBoard() {
             image: skillScrollImage,
             magicType: 'permanent',
             magicEffect: 'double-next-magic',
-            description: '永久魔法：使用后，下一张法术将被复制一份到背包中（可再次使用）。',
+            description: '永久魔法：使用后，下一张法术的效果将触发两次。',
           };
           await triggerEventTransform(currentEventCard, doubleCard, '契约裂隙涌出回响之力…');
           skipNextEventAutoDrawRef.current = true;
@@ -10362,6 +10545,8 @@ export default function GameBoard() {
         });
         if (deleteSuccess) {
           addGameLog('event', '墓语密室（全效）：删除了 1 张卡牌');
+        } else {
+          addGameLog('event', '墓语密室（全效）：未删除卡牌');
         }
         const selected = await requestGraveyardSelection(3);
         if (selected) {
@@ -10538,9 +10723,11 @@ export default function GameBoard() {
       } else if (effect === 'destroyEquipment:any') {
         const slotsWithItems = getEquipmentSlots().filter(slot => slot.item);
         if (!slotsWithItems.length) {
+          addGameLog('event', '事件效果：无装备可破坏');
           continue;
         }
         if (slotsWithItems.length === 1) {
+          addGameLog('event', `事件效果：破坏装备「${slotsWithItems[0].item!.name}」`);
           sacrificeEquipment(slotsWithItems[0].id);
         } else {
           const selected = await requestEquipmentSelection({
@@ -10548,6 +10735,8 @@ export default function GameBoard() {
             subtext: '左或右装备栏至少保留一件。',
           });
           if (selected) {
+            const destroyedItem = selected === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+            addGameLog('event', `事件效果：破坏装备「${destroyedItem?.name ?? '未知'}」`);
             sacrificeEquipment(selected);
           }
         }
@@ -10627,10 +10816,16 @@ export default function GameBoard() {
           };
           if (!equipmentSlot1) {
             setEquipmentSlot1(restoredShield);
+            addGameLog('event', `事件效果：从坟场恢复盾牌「${shield.name}」并装备至左槽`);
           } else if (!equipmentSlot2) {
             setEquipmentSlot2(restoredShield);
+            addGameLog('event', `事件效果：从坟场恢复盾牌「${shield.name}」并装备至右槽`);
+          } else {
+            addGameLog('event', '事件效果：没有空槽位，无法恢复盾牌');
           }
           setDiscardedCards(prev => prev.filter(c => c.id !== shield.id));
+        } else {
+          addGameLog('event', '事件效果：坟场没有盾牌可恢复');
         }
       } else if (effect.startsWith('tempShield+')) {
         const shieldGain = parseInt(effect.replace('tempShield+', ''), 10);
@@ -10796,9 +10991,12 @@ export default function GameBoard() {
         break;
       } else if (effect === 'fate-dice-strike') {
         const eventCardSnapshot = currentEventCard;
-        const cellIdx = activeCards.findIndex(c => c?.id === eventCardSnapshot.id);
-        const rightIdx = cellIdx + 1;
-        const rightCard = rightIdx < DUNGEON_COLUMN_COUNT ? activeCards[rightIdx] : null;
+        const resId = eventResolutionRef.current?.cardId;
+        const cellIdx = resId
+          ? activeCards.findIndex(c => c?.id === resId)
+          : activeCards.findIndex(c => c?.id === eventCardSnapshot.id);
+        const rightIdx = cellIdx >= 0 ? cellIdx + 1 : -1;
+        const rightCard = rightIdx >= 0 && rightIdx < DUNGEON_COLUMN_COUNT ? activeCards[rightIdx] : null;
 
         setEventModalOpen(false);
         setEventModalMinimized(false);
@@ -10892,11 +11090,12 @@ export default function GameBoard() {
     if (card.type === 'potion') {
       await handlePotionConsumption(card);
     } else if (card.type === 'weapon' || card.type === 'shield') {
-      // Handle equipment cards
       const emptySlot = !equipmentSlot1 ? 'equipmentSlot1' : !equipmentSlot2 ? 'equipmentSlot2' : null;
       if (emptySlot) {
         setEquipmentSlotById(emptySlot, { ...card } as EquipmentItem);
-    // // toast({ title: `${card.type === 'weapon' ? 'Weapon' : 'Shield'} Equipped!`, description: card.name });
+        addGameLog('equip', `手牌装备：${card.name}（${card.type === 'weapon' ? `${card.value}攻` : `${card.value}防`}）至${emptySlot === 'equipmentSlot1' ? '左' : '右'}槽`);
+      } else {
+        addGameLog('equip', `装备失败：没有空槽位（${card.name}）`);
       }
     }
     // More card types can be handled here
