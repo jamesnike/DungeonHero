@@ -752,8 +752,8 @@ function createDeck(): GameCardData[] {
       name: '洞察药剂',
       value: 6,
       image: potionDiscoverImage,
-      potionEffect: 'discover-class-2',
-      description: '获得两张职业卡牌。',
+      potionEffect: 'discover-class-3',
+      description: '获得三张职业卡牌。',
     },
     {
       type: 'potion',
@@ -7547,8 +7547,8 @@ export default function GameBoard() {
         return;
       }
 
-      if (effect === 'discover-class-2') {
-        const drawn = drawClassCardsToBackpack(2, 'potion-discover-2');
+      if (effect === 'discover-class-3') {
+        const drawn = drawClassCardsToBackpack(3, 'potion-discover-3');
         if (drawn.length > 0) {
           triggerClassDeckFlight(drawn);
           addGameLog('potion', `药水效果：获得 ${drawn.length} 张职业卡`);
@@ -11826,6 +11826,8 @@ export default function GameBoard() {
     classDeck.length,
     heroVariant,
     showBlockButtons,
+    viewportWidth,
+    gameViewport.height,
   ]);
   const draggedCardIsSpell =
     draggedCard?.type === 'magic' || draggedCard?.type === 'hero-magic' || draggedCard?.type === 'potion';

@@ -6,6 +6,7 @@ import type { RefObject } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import type { CSSProperties } from 'react';
 import type { HeroMagicId } from '@/components/GameCard';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 
 const BASE_HERO_WIDTH = 260;
 const HERO_SCALE_MIN = 0.75;
@@ -104,6 +105,8 @@ export default function HeroCard({
   spellDamageBonus = 0,
   onHeroClick,
 }: HeroCardProps) {
+  const gameViewport = useGameViewport();
+  const isCompact = gameViewport.width < 500;
   const [dragDepth, setDragDepth] = React.useState(0);
   const [heroScale, setHeroScale] = React.useState(1);
   const isOver = dragDepth > 0;
@@ -275,10 +278,13 @@ export default function HeroCard({
       data-testid="hero-card"
       style={{ '--dh-hero-instance-scale': appliedHeroScale.toString() } as CSSProperties}
     >
-      <div className="pointer-events-none absolute -top-7 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 dh-hero-small font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap">
+      <div
+        className="pointer-events-none absolute left-1/2 z-30 flex items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 dh-hero-small font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap"
+        style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
+      >
         <span className="flex items-center gap-1 text-purple-500">
           <Sparkles className="dh-hero-icon" />
-          永久法术伤害
+          {isCompact ? '法术' : '永久法术伤害'}
         </span>
         <span className="text-muted-foreground/50">|</span>
         <span className="font-mono text-primary dh-hero-chip">+{spellDamageDisplay}</span>

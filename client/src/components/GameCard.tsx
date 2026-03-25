@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 
 const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
@@ -47,7 +48,7 @@ export type PotionEffectId =
   | 'boost-both-slots'
   | 'repair-choice'
   | 'draw-backpack-4'
-  | 'discover-class-2'
+  | 'discover-class-3'
   | 'perm-spell-damage'
   | 'perm-backpack-size'
   | 'left-slot-durability-max+1'
@@ -221,6 +222,8 @@ function GameCardInner({
   equipmentStatModifier = null,
   showExhaustedOverlay = false,
 }: GameCardProps) {
+  const gameViewport = useGameViewport();
+  const isCompact = gameViewport.width < 500;
   const [isDragging, setIsDragging] = useState(false);
   const [cardScale, setCardScale] = useState(1);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -601,12 +604,12 @@ const amuletEffectText =
               {/* Inner decorative border */}
               <div className={`absolute pointer-events-none rounded-sm ${
                 isEventCard
-                  ? 'inset-[6px] border border-violet-300/30'
-                  : 'inset-[6px] border border-cyan-300/25'
+                  ? `${isCompact ? 'inset-[3px]' : 'inset-[6px]'} border border-violet-300/30`
+                  : `${isCompact ? 'inset-[3px]' : 'inset-[6px]'} border border-cyan-300/25`
               }`} />
 
               {/* Type label banner at top */}
-              <div className={`relative z-10 flex items-center justify-center gap-1.5 py-1.5 px-2 ${
+              <div className={`relative z-10 flex items-center justify-center gap-1.5 py-1.5 ${isCompact ? 'px-0.5' : 'px-2'} ${
                 isEventCard
                   ? 'bg-violet-800/25'
                   : card.type === 'hero-magic'
@@ -614,15 +617,17 @@ const amuletEffectText =
                     : 'bg-cyan-800/35'
               }`}>
                 {getCardIcon()}
-                <span className={`dh-card__caption font-bold uppercase tracking-widest ${
-                  isEventCard
-                    ? 'text-violet-950'
-                    : card.type === 'hero-magic'
-                      ? 'text-rose-950'
-                      : 'text-cyan-950'
-                }`}>
-                  {isEventCard ? 'Event' : card.type === 'hero-magic' ? 'Hero Magic' : 'Magic'}
-                </span>
+                {!isCompact && (
+                  <span className={`dh-card__caption font-bold uppercase tracking-widest ${
+                    isEventCard
+                      ? 'text-violet-950'
+                      : card.type === 'hero-magic'
+                        ? 'text-rose-950'
+                        : 'text-cyan-950'
+                  }`}>
+                    {isEventCard ? 'Event' : card.type === 'hero-magic' ? 'Hero Magic' : 'Magic'}
+                  </span>
+                )}
                 {isPermanentMagicCard && (
                   <span className="dh-card__caption flex items-center gap-0.5 rounded-sm border border-cyan-300/50 bg-cyan-800/50 px-1 py-0.5 font-bold uppercase tracking-wide text-cyan-50 shadow-sm">
                     <Infinity className="dh-icon-inline" />
@@ -631,14 +636,14 @@ const amuletEffectText =
               </div>
 
               {/* Divider line */}
-              <div className={`h-px mx-3 ${
+              <div className={`h-px ${isCompact ? 'mx-1' : 'mx-3'} ${
                 isEventCard
                   ? 'bg-gradient-to-r from-transparent via-violet-400/50 to-transparent'
                   : 'bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent'
               }`} />
 
               {/* Card name */}
-              <div className="relative z-10 px-2 pt-1.5 pb-0.5 text-center">
+              <div className={`relative z-10 ${isCompact ? 'px-0.5' : 'px-2'} pt-1.5 pb-0.5 text-center`}>
                 <h3 className={`dh-card__name font-serif font-bold w-full truncate ${
                   isEventCard ? 'text-violet-950' : card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
                 }`} title={card.name}>
@@ -647,14 +652,14 @@ const amuletEffectText =
               </div>
 
               {/* Thin separator */}
-              <div className={`h-px mx-6 ${
+              <div className={`h-px ${isCompact ? 'mx-2' : 'mx-6'} ${
                 isEventCard
                   ? 'bg-gradient-to-r from-transparent via-violet-500/30 to-transparent'
                   : 'bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent'
               }`} />
 
               {/* Description / choices area - fills remaining space */}
-              <div className="relative z-10 flex-1 overflow-y-auto px-2 py-1.5">
+              <div className={`relative z-10 flex-1 overflow-y-auto ${isCompact ? 'px-0.5' : 'px-2'} py-1.5`}>
                 {isMagicLikeCard && (
                   <div className="dh-card__body-text w-full text-left leading-snug text-gray-900">
                   
@@ -751,11 +756,13 @@ const amuletEffectText =
                   <>
                     <div className="absolute top-1 left-1">
                       <div className="relative group flex items-center">
-                        <div className="mr-1">
-                          <Sword className={`dh-card__icon drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${
-                            monsterAttackModifier > 0 ? 'text-orange-500' : 'text-red-500'
-                          }`} />
-                        </div>
+                        {!isCompact && (
+                          <div className="mr-1">
+                            <Sword className={`dh-card__icon drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${
+                              monsterAttackModifier > 0 ? 'text-orange-500' : 'text-red-500'
+                            }`} />
+                          </div>
+                        )}
                         <div className="flex items-baseline gap-0.5">
                           <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                             {monsterAttackBase}
@@ -790,11 +797,13 @@ const amuletEffectText =
                             </span>
                           )}
                         </div>
-                        <div>
-                          <Heart className={`dh-card__icon fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${
-                            monsterHpModifier > 0 || equipmentShieldModifierText ? 'text-emerald-500' : 'text-red-500'
-                          }`} />
-                        </div>
+                        {!isCompact && (
+                          <div>
+                            <Heart className={`dh-card__icon fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${
+                              monsterHpModifier > 0 || equipmentShieldModifierText ? 'text-emerald-500' : 'text-red-500'
+                            }`} />
+                          </div>
+                        )}
                       </div>
                       {card.hpLayers && card.hpLayers > 1 && (
                         <div className="flex gap-0.5 mt-1">
@@ -819,13 +828,15 @@ const amuletEffectText =
                   <>
                     <div className="absolute top-1 left-1">
                       <div className="relative group flex items-center">
-                        <div className="mr-1">
-                          {card.type === 'weapon' ? (
-                            <Sword className="dh-card__icon text-amber-400 fill-amber-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
-                          ) : (
-                            <Shield className="dh-card__icon text-blue-400 fill-blue-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
-                          )}
-                        </div>
+                        {!isCompact && (
+                          <div className="mr-1">
+                            {card.type === 'weapon' ? (
+                              <Sword className="dh-card__icon text-amber-400 fill-amber-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                            ) : (
+                              <Shield className="dh-card__icon text-blue-400 fill-blue-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-baseline gap-1">
                           <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                             {card.value}
@@ -874,14 +885,14 @@ const amuletEffectText =
               </div>
               
               {/* Text Area */}
-              <div className={`flex-1 p-1 flex flex-col items-center justify-start text-center overflow-hidden relative ${
+              <div className={`flex-1 ${isCompact ? 'p-0.5' : 'p-1'} flex flex-col items-center justify-start text-center overflow-hidden relative ${
                 card.type === 'amulet'
                   ? 'bg-amber-200/40'
                   : card.type === 'potion'
                     ? 'bg-emerald-300/40'
                     : 'bg-card'
               }`}>
-                <h3 className={`dh-card__name font-serif font-semibold w-full truncate px-1 ${
+                <h3 className={`dh-card__name font-serif font-semibold w-full truncate ${isCompact ? 'px-0' : 'px-1'} ${
                   isThemedImageCard ? 'text-gray-900' : ''
                 }`} title={card.name}>
                   {card.name}
@@ -914,18 +925,18 @@ const amuletEffectText =
                 )}
 
                 {(card.type === 'weapon' || card.type === 'shield') && card.description && (
-                  <div className="dh-card__body-text w-full text-gray-800 px-1 leading-tight">
+                  <div className={`dh-card__body-text w-full text-gray-800 ${isCompact ? 'px-0' : 'px-1'} leading-tight`}>
                     {card.description}
                   </div>
                 )}
 
                 {card.type === 'amulet' && amuletEffectText && !showAmuletOverlay && (
-                  <div className="dh-card__body-text w-full text-gray-800 px-1">
+                  <div className={`dh-card__body-text w-full text-gray-800 ${isCompact ? 'px-0' : 'px-1'}`}>
                     {amuletEffectText}
                   </div>
                 )}
                 {isPotionCard && potionDescription && (
-                  <div className="dh-card__body-text w-full text-gray-800 px-1">
+                  <div className={`dh-card__body-text w-full text-gray-800 ${isCompact ? 'px-0' : 'px-1'}`}>
                     {potionDescription}
                   </div>
                 )}

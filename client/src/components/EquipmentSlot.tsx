@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import GameCard, { type GameCardData, type EquipmentCardStatModifier } from './GameCard';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 
 const BASE_SLOT_WIDTH = 220;
 const SLOT_SCALE_MIN = 0.7;
@@ -72,6 +73,8 @@ export default function EquipmentSlot({
   isExhaustedThisTurn = false,
   isUnbreakable = false,
 }: EquipmentSlotProps) {
+  const gameViewport = useGameViewport();
+  const isCompact = gameViewport.width < 500;
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
   const slotRef = useRef<HTMLDivElement>(null);
@@ -236,10 +239,13 @@ export default function EquipmentSlot({
     >
       {/* Permanent bonus header */}
       {type === 'equipment' && (
-        <div className="absolute -top-7 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 sm:gap-2 rounded-full border border-border bg-background/95 px-2 py-0.5 sm:px-4 sm:py-1.5 dh-hero-chip font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap">
-          <span className="text-red-500">{formatBonus(permanentDamageBonus)} DMG</span>
+        <div
+          className="absolute left-1/2 z-30 flex items-center gap-1 sm:gap-2 rounded-full border border-border bg-background/95 px-2 py-0.5 sm:px-4 sm:py-1.5 dh-hero-chip font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap"
+          style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
+        >
+          <span className="text-red-500">{formatBonus(permanentDamageBonus)}{!isCompact && ' DMG'}</span>
           <span className="text-muted-foreground/50">|</span>
-          <span className="text-blue-500">{formatBonus(permanentShieldBonus)} SHD</span>
+          <span className="text-blue-500">{formatBonus(permanentShieldBonus)}{!isCompact && ' SHD'}</span>
         </div>
       )}
 
