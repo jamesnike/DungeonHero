@@ -1528,6 +1528,7 @@ export default function GameBoard() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [cardActionContext, setCardActionContext] = useState<CardActionContext | null>(null);
   const cardActionResolverRef = useRef<(() => void) | null>(null);
+  const cardActionRemainingRef = useRef<number>(0);
   const shopDiscountPercent = getShopDiscountPercent(shopLevel);
   const adjustShopLevel = useCallback((delta: number) => {
     if (!delta) return;
@@ -7539,6 +7540,7 @@ export default function GameBoard() {
     setDeleteModalOpen(false);
     setCardActionContext(null);
     cardActionResolverRef.current = null;
+    cardActionRemainingRef.current = 0;
     await completeCurrentEvent();
   }, [completeCurrentEvent]);
 
@@ -7549,6 +7551,7 @@ export default function GameBoard() {
         setHeroSkillBanner(options?.description ?? '当前没有足够的卡牌可供选择。');
         return Promise.resolve(false);
       }
+      cardActionRemainingRef.current = count;
       return new Promise<boolean>(resolve => {
         cardActionResolverRef.current = () => {
           resolve(true);
@@ -7612,6 +7615,7 @@ export default function GameBoard() {
     if (shopDeleteUsed || deletableCardCount === 0) {
       return;
     }
+    cardActionRemainingRef.current = 1;
     setCardActionContext({
       mode: 'shop',
       action: 'delete',
@@ -7835,21 +7839,29 @@ export default function GameBoard() {
 
   const handleDeleteCardConfirm = useCallback(
     (cardId: string, source: 'hand' | 'backpack') => {
+      if (cardActionRemainingRef.current <= 0) {
+        return;
+      }
+      cardActionRemainingRef.current -= 1;
+
       pushUndoSnapshot();
       let cardToDelete: GameCardData | null = null;
 
       if (source === 'hand') {
         cardToDelete = handCards.find(card => card.id === cardId) ?? null;
         if (!cardToDelete) {
+          cardActionRemainingRef.current += 1;
           return;
         }
         const removed = consumeCardFromHand(cardToDelete);
         if (!removed) {
+          cardActionRemainingRef.current += 1;
           return;
         }
       } else {
         cardToDelete = backpackItems.find(card => card.id === cardId) ?? null;
         if (!cardToDelete) {
+          cardActionRemainingRef.current += 1;
           return;
         }
         setBackpackItems(prev => prev.filter(card => card.id !== cardId));
@@ -7867,7 +7879,7 @@ export default function GameBoard() {
       }
 
       if (cardActionContext?.mode === 'event') {
-        const remaining = Math.max(0, cardActionContext.remainingCount - 1);
+        const remaining = cardActionRemainingRef.current;
         if (remaining <= 0) {
           setDeleteModalOpen(false);
           setCardActionContext(null);
