@@ -439,7 +439,7 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                 <div className="mb-1 font-semibold text-cyan-700 dark:text-cyan-400">
                   Type: {card.magicType === 'instant' ? 'Instant Spell' : 'Permanent Skill'}
                 </div>
-                <div>{card.magicEffect || card.description}</div>
+                <div>{card.description || card.magicEffect}</div>
               </div>
             )}
 

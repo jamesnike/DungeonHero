@@ -287,27 +287,33 @@ export default function EquipmentSlot({
                 : 'none',
             }}
           >
-            {reserveItems.map((reserveCard, rIdx) => (
-              <div
-                key={reserveCard.id}
-                className="absolute inset-0 cursor-pointer"
-                style={{ zIndex: 20 + rIdx, transform: 'translateY(-6%)' }}
-                onClick={(e) => { e.stopPropagation(); onSwapToTop?.(rIdx); }}
-              >
-                <GameCard
-                  card={{ ...reserveCard, fromSlot: slotId } as GameCardData}
-                  onClick={() => onSwapToTop?.(rIdx)}
-                  amuletDescriptionVariant="topThird"
-                  className="shadow-md opacity-80"
-                />
-              </div>
-            ))}
+            {reserveItems.map((reserveCard, rIdx) => {
+              const total = reserveItems.length + 1;
+              const bottomY = -6;
+              const topY = 28;
+              const step = total <= 1 ? 0 : (topY - bottomY) / (total - 1);
+              const y = bottomY + rIdx * step;
+              return (
+                <div
+                  key={reserveCard.id}
+                  className="absolute inset-0 cursor-pointer"
+                  style={{ zIndex: 20 + rIdx, transform: `translateY(${y}%)` }}
+                  onClick={(e) => { e.stopPropagation(); onSwapToTop?.(rIdx); }}
+                >
+                  <GameCard
+                    card={{ ...reserveCard, fromSlot: slotId } as GameCardData}
+                    amuletDescriptionVariant="topThird"
+                    className="shadow-md opacity-80"
+                  />
+                </div>
+              );
+            })}
             <div
               className={`absolute inset-0 ${
                 heroSkillHighlight ? 'cursor-pointer' : ''
               }`}
               style={{
-                zIndex: 30 + reserveItems.length,
+                zIndex: 20 + reserveItems.length,
                 transform: 'translateY(28%)',
               }}
             >

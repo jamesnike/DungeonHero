@@ -414,6 +414,7 @@ export type UndoTransientState = {
   pendingHeroSkillAction: PendingHeroSkillAction | null;
   pendingHeroMagicAction: PendingHeroMagicAction | null;
   shopModalOpen: boolean;
+  shopModalMinimized: boolean;
   shopOfferings: ShopOffering[];
   shopSourceEvent: GameCardData | null;
   shopDeleteUsed: boolean;

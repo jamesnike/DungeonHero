@@ -37,6 +37,7 @@ interface ShopModalProps {
   skillOffer?: ShopSkillDisplay | null;
   onBuySkill?: () => void;
   onFinish: () => void;
+  onMinimize?: () => void;
   sourceEventName?: string;
   hp?: number;
   maxHp?: number;
@@ -60,6 +61,7 @@ export default function ShopModal({
   skillOffer,
   onBuySkill,
   onFinish,
+  onMinimize,
   sourceEventName,
   hp,
   maxHp,
@@ -71,7 +73,9 @@ export default function ShopModal({
   const deleteOptionDisabled = !canDeleteCard;
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
+    if (!nextOpen && onMinimize) {
+      onMinimize();
+    } else if (!nextOpen) {
       onFinish();
     }
   };

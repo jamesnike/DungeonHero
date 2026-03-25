@@ -181,9 +181,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：获得等同本回合已损失生命的金币，并将“贪婪诅咒”放入背包。',
+    description: '一次性：获得等同本回合已损失生命的金币，将“贪婪诅咒”放入背包，并开启商店。',
     magicType: 'instant',
-    magicEffect: '获得金币并生成贪婪诅咒。',
+    magicEffect: '获得金币，生成贪婪诅咒，并开启商店。',
     knightEffect: 'blood-greed',
   });
 
@@ -362,4 +362,5 @@ export const createGreedCurseCard = (): KnightCardData => ({
   magicType: 'permanent',
   magicEffect: '使用失去 3 金币。',
   knightEffect: 'greed-curse',
+  isCurse: true,
 });

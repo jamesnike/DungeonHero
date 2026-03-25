@@ -25,7 +25,7 @@ import GameCard, {
 import EquipmentSlot from './EquipmentSlot';
 import CombatPanel from './CombatPanel';
 import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
-import { Sword, Calendar, Undo2, Wrench } from 'lucide-react';
+import { Sword, Calendar, Undo2, Wrench, ShoppingBag } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import AmuletSlot from './AmuletSlot';
@@ -1005,7 +1005,7 @@ function createDeck(): GameCardData[] {
         image: skillScrollImage,
         magicType: 'permanent',
         magicEffect: '永久魔法：对一个怪物造成伤害（每次使用后伤害永久 +1）。\n使用后需等待 2 次瀑流才能回到背包。',
-        description: '暗影契约的余力，每次刺击都比上一次更狠。',
+        description: '暗影契约的余力，每次刺击都比上一次更狠。使用后需等待 2 次瀑流才能回到背包。',
         scalingDamage: 1,
         recycleDelay: 2,
       },
@@ -1370,8 +1370,9 @@ function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备，恢复 1 点耐久。',
-      description: '精准地修补武器或护盾，恢复 1 点耐久值。',
+      magicEffect: '永久魔法：选择一个装备，恢复 1 点耐久。\n使用后需等待 2 次瀑流才能回到背包。',
+      description: '精准地修补武器或护盾，恢复 1 点耐久值。使用后需等待 2 次瀑流才能回到背包。',
+      recycleDelay: 2,
     },
     {
       id: STARTER_CARD_IDS.discardDraw,
@@ -1391,7 +1392,7 @@ function createStarterBackpack(): GameCardData[] {
       image: skillScrollImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，洗回牌堆。\n使用后需等待 2 次瀑流才能回到背包。',
-      description: '将一张地城卡牌洗回牌堆，重新扰乱命运。',
+      description: '将一张地城卡牌洗回牌堆，重新扰乱命运。使用后需等待 2 次瀑流才能回到背包。',
       recycleDelay: 2,
     },
     {
@@ -1511,6 +1512,7 @@ export default function GameBoard() {
   const [discoverModalOpen, setDiscoverModalOpen] = useState(false);
   const [discoverOptions, setDiscoverOptions] = useState<GameCardData[]>([]);
   const [shopModalOpen, setShopModalOpen] = useState(false);
+  const [shopModalMinimized, setShopModalMinimized] = useState(false);
   const [shopOfferings, setShopOfferings] = useState<ShopOffering[]>([]);
   const [shopSourceEvent, setShopSourceEvent] = useState<GameCardData | null>(null);
   const [shopDeleteUsed, setShopDeleteUsed] = useState(false);
@@ -4877,6 +4879,7 @@ export default function GameBoard() {
       setShopHealUsed(false);
       setDeleteModalOpen(false);
       setShopModalOpen(true);
+      setShopModalMinimized(false);
       setEventModalOpen(false);
       setEventModalMinimized(false);
       return true;
@@ -5890,6 +5893,7 @@ export default function GameBoard() {
     pendingHeroSkillAction,
     pendingHeroMagicAction,
     shopModalOpen,
+    shopModalMinimized,
     shopOfferings,
     shopSourceEvent,
     shopDeleteUsed,
@@ -5906,7 +5910,7 @@ export default function GameBoard() {
   }), [
     monsterRewardQueue, activeMonsterReward, selectedMonsterRewards,
     pendingMagicAction, pendingPotionAction, pendingHeroSkillAction, pendingHeroMagicAction,
-    shopModalOpen, shopOfferings, shopSourceEvent, shopDeleteUsed, shopHealUsed,
+    shopModalOpen, shopModalMinimized, shopOfferings, shopSourceEvent, shopDeleteUsed, shopHealUsed,
     discoverModalOpen, discoverOptions, deleteModalOpen,
     deathWardPrompt, equipmentPrompt, graveyardDiscoverState, cardActionContext,
     gameLogEntries,
@@ -5969,6 +5973,7 @@ export default function GameBoard() {
     setPendingHeroSkillAction(t.pendingHeroSkillAction);
     setPendingHeroMagicAction(t.pendingHeroMagicAction);
     setShopModalOpen(t.shopModalOpen);
+    setShopModalMinimized(t.shopModalMinimized);
     setShopOfferings(t.shopOfferings);
     setShopSourceEvent(t.shopSourceEvent);
     setShopDeleteUsed(t.shopDeleteUsed);
@@ -6230,18 +6235,30 @@ export default function GameBoard() {
 
   const swapEquipmentToTop = (slotId: EquipmentSlotId, reserveIndex: number) => {
     pushUndoSnapshot();
-    const currentActive = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-    const reserve = getEquipmentReserve(slotId);
-    if (reserveIndex < 0 || reserveIndex >= reserve.length) return;
-    const newActive = reserve[reserveIndex];
-    const newReserve = [...reserve];
-    newReserve.splice(reserveIndex, 1);
-    if (currentActive) {
-      newReserve.push(currentActive);
-    }
-    setEquipmentSlotById(slotId, newActive);
-    setEquipmentReserve(slotId, newReserve);
-    addGameLog('equip', `装备切换：${newActive.name} 替换 ${currentActive?.name ?? '空槽'}（${slotId === 'equipmentSlot1' ? '左' : '右'}槽）`);
+    const slotSetter = slotId === 'equipmentSlot1' ? setEquipmentSlot1 : setEquipmentSlot2;
+    const reserveSetter = slotId === 'equipmentSlot1' ? setEquipmentSlot1Reserve : setEquipmentSlot2Reserve;
+    let swappedInName = '';
+    let swappedOutName = '';
+
+    reserveSetter(prevReserve => {
+      if (reserveIndex < 0 || reserveIndex >= prevReserve.length) return prevReserve;
+      const promoted = prevReserve[reserveIndex];
+      swappedInName = promoted.name;
+      const updatedReserve = [...prevReserve];
+      updatedReserve.splice(reserveIndex, 1);
+
+      slotSetter(prevActive => {
+        swappedOutName = prevActive?.name ?? '空槽';
+        if (prevActive) {
+          updatedReserve.push(prevActive);
+        }
+        return { ...promoted, fromSlot: slotId } as EquipmentItem;
+      });
+
+      return updatedReserve;
+    });
+
+    addGameLog('equip', `装备切换：${swappedInName} 替换 ${swappedOutName}（${slotId === 'equipmentSlot1' ? '左' : '右'}槽）`);
   };
 
   const normalizeEventEffect = (expression?: EventEffectExpression): string[] => {
@@ -7679,6 +7696,7 @@ export default function GameBoard() {
   const handleShopClose = useCallback(async () => {
     pushUndoSnapshot();
     setShopModalOpen(false);
+    setShopModalMinimized(false);
     setShopOfferings([]);
     setShopSourceEvent(null);
     setDeleteModalOpen(false);
@@ -8148,11 +8166,27 @@ export default function GameBoard() {
         }
         addCardToBackpack(createGreedCurseCard(), { toBottom: true });
         consumeClassCardFromHand(card.id);
+
+        let shopOpened = false;
+        if (backpackItems.length < backpackCapacity) {
+          const offerings = generateShopOfferings();
+          if (offerings.length > 0) {
+            setShopOfferings(offerings);
+            setShopSourceEvent(card);
+            setShopDeleteUsed(false);
+            setShopHealUsed(false);
+            setDeleteModalOpen(false);
+            setShopModalOpen(true);
+            setShopModalMinimized(false);
+            shopOpened = true;
+          }
+        }
+
+        const baseBanner = goldEarned > 0
+          ? `嗜血贪欲让你获得 ${goldEarned} 金币，并将“贪婪”塞入背包。`
+          : '本回合未受伤，贪欲只留下“贪婪”。';
         finalizeMagicCard(card, {
-          banner:
-            goldEarned > 0
-              ? `嗜血贪欲让你获得 ${goldEarned} 金币，并将“贪婪”塞入背包。`
-              : '本回合未受伤，贪欲只留下“贪婪”。',
+          banner: shopOpened ? `${baseBanner}商店已开启！` : baseBanner,
         });
         return true;
       }
@@ -8371,6 +8405,7 @@ export default function GameBoard() {
         setShopHealUsed(false);
         setDeleteModalOpen(false);
         setShopModalOpen(true);
+        setShopModalMinimized(false);
         banner = '混沌骰运开启了一家临时商店！';
         break;
       }
@@ -8404,15 +8439,16 @@ export default function GameBoard() {
           banner = '没有足够的牌可供弃置，混沌骰运安静下来。';
           break;
         }
-        let draws = 0;
+        const drawnNames: string[] = [];
         for (let i = 0; i < 2; i += 1) {
-          const drawn = drawFromBackpackToHand();
-          if (!drawn) {
-            break;
-          }
-          draws += 1;
+          const [drawnCard] = takeRandomCardsFromBackpack(1);
+          if (!drawnCard) break;
+          queueCardIntoHand(drawnCard);
+          drawnNames.push(drawnCard.name);
         }
-        banner = `你弃置了 2 张牌，并从背包抽到了 ${draws} 张牌。`;
+        banner = drawnNames.length > 0
+          ? `你弃置了 2 张牌，从背包抽到了「${drawnNames.join('」「')}」。`
+          : '你弃置了 2 张牌，但背包为空，未能抽牌。';
         break;
       }
       default:
@@ -8427,6 +8463,11 @@ export default function GameBoard() {
   async function handleSkillCard(card: GameCardData) {
     const knightCard = card as KnightCardData;
     
+    if (card.isCurse && card.knightEffect === 'greed-curse') {
+      setGold(prev => Math.max(0, prev - 3));
+      finalizeMagicCard(card, { banner: '贪婪诅咒消耗了 3 金币。' });
+      return;
+    }
     if (card.isCurse) {
       applyDamage(3);
       finalizeMagicCard(card, { banner: '血咒吸取了 3 点生命。' });
@@ -13001,6 +13042,24 @@ export default function GameBoard() {
         </div>
       )}
 
+      {/* Shop-minimized floating restore button */}
+      {shopModalOpen && shopModalMinimized && (
+        <div
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-600/90 px-5 py-2.5 shadow-lg cursor-pointer select-none hover:bg-amber-600 transition-colors"
+          style={{ pointerEvents: 'auto' }}
+          onClick={() => setShopModalMinimized(false)}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            setShopModalMinimized(false);
+          }}
+        >
+          <ShoppingBag className="w-4 h-4 text-white" />
+          <span className="text-white text-sm font-semibold whitespace-nowrap">
+            商店 — 点击恢复
+          </span>
+        </div>
+      )}
+
       {deathWardPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-sm space-y-4 rounded-lg bg-card p-6 text-center shadow-2xl">
@@ -13071,7 +13130,7 @@ export default function GameBoard() {
       />
 
       <ShopModal
-        open={shopModalOpen}
+        open={shopModalOpen && !shopModalMinimized}
         offerings={shopOfferings}
         gold={gold}
         backpackCount={backpackItems.length}
@@ -13083,6 +13142,7 @@ export default function GameBoard() {
         onDeleteRequest={handleShopDeleteRequest}
         onBuy={handleShopPurchase}
         onFinish={handleShopClose}
+        onMinimize={() => setShopModalMinimized(true)}
         sourceEventName={shopSourceEvent?.name ?? undefined}
       />
 

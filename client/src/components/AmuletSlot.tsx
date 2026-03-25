@@ -100,21 +100,12 @@ export default function AmuletSlot({
     }
 
     const total = preparedAmulets.length;
-    const isTopCard = index === total - 1;
+    const bottomY = -6;
+    const topY = 28;
+    const step = total <= 1 ? 0 : (topY - bottomY) / (total - 1);
+    const y = bottomY + index * step;
 
-    if (total === 2) {
-      return isTopCard
-        ? { zIndex: 30, transform: 'translateY(28%)' }
-        : { zIndex: 20, transform: 'translateY(-6%)' };
-    }
-
-    if (isTopCard) {
-      return { zIndex: 30, transform: 'translateY(36%)' };
-    }
-    if (index === total - 2) {
-      return { zIndex: 20, transform: 'translateY(10%)' };
-    }
-    return { zIndex: 10, transform: 'translateY(-12%)' };
+    return { zIndex: 10 + index, transform: `translateY(${y}%)` };
   };
 
   const dropStateClass = isDropTarget
