@@ -167,6 +167,7 @@ export interface GameCardData {
   critChance?: number; // % chance to deal double damage on attack
   restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
   healOnAttack?: number; // Heal this amount each time this weapon attacks
+  healOnKill?: number; // Heal this amount when this weapon kills a monster
   waterfallAttackBoost?: number; // Increase weapon's own attack by this amount each waterfall
   isMinionCard?: boolean;
 }

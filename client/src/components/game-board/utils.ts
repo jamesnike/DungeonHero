@@ -367,19 +367,25 @@ export function createDeck(): GameCardData[] {
       maxDurability: durability,
     };
     if (weaponType.name === 'Holy Blade') {
-      card.healOnAttack = 2;
-      card.description = '每次攻击时恢复 2 点生命。';
+      card.healOnKill = 2;
+      card.description = '击杀怪物时回复 2 点生命。';
     }
     if (weaponType.name === 'Mace') {
       card.value = Math.min(card.value, 3);
+      card.durability = Math.min(card.durability!, 2);
+      card.maxDurability = card.durability;
       card.description = '攻击后掷骰：50% 概率不消耗耐久。';
       card.weaponDurabilitySaveChance = 50;
     }
     if (weaponType.name === 'Dagger') {
+      card.value = Math.min(card.value, 3);
+      card.durability = Math.min(card.durability!, 2);
+      card.maxDurability = card.durability;
       card.critChance = 50;
       card.description = '攻击时 50% 概率造成双倍伤害。';
     }
     if (weaponType.name === 'Sword') {
+      card.value = Math.min(card.value, 3);
       card.waterfallAttackBoost = 1;
       card.description = '每次瀑流触发时，攻击力 +1。';
     }

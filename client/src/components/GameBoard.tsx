@@ -627,19 +627,25 @@ function createDeck(): GameCardData[] {
       maxDurability: durability,
     };
     if (weaponType.name === 'Holy Blade') {
-      card.healOnAttack = 2;
-      card.description = '每次攻击时恢复 2 点生命。';
+      card.healOnKill = 2;
+      card.description = '击杀怪物时回复 2 点生命。';
     }
     if (weaponType.name === 'Mace') {
       card.value = Math.min(card.value, 3);
+      card.durability = Math.min(card.durability!, 2);
+      card.maxDurability = card.durability;
       card.description = '攻击后掷骰：50% 概率不消耗耐久。';
       card.weaponDurabilitySaveChance = 50;
     }
     if (weaponType.name === 'Dagger') {
+      card.value = Math.min(card.value, 3);
+      card.durability = Math.min(card.durability!, 2);
+      card.maxDurability = card.durability;
       card.critChance = 50;
       card.description = '攻击时 50% 概率造成双倍伤害。';
     }
     if (weaponType.name === 'Sword') {
+      card.value = Math.min(card.value, 3);
       card.waterfallAttackBoost = 1;
       card.description = '每次瀑流触发时，攻击力 +1。';
     }
@@ -5536,18 +5542,29 @@ export default function GameBoard() {
     const knightEvents = createKnightDiscoveryEvents();
     const deckWithClassEvents = [...newDeck, ...knightEvents].sort(() => Math.random() - 0.5);
 
-    // Ensure elite monsters only appear in the second half of the deck
-    const halfIdx = Math.floor(deckWithClassEvents.length / 2);
-    for (let i = 0; i < halfIdx; i++) {
-      if (deckWithClassEvents[i]?.monsterSpecial) {
-        // Find a non-elite card in the second half to swap with
-        for (let j = halfIdx; j < deckWithClassEvents.length; j++) {
-          if (!deckWithClassEvents[j]?.monsterSpecial) {
-            [deckWithClassEvents[i], deckWithClassEvents[j]] = [deckWithClassEvents[j], deckWithClassEvents[i]];
-            break;
-          }
-        }
-      }
+    // Balance monster distribution: roughly equal monsters per half, elites only in second half
+    {
+      const halfSize = Math.floor(deckWithClassEvents.length / 2);
+      const eliteMonsters = deckWithClassEvents.filter(c => c.monsterSpecial);
+      const nonEliteMonsters = deckWithClassEvents.filter(c => c.type === 'monster' && !c.monsterSpecial);
+      const nonMonsters = deckWithClassEvents.filter(c => c.type !== 'monster');
+
+      const totalMonsters = eliteMonsters.length + nonEliteMonsters.length;
+      const firstHalfMonsterCount = Math.min(Math.floor(totalMonsters / 2), nonEliteMonsters.length);
+
+      const firstHalf = [
+        ...nonEliteMonsters.slice(0, firstHalfMonsterCount),
+        ...nonMonsters.slice(0, halfSize - firstHalfMonsterCount),
+      ];
+      const secondHalf = [
+        ...nonEliteMonsters.slice(firstHalfMonsterCount),
+        ...eliteMonsters,
+        ...nonMonsters.slice(halfSize - firstHalfMonsterCount),
+      ];
+
+      firstHalf.sort(() => Math.random() - 0.5);
+      secondHalf.sort(() => Math.random() - 0.5);
+      deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
     }
     
     // Initialize with 10 cards total: 5 for preview, 5 for active

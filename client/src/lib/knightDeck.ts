@@ -42,8 +42,8 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 6,
     image: holyBladeImage,
     classCard: true,
-    description: '击杀怪物时回复 2 点生命。',
-    healOnKill: 2,
+    description: '每次攻击时恢复 2 点生命。',
+    healOnAttack: 2,
     durability: 2,
     maxDurability: 2,
   });
