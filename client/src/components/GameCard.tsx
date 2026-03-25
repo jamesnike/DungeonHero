@@ -36,6 +36,7 @@ export type CardType =
 export type EquipmentCardStatModifier = {
   appliesTo: 'weapon' | 'shield' | 'monster';
   modifier: number;
+  shieldModifier?: number;
 };
 
 export type PotionEffectId =
@@ -48,7 +49,10 @@ export type PotionEffectId =
   | 'draw-backpack-4'
   | 'discover-class-2'
   | 'perm-spell-damage'
-  | 'perm-backpack-size';
+  | 'perm-backpack-size'
+  | 'left-slot-durability-max+1'
+  | 'dice-backpack-expand'
+  | 'dice-arcane-infusion';
 
 export type AmuletEffectId =
   | 'heal'
@@ -75,7 +79,8 @@ export type EventRequirement =
   | { type: 'hand'; min: number; message?: string }
   | { type: 'cardPool'; pools: Array<'hand' | 'backpack'>; min: number; message?: string }
   | { type: 'graveyard'; min: number; message?: string }
-  | { type: 'gold'; min: number; message?: string };
+  | { type: 'gold'; min: number; message?: string }
+  | { type: 'leftMonsterEnrage'; min: number; message?: string };
 
 export type EventEffectExpression = string | string[];
 
@@ -162,8 +167,11 @@ export interface GameCardData {
   flipTarget?: CardFlipTarget;
   _flipBackCard?: GameCardData;
   scalingDamage?: number; // Self-scaling damage for permanent magic cards
+  recycleDelay?: number; // Waterfalls to wait in recycle bag before restoring (default 1)
+  _recycleWaits?: number; // Internal: remaining waterfalls before this card leaves the recycle bag
   onDestroyHeal?: number; // Heal this amount when equipment is destroyed
   onDestroyGold?: number; // Gain this much gold when equipment is destroyed
+  onDiscardDamage?: number; // Base spell damage dealt to random monster when discarded
   critChance?: number; // % chance to deal double damage on attack
   restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
   healOnAttack?: number; // Heal this amount each time this weapon attacks
@@ -501,6 +509,15 @@ const amuletEffectText =
           equipmentStatModifier.modifier,
         )}`
       : null;
+  const equipmentShieldModifierText =
+    equipmentStatModifier &&
+    card.type === 'monster' &&
+    equipmentStatModifier.appliesTo === 'monster' &&
+    (equipmentStatModifier.shieldModifier ?? 0) !== 0
+      ? `${(equipmentStatModifier.shieldModifier ?? 0) > 0 ? '+' : '-'} ${Math.abs(
+          equipmentStatModifier.shieldModifier ?? 0,
+        )}`
+      : null;
   const equipmentStatModifierColor = 'text-emerald-600';
 
   const monsterAttackModifier = (() => {
@@ -514,12 +531,13 @@ const amuletEffectText =
   })();
   const monsterAttackBase = (card.attack ?? card.value) - monsterAttackModifier;
 
-  const monsterMaxHpModifier = (() => {
+  const monsterHpModifier = (() => {
     if (card.type !== 'monster') return 0;
     const currentMax = card.maxHp ?? card.hp ?? 0;
     if (card.lowGoldBuffActive) return Math.floor(currentMax / 2);
     return 0;
   })();
+  const monsterHpBase = Math.max(0, (card.hp ?? card.value) - monsterHpModifier);
 
   return (
     <div
@@ -759,16 +777,23 @@ const amuletEffectText =
                       <div className="relative group flex items-center">
                         <div className="flex items-baseline gap-0.5 mr-1">
                           <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
-                            {card.hp ?? card.value}
+                            {monsterHpBase}
                           </span>
-                          {monsterMaxHpModifier > 0 && (
+                          {monsterHpModifier > 0 && (
                             <span className="dh-card__stat font-black text-emerald-600 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]">
-                              +{monsterMaxHpModifier}
+                              +{monsterHpModifier}
+                            </span>
+                          )}
+                          {equipmentShieldModifierText && (
+                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]`}>
+                              {equipmentShieldModifierText}
                             </span>
                           )}
                         </div>
                         <div>
-                          <Heart className="dh-card__icon text-red-500 fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
+                          <Heart className={`dh-card__icon fill-red-500 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${
+                            monsterHpModifier > 0 || equipmentShieldModifierText ? 'text-emerald-500' : 'text-red-500'
+                          }`} />
                         </div>
                       </div>
                       {card.hpLayers && card.hpLayers > 1 && (

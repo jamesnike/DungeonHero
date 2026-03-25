@@ -137,23 +137,18 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: potionArcaneInfusionImage,
     classCard: true,
-    description: '永久让法术伤害 +1。',
-    potionEffect: 'perm-spell-damage',
+    description: '掷骰：选中的永久加成翻倍（左伤害/左护甲/右伤害/右护甲/法术伤害）。',
+    potionEffect: 'dice-arcane-infusion',
   });
 
   pushCard({
-    type: 'event',
+    type: 'potion',
     name: '无尽背袋灵药',
     value: 0,
     image: potionBackpackExpandImage,
     classCard: true,
-    description: '四选一：护符上限+1、左装备栏容量+1、右装备栏容量+1、背包容量+3。',
-    eventChoices: [
-      { text: '护符上限 +1', hint: '护符栏可叠加更多护符', effect: 'amuletCapacity+1' },
-      { text: '左装备栏容量 +1', hint: '左装备栏可装备多件，点击切换', effect: 'equipSlot1Capacity+1' },
-      { text: '右装备栏容量 +1', hint: '右装备栏可装备多件，点击切换', effect: 'equipSlot2Capacity+1' },
-      { text: '背包容量 +3', hint: '永久增加背包空间', effect: 'backpackSize+3' },
-    ],
+    description: '掷骰决定效果：25% 护符上限+1 / 25% 左装备栏+1 / 25% 右装备栏+1 / 25% 背包+3。',
+    potionEffect: 'dice-backpack-expand',
   });
 
   // === HERO MAGIC (2 cards) ===

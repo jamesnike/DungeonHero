@@ -328,7 +328,7 @@ export function createDeck(): GameCardData[] {
     const fury = Math.floor(Math.random() * (monsterType.maxFury - monsterType.minFury + 1)) + monsterType.minFury;
     const isEliteMonster = ELITE_MONSTER_NAME_SET.has(monsterType.name);
 
-    deck.push({
+    const monsterCard: GameCardData = {
       id: `monster-${id++}`,
       type: 'monster',
       name: monsterType.name,
@@ -341,7 +341,11 @@ export function createDeck(): GameCardData[] {
       currentLayer: fury,
       image: monsterType.image,
       description: isEliteMonster ? ELITE_MONSTER_DISCARD_WARNING : undefined,
-    });
+    };
+    if (monsterType.name === 'Goblin' || monsterType.name === 'Goblin Warlock') {
+      monsterCard.onAttackEffect = 'steal-gold-2';
+    }
+    deck.push(monsterCard);
   }
 
   const weaponTypes = [
@@ -641,7 +645,7 @@ export function createDeck(): GameCardData[] {
           { text: '翻阅卷轴（抽 2 张牌）', effect: 'drawHeroCards:2' },
           { text: '联络商贩（商店等级 +1）', effect: 'shopLevel+1' },
           { text: '召唤商队（打开商店）', effect: 'openShop' },
-          { text: '深入探索（受 3 伤害，触发瀑流，翻转回去）', effect: 'vault-flipback', hint: '受到 3 点伤害并触发一次瀑流，宝库翻转回未开启状态' },
+          { text: '深入探索（受 3 伤害，瀑流+1，翻转回去）', effect: 'vault-flipback', hint: '受到 3 点伤害，瀑流计数 +1，宝库翻转回未开启状态' },
         ],
       },
       destination: 'stay',

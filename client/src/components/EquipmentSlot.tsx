@@ -279,12 +279,19 @@ export default function EquipmentSlot({
       
       {gameCardData ? (
         reserveItems.length > 0 ? (
-          <div className="relative w-full h-full z-20 overflow-visible">
+          <div
+            className="relative w-full h-full z-20 overflow-visible transition-transform duration-300 ease-out"
+            style={{
+              transform: type === 'equipment' && currentDurability
+                ? `translateX(-${Math.min(DURABILITY_SEGMENTS, currentDurability) * colWidth}px)`
+                : 'none',
+            }}
+          >
             {reserveItems.map((reserveCard, rIdx) => (
               <div
                 key={reserveCard.id}
                 className="absolute inset-0 cursor-pointer"
-                style={{ zIndex: 20 + rIdx, transform: 'translateY(-8%)' }}
+                style={{ zIndex: 20 + rIdx, transform: 'translateY(-6%)' }}
                 onClick={(e) => { e.stopPropagation(); onSwapToTop?.(rIdx); }}
               >
                 <GameCard
@@ -296,14 +303,12 @@ export default function EquipmentSlot({
               </div>
             ))}
             <div
-              className={`absolute inset-0 transition-transform duration-300 ease-out ${
+              className={`absolute inset-0 ${
                 heroSkillHighlight ? 'cursor-pointer' : ''
               }`}
               style={{
                 zIndex: 30 + reserveItems.length,
-                transform: type === 'equipment' && currentDurability
-                  ? `translateY(24%) translateX(-${Math.min(DURABILITY_SEGMENTS, currentDurability) * colWidth}px)`
-                  : 'translateY(24%)',
+                transform: 'translateY(28%)',
               }}
             >
               <GameCard

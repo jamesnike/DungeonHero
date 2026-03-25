@@ -308,7 +308,7 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
                     {card.enterEffect === 'auto-engage'
-                      ? '进入战斗行时自动处于激怒状态。'
+                      ? '进入战斗行时，整行怪物自动进入激怒状态。'
                       : '进入战斗行时触发特殊效果。'}
                   </p>
                 </div>
