@@ -13275,7 +13275,7 @@ export default function GameBoard() {
           onClick={(e) => { e.stopPropagation(); handleUndo(); }}
           onPointerDown={(e) => e.stopPropagation()}
           disabled={undoCount === 0}
-          style={{ pointerEvents: 'auto' }}
+          style={{ pointerEvents: 'auto', transform: `scale(${stageScale})`, transformOrigin: 'bottom right' }}
           className={`fixed bottom-4 right-4 z-[9999] flex items-center gap-1.5 rounded-full px-4 py-2.5 shadow-lg transition-all select-none ${
             undoCount > 0
               ? 'bg-slate-700/90 text-white hover:bg-slate-600 active:scale-95'
