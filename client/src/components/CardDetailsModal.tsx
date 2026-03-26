@@ -389,6 +389,87 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
               </div>
             )}
 
+            {/* Boss Phase Banner */}
+            {card.type === 'monster' && card.bossPhase && (
+              <div className="bg-red-600/20 p-3 rounded-md border-2 border-red-500/50 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-orange-500/10 pointer-events-none" />
+                <div className="relative flex items-center gap-2">
+                  <Skull className="w-5 h-5 shrink-0 text-red-500" />
+                  <span className="font-black text-sm text-red-600 dark:text-red-300 tracking-widest uppercase">
+                    BOSS 形态
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Boss: Retaliation */}
+            {card.type === 'monster' && card.bossRetaliationDamage && card.bossRetaliationDamage > 0 && (
+              <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 shrink-0 text-red-500" />
+                    <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
+                      反噬
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
+                    每次受到伤害时，对英雄造成 {card.bossRetaliationDamage} 点直接伤害（无视护盾）。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Boss: Last Stand Aura */}
+            {card.type === 'monster' && card.bossLastStandAura && (
+              <div className="bg-orange-500/15 p-3 rounded-md border border-orange-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-orange-500" />
+                    <span className="font-extrabold text-sm text-orange-700 dark:text-orange-300 tracking-wide">
+                      暴走光环 {(card.currentLayer ?? 1) === 1 ? '（已激活）' : ''}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">
+                    血层为 1 时，每个怪物回合结束 +5 攻击，恢复 8 HP（满血则恢复血层）。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Boss: Layer Cap */}
+            {card.type === 'monster' && card.bossLayerCap && (
+              <div className="bg-amber-500/15 p-3 rounded-md border border-amber-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                      坚韧
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
+                    每个玩家回合最多掉 1 血层，之后免疫所有伤害。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Boss: Final Monster (pre-transform) */}
+            {card.type === 'monster' && card.isFinalMonster && !card.bossPhase && (
+              <div className="bg-red-500/10 p-3 rounded-md border border-red-500/20 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skull className="w-4 h-4 shrink-0 text-red-400" />
+                    <span className="font-extrabold text-sm text-red-600 dark:text-red-400 tracking-wide">
+                      最终之敌
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-300 pl-6">
+                    击败后将变身为 Boss。
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Weapon/Shield Details */}
             {(card.type === 'weapon' || card.type === 'shield') && (
               <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">

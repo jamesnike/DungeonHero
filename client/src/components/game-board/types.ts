@@ -239,6 +239,7 @@ export type PendingMagicAction =
       card: GameCardData;
       effect: 'chaos-strike';
       step: 'monster-select';
+      prompt: string;
       data: Record<string, unknown>;
       echoRemaining?: number;
     };

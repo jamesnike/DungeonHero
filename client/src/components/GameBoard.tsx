@@ -2165,9 +2165,9 @@ export default function GameBoard() {
   );
   const [eventDiceModal, setEventDiceModal] = useState<EventDiceModalState | null>(null);
   const [eventDiceRollKey, setEventDiceRollKey] = useState(0);
-  const eventDiceResolverRef = useRef<(entry: EventDiceRange | null) => void>(null);
+  const eventDiceResolverRef = useRef<((entry: EventDiceRange | null) => void) | null>(null);
   const [equipmentPrompt, setEquipmentPrompt] = useState<EquipmentPromptState | null>(null);
-  const equipmentPromptResolverRef = useRef<(slot: EquipmentSlotId | null) => void>(null);
+  const equipmentPromptResolverRef = useRef<((slot: EquipmentSlotId | null) => void) | null>(null);
   const [eventTransformState, setEventTransformState] = useState<EventTransformState | null>(null);
   const [graveyardDiscoverState, setGraveyardDiscoverState] = useState<GameCardData[] | null>(null);
   const graveyardDiscoverResolverRef = useRef<((card: GameCardData | null) => void) | null>(null);
@@ -2773,7 +2773,7 @@ export default function GameBoard() {
   const combatPanelStyle = useMemo<CSSProperties>(() => {
     const scaledMin = Math.round(135 * stageScale);
     const scaledMax = Math.round(170 * stageScale);
-    const style: CSSProperties = {
+    const style: CSSProperties & Record<`--${string}`, string> = {
         '--combat-panel-width': `clamp(${scaledMin}px, ${11 * stageScale}vw, ${scaledMax}px)`,
         width: 'min(var(--combat-panel-width), calc(100% - 1.5rem))',
     };
@@ -3021,7 +3021,7 @@ export default function GameBoard() {
       selected.push(createGoldOption());
     }
     return selected;
-  });
+  }, []);
 
   const getMonsterRewardsPreview = useCallback(
     (monster: GameCardData): MonsterRewardOption[] => {
@@ -4654,7 +4654,7 @@ export default function GameBoard() {
   }, [backpackItems.length, handCards.length, processPendingAutoDraws]);
 
   const enqueueAutoDraw = useCallback(
-    (source: 'remove-card' | 'slot-cleared', cardId: string) => {
+    (source: 'remove-card' | 'slot-cleared' | 'backpack-store', cardId: string) => {
       const flightsCount = backpackHandFlightsRef.current.length;
       const availableSlots = Math.max(0, effectiveHandLimit - (handCards.length + flightsCount));
       if (availableSlots <= 0) {
@@ -4680,7 +4680,7 @@ export default function GameBoard() {
   );
 
   const registerDungeonCardProcessed = useCallback(
-    (cardId: string | null | undefined, source: 'remove-card' | 'slot-cleared') => {
+    (cardId: string | null | undefined, source: 'remove-card' | 'slot-cleared' | 'backpack-store') => {
       if (!cardId || gameOver || victory) {
         return;
       }
@@ -7266,9 +7266,31 @@ export default function GameBoard() {
     const resolvedDropCards = dropAssignments.map(pair => applyMonsterRage(pair.card, spawnTurn));
 
     const remainingPreviewOrdered = Array.from(unusedPreview).sort((a, b) => b - a);
-    const discardPreviewIndex = remainingPreviewOrdered[0] ?? null;
+    // Never discard the final monster (future boss) — pick a different card
+    const discardPreviewIndex =
+      remainingPreviewOrdered.find(idx => !previewCards[idx]?.isFinalMonster) ?? null;
     const discardCard =
       discardPreviewIndex !== null ? previewCards[discardPreviewIndex] : null;
+
+    // If the final monster is blocked but protected from discard, force-drop it
+    if (discardPreviewIndex !== null) {
+      unusedPreview.delete(discardPreviewIndex);
+    }
+    for (const blockedIdx of Array.from(unusedPreview)) {
+      const card = previewCards[blockedIdx];
+      if (!card?.isFinalMonster) continue;
+      const usedSlots = new Set([
+        ...dropAssignments.map(a => a.slotIndex),
+        ...activeCards.map((c, i) => (c ? i : -1)).filter(i => i >= 0),
+      ]);
+      for (let slot = 0; slot < DUNGEON_COLUMN_COUNT; slot++) {
+        if (!usedSlots.has(slot)) {
+          dropAssignments.push({ previewIndex: blockedIdx, card, slotIndex: slot });
+          unusedPreview.delete(blockedIdx);
+          break;
+        }
+      }
+    }
 
     const nextPreviewCards = remainingDeck.slice(0, 5);
     const nextRemainingDeck = remainingDeck.slice(5);
@@ -8068,32 +8090,33 @@ export default function GameBoard() {
 
   const applyMonsterReward = useCallback(
     async (option: MonsterRewardOption): Promise<boolean> => {
-      switch (option.effect.type) {
+      const eff = option.effect;
+      switch (eff.type) {
         case 'slotBonus': {
-          const { slotId, bonusType, amount } = option.effect;
+          const { slotId, bonusType, amount } = eff;
           setEquipmentSlotBonus(slotId, bonusType, value => value + amount);
           addGameLog('combat', `战利品：${describeSlotLabel(slotId)}永久 ${describeBonusLabel(bonusType)} +${amount}`);
           setHeroSkillBanner(`${describeSlotLabel(slotId)}永久 ${describeBonusLabel(bonusType)} +${amount}`);
           return true;
         }
         case 'gold': {
-          setGold(prev => prev + option.effect.amount);
-          addGameLog('combat', `战利品：获得 ${option.effect.amount} 金币`);
-          setHeroSkillBanner(`获得 ${option.effect.amount} 金币。`);
+          setGold(prev => prev + eff.amount);
+          addGameLog('combat', `战利品：获得 ${eff.amount} 金币`);
+          setHeroSkillBanner(`获得 ${eff.amount} 金币。`);
           return true;
         }
         case 'heal': {
-          const healed = healHero(option.effect.amount);
+          const healed = healHero(eff.amount);
           addGameLog('combat', `战利品：回复 ${healed} 点生命`);
           setHeroSkillBanner(healed > 0 ? `回复 ${healed} 点生命。` : '生命已满，治疗溢出。');
           return true;
         }
         case 'repair': {
-          addGameLog('combat', `战利品：修复装备耐久 +${option.effect.amount}`);
-          return repairEquipmentDurability(option.effect.amount, option.effect.targets);
+          addGameLog('combat', `战利品：修复装备耐久 +${eff.amount}`);
+          return repairEquipmentDurability(eff.amount, eff.targets);
         }
         case 'drawBackpack': {
-          const drawn = drawCardsFromBackpack(option.effect.amount);
+          const drawn = drawCardsFromBackpack(eff.amount);
           if (drawn > 0) {
             addGameLog('combat', `战利品：从背包抽出 ${drawn} 张牌`);
             setHeroSkillBanner(`从背包抽出了 ${drawn} 张牌。`);
@@ -8137,7 +8160,7 @@ export default function GameBoard() {
           return true;
         }
         case 'maxHp': {
-          const amount = option.effect.amount;
+          const amount = eff.amount;
           const updatedMaxHp = maxHp + amount;
           setPermanentMaxHpBonus(prev => prev + amount);
           setHp(prev => Math.min(updatedMaxHp, prev + amount));
@@ -8146,7 +8169,7 @@ export default function GameBoard() {
           return true;
         }
         case 'spellDamage': {
-          const amount = option.effect.amount;
+          const amount = eff.amount;
           setPermanentSpellDamageBonus(prev => prev + amount);
           addGameLog('combat', `战利品：法术伤害永久 +${amount}`);
           setHeroSkillBanner(`法术伤害永久 +${amount}`);
@@ -9021,6 +9044,7 @@ export default function GameBoard() {
               card,
               effect: 'chaos-strike',
               step: 'monster-select',
+              prompt: `选择一个怪物，对其造成 3 点伤害。${chaosEchoLabel}`,
               data: {},
               echoRemaining: echoMultiplier,
             });
@@ -10172,6 +10196,7 @@ export default function GameBoard() {
               card: pendingMagicAction.card,
               effect: 'chaos-strike',
               step: 'monster-select',
+              prompt: `${chaosBanner} 继续选择目标。${echoLabel}`,
               data: {},
               echoRemaining,
             });
@@ -10662,9 +10687,10 @@ export default function GameBoard() {
       });
 
       addGameLog('amulet', `装备护符：${card.name}`);
-      if (displacedAmulet) {
-        addGameLog('amulet', `卸下护符：${displacedAmulet.name}`);
-        addToGraveyard(displacedAmulet);
+      if (displacedAmulet !== null) {
+        const displaced = displacedAmulet as AmuletItem;
+        addGameLog('amulet', `卸下护符：${displaced.name}`);
+        addToGraveyard(displaced);
       }
 
       if (isCardFromHand(card)) {
@@ -12441,7 +12467,7 @@ export default function GameBoard() {
               ? 'block-button--disabled'
               : 'block-button--active'
           }`}
-          style={{ '--dh-overlay-scale': (overlayScale * stageScale).toString() }}
+          style={{ '--dh-overlay-scale': (overlayScale * stageScale).toString() } as CSSProperties}
         >
           <span className="block-button__label">{label}</span>
           <span className="block-button__meta">Damage: {pendingBlock.attackValue}</span>
@@ -12808,7 +12834,7 @@ export default function GameBoard() {
             const isDiscardingPreview = waterfallAnimation.discardSlot === index;
             const isDealingPreview = waterfallAnimation.dealingSlots.includes(index);
             const discardVector = previewGraveyardVectors[index] ?? GRAVEYARD_VECTOR_DEFAULT;
-            const previewAnimationStyle: PreviewAnimationStyle = {
+            const previewAnimationStyle: CSSProperties & Record<`--${string}`, string> = {
               '--graveyard-offset-x': `${discardVector.offsetX}px`,
               '--graveyard-offset-y': `${discardVector.offsetY}px`,
             };

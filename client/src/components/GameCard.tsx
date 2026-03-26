@@ -54,7 +54,8 @@ export type PotionEffectId =
   | 'perm-backpack-size'
   | 'left-slot-durability-max+1'
   | 'dice-backpack-expand'
-  | 'dice-arcane-infusion';
+  | 'dice-arcane-infusion'
+  | 'heal-14';
 
 export type AmuletEffectId =
   | 'heal'
@@ -64,7 +65,8 @@ export type AmuletEffectId =
   | 'flash'
   | 'strength'
   | 'dual-guard'
-  | 'discard-zap';
+  | 'discard-zap'
+  | 'flip-gold';
 
 export type AmuletAuraBonus = {
   attack?: number;
@@ -987,7 +989,6 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.name !== b.name ||
       a.attack !== b.attack ||
       a.hp !== b.hp ||
-      a.defense !== b.defense ||
       a.value !== b.value ||
       a.durability !== b.durability ||
       a.maxDurability !== b.maxDurability ||
