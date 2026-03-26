@@ -84,7 +84,7 @@ export type EventRequirement =
   | { type: 'cardPool'; pools: Array<'hand' | 'backpack'>; min: number; message?: string }
   | { type: 'graveyard'; min: number; message?: string }
   | { type: 'gold'; min: number; message?: string }
-  | { type: 'leftMonsterEnrage'; min: number; message?: string };
+  | { type: 'leftmostIsEnraged'; message?: string };
 
 export type EventEffectExpression = string | string[];
 

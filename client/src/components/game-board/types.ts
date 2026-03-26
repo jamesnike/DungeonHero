@@ -242,6 +242,12 @@ export type PendingMagicAction =
       prompt: string;
       data: Record<string, unknown>;
       echoRemaining?: number;
+    }
+  | {
+      card: GameCardData;
+      effect: 'fate-blade-target';
+      step: 'monster-select';
+      prompt: string;
     };
 
 export type PendingPotionAction =

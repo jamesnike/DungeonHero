@@ -910,7 +910,7 @@ function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '选择一个装备，在下个瀑流之前使用不消耗耐久。'
+    magicEffect: '选择一把武器，在下个瀑流之前使用不消耗耐久。'
   });
 
   // Event cards rewritten (first six)
@@ -1085,7 +1085,7 @@ function createDeck(): GameCardData[] {
     name: '荣誉回响',
     value: 0,
     image: eventScrollImage,
-    description: '选择一项奖励。此外，左侧所有怪物将被激怒。',
+    description: '选择一项奖励。',
     eventChoices: [
       { text: '整理呼吸（回复 5 HP）', effect: 'heal+5' },
       { text: '回收战利品（金币 +20）', effect: 'gold+20' },
@@ -1094,7 +1094,7 @@ function createDeck(): GameCardData[] {
         text: '战血铭刻（翻转为永久法术）',
         effect: 'flipToHonorBloodMagic',
         hint: '翻转为「战血之印」：使用时 -3 HP，被弃时对随机怪物造成法术伤害',
-        requires: [{ type: 'leftMonsterEnrage', min: 1, message: '需要左侧至少 1 个激怒的怪物' }],
+        requires: [{ type: 'leftmostIsEnraged', message: '需要最左边的卡牌是一个激怒的怪物' }],
       },
     ],
   });
@@ -1267,9 +1267,10 @@ function createDeck(): GameCardData[] {
         name: '命运之刃',
         value: 0,
         image: eventScrollImage,
-        description: '破坏右边相邻的卡牌。',
+        description: '释放：右侧为药水/武器/护盾则摧毁；右侧为怪物则激怒并打掉 2 层血；右侧无牌则随机弃一张手牌。收入手牌：从手牌发动时选择一个怪物，打掉 1 个血层。',
         eventChoices: [
           { text: '释放命运之刃', hint: '对右侧相邻卡牌造成效果', effect: 'fate-dice-strike' },
+          { text: '收入手牌', hint: '从手牌中发动时，可选择任意怪物造成 1 层伤害', effect: 'fate-blade-to-hand' },
         ],
       },
       destination: 'stay',
@@ -4825,6 +4826,7 @@ export default function GameBoard() {
           pending: pendingAutoDrawsRef.current,
           backpackCount: backpackItemsRef.current.length,
         });
+        pendingAutoDrawsRef.current = 0;
         break;
       }
 
@@ -4834,6 +4836,7 @@ export default function GameBoard() {
           pending: pendingAutoDrawsRef.current,
           backpackCount: backpackItemsRef.current.length,
         });
+        pendingAutoDrawsRef.current = 0;
         break;
       }
 
@@ -4861,6 +4864,15 @@ export default function GameBoard() {
           pending: pendingAutoDrawsRef.current,
           handSize: handCards.length,
           flights: flightsCount,
+        });
+        return;
+      }
+
+      if (backpackItemsRef.current.length === 0) {
+        logBackpackDraw('auto-draw-skipped-backpack-empty', {
+          source,
+          cardId,
+          pending: pendingAutoDrawsRef.current,
         });
         return;
       }
@@ -6779,20 +6791,13 @@ export default function GameBoard() {
               reason: requirement.message ?? `需要至少 ${requirement.min} 金币`,
             };
           }
-        } else if (requirement.type === 'leftMonsterEnrage') {
-          const cellIdx = activeCards.findIndex(c => c?.id === resolvingDungeonCardId);
-          if (cellIdx <= 0) {
-            return { disabled: true, reason: requirement.message ?? '左侧没有足够的怪物' };
-          }
-          let leftMonsterCount = 0;
-          for (let i = 0; i < cellIdx; i++) {
-            const card = activeCards[i];
-            if (card && card.type === 'monster' && isMonsterEngaged(card.id)) {
-              leftMonsterCount++;
-            }
-          }
-          if (leftMonsterCount < requirement.min) {
-            return { disabled: true, reason: requirement.message ?? `需要左侧至少 ${requirement.min} 个激怒的怪物` };
+        } else if (requirement.type === 'leftmostIsEnraged') {
+          const leftmostCard = activeCards.find(c => c != null);
+          const isEnragedMonster = leftmostCard &&
+            leftmostCard.type === 'monster' &&
+            isMonsterEngaged(leftmostCard.id);
+          if (!isEnragedMonster) {
+            return { disabled: true, reason: requirement.message ?? '需要最左边的卡牌是一个激怒的怪物' };
           }
         }
       }
@@ -10490,6 +10495,19 @@ export default function GameBoard() {
         finalizeMagicCard(pendingMagicAction.card, { banner: chaosBanner });
         return;
       }
+
+      if (pendingMagicAction.effect === 'fate-blade-target') {
+        if (!isMonsterEngaged(monster.id)) {
+          beginCombat(monster, 'hero');
+        }
+        const layerDamage = monster.hp ?? monster.value;
+        dealDamageToMonster(monster, layerDamage);
+        triggerMonsterBleedAnimation(monster.id);
+        addGameLog('event', `命运之刃对 ${monster.name} 造成 1 层伤害！`);
+        setHeroSkillBanner(`命运之刃对 ${monster.name} 造成了 1 层伤害！`);
+        setPendingMagicAction(null);
+        return;
+      }
     },
     [
       beginCombat,
@@ -10761,6 +10779,17 @@ export default function GameBoard() {
       } else if (card.type === 'magic' || card.type === 'hero-magic') {
         handleSkillCard(card);
       } else if (card.type === 'event') {
+        if (card.name === '命运之刃') {
+          setPendingMagicAction({
+            card,
+            effect: 'fate-blade-target',
+            step: 'monster-select',
+            prompt: '选择一个怪物，打掉 1 个血层。',
+          });
+          setHeroSkillBanner('命运之刃就绪，请选择目标怪物。');
+          resetDragState();
+          return;
+        }
         startEventResolution(null, 'hand');
         setCurrentEventCard(card);
         setEventModalOpen(true);
@@ -10775,6 +10804,17 @@ export default function GameBoard() {
         } else if (card.type === 'magic' || card.type === 'hero-magic') {
           handleSkillCard(card);
         } else if (card.type === 'event') {
+          if (card.name === '命运之刃') {
+            setPendingMagicAction({
+              card,
+              effect: 'fate-blade-target',
+              step: 'monster-select',
+              prompt: '选择一个怪物，打掉 1 个血层。',
+            });
+            setHeroSkillBanner('命运之刃就绪，请选择目标怪物。');
+            resetDragState();
+            return;
+          }
           startEventResolution(null, 'hand');
           setCurrentEventCard(card);
           setEventModalOpen(true);
@@ -11815,13 +11855,38 @@ export default function GameBoard() {
             removeCard(eventCardSnapshot.id, true);
           }
         } else if (rightCard && rightCard.type === 'monster') {
-          addGameLog('event', `命运之刃对 ${rightCard.name} 造成 1 层伤害并激怒`);
+          addGameLog('event', `命运之刃对 ${rightCard.name} 造成 2 层伤害并激怒`);
           if (!isMonsterEngaged(rightCard.id)) {
             beginCombat(rightCard, 'hero');
           }
-          const layerDamage = rightCard.hp ?? rightCard.value;
-          dealDamageToMonster(rightCard, layerDamage);
-          setHeroSkillBanner(`命运之刃对 ${rightCard.name} 造成了 1 层伤害！`);
+          let defeatedByBlade = false;
+          updateMonsterCard(rightCard.id, (card) => {
+            const curLayer = card.currentLayer ?? card.hpLayers ?? card.fury ?? 1;
+            const newLayer = Math.max(0, curLayer - 2);
+            const layersLost = curLayer - newLayer;
+            const newHp = newLayer > 0 ? (card.maxHp ?? card.hp ?? card.value) : 0;
+            let attackBoost = 0;
+            if (card.bleedEffect?.startsWith('attack+') && layersLost > 0 && newLayer > 0) {
+              const perLayer = parseInt(card.bleedEffect.replace('attack+', ''), 10) || 0;
+              attackBoost = perLayer * layersLost;
+            }
+            if (newLayer <= 0) {
+              defeatedByBlade = true;
+            }
+            return {
+              ...card,
+              currentLayer: newLayer,
+              hp: newHp,
+              attack: (card.attack ?? card.value) + attackBoost,
+              value: card.value + attackBoost,
+              specialAttackBoost: (card.specialAttackBoost ?? 0) + attackBoost,
+            };
+          });
+          triggerMonsterBleedAnimation(rightCard.id);
+          if (defeatedByBlade) {
+            handleMonsterDefeated(rightCard);
+          }
+          setHeroSkillBanner(`命运之刃对 ${rightCard.name} 造成了 2 层伤害！`);
           if (cellIdx !== -1) {
             removeCard(eventCardSnapshot.id, true);
           }
@@ -11840,6 +11905,18 @@ export default function GameBoard() {
           if (cellIdx !== -1) {
             removeCard(eventCardSnapshot.id, true);
           }
+        }
+        eventResolutionDeferred = true;
+      } else if (effect === 'fate-blade-to-hand') {
+        if (currentEventCard) {
+          const bladeCard = { ...currentEventCard };
+          setEventModalOpen(false);
+          setEventModalMinimized(false);
+          setCurrentEventCard(null);
+          finalizeEventResolution();
+          setHandCards(prev => [...prev, bladeCard]);
+          addGameLog('event', '命运之刃收入手牌。');
+          setHeroSkillBanner('命运之刃已收入手牌！');
         }
         eventResolutionDeferred = true;
       }
