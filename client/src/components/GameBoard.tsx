@@ -2866,7 +2866,7 @@ export default function GameBoard() {
 
   const createMonsterRewardOptionId = () => `monster-reward-${Math.random().toString(36).slice(2)}`;
 
-  const generateMonsterRewardOptions = useCallback((monster: GameCardData): MonsterRewardOption[] => {
+  const generateMonsterRewardOptions = (monster: GameCardData): MonsterRewardOption[] => {
     const isElite = Boolean(monster.monsterSpecial);
     const options: MonsterRewardOption[] = [];
     const usedKeys = new Set<string>();
@@ -3021,7 +3021,7 @@ export default function GameBoard() {
       selected.push(createGoldOption());
     }
     return selected;
-  }, []);
+  };
 
   const getMonsterRewardsPreview = useCallback(
     (monster: GameCardData): MonsterRewardOption[] => {
@@ -3178,8 +3178,12 @@ export default function GameBoard() {
       return;
     }
 
-    // Boss layer cap: immune to all damage after losing 1 layer this hero turn
-    if (monster.bossLayerCap && heroTurnLayerLossIdsRef.current.has(monster.id)) {
+    // Boss layer cap: immune to all damage after losing 1 layer this hero turn (only during hero turn)
+    if (
+      monster.bossLayerCap &&
+      combatState.currentTurn === 'hero' &&
+      heroTurnLayerLossIdsRef.current.has(monster.id)
+    ) {
       addGameLog('combat', `${monster.name} 处于免疫状态，伤害无效！`);
       setHeroSkillBanner(`${monster.name} 免疫！`);
       return;
@@ -3196,7 +3200,15 @@ export default function GameBoard() {
     // Boss retaliation: direct damage to hero per hit (ignores shields)
     if (monster.bossRetaliationDamage && monster.bossRetaliationDamage > 0) {
       const retDmg = monster.bossRetaliationDamage;
-      setHp(prev => Math.max(0, prev - retDmg));
+      setHp(prev => {
+        const newHp = Math.max(0, prev - retDmg);
+        if (newHp === 0) {
+          addGameLog('system', '英雄阵亡，游戏结束');
+          setGameOver(true);
+          setVictory(false);
+        }
+        return newHp;
+      });
       addHeroMagicGauge('holy-light', 1);
       addGameLog('combat', `${monster.name} 反噬：造成 ${retDmg} 点直接伤害！`);
     }
@@ -3764,7 +3776,11 @@ export default function GameBoard() {
       }
 
       // Boss layer cap: immune to all damage after losing 1 layer this hero turn
-      if (workingMonster.bossLayerCap && heroTurnLayerLossIdsRef.current.has(targetMonster.id)) {
+      if (
+        workingMonster.bossLayerCap &&
+        combatState.currentTurn === 'hero' &&
+        heroTurnLayerLossIdsRef.current.has(targetMonster.id)
+      ) {
         addGameLog('combat', `${targetMonster.name} 处于免疫状态，伤害无效！`);
         setHeroSkillBanner(`${targetMonster.name} 免疫！`);
         break;
@@ -3782,7 +3798,15 @@ export default function GameBoard() {
       // Boss retaliation: direct damage to hero per hit (ignores shields)
       if (workingMonster.bossRetaliationDamage && workingMonster.bossRetaliationDamage > 0) {
         const retDmg = workingMonster.bossRetaliationDamage;
-        setHp(prev => Math.max(0, prev - retDmg));
+        setHp(prev => {
+          const newHp = Math.max(0, prev - retDmg);
+          if (newHp === 0) {
+            addGameLog('system', '英雄阵亡，游戏结束');
+            setGameOver(true);
+            setVictory(false);
+          }
+          return newHp;
+        });
         addHeroMagicGauge('holy-light', 1);
         addGameLog('combat', `${targetMonster.name} 反噬：造成 ${retDmg} 点直接伤害！`);
       }
@@ -5614,14 +5638,15 @@ export default function GameBoard() {
           changed = true;
           const newAttack = (card.attack ?? card.value ?? 0) + 5;
           const newValue = (card.value ?? 0) + 5;
-          const maxHp = card.maxHp ?? card.hp ?? 0;
+          const mMaxHp = card.maxHp ?? card.hp ?? 0;
           let newHp = (card.hp ?? 0) + 8;
           let newLayer = card.currentLayer ?? 1;
-          if (newHp > maxHp && maxHp > 0) {
+          if (newHp > mMaxHp && mMaxHp > 0) {
             newLayer += 1;
-            newHp = 8;
+            newHp = mMaxHp;
           }
-          addGameLog('combat', `${card.name} 暴走光环：攻击 +5，恢复 8 HP！`);
+          const layerRestored = newLayer > (card.currentLayer ?? 1);
+          addGameLog('combat', `${card.name} 暴走光环：攻击 +5，${layerRestored ? `恢复血层至 ${newLayer} 层（满血）` : '恢复 8 HP'}！`);
           setHeroSkillBanner(`${card.name} 暴走光环发动！`);
           return {
             ...card,
@@ -5736,9 +5761,11 @@ export default function GameBoard() {
       }
     }
 
-    // Mark the last monster in the deck as the final boss candidate
+    // Mark the last monster in the remaining deck (index >= 10) as the final boss candidate.
+    // The first 10 cards are dealt immediately to preview/active rows, so the boss must come
+    // from the portion that will be drawn later via waterfall.
     {
-      for (let i = deckWithClassEvents.length - 1; i >= 0; i--) {
+      for (let i = deckWithClassEvents.length - 1; i >= 10; i--) {
         if (deckWithClassEvents[i].type === 'monster') {
           deckWithClassEvents[i].isFinalMonster = true;
           deckWithClassEvents[i].description =
