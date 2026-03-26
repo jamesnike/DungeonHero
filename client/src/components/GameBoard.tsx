@@ -5062,7 +5062,12 @@ export default function GameBoard() {
       const drawnIds = new Set(drawnCards.map(card => card.id));
 
       setClassDeck(prev => prev.filter(card => !drawnIds.has(card.id)));
-      setBackpackItems(prev => [...drawnCards, ...prev]);
+      setBackpackItems(prev => {
+        const next = [...drawnCards, ...prev];
+        if (next.length <= backpackCapacity) return next;
+        next.slice(backpackCapacity).forEach(c => addToGraveyard(c));
+        return next.slice(0, backpackCapacity);
+      });
 
       if (DEV_MODE) {
         console.debug('[ClassDeckDraw]', {
@@ -5677,6 +5682,10 @@ export default function GameBoard() {
     handCards,
     equipmentSlot1,
     equipmentSlot2,
+    equipmentSlot1Reserve,
+    equipmentSlot2Reserve,
+    equipmentSlotCapacity,
+    maxAmuletSlots,
     amuletSlots,
     backpackItems,
     permanentMagicRecycleBag,
@@ -6061,6 +6070,7 @@ export default function GameBoard() {
     setEventModalMinimized(false);
     setCurrentEventCard(null);
     setPendingMagicAction(null);
+    setHandLimitBonus(0);
     setWaveDiscardCount(0);
     lastWaterfallSequenceRef.current = null;
     
@@ -7207,12 +7217,17 @@ export default function GameBoard() {
       }
       const cards = classDeck.slice(-takeCount);
       setClassDeck(prev => prev.slice(0, prev.length - takeCount));
-      setBackpackItems(prev => [...cards, ...prev]);
+      setBackpackItems(prev => {
+        const next = [...cards, ...prev];
+        if (next.length <= backpackCapacity) return next;
+        next.slice(backpackCapacity).forEach(c => addToGraveyard(c));
+        return next.slice(0, backpackCapacity);
+      });
       addGameLog('skill', `从职业牌组底部获得 ${takeCount} 张牌：${cards.map(c => c.name).join('、')}`);
       triggerClassDeckFlight(cards);
       return cards;
     },
-    [addGameLog, backpackItems.length, classDeck, setBackpackItems, setClassDeck, triggerClassDeckFlight],
+    [addGameLog, addToGraveyard, backpackCapacity, backpackItems.length, classDeck, setBackpackItems, setClassDeck, triggerClassDeckFlight],
   );
 
   const resetWaterfallAnimation = () => {
@@ -8186,10 +8201,11 @@ export default function GameBoard() {
       }
 
       if (selectedCard) {
+        addGameLog('system', `发现：选择 ${selectedCard.name}`);
         if (backpackItems.length >= backpackCapacity) {
-          returnCardsToClassDeck([selectedCard]);
+          addToGraveyard(selectedCard);
+          addGameLog('system', `背包已满，${selectedCard.name} 进入了墓地。`);
         } else {
-          addGameLog('system', `发现：选择 ${selectedCard.name}`);
           setBackpackItems(prev => [selectedCard, ...prev]);
           triggerClassDeckFlight([selectedCard]);
         }
@@ -8686,16 +8702,17 @@ export default function GameBoard() {
       return;
     }
 
-    const started = startHeroMagicActivation(heroMagicId, 'card');
-    logHeroMagic('activation-request', {
+    updateHeroMagicStateById(heroMagicId, current => ({
+      ...current,
+      gauge: definition.gaugeMax,
+      usedThisWave: false,
+    }));
+    logHeroMagic('card-fill-gauge', {
       heroMagicId,
-      started,
       readyState: status,
     });
-    finalizeMagicCard(card);
-    if (!started) {
-      setHeroSkillBanner('当前无法发动该英雄魔法。');
-    }
+    setHeroSkillBanner(`${definition.name} 数值槽已充满，可以手动发动！`);
+    finalizeMagicCard(card, { banner: `${definition.name} 数值槽已充满！` });
   }
 
   const handleKnightInstantMagic = (card: KnightCardData): boolean => {

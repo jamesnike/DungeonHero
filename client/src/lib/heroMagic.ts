@@ -32,8 +32,8 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
   {
     id: 'holy-light',
     name: '圣光',
-    description: '第一次使用学习圣光技能，之后可立即发动：回满生命，或净化一个怪物的怒气层数。',
-    cardEffect: '回满生命 或 消除一个怪物的所有怒气层。',
+    description: '第一次使用学习圣光技能；已掌握时使用充满数值槽。发动效果：回满生命，或净化一个怪物的怒气层数。',
+    cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
     gaugeMax: 8,
     chargeHint: '每次受到伤害 +1 圣光值（上限 10）。',
     chargeSource: 'damage-taken',
@@ -41,8 +41,8 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
   {
     id: 'berserker-rage',
     name: '狂战',
-    description: '第一次使用学习狂战技能，之后可立即发动：直到下次瀑布前，每个Hero回合里每个武器栏可多攻击一次，且不消耗耐久。',
-    cardEffect: '直到下次瀑布前，每个武器栏每回合可多攻击一次，且不消耗耐久。',
+    description: '第一次使用学习狂战技能；已掌握时使用充满数值槽。发动效果：直到下次瀑布前，每个Hero回合里每个武器栏可多攻击一次，且不消耗耐久。',
+    cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
     gaugeMax: 10,
     chargeHint: '每次武器攻击 +1 狂战值（含闪光护符多次攻击）。',
     chargeSource: 'weapon-attack',

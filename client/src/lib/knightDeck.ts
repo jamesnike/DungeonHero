@@ -158,7 +158,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '第一次使用时解锁圣光；之后可立即回满生命或净化怒气。',
+    description: '第一次使用时解锁圣光；已掌握时充满数值槽，可手动发动。',
     heroMagicId: 'holy-light',
     heroMagicEffect: '英雄魔法：解锁或触发圣光。',
   });
@@ -169,7 +169,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '第一次使用时解锁狂战；之后可触发狂战：直到下次瀑布前，每个武器栏每回合可多攻击一次，且不消耗耐久。',
+    description: '第一次使用时解锁狂战；已掌握时充满数值槽，可手动发动。',
     heroMagicId: 'berserker-rage',
     heroMagicEffect: '英雄魔法：解锁或触发狂战。',
   });
