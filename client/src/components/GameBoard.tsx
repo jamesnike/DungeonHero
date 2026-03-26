@@ -5931,6 +5931,38 @@ export default function GameBoard() {
       deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
     }
 
+    // Balance monster density: at most 2 monsters per non-overlapping chunk of 5 cards
+    {
+      const MAX_MONSTERS_PER_CHUNK = 2;
+      const CHUNK = 5;
+      for (let start = 0; start + CHUNK <= deckWithClassEvents.length; start += CHUNK) {
+        const chunkEnd = start + CHUNK;
+        const monsterIndices: number[] = [];
+        for (let j = start; j < chunkEnd; j++) {
+          if (deckWithClassEvents[j].type === 'monster') monsterIndices.push(j);
+        }
+        while (monsterIndices.length > MAX_MONSTERS_PER_CHUNK) {
+          const excessIdx = monsterIndices.pop()!;
+          let swapTarget = -1;
+          for (let k = chunkEnd; k < deckWithClassEvents.length; k++) {
+            if (deckWithClassEvents[k].type !== 'monster') { swapTarget = k; break; }
+          }
+          if (swapTarget === -1) {
+            for (let k = start - 1; k >= 0; k--) {
+              if (deckWithClassEvents[k].type !== 'monster') { swapTarget = k; break; }
+            }
+          }
+          if (swapTarget >= 0) {
+            const tmp = deckWithClassEvents[excessIdx];
+            deckWithClassEvents[excessIdx] = deckWithClassEvents[swapTarget];
+            deckWithClassEvents[swapTarget] = tmp;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
     // Guarantee at least one monster among the last 3 cards of the deck
     {
       const len = deckWithClassEvents.length;
