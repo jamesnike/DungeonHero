@@ -5643,10 +5643,10 @@ export default function GameBoard() {
           let newLayer = card.currentLayer ?? 1;
           if (newHp > mMaxHp && mMaxHp > 0) {
             newLayer += 1;
-            newHp = mMaxHp;
+            newHp = 8;
           }
           const layerRestored = newLayer > (card.currentLayer ?? 1);
-          addGameLog('combat', `${card.name} 暴走光环：攻击 +5，${layerRestored ? `恢复血层至 ${newLayer} 层（满血）` : '恢复 8 HP'}！`);
+          addGameLog('combat', `${card.name} 暴走光环：攻击 +5，${layerRestored ? `恢复血层至 ${newLayer} 层（8 HP）` : '恢复 8 HP'}！`);
           setHeroSkillBanner(`${card.name} 暴走光环发动！`);
           return {
             ...card,
