@@ -101,7 +101,7 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
                   {cards.map((card) => (
                     <Card
                       key={card.id}
-                      className={`p-2 flex flex-col items-center gap-1 bg-muted/50 hover-elevate ${onCardSelect ? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : ''}`.trim()}
+                      className={`p-2 flex flex-col items-center gap-1 hover-elevate ${card.isFinalMonster ? 'bg-red-900/40 ring-2 ring-red-500/70' : 'bg-muted/50'} ${onCardSelect ? 'cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : ''}`.trim()}
                       onClick={() => onCardSelect?.(card)}
                       role={onCardSelect ? 'button' : undefined}
                       tabIndex={onCardSelect ? 0 : undefined}
@@ -114,17 +114,22 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
                       }}
                     >
                       {card.image && (
-                        <div className="w-full aspect-square rounded overflow-hidden bg-gradient-to-b from-muted to-card">
+                        <div className="relative w-full aspect-square rounded overflow-hidden bg-gradient-to-b from-muted to-card">
                           <img
                             src={card.image}
                             alt={card.name}
                             className="w-full h-full object-cover"
                           />
+                          {card.isFinalMonster && (
+                            <div className="absolute top-0 left-0 right-0 bg-red-600/80 text-white text-[8px] font-bold text-center py-0.5 tracking-wider">
+                              BOSS
+                            </div>
+                          )}
                         </div>
                       )}
                       <div className="text-center w-full">
-                        <p className="text-[10px] font-medium truncate">{card.name}</p>
-                        <Badge variant="outline" className="text-xs">
+                        <p className={`text-[10px] font-medium truncate ${card.isFinalMonster ? 'text-red-400' : ''}`}>{card.name}</p>
+                        <Badge variant={card.isFinalMonster ? 'destructive' : 'outline'} className="text-xs">
                           {card.value}
                         </Badge>
                       </div>

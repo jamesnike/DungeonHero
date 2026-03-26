@@ -181,6 +181,12 @@ export interface GameCardData {
   healOnKill?: number; // Heal this amount when this weapon kills a monster
   waterfallAttackBoost?: number; // Increase weapon's own attack by this amount each waterfall
   isMinionCard?: boolean;
+  // Boss monster properties
+  isFinalMonster?: boolean; // Last monster in the deck — transforms into boss on defeat
+  bossPhase?: boolean; // Monster has transformed into boss form
+  bossRetaliationDamage?: number; // Direct damage to hero (ignoring shields) each time boss takes a hit
+  bossLastStandAura?: boolean; // At 1 layer: +5 atk & heal 8 HP per monster turn end
+  bossLayerCap?: boolean; // Max 1 layer loss per hero turn; immune to all damage after
 }
 
 interface GameCardProps {

@@ -3177,6 +3177,14 @@ export default function GameBoard() {
     if (damage <= 0) {
       return;
     }
+
+    // Boss layer cap: immune to all damage after losing 1 layer this hero turn
+    if (monster.bossLayerCap && heroTurnLayerLossIdsRef.current.has(monster.id)) {
+      addGameLog('combat', `${monster.name} 处于免疫状态，伤害无效！`);
+      setHeroSkillBanner(`${monster.name} 免疫！`);
+      return;
+    }
+
     const layersBefore = monster.currentLayer ?? monster.fury ?? 1;
     const updatedMonster = damageMonster(monster, damage);
     const baseDelay = options?.animationDelay ?? 0;
@@ -3184,6 +3192,15 @@ export default function GameBoard() {
     for (let i = 0; i < pulses; i += 1) {
       triggerMonsterBleedAnimation(monster.id, baseDelay + i * Math.floor(COMBAT_ANIMATION_STAGGER / 2));
     }
+
+    // Boss retaliation: direct damage to hero per hit (ignores shields)
+    if (monster.bossRetaliationDamage && monster.bossRetaliationDamage > 0) {
+      const retDmg = monster.bossRetaliationDamage;
+      setHp(prev => Math.max(0, prev - retDmg));
+      addHeroMagicGauge('holy-light', 1);
+      addGameLog('combat', `${monster.name} 反噬：造成 ${retDmg} 点直接伤害！`);
+    }
+
     const monsterDefeated =
       (updatedMonster.currentLayer ?? 0) <= 0 || (updatedMonster.hp ?? 0) <= 0;
     if (monsterDefeated) {
@@ -3351,6 +3368,34 @@ export default function GameBoard() {
   };
 
   const handleMonsterDefeated = (monster: GameCardData) => {
+    // Final monster transforms into boss on first defeat
+    if (monster.isFinalMonster && !monster.bossPhase) {
+      const fullHp = monster.maxHp ?? monster.hp ?? monster.value ?? 0;
+      const layers = monster.fury ?? monster.hpLayers ?? 2;
+      const bossCard: GameCardData = {
+        ...monster,
+        bossPhase: true,
+        currentLayer: layers,
+        hp: fullHp,
+        hasRevive: true,
+        reviveUsed: false,
+        bossRetaliationDamage: 3,
+        bossLastStandAura: true,
+        bossLayerCap: true,
+        description: [
+          '反噬：每次受到伤害，对英雄造成 3 点直接伤害（无视护盾）',
+          '复生：首次被击杀后以 1 血层复活',
+          '暴走光环：血层为 1 时，每个怪物回合结束 +5 攻击，恢复 8 HP（满血则恢复血层）',
+          '坚韧：每个玩家回合最多掉 1 血层，之后免疫所有伤害',
+        ].join('\n'),
+      };
+      updateMonsterCard(monster.id, () => bossCard);
+      triggerEventTransform(monster, bossCard, 'Boss 降临！');
+      addGameLog('combat', `${monster.name} 变身为 Boss！`);
+      setHeroSkillBanner(`${monster.name} 暴走变身！`);
+      return;
+    }
+
     if (monster.hasRevive && !monster.reviveUsed) {
       const fullHp = monster.maxHp ?? monster.hp ?? monster.value ?? 0;
       updateMonsterCard(monster.id, card => ({
@@ -3718,6 +3763,14 @@ export default function GameBoard() {
         continue;
       }
 
+      // Boss layer cap: immune to all damage after losing 1 layer this hero turn
+      if (workingMonster.bossLayerCap && heroTurnLayerLossIdsRef.current.has(targetMonster.id)) {
+        addGameLog('combat', `${targetMonster.name} 处于免疫状态，伤害无效！`);
+        setHeroSkillBanner(`${targetMonster.name} 免疫！`);
+        break;
+      }
+
+      const layerBeforeHit = workingMonster.currentLayer ?? workingMonster.fury ?? 1;
       const monsterHpBefore = workingMonster.hp ?? workingMonster.value;
       const updatedMonster = damageMonster(workingMonster, finalDamage);
       triggerMonsterBleedAnimation(targetMonster.id, iterationDelay);
@@ -3726,13 +3779,25 @@ export default function GameBoard() {
         iterationDelay + Math.floor(COMBAT_ANIMATION_STAGGER / 2),
       );
 
+      // Boss retaliation: direct damage to hero per hit (ignores shields)
+      if (workingMonster.bossRetaliationDamage && workingMonster.bossRetaliationDamage > 0) {
+        const retDmg = workingMonster.bossRetaliationDamage;
+        setHp(prev => Math.max(0, prev - retDmg));
+        addHeroMagicGauge('holy-light', 1);
+        addGameLog('combat', `${targetMonster.name} 反噬：造成 ${retDmg} 点直接伤害！`);
+      }
+
       if (amuletEffects.hasLife) {
         const overflow = Math.max(0, finalDamage - monsterHpBefore);
         overflowHealing += overflow;
       }
 
       workingMonster = updatedMonster;
-      const remainingLayers = updatedMonster.currentLayer ?? 1;
+      const layerAfterHit = updatedMonster.currentLayer ?? 1;
+      if (layerAfterHit < layerBeforeHit) {
+        heroTurnLayerLossIdsRef.current.add(targetMonster.id);
+      }
+      const remainingLayers = layerAfterHit;
 
       if (remainingLayers <= 0) {
         if (targetMonster.hasRevive && !targetMonster.reviveUsed) {
@@ -5537,6 +5602,37 @@ export default function GameBoard() {
     if (prevTurnRef.current === 'monster' && combatState.currentTurn === 'hero') {
       setBerserkerSlotUsed({});
       heroTurnLayerLossIdsRef.current.clear();
+
+      // Boss Last Stand Aura: when at 1 layer, +5 atk and heal 8 HP per monster turn end
+      const engagedIds = combatState.engagedMonsterIds;
+      setActiveCards(prev => {
+        let changed = false;
+        const next = prev.map(card => {
+          if (!card || !engagedIds.includes(card.id)) return card;
+          if (!card.bossLastStandAura) return card;
+          if ((card.currentLayer ?? 1) !== 1) return card;
+          changed = true;
+          const newAttack = (card.attack ?? card.value ?? 0) + 5;
+          const newValue = (card.value ?? 0) + 5;
+          const maxHp = card.maxHp ?? card.hp ?? 0;
+          let newHp = (card.hp ?? 0) + 8;
+          let newLayer = card.currentLayer ?? 1;
+          if (newHp > maxHp && maxHp > 0) {
+            newLayer += 1;
+            newHp = 8;
+          }
+          addGameLog('combat', `${card.name} 暴走光环：攻击 +5，恢复 8 HP！`);
+          setHeroSkillBanner(`${card.name} 暴走光环发动！`);
+          return {
+            ...card,
+            attack: newAttack,
+            value: newValue,
+            hp: newHp,
+            currentLayer: newLayer,
+          };
+        });
+        return changed ? (next as typeof prev) : prev;
+      });
     }
     prevTurnRef.current = combatState.currentTurn;
   }, [combatState.currentTurn]);
@@ -5636,6 +5732,18 @@ export default function GameBoard() {
             deckWithClassEvents[swapIdx] = deckWithClassEvents[targetIdx];
             deckWithClassEvents[targetIdx] = tmp;
           }
+        }
+      }
+    }
+
+    // Mark the last monster in the deck as the final boss candidate
+    {
+      for (let i = deckWithClassEvents.length - 1; i >= 0; i--) {
+        if (deckWithClassEvents[i].type === 'monster') {
+          deckWithClassEvents[i].isFinalMonster = true;
+          deckWithClassEvents[i].description =
+            '最终之敌：击败后将变身为Boss。';
+          break;
         }
       }
     }
