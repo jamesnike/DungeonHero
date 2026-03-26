@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Coins, Heart, ShoppingBag, Trash2 } from 'lucide-react';
+import { ArrowUpCircle, Coins, Heart, ShoppingBag, Sparkles, Trash2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
 
 export interface ShopOffering {
@@ -44,6 +44,14 @@ interface ShopModalProps {
   healCost?: number;
   shopHealUsed?: boolean;
   onHealRequest?: () => void;
+  shopLevelUpCost?: number;
+  shopLevelUpUsed?: boolean;
+  onShopLevelUpRequest?: () => void;
+  shopSkillDiscoverCost?: number;
+  shopSkillDiscoverUsed?: boolean;
+  canDiscoverSkill?: boolean;
+  discoverSkillDisabledReason?: string;
+  onShopSkillDiscoverRequest?: () => void;
 }
 
 export default function ShopModal({
@@ -68,6 +76,14 @@ export default function ShopModal({
   healCost = 5,
   shopHealUsed,
   onHealRequest,
+  shopLevelUpCost = 10,
+  shopLevelUpUsed,
+  onShopLevelUpRequest,
+  shopSkillDiscoverCost = 10,
+  shopSkillDiscoverUsed,
+  canDiscoverSkill = true,
+  discoverSkillDisabledReason,
+  onShopSkillDiscoverRequest,
 }: ShopModalProps) {
   const isBackpackFull = backpackCount >= backpackCapacity;
   const deleteOptionDisabled = !canDeleteCard;
@@ -281,6 +297,91 @@ export default function ShopModal({
                       onClick={onHealRequest}
                     >
                       回血
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {shopLevel < 3 && (() => {
+              const canAffordLevelUp = gold >= shopLevelUpCost;
+              const levelUpDisabled = shopLevelUpUsed || !canAffordLevelUp;
+              return (
+                <div
+                  className={`flex flex-col gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-4 shadow-sm sm:flex-row sm:items-center ${levelUpDisabled ? 'opacity-70' : ''}`}
+                >
+                  <div className="flex gap-3 flex-1">
+                    <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                      <ArrowUpCircle className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-base font-semibold text-amber-700 dark:text-amber-400">商店升级</p>
+                        <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-700 dark:text-amber-400">
+                          每次商店限一次
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        花费 {shopLevelUpCost} 金币提升商店等级，下次光临时享受更多商品和折扣。
+                      </p>
+                      {shopLevelUpUsed && <p className="text-xs text-amber-700 dark:text-amber-400">本次商店的升级机会已使用。</p>}
+                      {!shopLevelUpUsed && !canAffordLevelUp && <p className="text-xs text-destructive">金币不足。</p>}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      价格：<span className="text-lg font-semibold text-yellow-500">{shopLevelUpCost}</span> 金币
+                    </span>
+                    <Button
+                      className="bg-amber-600 hover:bg-amber-700 text-white"
+                      disabled={levelUpDisabled}
+                      onClick={onShopLevelUpRequest}
+                    >
+                      升级
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {shopLevel >= 3 && (() => {
+              const canAffordDiscover = gold >= shopSkillDiscoverCost;
+              const discoverDisabled = shopSkillDiscoverUsed || !canAffordDiscover || !canDiscoverSkill;
+              return (
+                <div
+                  className={`flex flex-col gap-3 rounded-md border border-purple-500/40 bg-purple-500/5 p-4 shadow-sm sm:flex-row sm:items-center ${discoverDisabled ? 'opacity-70' : ''}`}
+                >
+                  <div className="flex gap-3 flex-1">
+                    <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-purple-500/10 text-purple-600 flex items-center justify-center">
+                      <Sparkles className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-base font-semibold text-purple-700 dark:text-purple-400">发现英雄技能</p>
+                        <Badge variant="outline" className="text-[10px] border-purple-500/50 text-purple-700 dark:text-purple-400">
+                          每次商店限一次
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        花费 {shopSkillDiscoverCost} 金币发现一个全新的英雄技能，从 3 个技能中选择 1 个学习。
+                      </p>
+                      {shopSkillDiscoverUsed && <p className="text-xs text-purple-700 dark:text-purple-400">本次商店的发现机会已使用。</p>}
+                      {!shopSkillDiscoverUsed && !canDiscoverSkill && discoverSkillDisabledReason && (
+                        <p className="text-xs text-muted-foreground">{discoverSkillDisabledReason}</p>
+                      )}
+                      {!shopSkillDiscoverUsed && canDiscoverSkill && !canAffordDiscover && <p className="text-xs text-destructive">金币不足。</p>}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      价格：<span className="text-lg font-semibold text-yellow-500">{shopSkillDiscoverCost}</span> 金币
+                    </span>
+                    <Button
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      disabled={discoverDisabled}
+                      onClick={onShopSkillDiscoverRequest}
+                    >
+                      发现技能
                     </Button>
                   </div>
                 </div>

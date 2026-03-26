@@ -52,7 +52,7 @@ import {
   createGraveyardRecallCard,
   type KnightCardData,
 } from '@/lib/knightDeck';
-import { getHeroSkillById, type HeroSkillDefinition, type HeroSkillId } from '@/lib/heroSkills';
+import { getHeroSkillById, heroSkills as allHeroSkills, type HeroSkillDefinition, type HeroSkillId } from '@/lib/heroSkills';
 import {
   HERO_MAGIC_IDS,
   createInitialHeroMagicState,
@@ -68,6 +68,7 @@ import CardDetailsModal from './CardDetailsModal';
 import DiscoverClassModal from './DiscoverClassModal';
 import CardDeletionModal from './CardDeletionModal';
 import ShopModal, { type ShopOffering } from './ShopModal';
+import ShopSkillSelectModal from './ShopSkillSelectModal';
 import CardFlipOverlay from './CardFlipOverlay';
 import { type DragData } from '../utils/mobileDragDrop';
 import type {
@@ -129,6 +130,9 @@ import minionImage from '@assets/generated_images/chibi_minion_follower.png';
 import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
 import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
 import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
+import daggerWeaponImage from '@assets/generated_images/cute_cartoon_weapon_dagger.png';
+import holyBladeImage from '@assets/generated_images/cute_cartoon_holy_blade.png';
+import maceImage from '@assets/generated_images/cute_cartoon_mace.png';
 
 // Cute cartoon shields (different tiers) - NEW Q-version style
 import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
@@ -262,6 +266,8 @@ const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
 const SHOP_LEVEL_DISCOUNT_STEP = 0.1;
 const SHOP_HEAL_COST = 5;
 const SHOP_HEAL_AMOUNT = 5;
+const SHOP_LEVEL_UP_COST = 10;
+const SHOP_SKILL_DISCOVER_COST = 10;
 const COMBAT_PANEL_DEFAULT_WIDTH = 170;
 const COMBAT_PANEL_DEFAULT_HEIGHT = 320;
 const COMBAT_PANEL_EDGE_PADDING = 12;
@@ -468,6 +474,23 @@ const HAND_DELIVERY_GUARD_DELAY =
   BACKPACK_FLIGHT_FALLBACK_BUFFER +
   HAND_DELIVERY_GUARD_EXTRA_BUFFER;
 
+/** After load/undo, re-bind art by English weapon name so Dagger ≠ Swift Blade (old saves stored the same image URL for both). */
+function patchPersistedMainDeckWeaponImage(card: GameCardData): GameCardData {
+  if (card.type !== 'weapon') return card;
+  switch (card.name) {
+    case 'Dagger':
+      return { ...card, image: daggerWeaponImage };
+    case 'Swift Blade':
+      return { ...card, image: daggerImage };
+    case 'Holy Blade':
+      return { ...card, image: holyBladeImage };
+    case 'Mace':
+      return { ...card, image: maceImage };
+    default:
+      return card;
+  }
+}
+
 function createDeck(): GameCardData[] {
   const deck: GameCardData[] = [];
   let id = 0;
@@ -496,12 +519,12 @@ function createDeck(): GameCardData[] {
     // Monster variety with attack/HP separation and fury (formerly layers)
     const monsterTypes = [
       { 
-        name: 'Dragon', 
-        image: dragonImage, 
+        name: 'Dragon',
+        image: dragonImage,
         minAttack: 4, maxAttack: 6,
-        minHp: 7, maxHp: 10,
+        minHp: 6, maxHp: 8,
         minFury: 3, maxFury: 4,
-        waterfallEffect: { type: 'turnBoost' as const, amount: 6, description: '被挤出时：waterfall 次数 +6（影响后续怪物血层）' },
+        waterfallEffect: { type: 'turnBoost' as const, amount: 4, description: '被挤出时：waterfall 次数 +4（影响后续怪物血层）' },
       },
       { 
         name: 'Skeleton', 
@@ -520,18 +543,18 @@ function createDeck(): GameCardData[] {
         waterfallEffect: { type: 'goldLoss' as const, amount: 6, description: '被挤出时：失去 6 金币' },
       },
       { 
-        name: 'Ogre', 
-        image: ogreImage, 
+        name: 'Ogre',
+        image: ogreImage,
         minAttack: 3, maxAttack: 4,
-        minHp: 5, maxHp: 7,
+        minHp: 5, maxHp: 6,
         minFury: 2, maxFury: 4,
         waterfallEffect: { type: 'bonusDecay' as const, amount: 1, description: '被挤出时：所有永久伤害/护甲加成 -1' },
       },
       { 
-        name: 'Wraith', 
-        image: wraithImage, 
+        name: 'Wraith',
+        image: wraithImage,
         minAttack: 3, maxAttack: 5,
-        minHp: 4, maxHp: 6,
+        minHp: 3, maxHp: 5,
         minFury: 2, maxFury: 3,
         waterfallEffect: { type: 'returnToDeck' as const, amount: 0, description: '被挤出时：不进入坟场，回到牌堆' },
       },
@@ -592,9 +615,11 @@ function createDeck(): GameCardData[] {
       if (type === 'Dragon') {
         chosen.bleedEffect = 'attack+3';
         chosen.eliteRegenHeroTurn = true;
+        chosen.waterfallEffect = { type: 'turnBoost', amount: 6, description: '被挤出时：waterfall 次数 +6（影响后续怪物血层）' };
       }
       if (type === 'Ogre') {
         chosen.eliteDoubleAttack = true;
+        chosen.waterfallEffect = { type: 'bonusDecay', amount: 2, description: '被挤出时：所有永久伤害/护甲加成 -2' };
       }
       if (type === 'Wraith') {
         chosen.lastWords = 'wraith-haunt-4';
@@ -602,15 +627,19 @@ function createDeck(): GameCardData[] {
       if (type === 'Goblin') {
         chosen.onAttackEffect = 'steal-gold-6';
         chosen.eliteLowGoldPower = true;
+        chosen.waterfallEffect = { type: 'goldLoss', amount: 12, description: '被挤出时：失去 12 金币' };
+      }
+      if (type === 'Skeleton') {
+        chosen.waterfallEffect = { type: 'damage', amount: 15, description: '被挤出时：对英雄造成 15 点伤害' };
       }
     }
 
   // Weapon variety with improved values (2-6 range)
   const weaponTypes = [
-    { name: 'Holy Blade', image: swordImage },
+    { name: 'Holy Blade', image: holyBladeImage },
     { name: 'Sword', image: axeImage },
-    { name: 'Dagger', image: daggerImage },
-    { name: 'Mace', image: swordImage },
+    { name: 'Dagger', image: daggerWeaponImage },
+    { name: 'Mace', image: maceImage },
     { name: 'Swift Blade', image: daggerImage },
     { name: 'Sword', image: axeImage },
   ];
@@ -631,6 +660,10 @@ function createDeck(): GameCardData[] {
     if (weaponType.name === 'Holy Blade') {
       card.healOnKill = 2;
       card.description = '击杀怪物时回复 2 点生命。';
+    }
+    if (weaponType.name === 'Swift Blade') {
+      card.durability = Math.floor(Math.random() * 3) + 2;
+      card.maxDurability = card.durability;
     }
     if (weaponType.name === 'Mace') {
       card.value = Math.min(card.value, 3);
@@ -680,6 +713,8 @@ function createDeck(): GameCardData[] {
     if (shieldType.name === 'Heavy Shield') {
       card.damageReflect = 1;
       card.description = '格挡时反弹 1 点伤害给攻击者（受装备栏永久伤害加成影响）。';
+      card.durability = Math.floor(Math.random() * 3) + 2;
+      card.maxDurability = card.durability;
     }
     if (shieldType.name === 'Wooden Shield') {
       card.onDestroyHeal = 3;
@@ -1521,6 +1556,7 @@ export default function GameBoard() {
   const [shopSourceEvent, setShopSourceEvent] = useState<GameCardData | null>(null);
   const [shopDeleteUsed, setShopDeleteUsed] = useState(false);
   const [shopHealUsed, setShopHealUsed] = useState(false);
+  const [shopLevelUpUsed, setShopLevelUpUsed] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [cardActionContext, setCardActionContext] = useState<CardActionContext | null>(null);
   const cardActionResolverRef = useRef<(() => void) | null>(null);
@@ -1561,6 +1597,7 @@ export default function GameBoard() {
     equipmentSlot2: 0,
   });
   const [heroVariant, setHeroVariant] = useState<HeroVariant>(() => getRandomHero());
+  const [isCombatPanelMinimized, setIsCombatPanelMinimized] = useState(true);
   const [combatPanelPosition, setCombatPanelPosition] = useState<{ x: number; y: number } | null>(null);
   const [combatPanelSize, setCombatPanelSize] = useState({ width: 0, height: 0 });
   const [isCombatPanelDragging, setIsCombatPanelDragging] = useState(false);
@@ -2213,6 +2250,11 @@ export default function GameBoard() {
   const [selectedHeroSkill, setSelectedHeroSkill] = useState<string | null>(null); // Selected Knight skill
   const selectedHeroSkillRef = useRef<string | null>(selectedHeroSkill);
   selectedHeroSkillRef.current = selectedHeroSkill;
+  const [extraHeroSkills, setExtraHeroSkills] = useState<HeroSkillId[]>([]);
+  const [extraSkillsUsedThisWave, setExtraSkillsUsedThisWave] = useState<Set<string>>(() => new Set());
+  const [shopSkillSelectOpen, setShopSkillSelectOpen] = useState(false);
+  const [shopSkillOptions, setShopSkillOptions] = useState<HeroSkillDefinition[]>([]);
+  const [shopSkillDiscoverUsed, setShopSkillDiscoverUsed] = useState(false);
   const healAccumulatorRef = useRef(0);
   const [showSkillSelection, setShowSkillSelection] = useState(true); // Show skill selection modal on game start
   const [resolvingDungeonCardId, setResolvingDungeonCardId] = useState<string | null>(null);
@@ -2555,6 +2597,7 @@ export default function GameBoard() {
 
   const resetHeroSkillForNewWave = useCallback(() => {
     setHeroSkillUsedThisWave(false);
+    setExtraSkillsUsedThisWave(new Set());
     setPendingHeroSkillAction(null);
     setPendingHeroMagicAction(null);
     setHeroSkillBanner(null);
@@ -2717,6 +2760,7 @@ export default function GameBoard() {
   useEffect(() => {
     if (!isCombatPanelVisible) {
       teardownCombatPanelDrag();
+      setIsCombatPanelMinimized(true);
     }
   }, [isCombatPanelVisible, teardownCombatPanelDrag]);
   useLayoutEffect(() => {
@@ -2767,7 +2811,7 @@ export default function GameBoard() {
     });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [isCombatPanelVisible]);
+  }, [isCombatPanelVisible, isCombatPanelMinimized]);
   useEffect(() => {
     if (!isCombatPanelVisible) {
       return;
@@ -4455,10 +4499,15 @@ export default function GameBoard() {
       detail: option.detail,
     }));
   }, [selectedCard, selectedMonsterRewards]);
-  const heroDetailsSkills = useMemo(
-    () => (selectedHeroSkillDef ? [selectedHeroSkillDef] : []),
-    [selectedHeroSkillDef],
-  );
+  const heroDetailsSkills = useMemo(() => {
+    const skills: HeroSkillDefinition[] = [];
+    if (selectedHeroSkillDef) skills.push(selectedHeroSkillDef);
+    for (const id of extraHeroSkills) {
+      const def = getHeroSkillById(id);
+      if (def) skills.push(def);
+    }
+    return skills;
+  }, [selectedHeroSkillDef, extraHeroSkills]);
   const getSpellDamage = useCallback(
     (baseDamage: number) => Math.max(0, baseDamage + permanentSpellDamageBonus),
     [permanentSpellDamageBonus],
@@ -5239,6 +5288,8 @@ export default function GameBoard() {
       setShopSourceEvent(eventCard);
       setShopDeleteUsed(false);
       setShopHealUsed(false);
+      setShopLevelUpUsed(false);
+      setShopSkillDiscoverUsed(false);
       setDeleteModalOpen(false);
       setShopModalOpen(true);
       setShopModalMinimized(false);
@@ -5661,6 +5712,7 @@ export default function GameBoard() {
       classDeck: sanitizeCardList(classDeck),
       classCardsInHand: sanitizeCardList(classCardsInHand),
       selectedHeroSkill,
+      extraHeroSkills: [...extraHeroSkills],
       showSkillSelection,
       heroVariant,
       permanentSkills: [...permanentSkills],
@@ -5708,6 +5760,7 @@ export default function GameBoard() {
       berserkerRageActive,
       berserkerSlotUsed,
       heroSkillUsedThisWave,
+      extraSkillsUsedThisWave: Array.from(extraSkillsUsedThisWave),
       handLimitBonus,
       goblinRewardClaimed: goblinRewardClaimedRef.current,
       drawPending,
@@ -5746,6 +5799,7 @@ export default function GameBoard() {
     classDeck,
     classCardsInHand,
     selectedHeroSkill,
+    extraHeroSkills,
     showSkillSelection,
     heroVariant,
     permanentSkills,
@@ -5772,6 +5826,7 @@ export default function GameBoard() {
     berserkerRageActive,
     berserkerSlotUsed,
     heroSkillUsedThisWave,
+    extraSkillsUsedThisWave,
     handLimitBonus,
     drawPending,
     waveDiscardCount,
@@ -6156,17 +6211,19 @@ export default function GameBoard() {
         return next;
       }
       for (let i = 0; i < Math.min(slots.length, DUNGEON_COLUMN_COUNT); i += 1) {
-        next[i] = slots[i] ?? null;
+        const c = slots[i] ?? null;
+        next[i] = c ? patchPersistedMainDeckWeaponImage(c) : null;
       }
       return next;
     };
 
     const mapEquipment = (card: GameCardData | null, slotId: EquipmentSlotId): EquipmentItem | null => {
       if (!card) return null;
-      if (card.type !== 'weapon' && card.type !== 'shield' && card.type !== 'monster') {
+      const patched = patchPersistedMainDeckWeaponImage(card);
+      if (patched.type !== 'weapon' && patched.type !== 'shield' && patched.type !== 'monster') {
         return null;
       }
-      return { ...card, fromSlot: slotId } as EquipmentItem;
+      return { ...patched, fromSlot: slotId } as EquipmentItem;
     };
 
     const mapAmulets = (amulets?: GameCardData[]): AmuletItem[] => {
@@ -6214,19 +6271,41 @@ export default function GameBoard() {
 
     setPreviewCards(mapSlots(snapshot.previewCards));
     setActiveCards(mapSlots(snapshot.activeCards));
-    setRemainingDeck(Array.isArray(snapshot.remainingDeck) ? snapshot.remainingDeck : []);
-    setDiscardedCards(Array.isArray(snapshot.discardedCards) ? snapshot.discardedCards : []);
-    setHandCards(Array.isArray(snapshot.handCards) ? snapshot.handCards : []);
+    setRemainingDeck(
+      Array.isArray(snapshot.remainingDeck)
+        ? snapshot.remainingDeck.map(patchPersistedMainDeckWeaponImage)
+        : [],
+    );
+    setDiscardedCards(
+      Array.isArray(snapshot.discardedCards)
+        ? snapshot.discardedCards.map(patchPersistedMainDeckWeaponImage)
+        : [],
+    );
+    setHandCards(
+      Array.isArray(snapshot.handCards) ? snapshot.handCards.map(patchPersistedMainDeckWeaponImage) : [],
+    );
     setEquipmentSlot1(mapEquipment(snapshot.equipmentSlot1 ?? null, 'equipmentSlot1'));
     setEquipmentSlot2(mapEquipment(snapshot.equipmentSlot2 ?? null, 'equipmentSlot2'));
     setEquipmentSlot1Reserve(
       Array.isArray(snapshot.equipmentSlot1Reserve)
-        ? snapshot.equipmentSlot1Reserve.map(c => ({ ...c, type: c.type as 'weapon' | 'shield' | 'monster', fromSlot: 'equipmentSlot1' as const }) as EquipmentItem)
+        ? snapshot.equipmentSlot1Reserve.map(c =>
+            ({
+              ...patchPersistedMainDeckWeaponImage(c),
+              type: c.type as 'weapon' | 'shield' | 'monster',
+              fromSlot: 'equipmentSlot1' as const,
+            }) as EquipmentItem,
+          )
         : [],
     );
     setEquipmentSlot2Reserve(
       Array.isArray(snapshot.equipmentSlot2Reserve)
-        ? snapshot.equipmentSlot2Reserve.map(c => ({ ...c, type: c.type as 'weapon' | 'shield' | 'monster', fromSlot: 'equipmentSlot2' as const }) as EquipmentItem)
+        ? snapshot.equipmentSlot2Reserve.map(c =>
+            ({
+              ...patchPersistedMainDeckWeaponImage(c),
+              type: c.type as 'weapon' | 'shield' | 'monster',
+              fromSlot: 'equipmentSlot2' as const,
+            }) as EquipmentItem,
+          )
         : [],
     );
     if (snapshot.equipmentSlotCapacity) {
@@ -6237,7 +6316,11 @@ export default function GameBoard() {
     }
     setMaxAmuletSlots(snapshot.maxAmuletSlots ?? MAX_AMULET_SLOTS);
     setAmuletSlots(mapAmulets(snapshot.amuletSlots));
-    setBackpackItems(Array.isArray(snapshot.backpackItems) ? snapshot.backpackItems : []);
+    setBackpackItems(
+      Array.isArray(snapshot.backpackItems)
+        ? snapshot.backpackItems.map(patchPersistedMainDeckWeaponImage)
+        : [],
+    );
     setTurnDamageTaken(snapshot.turnDamageTaken ?? 0);
     setBerserkTurnBuff(
       snapshot.berserkTurnBuff
@@ -6249,12 +6332,15 @@ export default function GameBoard() {
     );
     setExtraAttackCharges(snapshot.extraAttackCharges ?? 0);
     setPermanentMagicRecycleBag(
-      Array.isArray(snapshot.permanentMagicRecycleBag) ? snapshot.permanentMagicRecycleBag : [],
+      Array.isArray(snapshot.permanentMagicRecycleBag)
+        ? snapshot.permanentMagicRecycleBag.map(patchPersistedMainDeckWeaponImage)
+        : [],
     );
 
     setClassDeck(Array.isArray(snapshot.classDeck) ? snapshot.classDeck : []);
     setClassCardsInHand(Array.isArray(snapshot.classCardsInHand) ? snapshot.classCardsInHand : []);
     setSelectedHeroSkill(snapshot.selectedHeroSkill ?? null);
+    setExtraHeroSkills(Array.isArray((snapshot as any).extraHeroSkills) ? (snapshot as any).extraHeroSkills : []);
     setShowSkillSelection(
       typeof snapshot.showSkillSelection === 'boolean' ? snapshot.showSkillSelection : true,
     );
@@ -6304,6 +6390,7 @@ export default function GameBoard() {
     }
 
     setHeroSkillUsedThisWave(Boolean(snapshot.heroSkillUsedThisWave));
+    setExtraSkillsUsedThisWave(new Set(Array.isArray((snapshot as any).extraSkillsUsedThisWave) ? (snapshot as any).extraSkillsUsedThisWave : []));
     setHandLimitBonus(snapshot.handLimitBonus ?? 0);
     goblinRewardClaimedRef.current = Boolean(snapshot.goblinRewardClaimed);
     setPendingHeroSkillAction(null);
@@ -6410,6 +6497,10 @@ export default function GameBoard() {
     shopSourceEvent,
     shopDeleteUsed,
     shopHealUsed,
+    shopLevelUpUsed,
+    shopSkillDiscoverUsed,
+    shopSkillSelectOpen,
+    shopSkillOptions,
     discoverModalOpen,
     discoverOptions,
     deleteModalOpen,
@@ -6422,7 +6513,7 @@ export default function GameBoard() {
   }), [
     monsterRewardQueue, activeMonsterReward, selectedMonsterRewards,
     pendingMagicAction, pendingPotionAction, pendingHeroSkillAction, pendingHeroMagicAction,
-    shopModalOpen, shopModalMinimized, shopOfferings, shopSourceEvent, shopDeleteUsed, shopHealUsed,
+    shopModalOpen, shopModalMinimized, shopOfferings, shopSourceEvent, shopDeleteUsed, shopHealUsed, shopLevelUpUsed, shopSkillDiscoverUsed, shopSkillSelectOpen, shopSkillOptions,
     discoverModalOpen, discoverOptions, deleteModalOpen,
     deathWardPrompt, equipmentPrompt, graveyardDiscoverState, cardActionContext,
     gameLogEntries,
@@ -6526,6 +6617,10 @@ export default function GameBoard() {
     setShopSourceEvent(t.shopSourceEvent);
     setShopDeleteUsed(t.shopDeleteUsed);
     setShopHealUsed(t.shopHealUsed);
+    setShopLevelUpUsed(t.shopLevelUpUsed);
+    setShopSkillDiscoverUsed(t.shopSkillDiscoverUsed);
+    setShopSkillSelectOpen(t.shopSkillSelectOpen);
+    setShopSkillOptions(t.shopSkillOptions);
     setDiscoverModalOpen(t.discoverModalOpen);
     setDiscoverOptions(t.discoverOptions);
     setDeleteModalOpen(t.deleteModalOpen);
@@ -8143,16 +8238,19 @@ export default function GameBoard() {
       }
 
       if (effect === 'draw-backpack-4') {
-        let draws = 0;
-        for (let i = 0; i < 4; i += 1) {
-          const drawn = drawFromBackpackToHand();
-          if (!drawn) {
-            break;
-          }
-          draws += 1;
-        }
         setBackpackCapacityModifier(prev => prev + 1);
         setHandLimitBonus(prev => prev + 1);
+        const newHandLimit = effectiveHandLimit + 1;
+        const flightsCount = backpackHandFlightsRef.current.length;
+        const handSizeAfterPotion = handCards.filter(c => c.id !== card.id).length + flightsCount;
+        let draws = 0;
+        for (let i = 0; i < 4; i += 1) {
+          if (handSizeAfterPotion + draws >= newHandLimit) break;
+          const [drawnCard] = takeRandomCardsFromBackpack(1);
+          if (!drawnCard) break;
+          queueCardIntoHand(drawnCard);
+          draws += 1;
+        }
         const parts: string[] = [];
         if (draws > 0) parts.push(`从背包抽出${draws}张牌`);
         parts.push('背包上限 +1', '手牌上限 +1');
@@ -8433,6 +8531,44 @@ export default function GameBoard() {
     setShopHealUsed(true);
     setHeroSkillBanner(`花费 ${SHOP_HEAL_COST} 金币恢复了 ${SHOP_HEAL_AMOUNT} 点生命。`);
   }, [addGameLog, gold, healHero, hp, maxHp, setHeroSkillBanner, shopHealUsed]);
+
+  const handleShopLevelUpRequest = useCallback(() => {
+    pushUndoSnapshot();
+    if (shopLevelUpUsed || gold < SHOP_LEVEL_UP_COST) return;
+    addGameLog('shop', `花费 ${SHOP_LEVEL_UP_COST} 金币提升商店等级`);
+    setGold(prev => prev - SHOP_LEVEL_UP_COST);
+    setShopLevel(prev => prev + 1);
+    setShopLevelUpUsed(true);
+    setHeroSkillBanner(`花费 ${SHOP_LEVEL_UP_COST} 金币，商店等级提升了！`);
+  }, [addGameLog, gold, setHeroSkillBanner, shopLevelUpUsed]);
+
+  const handleShopSkillDiscoverRequest = useCallback(() => {
+    if (shopSkillDiscoverUsed || gold < SHOP_SKILL_DISCOVER_COST) return;
+    const ownedSkills = new Set<string>([
+      ...(selectedHeroSkill ? [selectedHeroSkill] : []),
+      ...extraHeroSkills,
+    ]);
+    const available = allHeroSkills.filter(s => !ownedSkills.has(s.id));
+    if (available.length < 3) return;
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const options = shuffled.slice(0, 3);
+    pushUndoSnapshot();
+    setGold(prev => prev - SHOP_SKILL_DISCOVER_COST);
+    setShopSkillOptions(options);
+    setShopSkillSelectOpen(true);
+    setShopSkillDiscoverUsed(true);
+    addGameLog('shop', `花费 ${SHOP_SKILL_DISCOVER_COST} 金币发现英雄技能`);
+  }, [addGameLog, extraHeroSkills, gold, selectedHeroSkill, shopSkillDiscoverUsed]);
+
+  const handleShopSkillSelect = useCallback((skillId: string) => {
+    pushUndoSnapshot();
+    const skillDef = getHeroSkillById(skillId as HeroSkillId);
+    setExtraHeroSkills(prev => [...prev, skillId as HeroSkillId]);
+    setShopSkillSelectOpen(false);
+    setShopSkillOptions([]);
+    addGameLog('skill', `学习了新的英雄技能：${skillDef?.name ?? skillId}`);
+    setHeroSkillBanner(`学习了「${skillDef?.name ?? skillId}」！`);
+  }, [addGameLog, setHeroSkillBanner]);
 
   const wasDraggedFromHand = (cardId: string) =>
     draggedCardSource === 'hand' && draggedCard?.id === cardId;
@@ -8814,6 +8950,8 @@ export default function GameBoard() {
             setShopSourceEvent(card);
             setShopDeleteUsed(false);
             setShopHealUsed(false);
+            setShopLevelUpUsed(false);
+            setShopSkillDiscoverUsed(false);
             setDeleteModalOpen(false);
             setShopModalOpen(true);
             setShopModalMinimized(false);
@@ -9042,6 +9180,8 @@ export default function GameBoard() {
         setShopSourceEvent(card);
         setShopDeleteUsed(false);
         setShopHealUsed(false);
+        setShopLevelUpUsed(false);
+        setShopSkillDiscoverUsed(false);
         setDeleteModalOpen(false);
         setShopModalOpen(true);
         setShopModalMinimized(false);
@@ -9936,17 +10076,32 @@ export default function GameBoard() {
     setHeroSkillBanner(null);
   }, [finalizePotionCard, pendingPotionAction]);
 
-  const handleHeroSkillUse = useCallback(async () => {
+  const markSkillUsed = useCallback((skillId: HeroSkillId) => {
+    if (skillId === selectedHeroSkill) {
+      setHeroSkillUsedThisWave(true);
+    } else {
+      setExtraSkillsUsedThisWave(prev => { const next = new Set(prev); next.add(skillId); return next; });
+    }
+  }, [selectedHeroSkill]);
+
+  const handleHeroSkillUse = useCallback(async (overrideSkillId?: HeroSkillId) => {
     pushUndoSnapshot();
-    if (!selectedHeroSkillDef) {
+    const skillDef = overrideSkillId ? getHeroSkillById(overrideSkillId) : selectedHeroSkillDef;
+    const isExtraSkill = !!overrideSkillId;
+    if (!skillDef) {
       setHeroSkillBanner(null);
       return;
     }
-    if (selectedHeroSkillDef.type === 'passive') {
+    if (skillDef.type === 'passive') {
       setHeroSkillBanner('Passive skill is always active.');
       return;
     }
-    if (heroSkillUsedThisWave) {
+    if (isExtraSkill) {
+      if (extraSkillsUsedThisWave.has(overrideSkillId)) {
+        setHeroSkillBanner('该技能本波已使用。');
+        return;
+      }
+    } else if (heroSkillUsedThisWave) {
       setHeroSkillBanner('Hero skill already used this wave.');
       return;
     }
@@ -9959,8 +10114,8 @@ export default function GameBoard() {
       return;
     }
 
-    addGameLog('skill', `使用英雄技能：${selectedHeroSkillDef.name}`);
-    switch (selectedHeroSkillDef.id) {
+    addGameLog('skill', `使用英雄技能：${skillDef.name}`);
+    switch (skillDef.id) {
       case 'armor-pact': {
         const emptySlots: EquipmentSlotId[] = [];
         if (!equipmentSlot1) emptySlots.push('equipmentSlot1');
@@ -9979,12 +10134,12 @@ export default function GameBoard() {
             setEquipmentSlotById(otherSlot, null);
             addGameLog('skill', `壁垒献祭：「${otherItem.name}」移至强化槽位`);
           }
-          setHeroSkillUsedThisWave(true);
+          markSkillUsed(skillDef.id);
           setHeroSkillBanner('装备槽永久护甲 +1。');
           break;
         }
         setPendingHeroSkillAction({ skillId: 'armor-pact', type: 'slot' });
-        setHeroSkillBanner(selectedHeroSkillDef.statusHint ?? '选择空槽以获得 +1 永久护甲。');
+        setHeroSkillBanner(skillDef.statusHint ?? '选择空槽以获得 +1 永久护甲。');
         break;
       }
       case 'durability-for-blood': {
@@ -10013,12 +10168,12 @@ export default function GameBoard() {
           const currentDurability = slot.item.durability ?? maxDurability;
           setEquipmentSlotById(slot.id, { ...slot.item, durability: Math.min(maxDurability, currentDurability + 1) });
           applyDamage(1);
-          setHeroSkillUsedThisWave(true);
+          markSkillUsed(skillDef.id);
           setHeroSkillBanner('Durability increased by 1.');
           break;
         }
         setPendingHeroSkillAction({ skillId: 'durability-for-blood', type: 'slot' });
-        setHeroSkillBanner(selectedHeroSkillDef.statusHint ?? 'Select an equipped slot to repair.');
+        setHeroSkillBanner(skillDef.statusHint ?? 'Select an equipped slot to repair.');
         break;
       }
       case 'blood-strike': {
@@ -10032,7 +10187,7 @@ export default function GameBoard() {
           applyDamage(3);
           const heroSkillDamage = getSpellDamage(3);
           dealDamageToMonster(monsters[0], heroSkillDamage, { pulses: 2 });
-          setHeroSkillUsedThisWave(true);
+          markSkillUsed(skillDef.id);
           setHeroSkillBanner(`Crimson Strike dealt ${heroSkillDamage} damage.`);
           break;
         }
@@ -10054,7 +10209,7 @@ export default function GameBoard() {
         const drawn = drawClassCardsToBackpack(1, 'gold-discovery');
         if (drawn.length > 0) {
           triggerClassDeckFlight(drawn);
-          setHeroSkillUsedThisWave(true);
+          markSkillUsed(skillDef.id);
           setHeroSkillBanner(`花费 ${cost} 金币，获得了「${drawn[0].name}」！`);
           addGameLog('skill', `黄金探秘：花费 ${cost} 金币，获得「${drawn[0].name}」`);
         } else {
@@ -10088,7 +10243,7 @@ export default function GameBoard() {
         } else {
           setHeroSkillBanner('放弃了坟场召回。');
         }
-        setHeroSkillUsedThisWave(true);
+        markSkillUsed(skillDef.id);
         break;
       }
       case 'blood-draw': {
@@ -10098,7 +10253,7 @@ export default function GameBoard() {
           const drawn = drawFromBackpackToHand();
           if (drawn) drawnNames.push(drawn.name);
         }
-        setHeroSkillUsedThisWave(true);
+        markSkillUsed(skillDef.id);
         if (drawnNames.length > 0) {
           setHeroSkillBanner(`失去 4 生命，抽到「${drawnNames.join('」「')}」！`);
           addGameLog('skill', `血契抽牌：失去 4 生命，抽到「${drawnNames.join('」「')}」`);
@@ -10121,7 +10276,7 @@ export default function GameBoard() {
           dealDamageToMonster(monster, dmg);
           totalDamaged++;
         }
-        setHeroSkillUsedThisWave(true);
+        markSkillUsed(skillDef.id);
         setHeroSkillBanner(`铁壁之心：对 ${totalDamaged} 只怪物各造成 ${dmg} 点伤害！`);
         addGameLog('skill', `铁壁之心：对场上 ${totalDamaged} 只怪物各造成 ${dmg} 点伤害`);
         break;
@@ -10147,13 +10302,13 @@ export default function GameBoard() {
           const slotId = equippedSlots[0];
           const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
           setSlotAttackBursts(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 6 }));
-          setHeroSkillUsedThisWave(true);
+          markSkillUsed(skillDef.id);
           setHeroSkillBanner(`${slotItem!.name} 的下次攻击将额外造成 6 点伤害！`);
           addGameLog('skill', `弃牌赋刃：${slotItem!.name} 下次攻击 +6`);
           break;
         }
         setPendingHeroSkillAction({ skillId: 'discard-empower', type: 'slot' });
-        setHeroSkillBanner(selectedHeroSkillDef.statusHint ?? '选择一个装备，为其下次攻击 +6 伤害。');
+        setHeroSkillBanner(skillDef.statusHint ?? '选择一个装备，为其下次攻击 +6 伤害。');
         break;
       }
       default:
@@ -10170,12 +10325,14 @@ export default function GameBoard() {
     drawFromBackpackToHand,
     equipmentSlot1,
     equipmentSlot2,
+    extraSkillsUsedThisWave,
     gold,
     heroSkillUsedThisWave,
     handCards,
     discardCardToGraveyard,
     isMonsterEngaged,
     discardedCards,
+    markSkillUsed,
     pendingHeroSkillAction,
     requestGraveyardSelection,
     selectedHeroSkillDef,
@@ -10208,7 +10365,7 @@ export default function GameBoard() {
           setEquipmentSlotById(slotId, otherItem);
           setEquipmentSlotById(otherSlot, null);
         }
-        setHeroSkillUsedThisWave(true);
+        markSkillUsed(pendingHeroSkillAction.skillId);
         setPendingHeroSkillAction(null);
         setHeroSkillBanner('装备槽永久护甲 +1。');
         setHeroSkillArrow(null);
@@ -10238,7 +10395,7 @@ export default function GameBoard() {
         };
         setEquipmentSlotById(slotId, updatedItem);
         applyDamage(1);
-        setHeroSkillUsedThisWave(true);
+        markSkillUsed(pendingHeroSkillAction.skillId);
         setPendingHeroSkillAction(null);
         setHeroSkillBanner('Durability increased by 1.');
         setHeroSkillArrow(null);
@@ -10251,7 +10408,7 @@ export default function GameBoard() {
           return;
         }
         setSlotAttackBursts(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 6 }));
-        setHeroSkillUsedThisWave(true);
+        markSkillUsed(pendingHeroSkillAction.skillId);
         setPendingHeroSkillAction(null);
         setHeroSkillBanner(`${slotItem.name} 的下次攻击将额外造成 6 点伤害！`);
         setHeroSkillArrow(null);
@@ -10263,6 +10420,7 @@ export default function GameBoard() {
       applyDamage,
       equipmentSlot1,
       equipmentSlot2,
+      markSkillUsed,
       pendingHeroSkillAction,
       setEquipmentSlotBonus,
       setEquipmentSlotById,
@@ -10532,7 +10690,7 @@ export default function GameBoard() {
       const heroSkillDamage = getSpellDamage(pendingHeroSkillAction.baseDamage ?? 3);
       dealDamageToMonster(monster, heroSkillDamage, { pulses: 2 });
 
-      setHeroSkillUsedThisWave(true);
+      markSkillUsed(pendingHeroSkillAction.skillId);
       setPendingHeroSkillAction(null);
       setHeroSkillBanner(`Crimson Strike dealt ${heroSkillDamage} damage.`);
       setHeroSkillArrow(null);
@@ -10541,6 +10699,7 @@ export default function GameBoard() {
       applyDamage,
       dealDamageToMonster,
       getSpellDamage,
+      markSkillUsed,
       pendingHeroSkillAction,
     ],
   );
@@ -12334,6 +12493,25 @@ export default function GameBoard() {
         }
       : null;
 
+  const extraHeroSkillInfos = useMemo(() => {
+    if (showSkillSelection || extraHeroSkills.length === 0) return [];
+    return extraHeroSkills.map(skillId => {
+      const def = getHeroSkillById(skillId);
+      if (!def) return null;
+      const used = extraSkillsUsedThisWave.has(skillId);
+      return {
+        skillId,
+        name: def.name,
+        effect: def.effect,
+        buttonLabel: def.type === 'active' ? def.buttonLabel ?? def.name : undefined,
+        isPassive: def.type === 'passive',
+        isReady: def.type === 'active' && !used && !waterfallActive && !playerTargetingActive,
+        isUsed: def.type === 'active' ? used : false,
+        disabledReason: used ? '该技能本波已使用。' : waterfallActive ? '等待瀑流结束。' : undefined,
+      };
+    }).filter(Boolean) as { skillId: string; name: string; effect?: string; buttonLabel?: string; isPassive?: boolean; isReady?: boolean; isUsed?: boolean; disabledReason?: string }[];
+  }, [showSkillSelection, extraHeroSkills, extraSkillsUsedThisWave, waterfallActive, playerTargetingActive]);
+
   const isPotionSlotEligible = (slotId: EquipmentSlotId) => {
     if (!potionSlotTargeting || !pendingPotionAction || pendingPotionAction.step !== 'slot-select') {
       return false;
@@ -12364,6 +12542,14 @@ export default function GameBoard() {
       return;
     }
     handleHeroSkillUse();
+  }, [heroSkillTargeting, cancelHeroSkillAction, handleHeroSkillUse]);
+
+  const handleExtraHeroSkillButtonClick = useCallback((skillId: string) => {
+    if (heroSkillTargeting) {
+      cancelHeroSkillAction();
+      return;
+    }
+    handleHeroSkillUse(skillId as HeroSkillId);
   }, [heroSkillTargeting, cancelHeroSkillAction, handleHeroSkillUse]);
 
   const handleHeroMagicTrigger = useCallback(
@@ -13172,6 +13358,7 @@ export default function GameBoard() {
               combatState.engagedMonsterIds.length > 0 && combatState.currentTurn === 'hero'
             }
             heroSkillInfo={heroSkillInfo}
+            extraHeroSkillInfos={extraHeroSkillInfos}
             heroSkillMessage={heroSkillPrompt}
             onHeroSkillClick={
               heroSkillInfo && selectedHeroSkillDef?.type === 'active'
@@ -13179,6 +13366,7 @@ export default function GameBoard() {
                 : undefined
             }
             onHeroSkillCancel={heroSkillTargeting ? cancelHeroSkillAction : undefined}
+            onExtraHeroSkillClick={handleExtraHeroSkillButtonClick}
             heroSkillButtonRef={heroSkillButtonRef}
             heroMagicInfo={heroMagicUiState}
             onHeroMagicTrigger={handleHeroMagicTrigger}
@@ -13783,7 +13971,7 @@ export default function GameBoard() {
         />
       </div>
 
-      {isCombatPanelVisible && (
+      {isCombatPanelVisible && !isCombatPanelMinimized && (
         <div
           ref={combatPanelWrapperRef}
           className={combatPanelWrapperClassName}
@@ -13803,6 +13991,8 @@ export default function GameBoard() {
             stageScale={stageScale}
             onDragHandlePointerDown={handleCombatPanelPointerDown}
             isDragging={isCombatPanelDragging}
+            minimized={false}
+            onMinimizedChange={setIsCombatPanelMinimized}
           />
         </div>
       )}
@@ -13960,6 +14150,32 @@ export default function GameBoard() {
         onFinish={handleShopClose}
         onMinimize={() => setShopModalMinimized(true)}
         sourceEventName={shopSourceEvent?.name ?? undefined}
+        hp={hp}
+        maxHp={maxHp}
+        healCost={SHOP_HEAL_COST}
+        shopHealUsed={shopHealUsed}
+        onHealRequest={handleShopHealRequest}
+        shopLevelUpCost={SHOP_LEVEL_UP_COST}
+        shopLevelUpUsed={shopLevelUpUsed}
+        onShopLevelUpRequest={handleShopLevelUpRequest}
+        shopSkillDiscoverCost={SHOP_SKILL_DISCOVER_COST}
+        shopSkillDiscoverUsed={shopSkillDiscoverUsed}
+        canDiscoverSkill={(() => {
+          const ownedCount = (selectedHeroSkill ? 1 : 0) + extraHeroSkills.length;
+          return allHeroSkills.length - ownedCount >= 3;
+        })()}
+        discoverSkillDisabledReason={
+          allHeroSkills.length - ((selectedHeroSkill ? 1 : 0) + extraHeroSkills.length) < 3
+            ? '已学习太多技能，没有足够的未学技能可供选择。'
+            : undefined
+        }
+        onShopSkillDiscoverRequest={handleShopSkillDiscoverRequest}
+      />
+
+      <ShopSkillSelectModal
+        open={shopSkillSelectOpen}
+        options={shopSkillOptions}
+        onSelect={handleShopSkillSelect}
       />
 
       {eventTransformState && <CardFlipOverlay state={eventTransformState} />}
@@ -14085,26 +14301,51 @@ export default function GameBoard() {
         onSelectSkill={handleSkillSelection}
       />
 
-      {/* Undo Button */}
-      {!gameOver && !showSkillSelection && (
-        <button
-          onClick={(e) => { e.stopPropagation(); handleUndo(); }}
-          onPointerDown={(e) => e.stopPropagation()}
-          disabled={undoCount === 0}
-          style={{ pointerEvents: 'auto', transform: `scale(${stageScale})`, transformOrigin: 'bottom right' }}
-          className={`absolute bottom-4 right-4 z-[9999] flex items-center gap-1.5 rounded-full px-4 py-2.5 shadow-lg transition-all select-none ${
-            undoCount > 0
-              ? 'bg-slate-700/90 text-white hover:bg-slate-600 active:scale-95'
-              : 'bg-slate-700/40 text-white/40 cursor-not-allowed'
-          }`}
-        >
-          <Undo2 className="w-4 h-4" />
-          <span className="text-sm font-medium">撤销</span>
-          {undoCount > 0 && (
-            <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-xs">{undoCount}</span>
-          )}
-        </button>
-      )}
+      {/* Bottom-right controls: minimized combat panel + undo */}
+      <div
+        className="absolute bottom-4 right-4 z-[9999] flex flex-col items-end"
+        style={{ pointerEvents: 'none', transform: `scale(${stageScale})`, transformOrigin: 'bottom right' }}
+      >
+        {isCombatPanelVisible && isCombatPanelMinimized && (
+          <div className="pointer-events-auto mb-1">
+            <CombatPanel
+              engagedMonsters={engagedMonsters}
+              isActive={isCombatPanelVisible}
+              currentTurn={combatState.currentTurn}
+              heroAttacksRemaining={combatState.heroAttacksRemaining}
+              heroAttacksThisTurn={combatState.heroAttacksThisTurn}
+              pendingBlock={combatState.pendingBlock}
+              monsterAttackQueue={combatState.monsterAttackQueue}
+              onEndHeroTurn={endHeroTurn}
+              equipmentSlot1={equipmentSlot1}
+              equipmentSlot2={equipmentSlot2}
+              stageScale={stageScale}
+              isDragging={false}
+              minimized={true}
+              onMinimizedChange={setIsCombatPanelMinimized}
+            />
+          </div>
+        )}
+        {!gameOver && !showSkillSelection && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleUndo(); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            disabled={undoCount === 0}
+            style={{ pointerEvents: 'auto' }}
+            className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 shadow-lg transition-all select-none ${
+              undoCount > 0
+                ? 'bg-slate-700/90 text-white hover:bg-slate-600 active:scale-95'
+                : 'bg-slate-700/40 text-white/40 cursor-not-allowed'
+            }`}
+          >
+            <Undo2 className="w-4 h-4" />
+            <span className="text-sm font-medium">撤销</span>
+            {undoCount > 0 && (
+              <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-xs">{undoCount}</span>
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

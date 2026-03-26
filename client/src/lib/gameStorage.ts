@@ -68,6 +68,7 @@ export interface PersistedGameState {
   classDeck: GameCardData[];
   classCardsInHand: KnightCardData[];
   selectedHeroSkill: string | null;
+  extraHeroSkills?: string[];
   showSkillSelection: boolean;
   heroVariant: HeroVariant;
   permanentSkills: string[];

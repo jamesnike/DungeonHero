@@ -5,7 +5,7 @@ import type {
   EventDiceRange,
   GameCardData,
 } from '../GameCard';
-import type { HeroSkillId } from '@/lib/heroSkills';
+import type { HeroSkillId, HeroSkillDefinition } from '@/lib/heroSkills';
 import type { ShopOffering } from '../ShopModal';
 import type { LogEntry } from '../GameLogPanel';
 import type { PersistedGameState } from '@/lib/gameStorage';
@@ -408,6 +408,10 @@ export type UndoTransientState = {
   shopSourceEvent: GameCardData | null;
   shopDeleteUsed: boolean;
   shopHealUsed: boolean;
+  shopLevelUpUsed: boolean;
+  shopSkillDiscoverUsed: boolean;
+  shopSkillSelectOpen: boolean;
+  shopSkillOptions: HeroSkillDefinition[];
   discoverModalOpen: boolean;
   discoverOptions: GameCardData[];
   deleteModalOpen: boolean;

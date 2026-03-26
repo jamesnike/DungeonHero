@@ -20,6 +20,8 @@ interface CombatPanelProps {
   stageScale?: number;
   onDragHandlePointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   isDragging?: boolean;
+  minimized: boolean;
+  onMinimizedChange: (minimized: boolean) => void;
 }
 
 const MEASURED_PANEL_MIN = 0.65;
@@ -43,8 +45,9 @@ export default function CombatPanel({
   stageScale = 1,
   onDragHandlePointerDown,
   isDragging = false,
+  minimized,
+  onMinimizedChange,
 }: CombatPanelProps) {
-  const [minimized, setMinimized] = useState(true);
   const [panelScale, setPanelScale] = useState(1);
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -161,18 +164,22 @@ export default function CombatPanel({
     return (
       <Card
         ref={cardRef}
-        className={`relative z-10 w-full border border-primary/25 bg-card/95 shadow-lg combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
+        className={`relative z-10 border border-primary/25 bg-card/95 shadow-lg combat-panel${isDragging ? ' combat-panel--dragging' : ''}`}
         style={{ '--dh-combat-panel-scale': combinedPanelScale.toString() } as CSSProperties}
       >
         <div
-          className={`p-2 flex items-center gap-2 combat-panel__drag-handle${isDragging ? ' combat-panel__drag-handle--active' : ''}`}
+          className={[
+            'p-2 flex items-center gap-2',
+            onDragHandlePointerDown && 'combat-panel__drag-handle',
+            onDragHandlePointerDown && isDragging && 'combat-panel__drag-handle--active',
+          ].filter(Boolean).join(' ')}
           onPointerDown={onDragHandlePointerDown}
-          aria-grabbed={isDragging}
+          aria-grabbed={isDragging || undefined}
         >
           <button
             type="button"
             className="flex-shrink-0 rounded-md p-1 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
-            onClick={() => setMinimized(false)}
+            onClick={() => onMinimizedChange(false)}
             title="Expand combat panel"
           >
             <Maximize2 className="combat-panel__icon" />
@@ -220,7 +227,7 @@ export default function CombatPanel({
             <button
               type="button"
               className="rounded-md p-1 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
-              onClick={() => setMinimized(true)}
+              onClick={() => onMinimizedChange(true)}
               title="Minimize combat panel"
             >
               <Minimize2 className="combat-panel__icon" />

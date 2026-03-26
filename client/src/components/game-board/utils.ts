@@ -5,6 +5,9 @@ import ogreImage from '@assets/generated_images/cute_chibi_ogre_monster.png';
 import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
 import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
 import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
+import daggerWeaponImage from '@assets/generated_images/cute_cartoon_weapon_dagger.png';
+import holyBladeImage from '@assets/generated_images/cute_cartoon_holy_blade.png';
+import maceImage from '@assets/generated_images/cute_cartoon_mace.png';
 import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
 import ironShieldImage from '@assets/generated_images/cute_iron_shield.png';
 import heavyShieldImage from '@assets/generated_images/simple_heavy_shield.png';
@@ -349,10 +352,10 @@ export function createDeck(): GameCardData[] {
   }
 
   const weaponTypes = [
-    { name: 'Holy Blade', image: swordImage },
+    { name: 'Holy Blade', image: holyBladeImage },
     { name: 'Sword', image: axeImage },
-    { name: 'Dagger', image: daggerImage },
-    { name: 'Mace', image: swordImage },
+    { name: 'Dagger', image: daggerWeaponImage },
+    { name: 'Mace', image: maceImage },
     { name: 'Swift Blade', image: daggerImage },
     { name: 'Sword', image: axeImage },
   ];
@@ -373,6 +376,10 @@ export function createDeck(): GameCardData[] {
     if (weaponType.name === 'Holy Blade') {
       card.healOnKill = 2;
       card.description = '击杀怪物时回复 2 点生命。';
+    }
+    if (weaponType.name === 'Swift Blade') {
+      card.durability = Math.floor(Math.random() * 3) + 2;
+      card.maxDurability = card.durability;
     }
     if (weaponType.name === 'Mace') {
       card.value = Math.min(card.value, 3);
@@ -427,6 +434,8 @@ export function createDeck(): GameCardData[] {
     if (shieldType.name === 'Heavy Shield') {
       card.damageReflect = 1;
       card.description = '格挡时反弹 1 点伤害给攻击者（受装备栏永久伤害加成影响）。';
+      card.durability = Math.floor(Math.random() * 3) + 2;
+      card.maxDurability = card.durability;
     }
     deck.push(card);
   });

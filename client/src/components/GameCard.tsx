@@ -520,8 +520,8 @@ const amuletEffectText =
       : 'overflow-hidden flex items-end justify-center',
     isThemedImageCard
       ? card.type === 'amulet'
-        ? 'bg-amber-200/40'
-        : 'bg-emerald-300/40'
+        ? 'bg-amber-200/26'
+        : 'bg-emerald-200/26'
       : 'bg-gradient-to-b from-muted to-card',
   ]
     .filter(Boolean)
@@ -939,9 +939,9 @@ const amuletEffectText =
               {/* Text Area */}
               <div className={`flex-1 ${isCompact ? 'p-0.5' : 'p-1'} flex flex-col items-center justify-start text-center overflow-hidden relative ${
                 card.type === 'amulet'
-                  ? 'bg-amber-200/40'
+                  ? 'bg-amber-200/26'
                   : card.type === 'potion'
-                    ? 'bg-emerald-300/40'
+                    ? 'bg-emerald-200/26'
                     : 'bg-card'
               }`}>
                 <h3 className={`dh-card__name font-serif font-semibold w-full truncate ${isCompact ? 'px-0' : 'px-1'} ${

@@ -8,6 +8,9 @@ import wraithImage from '@assets/generated_images/cute_chibi_wraith_monster.png'
 import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
 import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
 import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
+import daggerWeaponImage from '@assets/generated_images/cute_cartoon_weapon_dagger.png';
+import holyBladeImage from '@assets/generated_images/cute_cartoon_holy_blade.png';
+import maceImage from '@assets/generated_images/cute_cartoon_mace.png';
 import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
 import ironShieldImage from '@assets/generated_images/cute_iron_shield.png';
 import heavyShieldImage from '@assets/generated_images/simple_heavy_shield.png';
@@ -36,7 +39,7 @@ import cardBackImage from '@assets/generated_images/card_back_design.png';
 
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage,
-  swordImage, axeImage, daggerImage,
+  swordImage, axeImage, daggerImage, daggerWeaponImage, holyBladeImage, maceImage,
   woodenShieldImage, ironShieldImage, heavyShieldImage,
   potionImage, potionConcentratedHealImage, potionWeaponRepairImage,
   potionEquipmentRepairImage, potionBackpackDrawImage, potionDiscoverImage,

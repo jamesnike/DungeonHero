@@ -29,9 +29,11 @@ interface HeroCardProps {
   healing?: boolean;
   showAttackIndicator?: boolean;
   heroSkillInfo?: HeroSkillUiState | null;
+  extraHeroSkillInfos?: ExtraHeroSkillUiState[];
   heroSkillMessage?: string | null;
   onHeroSkillClick?: () => void;
   onHeroSkillCancel?: () => void;
+  onExtraHeroSkillClick?: (skillId: string) => void;
   heroSkillButtonRef?: RefObject<HTMLButtonElement>;
   heroMagicInfo?: HeroMagicUiState[] | null;
   onHeroMagicTrigger?: (id: HeroMagicId) => void;
@@ -56,6 +58,10 @@ interface HeroSkillUiState {
   isUsed?: boolean;
   isPending?: boolean;
   disabledReason?: string;
+}
+
+interface ExtraHeroSkillUiState extends HeroSkillUiState {
+  skillId: string;
 }
 
 interface HeroMagicUiState {
@@ -88,9 +94,11 @@ export default function HeroCard({
   healing = false,
   showAttackIndicator = false,
   heroSkillInfo = null,
+  extraHeroSkillInfos,
   heroSkillMessage = null,
   onHeroSkillClick,
   onHeroSkillCancel,
+  onExtraHeroSkillClick,
   heroSkillButtonRef,
   heroMagicInfo = null,
   onHeroMagicTrigger,
@@ -401,6 +409,36 @@ export default function HeroCard({
                 )}
               </div>
             )}
+            {extraHeroSkillInfos && extraHeroSkillInfos.length > 0 && extraHeroSkillInfos.map(extraSkill => {
+              const extraIsPassive = Boolean(extraSkill.isPassive);
+              const extraDisabled = extraIsPassive || extraSkill.isUsed || !extraSkill.isReady;
+              const extraBtnClasses = extraDisabled
+                ? 'bg-gray-400/60 text-gray-600 cursor-not-allowed border border-gray-500/40'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 ring-1 ring-indigo-400/40';
+              return (
+                <div key={extraSkill.skillId} className="flex flex-col items-center gap-1">
+                  {extraIsPassive ? (
+                    <span className="dh-hero-btn font-semibold uppercase tracking-wide text-amber-950 bg-amber-300/30 rounded-full border border-amber-400/40">
+                      Passive: {extraSkill.name}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`dh-hero-btn font-bold uppercase tracking-wide rounded-full transition-[background-color,opacity] ${extraBtnClasses}`}
+                      disabled={extraDisabled}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onExtraHeroSkillClick?.(extraSkill.skillId);
+                      }}
+                      onTouchEnd={(event) => event.stopPropagation()}
+                      title={extraSkill.disabledReason}
+                    >
+                      {extraSkill.buttonLabel ?? extraSkill.name}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             {heroSkillMessage && (
               <div className="flex items-center gap-1 dh-hero-small text-amber-900/70 text-center justify-center">
                 <AlertTriangle className="w-3 h-3" />
