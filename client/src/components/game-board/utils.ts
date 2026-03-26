@@ -661,14 +661,15 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: '签下血约（受到 5 点伤害）', effect: 'hp-5' },
+      { text: '签下血约（受到 8 点伤害）', effect: 'hp-8' },
       {
         text: '献出装备（破坏任一装备）',
         effect: 'destroyEquipment:any',
         hint: '会要求你选择左或右装备',
         requires: [{ type: 'equipmentAny', message: '需要至少一件装备' }],
       },
-      { text: '支付赎金（损失 10 金币）', effect: 'gold-10' },
+      { text: '支付赎金（损失 15 金币）', effect: 'gold-15' },
+      { text: '扩展手牌（手牌上限 +1，跳过翻转）', effect: 'handLimit+1', skipFlip: true },
     ],
     flipTarget: {
       toCard: {
@@ -802,7 +803,11 @@ export function createDeck(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       { text: '血价交易（-2 HP，发现专属）', effect: 'hp-2,discoverClass' },
-      { text: '捐献财富（-4 金币，商店等级 +1）', effect: 'gold-4,shopLevel+1' },
+      {
+        text: '捐献财富（-4 金币，商店等级 +1）',
+        effect: 'gold-4,shopLevel+1',
+        requires: [{ type: 'gold', min: 4, message: '需要至少 4 金币' }],
+      },
       {
         text: '焚尽旧物（弃 2 张牌，法伤 +1）',
         effect: ['discardCards:2', 'spellDamage+1'],
@@ -955,8 +960,8 @@ export function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个武器，使它的下一次攻击 +3。',
-      description: '选择一个已装备的武器，让它的下一次攻击临时 +3。',
+      magicEffect: '永久魔法：选择一个装备栏，使其装备的下一次攻击 +3。',
+      description: '选择一个装备栏，使其中装备的下一次攻击临时 +3。',
     },
     {
       id: STARTER_CARD_IDS.repairOne,

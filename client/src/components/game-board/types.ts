@@ -176,20 +176,6 @@ export type PendingHeroMagicAction =
 export type PendingMagicAction =
   | {
       card: GameCardData;
-      effect: 'bulwark-slam';
-      step: 'slot-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'bulwark-slam';
-      step: 'monster-select';
-      slotId: EquipmentSlotId;
-      pendingDamage: number;
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
       effect: 'armor-strike';
       step: 'slot-select';
       prompt: string;
@@ -219,6 +205,7 @@ export type PendingMagicAction =
       effect: 'eternal-repair';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -239,6 +226,7 @@ export type PendingMagicAction =
       effect: 'shuffle-dungeon';
       step: 'dungeon-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -252,6 +240,7 @@ export type PendingMagicAction =
       effect: 'chaos-strike';
       step: 'monster-select';
       data: Record<string, unknown>;
+      echoRemaining?: number;
     };
 
 export type PendingPotionAction =

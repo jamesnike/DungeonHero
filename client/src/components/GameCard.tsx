@@ -102,6 +102,7 @@ export interface EventChoiceDefinition {
   hint?: string;
   requiresDisabledChoices?: string[];
   requiresDisabledReason?: string;
+  skipFlip?: boolean;
 }
 
 export type CardFlipDestination = 'backpack' | 'hand' | 'graveyard' | 'stay';

@@ -63,7 +63,7 @@ export function generateKnightDeck(): KnightCardData[] {
   pushCard({
     type: 'weapon',
     name: '碎雷战锤',
-    value: 7,
+    value: 4,
     image: thunderHammerImage,
     classCard: true,
     description: '每次攻击永久增加该装备栏 +1 伤害。',
@@ -100,11 +100,11 @@ export function generateKnightDeck(): KnightCardData[] {
   pushCard({
     type: 'shield',
     name: '守护圣盾',
-    value: 4,
+    value: 3,
     image: guardianShieldImage,
     classCard: true,
-    description: '完美格挡时，50% 概率不消耗耐久（掷骰判定）。',
-    shieldPerfectBlockSaveChance: 50,
+    description: '完美格挡时，70% 概率不消耗耐久（掷骰判定）。',
+    shieldPerfectBlockSaveChance: 70,
     durability: 2,
     maxDurability: 2,
   });
@@ -181,7 +181,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：获得等同本回合已损失生命的金币，将“贪婪诅咒”放入背包，并开启商店。',
+    description: '一次性：获得等同当前已损失生命的金币，将“贪婪诅咒”放入背包，并开启商店。',
     magicType: 'instant',
     magicEffect: '获得金币，生成贪婪诅咒，并开启商店。',
     knightEffect: 'blood-greed',
