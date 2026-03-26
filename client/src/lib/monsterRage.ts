@@ -16,11 +16,11 @@ export type MonsterUpgrade = {
 };
 
 const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
-  Dragon: { base: 2, interval: 3 },
+  Dragon: { base: 2, interval: 4 },
   Skeleton: { base: 1, interval: 4 },
   Goblin: { base: 1, interval: 4 },
-  Ogre: { base: 1, interval: 2 },
-  Wraith: { base: 1, interval: 3 },
+  Ogre: { base: 1, interval: 3 },
+  Wraith: { base: 1, interval: 4 },
 };
 
 const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {

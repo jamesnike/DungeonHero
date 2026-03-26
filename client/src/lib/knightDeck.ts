@@ -126,7 +126,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: thunderAmuletImage,
     classCard: true,
-    description: '每弃一张牌，对激活行随机怪物造成 2 点伤害。',
+    description: '每弃一张牌，对激活行随机怪物造成 1 点伤害。',
     amuletEffect: 'discard-zap',
   });
 

@@ -511,7 +511,7 @@ export function createDeck(): GameCardData[] {
       name: 'Strength Amulet',
       value: 5,
       image: strengthAmuletImage,
-      description: '所有Equipment 攻击+4，每攻击一次，掉3点血',
+      description: '所有Equipment 攻击+4，每攻击一次，掉2点血',
       amuletEffect: 'strength',
       amuletAuraBonus: {
         attack: 4,
@@ -880,6 +880,7 @@ export function createDeck(): GameCardData[] {
         requires: [{ type: 'graveyard', min: 1, message: '坟场中没有可召回的卡牌' }],
       },
       { text: '召唤商贩（打开商店）', effect: 'openShop' },
+      { text: '空间扩展（背包上限 +2）', effect: 'backpackSize+2' },
     ],
   });
 

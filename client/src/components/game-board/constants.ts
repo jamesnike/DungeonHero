@@ -54,7 +54,7 @@ export const HERO_ROW_CLASS_DECK_INDEX = 5;
 export const BALANCE_ATTACK_BONUS = 3;
 export const BALANCE_SHIELD_BONUS = 3;
 export const FLASH_ATTACK_PENALTY = 3;
-export const STRENGTH_SELF_DAMAGE = 3;
+export const STRENGTH_SELF_DAMAGE = 2;
 
 export const COMBAT_ANIMATION_DURATION = 1200;
 export const COMBAT_ANIMATION_STAGGER = 180;

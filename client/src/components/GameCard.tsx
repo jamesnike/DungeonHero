@@ -55,7 +55,8 @@ export type PotionEffectId =
   | 'left-slot-durability-max+1'
   | 'dice-backpack-expand'
   | 'dice-arcane-infusion'
-  | 'heal-14';
+  | 'heal-14'
+  | 'discover-graveyard-magic';
 
 export type AmuletEffectId =
   | 'heal'
@@ -188,7 +189,8 @@ export interface GameCardData {
   bossPhase?: boolean; // Monster has transformed into boss form
   bossRetaliationDamage?: number; // Direct damage to hero (ignoring shields) each time boss takes a hit
   bossLastStandAura?: boolean; // At 1 layer: +5 atk & heal 8 HP per monster turn end
-  bossLayerCap?: boolean; // Max 1 layer loss per hero turn; immune to all damage after
+  bossLayerCap?: boolean; // (deprecated) Max 1 layer loss per hero turn
+  bossFuryDiceChance?: boolean; // Boss: 50% chance to skip layer loss on attack (dice roll)
   // Tier-3 waterfall upgrade abilities
   ogreEnterDiscard?: boolean; // Ogre tier-3: randomly discard a player hand card on enter
   dragonBleedDestroy?: boolean; // Dragon tier-3: on layer loss, destroy equipment with durability > remaining layers
@@ -196,6 +198,11 @@ export interface GameCardData {
   skeletonNoLayerCostActive?: boolean; // Set to true once skeleton revives with tier-3 ability
   wraithDeathHeal?: number; // Wraith tier-3: on death, same-row monsters gain this much HP
   goblinStealScale?: boolean; // Goblin tier-3: +X atk/hp per X gold stolen
+  goblinHasStolen?: boolean; // Tracks if this goblin successfully stole gold
+  // Permanent event properties
+  isPermanentEvent?: boolean; // Stays in dungeon after effect; recyclable like perm magic
+  hasReleaseCharge?: boolean; // Gained on appearance or position change; consumed on effect use
+  _fateBladeLastSlot?: number; // Internal: last known active row slot index for position tracking
 }
 
 interface GameCardProps {
@@ -659,7 +666,7 @@ const amuletEffectText =
                     {isEventCard ? 'Event' : card.type === 'hero-magic' ? 'Hero Magic' : 'Magic'}
                   </span>
                 ) : null}
-                {isPermanentMagicCard && (
+                {(isPermanentMagicCard || card.isPermanentEvent) && (
                   <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
                     <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
                   </span>

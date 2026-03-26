@@ -504,24 +504,24 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">
-                    血层为 1 时，每个怪物回合结束 +5 攻击，恢复 8 HP（满血则恢复血层）。
+                    血层为 1 时，每个怪物回合结束 +5 攻击，恢复 1 血层。
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Boss: Layer Cap */}
-            {card.type === 'monster' && card.bossLayerCap && (
+            {/* Boss: Fury Dice Chance */}
+            {card.type === 'monster' && card.bossFuryDiceChance && (
               <div className="bg-amber-500/15 p-3 rounded-md border border-amber-500/30 relative overflow-hidden">
                 <div className="relative flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 shrink-0 text-amber-500" />
                     <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
-                      坚韧
+                      韧性
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
-                    每个玩家回合最多掉 1 血层，之后免疫所有伤害。
+                    攻击后 50% 概率不掉血层（掷骰判定）。
                   </p>
                 </div>
               </div>
