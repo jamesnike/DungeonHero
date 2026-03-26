@@ -2274,6 +2274,75 @@ export default function GameBoard() {
     logBackpackDraw('hand-guard-clear-all');
   }, []);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'hidden') return;
+
+      animationDelayTimeoutsRef.current.forEach(id => clearTimeout(id));
+      animationDelayTimeoutsRef.current = [];
+
+      if (heroBleedTimeoutRef.current) {
+        clearTimeout(heroBleedTimeoutRef.current);
+        heroBleedTimeoutRef.current = null;
+      }
+
+      for (const timeouts of Object.values(monsterBleedTimeoutsRef.current)) {
+        timeouts.forEach(id => clearTimeout(id));
+      }
+      monsterBleedTimeoutsRef.current = {};
+
+      for (const timeouts of Object.values(weaponSwingTimeoutsRef.current)) {
+        timeouts.forEach(id => clearTimeout(id));
+      }
+      weaponSwingTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+
+      for (const timeouts of Object.values(shieldBlockTimeoutsRef.current)) {
+        timeouts.forEach(id => clearTimeout(id));
+      }
+      shieldBlockTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+
+      clearWaterfallTimeouts();
+
+      pendingHandDeliveryGuardsRef.current.forEach(entry => {
+        ensureCardInHand(entry.card);
+      });
+      clearAllHandDeliveryGuards();
+      clearAllBackpackHandFallbacks();
+
+      if (classDeckFlightAnimationRef.current !== null) {
+        cancelAnimationFrame(classDeckFlightAnimationRef.current);
+        classDeckFlightAnimationRef.current = null;
+      }
+      if (backpackHandFlightAnimationRef.current !== null) {
+        cancelAnimationFrame(backpackHandFlightAnimationRef.current);
+        backpackHandFlightAnimationRef.current = null;
+      }
+
+      for (const flight of backpackHandFlightsRef.current) {
+        if (!flight.delivered) {
+          ensureCardInHand(flight.card);
+        }
+      }
+      backpackHandFlightsRef.current = [];
+      setBackpackHandFlights([]);
+
+      classDeckFlightsRef.current = [];
+      setClassDeckFlights([]);
+
+      setHeroBleedActive(false);
+      setMonsterBleedStates({});
+      setWeaponSwingStates({ equipmentSlot1: 0, equipmentSlot2: 0 });
+      setShieldBlockStates({ equipmentSlot1: 0, equipmentSlot2: 0 });
+      setTakingDamage(false);
+      setHealing(false);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [clearWaterfallTimeouts, clearAllBackpackHandFallbacks, clearAllHandDeliveryGuards, ensureCardInHand]);
+
   const scheduleBackpackHandFallback = useCallback(
     (card: GameCardData) => {
       if (typeof window === 'undefined') {
@@ -4017,7 +4086,6 @@ export default function GameBoard() {
   };
 
   const resolveBlockChoice = async (target: BlockTarget) => {
-    pushUndoSnapshot();
     if (!combatState.pendingBlock) {
       return;
     }
