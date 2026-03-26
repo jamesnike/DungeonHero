@@ -113,6 +113,7 @@ export const STARTER_CARD_IDS = {
   weaponBurst: 'starter-perm-weapon-burst',
   repairOne: 'starter-perm-repair-one',
   healTwo: 'starter-perm-heal-two',
+  discardDraw: 'starter-perm-discard-draw',
   reshuffle: 'starter-perm-reshuffle',
   dungeonSwap: 'starter-perm-dungeon-swap',
   trainingBlade: 'starter-weapon-training-blade',

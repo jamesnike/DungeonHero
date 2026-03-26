@@ -15,6 +15,13 @@ import {
 import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
+import {
+  EventNameLeftGlyph,
+  EventTitleBand,
+  eventTitleSideSlotClass,
+  MagicNameFlankIcons,
+  MagicTitleBand,
+} from './MagicNameFlankIcons';
 
 const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
@@ -262,6 +269,8 @@ function GameCardInner({
   const engagedMonster = isEngaged && card.type === 'monster';
   const isPotionCard = card.type === 'potion';
   const isMagicLikeCard = card.type === 'magic' || card.type === 'hero-magic';
+  const isEventCard = card.type === 'event';
+  const isTitleBandCard = isMagicLikeCard || isEventCard;
   const isPermanentMagicCard = card.type === 'magic' && card.magicType === 'permanent';
   const healingPotionEffects: PotionEffectId[] = ['heal-5', 'heal-7'];
   const isHealingPotion =
@@ -433,9 +442,9 @@ function GameCardInner({
       case 'magic':
         return <Zap className="dh-card__icon text-cyan-500" />;
       case 'hero-magic':
-        return <Wand2 className="dh-card__icon text-rose-400" />;
+        return <Wand2 className="dh-card__icon text-rose-500" />;
       case 'event':
-        return <Scroll className="dh-card__icon text-violet-900" />;
+        return <Scroll className="dh-card__icon text-violet-700" />;
     }
   };
 
@@ -455,9 +464,9 @@ function GameCardInner({
       case 'shield':
         return 'border-blue-900';
       case 'potion':
-        return 'border-green-900';
+        return 'border-emerald-800';
       case 'amulet':
-        return 'border-amber-700';
+        return 'border-violet-900';
       case 'magic':
         return 'border-cyan-900';
       case 'hero-magic':
@@ -506,23 +515,83 @@ const amuletEffectText =
   const showShieldBlock = Boolean(shieldBlockAnimation);
   const showDefeatOverlay = Boolean(defeatAnimation);
   const showCombatOverlay = showBleedOverlay || showWeaponSwing || showShieldBlock || showDefeatOverlay;
-  const isEventCard = card.type === 'event';
   const isMagicCard = isMagicLikeCard;
   const isTextOnlyCard = isEventCard || isMagicCard;
   const isThemedImageCard = card.type === 'amulet' || card.type === 'potion';
+  const cornerDecoClass =
+    card.type === 'amulet'
+      ? 'dh-card-deco--amulet'
+      : card.type === 'potion'
+        ? 'dh-card-deco--potion'
+        : card.type === 'monster'
+          ? 'dh-card-deco--monster'
+          : card.type === 'weapon'
+            ? 'dh-card-deco--weapon'
+            : card.type === 'shield'
+              ? 'dh-card-deco--shield'
+              : '';
+  const hasCornerDeco = Boolean(cornerDecoClass);
+  const insetFrameBorderClass = (() => {
+    if (!hasCornerDeco) return '';
+    switch (card.type) {
+      case 'monster':
+        return 'border-red-400/45';
+      case 'weapon':
+        return 'border-amber-500/40';
+      case 'shield':
+        return 'border-sky-500/45';
+      case 'potion':
+        return 'border-emerald-500/40';
+      case 'amulet':
+        return 'border-violet-400/45';
+      default:
+        return '';
+    }
+  })();
   const cardImageHeightClass = isThemedImageCard ? 'h-[60%]' : 'h-[65%]';
   const hasFlipTarget = Boolean(card.flipTarget);
+
+  const cardImageBackdropClass = (() => {
+    if (isThemedImageCard) {
+      return card.type === 'amulet' ? 'bg-violet-200/30' : 'bg-emerald-200/30';
+    }
+    switch (card.type) {
+      case 'monster':
+        return 'bg-red-200/30';
+      case 'weapon':
+        return 'bg-amber-200/30';
+      case 'shield':
+        return 'bg-blue-200/30';
+      default:
+        return 'bg-gradient-to-b from-muted to-card';
+    }
+  })();
+
+  const cardTextAreaBgClass = (() => {
+    switch (card.type) {
+      case 'amulet':
+        return 'bg-violet-200/30';
+      case 'potion':
+        return 'bg-emerald-200/30';
+      case 'monster':
+        return 'bg-red-200/30';
+      case 'weapon':
+        return 'bg-amber-200/30';
+      case 'shield':
+        return 'bg-blue-200/30';
+      default:
+        return 'bg-card';
+    }
+  })();
+
   const cardImageWrapperClassName = [
     'relative',
+    hasCornerDeco ? 'z-[1]' : '',
     cardImageHeightClass,
     isThemedImageCard
       ? 'overflow-hidden flex items-center justify-center'
       : 'overflow-hidden flex items-end justify-center',
-    isThemedImageCard
-      ? card.type === 'amulet'
-        ? 'bg-amber-200/26'
-        : 'bg-emerald-200/26'
-      : 'bg-gradient-to-b from-muted to-card',
+    cardImageBackdropClass,
   ]
     .filter(Boolean)
     .join(' ');
@@ -619,30 +688,32 @@ const amuletEffectText =
             /* ========== EVENT / MAGIC: full-height text layout with decorative edges ========== */
             <div className={`h-full flex flex-col relative overflow-hidden ${
               isEventCard
-                ? 'bg-violet-900/30'
+                ? 'bg-gradient-to-b from-violet-50 to-violet-200/85'
                 : card.type === 'hero-magic'
-                  ? 'bg-rose-900/40'
-                  : 'bg-cyan-900/40'
+                  ? 'bg-gradient-to-b from-rose-50 to-rose-200/85'
+                  : 'bg-gradient-to-b from-sky-50 to-cyan-100/90'
             }`}>
               {/* Decorative corner ornaments */}
               <div className={`absolute inset-0 pointer-events-none ${
                 isEventCard ? 'dh-card-deco--event' : 'dh-card-deco--magic'
               }`} />
 
-              {/* Inner decorative border */}
+              {/* Outer inset frame (inside card, behind content) */}
               <div className={`absolute pointer-events-none rounded-sm ${
                 isEventCard
-                  ? `${isCompact ? 'inset-[3px]' : 'inset-[6px]'} border border-violet-300/30`
-                  : `${isCompact ? 'inset-[3px]' : 'inset-[6px]'} border border-cyan-300/25`
+                  ? `${isCompact ? 'inset-[3px]' : 'inset-[6px]'} border border-violet-400/45`
+                  : card.type === 'hero-magic'
+                    ? `${isCompact ? 'inset-[3px]' : 'inset-[6px]'} border border-rose-400/45`
+                    : `${isCompact ? 'inset-[3px]' : 'inset-[6px]'} border border-cyan-500/35`
               }`} />
 
               {/* Type label banner at top */}
               <div className={`relative z-10 flex items-center justify-center gap-1.5 py-1.5 ${isCompact ? 'px-0.5' : 'px-2'} ${
                 isEventCard
-                  ? 'bg-violet-800/25'
+                  ? 'bg-violet-300/55'
                   : card.type === 'hero-magic'
-                    ? 'bg-rose-800/35'
-                    : 'bg-cyan-800/35'
+                    ? 'bg-rose-300/55'
+                    : 'bg-cyan-200/60'
               }`}>
                 {getCardIcon()}
                 {isFlat ? (
@@ -674,62 +745,141 @@ const amuletEffectText =
               </div>
 
               {/* Divider line */}
-              <div className={`h-px ${isCompact ? 'mx-1' : 'mx-3'} ${
-                isEventCard
-                  ? 'bg-gradient-to-r from-transparent via-violet-400/50 to-transparent'
-                  : 'bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent'
-              }`} />
+              <div
+                className={`h-px ${isCompact ? 'mx-1' : 'mx-3'} ${
+                  isTitleBandCard ? '-mb-px' : ''
+                } ${
+                  isEventCard
+                    ? 'bg-gradient-to-r from-transparent via-violet-500/40 to-transparent'
+                    : card.type === 'hero-magic'
+                      ? 'bg-gradient-to-r from-transparent via-rose-500/40 to-transparent'
+                      : 'bg-gradient-to-r from-transparent via-cyan-600/35 to-transparent'
+                }`}
+              />
 
-              {/* Card name */}
-              <div className={`relative z-10 ${isCompact ? 'px-0.5' : 'px-2'} pt-1.5 pb-0.5 text-center`}>
-                <h3 className={`dh-card__name font-serif font-bold w-full truncate ${
-                  isEventCard ? 'text-violet-950' : card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
-                }`} title={card.name}>
-                  {card.name}
-                </h3>
-              </div>
+              {/* Card name (magic / hero-magic: fused band — wash + flanks + title) */}
+              {isMagicLikeCard ? (
+                <MagicTitleBand card={card} compact={isCompact} isFlat={isFlat}>
+                  <MagicNameFlankIcons
+                    card={card}
+                    side="left"
+                    compact={isCompact}
+                    isFlat={isFlat}
+                    integrated
+                  />
+                  <h3
+                    className={`dh-card__name flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent px-1 py-0 text-center font-serif font-bold leading-snug ${
+                      card.type === 'hero-magic'
+                        ? 'bg-white/18 text-rose-950'
+                        : 'bg-white/18 text-cyan-950'
+                    }`}
+                    title={card.name}
+                  >
+                    {card.name}
+                  </h3>
+                  <MagicNameFlankIcons
+                    card={card}
+                    side="right"
+                    compact={isCompact}
+                    isFlat={isFlat}
+                    integrated
+                  />
+                </MagicTitleBand>
+              ) : isEventCard ? (
+                <EventTitleBand card={card} compact={isCompact} isFlat={isFlat}>
+                  <div className="flex min-h-[1.3rem] w-full min-w-0 flex-1 items-stretch sm:min-h-[1.4rem]">
+                    <div
+                      className={`flex shrink-0 items-center justify-center ${eventTitleSideSlotClass(isFlat, isCompact)}`}
+                    >
+                      <EventNameLeftGlyph card={card} compact={isCompact} isFlat={isFlat} />
+                    </div>
+                    <h3
+                      className="dh-card__name flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/18 px-1 py-0 text-center font-serif font-bold leading-snug text-violet-950"
+                      title={card.name}
+                    >
+                      {card.name}
+                    </h3>
+                    <div
+                      className={`shrink-0 ${eventTitleSideSlotClass(isFlat, isCompact)}`}
+                      aria-hidden
+                    />
+                  </div>
+                </EventTitleBand>
+              ) : (
+                <div
+                  className={`relative z-10 flex items-center justify-center text-center ${
+                    isCompact ? 'px-0.5 py-1 min-h-[1.85rem]' : 'px-2 py-1.5 min-h-[2.35rem]'
+                  }`}
+                >
+                  <h3
+                    className={`dh-card__name w-full truncate px-0.5 font-serif font-bold ${
+                      isEventCard ? 'text-violet-950' : card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
+                    }`}
+                    title={card.name}
+                  >
+                    {card.name}
+                  </h3>
+                </div>
+              )}
 
               {/* Thin separator */}
-              <div className={`h-px ${isCompact ? 'mx-2' : 'mx-6'} ${
-                isEventCard
-                  ? 'bg-gradient-to-r from-transparent via-violet-500/30 to-transparent'
-                  : 'bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent'
-              }`} />
+              <div
+                className={`h-px ${isCompact ? 'mx-2' : 'mx-6'} ${
+                  isTitleBandCard ? '-mt-1' : ''
+                } ${
+                  isEventCard
+                    ? 'bg-gradient-to-r from-transparent via-violet-500/35 to-transparent'
+                    : card.type === 'hero-magic'
+                      ? 'bg-gradient-to-r from-transparent via-rose-500/35 to-transparent'
+                      : 'bg-gradient-to-r from-transparent via-cyan-600/30 to-transparent'
+                }`}
+              />
 
               {/* Description / choices area - fills remaining space */}
-              <div className={`relative z-10 flex-1 overflow-y-auto ${isCompact ? 'px-0.5' : 'px-2'} py-1.5`}>
-                {isMagicLikeCard && (
-                  <div className="dh-card__body-text w-full text-left leading-snug text-gray-900">
-                  
-                    {card.description || card.magicEffect || card.heroMagicEffect}
-                  </div>
-                )}
-                {isEventCard && card.eventChoices && (
-                  <div className="w-full flex flex-col gap-1">
-                    {card.eventChoices.map((choice, idx) => (
-                      <div
-                        key={idx}
-                        className="dh-card__caption text-gray-900 text-left break-words leading-snug"
-                      >
-                        <span className="text-violet-700 mr-0.5">◆</span> {choice.text}
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div
+                className={`relative z-10 flex-1 min-h-0 overflow-y-auto ${isCompact ? 'px-0.5' : 'px-2'} ${
+                  isTextOnlyCard ? 'pt-1 pb-1.5' : 'py-1.5'
+                }`}
+              >
+                <div
+                  className={`h-full min-h-0 ${
+                    isCompact ? 'px-1 py-1' : isTextOnlyCard ? 'px-2 py-1' : 'px-2 py-1.5'
+                  } rounded-md border border-transparent bg-white/92`}
+                >
+                  {isMagicLikeCard && (
+                    <div className="dh-card__event-option w-full text-left leading-snug text-zinc-900">
+                      {card.description || card.magicEffect || card.heroMagicEffect}
+                    </div>
+                  )}
+                  {isEventCard && card.eventChoices && (
+                    <div className="w-full flex flex-col gap-1">
+                      {card.eventChoices.map((choice, idx) => (
+                        <div
+                          key={idx}
+                          className="dh-card__event-option text-left break-words leading-snug text-zinc-900"
+                        >
+                          <span className="text-violet-600 mr-0.5">◆</span> {choice.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Bottom decorative bar */}
               <div className={`h-px mx-3 ${
                 isEventCard
-                  ? 'bg-gradient-to-r from-transparent via-violet-400/50 to-transparent'
-                  : 'bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent'
+                  ? 'bg-gradient-to-r from-transparent via-violet-500/40 to-transparent'
+                  : card.type === 'hero-magic'
+                    ? 'bg-gradient-to-r from-transparent via-rose-500/40 to-transparent'
+                    : 'bg-gradient-to-r from-transparent via-cyan-600/35 to-transparent'
               }`} />
               <div className={`relative z-10 flex items-center justify-center py-1 ${
                 isEventCard
-                  ? 'bg-violet-800/20'
+                  ? 'bg-violet-300/45'
                   : card.type === 'hero-magic'
-                    ? 'bg-rose-800/25'
-                    : 'bg-cyan-800/25'
+                    ? 'bg-rose-300/45'
+                    : 'bg-cyan-200/50'
               }`}>
                 {getCardIcon()}
               </div>
@@ -737,6 +887,20 @@ const amuletEffectText =
           ) : (
             /* ========== STANDARD CARD LAYOUT (monsters, weapons, shields, potions, amulets) ========== */
             <>
+              {hasCornerDeco && (
+                <div
+                  className={`absolute inset-0 pointer-events-none z-0 ${cornerDecoClass}`}
+                  aria-hidden
+                />
+              )}
+              {hasCornerDeco && insetFrameBorderClass && (
+                <div
+                  className={`absolute pointer-events-none rounded-sm ${
+                    isCompact ? 'inset-[3px]' : 'inset-[6px]'
+                  } border ${insetFrameBorderClass}`}
+                  aria-hidden
+                />
+              )}
               {/* Image Area */}
               <div className={cardImageWrapperClassName}>
                 {card.image && (
@@ -937,13 +1101,9 @@ const amuletEffectText =
               </div>
               
               {/* Text Area */}
-              <div className={`flex-1 ${isCompact ? 'p-0.5' : 'p-1'} flex flex-col items-center justify-start text-center overflow-hidden relative ${
-                card.type === 'amulet'
-                  ? 'bg-amber-200/26'
-                  : card.type === 'potion'
-                    ? 'bg-emerald-200/26'
-                    : 'bg-card'
-              }`}>
+              <div
+                className={`flex-1 ${isCompact ? 'p-0.5' : 'p-1'} flex flex-col items-center justify-start text-center overflow-hidden relative ${hasCornerDeco ? 'z-[1] ' : ''}${cardTextAreaBgClass}`}
+              >
                 <h3 className={`dh-card__name font-serif font-semibold w-full truncate ${isCompact ? 'px-0' : 'px-1'} ${
                   isThemedImageCard ? 'text-gray-900' : ''
                 }`} title={card.name}>

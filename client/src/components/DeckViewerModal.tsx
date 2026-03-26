@@ -9,6 +9,12 @@ import {
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { type GameCardData } from './GameCard';
+import {
+  EventPatternPreview,
+  MagicSpellPreview,
+  isEventCardType,
+  isMagicSpellCardType,
+} from './MagicNameFlankIcons';
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2 } from 'lucide-react';
 
 const DEV_MODE = process.env.NODE_ENV !== 'production';
@@ -113,25 +119,41 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
                         }
                       }}
                     >
-                      {card.image && (
-                        <div className="relative w-full aspect-square rounded overflow-hidden bg-gradient-to-b from-muted to-card">
-                          <img
-                            src={card.image}
-                            alt={card.name}
-                            className="w-full h-full object-cover"
+                      <div className="relative w-full aspect-square rounded overflow-hidden bg-gradient-to-b from-muted to-card">
+                        {isMagicSpellCardType(card.type) ? (
+                          <MagicSpellPreview
+                            card={card}
+                            aspect="none"
+                            className="absolute inset-0 h-full w-full rounded overflow-hidden"
                           />
-                          {card.isFinalMonster && (
-                            <div className="absolute top-0 left-0 right-0 bg-red-600/80 text-white text-[8px] font-bold text-center py-0.5 tracking-wider">
-                              BOSS
-                            </div>
-                          )}
-                        </div>
-                      )}
+                        ) : isEventCardType(card.type) ? (
+                          <EventPatternPreview
+                            card={card}
+                            aspect="none"
+                            className="absolute inset-0 h-full w-full rounded overflow-hidden"
+                          />
+                        ) : (
+                          card.image && (
+                            <img
+                              src={card.image}
+                              alt={card.name}
+                              className="h-full w-full object-cover"
+                            />
+                          )
+                        )}
+                        {card.isFinalMonster && (
+                          <div className="absolute top-0 left-0 right-0 z-10 bg-red-600/80 text-white text-[8px] font-bold text-center py-0.5 tracking-wider">
+                            BOSS
+                          </div>
+                        )}
+                      </div>
                       <div className="text-center w-full">
                         <p className={`text-[10px] font-medium truncate ${card.isFinalMonster ? 'text-red-400' : ''}`}>{card.name}</p>
-                        <Badge variant={card.isFinalMonster ? 'destructive' : 'outline'} className="text-xs">
-                          {card.value}
-                        </Badge>
+                        {!isMagicSpellCardType(card.type) && !isEventCardType(card.type) && (
+                          <Badge variant={card.isFinalMonster ? 'destructive' : 'outline'} className="text-xs">
+                            {card.value}
+                          </Badge>
+                        )}
                       </div>
                     </Card>
                   ))}

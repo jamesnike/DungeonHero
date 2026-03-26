@@ -10,6 +10,12 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from '@/components/ui/badge';
 import { GameCardData } from './GameCard';
+import {
+  EventPatternPreview,
+  MagicSpellPreview,
+  isEventCardType,
+  isMagicSpellCardType,
+} from './MagicNameFlankIcons';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import StackedCardPile from './StackedCardPile';
 import { cn } from '@/lib/utils';
@@ -189,12 +195,26 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
                         }}
                       >
                         <div className="relative aspect-square bg-gradient-to-b from-muted to-card overflow-hidden rounded-sm mb-1">
-                          {card.image && (
-                            <img 
-                              src={card.image} 
-                              alt={card.name}
-                              className="w-full h-full object-cover"
+                          {isMagicSpellCardType(card.type) ? (
+                            <MagicSpellPreview
+                              card={card}
+                              aspect="none"
+                              className="absolute inset-0 h-full w-full rounded-sm"
                             />
+                          ) : isEventCardType(card.type) ? (
+                            <EventPatternPreview
+                              card={card}
+                              aspect="none"
+                              className="absolute inset-0 h-full w-full rounded-sm"
+                            />
+                          ) : (
+                            card.image && (
+                              <img
+                                src={card.image}
+                                alt={card.name}
+                                className="h-full w-full object-cover"
+                              />
+                            )
                           )}
                           <div className="absolute top-0 right-0 bg-background/95 rounded-bl px-1">
                             <span className="font-mono font-bold text-xs">{card.value}</span>

@@ -942,7 +942,8 @@
 
   .dh-card__event-option {
     font-size: calc(
-      0.72rem *
+      var(--dh-card-body-base) *
+      1.12 *
       var(--dh-card-font-scale, 1) *
       var(--dh-card-instance-scale, 1)
     );
@@ -975,11 +976,21 @@
     height: calc(var(--dh-card-dot-size, 0.45rem) * var(--dh-card-instance-scale, 1));
   }
 
-  /* Event card corner ornaments */
+  /* Card-type corner ornaments (background frame) */
   .dh-card-deco--event::before,
   .dh-card-deco--event::after,
   .dh-card-deco--magic::before,
-  .dh-card-deco--magic::after {
+  .dh-card-deco--magic::after,
+  .dh-card-deco--monster::before,
+  .dh-card-deco--monster::after,
+  .dh-card-deco--weapon::before,
+  .dh-card-deco--weapon::after,
+  .dh-card-deco--shield::before,
+  .dh-card-deco--shield::after,
+  .dh-card-deco--potion::before,
+  .dh-card-deco--potion::after,
+  .dh-card-deco--amulet::before,
+  .dh-card-deco--amulet::after {
     content: '';
     position: absolute;
     width: 18px;
@@ -1010,6 +1021,71 @@
     bottom: 3px; right: 3px;
     border-bottom: 2px solid rgba(103, 232, 249, 0.5);
     border-right: 2px solid rgba(103, 232, 249, 0.5);
+    border-bottom-right-radius: 4px;
+  }
+
+  .dh-card-deco--monster::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(248, 113, 113, 0.58);
+    border-left: 2px solid rgba(248, 113, 113, 0.58);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--monster::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(248, 113, 113, 0.58);
+    border-right: 2px solid rgba(248, 113, 113, 0.58);
+    border-bottom-right-radius: 4px;
+  }
+
+  .dh-card-deco--weapon::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(251, 191, 36, 0.58);
+    border-left: 2px solid rgba(251, 191, 36, 0.58);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--weapon::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(251, 191, 36, 0.58);
+    border-right: 2px solid rgba(251, 191, 36, 0.58);
+    border-bottom-right-radius: 4px;
+  }
+
+  .dh-card-deco--shield::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(96, 165, 250, 0.58);
+    border-left: 2px solid rgba(96, 165, 250, 0.58);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--shield::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(96, 165, 250, 0.58);
+    border-right: 2px solid rgba(96, 165, 250, 0.58);
+    border-bottom-right-radius: 4px;
+  }
+
+  .dh-card-deco--potion::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(52, 211, 153, 0.55);
+    border-left: 2px solid rgba(52, 211, 153, 0.55);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--potion::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(52, 211, 153, 0.55);
+    border-right: 2px solid rgba(52, 211, 153, 0.55);
+    border-bottom-right-radius: 4px;
+  }
+
+  .dh-card-deco--amulet::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(196, 181, 253, 0.58);
+    border-left: 2px solid rgba(196, 181, 253, 0.58);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--amulet::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(196, 181, 253, 0.58);
+    border-right: 2px solid rgba(196, 181, 253, 0.58);
     border-bottom-right-radius: 4px;
   }
 

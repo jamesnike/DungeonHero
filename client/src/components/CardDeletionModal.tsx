@@ -3,6 +3,12 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Backpack, Hand, Trash2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
+import {
+  EventPatternPreview,
+  MagicSpellPreview,
+  isEventCardType,
+  isMagicSpellCardType,
+} from './MagicNameFlankIcons';
 
 type CardSource = 'hand' | 'backpack';
 
@@ -71,7 +77,13 @@ export default function CardDeletionModal({
                 }}
               >
                 <div className="relative h-16 w-12 overflow-hidden rounded-sm bg-muted">
-                  {card.image && <img src={card.image} alt={card.name} className="h-full w-full object-cover" />}
+                  {isMagicSpellCardType(card.type) ? (
+                    <MagicSpellPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+                  ) : isEventCardType(card.type) ? (
+                    <EventPatternPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+                  ) : (
+                    card.image && <img src={card.image} alt={card.name} className="h-full w-full object-cover" />
+                  )}
                   <Badge className="absolute top-1 right-1 text-[10px] px-1 py-0" variant="secondary">
                     {card.type.toUpperCase()}
                   </Badge>

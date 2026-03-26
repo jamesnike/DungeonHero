@@ -3,6 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowUpCircle, Coins, Heart, ShoppingBag, Sparkles, Trash2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
+import {
+  EventPatternPreview,
+  MagicSpellPreview,
+  isEventCardType,
+  isMagicSpellCardType,
+} from './MagicNameFlankIcons';
 
 export interface ShopOffering {
   card: GameCardData;
@@ -192,8 +198,14 @@ export default function ShopModal({
                 >
                   <div className="flex gap-3 flex-1">
                     <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-muted">
-                      {card.image && (
-                        <img src={card.image} alt={card.name} className="h-full w-full object-cover" />
+                      {isMagicSpellCardType(card.type) ? (
+                        <MagicSpellPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+                      ) : isEventCardType(card.type) ? (
+                        <EventPatternPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+                      ) : (
+                        card.image && (
+                          <img src={card.image} alt={card.name} className="h-full w-full object-cover" />
+                        )
                       )}
                       <Badge className="absolute top-1 right-1 text-[10px] px-1 py-0" variant="secondary">
                         {typeLabel}

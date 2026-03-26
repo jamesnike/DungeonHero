@@ -8,6 +8,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { GameCardData } from './GameCard';
+import {
+  EventPatternPreview,
+  MagicSpellPreview,
+  isEventCardType,
+  isMagicSpellCardType,
+} from './MagicNameFlankIcons';
 import { Backpack } from 'lucide-react';
 
 interface BackpackViewerModalProps {
@@ -48,16 +54,20 @@ export default function BackpackViewerModal({
       }}
     >
       <div className="relative h-16 w-12 overflow-hidden rounded-sm bg-gradient-to-b from-muted to-card">
-        {card.image && (
-          <img
-            src={card.image}
-            alt={card.name}
-            className="h-full w-full object-cover"
-          />
+        {isMagicSpellCardType(card.type) ? (
+          <MagicSpellPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+        ) : isEventCardType(card.type) ? (
+          <EventPatternPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+        ) : (
+          card.image && (
+            <img src={card.image} alt={card.name} className="h-full w-full object-cover" />
+          )
         )}
-        <Badge className="absolute top-1 right-1 text-[10px] px-1 py-0">
-          {card.value}
-        </Badge>
+        {!isMagicSpellCardType(card.type) && !isEventCardType(card.type) && (
+          <Badge className="absolute top-1 right-1 text-[10px] px-1 py-0">
+            {card.value}
+          </Badge>
+        )}
       </div>
       <div className="flex-1">
         <div className="flex items-center gap-2">

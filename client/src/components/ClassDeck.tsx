@@ -10,6 +10,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { GameCardData } from './GameCard';
+import {
+  EventPatternPreview,
+  MagicSpellPreview,
+  isEventCardType,
+  isMagicSpellCardType,
+} from './MagicNameFlankIcons';
 import StackedCardPile from './StackedCardPile';
 import { cn } from '@/lib/utils';
 import { useGameViewport } from '@/contexts/GameViewportContext';
@@ -130,12 +136,26 @@ export default function ClassDeck({
                         }}
                       >
                         <div className="relative aspect-square bg-gradient-to-b from-primary/10 to-primary/5 overflow-hidden rounded-sm mb-1">
-                          {card.image && (
-                            <img 
-                              src={card.image} 
-                              alt={card.name}
-                              className="w-full h-full object-cover"
+                          {isMagicSpellCardType(card.type) ? (
+                            <MagicSpellPreview
+                              card={card}
+                              aspect="none"
+                              className="absolute inset-0 h-full w-full rounded-sm"
                             />
+                          ) : isEventCardType(card.type) ? (
+                            <EventPatternPreview
+                              card={card}
+                              aspect="none"
+                              className="absolute inset-0 h-full w-full rounded-sm"
+                            />
+                          ) : (
+                            card.image && (
+                              <img
+                                src={card.image}
+                                alt={card.name}
+                                className="h-full w-full object-cover"
+                              />
+                            )
                           )}
                           {card.skillType && (
                             <Badge 
