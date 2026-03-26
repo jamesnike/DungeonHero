@@ -54,7 +54,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 4,
     image: swiftDaggerImage,
     classCard: true,
-    description: '杀死怪物时耐久度回满。',
+    description: '用此武器杀死怪物时耐久度回满。',
     durability: 3,
     maxDurability: 3,
     restoreDurabilityOnKill: true,

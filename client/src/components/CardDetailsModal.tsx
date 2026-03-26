@@ -189,10 +189,17 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                       {upgrades.map((u, i) => {
                         const reached = rageTurn != null && rageTurn >= u.waterfallLevel;
                         return (
-                          <div key={i} className={`text-xs flex items-center gap-2 ${reached ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
-                            <span>Waterfall ≥ {u.waterfallLevel}:</span>
-                            <span>攻击 +{u.attackBonus}, 血量 +{u.hpBonus}</span>
-                            {reached && <span className="text-[10px]">✓ 已激活</span>}
+                          <div key={i} className={`text-xs ${reached ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
+                            <div className="flex items-center gap-2">
+                              <span>Waterfall ≥ {u.waterfallLevel}:</span>
+                              <span>攻击 +{u.attackBonus}, 血量 +{u.hpBonus}</span>
+                              {reached && <span className="text-[10px]">✓ 已激活</span>}
+                            </div>
+                            {u.specialDesc && (
+                              <div className={`pl-4 text-[11px] ${reached ? 'text-red-400' : 'text-muted-foreground/70'}`}>
+                                {u.specialDesc}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -343,7 +350,7 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">
-                    每次攻击时偷取{card.onAttackEffect === 'steal-gold-5' ? ' 5 ' : ' 2 '}金币。
+                    每次攻击时偷取{card.onAttackEffect === 'steal-gold-6' ? ' 6 ' : ' 3 '}金币。
                   </p>
                 </div>
               </div>
@@ -385,6 +392,73 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                           ? '死亡时同行其他怪物攻击力 +4，同行卡牌位置随机打乱。'
                           : '死亡时触发特殊效果。'}
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-3 Upgrade: Ogre Enter Discard */}
+            {card.type === 'monster' && card.ogreEnterDiscard && (
+              <div className="bg-amber-500/15 p-3 rounded-md border border-amber-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">蛮力震慑</span>
+                  </div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">入场时随机弃掉玩家一张手牌。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-3 Upgrade: Dragon Bleed Destroy */}
+            {card.type === 'monster' && card.dragonBleedDestroy && (
+              <div className="bg-orange-500/15 p-3 rounded-md border border-orange-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 shrink-0 text-orange-500" />
+                    <span className="font-extrabold text-sm text-orange-700 dark:text-orange-300 tracking-wide">流血破甲</span>
+                  </div>
+                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">每失去一个血层，破坏所有耐久度大于该怪物剩余血层数的装备。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-3 Upgrade: Skeleton No Layer Cost */}
+            {card.type === 'monster' && (card.skeletonNoLayerCost || card.skeletonNoLayerCostActive) && (
+              <div className="bg-gray-500/15 p-3 rounded-md border border-gray-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skull className="w-4 h-4 shrink-0 text-gray-500" />
+                    <span className="font-extrabold text-sm text-gray-700 dark:text-gray-300 tracking-wide">
+                      不朽之骨 {card.skeletonNoLayerCostActive ? '（已激活）' : ''}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 pl-6">复生后，攻击不再消耗血层。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-3 Upgrade: Wraith Death Heal */}
+            {card.type === 'monster' && card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && (
+              <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨灵祝福</span>
+                  </div>
+                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">死亡时同行其他怪物生命值 +{card.wraithDeathHeal}。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-3 Upgrade: Goblin Steal Scale */}
+            {card.type === 'monster' && card.goblinStealScale && (
+              <div className="bg-emerald-500/15 p-3 rounded-md border border-emerald-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Coins className="w-4 h-4 shrink-0 text-emerald-500" />
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">贪婪强化</span>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">每偷到 X 金币，攻击力和生命值各 +X。</p>
                 </div>
               </div>
             )}

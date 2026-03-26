@@ -11,6 +11,8 @@ export type MonsterUpgrade = {
   waterfallLevel: number;
   attackBonus: number;
   hpBonus: number;
+  specialAbility?: string;
+  specialDesc?: string;
 };
 
 const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
@@ -22,11 +24,31 @@ const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
 };
 
 const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
-  Dragon:   [{ waterfallLevel: 4, attackBonus: 2, hpBonus: 3 }, { waterfallLevel: 8, attackBonus: 4, hpBonus: 6 }],
-  Skeleton: [{ waterfallLevel: 3, attackBonus: 2, hpBonus: 1 }, { waterfallLevel: 7, attackBonus: 4, hpBonus: 2 }],
-  Goblin:   [{ waterfallLevel: 3, attackBonus: 1, hpBonus: 2 }, { waterfallLevel: 7, attackBonus: 2, hpBonus: 4 }],
-  Ogre:     [{ waterfallLevel: 5, attackBonus: 1, hpBonus: 3 }, { waterfallLevel: 9, attackBonus: 2, hpBonus: 6 }],
-  Wraith:   [{ waterfallLevel: 4, attackBonus: 2, hpBonus: 2 }, { waterfallLevel: 8, attackBonus: 4, hpBonus: 4 }],
+  Dragon:   [
+    { waterfallLevel: 4, attackBonus: 2, hpBonus: 3 },
+    { waterfallLevel: 8, attackBonus: 4, hpBonus: 6 },
+    { waterfallLevel: 12, attackBonus: 6, hpBonus: 9, specialAbility: 'dragon-bleed-destroy', specialDesc: '流血破甲：每失去一个血层，破坏耐久度 > 剩余血层数的装备' },
+  ],
+  Skeleton: [
+    { waterfallLevel: 3, attackBonus: 2, hpBonus: 1 },
+    { waterfallLevel: 7, attackBonus: 4, hpBonus: 2 },
+    { waterfallLevel: 11, attackBonus: 6, hpBonus: 3, specialAbility: 'skeleton-no-layer-cost', specialDesc: '不朽之骨：复生后攻击不消耗血层' },
+  ],
+  Goblin:   [
+    { waterfallLevel: 3, attackBonus: 1, hpBonus: 2 },
+    { waterfallLevel: 7, attackBonus: 2, hpBonus: 4 },
+    { waterfallLevel: 11, attackBonus: 3, hpBonus: 6, specialAbility: 'goblin-steal-scale', specialDesc: '贪婪强化：每偷到X金币，攻击力和生命值 +X' },
+  ],
+  Ogre:     [
+    { waterfallLevel: 5, attackBonus: 1, hpBonus: 3 },
+    { waterfallLevel: 9, attackBonus: 2, hpBonus: 6 },
+    { waterfallLevel: 13, attackBonus: 3, hpBonus: 9, specialAbility: 'ogre-enter-discard', specialDesc: '蛮力震慑：入场时随机弃掉玩家一张手牌' },
+  ],
+  Wraith:   [
+    { waterfallLevel: 4, attackBonus: 2, hpBonus: 2 },
+    { waterfallLevel: 8, attackBonus: 4, hpBonus: 4 },
+    { waterfallLevel: 12, attackBonus: 6, hpBonus: 6, specialAbility: 'wraith-death-heal', specialDesc: '怨灵祝福：死亡时同行其他怪物生命值 +4' },
+  ],
 };
 
 const normalizeTurn = (turn: number): number => {
@@ -87,7 +109,7 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
   const bonusAtk = upgrade?.attackBonus ?? 0;
   const bonusHp = upgrade?.hpBonus ?? 0;
 
-  return {
+  const result: GameCardData = {
     ...card,
     baseAttack: baseAtk,
     baseHp,
@@ -100,4 +122,26 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
     currentLayer: rage,
     rageTurn: normalizedTurn,
   };
+
+  if (upgrade?.specialAbility) {
+    switch (upgrade.specialAbility) {
+      case 'ogre-enter-discard':
+        result.ogreEnterDiscard = true;
+        break;
+      case 'dragon-bleed-destroy':
+        result.dragonBleedDestroy = true;
+        break;
+      case 'skeleton-no-layer-cost':
+        result.skeletonNoLayerCost = true;
+        break;
+      case 'wraith-death-heal':
+        result.wraithDeathHeal = 4;
+        break;
+      case 'goblin-steal-scale':
+        result.goblinStealScale = true;
+        break;
+    }
+  }
+
+  return result;
 };

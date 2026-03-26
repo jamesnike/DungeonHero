@@ -189,6 +189,13 @@ export interface GameCardData {
   bossRetaliationDamage?: number; // Direct damage to hero (ignoring shields) each time boss takes a hit
   bossLastStandAura?: boolean; // At 1 layer: +5 atk & heal 8 HP per monster turn end
   bossLayerCap?: boolean; // Max 1 layer loss per hero turn; immune to all damage after
+  // Tier-3 waterfall upgrade abilities
+  ogreEnterDiscard?: boolean; // Ogre tier-3: randomly discard a player hand card on enter
+  dragonBleedDestroy?: boolean; // Dragon tier-3: on layer loss, destroy equipment with durability > remaining layers
+  skeletonNoLayerCost?: boolean; // Skeleton tier-3: after revive, attacks don't consume layers
+  skeletonNoLayerCostActive?: boolean; // Set to true once skeleton revives with tier-3 ability
+  wraithDeathHeal?: number; // Wraith tier-3: on death, same-row monsters gain this much HP
+  goblinStealScale?: boolean; // Goblin tier-3: +X atk/hp per X gold stolen
 }
 
 interface GameCardProps {
@@ -433,6 +440,8 @@ function GameCardInner({
     
     switch (card.type) {
       case 'monster':
+        if (card.bossPhase) return 'border-red-500 shadow-red-500/40 shadow-lg';
+        if (card.isFinalMonster) return 'border-red-600 shadow-red-500/20';
         return 'border-red-900';
       case 'weapon':
         return 'border-amber-900';
@@ -731,6 +740,20 @@ const amuletEffectText =
                     className={cardImageClassName}
                   />
                 )}
+                {card.type === 'monster' && card.bossPhase && (
+                  <div className="absolute inset-0 pointer-events-none border-2 border-red-500/50 rounded-sm bg-red-500/5" />
+                )}
+                {card.type === 'monster' && (card.isFinalMonster || card.bossPhase) && (
+                  <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
+                    <div className={`dh-card__caption text-center font-black tracking-widest text-white py-0.5 ${
+                      card.bossPhase
+                        ? 'bg-red-600/90'
+                        : 'bg-red-600/70'
+                    }`}>
+                      {card.bossPhase ? 'BOSS' : '最终之敌'}
+                    </div>
+                  </div>
+                )}
                 {showAmuletOverlay && (
                   <div className="dh-card__body-text absolute top-1.5 left-1.5 right-1.5 font-semibold text-black text-center px-1.5 py-0.5 tracking-wide pointer-events-none select-none drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
                     {amuletEffectText}
@@ -920,7 +943,7 @@ const amuletEffectText =
                   {card.name}
                 </h3>
 
-                {card.type === 'monster' && (card.monsterSpecial || card.hasRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect) && (
+                {card.type === 'monster' && (card.monsterSpecial || card.hasRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreEnterDiscard || card.dragonBleedDestroy || card.skeletonNoLayerCostActive || card.wraithDeathHeal || card.goblinStealScale) && (
                   <div className="dh-card__keyword-row">
                     {card.monsterSpecial && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.description ?? '精英怪物'}>精英</span>
@@ -942,6 +965,21 @@ const amuletEffectText =
                     )}
                     {card.onAttackEffect && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手：每次攻击时触发">动手</span>
+                    )}
+                    {card.ogreEnterDiscard && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="蛮力震慑：入场时随机弃掉一张手牌">震慑</span>
+                    )}
+                    {card.dragonBleedDestroy && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="流血破甲：失去血层时破坏高耐久装备">破甲</span>
+                    )}
+                    {card.skeletonNoLayerCostActive && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="不朽之骨：攻击不消耗血层">不朽</span>
+                    )}
+                    {card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`怨灵祝福：死亡时同行怪物生命+${card.wraithDeathHeal}`}>祝福</span>
+                    )}
+                    {card.goblinStealScale && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="贪婪强化：偷到金币后攻击力和生命值同步增长">贪婪</span>
                     )}
                   </div>
                 )}
@@ -1004,7 +1042,12 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.reviveUsed !== b.reviveUsed ||
       a.bleedEffect !== b.bleedEffect ||
       a.onAttackEffect !== b.onAttackEffect ||
-      a.lowGoldBuffActive !== b.lowGoldBuffActive
+      a.lowGoldBuffActive !== b.lowGoldBuffActive ||
+      a.ogreEnterDiscard !== b.ogreEnterDiscard ||
+      a.dragonBleedDestroy !== b.dragonBleedDestroy ||
+      a.skeletonNoLayerCostActive !== b.skeletonNoLayerCostActive ||
+      a.wraithDeathHeal !== b.wraithDeathHeal ||
+      a.goblinStealScale !== b.goblinStealScale
     ) {
       return false;
     }

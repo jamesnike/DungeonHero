@@ -343,7 +343,7 @@ export function createDeck(): GameCardData[] {
       description: isEliteMonster ? ELITE_MONSTER_DISCARD_WARNING : undefined,
     };
     if (monsterType.name === 'Goblin' || monsterType.name === 'Goblin Warlock') {
-      monsterCard.onAttackEffect = 'steal-gold-2';
+      monsterCard.onAttackEffect = 'steal-gold-3';
     }
     deck.push(monsterCard);
   }
@@ -583,7 +583,7 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '选择一个装备，在下个瀑流之前使用不消耗耐久。',
+    magicEffect: '选择一把武器，在下个瀑流之前使用不消耗耐久。',
   });
 
   deck.push({
