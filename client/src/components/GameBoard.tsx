@@ -900,7 +900,7 @@ function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '对任意怪物造成等同于你已损失生命的伤害，并恢复等量生命。'
+    magicEffect: '对任意怪物造成等同于当前金币数量的伤害，并恢复等量生命。'
   });
 
   deck.push({
@@ -5528,6 +5528,7 @@ export default function GameBoard() {
       berserkerRageActive,
       berserkerSlotUsed,
       heroSkillUsedThisWave,
+      handLimitBonus,
       drawPending,
       waveDiscardCount,
       resolvingDungeonCardId,
@@ -5586,6 +5587,7 @@ export default function GameBoard() {
     berserkerRageActive,
     berserkerSlotUsed,
     heroSkillUsedThisWave,
+    handLimitBonus,
     drawPending,
     waveDiscardCount,
     resolvingDungeonCardId,
@@ -6064,6 +6066,8 @@ export default function GameBoard() {
       eventResolutionRef.current = { cardId: snapshot.resolvingDungeonCardId, source: 'dungeon' };
     } else if (snapshot.currentEventCard) {
       eventResolutionRef.current = { cardId: null, source: 'hand' };
+    } else {
+      eventResolutionRef.current = { cardId: null, source: null };
     }
     setBerserkerRageActive(snapshot.berserkerRageActive ?? false);
     setBerserkerSlotUsed(snapshot.berserkerSlotUsed ?? {});
@@ -6087,6 +6091,7 @@ export default function GameBoard() {
     }
 
     setHeroSkillUsedThisWave(Boolean(snapshot.heroSkillUsedThisWave));
+    setHandLimitBonus(snapshot.handLimitBonus ?? 0);
     setPendingHeroSkillAction(null);
     setHeroSkillBanner(null);
     setHeroSkillArrow(null);
@@ -6112,6 +6117,40 @@ export default function GameBoard() {
     setDefensiveStanceActive(Boolean(snapshot.defensiveStanceActive));
     setTakingDamage(false);
     setHealing(false);
+
+    // Cancel combat animation timeouts and reset visual states
+    animationDelayTimeoutsRef.current.forEach(id => clearTimeout(id));
+    animationDelayTimeoutsRef.current = [];
+    if (heroBleedTimeoutRef.current) {
+      clearTimeout(heroBleedTimeoutRef.current);
+      heroBleedTimeoutRef.current = null;
+    }
+    for (const timeouts of Object.values(monsterBleedTimeoutsRef.current)) {
+      timeouts.forEach(id => clearTimeout(id));
+    }
+    monsterBleedTimeoutsRef.current = {};
+    for (const timeouts of Object.values(weaponSwingTimeoutsRef.current)) {
+      timeouts.forEach(id => clearTimeout(id));
+    }
+    weaponSwingTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+    for (const timeouts of Object.values(shieldBlockTimeoutsRef.current)) {
+      timeouts.forEach(id => clearTimeout(id));
+    }
+    shieldBlockTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+
+    setHeroBleedActive(false);
+    setMonsterBleedStates({});
+    setWeaponSwingStates({ equipmentSlot1: 0, equipmentSlot2: 0 });
+    setShieldBlockStates({ equipmentSlot1: 0, equipmentSlot2: 0 });
+    setRemovingCards(new Set());
+    setMonsterDefeatStates({});
+
+    // Clear stale tracking refs
+    storingCardIdsRef.current.clear();
+    pendingAutoDrawsRef.current = 0;
+    skipNextEventAutoDrawRef.current = false;
+    skipEventFlipRef.current = false;
+    heroTurnLayerLossIdsRef.current.clear();
 
     clearWaterfallTimeouts();
     waterfallPlanRef.current = null;
@@ -6213,6 +6252,41 @@ export default function GameBoard() {
     waterfallTimeoutsRef.current = [];
     waterfallLockRef.current = false;
     waterfallPendingRef.current = false;
+
+    // Cancel all in-flight combat animation timeouts
+    animationDelayTimeoutsRef.current.forEach(id => clearTimeout(id));
+    animationDelayTimeoutsRef.current = [];
+    if (heroBleedTimeoutRef.current) {
+      clearTimeout(heroBleedTimeoutRef.current);
+      heroBleedTimeoutRef.current = null;
+    }
+    for (const timeouts of Object.values(monsterBleedTimeoutsRef.current)) {
+      timeouts.forEach(id => clearTimeout(id));
+    }
+    monsterBleedTimeoutsRef.current = {};
+    for (const timeouts of Object.values(weaponSwingTimeoutsRef.current)) {
+      timeouts.forEach(id => clearTimeout(id));
+    }
+    weaponSwingTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+    for (const timeouts of Object.values(shieldBlockTimeoutsRef.current)) {
+      timeouts.forEach(id => clearTimeout(id));
+    }
+    shieldBlockTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+
+    // Reset visual animation states
+    setHeroBleedActive(false);
+    setMonsterBleedStates({});
+    setWeaponSwingStates({ equipmentSlot1: 0, equipmentSlot2: 0 });
+    setShieldBlockStates({ equipmentSlot1: 0, equipmentSlot2: 0 });
+    setRemovingCards(new Set());
+    setMonsterDefeatStates({});
+
+    // Clear stale tracking refs
+    storingCardIdsRef.current.clear();
+    pendingAutoDrawsRef.current = 0;
+    skipNextEventAutoDrawRef.current = false;
+    skipEventFlipRef.current = false;
+    heroTurnLayerLossIdsRef.current.clear();
 
     // Close UI-only modals that aren't part of the snapshot
     setBackpackViewerOpen(false);
@@ -8931,6 +9005,7 @@ export default function GameBoard() {
             return;
           }
           setBulwarkPassiveActive(true);
+          setPermanentSkills(prev => [...prev, '壁垒猛击']);
           addGameLog('magic', '壁垒猛击激活：之后每次瀑流，左右装备栏永久护甲各 +1');
           finalizeMagicCard(card, { banner: '壁垒猛击激活！之后每次瀑流，左右装备栏永久护甲各 +1。' });
           return;
@@ -8942,24 +9017,19 @@ export default function GameBoard() {
             return;
           }
           if (monsters.length === 1) {
-            const missingHp = Math.max(0, maxHp - hp);
-            if (missingHp <= 0) {
-              finalizeMagicCard(card, { banner: '你处于满血状态，血债清算没有造成伤害。' });
-              return;
-            }
-            const totalDamage = getSpellDamage(missingHp) * echoMultiplier;
+            const totalDamage = getSpellDamage(gold) * echoMultiplier;
             if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
             dealDamageToMonster(monsters[0], totalDamage, { pulses: 2 });
             const healed = healHero(totalDamage);
-            const healText = healed > 0 ? `恢复 ${healed} 点生命！` : '';
-            finalizeMagicCard(card, { banner: `血债清算造成 ${totalDamage} 点伤害！${healText}${isEchoTriggered ? '（回响×2）' : ''}` });
+            const healText = healed > 0 ? `，恢复 ${healed} 点生命` : '';
+            finalizeMagicCard(card, { banner: `血债清算造成 ${totalDamage} 点伤害${healText}！${isEchoTriggered ? '（回响×2）' : ''}` });
             return;
           }
           setPendingMagicAction({
             card,
             effect: 'blood-reckoning',
             step: 'monster-select',
-            prompt: '选择一个怪物，承受你已损失生命的伤害。',
+            prompt: `选择一个怪物，造成 ${gold} 点伤害并恢复等量生命。`,
           });
           setHeroSkillBanner('血债清算就绪，请选择目标怪物。');
           return;
@@ -10209,22 +10279,15 @@ export default function GameBoard() {
       }
 
       if (pendingMagicAction.effect === 'blood-reckoning') {
-        const missingHp = Math.max(0, maxHp - hp);
-        if (missingHp <= 0) {
-          finalizeMagicCard(pendingMagicAction.card, {
-            banner: '你处于满血状态，血债清算没有造成伤害。',
-          });
-          return;
-        }
-        const totalDamage = getSpellDamage(missingHp);
+        const totalDamage = getSpellDamage(gold);
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
         dealDamageToMonster(monster, totalDamage, { pulses: 2 });
         const healed = healHero(totalDamage);
-        const healText = healed > 0 ? `恢复 ${healed} 点生命！` : '';
+        const healText = healed > 0 ? `，恢复 ${healed} 点生命` : '';
         finalizeMagicCard(pendingMagicAction.card, {
-          banner: `血债清算造成 ${totalDamage} 点伤害！${healText}`,
+          banner: `血债清算造成 ${totalDamage} 点伤害${healText}！`,
         });
         return;
       }

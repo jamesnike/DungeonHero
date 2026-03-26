@@ -573,7 +573,7 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '对任意怪物造成等同于你已损失生命的伤害。',
+    magicEffect: '对任意怪物造成等同于当前金币数量的伤害，并恢复等量生命。',
   });
 
   deck.push({
