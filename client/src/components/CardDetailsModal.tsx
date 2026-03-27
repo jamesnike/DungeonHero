@@ -8,12 +8,6 @@ import {
 } from "./GameCard";
 import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade } from "@/lib/monsterRage";
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins } from "lucide-react";
-import {
-  EventPatternPreview,
-  MagicSpellPreview,
-  isEventCardType,
-  isMagicSpellCardType,
-} from "./MagicNameFlankIcons";
 import { CHAOS_DICE_SPELL_DESCRIPTION } from "@/lib/knightChaosDiceCopy";
 
 type MonsterRewardPreview = {
@@ -119,33 +113,6 @@ export default function CardDetailsModal({
         </DialogHeader>
         
         <div className="flex flex-col gap-4 py-4">
-          {/* Image */}
-          <div className="relative w-full aspect-video rounded-md overflow-hidden bg-muted border">
-            {isMagicSpellCardType(card.type) ? (
-              <MagicSpellPreview
-                card={card}
-                aspect="none"
-                detailBanner
-                className="absolute inset-0 h-full w-full rounded-md"
-              />
-            ) : isEventCardType(card.type) ? (
-              <EventPatternPreview
-                card={card}
-                aspect="none"
-                detailBanner
-                className="absolute inset-0 h-full w-full rounded-md"
-              />
-            ) : (
-              card.image && (
-                <img
-                  src={card.image}
-                  alt={card.name}
-                  className="h-full w-full object-cover"
-                />
-              )
-            )}
-          </div>
-
           {/* Monster Reward Preview */}
           {card.type === 'monster' && monsterRewards?.length ? (
             <div className="space-y-2">
