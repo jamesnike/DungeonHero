@@ -200,8 +200,12 @@ export default function EquipmentSlot({
   const testId = slotId || `slot-${type}`;
   const formatBonus = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
 
-  // Prepare item as GameCardData
+  // Prepare item as GameCardData (fromSlot lets GameCard cancel dragover so drops work on top of equipped gear)
   const gameCardData: GameCardData | null = item ? { ...item } : null;
+  const equipmentDisplayCard: GameCardData | null =
+    type === 'equipment' && gameCardData && slotId
+      ? ({ ...gameCardData, fromSlot: slotId } as GameCardData)
+      : gameCardData;
 
   const DURABILITY_SEGMENTS = 4;
   const colWidth = durabilityStripWidth || 12;
@@ -326,11 +330,11 @@ export default function EquipmentSlot({
               }}
             >
               <GameCard
-                card={gameCardData}
+                card={equipmentDisplayCard!}
                 equipmentStatModifier={statModifier}
                 onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
                 onDragEnd={onDragEnd}
-                onClick={onCardClick ? () => onCardClick(gameCardData) : undefined}
+                onClick={onCardClick ? () => onCardClick(gameCardData!) : undefined}
                 className="shadow-lg"
                 bleedAnimation={bleedAnimation}
                 weaponSwingAnimation={weaponSwingAnimation}
@@ -354,11 +358,11 @@ export default function EquipmentSlot({
             }}
           >
             <GameCard 
-              card={gameCardData}
+              card={type === 'equipment' ? equipmentDisplayCard! : gameCardData!}
               equipmentStatModifier={statModifier}
               onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
               onDragEnd={onDragEnd}
-              onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData) : undefined}
+              onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData!) : undefined}
               className={`${type === 'backpack' ? 'cursor-pointer' : ''} shadow-lg`}
               bleedAnimation={bleedAnimation}
               weaponSwingAnimation={weaponSwingAnimation}
@@ -408,6 +412,15 @@ export default function EquipmentSlot({
         <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-40 bg-yellow-400/90 text-yellow-900 font-bold px-2 py-0.5 rounded-full shadow-md border border-yellow-500 text-xs whitespace-nowrap animate-pulse">
           永恒修复
         </div>
+      )}
+      {type === 'equipment' && gameCardData && acceptsDrop && (
+        <div
+          className={`pointer-events-none absolute inset-0 z-[25] rounded-md transition-all duration-200 ${
+            isCombatDropTarget
+              ? 'ring-4 ring-destructive ring-inset bg-destructive/10 animate-pulse'
+              : 'ring-4 ring-primary ring-inset bg-primary/10 animate-pulse'
+          } ${acceptsDrop && isOver ? 'scale-[1.01]' : ''}`}
+        />
       )}
     </div>
   );

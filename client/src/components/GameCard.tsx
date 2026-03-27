@@ -434,9 +434,15 @@ function GameCardInner({
     onDragEnd?.(e);
   };
 
+  const equipmentSlotSurface =
+    (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') &&
+    'fromSlot' in card &&
+    typeof (card as { fromSlot?: string }).fromSlot === 'string' &&
+    (card as { fromSlot: string }).fromSlot.startsWith('slot-equipment');
+
   const handleDragOver = (e: React.DragEvent) => {
     if (disableInteractions) return;
-    if (card.type === 'monster') {
+    if (card.type === 'monster' || equipmentSlotSurface) {
       e.preventDefault();
     }
   };

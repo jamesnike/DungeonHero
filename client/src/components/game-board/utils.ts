@@ -376,6 +376,9 @@ export function createDeck(): GameCardData[] {
     if (weaponType.name === 'Holy Blade') {
       card.healOnKill = 2;
       card.description = '击杀怪物时回复 2 点生命。';
+      const hbDurability = Math.floor(Math.random() * 3) + 2;
+      card.durability = hbDurability;
+      card.maxDurability = hbDurability;
     }
     if (weaponType.name === 'Swift Blade') {
       card.durability = Math.floor(Math.random() * 3) + 2;
@@ -751,8 +754,8 @@ export function createDeck(): GameCardData[] {
       },
       {
         id: 'greedy-blood',
-        text: '献血离开（掉 5 HP）',
-        effect: 'hp-5',
+        text: '献血离开（掉 8 HP）',
+        effect: 'hp-8',
         hint: '仅当其他献祭方式全部不可用时可选',
         requiresDisabledChoices: ['greedy-left', 'greedy-right', 'greedy-amulet'],
         requiresDisabledReason: '仍有其他献祭方式可用',
@@ -767,7 +770,7 @@ export function createDeck(): GameCardData[] {
     name: '荣誉回响',
     value: 0,
     image: eventScrollImage,
-    description: '选择一项奖励。此外，左侧所有怪物将被激怒。',
+    description: '选择一项奖励。结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
     eventChoices: [
       { text: '整理呼吸（回复 8 HP）', effect: 'heal+8' },
       { text: '回收战利品（金币 +20）', effect: 'gold+20' },

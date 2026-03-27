@@ -192,6 +192,15 @@ const formatRepairTargetLabel = (targets: EquipmentRepairTarget[]) => {
 const describeSlotLabel = (slotId: EquipmentSlotId): '左侧装备栏' | '右侧装备栏' =>
   slotId === 'equipmentSlot1' ? '左侧装备栏' : '右侧装备栏';
 
+/** 装备栏拖拽用 slot-equipment-1/2；战斗状态用 equipmentSlot1/2 */
+const normalizeHeroEquipmentSlotFromDrag = (
+  raw: string | undefined | null,
+): EquipmentSlotId | undefined => {
+  if (raw === 'equipmentSlot1' || raw === 'slot-equipment-1') return 'equipmentSlot1';
+  if (raw === 'equipmentSlot2' || raw === 'slot-equipment-2') return 'equipmentSlot2';
+  return undefined;
+};
+
 const describeBonusLabel = (bonusType: keyof SlotPermanentBonus): '伤害' | '护甲' =>
   bonusType === 'damage' ? '伤害' : '护甲';
 
@@ -712,6 +721,9 @@ function createDeck(): GameCardData[] {
     if (weaponType.name === 'Holy Blade') {
       card.healOnKill = 2;
       card.description = '击杀怪物时回复 2 点生命。';
+      const hbDurability = Math.floor(Math.random() * 3) + 2;
+      card.durability = hbDurability;
+      card.maxDurability = hbDurability;
     }
     if (weaponType.name === 'Swift Blade') {
       card.durability = Math.floor(Math.random() * 3) + 2;
@@ -818,7 +830,7 @@ function createDeck(): GameCardData[] {
       value: 6,
       image: potionWeaponRepairImage,
       potionEffect: 'repair-choice',
-      description: '选择一件装备：恢复3点耐久 或 耐久上限+1（不恢复耐久）。',
+      description: '恢复3点耐久 或 耐久上限+1。',
     },
     {
       type: 'potion',
@@ -1157,8 +1169,8 @@ function createDeck(): GameCardData[] {
       },
       {
         id: 'greedy-blood',
-        text: '献血离开（掉 5 HP）',
-        effect: 'hp-5',
+        text: '献血离开（掉 8 HP）',
+        effect: 'hp-8',
         hint: '仅当其他献祭方式全部不可用时可选',
         requiresDisabledChoices: ['greedy-left', 'greedy-right', 'greedy-amulet'],
         requiresDisabledReason: '仍有其他献祭方式可用',
@@ -1173,7 +1185,7 @@ function createDeck(): GameCardData[] {
     name: '荣誉回响',
     value: 0,
     image: eventScrollImage,
-    description: '选择一项奖励。',
+    description: '选择一项奖励。结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
     eventChoices: [
       { text: '整理呼吸（回复 8 HP）', effect: 'heal+8' },
       { text: '回收战利品（金币 +20）', effect: 'gold+20' },
@@ -1445,7 +1457,22 @@ const STARTER_CARD_IDS = {
   trainingBlade: 'starter-weapon-training-blade',
   /** 选择「铁壁之心」时替换新手短剑 */
   shieldWallStarter: 'starter-shield-shield-wall',
+  /** 选择「愈战愈勇」时加入背包，与药水翻转的治愈余韵效果相同 */
+  healEcho: 'starter-perm-heal-echo',
 } as const;
+
+function createStarterHealEchoCard(): GameCardData {
+  return {
+    id: STARTER_CARD_IDS.healEcho,
+    type: 'magic',
+    name: '治愈余韵',
+    value: 0,
+    image: skillScrollImage,
+    magicType: 'permanent',
+    magicEffect: '永久魔法：使用时立即回复 2 点生命。',
+    description: '使用时立即回复 2 点生命。使用后回到回收袋，瀑流后可再次使用。',
+  };
+}
 
 function createStarterBackpack(): GameCardData[] {
   return [
@@ -2431,6 +2458,8 @@ export default function GameBoard() {
   const [slotAttackBursts, setSlotAttackBursts] = useState<Record<EquipmentSlotId, number>>(
     () => createEmptyEquipmentBuffState(),
   );
+  /** 噬血砺锋：该装备槽下一次攻击按实际扣血吸血（经 healHero，治疗护符会翻倍） */
+  const [nextAttackLifestealSlot, setNextAttackLifestealSlot] = useState<EquipmentSlotId | null>(null);
   const [berserkTurnBuff, setBerserkTurnBuff] = useState<Record<EquipmentSlotId, number>>(
     () => createEmptyEquipmentBuffState(),
   );
@@ -2808,9 +2837,6 @@ export default function GameBoard() {
     setBerserkerSlotUsed({});
     setUnbreakableUntilWaterfall({ equipmentSlot1: false, equipmentSlot2: false });
   }, [clearAllBackpackHandFallbacks]);
-  useEffect(() => {
-    resetHeroSkillForNewWave();
-  }, [selectedHeroSkill, resetHeroSkillForNewWave]);
 
   useEffect(() => {
     setTurnDamageTaken(0);
@@ -4698,6 +4724,7 @@ export default function GameBoard() {
     const slotDamageBonus = getEquipmentSlotBonus(slotId, 'damage');
     const appliedNextBonus = nextWeaponBonus;
     const slotBurstBonus = slotAttackBursts[slotId] ?? 0;
+    const discardEmpowerLifestealThisAttack = nextAttackLifestealSlot === slotId;
     const slotBerserkBonus = berserkTurnBuff[slotId] ?? 0;
     const balanceBonus = amuletEffects.hasBalance && slotId === 'equipmentSlot1' ? BALANCE_ATTACK_BONUS : 0;
     const balancePenalty = amuletEffects.hasBalance && slotId === 'equipmentSlot2' ? BALANCE_ATTACK_PENALTY : 0;
@@ -4757,6 +4784,8 @@ export default function GameBoard() {
     let workingMonster = targetMonster;
     let monsterDefeated = false;
     let totalRecordedDamage = 0;
+    /** 噬血砺锋：按命中时从当前血层实际扣掉的血量吸血；该次攻击生命护符（溢出回血）不叠加，由吸血覆盖 */
+    let discardEmpowerLifestealHpSum = 0;
     let overflowHealing = 0;
     let strengthHits = 0;
     const layersBeforeAttack = targetMonster.currentLayer ?? targetMonster.fury ?? 1;
@@ -4774,6 +4803,9 @@ export default function GameBoard() {
 
       const layerBeforeHit = workingMonster.currentLayer ?? workingMonster.fury ?? 1;
       const monsterHpBefore = workingMonster.hp ?? workingMonster.value;
+      if (discardEmpowerLifestealThisAttack) {
+        discardEmpowerLifestealHpSum += Math.min(finalDamage, monsterHpBefore);
+      }
       const updatedMonster = damageMonster(workingMonster, finalDamage);
       triggerMonsterBleedAnimation(targetMonster.id, iterationDelay);
       triggerMonsterBleedAnimation(
@@ -4797,7 +4829,7 @@ export default function GameBoard() {
         addGameLog('combat', `${targetMonster.name} 反噬：造成 ${retDmg} 点直接伤害！`);
       }
 
-      if (amuletEffects.hasLife) {
+      if (amuletEffects.hasLife && !discardEmpowerLifestealThisAttack) {
         const overflow = Math.max(0, finalDamage - monsterHpBefore);
         overflowHealing += overflow;
       }
@@ -4826,6 +4858,13 @@ export default function GameBoard() {
           break;
         }
       }
+    }
+
+    if (discardEmpowerLifestealThisAttack) {
+      if (discardEmpowerLifestealHpSum > 0) {
+        healHero(discardEmpowerLifestealHpSum, { healLogVariant: 'discard-empower-lifesteal' });
+      }
+      setNextAttackLifestealSlot(null);
     }
 
     if (overflowHealing > 0) {
@@ -5308,7 +5347,10 @@ export default function GameBoard() {
     setHeroSkillBanner(`殉烈爆鸣释放，对所有怪物造成 ${dmg} 点伤害！`);
   }, [activeCards, addGameLog, dealDamageToMonster, getSpellDamage, setHeroSkillBanner]);
   const healHero = useCallback(
-    (baseAmount: number) => {
+    (
+      baseAmount: number,
+      options?: { healLogVariant?: 'default' | 'discard-empower-lifesteal' },
+    ) => {
       const multiplier = amuletEffects.hasHeal ? 2 : 1;
       const adjustedAmount = Math.max(0, Math.floor(baseAmount * multiplier));
       if (adjustedAmount <= 0) {
@@ -5327,7 +5369,12 @@ export default function GameBoard() {
         setHealing(true);
         setTimeout(() => setHealing(false), 1200);
         setTotalHealed(prev => prev + actualHeal);
-        addGameLog('heal', `英雄回复 ${actualHeal} 点生命${amuletEffects.hasHeal ? '（治疗加倍）' : ''}`);
+        const healSuffix = amuletEffects.hasHeal ? '（治疗加倍）' : '';
+        if (options?.healLogVariant === 'discard-empower-lifesteal') {
+          addGameLog('heal', `噬血砺锋：吸血回复 ${actualHeal} 点生命${healSuffix}`);
+        } else {
+          addGameLog('heal', `英雄回复 ${actualHeal} 点生命${healSuffix}`);
+        }
 
         if (selectedHeroSkillRef.current === 'heal-to-damage') {
           const prevAccum = healAccumulatorRef.current;
@@ -6554,6 +6601,7 @@ export default function GameBoard() {
         equipmentSlot1: slotAttackBursts.equipmentSlot1 ?? 0,
         equipmentSlot2: slotAttackBursts.equipmentSlot2 ?? 0,
       },
+      nextAttackLifestealSlot,
       vampiricNextAttack,
       unbreakableNext,
       unbreakableUntilWaterfall,
@@ -6619,6 +6667,7 @@ export default function GameBoard() {
     nextWeaponBonus,
     nextShieldBonus,
     slotAttackBursts,
+    nextAttackLifestealSlot,
     vampiricNextAttack,
     unbreakableNext,
     unbreakableUntilWaterfall,
@@ -7028,6 +7077,7 @@ export default function GameBoard() {
     setBulwarkPassiveActive(false);
     setDefensiveStanceActive(false);
     setSlotAttackBursts({ equipmentSlot1: 0, equipmentSlot2: 0 });
+    setNextAttackLifestealSlot(null);
     setDoubleNextMagic(false);
     
     // Reset equipment slot bonuses
@@ -7225,7 +7275,9 @@ export default function GameBoard() {
     }
 
     setHeroSkillUsedThisWave(Boolean(snapshot.heroSkillUsedThisWave));
-    setExtraSkillsUsedThisWave(new Set(Array.isArray((snapshot as any).extraSkillsUsedThisWave) ? (snapshot as any).extraSkillsUsedThisWave : []));
+    setExtraSkillsUsedThisWave(
+      new Set(Array.isArray(snapshot.extraSkillsUsedThisWave) ? snapshot.extraSkillsUsedThisWave : []),
+    );
     setHandLimitBonus(snapshot.handLimitBonus ?? 0);
     setPendingHeroSkillAction(null);
     setHeroSkillBanner(null);
@@ -7242,6 +7294,10 @@ export default function GameBoard() {
           }
         : { equipmentSlot1: 0, equipmentSlot2: 0 },
     );
+    {
+      const s = snapshot.nextAttackLifestealSlot;
+      setNextAttackLifestealSlot(s === 'equipmentSlot1' || s === 'equipmentSlot2' ? s : null);
+    }
     setVampiricNextAttack(Boolean(snapshot.vampiricNextAttack));
     setUnbreakableNext(Boolean(snapshot.unbreakableNext));
     setUnbreakableUntilWaterfall(
@@ -7568,6 +7624,7 @@ export default function GameBoard() {
 
   // Handle skill selection
   const handleSkillSelection = (skillId: string) => {
+    resetHeroSkillForNewWave();
     const definition = getHeroSkillById(skillId as HeroSkillId);
     setSelectedHeroSkill(skillId);
     setShowSkillSelection(false);
@@ -7575,8 +7632,9 @@ export default function GameBoard() {
     
     const initialBonus = definition?.initialMaxHpBonus ?? 0;
     if (initialBonus) {
-      setHp(prev => prev + initialBonus);
       addGameLog('system', `开局加成：最大生命 +${initialBonus}`);
+      // 巨人心力等：仅此开局天赋在抬上限的同时视为满血（战利品/事件等只加上限不回血）
+      setHp(INITIAL_HP + initialBonus);
     }
     const initialGold = definition?.initialGoldBonus ?? 0;
     if (initialGold) {
@@ -7596,6 +7654,16 @@ export default function GameBoard() {
         triggerClassDeckFlight(drawn);
       }
     }
+    const initialShopLv = definition?.initialShopLevel;
+    if (initialShopLv != null && initialShopLv > 0) {
+      setShopLevel(initialShopLv);
+      addGameLog('shop', `开局加成：商店等级 ${initialShopLv}`);
+    }
+    const initialBackpackCap = definition?.initialBackpackCapacityBonus ?? 0;
+    if (initialBackpackCap) {
+      setBackpackCapacityModifier(prev => prev + initialBackpackCap);
+      addGameLog('skill', `开局加成：背包上限 +${initialBackpackCap}`);
+    }
     if (skillId === 'summon-minion') {
       const minionCard: GameCardData = {
         id: 'summon-minion-card',
@@ -7614,6 +7682,10 @@ export default function GameBoard() {
       };
       addCardToBackpack(minionCard);
       addGameLog('skill', '开局加成：获得小随从');
+    }
+    if (skillId === 'heal-to-damage') {
+      addCardToBackpack(createStarterHealEchoCard());
+      addGameLog('skill', '愈战愈勇：开局获得永久魔法「治愈余韵」');
     }
     if (skillId === 'shield-wall') {
       const thunderSeal = classDeck.find(
@@ -9746,9 +9818,9 @@ export default function GameBoard() {
         }
         case 'maxHp': {
           const amount = eff.amount;
-          const updatedMaxHp = maxHp + amount;
+          const newMaxHp = maxHp + amount;
           setPermanentMaxHpBonus(prev => prev + amount);
-          setHp(prev => Math.min(updatedMaxHp, prev + amount));
+          setHp(prev => Math.min(newMaxHp, prev));
           addGameLog('combat', `战利品：最大生命永久 +${amount}`);
           setHeroSkillBanner(`最大生命永久 +${amount}`);
           return true;
@@ -10953,7 +11025,8 @@ export default function GameBoard() {
           finalizeMagicCard(card, { banner: swapBanner });
           return;
         }
-        case 'potion-flip-heal': {
+        case 'potion-flip-heal':
+        case STARTER_CARD_IDS.healEcho: {
           const healed = healHero(2 * echoMultiplier);
           const banner = healed > 0
             ? `治愈余韵生效，恢复 ${healed} 点生命。${isEchoTriggered ? '（回响×2）' : ''}`
@@ -11401,24 +11474,6 @@ export default function GameBoard() {
         }
         break;
       }
-      case 'shield-wall': {
-        const monsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
-        if (monsters.length === 0) {
-          setHeroSkillBanner('场上没有怪物。');
-          return;
-        }
-        const dmg = getSpellDamage(1);
-        let totalDamaged = 0;
-        for (const monster of monsters) {
-          if (!isMonsterEngaged(monster.id)) beginCombat(monster, 'hero');
-          dealDamageToMonster(monster, dmg);
-          totalDamaged++;
-        }
-        markSkillUsed(skillDef.id);
-        setHeroSkillBanner(`铁壁之心：对 ${totalDamaged} 只怪物各造成 ${dmg} 点伤害！`);
-        addGameLog('skill', `铁壁之心：对场上 ${totalDamaged} 只怪物各造成 ${dmg} 点伤害`);
-        break;
-      }
       case 'discard-empower': {
         if (handCards.length === 0) {
           setHeroSkillBanner('需要至少 1 张手牌才能发动。');
@@ -11432,21 +11487,22 @@ export default function GameBoard() {
         const discarded = handCards[Math.floor(Math.random() * handCards.length)];
         discardCardToGraveyard(discarded, { owner: 'player' });
         setHandCards(prev => prev.filter(c => c.id !== discarded.id));
-        addGameLog('skill', `弃牌赋刃：弃置「${discarded.name}」`);
+        addGameLog('skill', `噬血砺锋：弃置「${discarded.name}」`);
         const equippedSlots: EquipmentSlotId[] = [];
         if (equipmentSlot1) equippedSlots.push('equipmentSlot1');
         if (equipmentSlot2) equippedSlots.push('equipmentSlot2');
         if (equippedSlots.length === 1) {
           const slotId = equippedSlots[0];
           const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-          setSlotAttackBursts(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 6 }));
+          setSlotAttackBursts(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 2 }));
+          setNextAttackLifestealSlot(slotId);
           markSkillUsed(skillDef.id);
-          setHeroSkillBanner(`${slotItem!.name} 的下次攻击将额外造成 6 点伤害！`);
-          addGameLog('skill', `弃牌赋刃：${slotItem!.name} 下次攻击 +6`);
+          setHeroSkillBanner(`${slotItem!.name} 的下次攻击 +2 伤害 且 吸血！`);
+          addGameLog('skill', `噬血砺锋：${slotItem!.name} 下次攻击 +2 且吸血`);
           break;
         }
         setPendingHeroSkillAction({ skillId: 'discard-empower', type: 'slot' });
-        setHeroSkillBanner(skillDef.statusHint ?? '选择一个装备，为其下次攻击 +6 伤害。');
+        setHeroSkillBanner(skillDef.statusHint ?? '选择一个装备：下次攻击 +2 伤害 且 吸血。');
         break;
       }
       default:
@@ -11545,12 +11601,13 @@ export default function GameBoard() {
           setHeroSkillBanner('请选择有装备的槽位。');
           return;
         }
-        setSlotAttackBursts(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 6 }));
+        setSlotAttackBursts(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 2 }));
+        setNextAttackLifestealSlot(slotId);
         markSkillUsed(pendingHeroSkillAction.skillId);
         setPendingHeroSkillAction(null);
-        setHeroSkillBanner(`${slotItem.name} 的下次攻击将额外造成 6 点伤害！`);
+        setHeroSkillBanner(`${slotItem.name} 的下次攻击 +2 伤害 且 吸血！`);
         setHeroSkillArrow(null);
-        addGameLog('skill', `弃牌赋刃：${slotItem.name} 下次攻击 +6`);
+        addGameLog('skill', `噬血砺锋：${slotItem.name} 下次攻击 +2 且吸血`);
       }
     },
     [
@@ -12120,8 +12177,13 @@ export default function GameBoard() {
 
   function handleWeaponToMonster(weapon: any, monster: GameCardData) {
     if (fullBoardInteractionLockedRef.current) return;
+    // 与手牌一致：怪物回合或等待格挡时不允许拖武器攻击，否则 performHeroAttack 会因 currentTurn !== 'hero' 静默返回（0 伤害、无日志）
+    if (handLockedForMonsterPhaseRef.current) {
+      setHeroSkillBanner('当前无法用武器攻击（怪物回合或需先格挡）。');
+      return;
+    }
     pushUndoSnapshot();
-    const slotId = weapon.fromSlot as EquipmentSlotId | undefined;
+    const slotId = normalizeHeroEquipmentSlotFromDrag(weapon.fromSlot);
     if (!slotId) {
       return;
     }
@@ -13478,22 +13540,22 @@ export default function GameBoard() {
 
     if (currentEventCard?.name === '荣誉回响' && resolvingDungeonCardId) {
       const cellIdx = activeCards.findIndex(c => c?.id === resolvingDungeonCardId);
-      if (cellIdx > 0) {
-        const leftMonsters: GameCardData[] = [];
-        for (let i = 0; i < cellIdx; i++) {
+      if (cellIdx !== -1 && cellIdx < activeCards.length - 1) {
+        const rightMonsters: GameCardData[] = [];
+        for (let i = cellIdx + 1; i < activeCards.length; i++) {
           const card = activeCards[i];
           if (card && card.type === 'monster') {
-            leftMonsters.push(card);
+            rightMonsters.push(card);
           }
         }
-        if (leftMonsters.length > 0) {
-          leftMonsters.forEach(monster => {
+        if (rightMonsters.length > 0) {
+          rightMonsters.forEach(monster => {
             if (!isMonsterEngaged(monster.id)) {
               beginCombat(monster, 'hero');
             }
           });
-          const names = leftMonsters.map(m => m.name).join('、');
-          addGameLog('event', `荣誉回响激怒了左侧的怪物：${names}`);
+          const names = rightMonsters.map(m => m.name).join('、');
+          addGameLog('event', `荣誉回响激怒了右侧的怪物：${names}`);
           setHeroSkillBanner(`荣誉回响激怒了 ${names}！`);
         }
       }
@@ -13557,7 +13619,7 @@ export default function GameBoard() {
       : pendingHeroSkillAction?.skillId === 'durability-for-blood'
         ? '+1 Durability'
         : pendingHeroSkillAction?.skillId === 'discard-empower'
-          ? '+6 Attack'
+          ? '+2 & 吸血'
           : 'Select Slot';
   const slotTargetingLabel = heroSkillSlotTargeting
     ? heroSkillSlotLabel
@@ -13850,6 +13912,7 @@ export default function GameBoard() {
     heroFrameDragOverLogCountRef.current = 0;
     heroFrameDropCalcLogCountRef.current = 0;
     setDraggedCard(card);
+    draggedCardRef.current = card;
     setDraggedCardSource('hand');
     startDragSession();
     // Card stays in hand until successfully dropped
@@ -14005,6 +14068,7 @@ export default function GameBoard() {
     heroFrameDragOverLogCountRef.current = 0;
     heroFrameDropCalcLogCountRef.current = 0;
     setDraggedCard(card);
+    draggedCardRef.current = card;
     setDraggedCardSource('dungeon');
     setIsDraggingFromDungeon(true);
     setIsDraggingToHand(true);
@@ -14965,6 +15029,7 @@ export default function GameBoard() {
                 isWeaponDropTarget={
                   !playerTargetingActive &&
                   !fullBoardInteractionLocked &&
+                  !handLockedForMonsterPhase &&
                   (draggedEquipment?.type === 'weapon' || draggedEquipment?.type === 'monster') &&
                   card.type === 'monster'
                 }

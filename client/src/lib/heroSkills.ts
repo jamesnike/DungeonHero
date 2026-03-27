@@ -29,6 +29,10 @@ export interface HeroSkillDefinition {
   initialGoldBonus?: number;
   initialClassCardDraw?: number;
   initialWaterfallBonus?: number;
+  /** Starting shop level (0 = default). Applied when the skill is chosen at run start. */
+  initialShopLevel?: number;
+  /** Added to backpack capacity modifier at run start when this skill is chosen first. */
+  initialBackpackCapacityBonus?: number;
 }
 
 export const heroSkills: HeroSkillDefinition[] = [
@@ -75,11 +79,12 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'gold-discovery',
     name: '黄金探秘',
-    description: '花费金币换取一张专属牌。',
-    effect: '花费 6 金币，随机获得一张专属牌放入背包。',
+    description: '花费金币换取一张专属牌；开局背包上限 +2。',
+    effect: '花费 6 金币，随机获得一张专属牌放入背包；开局背包上限 +2。',
     type: 'active',
     requiresTarget: null,
     buttonLabel: '黄金探秘',
+    initialBackpackCapacityBonus: 2,
   },
   {
     id: 'graveyard-recall',
@@ -93,10 +98,11 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'discard-profit',
     name: '弃牌生金',
-    description: '每一张弃牌都化为闪闪金币。',
-    effect: '被动：每弃掉一张牌，获得 2 金币。',
+    description: '每一张弃牌都化为闪闪金币；开局商店等级为 1。',
+    effect: '被动：每弃掉一张牌，获得 2 金币；开局商店等级为 1。',
     type: 'passive',
     requiresTarget: null,
+    initialShopLevel: 1,
   },
   {
     id: 'waterfall-heal',
@@ -108,19 +114,19 @@ export const heroSkills: HeroSkillDefinition[] = [
   },
   {
     id: 'discard-empower',
-    name: '弃牌赋刃',
-    description: '牺牲一张手牌，为武器注入强大力量。',
-    effect: '弃一张手牌，选一个装备，下次攻击 +6 伤害。',
+    name: '噬血砺锋',
+    description: '随机弃一张手牌，选一个装备，下次攻击 +2 伤害 且 吸血。',
+    effect: '随机弃一张手牌，选一个装备，下次攻击 +2 伤害 且 吸血。',
     type: 'active',
     requiresTarget: 'slot',
-    buttonLabel: '弃牌赋刃',
-    statusHint: '选择一个装备，为其下次攻击 +6 伤害。',
+    buttonLabel: '噬血砺锋',
+    statusHint: '选择一个装备：下次攻击 +2 伤害 且 吸血。',
   },
   {
     id: 'heal-to-damage',
     name: '愈战愈勇',
     description: '治愈之力转化为杀伐之气。',
-    effect: '被动：每累计恢复 5 点生命，左右装备栏各 +1 永久伤害。',
+    effect: '被动：每累计恢复 5 点生命，左右装备栏各 +1 永久伤害；开局背包内有「治愈余韵」。',
     type: 'passive',
     requiresTarget: null,
   },
@@ -137,11 +143,10 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'shield-wall',
     name: '铁壁之心',
-    description: '以盾为剑，化防御为攻势。',
-    effect: '对场上所有怪物造成 1 点伤害。被动：只能装备护盾。',
-    type: 'active',
+    description: "被动：开局拥有'雷霆符印'，只能装备护盾",
+    effect: "被动：开局拥有'雷霆符印'，只能装备护盾",
+    type: 'passive',
     requiresTarget: null,
-    buttonLabel: '铁壁之心',
   },
   {
     id: 'blood-draw',

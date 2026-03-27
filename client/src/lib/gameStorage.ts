@@ -89,6 +89,8 @@ export interface PersistedGameState {
   nextWeaponBonus?: number;
   nextShieldBonus?: number;
   slotAttackBursts?: EquipmentBuffSnapshot;
+  /** 噬血砺锋：该槽下一次英雄攻击按造成伤害吸血 */
+  nextAttackLifestealSlot?: 'equipmentSlot1' | 'equipmentSlot2' | null;
   vampiricNextAttack?: boolean;
   unbreakableNext?: boolean;
   unbreakableUntilWaterfall?: Record<string, boolean>;
@@ -98,6 +100,8 @@ export interface PersistedGameState {
   berserkerRageActive?: boolean;
   berserkerSlotUsed?: Record<string, boolean>;
   heroSkillUsedThisWave?: boolean;
+  /** 本波已用的额外英雄技能 id（商店发现等） */
+  extraSkillsUsedThisWave?: string[];
   handLimitBonus?: number;
   drawPending?: boolean;
   waveDiscardCount?: number;
