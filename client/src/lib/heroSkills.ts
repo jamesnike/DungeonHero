@@ -33,6 +33,8 @@ export interface HeroSkillDefinition {
   initialShopLevel?: number;
   /** Added to backpack capacity modifier at run start when this skill is chosen first. */
   initialBackpackCapacityBonus?: number;
+  /** Added to hand limit (with HAND_LIMIT) when this skill is chosen at run start. */
+  initialHandLimitBonus?: number;
 }
 
 export const heroSkills: HeroSkillDefinition[] = [
@@ -151,11 +153,12 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'blood-draw',
     name: '血契抽牌',
-    description: '以血为代价，从背包中汲取力量。',
-    effect: '失去 3 生命，从背包抽 2 张牌。',
+    description: '以血为代价，从背包中汲取力量；开局手牌上限 +1。',
+    effect: '被动：开局手牌上限 +1。主动：失去 3 生命，从背包抽 2 张牌。',
     type: 'active',
     requiresTarget: null,
     buttonLabel: '血契抽牌',
+    initialHandLimitBonus: 1,
   },
   {
     id: 'summon-minion',

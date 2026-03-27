@@ -7664,6 +7664,11 @@ export default function GameBoard() {
       setBackpackCapacityModifier(prev => prev + initialBackpackCap);
       addGameLog('skill', `开局加成：背包上限 +${initialBackpackCap}`);
     }
+    const initialHandLimit = definition?.initialHandLimitBonus ?? 0;
+    if (initialHandLimit) {
+      setHandLimitBonus(prev => prev + initialHandLimit);
+      addGameLog('skill', `开局加成：手牌上限 +${initialHandLimit}`);
+    }
     if (skillId === 'summon-minion') {
       const minionCard: GameCardData = {
         id: 'summon-minion-card',
