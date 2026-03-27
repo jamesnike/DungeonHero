@@ -433,7 +433,8 @@ export function createDeck(): GameCardData[] {
     }
     if (shieldType.name === 'Heavy Shield') {
       card.damageReflect = 1;
-      card.description = '格挡时反弹 1 点伤害给攻击者（受装备栏永久伤害加成影响）。';
+      card.description =
+        '格挡时反弹 1 点基础伤害给攻击者（叠加该装备栏永久伤害与永久法术伤害加成）。';
       card.durability = Math.floor(Math.random() * 3) + 2;
       card.maxDurability = card.durability;
     }
@@ -542,7 +543,7 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '将激活行的所有卡牌洗回牌堆，然后触发瀑布。',
+    magicEffect: '将激活行的所有卡牌置于牌堆底（不打乱其余牌序），然后触发瀑布。',
   });
 
   deck.push({
@@ -1001,8 +1002,8 @@ export function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一张地城卡牌，洗回牌堆。',
-      description: '将一张地城卡牌洗回牌堆，重新扰乱命运。',
+      magicEffect: '永久魔法：选择一张地城卡牌，置于牌堆底（不打乱牌堆）。',
+      description: '将一张地城卡牌放到牌堆最底部，不改变其余牌的顺序。',
       recycleDelay: 2,
     },
     {

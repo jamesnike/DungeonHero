@@ -2,7 +2,7 @@ import { Heart, Coins, Layers, Waves, ShoppingBag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
@@ -15,6 +15,8 @@ interface GameHeaderProps {
   turnCount: number;
   onDeckClick?: () => void;
   onNewGame?: () => void;
+  /** 瀑流「回牌堆」挤掉动画飞向牌库计数按钮 */
+  deckFlyTargetRef?: Ref<HTMLButtonElement | null>;
 }
 
 export default function GameHeader({
@@ -26,6 +28,7 @@ export default function GameHeader({
   turnCount,
   onDeckClick,
   onNewGame,
+  deckFlyTargetRef,
 }: GameHeaderProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
@@ -82,7 +85,8 @@ export default function GameHeader({
         </div>
       </div>
 
-      <button 
+      <button
+        ref={deckFlyTargetRef}
         onClick={onDeckClick}
         className="game-header__deck hover-elevate active-elevate-2 rounded-md transition-transform"
         data-testid="header-deck"

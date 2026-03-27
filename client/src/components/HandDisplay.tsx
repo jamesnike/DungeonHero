@@ -32,6 +32,8 @@ interface HandDisplayProps {
   maxHandSize?: number;
   cardSize?: { width: number, height: number }; // New prop for synchronization
   disableAnimations?: boolean;
+  /** 怪物回合等：与地城格一致的灰显 */
+  dimForCombatLock?: boolean;
   onCardClick?: (card: GameCardData) => void;
 }
 
@@ -43,9 +45,8 @@ export default function HandDisplay({
   maxHandSize = HAND_LIMIT,
   cardSize,
   disableAnimations = false,
+  dimForCombatLock = false,
   onCardClick,
-  spellDamageContextBonus = 0,
-  spellEchoNextMagic = false,
 }: HandDisplayProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
@@ -185,7 +186,11 @@ export default function HandDisplay({
         className="relative w-full max-w-5xl pointer-events-none"
         style={{ height: cardHeight, transform: `translateX(${Math.round(cardWidth * 0.15)}px)` }}
       >
-        <div className="absolute inset-0 flex items-end justify-center pointer-events-none">
+        <div
+          className={`absolute inset-0 flex items-end justify-center pointer-events-none transition-opacity duration-200 ${
+            dimForCombatLock ? 'opacity-60' : 'opacity-100'
+          }`.trim()}
+        >
           {handCards.map((card, index) => {
             const totalWidth = handCards.length * cardWidth * horizontalStepFactor;
             const startX = -totalWidth / 2;

@@ -105,6 +105,7 @@ export const initialWaterfallAnimationState: WaterfallAnimationState = {
   droppingSlots: [],
   landingSlots: [],
   discardSlot: null,
+  discardDestination: 'graveyard',
   dealingSlots: [],
   sequenceId: null,
 };

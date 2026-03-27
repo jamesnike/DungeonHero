@@ -575,6 +575,9 @@ export default function CardDetailsModal({
                   <p className="text-sm font-semibold text-red-700 dark:text-red-300 pl-6">
                     击败后将变身为 Boss。
                   </p>
+                  <p className="text-sm text-red-600/90 dark:text-red-300/90 pl-6">
+                    被瀑流从预览区挤出时不进入坟场，置于剩余牌堆底（不打乱其余牌序）。
+                  </p>
                 </div>
               </div>
             )}
@@ -609,8 +612,13 @@ export default function CardDetailsModal({
                    </div>
                 )}
                 {(card as any).damageReflect && (
-                   <div className="col-span-2 text-amber-600 flex items-center gap-1">
-                     <Shield className="w-3 h-3" /> Reflects {(card as any).damageReflect} damage
+                   <div className="col-span-2 text-amber-600 flex flex-col gap-0.5">
+                     <div className="flex items-center gap-1">
+                       <Shield className="w-3 h-3 shrink-0" />
+                       <span>
+                         格挡反弹 {(card as any).damageReflect} 点基础伤害，结算时叠加该栏永久伤害与全局永久法术伤害加成。
+                       </span>
+                     </div>
                    </div>
                 )}
               </div>

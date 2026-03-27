@@ -225,7 +225,8 @@ export type PendingMagicAction =
     }
   | {
       card: GameCardData;
-      effect: 'shuffle-dungeon';
+      /** `shuffle-dungeon` 仅旧存档兼容，新逻辑一律置于牌堆底、不打乱牌堆 */
+      effect: 'return-dungeon-bottom' | 'shuffle-dungeon';
       step: 'dungeon-select';
       prompt: string;
       echoRemaining?: number;
@@ -370,12 +371,17 @@ export type ActiveAmuletEffects = {
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';
 
+/** 预览区被挤掉的卡：进坟场 vs 回主牌堆（动画目标不同） */
+export type WaterfallDiscardDestination = 'graveyard' | 'deck';
+
 export type WaterfallAnimationState = {
   phase: WaterfallPhase;
   isActive: boolean;
   droppingSlots: number[];
   landingSlots: number[];
   discardSlot: number | null;
+  /** 与 `discardSlot` 同时有效；决定飞向坟场还是牌库按钮 */
+  discardDestination: WaterfallDiscardDestination;
   dealingSlots: number[];
   sequenceId: number | null;
 };
@@ -386,6 +392,8 @@ export type WaterfallPlan = {
   dropTargetSlots: number[];
   discardCard: GameCardData | null;
   discardPreviewIndex: number | null;
+  /** 与 `handleWaterfallDiscardComplete` 路由一致，供挤掉动画选用 */
+  discardDestination: WaterfallDiscardDestination;
   nextPreviewCards: GameCardData[];
   nextRemainingDeck: GameCardData[];
   shouldDeclareVictory: boolean;

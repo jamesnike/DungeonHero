@@ -808,6 +808,34 @@
     backface-visibility: hidden;
   }
 
+  /* 预览区被挤回主牌堆：飞向顶部牌库计数，带轻微「吸入」光感（非坟场） */
+  @keyframes preview-deck-return {
+    0% {
+      transform: translate(0, 0) scale(1) rotate(0deg);
+      opacity: 1;
+      filter: brightness(1) saturate(1);
+    }
+    40% {
+      filter: brightness(1.1) saturate(1.12) drop-shadow(0 0 12px rgba(56, 189, 248, 0.4));
+    }
+    100% {
+      transform: translate(
+          var(--deck-return-offset-x, -90px),
+          var(--deck-return-offset-y, -170px)
+        )
+        scale(0.26) rotate(-9deg);
+      opacity: 0;
+      filter: brightness(1.2) blur(0.6px);
+    }
+  }
+
+  .animate-preview-deck-return {
+    animation: preview-deck-return 450ms cubic-bezier(0.33, 0, 0.18, 1) forwards;
+    pointer-events: none;
+    will-change: transform, opacity, filter;
+    backface-visibility: hidden;
+  }
+
   @keyframes active-landing {
     0% {
       transform: translateY(-35%) scale(0.9);

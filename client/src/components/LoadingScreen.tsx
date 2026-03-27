@@ -114,6 +114,7 @@ const WARM_ANIMATION_CLASSES = [
   'combat-overlay__shape--heal-ring',
   'animate-preview-drop',
   'animate-preview-graveyard',
+  'animate-preview-deck-return',
   'animate-active-landing',
   'animate-preview-deal',
 ];
