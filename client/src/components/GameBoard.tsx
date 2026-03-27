@@ -2419,6 +2419,8 @@ export default function GameBoard() {
   const [eventTransformState, setEventTransformState] = useState<EventTransformState | null>(null);
   const [graveyardDiscoverState, setGraveyardDiscoverState] = useState<GameCardData[] | null>(null);
   const graveyardDiscoverResolverRef = useRef<((card: GameCardData | null) => void) | null>(null);
+  /** 坟场三选一取回目的地：亡灵拾遗优先入手牌，其余默认背包 */
+  const graveyardDiscoverDeliveryRef = useRef<'backpack' | 'hand-first'>('backpack');
   const suppressDeathWardRef = useRef(false);
   
   // Hero class system state
@@ -2778,9 +2780,12 @@ export default function GameBoard() {
   );
 
   useEffect(() => {
-    if (!graveyardDiscoverState && graveyardDiscoverResolverRef.current) {
-      graveyardDiscoverResolverRef.current(null);
-      graveyardDiscoverResolverRef.current = null;
+    if (!graveyardDiscoverState) {
+      graveyardDiscoverDeliveryRef.current = 'backpack';
+      if (graveyardDiscoverResolverRef.current) {
+        graveyardDiscoverResolverRef.current(null);
+        graveyardDiscoverResolverRef.current = null;
+      }
     }
   }, [graveyardDiscoverState]);
 
@@ -9576,12 +9581,17 @@ export default function GameBoard() {
   );
 
   const requestGraveyardSelection = useCallback(
-    (maxOptions: number) => {
+    (
+      maxOptions: number,
+      opts?: { delivery?: 'backpack' | 'hand-first' },
+    ) => {
       if (!discardedCards.length) {
         setHeroSkillBanner('坟场中没有可取回的卡牌。');
         return Promise.resolve<GameCardData | null>(null);
       }
       clearUndoStack();
+      graveyardDiscoverDeliveryRef.current =
+        opts?.delivery === 'hand-first' ? 'hand-first' : 'backpack';
       const shuffled = [...discardedCards].sort(() => Math.random() - 0.5);
       const options = shuffled.slice(0, Math.min(maxOptions, shuffled.length));
       return new Promise<GameCardData | null>(resolve => {
@@ -9606,13 +9616,40 @@ export default function GameBoard() {
         return;
       }
       setDiscardedCards(prev => prev.filter(card => card.id !== cardId));
-      addCardToBackpack(selected);
-      addGameLog('event', `坟场发现：选入背包「${selected.name}」`);
+      const delivery = graveyardDiscoverDeliveryRef.current;
+      const flightsCount = backpackHandFlightsRef.current.length;
+      const handRoom = Math.max(0, effectiveHandLimit - (handCards.length + flightsCount));
+      const toHand =
+        delivery === 'hand-first' && handRoom > 0 && !handCards.some(c => c.id === selected.id);
+      if (toHand) {
+        ensureCardInHand(selected);
+        addGameLog('event', `坟场发现：入手牌「${selected.name}」`);
+        setHeroSkillBanner(`「${selected.name}」已加入手牌。`);
+      } else {
+        addCardToBackpack(selected);
+        addGameLog(
+          'event',
+          delivery === 'hand-first'
+            ? `坟场发现：手牌已满，「${selected.name}」进入背包`
+            : `坟场发现：选入背包「${selected.name}」`,
+        );
+        if (delivery === 'hand-first') {
+          setHeroSkillBanner(`手牌已满，「${selected.name}」已进入背包。`);
+        }
+      }
       setGraveyardDiscoverState(null);
       graveyardDiscoverResolverRef.current?.(selected);
       graveyardDiscoverResolverRef.current = null;
     },
-    [addCardToBackpack, addGameLog, graveyardDiscoverState],
+    [
+      addCardToBackpack,
+      addGameLog,
+      effectiveHandLimit,
+      ensureCardInHand,
+      graveyardDiscoverState,
+      handCards,
+      setHeroSkillBanner,
+    ],
   );
 
   const handleShopDeleteRequest = useCallback(() => {
@@ -11452,10 +11489,9 @@ export default function GameBoard() {
           setHeroSkillBanner('亡灵拾遗已取消。');
           return;
         }
-        const selected = await requestGraveyardSelection(3);
+        const selected = await requestGraveyardSelection(3, { delivery: 'hand-first' });
         if (selected) {
           addGameLog('skill', `亡灵拾遗：从坟场召回「${selected.name}」`);
-          setHeroSkillBanner(`从坟场召回了「${selected.name}」！`);
         } else {
           setHeroSkillBanner('放弃了坟场召回。');
         }
@@ -15538,7 +15574,7 @@ export default function GameBoard() {
         cards={graveyardDiscoverState ?? []}
         onSelect={handleGraveyardDiscoverSelect}
         title="坟场召回"
-        description="从坟场随机出现的卡牌中选择一张带回背包。"
+        description="从坟场随机出现的卡牌中选择一张取回。"
       />
 
       <ShopModal
