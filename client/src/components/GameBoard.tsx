@@ -21,6 +21,7 @@ import GameCard, {
   type GameCardData,
   type EquipmentCardStatModifier,
   type HeroMagicId,
+  isPermRecycleEquipment,
 } from './GameCard';
 import EquipmentSlot from './EquipmentSlot';
 import CombatPanel from './CombatPanel';
@@ -639,6 +640,14 @@ function createDeck(): GameCardData[] {
       if (type === 'Skeleton') {
         chosen.waterfallEffect = { type: 'damage', amount: 15, description: '被挤出时：对英雄造成 15 点伤害' };
       }
+    }
+
+    const goblinsForTrick = deck.filter(
+      (c): c is GameCardData => c.type === 'monster' && c.monsterType === 'Goblin',
+    );
+    if (goblinsForTrick.length > 0) {
+      const trickCarrier = goblinsForTrick[Math.floor(Math.random() * goblinsForTrick.length)];
+      trickCarrier.goblinTrickCarrier = true;
     }
 
   // Weapon variety with improved values (2-6 range)
@@ -1865,7 +1874,6 @@ export default function GameBoard() {
   const storingCardIdsRef = useRef<Set<string>>(new Set());
   const previousActiveCardsRef = useRef<ActiveRowSlots>(createEmptyActiveRow());
   const freshGameStartRef = useRef(false);
-  const goblinRewardClaimedRef = useRef(false);
   const processedDungeonCardIdsRef = useRef<Set<string>>(new Set());
   const heroTurnLayerLossIdsRef = useRef<Set<string>>(new Set());
   const pendingDefeatIdsRef = useRef<Set<string>>(new Set());
@@ -4004,12 +4012,10 @@ export default function GameBoard() {
     }
 
     const latestMonster = activeCards.find(c => c?.id === monster.id) ?? monster;
-    const shouldFlipGoblin = latestMonster.monsterType === 'Goblin'
-      && !latestMonster.goblinHasStolen
-      && !goblinRewardClaimedRef.current;
-    if (shouldFlipGoblin) {
-      goblinRewardClaimedRef.current = true;
-    }
+    const shouldFlipGoblin =
+      latestMonster.monsterType === 'Goblin' &&
+      !latestMonster.goblinHasStolen &&
+      Boolean(latestMonster.goblinTrickCarrier);
 
     setTimeout(() => {
       pendingDefeatIdsRef.current.delete(monster.id);
@@ -4436,7 +4442,7 @@ export default function GameBoard() {
             setGold(prev => prev + slotItem.onDestroyGold!);
             addGameLog('equip', `${slotItem.name} 毁坏时获得了 ${slotItem.onDestroyGold} 金币`);
           }
-          addToGraveyard({ ...slotItem });
+          disposeOwnedEquipmentCard({ ...slotItem });
           clearEquipmentSlotWithPromote(slotId);
         } else {
           const safeDurability = weaponDurability <= 1 ? weaponDurability : weaponDurability - 1;
@@ -4670,7 +4676,7 @@ export default function GameBoard() {
                 setGold(prev => prev + slotItem.onDestroyGold!);
                 addGameLog('equip', `${slotItem.name} 毁坏时获得了 ${slotItem.onDestroyGold} 金币`);
               }
-              addToGraveyard({ ...slotItem });
+              disposeOwnedEquipmentCard({ ...slotItem });
               clearEquipmentSlotWithPromote(blockSlotId);
             } else {
               const nextDurability = shieldDurability <= 1 ? shieldDurability : shieldDurability - 1;
@@ -5431,10 +5437,15 @@ export default function GameBoard() {
   const addPermanentMagicToRecycleBag = useCallback(
     (card: GameCardData) => {
       const sanitized = sanitizeCardMetadata(card);
-      sanitized._recycleWaits = sanitized.recycleDelay ?? 1;
+      let payload: GameCardData = sanitized;
+      if (isPermRecycleEquipment(sanitized)) {
+        const maxD = sanitized.maxDurability ?? sanitized.durability ?? 1;
+        payload = { ...sanitized, durability: maxD, maxDurability: maxD };
+      }
+      const withWaits: GameCardData = { ...payload, _recycleWaits: payload.recycleDelay ?? 1 };
       setPermanentMagicRecycleBag(prev => {
-        const filtered = prev.filter(existing => existing.id !== sanitized.id);
-        return [...filtered, sanitized];
+        const filtered = prev.filter(existing => existing.id !== withWaits.id);
+        return [...filtered, withWaits];
       });
     },
     [setPermanentMagicRecycleBag],
@@ -6095,7 +6106,6 @@ export default function GameBoard() {
       heroSkillUsedThisWave,
       extraSkillsUsedThisWave: Array.from(extraSkillsUsedThisWave),
       handLimitBonus,
-      goblinRewardClaimed: goblinRewardClaimedRef.current,
       drawPending,
       waveDiscardCount,
       resolvingDungeonCardId,
@@ -6480,7 +6490,6 @@ export default function GameBoard() {
     const starterBackpack = createStarterBackpack();
     setBackpackItems(starterBackpack);
     setPermanentMagicRecycleBag([]);
-    goblinRewardClaimedRef.current = false;
     setBackpackCapacityModifier(0);
     setTurnDamageTaken(0);
     clearBerserkTurnBuff();
@@ -6747,7 +6756,6 @@ export default function GameBoard() {
     setHeroSkillUsedThisWave(Boolean(snapshot.heroSkillUsedThisWave));
     setExtraSkillsUsedThisWave(new Set(Array.isArray((snapshot as any).extraSkillsUsedThisWave) ? (snapshot as any).extraSkillsUsedThisWave : []));
     setHandLimitBonus(snapshot.handLimitBonus ?? 0);
-    goblinRewardClaimedRef.current = Boolean(snapshot.goblinRewardClaimed);
     setPendingHeroSkillAction(null);
     setHeroSkillBanner(null);
     setHeroSkillArrow(null);
@@ -7551,6 +7559,14 @@ export default function GameBoard() {
     });
   }
 
+  /** 装备损毁、挤位、事件摧毁等：永久装备进回收袋，其余进坟场 */
+  function disposeOwnedEquipmentCard(card: GameCardData) {
+    if (isPermRecycleEquipment(card)) {
+      addPermanentMagicToRecycleBag(card);
+    } else {
+      addToGraveyard(card);
+    }
+  }
 
   const discardCardToGraveyard = useCallback(
     (card: GameCardData | null | undefined, options?: { owner?: 'player' | 'dungeon'; forceGraveyard?: boolean }) => {
@@ -7708,7 +7724,11 @@ export default function GameBoard() {
       if (!slotItem) {
         return false;
       }
-      addToGraveyard(slotItem);
+      if (isPermRecycleEquipment(slotItem)) {
+        addPermanentMagicToRecycleBag(slotItem);
+      } else {
+        addToGraveyard(slotItem);
+      }
       const reserve = slotId === 'equipmentSlot1' ? equipmentSlot1Reserve : equipmentSlot2Reserve;
       if (reserve.length > 0) {
         const promoted = reserve[reserve.length - 1];
@@ -7719,7 +7739,15 @@ export default function GameBoard() {
       }
       return true;
     },
-    [addToGraveyard, clearEquipmentSlotById, equipmentSlot1, equipmentSlot2, equipmentSlot1Reserve, equipmentSlot2Reserve],
+    [
+      addPermanentMagicToRecycleBag,
+      addToGraveyard,
+      clearEquipmentSlotById,
+      equipmentSlot1,
+      equipmentSlot2,
+      equipmentSlot1Reserve,
+      equipmentSlot2Reserve,
+    ],
   );
 
   const swapEquipmentSlots = useCallback(() => {
@@ -7903,12 +7931,12 @@ export default function GameBoard() {
               const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
               if (slotItem) {
                 destroyed.push(slotItem.name);
-                addToGraveyard({ ...slotItem });
+                disposeOwnedEquipmentCard({ ...slotItem });
               }
               const reserve = slotId === 'equipmentSlot1' ? equipmentSlot1Reserve : equipmentSlot2Reserve;
               reserve.forEach(r => {
                 destroyed.push(r.name);
-                addToGraveyard({ ...r });
+                disposeOwnedEquipmentCard({ ...r });
               });
               clearEquipmentSlotById(slotId);
               setEquipmentReserve(slotId, []);
@@ -11740,7 +11768,13 @@ export default function GameBoard() {
     card: GameCardData | null | undefined,
   ): card is GameCardData => Boolean(card && card.type === 'magic' && card.magicType === 'permanent');
   const isRecyclableFromHand = (card: GameCardData | null | undefined): boolean =>
-    Boolean(card && ((card.type === 'magic' && card.magicType === 'permanent') || card.type === 'amulet' || card.isPermanentEvent));
+    Boolean(
+      card &&
+        ((card.type === 'magic' && card.magicType === 'permanent') ||
+          card.type === 'amulet' ||
+          card.isPermanentEvent ||
+          isPermRecycleEquipment(card)),
+    );
   const canCardGoToBackpack = (card: GameCardData) => {
     if (card.type === 'event') return false;
     if (card.type === 'monster') return false;
@@ -11909,12 +11943,12 @@ export default function GameBoard() {
       } else {
         if (equippedItem && equippedItem.id !== card.id) {
           if (reserve.length > 0) {
-            addToGraveyard(reserve[0]);
+            disposeOwnedEquipmentCard(reserve[0]);
             addGameLog('equip', `卸下 ${reserve[0].name}`);
             const newReserve = reserve.slice(1);
             setEquipmentReserve(equipSlot, equippedItem ? [...newReserve, equippedItem] : newReserve);
           } else {
-            addToGraveyard(equippedItem);
+            disposeOwnedEquipmentCard(equippedItem);
             addGameLog('equip', `卸下 ${equippedItem.name}`);
           }
         }
@@ -12167,7 +12201,7 @@ export default function GameBoard() {
             const slotItem = below.slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
             if (slotItem) {
               addGameLog('event', `命运十字路口：破坏了下方装备「${slotItem.name}」`);
-              addToGraveyard(slotItem);
+              disposeOwnedEquipmentCard(slotItem);
               clearEquipmentSlotById(below.slotId);
               const reserve = below.slotId === 'equipmentSlot1' ? equipmentSlot1Reserve : equipmentSlot2Reserve;
               if (reserve.length > 0) {
@@ -12589,10 +12623,10 @@ export default function GameBoard() {
         let destroyed = 0;
         destroySlots.forEach(slot => {
           const reserve = getEquipmentReserve(slot.id);
-          reserve.forEach(r => addToGraveyard(r));
+          reserve.forEach(r => disposeOwnedEquipmentCard(r));
           setEquipmentReserve(slot.id, []);
           if (slot.item) {
-            addToGraveyard(slot.item);
+            disposeOwnedEquipmentCard(slot.item);
             clearEquipmentSlotById(slot.id);
             destroyed++;
           }

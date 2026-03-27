@@ -99,7 +99,6 @@ export interface PersistedGameState {
   berserkerSlotUsed?: Record<string, boolean>;
   heroSkillUsedThisWave?: boolean;
   handLimitBonus?: number;
-  goblinRewardClaimed?: boolean;
   drawPending?: boolean;
   waveDiscardCount?: number;
   resolvingDungeonCardId?: string | null;

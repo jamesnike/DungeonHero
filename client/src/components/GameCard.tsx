@@ -195,6 +195,8 @@ export interface GameCardData {
   reflectHalfDamage?: boolean; // Reflect half of incoming attack damage back to attacker
   // Class card properties
   classCard?: boolean; // Marks as a class card
+  /** 损毁或强制弃置时进入回收袋，经 recycleDelay 次瀑流回背包（与永久法术共用回收区） */
+  permEquipment?: boolean;
   description?: string; // Card effect description
   potionEffect?: PotionEffectId;
   flipTarget?: CardFlipTarget;
@@ -226,14 +228,26 @@ export interface GameCardData {
   wraithDeathHeal?: number; // Wraith tier-3: on death, same-row monsters gain this much HP
   goblinStealScale?: boolean; // Goblin tier-3: +X atk/hp per X gold stolen
   goblinHasStolen?: boolean; // Tracks if this goblin successfully stole gold
+  /** 本局随机指定的一只哥布林；仅该实例死亡且未偷金时掉落「哥布林的戏法」 */
+  goblinTrickCarrier?: boolean;
   // Permanent event properties
   isPermanentEvent?: boolean; // Stays in dungeon after effect; recyclable like perm magic
   hasReleaseCharge?: boolean; // Gained on appearance or position change; consumed on effect use
   _fateBladeLastSlot?: number; // Internal: last known active row slot index for position tracking
 }
 
+export function isPermRecycleEquipment(card: GameCardData | null | undefined): boolean {
+  return Boolean(
+    card && (card.type === 'weapon' || card.type === 'shield') && card.permEquipment,
+  );
+}
+
 /** 背包列表等：`永久` 或 `永久 2`（recycleDelay > 1 时带数字） */
 export function getMagicSubtypeBracketLabel(card: GameCardData): string | null {
+  if (isPermRecycleEquipment(card)) {
+    const d = card.recycleDelay ?? 1;
+    return d > 1 ? `永久装备 ${d}` : '永久装备';
+  }
   if (card.type !== 'magic' || !card.magicType) return null;
   if (card.magicType === 'instant') return '即时';
   if (card.magicType === 'permanent') {
@@ -984,6 +998,17 @@ const amuletEffectText =
                     </div>
                   </div>
                 )}
+                {(card.type === 'weapon' || card.type === 'shield') && card.permEquipment && (
+                  <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
+                    <div className="dh-card__caption flex items-center justify-center gap-1 bg-slate-800/88 py-0.5 font-black uppercase tracking-widest text-white">
+                      <Infinity className="dh-icon-inline--compact shrink-0" aria-hidden />
+                      <span>{card.type === 'weapon' ? 'PERM WEAPON' : 'PERM SHIELD'}</span>
+                      {showPermRecycleCount && (
+                        <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {showAmuletOverlay && (
                   <div className="dh-card__body-text absolute top-1.5 left-1.5 right-1.5 font-semibold text-black text-center px-1.5 py-0.5 tracking-wide pointer-events-none select-none drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
                     {amuletEffectText}
@@ -1261,6 +1286,8 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.fury !== b.fury ||
       a.image !== b.image ||
       a.type !== b.type ||
+      a.permEquipment !== b.permEquipment ||
+      a.recycleDelay !== b.recycleDelay ||
       a.description !== b.description ||
       a.specialAttackBoost !== b.specialAttackBoost ||
       a.maxHp !== b.maxHp ||
@@ -1273,7 +1300,9 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.dragonBleedDestroy !== b.dragonBleedDestroy ||
       a.skeletonNoLayerCostActive !== b.skeletonNoLayerCostActive ||
       a.wraithDeathHeal !== b.wraithDeathHeal ||
-      a.goblinStealScale !== b.goblinStealScale
+      a.goblinStealScale !== b.goblinStealScale ||
+      a.goblinHasStolen !== b.goblinHasStolen ||
+      a.goblinTrickCarrier !== b.goblinTrickCarrier
     ) {
       return false;
     }

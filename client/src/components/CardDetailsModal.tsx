@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { type EventEffectExpression, type EventRequirement, type GameCardData } from "./GameCard";
+import { type EventEffectExpression, type EventRequirement, type GameCardData, isPermRecycleEquipment } from "./GameCard";
 import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade } from "@/lib/monsterRage";
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins } from "lucide-react";
 import {
@@ -570,6 +570,17 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
             {/* Weapon/Shield Details */}
             {(card.type === 'weapon' || card.type === 'shield') && (
               <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
+                {isPermRecycleEquipment(card) && (
+                  <div className="col-span-2 mb-1 inline-flex items-center gap-1 rounded-md border border-cyan-500/45 bg-cyan-950/25 px-2 py-1 text-xs font-bold tracking-wide text-cyan-900 dark:text-cyan-100">
+                    {card.type === 'weapon' ? 'PERM WEAPON' : 'PERM SHIELD'}
+                    {(card.recycleDelay ?? 1) > 1 && (
+                      <span className="tabular-nums">{card.recycleDelay}</span>
+                    )}
+                    <span className="ml-1 font-normal text-muted-foreground">
+                      损毁后进回收袋，与永久法术相同瀑流计数后回背包。
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   {card.type === 'weapon' ? <Sword className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
                   <span>{card.type === 'weapon' ? 'Attack' : 'Defense'}: <span className="font-bold">{card.value}</span></span>
