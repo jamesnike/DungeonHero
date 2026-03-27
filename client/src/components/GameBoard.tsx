@@ -9544,10 +9544,10 @@ export default function GameBoard() {
       title: '混沌骰运',
       subtitle: '掷出混沌之力',
       entries: [
-        { id: 'chaos-1', range: [1, 4] as [number, number], label: '武器与盾牌回到手牌', effect: 'none' },
-        { id: 'chaos-2', range: [5, 8] as [number, number], label: '发现 3 张专属卡牌', effect: 'none' },
+        { id: 'chaos-1', range: [1, 4] as [number, number], label: '装备回手（满则回收袋）', effect: 'none' },
+        { id: 'chaos-2', range: [5, 8] as [number, number], label: '发现 1 张专属（三选一）', effect: 'none' },
         { id: 'chaos-3', range: [9, 12] as [number, number], label: '临时混沌商店', effect: 'none' },
-        { id: 'chaos-4', range: [13, 16] as [number, number], label: '雷击随机怪物', effect: 'none' },
+        { id: 'chaos-4', range: [13, 16] as [number, number], label: '雷击：随机 1 怪，基础伤 3（双段）', effect: 'none' },
         { id: 'chaos-5', range: [17, 20] as [number, number], label: '弃 2 抽 2', effect: 'none' },
       ],
     });
@@ -9561,6 +9561,8 @@ export default function GameBoard() {
       case 'chaos-1': {
         const equipmentSlots = getEquipmentSlots();
         let returned = 0;
+        let toHand = 0;
+        let toRecycle = 0;
         let handLoad = handCards.length + backpackHandFlightsRef.current.length;
         equipmentSlots.forEach(slot => {
           const allItems = [
@@ -9574,21 +9576,34 @@ export default function GameBoard() {
             if (handLoad < effectiveHandLimit) {
               queueCardIntoHand(sanitized);
               handLoad += 1;
+              toHand += 1;
             } else {
-              addCardToBackpack(sanitized, { toBottom: true });
+              addPermanentMagicToRecycleBag(sanitized);
+              toRecycle += 1;
             }
             returned += 1;
           });
         });
-        banner =
-          returned > 0
-            ? `混沌骰运：${returned} 件装备回到了手牌。`
-            : '混沌骰运尝试归还装备，但你没有已装备的武器或盾牌。';
+        if (returned > 0) {
+          addGameLog(
+            'magic',
+            `混沌骰运：收回 ${returned} 件装备（手牌 +${toHand}，回收袋 +${toRecycle}）。`,
+          );
+          if (toRecycle > 0 && toHand > 0) {
+            banner = `混沌骰运：${toHand} 件回手牌，${toRecycle} 件因手牌已满进入回收袋（瀑流后回背包）。`;
+          } else if (toRecycle > 0) {
+            banner = `混沌骰运：${toRecycle} 件装备因手牌已满进入回收袋（瀑流后回背包）。`;
+          } else {
+            banner = `混沌骰运：${returned} 件装备回到了手牌。`;
+          }
+        } else {
+          banner = '混沌骰运尝试归还装备，但你没有已装备的武器或盾牌。';
+        }
         break;
       }
       case 'chaos-2': {
         const started = beginDiscoverFlow('chaos-dice');
-        banner = started ? '混沌骰运：出现了 3 张专属卡牌供你挑选。' : '混沌骰运想要发现卡牌，但背包已满或卡组耗尽。';
+        banner = started ? '混沌骰运：发现 1 张专属（三选一）。' : '混沌骰运想要发现卡牌，但背包已满或卡组耗尽。';
         break;
       }
       case 'chaos-3': {
@@ -11922,8 +11937,20 @@ export default function GameBoard() {
         } as EquipmentItem;
         addGameLog('equip', `装备怪物 ${card.name}（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterInitialDurability}/${monsterMaxDurability}耐久）`);
       } else {
-        equipCard = { ...card } as EquipmentItem;
-        addGameLog('equip', `装备 ${card.name}（${card.type === 'weapon' ? `${card.value}攻` : `${card.value}防`}）`);
+        const base = { ...card } as EquipmentItem;
+        const maxD = base.maxDurability ?? base.durability;
+        equipCard =
+          maxD != null && maxD > 0
+            ? { ...base, durability: maxD, maxDurability: maxD }
+            : base;
+        const durNote =
+          equipCard.maxDurability != null && equipCard.maxDurability > 0
+            ? `（耐久 ${equipCard.durability}/${equipCard.maxDurability}）`
+            : '';
+        addGameLog(
+          'equip',
+          `装备 ${card.name}（${card.type === 'weapon' ? `${card.value}攻` : `${card.value}防`}）${durNote}`,
+        );
       }
       setEquipmentSlotById(equipSlot, equipCard);
     // // toast({ 

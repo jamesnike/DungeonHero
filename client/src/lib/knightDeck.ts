@@ -1,4 +1,5 @@
 import { type GameCardData } from '@/components/GameCard';
+import { CHAOS_DICE_SPELL_DESCRIPTION, CHAOS_DICE_SPELL_MAGIC_EFFECT } from '@/lib/knightChaosDiceCopy';
 
 // Import images for Knight cards
 import holyBladeImage from '@assets/generated_images/holy_light_blade.png';
@@ -265,9 +266,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '永久：掷骰 20% 触发不同效果（装备回手/发现专属/开启商店/对怪物造成双段伤害/弃 2 抽 2）。',
+    description: CHAOS_DICE_SPELL_DESCRIPTION,
     magicType: 'permanent',
-    magicEffect: '掷骰触发混沌事件。',
+    magicEffect: CHAOS_DICE_SPELL_MAGIC_EFFECT,
     knightEffect: 'chaos-dice',
   });
 

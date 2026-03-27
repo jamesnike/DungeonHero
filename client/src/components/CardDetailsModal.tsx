@@ -8,6 +8,7 @@ import {
   isEventCardType,
   isMagicSpellCardType,
 } from "./MagicNameFlankIcons";
+import { CHAOS_DICE_SPELL_DESCRIPTION } from "@/lib/knightChaosDiceCopy";
 
 type MonsterRewardPreview = {
   id: string;
@@ -622,7 +623,12 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                     <span className="tabular-nums">{card.recycleDelay}</span>
                   </div>
                 )}
-                <div>{card.description || card.magicEffect}</div>
+                <div>
+                  {(card as GameCardData & { knightEffect?: string }).knightEffect === 'chaos-dice' ||
+                  card.name === '混沌骰运'
+                    ? CHAOS_DICE_SPELL_DESCRIPTION
+                    : card.description || card.magicEffect}
+                </div>
               </div>
             )}
 
