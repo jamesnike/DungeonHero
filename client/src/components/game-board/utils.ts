@@ -986,7 +986,7 @@ export function createStarterBackpack(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一个装备，恢复 1 点耐久。',
       description: '精准地修补武器或护盾，恢复 1 点耐久值。',
-      recycleDelay: 2,
+      recycleDelay: 1,
     },
     {
       id: STARTER_CARD_IDS.healTwo,
@@ -1018,6 +1018,7 @@ export function createStarterBackpack(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：将地城行最左和最右的卡牌对换位置。',
       description: '扭转地城秩序，将最左与最右的卡牌互换。',
+      recycleDelay: 2,
     },
     {
       id: STARTER_CARD_IDS.trainingBlade,

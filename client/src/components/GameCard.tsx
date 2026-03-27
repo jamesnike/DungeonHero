@@ -324,7 +324,10 @@ function GameCardInner({
   const isTitleBandCard = isMagicLikeCard || isEventCard;
   const isPermanentMagicCard = card.type === 'magic' && card.magicType === 'permanent';
   const permRecycleWaterfalls = card.recycleDelay ?? 1;
-  const showPermRecycleCount = permRecycleWaterfalls > 1;
+  /** 永久法术：卡面始终显示 PERM + 瀑流计数（含 1）；永驻事件、永久装备仍仅在 >1 时显示数字 */
+  const showPermMagicRecycleNumber = isPermanentMagicCard;
+  const showPermEventRecycleNumber = Boolean(card.isPermanentEvent) && permRecycleWaterfalls > 1;
+  const showPermEquipmentRecycleNumber = permRecycleWaterfalls > 1;
   const healingPotionEffects: PotionEffectId[] = ['heal-5', 'heal-7'];
   const isHealingPotion =
     isPotionCard && (!card.potionEffect || healingPotionEffects.includes(card.potionEffect));
@@ -805,7 +808,7 @@ const amuletEffectText =
                   <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
                     <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
                     <span className="leading-none">PERM</span>
-                    {showPermRecycleCount && (
+                    {(showPermMagicRecycleNumber || showPermEventRecycleNumber) && (
                       <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
                     )}
                   </span>
@@ -1027,7 +1030,7 @@ const amuletEffectText =
                     >
                       <Infinity className="dh-icon-inline--compact shrink-0" aria-hidden />
                       <span className="leading-none">PERM</span>
-                      {showPermRecycleCount && (
+                      {showPermEquipmentRecycleNumber && (
                         <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
                       )}
                     </span>

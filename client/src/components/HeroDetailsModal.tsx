@@ -5,7 +5,19 @@ import type { HeroVariant } from '@/lib/heroes';
 import type { HeroSkillDefinition } from '@/lib/heroSkills';
 import type { HeroMagicId } from '@/components/GameCard';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
-import { Coins, Heart, Shield, ShieldPlus, Sparkles, Sword, PlusCircle, Flame } from 'lucide-react';
+import {
+  Backpack,
+  Coins,
+  Flame,
+  Hand,
+  Heart,
+  LayoutGrid,
+  PlusCircle,
+  Shield,
+  ShieldPlus,
+  Sparkles,
+  Sword,
+} from 'lucide-react';
 
 export interface HeroMagicDisplayInfo {
   id: HeroMagicId;
@@ -36,6 +48,14 @@ interface HeroDetailsModalProps {
   heroSkills: HeroSkillDefinition[];
   permanentSkills: string[];
   heroMagicInfo?: HeroMagicDisplayInfo[];
+  /** 当前局内各区域卡牌上限 */
+  capacityLimits: {
+    hand: number;
+    backpack: number;
+    amuletSlots: number;
+    equipmentSlotLeft: number;
+    equipmentSlotRight: number;
+  };
 }
 
 const permanentSkillHints: Record<string, string> = {
@@ -66,6 +86,7 @@ export default function HeroDetailsModal({
   heroSkills,
   permanentSkills,
   heroMagicInfo,
+  capacityLimits,
 }: HeroDetailsModalProps) {
   const statItems = [
     {
@@ -112,6 +133,39 @@ export default function HeroDetailsModal({
     },
   ];
 
+  const capacityItems = [
+    {
+      key: 'hand',
+      label: '手牌上限',
+      value: `${capacityLimits.hand} 张`,
+      icon: <Hand className="w-4 h-4 text-sky-500" />,
+    },
+    {
+      key: 'backpack',
+      label: '背包上限',
+      value: `${capacityLimits.backpack} 张`,
+      icon: <Backpack className="w-4 h-4 text-amber-700 dark:text-amber-500" />,
+    },
+    {
+      key: 'amulet',
+      label: '护符栏上限',
+      value: `${capacityLimits.amuletSlots} 个`,
+      icon: <Sparkles className="w-4 h-4 text-violet-500" />,
+    },
+    {
+      key: 'equipL',
+      label: '左装备栏上限',
+      value: `${capacityLimits.equipmentSlotLeft} 件`,
+      icon: <LayoutGrid className="w-4 h-4 text-blue-600" />,
+    },
+    {
+      key: 'equipR',
+      label: '右装备栏上限',
+      value: `${capacityLimits.equipmentSlotRight} 件`,
+      icon: <LayoutGrid className="w-4 h-4 text-indigo-600" />,
+    },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
@@ -150,6 +204,24 @@ export default function HeroDetailsModal({
                     {stat.icon}
                     <span className="text-lg font-semibold">{stat.value}</span>
                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-base font-semibold text-foreground">携带与栏位上限</h3>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {capacityItems.map(row => (
+                <div
+                  key={row.key}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/25 px-3 py-2.5"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    {row.icon}
+                    <span className="text-sm font-medium text-foreground">{row.label}</span>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">{row.value}</span>
                 </div>
               ))}
             </div>

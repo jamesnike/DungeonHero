@@ -648,10 +648,10 @@ export default function CardDetailsModal({
                 <div className="mb-1 font-semibold text-cyan-700 dark:text-cyan-400">
                   Type: {card.magicType === 'instant' ? 'Instant Spell' : 'Permanent Skill'}
                 </div>
-                {card.magicType === 'permanent' && (card.recycleDelay ?? 1) > 1 && (
+                {card.magicType === 'permanent' && (
                   <div className="mb-2 inline-flex items-center gap-1 rounded-md border border-cyan-500/45 bg-cyan-950/25 px-2 py-1 text-xs font-bold tracking-wide text-cyan-900 dark:text-cyan-100">
                     PERM
-                    <span className="tabular-nums">{card.recycleDelay}</span>
+                    <span className="tabular-nums">{card.recycleDelay ?? 1}</span>
                   </div>
                 )}
                 <div>

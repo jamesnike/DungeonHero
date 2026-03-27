@@ -4,7 +4,7 @@ import DiscoverClassModal from '@/components/DiscoverClassModal';
 import ShopModal, { type ShopOffering } from '@/components/ShopModal';
 import CardDeletionModal from '@/components/CardDeletionModal';
 import CardDetailsModal from '@/components/CardDetailsModal';
-import HeroDetailsModal from '@/components/HeroDetailsModal';
+import HeroDetailsModal, { type HeroMagicDisplayInfo } from '@/components/HeroDetailsModal';
 import MonsterRewardModal from '@/components/MonsterRewardModal';
 import EventChoiceModal, { type EventChoiceAvailability } from '@/components/EventChoiceModal';
 import EventDiceModal from '@/components/EventDiceModal';
@@ -87,6 +87,14 @@ type GameBoardModalsProps = {
   heroDetailsStats: HeroStatsSummary;
   heroDetailsSkills: HeroSkillDefinition[];
   permanentSkills: string[];
+  heroMagicInfo?: HeroMagicDisplayInfo[];
+  heroCapacityLimits: {
+    hand: number;
+    backpack: number;
+    amuletSlots: number;
+    equipmentSlotLeft: number;
+    equipmentSlotRight: number;
+  };
   activeMonsterReward: MonsterRewardDrop | null;
   onMonsterRewardSelect: (optionId: string) => void;
   eventModalOpen: boolean;
@@ -159,6 +167,8 @@ export function GameBoardModals({
   heroDetailsStats,
   heroDetailsSkills,
   permanentSkills,
+  heroMagicInfo,
+  heroCapacityLimits,
   activeMonsterReward,
   onMonsterRewardSelect,
   eventModalOpen,
@@ -276,6 +286,8 @@ export function GameBoardModals({
         stats={heroDetailsStats}
         heroSkills={heroDetailsSkills}
         permanentSkills={permanentSkills}
+        heroMagicInfo={heroMagicInfo}
+        capacityLimits={heroCapacityLimits}
       />
 
       {activeMonsterReward && (
