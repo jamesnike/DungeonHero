@@ -44,6 +44,8 @@ export default function HandDisplay({
   cardSize,
   disableAnimations = false,
   onCardClick,
+  spellDamageContextBonus = 0,
+  spellEchoNextMagic = false,
 }: HandDisplayProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;

@@ -236,6 +236,11 @@ export interface GameCardData {
   _fateBladeLastSlot?: number; // Internal: last known active row slot index for position tracking
 }
 
+/** 叠伤永久法术：仅显示叠刺层数（随使用次数增加），不含永久法术加成 / 法术回响 */
+export function formatScalingSpellDamageLine(scalingBase: number): string {
+  return `当下 ${scalingBase} 点`;
+}
+
 export function isPermRecycleEquipment(card: GameCardData | null | undefined): boolean {
   return Boolean(
     card && (card.type === 'weapon' || card.type === 'shield') && card.permEquipment,
@@ -921,7 +926,15 @@ const amuletEffectText =
                 >
                   {isMagicLikeCard && (
                     <div className="dh-card__event-option w-full text-left leading-snug text-zinc-900">
-                      {card.description || card.magicEffect || card.heroMagicEffect}
+                      {card.scalingDamage != null ? (
+                        <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
+                          {formatScalingSpellDamageLine(card.scalingDamage)}
+                        </span>
+                      ) : (
+                        <>
+                          {card.description || card.magicEffect || card.heroMagicEffect}
+                        </>
+                      )}
                     </div>
                   )}
                   {isEventCard && card.eventChoices && (
@@ -1289,6 +1302,8 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.permEquipment !== b.permEquipment ||
       a.recycleDelay !== b.recycleDelay ||
       a.description !== b.description ||
+      a.magicEffect !== b.magicEffect ||
+      a.scalingDamage !== b.scalingDamage ||
       a.specialAttackBoost !== b.specialAttackBoost ||
       a.maxHp !== b.maxHp ||
       a.hasRevive !== b.hasRevive ||

@@ -7,7 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { GameCardData, getMagicSubtypeBracketLabel } from './GameCard';
+import {
+  GameCardData,
+  getMagicSubtypeBracketLabel,
+  formatScalingSpellDamageLine,
+} from './GameCard';
 import {
   EventPatternPreview,
   MagicSpellPreview,
@@ -32,6 +36,8 @@ export default function BackpackViewerModal({
   capacity,
   recycleCards = [],
   onCardSelect,
+  spellDamageContextBonus = 0,
+  spellEchoNextMagic = false,
 }: BackpackViewerModalProps) {
   const displayedCards = [...cards].sort((a, b) => a.name.localeCompare(b.name)); // Backpack is unordered
   const recycleBagCards = [...recycleCards].sort((a, b) => a.name.localeCompare(b.name));
@@ -87,10 +93,16 @@ export default function BackpackViewerModal({
           )}
           {card.type === 'hero-magic' && <span className="ml-1 text-muted-foreground/70">(英雄魔法)</span>}
         </p>
-        {card.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2">
-            {card.description}
+        {card.scalingDamage != null ? (
+          <p className="text-xs text-muted-foreground line-clamp-3">
+            {formatScalingSpellDamageLine(card.scalingDamage)}
           </p>
+        ) : (
+          card.description && (
+            <p className="text-xs text-muted-foreground line-clamp-2">
+              {card.description}
+            </p>
+          )
         )}
       </div>
     </Card>

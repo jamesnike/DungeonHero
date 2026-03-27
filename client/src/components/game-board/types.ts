@@ -234,7 +234,9 @@ export type PendingMagicAction =
       card: GameCardData;
       effect: 'scaling-damage';
       step: 'monster-select';
+      /** 刺击基数（未加永久法术加成、未乘回响） */
       pendingDamage: number;
+      echoMultiplier?: number;
       prompt: string;
     }
   | {

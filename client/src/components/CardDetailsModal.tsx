@@ -1,5 +1,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { type EventEffectExpression, type EventRequirement, type GameCardData, isPermRecycleEquipment } from "./GameCard";
+import {
+  type EventEffectExpression,
+  type EventRequirement,
+  type GameCardData,
+  isPermRecycleEquipment,
+  formatScalingSpellDamageLine,
+} from "./GameCard";
 import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade } from "@/lib/monsterRage";
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins } from "lucide-react";
 import {
@@ -25,7 +31,13 @@ interface CardDetailsModalProps {
   monsterRewards?: MonsterRewardPreview[] | null;
 }
 
-export default function CardDetailsModal({ card, open, onOpenChange, currentTurn, monsterRewards }: CardDetailsModalProps) {
+export default function CardDetailsModal({
+  card,
+  open,
+  onOpenChange,
+  currentTurn,
+  monsterRewards,
+}: CardDetailsModalProps) {
   if (!card) return null;
 
   const rageRule = card.type === 'monster' ? getMonsterRageRule(card.name) : null;
@@ -635,10 +647,16 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                   </div>
                 )}
                 <div>
-                  {(card as GameCardData & { knightEffect?: string }).knightEffect === 'chaos-dice' ||
-                  card.name === '混沌骰运'
-                    ? CHAOS_DICE_SPELL_DESCRIPTION
-                    : card.description || card.magicEffect}
+                  {card.scalingDamage != null ? (
+                    <p className="font-semibold text-foreground">
+                      {formatScalingSpellDamageLine(card.scalingDamage)}
+                    </p>
+                  ) : (card as GameCardData & { knightEffect?: string }).knightEffect === 'chaos-dice' ||
+                    card.name === '混沌骰运' ? (
+                    CHAOS_DICE_SPELL_DESCRIPTION
+                  ) : (
+                    card.description || card.magicEffect
+                  )}
                 </div>
               </div>
             )}
@@ -690,7 +708,8 @@ export default function CardDetailsModal({ card, open, onOpenChange, currentTurn
                     )}
                     {choice.requires?.length ? (
                       <div className="text-[11px] text-amber-600">
-                        需要：{formatRequirementText(choice.requires)}
+                        <span className="font-semibold text-amber-700 dark:text-amber-400">启用条件：</span>
+                        {formatRequirementText(choice.requires)}
                       </div>
                     ) : null}
                     {choice.effect && (
@@ -801,6 +820,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'discardRightForGold+15') return '破坏右槽装备并获得 15 金币';
       if (token === 'amuletsToGold+10') return '摧毁所有护符并每个获得 10 金币';
       if (token === 'classBottom+2') return '获得 class 底部两张专属卡';
+      if (token === 'flipToHonorBloodMagic') return '事件卡翻为「战血之印」永久法术并收入背包';
       if (token === 'fate-dice-strike') return '破坏右侧相邻卡牌';
       if (token === 'amuletCapacity+1') return '护符上限 +1';
       if (token === 'equipSlot1Capacity+1') return '左装备栏容量 +1';
@@ -828,6 +848,13 @@ function formatRequirementText(requires: EventRequirement[]): string {
           return `手牌/背包合计 ≥ ${req.min}`;
         case 'graveyard':
           return `坟场卡牌 ≥ ${req.min}`;
+        case 'gold':
+          return `至少 ${req.min} 金币`;
+        case 'leftmostIsEnraged':
+          return (
+            req.message ??
+            '地城激活行从左起第一个有牌的格子上必须是怪物，且该怪物已与英雄交战（空列跳过，不计入「第一个有牌格」）。'
+          );
         default:
           return '';
       }

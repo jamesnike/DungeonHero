@@ -1059,8 +1059,8 @@ function createDeck(): GameCardData[] {
         value: 0,
         image: skillScrollImage,
         magicType: 'permanent',
-        magicEffect: '永久魔法：对一个怪物造成伤害（每次使用后伤害永久 +1）。',
-        description: '暗影契约的余力，每次刺击都比上一次更狠。',
+        magicEffect: '永久：对怪造成伤害；用后叠刺+1，回回收袋。',
+        description: '每用过一次叠刺+1；卡面数字为叠刺层数。',
         scalingDamage: 1,
       },
       destination: 'backpack',
@@ -1139,14 +1139,20 @@ function createDeck(): GameCardData[] {
     image: eventScrollImage,
     description: '选择一项奖励。',
     eventChoices: [
-      { text: '整理呼吸（回复 5 HP）', effect: 'heal+5' },
+      { text: '整理呼吸（回复 8 HP）', effect: 'heal+8' },
       { text: '回收战利品（金币 +20）', effect: 'gold+20' },
       { text: '唤醒底牌（获得底部两张专属卡）', effect: 'classBottom+2' },
       {
         text: '战血铭刻（翻转为永久法术）',
         effect: 'flipToHonorBloodMagic',
         hint: '翻转为「战血之印」：使用时 -3 HP，被弃时对随机怪物造成法术伤害',
-        requires: [{ type: 'leftmostIsEnraged', message: '需要最左边的卡牌是一个激怒的怪物' }],
+        requires: [
+          {
+            type: 'leftmostIsEnraged',
+            message:
+              '地城激活行从左起第一个有牌的格子必须是怪物，且该怪物已与英雄交战；左侧空列不占用此判定。',
+          },
+        ],
       },
     ],
   });
@@ -2270,6 +2276,8 @@ export default function GameBoard() {
     discardShockInteractionLocked || minimizedModalLocksBoard;
   const fullBoardInteractionLockedRef = useRef(false);
   fullBoardInteractionLockedRef.current = fullBoardInteractionLocked;
+  /** Subset used only for End Hero Turn; updated later when modal/targeting flags are known */
+  const endHeroTurnGuardRef = useRef(false);
   const [currentEventCard, setCurrentEventCard] = useState<GameCardData | null>(null);
   const [permanentMaxHpBonus, setPermanentMaxHpBonus] = useState(0);
   const [permanentSpellDamageBonus, setPermanentSpellDamageBonus] = useState(0);
@@ -4500,7 +4508,7 @@ export default function GameBoard() {
   };
 
   const endHeroTurn = () => {
-    if (fullBoardInteractionLockedRef.current) return;
+    if (endHeroTurnGuardRef.current) return;
     pushUndoSnapshot();
     const engagedMonsters = getEngagedMonsterCards();
     if (engagedMonsters.length === 0) {
@@ -10303,16 +10311,18 @@ export default function GameBoard() {
         }
         default: {
           if (card.scalingDamage != null) {
-            const currentDamage = getSpellDamage(card.scalingDamage) * echoMultiplier;
+            const strikeBase = card.scalingDamage;
+            const currentDamage = getSpellDamage(strikeBase) * echoMultiplier;
             const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
             if (monsters.length === 0) {
               finalizeMagicCard(card, { banner: `${card.name}无效（没有怪物）。` });
               return;
             }
+            const nextBase = strikeBase + 1;
             const updatedCard: GameCardData = {
               ...card,
-              scalingDamage: card.scalingDamage + 1,
-              magicEffect: `永久魔法：对一个怪物造成 ${card.scalingDamage + 1} 点伤害（每次使用后伤害永久 +1）。`,
+              scalingDamage: nextBase,
+              magicEffect: `下一击叠刺 ${nextBase}`,
             };
             if (monsters.length === 1) {
               if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
@@ -10320,18 +10330,22 @@ export default function GameBoard() {
               addPermanentMagicToRecycleBag(updatedCard);
               removeCard(card.id, false);
               setPendingMagicAction(null);
-              addGameLog('magic', `${card.name}：对 ${monsters[0].name} 造成 ${currentDamage} 点伤害（下次 ${card.scalingDamage + 1} 点）`);
-              setHeroSkillBanner(`${card.name} 刺出 ${currentDamage} 点伤害！${isEchoTriggered ? '（回响×2）' : ''}下次将造成 ${card.scalingDamage + 1} 点。`);
+              addGameLog(
+                'magic',
+                `${card.name}：对 ${monsters[0].name} 造成 ${currentDamage} 点（下一击叠刺 ${nextBase}）`,
+              );
+              setHeroSkillBanner(`${card.name} 下一击叠刺 ${nextBase}`);
               return;
             }
             setPendingMagicAction({
               card: updatedCard,
               effect: 'scaling-damage',
               step: 'monster-select',
-              pendingDamage: card.scalingDamage * echoMultiplier,
-              prompt: `选择一个怪物，承受 ${currentDamage} 点伤害。`,
+              pendingDamage: strikeBase,
+              echoMultiplier,
+              prompt: `选择目标（本刺叠刺 ${strikeBase}）`,
             });
-            setHeroSkillBanner(`${card.name} 蓄力 ${currentDamage} 点伤害，请选择目标。`);
+            setHeroSkillBanner(`${card.name} 请选择目标 · 本刺叠刺 ${strikeBase}`);
             return;
           }
           if (card.magicEffect === 'double-next-magic') {
@@ -11224,8 +11238,9 @@ export default function GameBoard() {
       }
 
       if (pendingMagicAction.effect === 'scaling-damage') {
-        const baseDamage = pendingMagicAction.pendingDamage ?? 1;
-        const totalDamage = getSpellDamage(baseDamage);
+        const strikeBase = pendingMagicAction.pendingDamage ?? 1;
+        const echo = pendingMagicAction.echoMultiplier ?? 1;
+        const totalDamage = getSpellDamage(strikeBase) * echo;
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
@@ -11234,8 +11249,12 @@ export default function GameBoard() {
         addPermanentMagicToRecycleBag(updatedCard);
         removeCard(updatedCard.id, false);
         setPendingMagicAction(null);
-        addGameLog('magic', `${updatedCard.name}：对 ${monster.name} 造成 ${totalDamage} 点伤害（下次 ${baseDamage + 1} 点）`);
-        setHeroSkillBanner(`${updatedCard.name} 刺出 ${totalDamage} 点伤害！下次将造成 ${baseDamage + 1} 点。`);
+        const nextBase = updatedCard.scalingDamage ?? strikeBase + 1;
+        addGameLog(
+          'magic',
+          `${updatedCard.name}：对 ${monster.name} 造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）`,
+        );
+        setHeroSkillBanner(`${updatedCard.name} 下一击叠刺 ${nextBase}`);
         return;
       }
 
@@ -12960,6 +12979,30 @@ export default function GameBoard() {
   const potionChoiceDialogOpen =
     pendingPotionAction?.effect === 'repair-choice' && pendingPotionAction.step === 'choice';
 
+  const modalOverlayBlocksEndHeroTurn =
+    gameOver ||
+    showSkillSelection ||
+    backpackViewerOpen ||
+    deckViewerOpen ||
+    discoverModalOpen ||
+    Boolean(graveyardDiscoverState) ||
+    (shopModalOpen && !shopModalMinimized) ||
+    shopSkillSelectOpen ||
+    deleteModalOpen ||
+    detailsModalOpen ||
+    heroDetailsOpen ||
+    (eventModalOpen && !eventModalMinimized) ||
+    Boolean(eventDiceModal) ||
+    Boolean(equipmentPrompt) ||
+    Boolean(eventTransformState) ||
+    Boolean(activeMonsterReward) ||
+    Boolean(deathWardPrompt) ||
+    potionChoiceDialogOpen;
+
+  const endHeroTurnDisabled =
+    fullBoardInteractionLocked || modalOverlayBlocksEndHeroTurn || playerTargetingActive;
+  endHeroTurnGuardRef.current = endHeroTurnDisabled;
+
   const heroSkillInfo =
     !showSkillSelection && selectedHeroSkillDef
       ? {
@@ -14524,7 +14567,7 @@ export default function GameBoard() {
             pendingBlock={combatState.pendingBlock}
             monsterAttackQueue={combatState.monsterAttackQueue}
             onEndHeroTurn={endHeroTurn}
-            endHeroTurnDisabled={fullBoardInteractionLocked}
+            endHeroTurnDisabled={endHeroTurnDisabled}
             equipmentSlot1={equipmentSlot1}
             equipmentSlot2={equipmentSlot2}
             stageScale={stageScale}
@@ -14883,7 +14926,7 @@ export default function GameBoard() {
               pendingBlock={combatState.pendingBlock}
               monsterAttackQueue={combatState.monsterAttackQueue}
               onEndHeroTurn={endHeroTurn}
-              endHeroTurnDisabled={fullBoardInteractionLocked}
+              endHeroTurnDisabled={endHeroTurnDisabled}
               equipmentSlot1={equipmentSlot1}
               equipmentSlot2={equipmentSlot2}
               stageScale={stageScale}
