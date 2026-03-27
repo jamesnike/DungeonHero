@@ -303,6 +303,7 @@ const SHOP_LEVEL_DISCOUNT_STEP = 0.1;
 const SHOP_HEAL_COST = 5;
 const SHOP_HEAL_AMOUNT = 5;
 const SHOP_LEVEL_UP_COST = 10;
+const MAX_SHOP_LEVEL = 3;
 const SHOP_SKILL_DISCOVER_COST = 10;
 const COMBAT_PANEL_DEFAULT_WIDTH = 170;
 const COMBAT_PANEL_DEFAULT_HEIGHT = 320;
@@ -597,7 +598,7 @@ function createDeck(): GameCardData[] {
         minAttack: 3, maxAttack: 4,
         minHp: 5, maxHp: 6,
         minFury: 2, maxFury: 4,
-        waterfallEffect: { type: 'bonusDecay' as const, amount: 1, description: '被挤出时：所有永久伤害/护甲加成 -1' },
+        waterfallEffect: { type: 'bonusDecay' as const, amount: 1, description: '被挤出时：所有永久伤害/护甲/法术加成 -1' },
       },
       { 
         name: 'Wraith',
@@ -672,7 +673,7 @@ function createDeck(): GameCardData[] {
       }
       if (type === 'Ogre') {
         chosen.eliteDoubleAttack = true;
-        chosen.waterfallEffect = { type: 'bonusDecay', amount: 2, description: '被挤出时：所有永久伤害/护甲加成 -2' };
+        chosen.waterfallEffect = { type: 'bonusDecay', amount: 2, description: '被挤出时：所有永久伤害/护甲/法术加成 -2' };
       }
       if (type === 'Wraith') {
         chosen.lastWords = 'wraith-haunt-4';
@@ -1375,7 +1376,7 @@ function createDeck(): GameCardData[] {
         value: 0,
         image: eventScrollImage,
         isPermanentEvent: true,
-        description: '永驻型事件。从手牌打出时失去 5 点生命。出场或换位时获得一次释放机会：右侧为药水/武器/护盾/事件则摧毁并送入坟场；右侧为怪物则激怒，打掉 1 层血并将下一层打到仅剩 1 血；右侧无牌则随机弃一张手牌。可手动拖入回收袋。',
+        description: '永驻型事件。从手牌打出时失去 5 点生命。出场或换位时获得一次释放机会：右侧为药水/武器/护盾/事件则摧毁并送入坟场；右侧为怪物则激怒，直接打掉 2 层血（可击杀）；右侧无牌则随机弃一张手牌。可手动拖入回收袋。',
         eventChoices: [
           { text: '释放命运之刃', hint: '对右侧相邻卡牌造成效果（事件会进坟场）', effect: 'fate-dice-strike' },
         ],
@@ -1418,8 +1419,8 @@ function createDeck(): GameCardData[] {
         value: 0,
         image: skillScrollImage,
         magicType: 'instant',
-        magicEffect: '对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。',
-        description: '对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。',
+        magicEffect: '对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。(可超手牌上限)',
+        description: '对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。(可超手牌上限)',
       },
       destination: 'backpack',
       message: '混沌骰局翻转为混沌冲击！',
@@ -1659,7 +1660,7 @@ export default function GameBoard() {
   const shopDiscountPercent = getShopDiscountPercent(shopLevel);
   const adjustShopLevel = useCallback((delta: number) => {
     if (!delta) return;
-    setShopLevel(prev => Math.max(0, Math.floor(prev + delta)));
+    setShopLevel(prev => Math.min(MAX_SHOP_LEVEL, Math.max(0, Math.floor(prev + delta))));
   }, []);
   const [cardsPlayed, setCardsPlayed] = useState(0);
   const [gameOver, setGameOver] = useState(false);
@@ -1959,6 +1960,7 @@ export default function GameBoard() {
   const processedDungeonCardIdsRef = useRef<Set<string>>(new Set());
   const heroTurnLayerLossIdsRef = useRef<Set<string>>(new Set());
   const pendingDefeatIdsRef = useRef<Set<string>>(new Set());
+  const goblinStolenIdsRef = useRef<Set<string>>(new Set());
   const monsterRewardQueuedInstanceIdsRef = useRef<Set<string>>(new Set());
   const [heroFramePosition, setHeroFramePosition] = useState<HeroFramePosition | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -2222,25 +2224,20 @@ export default function GameBoard() {
     if (bladeIdx === -1) return;
     const blade = activeCards[bladeIdx]!;
     if (blade._fateBladeLastSlot !== bladeIdx) {
-      if (!blade.hasReleaseCharge) {
-        setActiveCards(prev => {
-          const next = [...prev] as typeof prev;
-          const card = next[bladeIdx];
-          if (card?.name === '命运之刃' && card.isPermanentEvent) {
-            next[bladeIdx] = { ...card, hasReleaseCharge: true, _fateBladeLastSlot: bladeIdx };
-          }
-          return next;
-        });
-      } else {
-        setActiveCards(prev => {
-          const next = [...prev] as typeof prev;
-          const card = next[bladeIdx];
-          if (card?.name === '命运之刃' && card.isPermanentEvent) {
-            next[bladeIdx] = { ...card, _fateBladeLastSlot: bladeIdx };
-          }
-          return next;
-        });
-      }
+      const shouldGrantCharge = !blade.hasReleaseCharge;
+      setActiveCards(prev => {
+        const next = [...prev] as typeof prev;
+        const idx = next.findIndex(c => c?.name === '命运之刃' && c.isPermanentEvent);
+        if (idx === -1) return prev;
+        const card = next[idx]!;
+        if (card._fateBladeLastSlot === idx) return prev;
+        next[idx] = {
+          ...card,
+          hasReleaseCharge: shouldGrantCharge ? true : card.hasReleaseCharge,
+          _fateBladeLastSlot: idx,
+        };
+        return next;
+      });
     }
   }, [activeCards]);
 
@@ -3537,12 +3534,12 @@ export default function GameBoard() {
     return m;
   };
 
-  /** 与 damageMonster 一致：本次伤害是否恰好打掉 1 个血层（含击杀最后一层）。 */
+  /** 本次伤害是否恰好打掉 1 个血层（含击杀最后一层）。 */
   const chaosStrikeRemovedExactlyOneLayer = (monster: GameCardData, rawDamage: number): boolean => {
     if (rawDamage <= 0) return false;
     if (!monster.maxHp || monster.hp == null) return false;
     const layersBefore = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;
-    const preview = damageMonster(monster, rawDamage);
+    const preview = damageMonsterWithLayerOverflow(monster, rawDamage);
     const layersAfter = preview.currentLayer ?? 0;
     return layersBefore - layersAfter === 1;
   };
@@ -3552,8 +3549,9 @@ export default function GameBoard() {
     monsterName: string,
     layersBefore: number,
     layersAfter: number,
+    force?: boolean,
   ) => {
-    if (layersAfter <= 0 || layersAfter >= layersBefore) return;
+    if (!force && (layersAfter <= 0 || layersAfter >= layersBefore)) return;
     const result = await requestDiceOutcome({
       title: monsterName,
       subtitle: '虚骨再生',
@@ -3614,7 +3612,7 @@ export default function GameBoard() {
     }
 
     const layersBefore = monster.currentLayer ?? monster.fury ?? 1;
-    const updatedMonster = damageMonster(monster, damage);
+    const updatedMonster = damageMonsterWithLayerOverflow(monster, damage);
     const baseDelay = options?.animationDelay ?? 0;
     const pulses = Math.max(1, options?.pulses ?? 1);
     for (let i = 0; i < pulses; i += 1) {
@@ -3686,7 +3684,7 @@ export default function GameBoard() {
     addGameLog('combat', `${monsterName} 反噬：造成 ${retDmg} 点直接伤害！`);
   };
 
-  /** 护盾反弹结算（不含格挡/反弹/反噬前置动画；叠加永久法术伤害加成） */
+  /** 护盾反弹结算（不含格挡/反弹/反噬前置动画；仅受装备栏永久伤害加成，不受法术伤害加成） */
   const applyShieldReflectDamage = (
     monsterSnapshot: GameCardData,
     baseReflectDamage: number,
@@ -3700,7 +3698,7 @@ export default function GameBoard() {
     if (baseReflectDamage <= 0 || pendingDefeatIdsRef.current.has(monsterSnapshot.id)) {
       return noop;
     }
-    const scaledDamage = Math.max(0, baseReflectDamage + permanentSpellDamageBonus);
+    const scaledDamage = Math.max(0, baseReflectDamage);
 
     let hpBeforeReflect = 0;
     let defeatedByReflect = false;
@@ -4378,6 +4376,11 @@ export default function GameBoard() {
         ].join('\n'),
       };
       updateMonsterCard(monster.id, () => bossCard);
+      setCombatState(prev => {
+        const remaining = prev.engagedMonsterIds.filter(id => id !== monster.id);
+        if (remaining.length === 0) return { ...initialCombatState };
+        return { ...prev, engagedMonsterIds: remaining };
+      });
       triggerEventTransform(monster, bossCard, 'Boss 降临！');
       addGameLog('combat', `${monster.name} 变身为 Boss！`);
       setHeroSkillBanner(`${monster.name} 暴走变身！`);
@@ -4501,10 +4504,12 @@ export default function GameBoard() {
     const shouldFlipGoblin =
       latestMonster.monsterType === 'Goblin' &&
       !latestMonster.goblinHasStolen &&
+      !goblinStolenIdsRef.current.has(monster.id) &&
       Boolean(latestMonster.goblinTrickCarrier);
 
     setTimeout(() => {
       pendingDefeatIdsRef.current.delete(monster.id);
+      goblinStolenIdsRef.current.delete(monster.id);
       setMonsterDefeatStates(prev => {
         const next = { ...prev };
         delete next[monster.id];
@@ -4570,6 +4575,9 @@ export default function GameBoard() {
 
     if (nextLayer <= 0) {
       handleMonsterDefeated(monster);
+      if (!pendingDefeatIdsRef.current.has(monster.id) && monster.monsterSpecial === 'bone-regen') {
+        void checkHollowSkeletonRestore(monster.id, monster.name, currentLayer, nextLayer, true);
+      }
       return;
     }
 
@@ -4619,13 +4627,17 @@ export default function GameBoard() {
   const beginCombat = (monster: GameCardData, initiator: CombatInitiator) => {
     addGameLog('combat', `与 ${monster.name} 进入战斗（HP: ${monster.hp ?? monster.value}${(monster.currentLayer ?? 1) > 1 ? ` ×${monster.currentLayer}层` : ''}）`);
     setCombatState(prev => {
-      const alreadyEngaged = prev.engagedMonsterIds.includes(monster.id);
-      const nextEngaged = alreadyEngaged ? prev.engagedMonsterIds : [...prev.engagedMonsterIds, monster.id];
+      // Filter out dying/dead monsters whose defeat animation is still playing.
+      // Without this, stale IDs cause beginCombat to treat a fresh engagement as
+      // "adding to existing combat", skipping the heroAttacksThisTurn reset.
+      const liveEngagedIds = prev.engagedMonsterIds.filter(
+        id => !pendingDefeatIdsRef.current.has(id),
+      );
+      const alreadyEngaged = liveEngagedIds.includes(monster.id);
+      const nextEngaged = alreadyEngaged ? liveEngagedIds : [...liveEngagedIds, monster.id];
 
-      if (prev.engagedMonsterIds.length === 0) {
+      if (liveEngagedIds.length === 0) {
         if (initiator === 'monster') {
-          // Monster initiates: immediately set pendingBlock so the monster
-          // attacks first without waiting for the useEffect chain.
           return {
             ...prev,
             engagedMonsterIds: nextEngaged,
@@ -4662,9 +4674,6 @@ export default function GameBoard() {
       }
 
       if (initiator === 'monster') {
-        // Adding a monster during existing combat: if it's currently the
-        // hero's turn, switch to the monster's turn so the new monster
-        // attacks immediately.
         if (prev.currentTurn === 'hero' && !prev.pendingBlock) {
           return {
             ...prev,
@@ -5219,6 +5228,7 @@ export default function GameBoard() {
         addGameLog('combat', `${monster.name} 动手偷走了 ${stealTarget} 金币！`);
         setHeroSkillBanner(`${monster.name} 偷走了 ${stealTarget} 金币！`);
         if (actualStolen > 0) {
+          goblinStolenIdsRef.current.add(monster.id);
           updateMonsterCard(monster.id, card => ({ ...card, goblinHasStolen: true }));
         }
         if (monster.goblinStealScale && actualStolen > 0) {
@@ -6827,6 +6837,24 @@ export default function GameBoard() {
     advanceMonsterTurn();
   }, [combatState.currentTurn, combatState.pendingBlock, combatState.monsterAttackQueue, advanceMonsterTurn, activeCards]);
 
+  // Safety net: prune stale engaged IDs whose cards no longer exist on the board
+  // and whose defeat timeout already fired (not in pendingDefeatIds).
+  useEffect(() => {
+    if (combatState.engagedMonsterIds.length === 0) return;
+    const staleIds = combatState.engagedMonsterIds.filter(
+      id =>
+        !activeCards.some(c => c?.id === id) &&
+        !pendingDefeatIdsRef.current.has(id),
+    );
+    if (staleIds.length === 0) return;
+    setCombatState(prev => {
+      const remaining = prev.engagedMonsterIds.filter(id => !staleIds.includes(id));
+      if (remaining.length === prev.engagedMonsterIds.length) return prev;
+      if (remaining.length === 0) return { ...initialCombatState };
+      return { ...prev, engagedMonsterIds: remaining };
+    });
+  }, [combatState.engagedMonsterIds, activeCards]);
+
   const prevTurnRef = useRef(combatState.currentTurn);
   useEffect(() => {
     if (prevTurnRef.current === 'monster' && combatState.currentTurn === 'hero') {
@@ -7178,7 +7206,7 @@ export default function GameBoard() {
     setHp(snapshot.hp ?? INITIAL_HP);
     setGold(snapshot.gold ?? INITIAL_GOLD);
     setTurnCount(snapshot.turnCount ?? INITIAL_TURN_COUNT);
-    setShopLevel(typeof snapshot.shopLevel === 'number' ? snapshot.shopLevel : 0);
+    setShopLevel(typeof snapshot.shopLevel === 'number' ? Math.min(MAX_SHOP_LEVEL, snapshot.shopLevel) : 0);
     setMonstersDefeated(snapshot.monstersDefeated ?? 0);
     setCardsPlayed(snapshot.cardsPlayed ?? 0);
     setTotalDamageTaken(snapshot.totalDamageTaken ?? 0);
@@ -7691,17 +7719,18 @@ export default function GameBoard() {
     }
     const initialShopLv = definition?.initialShopLevel;
     if (initialShopLv != null && initialShopLv > 0) {
-      setShopLevel(initialShopLv);
-      addGameLog('shop', `开局加成：商店等级 ${initialShopLv}`);
+      setShopLevel(Math.min(MAX_SHOP_LEVEL, initialShopLv));
+      addGameLog('shop', `开局加成：商店等级 ${Math.min(MAX_SHOP_LEVEL, initialShopLv)}`);
     }
     const initialBackpackCap = definition?.initialBackpackCapacityBonus ?? 0;
     if (initialBackpackCap) {
       setBackpackCapacityModifier(prev => prev + initialBackpackCap);
       addGameLog('skill', `开局加成：背包上限 +${initialBackpackCap}`);
     }
+    // 开局天赋的手牌加成必须覆盖旧值，不能叠在存档/上一局残留的 handLimitBonus 上
     const initialHandLimit = definition?.initialHandLimitBonus ?? 0;
+    setHandLimitBonus(initialHandLimit);
     if (initialHandLimit) {
-      setHandLimitBonus(prev => prev + initialHandLimit);
       addGameLog('skill', `开局加成：手牌上限 +${initialHandLimit}`);
     }
     if (skillId === 'summon-minion') {
@@ -8342,7 +8371,11 @@ export default function GameBoard() {
         const idx = cellIndex ?? activeCards.findIndex(c => c?.id === card.id);
         if (idx !== -1) {
           const cardWithFlip: GameCardData = { ...card };
-          const placedCard: GameCardData = { ...flip.toCard, _flipBackCard: cardWithFlip };
+          const placedCard: GameCardData = {
+            ...flip.toCard,
+            _flipBackCard: cardWithFlip,
+            ...(flip.toCard.isPermanentEvent ? { hasReleaseCharge: true, _fateBladeLastSlot: idx } : {}),
+          };
           setActiveCards(prev => {
             const next = [...prev];
             next[idx] = placedCard;
@@ -8553,13 +8586,14 @@ export default function GameBoard() {
             break;
           }
           case 'bonusDecay':
-            addGameLog('waterfall', `${cardName} 诅咒削弱装备加成 -${wfx.amount}`);
+            addGameLog('waterfall', `${cardName} 诅咒削弱装备/法术加成 -${wfx.amount}`);
             (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
               (['damage', 'shield'] as (keyof SlotPermanentBonus)[]).forEach(bonusType => {
                 setEquipmentSlotBonus(slotId, bonusType, v => v - wfx.amount);
               });
             });
-            setHeroSkillBanner(`${cardName} 的诅咒削弱了你的装备加成！`);
+            setPermanentSpellDamageBonus(prev => prev - wfx.amount);
+            setHeroSkillBanner(`${cardName} 的诅咒削弱了你的装备与法术加成！`);
             waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
             break;
           case 'goldLoss':
@@ -8883,10 +8917,22 @@ export default function GameBoard() {
       }
     }
 
-    const nextPreviewCards = remainingDeck.slice(0, 5);
-    const nextRemainingDeck = remainingDeck.slice(5);
+    const stuckFinalMonsters: GameCardData[] = [];
+    for (const stuckIdx of Array.from(unusedPreview)) {
+      const card = previewCards[stuckIdx];
+      if (card?.isFinalMonster) {
+        stuckFinalMonsters.push(card);
+        unusedPreview.delete(stuckIdx);
+        addGameLog('waterfall', `${card.name}（最终之敌）无法入场，返回牌堆顶等待决战`);
+        setHeroSkillBanner(`${card.name} 隐入牌堆……终局之战尚未到来。`);
+      }
+    }
+
+    const effectiveDeck = [...stuckFinalMonsters, ...remainingDeck];
+    const nextPreviewCards = effectiveDeck.slice(0, 5);
+    const nextRemainingDeck = effectiveDeck.slice(5);
     const shouldDeclareVictory =
-      nextPreviewCards.length === 0 && remainingDeck.length === 0;
+      nextPreviewCards.length === 0 && effectiveDeck.length === 0;
 
     const planDiscardCard = cascadeFullDrop ? null : discardCard;
     const planDiscardPreviewIndex = cascadeFullDrop ? null : discardPreviewIndex;
@@ -9710,13 +9756,13 @@ export default function GameBoard() {
 
   const handleShopLevelUpRequest = useCallback(() => {
     pushUndoSnapshot();
-    if (shopLevelUpUsed || goldRef.current < SHOP_LEVEL_UP_COST) return;
+    if (shopLevelUpUsed || goldRef.current < SHOP_LEVEL_UP_COST || shopLevel >= MAX_SHOP_LEVEL) return;
     addGameLog('shop', `商店：升级等级（-${SHOP_LEVEL_UP_COST} 金币）`);
     setGold(prev => prev - SHOP_LEVEL_UP_COST);
-    setShopLevel(prev => prev + 1);
+    setShopLevel(prev => Math.min(MAX_SHOP_LEVEL, prev + 1));
     setShopLevelUpUsed(true);
     setHeroSkillBanner(`花费 ${SHOP_LEVEL_UP_COST} 金币，商店等级提升了！`);
-  }, [addGameLog, setHeroSkillBanner, shopLevelUpUsed]);
+  }, [addGameLog, setHeroSkillBanner, shopLevelUpUsed, shopLevel]);
 
   const handleShopSkillDiscoverRequest = useCallback(() => {
     if (shopSkillDiscoverUsed || goldRef.current < SHOP_SKILL_DISCOVER_COST) return;
@@ -9745,7 +9791,78 @@ export default function GameBoard() {
     addGameLog('shop', `商店：习得英雄技能「${skillDef?.name ?? skillId}」`);
     addGameLog('skill', `学习了新的英雄技能：${skillDef?.name ?? skillId}`);
     setHeroSkillBanner(`学习了「${skillDef?.name ?? skillId}」！`);
-  }, [addGameLog, setHeroSkillBanner]);
+
+    if (!skillDef) return;
+
+    // Apply "opening" bonuses immediately even though we're mid-game
+    const hpBonus = skillDef.initialMaxHpBonus ?? 0;
+    if (hpBonus) {
+      setPermanentMaxHpBonus(prev => prev + hpBonus);
+      setHp(prev => prev + hpBonus);
+      addGameLog('skill', `技能加成：最大生命 +${hpBonus}，恢复 ${hpBonus} 生命`);
+    }
+    const goldBonus = skillDef.initialGoldBonus ?? 0;
+    if (goldBonus) {
+      setGold(prev => prev + goldBonus);
+      addGameLog('gold', `技能加成：金币 +${goldBonus}`);
+    }
+    const waterfallBonus = skillDef.initialWaterfallBonus ?? 0;
+    if (waterfallBonus) {
+      setTurnCount(prev => prev + waterfallBonus);
+      addGameLog('system', `技能加成：瀑流回合 +${waterfallBonus}`);
+    }
+    const classDraw = skillDef.initialClassCardDraw ?? 0;
+    if (classDraw) {
+      const drawn = drawClassCardsToBackpack(classDraw, 'shop-skill-draw');
+      if (drawn.length > 0) {
+        addGameLog('skill', `技能加成：预抽 ${drawn.length} 张职业牌`);
+        triggerClassDeckFlight(drawn);
+      }
+    }
+    const shopLvBonus = skillDef.initialShopLevel;
+    if (shopLvBonus != null && shopLvBonus > 0) {
+      setShopLevel(prev => {
+        const next = Math.min(MAX_SHOP_LEVEL, Math.max(prev, shopLvBonus));
+        if (next > prev) {
+          addGameLog('shop', `技能加成：商店等级提升至 Lv.${next}`);
+        }
+        return next;
+      });
+    }
+    const backpackCap = skillDef.initialBackpackCapacityBonus ?? 0;
+    if (backpackCap) {
+      setBackpackCapacityModifier(prev => prev + backpackCap);
+      addGameLog('skill', `技能加成：背包上限 +${backpackCap}`);
+    }
+    const handLimit = skillDef.initialHandLimitBonus ?? 0;
+    if (handLimit) {
+      setHandLimitBonus(prev => prev + handLimit);
+      addGameLog('skill', `技能加成：手牌上限 +${handLimit}`);
+    }
+    if (skillId === 'summon-minion') {
+      const minionCard: GameCardData = {
+        id: `summon-minion-card-${Date.now()}`,
+        type: 'monster',
+        name: '小随从',
+        value: 1,
+        attack: 1,
+        hp: 1,
+        hpLayers: 4,
+        fury: 4,
+        currentLayer: 4,
+        maxHp: 1,
+        image: minionImage,
+        description: '忠诚的小随从，可装备。每击杀一只怪物，攻击 +1、防御 +1。',
+        isMinionCard: true,
+      };
+      addCardToBackpack(minionCard);
+      addGameLog('skill', '技能加成：获得小随从');
+    }
+    if (skillId === 'heal-to-damage') {
+      addCardToBackpack(createStarterHealEchoCard());
+      addGameLog('skill', '愈战愈勇：获得永久魔法「治愈余韵」');
+    }
+  }, [addGameLog, setHeroSkillBanner, addCardToBackpack, drawClassCardsToBackpack, triggerClassDeckFlight]);
 
   const wasDraggedFromHand = (cardId: string) =>
     draggedCardSource === 'hand' && draggedCard?.id === cardId;
@@ -12361,7 +12478,7 @@ export default function GameBoard() {
           const targetSlot = emptySlots[Math.floor(Math.random() * emptySlots.length)];
           setActiveCards(prev => {
             const next = [...prev] as typeof prev;
-            next[targetSlot] = { ...card, _fateBladeLastSlot: undefined };
+            next[targetSlot] = { ...card, hasReleaseCharge: true, _fateBladeLastSlot: targetSlot };
             return next;
           });
           addGameLog('event', `${card.name} 被放置到地城第 ${targetSlot + 1} 列。`);
@@ -12428,7 +12545,7 @@ export default function GameBoard() {
             const targetSlot = emptySlots[Math.floor(Math.random() * emptySlots.length)];
             setActiveCards(prev => {
               const next = [...prev] as typeof prev;
-              next[targetSlot] = { ...card, _fateBladeLastSlot: undefined };
+              next[targetSlot] = { ...card, hasReleaseCharge: true, _fateBladeLastSlot: targetSlot };
               return next;
             });
             addGameLog('event', `${card.name} 被放置到地城第 ${targetSlot + 1} 列。`);
@@ -13170,7 +13287,12 @@ export default function GameBoard() {
       } else if (effect.startsWith('shopLevel+')) {
         const amount = parseInt(effect.replace('shopLevel+', ''), 10) || 1;
         setShopLevel(prev => {
-          const next = Math.max(0, prev + amount);
+          const next = Math.min(MAX_SHOP_LEVEL, Math.max(0, prev + amount));
+          if (next === prev) {
+            addGameLog('shop', `商店等级已达上限 Lv.${MAX_SHOP_LEVEL}，无法继续提升`);
+            setHeroSkillBanner(`商店等级已满（Lv.${MAX_SHOP_LEVEL}）！`);
+            return prev;
+          }
           addGameLog('shop', `商店等级提升至 Lv.${next}`);
           setHeroSkillBanner(`商店等级提升到 Lv.${next}`);
           return next;
@@ -13551,36 +13673,76 @@ export default function GameBoard() {
           if (!isMonsterEngaged(rightCard.id)) {
             beginCombat(rightCard, 'hero');
           }
-          let defeatedByBlade = false;
-          updateMonsterCard(rightCard.id, (card) => {
-            const curLayer = card.currentLayer ?? card.hpLayers ?? card.fury ?? 1;
-            if (curLayer <= 1) {
-              defeatedByBlade = true;
-              return { ...card, currentLayer: 0, hp: 0 };
-            }
-            const newLayer = curLayer - 1;
-            let attackBoost = 0;
-            if (card.bleedEffect?.startsWith('attack+')) {
-              const perLayer = parseInt(card.bleedEffect.replace('attack+', ''), 10) || 0;
-              attackBoost = perLayer;
-            }
-            return {
-              ...card,
-              currentLayer: newLayer,
-              hp: 1,
-              attack: (card.attack ?? card.value) + attackBoost,
-              value: card.value + attackBoost,
-              specialAttackBoost: (card.specialAttackBoost ?? 0) + attackBoost,
-            };
-          });
-          triggerMonsterBleedAnimation(rightCard.id);
+          const layersBefore = rightCard.currentLayer ?? rightCard.fury ?? 1;
+          const hpNow = rightCard.hp ?? 0;
+          const maxHpLayer = rightCard.maxHp ?? hpNow;
+          // 当前层血量 + 一整层 maxHp：等价于连续击穿两层（仅剩一层时等同击杀）
+          const strikeDamage = hpNow + maxHpLayer;
+          const updatedMonster = damageMonsterWithLayerOverflow(rightCard, strikeDamage);
+          const defeatedByBlade =
+            (updatedMonster.currentLayer ?? 0) <= 0 || (updatedMonster.hp ?? 0) <= 0;
+          const layersAfter = updatedMonster.currentLayer ?? 0;
+          const layersStripped = Math.max(0, layersBefore - layersAfter);
+
+          if (rightCard.bossRetaliationDamage && rightCard.bossRetaliationDamage > 0) {
+            const retDmg = rightCard.bossRetaliationDamage;
+            setHp(prev => {
+              const newHp = Math.max(0, prev - retDmg);
+              if (newHp === 0) {
+                addGameLog('system', '英雄阵亡，游戏结束');
+                setGameOver(true);
+                setVictory(false);
+              }
+              return newHp;
+            });
+            addHeroMagicGauge('holy-light', 1);
+            addGameLog('combat', `${rightCard.name} 反噬：造成 ${retDmg} 点直接伤害！`);
+          }
+
+          const pulseCount = Math.max(1, Math.min(4, layersStripped || 1));
+          for (let i = 0; i < pulseCount; i += 1) {
+            triggerMonsterBleedAnimation(rightCard.id, i * Math.floor(COMBAT_ANIMATION_STAGGER / 2));
+          }
+
           if (defeatedByBlade) {
+            updateMonsterCard(rightCard.id, () => updatedMonster);
             handleMonsterDefeated(rightCard);
             addGameLog('event', `命运之刃击杀了 ${rightCard.name}！`);
             setHeroSkillBanner(`命运之刃击杀了 ${rightCard.name}！`);
           } else {
-            addGameLog('event', `命运之刃对 ${rightCard.name} 打掉 1 层血，并将下一层打到仅剩 1 血！`);
-            setHeroSkillBanner(`命运之刃对 ${rightCard.name} 造成了重创！`);
+            updateMonsterCard(rightCard.id, () => updatedMonster);
+            if (layersAfter < layersBefore) {
+              heroTurnLayerLossIdsRef.current.add(rightCard.id);
+            }
+            if (rightCard.bleedEffect && layersAfter < layersBefore) {
+              const newAttack = updatedMonster.attack ?? updatedMonster.value;
+              const perLayer = parseInt((rightCard.bleedEffect ?? '').replace('attack+', ''), 10) || 0;
+              addGameLog(
+                'combat',
+                `${rightCard.name} 触发流血：攻击力+${perLayer * (layersBefore - layersAfter)}，当前 ${newAttack}！`,
+              );
+              setHeroSkillBanner(`${rightCard.name} 流血！攻击力升至 ${newAttack}！`);
+            }
+            if (rightCard.dragonBleedDestroy && layersAfter < layersBefore && layersAfter > 0) {
+              dragonBleedDestroyEquipment(rightCard.name, layersAfter);
+            }
+            if (rightCard.monsterSpecial === 'bone-regen') {
+              void checkHollowSkeletonRestore(rightCard.id, rightCard.name, layersBefore, layersAfter);
+            }
+            if (rightCard.monsterSpecial === 'wraith-rebirth') {
+              void checkWraithRebirth(
+                rightCard.id,
+                rightCard.name,
+                rightCard.fury ?? rightCard.hpLayers ?? 1,
+                layersBefore,
+                layersAfter,
+              );
+            }
+            addGameLog(
+              'event',
+              `命运之刃对 ${rightCard.name} 打掉 ${layersStripped} 层血（共 2 层穿透结算，可一次击杀）！`,
+            );
+            setHeroSkillBanner(`命运之刃对 ${rightCard.name} 打掉 ${layersStripped} 层血！`);
           }
           if (!isPerm && cellIdx !== -1) {
             removeCard(eventCardSnapshot.id, true);
@@ -14686,6 +14848,7 @@ export default function GameBoard() {
             shieldBlockAnimation={Boolean(shieldBlockStates.equipmentSlot1)}
             shieldBlockVariant={shieldBlockVariant.equipmentSlot1}
             isExhaustedThisTurn={
+              engagedMonsters.length > 0 &&
               combatState.heroAttacksThisTurn.equipmentSlot1 &&
               extraAttackCharges <= 0 &&
               (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot1))
@@ -14805,6 +14968,7 @@ export default function GameBoard() {
             shieldBlockAnimation={Boolean(shieldBlockStates.equipmentSlot2)}
             shieldBlockVariant={shieldBlockVariant.equipmentSlot2}
             isExhaustedThisTurn={
+              engagedMonsters.length > 0 &&
               combatState.heroAttacksThisTurn.equipmentSlot2 &&
               extraAttackCharges <= 0 &&
               (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot2))

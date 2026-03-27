@@ -807,10 +807,7 @@ const amuletEffectText =
                 {(isPermanentMagicCard || card.isPermanentEvent) && (
                   <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
                     <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
-                    <span className="leading-none">PERM</span>
-                    {(showPermMagicRecycleNumber || showPermEventRecycleNumber) && (
-                      <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
-                    )}
+                    <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
                   </span>
                 )}
               </div>
@@ -1029,10 +1026,7 @@ const amuletEffectText =
                       }`}
                     >
                       <Infinity className="dh-icon-inline--compact shrink-0" aria-hidden />
-                      <span className="leading-none">PERM</span>
-                      {showPermEquipmentRecycleNumber && (
-                        <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
-                      )}
+                      <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
                     </span>
                   </div>
                 )}

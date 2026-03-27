@@ -831,7 +831,8 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'flipToHonorBloodMagic') {
         return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时对激活行每怪 1 伤害';
       }
-      if (token === 'fate-dice-strike') return '破坏右侧相邻卡牌';
+      if (token === 'fate-dice-strike')
+        return '对右侧相邻卡牌生效：非怪物则摧毁；怪物则激怒并穿透打掉 2 层血（可击杀）';
       if (token === 'amuletCapacity+1') return '护符上限 +1';
       if (token === 'equipSlot1Capacity+1') return '左装备栏容量 +1';
       if (token === 'equipSlot2Capacity+1') return '右装备栏容量 +1';
