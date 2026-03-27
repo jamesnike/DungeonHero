@@ -81,7 +81,7 @@ export const MagicTitleBand = memo(function MagicTitleBand({
         className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${tint} mix-blend-multiply opacity-[0.22]`}
       />
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-b ${sheen}`} />
-      <div className="relative z-10 flex min-h-[1.3rem] min-w-0 flex-1 isolate items-stretch gap-0 sm:min-h-[1.4rem]">
+      <div className="relative z-10 flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] min-w-0 flex-1 items-stretch gap-0 sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
         {children}
       </div>
     </div>
@@ -107,7 +107,7 @@ export const EventTitleBand = memo(function EventTitleBand({
       }`}
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/50 via-stone-50/22 to-stone-900/6" />
-      <div className="relative z-10 flex min-h-[1.3rem] min-w-0 flex-1 isolate items-stretch gap-0 sm:min-h-[1.4rem]">
+      <div className="relative z-10 flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] min-w-0 flex-1 items-stretch gap-0 sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
         {children}
       </div>
     </div>
@@ -603,9 +603,21 @@ export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({
   if (!k) {
     return (
       <span
-        className="z-0 shrink-0"
+        className={cn(
+          'z-0 shrink-0',
+          integrated
+            ? isFlat
+              ? 'inline-block w-[calc(1.15rem*var(--dh-card-instance-scale,1))]'
+              : compact
+                ? 'inline-block w-[calc(1.25rem*var(--dh-card-instance-scale,1))]'
+                : 'inline-block w-[calc(1.65rem*var(--dh-card-instance-scale,1))] sm:w-[calc(1.75rem*var(--dh-card-instance-scale,1))]'
+            : isFlat
+              ? 'inline-block w-[calc(1.25rem*var(--dh-card-instance-scale,1))]'
+              : compact
+                ? 'inline-block w-[calc(1.5rem*var(--dh-card-instance-scale,1))]'
+                : 'inline-block w-[calc(2rem*var(--dh-card-instance-scale,1))]',
+        )}
         aria-hidden
-        style={{ width: integrated ? (isFlat ? 18 : compact ? 20 : 26) : isFlat ? 20 : compact ? 22 : 28 }}
       />
     );
   }
@@ -614,9 +626,19 @@ export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({
   const pos = side === 'left' ? 'object-[center_28%]' : 'object-[center_72%]';
 
   const frame = integrated
-    ? `relative z-0 h-full min-h-0 shrink-0 overflow-hidden ${isFlat ? 'w-[1.15rem]' : compact ? 'w-5' : 'w-[1.65rem] sm:w-7'}`
+    ? `relative z-0 isolate h-full min-h-0 shrink-0 overflow-hidden ${
+        isFlat
+          ? 'w-[calc(1.15rem*var(--dh-card-instance-scale,1))]'
+          : compact
+            ? 'w-[calc(1.25rem*var(--dh-card-instance-scale,1))]'
+            : 'w-[calc(1.65rem*var(--dh-card-instance-scale,1))] sm:w-[calc(1.75rem*var(--dh-card-instance-scale,1))]'
+      }`
     : `relative z-0 shrink-0 overflow-hidden rounded-lg border-2 border-amber-900/40 bg-amber-50/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_2px_4px_rgba(62,42,26,0.12)] ${
-        isFlat ? 'h-5 w-5 min-h-5 min-w-5' : compact ? 'h-6 w-6 min-h-6 min-w-6' : 'h-8 w-8 min-h-8 min-w-8'
+        isFlat
+          ? 'h-[calc(1.25rem*var(--dh-card-instance-scale,1))] w-[calc(1.25rem*var(--dh-card-instance-scale,1))] min-h-[calc(1.25rem*var(--dh-card-instance-scale,1))] min-w-[calc(1.25rem*var(--dh-card-instance-scale,1))]'
+          : compact
+            ? 'h-[calc(1.5rem*var(--dh-card-instance-scale,1))] w-[calc(1.5rem*var(--dh-card-instance-scale,1))] min-h-[calc(1.5rem*var(--dh-card-instance-scale,1))] min-w-[calc(1.5rem*var(--dh-card-instance-scale,1))]'
+            : 'h-[calc(2rem*var(--dh-card-instance-scale,1))] w-[calc(2rem*var(--dh-card-instance-scale,1))] min-h-[calc(2rem*var(--dh-card-instance-scale,1))] min-w-[calc(2rem*var(--dh-card-instance-scale,1))]'
       }`;
 
   return (
@@ -639,7 +661,7 @@ export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({
       />
       {integrated && (
         <div
-          className={`pointer-events-none absolute inset-y-0 w-2.5 ${
+          className={`pointer-events-none absolute inset-y-0 w-[calc(0.625rem*var(--dh-card-instance-scale,1))] ${
             side === 'left'
               ? `right-0 bg-gradient-to-l ${roseBand ? 'from-rose-50/90' : 'from-cyan-50/90'} to-transparent`
               : `left-0 bg-gradient-to-r ${roseBand ? 'from-rose-50/90' : 'from-cyan-50/90'} to-transparent`
@@ -671,13 +693,13 @@ export const EventNameLeftGlyph = memo(function EventNameLeftGlyph({
   if (!k) return null;
 
   const svgBox = isFlat
-    ? 'h-[1.05rem] w-[1.05rem]'
+    ? 'h-[calc(1.05rem*var(--dh-card-instance-scale,1))] w-[calc(1.05rem*var(--dh-card-instance-scale,1))]'
     : compact
-      ? 'h-5 w-5'
-      : 'h-[1.35rem] w-[1.35rem] sm:h-6 sm:w-6';
+      ? 'h-[calc(1.25rem*var(--dh-card-instance-scale,1))] w-[calc(1.25rem*var(--dh-card-instance-scale,1))]'
+      : 'h-[calc(1.35rem*var(--dh-card-instance-scale,1))] w-[calc(1.35rem*var(--dh-card-instance-scale,1))] sm:h-[calc(1.5rem*var(--dh-card-instance-scale,1))] sm:w-[calc(1.5rem*var(--dh-card-instance-scale,1))]';
 
   return (
-    <div className="relative z-0 flex h-full w-full items-center justify-center bg-transparent" aria-hidden>
+    <div className="relative z-0 isolate flex h-full w-full items-center justify-center bg-transparent" aria-hidden>
       <svg
         className={cn(
           'pointer-events-none shrink-0 opacity-[0.88] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]',
@@ -694,7 +716,11 @@ export const EventNameLeftGlyph = memo(function EventNameLeftGlyph({
 
 /** Matches magic/event title side slots so the name stays optically centered. */
 export function eventTitleSideSlotClass(isFlat?: boolean, compact?: boolean): string {
-  return isFlat ? 'w-[1.15rem]' : compact ? 'w-5' : 'w-[1.65rem] sm:w-7';
+  return isFlat
+    ? 'w-[calc(1.15rem*var(--dh-card-instance-scale,1))]'
+    : compact
+      ? 'w-[calc(1.25rem*var(--dh-card-instance-scale,1))]'
+      : 'w-[calc(1.65rem*var(--dh-card-instance-scale,1))] sm:w-[calc(1.75rem*var(--dh-card-instance-scale,1))]';
 }
 
 /** Full-area spell art for modals / deck lists (replaces flat scroll PNG for magic + hero-magic). */

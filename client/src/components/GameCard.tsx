@@ -27,6 +27,8 @@ const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
 const CARD_SCALE_MIN = 0.6;
 const CARD_SCALE_MAX = 1.4;
+/** Below this (narrow grid cells / 6×3 board), hide title flanks so scroll+glyph do not crowd the name. */
+const TITLE_FLANK_MIN_CARD_SCALE = 0.92;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -212,6 +214,17 @@ export interface GameCardData {
   _fateBladeLastSlot?: number; // Internal: last known active row slot index for position tracking
 }
 
+/** 背包列表等：`永久` 或 `永久 2`（recycleDelay > 1 时带数字） */
+export function getMagicSubtypeBracketLabel(card: GameCardData): string | null {
+  if (card.type !== 'magic' || !card.magicType) return null;
+  if (card.magicType === 'instant') return '即时';
+  if (card.magicType === 'permanent') {
+    const d = card.recycleDelay ?? 1;
+    return d > 1 ? `永久 ${d}` : '永久';
+  }
+  return card.magicType;
+}
+
 interface GameCardProps {
   card: GameCardData;
   onDragStart?: (card: GameCardData) => void;
@@ -316,6 +329,8 @@ function GameCardInner({
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, []);
+
+  const hideTitleFlankArt = cardScale < TITLE_FLANK_MIN_CARD_SCALE;
 
   const cardRef2 = useRef(card);
   cardRef2.current = card;
@@ -765,48 +780,72 @@ const amuletEffectText =
               {/* Card name (magic / hero-magic: fused band — wash + flanks + title) */}
               {isMagicLikeCard ? (
                 <MagicTitleBand card={card} compact={isCompact} isFlat={isFlat}>
-                  <MagicNameFlankIcons
-                    card={card}
-                    side="left"
-                    compact={isCompact}
-                    isFlat={isFlat}
-                    integrated
-                  />
-                  <h3
-                    className={`dh-card__name relative z-10 flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/18 px-1 py-0 text-center font-serif font-bold leading-snug ${
-                      card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
-                    }`}
-                    title={card.name}
-                  >
-                    {card.name}
-                  </h3>
-                  <MagicNameFlankIcons
-                    card={card}
-                    side="right"
-                    compact={isCompact}
-                    isFlat={isFlat}
-                    integrated
-                  />
-                </MagicTitleBand>
-              ) : isEventCard ? (
-                <EventTitleBand card={card} compact={isCompact} isFlat={isFlat}>
-                  <div className="flex min-h-[1.3rem] w-full min-w-0 flex-1 isolate items-stretch sm:min-h-[1.4rem]">
-                    <div
-                      className={`z-0 flex shrink-0 items-center justify-center ${eventTitleSideSlotClass(isFlat, isCompact)}`}
-                    >
-                      <EventNameLeftGlyph card={card} compact={isCompact} isFlat={isFlat} />
-                    </div>
+                  {hideTitleFlankArt ? (
                     <h3
-                      className="dh-card__name relative z-10 flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/18 px-1 py-0 text-center font-serif font-bold leading-snug text-violet-950"
+                      className={`dh-card__name relative z-20 isolate flex w-full min-w-0 items-center justify-center truncate bg-white/22 px-1.5 py-0 text-center font-serif font-bold leading-snug ${
+                        card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
+                      }`}
                       title={card.name}
                     >
                       {card.name}
                     </h3>
-                    <div
-                      className={`z-0 shrink-0 ${eventTitleSideSlotClass(isFlat, isCompact)}`}
-                      aria-hidden
-                    />
-                  </div>
+                  ) : (
+                    <>
+                      <MagicNameFlankIcons
+                        card={card}
+                        side="left"
+                        compact={isCompact}
+                        isFlat={isFlat}
+                        integrated
+                      />
+                      <h3
+                        className={`dh-card__name relative z-20 isolate flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/22 px-1 py-0 text-center font-serif font-bold leading-snug ${
+                          card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
+                        }`}
+                        title={card.name}
+                      >
+                        {card.name}
+                      </h3>
+                      <MagicNameFlankIcons
+                        card={card}
+                        side="right"
+                        compact={isCompact}
+                        isFlat={isFlat}
+                        integrated
+                      />
+                    </>
+                  )}
+                </MagicTitleBand>
+              ) : isEventCard ? (
+                <EventTitleBand card={card} compact={isCompact} isFlat={isFlat}>
+                  {hideTitleFlankArt ? (
+                    <div className="flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] w-full min-w-0 flex-1 items-stretch sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
+                      <h3
+                        className="dh-card__name relative z-20 isolate flex w-full min-w-0 items-center justify-center truncate bg-white/22 px-1.5 py-0 text-center font-serif font-bold leading-snug text-violet-950"
+                        title={card.name}
+                      >
+                        {card.name}
+                      </h3>
+                    </div>
+                  ) : (
+                    <div className="flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] w-full min-w-0 flex-1 items-stretch sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
+                      <div
+                        className={`relative z-0 flex shrink-0 items-center justify-center ${eventTitleSideSlotClass(isFlat, isCompact)}`}
+                      >
+                        <EventNameLeftGlyph card={card} compact={isCompact} isFlat={isFlat} />
+                      </div>
+                      <h3
+                        className="dh-card__name relative z-20 isolate flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/22 px-1 py-0 text-center font-serif font-bold leading-snug text-violet-950"
+                        title={card.name}
+                      >
+                        {card.name}
+                      </h3>
+                      <div
+                        className={`relative z-0 shrink-0 ${eventTitleSideSlotClass(isFlat, isCompact)}`}
+                        aria-hidden
+                      />
+                    </div>
+                  )}
                 </EventTitleBand>
               ) : (
                 <div

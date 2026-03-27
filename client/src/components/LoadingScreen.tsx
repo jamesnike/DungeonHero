@@ -5,6 +5,7 @@ import skeletonImage from '@assets/generated_images/cute_chibi_skeleton_monster.
 import goblinImage from '@assets/generated_images/cute_chibi_goblin_monster.png';
 import ogreImage from '@assets/generated_images/cute_chibi_ogre_monster.png';
 import wraithImage from '@assets/generated_images/cute_chibi_wraith_monster.png';
+import minionImage from '@assets/generated_images/chibi_minion_follower.png';
 import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
 import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
 import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
@@ -32,13 +33,20 @@ import lifestealAmuletImage from '@assets/generated_images/chibi_lifesteal_amule
 import flashAmuletImage from '@assets/generated_images/chibi_flash_amulet.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
 import thunderAmuletImage from '@assets/generated_images/chibi_thunder_amulet.png';
+/** Knight class deck arts (large files; not used by LoadingScreen UI but decoded before first draw) */
+import knightHolyBladeImage from '@assets/generated_images/holy_light_blade.png';
+import knightSwiftDaggerImage from '@assets/generated_images/swift_wind_dagger.png';
+import knightThunderHammerImage from '@assets/generated_images/thunder_warhammer.png';
+import knightIronTowerShieldImage from '@assets/generated_images/iron_tower_shield.png';
+import knightThornedShieldImage from '@assets/generated_images/thorned_reflect_shield.png';
+import knightGuardianShieldImage from '@assets/generated_images/guardian_holy_shield.png';
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
 import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 import heroPortrait from '@assets/generated_images/chibi_hero_adventurer_character.png';
 import cardBackImage from '@assets/generated_images/card_back_design.png';
 
 const ALL_IMAGES = [
-  dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage,
+  dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
   swordImage, axeImage, daggerImage, daggerWeaponImage, holyBladeImage, maceImage,
   woodenShieldImage, ironShieldImage, heavyShieldImage,
   potionImage, potionConcentratedHealImage, potionWeaponRepairImage,
@@ -48,6 +56,12 @@ const ALL_IMAGES = [
   lifeAmuletImage, strengthAmuletImage, guardianAmuletImage,
   balanceAmuletImage, lifestealAmuletImage, flashAmuletImage,
   dualguardAmuletImage, thunderAmuletImage,
+  knightHolyBladeImage,
+  knightSwiftDaggerImage,
+  knightThunderHammerImage,
+  knightIronTowerShieldImage,
+  knightThornedShieldImage,
+  knightGuardianShieldImage,
   skillScrollImage, eventScrollImage,
   heroPortrait, cardBackImage,
 ];

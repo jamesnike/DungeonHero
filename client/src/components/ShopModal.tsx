@@ -401,11 +401,10 @@ export default function ShopModal({
             })()}
           </div>
 
-          <div className="flex justify-center pt-2">
+          <div className="flex justify-center pt-2 px-1">
             <Button
-              variant="outline"
-              size="lg"
-              className="min-w-[200px] px-10 py-6 text-base font-semibold"
+              variant="ghost"
+              className="w-full max-w-[min(22rem,calc(100vw-2rem))] sm:max-w-none sm:w-auto min-h-[clamp(2.5rem,7vmin,3.75rem)] min-w-[clamp(10.5rem,58vw,17.5rem)] sm:min-w-[clamp(11rem,36vw,17.5rem)] px-[clamp(1rem,5.5vw,2.75rem)] py-[clamp(0.45rem,2.2vmin,1.6rem)] text-[clamp(0.8125rem,2.6vmin,1.125rem)] rounded-xl font-bold text-white bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 border-0 shadow-lg shadow-amber-900/30 ring-2 ring-amber-300/80 ring-offset-[clamp(2px,0.5vmin,4px)] ring-offset-background"
               onClick={onFinish}
             >
               结束购买

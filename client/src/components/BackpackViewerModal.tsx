@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { GameCardData } from './GameCard';
+import { GameCardData, getMagicSubtypeBracketLabel } from './GameCard';
 import {
   EventPatternPreview,
   MagicSpellPreview,
@@ -82,7 +82,7 @@ export default function BackpackViewerModal({
           {card.type}
           {card.type === 'magic' && card.magicType && (
             <span className="ml-1 text-muted-foreground/70">
-              ({card.magicType === 'permanent' ? '永久' : card.magicType === 'instant' ? '即时' : card.magicType})
+              ({getMagicSubtypeBracketLabel(card)})
             </span>
           )}
           {card.type === 'hero-magic' && <span className="ml-1 text-muted-foreground/70">(英雄魔法)</span>}
