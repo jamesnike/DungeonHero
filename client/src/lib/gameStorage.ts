@@ -94,7 +94,7 @@ export interface PersistedGameState {
   vampiricNextAttack?: boolean;
   unbreakableNext?: boolean;
   unbreakableUntilWaterfall?: Record<string, boolean>;
-  bulwarkPassiveActive?: boolean;
+  bulwarkPassiveActive?: number | boolean;
   defensiveStanceActive?: boolean;
   doubleNextMagic?: boolean;
   berserkerRageActive?: boolean;

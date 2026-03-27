@@ -1301,13 +1301,14 @@ function createDeck(): GameCardData[] {
     ],
   });
 
+  const cryptId = `event-${id++}`;
   deck.push({
-    id: `event-${id++}`,
+    id: cryptId,
     type: 'event',
     name: '墓语密室',
     value: 0,
     image: eventScrollImage,
-    description: '若左右两侧都是怪物，可获得全部效果。',
+    description: '若左右两侧都是怪物，可获得翻转效果。',
     eventChoices: [
       {
         text: '净化杂质（删 1 张牌）',
@@ -1358,7 +1359,7 @@ function createDeck(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       {
-        text: '掷动命运骰子',
+        text: '掷出不同结果：打开商店/商店等级+1/法术伤害+1/摧毁所有护符/发现一张专属卡，然后翻转成"命运之刃"。',
         hint: '20% 触发不同奖励或惩罚',
         diceTable: [
           { id: 'dice11-shop', range: [1, 4], label: '打开商店', effect: 'openShop' },
@@ -1377,7 +1378,7 @@ function createDeck(): GameCardData[] {
         value: 0,
         image: eventScrollImage,
         isPermanentEvent: true,
-        description: '永驻型事件。从手牌打出时失去 5 点生命。出场或换位时获得一次释放机会：右侧为药水/武器/护盾/事件则摧毁并送入坟场；右侧为怪物则激怒，直接打掉 2 层血（可击杀）；右侧无牌则随机弃一张手牌。可手动拖入回收袋。',
+        description: '永驻型事件。从手牌打出时失去 5 点生命。出场或换位时获得一次释放机会：右侧为药水/武器/护盾/事件则摧毁并送入坟场；右侧为怪物则激怒，直接打掉 2 层血（可击杀）；右侧无牌则从背包抽 2 张牌。可手动拖入回收袋。',
         eventChoices: [
           { text: '释放命运之刃', hint: '对右侧相邻卡牌造成效果（事件会进坟场）', effect: 'fate-dice-strike' },
         ],
@@ -1396,7 +1397,7 @@ function createDeck(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       {
-        text: '掷出混沌结果',
+        text: '20%掷出不同结果：打开商店/背包加入一张诅咒/删除1张牌/获得2张专属卡/抽2张牌，并翻转为"混沌冲击"。',
         hint: '20% 概率触发不同命运',
         diceTable: [
           { id: 'dice12-shop', range: [1, 4], label: '打开商店', effect: 'openShop' },
@@ -1436,7 +1437,7 @@ function createDeck(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       {
-        text: '签署裂隙契约',
+        text: '掷出不同结果：锋刃祝福/时空收缩/空间代价。',
         hint: '35% 锋刃祝福 / 35% 时空收缩 / 30% 空间代价',
         diceTable: [
           { id: 'rift-burst', range: [1, 7], label: '锋刃祝福：武器下次攻击 +4', effect: 'equipBurst+4' },
@@ -2455,8 +2456,8 @@ export default function GameBoard() {
   const [unbreakableUntilWaterfall, setUnbreakableUntilWaterfall] = useState<Record<EquipmentSlotId, boolean>>(
     { equipmentSlot1: false, equipmentSlot2: false },
   );
-  const [bulwarkPassiveActive, setBulwarkPassiveActive] = useState(false);
-  const bulwarkPassiveRef = useRef(false);
+  const [bulwarkPassiveActive, setBulwarkPassiveActive] = useState(0);
+  const bulwarkPassiveRef = useRef(0);
   bulwarkPassiveRef.current = bulwarkPassiveActive;
   const [defensiveStanceActive, setDefensiveStanceActive] = useState(false); // Damage reduction this turn
   const [slotAttackBursts, setSlotAttackBursts] = useState<Record<EquipmentSlotId, number>>(
@@ -7132,7 +7133,7 @@ export default function GameBoard() {
     setVampiricNextAttack(false);
     setUnbreakableNext(false);
     setUnbreakableUntilWaterfall({ equipmentSlot1: false, equipmentSlot2: false });
-    setBulwarkPassiveActive(false);
+    setBulwarkPassiveActive(0);
     setDefensiveStanceActive(false);
     setSlotAttackBursts({ equipmentSlot1: 0, equipmentSlot2: 0 });
     setNextAttackLifestealSlot(null);
@@ -7362,7 +7363,7 @@ export default function GameBoard() {
     setUnbreakableUntilWaterfall(
       snapshot.unbreakableUntilWaterfall ?? { equipmentSlot1: false, equipmentSlot2: false },
     );
-    setBulwarkPassiveActive(Boolean(snapshot.bulwarkPassiveActive));
+    setBulwarkPassiveActive(Number(snapshot.bulwarkPassiveActive) || 0);
     setDoubleNextMagic(Boolean(snapshot.doubleNextMagic));
     setDefensiveStanceActive(Boolean(snapshot.defensiveStanceActive));
     setTakingDamage(false);
@@ -7547,6 +7548,20 @@ export default function GameBoard() {
           setHeroSkillBanner(`${card.name} 被弃，对 ${target.name} 造成了 ${dmg} 点伤害！`);
         }
       }
+      if (owner === 'player' && card.onDiscardDraw && card.onDiscardDraw > 0) {
+        const drawCount = card.onDiscardDraw;
+        const drawnNames: string[] = [];
+        for (let i = 0; i < drawCount; i++) {
+          const drawn = drawFromBackpackToHand();
+          if (drawn) drawnNames.push(drawn.name);
+        }
+        if (drawnNames.length > 0) {
+          addGameLog('magic', `${card.name} 被弃：从背包抽取了 ${drawnNames.join('、')}`);
+          setHeroSkillBanner(`${card.name} 被弃，抽取了 ${drawnNames.join('、')}！`);
+        } else {
+          addGameLog('magic', `${card.name} 被弃：背包为空，未能抽牌`);
+        }
+      }
       triggerDiscardShock();
     },
     [
@@ -7555,6 +7570,7 @@ export default function GameBoard() {
       beginCombat,
       clearUndoStack,
       dealDamageToMonster,
+      drawFromBackpackToHand,
       getSpellDamage,
       isMonsterEngaged,
       setGold,
@@ -8615,7 +8631,7 @@ export default function GameBoard() {
           case 'turnBoost':
             addGameLog('waterfall', `${cardName} 龙息加速 waterfall +${wfx.amount}`);
             setTurnCount(prev => prev + wfx.amount);
-            if (bulwarkPassiveRef.current) {
+            for (let bi = 0; bi < bulwarkPassiveRef.current; bi++) {
               applyBulwarkPassiveShieldIncrement();
             }
             setHeroSkillBanner(`${cardName} 的龙息加速了 waterfall 进程 +${wfx.amount}！`);
@@ -8873,7 +8889,7 @@ export default function GameBoard() {
     }
     setTurnCount(prev => prev + 1);
     addGameLog('waterfall', `第 ${turnCount + 1} 波开始，${dropCount} 张新卡牌`);
-    if (bulwarkPassiveRef.current) {
+    for (let bi = 0; bi < bulwarkPassiveRef.current; bi++) {
       applyBulwarkPassiveShieldIncrement();
     }
     const recycledCards = restorePermanentMagicFromRecycleBag();
@@ -10779,14 +10795,14 @@ export default function GameBoard() {
           return;
         }
         case '壁垒猛击': {
-          if (bulwarkPassiveActive) {
-            finalizeMagicCard(card, { banner: '壁垒猛击被动已激活，无法重复使用。' });
-            return;
+          const newStacks = bulwarkPassiveActive + 1;
+          setBulwarkPassiveActive(newStacks);
+          if (!permanentSkills.includes('壁垒猛击')) {
+            setPermanentSkills(prev => [...prev, '壁垒猛击']);
           }
-          setBulwarkPassiveActive(true);
-          setPermanentSkills(prev => [...prev, '壁垒猛击']);
-          addGameLog('magic', '壁垒猛击激活：之后每次瀑流，随机一侧装备栏永久护甲 +1');
-          finalizeMagicCard(card, { banner: '壁垒猛击激活！之后每次瀑流，随机一侧装备栏永久护甲 +1。' });
+          const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
+          addGameLog('magic', `壁垒猛击激活${stackLabel}：之后每次瀑流，随机一侧装备栏永久护甲 +${newStacks}`);
+          finalizeMagicCard(card, { banner: `壁垒猛击激活${stackLabel}！之后每次瀑流，随机装备栏永久护甲 +1 触发 ${newStacks} 次。` });
           return;
         }
         case '血债清算': {
@@ -11245,6 +11261,14 @@ export default function GameBoard() {
           return;
         }
         default: {
+          if (card.id.includes('flip-crypt-echo')) {
+            const healed = healHero(3 * echoMultiplier);
+            const banner = healed > 0
+              ? `墓语回响生效，恢复 ${healed} 点生命。${isEchoTriggered ? '（回响×2）' : ''}`
+              : '生命值已满，墓语回响未回复生命。';
+            finalizeMagicCard(card, { banner });
+            return;
+          }
           if (card.scalingDamage != null) {
             const strikeBase = card.scalingDamage;
             const currentDamage = getSpellDamage(strikeBase) * echoMultiplier;
@@ -12687,20 +12711,39 @@ export default function GameBoard() {
           const reasonParts: string[] = [];
           if (!leftCard || leftCard.type !== 'monster') reasonParts.push('左侧不是怪物');
           if (!rightCard || rightCard.type !== 'monster') reasonParts.push('右侧不是怪物');
-          const choice: EventChoiceDefinition = {
-            text: '两侧皆为怪物（获得全部效果）',
-            effect: 'crypt-all-effects',
-            hint: bothMonsters
-              ? `左侧「${leftCard!.name}」右侧「${rightCard!.name}」，同时获得全部三项效果`
-              : reasonParts.join('，'),
-          };
-          if (!bothMonsters) {
-            choice.requires = [{ type: 'hand', min: 999, message: reasonParts.join('，') }];
+          if (bothMonsters) {
+            const flipTarget = {
+              toCard: {
+                id: `${eventCard.id}-flip-crypt-echo`,
+                type: 'magic' as const,
+                name: '墓语回响',
+                value: 0,
+                image: skillScrollImage,
+                magicType: 'permanent' as const,
+                magicEffect: '永久魔法：使用时回复 3 点生命。被弃置时从背包抽 3 张牌。',
+                description: '使用时回复 3 点生命。被弃置时从背包抽 3 张牌。',
+                onDiscardDraw: 3,
+              },
+              destination: 'backpack' as const,
+              banner: '墓语密室翻转为「墓语回响」，已放入背包。',
+            };
+            eventCard = {
+              ...eventCard,
+              flipTarget,
+              eventChoices: [...eventCard.eventChoices],
+            };
+          } else {
+            const choice: EventChoiceDefinition = {
+              text: '两侧皆为怪物（获得翻转效果）',
+              effect: 'crypt-all-effects',
+              hint: reasonParts.join('，'),
+              requires: [{ type: 'hand', min: 999, message: reasonParts.join('，') }],
+            };
+            eventCard = {
+              ...eventCard,
+              eventChoices: [...eventCard.eventChoices, choice],
+            };
           }
-          eventCard = {
-            ...eventCard,
-            eventChoices: [...eventCard.eventChoices, choice],
-          };
         }
         startEventResolution(eventCard.id, 'dungeon');
         setCurrentEventCard(eventCard);
@@ -13663,7 +13706,7 @@ export default function GameBoard() {
 
         setTurnCount(prev => prev + 1);
         addGameLog('event', '瀑流计数 +1');
-        if (bulwarkPassiveRef.current) {
+        for (let bi = 0; bi < bulwarkPassiveRef.current; bi++) {
           applyBulwarkPassiveShieldIncrement();
         }
 
@@ -13788,16 +13831,17 @@ export default function GameBoard() {
             removeCard(eventCardSnapshot.id, true);
           }
         } else {
-          if (handCards.length > 0) {
-            const randomIdx = Math.floor(Math.random() * handCards.length);
-            const discardedCard = handCards[randomIdx];
-            addGameLog('event', `命运之刃：右侧无牌，随机弃置手牌 ${discardedCard.name}`);
-            setHandCards(prev => prev.filter(c => c.id !== discardedCard.id));
-            discardCardToGraveyard(discardedCard, { owner: 'player' });
-            setHeroSkillBanner(`右侧无牌，命运之刃随机弃置了 ${discardedCard.name}。`);
+          const drawnNames: string[] = [];
+          for (let i = 0; i < 2; i++) {
+            const drawn = drawFromBackpackToHand();
+            if (drawn) drawnNames.push(drawn.name);
+          }
+          if (drawnNames.length > 0) {
+            addGameLog('event', `命运之刃：右侧无牌，从背包抽取了 ${drawnNames.join('、')}`);
+            setHeroSkillBanner(`右侧无牌，命运之刃抽取了 ${drawnNames.join('、')}。`);
           } else {
-            addGameLog('event', '命运之刃：右侧无牌且无手牌');
-            setHeroSkillBanner('右侧没有卡牌，也没有手牌可以弃置。');
+            addGameLog('event', '命运之刃：右侧无牌且背包为空');
+            setHeroSkillBanner('右侧没有卡牌，背包也没有牌可以抽取。');
           }
           if (!isPerm && cellIdx !== -1) {
             removeCard(eventCardSnapshot.id, true);

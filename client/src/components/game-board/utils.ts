@@ -923,7 +923,7 @@ export function createDeck(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       {
-        text: '掷动命运骰子',
+        text: '掷出不同结果：打开商店/商店等级+1/法术伤害+1/摧毁所有护符/发现一张专属卡，然后翻转成"命运之刃"。',
         hint: '20% 触发不同奖励或惩罚',
         diceTable: [
           { id: 'dice11-shop', range: [1, 4], label: '打开商店', effect: 'openShop' },
@@ -944,7 +944,7 @@ export function createDeck(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       {
-        text: '掷出混沌结果',
+        text: '20%掷出不同结果：打开商店/背包加入一张诅咒/删除1张牌/获得2张专属卡/抽2张牌，并翻转为"混沌冲击"。',
         hint: '20% 概率触发不同命运',
         diceTable: [
           { id: 'dice12-shop', range: [1, 4], label: '打开商店', effect: 'openShop' },

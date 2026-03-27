@@ -91,8 +91,8 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'graveyard-recall',
     name: '亡灵拾遗',
-    description: '牺牲手牌，从坟场召回一张卡牌；取回的牌优先加入手牌（手牌满则进背包）。',
-    effect: '弃两张手牌，从坟场随机 3 选 1 取回一张卡牌（有手牌空位时直接入手牌，否则进背包）。',
+    description: '弃两张手牌，从坟场发现一张卡牌，加入手牌。',
+    effect: '弃两张手牌，从坟场发现一张卡牌，加入手牌。',
     type: 'active',
     requiresTarget: null,
     buttonLabel: '亡灵拾遗',

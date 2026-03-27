@@ -207,6 +207,7 @@ export interface GameCardData {
   onDestroyHeal?: number; // Heal this amount when equipment is destroyed
   onDestroyGold?: number; // Gain this much gold when equipment is destroyed
   onDiscardDamage?: number; // Base spell damage dealt to random monster when discarded
+  onDiscardDraw?: number; // Draw this many cards from backpack when discarded
   critChance?: number; // % chance to deal double damage on attack
   restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
   healOnAttack?: number; // Heal this amount each time this weapon attacks

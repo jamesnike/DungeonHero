@@ -43,7 +43,7 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
     name: '狂战',
     description: '第一次使用学习狂战技能；已掌握时使用充满数值槽。发动效果：直到下次瀑布前，每个Hero回合里每个武器栏可多攻击一次，且不消耗耐久。',
     cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
-    gaugeMax: 10,
+    gaugeMax: 8,
     chargeHint: '每次武器攻击 +1 狂战值（含闪光护符多次攻击）。',
     chargeSource: 'weapon-attack',
   },
