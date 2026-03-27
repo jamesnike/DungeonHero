@@ -19,7 +19,6 @@ import {
   EventNameLeftGlyph,
   EventTitleBand,
   eventTitleSideSlotClass,
-  MagicNameFlankIcons,
   MagicNameLeftGlyph,
   MagicTitleBand,
 } from './MagicNameFlankIcons';
@@ -28,8 +27,8 @@ const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
 const CARD_SCALE_MIN = 0.6;
 const CARD_SCALE_MAX = 1.4;
-/** 6×3 棋盘：仅当标题区估出来不足约这么多个全角字宽时，才隐藏左侧专属图案 */
-const BOARD_TITLE_MIN_CHARS_FOR_GLYPH = 5;
+/** 魔法标题：仅当标题区估出来不足约这么多个全角字宽时，才隐藏左侧纹样（与事件卡一致，无卷轴 PNG） */
+const MAGIC_TITLE_MIN_CHARS_FOR_GLYPH = 5;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -48,7 +47,7 @@ function boardTitleGlyphWouldCrowdName(
   const titlePx = Math.max(0, cardWidthPx - 2 * slotPx - gutterPx);
   const titleFontPx = Math.max(7, 11.5 * inst);
   const cjkCharPx = titleFontPx * 0.92;
-  return titlePx < BOARD_TITLE_MIN_CHARS_FOR_GLYPH * cjkCharPx;
+  return titlePx < MAGIC_TITLE_MIN_CHARS_FOR_GLYPH * cjkCharPx;
 }
 
 export type CardType =
@@ -263,8 +262,6 @@ interface GameCardProps {
   shieldBlockVariant?: number;
   equipmentStatModifier?: EquipmentCardStatModifier | null;
   showExhaustedOverlay?: boolean;
-  /** 6×3 棋盘格：魔法标题条与事件一致，仅左侧纹样、无卷轴图 */
-  boardMagicTitleGlyphOnly?: boolean;
 }
 
 function GameCardInner({
@@ -286,7 +283,6 @@ function GameCardInner({
   shieldBlockVariant = 0,
   equipmentStatModifier = null,
   showExhaustedOverlay = false,
-  boardMagicTitleGlyphOnly = false,
 }: GameCardProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
@@ -354,9 +350,9 @@ function GameCardInner({
     };
   }, []);
 
-  const hideTitleFlankArt =
-    boardMagicTitleGlyphOnly &&
-    boardTitleGlyphWouldCrowdName(cardWidthPx, isFlat, isCompact);
+  /** 魔法 / 事件标题条：极窄时只显示标题，避免左侧纹样挤占 */
+  const hideTitleBandSideGlyph =
+    isTitleBandCard && boardTitleGlyphWouldCrowdName(cardWidthPx, isFlat, isCompact);
 
   const cardRef2 = useRef(card);
   cardRef2.current = card;
@@ -806,7 +802,7 @@ const amuletEffectText =
               {/* Card name (magic / hero-magic: fused band — wash + flanks + title) */}
               {isMagicLikeCard ? (
                 <MagicTitleBand card={card} compact={isCompact} isFlat={isFlat}>
-                  {hideTitleFlankArt ? (
+                  {hideTitleBandSideGlyph ? (
                     <h3
                       className={`dh-card__name relative z-20 isolate flex w-full min-w-0 items-center justify-center truncate bg-white/22 px-1.5 py-0 text-center font-serif font-bold leading-snug ${
                         card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
@@ -815,7 +811,7 @@ const amuletEffectText =
                     >
                       {card.name}
                     </h3>
-                  ) : boardMagicTitleGlyphOnly ? (
+                  ) : (
                     <div className="flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] w-full min-w-0 flex-1 items-stretch sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
                       <div
                         className={`relative z-0 flex shrink-0 items-center justify-center ${eventTitleSideSlotClass(isFlat, isCompact)}`}
@@ -835,36 +831,11 @@ const amuletEffectText =
                         aria-hidden
                       />
                     </div>
-                  ) : (
-                    <>
-                      <MagicNameFlankIcons
-                        card={card}
-                        side="left"
-                        compact={isCompact}
-                        isFlat={isFlat}
-                        integrated
-                      />
-                      <h3
-                        className={`dh-card__name relative z-20 isolate flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/22 px-1 py-0 text-center font-serif font-bold leading-snug ${
-                          card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
-                        }`}
-                        title={card.name}
-                      >
-                        {card.name}
-                      </h3>
-                      <MagicNameFlankIcons
-                        card={card}
-                        side="right"
-                        compact={isCompact}
-                        isFlat={isFlat}
-                        integrated
-                      />
-                    </>
                   )}
                 </MagicTitleBand>
               ) : isEventCard ? (
                 <EventTitleBand card={card} compact={isCompact} isFlat={isFlat}>
-                  {hideTitleFlankArt ? (
+                  {hideTitleBandSideGlyph ? (
                     <div className="flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] w-full min-w-0 flex-1 items-stretch sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
                       <h3
                         className="dh-card__name relative z-20 isolate flex w-full min-w-0 items-center justify-center truncate bg-white/22 px-1.5 py-0 text-center font-serif font-bold leading-snug text-violet-950"
@@ -910,9 +881,9 @@ const amuletEffectText =
                 </div>
               )}
 
-              {/* Thin separator */}
+              {/* Thin separator (aligned with wide body column) */}
               <div
-                className={`h-px ${isCompact ? 'mx-2' : 'mx-6'} ${
+                className={`h-px ${isCompact ? 'mx-0.5' : 'mx-1'} ${
                   isTitleBandCard ? '-mt-1' : ''
                 } ${
                   isEventCard
@@ -923,15 +894,15 @@ const amuletEffectText =
                 }`}
               />
 
-              {/* Description / choices area - fills remaining space */}
+              {/* Description / choices area - fills remaining space (tight horizontal inset vs card) */}
               <div
-                className={`relative z-10 flex-1 min-h-0 overflow-y-auto ${isCompact ? 'px-0.5' : 'px-2'} ${
-                  isTextOnlyCard ? 'pt-1 pb-1.5' : 'py-1.5'
-                }`}
+                className={`relative z-10 flex-1 min-h-0 overflow-y-auto ${
+                  isCompact ? 'px-0' : 'px-0.5'
+                } pt-1 pb-1.5`}
               >
                 <div
                   className={`h-full min-h-0 ${
-                    isCompact ? 'px-1 py-1' : isTextOnlyCard ? 'px-2 py-1' : 'px-2 py-1.5'
+                    isCompact ? 'px-0.5 py-1' : 'px-1 py-1'
                   } rounded-md border border-transparent bg-white/92`}
                 >
                   {isMagicLikeCard && (
@@ -955,7 +926,7 @@ const amuletEffectText =
               </div>
 
               {/* Bottom decorative bar */}
-              <div className={`h-px mx-3 ${
+              <div className={`h-px mx-1 ${
                 isEventCard
                   ? 'bg-gradient-to-r from-transparent via-violet-500/40 to-transparent'
                   : card.type === 'hero-magic'
@@ -1320,8 +1291,7 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
     prev.weaponSwingVariant === next.weaponSwingVariant &&
     prev.shieldBlockVariant === next.shieldBlockVariant &&
     prev.equipmentStatModifier === next.equipmentStatModifier &&
-    prev.showExhaustedOverlay === next.showExhaustedOverlay &&
-    prev.boardMagicTitleGlyphOnly === next.boardMagicTitleGlyphOnly
+    prev.showExhaustedOverlay === next.showExhaustedOverlay
   );
 }
 

@@ -14096,7 +14096,6 @@ export default function GameBoard() {
                   <GameCard
                     card={card}
                     disableInteractions
-                    boardMagicTitleGlyphOnly
                     onClick={() => handleCardClick(card)}
                   />
                 </div>
@@ -14160,7 +14159,6 @@ export default function GameBoard() {
             const gameCardNode = (
               <GameCard
                 card={card}
-                boardMagicTitleGlyphOnly
                 onDragStart={
                   isMonsterTurnLock || playerTargetingActive ? undefined : handleDragStartFromDungeon
                 }
