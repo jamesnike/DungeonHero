@@ -35,16 +35,17 @@ export default function EventDiceModal({
         </DialogHeader>
 
         <div className="mt-4 grid gap-4">
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 min-h-[260px]">
             <DiceRoller
               interactive={false}
               autoRollTrigger={autoRollTrigger}
               onRoll={onRollResult}
+              className="min-h-[220px]"
             />
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-3 py-2 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">Roll Result</span>
-            <Badge variant="secondary" className="text-base font-mono px-3 py-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-4 py-3 text-base text-muted-foreground">
+            <span className="font-semibold text-foreground text-lg">Roll Result</span>
+            <Badge variant="secondary" className="text-2xl font-mono px-4 py-2">
               {rolledValue ?? '…'}
             </Badge>
           </div>
