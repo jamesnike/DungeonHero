@@ -5,6 +5,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useOverlayScale } from "@/hooks/use-overlay-scale"
 
 const Dialog = DialogPrimitive.Root
 
@@ -41,27 +42,37 @@ const DialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     overlayClassName?: string;
     contentMotion?: "default" | "fade";
+    /** Set false to opt-out of viewport-based auto-zoom (default true). */
+    autoScale?: boolean;
   }
->(({ className, children, overlayClassName, contentMotion = "default", ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay className={overlayClassName} />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg",
-        contentMotion === "fade" ? dialogContentMotionFade : dialogContentMotionDefault,
-        className
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPortal>
-))
+>(({ className, children, overlayClassName, contentMotion = "default", style, autoScale = true, ...props }, ref) => {
+  const overlayScale = useOverlayScale();
+  const mergedStyle: React.CSSProperties = {
+    ...style,
+    ...(autoScale ? { zoom: overlayScale } : undefined),
+  };
+  return (
+    <DialogPortal>
+      <DialogOverlay className={overlayClassName} />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed left-[50%] top-[50%] z-50 grid w-full max-w-4xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg",
+          contentMotion === "fade" ? dialogContentMotionFade : dialogContentMotionDefault,
+          className
+        )}
+        style={mergedStyle}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  );
+})
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 const DialogHeader = ({

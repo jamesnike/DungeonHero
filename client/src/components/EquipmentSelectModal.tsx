@@ -1,7 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { GameCardData } from './GameCard';
 
 type EquipmentSlotKey = 'equipmentSlot1' | 'equipmentSlot2';
@@ -25,31 +24,6 @@ export default function EquipmentSelectModal({
   onSelect,
   onCancel,
 }: EquipmentSelectModalProps) {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [overlayScale, setOverlayScale] = useState(1);
-  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-  useEffect(() => {
-    if (typeof ResizeObserver === 'undefined') {
-      return;
-    }
-    const target = contentRef.current;
-    if (!target) return;
-    const baseWidth = 320;
-    const minScale = 0.7;
-    const maxScale = 1.15;
-    const updateScale = () => {
-      const width = target.getBoundingClientRect().width;
-      if (!width) return;
-      setOverlayScale(prev => {
-        const next = clamp(width / baseWidth, minScale, maxScale);
-        return Math.abs(prev - next) > 0.01 ? next : prev;
-      });
-    };
-    updateScale();
-    const observer = new ResizeObserver(updateScale);
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, []);
 
   const renderSlot = (label: string, slotId: EquipmentSlotKey, item: GameCardData | null) => {
     const disabled = !item;
@@ -87,9 +61,7 @@ export default function EquipmentSelectModal({
   return (
     <Dialog open={open} onOpenChange={value => !value && onCancel()}>
       <DialogContent
-        ref={contentRef}
-        className="sm:max-w-lg equipment-select"
-        style={{ '--dh-overlay-scale': overlayScale.toString() } as CSSProperties}
+        className="sm:max-w-3xl equipment-select"
       >
         <DialogHeader>
           <DialogTitle>{prompt}</DialogTitle>

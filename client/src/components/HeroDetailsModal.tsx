@@ -168,7 +168,7 @@ export default function HeroDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-[95vw] max-h-[95vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-2xl font-serif">{heroVariant.name}</DialogTitle>
           <DialogDescription className="flex items-center gap-2">

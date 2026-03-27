@@ -44,6 +44,7 @@ import BackpackZone from './BackpackZone';
 import BackpackViewerModal from './BackpackViewerModal';
 import MonsterRewardModal from '@/components/MonsterRewardModal';
 import HeroDetailsModal from './HeroDetailsModal';
+import { useOverlayScale } from '@/hooks/use-overlay-scale';
 // import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
@@ -652,9 +653,9 @@ function createDeck(): GameCardData[] {
     });
     const specialMap: Record<string, { tag: string; desc: string; lastWords?: string }> = {
       Dragon:   { tag: 'ember-fury',     desc: '精英流血：每失去一个血层，攻击力+3。\nHero回合未掉血层则恢复一层。' },
-      Skeleton: { tag: 'bone-regen',     desc: '失去血层后有50%概率恢复一层。', lastWords: 'discard-hand-3' },
-      Wraith:   { tag: 'wraith-rebirth', desc: '濒死时有50%概率血层全满。' },
-      Ogre:     { tag: 'ogre-crit',      desc: '攻击时50%概率双倍伤害。\n50%概率攻击两次。' },
+      Skeleton: { tag: 'bone-regen',     desc: '虚骨再生：每次失去血层后，50%概率恢复一层。', lastWords: 'discard-hand-3' },
+      Wraith:   { tag: 'wraith-rebirth', desc: '幽魂重生：血层降至1时，50%概率血层全满。' },
+      Ogre:     { tag: 'ogre-crit',      desc: '蛮力暴击：攻击时50%概率双倍伤害。\n狂暴连击：50%概率攻击两次。' },
       Goblin:   { tag: 'goblin-elite',   desc: '动手：偷取6金币。\n玩家金币≤10时，攻击力与血量翻倍。' },
     };
     for (const [type, monsters] of Object.entries(monstersByType)) {
@@ -1544,6 +1545,7 @@ function createStarterBackpack(): GameCardData[] {
 
 export default function GameBoard() {
   const gameViewport = useGameViewport();
+  const overlayZoom = useOverlayScale();
   // const { toast } = useToast(); // Disabled toast notifications
   const [hp, setHp] = useState(INITIAL_HP);
   const hpRef = useRef(INITIAL_HP);
@@ -2486,6 +2488,8 @@ export default function GameBoard() {
   const [pendingHeroSkillAction, setPendingHeroSkillAction] = useState<PendingHeroSkillAction | null>(null);
   const [pendingHeroMagicAction, setPendingHeroMagicAction] = useState<PendingHeroMagicAction | null>(null);
   const [pendingMagicAction, setPendingMagicAction] = useState<PendingMagicAction | null>(null);
+  const echoRemainingRef = useRef(0);
+  const echoTotalRef = useRef(0);
   const [pendingPotionAction, setPendingPotionAction] = useState<PendingPotionAction | null>(null);
   const [deathWardPrompt, setDeathWardPrompt] = useState<DeathWardPromptState | null>(null);
   const [monsterRewardQueue, setMonsterRewardQueue] = useState<MonsterRewardDrop[]>([]);
@@ -4375,6 +4379,9 @@ export default function GameBoard() {
           '韧性：攻击后 50% 概率不掉血层（掷骰判定）',
         ].join('\n'),
       };
+      if (monster.lastWords) {
+        executeLastWords(monster);
+      }
       updateMonsterCard(monster.id, () => bossCard);
       setCombatState(prev => {
         const remaining = prev.engagedMonsterIds.filter(id => id !== monster.id);
@@ -4388,6 +4395,9 @@ export default function GameBoard() {
     }
 
     if (monster.hasRevive && !monster.reviveUsed) {
+      if (monster.lastWords) {
+        executeLastWords(monster);
+      }
       const fullHp = monster.maxHp ?? monster.hp ?? monster.value ?? 0;
       const activateNoLayerCost = !!monster.skeletonNoLayerCost;
       updateMonsterCard(monster.id, card => ({
@@ -5375,7 +5385,7 @@ export default function GameBoard() {
   );
 
   const triggerGraveNova = useCallback(() => {
-    const monsters = flattenActiveRowSlots(activeCards).filter(
+    const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
       (card): card is GameCardData => Boolean(card && card.type === 'monster'),
     );
     if (!monsters.length) {
@@ -5388,7 +5398,7 @@ export default function GameBoard() {
       dealDamageToMonster(monster, dmg, { pulses: 2 });
     });
     setHeroSkillBanner(`殉烈爆鸣释放，对所有怪物造成 ${dmg} 点伤害！`);
-  }, [activeCards, addGameLog, dealDamageToMonster, getSpellDamage, setHeroSkillBanner]);
+  }, [addGameLog, dealDamageToMonster, getSpellDamage, setHeroSkillBanner]);
   const healHero = useCallback(
     (
       baseAmount: number,
@@ -6079,13 +6089,6 @@ export default function GameBoard() {
 
   const beginDiscoverFlow = useCallback(
     (source: string): boolean => {
-      if (backpackItems.length >= backpackCapacity) {
-        if (DEV_MODE) {
-          console.debug('[Discover] Backpack full, cannot start discover', { source });
-        }
-        return false;
-      }
-
       if (classDeck.length === 0) {
         if (DEV_MODE) {
           console.debug('[Discover] Class deck empty, cannot start discover', { source });
@@ -6113,7 +6116,7 @@ export default function GameBoard() {
 
       return true;
     },
-    [addGameLog, backpackItems.length, classDeck],
+    [addGameLog, classDeck],
   );
 
   const generateShopOfferings = useCallback((): ShopOffering[] => {
@@ -6162,13 +6165,6 @@ export default function GameBoard() {
         return false;
       }
 
-      if (backpackItems.length >= backpackCapacity) {
-        if (DEV_MODE) {
-          console.debug('[Shop] Cannot open shop, backpack full');
-        }
-        return false;
-      }
-
       const offerings = generateShopOfferings();
       if (!offerings.length) {
         if (DEV_MODE) {
@@ -6190,7 +6186,7 @@ export default function GameBoard() {
       setEventModalMinimized(false);
       return true;
     },
-    [backpackItems.length, generateShopOfferings],
+    [generateShopOfferings],
   );
 
 
@@ -7668,6 +7664,13 @@ export default function GameBoard() {
     setDeathWardPrompt(t.deathWardPrompt);
     setEquipmentPrompt(t.equipmentPrompt);
     setGraveyardDiscoverState(t.graveyardDiscoverState);
+    if (t.graveyardDiscoverState && t.activeMonsterReward) {
+      const doneId = t.activeMonsterReward.monsterInstanceId;
+      graveyardDiscoverResolverRef.current = () => {
+        if (doneId) monsterRewardQueuedInstanceIdsRef.current.delete(doneId);
+        setActiveMonsterReward(null);
+      };
+    }
     setCardActionContext(t.cardActionContext);
     setGameLogEntries(t.gameLogEntries);
     monsterRewardPreviewCacheRef.current = t.monsterRewardPreviewCache;
@@ -9073,6 +9076,7 @@ export default function GameBoard() {
 
       removeCard(card.id, false);
       setPendingMagicAction(null);
+      echoRemainingRef.current = 0;
     },
     [addGameLog, addPermanentMagicToRecycleBag, addToGraveyard, removeCard],
   );
@@ -9905,13 +9909,15 @@ export default function GameBoard() {
   };
 
   const discardAllHandCards = useCallback(() => {
+    let snapshot: GameCardData[] = [];
     setHandCards(prev => {
       if (!prev.length) {
         return prev;
       }
-      prev.forEach(card => discardCardToGraveyard(card, { owner: 'player' }));
+      snapshot = prev;
       return [];
     });
+    snapshot.forEach(card => discardCardToGraveyard(card, { owner: 'player' }));
   }, [discardCardToGraveyard]);
 
   const drawCardsFromBackpack = (count: number) => {
@@ -10513,7 +10519,7 @@ export default function GameBoard() {
       }
       case 'chaos-2': {
         const started = beginDiscoverFlow('chaos-dice');
-        banner = started ? '混沌骰运：发现 1 张专属（三选一）。' : '混沌骰运想要发现卡牌，但背包已满或卡组耗尽。';
+        banner = started ? '混沌骰运：发现 1 张专属（三选一）。' : '混沌骰运想要发现卡牌，但卡组已耗尽。';
         break;
       }
       case 'chaos-3': {
@@ -11173,6 +11179,8 @@ export default function GameBoard() {
             finalizeMagicCard(card, { banner: `${target.name} 已置于牌堆底。` });
             return;
           }
+          echoRemainingRef.current = echoMultiplier;
+          echoTotalRef.current = echoMultiplier;
           const echoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
           setPendingMagicAction({
             card,
@@ -12281,6 +12289,9 @@ export default function GameBoard() {
       if (!pendingMagicAction || pendingMagicAction.step !== 'dungeon-select') {
         return;
       }
+      if (echoRemainingRef.current <= 0) {
+        return;
+      }
       if (
         pendingMagicAction.effect !== 'return-dungeon-bottom' &&
         pendingMagicAction.effect !== 'shuffle-dungeon'
@@ -12298,19 +12309,20 @@ export default function GameBoard() {
       setRemainingDeck(prev => [...prev, sanitizedCard]);
       addGameLog('magic', `${card.name} 已置于牌堆底。`);
 
-      const echoRemaining = (pendingMagicAction.echoRemaining ?? 1) - 1;
-      if (echoRemaining > 0) {
+      echoRemainingRef.current -= 1;
+      const echoLeft = echoRemainingRef.current;
+      if (echoLeft > 0) {
         const remainingDungeonCards = activeCards.filter(c => c != null && c.id !== card.id);
         if (remainingDungeonCards.length > 0) {
-          const totalEcho = (pendingMagicAction.echoRemaining ?? 1);
-          const currentRound = totalEcho - echoRemaining + 1;
-          const echoLabel = `（回响：第 ${currentRound}/${totalEcho} 次）`;
+          const total = echoTotalRef.current;
+          const currentRound = total - echoLeft + 1;
+          const echoLabel = `（回响：第 ${currentRound}/${total} 次）`;
           setPendingMagicAction({
             card: pendingMagicAction.card,
             effect: 'return-dungeon-bottom',
             step: 'dungeon-select',
             prompt: `选择一张地城卡牌，置于牌堆底。${echoLabel}`,
-            echoRemaining,
+            echoRemaining: echoLeft,
           });
           setHeroSkillBanner(`${card.name} 已置于牌堆底。继续选择下一张。${echoLabel}`);
           return;
@@ -12589,7 +12601,10 @@ export default function GameBoard() {
         handleSkillCard(card);
         removeCard(card.id, false);
       } else if (card.type === 'event') {
-        if (card.isPermanentEvent && !card.hasReleaseCharge) {
+        const freshBladeCard = card.isPermanentEvent
+          ? activeCards.find(c => c?.id === card.id) ?? card
+          : card;
+        if (freshBladeCard.isPermanentEvent && !freshBladeCard.hasReleaseCharge) {
           setHeroSkillBanner('命运之刃暂无释放次数。');
           resetDragState();
           return;
@@ -15730,7 +15745,7 @@ export default function GameBoard() {
 
       {deathWardPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" style={{ pointerEvents: 'auto' }}>
-          <div className="w-full max-w-sm space-y-4 rounded-lg bg-card p-6 text-center shadow-2xl">
+          <div className="w-full max-w-2xl space-y-6 rounded-lg bg-card p-10 text-center shadow-2xl max-h-[95vh] overflow-y-auto" style={{ zoom: overlayZoom }}>
             <div className="space-y-1">
               <p className="text-lg font-semibold">命悬一线</p>
               <p className="text-sm text-muted-foreground">
@@ -15931,7 +15946,7 @@ export default function GameBoard() {
       
       {potionChoiceDialogOpen && (
         <Dialog open onOpenChange={(open) => { if (!open) cancelPotionAction(); }}>
-          <DialogContent className="sm:max-w-sm">
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Wrench className="w-5 h-5 text-emerald-500" />

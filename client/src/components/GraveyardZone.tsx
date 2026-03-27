@@ -156,7 +156,7 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
       </Card>
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="graveyard-viewer-modal">
+        <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto" data-testid="graveyard-viewer-modal">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Skull className="w-6 h-6" />

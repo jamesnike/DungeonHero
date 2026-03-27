@@ -1567,14 +1567,10 @@ html {
     font-size: calc(0.6rem * var(--header-scale));
     letter-spacing: 0.12em;
   }
-  .equipment-select {
-    --overlay-scale: var(--dh-overlay-scale, 1);
-  }
-
   .equipment-select__button {
     transition: transform 150ms ease, opacity 150ms ease;
-    padding: calc(0.85rem * var(--overlay-scale));
-    border-radius: calc(0.9rem * var(--overlay-scale));
+    padding: 0.85rem;
+    border-radius: 0.9rem;
   }
 
   .equipment-select__button--active:hover {
@@ -1587,24 +1583,24 @@ html {
   }
 
   .equipment-select__label {
-    font-size: calc(0.58rem * var(--overlay-scale));
+    font-size: 0.58rem;
     letter-spacing: 0.12em;
   }
 
   .equipment-select__name {
-    font-size: calc(0.95rem * var(--overlay-scale));
+    font-size: 0.95rem;
   }
 
   .equipment-select__meta {
-    font-size: calc(0.7rem * var(--overlay-scale));
+    font-size: 0.7rem;
   }
 
   .equipment-select__empty {
-    font-size: calc(0.85rem * var(--overlay-scale));
+    font-size: 0.85rem;
   }
 
   .equipment-select__cancel {
-    font-size: calc(0.85rem * var(--overlay-scale));
+    font-size: 0.85rem;
   }
 
   .combat-panel {

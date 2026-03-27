@@ -1325,7 +1325,8 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.wraithDeathHeal !== b.wraithDeathHeal ||
       a.goblinStealScale !== b.goblinStealScale ||
       a.goblinHasStolen !== b.goblinHasStolen ||
-      a.goblinTrickCarrier !== b.goblinTrickCarrier
+      a.goblinTrickCarrier !== b.goblinTrickCarrier ||
+      a.hasReleaseCharge !== b.hasReleaseCharge
     ) {
       return false;
     }

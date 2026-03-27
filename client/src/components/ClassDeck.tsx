@@ -94,7 +94,7 @@ function ClassDeckComponent({
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
         <DialogContent
           contentMotion="fade"
-          className="max-w-2xl max-h-[80vh] overflow-y-auto"
+          className="max-w-[95vw] max-h-[95vh] overflow-y-auto"
           data-testid="class-deck-viewer-modal"
         >
           <DialogHeader>

@@ -33,7 +33,7 @@ export default function HelpDialog() {
           <HelpCircle className="w-5 h-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl">How to Play</DialogTitle>
           <DialogDescription>

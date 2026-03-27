@@ -33,7 +33,7 @@ export default function VictoryDefeatModal({
 }: VictoryDefeatModalProps) {
   return (
     <Dialog open={open}>
-      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto" data-testid={isVictory ? "victory-modal" : "defeat-modal"}>
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto" data-testid={isVictory ? "victory-modal" : "defeat-modal"}>
         <DialogHeader>
           <div className="flex flex-col items-center gap-4 mb-4">
             {isVictory ? (

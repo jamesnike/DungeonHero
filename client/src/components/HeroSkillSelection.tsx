@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Shield, Droplet, Skull, Heart, Coins, Ghost, HandCoins, Waves, Swords, HeartPulse, Zap, ShieldAlert, BookOpen, Cat } from 'lucide-react';
 import { heroSkills } from '@/lib/heroSkills';
+import { useOverlayScale } from '@/hooks/use-overlay-scale';
 
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
 
@@ -10,6 +11,7 @@ interface HeroSkillSelectionProps {
 }
 
 export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillSelectionProps) {
+  const overlayScale = useOverlayScale();
   const getSkillIcon = (skillId: string) => {
     const cls = "w-4 h-4 md:w-5 md:h-5";
     switch (skillId) {
@@ -52,17 +54,20 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
         isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
-      <div className={`bg-background rounded-xl p-3 md:p-4 lg:p-5 max-w-xs md:max-w-xl lg:max-w-4xl w-full mx-2 md:mx-4 shadow-2xl border-2 border-primary transform transition-transform duration-200 ${
-        isOpen ? 'scale-100' : 'scale-95'
-      }`}>
-        <div className="text-center mb-2 md:mb-3 lg:mb-4">
-          <h2 className="font-serif text-lg md:text-xl lg:text-2xl font-bold mb-1 text-primary">选择英雄技能</h2>
-          <p className="text-muted-foreground text-xs md:text-sm">
+      <div
+        className={`bg-background rounded-xl p-5 md:p-7 lg:p-9 max-w-lg md:max-w-4xl lg:max-w-[95vw] w-full mx-2 md:mx-4 max-h-[95vh] overflow-y-auto shadow-2xl border-2 border-primary transform transition-transform duration-200 ${
+          isOpen ? 'scale-100' : 'scale-95'
+        }`}
+        style={{ zoom: overlayScale }}
+      >
+        <div className="text-center mb-3 md:mb-4 lg:mb-5">
+          <h2 className="font-serif text-xl md:text-2xl lg:text-3xl font-bold mb-1.5 text-primary">选择英雄技能</h2>
+          <p className="text-muted-foreground text-sm md:text-base">
             选择一项技能开始冒险
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-2.5 lg:gap-3 mb-2 md:mb-3 lg:mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 md:gap-3 lg:gap-4 mb-3 md:mb-4 lg:mb-5">
           {heroSkills.map((skill) => (
             <Card
               key={skill.id}
@@ -70,18 +75,18 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
               className="relative cursor-pointer transition-[transform,ring,box-shadow] duration-200 hover:scale-[1.03] hover:shadow-lg hover:ring-2 hover:ring-primary active:scale-[0.98]"
               data-testid={`skill-card-${skill.id}`}
             >
-              <div className="p-2 md:p-2.5 lg:p-3">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <div className="text-primary bg-muted rounded-full p-1.5 shrink-0">
+              <div className="p-2.5 md:p-3 lg:p-4">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="text-primary bg-muted rounded-full p-2 shrink-0">
                     {getSkillIcon(skill.id)}
                   </div>
-                  <h3 className="font-serif text-xs md:text-sm font-bold truncate">
+                  <h3 className="font-serif text-sm md:text-base font-bold truncate">
                     {skill.name}
                   </h3>
                 </div>
 
-                <div className="bg-primary/10 rounded p-1.5 border border-primary/30">
-                  <p className="text-[10px] md:text-xs font-medium leading-snug">
+                <div className="bg-primary/10 rounded p-2 border border-primary/30">
+                  <p className="text-xs md:text-sm font-medium leading-snug">
                     {skill.effect}
                   </p>
                 </div>
@@ -98,7 +103,7 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
           ))}
         </div>
 
-        <p className="text-[10px] md:text-xs text-muted-foreground text-center">
+        <p className="text-xs md:text-sm text-muted-foreground text-center">
           点击技能卡牌以选择
         </p>
       </div>

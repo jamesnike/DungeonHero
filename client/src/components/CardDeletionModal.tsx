@@ -105,7 +105,7 @@ export default function CardDeletionModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto" overlayClassName="bg-black/30">
+      <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto" overlayClassName="bg-black/30">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Trash2 className="w-5 h-5 text-destructive" />

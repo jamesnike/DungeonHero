@@ -11,6 +11,8 @@ let dragElement: HTMLElement | null = null;
 let dragPreview: HTMLElement | null = null;
 let touchTarget: HTMLElement | null = null;
 
+const DRAG_THRESHOLD = 10;
+
 export const initMobileDrag = (
   element: HTMLElement,
   data: DragData | (() => DragData),
@@ -18,28 +20,29 @@ export const initMobileDrag = (
   onDragEnd?: () => void
 ) => {
   let lastTouchPoint: { x: number; y: number } | null = null;
+  let startPoint: { x: number; y: number } | null = null;
+  let dragStarted = false;
   let rafId: number | null = null;
   let previewWidth = 0;
   let previewHeight = 0;
 
   const resolveData = (): DragData => typeof data === 'function' ? data() : data;
 
-  const handleTouchStart = (e: TouchEvent) => {
-    e.preventDefault();
-    
+  const beginDrag = (touchX: number, touchY: number) => {
+    dragStarted = true;
     currentDragData = { ...resolveData() };
     dragElement = element;
-    
+
     const rect = element.getBoundingClientRect();
     const originalWidth = rect.width;
     const originalHeight = rect.height;
     previewWidth = originalWidth;
     previewHeight = originalHeight;
-    
+
     dragPreview = element.cloneNode(true) as HTMLElement;
-    
+
     dragPreview.classList.remove('w-full', 'h-full');
-    
+
     dragPreview.style.width = `${originalWidth}px`;
     dragPreview.style.height = `${originalHeight}px`;
     dragPreview.style.maxWidth = `${originalWidth}px`;
@@ -53,17 +56,24 @@ export const initMobileDrag = (
     dragPreview.style.boxSizing = 'border-box';
     dragPreview.style.willChange = 'transform';
     dragPreview.style.contain = 'layout style paint';
-    
-    const touch = e.touches[0];
-    dragPreview.style.left = `${touch.clientX - originalWidth / 2}px`;
-    dragPreview.style.top = `${touch.clientY - originalHeight / 2}px`;
-    lastTouchPoint = { x: touch.clientX, y: touch.clientY };
-    
+
+    dragPreview.style.left = `${touchX - originalWidth / 2}px`;
+    dragPreview.style.top = `${touchY - originalHeight / 2}px`;
+    lastTouchPoint = { x: touchX, y: touchY };
+
     document.body.appendChild(dragPreview);
-    
+
     element.classList.add('opacity-50');
-    
+
     onDragStart?.();
+  };
+
+  const handleTouchStart = (e: TouchEvent) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    startPoint = { x: touch.clientX, y: touch.clientY };
+    lastTouchPoint = { x: touch.clientX, y: touch.clientY };
+    dragStarted = false;
   };
 
   let pendingTouchX = 0;
@@ -94,10 +104,20 @@ export const initMobileDrag = (
 
   const handleTouchMove = (e: TouchEvent) => {
     e.preventDefault();
-    
-    if (!dragPreview) return;
-    
+
     const touch = e.touches[0];
+
+    if (!dragStarted && startPoint) {
+      const dx = touch.clientX - startPoint.x;
+      const dy = touch.clientY - startPoint.y;
+      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) {
+        return;
+      }
+      beginDrag(touch.clientX, touch.clientY);
+    }
+
+    if (!dragPreview) return;
+
     pendingTouchX = touch.clientX;
     pendingTouchY = touch.clientY;
     lastTouchPoint = { x: touch.clientX, y: touch.clientY };
@@ -110,6 +130,12 @@ export const initMobileDrag = (
   
   const handleTouchEnd = (e: TouchEvent) => {
     e.preventDefault();
+
+    if (!dragStarted) {
+      startPoint = null;
+      element.click();
+      return;
+    }
 
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
@@ -154,6 +180,8 @@ export const initMobileDrag = (
     dragElement = null;
     touchTarget = null;
     lastTouchPoint = null;
+    startPoint = null;
+    dragStarted = false;
     moveScheduled = false;
     
     onDragEnd?.();
