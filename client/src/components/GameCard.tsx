@@ -773,10 +773,8 @@ const amuletEffectText =
                     integrated
                   />
                   <h3
-                    className={`dh-card__name flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent px-1 py-0 text-center font-serif font-bold leading-snug ${
-                      card.type === 'hero-magic'
-                        ? 'bg-white/18 text-rose-950'
-                        : 'bg-white/18 text-cyan-950'
+                    className={`dh-card__name relative z-10 flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/18 px-1 py-0 text-center font-serif font-bold leading-snug ${
+                      card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
                     }`}
                     title={card.name}
                   >
@@ -792,20 +790,20 @@ const amuletEffectText =
                 </MagicTitleBand>
               ) : isEventCard ? (
                 <EventTitleBand card={card} compact={isCompact} isFlat={isFlat}>
-                  <div className="flex min-h-[1.3rem] w-full min-w-0 flex-1 items-stretch sm:min-h-[1.4rem]">
+                  <div className="flex min-h-[1.3rem] w-full min-w-0 flex-1 isolate items-stretch sm:min-h-[1.4rem]">
                     <div
-                      className={`flex shrink-0 items-center justify-center ${eventTitleSideSlotClass(isFlat, isCompact)}`}
+                      className={`z-0 flex shrink-0 items-center justify-center ${eventTitleSideSlotClass(isFlat, isCompact)}`}
                     >
                       <EventNameLeftGlyph card={card} compact={isCompact} isFlat={isFlat} />
                     </div>
                     <h3
-                      className="dh-card__name flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/18 px-1 py-0 text-center font-serif font-bold leading-snug text-violet-950"
+                      className="dh-card__name relative z-10 flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/18 px-1 py-0 text-center font-serif font-bold leading-snug text-violet-950"
                       title={card.name}
                     >
                       {card.name}
                     </h3>
                     <div
-                      className={`shrink-0 ${eventTitleSideSlotClass(isFlat, isCompact)}`}
+                      className={`z-0 shrink-0 ${eventTitleSideSlotClass(isFlat, isCompact)}`}
                       aria-hidden
                     />
                   </div>

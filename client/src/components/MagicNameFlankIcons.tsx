@@ -81,7 +81,7 @@ export const MagicTitleBand = memo(function MagicTitleBand({
         className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${tint} mix-blend-multiply opacity-[0.22]`}
       />
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-b ${sheen}`} />
-      <div className="relative z-10 flex min-h-[1.3rem] min-w-0 flex-1 items-stretch gap-0 sm:min-h-[1.4rem]">
+      <div className="relative z-10 flex min-h-[1.3rem] min-w-0 flex-1 isolate items-stretch gap-0 sm:min-h-[1.4rem]">
         {children}
       </div>
     </div>
@@ -107,7 +107,7 @@ export const EventTitleBand = memo(function EventTitleBand({
       }`}
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/50 via-stone-50/22 to-stone-900/6" />
-      <div className="relative z-10 flex min-h-[1.3rem] min-w-0 flex-1 items-stretch gap-0 sm:min-h-[1.4rem]">
+      <div className="relative z-10 flex min-h-[1.3rem] min-w-0 flex-1 isolate items-stretch gap-0 sm:min-h-[1.4rem]">
         {children}
       </div>
     </div>
@@ -603,7 +603,7 @@ export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({
   if (!k) {
     return (
       <span
-        className="shrink-0"
+        className="z-0 shrink-0"
         aria-hidden
         style={{ width: integrated ? (isFlat ? 18 : compact ? 20 : 26) : isFlat ? 20 : compact ? 22 : 28 }}
       />
@@ -614,8 +614,8 @@ export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({
   const pos = side === 'left' ? 'object-[center_28%]' : 'object-[center_72%]';
 
   const frame = integrated
-    ? `relative h-full min-h-0 shrink-0 overflow-hidden ${isFlat ? 'w-[1.15rem]' : compact ? 'w-5' : 'w-[1.65rem] sm:w-7'}`
-    : `relative shrink-0 overflow-hidden rounded-lg border-2 border-amber-900/40 bg-amber-50/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_2px_4px_rgba(62,42,26,0.12)] ${
+    ? `relative z-0 h-full min-h-0 shrink-0 overflow-hidden ${isFlat ? 'w-[1.15rem]' : compact ? 'w-5' : 'w-[1.65rem] sm:w-7'}`
+    : `relative z-0 shrink-0 overflow-hidden rounded-lg border-2 border-amber-900/40 bg-amber-50/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_2px_4px_rgba(62,42,26,0.12)] ${
         isFlat ? 'h-5 w-5 min-h-5 min-w-5' : compact ? 'h-6 w-6 min-h-6 min-w-6' : 'h-8 w-8 min-h-8 min-w-8'
       }`;
 
@@ -677,7 +677,7 @@ export const EventNameLeftGlyph = memo(function EventNameLeftGlyph({
       : 'h-[1.35rem] w-[1.35rem] sm:h-6 sm:w-6';
 
   return (
-    <div className="relative flex h-full w-full items-center justify-center bg-transparent" aria-hidden>
+    <div className="relative z-0 flex h-full w-full items-center justify-center bg-transparent" aria-hidden>
       <svg
         className={cn(
           'pointer-events-none shrink-0 opacity-[0.88] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]',

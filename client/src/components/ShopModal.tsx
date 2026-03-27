@@ -401,8 +401,13 @@ export default function ShopModal({
             })()}
           </div>
 
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={onFinish}>
+          <div className="flex justify-center pt-2">
+            <Button
+              variant="outline"
+              size="lg"
+              className="min-w-[200px] px-10 py-6 text-base font-semibold"
+              onClick={onFinish}
+            >
               结束购买
             </Button>
           </div>
