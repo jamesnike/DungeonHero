@@ -679,6 +679,41 @@ export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({
   );
 });
 
+/** Magic / hero-magic title flank on board: same as event — transparent slot, SVG pattern only (no scroll PNG). */
+export const MagicNameLeftGlyph = memo(function MagicNameLeftGlyph({
+  card,
+  compact,
+  isFlat,
+}: {
+  card: MagicPatternCardRef;
+  compact?: boolean;
+  isFlat?: boolean;
+}) {
+  const k = resolveMagicPatternKey(card);
+  if (!k) return null;
+
+  const svgBox = isFlat
+    ? 'h-[calc(1.05rem*var(--dh-card-instance-scale,1))] w-[calc(1.05rem*var(--dh-card-instance-scale,1))]'
+    : compact
+      ? 'h-[calc(1.25rem*var(--dh-card-instance-scale,1))] w-[calc(1.25rem*var(--dh-card-instance-scale,1))]'
+      : 'h-[calc(1.35rem*var(--dh-card-instance-scale,1))] w-[calc(1.35rem*var(--dh-card-instance-scale,1))] sm:h-[calc(1.5rem*var(--dh-card-instance-scale,1))] sm:w-[calc(1.5rem*var(--dh-card-instance-scale,1))]';
+
+  return (
+    <div className="relative z-0 isolate flex h-full w-full items-center justify-center bg-transparent" aria-hidden>
+      <svg
+        className={cn(
+          'pointer-events-none shrink-0 opacity-[0.88] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]',
+          svgBox,
+        )}
+        viewBox="0 0 32 32"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <CuteSticker k={k} />
+      </svg>
+    </div>
+  );
+});
+
 /** Event title flank: transparent — only the SVG glyph (no box behind it). */
 export const EventNameLeftGlyph = memo(function EventNameLeftGlyph({
   card,

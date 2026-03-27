@@ -20,6 +20,7 @@ import {
   EventTitleBand,
   eventTitleSideSlotClass,
   MagicNameFlankIcons,
+  MagicNameLeftGlyph,
   MagicTitleBand,
 } from './MagicNameFlankIcons';
 
@@ -27,10 +28,28 @@ const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
 const CARD_SCALE_MIN = 0.6;
 const CARD_SCALE_MAX = 1.4;
-/** Below this (narrow grid cells / 6×3 board), hide title flanks so scroll+glyph do not crowd the name. */
-const TITLE_FLANK_MIN_CARD_SCALE = 0.92;
+/** 6×3 棋盘：仅当标题区估出来不足约这么多个全角字宽时，才隐藏左侧专属图案 */
+const BOARD_TITLE_MIN_CHARS_FOR_GLYPH = 5;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/** 与 eventTitleSideSlotClass 的 rem 档位一致；用实例缩放估侧栏占位 */
+function boardTitleGlyphWouldCrowdName(
+  cardWidthPx: number,
+  isFlat: boolean,
+  isCompact: boolean,
+): boolean {
+  if (cardWidthPx <= 0) return false;
+  const raw = cardWidthPx / BASE_CARD_WIDTH;
+  const inst = clamp(raw, CARD_SCALE_MIN, CARD_SCALE_MAX);
+  const slotRem = isFlat ? 1.15 : isCompact ? 1.25 : 1.65;
+  const slotPx = slotRem * 16 * inst;
+  const gutterPx = 10;
+  const titlePx = Math.max(0, cardWidthPx - 2 * slotPx - gutterPx);
+  const titleFontPx = Math.max(7, 11.5 * inst);
+  const cjkCharPx = titleFontPx * 0.92;
+  return titlePx < BOARD_TITLE_MIN_CHARS_FOR_GLYPH * cjkCharPx;
+}
 
 export type CardType =
   | 'monster'
@@ -244,6 +263,8 @@ interface GameCardProps {
   shieldBlockVariant?: number;
   equipmentStatModifier?: EquipmentCardStatModifier | null;
   showExhaustedOverlay?: boolean;
+  /** 6×3 棋盘格：魔法标题条与事件一致，仅左侧纹样、无卷轴图 */
+  boardMagicTitleGlyphOnly?: boolean;
 }
 
 function GameCardInner({
@@ -265,12 +286,14 @@ function GameCardInner({
   shieldBlockVariant = 0,
   equipmentStatModifier = null,
   showExhaustedOverlay = false,
+  boardMagicTitleGlyphOnly = false,
 }: GameCardProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [isDragging, setIsDragging] = useState(false);
   const [cardScale, setCardScale] = useState(1);
+  const [cardWidthPx, setCardWidthPx] = useState(BASE_CARD_WIDTH);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
   const durabilityCapacity = Math.max(card.maxDurability ?? card.durability ?? 0, 0);
@@ -313,6 +336,7 @@ function GameCardInner({
         rafId = null;
         const { width } = target.getBoundingClientRect();
         if (!width) return;
+        setCardWidthPx(prevW => (Math.abs(prevW - width) > 0.5 ? width : prevW));
         setCardScale(prev => {
           const next = clamp(width / BASE_CARD_WIDTH, CARD_SCALE_MIN, CARD_SCALE_MAX);
           return Math.abs(prev - next) > 0.01 ? next : prev;
@@ -330,7 +354,9 @@ function GameCardInner({
     };
   }, []);
 
-  const hideTitleFlankArt = cardScale < TITLE_FLANK_MIN_CARD_SCALE;
+  const hideTitleFlankArt =
+    boardMagicTitleGlyphOnly &&
+    boardTitleGlyphWouldCrowdName(cardWidthPx, isFlat, isCompact);
 
   const cardRef2 = useRef(card);
   cardRef2.current = card;
@@ -758,7 +784,7 @@ const amuletEffectText =
                   <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
                     <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
                     {showPermRecycleCount && (
-                      <span className="tabular-nums leading-none text-[11px]">{permRecycleWaterfalls}</span>
+                      <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
                     )}
                   </span>
                 )}
@@ -789,6 +815,26 @@ const amuletEffectText =
                     >
                       {card.name}
                     </h3>
+                  ) : boardMagicTitleGlyphOnly ? (
+                    <div className="flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] w-full min-w-0 flex-1 items-stretch sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
+                      <div
+                        className={`relative z-0 flex shrink-0 items-center justify-center ${eventTitleSideSlotClass(isFlat, isCompact)}`}
+                      >
+                        <MagicNameLeftGlyph card={card} compact={isCompact} isFlat={isFlat} />
+                      </div>
+                      <h3
+                        className={`dh-card__name relative z-20 isolate flex min-w-0 flex-1 items-center justify-center truncate border-x border-transparent bg-white/22 px-1 py-0 text-center font-serif font-bold leading-snug ${
+                          card.type === 'hero-magic' ? 'text-rose-950' : 'text-cyan-950'
+                        }`}
+                        title={card.name}
+                      >
+                        {card.name}
+                      </h3>
+                      <div
+                        className={`relative z-0 shrink-0 ${eventTitleSideSlotClass(isFlat, isCompact)}`}
+                        aria-hidden
+                      />
+                    </div>
                   ) : (
                     <>
                       <MagicNameFlankIcons
@@ -1274,7 +1320,8 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
     prev.weaponSwingVariant === next.weaponSwingVariant &&
     prev.shieldBlockVariant === next.shieldBlockVariant &&
     prev.equipmentStatModifier === next.equipmentStatModifier &&
-    prev.showExhaustedOverlay === next.showExhaustedOverlay
+    prev.showExhaustedOverlay === next.showExhaustedOverlay &&
+    prev.boardMagicTitleGlyphOnly === next.boardMagicTitleGlyphOnly
   );
 }
 
