@@ -8273,7 +8273,7 @@ export default function GameBoard() {
     name: '血咒之印',
     value: 0,
     image: sourceCard?.image ?? eventScrollImage,
-    description: '永久魔法：使用时失去 3 点生命值。',
+    description: '永久魔法：使用和弃置时，都失去 3 点生命值。',
     magicType: 'permanent',
     magicEffect: 'curse',
     isCurse: true,
@@ -10798,7 +10798,8 @@ export default function GameBoard() {
             card,
             effect: 'blood-reckoning',
             step: 'monster-select',
-            prompt: `选择一个怪物，造成 ${gold} 点伤害并恢复等量生命。`,
+            echoMultiplier,
+            prompt: `选择一个怪物，造成 ${getSpellDamage(gold) * echoMultiplier} 点伤害并恢复等量生命。${isEchoTriggered ? '（回响×2）' : ''}`,
           });
           setHeroSkillBanner('血债清算就绪，请选择目标怪物。');
           return;
@@ -12125,7 +12126,8 @@ export default function GameBoard() {
       }
 
       if (pendingMagicAction.effect === 'blood-reckoning') {
-        const totalDamage = getSpellDamage(gold);
+        const echo = pendingMagicAction.echoMultiplier ?? 1;
+        const totalDamage = getSpellDamage(goldRef.current) * echo;
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
@@ -12133,7 +12135,7 @@ export default function GameBoard() {
         const healed = healHero(totalDamage);
         const healText = healed > 0 ? `，恢复 ${healed} 点生命` : '';
         finalizeMagicCard(pendingMagicAction.card, {
-          banner: `血债清算造成 ${totalDamage} 点伤害${healText}！`,
+          banner: `血债清算造成 ${totalDamage} 点伤害${healText}！${echo > 1 ? '（回响×2）' : ''}`,
         });
         return;
       }
@@ -12216,15 +12218,21 @@ export default function GameBoard() {
 
     },
     [
+      activeCards,
+      addGameLog,
+      addPermanentMagicToRecycleBag,
       beginCombat,
+      chaosStrikeRemovedExactlyOneLayer,
       dealDamageToMonster,
       drawCardsFromBackpack,
       finalizeMagicCard,
       getSpellDamage,
+      healHero,
       hp,
       isMonsterEngaged,
       maxHp,
       pendingMagicAction,
+      removeCard,
       setHeroSkillBanner,
     ],
   );
@@ -12802,9 +12810,15 @@ export default function GameBoard() {
             resetDragState();
             return;
           }
+          if (card.isCurse) {
+            applyDamage(3);
+            addGameLog('magic', `弃置「${card.name}」回到回收袋（血咒吸取了 3 点生命）。`);
+            setHeroSkillBanner(`${card.name} 已弃置回回收袋，失去 3 点生命。`);
+          } else {
+            addGameLog('magic', `弃置「${card.name}」回到回收袋。`);
+            setHeroSkillBanner(`${card.name} 已弃置回回收袋。`);
+          }
           discardCardToGraveyard(card, { owner: 'player' });
-          addGameLog('magic', `弃置「${card.name}」回到回收袋。`);
-          setHeroSkillBanner(`${card.name} 已弃置回回收袋。`);
           resetDragState();
           return;
         }
@@ -14848,7 +14862,7 @@ export default function GameBoard() {
             shieldBlockAnimation={Boolean(shieldBlockStates.equipmentSlot1)}
             shieldBlockVariant={shieldBlockVariant.equipmentSlot1}
             isExhaustedThisTurn={
-              engagedMonsters.length > 0 &&
+              engagedMonsters.some(m => !monsterDefeatStates[m.id]) &&
               combatState.heroAttacksThisTurn.equipmentSlot1 &&
               extraAttackCharges <= 0 &&
               (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot1))
@@ -14968,7 +14982,7 @@ export default function GameBoard() {
             shieldBlockAnimation={Boolean(shieldBlockStates.equipmentSlot2)}
             shieldBlockVariant={shieldBlockVariant.equipmentSlot2}
             isExhaustedThisTurn={
-              engagedMonsters.length > 0 &&
+              engagedMonsters.some(m => !monsterDefeatStates[m.id]) &&
               combatState.heroAttacksThisTurn.equipmentSlot2 &&
               extraAttackCharges <= 0 &&
               (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot2))

@@ -196,6 +196,7 @@ export type PendingMagicAction =
       card: GameCardData;
       effect: 'blood-reckoning';
       step: 'monster-select';
+      echoMultiplier?: number;
       prompt: string;
     }
   | {
