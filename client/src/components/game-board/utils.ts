@@ -1003,7 +1003,7 @@ export function createStarterBackpack(): GameCardData[] {
       image: skillScrollImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，置于牌堆底（不打乱牌堆）。',
-      description: '将一张地城卡牌放到牌堆最底部，不改变其余牌的顺序。',
+      description: '将一张地城卡牌放到牌堆最底部。',
       recycleDelay: 2,
     },
     {

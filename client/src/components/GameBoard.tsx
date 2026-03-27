@@ -1478,8 +1478,7 @@ function createStarterBackpack(): GameCardData[] {
       image: skillScrollImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：弃 1 张手牌到回收袋，从背包抽 1 张牌。',
-      description:
-        '弃置 1 张手牌到回收袋，从背包抽取 1 张新牌。回收袋中的牌将在下次瀑流时回到背包（与「哥布林的戏法」相同）。',
+      description: '弃置 1 张手牌到回收袋，从背包抽取 1 张新牌。',
     },
     {
       id: STARTER_CARD_IDS.reshuffle,
@@ -1489,7 +1488,7 @@ function createStarterBackpack(): GameCardData[] {
       image: skillScrollImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，置于牌堆底（不打乱牌堆）。',
-      description: '将一张地城卡牌放到牌堆最底部，不改变其余牌的顺序。',
+      description: '将一张地城卡牌放到牌堆最底部。',
       recycleDelay: 2,
     },
     {
@@ -3757,24 +3756,6 @@ export default function GameBoard() {
     };
   };
 
-  const runShieldReflectBossRetaliationSequence = async (
-    m: GameCardData,
-    rawReflectDmg: number,
-    sourceName: string,
-    slotId: EquipmentSlotId,
-  ) => {
-    if (rawReflectDmg <= 0) return;
-    await new Promise<void>(r => setTimeout(r, COMBAT_BLOCK_TO_REFLECT_MS));
-    triggerShieldReflectAnimation(slotId);
-    await new Promise<void>(r => setTimeout(r, SHIELD_REFLECT_ANIM_MS));
-    const outcome = applyShieldReflectDamage(m, rawReflectDmg, sourceName);
-    if (outcome.shouldApplyBossRetaliation && outcome.bossRetaliationDamage > 0) {
-      triggerBossRetaliationAnimation();
-      await new Promise<void>(r => setTimeout(r, BOSS_RETALIATION_ANIM_MS));
-      applyBossRetaliationDamage(outcome.bossName, outcome.bossRetaliationDamage);
-    }
-  };
-
   const applyDiscardShockHit = useCallback(
     (flight: DiscardShockFlight) => {
       const row = activeCardsLatestRef.current;
@@ -3959,6 +3940,151 @@ export default function GameBoard() {
     },
     [amuletSlots, startDiscardShockFlightAnimation],
   );
+
+  const updateDirectedCombatFxFlightAnimation = useCallback((timestamp: number) => {
+    const flights = directedCombatFxFlightsRef.current;
+    if (!flights.length) {
+      directedCombatFxFlightAnimationRef.current = null;
+      return;
+    }
+    for (let i = 0; i < flights.length; i++) {
+      const flight = flights[i];
+      const elapsed = timestamp - flight.startTime;
+      const progress = elapsed < 0 ? 0 : clamp(elapsed / flight.duration);
+      flight.progress = progress;
+      const projectileSize =
+        flight.kind === 'shield-reflect'
+          ? DIRECTED_REFLECT_PROJECTILE_SIZE
+          : DIRECTED_RETALIATION_PROJECTILE_SIZE;
+      const el = directedCombatFxElementMapRef.current.get(flight.id);
+      if (el) {
+        const eased = easeInOutCubic(clamp(progress));
+        const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
+        const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
+        const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
+        const y = linearY - arcOffset;
+        const scale = 0.78 + eased * 0.35;
+        const fadeIn = eased < 0.08 ? clamp(eased / 0.08) : 1;
+        const fadeOut = eased > 0.88 ? clamp(1 - (eased - 0.88) / 0.12) : 1;
+        el.style.transform = `translate(${x - projectileSize / 2}px, ${y - projectileSize / 2}px) scale(${scale})`;
+        el.style.opacity = String(fadeIn * fadeOut);
+      }
+    }
+    const remaining = flights.filter(f => f.progress < 1);
+    if (remaining.length !== flights.length) {
+      directedCombatFxFlightsRef.current = remaining;
+      setDirectedCombatFxFlights(remaining);
+    }
+    if (remaining.length > 0) {
+      directedCombatFxFlightAnimationRef.current = window.requestAnimationFrame(updateDirectedCombatFxFlightAnimation);
+    } else {
+      directedCombatFxFlightAnimationRef.current = null;
+    }
+  }, []);
+
+  const startDirectedCombatFxFlightAnimation = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (directedCombatFxFlightAnimationRef.current !== null) return;
+    directedCombatFxFlightAnimationRef.current = window.requestAnimationFrame(updateDirectedCombatFxFlightAnimation);
+  }, [updateDirectedCombatFxFlightAnimation]);
+
+  const tryStartShieldReflectDirectedFx = useCallback(
+    (slotId: EquipmentSlotId, monsterId: string): boolean => {
+      if (typeof window === 'undefined') return false;
+      const surfaceEl = gameSurfaceRef.current;
+      const equipIdx =
+        slotId === 'equipmentSlot1' ? HERO_ROW_EQUIPMENT_1_INDEX : HERO_ROW_EQUIPMENT_2_INDEX;
+      const equipCell = heroRowCellRefs.current[equipIdx];
+      const monsterCell = monsterCellRefs.current[monsterId];
+      if (!surfaceEl || !equipCell || !monsterCell) {
+        return false;
+      }
+      const surfaceRect = surfaceEl.getBoundingClientRect();
+      const startRect = equipCell.getBoundingClientRect();
+      const endRect = monsterCell.getBoundingClientRect();
+      const baseTime = performance.now();
+      const start: Point = {
+        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 8,
+        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 8,
+      };
+      const end: Point = {
+        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 12,
+        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 12,
+      };
+      const flight: DirectedCombatFxFlight = {
+        id: `shield-reflect-${monsterId}-${baseTime}`,
+        kind: 'shield-reflect',
+        start,
+        end,
+        startTime: baseTime,
+        duration: Math.max(380, SHIELD_REFLECT_ANIM_MS - 80 + Math.random() * 60),
+        progress: 0,
+        arcHeight: 32 + Math.random() * 48,
+      };
+      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
+      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
+      startDirectedCombatFxFlightAnimation();
+      return true;
+    },
+    [startDirectedCombatFxFlightAnimation],
+  );
+
+  const tryStartBossRetaliationDirectedFx = useCallback(
+    (monsterId: string): boolean => {
+      if (typeof window === 'undefined') return false;
+      const surfaceEl = gameSurfaceRef.current;
+      const monsterCell = monsterCellRefs.current[monsterId];
+      const heroCell = heroRowCellRefs.current[HERO_ROW_HERO_INDEX];
+      if (!surfaceEl || !monsterCell || !heroCell) {
+        return false;
+      }
+      const surfaceRect = surfaceEl.getBoundingClientRect();
+      const startRect = monsterCell.getBoundingClientRect();
+      const endRect = heroCell.getBoundingClientRect();
+      const baseTime = performance.now();
+      const start: Point = {
+        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
+        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
+      };
+      const end: Point = {
+        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
+        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
+      };
+      const flight: DirectedCombatFxFlight = {
+        id: `boss-retaliation-${monsterId}-${baseTime}`,
+        kind: 'boss-retaliation',
+        start,
+        end,
+        startTime: baseTime,
+        duration: Math.max(360, BOSS_RETALIATION_ANIM_MS - 80 + Math.random() * 50),
+        progress: 0,
+        arcHeight: 36 + Math.random() * 52,
+      };
+      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
+      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
+      startDirectedCombatFxFlightAnimation();
+      return true;
+    },
+    [startDirectedCombatFxFlightAnimation],
+  );
+
+  const runShieldReflectBossRetaliationSequence = async (
+    m: GameCardData,
+    rawReflectDmg: number,
+    sourceName: string,
+    slotId: EquipmentSlotId,
+  ) => {
+    if (rawReflectDmg <= 0) return;
+    await new Promise<void>(r => setTimeout(r, COMBAT_BLOCK_TO_REFLECT_MS));
+    tryStartShieldReflectDirectedFx(slotId, m.id);
+    await new Promise<void>(r => setTimeout(r, SHIELD_REFLECT_ANIM_MS));
+    const outcome = applyShieldReflectDamage(m, rawReflectDmg, sourceName);
+    if (outcome.shouldApplyBossRetaliation && outcome.bossRetaliationDamage > 0) {
+      tryStartBossRetaliationDirectedFx(m.id);
+      await new Promise<void>(r => setTimeout(r, BOSS_RETALIATION_ANIM_MS));
+      applyBossRetaliationDamage(outcome.bossName, outcome.bossRetaliationDamage);
+    }
+  };
 
   const flushDiscardShockQueue = useCallback(() => {
     const bumpLock = () => {
@@ -7490,6 +7616,10 @@ export default function GameBoard() {
       addGameLog('skill', '开局加成：获得小随从');
     }
     if (skillId === 'shield-wall') {
+      const thunderSeal = classDeck.find(
+        c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap',
+      );
+
       const starterShield: GameCardData = {
         id: STARTER_CARD_IDS.shieldWallStarter,
         type: 'shield',
@@ -7506,9 +7636,18 @@ export default function GameBoard() {
         }
         return next;
       });
+
+      if (thunderSeal) {
+        setClassDeck(prev => prev.filter(c => c.id !== thunderSeal.id));
+        addCardToBackpack(thunderSeal);
+        triggerClassDeckFlight([thunderSeal]);
+      }
+
       addGameLog(
         'skill',
-        '铁壁之心：已移除「战斗鼓舞」；「新手短剑」已替换为 2 护甲、2 耐久的护盾',
+        thunderSeal
+          ? '铁壁之心：已移除「战斗鼓舞」；「新手短剑」已替换为 2 护甲、2 耐久的护盾；已从职业牌堆将「雷霆符印」放入背包。'
+          : '铁壁之心：已移除「战斗鼓舞」；「新手短剑」已替换为 2 护甲、2 耐久的护盾。',
       );
     }
   };

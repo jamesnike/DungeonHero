@@ -45,8 +45,8 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'durability-for-blood',
     name: '血换钢魂',
-    description: '献出生命，为装备注入额外耐久。',
-    effect: '失去 1 生命，选已装备槽 +1 耐久（不超上限）。',
+    description: '失去 1 生命，恢复1点装备耐久。',
+    effect: '失去 1 生命，恢复1点装备耐久。',
     type: 'active',
     requiresTarget: 'slot',
     buttonLabel: '献血修复',
@@ -155,8 +155,8 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'summon-minion',
     name: '随从召唤',
-    description: '召唤一只忠诚的小随从并肩作战。',
-    effect: '被动：开局获得随从卡（1攻1防4耐久，可装备）。每击杀一只怪物，随从攻击 +1、防御 +1。',
+    description: '被动：开局获得小随从 (每次击杀怪物，小随从攻击 +1、防御 +1)',
+    effect: '被动：开局获得小随从 (每次击杀怪物，小随从攻击 +1、防御 +1)',
     type: 'passive',
     requiresTarget: null,
   },
