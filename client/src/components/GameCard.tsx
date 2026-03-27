@@ -535,7 +535,7 @@ const amuletEffectText =
     if (!hasCornerDeco) return '';
     switch (card.type) {
       case 'monster':
-        return 'border-red-400/45';
+        return 'border-red-300/30';
       case 'weapon':
         return 'border-amber-500/40';
       case 'shield':
@@ -557,7 +557,7 @@ const amuletEffectText =
     }
     switch (card.type) {
       case 'monster':
-        return 'bg-red-200/30';
+        return 'bg-red-50/45';
       case 'weapon':
         return 'bg-amber-200/30';
       case 'shield':
@@ -574,7 +574,7 @@ const amuletEffectText =
       case 'potion':
         return 'bg-emerald-200/30';
       case 'monster':
-        return 'bg-red-200/30';
+        return 'bg-red-50/45';
       case 'weapon':
         return 'bg-amber-200/30';
       case 'shield':

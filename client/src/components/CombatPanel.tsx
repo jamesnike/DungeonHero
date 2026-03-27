@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Shield, Swords, Minimize2, Maximize2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 
 type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
@@ -15,6 +16,8 @@ interface CombatPanelProps {
   pendingBlock: { monsterId: string; attackValue: number; monsterName: string } | null;
   monsterAttackQueue: string[];
   onEndHeroTurn: () => void;
+  /** 弃牌雷击等序列进行中时禁用结束回合 */
+  endHeroTurnDisabled?: boolean;
   equipmentSlot1: (GameCardData & { type: 'weapon' | 'shield' | 'monster' }) | null;
   equipmentSlot2: (GameCardData & { type: 'weapon' | 'shield' | 'monster' }) | null;
   stageScale?: number;
@@ -40,6 +43,7 @@ export default function CombatPanel({
   pendingBlock,
   monsterAttackQueue,
   onEndHeroTurn,
+  endHeroTurnDisabled = false,
   equipmentSlot1,
   equipmentSlot2,
   stageScale = 1,
@@ -48,12 +52,26 @@ export default function CombatPanel({
   minimized,
   onMinimizedChange,
 }: CombatPanelProps) {
+  const gameViewport = useGameViewport();
   const [panelScale, setPanelScale] = useState(1);
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!isActive || engagedMonsters.length === 0) {
       return;
     }
+    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+    // Minimized strip is narrow; measuring it undervalues scale. Use same width heuristic as GameBoard combat wrapper.
+    if (minimized) {
+      const scaledMin = 135 * stageScale;
+      const scaledMax = 170 * stageScale;
+      const vwPart = (11 * stageScale * gameViewport.width) / 100;
+      const targetWidth = Math.min(Math.max(scaledMin, vwPart), scaledMax);
+      const next = clamp(targetWidth / BASE_PANEL_WIDTH, MEASURED_PANEL_MIN, MEASURED_PANEL_MAX);
+      setPanelScale(prev => (Math.abs(prev - next) > 0.01 ? next : prev));
+      return;
+    }
+
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
@@ -61,7 +79,6 @@ export default function CombatPanel({
     if (!target) {
       return;
     }
-    const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const updateScale = () => {
       const width = target.getBoundingClientRect().width;
       if (!width) return;
@@ -74,7 +91,7 @@ export default function CombatPanel({
     const observer = new ResizeObserver(updateScale);
     observer.observe(target);
     return () => observer.disconnect();
-  }, [isActive, engagedMonsters.length]);
+  }, [isActive, engagedMonsters.length, minimized, stageScale, gameViewport.width]);
 
   if (!isActive || engagedMonsters.length === 0) {
     return null;
@@ -188,6 +205,7 @@ export default function CombatPanel({
             <Button
               size="sm"
               className="combat-panel__button flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md"
+              disabled={endHeroTurnDisabled}
               onClick={(e) => { e.stopPropagation(); onEndHeroTurn(); }}
             >
               End Hero Turn
@@ -298,6 +316,7 @@ export default function CombatPanel({
                 <Button
                   size="sm"
                   className="px-2 py-1 combat-panel__button bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md"
+                  disabled={endHeroTurnDisabled}
                   onClick={onEndHeroTurn}
                 >
                   End Hero Turn

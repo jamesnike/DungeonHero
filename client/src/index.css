@@ -745,9 +745,9 @@
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(145deg, rgba(248, 113, 113, 0.2), rgba(190, 24, 93, 0.25));
-    box-shadow: inset 0 0 25px rgba(190, 24, 93, 0.35);
-    opacity: 0.85;
+    background: linear-gradient(145deg, rgba(220, 38, 38, 0.42), rgba(127, 29, 29, 0.5));
+    box-shadow: inset 0 0 32px rgba(69, 10, 10, 0.55);
+    opacity: 0.94;
     pointer-events: none;
     mix-blend-mode: multiply;
     z-index: 5;
@@ -755,7 +755,7 @@
   }
 
   .engaged-monster:hover .shadcn-card::after {
-    opacity: 0.95;
+    opacity: 1;
   }
 
 .monster-target-highlight {
@@ -1026,14 +1026,14 @@
 
   .dh-card-deco--monster::before {
     top: 3px; left: 3px;
-    border-top: 2px solid rgba(248, 113, 113, 0.58);
-    border-left: 2px solid rgba(248, 113, 113, 0.58);
+    border-top: 2px solid rgba(248, 113, 113, 0.38);
+    border-left: 2px solid rgba(248, 113, 113, 0.38);
     border-top-left-radius: 4px;
   }
   .dh-card-deco--monster::after {
     bottom: 3px; right: 3px;
-    border-bottom: 2px solid rgba(248, 113, 113, 0.58);
-    border-right: 2px solid rgba(248, 113, 113, 0.58);
+    border-bottom: 2px solid rgba(248, 113, 113, 0.38);
+    border-right: 2px solid rgba(248, 113, 113, 0.38);
     border-bottom-right-radius: 4px;
   }
 

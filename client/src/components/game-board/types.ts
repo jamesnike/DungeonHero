@@ -129,6 +129,8 @@ export type MonsterRewardOption = {
 export type MonsterRewardDrop = {
   monsterName: string;
   options: MonsterRewardOption[];
+  /** Same as GameCardData.id; used to dedupe rewards when defeat fires twice (e.g. double discard-zap). */
+  monsterInstanceId?: string;
 };
 
 export type DungeonDropAssignment = {
@@ -315,6 +317,23 @@ export type BackpackHandFlight = {
   progress: number;
   arcHeight: number;
   delivered?: boolean;
+};
+
+/** 雷霆符印：从护符栏飞向目标怪物的投射物动画 */
+export type DiscardShockFlight = {
+  id: string;
+  targetMonsterId: string;
+  start: Point;
+  end: Point;
+  startTime: number;
+  duration: number;
+  progress: number;
+  arcHeight: number;
+  delivered?: boolean;
+  damage: number;
+  pulses: number;
+  projectileImage?: string;
+  showBanner: boolean;
 };
 
 export type PendingHandInsertion = {

@@ -78,6 +78,7 @@ import type {
   BackpackDrawRequest,
   BackpackHandFlight,
   BlockTarget,
+  DiscardShockFlight,
   CardActionContext,
   ClassDeckFlight,
   CombatInitiator,
@@ -243,8 +244,14 @@ const logBackpackDraw = (tag: string, payload?: unknown) => {
 };
 const DUNGEON_COLUMNS = Array.from({ length: DUNGEON_COLUMN_COUNT }, (_, index) => index);
 const BASE_BACKPACK_CAPACITY = 10;
+const HERO_ROW_AMULET_INDEX = 0;
 const HERO_ROW_BACKPACK_INDEX = 4;
 const HERO_ROW_CLASS_DECK_INDEX = 5;
+const DISCARD_SHOCK_FLIGHT_BASE_DURATION = 520;
+const DISCARD_SHOCK_FLIGHT_VARIANCE = 140;
+const DISCARD_SHOCK_ARC_MIN = 36;
+const DISCARD_SHOCK_ARC_VARIANCE = 52;
+const DISCARD_SHOCK_PROJECTILE_SIZE = 56;
 const BALANCE_ATTACK_BONUS = 3;
 const BALANCE_SHIELD_BONUS = 3;
 const BALANCE_ATTACK_PENALTY = 1;
@@ -782,7 +789,7 @@ function createDeck(): GameCardData[] {
       value: 5,
       image: potionBackpackDrawImage,
       potionEffect: 'draw-backpack-4',
-      description: '从背包顶部抽最多4张牌到手牌，背包上限+1，手牌上限+1。',
+      description: '从背包随机抽最多4张牌到手牌；手牌上限+1后若仍有空位，再抽1张。背包容量+1。',
     },
     {
       type: 'potion',
@@ -926,7 +933,7 @@ function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '获得被动技能：之后每次瀑流计数增加时，左右装备栏永久护甲各 +1。'
+    magicEffect: '获得被动技能：之后每次瀑流计数增加时，随机一侧装备栏永久护甲 +1。'
   });
 
   deck.push({
@@ -1305,7 +1312,7 @@ function createDeck(): GameCardData[] {
         value: 0,
         image: eventScrollImage,
         isPermanentEvent: true,
-        description: '永驻型事件。出场或换位时获得一次释放机会：右侧为药水/武器/护盾则摧毁；右侧为怪物则激怒，打掉 1 层血并将下一层打到仅剩 1 血；右侧无牌则随机弃一张手牌。可手动拖入回收袋。',
+        description: '永驻型事件。从手牌打出时失去 5 点生命。出场或换位时获得一次释放机会：右侧为药水/武器/护盾则摧毁；右侧为怪物则激怒，打掉 1 层血并将下一层打到仅剩 1 血；右侧无牌则随机弃一张手牌。可手动拖入回收袋。',
         eventChoices: [
           { text: '释放命运之刃', hint: '对右侧相邻卡牌造成效果', effect: 'fate-dice-strike' },
         ],
@@ -1480,6 +1487,10 @@ export default function GameBoard() {
   const [undoCount, setUndoCount] = useState(() => undoStackRef.current.length);
   const undoGuardRef = useRef(false);
   const [amuletSlots, setAmuletSlots] = useState<AmuletItem[]>([]);
+  const amuletSlotsRef = useRef<AmuletItem[]>(amuletSlots);
+  useLayoutEffect(() => {
+    amuletSlotsRef.current = amuletSlots;
+  }, [amuletSlots]);
   const amuletEffects = useMemo<ActiveAmuletEffects>(() => {
     return amuletSlots.reduce<ActiveAmuletEffects>((state, slot) => {
       if (!slot) {
@@ -1828,6 +1839,22 @@ export default function GameBoard() {
   const backpackHandFlightsRef = useRef<BackpackHandFlight[]>([]);
   const backpackHandFlightAnimationRef = useRef<number | null>(null);
   const backpackFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [discardShockFlights, setDiscardShockFlights] = useState<DiscardShockFlight[]>([]);
+  /** 弃牌雷击队列/弹道未结束时禁止玩家操作 */
+  const [discardShockInteractionLocked, setDiscardShockInteractionLocked] = useState(false);
+  const discardShockInteractionLockedRef = useRef(false);
+  discardShockInteractionLockedRef.current = discardShockInteractionLocked;
+  const discardShockFlightsRef = useRef<DiscardShockFlight[]>([]);
+  const discardShockFlightAnimationRef = useRef<number | null>(null);
+  const discardShockElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  /** 多次弃牌雷击：排队，上一发飞行完全结束后再发下一发 */
+  const discardShockProcQueueRef = useRef<{ showBanner: boolean }[]>([]);
+  const discardShockSeqInFlightRef = useRef(false);
+  const flushDiscardShockQueueRef = useRef<() => void>(() => {});
+  const applyDiscardShockHitRef = useRef<(flight: DiscardShockFlight) => void>(() => {});
+  const beginCombatRef = useRef<(monster: GameCardData, initiator: CombatInitiator) => void>(() => {});
+  const activeCardsLatestRef = useRef<ActiveRowSlots>(activeCards);
+  activeCardsLatestRef.current = activeCards;
   const backpackHandFlightFallbacksRef = useRef<Map<string, number>>(new Map());
   const pendingHandDeliveryGuardsRef = useRef<
     Map<string, { card: GameCardData; timeoutId: number | null }>
@@ -1842,6 +1869,7 @@ export default function GameBoard() {
   const processedDungeonCardIdsRef = useRef<Set<string>>(new Set());
   const heroTurnLayerLossIdsRef = useRef<Set<string>>(new Set());
   const pendingDefeatIdsRef = useRef<Set<string>>(new Set());
+  const monsterRewardQueuedInstanceIdsRef = useRef<Set<string>>(new Set());
   const [heroFramePosition, setHeroFramePosition] = useState<HeroFramePosition | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const lastPersistedStateRef = useRef<string | null>(null);
@@ -2287,6 +2315,8 @@ export default function GameBoard() {
   const [extraAttackCharges, setExtraAttackCharges] = useState(0);
   const [doubleNextMagic, setDoubleNextMagic] = useState(false);
   const [combatState, setCombatState] = useState<CombatState>(initialCombatState);
+  const engagedMonsterIdsRef = useRef<string[]>(initialCombatState.engagedMonsterIds);
+  engagedMonsterIdsRef.current = combatState.engagedMonsterIds;
   const [swordVectors, setSwordVectors] = useState<Record<string, SwordVector>>({});
   const [equipmentSlotBonuses, setEquipmentSlotBonuses] = useState<EquipmentSlotBonusState>(() => createEmptySlotBonusState());
   const [heroSkillUsedThisWave, setHeroSkillUsedThisWave] = useState(false);
@@ -2393,6 +2423,21 @@ export default function GameBoard() {
         cancelAnimationFrame(backpackHandFlightAnimationRef.current);
         backpackHandFlightAnimationRef.current = null;
       }
+      if (discardShockFlightAnimationRef.current !== null) {
+        cancelAnimationFrame(discardShockFlightAnimationRef.current);
+        discardShockFlightAnimationRef.current = null;
+      }
+
+      for (const flight of discardShockFlightsRef.current) {
+        if (!flight.delivered) {
+          applyDiscardShockHitRef.current(flight);
+        }
+      }
+      discardShockFlightsRef.current = [];
+      setDiscardShockFlights([]);
+      discardShockElementMapRef.current.clear();
+      discardShockProcQueueRef.current = [];
+      discardShockSeqInFlightRef.current = false;
 
       for (const flight of backpackHandFlightsRef.current) {
         if (!flight.delivered) {
@@ -3197,6 +3242,7 @@ export default function GameBoard() {
 
   const handleCardClick = useCallback(
     (card: GameCardData) => {
+      if (discardShockInteractionLockedRef.current) return;
       setSelectedCard(card);
       if (card.type === 'monster') {
         const preview = getMonsterRewardsPreview(card);
@@ -3257,6 +3303,16 @@ export default function GameBoard() {
       value: newValue,
       specialAttackBoost: newSpecialBoost,
     };
+  };
+
+  /** 与 damageMonster 一致：本次伤害是否恰好打掉 1 个血层（含击杀最后一层）。 */
+  const chaosStrikeRemovedExactlyOneLayer = (monster: GameCardData, rawDamage: number): boolean => {
+    if (rawDamage <= 0) return false;
+    if (!monster.maxHp || monster.hp == null) return false;
+    const layersBefore = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;
+    const preview = damageMonster(monster, rawDamage);
+    const layersAfter = preview.currentLayer ?? 0;
+    return layersBefore - layersAfter === 1;
   };
 
   const checkHollowSkeletonRestore = async (
@@ -3377,6 +3433,259 @@ export default function GameBoard() {
     }
   };
 
+  const applyDiscardShockHit = useCallback(
+    (flight: DiscardShockFlight) => {
+      const row = activeCardsLatestRef.current;
+      const monster = flattenActiveRowSlots(row).find(
+        (c): c is GameCardData =>
+          Boolean(c && c.type === 'monster' && c.id === flight.targetMonsterId),
+      );
+      if (!monster) {
+        return;
+      }
+      if (flight.damage > 0 && !engagedMonsterIdsRef.current.includes(monster.id)) {
+        beginCombatRef.current(monster, 'hero');
+      }
+      undoStackRef.current = [];
+      setUndoCount(0);
+      clearUndoStorage();
+      addGameLog('amulet', `弃牌雷击对 ${monster.name} 造成 ${flight.damage} 点伤害`);
+      dealDamageToMonster(monster, flight.damage, { pulses: flight.pulses });
+      if (flight.showBanner) {
+        setHeroSkillBanner(`${monster.name} 被弃牌雷击击中，受到 ${flight.damage} 点伤害。`);
+      }
+    },
+    [addGameLog, clearUndoStorage, dealDamageToMonster, setHeroSkillBanner],
+  );
+  applyDiscardShockHitRef.current = applyDiscardShockHit;
+
+  const syncDiscardShockInteractionLock = useCallback(() => {
+    const busy =
+      discardShockProcQueueRef.current.length > 0 ||
+      discardShockSeqInFlightRef.current ||
+      discardShockFlightsRef.current.length > 0;
+    setDiscardShockInteractionLocked(busy);
+  }, []);
+
+  const syncDiscardShockInteractionLockRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    syncDiscardShockInteractionLockRef.current = syncDiscardShockInteractionLock;
+  }, [syncDiscardShockInteractionLock]);
+
+  const updateDiscardShockFlightAnimation = useCallback(
+    (timestamp: number) => {
+      const flights = discardShockFlightsRef.current;
+      if (!flights.length) {
+        discardShockFlightAnimationRef.current = null;
+        syncDiscardShockInteractionLockRef.current();
+        return;
+      }
+
+      let hasActive = false;
+      const toHit: DiscardShockFlight[] = [];
+      let hasCompleted = false;
+      const projectileSize = DISCARD_SHOCK_PROJECTILE_SIZE;
+
+      for (let i = 0; i < flights.length; i++) {
+        const flight = flights[i];
+        const elapsed = timestamp - flight.startTime;
+        let progress: number;
+        if (elapsed < 0) {
+          hasActive = true;
+          progress = 0;
+        } else {
+          progress = clamp(elapsed / flight.duration);
+        }
+        flight.progress = progress;
+        if (progress < 1) {
+          hasActive = true;
+          if (!flight.delivered && progress >= 0.88) {
+            toHit.push(flight);
+            flight.delivered = true;
+          }
+        } else {
+          if (!flight.delivered) {
+            toHit.push(flight);
+            flight.delivered = true;
+          }
+          hasCompleted = true;
+        }
+
+        const el = discardShockElementMapRef.current.get(flight.id);
+        if (el) {
+          const eased = easeInOutCubic(clamp(progress));
+          const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
+          const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
+          const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
+          const y = linearY - arcOffset;
+          const scale = 0.78 + eased * 0.35;
+          const fadeIn = eased < 0.08 ? clamp(eased / 0.08) : 1;
+          const fadeOut = eased > 0.88 ? clamp(1 - (eased - 0.88) / 0.12) : 1;
+          el.style.transform = `translate(${x - projectileSize / 2}px, ${y - projectileSize / 2}px) scale(${scale})`;
+          el.style.opacity = String(fadeIn * fadeOut);
+        }
+      }
+
+      toHit.forEach(f => applyDiscardShockHit(f));
+
+      if (hasCompleted) {
+        const prevLen = flights.length;
+        const remaining = flights.filter(f => f.progress < 1);
+        discardShockFlightsRef.current = remaining;
+        setDiscardShockFlights(remaining);
+        if (remaining.length < prevLen) {
+          discardShockSeqInFlightRef.current = false;
+          queueMicrotask(() => {
+            flushDiscardShockQueueRef.current();
+            syncDiscardShockInteractionLockRef.current();
+          });
+        }
+      }
+
+      if (hasActive && discardShockFlightsRef.current.length > 0) {
+        discardShockFlightAnimationRef.current = window.requestAnimationFrame(updateDiscardShockFlightAnimation);
+      } else {
+        discardShockFlightAnimationRef.current = null;
+        syncDiscardShockInteractionLockRef.current();
+      }
+    },
+    [applyDiscardShockHit],
+  );
+
+  const startDiscardShockFlightAnimation = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (discardShockFlightAnimationRef.current !== null) return;
+    discardShockFlightAnimationRef.current = window.requestAnimationFrame(updateDiscardShockFlightAnimation);
+  }, [updateDiscardShockFlightAnimation]);
+
+  const tryStartDiscardShockFlight = useCallback(
+    (targetMonsterId: string, damage: number, pulses: number, showBanner: boolean): boolean => {
+      if (typeof window === 'undefined') return false;
+      const surfaceEl = gameSurfaceRef.current;
+      const amuletCell = heroRowCellRefs.current[HERO_ROW_AMULET_INDEX];
+      const monsterCell = monsterCellRefs.current[targetMonsterId];
+      if (!surfaceEl || !amuletCell || !monsterCell) {
+        return false;
+      }
+      const surfaceRect = surfaceEl.getBoundingClientRect();
+      const amuletRect = amuletCell.getBoundingClientRect();
+      const monsterRect = monsterCell.getBoundingClientRect();
+      const baseTime = performance.now();
+      const start: Point = {
+        x:
+          amuletRect.left +
+          amuletRect.width / 2 -
+          surfaceRect.left +
+          (Math.random() - 0.5) * 10,
+        y:
+          amuletRect.top +
+          amuletRect.height / 2 -
+          surfaceRect.top +
+          (Math.random() - 0.5) * 8,
+      };
+      const end: Point = {
+        x:
+          monsterRect.left +
+          monsterRect.width / 2 -
+          surfaceRect.left +
+          (Math.random() - 0.5) * 14,
+        y:
+          monsterRect.top +
+          monsterRect.height / 2 -
+          surfaceRect.top +
+          (Math.random() - 0.5) * 14,
+      };
+      const zapAmulet = amuletSlots.find(a => a.amuletEffect === 'discard-zap');
+      const flight: DiscardShockFlight = {
+        id: `discard-shock-${targetMonsterId}-${baseTime}`,
+        targetMonsterId,
+        start,
+        end,
+        startTime: baseTime,
+        duration: DISCARD_SHOCK_FLIGHT_BASE_DURATION + Math.random() * DISCARD_SHOCK_FLIGHT_VARIANCE,
+        progress: 0,
+        arcHeight: DISCARD_SHOCK_ARC_MIN + Math.random() * DISCARD_SHOCK_ARC_VARIANCE,
+        damage,
+        pulses,
+        projectileImage: zapAmulet?.image,
+        showBanner,
+      };
+      discardShockFlightsRef.current = [...discardShockFlightsRef.current, flight];
+      setDiscardShockFlights(discardShockFlightsRef.current);
+      startDiscardShockFlightAnimation();
+      return true;
+    },
+    [amuletSlots, startDiscardShockFlightAnimation],
+  );
+
+  const flushDiscardShockQueue = useCallback(() => {
+    const bumpLock = () => {
+      syncDiscardShockInteractionLockRef.current();
+    };
+    if (discardShockSeqInFlightRef.current) {
+      bumpLock();
+      return;
+    }
+    const queue = discardShockProcQueueRef.current;
+    if (queue.length === 0) {
+      bumpLock();
+      return;
+    }
+
+    if (!amuletSlotsRef.current.some(s => s?.amuletEffect === 'discard-zap')) {
+      discardShockProcQueueRef.current = [];
+      bumpLock();
+      return;
+    }
+    const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
+      (c): c is GameCardData => Boolean(c && c.type === 'monster'),
+    );
+    if (monsters.length === 0) {
+      discardShockProcQueueRef.current = [];
+      bumpLock();
+      return;
+    }
+
+    const { showBanner } = queue.shift()!;
+    const target = monsters[Math.floor(Math.random() * monsters.length)];
+    const dmg = Math.max(0, 1 + permanentSpellDamageBonus);
+
+    discardShockSeqInFlightRef.current = true;
+    const started = tryStartDiscardShockFlight(target.id, dmg, 2, showBanner);
+    if (!started) {
+      discardShockSeqInFlightRef.current = false;
+      undoStackRef.current = [];
+      setUndoCount(0);
+      clearUndoStorage();
+      if (dmg > 0 && !engagedMonsterIdsRef.current.includes(target.id)) {
+        beginCombatRef.current(target, 'hero');
+      }
+      addGameLog('amulet', `弃牌雷击对 ${target.name} 造成 ${dmg} 点伤害`);
+      dealDamageToMonster(target, dmg, { pulses: 2 });
+      if (showBanner) {
+        setHeroSkillBanner(`${target.name} 被弃牌雷击击中，受到 ${dmg} 点伤害。`);
+      }
+      queueMicrotask(() => {
+        flushDiscardShockQueueRef.current();
+        syncDiscardShockInteractionLockRef.current();
+      });
+    } else {
+      bumpLock();
+    }
+  }, [
+    addGameLog,
+    clearUndoStorage,
+    dealDamageToMonster,
+    permanentSpellDamageBonus,
+    setHeroSkillBanner,
+    setUndoCount,
+    tryStartDiscardShockFlight,
+  ]);
+
+  useLayoutEffect(() => {
+    flushDiscardShockQueueRef.current = flushDiscardShockQueue;
+  }, [flushDiscardShockQueue]);
+
   const dragonBleedDestroyEquipment = (monsterName: string, remainingLayers: number) => {
     const destroySlot = (slotId: 'equipmentSlot1' | 'equipmentSlot2', item: EquipmentItem | null) => {
       if (!item) return false;
@@ -3398,37 +3707,33 @@ export default function GameBoard() {
   };
 
   const triggerDiscardShock = useCallback(() => {
-    if (!amuletEffects.hasDiscardShock) {
+    if (!amuletSlotsRef.current.some(s => s?.amuletEffect === 'discard-zap')) {
       return;
     }
-    const monsters = flattenActiveRowSlots(activeCards).filter(card => card.type === 'monster');
+    const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
+      (c): c is GameCardData => Boolean(c && c.type === 'monster'),
+    );
     if (monsters.length === 0) {
       return;
     }
-    const target = monsters[Math.floor(Math.random() * monsters.length)];
-    if (!target) {
-      return;
-    }
-    undoStackRef.current = [];
-    setUndoCount(0);
-    clearUndoStorage();
-    const dmg = Math.max(0, 1 + permanentSpellDamageBonus);
-    addGameLog('amulet', `弃牌雷击对 ${target.name} 造成 ${dmg} 点伤害`);
-    dealDamageToMonster(target, dmg, { pulses: 2 });
-    if (!pendingHeroSkillAction && !pendingMagicAction && !pendingPotionAction) {
-      setHeroSkillBanner(`${target.name} 被弃牌雷击击中，受到 ${dmg} 点伤害。`);
-    }
-  }, [
-    activeCards,
-    addGameLog,
-    amuletEffects.hasDiscardShock,
-    dealDamageToMonster,
-    permanentSpellDamageBonus,
-    pendingHeroSkillAction,
-    pendingMagicAction,
-    pendingPotionAction,
-    setHeroSkillBanner,
-  ]);
+    const showBanner =
+      !pendingHeroSkillAction && !pendingMagicAction && !pendingPotionAction;
+    discardShockProcQueueRef.current.push({ showBanner });
+    flushDiscardShockQueueRef.current();
+    syncDiscardShockInteractionLockRef.current();
+  }, [pendingHeroSkillAction, pendingMagicAction, pendingPotionAction]);
+
+  const syncMonsterRewardQueuedInstanceIdsRef = useCallback(
+    (queue: MonsterRewardDrop[], active: MonsterRewardDrop | null) => {
+      const next = new Set<string>();
+      (queue ?? []).forEach(d => {
+        if (d.monsterInstanceId) next.add(d.monsterInstanceId);
+      });
+      if (active?.monsterInstanceId) next.add(active.monsterInstanceId);
+      monsterRewardQueuedInstanceIdsRef.current = next;
+    },
+    [],
+  );
 
   const queueMonsterReward = useCallback(
     (monster: GameCardData) => {
@@ -3436,9 +3741,17 @@ export default function GameBoard() {
       if (!options.length) {
         return;
       }
+      const mid = monster.id;
+      if (mid && monsterRewardQueuedInstanceIdsRef.current.has(mid)) {
+        return;
+      }
+      if (mid) {
+        monsterRewardQueuedInstanceIdsRef.current.add(mid);
+      }
       setMonsterRewardQueue(prev => [
         ...prev,
         {
+          monsterInstanceId: mid,
           monsterName: monster.name ?? '神秘怪物',
           options,
         },
@@ -3879,6 +4192,7 @@ export default function GameBoard() {
       };
     });
   };
+  beginCombatRef.current = beginCombat;
 
   const applyHeroKillEffects = (monsterHp: number) => {
     if (vampiricNextAttack) {
@@ -4172,6 +4486,7 @@ export default function GameBoard() {
   };
 
   const endHeroTurn = () => {
+    if (discardShockInteractionLockedRef.current) return;
     pushUndoSnapshot();
     const engagedMonsters = getEngagedMonsterCards();
     if (engagedMonsters.length === 0) {
@@ -4234,6 +4549,9 @@ export default function GameBoard() {
 
   const resolveBlockChoice = async (target: BlockTarget) => {
     if (!combatState.pendingBlock) {
+      return;
+    }
+    if (discardShockInteractionLockedRef.current) {
       return;
     }
 
@@ -4558,9 +4876,16 @@ export default function GameBoard() {
           if (bonusGained > 0) {
             setEquipmentSlotBonuses(prev => ({
               ...prev,
-              equipmentSlot2: { ...prev.equipmentSlot2, damage: prev.equipmentSlot2.damage + bonusGained },
+              equipmentSlot1: {
+                ...prev.equipmentSlot1,
+                damage: prev.equipmentSlot1.damage + bonusGained,
+              },
+              equipmentSlot2: {
+                ...prev.equipmentSlot2,
+                damage: prev.equipmentSlot2.damage + bonusGained,
+              },
             }));
-            addGameLog('skill', `愈战愈勇：累计治疗触发，右装备栏永久伤害 +${bonusGained}`);
+            addGameLog('skill', `愈战愈勇：累计治疗触发，左右装备栏各永久伤害 +${bonusGained}`);
           }
         }
       }
@@ -5864,6 +6189,15 @@ export default function GameBoard() {
     backpackHandFlightsRef.current = [];
     backpackFlightElementMapRef.current.clear();
     setBackpackHandFlights([]);
+    if (discardShockFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
+      discardShockFlightAnimationRef.current = null;
+    }
+    discardShockFlightsRef.current = [];
+    discardShockElementMapRef.current.clear();
+    setDiscardShockFlights([]);
+    discardShockProcQueueRef.current = [];
+    discardShockSeqInFlightRef.current = false;
   }, [gameOver, clearAllBackpackHandFallbacks]);
 
   useEffect(() => {
@@ -5880,6 +6214,9 @@ export default function GameBoard() {
       }
       if (backpackHandFlightAnimationRef.current !== null) {
         window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
+      }
+      if (discardShockFlightAnimationRef.current !== null) {
+        window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
       }
     };
   }, []);
@@ -6147,6 +6484,15 @@ export default function GameBoard() {
       window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
       backpackHandFlightAnimationRef.current = null;
     }
+    setDiscardShockFlights([]);
+    discardShockFlightsRef.current = [];
+    discardShockElementMapRef.current.clear();
+    discardShockProcQueueRef.current = [];
+    discardShockSeqInFlightRef.current = false;
+    if (typeof window !== 'undefined' && discardShockFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
+      discardShockFlightAnimationRef.current = null;
+    }
     clearAllBackpackHandFallbacks();
     setBackpackViewerOpen(false);
     setHandCards([]);
@@ -6166,6 +6512,7 @@ export default function GameBoard() {
     setBerserkerSlotUsed({});
     setMonsterRewardQueue([]);
     setActiveMonsterReward(null);
+    monsterRewardQueuedInstanceIdsRef.current.clear();
     setTempShield(0);
     setEventModalOpen(false);
     setEventModalMinimized(false);
@@ -6476,6 +6823,15 @@ export default function GameBoard() {
       window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
       backpackHandFlightAnimationRef.current = null;
     }
+    setDiscardShockFlights([]);
+    discardShockFlightsRef.current = [];
+    discardShockElementMapRef.current.clear();
+    discardShockProcQueueRef.current = [];
+    discardShockSeqInFlightRef.current = false;
+    if (discardShockFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
+      discardShockFlightAnimationRef.current = null;
+    }
     clearAllBackpackHandFallbacks();
   };
 
@@ -6545,9 +6901,44 @@ export default function GameBoard() {
     clearUndoStorage();
   }, []);
 
+  /** Per-card discard hooks (弃牌获利、卡牌 onDiscardDamage、雷霆符印等)，与是否进墓地/回收袋无关 */
+  const applyDiscardSideEffects = useCallback(
+    (card: GameCardData, owner: 'player' | 'dungeon') => {
+      if (owner === 'player' && selectedHeroSkillRef.current === 'discard-profit') {
+        setGold(prev => prev + 2);
+        addGameLog('gold', `弃牌获利：弃置「${card.name}」获得 2 金币`);
+      }
+      if (card.onDiscardDamage) {
+        const monsters = flattenActiveRowSlots(activeCards).filter(
+          (c): c is GameCardData => Boolean(c && c.type === 'monster'),
+        );
+        if (monsters.length > 0) {
+          clearUndoStack();
+          const target = monsters[Math.floor(Math.random() * monsters.length)];
+          const dmg = getSpellDamage(card.onDiscardDamage);
+          dealDamageToMonster(target, dmg, { pulses: 2 });
+          addGameLog('magic', `${card.name} 被弃：对 ${target.name} 造成 ${dmg} 点法术伤害`);
+          setHeroSkillBanner(`${card.name} 被弃，对 ${target.name} 造成了 ${dmg} 点伤害！`);
+        }
+      }
+      triggerDiscardShock();
+    },
+    [
+      activeCards,
+      addGameLog,
+      clearUndoStack,
+      dealDamageToMonster,
+      getSpellDamage,
+      setGold,
+      setHeroSkillBanner,
+      triggerDiscardShock,
+    ],
+  );
+
   const handleUndo = useCallback(() => {
     const stack = undoStackRef.current;
     if (stack.length === 0) return;
+    if (discardShockInteractionLockedRef.current) return;
     const entry = stack.pop()!;
     setUndoCount(stack.length);
     saveUndoStack(stack);
@@ -6579,6 +6970,17 @@ export default function GameBoard() {
     }
     shieldBlockTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
 
+    if (discardShockFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
+      discardShockFlightAnimationRef.current = null;
+    }
+    discardShockFlightsRef.current = [];
+    discardShockElementMapRef.current.clear();
+    setDiscardShockFlights([]);
+    discardShockProcQueueRef.current = [];
+    discardShockSeqInFlightRef.current = false;
+    setDiscardShockInteractionLocked(false);
+
     // Reset visual animation states
     setHeroBleedActive(false);
     setMonsterBleedStates({});
@@ -6606,6 +7008,7 @@ export default function GameBoard() {
     const t = entry.transient;
     setMonsterRewardQueue(t.monsterRewardQueue);
     setActiveMonsterReward(t.activeMonsterReward);
+    syncMonsterRewardQueuedInstanceIdsRef(t.monsterRewardQueue ?? [], t.activeMonsterReward ?? null);
     setSelectedMonsterRewards(t.selectedMonsterRewards);
     setPendingMagicAction(t.pendingMagicAction);
     setPendingPotionAction(t.pendingPotionAction);
@@ -6633,7 +7036,7 @@ export default function GameBoard() {
 
     // Restore core game state
     hydrateGameState(entry.gameState);
-  }, [clearWaterfallTimeouts]);
+  }, [clearWaterfallTimeouts, syncMonsterRewardQueuedInstanceIdsRef]);
 
   const handleNewGame = () => {
     clearGameState();
@@ -6818,6 +7221,14 @@ export default function GameBoard() {
         },
       };
     });
+  };
+
+  const applyBulwarkPassiveShieldIncrement = () => {
+    const slots: EquipmentSlotId[] = ['equipmentSlot1', 'equipmentSlot2'];
+    const slot = slots[Math.floor(Math.random() * slots.length)]!;
+    setEquipmentSlotBonus(slot, 'shield', cur => cur + 1);
+    const label = slot === 'equipmentSlot1' ? '左' : '右';
+    addGameLog('magic', `壁垒猛击被动：随机加到${label}装备栏，永久护甲 +1`);
   };
 
   const resetEquipmentSlotBonuses = () => {
@@ -7149,26 +7560,9 @@ export default function GameBoard() {
       } else {
         addToGraveyard(card);
       }
-      if (owner === 'player' && selectedHeroSkillRef.current === 'discard-profit') {
-        setGold(prev => prev + 2);
-        addGameLog('gold', `弃牌获利：弃置「${card.name}」获得 2 金币`);
-      }
-      if (card.onDiscardDamage) {
-        const monsters = flattenActiveRowSlots(activeCards).filter(
-          (c): c is GameCardData => Boolean(c && c.type === 'monster'),
-        );
-        if (monsters.length > 0) {
-          clearUndoStack();
-          const target = monsters[Math.floor(Math.random() * monsters.length)];
-          const dmg = getSpellDamage(card.onDiscardDamage);
-          dealDamageToMonster(target, dmg, { pulses: 2 });
-          addGameLog('magic', `${card.name} 被弃：对 ${target.name} 造成 ${dmg} 点法术伤害`);
-          setHeroSkillBanner(`${card.name} 被弃，对 ${target.name} 造成了 ${dmg} 点伤害！`);
-        }
-      }
-      triggerDiscardShock();
+      applyDiscardSideEffects(card, owner);
     },
-    [activeCards, addGameLog, addPermanentMagicToRecycleBag, addToGraveyard, clearUndoStack, dealDamageToMonster, getSpellDamage, triggerDiscardShock, triggerGraveNova],
+    [addPermanentMagicToRecycleBag, addToGraveyard, applyDiscardSideEffects, triggerGraveNova],
   );
 
   const createCurseCard = (sourceCard?: GameCardData): GameCardData => ({
@@ -7469,9 +7863,7 @@ export default function GameBoard() {
             addGameLog('waterfall', `${cardName} 龙息加速 waterfall +${wfx.amount}`);
             setTurnCount(prev => prev + wfx.amount);
             if (bulwarkPassiveRef.current) {
-              setEquipmentSlotBonus('equipmentSlot1', 'shield', cur => cur + 1);
-              setEquipmentSlotBonus('equipmentSlot2', 'shield', cur => cur + 1);
-              addGameLog('magic', '壁垒猛击被动：左右装备栏永久护甲各 +1');
+              applyBulwarkPassiveShieldIncrement();
             }
             setHeroSkillBanner(`${cardName} 的龙息加速了 waterfall 进程 +${wfx.amount}！`);
             addToGraveyard(plan.discardCard);
@@ -7723,9 +8115,7 @@ export default function GameBoard() {
     setTurnCount(prev => prev + 1);
     addGameLog('waterfall', `第 ${turnCount + 1} 波开始，${dropCount} 张新卡牌`);
     if (bulwarkPassiveRef.current) {
-      setEquipmentSlotBonus('equipmentSlot1', 'shield', cur => cur + 1);
-      setEquipmentSlotBonus('equipmentSlot2', 'shield', cur => cur + 1);
-      addGameLog('magic', '壁垒猛击被动：左右装备栏永久护甲各 +1');
+      applyBulwarkPassiveShieldIncrement();
     }
     const recycledCards = restorePermanentMagicFromRecycleBag();
     if (recycledCards > 0) {
@@ -8241,18 +8631,27 @@ export default function GameBoard() {
         setBackpackCapacityModifier(prev => prev + 1);
         setHandLimitBonus(prev => prev + 1);
         const newHandLimit = effectiveHandLimit + 1;
-        const flightsCount = backpackHandFlightsRef.current.length;
-        const handSizeAfterPotion = handCards.filter(c => c.id !== card.id).length + flightsCount;
+        const handOccupancyTowardLimit = () =>
+          handCards.filter(c => c.id !== card.id).length + backpackHandFlightsRef.current.length;
         let draws = 0;
         for (let i = 0; i < 4; i += 1) {
-          if (handSizeAfterPotion + draws >= newHandLimit) break;
+          if (handOccupancyTowardLimit() >= newHandLimit) break;
           const [drawnCard] = takeRandomCardsFromBackpack(1);
           if (!drawnCard) break;
           queueCardIntoHand(drawnCard);
           draws += 1;
         }
+        let bonusDraws = 0;
+        if (handOccupancyTowardLimit() < newHandLimit && backpackItemsRef.current.length > 0) {
+          const [extraCard] = takeRandomCardsFromBackpack(1);
+          if (extraCard) {
+            queueCardIntoHand(extraCard);
+            bonusDraws = 1;
+          }
+        }
+        const totalDraws = draws + bonusDraws;
         const parts: string[] = [];
-        if (draws > 0) parts.push(`从背包抽出${draws}张牌`);
+        if (totalDraws > 0) parts.push(`从背包抽出${totalDraws}张牌`);
         parts.push('背包上限 +1', '手牌上限 +1');
         const banner = parts.join('，') + '。';
         addGameLog('potion', `药水效果：${parts.join('，')}`);
@@ -8764,6 +9163,10 @@ export default function GameBoard() {
       if (!resolved) {
         return;
       }
+      const doneId = activeMonsterReward.monsterInstanceId;
+      if (doneId) {
+        monsterRewardQueuedInstanceIdsRef.current.delete(doneId);
+      }
       setActiveMonsterReward(null);
     },
     [activeMonsterReward, applyMonsterReward],
@@ -9128,12 +9531,25 @@ export default function GameBoard() {
 
   const resolveChaosDice = async (card: GameCardData) => {
     clearUndoStack();
-    const roll = getRandomInt(1, 5);
-    addGameLog('magic', `混沌骰运：掷出 ${roll}`);
+    const diceResult = await requestDiceOutcome({
+      title: '混沌骰运',
+      subtitle: '掷出混沌之力',
+      entries: [
+        { id: 'chaos-1', range: [1, 4] as [number, number], label: '武器与盾牌回到手牌', effect: 'none' },
+        { id: 'chaos-2', range: [5, 8] as [number, number], label: '发现 3 张专属卡牌', effect: 'none' },
+        { id: 'chaos-3', range: [9, 12] as [number, number], label: '临时混沌商店', effect: 'none' },
+        { id: 'chaos-4', range: [13, 16] as [number, number], label: '雷击随机怪物', effect: 'none' },
+        { id: 'chaos-5', range: [17, 20] as [number, number], label: '弃 2 抽 2', effect: 'none' },
+      ],
+    });
+    if (!diceResult) {
+      finalizeMagicCard(card, { banner: '混沌骰运已取消。' });
+      return;
+    }
     let banner = '混沌骰运没有产生任何效果。';
 
-    switch (roll) {
-      case 1: {
+    switch (diceResult.id) {
+      case 'chaos-1': {
         const equipmentSlots = getEquipmentSlots();
         let returned = 0;
         let handLoad = handCards.length + backpackHandFlightsRef.current.length;
@@ -9161,12 +9577,12 @@ export default function GameBoard() {
             : '混沌骰运尝试归还装备，但你没有已装备的武器或盾牌。';
         break;
       }
-      case 2: {
+      case 'chaos-2': {
         const started = beginDiscoverFlow('chaos-dice');
         banner = started ? '混沌骰运：出现了 3 张专属卡牌供你挑选。' : '混沌骰运想要发现卡牌，但背包已满或卡组耗尽。';
         break;
       }
-      case 3: {
+      case 'chaos-3': {
         if (backpackItems.length >= backpackCapacity) {
           banner = '背包已满，混沌商店无法开启。';
           break;
@@ -9188,7 +9604,7 @@ export default function GameBoard() {
         banner = '混沌骰运开启了一家临时商店！';
         break;
       }
-      case 4: {
+      case 'chaos-4': {
         const monsters = flattenActiveRowSlots(activeCards).filter(
           (entry): entry is GameCardData => Boolean(entry && entry.type === 'monster'),
         );
@@ -9209,7 +9625,7 @@ export default function GameBoard() {
         banner = `${target.name} 被混沌雷击连续打中，累计受到 ${burstDamage * 2} 点伤害！`;
         break;
       }
-      case 5: {
+      case 'chaos-5': {
         const success = await requestCardAction('discard', 2, {
           title: '混沌骰运：弃 2 抽 2',
           description: '选择 2 张牌弃置（可来自手牌或背包）。',
@@ -9235,7 +9651,6 @@ export default function GameBoard() {
     }
 
     finalizeMagicCard(card, { banner });
-    setHeroSkillBanner(banner);
   };
 
   // Function to handle skill card effects - Defined early to be available for other handlers
@@ -9394,8 +9809,8 @@ export default function GameBoard() {
           }
           setBulwarkPassiveActive(true);
           setPermanentSkills(prev => [...prev, '壁垒猛击']);
-          addGameLog('magic', '壁垒猛击激活：之后每次瀑流，左右装备栏永久护甲各 +1');
-          finalizeMagicCard(card, { banner: '壁垒猛击激活！之后每次瀑流，左右装备栏永久护甲各 +1。' });
+          addGameLog('magic', '壁垒猛击激活：之后每次瀑流，随机一侧装备栏永久护甲 +1');
+          finalizeMagicCard(card, { banner: '壁垒猛击激活！之后每次瀑流，随机一侧装备栏永久护甲 +1。' });
           return;
         }
         case '血债清算': {
@@ -9582,11 +9997,8 @@ export default function GameBoard() {
             const target = chaosMons[0];
             if (!isMonsterEngaged(target.id)) beginCombat(target, 'hero');
             const chaosRawDamage = 3;
-            const hpPerLayer = target.hp ?? target.value;
-            const layersBefore = target.currentLayer ?? target.hpLayers ?? target.fury ?? 1;
+            const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(target, chaosRawDamage);
             dealDamageToMonster(target, chaosRawDamage);
-            const layersAfter = Math.max(0, layersBefore - Math.floor(chaosRawDamage / hpPerLayer));
-            const removedExactlyOneLayer = layersBefore - layersAfter === 1 && chaosRawDamage % hpPerLayer === 0;
             if (removedExactlyOneLayer) {
               const drawn = drawCardsFromBackpack(2);
               finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosRawDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。` });
@@ -9631,6 +10043,7 @@ export default function GameBoard() {
           const sanitized = sanitizeCardMetadata(hc);
           sanitized._recycleWaits = sanitized.recycleDelay ?? 1;
           setPermanentMagicRecycleBag(prev => [...prev.filter(e => e.id !== sanitized.id), sanitized]);
+          applyDiscardSideEffects(hc, 'player');
         }
         setHandCards(prev => prev.filter(c => c.id === card.id));
         const drawn: GameCardData[] = [];
@@ -10247,7 +10660,7 @@ export default function GameBoard() {
         break;
       }
       case 'blood-draw': {
-        applyDamage(4);
+        applyDamage(3);
         const drawnNames: string[] = [];
         for (let i = 0; i < 2; i++) {
           const drawn = drawFromBackpackToHand();
@@ -10255,11 +10668,11 @@ export default function GameBoard() {
         }
         markSkillUsed(skillDef.id);
         if (drawnNames.length > 0) {
-          setHeroSkillBanner(`失去 4 生命，抽到「${drawnNames.join('」「')}」！`);
-          addGameLog('skill', `血契抽牌：失去 4 生命，抽到「${drawnNames.join('」「')}」`);
+          setHeroSkillBanner(`失去 3 生命，抽到「${drawnNames.join('」「')}」！`);
+          addGameLog('skill', `血契抽牌：失去 3 生命，抽到「${drawnNames.join('」「')}」`);
         } else {
-          setHeroSkillBanner('失去 4 生命，但背包为空或手牌已满。');
-          addGameLog('skill', '血契抽牌：失去 4 生命，未能抽牌');
+          setHeroSkillBanner('失去 3 生命，但背包为空或手牌已满。');
+          addGameLog('skill', '血契抽牌：失去 3 生命，未能抽牌');
         }
         break;
       }
@@ -10779,11 +11192,8 @@ export default function GameBoard() {
           beginCombat(monster, 'hero');
         }
         const chaosRawDamage = 3;
-        const hpPerLayer = monster.hp ?? monster.value;
-        const layersBefore = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;
+        const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(monster, chaosRawDamage);
         dealDamageToMonster(monster, chaosRawDamage);
-        const layersAfter = Math.max(0, layersBefore - Math.floor(chaosRawDamage / hpPerLayer));
-        const removedExactlyOneLayer = layersBefore - layersAfter === 1 && chaosRawDamage % hpPerLayer === 0;
         let chaosBanner: string;
         if (removedExactlyOneLayer) {
           const drawn = drawCardsFromBackpack(2);
@@ -10972,6 +11382,7 @@ export default function GameBoard() {
   );
 
   function handleWeaponToMonster(weapon: any, monster: GameCardData) {
+    if (discardShockInteractionLockedRef.current) return;
     pushUndoSnapshot();
     const slotId = weapon.fromSlot as EquipmentSlotId | undefined;
     if (!slotId) {
@@ -10994,6 +11405,7 @@ export default function GameBoard() {
   };
 
   function handleCardToHero(card: GameCardData) {
+    if (discardShockInteractionLockedRef.current) return;
     pushUndoSnapshot();
     if (isCardFromEquipmentSlot(card)) {
       // Equipped items can only attack monsters or be discarded.
@@ -11071,7 +11483,13 @@ export default function GameBoard() {
             return next;
           });
           addGameLog('event', `${card.name} 被放置到地城第 ${targetSlot + 1} 列。`);
-          setHeroSkillBanner(`${card.name} 出现在地城中！`);
+          if (card.name === '命运之刃') {
+            applyDamage(5, 'general');
+            addGameLog('event', '命运之刃：从手牌打出，失去 5 点生命。');
+            setHeroSkillBanner(`${card.name} 出现在地城中！失去 5 点生命。`);
+          } else {
+            setHeroSkillBanner(`${card.name} 出现在地城中！`);
+          }
         } else {
           discardCardToGraveyard(card, { owner: 'player' });
           addGameLog('event', `${card.name}：地城没有空位，进入墓地。`);
@@ -11323,6 +11741,7 @@ export default function GameBoard() {
   };
 
   function handleCardToSlot(card: GameCardData, slotId: string) {
+    if (discardShockInteractionLockedRef.current) return;
     pushUndoSnapshot();
     if (slotId === 'slot-amulet') {
       if (card.type !== 'amulet') {
@@ -11410,8 +11829,8 @@ export default function GameBoard() {
       const fromAmuletSlot =
         cardWithOrigin.fromSlot === 'amulet' || amuletSlots.some(slot => slot?.id === card.id);
       if (fromAmuletSlot) {
-        setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
         discardCardToGraveyard(card, { owner: 'player' });
+        setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
         addGameLog('magic', `弃置护符「${card.name}」回到回收袋。`);
         setHeroSkillBanner(`${card.name} 已弃置回回收袋。`);
         resetDragState();
@@ -12181,9 +12600,7 @@ export default function GameBoard() {
         setTurnCount(prev => prev + 1);
         addGameLog('event', '瀑流计数 +1');
         if (bulwarkPassiveRef.current) {
-          setEquipmentSlotBonus('equipmentSlot1', 'shield', cur => cur + 1);
-          setEquipmentSlotBonus('equipmentSlot2', 'shield', cur => cur + 1);
-          addGameLog('magic', '壁垒猛击被动：左右装备栏永久护甲各 +1');
+          applyBulwarkPassiveShieldIncrement();
         }
 
         setHeroSkillBanner(`深入探索！受到 ${damage} 点伤害，瀑流计数 +1！`);
@@ -12327,6 +12744,7 @@ export default function GameBoard() {
   };
 
   const handlePlayCardFromHand = async (card: GameCardData, target?: any) => {
+    if (discardShockInteractionLockedRef.current) return;
     pushUndoSnapshot();
     if (!consumeCardFromHand(card)) {
       return;
@@ -12348,7 +12766,7 @@ export default function GameBoard() {
   };
 
   const handleBackpackClick = () => {
-    if (playerTargetingActive) return;
+    if (playerTargetingActive || discardShockInteractionLockedRef.current) return;
     setBackpackViewerOpen(true);
   };
 
@@ -12537,6 +12955,7 @@ export default function GameBoard() {
     slotTargetingActive && (!potionSlotTargeting || isPotionSlotEligible('equipmentSlot2'));
 
   const handleHeroSkillButtonClick = useCallback(() => {
+    if (discardShockInteractionLockedRef.current) return;
     if (heroSkillTargeting) {
       cancelHeroSkillAction();
       return;
@@ -12545,6 +12964,7 @@ export default function GameBoard() {
   }, [heroSkillTargeting, cancelHeroSkillAction, handleHeroSkillUse]);
 
   const handleExtraHeroSkillButtonClick = useCallback((skillId: string) => {
+    if (discardShockInteractionLockedRef.current) return;
     if (heroSkillTargeting) {
       cancelHeroSkillAction();
       return;
@@ -12554,6 +12974,7 @@ export default function GameBoard() {
 
   const handleHeroMagicTrigger = useCallback(
     (id: HeroMagicId) => {
+      if (discardShockInteractionLockedRef.current) return;
       pushUndoSnapshot();
       startHeroMagicActivation(id, 'gauge');
     },
@@ -12562,6 +12983,7 @@ export default function GameBoard() {
 
   const handleHeroMagicChoice = useCallback(
     (choice: 'heal' | 'purge') => {
+      if (discardShockInteractionLockedRef.current) return;
       pushUndoSnapshot();
       resolveHolyLightChoice(choice);
     },
@@ -12627,7 +13049,12 @@ export default function GameBoard() {
   const handleDragCardFromHand = (card: GameCardData) => {
     const targetingActive = playerTargetingActive;
   const isSpellCard = card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion';
-    if ((waterfallAnimation.isActive && !isSpellCard) || targetingActive) return;
+    if (
+      (waterfallAnimation.isActive && !isSpellCard) ||
+      targetingActive ||
+      discardShockInteractionLockedRef.current
+    )
+      return;
     heroFrameHoverLogCountRef.current = 0;
     heroFrameEnableLogCountRef.current = 0;
     heroFrameHitTestLogCountRef.current = 0;
@@ -12777,7 +13204,12 @@ export default function GameBoard() {
   
   // Handle drag start from dungeon cards
   const handleDragStartFromDungeon = (card: GameCardData) => {
-    if (waterfallAnimation.isActive || playerTargetingActive) return;
+    if (
+      waterfallAnimation.isActive ||
+      playerTargetingActive ||
+      discardShockInteractionLockedRef.current
+    )
+      return;
     heroFrameHoverLogCountRef.current = 0;
     heroFrameEnableLogCountRef.current = 0;
     heroFrameHitTestLogCountRef.current = 0;
@@ -12831,7 +13263,10 @@ export default function GameBoard() {
   const draggedCardIsSpell =
     draggedCard?.type === 'magic' || draggedCard?.type === 'hero-magic' || draggedCard?.type === 'potion';
   const heroRowInteractionLocked =
-    playerTargetingActive || isDefeatAnimationPlaying || (isWaterfallLocked && !draggedCardIsSpell);
+    playerTargetingActive ||
+    isDefeatAnimationPlaying ||
+    discardShockInteractionLocked ||
+    (isWaterfallLocked && !draggedCardIsSpell);
   const heroCardDropHighlight =
     !heroRowInteractionLocked &&
     canCardDropOnHero(draggedCard) &&
@@ -12848,6 +13283,7 @@ export default function GameBoard() {
     !isWaterfallLocked &&
     !isDefeatAnimationPlaying &&
     !playerTargetingActive &&
+    !discardShockInteractionLocked &&
     (canSellDraggedCard || canSellDraggedEquipment);
   const shouldHighlightGraveyard = graveyardDropEnabled && isDragSessionActive;
   const heroRowMagicDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
@@ -13199,9 +13635,17 @@ export default function GameBoard() {
   const canMonsterTargetShieldSlot = (slotItem: EquipmentItem | null) =>
     Boolean(slotItem && slotItem.type === 'shield' && draggedCard?.type === 'monster');
   const equipmentSlot1MonsterTarget =
-    !isWaterfallLocked && !isDefeatAnimationPlaying && !playerTargetingActive && canMonsterTargetShieldSlot(equipmentSlot1);
+    !isWaterfallLocked &&
+    !isDefeatAnimationPlaying &&
+    !playerTargetingActive &&
+    !discardShockInteractionLocked &&
+    canMonsterTargetShieldSlot(equipmentSlot1);
   const equipmentSlot2MonsterTarget =
-    !isWaterfallLocked && !isDefeatAnimationPlaying && !playerTargetingActive && canMonsterTargetShieldSlot(equipmentSlot2);
+    !isWaterfallLocked &&
+    !isDefeatAnimationPlaying &&
+    !playerTargetingActive &&
+    !discardShockInteractionLocked &&
+    canMonsterTargetShieldSlot(equipmentSlot2);
   const renderBlockButton = (
     target: BlockTarget,
     label: string,
@@ -13212,10 +13656,10 @@ export default function GameBoard() {
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
         <button
           type="button"
-          disabled={disabled}
+          disabled={disabled || discardShockInteractionLocked}
           onClick={(e) => {
             e.stopPropagation();
-            if (!disabled) {
+            if (!disabled && !discardShockInteractionLocked) {
               resolveBlockChoice(target);
             }
           }}
@@ -13242,6 +13686,7 @@ export default function GameBoard() {
     !isWaterfallLocked &&
     !isDefeatAnimationPlaying &&
     !playerTargetingActive &&
+    !discardShockInteractionLocked &&
     draggingEquipmentCard;
   const equipmentSlot1DropAvailable = equipmentSlotDropAvailable;
   const equipmentSlot2DropAvailable = equipmentSlotDropAvailable;
@@ -13257,11 +13702,11 @@ export default function GameBoard() {
           maxSlots={maxAmuletSlots}
           scaleMultiplier={stageScale}
           onDrop={(card) => {
-                if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive) return;
+                if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
             handleCardToSlot(card, 'slot-amulet');
           }}
           onDragStart={(card) => {
-                if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive) return;
+                if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
             setDraggedCard(card);
             setDraggedEquipment(null);
             setDraggedCardSource('amulet');
@@ -13271,7 +13716,13 @@ export default function GameBoard() {
             setDraggedCard(null);
             setDraggedCardSource((current) => (current === 'amulet' ? null : current));
           }}
-          isDropTarget={!isWaterfallLocked && !isDefeatAnimationPlaying && draggedCard?.type === 'amulet'}
+          isDropTarget={
+            !isWaterfallLocked &&
+            !isDefeatAnimationPlaying &&
+            !playerTargetingActive &&
+            !discardShockInteractionLocked &&
+            draggedCard?.type === 'amulet'
+          }
           onCardClick={handleCardClick}
         />
       ),
@@ -13303,11 +13754,11 @@ export default function GameBoard() {
             }
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot1}
             onDrop={(card) => {
-              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive) return;
+              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
               handleCardToSlot(card, 'slot-equipment-1');
             }}
             onDragStart={(equipment) => {
-              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive) return;
+              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
               setDraggedEquipment(equipment);
               setDraggedCard(null);
               setDraggedCardSource(equipment?.fromSlot ?? 'equipmentSlot1');
@@ -13344,7 +13795,13 @@ export default function GameBoard() {
             maxHp={maxHp}
             scaleMultiplier={stageScale}
             onDrop={(card) => {
-              if ((isWaterfallLocked && card.type !== 'magic') || playerTargetingActive) return;
+              if (
+                (isWaterfallLocked && card.type !== 'magic') ||
+                playerTargetingActive ||
+                discardShockInteractionLocked
+              ) {
+                return;
+              }
               handleCardToHero(card);
             }}
             isDropTarget={heroCardDropHighlight}
@@ -13378,7 +13835,7 @@ export default function GameBoard() {
             onPotionCancel={undefined}
             spellDamageBonus={permanentSpellDamageBonus}
             onHeroClick={
-              playerTargetingActive
+              playerTargetingActive || discardShockInteractionLocked
                 ? undefined
                 : () => {
                     setHeroDetailsOpen(true);
@@ -13416,11 +13873,11 @@ export default function GameBoard() {
             }
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot2}
             onDrop={(card) => {
-              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive) return;
+              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
               handleCardToSlot(card, 'slot-equipment-2');
             }}
             onDragStart={(equipment) => {
-              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive) return;
+              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
               setDraggedEquipment(equipment);
               setDraggedCard(null);
               setDraggedCardSource(equipment?.fromSlot ?? 'equipmentSlot2');
@@ -13454,7 +13911,7 @@ export default function GameBoard() {
           backpackCount={backpackItems.length}
           capacity={backpackCapacity}
           onDrop={(card) => {
-            if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive) return;
+            if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
             handleCardToSlot(card, 'slot-backpack');
           }}
           isDropTarget={
@@ -13662,7 +14119,11 @@ export default function GameBoard() {
             const isEngagedMonster = Boolean(card && card.type === 'monster' && isMonsterEngaged(card.id));
             const isResolvingCard = resolvingDungeonCardId === card?.id;
             const isEventPendingCell = isResolvingCard && eventPendingLocked;
-            const isMonsterTurnLock = showMonsterAttackIndicator || isWaterfallLocked || isDefeatAnimationPlaying;
+            const isMonsterTurnLock =
+              showMonsterAttackIndicator ||
+              isWaterfallLocked ||
+              isDefeatAnimationPlaying ||
+              discardShockInteractionLocked;
             const monsterTargetHighlight = Boolean(
               monsterTargetingActive && card && card.type === 'monster',
             );
@@ -13690,10 +14151,13 @@ export default function GameBoard() {
                 }
                 onDragEnd={handleDragEndFromDungeon}
                 onWeaponDrop={
-                  playerTargetingActive ? undefined : (weapon) => handleWeaponToMonster(weapon, card)
+                  playerTargetingActive || discardShockInteractionLocked
+                    ? undefined
+                    : (weapon) => handleWeaponToMonster(weapon, card)
                 }
                 isWeaponDropTarget={
                   !playerTargetingActive &&
+                  !discardShockInteractionLocked &&
                   (draggedEquipment?.type === 'weapon' || draggedEquipment?.type === 'monster') &&
                   card.type === 'monster'
                 }
@@ -13822,7 +14286,7 @@ export default function GameBoard() {
             <div className={cellInnerClass} ref={setGraveyardRef}>
               <GraveyardZone
                 onDrop={(card) => {
-                  if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive) return;
+                  if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
                   handleSellCard(card);
                 }}
                 isDropTarget={graveyardDropEnabled}
@@ -13986,6 +14450,7 @@ export default function GameBoard() {
             pendingBlock={combatState.pendingBlock}
             monsterAttackQueue={combatState.monsterAttackQueue}
             onEndHeroTurn={endHeroTurn}
+            endHeroTurnDisabled={discardShockInteractionLocked}
             equipmentSlot1={equipmentSlot1}
             equipmentSlot2={equipmentSlot2}
             stageScale={stageScale}
@@ -14027,6 +14492,34 @@ export default function GameBoard() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {discardShockFlights.length > 0 && (
+        <div className="pointer-events-none absolute inset-0 z-[35]">
+          {discardShockFlights.map(flight => (
+            <div
+              key={flight.id}
+              ref={el => {
+                if (el) discardShockElementMapRef.current.set(flight.id, el);
+                else discardShockElementMapRef.current.delete(flight.id);
+              }}
+              className="absolute rounded-full border-2 border-amber-300/90 bg-amber-500/20 shadow-[0_0_16px_rgba(251,191,36,0.9)] overflow-hidden ring-2 ring-yellow-200/40"
+              style={{
+                width: DISCARD_SHOCK_PROJECTILE_SIZE,
+                height: DISCARD_SHOCK_PROJECTILE_SIZE,
+                opacity: 0,
+                willChange: 'transform, opacity',
+                contain: 'layout style',
+              }}
+            >
+              {flight.projectileImage ? (
+                <img src={flight.projectileImage} alt="" className="h-full w-full object-cover" draggable={false} />
+              ) : (
+                <div className="h-full w-full bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-600" />
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -14302,10 +14795,7 @@ export default function GameBoard() {
       />
 
       {/* Bottom-right controls: minimized combat panel + undo */}
-      <div
-        className="absolute bottom-4 right-4 z-[9999] flex flex-col items-end"
-        style={{ pointerEvents: 'none', transform: `scale(${stageScale})`, transformOrigin: 'bottom right' }}
-      >
+      <div className="absolute bottom-4 right-4 z-[9999] flex flex-col items-end" style={{ pointerEvents: 'none' }}>
         {isCombatPanelVisible && isCombatPanelMinimized && (
           <div className="pointer-events-auto mb-1">
             <CombatPanel
@@ -14317,6 +14807,7 @@ export default function GameBoard() {
               pendingBlock={combatState.pendingBlock}
               monsterAttackQueue={combatState.monsterAttackQueue}
               onEndHeroTurn={endHeroTurn}
+              endHeroTurnDisabled={discardShockInteractionLocked}
               equipmentSlot1={equipmentSlot1}
               equipmentSlot2={equipmentSlot2}
               stageScale={stageScale}
@@ -14327,23 +14818,31 @@ export default function GameBoard() {
           </div>
         )}
         {!gameOver && !showSkillSelection && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleUndo(); }}
-            onPointerDown={(e) => e.stopPropagation()}
-            disabled={undoCount === 0}
-            style={{ pointerEvents: 'auto' }}
-            className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 shadow-lg transition-all select-none ${
-              undoCount > 0
-                ? 'bg-slate-700/90 text-white hover:bg-slate-600 active:scale-95'
-                : 'bg-slate-700/40 text-white/40 cursor-not-allowed'
-            }`}
+          <div
+            style={{
+              pointerEvents: 'none',
+              transform: `scale(${stageScale})`,
+              transformOrigin: 'bottom right',
+            }}
           >
-            <Undo2 className="w-4 h-4" />
-            <span className="text-sm font-medium">撤销</span>
-            {undoCount > 0 && (
-              <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-xs">{undoCount}</span>
-            )}
-          </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleUndo(); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              disabled={undoCount === 0 || discardShockInteractionLocked}
+              style={{ pointerEvents: 'auto' }}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 shadow-lg transition-all select-none ${
+                undoCount > 0
+                  ? 'bg-slate-700/90 text-white hover:bg-slate-600 active:scale-95'
+                  : 'bg-slate-700/40 text-white/40 cursor-not-allowed'
+              }`}
+            >
+              <Undo2 className="w-4 h-4" />
+              <span className="text-sm font-medium">撤销</span>
+              {undoCount > 0 && (
+                <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-xs">{undoCount}</span>
+              )}
+            </button>
+          </div>
         )}
       </div>
     </div>
