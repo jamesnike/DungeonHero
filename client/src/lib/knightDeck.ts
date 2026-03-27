@@ -80,8 +80,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 5,
     image: ironTowerShieldImage,
     classCard: true,
-    description:
-      '完全格挡一次攻击的全部伤害，无论攻击力多高。损毁后进入回收袋，与永久法术相同经瀑流计数后回背包。',
+    description: '完全格挡一次攻击的全部伤害，无论攻击力多高。损毁后进入回收袋。',
     durability: 1,
     maxDurability: 1,
     permEquipment: true,
@@ -119,7 +118,8 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: dualguardAmuletImage,
     classCard: true,
-    description: '护盾完美格挡时（护甲值≥攻击力），该装备栏永久护甲+1。',
+    description:
+      '护盾完美格挡时（护甲值≥攻击力），该装备栏永久护甲+1。「铁壁塔盾」的完全格挡视为完美格挡。',
     amuletEffect: 'dual-guard',
   });
 

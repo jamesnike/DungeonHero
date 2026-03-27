@@ -173,7 +173,7 @@ const INITIAL_TURN_COUNT = 1;
 const FINAL_MONSTER_MARK_DESCRIPTION =
   '最终之敌：击败后将变身为 Boss；被瀑流从预览挤出时不进坟场，置于牌堆底（不打乱牌序）。';
 
-const SELLABLE_TYPES = ['potion', 'weapon', 'shield', 'amulet', 'magic', 'hero-magic'] as const;
+const SELLABLE_TYPES = ['potion', 'weapon', 'shield', 'amulet', 'magic', 'hero-magic', 'monster'] as const;
 const EQUIPMENT_TYPES = ['weapon', 'shield', 'amulet'] as const;
 const CONSUMABLE_TYPES = ['potion', 'magic', 'hero-magic'] as const;
 const MAX_AMULET_SLOTS = 2;
@@ -1568,6 +1568,8 @@ export default function GameBoard() {
   );
   const [undoCount, setUndoCount] = useState(() => undoStackRef.current.length);
   const undoGuardRef = useRef(false);
+  /** 每次 hydrate / 新开局递增；格挡等异步结算在 await 后若发现过期则立刻放弃，避免撤销后仍写入旧闭包数据 */
+  const combatAsyncEpochRef = useRef(0);
   const [amuletSlots, setAmuletSlots] = useState<AmuletItem[]>([]);
   const amuletSlotsRef = useRef<AmuletItem[]>(amuletSlots);
   useLayoutEffect(() => {
@@ -5065,6 +5067,9 @@ export default function GameBoard() {
       return;
     }
 
+    const epoch = combatAsyncEpochRef.current;
+    const stale = () => combatAsyncEpochRef.current !== epoch;
+
     const pendingBlock = combatState.pendingBlock;
     const monster = activeCards.find(card => card?.id === pendingBlock.monsterId);
     if (!monster) {
@@ -5093,6 +5098,9 @@ export default function GameBoard() {
         setHeroSkillBanner(`${monster.name} 暴击了！伤害翻倍！`);
       }
     }
+    if (stale()) {
+      return;
+    }
 
     addGameLog('monster', `${monster.name} 发动攻击（${remainingDamage}伤害）`);
 
@@ -5106,9 +5114,9 @@ export default function GameBoard() {
       if (slotItem && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
         blockedWithShield = true;
         const knightShield = slotItem as GameCardData & { knightEffect?: string };
-        const isFullBlock = knightShield.knightEffect === 'fullBlock';
+        const isFullBlockShield = knightShield.knightEffect === 'fullBlock';
 
-        if (isFullBlock) {
+        if (isFullBlockShield) {
           triggerShieldBlockAnimation(blockSlotId);
           addGameLog('combat', `${slotItem.name} 完全格挡了 ${remainingDamage} 点伤害！`);
           setHeroSkillBanner(`${slotItem.name} 完全格挡！`);
@@ -5136,7 +5144,10 @@ export default function GameBoard() {
           reflectBlockSlotId = blockSlotId;
         }
 
-        if (remainingDamage === 0 && amuletEffects.hasDualGuard) {
+        // 铁壁塔盾等完全格挡：视为完美格挡（护甲未与攻击力逐项比较），可触发双守护圣盾与守护圣盾耐久判定
+        const isPerfectBlockThisShield = isFullBlockShield || remainingDamage === 0;
+
+        if (isPerfectBlockThisShield && amuletEffects.hasDualGuard) {
           setEquipmentSlotBonus(blockSlotId, 'shield', cur => cur + 1);
           const newBonus = getEquipmentSlotBonus(blockSlotId, 'shield') + 1;
           addGameLog('combat', `完美格挡！双守护圣盾使该栏永久护甲 +1（当前 +${newBonus}）`);
@@ -5145,7 +5156,7 @@ export default function GameBoard() {
 
         if (!unbreakableUntilWaterfall[blockSlotId]) {
           let skipShieldDurabilityLoss = false;
-          const perfectBlock = remainingDamage === 0;
+          const perfectBlock = isPerfectBlockThisShield;
           const saveChance = slotItem.shieldPerfectBlockSaveChance;
           if (perfectBlock && saveChance && saveChance > 0 && !unbreakableNext) {
             const threshold = Math.round((saveChance / 100) * 20);
@@ -5161,6 +5172,9 @@ export default function GameBoard() {
               skipShieldDurabilityLoss = true;
               addGameLog('equip', `${slotItem.name} 完美格挡，幸运保住了耐久！`);
             }
+          }
+          if (stale()) {
+            return;
           }
 
           if (!skipShieldDurabilityLoss) {
@@ -5228,6 +5242,9 @@ export default function GameBoard() {
           { id: 'single', range: [11, 20] as [number, number], label: '本次仅一击', effect: 'none' },
         ],
       });
+      if (stale()) {
+        return;
+      }
       if (doubleResult?.id === 'double') {
         addGameLog('combat', `${monster.name} 发动连击！再次攻击！`);
         setHeroSkillBanner(`${monster.name} 连击！再来一次！`);
@@ -5238,6 +5255,9 @@ export default function GameBoard() {
             reflectSourceName,
             reflectBlockSlotId,
           );
+        }
+        if (stale()) {
+          return;
         }
         setCombatState(prev => ({
           ...prev,
@@ -5261,6 +5281,9 @@ export default function GameBoard() {
           { id: 'lose', range: [11, 20] as [number, number], label: '正常掉血层', effect: 'none' },
         ],
       });
+      if (stale()) {
+        return;
+      }
       if (diceResult?.id === 'skip') {
         addGameLog('combat', `${monster.name} 韧性发动，本次攻击不掉血层！`);
       } else {
@@ -5277,6 +5300,10 @@ export default function GameBoard() {
         reflectSourceName,
         reflectBlockSlotId,
       );
+    }
+
+    if (stale()) {
+      return;
     }
 
     setCombatState(prev => ({
@@ -6872,6 +6899,7 @@ export default function GameBoard() {
   }, [gold, addGameLog]);
 
   const initGame = () => {
+    combatAsyncEpochRef.current += 1;
     setCombatState(initialCombatState);
     setHeroVariant(getRandomHero());
     clearAllHandDeliveryGuards();
@@ -7095,6 +7123,7 @@ export default function GameBoard() {
   };
 
   const hydrateGameState = (snapshot: PersistedGameState) => {
+    combatAsyncEpochRef.current += 1;
     const mapSlots = (slots?: Array<GameCardData | null>): ActiveRowSlots => {
       const next = createEmptyActiveRow();
       if (!Array.isArray(slots)) {
@@ -11175,13 +11204,25 @@ export default function GameBoard() {
     
     addGameLog('shop', `弃置 ${item.name}`);
 
-    const sellItem = item as GameCardData & { fromSlot?: EquipmentSlotId | 'amulet' };
+    const sellItem = item as GameCardData & { fromSlot?: string };
+    const slotFromCard = normalizeHeroEquipmentSlotFromDrag(sellItem.fromSlot);
+    const slotFromDragSession = normalizeHeroEquipmentSlotFromDrag(
+      typeof draggedCardSource === 'string' ? draggedCardSource : null,
+    );
     const immediateOrigin: DragOrigin | null =
       sellItem.fromSlot === 'amulet'
         ? 'amulet'
-        : sellItem.fromSlot === 'equipmentSlot1' || sellItem.fromSlot === 'equipmentSlot2'
-          ? sellItem.fromSlot
-          : draggedCardSource;
+        : slotFromCard
+          ? slotFromCard
+          : draggedCardSource === 'amulet'
+            ? 'amulet'
+            : slotFromDragSession
+              ? slotFromDragSession
+              : draggedCardSource === 'hand' ||
+                  draggedCardSource === 'backpack' ||
+                  draggedCardSource === 'dungeon'
+                ? draggedCardSource
+                : null;
 
     const fallbackOrigin: DragOrigin | null =
       immediateOrigin ??
@@ -12583,7 +12624,7 @@ export default function GameBoard() {
       return false;
     }
     const origin = (card as GameCardData & { fromSlot?: string }).fromSlot;
-    return origin === 'equipmentSlot1' || origin === 'equipmentSlot2';
+    return Boolean(normalizeHeroEquipmentSlotFromDrag(origin));
   };
 
   function handleCardToSlot(card: GameCardData, slotId: string) {

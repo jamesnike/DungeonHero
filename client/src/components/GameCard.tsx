@@ -804,6 +804,7 @@ const amuletEffectText =
                 {(isPermanentMagicCard || card.isPermanentEvent) && (
                   <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
                     <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
+                    <span className="leading-none">PERM</span>
                     {showPermRecycleCount && (
                       <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
                     )}
@@ -1018,14 +1019,18 @@ const amuletEffectText =
                   </div>
                 )}
                 {(card.type === 'weapon' || card.type === 'shield') && card.permEquipment && (
-                  <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
-                    <div className="dh-card__caption flex items-center justify-center gap-1 bg-slate-800/88 py-0.5 font-black uppercase tracking-widest text-white">
+                  <div className="absolute top-1 right-1 z-10 pointer-events-none">
+                    <span
+                      className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${
+                        isCompact ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'
+                      }`}
+                    >
                       <Infinity className="dh-icon-inline--compact shrink-0" aria-hidden />
-                      <span>{card.type === 'weapon' ? 'PERM WEAPON' : 'PERM SHIELD'}</span>
+                      <span className="leading-none">PERM</span>
                       {showPermRecycleCount && (
                         <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
                       )}
-                    </div>
+                    </span>
                   </div>
                 )}
                 {showAmuletOverlay && (

@@ -587,7 +587,7 @@ export default function CardDetailsModal({
               <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
                 {isPermRecycleEquipment(card) && (
                   <div className="col-span-2 mb-1 inline-flex items-center gap-1 rounded-md border border-cyan-500/45 bg-cyan-950/25 px-2 py-1 text-xs font-bold tracking-wide text-cyan-900 dark:text-cyan-100">
-                    {card.type === 'weapon' ? 'PERM WEAPON' : 'PERM SHIELD'}
+                    PERM
                     {(card.recycleDelay ?? 1) > 1 && (
                       <span className="tabular-nums">{card.recycleDelay}</span>
                     )}
