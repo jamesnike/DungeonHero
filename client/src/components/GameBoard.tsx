@@ -7523,15 +7523,16 @@ export default function GameBoard() {
         );
         if (monsters.length > 0) {
           clearUndoStack();
+          const honorDiscardDmg = getSpellDamage(1);
           monsters.forEach((monster, index) => {
             if (!isMonsterEngaged(monster.id)) {
               beginCombat(monster, 'hero');
             }
             const animationDelay = index * Math.floor(COMBAT_ANIMATION_STAGGER * 0.75);
-            dealDamageToMonster(monster, 1, { animationDelay, pulses: 1 });
+            dealDamageToMonster(monster, honorDiscardDmg, { animationDelay, pulses: 1 });
           });
-          addGameLog('magic', `${card.name} 被弃：对激活行每只怪物造成 1 点伤害`);
-          setHeroSkillBanner(`${card.name} 被弃，对场上每只怪物造成 1 点伤害！`);
+          addGameLog('magic', `${card.name} 被弃：对激活行每只怪物造成 ${honorDiscardDmg} 点伤害`);
+          setHeroSkillBanner(`${card.name} 被弃，对场上每只怪物造成 ${honorDiscardDmg} 点伤害！`);
         }
       } else if (card.onDiscardDamage) {
         const monsters = flattenActiveRowSlots(activeCards).filter(
@@ -8260,7 +8261,7 @@ export default function GameBoard() {
       if (owner === 'player' && isGraveNovaCard) {
         triggerGraveNova();
         addPermanentMagicToRecycleBag(card);
-      } else if (!options?.forceGraveyard && isRecyclableFromHand(card)) {
+      } else if (!options?.forceGraveyard && isRecyclableFromHand(card) && card.type !== 'amulet') {
         addPermanentMagicToRecycleBag(card);
       } else {
         addToGraveyard(card);
@@ -10108,15 +10109,18 @@ export default function GameBoard() {
       } else {
         addGameLog('system', `${delLabel}卡牌：${cardToDelete.name}`);
       }
-      const recycleBagDiscard =
-        cardActionContext?.mode === 'event' &&
-        isDiscardAction &&
-        Boolean(cardActionContext.discardToRecycleBag);
-      if (recycleBagDiscard) {
-        addPermanentMagicToRecycleBag(cardToDelete);
-        applyDiscardSideEffects(cardToDelete, 'player');
+      if (!isDiscardAction) {
+        addToGraveyard(cardToDelete);
       } else {
-        discardCardToGraveyard(cardToDelete, { owner: 'player' });
+        const recycleBagDiscard =
+          cardActionContext?.mode === 'event' &&
+          Boolean(cardActionContext.discardToRecycleBag);
+        if (recycleBagDiscard) {
+          addPermanentMagicToRecycleBag(cardToDelete);
+          applyDiscardSideEffects(cardToDelete, 'player');
+        } else {
+          discardCardToGraveyard(cardToDelete, { owner: 'player' });
+        }
       }
 
       if (cardActionContext?.mode === 'shop') {
@@ -10969,22 +10973,23 @@ export default function GameBoard() {
           if (chaosMons.length === 1 && echoMultiplier <= 1) {
             const target = chaosMons[0];
             if (!isMonsterEngaged(target.id)) beginCombat(target, 'hero');
-            const chaosRawDamage = 3;
-            const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(target, chaosRawDamage);
-            dealDamageToMonster(target, chaosRawDamage);
+            const chaosDamage = getSpellDamage(3);
+            const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(target, chaosDamage);
+            dealDamageToMonster(target, chaosDamage);
             if (removedExactlyOneLayer) {
               const drawn = drawCardsFromBackpack(2);
-              finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosRawDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。` });
+              finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。` });
             } else {
-              finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosRawDamage} 点伤害。` });
+              finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 点伤害。` });
             }
           } else {
+            const chaosDamage = getSpellDamage(3);
             const chaosEchoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
             setPendingMagicAction({
               card,
               effect: 'chaos-strike',
               step: 'monster-select',
-              prompt: `选择一个怪物，对其造成 3 点伤害。${chaosEchoLabel}`,
+              prompt: `选择一个怪物，对其造成 ${chaosDamage} 点伤害。${chaosEchoLabel}`,
               data: {},
               echoRemaining: echoMultiplier,
             });
@@ -12190,15 +12195,15 @@ export default function GameBoard() {
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        const chaosRawDamage = 3;
-        const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(monster, chaosRawDamage);
-        dealDamageToMonster(monster, chaosRawDamage);
+        const chaosDamage = getSpellDamage(3);
+        const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(monster, chaosDamage);
+        dealDamageToMonster(monster, chaosDamage);
         let chaosBanner: string;
         if (removedExactlyOneLayer) {
           const drawn = drawCardsFromBackpack(2);
-          chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosRawDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。`;
+          chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。`;
         } else {
-          chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosRawDamage} 点伤害。`;
+          chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosDamage} 点伤害。`;
         }
         addGameLog('magic', chaosBanner);
 
@@ -12833,7 +12838,12 @@ export default function GameBoard() {
             addGameLog('magic', `弃置「${card.name}」回到回收袋。`);
             setHeroSkillBanner(`${card.name} 已弃置回回收袋。`);
           }
-          discardCardToGraveyard(card, { owner: 'player' });
+          if (card.type === 'amulet') {
+            addPermanentMagicToRecycleBag(card);
+            applyDiscardSideEffects(card, 'player');
+          } else {
+            discardCardToGraveyard(card, { owner: 'player' });
+          }
           resetDragState();
           return;
         }
@@ -12864,7 +12874,8 @@ export default function GameBoard() {
       const fromAmuletSlot =
         cardWithOrigin.fromSlot === 'amulet' || amuletSlots.some(slot => slot?.id === card.id);
       if (fromAmuletSlot) {
-        discardCardToGraveyard(card, { owner: 'player' });
+        addPermanentMagicToRecycleBag(card);
+        applyDiscardSideEffects(card, 'player');
         setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
         addGameLog('magic', `弃置护符「${card.name}」回到回收袋。`);
         setHeroSkillBanner(`${card.name} 已弃置回回收袋。`);
