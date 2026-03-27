@@ -765,11 +765,14 @@ export const MagicSpellPreview = memo(function MagicSpellPreview({
   aspect = 'square',
   /** Card-detail `aspect-video` header: less zoom + glyph shifted up so the sticker is not clipped at the bottom. */
   detailBanner = false,
+  /** Grids / long lists: defer decode and only load near viewport to reduce jank. */
+  lazyImage = false,
 }: {
   card: MagicPatternCardRef;
   className?: string;
   aspect?: 'square' | 'landscape' | 'none';
   detailBanner?: boolean;
+  lazyImage?: boolean;
 }) {
   const rose = card.type === 'hero-magic';
   const sheen = rose
@@ -809,6 +812,9 @@ export const MagicSpellPreview = memo(function MagicSpellPreview({
         src={skillScrollImage}
         alt=""
         draggable={false}
+        loading={lazyImage ? 'lazy' : undefined}
+        decoding={lazyImage ? 'async' : undefined}
+        fetchPriority={lazyImage ? 'low' : undefined}
         className={cn(
           'h-full w-full object-cover opacity-[0.93]',
           detailBanner ? 'scale-[1.06] object-center' : 'scale-[1.18] object-center',
@@ -844,11 +850,13 @@ export const EventPatternPreview = memo(function EventPatternPreview({
   className,
   aspect = 'square',
   detailBanner = false,
+  lazyImage = false,
 }: {
   card: EventPatternCardRef;
   className?: string;
   aspect?: 'square' | 'landscape' | 'none';
   detailBanner?: boolean;
+  lazyImage?: boolean;
 }) {
   const sheen = 'from-white/50 via-amber-50/30 to-amber-950/12';
 
@@ -879,6 +887,9 @@ export const EventPatternPreview = memo(function EventPatternPreview({
         src={eventScrollImage}
         alt=""
         draggable={false}
+        loading={lazyImage ? 'lazy' : undefined}
+        decoding={lazyImage ? 'async' : undefined}
+        fetchPriority={lazyImage ? 'low' : undefined}
         className={cn(
           'h-full w-full object-cover opacity-[0.93]',
           detailBanner ? 'scale-[1.06] object-center' : 'scale-[1.18] object-center',

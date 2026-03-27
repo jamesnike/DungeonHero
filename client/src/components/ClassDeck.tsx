@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useMemo, useState, startTransition } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Shield, Eye } from 'lucide-react';
@@ -28,8 +28,8 @@ interface ClassDeckProps {
   onCardSelect?: (card: GameCardData) => void;
 }
 
-export default function ClassDeck({ 
-  classCards = [], 
+function ClassDeckComponent({
+  classCards = [],
   className = '',
   deckName = 'Knight Deck',
   onCardSelect,
@@ -37,16 +37,17 @@ export default function ClassDeck({
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [viewerOpen, setViewerOpen] = useState(false);
-  
-  // Group cards by type for viewer
-  const groupedCards = classCards.reduce((acc, card) => {
-    const type = card.skillType || card.type || 'other';
-    if (!acc[type]) {
-      acc[type] = [];
-    }
-    acc[type].push(card);
-    return acc;
-  }, {} as Record<string, GameCardData[]>);
+
+  const groupedCards = useMemo(() => {
+    return classCards.reduce((acc, card) => {
+      const type = card.skillType || card.type || 'other';
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(card);
+      return acc;
+    }, {} as Record<string, GameCardData[]>);
+  }, [classCards]);
   
   return (
     <>
@@ -55,7 +56,7 @@ export default function ClassDeck({
           'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-transform duration-200 hover:scale-[1.01]',
           className
         )}
-        onClick={() => setViewerOpen(true)}
+        onClick={() => startTransition(() => setViewerOpen(true))}
         data-testid="class-deck"
       >
         {isFlat ? (
@@ -91,7 +92,11 @@ export default function ClassDeck({
       </Card>
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="class-deck-viewer-modal">
+        <DialogContent
+          contentMotion="fade"
+          className="max-w-2xl max-h-[80vh] overflow-y-auto"
+          data-testid="class-deck-viewer-modal"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="w-6 h-6" />
@@ -135,17 +140,19 @@ export default function ClassDeck({
                           }
                         }}
                       >
-                        <div className="relative aspect-square bg-gradient-to-b from-primary/10 to-primary/5 overflow-hidden rounded-sm mb-1">
+                        <div className="relative aspect-square bg-gradient-to-b from-primary/10 to-primary/5 overflow-hidden rounded-sm mb-1 [content-visibility:auto]">
                           {isMagicSpellCardType(card.type) ? (
                             <MagicSpellPreview
                               card={card}
                               aspect="none"
+                              lazyImage
                               className="absolute inset-0 h-full w-full rounded-sm"
                             />
                           ) : isEventCardType(card.type) ? (
                             <EventPatternPreview
                               card={card}
                               aspect="none"
+                              lazyImage
                               className="absolute inset-0 h-full w-full rounded-sm"
                             />
                           ) : (
@@ -153,6 +160,9 @@ export default function ClassDeck({
                               <img
                                 src={card.image}
                                 alt={card.name}
+                                loading="lazy"
+                                decoding="async"
+                                fetchPriority="low"
                                 className="h-full w-full object-cover"
                               />
                             )
@@ -184,3 +194,5 @@ export default function ClassDeck({
     </>
   );
 }
+
+export default memo(ClassDeckComponent);

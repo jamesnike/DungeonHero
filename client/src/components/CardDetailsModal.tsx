@@ -828,7 +828,9 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'discardRightForGold+15') return '破坏右槽装备并获得 15 金币';
       if (token === 'amuletsToGold+10') return '摧毁所有护符并每个获得 10 金币';
       if (token === 'classBottom+2') return '获得 class 底部两张专属卡';
-      if (token === 'flipToHonorBloodMagic') return '事件卡翻为「战血之印」永久法术并收入背包';
+      if (token === 'flipToHonorBloodMagic') {
+        return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时对激活行每怪 1 伤害';
+      }
       if (token === 'fate-dice-strike') return '破坏右侧相邻卡牌';
       if (token === 'amuletCapacity+1') return '护符上限 +1';
       if (token === 'equipSlot1Capacity+1') return '左装备栏容量 +1';

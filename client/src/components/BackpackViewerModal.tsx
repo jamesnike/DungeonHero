@@ -36,8 +36,6 @@ export default function BackpackViewerModal({
   capacity,
   recycleCards = [],
   onCardSelect,
-  spellDamageContextBonus = 0,
-  spellEchoNextMagic = false,
 }: BackpackViewerModalProps) {
   const displayedCards = [...cards].sort((a, b) => a.name.localeCompare(b.name)); // Backpack is unordered
   const recycleBagCards = [...recycleCards].sort((a, b) => a.name.localeCompare(b.name));
@@ -61,12 +59,29 @@ export default function BackpackViewerModal({
     >
       <div className="relative h-16 w-12 overflow-hidden rounded-sm bg-gradient-to-b from-muted to-card">
         {isMagicSpellCardType(card.type) ? (
-          <MagicSpellPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+          <MagicSpellPreview
+            card={card}
+            aspect="none"
+            lazyImage
+            className="absolute inset-0 h-full w-full rounded-sm"
+          />
         ) : isEventCardType(card.type) ? (
-          <EventPatternPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+          <EventPatternPreview
+            card={card}
+            aspect="none"
+            lazyImage
+            className="absolute inset-0 h-full w-full rounded-sm"
+          />
         ) : (
           card.image && (
-            <img src={card.image} alt={card.name} className="h-full w-full object-cover" />
+            <img
+              src={card.image}
+              alt={card.name}
+              loading="lazy"
+              decoding="async"
+              fetchPriority="low"
+              className="h-full w-full object-cover"
+            />
           )
         )}
         {!isMagicSpellCardType(card.type) && !isEventCardType(card.type) && (

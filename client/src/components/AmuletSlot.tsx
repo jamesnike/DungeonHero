@@ -18,6 +18,10 @@ interface AmuletSlotProps {
   onDragEnd?: () => void;
   onCardClick?: (card: GameCardData) => void;
   scaleMultiplier?: number;
+  /** 怪物回合 / 待格挡：与手牌、地城格一致的灰显 */
+  dimForCombatLock?: boolean;
+  /** 与 HandDisplay 一致：瀑布锁、全板锁、怪物阶段时禁用拖拽与点击 */
+  disableAnimations?: boolean;
 }
 
 export default function AmuletSlot({
@@ -29,6 +33,8 @@ export default function AmuletSlot({
   onDragEnd,
   onCardClick,
   scaleMultiplier = 1,
+  dimForCombatLock = false,
+  disableAnimations = false,
 }: AmuletSlotProps) {
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
@@ -154,17 +160,22 @@ export default function AmuletSlot({
       style={{ '--dh-hero-instance-scale': appliedSlotScale.toString() } as CSSProperties}
     >
       {hasAmulets ? (
-        <div className="relative h-full w-full overflow-visible">
+        <div
+          className={`relative h-full w-full overflow-visible transition-opacity duration-200 ${
+            dimForCombatLock ? 'opacity-60' : 'opacity-100'
+          }`.trim()}
+        >
           {preparedAmulets.map((card, index) => {
             const isTopCard = index === preparedAmulets.length - 1;
             return (
               <div
                 key={card.id}
-                className="absolute inset-0"
+                className={`absolute inset-0 ${disableAnimations ? 'pointer-events-none' : ''}`.trim()}
                 style={getStackTransform(index)}
               >
                 <GameCard 
                   card={card}
+                  disableInteractions={disableAnimations}
                   onDragStart={(dragCard) => onDragStart?.(dragCard)}
                   onDragEnd={onDragEnd}
                   onClick={() => onCardClick?.(card)}

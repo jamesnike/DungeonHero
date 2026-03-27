@@ -105,6 +105,8 @@ export type CardActionContext = {
   title?: string;
   description?: string;
   handOnly?: boolean;
+  /** 与「哥布林的戏法」一致：弃牌一律进入手牌回收袋，瀑流后回背包 */
+  discardToRecycleBag?: boolean;
 };
 
 export type MonsterRewardEffect =
@@ -320,6 +322,18 @@ export type BackpackHandFlight = {
   progress: number;
   arcHeight: number;
   delivered?: boolean;
+};
+
+/** 护盾反弹 / Boss 反噬：纯表现用定向抛物线投射（伤害由结算逻辑另行应用） */
+export type DirectedCombatFxFlight = {
+  id: string;
+  kind: 'shield-reflect' | 'boss-retaliation';
+  start: Point;
+  end: Point;
+  startTime: number;
+  duration: number;
+  progress: number;
+  arcHeight: number;
 };
 
 /** 雷霆符印：从护符栏飞向目标怪物的投射物动画 */

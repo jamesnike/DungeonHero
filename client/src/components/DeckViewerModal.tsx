@@ -124,12 +124,14 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
                           <MagicSpellPreview
                             card={card}
                             aspect="none"
+                            lazyImage
                             className="absolute inset-0 h-full w-full rounded overflow-hidden"
                           />
                         ) : isEventCardType(card.type) ? (
                           <EventPatternPreview
                             card={card}
                             aspect="none"
+                            lazyImage
                             className="absolute inset-0 h-full w-full rounded overflow-hidden"
                           />
                         ) : (
@@ -137,6 +139,9 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
                             <img
                               src={card.image}
                               alt={card.name}
+                              loading="lazy"
+                              decoding="async"
+                              fetchPriority="low"
                               className="h-full w-full object-cover"
                             />
                           )

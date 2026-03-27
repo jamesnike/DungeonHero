@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Radix Dialog 等会临时锁 body 滚动：预留滚动条槽，避免开关弹窗时整页横向跳动、闪一下 */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);

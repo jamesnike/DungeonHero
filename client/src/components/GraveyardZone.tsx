@@ -199,12 +199,14 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
                             <MagicSpellPreview
                               card={card}
                               aspect="none"
+                              lazyImage
                               className="absolute inset-0 h-full w-full rounded-sm"
                             />
                           ) : isEventCardType(card.type) ? (
                             <EventPatternPreview
                               card={card}
                               aspect="none"
+                              lazyImage
                               className="absolute inset-0 h-full w-full rounded-sm"
                             />
                           ) : (
@@ -212,6 +214,9 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
                               <img
                                 src={card.image}
                                 alt={card.name}
+                                loading="lazy"
+                                decoding="async"
+                                fetchPriority="low"
                                 className="h-full w-full object-cover"
                               />
                             )
