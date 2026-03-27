@@ -1413,8 +1413,8 @@ function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备，恢复 1 点耐久。\n使用后需等待 2 次瀑流才能回到背包。',
-      description: '精准地修补武器或护盾，恢复 1 点耐久值。使用后需等待 2 次瀑流才能回到背包。',
+      magicEffect: '永久魔法：选择一个装备，恢复 1 点耐久。',
+      description: '精准地修补武器或护盾，恢复 1 点耐久值。',
       recycleDelay: 2,
     },
     {
@@ -1434,8 +1434,8 @@ function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一张地城卡牌，洗回牌堆。\n使用后需等待 2 次瀑流才能回到背包。',
-      description: '将一张地城卡牌洗回牌堆，重新扰乱命运。使用后需等待 2 次瀑流才能回到背包。',
+      magicEffect: '永久魔法：选择一张地城卡牌，洗回牌堆。',
+      description: '将一张地城卡牌洗回牌堆，重新扰乱命运。',
       recycleDelay: 2,
     },
     {
@@ -1467,6 +1467,8 @@ export default function GameBoard() {
   const hpRef = useRef(INITIAL_HP);
   hpRef.current = hp;
   const [gold, setGold] = useState(INITIAL_GOLD);
+  const goldRef = useRef(INITIAL_GOLD);
+  goldRef.current = gold;
   const [turnCount, setTurnCount] = useState(INITIAL_TURN_COUNT);
   const [shopLevel, setShopLevel] = useState(0);
   const [previewCards, setPreviewCards] = useState<ActiveRowSlots>(createEmptyActiveRow()); // Preview row slots
@@ -1840,10 +1842,8 @@ export default function GameBoard() {
   const backpackHandFlightAnimationRef = useRef<number | null>(null);
   const backpackFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const [discardShockFlights, setDiscardShockFlights] = useState<DiscardShockFlight[]>([]);
-  /** 弃牌雷击队列/弹道未结束时禁止玩家操作 */
+  /** 弃牌雷击队列/弹道未结束时禁止玩家操作（与最小化 Event/Shop 合并为 fullBoardInteractionLocked） */
   const [discardShockInteractionLocked, setDiscardShockInteractionLocked] = useState(false);
-  const discardShockInteractionLockedRef = useRef(false);
-  discardShockInteractionLockedRef.current = discardShockInteractionLocked;
   const discardShockFlightsRef = useRef<DiscardShockFlight[]>([]);
   const discardShockFlightAnimationRef = useRef<number | null>(null);
   const discardShockElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -2255,6 +2255,13 @@ export default function GameBoard() {
   const [classDeck, setClassDeck] = useState<GameCardData[]>([]); // Class deck cards
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [eventModalMinimized, setEventModalMinimized] = useState(false);
+  /** Event / Shop 最小化时冻结主界面操作（与弃牌雷击共用 fullBoardInteractionLocked） */
+  const minimizedModalLocksBoard =
+    (eventModalOpen && eventModalMinimized) || (shopModalOpen && shopModalMinimized);
+  const fullBoardInteractionLocked =
+    discardShockInteractionLocked || minimizedModalLocksBoard;
+  const fullBoardInteractionLockedRef = useRef(false);
+  fullBoardInteractionLockedRef.current = fullBoardInteractionLocked;
   const [currentEventCard, setCurrentEventCard] = useState<GameCardData | null>(null);
   const [permanentMaxHpBonus, setPermanentMaxHpBonus] = useState(0);
   const [permanentSpellDamageBonus, setPermanentSpellDamageBonus] = useState(0);
@@ -2978,13 +2985,14 @@ export default function GameBoard() {
   const combatPanelWrapperClassName = useMemo(
     () =>
       [
-        'pointer-events-auto absolute z-40 combat-panel-wrapper',
+        fullBoardInteractionLocked ? 'pointer-events-none' : 'pointer-events-auto',
+        'absolute z-40 combat-panel-wrapper',
         isCombatPanelDragging ? 'combat-panel-wrapper--dragging' : '',
         combatPanelPosition ? '' : COMBAT_PANEL_DEFAULT_POSITION_CLASS,
       ]
         .filter(Boolean)
         .join(' '),
-    [combatPanelPosition, isCombatPanelDragging],
+    [combatPanelPosition, isCombatPanelDragging, fullBoardInteractionLocked],
   );
 
   const resetDragState = useCallback(() => {
@@ -3242,7 +3250,7 @@ export default function GameBoard() {
 
   const handleCardClick = useCallback(
     (card: GameCardData) => {
-      if (discardShockInteractionLockedRef.current) return;
+      if (fullBoardInteractionLockedRef.current) return;
       setSelectedCard(card);
       if (card.type === 'monster') {
         const preview = getMonsterRewardsPreview(card);
@@ -4486,7 +4494,7 @@ export default function GameBoard() {
   };
 
   const endHeroTurn = () => {
-    if (discardShockInteractionLockedRef.current) return;
+    if (fullBoardInteractionLockedRef.current) return;
     pushUndoSnapshot();
     const engagedMonsters = getEngagedMonsterCards();
     if (engagedMonsters.length === 0) {
@@ -4551,7 +4559,7 @@ export default function GameBoard() {
     if (!combatState.pendingBlock) {
       return;
     }
-    if (discardShockInteractionLockedRef.current) {
+    if (fullBoardInteractionLockedRef.current) {
       return;
     }
 
@@ -6938,7 +6946,7 @@ export default function GameBoard() {
   const handleUndo = useCallback(() => {
     const stack = undoStackRef.current;
     if (stack.length === 0) return;
-    if (discardShockInteractionLockedRef.current) return;
+    if (fullBoardInteractionLockedRef.current) return;
     const entry = stack.pop()!;
     setUndoCount(stack.length);
     saveUndoStack(stack);
@@ -8804,11 +8812,11 @@ export default function GameBoard() {
           return prev;
         }
 
-        if (gold < offering.price) {
+        if (goldRef.current < offering.price) {
           return prev;
         }
 
-        if (backpackItems.length >= backpackCapacity) {
+        if (backpackItemsRef.current.length >= backpackCapacity) {
           return prev;
         }
 
@@ -8824,7 +8832,7 @@ export default function GameBoard() {
         return next;
       });
     },
-    [backpackItems.length, gold, triggerClassDeckFlight],
+    [backpackCapacity, triggerClassDeckFlight],
   );
 
   const handleShopClose = useCallback(async () => {
@@ -8923,26 +8931,26 @@ export default function GameBoard() {
 
   const handleShopHealRequest = useCallback(() => {
     pushUndoSnapshot();
-    if (shopHealUsed || gold < SHOP_HEAL_COST || hp >= maxHp) return;
+    if (shopHealUsed || goldRef.current < SHOP_HEAL_COST || hp >= maxHp) return;
     addGameLog('shop', `花费 ${SHOP_HEAL_COST} 金币治疗`);
     setGold(prev => prev - SHOP_HEAL_COST);
     healHero(SHOP_HEAL_AMOUNT);
     setShopHealUsed(true);
     setHeroSkillBanner(`花费 ${SHOP_HEAL_COST} 金币恢复了 ${SHOP_HEAL_AMOUNT} 点生命。`);
-  }, [addGameLog, gold, healHero, hp, maxHp, setHeroSkillBanner, shopHealUsed]);
+  }, [addGameLog, healHero, hp, maxHp, setHeroSkillBanner, shopHealUsed]);
 
   const handleShopLevelUpRequest = useCallback(() => {
     pushUndoSnapshot();
-    if (shopLevelUpUsed || gold < SHOP_LEVEL_UP_COST) return;
+    if (shopLevelUpUsed || goldRef.current < SHOP_LEVEL_UP_COST) return;
     addGameLog('shop', `花费 ${SHOP_LEVEL_UP_COST} 金币提升商店等级`);
     setGold(prev => prev - SHOP_LEVEL_UP_COST);
     setShopLevel(prev => prev + 1);
     setShopLevelUpUsed(true);
     setHeroSkillBanner(`花费 ${SHOP_LEVEL_UP_COST} 金币，商店等级提升了！`);
-  }, [addGameLog, gold, setHeroSkillBanner, shopLevelUpUsed]);
+  }, [addGameLog, setHeroSkillBanner, shopLevelUpUsed]);
 
   const handleShopSkillDiscoverRequest = useCallback(() => {
-    if (shopSkillDiscoverUsed || gold < SHOP_SKILL_DISCOVER_COST) return;
+    if (shopSkillDiscoverUsed || goldRef.current < SHOP_SKILL_DISCOVER_COST) return;
     const ownedSkills = new Set<string>([
       ...(selectedHeroSkill ? [selectedHeroSkill] : []),
       ...extraHeroSkills,
@@ -8957,7 +8965,7 @@ export default function GameBoard() {
     setShopSkillSelectOpen(true);
     setShopSkillDiscoverUsed(true);
     addGameLog('shop', `花费 ${SHOP_SKILL_DISCOVER_COST} 金币发现英雄技能`);
-  }, [addGameLog, extraHeroSkills, gold, selectedHeroSkill, shopSkillDiscoverUsed]);
+  }, [addGameLog, extraHeroSkills, selectedHeroSkill, shopSkillDiscoverUsed]);
 
   const handleShopSkillSelect = useCallback((skillId: string) => {
     pushUndoSnapshot();
@@ -9346,7 +9354,8 @@ export default function GameBoard() {
         consumeClassCardFromHand(card.id);
 
         let shopOpened = false;
-        if (backpackItems.length < backpackCapacity) {
+        // 必须用塞入「贪婪」后的容量：若仍用旧的 backpackItems.length，会在「刚好差一格满」时误开商店，导致界面有钱但背包已满、购买按钮全灰。
+        if (backpackItemsRef.current.length < backpackCapacity) {
           const offerings = generateShopOfferings();
           if (offerings.length > 0) {
             setShopOfferings(offerings);
@@ -11382,7 +11391,7 @@ export default function GameBoard() {
   );
 
   function handleWeaponToMonster(weapon: any, monster: GameCardData) {
-    if (discardShockInteractionLockedRef.current) return;
+    if (fullBoardInteractionLockedRef.current) return;
     pushUndoSnapshot();
     const slotId = weapon.fromSlot as EquipmentSlotId | undefined;
     if (!slotId) {
@@ -11405,7 +11414,7 @@ export default function GameBoard() {
   };
 
   function handleCardToHero(card: GameCardData) {
-    if (discardShockInteractionLockedRef.current) return;
+    if (fullBoardInteractionLockedRef.current) return;
     pushUndoSnapshot();
     if (isCardFromEquipmentSlot(card)) {
       // Equipped items can only attack monsters or be discarded.
@@ -11741,7 +11750,7 @@ export default function GameBoard() {
   };
 
   function handleCardToSlot(card: GameCardData, slotId: string) {
-    if (discardShockInteractionLockedRef.current) return;
+    if (fullBoardInteractionLockedRef.current) return;
     pushUndoSnapshot();
     if (slotId === 'slot-amulet') {
       if (card.type !== 'amulet') {
@@ -12744,7 +12753,7 @@ export default function GameBoard() {
   };
 
   const handlePlayCardFromHand = async (card: GameCardData, target?: any) => {
-    if (discardShockInteractionLockedRef.current) return;
+    if (fullBoardInteractionLockedRef.current) return;
     pushUndoSnapshot();
     if (!consumeCardFromHand(card)) {
       return;
@@ -12766,7 +12775,7 @@ export default function GameBoard() {
   };
 
   const handleBackpackClick = () => {
-    if (playerTargetingActive || discardShockInteractionLockedRef.current) return;
+    if (playerTargetingActive || fullBoardInteractionLockedRef.current) return;
     setBackpackViewerOpen(true);
   };
 
@@ -12955,7 +12964,7 @@ export default function GameBoard() {
     slotTargetingActive && (!potionSlotTargeting || isPotionSlotEligible('equipmentSlot2'));
 
   const handleHeroSkillButtonClick = useCallback(() => {
-    if (discardShockInteractionLockedRef.current) return;
+    if (fullBoardInteractionLockedRef.current) return;
     if (heroSkillTargeting) {
       cancelHeroSkillAction();
       return;
@@ -12964,7 +12973,7 @@ export default function GameBoard() {
   }, [heroSkillTargeting, cancelHeroSkillAction, handleHeroSkillUse]);
 
   const handleExtraHeroSkillButtonClick = useCallback((skillId: string) => {
-    if (discardShockInteractionLockedRef.current) return;
+    if (fullBoardInteractionLockedRef.current) return;
     if (heroSkillTargeting) {
       cancelHeroSkillAction();
       return;
@@ -12974,7 +12983,7 @@ export default function GameBoard() {
 
   const handleHeroMagicTrigger = useCallback(
     (id: HeroMagicId) => {
-      if (discardShockInteractionLockedRef.current) return;
+      if (fullBoardInteractionLockedRef.current) return;
       pushUndoSnapshot();
       startHeroMagicActivation(id, 'gauge');
     },
@@ -12983,7 +12992,7 @@ export default function GameBoard() {
 
   const handleHeroMagicChoice = useCallback(
     (choice: 'heal' | 'purge') => {
-      if (discardShockInteractionLockedRef.current) return;
+      if (fullBoardInteractionLockedRef.current) return;
       pushUndoSnapshot();
       resolveHolyLightChoice(choice);
     },
@@ -13052,7 +13061,7 @@ export default function GameBoard() {
     if (
       (waterfallAnimation.isActive && !isSpellCard) ||
       targetingActive ||
-      discardShockInteractionLockedRef.current
+      fullBoardInteractionLockedRef.current
     )
       return;
     heroFrameHoverLogCountRef.current = 0;
@@ -13207,7 +13216,7 @@ export default function GameBoard() {
     if (
       waterfallAnimation.isActive ||
       playerTargetingActive ||
-      discardShockInteractionLockedRef.current
+      fullBoardInteractionLockedRef.current
     )
       return;
     heroFrameHoverLogCountRef.current = 0;
@@ -13265,7 +13274,7 @@ export default function GameBoard() {
   const heroRowInteractionLocked =
     playerTargetingActive ||
     isDefeatAnimationPlaying ||
-    discardShockInteractionLocked ||
+    fullBoardInteractionLocked ||
     (isWaterfallLocked && !draggedCardIsSpell);
   const heroCardDropHighlight =
     !heroRowInteractionLocked &&
@@ -13283,7 +13292,7 @@ export default function GameBoard() {
     !isWaterfallLocked &&
     !isDefeatAnimationPlaying &&
     !playerTargetingActive &&
-    !discardShockInteractionLocked &&
+    !fullBoardInteractionLocked &&
     (canSellDraggedCard || canSellDraggedEquipment);
   const shouldHighlightGraveyard = graveyardDropEnabled && isDragSessionActive;
   const heroRowMagicDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
@@ -13638,13 +13647,13 @@ export default function GameBoard() {
     !isWaterfallLocked &&
     !isDefeatAnimationPlaying &&
     !playerTargetingActive &&
-    !discardShockInteractionLocked &&
+    !fullBoardInteractionLocked &&
     canMonsterTargetShieldSlot(equipmentSlot1);
   const equipmentSlot2MonsterTarget =
     !isWaterfallLocked &&
     !isDefeatAnimationPlaying &&
     !playerTargetingActive &&
-    !discardShockInteractionLocked &&
+    !fullBoardInteractionLocked &&
     canMonsterTargetShieldSlot(equipmentSlot2);
   const renderBlockButton = (
     target: BlockTarget,
@@ -13656,10 +13665,10 @@ export default function GameBoard() {
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
         <button
           type="button"
-          disabled={disabled || discardShockInteractionLocked}
+          disabled={disabled || fullBoardInteractionLocked}
           onClick={(e) => {
             e.stopPropagation();
-            if (!disabled && !discardShockInteractionLocked) {
+            if (!disabled && !fullBoardInteractionLocked) {
               resolveBlockChoice(target);
             }
           }}
@@ -13686,7 +13695,7 @@ export default function GameBoard() {
     !isWaterfallLocked &&
     !isDefeatAnimationPlaying &&
     !playerTargetingActive &&
-    !discardShockInteractionLocked &&
+    !fullBoardInteractionLocked &&
     draggingEquipmentCard;
   const equipmentSlot1DropAvailable = equipmentSlotDropAvailable;
   const equipmentSlot2DropAvailable = equipmentSlotDropAvailable;
@@ -13702,11 +13711,11 @@ export default function GameBoard() {
           maxSlots={maxAmuletSlots}
           scaleMultiplier={stageScale}
           onDrop={(card) => {
-                if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
+                if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
             handleCardToSlot(card, 'slot-amulet');
           }}
           onDragStart={(card) => {
-                if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
+                if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
             setDraggedCard(card);
             setDraggedEquipment(null);
             setDraggedCardSource('amulet');
@@ -13720,7 +13729,7 @@ export default function GameBoard() {
             !isWaterfallLocked &&
             !isDefeatAnimationPlaying &&
             !playerTargetingActive &&
-            !discardShockInteractionLocked &&
+            !fullBoardInteractionLocked &&
             draggedCard?.type === 'amulet'
           }
           onCardClick={handleCardClick}
@@ -13754,11 +13763,11 @@ export default function GameBoard() {
             }
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot1}
             onDrop={(card) => {
-              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
+              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
               handleCardToSlot(card, 'slot-equipment-1');
             }}
             onDragStart={(equipment) => {
-              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
+              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
               setDraggedEquipment(equipment);
               setDraggedCard(null);
               setDraggedCardSource(equipment?.fromSlot ?? 'equipmentSlot1');
@@ -13798,7 +13807,7 @@ export default function GameBoard() {
               if (
                 (isWaterfallLocked && card.type !== 'magic') ||
                 playerTargetingActive ||
-                discardShockInteractionLocked
+                fullBoardInteractionLocked
               ) {
                 return;
               }
@@ -13835,7 +13844,7 @@ export default function GameBoard() {
             onPotionCancel={undefined}
             spellDamageBonus={permanentSpellDamageBonus}
             onHeroClick={
-              playerTargetingActive || discardShockInteractionLocked
+              playerTargetingActive || fullBoardInteractionLocked
                 ? undefined
                 : () => {
                     setHeroDetailsOpen(true);
@@ -13873,11 +13882,11 @@ export default function GameBoard() {
             }
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot2}
             onDrop={(card) => {
-              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
+              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
               handleCardToSlot(card, 'slot-equipment-2');
             }}
             onDragStart={(equipment) => {
-              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
+              if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
               setDraggedEquipment(equipment);
               setDraggedCard(null);
               setDraggedCardSource(equipment?.fromSlot ?? 'equipmentSlot2');
@@ -13911,13 +13920,14 @@ export default function GameBoard() {
           backpackCount={backpackItems.length}
           capacity={backpackCapacity}
           onDrop={(card) => {
-            if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
+            if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
             handleCardToSlot(card, 'slot-backpack');
           }}
           isDropTarget={
             !isWaterfallLocked &&
             !isDefeatAnimationPlaying &&
             !playerTargetingActive &&
+            !fullBoardInteractionLocked &&
             draggedCard !== null &&
             !draggedEquipment &&
             (
@@ -14021,7 +14031,7 @@ export default function GameBoard() {
   }, [showMonsterAttackIndicator, updateSwordVectors]);
 
   return (
-    <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...(eventPendingLocked ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
+    <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...(minimizedModalLocksBoard ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
       {/* Header - Fixed height */}
       <div className="flex-shrink-0">
         <GameHeader 
@@ -14031,7 +14041,10 @@ export default function GameBoard() {
           cardsRemaining={getRemainingCards()}
           turnCount={turnCount}
           shopLevel={shopLevel}
-          onDeckClick={() => setDeckViewerOpen(true)}
+          onDeckClick={() => {
+            if (fullBoardInteractionLocked) return;
+            setDeckViewerOpen(true);
+          }}
           onNewGame={handleNewGame}
         />
       </div>
@@ -14123,7 +14136,7 @@ export default function GameBoard() {
               showMonsterAttackIndicator ||
               isWaterfallLocked ||
               isDefeatAnimationPlaying ||
-              discardShockInteractionLocked;
+              fullBoardInteractionLocked;
             const monsterTargetHighlight = Boolean(
               monsterTargetingActive && card && card.type === 'monster',
             );
@@ -14151,13 +14164,13 @@ export default function GameBoard() {
                 }
                 onDragEnd={handleDragEndFromDungeon}
                 onWeaponDrop={
-                  playerTargetingActive || discardShockInteractionLocked
+                  playerTargetingActive || fullBoardInteractionLocked
                     ? undefined
                     : (weapon) => handleWeaponToMonster(weapon, card)
                 }
                 isWeaponDropTarget={
                   !playerTargetingActive &&
-                  !discardShockInteractionLocked &&
+                  !fullBoardInteractionLocked &&
                   (draggedEquipment?.type === 'weapon' || draggedEquipment?.type === 'monster') &&
                   card.type === 'monster'
                 }
@@ -14286,7 +14299,7 @@ export default function GameBoard() {
             <div className={cellInnerClass} ref={setGraveyardRef}>
               <GraveyardZone
                 onDrop={(card) => {
-                  if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || discardShockInteractionLocked) return;
+                  if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
                   handleSellCard(card);
                 }}
                 isDropTarget={graveyardDropEnabled}
@@ -14430,7 +14443,7 @@ export default function GameBoard() {
           onDragEndFromHand={handleDragEndFromHand}
           maxHandSize={effectiveHandLimit}
           cardSize={gridCardSize} // Pass the measured size to HandDisplay
-          disableAnimations={isWaterfallLocked}
+          disableAnimations={isWaterfallLocked || fullBoardInteractionLocked}
           onCardClick={handleCardClick}
         />
       </div>
@@ -14450,7 +14463,7 @@ export default function GameBoard() {
             pendingBlock={combatState.pendingBlock}
             monsterAttackQueue={combatState.monsterAttackQueue}
             onEndHeroTurn={endHeroTurn}
-            endHeroTurnDisabled={discardShockInteractionLocked}
+            endHeroTurnDisabled={fullBoardInteractionLocked}
             equipmentSlot1={equipmentSlot1}
             equipmentSlot2={equipmentSlot2}
             stageScale={stageScale}
@@ -14524,7 +14537,7 @@ export default function GameBoard() {
       )}
 
       {/* Event-pending floating restore button */}
-      {eventPendingLocked && (
+      {eventModalOpen && eventModalMinimized && (
         <div
           className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-pink-600/90 px-5 py-2.5 shadow-lg cursor-pointer select-none event-pending-restore-btn hover:bg-pink-600 transition-colors"
           style={{ pointerEvents: 'auto' }}
@@ -14544,7 +14557,9 @@ export default function GameBoard() {
       {/* Shop-minimized floating restore button */}
       {shopModalOpen && shopModalMinimized && (
         <div
-          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-600/90 px-5 py-2.5 shadow-lg cursor-pointer select-none hover:bg-amber-600 transition-colors"
+          className={`absolute left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-600/90 px-5 py-2.5 shadow-lg cursor-pointer select-none hover:bg-amber-600 transition-colors ${
+            eventModalOpen && eventModalMinimized ? 'bottom-32' : 'bottom-20'
+          }`}
           style={{ pointerEvents: 'auto' }}
           onClick={() => setShopModalMinimized(false)}
           onTouchEnd={(e) => {
@@ -14560,7 +14575,7 @@ export default function GameBoard() {
       )}
 
       {deathWardPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" style={{ pointerEvents: 'auto' }}>
           <div className="w-full max-w-sm space-y-4 rounded-lg bg-card p-6 text-center shadow-2xl">
             <div className="space-y-1">
               <p className="text-lg font-semibold">命悬一线</p>
@@ -14797,7 +14812,7 @@ export default function GameBoard() {
       {/* Bottom-right controls: minimized combat panel + undo */}
       <div className="absolute bottom-4 right-4 z-[9999] flex flex-col items-end" style={{ pointerEvents: 'none' }}>
         {isCombatPanelVisible && isCombatPanelMinimized && (
-          <div className="pointer-events-auto mb-1">
+          <div className={`mb-1 ${fullBoardInteractionLocked ? 'pointer-events-none' : 'pointer-events-auto'}`}>
             <CombatPanel
               engagedMonsters={engagedMonsters}
               isActive={isCombatPanelVisible}
@@ -14807,7 +14822,7 @@ export default function GameBoard() {
               pendingBlock={combatState.pendingBlock}
               monsterAttackQueue={combatState.monsterAttackQueue}
               onEndHeroTurn={endHeroTurn}
-              endHeroTurnDisabled={discardShockInteractionLocked}
+              endHeroTurnDisabled={fullBoardInteractionLocked}
               equipmentSlot1={equipmentSlot1}
               equipmentSlot2={equipmentSlot2}
               stageScale={stageScale}
@@ -14828,8 +14843,8 @@ export default function GameBoard() {
             <button
               onClick={(e) => { e.stopPropagation(); handleUndo(); }}
               onPointerDown={(e) => e.stopPropagation()}
-              disabled={undoCount === 0 || discardShockInteractionLocked}
-              style={{ pointerEvents: 'auto' }}
+              disabled={undoCount === 0 || fullBoardInteractionLocked}
+              style={{ pointerEvents: fullBoardInteractionLocked ? 'none' : 'auto' }}
               className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 shadow-lg transition-all select-none ${
                 undoCount > 0
                   ? 'bg-slate-700/90 text-white hover:bg-slate-600 active:scale-95'

@@ -272,6 +272,8 @@ function GameCardInner({
   const isEventCard = card.type === 'event';
   const isTitleBandCard = isMagicLikeCard || isEventCard;
   const isPermanentMagicCard = card.type === 'magic' && card.magicType === 'permanent';
+  const permRecycleWaterfalls = card.recycleDelay ?? 1;
+  const showPermRecycleCount = permRecycleWaterfalls > 1;
   const healingPotionEffects: PotionEffectId[] = ['heal-5', 'heal-7'];
   const isHealingPotion =
     isPotionCard && (!card.potionEffect || healingPotionEffects.includes(card.potionEffect));
@@ -539,7 +541,7 @@ const amuletEffectText =
       case 'weapon':
         return 'border-amber-500/40';
       case 'shield':
-        return 'border-sky-500/45';
+        return 'border-blue-500/40';
       case 'potion':
         return 'border-emerald-500/40';
       case 'amulet':
@@ -561,7 +563,7 @@ const amuletEffectText =
       case 'weapon':
         return 'bg-amber-200/30';
       case 'shield':
-        return 'bg-blue-200/30';
+        return 'bg-blue-300/36';
       default:
         return 'bg-gradient-to-b from-muted to-card';
     }
@@ -578,7 +580,7 @@ const amuletEffectText =
       case 'weapon':
         return 'bg-amber-200/30';
       case 'shield':
-        return 'bg-blue-200/30';
+        return 'bg-blue-300/36';
       default:
         return 'bg-card';
     }
@@ -740,6 +742,9 @@ const amuletEffectText =
                 {(isPermanentMagicCard || card.isPermanentEvent) && (
                   <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
                     <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
+                    {showPermRecycleCount && (
+                      <span className="tabular-nums leading-none text-[11px]">{permRecycleWaterfalls}</span>
+                    )}
                   </span>
                 )}
               </div>

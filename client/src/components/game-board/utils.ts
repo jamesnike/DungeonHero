@@ -982,6 +982,7 @@ export function createStarterBackpack(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一个装备，恢复 1 点耐久。',
       description: '精准地修补武器或护盾，恢复 1 点耐久值。',
+      recycleDelay: 2,
     },
     {
       id: STARTER_CARD_IDS.healTwo,
@@ -1002,6 +1003,7 @@ export function createStarterBackpack(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，洗回牌堆。',
       description: '将一张地城卡牌洗回牌堆，重新扰乱命运。',
+      recycleDelay: 2,
     },
     {
       id: STARTER_CARD_IDS.dungeonSwap,
