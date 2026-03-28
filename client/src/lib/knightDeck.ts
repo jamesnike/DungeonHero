@@ -64,7 +64,7 @@ export function generateKnightDeck(): KnightCardData[] {
   pushCard({
     type: 'weapon',
     name: '碎雷战锤',
-    value: 4,
+    value: 3,
     image: thunderHammerImage,
     classCard: true,
     description: '每次攻击永久增加该装备栏 +1 伤害。',

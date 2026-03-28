@@ -500,7 +500,7 @@ export function createDeck(): GameCardData[] {
       name: 'Life Amulet',
       value: 5,
       image: lifeAmuletImage,
-      description: '攻击时候，超出对方血量的伤害，为自己回血',
+      description: '攻击时，若伤害超出怪物血量，回复 6 点生命。',
       amuletEffect: 'life',
     },
     {

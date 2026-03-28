@@ -915,7 +915,7 @@ function createDeck(): GameCardData[] {
       name: 'Life Amulet',
       value: 5,
       image: lifestealAmuletImage,
-      description: '攻击时候，超出对方血量的伤害，为自己回血',
+      description: '攻击时，若伤害超出怪物血量，回复 6 点生命。',
       amuletEffect: 'life',
     },
     {
@@ -4815,7 +4815,6 @@ export default function GameBoard() {
     let workingMonster = targetMonster;
     let monsterDefeated = false;
     let totalRecordedDamage = 0;
-    /** 噬血砺锋：按命中时从当前血层实际扣掉的血量吸血；该次攻击生命护符（溢出回血）不叠加，由吸血覆盖 */
     let discardEmpowerLifestealHpSum = 0;
     let overflowHealing = 0;
     let strengthHits = 0;
@@ -4860,9 +4859,10 @@ export default function GameBoard() {
         addGameLog('combat', `${targetMonster.name} 反噬：造成 ${retDmg} 点直接伤害！`);
       }
 
-      if (amuletEffects.hasLife && !discardEmpowerLifestealThisAttack) {
-        const overflow = Math.max(0, finalDamage - monsterHpBefore);
-        overflowHealing += overflow;
+      if (amuletEffects.hasLife && !overflowHealing) {
+        if (finalDamage > monsterHpBefore) {
+          overflowHealing = 6;
+        }
       }
 
       workingMonster = updatedMonster;
