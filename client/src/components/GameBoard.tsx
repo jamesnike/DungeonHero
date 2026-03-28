@@ -3348,12 +3348,13 @@ export default function GameBoard() {
     };
 
     const createMaxHpOption = (): MonsterRewardOption => {
+      const amount = Math.random() < 0.5 ? 2 : 3;
       return {
         id: createMonsterRewardOptionId(),
-        title: '最大生命 +2',
+        title: `最大生命 +${amount}`,
         description: '淬炼体魄，扩张体能上限。',
         detail: '永久增益',
-        effect: { type: 'maxHp', amount: 2 },
+        effect: { type: 'maxHp', amount },
       };
     };
 
@@ -3375,7 +3376,9 @@ export default function GameBoard() {
     pushOption(createDiscoverOption());
     pushOption(createGraveyardDiscoverOption());
     pushOption(createMaxHpOption());
-    pushOption(createSpellDamageOption());
+    if (Math.random() < 0.3) {
+      pushOption(createSpellDamageOption());
+    }
 
     const pool = [...options];
     const selected: MonsterRewardOption[] = [];

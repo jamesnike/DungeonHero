@@ -126,7 +126,8 @@ export default function DiceRoller({
       if (!parent) return;
       
       const dpr = window.devicePixelRatio || 1;
-      const { width, height } = parent.getBoundingClientRect();
+      const width = parent.offsetWidth;
+      const height = parent.offsetHeight;
       
       if (width === 0 || height === 0) return;
 
@@ -203,8 +204,9 @@ export default function DiceRoller({
     }
 
     const updateSize = () => {
-      const rect = target.getBoundingClientRect();
-      const nextSize = Math.min(rect.width, rect.height);
+      const w = target.offsetWidth;
+      const h = target.offsetHeight;
+      const nextSize = Math.min(w, h);
       if (!nextSize) return;
       setDiceSize(prev => {
         if (prev === null) return nextSize;
