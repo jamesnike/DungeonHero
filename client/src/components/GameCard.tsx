@@ -1127,7 +1127,7 @@ const amuletEffectText =
                           </div>
                         )}
                       </div>
-                      {card.hpLayers && card.hpLayers > 1 && (
+                      {card.hpLayers && card.hpLayers > 1 && card.durability === undefined && (
                         <div className={`flex ${isCompact ? 'gap-px mt-0.5' : 'gap-0.5 mt-1'}`}>
                           {[...Array(card.hpLayers)].map((_, i) => (
                             <div 
