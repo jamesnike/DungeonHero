@@ -727,7 +727,7 @@ const amuletEffectText =
         touch-none
         ${isDragging 
           ? 'opacity-60' 
-          : 'hover:scale-105 hover:-translate-y-1 hover:rotate-1'
+          : ''
         }
         ${card.type === 'monster' && isWeaponDropTarget ? 'scale-105' : ''}
         ${engagedMonster ? 'engaged-monster' : ''}

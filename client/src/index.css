@@ -946,6 +946,12 @@ html {
     );
   }
 
+  @media (hover: hover) {
+    .dh-card-wrapper:hover {
+      transform: scale(1.05) translateY(-0.25rem) rotate(1deg);
+    }
+  }
+
   .dh-card__name {
     font-size: calc(
       var(--dh-card-title-base) *

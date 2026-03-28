@@ -868,7 +868,7 @@ function createDeck(): GameCardData[] {
     },
     {
       type: 'potion',
-      name: '暮光翻转药剂',
+      name: '魔法平衡药剂',
       value: 0,
       image: potionTwilightImage,
       potionEffect: 'discover-graveyard-magic',

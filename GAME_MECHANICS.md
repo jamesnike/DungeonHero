@@ -604,7 +604,7 @@ baseDamage = max(0,
 | 高级修复剂 | `boost-both-slots` | 所有装备槽加成+1 |
 | 背包觉醒药 | `draw-backpack-4` | 背包容量+1，手牌上限+1，从背包抽牌 |
 | 洞察药剂 | `discover-class-3` | 从职业牌堆发现3张 |
-| 暮光翻转药剂 | `discover-graveyard-magic` | 从坟场魔法中选择 → 翻转 |
+| 魔法平衡药剂 | `discover-graveyard-magic` | 从坟场魔法中选择 → 翻转 |
 
 ### 11.3 骑士职业药水
 
