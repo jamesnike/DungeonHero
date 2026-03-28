@@ -24,7 +24,7 @@ import GameCard, {
   isPermRecycleEquipment,
 } from './GameCard';
 import EquipmentSlot from './EquipmentSlot';
-import CombatPanel from './CombatPanel';
+// CombatPanel removed — only the standalone End Hero Turn button is used
 import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
 import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -16071,32 +16071,7 @@ export default function GameBoard() {
         />
       </div>
 
-      {isCombatPanelVisible && !isCombatPanelMinimized && (
-        <div
-          ref={combatPanelWrapperRef}
-          className={combatPanelWrapperClassName}
-          style={combatPanelStyle}
-        >
-          <CombatPanel
-            engagedMonsters={engagedMonsters}
-            isActive={isCombatPanelVisible}
-            currentTurn={combatState.currentTurn}
-            heroAttacksRemaining={combatState.heroAttacksRemaining}
-            heroAttacksThisTurn={combatState.heroAttacksThisTurn}
-            pendingBlock={combatState.pendingBlock}
-            monsterAttackQueue={combatState.monsterAttackQueue}
-            onEndHeroTurn={endHeroTurn}
-            endHeroTurnDisabled={endHeroTurnDisabled}
-            equipmentSlot1={equipmentSlot1}
-            equipmentSlot2={equipmentSlot2}
-            stageScale={stageScale}
-            onDragHandlePointerDown={handleCombatPanelPointerDown}
-            isDragging={isCombatPanelDragging}
-            minimized={false}
-            onMinimizedChange={setIsCombatPanelMinimized}
-          />
-        </div>
-      )}
+      {/* CombatPanel removed — End Hero Turn button lives in the top-right overlay below */}
       <GameLogPanel
         entries={gameLogEntries}
         onClear={clearGameLog}
@@ -16541,7 +16516,7 @@ export default function GameBoard() {
         <div
           className="absolute right-4 z-[9999]"
           style={{
-            top: `${headerHeight}px`,
+            top: `${headerHeight + 8}px`,
             pointerEvents: 'none',
             transform: `scale(${stageScale})`,
             transformOrigin: 'top right',
@@ -16552,41 +16527,20 @@ export default function GameBoard() {
             onPointerDown={(e) => e.stopPropagation()}
             disabled={endHeroTurnDisabled}
             style={{ pointerEvents: endHeroTurnDisabled ? 'none' : 'auto' }}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 shadow-lg transition-all select-none ${
+            className={`end-hero-turn-btn flex items-center gap-2 rounded-full px-5 py-2.5 shadow-lg transition-all select-none font-bold ${
               !endHeroTurnDisabled
-                ? 'bg-amber-500/90 text-white hover:bg-amber-600 active:scale-95'
+                ? 'bg-amber-500 text-white hover:bg-amber-600 active:scale-95'
                 : 'bg-amber-500/40 text-white/40 cursor-not-allowed'
             }`}
           >
-            <Swords className="w-3.5 h-3.5" />
-            <span className="text-xs font-bold">End Hero Turn</span>
+            <Swords className="w-5 h-5" />
+            <span className="text-sm">End Hero Turn</span>
           </button>
         </div>
       )}
 
-      {/* Bottom-right controls: minimized combat panel + undo */}
+      {/* Bottom-right controls: undo */}
       <div className="absolute bottom-4 right-4 z-[9999] flex flex-col items-end" style={{ pointerEvents: 'none' }}>
-        {isCombatPanelVisible && isCombatPanelMinimized && (
-          <div className={`mb-1 ${fullBoardInteractionLocked ? 'pointer-events-none' : 'pointer-events-auto'}`}>
-            <CombatPanel
-              engagedMonsters={engagedMonsters}
-              isActive={isCombatPanelVisible}
-              currentTurn={combatState.currentTurn}
-              heroAttacksRemaining={combatState.heroAttacksRemaining}
-              heroAttacksThisTurn={combatState.heroAttacksThisTurn}
-              pendingBlock={combatState.pendingBlock}
-              monsterAttackQueue={combatState.monsterAttackQueue}
-              onEndHeroTurn={endHeroTurn}
-              endHeroTurnDisabled={endHeroTurnDisabled}
-              equipmentSlot1={equipmentSlot1}
-              equipmentSlot2={equipmentSlot2}
-              stageScale={stageScale}
-              isDragging={false}
-              minimized={true}
-              onMinimizedChange={setIsCombatPanelMinimized}
-            />
-          </div>
-        )}
         {!gameOver && !showSkillSelection && (
           <div
             style={{

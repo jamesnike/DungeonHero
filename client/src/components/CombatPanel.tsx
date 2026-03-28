@@ -302,7 +302,7 @@ export default function CombatPanel({
                 </span>
                 <Button
                   size="sm"
-                  className="px-2 py-1 combat-panel__button bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md"
+                  className="combat-panel__end-turn-btn bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md"
                   disabled={endHeroTurnDisabled}
                   onClick={onEndHeroTurn}
                 >
