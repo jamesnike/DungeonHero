@@ -1,4 +1,3 @@
-// Mobile drag and drop utility for touch devices
 export interface DragData {
   type: 'card' | 'equipment';
   data: any;
@@ -12,6 +11,7 @@ let dragPreview: HTMLElement | null = null;
 let touchTarget: HTMLElement | null = null;
 
 const DRAG_THRESHOLD = 10;
+const HIT_TEST_INTERVAL = 3;
 
 export const initMobileDrag = (
   element: HTMLElement,
@@ -23,8 +23,9 @@ export const initMobileDrag = (
   let startPoint: { x: number; y: number } | null = null;
   let dragStarted = false;
   let rafId: number | null = null;
-  let previewWidth = 0;
-  let previewHeight = 0;
+  let previewHalfW = 0;
+  let previewHalfH = 0;
+  let hitTestCounter = 0;
 
   const resolveData = (): DragData => typeof data === 'function' ? data() : data;
 
@@ -34,31 +35,24 @@ export const initMobileDrag = (
     dragElement = element;
 
     const rect = element.getBoundingClientRect();
-    const originalWidth = rect.width;
-    const originalHeight = rect.height;
-    previewWidth = originalWidth;
-    previewHeight = originalHeight;
+    const w = rect.width;
+    const h = rect.height;
+    previewHalfW = w / 2;
+    previewHalfH = h / 2;
 
     dragPreview = element.cloneNode(true) as HTMLElement;
 
     dragPreview.classList.remove('w-full', 'h-full');
 
-    dragPreview.style.width = `${originalWidth}px`;
-    dragPreview.style.height = `${originalHeight}px`;
-    dragPreview.style.maxWidth = `${originalWidth}px`;
-    dragPreview.style.maxHeight = `${originalHeight}px`;
-    dragPreview.style.position = 'fixed';
-    dragPreview.style.pointerEvents = 'none';
-    dragPreview.style.opacity = '0.8';
-    dragPreview.style.zIndex = '9999';
-    dragPreview.style.transform = 'scale(1.05)';
-    dragPreview.style.transition = 'none';
-    dragPreview.style.boxSizing = 'border-box';
-    dragPreview.style.willChange = 'transform';
-    dragPreview.style.contain = 'layout style paint';
+    dragPreview.style.cssText =
+      `width:${w}px;height:${h}px;max-width:${w}px;max-height:${h}px;` +
+      'position:fixed;left:0;top:0;pointer-events:none;opacity:0.8;z-index:9999;' +
+      'box-sizing:border-box;will-change:transform;contain:layout style paint;' +
+      'transition:none;backface-visibility:hidden;';
 
-    dragPreview.style.left = `${touchX - originalWidth / 2}px`;
-    dragPreview.style.top = `${touchY - originalHeight / 2}px`;
+    dragPreview.style.transform =
+      `translate3d(${touchX - previewHalfW}px, ${touchY - previewHalfH}px, 0) scale(1.05)`;
+
     lastTouchPoint = { x: touchX, y: touchY };
 
     document.body.appendChild(dragPreview);
@@ -74,6 +68,7 @@ export const initMobileDrag = (
     startPoint = { x: touch.clientX, y: touch.clientY };
     lastTouchPoint = { x: touch.clientX, y: touch.clientY };
     dragStarted = false;
+    hitTestCounter = 0;
   };
 
   let pendingTouchX = 0;
@@ -86,19 +81,22 @@ export const initMobileDrag = (
 
     if (!dragPreview) return;
 
-    dragPreview.style.left = `${pendingTouchX - previewWidth / 2}px`;
-    dragPreview.style.top = `${pendingTouchY - previewHeight / 2}px`;
+    dragPreview.style.transform =
+      `translate3d(${pendingTouchX - previewHalfW}px, ${pendingTouchY - previewHalfH}px, 0) scale(1.05)`;
 
-    dragPreview.style.display = 'none';
-    const elementUnder = document.elementFromPoint(pendingTouchX, pendingTouchY) as HTMLElement;
-    dragPreview.style.display = '';
+    hitTestCounter++;
+    if (hitTestCounter % HIT_TEST_INTERVAL === 0) {
+      dragPreview.style.visibility = 'hidden';
+      const elementUnder = document.elementFromPoint(pendingTouchX, pendingTouchY) as HTMLElement;
+      dragPreview.style.visibility = '';
 
-    touchTarget = elementUnder;
+      touchTarget = elementUnder;
 
-    if (currentDragData) {
-      document.dispatchEvent(new CustomEvent('mobile-drag-move', {
-        detail: { ...currentDragData, clientX: pendingTouchX, clientY: pendingTouchY },
-      }));
+      if (currentDragData) {
+        document.dispatchEvent(new CustomEvent('mobile-drag-move', {
+          detail: { ...currentDragData, clientX: pendingTouchX, clientY: pendingTouchY },
+        }));
+      }
     }
   };
 
@@ -141,11 +139,14 @@ export const initMobileDrag = (
       cancelAnimationFrame(rafId);
       rafId = null;
     }
-    if (moveScheduled) {
-      processTouchMove();
-    }
-    
+
     if (dragPreview) {
+      dragPreview.style.visibility = 'hidden';
+      const touch = e.changedTouches[0];
+      const finalPoint = lastTouchPoint ?? (touch ? { x: touch.clientX, y: touch.clientY } : null);
+      if (finalPoint) {
+        touchTarget = document.elementFromPoint(finalPoint.x, finalPoint.y) as HTMLElement;
+      }
       dragPreview.remove();
       dragPreview = null;
     }
