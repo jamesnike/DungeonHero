@@ -445,45 +445,6 @@ export default function HeroCard({
                 <span>{heroSkillMessage}</span>
               </div>
             )}
-            {heroMagicChoice && (
-              <div className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-1.5 space-y-1.5">
-                <span className="dh-hero-small font-semibold text-amber-700">{heroMagicChoice.prompt}</span>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    className="dh-hero-btn-sm font-semibold rounded-full bg-emerald-500 text-white hover:bg-emerald-500/90 transition"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onHeroMagicChoice?.('heal');
-                    }}
-                  >
-                    回满生命
-                  </button>
-                  <button
-                    type="button"
-                    className="dh-hero-btn-sm font-semibold rounded-full bg-sky-500 text-white hover:bg-sky-500/90 transition"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onHeroMagicChoice?.('purge');
-                    }}
-                  >
-                    净化怒气
-                  </button>
-                  {onHeroMagicCancel && (
-                    <button
-                      type="button"
-                      className="dh-hero-btn-sm font-semibold rounded-full border border-border text-amber-900/60 hover:text-amber-950 transition"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onHeroMagicCancel();
-                      }}
-                    >
-                      取消
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
             {potionChoice && (
               <div className="w-full rounded-md border border-emerald-500/40 bg-emerald-500/10 p-1.5 space-y-1.5">
                 <span className="dh-hero-small font-semibold text-emerald-700">{potionChoice.prompt}</span>

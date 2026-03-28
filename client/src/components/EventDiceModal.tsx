@@ -28,7 +28,7 @@ export default function EventDiceModal({
 }: EventDiceModalProps) {
   return (
     <Dialog open={open} onOpenChange={value => !value && onClose?.()}>
-      <DialogContent className="sm:max-w-3xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
           <DialogDescription>{subtitle ?? 'Roll the d20 to determine your fate.'}</DialogDescription>

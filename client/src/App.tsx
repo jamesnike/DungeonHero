@@ -4,6 +4,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PerformanceModeProvider } from "@/contexts/PerformanceModeContext";
 import Home from "@/pages/Home";
 import NotFound from "@/pages/not-found";
 import LoadingScreen from "@/components/LoadingScreen";
@@ -47,14 +48,16 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        {/* Game renders immediately but is invisible under the loading screen */}
-        <div style={showLoading ? { visibility: 'hidden', position: 'fixed', inset: 0, zIndex: 0 } : undefined}>
-          <Router />
-        </div>
-        {showLoading && <LoadingScreen onReady={handleReady} />}
-      </TooltipProvider>
+      <PerformanceModeProvider>
+        <TooltipProvider>
+          <Toaster />
+          {/* Game renders immediately but is invisible under the loading screen */}
+          <div style={showLoading ? { visibility: 'hidden', position: 'fixed', inset: 0, zIndex: 0 } : undefined}>
+            <Router />
+          </div>
+          {showLoading && <LoadingScreen onReady={handleReady} />}
+        </TooltipProvider>
+      </PerformanceModeProvider>
     </QueryClientProvider>
   );
 }

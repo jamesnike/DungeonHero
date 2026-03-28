@@ -61,7 +61,7 @@ export default function EquipmentSelectModal({
   return (
     <Dialog open={open} onOpenChange={value => !value && onCancel()}>
       <DialogContent
-        className="sm:max-w-3xl equipment-select"
+        className="sm:max-w-xl equipment-select"
       >
         <DialogHeader>
           <DialogTitle>{prompt}</DialogTitle>

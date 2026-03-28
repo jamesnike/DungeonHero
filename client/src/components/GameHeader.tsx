@@ -1,9 +1,10 @@
-import { Heart, Coins, Layers, Waves, ShoppingBag } from 'lucide-react';
+import { Heart, Coins, Layers, Waves, ShoppingBag, Zap, ZapOff } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
 import { useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
+import { usePerformanceMode } from '@/contexts/PerformanceModeContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
 interface GameHeaderProps {
@@ -31,6 +32,7 @@ export default function GameHeader({
   deckFlyTargetRef,
 }: GameHeaderProps) {
   const gameViewport = useGameViewport();
+  const { isLowPerf, toggle: togglePerf } = usePerformanceMode();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [headerScale, setHeaderScale] = useState(1);
@@ -82,6 +84,16 @@ export default function GameHeader({
             New Game
           </Button>
           <HelpDialog />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={togglePerf}
+            title={isLowPerf ? '流畅模式已开启（点击关闭）' : '开启流畅模式（减少特效）'}
+            data-testid="button-perf-mode"
+            className="game-header__button"
+          >
+            {isLowPerf ? <ZapOff className="w-5 h-5 text-yellow-500" /> : <Zap className="w-5 h-5" />}
+          </Button>
         </div>
       </div>
 

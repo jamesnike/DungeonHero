@@ -801,7 +801,7 @@ export function createDeck(): GameCardData[] {
         id: 'curse-pack-shrink',
         text: '束缚空间（背包容量 -4）',
         effect: 'backpackSize-4',
-        hint: '背包容量永久降低 4，超过的卡牌会被丢弃',
+        hint: '背包容量永久降低 4，超过的卡牌会被随机放入回收袋',
       },
     ],
     waterfallEffect: { type: 'boostRowMonsterAttack', amount: 3, description: '被挤出时：所有怪物攻击 +3' },

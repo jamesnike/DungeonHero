@@ -80,9 +80,13 @@ const FLAVOR_TEXTS = [
 function preloadImage(src: string): Promise<void> {
   return new Promise((resolve) => {
     const img = new Image();
-    img.onload = () => resolve();
-    img.onerror = () => resolve();
     img.src = src;
+    if (typeof img.decode === 'function') {
+      img.decode().then(() => resolve(), () => resolve());
+    } else {
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+    }
   });
 }
 
@@ -106,17 +110,39 @@ function preloadFonts(): Promise<void> {
 }
 
 const WARM_ANIMATION_CLASSES = [
+  // Card lifecycle
   'animate-card-remove',
-  'combat-overlay__shape--bleed',
-  'combat-overlay__shape--bleed-ring',
-  'combat-overlay__shape--heal',
-  'combat-overlay__shape--heal-rise',
-  'combat-overlay__shape--heal-ring',
+  'animate-damage-flash',
+  'animate-heal-glow',
+  // Preview / waterfall
   'animate-preview-drop',
   'animate-preview-graveyard',
   'animate-preview-deck-return',
   'animate-active-landing',
   'animate-preview-deal',
+  // Modal
+  'animate-modal-fade-in',
+  'animate-modal-slide-in',
+  // Combat: bleed
+  'combat-overlay__shape--bleed',
+  'combat-overlay__shape--bleed-drip',
+  'combat-overlay__shape--bleed-ring',
+  // Combat: weapon swing
+  'combat-overlay__shape--swing',
+  'combat-overlay__shape--swing-echo',
+  'combat-overlay__shape--swing-spark',
+  // Combat: shield block
+  'combat-overlay__shape--block',
+  'combat-overlay__shape--block-ripple',
+  'combat-overlay__shape--block-spark',
+  // Combat: heal
+  'combat-overlay__shape--heal',
+  'combat-overlay__shape--heal-rise',
+  'combat-overlay__shape--heal-ring',
+  // Combat: defeat
+  'combat-overlay__shape--defeat',
+  'combat-overlay__shape--defeat-burst',
+  'combat-overlay__shape--defeat-fade',
 ];
 
 function warmCssAnimations(): Promise<void> {

@@ -12,7 +12,8 @@ export type HeroSkillId =
   | 'early-surge'
   | 'shield-wall'
   | 'blood-draw'
-  | 'summon-minion';
+  | 'summon-minion'
+  | 'vanguard-swap';
 
 export type HeroSkillTarget = 'slot' | 'monster' | null;
 
@@ -35,17 +36,21 @@ export interface HeroSkillDefinition {
   initialBackpackCapacityBonus?: number;
   /** Added to hand limit (with HAND_LIMIT) when this skill is chosen at run start. */
   initialHandLimitBonus?: number;
+  /** Added to permanent spell damage bonus at run start when this skill is chosen. */
+  initialSpellDamageBonus?: number;
+  /** Number of cards drawn from backpack to hand at run start. */
+  initialHandDraw?: number;
 }
 
 export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'armor-pact',
-    name: '壁垒献祭',
+    name: '虚位铸甲',
     description: '强化空装备槽，并可将装备转移过来。',
     effect: '选空槽 +1 永久护甲；若另一槽有装备，则移至该空槽。',
     type: 'active',
     requiresTarget: 'slot',
-    buttonLabel: '壁垒献祭',
+    buttonLabel: '虚位铸甲',
     statusHint: '选择空槽以获得 +1 永久护甲。',
   },
   {
@@ -144,11 +149,12 @@ export const heroSkills: HeroSkillDefinition[] = [
   },
   {
     id: 'shield-wall',
-    name: '铁壁之心',
-    description: "被动：开局拥有'雷霆符印'，只能装备护盾",
-    effect: "被动：开局拥有'雷霆符印'，只能装备护盾",
+    name: '雷盾心法',
+    description: "被动：开局拥有'雷霆符印'，不能装备武器，+1 永久法术伤害",
+    effect: "被动：开局拥有'雷霆符印'，不能装备武器，+1 永久法术伤害",
     type: 'passive',
     requiresTarget: null,
+    initialSpellDamageBonus: 1,
   },
   {
     id: 'blood-draw',
@@ -167,6 +173,16 @@ export const heroSkills: HeroSkillDefinition[] = [
     effect: '被动：开局获得小随从 (每次击杀怪物，小随从攻击 +1、防御 +1)',
     type: 'passive',
     requiresTarget: null,
+  },
+  {
+    id: 'vanguard-swap',
+    name: '先锋换阵',
+    description: '调换地城行最左两张卡牌的位置；开局从背包抽 2 张手牌。',
+    effect: '主动：将地城行最左两张卡牌交换位置（需至少 2 张）。被动：开局抽 2 张手牌。',
+    type: 'active',
+    requiresTarget: null,
+    buttonLabel: '先锋换阵',
+    initialHandDraw: 2,
   },
 ];
 

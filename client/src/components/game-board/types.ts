@@ -355,6 +355,19 @@ export type DiscardShockFlight = {
   showBanner: boolean;
 };
 
+/** Card flying from hand/board to graveyard or backpack (recycle bag). */
+export type DiscardFlight = {
+  id: string;
+  card: GameCardData;
+  start: Point;
+  end: Point;
+  startTime: number;
+  duration: number;
+  progress: number;
+  arcHeight: number;
+  delivered?: boolean;
+};
+
 export type PendingHandInsertion = {
   card: GameCardData;
   attempts: number;

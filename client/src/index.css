@@ -930,11 +930,11 @@ html {
 
   .dh-grid-cell {
     padding: var(--dh-card-padding, 0.25rem);
-    contain: layout style;
+    contain: layout style paint;
   }
 
   .dh-card-wrapper {
-    contain: layout style;
+    contain: layout style paint;
     --dh-card-title-base: clamp(0.72rem, 0.6rem + 0.8vw, 1rem);
     --dh-card-body-base: clamp(0.6rem, 0.5rem + 0.5vw, 0.9rem);
     --dh-card-stat-base: clamp(1rem, 0.85rem + 0.8vw, 1.5rem);
@@ -1874,4 +1874,164 @@ html {
 @keyframes event-restore-pulse {
   0%, 100% { transform: translateX(-50%) scale(1); }
   50% { transform: translateX(-50%) scale(1.05); }
+}
+
+/* ════════════════════════════════════════════════
+   Low Performance Mode — .low-perf-mode on <html>
+   ════════════════════════════════════════════════ */
+
+.low-perf-mode .combat-overlay__shape--bleed,
+.low-perf-mode .combat-overlay__shape--heal {
+  mix-blend-mode: normal;
+  filter: none;
+  animation-duration: 350ms;
+}
+
+.low-perf-mode .combat-overlay__shape--bleed-drip,
+.low-perf-mode .combat-overlay__shape--bleed-ring,
+.low-perf-mode .combat-overlay__shape--heal-rise,
+.low-perf-mode .combat-overlay__shape--heal-ring {
+  display: none;
+}
+
+.low-perf-mode .combat-overlay__shape--swing {
+  animation-duration: 300ms;
+}
+.low-perf-mode .combat-overlay__shape--swing-echo,
+.low-perf-mode .combat-overlay__shape--swing-spark {
+  display: none;
+}
+
+.low-perf-mode .combat-overlay__shape--block {
+  animation-duration: 350ms;
+}
+.low-perf-mode .combat-overlay__shape--block-ripple,
+.low-perf-mode .combat-overlay__shape--block-spark {
+  display: none;
+}
+
+.low-perf-mode .combat-overlay__shape--defeat {
+  mix-blend-mode: normal;
+  animation-duration: 300ms;
+}
+.low-perf-mode .combat-overlay__shape--defeat-burst {
+  display: none;
+}
+.low-perf-mode .combat-overlay__shape--defeat-fade::after {
+  filter: none;
+}
+
+.low-perf-mode .animate-preview-drop {
+  animation-duration: 250ms;
+  will-change: auto;
+}
+.low-perf-mode .animate-preview-graveyard {
+  animation-duration: 200ms;
+  will-change: auto;
+}
+.low-perf-mode .animate-preview-deck-return {
+  animation-duration: 200ms;
+  will-change: auto;
+}
+.low-perf-mode .animate-preview-deck-return {
+  filter: none;
+}
+.low-perf-mode .animate-active-landing {
+  animation-duration: 200ms;
+  will-change: auto;
+}
+.low-perf-mode .animate-preview-deal {
+  animation-duration: 250ms;
+  will-change: auto;
+}
+
+.low-perf-mode .animate-card-remove {
+  animation-duration: 150ms;
+  will-change: auto;
+}
+
+.low-perf-mode .class-flight-card {
+  will-change: auto;
+  filter: none;
+}
+
+.low-perf-mode .combat-overlay__shape {
+  will-change: auto;
+}
+
+.low-perf-mode .engaged-monster .shadcn-card::after {
+  animation: none;
+  box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.6);
+}
+
+.low-perf-mode .event-pending-cell {
+  animation: none;
+  box-shadow: 0 0 6px 2px rgba(236, 72, 153, 0.4);
+}
+.low-perf-mode .fate-blade-charged {
+  animation: none;
+  box-shadow: 0 0 6px 2px rgba(59, 130, 246, 0.4);
+}
+.low-perf-mode .event-pending-restore-btn {
+  animation: none;
+}
+
+.low-perf-mode .animate-modal-slide-in {
+  animation-duration: 100ms;
+}
+
+.low-perf-mode .animate-damage-flash {
+  animation-duration: 100ms;
+}
+.low-perf-mode .animate-heal-glow {
+  animation-duration: 200ms;
+}
+
+/* ════════════════════════════════════════════════
+   Reduced Motion (iOS Accessibility → Reduce Motion)
+   ════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .combat-overlay__shape--bleed,
+  .combat-overlay__shape--bleed-drip,
+  .combat-overlay__shape--bleed-ring,
+  .combat-overlay__shape--heal,
+  .combat-overlay__shape--heal-rise,
+  .combat-overlay__shape--heal-ring,
+  .combat-overlay__shape--swing-echo,
+  .combat-overlay__shape--swing-spark,
+  .combat-overlay__shape--block-ripple,
+  .combat-overlay__shape--block-spark,
+  .combat-overlay__shape--defeat-burst {
+    display: none !important;
+  }
+
+  .combat-overlay__shape--bleed,
+  .combat-overlay__shape--heal,
+  .combat-overlay__shape--defeat {
+    mix-blend-mode: normal !important;
+    filter: none !important;
+  }
+
+  .class-flight-card {
+    filter: none !important;
+  }
+
+  .animate-preview-deck-return {
+    filter: none !important;
+  }
+
+  .event-pending-cell,
+  .fate-blade-charged,
+  .event-pending-restore-btn {
+    animation: none !important;
+  }
 }

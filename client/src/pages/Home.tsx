@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import GameBoard from '@/components/GameBoard';
 import { GameViewportProvider } from '@/contexts/GameViewportContext';
 import {
@@ -11,12 +11,20 @@ function useConstrainedViewport() {
     w: typeof window !== 'undefined' ? window.innerWidth : 1280,
     h: typeof window !== 'undefined' ? window.innerHeight : 800,
   }));
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const onResize = () =>
-      setSize({ w: window.innerWidth, h: window.innerHeight });
+    const onResize = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setSize({ w: window.innerWidth, h: window.innerHeight });
+      }, 150);
+    };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, []);
 
   return useMemo(() => {

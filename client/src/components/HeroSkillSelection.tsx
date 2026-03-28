@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Shield, Droplet, Skull, Heart, Coins, Ghost, HandCoins, Waves, Swords, HeartPulse, Zap, ShieldAlert, BookOpen, Cat } from 'lucide-react';
+import { Shield, Droplet, Skull, Heart, Coins, Ghost, HandCoins, Waves, Swords, HeartPulse, Zap, ShieldAlert, BookOpen, Cat, ArrowLeftRight } from 'lucide-react';
 import { heroSkills } from '@/lib/heroSkills';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
 
@@ -43,6 +43,8 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillS
         return <BookOpen className={cls} />;
       case 'summon-minion':
         return <Cat className={cls} />;
+      case 'vanguard-swap':
+        return <ArrowLeftRight className={cls} />;
       default:
         return <Shield className={cls} />;
     }
