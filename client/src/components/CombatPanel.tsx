@@ -201,22 +201,9 @@ export default function CombatPanel({
           >
             <Maximize2 className="combat-panel__icon" />
           </button>
-          {currentTurn === 'hero' ? (
-            <Button
-              size="sm"
-              className="combat-panel__button flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md"
-              disabled={endHeroTurnDisabled}
-              onClick={(e) => { e.stopPropagation(); onEndHeroTurn(); }}
-            >
-              End Hero Turn
-            </Button>
-          ) : (
-            <span className="combat-panel__summary text-muted-foreground truncate flex-1">
-              {currentAttacker
-                ? `${currentAttacker.name} attacking...`
-                : 'Monsters turn'}
-            </span>
-          )}
+          <span className="combat-panel__summary text-muted-foreground truncate flex-1">
+            {turnSummary}
+          </span>
         </div>
       </Card>
     );
