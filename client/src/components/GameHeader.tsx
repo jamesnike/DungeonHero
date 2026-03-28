@@ -1,4 +1,4 @@
-import { Heart, Coins, Layers, Waves, ShoppingBag, Zap, ZapOff } from 'lucide-react';
+import { Heart, Coins, Layers, Waves, ShoppingBag, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
@@ -92,7 +92,7 @@ export default function GameHeader({
             data-testid="button-perf-mode"
             className="game-header__button"
           >
-            {isLowPerf ? <ZapOff className="w-5 h-5 text-yellow-500" /> : <Zap className="w-5 h-5" />}
+            <Zap className={`w-5 h-5 ${isLowPerf ? 'text-yellow-500' : ''}`} />
           </Button>
         </div>
       </div>

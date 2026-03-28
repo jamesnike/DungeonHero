@@ -56,8 +56,10 @@ export function PerformanceModeProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     if (isLowPerf) {
       root.classList.add('low-perf-mode');
+      root.style.setProperty('--combat-animation-stagger', '70ms');
     } else {
       root.classList.remove('low-perf-mode');
+      root.style.setProperty('--combat-animation-stagger', '160ms');
     }
   }, [isLowPerf]);
 

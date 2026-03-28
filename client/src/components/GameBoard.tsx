@@ -45,6 +45,7 @@ import BackpackViewerModal from './BackpackViewerModal';
 import MonsterRewardModal from '@/components/MonsterRewardModal';
 import HeroDetailsModal from './HeroDetailsModal';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
+import { usePerformanceMode } from '@/contexts/PerformanceModeContext';
 // import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
@@ -1554,6 +1555,10 @@ function createStarterBackpack(): GameCardData[] {
 export default function GameBoard() {
   const gameViewport = useGameViewport();
   const overlayZoom = useOverlayScale();
+  const { isLowPerf } = usePerformanceMode();
+  const lowPerfRef = useRef(false);
+  lowPerfRef.current = isLowPerf;
+  const animSpeed = useCallback((ms: number) => lowPerfRef.current ? Math.round(ms * 0.45) : ms, []);
   // const { toast } = useToast(); // Disabled toast notifications
   const [hp, setHp] = useState(INITIAL_HP);
   const hpRef = useRef(INITIAL_HP);
@@ -1769,7 +1774,7 @@ export default function GameBoard() {
         heroBleedTimeoutRef.current = setTimeout(() => {
           setHeroBleedActive(false);
           heroBleedTimeoutRef.current = null;
-        }, COMBAT_ANIMATION_DURATION);
+        }, animSpeed(COMBAT_ANIMATION_DURATION));
       };
       scheduleAnimationStart(start, delay);
     },
@@ -1804,7 +1809,7 @@ export default function GameBoard() {
           if (!monsterBleedTimeoutsRef.current[monsterId]?.length) {
             delete monsterBleedTimeoutsRef.current[monsterId];
           }
-        }, COMBAT_ANIMATION_DURATION);
+        }, animSpeed(COMBAT_ANIMATION_DURATION));
         monsterBleedTimeoutsRef.current[monsterId] = [
           ...(monsterBleedTimeoutsRef.current[monsterId] || []),
           timeoutId,
@@ -1832,7 +1837,7 @@ export default function GameBoard() {
           weaponSwingTimeoutsRef.current[slotId] = (weaponSwingTimeoutsRef.current[slotId] || []).filter(
             id => id !== timeoutId,
           );
-        }, COMBAT_ANIMATION_DURATION);
+        }, animSpeed(COMBAT_ANIMATION_DURATION));
         weaponSwingTimeoutsRef.current[slotId] = [
           ...(weaponSwingTimeoutsRef.current[slotId] || []),
           timeoutId,
@@ -1860,7 +1865,7 @@ export default function GameBoard() {
           shieldBlockTimeoutsRef.current[slotId] = (shieldBlockTimeoutsRef.current[slotId] || []).filter(
             id => id !== timeoutId,
           );
-        }, COMBAT_ANIMATION_DURATION);
+        }, animSpeed(COMBAT_ANIMATION_DURATION));
         shieldBlockTimeoutsRef.current[slotId] = [
           ...(shieldBlockTimeoutsRef.current[slotId] || []),
           timeoutId,
@@ -2667,10 +2672,10 @@ export default function GameBoard() {
 
       clearBackpackHandFallback(card.id);
 
-      const fallbackDelay =
+      const fallbackDelay = animSpeed(
         BACKPACK_FLIGHT_BASE_DURATION +
         BACKPACK_FLIGHT_VARIANCE +
-        BACKPACK_FLIGHT_FALLBACK_BUFFER;
+        BACKPACK_FLIGHT_FALLBACK_BUFFER);
 
       const timeoutId = window.setTimeout(() => {
         backpackHandFlightFallbacksRef.current.delete(card.id);
@@ -3997,7 +4002,7 @@ export default function GameBoard() {
         start,
         end,
         startTime: baseTime,
-        duration: DISCARD_SHOCK_FLIGHT_BASE_DURATION + Math.random() * DISCARD_SHOCK_FLIGHT_VARIANCE,
+        duration: animSpeed(DISCARD_SHOCK_FLIGHT_BASE_DURATION + Math.random() * DISCARD_SHOCK_FLIGHT_VARIANCE),
         progress: 0,
         arcHeight: DISCARD_SHOCK_ARC_MIN + Math.random() * DISCARD_SHOCK_ARC_VARIANCE,
         damage,
@@ -4089,7 +4094,7 @@ export default function GameBoard() {
         start,
         end,
         startTime: baseTime,
-        duration: Math.max(380, SHIELD_REFLECT_ANIM_MS - 80 + Math.random() * 60),
+        duration: animSpeed(Math.max(380, SHIELD_REFLECT_ANIM_MS - 80 + Math.random() * 60)),
         progress: 0,
         arcHeight: 32 + Math.random() * 48,
       };
@@ -4128,7 +4133,7 @@ export default function GameBoard() {
         start,
         end,
         startTime: baseTime,
-        duration: Math.max(360, BOSS_RETALIATION_ANIM_MS - 80 + Math.random() * 50),
+        duration: animSpeed(Math.max(360, BOSS_RETALIATION_ANIM_MS - 80 + Math.random() * 50)),
         progress: 0,
         arcHeight: 36 + Math.random() * 52,
       };
@@ -4147,13 +4152,13 @@ export default function GameBoard() {
     slotId: EquipmentSlotId,
   ) => {
     if (rawReflectDmg <= 0) return;
-    await new Promise<void>(r => setTimeout(r, COMBAT_BLOCK_TO_REFLECT_MS));
+    await new Promise<void>(r => setTimeout(r, animSpeed(COMBAT_BLOCK_TO_REFLECT_MS)));
     tryStartShieldReflectDirectedFx(slotId, m.id);
-    await new Promise<void>(r => setTimeout(r, SHIELD_REFLECT_ANIM_MS));
+    await new Promise<void>(r => setTimeout(r, animSpeed(SHIELD_REFLECT_ANIM_MS)));
     const outcome = applyShieldReflectDamage(m, rawReflectDmg, sourceName);
     if (outcome.shouldApplyBossRetaliation && outcome.bossRetaliationDamage > 0) {
       tryStartBossRetaliationDirectedFx(m.id);
-      await new Promise<void>(r => setTimeout(r, BOSS_RETALIATION_ANIM_MS));
+      await new Promise<void>(r => setTimeout(r, animSpeed(BOSS_RETALIATION_ANIM_MS)));
       applyBossRetaliationDamage(outcome.bossName, outcome.bossRetaliationDamage);
     }
   };
@@ -4617,7 +4622,7 @@ export default function GameBoard() {
           monsterAttackQueue: queue,
         };
       });
-    }, DEFEAT_ANIMATION_DURATION);
+    }, animSpeed(DEFEAT_ANIMATION_DURATION));
   };
 
   const updateMonsterCard = (monsterId: string, updater: (monster: GameCardData) => GameCardData) => {
@@ -6336,8 +6341,8 @@ export default function GameBoard() {
         card,
         start,
         end,
-        startTime: baseTime + index * CLASS_FLIGHT_STAGGER,
-        duration: CLASS_FLIGHT_BASE_DURATION + Math.random() * CLASS_FLIGHT_VARIANCE,
+        startTime: baseTime + index * animSpeed(CLASS_FLIGHT_STAGGER),
+        duration: animSpeed(CLASS_FLIGHT_BASE_DURATION + Math.random() * CLASS_FLIGHT_VARIANCE),
         progress: 0,
         arcHeight: CLASS_FLIGHT_ARC_MIN + Math.random() * CLASS_FLIGHT_ARC_VARIANCE,
       };
@@ -6580,7 +6585,7 @@ export default function GameBoard() {
         start,
         end,
         startTime: baseTime,
-        duration: BACKPACK_FLIGHT_BASE_DURATION + Math.random() * BACKPACK_FLIGHT_VARIANCE,
+        duration: animSpeed(BACKPACK_FLIGHT_BASE_DURATION + Math.random() * BACKPACK_FLIGHT_VARIANCE),
         progress: 0,
         arcHeight: BACKPACK_FLIGHT_ARC_MIN + Math.random() * BACKPACK_FLIGHT_ARC_VARIANCE,
       };
@@ -6691,7 +6696,7 @@ export default function GameBoard() {
         start,
         end,
         startTime: baseTime,
-        duration: DISCARD_FLIGHT_BASE_DURATION + Math.random() * DISCARD_FLIGHT_VARIANCE,
+        duration: animSpeed(DISCARD_FLIGHT_BASE_DURATION + Math.random() * DISCARD_FLIGHT_VARIANCE),
         progress: 0,
         arcHeight: DISCARD_FLIGHT_ARC_MIN + Math.random() * DISCARD_FLIGHT_ARC_VARIANCE,
       };
@@ -8750,7 +8755,7 @@ export default function GameBoard() {
 
     queueWaterfallTimeout(() => {
       resetWaterfallAnimation();
-    }, WATERFALL_DEAL_DURATION, 'deal-phase-complete');
+    }, animSpeed(WATERFALL_DEAL_DURATION), 'deal-phase-complete');
   };
 
   const handleWaterfallDiscardComplete = () => {
@@ -8953,12 +8958,12 @@ export default function GameBoard() {
         landingSlots: [],
         sequenceId: prev.sequenceId,
       }));
-    }, Math.max(200, WATERFALL_DROP_DURATION - 200), 'landing-clear');
+    }, animSpeed(Math.max(200, WATERFALL_DROP_DURATION - 200)), 'landing-clear');
 
     if (plan.discardCard) {
       queueWaterfallTimeout(() => {
         handleWaterfallDiscardComplete();
-      }, WATERFALL_DISCARD_DURATION, 'drop-to-discard');
+      }, animSpeed(WATERFALL_DISCARD_DURATION), 'drop-to-discard');
     } else {
       queueWaterfallTimeout(() => {
         setPreviewCards(createEmptyActiveRow());
@@ -9180,9 +9185,9 @@ export default function GameBoard() {
     });
 
     if (resolvedDropCards.length > 0) {
-      queueWaterfallTimeout(handleWaterfallDropComplete, WATERFALL_DROP_DURATION, 'drop-phase-timeout');
+      queueWaterfallTimeout(handleWaterfallDropComplete, animSpeed(WATERFALL_DROP_DURATION), 'drop-phase-timeout');
     } else if (discardCard) {
-      queueWaterfallTimeout(handleWaterfallDiscardComplete, WATERFALL_DISCARD_DURATION, 'discard-phase-timeout');
+      queueWaterfallTimeout(handleWaterfallDiscardComplete, animSpeed(WATERFALL_DISCARD_DURATION), 'discard-phase-timeout');
     } else {
       startWaterfallDeal();
     }
@@ -12409,9 +12414,9 @@ export default function GameBoard() {
           const slot = equipSlots[0];
           const slotItem = slot.item!;
           const maxDur = slotItem.maxDurability ?? slotItem.durability ?? 0;
-          setEquipmentSlotById(slot.id, { ...slotItem, maxDurability: maxDur + 1 });
-          addGameLog('potion', `${slotItem.name} 耐久上限 +1（${maxDur} → ${maxDur + 1}）`);
-          void finalizePotionCard(card, { banner: `${slotItem.name} 耐久上限 +1` });
+          setEquipmentSlotById(slot.id, { ...slotItem, maxDurability: maxDur + 2 });
+          addGameLog('potion', `${slotItem.name} 耐久上限 +2（${maxDur} → ${maxDur + 2}）`);
+          void finalizePotionCard(card, { banner: `${slotItem.name} 耐久上限 +2` });
           setPendingPotionAction(null);
           return;
         }

@@ -1200,20 +1200,20 @@ html {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: calc(0.15rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
+    gap: calc(0.2rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
     padding: 0 0.15rem;
-    margin-bottom: calc(0.1rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
+    margin-bottom: calc(0.12rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
   }
 
   .dh-card__keyword-tag {
     display: inline-block;
-    padding: 0 calc(0.25rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
+    padding: calc(0.06rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1)) calc(0.45rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
     border-radius: 999px;
     font-weight: 800;
-    font-size: calc(0.42rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
+    font-size: calc(0.7rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
     color: #fff;
     letter-spacing: 0.06em;
-    line-height: 1.5;
+    line-height: 1.4;
     white-space: nowrap;
     pointer-events: auto;
     cursor: default;
