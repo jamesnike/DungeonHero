@@ -165,6 +165,14 @@ export default function AmuletSlot({
             dimForCombatLock ? 'opacity-60' : 'opacity-100'
           }`.trim()}
         >
+          {preparedAmulets.length < effectiveMaxSlots && (
+            <div
+              className={`absolute inset-0 rounded-lg border-dashed pointer-events-none transition-[border-color,border-width] duration-200 ${
+                isDropTarget ? 'border-4 border-primary animate-pulse' : 'border-2 border-muted-foreground/25'
+              }`}
+              style={{ zIndex: 5, transform: 'translateY(28%)' }}
+            />
+          )}
           {preparedAmulets.map((card, index) => {
             const isTopCard = index === preparedAmulets.length - 1;
             return (

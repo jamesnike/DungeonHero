@@ -299,6 +299,14 @@ export default function EquipmentSlot({
                 : 'none',
             }}
           >
+            {type === 'equipment' && (1 + reserveItems.length) < slotCapacity && (
+              <div
+                className={`absolute inset-0 rounded-lg border-dashed pointer-events-none transition-[border-color,border-width] duration-200 ${
+                  acceptsDrop ? 'border-4 border-primary animate-pulse' : 'border-2 border-muted-foreground/25'
+                }`}
+                style={{ zIndex: 15, transform: `translateY(${28 + 10}%)` }}
+              />
+            )}
             {reserveItems.map((reserveCard, rIdx) => {
               const total = reserveItems.length + 1;
               const bottomY = -6;
@@ -357,6 +365,14 @@ export default function EquipmentSlot({
                   : 'none',
             }}
           >
+            {type === 'equipment' && slotCapacity > 1 && (
+              <div
+                className={`absolute inset-0 rounded-lg border-dashed pointer-events-none transition-[border-color,border-width] duration-200 ${
+                  acceptsDrop ? 'border-4 border-primary animate-pulse' : 'border-2 border-muted-foreground/25'
+                }`}
+                style={{ zIndex: 15, transform: 'translateY(28%)' }}
+              />
+            )}
             <GameCard 
               card={type === 'equipment' ? equipmentDisplayCard! : gameCardData!}
               equipmentStatModifier={statModifier}
@@ -404,7 +420,7 @@ export default function EquipmentSlot({
         </Card>
       )}
       {heroSkillHighlight && heroSkillLabel && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 equip-slot-target-btn bg-amber-500 text-white font-bold px-4 py-2 rounded-full shadow-lg border-2 border-amber-300 cursor-pointer select-none whitespace-nowrap">
+        <div className="absolute top-1/2 left-1/2 z-40 equip-slot-target-btn bg-amber-500 text-white font-bold py-2 rounded-full shadow-lg border-2 border-amber-300 cursor-pointer select-none whitespace-nowrap text-center">
           {heroSkillLabel}
         </div>
       )}
