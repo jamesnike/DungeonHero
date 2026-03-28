@@ -122,23 +122,26 @@ export default function DiceRoller({
     const resize = () => {
       const currentCanvas = canvasRef.current;
       if (!currentCanvas) return;
+      const parent = currentCanvas.parentElement;
+      if (!parent) return;
       
       const dpr = window.devicePixelRatio || 1;
-      const { width, height } = currentCanvas.getBoundingClientRect();
+      const { width, height } = parent.getBoundingClientRect();
       
       if (width === 0 || height === 0) return;
 
-      currentCanvas.width = width * dpr;
-      currentCanvas.height = height * dpr;
+      currentCanvas.width = Math.round(width * dpr);
+      currentCanvas.height = Math.round(height * dpr);
       drawOnce();
     };
 
     resize();
     
+    const parent = canvas.parentElement;
     const resizeObserver = new ResizeObserver(() => {
       requestAnimationFrame(resize);
     });
-    resizeObserver.observe(canvas);
+    if (parent) resizeObserver.observe(parent);
 
     return () => {
       resizeObserver.disconnect();
@@ -273,7 +276,9 @@ export default function DiceRoller({
       <div className="flex h-full w-full flex-col p-1 sm:p-3 relative">
         <div className="relative flex flex-1 items-center justify-center" ref={containerRef}>
           <div className="relative flex items-center justify-center" style={squareStyle}>
-            <canvas ref={canvasRef} className="dice-canvas" />
+            <div className="relative w-full h-full">
+              <canvas ref={canvasRef} className="dice-canvas" />
+            </div>
             <div className="pointer-events-none absolute rounded-full bg-black/30" style={shadowStyle} />
           </div>
         </div>
