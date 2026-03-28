@@ -28,7 +28,7 @@ const BASE_CARD_WIDTH = 180;
 const CARD_SCALE_MIN = 0.6;
 const CARD_SCALE_MAX = 1.4;
 /** 魔法标题：仅当标题区估出来不足约这么多个全角字宽时，才隐藏左侧纹样（与事件卡一致，无卷轴 PNG） */
-const MAGIC_TITLE_MIN_CHARS_FOR_GLYPH = 5;
+const MAGIC_TITLE_MIN_CHARS_FOR_GLYPH = 7;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -43,10 +43,10 @@ function boardTitleGlyphWouldCrowdName(
   const inst = clamp(raw, CARD_SCALE_MIN, CARD_SCALE_MAX);
   const slotRem = isFlat ? 1.15 : isCompact ? 1.25 : 1.65;
   const slotPx = slotRem * 16 * inst;
-  const gutterPx = 10;
+  const gutterPx = 14;
   const titlePx = Math.max(0, cardWidthPx - 2 * slotPx - gutterPx);
   const titleFontPx = Math.max(7, 11.5 * inst);
-  const cjkCharPx = titleFontPx * 0.92;
+  const cjkCharPx = titleFontPx * 1.0;
   return titlePx < MAGIC_TITLE_MIN_CHARS_FOR_GLYPH * cjkCharPx;
 }
 

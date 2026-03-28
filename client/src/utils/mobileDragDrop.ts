@@ -13,46 +13,26 @@ let touchTarget: HTMLElement | null = null;
 const DRAG_THRESHOLD = 10;
 const HIT_TEST_INTERVAL = 5;
 
-const TYPE_BG: Record<string, string> = {
-  monster: '#7f1d1d',
-  weapon: '#78350f',
-  shield: '#1e3a5f',
-  potion: '#064e3b',
-  amulet: '#4c1d95',
-  magic: '#164e63',
-  'hero-magic': '#881337',
-  event: '#5b21b6',
-};
+const STRIP_SELECTORS = '.combat-overlay, .dh-card__lowgold-glow, .dh-card__flip-badge, .engaged-monster-aura';
 
 const reusableMoveDetail: DragData = { type: 'card', data: null, clientX: 0, clientY: 0 };
 
-function buildLightPreview(element: HTMLElement, w: number, h: number): HTMLElement {
-  const preview = document.createElement('div');
+function buildClonePreview(element: HTMLElement, w: number, h: number): HTMLElement {
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.classList.remove('w-full', 'h-full');
+  clone.classList.add('drag-preview');
 
-  const imgEl = element.querySelector('img') as HTMLImageElement | null;
+  const junk = clone.querySelectorAll(STRIP_SELECTORS);
+  for (let i = junk.length - 1; i >= 0; i--) junk[i].remove();
 
-  const testId = element.getAttribute('data-testid') || '';
-  const typeMatch = testId.match(/^card-([^-]+)/);
-  const cardType = typeMatch ? typeMatch[1] : '';
-  const bg = TYPE_BG[cardType] || '#374151';
-
-  let bgCss: string;
-  if (imgEl?.currentSrc || imgEl?.src) {
-    const src = imgEl.currentSrc || imgEl.src;
-    bgCss = `background:${bg} url('${src}') center/cover no-repeat;`;
-  } else {
-    bgCss = `background:${bg};`;
-  }
-
-  preview.style.cssText =
-    `width:${w}px;height:${h}px;` + bgCss +
+  clone.style.cssText =
+    `width:${w}px;height:${h}px;max-width:${w}px;max-height:${h}px;` +
     'position:fixed;left:0;top:0;pointer-events:none;opacity:0;z-index:9999;' +
     'box-sizing:border-box;will-change:transform;contain:layout style paint;' +
-    `border:3px solid ${bg};border-radius:8px;overflow:hidden;` +
     'backface-visibility:hidden;' +
     'transform:translate3d(-9999px,-9999px,0);';
 
-  return preview;
+  return clone;
 }
 
 export const initMobileDrag = (
@@ -82,7 +62,7 @@ export const initMobileDrag = (
     previewHalfW = w / 2;
     previewHalfH = h / 2;
 
-    const preview = buildLightPreview(element, w, h);
+    const preview = buildClonePreview(element, w, h);
     document.body.appendChild(preview);
     preparedPreview = preview;
   };
@@ -100,11 +80,11 @@ export const initMobileDrag = (
       const h = element.offsetHeight;
       previewHalfW = w / 2;
       previewHalfH = h / 2;
-      dragPreview = buildLightPreview(element, w, h);
+      dragPreview = buildClonePreview(element, w, h);
       document.body.appendChild(dragPreview);
     }
 
-    dragPreview.style.opacity = '0.85';
+    dragPreview.style.opacity = '0.8';
     dragPreview.style.transform =
       `translate3d(${touchX - previewHalfW}px, ${touchY - previewHalfH}px, 0) scale(1.05)`;
 
@@ -114,15 +94,21 @@ export const initMobileDrag = (
 
     element.classList.add('opacity-50');
 
-    onDragStart?.();
+    requestAnimationFrame(() => onDragStart?.());
   };
 
   const cleanupPreparedPreview = () => {
+    if (prepareTimerId !== null) {
+      clearTimeout(prepareTimerId);
+      prepareTimerId = null;
+    }
     if (preparedPreview) {
       preparedPreview.remove();
       preparedPreview = null;
     }
   };
+
+  let prepareTimerId: ReturnType<typeof setTimeout> | null = null;
 
   const handleTouchStart = (e: TouchEvent) => {
     e.preventDefault();
@@ -136,7 +122,11 @@ export const initMobileDrag = (
     hitTestCounter = 0;
 
     cleanupPreparedPreview();
-    preparePreview();
+    if (prepareTimerId !== null) clearTimeout(prepareTimerId);
+    prepareTimerId = setTimeout(() => {
+      prepareTimerId = null;
+      preparePreview();
+    }, 0);
   };
 
   let pendingTouchX = 0;
