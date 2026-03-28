@@ -386,8 +386,8 @@ export default function EquipmentSlot({
           ${
             acceptsDrop
               ? isCombatDropTarget
-                ? 'border-destructive border-4 bg-destructive/10 animate-pulse'
-                : 'border-primary border-4 bg-primary/10 animate-pulse'
+                ? 'border-dashed border-destructive border-4 bg-destructive/10 animate-pulse'
+                : 'border-dashed border-primary border-4 bg-primary/10 animate-pulse'
               : 'bg-muted/30'
           }
           ${
@@ -415,10 +415,10 @@ export default function EquipmentSlot({
       )}
       {type === 'equipment' && gameCardData && acceptsDrop && (
         <div
-          className={`pointer-events-none absolute inset-0 z-[25] rounded-md transition-all duration-200 ${
+          className={`pointer-events-none absolute inset-0 z-[25] rounded-md border-4 border-dashed transition-all duration-200 ${
             isCombatDropTarget
-              ? 'ring-4 ring-destructive ring-inset bg-destructive/10 animate-pulse'
-              : 'ring-4 ring-primary ring-inset bg-primary/10 animate-pulse'
+              ? 'border-destructive bg-destructive/10 animate-pulse'
+              : 'border-primary bg-primary/10 animate-pulse'
           } ${acceptsDrop && isOver ? 'scale-[1.01]' : ''}`}
         />
       )}
