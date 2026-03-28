@@ -930,11 +930,11 @@ html {
 
   .dh-grid-cell {
     padding: var(--dh-card-padding, 0.25rem);
-    contain: layout style paint;
+    contain: layout style;
   }
 
   .dh-card-wrapper {
-    contain: layout style paint;
+    contain: layout style;
     --dh-card-title-base: clamp(0.72rem, 0.6rem + 0.8vw, 1rem);
     --dh-card-body-base: clamp(0.6rem, 0.5rem + 0.5vw, 0.9rem);
     --dh-card-stat-base: clamp(1rem, 0.85rem + 0.8vw, 1.5rem);
