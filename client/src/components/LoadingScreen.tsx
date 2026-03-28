@@ -79,13 +79,25 @@ const FLAVOR_TEXTS = [
 
 function preloadImage(src: string): Promise<void> {
   return new Promise((resolve) => {
+    let settled = false;
+    const done = () => { if (!settled) { settled = true; resolve(); } };
+
+    const timer = setTimeout(done, 8000);
+
     const img = new Image();
+    img.onload = () => {
+      if (typeof img.decode === 'function') {
+        img.decode().then(done, done);
+      } else {
+        done();
+      }
+    };
+    img.onerror = done;
     img.src = src;
-    if (typeof img.decode === 'function') {
-      img.decode().then(() => resolve(), () => resolve());
-    } else {
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
+
+    if (img.complete) {
+      clearTimeout(timer);
+      done();
     }
   });
 }
