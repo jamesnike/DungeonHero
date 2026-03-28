@@ -1553,6 +1553,19 @@ html {
   .game-header__button {
     font-size: calc(0.78rem * var(--header-scale));
     padding: calc(0.38rem * var(--header-scale)) calc(0.95rem * var(--header-scale));
+    min-height: calc(2rem * var(--header-scale));
+  }
+
+  .game-header__button--icon {
+    width: calc(2.15rem * var(--header-scale));
+    height: calc(2.15rem * var(--header-scale));
+    min-height: calc(2.15rem * var(--header-scale));
+    padding: 0;
+  }
+
+  .game-header__button--icon svg {
+    width: calc(1.2rem * var(--header-scale));
+    height: calc(1.2rem * var(--header-scale));
   }
 
   .game-header__badge {
@@ -1659,7 +1672,12 @@ html {
   }
 
   .combat-panel__button {
-    font-size: calc(0.95rem * var(--combat-panel-scale, 1));
+    font-size: calc(0.78rem * var(--combat-panel-scale, 1));
+    padding-top: calc(0.2rem * var(--combat-panel-scale, 1));
+    padding-bottom: calc(0.2rem * var(--combat-panel-scale, 1));
+    padding-left: calc(0.5rem * var(--combat-panel-scale, 1));
+    padding-right: calc(0.5rem * var(--combat-panel-scale, 1));
+    line-height: 1.3;
   }
 
   .combat-panel__footer-text {
@@ -1985,6 +2003,20 @@ html {
 }
 .low-perf-mode .animate-heal-glow {
   animation-duration: 200ms;
+}
+
+/* ════════════════════════════════════════════════
+   Drag Preview — kill all animations / transitions
+   ════════════════════════════════════════════════ */
+.drag-preview,
+.drag-preview *,
+.drag-preview *::before,
+.drag-preview *::after {
+  animation: none !important;
+  transition: none !important;
+  will-change: auto !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
 }
 
 /* ════════════════════════════════════════════════

@@ -11,7 +11,11 @@ let dragPreview: HTMLElement | null = null;
 let touchTarget: HTMLElement | null = null;
 
 const DRAG_THRESHOLD = 10;
-const HIT_TEST_INTERVAL = 3;
+const HIT_TEST_INTERVAL = 5;
+
+const STRIP_SELECTORS = '.combat-overlay, .dh-card__lowgold-glow, .dh-card__flip-badge, .engaged-monster-aura';
+
+const reusableMoveDetail: DragData = { type: 'card', data: null, clientX: 0, clientY: 0 };
 
 export const initMobileDrag = (
   element: HTMLElement,
@@ -19,8 +23,11 @@ export const initMobileDrag = (
   onDragStart?: () => void,
   onDragEnd?: () => void
 ) => {
-  let lastTouchPoint: { x: number; y: number } | null = null;
-  let startPoint: { x: number; y: number } | null = null;
+  let startX = 0;
+  let startY = 0;
+  let lastTouchX = 0;
+  let lastTouchY = 0;
+  let hasLastTouch = false;
   let dragStarted = false;
   let rafId: number | null = null;
   let previewHalfW = 0;
@@ -31,23 +38,23 @@ export const initMobileDrag = (
   const resolveData = (): DragData => typeof data === 'function' ? data() : data;
 
   const preparePreview = () => {
-    const rect = element.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
+    const w = element.offsetWidth;
+    const h = element.offsetHeight;
     previewHalfW = w / 2;
     previewHalfH = h / 2;
 
     const clone = element.cloneNode(true) as HTMLElement;
     clone.classList.remove('w-full', 'h-full');
+    clone.classList.add('drag-preview');
 
-    const overlays = clone.querySelectorAll('.combat-overlay');
-    overlays.forEach(el => el.remove());
+    const junk = clone.querySelectorAll(STRIP_SELECTORS);
+    for (let i = junk.length - 1; i >= 0; i--) junk[i].remove();
 
     clone.style.cssText =
       `width:${w}px;height:${h}px;max-width:${w}px;max-height:${h}px;` +
       'position:fixed;left:0;top:0;pointer-events:none;opacity:0;z-index:9999;' +
       'box-sizing:border-box;will-change:transform;contain:layout style paint;' +
-      'transition:none;backface-visibility:hidden;' +
+      'backface-visibility:hidden;' +
       'transform:translate3d(-9999px,-9999px,0);';
 
     document.body.appendChild(clone);
@@ -64,26 +71,30 @@ export const initMobileDrag = (
       preparedPreview = null;
       dragPreview.style.opacity = '0.8';
     } else {
-      const rect = element.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
+      const w = element.offsetWidth;
+      const h = element.offsetHeight;
       previewHalfW = w / 2;
       previewHalfH = h / 2;
 
       dragPreview = element.cloneNode(true) as HTMLElement;
       dragPreview.classList.remove('w-full', 'h-full');
+      dragPreview.classList.add('drag-preview');
+      const junk = dragPreview.querySelectorAll(STRIP_SELECTORS);
+      for (let i = junk.length - 1; i >= 0; i--) junk[i].remove();
       dragPreview.style.cssText =
         `width:${w}px;height:${h}px;max-width:${w}px;max-height:${h}px;` +
         'position:fixed;left:0;top:0;pointer-events:none;opacity:0.8;z-index:9999;' +
         'box-sizing:border-box;will-change:transform;contain:layout style paint;' +
-        'transition:none;backface-visibility:hidden;';
+        'backface-visibility:hidden;';
       document.body.appendChild(dragPreview);
     }
 
     dragPreview.style.transform =
       `translate3d(${touchX - previewHalfW}px, ${touchY - previewHalfH}px, 0) scale(1.05)`;
 
-    lastTouchPoint = { x: touchX, y: touchY };
+    lastTouchX = touchX;
+    lastTouchY = touchY;
+    hasLastTouch = true;
 
     element.classList.add('opacity-50');
 
@@ -100,8 +111,11 @@ export const initMobileDrag = (
   const handleTouchStart = (e: TouchEvent) => {
     e.preventDefault();
     const touch = e.touches[0];
-    startPoint = { x: touch.clientX, y: touch.clientY };
-    lastTouchPoint = { x: touch.clientX, y: touch.clientY };
+    startX = touch.clientX;
+    startY = touch.clientY;
+    lastTouchX = touch.clientX;
+    lastTouchY = touch.clientY;
+    hasLastTouch = true;
     dragStarted = false;
     hitTestCounter = 0;
 
@@ -131,8 +145,12 @@ export const initMobileDrag = (
       touchTarget = elementUnder;
 
       if (currentDragData) {
+        reusableMoveDetail.type = currentDragData.type;
+        reusableMoveDetail.data = currentDragData.data;
+        reusableMoveDetail.clientX = pendingTouchX;
+        reusableMoveDetail.clientY = pendingTouchY;
         document.dispatchEvent(new CustomEvent('mobile-drag-move', {
-          detail: { ...currentDragData, clientX: pendingTouchX, clientY: pendingTouchY },
+          detail: reusableMoveDetail,
         }));
       }
     }
@@ -142,21 +160,24 @@ export const initMobileDrag = (
     e.preventDefault();
 
     const touch = e.touches[0];
+    const tx = touch.clientX;
+    const ty = touch.clientY;
 
-    if (!dragStarted && startPoint) {
-      const dx = touch.clientX - startPoint.x;
-      const dy = touch.clientY - startPoint.y;
-      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) {
+    if (!dragStarted) {
+      const dx = tx - startX;
+      const dy = ty - startY;
+      if (dx * dx + dy * dy < DRAG_THRESHOLD * DRAG_THRESHOLD) {
         return;
       }
-      beginDrag(touch.clientX, touch.clientY);
+      beginDrag(tx, ty);
     }
 
     if (!dragPreview) return;
 
-    pendingTouchX = touch.clientX;
-    pendingTouchY = touch.clientY;
-    lastTouchPoint = { x: touch.clientX, y: touch.clientY };
+    pendingTouchX = tx;
+    pendingTouchY = ty;
+    lastTouchX = tx;
+    lastTouchY = ty;
 
     if (!moveScheduled) {
       moveScheduled = true;
@@ -169,7 +190,7 @@ export const initMobileDrag = (
 
     if (!dragStarted) {
       cleanupPreparedPreview();
-      startPoint = null;
+      hasLastTouch = false;
       element.click();
       return;
     }
@@ -182,9 +203,10 @@ export const initMobileDrag = (
     if (dragPreview) {
       dragPreview.style.visibility = 'hidden';
       const touch = e.changedTouches[0];
-      const finalPoint = lastTouchPoint ?? (touch ? { x: touch.clientX, y: touch.clientY } : null);
-      if (finalPoint) {
-        touchTarget = document.elementFromPoint(finalPoint.x, finalPoint.y) as HTMLElement;
+      const fx = hasLastTouch ? lastTouchX : (touch ? touch.clientX : 0);
+      const fy = hasLastTouch ? lastTouchY : (touch ? touch.clientY : 0);
+      if (fx || fy) {
+        touchTarget = document.elementFromPoint(fx, fy) as HTMLElement;
       }
       dragPreview.remove();
       dragPreview = null;
@@ -194,9 +216,10 @@ export const initMobileDrag = (
     
     if (touchTarget && currentDragData) {
       const touch = e.changedTouches[0];
-      const dropPoint = lastTouchPoint ?? (touch ? { x: touch.clientX, y: touch.clientY } : null);
-      const detail: DragData & { _handled?: boolean } = dropPoint
-        ? { ...currentDragData, clientX: dropPoint.x, clientY: dropPoint.y }
+      const dpx = hasLastTouch ? lastTouchX : (touch ? touch.clientX : undefined);
+      const dpy = hasLastTouch ? lastTouchY : (touch ? touch.clientY : undefined);
+      const detail: DragData & { _handled?: boolean } = dpx !== undefined
+        ? { ...currentDragData, clientX: dpx, clientY: dpy }
         : { ...currentDragData };
 
       const globalEvent = new CustomEvent('mobile-drag-end', {
@@ -219,8 +242,7 @@ export const initMobileDrag = (
     currentDragData = null;
     dragElement = null;
     touchTarget = null;
-    lastTouchPoint = null;
-    startPoint = null;
+    hasLastTouch = false;
     dragStarted = false;
     moveScheduled = false;
     

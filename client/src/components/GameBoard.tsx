@@ -26,7 +26,7 @@ import GameCard, {
 import EquipmentSlot from './EquipmentSlot';
 import CombatPanel from './CombatPanel';
 import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
-import { Sword, Calendar, Undo2, Wrench, ShoppingBag } from 'lucide-react';
+import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import AmuletSlot from './AmuletSlot';
@@ -1592,6 +1592,18 @@ export default function GameBoard() {
   useLayoutEffect(() => {
     amuletSlotsRef.current = amuletSlots;
   }, [amuletSlots]);
+  useLayoutEffect(() => {
+    const el = headerWrapperRef.current;
+    if (!el) return;
+    const measure = () => {
+      const h = el.getBoundingClientRect().height;
+      setHeaderHeight(prev => (Math.abs(prev - h) < 0.5 ? prev : h));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const amuletEffects = useMemo<ActiveAmuletEffects>(() => {
     return amuletSlots.reduce<ActiveAmuletEffects>((state, slot) => {
       if (!slot) {
@@ -1729,6 +1741,8 @@ export default function GameBoard() {
   } | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const gameSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const headerWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(48);
   const gridWrapperRef = useRef<HTMLDivElement | null>(null);
   const animationDelayTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const heroBleedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -14884,14 +14898,16 @@ export default function GameBoard() {
     (canSellDraggedCard || canSellDraggedEquipment);
   const shouldHighlightGraveyard = graveyardDropEnabled && isDragSessionActive;
   const heroRowMagicDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
-    if (!heroRowMagicDropActive) return;
+    const card = draggedCardRef.current;
+    if (!card || !isHeroRowHighlightCard(card)) return;
     event.preventDefault();
   };
   const heroRowMagicDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    if (!heroRowMagicDropActive || !draggedCard) return;
+    const card = draggedCardRef.current;
+    if (!card || !isHeroRowHighlightCard(card)) return;
     event.preventDefault();
     event.stopPropagation();
-    handleCardToHero(draggedCard);
+    handleCardToHero(card);
   };
   const getHeroRowMagicDropHandlers = (
     slot: 'backpack' | 'other'
@@ -14899,7 +14915,7 @@ export default function GameBoard() {
     onDragOver?: (event: ReactDragEvent<HTMLDivElement>) => void;
     onDrop?: (event: ReactDragEvent<HTMLDivElement>) => void;
   } => {
-    if (!heroRowMagicDropActive || slot === 'backpack') {
+    if (slot === 'backpack') {
       return {};
     }
     return {
@@ -15625,7 +15641,7 @@ export default function GameBoard() {
   return (
     <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...(minimizedModalLocksBoard ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
       {/* Header - Fixed height */}
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0" ref={headerWrapperRef}>
         <GameHeader
           hp={hp}
           maxHp={maxHp}
@@ -16519,6 +16535,34 @@ export default function GameBoard() {
         isOpen={showSkillSelection}
         onSelectSkill={handleSkillSelection}
       />
+
+      {/* Top-right: End Hero Turn button */}
+      {isCombatPanelVisible && combatState.currentTurn === 'hero' && !gameOver && !showSkillSelection && (
+        <div
+          className="absolute right-4 z-[9999]"
+          style={{
+            top: `${headerHeight}px`,
+            pointerEvents: 'none',
+            transform: `scale(${stageScale})`,
+            transformOrigin: 'top right',
+          }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); endHeroTurn(); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            disabled={endHeroTurnDisabled}
+            style={{ pointerEvents: endHeroTurnDisabled ? 'none' : 'auto' }}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 shadow-lg transition-all select-none ${
+              !endHeroTurnDisabled
+                ? 'bg-amber-500/90 text-white hover:bg-amber-600 active:scale-95'
+                : 'bg-amber-500/40 text-white/40 cursor-not-allowed'
+            }`}
+          >
+            <Swords className="w-3.5 h-3.5" />
+            <span className="text-xs font-bold">End Hero Turn</span>
+          </button>
+        </div>
+      )}
 
       {/* Bottom-right controls: minimized combat panel + undo */}
       <div className="absolute bottom-4 right-4 z-[9999] flex flex-col items-end" style={{ pointerEvents: 'none' }}>

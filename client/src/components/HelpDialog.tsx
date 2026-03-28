@@ -34,12 +34,12 @@ function CardImg({ src, alt, size = 40 }: { src: string; alt: string; size?: num
   );
 }
 
-export default function HelpDialog() {
+export default function HelpDialog({ buttonClassName }: { buttonClassName?: string }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" data-testid="button-help">
-          <HelpCircle className="w-5 h-5" />
+        <Button variant="outline" size="icon" data-testid="button-help" className={buttonClassName}>
+          <HelpCircle />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-[min(95vw,540px)] max-h-[90vh] overflow-y-auto">

@@ -83,16 +83,16 @@ export default function GameHeader({
           <Button onClick={onNewGame} variant="outline" size="sm" data-testid="button-new-game" className="game-header__button">
             New Game
           </Button>
-          <HelpDialog />
+          <HelpDialog buttonClassName="game-header__button game-header__button--icon" />
           <Button
             variant="outline"
             size="icon"
             onClick={togglePerf}
             title={isLowPerf ? '流畅模式已开启（点击关闭）' : '开启流畅模式（减少特效）'}
             data-testid="button-perf-mode"
-            className="game-header__button"
+            className="game-header__button game-header__button--icon"
           >
-            <Zap className={`w-5 h-5 ${isLowPerf ? 'text-yellow-500' : ''}`} />
+            <Zap className={isLowPerf ? 'text-yellow-500' : ''} />
           </Button>
         </div>
       </div>

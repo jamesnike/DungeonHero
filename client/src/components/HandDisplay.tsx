@@ -28,7 +28,7 @@ interface HandDisplayProps {
   handCards: GameCardData[];
   onPlayCard?: (card: GameCardData, target?: any) => void;
   onDragCardFromHand?: (card: GameCardData) => void;
-  onDragEndFromHand?: () => void;
+  onDragEndFromHand?: (event?: React.DragEvent) => void;
   maxHandSize?: number;
   cardSize?: { width: number, height: number }; // New prop for synchronization
   disableAnimations?: boolean;
@@ -86,11 +86,14 @@ export default function HandDisplay({
     }
   }, []);
 
-  const forceStopDragging = useCallback(() => {
+  const pendingDragEventRef = useRef<React.DragEvent | undefined>(undefined);
+  const forceStopDragging = useCallback((event?: React.DragEvent) => {
     clearHoverDOM();
+    const evt = event ?? pendingDragEventRef.current;
+    pendingDragEventRef.current = undefined;
     setIsDraggingCard(prev => {
       if (prev) {
-        onDragEndFromHandRef.current?.();
+        onDragEndFromHandRef.current?.(evt);
       }
       return false;
     });
@@ -132,8 +135,8 @@ export default function HandDisplay({
     onDragCardFromHand?.(card);
   }, [onDragCardFromHand]);
 
-  const handleDragEnd = useCallback(() => {
-    forceStopDragging();
+  const handleDragEnd = useCallback((e?: React.DragEvent) => {
+    forceStopDragging(e);
   }, [forceStopDragging]);
 
   const cardWidth = effectiveCardWidth;
