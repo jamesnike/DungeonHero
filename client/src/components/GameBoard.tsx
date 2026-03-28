@@ -1684,6 +1684,8 @@ export default function GameBoard() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [cardActionContext, setCardActionContext] = useState<CardActionContext | null>(null);
   const cardActionResolverRef = useRef<(() => void) | null>(null);
+  const cardActionRemainingRef = useRef(0);
+  const deletingCardIdsRef = useRef(new Set<string>());
   const shopDiscountPercent = getShopDiscountPercent(shopLevel);
   const adjustShopLevel = useCallback((delta: number) => {
     if (!delta) return;
@@ -7885,6 +7887,8 @@ export default function GameBoard() {
       };
     }
     setCardActionContext(t.cardActionContext);
+    cardActionRemainingRef.current = t.cardActionContext?.remainingCount ?? 0;
+    deletingCardIdsRef.current.clear();
     setGameLogEntries(t.gameLogEntries);
     monsterRewardPreviewCacheRef.current = t.monsterRewardPreviewCache;
 
@@ -9927,6 +9931,8 @@ export default function GameBoard() {
           resolve(true);
           cardActionResolverRef.current = null;
         };
+        cardActionRemainingRef.current = count;
+        deletingCardIdsRef.current.clear();
         setCardActionContext({
           mode: 'event',
           action,
@@ -10024,6 +10030,8 @@ export default function GameBoard() {
     if (shopDeleteUsed || deletableCardCount === 0) {
       return;
     }
+    cardActionRemainingRef.current = 1;
+    deletingCardIdsRef.current.clear();
     setCardActionContext({
       mode: 'shop',
       action: 'delete',
@@ -10388,17 +10396,22 @@ export default function GameBoard() {
 
   const handleDeleteCardConfirm = useCallback(
     async (cardId: string, source: 'hand' | 'backpack') => {
+      if (deletingCardIdsRef.current.has(cardId)) return;
+      deletingCardIdsRef.current.add(cardId);
+
       pushUndoSnapshot();
       let cardToDelete: GameCardData | null = null;
 
       if (source === 'hand') {
         cardToDelete = handCards.find(card => card.id === cardId) ?? null;
         if (!cardToDelete) {
+          deletingCardIdsRef.current.delete(cardId);
           return;
         }
       } else {
         cardToDelete = backpackItems.find(card => card.id === cardId) ?? null;
         if (!cardToDelete) {
+          deletingCardIdsRef.current.delete(cardId);
           return;
         }
       }
@@ -10411,10 +10424,35 @@ export default function GameBoard() {
 
       if (source === 'hand') {
         const removed = consumeCardFromHand(cardToDelete!);
-        if (!removed) return;
+        if (!removed) {
+          deletingCardIdsRef.current.delete(cardId);
+          return;
+        }
       } else {
         setBackpackItems(prev => prev.filter(card => card.id !== cardId));
       }
+
+      cardActionRemainingRef.current = Math.max(0, cardActionRemainingRef.current - 1);
+      const remaining = cardActionRemainingRef.current;
+
+      if (cardActionContext?.mode === 'event') {
+        if (remaining <= 0) {
+          setDeleteModalOpen(false);
+          setCardActionContext(null);
+          const resolver = cardActionResolverRef.current;
+          cardActionResolverRef.current = null;
+          resolver?.();
+        } else {
+          setCardActionContext(context => (context ? { ...context, remainingCount: remaining } : context));
+        }
+      } else if (cardActionContext?.mode === 'shop') {
+        setShopDeleteUsed(true);
+        setDeleteModalOpen(false);
+        setCardActionContext(null);
+      } else {
+        setDeleteModalOpen(false);
+      }
+
       await flightP;
 
       const delLabel = isDiscardAction ? '弃置' : '删除';
@@ -10438,29 +10476,6 @@ export default function GameBoard() {
           discardCardToGraveyard(cardToDelete, { owner: 'player' });
         }
       }
-
-      if (cardActionContext?.mode === 'shop') {
-        setShopDeleteUsed(true);
-        setDeleteModalOpen(false);
-        setCardActionContext(null);
-        return;
-      }
-
-      if (cardActionContext?.mode === 'event') {
-        const remaining = Math.max(0, cardActionContext.remainingCount - 1);
-        if (remaining <= 0) {
-          setDeleteModalOpen(false);
-          setCardActionContext(null);
-          const resolver = cardActionResolverRef.current;
-          cardActionResolverRef.current = null;
-          resolver?.();
-        } else {
-          setCardActionContext(context => (context ? { ...context, remainingCount: remaining } : context));
-        }
-        return;
-      }
-
-      setDeleteModalOpen(false);
     },
     [
       addGameLog,
