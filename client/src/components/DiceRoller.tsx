@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { usePerformanceMode } from '@/contexts/PerformanceModeContext';
 
 interface DiceRollerProps {
   onRoll?: (value: number) => void;
@@ -34,6 +35,10 @@ export default function DiceRoller({
   autoRollTrigger,
   scaleMultiplier = 1,
 }: DiceRollerProps) {
+  const { isLowPerf } = usePerformanceMode();
+  const lowPerfRef = useRef(false);
+  lowPerfRef.current = isLowPerf;
+
   const [isRolling, setIsRolling] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -227,11 +232,13 @@ export default function DiceRoller({
     const alignQuat = quaternionFromVectors(faces[targetFaceIndex].normal, [0, 0, 1]);
     const twistQuat = quatFromAxisAngle([0, 0, 1], Math.random() * Math.PI * 2);
     const spinAxis = normalize([Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]);
-    const spinMagnitude = Math.PI * (5 + Math.random() * 4);
+
+    const fast = lowPerfRef.current;
+    const spinMagnitude = fast ? Math.PI * (2 + Math.random() * 2) : Math.PI * (5 + Math.random() * 4);
 
     rollStateRef.current = {
       start: performance.now(),
-      duration: 1400,
+      duration: fast ? 600 : 1400,
       from: orientationRef.current,
       to: quatNormalize(quatMultiply(twistQuat, alignQuat)),
       spinAxis,
