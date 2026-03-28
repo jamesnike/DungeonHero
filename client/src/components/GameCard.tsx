@@ -80,6 +80,8 @@ export type PotionEffectId =
   | 'perm-spell-damage'
   | 'perm-backpack-size'
   | 'left-slot-durability-max+1'
+  | 'right-slot-durability+1'
+  | 'perm-spell-damage-2'
   | 'dice-backpack-expand'
   | 'dice-arcane-infusion'
   | 'heal-14'

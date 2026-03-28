@@ -44,6 +44,7 @@ const NAME_TO_KEY: Record<string, string> = {
   法术回响: 'spell-echo',
   血金术: 'blood-gold-rite',
   战血之印: 'war-blood-seal',
+  秘典检索: 'tome-search',
   圣光秘术: 'hero-holy-light',
   狂战秘典: 'hero-berserker-rage',
   浴血贪念: 'knight-blood-greed',

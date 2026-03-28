@@ -463,7 +463,7 @@ export function createDeck(): GameCardData[] {
     },
     {
       type: 'potion',
-      name: '高级修复剂',
+      name: '双锋淬液',
       value: 7,
       image: potionImage,
       potionEffect: 'boost-both-slots',
@@ -566,7 +566,7 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '弃置至多 2 张手牌，从坟场发现 2 张牌，再从背包抽 2 张牌。',
+    magicEffect: '弃置至多 2 张手牌，从坟场发现 2 张牌加入手牌，再从背包抽 2 张牌。',
   });
 
   deck.push({
@@ -596,7 +596,7 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '选择一把武器，在下个瀑流之前使用不消耗耐久。',
+    magicEffect: '选择一件武器或随从，在下个瀑流之前使用不消耗耐久。',
   });
 
   deck.push({

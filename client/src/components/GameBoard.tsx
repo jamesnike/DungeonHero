@@ -839,11 +839,11 @@ function createDeck(): GameCardData[] {
       value: 6,
       image: potionWeaponRepairImage,
       potionEffect: 'repair-choice',
-      description: '恢复3点耐久 或 耐久上限+1。',
+      description: '恢复3点耐久 或 耐久上限+2。',
     },
     {
       type: 'potion',
-      name: '高级修复剂',
+      name: '双锋淬液',
       value: 7,
       image: potionEquipmentRepairImage,
       potionEffect: 'boost-both-slots',
@@ -880,8 +880,8 @@ function createDeck(): GameCardData[] {
           value: 0,
           image: skillScrollImage,
           magicType: 'instant',
-          magicEffect: '抽 1 张牌，并永久 +1 法术伤害。',
-          description: '药剂残渣翻转后留下的火光祝福。',
+          magicEffect: '使用时从背包抽 1 张手牌，并永久法术伤害 +1。',
+          description: '使用时从背包抽 1 张手牌，并永久法术伤害 +1。',
         },
         destination: 'backpack',
         banner: '药剂翻转成“余烬回响”，已放入背包。',
@@ -930,7 +930,7 @@ function createDeck(): GameCardData[] {
       name: 'Guardian Amulet',
       value: 5,
       image: guardianAmuletImage,
-      description: '有护盾时候，超过格挡的部分不损失血',
+      description: '有护盾格挡时，超出格挡的伤害最多为 6 点。',
       amuletEffect: 'guardian',
     },
     {
@@ -1019,7 +1019,7 @@ function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '选择一把武器，在下个瀑流之前使用不消耗耐久。'
+    magicEffect: '选择一件武器或随从，在下个瀑流之前使用不消耗耐久。'
   });
 
   // Event cards rewritten (first six)
@@ -1303,7 +1303,7 @@ function createDeck(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       { text: '研读残页（抽 2 张牌）', effect: 'drawHeroCards:2' },
-      { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh', hint: '翻转为永久法术伤害 +1 的药剂' },
+      { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh', hint: '翻转为永久法术伤害 +2 的药剂' },
       { text: '翻转成「淬炼药剂」', effect: 'flipToLeftDurabilityPotion', hint: '翻转为左装备栏耐久上限 +1 的药剂' },
     ],
   });
@@ -9434,6 +9434,13 @@ export default function GameBoard() {
         return;
       }
 
+      if (effect === 'perm-spell-damage-2') {
+        setPermanentSpellDamageBonus(prev => prev + 2);
+        addGameLog('potion', '药水效果：永久法术伤害 +2');
+        await finalizePotionCard(card, { banner: '永久法术伤害 +2。' });
+        return;
+      }
+
       if (effect === 'perm-backpack-size') {
         setBackpackCapacityModifier(prev => prev + 1);
         enforceBackpackCapacity();
@@ -9518,7 +9525,7 @@ export default function GameBoard() {
         setEquipmentSlotBonus('equipmentSlot1', 'shield', cur => cur + 1);
         setEquipmentSlotBonus('equipmentSlot2', 'damage', cur => cur + 1);
         setEquipmentSlotBonus('equipmentSlot2', 'shield', cur => cur + 1);
-        addGameLog('potion', '高级修复剂：左右装备栏永久伤害+1，护甲+1');
+        addGameLog('potion', '双锋淬液：左右装备栏永久伤害+1，护甲+1');
         await finalizePotionCard(card, { banner: '左右装备栏永久伤害+1，护甲+1！' });
         return;
       }
@@ -9533,6 +9540,21 @@ export default function GameBoard() {
         setEquipmentSlotById('equipmentSlot1', { ...leftSlot, maxDurability: maxDur + 1 });
         addGameLog('potion', `淬炼药剂：${leftSlot.name} 耐久上限 +1（${maxDur} → ${maxDur + 1}）`);
         await finalizePotionCard(card, { banner: `${leftSlot.name} 耐久上限 +1！` });
+        return;
+      }
+
+      if (effect === 'right-slot-durability+1') {
+        const rightSlot = equipmentSlot2;
+        if (!rightSlot || !rightSlot.durability) {
+          await finalizePotionCard(card, { banner: '右装备栏没有装备，药剂失效。' });
+          return;
+        }
+        const currentDur = rightSlot.durability ?? 0;
+        const maxDur = rightSlot.maxDurability ?? currentDur;
+        const newDur = Math.min(maxDur, currentDur + 1);
+        setEquipmentSlotById('equipmentSlot2', { ...rightSlot, durability: newDur });
+        addGameLog('potion', `淬炼药剂翻转：${rightSlot.name} 耐久 +1（${currentDur} → ${newDur}）`);
+        await finalizePotionCard(card, { banner: `${rightSlot.name} 耐久 +1！` });
         return;
       }
 
@@ -9662,6 +9684,26 @@ export default function GameBoard() {
           };
           setGraveyardDiscoverState(options);
         });
+        if (amuletEffects.hasBalance && card.flipTarget) {
+          card = {
+            ...card,
+            flipTarget: {
+              toCard: {
+                id: `backpack-magic-discover-${Date.now()}`,
+                type: 'magic',
+                name: '秘典检索',
+                value: 0,
+                image: skillScrollImage,
+                magicType: 'permanent',
+                magicEffect: 'backpack-magic-discover',
+                description: '隐藏效果：天平护符与暮光药剂共鸣，翻转为此卡。永久魔法：从背包中发现一张魔法牌加入手牌。',
+              },
+              destination: 'backpack',
+              banner: '天平之力共鸣，药剂翻转成了「秘典检索」！',
+              message: '天平符文闪烁，药剂变幻为新的形态…',
+            },
+          };
+        }
         if (selected) {
           addGameLog('potion', `药水效果：从墓地发现魔法卡「${selected.name}」`);
           await finalizePotionCard(card, { banner: `从墓地取回了「${selected.name}」！` });
@@ -10997,9 +11039,9 @@ export default function GameBoard() {
           // --- Phase 2: Discover (use fresh graveyard via ref) ---
           let discovered = 0;
           const selectedDiscoverIds = new Set<string>();
+          graveyardDiscoverDeliveryRef.current = 'hand-first';
 
           for (let di = 0; di < echoDiscover; di++) {
-            // Read the CURRENT graveyard each iteration (ref is eagerly updated)
             const freshGraveyard = discardedCardsRef.current;
             const available = freshGraveyard.filter(c => !selectedDiscoverIds.has(c.id));
             if (available.length === 0) break;
@@ -11028,6 +11070,9 @@ export default function GameBoard() {
           } else if (discardedCardsRef.current.length === 0) {
             bannerParts.push('坟场为空。');
           }
+
+          // Yield so React flushes discover state before drawing
+          await new Promise<void>(r => { setTimeout(r, 0); });
 
           // --- Phase 3: Draw (after discover is fully resolved) ---
           const drawnCards = takeRandomCardsFromBackpack(echoDraw);
@@ -11083,7 +11128,7 @@ export default function GameBoard() {
             slot.item != null && (slot.item.type === 'weapon' || slot.item.type === 'monster');
           const weaponSlots = getEquipmentSlots().filter(isWeaponSlot);
           if (weaponSlots.length === 0) {
-            finalizeMagicCard(card, { banner: '永恒修复无效（没有已装备的武器）。' });
+            finalizeMagicCard(card, { banner: '永恒修复无效（没有已装备的武器或随从）。' });
             return;
           }
           if (weaponSlots.length === 1 && echoMultiplier <= 1) {
@@ -11098,10 +11143,10 @@ export default function GameBoard() {
             card,
             effect: 'eternal-repair',
             step: 'slot-select',
-            prompt: `选择一把武器，瀑流前使用不消耗耐久。${eternalEchoLabel}`,
+            prompt: `选择一件武器或随从，瀑流前使用不消耗耐久。${eternalEchoLabel}`,
             echoRemaining: echoMultiplier,
           });
-          setHeroSkillBanner(`请选择要赋予永恒修复的武器。${eternalEchoLabel}`);
+          setHeroSkillBanner(`请选择要赋予永恒修复的武器或随从。${eternalEchoLabel}`);
           return;
         }
           
@@ -11226,6 +11271,39 @@ export default function GameBoard() {
           }
           if (isEchoTriggered) emberParts.push('（回响×2）');
           finalizeMagicCard(card, { banner: emberParts.join(' ') });
+          return;
+        }
+        case '秘典检索': {
+          const bpMagics = backpackItems.filter(c => c.type === 'magic');
+          if (bpMagics.length === 0) {
+            finalizeMagicCard(card, { banner: '背包中没有魔法牌，秘典检索无效。' });
+            return;
+          }
+          const shuffledBp = [...bpMagics].sort(() => Math.random() - 0.5);
+          const discoverOptions = shuffledBp.slice(0, Math.min(3, shuffledBp.length));
+          if (discoverOptions.length === 1) {
+            const pick = discoverOptions[0];
+            setBackpackItems(prev => prev.filter(c => c.id !== pick.id));
+            ensureCardInHand(pick);
+            addGameLog('magic', `秘典检索：从背包取出「${pick.name}」加入手牌。`);
+            finalizeMagicCard(card, { banner: `从背包取出「${pick.name}」！` });
+            return;
+          }
+          const selected = await new Promise<GameCardData | null>(resolve => {
+            graveyardDiscoverResolverRef.current = c => {
+              resolve(c);
+              graveyardDiscoverResolverRef.current = null;
+            };
+            setGraveyardDiscoverState(discoverOptions);
+          });
+          if (selected) {
+            setBackpackItems(prev => prev.filter(c => c.id !== selected.id));
+            ensureCardInHand(selected);
+            addGameLog('magic', `秘典检索：从背包取出「${selected.name}」加入手牌。`);
+            finalizeMagicCard(card, { banner: `从背包取出「${selected.name}」！` });
+          } else {
+            finalizeMagicCard(card, { banner: '放弃了秘典检索。' });
+          }
           return;
         }
         case '混沌冲击': {
@@ -11716,9 +11794,10 @@ export default function GameBoard() {
         }
       }
 
-      if (amuletEffects.hasGuardian && hadShieldProtection && source === 'combat') {
-        addGameLog('amulet', `守护护符：护盾存在时抵消了 ${remainingDamage} 点战斗伤害`);
-        return 0;
+      if (amuletEffects.hasGuardian && hadShieldProtection && source === 'combat' && remainingDamage > 6) {
+        const reduced = remainingDamage - 6;
+        remainingDamage = 6;
+        addGameLog('amulet', `守护护符：超出格挡的伤害被限制为 6（减免了 ${reduced} 点）`);
       }
 
       setTakingDamage(true);
@@ -12233,7 +12312,7 @@ export default function GameBoard() {
           return;
         }
         if (slotItem.type !== 'weapon' && slotItem.type !== 'monster') {
-          setHeroSkillBanner('永恒修复只能对武器使用。');
+          setHeroSkillBanner('永恒修复只能对武器或随从使用。');
           return;
         }
         setUnbreakableUntilWaterfall(prev => ({ ...prev, [slotId]: true }));
@@ -12380,9 +12459,9 @@ export default function GameBoard() {
           return;
         }
         const maxDur = slotItem.maxDurability ?? slotItem.durability ?? 0;
-        setEquipmentSlotById(slotId, { ...slotItem, maxDurability: maxDur + 1 });
-        addGameLog('potion', `${slotItem.name} 耐久上限 +1（${maxDur} → ${maxDur + 1}）`);
-        void finalizePotionCard(pendingPotionAction.card, { banner: `${slotItem.name} 耐久上限 +1` });
+        setEquipmentSlotById(slotId, { ...slotItem, maxDurability: maxDur + 2 });
+        addGameLog('potion', `${slotItem.name} 耐久上限 +2（${maxDur} → ${maxDur + 2}）`);
+        void finalizePotionCard(pendingPotionAction.card, { banner: `${slotItem.name} 耐久上限 +2` });
         setPendingPotionAction(null);
       }
     },
@@ -13608,8 +13687,8 @@ export default function GameBoard() {
             name: '纸灰药剂',
             value: 0,
             image: potionSpellDamageImage,
-            description: '使用时永久让法术伤害 +1。',
-            potionEffect: 'perm-spell-damage',
+            description: '使用时永久让法术伤害 +2。',
+            potionEffect: 'perm-spell-damage-2',
           };
           await triggerEventTransform(currentEventCard, paperAshPotion, '残页翻转，药香浮现…');
           skipNextEventAutoDrawRef.current = true;
@@ -13623,14 +13702,28 @@ export default function GameBoard() {
         }
       } else if (effect === 'flipToLeftDurabilityPotion') {
         if (currentEventCard) {
+          const flipPotionId = `right-dur-potion-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           const durabilityPotion: GameCardData = {
             id: `left-dur-potion-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             type: 'potion',
             name: '淬炼药剂',
             value: 0,
             image: potionWeaponRepairImage,
-            description: '使用时左装备栏的装备耐久上限 +1。',
+            description: '使用时左装备栏的装备耐久上限 +1。翻转后为右装备栏耐久 +1 的药剂。',
             potionEffect: 'left-slot-durability-max+1',
+            flipTarget: {
+              toCard: {
+                id: flipPotionId,
+                type: 'potion',
+                name: '淬炼药剂（右）',
+                value: 0,
+                image: potionWeaponRepairImage,
+                description: '使用时右装备栏的装备耐久 +1。',
+                potionEffect: 'right-slot-durability+1',
+              },
+              destination: 'backpack',
+              banner: '淬炼药剂翻转，右侧淬炼之力凝结…',
+            },
           };
           await triggerEventTransform(currentEventCard, durabilityPotion, '残页翻转，淬炼之力凝结…');
           skipNextEventAutoDrawRef.current = true;
@@ -16407,8 +16500,8 @@ export default function GameBoard() {
                 onClick={() => handlePotionChoiceSelection('upgrade')}
               >
                 <div className="flex flex-col gap-1">
-                  <span className="font-semibold">耐久上限 +1</span>
-                  <span className="text-xs text-muted-foreground">选择一件装备，永久提升其耐久上限（不恢复耐久）。</span>
+                  <span className="font-semibold">耐久上限 +2</span>
+                  <span className="text-xs text-muted-foreground">选择一件装备，永久提升其耐久上限 +2（不恢复耐久）。</span>
                 </div>
               </Button>
             </div>

@@ -601,9 +601,11 @@ export default function CardDetailsModal({
                      <Zap className="w-4 h-4 shrink-0" />
                    )}
                    <span className="font-bold">
-                     {(card as any).potionEffect?.startsWith('heal')
-                       ? `Restores ${card.value} HP`
-                       : card.description || '使用后触发效果'}
+                     {(card as any).potionEffect === 'heal-14'
+                       ? 'Restores 14 HP'
+                       : (card as any).potionEffect?.startsWith('heal')
+                         ? `Restores ${card.value} HP`
+                         : card.description || '使用后触发效果'}
                    </span>
                  </div>
               </div>
