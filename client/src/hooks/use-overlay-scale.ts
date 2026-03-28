@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 const MIN_SCALE = 0.82;
-const MAX_SCALE = 1.4;
+const MAX_SCALE = 1.0;
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, v));
