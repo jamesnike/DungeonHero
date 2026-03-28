@@ -26,40 +26,75 @@ export const initMobileDrag = (
   let previewHalfW = 0;
   let previewHalfH = 0;
   let hitTestCounter = 0;
+  let preparedPreview: HTMLElement | null = null;
 
   const resolveData = (): DragData => typeof data === 'function' ? data() : data;
 
-  const beginDrag = (touchX: number, touchY: number) => {
-    dragStarted = true;
-    currentDragData = { ...resolveData() };
-    dragElement = element;
-
+  const preparePreview = () => {
     const rect = element.getBoundingClientRect();
     const w = rect.width;
     const h = rect.height;
     previewHalfW = w / 2;
     previewHalfH = h / 2;
 
-    dragPreview = element.cloneNode(true) as HTMLElement;
+    const clone = element.cloneNode(true) as HTMLElement;
+    clone.classList.remove('w-full', 'h-full');
 
-    dragPreview.classList.remove('w-full', 'h-full');
+    const overlays = clone.querySelectorAll('.combat-overlay');
+    overlays.forEach(el => el.remove());
 
-    dragPreview.style.cssText =
+    clone.style.cssText =
       `width:${w}px;height:${h}px;max-width:${w}px;max-height:${h}px;` +
-      'position:fixed;left:0;top:0;pointer-events:none;opacity:0.8;z-index:9999;' +
+      'position:fixed;left:0;top:0;pointer-events:none;opacity:0;z-index:9999;' +
       'box-sizing:border-box;will-change:transform;contain:layout style paint;' +
-      'transition:none;backface-visibility:hidden;';
+      'transition:none;backface-visibility:hidden;' +
+      'transform:translate3d(-9999px,-9999px,0);';
+
+    document.body.appendChild(clone);
+    preparedPreview = clone;
+  };
+
+  const beginDrag = (touchX: number, touchY: number) => {
+    dragStarted = true;
+    currentDragData = { ...resolveData() };
+    dragElement = element;
+
+    if (preparedPreview) {
+      dragPreview = preparedPreview;
+      preparedPreview = null;
+      dragPreview.style.opacity = '0.8';
+    } else {
+      const rect = element.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      previewHalfW = w / 2;
+      previewHalfH = h / 2;
+
+      dragPreview = element.cloneNode(true) as HTMLElement;
+      dragPreview.classList.remove('w-full', 'h-full');
+      dragPreview.style.cssText =
+        `width:${w}px;height:${h}px;max-width:${w}px;max-height:${h}px;` +
+        'position:fixed;left:0;top:0;pointer-events:none;opacity:0.8;z-index:9999;' +
+        'box-sizing:border-box;will-change:transform;contain:layout style paint;' +
+        'transition:none;backface-visibility:hidden;';
+      document.body.appendChild(dragPreview);
+    }
 
     dragPreview.style.transform =
       `translate3d(${touchX - previewHalfW}px, ${touchY - previewHalfH}px, 0) scale(1.05)`;
 
     lastTouchPoint = { x: touchX, y: touchY };
 
-    document.body.appendChild(dragPreview);
-
     element.classList.add('opacity-50');
 
     onDragStart?.();
+  };
+
+  const cleanupPreparedPreview = () => {
+    if (preparedPreview) {
+      preparedPreview.remove();
+      preparedPreview = null;
+    }
   };
 
   const handleTouchStart = (e: TouchEvent) => {
@@ -69,6 +104,9 @@ export const initMobileDrag = (
     lastTouchPoint = { x: touch.clientX, y: touch.clientY };
     dragStarted = false;
     hitTestCounter = 0;
+
+    cleanupPreparedPreview();
+    preparePreview();
   };
 
   let pendingTouchX = 0;
@@ -130,6 +168,7 @@ export const initMobileDrag = (
     e.preventDefault();
 
     if (!dragStarted) {
+      cleanupPreparedPreview();
       startPoint = null;
       element.click();
       return;
@@ -199,6 +238,7 @@ export const initMobileDrag = (
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
     }
+    cleanupPreparedPreview();
   };
 };
 
