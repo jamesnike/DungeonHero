@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
-import { Shield, Sword, Backpack, Package } from 'lucide-react';
-import React, { useEffect, useRef } from 'react';
+import { Shield, Sword, Backpack, Package, X } from 'lucide-react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import GameCard, { type GameCardData, type EquipmentCardStatModifier } from './GameCard';
@@ -83,6 +83,17 @@ export default function EquipmentSlot({
   const acceptsDrop = Boolean(isDropTarget || isCombatDropTarget);
   const [durabilityStripWidth, setDurabilityStripWidth] = React.useState(12);
   const [slotScale, setSlotScale] = React.useState(1);
+  const [isCardDragging, setIsCardDragging] = React.useState(false);
+
+  const wrappedOnDragStart = useCallback((card: any) => {
+    setIsCardDragging(true);
+    onDragStart?.(card);
+  }, [onDragStart]);
+
+  const wrappedOnDragEnd = useCallback(() => {
+    setIsCardDragging(false);
+    onDragEnd?.();
+  }, [onDragEnd]);
   
   useEffect(() => {
     if (typeof window === 'undefined' || typeof MutationObserver === 'undefined') {
@@ -340,8 +351,8 @@ export default function EquipmentSlot({
               <GameCard
                 card={equipmentDisplayCard!}
                 equipmentStatModifier={statModifier}
-                onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
-                onDragEnd={onDragEnd}
+                onDragStart={(card) => wrappedOnDragStart({ ...card, fromSlot: slotId })}
+                onDragEnd={wrappedOnDragEnd}
                 onClick={onCardClick ? () => onCardClick(gameCardData!) : undefined}
                 className="shadow-lg"
                 bleedAnimation={bleedAnimation}
@@ -376,8 +387,8 @@ export default function EquipmentSlot({
             <GameCard 
               card={type === 'equipment' ? equipmentDisplayCard! : gameCardData!}
               equipmentStatModifier={statModifier}
-              onDragStart={(card) => onDragStart?.({ ...card, fromSlot: slotId })}
-              onDragEnd={onDragEnd}
+              onDragStart={(card) => wrappedOnDragStart({ ...card, fromSlot: slotId })}
+              onDragEnd={wrappedOnDragEnd}
               onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData!) : undefined}
               className={`${type === 'backpack' ? 'cursor-pointer' : ''} shadow-lg`}
               bleedAnimation={bleedAnimation}
@@ -437,6 +448,11 @@ export default function EquipmentSlot({
               : 'border-primary bg-primary/10 animate-pulse'
           } ${acceptsDrop && isOver ? 'scale-[1.01]' : ''}`}
         />
+      )}
+      {isExhaustedThisTurn && isCardDragging && (
+        <div className="equip-slot-exhausted-cell pointer-events-none absolute inset-0 z-30 items-center justify-center rounded-md bg-black/10">
+          <X className="w-3/5 h-3/5 text-red-500/50 stroke-[3]" />
+        </div>
       )}
     </div>
   );

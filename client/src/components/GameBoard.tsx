@@ -4532,13 +4532,22 @@ export default function GameBoard() {
         });
       }
       if (!found) {
-        if (equipmentSlot1?.isMinionCard) {
-          setEquipmentSlot1(prev => prev ? { ...buffMinion(prev), type: 'monster' as const } as EquipmentItem : null);
-          found = true;
-        } else if (equipmentSlot2?.isMinionCard) {
-          setEquipmentSlot2(prev => prev ? { ...buffMinion(prev), type: 'monster' as const } as EquipmentItem : null);
-          found = true;
-        }
+        setEquipmentSlot1(prev => {
+          if (prev && (prev as GameCardData).isMinionCard) {
+            found = true;
+            return { ...buffMinion(prev as GameCardData), type: 'monster' as const } as EquipmentItem;
+          }
+          return prev;
+        });
+      }
+      if (!found) {
+        setEquipmentSlot2(prev => {
+          if (prev && (prev as GameCardData).isMinionCard) {
+            found = true;
+            return { ...buffMinion(prev as GameCardData), type: 'monster' as const } as EquipmentItem;
+          }
+          return prev;
+        });
       }
       if (!found) {
         const buffReserve = (prev: EquipmentItem[]) => {
