@@ -37,7 +37,8 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
   const isOver = dragDepth > 0;
   const [viewerOpen, setViewerOpen] = useState(false);
   const graveyardRef = useRef<HTMLDivElement>(null);
-  const isHighlightActive = shouldHighlight && isDropTarget && isOver;
+  const isReadyToReceive = shouldHighlight && isDropTarget;
+  const isHoverActive = isReadyToReceive && isOver;
   
   // Set up mobile drop support
   useEffect(() => {
@@ -120,9 +121,9 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
         onClick={() => setViewerOpen(true)}
         data-testid="graveyard-zone"
         className={cn(
-          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/80 via-slate-900/50 to-zinc-900/30 transition-[border-color,ring] duration-200',
-          isHighlightActive && 'ring-4 ring-destructive/60 animate-pulse',
-          isHighlightActive && 'scale-105 ring-destructive bg-destructive/20',
+          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/80 via-slate-900/50 to-zinc-900/30 transition-[border-color,ring,box-shadow] duration-200',
+          isReadyToReceive && !isHoverActive && 'border-dashed border-primary animate-pulse',
+          isHoverActive && 'ring-4 ring-destructive/60 animate-pulse scale-105 ring-destructive bg-destructive/20',
           !isDropTarget && 'hover:scale-[1.01]'
         )}
       >

@@ -259,7 +259,7 @@ export default function EquipmentSlot({
       {type === 'equipment' && (
         <div
           className={`absolute inset-0 z-0 flex flex-row-reverse overflow-hidden rounded-md border-2 border-dashed border-border bg-muted/10 ${
-            heroSkillHighlight ? 'ring-4 ring-amber-300 animate-pulse' : ''
+            heroSkillHighlight ? 'ring-4 ring-amber-400 animate-pulse shadow-[0_0_16px_4px_rgba(245,158,11,0.4)]' : ''
           }`}
         >
           {Array.from({ length: DURABILITY_SEGMENTS }, (_, idx) => idx + 1).map((num) => {
@@ -397,14 +397,14 @@ export default function EquipmentSlot({
                 : 'scale-105 ring-4 ring-primary bg-primary/20'
               : ''
           }
-          ${heroSkillHighlight ? 'ring-4 ring-amber-300 animate-pulse cursor-pointer' : ''}
+          ${heroSkillHighlight ? 'ring-4 ring-amber-400 animate-pulse cursor-pointer shadow-[0_0_16px_4px_rgba(245,158,11,0.4)]' : ''}
         `}>
           {getIcon()}
           <span className="dh-hero-chip text-muted-foreground font-medium">{getLabel()}</span>
         </Card>
       )}
       {heroSkillHighlight && heroSkillLabel && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 bg-amber-200 text-amber-900 dh-hero-small font-semibold px-3 py-1 rounded-full shadow">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 equip-slot-target-btn bg-amber-500 text-white font-bold px-4 py-2 rounded-full shadow-lg border-2 border-amber-300 cursor-pointer select-none whitespace-nowrap">
           {heroSkillLabel}
         </div>
       )}

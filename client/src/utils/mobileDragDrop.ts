@@ -31,6 +31,7 @@ export const initMobileDrag = (
   let hitTestCounter = 0;
   let originCenterX = 0;
   let originCenterY = 0;
+  let dragCellEl: HTMLElement | null = null;
 
   const resolveData = (): DragData => typeof data === 'function' ? data() : data;
 
@@ -42,6 +43,9 @@ export const initMobileDrag = (
     const rect = element.getBoundingClientRect();
     originCenterX = rect.left + rect.width / 2;
     originCenterY = rect.top + rect.height / 2;
+
+    dragCellEl = element.closest('.dh-grid-cell') as HTMLElement | null;
+    if (dragCellEl) dragCellEl.style.zIndex = '9999';
 
     element.style.zIndex = '9999';
     element.style.position = 'relative';
@@ -140,6 +144,10 @@ export const initMobileDrag = (
   };
   
   const restoreElement = () => {
+    if (dragCellEl) {
+      dragCellEl.style.zIndex = '';
+      dragCellEl = null;
+    }
     element.style.zIndex = '';
     element.style.position = '';
     element.style.opacity = '';

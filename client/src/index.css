@@ -1333,6 +1333,26 @@ html {
     );
   }
 
+  .equip-slot-target-btn {
+    font-size: calc(
+      1rem *
+      var(--dh-hero-instance-scale, 1)
+    );
+    padding: calc(0.5rem * var(--dh-hero-instance-scale, 1)) calc(1rem * var(--dh-hero-instance-scale, 1));
+    animation: equip-slot-target-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes equip-slot-target-pulse {
+    0%, 100% {
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+      transform: translate(-50%, -50%) scale(1);
+    }
+    50% {
+      box-shadow: 0 4px 20px 6px rgba(245, 158, 11, 0.6);
+      transform: translate(-50%, -50%) scale(1.08);
+    }
+  }
+
   .dh-hero-hp {
     --dh-hero-hp-base: clamp(0.72rem, 0.52rem + 0.7vw, 1.3rem);
     font-size: calc(
