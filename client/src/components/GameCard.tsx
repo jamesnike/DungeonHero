@@ -726,7 +726,7 @@ const amuletEffectText =
         transition-[transform,opacity,filter] duration-200 ease-out
         touch-none
         ${isDragging 
-          ? 'opacity-60 scale-95 -rotate-6 -translate-y-2' 
+          ? 'opacity-60' 
           : 'hover:scale-105 hover:-translate-y-1 hover:rotate-1'
         }
         ${card.type === 'monster' && isWeaponDropTarget ? 'scale-105' : ''}

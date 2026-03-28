@@ -33,7 +33,6 @@ export const initMobileDrag = (
   let originCenterY = 0;
   let dragCellEl: HTMLElement | null = null;
   let cachedRect: DOMRect | null = null;
-  let dragStartTimerId: ReturnType<typeof setTimeout> | null = null;
 
   const resolveData = (): DragData => typeof data === 'function' ? data() : data;
 
@@ -59,10 +58,7 @@ export const initMobileDrag = (
     lastTouchY = touchY;
     hasLastTouch = true;
 
-    dragStartTimerId = setTimeout(() => {
-      dragStartTimerId = null;
-      onDragStart?.();
-    }, 50);
+    requestAnimationFrame(() => onDragStart?.());
   };
 
   const handleTouchStart = (e: TouchEvent) => {
@@ -143,16 +139,13 @@ export const initMobileDrag = (
   };
   
   const restoreElement = () => {
-    if (dragStartTimerId !== null) {
-      clearTimeout(dragStartTimerId);
-      dragStartTimerId = null;
-    }
     if (dragCellEl) {
       dragCellEl.style.zIndex = '';
       dragCellEl = null;
     }
     element.classList.remove('mobile-dragging');
-    element.style.transform = '';
+    element.style.transform = 'none';
+    element.style.opacity = '1';
     element.style.visibility = '';
   };
 
@@ -215,6 +208,11 @@ export const initMobileDrag = (
     moveScheduled = false;
     
     onDragEnd?.();
+
+    requestAnimationFrame(() => {
+      element.style.transform = '';
+      element.style.opacity = '';
+    });
   };
   
   element.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -226,7 +224,6 @@ export const initMobileDrag = (
     element.removeEventListener('touchmove', handleTouchMove);
     element.removeEventListener('touchend', handleTouchEnd);
     if (rafId !== null) cancelAnimationFrame(rafId);
-    if (dragStartTimerId !== null) clearTimeout(dragStartTimerId);
     cachedRect = null;
   };
 };
