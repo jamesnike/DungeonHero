@@ -3358,6 +3358,16 @@ export default function GameBoard() {
       };
     };
 
+    const createBackpackCapacityOption = (): MonsterRewardOption => {
+      return {
+        id: createMonsterRewardOptionId(),
+        title: '背包上限 +1',
+        description: '扩展背包空间，容纳更多物资。',
+        detail: '永久增益',
+        effect: { type: 'backpackCapacity', amount: 1 },
+      };
+    };
+
     const createSpellDamageOption = (): MonsterRewardOption => {
       return {
         id: createMonsterRewardOptionId(),
@@ -3369,6 +3379,7 @@ export default function GameBoard() {
     };
 
     pushOption(createSlotBonusOption());
+    pushOption(createSlotBonusOption());
     pushOption(createGoldOption());
     pushOption(createHealOption());
     pushOption(createRepairOption());
@@ -3378,6 +3389,9 @@ export default function GameBoard() {
     pushOption(createMaxHpOption());
     if (Math.random() < 0.3) {
       pushOption(createSpellDamageOption());
+    }
+    if (Math.random() < 0.15) {
+      pushOption(createBackpackCapacityOption());
     }
 
     const pool = [...options];
@@ -10045,6 +10059,13 @@ export default function GameBoard() {
           setPermanentSpellDamageBonus(prev => prev + amount);
           addGameLog('combat', `战利品：法术伤害永久 +${amount}`);
           setHeroSkillBanner(`法术伤害永久 +${amount}`);
+          return true;
+        }
+        case 'backpackCapacity': {
+          const amount = eff.amount;
+          setBackpackCapacityModifier(prev => prev + amount);
+          addGameLog('combat', `战利品：背包上限永久 +${amount}`);
+          setHeroSkillBanner(`背包上限永久 +${amount}`);
           return true;
         }
         default:

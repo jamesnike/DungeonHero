@@ -118,7 +118,8 @@ export type MonsterRewardEffect =
   | { type: 'discoverClass' }
   | { type: 'discoverGraveyard' }
   | { type: 'maxHp'; amount: number }
-  | { type: 'spellDamage'; amount: number };
+  | { type: 'spellDamage'; amount: number }
+  | { type: 'backpackCapacity'; amount: number };
 
 export type MonsterRewardOption = {
   id: string;
