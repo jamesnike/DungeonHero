@@ -32,6 +32,8 @@ export const initMobileDrag = (
   let originCenterX = 0;
   let originCenterY = 0;
   let dragCellEl: HTMLElement | null = null;
+  let cachedRect: DOMRect | null = null;
+  let dragStartTimerId: ReturnType<typeof setTimeout> | null = null;
 
   const resolveData = (): DragData => typeof data === 'function' ? data() : data;
 
@@ -40,24 +42,16 @@ export const initMobileDrag = (
     currentDragData = { ...resolveData() };
     dragElement = element;
 
-    const rect = element.getBoundingClientRect();
+    const rect = cachedRect || element.getBoundingClientRect();
+    cachedRect = null;
     originCenterX = rect.left + rect.width / 2;
     originCenterY = rect.top + rect.height / 2;
 
     dragCellEl = element.closest('.dh-grid-cell') as HTMLElement | null;
     if (dragCellEl) dragCellEl.style.zIndex = '9999';
 
-    element.style.zIndex = '9999';
-    element.style.position = 'relative';
-    element.style.opacity = '0.8';
-    element.style.pointerEvents = 'none';
-    element.style.willChange = 'transform';
-    element.style.transition = 'none';
-    element.style.backfaceVisibility = 'hidden';
-
-    const dx = touchX - originCenterX;
-    const dy = touchY - originCenterY;
-    element.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.05)`;
+    element.classList.add('mobile-dragging');
+    element.style.transform = `translate3d(${touchX - originCenterX}px, ${touchY - originCenterY}px, 0) scale(1.05)`;
 
     dragPreview = element;
 
@@ -65,7 +59,10 @@ export const initMobileDrag = (
     lastTouchY = touchY;
     hasLastTouch = true;
 
-    requestAnimationFrame(() => onDragStart?.());
+    dragStartTimerId = setTimeout(() => {
+      dragStartTimerId = null;
+      onDragStart?.();
+    }, 50);
   };
 
   const handleTouchStart = (e: TouchEvent) => {
@@ -78,6 +75,8 @@ export const initMobileDrag = (
     hasLastTouch = true;
     dragStarted = false;
     hitTestCounter = 0;
+
+    cachedRect = element.getBoundingClientRect();
   };
 
   let pendingTouchX = 0;
@@ -144,17 +143,15 @@ export const initMobileDrag = (
   };
   
   const restoreElement = () => {
+    if (dragStartTimerId !== null) {
+      clearTimeout(dragStartTimerId);
+      dragStartTimerId = null;
+    }
     if (dragCellEl) {
       dragCellEl.style.zIndex = '';
       dragCellEl = null;
     }
-    element.style.zIndex = '';
-    element.style.position = '';
-    element.style.opacity = '';
-    element.style.pointerEvents = '';
-    element.style.willChange = '';
-    element.style.transition = '';
-    element.style.backfaceVisibility = '';
+    element.classList.remove('mobile-dragging');
     element.style.transform = '';
     element.style.visibility = '';
   };
@@ -228,9 +225,9 @@ export const initMobileDrag = (
     element.removeEventListener('touchstart', handleTouchStart);
     element.removeEventListener('touchmove', handleTouchMove);
     element.removeEventListener('touchend', handleTouchEnd);
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-    }
+    if (rafId !== null) cancelAnimationFrame(rafId);
+    if (dragStartTimerId !== null) clearTimeout(dragStartTimerId);
+    cachedRect = null;
   };
 };
 

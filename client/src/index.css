@@ -2055,17 +2055,17 @@ html {
 }
 
 /* ════════════════════════════════════════════════
-   Drag Preview — kill all animations / transitions
+   Mobile Drag — applied to original element during touch drag
    ════════════════════════════════════════════════ */
-.drag-preview,
-.drag-preview *,
-.drag-preview *::before,
-.drag-preview *::after {
-  animation: none !important;
+.mobile-dragging {
+  z-index: 9999 !important;
+  position: relative !important;
+  opacity: 0.8 !important;
+  pointer-events: none !important;
+  will-change: transform !important;
   transition: none !important;
-  will-change: auto !important;
+  backface-visibility: hidden !important;
   filter: none !important;
-  mix-blend-mode: normal !important;
 }
 
 /* ════════════════════════════════════════════════
