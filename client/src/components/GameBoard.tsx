@@ -427,7 +427,7 @@ const getEmptyColumns = (slots: ActiveRowSlots): number[] =>
 const getFilledPreviewColumns = (slots: ActiveRowSlots): number[] =>
   DUNGEON_COLUMNS.filter(columnIndex => Boolean(slots[columnIndex]));
 
-const FLIP_GOLD_REWARD = 3;
+const FLIP_GOLD_REWARD = 5;
 
 const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   aura: {
