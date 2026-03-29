@@ -544,7 +544,7 @@ baseDamage = max(0,
 | 名称 | `magicType` | 效果 |
 |------|-------------|------|
 | 瀑流重置 | instant | 场上牌放回牌堆底，立即触发瀑流 |
-| 风暴箭雨 | instant | 对行中所有怪物造成 `getSpellDamage(3) × echo` 伤害；命中 ≥4 只怪物时翻转为「箭雨余韵」(permanent) |
+| 风暴箭雨 | instant | 对行中所有怪物造成 `getSpellDamage(3) × echo` 伤害；命中 ≥3 只怪物时翻转为「箭雨余韵」(permanent) |
 | 箭雨余韵 | permanent | 对行中所有怪物造成 `getSpellDamage(1) × echo` 伤害，每命中 1 只怪物从回收袋随机抽 1 张牌入手牌（不含自身） |
 | 回响行囊 | instant | 弃 `2×echo` 张手牌 → 从坟场发现 `2×echo` 张 → 从背包抽 `2×echo` 张 |
 | 壁垒猛击 | instant | 被动：每次瀑流随机装备槽永久护甲+1 |

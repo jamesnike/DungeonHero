@@ -11057,7 +11057,7 @@ export default function GameBoard() {
             const animationDelay = index * Math.floor(COMBAT_ANIMATION_STAGGER * 0.75);
             dealDamageToMonster(monster, volleyDamage, { animationDelay, pulses: 2 });
           });
-          if (monsters.length >= 4) {
+          if (monsters.length >= 3) {
             const flippedCard: GameCardData = {
               id: `${card.id}-flip-storm-volley`,
               type: 'magic',
@@ -11392,39 +11392,6 @@ export default function GameBoard() {
           }
           return;
         }
-        case '混沌冲击': {
-          const chaosMons = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
-          if (chaosMons.length === 0) {
-            finalizeMagicCard(card, { banner: '混沌冲击无效（没有怪物）。' });
-            return;
-          }
-          if (chaosMons.length === 1 && echoMultiplier <= 1) {
-            const target = chaosMons[0];
-            if (!isMonsterEngaged(target.id)) beginCombat(target, 'hero');
-            const chaosDamage = getSpellDamage(3);
-            const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(target, chaosDamage);
-            dealDamageToMonster(target, chaosDamage);
-            if (removedExactlyOneLayer) {
-              const drawn = drawCardsFromBackpack(2);
-              finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。` });
-            } else {
-              finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 点伤害。` });
-            }
-          } else {
-            const chaosDamage = getSpellDamage(3);
-            const chaosEchoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
-            setPendingMagicAction({
-              card,
-              effect: 'chaos-strike',
-              step: 'monster-select',
-              prompt: `选择一个怪物，对其造成 ${chaosDamage} 点伤害。${chaosEchoLabel}`,
-              data: {},
-              echoRemaining: echoMultiplier,
-            });
-            setHeroSkillBanner(`选择一个怪物，对其造成 3 点伤害。${chaosEchoLabel}`);
-          }
-          return;
-        }
       }
       
       // Handle class card removal
@@ -11462,6 +11429,39 @@ export default function GameBoard() {
         }
         addGameLog('magic', `哥布林的戏法：${count} 张手牌洗入回收袋，抽了 ${drawn.length} 张新牌。`);
         finalizeMagicCard(card, { banner: `哥布林的戏法：刷新了 ${count} 张手牌！` });
+        return;
+      }
+      if (card.name === '混沌冲击') {
+        const chaosMons = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
+        if (chaosMons.length === 0) {
+          finalizeMagicCard(card, { banner: '混沌冲击无效（没有怪物）。' });
+          return;
+        }
+        if (chaosMons.length === 1 && echoMultiplier <= 1) {
+          const target = chaosMons[0];
+          if (!isMonsterEngaged(target.id)) beginCombat(target, 'hero');
+          const chaosDamage = getSpellDamage(3);
+          const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(target, chaosDamage);
+          dealDamageToMonster(target, chaosDamage);
+          if (removedExactlyOneLayer) {
+            const drawn = drawCardsFromBackpack(2);
+            finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。` });
+          } else {
+            finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 点伤害。` });
+          }
+        } else {
+          const chaosDamage = getSpellDamage(3);
+          const chaosEchoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
+          setPendingMagicAction({
+            card,
+            effect: 'chaos-strike',
+            step: 'monster-select',
+            prompt: `选择一个怪物，对其造成 ${chaosDamage} 点伤害。${chaosEchoLabel}`,
+            data: {},
+            echoRemaining: echoMultiplier,
+          });
+          setHeroSkillBanner(`选择一个怪物，对其造成 3 点伤害。${chaosEchoLabel}`);
+        }
         return;
       }
       switch (card.id) {
@@ -13049,6 +13049,10 @@ export default function GameBoard() {
       tickRecycleForge();
 
       if (card.type === 'monster') {
+        if (isMonsterEngaged(card.id) && combatState.currentTurn === 'hero') {
+          resetDragState();
+          return;
+        }
         beginCombat(card, 'monster');
       } else if (card.type === 'potion') {
         void handlePotionConsumption(card);
@@ -13234,6 +13238,10 @@ export default function GameBoard() {
         resetDragState();
         return;
       } else if (card.type === 'monster') {
+        if (isMonsterEngaged(card.id) && combatState.currentTurn === 'hero') {
+          resetDragState();
+          return;
+        }
         beginCombat(card, 'monster');
       } else {
         // Other card types go to backpack
@@ -13283,7 +13291,10 @@ export default function GameBoard() {
   };
   const canCardDropOnHero = (card: GameCardData | null) => {
     if (!card) return false;
-    if (card.type === 'monster') return true;
+    if (card.type === 'monster') {
+      if (isMonsterEngaged(card.id) && combatState.currentTurn === 'hero') return false;
+      return true;
+    }
     if (isConsumableCard(card)) return true;
     if (card.type === 'event') return true;
     return false;
