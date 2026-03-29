@@ -20,7 +20,7 @@ const EVENT_NAME_TO_KEY: Record<string, string> = {
   暗影契约: 'evt-shadow-pact',
   共鸣熔炉: 'evt-resonance-forge',
   贪婪祭坛: 'evt-greed-altar',
-  荣誉回响: 'evt-honor-echo',
+  战血荣誉: 'evt-honor-echo',
   血咒仪式: 'evt-blood-curse-rite',
   深红契约: 'evt-crimson-pact',
   '深红契约（觉醒）': 'evt-crimson-pact',

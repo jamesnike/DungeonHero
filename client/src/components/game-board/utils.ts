@@ -755,7 +755,7 @@ export function createDeck(): GameCardData[] {
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: '荣誉回响',
+    name: '战血荣誉',
     value: 0,
     image: eventScrollImage,
     description: '选择一项奖励。结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',

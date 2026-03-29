@@ -1181,7 +1181,7 @@ function createDeck(): GameCardData[] {
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: '荣誉回响',
+    name: '战血荣誉',
     value: 0,
     image: eventScrollImage,
     description: '选择一项奖励。结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
@@ -5493,7 +5493,7 @@ export default function GameBoard() {
                 damage: prev.equipmentSlot2.damage + bonusGained,
               },
             }));
-            addGameLog('skill', `愈战愈勇：累计治疗触发，左右装备栏各永久伤害 +${bonusGained}`);
+            addGameLog('skill', `愈战愈勇：本次实际治疗 ${actualHeal}（累计 ${prevAccum} → ${newAccum}），左右装备栏各永久伤害 +${bonusGained}`);
           }
         }
       }
@@ -6041,8 +6041,9 @@ export default function GameBoard() {
         const filtered = prev.filter(existing => existing.id !== withWaits.id);
         return [...filtered, withWaits];
       });
+      addGameLog('deck', `「${card.name}」→ 回收袋`);
     },
-    [setPermanentMagicRecycleBag],
+    [addGameLog, setPermanentMagicRecycleBag],
   );
 
   const restorePermanentMagicFromRecycleBag = useCallback(() => {
@@ -6070,6 +6071,8 @@ export default function GameBoard() {
 
     if (!restoredCount) return 0;
 
+    addGameLog('deck', `回收袋返还 ${restoredCount} 张牌：${cardsToRestore.map(c => c.name).join('、')}`);
+
     backpackItemsRef.current = [...backpackItemsRef.current, ...cardsToRestore];
     setBackpackItems(prev => {
       const next = [...prev, ...cardsToRestore];
@@ -6078,7 +6081,7 @@ export default function GameBoard() {
     });
 
     return restoredCount;
-  }, [backpackCapacity, permanentMagicRecycleBag]);
+  }, [addGameLog, backpackCapacity, permanentMagicRecycleBag]);
 
   const tickRecycleForge = () => {
     if (!amuletSlotsRef.current.some(s => s?.amuletEffect === 'recycle-forge')) return;
@@ -8392,6 +8395,9 @@ export default function GameBoard() {
         }
 
         const newCards = prevRemaining.slice(0, cardsToDraw);
+        if (newCards.length > 0) {
+          addGameLog('deck', `翻开 ${newCards.length} 张地牢牌：${newCards.map(c => c.name).join('、')}`);
+        }
         const nextSlots = createEmptyActiveRow();
         const drawSpawnTurn = turnCount;
 
@@ -8454,6 +8460,7 @@ export default function GameBoard() {
       discardedCardsRef.current = next;
       return next;
     });
+    addGameLog('deck', `「${card.name}」→ 坟场`);
   }
 
   /**
@@ -11689,6 +11696,7 @@ export default function GameBoard() {
             if (drawn.length > 0) {
               setPermanentMagicRecycleBag(prev => prev.filter(c => !drawnIds.has(c.id)));
               drawn.forEach(c => ensureCardInHand(c));
+              addGameLog('deck', `从回收袋抽取 ${drawn.length} 张牌：${drawn.map(c => c.name).join('、')}`);
             }
             const drawnNames = drawn.map(c => c.name).join('、');
             const svBanner = drawn.length > 0
@@ -13864,11 +13872,11 @@ export default function GameBoard() {
             description:
               '永久魔法：打出时失去 1 点生命，选择一件装备恢复 1 点耐久（法术回响时恢复 2）。被弃置时对激活行每只怪物各造成 1 点伤害。',
           };
-          await triggerEventTransform(currentEventCard, honorBloodCard, '荣誉回响翻转为「战血之印」…');
+          await triggerEventTransform(currentEventCard, honorBloodCard, '战血荣誉翻转为「战血之印」…');
           skipNextEventAutoDrawRef.current = true;
           addCardToBackpack(honorBloodCard);
-          addGameLog('event', '事件效果：荣誉回响翻转成了「战血之印」');
-          setHeroSkillBanner('荣誉回响翻转为战血之印，已放入背包。');
+          addGameLog('event', '事件效果：战血荣誉翻转成了「战血之印」');
+          setHeroSkillBanner('战血荣誉翻转为战血之印，已放入背包。');
           if (amuletEffects.hasFlipGold) {
             setGold(prev => prev + FLIP_GOLD_REWARD);
             addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
@@ -14393,7 +14401,7 @@ export default function GameBoard() {
       return;
     }
 
-    if (currentEventCard?.name === '荣誉回响' && resolvingDungeonCardId) {
+    if (currentEventCard?.name === '战血荣誉' && resolvingDungeonCardId) {
       const cellIdx = activeCards.findIndex(c => c?.id === resolvingDungeonCardId);
       if (cellIdx !== -1 && cellIdx < activeCards.length - 1) {
         const rightMonsters: GameCardData[] = [];
@@ -14410,8 +14418,8 @@ export default function GameBoard() {
             }
           });
           const names = rightMonsters.map(m => m.name).join('、');
-          addGameLog('event', `荣誉回响激怒了右侧的怪物：${names}`);
-          setHeroSkillBanner(`荣誉回响激怒了 ${names}！`);
+          addGameLog('event', `战血荣誉激怒了右侧的怪物：${names}`);
+          setHeroSkillBanner(`战血荣誉激怒了 ${names}！`);
         }
       }
     }
@@ -14982,7 +14990,10 @@ export default function GameBoard() {
   const heroRowMagicDropActive =
     !heroRowInteractionLocked && isHeroRowHighlightCard(draggedCard);
   const canSellDraggedCard =
-    draggedCard ? (isSellableType(draggedCard.type) && !draggedCard.isCurse) || draggedCard.isPermanentEvent === true : false;
+    draggedCard
+      ? ((isSellableType(draggedCard.type) && !draggedCard.isCurse && !(draggedCard.type === 'monster' && !draggedCard.isMinionCard))
+        || draggedCard.isPermanentEvent === true)
+      : false;
   const canSellDraggedEquipment =
     draggedEquipment && draggedEquipment.type
       ? isSellableType(draggedEquipment.type as CardType)

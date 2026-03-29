@@ -581,7 +581,7 @@ baseDamage = max(0,
 |------|------|------|
 | 治愈余韵 | 治疗药水翻转 | 回复 2×echo HP |
 | 暗影之刺 | 暗影契约翻转 | `scalingDamage`：叠加伤害 |
-| 战血之印 | 荣誉回响翻转 | `honor-blood`：弃置时对每个怪物造成 `getSpellDamage(1)` |
+| 战血之印 | 战血荣誉翻转 | `honor-blood`：弃置时对每个怪物造成 `getSpellDamage(1)` |
 | 血金术 | 奇术商会翻转 | `guild-blood-gold`：-1 HP → +2 金 × echo |
 | 法术回响 | 裂隙契约翻转 | 下一张魔法效果翻倍 |
 | 哥布林的戏法 | 怪物击杀 | 其他手牌全部回收 |

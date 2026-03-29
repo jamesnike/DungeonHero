@@ -17,6 +17,7 @@ export type LogEntryType =
   | 'monster'
   | 'skill'
   | 'gold'
+  | 'deck'
   | 'system';
 
 export interface LogEntry {
@@ -40,6 +41,7 @@ const LOG_TYPE_COLORS: Record<LogEntryType, string> = {
   monster: 'text-red-500',
   skill: 'text-rose-400',
   gold: 'text-yellow-300',
+  deck: 'text-teal-400',
   system: 'text-gray-400',
 };
 
@@ -57,6 +59,7 @@ const LOG_TYPE_LABELS: Record<LogEntryType, string> = {
   monster: 'Monster',
   skill: 'Skill',
   gold: 'Gold',
+  deck: 'Deck',
   system: 'System',
 };
 
