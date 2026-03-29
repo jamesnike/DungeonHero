@@ -19,7 +19,7 @@ const EVENT_NAME_TO_KEY: Record<string, string> = {
   '秘藏宝库（已开启）': 'evt-vault',
   暗影契约: 'evt-shadow-pact',
   共鸣熔炉: 'evt-resonance-forge',
-  贪婪祭坛: 'evt-greed-altar',
+  破坏祭坛: 'evt-greed-altar',
   战血荣誉: 'evt-honor-echo',
   血咒仪式: 'evt-blood-curse-rite',
   双重燃烧: 'evt-crimson-pact',

@@ -1145,7 +1145,7 @@ function createDeck(): GameCardData[] {
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: '贪婪祭坛',
+    name: '破坏祭坛',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
