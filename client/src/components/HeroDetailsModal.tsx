@@ -47,6 +47,7 @@ interface HeroDetailsModalProps {
   };
   heroSkills: HeroSkillDefinition[];
   permanentSkills: string[];
+  permanentSkillStacks?: Record<string, number>;
   heroMagicInfo?: HeroMagicDisplayInfo[];
   /** 当前局内各区域卡牌上限 */
   capacityLimits: {
@@ -85,6 +86,7 @@ export default function HeroDetailsModal({
   stats,
   heroSkills,
   permanentSkills,
+  permanentSkillStacks,
   heroMagicInfo,
   capacityLimits,
 }: HeroDetailsModalProps) {
@@ -320,11 +322,23 @@ export default function HeroDetailsModal({
               <div className="grid gap-2 sm:grid-cols-2">
                 {permanentSkills.map((skill, index) => {
                   const { label, description } = describePermanentSkill(skill);
+                  const stacks = permanentSkillStacks?.[skill] ?? 0;
                   return (
                     <div key={`${label}-${index}`} className="rounded-xl border border-border/60 bg-muted/30 p-3">
-                      <div className="font-medium text-foreground">{label}</div>
+                      <div className="flex items-center gap-2 font-medium text-foreground">
+                        <span>{label}</span>
+                        {stacks > 1 && (
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                            ×{stacks}
+                          </Badge>
+                        )}
+                      </div>
                       {description ? (
-                        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {stacks > 1
+                            ? description.replace(/\+1/, `+${stacks}`)
+                            : description}
+                        </p>
                       ) : null}
                     </div>
                   );

@@ -443,6 +443,7 @@ const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasDualGuard: false,
   hasDiscardShock: false,
   hasFlipGold: false,
+  hasRecycleForge: false,
 });
 
 const logWaterfallInvariant = (
@@ -1132,7 +1133,7 @@ function createDeck(): GameCardData[] {
         name: '熔炉之心',
         value: 0,
         image: balanceAmuletImage,
-        description: `每有一张牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`,
+        description: `每有一张牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。可熔炉灵焰`,
         amuletEffect: 'flip-gold',
       },
       destination: 'backpack',
@@ -1416,8 +1417,8 @@ function createDeck(): GameCardData[] {
         name: '混沌冲击',
         value: 0,
         image: skillScrollImage,
-        magicType: 'instant',
-        magicEffect: '对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。(可超手牌上限)',
+        magicType: 'permanent',
+        magicEffect: '永久魔法：对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。(可超手牌上限)',
         description: '对一个怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。(可超手牌上限)',
       },
       destination: 'backpack',
@@ -1503,8 +1504,8 @@ function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：弃 1 张手牌到回收袋，从背包抽 1 张牌。',
-      description: '弃置 1 张手牌到回收袋，从背包抽取 1 张新牌。',
+      magicEffect: '永久魔法：弃 1 张手牌到回收袋，从背包抽 2 张牌。',
+      description: '弃置 1 张手牌到回收袋，从背包抽取 2 张新牌。',
       recycleDelay: 1,
     },
     {
@@ -1626,6 +1627,9 @@ export default function GameBoard() {
         case 'flip-gold':
           state.hasFlipGold = true;
           break;
+        case 'recycle-forge':
+          state.hasRecycleForge = true;
+          break;
       }
       const bonus = slot.amuletAuraBonus;
       if (bonus) {
@@ -1680,6 +1684,8 @@ export default function GameBoard() {
     setShopLevel(prev => Math.min(MAX_SHOP_LEVEL, Math.max(0, Math.floor(prev + delta))));
   }, []);
   const [cardsPlayed, setCardsPlayed] = useState(0);
+  const [recycleForgePlayCount, setRecycleForgePlayCount] = useState(0);
+  const recycleForgePlayCountRef = useRef(0);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
   const [draggedCard, setDraggedCard] = useState<GameCardData | null>(null);
@@ -6074,6 +6080,23 @@ export default function GameBoard() {
     return restoredCount;
   }, [backpackCapacity, permanentMagicRecycleBag]);
 
+  const tickRecycleForge = () => {
+    if (!amuletSlotsRef.current.some(s => s?.amuletEffect === 'recycle-forge')) return;
+    const next = recycleForgePlayCountRef.current + 1;
+    recycleForgePlayCountRef.current = next;
+    setRecycleForgePlayCount(next);
+    if (next % 5 === 0) {
+      const restored = restorePermanentMagicFromRecycleBag();
+      const drawn = takeRandomCardsFromBackpack(Math.min(2, backpackItemsRef.current.length));
+      drawn.forEach(c => queueCardIntoHand(c));
+      const parts: string[] = [];
+      parts.push(restored > 0 ? `回收熔炉：回收袋返还 ${restored} 张牌` : '回收熔炉：回收袋为空');
+      if (drawn.length > 0) parts.push(`抽到 ${drawn.map(c => c.name).join('、')}`);
+      setHeroSkillBanner(parts.join('，') + '。');
+      addGameLog('amulet', `回收熔炉触发（${next} 张牌已使用）：${parts.join('，')}。`);
+    }
+  };
+
   const drawClassCardsToBackpack = useCallback(
     (count: number, source: string, filter?: (card: GameCardData) => boolean): GameCardData[] => {
       if (count <= 0) return [];
@@ -6727,6 +6750,7 @@ export default function GameBoard() {
       shopLevel,
       monstersDefeated,
       cardsPlayed,
+      recycleForgePlayCount,
       totalDamageTaken,
       totalHealed,
       healAccumulator: healAccumulatorRef.current,
@@ -6816,6 +6840,7 @@ export default function GameBoard() {
     shopLevel,
     monstersDefeated,
     cardsPlayed,
+    recycleForgePlayCount,
     totalDamageTaken,
     totalHealed,
     previewCards,
@@ -7242,6 +7267,8 @@ export default function GameBoard() {
     setBackpackViewerOpen(false);
     setHandCards([]);
     setCardsPlayed(0);
+    setRecycleForgePlayCount(0);
+    recycleForgePlayCountRef.current = 0;
     setGameOver(false);
     setVictory(false);
     setDrawPending(false);
@@ -7360,6 +7387,8 @@ export default function GameBoard() {
     setShopLevel(typeof snapshot.shopLevel === 'number' ? Math.min(MAX_SHOP_LEVEL, snapshot.shopLevel) : 0);
     setMonstersDefeated(snapshot.monstersDefeated ?? 0);
     setCardsPlayed(snapshot.cardsPlayed ?? 0);
+    setRecycleForgePlayCount(snapshot.recycleForgePlayCount ?? 0);
+    recycleForgePlayCountRef.current = snapshot.recycleForgePlayCount ?? 0;
     setTotalDamageTaken(snapshot.totalDamageTaken ?? 0);
     setTotalHealed(snapshot.totalHealed ?? 0);
     healAccumulatorRef.current = snapshot.healAccumulator ?? 0;
@@ -10714,6 +10743,24 @@ export default function GameBoard() {
           restored > 0 ? `回收袋返还 ${restored} 张牌。` : '回收袋里没有等待的卡牌。',
         );
         bannerParts.push(draws > 0 ? `抽到了 ${draws} 张牌。` : '没有抽到卡牌。');
+
+        const hasForgeHeart = amuletSlotsRef.current.some(a => a?.amuletEffect === 'flip-gold');
+        if (hasForgeHeart) {
+          setAmuletSlots(prev => prev.filter(slot => slot?.amuletEffect !== 'flip-gold'));
+          const recycleForgeAmulet: GameCardData = {
+            id: `amulet-recycle-forge-${Date.now()}`,
+            type: 'amulet',
+            name: '回收熔炉',
+            value: 0,
+            image: balanceAmuletImage,
+            description: '每从手牌里使用 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限)',
+            amuletEffect: 'recycle-forge',
+          };
+          queueCardIntoHand(recycleForgeAmulet);
+          bannerParts.push('熔炉之心消散，回收灵焰翻转为「回收熔炉」加入手牌！');
+          addGameLog('amulet', '回收灵焰与熔炉之心共鸣：熔炉之心消散，「回收熔炉」加入手牌！');
+        }
+
         finalizeMagicCard(card, { banner: bannerParts.join(' ') });
         return true;
       }
@@ -10997,6 +11044,25 @@ export default function GameBoard() {
             const animationDelay = index * Math.floor(COMBAT_ANIMATION_STAGGER * 0.75);
             dealDamageToMonster(monster, volleyDamage, { animationDelay, pulses: 2 });
           });
+          if (monsters.length >= 4) {
+            const flippedCard: GameCardData = {
+              id: `${card.id}-flip-storm-volley`,
+              type: 'magic',
+              name: '箭雨余韵',
+              value: 0,
+              image: skillScrollImage,
+              magicType: 'permanent',
+              magicEffect: 'storm-volley-recycle',
+              description: '对激活行所有怪物造成 1 点伤害，每击中一个怪物，从回收袋随机抽 1 张牌加入手牌。',
+            };
+            addGameLog('magic', `风暴箭雨命中 ${monsters.length} 只怪物，翻转为「箭雨余韵」！`);
+            removeCard(card.id, false);
+            setPendingMagicAction(null);
+            await triggerEventTransform(card, flippedCard, '风暴箭雨翻转为「箭雨余韵」');
+            addCardToBackpack(flippedCard);
+            setHeroSkillBanner(`风暴箭雨命中 ${monsters.length} 只怪物，对每只造成 ${volleyDamage} 点伤害！翻转为「箭雨余韵」！`);
+            return;
+          }
           finalizeMagicCard(card, { banner: `风暴箭雨对每只怪物造成 ${volleyDamage} 点伤害！${isEchoTriggered ? '（回响×2）' : ''}` });
           return;
         }
@@ -11452,7 +11518,7 @@ export default function GameBoard() {
         }
         case STARTER_CARD_IDS.discardDraw: {
           const discardCount = 1 * echoMultiplier;
-          const drawCount = 1 * echoMultiplier;
+          const drawCount = 2 * echoMultiplier;
           const wasPlayedFromHand = handCards.some(c => c.id === card.id);
           const actualHandCount = handCards.length - (wasPlayedFromHand ? 1 : 0);
           const echoTag = isEchoTriggered ? '（回响×2）' : '';
@@ -11600,6 +11666,37 @@ export default function GameBoard() {
           return;
         }
         default: {
+          if (card.magicEffect === 'storm-volley-recycle') {
+            const svMonsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
+            if (svMonsters.length === 0) {
+              finalizeMagicCard(card, { banner: '箭雨余韵无效（没有怪物）。' });
+              return;
+            }
+            const svDamage = getSpellDamage(1) * echoMultiplier;
+            svMonsters.forEach((monster, index) => {
+              if (!isMonsterEngaged(monster.id)) {
+                beginCombat(monster, 'hero');
+              }
+              const animationDelay = index * Math.floor(COMBAT_ANIMATION_STAGGER * 0.75);
+              dealDamageToMonster(monster, svDamage, { animationDelay, pulses: 1 });
+            });
+            const hitCount = svDamage > 0 ? svMonsters.length : 0;
+            const availableBag = permanentMagicRecycleBag.filter(c => c.id !== card.id);
+            const drawCount = Math.min(hitCount, availableBag.length);
+            const shuffled = [...availableBag].sort(() => Math.random() - 0.5);
+            const drawn = shuffled.slice(0, drawCount);
+            const drawnIds = new Set(drawn.map(c => c.id));
+            if (drawn.length > 0) {
+              setPermanentMagicRecycleBag(prev => prev.filter(c => !drawnIds.has(c.id)));
+              drawn.forEach(c => ensureCardInHand(c));
+            }
+            const drawnNames = drawn.map(c => c.name).join('、');
+            const svBanner = drawn.length > 0
+              ? `箭雨余韵命中 ${hitCount} 只怪物，造成 ${svDamage} 点伤害！从回收袋抽取：${drawnNames}。${isEchoTriggered ? '（回响×2）' : ''}`
+              : `箭雨余韵命中 ${hitCount} 只怪物，造成 ${svDamage} 点伤害！回收袋无可抽取的牌。${isEchoTriggered ? '（回响×2）' : ''}`;
+            finalizeMagicCard(card, { banner: svBanner });
+            return;
+          }
           if (card.id.includes('flip-crypt-echo')) {
             const healed = healHero(3 * echoMultiplier);
             const banner = healed > 0
@@ -12935,6 +13032,8 @@ export default function GameBoard() {
       }).catch(()=>{});
       // #endregion
 
+      tickRecycleForge();
+
       if (card.type === 'monster') {
         beginCombat(card, 'monster');
       } else if (card.type === 'potion') {
@@ -13215,6 +13314,10 @@ export default function GameBoard() {
       });
 
       addGameLog('amulet', `装备护符：${card.name}`);
+      if (card.amuletEffect === 'recycle-forge') {
+        recycleForgePlayCountRef.current = 0;
+        setRecycleForgePlayCount(0);
+      }
       if (displacedAmulet !== null) {
         const displaced = displacedAmulet as AmuletItem;
         addGameLog('amulet', `卸下护符：${displaced.name}`);
@@ -13225,6 +13328,7 @@ export default function GameBoard() {
         if (!consumeCardFromHand(card)) {
           return;
         }
+        tickRecycleForge();
       } else if (backpackItems.some(c => c.id === card.id)) {
         setBackpackItems(prev => prev.filter(c => c.id !== card.id));
       } else {
@@ -13400,6 +13504,7 @@ export default function GameBoard() {
         if (!consumeCardFromHand(card)) {
           return;
         }
+        tickRecycleForge();
       } else {
         removeCard(card.id, false);
       }
@@ -16368,6 +16473,7 @@ export default function GameBoard() {
         stats={heroDetailsStats}
         heroSkills={heroDetailsSkills}
         permanentSkills={permanentSkills}
+        permanentSkillStacks={{ '壁垒猛击': bulwarkPassiveActive }}
         heroMagicInfo={heroMagicUiState}
         capacityLimits={{
           hand: effectiveHandLimit,

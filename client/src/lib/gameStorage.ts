@@ -48,6 +48,7 @@ export interface PersistedGameState {
   monstersDefeated: number;
   shopLevel: number;
   cardsPlayed: number;
+  recycleForgePlayCount?: number;
   totalDamageTaken: number;
   totalHealed: number;
   healAccumulator: number;

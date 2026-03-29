@@ -396,6 +396,7 @@ export type ActiveAmuletEffects = {
   hasDualGuard: boolean;
   hasDiscardShock: boolean;
   hasFlipGold: boolean;
+  hasRecycleForge: boolean;
 };
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';

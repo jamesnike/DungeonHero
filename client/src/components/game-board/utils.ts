@@ -707,7 +707,7 @@ export function createDeck(): GameCardData[] {
         name: '熔炉之心',
         value: 0,
         image: balanceAmuletImage,
-        description: '每有一张牌翻转，获得 3 金币。',
+        description: '每有一张牌翻转，获得 3 金币。可熔炉灵焰',
         amuletEffect: 'flip-gold',
       },
       destination: 'backpack',

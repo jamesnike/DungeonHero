@@ -100,7 +100,8 @@ export type AmuletEffectId =
   | 'strength'
   | 'dual-guard'
   | 'discard-zap'
-  | 'flip-gold';
+  | 'flip-gold'
+  | 'recycle-forge';
 
 export type AmuletAuraBonus = {
   attack?: number;

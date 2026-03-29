@@ -32,6 +32,7 @@ const NAME_TO_KEY: Record<string, string> = {
   治愈余韵: 'heal-echo',
   余烬回响: 'ember-echo',
   暗影之刺: 'shadow-spike',
+  箭雨余韵: 'storm-volley',
   混沌冲击: 'chaos-strike',
   战斗鼓舞: 'battle-rally',
   精工修复: 'master-repair',
