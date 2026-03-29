@@ -4325,9 +4325,6 @@ export default function GameBoard() {
     }
 
     if (effect.startsWith('wraith-haunt-')) {
-      undoStackRef.current = [];
-      setUndoCount(0);
-      clearUndoStorage();
       const atkBoost = parseInt(effect.replace('wraith-haunt-', ''), 10) || 2;
       setActiveCards(prev => {
         const otherMonsters: string[] = [];
@@ -15800,7 +15797,7 @@ export default function GameBoard() {
   }, [showMonsterAttackIndicator, updateSwordVectors]);
 
   return (
-    <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...(minimizedModalLocksBoard ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
+    <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...((minimizedModalLocksBoard || gameOver) ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
       {/* Header - Fixed height */}
       <div className="flex-shrink-0" ref={headerWrapperRef}>
         <GameHeader
