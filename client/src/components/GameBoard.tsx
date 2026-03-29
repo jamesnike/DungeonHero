@@ -672,7 +672,7 @@ function createDeck(): GameCardData[] {
       }
       if (type === 'Ogre') {
         chosen.eliteDoubleAttack = true;
-        chosen.waterfallEffect = { type: 'bonusDecay', amount: 2, description: '被挤出时：所有永久伤害/护甲/法术加成 -2' };
+        chosen.waterfallEffect = { type: 'bonusDecay', amount: 3, description: '被挤出时：所有永久伤害/护甲/法术加成 -3' };
       }
       if (type === 'Wraith') {
         chosen.lastWords = 'wraith-haunt-4';
