@@ -986,7 +986,7 @@ function createDeck(): GameCardData[] {
   deck.push({
     id: `magic-${id++}`,
     type: 'magic',
-    name: '壁垒猛击',
+    name: '潮涌铸甲',
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
@@ -8166,7 +8166,7 @@ export default function GameBoard() {
     const slot = slots[Math.floor(Math.random() * slots.length)]!;
     setEquipmentSlotBonus(slot, 'shield', cur => cur + 1);
     const label = slot === 'equipmentSlot1' ? '左' : '右';
-    addGameLog('magic', `壁垒猛击被动：随机加到${label}装备栏，永久护甲 +1`);
+    addGameLog('magic', `潮涌铸甲被动：随机加到${label}装备栏，永久护甲 +1`);
   };
 
   const resetEquipmentSlotBonuses = () => {
@@ -8502,7 +8502,7 @@ export default function GameBoard() {
   }
 
   const discardCardToGraveyard = useCallback(
-    (card: GameCardData | null | undefined, options?: { owner?: 'player' | 'dungeon'; forceGraveyard?: boolean }) => {
+    (card: GameCardData | null | undefined, options?: { owner?: 'player' | 'dungeon'; forceGraveyard?: boolean; forceRecycleBag?: boolean }) => {
       if (!card) {
         return;
       }
@@ -8511,6 +8511,8 @@ export default function GameBoard() {
         (card as KnightCardData | undefined)?.knightEffect === 'grave-nova';
       if (owner === 'player' && isGraveNovaCard) {
         triggerGraveNova();
+        addPermanentMagicToRecycleBag(card);
+      } else if (options?.forceRecycleBag) {
         addPermanentMagicToRecycleBag(card);
       } else if (!options?.forceGraveyard && isRecyclableFromHand(card) && card.type !== 'amulet') {
         addPermanentMagicToRecycleBag(card);
@@ -11195,15 +11197,15 @@ export default function GameBoard() {
           finalizeMagicCard(card, { banner: bannerParts.join(' ') });
           return;
         }
-        case '壁垒猛击': {
+        case '潮涌铸甲': {
           const newStacks = bulwarkPassiveActive + 1;
           setBulwarkPassiveActive(newStacks);
-          if (!permanentSkills.includes('壁垒猛击')) {
-            setPermanentSkills(prev => [...prev, '壁垒猛击']);
+          if (!permanentSkills.includes('潮涌铸甲')) {
+            setPermanentSkills(prev => [...prev, '潮涌铸甲']);
           }
           const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
-          addGameLog('magic', `壁垒猛击激活${stackLabel}：之后每次瀑流，随机一侧装备栏永久护甲 +${newStacks}`);
-          finalizeMagicCard(card, { banner: `壁垒猛击激活${stackLabel}！之后每次瀑流，随机装备栏永久护甲 +1 触发 ${newStacks} 次。` });
+          addGameLog('magic', `潮涌铸甲激活${stackLabel}：之后每次瀑流，随机一侧装备栏永久护甲 +${newStacks}`);
+          finalizeMagicCard(card, { banner: `潮涌铸甲激活${stackLabel}！之后每次瀑流，随机装备栏永久护甲 +1 触发 ${newStacks} 次。` });
           return;
         }
         case '血债清算': {
@@ -11402,10 +11404,7 @@ export default function GameBoard() {
           return;
         }
         for (const hc of otherHandCards) {
-          const sanitized = sanitizeCardMetadata(hc);
-          sanitized._recycleWaits = sanitized.recycleDelay ?? 1;
-          setPermanentMagicRecycleBag(prev => [...prev.filter(e => e.id !== sanitized.id), sanitized]);
-          applyDiscardSideEffects(hc, 'player');
+          discardCardToGraveyard(hc, { owner: 'player', forceRecycleBag: true });
         }
         setHandCards(prev => prev.filter(c => c.id === card.id));
         const drawn: GameCardData[] = [];
@@ -16525,7 +16524,7 @@ export default function GameBoard() {
         stats={heroDetailsStats}
         heroSkills={heroDetailsSkills}
         permanentSkills={permanentSkills}
-        permanentSkillStacks={{ '壁垒猛击': bulwarkPassiveActive }}
+        permanentSkillStacks={{ '潮涌铸甲': bulwarkPassiveActive }}
         heroMagicInfo={heroMagicUiState}
         capacityLimits={{
           hand: effectiveHandLimit,

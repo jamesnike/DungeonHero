@@ -26,7 +26,7 @@ const NAME_TO_KEY: Record<string, string> = {
   瀑流重置: 'waterfall-reset',
   风暴箭雨: 'storm-rain',
   回响行囊: 'echo-bag',
-  壁垒猛击: 'bulwark-ram',
+  潮涌铸甲: 'bulwark-ram',
   血债清算: 'blood-gold-debt',
   永恒修复: 'eternal-mend',
   治愈余韵: 'heal-echo',

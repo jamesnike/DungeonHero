@@ -75,7 +75,7 @@
 | 盾牌 | 6 | Wooden×2, Iron×2, Heavy×2 |
 | 药水 | 6 | 治疗/修复/背包/洞察等 |
 | 护符 | 6 | Heal, Balance, Life, Guardian, Flash, Strength |
-| 魔法 | 6 | 瀑流重置, 风暴箭雨, 回响行囊, 壁垒猛击, 血债清算, 永恒修复 |
+| 魔法 | 6 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 血债清算, 永恒修复 |
 | 事件 | 14 | 各类事件 |
 
 ### 2.2 初始背包 (`createStarterBackpack`)
@@ -109,7 +109,7 @@
 
 1. `turnCount` +1
 2. 如果有"潮涌回春"技能：回复 4 HP（有治疗护符时翻倍为 8）
-3. 如果有"壁垒猛击"被动：随机装备槽永久护甲 +1
+3. 如果有"潮涌铸甲"被动：随机装备槽永久护甲 +1
 4. **执行回收袋恢复** (`restorePermanentMagicFromRecycleBag`)
 5. 预览区卡牌落入场上空列
 6. 多余的预览卡牌被挤出（按倒序）
@@ -547,7 +547,7 @@ baseDamage = max(0,
 | 风暴箭雨 | instant | 对行中所有怪物造成 `getSpellDamage(3) × echo` 伤害；命中 ≥3 只怪物时翻转为「箭雨余韵」(permanent) |
 | 箭雨余韵 | permanent | 对行中所有怪物造成 `getSpellDamage(1) × echo` 伤害，每命中 1 只怪物从回收袋随机抽 1 张牌入手牌（不含自身） |
 | 回响行囊 | instant | 弃 `2×echo` 张手牌 → 从坟场发现 `2×echo` 张 → 从背包抽 `2×echo` 张 |
-| 壁垒猛击 | instant | 被动：每次瀑流随机装备槽永久护甲+1 |
+| 潮涌铸甲 | instant | 被动：每次瀑流随机装备槽永久护甲+1 |
 | 血债清算 | instant | 伤害 = `getSpellDamage(gold) × echo`，回复等量HP |
 | 永恒修复 | instant | 武器本瀑流内不消耗耐久 |
 

@@ -66,7 +66,7 @@ const permanentSkillHints: Record<string, string> = {
   'Battle Frenzy': '生命低于 50% 时，额外 +2 武器伤害。',
   'Iron Skin': '所有护甲获得 +1 防御加成。',
   Bloodthirsty: '击杀怪物后回复 2 点生命值。',
-  '壁垒猛击': '每次瀑流推进时，随机一侧装备栏永久护甲 +1。',
+  '潮涌铸甲': '每次瀑流推进时，随机一侧装备栏永久护甲 +1。',
 };
 
 const formatSignedValue = (value: number) => (value >= 0 ? `+${value}` : `${value}`);

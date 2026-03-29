@@ -561,7 +561,7 @@ export function createDeck(): GameCardData[] {
   deck.push({
     id: `magic-${id++}`,
     type: 'magic',
-    name: '壁垒猛击',
+    name: '潮涌铸甲',
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
