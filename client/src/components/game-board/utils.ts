@@ -16,6 +16,7 @@ import lifeAmuletImage from '@assets/generated_images/chibi_life_amulet.png';
 import strengthAmuletImage from '@assets/generated_images/chibi_strength_amulet.png';
 import guardianAmuletImage from '@assets/generated_images/chibi_guardian_amulet.png';
 import balanceAmuletImage from '@assets/generated_images/chibi_balance_amulet.png';
+import forgeHeartAmuletImage from '@assets/generated_images/chibi_forge_heart_amulet.png';
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
 import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 
@@ -597,7 +598,7 @@ export function createDeck(): GameCardData[] {
     eventChoices: [
       { text: '倾听命运的低语（发现专属卡）', effect: 'discoverClass', hint: '立即进行发现流程' },
       { text: '与命运商贩交谈（打开商店）', effect: 'openShop', hint: '立刻开启商店' },
-      { text: '献祭体魄（永久 +3 生命上限）', effect: 'maxhpperm+3', hint: '上限提升会保留整局' },
+      { text: '献祭体魄（永久 +5 生命上限）', effect: 'maxhpperm+5', hint: '上限提升会保留整局' },
     ],
   });
 
@@ -706,7 +707,7 @@ export function createDeck(): GameCardData[] {
         type: 'amulet',
         name: '熔炉之心',
         value: 0,
-        image: balanceAmuletImage,
+        image: forgeHeartAmuletImage,
         description: '每有一张牌翻转，获得 3 金币。可熔炉灵焰',
         amuletEffect: 'flip-gold',
       },
@@ -799,7 +800,7 @@ export function createDeck(): GameCardData[] {
   deck.push({
     id: crimsonPactId,
     type: 'event',
-    name: '深红契约',
+    name: '双重燃烧',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
@@ -826,7 +827,7 @@ export function createDeck(): GameCardData[] {
       toCard: {
         id: `${crimsonPactId}-flip`,
         type: 'event',
-        name: '深红契约（觉醒）',
+        name: '双重燃烧（觉醒）',
         value: 0,
         image: eventScrollImage,
         eventChoices: [
@@ -851,7 +852,7 @@ export function createDeck(): GameCardData[] {
         ],
       },
       destination: 'stay',
-      message: '深红契约觉醒！代价更高，但仍可反复使用。',
+      message: '双重燃烧觉醒！代价更高，但仍可反复使用。',
     },
   });
 

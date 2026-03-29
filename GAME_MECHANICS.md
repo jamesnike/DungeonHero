@@ -174,7 +174,7 @@ baseDamage = max(0,
   + attackBonus            // 全局攻击加成
   + slotDamageBonus        // 槽位永久伤害加成
   + nextWeaponBonus        // 战斗鼓舞等一次性加成
-  + slotBurstBonus         // 爆发加成（裂隙契约等）
+  + slotBurstBonus         // 爆发加成（时空收缩等）
   + berserkTurnBuff        // 孤注一掷回合加成
   + balanceBonus/Penalty   // 平衡护符：左+3 / 右-1
   - flashPenalty            // 闪光护符：-3
@@ -583,7 +583,7 @@ baseDamage = max(0,
 | 暗影之刺 | 暗影契约翻转 | `scalingDamage`：叠加伤害 |
 | 战血之印 | 战血荣誉翻转 | `honor-blood`：弃置时对每个怪物造成 `getSpellDamage(1)` |
 | 血金术 | 奇术商会翻转 | `guild-blood-gold`：-1 HP → +2 金 × echo |
-| 法术回响 | 裂隙契约翻转 | 下一张魔法效果翻倍 |
+| 法术回响 | 时空收缩翻转 | 下一张魔法效果翻倍 |
 | 哥布林的戏法 | 怪物击杀 | 其他手牌全部回收 |
 
 ---
@@ -879,7 +879,7 @@ baseDamage = max(0,
 ### 19.3 来源
 
 - 使用"法术回响"牌（`magicEffect: 'double-next-magic'`）
-- 裂隙契约事件翻转
+- 时空收缩事件翻转
 
 ---
 

@@ -163,6 +163,7 @@ import guardianAmuletImage from '@assets/generated_images/chibi_guardian_amulet.
 import balanceAmuletImage from '@assets/generated_images/chibi_balance_amulet.png';
 import lifestealAmuletImage from '@assets/generated_images/chibi_lifesteal_amulet.png';
 import flashAmuletImage from '@assets/generated_images/chibi_flash_amulet.png';
+import forgeHeartAmuletImage from '@assets/generated_images/chibi_forge_heart_amulet.png';
 
 // Skill and Event images
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
@@ -969,7 +970,7 @@ function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '对激活行的每个怪物造成 3 点伤害。'
+    magicEffect: '对激活行的每个怪物造成 3 点伤害。攻击对象越多越好。'
   });
 
   deck.push({
@@ -1023,7 +1024,7 @@ function createDeck(): GameCardData[] {
     eventChoices: [
       { text: '倾听命运的低语（发现专属卡）', effect: 'discoverClass', hint: '立即进行发现流程' },
       { text: '与命运商贩交谈（打开商店）', effect: 'openShop', hint: '立刻开启商店' },
-      { text: '献祭体魄（永久 +3 生命上限）', effect: 'maxhpperm+3', hint: '上限提升会保留整局' },
+      { text: '献祭体魄（永久 +5 生命上限）', effect: 'maxhpperm+5', hint: '上限提升会保留整局' },
     ],
   });
 
@@ -1132,7 +1133,7 @@ function createDeck(): GameCardData[] {
         type: 'amulet',
         name: '熔炉之心',
         value: 0,
-        image: balanceAmuletImage,
+        image: forgeHeartAmuletImage,
         description: `每有一张牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。可熔炉灵焰`,
         amuletEffect: 'flip-gold',
       },
@@ -1237,7 +1238,7 @@ function createDeck(): GameCardData[] {
   deck.push({
     id: crimsonPactId,
     type: 'event',
-    name: '深红契约',
+    name: '双重燃烧',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
@@ -1264,7 +1265,7 @@ function createDeck(): GameCardData[] {
       toCard: {
         id: `${crimsonPactId}-flip`,
         type: 'event',
-        name: '深红契约（觉醒）',
+        name: '双重燃烧（觉醒）',
         value: 0,
         image: eventScrollImage,
         eventChoices: [
@@ -1281,14 +1282,14 @@ function createDeck(): GameCardData[] {
         ],
       },
       destination: 'stay',
-      message: '深红契约觉醒！代价更高，但仍可反复使用。',
+      message: '双重燃烧觉醒！代价更高，但仍可反复使用。',
     },
   });
 
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: '折页遗稿',
+    name: '药剂遗稿',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
@@ -1429,7 +1430,7 @@ function createDeck(): GameCardData[] {
   deck.push({
     id: `event-${id++}`,
     type: 'event',
-    name: '裂隙契约',
+    name: '时空收缩',
     value: 0,
     image: eventScrollImage,
     eventChoices: [
@@ -6083,6 +6084,17 @@ export default function GameBoard() {
     return restoredCount;
   }, [addGameLog, backpackCapacity, permanentMagicRecycleBag]);
 
+  const updateRecycleForgeCounter = (count: number) => {
+    const display = count % 5;
+    setAmuletSlots(prev => prev.map(slot => {
+      if (slot?.amuletEffect !== 'recycle-forge') return slot;
+      return {
+        ...slot,
+        description: `每从手牌里使用 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${display}/5]`,
+      };
+    }));
+  };
+
   const tickRecycleForge = () => {
     if (!amuletSlotsRef.current.some(s => s?.amuletEffect === 'recycle-forge')) return;
     const next = recycleForgePlayCountRef.current + 1;
@@ -6098,6 +6110,7 @@ export default function GameBoard() {
       setHeroSkillBanner(parts.join('，') + '。');
       addGameLog('amulet', `回收熔炉触发（${next} 张牌已使用）：${parts.join('，')}。`);
     }
+    updateRecycleForgeCounter(next);
   };
 
   const drawClassCardsToBackpack = useCallback(
@@ -7447,7 +7460,15 @@ export default function GameBoard() {
       });
     }
     setMaxAmuletSlots(snapshot.maxAmuletSlots ?? MAX_AMULET_SLOTS);
-    setAmuletSlots(mapAmulets(snapshot.amuletSlots));
+    const restoredAmulets = mapAmulets(snapshot.amuletSlots);
+    const savedForgeCount = snapshot.recycleForgePlayCount ?? 0;
+    setAmuletSlots(restoredAmulets.map(slot => {
+      if (slot?.amuletEffect !== 'recycle-forge') return slot;
+      return {
+        ...slot,
+        description: `每从手牌里使用 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${savedForgeCount % 5}/5]`,
+      };
+    }));
     setBackpackItems(
       Array.isArray(snapshot.backpackItems)
         ? snapshot.backpackItems.map(patchPersistedMainDeckWeaponImage)
@@ -10765,10 +10786,11 @@ export default function GameBoard() {
             type: 'amulet',
             name: '回收熔炉',
             value: 0,
-            image: balanceAmuletImage,
-            description: '每从手牌里使用 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限)',
+            image: forgeHeartAmuletImage,
+            description: '每从手牌里使用 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [0/5]',
             amuletEffect: 'recycle-forge',
           };
+          void triggerEventTransform(card, recycleForgeAmulet, '回收灵焰翻转为「回收熔炉」');
           queueCardIntoHand(recycleForgeAmulet);
           bannerParts.push('熔炉之心消散，回收灵焰翻转为「回收熔炉」加入手牌！');
           addGameLog('amulet', '回收灵焰与熔炉之心共鸣：熔炉之心消散，「回收熔炉」加入手牌！');
@@ -11359,39 +11381,6 @@ export default function GameBoard() {
           finalizeMagicCard(card, { banner: emberParts.join(' ') });
           return;
         }
-        case '秘典检索': {
-          const bpMagics = backpackItems.filter(c => c.type === 'magic');
-          if (bpMagics.length === 0) {
-            finalizeMagicCard(card, { banner: '背包中没有魔法牌，秘典检索无效。' });
-            return;
-          }
-          const shuffledBp = [...bpMagics].sort(() => Math.random() - 0.5);
-          const discoverOptions = shuffledBp.slice(0, Math.min(3, shuffledBp.length));
-          if (discoverOptions.length === 1) {
-            const pick = discoverOptions[0];
-            setBackpackItems(prev => prev.filter(c => c.id !== pick.id));
-            ensureCardInHand(pick);
-            addGameLog('magic', `秘典检索：从背包取出「${pick.name}」加入手牌。`);
-            finalizeMagicCard(card, { banner: `从背包取出「${pick.name}」！` });
-            return;
-          }
-          const selected = await new Promise<GameCardData | null>(resolve => {
-            graveyardDiscoverResolverRef.current = c => {
-              resolve(c);
-              graveyardDiscoverResolverRef.current = null;
-            };
-            setGraveyardDiscoverState(discoverOptions);
-          });
-          if (selected) {
-            setBackpackItems(prev => prev.filter(c => c.id !== selected.id));
-            ensureCardInHand(selected);
-            addGameLog('magic', `秘典检索：从背包取出「${selected.name}」加入手牌。`);
-            finalizeMagicCard(card, { banner: `从背包取出「${selected.name}」！` });
-          } else {
-            finalizeMagicCard(card, { banner: '放弃了秘典检索。' });
-          }
-          return;
-        }
       }
       
       // Handle class card removal
@@ -11461,6 +11450,39 @@ export default function GameBoard() {
             echoRemaining: echoMultiplier,
           });
           setHeroSkillBanner(`选择一个怪物，对其造成 3 点伤害。${chaosEchoLabel}`);
+        }
+        return;
+      }
+      if (card.name === '秘典检索') {
+        const bpMagics = backpackItems.filter(c => c.type === 'magic');
+        if (bpMagics.length === 0) {
+          finalizeMagicCard(card, { banner: '背包中没有魔法牌，秘典检索无效。' });
+          return;
+        }
+        const shuffledBp = [...bpMagics].sort(() => Math.random() - 0.5);
+        const discoverOptions = shuffledBp.slice(0, Math.min(3, shuffledBp.length));
+        if (discoverOptions.length === 1) {
+          const pick = discoverOptions[0];
+          setBackpackItems(prev => prev.filter(c => c.id !== pick.id));
+          ensureCardInHand(pick);
+          addGameLog('magic', `秘典检索：从背包取出「${pick.name}」加入手牌。`);
+          finalizeMagicCard(card, { banner: `从背包取出「${pick.name}」！` });
+          return;
+        }
+        const selected = await new Promise<GameCardData | null>(resolve => {
+          graveyardDiscoverResolverRef.current = c => {
+            resolve(c);
+            graveyardDiscoverResolverRef.current = null;
+          };
+          setGraveyardDiscoverState(discoverOptions);
+        });
+        if (selected) {
+          setBackpackItems(prev => prev.filter(c => c.id !== selected.id));
+          ensureCardInHand(selected);
+          addGameLog('magic', `秘典检索：从背包取出「${selected.name}」加入手牌。`);
+          finalizeMagicCard(card, { banner: `从背包取出「${selected.name}」！` });
+        } else {
+          finalizeMagicCard(card, { banner: '放弃了秘典检索。' });
         }
         return;
       }
@@ -13342,6 +13364,7 @@ export default function GameBoard() {
       if (card.amuletEffect === 'recycle-forge') {
         recycleForgePlayCountRef.current = 0;
         setRecycleForgePlayCount(0);
+        updateRecycleForgeCounter(0);
       }
       if (displacedAmulet !== null) {
         const displaced = displacedAmulet as AmuletItem;
@@ -13784,8 +13807,8 @@ export default function GameBoard() {
             setAmuletSlots(prev => prev.slice(0, -1));
             setHeroSkillBanner(`破坏了「${topAmulet.name}」！获得全部三项效果！`);
           }
-          setPermanentMaxHpBonus(prev => prev + 3);
-          addGameLog('event', '命运十字路口：最大生命永久 +3');
+          setPermanentMaxHpBonus(prev => prev + 5);
+          addGameLog('event', '命运十字路口：最大生命永久 +5');
           const started = startShopFlow(currentEventCard);
           if (started) {
             eventResolutionDeferred = true;
