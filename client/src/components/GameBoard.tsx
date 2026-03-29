@@ -7774,7 +7774,9 @@ export default function GameBoard() {
           addGameLog('magic', `${card.name} 被弃：背包为空，未能抽牌`);
         }
       }
-      triggerDiscardShock();
+      if ((card as GameCardData).amuletEffect !== 'discard-zap') {
+        triggerDiscardShock();
+      }
     },
     [
       activeCards,
