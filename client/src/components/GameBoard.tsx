@@ -7328,6 +7328,7 @@ export default function GameBoard() {
     setShopSkillDiscoverUsed(false);
     setShopSkillSelectOpen(false);
     setShopSkillOptions([]);
+    healAccumulatorRef.current = 0;
     setShowSkillSelection(true);
     resetHeroSkillForNewWave();
   };
