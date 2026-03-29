@@ -63,7 +63,6 @@ type GameBoardModalsProps = {
   shopOfferings: ShopOffering[];
   backpackCapacity: number;
   shopLevel: number;
-  shopDiscountPercent: number;
   canDeleteCardInShop: boolean;
   shopDeleteDisabledReason?: string;
   onShopDeleteRequest: () => void;
@@ -143,7 +142,6 @@ export function GameBoardModals({
   shopOfferings,
   backpackCapacity,
   shopLevel,
-  shopDiscountPercent,
   canDeleteCardInShop,
   shopDeleteDisabledReason,
   onShopDeleteRequest,
@@ -248,7 +246,6 @@ export function GameBoardModals({
         backpackCount={backpackItems.length}
         backpackCapacity={backpackCapacity}
         shopLevel={shopLevel}
-        discountPercent={shopDiscountPercent}
         canDeleteCard={canDeleteCardInShop}
         deleteDisabledReason={shopDeleteDisabledReason}
         onDeleteRequest={onShopDeleteRequest}

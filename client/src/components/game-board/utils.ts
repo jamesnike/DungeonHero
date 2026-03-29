@@ -26,7 +26,6 @@ import {
   DUNGEON_COLUMN_COUNT,
   ELITE_MONSTER_DISCARD_WARNING,
   ELITE_MONSTER_NAME_SET,
-  SHOP_LEVEL_DISCOUNT_STEP,
   SHOP_TYPE_PRICES,
   SLOT_LABEL_MAP,
   STARTER_CARD_IDS,
@@ -151,15 +150,8 @@ export const getBaseShopPrice = (card: GameCardData): number => {
   return Math.max(5, card.value || 5);
 };
 
-export const getShopDiscountFactor = (level: number): number => Math.max(0, 1 - level * SHOP_LEVEL_DISCOUNT_STEP);
-
-export const getShopDiscountPercent = (level: number): number =>
-  Math.max(0, Math.round(level * SHOP_LEVEL_DISCOUNT_STEP * 100));
-
-export const getShopPrice = (card: GameCardData, level: number): number => {
-  const basePrice = getBaseShopPrice(card);
-  const discounted = Math.floor(basePrice * getShopDiscountFactor(level));
-  return Math.max(1, discounted);
+export const getShopPrice = (card: GameCardData): number => {
+  return getBaseShopPrice(card);
 };
 
 export const getGridMetricsForWidth = (width: number): GridMetrics => {

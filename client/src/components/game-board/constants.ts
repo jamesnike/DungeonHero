@@ -68,8 +68,6 @@ export const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
   'hero-magic': 9,
   amulet: 6,
 };
-export const SHOP_LEVEL_DISCOUNT_STEP = 0.1;
-
 export const COMBAT_PANEL_DEFAULT_WIDTH = 170;
 export const COMBAT_PANEL_DEFAULT_HEIGHT = 320;
 export const COMBAT_PANEL_EDGE_PADDING = 12;

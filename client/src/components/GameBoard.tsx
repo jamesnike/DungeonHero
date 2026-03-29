@@ -302,7 +302,6 @@ const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
   'hero-magic': 9,
   amulet: 6,
 };
-const SHOP_LEVEL_DISCOUNT_STEP = 0.1;
 const SHOP_HEAL_COST = 5;
 const SHOP_HEAL_AMOUNT = 5;
 const SHOP_LEVEL_UP_COST = 10;
@@ -331,15 +330,8 @@ const getBaseShopPrice = (card: GameCardData): number => {
   return Math.max(5, card.value || 5);
 };
 
-const getShopDiscountFactor = (level: number): number => Math.max(0, 1 - level * SHOP_LEVEL_DISCOUNT_STEP);
-
-const getShopDiscountPercent = (level: number): number =>
-  Math.max(0, Math.round(level * SHOP_LEVEL_DISCOUNT_STEP * 100));
-
-const getShopPrice = (card: GameCardData, level: number): number => {
-  const basePrice = getBaseShopPrice(card);
-  const discounted = Math.floor(basePrice * getShopDiscountFactor(level));
-  return Math.max(1, discounted);
+const getShopPrice = (card: GameCardData): number => {
+  return getBaseShopPrice(card);
 };
 
 const isHeroRowHighlightCard = (
@@ -990,7 +982,7 @@ function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '弃置至多 2 张手牌，从坟场发现 2 张牌，再从背包抽 2 张牌。'
+    magicEffect: '弃置至多 2 张手牌，从坟场发现 2 张牌，再从背包抽 2 张牌。(可超手牌上限)'
   });
 
   deck.push({
@@ -1687,7 +1679,6 @@ export default function GameBoard() {
   const cardActionResolverRef = useRef<(() => void) | null>(null);
   const cardActionRemainingRef = useRef(0);
   const deletingCardIdsRef = useRef(new Set<string>());
-  const shopDiscountPercent = getShopDiscountPercent(shopLevel);
   const adjustShopLevel = useCallback((delta: number) => {
     if (!delta) return;
     setShopLevel(prev => Math.min(MAX_SHOP_LEVEL, Math.max(0, Math.floor(prev + delta))));
@@ -6229,7 +6220,7 @@ export default function GameBoard() {
     SHOP_REQUIRED_TYPES.forEach(type => {
       const picked = takeRandomCard(card => card.type === type);
       if (picked) {
-        offerings.push({ card: picked, price: getShopPrice(picked, shopLevel), sold: false });
+        offerings.push({ card: picked, price: getShopPrice(picked), sold: false });
       }
     });
 
@@ -6238,7 +6229,7 @@ export default function GameBoard() {
       if (!picked) {
         break;
       }
-      offerings.push({ card: picked, price: getShopPrice(picked, shopLevel), sold: false });
+      offerings.push({ card: picked, price: getShopPrice(picked), sold: false });
     }
 
     return offerings;
@@ -9576,18 +9567,16 @@ export default function GameBoard() {
         return;
       }
 
-      if (effect === 'right-slot-durability+1') {
+      if (effect === 'right-slot-durability-max+1') {
         const rightSlot = equipmentSlot2;
         if (!rightSlot || !rightSlot.durability) {
           await finalizePotionCard(card, { banner: '右装备栏没有装备，药剂失效。' });
           return;
         }
-        const currentDur = rightSlot.durability ?? 0;
-        const maxDur = rightSlot.maxDurability ?? currentDur;
-        const newDur = Math.min(maxDur, currentDur + 1);
-        setEquipmentSlotById('equipmentSlot2', { ...rightSlot, durability: newDur });
-        addGameLog('potion', `淬炼药剂翻转：${rightSlot.name} 耐久 +1（${currentDur} → ${newDur}）`);
-        await finalizePotionCard(card, { banner: `${rightSlot.name} 耐久 +1！` });
+        const maxDur = rightSlot.maxDurability ?? rightSlot.durability ?? 0;
+        setEquipmentSlotById('equipmentSlot2', { ...rightSlot, maxDurability: maxDur + 1 });
+        addGameLog('potion', `淬炼药剂（右）：${rightSlot.name} 耐久上限 +1（${maxDur} → ${maxDur + 1}）`);
+        await finalizePotionCard(card, { banner: `${rightSlot.name} 耐久上限 +1！` });
         return;
       }
 
@@ -13753,7 +13742,7 @@ export default function GameBoard() {
             name: '淬炼药剂',
             value: 0,
             image: potionWeaponRepairImage,
-            description: '使用时左装备栏的装备耐久上限 +1。翻转后为右装备栏耐久 +1 的药剂。',
+            description: '使用时左装备栏的装备耐久上限 +1。翻转后为右装备栏耐久上限 +1 的药剂。',
             potionEffect: 'left-slot-durability-max+1',
             flipTarget: {
               toCard: {
@@ -13762,8 +13751,8 @@ export default function GameBoard() {
                 name: '淬炼药剂（右）',
                 value: 0,
                 image: potionWeaponRepairImage,
-                description: '使用时右装备栏的装备耐久 +1。',
-                potionEffect: 'right-slot-durability+1',
+                description: '使用时右装备栏的装备耐久上限 +1。',
+                potionEffect: 'right-slot-durability-max+1',
               },
               destination: 'backpack',
               banner: '淬炼药剂翻转，右侧淬炼之力凝结…',
@@ -16335,7 +16324,6 @@ export default function GameBoard() {
         backpackCount={backpackItems.length}
         backpackCapacity={backpackCapacity}
         shopLevel={shopLevel}
-        discountPercent={shopDiscountPercent}
         canDeleteCard={canDeleteCardInShop}
         deleteDisabledReason={shopDeleteDisabledReason}
         onDeleteRequest={handleShopDeleteRequest}

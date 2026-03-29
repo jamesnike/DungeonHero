@@ -35,7 +35,6 @@ interface ShopModalProps {
   backpackCount: number;
   backpackCapacity: number;
   shopLevel: number;
-  discountPercent: number;
   canDeleteCard: boolean;
   deleteDisabledReason?: string;
   onDeleteRequest: () => void;
@@ -67,7 +66,6 @@ export default function ShopModal({
   backpackCount,
   backpackCapacity,
   shopLevel,
-  discountPercent,
   canDeleteCard,
   deleteDisabledReason,
   onDeleteRequest,
@@ -130,7 +128,7 @@ export default function ShopModal({
                 Lv.{shopLevel}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                价格 -{discountPercent}% · 额外商品 +{shopLevel}
+                额外商品 +{shopLevel}
               </span>
             </span>
           </div>
@@ -334,7 +332,7 @@ export default function ShopModal({
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        花费 {shopLevelUpCost} 金币提升商店等级，下次光临时享受更多商品和折扣。
+                        花费 {shopLevelUpCost} 金币提升商店等级，下次光临时享受更多商品。
                       </p>
                       {shopLevelUpUsed && <p className="text-xs text-amber-700 dark:text-amber-400">本次商店的升级机会已使用。</p>}
                       {!shopLevelUpUsed && !canAffordLevelUp && <p className="text-xs text-destructive">金币不足。</p>}
