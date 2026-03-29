@@ -67,7 +67,7 @@ export const heroSkills: HeroSkillDefinition[] = [
     id: 'blood-strike',
     name: '血痕一击',
     description: '以自损换取必中重击。',
-    effect: '失去 3 生命，对目标造成 3 伤害。',
+    effect: '失去 2 生命，对目标造成 3 伤害。',
     type: 'active',
     requiresTarget: 'monster',
     buttonLabel: '血痕一击',

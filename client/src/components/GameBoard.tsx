@@ -12123,7 +12123,7 @@ export default function GameBoard() {
         }
         if (monsters.length === 1) {
           if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
-          applyDamage(3);
+          applyDamage(2);
           const heroSkillDamage = getSpellDamage(3);
           dealDamageToMonster(monsters[0], heroSkillDamage, { pulses: 2 });
           markSkillUsed(skillDef.id);
@@ -12637,7 +12637,7 @@ export default function GameBoard() {
         beginCombat(monster, 'hero');
       }
 
-      applyDamage(3);
+      applyDamage(2);
       const heroSkillDamage = getSpellDamage(pendingHeroSkillAction.baseDamage ?? 3);
       dealDamageToMonster(monster, heroSkillDamage, { pulses: 2 });
 
