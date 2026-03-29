@@ -18,6 +18,7 @@ interface CardDeletionModalProps {
   handCards: GameCardData[];
   backpackCards: GameCardData[];
   recycleBagCards?: GameCardData[];
+  showRecycleBag?: boolean;
   onDeleteCard: (cardId: string, source: CardSource) => void;
   title?: string;
   description?: string;
@@ -38,6 +39,7 @@ export default function CardDeletionModal({
   handCards,
   backpackCards,
   recycleBagCards = [],
+  showRecycleBag = false,
   onDeleteCard,
   title,
   description,
@@ -129,7 +131,7 @@ export default function CardDeletionModal({
         <div className="space-y-6 py-2">
           {renderCardSection('手牌', handCards, 'hand')}
           {!handOnly && renderCardSection('背包', backpackCards, 'backpack')}
-          {!handOnly && recycleBagCards.length > 0 && renderCardSection('回收袋', recycleBagCards, 'recycleBag')}
+          {!handOnly && showRecycleBag && recycleBagCards.length > 0 && renderCardSection('回收袋', recycleBagCards, 'recycleBag')}
         </div>
       </DialogContent>
     </Dialog>

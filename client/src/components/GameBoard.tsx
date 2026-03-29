@@ -9913,7 +9913,12 @@ export default function GameBoard() {
         discardToRecycleBag?: boolean;
       },
     ) => {
-      const pool = options?.handOnly ? handCards.length : deletableCardCount;
+      const basePool = handCards.length + backpackItems.length;
+      const pool = options?.handOnly
+        ? handCards.length
+        : action === 'delete'
+          ? basePool + permanentMagicRecycleBag.length
+          : basePool;
       if (pool < count) {
         setHeroSkillBanner(options?.description ?? '当前没有足够的卡牌可供选择。');
         return Promise.resolve(false);
@@ -9938,7 +9943,7 @@ export default function GameBoard() {
         setDeleteModalOpen(true);
       });
     },
-    [deletableCardCount, handCards.length, setHeroSkillBanner],
+    [backpackItems.length, handCards.length, permanentMagicRecycleBag.length, setHeroSkillBanner],
   );
 
   const requestGraveyardSelection = useCallback(
@@ -16462,6 +16467,7 @@ export default function GameBoard() {
         handCards={handCards}
         backpackCards={backpackItems}
         recycleBagCards={permanentMagicRecycleBag}
+        showRecycleBag={cardActionContext?.action === 'delete'}
         onDeleteCard={handleDeleteCardConfirm}
         title={cardActionContext?.title}
         description={cardActionContext?.description}

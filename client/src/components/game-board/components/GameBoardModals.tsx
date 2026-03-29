@@ -262,6 +262,7 @@ export function GameBoardModals({
         handCards={handCards}
         backpackCards={backpackItems}
         recycleBagCards={permanentMagicRecycleBag}
+        showRecycleBag={cardActionContext?.action === 'delete'}
         onDeleteCard={onDeleteCardConfirm}
         title={cardActionContext?.title}
         description={cardActionContext?.description}
