@@ -7774,7 +7774,7 @@ export default function GameBoard() {
           addGameLog('magic', `${card.name} 被弃：背包为空，未能抽牌`);
         }
       }
-      if ((card as GameCardData).amuletEffect !== 'discard-zap') {
+      if ((card as GameCardData).amuletEffect !== 'discard-zap' && !waterfallLockRef.current) {
         triggerDiscardShock();
       }
     },
@@ -10232,10 +10232,8 @@ export default function GameBoard() {
     pendingHandDeliveryGuardsRef.current.delete(cardId);
     clearBackpackHandFallback(cardId);
 
+    handCardsRef.current = handCardsRef.current.filter(c => c.id !== cardId);
     setHandCards(prev => {
-      if (!prev.some(c => c.id === cardId)) {
-        return prev;
-      }
       const next = prev.filter(c => c.id !== cardId);
       handCardsRef.current = next;
       return next;
