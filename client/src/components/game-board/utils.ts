@@ -697,8 +697,8 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: '左槽淬火（左槽永久伤害 +1）', effect: 'slotLeftDamage+1' },
-      { text: '右槽固化（右槽永久护甲 +1）', effect: 'slotRightDefense+1' },
+      { text: '左槽淬火（左槽永久伤害 +2）', effect: 'slotLeftDamage+2' },
+      { text: '右槽固化（右槽永久护甲 +2）', effect: 'slotRightDefense+2' },
       { text: '翻转轨道（左右装备互换）', effect: 'swapEquipmentSlots' },
     ],
     flipTarget: {

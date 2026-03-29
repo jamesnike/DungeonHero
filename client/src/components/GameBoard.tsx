@@ -1123,8 +1123,8 @@ function createDeck(): GameCardData[] {
     value: 0,
     image: eventScrollImage,
     eventChoices: [
-      { text: '左槽淬火（左槽永久伤害 +1）', effect: 'slotLeftDamage+1' },
-      { text: '右槽固化（右槽永久护甲 +1）', effect: 'slotRightDefense+1' },
+      { text: '左槽淬火（左槽永久伤害 +2）', effect: 'slotLeftDamage+2' },
+      { text: '右槽固化（右槽永久护甲 +2）', effect: 'slotRightDefense+2' },
       { text: '翻转轨道（左右装备互换）', effect: 'swapEquipmentSlots' },
     ],
     flipTarget: {
@@ -1193,7 +1193,7 @@ function createDeck(): GameCardData[] {
       {
         text: '战血铭刻（翻转为永久法术）',
         effect: 'flipToHonorBloodMagic',
-        hint: '翻转为「战血之印」：打出失去 1 生命并选一件装备 +1 耐久；被弃时对激活行每只怪造成 1 伤害',
+        hint: '翻转为「战血之印」：打出失去 1 生命并选一件装备 +1 耐久；被弃时将激活行所有怪物攻击力 -3',
         requires: [
           {
             type: 'leftmostIsEnraged',
@@ -7734,16 +7734,18 @@ export default function GameBoard() {
         );
         if (monsters.length > 0) {
           clearUndoStack();
-          const honorDiscardDmg = getSpellDamage(1);
-          monsters.forEach((monster, index) => {
-            if (!isMonsterEngaged(monster.id)) {
-              beginCombat(monster, 'hero');
-            }
-            const animationDelay = index * Math.floor(COMBAT_ANIMATION_STAGGER * 0.75);
-            dealDamageToMonster(monster, honorDiscardDmg, { animationDelay, pulses: 1 });
+          const atkReduction = 3;
+          monsters.forEach(monster => {
+            const currentAtk = monster.attack ?? monster.value;
+            const newAtk = Math.max(0, currentAtk - atkReduction);
+            updateMonsterCard(monster.id, m => ({
+              ...m,
+              attack: newAtk,
+              value: Math.max(0, m.value - atkReduction),
+            }));
           });
-          addGameLog('magic', `${card.name} 被弃：对激活行每只怪物造成 ${honorDiscardDmg} 点伤害`);
-          setHeroSkillBanner(`${card.name} 被弃，对场上每只怪物造成 ${honorDiscardDmg} 点伤害！`);
+          addGameLog('magic', `${card.name} 被弃：激活行所有怪物攻击力 -${atkReduction}`);
+          setHeroSkillBanner(`${card.name} 被弃，激活行所有怪物攻击力 -${atkReduction}！`);
         }
       } else if (card.onDiscardDamage) {
         const monsters = flattenActiveRowSlots(activeCards).filter(
@@ -7777,15 +7779,14 @@ export default function GameBoard() {
     [
       activeCards,
       addGameLog,
-      beginCombat,
       clearUndoStack,
       dealDamageToMonster,
       drawFromBackpackToHand,
       getSpellDamage,
-      isMonsterEngaged,
       setGold,
       setHeroSkillBanner,
       triggerDiscardShock,
+      updateMonsterCard,
     ],
   );
 
@@ -8363,9 +8364,15 @@ export default function GameBoard() {
           };
         }
       }
+      if (!baseState.disabled && choice.effect && !choice.diceTable) {
+        const tokens = normalizeEventEffect(choice.effect);
+        if (tokens.some(t => t.startsWith('shopLevel+')) && shopLevel >= MAX_SHOP_LEVEL) {
+          return { disabled: true, reason: `商店等级已达上限（Lv.${MAX_SHOP_LEVEL}）` };
+        }
+      }
       return baseState;
     });
-  }, [currentEventCard, evaluateChoiceRequirements]);
+  }, [currentEventCard, evaluateChoiceRequirements, shopLevel]);
 
   const findWeaponSlot = (): { id: EquipmentSlotId; item: EquipmentItem } | null => {
     for (const slot of getEquipmentSlots()) {
@@ -10253,17 +10260,21 @@ export default function GameBoard() {
     sorted.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
   }, [discardCardToGraveyard, triggerDiscardFlight]);
 
-  const drawCardsFromBackpack = (count: number) => {
+  const drawCardsFromBackpack = (count: number, options?: { ignoreLimit?: boolean }) => {
     if (count <= 0) {
       return 0;
     }
 
-    const availableHandSlots = Math.max(0, effectiveHandLimit - (handCards.length + backpackHandFlightsRef.current.length));
-    if (availableHandSlots <= 0) {
-      return 0;
+    let drawLimit = count;
+    if (!options?.ignoreLimit) {
+      const liveHandSize = handCardsRef.current.length;
+      const availableHandSlots = Math.max(0, effectiveHandLimit - (liveHandSize + backpackHandFlightsRef.current.length));
+      if (availableHandSlots <= 0) {
+        return 0;
+      }
+      drawLimit = Math.min(count, availableHandSlots);
     }
 
-    const drawLimit = Math.min(count, availableHandSlots);
     const drawnCards = takeRandomCardsFromBackpack(drawLimit);
     if (!drawnCards.length) {
       return 0;
@@ -11436,7 +11447,7 @@ export default function GameBoard() {
           const removedExactlyOneLayer = chaosStrikeRemovedExactlyOneLayer(target, chaosDamage);
           dealDamageToMonster(target, chaosDamage);
           if (removedExactlyOneLayer) {
-            const drawn = drawCardsFromBackpack(2);
+            const drawn = drawCardsFromBackpack(2, { ignoreLimit: true });
             finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。` });
           } else {
             finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 点伤害。` });
@@ -12727,7 +12738,7 @@ export default function GameBoard() {
         dealDamageToMonster(monster, chaosDamage);
         let chaosBanner: string;
         if (removedExactlyOneLayer) {
-          const drawn = drawCardsFromBackpack(2);
+          const drawn = drawCardsFromBackpack(2, { ignoreLimit: true });
           chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosDamage} 伤害，恰好减去一层！额外抽 ${drawn} 张牌。`;
         } else {
           chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosDamage} 点伤害。`;
@@ -13913,7 +13924,7 @@ export default function GameBoard() {
             magicType: 'permanent',
             magicEffect: 'honor-blood',
             description:
-              '永久魔法：打出时失去 1 点生命，选择一件装备恢复 1 点耐久（法术回响时恢复 2）。被弃置时对激活行每只怪物各造成 1 点伤害。',
+              '永久魔法：打出时失去 1 点生命，选择一件装备恢复 1 点耐久（法术回响时恢复 2）。被弃置时将激活行所有怪物攻击力 -3。',
           };
           await triggerEventTransform(currentEventCard, honorBloodCard, '战血荣誉翻转为「战血之印」…');
           skipNextEventAutoDrawRef.current = true;
@@ -14054,12 +14065,12 @@ export default function GameBoard() {
             sacrificeEquipment(selected);
           }
         }
-      } else if (effect === 'slotLeftDamage+1') {
-        addGameLog('event', '事件效果：左槽永久伤害 +1');
-        setEquipmentSlotBonus('equipmentSlot1', 'damage', value => value + 1);
-      } else if (effect === 'slotRightDefense+1') {
-        addGameLog('event', '事件效果：右槽永久护甲 +1');
-        setEquipmentSlotBonus('equipmentSlot2', 'shield', value => value + 1);
+      } else if (effect === 'slotLeftDamage+2') {
+        addGameLog('event', '事件效果：左槽永久伤害 +2');
+        setEquipmentSlotBonus('equipmentSlot1', 'damage', value => value + 2);
+      } else if (effect === 'slotRightDefense+2') {
+        addGameLog('event', '事件效果：右槽永久护甲 +2');
+        setEquipmentSlotBonus('equipmentSlot2', 'shield', value => value + 2);
       } else if (effect === 'swapEquipmentSlots') {
         addGameLog('event', '事件效果：交换左右装备槽');
         swapEquipmentSlots();
