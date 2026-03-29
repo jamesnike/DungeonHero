@@ -996,7 +996,7 @@ function createDeck(): GameCardData[] {
   deck.push({
     id: `magic-${id++}`,
     type: 'magic',
-    name: '血债清算',
+    name: '点金裁决',
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
@@ -11225,10 +11225,10 @@ export default function GameBoard() {
           finalizeMagicCard(card, { banner: `潮涌铸甲激活${stackLabel}！之后每次瀑流，随机装备栏永久护甲 +1 触发 ${newStacks} 次。` });
           return;
         }
-        case '血债清算': {
+        case '点金裁决': {
           const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
           if (monsters.length === 0) {
-            finalizeMagicCard(card, { banner: '血债清算无效（没有怪物）。' });
+            finalizeMagicCard(card, { banner: '点金裁决无效（没有怪物）。' });
             return;
           }
           if (monsters.length === 1) {
@@ -11237,7 +11237,7 @@ export default function GameBoard() {
             dealDamageToMonster(monsters[0], totalDamage, { pulses: 2 });
             const healed = healHero(totalDamage);
             const healText = healed > 0 ? `，恢复 ${healed} 点生命` : '';
-            finalizeMagicCard(card, { banner: `血债清算造成 ${totalDamage} 点伤害${healText}！${isEchoTriggered ? '（回响×2）' : ''}` });
+            finalizeMagicCard(card, { banner: `点金裁决造成 ${totalDamage} 点伤害${healText}！${isEchoTriggered ? '（回响×2）' : ''}` });
             return;
           }
           setPendingMagicAction({
@@ -11247,7 +11247,7 @@ export default function GameBoard() {
             echoMultiplier,
             prompt: `选择一个怪物，造成 ${getSpellDamage(gold) * echoMultiplier} 点伤害并恢复等量生命。${isEchoTriggered ? '（回响×2）' : ''}`,
           });
-          setHeroSkillBanner('血债清算就绪，请选择目标怪物。');
+          setHeroSkillBanner('点金裁决就绪，请选择目标怪物。');
           return;
         }
         case '永恒修复': {
@@ -12688,7 +12688,7 @@ export default function GameBoard() {
         const healed = healHero(totalDamage);
         const healText = healed > 0 ? `，恢复 ${healed} 点生命` : '';
         finalizeMagicCard(pendingMagicAction.card, {
-          banner: `血债清算造成 ${totalDamage} 点伤害${healText}！${echo > 1 ? '（回响×2）' : ''}`,
+          banner: `点金裁决造成 ${totalDamage} 点伤害${healText}！${echo > 1 ? '（回响×2）' : ''}`,
         });
         return;
       }

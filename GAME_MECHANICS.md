@@ -75,7 +75,7 @@
 | 盾牌 | 6 | Wooden×2, Iron×2, Heavy×2 |
 | 药水 | 6 | 治疗/修复/背包/洞察等 |
 | 护符 | 6 | Heal, Balance, Life, Guardian, Flash, Strength |
-| 魔法 | 6 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 血债清算, 永恒修复 |
+| 魔法 | 6 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 点金裁决, 永恒修复 |
 | 事件 | 14 | 各类事件 |
 
 ### 2.2 初始背包 (`createStarterBackpack`)
@@ -548,7 +548,7 @@ baseDamage = max(0,
 | 箭雨余韵 | permanent | 对行中所有怪物造成 `getSpellDamage(1) × echo` 伤害，每命中 1 只怪物从回收袋随机抽 1 张牌入手牌（不含自身） |
 | 回响行囊 | instant | 弃 `2×echo` 张手牌 → 从坟场发现 `2×echo` 张 → 从背包抽 `2×echo` 张 |
 | 潮涌铸甲 | instant | 被动：每次瀑流随机装备槽永久护甲+1 |
-| 血债清算 | instant | 伤害 = `getSpellDamage(gold) × echo`，回复等量HP |
+| 点金裁决 | instant | 伤害 = `getSpellDamage(gold) × echo`，回复等量HP |
 | 永恒修复 | instant | 武器本瀑流内不消耗耐久 |
 
 ### 10.3 骑士职业魔法
