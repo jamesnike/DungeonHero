@@ -1,10 +1,9 @@
-import { Heart, Coins, Layers, Waves, ShoppingBag, Zap } from 'lucide-react';
+import { Heart, Coins, Layers, Waves, ShoppingBag, Trophy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
 import { useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
-import { usePerformanceMode } from '@/contexts/PerformanceModeContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
 interface GameHeaderProps {
@@ -14,6 +13,7 @@ interface GameHeaderProps {
   cardsRemaining: number;
   shopLevel: number;
   turnCount: number;
+  totalWins?: number;
   onDeckClick?: () => void;
   onNewGame?: () => void;
   /** 瀑流「回牌堆」挤掉动画飞向牌库计数按钮 */
@@ -27,12 +27,12 @@ export default function GameHeader({
   cardsRemaining,
   shopLevel,
   turnCount,
+  totalWins = 0,
   onDeckClick,
   onNewGame,
   deckFlyTargetRef,
 }: GameHeaderProps) {
   const gameViewport = useGameViewport();
-  const { isLowPerf, toggle: togglePerf } = usePerformanceMode();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [headerScale, setHeaderScale] = useState(1);
@@ -72,11 +72,9 @@ export default function GameHeader({
       style={headerStyle}
     >
       <div className="game-header__group">
-        <div className="game-header__stat" data-testid="header-hp">
-          <Heart className="game-header__icon text-destructive" />
-          <span className="game-header__value font-mono font-bold">
-            {hp}/{maxHp}
-          </span>
+        <div className="game-header__trophy" data-testid="header-trophy">
+          <Trophy className="game-header__icon text-yellow-500" />
+          <span className="game-header__trophy-count font-mono font-bold">{totalWins}</span>
         </div>
 
         <div className="game-header__controls">
@@ -84,16 +82,12 @@ export default function GameHeader({
             New Game
           </Button>
           <HelpDialog buttonClassName="game-header__button game-header__button--icon" />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={togglePerf}
-            title={isLowPerf ? '流畅模式已开启（点击关闭）' : '开启流畅模式（减少特效）'}
-            data-testid="button-perf-mode"
-            className="game-header__button game-header__button--icon"
-          >
-            <Zap className={isLowPerf ? 'text-yellow-500' : ''} />
-          </Button>
+          <div className="game-header__stat" data-testid="header-hp">
+            <Heart className="game-header__icon text-destructive" />
+            <span className="game-header__value font-mono font-bold">
+              {hp}/{maxHp}
+            </span>
+          </div>
         </div>
       </div>
 

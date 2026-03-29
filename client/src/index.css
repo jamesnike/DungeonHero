@@ -1561,7 +1561,8 @@ html {
   .game-header__stat,
   .game-header__controls,
   .game-header__deck,
-  .game-header__shop {
+  .game-header__shop,
+  .game-header__trophy {
     display: flex;
     align-items: center;
     gap: calc(0.65rem * var(--header-scale));
@@ -1606,6 +1607,12 @@ html {
   .game-header__badge {
     font-size: calc(0.95rem * var(--header-scale));
     padding: calc(0.25rem * var(--header-scale)) calc(0.75rem * var(--header-scale));
+  }
+
+  .game-header__trophy-count {
+    font-size: calc(1.15rem * var(--header-scale));
+    color: #eab308;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 
   .game-header__shop-text {
@@ -1956,117 +1963,6 @@ html {
 @keyframes event-restore-pulse {
   0%, 100% { transform: translateX(-50%) scale(1); }
   50% { transform: translateX(-50%) scale(1.05); }
-}
-
-/* ════════════════════════════════════════════════
-   Low Performance Mode — .low-perf-mode on <html>
-   ════════════════════════════════════════════════ */
-
-.low-perf-mode .combat-overlay__shape--bleed,
-.low-perf-mode .combat-overlay__shape--heal {
-  mix-blend-mode: normal;
-  filter: none;
-  animation-duration: 350ms;
-}
-
-.low-perf-mode .combat-overlay__shape--bleed-drip,
-.low-perf-mode .combat-overlay__shape--bleed-ring,
-.low-perf-mode .combat-overlay__shape--heal-rise,
-.low-perf-mode .combat-overlay__shape--heal-ring {
-  display: none;
-}
-
-.low-perf-mode .combat-overlay__shape--swing {
-  animation-duration: 300ms;
-}
-.low-perf-mode .combat-overlay__shape--swing-echo,
-.low-perf-mode .combat-overlay__shape--swing-spark {
-  display: none;
-}
-
-.low-perf-mode .combat-overlay__shape--block {
-  animation-duration: 350ms;
-}
-.low-perf-mode .combat-overlay__shape--block-ripple,
-.low-perf-mode .combat-overlay__shape--block-spark {
-  display: none;
-}
-
-.low-perf-mode .combat-overlay__shape--defeat {
-  mix-blend-mode: normal;
-  animation-duration: 300ms;
-}
-.low-perf-mode .combat-overlay__shape--defeat-burst {
-  display: none;
-}
-.low-perf-mode .combat-overlay__shape--defeat-fade::after {
-  filter: none;
-}
-
-.low-perf-mode .animate-preview-drop {
-  animation-duration: 250ms;
-  will-change: auto;
-}
-.low-perf-mode .animate-preview-graveyard {
-  animation-duration: 200ms;
-  will-change: auto;
-}
-.low-perf-mode .animate-preview-deck-return {
-  animation-duration: 200ms;
-  will-change: auto;
-}
-.low-perf-mode .animate-preview-deck-return {
-  filter: none;
-}
-.low-perf-mode .animate-active-landing {
-  animation-duration: 200ms;
-  will-change: auto;
-}
-.low-perf-mode .animate-preview-deal {
-  animation-duration: 250ms;
-  will-change: auto;
-}
-
-.low-perf-mode .animate-card-remove {
-  animation-duration: 150ms;
-  will-change: auto;
-}
-
-.low-perf-mode .class-flight-card {
-  will-change: auto;
-  filter: none;
-}
-
-.low-perf-mode .combat-overlay__shape {
-  will-change: auto;
-}
-
-.low-perf-mode .engaged-monster .shadcn-card::after {
-  animation: none;
-  box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.6);
-}
-
-.low-perf-mode .event-pending-cell {
-  animation: none;
-  box-shadow: 0 0 6px 2px rgba(236, 72, 153, 0.4);
-}
-.low-perf-mode .fate-blade-charged {
-  animation: none;
-  box-shadow: 0 0 6px 2px rgba(59, 130, 246, 0.4);
-}
-.low-perf-mode .event-pending-restore-btn {
-  animation: none;
-}
-
-.low-perf-mode .animate-modal-slide-in {
-  animation-duration: 100ms;
-}
-
-.low-perf-mode .animate-damage-flash {
-  animation-duration: 100ms;
-}
-.low-perf-mode .animate-heal-glow {
-  animation-duration: 200ms;
 }
 
 /* ════════════════════════════════════════════════

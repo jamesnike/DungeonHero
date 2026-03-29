@@ -45,7 +45,6 @@ import BackpackViewerModal from './BackpackViewerModal';
 import MonsterRewardModal from '@/components/MonsterRewardModal';
 import HeroDetailsModal from './HeroDetailsModal';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
-import { usePerformanceMode } from '@/contexts/PerformanceModeContext';
 // import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
@@ -65,7 +64,7 @@ import {
   type HeroMagicState,
 } from '@/lib/heroMagic';
 import { getRandomHero, type HeroVariant } from '@/lib/heroes';
-import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, type PersistedGameState } from '@/lib/gameStorage';
+import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, getTotalWins, incrementTotalWins, type PersistedGameState } from '@/lib/gameStorage';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import CardDetailsModal from './CardDetailsModal';
 import DiscoverClassModal from './DiscoverClassModal';
@@ -1546,10 +1545,7 @@ function createStarterBackpack(): GameCardData[] {
 export default function GameBoard() {
   const gameViewport = useGameViewport();
   const overlayZoom = useOverlayScale();
-  const { isLowPerf } = usePerformanceMode();
-  const lowPerfRef = useRef(false);
-  lowPerfRef.current = isLowPerf;
-  const animSpeed = useCallback((ms: number) => lowPerfRef.current ? Math.round(ms * 0.45) : ms, []);
+  const animSpeed = useCallback((ms: number) => ms, []);
   // const { toast } = useToast(); // Disabled toast notifications
   const [hp, setHp] = useState(INITIAL_HP);
   const hpRef = useRef(INITIAL_HP);
@@ -1689,6 +1685,7 @@ export default function GameBoard() {
   const recycleForgePlayCountRef = useRef(0);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
+  const [totalWins, setTotalWins] = useState(() => getTotalWins());
   const [draggedCard, setDraggedCard] = useState<GameCardData | null>(null);
   const [draggedCardSource, setDraggedCardSource] = useState<DragOrigin | null>(null);
   const [heroRowDropState, setHeroRowDropState] = useState<HeroRowDropType | null>(null);
@@ -8421,6 +8418,7 @@ export default function GameBoard() {
           addGameLog('system', '胜利！地牢已被征服！');
           setVictory(true);
           setGameOver(true);
+          setTotalWins(incrementTotalWins());
           setActiveCards(createEmptyActiveRow());
           setCardsPlayed(0);
           setDrawPending(false);
@@ -8782,6 +8780,7 @@ export default function GameBoard() {
         addGameLog('system', '胜利！地牢已被征服！');
         setVictory(true);
         setGameOver(true);
+        setTotalWins(incrementTotalWins());
       }
       resetWaterfallAnimation();
       return;
@@ -9298,6 +9297,7 @@ export default function GameBoard() {
             addGameLog('system', '胜利！地牢已被征服！');
             setVictory(true);
             setGameOver(true);
+            setTotalWins(incrementTotalWins());
           }
         }
         
@@ -15812,6 +15812,7 @@ export default function GameBoard() {
           cardsRemaining={getRemainingCards()}
           turnCount={turnCount}
           shopLevel={shopLevel}
+          totalWins={totalWins}
           deckFlyTargetRef={deckFlyTargetRef}
           onDeckClick={() => {
             if (fullBoardInteractionLocked) return;

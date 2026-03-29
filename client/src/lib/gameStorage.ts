@@ -234,3 +234,27 @@ export const clearGameLogStorage = () => {
   }
 };
 
+const TOTAL_WINS_STORAGE_KEY = 'dungeonhero:total-wins';
+
+export const getTotalWins = (): number => {
+  if (!canUseStorage()) return 0;
+  try {
+    const raw = window.localStorage.getItem(TOTAL_WINS_STORAGE_KEY);
+    return raw ? parseInt(raw, 10) || 0 : 0;
+  } catch {
+    return 0;
+  }
+};
+
+export const incrementTotalWins = (): number => {
+  const current = getTotalWins();
+  const next = current + 1;
+  if (!canUseStorage()) return next;
+  try {
+    window.localStorage.setItem(TOTAL_WINS_STORAGE_KEY, String(next));
+  } catch {
+    // ignore
+  }
+  return next;
+};
+
