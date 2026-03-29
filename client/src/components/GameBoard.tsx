@@ -4324,7 +4324,8 @@ export default function GameBoard() {
       handCardsRef.current = handCardsRef.current.filter(c => !discardIds.has(c.id));
       setHandCards(handCardsRef.current);
       await Promise.all(flights.map(f => f.promise));
-      flights.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
+      const sorted = [...flights].sort((a, b) => (a.card.onDiscardDraw ? 1 : 0) - (b.card.onDiscardDraw ? 1 : 0));
+      sorted.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
       const names = toDiscard.map(c => c.name);
       addGameLog('combat', `${monster.name} 的遗言：随机弃置了 ${discardCount} 张手牌（${names.join('、')}）`);
       setHeroSkillBanner(`${monster.name} 的遗言：弃置了 ${names.join('、')}！`);
@@ -5805,9 +5806,10 @@ export default function GameBoard() {
   // Auto-draw mechanism - draw random backpack cards to hand
   const drawFromBackpackToHand = (): GameCardData | null => {
     const flightsCount = backpackHandFlightsRef.current.length;
-    const availableSlots = Math.max(0, effectiveHandLimit - (handCards.length + flightsCount));
+    const liveHandSize = handCardsRef.current.length;
+    const availableSlots = Math.max(0, effectiveHandLimit - (liveHandSize + flightsCount));
     logBackpackDraw('draw-request', {
-      handSize: handCards.length,
+      handSize: liveHandSize,
       flights: flightsCount,
       availableSlots,
       backpackStateCount: backpackItems.length,
@@ -10247,7 +10249,8 @@ export default function GameBoard() {
     handCardsRef.current = [];
     setHandCards([]);
     await Promise.all(flights.map(f => f.promise));
-    flights.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
+    const sorted = [...flights].sort((a, b) => (a.card.onDiscardDraw ? 1 : 0) - (b.card.onDiscardDraw ? 1 : 0));
+    sorted.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
   }, [discardCardToGraveyard, triggerDiscardFlight]);
 
   const drawCardsFromBackpack = (count: number) => {
@@ -11124,7 +11127,8 @@ export default function GameBoard() {
               handCardsRef.current = handCardsRef.current.filter(c => !discardIds.has(c.id));
               setHandCards(handCardsRef.current);
               await Promise.all(flights.map(f => f.promise));
-              flights.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
+              const sorted = [...flights].sort((a, b) => (a.card.onDiscardDraw ? 1 : 0) - (b.card.onDiscardDraw ? 1 : 0));
+              sorted.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
               bannerParts.push(`弃置了 ${cardsToDiscard.length} 张手牌。`);
             } else {
               const success = await requestCardAction('discard', echoDiscard, {
@@ -13986,7 +13990,8 @@ export default function GameBoard() {
         handCardsRef.current = handCardsRef.current.filter(c => !discardIds.has(c.id));
         setHandCards(handCardsRef.current);
         await Promise.all(flights.map(f => f.promise));
-        flights.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
+        const sorted = [...flights].sort((a, b) => (a.card.onDiscardDraw ? 1 : 0) - (b.card.onDiscardDraw ? 1 : 0));
+        sorted.forEach(f => discardCardToGraveyard(f.card, { owner: 'player' }));
         const discardedNames = cardsToDiscard.map(c => c.name);
         if (discardedNames.length > 0) {
           addGameLog('event', `随机弃置手牌：${discardedNames.join('、')}`);

@@ -1166,6 +1166,24 @@ const amuletEffectText =
                           ))}
                         </div>
                       )}
+                      {(card.durability !== undefined || card.maxDurability !== undefined) && totalDurabilityDots > 0 && (
+                        <div className={`flex ${isCompact ? 'gap-px mt-0.5' : 'gap-0.5 mt-1'}`}>
+                          {Array.from({ length: totalDurabilityDots }).map((_, i) => {
+                            const dotValue = i + 1;
+                            const isFilled = dotValue <= currentDurability;
+                            return (
+                              <div
+                                key={dotValue}
+                                className={`dh-card__durability-dot rounded-full border shadow-sm transition-colors ${
+                                  isFilled
+                                    ? 'bg-amber-400 border-amber-500 shadow-amber-500/40'
+                                    : 'bg-slate-800/50 border-slate-600 opacity-50'
+                                }`}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                     {card.lowGoldBuffActive && (
                       <div className="dh-card__lowgold-glow" />
