@@ -1193,7 +1193,7 @@ function createDeck(): GameCardData[] {
       {
         text: '战血铭刻（翻转为永久法术）',
         effect: 'flipToHonorBloodMagic',
-        hint: '翻转为「战血之印」：打出失去 1 生命并选一件装备 +1 耐久；被弃时将激活行所有怪物攻击力 -3',
+        hint: '翻转为「战血之印」：打出失去 1 生命并选一件装备 +1 耐久；被弃时将激活行所有怪物攻击力 -2',
         requires: [
           {
             type: 'leftmostIsEnraged',
@@ -7734,7 +7734,7 @@ export default function GameBoard() {
         );
         if (monsters.length > 0) {
           clearUndoStack();
-          const atkReduction = 3;
+          const atkReduction = 2;
           monsters.forEach(monster => {
             const currentAtk = monster.attack ?? monster.value;
             const newAtk = Math.max(0, currentAtk - atkReduction);
@@ -13924,7 +13924,7 @@ export default function GameBoard() {
             magicType: 'permanent',
             magicEffect: 'honor-blood',
             description:
-              '永久魔法：打出时失去 1 点生命，选择一件装备恢复 1 点耐久（法术回响时恢复 2）。被弃置时将激活行所有怪物攻击力 -3。',
+              '永久魔法：打出时失去 1 点生命，选择一件装备恢复 1 点耐久（法术回响时恢复 2）。被弃置时将激活行所有怪物攻击力 -2。',
           };
           await triggerEventTransform(currentEventCard, honorBloodCard, '战血荣誉翻转为「战血之印」…');
           skipNextEventAutoDrawRef.current = true;

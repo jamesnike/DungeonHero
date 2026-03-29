@@ -798,7 +798,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'amuletsToGold+10') return '摧毁所有护符并每个获得 10 金币';
       if (token === 'classBottom+2') return '获得 class 底部两张专属卡';
       if (token === 'flipToHonorBloodMagic') {
-        return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时将激活行所有怪物攻击力 -3';
+        return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时将激活行所有怪物攻击力 -2';
       }
       if (token === 'fate-dice-strike')
         return '对右侧相邻卡牌生效：非怪物则摧毁；怪物则激怒并穿透打掉 2 层血（可击杀）';
