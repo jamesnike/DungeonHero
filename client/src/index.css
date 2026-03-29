@@ -1362,15 +1362,6 @@ html {
     }
   }
 
-  .equip-slot-exhausted-cell {
-    display: none;
-  }
-  @media (pointer: coarse) {
-    .equip-slot-exhausted-cell {
-      display: flex;
-    }
-  }
-
   .dh-hero-hp {
     --dh-hero-hp-base: clamp(0.72rem, 0.52rem + 0.7vw, 1.3rem);
     font-size: calc(

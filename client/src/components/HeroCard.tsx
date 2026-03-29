@@ -224,7 +224,7 @@ export default function HeroCard({
     ready
       ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-lg shadow-rose-500/30 ring-1 ring-rose-400/40'
       : 'bg-gray-400/60 text-gray-600 cursor-not-allowed border border-gray-500/40';
-  const spellDamageDisplay = Math.max(0, spellDamageBonus);
+  const spellDamageDisplay = spellDamageBonus;
   const appliedHeroScale = clamp(
     heroScale * scaleMultiplier,
     HERO_SCALE_MIN * Math.min(1, scaleMultiplier),
@@ -297,7 +297,7 @@ export default function HeroCard({
           {isCompact ? '法术' : '永久法术伤害'}
         </span>
         <span className="text-muted-foreground/50">|</span>
-        <span className="font-mono text-primary dh-hero-chip">+{spellDamageDisplay}</span>
+        <span className={`font-mono dh-hero-chip ${spellDamageDisplay < 0 ? 'text-red-500' : 'text-primary'}`}>{spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}</span>
       </div>
       <Card className={`
         relative h-full w-full border-4 border-amber-600 shadow-lg overflow-hidden

@@ -450,7 +450,7 @@ export default function EquipmentSlot({
         />
       )}
       {isExhaustedThisTurn && isCardDragging && (
-        <div className="equip-slot-exhausted-cell pointer-events-none absolute inset-0 z-30 items-center justify-center rounded-md bg-black/10">
+        <div className="pointer-events-none absolute inset-0 z-[16] flex items-center justify-center rounded-md bg-black/10">
           <X className="w-3/5 h-3/5 text-red-500/50 stroke-[3]" />
         </div>
       )}

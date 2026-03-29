@@ -1517,6 +1517,7 @@ function createStarterBackpack(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：弃 1 张手牌到回收袋，从背包抽 1 张牌。',
       description: '弃置 1 张手牌到回收袋，从背包抽取 1 张新牌。',
+      recycleDelay: 1,
     },
     {
       id: STARTER_CARD_IDS.reshuffle,
@@ -11516,7 +11517,7 @@ export default function GameBoard() {
               promise: triggerDiscardFlight(hc, 'recycle-bag'),
             }));
             const victimIds = new Set(victims.map(v => v.id));
-            handCardsRef.current = handCardsRef.current.filter(c => !victimIds.has(c.id));
+            handCardsRef.current = handCardsRef.current.filter(c => !victimIds.has(c.id) && c.id !== card.id);
             setHandCards(handCardsRef.current);
             await Promise.all(flights.map(f => f.promise));
             flights.forEach(f => {
