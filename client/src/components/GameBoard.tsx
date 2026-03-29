@@ -323,15 +323,11 @@ const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: number)
 const isBackpackRestrictedCard = (card: GameCardData | null) =>
   Boolean(card && (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion' || card.isPermanentEvent));
 
-const getBaseShopPrice = (card: GameCardData): number => {
+const getShopPrice = (card: GameCardData): number => {
   if (SHOP_TYPE_PRICES[card.type] !== undefined) {
     return SHOP_TYPE_PRICES[card.type] as number;
   }
   return Math.max(5, card.value || 5);
-};
-
-const getShopPrice = (card: GameCardData): number => {
-  return getBaseShopPrice(card);
 };
 
 const isHeroRowHighlightCard = (
@@ -732,8 +728,8 @@ function createDeck(): GameCardData[] {
       card.maxDurability = card.durability;
     }
     if (weaponType.name === 'Mace') {
-      card.value = Math.min(card.value, 3);
-      card.durability = Math.min(card.durability!, 2);
+      card.value = Math.floor(Math.random() * 2) + 1;
+      card.durability = Math.floor(Math.random() * 2) + 3;
       card.maxDurability = card.durability;
       card.description = '攻击后掷骰：50% 概率不消耗耐久。';
       card.weaponDurabilitySaveChance = 50;
@@ -915,7 +911,7 @@ function createDeck(): GameCardData[] {
       name: 'Life Amulet',
       value: 5,
       image: lifestealAmuletImage,
-      description: '攻击时，若伤害超出怪物血量，回复 6 点生命。',
+      description: '攻击时，若伤害超出怪物血量，回复 4 点生命。',
       amuletEffect: 'life',
     },
     {
@@ -1190,7 +1186,7 @@ function createDeck(): GameCardData[] {
     description: '选择一项奖励。结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
     eventChoices: [
       { text: '整理呼吸（回复 8 HP）', effect: 'heal+8' },
-      { text: '回收战利品（金币 +20）', effect: 'gold+20' },
+      { text: '回收战利品（金币 +15）', effect: 'gold+15' },
       { text: '唤醒底牌（获得底部两张专属卡）', effect: 'classBottom+2' },
       {
         text: '战血铭刻（翻转为永久法术）',
@@ -2412,7 +2408,7 @@ export default function GameBoard() {
   const [waveDiscardCount, setWaveDiscardCount] = useState(0);
   const [handCards, setHandCards] = useState<GameCardData[]>([]); // Hand system - max 7 cards
   const handCardsRef = useRef<GameCardData[]>([]);
-  const deletableCardCount = handCards.length + backpackItems.length;
+  const deletableCardCount = handCards.length + backpackItems.length + permanentMagicRecycleBag.length;
   const canDeleteCardInShop = !shopDeleteUsed && deletableCardCount > 0;
   const shopDeleteDisabledReason = shopDeleteUsed
     ? '本次商店的删牌机会已用完。'
@@ -3487,54 +3483,15 @@ export default function GameBoard() {
     }
   }, []);
 
-  // Function to damage a monster and update its HP layers
-  const damageMonster = (monster: GameCardData, damage: number): GameCardData => {
-    if (!monster.hp || !monster.maxHp) {
-      return {
-        ...monster,
-        hp: Math.max(0, (monster.hp || monster.value) - damage),
-        value: Math.max(0, (monster.hp || monster.value) - damage)
-      };
-    }
-    
-    const currentHp = monster.hp;
-    let newHp = currentHp - damage;
-    let currentLayer = monster.currentLayer || 1;
-    const layerBefore = currentLayer;
-    
-    if (newHp <= 0) {
-      if (currentLayer > 0) {
-        currentLayer -= 1;
-        newHp = currentLayer > 0 ? monster.maxHp : 0;
-      }
-    }
-
-    const layerLost = layerBefore - currentLayer;
-    let attackBoost = 0;
-    if (monster.bleedEffect?.startsWith('attack+') && layerLost > 0 && currentLayer > 0) {
-      const perLayer = parseInt(monster.bleedEffect.replace('attack+', ''), 10) || 0;
-      attackBoost = perLayer * layerLost;
-    }
-
-    const newAttack = (monster.attack ?? monster.value) + attackBoost;
-    const newValue = monster.value + attackBoost;
-    const newSpecialBoost = (monster.specialAttackBoost ?? 0) + attackBoost;
-
-    return {
-      ...monster,
-      hp: newHp,
-      currentLayer,
-      attack: newAttack,
-      value: newValue,
-      specialAttackBoost: newSpecialBoost,
-    };
-  };
-
   /**
-   * 单次伤害可连续击穿多层：每层先扣光当前 hp，再掉一层并回满（与 damageMonster 单层逻辑一致，含 attack+ 流血叠攻）。
-   * 用于护盾反弹等需伤害溢出的结算。
+   * 单次伤害可连续击穿多层：每层先扣光当前 hp，再掉一层并回满（含 attack+ 流血叠攻）。
+   * 溢出伤害继续穿透下一层，直到伤害耗尽、怪物死亡或达到 maxLayerLoss 上限。
    */
-  const damageMonsterWithLayerOverflow = (monster: GameCardData, damage: number): GameCardData => {
+  const damageMonsterWithLayerOverflow = (
+    monster: GameCardData,
+    damage: number,
+    maxLayerLoss?: number,
+  ): GameCardData => {
     if (damage <= 0) {
       return monster;
     }
@@ -3546,6 +3503,7 @@ export default function GameBoard() {
       };
     }
 
+    const startLayer = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;
     let m = monster;
     let d = damage;
 
@@ -3554,6 +3512,13 @@ export default function GameBoard() {
       const hpNow = m.hp ?? 0;
       if (layers <= 0 || hpNow <= 0) {
         break;
+      }
+
+      if (maxLayerLoss != null && startLayer - layers >= maxLayerLoss) {
+        return {
+          ...m,
+          hp: Math.max(0, hpNow - d),
+        };
       }
 
       if (d < hpNow) {
@@ -4905,7 +4870,7 @@ export default function GameBoard() {
       if (discardEmpowerLifestealThisAttack) {
         discardEmpowerLifestealHpSum += Math.min(finalDamage, monsterHpBefore);
       }
-      const updatedMonster = damageMonster(workingMonster, finalDamage);
+      const updatedMonster = damageMonsterWithLayerOverflow(workingMonster, finalDamage, 2);
       triggerMonsterBleedAnimation(targetMonster.id, iterationDelay);
       triggerMonsterBleedAnimation(
         targetMonster.id,
@@ -4930,7 +4895,7 @@ export default function GameBoard() {
 
       if (amuletEffects.hasLife && !overflowHealing) {
         if (finalDamage > monsterHpBefore) {
-          overflowHealing = 6;
+          overflowHealing = 4;
         }
       }
 
@@ -10028,7 +9993,7 @@ export default function GameBoard() {
       requiredCount: 1,
       remainingCount: 1,
       title: '选择要删除的卡牌',
-      description: '从手牌或背包中删除 1 张卡牌，将其送入坟场。',
+      description: '从手牌、背包或回收袋中删除 1 张卡牌，将其送入坟场。',
     });
     setDeleteModalOpen(true);
   }, [deletableCardCount, shopDeleteUsed]);
@@ -10385,7 +10350,7 @@ export default function GameBoard() {
   );
 
   const handleDeleteCardConfirm = useCallback(
-    async (cardId: string, source: 'hand' | 'backpack') => {
+    async (cardId: string, source: 'hand' | 'backpack' | 'recycleBag') => {
       if (deletingCardIdsRef.current.has(cardId)) return;
       deletingCardIdsRef.current.add(cardId);
 
@@ -10398,8 +10363,14 @@ export default function GameBoard() {
           deletingCardIdsRef.current.delete(cardId);
           return;
         }
-      } else {
+      } else if (source === 'backpack') {
         cardToDelete = backpackItems.find(card => card.id === cardId) ?? null;
+        if (!cardToDelete) {
+          deletingCardIdsRef.current.delete(cardId);
+          return;
+        }
+      } else {
+        cardToDelete = permanentMagicRecycleBag.find(card => card.id === cardId) ?? null;
         if (!cardToDelete) {
           deletingCardIdsRef.current.delete(cardId);
           return;
@@ -10418,8 +10389,10 @@ export default function GameBoard() {
           deletingCardIdsRef.current.delete(cardId);
           return;
         }
-      } else {
+      } else if (source === 'backpack') {
         setBackpackItems(prev => prev.filter(card => card.id !== cardId));
+      } else {
+        setPermanentMagicRecycleBag(prev => prev.filter(card => card.id !== cardId));
       }
 
       cardActionRemainingRef.current = Math.max(0, cardActionRemainingRef.current - 1);
@@ -10477,6 +10450,7 @@ export default function GameBoard() {
       consumeCardFromHand,
       discardCardToGraveyard,
       handCards,
+      permanentMagicRecycleBag,
       triggerDiscardFlight,
     ],
   );
@@ -13269,7 +13243,11 @@ export default function GameBoard() {
             resetDragState();
             return;
           }
-          if (card.isCurse) {
+          if (card.isCurse && (card as any).knightEffect === 'greed-curse') {
+            setGold(prev => Math.max(0, prev - 3));
+            addGameLog('magic', `弃置「${card.name}」回到回收袋（贪婪诅咒消耗了 3 金币）。`);
+            setHeroSkillBanner(`${card.name} 已弃置回回收袋，失去 3 金币。`);
+          } else if (card.isCurse) {
             applyDamage(3);
             addGameLog('magic', `弃置「${card.name}」回到回收袋（血咒吸取了 3 点生命）。`);
             setHeroSkillBanner(`${card.name} 已弃置回回收袋，失去 3 点生命。`);
@@ -16366,6 +16344,7 @@ export default function GameBoard() {
         onOpenChange={handleDeleteModalOpenChange}
         handCards={handCards}
         backpackCards={backpackItems}
+        recycleBagCards={permanentMagicRecycleBag}
         onDeleteCard={handleDeleteCardConfirm}
         title={cardActionContext?.title}
         description={cardActionContext?.description}

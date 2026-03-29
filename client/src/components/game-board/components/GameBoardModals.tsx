@@ -32,7 +32,7 @@ import type {
 
 type DiscoverOption = GameCardData;
 
-type CardDeletionSource = 'hand' | 'backpack';
+type CardDeletionSource = 'hand' | 'backpack' | 'recycleBag';
 
 type GameBoardModalsProps = {
   deathWardPrompt: DeathWardPromptState | null;
@@ -261,6 +261,7 @@ export function GameBoardModals({
         onOpenChange={onDeleteModalChange}
         handCards={handCards}
         backpackCards={backpackItems}
+        recycleBagCards={permanentMagicRecycleBag}
         onDeleteCard={onDeleteCardConfirm}
         title={cardActionContext?.title}
         description={cardActionContext?.description}

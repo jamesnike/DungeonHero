@@ -143,15 +143,11 @@ export const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: 
 export const isBackpackRestrictedCard = (card: GameCardData | null) =>
   Boolean(card && (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion'));
 
-export const getBaseShopPrice = (card: GameCardData): number => {
+export const getShopPrice = (card: GameCardData): number => {
   if (SHOP_TYPE_PRICES[card.type as CardType] !== undefined) {
     return SHOP_TYPE_PRICES[card.type as CardType] as number;
   }
   return Math.max(5, card.value || 5);
-};
-
-export const getShopPrice = (card: GameCardData): number => {
-  return getBaseShopPrice(card);
 };
 
 export const getGridMetricsForWidth = (width: number): GridMetrics => {

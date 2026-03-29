@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Backpack, Hand, Trash2 } from 'lucide-react';
+import { Backpack, Hand, Recycle, Trash2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
 import {
   EventPatternPreview,
@@ -10,13 +10,14 @@ import {
   isMagicSpellCardType,
 } from './MagicNameFlankIcons';
 
-type CardSource = 'hand' | 'backpack';
+type CardSource = 'hand' | 'backpack' | 'recycleBag';
 
 interface CardDeletionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   handCards: GameCardData[];
   backpackCards: GameCardData[];
+  recycleBagCards?: GameCardData[];
   onDeleteCard: (cardId: string, source: CardSource) => void;
   title?: string;
   description?: string;
@@ -28,6 +29,7 @@ interface CardDeletionModalProps {
 const sectionIconMap: Record<CardSource, typeof Backpack> = {
   hand: Hand,
   backpack: Backpack,
+  recycleBag: Recycle,
 };
 
 export default function CardDeletionModal({
@@ -35,6 +37,7 @@ export default function CardDeletionModal({
   onOpenChange,
   handCards,
   backpackCards,
+  recycleBagCards = [],
   onDeleteCard,
   title,
   description,
@@ -48,7 +51,11 @@ export default function CardDeletionModal({
   const renderCardSection = (title: string, cards: GameCardData[], source: CardSource) => {
     const Icon = sectionIconMap[source];
     const emptyText =
-      source === 'hand' ? '当前没有手牌可以删除。' : '背包里没有可以删除的卡牌。';
+      source === 'hand'
+        ? '当前没有手牌可以删除。'
+        : source === 'backpack'
+          ? '背包里没有可以删除的卡牌。'
+          : '回收袋里没有可以删除的卡牌。';
 
     return (
       <div className="space-y-3">
@@ -122,6 +129,7 @@ export default function CardDeletionModal({
         <div className="space-y-6 py-2">
           {renderCardSection('手牌', handCards, 'hand')}
           {!handOnly && renderCardSection('背包', backpackCards, 'backpack')}
+          {!handOnly && recycleBagCards.length > 0 && renderCardSection('回收袋', recycleBagCards, 'recycleBag')}
         </div>
       </DialogContent>
     </Dialog>
