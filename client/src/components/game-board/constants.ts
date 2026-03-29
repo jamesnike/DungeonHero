@@ -60,13 +60,14 @@ export const COMBAT_ANIMATION_DURATION = 1200;
 export const COMBAT_ANIMATION_STAGGER = 180;
 
 export const SHOP_MAX_OFFERINGS = 6;
-export const SHOP_REQUIRED_TYPES: CardType[] = ['weapon', 'shield', 'magic', 'amulet'];
+export const SHOP_REQUIRED_TYPES: CardType[][] = [['weapon'], ['shield'], ['magic'], ['amulet', 'potion']];
 export const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
   weapon: 10,
+  potion: 9,
   shield: 8,
+  amulet: 8,
   magic: 7,
   'hero-magic': 9,
-  amulet: 6,
 };
 export const COMBAT_PANEL_DEFAULT_WIDTH = 170;
 export const COMBAT_PANEL_DEFAULT_HEIGHT = 320;

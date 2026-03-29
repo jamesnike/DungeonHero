@@ -294,13 +294,14 @@ const SHIELD_REFLECT_ANIM_MS = 1020;
 const BOSS_RETALIATION_ANIM_MS = 920;
 const DEFEAT_ANIMATION_DURATION = 950;
 const SHOP_MAX_OFFERINGS = 5;
-const SHOP_REQUIRED_TYPES: CardType[] = ['weapon', 'shield', 'magic', 'amulet'];
+const SHOP_REQUIRED_TYPES: CardType[][] = [['weapon'], ['shield'], ['magic'], ['amulet', 'potion']];
 const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
   weapon: 10,
+  potion: 9,
   shield: 8,
+  amulet: 8,
   magic: 7,
   'hero-magic': 9,
-  amulet: 6,
 };
 const SHOP_HEAL_COST = 5;
 const SHOP_HEAL_AMOUNT = 5;
@@ -6220,8 +6221,8 @@ export default function GameBoard() {
       return picked;
     };
 
-    SHOP_REQUIRED_TYPES.forEach(type => {
-      const picked = takeRandomCard(card => card.type === type);
+    SHOP_REQUIRED_TYPES.forEach(types => {
+      const picked = takeRandomCard(card => types.includes(card.type));
       if (picked) {
         offerings.push({ card: picked, price: getShopPrice(picked), sold: false });
       }
