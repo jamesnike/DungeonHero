@@ -16,12 +16,16 @@ import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
+  CuteSticker,
   EventNameLeftGlyph,
   EventTitleBand,
   eventTitleSideSlotClass,
   MagicNameLeftGlyph,
   MagicTitleBand,
+  tintForKey,
 } from './MagicNameFlankIcons';
+import { resolveMagicPatternKey } from '@/lib/magicPatternKey';
+import { resolveEventPatternKey } from '@/lib/eventPatternKey';
 
 const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
@@ -586,6 +590,9 @@ const amuletEffectText =
   const showDefeatOverlay = Boolean(defeatAnimation);
   const showCombatOverlay = showBleedOverlay || showWeaponSwing || showShieldBlock || showDefeatOverlay;
   const isMagicCard = isMagicLikeCard;
+  const magicPatternKey = isMagicLikeCard ? resolveMagicPatternKey(card) : null;
+  const eventPatternKey = isEventCard ? resolveEventPatternKey(card) : null;
+  const cardWatermarkKey = magicPatternKey || eventPatternKey;
   const isTextOnlyCard = isEventCard || isMagicCard;
   const isThemedImageCard = card.type === 'amulet' || card.type === 'potion';
   const cornerDecoClass =
@@ -930,12 +937,29 @@ const amuletEffectText =
                 } pt-1 pb-1.5`}
               >
                 <div
-                  className={`h-full min-h-0 ${
+                  className={`h-full min-h-0 relative overflow-hidden ${
                     isCompact ? 'px-0.5 py-1' : 'px-1 py-1'
-                  } rounded-md border border-transparent bg-white/92`}
+                  } rounded-md border border-transparent ${
+                    cardWatermarkKey ? 'bg-transparent' : 'bg-white/92'
+                  }`}
                 >
+                  {cardWatermarkKey && (
+                    <>
+                      <div
+                        className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tintForKey(cardWatermarkKey)} opacity-[0.22]`}
+                      />
+                      <svg
+                        className="dh-sticker-watermark pointer-events-none absolute inset-[-15%] h-[130%] w-[130%] opacity-[0.18]"
+                        viewBox="0 0 32 32"
+                        preserveAspectRatio="xMidYMid meet"
+                        aria-hidden="true"
+                      >
+                        <CuteSticker k={cardWatermarkKey} />
+                      </svg>
+                    </>
+                  )}
                   {isMagicLikeCard && (
-                    <div className="dh-card__event-option w-full text-left leading-snug text-zinc-900">
+                    <div className="dh-card__event-option relative z-10 w-full text-left leading-snug text-zinc-900">
                       {card.scalingDamage != null ? (
                         <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
                           {formatScalingSpellDamageLine(card.scalingDamage)}
@@ -948,7 +972,7 @@ const amuletEffectText =
                     </div>
                   )}
                   {isEventCard && card.eventChoices && (
-                    <div className="w-full flex flex-col gap-1">
+                    <div className="relative z-10 w-full flex flex-col gap-1">
                       {card.eventChoices.map((choice, idx) => (
                         <div
                           key={idx}

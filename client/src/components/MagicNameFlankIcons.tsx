@@ -46,10 +46,25 @@ const TINT_BY_KEY: Record<string, string> = {
   'knight-chaos-dice': 'from-purple-400/50 to-pink-500/45',
   'knight-graveyard-recall': 'from-stone-500/50 to-violet-600/45',
   'knight-greed-curse': 'from-yellow-600/50 to-amber-900/50',
+  'evt-fate-crossroads': 'from-violet-400/45 to-indigo-500/45',
+  'evt-vault': 'from-amber-400/50 to-yellow-500/45',
+  'evt-shadow-pact': 'from-purple-500/50 to-indigo-800/50',
+  'evt-resonance-forge': 'from-orange-400/50 to-amber-500/45',
+  'evt-greed-altar': 'from-violet-300/45 to-amber-500/45',
+  'evt-honor-echo': 'from-violet-400/45 to-purple-500/45',
+  'evt-blood-curse-rite': 'from-rose-500/50 to-red-700/50',
+  'evt-crimson-pact': 'from-red-400/50 to-violet-500/45',
+  'evt-tomb-chamber': 'from-stone-400/45 to-violet-500/45',
+  'evt-arcane-guild': 'from-purple-300/45 to-indigo-500/45',
+  'evt-fate-dice-cup': 'from-violet-400/50 to-purple-500/45',
+  'evt-chaos-dice-game': 'from-purple-400/45 to-pink-400/40',
+  'evt-seal-demo': 'from-indigo-300/45 to-violet-500/45',
+  'evt-nether-veil': 'from-indigo-500/50 to-purple-700/50',
 };
 
 export function tintForKey(k: string): string {
   if (k.startsWith('fallback-')) return 'from-cyan-400/40 to-teal-500/40';
+  if (k.startsWith('evt-fallback-')) return 'from-violet-400/40 to-purple-500/40';
   return TINT_BY_KEY[k] ?? 'from-cyan-400/40 to-sky-500/40';
 }
 
