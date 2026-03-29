@@ -1231,7 +1231,7 @@ function createDeck(): GameCardData[] {
         hint: '背包容量永久降低 4，超过的卡牌会被随机放入回收袋',
       },
     ],
-    waterfallEffect: { type: 'boostRowMonsterAttack', amount: 3, description: '被挤出时：所有怪物攻击 +3' },
+    waterfallEffect: { type: 'boostRowMonsterAttack', amount: 5, description: '被挤出时：所有怪物攻击 +5' },
   });
 
   const crimsonPactId = `event-${id++}`;
