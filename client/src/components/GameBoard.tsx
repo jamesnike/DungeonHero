@@ -26,7 +26,7 @@ import GameCard, {
 import EquipmentSlot from './EquipmentSlot';
 // CombatPanel removed — only the standalone End Hero Turn button is used
 import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
-import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag } from 'lucide-react';
+import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag, Trophy, Skull } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import AmuletSlot from './AmuletSlot';
@@ -1686,6 +1686,7 @@ export default function GameBoard() {
   const recycleForgePlayCountRef = useRef(0);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
+  const [gameOverMinimized, setGameOverMinimized] = useState(false);
   const [totalWins, setTotalWins] = useState(() => getTotalWins());
   const [draggedCard, setDraggedCard] = useState<GameCardData | null>(null);
   const [draggedCardSource, setDraggedCardSource] = useState<DragOrigin | null>(null);
@@ -2430,7 +2431,7 @@ export default function GameBoard() {
   const eventChoiceProcessingRef = useRef(false);
   /** Event / Shop 最小化时冻结主界面操作（与弃牌雷击共用 fullBoardInteractionLocked） */
   const minimizedModalLocksBoard =
-    (eventModalOpen && eventModalMinimized) || (shopModalOpen && shopModalMinimized);
+    (eventModalOpen && eventModalMinimized) || (shopModalOpen && shopModalMinimized) || (gameOver && gameOverMinimized);
   const fullBoardInteractionLocked =
     discardShockInteractionLocked || minimizedModalLocksBoard;
   const fullBoardInteractionLockedRef = useRef(false);
@@ -7860,6 +7861,7 @@ export default function GameBoard() {
     setDetailsModalOpen(false);
     setHeroDetailsOpen(false);
     setEventDiceModal(null);
+    setGameOverMinimized(false);
 
     // Restore transient state from snapshot
     const t = entry.transient;
@@ -7909,6 +7911,7 @@ export default function GameBoard() {
     lastPersistedStateRef.current = null;
     clearUndoStack();
     clearGameLog();
+    setGameOverMinimized(false);
     initGame();
     setIsHydrated(true);
   };
@@ -16393,6 +16396,35 @@ export default function GameBoard() {
         </div>
       )}
 
+      {/* Game-over minimized floating restore button */}
+      {gameOver && gameOverMinimized && (
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full px-5 py-2.5 shadow-lg cursor-pointer select-none transition-colors ${
+            victory
+              ? 'bg-emerald-600/90 hover:bg-emerald-600'
+              : 'bg-red-700/90 hover:bg-red-700'
+          } ${
+            (eventModalOpen && eventModalMinimized && shopModalOpen && shopModalMinimized) ? 'bottom-44'
+            : ((eventModalOpen && eventModalMinimized) || (shopModalOpen && shopModalMinimized)) ? 'bottom-32'
+            : 'bottom-20'
+          }`}
+          style={{ pointerEvents: 'auto' }}
+          onClick={() => setGameOverMinimized(false)}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            setGameOverMinimized(false);
+          }}
+        >
+          {victory
+            ? <Trophy className="w-4 h-4 text-white" />
+            : <Skull className="w-4 h-4 text-white" />
+          }
+          <span className="text-white text-sm font-semibold whitespace-nowrap">
+            {victory ? '胜利' : '失败'} — 点击恢复
+          </span>
+        </div>
+      )}
+
       {deathWardPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" style={{ pointerEvents: 'auto' }}>
           <div className="w-full max-w-2xl space-y-6 rounded-lg bg-card p-10 text-center shadow-2xl max-h-[95vh] overflow-y-auto" style={{ zoom: overlayZoom }}>
@@ -16422,14 +16454,16 @@ export default function GameBoard() {
       )}
 
       <VictoryDefeatModal
-        open={gameOver}
+        open={gameOver && !gameOverMinimized}
         isVictory={victory}
         gold={gold}
         hpRemaining={hp}
         onRestart={handleNewGame}
+        onMinimize={() => setGameOverMinimized(true)}
         monstersDefeated={monstersDefeated}
         damageTaken={totalDamageTaken}
         totalHealed={totalHealed}
+        scaleMultiplier={stageScale}
       />
       
       <DeckViewerModal
@@ -16702,7 +16736,7 @@ export default function GameBoard() {
 
       {/* Bottom-right controls: undo */}
       <div className="absolute bottom-4 right-4 z-[9999] flex flex-col items-end" style={{ pointerEvents: 'none' }}>
-        {!gameOver && !showSkillSelection && (
+        {!showSkillSelection && (
           <div
             style={{
               pointerEvents: 'none',

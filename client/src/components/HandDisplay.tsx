@@ -72,6 +72,9 @@ export default function HandDisplay({
     setIsCompactHand(gameViewport.width < 640);
   }, [gameViewport.width]);
 
+  const onDragCardFromHandRef = useRef(onDragCardFromHand);
+  onDragCardFromHandRef.current = onDragCardFromHand;
+
   const onDragEndFromHandRef = useRef(onDragEndFromHand);
   onDragEndFromHandRef.current = onDragEndFromHand;
 
@@ -132,8 +135,8 @@ export default function HandDisplay({
   const handleDragStart = useCallback((card: GameCardData) => {
     if (layoutRef.current.disableAnimations) return;
     setIsDraggingCard(true);
-    onDragCardFromHand?.(card);
-  }, [onDragCardFromHand]);
+    onDragCardFromHandRef.current?.(card);
+  }, []);
 
   const handleDragEnd = useCallback((e?: React.DragEvent) => {
     forceStopDragging(e);
