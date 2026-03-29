@@ -3824,16 +3824,13 @@ export default function GameBoard() {
       if (flight.damage > 0 && !engagedMonsterIdsRef.current.includes(monster.id)) {
         beginCombatRef.current(monster, 'hero');
       }
-      undoStackRef.current = [];
-      setUndoCount(0);
-      clearUndoStorage();
       addGameLog('amulet', `弃牌雷击对 ${monster.name} 造成 ${flight.damage} 点伤害`);
       dealDamageToMonster(monster, flight.damage, { pulses: flight.pulses });
       if (flight.showBanner) {
         setHeroSkillBanner(`${monster.name} 被弃牌雷击击中，受到 ${flight.damage} 点伤害。`);
       }
     },
-    [addGameLog, clearUndoStorage, dealDamageToMonster, setHeroSkillBanner],
+    [addGameLog, dealDamageToMonster, setHeroSkillBanner],
   );
   applyDiscardShockHitRef.current = applyDiscardShockHit;
 
@@ -4177,9 +4174,6 @@ export default function GameBoard() {
     const started = tryStartDiscardShockFlight(target.id, dmg, 2, showBanner);
     if (!started) {
       discardShockSeqInFlightRef.current = false;
-      undoStackRef.current = [];
-      setUndoCount(0);
-      clearUndoStorage();
       if (dmg > 0 && !engagedMonsterIdsRef.current.includes(target.id)) {
         beginCombatRef.current(target, 'hero');
       }
@@ -9593,7 +9587,7 @@ export default function GameBoard() {
 
       if (effect === 'left-slot-durability-max+1') {
         const leftSlot = equipmentSlot1;
-        if (!leftSlot || !leftSlot.durability) {
+        if (!leftSlot || leftSlot.durability == null) {
           await finalizePotionCard(card, { banner: '左装备栏没有装备，药剂失效。' });
           return;
         }
@@ -9606,7 +9600,7 @@ export default function GameBoard() {
 
       if (effect === 'right-slot-durability-max+1') {
         const rightSlot = equipmentSlot2;
-        if (!rightSlot || !rightSlot.durability) {
+        if (!rightSlot || rightSlot.durability == null) {
           await finalizePotionCard(card, { banner: '右装备栏没有装备，药剂失效。' });
           return;
         }
@@ -11738,7 +11732,7 @@ export default function GameBoard() {
             const drawnIds = new Set(drawn.map(c => c.id));
             if (drawn.length > 0) {
               setPermanentMagicRecycleBag(prev => prev.filter(c => !drawnIds.has(c.id)));
-              drawn.forEach(c => ensureCardInHand(c));
+              drawn.forEach(c => queueCardIntoHand(c));
               addGameLog('deck', `从回收袋抽取 ${drawn.length} 张牌：${drawn.map(c => c.name).join('、')}`);
             }
             const drawnNames = drawn.map(c => c.name).join('、');
