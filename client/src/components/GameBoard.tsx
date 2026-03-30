@@ -1255,16 +1255,9 @@ function createDeck(): GameCardData[] {
         requires: [{ type: 'gold', min: 4, message: '需要至少 4 金币' }],
       },
       {
-        text: '焚尽旧物（弃 2 张牌，法伤 +1）',
-        effect: ['discardCards:2', 'spellDamage+1'],
-        requires: [
-          {
-            type: 'cardPool',
-            pools: ['hand', 'backpack'],
-            min: 2,
-            message: '需要至少 2 张可弃置的卡牌',
-          },
-        ],
+        text: '焚尽旧物（随机弃 2 张手牌，法伤 +1）',
+        effect: ['randomDiscardHand:2', 'spellDamage+1'],
+        requires: [{ type: 'hand', min: 2, message: '需要至少 2 张手牌' }],
       },
     ],
     flipTarget: {
@@ -1282,8 +1275,9 @@ function createDeck(): GameCardData[] {
             requires: [{ type: 'gold', min: 12, message: '需要至少 12 金币' }],
           },
           {
-            text: '灵魂焚烧（弃至多 4 张手牌，法伤 +1）',
+            text: '灵魂焚烧（随机弃 4 张手牌，法伤 +1）',
             effect: ['randomDiscardHand:4', 'spellDamage+1'],
+            requires: [{ type: 'hand', min: 4, message: '需要至少 4 张手牌' }],
           },
         ],
       },
@@ -1300,7 +1294,7 @@ function createDeck(): GameCardData[] {
     image: eventScrollImage,
     eventChoices: [
       { text: '研读残页（抽 2 张牌）', effect: 'drawHeroCards:2' },
-      { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh', hint: '翻转为永久法术伤害 +2 的药剂' },
+      { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh', hint: '翻转为永久法术伤害 +2、最大生命值 -5 的药剂' },
       { text: '翻转成「淬炼药剂」', effect: 'flipToLeftDurabilityPotion', hint: '翻转为左装备栏耐久上限 +1 的药剂' },
     ],
   });
@@ -9670,8 +9664,11 @@ export default function GameBoard() {
 
       if (effect === 'perm-spell-damage-2') {
         setPermanentSpellDamageBonus(prev => prev + 2);
-        addGameLog('potion', '药水效果：永久法术伤害 +2');
-        await finalizePotionCard(card, { banner: '永久法术伤害 +2。' });
+        const newMaxHp = maxHp - 5;
+        setPermanentMaxHpBonus(prev => prev - 5);
+        setHp(prev => Math.min(newMaxHp, prev));
+        addGameLog('potion', '药水效果：永久法术伤害 +2；最大生命值 -5');
+        await finalizePotionCard(card, { banner: '永久法术伤害 +2；最大生命值 -5。' });
         return;
       }
 
@@ -14090,7 +14087,7 @@ export default function GameBoard() {
             name: '纸灰药剂',
             value: 0,
             image: potionSpellDamageImage,
-            description: '使用时永久让法术伤害 +2。',
+            description: '使用时永久让法术伤害 +2；最大生命值 -5。',
             potionEffect: 'perm-spell-damage-2',
           };
           await triggerEventTransform(currentEventCard, paperAshPotion, '残页翻转，药香浮现…');

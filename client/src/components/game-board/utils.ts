@@ -813,16 +813,9 @@ export function createDeck(): GameCardData[] {
         requires: [{ type: 'gold', min: 4, message: '需要至少 4 金币' }],
       },
       {
-        text: '焚尽旧物（弃 2 张牌，法伤 +1）',
-        effect: ['discardCards:2', 'spellDamage+1'],
-        requires: [
-          {
-            type: 'cardPool',
-            pools: ['hand', 'backpack'],
-            min: 2,
-            message: '需要至少 2 张可弃置的卡牌',
-          },
-        ],
+        text: '焚尽旧物（随机弃 2 张手牌，法伤 +1）',
+        effect: ['randomDiscardHand:2', 'spellDamage+1'],
+        requires: [{ type: 'hand', min: 2, message: '需要至少 2 张手牌' }],
       },
     ],
     flipTarget: {
@@ -840,16 +833,9 @@ export function createDeck(): GameCardData[] {
             requires: [{ type: 'gold', min: 12, message: '需要至少 12 金币' }],
           },
           {
-            text: '灵魂焚烧（弃 4 张牌，法伤 +1）',
-            effect: ['discardCards:4', 'spellDamage+1'],
-            requires: [
-              {
-                type: 'cardPool',
-                pools: ['hand', 'backpack'],
-                min: 4,
-                message: '需要至少 4 张可弃置的卡牌',
-              },
-            ],
+            text: '灵魂焚烧（随机弃 4 张手牌，法伤 +1）',
+            effect: ['randomDiscardHand:4', 'spellDamage+1'],
+            requires: [{ type: 'hand', min: 4, message: '需要至少 4 张手牌' }],
           },
         ],
       },
