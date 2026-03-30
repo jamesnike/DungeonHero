@@ -8357,27 +8357,6 @@ export default function GameBoard() {
     addGameLog('equip', `装备切换：${swappedInName} 替换 ${swappedOutName}（${slotId === 'equipmentSlot1' ? '左' : '右'}槽）`);
   };
 
-  const moveEquipmentInStack = (slotId: EquipmentSlotId, stackIndex: number, direction: 'up' | 'down') => {
-    pushUndoSnapshot();
-    const reserve = getEquipmentReserve(slotId);
-    const activeItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-    if (!activeItem) return;
-
-    const stack: (EquipmentItem | null)[] = [...reserve, activeItem];
-    const targetIndex = direction === 'up' ? stackIndex + 1 : stackIndex - 1;
-    if (targetIndex < 0 || targetIndex >= stack.length) return;
-
-    [stack[stackIndex], stack[targetIndex]] = [stack[targetIndex], stack[stackIndex]];
-
-    const newActive = stack[stack.length - 1] as EquipmentItem;
-    const newReserve = stack.slice(0, -1) as EquipmentItem[];
-
-    setEquipmentSlotById(slotId, { ...newActive, fromSlot: slotId } as EquipmentItem);
-    setEquipmentReserve(slotId, newReserve);
-
-    addGameLog('equip', `装备移动：${stack[targetIndex]?.name ?? '?'}（${slotId === 'equipmentSlot1' ? '左' : '右'}槽）`);
-  };
-
   const normalizeEventEffect = (expression?: EventEffectExpression): string[] => {
     if (!expression) {
       return [];
@@ -13738,6 +13717,16 @@ export default function GameBoard() {
       }
 
       if (isCardFromEquipmentSlot(card)) {
+        const cardOriginSlot = normalizeHeroEquipmentSlotFromDrag(
+          (card as GameCardData & { fromSlot?: string }).fromSlot,
+        );
+        if (cardOriginSlot === equipSlot) {
+          const reserve = getEquipmentReserve(equipSlot);
+          const reserveIdx = reserve.findIndex(r => r.id === card.id);
+          if (reserveIdx >= 0) {
+            swapEquipmentToTop(equipSlot, reserveIdx);
+          }
+        }
         resetDragState();
         return;
       }
@@ -15789,7 +15778,6 @@ export default function GameBoard() {
             reserveItems={equipmentSlot1Reserve}
             slotCapacity={equipmentSlotCapacity.equipmentSlot1}
             onSwapToTop={(rIdx) => swapEquipmentToTop('equipmentSlot1', rIdx)}
-            onReorderEquipment={(stackIdx, dir) => moveEquipmentInStack('equipmentSlot1', stackIdx, dir)}
             statModifier={equipmentSlot1StatModifier}
             scaleMultiplier={stageScale}
             permanentDamageBonus={getEquipmentSlotBonus('equipmentSlot1', 'damage')}
@@ -15912,7 +15900,6 @@ export default function GameBoard() {
             reserveItems={equipmentSlot2Reserve}
             slotCapacity={equipmentSlotCapacity.equipmentSlot2}
             onSwapToTop={(rIdx) => swapEquipmentToTop('equipmentSlot2', rIdx)}
-            onReorderEquipment={(stackIdx, dir) => moveEquipmentInStack('equipmentSlot2', stackIdx, dir)}
             statModifier={equipmentSlot2StatModifier}
             scaleMultiplier={stageScale}
             permanentDamageBonus={getEquipmentSlotBonus('equipmentSlot2', 'damage')}

@@ -1345,63 +1345,6 @@ html {
     );
   }
 
-  /* Equipment stack reorder buttons */
-  .equip-stack-card-wrapper {
-    position: relative;
-  }
-
-  .equip-reorder-buttons {
-    position: absolute;
-    left: 2px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    z-index: 50;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    pointer-events: none;
-  }
-
-  .equip-stack-card-wrapper:hover .equip-reorder-buttons {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  @media (pointer: coarse) {
-    .equip-reorder-buttons {
-      opacity: 1;
-      pointer-events: auto;
-    }
-  }
-
-  .equip-reorder-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: calc(20px * var(--dh-hero-instance-scale, 1));
-    height: calc(20px * var(--dh-hero-instance-scale, 1));
-    min-width: 16px;
-    min-height: 16px;
-    border-radius: 50%;
-    border: 1.5px solid hsl(var(--border));
-    background: hsl(var(--background) / 0.92);
-    color: hsl(var(--foreground));
-    cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-    transition: background 0.12s, transform 0.12s;
-  }
-
-  .equip-reorder-btn:hover {
-    background: hsl(var(--accent));
-    transform: scale(1.15);
-  }
-
-  .equip-reorder-btn:active {
-    transform: scale(0.95);
-  }
-
   .equip-slot-target-btn {
     width: 80%;
     max-width: 12rem;
