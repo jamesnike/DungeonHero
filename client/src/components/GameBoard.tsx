@@ -6132,7 +6132,7 @@ export default function GameBoard() {
       if (slot?.amuletEffect !== 'recycle-forge') return slot;
       return {
         ...slot,
-        description: `每从手牌里使用 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${display}/5]`,
+        description: `每使用或弃置 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${display}/5]`,
       };
     }));
   };
@@ -6145,7 +6145,7 @@ export default function GameBoard() {
     if (next % 5 === 0) {
       const restored = restorePermanentMagicFromRecycleBag();
       const drawn = takeRandomCardsFromBackpack(Math.min(2, backpackItemsRef.current.length));
-      drawn.forEach(c => queueCardIntoHand(c));
+      drawn.forEach(c => ensureCardInHand(c));
       const parts: string[] = [];
       parts.push(restored > 0 ? `回收熔炉：回收袋返还 ${restored} 张牌` : '回收熔炉：回收袋为空');
       if (drawn.length > 0) parts.push(`抽到 ${drawn.map(c => c.name).join('、')}`);
@@ -7540,7 +7540,7 @@ export default function GameBoard() {
       if (slot?.amuletEffect !== 'recycle-forge') return slot;
       return {
         ...slot,
-        description: `每从手牌里使用 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${savedForgeCount % 5}/5]`,
+        description: `每使用或弃置 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${savedForgeCount % 5}/5]`,
       };
     }));
     setBackpackItems(
@@ -11065,7 +11065,7 @@ export default function GameBoard() {
             name: '回收熔炉',
             value: 0,
             image: forgeHeartAmuletImage,
-            description: '每从手牌里使用 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [0/5]',
+            description: '每使用或弃置 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [0/5]',
             amuletEffect: 'recycle-forge',
           };
           void triggerEventTransform(card, recycleForgeAmulet, '回收灵焰翻转为「回收熔炉」');
@@ -11254,6 +11254,7 @@ export default function GameBoard() {
 
   // Function to handle skill card effects - Defined early to be available for other handlers
   async function handleSkillCard(card: GameCardData) {
+    const handCards = [...handCardsRef.current];
     const knightCard = card as KnightCardData;
     
     if (card.isCurse && knightCard.knightEffect === 'greed-curse') {
@@ -13712,6 +13713,7 @@ export default function GameBoard() {
           } else {
             discardCardToGraveyard(card, { owner: 'player' });
           }
+          tickRecycleForge();
           resetDragState();
           return;
         }
@@ -13747,6 +13749,7 @@ export default function GameBoard() {
         setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
         addGameLog('magic', `弃置护符「${card.name}」回到回收袋。`);
         setHeroSkillBanner(`${card.name} 已弃置回回收袋。`);
+        tickRecycleForge();
         resetDragState();
         return;
       }
