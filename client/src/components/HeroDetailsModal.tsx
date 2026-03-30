@@ -66,7 +66,8 @@ const permanentSkillHints: Record<string, string> = {
   'Battle Frenzy': '生命低于 50% 时，额外 +2 武器伤害。',
   'Iron Skin': '所有护甲获得 +1 防御加成。',
   Bloodthirsty: '击杀怪物后回复 2 点生命值。',
-  '潮涌铸甲': '每次瀑流推进时，随机一侧装备栏永久护甲 +1。',
+  '潮涌铸甲': '瀑流铸甲 / 格挡铸甲（见下方子效果）。',
+  '幽魂净化': '当背包为空时，自动将回收袋里的牌洗回背包（每波瀑流一次）。',
 };
 
 const formatSignedValue = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
@@ -323,6 +324,41 @@ export default function HeroDetailsModal({
                 {permanentSkills.map((skill, index) => {
                   const { label, description } = describePermanentSkill(skill);
                   const stacks = permanentSkillStacks?.[skill] ?? 0;
+
+                  if (skill === '潮涌铸甲') {
+                    const waterfallStacks = permanentSkillStacks?.['潮涌铸甲·瀑流'] ?? 0;
+                    const blockStacks = permanentSkillStacks?.['潮涌铸甲·格挡'] ?? 0;
+                    const parts: string[] = [];
+                    if (waterfallStacks > 0) {
+                      const suffix = waterfallStacks > 1 ? `（×${waterfallStacks}层）` : '';
+                      parts.push(`瀑流铸甲${suffix}：每次瀑流，随机一侧装备栏永久护甲 +${waterfallStacks}。`);
+                    }
+                    if (blockStacks > 0) {
+                      const tempGain = 3 * blockStacks;
+                      const suffix = blockStacks > 1 ? `（×${blockStacks}层）` : '';
+                      parts.push(`格挡铸甲${suffix}：每次格挡，该装备栏临时护甲 +${tempGain}（瀑流重置）。`);
+                    }
+                    return (
+                      <div key={`${label}-${index}`} className="rounded-xl border border-border/60 bg-muted/30 p-3">
+                        <div className="flex items-center gap-2 font-medium text-foreground">
+                          <span>{label}</span>
+                          {stacks > 1 && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                              ×{stacks}
+                            </Badge>
+                          )}
+                        </div>
+                        {parts.length > 0 ? (
+                          <div className="mt-1 space-y-0.5">
+                            {parts.map((p, pi) => (
+                              <p key={pi} className="text-xs text-muted-foreground">{p}</p>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  }
+
                   return (
                     <div key={`${label}-${index}`} className="rounded-xl border border-border/60 bg-muted/30 p-3">
                       <div className="flex items-center gap-2 font-medium text-foreground">

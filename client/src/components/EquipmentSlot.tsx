@@ -27,6 +27,7 @@ interface EquipmentSlotProps {
   scaleMultiplier?: number;
   permanentDamageBonus?: number;
   permanentShieldBonus?: number;
+  tempShieldBonus?: number;
   onDrop?: (card: any) => void;
   onDragStart?: (item: any) => void;
   onDragEnd?: () => void;
@@ -57,6 +58,7 @@ export default function EquipmentSlot({
   scaleMultiplier = 1,
   permanentDamageBonus = 0,
   permanentShieldBonus = 0,
+  tempShieldBonus = 0,
   onDrop,
   onDragStart,
   onDragEnd,
@@ -263,6 +265,12 @@ export default function EquipmentSlot({
           <span className="text-red-500">{formatBonus(permanentDamageBonus)}{!isCompact && ' DMG'}</span>
           <span className="text-muted-foreground/50">|</span>
           <span className="text-blue-500">{formatBonus(permanentShieldBonus)}{!isCompact && ' SHD'}</span>
+          {tempShieldBonus > 0 && (
+            <>
+              <span className="text-muted-foreground/50">|</span>
+              <span className="text-cyan-400">{formatBonus(tempShieldBonus)}{!isCompact && ' TMP'}</span>
+            </>
+          )}
         </div>
       )}
 
@@ -437,7 +445,7 @@ export default function EquipmentSlot({
       )}
       {isUnbreakable && gameCardData && (
         <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-40 bg-yellow-400/90 text-yellow-900 font-bold px-2 py-0.5 rounded-full shadow-md border border-yellow-500 text-xs whitespace-nowrap animate-pulse">
-          永恒修复
+          涌泉满手
         </div>
       )}
       {type === 'equipment' && gameCardData && acceptsDrop && (

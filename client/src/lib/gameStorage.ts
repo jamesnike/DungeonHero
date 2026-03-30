@@ -96,16 +96,21 @@ export interface PersistedGameState {
   unbreakableNext?: boolean;
   unbreakableUntilWaterfall?: Record<string, boolean>;
   bulwarkPassiveActive?: number | boolean;
+  bulwarkTempArmorStacks?: number;
+  slotTempArmor?: Record<string, number>;
   defensiveStanceActive?: boolean;
   doubleNextMagic?: boolean;
   berserkerRageActive?: boolean;
   berserkerSlotUsed?: Record<string, boolean>;
+  gambitExtraActive?: boolean;
+  gambitSlotUsed?: Record<string, boolean>;
   heroSkillUsedThisWave?: boolean;
   /** 本波已用的额外英雄技能 id（商店发现等） */
   extraSkillsUsedThisWave?: string[];
   handLimitBonus?: number;
   drawPending?: boolean;
   waveDiscardCount?: number;
+  wraithPassiveEnabled?: boolean;
   resolvingDungeonCardId?: string | null;
   currentEventCard?: GameCardData | null;
   eventModalOpen?: boolean;

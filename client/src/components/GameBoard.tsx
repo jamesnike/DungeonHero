@@ -27,7 +27,7 @@ import EquipmentSlot from './EquipmentSlot';
 // CombatPanel removed — only the standalone End Hero Turn button is used
 import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
 import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag, Trophy, Skull } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import AmuletSlot from './AmuletSlot';
 import GraveyardZone from './GraveyardZone';
@@ -44,6 +44,7 @@ import BackpackZone from './BackpackZone';
 import BackpackViewerModal from './BackpackViewerModal';
 import MonsterRewardModal from '@/components/MonsterRewardModal';
 import HeroDetailsModal from './HeroDetailsModal';
+import MagicChoiceModal, { type MagicChoiceModalState } from './MagicChoiceModal';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
 // import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
@@ -68,6 +69,7 @@ import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoSt
 import { applyMonsterRage } from '@/lib/monsterRage';
 import CardDetailsModal from './CardDetailsModal';
 import DiscoverClassModal from './DiscoverClassModal';
+import GraveyardExileModal from './GraveyardExileModal';
 import CardDeletionModal from './CardDeletionModal';
 import ShopModal, { type ShopOffering } from './ShopModal';
 import ShopSkillSelectModal from './ShopSkillSelectModal';
@@ -116,6 +118,7 @@ import type {
   PendingPotionAction,
   Point,
   SlotPermanentBonus,
+  SlotTempArmorState,
   SwordVector,
   UndoSnapshot,
   UndoTransientState,
@@ -438,7 +441,7 @@ const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasHeal: false,
   hasBalance: false,
   hasLife: false,
-  hasGuardian: false,
+  hasCatapult: false,
   hasFlash: false,
   hasStrength: false,
   hasDualGuard: false,
@@ -523,14 +526,15 @@ const DISCARD_FLIGHT_VARIANCE = 200;
 const DISCARD_FLIGHT_ARC_MIN = 30;
 const DISCARD_FLIGHT_ARC_VARIANCE = 45;
 
-/** After load/undo, re-bind art by English weapon name so Dagger ≠ Swift Blade (old saves stored the same image URL for both). */
+/** After load/undo, re-bind art by English weapon name so Dagger ≠ 虚灵刀 (old saves stored the same image URL for both). */
 function patchPersistedMainDeckWeaponImage(card: GameCardData): GameCardData {
   if (card.type !== 'weapon') return card;
   switch (card.name) {
     case 'Dagger':
       return { ...card, image: daggerWeaponImage };
+    case '虚灵刀':
     case 'Swift Blade':
-      return { ...card, image: daggerImage };
+      return { ...card, name: '虚灵刀', image: daggerImage, ghostBladeExile: true, description: card.description || '每次攻击后，可从坟场选择卡牌移除出游戏。' };
     case 'Holy Blade':
       return { ...card, image: holyBladeImage };
     case 'Mace':
@@ -701,7 +705,7 @@ function createDeck(): GameCardData[] {
     { name: 'Sword', image: axeImage },
     { name: 'Dagger', image: daggerWeaponImage },
     { name: 'Mace', image: maceImage },
-    { name: 'Swift Blade', image: daggerImage },
+    { name: '虚灵刀', image: daggerImage },
     { name: 'Sword', image: axeImage },
   ];
   
@@ -725,9 +729,11 @@ function createDeck(): GameCardData[] {
       card.durability = hbDurability;
       card.maxDurability = hbDurability;
     }
-    if (weaponType.name === 'Swift Blade') {
+    if (weaponType.name === '虚灵刀') {
       card.durability = Math.floor(Math.random() * 3) + 2;
       card.maxDurability = card.durability;
+      card.ghostBladeExile = true;
+      card.description = '每次攻击后，可从坟场选择卡牌移除出游戏。';
     }
     if (weaponType.name === 'Mace') {
       card.value = Math.floor(Math.random() * 2) + 1;
@@ -918,11 +924,11 @@ function createDeck(): GameCardData[] {
     },
     {
       type: 'amulet',
-      name: 'Guardian Amulet',
+      name: 'Catapult Amulet',
       value: 5,
       image: guardianAmuletImage,
-      description: '有护盾格挡时，超出格挡的伤害最多为 6 点。',
-      amuletEffect: 'guardian',
+      description: '每次手动拖动一张牌到墓地后，抽一张牌。',
+      amuletEffect: 'catapult',
     },
     {
       type: 'amulet',
@@ -990,7 +996,7 @@ function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '获得被动技能：之后每次瀑流计数增加时，随机一侧装备栏永久护甲 +1。'
+    magicEffect: '2选1被动：瀑流铸甲（每次瀑流随机装备栏护甲+1）或格挡铸甲（每次格挡该栏临时护甲+3，瀑流重置）。'
   });
 
   deck.push({
@@ -1006,11 +1012,11 @@ function createDeck(): GameCardData[] {
   deck.push({
     id: `magic-${id++}`,
     type: 'magic',
-    name: '永恒修复',
+    name: '涌泉满手',
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '选择一件武器或随从，在下个瀑流之前使用不消耗耐久。'
+    magicEffect: '手牌补充到上限（从背包抽牌）。'
   });
 
   // Event cards rewritten (first six)
@@ -1460,6 +1466,8 @@ const STARTER_CARD_IDS = {
   shieldWallStarter: 'starter-shield-shield-wall',
   /** 选择「愈战愈勇」时加入背包，与药水翻转的治愈余韵效果相同 */
   healEcho: 'starter-perm-heal-echo',
+  /** 选择「亡灵拾遗」时替换新手短剑 */
+  ghostBladeStarter: 'starter-weapon-ghost-blade',
 } as const;
 
 function createStarterHealEchoCard(): GameCardData {
@@ -1518,7 +1526,7 @@ function createStarterBackpack(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，置于牌堆底（不打乱牌堆）。',
       description: '将一张地城卡牌放到牌堆最底部。',
-      recycleDelay: 2,
+      recycleDelay: 1,
     },
     {
       id: STARTER_CARD_IDS.dungeonSwap,
@@ -1607,8 +1615,8 @@ export default function GameBoard() {
         case 'life':
           state.hasLife = true;
           break;
-        case 'guardian':
-          state.hasGuardian = true;
+        case 'catapult':
+          state.hasCatapult = true;
           break;
         case 'flash':
           state.hasFlash = true;
@@ -2424,6 +2432,9 @@ export default function GameBoard() {
   const [isDraggingToHand, setIsDraggingToHand] = useState(false); // Show hand acquisition zone
   const [isDraggingFromDungeon, setIsDraggingFromDungeon] = useState(false); // Track if dragging from dungeon
   const [permanentSkills, setPermanentSkills] = useState<string[]>([]); // Track permanent skill effects
+  const [wraithPassiveEnabled, setWraithPassiveEnabled] = useState(false);
+  const wraithPassiveEnabledRef = useRef(false);
+  const [wraithPassiveUnlockPopup, setWraithPassiveUnlockPopup] = useState(false);
   const [tempShield, setTempShield] = useState(0); // Temporary shield from skills
   const [classDeck, setClassDeck] = useState<GameCardData[]>([]); // Class deck cards
   const [eventModalOpen, setEventModalOpen] = useState(false);
@@ -2448,6 +2459,8 @@ export default function GameBoard() {
   const [eventDiceModal, setEventDiceModal] = useState<EventDiceModalState | null>(null);
   const [eventDiceRollKey, setEventDiceRollKey] = useState(0);
   const eventDiceResolverRef = useRef<((entry: EventDiceRange | null) => void) | null>(null);
+  const [magicChoiceModal, setMagicChoiceModal] = useState<MagicChoiceModalState | null>(null);
+  const magicChoiceResolverRef = useRef<((optionId: string) => void) | null>(null);
   const [equipmentPrompt, setEquipmentPrompt] = useState<EquipmentPromptState | null>(null);
   const equipmentPromptResolverRef = useRef<((slot: EquipmentSlotId | null) => void) | null>(null);
   const [eventTransformState, setEventTransformState] = useState<EventTransformState | null>(null);
@@ -2455,6 +2468,9 @@ export default function GameBoard() {
   const graveyardDiscoverResolverRef = useRef<((card: GameCardData | null) => void) | null>(null);
   /** 坟场三选一取回目的地：亡灵拾遗优先入手牌，其余默认背包 */
   const graveyardDiscoverDeliveryRef = useRef<'backpack' | 'hand-first'>('backpack');
+  /** 虚灵刀：攻击后弹出的坟场放逐弹窗 */
+  const [ghostBladeExileCards, setGhostBladeExileCards] = useState<GameCardData[] | null>(null);
+  const ghostBladeExileResolverRef = useRef<(() => void) | null>(null);
   const suppressDeathWardRef = useRef(false);
   
   // Hero class system state
@@ -2490,6 +2506,10 @@ export default function GameBoard() {
   const [bulwarkPassiveActive, setBulwarkPassiveActive] = useState(0);
   const bulwarkPassiveRef = useRef(0);
   bulwarkPassiveRef.current = bulwarkPassiveActive;
+  const [bulwarkTempArmorStacks, setBulwarkTempArmorStacks] = useState(0);
+  const bulwarkTempArmorRef = useRef(0);
+  bulwarkTempArmorRef.current = bulwarkTempArmorStacks;
+  const [slotTempArmor, setSlotTempArmor] = useState<SlotTempArmorState>({ equipmentSlot1: 0, equipmentSlot2: 0 });
   const [defensiveStanceActive, setDefensiveStanceActive] = useState(false); // Damage reduction this turn
   const [slotAttackBursts, setSlotAttackBursts] = useState<Record<EquipmentSlotId, number>>(
     () => createEmptyEquipmentBuffState(),
@@ -2531,6 +2551,8 @@ export default function GameBoard() {
   const [selectedMonsterRewards, setSelectedMonsterRewards] = useState<MonsterRewardOption[] | null>(null);
   const [berserkerRageActive, setBerserkerRageActive] = useState(false);
   const [berserkerSlotUsed, setBerserkerSlotUsed] = useState<Record<string, boolean>>({});
+  const [gambitExtraActive, setGambitExtraActive] = useState(false);
+  const [gambitSlotUsed, setGambitSlotUsed] = useState<Record<string, boolean>>({});
 
   const ensureCardInHand = useCallback((card: GameCardData) => {
     setHandCards(prev => {
@@ -2878,6 +2900,8 @@ export default function GameBoard() {
     });
     setBerserkerRageActive(false);
     setBerserkerSlotUsed({});
+    setGambitExtraActive(false);
+    setGambitSlotUsed({});
     setUnbreakableUntilWaterfall({ equipmentSlot1: false, equipmentSlot2: false });
   }, [clearAllBackpackHandFallbacks]);
 
@@ -2885,6 +2909,8 @@ export default function GameBoard() {
     setTurnDamageTaken(0);
     clearBerserkTurnBuff();
     setExtraAttackCharges(0);
+    setGambitExtraActive(false);
+    setGambitSlotUsed({});
   }, [turnCount, clearBerserkTurnBuff]);
 
   const heroFrameRef = useRef<HTMLDivElement | null>(null);
@@ -4287,6 +4313,7 @@ export default function GameBoard() {
     addGameLog('combat', '战斗结束');
     setCombatState(initialCombatState);
     setBerserkerSlotUsed({});
+    setGambitSlotUsed({});
   };
 
   const executeLastWords = async (monster: GameCardData) => {
@@ -4767,15 +4794,17 @@ export default function GameBoard() {
     const slotAlreadyAttacked = combatState.heroAttacksThisTurn[slotId];
     const hasBaseAttack = combatState.heroAttacksRemaining > 0;
     const canUseBerserkerExtra = berserkerRageActive && slotAlreadyAttacked && !berserkerSlotUsed[slotId];
+    const canUseGambitExtra = gambitExtraActive && slotAlreadyAttacked && !gambitSlotUsed[slotId];
     const needsExtraCharge = slotAlreadyAttacked || !hasBaseAttack;
-    if (needsExtraCharge && !canUseBerserkerExtra && extraAttackCharges <= 0) {
+    if (needsExtraCharge && !canUseBerserkerExtra && !canUseGambitExtra && extraAttackCharges <= 0) {
       return;
     }
     if (!needsExtraCharge && !hasBaseAttack) {
       return;
     }
     const usingBerserkerExtra = needsExtraCharge && canUseBerserkerExtra;
-    const usingExtraCharge = needsExtraCharge && !usingBerserkerExtra && extraAttackCharges > 0;
+    const usingGambitExtra = needsExtraCharge && !usingBerserkerExtra && canUseGambitExtra;
+    const usingExtraCharge = needsExtraCharge && !usingBerserkerExtra && !usingGambitExtra && extraAttackCharges > 0;
 
     const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
     if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) {
@@ -4964,8 +4993,12 @@ export default function GameBoard() {
       setBerserkerSlotUsed(prev => ({ ...prev, [slotId]: true }));
     }
 
+    if (usingGambitExtra) {
+      setGambitSlotUsed(prev => ({ ...prev, [slotId]: true }));
+    }
+
     const killRestoresDurability = monsterDefeated && slotItem.restoreDurabilityOnKill && !!slotItem.maxDurability;
-    if (!usingBerserkerExtra && !unbreakableUntilWaterfall[slotId] && !killRestoresDurability) {
+    if (!berserkerRageActive && !unbreakableUntilWaterfall[slotId] && !killRestoresDurability) {
       let skipDurabilityLoss = false;
       const saveChance = slotItem.weaponDurabilitySaveChance;
       if (saveChance && saveChance > 0 && !unbreakableNext) {
@@ -5051,6 +5084,10 @@ export default function GameBoard() {
         void checkWraithRebirth(targetMonster.id, targetMonster.name, targetMonster.fury ?? targetMonster.hpLayers ?? 1, layersBeforeAttack, layersAfterAttack);
       }
     }
+
+    if (slotItem.ghostBladeExile) {
+      await triggerGhostBladeExile();
+    }
   };
 
   const endHeroTurn = () => {
@@ -5089,6 +5126,7 @@ export default function GameBoard() {
 
     heroTurnLayerLossIdsRef.current.clear();
     setBerserkerSlotUsed({});
+    setGambitSlotUsed({});
 
     const drawnCard = drawFromBackpackToHand();
     if (drawnCard) {
@@ -5180,9 +5218,10 @@ export default function GameBoard() {
         } else {
           const baseArmor = slotItem.type === 'monster' ? (slotItem.hp ?? slotItem.value) : slotItem.value;
           const slotShieldBonus = getEquipmentSlotBonus(blockSlotId, 'shield');
+          const slotTemp = slotTempArmor[blockSlotId] ?? 0;
           const balanceBonus = amuletEffects.hasBalance && blockSlotId === 'equipmentSlot2' ? BALANCE_SHIELD_BONUS : 0;
           const balanceShieldPenalty = amuletEffects.hasBalance && blockSlotId === 'equipmentSlot1' ? BALANCE_SHIELD_PENALTY : 0;
-          const shieldValue = Math.max(0, baseArmor + defenseBonus + slotShieldBonus + balanceBonus - balanceShieldPenalty);
+          const shieldValue = Math.max(0, baseArmor + defenseBonus + slotShieldBonus + slotTemp + balanceBonus - balanceShieldPenalty);
           triggerShieldBlockAnimation(blockSlotId);
           const blocked = Math.min(remainingDamage, shieldValue);
           remainingDamage = Math.max(0, remainingDamage - shieldValue);
@@ -5260,6 +5299,14 @@ export default function GameBoard() {
           }
         }
       }
+    }
+
+    if (blockedWithShield && bulwarkTempArmorRef.current > 0) {
+      const blockSlotId = target as EquipmentSlotId;
+      const tempGain = 3 * bulwarkTempArmorRef.current;
+      setSlotTempArmor(prev => ({ ...prev, [blockSlotId]: (prev[blockSlotId] ?? 0) + tempGain }));
+      const label = blockSlotId === 'equipmentSlot1' ? '左' : '右';
+      addGameLog('magic', `潮涌铸甲被动：${label}装备栏临时护甲 +${tempGain}`);
     }
 
     if (remainingDamage > 0) {
@@ -5595,7 +5642,7 @@ export default function GameBoard() {
       setBerserkerSlotUsed({});
       completeHeroMagicActivation('berserker-rage', origin);
       logHeroMagic('berserker-trigger', { origin });
-      setHeroSkillBanner('狂战发动：直到下次瀑布前，每个武器栏每回合可多攻击一次，且不消耗耐久。');
+      setHeroSkillBanner('狂战发动：直到下次瀑布前，每个武器栏每回合可多攻击一次，且所有攻击不消耗耐久。');
     },
     [completeHeroMagicActivation, setHeroSkillBanner],
   );
@@ -6426,6 +6473,22 @@ export default function GameBoard() {
     setEventDiceModal(null);
   }, []);
 
+  const requestMagicChoice = useCallback(
+    (config: MagicChoiceModalState) => {
+      return new Promise<string>(resolve => {
+        magicChoiceResolverRef.current = resolve;
+        setMagicChoiceModal(config);
+      });
+    },
+    [],
+  );
+
+  const handleMagicChoice = useCallback((optionId: string) => {
+    magicChoiceResolverRef.current?.(optionId);
+    magicChoiceResolverRef.current = null;
+    setMagicChoiceModal(null);
+  }, []);
+
   const requestEquipmentSelection = useCallback(
     (prompt: EquipmentPromptState): Promise<EquipmentSlotId | null> => {
       return new Promise(resolve => {
@@ -6827,15 +6890,20 @@ export default function GameBoard() {
       unbreakableNext,
       unbreakableUntilWaterfall,
       bulwarkPassiveActive,
+      bulwarkTempArmorStacks,
+      slotTempArmor: { ...slotTempArmor },
       defensiveStanceActive,
       doubleNextMagic,
       berserkerRageActive,
       berserkerSlotUsed,
+      gambitExtraActive,
+      gambitSlotUsed,
       heroSkillUsedThisWave,
       extraSkillsUsedThisWave: Array.from(extraSkillsUsedThisWave),
       handLimitBonus,
       drawPending,
       waveDiscardCount,
+      wraithPassiveEnabled,
       resolvingDungeonCardId,
       currentEventCard,
       eventModalOpen,
@@ -6894,15 +6962,20 @@ export default function GameBoard() {
     unbreakableNext,
     unbreakableUntilWaterfall,
     bulwarkPassiveActive,
+    bulwarkTempArmorStacks,
+    slotTempArmor,
     defensiveStanceActive,
     doubleNextMagic,
     berserkerRageActive,
     berserkerSlotUsed,
+    gambitExtraActive,
+    gambitSlotUsed,
     heroSkillUsedThisWave,
     extraSkillsUsedThisWave,
     handLimitBonus,
     drawPending,
     waveDiscardCount,
+    wraithPassiveEnabled,
     resolvingDungeonCardId,
     currentEventCard,
     eventModalOpen,
@@ -7284,7 +7357,11 @@ export default function GameBoard() {
     setTotalDamageTaken(0);
     setTotalHealed(0);
     setDiscardedCards([]);
+    setGhostBladeExileCards(null);
+    ghostBladeExileResolverRef.current = null;
     setPermanentSkills([]);
+    setWraithPassiveEnabled(false);
+    wraithPassiveEnabledRef.current = false;
     setPermanentMaxHpBonus(0);
     setPermanentSpellDamageBonus(0);
     setHeroMagicState(createInitialHeroMagicState());
@@ -7318,6 +7395,8 @@ export default function GameBoard() {
     setUnbreakableNext(false);
     setUnbreakableUntilWaterfall({ equipmentSlot1: false, equipmentSlot2: false });
     setBulwarkPassiveActive(0);
+    setBulwarkTempArmorStacks(0);
+    setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
     setDefensiveStanceActive(false);
     setSlotAttackBursts({ equipmentSlot1: 0, equipmentSlot2: 0 });
     setNextAttackLifestealSlot(null);
@@ -7492,6 +7571,9 @@ export default function GameBoard() {
     setHeroVariant(snapshot.heroVariant ?? getRandomHero());
 
     setPermanentSkills(Array.isArray(snapshot.permanentSkills) ? snapshot.permanentSkills : []);
+    const restoredWraithPassive = Boolean(snapshot.wraithPassiveEnabled);
+    setWraithPassiveEnabled(restoredWraithPassive);
+    wraithPassiveEnabledRef.current = restoredWraithPassive;
     setPermanentMaxHpBonus(snapshot.permanentMaxHpBonus ?? 0);
     setPermanentSpellDamageBonus(snapshot.permanentSpellDamageBonus ?? 0);
     setBackpackCapacityModifier(snapshot.backpackCapacityModifier ?? 0);
@@ -7515,6 +7597,8 @@ export default function GameBoard() {
     }
     setBerserkerRageActive(snapshot.berserkerRageActive ?? false);
     setBerserkerSlotUsed(snapshot.berserkerSlotUsed ?? {});
+    setGambitExtraActive(snapshot.gambitExtraActive ?? false);
+    setGambitSlotUsed(snapshot.gambitSlotUsed ?? {});
 
     if (snapshot.combatState && snapshot.combatState.engagedMonsterIds.length > 0) {
       setCombatState({
@@ -7564,6 +7648,11 @@ export default function GameBoard() {
       snapshot.unbreakableUntilWaterfall ?? { equipmentSlot1: false, equipmentSlot2: false },
     );
     setBulwarkPassiveActive(Number(snapshot.bulwarkPassiveActive) || 0);
+    setBulwarkTempArmorStacks(Number(snapshot.bulwarkTempArmorStacks) || 0);
+    setSlotTempArmor(snapshot.slotTempArmor
+      ? { equipmentSlot1: snapshot.slotTempArmor.equipmentSlot1 ?? 0, equipmentSlot2: snapshot.slotTempArmor.equipmentSlot2 ?? 0 }
+      : { equipmentSlot1: 0, equipmentSlot2: 0 },
+    );
     setDoubleNextMagic(Boolean(snapshot.doubleNextMagic));
     setDefensiveStanceActive(Boolean(snapshot.defensiveStanceActive));
     setTakingDamage(false);
@@ -7711,9 +7800,9 @@ export default function GameBoard() {
     clearUndoStorage();
   }, []);
 
-  /** Per-card discard hooks (弃牌获利、卡牌 onDiscardDamage、雷霆符印等)，与是否进墓地/回收袋无关 */
+  /** Per-card discard hooks (弃牌获利、卡牌 onDiscardDamage、雷霆符印等) */
   const applyDiscardSideEffects = useCallback(
-    (card: GameCardData, owner: 'player' | 'dungeon') => {
+    (card: GameCardData, owner: 'player' | 'dungeon', opts?: { toRecycleBag?: boolean }) => {
       if (owner === 'player' && selectedHeroSkillRef.current === 'discard-profit') {
         setGold(prev => prev + 2);
         addGameLog('gold', `弃牌获利：弃置「${card.name}」获得 2 金币`);
@@ -7764,7 +7853,7 @@ export default function GameBoard() {
           addGameLog('magic', `${card.name} 被弃：背包为空，未能抽牌`);
         }
       }
-      if ((card as GameCardData).amuletEffect !== 'discard-zap' && !waterfallLockRef.current) {
+      if ((card as GameCardData).amuletEffect !== 'discard-zap' && !opts?.toRecycleBag) {
         triggerDiscardShock();
       }
     },
@@ -7996,6 +8085,23 @@ export default function GameBoard() {
       addCardToBackpack(createStarterHealEchoCard());
       addGameLog('skill', '愈战愈勇：开局获得永久魔法「治愈余韵」');
     }
+    if (skillId === 'graveyard-recall') {
+      const ghostBlade: GameCardData = {
+        id: STARTER_CARD_IDS.ghostBladeStarter,
+        type: 'weapon',
+        name: '虚灵刀',
+        value: 3,
+        image: daggerImage,
+        durability: 3,
+        maxDurability: 3,
+        ghostBladeExile: true,
+        description: '每次攻击后，可从坟场选择卡牌移除出游戏。',
+      };
+      setBackpackItems(prev =>
+        prev.map(c => (c.id === STARTER_CARD_IDS.trainingBlade ? ghostBlade : c)),
+      );
+      addGameLog('skill', '亡灵拾遗：开局装备替换为「虚灵刀」');
+    }
     if (skillId === 'shield-wall') {
       const thunderSeal = classDeck.find(
         c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap',
@@ -8051,9 +8157,10 @@ export default function GameBoard() {
     }
     const baseArmor = slotItem.type === 'monster' ? (slotItem.hp ?? slotItem.value) : slotItem.value;
     const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
+    const slotTemp = slotTempArmor[slotId] ?? 0;
     const balanceBonus = amuletEffects.hasBalance && slotId === 'equipmentSlot2' ? BALANCE_SHIELD_BONUS : 0;
     const balanceShieldPenalty = amuletEffects.hasBalance && slotId === 'equipmentSlot1' ? BALANCE_SHIELD_PENALTY : 0;
-    return Math.max(0, baseArmor + defenseBonus + slotShieldBonus + balanceBonus - balanceShieldPenalty);
+    return Math.max(0, baseArmor + defenseBonus + slotShieldBonus + slotTemp + balanceBonus - balanceShieldPenalty);
   };
 
   const getEquipmentSlotStatModifier = (slotId: EquipmentSlotId): EquipmentSlotStatModifier | null => {
@@ -8089,11 +8196,12 @@ export default function GameBoard() {
 
     if (slotItem.type === 'shield') {
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
+      const slotTemp = slotTempArmor[slotId] ?? 0;
       const balanceBonus =
         amuletEffects.hasBalance && slotId === 'equipmentSlot2' ? BALANCE_SHIELD_BONUS : 0;
       const balancePenalty =
         amuletEffects.hasBalance && slotId === 'equipmentSlot1' ? BALANCE_SHIELD_PENALTY : 0;
-      const modifier = defenseBonus + slotShieldBonus + balanceBonus - balancePenalty;
+      const modifier = defenseBonus + slotShieldBonus + slotTemp + balanceBonus - balancePenalty;
 
       return {
         appliesTo: 'shield',
@@ -8121,11 +8229,12 @@ export default function GameBoard() {
         flashPenalty;
 
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
+      const slotTemp = slotTempArmor[slotId] ?? 0;
       const balanceShieldBonus =
         amuletEffects.hasBalance && slotId === 'equipmentSlot2' ? BALANCE_SHIELD_BONUS : 0;
       const balanceShieldPenalty =
         amuletEffects.hasBalance && slotId === 'equipmentSlot1' ? BALANCE_SHIELD_PENALTY : 0;
-      const shieldModifier = defenseBonus + slotShieldBonus + balanceShieldBonus - balanceShieldPenalty;
+      const shieldModifier = defenseBonus + slotShieldBonus + slotTemp + balanceShieldBonus - balanceShieldPenalty;
 
       return {
         appliesTo: 'monster' as const,
@@ -8495,13 +8604,14 @@ export default function GameBoard() {
    * - 耐久归零毁坏 → 不算弃置，仅进坟场/回收袋，不触发弃置副作用。
    */
   function disposeOwnedEquipmentCard(card: GameCardData, options?: { isDestruction?: boolean }) {
-    if (isPermRecycleEquipment(card)) {
+    const toRecycleBag = isPermRecycleEquipment(card);
+    if (toRecycleBag) {
       addPermanentMagicToRecycleBag(card);
     } else {
       addToGraveyard(card);
     }
     if (!options?.isDestruction) {
-      applyDiscardSideEffects(card, 'player');
+      applyDiscardSideEffects(card, 'player', { toRecycleBag });
     }
   }
 
@@ -8513,17 +8623,21 @@ export default function GameBoard() {
       const owner = options?.owner ?? 'dungeon';
       const isGraveNovaCard =
         (card as KnightCardData | undefined)?.knightEffect === 'grave-nova';
+      let toRecycleBag = false;
       if (owner === 'player' && isGraveNovaCard) {
         triggerGraveNova();
         addPermanentMagicToRecycleBag(card);
+        toRecycleBag = true;
       } else if (options?.forceRecycleBag) {
         addPermanentMagicToRecycleBag(card);
+        toRecycleBag = true;
       } else if (!options?.forceGraveyard && isRecyclableFromHand(card) && card.type !== 'amulet') {
         addPermanentMagicToRecycleBag(card);
+        toRecycleBag = true;
       } else {
         addToGraveyard(card);
       }
-      applyDiscardSideEffects(card, owner);
+      applyDiscardSideEffects(card, owner, { toRecycleBag });
     },
     [addPermanentMagicToRecycleBag, addToGraveyard, applyDiscardSideEffects, triggerGraveNova],
   );
@@ -8595,6 +8709,55 @@ export default function GameBoard() {
   useEffect(() => {
     enforceBackpackCapacity();
   }, [backpackCapacity, enforceBackpackCapacity]);
+
+  const pendingWraithPassiveUnlockRef = useRef(false);
+
+  useEffect(() => {
+    if (permanentSkills.includes('幽魂净化')) return;
+    if (pendingWraithPassiveUnlockRef.current) return;
+    if (monstersDefeated === 0) return;
+
+    const hasWraith =
+      activeCards.some(c => c?.monsterType === 'Wraith') ||
+      previewCards.some(c => c?.monsterType === 'Wraith') ||
+      remainingDeck.some(c => c.monsterType === 'Wraith');
+
+    if (!hasWraith) {
+      pendingWraithPassiveUnlockRef.current = true;
+      setPermanentSkills(prev => {
+        if (prev.includes('幽魂净化')) return prev;
+        return [...prev, '幽魂净化'];
+      });
+      wraithPassiveEnabledRef.current = true;
+      setWraithPassiveEnabled(true);
+      addGameLog('skill', '所有幽魂已被消灭！获得被动技能：幽魂净化');
+    }
+  }, [activeCards, previewCards, remainingDeck, permanentSkills, monstersDefeated, addGameLog]);
+
+  useEffect(() => {
+    if (!pendingWraithPassiveUnlockRef.current) return;
+    if (activeMonsterReward || monsterRewardQueue.length > 0) return;
+    pendingWraithPassiveUnlockRef.current = false;
+    setWraithPassiveUnlockPopup(true);
+  }, [activeMonsterReward, monsterRewardQueue]);
+
+  useEffect(() => {
+    if (!permanentSkills.includes('幽魂净化')) return;
+    if (!wraithPassiveEnabledRef.current) return;
+    if (backpackItems.length > 0) return;
+    if (permanentMagicRecycleBag.length === 0) return;
+
+    wraithPassiveEnabledRef.current = false;
+    setWraithPassiveEnabled(false);
+
+    const cardsToMove = [...permanentMagicRecycleBag].map(c => sanitizeCardMetadata(c));
+    setPermanentMagicRecycleBag([]);
+    backpackItemsRef.current = cardsToMove;
+    setBackpackItems(cardsToMove);
+
+    addGameLog('skill', `幽魂净化：背包为空，${cardsToMove.length} 张牌从回收袋自动洗回背包！`);
+    setHeroSkillBanner(`幽魂净化：${cardsToMove.length} 张牌从回收袋洗回背包！`);
+  }, [backpackItems.length, permanentSkills, permanentMagicRecycleBag, addGameLog, setHeroSkillBanner]);
 
   useEffect(() => {
     backpackItemsRef.current = backpackItems;
@@ -8884,6 +9047,9 @@ export default function GameBoard() {
             for (let bi = 0; bi < bulwarkPassiveRef.current; bi++) {
               applyBulwarkPassiveShieldIncrement();
             }
+            if (bulwarkTempArmorRef.current > 0) {
+              setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
+            }
             setHeroSkillBanner(`${cardName} 的龙息加速了 waterfall 进程 +${wfx.amount}！`);
             waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
             break;
@@ -9142,9 +9308,22 @@ export default function GameBoard() {
     for (let bi = 0; bi < bulwarkPassiveRef.current; bi++) {
       applyBulwarkPassiveShieldIncrement();
     }
+    if (bulwarkTempArmorRef.current > 0) {
+      const prevLeft = slotTempArmor.equipmentSlot1;
+      const prevRight = slotTempArmor.equipmentSlot2;
+      if (prevLeft > 0 || prevRight > 0) {
+        setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
+        addGameLog('magic', '潮涌铸甲：瀑流重置，所有临时护甲归零');
+      }
+    }
     const recycledCards = restorePermanentMagicFromRecycleBag();
     if (recycledCards > 0) {
       logWaterfall('recycle-restore', { restored: recycledCards });
+    }
+
+    if (permanentSkills.includes('幽魂净化')) {
+      wraithPassiveEnabledRef.current = true;
+      setWraithPassiveEnabled(true);
     }
 
     logWaterfall('trigger', {
@@ -10051,6 +10230,42 @@ export default function GameBoard() {
     ],
   );
 
+  const triggerGhostBladeExile = useCallback(
+    (): Promise<void> => {
+      const graveyard = discardedCardsRef.current;
+      if (graveyard.length === 0) return Promise.resolve();
+      const shuffled = [...graveyard].sort(() => Math.random() - 0.5);
+      const options = shuffled.slice(0, Math.min(3, shuffled.length));
+      return new Promise<void>(resolve => {
+        ghostBladeExileResolverRef.current = resolve;
+        setGhostBladeExileCards(options);
+      });
+    },
+    [],
+  );
+
+  const handleGhostBladeExileConfirm = useCallback(
+    (selectedIds: string[]) => {
+      if (selectedIds.length > 0) {
+        setDiscardedCards(prev => {
+          const exileSet = new Set(selectedIds);
+          const next = prev.filter(c => !exileSet.has(c.id));
+          discardedCardsRef.current = next;
+          return next;
+        });
+        const exiledNames = (ghostBladeExileCards ?? [])
+          .filter(c => selectedIds.includes(c.id))
+          .map(c => c.name);
+        addGameLog('equip', `虚灵刀放逐：${exiledNames.join('、')} 被移除出游戏。`);
+        setHeroSkillBanner(`虚灵刀放逐了 ${exiledNames.join('、')}！`);
+      }
+      setGhostBladeExileCards(null);
+      ghostBladeExileResolverRef.current?.();
+      ghostBladeExileResolverRef.current = null;
+    },
+    [addGameLog, ghostBladeExileCards, setHeroSkillBanner],
+  );
+
   const handleShopDeleteRequest = useCallback(() => {
     pushUndoSnapshot();
     if (shopDeleteUsed || deletableCardCount === 0) {
@@ -10508,7 +10723,7 @@ export default function GameBoard() {
           Boolean(cardActionContext.discardToRecycleBag);
         if (recycleBagDiscard) {
           addPermanentMagicToRecycleBag(cardToDelete);
-          applyDiscardSideEffects(cardToDelete, 'player');
+          applyDiscardSideEffects(cardToDelete, 'player', { toRecycleBag: true });
         } else {
           discardCardToGraveyard(cardToDelete, { owner: 'player' });
         }
@@ -10675,10 +10890,11 @@ export default function GameBoard() {
           applyDamage(hpLoss);
         }
         addBerserkTurnBuff(4);
-        grantExtraAttackCharges(1);
+        setGambitExtraActive(true);
+        setGambitSlotUsed({});
         consumeClassCardFromHand(card.id);
         finalizeMagicCard(card, {
-          banner: '狂血豪赌发动：本回合装备 +4 伤害并获得一次额外攻击机会。',
+          banner: '狂血豪赌发动：本回合装备 +4 伤害，每个武器栏可多攻击一次。',
         });
         return true;
       }
@@ -10824,7 +11040,7 @@ export default function GameBoard() {
     clearUndoStack();
     const eligible = discardedCards.filter(c => c.id !== card.id);
     const shuffled = [...eligible].sort(() => Math.random() - 0.5);
-    const recalled = shuffled.slice(0, Math.min(3, shuffled.length));
+    const recalled = shuffled.slice(0, Math.min(4, shuffled.length));
 
     recalled.forEach(c => {
       setDiscardedCards(prev => prev.filter(dc => dc.id !== c.id));
@@ -10840,11 +11056,7 @@ export default function GameBoard() {
     removeCard(card.id, false);
     setPendingMagicAction(null);
 
-    if (card.flipTarget) {
-      await applyCardFlip(card);
-    } else {
-      addToGraveyard(card);
-    }
+    addToGraveyard(card);
   };
 
   const resolveChaosDice = async (card: GameCardData) => {
@@ -11208,14 +11420,42 @@ export default function GameBoard() {
           return;
         }
         case '潮涌铸甲': {
-          const newStacks = bulwarkPassiveActive + 1;
-          setBulwarkPassiveActive(newStacks);
-          if (!permanentSkills.includes('潮涌铸甲')) {
-            setPermanentSkills(prev => [...prev, '潮涌铸甲']);
+          const choiceId = await requestMagicChoice({
+            title: '潮涌铸甲',
+            subtitle: '选择一个被动效果',
+            options: [
+              {
+                id: 'waterfall-armor',
+                label: '瀑流铸甲',
+                description: '被动：每次瀑流推进时，随机一侧装备栏永久护甲 +1。',
+              },
+              {
+                id: 'block-temp-armor',
+                label: '格挡铸甲',
+                description: '被动：每次格挡时，该装备栏获得 3 点临时护甲（下次瀑流时重置）。',
+              },
+            ],
+          });
+          if (choiceId === 'waterfall-armor') {
+            const newStacks = bulwarkPassiveActive + 1;
+            setBulwarkPassiveActive(newStacks);
+            if (!permanentSkills.includes('潮涌铸甲')) {
+              setPermanentSkills(prev => [...prev, '潮涌铸甲']);
+            }
+            const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
+            addGameLog('magic', `潮涌铸甲·瀑流铸甲激活${stackLabel}：之后每次瀑流，随机一侧装备栏永久护甲 +${newStacks}`);
+            finalizeMagicCard(card, { banner: `瀑流铸甲激活${stackLabel}！之后每次瀑流，随机装备栏永久护甲 +1 触发 ${newStacks} 次。` });
+          } else {
+            const newStacks = bulwarkTempArmorStacks + 1;
+            setBulwarkTempArmorStacks(newStacks);
+            if (!permanentSkills.includes('潮涌铸甲')) {
+              setPermanentSkills(prev => [...prev, '潮涌铸甲']);
+            }
+            const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
+            const tempGain = 3 * newStacks;
+            addGameLog('magic', `潮涌铸甲·格挡铸甲激活${stackLabel}：之后每次格挡，该装备栏临时护甲 +${tempGain}`);
+            finalizeMagicCard(card, { banner: `格挡铸甲激活${stackLabel}！每次格挡，该装备栏临时护甲 +${tempGain}（瀑流重置）。` });
           }
-          const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
-          addGameLog('magic', `潮涌铸甲激活${stackLabel}：之后每次瀑流，随机一侧装备栏永久护甲 +${newStacks}`);
-          finalizeMagicCard(card, { banner: `潮涌铸甲激活${stackLabel}！之后每次瀑流，随机装备栏永久护甲 +1 触发 ${newStacks} 次。` });
           return;
         }
         case '点金裁决': {
@@ -11243,30 +11483,19 @@ export default function GameBoard() {
           setHeroSkillBanner('点金裁决就绪，请选择目标怪物。');
           return;
         }
-        case '永恒修复': {
-          const isWeaponSlot = (slot: { id: string; item: GameCardData | null }) =>
-            slot.item != null && (slot.item.type === 'weapon' || slot.item.type === 'monster');
-          const weaponSlots = getEquipmentSlots().filter(isWeaponSlot);
-          if (weaponSlots.length === 0) {
-            finalizeMagicCard(card, { banner: '永恒修复无效（没有已装备的武器或随从）。' });
+        case '涌泉满手': {
+          const handSizeExcludingSelf = handCards.filter(c => c.id !== card.id).length;
+          const flightsCount = backpackHandFlightsRef.current.length;
+          const deficit = Math.max(0, effectiveHandLimit - (handSizeExcludingSelf + flightsCount));
+          if (deficit <= 0 || backpackItemsRef.current.length === 0) {
+            finalizeMagicCard(card, { banner: '涌泉满手：手牌已满或背包为空。' });
             return;
           }
-          if (weaponSlots.length === 1 && echoMultiplier <= 1) {
-            const slot = weaponSlots[0];
-            setUnbreakableUntilWaterfall(prev => ({ ...prev, [slot.id]: true }));
-            addGameLog('magic', `${slot.item!.name} 在下个瀑流前使用不消耗耐久。`);
-            finalizeMagicCard(card, { banner: `${slot.item!.name} 获得永恒修复（瀑流前不消耗耐久）。` });
-            return;
-          }
-          const eternalEchoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
-          setPendingMagicAction({
-            card,
-            effect: 'eternal-repair',
-            step: 'slot-select',
-            prompt: `选择一件武器或随从，瀑流前使用不消耗耐久。${eternalEchoLabel}`,
-            echoRemaining: echoMultiplier,
-          });
-          setHeroSkillBanner(`请选择要赋予永恒修复的武器或随从。${eternalEchoLabel}`);
+          const drawCount = Math.min(deficit, backpackItemsRef.current.length);
+          const drawnCards = takeRandomCardsFromBackpack(drawCount);
+          drawnCards.forEach(c => queueCardIntoHand(c));
+          addGameLog('magic', `涌泉满手：从背包抽取 ${drawnCards.length} 张牌补充手牌。`);
+          finalizeMagicCard(card, { banner: `涌泉满手：从背包抽了 ${drawnCards.length} 张牌，手牌补充到上限。` });
           return;
         }
           
@@ -11595,7 +11824,7 @@ export default function GameBoard() {
             await Promise.all(flights.map(f => f.promise));
             flights.forEach(f => {
               addPermanentMagicToRecycleBag(f.card);
-              applyDiscardSideEffects(f.card, 'player');
+              applyDiscardSideEffects(f.card, 'player', { toRecycleBag: true });
             });
             finalizeMagicCard(card, {
               banner: `自动弃置 ${actualHandCount} 张手牌到回收袋。${echoTag}`,
@@ -11899,6 +12128,13 @@ export default function GameBoard() {
         break;
     }
 
+    if (amuletEffects.hasCatapult) {
+      const drawn = drawCardsFromBackpack(1);
+      if (drawn > 0) {
+        addGameLog('amulet', `弹射护符：弃牌后从背包抽了 1 张牌`);
+      }
+    }
+
     resetDragState();
   };
 
@@ -11943,12 +12179,6 @@ export default function GameBoard() {
         }
       }
 
-      if (amuletEffects.hasGuardian && hadShieldProtection && source === 'combat' && remainingDamage > 6) {
-        const reduced = remainingDamage - 6;
-        remainingDamage = 6;
-        addGameLog('amulet', `守护护符：超出格挡的伤害被限制为 6（减免了 ${reduced} 点）`);
-      }
-
       setTakingDamage(true);
       setTimeout(() => setTakingDamage(false), 200);
       triggerHeroBleedAnimation();
@@ -11977,7 +12207,6 @@ export default function GameBoard() {
     },
     [
       addGameLog,
-      amuletEffects.hasGuardian,
       deathWardPrompt,
       equipmentSlot1,
       equipmentSlot2,
@@ -12461,7 +12690,7 @@ export default function GameBoard() {
           return;
         }
         if (slotItem.type !== 'weapon' && slotItem.type !== 'monster') {
-          setHeroSkillBanner('永恒修复只能对武器或随从使用。');
+          setHeroSkillBanner('涌泉满手只能对武器或随从使用。');
           return;
         }
         setUnbreakableUntilWaterfall(prev => ({ ...prev, [slotId]: true }));
@@ -12479,15 +12708,15 @@ export default function GameBoard() {
               card: pendingMagicAction.card,
               effect: 'eternal-repair',
               step: 'slot-select',
-              prompt: `${slotItem.name} 已获得永恒修复。继续选择下一把武器。${echoLabel}`,
+              prompt: `${slotItem.name} 已获得涌泉满手。继续选择下一把武器。${echoLabel}`,
               echoRemaining,
             });
-            setHeroSkillBanner(`${slotItem.name} 已获得永恒修复。继续选择下一把。${echoLabel}`);
+            setHeroSkillBanner(`${slotItem.name} 已获得涌泉满手。继续选择下一把。${echoLabel}`);
             return;
           }
         }
         finalizeMagicCard(pendingMagicAction.card, {
-          banner: `${slotItem.name} 获得永恒修复（瀑流前不消耗耐久）。`,
+          banner: `${slotItem.name} 获得涌泉满手。`,
         });
       }
     },
@@ -12949,8 +13178,9 @@ export default function GameBoard() {
     const slotAlreadyAttacked = combatState.heroAttacksThisTurn[slotId];
     const hasBaseAttack = combatState.heroAttacksRemaining > 0;
     const canUseBerserkerExtra = berserkerRageActive && slotAlreadyAttacked && !berserkerSlotUsed[slotId];
+    const canUseGambitExtra = gambitExtraActive && slotAlreadyAttacked && !gambitSlotUsed[slotId];
     const needsExtraCharge = slotAlreadyAttacked || !hasBaseAttack;
-    if (needsExtraCharge && !canUseBerserkerExtra && extraAttackCharges <= 0) {
+    if (needsExtraCharge && !canUseBerserkerExtra && !canUseGambitExtra && extraAttackCharges <= 0) {
       return;
     }
 
@@ -13418,7 +13648,7 @@ export default function GameBoard() {
           }
           if (card.type === 'amulet') {
             addPermanentMagicToRecycleBag(card);
-            applyDiscardSideEffects(card, 'player');
+            applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
           } else {
             discardCardToGraveyard(card, { owner: 'player' });
           }
@@ -13453,7 +13683,7 @@ export default function GameBoard() {
         cardWithOrigin.fromSlot === 'amulet' || amuletSlots.some(slot => slot?.id === card.id);
       if (fromAmuletSlot) {
         addPermanentMagicToRecycleBag(card);
-        applyDiscardSideEffects(card, 'player');
+        applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
         setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
         addGameLog('magic', `弃置护符「${card.name}」回到回收袋。`);
         setHeroSkillBanner(`${card.name} 已弃置回回收袋。`);
@@ -14292,6 +14522,9 @@ export default function GameBoard() {
         for (let bi = 0; bi < bulwarkPassiveRef.current; bi++) {
           applyBulwarkPassiveShieldIncrement();
         }
+        if (bulwarkTempArmorRef.current > 0) {
+          setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
+        }
 
         setHeroSkillBanner(`深入探索！受到 ${damage} 点伤害，瀑流计数 +1！`);
         eventResolutionDeferred = true;
@@ -14636,6 +14869,7 @@ export default function GameBoard() {
     deckViewerOpen ||
     discoverModalOpen ||
     Boolean(graveyardDiscoverState) ||
+    Boolean(ghostBladeExileCards) ||
     (shopModalOpen && !shopModalMinimized) ||
     shopSkillSelectOpen ||
     deleteModalOpen ||
@@ -14643,6 +14877,7 @@ export default function GameBoard() {
     heroDetailsOpen ||
     (eventModalOpen && !eventModalMinimized) ||
     Boolean(eventDiceModal) ||
+    Boolean(magicChoiceModal) ||
     Boolean(equipmentPrompt) ||
     Boolean(eventTransformState) ||
     Boolean(activeMonsterReward) ||
@@ -14675,23 +14910,40 @@ export default function GameBoard() {
       : null;
 
   const extraHeroSkillInfos = useMemo(() => {
-    if (showSkillSelection || extraHeroSkills.length === 0) return [];
-    return extraHeroSkills.map(skillId => {
-      const def = getHeroSkillById(skillId);
-      if (!def) return null;
-      const used = extraSkillsUsedThisWave.has(skillId);
-      return {
-        skillId,
-        name: def.name,
-        effect: def.effect,
-        buttonLabel: def.type === 'active' ? def.buttonLabel ?? def.name : undefined,
-        isPassive: def.type === 'passive',
-        isReady: def.type === 'active' && !used && !waterfallActive && !playerTargetingActive,
-        isUsed: def.type === 'active' ? used : false,
-        disabledReason: used ? '该技能本波已使用。' : waterfallActive ? '等待瀑流结束。' : undefined,
-      };
-    }).filter(Boolean) as { skillId: string; name: string; effect?: string; buttonLabel?: string; isPassive?: boolean; isReady?: boolean; isUsed?: boolean; disabledReason?: string }[];
-  }, [showSkillSelection, extraHeroSkills, extraSkillsUsedThisWave, waterfallActive, playerTargetingActive]);
+    type ExtraSkillInfo = { skillId: string; name: string; effect?: string; buttonLabel?: string; isPassive?: boolean; isReady?: boolean; isUsed?: boolean; disabledReason?: string };
+    const infos: ExtraSkillInfo[] = [];
+
+    if (!showSkillSelection && extraHeroSkills.length > 0) {
+      for (const skillId of extraHeroSkills) {
+        const def = getHeroSkillById(skillId);
+        if (!def) continue;
+        const used = extraSkillsUsedThisWave.has(skillId);
+        infos.push({
+          skillId,
+          name: def.name,
+          effect: def.effect,
+          buttonLabel: def.type === 'active' ? def.buttonLabel ?? def.name : undefined,
+          isPassive: def.type === 'passive',
+          isReady: def.type === 'active' && !used && !waterfallActive && !playerTargetingActive,
+          isUsed: def.type === 'active' ? used : false,
+          disabledReason: used ? '该技能本波已使用。' : waterfallActive ? '等待瀑流结束。' : undefined,
+        });
+      }
+    }
+
+    if (permanentSkills.includes('幽魂净化')) {
+      infos.push({
+        skillId: 'wraith-purification',
+        name: '幽魂净化',
+        effect: `背包为空时，自动将回收袋洗回背包（每波一次）`,
+        isPassive: true,
+        isReady: false,
+        isUsed: !wraithPassiveEnabled,
+      });
+    }
+
+    return infos;
+  }, [showSkillSelection, extraHeroSkills, extraSkillsUsedThisWave, waterfallActive, playerTargetingActive, permanentSkills, wraithPassiveEnabled]);
 
   const isPotionSlotEligible = (slotId: EquipmentSlotId) => {
     if (!potionSlotTargeting || !pendingPotionAction || pendingPotionAction.step !== 'slot-select') {
@@ -15517,6 +15769,7 @@ export default function GameBoard() {
             scaleMultiplier={stageScale}
             permanentDamageBonus={getEquipmentSlotBonus('equipmentSlot1', 'damage')}
             permanentShieldBonus={getEquipmentSlotBonus('equipmentSlot1', 'shield')}
+            tempShieldBonus={slotTempArmor.equipmentSlot1}
             weaponSwingAnimation={Boolean(weaponSwingStates.equipmentSlot1)}
             weaponSwingVariant={weaponSwingVariant.equipmentSlot1}
             shieldBlockAnimation={Boolean(shieldBlockStates.equipmentSlot1)}
@@ -15525,7 +15778,8 @@ export default function GameBoard() {
               engagedMonsters.some(m => !monsterDefeatStates[m.id]) &&
               combatState.heroAttacksThisTurn.equipmentSlot1 &&
               extraAttackCharges <= 0 &&
-              (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot1))
+              (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot1)) &&
+              (!gambitExtraActive || Boolean(gambitSlotUsed.equipmentSlot1))
             }
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot1}
             onDrop={(card) => {
@@ -15637,6 +15891,7 @@ export default function GameBoard() {
             scaleMultiplier={stageScale}
             permanentDamageBonus={getEquipmentSlotBonus('equipmentSlot2', 'damage')}
             permanentShieldBonus={getEquipmentSlotBonus('equipmentSlot2', 'shield')}
+            tempShieldBonus={slotTempArmor.equipmentSlot2}
             weaponSwingAnimation={Boolean(weaponSwingStates.equipmentSlot2)}
             weaponSwingVariant={weaponSwingVariant.equipmentSlot2}
             shieldBlockAnimation={Boolean(shieldBlockStates.equipmentSlot2)}
@@ -15645,7 +15900,8 @@ export default function GameBoard() {
               engagedMonsters.some(m => !monsterDefeatStates[m.id]) &&
               combatState.heroAttacksThisTurn.equipmentSlot2 &&
               extraAttackCharges <= 0 &&
-              (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot2))
+              (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot2)) &&
+              (!gambitExtraActive || Boolean(gambitSlotUsed.equipmentSlot2))
             }
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot2}
             onDrop={(card) => {
@@ -16450,6 +16706,37 @@ export default function GameBoard() {
         </div>
       )}
 
+      <Dialog open={wraithPassiveUnlockPopup} onOpenChange={setWraithPassiveUnlockPopup}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-serif text-purple-300">幽魂净化</DialogTitle>
+            <DialogDescription className="sr-only">被动技能解锁</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              所有幽魂已被消灭！你获得了一个新的被动技能：
+            </p>
+            <div className="rounded-xl border border-purple-500/40 bg-purple-500/10 p-4">
+              <div className="text-lg font-semibold text-purple-300">幽魂净化</div>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                当背包里的卡牌为 0 时，自动将回收袋里的牌洗回背包。
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground/70">
+                每波瀑流重置一次（不叠加，仅有启用/禁用状态）。
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              className="rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700 transition-colors"
+              onClick={() => setWraithPassiveUnlockPopup(false)}
+            >
+              知道了
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <VictoryDefeatModal
         open={gameOver && !gameOverMinimized}
         isVictory={victory}
@@ -16491,6 +16778,12 @@ export default function GameBoard() {
         onSelect={handleGraveyardDiscoverSelect}
         title="坟场召回"
         description="从坟场随机出现的卡牌中选择一张取回。"
+      />
+
+      <GraveyardExileModal
+        open={Boolean(ghostBladeExileCards)}
+        cards={ghostBladeExileCards ?? []}
+        onConfirm={handleGhostBladeExileConfirm}
       />
 
       <ShopModal
@@ -16567,7 +16860,11 @@ export default function GameBoard() {
         stats={heroDetailsStats}
         heroSkills={heroDetailsSkills}
         permanentSkills={permanentSkills}
-        permanentSkillStacks={{ '潮涌铸甲': bulwarkPassiveActive }}
+        permanentSkillStacks={{
+          '潮涌铸甲': bulwarkPassiveActive + bulwarkTempArmorStacks,
+          '潮涌铸甲·瀑流': bulwarkPassiveActive,
+          '潮涌铸甲·格挡': bulwarkTempArmorStacks,
+        }}
         heroMagicInfo={heroMagicUiState}
         capacityLimits={{
           hand: effectiveHandLimit,
@@ -16614,6 +16911,12 @@ export default function GameBoard() {
           onClose={cancelDiceModal}
         />
       )}
+
+      <MagicChoiceModal
+        open={Boolean(magicChoiceModal)}
+        state={magicChoiceModal}
+        onChoice={handleMagicChoice}
+      />
 
       {equipmentPrompt && (
         <EquipmentSelectModal

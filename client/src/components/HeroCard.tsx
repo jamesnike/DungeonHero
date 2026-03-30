@@ -418,8 +418,12 @@ export default function HeroCard({
               return (
                 <div key={extraSkill.skillId} className="flex flex-col items-center gap-1">
                   {extraIsPassive ? (
-                    <span className="dh-hero-btn font-semibold uppercase tracking-wide text-amber-950 bg-amber-300/30 rounded-full border border-amber-400/40">
-                      Passive: {extraSkill.name}
+                    <span className={`dh-hero-btn font-semibold uppercase tracking-wide rounded-full border ${
+                      extraSkill.isUsed
+                        ? 'text-gray-500 bg-gray-300/20 border-gray-400/30'
+                        : 'text-amber-950 bg-amber-300/30 border-amber-400/40'
+                    }`}>
+                      Passive: {extraSkill.name}{extraSkill.isUsed ? ' ✓' : ''}
                     </span>
                   ) : (
                     <button

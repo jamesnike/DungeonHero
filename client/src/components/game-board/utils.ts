@@ -110,7 +110,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasHeal: false,
   hasBalance: false,
   hasLife: false,
-  hasGuardian: false,
+  hasCatapult: false,
   hasFlash: false,
   hasStrength: false,
   hasDualGuard: false,
@@ -345,7 +345,7 @@ export function createDeck(): GameCardData[] {
     { name: 'Sword', image: axeImage },
     { name: 'Dagger', image: daggerWeaponImage },
     { name: 'Mace', image: maceImage },
-    { name: 'Swift Blade', image: daggerImage },
+    { name: '虚灵刀', image: daggerImage },
     { name: 'Sword', image: axeImage },
   ];
 
@@ -369,9 +369,11 @@ export function createDeck(): GameCardData[] {
       card.durability = hbDurability;
       card.maxDurability = hbDurability;
     }
-    if (weaponType.name === 'Swift Blade') {
+    if (weaponType.name === '虚灵刀') {
       card.durability = Math.floor(Math.random() * 3) + 2;
       card.maxDurability = card.durability;
+      card.ghostBladeExile = true;
+      card.description = '每次攻击后，可从坟场选择卡牌移除出游戏。';
     }
     if (weaponType.name === 'Mace') {
       card.value = Math.min(card.value, 3);
@@ -494,11 +496,11 @@ export function createDeck(): GameCardData[] {
     },
     {
       type: 'amulet',
-      name: 'Guardian Amulet',
+      name: 'Catapult Amulet',
       value: 5,
       image: guardianAmuletImage,
-      description: '有护盾时候，超过格挡的部分不损失血',
-      amuletEffect: 'guardian',
+      description: '每次手动拖动一张牌到墓地后，抽一张牌。',
+      amuletEffect: 'catapult',
     },
     {
       type: 'amulet',
@@ -565,7 +567,7 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '选择一个护盾槽，对一只怪物造成等同于该护盾值的伤害。',
+    magicEffect: '2选1被动：瀑流铸甲（每次瀑流随机装备栏护甲+1）或格挡铸甲（每次格挡该栏临时护甲+3，瀑流重置）。',
   });
 
   deck.push({
@@ -581,11 +583,11 @@ export function createDeck(): GameCardData[] {
   deck.push({
     id: `magic-${id++}`,
     type: 'magic',
-    name: '永恒修复',
+    name: '涌泉满手',
     value: 0,
     image: skillScrollImage,
     magicType: 'instant',
-    magicEffect: '选择一件武器或随从，在下个瀑流之前使用不消耗耐久。',
+    magicEffect: '手牌补充到上限（从背包抽牌）。',
   });
 
   deck.push({
@@ -996,7 +998,7 @@ export function createStarterBackpack(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，置于牌堆底（不打乱牌堆）。',
       description: '将一张地城卡牌放到牌堆最底部。',
-      recycleDelay: 2,
+      recycleDelay: 1,
     },
     {
       id: STARTER_CARD_IDS.dungeonSwap,

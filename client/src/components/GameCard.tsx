@@ -95,7 +95,7 @@ export type AmuletEffectId =
   | 'heal'
   | 'balance'
   | 'life'
-  | 'guardian'
+  | 'catapult'
   | 'flash'
   | 'strength'
   | 'dual-guard'
@@ -218,6 +218,7 @@ export interface GameCardData {
   critChance?: number; // % chance to deal double damage on attack
   restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
   healOnAttack?: number; // Heal this amount each time this weapon attacks
+  ghostBladeExile?: boolean; // 虚灵刀: after each attack, offer to exile cards from graveyard
   healOnKill?: number; // Heal this amount when this weapon kills a monster
   waterfallAttackBoost?: number; // Increase weapon's own attack by this amount each waterfall
   isMinionCard?: boolean;

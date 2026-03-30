@@ -71,11 +71,11 @@
 | 类别 | 数量 | 说明 |
 |------|------|------|
 | 怪物 | 15 | 5种族 × 3（Dragon, Skeleton, Goblin, Ogre, Wraith） |
-| 武器 | 6 | Holy Blade, Swift Blade, Mace, Dagger, Sword×2 |
+| 武器 | 6 | Holy Blade, 虚灵刀, Mace, Dagger, Sword×2 |
 | 盾牌 | 6 | Wooden×2, Iron×2, Heavy×2 |
 | 药水 | 6 | 治疗/修复/背包/洞察等 |
 | 护符 | 6 | Heal, Balance, Life, Guardian, Flash, Strength |
-| 魔法 | 6 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 点金裁决, 永恒修复 |
+| 魔法 | 6 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 点金裁决, 涌泉满手 |
 | 事件 | 14 | 各类事件 |
 
 ### 2.2 初始背包 (`createStarterBackpack`)
@@ -87,7 +87,7 @@
 | 战斗鼓舞 | 1 | 下一次武器攻击 +3 × echo |
 | 精工修复 | 1 | 修复1耐久 × echo |
 | 汰旧迎新 | 1 | 弃1抽2 × echo |
-| 迷宫回溯 | 2 | 1张地牢牌放到牌堆底 × echo |
+| 迷宫回溯 | 1 | 1张地牢牌放到牌堆底 × echo |
 | 乾坤挪移 | 2 | 交换场上最左与最右的牌 × echo |
 
 ### 2.3 骑士职业牌堆
@@ -109,7 +109,7 @@
 
 1. `turnCount` +1
 2. 如果有"潮涌回春"技能：回复 4 HP（有治疗护符时翻倍为 8）
-3. 如果有"潮涌铸甲"被动：随机装备槽永久护甲 +1
+3. 如果有"潮涌铸甲·瀑流铸甲"被动：随机装备槽永久护甲 +1；如果有"潮涌铸甲·格挡铸甲"被动：重置所有装备栏临时护甲
 4. **执行回收袋恢复** (`restorePermanentMagicFromRecycleBag`)
 5. 预览区卡牌落入场上空列
 6. 多余的预览卡牌被挤出（按倒序）
@@ -164,7 +164,7 @@
 - 每个英雄回合有 2 次基础攻击机会（`heroAttacksRemaining: 2`）
 - 每个装备槽**每回合**只能攻击一次（`heroAttacksThisTurn` 追踪）
 - 额外攻击需要消耗 `extraAttackCharges`
-- 狂战士之怒激活时，每槽额外获得1次免耐久消耗攻击
+- 狂战士之怒激活时，每槽额外获得1次攻击，且所有攻击不消耗耐久（持续到下次瀑流）
 
 ### 4.3 武器伤害公式
 
@@ -259,7 +259,7 @@ baseDamage = max(0,
 
 ### 5.2 耐久度
 
-- 武器：每次攻击 -1 耐久（狂战额外攻击**不消耗**耐久）
+- 武器：每次攻击 -1 耐久（狂战激活期间**所有攻击不消耗**耐久）
 - 盾牌：每次格挡 -1 耐久
 - 耐久为 0 → 武器/盾牌损毁 → `disposeOwnedEquipmentCard`
 - 击杀怪物 + `restoreDurabilityOnKill`：恢复耐久到满
@@ -323,7 +323,7 @@ baseDamage = max(0,
 | Heal Amulet | `heal` | 所有回血效果翻倍 |
 | Balance Amulet | `balance` | 左攻+3防-1，右防+3攻-1 |
 | Life Amulet | `life` | 超出怪物血量的伤害转化为回血 |
-| Guardian Amulet | `guardian` | 有盾时溢出伤害全部吸收 |
+| Catapult Amulet | `catapult` | 每次手动拖动一张牌到墓地后，抽一张牌 |
 | Flash Amulet | `flash` | 攻击两次，攻击力-3 |
 | Strength Amulet | `strength` | 攻击力+4，每次攻击自损2HP |
 
@@ -370,7 +370,7 @@ baseDamage = max(0,
 | 牌名 | `recycleDelay` |
 |------|---------------|
 | 精工修复 | 1 |
-| 迷宫回溯 | 2 |
+| 迷宫回溯 | 1 |
 | 乾坤挪移 | 2 |
 | 其他永久牌 | 1（默认） |
 
@@ -547,9 +547,9 @@ baseDamage = max(0,
 | 风暴箭雨 | instant | 对行中所有怪物造成 `getSpellDamage(3) × echo` 伤害；命中 ≥3 只怪物时翻转为「箭雨余韵」(permanent) |
 | 箭雨余韵 | permanent | 对行中所有怪物造成 `getSpellDamage(1) × echo` 伤害，每命中 1 只怪物从回收袋随机抽 1 张牌入手牌（不含自身） |
 | 回响行囊 | instant | 弃 `2×echo` 张手牌 → 从坟场发现 `2×echo` 张 → 从背包抽 `2×echo` 张 |
-| 潮涌铸甲 | instant | 被动：每次瀑流随机装备槽永久护甲+1 |
+| 潮涌铸甲 | instant | 2选1被动：A)瀑流铸甲—每次瀑流随机装备槽永久护甲+1；B)格挡铸甲—每次格挡该装备栏临时护甲+3（瀑流重置） |
 | 点金裁决 | instant | 伤害 = `getSpellDamage(gold) × echo`，回复等量HP |
-| 永恒修复 | instant | 武器本瀑流内不消耗耐久 |
+| 涌泉满手 | instant | 手牌补充到上限（从背包抽牌，计算差值时不算自身） |
 
 ### 10.3 骑士职业魔法
 
@@ -559,11 +559,11 @@ baseDamage = max(0,
 | 铠甲贯刺 | permanent | `armor-strike` | 选择装备槽的护甲值 → 对怪物造成 `getSpellDamage(armor)` |
 | 残血终焉 | permanent | `missing-hp-smite` | 伤害 = `getSpellDamage(maxHp - hp)` |
 | 坟火新星 | permanent | `grave-nova` | 永久：被弃置时对所有怪物造成 `getSpellDamage(3)` |
-| 孤注一掷 | instant | `berserk-gambit` | HP降至1，本回合武器+4，额外攻击+1 |
+| 孤注一掷 | instant | `berserk-gambit` | HP降至1，本回合武器+4，每个武器栏可多攻击一次（与狂战叠加） |
 | 回收灵焰 | permanent | `recycle-flare` | 立即恢复回收袋中的牌，从背包抽最多2张 |
 | 不灭守护 | instant | `death-ward` | 致命时触发（特殊） |
 | 混沌骰运 | permanent | `chaos-dice` | D20掷骰，5种随机效果 |
-| 冥途拾遗 | instant | `graveyard-recall` | 从坟场召回最多3张 → 翻转为冥途幻变事件 |
+| 冥途拾遗 | instant | `graveyard-recall` | 从坟场召回最多4张加入背包 |
 
 ### 10.4 混沌骰运效果表
 
@@ -738,7 +738,7 @@ baseDamage = max(0,
 | 仪表上限 | 8 |
 | 充能来源 | 每次武器攻击 +1（闪光护符双击算+2） |
 | 激活条件 | 仪表已满 |
-| 效果 | 每个武器槽获得1次额外攻击（不消耗耐久）；持续到下次瀑流 |
+| 效果 | 每个武器槽每回合获得1次额外攻击，且所有攻击不消耗耐久；持续到下次瀑流 |
 
 ### 14.3 解锁与充能
 

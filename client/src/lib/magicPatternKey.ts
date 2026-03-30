@@ -28,7 +28,7 @@ const NAME_TO_KEY: Record<string, string> = {
   回响行囊: 'echo-bag',
   潮涌铸甲: 'bulwark-ram',
   点金裁决: 'blood-gold-debt',
-  永恒修复: 'eternal-mend',
+  涌泉满手: 'eternal-mend',
   治愈余韵: 'heal-echo',
   余烬回响: 'ember-echo',
   暗影之刺: 'shadow-spike',

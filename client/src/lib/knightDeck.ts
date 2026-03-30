@@ -9,7 +9,6 @@ import ironTowerShieldImage from '@assets/generated_images/iron_tower_shield.png
 import thornedShieldImage from '@assets/generated_images/thorned_reflect_shield.png';
 import guardianShieldImage from '@assets/generated_images/guardian_holy_shield.png';
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
-import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
 import thunderAmuletImage from '@assets/generated_images/chibi_thunder_amulet.png';
 import potionArcaneInfusionImage from '@assets/generated_images/cute_potion_arcane_infusion.png';
@@ -129,7 +128,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: thunderAmuletImage,
     classCard: true,
-    description: '每弃一张牌，对激活行随机怪物造成 1 点伤害。',
+    description: '每弃一张牌到坟场，对激活行随机怪物造成 1 点伤害。',
     amuletEffect: 'discard-zap',
   });
 
@@ -232,9 +231,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：生命降至 1，本回合所有装备 +4 伤害并额外攻击一次。',
+    description: '一次性：生命降至 1，本回合所有装备 +4 伤害，每个武器栏可多攻击一次。',
     magicType: 'instant',
-    magicEffect: '降血换取爆发与额外攻击。',
+    magicEffect: '降血换取爆发与每栏额外攻击。',
     knightEffect: 'berserk-gambit',
   });
 
@@ -283,16 +282,10 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。使用后翻转为事件。',
+    description: '一次性：从坟场随机取回至多 4 张牌加入背包（不能取回自己）。',
     magicType: 'instant',
-    magicEffect: '坟场随机取回 3 张牌。',
+    magicEffect: '坟场随机取回 4 张牌。',
     knightEffect: 'graveyard-recall',
-    flipTarget: {
-      toCard: buildGraveyardRecallFlipEvent(`${graveyardRecallId}-flip`),
-      destination: 'backpack',
-      banner: '法术翻转成事件卷轴，已放入背包。',
-      message: '坟场之力翻涌，卷轴变形为新的形态…',
-    },
   });
 
   // Shuffle the deck
@@ -309,29 +302,6 @@ export function createKnightDiscoveryEvents(): GameCardData[] {
 const createDynamicKnightCardId = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-function buildGraveyardRecallFlipEvent(id: string): GameCardData {
-  return {
-    id,
-    type: 'event',
-    name: '冥途幻变',
-    value: 0,
-    image: eventScrollImage,
-    description: '掷骰子决定命运：25% 获得专属卡，25% 装备耐久 +1，25% 翻回原始法术，25% 摧毁所有装备。',
-    eventChoices: [
-      {
-        text: '掷动命运之骰',
-        hint: '25% 触发四种不同结果',
-        diceTable: [
-          { id: 'gr-class2', range: [1, 5] as [number, number], label: '获得 2 张专属卡', effect: 'drawClass2' },
-          { id: 'gr-repair', range: [6, 10] as [number, number], label: '所有装备耐久 +1', effect: 'repairAllDurability+1' },
-          { id: 'gr-flipback', range: [11, 15] as [number, number], label: '翻回原始法术', effect: 'flipBackToGraveyardRecall' },
-          { id: 'gr-destroy', range: [16, 20] as [number, number], label: '摧毁所有装备', effect: 'destroyAllEquipment' },
-        ],
-      },
-    ],
-  };
-}
-
 export const createGraveyardRecallCard = (): KnightCardData => {
   const id = createDynamicKnightCardId('graveyard-recall');
   return {
@@ -341,16 +311,10 @@ export const createGraveyardRecallCard = (): KnightCardData => {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。使用后翻转为事件。',
+    description: '一次性：从坟场随机取回至多 4 张牌加入背包（不能取回自己）。',
     magicType: 'instant',
-    magicEffect: '坟场随机取回 3 张牌。',
+    magicEffect: '坟场随机取回 4 张牌。',
     knightEffect: 'graveyard-recall',
-    flipTarget: {
-      toCard: buildGraveyardRecallFlipEvent(`${id}-flip`),
-      destination: 'backpack',
-      banner: '法术翻转成事件卷轴，已放入背包。',
-      message: '坟场之力翻涌，卷轴变形为新的形态…',
-    },
   };
 };
 

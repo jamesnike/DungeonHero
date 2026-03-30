@@ -77,6 +77,8 @@ export type EquipmentSlotStatModifier = EquipmentCardStatModifier;
 
 export type EquipmentSlotBonusState = Record<EquipmentSlotId, SlotPermanentBonus>;
 
+export type SlotTempArmorState = Record<EquipmentSlotId, number>;
+
 export type EventDiceModalState = {
   title: string;
   subtitle?: string;
@@ -390,7 +392,7 @@ export type ActiveAmuletEffects = {
   hasHeal: boolean;
   hasBalance: boolean;
   hasLife: boolean;
-  hasGuardian: boolean;
+  hasCatapult: boolean;
   hasFlash: boolean;
   hasStrength: boolean;
   hasDualGuard: boolean;
