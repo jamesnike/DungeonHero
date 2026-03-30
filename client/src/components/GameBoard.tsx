@@ -665,6 +665,7 @@ function createDeck(): GameCardData[] {
       if (!spec || !monsters.length) continue;
       const chosen = monsters[Math.floor(Math.random() * monsters.length)];
       chosen.monsterSpecial = spec.tag;
+      chosen.monsterSpecialDesc = spec.desc;
       chosen.description = spec.desc;
       if (spec.lastWords) {
         chosen.lastWords = spec.lastWords;
@@ -927,7 +928,7 @@ function createDeck(): GameCardData[] {
       name: 'Catapult Amulet',
       value: 5,
       image: guardianAmuletImage,
-      description: '每次手动拖动一张牌到墓地后，抽一张牌。',
+      description: '每次手动拖动一张牌到墓地后，抽2张牌。',
       amuletEffect: 'catapult',
     },
     {
@@ -2816,12 +2817,12 @@ export default function GameBoard() {
   );
 
   useEffect(() => {
-    if (activeMonsterReward || monsterRewardQueue.length === 0) {
+    if (activeMonsterReward || monsterRewardQueue.length === 0 || ghostBladeExileCards) {
       return;
     }
     setActiveMonsterReward(monsterRewardQueue[0]);
     setMonsterRewardQueue(prev => prev.slice(1));
-  }, [activeMonsterReward, monsterRewardQueue]);
+  }, [activeMonsterReward, monsterRewardQueue, ghostBladeExileCards]);
   const cellWrapperClass = "flex w-full h-full min-w-0 min-h-0";
   const cellInnerClass = "flex w-full h-full dh-grid-cell";
   const updateHeroRowDropHighlight = useCallback((card: GameCardData | null) => {
@@ -3583,7 +3584,7 @@ export default function GameBoard() {
     if (rawDamage <= 0) return false;
     if (!monster.maxHp || monster.hp == null) return false;
     const layersBefore = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;
-    const preview = damageMonsterWithLayerOverflow(monster, rawDamage);
+    const preview = damageMonsterWithLayerOverflow(monster, rawDamage, 2);
     const layersAfter = preview.currentLayer ?? 0;
     return layersBefore - layersAfter === 1;
   };
@@ -3656,7 +3657,7 @@ export default function GameBoard() {
     }
 
     const layersBefore = monster.currentLayer ?? monster.fury ?? 1;
-    const updatedMonster = damageMonsterWithLayerOverflow(monster, damage);
+    const updatedMonster = damageMonsterWithLayerOverflow(monster, damage, 2);
     const baseDelay = options?.animationDelay ?? 0;
     const pulses = Math.max(1, options?.pulses ?? 1);
     for (let i = 0; i < pulses; i += 1) {
@@ -3756,7 +3757,7 @@ export default function GameBoard() {
       }
       hpBeforeReflect = card.hp ?? 0;
       layersBeforeReflect = card.currentLayer ?? card.fury ?? 1;
-      const damaged = damageMonsterWithLayerOverflow(card, scaledDamage);
+      const damaged = damageMonsterWithLayerOverflow(card, scaledDamage, 2);
       layersAfterReflect = damaged.currentLayer ?? 0;
       damagedSnapshot = damaged;
       if ((damaged.currentLayer ?? 0) <= 0 || (damaged.hp ?? 0) <= 0) {
@@ -5072,10 +5073,18 @@ export default function GameBoard() {
         dragonBleedDestroyEquipment(targetMonster.name, layersAfterAttack);
       }
       if (targetMonster.monsterSpecial === 'bone-regen') {
-        void checkHollowSkeletonRestore(targetMonster.id, targetMonster.name, layersBeforeAttack, layersAfterAttack);
+        if (slotItem.ghostBladeExile) {
+          await checkHollowSkeletonRestore(targetMonster.id, targetMonster.name, layersBeforeAttack, layersAfterAttack);
+        } else {
+          void checkHollowSkeletonRestore(targetMonster.id, targetMonster.name, layersBeforeAttack, layersAfterAttack);
+        }
       }
       if (targetMonster.monsterSpecial === 'wraith-rebirth') {
-        void checkWraithRebirth(targetMonster.id, targetMonster.name, targetMonster.fury ?? targetMonster.hpLayers ?? 1, layersBeforeAttack, layersAfterAttack);
+        if (slotItem.ghostBladeExile) {
+          await checkWraithRebirth(targetMonster.id, targetMonster.name, targetMonster.fury ?? targetMonster.hpLayers ?? 1, layersBeforeAttack, layersAfterAttack);
+        } else {
+          void checkWraithRebirth(targetMonster.id, targetMonster.name, targetMonster.fury ?? targetMonster.hpLayers ?? 1, layersBeforeAttack, layersAfterAttack);
+        }
       }
     }
 
@@ -7943,6 +7952,11 @@ export default function GameBoard() {
     setHeroDetailsOpen(false);
     setEventDiceModal(null);
     setGameOverMinimized(false);
+    if (ghostBladeExileResolverRef.current) {
+      ghostBladeExileResolverRef.current();
+      ghostBladeExileResolverRef.current = null;
+    }
+    setGhostBladeExileCards(null);
 
     // Restore transient state from snapshot
     const t = entry.transient;
@@ -8026,14 +8040,6 @@ export default function GameBoard() {
       setTurnCount(prev => prev + initialWaterfall);
       addGameLog('system', `开局加成：瀑流回合 +${initialWaterfall}`);
     }
-    const initialDraw = definition?.initialClassCardDraw ?? 0;
-    if (initialDraw) {
-      const drawn = drawClassCardsToBackpack(initialDraw, 'early-surge');
-      if (drawn.length > 0) {
-        addGameLog('skill', `开局加成：预抽 ${drawn.length} 张职业牌`);
-        triggerClassDeckFlight(drawn);
-      }
-    }
     const initialShopLv = definition?.initialShopLevel;
     if (initialShopLv != null && initialShopLv > 0) {
       setShopLevel(Math.min(MAX_SHOP_LEVEL, initialShopLv));
@@ -8054,13 +8060,6 @@ export default function GameBoard() {
     if (initialSpellDmg) {
       setPermanentSpellDamageBonus(prev => prev + initialSpellDmg);
       addGameLog('skill', `开局加成：永久法术伤害 +${initialSpellDmg}`);
-    }
-    const initialHandDraw = definition?.initialHandDraw ?? 0;
-    if (initialHandDraw) {
-      for (let i = 0; i < initialHandDraw; i++) {
-        const drawn = drawFromBackpackToHand();
-        if (drawn) addGameLog('skill', `开局加成：抽到手牌「${drawn.name}」`);
-      }
     }
     if (skillId === 'summon-minion') {
       const minionCard: GameCardData = {
@@ -8137,6 +8136,41 @@ export default function GameBoard() {
           : '雷盾心法：已移除「战斗鼓舞」；「新手短剑」已替换为 2 护甲、2 耐久的护盾。',
       );
     }
+
+    // ─── Base opening sequence (all heroes) ─────────────────────────────────────
+    // Step 1: draw class card(s) to backpack with flight animation
+    const baseClassCards = 1;
+    const skillClassCards = definition?.initialClassCardDraw ?? 0;
+    const totalClassCards = baseClassCards + skillClassCards;
+    const classFilter = skillId === 'shield-wall'
+      ? (card: GameCardData) => !(card.type === 'amulet' && (card as GameCardData).amuletEffect === 'discard-zap')
+      : undefined;
+    const classDrawn = drawClassCardsToBackpack(totalClassCards, '开场', classFilter);
+    if (classDrawn.length > 0) {
+      triggerClassDeckFlight(classDrawn);
+    }
+
+    // Step 2: after class deck flight animation, draw cards from backpack to hand
+    const baseHandCards = 2;
+    const skillHandCards = definition?.initialHandDraw ?? 0;
+    const totalHandCards = baseHandCards + skillHandCards;
+    const classFlightDelay = classDrawn.length > 0
+      ? CLASS_FLIGHT_BASE_DURATION + CLASS_FLIGHT_VARIANCE
+        + Math.max(0, classDrawn.length - 1) * CLASS_FLIGHT_STAGGER + 300
+      : 200;
+    setTimeout(() => {
+      for (let i = 0; i < totalHandCards; i++) {
+        const drawn = drawFromBackpackToHand();
+        if (drawn) {
+          addGameLog(
+            i < baseHandCards ? 'system' : 'skill',
+            i < baseHandCards
+              ? `开场抽牌：「${drawn.name}」`
+              : `开局加成：抽到手牌「${drawn.name}」`,
+          );
+        }
+      }
+    }, classFlightDelay);
   };
 
   // Equipment slot helpers
@@ -10162,14 +10196,18 @@ export default function GameBoard() {
       maxOptions: number,
       opts?: { delivery?: 'backpack' | 'hand-first' },
     ) => {
-      if (!discardedCards.length) {
+      const exileIds = new Set((ghostBladeExileCards ?? []).map(c => c.id));
+      const eligible = exileIds.size > 0
+        ? discardedCards.filter(c => !exileIds.has(c.id))
+        : discardedCards;
+      if (!eligible.length) {
         setHeroSkillBanner('坟场中没有可取回的卡牌。');
         return Promise.resolve<GameCardData | null>(null);
       }
       clearUndoStack();
       graveyardDiscoverDeliveryRef.current =
         opts?.delivery === 'hand-first' ? 'hand-first' : 'backpack';
-      const shuffled = [...discardedCards].sort(() => Math.random() - 0.5);
+      const shuffled = [...eligible].sort(() => Math.random() - 0.5);
       const options = shuffled.slice(0, Math.min(maxOptions, shuffled.length));
       return new Promise<GameCardData | null>(resolve => {
         graveyardDiscoverResolverRef.current = card => {
@@ -10179,7 +10217,7 @@ export default function GameBoard() {
         setGraveyardDiscoverState(options);
       });
     },
-    [clearUndoStack, discardedCards, setHeroSkillBanner],
+    [clearUndoStack, discardedCards, ghostBladeExileCards, setHeroSkillBanner],
   );
 
   const handleGraveyardDiscoverSelect = useCallback(
@@ -10236,15 +10274,19 @@ export default function GameBoard() {
   const triggerGhostBladeExile = useCallback(
     (): Promise<void> => {
       const graveyard = discardedCardsRef.current;
-      if (graveyard.length === 0) return Promise.resolve();
-      const shuffled = [...graveyard].sort(() => Math.random() - 0.5);
+      const discoverIds = new Set((graveyardDiscoverState ?? []).map(c => c.id));
+      const eligible = discoverIds.size > 0
+        ? graveyard.filter(c => !discoverIds.has(c.id))
+        : graveyard;
+      if (eligible.length === 0) return Promise.resolve();
+      const shuffled = [...eligible].sort(() => Math.random() - 0.5);
       const options = shuffled.slice(0, Math.min(3, shuffled.length));
       return new Promise<void>(resolve => {
         ghostBladeExileResolverRef.current = resolve;
         setGhostBladeExileCards(options);
       });
     },
-    [],
+    [graveyardDiscoverState],
   );
 
   const handleGhostBladeExileConfirm = useCallback(
@@ -10671,8 +10713,14 @@ export default function GameBoard() {
 
       const isDiscardAction = cardActionContext?.action === 'discard';
 
-      const flightDest: 'graveyard' | 'recycle-bag' = isDiscardAction
-        && cardActionContext?.discardToRecycleBag ? 'recycle-bag' : 'graveyard';
+      let flightDest: 'graveyard' | 'recycle-bag' = 'graveyard';
+      if (isDiscardAction) {
+        if (cardActionContext?.discardToRecycleBag) {
+          flightDest = 'recycle-bag';
+        } else if (isRecyclableFromHand(cardToDelete) && cardToDelete.type !== 'amulet') {
+          flightDest = 'recycle-bag';
+        }
+      }
       const flightP = triggerDiscardFlight(cardToDelete, flightDest);
 
       if (source === 'hand') {
@@ -10972,11 +11020,11 @@ export default function GameBoard() {
         }
         if (monsters.length === 1) {
           const missingHp = Math.max(0, maxHp - hp);
-          if (missingHp <= 0) {
+          const totalDamage = getSpellDamage(missingHp);
+          if (totalDamage <= 0) {
             finalizeMagicCard(card, { banner: '你处于满血状态，没有造成伤害。' });
             return true;
           }
-          const totalDamage = getSpellDamage(missingHp);
           if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
           dealDamageToMonster(monsters[0], totalDamage, { pulses: 2 });
           finalizeMagicCard(card, { banner: `残血裁决释放 ${totalDamage} 点伤害。` });
@@ -11024,9 +11072,12 @@ export default function GameBoard() {
           queueCardIntoHand(recycleForgeAmulet);
           bannerParts.push('熔炉之心消散，回收灵焰翻转为「回收熔炉」加入手牌！');
           addGameLog('amulet', '回收灵焰与熔炉之心共鸣：熔炉之心消散，「回收熔炉」加入手牌！');
+          addGameLog('magic', `魔法：${card.name} — ${bannerParts.join(' ')}`);
+          setHeroSkillBanner(bannerParts.join(' '));
+          addToGraveyard(card);
+        } else {
+          finalizeMagicCard(card, { banner: bannerParts.join(' ') });
         }
-
-        finalizeMagicCard(card, { banner: bannerParts.join(' ') });
         return true;
       }
       case 'chaos-dice': {
@@ -11087,7 +11138,7 @@ export default function GameBoard() {
         let returned = 0;
         let toHand = 0;
         let toRecycle = 0;
-        let handLoad = handCards.length + backpackHandFlightsRef.current.length;
+        let handLoad = handCardsRef.current.length + backpackHandFlightsRef.current.length;
         equipmentSlots.forEach(slot => {
           const allItems = [
             ...(slot.item ? [slot.item] : []),
@@ -12059,6 +12110,7 @@ export default function GameBoard() {
         removeCard(item.id, false);
       } else if (isHand) {
         consumeCardFromHand(item as GameCardData);
+        tickRecycleForge();
       }
       addGameLog('event', `${item.name} 已弃入墓地。`);
       setHeroSkillBanner(`${item.name} 已弃入墓地。`);
@@ -12120,6 +12172,7 @@ export default function GameBoard() {
         break;
       case 'hand':
         consumeCardFromHand(sellItem);
+        tickRecycleForge();
         break;
       case 'backpack':
         setBackpackItems(prev => prev.filter(c => c.id !== sellItem.id));
@@ -12132,9 +12185,9 @@ export default function GameBoard() {
     }
 
     if (amuletEffects.hasCatapult) {
-      const drawn = drawCardsFromBackpack(1);
+      const drawn = drawCardsFromBackpack(2);
       if (drawn > 0) {
-        addGameLog('amulet', `弹射护符：弃牌后从背包抽了 1 张牌`);
+        addGameLog('amulet', `弹射护符：弃牌后从背包抽了 ${drawn} 张牌`);
       }
     }
 
@@ -12920,11 +12973,11 @@ export default function GameBoard() {
 
       if (pendingMagicAction.effect === 'missing-hp-smite') {
         const missingHp = Math.max(0, maxHp - hp);
-        if (missingHp <= 0) {
+        const totalDamage = getSpellDamage(missingHp);
+        if (totalDamage <= 0) {
           finalizeMagicCard(pendingMagicAction.card, { banner: '你处于满血状态，没有造成伤害。' });
           return;
         }
-        const totalDamage = getSpellDamage(missingHp);
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
@@ -13313,18 +13366,18 @@ export default function GameBoard() {
       tickRecycleForge();
 
       if (card.type === 'monster') {
-        if (isMonsterEngaged(card.id) && combatState.currentTurn === 'hero') {
-          resetDragState();
-          return;
-        }
-        beginCombat(card, 'monster');
+        resetDragState();
+        return;
       } else if (card.type === 'potion') {
         void handlePotionConsumption(card);
       } else if (card.type === 'magic' || card.type === 'hero-magic') {
         handleSkillCard(card);
       } else if (card.type === 'event') {
         startEventResolution(null, 'hand');
-        setCurrentEventCard(card);
+        const cleanedCard = card.eventChoices
+          ? { ...card, eventChoices: card.eventChoices.filter(c => c.effect !== 'crossroads-destroy-below') }
+          : card;
+        setCurrentEventCard(cleanedCard);
         eventChoiceProcessingRef.current = false;
         setEventModalOpen(true);
         resetDragState();
@@ -13363,7 +13416,10 @@ export default function GameBoard() {
           handleSkillCard(card);
         } else if (card.type === 'event') {
           startEventResolution(null, 'hand');
-          setCurrentEventCard(card);
+          const cleanedCard = card.eventChoices
+            ? { ...card, eventChoices: card.eventChoices.filter(c => c.effect !== 'crossroads-destroy-below') }
+            : card;
+          setCurrentEventCard(cleanedCard);
           eventChoiceProcessingRef.current = false;
           setEventModalOpen(true);
           resetDragState();
@@ -13553,9 +13609,10 @@ export default function GameBoard() {
     if (card.type === 'monster') return false;
     return true;
   };
-  const canCardDropOnHero = (card: GameCardData | null) => {
+  const canCardDropOnHero = (card: GameCardData | null, source?: DragOrigin | null) => {
     if (!card) return false;
     if (card.type === 'monster') {
+      if (source === 'hand' || source === 'backpack') return false;
       if (isMonsterEngaged(card.id) && combatState.currentTurn === 'hero') return false;
       return true;
     }
@@ -13708,15 +13765,15 @@ export default function GameBoard() {
       const equipSlot: EquipmentSlotId = slotId === 'slot-equipment-1' ? 'equipmentSlot1' : 'equipmentSlot2';
       const equippedItem = equipSlot === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
       
-      const isMonsterFromHand = card.type === 'monster' && (isCardFromHand(card) || backpackItems.some(b => b.id === card.id));
-
-      if (card.type === 'monster' && !isMonsterFromHand) {
-        beginCombat(card, 'monster');
+      if (isCardFromEquipmentSlot(card)) {
         resetDragState();
         return;
       }
 
-      if (isCardFromEquipmentSlot(card)) {
+      const isMonsterFromHand = card.type === 'monster' && (isCardFromHand(card) || backpackItems.some(b => b.id === card.id));
+
+      if (card.type === 'monster' && !isMonsterFromHand) {
+        beginCombat(card, 'monster');
         resetDragState();
         return;
       }
@@ -14212,7 +14269,6 @@ export default function GameBoard() {
           break;
         }
       } else if (effect.startsWith('randomDiscardHand:')) {
-        clearUndoStack();
         const count = parseInt(effect.replace('randomDiscardHand:', ''), 10) || 1;
         const currentHand = handCards.filter(c => c.id !== currentEventCard?.id);
         const toDiscardCount = Math.min(count, currentHand.length);
@@ -15290,7 +15346,7 @@ export default function GameBoard() {
     (isWaterfallLocked && !draggedCardIsSpell);
   const heroCardDropHighlight =
     !heroRowInteractionLocked &&
-    canCardDropOnHero(draggedCard) &&
+    canCardDropOnHero(draggedCard, draggedCardSource) &&
     !isHeroRowHighlightCard(draggedCard);
   const heroRowMagicDropActive =
     !heroRowInteractionLocked && isHeroRowHighlightCard(draggedCard);
@@ -15308,6 +15364,7 @@ export default function GameBoard() {
     !isDefeatAnimationPlaying &&
     !playerTargetingActive &&
     !fullBoardInteractionLocked &&
+    !activeMonsterReward &&
     (canSellDraggedCard || canSellDraggedEquipment);
   const shouldHighlightGraveyard = graveyardDropEnabled && isDragSessionActive;
   const heroRowMagicDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
@@ -16339,7 +16396,7 @@ export default function GameBoard() {
             <div className={cellInnerClass} ref={setGraveyardRef}>
               <GraveyardZone
                 onDrop={(card) => {
-                  if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
+                  if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked || activeMonsterReward) return;
                   handleSellCard(card);
                 }}
                 isDropTarget={graveyardDropEnabled}

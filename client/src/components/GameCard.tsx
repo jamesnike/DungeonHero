@@ -171,6 +171,7 @@ export interface GameCardData {
   // Monster-specific properties
   monsterType?: string; // Base type for rage lookup (Dragon, Skeleton, etc.)
   monsterSpecial?: string; // Special champion ability tag (ember-fury, bone-regen, etc.)
+  monsterSpecialDesc?: string; // Elite ability description (preserved independently of `description`)
   specialAttackBoost?: number; // Cumulative attack boost from bleedEffect
   hasRevive?: boolean; // Monster revives once at 1 HP layer on first death
   reviveUsed?: boolean; // Whether the revive has already been consumed

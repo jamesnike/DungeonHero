@@ -222,7 +222,7 @@ export default function CardDetailsModal({
             )}
 
             {/* Monster Special Ability */}
-            {card.type === 'monster' && card.monsterSpecial && card.description && (
+            {card.type === 'monster' && card.monsterSpecial && (card.monsterSpecialDesc || card.description) && (
               <div className="bg-violet-500/15 p-3 rounded-md border border-violet-500/30 relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 to-purple-500/10 pointer-events-none" />
                 <div className="relative flex flex-col gap-1.5">
@@ -233,7 +233,7 @@ export default function CardDetailsModal({
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">
-                    {card.description}
+                    {card.monsterSpecialDesc || card.description}
                   </p>
                 </div>
               </div>

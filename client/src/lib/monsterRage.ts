@@ -108,13 +108,14 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
   const upgrade = getActiveUpgrade(monsterType, normalizedTurn);
   const bonusAtk = upgrade?.attackBonus ?? 0;
   const bonusHp = upgrade?.hpBonus ?? 0;
+  const bleedBoost = card.specialAttackBoost ?? 0;
 
   const result: GameCardData = {
     ...card,
     baseAttack: baseAtk,
     baseHp,
-    attack: baseAtk + bonusAtk,
-    value: baseAtk + bonusAtk,
+    attack: baseAtk + bonusAtk + bleedBoost,
+    value: baseAtk + bonusAtk + bleedBoost,
     hp: baseHp + bonusHp,
     maxHp: baseHp + bonusHp,
     fury: rage,

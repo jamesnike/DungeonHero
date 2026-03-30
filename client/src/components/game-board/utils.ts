@@ -499,7 +499,7 @@ export function createDeck(): GameCardData[] {
       name: 'Catapult Amulet',
       value: 5,
       image: guardianAmuletImage,
-      description: '每次手动拖动一张牌到墓地后，抽一张牌。',
+      description: '每次手动拖动一张牌到墓地后，抽2张牌。',
       amuletEffect: 'catapult',
     },
     {
