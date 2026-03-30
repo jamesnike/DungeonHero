@@ -479,6 +479,7 @@ export type UndoTransientState = {
   deathWardPrompt: DeathWardPromptState | null;
   equipmentPrompt: EquipmentPromptState | null;
   graveyardDiscoverState: GameCardData[] | null;
+  graveyardDiscoverDelivery: 'backpack' | 'hand-first';
   cardActionContext: CardActionContext | null;
   gameLogEntries: LogEntry[];
   monsterRewardPreviewCache: Record<string, MonsterRewardOption[]>;

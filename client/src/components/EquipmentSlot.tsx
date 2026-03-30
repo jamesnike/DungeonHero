@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Shield, Sword, Backpack, Package, X } from 'lucide-react';
+import { Shield, Sword, Backpack, Package, X, ChevronUp, ChevronDown } from 'lucide-react';
 import React, { useCallback, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
@@ -22,6 +22,7 @@ interface EquipmentSlotProps {
   reserveItems?: (GameCardData & { [key: string]: any })[];
   slotCapacity?: number;
   onSwapToTop?: (reserveIndex: number) => void;
+  onReorderEquipment?: (stackIndex: number, direction: 'up' | 'down') => void;
   statModifier?: EquipmentCardStatModifier | null;
   backpackCount?: number;
   scaleMultiplier?: number;
@@ -53,6 +54,7 @@ export default function EquipmentSlot({
   reserveItems = [],
   slotCapacity = 1,
   onSwapToTop,
+  onReorderEquipment,
   statModifier,
   backpackCount = 0,
   scaleMultiplier = 1,
@@ -332,23 +334,46 @@ export default function EquipmentSlot({
               const topY = 28;
               const step = total <= 1 ? 0 : (topY - bottomY) / (total - 1);
               const y = bottomY + rIdx * step;
+              const canMoveUp = true;
+              const canMoveDown = rIdx > 0;
               return (
                 <div
                   key={reserveCard.id}
-                  className="absolute inset-0 cursor-pointer"
+                  className="absolute inset-0 equip-stack-card-wrapper"
                   style={{ zIndex: 20 + rIdx, transform: `translateY(${y}%)` }}
-                  onClick={(e) => { e.stopPropagation(); onSwapToTop?.(rIdx); }}
                 >
                   <GameCard
                     card={{ ...reserveCard, fromSlot: slotId } as GameCardData}
                     amuletDescriptionVariant="topThird"
                     className="shadow-md opacity-80"
                   />
+                  {onReorderEquipment && (
+                    <div className="equip-reorder-buttons">
+                      {canMoveUp && (
+                        <button
+                          className="equip-reorder-btn equip-reorder-up"
+                          onClick={(e) => { e.stopPropagation(); onReorderEquipment(rIdx, 'up'); }}
+                          title="上移"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canMoveDown && (
+                        <button
+                          className="equip-reorder-btn equip-reorder-down"
+                          onClick={(e) => { e.stopPropagation(); onReorderEquipment(rIdx, 'down'); }}
+                          title="下移"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
             <div
-              className={`absolute inset-0 ${
+              className={`absolute inset-0 equip-stack-card-wrapper ${
                 heroSkillHighlight ? 'cursor-pointer' : ''
               }`}
               style={{
@@ -370,6 +395,17 @@ export default function EquipmentSlot({
                 shieldBlockVariant={shieldBlockVariant}
                 showExhaustedOverlay={isExhaustedThisTurn}
               />
+              {onReorderEquipment && reserveItems.length > 0 && (
+                <div className="equip-reorder-buttons">
+                  <button
+                    className="equip-reorder-btn equip-reorder-down"
+                    onClick={(e) => { e.stopPropagation(); onReorderEquipment(reserveItems.length, 'down'); }}
+                    title="下移"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ) : (

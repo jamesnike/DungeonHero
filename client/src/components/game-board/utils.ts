@@ -672,7 +672,7 @@ export function createDeck(): GameCardData[] {
         hint: '会要求你选择左或右装备',
         requires: [{ type: 'equipmentAny', message: '需要至少一件装备' }],
       },
-      { text: '支付赎金（损失 15 金币）', effect: 'gold-15' },
+      { text: '支付赎金（损失 15 金币）', effect: 'gold-15', requires: [{ type: 'gold', min: 15, message: '需要至少 15 金币' }] },
       { text: '扩展手牌（手牌上限 +1，跳过翻转）', effect: 'handLimit+1', skipFlip: true },
     ],
     flipTarget: {

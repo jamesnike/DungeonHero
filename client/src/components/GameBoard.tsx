@@ -1102,7 +1102,7 @@ function createDeck(): GameCardData[] {
         hint: '会要求你选择左或右装备',
         requires: [{ type: 'equipmentAny', message: '需要至少一件装备' }],
       },
-      { text: '支付赎金（损失 15 金币）', effect: 'gold-15' },
+      { text: '支付赎金（损失 15 金币）', effect: 'gold-15', requires: [{ type: 'gold', min: 15, message: '需要至少 15 金币' }] },
       { text: '扩展手牌（手牌上限 +1，跳过翻转）', effect: 'handLimit+1', skipFlip: true },
     ],
     flipTarget: {
@@ -7756,6 +7756,7 @@ export default function GameBoard() {
     deathWardPrompt,
     equipmentPrompt,
     graveyardDiscoverState,
+    graveyardDiscoverDelivery: graveyardDiscoverDeliveryRef.current,
     cardActionContext,
     gameLogEntries,
     monsterRewardPreviewCache: monsterRewardPreviewCacheRef.current,
@@ -7969,12 +7970,17 @@ export default function GameBoard() {
     setDeathWardPrompt(t.deathWardPrompt);
     setEquipmentPrompt(t.equipmentPrompt);
     setGraveyardDiscoverState(t.graveyardDiscoverState);
-    if (t.graveyardDiscoverState && t.activeMonsterReward) {
-      const doneId = t.activeMonsterReward.monsterInstanceId;
-      graveyardDiscoverResolverRef.current = () => {
-        if (doneId) monsterRewardQueuedInstanceIdsRef.current.delete(doneId);
-        setActiveMonsterReward(null);
-      };
+    if (t.graveyardDiscoverState) {
+      graveyardDiscoverDeliveryRef.current = t.graveyardDiscoverDelivery ?? 'backpack';
+      if (t.activeMonsterReward) {
+        const doneId = t.activeMonsterReward.monsterInstanceId;
+        graveyardDiscoverResolverRef.current = () => {
+          if (doneId) monsterRewardQueuedInstanceIdsRef.current.delete(doneId);
+          setActiveMonsterReward(null);
+        };
+      } else {
+        graveyardDiscoverResolverRef.current = () => {};
+      }
     }
     setCardActionContext(t.cardActionContext);
     cardActionRemainingRef.current = t.cardActionContext?.remainingCount ?? 0;
@@ -8349,6 +8355,27 @@ export default function GameBoard() {
     });
 
     addGameLog('equip', `装备切换：${swappedInName} 替换 ${swappedOutName}（${slotId === 'equipmentSlot1' ? '左' : '右'}槽）`);
+  };
+
+  const moveEquipmentInStack = (slotId: EquipmentSlotId, stackIndex: number, direction: 'up' | 'down') => {
+    pushUndoSnapshot();
+    const reserve = getEquipmentReserve(slotId);
+    const activeItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+    if (!activeItem) return;
+
+    const stack: (EquipmentItem | null)[] = [...reserve, activeItem];
+    const targetIndex = direction === 'up' ? stackIndex + 1 : stackIndex - 1;
+    if (targetIndex < 0 || targetIndex >= stack.length) return;
+
+    [stack[stackIndex], stack[targetIndex]] = [stack[targetIndex], stack[stackIndex]];
+
+    const newActive = stack[stack.length - 1] as EquipmentItem;
+    const newReserve = stack.slice(0, -1) as EquipmentItem[];
+
+    setEquipmentSlotById(slotId, { ...newActive, fromSlot: slotId } as EquipmentItem);
+    setEquipmentReserve(slotId, newReserve);
+
+    addGameLog('equip', `装备移动：${stack[targetIndex]?.name ?? '?'}（${slotId === 'equipmentSlot1' ? '左' : '右'}槽）`);
   };
 
   const normalizeEventEffect = (expression?: EventEffectExpression): string[] => {
@@ -12394,13 +12421,13 @@ export default function GameBoard() {
           setHeroSkillBanner('亡灵拾遗已取消。');
           return;
         }
+        markSkillUsed(skillDef.id);
         const selected = await requestGraveyardSelection(3, { delivery: 'hand-first' });
         if (selected) {
           addGameLog('skill', `亡灵拾遗：从坟场召回「${selected.name}」`);
         } else {
           setHeroSkillBanner('放弃了坟场召回。');
         }
-        markSkillUsed(skillDef.id);
         break;
       }
       case 'blood-draw': {
@@ -15762,6 +15789,7 @@ export default function GameBoard() {
             reserveItems={equipmentSlot1Reserve}
             slotCapacity={equipmentSlotCapacity.equipmentSlot1}
             onSwapToTop={(rIdx) => swapEquipmentToTop('equipmentSlot1', rIdx)}
+            onReorderEquipment={(stackIdx, dir) => moveEquipmentInStack('equipmentSlot1', stackIdx, dir)}
             statModifier={equipmentSlot1StatModifier}
             scaleMultiplier={stageScale}
             permanentDamageBonus={getEquipmentSlotBonus('equipmentSlot1', 'damage')}
@@ -15884,6 +15912,7 @@ export default function GameBoard() {
             reserveItems={equipmentSlot2Reserve}
             slotCapacity={equipmentSlotCapacity.equipmentSlot2}
             onSwapToTop={(rIdx) => swapEquipmentToTop('equipmentSlot2', rIdx)}
+            onReorderEquipment={(stackIdx, dir) => moveEquipmentInStack('equipmentSlot2', stackIdx, dir)}
             statModifier={equipmentSlot2StatModifier}
             scaleMultiplier={stageScale}
             permanentDamageBonus={getEquipmentSlotBonus('equipmentSlot2', 'damage')}
