@@ -10,6 +10,7 @@ import { FLAT_ASPECT_RATIO } from './game-board/constants';
 const BASE_SLOT_WIDTH = 220;
 const SLOT_SCALE_MIN = 0.7;
 const SLOT_SCALE_MAX = 1.3;
+const RESERVE_SWIPE_THRESHOLD = 40;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -129,7 +130,7 @@ export default function EquipmentSlot({
           onDrop(dragData.data);
         }
       },
-      ['card'] // Accept card drops
+      ['card']
     );
     
     return cleanup;
@@ -336,12 +337,47 @@ export default function EquipmentSlot({
                 <div
                   key={reserveCard.id}
                   className="absolute inset-0"
-                  style={{ zIndex: 20 + rIdx, transform: `translateY(${y}%)` }}
+                  style={{ zIndex: 20 + rIdx, transform: `translateY(${y}%)`, touchAction: 'none' }}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    const el = e.currentTarget;
+                    el.setPointerCapture(e.pointerId);
+                    el.dataset.swipeStartY = String(e.clientY);
+                    el.dataset.swipeBaseY = String(y);
+                    el.style.transition = 'none';
+                  }}
+                  onPointerMove={(e) => {
+                    const el = e.currentTarget;
+                    if (!el.dataset.swipeStartY) return;
+                    const dy = Math.max(0, e.clientY - parseFloat(el.dataset.swipeStartY));
+                    const baseY = el.dataset.swipeBaseY ?? '0';
+                    el.style.transform = `translateY(${baseY}%) translateY(${dy}px)`;
+                  }}
+                  onPointerUp={(e) => {
+                    const el = e.currentTarget;
+                    if (!el.dataset.swipeStartY) return;
+                    const dy = e.clientY - parseFloat(el.dataset.swipeStartY);
+                    const baseY = el.dataset.swipeBaseY ?? '0';
+                    el.style.transition = 'transform 0.2s ease-out';
+                    el.style.transform = `translateY(${baseY}%)`;
+                    delete el.dataset.swipeStartY;
+                    delete el.dataset.swipeBaseY;
+                    if (dy > RESERVE_SWIPE_THRESHOLD) {
+                      onSwapToTop?.(rIdx);
+                    }
+                  }}
+                  onPointerCancel={(e) => {
+                    const el = e.currentTarget;
+                    const baseY = el.dataset.swipeBaseY ?? '0';
+                    el.style.transition = 'transform 0.2s ease-out';
+                    el.style.transform = `translateY(${baseY}%)`;
+                    delete el.dataset.swipeStartY;
+                    delete el.dataset.swipeBaseY;
+                  }}
                 >
                   <GameCard
                     card={{ ...reserveCard, fromSlot: slotId } as GameCardData}
-                    onDragStart={(card) => wrappedOnDragStart({ ...card, fromSlot: slotId })}
-                    onDragEnd={wrappedOnDragEnd}
+                    disableInteractions
                     amuletDescriptionVariant="topThird"
                     className="shadow-md opacity-80"
                   />

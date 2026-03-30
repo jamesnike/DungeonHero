@@ -13717,16 +13717,6 @@ export default function GameBoard() {
       }
 
       if (isCardFromEquipmentSlot(card)) {
-        const cardOriginSlot = normalizeHeroEquipmentSlotFromDrag(
-          (card as GameCardData & { fromSlot?: string }).fromSlot,
-        );
-        if (cardOriginSlot === equipSlot) {
-          const reserve = getEquipmentReserve(equipSlot);
-          const reserveIdx = reserve.findIndex(r => r.id === card.id);
-          if (reserveIdx >= 0) {
-            swapEquipmentToTop(equipSlot, reserveIdx);
-          }
-        }
         resetDragState();
         return;
       }
