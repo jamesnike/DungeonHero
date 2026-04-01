@@ -13,6 +13,20 @@ import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amule
 import thunderAmuletImage from '@assets/generated_images/chibi_thunder_amulet.png';
 import potionArcaneInfusionImage from '@assets/generated_images/cute_potion_arcane_infusion.png';
 import potionBackpackExpandImage from '@assets/generated_images/cute_potion_backpack_expand.png';
+import persuadeHammerImage from '@assets/generated_images/knight_persuade_hammer.png';
+import thunderStunHammerImage from '@assets/generated_images/knight_thunder_stun_hammer.png';
+import reviveBoneShieldImage from '@assets/generated_images/knight_revive_bone_shield.png';
+import evolvingShieldImage from '@assets/generated_images/knight_evolving_shield.png';
+import guardianLinkShieldImage from '@assets/generated_images/knight_guardian_link_shield.png';
+import salvageAmuletImage from '@assets/generated_images/knight_salvage_amulet.png';
+import bloodrageAmuletImage from '@assets/generated_images/knight_bloodrage_amulet.png';
+import persuadeAuraAmuletImage from '@assets/generated_images/knight_persuade_aura_amulet.png';
+import statSwapPotionImage from '@assets/generated_images/knight_stat_swap_potion.png';
+import lifestealPotionImage from '@assets/generated_images/knight_lifesteal_potion.png';
+import persuadeScrollImage from '@assets/generated_images/knight_persuade_scroll.png';
+import fusionScrollImage from '@assets/generated_images/knight_fusion_scroll.png';
+import recallScrollImage from '@assets/generated_images/knight_recall_scroll.png';
+import monsterDoomScrollImage from '@assets/generated_images/knight_monster_doom_scroll.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -183,10 +197,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：获得等同当前已损失生命的金币，将“贪婪诅咒”放入背包，并开启商店。',
+    description: '一次性：获得等同当前已损失生命的金币，将“贪婪诅咒”放入背包。',
     magicType: 'instant',
-    magicEffect: '获得金币，生成贪婪诅咒，并开启商店。',
+    magicEffect: '获得金币，生成贪婪诅咒。',
     knightEffect: 'blood-greed',
+    maxUpgradeLevel: 1,
   });
 
   pushCard({
@@ -195,10 +210,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '永久：选择一件护甲装备，对目标怪物造成等同护甲值的伤害。',
+    description: '永久：选择一件护甲装备，对目标怪物造成等同护甲值 50% 的伤害。',
     magicType: 'permanent',
-    magicEffect: '护甲转化为伤害。',
+    magicEffect: '护甲值 50% 转化为伤害。',
     knightEffect: 'armor-strike',
+    maxUpgradeLevel: 2,
   });
 
   pushCard({
@@ -207,10 +223,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '永久：对一名怪物造成等同当前已损失生命值的伤害。',
+    description: '永久：对一名怪物造成等同当前已损失生命值 50% 的伤害。',
     magicType: 'permanent',
-    magicEffect: '以失去生命为伤害。',
+    magicEffect: '以失去生命 50% 为伤害。',
     knightEffect: 'missing-hp-smite',
+    maxUpgradeLevel: 2,
   });
 
   pushCard({
@@ -231,10 +248,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：生命降至 1，本回合所有装备 +4 伤害，每个武器栏可多攻击一次。',
+    description: '一次性：生命降至 1，每个武器栏可多攻击一次。',
     magicType: 'instant',
-    magicEffect: '降血换取爆发与每栏额外攻击。',
+    magicEffect: '降血换取每栏额外攻击。',
     knightEffect: 'berserk-gambit',
+    maxUpgradeLevel: 3,
   });
 
   pushCard({
@@ -247,6 +265,7 @@ export function generateKnightDeck(): KnightCardData[] {
     magicType: 'permanent',
     magicEffect: '回收袋归位并抽牌。',
     knightEffect: 'recycle-flare',
+    maxUpgradeLevel: 2,
   });
 
   pushCard({
@@ -259,6 +278,7 @@ export function generateKnightDeck(): KnightCardData[] {
     magicType: 'instant',
     magicEffect: '濒死时抵消致死伤害。',
     knightEffect: 'death-ward',
+    maxUpgradeLevel: 2,
   });
 
   pushCard({
@@ -282,10 +302,180 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：从坟场随机取回至多 4 张牌加入背包（不能取回自己）。',
+    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。',
     magicType: 'instant',
-    magicEffect: '坟场随机取回 4 张牌。',
+    magicEffect: '坟场随机取回 3 张牌。',
     knightEffect: 'graveyard-recall',
+    maxUpgradeLevel: 3,
+  });
+
+  // === NEW WEAPONS (2 cards) ===
+  pushCard({
+    type: 'weapon',
+    name: '感化之锤',
+    value: 2,
+    image: persuadeHammerImage,
+    classCard: true,
+    description: '每次攻击某个怪物，增加该怪物劝降概率 +20%（精英 +10%）。',
+    persuadeBoostOnHit: 20,
+    persuadeBoostOnHitElite: 10,
+    durability: 4,
+    maxDurability: 4,
+  });
+
+  pushCard({
+    type: 'weapon',
+    name: '雷击碎骨锤',
+    value: 3,
+    image: thunderStunHammerImage,
+    classCard: true,
+    description: '击晕率额外 +15%。攻击已击晕的怪物时造成双倍伤害。',
+    stunBonusChance: 15,
+    doubleDamageOnStunned: true,
+    durability: 3,
+    maxDurability: 3,
+  });
+
+  // === NEW SHIELDS (3 cards) ===
+  pushCard({
+    type: 'shield',
+    name: '不朽骨盾',
+    value: 2,
+    image: reviveBoneShieldImage,
+    classCard: true,
+    description: '复生（首次摧毁恢复 1 耐久）。摧毁时该装备栏永久伤害 +1。',
+    hasEquipmentRevive: true,
+    onDestroyPermanentDamage: 1,
+    durability: 4,
+    maxDurability: 4,
+  });
+
+  pushCard({
+    type: 'shield',
+    name: '进化甲壁',
+    value: 5,
+    image: evolvingShieldImage,
+    classCard: true,
+    description: '格挡 4 次后自动升级（护甲 +2、耐久回满、上限 +1）。',
+    shieldBlockAutoUpgradeCount: 4,
+    durability: 2,
+    maxDurability: 2,
+  });
+
+  pushCard({
+    type: 'shield',
+    name: '守望者之盾',
+    value: 4,
+    image: guardianLinkShieldImage,
+    classCard: true,
+    description: '格挡时，另一个装备栏获得临时护甲（等同此盾护甲值）。',
+    blockGrantTempArmorToOther: true,
+    durability: 2,
+    maxDurability: 2,
+  });
+
+  // === NEW AMULETS (3 cards) ===
+  pushCard({
+    type: 'amulet',
+    name: '残骸回收符',
+    value: 1,
+    image: salvageAmuletImage,
+    classCard: true,
+    description: '装备摧毁时，改为回到手牌（耐久归零但不进坟场）。',
+    amuletEffect: 'equipment-salvage',
+  });
+
+  pushCard({
+    type: 'amulet',
+    name: '血怒战符',
+    value: 1,
+    image: bloodrageAmuletImage,
+    classCard: true,
+    description: '每次失去生命时，所有装备栏临时攻击 +3。',
+    amuletEffect: 'bloodrage-attack',
+  });
+
+  pushCard({
+    type: 'amulet',
+    name: '怀柔之印',
+    value: 1,
+    image: persuadeAuraAmuletImage,
+    classCard: true,
+    description: '每获得一次临时攻击加成，激活行所有怪物劝降率 +5%。',
+    amuletEffect: 'persuade-on-temp-attack',
+  });
+
+  // === NEW POTIONS (2 cards) ===
+  pushCard({
+    type: 'potion',
+    name: '乾坤颠倒药',
+    value: 0,
+    image: statSwapPotionImage,
+    classCard: true,
+    description: '随机选择左或右装备栏，将其永久伤害与永久护甲数值互换。',
+    potionEffect: 'swap-slot-damage-shield',
+  });
+
+  pushCard({
+    type: 'potion',
+    name: '暗夜吸血药',
+    value: 0,
+    image: lifestealPotionImage,
+    classCard: true,
+    description: '法术吸血 +1，生命上限 +6。',
+    potionEffect: 'spell-lifesteal+1-maxhp+6',
+  });
+
+  // === NEW INSTANT MAGIC (2 cards) ===
+  pushCard({
+    type: 'magic',
+    name: '怀柔令',
+    value: 0,
+    image: persuadeScrollImage,
+    classCard: true,
+    description: '一次性：劝降费用降低 3 金币，成功率 +10%（持续到下次劝降）。',
+    magicType: 'instant',
+    magicEffect: '劝降费用 -3，成功率 +10%。',
+    knightEffect: 'persuade-discount',
+    maxUpgradeLevel: 2,
+  });
+
+  pushCard({
+    type: 'magic',
+    name: '魔物融合',
+    value: 0,
+    image: fusionScrollImage,
+    classCard: true,
+    description: '一次性：融合同种怪物——2只融合为精英，3只融合为骷髅王（隐藏Boss）。不同种怪物不能融合。',
+    magicType: 'instant',
+    magicEffect: '选择激活行同种怪物进行融合。',
+    knightEffect: 'monster-fusion',
+  });
+
+  // === NEW PERMANENT MAGIC (1 card) ===
+  pushCard({
+    type: 'magic',
+    name: '紧急回收',
+    value: 0,
+    image: recallScrollImage,
+    classCard: true,
+    description: '永久：失去 2 点生命，选择一个装备回到手牌。',
+    magicType: 'permanent',
+    magicEffect: '失去 2 HP，装备回手。',
+    knightEffect: 'recall-equipment',
+    maxUpgradeLevel: 2,
+  });
+
+  // === NEW HERO MAGIC (1 card) ===
+  pushCard({
+    type: 'hero-magic',
+    name: '灭世裁决',
+    value: 0,
+    image: monsterDoomScrollImage,
+    classCard: true,
+    description: '装备的怪物数量为数值条（上限 6）。释放：摧毁所有装备，每摧毁一个装备对激活行所有怪物 -2攻/-2血上限（每个血层都减）。',
+    heroMagicId: 'monster-doom',
+    heroMagicEffect: '英雄魔法：解锁或触发灭世裁决。',
   });
 
   // Shuffle the deck
@@ -311,10 +501,11 @@ export const createGraveyardRecallCard = (): KnightCardData => {
     value: 0,
     image: skillScrollImage,
     classCard: true,
-    description: '一次性：从坟场随机取回至多 4 张牌加入背包（不能取回自己）。',
+    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。',
     magicType: 'instant',
-    magicEffect: '坟场随机取回 4 张牌。',
+    magicEffect: '坟场随机取回 3 张牌。',
     knightEffect: 'graveyard-recall',
+    maxUpgradeLevel: 3,
   };
 };
 

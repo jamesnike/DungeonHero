@@ -439,6 +439,19 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Tier-2 Upgrade: Wraith Turn Attack */}
+            {card.type === 'monster' && card.wraithTurnAttack != null && card.wraithTurnAttack > 0 && (
+              <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨念蓄积</span>
+                  </div>
+                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">每个怪物回合结束时攻击力 +{card.wraithTurnAttack}。</p>
+                </div>
+              </div>
+            )}
+
             {/* Tier-3 Upgrade: Wraith Death Heal */}
             {card.type === 'monster' && card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && (
               <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30">
@@ -461,6 +474,19 @@ export default function CardDetailsModal({
                     <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">贪婪强化</span>
                   </div>
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">每偷到 X 金币，攻击力和生命值各 +X。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Stun Status */}
+            {card.type === 'monster' && card.isStunned && (
+              <div className="bg-yellow-500/15 p-3 rounded-md border border-yellow-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 shrink-0 text-yellow-500" />
+                    <span className="font-extrabold text-sm text-yellow-700 dark:text-yellow-300 tracking-wide">晕眩</span>
+                  </div>
+                  <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 pl-6">被击晕，本回合无法行动，不触发回合效果。</p>
                 </div>
               </div>
             )}
@@ -548,6 +574,114 @@ export default function CardDetailsModal({
                 </div>
               </div>
             )}
+
+            {/* Monster Equipment Effects */}
+            {card.type === 'monster' && card.durability != null && (() => {
+              const mType = card.monsterType ?? card.name;
+              const effects: { title: string; desc: string; color: string }[] = [];
+
+              if (mType === 'Goblin') {
+                if (card.onAttackEffect?.startsWith('steal-gold-')) {
+                  const amt = card.onAttackEffect.replace('steal-gold-', '');
+                  effects.push({ title: '动手偷钱', desc: `攻击时为 Hero 偷取 ${amt} 金币。`, color: 'emerald' });
+                }
+                if (card.eliteLowGoldPower) {
+                  effects.push({ title: '贪婪强化', desc: '当玩家金币 ≥ 30 时，该装备攻击力和护盾值翻倍。', color: 'amber' });
+                }
+                if (card.goblinStealScale) {
+                  effects.push({ title: '贪婪成长', desc: '每偷到 X 金币，攻击力和护甲值各 +X。', color: 'emerald' });
+                }
+              } else if (mType === 'Ogre') {
+                if (card.enterEffect === 'auto-engage') {
+                  effects.push({ title: '入场激怒', desc: '装备时，战斗行的所有怪物进入激怒状态。', color: 'amber' });
+                }
+                if (card.ogreEnterDiscard) {
+                  effects.push({ title: '蛮力震慑', desc: '装备时，从背包抽一张牌。', color: 'cyan' });
+                }
+                if (card.monsterSpecial === 'ogre-crit') {
+                  effects.push({ title: '蛮力暴击', desc: '装备攻击时伤害始终翻倍。', color: 'red' });
+                }
+                if (card.eliteDoubleAttack) {
+                  effects.push({ title: '连击', desc: '攻击后 50% 概率可以再攻击一次。', color: 'violet' });
+                }
+              } else if (mType === 'Skeleton') {
+                if (card.hasRevive) {
+                  effects.push({
+                    title: card.reviveUsed ? '复生（已触发）' : '复生',
+                    desc: '装备第一次耐久耗完时，以 1 耐久形式复生。',
+                    color: card.reviveUsed ? 'gray' : 'emerald',
+                  });
+                }
+                if (card.monsterSpecial === 'bone-regen') {
+                  effects.push({ title: '虚骨再生', desc: '每次失去耐久，50% 概率恢复一层。', color: 'gray' });
+                }
+                if (card.lastWords === 'discard-hand-3') {
+                  effects.push({ title: '遗言', desc: '装备毁坏时，抽 3 张牌。', color: 'cyan' });
+                }
+              } else if (mType === 'Wraith') {
+                if (card.lastWords?.startsWith('wraith-haunt')) {
+                  const hauntAmt = card.lastWords.replace('wraith-haunt-', '');
+                  effects.push({ title: '遗言', desc: `装备毁坏时，另一个装备栏获得 +${hauntAmt} 临时攻击力，50% 概率左右装备互换。`, color: 'purple' });
+                }
+                if (card.monsterSpecial === 'wraith-rebirth') {
+                  effects.push({
+                    title: card.wraithRebirthUsed ? '幽魂重生（已触发）' : '幽魂重生',
+                    desc: '耐久第一次降到 1 时，耐久回满。',
+                    color: card.wraithRebirthUsed ? 'gray' : 'purple',
+                  });
+                }
+                if (card.wraithDeathHeal) {
+                  effects.push({ title: '怨灵祝福', desc: '装备毁坏时，另一个装备栏的装备耐久 +1。', color: 'purple' });
+                }
+              } else if (mType === 'Dragon') {
+                if (card.bleedEffect) {
+                  effects.push({ title: '流血', desc: '每失去 1 耐久，攻击力 +3。', color: 'orange' });
+                }
+                if (card.eliteRegenHeroTurn) {
+                  effects.push({ title: '龙息回复', desc: '若怪物回合内 Hero 未掉血，该装备立即恢复 1 耐久。', color: 'amber' });
+                }
+                if (card.dragonBleedDestroy) {
+                  effects.push({ title: '流血破甲', desc: '每失去 1 耐久，对所有血层数大于该装备剩余耐久的怪物造成 1 血层伤害。', color: 'orange' });
+                }
+              }
+
+              if (effects.length === 0) return null;
+
+              const colorMap: Record<string, { bg: string; border: string; title: string; text: string }> = {
+                emerald: { bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', title: 'text-emerald-700 dark:text-emerald-300', text: 'text-emerald-800 dark:text-emerald-200' },
+                amber:   { bg: 'bg-amber-500/15',   border: 'border-amber-500/30',   title: 'text-amber-700 dark:text-amber-300',     text: 'text-amber-800 dark:text-amber-200' },
+                red:     { bg: 'bg-red-500/15',     border: 'border-red-500/30',     title: 'text-red-700 dark:text-red-300',         text: 'text-red-800 dark:text-red-200' },
+                violet:  { bg: 'bg-violet-500/15',  border: 'border-violet-500/30',  title: 'text-violet-700 dark:text-violet-300',   text: 'text-violet-800 dark:text-violet-200' },
+                cyan:    { bg: 'bg-cyan-500/15',    border: 'border-cyan-500/30',    title: 'text-cyan-700 dark:text-cyan-300',       text: 'text-cyan-800 dark:text-cyan-200' },
+                gray:    { bg: 'bg-gray-500/15',    border: 'border-gray-500/30',    title: 'text-gray-700 dark:text-gray-300',       text: 'text-gray-800 dark:text-gray-200' },
+                purple:  { bg: 'bg-purple-500/15',  border: 'border-purple-500/30',  title: 'text-purple-700 dark:text-purple-300',   text: 'text-purple-800 dark:text-purple-200' },
+                orange:  { bg: 'bg-orange-500/15',  border: 'border-orange-500/30',  title: 'text-orange-700 dark:text-orange-300',   text: 'text-orange-800 dark:text-orange-200' },
+              };
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
+                    <Sparkles className="w-4 h-4" />
+                    装备效果
+                  </div>
+                  {effects.map((eff, idx) => {
+                    const c = colorMap[eff.color] ?? colorMap.gray;
+                    return (
+                      <div key={idx} className={`${c.bg} p-3 rounded-md border ${c.border}`}>
+                        <div className="flex flex-col gap-1.5">
+                          <span className={`font-extrabold text-sm ${c.title} tracking-wide`}>
+                            {eff.title}
+                          </span>
+                          <p className={`text-sm font-semibold ${c.text} pl-2`}>
+                            {eff.desc}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* Weapon/Shield Details */}
             {(card.type === 'weapon' || card.type === 'shield') && (
@@ -779,6 +913,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token.startsWith('backpackSize-')) return `背包容量 -${token.replace('backpackSize-', '')}`;
       if (token.startsWith('shopLevel+')) return `商店等级 +${token.replace('shopLevel+', '')}`;
       if (token.startsWith('spellDamage+')) return `法术伤害 +${token.replace('spellDamage+', '')}`;
+      if (token.startsWith('spellLifesteal+')) return `法术吸血 +${token.replace('spellLifesteal+', '')}`;
       if (token.startsWith('discardCards:')) return `弃置 ${token.replace('discardCards:', '')} 张牌`;
       if (token.startsWith('deleteCard')) {
         const [, count = '1'] = token.split(':');

@@ -47,6 +47,15 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
     chargeHint: '每次武器攻击 +1 狂战值（含闪光护符多次攻击）。',
     chargeSource: 'weapon-attack',
   },
+  {
+    id: 'monster-doom',
+    name: '灭世裁决',
+    description: '装备怪物数量为数值条（上限 6）。发动效果：摧毁所有装备，每摧毁一个装备对激活行所有怪物 -2攻/-2血上限。',
+    cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
+    gaugeMax: 6,
+    chargeHint: '每装备一个怪物 +1 灭世值。',
+    chargeSource: 'weapon-attack',
+  },
 ];
 
 const heroMagicDefinitionMap: Record<HeroMagicId, HeroMagicDefinition> = heroMagicDefinitions.reduce(

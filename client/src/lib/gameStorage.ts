@@ -37,6 +37,7 @@ export interface CombatStateSnapshot {
     monsterName: string;
     isFollowUpAttack?: boolean;
   };
+  slotBlocksThisTurn?: Record<string, boolean>;
 }
 
 export interface PersistedGameState {
@@ -80,6 +81,7 @@ export interface PersistedGameState {
   victory: boolean;
   permanentMaxHpBonus: number;
   permanentSpellDamageBonus: number;
+  permanentSpellLifesteal: number;
   backpackCapacityModifier: number;
   heroMagicState: HeroMagicState;
   turnDamageTaken: number;
@@ -103,7 +105,8 @@ export interface PersistedGameState {
   berserkerRageActive?: boolean;
   berserkerSlotUsed?: Record<string, boolean>;
   gambitExtraActive?: boolean;
-  gambitSlotUsed?: Record<string, boolean>;
+  gambitExtraPerSlot?: number;
+  gambitSlotUsed?: Record<string, number>;
   heroSkillUsedThisWave?: boolean;
   /** 本波已用的额外英雄技能 id（商店发现等） */
   extraSkillsUsedThisWave?: string[];
@@ -115,6 +118,7 @@ export interface PersistedGameState {
   currentEventCard?: GameCardData | null;
   eventModalOpen?: boolean;
   eventModalMinimized?: boolean;
+  heroStunChance?: number;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

@@ -96,6 +96,10 @@ export const initialCombatState: CombatState = {
   heroDamageThisTurn: {},
   monsterAttackQueue: [],
   pendingBlock: null,
+  slotBlocksThisTurn: {
+    equipmentSlot1: false,
+    equipmentSlot2: false,
+  },
 };
 
 export const initialWaterfallAnimationState: WaterfallAnimationState = {

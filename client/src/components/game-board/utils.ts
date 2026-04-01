@@ -116,6 +116,11 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasDualGuard: false,
   hasDiscardShock: false,
   hasFlipGold: false,
+  hasRecycleForge: false,
+  hasLoneCard: false,
+  hasEquipmentSalvage: false,
+  hasBloodrageAttack: false,
+  hasPersuadeOnTempAttack: false,
 });
 
 export const logWaterfallInvariant = (
@@ -591,6 +596,16 @@ export function createDeck(): GameCardData[] {
   });
 
   deck.push({
+    id: `magic-${id++}`,
+    type: 'magic',
+    name: '等价交换',
+    value: 0,
+    image: skillScrollImage,
+    magicType: 'instant',
+    magicEffect: '选择一件装备和一个非Boss怪物，互换它们的耐久与血层数。',
+  });
+
+  deck.push({
     id: `event-${id++}`,
     type: 'event',
     name: '命运十字路口',
@@ -951,8 +966,9 @@ export function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备栏，使其装备的下一次攻击 +3。',
-      description: '选择一个装备栏，使其中装备的下一次攻击临时 +3。',
+      magicEffect: '永久魔法：选择一个装备栏，使其装备的下一次攻击 +2。',
+      description: '选择一个装备栏，使其中装备的下一次攻击临时 +2。',
+      maxUpgradeLevel: 2,
     },
     {
       id: STARTER_CARD_IDS.repairOne,
@@ -961,9 +977,10 @@ export function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: skillScrollImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备，恢复 1 点耐久。',
-      description: '精准地修补武器或护盾，恢复 1 点耐久值。',
+      magicEffect: '永久魔法：失去 2 点生命，选择一个装备恢复 1 点耐久。',
+      description: '失去 2 点生命，精准修补武器或护盾，恢复 1 点耐久值。',
       recycleDelay: 1,
+      maxUpgradeLevel: 3,
     },
     {
       id: STARTER_CARD_IDS.healTwo,
@@ -984,7 +1001,8 @@ export function createStarterBackpack(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，置于牌堆底（不打乱牌堆）。',
       description: '将一张地城卡牌放到牌堆最底部。',
-      recycleDelay: 1,
+      recycleDelay: 3,
+      maxUpgradeLevel: 2,
     },
     {
       id: STARTER_CARD_IDS.dungeonSwap,
@@ -996,6 +1014,7 @@ export function createStarterBackpack(): GameCardData[] {
       magicEffect: '永久魔法：将地城行最左和最右的卡牌对换位置。',
       description: '扭转地城秩序，将最左与最右的卡牌互换。',
       recycleDelay: 2,
+      maxUpgradeLevel: 2,
     },
     {
       id: STARTER_CARD_IDS.trainingBlade,
@@ -1005,6 +1024,7 @@ export function createStarterBackpack(): GameCardData[] {
       image: swordImage,
       durability: 2,
       maxDurability: 2,
+      maxUpgradeLevel: 2,
     },
   ];
 }

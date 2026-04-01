@@ -8,6 +8,7 @@ import { getHeroMagicDefinition } from '@/lib/heroMagic';
 import {
   Backpack,
   Coins,
+  Droplets,
   Flame,
   Hand,
   Heart,
@@ -17,6 +18,7 @@ import {
   ShieldPlus,
   Sparkles,
   Sword,
+  Zap,
 } from 'lucide-react';
 
 export interface HeroMagicDisplayInfo {
@@ -42,6 +44,7 @@ interface HeroDetailsModalProps {
     attackBonus: number;
     defenseBonus: number;
     spellDamageBonus: number;
+    spellLifesteal: number;
     tempShield: number;
     permanentMaxHpBonus: number;
   };
@@ -123,6 +126,12 @@ export default function HeroDetailsModal({
       icon: <Sparkles className="w-4 h-4 text-purple-500" />,
     },
     {
+      key: 'spellLifesteal',
+      label: '法术吸血',
+      value: String(stats.spellLifesteal),
+      icon: <Droplets className="w-4 h-4 text-rose-400" />,
+    },
+    {
       key: 'tempShield',
       label: '临时护盾',
       value: formatSignedValue(stats.tempShield),
@@ -133,6 +142,12 @@ export default function HeroDetailsModal({
       label: '永久生命奖励',
       value: formatSignedValue(stats.permanentMaxHpBonus),
       icon: <PlusCircle className="w-4 h-4 text-emerald-500" />,
+    },
+    {
+      key: 'stunChance',
+      label: '击晕概率',
+      value: `${stats.stunChance}%`,
+      icon: <Zap className="w-4 h-4 text-yellow-500" />,
     },
   ];
 

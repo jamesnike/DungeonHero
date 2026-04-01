@@ -46,7 +46,7 @@ const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
   ],
   Wraith:   [
     { waterfallLevel: 4, attackBonus: 2, hpBonus: 2 },
-    { waterfallLevel: 8, attackBonus: 4, hpBonus: 4 },
+    { waterfallLevel: 8, attackBonus: 4, hpBonus: 4, specialAbility: 'wraith-turn-attack', specialDesc: '怨念蓄积：每个怪物回合结束时攻击力 +3' },
     { waterfallLevel: 12, attackBonus: 6, hpBonus: 6, specialAbility: 'wraith-death-heal', specialDesc: '怨灵祝福：死亡时同行其他怪物生命值 +4' },
   ],
 };
@@ -135,7 +135,11 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
       case 'skeleton-no-layer-cost':
         result.skeletonNoLayerCost = true;
         break;
+      case 'wraith-turn-attack':
+        result.wraithTurnAttack = 3;
+        break;
       case 'wraith-death-heal':
+        result.wraithTurnAttack = 3;
         result.wraithDeathHeal = 4;
         break;
       case 'goblin-steal-scale':

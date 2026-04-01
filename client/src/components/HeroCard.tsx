@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Heart, AlertTriangle, Sparkles } from 'lucide-react';
+import { Heart, AlertTriangle, Sparkles, Droplets } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import React, { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
@@ -47,6 +47,7 @@ interface HeroCardProps {
   weaponSwingAnimation?: boolean;
   shieldBlockAnimation?: boolean;
   spellDamageBonus?: number;
+  spellLifesteal?: number;
 }
 
 interface HeroSkillUiState {
@@ -112,6 +113,7 @@ export default function HeroCard({
   weaponSwingAnimation = false,
   shieldBlockAnimation = false,
   spellDamageBonus = 0,
+  spellLifesteal = 0,
   onHeroClick,
 }: HeroCardProps) {
   const gameViewport = useGameViewport();
@@ -292,12 +294,15 @@ export default function HeroCard({
         className={`pointer-events-none absolute left-1/2 z-30 flex items-center gap-2 rounded-full border border-border bg-background/95 dh-hero-small font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'px-2 py-0' : 'px-3 py-1'}`}
         style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
       >
-        <span className="flex items-center gap-1 text-purple-500">
+        <span className="flex items-center gap-1 text-purple-500" title="法术伤害加成">
           <Sparkles className="dh-hero-icon" />
-          {isCompact ? '法术' : '永久法术伤害'}
+          <span className={`font-mono dh-hero-chip ${spellDamageDisplay < 0 ? 'text-red-500' : ''}`}>{spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}</span>
         </span>
         <span className="text-muted-foreground/50">|</span>
-        <span className={`font-mono dh-hero-chip ${spellDamageDisplay < 0 ? 'text-red-500' : 'text-primary'}`}>{spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}</span>
+        <span className="flex items-center gap-1 text-rose-400" title="法术吸血">
+          <Droplets className="dh-hero-icon" />
+          <span className="font-mono dh-hero-chip">{spellLifesteal}</span>
+        </span>
       </div>
       <Card className={`
         relative h-full w-full border-4 border-amber-600 shadow-lg overflow-hidden

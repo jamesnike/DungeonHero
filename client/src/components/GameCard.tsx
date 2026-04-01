@@ -11,6 +11,7 @@ import {
   Infinity,
   Wand2,
   X,
+  ArrowBigUpDash,
 } from 'lucide-react';
 import { initMobileDrag, initMobileDrop } from '../utils/mobileDragDrop';
 import { useGameViewport } from '@/contexts/GameViewportContext';
@@ -89,7 +90,16 @@ export type PotionEffectId =
   | 'dice-backpack-expand'
   | 'dice-arcane-infusion'
   | 'heal-14'
-  | 'discover-graveyard-magic';
+  | 'discover-graveyard-magic'
+  | 'perm-slot-damage+1'
+  | 'perm-equipment-durability-max+1'
+  | 'perm-spell-lifesteal+1'
+  | 'perm-slot-stun+5'
+  | 'perm-slot-capacity+1'
+  | 'perm-hand-limit+1'
+  | 'perm-backpack-size+2'
+  | 'swap-slot-damage-shield'
+  | 'spell-lifesteal+1-maxhp+6';
 
 export type AmuletEffectId =
   | 'heal'
@@ -101,7 +111,11 @@ export type AmuletEffectId =
   | 'dual-guard'
   | 'discard-zap'
   | 'flip-gold'
-  | 'recycle-forge';
+  | 'recycle-forge'
+  | 'lone-card'
+  | 'equipment-salvage'
+  | 'bloodrage-attack'
+  | 'persuade-on-temp-attack';
 
 export type AmuletAuraBonus = {
   attack?: number;
@@ -109,7 +123,7 @@ export type AmuletAuraBonus = {
   maxHp?: number;
 };
 
-export type HeroMagicId = 'holy-light' | 'berserker-rage';
+export type HeroMagicId = 'holy-light' | 'berserker-rage' | 'monster-doom';
 
 export type EventRequirement =
   | { type: 'equipment'; slot: 'left' | 'right'; message?: string }
@@ -222,6 +236,19 @@ export interface GameCardData {
   ghostBladeExile?: boolean; // 虚灵刀: after each attack, offer to exile cards from graveyard
   healOnKill?: number; // Heal this amount when this weapon kills a monster
   waterfallAttackBoost?: number; // Increase weapon's own attack by this amount each waterfall
+  killGoldScaling?: boolean; // Weapon gives increasing gold per kill (counter starts at 1, increments each kill)
+  killGoldCounter?: number; // Current gold bonus for next kill with this weapon
+  persuadeBoostOnHit?: number; // Increase target monster's persuade rate by this % on hit
+  persuadeBoostOnHitElite?: number; // Override persuade boost for elite monsters
+  stunBonusChance?: number; // Extra stun % for this weapon specifically
+  doubleDamageOnStunned?: boolean; // Deal double damage when attacking stunned monsters
+  onDestroyPermanentDamage?: number; // Add permanent damage to slot when this equipment is destroyed
+  shieldBlockAutoUpgradeCount?: number; // Auto-upgrade shield after this many blocks
+  _shieldBlockCount?: number; // Internal counter for blocks performed
+  blockGrantTempArmorToOther?: boolean; // On block, grant temp armor equal to shield value to other slot
+  onDestroyDraw?: number; // Draw this many cards from backpack when this equipment is destroyed
+  hasEquipmentRevive?: boolean; // Non-monster equipment has revive (first destruction → 1 durability)
+  equipmentReviveUsed?: boolean; // Whether the equipment revive has been consumed
   isMinionCard?: boolean;
   // Boss monster properties
   isFinalMonster?: boolean; // Last monster in the deck — transforms into boss on defeat
@@ -235,15 +262,22 @@ export interface GameCardData {
   dragonBleedDestroy?: boolean; // Dragon tier-3: on layer loss, destroy equipment with durability > remaining layers
   skeletonNoLayerCost?: boolean; // Skeleton tier-3: after revive, attacks don't consume layers
   skeletonNoLayerCostActive?: boolean; // Set to true once skeleton revives with tier-3 ability
+  wraithTurnAttack?: number; // Wraith tier-2: +N attack at end of each monster turn
   wraithDeathHeal?: number; // Wraith tier-3: on death, same-row monsters gain this much HP
   goblinStealScale?: boolean; // Goblin tier-3: +X atk/hp per X gold stolen
   goblinHasStolen?: boolean; // Tracks if this goblin successfully stole gold
   /** 本局随机指定的一只哥布林；仅该实例死亡且未偷金时掉落「哥布林的戏法」 */
   goblinTrickCarrier?: boolean;
+  wraithRebirthUsed?: boolean; // Wraith equipment: durability refill has been consumed
+  /** 击晕状态：被击晕的怪物在其回合不能攻击且不触发回合效果，持续一回合后自动恢复 */
+  isStunned?: boolean;
   // Permanent event properties
   isPermanentEvent?: boolean; // Stays in dungeon after effect; recyclable like perm magic
   hasReleaseCharge?: boolean; // Gained on appearance or position change; consumed on effect use
   _fateBladeLastSlot?: number; // Internal: last known active row slot index for position tracking
+  // Card upgrade properties
+  upgradeLevel?: number; // Current upgrade level (0 = base, 1 = upgraded once, etc.)
+  maxUpgradeLevel?: number; // Maximum number of upgrades allowed for this card
 }
 
 /** 叠伤永久法术：仅显示叠刺层数（随使用次数增加），不含永久法术加成 / 法术回响 */
@@ -586,6 +620,9 @@ const amuletEffectText =
   const getLayerShift = () => {
     return 0; // Handled by GameBoard wrapper now
   };
+
+  const upgradeLevel = card.upgradeLevel ?? 0;
+  const showUpgradeBadge = upgradeLevel > 0;
 
   const showBleedOverlay = Boolean(bleedAnimation);
   const showWeaponSwing = Boolean(weaponSwingAnimation);
@@ -974,16 +1011,42 @@ const amuletEffectText =
                       )}
                     </div>
                   )}
-                  {isEventCard && card.eventChoices && (
+                  {isEventCard && (
                     <div className="relative z-10 w-full flex flex-col gap-1">
-                      {card.eventChoices.map((choice, idx) => (
-                        <div
-                          key={idx}
-                          className="dh-card__event-option text-left break-words leading-snug text-zinc-900"
-                        >
-                          <span className="text-violet-600 mr-0.5">◆</span> {choice.text}
+                      {card.description && (
+                        <div className="dh-card__event-option text-left break-words leading-snug text-violet-800/70 italic">
+                          {card.description}
                         </div>
-                      ))}
+                      )}
+                      {card.eventChoices?.map((choice, idx) =>
+                        choice.diceTable?.length ? (
+                          <div key={idx} className="flex flex-col gap-0.5">
+                            <div className="dh-card__event-option text-left break-words leading-snug text-zinc-900">
+                              <span className="text-amber-600 mr-0.5">🎲</span> 掷出不同结果：
+                            </div>
+                            {choice.diceTable.map(entry => (
+                              <div
+                                key={entry.id}
+                                className="dh-card__event-option text-left break-words leading-snug text-zinc-900 pl-2"
+                              >
+                                <span className="text-violet-600 mr-0.5">◆</span> {entry.label}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div
+                            key={idx}
+                            className="dh-card__event-option text-left break-words leading-snug text-zinc-900"
+                          >
+                            <span className="text-violet-600 mr-0.5">◆</span> {choice.text}
+                          </div>
+                        )
+                      )}
+                      {card.waterfallEffect && (
+                        <div className="dh-card__event-option text-left break-words leading-snug text-red-700/80 font-medium">
+                          ⚠ {card.waterfallEffect.description}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1005,6 +1068,14 @@ const amuletEffectText =
                     : 'bg-cyan-200/50'
               }`}>
                 {getCardIcon()}
+                {showUpgradeBadge && (
+                  <div className="dh-card__upgrade-badge dh-card__upgrade-badge--magic" title={`已升级 ${upgradeLevel} 次`}>
+                    <ArrowBigUpDash className="dh-card__upgrade-badge-icon" />
+                    {upgradeLevel > 1 && (
+                      <span className="dh-card__upgrade-badge-count">{upgradeLevel}</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1036,6 +1107,25 @@ const amuletEffectText =
                 )}
                 {card.type === 'monster' && card.bossPhase && (
                   <div className="absolute inset-0 pointer-events-none border-2 border-red-500/50 rounded-sm bg-red-500/5" />
+                )}
+                {card.type === 'monster' && card.isStunned && (
+                  <div className="dh-stun-overlay">
+                    <svg className="dh-stun-overlay__icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                      <g className="dh-stun-overlay__spin">
+                        {/* Spiral swirl */}
+                        <path
+                          d="M50 25 C60 25, 75 35, 75 50 C75 65, 60 75, 50 75 C35 75, 25 60, 30 48 C35 36, 48 35, 50 42 C52 49, 45 55, 42 50"
+                          fill="none" stroke="#facc15" strokeWidth="4" strokeLinecap="round"
+                        />
+                        {/* Stars */}
+                        <polygon points="20,18 22,12 24,18 30,20 24,22 22,28 20,22 14,20" fill="#fbbf24" />
+                        <polygon points="76,22 78,16 80,22 86,24 80,26 78,32 76,26 70,24" fill="#fde68a" />
+                        <polygon points="50,8 52,2 54,8 60,10 54,12 52,18 50,12 44,10" fill="#fbbf24" />
+                        <polygon points="30,78 32,72 34,78 40,80 34,82 32,88 30,82 24,80" fill="#fde68a" />
+                        <polygon points="72,72 74,66 76,72 82,74 76,76 74,82 72,76 66,74" fill="#fbbf24" />
+                      </g>
+                    </svg>
+                  </div>
                 )}
                 {card.type === 'monster' && (card.isFinalMonster || card.bossPhase) && (
                   <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
@@ -1251,6 +1341,14 @@ const amuletEffectText =
                     </div>
                   </div>
                 )}
+                {showUpgradeBadge && (
+                  <div className="dh-card__upgrade-badge" title={`已升级 ${upgradeLevel} 次`}>
+                    <ArrowBigUpDash className="dh-card__upgrade-badge-icon" />
+                    {upgradeLevel > 1 && (
+                      <span className="dh-card__upgrade-badge-count">{upgradeLevel}</span>
+                    )}
+                  </div>
+                )}
               </div>
               
               {/* Text Area */}
@@ -1263,7 +1361,59 @@ const amuletEffectText =
                   {card.name}
                 </h3>
 
-                {card.type === 'monster' && (card.monsterSpecial || card.hasRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreEnterDiscard || card.dragonBleedDestroy || card.skeletonNoLayerCostActive || card.wraithDeathHeal || card.goblinStealScale) && (
+                {card.type === 'monster' && card.durability != null && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealScale || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonBleedDestroy || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal) && (
+                  <div className="dh-card__keyword-row">
+                    {card.onAttackEffect && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手偷钱：攻击时为Hero偷钱">偷钱</span>
+                    )}
+                    {card.eliteLowGoldPower && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="贪婪强化：金币≥30时攻击力和护盾翻倍">贪婪</span>
+                    )}
+                    {card.goblinStealScale && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="贪婪成长：偷钱后攻击力和护甲同步增长">成长</span>
+                    )}
+                    {card.monsterSpecial === 'ogre-crit' && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="蛮力暴击：攻击伤害始终翻倍">暴击</span>
+                    )}
+                    {card.eliteDoubleAttack && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="连击：50%概率可以再攻击一次">连击</span>
+                    )}
+                    {card.hasRevive && (
+                      <span className={`dh-card__keyword-tag ${card.reviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
+                        title={card.reviveUsed ? '复生已触发' : '耐久耗完时以1耐久复生'}>
+                        {card.reviveUsed ? '已复生' : '复生'}
+                      </span>
+                    )}
+                    {card.monsterSpecial === 'bone-regen' && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虚骨再生：每次失去耐久50%概率恢复">再生</span>
+                    )}
+                    {card.lastWords === 'discard-hand-3' && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="遗言：毁坏时抽3张牌">遗言</span>
+                    )}
+                    {card.lastWords?.startsWith('wraith-haunt') && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：毁坏时另一装备获得临时攻击">遗言</span>
+                    )}
+                    {card.monsterSpecial === 'wraith-rebirth' && (
+                      <span className={`dh-card__keyword-tag ${card.wraithRebirthUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
+                        title={card.wraithRebirthUsed ? '幽魂重生已触发' : '耐久第一次降到1时回满'}>
+                        {card.wraithRebirthUsed ? '已重生' : '重生'}
+                      </span>
+                    )}
+                    {card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="怨灵祝福：毁坏时另一装备耐久+1">祝福</span>
+                    )}
+                    {card.bleedEffect && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="流血：每失去1耐久攻击力+3">流血</span>
+                    )}
+                    {card.eliteRegenHeroTurn && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="龙息回复：怪物回合内未掉血则恢复1耐久">回复</span>
+                    )}
+                    {card.dragonBleedDestroy && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="流血破甲：失去耐久时对高血层怪物造成1血层伤害">破甲</span>
+                    )}
+                  </div>
+                )}
+                {card.type === 'monster' && card.durability == null && (card.monsterSpecial || card.hasRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreEnterDiscard || card.dragonBleedDestroy || card.skeletonNoLayerCostActive || card.wraithTurnAttack || card.wraithDeathHeal || card.goblinStealScale || card.isStunned) && (
                   <div className="dh-card__keyword-row">
                     {card.monsterSpecial && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.description ?? '精英怪物'}>精英</span>
@@ -1295,11 +1445,17 @@ const amuletEffectText =
                     {card.skeletonNoLayerCostActive && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="不朽之骨：攻击不消耗血层">不朽</span>
                     )}
+                    {card.wraithTurnAttack != null && card.wraithTurnAttack > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`怨念蓄积：每个怪物回合结束时攻击力 +${card.wraithTurnAttack}`}>蓄积</span>
+                    )}
                     {card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`怨灵祝福：死亡时同行怪物生命+${card.wraithDeathHeal}`}>祝福</span>
                     )}
                     {card.goblinStealScale && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="贪婪强化：偷到金币后攻击力和生命值同步增长">贪婪</span>
+                    )}
+                    {card.isStunned && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title="晕眩：本回合无法行动">晕眩</span>
                     )}
                   </div>
                 )}
@@ -1370,11 +1526,20 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.ogreEnterDiscard !== b.ogreEnterDiscard ||
       a.dragonBleedDestroy !== b.dragonBleedDestroy ||
       a.skeletonNoLayerCostActive !== b.skeletonNoLayerCostActive ||
+      a.wraithTurnAttack !== b.wraithTurnAttack ||
       a.wraithDeathHeal !== b.wraithDeathHeal ||
       a.goblinStealScale !== b.goblinStealScale ||
       a.goblinHasStolen !== b.goblinHasStolen ||
       a.goblinTrickCarrier !== b.goblinTrickCarrier ||
-      a.hasReleaseCharge !== b.hasReleaseCharge
+      a.hasReleaseCharge !== b.hasReleaseCharge ||
+      a.isStunned !== b.isStunned ||
+      a.wraithRebirthUsed !== b.wraithRebirthUsed ||
+      a.eliteLowGoldPower !== b.eliteLowGoldPower ||
+      a.eliteDoubleAttack !== b.eliteDoubleAttack ||
+      a.eliteRegenHeroTurn !== b.eliteRegenHeroTurn ||
+      a.enterEffect !== b.enterEffect ||
+      a.monsterSpecial !== b.monsterSpecial ||
+      a.upgradeLevel !== b.upgradeLevel
     ) {
       return false;
     }

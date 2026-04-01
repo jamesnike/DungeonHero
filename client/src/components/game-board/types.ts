@@ -28,6 +28,7 @@ export type CombatState = {
     monsterName: string;
     isFollowUpAttack?: boolean;
   };
+  slotBlocksThisTurn: Record<EquipmentSlotId, boolean>;
 };
 
 export type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
@@ -121,7 +122,9 @@ export type MonsterRewardEffect =
   | { type: 'discoverGraveyard' }
   | { type: 'maxHp'; amount: number }
   | { type: 'spellDamage'; amount: number }
-  | { type: 'backpackCapacity'; amount: number };
+  | { type: 'spellLifesteal'; amount: number }
+  | { type: 'backpackCapacity'; amount: number }
+  | { type: 'stunChance'; amount: number };
 
 export type MonsterRewardOption = {
   id: string;
@@ -239,6 +242,13 @@ export type PendingMagicAction =
     }
   | {
       card: GameCardData;
+      effect: 'dungeon-swap-select';
+      step: 'dungeon-select';
+      prompt: string;
+      leftIdx: number;
+    }
+  | {
+      card: GameCardData;
       effect: 'scaling-damage';
       step: 'monster-select';
       /** 刺击基数（未加永久法术加成、未乘回响） */
@@ -253,6 +263,65 @@ export type PendingMagicAction =
       prompt: string;
       data: Record<string, unknown>;
       echoRemaining?: number;
+    }
+  | {
+      card: GameCardData;
+      effect: 'soul-swap';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'soul-swap';
+      step: 'monster-select';
+      slotId: EquipmentSlotId;
+      slotDurability: number;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'temp-armor';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'dungeon-preview-swap';
+      step: 'dungeon-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'dungeon-preview-swap';
+      step: 'preview-select';
+      selectedActiveSlot: number;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'grant-revive';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'recall-equipment';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'magic-missile';
+      step: 'monster-select';
+      prompt: string;
+      echoMultiplier?: number;
+    }
+  | {
+      card: GameCardData;
+      effect: 'fate-swap';
+      step: 'dungeon-select';
+      prompt: string;
+      deckDepth: number;
     }
 export type PendingPotionAction =
   | {
@@ -281,6 +350,30 @@ export type PendingPotionAction =
       card: GameCardData;
       effect: 'repair-choice-upgrade';
       allowedTypes: EquipmentRepairTarget[];
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'perm-slot-damage+1';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'perm-equipment-durability-max+1';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'perm-slot-stun+5';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'perm-slot-capacity+1';
       step: 'slot-select';
       prompt: string;
     };
@@ -399,6 +492,10 @@ export type ActiveAmuletEffects = {
   hasDiscardShock: boolean;
   hasFlipGold: boolean;
   hasRecycleForge: boolean;
+  hasLoneCard: boolean;
+  hasEquipmentSalvage: boolean;
+  hasBloodrageAttack: boolean;
+  hasPersuadeOnTempAttack: boolean;
 };
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';
@@ -445,8 +542,10 @@ export type HeroStatsSummary = {
   attackBonus: number;
   defenseBonus: number;
   spellDamageBonus: number;
+  spellLifesteal: number;
   tempShield: number;
   permanentMaxHpBonus: number;
+  stunChance: number;
 };
 
 export type HeroSkillSummary = {
@@ -476,6 +575,7 @@ export type UndoTransientState = {
   discoverModalOpen: boolean;
   discoverOptions: GameCardData[];
   deleteModalOpen: boolean;
+  upgradeModalOpen: boolean;
   deathWardPrompt: DeathWardPromptState | null;
   equipmentPrompt: EquipmentPromptState | null;
   graveyardDiscoverState: GameCardData[] | null;
