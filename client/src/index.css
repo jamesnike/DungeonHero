@@ -881,6 +881,12 @@ html {
     filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.45));
     transition: opacity 220ms cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  .fate-swap-flight-card {
+    pointer-events: none;
+    will-change: transform, opacity;
+    filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.7)) drop-shadow(0 8px 16px rgba(15, 23, 42, 0.5));
+  }
   
   @keyframes modal-fade-in {
     from {
@@ -2020,6 +2026,97 @@ html {
 }
 
 /* ════════════════════════════════════════════════
+   Mobile Performance Profile
+   Reduces GPU-heavy CSS effects on touch devices
+   and narrow viewports for smoother gameplay.
+   ════════════════════════════════════════════════ */
+
+@media (hover: none), (max-width: 768px) {
+  .combat-overlay__shape--bleed {
+    mix-blend-mode: normal;
+    filter: none;
+  }
+
+  .combat-overlay__shape--bleed-drip {
+    filter: none;
+  }
+
+  .combat-overlay__shape--heal {
+    mix-blend-mode: normal;
+    filter: none;
+  }
+
+  .combat-overlay__shape--heal-rise {
+    filter: none;
+  }
+
+  .combat-overlay__shape--defeat {
+    mix-blend-mode: normal;
+  }
+
+  .combat-overlay__shape--defeat-burst {
+    filter: none;
+  }
+
+  .combat-overlay__shape--defeat-fade::after {
+    filter: none;
+  }
+
+  .combat-overlay__shape--block-spark {
+    box-shadow: none;
+  }
+
+  .engaged-monster .shadcn-card::after {
+    mix-blend-mode: normal;
+    box-shadow: inset 0 0 12px rgba(69, 10, 10, 0.4);
+  }
+
+  .monster-target-highlight {
+    box-shadow:
+      0 0 0 3px rgba(251, 191, 36, 0.85),
+      0 0 8px rgba(251, 191, 36, 0.3);
+  }
+
+  .dungeon-target-highlight {
+    box-shadow:
+      0 0 0 3px rgba(59, 130, 246, 0.85),
+      0 0 8px rgba(59, 130, 246, 0.3);
+  }
+
+  .class-flight-card {
+    filter: none;
+  }
+
+  .fate-swap-flight-card {
+    filter: none;
+  }
+
+  .animate-preview-deck-return {
+    filter: none;
+  }
+
+  .animate-heal-glow {
+    box-shadow: none;
+    animation: none;
+    background-color: rgba(34, 197, 94, 0.15);
+  }
+
+  .shield-block {
+    box-shadow: none;
+  }
+
+  .card-draft-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(0, 0, 0, 0.75);
+  }
+
+  .loading-screen__hero-glow {
+    filter: blur(12px);
+  }
+}
+
+/* ════════════════════════════════════════════════
    Reduced Motion (iOS Accessibility → Reduce Motion)
    ════════════════════════════════════════════════ */
 
@@ -2054,6 +2151,10 @@ html {
   }
 
   .class-flight-card {
+    filter: none !important;
+  }
+
+  .fate-swap-flight-card {
     filter: none !important;
   }
 
@@ -2270,13 +2371,6 @@ html {
   transform: translateY(-2px);
 }
 
-.card-draft-choice-selected {
-  border-color: #a882ff !important;
-  background: rgba(168, 130, 255, 0.14) !important;
-  box-shadow: 0 0 16px rgba(168, 130, 255, 0.3);
-  transform: translateY(-4px);
-}
-
 .card-draft-choice-name {
   font-size: 0.82rem;
   font-weight: 600;
@@ -2293,25 +2387,169 @@ html {
   overflow: hidden;
 }
 
-.card-draft-confirm-btn {
-  padding: 10px 36px;
+/* ── Skill Draft Card (inside card-draft layout) ─────────── */
+.skill-draft-card {
+  position: relative;
+  width: 140px;
+  min-height: 190px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(170deg, #2a2540 0%, #1a1730 100%);
+  border: 1.5px solid rgba(168, 130, 255, 0.3);
+  box-shadow: 0 4px 16px rgba(80, 50, 160, 0.25);
+}
+
+.skill-draft-card-bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  pointer-events: none;
+}
+
+.skill-draft-card-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.skill-draft-card-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 10px 14px;
+  gap: 6px;
+}
+
+.skill-draft-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(168, 130, 255, 0.15);
+  border: 1.5px solid rgba(168, 130, 255, 0.35);
+  color: #c4a8ff;
+  margin-bottom: 2px;
+}
+
+.skill-draft-name {
   font-size: 0.95rem;
+  font-weight: 700;
+  color: #e8e0ff;
+  text-shadow: 0 0 8px rgba(168, 130, 255, 0.3);
+  text-align: center;
+}
+
+.skill-draft-type {
+  font-size: 0.65rem;
   font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #7c5ce0, #a882ff);
-  border: none;
+  padding: 2px 10px;
   border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+.skill-draft-type-active {
+  background: rgba(255, 160, 60, 0.2);
+  color: #ffb366;
+  border: 1px solid rgba(255, 160, 60, 0.35);
+}
+
+.skill-draft-type-passive {
+  background: rgba(80, 200, 160, 0.15);
+  color: #6ee0b8;
+  border: 1px solid rgba(80, 200, 160, 0.3);
+}
+
+.skill-draft-divider {
+  width: 60%;
+  height: 1px;
+  background: rgba(168, 130, 255, 0.2);
+  margin: 4px 0;
+}
+
+.skill-draft-effect {
+  font-size: 0.68rem;
+  color: #b0a8cc;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.skill-draft-reroll {
+  font-size: 0.78rem;
+  color: #9e95b8;
+  background: rgba(168, 130, 255, 0.08);
+  border: 1px solid rgba(168, 130, 255, 0.2);
+  border-radius: 8px;
+  padding: 6px 18px;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
-  box-shadow: 0 4px 16px rgba(120, 80, 220, 0.35);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
-.card-draft-confirm-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(120, 80, 220, 0.45);
+.skill-draft-reroll:hover {
+  background: rgba(168, 130, 255, 0.15);
+  border-color: rgba(168, 130, 255, 0.4);
+  color: #c4b8e0;
 }
 
-.card-draft-confirm-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+/* ── Class Card Preview (in draft overlays) ──────────────── */
+.class-card-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: rgba(255, 200, 60, 0.06);
+  border: 1px solid rgba(255, 200, 60, 0.2);
 }
+
+.class-card-preview-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #e8c44a;
+  letter-spacing: 0.5px;
+}
+
+.class-card-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.class-card-preview-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1.5px solid rgba(255, 200, 60, 0.3);
+  box-shadow: 0 2px 8px rgba(200, 160, 40, 0.2);
+  flex-shrink: 0;
+}
+
+.class-card-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.class-card-preview-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #f0e0a0;
+}
+
+.class-card-preview-desc {
+  font-size: 0.65rem;
+  color: #b0a878;
+  line-height: 1.35;
+  max-width: 240px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+

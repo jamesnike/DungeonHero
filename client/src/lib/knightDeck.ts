@@ -3,14 +3,35 @@ import { CHAOS_DICE_SPELL_DESCRIPTION, CHAOS_DICE_SPELL_MAGIC_EFFECT } from '@/l
 
 // Import images for Knight cards
 import holyBladeImage from '@assets/generated_images/holy_light_blade.png';
-import swiftDaggerImage from '@assets/generated_images/swift_wind_dagger.png';
+import swiftDaggerKnightImage from '@assets/generated_images/card_dedupe_weapon_swift_knight.png';
+import swiftDaggerSoulHunterImage from '@assets/generated_images/card_dedupe_weapon_swift_soul_hunter.png';
 import thunderHammerImage from '@assets/generated_images/thunder_warhammer.png';
 import ironTowerShieldImage from '@assets/generated_images/iron_tower_shield.png';
 import thornedShieldImage from '@assets/generated_images/thorned_reflect_shield.png';
 import guardianShieldImage from '@assets/generated_images/guardian_holy_shield.png';
-import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
+import dedupeKnightHeroHolyLightImage from '@assets/generated_images/card_dedupe_knight_hero_magic_holy_light.png';
+import dedupeKnightHeroBerserkerImage from '@assets/generated_images/card_dedupe_knight_hero_magic_berserker.png';
+import dedupeKnightMagicBloodGreedImage from '@assets/generated_images/card_dedupe_knight_magic_blood_greed.png';
+import dedupeKnightMagicDeadPactImage from '@assets/generated_images/card_dedupe_knight_magic_dead_pact.png';
+import dedupeKnightMagicArmorPierceImage from '@assets/generated_images/card_dedupe_knight_magic_armor_pierce.png';
+import dedupeKnightMagicMissingHpSmiteImage from '@assets/generated_images/card_dedupe_knight_magic_missing_hp_smite.png';
+import dedupeKnightMagicGraveNovaImage from '@assets/generated_images/card_dedupe_knight_magic_grave_nova.png';
+import dedupeKnightMagicBerserkGambitImage from '@assets/generated_images/card_dedupe_knight_magic_berserk_gambit.png';
+import dedupeKnightMagicDeckJudgeImage from '@assets/generated_images/card_dedupe_knight_magic_deck_judge.png';
+import dedupeKnightMagicRecycleFlareImage from '@assets/generated_images/card_dedupe_knight_magic_recycle_flare.png';
+import dedupeKnightMagicChaosDiceImage from '@assets/generated_images/card_dedupe_knight_magic_chaos_dice.png';
+import dedupeKnightMagicFateSightImage from '@assets/generated_images/card_dedupe_knight_magic_fate_sight.png';
+import dedupeKnightMagicSoftWaterfallImage from '@assets/generated_images/card_dedupe_knight_magic_soft_waterfall.png';
+import dedupeKnightMagicMirrorCopyImage from '@assets/generated_images/card_dedupe_knight_magic_mirror_copy.png';
+import dedupeKnightMagicArmorStunConvertImage from '@assets/generated_images/card_dedupe_knight_magic_armor_stun_convert.png';
+import dedupeKnightMagicOverkillUpgradeImage from '@assets/generated_images/card_dedupe_knight_magic_overkill_upgrade.png';
+import dedupeKnightHeroReviveTomeImage from '@assets/generated_images/card_dedupe_knight_hero_magic_revive_tome.png';
+import dedupeKnightMagicGreedCurseImage from '@assets/generated_images/card_dedupe_knight_magic_greed_curse.png';
+import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
-import thunderAmuletImage from '@assets/generated_images/chibi_thunder_amulet.png';
+import thunderAmuletSigilImage from '@assets/generated_images/card_dedupe_amulet_thunder_sigil.png';
+import thunderAmuletWarMarkImage from '@assets/generated_images/card_dedupe_amulet_thunder_war_mark.png';
+import thunderAmuletStunBagImage from '@assets/generated_images/card_dedupe_amulet_thunder_stun_bag.png';
 import potionArcaneInfusionImage from '@assets/generated_images/cute_potion_arcane_infusion.png';
 import potionBackpackExpandImage from '@assets/generated_images/cute_potion_backpack_expand.png';
 import persuadeHammerImage from '@assets/generated_images/knight_persuade_hammer.png';
@@ -23,10 +44,14 @@ import bloodrageAmuletImage from '@assets/generated_images/knight_bloodrage_amul
 import persuadeAuraAmuletImage from '@assets/generated_images/knight_persuade_aura_amulet.png';
 import statSwapPotionImage from '@assets/generated_images/knight_stat_swap_potion.png';
 import lifestealPotionImage from '@assets/generated_images/knight_lifesteal_potion.png';
-import persuadeScrollImage from '@assets/generated_images/knight_persuade_scroll.png';
+import persuadeScrollAmuletDedupeImage from '@assets/generated_images/card_dedupe_persuade_scroll_amulet.png';
 import fusionScrollImage from '@assets/generated_images/knight_fusion_scroll.png';
 import recallScrollImage from '@assets/generated_images/knight_recall_scroll.png';
 import monsterDoomScrollImage from '@assets/generated_images/knight_monster_doom_scroll.png';
+import heavyShieldKnightBashImage from '@assets/generated_images/card_dedupe_shield_heavy_knight_bash.png';
+import knightChainPersuadePotionImage from '@assets/generated_images/card_dedupe_potion_slot_capacity_knight.png';
+import daggerWeaponImage from '@assets/generated_images/cute_cartoon_weapon_dagger.png';
+import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -66,7 +91,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'weapon',
     name: '疾风短剑',
     value: 4,
-    image: swiftDaggerImage,
+    image: swiftDaggerKnightImage,
     classCard: true,
     description: '用此武器杀死怪物时耐久度回满。',
     durability: 3,
@@ -96,6 +121,7 @@ export function generateKnightDeck(): KnightCardData[] {
     description: '完全格挡一次攻击的全部伤害，无论攻击力多高。损毁后进入回收袋。',
     durability: 1,
     maxDurability: 1,
+    armorMax: 5,
     permEquipment: true,
     knightEffect: 'fullBlock',
   });
@@ -110,6 +136,7 @@ export function generateKnightDeck(): KnightCardData[] {
     reflectHalfDamage: true,
     durability: 2,
     maxDurability: 2,
+    armorMax: 4,
   });
 
   pushCard({
@@ -118,10 +145,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 3,
     image: guardianShieldImage,
     classCard: true,
-    description: '完美格挡时，70% 概率不消耗耐久（掷骰判定）。',
-    shieldPerfectBlockSaveChance: 70,
+    description: '完美格挡时，50% 概率不消耗耐久（掷骰判定）。',
+    shieldPerfectBlockSaveChance: 50,
     durability: 2,
     maxDurability: 2,
+    armorMax: 3,
   });
 
   // === AMULETS (2 cards) ===
@@ -134,16 +162,18 @@ export function generateKnightDeck(): KnightCardData[] {
     description:
       '护盾完美格挡时（护甲值≥攻击力），该装备栏永久护甲+1。「铁壁塔盾」的完全格挡视为完美格挡。',
     amuletEffect: 'dual-guard',
+    recycleDelay: 1,
   });
 
   pushCard({
     type: 'amulet',
     name: '雷霆符印',
     value: 1,
-    image: thunderAmuletImage,
+    image: thunderAmuletSigilImage,
     classCard: true,
-    description: '每弃一张牌到坟场，对激活行随机怪物造成 1 点伤害。',
+    description: '每弃置一张牌到坟场，对激活行随机怪物造成 1 点伤害。',
     amuletEffect: 'discard-zap',
+    recycleDelay: 1,
   });
 
   // === POTIONS (2 cards) ===
@@ -172,7 +202,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'hero-magic',
     name: '圣光秘术',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightHeroHolyLightImage,
     classCard: true,
     description: '第一次使用时解锁圣光；已掌握时充满数值槽，可手动发动。',
     heroMagicId: 'holy-light',
@@ -183,7 +213,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'hero-magic',
     name: '狂战秘典',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightHeroBerserkerImage,
     classCard: true,
     description: '第一次使用时解锁狂战；已掌握时充满数值槽，可手动发动。',
     heroMagicId: 'berserker-rage',
@@ -195,7 +225,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'magic',
     name: '浴血贪念',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightMagicBloodGreedImage,
     classCard: true,
     description: '一次性：获得等同当前已损失生命的金币，将“贪婪诅咒”放入背包。',
     magicType: 'instant',
@@ -206,9 +236,21 @@ export function generateKnightDeck(): KnightCardData[] {
 
   pushCard({
     type: 'magic',
+    name: '亡者之契',
+    value: 0,
+    image: dedupeKnightMagicDeadPactImage,
+    classCard: true,
+    description: '一次性：从坟场发现一张怪物牌，加入手牌。',
+    magicType: 'instant',
+    magicEffect: '从坟场发现一张怪物牌。',
+    knightEffect: 'monster-recruit',
+  });
+
+  pushCard({
+    type: 'magic',
     name: '铠甲贯刺',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightMagicArmorPierceImage,
     classCard: true,
     description: '永久：选择一件护甲装备，对目标怪物造成等同护甲值 50% 的伤害。',
     magicType: 'permanent',
@@ -221,7 +263,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'magic',
     name: '残血终焉',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightMagicMissingHpSmiteImage,
     classCard: true,
     description: '永久：对一名怪物造成等同当前已损失生命值 50% 的伤害。',
     magicType: 'permanent',
@@ -234,7 +276,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'magic',
     name: '坟火新星',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightMagicGraveNovaImage,
     classCard: true,
     description: '永久：当此牌被弃置时，对当前行所有怪物造成 3 点伤害。',
     magicType: 'permanent',
@@ -246,7 +288,7 @@ export function generateKnightDeck(): KnightCardData[] {
     type: 'magic',
     name: '孤注一掷',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightMagicBerserkGambitImage,
     classCard: true,
     description: '一次性：生命降至 1，每个武器栏可多攻击一次。',
     magicType: 'instant',
@@ -257,9 +299,22 @@ export function generateKnightDeck(): KnightCardData[] {
 
   pushCard({
     type: 'magic',
+    name: '命数裁断',
+    value: 0,
+    image: dedupeKnightMagicDeckJudgeImage,
+    classCard: true,
+    description:
+      '一次性：翻看主牌堆顶 5 张牌（不抽牌、不改变牌序）；其中每有一张怪物牌，须删除一张你的牌（手牌、背包、装备、护符或回收袋）。',
+    magicType: 'instant',
+    magicEffect: '透视主牌堆顶并依怪物张数删牌。',
+    knightEffect: 'deck-judge-delete',
+  });
+
+  pushCard({
+    type: 'magic',
     name: '回收灵焰',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightMagicRecycleFlareImage,
     classCard: true,
     description: '永久：将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限)',
     magicType: 'permanent',
@@ -270,22 +325,9 @@ export function generateKnightDeck(): KnightCardData[] {
 
   pushCard({
     type: 'magic',
-    name: '不灭守护',
-    value: 0,
-    image: skillScrollImage,
-    classCard: true,
-    description: '一次性：只能在受到致命伤害时打出，抵消该次伤害。',
-    magicType: 'instant',
-    magicEffect: '濒死时抵消致死伤害。',
-    knightEffect: 'death-ward',
-    maxUpgradeLevel: 2,
-  });
-
-  pushCard({
-    type: 'magic',
     name: '混沌骰运',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightMagicChaosDiceImage,
     classCard: true,
     description: CHAOS_DICE_SPELL_DESCRIPTION,
     magicType: 'permanent',
@@ -293,20 +335,31 @@ export function generateKnightDeck(): KnightCardData[] {
     knightEffect: 'chaos-dice',
   });
 
-  // === GRAVEYARD RECALL (1 card) ===
-  const graveyardRecallId = nextId();
-  deck.push({
-    id: graveyardRecallId,
+  pushCard({
     type: 'magic',
-    name: '冥途拾遗',
+    name: '天眼审判',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeKnightMagicFateSightImage,
     classCard: true,
-    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。',
-    magicType: 'instant',
-    magicEffect: '坟场随机取回 3 张牌。',
-    knightEffect: 'graveyard-recall',
-    maxUpgradeLevel: 3,
+    description: '永久：造成 3 点伤害，翻看主牌堆顶 3 张牌，每有一张怪物牌，20% 概率击晕目标。',
+    magicType: 'permanent',
+    magicEffect: '造成伤害并透视牌堆，可能击晕目标。',
+    knightEffect: 'fate-sight',
+    recycleDelay: 2,
+    maxUpgradeLevel: 1,
+  });
+
+  pushCard({
+    type: 'magic',
+    name: '暗流涌动',
+    value: 0,
+    image: dedupeKnightMagicSoftWaterfallImage,
+    classCard: true,
+    description: '永久：触发柔和瀑流——预览行中正下方为空位的牌落入激活行，其余预览牌不动；仅对腾出的预览位补牌。',
+    magicType: 'permanent',
+    magicEffect: '柔和瀑流：空位补牌，不挤掉现有牌。',
+    knightEffect: 'soft-waterfall',
+    recycleDelay: 1,
   });
 
   // === NEW WEAPONS (2 cards) ===
@@ -329,9 +382,21 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 3,
     image: thunderStunHammerImage,
     classCard: true,
-    description: '击晕率额外 +15%。攻击已击晕的怪物时造成双倍伤害。',
-    stunBonusChance: 15,
+    description: '击晕率30%。攻击已击晕的怪物时造成双倍伤害。',
+    weaponStunChance: 30,
     doubleDamageOnStunned: true,
+    durability: 3,
+    maxDurability: 3,
+  });
+
+  pushCard({
+    type: 'weapon',
+    name: '噬魂猎刃',
+    value: 5,
+    image: swiftDaggerSoulHunterImage,
+    classCard: true,
+    description: '超杀：将回收袋 2 张牌移到手上。',
+    overkillRecycleToHand: 2,
     durability: 3,
     maxDurability: 3,
   });
@@ -343,11 +408,12 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 2,
     image: reviveBoneShieldImage,
     classCard: true,
-    description: '复生（首次摧毁恢复 1 耐久）。摧毁时该装备栏永久伤害 +1。',
+    description: '复生（首次摧毁恢复 1 耐久）。遗言：该装备栏永久伤害 +1。',
     hasEquipmentRevive: true,
     onDestroyPermanentDamage: 1,
     durability: 4,
     maxDurability: 4,
+    armorMax: 2,
   });
 
   pushCard({
@@ -360,6 +426,7 @@ export function generateKnightDeck(): KnightCardData[] {
     shieldBlockAutoUpgradeCount: 4,
     durability: 2,
     maxDurability: 2,
+    armorMax: 5,
   });
 
   pushCard({
@@ -372,6 +439,7 @@ export function generateKnightDeck(): KnightCardData[] {
     blockGrantTempArmorToOther: true,
     durability: 2,
     maxDurability: 2,
+    armorMax: 4,
   });
 
   // === NEW AMULETS (3 cards) ===
@@ -381,8 +449,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: salvageAmuletImage,
     classCard: true,
-    description: '装备摧毁时，改为回到手牌（耐久归零但不进坟场）。',
+    description: '装备摧毁时，改为回到手牌，耐久上限-1（减到0时从游戏里删掉）。',
     amuletEffect: 'equipment-salvage',
+    recycleDelay: 1,
   });
 
   pushCard({
@@ -393,6 +462,7 @@ export function generateKnightDeck(): KnightCardData[] {
     classCard: true,
     description: '每次失去生命时，所有装备栏临时攻击 +3。',
     amuletEffect: 'bloodrage-attack',
+    recycleDelay: 1,
   });
 
   pushCard({
@@ -401,8 +471,42 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: persuadeAuraAmuletImage,
     classCard: true,
-    description: '每获得一次临时攻击加成，激活行所有怪物劝降率 +5%。',
+    description: '每获得一次临时攻击加成，下一次劝降率 +5%。',
     amuletEffect: 'persuade-on-temp-attack',
+    recycleDelay: 1,
+  });
+
+  pushCard({
+    type: 'amulet',
+    name: '劝降归袋符',
+    value: 1,
+    image: persuadeScrollAmuletDedupeImage,
+    classCard: true,
+    description: '每劝降成功一次，将一张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。',
+    amuletEffect: 'persuade-grant-recycle-fetch',
+    recycleDelay: 1,
+  });
+
+  pushCard({
+    type: 'amulet',
+    name: '战伤刻印',
+    value: 1,
+    image: thunderAmuletWarMarkImage,
+    classCard: true,
+    description: '每造成 5 次伤害（武器、护符、法术等任意来源对怪物造成伤害均计数），发现一张专属牌。',
+    amuletEffect: 'damage-class-discover',
+    recycleDelay: 1,
+  });
+
+  pushCard({
+    type: 'amulet',
+    name: '晕锤归袋符',
+    value: 1,
+    image: thunderAmuletStunBagImage,
+    classCard: true,
+    description: '每击晕一次怪物，从回收袋随机取回一张牌到手牌。',
+    amuletEffect: 'stun-recycle-to-hand',
+    recycleDelay: 1,
   });
 
   // === NEW POTIONS (2 cards) ===
@@ -422,24 +526,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: lifestealPotionImage,
     classCard: true,
-    description: '法术吸血 +1，生命上限 +6。',
+    description: '超杀吸血 +1，生命上限 +6。',
     potionEffect: 'spell-lifesteal+1-maxhp+6',
   });
 
-  // === NEW INSTANT MAGIC (2 cards) ===
-  pushCard({
-    type: 'magic',
-    name: '怀柔令',
-    value: 0,
-    image: persuadeScrollImage,
-    classCard: true,
-    description: '一次性：劝降费用降低 3 金币，成功率 +10%（持续到下次劝降）。',
-    magicType: 'instant',
-    magicEffect: '劝降费用 -3，成功率 +10%。',
-    knightEffect: 'persuade-discount',
-    maxUpgradeLevel: 2,
-  });
-
+  // === NEW INSTANT MAGIC ===
   pushCard({
     type: 'magic',
     name: '魔物融合',
@@ -452,21 +543,58 @@ export function generateKnightDeck(): KnightCardData[] {
     knightEffect: 'monster-fusion',
   });
 
-  // === NEW PERMANENT MAGIC (1 card) ===
+  pushCard({
+    type: 'magic',
+    name: '镜影摹形',
+    value: 0,
+    image: dedupeKnightMagicMirrorCopyImage,
+    classCard: true,
+    description: '一次性：选择左/右装备栏、护符栏或手牌中的一张牌，化身为该牌的复制并加入手牌。',
+    magicType: 'instant',
+    magicEffect: '选择一张牌，成为该牌的复制。',
+    knightEffect: 'mirror-copy',
+  });
+
+  // === NEW PERMANENT MAGIC (2 cards) ===
+  pushCard({
+    type: 'magic',
+    name: '护甲凝雷',
+    value: 0,
+    image: dedupeKnightMagicArmorStunConvertImage,
+    classCard: true,
+    description: '永久：选择一个护盾，每 1 点护甲值使击晕上限 +1%，然后该装备栏临时护甲清零。',
+    magicType: 'permanent',
+    magicEffect: '护甲转化为击晕上限。',
+    knightEffect: 'armor-stun-convert',
+  });
+
+  pushCard({
+    type: 'magic',
+    name: '淬炼冲击',
+    value: 0,
+    image: dedupeKnightMagicOverkillUpgradeImage,
+    classCard: true,
+    description: '永久：对一个怪物造成 3 点伤害。超杀：升级一张牌。',
+    magicType: 'permanent',
+    magicEffect: '造成 3 点伤害，超杀升级一张牌。',
+    knightEffect: 'overkill-upgrade',
+    recycleDelay: 1,
+  });
+
   pushCard({
     type: 'magic',
     name: '紧急回收',
     value: 0,
     image: recallScrollImage,
     classCard: true,
-    description: '永久：失去 2 点生命，选择一个装备回到手牌。',
+    description: '永久：失去 2 点生命，回手一张牌。',
     magicType: 'permanent',
-    magicEffect: '失去 2 HP，装备回手。',
+    magicEffect: '失去 2 HP，回手一张牌。',
     knightEffect: 'recall-equipment',
     maxUpgradeLevel: 2,
   });
 
-  // === NEW HERO MAGIC (1 card) ===
+  // === NEW HERO MAGIC (2 cards) ===
   pushCard({
     type: 'hero-magic',
     name: '灭世裁决',
@@ -476,6 +604,67 @@ export function generateKnightDeck(): KnightCardData[] {
     description: '装备的怪物数量为数值条（上限 6）。释放：摧毁所有装备，每摧毁一个装备对激活行所有怪物 -2攻/-2血上限（每个血层都减）。',
     heroMagicId: 'monster-doom',
     heroMagicEffect: '英雄魔法：解锁或触发灭世裁决。',
+  });
+
+  pushCard({
+    type: 'hero-magic',
+    name: '复生秘典',
+    value: 0,
+    image: dedupeKnightHeroReviveTomeImage,
+    classCard: true,
+    description: '每受到 3 次伤害充满数值条。释放：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
+    heroMagicId: 'revive-blessing',
+    heroMagicEffect: '英雄魔法：解锁或触发复生祝福。',
+  });
+
+  // === CLASS SHIELD ===
+  pushCard({
+    type: 'shield',
+    name: '猛击之盾',
+    value: 2,
+    image: heavyShieldKnightBashImage,
+    classCard: true,
+    description: '可拖动到怪物上猛击（不造成伤害），5%×护甲值 概率击晕。',
+    durability: 4,
+    maxDurability: 4,
+    armorMax: 2,
+    shieldBashStunRate: 5,
+  });
+
+  // === CLASS POTION ===
+  pushCard({
+    type: 'potion',
+    name: '连劝秘药',
+    value: 0,
+    image: knightChainPersuadePotionImage,
+    classCard: true,
+    description: '永久被动：连续两次劝降同一个怪物时，成功概率 +15%。',
+    potionEffect: 'perm-persuade-consecutive',
+  });
+
+  // === CLASS WEAPONS ===
+  pushCard({
+    type: 'weapon',
+    name: '汰换之刃',
+    value: 2,
+    image: daggerWeaponImage,
+    classCard: true,
+    description: '每次攻击后，可将一张手牌移到回收袋，再抽一张牌。',
+    durability: 4,
+    maxDurability: 4,
+    postAttackHandRecycle: true,
+  });
+
+  pushCard({
+    type: 'weapon',
+    name: '怒斩之刃',
+    value: 4,
+    image: swordImage,
+    classCard: true,
+    description: '该武器每回合可攻击 2 次（攻击次数 +1）。',
+    durability: 3,
+    maxDurability: 3,
+    weaponExtraAttack: 1,
   });
 
   // Shuffle the deck
@@ -492,15 +681,28 @@ export function createKnightDiscoveryEvents(): GameCardData[] {
 const createDynamicKnightCardId = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-export const createGraveyardRecallCard = (): KnightCardData => {
+/** 劝降归袋符：劝降成功时加入手牌的一次性魔法。 */
+export const createPersuadeRecycleFetchMagicCard = (): KnightCardData => ({
+  id: createDynamicKnightCardId('persuade-recycle-fetch'),
+  type: 'magic',
+  name: '归袋抽引',
+  value: 0,
+  image: recallScrollImage,
+  classCard: true,
+  description: '一次性：从回收袋随机 1 张牌加入手牌。',
+  magicType: 'instant',
+  magicEffect: '从回收袋随机 1 张牌加入手牌。',
+  knightEffect: 'recycle-random-to-hand',
+});
+
+export const createGraveyardRecallCard = (): GameCardData => {
   const id = createDynamicKnightCardId('graveyard-recall');
   return {
     id,
     type: 'magic',
     name: '冥途拾遗',
     value: 0,
-    image: skillScrollImage,
-    classCard: true,
+    image: dedupeMagicUnderworldRelicImage,
     description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。',
     magicType: 'instant',
     magicEffect: '坟场随机取回 3 张牌。',
@@ -514,7 +716,7 @@ export const createGreedCurseCard = (): KnightCardData => ({
   type: 'magic',
   name: '贪婪诅咒',
   value: 0,
-  image: skillScrollImage,
+  image: dedupeKnightMagicGreedCurseImage,
   classCard: true,
   description: '永久：使用或弃置时失去 3 金币，瀑布后才能再次使用。',
   magicType: 'permanent',

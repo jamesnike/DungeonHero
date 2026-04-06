@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { ScrollText, Minimize2, Maximize2, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 
 export type LogEntryType =
@@ -76,7 +76,7 @@ const EDGE_PADDING = 12;
 const DEFAULT_WIDTH_CSS = 'clamp(180px, 16vw, 260px)';
 const MINIMIZED_WIDTH_CSS = 'clamp(80px, 7vw, 110px)';
 
-export default function GameLogPanel({
+function GameLogPanelInner({
   entries,
   onClear,
   stageScale = 1,
@@ -391,3 +391,5 @@ export default function GameLogPanel({
     </div>
   );
 }
+
+export default memo(GameLogPanelInner);

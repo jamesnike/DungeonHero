@@ -1,6 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
 
+export type DraftRoundType = 'general' | 'equipment' | 'potion' | 'amulet';
+
 export interface CardDraftModalProps {
   isOpen: boolean;
   pool: GameCardData[];
@@ -8,6 +10,9 @@ export interface CardDraftModalProps {
   choicesPerRound: number;
   onComplete: (picks: GameCardData[]) => void;
   overlayZoom?: number;
+  classCardPreview?: GameCardData | null;
+  /** Per-round type overrides. Unspecified rounds default to 'general'. */
+  roundTypes?: DraftRoundType[];
 }
 
 function sampleFromPool(pool: GameCardData[], count: number): GameCardData[] {
@@ -36,50 +41,66 @@ export default function CardDraftModal({
   choicesPerRound,
   onComplete,
   overlayZoom = 1,
+  classCardPreview,
+  roundTypes,
 }: CardDraftModalProps) {
+  const poolsByType = useMemo(() => {
+    const equipmentOnly = pool.filter(c => c.type === 'weapon' || c.type === 'shield');
+    const potionOnly = pool.filter(c => c.type === 'potion');
+    const amuletOnly = pool.filter(c => c.type === 'amulet');
+    const general = pool.filter(c => c.type !== 'potion' && c.type !== 'amulet' && c.type !== 'weapon' && c.type !== 'shield');
+    return { general, equipment: equipmentOnly, potion: potionOnly, amulet: amuletOnly } as const;
+  }, [pool]);
+
+  const getRoundType = useCallback(
+    (r: number): DraftRoundType => roundTypes?.[r] ?? 'general',
+    [roundTypes],
+  );
+
+  const getPoolForRound = useCallback(
+    (r: number) => poolsByType[getRoundType(r)],
+    [poolsByType, getRoundType],
+  );
+
   const [round, setRound] = useState(0);
   const [picks, setPicks] = useState<GameCardData[]>([]);
   const [currentChoices, setCurrentChoices] = useState<GameCardData[]>(() =>
-    sampleFromPool(pool, choicesPerRound),
+    sampleFromPool(getPoolForRound(0), choicesPerRound),
   );
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [picking, setPicking] = useState(false);
+
+  const currentRoundType = getRoundType(round);
 
   const regenerateChoices = useCallback(() => {
-    setCurrentChoices(sampleFromPool(pool, choicesPerRound));
-    setSelectedIdx(null);
-    setConfirming(false);
-  }, [pool, choicesPerRound]);
+    setCurrentChoices(sampleFromPool(getPoolForRound(round), choicesPerRound));
+    setPicking(false);
+  }, [getPoolForRound, round, choicesPerRound]);
 
-  const handleSelect = useCallback(
+  const handlePick = useCallback(
     (idx: number) => {
-      if (confirming) return;
-      setSelectedIdx(idx);
+      if (picking) return;
+      setPicking(true);
+
+      const chosen = currentChoices[idx];
+      const baseId = chosen.id.replace(/-draft-.*$/, '');
+      const finalCard: GameCardData = {
+        ...chosen,
+        id: `${baseId}-pick-${round}`,
+      };
+      const newPicks = [...picks, finalCard];
+      setPicks(newPicks);
+
+      const nextRound = round + 1;
+      if (nextRound >= totalRounds) {
+        onComplete(newPicks);
+        return;
+      }
+      setRound(nextRound);
+      setCurrentChoices(sampleFromPool(getPoolForRound(nextRound), choicesPerRound));
+      setPicking(false);
     },
-    [confirming],
+    [picking, currentChoices, picks, round, totalRounds, choicesPerRound, onComplete, getPoolForRound],
   );
-
-  const handleConfirm = useCallback(() => {
-    if (selectedIdx == null) return;
-    const chosen = currentChoices[selectedIdx];
-    const baseId = chosen.id.replace(/-draft-.*$/, '');
-    const finalCard: GameCardData = {
-      ...chosen,
-      id: `${baseId}-pick-${round}`,
-    };
-    const newPicks = [...picks, finalCard];
-    setPicks(newPicks);
-
-    const nextRound = round + 1;
-    if (nextRound >= totalRounds) {
-      onComplete(newPicks);
-      return;
-    }
-    setRound(nextRound);
-    setCurrentChoices(sampleFromPool(pool, choicesPerRound));
-    setSelectedIdx(null);
-    setConfirming(false);
-  }, [selectedIdx, currentChoices, picks, round, totalRounds, pool, choicesPerRound, onComplete]);
 
   const pickedSummary = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -99,7 +120,11 @@ export default function CardDraftModal({
         <div className="card-draft-header">
           <h2 className="card-draft-title">选择起始卡牌</h2>
           <p className="card-draft-subtitle">
-            第 {round + 1} / {totalRounds} 轮 — 从下方三张牌中选择一张加入背包
+            第 {round + 1} / {totalRounds} 轮 — {
+              currentRoundType === 'equipment' ? '从下方装备中选择一件加入背包' :
+              currentRoundType === 'potion' ? '从下方药水中选择一瓶加入背包' :
+              currentRoundType === 'amulet' ? '从下方护符中选择一枚加入背包' :
+              '从下方三张牌中选择一张加入背包'}
           </p>
         </div>
 
@@ -114,8 +139,8 @@ export default function CardDraftModal({
           {currentChoices.map((card, idx) => (
             <div
               key={card.id}
-              className={`card-draft-choice ${selectedIdx === idx ? 'card-draft-choice-selected' : ''}`}
-              onClick={() => handleSelect(idx)}
+              className="card-draft-choice"
+              onClick={() => handlePick(idx)}
             >
               <GameCard card={card} />
               <div className="card-draft-choice-name">{card.name}</div>
@@ -124,13 +149,20 @@ export default function CardDraftModal({
           ))}
         </div>
 
-        <button
-          className="card-draft-confirm-btn"
-          disabled={selectedIdx == null}
-          onClick={handleConfirm}
-        >
-          {round + 1 < totalRounds ? '确认选择' : '确认并开始'}
-        </button>
+        {classCardPreview && (
+          <div className="class-card-preview">
+            <div className="class-card-preview-label">即将获得的专属卡</div>
+            <div className="class-card-preview-card">
+              {classCardPreview.image && (
+                <img src={classCardPreview.image} alt={classCardPreview.name} className="class-card-preview-img" />
+              )}
+              <div className="class-card-preview-info">
+                <div className="class-card-preview-name">{classCardPreview.name}</div>
+                <div className="class-card-preview-desc">{classCardPreview.description || classCardPreview.magicEffect || ''}</div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

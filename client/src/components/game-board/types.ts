@@ -8,8 +8,6 @@ import type {
 import type { HeroSkillId, HeroSkillDefinition } from '@/lib/heroSkills';
 import type { ShopOffering } from '../ShopModal';
 import type { LogEntry } from '../GameLogPanel';
-import type { PersistedGameState } from '@/lib/gameStorage';
-
 export type BlockTarget = EquipmentSlotId | 'hero';
 
 export type CombatInitiator = 'hero' | 'monster';
@@ -33,6 +31,8 @@ export type CombatState = {
 
 export type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
+export type FlightSourceHint = EquipmentSlotId | 'amulet';
+
 export type EquipmentItem = GameCardData & {
   type: 'weapon' | 'shield' | 'monster';
   fromSlot?: EquipmentSlotId;
@@ -46,7 +46,7 @@ export type DragOrigin = 'hand' | 'dungeon' | 'backpack' | 'amulet' | EquipmentS
 
 export type ActiveRowSlots = Array<GameCardData | null>;
 
-export type HeroRowDropType = 'event' | 'magic' | 'potion' | 'hero-magic';
+export type HeroRowDropType = 'event' | 'magic' | 'potion' | 'hero-magic' | 'building';
 
 export type GraveyardVector = { offsetX: number; offsetY: number };
 
@@ -100,16 +100,17 @@ export type EventTransformState = {
   message?: string;
 };
 
+export type CardActionKeyword = 'discard-recycle' | 'discard-only' | 'recycle-only' | 'delete' | 'move-to';
+
 export type CardActionContext = {
   mode: 'shop' | 'event';
-  action: 'delete' | 'discard';
+  keyword: CardActionKeyword;
   requiredCount: number;
   remainingCount: number;
   title?: string;
   description?: string;
   handOnly?: boolean;
-  /** 与「哥布林的戏法」一致：弃牌一律进入手牌回收袋，瀑流后回背包 */
-  discardToRecycleBag?: boolean;
+  moveToDestination?: 'recycle-bag' | 'graveyard';
 };
 
 export type MonsterRewardEffect =
@@ -123,8 +124,8 @@ export type MonsterRewardEffect =
   | { type: 'maxHp'; amount: number }
   | { type: 'spellDamage'; amount: number }
   | { type: 'spellLifesteal'; amount: number }
-  | { type: 'backpackCapacity'; amount: number }
-  | { type: 'stunChance'; amount: number };
+  | { type: 'stunCap'; amount: number }
+  | { type: 'backpackCapacity'; amount: number };
 
 export type MonsterRewardOption = {
   id: string;
@@ -179,6 +180,12 @@ export type PendingHeroMagicAction =
   | {
       id: 'holy-light';
       step: 'monster-select';
+      origin: HeroMagicActivationOrigin;
+      prompt: string;
+    }
+  | {
+      id: 'revive-blessing';
+      step: 'slot-select';
       origin: HeroMagicActivationOrigin;
       prompt: string;
     };
@@ -305,16 +312,17 @@ export type PendingMagicAction =
     }
   | {
       card: GameCardData;
-      effect: 'recall-equipment';
-      step: 'slot-select';
+      effect: 'missile-bolt';
+      step: 'monster-select';
       prompt: string;
     }
   | {
       card: GameCardData;
-      effect: 'magic-missile';
+      effect: 'stun-strike';
       step: 'monster-select';
       prompt: string;
       echoMultiplier?: number;
+      data?: { baseDmg: number; stunPct: number };
     }
   | {
       card: GameCardData;
@@ -323,6 +331,65 @@ export type PendingMagicAction =
       prompt: string;
       deckDepth: number;
     }
+  | {
+      card: GameCardData;
+      effect: 'fate-sight';
+      step: 'monster-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'honor-sweep';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'armor-stun-convert';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'overkill-upgrade';
+      step: 'monster-select';
+      prompt: string;
+      data: Record<string, unknown>;
+      echoRemaining?: number;
+    }
+
+/** 天眼审判：透视 + 击晕判定（关闭弹窗后掷骰） */
+export type DeckPeekModalStateFateSight = {
+  mode?: 'fate-sight';
+  peekedCards: GameCardData[];
+  monsterCount: number;
+  stunChance: number;
+  targetMonsterName: string;
+};
+
+/** 命数裁断等：仅翻看主牌堆顶，用于判定删牌数量 */
+export type DeckPeekModalStateDeckJudge = {
+  mode: 'deck-judge-delete';
+  peekedCards: GameCardData[];
+  monsterCount: number;
+  /** 与 monsterCount 相同；展示「将删除 N 张」 */
+  deleteCount: number;
+};
+
+/** 万象探知：翻看牌堆顶并根据类型获得增益 */
+export type DeckPeekModalStateDungeonInsight = {
+  mode: 'dungeon-insight';
+  peekedCards: GameCardData[];
+  gains: DungeonInsightGain[];
+};
+
+export type DungeonInsightGain = {
+  label: string;
+  count: number;
+};
+
+export type DeckPeekModalState = DeckPeekModalStateFateSight | DeckPeekModalStateDeckJudge | DeckPeekModalStateDungeonInsight;
+
 export type PendingPotionAction =
   | {
       card: GameCardData;
@@ -355,19 +422,13 @@ export type PendingPotionAction =
     }
   | {
       card: GameCardData;
-      effect: 'perm-slot-damage+1';
+      effect: 'perm-slot-damage+1' | 'perm-slot-damage+2';
       step: 'slot-select';
       prompt: string;
     }
   | {
       card: GameCardData;
-      effect: 'perm-equipment-durability-max+1';
-      step: 'slot-select';
-      prompt: string;
-    }
-  | {
-      card: GameCardData;
-      effect: 'perm-slot-stun+5';
+      effect: 'perm-equipment-durability-max+1' | 'perm-equipment-durability-max+2';
       step: 'slot-select';
       prompt: string;
     }
@@ -421,10 +482,22 @@ export type BackpackHandFlight = {
   delivered?: boolean;
 };
 
-/** 护盾反弹 / Boss 反噬：纯表现用定向抛物线投射（伤害由结算逻辑另行应用） */
+/** 深层交织：地城牌与牌堆牌双向交换飞行动画 */
+export type FateSwapFlight = {
+  id: string;
+  card: GameCardData;
+  start: Point;
+  end: Point;
+  startTime: number;
+  duration: number;
+  progress: number;
+  arcHeight: number;
+};
+
+/** 护盾反弹 / Boss 反噬 / 奥术之刃附魔：纯表现用定向抛物线投射（伤害由结算逻辑另行应用） */
 export type DirectedCombatFxFlight = {
   id: string;
-  kind: 'shield-reflect' | 'boss-retaliation';
+  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell';
   start: Point;
   end: Point;
   startTime: number;
@@ -484,7 +557,7 @@ export type ActiveAmuletEffects = {
   aura: AmuletAuraTotals;
   hasHeal: boolean;
   hasBalance: boolean;
-  hasLife: boolean;
+  lifeOverkillBonus: number;
   hasCatapult: boolean;
   hasFlash: boolean;
   hasStrength: boolean;
@@ -496,12 +569,19 @@ export type ActiveAmuletEffects = {
   hasEquipmentSalvage: boolean;
   hasBloodrageAttack: boolean;
   hasPersuadeOnTempAttack: boolean;
+  hasPersuadeGrantRecycleFetch: boolean;
+  hasDamageClassDiscover: boolean;
+  hasPersuadeGraveyardStack: boolean;
+  hasStunRecycleToHand: boolean;
+  hasCardGainUpgrade: boolean;
+  hasAttackPersuadeDiscount: boolean;
+  hasCardGainMissile: boolean;
 };
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';
 
-/** 预览区被挤掉的卡：进坟场 vs 回主牌堆（动画目标不同） */
-export type WaterfallDiscardDestination = 'graveyard' | 'deck';
+/** 预览区被挤掉的卡：弃置→坟场 / 回收→回收袋 / 回主牌堆（动画目标不同） */
+export type WaterfallDiscardDestination = 'graveyard' | 'recycle-bag' | 'deck';
 
 export type WaterfallAnimationState = {
   phase: WaterfallPhase;
@@ -545,7 +625,7 @@ export type HeroStatsSummary = {
   spellLifesteal: number;
   tempShield: number;
   permanentMaxHpBonus: number;
-  stunChance: number;
+  stunCap: number;
 };
 
 export type HeroSkillSummary = {
@@ -554,39 +634,4 @@ export type HeroSkillSummary = {
   description: string;
 };
 
-export type UndoTransientState = {
-  monsterRewardQueue: MonsterRewardDrop[];
-  activeMonsterReward: MonsterRewardDrop | null;
-  selectedMonsterRewards: MonsterRewardOption[] | null;
-  pendingMagicAction: PendingMagicAction | null;
-  pendingPotionAction: PendingPotionAction | null;
-  pendingHeroSkillAction: PendingHeroSkillAction | null;
-  pendingHeroMagicAction: PendingHeroMagicAction | null;
-  shopModalOpen: boolean;
-  shopModalMinimized: boolean;
-  shopOfferings: ShopOffering[];
-  shopSourceEvent: GameCardData | null;
-  shopDeleteUsed: boolean;
-  shopHealUsed: boolean;
-  shopLevelUpUsed: boolean;
-  shopSkillDiscoverUsed: boolean;
-  shopSkillSelectOpen: boolean;
-  shopSkillOptions: HeroSkillDefinition[];
-  discoverModalOpen: boolean;
-  discoverOptions: GameCardData[];
-  deleteModalOpen: boolean;
-  upgradeModalOpen: boolean;
-  deathWardPrompt: DeathWardPromptState | null;
-  equipmentPrompt: EquipmentPromptState | null;
-  graveyardDiscoverState: GameCardData[] | null;
-  graveyardDiscoverDelivery: 'backpack' | 'hand-first';
-  cardActionContext: CardActionContext | null;
-  gameLogEntries: LogEntry[];
-  monsterRewardPreviewCache: Record<string, MonsterRewardOption[]>;
-};
-
-export type UndoSnapshot = {
-  gameState: PersistedGameState;
-  transient: UndoTransientState;
-};
 

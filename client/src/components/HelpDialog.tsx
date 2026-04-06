@@ -227,7 +227,7 @@ export default function HelpDialog({ buttonClassName }: { buttonClassName?: stri
               </h3>
               <p className="text-xs leading-relaxed">
                 怪物的 HP 由多层 <strong className="text-foreground">"血层"</strong> 组成（显示为数字下方的叠层）。
-                每次攻击伤害 ≥ 当前血层值时，打掉该层，溢出伤害继续扣下一层。
+                每次攻击伤害 ≥ 当前血层值时，打掉该层，溢出伤害不会穿透到下一层。
                 所有血层归零即 <strong className="text-foreground">击杀</strong>。未击杀则怪物会反击。
               </p>
             </div>

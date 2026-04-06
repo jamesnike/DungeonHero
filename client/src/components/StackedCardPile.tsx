@@ -1,7 +1,8 @@
 import cardBackImage from '@assets/generated_images/card_back_design.png';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
+import { useGameViewport } from '@/contexts/GameViewportContext';
 
 type StackVariant = 'bright' | 'muted';
 
@@ -41,7 +42,10 @@ const paletteMap: Record<StackVariant, {
   }
 };
 
-export default function StackedCardPile({
+const MOBILE_MAX_LAYERS = 5;
+const MOBILE_WIDTH_THRESHOLD = 768;
+
+function StackedCardPileInner({
   count,
   maxLayers = 16,
   className,
@@ -50,8 +54,12 @@ export default function StackedCardPile({
   variant = 'muted',
   label,
 }: StackedCardPileProps) {
+  const { width: vpWidth } = useGameViewport();
+  const isMobile = vpWidth > 0 && vpWidth < MOBILE_WIDTH_THRESHOLD;
+  const effectiveMaxLayers = isMobile ? Math.min(maxLayers, MOBILE_MAX_LAYERS) : maxLayers;
+
   const hasCards = count > 0;
-  const layersToRender = hasCards ? Math.min(count, maxLayers) : 0;
+  const layersToRender = hasCards ? Math.min(count, effectiveMaxLayers) : 0;
   const palette = paletteMap[variant];
 
   const layerConfigs = useMemo(() => {
@@ -68,6 +76,80 @@ export default function StackedCardPile({
       };
     });
   }, [layersToRender, hasCards]);
+
+  if (isMobile) {
+    return (
+      <div className={cn('relative h-full w-full overflow-visible', className)}>
+        {layerConfigs.map((config, index) => (
+          <div
+            key={config.id}
+            className="absolute inset-0"
+            style={{
+              zIndex: layersToRender - index,
+              transform: `translate(${config.translateX}px, ${-config.translateY}px) rotate(${config.rotateZ}deg) scale(${config.scale})`,
+              transition: 'transform 300ms ease-out',
+            }}
+          >
+            <div
+              className="h-full w-full rounded-[0.6rem]"
+              style={{
+                boxShadow: `0 2px 4px ${palette.shadow}`,
+                border: `2px solid ${palette.outline}`,
+                backgroundColor: palette.cardFill,
+                backgroundImage: `linear-gradient(120deg, rgba(255,255,255,0.4), transparent 55%), url(${cardBackSrc})`,
+                backgroundSize: 'cover',
+                filter: `brightness(${config.brightness})`,
+                opacity: config.opacity,
+              }}
+            />
+          </div>
+        ))}
+
+        {!hasCards && (
+          <div className="absolute inset-0 flex items-center justify-center dh-deck-badge uppercase tracking-widest text-muted-foreground">
+            {emptyLabel}
+          </div>
+        )}
+
+        {hasCards && (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{
+              zIndex: layersToRender + 2,
+              transform: `translateY(${-layersToRender * 1.5}px)`,
+              transition: 'transform 300ms ease-out',
+            }}
+          >
+            <div
+              className="h-[86%] w-[84%] rounded-2xl flex flex-col items-center justify-center px-4"
+              style={{
+                border: `3px solid ${palette.outline}`,
+                backgroundColor: palette.cardFill,
+                boxShadow: `0 4px 8px ${palette.shadow}`,
+              }}
+            >
+              <div
+                className="px-3 py-1 rounded-full dh-deck-badge font-semibold uppercase tracking-[0.2em]"
+                style={{
+                  backgroundColor: palette.badgeBg,
+                  color: palette.labelColor,
+                  border: `2px solid ${palette.outline}`,
+                }}
+              >
+                {label || 'Deck'}
+              </div>
+              <p
+                className="mt-2 dh-deck-count font-bold"
+                style={{ color: palette.labelColor }}
+              >
+                {count} cards
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={cn('relative h-full w-full overflow-visible', className)}>
@@ -151,3 +233,5 @@ export default function StackedCardPile({
     </div>
   );
 }
+
+export default memo(StackedCardPileInner);

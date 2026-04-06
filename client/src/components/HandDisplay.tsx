@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import { useGameViewport } from '@/contexts/GameViewportContext';
@@ -37,7 +37,7 @@ interface HandDisplayProps {
   onCardClick?: (card: GameCardData) => void;
 }
 
-export default function HandDisplay({ 
+function HandDisplayInner({ 
   handCards, 
   onPlayCard,
   onDragCardFromHand,
@@ -245,3 +245,5 @@ export default function HandDisplay({
     </div>
   );
 }
+
+export default memo(HandDisplayInner);

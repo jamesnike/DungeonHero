@@ -50,6 +50,8 @@ export interface PersistedGameState {
   shopLevel: number;
   cardsPlayed: number;
   recycleForgePlayCount?: number;
+  /** 战伤刻印：已造成伤害次数 streak 0–4 */
+  classDamageDiscoverStreak?: number;
   totalDamageTaken: number;
   totalHealed: number;
   healAccumulator: number;
@@ -100,13 +102,16 @@ export interface PersistedGameState {
   bulwarkPassiveActive?: number | boolean;
   bulwarkTempArmorStacks?: number;
   slotTempArmor?: Record<string, number>;
+  slotTempAttack?: Record<string, number>;
   defensiveStanceActive?: boolean;
   doubleNextMagic?: boolean;
   berserkerRageActive?: boolean;
   berserkerSlotUsed?: Record<string, boolean>;
+  flashSlotUsed?: Record<string, boolean>;
   gambitExtraActive?: boolean;
   gambitExtraPerSlot?: number;
   gambitSlotUsed?: Record<string, number>;
+  weaponExtraAttackUsed?: Record<string, boolean>;
   heroSkillUsedThisWave?: boolean;
   /** 本波已用的额外英雄技能 id（商店发现等） */
   extraSkillsUsedThisWave?: string[];
@@ -118,7 +123,14 @@ export interface PersistedGameState {
   currentEventCard?: GameCardData | null;
   eventModalOpen?: boolean;
   eventModalMinimized?: boolean;
-  heroStunChance?: number;
+  stunCap?: number;
+  heroStunned?: boolean;
+  persuadeLevel?: number;
+  persuadeCostModifier?: number;
+  lastPersuadeTargetId?: string | null;
+  previewCardStacks?: Record<number, GameCardData[]>;
+  activeCardStacks?: Record<number, GameCardData[]>;
+  waterfallDealBonus?: number;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

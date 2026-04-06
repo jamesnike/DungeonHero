@@ -8,17 +8,52 @@ import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
 import daggerWeaponImage from '@assets/generated_images/cute_cartoon_weapon_dagger.png';
 import holyBladeImage from '@assets/generated_images/cute_cartoon_holy_blade.png';
 import maceImage from '@assets/generated_images/cute_cartoon_mace.png';
+import arcaneBladeImage from '@assets/generated_images/arcane_blade_weapon.png';
+import starterGhostBladeImage from '@assets/generated_images/starter_ghost_blade.png';
+import warhammerImage from '@assets/generated_images/thunder_warhammer.png';
 import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
 import ironShieldImage from '@assets/generated_images/cute_iron_shield.png';
-import heavyShieldImage from '@assets/generated_images/simple_heavy_shield.png';
+import heavyShieldImage from '@assets/generated_images/card_dedupe_shield_heavy_main.png';
 import potionImage from '@assets/generated_images/cute_cartoon_healing_potion.png';
 import lifeAmuletImage from '@assets/generated_images/chibi_life_amulet.png';
 import strengthAmuletImage from '@assets/generated_images/chibi_strength_amulet.png';
-import guardianAmuletImage from '@assets/generated_images/chibi_guardian_amulet.png';
 import balanceAmuletImage from '@assets/generated_images/chibi_balance_amulet.png';
+import dedupeAmuletCatapultImage from '@assets/generated_images/card_dedupe_amulet_catapult.png';
 import forgeHeartAmuletImage from '@assets/generated_images/chibi_forge_heart_amulet.png';
-import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
-import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
+import dedupeMagicWaterfallResetImage from '@assets/generated_images/card_dedupe_magic_waterfall_reset.png';
+import dedupeMagicStormArrowsImage from '@assets/generated_images/card_dedupe_magic_storm_arrows.png';
+import dedupeMagicEchoBagImage from '@assets/generated_images/card_dedupe_magic_echo_bag.png';
+import dedupeMagicTideArmorImage from '@assets/generated_images/card_dedupe_magic_tide_armor.png';
+import dedupeMagicGoldJudgmentImage from '@assets/generated_images/card_dedupe_magic_gold_judgment.png';
+import dedupeMagicFullHandSpringImage from '@assets/generated_images/card_dedupe_magic_full_hand_spring.png';
+import dedupeMagicEquivalentExchangeImage from '@assets/generated_images/card_dedupe_magic_equivalent_exchange.png';
+import dedupeMagicUndeathGuardImage from '@assets/generated_images/card_dedupe_magic_undeath_guard.png';
+import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
+import dedupeMagicArcaneRefineImage from '@assets/generated_images/card_dedupe_magic_arcane_refine.png';
+import dedupePersuadeScrollCharmImage from '@assets/generated_images/card_dedupe_persuade_scroll_charm.png';
+import dedupeMagicShadowSpikeFlipImage from '@assets/generated_images/card_dedupe_magic_shadow_spike_flip.png';
+import dedupeStarterCombatRallyImage from '@assets/generated_images/card_dedupe_starter_combat_rally.png';
+import dedupeStarterFineRepairImage from '@assets/generated_images/card_dedupe_starter_fine_repair.png';
+import dedupeStarterBlessingWindImage from '@assets/generated_images/card_dedupe_starter_blessing_wind.png';
+import dedupeStarterMazeRewindImage from '@assets/generated_images/card_dedupe_starter_maze_rewind.png';
+import dedupeStarterWorldSwapImage from '@assets/generated_images/card_dedupe_starter_world_swap.png';
+import dedupeEventFateCrossroadsImage from '@assets/generated_images/card_dedupe_event_fate_crossroads.png';
+import dedupeEventSecretVaultImage from '@assets/generated_images/card_dedupe_event_secret_vault.png';
+import dedupeEventSecretVaultOpenImage from '@assets/generated_images/card_dedupe_event_secret_vault_open.png';
+import dedupeEventShadowPactImage from '@assets/generated_images/card_dedupe_event_shadow_pact.png';
+import dedupeEventResonanceForgeImage from '@assets/generated_images/card_dedupe_event_resonance_forge.png';
+import dedupeEventGreedyAltarImage from '@assets/generated_images/card_dedupe_event_greedy_altar.png';
+import dedupeEventSealAltarBuildingImage from '@assets/generated_images/card_dedupe_event_seal_altar_building.png';
+import dedupeEventBattleHonorImage from '@assets/generated_images/card_dedupe_event_battle_honor.png';
+import dedupeEventBloodCurseImage from '@assets/generated_images/card_dedupe_event_blood_curse.png';
+import dedupeEventCrimsonPactImage from '@assets/generated_images/card_dedupe_event_crimson_pact.png';
+import dedupeEventCrimsonPactAwakenedImage from '@assets/generated_images/card_dedupe_event_crimson_pact_awakened.png';
+import dedupeEventCryptWhisperImage from '@assets/generated_images/card_dedupe_event_crypt_whisper.png';
+import dedupeEventArcaneGuildImage from '@assets/generated_images/card_dedupe_event_arcane_guild.png';
+import dedupeEventFateDiceCupImage from '@assets/generated_images/card_dedupe_event_fate_dice_cup.png';
+import dedupeEventChaosDiceGameImage from '@assets/generated_images/card_dedupe_event_chaos_dice_game.png';
+import potionHasteDrawImage from '@assets/generated_images/card_dedupe_potion_haste_draw.png';
+import potionEternalInscribeImage from '@assets/generated_images/card_dedupe_potion_eternal_perm.png';
 
 import type { CardType, GameCardData } from '../GameCard';
 import {
@@ -109,7 +144,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   },
   hasHeal: false,
   hasBalance: false,
-  hasLife: false,
+  lifeOverkillBonus: 0,
   hasCatapult: false,
   hasFlash: false,
   hasStrength: false,
@@ -121,6 +156,9 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasEquipmentSalvage: false,
   hasBloodrageAttack: false,
   hasPersuadeOnTempAttack: false,
+  hasPersuadeGrantRecycleFetch: false,
+  hasDamageClassDiscover: false,
+  hasPersuadeGraveyardStack: false,
 });
 
 export const logWaterfallInvariant = (
@@ -350,12 +388,14 @@ export function createDeck(): GameCardData[] {
     { name: 'Sword', image: axeImage },
     { name: 'Dagger', image: daggerWeaponImage },
     { name: 'Mace', image: maceImage },
-    { name: '虚灵刀', image: daggerImage },
-    { name: 'Sword', image: axeImage },
+    { name: '虚灵刀', image: starterGhostBladeImage },
+    { name: '奥术之刃', image: arcaneBladeImage },
+    { name: '战锤', image: warhammerImage },
   ];
+  const selectedWeapons = [...weaponTypes].sort(() => Math.random() - 0.5).slice(0, 6);
 
   for (let i = 0; i < 6; i++) {
-    const weaponType = weaponTypes[i % weaponTypes.length];
+    const weaponType = selectedWeapons[i];
     const value = Math.floor(Math.random() * 5) + 2;
     const durability = Math.floor(Math.random() * 4) + 1;
     const card: GameCardData = {
@@ -368,8 +408,9 @@ export function createDeck(): GameCardData[] {
       maxDurability: durability,
     };
     if (weaponType.name === 'Holy Blade') {
-      card.healOnKill = 2;
-      card.description = '击杀怪物时回复 2 点生命。';
+      card.onEquipEffect = 'spell-lifesteal+1';
+      card.overkillDraw = 1;
+      card.description = '入场：超杀吸血 +1。超杀：抽 1 张牌。';
       const hbDurability = Math.floor(Math.random() * 3) + 2;
       card.durability = hbDurability;
       card.maxDurability = hbDurability;
@@ -397,7 +438,24 @@ export function createDeck(): GameCardData[] {
     if (weaponType.name === 'Sword') {
       card.value = Math.min(card.value, 3);
       card.waterfallAttackBoost = 1;
-      card.description = '每次瀑流触发时，攻击力 +1。';
+      card.onDestroyGold = 4;
+      card.description = '每次瀑流触发时，攻击力 +1。遗言：获得 4 金币。';
+    }
+    if (weaponType.name === '奥术之刃') {
+      card.value = Math.floor(Math.random() * 2) + 1;
+      const abDurability = Math.floor(Math.random() * 2) + 2;
+      card.durability = abDurability;
+      card.maxDurability = abDurability;
+      card.postAttackSpellDamage = 1;
+      card.description = '攻击后，随机对一个怪物造成 1 点法术伤害（受法术伤害加成）。';
+    }
+    if (weaponType.name === '战锤') {
+      card.value = Math.floor(Math.random() * 3) + 1;
+      const whDurability = Math.floor(Math.random() * 3) + 1;
+      card.durability = whDurability;
+      card.maxDurability = whDurability;
+      card.weaponStunChance = 20;
+      card.description = '击晕率 20%。';
     }
     
     deck.push(card);
@@ -412,7 +470,14 @@ export function createDeck(): GameCardData[] {
   const shieldDistribution = [shieldTypes[0], shieldTypes[0], shieldTypes[1], shieldTypes[1], shieldTypes[2]];
 
   shieldDistribution.forEach(shieldType => {
-    const durability = Math.floor(Math.random() * 4) + 1;
+    let durability: number;
+    if (shieldType.name === 'Wooden Shield') {
+      durability = Math.floor(Math.random() * 2) + 1; // 1-2
+    } else if (shieldType.name === 'Iron Shield') {
+      durability = Math.floor(Math.random() * 3) + 1; // 1-3
+    } else {
+      durability = Math.floor(Math.random() * 2) + 2; // 2-3
+    }
     const card: GameCardData = {
       id: `shield-${id++}`,
       type: 'shield',
@@ -421,21 +486,21 @@ export function createDeck(): GameCardData[] {
       image: shieldType.image,
       durability,
       maxDurability: durability,
+      armorMax: shieldType.value,
     };
     if (shieldType.name === 'Wooden Shield') {
       card.onDestroyHeal = 3;
-      card.description = '毁坏时恢复 3 点生命。';
+      card.description = '遗言：恢复 3 点生命。';
     }
     if (shieldType.name === 'Iron Shield') {
-      card.onDestroyGold = 3;
-      card.description = '毁坏时获得 3 金币。';
+      card.onEquipEffect = 'graveyard-to-hand';
+      card.description = '入场：随机获得一张坟场的牌，移到手牌。';
     }
     if (shieldType.name === 'Heavy Shield') {
       card.damageReflect = 1;
+      card.onDestroyClassDraw = 1;
       card.description =
-        '格挡时反弹 1 点基础伤害给攻击者（叠加该装备栏永久伤害与永久法术伤害加成）。';
-      card.durability = Math.floor(Math.random() * 3) + 2;
-      card.maxDurability = card.durability;
+        '格挡时反弹 1 点基础伤害给攻击者（叠加该装备栏永久伤害与永久法术伤害加成）。遗言：获得 1 张专属卡。';
     }
     deck.push(card);
   });
@@ -465,6 +530,22 @@ export function createDeck(): GameCardData[] {
       potionEffect: 'boost-both-slots',
       description: '左右装备栏永久伤害+1，护甲+1。',
     },
+    {
+      type: 'potion',
+      name: '疾汲秘药',
+      value: 0,
+      image: potionHasteDrawImage,
+      potionEffect: 'end-turn-draw-2',
+      description: '永久被动：英雄回合结束时抽牌从 1 张提升为 2 张（不可叠加）。',
+    },
+    {
+      type: 'potion',
+      name: '永恒铭刻药',
+      value: 6,
+      image: potionEternalInscribeImage,
+      potionEffect: 'grant-perm-2',
+      description: '选择一张没有 Perm 属性的手牌，赋予 Perm 2（被移除后进入回收袋，经 2 次瀑流返回背包）。',
+    },
   ];
 
   potionCards.forEach(card => {
@@ -487,8 +568,8 @@ export function createDeck(): GameCardData[] {
       type: 'amulet',
       name: 'Balance Amulet',
       value: 5,
-      image: guardianAmuletImage,
-      description: '左边Equipment攻击+3护甲-1，右边Equipment护甲+3攻击-1',
+      image: balanceAmuletImage,
+      description: '左边装备栏临时攻击+3临时护甲-1，右边装备栏临时护甲+3临时攻击-1',
       amuletEffect: 'balance',
     },
     {
@@ -496,15 +577,15 @@ export function createDeck(): GameCardData[] {
       name: 'Life Amulet',
       value: 5,
       image: lifeAmuletImage,
-      description: '攻击时，若伤害超出怪物血量，回复 6 点生命。',
+      description: '超杀吸血+4。',
       amuletEffect: 'life',
     },
     {
       type: 'amulet',
       name: 'Catapult Amulet',
       value: 5,
-      image: guardianAmuletImage,
-      description: '每次手动拖动一张牌到墓地后，抽2张牌。',
+      image: dedupeAmuletCatapultImage,
+      description: '每弃置1张牌，抽1张牌。',
       amuletEffect: 'catapult',
     },
     {
@@ -512,7 +593,7 @@ export function createDeck(): GameCardData[] {
       name: 'Flash Amulet',
       value: 5,
       image: strengthAmuletImage,
-      description: '所有Equipment攻击力-3，攻击两次',
+      description: '所有装备攻击力减半，攻击次数+1',
       amuletEffect: 'flash',
     },
     {
@@ -520,11 +601,8 @@ export function createDeck(): GameCardData[] {
       name: 'Strength Amulet',
       value: 5,
       image: strengthAmuletImage,
-      description: '所有Equipment 攻击+4，每攻击一次，掉2点血',
+      description: '所有装备栏临时攻击+4，每攻击一次，失去2血',
       amuletEffect: 'strength',
-      amuletAuraBonus: {
-        attack: 4,
-      },
     },
   ];
 
@@ -540,7 +618,7 @@ export function createDeck(): GameCardData[] {
     type: 'magic',
     name: '瀑流重置',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeMagicWaterfallResetImage,
     magicType: 'instant',
     magicEffect: '将激活行的所有卡牌置于牌堆底（不打乱其余牌序），然后触发瀑布。',
   });
@@ -550,7 +628,7 @@ export function createDeck(): GameCardData[] {
     type: 'magic',
     name: '风暴箭雨',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeMagicStormArrowsImage,
     magicType: 'instant',
     magicEffect: '对激活行的每个怪物造成 3 点伤害。',
   });
@@ -560,9 +638,9 @@ export function createDeck(): GameCardData[] {
     type: 'magic',
     name: '回响行囊',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeMagicEchoBagImage,
     magicType: 'instant',
-    magicEffect: '弃置至多 2 张手牌，从坟场发现 2 张牌加入手牌，再从背包抽 2 张牌。',
+    magicEffect: '弃回至多 2 张手牌，从坟场发现 2 张牌加入手牌，再从背包抽 2 张牌。',
   });
 
   deck.push({
@@ -570,9 +648,9 @@ export function createDeck(): GameCardData[] {
     type: 'magic',
     name: '潮涌铸甲',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeMagicTideArmorImage,
     magicType: 'instant',
-    magicEffect: '2选1被动：瀑流铸甲（每次瀑流随机装备栏护甲+1）或格挡铸甲（每次格挡该栏临时护甲+3，瀑流重置）。',
+    magicEffect: '2选1被动：瀑流铸剑（每次攻击该栏临时攻击+2）或格挡铸甲（每次格挡该栏临时护甲+2）。',
   });
 
   deck.push({
@@ -580,7 +658,7 @@ export function createDeck(): GameCardData[] {
     type: 'magic',
     name: '点金裁决',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeMagicGoldJudgmentImage,
     magicType: 'instant',
     magicEffect: '对任意怪物造成等同于当前金币数量的伤害，并恢复等量生命。',
   });
@@ -590,9 +668,9 @@ export function createDeck(): GameCardData[] {
     type: 'magic',
     name: '涌泉满手',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeMagicFullHandSpringImage,
     magicType: 'instant',
-    magicEffect: '手牌补充到上限（从背包抽牌）。',
+    magicEffect: '恢复 8 点生命，手牌补充到上限（从背包抽牌）。',
   });
 
   deck.push({
@@ -600,9 +678,59 @@ export function createDeck(): GameCardData[] {
     type: 'magic',
     name: '等价交换',
     value: 0,
-    image: skillScrollImage,
+    image: dedupeMagicEquivalentExchangeImage,
     magicType: 'instant',
     magicEffect: '选择一件装备和一个非Boss怪物，互换它们的耐久与血层数。',
+  });
+
+  deck.push({
+    id: `magic-${id++}`,
+    type: 'magic',
+    name: '不灭守护',
+    value: 0,
+    image: dedupeMagicUndeathGuardImage,
+    magicType: 'instant',
+    magicEffect: '濒死时抵消致死伤害。',
+    description: '一次性：只能在受到致命伤害时打出，抵消该次伤害。',
+    knightEffect: 'death-ward',
+    maxUpgradeLevel: 2,
+  });
+
+  deck.push({
+    id: `magic-${id++}`,
+    type: 'magic',
+    name: '冥途拾遗',
+    value: 0,
+    image: dedupeMagicUnderworldRelicImage,
+    magicType: 'instant',
+    magicEffect: '坟场随机取回 3 张牌。',
+    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。',
+    knightEffect: 'graveyard-recall',
+    maxUpgradeLevel: 3,
+  });
+
+  deck.push({
+    id: `magic-${id++}`,
+    type: 'magic',
+    name: '怀柔令',
+    value: 0,
+    image: dedupePersuadeScrollCharmImage,
+    magicType: 'instant',
+    magicEffect: '劝降费用永久 -2，下次成功率 +10%。',
+    description: '一次性：劝降费用永久降低 2 金币，下次劝降成功率 +10%。',
+    knightEffect: 'persuade-discount',
+    maxUpgradeLevel: 2,
+  });
+
+  deck.push({
+    id: `magic-${id++}`,
+    type: 'magic',
+    name: '秘法精炼',
+    value: 0,
+    image: dedupeMagicArcaneRefineImage,
+    magicType: 'instant',
+    magicEffect: '选择手牌中一张魔法牌进行升级。',
+    description: '一次性：选择手牌中一张可升级的魔法牌，使其升级一次。',
   });
 
   deck.push({
@@ -610,12 +738,13 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '命运十字路口',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventFateCrossroadsImage,
     description: '打开时向左平移至被阻挡位置。若正下方有装备或护符，可破坏它并获得全部效果。',
     eventChoices: [
-      { text: '倾听命运的低语（发现专属卡）', effect: 'discoverClass', hint: '立即进行发现流程' },
-      { text: '与命运商贩交谈（打开商店）', effect: 'openShop', hint: '立刻开启商店' },
-      { text: '献祭体魄（永久 +5 生命上限）', effect: 'maxhpperm+5', hint: '上限提升会保留整局' },
+      { text: '倾听命运的低语（发现2张专属卡）', effect: 'drawClass2', hint: '获得 2 张职业牌放入背包' },
+      { text: '与命运商贩交谈（商店等级+1 并 打开商店）', effect: ['shopLevel+1', 'openShop'], hint: '商店等级+1 并立刻开启商店' },
+      { text: '献祭体魄（永久 +8 生命上限）', effect: 'maxhpperm+8', hint: '上限提升会保留整局' },
+      { text: '选择一张牌升级', effect: 'upgradeCard', hint: '从所有可升级的牌中选择一张进行升级' },
     ],
   });
 
@@ -625,22 +754,22 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '秘藏宝库',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventSecretVaultImage,
     eventChoices: [
       {
-        text: '搜刮遗物（获得两张专属卡，随机弃两张手牌）',
+        text: '搜刮遗物（获得两张专属卡，随机弃回两张手牌）',
         effect: ['drawClass2', 'randomDiscardHand:2'],
-        hint: '专属卡放入背包，随机弃置两张手牌',
+        hint: '专属卡放入背包，随机弃回两张手牌',
         requires: [{ type: 'hand', min: 2, message: '需要至少 2 张手牌' }],
       },
       {
         text: '翻找黄金（掷骰决定收益）',
-        hint: '25% +10金 / 25% +20金 / 25% -10金 / 25% -10金且弃1手牌',
+        hint: '25% +20金 / 25% +30金 / 25% -10金 / 25% -10金且弃回1手牌',
         diceTable: [
-          { id: 'vault-gold10', range: [1, 5], label: '+10 金币', effect: 'gold+10' },
-          { id: 'vault-gold20', range: [6, 10], label: '+20 金币', effect: 'gold+20' },
+          { id: 'vault-gold20', range: [1, 5], label: '+20 金币', effect: 'gold+20' },
+          { id: 'vault-gold30', range: [6, 10], label: '+30 金币', effect: 'gold+30' },
           { id: 'vault-gold-10', range: [11, 15], label: '-10 金币', effect: 'gold-10' },
-          { id: 'vault-gold-10d', range: [16, 20], label: '-10 金币，弃 1 手牌', effect: 'gold-10,randomDiscardHand:1' },
+          { id: 'vault-gold-10d', range: [16, 20], label: '-10 金币，弃回 1 张手牌', effect: 'gold-10,randomDiscardHand:1' },
         ],
       },
       {
@@ -659,11 +788,11 @@ export function createDeck(): GameCardData[] {
         type: 'event',
         name: '秘藏宝库（已开启）',
         value: 0,
-        image: eventScrollImage,
+        image: dedupeEventSecretVaultOpenImage,
         eventChoices: [
-          { text: '翻阅卷轴（抽 2 张牌）', effect: 'drawHeroCards:2' },
-          { text: '联络商贩（商店等级 +1）', effect: 'shopLevel+1' },
-          { text: '召唤商队（打开商店）', effect: 'openShop' },
+          { text: '翻阅卷轴（抽 3 张牌）', effect: 'drawHeroCards:3' },
+          { text: '联络商贩（商店等级 +1，劝降等级 +1）', effect: ['shopLevel+1', 'persuadeLevel+1'], hint: '商店等级与劝降等级各 +1' },
+          { text: '召唤商队（金币+10 且 打开商店）', effect: ['gold+10', 'openShop'], hint: '获得 10 金币并立刻开启商店' },
           { text: '深入探索（受 3 伤害，瀑流+1，翻转回去）', effect: 'vault-flipback', hint: '受到 3 点伤害，瀑流计数 +1，宝库翻转回未开启状态' },
         ],
       },
@@ -678,7 +807,7 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '暗影契约',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventShadowPactImage,
     eventChoices: [
       { text: '签下血约（受到 8 点伤害）', effect: 'hp-8' },
       {
@@ -696,7 +825,7 @@ export function createDeck(): GameCardData[] {
         type: 'magic',
         name: '暗影之刺',
         value: 0,
-        image: skillScrollImage,
+        image: dedupeMagicShadowSpikeFlipImage,
         magicType: 'permanent',
         magicEffect: '永久：对怪造成伤害；用后叠刺+1，回回收袋。',
         description: '每用过一次叠刺+1；卡面数字为叠刺层数。',
@@ -712,11 +841,11 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '共鸣熔炉',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventResonanceForgeImage,
     eventChoices: [
-      { text: '左槽淬火（左槽永久伤害 +2）', effect: 'slotLeftDamage+2' },
-      { text: '右槽固化（右槽永久护甲 +2）', effect: 'slotRightDefense+2' },
-      { text: '翻转轨道（左右装备互换）', effect: 'swapEquipmentSlots' },
+      { text: '左槽淬火（左槽永久伤害 +2，恢复1耐久）', effect: ['slotLeftDamage+2', 'repairSlot:left:1'] },
+      { text: '右槽固化（右槽永久护甲 +2，恢复1耐久）', effect: ['slotRightDefense+2', 'repairSlot:right:1'] },
+      { text: '翻转轨道（左右装备互换，各恢复1耐久）', effect: ['swapEquipmentSlots', 'repairSlot:both:1'] },
     ],
     flipTarget: {
       toCard: {
@@ -727,6 +856,7 @@ export function createDeck(): GameCardData[] {
         image: forgeHeartAmuletImage,
         description: '每有一张牌翻转，获得 3 金币。可熔炉灵焰',
         amuletEffect: 'flip-gold',
+        recycleDelay: 1,
       },
       destination: 'backpack',
       banner: '共鸣熔炉翻转为「熔炉之心」，已放入背包。',
@@ -738,18 +868,30 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '破坏祭坛',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventGreedyAltarImage,
     eventChoices: [
       {
         id: 'greedy-left',
-        text: '献祭左手装备（金币 +15）',
-        effect: 'discardLeftForGold+15',
+        text: '献祭所有左手装备（每个 +10 金币）',
+        effect: 'discardAllLeftForGold+10',
         requires: [{ type: 'equipment', slot: 'left', message: '左侧装备栏为空' }],
       },
       {
         id: 'greedy-right',
-        text: '献祭右手装备（金币 +15）',
-        effect: 'discardRightForGold+15',
+        text: '献祭所有右手装备（每个 +10 金币）',
+        effect: 'discardAllRightForGold+10',
+        requires: [{ type: 'equipment', slot: 'right', message: '右侧装备栏为空' }],
+      },
+      {
+        id: 'greedy-current-left',
+        text: '献祭当前左手装备（金币 +15）',
+        effect: 'discardCurrentLeftForGold+15',
+        requires: [{ type: 'equipment', slot: 'left', message: '左侧装备栏为空' }],
+      },
+      {
+        id: 'greedy-current-right',
+        text: '献祭当前右手装备（金币 +15）',
+        effect: 'discardCurrentRightForGold+15',
         requires: [{ type: 'equipment', slot: 'right', message: '右侧装备栏为空' }],
       },
       {
@@ -763,11 +905,31 @@ export function createDeck(): GameCardData[] {
         text: '献血离开（掉 8 HP）',
         effect: 'hp-8',
         hint: '仅当其他献祭方式全部不可用时可选',
-        requiresDisabledChoices: ['greedy-left', 'greedy-right', 'greedy-amulet'],
+        requiresDisabledChoices: ['greedy-left', 'greedy-right', 'greedy-current-left', 'greedy-current-right', 'greedy-amulet'],
         requiresDisabledReason: '仍有其他献祭方式可用',
       },
     ],
     waterfallEffect: { type: 'destroyAllEquipment', amount: 0, description: '被挤出时：破坏玩家所有装备' },
+    flipTarget: {
+      toCard: {
+        id: 'event-greedy-altar-seal-altar',
+        type: 'building',
+        name: '破印祭坛',
+        value: 0,
+        image: dedupeEventSealAltarBuildingImage,
+        buildingAura: 'suppress-adjacent-temp-attack',
+        fury: 1,
+        hpLayers: 1,
+        currentLayer: 1,
+        hp: 6,
+        maxHp: 6,
+        description:
+          '光环（在场时生效，毁坏后消失）：在预览行、地城激活行与英雄行构成的 5 列棋盘上，与本建筑八邻（含斜向）相邻格子中的玩家装备，不受该装备栏「临时攻击」数值加成（血怒等其它加成仍生效）。',
+      },
+      destination: 'stay',
+      message: '破坏祭坛凝固为破印祭坛！',
+      banner: '破坏祭坛翻转为「破印祭坛」',
+    },
   });
 
   deck.push({
@@ -775,12 +937,13 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '战血荣誉',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventBattleHonorImage,
     description: '选择一项奖励。结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
     eventChoices: [
-      { text: '整理呼吸（回复 8 HP）', effect: 'heal+8' },
-      { text: '回收战利品（金币 +20）', effect: 'gold+20' },
-      { text: '唤醒底牌（获得底部两张专属卡）', effect: 'classBottom+2' },
+      { text: '整理呼吸（回复 8 HP，超杀吸血+1）', effect: ['heal+8', 'spellLifesteal+1'] },
+      { text: '回收战利品（金币 +15，打开商店）', effect: ['gold+15', 'openShop'] },
+      { text: '唤醒底牌（获得底部三张专属卡）', effect: 'classBottom+3' },
+      { text: '选择一张牌升级', effect: 'upgradeCard', hint: '从所有可升级的牌中选择一张进行升级' },
     ],
   });
 
@@ -789,7 +952,7 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '血咒仪式',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventBloodCurseImage,
     eventChoices: [
       {
         id: 'curse-flip',
@@ -799,15 +962,34 @@ export function createDeck(): GameCardData[] {
       },
       {
         id: 'curse-discard-hand',
-        text: '献祭手牌（手牌全弃）',
+        text: '献祭手牌（手牌全部弃回）',
         effect: 'discardHandAll',
         requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+      },
+      {
+        id: 'curse-hand-all-recycle',
+        text: '缚咒收纳（所有手牌移入回收袋）',
+        effect: 'handAllToRecycleBag',
+        requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+        hint: '全部手牌进入永久魔法回收袋（含不可回收牌）',
       },
       {
         id: 'curse-pack-shrink',
         text: '束缚空间（背包容量 -4）',
         effect: 'backpackSize-4',
         hint: '背包容量永久降低 4，超过的卡牌会被随机放入回收袋',
+      },
+      {
+        id: 'curse-atk-recall',
+        text: '血蚀锋刃（所有装备栏永久攻击 -1，翻转成「回收术」）',
+        effect: ['allSlotDamage-1', 'flipToRecallEquip'],
+        hint: '左右装备栏永久伤害各 -1，事件卡翻转为「回收术」永久魔法放入背包',
+      },
+      {
+        id: 'curse-def-blessing',
+        text: '血蚀铠甲（所有装备栏永久护甲 -1，翻转成「不灭赐福」）',
+        effect: ['allSlotShield-1', 'flipToUndyingBlessing'],
+        hint: '左右装备栏永久护甲各 -1，事件卡翻转为「不灭赐福」永久魔法放入背包',
       },
     ],
     waterfallEffect: { type: 'boostRowMonsterAttack', amount: 5, description: '被挤出时：所有怪物攻击 +5' },
@@ -819,7 +1001,7 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '双重燃烧',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventCrimsonPactImage,
     eventChoices: [
       { text: '血价交易（-2 HP，发现专属）', effect: 'hp-2,discoverClass' },
       {
@@ -828,7 +1010,7 @@ export function createDeck(): GameCardData[] {
         requires: [{ type: 'gold', min: 4, message: '需要至少 4 金币' }],
       },
       {
-        text: '焚尽旧物（随机弃 2 张手牌，法伤 +1）',
+        text: '焚尽旧物（随机弃回 2 张手牌，法伤 +1）',
         effect: ['randomDiscardHand:2', 'spellDamage+1'],
         requires: [{ type: 'hand', min: 2, message: '需要至少 2 张手牌' }],
       },
@@ -839,7 +1021,8 @@ export function createDeck(): GameCardData[] {
         type: 'event',
         name: '双重燃烧（觉醒）',
         value: 0,
-        image: eventScrollImage,
+        image: dedupeEventCrimsonPactAwakenedImage,
+        description: '使用后进入墓地。若预览行正上方是魔法牌，触发魔法共鸣，翻转为「虚空置换」永久魔法。',
         eventChoices: [
           { text: '鲜血献祭（-6 HP，发现专属）', effect: 'hp-6,discoverClass' },
           {
@@ -848,7 +1031,7 @@ export function createDeck(): GameCardData[] {
             requires: [{ type: 'gold', min: 12, message: '需要至少 12 金币' }],
           },
           {
-            text: '灵魂焚烧（随机弃 4 张手牌，法伤 +1）',
+            text: '灵魂焚烧（随机弃回 4 张手牌，法伤 +1）',
             effect: ['randomDiscardHand:4', 'spellDamage+1'],
             requires: [{ type: 'hand', min: 4, message: '需要至少 4 张手牌' }],
           },
@@ -864,28 +1047,28 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '墓语密室',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventCryptWhisperImage,
     description: '若左右两侧都是怪物，可获得全部效果。',
     eventChoices: [
       {
-        text: '净化杂质（删 1 张牌）',
-        effect: 'deleteCard:1',
+        text: '净化杂质（删 3 张牌）',
+        effect: 'deleteCard:3',
         requires: [
           {
             type: 'cardPool',
             pools: ['hand', 'backpack'],
-            min: 1,
-            message: '需要至少 1 张可删除的卡牌',
+            min: 3,
+            message: '需要至少 3 张可删除的卡牌',
           },
         ],
       },
       {
-        text: '坟场召回（随机 3 选 1）',
-        effect: 'graveyardDiscover',
+        text: '坟场召回（召回2次）',
+        effect: ['graveyardDiscover', 'graveyardDiscover'],
         requires: [{ type: 'graveyard', min: 1, message: '坟场中没有可召回的卡牌' }],
       },
-      { text: '召唤商贩（打开商店）', effect: 'openShop' },
-      { text: '空间扩展（背包上限 +2）', effect: 'backpackSize+2' },
+      { text: '召唤商贩（回收袋发现一张牌，打开商店）', effect: ['recycleBagDiscover', 'openShop'] },
+      { text: '空间扩展（背包上限 +5）', effect: 'backpackSize+5' },
     ],
   });
 
@@ -894,16 +1077,17 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '奇术商会',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventArcaneGuildImage,
     eventChoices: [
-      { text: '思绪翻涌（抽 2 张牌）', effect: 'drawHeroCards:2' },
-      { text: '扩张人脉（商店等级 +1）', effect: 'shopLevel+1' },
+      { text: '思绪翻涌（获得2张专属牌，加入手上）', effect: 'drawClassToHand:2', hint: '从专属牌堆抽 2 张直接加入手牌' },
+      { text: '扩张人脉（商店等级 +1，打开商店）', effect: ['shopLevel+1', 'openShop'] },
       {
-        text: '挖掘遗物（坟场发现 1 张）',
-        effect: 'graveyardDiscover',
+        text: '挖掘遗物（坟场发现 2 张）',
+        effect: ['graveyardDiscover', 'graveyardDiscover'],
         requires: [{ type: 'graveyard', min: 1, message: '坟场中没有可召回的卡牌' }],
       },
       { text: '翻转商会卷轴', effect: 'guildFlipToMagic', hint: '翻转为永久魔法「血金术」，放入背包' },
+      { text: '翻转为「奇术轮转」', effect: 'guildFlipToHandRecycleMagic', hint: '翻转为永久魔法：所有手牌移入回收袋，再从回收袋随机 2 张移到手上' },
     ],
   });
 
@@ -912,17 +1096,17 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '命运骰盅',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventFateDiceCupImage,
     eventChoices: [
       {
-        text: '掷出不同结果：打开商店/商店等级+1/法术伤害+1/摧毁所有护符/发现一张专属卡，然后翻转成"命运之刃"。',
+        text: '掷出不同结果：金币+10并打开商店/商店等级+1并劝降费用-2/法术伤害+1并超杀吸血+1/摧毁所有护符/发现两张专属卡，然后翻转成"命运之刃"。',
         hint: '20% 触发不同奖励或惩罚',
         diceTable: [
-          { id: 'dice11-shop', range: [1, 4], label: '打开商店', effect: 'openShop' },
-          { id: 'dice11-level', range: [5, 8], label: '商店等级 +1', effect: 'shopLevel+1' },
-          { id: 'dice11-spell', range: [9, 12], label: '法术伤害 +1', effect: 'spellDamage+1' },
+          { id: 'dice11-shop', range: [1, 4], label: '金币+10，打开商店', effect: ['gold+10', 'openShop'] },
+          { id: 'dice11-level', range: [5, 8], label: '商店等级 +1，劝降费用-2', effect: ['shopLevel+1', 'persuadeCost-2'] },
+          { id: 'dice11-spell', range: [9, 12], label: '法术伤害 +1，超杀吸血+1', effect: ['spellDamage+1', 'spellLifesteal+1'] },
           { id: 'dice11-amulets', range: [13, 16], label: '摧毁所有护符', effect: 'removeAllAmulets' },
-          { id: 'dice11-discover', range: [17, 20], label: '发现一张专属卡', effect: 'discoverClass' },
+          { id: 'dice11-discover', range: [17, 20], label: '发现两张专属卡', effect: 'drawClass2' },
         ],
       },
     ],
@@ -933,22 +1117,23 @@ export function createDeck(): GameCardData[] {
     type: 'event',
     name: '混沌骰局',
     value: 0,
-    image: eventScrollImage,
+    image: dedupeEventChaosDiceGameImage,
     eventChoices: [
       {
-        text: '20%掷出不同结果：打开商店/背包加入一张诅咒/删除1张牌/获得2张专属卡/抽2张牌，并翻转为"混沌冲击"。',
+        text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗入背包并抽2张牌，并翻转为"混沌冲击"。',
         hint: '20% 概率触发不同命运',
         diceTable: [
-          { id: 'dice12-shop', range: [1, 4], label: '打开商店', effect: 'openShop' },
+          { id: 'dice12-shop', range: [1, 4], label: '金币+10，打开商店', effect: ['gold+10', 'openShop'] },
           { id: 'dice12-curse', range: [5, 8], label: '背包加入一张诅咒', effect: 'addCurse' },
           {
             id: 'dice12-delete',
             range: [9, 12],
-            label: '删除 1 张牌',
-            effect: 'deleteCard:1',
+            label: '删除 2 张牌',
+            effect: 'deleteCard:2',
           },
           { id: 'dice12-class', range: [13, 16], label: '获得 2 张专属卡', effect: 'drawClass2' },
-          { id: 'dice12-draw', range: [17, 20], label: '抽 2 张牌', effect: 'drawHeroCards:2' },
+          { id: 'dice12-draw', range: [17, 20], label: '回收袋洗入背包，抽 2 张牌', effect: ['recycleToBackpack', 'drawHeroCards:2'] },
+          { id: 'dice12-upgrade', range: [1, 20], label: '选择一张牌升级', effect: 'upgradeCard' },
         ],
       },
     ],
@@ -964,10 +1149,10 @@ export function createStarterBackpack(): GameCardData[] {
       type: 'magic',
       name: '战斗鼓舞',
       value: 0,
-      image: skillScrollImage,
+      image: dedupeStarterCombatRallyImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备栏，使其装备的下一次攻击 +2。',
-      description: '选择一个装备栏，使其中装备的下一次攻击临时 +2。',
+      magicEffect: '永久魔法：选择一个装备栏，临时攻击力 +3。',
+      description: '选择一个装备栏，临时攻击力 +3（瀑流后重置）。',
       maxUpgradeLevel: 2,
     },
     {
@@ -975,7 +1160,7 @@ export function createStarterBackpack(): GameCardData[] {
       type: 'magic',
       name: '精工修复',
       value: 0,
-      image: skillScrollImage,
+      image: dedupeStarterFineRepairImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：失去 2 点生命，选择一个装备恢复 1 点耐久。',
       description: '失去 2 点生命，精准修补武器或护盾，恢复 1 点耐久值。',
@@ -987,7 +1172,7 @@ export function createStarterBackpack(): GameCardData[] {
       type: 'magic',
       name: '祝福之风',
       value: 0,
-      image: skillScrollImage,
+      image: dedupeStarterBlessingWindImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：回复 2 点生命值。',
       description: '微风拂面，立即回复 2 点生命。',
@@ -997,7 +1182,7 @@ export function createStarterBackpack(): GameCardData[] {
       type: 'magic',
       name: '迷宫回溯',
       value: 0,
-      image: skillScrollImage,
+      image: dedupeStarterMazeRewindImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，置于牌堆底（不打乱牌堆）。',
       description: '将一张地城卡牌放到牌堆最底部。',
@@ -1009,7 +1194,7 @@ export function createStarterBackpack(): GameCardData[] {
       type: 'magic',
       name: '乾坤挪移',
       value: 0,
-      image: skillScrollImage,
+      image: dedupeStarterWorldSwapImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：将地城行最左和最右的卡牌对换位置。',
       description: '扭转地城秩序，将最左与最右的卡牌互换。',
@@ -1032,5 +1217,5 @@ export function createStarterBackpack(): GameCardData[] {
 export const isHeroRowHighlightCard = (
   card: GameCardData | null,
 ): card is GameCardData & { type: HeroRowDropType } =>
-  Boolean(card && (card.type === 'event' || card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion'));
+  Boolean(card && (card.type === 'event' || card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion' || (card.type === 'building' && card.eventChoices)));
 

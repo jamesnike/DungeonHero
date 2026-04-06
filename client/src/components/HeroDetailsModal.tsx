@@ -69,7 +69,8 @@ const permanentSkillHints: Record<string, string> = {
   'Battle Frenzy': '生命低于 50% 时，额外 +2 武器伤害。',
   'Iron Skin': '所有护甲获得 +1 防御加成。',
   Bloodthirsty: '击杀怪物后回复 2 点生命值。',
-  '潮涌铸甲': '瀑流铸甲 / 格挡铸甲（见下方子效果）。',
+  '潮涌铸甲': '瀑流铸剑 / 格挡铸甲（见下方子效果）。',
+  '疾汲秘药': '英雄回合结束时抽牌从 1 张提升为 2 张。',
   '幽魂净化': '当背包为空时，自动将回收袋里的牌洗回背包（每波瀑流一次）。',
 };
 
@@ -127,7 +128,7 @@ export default function HeroDetailsModal({
     },
     {
       key: 'spellLifesteal',
-      label: '法术吸血',
+      label: '超杀吸血',
       value: String(stats.spellLifesteal),
       icon: <Droplets className="w-4 h-4 text-rose-400" />,
     },
@@ -144,10 +145,10 @@ export default function HeroDetailsModal({
       icon: <PlusCircle className="w-4 h-4 text-emerald-500" />,
     },
     {
-      key: 'stunChance',
-      label: '击晕概率',
-      value: `${stats.stunChance}%`,
-      icon: <Zap className="w-4 h-4 text-yellow-500" />,
+      key: 'stunCap',
+      label: '击晕上限',
+      value: `${stats.stunCap}%`,
+      icon: <Zap className="w-4 h-4 text-orange-500" />,
     },
   ];
 
@@ -345,13 +346,14 @@ export default function HeroDetailsModal({
                     const blockStacks = permanentSkillStacks?.['潮涌铸甲·格挡'] ?? 0;
                     const parts: string[] = [];
                     if (waterfallStacks > 0) {
+                      const tempGainAtk = 2 * waterfallStacks;
                       const suffix = waterfallStacks > 1 ? `（×${waterfallStacks}层）` : '';
-                      parts.push(`瀑流铸甲${suffix}：每次瀑流，随机一侧装备栏永久护甲 +${waterfallStacks}。`);
+                      parts.push(`瀑流铸剑${suffix}：每次攻击，该装备栏临时攻击 +${tempGainAtk}。`);
                     }
                     if (blockStacks > 0) {
-                      const tempGain = 3 * blockStacks;
+                      const tempGain = 2 * blockStacks;
                       const suffix = blockStacks > 1 ? `（×${blockStacks}层）` : '';
-                      parts.push(`格挡铸甲${suffix}：每次格挡，该装备栏临时护甲 +${tempGain}（瀑流重置）。`);
+                      parts.push(`格挡铸甲${suffix}：每次格挡，该装备栏临时护甲 +${tempGain}。`);
                     }
                     return (
                       <div key={`${label}-${index}`} className="rounded-xl border border-border/60 bg-muted/30 p-3">

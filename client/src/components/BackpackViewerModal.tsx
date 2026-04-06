@@ -11,6 +11,7 @@ import {
   GameCardData,
   getMagicSubtypeBracketLabel,
   formatScalingSpellDamageLine,
+  waterfallsUntilBackpackFromRecycle,
 } from './GameCard';
 import {
   EventPatternPreview,
@@ -18,7 +19,7 @@ import {
   isEventCardType,
   isMagicSpellCardType,
 } from './MagicNameFlankIcons';
-import { Backpack } from 'lucide-react';
+import { Backpack, Waves } from 'lucide-react';
 
 interface BackpackViewerModalProps {
   open: boolean;
@@ -90,6 +91,17 @@ export default function BackpackViewerModal({
           </Badge>
         )}
       </div>
+      {variant === 'recycle' && (
+        <div
+          className="flex shrink-0 flex-col items-center justify-center gap-0.5 text-muted-foreground"
+          title={`${waterfallsUntilBackpackFromRecycle(card)} 次瀑流后回背包`}
+        >
+          <Waves className="h-4 w-4" aria-hidden />
+          <span className="text-xs font-bold tabular-nums leading-none text-foreground">
+            {waterfallsUntilBackpackFromRecycle(card)}
+          </span>
+        </div>
+      )}
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold">{card.name}</p>
@@ -151,7 +163,7 @@ export default function BackpackViewerModal({
                   <div className="font-semibold text-foreground">
                     回收袋 ({recycleBagCards.length} 张)
                   </div>
-                  <p>这些卡牌会在下一次瀑布开始时返回背包。</p>
+                  <p>瀑流图标旁数字为剩余次数；下一次瀑流开始时结算。</p>
                 </div>
                 {recycleBagCards.map(card => renderCardRow(card, 'recycle'))}
               </div>

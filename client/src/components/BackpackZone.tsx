@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import StackedCardPile from './StackedCardPile';
@@ -16,7 +16,7 @@ interface BackpackZoneProps {
   onOpenViewer?: () => void;
 }
 
-export default function BackpackZone({
+function BackpackZoneInner({
   backpackCount,
   capacity,
   onDrop,
@@ -121,3 +121,4 @@ export default function BackpackZone({
   );
 }
 
+export default memo(BackpackZoneInner);

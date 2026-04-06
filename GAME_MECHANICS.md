@@ -13,7 +13,7 @@
 5. [装备系统 (武器与盾牌)](#5-装备系统-武器与盾牌)
 6. [护符系统 (Amulet)](#6-护符系统-amulet)
 7. [永久牌与回收袋系统 (Permanent & Recycle Bag)](#7-永久牌与回收袋系统-permanent--recycle-bag)
-8. [弃牌与删牌规则](#8-弃牌与删牌规则)
+8. [弃回与删牌规则](#8-弃回与删牌规则)
 9. [怪物系统](#9-怪物系统)
 10. [魔法系统](#10-魔法系统)
 11. [药水系统](#11-药水系统)
@@ -26,6 +26,29 @@
 18. [翻转系统 (Card Flip)](#18-翻转系统-card-flip)
 19. [回响机制 (Echo)](#19-回响机制-echo)
 20. [关键常量表](#20-关键常量表)
+
+---
+
+## 核心关键词
+
+| 关键词 | 含义 | 触发副作用？ | 遵循路由规则？ |
+|--------|------|:----------:|:------------:|
+| **弃置** | 将卡牌送入**坟场**（Graveyard） | 是 | 是（仅非 Perm） |
+| **回收** | 将卡牌送入**回收袋**（Recycle Bag） | 是 | 是（仅 Perm） |
+| **弃回** | 弃置 + 回收的统称；每张牌按 Perm 自动路由 | 是 | 是 |
+| **删除** | 从游戏中完全移除（送入坟场） | **否** | **否** |
+| **移到** | 无视规则，强制移到指定区域 | **否** | **否** |
+| **回手** | 从装备栏/护符栏移回手牌（保留当前属性与耐久） | **否** | **否** |
+
+> **弃置/回收/弃回** 遵循 Perm 路由规则并触发弃牌副作用（弃牌获利、坟火新星、雷霆符印等）。
+>
+> **删除** 将卡牌送入坟场，**不触发**任何副作用。用于商店删牌、事件删牌等永久移除效果。
+>
+> **移到** 无视 Perm 路由规则，强制将卡牌放到指定区域（坟场/回收袋/背包/手牌等），**不触发**任何副作用。例如"将一张牌移到回收袋"，无论该牌是否 Perm，都直接放入回收袋。
+>
+> **回手** 将装备栏或护符栏中**最上面**的一件装备/护符移回手牌。玩家从**左装备栏、右装备栏、护符栏**三者中选择一个有物品的位置。卡牌回手后**保留当前属性与耐久**（不重置、不修复）。若装备栏有堆叠（Reserve），移除顶层后底层自动提升。效果令牌：`returnToHand:N`（N 为回手次数）。
+>
+> **Perm 路由规则：** Perm 卡牌只能回收（进回收袋），非 Perm 卡牌只能弃置（进坟场）。Perm 卡牌不可被手动拖到 Graveyard 区域。
 
 ---
 
@@ -70,29 +93,23 @@
 
 | 类别 | 数量 | 说明 |
 |------|------|------|
-| 怪物 | 15 | 5种族 × 3（Dragon, Skeleton, Goblin, Ogre, Wraith） |
-| 武器 | 6 | Holy Blade, 虚灵刀, Mace, Dagger, Sword×2 |
+| 怪物 | 18 | 6种族 × 3（Dragon, Skeleton, Goblin, Ogre, Wraith, Swarm） |
+| 武器 | 6 | Holy Blade, 虚灵刀, Mace, Dagger, Sword, 奥术之刃 |
 | 盾牌 | 6 | Wooden×2, Iron×2, Heavy×2 |
 | 药水 | 6 | 治疗/修复/背包/洞察等 |
 | 护符 | 6 | Heal, Balance, Life, Guardian, Flash, Strength |
-| 魔法 | 6 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 点金裁决, 涌泉满手 |
+| 魔法 | 5 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 点金裁决, 涌泉满手, 等价交换, 不灭守护, 冥途拾遗, 怀柔令, 秘法精炼（候选11，每局选5） |
 | 事件 | 14 | 各类事件 |
 
-### 2.2 初始背包 (`createStarterBackpack`)
+### 2.2 初始背包（选秀制）
 
-6 张牌：5张永久魔法 + 1把新手短剑
+游戏开始选择技能后，从候选牌中进行 **6 轮选秀**（每轮展示 3 张，选 1 张），组成初始背包。第 1 轮药水、第 2 轮装备、第 3 轮护符、第 4–6 轮通用（不含装备）。详见 `CARD_POOL_REFERENCE.md` 起始背包章节。
 
-| 名称 | `recycleDelay` | 效果 |
-|------|---------------|------|
-| 战斗鼓舞 | 1 | 下一次武器攻击 +3 × echo |
-| 精工修复 | 1 | 修复1耐久 × echo |
-| 汰旧迎新 | 1 | 弃1抽2 × echo |
-| 迷宫回溯 | 1 | 1张地牢牌放到牌堆底 × echo |
-| 乾坤挪移 | 2 | 交换场上最左与最右的牌 × echo |
+初始背包候选卡牌包含 6 把武器、2 面盾牌、3 个护符、14 张永久魔法、4 张即时魔法、9 张药水。
 
 ### 2.3 骑士职业牌堆
 
-21 张牌，详见 [§13 骑士职业卡牌](#13-骑士职业卡牌)。
+18 张牌，详见 [§13 骑士职业卡牌](#13-骑士职业卡牌)。
 
 ### 2.4 牌序规则
 
@@ -109,7 +126,7 @@
 
 1. `turnCount` +1
 2. 如果有"潮涌回春"技能：回复 4 HP（有治疗护符时翻倍为 8）
-3. 如果有"潮涌铸甲·瀑流铸甲"被动：随机装备槽永久护甲 +1；如果有"潮涌铸甲·格挡铸甲"被动：重置所有装备栏临时护甲
+3. 如果有"潮涌铸甲·格挡铸甲"被动：该栏临时护甲 +2（"瀑流铸剑"被动在攻击时触发，不在瀑流时触发）
 4. **执行回收袋恢复** (`restorePermanentMagicFromRecycleBag`)
 5. 预览区卡牌落入场上空列
 6. 多余的预览卡牌被挤出（按倒序）
@@ -119,7 +136,7 @@
 
 - **最终之敌（Boss变身前）**：不会被挤出；如果无空位则放回**牌堆顶**
 - 怪物的 `waterfallEffect.type === 'returnToDeck'`：放回牌堆（不进坟场）
-- 其他情况：进入坟场，并执行 `waterfallEffect`（如有）
+- 其他情况：弃回（Perm→回收袋，非Perm→坟场），并执行 `waterfallEffect`（如有）
 
 ### 3.3 瀑流效果 (`waterfallEffect`)
 
@@ -132,6 +149,7 @@
 | `turnBoost` | `turnCount` +N |
 | `boostRowMonsterAttack` | 同行怪物攻击力 +3 |
 | `destroyAllEquipment` | 摧毁所有装备 |
+| `swarmInfest` | 在主牌堆顶加入 N 只小虫子 |
 | 默认 | `discardCardToGraveyard` |
 
 ### 3.4 回收袋恢复
@@ -176,13 +194,15 @@ baseDamage = max(0,
   + nextWeaponBonus        // 战斗鼓舞等一次性加成
   + slotBurstBonus         // 爆发加成（时空收缩等）
   + berserkTurnBuff        // 孤注一掷回合加成
-  + balanceBonus/Penalty   // 平衡护符：左+3 / 右-1
-  - flashPenalty            // 闪光护符：-3
+  + slotTempAttack         // 临时攻击（力量护符 / 均衡护符等，瀑流后重置）
 )
+
+// 闪光护符减半（光环效果，总是最后计算）
+finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 ```
 
 **全局攻击加成 (`attackBonus`)：**
-- 护符光环 `amuletEffects.aura.attack`（力量护符 +4）
+- 护符光环 `amuletEffects.aura.attack`
 - 武器大师技能 +1
 - `weaponMasterBonus`（职业加成）
 - 狂战士之怒被动：`floor((maxHp - hp) / 2)`
@@ -205,16 +225,15 @@ baseDamage = max(0,
 
 ### 4.5 闪光护符 (Flash Amulet)
 
-- `attackIterations = hasFlash ? 2 : 1`
-- 每次攻击迭代使用相同的最终伤害值
-- 全局 -3 攻击力
-- 两次攻击**都**计入狂战仪表
+- 所有装备攻击力减半（计算完所有其他 buff 后 `÷2`，向下取整），因为是光环效果总是最后计算
+- 每个装备槽每回合攻击次数 +1（类似狂战，使用 `flashSlotUsed` 追踪每槽额外攻击是否已用）
+- `flashSlotUsed` 在每个英雄回合开始时重置
+- 卡牌上直接显示减半后的最终攻击力数字
 
 ### 4.6 力量护符 (Strength Amulet)
 
-- 全局 +4 攻击力（通过 `amuletAuraBonus.attack`）
-- 每次攻击迭代后受到 `STRENGTH_SELF_DAMAGE(2)` 点伤害
-- 闪光 + 力量 = 2次攻击 × 2点自伤 = 4点自伤
+- 每波开始时为所有装备栏施加 +4 临时攻击（通过 `slotTempAttack`，瀑流后重置再重新施加）
+- 每次攻击后受到 `STRENGTH_SELF_DAMAGE(2)` 点伤害
 
 ### 4.7 结束英雄回合
 
@@ -239,7 +258,7 @@ baseDamage = max(0,
 5. **守护护符** (`guardian`)：有盾时，溢出伤害**全部吸收**
 6. **盾牌耐久**：格挡后 -1 耐久（`unbreakableUntilWaterfall` 除外）
 7. **完美格挡**：铁壁塔盾或 `remainingDamage === 0`
-8. **完美格挡保护**：`shieldPerfectBlockSaveChance`（守护圣盾70%）→ D20 判定免耐久消耗
+8. **完美格挡保护**：`shieldPerfectBlockSaveChance`（守护圣盾50%）→ D20 判定免耐久消耗
 9. 盾牌破碎 → `disposeOwnedEquipmentCard` → 预备栏顶替
 
 ### 4.10 Boss反击伤害
@@ -265,23 +284,43 @@ baseDamage = max(0,
 - 击杀怪物 + `restoreDurabilityOnKill`：恢复耐久到满
 - `unbreakableUntilWaterfall`：当前瀑流周期内不消耗耐久
 
-### 5.3 永久装备 (`permEquipment`)
+### 5.3 装备关键词
+
+#### 入场 (`onEquipEffect`)
+
+装备被装备到装备栏时触发一次。触发时机：拖拽装备到槽位 或 从手牌打出装备。
+
+| 效果ID | 行为 |
+|--------|------|
+| `graveyard-to-hand` | 随机从坟场取 1 张牌加入手牌 |
+
+#### 遗言 (`onDestroyEffect` / `onDestroyHeal` / `onDestroyGold` / `onDestroyDraw` / `onDestroyPermanentDamage`)
+
+装备被摧毁时触发。包括：耐久耗尽、被事件效果破坏、被怪物效果破坏等所有摧毁路径。
+
+> **规则：遗言 + 复活 →** 当装备同时有遗言和复活时，耐久耗尽的处理顺序为：**遗言先触发 → 复活生效**（耐久回到 1）。装备不会真正被移除。
+
+怪物装备的 `lastWords` 也遵循此规则。
+
+### 5.4 永久装备 (`permEquipment`)
 
 - 标记 `permEquipment: true` 的武器/盾牌
 - 损毁/挤出时进**回收袋**（而非坟场）
 - 回收时**耐久恢复至满**
 - 判定函数：`isPermRecycleEquipment(card)` → `card.type in ['weapon','shield'] && card.permEquipment`
 
-### 5.4 装备处置 (`disposeOwnedEquipmentCard`)
+### 5.5 装备处置 (`disposeOwnedEquipmentCard`)
 
 1. 如果是 `isPermRecycleEquipment` → `addPermanentMagicToRecycleBag`（进回收袋）
 2. 否则 → `addToGraveyard`（进坟场）
 3. **始终**触发 `applyDiscardSideEffects`
 
-### 5.5 平衡护符对装备的影响
+### 5.6 平衡护符对装备的影响
 
-| 槽位 | 攻击力修正 | 护甲修正 |
-|------|-----------|---------|
+每波开始时通过 `slotTempAttack` / `slotTempArmor` 施加，瀑流后重置再重新施加。
+
+| 槽位 | 临时攻击修正 | 临时护甲修正 |
+|------|-------------|-------------|
 | 左 (slot1) | +3 | -1 |
 | 右 (slot2) | -1 | +3 |
 
@@ -321,11 +360,11 @@ baseDamage = max(0,
 | 名称 | `amuletEffect` | 效果 |
 |------|----------------|------|
 | Heal Amulet | `heal` | 所有回血效果翻倍 |
-| Balance Amulet | `balance` | 左攻+3防-1，右防+3攻-1 |
-| Life Amulet | `life` | 超出怪物血量的伤害转化为回血 |
-| Catapult Amulet | `catapult` | 每次手动拖动一张牌到墓地后，抽一张牌 |
-| Flash Amulet | `flash` | 攻击两次，攻击力-3 |
-| Strength Amulet | `strength` | 攻击力+4，每次攻击自损2HP |
+| Balance Amulet | `balance` | 左栏临时攻击+3临时护甲-1，右栏临时护甲+3临时攻击-1 |
+| Life Amulet | `life` | 超杀吸血+4 |
+| Catapult Amulet | `catapult` | 每弃置1张牌，抽1张牌 |
+| Flash Amulet | `flash` | 攻击力减半，攻击次数+1 |
+| Strength Amulet | `strength` | 临时攻击+4，每次攻击自损2HP |
 
 ### 6.6 骑士职业护符
 
@@ -344,28 +383,67 @@ baseDamage = max(0,
 
 ## 7. 永久牌与回收袋系统 (Permanent & Recycle Bag)
 
-### 7.1 什么是永久牌
+### 7.1 关键词定义
 
-永久牌 = 使用后不进坟场，进入回收袋等待回收的牌。
+- **弃置**：将卡牌送入坟场（Graveyard）。适用于所有非 Perm 卡牌。触发弃牌副作用。
+- **回收**：将卡牌送入回收袋（Recycle Bag）。适用于所有带 Perm 的卡牌。触发弃牌副作用。
+- **弃回**：弃置 + 回收的统称。对一批卡牌执行"弃回"时，每张牌根据是否 Perm 自动路由——非 Perm 弃置到坟场，Perm 回收到回收袋。例如"弃回所有手牌"。
+- **删除**：从游戏中完全移除，送入坟场。**不触发**任何弃牌副作用，无视 Perm 路由规则。用于商店删牌、事件删牌。代码路径：`addToGraveyard(card)`。
+- **移到**：无视所有规则，强制将卡牌放到指定区域。**不触发**任何副作用，不受 Perm 路由限制。例如"将一张牌移到回收袋"，无论该牌是否 Perm，都直接放入回收袋。
 
-**判定 `isPermanentMagicCard`：** `card.type === 'magic' && card.magicType === 'permanent'`
+**Perm 路由规则（弃置/回收/弃回遵循）：**
+- 带 Perm 的卡牌，无论自动还是手动，都只能**回收**（进回收袋），不能弃置到坟场。
+- 不带 Perm 的卡牌，无论自动还是手动，都只能**弃置**（进坟场），不能进回收袋。
+- Perm 卡牌不可被手动拖到 Graveyard 区域。
+- 当操作涉及多张可能混合 Perm 和非 Perm 的卡牌时，使用**弃回**一词。
+- **删除**和**移到**不受此规则约束。
 
-### 7.2 什么牌可以被手动拖到回收袋 (`isRecyclableFromHand`)
+### 7.2 选择界面范围
 
-以下**任一**条件满足即可拖到回收袋：
+当效果要求玩家"选择 N 张牌"时，根据关键词决定可选范围和筛选条件：
+
+| 关键词 | 可选区域（无明确指定时） | 筛选 | 示例 |
+|--------|--------------------------|------|------|
+| 弃回 N 张牌 | 手牌 + 装备栏 + 护符栏 | 所有牌 | "弃回 2 张牌" |
+| 弃回 N 张手牌 | 仅手牌 | 所有牌 | "弃回 2 张手牌" |
+| 弃置 N 张牌 | 手牌 + 装备栏 + 护符栏 | 仅非 Perm | — |
+| 回收 N 张牌 | 手牌 + 装备栏 + 护符栏 | 仅 Perm | — |
+| 删除 N 张牌 | 手牌 + 背包 + 装备栏 + 护符栏 + 回收袋 | 所有牌 | "删除 1 张卡牌" |
+| 移到 | 手牌 + 装备栏 + 护符栏 | 所有牌 | "将 1 张手牌移到回收袋" |
+
+- 当关键词后明确写了"手牌"（如"弃回 N 张**手牌**"），选择范围缩窄至仅手牌。
+- **背包**仅在"删除"操作中可选。
+- **回收袋**仅在"删除"操作中可选。
+
+### 7.3 什么是 Perm 卡牌
+
+Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
+
+以下**任一**条件满足即为 Perm 卡牌：
 - 永久魔法 (`type === 'magic' && magicType === 'permanent'`)
-- 护符 (`type === 'amulet'`)
 - 永久事件 (`isPermanentEvent === true`)
 - 永久装备 (`isPermRecycleEquipment` → `type in ['weapon','shield'] && permEquipment`)
 
-### 7.3 回收袋流程
+**判定 `isPermanentMagicCard`：** `card.type === 'magic' && card.magicType === 'permanent'`
+
+**护符说明：** 护符 (`type === 'amulet'`) 在手牌中可拖至回收袋，但自动弃置时进坟场（特殊处理，不算 Perm）。
+
+### 7.4 手动处置规则
+
+| 来源 | Perm 卡牌 | 非 Perm 卡牌 |
+|------|-----------|-------------|
+| 手牌 | 拖到背包区域 → 回收袋 | 拖到坟场区域 → 坟场 |
+| 地城（永久事件） | 拖到背包区域 → 回收袋 | N/A |
+| 装备槽（永久装备） | 拖到背包区域 → 回收袋 | 拖到坟场区域 → 坟场 |
+
+### 7.5 回收袋流程
 
 1. 牌进入回收袋时：`_recycleWaits = recycleDelay ?? 1`
 2. 每次瀑流：`_recycleWaits` -1
 3. `_recycleWaits ≤ 0` 且背包有空位 → 牌回到背包
 4. 永久装备回收时耐久恢复至满
 
-### 7.4 `recycleDelay` 值（默认 1）
+### 7.6 `recycleDelay` 值（默认 1）
 
 | 牌名 | `recycleDelay` |
 |------|---------------|
@@ -374,23 +452,23 @@ baseDamage = max(0,
 | 乾坤挪移 | 2 |
 | 其他永久牌 | 1（默认） |
 
-### 7.5 重要区分：回收袋 vs 坟场
+### 7.7 回收 vs 弃置 对照表
 
-| 情况 | 目的地 |
-|------|--------|
-| 永久魔法使用后 | 回收袋 |
-| 永久魔法被弃置 | 回收袋 |
-| 永久装备损毁/挤出 | 回收袋 |
-| 护符手动拖到回收袋 | 回收袋 |
-| 护符被自动弃置（挤出等） | **坟场** |
-| 即时魔法使用后 | 坟场 |
-| 药水使用后（无翻转） | 坟场 |
-| 非永久装备损毁 | 坟场 |
-| 被"删牌"效果删除的任何牌 | 坟场 |
+| 情况 | 关键词 | 目的地 |
+|------|--------|--------|
+| 永久魔法使用后 | 回收 | 回收袋 |
+| 永久魔法被处置 | 回收 | 回收袋 |
+| 永久装备损毁/挤出 | 回收 | 回收袋 |
+| 永久事件被处置 | 回收 | 回收袋 |
+| 护符手动拖到回收袋 | 回收 | 回收袋 |
+| 护符被自动弃置（挤出等） | 弃置 | 坟场 |
+| 即时魔法使用后 | 弃置 | 坟场 |
+| 药水使用后（无翻转） | 弃置 | 坟场 |
+| 非永久装备损毁 | 弃置 | 坟场 |
 
 ---
 
-## 8. 弃牌与删牌规则
+## 8. 弃回与删牌规则
 
 ### 8.1 `discardCardToGraveyard` 完整流程
 
@@ -399,46 +477,94 @@ baseDamage = max(0,
    → triggerGraveNova()（对所有怪物造成伤害）
    → addPermanentMagicToRecycleBag（坟火新星本身进回收袋）
 
-2. 否则如果：非 forceGraveyard、isRecyclableFromHand(card)、且 card.type !== 'amulet'：
+2. 否则如果 Perm 卡牌（isRecyclableFromHand(card) && type !== 'amulet'）：
+   → addPermanentMagicToRecycleBag（回收至回收袋，无论 forceGraveyard）
+
+3. 否则如果 forceRecycleBag：
    → addPermanentMagicToRecycleBag（进回收袋）
 
-3. 否则：
-   → addToGraveyard（进坟场）
+4. 否则：
+   → addToGraveyard（弃置至坟场）
 
-4. 始终执行 applyDiscardSideEffects(card, owner)
+5. 始终执行 applyDiscardSideEffects(card, owner)
 ```
 
-### 8.2 弃牌副作用 (`applyDiscardSideEffects`)
+### 8.2 卡牌使用 Staging 机制
+
+打出一张牌时，该牌进入虚拟的 **Staging 区**（不属于手牌、坟场、回收袋）。
+
+**结算顺序：**
+
+```
+1. 牌从手牌移除 → 进入 Staging（手牌数 -1）
+2. 牌的效果按顺序结算（弃牌、抽牌、造成伤害等）
+   - 此阶段中被弃掉的牌，其弃置副作用（onDiscardDraw 等）被 **排入队列**，不立即触发
+3. 牌的效果全部结算完毕
+4. Staging 中的牌 → 坟场 或 回收袋
+5. 依序结算队列中的弃置副作用（连锁效果）
+```
+
+**示例：** 手牌 5 张，上限 5。打出一张"弃回 1 抽 1"的牌：
+- 该牌 → Staging（手牌变为 4）
+- 弃回 1 张手牌（手牌变为 3），被弃回的牌进入坟场/回收袋
+- 抽 1 张（手牌变为 4，未超上限）
+- Staging 的牌 → 坟场（手牌仍为 4）
+- 被弃回的牌恰好有 `onDiscardDraw: 2`：此时手牌 4，上限 5，**只能抽 1 张**
+
+**关键规则：** 连锁效果必须等前一张牌完全结算完毕（进入坟场/回收袋后）才开始结算。
+
+### 8.3 弃牌副作用 (`applyDiscardSideEffects`)
+
+弃牌副作用分为两个阶段，**卡牌自身效果先结算，然后再结算"每次弃置"触发器**：
+
+**Phase 1 — 卡牌自身的弃置效果（优先结算）：**
+
+| 条件 | 效果 |
+|------|------|
+| 牌的 `magicEffect === 'honor-blood'` | 激活行所有怪物攻击力 -2 |
+| 牌有 `onDiscardDamage` | 对随机怪物造成 `getSpellDamage(amount)` 伤害 |
+| 牌有 `onDiscardDraw` | 从背包抽取指定数量的牌（受手牌上限限制） |
+
+**Phase 2 — "每次弃置"触发器（后结算）：**
 
 | 条件 | 效果 |
 |------|------|
 | 技能"弃牌获利" (`discard-profit`) | +2 金币 |
-| 牌的 `magicEffect === 'honor-blood'` | 对每个怪物造成 `getSpellDamage(1)` 伤害 |
-| 牌有 `onDiscardDamage` | 对随机怪物造成 `getSpellDamage(amount)` 伤害 |
-| 雷霆符印护符在场 | `triggerDiscardShock()` |
+| 弹射护符 (`catapult`) | 从背包抽 1 张牌 |
+| 雷霆符印 (`discard-zap`) | `triggerDiscardShock()` 对随机怪物造成伤害 |
 
-### 8.3 删牌 vs 弃牌
+> **规则：** 含"每"字样的触发器（弹射护符、雷霆符印、弃牌获利）一定在被弃牌自身效果之后结算。
+> 例：弃掉一张 `onDiscardDraw: 2` 的牌 → 先抽 2 张（牌自身效果）→ 然后弹射护符再抽 1 张。
 
-| 操作 | 路径 | 触发效果？ | 目的地 |
-|------|------|-----------|--------|
-| **删牌** (delete) | `addToGraveyard(card)` | **不触发**任何效果 | 坟场 |
-| **弃牌** (discard) | `discardCardToGraveyard(card)` | 触发坟火新星、回收、弃牌副作用 | 回收袋或坟场 |
+> **注意：** 当有牌在 Staging 区时，整个弃置副作用（Phase 1 + Phase 2）不会立即执行，而是排入队列，等 Staging 的牌结算完毕后依序执行。
 
-> **规则：** 删牌效果是最强的——无视所有其他效果（坟火新星、回收、弃牌获利等），直接将牌送入坟场。
+### 8.4 五种卡牌操作对比
 
-### 8.4 手动拖到回收袋 vs 自动弃置
+| 关键词 | 代码路径 | 触发副作用？ | 遵循 Perm 路由？ | 目的地 |
+|--------|---------|:----------:|:-------------:|--------|
+| **弃置** | `discardCardToGraveyard` | 是 | 是 | 坟场 |
+| **回收** | `discardCardToGraveyard` / `addPermanentMagicToRecycleBag` | 是 | 是 | 回收袋 |
+| **弃回** | `discardCardToGraveyard` | 是 | 是 | Perm→回收袋 / 非Perm→坟场 |
+| **删除** | `addToGraveyard(card)` | **否** | **否** | 坟场 |
+| **移到** | 直接操作目标区域状态 | **否** | **否** | 指定区域 |
 
-| 操作 | 护符行为 | 永久牌行为 |
-|------|---------|-----------|
-| 手动拖到回收袋 | 进回收袋 | 进回收袋 |
-| 自动弃置（瀑流/效果） | 进坟场 | 进回收袋 |
+> **删除** 无视所有规则（坟火新星、Perm 路由、弃牌获利等），直接将牌送入坟场。用于商店删牌、事件删牌。
+>
+> **移到** 无视所有规则，将牌强制放到指定区域（如"移到回收袋"、"移到手牌"）。不触发任何副作用，不受 Perm 路由限制。
 
-### 8.5 诅咒牌弃置
+### 8.5 手动拖到回收袋 vs 自动弃回
+
+| 操作 | 护符行为 | Perm 卡牌行为 | 非 Perm 卡牌行为 |
+|------|---------|-------------|---------------|
+| 手动拖到回收袋 | 进回收袋 | 进回收袋（回收） | N/A |
+| 自动弃回（瀑流/效果） | 进坟场（弃置） | 进回收袋（回收） | 进坟场（弃置） |
+
+### 8.6 诅咒牌弃置
 
 - 弃置诅咒牌（手动拖到回收袋）时受到 3 点伤害
 - 使用诅咒牌时也受到 3 点伤害
 
-### 8.6 坟火新星 (`grave-nova`)
+### 8.7 坟火新星 (`grave-nova`)
 
 - 触发时机：该牌被**弃置**时（不是被删除时）
 - 效果：对当前行所有怪物造成 `getSpellDamage(3)` 伤害
@@ -458,12 +584,22 @@ baseDamage = max(0,
 | Goblin | `onAttackEffect: 'steal-gold-3'`（攻击偷3金） |
 | Ogre | `enterEffect: 'auto-engage'`（进场自动开战） |
 | Wraith | `lastWords: 'wraith-haunt-2'`（遗言：同行怪物攻击+2并打乱位置） |
+| Swarm | `swarmSpawn: true`（虫群被动：场上有虫群怪时，每移除一张地城牌，在该位置生成一只小虫子） |
+
+#### 9.1.1 小虫子（Buglet）
+
+- 由虫群被动生成的衍生怪物（`isBuglet: true`, `monsterType: 'Buglet'`）
+- 攻击力 2，生命 1，1 层血
+- 击杀小虫子不会再生成新的小虫子（防止无限循环）
+- 击杀小虫子的战利品固定为 1 个选项：获得 2-3 金币
+- 死亡时 5% 概率翻转为「虫蜕之冠」护符（`amuletEffect: 'card-gain-upgrade'`，每新获得 3 张牌自动升级 1 张牌）。每局仅可触发一次，获得后不再翻转。
 
 ### 9.2 血层系统
 
 - 怪物有多层血量（`fury`/`hpLayers` → `currentLayer`）
 - 每层有独立HP（`hp`/`maxHp`）
 - 扣光一层HP后掉一层，HP恢复至 `maxHp`
+- 单次伤害最多打掉当前血层，溢出伤害不穿透到下一层
 - `bleedEffect`：每失去一层，攻击力 +N
 
 ### 9.3 精英怪物
@@ -477,9 +613,10 @@ baseDamage = max(0,
 | Wraith | `wraith-rebirth` | 幽魂重生：血层降至1时50%概率全满（D20 ≤ 10） |
 | Ogre | `ogre-crit` | 蛮力暴击：攻击50%概率双倍伤害 + 狂暴连击：50%概率攻击两次 |
 | Goblin | `goblin-elite` | 偷取6金币；玩家金币≤10时攻击力与血量翻倍 |
+| Swarm | `swarm-elite` | 虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子 |
 
 精英怪还有特殊遗言：
-- 精英 Skeleton：`discard-hand-3`（随机弃置3张手牌）
+- 精英 Skeleton：`discard-hand-3`（随机弃回3张手牌）
 - 精英 Wraith：`wraith-haunt-4`（同行怪物攻击+4并打乱位置）
 
 ### 9.4 遗言系统 (`lastWords`)
@@ -495,7 +632,7 @@ baseDamage = max(0,
 
 | 效果ID | 行为 |
 |--------|------|
-| `discard-hand-3` | 随机弃置最多3张手牌 |
+| `discard-hand-3` | 随机弃回最多3张手牌 |
 | `wraith-haunt-N` | 同行怪物攻击+N，同行卡牌位置随机打乱 |
 
 ### 9.5 复生系统 (`hasRevive`)
@@ -505,7 +642,28 @@ baseDamage = max(0,
 - 第二次击杀时：正常死亡
 - Boss变身后也有 `hasRevive`
 
-### 9.6 最终之敌与Boss变身
+### 9.6 怪物强化等级
+
+每个怪物有强化等级（`upgradeLevel`），对应 `MONSTER_UPGRADES` 中的升级阶段：
+
+- **Lv.0** = 基础属性（无强化）
+- **Lv.1/2/3** = 第一/二/三阶段，获得攻击和血量加成及特殊能力
+
+**自然强化**：怪物出现在地城行时，根据当前 waterfall 次数自动达到对应等级。例如 Dragon 在 waterfall ≥ 4 时为 Lv.1，≥ 8 时为 Lv.2，≥ 12 时为 Lv.3。
+
+**手动升级**：怪物作为装备时，可通过升级系统（升级卷轴、秘法精炼、商店等）升级到下一等级，获得该阶段的完整加成（攻击、血量、特殊能力）。
+
+| 种族 | Lv.1 | Lv.2 | Lv.3 |
+|------|------|------|------|
+| Dragon | WF≥4: 攻+3 血+1 | WF≥8: 攻+5 血+4 | WF≥12: 攻+8 血+7 + 流血破甲 |
+| Skeleton | WF≥3: 攻+3 血+1 | WF≥7: 攻+6 血+2 | WF≥11: 攻+9 血+3 + 不朽之骨 |
+| Goblin | WF≥3: 攻+2 血+1 | WF≥7: 攻+4 血+2 | WF≥11: 攻+6 血+4 + 贪婪强化 |
+| Ogre | WF≥5: 攻+3 血+1 + 击晕 | WF≥9: 攻+5 血+3 + 连击 | WF≥13: 攻+8 血+5 + 全技能 |
+| Wraith | WF≥4: 攻+3 血+1 | WF≥8: 攻+5 血+3 + 蓄积 | WF≥12: 攻+7 血+4 + 祝福 |
+| Swarm | WF≥4: 攻+1 血+2 + 集结 | WF≥8: 攻+2 血+4 | WF≥12: 攻+3 血+6 |
+| Buglet | WF≥4: 攻+2 血+1 | WF≥8: 攻+4 血+2 | WF≥12: 攻+6 血+4 |
+
+### 9.7 最终之敌与Boss变身
 
 **最终之敌**：牌堆中最后一只怪物，标记 `isFinalMonster: true`
 
@@ -528,6 +686,40 @@ baseDamage = max(0,
 **Boss韧性** (`bossFuryDiceChance`)：
 - 攻击后50%概率不掉血层（D20 ≤ 10）
 
+### 9.8 击晕状态 (`isStunned`)
+
+当怪物处于击晕状态时，**所有技能完全无效**：
+
+**攻击阶段（已由攻击队列跳过实现）：**
+- 怪物回合跳过攻击
+- `onAttackEffect`（偷金）不触发
+- `eliteDoubleAttack`（连击）不触发
+- `ogreStun`（击晕玩家）不触发
+
+**被动/反应技能（被攻击时）：**
+- `bossRetaliationDamage`（反噬）不生效
+- `bleedEffect`（流血攻击加成）不生效
+- `dragonBleedDestroy`（流血破甲）不生效
+- `bossFuryDiceChance`（韧性免血层损失）不生效
+- 精英特殊能力（骨再生 `bone-regen`、幽魂重生 `wraith-rebirth`、虫母 `swarm-elite`）不触发
+
+**回合结束技能：**
+- `wraithTurnAttack`（怨念蓄积）不生效
+- `bossLastStandAura`（暴走光环）不生效
+- `eliteRegenHeroTurn`（未受伤恢复血层）不生效
+
+**死亡/复生技能：**
+- `hasRevive`（复生）不生效——击晕状态下击杀直接死亡
+- `lastWords`（遗言）不触发
+- `wraithDeathHeal`（怨灵祝福）不触发
+- `isFinalMonster`（Boss变身）不触发
+
+**场地技能：**
+- `swarmSpawn`（虫群被动生成小虫子）不生效
+- `swarmHordeRage`（虫群集结）不触发
+
+> 击晕持续一个怪物回合，在怪物回合结束时自动恢复。
+
 ---
 
 ## 10. 魔法系统
@@ -546,24 +738,31 @@ baseDamage = max(0,
 | 瀑流重置 | instant | 场上牌放回牌堆底，立即触发瀑流 |
 | 风暴箭雨 | instant | 对行中所有怪物造成 `getSpellDamage(3) × echo` 伤害；命中 ≥3 只怪物时翻转为「箭雨余韵」(permanent) |
 | 箭雨余韵 | permanent | 对行中所有怪物造成 `getSpellDamage(1) × echo` 伤害，每命中 1 只怪物从回收袋随机抽 1 张牌入手牌（不含自身） |
-| 回响行囊 | instant | 弃 `2×echo` 张手牌 → 从坟场发现 `2×echo` 张 → 从背包抽 `2×echo` 张 |
-| 潮涌铸甲 | instant | 2选1被动：A)瀑流铸甲—每次瀑流随机装备槽永久护甲+1；B)格挡铸甲—每次格挡该装备栏临时护甲+3（瀑流重置） |
+| 回响行囊 | instant | 弃回 `2×echo` 张手牌 → 从坟场发现 `2×echo` 张 → 从背包抽 `2×echo` 张 |
+| 潮涌铸甲 | instant | 2选1被动：A)瀑流铸剑—每次攻击该装备栏临时攻击+2；B)格挡铸甲—每次格挡该装备栏临时护甲+2 |
 | 点金裁决 | instant | 伤害 = `getSpellDamage(gold) × echo`，回复等量HP |
-| 涌泉满手 | instant | 手牌补充到上限（从背包抽牌，计算差值时不算自身） |
+| 涌泉满手 | instant | 恢复 8 点生命，手牌补充到上限（从背包抽牌，计算差值时不算自身） |
+| 不灭守护 | instant | 濒死时自动抵消致死伤害（无需主动打出） |
+| 冥途拾遗 | instant | 从坟场随机取回至多 3 张牌加入背包（不能取回自己） |
+| 怀柔令 | instant | 劝降费用永久降低 2 金币，下次劝降成功率 +10% |
+| 秘法精炼 | instant | 选择手牌中一张可升级的魔法牌进行升级 |
 
 ### 10.3 骑士职业魔法
 
 | 名称 | `magicType` | `knightEffect` | 效果 |
 |------|-------------|----------------|------|
+| 亡者之契 | instant | `monster-recruit` | 从坟场发现一张怪物牌（3选1），加入手牌 |
 | 浴血贪念 | instant | `blood-greed` | 获得金币 = `max(0, maxHp - hp)`，添加贪婪诅咒到背包 |
 | 铠甲贯刺 | permanent | `armor-strike` | 选择装备槽的护甲值 → 对怪物造成 `getSpellDamage(armor)` |
 | 残血终焉 | permanent | `missing-hp-smite` | 伤害 = `getSpellDamage(maxHp - hp)` |
 | 坟火新星 | permanent | `grave-nova` | 永久：被弃置时对所有怪物造成 `getSpellDamage(3)` |
 | 孤注一掷 | instant | `berserk-gambit` | HP降至1，本回合武器+4，每个武器栏可多攻击一次（与狂战叠加） |
 | 回收灵焰 | permanent | `recycle-flare` | 立即恢复回收袋中的牌，从背包抽最多2张 |
-| 不灭守护 | instant | `death-ward` | 致命时触发（特殊） |
 | 混沌骰运 | permanent | `chaos-dice` | D20掷骰，5种随机效果 |
-| 冥途拾遗 | instant | `graveyard-recall` | 从坟场召回最多4张加入背包 |
+| 天眼审判 | permanent | `fate-sight` | 造成3点伤害，翻看牌堆顶3张牌，每有1张怪物牌20%击晕目标（Perm 2，可升级） |
+| 护甲凝雷 | permanent | `armor-stun-convert` | 选择一个护盾，每1点护甲值使击晕上限+1%，然后该装备栏临时护甲清零 |
+| 暗流涌动 | permanent | `soft-waterfall` | 柔和瀑流：预览行中正下方为空位的牌落入激活行，其余预览牌不动；仅对腾出的预览位从牌堆补牌（Perm 1） |
+| 淬炼冲击 | permanent | `overkill-upgrade` | 对一个怪物造成 `getSpellDamage(3)` 伤害。超杀：升级一张牌（Perm 1） |
 
 ### 10.4 混沌骰运效果表
 
@@ -573,7 +772,7 @@ baseDamage = max(0,
 | 5–8 | 发现1张职业牌（3选1） |
 | 9–12 | 临时商店 |
 | 13–16 | 随机怪物受到 `getSpellDamage(3)` × 2次 |
-| 17–20 | 弃2张手牌 → 从背包抽2张 |
+| 17–20 | 弃置2张手牌 → 从背包抽2张 |
 
 ### 10.5 其他永久魔法（通过翻转/事件获得）
 
@@ -601,7 +800,7 @@ baseDamage = max(0,
 |------|----------------|------|
 | 治疗药水 | `heal-5` | 回复5HP → 翻转为"治愈余韵"永久魔法 |
 | 浓缩治疗药水 | `heal-14` | 回复14HP |
-| 装备修复剂 | `repair-choice` | 选择修复哪个装备 |
+| 装备修复剂 | `repair-choice` | 左右装备都恢复3点耐久 或 左右装备都耐久上限+2 |
 | 高级修复剂 | `boost-both-slots` | 所有装备槽加成+1 |
 | 背包觉醒药 | `draw-backpack-4` | 背包容量+1，手牌上限+1，从背包抽牌 |
 | 洞察药剂 | `discover-class-3` | 从职业牌堆发现3张 |
@@ -656,9 +855,9 @@ baseDamage = max(0,
 | `handLimit+1` | 手牌上限+1 |
 | `amuletCapacity+1` | 护符槽+1 |
 | `equipSlot1Capacity+1` / `equipSlot2Capacity+1` | 装备预备容量+1 |
-| `discardHandAll` | 弃置所有手牌 |
+| `discardHandAll` | 弃回所有手牌 |
 | `deleteCard:N` | 删除N张牌（进坟场，无视其他效果） |
-| `randomDiscardHand:N` | 随机弃置N张手牌 |
+| `randomDiscardHand:N` | 随机弃回N张手牌 |
 | `graveyardDiscover` | 从坟场选牌 |
 | `removeAllAmulets` | 所有护符进坟场 |
 | `destroyEquipment:any` | 选择牺牲一件装备 |
@@ -690,7 +889,7 @@ baseDamage = max(0,
 |------|------|------|------|
 | 铁壁塔盾 | 5 | 1/1 | `permEquipment`，`fullBlock`（完全格挡） |
 | 棘刺反盾 | 4 | 2/2 | `reflectHalfDamage`（反弹半数伤害） |
-| 守护圣盾 | 3 | 2/2 | `shieldPerfectBlockSaveChance: 70`（完美格挡70%保护盾） |
+| 守护圣盾 | 3 | 2/2 | `shieldPerfectBlockSaveChance: 50`（完美格挡50%保护盾） |
 
 ### 13.3 护符
 
@@ -712,6 +911,7 @@ baseDamage = max(0,
 |------|------|
 | 圣光秘术 | 解锁/充满圣光仪表 |
 | 狂战秘典 | 解锁/充满狂战仪表 |
+| 复生秘典 | 解锁/充满复生祝福仪表 |
 
 ### 13.6 魔法牌
 
@@ -740,7 +940,17 @@ baseDamage = max(0,
 | 激活条件 | 仪表已满 |
 | 效果 | 每个武器槽每回合获得1次额外攻击，且所有攻击不消耗耐久；持续到下次瀑流 |
 
-### 14.3 解锁与充能
+### 14.3 复生祝福 (Revive Blessing)
+
+| 属性 | 值 |
+|------|-----|
+| 仪表上限 | 3 |
+| 充能来源 | 每次受到伤害 +1 |
+| 激活条件 | 仪表已满 |
+| 效果 | 失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活） |
+| 使用限制 | 每瀑流周期只能使用一次 (`usedThisWave`) |
+
+### 14.4 解锁与充能
 
 - 首次使用英雄魔法牌：解锁对应仪表，初始值0
 - 再次使用英雄魔法牌：仪表直接充满
@@ -760,10 +970,10 @@ baseDamage = max(0,
 | `blood-strike` | 主动 | -3 HP，对怪物造成3伤害 |
 | `vitality-well` | 被动 | +8 最大HP，+8 初始金币 |
 | `gold-discovery` | 主动 | 6金 → 随机职业牌；+2初始背包 |
-| `graveyard-recall` | 主动 | 弃2 → 坟场3选1 |
+| `graveyard-recall` | 主动 | 弃回2 → 坟场3选1 |
 | `discard-profit` | 被动 | 每次弃牌+2金；初始商店等级1 |
 | `waterfall-heal` | 被动 | 每次瀑流回复4HP（治疗护符翻倍为8） |
-| `discard-empower` | 主动 | 随机弃1+选槽：下次攻击+2且吸血 |
+| `discard-empower` | 主动 | 随机弃回1张+选槽：下次攻击+2且吸血 |
 | `heal-to-damage` | 被动 | 每有效治疗5点 → 双槽各+1永久伤害；自带治愈余韵 |
 | `early-surge` | 被动 | 初始瀑流+2，抽3张职业牌 |
 | `shield-wall` | 被动 | 雷霆符印入背包；只出盾牌；新手武器→新手盾 |
@@ -840,7 +1050,9 @@ baseDamage = max(0,
 | 发现职业牌 | 仅精英；职业牌堆非空且背包有空位 |
 | 坟场发现 | 仅精英；坟场非空且背包有空位 |
 | 最大HP +2 | 永久最大HP +2 |
-| 法术伤害 +1 | 永久法术伤害 +1 |
+| 法术伤害 +1 | 永久法术伤害 +1（15%概率出现） |
+| 超杀吸血 +1 | 永久超杀吸血 +1（15%概率出现） |
+| 击晕上限 +5% | 永久击晕上限 +5%（15%概率出现） |
 
 ---
 
@@ -895,7 +1107,6 @@ baseDamage = max(0,
 | `BALANCE_SHIELD_BONUS` | 3 | GameBoard.tsx |
 | `BALANCE_ATTACK_PENALTY` | 1 | GameBoard.tsx |
 | `BALANCE_SHIELD_PENALTY` | 1 | GameBoard.tsx |
-| `FLASH_ATTACK_PENALTY` | 3 | GameBoard.tsx |
 | `STRENGTH_SELF_DAMAGE` | 2 | GameBoard.tsx |
 | `FLIP_GOLD_REWARD` | 3 | GameBoard.tsx |
 | `DEFEAT_ANIMATION_DURATION` | 950ms | GameBoard.tsx |

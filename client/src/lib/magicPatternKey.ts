@@ -20,6 +20,9 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'chaos-dice': 'knight-chaos-dice',
   'graveyard-recall': 'knight-graveyard-recall',
   'greed-curse': 'knight-greed-curse',
+  'honor-sweep': 'knight-honor-sweep',
+  'armor-stun-convert': 'knight-armor-stun-convert',
+  'overkill-upgrade': 'knight-overkill-upgrade',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -42,12 +45,15 @@ const NAME_TO_KEY: Record<string, string> = {
   乾坤挪移: 'world-swap',
   哥布林的戏法: 'goblin-trick',
   血咒之印: 'curse-seal',
+  战血横扫: 'knight-honor-sweep',
   法术回响: 'spell-echo',
   血金术: 'blood-gold-rite',
+  奇术轮转: 'guild-hand-recycle',
   战血之印: 'war-blood-seal',
   秘典检索: 'tome-search',
   圣光秘术: 'hero-holy-light',
   狂战秘典: 'hero-berserker-rage',
+  复生秘典: 'hero-revive-blessing',
   浴血贪念: 'knight-blood-greed',
   铠甲贯刺: 'knight-armor-strike',
   残血终焉: 'knight-missing-hp-smite',
@@ -58,6 +64,8 @@ const NAME_TO_KEY: Record<string, string> = {
   混沌骰运: 'knight-chaos-dice',
   冥途拾遗: 'knight-graveyard-recall',
   贪婪诅咒: 'knight-greed-curse',
+  护甲凝雷: 'knight-armor-stun-convert',
+  万象探知: 'dungeon-insight',
 };
 
 function hashName(s: string): number {
@@ -82,12 +90,14 @@ export function resolveMagicPatternKey(card: MagicPatternCardRef): string | null
   if (card.type === 'hero-magic') {
     if (card.heroMagicId === 'holy-light') return 'hero-holy-light';
     if (card.heroMagicId === 'berserker-rage') return 'hero-berserker-rage';
+    if (card.heroMagicId === 'revive-blessing') return 'hero-revive-blessing';
     return NAME_TO_KEY[card.name] ?? `fallback-${hashName(card.name) % 12}`;
   }
   if (card.type !== 'magic') return null;
 
   if (card.magicEffect === 'curse') return 'curse-seal';
   if (card.magicEffect === 'honor-blood') return 'war-blood-seal';
+  if (card.magicEffect === 'honor-sweep') return 'knight-honor-sweep';
   if (card.magicEffect === 'double-next-magic') return 'spell-echo';
 
   const ke = card.knightEffect;

@@ -28,6 +28,7 @@ interface EquipmentSlotProps {
   scaleMultiplier?: number;
   permanentDamageBonus?: number;
   permanentShieldBonus?: number;
+  tempAttackBonus?: number;
   tempShieldBonus?: number;
   onDrop?: (card: any) => void;
   onDragStart?: (item: any) => void;
@@ -45,6 +46,7 @@ interface EquipmentSlotProps {
   shieldBlockVariant?: number;
   isExhaustedThisTurn?: boolean;
   isUnbreakable?: boolean;
+  isStunFrozen?: boolean;
 }
 
 export default function EquipmentSlot({
@@ -59,6 +61,7 @@ export default function EquipmentSlot({
   scaleMultiplier = 1,
   permanentDamageBonus = 0,
   permanentShieldBonus = 0,
+  tempAttackBonus = 0,
   tempShieldBonus = 0,
   onDrop,
   onDragStart,
@@ -76,6 +79,7 @@ export default function EquipmentSlot({
   shieldBlockVariant = 0,
   isExhaustedThisTurn = false,
   isUnbreakable = false,
+  isStunFrozen = false,
 }: EquipmentSlotProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
@@ -263,6 +267,12 @@ export default function EquipmentSlot({
           className={`absolute left-1/2 z-30 flex items-center gap-1 sm:gap-2 rounded-full border border-border bg-background/95 dh-hero-chip font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'px-1.5 py-0 sm:px-2 sm:py-0' : 'px-2 py-0.5 sm:px-4 sm:py-1.5'}`}
           style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
         >
+          {tempAttackBonus > 0 && (
+            <>
+              <span className="text-orange-400">{formatBonus(tempAttackBonus)}{!isCompact && ' ATK'}</span>
+              <span className="text-muted-foreground/50">|</span>
+            </>
+          )}
           <span className="text-red-500">{formatBonus(permanentDamageBonus)}{!isCompact && ' DMG'}</span>
           <span className="text-muted-foreground/50">|</span>
           <span className="text-blue-500">{formatBonus(permanentShieldBonus)}{!isCompact && ' SHD'}</span>
@@ -484,6 +494,14 @@ export default function EquipmentSlot({
         <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-40 bg-yellow-400/90 text-yellow-900 font-bold px-2 py-0.5 rounded-full shadow-md border border-yellow-500 text-xs whitespace-nowrap animate-pulse">
           涌泉满手
         </div>
+      )}
+      {isStunFrozen && type === 'equipment' && (
+        <>
+          <div className="pointer-events-none absolute inset-0 z-[35] rounded-md bg-cyan-400/20 border-2 border-cyan-400/60 animate-pulse" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-cyan-600/90 text-white font-bold px-3 py-1 rounded-full shadow-lg border-2 border-cyan-300 text-xs whitespace-nowrap animate-pulse">
+            击晕冻结
+          </div>
+        </>
       )}
       {type === 'equipment' && gameCardData && acceptsDrop && (
         <div

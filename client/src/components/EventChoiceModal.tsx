@@ -126,10 +126,18 @@ function formatEffect(effect?: EventEffectExpression): string | null {
       if (token === 'slotRightDefense+1') return 'Right slot +1 permanent armor';
       if (token === 'swapEquipmentSlots') return 'Swap left/right equipment';
       if (token === 'destroyEquipment:any') return 'Destroy one equipped item';
-      if (token === 'discardLeftForGold+15') return 'Destroy left equipment, gain 15 gold';
-      if (token === 'discardRightForGold+15') return 'Destroy right equipment, gain 15 gold';
+      if (token === 'discardAllLeftForGold+10') return 'Destroy all left equipment, +10 gold each';
+      if (token === 'discardAllRightForGold+10') return 'Destroy all right equipment, +10 gold each';
+      if (token === 'discardCurrentLeftForGold+15') return 'Destroy current left equipment, gain 15 gold';
+      if (token === 'discardCurrentRightForGold+15') return 'Destroy current right equipment, gain 15 gold';
       if (token === 'amuletsToGold+10') return 'Destroy all amulets, +10 gold each';
       if (token === 'classBottom+2') return 'Gain bottom 2 class cards';
+      if (token === 'upgradeCard') return 'Choose a card to upgrade';
+      if (token === 'flipToUpgradeScroll') return 'Flip into Upgrade Scroll (instant magic)';
+      if (token === 'allSlotDamage-1') return 'All equipment slots: permanent damage -1';
+      if (token === 'allSlotShield-1') return 'All equipment slots: permanent armor -1';
+      if (token === 'flipToRecallEquip') return 'Flip into Recall (permanent magic)';
+      if (token === 'flipToUndyingBlessing') return 'Flip into Undying Blessing (permanent magic)';
       if (token === 'none') return null;
       return token;
     })

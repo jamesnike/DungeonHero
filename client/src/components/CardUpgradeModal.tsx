@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowBigUpDash } from 'lucide-react';
 import GameCard, { type GameCardData } from './GameCard';
 
-export type UpgradeableCardType = 'magic' | 'weapon' | 'shield' | 'potion' | 'amulet';
+export type UpgradeableCardType = 'magic' | 'weapon' | 'shield' | 'potion' | 'amulet' | 'monster';
 
 const UPGRADEABLE_TYPES: ReadonlySet<string> = new Set<UpgradeableCardType>([
   'magic',
@@ -18,6 +18,7 @@ const UPGRADEABLE_TYPES: ReadonlySet<string> = new Set<UpgradeableCardType>([
   'shield',
   'potion',
   'amulet',
+  'monster',
 ]);
 
 export function isUpgradeableCard(card: GameCardData): boolean {

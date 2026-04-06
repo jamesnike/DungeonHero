@@ -6,8 +6,9 @@ import {
   isPermRecycleEquipment,
   formatScalingSpellDamageLine,
 } from "./GameCard";
-import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade } from "@/lib/monsterRage";
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins } from "lucide-react";
+import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade, getUpgradeTierCount } from "@/lib/monsterRage";
+import { isUpgradeableCard, isCardAtMaxUpgrade } from "./CardUpgradeModal";
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins, ArrowBigUpDash, Landmark } from "lucide-react";
 import { CHAOS_DICE_SPELL_DESCRIPTION } from "@/lib/knightChaosDiceCopy";
 
 type MonsterRewardPreview = {
@@ -95,6 +96,7 @@ export default function CardDetailsModal({
       case 'magic': return <Zap className="w-6 h-6 text-cyan-500" />;
       case 'hero-magic': return <Wand2 className="w-6 h-6 text-rose-500" />;
       case 'event': return <Scroll className="w-6 h-6 text-violet-500" />;
+      case 'building': return <Landmark className="w-6 h-6 text-stone-500" />;
       default: return null;
     }
   };
@@ -110,6 +112,21 @@ export default function CardDetailsModal({
           <DialogDescription>
             {card.type.toUpperCase()} {card.classCard ? '• KNIGHT CLASS' : ''}
           </DialogDescription>
+          {isUpgradeableCard(card) && (
+            <div className="flex items-center gap-2 mt-1">
+              {isCardAtMaxUpgrade(card) ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-gray-500/15 px-2.5 py-0.5 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  <ArrowBigUpDash className="w-3.5 h-3.5" />
+                  已满级 (Lv.{card.upgradeLevel ?? 0}/{card.maxUpgradeLevel ?? 0})
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 animate-pulse">
+                  <ArrowBigUpDash className="w-3.5 h-3.5" />
+                  可升级 (Lv.{card.upgradeLevel ?? 0}/{card.maxUpgradeLevel ?? 0})
+                </span>
+              )}
+            </div>
+          )}
         </DialogHeader>
         
         <div className="flex flex-col gap-4 py-4">
@@ -185,15 +202,22 @@ export default function CardDetailsModal({
                       <div>当前 waterfall {rageTurn} ⇒ 怒气 {rageDisplayValue}</div>
                     </div>
                   )}
-                  {upgrades.length > 0 && (
+                  {upgrades.length > 0 && (() => {
+                    const currentLevel = card.upgradeLevel ?? 0;
+                    const maxLevel = getUpgradeTierCount(mType);
+                    return (
                     <div className="col-span-2 mt-1 space-y-1">
-                      <div className="text-xs font-semibold text-muted-foreground">升级阶段</div>
+                      <div className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                        <span>强化等级</span>
+                        <span className={`${currentLevel > 0 ? 'text-red-500' : ''}`}>Lv.{currentLevel} / {maxLevel}</span>
+                      </div>
                       {upgrades.map((u, i) => {
-                        const reached = rageTurn != null && rageTurn >= u.waterfallLevel;
+                        const tierLevel = i + 1;
+                        const reached = currentLevel >= tierLevel;
                         return (
                           <div key={i} className={`text-xs ${reached ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
                             <div className="flex items-center gap-2">
-                              <span>Waterfall ≥ {u.waterfallLevel}:</span>
+                              <span>Lv.{tierLevel} (Waterfall ≥ {u.waterfallLevel}):</span>
                               <span>攻击 +{u.attackBonus}, 血量 +{u.hpBonus}</span>
                               {reached && <span className="text-[10px]">✓ 已激活</span>}
                             </div>
@@ -206,7 +230,8 @@ export default function CardDetailsModal({
                         );
                       })}
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })()}
@@ -240,36 +265,39 @@ export default function CardDetailsModal({
             )}
 
             {/* Monster Revive Keyword */}
-            {card.type === 'monster' && card.hasRevive && (
-              <div className={`p-3 rounded-md border relative overflow-hidden ${
-                card.reviveUsed
-                  ? 'bg-gray-500/10 border-gray-500/30'
-                  : 'bg-emerald-500/15 border-emerald-500/30'
-              }`}>
-                <div className="relative flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <Heart className={`w-4 h-4 shrink-0 ${card.reviveUsed ? 'text-gray-400' : 'text-emerald-500'}`} />
-                    <span className={`font-extrabold text-sm tracking-wide ${
-                      card.reviveUsed
-                        ? 'text-gray-500 dark:text-gray-400 line-through'
-                        : 'text-emerald-700 dark:text-emerald-300'
+            {card.type === 'monster' && (card.hasRevive || card.hasEquipmentRevive) && (() => {
+              const allUsed = (!card.hasRevive || card.reviveUsed) && (!card.hasEquipmentRevive || card.equipmentReviveUsed);
+              return (
+                <div className={`p-3 rounded-md border relative overflow-hidden ${
+                  allUsed
+                    ? 'bg-gray-500/10 border-gray-500/30'
+                    : 'bg-emerald-500/15 border-emerald-500/30'
+                }`}>
+                  <div className="relative flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <Heart className={`w-4 h-4 shrink-0 ${allUsed ? 'text-gray-400' : 'text-emerald-500'}`} />
+                      <span className={`font-extrabold text-sm tracking-wide ${
+                        allUsed
+                          ? 'text-gray-500 dark:text-gray-400 line-through'
+                          : 'text-emerald-700 dark:text-emerald-300'
+                      }`}>
+                        复生
+                      </span>
+                      {allUsed && (
+                        <span className="text-xs text-gray-400">（已触发）</span>
+                      )}
+                    </div>
+                    <p className={`text-sm pl-6 ${
+                      allUsed
+                        ? 'text-gray-500 dark:text-gray-400'
+                        : 'font-semibold text-emerald-800 dark:text-emerald-200'
                     }`}>
-                      复生
-                    </span>
-                    {card.reviveUsed && (
-                      <span className="text-xs text-gray-400">（已触发）</span>
-                    )}
+                      首次死亡时，以 1 血层的形式复生（仅一次）。
+                    </p>
                   </div>
-                  <p className={`text-sm pl-6 ${
-                    card.reviveUsed
-                      ? 'text-gray-500 dark:text-gray-400'
-                      : 'font-semibold text-emerald-800 dark:text-emerald-200'
-                  }`}>
-                    首次死亡时，以 1 血层的形式复生（仅一次）。
-                  </p>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Monster Bleed Keyword */}
             {card.type === 'monster' && card.bleedEffect && (
@@ -387,13 +415,39 @@ export default function CardDetailsModal({
                   </div>
                   <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
                     {card.lastWords === 'discard-hand-3'
-                      ? '死亡时随机弃置玩家 3 张手牌。'
+                      ? '死亡时随机弃回玩家 3 张手牌。'
                       : card.lastWords === 'wraith-haunt-2'
                         ? '死亡时同行其他怪物攻击力 +2，同行卡牌位置随机打乱。'
                         : card.lastWords === 'wraith-haunt-4'
                           ? '死亡时同行其他怪物攻击力 +4，同行卡牌位置随机打乱。'
                           : '死亡时触发特殊效果。'}
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* Ogre Stun */}
+            {card.type === 'monster' && card.ogreStun && (
+              <div className="bg-cyan-500/15 p-3 rounded-md border border-cyan-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 shrink-0 text-cyan-500" />
+                    <span className="font-extrabold text-sm text-cyan-700 dark:text-cyan-300 tracking-wide">蛮力击晕</span>
+                  </div>
+                  <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200 pl-6">攻击时20%概率击晕玩家，冻结装备栏和护符栏一回合。手牌仍可使用，但无法装备/卸下装备和护符。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Ogre Double Attack */}
+            {card.type === 'monster' && card.eliteDoubleAttack && (
+              <div className="bg-violet-500/15 p-3 rounded-md border border-violet-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 shrink-0 text-violet-500" />
+                    <span className="font-extrabold text-sm text-violet-700 dark:text-violet-300 tracking-wide">狂暴连击</span>
+                  </div>
+                  <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">攻击时70%概率再攻击一次。</p>
                 </div>
               </div>
             )}
@@ -406,7 +460,7 @@ export default function CardDetailsModal({
                     <Zap className="w-4 h-4 shrink-0 text-amber-500" />
                     <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">蛮力震慑</span>
                   </div>
-                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">入场时随机弃掉玩家一张手牌。</p>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">入场时随机弃回玩家一张手牌。</p>
                 </div>
               </div>
             )}
@@ -461,6 +515,19 @@ export default function CardDetailsModal({
                     <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨灵祝福</span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">死亡时同行其他怪物生命值 +{card.wraithDeathHeal}。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-1 Upgrade: Goblin Steal Card */}
+            {card.type === 'monster' && card.goblinStealCard && (
+              <div className="bg-emerald-500/15 p-3 rounded-md border border-emerald-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Scroll className="w-4 h-4 shrink-0 text-emerald-500" />
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">窃牌贼</span>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">攻击时随机偷走一张玩家手牌，堆叠在自身下方。击杀后被偷的牌逐张成为地城牌，每弹出一张自动抽 1 张牌。</p>
                 </div>
               </div>
             )}
@@ -585,6 +652,9 @@ export default function CardDetailsModal({
                   const amt = card.onAttackEffect.replace('steal-gold-', '');
                   effects.push({ title: '动手偷钱', desc: `攻击时为 Hero 偷取 ${amt} 金币。`, color: 'emerald' });
                 }
+                if (card.goblinStealCard) {
+                  effects.push({ title: '窃牌贼', desc: '攻击时随机偷走一张玩家手牌，堆叠在自身下方。被偷的牌弹出时自动抽 1 张牌。', color: 'emerald' });
+                }
                 if (card.eliteLowGoldPower) {
                   effects.push({ title: '贪婪强化', desc: '当玩家金币 ≥ 30 时，该装备攻击力和护盾值翻倍。', color: 'amber' });
                 }
@@ -616,12 +686,12 @@ export default function CardDetailsModal({
                   effects.push({ title: '虚骨再生', desc: '每次失去耐久，50% 概率恢复一层。', color: 'gray' });
                 }
                 if (card.lastWords === 'discard-hand-3') {
-                  effects.push({ title: '遗言', desc: '装备毁坏时，抽 3 张牌。', color: 'cyan' });
+                  effects.push({ title: '遗言', desc: '抽 3 张牌。', color: 'cyan' });
                 }
               } else if (mType === 'Wraith') {
                 if (card.lastWords?.startsWith('wraith-haunt')) {
                   const hauntAmt = card.lastWords.replace('wraith-haunt-', '');
-                  effects.push({ title: '遗言', desc: `装备毁坏时，另一个装备栏获得 +${hauntAmt} 临时攻击力，50% 概率左右装备互换。`, color: 'purple' });
+                  effects.push({ title: '遗言', desc: `另一个装备栏获得 +${hauntAmt} 临时攻击力，50% 概率左右装备互换。`, color: 'purple' });
                 }
                 if (card.monsterSpecial === 'wraith-rebirth') {
                   effects.push({
@@ -631,7 +701,7 @@ export default function CardDetailsModal({
                   });
                 }
                 if (card.wraithDeathHeal) {
-                  effects.push({ title: '怨灵祝福', desc: '装备毁坏时，另一个装备栏的装备耐久 +1。', color: 'purple' });
+                  effects.push({ title: '遗言', desc: '另一个装备栏的装备耐久 +1。', color: 'purple' });
                 }
               } else if (mType === 'Dragon') {
                 if (card.bleedEffect) {
@@ -707,6 +777,19 @@ export default function CardDetailsModal({
                     <span className="font-bold">{card.durability}/{card.maxDurability || card.durability}</span>
                   </div>
                 )}
+                {card.type === 'shield' && card.armorMax != null && card.armorMax > 0 && (() => {
+                  const baseArmorMax = card.armorMax;
+                  const curArmor = Math.min(card.armor ?? baseArmorMax, baseArmorMax);
+                  return (
+                    <div className="col-span-2 flex items-center gap-2 mt-1">
+                      <Shield className="w-4 h-4 text-cyan-500" />
+                      <span>
+                        护甲：<span className={`font-bold ${curArmor < baseArmorMax ? 'text-orange-500' : 'text-cyan-600'}`}>{curArmor}</span>
+                        <span className="text-muted-foreground"> / {baseArmorMax}</span>
+                      </span>
+                    </div>
+                  );
+                })()}
                 {(card as any).healOnKill && (
                    <div className="col-span-2 text-green-600 flex items-center gap-1">
                      <Heart className="w-3 h-3" /> Heals {(card as any).healOnKill} HP on kill
@@ -722,6 +805,38 @@ export default function CardDetailsModal({
                      </div>
                    </div>
                 )}
+              </div>
+            )}
+
+            {/* Equipment Revive Keyword (from 不灭赐福) */}
+            {(card.type === 'weapon' || card.type === 'shield') && card.hasEquipmentRevive && (
+              <div className={`p-3 rounded-md border relative overflow-hidden ${
+                card.equipmentReviveUsed
+                  ? 'bg-gray-500/10 border-gray-500/30'
+                  : 'bg-emerald-500/15 border-emerald-500/30'
+              }`}>
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Heart className={`w-4 h-4 shrink-0 ${card.equipmentReviveUsed ? 'text-gray-400' : 'text-emerald-500'}`} />
+                    <span className={`font-extrabold text-sm tracking-wide ${
+                      card.equipmentReviveUsed
+                        ? 'text-gray-500 dark:text-gray-400 line-through'
+                        : 'text-emerald-700 dark:text-emerald-300'
+                    }`}>
+                      复生
+                    </span>
+                    {card.equipmentReviveUsed && (
+                      <span className="text-xs text-gray-400">（已触发）</span>
+                    )}
+                  </div>
+                  <p className={`text-sm pl-6 ${
+                    card.equipmentReviveUsed
+                      ? 'text-gray-500 dark:text-gray-400'
+                      : 'font-semibold text-emerald-800 dark:text-emerald-200'
+                  }`}>
+                    首次毁坏时，以 1 耐久的形式复生（仅一次）。
+                  </p>
+                </div>
               </div>
             )}
 
@@ -802,15 +917,30 @@ export default function CardDetailsModal({
               );
             })()}
 
+            {card.type === 'building' && (card.maxHp != null || card.hp != null) && (
+              <div className="rounded-md border border-stone-500/30 bg-stone-500/10 p-3 text-sm">
+                <span className="font-semibold text-stone-800 dark:text-stone-200">耐久 </span>
+                <span className="tabular-nums font-bold">{card.hp ?? 0}</span>
+                {card.maxHp != null && (
+                  <span className="text-muted-foreground"> / {card.maxHp}</span>
+                )}
+                {(card.fury ?? card.hpLayers ?? card.currentLayer) != null && (
+                  <span className="ml-3 text-muted-foreground">
+                    血层 {card.currentLayer ?? card.fury ?? card.hpLayers ?? 1}
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Event Details */}
-            {card.type === 'event' && card.description && (
+            {(card.type === 'event' || card.type === 'building') && card.description && (
               <div className="bg-sky-500/10 p-3 rounded-md border border-sky-500/30">
                 <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{card.description}</p>
               </div>
             )}
-            {card.type === 'event' && card.eventChoices && (
+            {(card.type === 'event' || card.type === 'building') && card.eventChoices && (
               <div className="space-y-2">
-                <div className="font-semibold mb-1">事件选项</div>
+                <div className="font-semibold mb-1">{card.type === 'building' ? '建筑能力' : '事件选项'}</div>
                 {card.eventChoices.map((choice, idx) => (
                   <div key={idx} className="rounded-md border border-border/60 bg-muted/40 p-3 space-y-1">
                     <div className="text-sm font-semibold text-foreground">{choice.text}</div>
@@ -857,6 +987,7 @@ export default function CardDetailsModal({
                       ({card.flipTarget.toCard.type === 'magic'
                         ? card.flipTarget.toCard.magicType === 'instant' ? '一次性法术' : '永久法术'
                         : card.flipTarget.toCard.type === 'event' ? '事件'
+                        : card.flipTarget.toCard.type === 'building' ? '建筑'
                         : card.flipTarget.toCard.type === 'potion' ? '药水'
                         : card.flipTarget.toCard.type.toUpperCase()})
                     </span>
@@ -866,7 +997,7 @@ export default function CardDetailsModal({
                       {card.flipTarget.toCard.description || card.flipTarget.toCard.magicEffect || card.flipTarget.toCard.heroMagicEffect}
                     </div>
                   )}
-                  {card.flipTarget.toCard.type === 'event' && card.flipTarget.toCard.eventChoices?.map((choice, idx) => (
+                  {(card.flipTarget.toCard.type === 'event' || card.flipTarget.toCard.type === 'building') && card.flipTarget.toCard.eventChoices?.map((choice, idx) => (
                     <div key={idx} className="text-xs text-muted-foreground leading-relaxed">
                       {choice.hint || choice.text}
                     </div>
@@ -883,6 +1014,7 @@ export default function CardDetailsModal({
               card.type !== 'magic' &&
               card.type !== 'hero-magic' &&
               card.type !== 'event' &&
+              card.type !== 'building' &&
               card.type !== 'amulet' &&
               card.type !== 'potion' && (
               <div className="italic text-muted-foreground border-t pt-2 mt-2">
@@ -909,12 +1041,12 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token.startsWith('maxhpperm+')) return `永久 +${token.replace('maxhpperm+', '')} 最大生命`;
       if (token === 'flipToCurse') return '将事件卡翻为诅咒并收入背包';
       if (token === 'addCurse') return '背包加入一张诅咒';
-      if (token === 'discardHandAll') return '弃掉全部手牌';
+      if (token === 'discardHandAll') return '弃回全部手牌';
       if (token.startsWith('backpackSize-')) return `背包容量 -${token.replace('backpackSize-', '')}`;
       if (token.startsWith('shopLevel+')) return `商店等级 +${token.replace('shopLevel+', '')}`;
       if (token.startsWith('spellDamage+')) return `法术伤害 +${token.replace('spellDamage+', '')}`;
-      if (token.startsWith('spellLifesteal+')) return `法术吸血 +${token.replace('spellLifesteal+', '')}`;
-      if (token.startsWith('discardCards:')) return `弃置 ${token.replace('discardCards:', '')} 张牌`;
+      if (token.startsWith('spellLifesteal+')) return `超杀吸血 +${token.replace('spellLifesteal+', '')}`;
+      if (token.startsWith('discardCards:')) return `弃回 ${token.replace('discardCards:', '')} 张牌`;
       if (token.startsWith('deleteCard')) {
         const [, count = '1'] = token.split(':');
         return `删除 ${count} 张牌`;
@@ -928,12 +1060,23 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'slotRightDefense+1') return '右槽永久护甲 +1';
       if (token === 'swapEquipmentSlots') return '左右装备互换';
       if (token === 'destroyEquipment:any') return '破坏任一装备';
-      if (token === 'discardLeftForGold+15') return '破坏左槽装备并获得 15 金币';
-      if (token === 'discardRightForGold+15') return '破坏右槽装备并获得 15 金币';
+      if (token === 'discardAllLeftForGold+10') return '破坏所有左槽装备，每件获得 10 金币';
+      if (token === 'discardAllRightForGold+10') return '破坏所有右槽装备，每件获得 10 金币';
+      if (token === 'discardCurrentLeftForGold+15') return '破坏当前左槽装备并获得 15 金币';
+      if (token === 'discardCurrentRightForGold+15') return '破坏当前右槽装备并获得 15 金币';
       if (token === 'amuletsToGold+10') return '摧毁所有护符并每个获得 10 金币';
       if (token === 'classBottom+2') return '获得 class 底部两张专属卡';
+      if (token === 'upgradeCard') return '选择一张牌进行升级';
+      if (token === 'flipToUpgradeScroll') return '翻转为「升级卷轴」即时魔法：选择一张牌进行升级';
+      if (token === 'allSlotDamage-1') return '所有装备栏永久攻击 -1';
+      if (token === 'allSlotShield-1') return '所有装备栏永久护甲 -1';
+      if (token === 'flipToRecallEquip') return '翻转为「回收术」永久魔法：回手一张牌，抽 1 张牌';
+      if (token === 'flipToUndyingBlessing') return '翻转为「不灭赐福」永久魔法：赋予装备复生能力';
       if (token === 'flipToHonorBloodMagic') {
         return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时将激活行所有怪物攻击力 -2';
+      }
+      if (token === 'flipToHonorSweepMagic') {
+        return '事件卡翻为「战血横扫」永久法术并收入背包：选武器对激活行造成等同攻击力的多轮法术伤害（不耗耐久），该栏临时攻击 -5；可升级 2 次增加轮数';
       }
       if (token === 'fate-dice-strike')
         return '对右侧相邻卡牌生效：非怪物则摧毁；怪物则激怒并穿透打掉 2 层血（可击杀）';

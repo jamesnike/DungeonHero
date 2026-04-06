@@ -11,9 +11,11 @@
 
 | # | 选项 | 效果 | 条件 |
 |---|------|------|------|
-| 1 | 倾听命运的低语（发现专属卡） | `discoverClass` | — |
-| 2 | 与命运商贩交谈（打开商店） | `openShop` | — |
-| 3 | 献祭体魄（永久 +5 生命上限） | `maxhpperm+5` | — |
+| 1 | 倾听命运的低语（发现2张专属卡） | `drawClass2` | — |
+| 2 | 与命运商贩交谈（商店等级+1 并 打开商店） | `shopLevel+1, openShop` | — |
+| 3 | 献祭体魄（永久 +8 生命上限） | `maxhpperm+8` | — |
+| 4 | 拓展行囊（背包上限 +5） | `backpackSize+5` | — |
+| 5 | 选择一张牌升级 | `upgradeCard` | — |
 
 **运行时动态追加选项（不参与裁剪）：**
 
@@ -33,18 +35,20 @@
 
 | # | 选项 | 效果 | 条件 |
 |---|------|------|------|
-| 1 | 搜刮遗物（获得两张专属卡，随机弃两张手牌） | `drawClass2, randomDiscardHand:2` | 手牌 ≥ 2 |
+| 1 | 搜刮遗物（获得两张专属卡，随机弃回两张手牌） | `drawClass2, randomDiscardHand:2` | 手牌 ≥ 2 |
 | 2 | 🎲 翻找黄金（掷骰决定收益） | 见骰子表 A | — |
 | 3 | 🎲 翻出药剂（掷骰决定效果） | 见骰子表 B | — |
+| 4 | 🎲 寻找怀柔之道（掷骰决定劝降优惠） | 见骰子表 C | — |
+| 5 | 🎲 激励锋芒（掷骰为装备附加临时攻击） | 见骰子表 D | — |
 
 **骰子表 A — 翻找黄金：**
 
 | 范围 | 结果 | 效果 |
 |------|------|------|
-| 1-5 | +10 金币 | `gold+10` |
-| 6-10 | +20 金币 | `gold+20` |
+| 1-5 | +20 金币 | `gold+20` |
+| 6-10 | +30 金币 | `gold+30` |
 | 11-15 | -10 金币 | `gold-10` |
-| 16-20 | -10 金币，弃 1 手牌 | `gold-10, randomDiscardHand:1` |
+| 16-20 | -10 金币，弃回 1 张手牌 | `gold-10, randomDiscardHand:1` |
 
 **骰子表 B — 翻出药剂：**
 
@@ -54,16 +58,32 @@
 | 7-12 | 恢复 10 HP | `heal+10` |
 | 13-20 | 受到 8 点伤害 | `hp-8` |
 
+**骰子表 C — 寻找怀柔之道：**
+
+| 范围 | 结果 | 效果 |
+|------|------|------|
+| 1-12 | 本回合劝降金币 -5 | `persuadeNextCostReduction:5` |
+| 13-20 | 本回合劝降成功率 -10% | `persuadeNextRatePenalty:10` |
+
+**骰子表 D — 激励锋芒：**
+
+| 范围 | 结果 | 效果 |
+|------|------|------|
+| 1-12 | 所有装备栏临时攻击力 +4 | `allSlotTempAttack:4` |
+| 13-20 | 受到 5 点伤害 | `hp-5` |
+
 翻转 → **秘藏宝库（已开启）**（留在原位）
 
 ### 秘藏宝库（已开启）
 
 | # | 选项 | 效果 |
 |---|------|------|
-| 1 | 翻阅卷轴（抽 2 张牌） | `drawHeroCards:2` |
-| 2 | 联络商贩（商店等级 +1） | `shopLevel+1` |
-| 3 | 召唤商队（打开商店） | `openShop` |
+| 1 | 翻阅卷轴（抽 3 张牌） | `drawHeroCards:3` |
+| 2 | 联络商贩（商店等级 +1，劝降等级 +1） | `shopLevel+1, persuadeLevel+1` |
+| 3 | 召唤商队（金币+10 且 打开商店） | `gold+10, openShop` |
 | 4 | 深入探索（受 3 伤害，瀑流+1，翻转回去） | `vault-flipback` |
+| 5 | 展示权威（劝降等级 +1，击晕上限+10%） | `persuadeLevel+1, stunCap+10` |
+| 6 | 护甲加持（所有装备栏 临时护甲+4） | `allSlotTempArmor:4` |
 
 ---
 
@@ -75,6 +95,9 @@
 | 2 | 献出装备（破坏任一装备） | `destroyEquipment:any` | 需要至少一件装备 | — |
 | 3 | 支付赎金（损失 15 金币） | `gold-15` | 金币 ≥ 15 | — |
 | 4 | 扩展手牌（手牌上限 +1，跳过翻转） | `handLimit+1` | — | `skipFlip`：选此项后不会翻转为暗影之刺 |
+| 5 | 贬低商贩（商店等级 -1） | `shopLevel-1` | 商店等级 ≥ 1 | — |
+| 6 | 削弱威慑（劝降等级 -1） | `persuadeLevel-1` | 劝降等级 ≥ 2 | — |
+| 7 | 血之代价（失去 8 点生命） | `hp-8` | 选项 2/3/5/6 全部不可用 | 备用选项：当所有有条件的选项都无法选择时启用 |
 
 翻转 → **暗影之刺**（永久魔法，对怪物造成伤害，每使用一次叠刺 +1，放入背包。选项 4 时跳过翻转）
 
@@ -84,9 +107,11 @@
 
 | # | 选项 | 效果 |
 |---|------|------|
-| 1 | 左槽淬火（左槽永久伤害 +2） | `slotLeftDamage+2` |
-| 2 | 右槽固化（右槽永久护甲 +2） | `slotRightDefense+2` |
-| 3 | 翻转轨道（左右装备互换） | `swapEquipmentSlots` |
+| 1 | 左槽淬火（左槽永久伤害 +2，恢复1耐久） | `slotLeftDamage+2, repairSlot:left:1` |
+| 2 | 右槽固化（右槽永久护甲 +2，恢复1耐久） | `slotRightDefense+2, repairSlot:right:1` |
+| 3 | 翻转轨道（左右装备互换，各恢复1耐久） | `swapEquipmentSlots, repairSlot:both:1` |
+| 4 | 左槽铸盾（左槽永久护甲 +2，恢复1耐久） | `slotLeftDefense+2, repairSlot:left:1` |
+| 5 | 右槽磨刃（右槽永久伤害 +2，恢复1耐久） | `slotRightDamage+2, repairSlot:right:1` |
 
 翻转 → **熔炉之心**（护符，翻转获金，放入背包）
 
@@ -96,12 +121,16 @@
 
 | # | ID | 选项 | 效果 | 条件 |
 |---|-----|------|------|------|
-| 1 | `greedy-left` | 献祭左手装备（金币 +15） | `discardLeftForGold+15` | 左装备栏非空 |
-| 2 | `greedy-right` | 献祭右手装备（金币 +15） | `discardRightForGold+15` | 右装备栏非空 |
-| 3 | `greedy-amulet` | 粉碎所有护符（每个 +10 金币） | `amuletsToGold+10` | 需要护符 |
-| 4 | `greedy-blood` | 献血离开（掉 8 HP） | `hp-8` | `requiresDisabledChoices`: 1/2/3 全部不可用时才解锁 |
+| 1 | `greedy-left` | 献祭所有左手装备（每个 +10 金币） | `discardAllLeftForGold+10` | 左装备栏非空 |
+| 2 | `greedy-right` | 献祭所有右手装备（每个 +10 金币） | `discardAllRightForGold+10` | 右装备栏非空 |
+| 3 | `greedy-current-left` | 献祭当前左手装备（金币 +15） | `discardCurrentLeftForGold+15` | 左装备栏非空 |
+| 4 | `greedy-current-right` | 献祭当前右手装备（金币 +15） | `discardCurrentRightForGold+15` | 右装备栏非空 |
+| 5 | `greedy-amulet` | 粉碎所有护符（每个 +10 金币） | `amuletsToGold+10` | 需要护符 |
+| 6 | `greedy-blood` | 献血离开（掉 8 HP） | `hp-8` | `requiresDisabledChoices`: 1/2/3/4/5 全部不可用时才解锁 |
+| 7 | `greedy-delete` | 焚毁卡牌（选择至多 3 张牌删除，每张 -5 金币） | `deleteCardForGold:3:-5` | 手牌+背包 ≥ 1 |
+| 8 | `greedy-discard-all` | 弃回所有手牌（每张 +3 金币） | `discardAllHandForGold:3` | 手牌 ≥ 1 |
 
-> **跨选项依赖**：选项 4 的 `requiresDisabledChoices` 引用了 `greedy-left`、`greedy-right`、`greedy-amulet`。
+> **跨选项依赖**：选项 6 的 `requiresDisabledChoices` 引用了 `greedy-left`、`greedy-right`、`greedy-current-left`、`greedy-current-right`、`greedy-amulet`。
 > 裁剪到 2 个选项后，引用列表会自动清理为仅包含仍存在的 ID。
 
 特殊：被挤出时破坏玩家所有装备（`waterfallEffect: destroyAllEquipment`）
@@ -114,10 +143,12 @@
 
 | # | 选项 | 效果 | 条件 |
 |---|------|------|------|
-| 1 | 整理呼吸（回复 8 HP） | `heal+8` | — |
-| 2 | 回收战利品（金币 +15） | `gold+15` | — |
-| 3 | 唤醒底牌（获得底部两张专属卡） | `classBottom+2` | — |
+| 1 | 整理呼吸（回复 8 HP，超杀吸血+1） | `heal+8, spellLifesteal+1` | — |
+| 2 | 回收战利品（金币 +15，打开商店） | `gold+15, openShop` | — |
+| 3 | 唤醒底牌（获得底部三张专属卡） | `classBottom+3` | — |
 | 4 | 战血铭刻（翻转为永久法术） | `flipToHonorBloodMagic` | 激活行最左非空格是怪物且已交战 |
+| 5 | 强化意志（击晕上限 +10%，激活行怪物攻击-2） | `stunCap+10, activeRowMonsterAttack-2` | — |
+| 6 | 选择一张牌升级 | `upgradeCard` | — |
 
 **动态翻转产物（由选项 4 触发）：**
 
@@ -138,14 +169,19 @@
 | # | ID | 选项 | 效果 | 条件 |
 |---|-----|------|------|------|
 | 1 | `curse-flip` | 翻转卷轴（获得血咒） | `flipToCurse` | — |
-| 2 | `curse-discard-hand` | 献祭手牌（手牌全弃） | `discardHandAll` | 手牌 ≥ 1 |
+| 2 | `curse-discard-hand` | 献祭手牌（手牌全部弃回） | `discardHandAll` | 手牌 ≥ 1 |
 | 3 | `curse-pack-shrink` | 束缚空间（背包容量 -4） | `backpackSize-4` | — |
+| 4 | `curse-hand-shrink` | 封印牌位（手牌上限 -1） | `handLimit-1` | — |
+| 5 | `curse-atk-recall` | 血蚀锋刃（所有装备栏永久攻击 -1，翻转成「回收术」） | `allSlotDamage-1, flipToRecallEquip` | — |
+| 6 | `curse-def-blessing` | 血蚀铠甲（所有装备栏永久护甲 -1，翻转成「不灭赐福」） | `allSlotShield-1, flipToUndyingBlessing` | — |
 
-**动态翻转产物（由选项 1 触发）：**
+**动态翻转产物（由选项 1/5/6 触发）：**
 
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
 | `flipToCurse` | 血咒之印 | 永久魔法（诅咒） | 使用和弃置时，都失去 3 点生命值 | 背包 |
+| `flipToRecallEquip` | 回收术 | 永久魔法 | 回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌 | 背包 |
+| `flipToUndyingBlessing` | 不灭赐福 | 永久魔法 | 选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生） | 背包 |
 
 特殊：被挤出时所有怪物攻击 +5
 
@@ -157,7 +193,9 @@
 |---|------|------|------|
 | 1 | 血价交易（-2 HP，发现专属） | `hp-2, discoverClass` | — |
 | 2 | 捐献财富（-4 金币，商店等级 +1） | `gold-4, shopLevel+1` | 金币 ≥ 4 |
-| 3 | 焚尽旧物（随机弃 2 张手牌，法伤 +1） | `randomDiscardHand:2, spellDamage+1` | 手牌 ≥ 2 |
+| 3 | 焚尽旧物（随机弃回 2 张手牌，法伤 +1） | `randomDiscardHand:2, spellDamage+1` | 手牌 ≥ 2 |
+| 4 | 血魂灌注（-3 血上限，超杀吸血 +1） | `maxhpperm-3, spellLifesteal+1` | — |
+| 5 | 行囊交锋（-2 背包上限，劝降等级 +1） | `backpackSize-2, persuadeLevel+1` | — |
 
 翻转 → **双重燃烧（觉醒）**（留在原位）
 
@@ -167,7 +205,12 @@
 |---|------|------|------|
 | 1 | 鲜血献祭（-6 HP，发现专属） | `hp-6, discoverClass` | — |
 | 2 | 黄金燃祭（-12 金币，商店等级 +1） | `gold-12, shopLevel+1` | 金币 ≥ 12 |
-| 3 | 灵魂焚烧（随机弃 4 张手牌，法伤 +1） | `randomDiscardHand:4, spellDamage+1` | 手牌 ≥ 4 |
+| 3 | 灵魂焚烧（随机弃回 4 张手牌，法伤 +1） | `randomDiscardHand:4, spellDamage+1` | 手牌 ≥ 4 |
+| 4 | 觉醒血魂（-8 血上限，超杀吸血 +1） | `maxhpperm-8, spellLifesteal+1` | — |
+| 5 | 觉醒行囊（-5 背包上限，劝降等级 +1） | `backpackSize-5, persuadeLevel+1` | — |
+
+觉醒版使用后进入墓地。若预览行正上方是魔法牌，触发**魔法共鸣**，翻转为「虚空置换」永久魔法（留在原位）。
+虚空置换效果：将背包与永久魔法回收袋内的所有牌对换（瀑流延迟 1）。
 
 ---
 
@@ -175,16 +218,23 @@
 
 | # | 选项 | 效果 |
 |---|------|------|
-| 1 | 研读残页（抽 2 张牌） | `drawHeroCards:2` |
+| 1 | 翻转成「回响残页」 | `flipToDiscardDrawMagic` |
 | 2 | 翻转成「纸灰药剂」 | `flipToPaperAsh` |
 | 3 | 翻转成「淬炼药剂」 | `flipToLeftDurabilityPotion` |
+| 4 | 翻转成「置换药剂」 | `flipToEquipSwapPotion` |
+| 5 | 翻转成「扩容药剂」 | `flipToHandLimitPotion` |
+| 6 | 翻转成「升级卷轴」 | `flipToUpgradeScroll` |
 
 **动态翻转产物（由选项效果触发，不在卡面定义 flipTarget）：**
 
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
+| `flipToDiscardDrawMagic` | 回响残页 | 永久魔法 | 被弃回时，从背包抽 2 张牌 | 背包 |
 | `flipToPaperAsh` | 纸灰药剂 | 药水 | 使用时永久法术伤害 +2；最大生命值 -5 | 背包 |
 | `flipToLeftDurabilityPotion` | 淬炼药剂 | 药水 | 使用时左装备栏耐久上限 +1。翻转后变为「淬炼药剂（右）」：右装备栏耐久上限 +1 | 背包 |
+| `flipToEquipSwapPotion` | 置换药剂 | 药水 | 使用时选择一个装备回手牌；若另一栏有装备，则换到该位置 | 背包 |
+| `flipToHandLimitPotion` | 扩容药剂 | 药水 | 使用时永久手牌上限 +1 | 背包 |
+| `flipToUpgradeScroll` | 升级卷轴 | 即时魔法 | 一次性使用，选择一张牌进行升级 | 背包 |
 
 ---
 
@@ -194,19 +244,21 @@
 
 | # | 选项 | 效果 | 条件 |
 |---|------|------|------|
-| 1 | 净化杂质（删 1 张牌） | `deleteCard:1` | 手牌或背包 ≥ 1 |
-| 2 | 坟场召回（随机 3 选 1） | `graveyardDiscover` | 坟场 ≥ 1 |
-| 3 | 召唤商贩（打开商店） | `openShop` | — |
-| 4 | 空间扩展（背包上限 +2） | `backpackSize+2` | — |
+| 1 | 净化杂质（删 3 张牌） | `deleteCard:3` | 手牌或背包 ≥ 3 |
+| 2 | 坟场召回（召回2次） | `['graveyardDiscover', 'graveyardDiscover']` | 坟场 ≥ 1 |
+| 3 | 召唤商贩（回收袋发现一张牌，打开商店） | `['recycleBagDiscover', 'openShop']` | — |
+| 4 | 空间扩展（背包上限 +5） | `backpackSize+5` | — |
+| 5 | 强化意志（发现专属武器，击晕上限 +10%） | `['stunCap+10', 'discoverClassWeapon']` | — |
+| 6 | 威压交涉（劝降等级+1，劝降费用 -2） | `['persuadeLevel+1', 'persuadeCost-2']` | — |
 
 **运行时动态行为（不参与裁剪，从地城触发时判断）：**
 
 | 条件 | 行为 |
 |------|------|
-| 左右两侧**都是**怪物 | ① 为该卡附加 `flipTarget` → 结算后翻转为「**墓语回响**」（永久魔法：使用时回复 3 HP；被弃置时从背包抽 3 张牌），放入背包。② 正常从上方 4 个选项中选择。 |
+| 左右两侧**都是**怪物 | ① 为该卡附加 `flipTarget` → 结算后翻转为「**墓语回响**」（永久魔法：使用时回复 3 HP；被弃置时从背包抽 3 张牌），放入背包。② 正常从上方 6 个选项中选择。 |
 | 左右两侧**不全是**怪物 | 追加一个**永久禁用**的占位选项："两侧皆为怪物（获得翻转效果）"，显示具体原因（如"左侧不是怪物"、"右侧不是怪物"）。`requires: hand ≥ 999`（永远不满足）。 |
 
-> 注：当两侧都是怪物且选择了占位选项对应的 `crypt-all-effects` 效果时，实际会一次性触发全部 4 项效果：删 1 张牌 + 坟场召回 + 背包上限 +2 + 打开商店。
+> 注：当两侧都是怪物且选择了占位选项对应的 `crypt-all-effects` 效果时，实际会一次性触发全部效果：删 3 张牌 + 坟场召回×2 + 回收袋发现 + 背包上限 +5 + 发现专属武器 + 击晕上限 +10% + 劝降等级+1 + 劝降费用 -2 + 打开商店。
 
 ---
 
@@ -214,16 +266,20 @@
 
 | # | 选项 | 效果 | 条件 |
 |---|------|------|------|
-| 1 | 思绪翻涌（抽 2 张牌） | `drawHeroCards:2` | — |
-| 2 | 扩张人脉（商店等级 +1） | `shopLevel+1` | — |
-| 3 | 挖掘遗物（坟场发现 1 张） | `graveyardDiscover` | 坟场 ≥ 1 |
+| 1 | 思绪翻涌（获得2张专属牌，加入手上） | `drawClassToHand:2` | — |
+| 2 | 扩张人脉（商店等级 +1，打开商店） | `['shopLevel+1', 'openShop']` | — |
+| 3 | 挖掘遗物（坟场发现 2 张） | `['graveyardDiscover', 'graveyardDiscover']` | 坟场 ≥ 1 |
 | 4 | 翻转商会卷轴 | `guildFlipToMagic` | — |
+| 5 | 展示权威（劝降等级 +1，下次劝降免费） | `['persuadeLevel+1', 'persuadeNextFree']` | — |
+| 6 | 整合回收袋（洗入背包） | `recycleToBackpack` | — |
+| 7 | 翻转为「奇术轮转」 | `guildFlipToHandRecycleMagic` | — |
 
-**动态翻转产物（由选项 4 触发）：**
+**动态翻转产物（由选项 4 / 7 触发）：**
 
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
 | `guildFlipToMagic` | 血金术 | 永久魔法 | 使用时受到 1 点伤害，获得 2 金币 | 背包 |
+| `guildFlipToHandRecycleMagic` | 奇术轮转 | 永久魔法 | 使用时所有手牌移入回收袋，再从回收袋随机 2 张移到手上 | 背包 |
 
 ---
 
@@ -237,11 +293,13 @@
 
 | 范围 | 结果 | 效果 |
 |------|------|------|
-| 1-4 | 打开商店 | `openShop` |
-| 5-8 | 商店等级 +1 | `shopLevel+1` |
-| 9-12 | 法术伤害 +1 | `spellDamage+1` |
+| 1-4 | 金币+10，打开商店 | `['gold+10', 'openShop']` |
+| 5-8 | 商店等级 +1，劝降费用-2 | `['shopLevel+1', 'persuadeCost-2']` |
+| 9-12 | 法术伤害 +1，超杀吸血+1 | `['spellDamage+1', 'spellLifesteal+1']` |
 | 13-16 | 摧毁所有护符 | `removeAllAmulets` |
-| 17-20 | 发现一张专属卡 | `discoverClass` |
+| 17-20 | 发现两张专属卡 | `drawClass2` |
+| 1-10 | 超杀吸血 +2 | `spellLifesteal+2` |
+| 11-20 | 交换左右装备，各恢复1耐久 | `['swapEquipmentSlots', 'repairSlot:both:1']` |
 
 翻转 → **命运之刃**（永驻型事件，留在原位）
 
@@ -263,13 +321,15 @@
 
 | 范围 | 结果 | 效果 |
 |------|------|------|
-| 1-4 | 打开商店 | `openShop` |
+| 1-4 | 金币+10，打开商店 | `['gold+10', 'openShop']` |
 | 5-8 | 背包加入一张诅咒 | `addCurse`（生成「血咒之印」，使用/弃置时失去 3 HP） |
-| 9-12 | 删除 1 张牌 | `deleteCard:1` |
+| 9-12 | 删除 2 张牌 | `deleteCard:2` |
 | 13-16 | 获得 2 张专属卡 | `drawClass2` |
-| 17-20 | 抽 2 张牌 | `drawHeroCards:2` |
+| 17-20 | 回收袋洗入背包，抽 2 张牌 | `['recycleToBackpack', 'drawHeroCards:2']` |
+| 1-20 | 下一次劝降费用 +10 | `persuadeNextCostIncrease:10` |
+| 1-20 | 选择一张牌升级 | `upgradeCard` |
 
-翻转 → **混沌冲击**（永久魔法，对怪物造成 3 点伤害。若恰好减掉一个血层，额外抽 2 张牌。放入背包）
+翻转 → **混沌冲击**（永久魔法，对怪物造成 3 点伤害。超杀：抽 2 张牌。放入背包）
 
 ---
 
@@ -283,15 +343,23 @@
 
 | 范围 | 结果 | 效果 |
 |------|------|------|
-| 1-7 | 锋刃祝福：武器下次攻击 +4 | `equipBurst+4` |
+| 1-7 | 锋刃祝福：所有装备栏临时攻击+4 | `allSlotTempAttack:4` |
 | 8-14 | 时空收缩：Waterfall 进度 -2 | `turnCount-2` |
-| 15-20 | 空间代价：背包 -2，获得法术回响 | `backpackSize-2, flipToDoubleNextMagic` |
+| 15-20 | 空间代价：背包 -2，获得法术回响 | `['backpackSize-2', 'flipToDoubleNextMagic']` |
+| 1-10 | 时空侵蚀：商店等级 -1，劝降等级-1 | `['shopLevel-1', 'persuadeLevel-1']` |
+| 11-20 | 时空压缩：激活行怪物攻击力 -3 | `activeRowMonsterAttack-3` |
 
 **动态翻转产物（由骰子结果 15-20 触发）：**
 
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
 | `flipToDoubleNextMagic` | 法术回响 | 永久魔法 | 使用后，下一张法术的效果将触发两次 | 背包 |
+
+**事件翻转产物（掷骰结算后触发）：**
+
+| 产物名 | 类型 | magicEffect | 描述 | 去向 |
+|--------|------|-------------|------|------|
+| 时空镜像 | 永久魔法 | `temp-attack-mirror-armor` | 选择一个装备栏，调整临时攻击力(可加可减)，直到攻击力变为与护甲相同 | 背包 |
 
 ---
 

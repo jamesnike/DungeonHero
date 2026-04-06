@@ -1,113 +1,119 @@
-import { Card } from '@/components/ui/card';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Shield, Droplet, Skull, Heart, Coins, Ghost, HandCoins, Waves, Swords, HeartPulse, Zap, ShieldAlert, BookOpen, Cat, ArrowLeftRight } from 'lucide-react';
-import { heroSkills } from '@/lib/heroSkills';
+import { heroSkills, type HeroSkillDefinition } from '@/lib/heroSkills';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
+import type { GameCardData } from './GameCard';
 
 import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
 
 interface HeroSkillSelectionProps {
   isOpen: boolean;
   onSelectSkill: (skillId: string) => void;
+  classCardPreview?: GameCardData | null;
 }
 
-export default function HeroSkillSelection({ isOpen, onSelectSkill }: HeroSkillSelectionProps) {
+function sampleSkills(count: number): HeroSkillDefinition[] {
+  const shuffled = [...heroSkills].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+function getSkillIcon(skillId: string) {
+  const cls = "w-6 h-6";
+  switch (skillId) {
+    case 'armor-pact': return <Shield className={cls} />;
+    case 'durability-for-blood': return <Droplet className={cls} />;
+    case 'blood-strike': return <Skull className={cls} />;
+    case 'vitality-well': return <Heart className={cls} />;
+    case 'gold-discovery': return <Coins className={cls} />;
+    case 'graveyard-recall': return <Ghost className={cls} />;
+    case 'discard-profit': return <HandCoins className={cls} />;
+    case 'waterfall-heal': return <Waves className={cls} />;
+    case 'discard-empower': return <Swords className={cls} />;
+    case 'heal-to-damage': return <HeartPulse className={cls} />;
+    case 'early-surge': return <Zap className={cls} />;
+    case 'shield-wall': return <ShieldAlert className={cls} />;
+    case 'blood-draw': return <BookOpen className={cls} />;
+    case 'summon-minion': return <Cat className={cls} />;
+    case 'vanguard-swap': return <ArrowLeftRight className={cls} />;
+    default: return <Shield className={cls} />;
+  }
+}
+
+export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPreview }: HeroSkillSelectionProps) {
   const overlayScale = useOverlayScale();
-  const getSkillIcon = (skillId: string) => {
-    const cls = "w-4 h-4 md:w-5 md:h-5";
-    switch (skillId) {
-      case 'armor-pact':
-        return <Shield className={cls} />;
-      case 'durability-for-blood':
-        return <Droplet className={cls} />;
-      case 'blood-strike':
-        return <Skull className={cls} />;
-      case 'vitality-well':
-        return <Heart className={cls} />;
-      case 'gold-discovery':
-        return <Coins className={cls} />;
-      case 'graveyard-recall':
-        return <Ghost className={cls} />;
-      case 'discard-profit':
-        return <HandCoins className={cls} />;
-      case 'waterfall-heal':
-        return <Waves className={cls} />;
-      case 'discard-empower':
-        return <Swords className={cls} />;
-      case 'heal-to-damage':
-        return <HeartPulse className={cls} />;
-      case 'early-surge':
-        return <Zap className={cls} />;
-      case 'shield-wall':
-        return <ShieldAlert className={cls} />;
-      case 'blood-draw':
-        return <BookOpen className={cls} />;
-      case 'summon-minion':
-        return <Cat className={cls} />;
-      case 'vanguard-swap':
-        return <ArrowLeftRight className={cls} />;
-      default:
-        return <Shield className={cls} />;
+  const [choices, setChoices] = useState<HeroSkillDefinition[]>([]);
+  const prevIsOpen = useRef(false);
+
+  useEffect(() => {
+    if (isOpen && !prevIsOpen.current) {
+      setChoices(sampleSkills(3));
     }
-  };
+    prevIsOpen.current = isOpen;
+  }, [isOpen]);
+
+  const handleReroll = useCallback(() => {
+    setChoices(sampleSkills(3));
+  }, []);
+
+  if (!isOpen) return null;
 
   return (
-    <div 
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 transition-opacity duration-200 ${
-        isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-      }`}
-    >
-      <div
-        className={`bg-background rounded-xl p-5 md:p-7 lg:p-9 max-w-lg md:max-w-4xl lg:max-w-[95vw] w-full mx-2 md:mx-4 max-h-[95vh] overflow-y-auto shadow-2xl border-2 border-primary transform transition-transform duration-200 ${
-          isOpen ? 'scale-100' : 'scale-95'
-        }`}
-        style={{ zoom: overlayScale }}
-      >
-        <div className="text-center mb-3 md:mb-4 lg:mb-5">
-          <h2 className="font-serif text-xl md:text-2xl lg:text-3xl font-bold mb-1.5 text-primary">选择英雄技能</h2>
-          <p className="text-muted-foreground text-sm md:text-base">
-            选择一项技能开始冒险
+    <div className="card-draft-overlay" style={{ zoom: overlayScale }}>
+      <div className="card-draft-modal">
+        <div className="card-draft-header">
+          <h2 className="card-draft-title">选择英雄技能</h2>
+          <p className="card-draft-subtitle">
+            从下方三个技能中选择一个开始冒险
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 md:gap-3 lg:gap-4 mb-3 md:mb-4 lg:mb-5">
-          {heroSkills.map((skill) => (
-            <Card
+        <div className="card-draft-choices">
+          {choices.map((skill) => (
+            <div
               key={skill.id}
+              className="card-draft-choice"
               onClick={() => onSelectSkill(skill.id)}
-              className="relative cursor-pointer transition-[transform,ring,box-shadow] duration-200 hover:scale-[1.03] hover:shadow-lg hover:ring-2 hover:ring-primary active:scale-[0.98]"
-              data-testid={`skill-card-${skill.id}`}
             >
-              <div className="p-2.5 md:p-3 lg:p-4">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="text-primary bg-muted rounded-full p-2 shrink-0">
+              <div className="skill-draft-card">
+                <div className="skill-draft-card-bg">
+                  <img src={skillScrollImage} alt="" />
+                </div>
+                <div className="skill-draft-card-content">
+                  <div className="skill-draft-icon">
                     {getSkillIcon(skill.id)}
                   </div>
-                  <h3 className="font-serif text-sm md:text-base font-bold truncate">
-                    {skill.name}
-                  </h3>
-                </div>
-
-                <div className="bg-primary/10 rounded p-2 border border-primary/30">
-                  <p className="text-xs md:text-sm font-medium leading-snug">
-                    {skill.effect}
-                  </p>
-                </div>
-
-                <div className="absolute inset-0 opacity-5 pointer-events-none">
-                  <img 
-                    src={skillScrollImage} 
-                    alt="" 
-                    className="w-full h-full object-cover rounded-lg"
-                  />
+                  <div className="skill-draft-name">{skill.name}</div>
+                  <div className={`skill-draft-type ${skill.type === 'active' ? 'skill-draft-type-active' : 'skill-draft-type-passive'}`}>
+                    {skill.type === 'active' ? '主动' : '被动'}
+                  </div>
+                  <div className="skill-draft-divider" />
+                  <div className="skill-draft-effect">{skill.effect}</div>
                 </div>
               </div>
-            </Card>
+              <div className="card-draft-choice-name">{skill.name}</div>
+              <div className="card-draft-choice-desc">{skill.description}</div>
+            </div>
           ))}
         </div>
 
-        <p className="text-xs md:text-sm text-muted-foreground text-center">
-          点击技能卡牌以选择
-        </p>
+        <button className="skill-draft-reroll" onClick={handleReroll}>
+          换一批
+        </button>
+
+        {classCardPreview && (
+          <div className="class-card-preview">
+            <div className="class-card-preview-label">即将获得的专属卡</div>
+            <div className="class-card-preview-card">
+              {classCardPreview.image && (
+                <img src={classCardPreview.image} alt={classCardPreview.name} className="class-card-preview-img" />
+              )}
+              <div className="class-card-preview-info">
+                <div className="class-card-preview-name">{classCardPreview.name}</div>
+                <div className="class-card-preview-desc">{classCardPreview.description || classCardPreview.magicEffect || ''}</div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

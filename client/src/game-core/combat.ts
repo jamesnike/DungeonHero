@@ -1,0 +1,743 @@
+/**
+ * Combat Domain — pure game logic for combat resolution.
+ *
+ * Every function takes the current GameState (or relevant slices) and returns
+ * either a new value or a Partial<GameState> patch. The GameEngine applies
+ * the patch and emits events for UI animations.
+ */
+
+import type { GameCardData, HeroMagicId } from '@/components/GameCard';
+import type {
+  CombatState,
+  CombatInitiator,
+  EquipmentSlotId,
+  EquipmentSlotBonusState,
+  SlotPermanentBonus,
+  ActiveRowSlots,
+  BlockTarget,
+  ActiveAmuletEffects,
+} from '@/components/game-board/types';
+import type { EquipmentBuffSnapshot } from '@/lib/gameStorage';
+import type { GameState } from './types';
+import { initialCombatState, INITIAL_HP, STRENGTH_SELF_DAMAGE } from './constants';
+import { flattenActiveRowSlots } from './helpers';
+
+// ---------------------------------------------------------------------------
+// Pure computation: monster damage (overflow does NOT penetrate layers)
+// ---------------------------------------------------------------------------
+
+export function damageMonsterWithLayerOverflow(
+  monster: GameCardData,
+  damage: number,
+  _maxLayerLoss?: number,
+): GameCardData {
+  if (damage <= 0) return monster;
+
+  if (!monster.maxHp || monster.hp == null) {
+    return {
+      ...monster,
+      hp: Math.max(0, (monster.hp || monster.value) - damage),
+      value: Math.max(0, (monster.hp || monster.value) - damage),
+    };
+  }
+
+  const layers = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;
+  const hpNow = monster.hp ?? 0;
+  if (layers <= 0 || hpNow <= 0) return monster;
+
+  if (damage < hpNow) {
+    return { ...monster, hp: hpNow - damage };
+  }
+
+  const newLayer = layers - 1;
+
+  let attackBoost = 0;
+  if (monster.bleedEffect?.startsWith('attack+') && newLayer > 0 && !monster.isStunned) {
+    attackBoost = parseInt(monster.bleedEffect.replace('attack+', ''), 10) || 0;
+  }
+
+  const maxHp = monster.maxHp ?? hpNow;
+  return {
+    ...monster,
+    currentLayer: newLayer,
+    hp: newLayer > 0 ? maxHp : 0,
+    attack: (monster.attack ?? monster.value) + attackBoost,
+    value: monster.value + attackBoost,
+    specialAttackBoost: (monster.specialAttackBoost ?? 0) + attackBoost,
+    tempAttackBoost: (monster.tempAttackBoost ?? 0) + attackBoost,
+  };
+}
+
+/**
+ * Compute overkill damage — the portion of damage that exceeds the current
+ * layer's HP. Overflow never penetrates to the next layer.
+ */
+export function computeOverkill(
+  monster: GameCardData,
+  damage: number,
+  _maxLayerLoss?: number,
+): number {
+  if (damage <= 0) return 0;
+
+  if (!monster.maxHp || monster.hp == null) {
+    const hp = monster.hp || monster.value || 0;
+    return Math.max(0, damage - hp);
+  }
+
+  const hpNow = monster.hp ?? 0;
+  return Math.max(0, damage - hpNow);
+}
+
+/** True if this damage would overkill the current layer. */
+export function chaosStrikeHasOverkill(monster: GameCardData, rawDamage: number): boolean {
+  return computeOverkill(monster, rawDamage) > 0;
+}
+
+export function isMonsterDefeated(monster: GameCardData): boolean {
+  return (monster.currentLayer ?? 0) <= 0 || (monster.hp ?? 0) <= 0;
+}
+
+// ---------------------------------------------------------------------------
+// Begin combat
+// ---------------------------------------------------------------------------
+
+export function beginCombatPatch(
+  prev: CombatState,
+  monster: GameCardData,
+  initiator: CombatInitiator,
+  pendingDefeatIds: Set<string>,
+): CombatState {
+  const liveEngagedIds = prev.engagedMonsterIds.filter(id => !pendingDefeatIds.has(id));
+  const alreadyEngaged = liveEngagedIds.includes(monster.id);
+  const nextEngaged = alreadyEngaged ? liveEngagedIds : [...liveEngagedIds, monster.id];
+
+  if (liveEngagedIds.length === 0) {
+    const freshAttackState = {
+      heroAttacksThisTurn: { equipmentSlot1: false, equipmentSlot2: false } as Record<EquipmentSlotId, boolean>,
+      heroAttacksRemaining: 2,
+      heroDamageThisTurn: {} as Record<string, number>,
+      monsterAttackQueue: [] as string[],
+      slotBlocksThisTurn: { equipmentSlot1: false, equipmentSlot2: false } as Record<EquipmentSlotId, boolean>,
+    };
+    if (initiator === 'monster') {
+      return {
+        ...prev,
+        engagedMonsterIds: nextEngaged,
+        initiator,
+        currentTurn: 'monster',
+        ...freshAttackState,
+        pendingBlock: {
+          monsterId: monster.id,
+          attackValue: monster.attack ?? monster.value,
+          monsterName: monster.name,
+        },
+      };
+    }
+    return {
+      ...prev,
+      engagedMonsterIds: nextEngaged,
+      initiator,
+      currentTurn: 'hero',
+      ...freshAttackState,
+      pendingBlock: null,
+    };
+  }
+
+  if (initiator === 'monster') {
+    if (prev.currentTurn === 'hero' && !prev.pendingBlock) {
+      return {
+        ...prev,
+        engagedMonsterIds: nextEngaged,
+        currentTurn: 'monster',
+        pendingBlock: {
+          monsterId: monster.id,
+          attackValue: monster.attack ?? monster.value,
+          monsterName: monster.name,
+        },
+      };
+    }
+    return {
+      ...prev,
+      engagedMonsterIds: nextEngaged,
+      monsterAttackQueue: [...prev.monsterAttackQueue, monster.id],
+    };
+  }
+
+  return {
+    ...prev,
+    engagedMonsterIds: nextEngaged,
+    initiator: prev.initiator ?? initiator,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// End hero turn — transitions to monster turn
+// ---------------------------------------------------------------------------
+
+export interface EndHeroTurnResult {
+  combatState: CombatState;
+  activeCards: ActiveRowSlots;
+  berserkerSlotUsed: Record<string, boolean>;
+  gambitSlotUsed: Record<string, number>;
+  weaponExtraAttackUsed: Record<string, boolean>;
+  logs: Array<{ type: string; message: string }>;
+}
+
+export function endHeroTurnPatch(
+  state: GameState,
+  heroTurnLayerLossIds: Set<string>,
+): EndHeroTurnResult {
+  const logs: Array<{ type: string; message: string }> = [];
+  const engagedMonsters = flattenActiveRowSlots(state.activeCards).filter(
+    c => c.type === 'monster' && state.combatState.engagedMonsterIds.includes(c.id),
+  );
+
+  if (engagedMonsters.length === 0) {
+    return {
+      combatState: { ...initialCombatState },
+      activeCards: state.activeCards,
+      berserkerSlotUsed: {},
+      gambitSlotUsed: {},
+      weaponExtraAttackUsed: {},
+      logs: [{ type: 'combat', message: '战斗结束' }],
+    };
+  }
+
+  const newActiveCards = [...state.activeCards] as ActiveRowSlots;
+  engagedMonsters.forEach(monster => {
+    const idx = newActiveCards.findIndex(c => c?.id === monster.id);
+    if (idx < 0) return;
+
+    if (monster.eliteRegenHeroTurn && !monster.isStunned && !heroTurnLayerLossIds.has(monster.id)) {
+      const currentLayer = monster.currentLayer ?? monster.fury ?? 1;
+      const maxLayers = monster.fury ?? monster.hpLayers ?? 1;
+      if (currentLayer < maxLayers) {
+        const restoredLayer = currentLayer + 1;
+        newActiveCards[idx] = {
+          ...monster,
+          currentLayer: restoredLayer,
+          hp: monster.maxHp ?? monster.hp ?? 0,
+        };
+        logs.push({ type: 'combat', message: `${monster.name} 未受到血层伤害，恢复了一个血层！当前 ${restoredLayer} 层。` });
+        return;
+      }
+    }
+
+  });
+
+  const sortedMonsters = [...engagedMonsters].sort((a, b) => {
+    const idxA = state.activeCards.findIndex(c => c?.id === a.id);
+    const idxB = state.activeCards.findIndex(c => c?.id === b.id);
+    return idxA - idxB;
+  });
+
+  const newCombatState: CombatState = {
+    ...state.combatState,
+    currentTurn: 'monster',
+    heroAttacksThisTurn: { equipmentSlot1: false, equipmentSlot2: false },
+    heroAttacksRemaining: 2,
+    heroDamageThisTurn: {},
+    monsterAttackQueue: sortedMonsters.map(m => m.id),
+    pendingBlock: null,
+    slotBlocksThisTurn: { equipmentSlot1: false, equipmentSlot2: false },
+  };
+
+  return {
+    combatState: newCombatState,
+    activeCards: newActiveCards,
+    berserkerSlotUsed: {},
+    gambitSlotUsed: {},
+    weaponExtraAttackUsed: {},
+    logs,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Advance monster turn (process attack queue)
+// ---------------------------------------------------------------------------
+
+export interface AdvanceMonsterTurnResult {
+  combatState: CombatState;
+  skippedMonsters: Array<{ id: string; name: string }>;
+}
+
+export function advanceMonsterTurnPatch(
+  prev: CombatState,
+  activeCards: ActiveRowSlots,
+): AdvanceMonsterTurnResult {
+  if (prev.currentTurn !== 'monster' || prev.pendingBlock) {
+    return { combatState: prev, skippedMonsters: [] };
+  }
+
+  const skipped: Array<{ id: string; name: string }> = [];
+  const queue = [...prev.monsterAttackQueue];
+
+  while (queue.length > 0) {
+    const nextId = queue.shift()!;
+    const monster = activeCards.find(card => card?.id === nextId);
+    if (!monster) continue;
+
+    if (monster.isStunned) {
+      skipped.push({ id: monster.id, name: monster.name });
+      continue;
+    }
+
+    return {
+      combatState: {
+        ...prev,
+        monsterAttackQueue: queue,
+        pendingBlock: {
+          monsterId: monster.id,
+          attackValue: monster.attack ?? monster.value,
+          monsterName: monster.name,
+        },
+      },
+      skippedMonsters: skipped,
+    };
+  }
+
+  if (prev.engagedMonsterIds.length === 0) {
+    return { combatState: { ...initialCombatState }, skippedMonsters: skipped };
+  }
+
+  return {
+    combatState: {
+      ...prev,
+      currentTurn: 'hero',
+      heroAttacksThisTurn: { equipmentSlot1: false, equipmentSlot2: false },
+      heroAttacksRemaining: 2,
+      heroDamageThisTurn: {},
+      monsterAttackQueue: [],
+    },
+    skippedMonsters: skipped,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Finish combat
+// ---------------------------------------------------------------------------
+
+export function finishCombatPatch(): Partial<GameState> {
+  return {
+    combatState: { ...initialCombatState },
+    berserkerSlotUsed: {},
+    gambitSlotUsed: {},
+    weaponExtraAttackUsed: {},
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Hero heal (pure computation)
+// ---------------------------------------------------------------------------
+
+export interface HealResult {
+  hp: number;
+  totalHealed: number;
+  healAccumulator: number;
+  actualHeal: number;
+  equipmentSlotBonuses?: EquipmentSlotBonusState;
+  healToDamageBonusGained?: number;
+}
+
+export function computeHeal(
+  state: GameState,
+  baseAmount: number,
+  amuletEffects: ActiveAmuletEffects,
+): HealResult {
+  const multiplier = amuletEffects.hasHeal ? 2 : 1;
+  const adjustedAmount = Math.max(0, Math.floor(baseAmount * multiplier));
+  const maxHp = INITIAL_HP + state.permanentMaxHpBonus + amuletEffects.aura.maxHp;
+  const actualHeal = adjustedAmount <= 0 ? 0 : Math.min(adjustedAmount, Math.max(0, maxHp - state.hp));
+
+  const result: HealResult = {
+    hp: Math.min(maxHp, state.hp + adjustedAmount),
+    totalHealed: state.totalHealed + actualHeal,
+    healAccumulator: state.healAccumulator + actualHeal,
+    actualHeal,
+  };
+
+  if (actualHeal > 0 && state.selectedHeroSkill === 'heal-to-damage') {
+    const prevAccum = state.healAccumulator;
+    const newAccum = prevAccum + actualHeal;
+    const bonusGained = Math.floor(newAccum / 5) - Math.floor(prevAccum / 5);
+    if (bonusGained > 0) {
+      result.equipmentSlotBonuses = {
+        equipmentSlot1: {
+          damage: state.equipmentSlotBonuses.equipmentSlot1.damage + bonusGained,
+          shield: state.equipmentSlotBonuses.equipmentSlot1.shield,
+        },
+        equipmentSlot2: {
+          damage: state.equipmentSlotBonuses.equipmentSlot2.damage + bonusGained,
+          shield: state.equipmentSlotBonuses.equipmentSlot2.shield,
+        },
+      };
+      result.healToDamageBonusGained = bonusGained;
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Apply damage to hero (pure computation)
+// ---------------------------------------------------------------------------
+
+export interface DamageResult {
+  hp: number;
+  tempShield: number;
+  totalDamageTaken: number;
+  turnDamageTaken: number;
+  appliedDamage: number;
+  shieldAbsorbed: number;
+  gameOver: boolean;
+  berserkTurnBuff?: EquipmentBuffSnapshot;
+  needsDeathWard?: boolean;
+}
+
+export function computeDamage(
+  state: GameState,
+  rawDamage: number,
+  amuletEffects: ActiveAmuletEffects,
+  hasDeathWardCard: boolean,
+): DamageResult {
+  let remaining = Math.max(0, Math.floor(rawDamage));
+  if (remaining <= 0) {
+    return {
+      hp: state.hp,
+      tempShield: state.tempShield,
+      totalDamageTaken: state.totalDamageTaken,
+      turnDamageTaken: state.turnDamageTaken,
+      appliedDamage: 0,
+      shieldAbsorbed: 0,
+      gameOver: false,
+    };
+  }
+
+  let shieldAbsorbed = 0;
+  let tempShield = state.tempShield;
+  if (tempShield > 0 && remaining > 0) {
+    shieldAbsorbed = Math.min(tempShield, remaining);
+    remaining -= shieldAbsorbed;
+    tempShield -= shieldAbsorbed;
+  }
+
+  if (remaining <= 0) {
+    return {
+      hp: state.hp,
+      tempShield,
+      totalDamageTaken: state.totalDamageTaken,
+      turnDamageTaken: state.turnDamageTaken,
+      appliedDamage: 0,
+      shieldAbsorbed,
+      gameOver: false,
+    };
+  }
+
+  if (remaining >= state.hp && hasDeathWardCard && !state.deathWardPrompt) {
+    return {
+      hp: state.hp,
+      tempShield,
+      totalDamageTaken: state.totalDamageTaken,
+      turnDamageTaken: state.turnDamageTaken,
+      appliedDamage: 0,
+      shieldAbsorbed,
+      gameOver: false,
+      needsDeathWard: true,
+    };
+  }
+
+  const newHp = Math.max(0, state.hp - remaining);
+  const appliedDamage = state.hp - newHp;
+
+  const result: DamageResult = {
+    hp: newHp,
+    tempShield,
+    totalDamageTaken: state.totalDamageTaken + appliedDamage,
+    turnDamageTaken: state.turnDamageTaken + appliedDamage,
+    appliedDamage,
+    shieldAbsorbed,
+    gameOver: newHp === 0,
+  };
+
+  if (appliedDamage > 0 && amuletEffects.hasBloodrageAttack) {
+    result.berserkTurnBuff = {
+      equipmentSlot1: (state.berserkTurnBuff.equipmentSlot1 ?? 0) + 3,
+      equipmentSlot2: (state.berserkTurnBuff.equipmentSlot2 ?? 0) + 3,
+    };
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Compute attack damage
+// ---------------------------------------------------------------------------
+
+export interface AttackDamageParams {
+  weaponValue: number;
+  slotId: EquipmentSlotId;
+  slotDamageBonus: number;
+  slotBerserkBonus: number;
+  nextWeaponBonus: number;
+  slotBurstBonus: number;
+  slotTempAttack: number;
+  attackBonus: number;
+  amuletEffects: ActiveAmuletEffects;
+  isCrit: boolean;
+  stunnedDoubleMultiplier: number;
+}
+
+export function computeAttackDamage(params: AttackDamageParams): number {
+  const baseDamage = Math.max(
+    0,
+    params.weaponValue +
+    params.attackBonus +
+    params.slotDamageBonus +
+    params.slotBerserkBonus +
+    params.nextWeaponBonus +
+    params.slotBurstBonus +
+    params.slotTempAttack,
+  );
+
+  const preFinal = (params.isCrit ? baseDamage * 2 : baseDamage) * params.stunnedDoubleMultiplier;
+  return params.amuletEffects.hasFlash ? Math.max(0, Math.floor(preFinal / 2)) : preFinal;
+}
+
+// ---------------------------------------------------------------------------
+// Compute shield block value
+// ---------------------------------------------------------------------------
+
+export interface BlockParams {
+  shieldValue: number;
+  slotId: EquipmentSlotId;
+  slotShieldBonus: number;
+  slotTempArmor: number;
+  defenseBonus: number;
+  amuletEffects: ActiveAmuletEffects;
+  isMonsterEquip: boolean;
+  gold: number;
+  eliteLowGoldPower?: boolean;
+}
+
+export function computeShieldBlockValue(params: BlockParams): number {
+  const rawBase = params.isMonsterEquip && params.eliteLowGoldPower && params.gold >= 30
+    ? params.shieldValue * 2 : params.shieldValue;
+  return Math.max(0, rawBase + params.defenseBonus + params.slotShieldBonus + params.slotTempArmor);
+}
+
+// ---------------------------------------------------------------------------
+// Prune stale engaged monster IDs
+// ---------------------------------------------------------------------------
+
+export function pruneStaleEngagedIds(
+  combatState: CombatState,
+  activeCards: ActiveRowSlots,
+  pendingDefeatIds: Set<string>,
+): CombatState | null {
+  if (combatState.engagedMonsterIds.length === 0) return null;
+
+  const staleIds = combatState.engagedMonsterIds.filter(
+    id => !activeCards.some(c => c?.id === id) && !pendingDefeatIds.has(id),
+  );
+  if (staleIds.length === 0) return null;
+
+  const remaining = combatState.engagedMonsterIds.filter(id => !staleIds.includes(id));
+  if (remaining.length === 0) return { ...initialCombatState };
+  return { ...combatState, engagedMonsterIds: remaining };
+}
+
+// ---------------------------------------------------------------------------
+// Monster turn-end effects (stun clear, wraith aura, boss last stand)
+// ---------------------------------------------------------------------------
+
+export interface MonsterTurnEndResult {
+  activeCards: ActiveRowSlots;
+  logs: Array<{ type: string; message: string }>;
+  banners: string[];
+}
+
+export function applyMonsterTurnEndEffects(
+  activeCards: ActiveRowSlots,
+  engagedMonsterIds: string[],
+): MonsterTurnEndResult {
+  const logs: Array<{ type: string; message: string }> = [];
+  const banners: string[] = [];
+  let changed = false;
+
+  const next = activeCards.map(card => {
+    if (!card || !engagedMonsterIds.includes(card.id)) return card;
+    let updated = card;
+
+    if (updated.isStunned) {
+      changed = true;
+      logs.push({ type: 'combat', message: `${updated.name} 从晕眩中恢复了。` });
+      updated = { ...updated, isStunned: false };
+      return updated;
+    }
+
+    if (updated.wraithTurnAttack && updated.wraithTurnAttack > 0) {
+      const boost = updated.wraithTurnAttack;
+      changed = true;
+      const newAttack = (updated.attack ?? updated.value ?? 0) + boost;
+      const newValue = (updated.value ?? 0) + boost;
+      logs.push({ type: 'combat', message: `${updated.name} 怨念蓄积：攻击力 +${boost}！（当前 ${newAttack}）` });
+      updated = { ...updated, attack: newAttack, value: newValue, tempAttackBoost: (updated.tempAttackBoost ?? 0) + boost };
+    }
+
+    if (updated.bossLastStandAura && (updated.currentLayer ?? 1) === 1) {
+      changed = true;
+      const newAttack = (updated.attack ?? updated.value ?? 0) + 5;
+      const newValue = (updated.value ?? 0) + 5;
+      const newLayer = (updated.currentLayer ?? 1) + 1;
+      const fullHp = updated.maxHp ?? updated.hp ?? 0;
+      logs.push({ type: 'combat', message: `${updated.name} 暴走光环：攻击 +5，恢复至 ${newLayer} 血层！` });
+      banners.push(`${updated.name} 暴走光环发动！`);
+      return { ...updated, attack: newAttack, value: newValue, hp: fullHp, currentLayer: newLayer, tempAttackBoost: (updated.tempAttackBoost ?? 0) + 5 };
+    }
+
+    return updated !== card ? updated : card;
+  });
+
+  return {
+    activeCards: changed ? next as ActiveRowSlots : activeCards,
+    logs,
+    banners,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Low-gold elite goblin buff
+// ---------------------------------------------------------------------------
+
+export function applyLowGoldEliteBuff(
+  activeCards: ActiveRowSlots,
+  isLowGold: boolean,
+): { activeCards: ActiveRowSlots; logs: Array<{ type: string; message: string }>; banners: string[] } | null {
+  const logs: Array<{ type: string; message: string }> = [];
+  const banners: string[] = [];
+  let changed = false;
+
+  const next = activeCards.map(card => {
+    if (!card || card.type !== 'monster' || !card.eliteLowGoldPower) return card;
+
+    if (isLowGold && !card.lowGoldBuffActive) {
+      changed = true;
+      logs.push({ type: 'combat', message: `${card.name} 感受到了贪婪的力量！攻击力与血量翻倍！` });
+      banners.push(`${card.name} 贪婪强化！攻击力与血量翻倍！`);
+      const atkBefore = card.attack ?? card.value;
+      const maxHpBefore = card.maxHp ?? 0;
+      return {
+        ...card,
+        attack: atkBefore * 2,
+        value: card.value * 2,
+        hp: (card.hp ?? 0) * 2,
+        maxHp: maxHpBefore * 2,
+        lowGoldBuffActive: true,
+        tempAttackBoost: (card.tempAttackBoost ?? 0) + atkBefore,
+        tempHpBoost: (card.tempHpBoost ?? 0) + maxHpBefore,
+      };
+    }
+
+    if (!isLowGold && card.lowGoldBuffActive) {
+      changed = true;
+      logs.push({ type: 'combat', message: `${card.name} 的贪婪强化消退了。` });
+      const newAtk = Math.floor((card.attack ?? card.value) / 2);
+      const newMaxHp = Math.floor((card.maxHp ?? 0) / 2);
+      const prevTempAtk = Math.floor((card.tempAttackBoost ?? 0) / 2);
+      const prevTempHp = Math.floor((card.tempHpBoost ?? 0) / 2);
+      return {
+        ...card,
+        attack: newAtk,
+        value: Math.floor(card.value / 2),
+        hp: Math.ceil((card.hp ?? 0) / 2),
+        maxHp: newMaxHp,
+        lowGoldBuffActive: false,
+        tempAttackBoost: prevTempAtk,
+        tempHpBoost: prevTempHp,
+      };
+    }
+
+    return card;
+  });
+
+  if (!changed) return null;
+  return { activeCards: next as ActiveRowSlots, logs, banners };
+}
+
+// ---------------------------------------------------------------------------
+// Boss transformation
+// ---------------------------------------------------------------------------
+
+export function createBossCard(monster: GameCardData): GameCardData {
+  const fullHp = monster.maxHp ?? monster.hp ?? monster.value ?? 0;
+  const layers = monster.fury ?? monster.hpLayers ?? 2;
+  return {
+    ...monster,
+    bossPhase: true,
+    currentLayer: layers,
+    hp: fullHp,
+    hasRevive: true,
+    reviveUsed: false,
+    bossRetaliationDamage: 3,
+    bossLastStandAura: true,
+    bossFuryDiceChance: true,
+    attack: (monster.attack ?? monster.value ?? 0) + 5,
+    value: (monster.value ?? 0) + 5,
+    tempAttackBoost: (monster.tempAttackBoost ?? 0) + 5,
+    name: `${monster.name} (Boss)`,
+    description: `Boss形态！反噬3；1层时攻+5并恢复1层；受攻时50%概率不掉层。`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Wraith last-words effect (shuffle & boost row)
+// ---------------------------------------------------------------------------
+
+export function applyWraithHauntEffect(
+  activeCards: ActiveRowSlots,
+  monsterId: string,
+  atkBoost: number,
+): ActiveRowSlots {
+  const occupiedIndices: number[] = [];
+  const occupiedCards: (GameCardData | null)[] = [];
+
+  for (let i = 0; i < activeCards.length; i++) {
+    const c = activeCards[i];
+    if (!c || c.id === monsterId) continue;
+    occupiedIndices.push(i);
+    occupiedCards.push(c);
+  }
+
+  if (occupiedIndices.length === 0) return activeCards;
+
+  const shuffle = <T,>(arr: T[]): T[] => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+
+  let shuffled = shuffle(occupiedCards);
+  if (occupiedCards.length >= 2) {
+    const sameOrder = shuffled.every((c, i) => c === occupiedCards[i]);
+    if (sameOrder) shuffled = shuffle(occupiedCards);
+  }
+
+  const next = [...activeCards] as ActiveRowSlots;
+  for (let i = 0; i < occupiedIndices.length; i++) {
+    let card = shuffled[i];
+    if (card && card.type === 'monster') {
+      card = {
+        ...card,
+        attack: (card.attack ?? card.value) + atkBoost,
+        specialAttackBoost: (card.specialAttackBoost ?? 0) + atkBoost,
+        tempAttackBoost: (card.tempAttackBoost ?? 0) + atkBoost,
+      };
+    }
+    next[occupiedIndices[i]] = card;
+  }
+
+  return next;
+}

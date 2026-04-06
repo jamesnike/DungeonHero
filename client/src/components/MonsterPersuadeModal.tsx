@@ -19,6 +19,7 @@ interface MonsterPersuadeModalProps {
   diceValue: number | null;
   success: boolean | null;
   autoRollTrigger: number;
+  persuadeLevel: number;
   onConfirm: () => void;
   onDiceResult: (value: number) => void;
   onClose: () => void;
@@ -36,6 +37,7 @@ export default function MonsterPersuadeModal({
   diceValue,
   success,
   autoRollTrigger,
+  persuadeLevel,
   onConfirm,
   onDiceResult,
   onClose,
@@ -69,6 +71,17 @@ export default function MonsterPersuadeModal({
             <>
               {/* Cost & success rate info */}
               <div className="space-y-2">
+                <div className="flex items-center justify-between rounded border border-border px-4 py-3">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    劝降等级
+                  </span>
+                  <Badge variant="secondary" className="text-base font-mono px-3 py-1 text-purple-600">
+                    Lv.{persuadeLevel}
+                    <span className="text-xs text-muted-foreground ml-1">（可劝降 ≤{persuadeLevel} 血层）</span>
+                  </Badge>
+                </div>
+
                 <div className="flex items-center justify-between rounded border border-border px-4 py-3">
                   <span className="flex items-center gap-2 text-sm font-medium">
                     <Coins className="w-4 h-4 text-amber-500" />

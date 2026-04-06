@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
-import { Heart, AlertTriangle, Sparkles, Droplets } from 'lucide-react';
+import { Heart, AlertTriangle, Sparkles, Droplets, Zap } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import React, { useEffect, useRef } from 'react';
+import React, { memo, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import type { CSSProperties } from 'react';
@@ -48,6 +48,7 @@ interface HeroCardProps {
   shieldBlockAnimation?: boolean;
   spellDamageBonus?: number;
   spellLifesteal?: number;
+  stunCap?: number;
 }
 
 interface HeroSkillUiState {
@@ -82,7 +83,7 @@ type HeroMagicChoicePrompt = {
   prompt: string;
 };
 
-export default function HeroCard({ 
+function HeroCardInner({ 
   hp, 
   maxHp, 
   scaleMultiplier = 1,
@@ -114,6 +115,7 @@ export default function HeroCard({
   shieldBlockAnimation = false,
   spellDamageBonus = 0,
   spellLifesteal = 0,
+  stunCap = 10,
   onHeroClick,
 }: HeroCardProps) {
   const gameViewport = useGameViewport();
@@ -299,9 +301,14 @@ export default function HeroCard({
           <span className={`font-mono dh-hero-chip ${spellDamageDisplay < 0 ? 'text-red-500' : ''}`}>{spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}</span>
         </span>
         <span className="text-muted-foreground/50">|</span>
-        <span className="flex items-center gap-1 text-rose-400" title="法术吸血">
+        <span className="flex items-center gap-1 text-rose-400" title="超杀吸血">
           <Droplets className="dh-hero-icon" />
           <span className="font-mono dh-hero-chip">{spellLifesteal}</span>
+        </span>
+        <span className="text-muted-foreground/50">|</span>
+        <span className="flex items-center gap-1 text-orange-500" title="击晕上限">
+          <Zap className="dh-hero-icon" />
+          <span className="font-mono dh-hero-chip">{stunCap}%</span>
         </span>
       </div>
       <Card className={`
@@ -535,3 +542,5 @@ export default function HeroCard({
     </div>
   );
 }
+
+export default memo(HeroCardInner);

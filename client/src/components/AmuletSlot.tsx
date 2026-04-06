@@ -22,6 +22,7 @@ interface AmuletSlotProps {
   dimForCombatLock?: boolean;
   /** 与 HandDisplay 一致：瀑布锁、全板锁、怪物阶段时禁用拖拽与点击 */
   disableAnimations?: boolean;
+  isStunFrozen?: boolean;
 }
 
 export default function AmuletSlot({
@@ -35,6 +36,7 @@ export default function AmuletSlot({
   scaleMultiplier = 1,
   dimForCombatLock = false,
   disableAnimations = false,
+  isStunFrozen = false,
 }: AmuletSlotProps) {
   const [dragDepth, setDragDepth] = React.useState(0);
   const isOver = dragDepth > 0;
@@ -207,6 +209,14 @@ export default function AmuletSlot({
             </span>
           </div>
         </Card>
+      )}
+      {isStunFrozen && (
+        <>
+          <div className="pointer-events-none absolute inset-0 z-[35] rounded-xl bg-cyan-400/20 border-2 border-cyan-400/60 animate-pulse" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-cyan-600/90 text-white font-bold px-3 py-1 rounded-full shadow-lg border-2 border-cyan-300 text-xs whitespace-nowrap animate-pulse">
+            击晕冻结
+          </div>
+        </>
       )}
     </div>
   );

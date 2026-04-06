@@ -1,8 +1,8 @@
-import { Heart, Coins, Layers, Waves, ShoppingBag, Trophy } from 'lucide-react';
+import { Heart, Coins, Layers, Waves, ShoppingBag, Trophy, Handshake } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
-import { useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
+import { memo, useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 
@@ -12,6 +12,9 @@ interface GameHeaderProps {
   gold: number;
   cardsRemaining: number;
   shopLevel: number;
+  persuadeLevel: number;
+  persuadeCost: number;
+  persuadeTempDiscount?: number;
   turnCount: number;
   totalWins?: number;
   onDeckClick?: () => void;
@@ -20,12 +23,15 @@ interface GameHeaderProps {
   deckFlyTargetRef?: Ref<HTMLButtonElement | null>;
 }
 
-export default function GameHeader({
+function GameHeaderInner({
   hp,
   maxHp,
   gold,
   cardsRemaining,
   shopLevel,
+  persuadeLevel,
+  persuadeCost,
+  persuadeTempDiscount = 0,
   turnCount,
   totalWins = 0,
   onDeckClick,
@@ -117,6 +123,14 @@ export default function GameHeader({
         </Badge>
       </div>
 
+      <div className="game-header__shop" data-testid="header-persuade-level" title={`劝降等级 Lv.${persuadeLevel}（可劝降 ≤${persuadeLevel} 血层怪物）/ 费用 ${persuadeCost} 金${persuadeTempDiscount ? `（临时${persuadeTempDiscount > 0 ? '减免' : '加价'} ${Math.abs(persuadeTempDiscount)}）` : ''}`}>
+        <Handshake className="game-header__icon text-purple-500" />
+        <Badge variant="secondary" className="game-header__badge font-mono">
+          Lv.{persuadeLevel}
+          <span className={`ml-1 ${persuadeTempDiscount > 0 ? 'text-green-400' : persuadeTempDiscount < 0 ? 'text-red-400' : 'text-amber-500'}`}>{persuadeCost}g</span>
+        </Badge>
+      </div>
+
       <div className="game-header__stat" data-testid="header-gold">
         <Coins className="game-header__icon text-yellow-500" />
         <span className="game-header__value font-mono font-bold text-yellow-500">
@@ -126,3 +140,5 @@ export default function GameHeader({
     </div>
   );
 }
+
+export default memo(GameHeaderInner);

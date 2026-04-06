@@ -16,38 +16,50 @@ export type MonsterUpgrade = {
 };
 
 const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
-  Dragon: { base: 2, interval: 4 },
+  Dragon: { base: 2, interval: 5 },
   Skeleton: { base: 1, interval: 4 },
   Goblin: { base: 1, interval: 4 },
   Ogre: { base: 1, interval: 3 },
   Wraith: { base: 1, interval: 4 },
+  Swarm: { base: 2, interval: 5 },
+  Buglet: { base: 1, interval: 5 },
 };
 
 const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
   Dragon:   [
-    { waterfallLevel: 4, attackBonus: 2, hpBonus: 3 },
-    { waterfallLevel: 8, attackBonus: 4, hpBonus: 6 },
-    { waterfallLevel: 12, attackBonus: 6, hpBonus: 9, specialAbility: 'dragon-bleed-destroy', specialDesc: '流血破甲：每失去一个血层，破坏耐久度 > 剩余血层数的装备' },
+    { waterfallLevel: 4, attackBonus: 3, hpBonus: 1 },
+    { waterfallLevel: 8, attackBonus: 5, hpBonus: 4 },
+    { waterfallLevel: 12, attackBonus: 8, hpBonus: 7, specialAbility: 'dragon-bleed-destroy', specialDesc: '流血破甲：每失去一个血层，破坏耐久度 > 剩余血层数的装备' },
   ],
   Skeleton: [
-    { waterfallLevel: 3, attackBonus: 2, hpBonus: 1 },
-    { waterfallLevel: 7, attackBonus: 4, hpBonus: 2 },
-    { waterfallLevel: 11, attackBonus: 6, hpBonus: 3, specialAbility: 'skeleton-no-layer-cost', specialDesc: '不朽之骨：复生后攻击不消耗血层' },
+    { waterfallLevel: 3, attackBonus: 3, hpBonus: 1 },
+    { waterfallLevel: 7, attackBonus: 6, hpBonus: 2 },
+    { waterfallLevel: 11, attackBonus: 9, hpBonus: 3, specialAbility: 'skeleton-no-layer-cost', specialDesc: '不朽之骨：复生后攻击不消耗血层' },
   ],
   Goblin:   [
-    { waterfallLevel: 3, attackBonus: 1, hpBonus: 2 },
-    { waterfallLevel: 7, attackBonus: 2, hpBonus: 4 },
-    { waterfallLevel: 11, attackBonus: 3, hpBonus: 6, specialAbility: 'goblin-steal-scale', specialDesc: '贪婪强化：每偷到X金币，攻击力和生命值 +X' },
+    { waterfallLevel: 3, attackBonus: 2, hpBonus: 1, specialAbility: 'goblin-steal-card', specialDesc: '窃牌贼：攻击时随机偷走一张手牌，堆叠在自身下方' },
+    { waterfallLevel: 7, attackBonus: 4, hpBonus: 2, specialAbility: 'goblin-steal-card', specialDesc: '窃牌贼：攻击时随机偷走一张手牌，堆叠在自身下方' },
+    { waterfallLevel: 11, attackBonus: 6, hpBonus: 4, specialAbility: 'goblin-steal-scale', specialDesc: '贪婪强化：每偷到X金币，攻击力和生命值 +X' },
   ],
   Ogre:     [
-    { waterfallLevel: 5, attackBonus: 1, hpBonus: 3 },
-    { waterfallLevel: 9, attackBonus: 2, hpBonus: 6 },
-    { waterfallLevel: 13, attackBonus: 3, hpBonus: 9, specialAbility: 'ogre-enter-discard', specialDesc: '蛮力震慑：入场时随机弃掉玩家一张手牌' },
+    { waterfallLevel: 5, attackBonus: 3, hpBonus: 1, specialAbility: 'ogre-stun', specialDesc: '蛮力击晕：攻击时20%概率击晕玩家（装备栏和护符栏冻结一回合）' },
+    { waterfallLevel: 9, attackBonus: 5, hpBonus: 3, specialAbility: 'ogre-stun-double', specialDesc: '蛮力击晕 + 狂暴连击：攻击时70%概率再攻击一次' },
+    { waterfallLevel: 13, attackBonus: 8, hpBonus: 5, specialAbility: 'ogre-all', specialDesc: '蛮力震慑 + 蛮力击晕 + 狂暴连击' },
   ],
   Wraith:   [
-    { waterfallLevel: 4, attackBonus: 2, hpBonus: 2 },
-    { waterfallLevel: 8, attackBonus: 4, hpBonus: 4, specialAbility: 'wraith-turn-attack', specialDesc: '怨念蓄积：每个怪物回合结束时攻击力 +3' },
-    { waterfallLevel: 12, attackBonus: 6, hpBonus: 6, specialAbility: 'wraith-death-heal', specialDesc: '怨灵祝福：死亡时同行其他怪物生命值 +4' },
+    { waterfallLevel: 4, attackBonus: 3, hpBonus: 1 },
+    { waterfallLevel: 8, attackBonus: 5, hpBonus: 3, specialAbility: 'wraith-turn-attack', specialDesc: '怨念蓄积：每个怪物回合结束时攻击力 +3' },
+    { waterfallLevel: 12, attackBonus: 7, hpBonus: 4, specialAbility: 'wraith-death-heal', specialDesc: '怨灵祝福：死亡时同行其他怪物生命值 +4' },
+  ],
+  Swarm:    [
+    { waterfallLevel: 4, attackBonus: 1, hpBonus: 2, specialAbility: 'swarm-horde-rage', specialDesc: '虫群集结：当激活行怪物≥3时，所有怪物被激怒，并+3攻击+3血量' },
+    { waterfallLevel: 8, attackBonus: 2, hpBonus: 4 },
+    { waterfallLevel: 12, attackBonus: 3, hpBonus: 6 },
+  ],
+  Buglet:   [
+    { waterfallLevel: 4, attackBonus: 2, hpBonus: 1 },
+    { waterfallLevel: 8, attackBonus: 4, hpBonus: 2 },
+    { waterfallLevel: 12, attackBonus: 6, hpBonus: 4 },
   ],
 };
 
@@ -72,6 +84,16 @@ export const getMonsterUpgrades = (monsterType: string): MonsterUpgrade[] => {
   return MONSTER_UPGRADES[monsterType] ?? [];
 };
 
+export const getUpgradeTierCount = (monsterType: string): number => {
+  return (MONSTER_UPGRADES[monsterType] ?? []).length;
+};
+
+export const getUpgradeTierByLevel = (monsterType: string, level: number): MonsterUpgrade | null => {
+  const upgrades = MONSTER_UPGRADES[monsterType];
+  if (!upgrades || level < 1 || level > upgrades.length) return null;
+  return upgrades[level - 1];
+};
+
 export const getActiveUpgrade = (monsterType: string, waterfall: number): MonsterUpgrade | null => {
   const upgrades = MONSTER_UPGRADES[monsterType];
   if (!upgrades) return null;
@@ -83,12 +105,66 @@ export const getActiveUpgrade = (monsterType: string, waterfall: number): Monste
   return active;
 };
 
+export const getWaterfallUpgradeLevel = (monsterType: string, waterfall: number): number => {
+  const upgrades = MONSTER_UPGRADES[monsterType];
+  if (!upgrades) return 0;
+  const normalized = normalizeTurn(waterfall);
+  let level = 0;
+  for (const u of upgrades) {
+    if (normalized >= u.waterfallLevel) level++;
+  }
+  return level;
+};
+
 export const calculateMonsterRage = (monsterName: string, turn: number): number | null => {
   const rule = getMonsterRageRule(monsterName);
   if (!rule) {
     return null;
   }
   return calculateFromRule(rule, turn);
+};
+
+const applySpecialAbility = (result: GameCardData, ability: string): void => {
+  switch (ability) {
+    case 'ogre-stun':
+      result.ogreStun = true;
+      break;
+    case 'ogre-stun-double':
+      result.ogreStun = true;
+      result.eliteDoubleAttack = true;
+      break;
+    case 'ogre-all':
+      result.ogreEnterDiscard = true;
+      result.ogreStun = true;
+      result.eliteDoubleAttack = true;
+      break;
+    case 'ogre-enter-discard':
+      result.ogreEnterDiscard = true;
+      break;
+    case 'dragon-bleed-destroy':
+      result.dragonBleedDestroy = true;
+      break;
+    case 'skeleton-no-layer-cost':
+      result.skeletonNoLayerCost = true;
+      break;
+    case 'wraith-turn-attack':
+      result.wraithTurnAttack = 3;
+      break;
+    case 'wraith-death-heal':
+      result.wraithTurnAttack = 3;
+      result.wraithDeathHeal = 4;
+      break;
+    case 'goblin-steal-card':
+      result.goblinStealCard = true;
+      break;
+    case 'goblin-steal-scale':
+      result.goblinStealCard = true;
+      result.goblinStealScale = true;
+      break;
+    case 'swarm-horde-rage':
+      result.swarmHordeRage = true;
+      break;
+  }
 };
 
 export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData => {
@@ -105,7 +181,12 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
 
   const baseAtk = card.baseAttack ?? card.attack ?? card.value ?? 0;
   const baseHp = card.baseHp ?? card.maxHp ?? card.hp ?? card.value ?? 0;
-  const upgrade = getActiveUpgrade(monsterType, normalizedTurn);
+
+  const waterfallLevel = getWaterfallUpgradeLevel(monsterType, normalizedTurn);
+  const manualLevel = card.upgradeLevel ?? 0;
+  const effectiveLevel = Math.max(waterfallLevel, manualLevel);
+  const upgrade = getUpgradeTierByLevel(monsterType, effectiveLevel);
+
   const bonusAtk = upgrade?.attackBonus ?? 0;
   const bonusHp = upgrade?.hpBonus ?? 0;
   const bleedBoost = card.specialAttackBoost ?? 0;
@@ -122,30 +203,42 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
     hpLayers: rage,
     currentLayer: rage,
     rageTurn: normalizedTurn,
+    upgradeLevel: effectiveLevel,
+    maxUpgradeLevel: getUpgradeTierCount(monsterType),
   };
 
   if (upgrade?.specialAbility) {
-    switch (upgrade.specialAbility) {
-      case 'ogre-enter-discard':
-        result.ogreEnterDiscard = true;
-        break;
-      case 'dragon-bleed-destroy':
-        result.dragonBleedDestroy = true;
-        break;
-      case 'skeleton-no-layer-cost':
-        result.skeletonNoLayerCost = true;
-        break;
-      case 'wraith-turn-attack':
-        result.wraithTurnAttack = 3;
-        break;
-      case 'wraith-death-heal':
-        result.wraithTurnAttack = 3;
-        result.wraithDeathHeal = 4;
-        break;
-      case 'goblin-steal-scale':
-        result.goblinStealScale = true;
-        break;
-    }
+    applySpecialAbility(result, upgrade.specialAbility);
+  }
+
+  return result;
+};
+
+export const applyMonsterUpgradeLevel = (card: GameCardData, newLevel: number): GameCardData => {
+  if (card.type !== 'monster') return card;
+  const monsterType = card.monsterType ?? card.name;
+  const tier = getUpgradeTierByLevel(monsterType, newLevel);
+
+  const baseAtk = card.baseAttack ?? card.attack ?? card.value ?? 0;
+  const baseHp = card.baseHp ?? card.maxHp ?? card.hp ?? card.value ?? 0;
+  const bleedBoost = card.specialAttackBoost ?? 0;
+  const bonusAtk = tier?.attackBonus ?? 0;
+  const bonusHp = tier?.hpBonus ?? 0;
+
+  const result: GameCardData = {
+    ...card,
+    attack: baseAtk + bonusAtk + bleedBoost,
+    value: baseAtk + bonusAtk + bleedBoost,
+    hp: baseHp + bonusHp,
+    maxHp: baseHp + bonusHp,
+    upgradeLevel: newLevel,
+  };
+
+  if (tier?.specialAbility) {
+    applySpecialAbility(result, tier.specialAbility);
+  }
+  if (tier?.specialDesc) {
+    result.monsterSpecialDesc = tier.specialDesc;
   }
 
   return result;

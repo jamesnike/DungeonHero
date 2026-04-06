@@ -33,6 +33,7 @@ const TINT_BY_KEY: Record<string, string> = {
   'curse-seal': 'from-red-600/55 to-purple-900/50',
   'spell-echo': 'from-cyan-400/50 to-blue-500/45',
   'blood-gold-rite': 'from-red-500/50 to-yellow-500/45',
+  'guild-hand-recycle': 'from-teal-400/50 to-indigo-500/45',
   'war-blood-seal': 'from-red-700/50 to-rose-900/50',
   'hero-holy-light': 'from-yellow-200/55 to-amber-300/50',
   'hero-berserker-rage': 'from-red-500/55 to-orange-600/50',
@@ -396,6 +397,15 @@ export function CuteSticker({ k }: { k: string }) {
             d="M13 8c0 8 4 11 6 14 2-3 6-6 6-14-4 3-5 3-6 0-1 3-2 3-6 0z"
           />
           <circle cx="22" cy="17" r="4" fill="#fde047" />
+        </g>
+      );
+    case 'guild-hand-recycle':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="none" stroke="#2dd4bf" strokeWidth="2.2" d="M10 16a6 6 0 0 1 12 0" />
+          <path fill="#2dd4bf" d="M22 13l3 3-3 3V13z" />
+          <path fill="none" stroke="#818cf8" strokeWidth="2.2" d="M22 16a6 6 0 0 1-12 0" />
+          <path fill="#818cf8" d="M10 19l-3-3 3-3v6z" />
         </g>
       );
     case 'war-blood-seal':

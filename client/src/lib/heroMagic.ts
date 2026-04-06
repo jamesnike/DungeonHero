@@ -56,6 +56,15 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
     chargeHint: '每装备一个怪物 +1 灭世值。',
     chargeSource: 'weapon-attack',
   },
+  {
+    id: 'revive-blessing',
+    name: '复生祝福',
+    description: '每受到 3 次伤害充满数值条。发动效果：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
+    cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
+    gaugeMax: 3,
+    chargeHint: '每次受到伤害 +1 复生值。',
+    chargeSource: 'damage-taken',
+  },
 ];
 
 const heroMagicDefinitionMap: Record<HeroMagicId, HeroMagicDefinition> = heroMagicDefinitions.reduce(

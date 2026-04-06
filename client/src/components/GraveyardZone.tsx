@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Eye, Skull } from 'lucide-react';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { memo, useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,7 @@ interface GraveyardZoneProps {
   onCardSelect?: (card: GameCardData) => void;
 }
 
-export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect }: GraveyardZoneProps) {
+function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect }: GraveyardZoneProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [dragDepth, setDragDepth] = React.useState(0);
@@ -239,3 +239,5 @@ export default function GraveyardZone({ onDrop, isDropTarget, discardedCards, sh
     </>
   );
 }
+
+export default memo(GraveyardZoneInner);
