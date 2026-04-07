@@ -57,7 +57,7 @@ export interface ShopHandlersDeps {
   applyDiscardSideEffects: (
     card: GameCardData,
     owner: 'player' | 'dungeon',
-    opts?: { toRecycleBag?: boolean },
+    opts?: { toRecycleBag?: boolean; isEquipmentDisplace?: boolean },
   ) => void;
   isRecyclableFromHand: (card: GameCardData | null | undefined) => boolean;
   drawClassCardsToBackpack: (
@@ -366,6 +366,34 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     ],
   );
 
+  const handleDiscoverCancel = useCallback(
+    async () => {
+      depsRef.current.pushUndoSnapshot();
+      if (!discoverOptions.length) return;
+
+      depsRef.current.returnCardsToClassDeck(discoverOptions);
+
+      setDiscoverModalOpen(false);
+      setDiscoverOptions([]);
+
+      depsRef.current.addGameLog('skill', '发现专属卡：放弃选择');
+
+      const completion = depsRef.current.discoverPotionCompletionRef.current;
+      if (completion) {
+        depsRef.current.discoverPotionCompletionRef.current = null;
+        completion({ banner: '放弃了发现专属牌。' });
+        return;
+      }
+
+      await depsRef.current.completeCurrentEvent();
+    },
+    [
+      discoverOptions,
+      setDiscoverModalOpen,
+      setDiscoverOptions,
+    ],
+  );
+
   // -- Shop purchase / close --------------------------------------------------
 
   const handleShopPurchase = useCallback(
@@ -489,7 +517,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
       switch (getStarterBaseId(card.id)) {
         case STARTER_CARD_IDS.weaponBurst: {
-          const burstVal = 3 + 2 * newLevel;
+          const burstVal = 2 + 2 * newLevel;
           upgraded.description = `选择一个装备栏，临时攻击力 +${burstVal}（瀑流后重置）。`;
           upgraded.magicEffect = `永久魔法：选择一个装备栏，临时攻击力 +${burstVal}。`;
           break;
@@ -559,6 +587,34 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           const bc = boltCounts[newLevel] ?? 4;
           upgraded.description = `加入 ${bc} 张一次性「魔弹」到手牌（每张可对一个怪物造成 2 点法术伤害）。`;
           upgraded.magicEffect = `永久魔法：手上加入 ${bc} 张一次性「魔弹」。`;
+          break;
+        }
+        case STARTER_CARD_IDS.loneCardAmulet: {
+          upgraded.description = '每次瀑流时（回收前），若背包卡牌数量为 1 或 2，获得一张职业专属牌。';
+          break;
+        }
+        case STARTER_CARD_IDS.attackPersuadeAmulet: {
+          upgraded.description = '每攻击一次，下次劝降费用 -5（可叠加）。';
+          break;
+        }
+        case STARTER_CARD_IDS.cardGainMissileAmulet: {
+          upgraded.description = '每新获得一张牌（含专属卡池、坟场），将两张「魔弹」加入手牌。';
+          break;
+        }
+        case STARTER_CARD_IDS.damageClassDiscoverAmulet: {
+          upgraded.description = '每造成 3 次伤害（武器、护符、法术等任意来源），发现一张专属牌。';
+          break;
+        }
+        case STARTER_CARD_IDS.stunUpgradeCapAmulet: {
+          upgraded.description = '每击晕一次怪物，击晕上限 +10%。';
+          break;
+        }
+        case STARTER_CARD_IDS.recycleBackpackExpandAmulet: {
+          upgraded.description = '每回收 6 张牌，背包上限 +3。';
+          break;
+        }
+        case STARTER_CARD_IDS.dungeonGoldAmulet: {
+          upgraded.description = '每处理 1 张地城牌，金币 +2。';
           break;
         }
         case STARTER_CARD_IDS.recycleDrawMagic: {
@@ -924,6 +980,35 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       setGraveyardDiscoverState,
       setHeroSkillBanner,
     ],
+  );
+
+  const handleGraveyardDiscoverCancel = useCallback(
+    () => {
+      depsRef.current.pushUndoSnapshot();
+      setGraveyardDiscoverState(null);
+      depsRef.current.addGameLog('event', '坟场发现：放弃选择');
+      depsRef.current.graveyardDiscoverResolverRef.current?.(null);
+      depsRef.current.graveyardDiscoverResolverRef.current = null;
+    },
+    [setGraveyardDiscoverState],
+  );
+
+  // -- Async discover wrapper (Promise-based) ---------------------------------
+
+  const beginDiscoverFlowAsync = useCallback(
+    (source: string, opts?: BeginDiscoverFlowOptions): Promise<void> => {
+      return new Promise<void>((resolve) => {
+        depsRef.current.discoverPotionCompletionRef.current = (_payload) => {
+          resolve();
+        };
+        const started = beginDiscoverFlow(source, opts);
+        if (!started) {
+          depsRef.current.discoverPotionCompletionRef.current = null;
+          resolve();
+        }
+      });
+    },
+    [beginDiscoverFlow],
   );
 
   // -- Ghost blade exile ------------------------------------------------------
@@ -1350,6 +1435,12 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           setHeroSkillBanner(`背包上限永久 +${amount}`);
           return true;
         }
+        case 'upgradeCard': {
+          depsRef.current.addGameLog('combat', '战利品：选择一张牌升级');
+          setUpgradeModalOpen(true);
+          setHeroSkillBanner('选择一张牌进行升级。');
+          return true;
+        }
         default:
           return false;
       }
@@ -1367,6 +1458,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       setPermanentSpellLifesteal,
       setStunCap,
       setBackpackCapacityModifier,
+      setUpgradeModalOpen,
     ],
   );
 
@@ -1408,8 +1500,10 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
     // Discover
     beginDiscoverFlow,
+    beginDiscoverFlowAsync,
     handleDiscoverFallback,
     handleDiscoverSelect,
+    handleDiscoverCancel,
 
     // Shop purchase / close
     handleShopPurchase,
@@ -1430,6 +1524,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     // Graveyard discover
     requestGraveyardSelection,
     handleGraveyardDiscoverSelect,
+    handleGraveyardDiscoverCancel,
 
     // Ghost blade exile
     triggerGhostBladeExile,

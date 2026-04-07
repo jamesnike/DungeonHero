@@ -130,6 +130,11 @@ import dedupeStarterThunderStrikeImage from '@assets/generated_images/card_dedup
 import dedupeStarterAmuletLoneImage from '@assets/generated_images/card_dedupe_starter_amulet_lone.png';
 import dedupeStarterAmuletPersuadeImage from '@assets/generated_images/card_dedupe_starter_amulet_persuade.png';
 import dedupeStarterAmuletMissileImage from '@assets/generated_images/card_dedupe_starter_amulet_missile.png';
+import dedupeStarterAmuletDamageDiscoverImage from '@assets/generated_images/card_dedupe_starter_amulet_damage_discover.png';
+import dedupeStarterAmuletPersuadeUpgradeImage from '@assets/generated_images/card_dedupe_starter_amulet_persuade_upgrade.png';
+import dedupeStarterAmuletStunCapImage from '@assets/generated_images/card_dedupe_starter_amulet_stun_cap.png';
+import dedupeStarterAmuletRecycleExpandImage from '@assets/generated_images/card_dedupe_starter_amulet_recycle_expand.png';
+import dedupeStarterAmuletDungeonGoldImage from '@assets/generated_images/card_dedupe_starter_amulet_dungeon_gold.png';
 import dedupeStarterBackpackSizePotionImage from '@assets/generated_images/card_dedupe_starter_potion_backpack_size.png';
 import dedupeStarterWaterfallDealPotionImage from '@assets/generated_images/card_dedupe_starter_potion_waterfall_deal.png';
 import dedupeStarterSlotCapacityPotionImage from '@assets/generated_images/card_dedupe_potion_slot_capacity_starter.png';
@@ -172,7 +177,7 @@ export function patchPersistedMainDeckWeaponImage(card: GameCardData): GameCardD
   if (card.type !== 'weapon') return card;
   switch (card.name) {
     case 'Dagger':
-      return { ...card, image: daggerWeaponImage };
+      return { ...card, image: daggerWeaponImage, daggerSelfDestructDiscover: true, critChance: undefined };
     case '虚灵刀':
     case 'Swift Blade':
       return { ...card, name: '虚灵刀', image: starterGhostBladeImage, ghostBladeExile: true, description: card.description || '每次攻击后，可从坟场选择卡牌移除出游戏。' };
@@ -181,7 +186,7 @@ export function patchPersistedMainDeckWeaponImage(card: GameCardData): GameCardD
     case 'Mace':
       return { ...card, image: maceImage };
     case '战锤':
-      return { ...card, image: warhammerImage, weaponStunChance: card.weaponStunChance ?? 20, description: card.description || '击晕率 20%。' };
+      return { ...card, image: warhammerImage, weaponStunChance: card.weaponStunChance ?? 40, onEquipEffect: card.onEquipEffect || 'stunCap+5', description: card.description || '入场：击晕上限 +5%。击晕率 40%。' };
     default:
       return card;
   }
@@ -460,19 +465,19 @@ export function createDeck(): GameCardData[] {
       card.onEquipEffect = 'spell-lifesteal+1';
       card.overkillDraw = 1;
       card.description = '入场：超杀吸血 +1。超杀：抽 1 张牌。';
-      const hbDurability = Math.floor(Math.random() * 3) + 2;
+      const hbDurability = Math.floor(Math.random() * 2) + 1;
       card.durability = hbDurability;
       card.maxDurability = hbDurability;
     }
     if (weaponType.name === '虚灵刀') {
-      card.durability = Math.floor(Math.random() * 3) + 2;
+      card.durability = Math.floor(Math.random() * 3) + 1;
       card.maxDurability = card.durability;
       card.ghostBladeExile = true;
       card.description = '每次攻击后，可从坟场选择卡牌移除出游戏。';
     }
     if (weaponType.name === 'Mace') {
       card.value = Math.floor(Math.random() * 2) + 1;
-      card.durability = Math.floor(Math.random() * 2) + 3;
+      card.durability = Math.floor(Math.random() * 2) + 2;
       card.maxDurability = card.durability;
       card.description = '入场：该装备栏临时攻击 +2。攻击后掷骰：50% 概率不消耗耐久。';
       card.weaponDurabilitySaveChance = 50;
@@ -482,9 +487,9 @@ export function createDeck(): GameCardData[] {
       card.value = Math.min(card.value, 3);
       card.durability = Math.min(card.durability!, 2);
       card.maxDurability = card.durability;
-      card.critChance = 50;
+      card.daggerSelfDestructDiscover = true;
       card.onEquipEffect = 'persuade-bonus-10';
-      card.description = '入场：下次劝降成功率 +10%。攻击时 50% 概率造成双倍伤害。';
+      card.description = '入场：下次劝降成功率 +10%。攻击后，可自毁来发现专属牌。';
     }
     if (weaponType.name === 'Sword') {
       card.value = Math.floor(Math.random() * 3) + 4;
@@ -504,11 +509,12 @@ export function createDeck(): GameCardData[] {
     }
     if (weaponType.name === '战锤') {
       card.value = Math.floor(Math.random() * 3) + 1;
-      const whDurability = Math.floor(Math.random() * 3) + 1;
+      const whDurability = Math.floor(Math.random() * 2) + 1;
       card.durability = whDurability;
       card.maxDurability = whDurability;
-      card.weaponStunChance = 20;
-      card.description = '击晕率 20%。';
+      card.weaponStunChance = 40;
+      card.onEquipEffect = 'stunCap+5';
+      card.description = '入场：击晕上限 +5%。击晕率 40%。';
     }
     
     deck.push(card);
@@ -530,7 +536,7 @@ export function createDeck(): GameCardData[] {
     } else if (shieldType.name === 'Iron Shield') {
       durability = Math.floor(Math.random() * 3) + 1; // 1-3
     } else {
-      durability = Math.floor(Math.random() * 2) + 2; // 2-3
+      durability = Math.floor(Math.random() * 2) + 1; // 1-2
     }
     const card: GameCardData = {
       id: `shield-${id++}`,
@@ -1462,7 +1468,7 @@ export function createDeck(): GameCardData[] {
   });
 
   const deckLimits: Partial<Record<GameCardData['type'], number>> = {
-    magic: 5,
+    magic: 7,
     amulet: 5,
     potion: 6,
     shield: 5,
@@ -1529,6 +1535,11 @@ export const STARTER_CARD_IDS = {
   stunStrike: 'starter-perm-stun-strike',
   attackPersuadeAmulet: 'starter-amulet-attack-persuade',
   cardGainMissileAmulet: 'starter-amulet-card-gain-missile',
+  damageClassDiscoverAmulet: 'starter-amulet-damage-class-discover',
+  swapUpgradeAmulet: 'starter-amulet-swap-upgrade',
+  stunUpgradeCapAmulet: 'starter-amulet-stun-upgrade-cap',
+  recycleBackpackExpandAmulet: 'starter-amulet-recycle-backpack-expand',
+  dungeonGoldAmulet: 'starter-amulet-dungeon-gold',
   permGrantMagic: 'starter-instant-perm-grant',
   recycleDrawMagic: 'starter-perm-recycle-draw',
 } as const;
@@ -1581,8 +1592,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterCombatRallyImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备栏，临时攻击力 +3。',
-      description: '选择一个装备栏，临时攻击力 +3（瀑流后重置）。',
+      magicEffect: '永久魔法：选择一个装备栏，临时攻击力 +2。',
+      description: '选择一个装备栏，临时攻击力 +2（瀑流后重置）。',
       maxUpgradeLevel: 2,
     },
     {
@@ -1683,8 +1694,8 @@ export function createStarterCardPool(): GameCardData[] {
       name: '幸运匕首',
       value: 2,
       image: starterLuckyDaggerImage,
-      durability: 2,
-      maxDurability: 2,
+      durability: 1,
+      maxDurability: 1,
       critChance: 50,
       weaponDurabilitySaveChance: 50,
       description: '50% 暴击（双倍伤害），50% 不消耗耐久。',
@@ -1706,8 +1717,8 @@ export function createStarterCardPool(): GameCardData[] {
       name: '劝降之刃',
       value: 1,
       image: starterPersuadeBladeImage,
-      durability: 3,
-      maxDurability: 3,
+      durability: 2,
+      maxDurability: 2,
       persuadeBoostOnHit: 20,
       persuadeBoostOnHitElite: 10,
       description: '攻击怪物后使其劝降概率 +20%（精英 +10%）。',
@@ -1730,8 +1741,8 @@ export function createStarterCardPool(): GameCardData[] {
       name: '连携之盾',
       value: 1,
       image: starterLinkShieldImage,
-      durability: 4,
-      maxDurability: 4,
+      durability: 3,
+      maxDurability: 3,
       onEquipEffect: 'other-slot-durability+1',
       description: '入场：另一个装备栏的装备 +1 耐久。',
     },
@@ -1795,6 +1806,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterAmuletLoneImage,
       amuletEffect: 'lone-card',
       description: '每次瀑流时（回收前），若背包卡牌数量为 1，获得一张职业专属牌。',
+      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.attackPersuadeAmulet,
@@ -1803,7 +1815,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterAmuletPersuadeImage,
       amuletEffect: 'attack-persuade-discount',
-      description: '每攻击一次，下次劝降费用 -2（可叠加）。',
+      description: '每攻击一次，下次劝降费用 -3（可叠加）。',
+      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.cardGainMissileAmulet,
@@ -1813,6 +1826,56 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterAmuletMissileImage,
       amuletEffect: 'card-gain-missile',
       description: '每新获得一张牌（含专属卡池、坟场），将一张「魔弹」加入手牌。',
+      maxUpgradeLevel: 1,
+    },
+    {
+      id: STARTER_CARD_IDS.damageClassDiscoverAmulet,
+      type: 'amulet',
+      name: '战痕之符',
+      value: 0,
+      image: dedupeStarterAmuletDamageDiscoverImage,
+      amuletEffect: 'damage-class-discover',
+      description: '每造成 5 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
+      maxUpgradeLevel: 1,
+    },
+    {
+      id: STARTER_CARD_IDS.swapUpgradeAmulet,
+      type: 'amulet',
+      name: '流转之符',
+      value: 0,
+      image: dedupeStarterAmuletPersuadeUpgradeImage,
+      amuletEffect: 'swap-upgrade',
+      description: '每交换 3 次位置，升级 1 张牌。',
+    },
+    {
+      id: STARTER_CARD_IDS.stunUpgradeCapAmulet,
+      type: 'amulet',
+      name: '震慑之符',
+      value: 0,
+      image: dedupeStarterAmuletStunCapImage,
+      amuletEffect: 'stun-upgrade-cap',
+      description: '每击晕一次怪物，击晕上限 +5%。',
+      maxUpgradeLevel: 1,
+    },
+    {
+      id: STARTER_CARD_IDS.recycleBackpackExpandAmulet,
+      type: 'amulet',
+      name: '积蓄之符',
+      value: 0,
+      image: dedupeStarterAmuletRecycleExpandImage,
+      amuletEffect: 'recycle-backpack-expand',
+      description: '每回收 10 张牌，背包上限 +3。',
+      maxUpgradeLevel: 1,
+    },
+    {
+      id: STARTER_CARD_IDS.dungeonGoldAmulet,
+      type: 'amulet',
+      name: '拾荒之符',
+      value: 0,
+      image: dedupeStarterAmuletDungeonGoldImage,
+      amuletEffect: 'dungeon-gold',
+      description: '每处理 1 张地城牌，金币 +1。',
+      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.undyingBlessing,
@@ -1943,8 +2006,8 @@ export function createStarterCardPool(): GameCardData[] {
       name: '手牌扩容药',
       value: 0,
       image: starterPotionHandLimitImage,
-      potionEffect: 'perm-hand-limit+2',
-      description: '手牌上限 +2。',
+      potionEffect: 'perm-hand-limit+1',
+      description: '手牌上限 +1。',
     },
     {
       id: STARTER_CARD_IDS.backpackSizePotion,
@@ -1971,8 +2034,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterThunderStrikeImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：对一个怪物造成 2 点伤害，10% 击晕。',
-      description: '对一个怪物造成 2 点法术伤害，有 10% 概率击晕目标。',
+      magicEffect: '永久魔法：对一个怪物造成 1 点伤害 2 次，每次 10% 击晕。',
+      description: '对一个怪物造成 1 点法术伤害 2 次，每次有 10% 概率击晕目标。',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
     },

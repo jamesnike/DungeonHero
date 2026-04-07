@@ -20,6 +20,7 @@ import {
   FLIP_GOLD_REWARD,
   MAX_SHOP_LEVEL,
   BASE_BACKPACK_CAPACITY,
+  HAND_LIMIT,
 } from '@/game-core/constants';
 import {
   logBackpackDraw,
@@ -244,9 +245,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
 
   // -- Derived values ---------------------------------------------------------
 
-  const effectiveHandLimit = (engine.getState() as any).handLimitBonus != null
-    ? 5 + handLimitBonus
-    : 5 + handLimitBonus;
+  const effectiveHandLimit = HAND_LIMIT + handLimitBonus;
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
   const maxHp =
     INITIAL_HP +
@@ -332,7 +331,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
 
     while (pendingAutoDrawsRef.current > 0) {
       const st = engine.getState();
-      const liveHandLimit = 5 + (st.handLimitBonus ?? 0);
+      const liveHandLimit = HAND_LIMIT + (st.handLimitBonus ?? 0);
       const liveHandSize = st.handCards.length;
       const flightsCount = depsRef.current.backpackHandFlightsRef.current.length;
       logBackpackDraw('auto-draw-loop', {
@@ -439,6 +438,13 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       }
 
       processedDungeonCardIdsRef.current.add(cardId);
+
+      if (depsRef.current.amuletEffects.hasDungeonGold) {
+        const goldAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'dungeon-gold');
+        const goldAmount = (goldAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
+        setGold(prev => prev + goldAmount);
+        addGameLog('amulet', `拾荒之符：处理地城牌，金币 +${goldAmount}`);
+      }
 
       pendingAutoDrawsRef.current += 1;
       setAutoDrawTrigger(v => v + 1);
@@ -1396,7 +1402,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         setHandLimitBonus(prev => {
           const next = prev - amount;
           addGameLog('event', `事件效果：手牌上限 -${amount}`);
-          setHeroSkillBanner(`手牌上限降低至 ${5 + next}。`);
+          setHeroSkillBanner(`手牌上限降低至 ${HAND_LIMIT + next}。`);
           return next;
         });
       } else if (effect.startsWith('maxhpperm-')) {
@@ -2137,16 +2143,18 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         depsRef.current.triggerClassDeckFlight(drawn);
       } else if (effect.startsWith('drawClassToHand:')) {
         const count = parseInt(effect.replace('drawClassToHand:', ''), 10) || 2;
-        const drawn = depsRef.current.drawClassCardsToBackpack(count, 'drawClassToHand');
-        if (drawn.length > 0) {
+        if (classDeck.length === 0) {
+          addGameLog('event', '事件效果：专属牌堆已空');
+          setHeroSkillBanner('专属牌堆已空，无法抽取。');
+        } else {
+          const drawCount = Math.min(count, classDeck.length);
+          const shuffled = [...classDeck].sort(() => Math.random() - 0.5);
+          const drawn = shuffled.slice(0, drawCount);
           const drawnIds = new Set(drawn.map(c => c.id));
-          setBackpackItems(prev => prev.filter(c => !drawnIds.has(c.id)));
+          setClassDeck(prev => prev.filter(c => !drawnIds.has(c.id)));
           drawn.forEach(card => depsRef.current.queueCardIntoHand(card));
           addGameLog('event', `事件效果：${drawn.length} 张专属牌直接加入手牌`);
           setHeroSkillBanner(`获得了 ${drawn.map(c => c.name).join('、')}！`);
-        } else {
-          addGameLog('event', '事件效果：专属牌堆已空');
-          setHeroSkillBanner('专属牌堆已空，无法抽取。');
         }
       } else if (effect === 'drawKnight1') {
         const drawn = depsRef.current.drawClassCardsToBackpack(1, 'drawKnight1');

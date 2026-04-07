@@ -137,7 +137,11 @@ export type AmuletEffectId =
   | 'persuade-graveyard-stack'
   | 'stun-recycle-to-hand'
   | 'attack-persuade-discount'
-  | 'card-gain-missile';
+  | 'card-gain-missile'
+  | 'swap-upgrade'
+  | 'stun-upgrade-cap'
+  | 'recycle-backpack-expand'
+  | 'dungeon-gold';
 
 export type AmuletAuraBonus = {
   attack?: number;
@@ -268,6 +272,7 @@ export interface GameCardData {
   critChance?: number; // % chance to deal double damage on attack
   restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
   healOnAttack?: number; // Heal this amount each time this weapon attacks
+  daggerSelfDestructDiscover?: boolean; // 匕首: after attack, optionally destroy weapon to discover class cards (1 per remaining durability)
   ghostBladeExile?: boolean; // 虚灵刀: after each attack, offer to exile cards from graveyard
   postAttackHandRecycle?: boolean; // After each attack, optionally move a hand card to recycle bag and draw one
   weaponExtraAttack?: number; // This weapon's slot gets N extra attacks per hero turn
@@ -342,6 +347,15 @@ export function isPermRecycleEquipment(card: GameCardData | null | undefined): b
 /** 回收袋中卡牌：距离回到背包还需经历的瀑流次数（与 useCardOperations.restorePermanentMagicFromRecycleBag 一致） */
 export function waterfallsUntilBackpackFromRecycle(card: GameCardData): number {
   return Math.max(card._recycleWaits ?? 0, 1);
+}
+
+/** 判断卡牌是否已有任何形式的 Perm 属性（永久魔法 / 永久装备 / 永驻事件 / 显式 recycleDelay） */
+export function cardHasPermFlag(card: GameCardData): boolean {
+  if (card.magicType === 'permanent') return true;
+  if (card.permEquipment) return true;
+  if (card.isPermanentEvent) return true;
+  if (card.recycleDelay != null && card.recycleDelay > 0) return true;
+  return false;
 }
 
 /** 背包列表等：`永久` 或 `永久 2`（recycleDelay > 1 时带数字） */
@@ -488,7 +502,7 @@ function GameCardInner({
   onDragEndRef.current = onDragEnd;
 
   useEffect(() => {
-    if (disableInteractions || !cardRef.current || card.type === 'building') return;
+    if (disableInteractions || !cardRef.current || (card.type === 'building' && !card.eventChoices)) return;
 
     const cleanup = initMobileDrag(
       cardRef.current,
@@ -832,7 +846,7 @@ const amuletEffectText =
   return (
     <div
       ref={cardRef}
-      draggable={!disableInteractions && card.type !== 'building'}
+      draggable={!disableInteractions && (card.type !== 'building' || Boolean(card.eventChoices))}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragOver={handleDragOver}

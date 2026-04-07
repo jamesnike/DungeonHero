@@ -120,6 +120,8 @@ export interface CombatActionsDeps {
   triggerStealCardFlight: (card: GameCardData, targetMonsterId: string) => Promise<void>;
   dragonBleedDestroyEquipment: (monsterName: string, remainingLayers: number) => void;
   beginDiscoverFlow: (source: string) => boolean;
+  beginDiscoverFlowAsync: (source: string) => Promise<void>;
+  requestDaggerSelfDestruct: (weaponName: string, remainingDurability: number) => Promise<boolean>;
 
   // --- Refs ---
   combatAsyncEpochRef: React.MutableRefObject<number>;
@@ -246,18 +248,22 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   const setSelectedMonsterRewards = useEngineSetter('selectedMonsterRewards');
   const setClassDamageDiscoverStreak = useEngineSetter('classDamageDiscoverStreak');
   const setHeroStunned = useEngineSetter('heroStunned');
+  const setStunCap = useEngineSetter('stunCap');
 
   const recordClassDamageDiscoverHit = useCallback(() => {
     const d = depsRef.current;
     if (!d?.amuletEffects.hasDamageClassDiscover) return;
-    const streak = engine.getState().classDamageDiscoverStreak ?? 0;
+    const st = engine.getState();
+    const discoverAmulet = st.amuletSlots.find(s => s?.amuletEffect === 'damage-class-discover');
+    const threshold = (discoverAmulet?.upgradeLevel ?? 0) >= 1 ? 3 : 5;
+    const streak = st.classDamageDiscoverStreak ?? 0;
     const next = streak + 1;
-    if (next >= 5) {
+    if (next >= threshold) {
       const started = d.beginDiscoverFlow('damage-class-discover');
       if (started) {
-        d.addGameLog('amulet', '战伤刻印：累计 5 次造成伤害，发现专属牌！');
+        d.addGameLog('amulet', `战痕之符：累计 ${threshold} 次造成伤害，发现专属牌！`);
       } else {
-        d.addGameLog('amulet', '战伤刻印：累计 5 次造成伤害，但职业牌堆已空。');
+        d.addGameLog('amulet', `战痕之符：累计 ${threshold} 次造成伤害，但职业牌堆已空。`);
       }
       setClassDamageDiscoverStreak(0);
     } else {
@@ -1660,13 +1666,15 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       const existing = depsRef.current.persuadeDiscountRef?.current;
       const currentReduction = existing?.costReduction ?? 0;
       const currentRate = existing?.rateBonus ?? 0;
-      const newReduction = currentReduction + 2;
+      const discountAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'attack-persuade-discount');
+      const discountStep = (discountAmulet?.upgradeLevel ?? 0) >= 1 ? 5 : 3;
+      const newReduction = currentReduction + discountStep;
       depsRef.current.persuadeDiscountRef.current = {
         costReduction: newReduction,
         rateBonus: currentRate,
       };
       depsRef.current.setPersuadeTempDiscount(newReduction);
-      addGameLog('amulet', `降服之符：攻击后下次劝降费用 -2（累计 -${newReduction}）`);
+      addGameLog('amulet', `降服之符：攻击后下次劝降费用 -${discountStep}（累计 -${newReduction}）`);
     }
 
     setCombatState(prev => ({
@@ -1733,6 +1741,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         }
       }
     }
+
+    let weaponSurvivedWithDurability = slotItem.durability ?? 0;
+    let weaponDestroyed = false;
 
     const killRestoresDurability = monsterDefeated && slotItem.restoreDurabilityOnKill && !!slotItem.maxDurability;
     if (!berserkerRageActive && !unbreakableUntilWaterfall[slotId] && !killRestoresDurability) {
@@ -1860,7 +1871,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             setEquipmentSlotById(slotId, reviveUpdate as EquipmentItem);
             addGameLog('equip', `${slotItem.name} 复生！以 1 耐久复活！`);
             setHeroSkillBanner(`${slotItem.name} 复生了！`);
+            weaponSurvivedWithDurability = 1;
           } else {
+            weaponDestroyed = true;
             addGameLog('equip', `${slotItem.name} 损坏了`);
             disposeOwnedEquipmentCard({ ...slotItem }, { isDestruction: true });
             const otherSlotIdForSwap: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -1916,6 +1929,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             }
           }
           setEquipmentSlotById(slotId, updatedSlotItem as EquipmentItem);
+          weaponSurvivedWithDurability = updatedDurability;
           if (weaponDurability <= 1 && unbreakableNext) {
             setUnbreakableNext(false);
           }
@@ -1956,10 +1970,10 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       const actualBoost = isTargetElite
         ? (slotItem.persuadeBoostOnHitElite ?? Math.floor(slotItem.persuadeBoostOnHit / 2))
         : slotItem.persuadeBoostOnHit;
-      updateMonsterCard(targetMonster.id, m => ({
-        ...m,
-        _persuadeBoost: ((m as any)._persuadeBoost ?? 0) + actualBoost,
-      }));
+      workingMonster = {
+        ...workingMonster,
+        _persuadeBoost: ((workingMonster as any)._persuadeBoost ?? 0) + actualBoost,
+      };
       addGameLog('equip', `${slotItem.name}：${targetMonster.name} 劝降概率 +${actualBoost}%${isTargetElite ? '（精英减半）' : ''}`);
     }
 
@@ -2022,8 +2036,34 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                   return prev.filter((_, i) => i !== idx);
                 });
               }
+
+              if (ae.hasStunUpgradeCap) {
+                const stunAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'stun-upgrade-cap');
+                const stunStep = (stunAmulet?.upgradeLevel ?? 0) >= 1 ? 10 : 5;
+                setStunCap(prev => {
+                  const next = Math.min(100, prev + stunStep);
+                  addGameLog('amulet', `震慑之符：击晕成功，击晕上限 +${stunStep}%（当前 ${next}%）`);
+                  return next;
+                });
+              }
             }
           }
+        }
+      }
+    }
+
+    if (slotItem.daggerSelfDestructDiscover && !weaponDestroyed && weaponSurvivedWithDurability > 0) {
+      const confirmed = await depsRef.current.requestDaggerSelfDestruct(
+        slotItem.name,
+        weaponSurvivedWithDurability,
+      );
+      if (confirmed) {
+        addGameLog('equip', `${slotItem.name} 自毁！发现 ${weaponSurvivedWithDurability} 张专属牌！`);
+        setHeroSkillBanner(`${slotItem.name} 自毁！`);
+        disposeOwnedEquipmentCard({ ...slotItem, durability: 0 }, { isDestruction: true });
+        clearEquipmentSlotWithPromote(slotId);
+        for (let i = 0; i < weaponSurvivedWithDurability; i++) {
+          await depsRef.current.beginDiscoverFlowAsync(`${slotItem.name}-自毁`);
         }
       }
     }
@@ -2885,6 +2925,16 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               setHandCards(hand => [...hand, picked]);
               addGameLog('equip', `击晕回收：从回收袋取回「${picked.name}」到手牌`);
               return prev.filter((_, i) => i !== idx);
+            });
+          }
+
+          if (ae.hasStunUpgradeCap) {
+            const stunAmulet2 = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'stun-upgrade-cap');
+            const stunStep2 = (stunAmulet2?.upgradeLevel ?? 0) >= 1 ? 10 : 5;
+            setStunCap(prev => {
+              const next = Math.min(100, prev + stunStep2);
+              addGameLog('amulet', `震慑之符：击晕成功，击晕上限 +${stunStep2}%（当前 ${next}%）`);
+              return next;
             });
           }
         }

@@ -267,19 +267,19 @@ export default function EquipmentSlot({
           className={`absolute left-1/2 z-30 flex items-center gap-1 sm:gap-2 rounded-full border border-border bg-background/95 dh-hero-chip font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'px-1.5 py-0 sm:px-2 sm:py-0' : 'px-2 py-0.5 sm:px-4 sm:py-1.5'}`}
           style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
         >
-          {tempAttackBonus > 0 && (
+          {tempAttackBonus !== 0 && (
             <>
-              <span className="text-orange-400">{formatBonus(tempAttackBonus)}{!isCompact && ' ATK'}</span>
+              <span className={tempAttackBonus > 0 ? 'text-orange-400' : 'text-orange-400/60'}>{formatBonus(tempAttackBonus)}{!isCompact && ' ATK'}</span>
               <span className="text-muted-foreground/50">|</span>
             </>
           )}
           <span className="text-red-500">{formatBonus(permanentDamageBonus)}{!isCompact && ' DMG'}</span>
           <span className="text-muted-foreground/50">|</span>
           <span className="text-blue-500">{formatBonus(permanentShieldBonus)}{!isCompact && ' SHD'}</span>
-          {tempShieldBonus > 0 && (
+          {tempShieldBonus !== 0 && (
             <>
               <span className="text-muted-foreground/50">|</span>
-              <span className="text-cyan-400">{formatBonus(tempShieldBonus)}{!isCompact && ' TMP'}</span>
+              <span className={tempShieldBonus > 0 ? 'text-cyan-400' : 'text-cyan-400/60'}>{formatBonus(tempShieldBonus)}{!isCompact && ' TMP'}</span>
             </>
           )}
         </div>

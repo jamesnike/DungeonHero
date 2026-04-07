@@ -159,6 +159,10 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasPersuadeGrantRecycleFetch: false,
   hasDamageClassDiscover: false,
   hasPersuadeGraveyardStack: false,
+  hasSwapUpgrade: false,
+  hasStunUpgradeCap: false,
+  hasRecycleBackpackExpand: false,
+  hasDungeonGold: false,
 });
 
 export const logWaterfallInvariant = (
@@ -432,8 +436,8 @@ export function createDeck(): GameCardData[] {
       card.value = Math.min(card.value, 3);
       card.durability = Math.min(card.durability!, 2);
       card.maxDurability = card.durability;
-      card.critChance = 50;
-      card.description = '攻击时 50% 概率造成双倍伤害。';
+      card.daggerSelfDestructDiscover = true;
+      card.description = '攻击后，可自毁来发现专属牌。';
     }
     if (weaponType.name === 'Sword') {
       card.value = Math.min(card.value, 3);
@@ -454,8 +458,9 @@ export function createDeck(): GameCardData[] {
       const whDurability = Math.floor(Math.random() * 3) + 1;
       card.durability = whDurability;
       card.maxDurability = whDurability;
-      card.weaponStunChance = 20;
-      card.description = '击晕率 20%。';
+      card.weaponStunChance = 40;
+      card.onEquipEffect = 'stunCap+5';
+      card.description = '入场：击晕上限 +5%。击晕率 40%。';
     }
     
     deck.push(card);
@@ -1151,8 +1156,8 @@ export function createStarterBackpack(): GameCardData[] {
       value: 0,
       image: dedupeStarterCombatRallyImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备栏，临时攻击力 +3。',
-      description: '选择一个装备栏，临时攻击力 +3（瀑流后重置）。',
+      magicEffect: '永久魔法：选择一个装备栏，临时攻击力 +2。',
+      description: '选择一个装备栏，临时攻击力 +2（瀑流后重置）。',
       maxUpgradeLevel: 2,
     },
     {

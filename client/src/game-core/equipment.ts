@@ -219,6 +219,10 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
     hasPersuadeGraveyardStack: false,
     hasStunRecycleToHand: false,
     hasCardGainUpgrade: false,
+    hasSwapUpgrade: false,
+    hasStunUpgradeCap: false,
+    hasRecycleBackpackExpand: false,
+    hasDungeonGold: false,
   };
 
   for (const amulet of amuletSlots) {
@@ -250,6 +254,10 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'card-gain-upgrade': effects.hasCardGainUpgrade = true; break;
       case 'attack-persuade-discount': effects.hasAttackPersuadeDiscount = true; break;
       case 'card-gain-missile': effects.hasCardGainMissile = true; break;
+      case 'swap-upgrade': effects.hasSwapUpgrade = true; break;
+      case 'stun-upgrade-cap': effects.hasStunUpgradeCap = true; break;
+      case 'recycle-backpack-expand': effects.hasRecycleBackpackExpand = true; break;
+      case 'dungeon-gold': effects.hasDungeonGold = true; break;
     }
   }
 

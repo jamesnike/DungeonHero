@@ -5,6 +5,7 @@ interface DiscoverClassModalProps {
   open: boolean;
   cards: GameCardData[];
   onSelect: (cardId: string) => void;
+  onCancel?: () => void;
   title?: string;
   description?: string;
 }
@@ -13,6 +14,7 @@ export default function DiscoverClassModal({
   open,
   cards,
   onSelect,
+  onCancel,
   title,
   description,
 }: DiscoverClassModalProps) {
@@ -50,6 +52,18 @@ export default function DiscoverClassModal({
             </button>
           ))}
         </div>
+
+        {onCancel && (
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              className="rounded-md border border-border px-5 py-2 text-sm text-muted-foreground hover:bg-muted/60 transition-colors"
+              onClick={onCancel}
+            >
+              取消（不选）
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

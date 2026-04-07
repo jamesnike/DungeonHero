@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { useGameEngine, useGameState, useEngineSetter } from '@/hooks/useGameEngine';
 import type { GameCardData, EventEffectExpression, HeroMagicId } from '@/components/GameCard';
+import { cardHasPermFlag } from '@/components/GameCard';
 import type { LogEntryType } from '@/components/GameLogPanel';
 import type {
   ActiveAmuletEffects,
@@ -94,7 +95,7 @@ export interface CardPlayHandlersDeps {
   applyDiscardSideEffects: (
     card: GameCardData,
     owner: 'player' | 'dungeon',
-    opts?: { toRecycleBag?: boolean },
+    opts?: { toRecycleBag?: boolean; isEquipmentDisplace?: boolean },
   ) => void;
   triggerEventTransform: (fromCard: GameCardData, toCard: GameCardData, message?: string) => Promise<void>;
   applyCardFlip: (card: GameCardData, cellIndex?: number) => Promise<boolean>;
@@ -289,6 +290,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   const setPendingPotionAction = useEngineSetter('pendingPotionAction');
   const setGraveyardDiscoverState = useEngineSetter('graveyardDiscoverState');
   const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
+  const setSwapUpgradeProgress = useEngineSetter('swapUpgradeProgress');
   const setShopOfferings = useEngineSetter('shopOfferings');
   const setShopSourceEvent = useEngineSetter('shopSourceEvent');
   const setShopDeleteUsed = useEngineSetter('shopDeleteUsed');
@@ -359,6 +361,16 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               setHandCards(hand => [...hand, picked]);
               addGameLog('equip', `击晕回收：从回收袋取回「${picked.name}」到手牌`);
               return prev.filter((_, i) => i !== idx);
+            });
+          }
+
+          if (depsRef.current.amuletEffects.hasStunUpgradeCap) {
+            const stunAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'stun-upgrade-cap');
+            const stunStep = (stunAmulet?.upgradeLevel ?? 0) >= 1 ? 10 : 5;
+            setStunCap(prev => {
+              const next = Math.min(100, prev + stunStep);
+              addGameLog('amulet', `震慑之符：击晕成功，击晕上限 +${stunStep}%（当前 ${next}%）`);
+              return next;
             });
           }
         }
@@ -706,7 +718,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       const sourceCard = depsRef.current.stagingCardsRef.current.find(c => c.id === modal.sourceCardId);
       if (!sourceCard) return;
       const targetCard = engine.getState().handCards.find(c => c.id === targetCardId);
-      if (!targetCard || targetCard.recycleDelay) return;
+      if (!targetCard || cardHasPermFlag(targetCard)) return;
       setHandCards(prev => prev.map(c => c.id === targetCardId ? { ...c, recycleDelay: 2 } : c));
       const logType = modal.sourceType === 'potion' ? 'potion' : 'magic';
       const label = modal.sourceType === 'potion' ? '永恒铭刻药' : '永恒铭刻';
@@ -915,9 +927,9 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
 
       if (effect === 'perm-hand-limit+2') {
-        setHandLimitBonus(prev => prev + 2);
-        depsRef.current.addGameLog('potion', '药水效果：手牌上限 +2');
-        await finalizePotionCard(card, { banner: '手牌上限 +2。' });
+        setHandLimitBonus(prev => prev + 1);
+        depsRef.current.addGameLog('potion', '药水效果：手牌上限 +1');
+        await finalizePotionCard(card, { banner: '手牌上限 +1。' });
         return;
       }
 
@@ -1183,7 +1195,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       if (effect === 'hand-limit+1') {
         setHandLimitBonus(prev => prev + 1);
         depsRef.current.addGameLog('potion', '扩容药剂：手牌上限永久 +1');
-        await finalizePotionCard(card, { banner: `手牌上限提升至 ${5 + (handLimitBonus ?? 0) + 1}！` });
+        await finalizePotionCard(card, { banner: `手牌上限提升至 ${HAND_LIMIT + (handLimitBonus ?? 0) + 1}！` });
         return;
       }
 
@@ -1389,7 +1401,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
 
       if (effect === 'grant-perm-2') {
-        const eligible = handCards.filter(c => c.id !== card.id && !c.recycleDelay);
+        const eligible = handCards.filter(c => c.id !== card.id && !cardHasPermFlag(c));
         if (eligible.length === 0) {
           depsRef.current.addGameLog('potion', '永恒铭刻药：手牌中没有可赋予永恒属性的卡牌。');
           await finalizePotionCard(card, { banner: '手牌中没有可赋予永恒属性的卡牌。' });
@@ -2773,6 +2785,33 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           finalizeMagicCard(card, { banner: '秘法精炼：选择一张魔法牌进行升级。' });
           return;
         }
+        case '专属召唤': {
+          const wasPlayedFromHand = handCards.some(c => c.id === card.id);
+          const actualHandCount = handCards.length - (wasPlayedFromHand ? 1 : 0);
+          if (actualHandCount < 2) {
+            finalizeMagicCard(card, { banner: '手牌不足 2 张，无法使用。' });
+            return;
+          }
+          void depsRef.current.requestCardAction('discard-recycle', 2, {
+            title: '专属召唤：弃回 2 张牌',
+            description: '弃回 2 张牌，获得一张职业专属卡。',
+            handOnly: true,
+          }).then(success => {
+            if (!success) {
+              finalizeMagicCard(card, { banner: '取消了专属召唤。' });
+              return;
+            }
+            const classDrawn = depsRef.current.drawClassCardsToBackpack(1, '专属召唤');
+            if (classDrawn.length > 0) {
+              depsRef.current.triggerClassDeckFlight(classDrawn);
+              depsRef.current.addGameLog('magic', `专属召唤：获得职业卡「${classDrawn[0].name}」`);
+              finalizeMagicCard(card, { banner: `获得职业卡「${classDrawn[0].name}」！` });
+            } else {
+              finalizeMagicCard(card, { banner: '职业牌堆已空。' });
+            }
+          });
+          return;
+        }
         case '升级卷轴': {
           setUpgradeModalOpen(true);
           finalizeMagicCard(card, { banner: '升级卷轴：选择一张牌进行升级。' });
@@ -2947,7 +2986,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         return;
       }
       if (card.name === '混沌冲击') {
-        const chaosMons = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
+        const chaosMons = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster' || c.type === 'building');
         if (chaosMons.length === 0) {
           finalizeMagicCard(card, { banner: '混沌冲击无效（没有怪物）。' });
           return;
@@ -2971,16 +3010,16 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             card,
             effect: 'chaos-strike',
             step: 'monster-select',
-            prompt: `选择一个怪物，对其造成 ${chaosDamage} 点伤害。超杀：抽 2 张牌。${chaosEchoLabel}`,
+            prompt: `选择一个目标，对其造成 ${chaosDamage} 点伤害。超杀：抽 2 张牌。${chaosEchoLabel}`,
             data: {},
             echoRemaining: echoMultiplier,
           });
-          setHeroSkillBanner(`选择一个怪物，造成 3 点伤害。超杀：抽 2 张牌。${chaosEchoLabel}`);
+          setHeroSkillBanner(`选择一个目标，造成 3 点伤害。超杀：抽 2 张牌。${chaosEchoLabel}`);
         }
         return;
       }
       if (card.name === '淬炼冲击') {
-        const okMons = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
+        const okMons = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster' || c.type === 'building');
         if (okMons.length === 0) {
           finalizeMagicCard(card, { banner: '淬炼冲击无效（没有怪物）。' });
           return;
@@ -3004,11 +3043,11 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             card,
             effect: 'overkill-upgrade',
             step: 'monster-select',
-            prompt: `选择一个怪物，对其造成 ${okDamage} 点伤害。超杀：升级一张牌。${okEchoLabel}`,
+            prompt: `选择一个目标，对其造成 ${okDamage} 点伤害。超杀：升级一张牌。${okEchoLabel}`,
             data: {},
             echoRemaining: echoMultiplier,
           });
-          setHeroSkillBanner(`选择一个怪物，造成 3 点伤害。超杀：升级一张牌。${okEchoLabel}`);
+          setHeroSkillBanner(`选择一个目标，造成 3 点伤害。超杀：升级一张牌。${okEchoLabel}`);
         }
         return;
       }
@@ -3062,7 +3101,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
       switch (getStarterBaseId(card.id)) {
         case STARTER_CARD_IDS.weaponBurst: {
-          const burstBase = 3 + 2 * (card.upgradeLevel ?? 0);
+          const burstBase = 2 + 2 * (card.upgradeLevel ?? 0);
           const weaponSlots = depsRef.current.getEquipmentSlots().filter(slot => slot.item?.type === 'weapon' || slot.item?.type === 'monster');
           if (weaponSlots.length === 0) {
             finalizeMagicCard(card, { banner: '当前没有可以强化的装备栏。' });
@@ -3242,6 +3281,18 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             depsRef.current.removeCard(target.id, false);
             const sanitizedCard = sanitizeCardMetadata(target);
             setRemainingDeck(prev => [...prev, sanitizedCard]);
+            if (depsRef.current.amuletEffects.hasSwapUpgrade) {
+              const prog = engine.getState().swapUpgradeProgress + 1;
+              if (prog >= 3) {
+                setSwapUpgradeProgress(0);
+                setUpgradeModalOpen(true);
+                depsRef.current.addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+                setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+              } else {
+                setSwapUpgradeProgress(prog);
+                depsRef.current.addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
+              }
+            }
             finalizeMagicCard(card, { banner: `${target.name} 已置于牌堆底。` });
             return;
           }
@@ -3286,6 +3337,25 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             ? `乾坤挪移 ×${echoMultiplier}：${leftCard.name} ↔ ${rightCard.name}（回响）`
             : `${leftCard.name} ↔ ${rightCard.name} 位置互换！`;
           depsRef.current.addGameLog('magic', `乾坤挪移：${leftCard.name} 与 ${rightCard.name} 互换 ${echoMultiplier} 次。`);
+          if (depsRef.current.amuletEffects.hasSwapUpgrade) {
+            const swapCount = echoMultiplier;
+            let prog = engine.getState().swapUpgradeProgress;
+            for (let si = 0; si < swapCount; si++) {
+              prog += 1;
+              if (prog >= 3) {
+                prog = 0;
+                setUpgradeModalOpen(true);
+                depsRef.current.addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+                setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+              }
+            }
+            if (prog !== engine.getState().swapUpgradeProgress) {
+              setSwapUpgradeProgress(prog);
+              if (prog > 0) {
+                depsRef.current.addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
+              }
+            }
+          }
           finalizeMagicCard(card, { banner: swapBanner });
           return;
         }
@@ -3320,7 +3390,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return;
         }
         case STARTER_CARD_IDS.permGrantMagic: {
-          const eligible = handCards.filter(c => c.id !== card.id && !c.recycleDelay);
+          const eligible = handCards.filter(c => c.id !== card.id && !cardHasPermFlag(c));
           if (eligible.length === 0) {
             depsRef.current.addGameLog('magic', '永恒铭刻：手牌中没有可赋予永恒属性的卡牌。');
             finalizeMagicCard(card, { banner: '手牌中没有可赋予永恒属性的卡牌。' });
@@ -3442,11 +3512,13 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return;
         }
         case STARTER_CARD_IDS.stunStrike: {
-          const stunDamages = [2, 4, 6];
+          const stunDmgPerHit = [1, 2, 3];
           const stunChances = [10, 20, 30];
-          const baseDmg = stunDamages[card.upgradeLevel ?? 0] ?? 2;
+          const hits = 2;
+          const baseDmgPerHit = stunDmgPerHit[card.upgradeLevel ?? 0] ?? 1;
           const stunPct = stunChances[card.upgradeLevel ?? 0] ?? 10;
-          const totalDmg = getSpellDamage(baseDmg) * echoMultiplier;
+          const hitDmg = getSpellDamage(baseDmgPerHit) * echoMultiplier;
+          const totalDmg = hitDmg * hits;
           const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
           if (monsters.length === 0) {
             finalizeMagicCard(card, { banner: '没有怪物可攻击。' });
@@ -3456,12 +3528,14 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             if (!depsRef.current.isMonsterEngaged(monsters[0].id)) depsRef.current.beginCombat(monsters[0], 'hero');
             depsRef.current.dealDamageToMonster(monsters[0], totalDmg, { pulses: 2 });
             let stunText = '';
-            if (!monsters[0].isStunned) {
-              const threshold = Math.round((stunPct / 100) * 20);
-              if (threshold > 0) {
+            let stunned = monsters[0].isStunned;
+            const threshold = Math.round((stunPct / 100) * 20);
+            if (threshold > 0) {
+              for (let hit = 1; hit <= hits; hit++) {
+                if (stunned) break;
                 const stunResult = await depsRef.current.requestDiceOutcome({
                   title: monsters[0].name,
-                  subtitle: `雷震击晕判定（${stunPct}%）`,
+                  subtitle: `雷震击晕判定 第${hit}击（${stunPct}%）`,
                   entries: [
                     { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
                     { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
@@ -3469,26 +3543,38 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
                 });
                 if (stunResult?.id === 'stun') {
                   depsRef.current.updateMonsterCard(monsters[0].id, m => ({ ...m, isStunned: true }));
-                  stunText = ' 击晕成功！';
+                  stunned = true;
+                  stunText = ` 第${hit}击击晕成功！`;
                   depsRef.current.addGameLog('combat', `${monsters[0].name} 被雷震击晕了！`);
-                } else {
-                  stunText = ' 未能击晕。';
+
+                  if (depsRef.current.amuletEffects.hasStunUpgradeCap) {
+                    const stunAmuletB = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'stun-upgrade-cap');
+                    const stunStepB = (stunAmuletB?.upgradeLevel ?? 0) >= 1 ? 10 : 5;
+                    setStunCap(prev => {
+                      const next = Math.min(100, prev + stunStepB);
+                      depsRef.current.addGameLog('amulet', `震慑之符：击晕成功，击晕上限 +${stunStepB}%（当前 ${next}%）`);
+                      return next;
+                    });
+                  }
                 }
               }
+              if (!stunned) {
+                stunText = ' 未能击晕。';
+              }
             }
-            depsRef.current.addGameLog('magic', `雷震击：对 ${monsters[0].name} 造成 ${totalDmg} 点法术伤害`);
-            finalizeMagicCard(card, { banner: `雷震击：对 ${monsters[0].name} 造成 ${totalDmg} 点伤害！${stunText}` });
+            depsRef.current.addGameLog('magic', `雷震击：对 ${monsters[0].name} 造成 ${hitDmg}×${hits} 点法术伤害`);
+            finalizeMagicCard(card, { banner: `雷震击：对 ${monsters[0].name} 造成 ${hitDmg}×${hits} 点伤害！${stunText}` });
             return;
           }
           setPendingMagicAction({
             card,
             effect: 'stun-strike',
             step: 'monster-select',
-            prompt: `选择一个怪物，造成 ${totalDmg} 点法术伤害（${stunPct}% 击晕）。`,
+            prompt: `选择一个怪物，造成 ${hitDmg}×${hits} 点法术伤害（每击 ${stunPct}% 击晕）。`,
             echoMultiplier,
-            data: { baseDmg, stunPct },
+            data: { baseDmgPerHit, stunPct, hits },
           });
-          setHeroSkillBanner(`选择一个怪物，造成 ${totalDmg} 点伤害（${stunPct}% 击晕）。`);
+          setHeroSkillBanner(`选择一个怪物，造成 ${hitDmg}×${hits} 点伤害（每击 ${stunPct}% 击晕）。`);
           return;
         }
         case STARTER_CARD_IDS.gamblerGambit: {
@@ -3742,6 +3828,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         if (card.onEquipEffect === 'spell-lifesteal+1') {
           setPermanentSpellLifesteal(prev => prev + 1);
           depsRef.current.addGameLog('equip', `${card.name} 入场效果：超杀吸血 +1！`);
+        }
+        if (card.onEquipEffect === 'stunCap+5') {
+          setStunCap(prev => Math.min(100, prev + 5));
+          depsRef.current.addGameLog('equip', `${card.name} 入场效果：击晕上限 +5%！`);
         }
         if (card.onEquipEffect === 'other-slot-durability+1') {
           const otherSlotId: EquipmentSlotId = emptySlot === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';

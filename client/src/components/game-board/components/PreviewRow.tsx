@@ -1,5 +1,5 @@
 /**
- * PreviewRow — renders the top row of preview cards (5 cards + DiceRoller).
+ * PreviewRow — renders the top row of preview cards (DUNGEON_COLUMN_COUNT cards + DiceRoller).
  *
  * Pure render component: all data and callbacks come via props.
  */
@@ -8,6 +8,7 @@ import type { CSSProperties } from 'react';
 import GameCard from '@/components/GameCard';
 import type { GameCardData } from '@/components/GameCard';
 import DiceRoller from '@/components/DiceRoller';
+import { DUNGEON_COLUMNS } from '../constants';
 import type { ActiveRowSlots, WaterfallAnimationState } from '../types';
 
 export interface PreviewRowProps {
@@ -41,7 +42,7 @@ export default function PreviewRow({
 }: PreviewRowProps) {
   return (
     <>
-      {[0, 1, 2, 3, 4].map((index) => {
+      {DUNGEON_COLUMNS.map((index) => {
         const card = previewCards[index];
         const isDroppingPreview = waterfallAnimation.droppingSlots.includes(index);
         const isDiscardingPreview = waterfallAnimation.discardSlot === index;
@@ -100,9 +101,10 @@ export default function PreviewRow({
                         className="absolute inset-0 rounded-md overflow-hidden"
                         style={{
                           zIndex: sIdx,
-                          transform: `translateY(${y}%) scale(${0.94 - sIdx * 0.02})`,
+                          transform: `translateY(${y}%)`,
                           opacity: 0.4 - sIdx * 0.1,
                           filter: 'brightness(0.6)',
+                          padding: 'var(--dh-card-padding, 0.25rem)',
                         }}
                       >
                         <GameCard card={stackCard} disableInteractions />
@@ -136,7 +138,7 @@ export default function PreviewRow({
         );
       })}
 
-      {/* DiceRoller in column 6 */}
+      {/* DiceRoller in last column */}
       <div className={cellWrapperClass}>
         <div className={cellInnerClass}>
           <DiceRoller className="w-full h-full" scaleMultiplier={stageScale} />

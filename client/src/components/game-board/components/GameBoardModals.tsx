@@ -55,6 +55,11 @@ export type GameBoardModalsProps = {
   onDeathWardConfirm: () => void;
   onDeathWardDecline: () => void;
 
+  // --- Dagger Self-Destruct ---
+  daggerSelfDestructPrompt: { weaponName: string; remainingDurability: number } | null;
+  onDaggerSelfDestructConfirm: () => void;
+  onDaggerSelfDestructDecline: () => void;
+
   // --- Wraith passive unlock ---
   wraithPassiveUnlockPopup: boolean;
   onWraithPassiveUnlockChange: (open: boolean) => void;
@@ -90,10 +95,12 @@ export type GameBoardModalsProps = {
   discoverModalOpen: boolean;
   discoverOptions: GameCardData[];
   onDiscoverSelect: (cardId: string) => void;
+  onDiscoverCancel: () => void;
 
   // --- Graveyard discover ---
   graveyardDiscoverState: GameCardData[] | null;
   onGraveyardDiscoverSelect: (cardId: string) => void;
+  onGraveyardDiscoverCancel: () => void;
 
   // --- Graveyard exile ---
   ghostBladeExileCards: GameCardData[] | null;
@@ -256,6 +263,9 @@ function GameBoardModalsInner({
   deathWardPrompt,
   onDeathWardConfirm,
   onDeathWardDecline,
+  daggerSelfDestructPrompt,
+  onDaggerSelfDestructConfirm,
+  onDaggerSelfDestructDecline,
 
   wraithPassiveUnlockPopup,
   onWraithPassiveUnlockChange,
@@ -287,9 +297,11 @@ function GameBoardModalsInner({
   discoverModalOpen,
   discoverOptions,
   onDiscoverSelect,
+  onDiscoverCancel,
 
   graveyardDiscoverState,
   onGraveyardDiscoverSelect,
+  onGraveyardDiscoverCancel,
 
   ghostBladeExileCards,
   onGhostBladeExileConfirm,
@@ -448,6 +460,34 @@ function GameBoardModalsInner({
         </div>
       )}
 
+      {daggerSelfDestructPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" style={{ pointerEvents: 'auto' }}>
+          <div className="w-full max-w-2xl space-y-6 rounded-lg bg-card p-10 text-center shadow-2xl max-h-[95vh] overflow-y-auto" style={{ zoom: overlayZoom }}>
+            <div className="space-y-1">
+              <p className="text-lg font-semibold">自毁</p>
+              <p className="text-sm text-muted-foreground">
+                是否自毁 {daggerSelfDestructPrompt.weaponName}？毁坏后将发现{' '}
+                {daggerSelfDestructPrompt.remainingDurability} 张专属牌。
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                onClick={onDaggerSelfDestructConfirm}
+              >
+                自毁（发现 {daggerSelfDestructPrompt.remainingDurability} 张）
+              </button>
+              <button
+                className="rounded-md border border-border px-4 py-2"
+                onClick={onDaggerSelfDestructDecline}
+              >
+                保留武器
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Dialog open={wraithPassiveUnlockPopup} onOpenChange={onWraithPassiveUnlockChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -512,12 +552,14 @@ function GameBoardModalsInner({
         open={discoverModalOpen}
         cards={discoverOptions}
         onSelect={onDiscoverSelect}
+        onCancel={onDiscoverCancel}
       />
 
       <DiscoverClassModal
         open={Boolean(graveyardDiscoverState)}
         cards={graveyardDiscoverState ?? []}
         onSelect={onGraveyardDiscoverSelect}
+        onCancel={onGraveyardDiscoverCancel}
         title="坟场召回"
         description="从坟场随机出现的卡牌中选择一张取回。"
       />

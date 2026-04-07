@@ -94,8 +94,8 @@ export function generateKnightDeck(): KnightCardData[] {
     image: swiftDaggerKnightImage,
     classCard: true,
     description: '用此武器杀死怪物时耐久度回满。',
-    durability: 3,
-    maxDurability: 3,
+    durability: 2,
+    maxDurability: 2,
     restoreDurabilityOnKill: true,
   });
 
@@ -107,8 +107,8 @@ export function generateKnightDeck(): KnightCardData[] {
     classCard: true,
     description: '每次攻击永久增加该装备栏 +1 伤害。',
     weaponBonus: 1,
-    durability: 2,
-    maxDurability: 2,
+    durability: 1,
+    maxDurability: 1,
   });
 
   // === SHIELDS (3 cards) ===
@@ -372,8 +372,8 @@ export function generateKnightDeck(): KnightCardData[] {
     description: '每次攻击某个怪物，增加该怪物劝降概率 +20%（精英 +10%）。',
     persuadeBoostOnHit: 20,
     persuadeBoostOnHitElite: 10,
-    durability: 4,
-    maxDurability: 4,
+    durability: 3,
+    maxDurability: 3,
   });
 
   pushCard({
@@ -385,8 +385,8 @@ export function generateKnightDeck(): KnightCardData[] {
     description: '击晕率30%。攻击已击晕的怪物时造成双倍伤害。',
     weaponStunChance: 30,
     doubleDamageOnStunned: true,
-    durability: 3,
-    maxDurability: 3,
+    durability: 2,
+    maxDurability: 2,
   });
 
   pushCard({
@@ -397,23 +397,23 @@ export function generateKnightDeck(): KnightCardData[] {
     classCard: true,
     description: '超杀：将回收袋 2 张牌移到手上。',
     overkillRecycleToHand: 2,
-    durability: 3,
-    maxDurability: 3,
+    durability: 2,
+    maxDurability: 2,
   });
 
   // === NEW SHIELDS (3 cards) ===
   pushCard({
     type: 'shield',
     name: '不朽骨盾',
-    value: 2,
+    value: 3,
     image: reviveBoneShieldImage,
     classCard: true,
     description: '复生（首次摧毁恢复 1 耐久）。遗言：该装备栏永久伤害 +1。',
     hasEquipmentRevive: true,
     onDestroyPermanentDamage: 1,
-    durability: 4,
-    maxDurability: 4,
-    armorMax: 2,
+    durability: 2,
+    maxDurability: 2,
+    armorMax: 3,
   });
 
   pushCard({
@@ -650,8 +650,8 @@ export function generateKnightDeck(): KnightCardData[] {
     image: daggerWeaponImage,
     classCard: true,
     description: '每次攻击后，可将一张手牌移到回收袋，再抽一张牌。',
-    durability: 4,
-    maxDurability: 4,
+    durability: 3,
+    maxDurability: 3,
     postAttackHandRecycle: true,
   });
 

@@ -82,7 +82,7 @@ import { getRandomHero, type HeroVariant } from '@/lib/heroes';
 import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, getTotalWins, incrementTotalWins, type PersistedGameState } from '@/lib/gameStorage';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import CardDetailsModal from './CardDetailsModal';
-import CardUpgradeModal from './CardUpgradeModal';
+import CardUpgradeModal, { isUpgradeableCard, isCardAtMaxUpgrade } from './CardUpgradeModal';
 import HandMagicUpgradeModal from './HandMagicUpgradeModal';
 import MirrorCopyModal from './MirrorCopyModal';
 import PermGrantModal from './PermGrantModal';
@@ -412,6 +412,7 @@ export default function GameBoard() {
   const setPermanentMaxHpBonus = useEngineSetter('permanentMaxHpBonus');
   const setPermanentSpellDamageBonus = useEngineSetter('permanentSpellDamageBonus');
   const setPermanentSpellLifesteal = useEngineSetter('permanentSpellLifesteal');
+  const setStunCap = useEngineSetter('stunCap');
   const setHandLimitBonus = useEngineSetter('handLimitBonus');
   const setHeroMagicState = useEngineSetter('heroMagicState');
   const setWraithPassiveEnabled = useEngineSetter('wraithPassiveEnabled');
@@ -584,6 +585,18 @@ export default function GameBoard() {
         case 'card-gain-missile':
           state.hasCardGainMissile = true;
           break;
+        case 'swap-upgrade':
+          state.hasSwapUpgrade = true;
+          break;
+        case 'stun-upgrade-cap':
+          state.hasStunUpgradeCap = true;
+          break;
+        case 'recycle-backpack-expand':
+          state.hasRecycleBackpackExpand = true;
+          break;
+        case 'dungeon-gold':
+          state.hasDungeonGold = true;
+          break;
       }
       const bonus = slot.amuletAuraBonus;
       if (bonus) {
@@ -707,8 +720,10 @@ export default function GameBoard() {
     generateShopOfferings,
     startShopFlow,
     beginDiscoverFlow,
+    beginDiscoverFlowAsync,
     handleDiscoverFallback,
     handleDiscoverSelect,
+    handleDiscoverCancel,
     handleShopPurchase,
     handleShopClose,
     handleShopDeleteRequest,
@@ -719,6 +734,7 @@ export default function GameBoard() {
     handleShopSkillSelect,
     requestGraveyardSelection,
     handleGraveyardDiscoverSelect,
+    handleGraveyardDiscoverCancel,
     triggerGhostBladeExile,
     handleGhostBladeExileConfirm,
     requestCardAction,
@@ -728,6 +744,28 @@ export default function GameBoard() {
     applyMonsterReward,
     handleMonsterRewardSelection,
   } = shopHandlers;
+
+  const requestDaggerSelfDestruct = useCallback(
+    (weaponName: string, remainingDurability: number): Promise<boolean> => {
+      return new Promise<boolean>((resolve) => {
+        daggerSelfDestructResolverRef.current = resolve;
+        setDaggerSelfDestructPrompt({ weaponName, remainingDurability });
+      });
+    },
+    [],
+  );
+
+  const handleDaggerSelfDestructConfirm = useCallback(() => {
+    setDaggerSelfDestructPrompt(null);
+    daggerSelfDestructResolverRef.current?.(true);
+    daggerSelfDestructResolverRef.current = null;
+  }, []);
+
+  const handleDaggerSelfDestructDecline = useCallback(() => {
+    setDaggerSelfDestructPrompt(null);
+    daggerSelfDestructResolverRef.current?.(false);
+    daggerSelfDestructResolverRef.current = null;
+  }, []);
 
   const handleHandMagicUpgradeSelect = useCallback((cardId: string) => {
     handleCardUpgrade(cardId);
@@ -1616,6 +1654,8 @@ export default function GameBoard() {
   const discoverPotionCompletionRef = useRef<((payload: { banner: string }) => void) | null>(null);
   const deckJudgePeekCloseRef = useRef<(() => void) | null>(null);
   const ghostBladeExileResolverRef = useRef<(() => void) | null>(null);
+  const daggerSelfDestructResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const [daggerSelfDestructPrompt, setDaggerSelfDestructPrompt] = useState<{ weaponName: string; remainingDurability: number } | null>(null);
   const suppressDeathWardRef = useRef(false);
   const selectedHeroSkillRef = useRef<string | null>(selectedHeroSkill);
   selectedHeroSkillRef.current = selectedHeroSkill;
@@ -2405,7 +2445,6 @@ export default function GameBoard() {
     };
 
     const createDiscoverOption = (): MonsterRewardOption | null => {
-      if (!isElite) return null;
       if (classDeck.length === 0 || backpackItems.length >= backpackCapacity) {
         return null;
       }
@@ -2413,7 +2452,7 @@ export default function GameBoard() {
         id: createMonsterRewardOptionId(),
         title: '发现一张专属牌',
         description: '从职业卡牌中挑选新的战术手段。',
-        detail: '精英掉落',
+        detail: isElite ? '精英掉落' : '稀有掉落',
         effect: { type: 'discoverClass' },
       };
     };
@@ -2483,15 +2522,35 @@ export default function GameBoard() {
       };
     };
 
+    const createUpgradeOption = (): MonsterRewardOption | null => {
+      const hasUpgradeable =
+        handCards.some(c => isUpgradeableCard(c) && !isCardAtMaxUpgrade(c))
+        || [equipmentSlot1, equipmentSlot2].some(c => c != null && isUpgradeableCard(c) && !isCardAtMaxUpgrade(c))
+        || amuletSlots.some(c => isUpgradeableCard(c) && !isCardAtMaxUpgrade(c));
+      if (!hasUpgradeable) return null;
+      return {
+        id: createMonsterRewardOptionId(),
+        title: '升级一张牌',
+        description: '选择一张可升级的卡牌，提升其品质。',
+        detail: '战术强化',
+        effect: { type: 'upgradeCard' },
+      };
+    };
+
     pushOption(createSlotBonusOption());
     pushOption(createSlotBonusOption());
     pushOption(createGoldOption());
     pushOption(createHealOption());
     pushOption(createRepairOption());
     pushOption(createDrawOption());
-    pushOption(createDiscoverOption());
+    if (isElite || Math.random() < 0.10) {
+      pushOption(createDiscoverOption());
+    }
     pushOption(createGraveyardDiscoverOption());
     pushOption(createMaxHpOption());
+    if (Math.random() < 0.25) {
+      pushOption(createUpgradeOption());
+    }
     if (Math.random() < 0.15) {
       pushOption(createSpellDamageOption());
     }
@@ -4156,36 +4215,57 @@ export default function GameBoard() {
     }
     const deckWithClassEvents = [...newDeck, ...knightEvents].sort(() => Math.random() - 0.5);
 
-    // Balance monster distribution: roughly equal monsters per half, elites only in second half
+    // Balance monster distribution: 1 elite in first half (positions 13–30), rest in second half
     {
       const halfSize = Math.floor(deckWithClassEvents.length / 2);
       const eliteMonsters = deckWithClassEvents.filter(c => c.monsterSpecial);
       const nonEliteMonsters = deckWithClassEvents.filter(c => c.type === 'monster' && !c.monsterSpecial);
       const nonMonsters = deckWithClassEvents.filter(c => c.type !== 'monster');
 
+      // Pull 1 random elite into the first half
+      let earlyElite: typeof eliteMonsters[0] | null = null;
+      const remainingElites = [...eliteMonsters];
+      if (remainingElites.length > 0) {
+        const idx = Math.floor(Math.random() * remainingElites.length);
+        earlyElite = remainingElites.splice(idx, 1)[0];
+      }
+
       const totalMonsters = eliteMonsters.length + nonEliteMonsters.length;
       const firstHalfMonsterCount = Math.min(Math.floor(totalMonsters / 2), nonEliteMonsters.length);
 
       const firstHalf = [
         ...nonEliteMonsters.slice(0, firstHalfMonsterCount),
-        ...nonMonsters.slice(0, halfSize - firstHalfMonsterCount),
+        ...nonMonsters.slice(0, halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
+        ...(earlyElite ? [earlyElite] : []),
       ];
       const secondHalf = [
         ...nonEliteMonsters.slice(firstHalfMonsterCount),
-        ...eliteMonsters,
-        ...nonMonsters.slice(halfSize - firstHalfMonsterCount),
+        ...remainingElites,
+        ...nonMonsters.slice(halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
       ];
 
       firstHalf.sort(() => Math.random() - 0.5);
       secondHalf.sort(() => Math.random() - 0.5);
+
+      // Ensure the early elite lands in positions 12–29 (not in the first 12 cards)
+      if (earlyElite && firstHalf.length > 12) {
+        const eliteIdx = firstHalf.indexOf(earlyElite);
+        if (eliteIdx >= 0 && eliteIdx < 12) {
+          const swapTarget = 12 + Math.floor(Math.random() * (firstHalf.length - 12));
+          const tmp = firstHalf[eliteIdx];
+          firstHalf[eliteIdx] = firstHalf[swapTarget];
+          firstHalf[swapTarget] = tmp;
+        }
+      }
+
       deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
     }
 
-    // Balance monster density: 1–2 monsters per non-overlapping chunk of 5 cards
+    // Balance monster density: 1–2 monsters per non-overlapping chunk of 6 cards
     {
       const MIN_MONSTERS = 1;
       const MAX_MONSTERS = 2;
-      const CHUNK = 5;
+      const CHUNK = 6;
       for (let start = 0; start + CHUNK <= deckWithClassEvents.length; start += CHUNK) {
         const chunkEnd = start + CHUNK;
         const monsterIndices: number[] = [];
@@ -4270,27 +4350,71 @@ export default function GameBoard() {
       }
     }
 
-    // Initialize with 10 cards total: 5 for preview, 5 for active
-    const initialPreview = fillActiveRowSlots(deckWithClassEvents.slice(0, 5)).map((card, slotIdx) => {
+    // Build a mutable deal queue; extract non-monster cards for stacking
+    const dealQueue = [...deckWithClassEvents];
+
+    // Helper: extract the first non-monster from dealQueue starting at `from`, returns it and removes from queue
+    const extractFirstNonMonster = (from: number): GameCardData | null => {
+      for (let i = from; i < dealQueue.length; i++) {
+        if (dealQueue[i].type !== 'monster') {
+          return dealQueue.splice(i, 1)[0];
+        }
+      }
+      return null;
+    };
+
+    // Preview row: 5 cards from deal queue
+    const previewRaw = dealQueue.splice(0, 5);
+    const initialPreview = fillActiveRowSlots(previewRaw).map((card, slotIdx) => {
       if (!card) return null;
       const raged = applyMonsterRage(card, INITIAL_TURN_COUNT + 1);
-      if (slotIdx === lastMonsterDeckIndex && raged.type === 'monster') {
+      if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
         return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
       }
       return raged;
-    }) as ActiveRowSlots; // Top row (preview) - rage at turnCount+1 since they drop on next waterfall
-    const initialActive = fillActiveRowSlots(deckWithClassEvents.slice(5, 10)).map((card, slotIdx) => {
+    }) as ActiveRowSlots;
+
+    // Preview stack: first non-monster from remainder → stack on a random non-monster preview cell
+    const initialPreviewStacks: Record<number, GameCardData[]> = {};
+    const previewStackCard = extractFirstNonMonster(0);
+    if (previewStackCard) {
+      const nonMonsterPreviewIndices = initialPreview
+        .map((c, i) => (c && c.type !== 'monster' ? i : -1))
+        .filter(i => i >= 0);
+      if (nonMonsterPreviewIndices.length > 0) {
+        const targetIdx = nonMonsterPreviewIndices[Math.floor(Math.random() * nonMonsterPreviewIndices.length)];
+        initialPreviewStacks[targetIdx] = [applyMonsterRage(previewStackCard, INITIAL_TURN_COUNT + 1)];
+      }
+    }
+
+    // Active row: next 5 cards from deal queue
+    const activeRaw = dealQueue.splice(0, 5);
+    const initialActive = fillActiveRowSlots(activeRaw).map((card, slotIdx) => {
       if (!card) return null;
-      const deckIndex = 5 + slotIdx;
       const raged = applyMonsterRage(card, INITIAL_TURN_COUNT);
-      if (deckIndex === lastMonsterDeckIndex && raged.type === 'monster') {
+      if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
         return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
       }
       return raged;
-    }) as ActiveRowSlots; // Middle row (active)
-    const initialRemaining = deckWithClassEvents.slice(10).map((card, k) => {
-      const deckIndex = 10 + k;
-      if (deckIndex === lastMonsterDeckIndex && card.type === 'monster') {
+    }) as ActiveRowSlots;
+
+    // Active stack: first non-monster from remainder → stack on a random non-monster active cell
+    const initialActiveStacks: Record<number, GameCardData[]> = {};
+    const activeStackCard = extractFirstNonMonster(0);
+    if (activeStackCard) {
+      const nonMonsterActiveIndices = initialActive
+        .map((c, i) => (c && c.type !== 'monster' ? i : -1))
+        .filter(i => i >= 0);
+      if (nonMonsterActiveIndices.length > 0) {
+        const targetIdx = nonMonsterActiveIndices[Math.floor(Math.random() * nonMonsterActiveIndices.length)];
+        initialActiveStacks[targetIdx] = [applyMonsterRage(activeStackCard, INITIAL_TURN_COUNT)];
+      }
+    }
+
+    // Remaining deck — mark final monster by matching the original deck index
+    const initialRemaining = dealQueue.map((card) => {
+      const origIdx = deckWithClassEvents.indexOf(card);
+      if (origIdx === lastMonsterDeckIndex && card.type === 'monster') {
         return { ...card, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
       }
       return card;
@@ -4309,6 +4433,8 @@ export default function GameBoard() {
       heroClass: newHeroClass,
       previewCards: initialPreview,
       activeCards: initialActive,
+      previewCardStacks: initialPreviewStacks,
+      activeCardStacks: initialActiveStacks,
       remainingDeck: initialRemaining,
       classDeck: newClassDeck,
       showSkillSelection: true,
@@ -4440,6 +4566,8 @@ export default function GameBoard() {
       cardsPlayed: snapshot.cardsPlayed ?? 0,
       recycleForgePlayCount: savedForgeCount,
       classDamageDiscoverStreak: snapshot.classDamageDiscoverStreak ?? 0,
+      recycleBackpackProgress: snapshot.recycleBackpackProgress ?? 0,
+      swapUpgradeProgress: snapshot.swapUpgradeProgress ?? 0,
       totalDamageTaken: snapshot.totalDamageTaken ?? 0,
       totalHealed: snapshot.totalHealed ?? 0,
       healAccumulator: snapshot.healAccumulator ?? 0,
@@ -4683,12 +4811,15 @@ export default function GameBoard() {
     }
 
     if (amuletEffects.hasCardGainMissile) {
+      const missileAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'card-gain-missile');
+      const boltsPerCard = (missileAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
+      const totalBolts = count * boltsPerCard;
       const bolts: GameCardData[] = [];
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < totalBolts; i++) {
         bolts.push(createMagicBoltCard());
       }
       setHandCards(prev => [...prev, ...bolts]);
-      addGameLog('amulet', `弹幕之符：获得 ${count} 张「魔弹」`);
+      addGameLog('amulet', `弹幕之符：获得 ${totalBolts} 张「魔弹」`);
     }
   };
 
@@ -5468,6 +5599,22 @@ export default function GameBoard() {
       }
     }
 
+    // Also discard any stacked cards on the discarded preview slot
+    if (plan.discardPreviewIndex != null) {
+      const discardedStacks = previewCardStacks[plan.discardPreviewIndex];
+      if (discardedStacks && discardedStacks.length > 0) {
+        for (const stackCard of discardedStacks) {
+          discardCardToGraveyard(stackCard, { owner: 'dungeon' });
+          addGameLog('waterfall', `瀑流挤掉堆叠：「${stackCard.name}」一并被挤出`);
+        }
+        setPreviewCardStacks(prev => {
+          const next = { ...prev };
+          delete next[plan.discardPreviewIndex!];
+          return next;
+        });
+      }
+    }
+
     logWaterfall('discard-complete', {
       discardedCardId: plan.discardCard?.id ?? null,
     });
@@ -5524,7 +5671,14 @@ export default function GameBoard() {
         return next;
       });
 
-      // Clear transferred preview stacks
+      // Clear dropped preview cells and their stacks so they don't flash after animation ends
+      setPreviewCards(prev => {
+        const next = [...prev] as ActiveRowSlots;
+        for (const previewIdx of plan.dropPreviewIndices) {
+          next[previewIdx] = null;
+        }
+        return next;
+      });
       setPreviewCardStacks(prev => {
         const next = { ...prev };
         for (const previewIdx of plan.dropPreviewIndices) {
@@ -5721,11 +5875,16 @@ export default function GameBoard() {
       if (c.type !== 'monster' || ((c.tempAttackBoost ?? 0) === 0 && (c.tempHpBoost ?? 0) === 0)) return c;
       return { ...c, tempAttackBoost: 0, tempHpBoost: 0 };
     }));
-    if (amuletEffects.hasLoneCard && engine.getState().backpackItems.length === 1) {
-      const loneDrawn = drawClassCardsToBackpack(1, '孤注之符');
-      if (loneDrawn.length > 0) {
-        triggerClassDeckFlight(loneDrawn);
-        addGameLog('amulet', `孤注之符：背包仅剩 1 张牌，获得职业卡「${loneDrawn[0].name}」`);
+    if (amuletEffects.hasLoneCard) {
+      const bpLen = engine.getState().backpackItems.length;
+      const loneAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'lone-card');
+      const loneThreshold = (loneAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
+      if (bpLen >= 1 && bpLen <= loneThreshold) {
+        const loneDrawn = drawClassCardsToBackpack(1, '孤注之符');
+        if (loneDrawn.length > 0) {
+          triggerClassDeckFlight(loneDrawn);
+          addGameLog('amulet', `孤注之符：背包仅剩 ${bpLen} 张牌，获得职业卡「${loneDrawn[0].name}」`);
+        }
       }
     }
 
@@ -5790,16 +5949,27 @@ export default function GameBoard() {
     }
 
     const effectiveDeck = [...stuckFinalMonsters, ...remainingDeck];
-    const baseDealCount = Math.min(5, effectiveDeck.length);
+    const baseDealCount = Math.min(DUNGEON_COLUMN_COUNT, effectiveDeck.length);
     const nextPreviewCards = effectiveDeck.slice(0, baseDealCount);
     let nextRemainingDeck = effectiveDeck.slice(baseDealCount);
 
-    // Waterfall deal bonus: deal extra cards that stack on non-monster preview cells
+    // Default +1 stack per waterfall + any waterfallDealBonus extra stacks
+    // Monster cards are never stacked — they remain in the deck
     const newPreviewStacks: Record<number, GameCardData[]> = {};
-    if (waterfallDealBonus > 0 && nextRemainingDeck.length > 0) {
-      const bonusCount = Math.min(waterfallDealBonus, nextRemainingDeck.length);
-      const bonusCards = nextRemainingDeck.slice(0, bonusCount);
-      nextRemainingDeck = nextRemainingDeck.slice(bonusCount);
+    const defaultStackCount = 1;
+    const totalBonusCount = defaultStackCount + waterfallDealBonus;
+    if (totalBonusCount > 0 && nextRemainingDeck.length > 0 && nextPreviewCards.length > 0) {
+      const bonusCards: GameCardData[] = [];
+      const skippedCards: GameCardData[] = [];
+      for (let di = 0; di < nextRemainingDeck.length && bonusCards.length < totalBonusCount; di++) {
+        if (nextRemainingDeck[di].type === 'monster') {
+          skippedCards.push(nextRemainingDeck[di]);
+        } else {
+          bonusCards.push(nextRemainingDeck[di]);
+        }
+      }
+      const consumed = bonusCards.length + skippedCards.length;
+      nextRemainingDeck = [...skippedCards, ...nextRemainingDeck.slice(consumed)];
 
       for (const bonusCard of bonusCards) {
         const nonMonsterIndices = nextPreviewCards
@@ -5811,7 +5981,7 @@ export default function GameBoard() {
             newPreviewStacks[targetIdx] = [];
           }
           newPreviewStacks[targetIdx].push(bonusCard);
-          addGameLog('waterfall', `瀑流增幅：「${bonusCard.name}」堆叠在预览行第 ${targetIdx + 1} 列`);
+          addGameLog('waterfall', `瀑流堆叠：「${bonusCard.name}」堆叠在预览行第 ${targetIdx + 1} 列`);
         }
       }
     }
@@ -6116,6 +6286,22 @@ export default function GameBoard() {
         clearEquipmentSlotWithPromote(fallbackOrigin);
         break;
       case 'amulet':
+        if (sellItem.amuletEffect === 'balance') {
+          setSlotTempAttack(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_ATTACK_BONUS,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_ATTACK_PENALTY,
+          }));
+          setSlotTempArmor(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_SHIELD_PENALTY,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_SHIELD_BONUS,
+          }));
+        }
+        if (sellItem.amuletEffect === 'strength') {
+          setSlotTempAttack(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - 4,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - 4,
+          }));
+        }
         setAmuletSlots(prev => prev.filter(slot => slot?.id !== sellItem.id));
         break;
       case 'hand':
@@ -6185,6 +6371,8 @@ export default function GameBoard() {
     triggerStealCardFlight,
     dragonBleedDestroyEquipment,
     beginDiscoverFlow,
+    beginDiscoverFlowAsync,
+    requestDaggerSelfDestruct,
     combatAsyncEpochRef,
     pendingDefeatIdsRef,
     goblinStolenIdsRef,
@@ -6945,6 +7133,7 @@ export default function GameBoard() {
         queueCardIntoHand(createPersuadeRecycleFetchMagicCard());
         addGameLog('amulet', '劝降归袋符：「归袋抽引」已加入手牌。');
       }
+
     } else {
       addGameLog('combat', `劝降失败！${persuadeState.monster.name} 拒绝了劝降。（掷出 ${value}，需要 ≥${persuadeState.threshold}）`);
       setHeroSkillBanner(`劝降失败！${persuadeState.monster.name} 不为所动。`);
@@ -6990,8 +7179,44 @@ export default function GameBoard() {
         setRecycleForgePlayCount(0);
         updateRecycleForgeCounter(0);
       }
+
+      if (card.amuletEffect === 'balance') {
+        setSlotTempAttack(prev => ({
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
+        }));
+        setSlotTempArmor(prev => ({
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
+        }));
+        addGameLog('amulet', '均衡护符生效：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1');
+      }
+      if (card.amuletEffect === 'strength') {
+        setSlotTempAttack(prev => ({
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
+        }));
+        addGameLog('amulet', '力量护符生效：所有装备栏临时攻击 +4！');
+      }
+
       if (displacedAmulet !== null) {
         const displaced = displacedAmulet as AmuletItem;
+        if (displaced.amuletEffect === 'balance') {
+          setSlotTempAttack(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_ATTACK_BONUS,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_ATTACK_PENALTY,
+          }));
+          setSlotTempArmor(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_SHIELD_PENALTY,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_SHIELD_BONUS,
+          }));
+        }
+        if (displaced.amuletEffect === 'strength') {
+          setSlotTempAttack(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - 4,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - 4,
+          }));
+        }
         addGameLog('amulet', `卸下护符：${displaced.name}`);
         discardCardToGraveyard(displaced, { owner: 'player' });
       }
@@ -7047,6 +7272,40 @@ export default function GameBoard() {
         return;
       }
 
+      const cardWithOrigin = card as GameCardData & { fromSlot?: DragOrigin };
+      const fromAmuletSlot =
+        cardWithOrigin.fromSlot === 'amulet' || amuletSlots.some(slot => slot?.id === card.id);
+      if (fromAmuletSlot) {
+        if (!isRecyclableFromHand(card)) {
+          resetDragState();
+          return;
+        }
+        if (card.amuletEffect === 'balance') {
+          setSlotTempAttack(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_ATTACK_BONUS,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_ATTACK_PENALTY,
+          }));
+          setSlotTempArmor(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_SHIELD_PENALTY,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_SHIELD_BONUS,
+          }));
+        }
+        if (card.amuletEffect === 'strength') {
+          setSlotTempAttack(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - 4,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - 4,
+          }));
+        }
+        setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
+        addPermanentMagicToRecycleBag(card);
+        applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
+        addGameLog('magic', `回收护符「${card.name}」至回收袋。`);
+        setHeroSkillBanner(`${card.name} 已回收至回收袋。`);
+        tickRecycleForge();
+        resetDragState();
+        return;
+      }
+
       if (card.type === 'monster' && activeCards.some(slot => slot?.id === card.id)) {
         if (canPersuadeMonster(card) && backpackItems.length < backpackCapacity) {
           openPersuadeModal(card, 'backpack');
@@ -7061,24 +7320,6 @@ export default function GameBoard() {
       }
 
       if (backpackItems.length >= backpackCapacity) {
-        return;
-      }
-
-      const cardWithOrigin = card as GameCardData & { fromSlot?: DragOrigin };
-      const fromAmuletSlot =
-        cardWithOrigin.fromSlot === 'amulet' || amuletSlots.some(slot => slot?.id === card.id);
-      if (fromAmuletSlot) {
-        if (!isRecyclableFromHand(card)) {
-          resetDragState();
-          return;
-        }
-        setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
-        addPermanentMagicToRecycleBag(card);
-        applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
-        addGameLog('magic', `回收护符「${card.name}」至回收袋。`);
-        setHeroSkillBanner(`${card.name} 已回收至回收袋。`);
-        tickRecycleForge();
-        resetDragState();
         return;
       }
       
@@ -7169,7 +7410,7 @@ export default function GameBoard() {
         const maxD = base.maxDurability ?? base.durability;
         equipCard =
           maxD != null && maxD > 0
-            ? { ...base, durability: maxD, maxDurability: maxD }
+            ? { ...base, durability: base.durability ?? maxD, maxDurability: maxD }
             : base;
         const durNote =
           equipCard.maxDurability != null && equipCard.maxDurability > 0
@@ -7206,6 +7447,10 @@ export default function GameBoard() {
         if (equipCard.onEquipEffect === 'spell-lifesteal+1') {
           setPermanentSpellLifesteal(prev => prev + 1);
           addGameLog('equip', `${equipCard.name} 入场效果：超杀吸血 +1！`);
+        }
+        if (equipCard.onEquipEffect === 'stunCap+5') {
+          setStunCap(prev => Math.min(100, prev + 5));
+          addGameLog('equip', `${equipCard.name} 入场效果：击晕上限 +5%！`);
         }
         if (equipCard.onEquipEffect === 'other-slot-durability+1') {
           const otherSlotId: EquipmentSlotId = equipSlot === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -7408,6 +7653,7 @@ export default function GameBoard() {
     Boolean(eventTransformState) ||
     Boolean(activeMonsterReward) ||
     Boolean(deathWardPrompt) ||
+    Boolean(daggerSelfDestructPrompt) ||
     potionChoiceDialogOpen ||
     Boolean(deckPeekState);
 
@@ -8504,6 +8750,8 @@ export default function GameBoard() {
                 handCards.some(c => c.id === draggedCard.id)
                 ||
                 (draggingDungeonMonsterForPersuade && backpackItems.length < backpackCapacity)
+                ||
+                (draggedCardSource === 'amulet' && isRecyclableFromHand(draggedCard))
               ))
               ||
               (draggedEquipment && isPermRecycleEquipment(draggedEquipment as GameCardData))
@@ -8666,14 +8914,14 @@ export default function GameBoard() {
             className="flex-1 min-h-0 relative flex justify-start lg:justify-center"
           >
             <div ref={gridWrapperRef} className="relative flex-1 w-full">
-              {/* 3×6 Card Grid */}
+              {/* 3×7 Card Grid (6 dungeon columns + 1 utility column) */}
               <div 
                 className="game-grid grid mx-auto h-full max-w-[1350px]"
                 style={{ 
                   gridAutoRows: 'minmax(0, 1fr)'
                 }}>
-          {/* Row 1: Preview Row - 5 cards + DiceRoller */}
-          {[0, 1, 2, 3, 4].map((index) => {
+          {/* Row 1: Preview Row - DUNGEON_COLUMN_COUNT cards + DiceRoller */}
+          {DUNGEON_COLUMNS.map((index) => {
             const card = previewCards[index];
             const isDroppingPreview = waterfallAnimation.droppingSlots.includes(index);
             const isDiscardingPreview = waterfallAnimation.discardSlot === index;
@@ -8703,6 +8951,7 @@ export default function GameBoard() {
 
             const previewStackedCards = previewCardStacks[index] ?? [];
             const hasPreviewStack = previewStackedCards.length > 0;
+            const isPreviewAnimating = isDroppingPreview || isDiscardingPreview || isDealingPreview;
 
             return card ? (
               <div 
@@ -8715,15 +8964,39 @@ export default function GameBoard() {
                   className={`${cellInnerClass} ${hasPreviewStack ? 'relative' : ''} ${previewAnimationClass}`.trim()}
                   style={previewAnimationStyle}
                 >
-                  {hasPreviewStack && previewStackedCards.map((stackCard, sIdx) => (
-                    <div
-                      key={stackCard.id}
-                      className="absolute inset-0 pointer-events-none dh-grid-cell"
-                      style={{ zIndex: sIdx, transform: `translateY(${(sIdx + 1) * -8}%)` }}
-                    >
-                      <GameCard card={stackCard} disableInteractions />
-                    </div>
-                  ))}
+                  {hasPreviewStack && previewStackedCards.map((stackCard, sIdx) => {
+                    if (isPreviewAnimating) {
+                      return (
+                        <div
+                          key={stackCard.id}
+                          className="absolute inset-0 pointer-events-none"
+                          style={{ zIndex: -1, opacity: 0, padding: 'var(--dh-card-padding, 0.25rem)' }}
+                        >
+                          <GameCard card={stackCard} disableInteractions />
+                        </div>
+                      );
+                    }
+                    const total = previewStackedCards.length + 1;
+                    const bottomY = -6;
+                    const topY = 20;
+                    const step = total <= 1 ? 0 : (topY - bottomY) / (total - 1);
+                    const y = bottomY + sIdx * step;
+                    return (
+                      <div
+                        key={stackCard.id}
+                        className="absolute inset-0 rounded-md overflow-hidden pointer-events-none"
+                        style={{
+                          zIndex: sIdx,
+                          transform: `translateY(${y}%)`,
+                          opacity: 0.4 - sIdx * 0.1,
+                          filter: 'brightness(0.6)',
+                          padding: 'var(--dh-card-padding, 0.25rem)',
+                        }}
+                      >
+                        <GameCard card={stackCard} disableInteractions />
+                      </div>
+                    );
+                  })}
                   <GameCard
                     card={card}
                     disableInteractions
@@ -8750,7 +9023,7 @@ export default function GameBoard() {
             );
           })}
           
-          {/* Row 1, Col 6: DiceRoller */}
+          {/* Row 1, last col: DiceRoller */}
           <div className={cellWrapperClass}>
             <div className={cellInnerClass}>
               <DiceRoller 
@@ -8761,8 +9034,8 @@ export default function GameBoard() {
             </div>
           </div>
 
-          {/* Row 2: Active Row - 5 cards + GraveyardZone */}
-          {[0, 1, 2, 3, 4].map((index) => {
+          {/* Row 2: Active Row - DUNGEON_COLUMN_COUNT cards + GraveyardZone */}
+          {DUNGEON_COLUMNS.map((index) => {
             const card = activeCards[index];
             const colWidth = rageStripWidth;
             const isEngagedMonster = Boolean(card && card.type === 'monster' && isMonsterEngaged(card.id));
@@ -8805,15 +9078,28 @@ export default function GameBoard() {
 
             const gameCardNode = (
               <>
-                {hasActiveStack && activeStackedCards.map((stackCard, sIdx) => (
-                  <div
-                    key={stackCard.id}
-                    className="absolute inset-0 pointer-events-none dh-grid-cell"
-                    style={{ zIndex: sIdx, transform: `translateY(${(sIdx + 1) * -8}%)` }}
-                  >
-                    <GameCard card={stackCard} disableInteractions />
-                  </div>
-                ))}
+                {hasActiveStack && activeStackedCards.map((stackCard, sIdx) => {
+                  const total = activeStackedCards.length + 1;
+                  const bottomY = -6;
+                  const topY = 20;
+                  const step = total <= 1 ? 0 : (topY - bottomY) / (total - 1);
+                  const y = bottomY + sIdx * step;
+                  return (
+                    <div
+                      key={stackCard.id}
+                      className="absolute inset-0 rounded-md overflow-hidden pointer-events-none"
+                      style={{
+                        zIndex: sIdx,
+                        transform: `translateY(${y}%)`,
+                        opacity: 0.5 - sIdx * 0.1,
+                        filter: 'brightness(0.7)',
+                        padding: 'var(--dh-card-padding, 0.25rem)',
+                      }}
+                    >
+                      <GameCard card={stackCard} disableInteractions />
+                    </div>
+                  );
+                })}
                 <GameCard
                   card={card}
                   onDragStart={
@@ -8962,7 +9248,7 @@ export default function GameBoard() {
             );
           })}
           
-          {/* Row 2, Col 6: GraveyardZone */}
+          {/* Row 2, last col: GraveyardZone */}
           <div className={cellWrapperClass}>
             <div className={cellInnerClass} ref={setGraveyardRef}>
               <GraveyardZone
@@ -9411,6 +9697,9 @@ export default function GameBoard() {
         deathWardPrompt={deathWardPrompt}
         onDeathWardConfirm={handleDeathWardConfirm}
         onDeathWardDecline={handleDeathWardDecline}
+        daggerSelfDestructPrompt={daggerSelfDestructPrompt}
+        onDaggerSelfDestructConfirm={handleDaggerSelfDestructConfirm}
+        onDaggerSelfDestructDecline={handleDaggerSelfDestructDecline}
         wraithPassiveUnlockPopup={wraithPassiveUnlockPopup}
         onWraithPassiveUnlockChange={setWraithPassiveUnlockPopup}
         gameOver={gameOver}
@@ -9437,8 +9726,10 @@ export default function GameBoard() {
         discoverModalOpen={discoverModalOpen}
         discoverOptions={discoverOptions}
         onDiscoverSelect={handleDiscoverSelect}
+        onDiscoverCancel={handleDiscoverCancel}
         graveyardDiscoverState={graveyardDiscoverState}
         onGraveyardDiscoverSelect={handleGraveyardDiscoverSelect}
+        onGraveyardDiscoverCancel={handleGraveyardDiscoverCancel}
         ghostBladeExileCards={ghostBladeExileCards}
         onGhostBladeExileConfirm={handleGhostBladeExileConfirm}
         shopModalOpen={shopModalOpen}

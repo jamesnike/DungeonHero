@@ -119,6 +119,8 @@ export function serializeGameState(state: GameState): PersistedGameState {
     stunCap: state.stunCap,
     heroStunned: state.heroStunned,
     cardGainUpgradeProgress: state.cardGainUpgradeProgress,
+    recycleBackpackProgress: state.recycleBackpackProgress,
+    swapUpgradeProgress: state.swapUpgradeProgress,
     bugletAmuletObtained: state.bugletAmuletObtained,
     persuadeLevel: state.persuadeLevel,
     persuadeCostModifier: state.persuadeCostModifier,

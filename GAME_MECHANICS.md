@@ -76,8 +76,8 @@
 | **牌堆** | `remainingDeck` | 未翻开的牌 |
 | **预览区** | `previewCards` | 瀑流时先展示在顶行 |
 | **场上** | `activeCards` | 5列活跃卡牌行 |
-| **手牌** | `handCards` | 上限 `HAND_LIMIT(5) + handLimitBonus` |
-| **背包** | `backpackItems` | LIFO，基础容量 `BASE_BACKPACK_CAPACITY(10)` + 修正 |
+| **手牌** | `handCards` | 上限 `HAND_LIMIT(6) + handLimitBonus` |
+| **背包** | `backpackItems` | LIFO，基础容量 `BASE_BACKPACK_CAPACITY(12)` + 修正 |
 | **回收袋** | `permanentMagicRecycleBag` | 永久牌等待回收的区域 |
 | **坟场** | `discardedCards` | 已消耗/销毁的牌（按ID去重） |
 | **职业牌堆** | `classDeck` | 骑士职业专属卡牌 |
@@ -113,8 +113,8 @@
 
 ### 2.4 牌序规则
 
-- 精英怪只出现在牌堆**后半段**
-- 每5张牌中至少有1张怪物
+- 1只精英怪出现在牌堆**前半段**（第13–30张），其余精英怪在**后半段**
+- 每6张牌中至少有1张怪物，至多2张怪物
 - 牌堆最后3张中必有1张怪物
 - 牌堆中最后一只怪物标记为"最终之敌"(`isFinalMonster: true`)
 
@@ -209,8 +209,12 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 - 战斗狂热技能：`hp < maxHp / 2` 时 +2
 
 **暴击判定：**
-- 有 `critChance` 的武器（如匕首）：`threshold = round((critChance/100) × 20)`
+- 有 `critChance` 的武器（如幸运匕首）：`threshold = round((critChance/100) × 20)`
 - D20 掷骰，≤ threshold 时暴击 → 最终伤害**翻倍**
+
+**匕首自毁发现：**
+- 主牌堆 Dagger 攻击后，若武器仍有耐久，弹窗询问玩家是否自毁
+- 确认后毁坏武器，发现 N 张专属牌（N = 剩余耐久）
 
 ### 4.4 武器疲劳判定 (`isExhaustedThisTurn` → 红叉)
 
@@ -1100,8 +1104,8 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 常量 | 值 | 所在文件 |
 |------|-----|---------|
 | `INITIAL_HP` | 20 | constants.ts |
-| `HAND_LIMIT` | 5 | constants.ts |
-| `BASE_BACKPACK_CAPACITY` | 10 | GameBoard.tsx |
+| `HAND_LIMIT` | 6 | constants.ts |
+| `BASE_BACKPACK_CAPACITY` | 12 | constants.ts |
 | `MAX_AMULET_SLOTS` | 2 | GameBoard.tsx |
 | `BALANCE_ATTACK_BONUS` | 3 | GameBoard.tsx |
 | `BALANCE_SHIELD_BONUS` | 3 | GameBoard.tsx |

@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Infinity as InfinityIcon } from 'lucide-react';
-import GameCard, { type GameCardData } from './GameCard';
+import GameCard, { type GameCardData, cardHasPermFlag } from './GameCard';
 
 interface PermGrantModalProps {
   open: boolean;
@@ -28,7 +28,7 @@ export default function PermGrantModal({
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const eligibleCards = handCards.filter(
-    c => c.id !== sourceCardId && !c.recycleDelay,
+    c => c.id !== sourceCardId && !cardHasPermFlag(c),
   );
 
   const handleConfirm = () => {

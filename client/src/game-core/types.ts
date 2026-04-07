@@ -226,6 +226,8 @@ export interface GameState {
   stunCap: number;
   heroStunned: boolean;
   cardGainUpgradeProgress: number;
+  recycleBackpackProgress: number;
+  swapUpgradeProgress: number;
   bugletAmuletObtained: boolean;
   handLimitBonus: number;
   heroMagicState: HeroMagicState;

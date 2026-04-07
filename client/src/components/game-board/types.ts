@@ -125,7 +125,8 @@ export type MonsterRewardEffect =
   | { type: 'spellDamage'; amount: number }
   | { type: 'spellLifesteal'; amount: number }
   | { type: 'stunCap'; amount: number }
-  | { type: 'backpackCapacity'; amount: number };
+  | { type: 'backpackCapacity'; amount: number }
+  | { type: 'upgradeCard' };
 
 export type MonsterRewardOption = {
   id: string;
@@ -576,6 +577,10 @@ export type ActiveAmuletEffects = {
   hasCardGainUpgrade: boolean;
   hasAttackPersuadeDiscount: boolean;
   hasCardGainMissile: boolean;
+  hasSwapUpgrade: boolean;
+  hasStunUpgradeCap: boolean;
+  hasRecycleBackpackExpand: boolean;
+  hasDungeonGold: boolean;
 };
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';

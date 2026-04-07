@@ -223,6 +223,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   const setSlotTempArmor = useEngineSetter('slotTempArmor');
   const setEquipmentSlotCapacity = useEngineSetter('equipmentSlotCapacity');
   const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
+  const setSwapUpgradeProgress = useEngineSetter('swapUpgradeProgress');
 
   // -- Convenience accessors --------------------------------------------------
 
@@ -1696,7 +1697,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
         const echoRemaining = (pendingMagicAction.echoRemaining ?? 1) - 1;
         if (echoRemaining > 0) {
-          const remainingMonsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
+          const remainingMonsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster' || c.type === 'building');
           if (remainingMonsters.length > 0) {
             const totalEcho = (pendingMagicAction.echoRemaining ?? 1);
             const echoLabel = `（回响：第 ${totalEcho - echoRemaining + 1}/${totalEcho} 次）`;
@@ -1734,7 +1735,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
         const echoRemaining = (pendingMagicAction.echoRemaining ?? 1) - 1;
         if (echoRemaining > 0) {
-          const remainingMonsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
+          const remainingMonsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster' || c.type === 'building');
           if (remainingMonsters.length > 0) {
             const totalEcho = (pendingMagicAction.echoRemaining ?? 1);
             const echoLabel = `（回响：第 ${totalEcho - echoRemaining + 1}/${totalEcho} 次）`;
@@ -1793,18 +1794,22 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
       if (pendingMagicAction.effect === 'stun-strike') {
         const echo = pendingMagicAction.echoMultiplier ?? 1;
-        const baseDmg = pendingMagicAction.data?.baseDmg ?? 2;
+        const baseDmgPerHit = pendingMagicAction.data?.baseDmgPerHit ?? 1;
         const stunPct = pendingMagicAction.data?.stunPct ?? 10;
-        const totalDmg = getSpellDamage(baseDmg) * echo;
+        const hits = pendingMagicAction.data?.hits ?? 2;
+        const hitDmg = getSpellDamage(baseDmgPerHit) * echo;
+        const totalDmg = hitDmg * hits;
         if (!isMonsterEngaged(monster.id)) beginCombat(monster, 'hero');
         dealDamageToMonster(monster, totalDmg, { pulses: 2 });
         let stunText = '';
-        if (!monster.isStunned) {
-          const threshold = Math.round((stunPct / 100) * 20);
-          if (threshold > 0) {
+        let stunned = monster.isStunned;
+        const threshold = Math.round((stunPct / 100) * 20);
+        if (threshold > 0) {
+          for (let hit = 1; hit <= hits; hit++) {
+            if (stunned) break;
             const stunResult = await requestDiceOutcome({
               title: monster.name,
-              subtitle: `雷震击晕判定（${stunPct}%）`,
+              subtitle: `雷震击晕判定 第${hit}击（${stunPct}%）`,
               entries: [
                 { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
                 { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
@@ -1812,15 +1817,27 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
             });
             if (stunResult?.id === 'stun') {
               updateMonsterCard(monster.id, m => ({ ...m, isStunned: true }));
-              stunText = ' 击晕成功！';
+              stunned = true;
+              stunText = ` 第${hit}击击晕成功！`;
               addGameLog('combat', `${monster.name} 被雷震击晕了！`);
-            } else {
-              stunText = ' 未能击晕。';
+
+              if (depsRef.current.amuletEffects.hasStunUpgradeCap) {
+                const stunAmuletH = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'stun-upgrade-cap');
+                const stunStepH = (stunAmuletH?.upgradeLevel ?? 0) >= 1 ? 10 : 5;
+                setStunCap(prev => {
+                  const next = Math.min(100, prev + stunStepH);
+                  addGameLog('amulet', `震慑之符：击晕成功，击晕上限 +${stunStepH}%（当前 ${next}%）`);
+                  return next;
+                });
+              }
             }
           }
+          if (!stunned) {
+            stunText = ' 未能击晕。';
+          }
         }
-        addGameLog('magic', `雷震击：对 ${monster.name} 造成 ${totalDmg} 点法术伤害`);
-        finalizeMagicCard(pendingMagicAction.card, { banner: `雷震击：对 ${monster.name} 造成 ${totalDmg} 点伤害！${stunText}` });
+        addGameLog('magic', `雷震击：对 ${monster.name} 造成 ${hitDmg}×${hits} 点法术伤害`);
+        finalizeMagicCard(pendingMagicAction.card, { banner: `雷震击：对 ${monster.name} 造成 ${hitDmg}×${hits} 点伤害！${stunText}` });
         return;
       }
 
@@ -1888,6 +1905,18 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           drawMsg = drawn ? ` 抽到「${drawn.name}」。` : '';
         }
         addGameLog('magic', `维度扭曲：${card.name} ↔ ${previewCard.name} 互换行位置${drawMsg}`);
+        if (depsRef.current.amuletEffects.hasSwapUpgrade) {
+          const prog = engine.getState().swapUpgradeProgress + 1;
+          if (prog >= 3) {
+            setSwapUpgradeProgress(0);
+            setUpgradeModalOpen(true);
+            addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+            setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+          } else {
+            setSwapUpgradeProgress(prog);
+            addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
+          }
+        }
         finalizeMagicCard(pendingMagicAction.card, { banner: `${card.name} ↔ ${previewCard.name} 行位置互换！${drawMsg}` });
         return;
       }
@@ -1929,6 +1958,18 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           return next;
         });
         addGameLog('magic', `${pendingMagicAction.card.name}：${card.name} 与牌堆第 ${swapIdx + 1} 张 ${deckCard.name} 交换${persuadeMsg}`);
+        if (depsRef.current.amuletEffects.hasSwapUpgrade) {
+          const prog = engine.getState().swapUpgradeProgress + 1;
+          if (prog >= 3) {
+            setSwapUpgradeProgress(0);
+            setUpgradeModalOpen(true);
+            addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+            setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+          } else {
+            setSwapUpgradeProgress(prog);
+            addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
+          }
+        }
         finalizeMagicCard(pendingMagicAction.card, {
           banner: `${card.name} ↔ ${deckCard.name}（牌堆第 ${swapIdx + 1} 张）交换！${persuadeMsg}`,
         });
@@ -1955,6 +1996,18 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           return next;
         });
         addGameLog('magic', `乾坤挪移：${card.name} 与 ${leftC.name} 互换位置。`);
+        if (depsRef.current.amuletEffects.hasSwapUpgrade) {
+          const prog = engine.getState().swapUpgradeProgress + 1;
+          if (prog >= 3) {
+            setSwapUpgradeProgress(0);
+            setUpgradeModalOpen(true);
+            addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+            setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+          } else {
+            setSwapUpgradeProgress(prog);
+            addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
+          }
+        }
         finalizeMagicCard(pendingMagicAction.card, { banner: `${card.name} ↔ ${leftC.name} 位置互换！` });
         return;
       }
@@ -1978,6 +2031,19 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       const sanitizedCard = sanitizeCardMetadata(card);
       setRemainingDeck(prev => [...prev, sanitizedCard]);
       addGameLog('magic', `${card.name} 已置于牌堆底。`);
+
+      if (depsRef.current.amuletEffects.hasSwapUpgrade) {
+        const prog = engine.getState().swapUpgradeProgress + 1;
+        if (prog >= 3) {
+          setSwapUpgradeProgress(0);
+          setUpgradeModalOpen(true);
+          addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+          setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+        } else {
+          setSwapUpgradeProgress(prog);
+          addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
+        }
+      }
 
       echoRemainingRef.current -= 1;
       const echoLeft = echoRemainingRef.current;

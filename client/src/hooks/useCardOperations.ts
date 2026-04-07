@@ -41,7 +41,7 @@ import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingA
 export interface PendingDiscardEffect {
   card: GameCardData;
   owner: 'player' | 'dungeon';
-  opts?: { toRecycleBag?: boolean };
+  opts?: { toRecycleBag?: boolean; isEquipmentDisplace?: boolean };
 }
 
 export interface CardOperationsDeps {
@@ -126,6 +126,8 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   const setAmuletSlots = useEngineSetter('amuletSlots');
   const setWaveDiscardCount = useEngineSetter('waveDiscardCount');
   const setRecycleForgePlayCount = useEngineSetter('recycleForgePlayCount');
+  const setRecycleBackpackProgress = useEngineSetter('recycleBackpackProgress');
+  const setBackpackCapacityModifier = useEngineSetter('backpackCapacityModifier');
   const setHeroSkillBanner = useEngineSetter('heroSkillBanner');
   const setEventTransformState = useEngineSetter('eventTransformState');
 
@@ -152,6 +154,10 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         case 'persuade-grant-recycle-fetch': state.hasPersuadeGrantRecycleFetch = true; break;
         case 'damage-class-discover': state.hasDamageClassDiscover = true; break;
         case 'persuade-graveyard-stack': state.hasPersuadeGraveyardStack = true; break;
+        case 'swap-upgrade': state.hasSwapUpgrade = true; break;
+        case 'stun-upgrade-cap': state.hasStunUpgradeCap = true; break;
+        case 'recycle-backpack-expand': state.hasRecycleBackpackExpand = true; break;
+        case 'dungeon-gold': state.hasDungeonGold = true; break;
       }
       const bonus = slot.amuletAuraBonus;
       if (bonus) {
@@ -268,6 +274,8 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       if (isPermRecycleEquipment(sanitized)) {
         const maxD = sanitized.maxDurability ?? sanitized.durability ?? 1;
         payload = { ...sanitized, durability: maxD, maxDurability: maxD };
+      } else if ((sanitized.type === 'weapon' || sanitized.type === 'shield') && sanitized.recycleDelay != null && sanitized.recycleDelay > 0) {
+        payload = { ...sanitized, durability: 1 };
       }
       const withWaits: GameCardData = { ...payload, _recycleWaits: payload.recycleDelay ?? 1 };
       setPermanentMagicRecycleBag(prev => {
@@ -275,8 +283,22 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         return [...filtered, withWaits];
       });
       depsRef.current.addGameLog('deck', `「${card.name}」→ 回收袋`);
+
+      const state = engine.getState();
+      const recycleAmulet = state.amuletSlots.find(s => s?.amuletEffect === 'recycle-backpack-expand');
+      if (recycleAmulet) {
+        const recycleThreshold = (recycleAmulet.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        const progress = state.recycleBackpackProgress + 1;
+        if (progress >= recycleThreshold) {
+          setRecycleBackpackProgress(0);
+          setBackpackCapacityModifier(prev => prev + 3);
+          depsRef.current.addGameLog('amulet', `积蓄之符：累计回收 ${recycleThreshold} 张牌，背包上限 +3！`);
+        } else {
+          setRecycleBackpackProgress(progress);
+        }
+      }
     },
-    [setPermanentMagicRecycleBag],
+    [setPermanentMagicRecycleBag, engine, setRecycleBackpackProgress, setBackpackCapacityModifier],
   );
 
   const restorePermanentMagicFromRecycleBag = useCallback(() => {
@@ -483,7 +505,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   // -- Discard side effects ---------------------------------------------------
 
   const executeDiscardSideEffects = useCallback(
-    (card: GameCardData, owner: 'player' | 'dungeon', opts?: { toRecycleBag?: boolean }) => {
+    (card: GameCardData, owner: 'player' | 'dungeon', opts?: { toRecycleBag?: boolean; isEquipmentDisplace?: boolean }) => {
       // --- Phase 1: card-own on-discard effects (resolve first) ---
       if (owner === 'player' && card.type === 'magic' && card.magicEffect === 'honor-blood') {
         const monsters = flattenActiveRowSlots(activeCards).filter(
@@ -536,7 +558,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         setGold(prev => prev + 2);
         depsRef.current.addGameLog('gold', `弃牌获利：弃回「${card.name}」获得 2 金币`);
       }
-      if (amuletEffects.hasCatapult) {
+      if (amuletEffects.hasCatapult && !opts?.toRecycleBag && !opts?.isEquipmentDisplace) {
         const drawn = drawFromBackpackToHand();
         if (drawn) {
           depsRef.current.addGameLog('amulet', `弹射护符：弃置「${card.name}」后从背包抽了「${drawn.name}」`);
@@ -555,7 +577,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   );
 
   const applyDiscardSideEffects = useCallback(
-    (card: GameCardData, owner: 'player' | 'dungeon', opts?: { toRecycleBag?: boolean }) => {
+    (card: GameCardData, owner: 'player' | 'dungeon', opts?: { toRecycleBag?: boolean; isEquipmentDisplace?: boolean }) => {
       if (depsRef.current.stagingCardsRef.current.length > 0) {
         depsRef.current.pendingDiscardEffectsQueueRef.current.push({ card, owner, opts });
         return;
@@ -776,14 +798,15 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       setHeroSkillBanner(`残骸回收！${card.name} 回到手牌（耐久上限 ${newMaxDur}）！`);
       return;
     }
-    const toRecycleBag = isPermRecycleEquipment(card);
+    const toRecycleBag = isPermRecycleEquipment(card) ||
+      ((card.type === 'weapon' || card.type === 'shield') && card.recycleDelay != null && card.recycleDelay > 0);
     if (toRecycleBag) {
       addPermanentMagicToRecycleBag(card);
     } else {
       addToGraveyard(card);
     }
     if (!options?.isDestruction) {
-      applyDiscardSideEffects(card, 'player', { toRecycleBag });
+      applyDiscardSideEffects(card, 'player', { toRecycleBag, isEquipmentDisplace: true });
     }
   }
 
@@ -945,7 +968,9 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       if (!slotItem) {
         return false;
       }
-      if (isPermRecycleEquipment(slotItem)) {
+      const toRecycleBag = isPermRecycleEquipment(slotItem) ||
+        ((slotItem.type === 'weapon' || slotItem.type === 'shield') && slotItem.recycleDelay != null && slotItem.recycleDelay > 0);
+      if (toRecycleBag) {
         addPermanentMagicToRecycleBag(slotItem);
       } else {
         addToGraveyard(slotItem);
@@ -975,7 +1000,9 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       if (!slotItem) return 0;
       let count = 0;
       const sendToGrave = (item: EquipmentItem) => {
-        if (isPermRecycleEquipment(item)) {
+        const toRecycleBag = isPermRecycleEquipment(item) ||
+          ((item.type === 'weapon' || item.type === 'shield') && item.recycleDelay != null && item.recycleDelay > 0);
+        if (toRecycleBag) {
           addPermanentMagicToRecycleBag(item);
         } else {
           addToGraveyard(item);

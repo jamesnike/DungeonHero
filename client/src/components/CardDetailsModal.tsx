@@ -756,14 +756,14 @@ export default function CardDetailsModal({
             {/* Weapon/Shield Details */}
             {(card.type === 'weapon' || card.type === 'shield') && (
               <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
-                {isPermRecycleEquipment(card) && (
+                {(isPermRecycleEquipment(card) || (card.recycleDelay != null && card.recycleDelay > 0)) && (
                   <div className="col-span-2 mb-1 inline-flex items-center gap-1 rounded-md border border-cyan-500/45 bg-cyan-950/25 px-2 py-1 text-xs font-bold tracking-wide text-cyan-900 dark:text-cyan-100">
                     PERM
                     {(card.recycleDelay ?? 1) > 1 && (
                       <span className="tabular-nums">{card.recycleDelay}</span>
                     )}
                     <span className="ml-1 font-normal text-muted-foreground">
-                      损毁后进回收袋，与永久法术相同瀑流计数后回背包。
+                      损毁后进回收袋，{isPermRecycleEquipment(card) ? '耐久恢复至满' : '耐久回到 1'}，与永久法术相同瀑流计数后回背包。
                     </span>
                   </div>
                 )}

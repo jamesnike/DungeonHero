@@ -1,5 +1,5 @@
 /**
- * DungeonRow — renders the active dungeon row (5 cards + GraveyardZone).
+ * DungeonRow — renders the active dungeon row (DUNGEON_COLUMN_COUNT cards + GraveyardZone).
  *
  * Handles monster rage overlays, engagement states, and targeting highlights.
  */
@@ -10,7 +10,7 @@ import type { GameCardData, EquipmentCardStatModifier } from '@/components/GameC
 import GraveyardZone from '@/components/GraveyardZone';
 import { Calendar } from 'lucide-react';
 import type { ActiveRowSlots, CombatState, PendingMagicAction, EquipmentSlotId } from '../types';
-import { MONSTER_RAGE_BASE_TRANSLATE_PX, MONSTER_RAGE_TRANSLATE_ADJUST_PX } from '../constants';
+import { DUNGEON_COLUMNS, MONSTER_RAGE_BASE_TRANSLATE_PX, MONSTER_RAGE_TRANSLATE_ADJUST_PX } from '../constants';
 
 export interface DungeonRowProps {
   activeCards: ActiveRowSlots;
@@ -101,7 +101,7 @@ function DungeonRowInner({
 
   return (
     <>
-      {[0, 1, 2, 3, 4].map((index) => {
+      {DUNGEON_COLUMNS.map((index) => {
         const card = activeCards[index];
         const colWidth = rageStripWidth;
         const isEngagedMonster = Boolean(
@@ -211,9 +211,10 @@ function DungeonRowInner({
                         className="absolute inset-0 rounded-md overflow-hidden"
                         style={{
                           zIndex: sIdx,
-                          transform: `translateY(${y}%) scale(${0.94 - sIdx * 0.02})`,
+                          transform: `translateY(${y}%)`,
                           opacity: 0.5 - sIdx * 0.1,
                           filter: 'brightness(0.7)',
+                          padding: 'var(--dh-card-padding, 0.25rem)',
                         }}
                       >
                         <GameCard card={stackCard} disableInteractions />
@@ -314,7 +315,7 @@ function DungeonRowInner({
         );
       })}
 
-      {/* GraveyardZone in column 6 */}
+      {/* GraveyardZone in last column */}
       <div className={cellWrapperClass}>
         <div className={cellInnerClass} ref={setGraveyardRef}>
           <GraveyardZone

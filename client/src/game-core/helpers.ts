@@ -209,7 +209,8 @@ export function getWaterfallPreviewDiscardDestination(
     (card.type === 'magic' && card.magicType === 'permanent') ||
     card.type === 'amulet' ||
     card.isPermanentEvent ||
-    isPermRecycleEquipment(card);
+    isPermRecycleEquipment(card) ||
+    (card.recycleDelay != null && card.recycleDelay > 0);
   if (isPerm) return 'recycle-bag';
   return 'graveyard';
 }

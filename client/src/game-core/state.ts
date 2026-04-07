@@ -74,6 +74,8 @@ export function createInitialGameState(): GameState {
     stunCap: INITIAL_STUN_CAP,
     heroStunned: false,
     cardGainUpgradeProgress: 0,
+    recycleBackpackProgress: 0,
+    swapUpgradeProgress: 0,
     bugletAmuletObtained: false,
     handLimitBonus: 0,
     heroMagicState: createInitialHeroMagicState(),

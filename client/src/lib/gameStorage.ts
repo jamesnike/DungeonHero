@@ -125,6 +125,8 @@ export interface PersistedGameState {
   eventModalMinimized?: boolean;
   stunCap?: number;
   heroStunned?: boolean;
+  recycleBackpackProgress?: number;
+  swapUpgradeProgress?: number;
   persuadeLevel?: number;
   persuadeCostModifier?: number;
   lastPersuadeTargetId?: string | null;

@@ -169,7 +169,7 @@ export default function HelpDialog({ buttonClassName }: { buttonClassName?: stri
               <div className="min-w-0">
                 <strong className="text-orange-400 text-sm">背包 & 手牌</strong>
                 <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                  存放非怪物/非事件卡（上限 10~15 张）。每处理一张场上的牌，背包会自动抽一张到手牌。手牌上限 5~7 张。
+                  存放非怪物/非事件卡（上限 12~17 张）。每处理一张场上的牌，背包会自动抽一张到手牌。手牌上限 6~8 张。
                 </p>
               </div>
             </div>

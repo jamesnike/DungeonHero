@@ -4,4 +4,4 @@ export const CHAOS_DICE_SPELL_DESCRIPTION =
 
 /** 卡片摘要（仅 magicEffect 等短位） */
 export const CHAOS_DICE_SPELL_MAGIC_EFFECT =
-  '掷骰五选一：装备回手（再装耐久回满）、发现专属（三选一）、临时商店、雷击随机 1 怪基础伤 3 双段、弃回 2 抽 2。';
+  '掷骰五选一：装备回手（保留耐久）、发现专属（三选一）、临时商店、雷击随机 1 怪基础伤 3 双段、弃回 2 抽 2。';

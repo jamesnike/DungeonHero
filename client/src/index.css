@@ -2108,7 +2108,7 @@ html {
   .card-draft-overlay {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(0, 0, 0, 0.3);
   }
 
   .loading-screen__hero-glow {
@@ -2292,7 +2292,7 @@ html {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.82);
+  background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(6px);
 }
 
@@ -2304,10 +2304,10 @@ html {
   padding: 28px 32px 24px;
   max-width: 700px;
   width: 92vw;
-  background: linear-gradient(160deg, #1e1b2e 0%, #15131f 100%);
-  border: 1px solid rgba(168, 130, 255, 0.25);
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 16px;
-  box-shadow: 0 0 40px rgba(120, 80, 220, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .card-draft-header {
@@ -2317,30 +2317,29 @@ html {
 .card-draft-title {
   font-size: 1.4rem;
   font-weight: 700;
-  color: #e2d8ff;
+  color: #1a1a2e;
   margin: 0 0 4px;
-  text-shadow: 0 0 12px rgba(168, 130, 255, 0.4);
 }
 
 .card-draft-subtitle {
   font-size: 0.85rem;
-  color: #9e95b8;
+  color: #666;
   margin: 0;
 }
 
 .card-draft-picked {
   font-size: 0.8rem;
-  color: #b5aed0;
-  background: rgba(168, 130, 255, 0.08);
+  color: #555;
+  background: rgba(100, 60, 180, 0.06);
   padding: 6px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(168, 130, 255, 0.15);
+  border: 1px solid rgba(100, 60, 180, 0.12);
   max-width: 100%;
   text-align: center;
 }
 
 .card-draft-picked-label {
-  color: #a882ff;
+  color: #6b3fa0;
   font-weight: 600;
 }
 
@@ -2359,28 +2358,28 @@ html {
   padding: 12px;
   border-radius: 12px;
   border: 2px solid transparent;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.02);
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s, transform 0.15s;
   max-width: 180px;
 }
 
 .card-draft-choice:hover {
-  background: rgba(168, 130, 255, 0.08);
-  border-color: rgba(168, 130, 255, 0.3);
+  background: rgba(100, 60, 180, 0.06);
+  border-color: rgba(100, 60, 180, 0.2);
   transform: translateY(-2px);
 }
 
 .card-draft-choice-name {
   font-size: 0.82rem;
   font-weight: 600;
-  color: #e0d8f0;
+  color: #1a1a2e;
   text-align: center;
 }
 
 .card-draft-choice-desc {
   font-size: 0.7rem;
-  color: #8e85a8;
+  color: #666;
   text-align: center;
   line-height: 1.35;
   max-height: 3.8em;
@@ -2394,9 +2393,9 @@ html {
   min-height: 190px;
   border-radius: 12px;
   overflow: hidden;
-  background: linear-gradient(170deg, #2a2540 0%, #1a1730 100%);
-  border: 1.5px solid rgba(168, 130, 255, 0.3);
-  box-shadow: 0 4px 16px rgba(80, 50, 160, 0.25);
+  background: linear-gradient(170deg, #f8f6ff 0%, #efe8ff 100%);
+  border: 1.5px solid rgba(100, 60, 180, 0.18);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 .skill-draft-card-bg {
@@ -2429,17 +2428,16 @@ html {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(168, 130, 255, 0.15);
-  border: 1.5px solid rgba(168, 130, 255, 0.35);
-  color: #c4a8ff;
+  background: rgba(100, 60, 180, 0.1);
+  border: 1.5px solid rgba(100, 60, 180, 0.22);
+  color: #6b3fa0;
   margin-bottom: 2px;
 }
 
 .skill-draft-name {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #e8e0ff;
-  text-shadow: 0 0 8px rgba(168, 130, 255, 0.3);
+  color: #1a1a2e;
   text-align: center;
 }
 
@@ -2452,36 +2450,36 @@ html {
 }
 
 .skill-draft-type-active {
-  background: rgba(255, 160, 60, 0.2);
-  color: #ffb366;
-  border: 1px solid rgba(255, 160, 60, 0.35);
+  background: rgba(220, 120, 20, 0.1);
+  color: #b06a10;
+  border: 1px solid rgba(220, 120, 20, 0.25);
 }
 
 .skill-draft-type-passive {
-  background: rgba(80, 200, 160, 0.15);
-  color: #6ee0b8;
-  border: 1px solid rgba(80, 200, 160, 0.3);
+  background: rgba(40, 160, 120, 0.1);
+  color: #1a8a60;
+  border: 1px solid rgba(40, 160, 120, 0.2);
 }
 
 .skill-draft-divider {
   width: 60%;
   height: 1px;
-  background: rgba(168, 130, 255, 0.2);
+  background: rgba(0, 0, 0, 0.1);
   margin: 4px 0;
 }
 
 .skill-draft-effect {
   font-size: 0.68rem;
-  color: #b0a8cc;
+  color: #555;
   line-height: 1.4;
   text-align: center;
 }
 
 .skill-draft-reroll {
   font-size: 0.78rem;
-  color: #9e95b8;
-  background: rgba(168, 130, 255, 0.08);
-  border: 1px solid rgba(168, 130, 255, 0.2);
+  color: #666;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 8px;
   padding: 6px 18px;
   cursor: pointer;
@@ -2489,9 +2487,9 @@ html {
 }
 
 .skill-draft-reroll:hover {
-  background: rgba(168, 130, 255, 0.15);
-  border-color: rgba(168, 130, 255, 0.4);
-  color: #c4b8e0;
+  background: rgba(100, 60, 180, 0.08);
+  border-color: rgba(100, 60, 180, 0.25);
+  color: #6b3fa0;
 }
 
 /* ── Class Card Preview (in draft overlays) ──────────────── */
@@ -2502,14 +2500,14 @@ html {
   gap: 6px;
   padding: 10px 16px;
   border-radius: 10px;
-  background: rgba(255, 200, 60, 0.06);
-  border: 1px solid rgba(255, 200, 60, 0.2);
+  background: rgba(200, 160, 40, 0.06);
+  border: 1px solid rgba(200, 160, 40, 0.18);
 }
 
 .class-card-preview-label {
   font-size: 0.72rem;
   font-weight: 600;
-  color: #e8c44a;
+  color: #9a7a20;
   letter-spacing: 0.5px;
 }
 
@@ -2524,8 +2522,8 @@ html {
   height: 44px;
   border-radius: 8px;
   object-fit: cover;
-  border: 1.5px solid rgba(255, 200, 60, 0.3);
-  box-shadow: 0 2px 8px rgba(200, 160, 40, 0.2);
+  border: 1.5px solid rgba(200, 160, 40, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 
@@ -2539,12 +2537,12 @@ html {
 .class-card-preview-name {
   font-size: 0.82rem;
   font-weight: 700;
-  color: #f0e0a0;
+  color: #8a6a10;
 }
 
 .class-card-preview-desc {
   font-size: 0.65rem;
-  color: #b0a878;
+  color: #777;
   line-height: 1.35;
   max-width: 240px;
   overflow: hidden;
