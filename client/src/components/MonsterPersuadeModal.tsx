@@ -114,12 +114,10 @@ export default function MonsterPersuadeModal({
                 <div className="rounded border border-border/60 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
                   <p>投掷 d20 骰子，掷出 <span className="font-mono font-semibold text-foreground">{threshold}</span> 或更高即劝降成功。</p>
                   <p className="mt-1">
-                    成功后 {monster.name} 将进入{targetLabel}
-                    {targetLabel === '背包' ? '' : '（装备）'}
-                    ，血层转换为耐久（{monsterHpLayers}层 → {monsterHpLayers}耐久）。
+                    成功后 {monster.name} 将进入背包，血层转换为耐久（{monsterHpLayers}层 → {monsterHpLayers}耐久）。
                   </p>
                   <p className="mt-1 text-amber-600 dark:text-amber-400 font-medium">
-                    怪物原有能力将转化为对应的装备效果。
+                    从背包装备后，怪物原有能力将转化为对应的装备效果。
                   </p>
                 </div>
               </div>

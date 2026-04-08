@@ -31,13 +31,17 @@ export function damageMonsterWithLayerOverflow(
   damage: number,
   _maxLayerLoss?: number,
 ): GameCardData {
-  if (damage <= 0) return monster;
+  let effectiveDamage = damage;
+  if (monster.maxDamagePerHit && effectiveDamage > monster.maxDamagePerHit && !monster.isStunned) {
+    effectiveDamage = monster.maxDamagePerHit;
+  }
+  if (effectiveDamage <= 0) return monster;
 
   if (!monster.maxHp || monster.hp == null) {
     return {
       ...monster,
-      hp: Math.max(0, (monster.hp || monster.value) - damage),
-      value: Math.max(0, (monster.hp || monster.value) - damage),
+      hp: Math.max(0, (monster.hp || monster.value) - effectiveDamage),
+      value: Math.max(0, (monster.hp || monster.value) - effectiveDamage),
     };
   }
 
@@ -45,8 +49,8 @@ export function damageMonsterWithLayerOverflow(
   const hpNow = monster.hp ?? 0;
   if (layers <= 0 || hpNow <= 0) return monster;
 
-  if (damage < hpNow) {
-    return { ...monster, hp: hpNow - damage };
+  if (effectiveDamage < hpNow) {
+    return { ...monster, hp: hpNow - effectiveDamage };
   }
 
   const newLayer = layers - 1;
@@ -178,6 +182,7 @@ export interface EndHeroTurnResult {
   combatState: CombatState;
   activeCards: ActiveRowSlots;
   berserkerSlotUsed: Record<string, boolean>;
+  flashSlotUsed: Record<string, boolean>;
   gambitSlotUsed: Record<string, number>;
   weaponExtraAttackUsed: Record<string, boolean>;
   logs: Array<{ type: string; message: string }>;
@@ -197,6 +202,7 @@ export function endHeroTurnPatch(
       combatState: { ...initialCombatState },
       activeCards: state.activeCards,
       berserkerSlotUsed: {},
+      flashSlotUsed: {},
       gambitSlotUsed: {},
       weaponExtraAttackUsed: {},
       logs: [{ type: 'combat', message: '战斗结束' }],
@@ -246,6 +252,7 @@ export function endHeroTurnPatch(
     combatState: newCombatState,
     activeCards: newActiveCards,
     berserkerSlotUsed: {},
+    flashSlotUsed: {},
     gambitSlotUsed: {},
     weaponExtraAttackUsed: {},
     logs,
@@ -321,6 +328,7 @@ export function finishCombatPatch(): Partial<GameState> {
   return {
     combatState: { ...initialCombatState },
     berserkerSlotUsed: {},
+    flashSlotUsed: {},
     gambitSlotUsed: {},
     weaponExtraAttackUsed: {},
   };
@@ -582,6 +590,14 @@ export function applyMonsterTurnEndEffects(
       const newValue = (updated.value ?? 0) + boost;
       logs.push({ type: 'combat', message: `${updated.name} 怨念蓄积：攻击力 +${boost}！（当前 ${newAttack}）` });
       updated = { ...updated, attack: newAttack, value: newValue, tempAttackBoost: (updated.tempAttackBoost ?? 0) + boost };
+    }
+
+    if (updated.golemSpellGrowth && updated.golemSpellGrowth > 0 && updated.antiMagicReflect != null) {
+      const growth = updated.golemSpellGrowth;
+      const newReflect = updated.antiMagicReflect + growth;
+      changed = true;
+      logs.push({ type: 'combat', message: `${updated.name} 法力吞噬：反魔伤害 +${growth}！（当前 ${newReflect}）` });
+      updated = { ...updated, antiMagicReflect: newReflect };
     }
 
     if (updated.bossLastStandAura && (updated.currentLayer ?? 1) === 1) {

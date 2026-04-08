@@ -177,6 +177,17 @@ export function applyWaterfallEffect(
         equipmentSlot2Reserve: [],
       };
 
+    case 'spellDecay':
+      return {
+        permanentSpellDamageBonus: Math.max(0, state.permanentSpellDamageBonus - effect.amount),
+      };
+
+    case 'destroyAllAmuletsAndDiscardHand':
+      return {
+        amuletSlots: [],
+        handCards: [],
+      };
+
     default:
       return {};
   }
@@ -196,5 +207,6 @@ export function waterfallResetsPure(state: GameState): Partial<GameState> {
     turnDamageTaken: 0,
     heroSkillUsedThisWave: false,
     extraSkillsUsedThisWave: [],
+    magicCardsPlayedThisTurn: 0,
   };
 }

@@ -23,6 +23,7 @@ const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
   Wraith: { base: 1, interval: 4 },
   Swarm: { base: 2, interval: 5 },
   Buglet: { base: 1, interval: 5 },
+  Golem: { base: 1, interval: 4 },
 };
 
 const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
@@ -60,6 +61,11 @@ const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
     { waterfallLevel: 4, attackBonus: 2, hpBonus: 1 },
     { waterfallLevel: 8, attackBonus: 4, hpBonus: 2 },
     { waterfallLevel: 12, attackBonus: 6, hpBonus: 4 },
+  ],
+  Golem:    [
+    { waterfallLevel: 4, attackBonus: 2, hpBonus: 2, specialAbility: 'golem-spell-resist', specialDesc: '法术抗性：受到的法术伤害减少50%' },
+    { waterfallLevel: 8, attackBonus: 4, hpBonus: 3 },
+    { waterfallLevel: 12, attackBonus: 6, hpBonus: 5, specialAbility: 'golem-spell-growth', specialDesc: '法力吞噬：每个怪物回合结束时，反魔伤害+1' },
   ],
 };
 
@@ -163,6 +169,13 @@ const applySpecialAbility = (result: GameCardData, ability: string): void => {
       break;
     case 'swarm-horde-rage':
       result.swarmHordeRage = true;
+      break;
+    case 'golem-spell-resist':
+      result.spellDamageReduction = 0.5;
+      break;
+    case 'golem-spell-growth':
+      result.spellDamageReduction = 0.5;
+      result.golemSpellGrowth = 1;
       break;
   }
 };

@@ -8,7 +8,8 @@ import type { ActiveRowSlots, EquipmentItem, EquipmentSlotId } from '@/component
 import { DUNGEON_COLUMN_COUNT } from './constants';
 
 export const BUILDING_AURA_SUPPRESS_ADJACENT_TEMP_ATTACK = 'suppress-adjacent-temp-attack' as const;
-export type BuildingAuraId = typeof BUILDING_AURA_SUPPRESS_ADJACENT_TEMP_ATTACK;
+export const BUILDING_AURA_ADJACENT_MAGIC_IMMUNE = 'adjacent-magic-immune' as const;
+export type BuildingAuraId = typeof BUILDING_AURA_SUPPRESS_ADJACENT_TEMP_ATTACK | typeof BUILDING_AURA_ADJACENT_MAGIC_IMMUNE;
 
 const BUILDING_ROW = 1;
 const HERO_EQUIP_COL: Record<EquipmentSlotId, number> = {
@@ -59,4 +60,26 @@ export function getEquipmentSlotsWithSuppressedTempAttack(
     }
   }
   return suppressed;
+}
+
+function isAdjacentMagicImmuneAura(card: GameCardData | null | undefined): boolean {
+  return (
+    card?.type === 'building' &&
+    card.buildingAura === BUILDING_AURA_ADJACENT_MAGIC_IMMUNE
+  );
+}
+
+/**
+ * 检查指定地城列中的怪物是否因相邻建筑光环而免疫玩家魔法伤害。
+ * 仅检查同行（active row）左右相邻格。
+ */
+export function isMonsterMagicImmuneByBuilding(
+  activeCards: ActiveRowSlots,
+  monsterCol: number,
+): boolean {
+  const leftCol = monsterCol - 1;
+  const rightCol = monsterCol + 1;
+  if (leftCol >= 0 && isAdjacentMagicImmuneAura(activeCards[leftCol])) return true;
+  if (rightCol < DUNGEON_COLUMN_COUNT && isAdjacentMagicImmuneAura(activeCards[rightCol])) return true;
+  return false;
 }

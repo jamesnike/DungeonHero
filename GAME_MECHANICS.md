@@ -804,7 +804,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 |------|----------------|------|
 | 治疗药水 | `heal-5` | 回复5HP → 翻转为"治愈余韵"永久魔法 |
 | 浓缩治疗药水 | `heal-14` | 回复14HP |
-| 装备修复剂 | `repair-choice` | 左右装备都恢复3点耐久 或 左右装备都耐久上限+2 |
+| 装备修复剂 | `repair-choice` | 左右装备都恢复2点耐久 或 左右装备都耐久上限+1 |
 | 高级修复剂 | `boost-both-slots` | 所有装备槽加成+1 |
 | 背包觉醒药 | `draw-backpack-4` | 背包容量+1，手牌上限+1，从背包抽牌 |
 | 洞察药剂 | `discover-class-3` | 从职业牌堆发现3张 |
@@ -857,8 +857,16 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | `spellDamage+N` | 永久法术伤害+N |
 | `backpackSize+N` / `backpackSize-N` | 背包容量修正 |
 | `handLimit+1` | 手牌上限+1 |
-| `amuletCapacity+1` | 护符槽+1 |
+| `amuletCapacity+1` / `amuletCapacity-1` | 护符槽±1 |
+| `halveSlotDamageBonus` | 所有装备栏永久攻击加成减半 |
+| `halveSpellDamageBonus` | 法术伤害加成减半 |
+| `halveSlotShieldBonus` | 所有装备栏永久护甲加成减半 |
+| `spellLifesteal+N` / `spellLifesteal-N` | 超杀吸血±N |
 | `equipSlot1Capacity+1` / `equipSlot2Capacity+1` | 装备预备容量+1 |
+| `persuadeSameTargetCostHalve` | 连续劝降同一怪物，第二次费用减半 |
+| `persuadeRaceBonus:races:N` | 指定种族劝降率+N% |
+| `persuadeSuccessDurabilityBonus+N` | 劝降成功的怪物起始耐久+N |
+| `upgradePersuadeAmulets` | 升级已装备的劝降护符 |
 | `discardHandAll` | 弃回所有手牌 |
 | `deleteCard:N` | 删除N张牌（进坟场，无视其他效果） |
 | `randomDiscardHand:N` | 随机弃回N张手牌 |

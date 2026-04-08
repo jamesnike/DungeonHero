@@ -52,7 +52,8 @@ import dedupeEventCryptWhisperImage from '@assets/generated_images/card_dedupe_e
 import dedupeEventArcaneGuildImage from '@assets/generated_images/card_dedupe_event_arcane_guild.png';
 import dedupeEventFateDiceCupImage from '@assets/generated_images/card_dedupe_event_fate_dice_cup.png';
 import dedupeEventChaosDiceGameImage from '@assets/generated_images/card_dedupe_event_chaos_dice_game.png';
-import potionHasteDrawImage from '@assets/generated_images/card_dedupe_potion_haste_draw.png';
+import dedupeEventCursedDiceImage from '@assets/generated_images/card_dedupe_knight_magic_fortune_wheel.png';
+import dedupeEventCursedDiceBuildingImage from '@assets/generated_images/card_dedupe_magic_event_fortify.png';
 import potionEternalInscribeImage from '@assets/generated_images/card_dedupe_potion_eternal_perm.png';
 
 import type { CardType, GameCardData } from '../GameCard';
@@ -156,7 +157,9 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasEquipmentSalvage: false,
   hasBloodrageAttack: false,
   hasPersuadeOnTempAttack: false,
+  persuadeOnTempAttackBonus: 0,
   hasPersuadeGrantRecycleFetch: false,
+  persuadeGrantRecycleFetchCount: 0,
   hasDamageClassDiscover: false,
   hasPersuadeGraveyardStack: false,
   hasSwapUpgrade: false,
@@ -415,7 +418,7 @@ export function createDeck(): GameCardData[] {
       card.onEquipEffect = 'spell-lifesteal+1';
       card.overkillDraw = 1;
       card.description = '入场：超杀吸血 +1。超杀：抽 1 张牌。';
-      const hbDurability = Math.floor(Math.random() * 3) + 2;
+      const hbDurability = Math.floor(Math.random() * 2) + 1;
       card.durability = hbDurability;
       card.maxDurability = hbDurability;
     }
@@ -434,8 +437,8 @@ export function createDeck(): GameCardData[] {
     }
     if (weaponType.name === 'Dagger') {
       card.value = Math.min(card.value, 3);
-      card.durability = Math.min(card.durability!, 2);
-      card.maxDurability = card.durability;
+      card.durability = 2;
+      card.maxDurability = 2;
       card.daggerSelfDestructDiscover = true;
       card.description = '攻击后，可自毁来发现专属牌。';
     }
@@ -534,14 +537,6 @@ export function createDeck(): GameCardData[] {
       image: potionImage,
       potionEffect: 'boost-both-slots',
       description: '左右装备栏永久伤害+1，护甲+1。',
-    },
-    {
-      type: 'potion',
-      name: '疾汲秘药',
-      value: 0,
-      image: potionHasteDrawImage,
-      potionEffect: 'end-turn-draw-2',
-      description: '永久被动：英雄回合结束时抽牌从 1 张提升为 2 张（不可叠加）。',
     },
     {
       type: 'potion',
@@ -1139,6 +1134,52 @@ export function createDeck(): GameCardData[] {
           { id: 'dice12-class', range: [13, 16], label: '获得 2 张专属卡', effect: 'drawClass2' },
           { id: 'dice12-draw', range: [17, 20], label: '回收袋洗入背包，抽 2 张牌', effect: ['recycleToBackpack', 'drawHeroCards:2'] },
           { id: 'dice12-upgrade', range: [1, 20], label: '选择一张牌升级', effect: 'upgradeCard' },
+        ],
+      },
+    ],
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '劝降祭典',
+    value: 0,
+    image: dedupePersuadeScrollCharmImage,
+    description: '掷出诅咒骰子，获得一项劝降增强。若装备着怀柔之印或劝降归袋符，将升级它们。',
+    eventChoices: [
+      {
+        text: '掷出劝降骰：劝降等级+1/劝降费用-2/连劝减半/种族加成/耐久增强',
+        hint: '20% 概率触发不同劝降增强',
+        effect: 'upgradePersuadeAmulets',
+        diceTable: [
+          { id: 'persuade-dice-level', range: [1, 4], label: '劝降等级 +1', effect: 'persuadeLevel+1' },
+          { id: 'persuade-dice-cost', range: [5, 8], label: '劝降费用永久 -2', effect: 'persuadeCost-2' },
+          { id: 'persuade-dice-same-halve', range: [9, 12], label: '连续劝降同一怪物，第二次费用减半', effect: 'persuadeSameTargetCostHalve' },
+          { id: 'persuade-dice-race', range: [13, 16], label: 'Skeleton/Wraith 劝降率 +20%', effect: 'persuadeRaceBonus:Skeleton,Wraith:20' },
+          { id: 'persuade-dice-durability', range: [17, 20], label: '劝降成功的怪物起始耐久 +1', effect: 'persuadeSuccessDurabilityBonus+1' },
+        ],
+      },
+    ],
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '诅咒骰局',
+    value: 0,
+    image: dedupeEventCursedDiceImage,
+    description: '掷出诅咒骰子，承受一项惩罚，然后翻转为「诅咒碑」建筑。',
+    waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0, description: '被挤出时：摧毁所有护符，弃回所有手牌' },
+    eventChoices: [
+      {
+        text: '掷出诅咒骰：装备攻击减半/法伤减半/装备护甲减半/超杀吸血-3/护符上限-1',
+        hint: '20% 概率触发不同惩罚，然后翻转为「诅咒碑」',
+        diceTable: [
+          { id: 'cursed-dice-atk-halve', range: [1, 4], label: '所有装备栏永久攻击加成减半', effect: 'halveSlotDamageBonus' },
+          { id: 'cursed-dice-spell-halve', range: [5, 8], label: '法术伤害加成减半', effect: 'halveSpellDamageBonus' },
+          { id: 'cursed-dice-armor-halve', range: [9, 12], label: '所有装备栏永久护甲加成减半', effect: 'halveSlotShieldBonus' },
+          { id: 'cursed-dice-lifesteal-loss', range: [13, 16], label: '超杀吸血 -3', effect: 'spellLifesteal-3' },
+          { id: 'cursed-dice-amulet-cap', range: [17, 20], label: '护符栏上限 -1', effect: 'amuletCapacity-1' },
         ],
       },
     ],

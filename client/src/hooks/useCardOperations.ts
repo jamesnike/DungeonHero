@@ -31,6 +31,7 @@ import {
   flattenActiveRowSlots,
   sanitizeCardMetadata,
   logBackpackDraw,
+  computeAmuletAuraReversal,
 } from '@/game-core/helpers';
 import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingAura';
 
@@ -57,7 +58,7 @@ export interface CardOperationsDeps {
   storingCardIdsRef: React.MutableRefObject<Set<string>>;
   selectedHeroSkillRef: React.MutableRefObject<string | null>;
   pendingAutoDrawsRef: React.MutableRefObject<number>;
-  onNewCardGainedRef: React.MutableRefObject<((count: number) => void) | null>;
+  onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard') => void) | null>;
   discardedCardsRef: React.MutableRefObject<GameCardData[]>;
 
   stagingCardsRef: React.MutableRefObject<GameCardData[]>;
@@ -124,6 +125,8 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   const setEquipmentSlotBonuses = useEngineSetter('equipmentSlotBonuses');
   const setActiveCards = useEngineSetter('activeCards');
   const setAmuletSlots = useEngineSetter('amuletSlots');
+  const setSlotTempAttack = useEngineSetter('slotTempAttack');
+  const setSlotTempArmor = useEngineSetter('slotTempArmor');
   const setWaveDiscardCount = useEngineSetter('waveDiscardCount');
   const setRecycleForgePlayCount = useEngineSetter('recycleForgePlayCount');
   const setRecycleBackpackProgress = useEngineSetter('recycleBackpackProgress');
@@ -150,8 +153,14 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         case 'lone-card': state.hasLoneCard = true; break;
         case 'equipment-salvage': state.hasEquipmentSalvage = true; break;
         case 'bloodrage-attack': state.hasBloodrageAttack = true; break;
-        case 'persuade-on-temp-attack': state.hasPersuadeOnTempAttack = true; break;
-        case 'persuade-grant-recycle-fetch': state.hasPersuadeGrantRecycleFetch = true; break;
+        case 'persuade-on-temp-attack':
+          state.hasPersuadeOnTempAttack = true;
+          state.persuadeOnTempAttackBonus = (slot.upgradeLevel ?? 0) >= 1 ? 10 : 5;
+          break;
+        case 'persuade-grant-recycle-fetch':
+          state.hasPersuadeGrantRecycleFetch = true;
+          state.persuadeGrantRecycleFetchCount = (slot.upgradeLevel ?? 0) >= 1 ? 2 : 1;
+          break;
         case 'damage-class-discover': state.hasDamageClassDiscover = true; break;
         case 'persuade-graveyard-stack': state.hasPersuadeGraveyardStack = true; break;
         case 'swap-upgrade': state.hasSwapUpgrade = true; break;
@@ -789,13 +798,18 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         setHeroSkillBanner(`${card.name} 耐久上限归零，移除！`);
         return;
       }
-      const { fromSlot, ...rest } = card as GameCardData & { fromSlot?: string };
-      const salvaged = { ...rest, durability: newMaxDur, maxDurability: newMaxDur };
+      const {
+        fromSlot, armor: _clrArmor, armorBonusDamaged: _clrBonusDmg,
+        _shieldBlockCount: _clrBlockCnt, reviveUsed: _clrRevive,
+        equipmentReviveUsed: _clrEqRevive, wraithRebirthUsed: _clrWraith,
+        ...rest
+      } = card as GameCardData & { fromSlot?: string; _shieldBlockCount?: number };
+      const salvaged = { ...rest, durability: 1, maxDurability: newMaxDur };
       const slotHint: FlightSourceHint | undefined =
         fromSlot === 'equipmentSlot1' || fromSlot === 'equipmentSlot2' ? fromSlot : undefined;
       depsRef.current.queueCardIntoHand(salvaged, slotHint);
-      depsRef.current.addGameLog('equip', `残骸回收符：${card.name} 回到手牌（耐久上限 ${newMaxDur}）！`);
-      setHeroSkillBanner(`残骸回收！${card.name} 回到手牌（耐久上限 ${newMaxDur}）！`);
+      depsRef.current.addGameLog('equip', `残骸回收符：${card.name} 回到手牌（耐久 1/${newMaxDur}）！`);
+      setHeroSkillBanner(`残骸回收！${card.name} 回到手牌！`);
       return;
     }
     const toRecycleBag = isPermRecycleEquipment(card) ||
@@ -1043,6 +1057,19 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   const convertAmuletsToGold = useCallback(
     (amountPer: number) => {
       if (!amuletSlots.length) return 0;
+      const reversal = computeAmuletAuraReversal(amuletSlots);
+      if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
+        setSlotTempAttack(prev => ({
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
+        }));
+      }
+      if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
+        setSlotTempArmor(prev => ({
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
+        }));
+      }
       const payout = amountPer * amuletSlots.length;
       depsRef.current.addGameLog('amulet', `${amuletSlots.length} 枚护符转化为 ${payout} 金币`);
       amuletSlots.forEach(amulet => addToGraveyard(amulet));
@@ -1050,7 +1077,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       setGold(prev => prev + payout);
       return payout;
     },
-    [amuletSlots, setAmuletSlots, setGold],
+    [amuletSlots, setAmuletSlots, setSlotTempAttack, setSlotTempArmor, setGold],
   );
 
   // -- Discard all hand -------------------------------------------------------

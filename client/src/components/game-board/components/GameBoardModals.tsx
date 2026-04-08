@@ -777,8 +777,8 @@ function GameBoardModalsInner({
                 onClick={() => onPotionChoiceSelection('repair')}
               >
                 <div className="flex flex-col gap-1">
-                  <span className="font-semibold">左右装备都恢复 3 点耐久</span>
-                  <span className="text-xs text-muted-foreground">所有已装备的武器/盾牌各恢复 3 点耐久。</span>
+                  <span className="font-semibold">左右装备都恢复 2 点耐久</span>
+                  <span className="text-xs text-muted-foreground">所有已装备的武器/盾牌各恢复 2 点耐久。</span>
                 </div>
               </Button>
               <Button
@@ -787,8 +787,8 @@ function GameBoardModalsInner({
                 onClick={() => onPotionChoiceSelection('upgrade')}
               >
                 <div className="flex flex-col gap-1">
-                  <span className="font-semibold">左右装备都耐久上限 +2</span>
-                  <span className="text-xs text-muted-foreground">所有已装备的武器/盾牌永久提升耐久上限 +2（不恢复耐久）。</span>
+                  <span className="font-semibold">左右装备都耐久上限 +1</span>
+                  <span className="text-xs text-muted-foreground">所有已装备的武器/盾牌永久提升耐久上限 +1（不恢复耐久）。</span>
                 </div>
               </Button>
             </div>

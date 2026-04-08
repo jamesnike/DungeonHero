@@ -25,11 +25,13 @@ import {
 import {
   logBackpackDraw,
   pickRandomHandCardsForDiscardPreferGraveyard,
+  computeAmuletAuraReversal,
 } from '@/game-core/helpers';
 import {
   createGraveyardRecallCard,
 } from '@/lib/knightDeck';
 import {
+  STARTER_CARD_IDS,
   skillScrollImage,
   potionSpellDamageImage,
   potionWeaponRepairImage,
@@ -107,7 +109,7 @@ export interface EventSystemDeps {
   ) => Promise<boolean>;
   requestGraveyardSelection: (
     maxCards: number,
-    options?: { delivery?: 'backpack' | 'hand-first' },
+    options?: { delivery?: 'backpack' | 'hand-first'; filter?: (card: GameCardData) => boolean },
   ) => Promise<GameCardData | null>;
   startShopFlow: (card: GameCardData | null) => boolean;
   beginDiscoverFlow: (
@@ -188,6 +190,9 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     stunCap,
     persuadeLevel,
     persuadeCostModifier,
+    equipmentSlotBonuses,
+    permanentSpellDamageBonus,
+    permanentSpellLifesteal,
     equipmentSlot1Reserve,
     equipmentSlot2Reserve,
     eventModalOpen,
@@ -212,6 +217,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   const setEquipmentSlot1 = useEngineSetter('equipmentSlot1');
   const setEquipmentSlot2 = useEngineSetter('equipmentSlot2');
   const setEquipmentSlotCapacity = useEngineSetter('equipmentSlotCapacity');
+  const setEquipmentSlotBonuses = useEngineSetter('equipmentSlotBonuses');
   const setMaxAmuletSlots = useEngineSetter('maxAmuletSlots');
   const setAmuletSlots = useEngineSetter('amuletSlots');
   const setBackpackItems = useEngineSetter('backpackItems');
@@ -240,8 +246,16 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   const setStunCap = useEngineSetter('stunCap');
   const setPersuadeLevel = useEngineSetter('persuadeLevel');
   const setPersuadeCostModifier = useEngineSetter('persuadeCostModifier');
+  const setPersuadeSameTargetCostHalve = useEngineSetter('persuadeSameTargetCostHalve');
+  const setPersuadeRaceBonus = useEngineSetter('persuadeRaceBonus');
+  const setPersuadeSuccessDurabilityBonus = useEngineSetter('persuadeSuccessDurabilityBonus');
   const setPermanentMagicRecycleBag = useEngineSetter('permanentMagicRecycleBag');
   const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
+  const setGambitExtraActive = useEngineSetter('gambitExtraActive');
+  const setGambitExtraPerSlot = useEngineSetter('gambitExtraPerSlot');
+  const setGambitSlotUsed = useEngineSetter('gambitSlotUsed');
+  const setPermGrantModal = useEngineSetter('permGrantModal');
+  const setActiveCardStacks = useEngineSetter('activeCardStacks');
 
   // -- Derived values ---------------------------------------------------------
 
@@ -355,7 +369,6 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           pending: pendingAutoDrawsRef.current,
           backpackCount: st.backpackItems.length,
         });
-        pendingAutoDrawsRef.current = 0;
         break;
       }
 
@@ -365,7 +378,6 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           pending: pendingAutoDrawsRef.current,
           backpackCount: engine.getState().backpackItems.length,
         });
-        pendingAutoDrawsRef.current = 0;
         break;
       }
 
@@ -428,16 +440,12 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         return;
       }
 
+      processedDungeonCardIdsRef.current.add(cardId);
+
       const st = engine.getState();
       if (st.backpackItems.length === 0) {
         logBackpackDraw('dungeon-processed-no-backpack', { cardId, source });
-        // Do not mark processed yet: remove-card may run while the backpack is still
-        // empty, then slot-cleared (or a later call) can legitimately queue auto-draw
-        // once the backpack is stocked — otherwise the id is consumed with no draw.
-        return;
       }
-
-      processedDungeonCardIdsRef.current.add(cardId);
 
       if (depsRef.current.amuletEffects.hasDungeonGold) {
         const goldAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'dungeon-gold');
@@ -750,7 +758,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   const completeCurrentEvent = useCallback(async () => {
     if (!currentEventCard) return;
     const cardToComplete = currentEventCard;
-    const shouldSkipFlip = skipEventFlipRef.current;
+    let shouldSkipFlip = skipEventFlipRef.current;
     skipEventFlipRef.current = false;
     setEventModalOpen(false);
     setEventModalMinimized(false);
@@ -759,6 +767,18 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     const st = engine.getState();
     const liveActive = st.activeCards;
     const previewRow = st.previewCards;
+
+    if (!shouldSkipFlip && cardToComplete.flipCondition) {
+      if (cardToComplete.flipCondition.startsWith('activeRowEquipment:')) {
+        const minCount = parseInt(cardToComplete.flipCondition.split(':')[1], 10) || 2;
+        const equipCount = liveActive.filter(
+          (c): c is GameCardData => c != null && (c.type === 'weapon' || c.type === 'shield'),
+        ).length;
+        if (equipCount < minCount) {
+          shouldSkipFlip = true;
+        }
+      }
+    }
 
     const crimsonMagicResonanceFlip =
       cardToComplete.name === '双重燃烧（觉醒）' && !shouldSkipFlip
@@ -789,9 +809,26 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     const cardForFlip =
       hasFlip && effectiveFlipTarget ? { ...cardToComplete, flipTarget: effectiveFlipTarget } : cardToComplete;
 
-    finalizeEventResolution({ removeFromDungeon: !isStayFlip });
+    const eventCellIdx = liveActive.findIndex(c => c?.id === cardToComplete.id);
+    const stacks = st.activeCardStacks ?? {};
+    const stackBelow = eventCellIdx >= 0 ? (stacks[eventCellIdx] ?? []) : [];
+    const shouldStayOnStack = !hasFlip && !!cardToComplete.stayIfStacked && stackBelow.length > 0;
+
+    finalizeEventResolution({ removeFromDungeon: !isStayFlip && !shouldStayOnStack });
     if (hasFlip) {
       await depsRef.current.applyCardFlip(cardForFlip, isStayFlip ? cellIndex : undefined);
+    } else if (shouldStayOnStack) {
+      for (const stackCard of stackBelow) {
+        depsRef.current.discardCardToGraveyard(stackCard, { owner: 'dungeon' });
+        addGameLog('event', `祭坛驻留：堆叠牌「${stackCard.name}」被送入坟场`);
+      }
+      setActiveCardStacks(prev => {
+        const next = { ...prev };
+        delete next[eventCellIdx];
+        return next;
+      });
+      addGameLog('event', '附魔祭坛驻留在地城中，可再次触发！');
+      setHeroSkillBanner('附魔祭坛驻留！堆叠牌已消耗。');
     } else {
       depsRef.current.addToGraveyard(cardToComplete);
     }
@@ -1105,8 +1142,30 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                 depsRef.current.setEquipmentSlotBonus(below.slotId, 'damage', cur => cur + slotItem.onDestroyPermanentDamage!);
                 addGameLog('equip', `${slotItem.name} 遗言：该装备栏永久伤害 +${slotItem.onDestroyPermanentDamage}！`);
               }
+              if (slotItem.onDestroyPermanentShield) {
+                depsRef.current.setEquipmentSlotBonus(below.slotId, 'shield', cur => cur + slotItem.onDestroyPermanentShield!);
+                addGameLog('equip', `${slotItem.name} 遗言：该装备栏永久护甲 +${slotItem.onDestroyPermanentShield}！`);
+              }
               if (slotItem.onDestroyEffect) {
-                addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
+                if (slotItem.onDestroyEffect === 'hand-equip-buff-2-2') {
+                  setHandCards(prev => {
+                    const buffed: string[] = [];
+                    const next = prev.map(c => {
+                      if (c.type === 'weapon' || c.type === 'shield') {
+                        buffed.push(c.name);
+                        return { ...c, value: (c.value ?? 0) + 2, armorMax: c.armorMax != null ? c.armorMax + 2 : undefined };
+                      }
+                      return c;
+                    });
+                    if (buffed.length > 0) {
+                      addGameLog('equip', `${slotItem.name} 遗言：${buffed.join('、')} 获得 +2攻击 +2护甲！`);
+                      setHeroSkillBanner(`${slotItem.name} 遗言！手牌装备 +2攻击 +2护甲！`);
+                    }
+                    return next;
+                  });
+                } else {
+                  addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
+                }
               }
               depsRef.current.disposeOwnedEquipmentCard(slotItem, { isDestruction: true });
               depsRef.current.clearEquipmentSlotById(below.slotId);
@@ -1360,6 +1419,115 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           setHeroSkillBanner(`超杀吸血永久 +${amount}（当前 ${next}）。`);
           return next;
         });
+      } else if (effect.startsWith('spellLifesteal-')) {
+        const amount = parseInt(effect.replace('spellLifesteal-', ''), 10) || 1;
+        setPermanentSpellLifesteal(prev => {
+          const next = Math.max(0, prev - amount);
+          addGameLog('event', `事件效果：超杀吸血永久 -${amount}`);
+          setHeroSkillBanner(`超杀吸血永久 -${amount}（当前 ${next}）。`);
+          return next;
+        });
+      } else if (effect === 'halveSlotDamageBonus') {
+        setEquipmentSlotBonuses(prev => {
+          const s1d = Math.floor(prev.equipmentSlot1.damage / 2);
+          const s2d = Math.floor(prev.equipmentSlot2.damage / 2);
+          addGameLog('event', `事件效果：所有装备栏永久攻击加成减半（左 ${prev.equipmentSlot1.damage}→${s1d}，右 ${prev.equipmentSlot2.damage}→${s2d}）`);
+          setHeroSkillBanner(`装备栏永久攻击加成减半！`);
+          return {
+            ...prev,
+            equipmentSlot1: { ...prev.equipmentSlot1, damage: s1d },
+            equipmentSlot2: { ...prev.equipmentSlot2, damage: s2d },
+          };
+        });
+      } else if (effect === 'halveSpellDamageBonus') {
+        setPermanentSpellDamageBonus(prev => {
+          const next = Math.floor(prev / 2);
+          addGameLog('event', `事件效果：法术伤害加成减半（${prev}→${next}）`);
+          setHeroSkillBanner(`法术伤害加成减半（${prev}→${next}）！`);
+          return next;
+        });
+      } else if (effect === 'halveSlotShieldBonus') {
+        setEquipmentSlotBonuses(prev => {
+          const s1s = Math.floor(prev.equipmentSlot1.shield / 2);
+          const s2s = Math.floor(prev.equipmentSlot2.shield / 2);
+          addGameLog('event', `事件效果：所有装备栏永久护甲加成减半（左 ${prev.equipmentSlot1.shield}→${s1s}，右 ${prev.equipmentSlot2.shield}→${s2s}）`);
+          setHeroSkillBanner(`装备栏永久护甲加成减半！`);
+          return {
+            ...prev,
+            equipmentSlot1: { ...prev.equipmentSlot1, shield: s1s },
+            equipmentSlot2: { ...prev.equipmentSlot2, shield: s2s },
+          };
+        });
+      } else if (effect === 'amuletCapacity-1') {
+        setMaxAmuletSlots(prev => {
+          const next = Math.max(1, prev - 1);
+          if (next === prev) {
+            addGameLog('event', '护符上限已为最低值');
+            setHeroSkillBanner('护符上限已为最低值！');
+            return prev;
+          }
+          addGameLog('event', `事件效果：护符栏上限 -1（当前 ${next}）`);
+          setHeroSkillBanner(`护符栏上限降低至 ${next}。`);
+          return next;
+        });
+        const currentAmulets = engine.getState().amuletSlots;
+        const newMax = Math.max(1, maxAmuletSlots - 1);
+        if (currentAmulets.length > newMax) {
+          const overflow = currentAmulets.slice(0, currentAmulets.length - newMax);
+          const kept = currentAmulets.slice(currentAmulets.length - newMax);
+          overflow.forEach(amulet => depsRef.current.addToGraveyard(amulet));
+          setAmuletSlots(kept);
+          addGameLog('event', `护符栏缩减，${overflow.map(a => a.name).join('、')} 被送入坟场`);
+        }
+      } else if (effect === 'persuadeSameTargetCostHalve') {
+        setPersuadeSameTargetCostHalve(true);
+        addGameLog('event', '事件效果：连续劝降同一怪物，第二次费用减半');
+        setHeroSkillBanner('连续劝降同一怪物时，第二次费用减半！');
+      } else if (effect.startsWith('persuadeRaceBonus:')) {
+        const parts = effect.replace('persuadeRaceBonus:', '').split(':');
+        const races = parts[0].split(',');
+        const bonus = parseInt(parts[1], 10) || 20;
+        setPersuadeRaceBonus(prev => {
+          const next = { ...prev };
+          races.forEach(race => { next[race] = (next[race] ?? 0) + bonus; });
+          return next;
+        });
+        addGameLog('event', `事件效果：${races.join('、')} 劝降成功率 +${bonus}%`);
+        setHeroSkillBanner(`${races.join('、')} 的劝降成功率永久 +${bonus}%！`);
+      } else if (effect.startsWith('persuadeSuccessDurabilityBonus+')) {
+        const amount = parseInt(effect.replace('persuadeSuccessDurabilityBonus+', ''), 10) || 1;
+        setPersuadeSuccessDurabilityBonus(prev => prev + amount);
+        addGameLog('event', `事件效果：劝降成功的怪物起始耐久 +${amount}`);
+        setHeroSkillBanner(`劝降成功的怪物起始耐久 +${amount}！`);
+      } else if (effect === 'upgradePersuadeAmulets') {
+        const currentAmulets = engine.getState().amuletSlots;
+        let upgraded = false;
+        const newAmulets = currentAmulets.map(amulet => {
+          if (amulet.amuletEffect === 'persuade-on-temp-attack' && (amulet.upgradeLevel ?? 0) < 1) {
+            upgraded = true;
+            addGameLog('event', `怀柔之印升级：每获得一次临时攻击加成，下一次劝降率 +10%`);
+            setHeroSkillBanner('怀柔之印已升级！劝降率加成从 +5% 提升到 +10%！');
+            return {
+              ...amulet,
+              upgradeLevel: 1,
+              description: '（已升级）每获得一次临时攻击加成，下一次劝降率 +10%。',
+            };
+          }
+          if (amulet.amuletEffect === 'persuade-grant-recycle-fetch' && (amulet.upgradeLevel ?? 0) < 1) {
+            upgraded = true;
+            addGameLog('event', `劝降归袋符升级：每劝降成功一次，将两张「归袋抽引」加入手牌`);
+            setHeroSkillBanner('劝降归袋符已升级！每次劝降成功获得 2 张归袋抽引！');
+            return {
+              ...amulet,
+              upgradeLevel: 1,
+              description: '（已升级）每劝降成功一次，将两张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。',
+            };
+          }
+          return amulet;
+        });
+        if (upgraded) {
+          setAmuletSlots(newAmulets as typeof currentAmulets);
+        }
       } else if (effect.startsWith('stunCap+')) {
         const amount = parseInt(effect.replace('stunCap+', ''), 10) || 10;
         setStunCap(prev => {
@@ -1481,8 +1649,9 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             return next;
           });
           if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
-            depsRef.current.persuadeAmuletBonusRef.current += 5;
-            addGameLog('equip', `怀柔之印：下次劝降率 +5%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
+            const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+            depsRef.current.persuadeAmuletBonusRef.current += pBonus;
+            addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
           }
           const names = slots.map(s => s.item!.name).join('、');
           addGameLog('event', `事件效果：所有装备临时攻击 +${amount}`);
@@ -1767,6 +1936,19 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         }
       } else if (effect === 'removeAllAmulets') {
         if (amuletSlots.length) {
+          const reversal = computeAmuletAuraReversal(amuletSlots);
+          if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
+            setSlotTempAttack(prev => ({
+              equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
+              equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
+            }));
+          }
+          if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
+            setSlotTempArmor(prev => ({
+              equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
+              equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
+            }));
+          }
           addGameLog('event', `事件效果：粉碎 ${amuletSlots.length} 枚护符`);
           amuletSlots.forEach(amulet => depsRef.current.addToGraveyard(amulet));
           setAmuletSlots([]);
@@ -1801,7 +1983,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         }
         if (destroyedItem && destroyedSlotId) {
           const hasLastWords = destroyedItem.onDestroyHeal || destroyedItem.onDestroyGold || destroyedItem.onDestroyDraw
-            || destroyedItem.onDestroyClassDraw || destroyedItem.onDestroyPermanentDamage || destroyedItem.onDestroyEffect;
+            || destroyedItem.onDestroyClassDraw || destroyedItem.onDestroyPermanentDamage || destroyedItem.onDestroyPermanentShield || destroyedItem.onDestroyEffect;
           if (hasLastWords) {
             addGameLog('equip', `${destroyedItem.name} 遗言触发！`);
           }
@@ -1828,8 +2010,30 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             depsRef.current.setEquipmentSlotBonus(destroyedSlotId, 'damage', cur => cur + destroyedItem.onDestroyPermanentDamage!);
             addGameLog('equip', `${destroyedItem.name} 遗言：该装备栏永久伤害 +${destroyedItem.onDestroyPermanentDamage}！`);
           }
+          if (destroyedItem.onDestroyPermanentShield) {
+            depsRef.current.setEquipmentSlotBonus(destroyedSlotId, 'shield', cur => cur + destroyedItem.onDestroyPermanentShield!);
+            addGameLog('equip', `${destroyedItem.name} 遗言：该装备栏永久护甲 +${destroyedItem.onDestroyPermanentShield}！`);
+          }
           if (destroyedItem.onDestroyEffect) {
-            addGameLog('equip', `${destroyedItem.name} 遗言：${destroyedItem.onDestroyEffect}`);
+            if (destroyedItem.onDestroyEffect === 'hand-equip-buff-2-2') {
+              setHandCards(prev => {
+                const buffed: string[] = [];
+                const next = prev.map(c => {
+                  if (c.type === 'weapon' || c.type === 'shield') {
+                    buffed.push(c.name);
+                    return { ...c, value: (c.value ?? 0) + 2, armorMax: c.armorMax != null ? c.armorMax + 2 : undefined };
+                  }
+                  return c;
+                });
+                if (buffed.length > 0) {
+                  addGameLog('equip', `${destroyedItem.name} 遗言：${buffed.join('、')} 获得 +2攻击 +2护甲！`);
+                  setHeroSkillBanner(`${destroyedItem.name} 遗言！手牌装备 +2攻击 +2护甲！`);
+                }
+                return next;
+              });
+            } else {
+              addGameLog('equip', `${destroyedItem.name} 遗言：${destroyedItem.onDestroyEffect}`);
+            }
           }
         }
       } else if (effect === 'slotLeftDamage+2') {
@@ -1851,7 +2055,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       } else if (effect === 'flipToRecallEquip') {
         if (currentEventCard) {
           const recallCard: GameCardData = {
-            id: `recall-equip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id: `${STARTER_CARD_IDS.recallEquip}-pick-${Date.now()}`,
             type: 'magic',
             name: '回收术',
             value: 0,
@@ -1873,7 +2077,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       } else if (effect === 'flipToUndyingBlessing') {
         if (currentEventCard) {
           const blessingCard: GameCardData = {
-            id: `undying-blessing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            id: `${STARTER_CARD_IDS.undyingBlessing}-pick-${Date.now()}`,
             type: 'magic',
             name: '不灭赐福',
             value: 0,
@@ -1896,6 +2100,89 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       } else if (effect === 'swapEquipmentSlots') {
         addGameLog('event', '事件效果：交换左右装备槽');
         depsRef.current.swapEquipmentSlots();
+      } else if (effect === 'slotLeftDurMax+1' || effect === 'slotRightDurMax+1') {
+        const slotId: EquipmentSlotId = effect === 'slotLeftDurMax+1' ? 'equipmentSlot1' : 'equipmentSlot2';
+        const label = effect === 'slotLeftDurMax+1' ? '左' : '右';
+        const item = slotId === 'equipmentSlot1' ? engine.getState().equipmentSlot1 : engine.getState().equipmentSlot2;
+        if (item && item.durability != null) {
+          const maxDur = item.maxDurability ?? item.durability ?? 0;
+          depsRef.current.setEquipmentSlotById(slotId, { ...item, maxDurability: maxDur + 1 });
+          addGameLog('event', `事件效果：${item.name} 耐久上限 +1（${maxDur} → ${maxDur + 1}）`);
+          setHeroSkillBanner(`${item.name} 耐久上限 +1！`);
+        } else {
+          setHeroSkillBanner(`${label}装备栏没有装备或不具有耐久属性。`);
+        }
+      } else if (effect === 'slotLeftExtraAttack' || effect === 'slotRightExtraAttack') {
+        const targetSlot: EquipmentSlotId = effect === 'slotLeftExtraAttack' ? 'equipmentSlot1' : 'equipmentSlot2';
+        const otherSlot: EquipmentSlotId = effect === 'slotLeftExtraAttack' ? 'equipmentSlot2' : 'equipmentSlot1';
+        const label = effect === 'slotLeftExtraAttack' ? '左' : '右';
+        const item = targetSlot === 'equipmentSlot1' ? engine.getState().equipmentSlot1 : engine.getState().equipmentSlot2;
+        if (item && (item.type === 'weapon' || item.type === 'monster')) {
+          setGambitExtraActive(true);
+          setGambitExtraPerSlot(prev => prev + 1);
+          setGambitSlotUsed(prev => ({
+            ...prev,
+            [otherSlot]: (prev[otherSlot] ?? 0) + 1,
+          }));
+          addGameLog('event', `事件效果：${label}装备栏本回合攻击次数 +1`);
+          setHeroSkillBanner(`${item.name} 本回合可多攻击一次！`);
+        } else {
+          setHeroSkillBanner(`${label}装备栏没有可攻击的武器。`);
+        }
+      } else if (effect === 'discardHandEquipForClassEquip') {
+        const hand = engine.getState().handCards;
+        const equipInHand = hand.filter(c => c.type === 'weapon' || c.type === 'shield');
+        if (equipInHand.length === 0) {
+          addGameLog('event', '事件效果：手牌中没有装备卡');
+          setHeroSkillBanner('手牌中没有装备卡可弃置。');
+        } else {
+          const equipIds = new Set(equipInHand.map(c => c.id));
+          setHandCards(prev => prev.filter(c => !equipIds.has(c.id)));
+          for (const card of equipInHand) {
+            depsRef.current.discardCardToGraveyard(card, { owner: 'player' });
+          }
+          const drawn = depsRef.current.drawClassCardsToBackpack(
+            equipInHand.length,
+            'discardHandEquipForClassEquip',
+            (card: GameCardData) => card.type === 'weapon' || card.type === 'shield',
+          );
+          if (drawn.length > 0) {
+            depsRef.current.triggerClassDeckFlight(drawn);
+          }
+          addGameLog('event', `事件效果：弃置 ${equipInHand.length} 张手牌装备，获得 ${drawn.length} 张专属装备`);
+          setHeroSkillBanner(`弃置了 ${equipInHand.map(c => c.name).join('、')}，获得 ${drawn.length} 张专属装备！`);
+        }
+      } else if (effect.startsWith('grantFlankDraw:')) {
+        const drawCount = parseInt(effect.replace('grantFlankDraw:', ''), 10) || 1;
+        const eligible = handCards.filter(c => !c.flankEffect);
+        if (eligible.length === 0) {
+          setHeroSkillBanner('手牌中没有可赋予侧击效果的卡牌。');
+        } else {
+          setPermGrantModal({ sourceCardId: 'event-grant', sourceType: 'flank-grant' });
+          addGameLog('event', `事件效果：选择一张手牌赋予「侧击：抽${drawCount}张牌」`);
+        }
+      } else if (effect === 'grantAmuletPerm') {
+        const amulets = engine.getState().amuletSlots as GameCardData[];
+        const eligible = amulets.filter(a => !a.recycleDelay || a.recycleDelay < 2);
+        if (eligible.length === 0) {
+          setHeroSkillBanner('没有可赋予 Perm 2 的护符。');
+        } else {
+          const target = eligible[0];
+          setAmuletSlots(prev => prev.map(a => a.id === target.id ? { ...a, recycleDelay: 2 } : a));
+          addGameLog('event', `事件效果：「${target.name}」获得 Perm 2`);
+          setHeroSkillBanner(`「${target.name}」获得 Perm 2！被移除后将经 2 次瀑流返回背包。`);
+        }
+      } else if (effect.startsWith('grantTransformGold:')) {
+        const goldAmount = parseInt(effect.replace('grantTransformGold:', ''), 10) || 3;
+        const eligible = handCards.filter(c => !c.transformBonus);
+        if (eligible.length === 0) {
+          setHeroSkillBanner('手牌中没有可赋予转型效果的卡牌。');
+        } else {
+          setPermGrantModal({ sourceCardId: 'event-grant', sourceType: 'transform-gold-grant' });
+          addGameLog('event', `事件效果：选择一张手牌赋予「转型：+${goldAmount}金币」`);
+        }
+      } else if (effect === 'noop') {
+        // Intentional no-op; effect is handled via flipTarget
       } else if (effect.startsWith('repairSlot:')) {
         const parts = effect.split(':');
         const target = parts[1];
@@ -2196,6 +2483,78 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         } else {
           depsRef.current.handleDiscoverFallback();
         }
+      } else if (effect === 'discoverClassMagic') {
+        addGameLog('event', '事件效果：发现专属魔法牌');
+        const started = depsRef.current.beginDiscoverFlow(effect, {
+          filter: (card: GameCardData) => card.type === 'magic' || card.type === 'hero-magic',
+        });
+        if (started) {
+          eventResolutionDeferred = true;
+          break;
+        } else {
+          depsRef.current.handleDiscoverFallback();
+        }
+      } else if (effect === 'drawClassHeroMagic:2') {
+        const drawn = depsRef.current.drawClassCardsToBackpack(2, 'drawClassHeroMagic', (card: GameCardData) => card.type === 'hero-magic');
+        if (drawn.length > 0) {
+          addGameLog('event', `事件效果：获得 ${drawn.length} 张英雄魔法`);
+          depsRef.current.triggerClassDeckFlight(drawn);
+          setHeroSkillBanner(`获得了 ${drawn.length} 张英雄魔法卡！`);
+        } else {
+          const fallback = depsRef.current.drawClassCardsToBackpack(2, 'drawClassHeroMagic-fallback');
+          if (fallback.length > 0) {
+            addGameLog('event', `事件效果：专属牌堆没有英雄魔法，改为获得 ${fallback.length} 张专属牌`);
+            depsRef.current.triggerClassDeckFlight(fallback);
+          }
+          setHeroSkillBanner(drawn.length > 0 ? '获得了英雄魔法卡！' : '专属牌堆中没有英雄魔法卡。');
+        }
+      } else if (effect === 'discoverStarterMagic') {
+        addGameLog('event', '事件效果：发现起始背包的魔法卡');
+        const { createStarterCardPool } = await import('@/game-core/deck');
+        const pool = createStarterCardPool();
+        const magicCards = pool.filter(c => c.type === 'magic');
+        const shuffled = [...magicCards].sort(() => Math.random() - 0.5);
+        const tempCards = shuffled.slice(0, 3).map(c => ({
+          ...c,
+          id: `${c.id}-disc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        }));
+        if (tempCards.length > 0) {
+          setClassDeck(prev => [...tempCards, ...prev]);
+          const started = depsRef.current.beginDiscoverFlow(effect, {
+            filter: (card: GameCardData) => tempCards.some(tc => tc.id === card.id),
+          });
+          if (started) {
+            eventResolutionDeferred = true;
+            break;
+          }
+        }
+        setHeroSkillBanner('没有可用的起始魔法卡。');
+      } else if (effect === 'graveyardDiscoverMagic') {
+        addGameLog('event', '事件效果：发现坟场的魔法卡');
+        const selected = await depsRef.current.requestGraveyardSelection(3, {
+          filter: (card: GameCardData) => card.type === 'magic' || card.type === 'hero-magic',
+        });
+        if (selected) {
+          addGameLog('event', `事件效果：从坟场获得魔法卡 ${selected.name}`);
+        } else {
+          setHeroSkillBanner('坟场中没有魔法卡。');
+        }
+      } else if (effect === 'recycleBagMagicToHand:2') {
+        const recycled = engine.getState().permanentMagicRecycleBag;
+        const magicInBag = recycled.filter(c => c.type === 'magic' || c.type === 'hero-magic');
+        if (magicInBag.length > 0) {
+          const toMove = magicInBag.slice(0, 2);
+          const movedIds = new Set(toMove.map(c => c.id));
+          setPermanentMagicRecycleBag(prev => prev.filter(c => !movedIds.has(c.id)));
+          for (const mc of toMove) {
+            depsRef.current.queueCardIntoHand(mc);
+          }
+          addGameLog('event', `事件效果：从回收袋取回 ${toMove.length} 张魔法卡到手牌`);
+          setHeroSkillBanner(`从回收袋取回了 ${toMove.map(c => c.name).join('、')}！`);
+        } else {
+          addGameLog('event', '事件效果：回收袋中没有魔法卡');
+          setHeroSkillBanner('回收袋中没有魔法卡。');
+        }
       } else if (effect === 'openShop') {
         addGameLog('shop', '事件效果：开启商店');
         const started = depsRef.current.startShopFlow(currentEventCard);
@@ -2264,8 +2623,29 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             depsRef.current.setEquipmentSlotBonus(sid, 'damage', cur => cur + item.onDestroyPermanentDamage!);
             addGameLog('equip', `${item.name} 遗言：该装备栏永久伤害 +${item.onDestroyPermanentDamage}！`);
           }
+          if (item.onDestroyPermanentShield) {
+            depsRef.current.setEquipmentSlotBonus(sid, 'shield', cur => cur + item.onDestroyPermanentShield!);
+            addGameLog('equip', `${item.name} 遗言：该装备栏永久护甲 +${item.onDestroyPermanentShield}！`);
+          }
           if (item.onDestroyEffect) {
-            addGameLog('equip', `${item.name} 遗言：${item.onDestroyEffect}`);
+            if (item.onDestroyEffect === 'hand-equip-buff-2-2') {
+              setHandCards(prev => {
+                const buffed: string[] = [];
+                const next = prev.map(c => {
+                  if (c.type === 'weapon' || c.type === 'shield') {
+                    buffed.push(c.name);
+                    return { ...c, value: (c.value ?? 0) + 2, armorMax: c.armorMax != null ? c.armorMax + 2 : undefined };
+                  }
+                  return c;
+                });
+                if (buffed.length > 0) {
+                  addGameLog('equip', `${item.name} 遗言：${buffed.join('、')} 获得 +2攻击 +2护甲！`);
+                }
+                return next;
+              });
+            } else {
+              addGameLog('equip', `${item.name} 遗言：${item.onDestroyEffect}`);
+            }
           }
         };
         destroySlots.forEach(slot => {

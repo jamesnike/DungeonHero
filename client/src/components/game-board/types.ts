@@ -126,7 +126,9 @@ export type MonsterRewardEffect =
   | { type: 'spellLifesteal'; amount: number }
   | { type: 'stunCap'; amount: number }
   | { type: 'backpackCapacity'; amount: number }
-  | { type: 'upgradeCard' };
+  | { type: 'upgradeCard' }
+  | { type: 'grantStatSwapCard' }
+  | { type: 'persuadeRateBonus'; amount: number };
 
 export type MonsterRewardOption = {
   id: string;
@@ -242,6 +244,14 @@ export type PendingMagicAction =
     }
   | {
       card: GameCardData;
+      effect: 'transform-repair';
+      step: 'slot-select';
+      prompt: string;
+      transformTriggered: boolean;
+      echoMultiplier?: number;
+    }
+  | {
+      card: GameCardData;
       /** `shuffle-dungeon` 仅旧存档兼容，新逻辑一律置于牌堆底、不打乱牌堆 */
       effect: 'return-dungeon-bottom' | 'shuffle-dungeon';
       step: 'dungeon-select';
@@ -346,6 +356,12 @@ export type PendingMagicAction =
     }
   | {
       card: GameCardData;
+      effect: 'weapon-sweep';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
       effect: 'armor-stun-convert';
       step: 'slot-select';
       prompt: string;
@@ -357,6 +373,41 @@ export type PendingMagicAction =
       prompt: string;
       data: Record<string, unknown>;
       echoRemaining?: number;
+    }
+  | {
+      card: GameCardData;
+      effect: 'event-fortify';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'temp-attack-strike';
+      step: 'slot-select';
+      prompt: string;
+      isFlank?: boolean;
+    }
+  | {
+      card: GameCardData;
+      effect: 'flank-fortify';
+      step: 'slot-select';
+      prompt: string;
+      isFlank?: boolean;
+    }
+  | {
+      card: GameCardData;
+      effect: 'arcane-storm';
+      step: 'monster-select';
+      pendingDamage: number;
+      echoMultiplier?: number;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'stat-swap';
+      step: 'monster-select';
+      prompt: string;
+      isFlank?: boolean;
     }
 
 /** 天眼审判：透视 + 击晕判定（关闭弹窗后掷骰） */
@@ -436,6 +487,12 @@ export type PendingPotionAction =
   | {
       card: GameCardData;
       effect: 'perm-slot-capacity+1';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'grant-lastwords-hand-equip-buff';
       step: 'slot-select';
       prompt: string;
     };
@@ -570,7 +627,9 @@ export type ActiveAmuletEffects = {
   hasEquipmentSalvage: boolean;
   hasBloodrageAttack: boolean;
   hasPersuadeOnTempAttack: boolean;
+  persuadeOnTempAttackBonus: number;
   hasPersuadeGrantRecycleFetch: boolean;
+  persuadeGrantRecycleFetchCount: number;
   hasDamageClassDiscover: boolean;
   hasPersuadeGraveyardStack: boolean;
   hasStunRecycleToHand: boolean;

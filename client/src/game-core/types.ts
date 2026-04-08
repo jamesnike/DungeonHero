@@ -156,7 +156,7 @@ import type { PersuadePhase } from '@/components/MonsterPersuadeModal';
 
 export interface PersuadeModalState {
   monster: GameCardData;
-  targetSlot: 'backpack' | EquipmentSlotId;
+  targetSlot: 'backpack';
   phase: PersuadePhase;
   threshold: number;
   successRate: number;
@@ -229,12 +229,20 @@ export interface GameState {
   recycleBackpackProgress: number;
   swapUpgradeProgress: number;
   bugletAmuletObtained: boolean;
+  statSwapCardObtained: boolean;
   handLimitBonus: number;
   heroMagicState: HeroMagicState;
   wraithPassiveEnabled: boolean;
   persuadeLevel: number;
   persuadeCostModifier: number;
   lastPersuadeTargetId: string | null;
+  persuadeSameTargetCostHalve: boolean;
+  persuadeRaceBonus: Record<string, number>;
+  persuadeSuccessDurabilityBonus: number;
+  /** 转型关键词：上一张「使用」的牌的类型分类（不含弃置/回收/事件） */
+  lastPlayedCardCategory: string | null;
+  /** 本波已使用的 magic/hero-magic 卡数量（瀑流重置） */
+  magicCardsPlayedThisTurn: number;
 
   // --- Combat ---
   combatState: CombatState;
@@ -307,8 +315,8 @@ export interface GameState {
   handMagicUpgradeModal: { sourceCardId: string } | null;
   /** 镜影摹形：选择复制目标 */
   mirrorCopyModal: { sourceCardId: string } | null;
-  /** 永恒铭刻：选择手牌赋予 Perm 2（来源可为药水或即时魔法） */
-  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' } | null;
+  /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
+  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'flank-grant' | 'transform-gold-grant' } | null;
   graveyardDiscoverState: GameCardData[] | null;
   graveyardDiscoverDelivery: 'backpack' | 'hand-first';
   cardActionContext: CardActionContext | null;

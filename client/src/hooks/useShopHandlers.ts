@@ -27,6 +27,7 @@ import {
   getShopPrice,
   describeSlotLabel,
   describeBonusLabel,
+  computeAmuletAuraReversal,
 } from '@/game-core/helpers';
 import {
   STARTER_CARD_IDS,
@@ -35,6 +36,7 @@ import {
   createStarterHealEchoCard,
 } from '@/game-core/deck';
 import { applyMonsterUpgradeLevel } from '@/lib/monsterRage';
+import statSwapCardImage from '@assets/generated_images/knight_stat_swap_potion.png';
 
 // ---------------------------------------------------------------------------
 // Deps: external dependencies injected by GameBoard
@@ -110,7 +112,8 @@ export interface ShopHandlersDeps {
   ghostBladeExileResolverRef: React.MutableRefObject<(() => void) | null>;
   /** 从专属发现弹窗完成时调用（药水「灵思药剂」等），替代 completeCurrentEvent */
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
-  onNewCardGainedRef: React.MutableRefObject<((count: number) => void) | null>;
+  onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard') => void) | null>;
+  persuadeAmuletBonusRef: React.MutableRefObject<number>;
 }
 
 export type BeginDiscoverFlowOptions = {
@@ -162,6 +165,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
   const setEquipmentSlot1 = useEngineSetter('equipmentSlot1');
   const setEquipmentSlot2 = useEngineSetter('equipmentSlot2');
   const setAmuletSlots = useEngineSetter('amuletSlots');
+  const setSlotTempAttack = useEngineSetter('slotTempAttack');
+  const setSlotTempArmor = useEngineSetter('slotTempArmor');
   const setExtraHeroSkills = useEngineSetter('extraHeroSkills');
   const setPermanentMaxHpBonus = useEngineSetter('permanentMaxHpBonus');
   const setPermanentSpellDamageBonus = useEngineSetter('permanentSpellDamageBonus');
@@ -192,6 +197,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
   const setGhostBladeExileCards = useEngineSetter('ghostBladeExileCards');
   const setMonsterRewardQueue = useEngineSetter('monsterRewardQueue');
   const setActiveMonsterReward = useEngineSetter('activeMonsterReward');
+  const setStatSwapCardObtained = useEngineSetter('statSwapCardObtained');
 
   // -- Derived values ---------------------------------------------------------
 
@@ -598,7 +604,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           break;
         }
         case STARTER_CARD_IDS.cardGainMissileAmulet: {
-          upgraded.description = '每新获得一张牌（含专属卡池、坟场），将两张「魔弹」加入手牌。';
+          upgraded.description = '每从坟场获得一次牌（同时获得多张算一次），将两张「魔弹」加入手牌。';
           break;
         }
         case STARTER_CARD_IDS.damageClassDiscoverAmulet: {
@@ -907,12 +913,15 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
   const requestGraveyardSelection = useCallback(
     (
       maxOptions: number,
-      opts?: { delivery?: 'backpack' | 'hand-first' },
+      opts?: { delivery?: 'backpack' | 'hand-first'; filter?: (card: GameCardData) => boolean },
     ) => {
       const exileIds = new Set((ghostBladeExileCards ?? []).map(c => c.id));
-      const eligible = exileIds.size > 0
+      let eligible = exileIds.size > 0
         ? discardedCards.filter(c => !exileIds.has(c.id))
         : discardedCards;
+      if (opts?.filter) {
+        eligible = eligible.filter(opts.filter);
+      }
       if (!eligible.length) {
         setHeroSkillBanner('坟场中没有可取回的卡牌。');
         return Promise.resolve<GameCardData | null>(null);
@@ -956,9 +965,10 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         depsRef.current.ensureCardInHand(selected);
         depsRef.current.addGameLog('event', `坟场发现：入手牌「${selected.name}」`);
         setHeroSkillBanner(`「${selected.name}」已加入手牌。`);
-        depsRef.current.onNewCardGainedRef?.current?.(1);
+        depsRef.current.onNewCardGainedRef?.current?.(1, 'graveyard');
       } else {
-        depsRef.current.addCardToBackpack(selected);
+        depsRef.current.addCardToBackpack(selected, { skipGainNotify: true });
+        depsRef.current.onNewCardGainedRef?.current?.(1, 'graveyard');
         depsRef.current.addGameLog(
           'event',
           delivery === 'hand-first'
@@ -1203,6 +1213,19 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           }));
         }
       } else if (source === 'amulet') {
+        const reversal = computeAmuletAuraReversal([cardToDelete]);
+        if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
+          setSlotTempAttack(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
+          }));
+        }
+        if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
+          setSlotTempArmor(prev => ({
+            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
+            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
+          }));
+        }
         setAmuletSlots(prev => prev.filter(card => card.id !== cardId));
       }
 
@@ -1441,6 +1464,35 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           setHeroSkillBanner('选择一张牌进行升级。');
           return true;
         }
+        case 'persuadeRateBonus': {
+          const amount = eff.amount;
+          depsRef.current.persuadeAmuletBonusRef.current += amount;
+          depsRef.current.addGameLog('combat', `战利品：劝降成功率永久 +${amount}%`);
+          setHeroSkillBanner(`劝降成功率永久 +${amount}%`);
+          return true;
+        }
+        case 'grantStatSwapCard': {
+          const statSwapCard: GameCardData = {
+            id: `stat-swap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            type: 'magic',
+            name: '颠倒乾坤',
+            value: 0,
+            image: statSwapCardImage,
+            classCard: true,
+            description: '永久：选择一个怪物，将其攻击和血量上限对换。侧击：50% 击晕。',
+            magicType: 'permanent',
+            magicEffect: '攻击与血量上限互换。',
+            knightEffect: 'stat-swap',
+            flankEffect: '50% 概率击晕目标',
+            recycleDelay: 2,
+          };
+          setStatSwapCardObtained(true);
+          depsRef.current.addCardToBackpack(statSwapCard);
+          depsRef.current.addGameLog('combat', '战利品：获得极稀有魔法卡「颠倒乾坤」！');
+          setHeroSkillBanner('获得了极稀有魔法卡「颠倒乾坤」！');
+          depsRef.current.onNewCardGainedRef?.current?.(1);
+          return true;
+        }
         default:
           return false;
       }
@@ -1459,6 +1511,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       setStunCap,
       setBackpackCapacityModifier,
       setUpgradeModalOpen,
+      setStatSwapCardObtained,
     ],
   );
 

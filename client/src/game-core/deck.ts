@@ -18,6 +18,7 @@ import goblinImage from '@assets/generated_images/cute_chibi_goblin_monster.png'
 import ogreImage from '@assets/generated_images/cute_chibi_ogre_monster.png';
 import wraithImage from '@assets/generated_images/cute_chibi_wraith_monster.png';
 import swarmImage from '@assets/generated_images/cute_chibi_swarm_monster.png';
+import golemImage from '@assets/generated_images/cute_chibi_golem_monster.png';
 import bugletImage from '@assets/generated_images/cute_chibi_buglet_token.png';
 export { default as minionImage } from '@assets/generated_images/chibi_minion_follower.png';
 export { bugletImage };
@@ -54,7 +55,6 @@ const potionWeaponRepairImage = potionWeaponRepairImageImport;
 export { potionWeaponRepairImage };
 import potionEquipmentRepairImage from '@assets/generated_images/cute_potion_equipment_repair.png';
 import potionBackpackAwakenImage from '@assets/generated_images/card_dedupe_potion_backpack_awaken.png';
-import potionHasteDrawImage from '@assets/generated_images/card_dedupe_potion_haste_draw.png';
 import potionInsightClassImage from '@assets/generated_images/card_dedupe_potion_insight.png';
 import potionEternalInscribeImage from '@assets/generated_images/card_dedupe_potion_eternal_perm.png';
 import potionTwilightImage from '@assets/generated_images/cute_potion_twilight.png';
@@ -97,6 +97,8 @@ import dedupeMagicUndeathGuardImage from '@assets/generated_images/card_dedupe_m
 import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dedupeMagicArcaneRefineImage from '@assets/generated_images/card_dedupe_magic_arcane_refine.png';
 import dedupeMagicOmniscienceImage from '@assets/generated_images/card_dedupe_magic_omniscience.png';
+import dedupeMagicEventFortifyImage from '@assets/generated_images/card_dedupe_magic_event_fortify.png';
+import dedupeMagicStunWaveImage from '@assets/generated_images/card_dedupe_knight_magic_armor_stun_convert.png';
 import dedupeMagicShadowSpikeFlipImage from '@assets/generated_images/card_dedupe_magic_shadow_spike_flip.png';
 import dedupeMagicChaosImpactFlipImage from '@assets/generated_images/card_dedupe_magic_chaos_impact_flip.png';
 import dedupeMagicTimeMirrorFlipImage from '@assets/generated_images/card_dedupe_magic_time_mirror_flip.png';
@@ -119,6 +121,8 @@ import dedupeEventFateDiceCupImage from '@assets/generated_images/card_dedupe_ev
 import dedupeEventBladeOfFateBuildingImage from '@assets/generated_images/card_dedupe_event_blade_of_fate_building.png';
 import dedupeEventChaosDiceGameImage from '@assets/generated_images/card_dedupe_event_chaos_dice_game.png';
 import dedupeEventTimeRiftImage from '@assets/generated_images/card_dedupe_event_time_rift.png';
+import dedupeEventCursedDiceImage from '@assets/generated_images/card_dedupe_knight_magic_fortune_wheel.png';
+import dedupeEventCursedDiceBuildingImage from '@assets/generated_images/card_dedupe_magic_event_fortify.png';
 import dedupeStarterCombatRallyImage from '@assets/generated_images/card_dedupe_starter_combat_rally.png';
 import dedupeStarterFineRepairImage from '@assets/generated_images/card_dedupe_starter_fine_repair.png';
 import dedupeStarterDiscardDrawImage from '@assets/generated_images/card_dedupe_starter_discard_draw.png';
@@ -128,13 +132,13 @@ import dedupeMissileBoltTokenImage from '@assets/generated_images/card_dedupe_mi
 import dedupeStarterMagicMissileImage from '@assets/generated_images/card_dedupe_starter_magic_missile.png';
 import dedupeStarterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
 import dedupeStarterAmuletLoneImage from '@assets/generated_images/card_dedupe_starter_amulet_lone.png';
-import dedupeStarterAmuletPersuadeImage from '@assets/generated_images/card_dedupe_starter_amulet_persuade.png';
-import dedupeStarterAmuletMissileImage from '@assets/generated_images/card_dedupe_starter_amulet_missile.png';
-import dedupeStarterAmuletDamageDiscoverImage from '@assets/generated_images/card_dedupe_starter_amulet_damage_discover.png';
-import dedupeStarterAmuletPersuadeUpgradeImage from '@assets/generated_images/card_dedupe_starter_amulet_persuade_upgrade.png';
-import dedupeStarterAmuletStunCapImage from '@assets/generated_images/card_dedupe_starter_amulet_stun_cap.png';
-import dedupeStarterAmuletRecycleExpandImage from '@assets/generated_images/card_dedupe_starter_amulet_recycle_expand.png';
-import dedupeStarterAmuletDungeonGoldImage from '@assets/generated_images/card_dedupe_starter_amulet_dungeon_gold.png';
+import starterAmuletPersuadeDiscountImage from '@assets/generated_images/starter_amulet_persuade_discount.png';
+import starterAmuletMissileImage from '@assets/generated_images/starter_amulet_missile.png';
+import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
+import starterAmuletSwapUpgradeImage from '@assets/generated_images/starter_amulet_swap_upgrade.png';
+import starterAmuletStunCapImage from '@assets/generated_images/starter_amulet_stun_cap.png';
+import starterAmuletRecycleExpandImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
+import starterAmuletDungeonGoldImage from '@assets/generated_images/starter_amulet_dungeon_gold.png';
 import dedupeStarterBackpackSizePotionImage from '@assets/generated_images/card_dedupe_starter_potion_backpack_size.png';
 import dedupeStarterWaterfallDealPotionImage from '@assets/generated_images/card_dedupe_starter_potion_waterfall_deal.png';
 import dedupeStarterSlotCapacityPotionImage from '@assets/generated_images/card_dedupe_potion_slot_capacity_starter.png';
@@ -150,7 +154,7 @@ import starterLuckyDaggerImage from '@assets/generated_images/starter_lucky_dagg
 import starterWaterfallSwordImage from '@assets/generated_images/starter_waterfall_sword.png';
 import starterPersuadeBladeImage from '@assets/generated_images/starter_persuade_blade.png';
 import starterGuardianShieldImage from '@assets/generated_images/starter_guardian_shield.png';
-import starterLinkShieldImage from '@assets/generated_images/knight_guardian_link_shield.png';
+import starterLinkShieldImage from '@assets/generated_images/starter_link_shield.png';
 import starterScrollArmorImage from '@assets/generated_images/starter_scroll_armor.png';
 import starterScrollHealImage from '@assets/generated_images/starter_scroll_heal.png';
 import starterScrollSummonImage from '@assets/generated_images/starter_scroll_summon.png';
@@ -168,6 +172,10 @@ import starterPotionDurabilityImage from '@assets/generated_images/starter_potio
 import starterPotionLifestealImage from '@assets/generated_images/starter_potion_lifesteal.png';
 import starterPotionStunImage from '@assets/generated_images/starter_potion_stun.png';
 import starterPotionHandLimitImage from '@assets/generated_images/starter_potion_hand_limit.png';
+import starterNoviceSwordImage from '@assets/generated_images/starter_novice_sword.png';
+import starterScrollRecycleEchoImage from '@assets/generated_images/starter_scroll_recycle_echo.png';
+import starterPotionSpellDamageImage from '@assets/generated_images/starter_potion_spell_damage.png';
+import starterScrollEternalInscribeImage from '@assets/generated_images/starter_scroll_eternal_inscribe.png';
 
 // ---------------------------------------------------------------------------
 // patchPersistedMainDeckWeaponImage
@@ -276,6 +284,7 @@ export function createDeck(): GameCardData[] {
       Ogre: ['Brutal', 'Stone', 'Hulking', 'Iron', 'Scarred', 'Raging', 'Titan', 'Gnarled', 'Vicious', 'Dusk', 'Wrathful', 'Blight'],
       Wraith: ['Phantom', 'Spectral', 'Haunting', 'Ethereal', 'Abyssal', 'Twilight', 'Hollow', 'Veiled', 'Mourning', 'Sinister', 'Fading', 'Drifting'],
       Swarm: ['Chittering', 'Hive', 'Burrowing', 'Writhing', 'Scuttling', 'Plague', 'Festering', 'Crawling', 'Venomous', 'Ravenous', 'Swarming', 'Teeming'],
+      Golem: ['Ancient', 'Stone', 'Crystal', 'Rune', 'Iron', 'Jade', 'Obsidian', 'Marble', 'Granite', 'Arcane', 'Mithril', 'Adamant'],
     };
     const usedPrefixes: Record<string, Set<number>> = {};
 
@@ -344,10 +353,18 @@ export function createDeck(): GameCardData[] {
         minFury: 2, maxFury: 2,
         waterfallEffect: { type: 'swarmInfest' as const, amount: 3, description: '被挤出时：在主牌堆顶加入 3 只小虫子' },
       },
+      {
+        name: 'Golem',
+        image: golemImage,
+        minAttack: 3, maxAttack: 5,
+        minHp: 5, maxHp: 7,
+        minFury: 2, maxFury: 3,
+        waterfallEffect: { type: 'spellDecay' as const, amount: 2, description: '被挤出时：永久法术伤害加成 -2' },
+      },
     ];
 
-    // 18 monsters total (3 per type, 6 races)
-    for (let i = 0; i < 18; i++) {
+    // 21 monsters total (3 per type, 7 races)
+    for (let i = 0; i < 21; i++) {
       const monsterType = monsterTypes[i % monsterTypes.length];
       const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
       const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
@@ -377,6 +394,7 @@ export function createDeck(): GameCardData[] {
         ...(monsterType.name === 'Wraith' ? { lastWords: 'wraith-haunt-2' } : {}),
         ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-3' } : {}),
         ...(monsterType.name === 'Swarm' ? { swarmSpawn: true, description: '虫群：场上有虫群怪物时，每移除一张地城牌，在该位置生成一只小虫子。' } : {}),
+        ...(monsterType.name === 'Golem' ? { antiMagicReflect: 2, description: '反魔：玩家每使用一张造成伤害的法术牌，对玩家造成 2 点伤害。' } : {}),
       });
     }
 
@@ -392,6 +410,7 @@ export function createDeck(): GameCardData[] {
       Ogre:     { tag: 'ogre-crit',      desc: '蛮力暴击：攻击时50%概率双倍伤害。\n狂暴连击：70%概率攻击两次。' },
       Goblin:   { tag: 'goblin-elite',   desc: '动手：偷取6金币。\n玩家金币≤10时，攻击力与血量翻倍。' },
       Swarm:    { tag: 'swarm-elite',    desc: '虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子。' },
+      Golem:    { tag: 'golem-elite',   desc: '岩石护体：每次最多受到 5 点伤害。' },
     };
     for (const [type, monsters] of Object.entries(monstersByType)) {
       const spec = specialMap[type];
@@ -425,6 +444,10 @@ export function createDeck(): GameCardData[] {
       }
       if (type === 'Swarm') {
         chosen.waterfallEffect = { type: 'swarmInfest', amount: 5, description: '被挤出时：在主牌堆顶加入 5 只小虫子' };
+      }
+      if (type === 'Golem') {
+        chosen.maxDamagePerHit = 5;
+        chosen.waterfallEffect = { type: 'spellDecay', amount: 3, description: '被挤出时：永久法术伤害加成 -3' };
       }
     }
 
@@ -485,8 +508,8 @@ export function createDeck(): GameCardData[] {
     }
     if (weaponType.name === 'Dagger') {
       card.value = Math.min(card.value, 3);
-      card.durability = Math.min(card.durability!, 2);
-      card.maxDurability = card.durability;
+      card.durability = 2;
+      card.maxDurability = 2;
       card.daggerSelfDestructDiscover = true;
       card.onEquipEffect = 'persuade-bonus-10';
       card.description = '入场：下次劝降成功率 +10%。攻击后，可自毁来发现专属牌。';
@@ -603,7 +626,7 @@ export function createDeck(): GameCardData[] {
       value: 6,
       image: potionWeaponRepairImage,
       potionEffect: 'repair-choice',
-      description: '左右装备都恢复3点耐久 或 左右装备都耐久上限+2。',
+      description: '左右装备都恢复2点耐久 或 左右装备都耐久上限+1。',
     },
     {
       type: 'potion',
@@ -654,19 +677,19 @@ export function createDeck(): GameCardData[] {
     },
     {
       type: 'potion',
-      name: '疾汲秘药',
-      value: 0,
-      image: potionHasteDrawImage,
-      potionEffect: 'end-turn-draw-2',
-      description: '永久被动：英雄回合结束时抽牌从 1 张提升为 2 张（不可叠加）。',
-    },
-    {
-      type: 'potion',
       name: '永恒铭刻药',
       value: 6,
       image: potionEternalInscribeImage,
       potionEffect: 'grant-perm-2',
       description: '选择一张没有 Perm 属性的手牌，赋予 Perm 2（被移除后进入回收袋，经 2 次瀑流返回背包）。',
+    },
+    {
+      type: 'potion',
+      name: '遗赠淬炼药',
+      value: 6,
+      image: potionEquipmentRepairImage,
+      potionEffect: 'grant-lastwords-hand-equip-buff',
+      description: '选择一个装备，使其获得遗言：手牌里的装备 +2 攻击 +2 护甲。',
     },
   ];
 
@@ -876,6 +899,29 @@ export function createDeck(): GameCardData[] {
     description: '一次性：翻看牌堆顶 5 张牌。怪物→随机装备栏攻击+1，装备→随机装备栏护甲+1，魔法→法强+1，护符→超杀吸血+1，药水→击晕上限+5%。',
   });
 
+  deck.push({
+    id: `magic-${id++}`,
+    type: 'magic',
+    name: '天机铸炼',
+    value: 0,
+    image: dedupeMagicEventFortifyImage,
+    magicType: 'instant',
+    magicEffect: '选择一件装备，翻看牌堆顶 3 张牌，其中有 X 张事件牌，则该装备耐久上限 +X 并恢复 X 点耐久。',
+    description: '一次性：选择一件装备，翻看牌堆顶 3 张牌。每有一张事件牌，该装备耐久度上限 +1 并恢复 1 点耐久。',
+  });
+
+  deck.push({
+    id: `magic-${id++}`,
+    type: 'magic',
+    name: '震慑领域',
+    value: 0,
+    image: dedupeMagicStunWaveImage,
+    magicType: 'instant',
+    magicEffect: '击晕上限 +10%。',
+    description: '一次性：击晕上限 +10%。转型：对激活行所有怪物 60% 击晕。',
+    knightEffect: 'stun-wave',
+  });
+
   // Event cards
   deck.push({
     id: `event-${id++}`,
@@ -1031,7 +1077,6 @@ export function createDeck(): GameCardData[] {
         image: forgeHeartAmuletImage,
         description: `每有一张牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。可熔炉灵焰`,
         amuletEffect: 'flip-gold',
-        recycleDelay: 1,
       },
       destination: 'backpack',
       banner: '共鸣熔炉翻转为「熔炉之心」，已放入背包。',
@@ -1458,12 +1503,280 @@ export function createDeck(): GameCardData[] {
         value: 0,
         image: dedupeMagicTimeMirrorFlipImage,
         magicType: 'permanent',
-        magicEffect: 'temp-attack-mirror-armor',
-        description: '永久魔法：选择一个装备栏，调整临时攻击力(可加可减)，直到攻击力变为与护甲相同。',
-        recycleDelay: 1,
+        magicEffect: 'equalize-temp-attack-armor',
+        description: '永久魔法（Perm 2）：选择一个装备栏，使得临时攻击和临时护甲相等（增加较低的一方）。',
+        recycleDelay: 2,
       },
       destination: 'backpack',
       message: '时空收缩翻转为时空镜像！',
+    },
+  });
+
+  const arcaneCorridorId = `event-${id++}`;
+  deck.push({
+    id: arcaneCorridorId,
+    type: 'event',
+    name: '奥术回廊',
+    value: 0,
+    image: skillScrollImage,
+    description: '魔法能量在此汇聚，选择一种方式汲取力量。',
+    eventChoices: [
+      {
+        text: '法术回响（下一张Magic触发两次）',
+        effect: 'flipToDoubleNextMagic',
+        hint: '获得一张「法术回响」永久魔法放入背包',
+      },
+      {
+        text: '发现一张专属Magic卡',
+        effect: 'discoverClassMagic',
+        hint: '从专属牌堆发现一张魔法/英雄魔法牌（三选一）',
+      },
+      {
+        text: '获得2张专属Hero Magic',
+        effect: 'drawClassHeroMagic:2',
+        hint: '从专属牌堆抽取2张英雄魔法卡放入背包',
+      },
+      {
+        id: 'arcane-starter-magic',
+        text: '发现一张起始背包的Magic卡',
+        effect: 'discoverStarterMagic',
+        hint: '从起始背包候选魔法池中发现一张（三选一）',
+      },
+      {
+        id: 'arcane-graveyard-magic',
+        text: '发现一张坟场的Magic卡',
+        effect: 'graveyardDiscoverMagic',
+        hint: '从坟场中发现一张魔法卡加入背包',
+        requires: [{ type: 'graveyard', min: 1, message: '坟场中没有卡牌' }],
+      },
+      {
+        id: 'arcane-recycle-magic',
+        text: '回收袋至多2张Magic移到手上',
+        effect: 'recycleBagMagicToHand:2',
+        hint: '从回收袋中取出至多2张魔法卡加入手牌',
+      },
+    ],
+    flipTarget: {
+      toCard: {
+        id: `${arcaneCorridorId}-flip`,
+        type: 'magic',
+        name: '奥术风暴',
+        value: 0,
+        image: skillScrollImage,
+        magicType: 'permanent',
+        magicEffect: 'arcane-storm-magic-count',
+        description: '永久魔法（Perm 1）：造成 X 点伤害，X = 本回合已使用的魔法卡数量。',
+        recycleDelay: 1,
+      },
+      destination: 'backpack',
+      message: '奥术回廊翻转为「奥术风暴」，已放入背包。',
+    },
+  });
+
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '劝降祭典',
+    value: 0,
+    image: persuadeScrollCharmImage,
+    description: '掷出诅咒骰子，获得一项劝降增强。若装备着怀柔之印或劝降归袋符，将升级它们。',
+    eventChoices: [
+      {
+        text: '掷出劝降骰：劝降等级+1/劝降费用-2/连劝减半/种族加成/耐久增强',
+        hint: '20% 概率触发不同劝降增强',
+        effect: 'upgradePersuadeAmulets',
+        diceTable: [
+          { id: 'persuade-dice-level', range: [1, 4], label: '劝降等级 +1', effect: 'persuadeLevel+1' },
+          { id: 'persuade-dice-cost', range: [5, 8], label: '劝降费用永久 -2', effect: 'persuadeCost-2' },
+          { id: 'persuade-dice-same-halve', range: [9, 12], label: '连续劝降同一怪物，第二次费用减半', effect: 'persuadeSameTargetCostHalve' },
+          { id: 'persuade-dice-race', range: [13, 16], label: 'Skeleton/Wraith 劝降率 +20%', effect: 'persuadeRaceBonus:Skeleton,Wraith:20' },
+          { id: 'persuade-dice-durability', range: [17, 20], label: '劝降成功的怪物起始耐久 +1', effect: 'persuadeSuccessDurabilityBonus+1' },
+        ],
+      },
+    ],
+  });
+
+  const cursedDiceId = `event-${id++}`;
+  deck.push({
+    id: cursedDiceId,
+    type: 'event',
+    name: '诅咒骰局',
+    value: 0,
+    image: dedupeEventCursedDiceImage,
+    description: '掷出诅咒骰子，承受一项惩罚，然后翻转为「诅咒碑」建筑。',
+    waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0, description: '被挤出时：摧毁所有护符，弃回所有手牌' },
+    eventChoices: [
+      {
+        text: '掷出诅咒骰：装备攻击减半/法伤减半/装备护甲减半/超杀吸血-3/护符上限-1',
+        hint: '20% 概率触发不同惩罚，然后翻转为「诅咒碑」',
+        diceTable: [
+          { id: 'cursed-dice-atk-halve', range: [1, 4], label: '所有装备栏永久攻击加成减半', effect: 'halveSlotDamageBonus' },
+          { id: 'cursed-dice-spell-halve', range: [5, 8], label: '法术伤害加成减半', effect: 'halveSpellDamageBonus' },
+          { id: 'cursed-dice-armor-halve', range: [9, 12], label: '所有装备栏永久护甲加成减半', effect: 'halveSlotShieldBonus' },
+          { id: 'cursed-dice-lifesteal-loss', range: [13, 16], label: '超杀吸血 -3', effect: 'spellLifesteal-3' },
+          { id: 'cursed-dice-amulet-cap', range: [17, 20], label: '护符栏上限 -1', effect: 'amuletCapacity-1' },
+        ],
+      },
+    ],
+    flipTarget: {
+      toCard: {
+        id: `${cursedDiceId}-flip`,
+        type: 'building',
+        name: '诅咒碑',
+        value: 0,
+        image: dedupeEventCursedDiceBuildingImage,
+        buildingAura: 'adjacent-magic-immune',
+        fury: 1,
+        hpLayers: 1,
+        currentLayer: 1,
+        hp: 8,
+        maxHp: 8,
+        description:
+          '建筑（血量 8）：光环——左右相邻格中的怪物不受玩家魔法伤害。可被攻击摧毁。',
+      },
+      destination: 'stay',
+      message: '诅咒骰局翻转为诅咒碑！',
+      banner: '诅咒骰局翻转为「诅咒碑」',
+    },
+  });
+
+  // ---------------------------------------------------------------------------
+  // Event #16: 战备工坊 (Arsenal Workshop)
+  // ---------------------------------------------------------------------------
+  const arsenalWorkshopId = `event-${id++}`;
+  deck.push({
+    id: arsenalWorkshopId,
+    type: 'event',
+    name: '战备工坊',
+    value: 0,
+    image: skillScrollImage,
+    description: '装备锻造与强化之所，选择一种方式改良你的装备。',
+    eventChoices: [
+      {
+        id: 'arsenal-left-dur',
+        text: '左装备栏：耐久上限+1，恢复2点耐久',
+        effect: ['slotLeftDurMax+1', 'repairSlot:left:2'],
+        hint: '左装备栏的装备 +1 耐久上限并恢复 2 点耐久',
+        requires: [{ type: 'equipment', slot: 'left', message: '左装备栏没有装备' }],
+      },
+      {
+        id: 'arsenal-right-dur',
+        text: '右装备栏：耐久上限+1，恢复2点耐久',
+        effect: ['slotRightDurMax+1', 'repairSlot:right:2'],
+        hint: '右装备栏的装备 +1 耐久上限并恢复 2 点耐久',
+        requires: [{ type: 'equipment', slot: 'right', message: '右装备栏没有装备' }],
+      },
+      {
+        id: 'arsenal-swap',
+        text: '左右装备互换，各自+1耐久',
+        effect: ['swapEquipmentSlots', 'repairSlot:both:1'],
+        hint: '交换左右装备位置，各恢复 1 点耐久',
+        requires: [{ type: 'equipmentAny', message: '至少需要一件装备' }],
+      },
+      {
+        id: 'arsenal-left-extra',
+        text: '左装备栏本回合攻击次数+1',
+        effect: 'slotLeftExtraAttack',
+        hint: '左装备栏本回合可多攻击一次',
+        requires: [{ type: 'equipment', slot: 'left', message: '左装备栏没有装备' }],
+      },
+      {
+        id: 'arsenal-right-extra',
+        text: '右装备栏本回合攻击次数+1',
+        effect: 'slotRightExtraAttack',
+        hint: '右装备栏本回合可多攻击一次',
+        requires: [{ type: 'equipment', slot: 'right', message: '右装备栏没有装备' }],
+      },
+      {
+        id: 'arsenal-discard-equip',
+        text: '弃置所有手牌装备，每张换一张专属装备',
+        effect: 'discardHandEquipForClassEquip',
+        hint: '弃置手牌中所有装备卡，每弃置一张从专属牌堆获得一张装备',
+      },
+    ],
+    flipTarget: {
+      toCard: {
+        id: `${arsenalWorkshopId}-flip`,
+        type: 'magic',
+        name: '装备附魔',
+        value: 0,
+        image: skillScrollImage,
+        magicType: 'permanent',
+        magicEffect: 'equipment-enchant-discard',
+        description: '永久魔法（Perm 2）：弃置手牌中一张装备，将其攻击/护甲值随机附加到装备栏的某件装备上。',
+        recycleDelay: 2,
+      },
+      destination: 'backpack',
+      message: '战备工坊翻转为「装备附魔」，已放入背包。',
+    },
+    flipCondition: 'activeRowEquipment:2',
+  });
+
+  // ---------------------------------------------------------------------------
+  // Event #18: 附魔祭坛 (Enchantment Altar)
+  // ---------------------------------------------------------------------------
+  const enchantAltarId = `event-${id++}`;
+  deck.push({
+    id: enchantAltarId,
+    type: 'event',
+    name: '附魔祭坛',
+    value: 0,
+    image: skillScrollImage,
+    description: '古老的祭坛散发着附魔之力。若此牌下方有堆叠牌，处理后将消耗下方牌并驻留。',
+    stayIfStacked: true,
+    eventChoices: [
+      {
+        id: 'altar-shop',
+        text: '商店等级+1，打开商店',
+        effect: ['shopLevel+1', 'openShop'],
+        hint: '商店等级提升 1 级，并立即打开商店',
+        skipFlip: true,
+      },
+      {
+        id: 'altar-flank',
+        text: '选择手牌赋予「侧击：抽1张牌」',
+        effect: 'grantFlankDraw:1',
+        hint: '选择一张手牌，赋予侧击效果（打出时处于手牌最左/最右位置时抽1张牌）',
+        requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+        skipFlip: true,
+      },
+      {
+        id: 'altar-amulet-perm',
+        text: '选择护符赋予 Perm 2',
+        effect: 'grantAmuletPerm',
+        hint: '选择一个护符，赋予 Perm 2（被移除后经 2 次瀑流返回背包）',
+        requires: [{ type: 'amulet', message: '没有已装备的护符' }],
+        skipFlip: true,
+      },
+      {
+        id: 'altar-transform-gold',
+        text: '选择手牌赋予「转型：+3金币」',
+        effect: 'grantTransformGold:3',
+        hint: '选择一张手牌，赋予转型效果（打出前一张牌类型不同时获得 3 金币）',
+        requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+        skipFlip: true,
+      },
+      {
+        id: 'altar-flip',
+        text: '翻转为「祭坛秘术」永久魔法',
+        effect: 'noop',
+        hint: '该牌翻转为 Perm 1 魔法：弃回 2 张手牌，发现 1 张专属 Magic 卡',
+      },
+    ],
+    flipTarget: {
+      toCard: {
+        id: `${enchantAltarId}-flip`,
+        type: 'magic',
+        name: '祭坛秘术',
+        value: 0,
+        image: skillScrollImage,
+        magicType: 'permanent',
+        magicEffect: 'altar-discard-discover',
+        description: '永久魔法（Perm 1）：弃回 2 张手牌，发现 1 张专属 Magic 卡。',
+        recycleDelay: 1,
+      },
+      destination: 'backpack',
+      message: '附魔祭坛翻转为「祭坛秘术」，已放入背包。',
     },
   });
 
@@ -1649,7 +1962,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'weapon',
       name: '新手短剑',
       value: 3,
-      image: swordImage,
+      image: starterNoviceSwordImage,
       durability: 2,
       maxDurability: 2,
       maxUpgradeLevel: 2,
@@ -1674,8 +1987,8 @@ export function createStarterCardPool(): GameCardData[] {
       durability: 2,
       maxDurability: 2,
       killGoldScaling: true,
-      killGoldCounter: 1,
-      description: '每击杀一个怪物获得金币（首次+1，之后每次递增）。',
+      killGoldCounter: 2,
+      description: '每击杀一个怪物获得金币（首次+2，之后每次递增）。',
     },
     {
       id: STARTER_CARD_IDS.ghostBlade2,
@@ -1721,7 +2034,7 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 2,
       persuadeBoostOnHit: 20,
       persuadeBoostOnHitElite: 10,
-      description: '攻击怪物后使其劝降概率 +20%（精英 +10%）。',
+      description: '每攻击一次，下次劝降成功概率 +20%（精英 +10%）。',
     },
     {
       id: STARTER_CARD_IDS.guardianShield,
@@ -1813,7 +2126,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'amulet',
       name: '降服之符',
       value: 0,
-      image: dedupeStarterAmuletPersuadeImage,
+      image: starterAmuletPersuadeDiscountImage,
       amuletEffect: 'attack-persuade-discount',
       description: '每攻击一次，下次劝降费用 -3（可叠加）。',
       maxUpgradeLevel: 1,
@@ -1823,9 +2136,9 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'amulet',
       name: '弹幕之符',
       value: 0,
-      image: dedupeStarterAmuletMissileImage,
+      image: starterAmuletMissileImage,
       amuletEffect: 'card-gain-missile',
-      description: '每新获得一张牌（含专属卡池、坟场），将一张「魔弹」加入手牌。',
+      description: '每从坟场获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。',
       maxUpgradeLevel: 1,
     },
     {
@@ -1833,7 +2146,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'amulet',
       name: '战痕之符',
       value: 0,
-      image: dedupeStarterAmuletDamageDiscoverImage,
+      image: starterAmuletDamageDiscoverImage,
       amuletEffect: 'damage-class-discover',
       description: '每造成 5 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
       maxUpgradeLevel: 1,
@@ -1843,7 +2156,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'amulet',
       name: '流转之符',
       value: 0,
-      image: dedupeStarterAmuletPersuadeUpgradeImage,
+      image: starterAmuletSwapUpgradeImage,
       amuletEffect: 'swap-upgrade',
       description: '每交换 3 次位置，升级 1 张牌。',
     },
@@ -1852,7 +2165,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'amulet',
       name: '震慑之符',
       value: 0,
-      image: dedupeStarterAmuletStunCapImage,
+      image: starterAmuletStunCapImage,
       amuletEffect: 'stun-upgrade-cap',
       description: '每击晕一次怪物，击晕上限 +5%。',
       maxUpgradeLevel: 1,
@@ -1862,7 +2175,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'amulet',
       name: '积蓄之符',
       value: 0,
-      image: dedupeStarterAmuletRecycleExpandImage,
+      image: starterAmuletRecycleExpandImage,
       amuletEffect: 'recycle-backpack-expand',
       description: '每回收 10 张牌，背包上限 +3。',
       maxUpgradeLevel: 1,
@@ -1872,7 +2185,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'amulet',
       name: '拾荒之符',
       value: 0,
-      image: dedupeStarterAmuletDungeonGoldImage,
+      image: starterAmuletDungeonGoldImage,
       amuletEffect: 'dungeon-gold',
       description: '每处理 1 张地城牌，金币 +1。',
       maxUpgradeLevel: 1,
@@ -1926,7 +2239,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'magic',
       name: '回收余韵',
       value: 0,
-      image: starterScrollRecallImage,
+      image: starterScrollRecycleEchoImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：被回收时，从背包抽 1 张牌。',
       description: '被回收时，从背包抽 1 张牌。',
@@ -1939,7 +2252,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'potion',
       name: '法伤药水',
       value: 0,
-      image: potionSpellDamageImage,
+      image: starterPotionSpellDamageImage,
       potionEffect: 'perm-spell-damage+2',
       description: '永久法术伤害 +2。',
     },
@@ -1985,7 +2298,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'magic',
       name: '永恒铭刻',
       value: 0,
-      image: potionEternalInscribeImage,
+      image: starterScrollEternalInscribeImage,
       magicType: 'instant',
       magicEffect: '即时魔法：选择一张没有 Perm 属性的手牌，赋予 Perm 2。',
       description: '一次性使用，选择一张手牌赋予 Perm 2（被移除后经 2 次瀑流返回背包）。',

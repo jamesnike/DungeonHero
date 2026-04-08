@@ -545,6 +545,58 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Golem Anti-Magic Reflect */}
+            {card.type === 'monster' && card.antiMagicReflect != null && card.antiMagicReflect > 0 && (
+              <div className="bg-indigo-500/15 p-3 rounded-md border border-indigo-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">反魔</span>
+                  </div>
+                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">玩家每使用一张造成伤害的法术牌，对玩家造成 {card.antiMagicReflect} 点伤害。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Golem Spell Damage Reduction */}
+            {card.type === 'monster' && card.spellDamageReduction != null && card.spellDamageReduction > 0 && (
+              <div className="bg-indigo-500/15 p-3 rounded-md border border-indigo-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 shrink-0 text-indigo-500" />
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">法术抗性</span>
+                  </div>
+                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">受到的法术伤害减少 {Math.round(card.spellDamageReduction * 100)}%。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Golem Max Damage Per Hit */}
+            {card.type === 'monster' && card.maxDamagePerHit != null && (
+              <div className="bg-indigo-500/15 p-3 rounded-md border border-indigo-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 shrink-0 text-indigo-500" />
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">岩石护体</span>
+                  </div>
+                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每次最多受到 {card.maxDamagePerHit} 点伤害。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Golem Spell Growth */}
+            {card.type === 'monster' && card.golemSpellGrowth != null && card.golemSpellGrowth > 0 && (
+              <div className="bg-indigo-500/15 p-3 rounded-md border border-indigo-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">法力吞噬</span>
+                  </div>
+                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每个怪物回合结束时，反魔伤害 +{card.golemSpellGrowth}。</p>
+                </div>
+              </div>
+            )}
+
             {/* Stun Status */}
             {card.type === 'monster' && card.isStunned && (
               <div className="bg-yellow-500/15 p-3 rounded-md border border-yellow-500/30">
@@ -884,6 +936,18 @@ export default function CardDetailsModal({
                     card.description || card.magicEffect
                   )}
                 </div>
+                {card.transformBonus && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800 dark:text-amber-200">
+                    <span className="font-bold">转型</span>
+                    <span>上一张使用的牌类型不同时：{card.transformBonus}</span>
+                  </div>
+                )}
+                {card.flankEffect && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-800 dark:text-cyan-200">
+                    <span className="font-bold">侧击</span>
+                    <span>手牌最左/最右时打出：{card.flankEffect}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -916,6 +980,13 @@ export default function CardDetailsModal({
                 </div>
               );
             })()}
+
+            {card.type !== 'magic' && card.transformBonus && (
+              <div className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800 dark:text-amber-200">
+                <span className="font-bold">转型</span>
+                <span>上一张使用的牌类型不同时：{card.transformBonus}</span>
+              </div>
+            )}
 
             {card.type === 'building' && (card.maxHp != null || card.hp != null) && (
               <div className="rounded-md border border-stone-500/30 bg-stone-500/10 p-3 text-sm">
@@ -1046,6 +1117,18 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token.startsWith('shopLevel+')) return `商店等级 +${token.replace('shopLevel+', '')}`;
       if (token.startsWith('spellDamage+')) return `法术伤害 +${token.replace('spellDamage+', '')}`;
       if (token.startsWith('spellLifesteal+')) return `超杀吸血 +${token.replace('spellLifesteal+', '')}`;
+      if (token.startsWith('spellLifesteal-')) return `超杀吸血 -${token.replace('spellLifesteal-', '')}`;
+      if (token === 'halveSlotDamageBonus') return '所有装备栏永久攻击加成减半';
+      if (token === 'halveSpellDamageBonus') return '法术伤害加成减半';
+      if (token === 'halveSlotShieldBonus') return '所有装备栏永久护甲加成减半';
+      if (token === 'amuletCapacity-1') return '护符栏上限 -1';
+      if (token === 'persuadeSameTargetCostHalve') return '连续劝降同一怪物，第二次费用减半';
+      if (token.startsWith('persuadeRaceBonus:')) {
+        const parts = token.replace('persuadeRaceBonus:', '').split(':');
+        return `${parts[0].split(',').join('、')} 劝降率 +${parts[1]}%`;
+      }
+      if (token.startsWith('persuadeSuccessDurabilityBonus+')) return `劝降成功的怪物起始耐久 +${token.replace('persuadeSuccessDurabilityBonus+', '')}`;
+      if (token === 'upgradePersuadeAmulets') return '升级已装备的劝降护符';
       if (token.startsWith('discardCards:')) return `弃回 ${token.replace('discardCards:', '')} 张牌`;
       if (token.startsWith('deleteCard')) {
         const [, count = '1'] = token.split(':');

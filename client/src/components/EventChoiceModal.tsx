@@ -122,6 +122,18 @@ function formatEffect(effect?: EventEffectExpression): string | null {
       if (token === 'graveyardDiscover') return 'Discover 1 card from the graveyard';
       if (token.startsWith('drawHeroCards:')) return `Draw ${token.replace('drawHeroCards:', '')} card(s) from backpack`;
       if (token === 'removeAllAmulets') return 'Destroy all amulets';
+      if (token.startsWith('spellLifesteal-')) return `Overkill lifesteal -${token.replace('spellLifesteal-', '')}`;
+      if (token === 'halveSlotDamageBonus') return 'Halve all equipment slot attack bonuses';
+      if (token === 'halveSpellDamageBonus') return 'Halve spell damage bonus';
+      if (token === 'halveSlotShieldBonus') return 'Halve all equipment slot armor bonuses';
+      if (token === 'amuletCapacity-1') return 'Amulet slot capacity -1';
+      if (token === 'persuadeSameTargetCostHalve') return 'Same-target consecutive persuade cost halved';
+      if (token.startsWith('persuadeRaceBonus:')) {
+        const parts = token.replace('persuadeRaceBonus:', '').split(':');
+        return `${parts[0]} persuade rate +${parts[1]}%`;
+      }
+      if (token.startsWith('persuadeSuccessDurabilityBonus+')) return `Persuaded monster starting durability +${token.replace('persuadeSuccessDurabilityBonus+', '')}`;
+      if (token === 'upgradePersuadeAmulets') return 'Upgrade equipped persuade amulets';
       if (token === 'slotLeftDamage+1') return 'Left slot +1 permanent damage';
       if (token === 'slotRightDefense+1') return 'Right slot +1 permanent armor';
       if (token === 'swapEquipmentSlots') return 'Swap left/right equipment';

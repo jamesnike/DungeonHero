@@ -114,6 +114,7 @@ export interface HeroActionsDeps {
   chaosStrikeHasOverkill: (monster: GameCardData, damage: number) => boolean;
   drawCardsFromBackpack: (count: number, opts?: { ignoreLimit?: boolean }) => number;
   resolveFateSight: (card: GameCardData, target: GameCardData, baseDmg: number, peekCount: number) => void;
+  resolveStatSwap: (card: GameCardData, target: GameCardData, isFlank: boolean) => void;
 
   // --- Animation / UI callbacks from GameBoard ---
   addGameLog: (type: LogEntryType, message: string) => void;
@@ -405,6 +406,10 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
               depsRef.current.setEquipmentSlotBonus(sid, 'damage', cur => cur + item.onDestroyPermanentDamage!);
               addGameLog('equip', `${item.name} 遗言：该装备栏永久伤害 +${item.onDestroyPermanentDamage}！`);
             }
+            if (item.onDestroyPermanentShield) {
+              depsRef.current.setEquipmentSlotBonus(sid, 'shield', cur => cur + item.onDestroyPermanentShield!);
+              addGameLog('equip', `${item.name} 遗言：该装备栏永久护甲 +${item.onDestroyPermanentShield}！`);
+            }
             if (item.onDestroyEffect) {
               addGameLog('equip', `${item.name} 遗言：${item.onDestroyEffect}`);
             }
@@ -429,8 +434,6 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
                   value: newAtk,
                   maxHp: newMaxHp,
                   hp: newHp,
-                  tempAttackBoost: (prev.tempAttackBoost ?? 0) - totalDebuff,
-                  tempHpBoost: (prev.tempHpBoost ?? 0) - totalDebuff,
                 };
               });
             });
@@ -452,14 +455,10 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
             return false;
           }
           const REVIVE_BLESSING_COST = 3;
-          if (hp <= REVIVE_BLESSING_COST) {
-            setHeroSkillBanner(`生命不足，需要 ${REVIVE_BLESSING_COST} 点生命发动复生祝福。`);
-            return false;
-          }
           if (equipSlots.length === 1) {
             const sid = equipSlots[0];
             const item = sid === 'equipmentSlot1' ? equipmentSlot1! : equipmentSlot2!;
-            depsRef.current.setHp(prev => Math.max(0, prev - REVIVE_BLESSING_COST));
+            depsRef.current.setHp(prev => Math.max(1, prev - REVIVE_BLESSING_COST));
             depsRef.current.setEquipmentSlotById(sid, { ...item, hasEquipmentRevive: true, equipmentReviveUsed: false } as any);
             addGameLog('magic', `复生祝福：失去 ${REVIVE_BLESSING_COST} 生命，${item.name} 获得复生能力`);
             setHeroSkillBanner(`${item.name} 获得了复生祝福！`);
@@ -488,7 +487,6 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       activeCards,
       equipmentSlot1,
       equipmentSlot2,
-      hp,
       setHeroSkillBanner,
       setPendingHeroMagicAction,
       addGameLog,
@@ -1079,6 +1077,51 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     [computeHonorSweepWaveDamage, engine, setHeroSkillBanner, setSlotTempAttack],
   );
 
+  const applyWeaponSweepMagic = useCallback(
+    (card: GameCardData, slotId: EquipmentSlotId) => {
+      const { finalizeMagicCard, dealDamageToMonster, isMonsterEngaged, beginCombat, addGameLog } =
+        depsRef.current;
+      const st = engine.getState();
+      const slotItem = slotId === 'equipmentSlot1' ? st.equipmentSlot1 : st.equipmentSlot2;
+      if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) {
+        setHeroSkillBanner('请选择已装备的武器。');
+        return;
+      }
+      const waveDamage = computeHonorSweepWaveDamage(slotId);
+      const monsters = flattenActiveRowSlots(st.activeCards).filter(c => c?.type === 'monster');
+      if (monsters.length === 0) {
+        finalizeMagicCard(card, { banner: '激活行没有怪物。' });
+        return;
+      }
+      if (waveDamage <= 0) {
+        finalizeMagicCard(card, { banner: '当前攻击力为 0，未造成伤害。' });
+        return;
+      }
+      let hitIndex = 0;
+      monsters.forEach(m => {
+        if (!m) return;
+        if (!isMonsterEngaged(m.id)) beginCombat(m, 'hero');
+        dealDamageToMonster(m, waveDamage, {
+          pulses: 2,
+          animationDelay: hitIndex * HONOR_SWEEP_HIT_STAGGER_MS,
+        });
+        hitIndex += 1;
+      });
+      setSlotTempAttack(prev => ({
+        ...prev,
+        [slotId]: (prev[slotId] ?? 0) - 3,
+      }));
+      addGameLog(
+        'magic',
+        `利刃风暴：${slotItem.name} 对激活行所有怪物造成 ${waveDamage} 点伤害，该栏临时攻击 -3。`,
+      );
+      finalizeMagicCard(card, {
+        banner: `利刃风暴：${waveDamage} 点伤害（${slotItem.name}，不耗耐久），该武器栏临时攻击 -3。`,
+      });
+    },
+    [computeHonorSweepWaveDamage, engine, setHeroSkillBanner, setSlotTempAttack],
+  );
+
   // ---------------------------------------------------------------------------
   // handleMagicSlotSelection
   // ---------------------------------------------------------------------------
@@ -1109,24 +1152,29 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
 
+      if (pendingMagicAction.effect === 'weapon-sweep') {
+        const card = pendingMagicAction.card;
+        applyWeaponSweepMagic(card, slotId);
+        setPendingMagicAction(null);
+        return;
+      }
+
       if (pendingMagicAction.effect === 'weapon-burst') {
         const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-        if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) {
-          setHeroSkillBanner('请选择一个已装备的武器。');
-          return;
-        }
-        const burstBase = 2 + (pendingMagicAction.card.upgradeLevel ?? 0);
+        const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+        const burstBase = 2 + 2 * (pendingMagicAction.card.upgradeLevel ?? 0);
         const burstAmount = burstBase * (pendingMagicAction.echoMultiplier ?? 1);
         setSlotTempAttack(prev => ({
           ...prev,
           [slotId]: (prev[slotId] ?? 0) + burstAmount,
         }));
         if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
-          depsRef.current.persuadeAmuletBonusRef.current += 5;
-          depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +5%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
+          const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+          depsRef.current.persuadeAmuletBonusRef.current += pBonus;
+          depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
         }
         finalizeMagicCard(pendingMagicAction.card, {
-          banner: `${slotItem.name} 临时攻击力 +${burstAmount}。${(pendingMagicAction.echoMultiplier ?? 1) > 1 ? '（回响×2）' : ''}`,
+          banner: `${label} 临时攻击力 +${burstAmount}。${(pendingMagicAction.echoMultiplier ?? 1) > 1 ? '（回响×2）' : ''}`,
         });
         return;
       }
@@ -1164,6 +1212,39 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
             ? `战血之印：${slotItem.name} 恢复 ${repairAmount} 点耐久。${(pendingMagicAction.echoMultiplier ?? 1) > 1 ? '（回响×2）' : ''}`
             : `${slotItem.name} 恢复了 ${repairAmount} 点耐久${drawMsg}。${(pendingMagicAction.echoMultiplier ?? 1) > 1 ? '（回响×2）' : ''}`;
         finalizeMagicCard(pendingMagicAction.card, { banner: repairBanner });
+        return;
+      }
+
+      if (pendingMagicAction.effect === 'transform-repair') {
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (!slotItem) {
+          setHeroSkillBanner('该槽位没有装备。');
+          return;
+        }
+        const maxDur = slotItem.maxDurability ?? slotItem.durability ?? 0;
+        const curDur = slotItem.durability ?? maxDur;
+        const echoMul = pendingMagicAction.echoMultiplier ?? 1;
+        const repairAmt = 1 * echoMul;
+        const parts: string[] = [];
+        if (maxDur > 0 && curDur < maxDur) {
+          setEquipmentSlotById(slotId, {
+            ...slotItem,
+            durability: Math.min(maxDur, curDur + repairAmt),
+          });
+          parts.push(`${slotItem.name} 耐久 +${repairAmt}`);
+        } else {
+          parts.push(`${slotItem.name} 已满耐久`);
+        }
+        if (pendingMagicAction.transformTriggered) {
+          const tempAtkBonus = 3 * echoMul;
+          setSlotTempAttack(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + tempAtkBonus }));
+          parts.push(`转型：临时攻击 +${tempAtkBonus}`);
+          if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+            const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+            depsRef.current.persuadeAmuletBonusRef.current += pBonus;
+          }
+        }
+        finalizeMagicCard(pendingMagicAction.card, { banner: parts.join('。') + '。' });
         return;
       }
 
@@ -1222,29 +1303,107 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
 
-      if (pendingMagicAction.effect === 'temp-attack-mirror-armor') {
+      if (pendingMagicAction.effect === 'temp-attack-strike') {
         const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
         if (!slotItem) {
           setHeroSkillBanner('该装备栏为空。');
           return;
         }
-        const totalArmor = calculateSlotArmorValue(slotId);
-        let attackWithoutTemp = 0;
-        if (slotItem.type === 'weapon' || slotItem.type === 'monster') {
-          const base = slotItem.type === 'monster' ? (slotItem.attack ?? slotItem.value) : slotItem.value;
-          const ae = depsRef.current.amuletEffects;
-          const atkBonus = depsRef.current.getAttackBonus();
-          const dmgBonus = depsRef.current.getEquipmentSlotBonus(slotId, 'damage');
-          const berserk = gs.berserkTurnBuff[slotId] ?? 0;
-          attackWithoutTemp = base + atkBonus + dmgBonus + berserk;
+        const tempAtk = gs.slotTempAttack[slotId] ?? 0;
+        if (tempAtk <= 0) {
+          setHeroSkillBanner('该装备栏没有临时攻击。');
+          return;
         }
-        const oldTemp = gs.slotTempAttack[slotId] ?? 0;
-        const newTemp = totalArmor - attackWithoutTemp;
-        const delta = newTemp - oldTemp;
-        setSlotTempAttack(prev => ({ ...prev, [slotId]: newTemp }));
-        const deltaStr = delta >= 0 ? `+${delta}` : `${delta}`;
-        addGameLog('magic', `时空镜像：${slotItem.name} 临时攻击力 ${deltaStr}，攻击力变为 ${totalArmor}`);
-        finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击力 ${deltaStr}，攻击力与护甲相同（${totalArmor}）。` });
+        const monsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
+        if (monsters.length === 0) {
+          finalizeMagicCard(pendingMagicAction.card, { banner: '当前没有可攻击的怪物。' });
+          return;
+        }
+        const target = monsters[Math.floor(Math.random() * monsters.length)];
+        const totalDamage = getSpellDamage(tempAtk);
+        if (!isMonsterEngaged(target.id)) beginCombat(target, 'hero');
+        dealDamageToMonster(target, totalDamage, { pulses: 2, isSpellDamage: true });
+        const isFlank = pendingMagicAction.isFlank ?? false;
+        let stunText = '';
+        if (isFlank && !target.isStunned) {
+          const effectiveFlankStun = Math.min(40, stunCap);
+          const threshold = Math.round((effectiveFlankStun / 100) * 20);
+          void depsRef.current.requestDiceOutcome({
+            title: target.name,
+            subtitle: `侧击击晕判定（${effectiveFlankStun}%）`,
+            entries: [
+              { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
+              { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
+            ],
+          }).then(stunResult => {
+            if (stunResult?.id === 'stun') {
+              updateMonsterCard(target.id, m => ({ ...m, isStunned: true }));
+              addGameLog('combat', `${target.name} 被侧击击晕了！`);
+              if (depsRef.current.amuletEffects.hasStunUpgradeCap) {
+                const stunAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'stun-upgrade-cap');
+                const stunStep = (stunAmulet?.upgradeLevel ?? 0) >= 1 ? 10 : 5;
+                setStunCap(prev => {
+                  const next = Math.min(100, prev + stunStep);
+                  addGameLog('amulet', `震慑之符：击晕成功，击晕上限 +${stunStep}%（当前 ${next}%）`);
+                  return next;
+                });
+              }
+            }
+          });
+          stunText = '（侧击：击晕判定中…）';
+        }
+        addGameLog('magic', `锋刃侧击：对 ${target.name} 造成 ${totalDamage} 点伤害${isFlank ? '（侧击触发）' : ''}`);
+        finalizeMagicCard(pendingMagicAction.card, { banner: `锋刃侧击对 ${target.name} 造成 ${totalDamage} 点伤害！${stunText}`, dealtDamage: true });
+        return;
+      }
+
+      if (pendingMagicAction.effect === 'flank-fortify') {
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (!slotItem) {
+          setHeroSkillBanner('该装备栏为空。');
+          return;
+        }
+        setSlotTempArmor(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 3 }));
+        const isFlank = pendingMagicAction.isFlank ?? false;
+        let flankText = '';
+        if (isFlank) {
+          if (!slotItem.hasEquipmentRevive || slotItem.equipmentReviveUsed) {
+            setEquipmentSlotById(slotId, { ...slotItem, hasEquipmentRevive: true, equipmentReviveUsed: false } as EquipmentItem);
+            flankText = ` 侧击触发：${slotItem.name} 获得复生！`;
+            addGameLog('magic', `固壁侧守（侧击）：${slotItem.name} 获得复生能力`);
+          } else {
+            flankText = ` 侧击触发：${slotItem.name} 已有复生，无额外效果。`;
+          }
+        }
+        addGameLog('magic', `固壁侧守：${slotItem.name} +3 临时护甲`);
+        finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} +3 临时护甲。${flankText}` });
+        return;
+      }
+
+      if (pendingMagicAction.effect === 'equalize-temp-attack-armor') {
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (!slotItem) {
+          setHeroSkillBanner('该装备栏为空。');
+          return;
+        }
+        const tempAtk = gs.slotTempAttack[slotId] ?? 0;
+        const tempArm = gs.slotTempArmor[slotId] ?? 0;
+        if (tempAtk === tempArm) {
+          addGameLog('magic', `时空镜像：${slotItem.name} 临时攻击(${tempAtk})与临时护甲(${tempArm})已相等，无变化。`);
+          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击与临时护甲已相等（${tempAtk}），无需调整。` });
+          return;
+        }
+        if (tempAtk > tempArm) {
+          const delta = tempAtk - tempArm;
+          setSlotTempArmor(prev => ({ ...prev, [slotId]: tempAtk }));
+          addGameLog('magic', `时空镜像：${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}`);
+          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}。` });
+        } else {
+          const delta = tempArm - tempAtk;
+          setSlotTempAttack(prev => ({ ...prev, [slotId]: tempArm }));
+          addGameLog('magic', `时空镜像：${slotItem.name} 临时攻击 +${delta}，临时攻击与临时护甲均为 ${tempArm}`);
+          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击 +${delta}，临时攻击与临时护甲均为 ${tempArm}。` });
+        }
         return;
       }
 
@@ -1343,6 +1502,36 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
 
+      if (pendingMagicAction.effect === 'event-fortify') {
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (!slotItem) {
+          setHeroSkillBanner('该装备栏为空。');
+          return;
+        }
+        const deck = remainingDeck;
+        const peekCount = Math.min(3, deck.length);
+        const peekedCards = deck.slice(0, peekCount);
+        const eventCount = peekedCards.filter(c => c.type === 'event').length;
+
+        if (eventCount > 0) {
+          const oldMaxDur = slotItem.maxDurability ?? slotItem.durability ?? 0;
+          const curDur = slotItem.durability ?? oldMaxDur;
+          const newMaxDur = oldMaxDur + eventCount;
+          const newDur = Math.min(newMaxDur, curDur + eventCount);
+          setEquipmentSlotById(slotId, { ...slotItem, maxDurability: newMaxDur, durability: newDur });
+          addGameLog('magic', `天机铸炼：翻看 ${peekCount} 张牌，${eventCount} 张事件 → ${slotItem.name} 耐久上限 +${eventCount}（${oldMaxDur}→${newMaxDur}），耐久恢复 ${newDur - curDur}（${curDur}→${newDur}）`);
+        } else {
+          addGameLog('magic', `天机铸炼：翻看 ${peekCount} 张牌，0 张事件 → 无增益`);
+        }
+
+        const cardNames = peekedCards.map(c => c.name).join('、');
+        const banner = peekCount > 0
+          ? `天机铸炼翻看 ${peekCount} 张牌（${cardNames}）：${eventCount} 张事件，${eventCount > 0 ? `${slotItem.name} 耐久上限 +${eventCount}，恢复 ${eventCount} 点耐久。` : '无增益。'}`
+          : '天机铸炼：主牌堆已空，无效果。';
+        finalizeMagicCard(pendingMagicAction.card, { banner });
+        return;
+      }
+
       if (pendingMagicAction.effect === 'grant-revive') {
         const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
         if (!slotItem) {
@@ -1364,6 +1553,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     [
       activeCards,
       applyHonorSweepMagic,
+      applyWeaponSweepMagic,
       equipmentSlot1,
       equipmentSlot2,
       pendingMagicAction,
@@ -1416,7 +1606,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           const maxDur = slotItem.maxDurability ?? slotItem.durability ?? 0;
           const curDur = slotItem.durability ?? maxDur;
           if (maxDur > 0 && curDur < maxDur) {
-            const newDur = Math.min(maxDur, curDur + 3);
+            const newDur = Math.min(maxDur, curDur + 2);
             setEquipmentSlotById(slot.id, { ...slotItem, durability: newDur });
             addGameLog('potion', `装备修复剂：${slotItem.name} 耐久 ${curDur} → ${newDur}`);
             bannerParts.push(`${slotItem.name} 耐久 +${newDur - curDur}`);
@@ -1442,9 +1632,9 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         for (const slot of equippedSlots) {
           const slotItem = slot.item!;
           const maxDur = slotItem.maxDurability ?? slotItem.durability ?? 0;
-          setEquipmentSlotById(slot.id, { ...slotItem, maxDurability: maxDur + 2 });
-          addGameLog('potion', `装备修复剂：${slotItem.name} 耐久上限 +2（${maxDur} → ${maxDur + 2}）`);
-          bannerParts.push(`${slotItem.name} 上限 +2`);
+          setEquipmentSlotById(slot.id, { ...slotItem, maxDurability: maxDur + 1 });
+          addGameLog('potion', `装备修复剂：${slotItem.name} 耐久上限 +1（${maxDur} → ${maxDur + 1}）`);
+          bannerParts.push(`${slotItem.name} 上限 +1`);
         }
         void finalizePotionCard(card, { banner: bannerParts.join('，') + '。' });
         setPendingPotionAction(null);
@@ -1539,6 +1729,19 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         const label = slotId === 'equipmentSlot1' ? '左' : '右';
         addGameLog('potion', `扩容药剂：${label}装备栏容量 +1`);
         void finalizePotionCard(pendingPotionAction.card, { banner: `${label}装备栏容量 +1！` });
+        setPendingPotionAction(null);
+        return;
+      }
+
+      if (pendingPotionAction.effect === 'grant-lastwords-hand-equip-buff') {
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (!slotItem) {
+          setHeroSkillBanner('该装备栏没有装备。');
+          return;
+        }
+        setEquipmentSlotById(slotId, { ...slotItem, onDestroyEffect: 'hand-equip-buff-2-2' });
+        addGameLog('potion', `遗赠淬炼药：${slotItem.name} 获得遗言：手牌装备 +2攻击 +2护甲！`);
+        void finalizePotionCard(pendingPotionAction.card, { banner: `${slotItem.name} 获得遗言：手牌装备 +2攻击 +2护甲！` });
         setPendingPotionAction(null);
         return;
       }
@@ -1679,6 +1882,20 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
 
+      if (pendingMagicAction.effect === 'arcane-storm') {
+        const stormBase = pendingMagicAction.pendingDamage ?? 1;
+        const echo = pendingMagicAction.echoMultiplier ?? 1;
+        const totalDamage = getSpellDamage(stormBase) * echo;
+        if (!isMonsterEngaged(monster.id)) {
+          beginCombat(monster, 'hero');
+        }
+        dealDamageToMonster(monster, totalDamage, { pulses: 2 });
+        finalizeMagicCard(pendingMagicAction.card, {
+          banner: `奥术风暴：对 ${monster.name} 造成 ${totalDamage} 点伤害。${echo > 1 ? '（回响×' + echo + '）' : ''}`,
+        });
+        return;
+      }
+
       if (pendingMagicAction.effect === 'chaos-strike') {
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
@@ -1795,7 +2012,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       if (pendingMagicAction.effect === 'stun-strike') {
         const echo = pendingMagicAction.echoMultiplier ?? 1;
         const baseDmgPerHit = pendingMagicAction.data?.baseDmgPerHit ?? 1;
-        const stunPct = pendingMagicAction.data?.stunPct ?? 10;
+        const stunPct = Math.min(pendingMagicAction.data?.stunPct ?? 10, stunCap);
         const hits = pendingMagicAction.data?.hits ?? 2;
         const hitDmg = getSpellDamage(baseDmgPerHit) * echo;
         const totalDmg = hitDmg * hits;
@@ -1848,6 +2065,13 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         const baseDmg = baseDamages[card.upgradeLevel ?? 0] ?? 3;
         const peekCount = peekCounts[card.upgradeLevel ?? 0] ?? 3;
         depsRef.current.resolveFateSight(card, monster, baseDmg, peekCount);
+        setPendingMagicAction(null);
+        return;
+      }
+
+      if (pendingMagicAction.effect === 'stat-swap') {
+        const isFlank = pendingMagicAction.isFlank ?? false;
+        depsRef.current.resolveStatSwap(pendingMagicAction.card, monster, isFlank);
         setPendingMagicAction(null);
         return;
       }
@@ -2100,7 +2324,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
       const REVIVE_BLESSING_COST = 3;
-      depsRef.current.setHp(prev => Math.max(0, prev - REVIVE_BLESSING_COST));
+      depsRef.current.setHp(prev => Math.max(1, prev - REVIVE_BLESSING_COST));
       depsRef.current.setEquipmentSlotById(slotId, { ...slotItem, hasEquipmentRevive: true, equipmentReviveUsed: false } as any);
       addGameLog('magic', `复生祝福：失去 ${REVIVE_BLESSING_COST} 生命，${slotItem.name} 获得复生能力`);
       setHeroSkillBanner(`${slotItem.name} 获得了复生祝福！`);
@@ -2196,27 +2420,52 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       }
     }
 
+    const raceBonus = engine.getState().persuadeRaceBonus;
+    if (monster.monsterType && raceBonus[monster.monsterType]) {
+      rate += raceBonus[monster.monsterType];
+    }
+
+    const pLevel = engine.getState().persuadeLevel ?? 1;
+    rate += (pLevel - 1) * 5;
+
     const clamped = Math.max(5, Math.min(75, rate));
     return Math.round(clamped / 5) * 5;
   };
 
-  const canPersuadeMonster = (card: GameCardData): boolean => {
+  const getPersuadeEffectiveCost = (card?: GameCardData): number => {
     const costReduction = depsRef.current.persuadeDiscountRef.current?.costReduction ?? 0;
-    const permCostMod = engine.getState().persuadeCostModifier ?? 0;
-    const effectiveCost = Math.max(0, PERSUADE_COST + permCostMod - costReduction);
-    const monsterLayers = card.currentLayer ?? card.hpLayers ?? card.fury ?? 1;
-    return (
-      card.type === 'monster' &&
-      engine.getState().gold >= effectiveCost &&
-      monsterLayers <= engine.getState().persuadeLevel
-    );
+    const st = engine.getState();
+    const permCostMod = st.persuadeCostModifier ?? 0;
+    let cost = Math.max(0, PERSUADE_COST + permCostMod - costReduction);
+    if (st.persuadeSameTargetCostHalve && card && st.lastPersuadeTargetId === card.id) {
+      cost = Math.floor(cost / 2);
+    }
+    return cost;
   };
 
-  const openPersuadeModal = (monster: GameCardData, targetSlot: 'backpack' | EquipmentSlotId) => {
+  const canPersuadeMonster = (card: GameCardData): boolean => {
+    if (card.type !== 'monster') return false;
+    const effectiveCost = getPersuadeEffectiveCost(card);
+    const st = engine.getState();
+    const liveCard = (st.activeCards as GameCardData[]).find(c => c?.id === card.id);
+    const src = liveCard ?? card;
+    const monsterLayers = src.currentLayer ?? src.hpLayers ?? src.fury ?? 1;
+    const goldOk = st.gold >= effectiveCost;
+    const layerOk = monsterLayers <= st.persuadeLevel;
+    if (!goldOk || !layerOk) {
+      console.log('[canPersuade]', card.name,
+        '| gold:', st.gold, '>=', effectiveCost, '→', goldOk,
+        '| layers:', monsterLayers, '(cur:', src.currentLayer, 'hp:', src.hpLayers, 'fury:', src.fury, ')',
+        '<=', st.persuadeLevel, '→', layerOk,
+        '| liveCard found:', !!liveCard,
+      );
+    }
+    return goldOk && layerOk;
+  };
+
+  const openPersuadeModal = (monster: GameCardData, targetSlot: 'backpack' = 'backpack') => {
     const successRate = computePersuadeSuccessRate(monster);
-    const costReduction = depsRef.current.persuadeDiscountRef.current?.costReduction ?? 0;
-    const permCostMod = persuadeCostModifier ?? 0;
-    const effectiveCost = Math.max(0, PERSUADE_COST + permCostMod - costReduction);
+    const effectiveCost = getPersuadeEffectiveCost(monster);
     const threshold = 21 - successRate / 5;
     setPersuadeState({
       monster,
@@ -2232,11 +2481,10 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   const handlePersuadeConfirm = () => {
     if (!persuadeState) return;
     depsRef.current.pushUndoSnapshot();
-    const costReduction = depsRef.current.persuadeDiscountRef.current?.costReduction ?? 0;
-    const permCostMod = persuadeCostModifier ?? 0;
-    const effectiveCost = Math.max(0, PERSUADE_COST + permCostMod - costReduction);
+    const effectiveCost = getPersuadeEffectiveCost(persuadeState.monster);
     setGold(prev => Math.max(0, prev - effectiveCost));
-    addGameLog('system', `花费 ${effectiveCost} 金币尝试劝降 ${persuadeState.monster.name}…${costReduction > 0 ? `（临时减免 ${costReduction}）` : ''}`);
+    const sameTargetDiscount = engine.getState().persuadeSameTargetCostHalve && engine.getState().lastPersuadeTargetId === persuadeState.monster.id;
+    addGameLog('system', `花费 ${effectiveCost} 金币尝试劝降 ${persuadeState.monster.name}…${sameTargetDiscount ? '（连劝减半）' : ''}`);
     setLastPersuadeTargetId(persuadeState.monster.id);
     depsRef.current.persuadeDiscountRef.current = null;
     depsRef.current.setPersuadeTempDiscount(0);
@@ -2299,6 +2547,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     cancelPotionAction,
     markSkillUsed,
     applyHonorSweepMagic,
+    applyWeaponSweepMagic,
     handleHeroSkillUse,
     handleHeroSkillSlotSelection,
     handleMagicSlotSelection,

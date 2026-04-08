@@ -5,7 +5,7 @@
  * depend on React or DOM — they operate on plain data.
  */
 
-import type { GameCardData, EquipmentCardStatModifier } from '@/components/GameCard';
+import type { GameCardData, CardType, EquipmentCardStatModifier, AmuletEffectId } from '@/components/GameCard';
 import { isPermRecycleEquipment } from '@/components/GameCard';
 import type {
   ActiveRowSlots,
@@ -16,7 +16,15 @@ import type {
   GridMetrics,
   WaterfallDiscardDestination,
 } from '@/components/game-board/types';
-import { DUNGEON_COLUMN_COUNT, DUNGEON_COLUMNS, SHOP_TYPE_PRICES } from './constants';
+import {
+  DUNGEON_COLUMN_COUNT,
+  DUNGEON_COLUMNS,
+  SHOP_TYPE_PRICES,
+  BALANCE_ATTACK_BONUS,
+  BALANCE_ATTACK_PENALTY,
+  BALANCE_SHIELD_BONUS,
+  BALANCE_SHIELD_PENALTY,
+} from './constants';
 
 // ---------------------------------------------------------------------------
 // Math helpers
@@ -145,7 +153,6 @@ export function isRecyclableFromHand(card: GameCardData | null | undefined): boo
   return Boolean(
     card &&
       ((card.type === 'magic' && card.magicType === 'permanent') ||
-        (card.type === 'amulet' && card.recycleDelay != null) ||
         card.isPermanentEvent ||
         isPermRecycleEquipment(card) ||
         (card.recycleDelay != null && card.recycleDelay > 0)),
@@ -245,3 +252,67 @@ export const logBackpackDraw = (tag: string, payload?: unknown): void => {
     console.debug('[BackpackDraw]', tag, payload);
   }
 };
+
+// ---------------------------------------------------------------------------
+// 转型 (Transformation) — card play category
+// ---------------------------------------------------------------------------
+
+export type CardPlayCategory =
+  | 'instant-magic'
+  | 'perm-magic'
+  | 'hero-magic'
+  | 'weapon'
+  | 'shield'
+  | 'amulet'
+  | 'potion'
+  | 'monster-equipment';
+
+export function getCardPlayCategory(card: GameCardData): CardPlayCategory {
+  const t: CardType = card.type;
+  if (t === 'magic') {
+    return card.magicType === 'permanent' ? 'perm-magic' : 'instant-magic';
+  }
+  if (t === 'hero-magic') return 'hero-magic';
+  if (t === 'weapon') return 'weapon';
+  if (t === 'shield') return 'shield';
+  if (t === 'amulet') return 'amulet';
+  if (t === 'potion') return 'potion';
+  if (t === 'monster') return 'monster-equipment';
+  return 'instant-magic';
+}
+
+// ---------------------------------------------------------------------------
+// Amulet aura reversal helpers
+// ---------------------------------------------------------------------------
+
+export interface AmuletAuraReversal {
+  tempAttackDelta: { equipmentSlot1: number; equipmentSlot2: number };
+  tempArmorDelta: { equipmentSlot1: number; equipmentSlot2: number };
+}
+
+/**
+ * Compute the slotTempAttack / slotTempArmor deltas needed to reverse the
+ * aura effects of the given amulets.  Caller should apply both deltas after
+ * clearing the amulet slots.
+ */
+export function computeAmuletAuraReversal(
+  amulets: readonly { amuletEffect?: AmuletEffectId }[],
+): AmuletAuraReversal {
+  const result: AmuletAuraReversal = {
+    tempAttackDelta: { equipmentSlot1: 0, equipmentSlot2: 0 },
+    tempArmorDelta: { equipmentSlot1: 0, equipmentSlot2: 0 },
+  };
+  for (const a of amulets) {
+    if (a.amuletEffect === 'strength') {
+      result.tempAttackDelta.equipmentSlot1 -= 4;
+      result.tempAttackDelta.equipmentSlot2 -= 4;
+    }
+    if (a.amuletEffect === 'balance') {
+      result.tempAttackDelta.equipmentSlot1 -= BALANCE_ATTACK_BONUS;
+      result.tempAttackDelta.equipmentSlot2 += BALANCE_ATTACK_PENALTY;
+      result.tempArmorDelta.equipmentSlot1 += BALANCE_SHIELD_PENALTY;
+      result.tempArmorDelta.equipmentSlot2 -= BALANCE_SHIELD_BONUS;
+    }
+  }
+  return result;
+}

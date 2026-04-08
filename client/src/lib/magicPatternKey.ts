@@ -23,6 +23,9 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'honor-sweep': 'knight-honor-sweep',
   'armor-stun-convert': 'knight-armor-stun-convert',
   'overkill-upgrade': 'knight-overkill-upgrade',
+  'transform-repair': 'knight-transform-repair',
+  'transform-grant': 'knight-transform-grant',
+  'weapon-sweep': 'knight-weapon-sweep',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -66,6 +69,12 @@ const NAME_TO_KEY: Record<string, string> = {
   贪婪诅咒: 'knight-greed-curse',
   护甲凝雷: 'knight-armor-stun-convert',
   万象探知: 'dungeon-insight',
+  蜕变修复: 'knight-transform-repair',
+  蜕变赋灵: 'knight-transform-grant',
+  利刃风暴: 'knight-weapon-sweep',
+  奥术风暴: 'arcane-storm',
+  装备附魔: 'equipment-enchant',
+  祭坛秘术: 'altar-ritual',
 };
 
 function hashName(s: string): number {
@@ -99,6 +108,9 @@ export function resolveMagicPatternKey(card: MagicPatternCardRef): string | null
   if (card.magicEffect === 'honor-blood') return 'war-blood-seal';
   if (card.magicEffect === 'honor-sweep') return 'knight-honor-sweep';
   if (card.magicEffect === 'double-next-magic') return 'spell-echo';
+  if (card.magicEffect === 'arcane-storm-magic-count') return 'arcane-storm';
+  if (card.magicEffect === 'equipment-enchant-discard') return 'equipment-enchant';
+  if (card.magicEffect === 'altar-discard-discover') return 'altar-ritual';
 
   const ke = card.knightEffect;
   if (ke && KNIGHT_EFFECT_TO_KEY[ke]) {

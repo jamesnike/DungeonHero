@@ -127,9 +127,15 @@ export interface PersistedGameState {
   heroStunned?: boolean;
   recycleBackpackProgress?: number;
   swapUpgradeProgress?: number;
+  statSwapCardObtained?: boolean;
   persuadeLevel?: number;
   persuadeCostModifier?: number;
   lastPersuadeTargetId?: string | null;
+  persuadeSameTargetCostHalve?: boolean;
+  persuadeRaceBonus?: Record<string, number>;
+  persuadeSuccessDurabilityBonus?: number;
+  lastPlayedCardCategory?: string | null;
+  magicCardsPlayedThisTurn?: number;
   previewCardStacks?: Record<number, GameCardData[]>;
   activeCardStacks?: Record<number, GameCardData[]>;
   waterfallDealBonus?: number;

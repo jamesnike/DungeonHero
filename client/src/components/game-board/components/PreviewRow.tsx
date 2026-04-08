@@ -79,7 +79,7 @@ export default function PreviewRow({
         return card ? (
           <div
             key={`preview-${index}`}
-            className={`opacity-60 ${cellWrapperClass}`}
+            className={`opacity-60 ${cellWrapperClass}${hasStack ? ' relative overflow-visible' : ''}`}
             data-testid={`preview-card-${index}`}
             ref={(el) => setPreviewCellRef(index, el)}
           >
@@ -90,11 +90,8 @@ export default function PreviewRow({
               {hasStack && (
                 <div className="absolute inset-0 z-10 pointer-events-none">
                   {stackedCards.map((stackCard, sIdx) => {
-                    const total = stackedCards.length + 1;
-                    const bottomY = -6;
-                    const topY = 20;
-                    const step = total <= 1 ? 0 : (topY - bottomY) / (total - 1);
-                    const y = bottomY + sIdx * step;
+                    const offsetStep = 8;
+                    const y = -(stackedCards.length - sIdx) * offsetStep;
                     return (
                       <div
                         key={stackCard.id}

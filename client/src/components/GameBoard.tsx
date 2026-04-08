@@ -566,9 +566,11 @@ export default function GameBoard() {
           break;
         case 'persuade-on-temp-attack':
           state.hasPersuadeOnTempAttack = true;
+          state.persuadeOnTempAttackBonus = (slot.upgradeLevel ?? 0) >= 1 ? 10 : 5;
           break;
         case 'persuade-grant-recycle-fetch':
           state.hasPersuadeGrantRecycleFetch = true;
+          state.persuadeGrantRecycleFetchCount = (slot.upgradeLevel ?? 0) >= 1 ? 2 : 1;
           break;
         case 'damage-class-discover':
           state.hasDamageClassDiscover = true;
@@ -804,6 +806,7 @@ export default function GameBoard() {
     drawCardsFromBackpack,
     getRepairableEquipmentSlots,
     resolveFateSight,
+    resolveStatSwap,
     resolveMirrorCopy,
     cancelMirrorCopy,
     resolvePermGrant,
@@ -841,6 +844,7 @@ export default function GameBoard() {
     handleHeroMagicTrigger,
     handleHeroMagicChoice,
     applyHonorSweepMagic,
+    applyWeaponSweepMagic,
   } = heroActions;
 
   // --- Layer 5: Event System ---
@@ -879,7 +883,7 @@ export default function GameBoard() {
   }, []);
   const persuadeDiscountRef = useRef<{ costReduction: number; rateBonus: number } | null>(null);
   const persuadeAmuletBonusRef = useRef(0);
-  const onNewCardGainedRef = useRef<((count: number) => void) | null>(null);
+  const onNewCardGainedRef = useRef<((count: number, source?: 'graveyard') => void) | null>(null);
   const [persuadeTempDiscount, setPersuadeTempDiscount] = useState(0);
   const stagingCardsRef = useRef<GameCardData[]>([]);
   const pendingDiscardEffectsQueueRef = useRef<import('@/hooks/useCardOperations').PendingDiscardEffect[]>([]);
@@ -1142,6 +1146,7 @@ export default function GameBoard() {
   const deckFlyTargetRef = useRef<HTMLButtonElement | null>(null);
   const heroFrameBoundsRef = useRef<DOMRect | null>(null);
   const heroFrameDropIntentRef = useRef(false);
+  const lastPlayedFlankRef = useRef(false);
   const draggedCardRef = useRef<GameCardData | null>(null);
   const handleCardToHeroRef = useRef<((card: GameCardData) => void) | null>(null);
   const heroSkillButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -2562,6 +2567,24 @@ export default function GameBoard() {
     }
     if (Math.random() < 0.15) {
       pushOption(createBackpackCapacityOption());
+    }
+    if (Math.random() < 0.15) {
+      pushOption({
+        id: createMonsterRewardOptionId(),
+        title: '劝降成功率 +10%',
+        description: '提升交涉能力，劝降怪物的成功率提高。',
+        detail: '永久增益',
+        effect: { type: 'persuadeRateBonus', amount: 10 },
+      });
+    }
+    if (!gs.statSwapCardObtained && Math.random() < 0.03) {
+      pushOption({
+        id: createMonsterRewardOptionId(),
+        title: '获得魔法卡「颠倒乾坤」',
+        description: '永久魔法（Perm 2）：选择一个怪物，将其攻击和血量上限对换。侧击：50% 击晕。',
+        detail: '极稀有掉落',
+        effect: { type: 'grantStatSwapCard' },
+      });
     }
 
     const pool = [...options];
@@ -4363,8 +4386,20 @@ export default function GameBoard() {
       return null;
     };
 
+    // Ensure a raw row has at least 1 monster; if not, swap one in from the queue
+    const ensureRowHasMonster = (row: GameCardData[], queue: GameCardData[]) => {
+      if (row.some(c => c.type === 'monster')) return;
+      const qMonsterIdx = queue.findIndex(c => c.type === 'monster');
+      if (qMonsterIdx < 0) return;
+      const rowSwapIdx = Math.floor(Math.random() * row.length);
+      const tmp = row[rowSwapIdx];
+      row[rowSwapIdx] = queue[qMonsterIdx];
+      queue[qMonsterIdx] = tmp;
+    };
+
     // Preview row: 5 cards from deal queue
     const previewRaw = dealQueue.splice(0, 5);
+    ensureRowHasMonster(previewRaw, dealQueue);
     const initialPreview = fillActiveRowSlots(previewRaw).map((card, slotIdx) => {
       if (!card) return null;
       const raged = applyMonsterRage(card, INITIAL_TURN_COUNT + 1);
@@ -4389,6 +4424,7 @@ export default function GameBoard() {
 
     // Active row: next 5 cards from deal queue
     const activeRaw = dealQueue.splice(0, 5);
+    ensureRowHasMonster(activeRaw, dealQueue);
     const initialActive = fillActiveRowSlots(activeRaw).map((card, slotIdx) => {
       if (!card) return null;
       const raged = applyMonsterRage(card, INITIAL_TURN_COUNT);
@@ -4615,6 +4651,11 @@ export default function GameBoard() {
       persuadeLevel: snapshot.persuadeLevel ?? 1,
       persuadeCostModifier: snapshot.persuadeCostModifier ?? 0,
       lastPersuadeTargetId: snapshot.lastPersuadeTargetId ?? null,
+      persuadeSameTargetCostHalve: snapshot.persuadeSameTargetCostHalve ?? false,
+      persuadeRaceBonus: snapshot.persuadeRaceBonus ?? {},
+      persuadeSuccessDurabilityBonus: snapshot.persuadeSuccessDurabilityBonus ?? 0,
+      lastPlayedCardCategory: snapshot.lastPlayedCardCategory ?? null,
+      magicCardsPlayedThisTurn: snapshot.magicCardsPlayedThisTurn ?? 0,
       backpackCapacityModifier: snapshot.backpackCapacityModifier ?? 0,
       heroMagicState: sanitizeHeroMagicState(snapshot.heroMagicState),
       equipmentSlotBonuses: mapEquipmentBonuses(snapshot.equipmentSlotBonuses),
@@ -4655,6 +4696,7 @@ export default function GameBoard() {
       slotTempAttack: snapshot.slotTempAttack
         ? { equipmentSlot1: snapshot.slotTempAttack.equipmentSlot1 ?? 0, equipmentSlot2: snapshot.slotTempAttack.equipmentSlot2 ?? 0 }
         : { equipmentSlot1: 0, equipmentSlot2: 0 },
+      statSwapCardObtained: Boolean((snapshot as any).statSwapCardObtained),
       doubleNextMagic: Boolean(snapshot.doubleNextMagic),
       defensiveStanceActive: Boolean(snapshot.defensiveStanceActive),
       previewCardStacks: snapshot.previewCardStacks ?? {},
@@ -4796,7 +4838,7 @@ export default function GameBoard() {
 
   // Card-gain amulet callbacks
   const setCardGainUpgradeProgress = useEngineSetter('cardGainUpgradeProgress');
-  onNewCardGainedRef.current = (count: number) => {
+  onNewCardGainedRef.current = (count: number, source?: 'graveyard') => {
     if (amuletEffects.hasCardGainUpgrade) {
       const current = engine.getState().cardGainUpgradeProgress;
       const next = current + count;
@@ -4810,16 +4852,15 @@ export default function GameBoard() {
       }
     }
 
-    if (amuletEffects.hasCardGainMissile) {
+    if (amuletEffects.hasCardGainMissile && source === 'graveyard') {
       const missileAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'card-gain-missile');
-      const boltsPerCard = (missileAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
-      const totalBolts = count * boltsPerCard;
+      const boltsPerTrigger = (missileAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
       const bolts: GameCardData[] = [];
-      for (let i = 0; i < totalBolts; i++) {
+      for (let i = 0; i < boltsPerTrigger; i++) {
         bolts.push(createMagicBoltCard());
       }
       setHandCards(prev => [...prev, ...bolts]);
-      addGameLog('amulet', `弹幕之符：获得 ${totalBolts} 张「魔弹」`);
+      addGameLog('amulet', `弹幕之符：获得 ${boltsPerTrigger} 张「魔弹」`);
     }
   };
 
@@ -4910,6 +4951,7 @@ export default function GameBoard() {
 
     // Clear stale tracking refs
     storingCardIdsRef.current.clear();
+    processedDungeonCardIdsRef.current.clear();
     pendingAutoDrawsRef.current = 0;
     skipNextEventAutoDrawRef.current = false;
     skipEventFlipRef.current = false;
@@ -5583,6 +5625,34 @@ export default function GameBoard() {
             }
             addGameLog('waterfall', `${cardName} 被挤出，${bugCount} 只小虫子涌入了牌堆顶！`);
             setHeroSkillBanner(`${cardName} 被挤出！${bugCount} 只小虫子混入了牌堆！`);
+            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
+            break;
+          }
+          case 'spellDecay': {
+            const decayAmount = wfx.amount;
+            setPermanentSpellDamageBonus(prev => Math.max(0, prev - decayAmount));
+            addGameLog('waterfall', `${cardName} 被挤出，永久法术伤害加成 -${decayAmount}`);
+            setHeroSkillBanner(`${cardName} 的反魔结界削弱了你的法术伤害！-${decayAmount}`);
+            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
+            break;
+          }
+          case 'destroyAllAmuletsAndDiscardHand': {
+            const removedAmulets = [...amuletSlots];
+            if (removedAmulets.length > 0) {
+              removedAmulets.forEach(a => addToGraveyard(a as GameCardData));
+              setAmuletSlots([]);
+              addGameLog('waterfall', `${cardName} 被挤出，摧毁了 ${removedAmulets.length} 枚护符：${removedAmulets.map(a => a.name).join('、')}`);
+            }
+            const handSnapshot = [...handCards];
+            if (handSnapshot.length > 0) {
+              discardAllHandCards();
+              addGameLog('waterfall', `${cardName} 被挤出，弃回了 ${handSnapshot.length} 张手牌`);
+            }
+            if (removedAmulets.length > 0 || handSnapshot.length > 0) {
+              setHeroSkillBanner(`${cardName} 被挤出：摧毁了所有护符，弃回了全部手牌！`);
+            } else {
+              addGameLog('waterfall', `${cardName} 被挤出，但没有护符和手牌。`);
+            }
             waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
             break;
           }
@@ -6441,6 +6511,7 @@ export default function GameBoard() {
     ghostBladeExileResolverRef,
     discoverPotionCompletionRef,
     onNewCardGainedRef,
+    persuadeAmuletBonusRef,
   };
 
   // Populate cardPlayHandlers deps ref (all function deps are now defined)
@@ -6525,6 +6596,8 @@ export default function GameBoard() {
     deckJudgePeekCloseRef,
     getAttackBonus: () => attackBonus,
     applyHonorSweepMagic,
+    applyWeaponSweepMagic,
+    lastPlayedFlankRef,
   };
 
   // Populate heroActions deps ref (all function deps are now defined)
@@ -6564,6 +6637,7 @@ export default function GameBoard() {
     chaosStrikeHasOverkill,
     drawCardsFromBackpack,
     resolveFateSight,
+    resolveStatSwap,
     addGameLog,
     pushUndoSnapshot,
     clearUndoStack,
@@ -6709,6 +6783,10 @@ export default function GameBoard() {
     };
     
     if (isFromHand) {
+      const handArr = handCardsRef.current;
+      const flankIdx = handArr.findIndex(c => c.id === card.id);
+      lastPlayedFlankRef.current = flankIdx >= 0 && (flankIdx === 0 || flankIdx === handArr.length - 1);
+
       if (!consumeCardFromHand(card)) {
         resetDragState();
         return;
@@ -7026,7 +7104,8 @@ export default function GameBoard() {
       const { monster, targetSlot } = persuadeState;
       const monsterAttack = monster.attack ?? monster.value;
       const monsterArmor = monster.hp ?? monster.value;
-      const monsterMaxDurability = monster.hpLayers ?? monster.fury ?? 1;
+      const durabilityBonus = engine.getState().persuadeSuccessDurabilityBonus ?? 0;
+      const monsterMaxDurability = (monster.hpLayers ?? monster.fury ?? 1) + durabilityBonus;
 
       if (isMonsterEngaged(monster.id)) {
         setCombatState(prev => {
@@ -7130,8 +7209,11 @@ export default function GameBoard() {
       }
 
       if (amuletEffects.hasPersuadeGrantRecycleFetch) {
-        queueCardIntoHand(createPersuadeRecycleFetchMagicCard());
-        addGameLog('amulet', '劝降归袋符：「归袋抽引」已加入手牌。');
+        const fetchCount = amuletEffects.persuadeGrantRecycleFetchCount || 1;
+        for (let fi = 0; fi < fetchCount; fi++) {
+          queueCardIntoHand(createPersuadeRecycleFetchMagicCard());
+        }
+        addGameLog('amulet', `劝降归袋符：${fetchCount} 张「归袋抽引」已加入手牌。`);
       }
 
     } else {
@@ -7306,8 +7388,9 @@ export default function GameBoard() {
         return;
       }
 
-      if (card.type === 'monster' && activeCards.some(slot => slot?.id === card.id)) {
-        if (canPersuadeMonster(card) && backpackItems.length < backpackCapacity) {
+      if (card.type === 'monster') {
+        const isFromHandOrBackpack = isCardFromHand(card) || backpackItems.some(b => b.id === card.id);
+        if (!isFromHandOrBackpack && canPersuadeMonster(card) && backpackItems.length < backpackCapacity) {
           openPersuadeModal(card, 'backpack');
           resetDragState();
           return;
@@ -7341,11 +7424,6 @@ export default function GameBoard() {
       const isMonsterFromHand = card.type === 'monster' && (isCardFromHand(card) || backpackItems.some(b => b.id === card.id));
 
       if (card.type === 'monster' && !isMonsterFromHand) {
-        if (canPersuadeMonster(card)) {
-          openPersuadeModal(card, equipSlot);
-          resetDragState();
-          return;
-        }
         if (!isMonsterEngaged(card.id)) {
           beginCombat(card, 'monster');
         }
@@ -8459,10 +8537,8 @@ export default function GameBoard() {
   const draggingDungeonMonsterForPersuade = Boolean(
     draggedCard &&
     draggedCard.type === 'monster' &&
-    draggedCardSource === 'dungeon' &&
     !draggingMonsterFromHand &&
-    gold >= Math.max(0, PERSUADE_COST + persuadeCostModifier - persuadeTempDiscount) &&
-    (draggedCard.currentLayer ?? draggedCard.hpLayers ?? draggedCard.fury ?? 1) <= persuadeLevel,
+    canPersuadeMonster(draggedCard),
   );
   const draggingEquipmentCard = Boolean(
     draggedCard && (draggedCard.type === 'weapon' || draggedCard.type === 'shield' || draggingMonsterFromHand),
@@ -8473,7 +8549,7 @@ export default function GameBoard() {
     !playerTargetingActive &&
     !fullBoardInteractionLocked &&
     !heroStunned &&
-    (draggingEquipmentCard || draggingDungeonMonsterForPersuade);
+    draggingEquipmentCard;
   const equipmentSlot1DropAvailable = equipmentSlotDropAvailable;
   const equipmentSlot2DropAvailable = equipmentSlotDropAvailable;
   const equipmentSlot1StatModifier = getEquipmentSlotStatModifier('equipmentSlot1');
@@ -8956,7 +9032,7 @@ export default function GameBoard() {
             return card ? (
               <div 
                 key={`preview-${index}`}
-                className={`opacity-60 ${cellWrapperClass}`}
+                className={`opacity-60 ${cellWrapperClass}${hasPreviewStack ? ' relative overflow-visible' : ''}`}
                 data-testid={`preview-card-${index}`}
                 ref={el => setPreviewCellRef(index, el)}
               >
@@ -8976,11 +9052,8 @@ export default function GameBoard() {
                         </div>
                       );
                     }
-                    const total = previewStackedCards.length + 1;
-                    const bottomY = -6;
-                    const topY = 20;
-                    const step = total <= 1 ? 0 : (topY - bottomY) / (total - 1);
-                    const y = bottomY + sIdx * step;
+                    const offsetStep = 8;
+                    const y = -(previewStackedCards.length - sIdx) * offsetStep;
                     return (
                       <div
                         key={stackCard.id}
@@ -9079,11 +9152,8 @@ export default function GameBoard() {
             const gameCardNode = (
               <>
                 {hasActiveStack && activeStackedCards.map((stackCard, sIdx) => {
-                  const total = activeStackedCards.length + 1;
-                  const bottomY = -6;
-                  const topY = 20;
-                  const step = total <= 1 ? 0 : (topY - bottomY) / (total - 1);
-                  const y = bottomY + sIdx * step;
+                  const offsetStep = 8;
+                  const y = -(activeStackedCards.length - sIdx) * offsetStep;
                   return (
                     <div
                       key={stackCard.id}
@@ -9172,7 +9242,9 @@ export default function GameBoard() {
 
             const activeCellWrapper = isMonster
               ? `${cellWrapperClass} relative overflow-visible`
-              : cellWrapperClass;
+              : hasActiveStack
+                ? `${cellWrapperClass} relative overflow-visible`
+                : cellWrapperClass;
 
             return (
               <div 
@@ -9689,6 +9761,7 @@ export default function GameBoard() {
         onClose={cancelPermGrant}
         handCards={handCards}
         sourceCardId={permGrantModal?.sourceCardId ?? null}
+        sourceType={permGrantModal?.sourceType ?? 'magic'}
         onConfirm={resolvePermGrant}
       />
 
@@ -9783,7 +9856,13 @@ export default function GameBoard() {
         onMonsterRewardSelect={handleMonsterRewardSelection}
         persuadeOpen={Boolean(persuadeState)}
         persuadeMonster={persuadeState?.monster ?? null}
-        persuadeCost={Math.max(0, PERSUADE_COST + persuadeCostModifier - (persuadeDiscountRef.current?.costReduction ?? 0))}
+        persuadeCost={(() => {
+          let c = Math.max(0, PERSUADE_COST + persuadeCostModifier - (persuadeDiscountRef.current?.costReduction ?? 0));
+          if (persuadeState?.monster && engine.getState().persuadeSameTargetCostHalve && engine.getState().lastPersuadeTargetId === persuadeState.monster.id) {
+            c = Math.floor(c / 2);
+          }
+          return c;
+        })()}
         persuadeThreshold={persuadeState?.threshold ?? 10}
         persuadeSuccessRate={persuadeState?.successRate ?? 50}
         persuadeTargetLabel={persuadeState?.targetSlot === 'backpack' ? '背包' : '装备栏'}
