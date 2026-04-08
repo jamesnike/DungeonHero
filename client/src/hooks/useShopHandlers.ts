@@ -119,6 +119,8 @@ export interface ShopHandlersDeps {
 export type BeginDiscoverFlowOptions = {
   /** 仅从满足条件的专属牌中候选（例如仅魔法） */
   filter?: (card: GameCardData) => boolean;
+  /** 直接提供候选池，跳过 classDeck（用于起始背包等外部卡源） */
+  overridePool?: GameCardData[];
 };
 
 // ---------------------------------------------------------------------------
@@ -283,7 +285,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
   const beginDiscoverFlow = useCallback(
     (source: string, opts?: BeginDiscoverFlowOptions): boolean => {
-      const pool = opts?.filter ? classDeck.filter(opts.filter) : classDeck;
+      const pool = opts?.overridePool
+        ?? (opts?.filter ? classDeck.filter(opts.filter) : classDeck);
       if (pool.length === 0) {
         if (DEV_MODE) {
           console.debug('[Discover] No cards in pool, cannot start discover', { source, filtered: Boolean(opts?.filter) });
@@ -296,7 +299,9 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       const options = shuffledDeck.slice(0, available);
       const optionIds = new Set(options.map(card => card.id));
 
-      setClassDeck(prev => prev.filter(card => !optionIds.has(card.id)));
+      if (!opts?.overridePool) {
+        setClassDeck(prev => prev.filter(card => !optionIds.has(card.id)));
+      }
       setDiscoverOptions(options);
       setDiscoverModalOpen(true);
 

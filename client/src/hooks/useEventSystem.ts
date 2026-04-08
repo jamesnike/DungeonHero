@@ -2519,9 +2519,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           id: `${c.id}-disc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         }));
         if (tempCards.length > 0) {
-          setClassDeck(prev => [...tempCards, ...prev]);
           const started = depsRef.current.beginDiscoverFlow(effect, {
-            filter: (card: GameCardData) => tempCards.some(tc => tc.id === card.id),
+            overridePool: tempCards,
           });
           if (started) {
             eventResolutionDeferred = true;
