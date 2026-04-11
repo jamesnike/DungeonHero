@@ -13,6 +13,7 @@ import relicBulwarkArmorImage from '@assets/generated_images/card_dedupe_magic_t
 import relicChainPersuadeImage from '@assets/generated_images/knight_potion_chain_persuade.png';
 import relicRecycleShuffleImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
 import relicEquipEmpowerImage from '@assets/generated_images/knight_potion_equip_empower.png';
+import relicWraithPurificationImage from '@assets/generated_images/cute_chibi_wraith_monster.png';
 
 const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'waterfall-discover': {
@@ -90,7 +91,7 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'recycle-shuffle': {
     id: 'recycle-shuffle',
     name: '永恒护符·回收轮转',
-    description: '战斗结束或瀑流推进时，将回收袋中的卡牌洗入背包。',
+    description: '战斗结束或瀑流推进时，回收袋洗回背包（所有牌剩余瀑流 -1，就绪的牌回背包）。',
     image: relicRecycleShuffleImage,
   },
   'equip-empower': {
@@ -98,6 +99,12 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
     name: '永恒护符·铸锋药剂',
     description: '当装备上装备时，该装备栏获得 3 临时攻击和 3 临时护甲。',
     image: relicEquipEmpowerImage,
+  },
+  'wraith-purification': {
+    id: 'wraith-purification',
+    name: '永恒护符·幽魂净化',
+    description: '每当背包空了，将回收袋洗回背包（没有使用上限）。',
+    image: relicWraithPurificationImage,
   },
 };
 
@@ -113,7 +120,7 @@ export function hasEternalRelic(relics: EternalRelic[], id: EternalRelicId): boo
   return relics.some(r => r.id === id);
 }
 
-const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower']);
+const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification']);
 
 export function getSelectableRelics(exclude: EternalRelicId[]): EternalRelic[] {
   const excludeSet = new Set(exclude);

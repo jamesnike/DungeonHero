@@ -5026,7 +5026,7 @@ export default function GameBoard() {
       if (slot?.amuletEffect === 'recycle-forge') {
         return {
           ...slot,
-          description: `每使用或弃回 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${savedForgeCount % 5}/5]`,
+          description: `每使用或弃回 5 张牌，回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 2 张牌。(可超手牌上限) [${savedForgeCount % 5}/5]`,
         };
       }
       if (slot?.amuletEffect === 'damage-class-discover') {
@@ -5848,7 +5848,7 @@ export default function GameBoard() {
   const pendingWraithPassiveUnlockRef = useRef(false);
 
   useEffect(() => {
-    if (permanentSkills.includes('幽魂净化')) return;
+    if (hasEternalRelic(eternalRelics, 'wraith-purification')) return;
     if (pendingWraithPassiveUnlockRef.current) return;
     if (monstersDefeated === 0) return;
 
@@ -5859,14 +5859,14 @@ export default function GameBoard() {
 
     if (!hasWraith) {
       pendingWraithPassiveUnlockRef.current = true;
-      setPermanentSkills(prev => {
-        if (prev.includes('幽魂净化')) return prev;
-        return [...prev, '幽魂净化'];
+      const relic = getEternalRelic('wraith-purification');
+      setEternalRelics(prev => {
+        if (hasEternalRelic(prev, 'wraith-purification')) return prev;
+        return [...prev, relic];
       });
-      setWraithPassiveEnabled(true);
-      addGameLog('skill', '所有幽魂已被消灭！获得被动技能：幽魂净化');
+      addGameLog('skill', `所有幽魂已被消灭！获得${relic.name}`);
     }
-  }, [activeCards, previewCards, remainingDeck, permanentSkills, monstersDefeated, addGameLog]);
+  }, [activeCards, previewCards, remainingDeck, eternalRelics, monstersDefeated, addGameLog]);
 
   useEffect(() => {
     if (!pendingWraithPassiveUnlockRef.current) return;
@@ -5876,20 +5876,31 @@ export default function GameBoard() {
   }, [activeMonsterReward, monsterRewardQueue]);
 
   useEffect(() => {
-    if (!permanentSkills.includes('幽魂净化')) return;
-    if (!engine.getState().wraithPassiveEnabled) return;
+    if (!hasEternalRelic(eternalRelicsRef.current, 'wraith-purification')) return;
     if (backpackItems.length > 0) return;
     if (permanentMagicRecycleBag.length === 0) return;
 
-    setWraithPassiveEnabled(false);
+    const readyCards: GameCardData[] = [];
+    const waitingCards: GameCardData[] = [];
+    for (const card of permanentMagicRecycleBag) {
+      const waits = ((card as GameCardData & { _recycleWaits?: number })._recycleWaits ?? 1) - 1;
+      if (waits <= 0) {
+        readyCards.push(sanitizeCardMetadata(card));
+      } else {
+        waitingCards.push({ ...card, _recycleWaits: waits } as GameCardData);
+      }
+    }
+    setPermanentMagicRecycleBag(waitingCards);
+    if (readyCards.length > 0) {
+      setBackpackItems(readyCards);
+    }
 
-    const cardsToMove = [...permanentMagicRecycleBag].map(c => sanitizeCardMetadata(c));
-    setPermanentMagicRecycleBag([]);
-    setBackpackItems(cardsToMove);
-
-    addGameLog('skill', `幽魂净化：背包为空，${cardsToMove.length} 张牌从回收袋自动洗回背包！`);
-    setHeroSkillBanner(`幽魂净化：${cardsToMove.length} 张牌从回收袋洗回背包！`);
-  }, [backpackItems.length, permanentSkills, permanentMagicRecycleBag, addGameLog, setHeroSkillBanner]);
+    const parts: string[] = [];
+    if (readyCards.length > 0) parts.push(`回收袋 ${readyCards.length} 张牌洗回背包`);
+    if (waitingCards.length > 0) parts.push(`${waitingCards.length} 张牌剩余瀑流 -1（仍在回收袋）`);
+    addGameLog('skill', `永恒护符·幽魂净化：背包为空 → ${parts.join('，')}`);
+    setHeroSkillBanner(`永恒护符·幽魂净化：${parts.join('，')}`);
+  }, [backpackItems.length, permanentMagicRecycleBag, addGameLog, setHeroSkillBanner]);
 
   useEffect(() => {
     discardedCardsRef.current = discardedCards;
@@ -6483,10 +6494,6 @@ export default function GameBoard() {
         setEquipmentSlotById(gsId, { ...gItem, golemLayerLossReflect: newCoeff });
         addGameLog('equip', `${gItem.name} 法力吞噬：瀑流强化，岩层反震系数 +${gItem.golemSpellGrowth}（当前 ${newCoeff}）`);
       }
-    }
-
-    if (permanentSkills.includes('幽魂净化')) {
-      setWraithPassiveEnabled(true);
     }
 
     resetHeroSkillForNewWave();
@@ -8552,19 +8559,8 @@ export default function GameBoard() {
       }
     }
 
-    if (permanentSkills.includes('幽魂净化')) {
-      infos.push({
-        skillId: 'wraith-purification',
-        name: '幽魂净化',
-        effect: `背包为空时，自动将回收袋洗回背包（每波一次）`,
-        isPassive: true,
-        isReady: false,
-        isUsed: !wraithPassiveEnabled,
-      });
-    }
-
     return infos;
-  }, [showSkillSelection, extraHeroSkills, extraSkillsUsedThisWave, waterfallActive, playerTargetingActive, permanentSkills, wraithPassiveEnabled]);
+  }, [showSkillSelection, extraHeroSkills, extraSkillsUsedThisWave, waterfallActive, playerTargetingActive, permanentSkills]);
 
   const isPotionSlotEligible = (slotId: EquipmentSlotId) => {
     if (!potionSlotTargeting || !pendingPotionAction || pendingPotionAction.step !== 'slot-select') {

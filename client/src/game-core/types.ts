@@ -140,6 +140,7 @@ export type EternalRelicId =
   | 'chain-persuade'
   | 'recycle-shuffle'
   | 'equip-empower'
+  | 'wraith-purification'
   | `amulet-eternal-${string}`;
 
 export interface EternalRelic {

@@ -751,7 +751,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           case 'recycle-flare': {
             const drawCounts = [2, 3, 4];
             const dc = drawCounts[newLevel] ?? 4;
-            upgraded.description = `永久：将回收袋里的卡牌放回背包，然后抽 ${dc} 张牌。(可超手牌上限)`;
+            upgraded.description = `永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 ${dc} 张牌。(可超手牌上限)`;
             upgraded.magicEffect = `回收袋归位并抽 ${dc} 张牌。`;
             break;
           }

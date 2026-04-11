@@ -435,7 +435,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       if (slot?.amuletEffect !== 'recycle-forge') return slot;
       return {
         ...slot,
-        description: `每使用或弃回 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${display}/5]`,
+        description: `每使用或弃回 5 张牌，回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 2 张牌。(可超手牌上限) [${display}/5]`,
       };
     }));
   };
@@ -631,12 +631,14 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     if (slotItem.type === 'monster') {
       const baseArmor = slotItem.hp ?? slotItem.value;
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
-      const slotTemp = slotTempArmor[slotId] ?? 0;
+      const rawSlotTemp = slotTempArmor[slotId] ?? 0;
+      const slotTemp = amuletEffects.hasArmorHalveEndure ? Math.floor(rawSlotTemp / 2) : rawSlotTemp;
       return Math.max(0, baseArmor + defenseBonus + slotShieldBonus + slotTemp);
     }
     const baseArmorMax = slotItem.armorMax ?? slotItem.value;
     const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
-    const slotTemp = slotTempArmor[slotId] ?? 0;
+    const rawSlotTemp = slotTempArmor[slotId] ?? 0;
+    const slotTemp = amuletEffects.hasArmorHalveEndure ? Math.floor(rawSlotTemp / 2) : rawSlotTemp;
     const permanentBonus = Math.max(0, defenseBonus + slotShieldBonus);
     const storedBaseArmor = Math.min(slotItem.armor ?? baseArmorMax, baseArmorMax);
     const currentArmor = storedBaseArmor + permanentBonus + slotTemp;

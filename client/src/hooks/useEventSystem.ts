@@ -1748,18 +1748,32 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       } else if (effect === 'recycleToBackpack') {
         const recycled = engine.getState().permanentMagicRecycleBag;
         if (recycled.length > 0) {
+          const readyCards: GameCardData[] = [];
+          const waitingCards: GameCardData[] = [];
+          for (const card of recycled) {
+            const waits = ((card as GameCardData & { _recycleWaits?: number })._recycleWaits ?? 1) - 1;
+            if (waits <= 0) {
+              const { _recycleWaits, ...clean } = card as GameCardData & { _recycleWaits?: number };
+              readyCards.push(clean as GameCardData);
+            } else {
+              waitingCards.push({ ...card, _recycleWaits: waits } as GameCardData);
+            }
+          }
           const cap = Math.max(1, BASE_BACKPACK_CAPACITY + engine.getState().backpackCapacityModifier);
           const currentBp = engine.getState().backpackItems;
           const available = cap - currentBp.length;
-          const shuffled = [...recycled].sort(() => Math.random() - 0.5);
-          const toAdd = shuffled.slice(0, Math.max(0, available));
-          const overflow = shuffled.slice(Math.max(0, available));
+          const toAdd = readyCards.slice(0, Math.max(0, available));
+          const overflow = readyCards.slice(Math.max(0, available));
           if (toAdd.length > 0) {
             setBackpackItems(prev => [...toAdd, ...prev]);
           }
-          setPermanentMagicRecycleBag(overflow);
-          addGameLog('event', `事件效果：将 ${toAdd.length} 张卡牌从回收袋洗入背包${overflow.length > 0 ? `（${overflow.length} 张因容量不足留在回收袋）` : ''}`);
-          setHeroSkillBanner(`${toAdd.length} 张卡牌从回收袋回到了背包！`);
+          setPermanentMagicRecycleBag([...overflow, ...waitingCards]);
+          const parts: string[] = [];
+          if (toAdd.length > 0) parts.push(`回收袋 ${toAdd.length} 张牌洗回背包`);
+          if (waitingCards.length > 0) parts.push(`${waitingCards.length} 张牌剩余瀑流 -1（仍在回收袋）`);
+          if (overflow.length > 0) parts.push(`${overflow.length} 张因容量不足留在回收袋`);
+          addGameLog('event', `事件效果：回收袋洗回背包 → ${parts.join('，')}`);
+          setHeroSkillBanner(toAdd.length > 0 ? `回收袋 ${toAdd.length} 张卡牌洗回了背包！` : '回收袋中的牌仍需等待瀑流。');
         } else {
           addGameLog('event', '事件效果：回收袋为空');
           setHeroSkillBanner('回收袋中没有卡牌。');
@@ -1772,7 +1786,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           image: skillScrollImage,
           magicType: 'permanent',
           magicEffect: 'guild-recycle-reshuffle',
-          description: '永久魔法（Perm 1）：将回收袋洗回背包，抽 1 张牌。',
+          description: '永久魔法（Perm 1）：回收袋洗回背包（所有牌剩余瀑流 -1），抽 1 张牌。',
           recycleDelay: 1,
         };
         depsRef.current.addCardToBackpack(guildRecycleCard);

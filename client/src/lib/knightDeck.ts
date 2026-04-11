@@ -327,7 +327,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: dedupeKnightMagicRecycleFlareImage,
     classCard: true,
-    description: '永久：将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限)',
+    description: '永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 2 张牌。(可超手牌上限)',
     magicType: 'permanent',
     magicEffect: '回收袋归位并抽牌。',
     knightEffect: 'recycle-flare',

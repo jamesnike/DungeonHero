@@ -493,20 +493,17 @@ function GameBoardModalsInner({
       <Dialog open={wraithPassiveUnlockPopup} onOpenChange={onWraithPassiveUnlockChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-xl font-serif text-purple-300">幽魂净化</DialogTitle>
-            <DialogDescription className="sr-only">被动技能解锁</DialogDescription>
+            <DialogTitle className="text-xl font-serif text-purple-300">永恒护符·幽魂净化</DialogTitle>
+            <DialogDescription className="sr-only">永恒护符解锁</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              所有幽魂已被消灭！你获得了一个新的被动技能：
+              所有幽魂已被消灭！你获得了一个新的永恒护符：
             </p>
             <div className="rounded-xl border border-purple-500/40 bg-purple-500/10 p-4">
-              <div className="text-lg font-semibold text-purple-300">幽魂净化</div>
+              <div className="text-lg font-semibold text-purple-300">永恒护符·幽魂净化</div>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                当背包里的卡牌为 0 时，自动将回收袋里的牌洗回背包。
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/70">
-                每波瀑流重置一次（不叠加，仅有启用/禁用状态）。
+                每当背包空了，将回收袋洗回背包（没有使用上限）。
               </p>
             </div>
           </div>

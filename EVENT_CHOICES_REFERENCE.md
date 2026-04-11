@@ -271,7 +271,7 @@
 | 3 | 挖掘遗物（坟场发现 2 张） | `['graveyardDiscover', 'graveyardDiscover']` | 坟场 ≥ 1 |
 | 4 | 翻转商会卷轴 | `guildFlipToMagic` | — |
 | 5 | 展示权威（劝降等级 +1，下次劝降免费） | `['persuadeLevel+1', 'persuadeNextFree']` | — |
-| 6 | 整合回收袋（洗入背包） | `recycleToBackpack` | — |
+| 6 | 整合回收袋（回收袋洗回背包） | `recycleToBackpack` | — |
 | 7 | 翻转为「奇术轮转」 | `guildFlipToHandRecycleMagic` | — |
 
 **动态翻转产物（由选项 4 / 7 触发）：**
@@ -325,7 +325,7 @@
 | 5-8 | 背包加入一张诅咒 | `addCurse`（生成「血咒之印」，使用/弃置时失去 3 HP） |
 | 9-12 | 删除 2 张牌 | `deleteCard:2` |
 | 13-16 | 获得 2 张专属卡 | `drawClass2` |
-| 17-20 | 回收袋洗入背包，抽 2 张牌 | `['recycleToBackpack', 'drawHeroCards:2']` |
+| 17-20 | 回收袋洗回背包，抽 2 张牌 | `['recycleToBackpack', 'drawHeroCards:2']` |
 | 1-20 | 下一次劝降费用 +10 | `persuadeNextCostIncrease:10` |
 | 1-20 | 选择一张牌升级 | `upgradeCard` |
 

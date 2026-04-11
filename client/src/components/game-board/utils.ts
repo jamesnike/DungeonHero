@@ -1144,7 +1144,7 @@ export function createDeck(): GameCardData[] {
     image: dedupeEventChaosDiceGameImage,
     eventChoices: [
       {
-        text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗入背包并抽2张牌，并翻转为"混沌冲击"。',
+        text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗回背包并抽2张牌，并翻转为"混沌冲击"。',
         hint: '20% 概率触发不同命运',
         diceTable: [
           { id: 'dice12-shop', range: [1, 4], label: '金币+10，打开商店', effect: ['gold+10', 'openShop'] },
@@ -1156,7 +1156,7 @@ export function createDeck(): GameCardData[] {
             effect: 'deleteCard:2',
           },
           { id: 'dice12-class', range: [13, 16], label: '获得 2 张专属卡', effect: 'drawClass2' },
-          { id: 'dice12-draw', range: [17, 20], label: '回收袋洗入背包，抽 2 张牌', effect: ['recycleToBackpack', 'drawHeroCards:2'] },
+          { id: 'dice12-draw', range: [17, 20], label: '回收袋洗回背包，抽 2 张牌', effect: ['recycleToBackpack', 'drawHeroCards:2'] },
           { id: 'dice12-upgrade', range: [1, 20], label: '选择一张牌升级', effect: 'upgradeCard' },
         ],
       },

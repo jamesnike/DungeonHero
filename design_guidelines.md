@@ -562,16 +562,20 @@ The Ghost mechanic (`isGhost: true` on `GameCardData`) makes a card transparent 
 
 ## Amplify Mechanic (增幅)
 
-The Amplify mechanic allows the player to permanently boost a card's stats via the「增幅」magic card — a `Perm 1` permanent magic in the main deck's magic candidate pool.
+The Amplify mechanic allows the player to permanently boost a card's stats. The main deck contains an **instant** magic「增幅」that, when played, lets the player select a target and generates a **Perm 2 permanent magic** bound to that target. Each time the generated Perm 2 card is used, it applies one amplification to the bound target.
 
 ### Card Definition
 
-- **Type**: `magic`, `magicType: 'permanent'`, `magicEffect: 'amplify-card'`, `recycleDelay: 1`
-- **Defined in**: `deck.ts` → `createDeck()` magic pool (candidate 15 of 15)
+- **Instant card**: `magic`, `magicType: 'instant'`, `magicEffect: 'amplify-card'`
+  - Defined in: `deck.ts` → `createDeck()` magic pool (candidate 15 of 15)
+  - One-time use: consumed after selecting a target (goes to graveyard)
+- **Generated Perm 2 card**: `magic`, `magicType: 'permanent'`, `magicEffect: 'amplify-target'`, `recycleDelay: 2`
+  - Created dynamically in `resolveAmplify()` with `_amplifyTargetCardId` and `_amplifyTargetName`
+  - Added to backpack; reusable via Perm 2 recycle cycle
 
 ### Targeting
 
-When played, the card opens `AmplifyModal` for target selection. Eligible targets:
+When the instant「增幅」is played, it opens `AmplifyModal` for target selection. Eligible targets:
 
 | Source | Eligible types |
 |--------|---------------|

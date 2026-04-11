@@ -966,10 +966,9 @@ export function createDeck(): GameCardData[] {
     name: '增幅',
     value: 0,
     image: skillScrollImage,
-    magicType: 'permanent',
+    magicType: 'instant',
     magicEffect: 'amplify-card',
-    description: '永久魔法（Perm 1）：选择一张装备栏或手牌中的装备/伤害魔法，武器攻击+1，护盾护甲+1，伤害魔法伤害+1。',
-    recycleDelay: 1,
+    description: '一次性魔法：选择一张装备栏或手牌中的装备/伤害魔法，生成一张永久魔法（Perm 2）对其进行增幅（武器攻击+1，护盾护甲+1，伤害魔法伤害+1）。',
   });
 
   // Event cards
@@ -1449,7 +1448,7 @@ export function createDeck(): GameCardData[] {
       },
       { text: '翻转商会卷轴', effect: 'guildFlipToMagic', hint: '翻转为永久魔法「血金术」，放入背包' },
       { text: '展示权威（劝降等级 +1，下次劝降免费）', effect: ['persuadeLevel+1', 'persuadeNextFree'], hint: '劝降更强怪物，下次劝降不花金币' },
-      { text: '整合回收袋（洗入背包）', effect: 'recycleToBackpack', hint: '将回收袋中的所有牌洗入背包，获得「回收轮转」魔法' },
+      { text: '整合回收袋（回收袋洗回背包）', effect: 'recycleToBackpack', hint: '回收袋所有牌剩余瀑流 -1，就绪的牌回背包，获得「回收轮转」魔法' },
       { text: '翻转为「奇术轮转」', effect: 'guildFlipToHandRecycleMagic', hint: '翻转为永久魔法：所有手牌移入回收袋，再从回收袋随机 2 张移到手上' },
     ],
   });
@@ -1509,7 +1508,7 @@ export function createDeck(): GameCardData[] {
     image: dedupeEventChaosDiceGameImage,
     eventChoices: [
       {
-        text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗入背包并抽2张牌，并翻转为"混沌冲击"。',
+        text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗回背包并抽2张牌，并翻转为"混沌冲击"。',
         hint: '20% 概率触发不同命运',
         diceTable: [
           { id: 'dice12-shop', range: [1, 4], label: '金币+10，打开商店', effect: ['gold+10', 'openShop'] },
@@ -1521,7 +1520,7 @@ export function createDeck(): GameCardData[] {
             effect: 'deleteCard:2',
           },
           { id: 'dice12-class', range: [13, 16], label: '获得 2 张专属卡', effect: 'drawClass2' },
-          { id: 'dice12-draw', range: [17, 20], label: '回收袋洗入背包，抽 2 张牌', effect: ['recycleToBackpack', 'drawHeroCards:2'] },
+          { id: 'dice12-draw', range: [17, 20], label: '回收袋洗回背包，抽 2 张牌', effect: ['recycleToBackpack', 'drawHeroCards:2'] },
           { id: 'dice12-persuade-cost', range: [1, 20], label: '下一次劝降费用 +10', effect: 'persuadeNextCostIncrease:10' },
           { id: 'dice12-upgrade', range: [1, 20], label: '选择一张牌升级', effect: 'upgradeCard' },
         ],

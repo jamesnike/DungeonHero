@@ -1492,7 +1492,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
     if (readyCards.length > 0) {
       setBackpackItems(prev => [...prev, ...readyCards]);
-      depsRef.current.addGameLog('combat', `战斗结束，回收袋 ${readyCards.length} 张牌洗入背包：${readyCards.map(c => c.name).join('、')}`);
+      depsRef.current.addGameLog('combat', `战斗结束，回收袋 ${readyCards.length} 张牌洗回背包：${readyCards.map(c => c.name).join('、')}`);
     }
     if (stillWaiting.length > 0) {
       depsRef.current.addGameLog('combat', `回收袋仍有 ${stillWaiting.length} 张牌等待瀑流：${stillWaiting.map(c => `${c.name}(还需${c._recycleWaits}次)`).join('、')}`);
@@ -2863,29 +2863,32 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           }
         }
 
-        if (!shieldAutoEvolved && !isFullBlockShield && !unbreakableUntilWaterfall[blockSlotId] && shieldArmorDepleted) {
-          let skipShieldDurabilityLoss = false;
-          const isMonsterEquipShield = slotItem.type === 'monster';
-          const perfectBlock = isPerfectBlockThisShield;
+        let perfectBlockSaved = false;
+        if (!shieldAutoEvolved && !isFullBlockShield && isPerfectBlockThisShield && !unbreakableUntilWaterfall[blockSlotId]) {
           const saveChance = slotItem.shieldPerfectBlockSaveChance;
-          if (perfectBlock && saveChance && saveChance > 0 && !unbreakableNext) {
+          if (saveChance && saveChance > 0 && !unbreakableNext) {
             const threshold = Math.round((saveChance / 100) * 20);
             const result = await requestDiceOutcome({
               title: slotItem.name,
               subtitle: '完美格挡 — 耐久判定',
               entries: [
                 { id: 'save', range: [1, threshold] as [number, number], label: '耐久保留！', effect: 'none' },
-                { id: 'lose', range: [threshold + 1, 20] as [number, number], label: '耐久 -1', effect: 'none' },
+                { id: 'lose', range: [threshold + 1, 20] as [number, number], label: shieldArmorDepleted ? '耐久 -1' : '护甲磨损', effect: 'none' },
               ],
             });
             if (result?.id === 'save') {
-              skipShieldDurabilityLoss = true;
+              perfectBlockSaved = true;
               depsRef.current.addGameLog('equip', `${slotItem.name} 完美格挡，幸运保住了耐久！`);
             }
           }
-          if (stale()) {
-            return;
-          }
+        }
+        if (stale()) {
+          return;
+        }
+
+        if (!shieldAutoEvolved && !isFullBlockShield && !unbreakableUntilWaterfall[blockSlotId] && shieldArmorDepleted) {
+          let skipShieldDurabilityLoss = perfectBlockSaved;
+          const isMonsterEquipShield = slotItem.type === 'monster';
 
           if (!skipShieldDurabilityLoss && isMonsterEquipShield && (slotItem.monsterSpecial === 'bone-regen' || slotItem.monsterSpecial === 'skeleton-king')) {
             const boneResult = await requestDiceOutcome({
@@ -3178,7 +3181,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           }
         } else if (!shieldAutoEvolved && !isFullBlockShield && !shieldArmorDepleted) {
           const evolveCountWork = evolveBlockCount !== undefined ? { _shieldBlockCount: evolveBlockCount } : {};
-          setEquipmentSlotById(blockSlotId, { ...workingShieldItem, ...evolveCountWork } as EquipmentItem);
+          if (perfectBlockSaved) {
+            if (Object.keys(evolveCountWork).length > 0) {
+              setEquipmentSlotById(blockSlotId, { ...slotItem, ...evolveCountWork } as EquipmentItem);
+            }
+          } else {
+            setEquipmentSlotById(blockSlotId, { ...workingShieldItem, ...evolveCountWork } as EquipmentItem);
+          }
         }
       }
     }
