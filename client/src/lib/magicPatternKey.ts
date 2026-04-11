@@ -75,6 +75,8 @@ const NAME_TO_KEY: Record<string, string> = {
   奥术风暴: 'arcane-storm',
   装备附魔: 'equipment-enchant',
   祭坛秘术: 'altar-ritual',
+  劝降祝福: 'persuade-boost',
+  赏金裁决: 'bounty-spell',
 };
 
 function hashName(s: string): number {
@@ -111,6 +113,8 @@ export function resolveMagicPatternKey(card: MagicPatternCardRef): string | null
   if (card.magicEffect === 'arcane-storm-magic-count') return 'arcane-storm';
   if (card.magicEffect === 'equipment-enchant-discard') return 'equipment-enchant';
   if (card.magicEffect === 'altar-discard-discover') return 'altar-ritual';
+  if (card.magicEffect === 'persuade-boost-draw') return 'persuade-boost';
+  if (card.magicEffect === 'bounty-spell-damage') return 'bounty-spell';
 
   const ke = card.knightEffect;
   if (ke && KNIGHT_EFFECT_TO_KEY[ke]) {

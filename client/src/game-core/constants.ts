@@ -92,6 +92,7 @@ export const initialCombatState: CombatState = {
   monsterAttackQueue: [],
   pendingBlock: null,
   slotBlocksThisTurn: { equipmentSlot1: false, equipmentSlot2: false },
+  slotDurabilityUsedThisTurn: { equipmentSlot1: 0, equipmentSlot2: 0 },
 };
 
 export const initialWaterfallAnimationState: WaterfallAnimationState = {
@@ -147,6 +148,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasStunUpgradeCap: false,
   hasRecycleBackpackExpand: false,
   hasDungeonGold: false,
+  stunRateBoost: 0,
 });
 
 // ---------------------------------------------------------------------------

@@ -18,6 +18,8 @@ import type {
 import type { KnightCardData } from '@/lib/knightDeck';
 import { createGreedCurseCard } from '@/lib/knightDeck';
 import type { HeroSkillId } from '@/lib/heroSkills';
+import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
+import type { EternalRelicId } from '@/game-core/types';
 import { getHeroSkillById } from '@/lib/heroSkills';
 import type { EventDiceRange } from '@/components/GameCard';
 import type { HeroMagicRuntimeState } from '@/lib/heroMagic';
@@ -45,9 +47,10 @@ import {
   logHeroMagic,
   getCardPlayCategory,
   pickRandomHandCardsForDiscardPreferGraveyard,
+  isDamageMagic,
 } from '@/game-core/helpers';
 import { damageMonsterWithLayerOverflow, chaosStrikeHasOverkill } from '@/game-core/combat';
-import type { MirrorCopySelection } from '@/game-core/types';
+import type { MirrorCopySelection, AmplifySelection } from '@/game-core/types';
 
 // ---------------------------------------------------------------------------
 // UI-only animation constants (mirrored from GameBoard.tsx)
@@ -146,8 +149,9 @@ export interface CardPlayHandlersDeps {
   queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
   triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
-  triggerGraveNova: () => void;
+  triggerGraveNova: (graveNovaCard?: GameCardData) => void;
   triggerWaterfall: () => void;
+  applyWaterfallSideEffects: () => void;
   queueWaterfallTimeout: (callback: () => void, delay: number, label?: string) => void;
   consumeCardFromHand: (card: GameCardData | string) => boolean;
 
@@ -228,6 +232,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     bulwarkTempArmorStacks,
     handLimitBonus,
     stunCap,
+    eternalRelics,
   } = gs;
 
   const maxHp =
@@ -282,6 +287,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   const setMagicCardsPlayedThisTurn = useEngineSetter('magicCardsPlayedThisTurn');
   const setBulwarkPassiveActive = useEngineSetter('bulwarkPassiveActive');
   const setBulwarkTempArmorStacks = useEngineSetter('bulwarkTempArmorStacks');
+  const setEternalRelics = useEngineSetter('eternalRelics');
   const setStunCap = useEngineSetter('stunCap');
   const setSlotTempArmor = useEngineSetter('slotTempArmor');
   const setBerserkerRageActive = useEngineSetter('berserkerRageActive');
@@ -308,6 +314,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   const setCardsPlayed = useEngineSetter('cardsPlayed');
   const setMirrorCopyModal = useEngineSetter('mirrorCopyModal');
   const setPermGrantModal = useEngineSetter('permGrantModal');
+  const setAmplifyModal = useEngineSetter('amplifyModal');
   const setPersuadeCostModifier = useEngineSetter('persuadeCostModifier');
   const setLastPlayedCardCategory = useEngineSetter('lastPlayedCardCategory');
 
@@ -326,14 +333,14 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   // -- Fate Sight resolution helper -------------------------------------------
 
   const resolveFateSight = (card: GameCardData, target: GameCardData, baseDmg: number, peekCount: number) => {
-    const totalDamage = getSpellDamage(baseDmg);
+    const totalDamage = getSpellDamage(baseDmg + (card.amplifyBonus ?? 0));
     if (!depsRef.current.isMonsterEngaged(target.id)) depsRef.current.beginCombat(target, 'hero');
     depsRef.current.dealDamageToMonster(target, totalDamage, { pulses: 2, isSpellDamage: true });
 
     const deck = engine.getState().remainingDeck;
     const peekedCards = deck.slice(0, Math.min(peekCount, deck.length));
     const monsterCount = peekedCards.filter(c => c.type === 'monster').length;
-    const rawStunChance = Math.min(monsterCount * 20, 100);
+    const rawStunChance = Math.min(monsterCount * 20 + (depsRef.current.amuletEffects?.stunRateBoost ?? 0), 100);
     const stunChance = stunCap > 0 ? Math.min(rawStunChance, stunCap) : rawStunChance;
 
     depsRef.current.setDeckPeekState({
@@ -414,7 +421,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     }));
     let stunText = '';
     if (isFlank && !target.isStunned) {
-      const effectiveFlankStun = Math.min(50, stunCap);
+      const effectiveFlankStun = Math.min(50 + (depsRef.current.amuletEffects?.stunRateBoost ?? 0), stunCap);
       const threshold = Math.round((effectiveFlankStun / 100) * 20);
       void depsRef.current.requestDiceOutcome({
         title: target.name,
@@ -550,7 +557,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     [completeHeroMagicActivation, setHeroSkillBanner],
   );
 
-  const triggerGraveNova = useCallback(() => {
+  const triggerGraveNova = useCallback((graveNovaCard?: GameCardData) => {
     const monsters = flattenActiveRowSlots(depsRef.current.activeCardsLatestRef.current).filter(
       (card): card is GameCardData => Boolean(card && card.type === 'monster'),
     );
@@ -558,7 +565,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       setHeroSkillBanner('殉烈爆鸣没有目标。');
       return;
     }
-    const dmg = getSpellDamage(3);
+    const dmg = getSpellDamage(3 + (graveNovaCard?.amplifyBonus ?? 0));
     addGameLog('combat', `殉烈爆鸣：对 ${monsters.map(m => m.name).join('、')} 各造成 ${dmg} 点法术伤害`);
     monsters.forEach(monster => {
       depsRef.current.dealDamageToMonster(monster, dmg, { pulses: 2, isSpellDamage: true });
@@ -695,7 +702,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         setHeroSkillBanner(options.banner);
       }
 
-      if (options?.dealtDamage) {
+      {
         const currentActiveCards = engine.getState().activeCards;
         for (const ac of currentActiveCards) {
           if (ac && ac.antiMagicReflect && ac.antiMagicReflect > 0 && !ac.isStunned) {
@@ -832,6 +839,76 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         return;
       }
 
+      if (modal.sourceType === 'flank-persuade-grant') {
+        const targetCard = engine.getState().handCards.find(c => c.id === targetCardId);
+        if (!targetCard) return;
+        const amount = modal.meta?.amount ?? 1;
+        setHandCards(prev => prev.map(c =>
+          c.id === targetCardId
+            ? { ...c, flankEffect: `劝降费用永久 -${amount}`, flankEffectId: `persuadeCost-${amount}` }
+            : c,
+        ));
+        depsRef.current.addGameLog('event', `赋能神殿：「${targetCard.name}」获得侧击效果！`);
+        setHeroSkillBanner(`「${targetCard.name}」获得侧击：劝降费用永久 -${amount}！`);
+        return;
+      }
+
+      if (modal.sourceType === 'flank-stun-grant') {
+        const targetCard = engine.getState().handCards.find(c => c.id === targetCardId);
+        if (!targetCard) return;
+        const amount = modal.meta?.amount ?? 5;
+        setHandCards(prev => prev.map(c =>
+          c.id === targetCardId
+            ? { ...c, flankEffect: `击晕上限 +${amount}%`, flankEffectId: `stunCap+${amount}` }
+            : c,
+        ));
+        depsRef.current.addGameLog('event', `赋能神殿：「${targetCard.name}」获得侧击效果！`);
+        setHeroSkillBanner(`「${targetCard.name}」获得侧击：击晕上限 +${amount}%！`);
+        return;
+      }
+
+      if (modal.sourceType === 'flank-damage-grant') {
+        const targetCard = engine.getState().handCards.find(c => c.id === targetCardId);
+        if (!targetCard) return;
+        const amount = modal.meta?.amount ?? 5;
+        setHandCards(prev => prev.map(c =>
+          c.id === targetCardId
+            ? { ...c, flankEffect: `对随机怪物造成 ${amount} 点伤害`, flankEffectId: `damage:${amount}` }
+            : c,
+        ));
+        depsRef.current.addGameLog('event', `赋能神殿：「${targetCard.name}」获得侧击效果！`);
+        setHeroSkillBanner(`「${targetCard.name}」获得侧击：对随机怪物造成 ${amount} 点伤害！`);
+        return;
+      }
+
+      if (modal.sourceType === 'transform-draw-grant') {
+        const targetCard = engine.getState().handCards.find(c => c.id === targetCardId);
+        if (!targetCard) return;
+        const amount = modal.meta?.amount ?? 2;
+        setHandCards(prev => prev.map(c =>
+          c.id === targetCardId
+            ? { ...c, transformBonus: `抽 ${amount} 张牌`, transformEffect: `draw:${amount}` }
+            : c,
+        ));
+        depsRef.current.addGameLog('event', `赋能神殿：「${targetCard.name}」获得转型效果！`);
+        setHeroSkillBanner(`「${targetCard.name}」获得转型：抽 ${amount} 张牌！`);
+        return;
+      }
+
+      if (modal.sourceType === 'transform-heal-grant') {
+        const targetCard = engine.getState().handCards.find(c => c.id === targetCardId);
+        if (!targetCard) return;
+        const amount = modal.meta?.amount ?? 2;
+        setHandCards(prev => prev.map(c =>
+          c.id === targetCardId
+            ? { ...c, transformBonus: `恢复 ${amount} HP`, transformEffect: `heal:${amount}` }
+            : c,
+        ));
+        depsRef.current.addGameLog('event', `赋能神殿：「${targetCard.name}」获得转型效果！`);
+        setHeroSkillBanner(`「${targetCard.name}」获得转型：恢复 ${amount} HP！`);
+        return;
+      }
+
       const sourceCard = depsRef.current.stagingCardsRef.current.find(c => c.id === modal.sourceCardId);
       if (!sourceCard) return;
       const targetCard = engine.getState().handCards.find(c => c.id === targetCardId);
@@ -896,7 +973,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     const modal = engine.getState().permGrantModal;
     setPermGrantModal(null);
     if (!modal) return;
-    if (modal.sourceType === 'flank-grant' || modal.sourceType === 'transform-gold-grant') {
+    if (modal.sourceType === 'flank-grant' || modal.sourceType === 'transform-gold-grant'
+      || modal.sourceType === 'flank-persuade-grant' || modal.sourceType === 'flank-stun-grant'
+      || modal.sourceType === 'flank-damage-grant' || modal.sourceType === 'transform-draw-grant'
+      || modal.sourceType === 'transform-heal-grant') {
       return;
     }
     const sourceCard = depsRef.current.stagingCardsRef.current.find(c => c.id === modal.sourceCardId);
@@ -912,6 +992,104 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       finalizeMagicCard(sourceCard, { banner: '取消了永恒铭刻。' });
     }
   }, [engine, setPermGrantModal, finalizePotionCard, finalizeMagicCard]);
+
+  // ---------------------------------------------------------------------------
+  // resolveAmplify / cancelAmplify
+  // ---------------------------------------------------------------------------
+
+  const resolveAmplify = useCallback(
+    (selection: AmplifySelection) => {
+      const modal = engine.getState().amplifyModal;
+      setAmplifyModal(null);
+      if (!modal) return;
+
+      const sourceCard = depsRef.current.stagingCardsRef.current.find(c => c.id === modal.sourceCardId);
+      if (!sourceCard) return;
+
+      if (selection.kind === 'equipment') {
+        const slotId = selection.slotId;
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (!slotItem) {
+          finalizeMagicCard(sourceCard, { banner: '增幅：目标装备已不存在。' });
+          return;
+        }
+        if (slotItem.type === 'weapon') {
+          depsRef.current.setEquipmentSlotById(slotId, {
+            ...slotItem,
+            value: slotItem.value + 1,
+            amplifyBonus: (slotItem.amplifyBonus ?? 0) + 1,
+          });
+          depsRef.current.addGameLog('magic', `增幅：${slotItem.name} 攻击力 +1（${slotItem.value}→${slotItem.value + 1}）`);
+          finalizeMagicCard(sourceCard, { banner: `增幅：${slotItem.name} 攻击力 +1（${slotItem.value}→${slotItem.value + 1}）！` });
+        } else {
+          const oldArmor = slotItem.armorMax ?? slotItem.value;
+          depsRef.current.setEquipmentSlotById(slotId, {
+            ...slotItem,
+            armorMax: oldArmor + 1,
+            value: slotItem.value + 1,
+            amplifyBonus: (slotItem.amplifyBonus ?? 0) + 1,
+          });
+          depsRef.current.addGameLog('magic', `增幅：${slotItem.name} 护甲 +1（${oldArmor}→${oldArmor + 1}）`);
+          finalizeMagicCard(sourceCard, { banner: `增幅：${slotItem.name} 护甲 +1（${oldArmor}→${oldArmor + 1}）！` });
+        }
+        return;
+      }
+
+      const targetCard = engine.getState().handCards.find(c => c.id === selection.cardId);
+      if (!targetCard) {
+        finalizeMagicCard(sourceCard, { banner: '增幅：目标卡牌已不在手牌中。' });
+        return;
+      }
+
+      if (targetCard.type === 'weapon') {
+        setHandCards(prev => prev.map(c =>
+          c.id === targetCard.id
+            ? { ...c, value: c.value + 1, amplifyBonus: (c.amplifyBonus ?? 0) + 1 }
+            : c,
+        ));
+        depsRef.current.addGameLog('magic', `增幅：${targetCard.name} 攻击力 +1（${targetCard.value}→${targetCard.value + 1}）`);
+        finalizeMagicCard(sourceCard, { banner: `增幅：${targetCard.name} 攻击力 +1（${targetCard.value}→${targetCard.value + 1}）！` });
+      } else if (targetCard.type === 'shield') {
+        const oldArmor = targetCard.armorMax ?? targetCard.value;
+        setHandCards(prev => prev.map(c =>
+          c.id === targetCard.id
+            ? { ...c, armorMax: (c.armorMax ?? c.value) + 1, value: c.value + 1, amplifyBonus: (c.amplifyBonus ?? 0) + 1 }
+            : c,
+        ));
+        depsRef.current.addGameLog('magic', `增幅：${targetCard.name} 护甲 +1（${oldArmor}→${oldArmor + 1}）`);
+        finalizeMagicCard(sourceCard, { banner: `增幅：${targetCard.name} 护甲 +1（${oldArmor}→${oldArmor + 1}）！` });
+      } else if (targetCard.type === 'magic') {
+        if (targetCard.scalingDamage != null) {
+          setHandCards(prev => prev.map(c =>
+            c.id === targetCard.id
+              ? { ...c, scalingDamage: (c.scalingDamage ?? 0) + 1, amplifyBonus: (c.amplifyBonus ?? 0) + 1 }
+              : c,
+          ));
+          depsRef.current.addGameLog('magic', `增幅：${targetCard.name} 叠刺基数 +1（${targetCard.scalingDamage}→${targetCard.scalingDamage + 1}）`);
+          finalizeMagicCard(sourceCard, { banner: `增幅：${targetCard.name} 叠刺基数 +1！` });
+        } else {
+          const newBonus = (targetCard.amplifyBonus ?? 0) + 1;
+          setHandCards(prev => prev.map(c =>
+            c.id === targetCard.id
+              ? { ...c, amplifyBonus: newBonus }
+              : c,
+          ));
+          depsRef.current.addGameLog('magic', `增幅：${targetCard.name} 伤害 +1（增幅 ×${newBonus}）`);
+          finalizeMagicCard(sourceCard, { banner: `增幅：${targetCard.name} 伤害 +1！` });
+        }
+      }
+    },
+    [engine, setAmplifyModal, setHandCards, finalizeMagicCard, equipmentSlot1, equipmentSlot2],
+  );
+
+  const cancelAmplify = useCallback(() => {
+    const modal = engine.getState().amplifyModal;
+    setAmplifyModal(null);
+    if (!modal) return;
+    const sourceCard = depsRef.current.stagingCardsRef.current.find(c => c.id === modal.sourceCardId);
+    if (!sourceCard) return;
+    finalizeMagicCard(sourceCard, { banner: '取消了增幅。' });
+  }, [engine, setAmplifyModal, finalizeMagicCard]);
 
   // ---------------------------------------------------------------------------
   // resolvePotionRepairForSlot
@@ -1260,29 +1438,32 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
 
       if (effect === 'dice-backpack-expand') {
-        const diceResult = await depsRef.current.requestDiceOutcome({
+        const choiceId = await depsRef.current.requestMagicChoice({
           title: card.name,
-          subtitle: '掷骰决定灵药效果',
-          entries: [
-            { id: 'bp-amulet', range: [1, 5] as [number, number], label: '护符上限 +1', effect: 'amuletCapacity+1' },
-            { id: 'bp-left', range: [6, 10] as [number, number], label: '左装备栏容量 +1', effect: 'equipSlot1Capacity+1' },
-            { id: 'bp-right', range: [11, 15] as [number, number], label: '右装备栏容量 +1', effect: 'equipSlot2Capacity+1' },
-            { id: 'bp-bag', range: [16, 20] as [number, number], label: '背包容量 +3', effect: 'backpackSize+3' },
+          subtitle: '选择灵药效果',
+          options: [
+            { id: 'bp-amulet', label: '护符上限 +1', description: '永久增加护符槽位上限 1 个' },
+            { id: 'bp-left', label: '左装备栏容量 +1', description: '永久增加左装备栏容量 1 个' },
+            { id: 'bp-right', label: '右装备栏容量 +1', description: '永久增加右装备栏容量 1 个' },
+            { id: 'bp-bag', label: '背包容量 +3', description: '永久增加背包容量 3 格' },
           ],
         });
-        if (!diceResult) return;
-        const rolledEffect = normalizeEventEffect(diceResult.effect)[0];
-        if (rolledEffect === 'amuletCapacity+1') {
+        let banner = '';
+        if (choiceId === 'bp-amulet') {
           setMaxAmuletSlots(prev => prev + 1);
-        } else if (rolledEffect === 'equipSlot1Capacity+1') {
-          setEquipmentSlotCapacity(prev => ({ ...prev, equipmentSlot1: prev.equipmentSlot1 + 1 }));
-        } else if (rolledEffect === 'equipSlot2Capacity+1') {
-          setEquipmentSlotCapacity(prev => ({ ...prev, equipmentSlot2: prev.equipmentSlot2 + 1 }));
-        } else if (rolledEffect === 'backpackSize+3') {
+          banner = '护符上限 +1';
+        } else if (choiceId === 'bp-left') {
+          setEquipmentSlotCapacity(prev => ({ ...prev, equipmentSlot1: (prev.equipmentSlot1 ?? 1) + 1 }));
+          banner = '左装备栏容量 +1';
+        } else if (choiceId === 'bp-right') {
+          setEquipmentSlotCapacity(prev => ({ ...prev, equipmentSlot2: (prev.equipmentSlot2 ?? 1) + 1 }));
+          banner = '右装备栏容量 +1';
+        } else if (choiceId === 'bp-bag') {
           setBackpackCapacityModifier(prev => prev + 3);
+          banner = '背包容量 +3';
         }
-        depsRef.current.addGameLog('potion', `灵药效果：${diceResult.label}`);
-        await finalizePotionCard(card, { banner: diceResult.label });
+        depsRef.current.addGameLog('potion', `灵药效果：${banner}`);
+        await finalizePotionCard(card, { banner });
         return;
       }
 
@@ -1547,12 +1728,13 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
 
       if (effect === 'perm-persuade-consecutive') {
-        if (!permanentSkills.includes('连劝秘药')) {
-          setPermanentSkills(prev => [...prev, '连劝秘药']);
-          depsRef.current.addGameLog('potion', '连劝秘药：连续劝降同一个怪物时成功率 +15%！');
-          await finalizePotionCard(card, { banner: '连劝秘药生效！连续劝降同一怪物概率 +15%。' });
+        if (!hasEternalRelic(eternalRelics, 'chain-persuade')) {
+          const relic = getEternalRelic('chain-persuade');
+          setEternalRelics(prev => [...prev, relic]);
+          depsRef.current.addGameLog('potion', '获得永恒护符·连劝秘药：连续劝降同一个怪物时成功率 +15%！');
+          await finalizePotionCard(card, { banner: '获得永恒护符·连劝秘药！连续劝降同一怪物概率 +15%。' });
         } else {
-          depsRef.current.addGameLog('potion', '连劝秘药：效果已存在，无法叠加。');
+          depsRef.current.addGameLog('potion', '永恒护符·连劝秘药：效果已存在，无法叠加。');
           await finalizePotionCard(card, { banner: '效果已存在，无法叠加。' });
         }
         return;
@@ -1598,6 +1780,53 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           prompt: '选择一个装备，赋予遗言：手牌装备 +2攻击 +2护甲。',
         });
         setHeroSkillBanner('选择一个装备，赋予遗言：手牌装备 +2攻击 +2护甲。');
+        return;
+      }
+
+      if (effect === 'amulet-to-eternal-relic') {
+        const currentAmulets = engine.getState().amuletSlots;
+        const filledAmulets = currentAmulets
+          .map((a, idx) => ({ amulet: a, index: idx }))
+          .filter((entry): entry is { amulet: NonNullable<typeof entry.amulet>; index: number } => entry.amulet != null);
+
+        if (filledAmulets.length === 0) {
+          depsRef.current.addGameLog('potion', '护符永铸药：没有已装备的护符，无法使用。');
+          await finalizePotionCard(card, { banner: '没有已装备的护符！' });
+          return;
+        }
+
+        let chosen: typeof filledAmulets[0];
+        if (filledAmulets.length === 1) {
+          chosen = filledAmulets[0];
+        } else {
+          const choiceId = await depsRef.current.requestMagicChoice({
+            title: '护符永铸药',
+            subtitle: '选择一个护符，将其转化为永恒护符',
+            options: filledAmulets.map(entry => ({
+              id: String(entry.index),
+              label: entry.amulet.name,
+              description: entry.amulet.description ?? '护符效果',
+            })),
+          });
+          chosen = filledAmulets.find(e => String(e.index) === choiceId) ?? filledAmulets[0];
+        }
+
+        const amulet = chosen.amulet;
+        const newRelic: import('@/game-core/types').EternalRelic = {
+          id: `amulet-eternal-${amulet.amuletEffect ?? amulet.id}` as import('@/game-core/types').EternalRelicId,
+          name: `永恒护符·${amulet.name}`,
+          description: amulet.description ?? '',
+          image: amulet.image ?? '',
+          amuletEffect: amulet.amuletEffect,
+          amuletAuraBonus: amulet.amuletAuraBonus,
+          upgradeLevel: amulet.upgradeLevel,
+        };
+
+        setAmuletSlots(prev => prev.filter((_, i) => i !== chosen.index));
+        setEternalRelics(prev => [...prev, newRelic]);
+
+        depsRef.current.addGameLog('potion', `护符永铸药：${amulet.name} 转化为永恒护符！`);
+        await finalizePotionCard(card, { banner: `${amulet.name} 已转化为永恒护符！效果永久生效。` });
         return;
       }
 
@@ -1741,7 +1970,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       case 'berserk-gambit': {
         const hpLoss = Math.max(0, hp - 1);
         if (hpLoss > 0) {
-          depsRef.current.applyDamage(hpLoss);
+          depsRef.current.applyDamage(hpLoss, 'general', { selfInflicted: true });
         }
         const lvl = card.upgradeLevel ?? 0;
         const buffAmounts = [0, 4, 8, 8];
@@ -1956,26 +2185,35 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return true;
         }
         if (monsters.length === 1) {
-          const boltDmg = getSpellDamage(2);
+          const boltDmg = getSpellDamage(2 + (card.amplifyBonus ?? 0));
           if (!depsRef.current.isMonsterEngaged(monsters[0].id)) depsRef.current.beginCombat(monsters[0], 'hero');
           depsRef.current.dealDamageToMonster(monsters[0], boltDmg, { pulses: 2, isSpellDamage: true });
           depsRef.current.addGameLog('magic', `魔弹：对 ${monsters[0].name} 造成 ${boltDmg} 点法术伤害`);
           finalizeMagicCard(card, { banner: `魔弹：对 ${monsters[0].name} 造成 ${boltDmg} 点伤害！`, dealtDamage: true });
           return true;
         }
+        const boltPendingDmg = getSpellDamage(2 + (card.amplifyBonus ?? 0));
         setPendingMagicAction({
           card,
           effect: 'missile-bolt',
           step: 'monster-select',
-          prompt: `选择一个怪物，造成 ${getSpellDamage(2)} 点法术伤害。`,
+          prompt: `选择一个怪物，造成 ${boltPendingDmg} 点法术伤害。`,
         });
-        setHeroSkillBanner(`选择一个怪物，造成 ${getSpellDamage(2)} 点法术伤害。`);
+        setHeroSkillBanner(`选择一个怪物，造成 ${boltPendingDmg} 点法术伤害。`);
         return true;
       }
       case 'stun-wave': {
         setStunCap(prev => Math.min(100, prev + 10));
         depsRef.current.addGameLog('magic', '震慑领域：击晕上限 +10%');
         void resolveStunWave(card);
+        return true;
+      }
+      case 'amulet-expand': {
+        if (card.classCard) depsRef.current.consumeClassCardFromHand(card.id);
+        setMaxAmuletSlots(prev => prev + 1);
+        const newMax = engine.getState().maxAmuletSlots + 1;
+        depsRef.current.addGameLog('magic', `符位开辟：护符栏上限 +1（当前上限 ${newMax}）`);
+        finalizeMagicCard(card, { banner: `护符栏上限提升至 ${newMax}！` });
         return true;
       }
       default:
@@ -2011,9 +2249,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             finalizeMagicCard(card, { banner: '该盾牌目前没有可用的护甲。' });
             return true;
           }
+          const ampBonus = card.amplifyBonus ?? 0;
           const monsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
           if (monsters.length === 1) {
-            const totalDamage = getSpellDamage(scaledArmor);
+            const totalDamage = getSpellDamage(scaledArmor + ampBonus);
             if (!depsRef.current.isMonsterEngaged(monsters[0].id)) depsRef.current.beginCombat(monsters[0], 'hero');
             depsRef.current.dealDamageToMonster(monsters[0], totalDamage, { pulses: 2, isSpellDamage: true });
             finalizeMagicCard(card, { banner: `御甲破击造成 ${totalDamage} 点伤害（护甲 ${armorPct}%）。`, dealtDamage: true });
@@ -2025,7 +2264,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             step: 'monster-select',
             slotId,
             pendingDamage: scaledArmor,
-            prompt: `选择一个怪物，承受 ${getSpellDamage(scaledArmor)} 点护甲伤害。`,
+            prompt: `选择一个怪物，承受 ${getSpellDamage(scaledArmor + ampBonus)} 点护甲伤害。`,
           });
           setHeroSkillBanner('选择一个怪物承受你的护甲一击。');
           return true;
@@ -2082,7 +2321,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         if (monsters.length === 1) {
           const missingHp = Math.max(0, maxHp - hp);
           const scaledDmg = Math.floor(missingHp * smitePct / 100);
-          const totalDamage = getSpellDamage(scaledDmg);
+          const totalDamage = getSpellDamage(scaledDmg + (card.amplifyBonus ?? 0));
           if (totalDamage <= 0) {
             finalizeMagicCard(card, { banner: '你处于满血状态，没有造成伤害。' });
             return true;
@@ -2099,6 +2338,38 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           prompt: '选择一个怪物，承受你缺失生命的伤害。',
         });
         setHeroSkillBanner('选择一个怪物，承受你缺失生命的伤害。');
+        return true;
+      }
+      case 'blood-sacrifice-strike': {
+        const monsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
+        depsRef.current.consumeClassCardFromHand(card.id);
+        if (monsters.length === 0) {
+          finalizeMagicCard(card, { banner: '当前没有可攻击的怪物。' });
+          return true;
+        }
+        const hpToLose = Math.floor(hp / 2);
+        if (hpToLose <= 0) {
+          finalizeMagicCard(card, { banner: '生命值过低，无法献祭。' });
+          return true;
+        }
+        const baseDmg = hpToLose * 2;
+        const totalDamage = getSpellDamage(baseDmg + (card.amplifyBonus ?? 0));
+        if (monsters.length === 1) {
+          depsRef.current.applyDamage(hpToLose, 'general', { selfInflicted: true });
+          if (!depsRef.current.isMonsterEngaged(monsters[0].id)) depsRef.current.beginCombat(monsters[0], 'hero');
+          depsRef.current.dealDamageToMonster(monsters[0], totalDamage, { pulses: 2, isSpellDamage: true });
+          finalizeMagicCard(card, { banner: `血祭裁决：献祭 ${hpToLose} 点生命，对 ${monsters[0].name} 造成 ${totalDamage} 点伤害！`, dealtDamage: true });
+          return true;
+        }
+        setPendingMagicAction({
+          card,
+          effect: 'blood-sacrifice-strike',
+          step: 'monster-select',
+          pendingDamage: totalDamage,
+          hpLost: hpToLose,
+          prompt: `选择一个怪物，献祭 ${hpToLose} 点生命，造成 ${totalDamage} 点伤害。`,
+        });
+        setHeroSkillBanner(`血祭裁决：选择目标，献祭 ${hpToLose} 点生命，造成 ${totalDamage} 点伤害。`);
         return true;
       }
       case 'temp-attack-strike': {
@@ -2122,12 +2393,12 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             return true;
           }
           const target = monsters[Math.floor(Math.random() * monsters.length)];
-          const totalDamage = getSpellDamage(tempAtk);
+          const totalDamage = getSpellDamage(tempAtk + (card.amplifyBonus ?? 0));
           if (!depsRef.current.isMonsterEngaged(target.id)) depsRef.current.beginCombat(target, 'hero');
           depsRef.current.dealDamageToMonster(target, totalDamage, { pulses: 2, isSpellDamage: true });
           let stunText = '';
           if (isFlank && !target.isStunned) {
-            const effectiveFlankStun = Math.min(40, stunCap);
+            const effectiveFlankStun = Math.min(40 + (depsRef.current.amuletEffects?.stunRateBoost ?? 0), stunCap);
             const threshold = Math.round((effectiveFlankStun / 100) * 20);
             const stunDicePromise = depsRef.current.requestDiceOutcome({
               title: target.name,
@@ -2239,6 +2510,49 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         } else {
           finalizeMagicCard(card, { banner: bannerParts.join(' ') });
         }
+        return true;
+      }
+      case 'blood-draw': {
+        depsRef.current.consumeClassCardFromHand(card.id);
+        const bloodDrawCounts = [3, 4, 5];
+        const bloodDraw = bloodDrawCounts[card.upgradeLevel ?? 0] ?? 5;
+        const hpCost = 1;
+        depsRef.current.applyDamage(hpCost, 'general', { selfInflicted: true });
+        const drawn = drawCardsFromBackpack(bloodDraw, { ignoreLimit: true });
+        depsRef.current.addGameLog('magic', `血契抽引：失去 ${hpCost} HP，抽了 ${drawn} 张牌。`);
+        finalizeMagicCard(card, { banner: `血契抽引：失去 ${hpCost} HP，抽了 ${drawn} 张牌！` });
+        return true;
+      }
+      case 'repair-enrage-dice': {
+        const allSlots = depsRef.current.getEquipmentSlots().filter(slot => slot.item != null);
+        const monsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
+        depsRef.current.consumeClassCardFromHand(card.id);
+        if (allSlots.length === 0 || monsters.length === 0) {
+          finalizeMagicCard(card, { banner: '没有可选的装备或怪物。' });
+          return true;
+        }
+        if (allSlots.length === 1 && monsters.length === 1) {
+          void resolveRepairEnrageDice(card, allSlots[0].id, monsters[0]);
+          return true;
+        }
+        if (allSlots.length === 1) {
+          setPendingMagicAction({
+            card,
+            effect: 'repair-enrage-dice',
+            step: 'monster-select',
+            slotId: allSlots[0].id,
+            prompt: '选择一个怪物作为赌运目标。',
+          });
+          setHeroSkillBanner('选择一个怪物作为赌运目标。');
+          return true;
+        }
+        setPendingMagicAction({
+          card,
+          effect: 'repair-enrage-dice',
+          step: 'slot-select',
+          prompt: '选择一个装备进行锻造赌运。',
+        });
+        setHeroSkillBanner('选择一个装备进行锻造赌运。');
         return true;
       }
       case 'chaos-dice': {
@@ -2440,6 +2754,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         setPreviewCards(newPreview);
         setRemainingDeck(newDeck);
 
+        depsRef.current.applyWaterfallSideEffects();
+
         const msg = droppedSlots.length > 0
           ? `暗流涌动：${droppedSlots.length} 张预览牌落入空位，补充了 ${dealCount} 张新预览牌。`
           : '暗流涌动：预览行对应空位没有牌可落下。';
@@ -2637,6 +2953,58 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   };
 
   // ---------------------------------------------------------------------------
+  // resolveRepairEnrageDice (async helper for knight repair-enrage-dice)
+  // ---------------------------------------------------------------------------
+
+  const resolveRepairEnrageDice = async (card: GameCardData, slotId: EquipmentSlotId, monster: GameCardData) => {
+    depsRef.current.clearUndoStack();
+    const diceResult = await depsRef.current.requestDiceOutcome({
+      title: '锻造赌运',
+      subtitle: '掷骰决定命运',
+      entries: [
+        { id: 'repair', range: [1, 16] as [number, number], label: '修复成功！装备 +1 耐久', effect: 'none' },
+        { id: 'enrage', range: [17, 20] as [number, number], label: '失败！怪物 -1 血层并激怒', effect: 'none' },
+      ],
+    });
+    if (!diceResult) {
+      finalizeMagicCard(card, { banner: '锻造赌运已取消。' });
+      return;
+    }
+    const slotItem = slotId === 'equipmentSlot1' ? engine.getState().equipmentSlot1 : engine.getState().equipmentSlot2;
+    if (diceResult.id === 'repair') {
+      if (slotItem && slotItem.durability != null && slotItem.maxDurability != null) {
+        const newDur = Math.min(slotItem.maxDurability, slotItem.durability + 1);
+        depsRef.current.setEquipmentSlotById(slotId, { ...slotItem, durability: newDur } as any);
+        depsRef.current.addGameLog('magic', `锻造赌运：${slotItem.name} 耐久 +1（${slotItem.durability}→${newDur}）`);
+        finalizeMagicCard(card, { banner: `锻造赌运成功！${slotItem.name} 耐久 +1！` });
+      } else {
+        finalizeMagicCard(card, { banner: '锻造赌运：装备已不存在。' });
+      }
+    } else {
+      const oldLayers = monster.currentLayer ?? monster.fury ?? 1;
+      if (oldLayers > 1) {
+        depsRef.current.updateMonsterCard(monster.id, m => ({
+          ...m,
+          currentLayer: oldLayers - 1,
+          hp: m.maxHp ?? m.hp ?? 0,
+          attack: (m.attack ?? m.value) + 2,
+          value: (m.attack ?? m.value) + 2,
+        }));
+        depsRef.current.addGameLog('magic', `锻造赌运失败：${monster.name} 失去 1 血层（${oldLayers}→${oldLayers - 1}）并激怒（攻击+2）！`);
+        finalizeMagicCard(card, { banner: `锻造赌运失败！${monster.name} -1 血层并激怒（攻击+2）！` });
+      } else {
+        depsRef.current.updateMonsterCard(monster.id, m => ({
+          ...m,
+          attack: (m.attack ?? m.value) + 2,
+          value: (m.attack ?? m.value) + 2,
+        }));
+        depsRef.current.addGameLog('magic', `锻造赌运失败：${monster.name} 已是最后血层，激怒（攻击+2）！`);
+        finalizeMagicCard(card, { banner: `锻造赌运失败！${monster.name} 激怒（攻击+2）！` });
+      }
+    }
+  };
+
+  // ---------------------------------------------------------------------------
   // resolveChaosDice (async helper for knight chaos-dice)
   // ---------------------------------------------------------------------------
 
@@ -2802,7 +3170,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     }
 
     const currentStunCap = engine.getState().stunCap;
-    const stunPct = Math.min(60, currentStunCap);
+    const stunPct = Math.min(60 + (depsRef.current.amuletEffects?.stunRateBoost ?? 0), currentStunCap);
     const threshold = Math.round((stunPct / 100) * 20);
     const stunResults: string[] = [];
 
@@ -2856,12 +3224,12 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       return;
     }
     if (card.isCurse) {
-      depsRef.current.applyDamage(3);
+      depsRef.current.applyDamage(3, 'general', { selfInflicted: true });
       finalizeMagicCard(card, { banner: '血咒吸取了 3 点生命。' });
       return;
     }
 
-    if (card.type === 'magic' || card.type === 'hero-magic') {
+    if (card.type === 'magic') {
       setMagicCardsPlayedThisTurn(prev => prev + 1);
     }
 
@@ -2874,7 +3242,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     const echoMultiplier = isEchoTriggered ? 2 : 1;
 
     if (card.magicEffect === 'honor-blood') {
-      depsRef.current.applyDamage(1);
+      depsRef.current.applyDamage(1, 'general', { selfInflicted: true });
       const repairableSlots = depsRef.current.getEquipmentSlots().filter(slot => {
         if (!slot.item) return false;
         const maxDurability = slot.item.maxDurability ?? slot.item.durability ?? 0;
@@ -2944,7 +3312,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             finalizeMagicCard(card, { banner: '风暴箭雨无效（没有怪物）。' });
             return;
           }
-          const volleyDamage = getSpellDamage(3) * echoMultiplier;
+          const volleyDamage = getSpellDamage(3 + (card.amplifyBonus ?? 0)) * echoMultiplier;
           monsters.forEach((monster, index) => {
             if (!depsRef.current.isMonsterEngaged(monster.id)) {
               depsRef.current.beginCombat(monster, 'hero');
@@ -3069,40 +3437,42 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         case '潮涌铸甲': {
           const choiceId = await depsRef.current.requestMagicChoice({
             title: '潮涌铸甲',
-            subtitle: '选择一个被动效果',
+            subtitle: '选择获得一个永恒护符',
             options: [
               {
                 id: 'waterfall-armor',
                 label: '瀑流铸剑',
-                description: '被动：每次攻击时，该装备栏临时攻击 +2。',
+                description: '永恒护符：每次攻击时，该装备栏临时攻击 +2。（可叠加）',
               },
               {
                 id: 'block-temp-armor',
                 label: '格挡铸甲',
-                description: '被动：每次格挡时，该装备栏获得 2 点临时护甲。',
+                description: '永恒护符：每次格挡时，该装备栏获得 2 点临时护甲。（可叠加）',
               },
             ],
           });
           if (choiceId === 'waterfall-armor') {
             const newStacks = bulwarkPassiveActive + 1;
             setBulwarkPassiveActive(newStacks);
-            if (!permanentSkills.includes('潮涌铸甲')) {
-              setPermanentSkills(prev => [...prev, '潮涌铸甲']);
+            const relic = getEternalRelic('bulwark-attack');
+            if (!hasEternalRelic(eternalRelics, 'bulwark-attack')) {
+              setEternalRelics([...eternalRelics, relic]);
             }
             const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
             const tempGain = 2 * newStacks;
-            depsRef.current.addGameLog('magic', `潮涌铸甲·瀑流铸剑激活${stackLabel}：之后每次攻击，该装备栏临时攻击 +${tempGain}`);
-            finalizeMagicCard(card, { banner: `瀑流铸剑激活${stackLabel}！每次攻击，该装备栏临时攻击 +${tempGain}。` });
+            depsRef.current.addGameLog('magic', `获得永恒护符·瀑流铸剑${stackLabel}：之后每次攻击，该装备栏临时攻击 +${tempGain}`);
+            finalizeMagicCard(card, { banner: `获得永恒护符·瀑流铸剑${stackLabel}！每次攻击，该装备栏临时攻击 +${tempGain}。` });
           } else {
             const newStacks = bulwarkTempArmorStacks + 1;
             setBulwarkTempArmorStacks(newStacks);
-            if (!permanentSkills.includes('潮涌铸甲')) {
-              setPermanentSkills(prev => [...prev, '潮涌铸甲']);
+            const relic = getEternalRelic('bulwark-armor');
+            if (!hasEternalRelic(eternalRelics, 'bulwark-armor')) {
+              setEternalRelics([...eternalRelics, relic]);
             }
             const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
             const tempGain = 2 * newStacks;
-            depsRef.current.addGameLog('magic', `潮涌铸甲·格挡铸甲激活${stackLabel}：之后每次格挡，该装备栏临时护甲 +${tempGain}`);
-            finalizeMagicCard(card, { banner: `格挡铸甲激活${stackLabel}！每次格挡，该装备栏临时护甲 +${tempGain}。` });
+            depsRef.current.addGameLog('magic', `获得永恒护符·格挡铸甲${stackLabel}：之后每次攻击，该装备栏临时护甲 +${tempGain}`);
+            finalizeMagicCard(card, { banner: `获得永恒护符·格挡铸甲${stackLabel}！每次格挡，该装备栏临时护甲 +${tempGain}。` });
           }
           return;
         }
@@ -3113,7 +3483,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             return;
           }
           if (monsters.length === 1) {
-            const totalDamage = getSpellDamage(gold) * echoMultiplier;
+            const totalDamage = getSpellDamage(gold + (card.amplifyBonus ?? 0)) * echoMultiplier;
             if (!depsRef.current.isMonsterEngaged(monsters[0].id)) depsRef.current.beginCombat(monsters[0], 'hero');
             depsRef.current.dealDamageToMonster(monsters[0], totalDamage, { pulses: 2, isSpellDamage: true });
             const healed = depsRef.current.healHero(totalDamage);
@@ -3126,7 +3496,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             effect: 'blood-reckoning',
             step: 'monster-select',
             echoMultiplier,
-            prompt: `选择一个怪物，造成 ${getSpellDamage(gold) * echoMultiplier} 点伤害并恢复等量生命。${isEchoTriggered ? '（回响×2）' : ''}`,
+            prompt: `选择一个怪物，造成 ${getSpellDamage(gold + (card.amplifyBonus ?? 0)) * echoMultiplier} 点伤害并恢复等量生命。${isEchoTriggered ? '（回响×2）' : ''}`,
           });
           setHeroSkillBanner('点金裁决就绪，请选择目标怪物。');
           return;
@@ -3247,7 +3617,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           
         case 'Blood Sacrifice':
           if (hp > 3) {
-            depsRef.current.applyDamage(3);
+            depsRef.current.applyDamage(3, 'general', { selfInflicted: true });
             setNextWeaponBonus(prev => prev + 3);
             depsRef.current.addGameLog('skill', '鲜血献祭：失去 3 点生命，下次武器伤害 +3');
           }
@@ -3258,21 +3628,21 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           break;
         case 'Blood for Power':
           if (hp > 5) {
-            depsRef.current.applyDamage(5);
+            depsRef.current.applyDamage(5, 'general', { selfInflicted: true });
             setGold(prev => prev + 10);
             depsRef.current.addGameLog('skill', '以血换力：失去 5 点生命，获得 10 金币');
           }
           break;
         case 'Crimson Shield':
           if (hp > 2) {
-            depsRef.current.applyDamage(2);
+            depsRef.current.applyDamage(2, 'general', { selfInflicted: true });
             setTempShield(prev => prev + 6);
             depsRef.current.addGameLog('skill', '血色之盾：失去 2 点生命，临时护盾 +6');
           }
           break;
         case 'Life Transfer':
           if (hp > 3) {
-            depsRef.current.applyDamage(3);
+            depsRef.current.applyDamage(3, 'general', { selfInflicted: true });
             setNextWeaponBonus(prev => prev + 3);
             depsRef.current.addGameLog('skill', '生命转移：失去 3 点生命，下次武器伤害 +3');
           }
@@ -3478,7 +3848,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           depsRef.current.consumeClassCardFromHand(card.id);
         }
         const hpCost = 2;
-        depsRef.current.applyDamage(hpCost);
+        depsRef.current.applyDamage(hpCost, 'general', { selfInflicted: true });
         const result = await performReturnToHand();
         if (result.success) {
           depsRef.current.addGameLog('magic', `紧急回收：失去 ${hpCost} HP，${result.itemName} 从${result.slotLabel}回到手牌`);
@@ -3555,10 +3925,11 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           finalizeMagicCard(card, { banner: '混沌冲击无效（没有怪物）。' });
           return;
         }
+        const chaosBase = 3 + (card.amplifyBonus ?? 0);
         if (chaosMons.length === 1 && echoMultiplier <= 1) {
           const target = chaosMons[0];
           if (!depsRef.current.isMonsterEngaged(target.id)) depsRef.current.beginCombat(target, 'hero');
-          const chaosDamage = getSpellDamage(3);
+          const chaosDamage = getSpellDamage(chaosBase);
           const overkill = chaosStrikeHasOverkill(target, chaosDamage);
           depsRef.current.dealDamageToMonster(target, chaosDamage, { isSpellDamage: true });
           if (overkill) {
@@ -3568,7 +3939,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             finalizeMagicCard(card, { banner: `混沌冲击对 ${target.name} 造成 ${chaosDamage} 点伤害。`, dealtDamage: true });
           }
         } else {
-          const chaosDamage = getSpellDamage(3);
+          const chaosDamage = getSpellDamage(chaosBase);
           const chaosEchoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
           setPendingMagicAction({
             card,
@@ -3578,7 +3949,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             data: {},
             echoRemaining: echoMultiplier,
           });
-          setHeroSkillBanner(`选择一个目标，造成 3 点伤害。超杀：抽 2 张牌。${chaosEchoLabel}`);
+          setHeroSkillBanner(`选择一个目标，造成 ${chaosBase} 点伤害。超杀：抽 2 张牌。${chaosEchoLabel}`);
         }
         return;
       }
@@ -3588,10 +3959,11 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           finalizeMagicCard(card, { banner: '淬炼冲击无效（没有怪物）。' });
           return;
         }
+        const okBase = 3 + (card.amplifyBonus ?? 0);
         if (okMons.length === 1 && echoMultiplier <= 1) {
           const target = okMons[0];
           if (!depsRef.current.isMonsterEngaged(target.id)) depsRef.current.beginCombat(target, 'hero');
-          const okDamage = getSpellDamage(3);
+          const okDamage = getSpellDamage(okBase);
           const overkill = chaosStrikeHasOverkill(target, okDamage);
           depsRef.current.dealDamageToMonster(target, okDamage, { isSpellDamage: true });
           if (overkill) {
@@ -3601,7 +3973,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             finalizeMagicCard(card, { banner: `淬炼冲击对 ${target.name} 造成 ${okDamage} 点伤害。`, dealtDamage: true });
           }
         } else {
-          const okDamage = getSpellDamage(3);
+          const okDamage = getSpellDamage(okBase);
           const okEchoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
           setPendingMagicAction({
             card,
@@ -3686,7 +4058,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           const repairDrawCard = repairUpgLvl >= 2;
 
           if (repairHpCost > 0) {
-            depsRef.current.applyDamage(repairHpCost);
+            depsRef.current.applyDamage(repairHpCost, 'general', { selfInflicted: true });
           }
 
           const repairableSlots = depsRef.current.getEquipmentSlots().filter(slot => {
@@ -3738,8 +4110,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         }
         case STARTER_CARD_IDS.discardDraw: {
           const ddUpgLvl = card.upgradeLevel ?? 0;
-          const ddDiscards = [1, 1, 2, 3];
-          const ddDraws = [1, 2, 3, 4];
+          const ddDiscards = [1, 2, 3];
+          const ddDraws = [2, 3, 4];
           const discardCount = (ddDiscards[ddUpgLvl] ?? 1) * echoMultiplier;
           const drawCount = (ddDraws[ddUpgLvl] ?? 1) * echoMultiplier;
           const wasPlayedFromHand = handCards.some(c => c.id === card.id);
@@ -3825,19 +4197,23 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             depsRef.current.removeCard(target.id, false);
             const sanitizedCard = sanitizeCardMetadata(target);
             setRemainingDeck(prev => [...prev, sanitizedCard]);
+            let reshuffleSingleUpgrade = false;
             if (depsRef.current.amuletEffects.hasSwapUpgrade) {
               const prog = engine.getState().swapUpgradeProgress + 1;
               if (prog >= 3) {
                 setSwapUpgradeProgress(0);
-                setUpgradeModalOpen(true);
-                depsRef.current.addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
-                setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+                reshuffleSingleUpgrade = true;
               } else {
                 setSwapUpgradeProgress(prog);
                 depsRef.current.addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
               }
             }
             finalizeMagicCard(card, { banner: `${target.name} 已置于牌堆底。` });
+            if (reshuffleSingleUpgrade) {
+              setUpgradeModalOpen(true);
+              depsRef.current.addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+              setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+            }
             return;
           }
           depsRef.current.echoRemainingRef.current = echoMultiplier;
@@ -3881,6 +4257,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             ? `乾坤挪移 ×${echoMultiplier}：${leftCard.name} ↔ ${rightCard.name}（回响）`
             : `${leftCard.name} ↔ ${rightCard.name} 位置互换！`;
           depsRef.current.addGameLog('magic', `乾坤挪移：${leftCard.name} 与 ${rightCard.name} 互换 ${echoMultiplier} 次。`);
+          let dungeonSwapUpgrade = false;
           if (depsRef.current.amuletEffects.hasSwapUpgrade) {
             const swapCount = echoMultiplier;
             let prog = engine.getState().swapUpgradeProgress;
@@ -3888,9 +4265,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               prog += 1;
               if (prog >= 3) {
                 prog = 0;
-                setUpgradeModalOpen(true);
-                depsRef.current.addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
-                setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+                dungeonSwapUpgrade = true;
               }
             }
             if (prog !== engine.getState().swapUpgradeProgress) {
@@ -3901,6 +4276,11 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             }
           }
           finalizeMagicCard(card, { banner: swapBanner });
+          if (dungeonSwapUpgrade) {
+            setUpgradeModalOpen(true);
+            depsRef.current.addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+            setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+          }
           return;
         }
         case 'potion-flip-heal':
@@ -3913,7 +4293,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return;
         }
         case 'guild-blood-gold': {
-          depsRef.current.applyDamage(1 * echoMultiplier);
+          depsRef.current.applyDamage(1 * echoMultiplier, 'general', { selfInflicted: true });
           setGold(prev => prev + 2 * echoMultiplier);
           depsRef.current.addGameLog('magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${2 * echoMultiplier} 金币`);
           finalizeMagicCard(card, { banner: `血金术：以 ${1 * echoMultiplier} 点生命换取 ${2 * echoMultiplier} 金币。${isEchoTriggered ? '（回响×2）' : ''}` });
@@ -4059,8 +4439,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           const stunDmgPerHit = [1, 2, 3];
           const stunChances = [10, 20, 30];
           const hits = 2;
-          const baseDmgPerHit = stunDmgPerHit[card.upgradeLevel ?? 0] ?? 1;
-          const rawStunPct = stunChances[card.upgradeLevel ?? 0] ?? 10;
+          const baseDmgPerHit = (stunDmgPerHit[card.upgradeLevel ?? 0] ?? 1) + (card.amplifyBonus ?? 0);
+          const rawStunPct = (stunChances[card.upgradeLevel ?? 0] ?? 10) + (depsRef.current.amuletEffects?.stunRateBoost ?? 0);
           const stunPct = Math.min(rawStunPct, stunCap);
           const hitDmg = getSpellDamage(baseDmgPerHit) * echoMultiplier;
           const totalDmg = hitDmg * hits;
@@ -4127,7 +4507,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           const drawAmounts = [1, 2, 3];
           const goldAmt = goldAmounts[card.upgradeLevel ?? 0] ?? 1;
           const drawAmt = drawAmounts[card.upgradeLevel ?? 0] ?? 1;
-          depsRef.current.applyDamage(1);
+          depsRef.current.applyDamage(1, 'general', { selfInflicted: true });
           setGold(prev => prev + goldAmt);
           const drawnNames: string[] = [];
           for (let i = 0; i < drawAmt; i++) {
@@ -4182,7 +4562,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               finalizeMagicCard(card, { banner: '箭雨余韵无效（没有怪物）。' });
               return;
             }
-            const svDamage = getSpellDamage(1) * echoMultiplier;
+            const svDamage = getSpellDamage(1 + (card.amplifyBonus ?? 0)) * echoMultiplier;
             svMonsters.forEach((monster, index) => {
               if (!depsRef.current.isMonsterEngaged(monster.id)) {
                 depsRef.current.beginCombat(monster, 'hero');
@@ -4268,7 +4648,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           }
           if (card.magicEffect === 'arcane-storm-magic-count') {
             const magicCount = engine.getState().magicCardsPlayedThisTurn;
-            const baseDmg = Math.max(0, magicCount);
+            const baseDmg = Math.max(0, magicCount + (card.amplifyBonus ?? 0));
             const totalDmg = getSpellDamage(baseDmg) * echoMultiplier;
             const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster' || c.type === 'building');
             if (monsters.length === 0 || totalDmg <= 0) {
@@ -4382,6 +4762,55 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             finalizeMagicCard(card, { banner: '法术回响已激活！下一张法术的效果将触发两次。' });
             return;
           }
+          if (card.magicEffect === 'amplify-card') {
+            const hasEquip1 = equipmentSlot1 && (equipmentSlot1.type === 'weapon' || equipmentSlot1.type === 'shield');
+            const hasEquip2 = equipmentSlot2 && (equipmentSlot2.type === 'weapon' || equipmentSlot2.type === 'shield');
+            const eligibleHand = handCards.filter(
+              c => c.id !== card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c)),
+            );
+            if (!hasEquip1 && !hasEquip2 && eligibleHand.length === 0) {
+              finalizeMagicCard(card, { banner: '增幅：没有可增幅的目标（装备栏无装备，手牌中无装备或伤害魔法）。' });
+              return;
+            }
+            setAmplifyModal({ sourceCardId: card.id });
+            setHeroSkillBanner('增幅：选择一张牌进行增幅。');
+            return;
+          }
+          if (card.magicEffect === 'persuade-boost-draw') {
+            const normalBoost = 15 * echoMultiplier;
+            depsRef.current.persuadeAmuletBonusRef.current += normalBoost;
+            depsRef.current.addGameLog('magic', `劝降祝福：下次劝降成功率 +${normalBoost}%（精英 +${10 * echoMultiplier}%），抽 1 张牌`);
+            const drawn = drawCardsFromBackpack(1 * echoMultiplier);
+            const drawText = drawn > 0 ? `，抽了 ${drawn} 张牌` : '';
+            finalizeMagicCard(card, { banner: `劝降祝福：劝降成功率 +${normalBoost}%${drawText}。${isEchoTriggered ? '（回响×2）' : ''}` });
+            return;
+          }
+          if (card.magicEffect === 'bounty-spell-damage') {
+            const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster');
+            if (monsters.length === 0) {
+              finalizeMagicCard(card, { banner: '赏金裁决无效（没有怪物）。' });
+              return;
+            }
+            const baseDmg = 5 + (card.amplifyBonus ?? 0);
+            const totalDmg = getSpellDamage(baseDmg) * echoMultiplier;
+            if (monsters.length === 1) {
+              if (!depsRef.current.isMonsterEngaged(monsters[0].id)) depsRef.current.beginCombat(monsters[0], 'hero');
+              depsRef.current.dealDamageToMonster(monsters[0], totalDmg, { pulses: 2, isSpellDamage: true });
+              setGold(prev => prev + totalDmg);
+              depsRef.current.addGameLog('magic', `赏金裁决：对 ${monsters[0].name} 造成 ${totalDmg} 点法术伤害，获得 ${totalDmg} 金币`);
+              finalizeMagicCard(card, { banner: `赏金裁决：${totalDmg} 点伤害 → ${totalDmg} 金币！${isEchoTriggered ? '（回响×2）' : ''}`, dealtDamage: true });
+              return;
+            }
+            setPendingMagicAction({
+              card,
+              effect: 'bounty-spell-damage',
+              step: 'monster-select',
+              echoMultiplier,
+              prompt: `选择一个怪物，造成 ${totalDmg} 点法术伤害并获得等量金币。${isEchoTriggered ? '（回响×2）' : ''}`,
+            });
+            setHeroSkillBanner('赏金裁决：选择目标怪物。');
+            return;
+          }
           finalizeMagicCard(card, { banner: card.magicEffect || '永久魔法生效。' });
           return;
         }
@@ -4430,6 +4859,32 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       setHeroSkillBanner(`侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。`);
     }
 
+    if (depsRef.current.lastPlayedFlankRef.current && card.flankEffectId) {
+      if (card.flankEffectId.startsWith('persuadeCost-')) {
+        const amount = parseInt(card.flankEffectId.replace('persuadeCost-', ''), 10) || 1;
+        setPersuadeCostModifier(prev => prev - amount);
+        depsRef.current.addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${amount}`);
+        setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${amount}！`);
+      } else if (card.flankEffectId.startsWith('stunCap+')) {
+        const amount = parseInt(card.flankEffectId.replace('stunCap+', ''), 10) || 5;
+        setStunCap(prev => Math.min(100, prev + amount));
+        depsRef.current.addGameLog('event', `侧击效果：${card.name} 击晕上限 +${amount}%`);
+        setHeroSkillBanner(`侧击！${card.name} 击晕上限 +${amount}%！`);
+      } else if (card.flankEffectId.startsWith('damage:')) {
+        const amount = parseInt(card.flankEffectId.replace('damage:', ''), 10) || 5;
+        const monsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
+        if (monsters.length > 0) {
+          const target = monsters[Math.floor(Math.random() * monsters.length)];
+          depsRef.current.dealDamageToMonster(target, amount);
+          depsRef.current.addGameLog('event', `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害`);
+          setHeroSkillBanner(`侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！`);
+        } else {
+          depsRef.current.addGameLog('event', `侧击效果：${card.name} 没有可攻击的怪物`);
+          setHeroSkillBanner(`侧击！但没有可攻击的怪物。`);
+        }
+      }
+    }
+
     const needsStaging = card.type === 'potion' || card.type === 'magic' || card.type === 'hero-magic';
     if (needsStaging) {
       depsRef.current.stagingCardsRef.current = [...depsRef.current.stagingCardsRef.current, card];
@@ -4461,6 +4916,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         if (card.onEquipEffect === 'temp-attack-2') {
           setSlotTempAttack(prev => ({ ...prev, [emptySlot]: (prev[emptySlot] ?? 0) + 2 }));
           depsRef.current.addGameLog('equip', `${card.name} 入场效果：该装备栏临时攻击 +2！`);
+        }
+        if (card.onEquipEffect === 'temp-armor-3') {
+          setSlotTempArmor(prev => ({ ...prev, [emptySlot]: (prev[emptySlot] ?? 0) + 3 }));
+          depsRef.current.addGameLog('equip', `${card.name} 入场效果：该装备栏临时护甲 +3！`);
         }
         if (card.onEquipEffect === 'persuade-bonus-10') {
           depsRef.current.persuadeAmuletBonusRef.current += 10;
@@ -4520,6 +4979,18 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           setGold(prev => prev + goldAmount);
           depsRef.current.addGameLog('gold', `转型触发：获得 ${goldAmount} 金币！`);
           setHeroSkillBanner(`转型触发！获得 ${goldAmount} 金币！`);
+        } else if (card.transformEffect?.startsWith('draw:')) {
+          const drawCount = parseInt(card.transformEffect.replace('draw:', ''), 10) || 2;
+          for (let i = 0; i < drawCount; i++) {
+            depsRef.current.drawFromBackpackToHand();
+          }
+          depsRef.current.addGameLog('magic', `转型触发：抽取 ${drawCount} 张牌！`);
+          setHeroSkillBanner(`转型触发！抽取了 ${drawCount} 张牌！`);
+        } else if (card.transformEffect?.startsWith('heal:')) {
+          const healAmount = parseInt(card.transformEffect.replace('heal:', ''), 10) || 2;
+          setHp(prev => Math.min(prev + healAmount, engine.getState().maxHp));
+          depsRef.current.addGameLog('event', `转型触发：恢复 ${healAmount} HP！`);
+          setHeroSkillBanner(`转型触发！恢复了 ${healAmount} HP！`);
         }
       }
     }
@@ -4570,10 +5041,13 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     getRepairableEquipmentSlots,
     resolveFateSight,
     resolveStatSwap,
+    resolveRepairEnrageDice,
 
     resolveMirrorCopy,
     cancelMirrorCopy,
     resolvePermGrant,
     cancelPermGrant,
+    resolveAmplify,
+    cancelAmplify,
   };
 }

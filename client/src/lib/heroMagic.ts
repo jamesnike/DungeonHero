@@ -7,7 +7,7 @@ const clampNumber = (value: number, min: number, max: number) => {
   return Math.min(max, Math.max(min, Math.floor(value)));
 };
 
-export type HeroMagicChargeSource = 'damage-taken' | 'weapon-attack';
+export type HeroMagicChargeSource = 'damage-taken' | 'self-damage' | 'weapon-attack';
 
 export interface HeroMagicDefinition {
   id: HeroMagicId;
@@ -59,11 +59,11 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
   {
     id: 'revive-blessing',
     name: '复生祝福',
-    description: '每受到 3 次伤害充满数值条。发动效果：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
+    description: '每对自己造成 3 次伤害充满数值条。发动效果：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
     cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
     gaugeMax: 3,
-    chargeHint: '每次受到伤害 +1 复生值。',
-    chargeSource: 'damage-taken',
+    chargeHint: '每次对自己造成伤害 +1 复生值。',
+    chargeSource: 'self-damage',
   },
 ];
 

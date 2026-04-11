@@ -10,14 +10,28 @@ import { Button } from '@/components/ui/button';
 import { Infinity as InfinityIcon } from 'lucide-react';
 import GameCard, { type GameCardData, cardHasPermFlag } from './GameCard';
 
+type PermGrantSourceType =
+  | 'potion' | 'magic'
+  | 'transform-grant' | 'equipment-enchant'
+  | 'flank-grant' | 'transform-gold-grant'
+  | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant'
+  | 'transform-draw-grant' | 'transform-heal-grant';
+
 interface PermGrantModalProps {
   open: boolean;
   onClose: () => void;
   handCards: GameCardData[];
   sourceCardId: string | null;
-  sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'flank-grant' | 'transform-gold-grant';
+  sourceType: PermGrantSourceType;
   onConfirm: (cardId: string) => void;
 }
+
+const FLANK_GRANT_TYPES = new Set<string>([
+  'flank-grant', 'flank-persuade-grant', 'flank-stun-grant', 'flank-damage-grant',
+]);
+const TRANSFORM_GRANT_TYPES = new Set<string>([
+  'transform-grant', 'transform-gold-grant', 'transform-draw-grant', 'transform-heal-grant',
+]);
 
 export default function PermGrantModal({
   open,
@@ -29,17 +43,15 @@ export default function PermGrantModal({
 }: PermGrantModalProps) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
-  const isTransformGrant = sourceType === 'transform-grant';
   const isEquipEnchant = sourceType === 'equipment-enchant';
-  const isFlankGrant = sourceType === 'flank-grant';
-  const isTransformGoldGrant = sourceType === 'transform-gold-grant';
+  const isFlankType = FLANK_GRANT_TYPES.has(sourceType);
+  const isTransformType = TRANSFORM_GRANT_TYPES.has(sourceType);
 
   const eligibleCards = handCards.filter(c => {
     if (c.id === sourceCardId) return false;
     if (isEquipEnchant) return c.type === 'weapon' || c.type === 'shield';
-    if (isFlankGrant) return !c.flankEffect;
-    if (isTransformGoldGrant) return !c.transformBonus;
-    if (isTransformGrant) return !c.transformBonus;
+    if (isFlankType) return !c.flankEffect;
+    if (isTransformType) return !c.transformBonus;
     return !cardHasPermFlag(c);
   });
 
@@ -59,24 +71,44 @@ export default function PermGrantModal({
     'transform-grant': '蜕变赋灵',
     'flank-grant': '赋予侧击',
     'transform-gold-grant': '赋予转型',
+    'flank-persuade-grant': '赋能神殿 · 侧击',
+    'flank-stun-grant': '赋能神殿 · 侧击',
+    'flank-damage-grant': '赋能神殿 · 侧击',
+    'transform-draw-grant': '赋能神殿 · 转型',
+    'transform-heal-grant': '赋能神殿 · 转型',
   };
   const descMap: Record<string, string> = {
     'equipment-enchant': '选择一张手牌中的装备弃置，将其攻击/护甲值随机附魔到装备栏的一件装备上',
     'transform-grant': '选择一张手牌赋予「转型：随机获得坟场一张魔法卡」',
     'flank-grant': '选择一张手牌赋予「侧击：抽1张牌」（打出时处于手牌最左或最右位置时触发）',
     'transform-gold-grant': '选择一张手牌赋予「转型：+3金币」（打出前一张牌与本牌类型不同时触发）',
+    'flank-persuade-grant': '选择一张手牌赋予「侧击：劝降费用永久 -1」（任何类型的牌均可）',
+    'flank-stun-grant': '选择一张手牌赋予「侧击：击晕上限 +5%」（任何类型的牌均可）',
+    'flank-damage-grant': '选择一张手牌赋予「侧击：对随机怪物造成 5 点伤害」（任何类型的牌均可）',
+    'transform-draw-grant': '选择一张手牌赋予「转型：抽 2 张牌」（任何类型的牌均可）',
+    'transform-heal-grant': '选择一张手牌赋予「转型：恢复 2 HP」（任何类型的牌均可）',
   };
   const emptyMap: Record<string, string> = {
     'equipment-enchant': '手牌中没有可弃置的装备卡',
     'flank-grant': '手牌中没有可赋予侧击效果的卡牌',
     'transform-gold-grant': '手牌中没有可赋予转型效果的卡牌',
     'transform-grant': '手牌中没有可赋予转型效果的卡牌',
+    'flank-persuade-grant': '手牌中没有可赋予侧击效果的卡牌',
+    'flank-stun-grant': '手牌中没有可赋予侧击效果的卡牌',
+    'flank-damage-grant': '手牌中没有可赋予侧击效果的卡牌',
+    'transform-draw-grant': '手牌中没有可赋予转型效果的卡牌',
+    'transform-heal-grant': '手牌中没有可赋予转型效果的卡牌',
   };
   const confirmMap: Record<string, string> = {
     'equipment-enchant': '附魔',
     'transform-grant': '赋灵',
     'flank-grant': '赋予',
     'transform-gold-grant': '赋予',
+    'flank-persuade-grant': '赋予',
+    'flank-stun-grant': '赋予',
+    'flank-damage-grant': '赋予',
+    'transform-draw-grant': '赋予',
+    'transform-heal-grant': '赋予',
   };
   const title = titleMap[sourceType] ?? '永恒铭刻';
   const description = descMap[sourceType] ?? '选择一张手牌赋予 Perm 2（被移除后经 2 次瀑流返回背包）';

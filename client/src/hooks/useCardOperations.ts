@@ -50,15 +50,16 @@ export interface CardOperationsDeps {
 
   triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
   triggerDiscardShock: () => void;
-  triggerGraveNova: () => void;
+  triggerGraveNova: (graveNovaCard?: GameCardData) => void;
   queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
 
   handCardsRef: React.MutableRefObject<GameCardData[]>;
   backpackHandFlightsRef: React.MutableRefObject<BackpackHandFlight[]>;
   storingCardIdsRef: React.MutableRefObject<Set<string>>;
   selectedHeroSkillRef: React.MutableRefObject<string | null>;
+  eternalRelicsRef: React.MutableRefObject<import('@/game-core/types').EternalRelic[]>;
   pendingAutoDrawsRef: React.MutableRefObject<number>;
-  onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard') => void) | null>;
+  onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard' | 'classPool') => void) | null>;
   discardedCardsRef: React.MutableRefObject<GameCardData[]>;
 
   stagingCardsRef: React.MutableRefObject<GameCardData[]>;
@@ -167,6 +168,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         case 'stun-upgrade-cap': state.hasStunUpgradeCap = true; break;
         case 'recycle-backpack-expand': state.hasRecycleBackpackExpand = true; break;
         case 'dungeon-gold': state.hasDungeonGold = true; break;
+        case 'stun-rate-boost': state.stunRateBoost += 20; break;
       }
       const bonus = slot.amuletAuraBonus;
       if (bonus) {
@@ -498,7 +500,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
           'skill',
           `获得专属卡（${source}）：${drawnCards.map(c => c.name).join('、')}`,
         );
-        depsRef.current.onNewCardGainedRef?.current?.(drawnCards.length);
+        depsRef.current.onNewCardGainedRef?.current?.(drawnCards.length, 'classPool');
       }
 
       return drawnCards;
@@ -563,14 +565,18 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       }
 
       // --- Phase 2: per-discard triggers (resolve after card-own effects) ---
-      if (owner === 'player' && depsRef.current.selectedHeroSkillRef.current === 'discard-profit') {
+      if (owner === 'player' && depsRef.current.eternalRelicsRef.current.some(r => r.id === 'discard-profit')) {
         setGold(prev => prev + 2);
-        depsRef.current.addGameLog('gold', `弃牌获利：弃回「${card.name}」获得 2 金币`);
+        depsRef.current.addGameLog('gold', `永恒护符·弃牌生金：弃回「${card.name}」获得 2 金币`);
       }
       if (amuletEffects.hasCatapult && !opts?.toRecycleBag && !opts?.isEquipmentDisplace) {
-        const drawn = drawFromBackpackToHand();
-        if (drawn) {
-          depsRef.current.addGameLog('amulet', `弹射护符：弃置「${card.name}」后从背包抽了「${drawn.name}」`);
+        const drawnNames: string[] = [];
+        for (let ci = 0; ci < 2; ci++) {
+          const drawn = drawFromBackpackToHand();
+          if (drawn) drawnNames.push(`「${drawn.name}」`);
+        }
+        if (drawnNames.length > 0) {
+          depsRef.current.addGameLog('amulet', `弹射护符：弃置「${card.name}」后从背包抽了${drawnNames.join('、')}`);
         }
       }
       if ((card as GameCardData).amuletEffect !== 'discard-zap' && !opts?.toRecycleBag) {
@@ -672,7 +678,8 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
     if (slotItem.type === 'shield') {
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
-      const slotTemp = slotTempArmor[slotId] ?? 0;
+      const rawSlotTemp = slotTempArmor[slotId] ?? 0;
+      const slotTemp = amuletEffects.hasArmorHalveEndure ? Math.floor(rawSlotTemp / 2) : rawSlotTemp;
       const permanentShieldBonus = Math.max(0, defenseBonus + slotShieldBonus);
 
       return {
@@ -697,8 +704,9 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         slotBerserkBonus;
 
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
-      const slotTemp = slotTempArmor[slotId] ?? 0;
-      const shieldModifier = defenseBonus + slotShieldBonus + slotTemp;
+      const rawSlotTempMonster = slotTempArmor[slotId] ?? 0;
+      const slotTempMonster = amuletEffects.hasArmorHalveEndure ? Math.floor(rawSlotTempMonster / 2) : rawSlotTempMonster;
+      const shieldModifier = defenseBonus + slotShieldBonus + slotTempMonster;
 
       return {
         appliesTo: 'monster' as const,
@@ -835,7 +843,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       const isPerm = isRecyclableFromHand(card);
       let toRecycleBag = false;
       if (owner === 'player' && isGraveNovaCard) {
-        depsRef.current.triggerGraveNova();
+        depsRef.current.triggerGraveNova(card);
         addPermanentMagicToRecycleBag(card);
         toRecycleBag = true;
       } else if (options?.forceRecycleBag || isPerm) {
@@ -946,7 +954,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
           const placedCard: GameCardData = {
             ...flip.toCard,
             _flipBackCard: cardWithFlip,
-            ...(flip.toCard.type === 'building' && flip.toCard.name === '命运之刃'
+            ...(flip.toCard.type === 'building' && (flip.toCard.name === '命运之刃' || flip.toCard.name === '增幅祭坛')
               ? { hasReleaseCharge: true, _fateBladeLastSlot: idx }
               : {}),
           };

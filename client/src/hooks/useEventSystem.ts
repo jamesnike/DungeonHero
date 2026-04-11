@@ -26,6 +26,7 @@ import {
   logBackpackDraw,
   pickRandomHandCardsForDiscardPreferGraveyard,
   computeAmuletAuraReversal,
+  isDamageMagic,
 } from '@/game-core/helpers';
 import {
   createGraveyardRecallCard,
@@ -114,9 +115,14 @@ export interface EventSystemDeps {
   startShopFlow: (card: GameCardData | null) => boolean;
   beginDiscoverFlow: (
     effect: string,
-    options?: { filter?: (card: GameCardData) => boolean },
+    options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[] },
   ) => boolean;
+  beginDiscoverFlowAsync: (
+    source: string,
+    opts?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[] },
+  ) => Promise<void>;
   handleDiscoverFallback: () => void;
+  handleCardUpgrade: (cardId: string) => void;
 
   // --- Functions from useCardPlayHandlers (Layer 3) ---
   normalizeEventEffect: (effect: string | string[] | undefined) => string[];
@@ -361,6 +367,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           handSize: liveHandSize,
           flights: flightsCount,
         });
+        pendingAutoDrawsRef.current = 0;
         break;
       }
 
@@ -653,11 +660,16 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           if (persuadeLevel < requirement.min) {
             return { disabled: true, reason: requirement.message ?? `劝降等级不足 ${requirement.min}` };
           }
+        } else if (requirement.type === 'handUpgraded') {
+          const upgradedCount = handCards.filter(c => (c.upgradeLevel ?? 0) > 0).length;
+          if (upgradedCount < requirement.min) {
+            return { disabled: true, reason: requirement.message ?? '手牌中没有已增幅的卡牌' };
+          }
         }
       }
       return { disabled: false };
     },
-    [activeCards, amuletSlots.length, backpackItems.length, combatState.engagedMonsterIds, discardedCards.length, equipmentSlot1, equipmentSlot2, gold, handCards.length, resolvingDungeonCardId, shopLevel, persuadeLevel],
+    [activeCards, amuletSlots.length, backpackItems.length, combatState.engagedMonsterIds, discardedCards.length, equipmentSlot1, equipmentSlot2, gold, handCards, resolvingDungeonCardId, shopLevel, persuadeLevel],
   );
 
   // ---------------------------------------------------------------------------
@@ -1383,11 +1395,11 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         addGameLog('event', '事件效果：护符上限 +1');
         setHeroSkillBanner(`护符上限提升至 ${maxAmuletSlots + 1}。`);
       } else if (effect === 'equipSlot1Capacity+1') {
-        setEquipmentSlotCapacity(prev => ({ ...prev, equipmentSlot1: prev.equipmentSlot1 + 1 }));
+        setEquipmentSlotCapacity(prev => ({ ...prev, equipmentSlot1: (prev.equipmentSlot1 ?? 1) + 1 }));
         addGameLog('event', '事件效果：左装备栏容量 +1');
         setHeroSkillBanner('左装备栏现在可以装备多件装备了！');
       } else if (effect === 'equipSlot2Capacity+1') {
-        setEquipmentSlotCapacity(prev => ({ ...prev, equipmentSlot2: prev.equipmentSlot2 + 1 }));
+        setEquipmentSlotCapacity(prev => ({ ...prev, equipmentSlot2: (prev.equipmentSlot2 ?? 1) + 1 }));
         addGameLog('event', '事件效果：右装备栏容量 +1');
         setHeroSkillBanner('右装备栏现在可以装备多件装备了！');
       } else if (effect.startsWith('shopLevel+')) {
@@ -2181,6 +2193,51 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           setPermGrantModal({ sourceCardId: 'event-grant', sourceType: 'transform-gold-grant' });
           addGameLog('event', `事件效果：选择一张手牌赋予「转型：+${goldAmount}金币」`);
         }
+      } else if (effect.startsWith('grantFlankPersuadeCost:')) {
+        const amount = parseInt(effect.replace('grantFlankPersuadeCost:', ''), 10) || 1;
+        const eligible = handCards.filter(c => !c.flankEffect);
+        if (eligible.length === 0) {
+          setHeroSkillBanner('手牌中没有可赋予侧击效果的卡牌。');
+        } else {
+          setPermGrantModal({ sourceCardId: 'event-grant', sourceType: 'flank-persuade-grant', meta: { amount } });
+          addGameLog('event', `事件效果：选择一张手牌赋予「侧击：劝降费用永久 -${amount}」`);
+        }
+      } else if (effect.startsWith('grantFlankStunCap:')) {
+        const amount = parseInt(effect.replace('grantFlankStunCap:', ''), 10) || 5;
+        const eligible = handCards.filter(c => !c.flankEffect);
+        if (eligible.length === 0) {
+          setHeroSkillBanner('手牌中没有可赋予侧击效果的卡牌。');
+        } else {
+          setPermGrantModal({ sourceCardId: 'event-grant', sourceType: 'flank-stun-grant', meta: { amount } });
+          addGameLog('event', `事件效果：选择一张手牌赋予「侧击：击晕上限 +${amount}%」`);
+        }
+      } else if (effect.startsWith('grantFlankDamage:')) {
+        const amount = parseInt(effect.replace('grantFlankDamage:', ''), 10) || 5;
+        const eligible = handCards.filter(c => !c.flankEffect);
+        if (eligible.length === 0) {
+          setHeroSkillBanner('手牌中没有可赋予侧击效果的卡牌。');
+        } else {
+          setPermGrantModal({ sourceCardId: 'event-grant', sourceType: 'flank-damage-grant', meta: { amount } });
+          addGameLog('event', `事件效果：选择一张手牌赋予「侧击：对随机怪物造成 ${amount} 点伤害」`);
+        }
+      } else if (effect.startsWith('grantTransformDraw:')) {
+        const amount = parseInt(effect.replace('grantTransformDraw:', ''), 10) || 2;
+        const eligible = handCards.filter(c => !c.transformBonus);
+        if (eligible.length === 0) {
+          setHeroSkillBanner('手牌中没有可赋予转型效果的卡牌。');
+        } else {
+          setPermGrantModal({ sourceCardId: 'event-grant', sourceType: 'transform-draw-grant', meta: { amount } });
+          addGameLog('event', `事件效果：选择一张手牌赋予「转型：抽 ${amount} 张牌」`);
+        }
+      } else if (effect.startsWith('grantTransformHeal:')) {
+        const amount = parseInt(effect.replace('grantTransformHeal:', ''), 10) || 2;
+        const eligible = handCards.filter(c => !c.transformBonus);
+        if (eligible.length === 0) {
+          setHeroSkillBanner('手牌中没有可赋予转型效果的卡牌。');
+        } else {
+          setPermGrantModal({ sourceCardId: 'event-grant', sourceType: 'transform-heal-grant', meta: { amount } });
+          addGameLog('event', `事件效果：选择一张手牌赋予「转型：恢复 ${amount} HP」`);
+        }
       } else if (effect === 'noop') {
         // Intentional no-op; effect is handled via flipTarget
       } else if (effect.startsWith('repairSlot:')) {
@@ -2494,14 +2551,14 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         } else {
           depsRef.current.handleDiscoverFallback();
         }
-      } else if (effect === 'drawClassHeroMagic:2') {
-        const drawn = depsRef.current.drawClassCardsToBackpack(2, 'drawClassHeroMagic', (card: GameCardData) => card.type === 'hero-magic');
+      } else if (effect === 'drawClassHeroMagic:1') {
+        const drawn = depsRef.current.drawClassCardsToBackpack(1, 'drawClassHeroMagic', (card: GameCardData) => card.type === 'hero-magic');
         if (drawn.length > 0) {
           addGameLog('event', `事件效果：获得 ${drawn.length} 张英雄魔法`);
           depsRef.current.triggerClassDeckFlight(drawn);
-          setHeroSkillBanner(`获得了 ${drawn.length} 张英雄魔法卡！`);
+          setHeroSkillBanner(`获得了英雄魔法卡！`);
         } else {
-          const fallback = depsRef.current.drawClassCardsToBackpack(2, 'drawClassHeroMagic-fallback');
+          const fallback = depsRef.current.drawClassCardsToBackpack(1, 'drawClassHeroMagic-fallback');
           if (fallback.length > 0) {
             addGameLog('event', `事件效果：专属牌堆没有英雄魔法，改为获得 ${fallback.length} 张专属牌`);
             depsRef.current.triggerClassDeckFlight(fallback);
@@ -2684,7 +2741,6 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         const damage = 3;
         setHp(prev => Math.max(0, prev - damage));
         depsRef.current.addHeroMagicGauge('holy-light', 1);
-        depsRef.current.addHeroMagicGauge('revive-blessing', 1);
         addGameLog('event', `秘藏宝库深入探索：受到 ${damage} 点伤害`);
 
         const flipBack = eventCardSnapshot._flipBackCard;
@@ -2778,7 +2834,6 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
               return newHp;
             });
             depsRef.current.addHeroMagicGauge('holy-light', 1);
-            depsRef.current.addHeroMagicGauge('revive-blessing', 1);
             addGameLog('combat', `${rightCard.name} 反噬：造成 ${retDmg} 点直接伤害！`);
           }
 
@@ -2853,6 +2908,492 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             const next = [...prev] as typeof prev;
             const card = next[cellIdx];
             if (card?.name === '命运之刃' && (card.type === 'building' || card.isPermanentEvent)) {
+              next[cellIdx] = { ...card, hasReleaseCharge: false };
+            }
+            return next;
+          });
+        }
+
+        eventResolutionDeferred = true;
+      }
+
+      // -----------------------------------------------------------------------
+      // Grant starter cards to backpack
+      // -----------------------------------------------------------------------
+
+      else if (effect === 'grantStarterWeaponBurst') {
+        const { createStarterCardPool, STARTER_CARD_IDS: ids } = await import('@/game-core/deck');
+        const pool = createStarterCardPool();
+        const template = pool.find(c => c.id === ids.weaponBurst);
+        if (template) {
+          const card: GameCardData = { ...template, id: `${template.id}-evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+          depsRef.current.addCardToBackpack(card);
+          addGameLog('event', '事件效果：获得永久魔法「战斗鼓舞」');
+          setHeroSkillBanner('获得了「战斗鼓舞」，已放入背包。');
+        }
+      } else if (effect === 'grantStarterTempArmor') {
+        const { createStarterCardPool, STARTER_CARD_IDS: ids } = await import('@/game-core/deck');
+        const pool = createStarterCardPool();
+        const template = pool.find(c => c.id === ids.tempArmor);
+        if (template) {
+          const card: GameCardData = { ...template, id: `${template.id}-evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+          depsRef.current.addCardToBackpack(card);
+          addGameLog('event', '事件效果：获得永久魔法「铸甲术」');
+          setHeroSkillBanner('获得了「铸甲术」，已放入背包。');
+        }
+      } else if (effect === 'grantStarterStunStrike') {
+        const { createStarterCardPool, STARTER_CARD_IDS: ids } = await import('@/game-core/deck');
+        const pool = createStarterCardPool();
+        const template = pool.find(c => c.id === ids.stunStrike);
+        if (template) {
+          const card: GameCardData = { ...template, id: `${template.id}-evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+          depsRef.current.addCardToBackpack(card);
+          addGameLog('event', '事件效果：获得永久魔法「雷震击」');
+          setHeroSkillBanner('获得了「雷震击」，已放入背包。');
+        }
+      } else if (effect === 'grantRandomClassShield') {
+        const drawn = depsRef.current.drawClassCardsToBackpack(1, 'grantRandomClassShield', (c: GameCardData) => c.type === 'shield');
+        if (drawn.length > 0) {
+          addGameLog('event', `事件效果：从专属牌堆获得护盾「${drawn[0].name}」`);
+          depsRef.current.triggerClassDeckFlight(drawn);
+          setHeroSkillBanner(`获得了专属护盾「${drawn[0].name}」！`);
+        } else {
+          addGameLog('event', '事件效果：专属牌堆中没有护盾');
+          setHeroSkillBanner('专属牌堆中没有可用的护盾。');
+        }
+      } else if (effect === 'grantPersuadeBoostMagic') {
+        const persuadeBoostCard: GameCardData = {
+          id: `persuade-boost-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'magic',
+          name: '劝降祝福',
+          value: 0,
+          image: skillScrollImage,
+          magicType: 'permanent',
+          magicEffect: 'persuade-boost-draw',
+          description: '永久魔法（Perm 1）：下次劝降成功率 +15%（精英 +10%），抽 1 张牌。',
+          recycleDelay: 1,
+        };
+        depsRef.current.addCardToBackpack(persuadeBoostCard);
+        addGameLog('event', '事件效果：获得永久魔法「劝降祝福」');
+        setHeroSkillBanner('获得了「劝降祝福」，已放入背包。');
+      } else if (effect === 'grantBountySpellMagic') {
+        const bountySpellCard: GameCardData = {
+          id: `bounty-spell-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'magic',
+          name: '赏金裁决',
+          value: 0,
+          image: skillScrollImage,
+          magicType: 'permanent',
+          magicEffect: 'bounty-spell-damage',
+          description: '永久魔法（Perm 1）：选择一个怪物，造成 5 点法术伤害，获得等同于造成伤害的金币。',
+          recycleDelay: 1,
+        };
+        depsRef.current.addCardToBackpack(bountySpellCard);
+        addGameLog('event', '事件效果：获得永久魔法「赏金裁决」');
+        setHeroSkillBanner('获得了「赏金裁决」，已放入背包。');
+      }
+
+      // -----------------------------------------------------------------------
+      // 增幅仪式 — Amplification Ritual choices
+      // -----------------------------------------------------------------------
+
+      else if (effect === 'amplify-altar-from-equip') {
+        const eventCardSnapshot = currentEventCard;
+        const resId = depsRef.current.eventResolutionRef.current?.cardId;
+        const cellIdx = resId
+          ? activeCards.findIndex(c => c?.id === resId)
+          : activeCards.findIndex(c => c?.id === eventCardSnapshot?.id);
+
+        const slots = depsRef.current.getEquipmentSlots();
+        const weaponSlots = slots.filter(s => s.item && (s.item.type === 'weapon' || s.item.type === 'shield' || s.item.type === 'monster'));
+
+        if (weaponSlots.length === 0) {
+          setHeroSkillBanner('没有已装备的装备。');
+        } else {
+          let targetCardId: string | null = null;
+          let targetName = '';
+
+          if (weaponSlots.length === 1) {
+            targetCardId = weaponSlots[0].item!.id;
+            targetName = weaponSlots[0].item!.name;
+          } else {
+            const selectedSlotId = await requestEquipmentSelection({
+              prompt: '选择一件装备作为增幅目标',
+              subtext: '该装备将成为增幅祭坛的增幅目标。',
+            });
+            if (selectedSlotId) {
+              const slotItem = selectedSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+              if (slotItem) {
+                targetCardId = slotItem.id;
+                targetName = slotItem.name;
+              }
+            }
+          }
+
+          if (targetCardId && cellIdx !== -1) {
+            setEventModalOpen(false);
+            setEventModalMinimized(false);
+            setCurrentEventCard(null);
+            finalizeEventResolution({ removeFromDungeon: false });
+
+            const altarBuilding: GameCardData = {
+              id: `amplify-altar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              type: 'building',
+              name: '增幅祭坛',
+              value: 0,
+              image: eventCardSnapshot?.image ?? skillScrollImage,
+              isGhost: true,
+              fury: 1,
+              hpLayers: 1,
+              currentLayer: 1,
+              hp: 2,
+              maxHp: 2,
+              hasReleaseCharge: true,
+              _fateBladeLastSlot: cellIdx,
+              _amplifyTargetCardId: targetCardId,
+              _amplifyTargetName: targetName,
+              description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${targetName}」施加一次增幅。`,
+              eventChoices: [
+                { text: `发动增幅祭坛（目标：${targetName}）`, hint: '移除一张手牌，对增幅目标施加一次增幅', effect: 'amplify-altar-activate' },
+              ],
+            };
+
+            await depsRef.current.triggerEventTransform(eventCardSnapshot!, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
+            setActiveCards(prev => {
+              const next = [...prev] as typeof prev;
+              next[cellIdx] = altarBuilding;
+              return next;
+            });
+
+            if (depsRef.current.amuletEffects.hasFlipGold) {
+              setGold(prev => prev + FLIP_GOLD_REWARD);
+              addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+            }
+
+            addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${targetName}`);
+            setHeroSkillBanner(`增幅仪式翻转为增幅祭坛！目标：${targetName}`);
+            eventResolutionDeferred = true;
+          }
+        }
+      }
+
+      else if (effect === 'amplify-altar-from-hand') {
+        const eventCardSnapshot = currentEventCard;
+        const resId = depsRef.current.eventResolutionRef.current?.cardId;
+        const cellIdx = resId
+          ? activeCards.findIndex(c => c?.id === resId)
+          : activeCards.findIndex(c => c?.id === eventCardSnapshot?.id);
+
+        const eligibleFilter = (c: GameCardData) =>
+          c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c);
+        const eligible = handCards.filter(eligibleFilter);
+
+        if (eligible.length === 0) {
+          setHeroSkillBanner('手牌中没有符合条件的装备或伤害魔法。');
+        } else {
+          const targetCard = eligible[0];
+          const targetCardId = targetCard.id;
+          const targetName = targetCard.name;
+
+          if (cellIdx !== -1) {
+            setEventModalOpen(false);
+            setEventModalMinimized(false);
+            setCurrentEventCard(null);
+            finalizeEventResolution({ removeFromDungeon: false });
+
+            const altarBuilding: GameCardData = {
+              id: `amplify-altar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              type: 'building',
+              name: '增幅祭坛',
+              value: 0,
+              image: eventCardSnapshot?.image ?? skillScrollImage,
+              isGhost: true,
+              fury: 1,
+              hpLayers: 1,
+              currentLayer: 1,
+              hp: 2,
+              maxHp: 2,
+              hasReleaseCharge: true,
+              _fateBladeLastSlot: cellIdx,
+              _amplifyTargetCardId: targetCardId,
+              _amplifyTargetName: targetName,
+              description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${targetName}」施加一次增幅。`,
+              eventChoices: [
+                { text: `发动增幅祭坛（目标：${targetName}）`, hint: '移除一张手牌，对增幅目标施加一次增幅', effect: 'amplify-altar-activate' },
+              ],
+            };
+
+            await depsRef.current.triggerEventTransform(eventCardSnapshot!, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
+            setActiveCards(prev => {
+              const next = [...prev] as typeof prev;
+              next[cellIdx] = altarBuilding;
+              return next;
+            });
+
+            if (depsRef.current.amuletEffects.hasFlipGold) {
+              setGold(prev => prev + FLIP_GOLD_REWARD);
+              addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+            }
+
+            addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${targetName}`);
+            setHeroSkillBanner(`增幅仪式翻转为增幅祭坛！目标：${targetName}`);
+            eventResolutionDeferred = true;
+          }
+        }
+      }
+
+      else if (effect === 'amplify-altar-discover-class') {
+        const eventCardSnapshot = currentEventCard;
+        const resId = depsRef.current.eventResolutionRef.current?.cardId;
+        const cellIdx = resId
+          ? activeCards.findIndex(c => c?.id === resId)
+          : activeCards.findIndex(c => c?.id === eventCardSnapshot?.id);
+
+        const eligibleFilter = (c: GameCardData) =>
+          c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c);
+
+        const backpackIdsBefore = new Set(engine.getState().backpackItems.map(c => c.id));
+        const graveyardIdsBefore = new Set(engine.getState().discardedCards.map(c => c.id));
+
+        setEventModalOpen(false);
+        setEventModalMinimized(false);
+
+        await depsRef.current.beginDiscoverFlowAsync('amplify-altar-discover-class', {
+          filter: eligibleFilter,
+        });
+
+        const stAfter = engine.getState();
+        const newInBackpack = stAfter.backpackItems.find(c => !backpackIdsBefore.has(c.id));
+        const newInGraveyard = newInBackpack ? null : stAfter.discardedCards.find(c => !graveyardIdsBefore.has(c.id));
+        const targetCard = newInBackpack ?? newInGraveyard;
+
+        if (targetCard && cellIdx !== -1) {
+          setCurrentEventCard(null);
+          finalizeEventResolution({ removeFromDungeon: false });
+
+          if (newInBackpack) {
+            setBackpackItems(prev => prev.filter(c => c.id !== targetCard.id));
+          } else if (newInGraveyard) {
+            setDiscardedCards(prev => prev.filter(c => c.id !== targetCard.id));
+          }
+          depsRef.current.queueCardIntoHand(targetCard);
+
+          const altarBuilding: GameCardData = {
+            id: `amplify-altar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'building',
+            name: '增幅祭坛',
+            value: 0,
+            image: eventCardSnapshot?.image ?? skillScrollImage,
+            isGhost: true,
+            fury: 1,
+            hpLayers: 1,
+            currentLayer: 1,
+            hp: 2,
+            maxHp: 2,
+            hasReleaseCharge: true,
+            _fateBladeLastSlot: cellIdx,
+            _amplifyTargetCardId: targetCard.id,
+            _amplifyTargetName: targetCard.name,
+            description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${targetCard.name}」施加一次增幅。`,
+            eventChoices: [
+              { text: `发动增幅祭坛（目标：${targetCard.name}）`, hint: '移除一张手牌，对增幅目标施加一次增幅', effect: 'amplify-altar-activate' },
+            ],
+          };
+
+          await depsRef.current.triggerEventTransform(eventCardSnapshot!, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
+          setActiveCards(prev => {
+            const next = [...prev] as typeof prev;
+            next[cellIdx] = altarBuilding;
+            return next;
+          });
+
+          if (depsRef.current.amuletEffects.hasFlipGold) {
+            setGold(prev => prev + FLIP_GOLD_REWARD);
+            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+          }
+
+          addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${targetCard.name}`);
+          setHeroSkillBanner(`增幅仪式翻转为增幅祭坛！目标：${targetCard.name}`);
+        } else {
+          setCurrentEventCard(null);
+          finalizeEventResolution({ removeFromDungeon: true });
+          depsRef.current.addToGraveyard(eventCardSnapshot!);
+          setHeroSkillBanner('没有可发现的装备或伤害魔法。');
+        }
+        eventResolutionDeferred = true;
+      }
+
+      else if (effect === 'amplify-altar-discover-graveyard') {
+        const eventCardSnapshot = currentEventCard;
+        const resId = depsRef.current.eventResolutionRef.current?.cardId;
+        const cellIdx = resId
+          ? activeCards.findIndex(c => c?.id === resId)
+          : activeCards.findIndex(c => c?.id === eventCardSnapshot?.id);
+
+        const eligibleFilter = (c: GameCardData) =>
+          c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c);
+
+        const selected = await depsRef.current.requestGraveyardSelection(3, {
+          delivery: 'hand-first',
+          filter: eligibleFilter,
+        });
+
+        if (selected && cellIdx !== -1) {
+          setEventModalOpen(false);
+          setEventModalMinimized(false);
+          setCurrentEventCard(null);
+          finalizeEventResolution({ removeFromDungeon: false });
+
+          const altarBuilding: GameCardData = {
+            id: `amplify-altar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'building',
+            name: '增幅祭坛',
+            value: 0,
+            image: eventCardSnapshot?.image ?? skillScrollImage,
+            isGhost: true,
+            fury: 1,
+            hpLayers: 1,
+            currentLayer: 1,
+            hp: 2,
+            maxHp: 2,
+            hasReleaseCharge: true,
+            _fateBladeLastSlot: cellIdx,
+            _amplifyTargetCardId: selected.id,
+            _amplifyTargetName: selected.name,
+            description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${selected.name}」施加一次增幅。`,
+            eventChoices: [
+              { text: `发动增幅祭坛（目标：${selected.name}）`, hint: '移除一张手牌，对增幅目标施加一次增幅', effect: 'amplify-altar-activate' },
+            ],
+          };
+
+          await depsRef.current.triggerEventTransform(eventCardSnapshot!, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
+          setActiveCards(prev => {
+            const next = [...prev] as typeof prev;
+            next[cellIdx] = altarBuilding;
+            return next;
+          });
+
+          if (depsRef.current.amuletEffects.hasFlipGold) {
+            setGold(prev => prev + FLIP_GOLD_REWARD);
+            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+          }
+
+          addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${selected.name}（坟场召回至手牌）`);
+          setHeroSkillBanner(`增幅仪式翻转为增幅祭坛！目标：${selected.name}`);
+        } else {
+          setHeroSkillBanner('坟场中没有符合条件的装备或伤害魔法。');
+        }
+        eventResolutionDeferred = true;
+      }
+
+      else if (effect === 'amplify-copy-upgraded') {
+        const upgraded = handCards.filter(c => (c.upgradeLevel ?? 0) > 0);
+        if (upgraded.length === 0) {
+          setHeroSkillBanner('手牌中没有已增幅的卡牌可供复制。');
+        } else {
+          const target = upgraded[0];
+          const copy: GameCardData = {
+            ...target,
+            id: `${target.id}-copy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          };
+          depsRef.current.queueCardIntoHand(copy);
+          addGameLog('event', `增幅仪式：复制了「${target.name}」`);
+          setHeroSkillBanner(`复制了「${target.name}」！副本已加入手牌。`);
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // 增幅祭坛 activation — sacrifice a hand card to amplify target
+      // -----------------------------------------------------------------------
+
+      else if (effect === 'amplify-altar-activate') {
+        const eventCardSnapshot = currentEventCard;
+        const resId = depsRef.current.eventResolutionRef.current?.cardId;
+        const cellIdx = resId
+          ? activeCards.findIndex(c => c?.id === resId)
+          : activeCards.findIndex(c => c?.id === eventCardSnapshot?.id);
+        const isPerm = eventCardSnapshot?.type === 'building' || eventCardSnapshot?.isPermanentEvent;
+
+        const targetCardId = eventCardSnapshot?._amplifyTargetCardId;
+        if (!targetCardId) {
+          setHeroSkillBanner('增幅祭坛：没有增幅目标。');
+          setEventModalOpen(false);
+          setEventModalMinimized(false);
+          setCurrentEventCard(null);
+          finalizeEventResolution({ removeFromDungeon: false });
+          eventResolutionDeferred = true;
+          break;
+        }
+
+        const st = engine.getState();
+        const allCards = [
+          ...st.handCards,
+          ...(st.equipmentSlot1 ? [st.equipmentSlot1] : []),
+          ...(st.equipmentSlot2 ? [st.equipmentSlot2] : []),
+          ...st.backpackItems,
+        ];
+        const targetCard = allCards.find(c => c.id === targetCardId);
+        if (!targetCard) {
+          setHeroSkillBanner('增幅祭坛：目标卡牌已不存在。');
+          setEventModalOpen(false);
+          setEventModalMinimized(false);
+          setCurrentEventCard(null);
+          finalizeEventResolution({ removeFromDungeon: false });
+          eventResolutionDeferred = true;
+          break;
+        }
+
+        setEventModalOpen(false);
+        setEventModalMinimized(false);
+        setCurrentEventCard(null);
+        finalizeEventResolution({ removeFromDungeon: false });
+
+        const deleteSuccess = await depsRef.current.requestCardAction('delete', 1, {
+          title: `增幅祭坛：移除一张手牌`,
+          description: `移除一张手牌作为祭品，对「${targetCard.name}」施加一次增幅。`,
+          handOnly: true,
+        });
+
+        if (deleteSuccess) {
+          const applyAmplifyToCard = (card: GameCardData): GameCardData => {
+            if (card.type === 'weapon' || card.type === 'monster') {
+              const newVal = card.value + 1;
+              return { ...card, value: newVal, amplifyBonus: (card.amplifyBonus ?? 0) + 1 };
+            } else if (card.type === 'shield') {
+              const oldArmor = card.armorMax ?? card.value;
+              return { ...card, armorMax: oldArmor + 1, value: card.value + 1, amplifyBonus: (card.amplifyBonus ?? 0) + 1 };
+            } else if (card.type === 'magic') {
+              if (card.scalingDamage != null) {
+                return { ...card, scalingDamage: (card.scalingDamage ?? 0) + 1, amplifyBonus: (card.amplifyBonus ?? 0) + 1 };
+              }
+              return { ...card, amplifyBonus: (card.amplifyBonus ?? 0) + 1 };
+            }
+            return card;
+          };
+
+          const latestState = engine.getState();
+          if (latestState.handCards.some(c => c.id === targetCardId)) {
+            setHandCards(prev => prev.map(c => c.id === targetCardId ? applyAmplifyToCard(c) : c));
+          } else if (latestState.equipmentSlot1?.id === targetCardId) {
+            depsRef.current.setEquipmentSlotById('equipmentSlot1', applyAmplifyToCard(latestState.equipmentSlot1) as EquipmentItem);
+          } else if (latestState.equipmentSlot2?.id === targetCardId) {
+            depsRef.current.setEquipmentSlotById('equipmentSlot2', applyAmplifyToCard(latestState.equipmentSlot2) as EquipmentItem);
+          } else {
+            setBackpackItems(prev => prev.map(c => c.id === targetCardId ? applyAmplifyToCard(c) : c));
+          }
+
+          addGameLog('event', `增幅祭坛发动：「${targetCard.name}」获得一次增幅！`);
+          setHeroSkillBanner(`增幅祭坛：「${targetCard.name}」获得增幅！`);
+        } else {
+          addGameLog('event', '增幅祭坛：没有手牌可供移除。');
+          setHeroSkillBanner('没有手牌可供移除。');
+        }
+
+        if (isPerm && cellIdx !== -1) {
+          setActiveCards(prev => {
+            const next = [...prev] as typeof prev;
+            const card = next[cellIdx];
+            if (card?.name === '增幅祭坛' && card.type === 'building') {
               next[cellIdx] = { ...card, hasReleaseCharge: false };
             }
             return next;

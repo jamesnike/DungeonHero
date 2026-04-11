@@ -99,6 +99,10 @@ export const initialCombatState: CombatState = {
     equipmentSlot1: false,
     equipmentSlot2: false,
   },
+  slotDurabilityUsedThisTurn: {
+    equipmentSlot1: 0,
+    equipmentSlot2: 0,
+  },
 };
 
 export const initialWaterfallAnimationState: WaterfallAnimationState = {
@@ -120,6 +124,7 @@ export const STARTER_CARD_IDS = {
   reshuffle: 'starter-perm-reshuffle',
   dungeonSwap: 'starter-perm-dungeon-swap',
   trainingBlade: 'starter-weapon-training-blade',
+  immortalHammer: 'starter-weapon-immortal-hammer',
 } as const;
 
 export const BACKPACK_FLIGHT_BASE_DURATION = 700;

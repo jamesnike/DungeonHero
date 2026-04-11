@@ -20,6 +20,8 @@ interface CombatPanelProps {
   endHeroTurnDisabled?: boolean;
   equipmentSlot1: (GameCardData & { type: 'weapon' | 'shield' | 'monster' }) | null;
   equipmentSlot2: (GameCardData & { type: 'weapon' | 'shield' | 'monster' }) | null;
+  slotDurabilityUsedThisTurn: Record<EquipmentSlotId, number>;
+  blockDurabilityPerSlot: number;
   stageScale?: number;
   onDragHandlePointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   isDragging?: boolean;
@@ -46,6 +48,8 @@ export default function CombatPanel({
   endHeroTurnDisabled = false,
   equipmentSlot1,
   equipmentSlot2,
+  slotDurabilityUsedThisTurn,
+  blockDurabilityPerSlot,
   stageScale = 1,
   onDragHandlePointerDown,
   isDragging = false,
@@ -315,13 +319,34 @@ export default function CombatPanel({
               </div>
             </div>
           ) : (
-            <p className="combat-panel__footer-text text-muted-foreground">
-              {currentAttacker
-                ? `${currentAttacker.name} is attacking now.`
-                : monsterAttackQueue.length > 0
-                  ? 'Waiting for the next attacker...'
-                  : 'Monsters are regrouping.'}
-            </p>
+            <div className="flex flex-col gap-1.5">
+              <p className="combat-panel__footer-text text-muted-foreground">
+                {currentAttacker
+                  ? `${currentAttacker.name} is attacking now.`
+                  : monsterAttackQueue.length > 0
+                    ? 'Waiting for the next attacker...'
+                    : 'Monsters are regrouping.'}
+              </p>
+              {(equipmentSlot1?.type === 'shield' || equipmentSlot1?.type === 'monster' || equipmentSlot2?.type === 'shield' || equipmentSlot2?.type === 'monster') && (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).map(sid => {
+                    const item = sid === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+                    if (!item || (item.type !== 'shield' && item.type !== 'monster')) return null;
+                    const used = slotDurabilityUsedThisTurn[sid] ?? 0;
+                    const remaining = Math.max(0, blockDurabilityPerSlot - used);
+                    const label = sid === 'equipmentSlot1' ? 'Left' : 'Right';
+                    return (
+                      <div key={sid} className="flex flex-col px-2 py-1 rounded-md border bg-background/50">
+                        <span className="combat-panel__slot-label uppercase tracking-wide text-muted-foreground">{label}</span>
+                        <span className={`combat-panel__stat font-medium ${remaining <= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                          {remaining <= 0 ? '耐久用尽' : `耐久 ${remaining}/${blockDurabilityPerSlot}`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

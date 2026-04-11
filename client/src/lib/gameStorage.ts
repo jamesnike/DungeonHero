@@ -3,6 +3,16 @@ import type { HeroVariant } from '@/lib/heroes';
 import type { KnightCardData } from '@/lib/knightDeck';
 import { sanitizeHeroMagicState, type HeroMagicState } from '@/lib/heroMagic';
 
+interface PersistedEternalRelic {
+  id: string;
+  name: string;
+  description: string;
+  image: string;
+  amuletEffect?: string;
+  amuletAuraBonus?: { attack?: number; defense?: number; maxHp?: number };
+  upgradeLevel?: number;
+}
+
 export const GAME_STATE_STORAGE_KEY = 'dungeonhero:game-state:v1';
 const STORAGE_VERSION = 1 as const;
 
@@ -38,6 +48,7 @@ export interface CombatStateSnapshot {
     isFollowUpAttack?: boolean;
   };
   slotBlocksThisTurn?: Record<string, boolean>;
+  slotDurabilityUsedThisTurn?: Record<string, number>;
 }
 
 export interface PersistedGameState {
@@ -112,6 +123,7 @@ export interface PersistedGameState {
   gambitExtraPerSlot?: number;
   gambitSlotUsed?: Record<string, number>;
   weaponExtraAttackUsed?: Record<string, boolean>;
+  blockDurabilityPerSlot?: number;
   heroSkillUsedThisWave?: boolean;
   /** 本波已用的额外英雄技能 id（商店发现等） */
   extraSkillsUsedThisWave?: string[];
@@ -139,6 +151,7 @@ export interface PersistedGameState {
   previewCardStacks?: Record<number, GameCardData[]>;
   activeCardStacks?: Record<number, GameCardData[]>;
   waterfallDealBonus?: number;
+  eternalRelics?: PersistedEternalRelic[];
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

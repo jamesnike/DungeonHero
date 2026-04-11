@@ -120,8 +120,16 @@ export const flattenActiveRowSlots = (slots: ActiveRowSlots): GameCardData[] =>
 export const countActiveRowSlots = (slots: ActiveRowSlots): number =>
   slots.reduce((count, card) => (card ? count + 1 : count), 0);
 
+/** Count non-null, non-ghost cards in the active row (ghost cards are transparent to waterfall) */
+export const countActiveRowSlotsExcludeGhost = (slots: ActiveRowSlots): number =>
+  slots.reduce((count, card) => (card && !card.isGhost ? count + 1 : count), 0);
+
 export const getEmptyColumns = (slots: ActiveRowSlots): number[] =>
   DUNGEON_COLUMNS.filter(i => !slots[i]);
+
+/** Columns that are truly empty OR occupied only by a ghost card (transparent to waterfall) */
+export const getEmptyOrGhostColumns = (slots: ActiveRowSlots): number[] =>
+  DUNGEON_COLUMNS.filter(i => !slots[i] || slots[i]?.isGhost);
 
 export const getFilledPreviewColumns = (slots: ActiveRowSlots): number[] =>
   DUNGEON_COLUMNS.filter(i => Boolean(slots[i]));
@@ -315,4 +323,37 @@ export function computeAmuletAuraReversal(
     }
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// isDamageMagic — checks if a magic card deals damage (for Amplify targeting)
+// ---------------------------------------------------------------------------
+
+export function isDamageMagic(card: GameCardData): boolean {
+  if (card.type !== 'magic') return false;
+  if (card.scalingDamage != null) return true;
+  if (card.onDiscardDamage != null && card.onDiscardDamage > 0) return true;
+  const damageKnightEffects = [
+    'missile-bolt',
+    'armor-strike',
+    'missing-hp-smite',
+    'blood-sacrifice-strike',
+    'grave-nova',
+    'fate-sight',
+    'temp-attack-strike',
+    'weapon-sweep',
+    'overkill-upgrade',
+  ];
+  if (card.knightEffect && damageKnightEffects.includes(card.knightEffect)) return true;
+  const damageEffects = [
+    'storm-volley-recycle',
+    'arcane-storm-magic-count',
+    'bounty-spell-damage',
+  ];
+  if (card.magicEffect && damageEffects.includes(card.magicEffect)) return true;
+  const damageNames = [
+    '风暴箭雨', '点金裁决', '混沌冲击', '箭雨余韵', '魔弹', '雷震击', '赏金裁决',
+  ];
+  if (damageNames.includes(card.name)) return true;
+  return false;
 }

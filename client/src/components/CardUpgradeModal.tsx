@@ -37,6 +37,7 @@ interface CardUpgradeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   handCards: GameCardData[];
+  backpackItems: GameCardData[];
   equipmentSlot1: GameCardData | null;
   equipmentSlot2: GameCardData | null;
   amuletSlots: GameCardData[];
@@ -47,6 +48,7 @@ export default function CardUpgradeModal({
   open,
   onOpenChange,
   handCards,
+  backpackItems,
   equipmentSlot1,
   equipmentSlot2,
   amuletSlots,
@@ -55,11 +57,12 @@ export default function CardUpgradeModal({
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const upgradeableHand = handCards.filter(isUpgradeableCard);
+  const upgradeableBackpack = backpackItems.filter(isUpgradeableCard);
   const upgradeableEquipment = [equipmentSlot1, equipmentSlot2]
     .filter((c): c is GameCardData => c != null && isUpgradeableCard(c));
   const upgradeableAmulets = amuletSlots.filter(isUpgradeableCard);
 
-  const allCards = [...upgradeableHand, ...upgradeableEquipment, ...upgradeableAmulets];
+  const allCards = [...upgradeableHand, ...upgradeableBackpack, ...upgradeableEquipment, ...upgradeableAmulets];
   const hasUpgradeableCards = allCards.length > 0;
 
   const handleConfirm = () => {
@@ -136,6 +139,7 @@ export default function CardUpgradeModal({
           ) : (
             <>
               {renderSection('手牌', upgradeableHand)}
+              {renderSection('背包', upgradeableBackpack)}
               {renderSection('装备栏', upgradeableEquipment)}
               {renderSection('护符栏', upgradeableAmulets)}
             </>

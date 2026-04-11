@@ -45,6 +45,8 @@ interface EquipmentSlotProps {
   weaponSwingVariant?: number;
   shieldBlockVariant?: number;
   isExhaustedThisTurn?: boolean;
+  /** Remaining action count to show on the slot when dragging (attacks during hero turn, block durability during monster turn). null = don't show. */
+  slotActionCount?: number | null;
   isUnbreakable?: boolean;
   isStunFrozen?: boolean;
 }
@@ -78,6 +80,7 @@ export default function EquipmentSlot({
   weaponSwingVariant = 0,
   shieldBlockVariant = 0,
   isExhaustedThisTurn = false,
+  slotActionCount = null,
   isUnbreakable = false,
   isStunFrozen = false,
 }: EquipmentSlotProps) {
@@ -461,29 +464,39 @@ export default function EquipmentSlot({
           </div>
         )
       ) : (
-        <Card className={`
-          h-full w-full border-2 border-dashed border-border
-          flex flex-col items-center justify-center gap-2
-          transition-[border-color,background-color] duration-200 relative z-10
-          ${
-            acceptsDrop
-              ? isCombatDropTarget
-                ? 'border-dashed border-destructive border-4 bg-destructive/10 animate-pulse'
-                : 'border-dashed border-primary border-4 bg-primary/10 animate-pulse'
-              : 'bg-muted/30'
-          }
-          ${
-            acceptsDrop && isOver
-              ? isCombatDropTarget
-                ? 'scale-105 ring-4 ring-destructive bg-destructive/20'
-                : 'scale-105 ring-4 ring-primary bg-primary/20'
-              : ''
-          }
-          ${heroSkillHighlight ? 'ring-4 ring-amber-400 animate-pulse cursor-pointer shadow-[0_0_16px_4px_rgba(245,158,11,0.4)]' : ''}
-        `}>
-          {getIcon()}
-          <span className="dh-hero-chip text-muted-foreground font-medium">{getLabel()}</span>
-        </Card>
+        <>
+          {type === 'equipment' && slotCapacity > 1 && (
+            <div
+              className={`absolute inset-0 rounded-lg border-dashed pointer-events-none transition-[border-color,border-width] duration-200 ${
+                acceptsDrop ? 'border-4 border-primary animate-pulse' : 'border-2 border-muted-foreground/25'
+              }`}
+              style={{ zIndex: 5, transform: 'translateY(28%)' }}
+            />
+          )}
+          <Card className={`
+            h-full w-full border-2 border-dashed border-border
+            flex flex-col items-center justify-center gap-2
+            transition-[border-color,background-color] duration-200 relative z-10
+            ${
+              acceptsDrop
+                ? isCombatDropTarget
+                  ? 'border-dashed border-destructive border-4 bg-destructive/10 animate-pulse'
+                  : 'border-dashed border-primary border-4 bg-primary/10 animate-pulse'
+                : 'bg-muted/30'
+            }
+            ${
+              acceptsDrop && isOver
+                ? isCombatDropTarget
+                  ? 'scale-105 ring-4 ring-destructive bg-destructive/20'
+                  : 'scale-105 ring-4 ring-primary bg-primary/20'
+                : ''
+            }
+            ${heroSkillHighlight ? 'ring-4 ring-amber-400 animate-pulse cursor-pointer shadow-[0_0_16px_4px_rgba(245,158,11,0.4)]' : ''}
+          `}>
+            {getIcon()}
+            <span className="dh-hero-chip text-muted-foreground font-medium">{getLabel()}</span>
+          </Card>
+        </>
       )}
       {heroSkillHighlight && heroSkillLabel && (
         <div className="absolute top-1/2 left-1/2 z-40 equip-slot-target-btn bg-amber-500 text-white font-bold py-2 rounded-full shadow-lg border-2 border-amber-300 cursor-pointer select-none whitespace-nowrap text-center">
@@ -512,7 +525,20 @@ export default function EquipmentSlot({
           } ${acceptsDrop && isOver ? 'scale-[1.01]' : ''}`}
         />
       )}
-      {isExhaustedThisTurn && isCardDragging && (
+      {isCardDragging && slotActionCount != null && (
+        <div className="pointer-events-none absolute inset-0 z-[16] flex items-center justify-center rounded-md bg-black/10">
+          {slotActionCount <= 0 ? (
+            <X className="w-3/5 h-3/5 text-red-500/50 stroke-[3]" />
+          ) : (
+            <svg className="w-3/5 h-3/5 text-red-500/50" viewBox="0 0 24 24">
+              <text x="12" y="12" textAnchor="middle" dominantBaseline="central" fill="currentColor" fontSize="20" fontWeight="800">
+                {slotActionCount}
+              </text>
+            </svg>
+          )}
+        </div>
+      )}
+      {isExhaustedThisTurn && isCardDragging && slotActionCount == null && (
         <div className="pointer-events-none absolute inset-0 z-[16] flex items-center justify-center rounded-md bg-black/10">
           <X className="w-3/5 h-3/5 text-red-500/50 stroke-[3]" />
         </div>

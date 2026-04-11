@@ -8,7 +8,7 @@ import {
 } from "./GameCard";
 import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade, getUpgradeTierCount } from "@/lib/monsterRage";
 import { isUpgradeableCard, isCardAtMaxUpgrade } from "./CardUpgradeModal";
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins, ArrowBigUpDash, Landmark } from "lucide-react";
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins, ArrowBigUpDash, Landmark, Flame } from "lucide-react";
 import { CHAOS_DICE_SPELL_DESCRIPTION } from "@/lib/knightChaosDiceCopy";
 
 type MonsterRewardPreview = {
@@ -316,6 +316,40 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Dragon Lv1: Attack no layer cost */}
+            {card.type === 'monster' && card.dragonAttackNoLayerCost && (
+              <div className="bg-amber-500/15 p-3 rounded-md border border-amber-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                      龙鳞护体
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
+                    该怪物攻击时不消耗血层。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Dragon Lv2: Damage retaliation */}
+            {card.type === 'monster' && card.dragonDamageRetaliation != null && card.dragonDamageRetaliation > 0 && (
+              <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-4 h-4 shrink-0 text-red-500" />
+                    <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
+                      龙息反击
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
+                    每受到一次伤害，对玩家造成 {card.dragonDamageRetaliation} 点法术伤害。
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Monster Elite Dragon Regen */}
             {card.type === 'monster' && card.eliteRegenHeroTurn && (
               <div className="bg-amber-500/15 p-3 rounded-md border border-amber-500/30 relative overflow-hidden">
@@ -328,6 +362,23 @@ export default function CardDetailsModal({
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
                     若 Hero 回合结束时未掉血层，立即恢复一个血层。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Elite Dragon: Heal other monster */}
+            {card.type === 'monster' && card.eliteHealOtherMonster && (
+              <div className="bg-emerald-500/15 p-3 rounded-md border border-emerald-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 shrink-0 text-emerald-500" />
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">
+                      龙息庇护
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">
+                    若 Hero 回合结束时未掉血层，为激活行另一个怪物恢复一个血层。
                   </p>
                 </div>
               </div>
@@ -416,11 +467,13 @@ export default function CardDetailsModal({
                   <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
                     {card.lastWords === 'discard-hand-3'
                       ? '死亡时随机弃回玩家 3 张手牌。'
-                      : card.lastWords === 'wraith-haunt-2'
-                        ? '死亡时同行其他怪物攻击力 +2，同行卡牌位置随机打乱。'
-                        : card.lastWords === 'wraith-haunt-4'
-                          ? '死亡时同行其他怪物攻击力 +4，同行卡牌位置随机打乱。'
-                          : '死亡时触发特殊效果。'}
+                      : card.lastWords === 'discard-hand-1'
+                        ? '死亡时随机弃回玩家 1 张手牌。'
+                        : card.lastWords === 'wraith-haunt-2'
+                          ? '死亡时同行其他怪物攻击力 +2，同行卡牌位置随机打乱。'
+                          : card.lastWords === 'wraith-haunt-4'
+                            ? '死亡时同行其他怪物攻击力 +4，同行卡牌位置随机打乱。'
+                            : '死亡时触发特殊效果。'}
                   </p>
                 </div>
               </div>
@@ -478,7 +531,7 @@ export default function CardDetailsModal({
               </div>
             )}
 
-            {/* Tier-3 Upgrade: Skeleton No Layer Cost */}
+            {/* Tier-1 Upgrade: Skeleton No Layer Cost */}
             {card.type === 'monster' && (card.skeletonNoLayerCost || card.skeletonNoLayerCostActive) && (
               <div className="bg-gray-500/15 p-3 rounded-md border border-gray-500/30">
                 <div className="flex flex-col gap-1.5">
@@ -493,7 +546,37 @@ export default function CardDetailsModal({
               </div>
             )}
 
-            {/* Tier-2 Upgrade: Wraith Turn Attack */}
+            {/* Tier-2 Upgrade: Skeleton Last Words Discard */}
+            {card.type === 'monster' && card.skeletonLastWordsDiscard && (
+              <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skull className="w-4 h-4 shrink-0 text-red-500" />
+                    <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
+                      遗言
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">死亡时随机弃回玩家 1 张手牌。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-3 Upgrade: Skeleton Re-Revive */}
+            {card.type === 'monster' && card.skeletonReRevive && (
+              <div className="bg-violet-500/15 p-3 rounded-md border border-violet-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skull className="w-4 h-4 shrink-0 text-violet-500" />
+                    <span className="font-extrabold text-sm text-violet-700 dark:text-violet-300 tracking-wide">
+                      亡骨轮回
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">同行其他怪物被击败时，若本骷髅已复生过，再次获得复生。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-2 Upgrade: Wraith Turn Attack (legacy) */}
             {card.type === 'monster' && card.wraithTurnAttack != null && card.wraithTurnAttack > 0 && (
               <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30">
                 <div className="flex flex-col gap-1.5">
@@ -506,7 +589,7 @@ export default function CardDetailsModal({
               </div>
             )}
 
-            {/* Tier-3 Upgrade: Wraith Death Heal */}
+            {/* Tier-3 Upgrade: Wraith Death Heal (legacy) */}
             {card.type === 'monster' && card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && (
               <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30">
                 <div className="flex flex-col gap-1.5">
@@ -515,6 +598,45 @@ export default function CardDetailsModal({
                     <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨灵祝福</span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">死亡时同行其他怪物生命值 +{card.wraithDeathHeal}。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-1 Upgrade: Wraith Aura Attack */}
+            {card.type === 'monster' && card.wraithAuraAttack != null && card.wraithAuraAttack > 0 && (
+              <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨念光环</span>
+                  </div>
+                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">每个怪物回合结束时，激活行所有怪物攻击力 +{card.wraithAuraAttack}。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-2 Upgrade: Wraith Death Heal Spread */}
+            {card.type === 'monster' && card.wraithDeathHealSpread != null && card.wraithDeathHealSpread > 0 && (
+              <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨灵遗言</span>
+                  </div>
+                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">死亡时同行其他怪物生命值 +{card.wraithDeathHealSpread}，并让随机一个激活行怪物获得此遗言。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Tier-3 Upgrade: Wraith Curse */}
+            {card.type === 'monster' && card.wraithTurnEnrage && (
+              <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨灵诅咒</span>
+                  </div>
+                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">每个怪物回合结束时，使激活行所有怪物激怒，并随机摧毁一个护符。</p>
                 </div>
               </div>
             )}
@@ -553,7 +675,7 @@ export default function CardDetailsModal({
                     <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />
                     <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">反魔</span>
                   </div>
-                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">玩家每使用一张造成伤害的法术牌，对玩家造成 {card.antiMagicReflect} 点伤害。</p>
+                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">玩家每使用一张法术牌，对玩家造成 {card.antiMagicReflect} 点伤害。</p>
                 </div>
               </div>
             )}
@@ -584,6 +706,19 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Golem Layer Loss Reflect */}
+            {card.type === 'monster' && card.golemLayerLossReflect != null && card.golemLayerLossReflect > 0 && (
+              <div className="bg-indigo-500/15 p-3 rounded-md border border-indigo-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">岩层反震</span>
+                  </div>
+                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每次掉1血层，对玩家造成 {card.golemLayerLossReflect}×已损失血层 点伤害。</p>
+                </div>
+              </div>
+            )}
+
             {/* Golem Spell Growth */}
             {card.type === 'monster' && card.golemSpellGrowth != null && card.golemSpellGrowth > 0 && (
               <div className="bg-indigo-500/15 p-3 rounded-md border border-indigo-500/30">
@@ -592,7 +727,7 @@ export default function CardDetailsModal({
                     <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />
                     <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">法力吞噬</span>
                   </div>
-                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每个怪物回合结束时，反魔伤害 +{card.golemSpellGrowth}。</p>
+                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每个怪物回合结束时，反魔伤害 +{card.golemSpellGrowth}，岩层反震系数 +{card.golemSpellGrowth}。</p>
                 </div>
               </div>
             )}
@@ -737,9 +872,6 @@ export default function CardDetailsModal({
                 if (card.monsterSpecial === 'bone-regen') {
                   effects.push({ title: '虚骨再生', desc: '每次失去耐久，50% 概率恢复一层。', color: 'gray' });
                 }
-                if (card.lastWords === 'discard-hand-3') {
-                  effects.push({ title: '遗言', desc: '抽 3 张牌。', color: 'cyan' });
-                }
               } else if (mType === 'Wraith') {
                 if (card.lastWords?.startsWith('wraith-haunt')) {
                   const hauntAmt = card.lastWords.replace('wraith-haunt-', '');
@@ -761,6 +893,15 @@ export default function CardDetailsModal({
                 }
                 if (card.eliteRegenHeroTurn) {
                   effects.push({ title: '龙息回复', desc: '若怪物回合内 Hero 未掉血，该装备立即恢复 1 耐久。', color: 'amber' });
+                }
+                if (card.eliteHealOtherMonster) {
+                  effects.push({ title: '龙息庇护', desc: 'Hero 回合未掉血层时，为激活行另一个怪物恢复 1 血层。', color: 'emerald' });
+                }
+                if (card.dragonAttackNoLayerCost) {
+                  effects.push({ title: '龙鳞护体', desc: '攻击不消耗血层。', color: 'amber' });
+                }
+                if (card.dragonDamageRetaliation) {
+                  effects.push({ title: '龙息反击', desc: `每受到一次伤害，对玩家造成 ${card.dragonDamageRetaliation} 点法术伤害。`, color: 'red' });
                 }
                 if (card.dragonBleedDestroy) {
                   effects.push({ title: '流血破甲', desc: '每失去 1 耐久，对所有血层数大于该装备剩余耐久的怪物造成 1 血层伤害。', color: 'orange' });

@@ -117,6 +117,48 @@ export type MirrorCopySelection =
   | { kind: 'amulet'; index: number }
   | { kind: 'hand'; cardId: string };
 
+/** 增幅：可选目标为装备栏或手牌中的装备/伤害魔法 */
+export type AmplifySelection =
+  | { kind: 'equipment'; slotId: 'equipmentSlot1' | 'equipmentSlot2' }
+  | { kind: 'hand'; cardId: string };
+
+// ---------------------------------------------------------------------------
+// Eternal Relics — permanent passive items (like Slay the Spire relics)
+// ---------------------------------------------------------------------------
+
+export type EternalRelicId =
+  | 'waterfall-discover'
+  | 'waterfall-heal'
+  | 'vitality-well'
+  | 'discard-profit'
+  | 'heal-to-damage'
+  | 'early-surge'
+  | 'shield-wall'
+  | 'summon-minion'
+  | 'bulwark-attack'
+  | 'bulwark-armor'
+  | 'chain-persuade'
+  | 'recycle-shuffle'
+  | `amulet-eternal-${string}`;
+
+export interface EternalRelic {
+  id: EternalRelicId;
+  name: string;
+  description: string;
+  image: string;
+  initialMaxHpBonus?: number;
+  initialGoldBonus?: number;
+  initialShopLevel?: number;
+  initialWaterfallBonus?: number;
+  initialClassCardDraw?: number;
+  initialSpellDamageBonus?: number;
+  /** When this relic was converted from an amulet, store its effect so it continues to function. */
+  amuletEffect?: import('@/components/GameCard').AmuletEffectId;
+  amuletAuraBonus?: import('@/components/GameCard').AmuletAuraBonus;
+  /** Upgrade level carried over from the original amulet. */
+  upgradeLevel?: number;
+}
+
 // ---------------------------------------------------------------------------
 // GameState — the unified, authoritative game state managed by GameEngine
 // ---------------------------------------------------------------------------
@@ -241,7 +283,7 @@ export interface GameState {
   persuadeSuccessDurabilityBonus: number;
   /** 转型关键词：上一张「使用」的牌的类型分类（不含弃置/回收/事件） */
   lastPlayedCardCategory: string | null;
-  /** 本波已使用的 magic/hero-magic 卡数量（瀑流重置） */
+  /** 本波已使用的 magic 卡数量（瀑流重置，不含 hero-magic） */
   magicCardsPlayedThisTurn: number;
 
   // --- Combat ---
@@ -274,6 +316,7 @@ export interface GameState {
   gambitExtraPerSlot: number;
   gambitSlotUsed: Record<string, number>;
   weaponExtraAttackUsed: Record<string, boolean>;
+  blockDurabilityPerSlot: number;
 
   // --- Targeting / pending actions ---
   pendingHeroSkillAction: PendingHeroSkillAction | null;
@@ -316,7 +359,9 @@ export interface GameState {
   /** 镜影摹形：选择复制目标 */
   mirrorCopyModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
-  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'flank-grant' | 'transform-gold-grant' } | null;
+  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant'; meta?: Record<string, number> } | null;
+  /** 增幅：选择装备栏或手牌中的装备/伤害魔法进行增幅 */
+  amplifyModal: { sourceCardId: string } | null;
   graveyardDiscoverState: GameCardData[] | null;
   graveyardDiscoverDelivery: 'backpack' | 'hand-first';
   cardActionContext: CardActionContext | null;
@@ -337,6 +382,9 @@ export interface GameState {
   drawPending: boolean;
   isHydrated: boolean;
   heroSkillBanner: string | null;
+
+  // --- Eternal relics ---
+  eternalRelics: EternalRelic[];
 
   // --- Game log ---
   gameLogEntries: LogEntry[];

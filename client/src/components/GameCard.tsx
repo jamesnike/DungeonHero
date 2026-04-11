@@ -115,7 +115,8 @@ export type PotionEffectId =
   | 'perm-waterfall-deal+1'
   | 'grant-perm-2'
   | 'perm-persuade-consecutive'
-  | 'grant-lastwords-hand-equip-buff';
+  | 'grant-lastwords-hand-equip-buff'
+  | 'amulet-to-eternal-relic';
 
 export type AmuletEffectId =
   | 'heal'
@@ -162,7 +163,8 @@ export type EventRequirement =
   | { type: 'gold'; min: number; message?: string }
   | { type: 'leftmostIsEnraged'; message?: string }
   | { type: 'shopLevel'; min: number; message?: string }
-  | { type: 'persuadeLevel'; min: number; message?: string };
+  | { type: 'persuadeLevel'; min: number; message?: string }
+  | { type: 'handUpgraded'; min: number; message?: string };
 
 export type EventEffectExpression = string | string[];
 
@@ -274,6 +276,8 @@ export interface GameCardData {
   critChance?: number; // % chance to deal double damage on attack
   restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
   healOnAttack?: number; // Heal this amount each time this weapon attacks
+  onAttackBuffOtherSlotTempAttack?: number; // Give the OTHER equipment slot +N temp attack on each attack
+  onAttackRepairOtherSlot?: number; // Restore N durability to the OTHER equipment slot on each attack
   daggerSelfDestructDiscover?: boolean; // 匕首: after attack, optionally destroy weapon to discover class cards (1 per remaining durability)
   ghostBladeExile?: boolean; // 虚灵刀: after each attack, offer to exile cards from graveyard
   postAttackHandRecycle?: boolean; // After each attack, optionally move a hand card to recycle bag and draw one
@@ -293,6 +297,8 @@ export interface GameCardData {
   onDestroyPermanentShield?: number; // Add permanent armor to slot when this equipment is destroyed
   shieldBlockAutoUpgradeCount?: number; // Auto-upgrade shield after this many blocks
   _shieldBlockCount?: number; // Internal counter for blocks performed
+  shieldExtraBlocksPerDurability?: number; // Extra armor-depleted blocks before losing 1 durability
+  _shieldDurabilityBlockCounter?: number; // Runtime counter for extra-block durability tracking
   _counterDisplay?: string; // Dynamic counter text shown on card (e.g. "2/5")
   blockGrantTempArmorToOther?: boolean; // On block, grant temp armor equal to shield value to other slot
   onDestroyDraw?: number; // Draw this many cards from backpack when this equipment is destroyed
@@ -310,21 +316,33 @@ export interface GameCardData {
   // Tier-3 waterfall upgrade abilities
   ogreStun?: boolean; // Ogre tier-1+: 20% chance to stun the player on attack (freezes equipment/amulet slots)
   ogreEnterDiscard?: boolean; // Ogre tier-3: randomly discard a player hand card on enter
+  dragonAttackNoLayerCost?: boolean; // Dragon tier-1+: attacks don't consume blood layers
+  dragonDamageRetaliation?: number; // Dragon tier-2+: deal N magic damage to player each time this monster takes damage
   dragonBleedDestroy?: boolean; // Dragon tier-3: on layer loss, destroy equipment with durability > remaining layers
-  skeletonNoLayerCost?: boolean; // Skeleton tier-3: after revive, attacks don't consume layers
-  skeletonNoLayerCostActive?: boolean; // Set to true once skeleton revives with tier-3 ability
-  wraithTurnAttack?: number; // Wraith tier-2: +N attack at end of each monster turn
-  wraithDeathHeal?: number; // Wraith tier-3: on death, same-row monsters gain this much HP
+  eliteHealOtherMonster?: boolean; // Elite dragon: if hero turn ends without layer loss, heal 1 layer on another active row monster
+  skeletonNoLayerCost?: boolean; // Skeleton tier-1+: after revive, attacks don't consume layers
+  skeletonNoLayerCostActive?: boolean; // Set to true once skeleton revives with no-layer-cost ability
+  skeletonLastWordsDiscard?: boolean; // Skeleton tier-2+: last words discard 1 player hand card
+  skeletonReRevive?: boolean; // Skeleton tier-3: when another monster in active row is defeated and this skeleton already revived, regain revive
+  wraithTurnAttack?: number; // Wraith tier-2 (legacy): +N attack at end of each monster turn
+  wraithDeathHeal?: number; // Wraith tier-3 (legacy): on death, same-row monsters gain this much HP
+  wraithAuraAttack?: number; // Wraith tier-1: +N attack to ALL active row monsters at end of monster turn
+  wraithDeathHealSpread?: number; // Wraith tier-2: on death, same-row monsters +N HP and pass this last word to random monster
+  wraithTurnEnrage?: boolean; // Wraith tier-3: enrage all active row monsters at end of monster turn
+  wraithDestroyAmulet?: boolean; // Wraith tier-3: destroy a random amulet at end of monster turn
   goblinStealCard?: boolean; // Goblin tier-1+: steal a random hand card on attack, stacked under this monster
   stolenByGoblin?: boolean; // Card was stolen by a Goblin and stacked under it; triggers auto-draw on stack pop
   goblinStealScale?: boolean; // Goblin tier-3: +X atk/hp per X gold stolen
   goblinHasStolen?: boolean; // Tracks if this goblin successfully stole gold
   swarmHordeRage?: boolean; // Swarm tier-1: when ≥3 monsters in active row, all get enraged +3 atk/hp
   swarmHordeBuffed?: boolean; // Tracks if this monster already received the horde buff
-  antiMagicReflect?: number; // Golem base: damage dealt to player per damaging magic card used
+  swarmCorrode?: boolean; // Swarm tier-2: on attack, blocking shield loses 1 durability (doesn't count as block durability use)
+  swarmBugletShield?: boolean; // Swarm tier-3: takes 0 damage when buglets exist on active row
+  antiMagicReflect?: number; // Golem base: damage dealt to player per magic card used
   spellDamageReduction?: number; // Golem tier-1: fraction of spell damage reduced (0.5 = 50%)
   maxDamagePerHit?: number; // Golem elite: max damage this monster can take per hit
-  golemSpellGrowth?: number; // Golem tier-3: increase antiMagicReflect by this each monster turn end
+  golemLayerLossReflect?: number; // Golem tier-2: deals coeff × lostLayers damage when losing a fury layer
+  golemSpellGrowth?: number; // Golem tier-3: increase antiMagicReflect & golemLayerLossReflect each monster turn end
   /** 本局随机指定的一只哥布林；仅该实例死亡且未偷金时掉落「哥布林的戏法」 */
   goblinTrickCarrier?: boolean;
   wraithRebirthUsed?: boolean; // Wraith equipment: durability refill has been consumed
@@ -347,8 +365,18 @@ export interface GameCardData {
   flankEffect?: string;
   /** 侧击抽牌：打出时处于手牌最左/最右位置时抽取的卡牌数量 */
   flankDraw?: number;
+  /** 侧击触发时执行的效果 ID（如 persuadeCost-1、stunCap+5、damage:5） */
+  flankEffectId?: string;
   /** 事件堆叠驻留：处理后若 activeCardStacks 有下方牌，则消耗下方牌、事件不进坟场 */
   stayIfStacked?: boolean;
+  /** 幽灵属性：不阻挡瀑流、不计入激活行剩余卡牌数；瀑流时垫在最下方 */
+  isGhost?: boolean;
+  /** 增幅加成：每次增幅 +1，武器加攻击/护盾加护甲/伤害魔法加伤害 */
+  amplifyBonus?: number;
+  /** 增幅祭坛：发动时增幅目标卡牌的 ID */
+  _amplifyTargetCardId?: string;
+  /** 增幅祭坛：增幅目标卡牌的名称（用于卡面显示） */
+  _amplifyTargetName?: string;
 }
 
 /** 叠伤永久法术：仅显示叠刺层数（随使用次数增加），不含永久法术加成 / 法术回响 */
@@ -409,6 +437,7 @@ interface GameCardProps {
   disableInteractions?: boolean;
   amuletDescriptionVariant?: 'default' | 'topThird';
   bleedAnimation?: boolean;
+  healAnimation?: boolean;
   weaponSwingAnimation?: boolean;
   shieldBlockAnimation?: boolean;
   defeatAnimation?: boolean;
@@ -430,6 +459,7 @@ function GameCardInner({
   disableInteractions = false,
   amuletDescriptionVariant = 'default',
   bleedAnimation = false,
+  healAnimation = false,
   weaponSwingAnimation = false,
   shieldBlockAnimation = false,
   defeatAnimation = false,
@@ -719,10 +749,11 @@ const amuletEffectText =
   const showUpgradeBadge = upgradeLevel > 0 && !(card.type === 'monster' && card.durability == null);
 
   const showBleedOverlay = Boolean(bleedAnimation);
+  const showHealOverlay = Boolean(healAnimation);
   const showWeaponSwing = Boolean(weaponSwingAnimation);
   const showShieldBlock = Boolean(shieldBlockAnimation);
   const showDefeatOverlay = Boolean(defeatAnimation);
-  const showCombatOverlay = showBleedOverlay || showWeaponSwing || showShieldBlock || showDefeatOverlay;
+  const showCombatOverlay = showBleedOverlay || showHealOverlay || showWeaponSwing || showShieldBlock || showDefeatOverlay;
   const isMagicCard = isMagicLikeCard;
   const magicPatternKey = isMagicLikeCard ? resolveMagicPatternKey(card) : null;
   const eventPatternKey = isEventCard ? resolveEventPatternKey(card) : null;
@@ -1115,16 +1146,21 @@ const amuletEffectText =
                         </>
                       )}
                       {card.transformBonus && (
-                        <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block mt-0.5" title={`转型：${card.transformBonus}`}>转型</span>
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block mt-0.5">转型：{card.transformBonus}</span>
                       )}
                       {card.flankEffect && (
-                        <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block mt-0.5" title={`侧击：${card.flankEffect}`}>侧击</span>
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block mt-0.5">侧击：{card.flankEffect}</span>
                       )}
                     </div>
                   )}
                   {!isMagicLikeCard && card.transformBonus && (
                     <div className="relative z-10 w-full text-center mt-0.5">
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block" title={`转型：${card.transformBonus}`}>转型</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block">转型：{card.transformBonus}</span>
+                    </div>
+                  )}
+                  {!isMagicLikeCard && card.flankEffect && (
+                    <div className="relative z-10 w-full text-center mt-0.5">
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block">侧击：{card.flankEffect}</span>
                     </div>
                   )}
                   {isEventCard && (
@@ -1308,6 +1344,13 @@ const amuletEffectText =
                         <span className="combat-overlay__shape combat-overlay__shape--bleed-ring" data-stagger="2" />
                       </>
                     )}
+                    {showHealOverlay && (
+                      <>
+                        <span className="combat-overlay__shape combat-overlay__shape--heal" />
+                        <span className="combat-overlay__shape combat-overlay__shape--heal-rise" data-stagger="1" />
+                        <span className="combat-overlay__shape combat-overlay__shape--heal-ring" data-stagger="2" />
+                      </>
+                    )}
                     {showWeaponSwing && (
                       <>
                         <span className="combat-overlay__shape combat-overlay__shape--swing" />
@@ -1433,11 +1476,28 @@ const amuletEffectText =
 
                 {card.type === 'building' && (
                   <>
-                    <div className="absolute top-1 left-1 z-10 pointer-events-none">
+                    <div className="absolute top-1 left-1 z-10 pointer-events-none flex items-center gap-0.5">
                       <span className="dh-card__caption rounded-sm border border-stone-500/60 bg-stone-700/75 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-100">
                         建筑
                       </span>
+                      {card.isGhost && (
+                        <span className="rounded-sm border border-indigo-400/60 bg-indigo-900/70 px-0.5 py-0.5 text-[10px] leading-none text-indigo-200" title="幽灵：不阻挡瀑流，不计入剩余卡牌">
+                          👻
+                        </span>
+                      )}
                     </div>
+                    {card._amplifyTargetName && (
+                      <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+                        <div className="bg-gradient-to-t from-black/80 to-transparent px-1 pb-0.5 pt-2">
+                          <div className="flex items-center gap-0.5">
+                            <span className="text-[9px] text-amber-300/80">🎯</span>
+                            <span className="text-[9px] font-bold text-amber-200 truncate drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+                              {card._amplifyTargetName}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
                       <div className="relative group flex items-center">
                         <div className="flex items-baseline gap-0 mr-1">
@@ -1579,7 +1639,7 @@ const amuletEffectText =
                   {card.name}
                 </h3>
 
-                {card.type === 'monster' && card.durability != null && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonBleedDestroy || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemSpellGrowth) && (
+                {card.type === 'monster' && card.durability != null && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonBleedDestroy || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手偷钱：攻击时为Hero偷钱">偷钱</span>
@@ -1636,7 +1696,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="流血破甲：失去耐久时对高血层怪物造成1血层伤害">破甲</span>
                     )}
                     {card.antiMagicReflect != null && card.antiMagicReflect > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`反魔：玩家每使用一张造成伤害的法术牌，对玩家造成 ${card.antiMagicReflect} 点伤害`}>反魔</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`反魔：玩家每使用一张法术牌，对玩家造成 ${card.antiMagicReflect} 点伤害`}>反魔</span>
                     )}
                     {card.spellDamageReduction != null && card.spellDamageReduction > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title={`法术抗性：受到的法术伤害减少 ${Math.round(card.spellDamageReduction * 100)}%`}>抗性</span>
@@ -1644,12 +1704,15 @@ const amuletEffectText =
                     {card.maxDamagePerHit != null && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={`岩石护体：每次最多受到 ${card.maxDamagePerHit} 点伤害`}>护体</span>
                     )}
+                    {card.golemLayerLossReflect != null && card.golemLayerLossReflect > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`岩层反震：每次掉1血层，对玩家造成 ${card.golemLayerLossReflect}×已损失血层 点伤害`}>反震</span>
+                    )}
                     {card.golemSpellGrowth != null && card.golemSpellGrowth > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`法力吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}`}>吞噬</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`法力吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}，反震系数 +${card.golemSpellGrowth}`}>吞噬</span>
                     )}
                   </div>
                 )}
-                {card.type === 'monster' && card.durability == null && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonBleedDestroy || card.skeletonNoLayerCostActive || card.wraithTurnAttack || card.wraithDeathHeal || card.goblinStealCard || card.goblinStealScale || card.isStunned || card.swarmSpawn || card.isBuglet || card.swarmHordeRage || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemSpellGrowth) && (
+                {card.type === 'monster' && card.durability == null && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.isStunned || card.swarmSpawn || card.isBuglet || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth) && (
                   <div className="dh-card__keyword-row">
                     {card.monsterSpecial && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.description ?? '精英怪物'}>精英</span>
@@ -1665,6 +1728,12 @@ const amuletEffectText =
                     )}
                     {card.swarmHordeRage && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="虫群集结：当激活行怪物≥3时，所有怪物被激怒，并+3攻击+3血量">集结</span>
+                    )}
+                    {card.swarmCorrode && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="腐蚀甲壳：攻击时，格挡护盾立刻-1耐久度（不计入格挡耐久次数）">腐蚀</span>
+                    )}
+                    {card.swarmBugletShield && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虫盾共生：激活行有小虫子时，受到的伤害为0">虫盾</span>
                     )}
                     {(card.hasRevive || card.hasEquipmentRevive) && (() => {
                       const allUsed = (!card.hasRevive || card.reviveUsed) && (!card.hasEquipmentRevive || card.equipmentReviveUsed);
@@ -1696,17 +1765,44 @@ const amuletEffectText =
                     {card.ogreEnterDiscard && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="蛮力震慑：入场时随机弃回一张手牌">震慑</span>
                     )}
+                    {card.dragonAttackNoLayerCost && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="龙鳞护体：攻击不消耗血层">龙鳞</span>
+                    )}
+                    {card.dragonDamageRetaliation != null && card.dragonDamageRetaliation > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title={`龙息反击：每受到一次伤害，对玩家造成 ${card.dragonDamageRetaliation} 点法术伤害`}>反击</span>
+                    )}
                     {card.dragonBleedDestroy && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="流血破甲：失去血层时破坏高耐久装备">破甲</span>
                     )}
+                    {card.eliteHealOtherMonster && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="龙息庇护：Hero回合未掉血层时，为激活行另一个怪物恢复1血层">庇护</span>
+                    )}
                     {card.skeletonNoLayerCostActive && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="不朽之骨：攻击不消耗血层">不朽</span>
+                    )}
+                    {card.skeletonLastWordsDiscard && !card.lastWords && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：死亡时随机弃回玩家1张手牌">遗言</span>
+                    )}
+                    {card.skeletonReRevive && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="亡骨轮回：同行其他怪物被击败时，若已复生过，再次获得复生">轮回</span>
                     )}
                     {card.wraithTurnAttack != null && card.wraithTurnAttack > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`怨念蓄积：每个怪物回合结束时攻击力 +${card.wraithTurnAttack}`}>蓄积</span>
                     )}
                     {card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`怨灵祝福：死亡时同行怪物生命+${card.wraithDeathHeal}`}>祝福</span>
+                    )}
+                    {card.wraithAuraAttack != null && card.wraithAuraAttack > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`怨念光环：每个怪物回合结束时，激活行所有怪物攻击力 +${card.wraithAuraAttack}`}>光环</span>
+                    )}
+                    {card.wraithDeathHealSpread != null && card.wraithDeathHealSpread > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`怨灵遗言：死亡时同行怪物生命 +${card.wraithDeathHealSpread}，并传递此遗言`}>遗言</span>
+                    )}
+                    {card.wraithTurnEnrage && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="怨灵诅咒：每个怪物回合结束时，使激活行所有怪物激怒">诅咒</span>
+                    )}
+                    {card.wraithDestroyAmulet && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="护符破坏：每个怪物回合结束时，随机摧毁一个护符">碎符</span>
                     )}
                     {card.goblinStealCard && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃牌贼：攻击时偷走一张手牌">窃牌</span>
@@ -1715,7 +1811,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="贪婪强化：偷到金币后攻击力和生命值同步增长">贪婪</span>
                     )}
                     {card.antiMagicReflect != null && card.antiMagicReflect > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`反魔：玩家每使用一张造成伤害的法术牌，对玩家造成 ${card.antiMagicReflect} 点伤害`}>反魔</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`反魔：玩家每使用一张法术牌，对玩家造成 ${card.antiMagicReflect} 点伤害`}>反魔</span>
                     )}
                     {card.spellDamageReduction != null && card.spellDamageReduction > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title={`法术抗性：受到的法术伤害减少 ${Math.round(card.spellDamageReduction * 100)}%`}>抗性</span>
@@ -1723,8 +1819,11 @@ const amuletEffectText =
                     {card.maxDamagePerHit != null && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={`岩石护体：每次最多受到 ${card.maxDamagePerHit} 点伤害`}>护体</span>
                     )}
+                    {card.golemLayerLossReflect != null && card.golemLayerLossReflect > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`岩层反震：每次掉1血层，对玩家造成 ${card.golemLayerLossReflect}×已损失血层 点伤害`}>反震</span>
+                    )}
                     {card.golemSpellGrowth != null && card.golemSpellGrowth > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`法力吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}`}>吞噬</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`法力吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}，反震系数 +${card.golemSpellGrowth}`}>吞噬</span>
                     )}
                     {card.isStunned && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title="晕眩：本回合无法行动">晕眩</span>
@@ -1812,6 +1911,7 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.transformEffect !== b.transformEffect ||
       a.flankEffect !== b.flankEffect ||
       a.flankDraw !== b.flankDraw ||
+      a.flankEffectId !== b.flankEffectId ||
       a.specialAttackBoost !== b.specialAttackBoost ||
       a.tempAttackBoost !== b.tempAttackBoost ||
       a.tempHpBoost !== b.tempHpBoost ||
@@ -1823,10 +1923,19 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.lowGoldBuffActive !== b.lowGoldBuffActive ||
       a.ogreStun !== b.ogreStun ||
       a.ogreEnterDiscard !== b.ogreEnterDiscard ||
+      a.dragonAttackNoLayerCost !== b.dragonAttackNoLayerCost ||
+      a.dragonDamageRetaliation !== b.dragonDamageRetaliation ||
       a.dragonBleedDestroy !== b.dragonBleedDestroy ||
+      a.eliteHealOtherMonster !== b.eliteHealOtherMonster ||
       a.skeletonNoLayerCostActive !== b.skeletonNoLayerCostActive ||
+      a.skeletonLastWordsDiscard !== b.skeletonLastWordsDiscard ||
+      a.skeletonReRevive !== b.skeletonReRevive ||
       a.wraithTurnAttack !== b.wraithTurnAttack ||
       a.wraithDeathHeal !== b.wraithDeathHeal ||
+      a.wraithAuraAttack !== b.wraithAuraAttack ||
+      a.wraithDeathHealSpread !== b.wraithDeathHealSpread ||
+      a.wraithTurnEnrage !== b.wraithTurnEnrage ||
+      a.wraithDestroyAmulet !== b.wraithDestroyAmulet ||
       a.goblinStealCard !== b.goblinStealCard ||
       a.goblinStealScale !== b.goblinStealScale ||
       a.goblinHasStolen !== b.goblinHasStolen ||
@@ -1844,10 +1953,19 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.isBuglet !== b.isBuglet ||
       a.swarmHordeRage !== b.swarmHordeRage ||
       a.swarmHordeBuffed !== b.swarmHordeBuffed ||
+      a.swarmCorrode !== b.swarmCorrode ||
+      a.swarmBugletShield !== b.swarmBugletShield ||
       a.hasEquipmentRevive !== b.hasEquipmentRevive ||
       a.equipmentReviveUsed !== b.equipmentReviveUsed ||
       a._shieldBlockCount !== b._shieldBlockCount ||
-      a._counterDisplay !== b._counterDisplay
+      a._counterDisplay !== b._counterDisplay ||
+      a.magicType !== b.magicType ||
+      a.isPermanentEvent !== b.isPermanentEvent ||
+      a.isGhost !== b.isGhost ||
+      a.amplifyBonus !== b.amplifyBonus ||
+      a.onDiscardDraw !== b.onDiscardDraw ||
+      a.potionEffect !== b.potionEffect ||
+      a.amuletEffect !== b.amuletEffect
     ) {
       return false;
     }
@@ -1858,6 +1976,7 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
     prev.disableInteractions === next.disableInteractions &&
     prev.amuletDescriptionVariant === next.amuletDescriptionVariant &&
     prev.bleedAnimation === next.bleedAnimation &&
+    prev.healAnimation === next.healAnimation &&
     prev.weaponSwingAnimation === next.weaponSwingAnimation &&
     prev.shieldBlockAnimation === next.shieldBlockAnimation &&
     prev.defeatAnimation === next.defeatAnimation &&

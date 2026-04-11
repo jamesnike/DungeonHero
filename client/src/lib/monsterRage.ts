@@ -28,14 +28,14 @@ const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
 
 const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
   Dragon:   [
-    { waterfallLevel: 4, attackBonus: 3, hpBonus: 1 },
-    { waterfallLevel: 8, attackBonus: 5, hpBonus: 4 },
-    { waterfallLevel: 12, attackBonus: 8, hpBonus: 7, specialAbility: 'dragon-bleed-destroy', specialDesc: '流血破甲：每失去一个血层，破坏耐久度 > 剩余血层数的装备' },
+    { waterfallLevel: 4, attackBonus: 3, hpBonus: 1, specialAbility: 'dragon-attack-no-layer-cost', specialDesc: '龙鳞护体：攻击不消耗血层' },
+    { waterfallLevel: 8, attackBonus: 5, hpBonus: 4, specialAbility: 'dragon-damage-retaliation', specialDesc: '龙鳞护体 + 龙息反击：每受到一次伤害，对玩家造成 3 点法术伤害' },
+    { waterfallLevel: 12, attackBonus: 8, hpBonus: 7, specialAbility: 'dragon-all', specialDesc: '龙鳞护体 + 龙息反击 + 流血破甲：每失去一个血层，破坏耐久度 > 剩余血层数的装备' },
   ],
   Skeleton: [
-    { waterfallLevel: 3, attackBonus: 3, hpBonus: 1 },
-    { waterfallLevel: 7, attackBonus: 6, hpBonus: 2 },
-    { waterfallLevel: 11, attackBonus: 9, hpBonus: 3, specialAbility: 'skeleton-no-layer-cost', specialDesc: '不朽之骨：复生后攻击不消耗血层' },
+    { waterfallLevel: 3, attackBonus: 3, hpBonus: 1, specialAbility: 'skeleton-no-layer-cost', specialDesc: '不朽之骨：复生后攻击不消耗血层' },
+    { waterfallLevel: 7, attackBonus: 6, hpBonus: 2, specialAbility: 'skeleton-last-words-discard', specialDesc: '遗言：随机弃回玩家 1 张手牌' },
+    { waterfallLevel: 11, attackBonus: 9, hpBonus: 3, specialAbility: 'skeleton-re-revive', specialDesc: '亡骨轮回：同行其他怪物被击败时，若本骷髅已复生过，再次获得复生' },
   ],
   Goblin:   [
     { waterfallLevel: 3, attackBonus: 2, hpBonus: 1, specialAbility: 'goblin-steal-card', specialDesc: '窃牌贼：攻击时随机偷走一张手牌，堆叠在自身下方' },
@@ -48,14 +48,14 @@ const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
     { waterfallLevel: 13, attackBonus: 8, hpBonus: 5, specialAbility: 'ogre-all', specialDesc: '蛮力震慑 + 蛮力击晕 + 狂暴连击' },
   ],
   Wraith:   [
-    { waterfallLevel: 4, attackBonus: 3, hpBonus: 1 },
-    { waterfallLevel: 8, attackBonus: 5, hpBonus: 3, specialAbility: 'wraith-turn-attack', specialDesc: '怨念蓄积：每个怪物回合结束时攻击力 +3' },
-    { waterfallLevel: 12, attackBonus: 7, hpBonus: 4, specialAbility: 'wraith-death-heal', specialDesc: '怨灵祝福：死亡时同行其他怪物生命值 +4' },
+    { waterfallLevel: 4, attackBonus: 3, hpBonus: 1, specialAbility: 'wraith-aura-attack', specialDesc: '怨念光环：每个怪物回合结束时，激活行所有怪物攻击力 +2' },
+    { waterfallLevel: 8, attackBonus: 5, hpBonus: 3, specialAbility: 'wraith-death-spread', specialDesc: '怨灵遗言：死亡时同行其他怪物生命值 +4，并让随机一个激活行怪物获得此遗言' },
+    { waterfallLevel: 12, attackBonus: 7, hpBonus: 4, specialAbility: 'wraith-curse', specialDesc: '怨灵诅咒：每个怪物回合结束时，使激活行所有怪物激怒，并随机摧毁一个护符' },
   ],
   Swarm:    [
     { waterfallLevel: 4, attackBonus: 1, hpBonus: 2, specialAbility: 'swarm-horde-rage', specialDesc: '虫群集结：当激活行怪物≥3时，所有怪物被激怒，并+3攻击+3血量' },
-    { waterfallLevel: 8, attackBonus: 2, hpBonus: 4 },
-    { waterfallLevel: 12, attackBonus: 3, hpBonus: 6 },
+    { waterfallLevel: 8, attackBonus: 2, hpBonus: 4, specialAbility: 'swarm-corrode', specialDesc: '腐蚀甲壳：攻击时，格挡护盾立刻-1耐久度（不计入格挡耐久次数）' },
+    { waterfallLevel: 12, attackBonus: 3, hpBonus: 6, specialAbility: 'swarm-buglet-shield', specialDesc: '虫盾共生：激活行有小虫子时，受到的伤害为0' },
   ],
   Buglet:   [
     { waterfallLevel: 4, attackBonus: 2, hpBonus: 1 },
@@ -64,8 +64,8 @@ const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
   ],
   Golem:    [
     { waterfallLevel: 4, attackBonus: 2, hpBonus: 2, specialAbility: 'golem-spell-resist', specialDesc: '法术抗性：受到的法术伤害减少50%' },
-    { waterfallLevel: 8, attackBonus: 4, hpBonus: 3 },
-    { waterfallLevel: 12, attackBonus: 6, hpBonus: 5, specialAbility: 'golem-spell-growth', specialDesc: '法力吞噬：每个怪物回合结束时，反魔伤害+1' },
+    { waterfallLevel: 8, attackBonus: 4, hpBonus: 3, specialAbility: 'golem-layer-loss-reflect', specialDesc: '岩层反震：每次掉1血层，对玩家造成 3×已损失血层 点伤害' },
+    { waterfallLevel: 12, attackBonus: 6, hpBonus: 5, specialAbility: 'golem-spell-growth', specialDesc: '法力吞噬：每个怪物回合结束时，反魔伤害+1，岩层反震系数+1' },
   ],
 };
 
@@ -147,18 +147,42 @@ const applySpecialAbility = (result: GameCardData, ability: string): void => {
     case 'ogre-enter-discard':
       result.ogreEnterDiscard = true;
       break;
-    case 'dragon-bleed-destroy':
+    case 'dragon-attack-no-layer-cost':
+      result.dragonAttackNoLayerCost = true;
+      break;
+    case 'dragon-damage-retaliation':
+      result.dragonAttackNoLayerCost = true;
+      result.dragonDamageRetaliation = 3;
+      break;
+    case 'dragon-all':
+      result.dragonAttackNoLayerCost = true;
+      result.dragonDamageRetaliation = 3;
       result.dragonBleedDestroy = true;
       break;
     case 'skeleton-no-layer-cost':
       result.skeletonNoLayerCost = true;
       break;
-    case 'wraith-turn-attack':
-      result.wraithTurnAttack = 3;
+    case 'skeleton-last-words-discard':
+      result.skeletonNoLayerCost = true;
+      result.skeletonLastWordsDiscard = true;
       break;
-    case 'wraith-death-heal':
-      result.wraithTurnAttack = 3;
-      result.wraithDeathHeal = 4;
+    case 'skeleton-re-revive':
+      result.skeletonNoLayerCost = true;
+      result.skeletonLastWordsDiscard = true;
+      result.skeletonReRevive = true;
+      break;
+    case 'wraith-aura-attack':
+      result.wraithAuraAttack = 2;
+      break;
+    case 'wraith-death-spread':
+      result.wraithAuraAttack = 2;
+      result.wraithDeathHealSpread = 4;
+      break;
+    case 'wraith-curse':
+      result.wraithAuraAttack = 2;
+      result.wraithDeathHealSpread = 4;
+      result.wraithTurnEnrage = true;
+      result.wraithDestroyAmulet = true;
       break;
     case 'goblin-steal-card':
       result.goblinStealCard = true;
@@ -170,11 +194,25 @@ const applySpecialAbility = (result: GameCardData, ability: string): void => {
     case 'swarm-horde-rage':
       result.swarmHordeRage = true;
       break;
+    case 'swarm-corrode':
+      result.swarmHordeRage = true;
+      result.swarmCorrode = true;
+      break;
+    case 'swarm-buglet-shield':
+      result.swarmHordeRage = true;
+      result.swarmCorrode = true;
+      result.swarmBugletShield = true;
+      break;
     case 'golem-spell-resist':
       result.spellDamageReduction = 0.5;
       break;
+    case 'golem-layer-loss-reflect':
+      result.spellDamageReduction = 0.5;
+      result.golemLayerLossReflect = 3;
+      break;
     case 'golem-spell-growth':
       result.spellDamageReduction = 0.5;
+      result.golemLayerLossReflect = 3;
       result.golemSpellGrowth = 1;
       break;
   }

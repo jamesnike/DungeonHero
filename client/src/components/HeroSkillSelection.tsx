@@ -1,10 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Shield, Droplet, Skull, Heart, Coins, Ghost, HandCoins, Waves, Swords, HeartPulse, Zap, ShieldAlert, BookOpen, Cat, ArrowLeftRight } from 'lucide-react';
-import { heroSkills, type HeroSkillDefinition } from '@/lib/heroSkills';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
 import type { GameCardData } from './GameCard';
-
-import skillScrollImage from '@assets/generated_images/chibi_skill_scroll.png';
+import { heroSkills, type HeroSkillDefinition } from '@/lib/heroSkills';
+import { getEternalRelic } from '@/lib/eternalRelics';
+import type { EternalRelicId } from '@/game-core/types';
 
 interface HeroSkillSelectionProps {
   isOpen: boolean;
@@ -15,28 +14,6 @@ interface HeroSkillSelectionProps {
 function sampleSkills(count: number): HeroSkillDefinition[] {
   const shuffled = [...heroSkills].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
-}
-
-function getSkillIcon(skillId: string) {
-  const cls = "w-6 h-6";
-  switch (skillId) {
-    case 'armor-pact': return <Shield className={cls} />;
-    case 'durability-for-blood': return <Droplet className={cls} />;
-    case 'blood-strike': return <Skull className={cls} />;
-    case 'vitality-well': return <Heart className={cls} />;
-    case 'gold-discovery': return <Coins className={cls} />;
-    case 'graveyard-recall': return <Ghost className={cls} />;
-    case 'discard-profit': return <HandCoins className={cls} />;
-    case 'waterfall-heal': return <Waves className={cls} />;
-    case 'discard-empower': return <Swords className={cls} />;
-    case 'heal-to-damage': return <HeartPulse className={cls} />;
-    case 'early-surge': return <Zap className={cls} />;
-    case 'shield-wall': return <ShieldAlert className={cls} />;
-    case 'blood-draw': return <BookOpen className={cls} />;
-    case 'summon-minion': return <Cat className={cls} />;
-    case 'vanguard-swap': return <ArrowLeftRight className={cls} />;
-    default: return <Shield className={cls} />;
-  }
 }
 
 export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPreview }: HeroSkillSelectionProps) {
@@ -67,33 +44,51 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPre
           </p>
         </div>
 
-        <div className="card-draft-choices">
-          {choices.map((skill) => (
-            <div
-              key={skill.id}
-              className="card-draft-choice"
-              onClick={() => onSelectSkill(skill.id)}
-            >
-              <div className="skill-draft-card">
-                <div className="skill-draft-card-bg">
-                  <img src={skillScrollImage} alt="" />
+        <div className="card-draft-choices" style={{ justifyContent: 'center' }}>
+          {choices.map((skill) => {
+            const isPassive = skill.type === 'passive';
+            const relic = isPassive ? getEternalRelic(skill.id as EternalRelicId) : null;
+
+            return (
+              <div
+                key={skill.id}
+                className="card-draft-choice"
+                onClick={() => onSelectSkill(skill.id)}
+              >
+                <div className="skill-draft-card">
+                  {isPassive && relic ? (
+                    <div className="skill-draft-card-bg" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img
+                        src={relic.image}
+                        alt={relic.name}
+                        style={{ width: '80%', height: '80%', objectFit: 'cover', borderRadius: '50%', border: '3px solid rgba(245, 158, 11, 0.5)' }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="skill-draft-card-bg" />
+                  )}
+                  <div className="skill-draft-card-content">
+                    <div className="skill-draft-name" style={isPassive ? { marginTop: 4 } : undefined}>
+                      {isPassive && relic ? relic.name : skill.name}
+                    </div>
+                    <div className={`skill-draft-type ${isPassive ? 'skill-draft-type-passive' : 'skill-draft-type-active'}`}>
+                      {isPassive ? '永恒护符' : '主动技能'}
+                    </div>
+                    <div className="skill-draft-divider" />
+                    <div className="skill-draft-effect">
+                      {isPassive && relic ? relic.description : skill.effect}
+                    </div>
+                  </div>
                 </div>
-                <div className="skill-draft-card-content">
-                  <div className="skill-draft-icon">
-                    {getSkillIcon(skill.id)}
-                  </div>
-                  <div className="skill-draft-name">{skill.name}</div>
-                  <div className={`skill-draft-type ${skill.type === 'active' ? 'skill-draft-type-active' : 'skill-draft-type-passive'}`}>
-                    {skill.type === 'active' ? '主动' : '被动'}
-                  </div>
-                  <div className="skill-draft-divider" />
-                  <div className="skill-draft-effect">{skill.effect}</div>
+                <div className="card-draft-choice-name">
+                  {isPassive && relic ? relic.name : skill.name}
+                </div>
+                <div className="card-draft-choice-desc">
+                  {isPassive && relic ? relic.description : skill.description}
                 </div>
               </div>
-              <div className="card-draft-choice-name">{skill.name}</div>
-              <div className="card-draft-choice-desc">{skill.description}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <button className="skill-draft-reroll" onClick={handleReroll}>

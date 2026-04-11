@@ -63,6 +63,7 @@ export interface HeroActionsDeps {
   disposeOwnedEquipmentCard: (card: GameCardData, options?: { isDestruction?: boolean }) => void;
   addPermanentMagicToRecycleBag: (card: GameCardData) => void;
   amuletEffects: ActiveAmuletEffects;
+  eternalRelicsRef: React.MutableRefObject<import('@/game-core/types').EternalRelic[]>;
 
   // --- Functions from useCombatActions (Layer 1) ---
   healHero: (amount: number) => number;
@@ -115,6 +116,7 @@ export interface HeroActionsDeps {
   drawCardsFromBackpack: (count: number, opts?: { ignoreLimit?: boolean }) => number;
   resolveFateSight: (card: GameCardData, target: GameCardData, baseDmg: number, peekCount: number) => void;
   resolveStatSwap: (card: GameCardData, target: GameCardData, isFlank: boolean) => void;
+  resolveRepairEnrageDice: (card: GameCardData, slotId: EquipmentSlotId, monster: GameCardData) => void;
 
   // --- Animation / UI callbacks from GameBoard ---
   addGameLog: (type: LogEntryType, message: string) => void;
@@ -728,7 +730,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           const maxDurability = slot.item.maxDurability ?? slot.item.durability ?? 0;
           const currentDurability = slot.item.durability ?? maxDurability;
           setEquipmentSlotById(slot.id, { ...slot.item, durability: Math.min(maxDurability, currentDurability + 1) });
-          applyDamage(1);
+          applyDamage(1, 'general', { selfInflicted: true });
           markSkillUsed(skillDef.id);
           setHeroSkillBanner('Durability increased by 1.');
           break;
@@ -745,7 +747,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         }
         if (monsters.length === 1) {
           if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
-          applyDamage(2);
+          applyDamage(2, 'general', { selfInflicted: true });
           const heroSkillDamage = getSpellDamage(3);
           dealDamageToMonster(monsters[0], heroSkillDamage, { pulses: 2 });
           markSkillUsed(skillDef.id);
@@ -807,7 +809,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         break;
       }
       case 'blood-draw': {
-        applyDamage(3);
+        applyDamage(3, 'general', { selfInflicted: true });
         const drawnNames: string[] = [];
         for (let i = 0; i < 2; i++) {
           const drawn = drawFromBackpackToHand();
@@ -958,7 +960,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           durability: Math.min(maxDurability, currentDurability + 1),
         };
         depsRef.current.setEquipmentSlotById(slotId, updatedItem);
-        depsRef.current.applyDamage(1);
+        depsRef.current.applyDamage(1, 'general', { selfInflicted: true });
         markSkillUsed(pendingHeroSkillAction.skillId);
         setPendingHeroSkillAction(null);
         setHeroSkillBanner('Durability increased by 1.');
@@ -1087,7 +1089,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         setHeroSkillBanner('请选择已装备的武器。');
         return;
       }
-      const waveDamage = computeHonorSweepWaveDamage(slotId);
+      const waveDamage = computeHonorSweepWaveDamage(slotId) + (card.amplifyBonus ?? 0);
       const monsters = flattenActiveRowSlots(st.activeCards).filter(c => c?.type === 'monster');
       if (monsters.length === 0) {
         finalizeMagicCard(card, { banner: '激活行没有怪物。' });
@@ -1262,15 +1264,16 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           setHeroSkillBanner('该盾牌目前没有可用的护甲。');
           return;
         }
+        const ampBonus = pendingMagicAction.card.amplifyBonus ?? 0;
         const monsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
         if (monsters.length === 1) {
-          const totalDamage = getSpellDamage(scaledArmor);
+          const totalDamage = getSpellDamage(scaledArmor + ampBonus);
           if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
           dealDamageToMonster(monsters[0], totalDamage, { pulses: 2 });
           finalizeMagicCard(pendingMagicAction.card, { banner: `御甲破击造成 ${totalDamage} 点伤害（护甲 ${armorPct}%）。` });
           return;
         }
-        const totalDamage = getSpellDamage(scaledArmor);
+        const totalDamage = getSpellDamage(scaledArmor + ampBonus);
         setPendingMagicAction({
           card: pendingMagicAction.card,
           effect: 'armor-strike',
@@ -1320,13 +1323,13 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           return;
         }
         const target = monsters[Math.floor(Math.random() * monsters.length)];
-        const totalDamage = getSpellDamage(tempAtk);
+        const totalDamage = getSpellDamage(tempAtk + (pendingMagicAction.card.amplifyBonus ?? 0));
         if (!isMonsterEngaged(target.id)) beginCombat(target, 'hero');
         dealDamageToMonster(target, totalDamage, { pulses: 2, isSpellDamage: true });
         const isFlank = pendingMagicAction.isFlank ?? false;
         let stunText = '';
         if (isFlank && !target.isStunned) {
-          const effectiveFlankStun = Math.min(40, stunCap);
+          const effectiveFlankStun = Math.min(40 + (depsRef.current.amuletEffects?.stunRateBoost ?? 0), stunCap);
           const threshold = Math.round((effectiveFlankStun / 100) * 20);
           void depsRef.current.requestDiceOutcome({
             title: target.name,
@@ -1488,6 +1491,33 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           prompt: `选择一个非Boss怪物，与 ${slotItem.name}（耐久 ${durability}）互换血层。`,
         } as PendingMagicAction);
         setHeroSkillBanner(`等价交换：选择一个怪物与 ${slotItem.name}（耐久 ${durability}）互换血层。`);
+        return;
+      }
+
+      if (pendingMagicAction.effect === 'repair-enrage-dice') {
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (!slotItem) {
+          setHeroSkillBanner('请选择一个有装备的栏位。');
+          return;
+        }
+        const monsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
+        if (monsters.length === 0) {
+          finalizeMagicCard(pendingMagicAction.card, { banner: '没有可选的怪物。' });
+          return;
+        }
+        if (monsters.length === 1) {
+          void depsRef.current.resolveRepairEnrageDice(pendingMagicAction.card, slotId, monsters[0]);
+          setPendingMagicAction(null);
+          return;
+        }
+        setPendingMagicAction({
+          card: pendingMagicAction.card,
+          effect: 'repair-enrage-dice',
+          step: 'monster-select',
+          slotId,
+          prompt: '选择一个怪物作为赌运目标。',
+        } as PendingMagicAction);
+        setHeroSkillBanner(`已选择 ${slotItem.name}，选择一个怪物作为赌运目标。`);
         return;
       }
 
@@ -1725,7 +1755,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       }
 
       if (pendingPotionAction.effect === 'perm-slot-capacity+1') {
-        setEquipmentSlotCapacity(prev => ({ ...prev, [slotId]: prev[slotId] + 1 }));
+        setEquipmentSlotCapacity(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 1) + 1 }));
         const label = slotId === 'equipmentSlot1' ? '左' : '右';
         addGameLog('potion', `扩容药剂：${label}装备栏容量 +1`);
         void finalizePotionCard(pendingPotionAction.card, { banner: `${label}装备栏容量 +1！` });
@@ -1766,7 +1796,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         depsRef.current.beginCombat(monster, 'hero');
       }
 
-      depsRef.current.applyDamage(2);
+      depsRef.current.applyDamage(2, 'general', { selfInflicted: true });
       const heroSkillDamage = depsRef.current.getSpellDamage(pendingHeroSkillAction.baseDamage ?? 3);
       depsRef.current.dealDamageToMonster(monster, heroSkillDamage, { pulses: 2 });
 
@@ -1811,11 +1841,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
       if (pendingMagicAction.effect === 'armor-strike') {
         const baseDamage = pendingMagicAction.pendingDamage;
-        if (baseDamage <= 0) {
+        if (baseDamage <= 0 && (pendingMagicAction.card.amplifyBonus ?? 0) <= 0) {
           finalizeMagicCard(pendingMagicAction.card, { banner: '护甲一击没有造成伤害。' });
           return;
         }
-        const totalDamage = getSpellDamage(baseDamage);
+        const totalDamage = getSpellDamage(baseDamage + (pendingMagicAction.card.amplifyBonus ?? 0));
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
@@ -1828,7 +1858,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
       if (pendingMagicAction.effect === 'blood-reckoning') {
         const echo = pendingMagicAction.echoMultiplier ?? 1;
-        const totalDamage = getSpellDamage(engine.getState().gold) * echo;
+        const totalDamage = getSpellDamage(engine.getState().gold + (pendingMagicAction.card.amplifyBonus ?? 0)) * echo;
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
@@ -1841,12 +1871,29 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
 
+      if (pendingMagicAction.effect === 'bounty-spell-damage') {
+        const echo = pendingMagicAction.echoMultiplier ?? 1;
+        const baseDmg = 5 + (pendingMagicAction.card.amplifyBonus ?? 0);
+        const totalDamage = getSpellDamage(baseDmg) * echo;
+        if (!isMonsterEngaged(monster.id)) {
+          beginCombat(monster, 'hero');
+        }
+        dealDamageToMonster(monster, totalDamage, { pulses: 2, isSpellDamage: true });
+        setGold(prev => prev + totalDamage);
+        addGameLog('magic', `赏金裁决：对 ${monster.name} 造成 ${totalDamage} 点法术伤害，获得 ${totalDamage} 金币`);
+        finalizeMagicCard(pendingMagicAction.card, {
+          banner: `赏金裁决：${totalDamage} 点伤害 → ${totalDamage} 金币！${echo > 1 ? '（回响×2）' : ''}`,
+          dealtDamage: true,
+        });
+        return;
+      }
+
       if (pendingMagicAction.effect === 'missing-hp-smite') {
         const smitePcts = [50, 100, 150];
         const smitePct = smitePcts[pendingMagicAction.card.upgradeLevel ?? 0] ?? 150;
         const missingHp = Math.max(0, maxHp - hp);
         const scaledDmg = Math.floor(missingHp * smitePct / 100);
-        const totalDamage = getSpellDamage(scaledDmg);
+        const totalDamage = getSpellDamage(scaledDmg + (pendingMagicAction.card.amplifyBonus ?? 0));
         if (totalDamage <= 0) {
           finalizeMagicCard(pendingMagicAction.card, { banner: '你处于满血状态，没有造成伤害。' });
           return;
@@ -1857,6 +1904,21 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         dealDamageToMonster(monster, totalDamage, { pulses: 2 });
         finalizeMagicCard(pendingMagicAction.card, {
           banner: `残血裁决释放 ${totalDamage} 点伤害（${smitePct}%）。`,
+        });
+        return;
+      }
+
+      if (pendingMagicAction.effect === 'blood-sacrifice-strike') {
+        const hpToLose = pendingMagicAction.hpLost;
+        const totalDamage = pendingMagicAction.pendingDamage;
+        depsRef.current.applyDamage(hpToLose, 'general', { selfInflicted: true });
+        if (!isMonsterEngaged(monster.id)) {
+          beginCombat(monster, 'hero');
+        }
+        dealDamageToMonster(monster, totalDamage, { pulses: 2, isSpellDamage: true });
+        finalizeMagicCard(pendingMagicAction.card, {
+          banner: `血祭裁决：献祭 ${hpToLose} 点生命，对 ${monster.name} 造成 ${totalDamage} 点伤害！`,
+          dealtDamage: true,
         });
         return;
       }
@@ -1900,7 +1962,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        const chaosDamage = getSpellDamage(3);
+        const chaosDamage = getSpellDamage(3 + (pendingMagicAction.card.amplifyBonus ?? 0));
         const overkill = chaosStrikeHasOverkill(monster, chaosDamage);
         dealDamageToMonster(monster, chaosDamage);
         let chaosBanner: string;
@@ -1938,7 +2000,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        const okDamage = getSpellDamage(3);
+        const okDamage = getSpellDamage(3 + (pendingMagicAction.card.amplifyBonus ?? 0));
         const overkill = chaosStrikeHasOverkill(monster, okDamage);
         dealDamageToMonster(monster, okDamage);
         let okBanner: string;
@@ -2001,7 +2063,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       }
 
       if (pendingMagicAction.effect === 'missile-bolt') {
-        const totalDmg = getSpellDamage(2);
+        const totalDmg = getSpellDamage(2 + (pendingMagicAction.card.amplifyBonus ?? 0));
         if (!isMonsterEngaged(monster.id)) beginCombat(monster, 'hero');
         dealDamageToMonster(monster, totalDmg, { pulses: 2 });
         addGameLog('magic', `魔弹：对 ${monster.name} 造成 ${totalDmg} 点法术伤害`);
@@ -2076,6 +2138,13 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
 
+      if (pendingMagicAction.effect === 'repair-enrage-dice') {
+        const slotId = pendingMagicAction.slotId;
+        void depsRef.current.resolveRepairEnrageDice(pendingMagicAction.card, slotId, monster);
+        setPendingMagicAction(null);
+        return;
+      }
+
     },
     [
       activeCards,
@@ -2129,19 +2198,23 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           drawMsg = drawn ? ` 抽到「${drawn.name}」。` : '';
         }
         addGameLog('magic', `维度扭曲：${card.name} ↔ ${previewCard.name} 互换行位置${drawMsg}`);
+        let swapUpgradeTrigger = false;
         if (depsRef.current.amuletEffects.hasSwapUpgrade) {
           const prog = engine.getState().swapUpgradeProgress + 1;
           if (prog >= 3) {
             setSwapUpgradeProgress(0);
-            setUpgradeModalOpen(true);
-            addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
-            setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+            swapUpgradeTrigger = true;
           } else {
             setSwapUpgradeProgress(prog);
             addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
           }
         }
         finalizeMagicCard(pendingMagicAction.card, { banner: `${card.name} ↔ ${previewCard.name} 行位置互换！${drawMsg}` });
+        if (swapUpgradeTrigger) {
+          setUpgradeModalOpen(true);
+          addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+          setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+        }
         return;
       }
 
@@ -2182,13 +2255,12 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           return next;
         });
         addGameLog('magic', `${pendingMagicAction.card.name}：${card.name} 与牌堆第 ${swapIdx + 1} 张 ${deckCard.name} 交换${persuadeMsg}`);
+        let swapUpgradeTrigger2 = false;
         if (depsRef.current.amuletEffects.hasSwapUpgrade) {
           const prog = engine.getState().swapUpgradeProgress + 1;
           if (prog >= 3) {
             setSwapUpgradeProgress(0);
-            setUpgradeModalOpen(true);
-            addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
-            setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+            swapUpgradeTrigger2 = true;
           } else {
             setSwapUpgradeProgress(prog);
             addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
@@ -2197,6 +2269,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         finalizeMagicCard(pendingMagicAction.card, {
           banner: `${card.name} ↔ ${deckCard.name}（牌堆第 ${swapIdx + 1} 张）交换！${persuadeMsg}`,
         });
+        if (swapUpgradeTrigger2) {
+          setUpgradeModalOpen(true);
+          addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+          setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+        }
         return;
       }
 
@@ -2220,19 +2297,23 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           return next;
         });
         addGameLog('magic', `乾坤挪移：${card.name} 与 ${leftC.name} 互换位置。`);
+        let swapUpgradeTrigger3 = false;
         if (depsRef.current.amuletEffects.hasSwapUpgrade) {
           const prog = engine.getState().swapUpgradeProgress + 1;
           if (prog >= 3) {
             setSwapUpgradeProgress(0);
-            setUpgradeModalOpen(true);
-            addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
-            setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+            swapUpgradeTrigger3 = true;
           } else {
             setSwapUpgradeProgress(prog);
             addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
           }
         }
         finalizeMagicCard(pendingMagicAction.card, { banner: `${card.name} ↔ ${leftC.name} 位置互换！` });
+        if (swapUpgradeTrigger3) {
+          setUpgradeModalOpen(true);
+          addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+          setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+        }
         return;
       }
 
@@ -2256,13 +2337,12 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       setRemainingDeck(prev => [...prev, sanitizedCard]);
       addGameLog('magic', `${card.name} 已置于牌堆底。`);
 
+      let swapUpgradeTrigger4 = false;
       if (depsRef.current.amuletEffects.hasSwapUpgrade) {
         const prog = engine.getState().swapUpgradeProgress + 1;
         if (prog >= 3) {
           setSwapUpgradeProgress(0);
-          setUpgradeModalOpen(true);
-          addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
-          setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+          swapUpgradeTrigger4 = true;
         } else {
           setSwapUpgradeProgress(prog);
           addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
@@ -2284,7 +2364,13 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
             prompt: `选择一张地城卡牌，置于牌堆底。${echoLabel}`,
             echoRemaining: echoLeft,
           } as PendingMagicAction);
-          setHeroSkillBanner(`${card.name} 已置于牌堆底。继续选择下一张。${echoLabel}`);
+          if (swapUpgradeTrigger4) {
+            setUpgradeModalOpen(true);
+            addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+            setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+          } else {
+            setHeroSkillBanner(`${card.name} 已置于牌堆底。继续选择下一张。${echoLabel}`);
+          }
           return;
         }
         addGameLog('magic', '回响：地城中没有更多卡牌可选。');
@@ -2293,6 +2379,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       finalizeMagicCard(pendingMagicAction.card, {
         banner: `${card.name} 已置于牌堆底。`,
       });
+      if (swapUpgradeTrigger4) {
+        setUpgradeModalOpen(true);
+        addGameLog('amulet', '流转之符：交换 3 次位置，选择一张牌升级！');
+        setHeroSkillBanner('流转之符：选择一张牌进行升级。');
+      }
     },
     [
       activeCards,
@@ -2413,7 +2504,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
     rate += depsRef.current.persuadeAmuletBonusRef.current;
 
-    if (permanentSkills.includes('连劝秘药')) {
+    if (depsRef.current.eternalRelicsRef.current.some(r => r.id === 'chain-persuade')) {
       const lastTargetId = engine.getState().lastPersuadeTargetId;
       if (lastTargetId && lastTargetId === monster.id) {
         rate += 15;

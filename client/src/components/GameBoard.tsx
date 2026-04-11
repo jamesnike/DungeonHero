@@ -81,10 +81,13 @@ import {
 import { getRandomHero, type HeroVariant } from '@/lib/heroes';
 import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, getTotalWins, incrementTotalWins, type PersistedGameState } from '@/lib/gameStorage';
 import { applyMonsterRage } from '@/lib/monsterRage';
+import { getStartingRelics, hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
+import EternalRelicBar from './EternalRelicBar';
 import CardDetailsModal from './CardDetailsModal';
 import CardUpgradeModal, { isUpgradeableCard, isCardAtMaxUpgrade } from './CardUpgradeModal';
 import HandMagicUpgradeModal from './HandMagicUpgradeModal';
 import MirrorCopyModal from './MirrorCopyModal';
+import AmplifyModal from './AmplifyModal';
 import PermGrantModal from './PermGrantModal';
 import CardDraftModal from './CardDraftModal';
 import DiscoverClassModal from './DiscoverClassModal';
@@ -104,6 +107,7 @@ import type {
   DirectedCombatFxFlight,
   DiscardShockFlight,
   FateSwapFlight,
+  GraveyardStackFlight,
   FlightSourceHint,
   CardActionContext,
   ClassDeckFlight,
@@ -153,7 +157,7 @@ import {
   createStarterHealEchoCard,
   createBugletCard,
   patchPersistedMainDeckWeaponImage,
-  pruneEventChoicesToTwo,
+  pruneEventChoicesToThree,
   STARTER_CARD_IDS,
   minionImage,
   skillScrollImage,
@@ -214,7 +218,9 @@ import {
   fillActiveRowSlots,
   flattenActiveRowSlots,
   countActiveRowSlots,
+  countActiveRowSlotsExcludeGhost,
   getEmptyColumns,
+  getEmptyOrGhostColumns,
   getFilledPreviewColumns,
   findSlotIndexByCardId,
   sanitizeCardMetadata,
@@ -227,6 +233,7 @@ import {
   logHeroMagic,
   logBackpackDraw,
   pickRandomHandCardsForDiscardPreferGraveyard,
+  computeAmuletAuraReversal,
 } from '@/game-core/helpers';
 import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingAura';
 
@@ -256,6 +263,7 @@ const HERO_ROW_CLASS_DECK_INDEX = 5;
 const DIRECTED_REFLECT_PROJECTILE_SIZE = 50;
 const DIRECTED_RETALIATION_PROJECTILE_SIZE = 52;
 const DIRECTED_ARCANE_PROJECTILE_SIZE = 44;
+const DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE = 48;
 const ARCANE_BLADE_SPELL_ANIM_MS = 780;
 const DISCARD_SHOCK_FLIGHT_BASE_DURATION = 520;
 const DISCARD_SHOCK_FLIGHT_VARIANCE = 140;
@@ -270,6 +278,7 @@ const COMBAT_BLOCK_TO_REFLECT_MS = 220;
 const SHIELD_REFLECT_ANIM_MS = 1020;
 /** Boss 反噬特效时长，与 boss-retaliation-* 大致对齐 */
 const BOSS_RETALIATION_ANIM_MS = 920;
+const GOLEM_LAYER_REFLECT_ANIM_MS = 850;
 const DEFEAT_ANIMATION_DURATION = 950;
 const COMBAT_PANEL_DEFAULT_WIDTH = 170;
 const COMBAT_PANEL_DEFAULT_HEIGHT = 320;
@@ -356,6 +365,7 @@ export default function GameBoard() {
     flashSlotUsed,
     gambitExtraActive, gambitExtraPerSlot, gambitSlotUsed,
     weaponExtraAttackUsed,
+    blockDurabilityPerSlot,
     pendingHeroSkillAction, pendingHeroMagicAction,
     pendingMagicAction, pendingPotionAction, deathWardPrompt,
     monsterRewardQueue, activeMonsterReward, selectedMonsterRewards,
@@ -367,7 +377,7 @@ export default function GameBoard() {
     currentEventCard, resolvingDungeonCardId,
     eventModalOpen, eventModalMinimized,
     eventDiceModal, eventTransformState, persuadeState, persuadeLevel, persuadeCostModifier, magicChoiceModal,
-    discoverModalOpen, discoverOptions, deleteModalOpen, upgradeModalOpen, handMagicUpgradeModal, mirrorCopyModal, permGrantModal,
+    discoverModalOpen, discoverOptions, deleteModalOpen, upgradeModalOpen, handMagicUpgradeModal, mirrorCopyModal, permGrantModal, amplifyModal,
     graveyardDiscoverState, graveyardDiscoverDelivery,
     cardActionContext, equipmentPrompt, ghostBladeExileCards,
     gameOver, victory, showSkillSelection, showCardDraft, cardDraftPool,
@@ -379,6 +389,7 @@ export default function GameBoard() {
     waterfallDealBonus,
     previewCardStacks,
     activeCardStacks,
+    eternalRelics,
   } = gs;
 
   // Shim setters — identical API to React's useState setters
@@ -444,6 +455,7 @@ export default function GameBoard() {
   const setGambitSlotUsed = useEngineSetter('gambitSlotUsed');
   const setPendingHeroSkillAction = useEngineSetter('pendingHeroSkillAction');
   const setPendingHeroMagicAction = useEngineSetter('pendingHeroMagicAction');
+  const setPersuadeCostModifier = useEngineSetter('persuadeCostModifier');
   const setPendingMagicAction = useEngineSetter('pendingMagicAction');
   const setPendingPotionAction = useEngineSetter('pendingPotionAction');
   const setDeathWardPrompt = useEngineSetter('deathWardPrompt');
@@ -498,6 +510,7 @@ export default function GameBoard() {
   const setGameLogEntries = useEngineSetter('gameLogEntries');
   const setPreviewCardStacks = useEngineSetter('previewCardStacks');
   const setActiveCardStacks = useEngineSetter('activeCardStacks');
+  const setEternalRelics = useEngineSetter('eternalRelics');
 
   // hpRef/goldRef eliminated — use engine.getState().hp / .gold in closures
   const undoStackRef = useRef<GameState[]>(
@@ -520,11 +533,15 @@ export default function GameBoard() {
     return () => ro.disconnect();
   }, []);
   const amuletEffects = useMemo<ActiveAmuletEffects>(() => {
-    return amuletSlots.reduce<ActiveAmuletEffects>((state, slot) => {
-      if (!slot) {
-        return state;
-      }
-      switch (slot.amuletEffect) {
+    const applyAmuletEffect = (
+      state: ActiveAmuletEffects,
+      amuletEffect: string | undefined,
+      upgradeLevel: number,
+      auraBonus?: import('@/components/GameCard').AmuletAuraBonus | null,
+      slotValue?: number,
+      slotEffect?: string,
+    ) => {
+      switch (amuletEffect) {
         case 'heal':
           state.hasHeal = true;
           break;
@@ -566,11 +583,11 @@ export default function GameBoard() {
           break;
         case 'persuade-on-temp-attack':
           state.hasPersuadeOnTempAttack = true;
-          state.persuadeOnTempAttackBonus = (slot.upgradeLevel ?? 0) >= 1 ? 10 : 5;
+          state.persuadeOnTempAttackBonus = upgradeLevel >= 1 ? 10 : 5;
           break;
         case 'persuade-grant-recycle-fetch':
           state.hasPersuadeGrantRecycleFetch = true;
-          state.persuadeGrantRecycleFetchCount = (slot.upgradeLevel ?? 0) >= 1 ? 2 : 1;
+          state.persuadeGrantRecycleFetchCount = upgradeLevel >= 1 ? 2 : 1;
           break;
         case 'damage-class-discover':
           state.hasDamageClassDiscover = true;
@@ -600,32 +617,36 @@ export default function GameBoard() {
           state.hasDungeonGold = true;
           break;
       }
-      const bonus = slot.amuletAuraBonus;
-      if (bonus) {
-        if (typeof bonus.attack === 'number') {
-          state.aura.attack += bonus.attack;
+      if (auraBonus) {
+        if (typeof auraBonus.attack === 'number') state.aura.attack += auraBonus.attack;
+        if (typeof auraBonus.defense === 'number') state.aura.defense += auraBonus.defense;
+        if (typeof auraBonus.maxHp === 'number') state.aura.maxHp += auraBonus.maxHp;
+      }
+      if (typeof slotValue === 'number' && slotEffect) {
+        if (slotEffect === 'attack' && !(auraBonus && typeof auraBonus.attack === 'number')) {
+          state.aura.attack += slotValue;
         }
-        if (typeof bonus.defense === 'number') {
-          state.aura.defense += bonus.defense;
+        if (slotEffect === 'defense' && !(auraBonus && typeof auraBonus.defense === 'number')) {
+          state.aura.defense += slotValue;
         }
-        if (typeof bonus.maxHp === 'number') {
-          state.aura.maxHp += bonus.maxHp;
+        if (slotEffect === 'health' && !(auraBonus && typeof auraBonus.maxHp === 'number')) {
+          state.aura.maxHp += slotValue;
         }
       }
-      if (typeof slot.value === 'number' && slot.effect) {
-        if (slot.effect === 'attack' && !(bonus && typeof bonus.attack === 'number')) {
-          state.aura.attack += slot.value;
-        }
-        if (slot.effect === 'defense' && !(bonus && typeof bonus.defense === 'number')) {
-          state.aura.defense += slot.value;
-        }
-        if (slot.effect === 'health' && !(bonus && typeof bonus.maxHp === 'number')) {
-          state.aura.maxHp += slot.value;
-        }
+    };
+
+    const state = createEmptyAmuletEffects();
+    for (const slot of amuletSlots) {
+      if (!slot) continue;
+      applyAmuletEffect(state, slot.amuletEffect, slot.upgradeLevel ?? 0, slot.amuletAuraBonus, slot.value, slot.effect);
+    }
+    for (const relic of eternalRelics) {
+      if (relic.amuletEffect) {
+        applyAmuletEffect(state, relic.amuletEffect, relic.upgradeLevel ?? 0, relic.amuletAuraBonus);
       }
-      return state;
-    }, createEmptyAmuletEffects());
-  }, [amuletSlots]);
+    }
+    return state;
+  }, [amuletSlots, eternalRelics]);
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
 
   // ---------------------------------------------------------------------------
@@ -807,10 +828,13 @@ export default function GameBoard() {
     getRepairableEquipmentSlots,
     resolveFateSight,
     resolveStatSwap,
+    resolveRepairEnrageDice,
     resolveMirrorCopy,
     cancelMirrorCopy,
     resolvePermGrant,
     cancelPermGrant,
+    resolveAmplify,
+    cancelAmplify,
   } = cardPlayHandlers;
 
   // --- Layer 4: Hero Actions ---
@@ -883,7 +907,7 @@ export default function GameBoard() {
   }, []);
   const persuadeDiscountRef = useRef<{ costReduction: number; rateBonus: number } | null>(null);
   const persuadeAmuletBonusRef = useRef(0);
-  const onNewCardGainedRef = useRef<((count: number, source?: 'graveyard') => void) | null>(null);
+  const onNewCardGainedRef = useRef<((count: number, source?: 'graveyard' | 'classPool') => void) | null>(null);
   const [persuadeTempDiscount, setPersuadeTempDiscount] = useState(0);
   const stagingCardsRef = useRef<GameCardData[]>([]);
   const pendingDiscardEffectsQueueRef = useRef<import('@/hooks/useCardOperations').PendingDiscardEffect[]>([]);
@@ -898,6 +922,7 @@ export default function GameBoard() {
   const [healing, setHealing] = useState(false);
   const [heroBleedActive, setHeroBleedActive] = useState(false);
   const [monsterBleedStates, setMonsterBleedStates] = useState<Record<string, number>>({});
+  const [monsterHealStates, setMonsterHealStates] = useState<Record<string, number>>({});
   const [monsterDefeatStates, setMonsterDefeatStates] = useState<Record<string, boolean>>({});
   const [weaponSwingStates, setWeaponSwingStates] = useState<Record<EquipmentSlotId, number>>({
     equipmentSlot1: 0,
@@ -941,6 +966,7 @@ export default function GameBoard() {
   const animationDelayTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const heroBleedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const monsterBleedTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>[]>>({});
+  const monsterHealTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>[]>>({});
   const weaponSwingTimeoutsRef = useRef<Record<EquipmentSlotId, ReturnType<typeof setTimeout>[]>>({
     equipmentSlot1: [],
     equipmentSlot2: [],
@@ -1020,6 +1046,39 @@ export default function GameBoard() {
         }, animSpeed(COMBAT_ANIMATION_DURATION));
         monsterBleedTimeoutsRef.current[monsterId] = [
           ...(monsterBleedTimeoutsRef.current[monsterId] || []),
+          timeoutId,
+        ];
+      }, delay);
+    },
+    [scheduleAnimationStart],
+  );
+  const triggerMonsterHealAnimation = useCallback(
+    (monsterId: string, delay = 0) => {
+      if (!monsterId) return;
+      scheduleAnimationStart(() => {
+        setMonsterHealStates(prev => ({
+          ...prev,
+          [monsterId]: (prev[monsterId] ?? 0) + 1,
+        }));
+        const timeoutId = setTimeout(() => {
+          setMonsterHealStates(prev => {
+            const current = prev[monsterId];
+            if (!current) return prev;
+            if (current <= 1) {
+              const next = { ...prev };
+              delete next[monsterId];
+              return next;
+            }
+            return { ...prev, [monsterId]: current - 1 };
+          });
+          monsterHealTimeoutsRef.current[monsterId] =
+            (monsterHealTimeoutsRef.current[monsterId] || []).filter(id => id !== timeoutId);
+          if (!monsterHealTimeoutsRef.current[monsterId]?.length) {
+            delete monsterHealTimeoutsRef.current[monsterId];
+          }
+        }, animSpeed(COMBAT_ANIMATION_DURATION));
+        monsterHealTimeoutsRef.current[monsterId] = [
+          ...(monsterHealTimeoutsRef.current[monsterId] || []),
           timeoutId,
         ];
       }, delay);
@@ -1159,6 +1218,10 @@ export default function GameBoard() {
   const fateSwapFlightsRef = useRef<FateSwapFlight[]>([]);
   const fateSwapFlightAnimationRef = useRef<number | null>(null);
   const fateSwapFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [graveyardStackFlights, setGraveyardStackFlights] = useState<GraveyardStackFlight[]>([]);
+  const graveyardStackFlightsRef = useRef<GraveyardStackFlight[]>([]);
+  const graveyardStackFlightAnimationRef = useRef<number | null>(null);
+  const graveyardStackFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const [backpackHandFlights, setBackpackHandFlights] = useState<BackpackHandFlight[]>([]);
   const backpackHandFlightsRef = useRef<BackpackHandFlight[]>([]);
   const backpackHandFlightAnimationRef = useRef<number | null>(null);
@@ -1466,24 +1529,27 @@ export default function GameBoard() {
   }, [draggedCard]);
 
   useEffect(() => {
-    const bladeIdx = activeCards.findIndex(c => c?.name === '命运之刃' && c.type === 'building');
-    if (bladeIdx === -1) return;
-    const blade = activeCards[bladeIdx]!;
-    if (blade._fateBladeLastSlot !== bladeIdx) {
-      const shouldGrantCharge = !blade.hasReleaseCharge;
-      setActiveCards(prev => {
-        const next = [...prev] as typeof prev;
-        const idx = next.findIndex(c => c?.name === '命运之刃' && c.type === 'building');
-        if (idx === -1) return prev;
-        const card = next[idx]!;
-        if (card._fateBladeLastSlot === idx) return prev;
-        next[idx] = {
-          ...card,
-          hasReleaseCharge: shouldGrantCharge ? true : card.hasReleaseCharge,
-          _fateBladeLastSlot: idx,
-        };
-        return next;
-      });
+    const releaseChargeNames = ['命运之刃', '增幅祭坛'];
+    for (const buildingName of releaseChargeNames) {
+      const bldgIdx = activeCards.findIndex(c => c?.name === buildingName && c.type === 'building');
+      if (bldgIdx === -1) continue;
+      const bldg = activeCards[bldgIdx]!;
+      if (bldg._fateBladeLastSlot !== bldgIdx) {
+        const shouldGrantCharge = !bldg.hasReleaseCharge;
+        setActiveCards(prev => {
+          const next = [...prev] as typeof prev;
+          const idx = next.findIndex(c => c?.name === buildingName && c.type === 'building');
+          if (idx === -1) return prev;
+          const card = next[idx]!;
+          if (card._fateBladeLastSlot === idx) return prev;
+          next[idx] = {
+            ...card,
+            hasReleaseCharge: shouldGrantCharge ? true : card.hasReleaseCharge,
+            _fateBladeLastSlot: idx,
+          };
+          return next;
+        });
+      }
     }
   }, [activeCards]);
 
@@ -1664,6 +1730,8 @@ export default function GameBoard() {
   const suppressDeathWardRef = useRef(false);
   const selectedHeroSkillRef = useRef<string | null>(selectedHeroSkill);
   selectedHeroSkillRef.current = selectedHeroSkill;
+  const eternalRelicsRef = useRef(eternalRelics);
+  eternalRelicsRef.current = eternalRelics;
   const cardDraftPendingSkillRef = useRef<string | null>(null);
   const classCardPreviewIdRef = useRef<string | null>(null);
   const eventResolutionRef = useRef<{ cardId: string | null; source: 'dungeon' | 'hand' | null }>({ cardId: null, source: null });
@@ -1671,6 +1739,14 @@ export default function GameBoard() {
   // Card Details Modal State
   const [selectedCard, setSelectedCard] = useState<GameCardData | null>(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+
+  // Eternal Relic detail modal
+  const [selectedEternalRelic, setSelectedEternalRelic] = useState<import('@/game-core/types').EternalRelic | null>(null);
+  const [eternalRelicModalOpen, setEternalRelicModalOpen] = useState(false);
+  const handleEternalRelicClick = useCallback((relic: import('@/game-core/types').EternalRelic) => {
+    setSelectedEternalRelic(relic);
+    setEternalRelicModalOpen(true);
+  }, []);
 
   const bulwarkTempArmorRef = useRef(0);
   bulwarkTempArmorRef.current = bulwarkTempArmorStacks;
@@ -1778,6 +1854,10 @@ export default function GameBoard() {
         cancelAnimationFrame(fateSwapFlightAnimationRef.current);
         fateSwapFlightAnimationRef.current = null;
       }
+      if (graveyardStackFlightAnimationRef.current !== null) {
+        cancelAnimationFrame(graveyardStackFlightAnimationRef.current);
+        graveyardStackFlightAnimationRef.current = null;
+      }
       if (backpackHandFlightAnimationRef.current !== null) {
         cancelAnimationFrame(backpackHandFlightAnimationRef.current);
         backpackHandFlightAnimationRef.current = null;
@@ -1810,6 +1890,8 @@ export default function GameBoard() {
       setClassDeckFlights([]);
       fateSwapFlightsRef.current = [];
       setFateSwapFlights([]);
+      graveyardStackFlightsRef.current = [];
+      setGraveyardStackFlights([]);
 
       setHeroBleedActive(false);
       setMonsterBleedStates({});
@@ -2848,7 +2930,9 @@ export default function GameBoard() {
           ? DIRECTED_REFLECT_PROJECTILE_SIZE
           : flight.kind === 'arcane-blade-spell'
             ? DIRECTED_ARCANE_PROJECTILE_SIZE
-            : DIRECTED_RETALIATION_PROJECTILE_SIZE;
+            : flight.kind === 'golem-layer-reflect'
+              ? DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE
+              : DIRECTED_RETALIATION_PROJECTILE_SIZE;
       const el = directedCombatFxElementMapRef.current.get(flight.id);
       if (el) {
         const eased = easeInOutCubic(clamp(progress));
@@ -2953,6 +3037,45 @@ export default function GameBoard() {
         duration: animSpeed(Math.max(360, BOSS_RETALIATION_ANIM_MS - 80 + Math.random() * 50)),
         progress: 0,
         arcHeight: 36 + Math.random() * 52,
+      };
+      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
+      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
+      startDirectedCombatFxFlightAnimation();
+      return true;
+    },
+    [startDirectedCombatFxFlightAnimation],
+  );
+
+  const tryStartGolemLayerReflectFx = useCallback(
+    (monsterId: string): boolean => {
+      if (typeof window === 'undefined') return false;
+      const surfaceEl = gameSurfaceRef.current;
+      const monsterCell = monsterCellRefs.current[monsterId];
+      const heroCell = heroRowCellRefs.current[HERO_ROW_HERO_INDEX];
+      if (!surfaceEl || !monsterCell || !heroCell) {
+        return false;
+      }
+      const surfaceRect = surfaceEl.getBoundingClientRect();
+      const startRect = monsterCell.getBoundingClientRect();
+      const endRect = heroCell.getBoundingClientRect();
+      const baseTime = performance.now();
+      const start: Point = {
+        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
+        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
+      };
+      const end: Point = {
+        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
+        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
+      };
+      const flight: DirectedCombatFxFlight = {
+        id: `golem-layer-reflect-${monsterId}-${baseTime}`,
+        kind: 'golem-layer-reflect',
+        start,
+        end,
+        startTime: baseTime,
+        duration: animSpeed(Math.max(320, GOLEM_LAYER_REFLECT_ANIM_MS - 60 + Math.random() * 40)),
+        progress: 0,
+        arcHeight: 40 + Math.random() * 48,
       };
       directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
       setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
@@ -3097,6 +3220,10 @@ export default function GameBoard() {
           setEquipmentSlotBonus(slotId, 'damage', cur => cur + card.onDestroyPermanentDamage!);
           addGameLog('equip', `${card.name} 遗言：该装备栏永久伤害 +${card.onDestroyPermanentDamage}！`);
         }
+        if (card.onDestroyPermanentShield) {
+          setEquipmentSlotBonus(slotId, 'shield', cur => cur + card.onDestroyPermanentShield!);
+          addGameLog('equip', `${card.name} 遗言：该装备栏永久护甲 +${card.onDestroyPermanentShield}！`);
+        }
         if (card.onDestroyEffect) {
           addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
         }
@@ -3157,12 +3284,14 @@ export default function GameBoard() {
   };
 
   const effectiveHandLimit = HAND_LIMIT + handLimitBonus;
+  const eternalMaxHpBonus = eternalRelics.reduce((sum, r) => sum + (r.initialMaxHpBonus ?? 0), 0);
   const maxHp =
     INITIAL_HP +
     amuletEffects.aura.maxHp +
     permanentMaxHpBonus +
     (permanentSkills.includes('Iron Will') ? 3 : 0) +
-    (selectedHeroSkillDef?.initialMaxHpBonus ?? 0);
+    (selectedHeroSkillDef?.initialMaxHpBonus ?? 0) +
+    eternalMaxHpBonus;
   const attackBonus = amuletEffects.aura.attack + 
     (permanentSkills.includes('Weapon Master') ? 1 : 0) +
     weaponMasterBonus + // Knight class bonus to all weapons
@@ -3573,7 +3702,121 @@ export default function GameBoard() {
     startFateSwapFlightAnimation();
   }, [startFateSwapFlightAnimation]);
 
+  // ---------------------------------------------------------------------------
+  // Graveyard Stack Flight (Graveyard Amulet: graveyard → dungeon cell)
+  // ---------------------------------------------------------------------------
+  const GRAVEYARD_STACK_FLIGHT_DURATION = 600;
+  const GRAVEYARD_STACK_ARC_HEIGHT = 60;
 
+  const updateGraveyardStackFlightAnimation = useCallback((timestamp: number) => {
+    const flights = graveyardStackFlightsRef.current;
+    if (!flights.length) {
+      graveyardStackFlightAnimationRef.current = null;
+      return;
+    }
+
+    let hasActive = false;
+    let hasCompleted = false;
+    const cardW = gridCardSizeRef.current?.width ?? 140;
+    const cardH = gridCardSizeRef.current?.height ?? 210;
+
+    for (let i = 0; i < flights.length; i++) {
+      const flight = flights[i];
+      const elapsed = timestamp - flight.startTime;
+      let progress: number;
+      if (elapsed < 0) {
+        hasActive = true;
+        progress = 0;
+      } else {
+        progress = clamp(elapsed / flight.duration);
+      }
+      flight.progress = progress;
+      if (progress < 1) {
+        hasActive = true;
+      } else {
+        hasCompleted = true;
+      }
+
+      const el = graveyardStackFlightElementMapRef.current.get(flight.id);
+      if (el) {
+        const eased = easeInOutCubic(clamp(progress));
+        const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
+        const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
+        const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
+        const y = linearY - arcOffset;
+        const scale = 0.75 + Math.sin(Math.PI * eased) * 0.3;
+        const fadeIn = eased < 0.08 ? clamp(eased / 0.08) : 1;
+        const fadeOut = eased > 0.82 ? clamp(1 - (eased - 0.82) / 0.18) : 1;
+        const rotate = Math.sin(eased * Math.PI * 1.2) * 12;
+        el.style.transform = `translate(${x - cardW / 2}px, ${y - cardH / 2}px) scale(${scale}) rotate(${rotate}deg)`;
+        el.style.opacity = String(fadeIn * fadeOut);
+      }
+    }
+
+    if (hasCompleted) {
+      const remaining = flights.filter(f => f.progress < 1);
+      graveyardStackFlightsRef.current = remaining;
+      setGraveyardStackFlights(remaining);
+    }
+
+    if (hasActive && graveyardStackFlightsRef.current.length > 0) {
+      graveyardStackFlightAnimationRef.current = window.requestAnimationFrame(updateGraveyardStackFlightAnimation);
+    } else {
+      graveyardStackFlightAnimationRef.current = null;
+    }
+  }, []);
+
+  const startGraveyardStackFlightAnimation = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (graveyardStackFlightAnimationRef.current !== null) return;
+    graveyardStackFlightAnimationRef.current = window.requestAnimationFrame(updateGraveyardStackFlightAnimation);
+  }, [updateGraveyardStackFlightAnimation]);
+
+  const triggerGraveyardStackFlight = useCallback((targetCellIndex: number, cards: GameCardData[]) => {
+    if (typeof window === 'undefined') return;
+    const surfaceEl = gameSurfaceRef.current;
+    const graveyardEl = graveyardCellRef.current;
+    const targetCell = activeCellRefs.current[targetCellIndex];
+
+    if (!surfaceEl || !graveyardEl || !targetCell) {
+      return;
+    }
+
+    const surfaceRect = surfaceEl.getBoundingClientRect();
+    const graveyardRect = graveyardEl.getBoundingClientRect();
+    const cellRect = targetCell.getBoundingClientRect();
+    const baseTime = performance.now();
+
+    const graveyardCenter: Point = {
+      x: graveyardRect.left + graveyardRect.width / 2 - surfaceRect.left,
+      y: graveyardRect.top + graveyardRect.height / 2 - surfaceRect.top,
+    };
+    const cellCenter: Point = {
+      x: cellRect.left + cellRect.width / 2 - surfaceRect.left,
+      y: cellRect.top + cellRect.height / 2 - surfaceRect.top,
+    };
+
+    const flights: GraveyardStackFlight[] = cards.map((card, i) => ({
+      id: `graveyard-stack-${card.id}-${baseTime}`,
+      card,
+      start: {
+        x: graveyardCenter.x + (Math.random() - 0.5) * 16,
+        y: graveyardCenter.y + (Math.random() - 0.5) * 10,
+      },
+      end: {
+        x: cellCenter.x + (Math.random() - 0.5) * 8,
+        y: cellCenter.y + (Math.random() - 0.5) * 6,
+      },
+      startTime: baseTime + i * 120,
+      duration: animSpeed(GRAVEYARD_STACK_FLIGHT_DURATION),
+      progress: 0,
+      arcHeight: GRAVEYARD_STACK_ARC_HEIGHT + Math.random() * 20,
+    }));
+
+    graveyardStackFlightsRef.current = [...graveyardStackFlightsRef.current, ...flights];
+    setGraveyardStackFlights(graveyardStackFlightsRef.current);
+    startGraveyardStackFlightAnimation();
+  }, [animSpeed, startGraveyardStackFlightAnimation]);
 
 
 
@@ -4032,6 +4275,13 @@ export default function GameBoard() {
       window.cancelAnimationFrame(fateSwapFlightAnimationRef.current);
       fateSwapFlightAnimationRef.current = null;
     }
+    graveyardStackFlightsRef.current = [];
+    graveyardStackFlightElementMapRef.current.clear();
+    setGraveyardStackFlights([]);
+    if (graveyardStackFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(graveyardStackFlightAnimationRef.current);
+      graveyardStackFlightAnimationRef.current = null;
+    }
     if (discardShockFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
       discardShockFlightAnimationRef.current = null;
@@ -4057,6 +4307,9 @@ export default function GameBoard() {
       }
       if (fateSwapFlightAnimationRef.current !== null) {
         window.cancelAnimationFrame(fateSwapFlightAnimationRef.current);
+      }
+      if (graveyardStackFlightAnimationRef.current !== null) {
+        window.cancelAnimationFrame(graveyardStackFlightAnimationRef.current);
       }
       if (backpackHandFlightAnimationRef.current !== null) {
         window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
@@ -4118,6 +4371,20 @@ export default function GameBoard() {
       }
 
       const engagedIds = combatState.engagedMonsterIds;
+
+      // Wraith aura: check if any engaged wraith has wraithAuraAttack
+      let auraBoost = 0;
+      let hasWraithEnrage = false;
+      let hasWraithDestroyAmulet = false;
+      for (const card of activeCards) {
+        if (!card || !engagedIds.includes(card.id) || card.isStunned) continue;
+        if (card.wraithAuraAttack && card.wraithAuraAttack > 0) {
+          auraBoost = Math.max(auraBoost, card.wraithAuraAttack);
+        }
+        if (card.wraithTurnEnrage) hasWraithEnrage = true;
+        if (card.wraithDestroyAmulet) hasWraithDestroyAmulet = true;
+      }
+
       setActiveCards(prev => {
         let changed = false;
         const next = prev.map(card => {
@@ -4125,7 +4392,6 @@ export default function GameBoard() {
 
           let updated = card;
 
-          // Clear stun at end of monster turn (stun lasts one round)
           if (updated.isStunned) {
             changed = true;
             addGameLog('combat', `${updated.name} 从晕眩中恢复了。`);
@@ -4133,7 +4399,7 @@ export default function GameBoard() {
             return updated;
           }
 
-          // Wraith tier-2: +N attack at end of each monster turn
+          // Legacy wraith tier-2: self-only attack boost
           if (updated.wraithTurnAttack && updated.wraithTurnAttack > 0) {
             const boost = updated.wraithTurnAttack;
             changed = true;
@@ -4163,6 +4429,70 @@ export default function GameBoard() {
         });
         return changed ? (next as typeof prev) : prev;
       });
+
+      // Wraith Lv1+: aura attack boost to ALL active row monsters
+      if (auraBoost > 0) {
+        setActiveCards(prev => {
+          const boostedNames: string[] = [];
+          const next = prev.map(card => {
+            if (!card || card.type !== 'monster') return card;
+            const newAttack = (card.attack ?? card.value ?? 0) + auraBoost;
+            const newValue = (card.value ?? 0) + auraBoost;
+            boostedNames.push(card.name);
+            return { ...card, attack: newAttack, value: newValue, tempAttackBoost: (card.tempAttackBoost ?? 0) + auraBoost };
+          }) as typeof prev;
+          if (boostedNames.length > 0) {
+            addGameLog('combat', `怨念光环：激活行所有怪物攻击力 +${auraBoost}！（${boostedNames.join('、')}）`);
+            setHeroSkillBanner(`怨念光环！全体怪物攻击力 +${auraBoost}！`);
+          }
+          return next;
+        });
+      }
+
+      // Wraith Lv3: enrage all active row monsters
+      if (hasWraithEnrage) {
+        const rowMonsters = activeCards.filter(
+          (c): c is GameCardData => Boolean(c && c.type === 'monster' && !c.isStunned),
+        );
+        for (const m of rowMonsters) {
+          if (!isMonsterEngaged(m.id)) {
+            beginCombat(m, 'monster');
+          }
+        }
+        if (rowMonsters.length > 0) {
+          const names = rowMonsters.filter(m => !engagedIds.includes(m.id)).map(m => m.name);
+          if (names.length > 0) {
+            addGameLog('combat', `怨灵诅咒：激活行怪物被激怒！（${names.join('、')}）`);
+            setHeroSkillBanner(`怨灵诅咒！全体怪物激怒！`);
+          }
+        }
+      }
+
+      // Wraith Lv3: destroy a random amulet
+      if (hasWraithDestroyAmulet) {
+        const currentAmulets = engine.getState().amuletSlots;
+        if (currentAmulets.length > 0) {
+          const targetIdx = Math.floor(Math.random() * currentAmulets.length);
+          const targetAmulet = currentAmulets[targetIdx];
+          const reversal = computeAmuletAuraReversal([targetAmulet]);
+          if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
+            setSlotTempAttack(prev => ({
+              equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
+              equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
+            }));
+          }
+          if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
+            setSlotTempArmor(prev => ({
+              equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
+              equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
+            }));
+          }
+          addToGraveyard(targetAmulet);
+          setAmuletSlots(prev => prev.filter(a => a.id !== targetAmulet.id));
+          addGameLog('combat', `怨灵诅咒：摧毁了护符「${targetAmulet.name}」！`);
+          setHeroSkillBanner(`怨灵诅咒！护符「${targetAmulet.name}」被摧毁！`);
+        }
+      }
     }
     prevTurnRef.current = combatState.currentTurn;
   }, [combatState.currentTurn]);
@@ -4226,14 +4556,14 @@ export default function GameBoard() {
     const newDeck = createDeck();
     for (let i = 0; i < newDeck.length; i++) {
       if (newDeck[i].type === 'event') {
-        newDeck[i] = pruneEventChoicesToTwo(newDeck[i]);
+        newDeck[i] = pruneEventChoicesToThree(newDeck[i]);
       }
     }
     // Add Knight discovery events to main deck
     const knightEvents = createKnightDiscoveryEvents();
     for (let i = 0; i < knightEvents.length; i++) {
       if (knightEvents[i].type === 'event') {
-        knightEvents[i] = pruneEventChoicesToTwo(knightEvents[i]);
+        knightEvents[i] = pruneEventChoicesToThree(knightEvents[i]);
       }
     }
     const deckWithClassEvents = [...newDeck, ...knightEvents].sort(() => Math.random() - 0.5);
@@ -4473,6 +4803,7 @@ export default function GameBoard() {
       activeCardStacks: initialActiveStacks,
       remainingDeck: initialRemaining,
       classDeck: newClassDeck,
+      eternalRelics: getStartingRelics(),
       showSkillSelection: true,
       totalWins: getTotalWins(),
     });
@@ -4491,6 +4822,13 @@ export default function GameBoard() {
     if (typeof window !== 'undefined' && fateSwapFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(fateSwapFlightAnimationRef.current);
       fateSwapFlightAnimationRef.current = null;
+    }
+    setGraveyardStackFlights([]);
+    graveyardStackFlightsRef.current = [];
+    graveyardStackFlightElementMapRef.current.clear();
+    if (typeof window !== 'undefined' && graveyardStackFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(graveyardStackFlightAnimationRef.current);
+      graveyardStackFlightAnimationRef.current = null;
     }
     setDiscardShockFlights([]);
     discardShockFlightsRef.current = [];
@@ -4587,6 +4925,7 @@ export default function GameBoard() {
             monsterAttackQueue: snapshot.combatState.monsterAttackQueue ?? [],
             pendingBlock: snapshot.combatState.pendingBlock ?? null,
             slotBlocksThisTurn: (snapshot.combatState.slotBlocksThisTurn ?? { equipmentSlot1: false, equipmentSlot2: false }) as Record<EquipmentSlotId, boolean>,
+            slotDurabilityUsedThisTurn: (snapshot.combatState.slotDurabilityUsedThisTurn ?? { equipmentSlot1: 0, equipmentSlot2: 0 }) as Record<EquipmentSlotId, number>,
           }
         : { ...initialCombatState };
 
@@ -4674,6 +5013,7 @@ export default function GameBoard() {
       gambitExtraPerSlot: snapshot.gambitExtraPerSlot ?? 1,
       gambitSlotUsed: snapshot.gambitSlotUsed ?? {},
       weaponExtraAttackUsed: snapshot.weaponExtraAttackUsed ?? {},
+      blockDurabilityPerSlot: snapshot.blockDurabilityPerSlot ?? 1,
       combatState: restoredCombat,
       heroSkillUsedThisWave: Boolean(snapshot.heroSkillUsedThisWave),
       extraSkillsUsedThisWave: Array.isArray(snapshot.extraSkillsUsedThisWave) ? snapshot.extraSkillsUsedThisWave : [],
@@ -4702,6 +5042,7 @@ export default function GameBoard() {
       previewCardStacks: snapshot.previewCardStacks ?? {},
       activeCardStacks: snapshot.activeCardStacks ?? {},
       waterfallDealBonus: snapshot.waterfallDealBonus ?? 0,
+      eternalRelics: Array.isArray(snapshot.eternalRelics) ? snapshot.eternalRelics as import('@/game-core/types').EternalRelic[] : getStartingRelics(),
       undoCount: undoStackRef.current.length,
       isHydrated: true,
       totalWins: getTotalWins(),
@@ -4787,6 +5128,13 @@ export default function GameBoard() {
       window.cancelAnimationFrame(fateSwapFlightAnimationRef.current);
       fateSwapFlightAnimationRef.current = null;
     }
+    setGraveyardStackFlights([]);
+    graveyardStackFlightsRef.current = [];
+    graveyardStackFlightElementMapRef.current.clear();
+    if (graveyardStackFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(graveyardStackFlightAnimationRef.current);
+      graveyardStackFlightAnimationRef.current = null;
+    }
     setBackpackHandFlights([]);
     backpackHandFlightsRef.current = [];
     backpackFlightElementMapRef.current.clear();
@@ -4838,7 +5186,7 @@ export default function GameBoard() {
 
   // Card-gain amulet callbacks
   const setCardGainUpgradeProgress = useEngineSetter('cardGainUpgradeProgress');
-  onNewCardGainedRef.current = (count: number, source?: 'graveyard') => {
+  onNewCardGainedRef.current = (count: number, source?: 'graveyard' | 'classPool') => {
     if (amuletEffects.hasCardGainUpgrade) {
       const current = engine.getState().cardGainUpgradeProgress;
       const next = current + count;
@@ -4852,7 +5200,7 @@ export default function GameBoard() {
       }
     }
 
-    if (amuletEffects.hasCardGainMissile && source === 'graveyard') {
+    if (amuletEffects.hasCardGainMissile && (source === 'graveyard' || source === 'classPool')) {
       const missileAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'card-gain-missile');
       const boltsPerTrigger = (missileAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
       const bolts: GameCardData[] = [];
@@ -4875,6 +5223,7 @@ export default function GameBoard() {
     backpackHandFlightsRef,
     storingCardIdsRef,
     selectedHeroSkillRef,
+    eternalRelicsRef,
     pendingAutoDrawsRef,
     discardedCardsRef,
     stagingCardsRef,
@@ -5005,51 +5354,85 @@ export default function GameBoard() {
     setIsHydrated(true);
   };
 
-  // Handle skill selection — now shows the card draft modal before proceeding
+  // Handle skill selection — active skills set as hero skill, passive skills become eternal relics
   const handleSkillSelection = (skillId: string) => {
     engine.batch(() => {
       resetHeroSkillForNewWave();
       const definition = getHeroSkillById(skillId as HeroSkillId);
-      setSelectedHeroSkill(skillId as HeroSkillId);
-      setShowSkillSelection(false);
-      addGameLog('system', `选择英雄技能：${definition?.name ?? skillId}`);
-      
-      const initialBonus = definition?.initialMaxHpBonus ?? 0;
-      if (initialBonus) {
-        addGameLog('system', `开局加成：最大生命 +${initialBonus}`);
-        setHp(INITIAL_HP + initialBonus);
-      }
-      const initialGold = definition?.initialGoldBonus ?? 0;
-      if (initialGold) {
-        setGold(prev => prev + initialGold);
-        addGameLog('gold', `开局加成：金币 +${initialGold}`);
-      }
-      const initialWaterfall = definition?.initialWaterfallBonus ?? 0;
-      if (initialWaterfall) {
-        setTurnCount(prev => prev + initialWaterfall);
-        addGameLog('system', `开局加成：瀑流回合 +${initialWaterfall}`);
-      }
-      const initialShopLv = definition?.initialShopLevel;
-      if (initialShopLv != null && initialShopLv > 0) {
-        setShopLevel(Math.min(MAX_SHOP_LEVEL, initialShopLv));
-        addGameLog('shop', `开局加成：商店等级 ${Math.min(MAX_SHOP_LEVEL, initialShopLv)}`);
-      }
-      const initialBackpackCap = definition?.initialBackpackCapacityBonus ?? 0;
-      if (initialBackpackCap) {
-        setBackpackCapacityModifier(prev => prev + initialBackpackCap);
-        addGameLog('skill', `开局加成：背包上限 +${initialBackpackCap}`);
-      }
-      const initialHandLimit = definition?.initialHandLimitBonus ?? 0;
-      setHandLimitBonus(initialHandLimit);
-      if (initialHandLimit) {
-        addGameLog('skill', `开局加成：手牌上限 +${initialHandLimit}`);
-      }
-      const initialSpellDmg = definition?.initialSpellDamageBonus ?? 0;
-      if (initialSpellDmg) {
-        setPermanentSpellDamageBonus(prev => prev + initialSpellDmg);
-        addGameLog('skill', `开局加成：永久法术伤害 +${initialSpellDmg}`);
+      const isPassive = definition?.type === 'passive';
+
+      if (isPassive) {
+        const relic = getEternalRelic(skillId as import('@/game-core/types').EternalRelicId);
+        setEternalRelics(prev => [...prev, relic]);
+        addGameLog('system', `获得永恒护符：${relic.name}`);
+
+        const initialBonus = relic.initialMaxHpBonus ?? 0;
+        if (initialBonus) {
+          addGameLog('system', `开局加成：最大生命 +${initialBonus}`);
+          setHp(INITIAL_HP + initialBonus);
+        }
+        const initialGold = relic.initialGoldBonus ?? 0;
+        if (initialGold) {
+          setGold(prev => prev + initialGold);
+          addGameLog('gold', `开局加成：金币 +${initialGold}`);
+        }
+        const initialWaterfall = relic.initialWaterfallBonus ?? 0;
+        if (initialWaterfall) {
+          setTurnCount(prev => prev + initialWaterfall);
+          addGameLog('system', `开局加成：瀑流回合 +${initialWaterfall}`);
+        }
+        const initialShopLv = relic.initialShopLevel;
+        if (initialShopLv != null && initialShopLv > 0) {
+          setShopLevel(Math.min(MAX_SHOP_LEVEL, initialShopLv));
+          addGameLog('shop', `开局加成：商店等级 ${Math.min(MAX_SHOP_LEVEL, initialShopLv)}`);
+        }
+        const initialSpellDmg = relic.initialSpellDamageBonus ?? 0;
+        if (initialSpellDmg) {
+          setPermanentSpellDamageBonus(prev => prev + initialSpellDmg);
+          addGameLog('skill', `开局加成：永久法术伤害 +${initialSpellDmg}`);
+        }
+      } else {
+        setSelectedHeroSkill(skillId as HeroSkillId);
+        addGameLog('system', `选择英雄技能：${definition?.name ?? skillId}`);
+
+        const initialBonus = definition?.initialMaxHpBonus ?? 0;
+        if (initialBonus) {
+          addGameLog('system', `开局加成：最大生命 +${initialBonus}`);
+          setHp(INITIAL_HP + initialBonus);
+        }
+        const initialGold = definition?.initialGoldBonus ?? 0;
+        if (initialGold) {
+          setGold(prev => prev + initialGold);
+          addGameLog('gold', `开局加成：金币 +${initialGold}`);
+        }
+        const initialWaterfall = definition?.initialWaterfallBonus ?? 0;
+        if (initialWaterfall) {
+          setTurnCount(prev => prev + initialWaterfall);
+          addGameLog('system', `开局加成：瀑流回合 +${initialWaterfall}`);
+        }
+        const initialShopLv = definition?.initialShopLevel;
+        if (initialShopLv != null && initialShopLv > 0) {
+          setShopLevel(Math.min(MAX_SHOP_LEVEL, initialShopLv));
+          addGameLog('shop', `开局加成：商店等级 ${Math.min(MAX_SHOP_LEVEL, initialShopLv)}`);
+        }
+        const initialBackpackCap = definition?.initialBackpackCapacityBonus ?? 0;
+        if (initialBackpackCap) {
+          setBackpackCapacityModifier(prev => prev + initialBackpackCap);
+          addGameLog('skill', `开局加成：背包上限 +${initialBackpackCap}`);
+        }
+        const initialHandLimit = definition?.initialHandLimitBonus ?? 0;
+        setHandLimitBonus(initialHandLimit);
+        if (initialHandLimit) {
+          addGameLog('skill', `开局加成：手牌上限 +${initialHandLimit}`);
+        }
+        const initialSpellDmg = definition?.initialSpellDamageBonus ?? 0;
+        if (initialSpellDmg) {
+          setPermanentSpellDamageBonus(prev => prev + initialSpellDmg);
+          addGameLog('skill', `开局加成：永久法术伤害 +${initialSpellDmg}`);
+        }
       }
 
+      setShowSkillSelection(false);
       cardDraftPendingSkillRef.current = skillId;
       setCardDraftPool(createStarterCardPool());
       setShowCardDraft(true);
@@ -5060,6 +5443,7 @@ export default function GameBoard() {
     const skillId = cardDraftPendingSkillRef.current;
     cardDraftPendingSkillRef.current = null;
     const definition = skillId ? getHeroSkillById(skillId as HeroSkillId) : null;
+    const currentRelics = eternalRelicsRef.current;
 
     let classDrawn: GameCardData[] = [];
 
@@ -5070,7 +5454,7 @@ export default function GameBoard() {
       setBackpackItems(picks);
       addGameLog('system', `起始卡牌选择完毕：${picks.map(c => c.name).join('、')}`);
 
-      if (skillId === 'summon-minion') {
+      if (hasEternalRelic(currentRelics, 'summon-minion')) {
         const minionCard: GameCardData = {
           id: 'summon-minion-card',
           type: 'monster',
@@ -5089,11 +5473,11 @@ export default function GameBoard() {
         addCardToBackpack(minionCard);
         addGameLog('skill', '开局加成：获得小随从');
       }
-      if (skillId === 'heal-to-damage') {
+      if (hasEternalRelic(currentRelics, 'heal-to-damage')) {
         addCardToBackpack(createStarterHealEchoCard());
         addGameLog('skill', '愈战愈勇：开局获得永久魔法「治愈余韵」');
       }
-      if (skillId === 'shield-wall') {
+      if (hasEternalRelic(currentRelics, 'shield-wall')) {
         const thunderSeal = classDeck.find(
           c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap',
         );
@@ -5108,9 +5492,10 @@ export default function GameBoard() {
       }
 
       const baseClassCards = 1;
-      const skillClassCards = definition?.initialClassCardDraw ?? 0;
-      const totalClassCards = baseClassCards + skillClassCards;
-      const classFilter = skillId === 'shield-wall'
+      const skillClassCards = (definition?.type === 'passive') ? 0 : (definition?.initialClassCardDraw ?? 0);
+      const relicClassCards = currentRelics.reduce((sum, r) => sum + (r.initialClassCardDraw ?? 0), 0);
+      const totalClassCards = baseClassCards + skillClassCards + relicClassCards;
+      const classFilter = hasEternalRelic(currentRelics, 'shield-wall')
         ? (card: GameCardData) => !(card.type === 'amulet' && (card as GameCardData).amuletEffect === 'discard-zap')
         : undefined;
 
@@ -5144,8 +5529,8 @@ export default function GameBoard() {
     });
 
     const baseHandCards = 2;
-    const skillHandCards = definition?.initialHandDraw ?? 0;
-    const totalHandCards = baseHandCards + skillHandCards;
+    const skillHandDraw = (definition?.type === 'passive') ? 0 : (definition?.initialHandDraw ?? 0);
+    const totalHandCards = baseHandCards + skillHandDraw;
     const classFlightDelay = classDrawn.length > 0
       ? CLASS_FLIGHT_BASE_DURATION + CLASS_FLIGHT_VARIANCE
         + Math.max(0, classDrawn.length - 1) * CLASS_FLIGHT_STAGGER + 300
@@ -5216,9 +5601,9 @@ export default function GameBoard() {
     const timer = setTimeout(() => {
       let carriedSlot: { card: GameCardData; index: number } | null = null;
       
-      // First, capture the unplayed card and its original slot
+      // First, capture the unplayed non-ghost card and its original slot
       setActiveCards(prev => {
-        const remaining = flattenActiveRowSlots(prev);
+        const remaining = flattenActiveRowSlots(prev).filter(c => !c.isGhost);
         if (remaining.length === 1) {
           const onlyCard = remaining[0];
           carriedSlot = {
@@ -5389,7 +5774,7 @@ export default function GameBoard() {
 
     if (plan.nextPreviewCards.length === 0) {
       setPreviewCards(createEmptyActiveRow());
-      if (plan.shouldDeclareVictory && countActiveRowSlots(activeCards) === 0) {
+      if (plan.shouldDeclareVictory && countActiveRowSlotsExcludeGhost(activeCards) === 0) {
         addGameLog('system', '胜利！地牢已被征服！');
         setVictory(true);
         setGameOver(true);
@@ -5589,6 +5974,10 @@ export default function GameBoard() {
                 setEquipmentSlotBonus(sid, 'damage', cur => cur + card.onDestroyPermanentDamage!);
                 addGameLog('equip', `${card.name} 遗言：该装备栏永久伤害 +${card.onDestroyPermanentDamage}！`);
               }
+              if (card.onDestroyPermanentShield) {
+                setEquipmentSlotBonus(sid, 'shield', cur => cur + card.onDestroyPermanentShield!);
+                addGameLog('equip', `${card.name} 遗言：该装备栏永久护甲 +${card.onDestroyPermanentShield}！`);
+              }
               if (card.onDestroyEffect) {
                 addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
               }
@@ -5717,20 +6106,30 @@ export default function GameBoard() {
     });
 
     if (plan.dropTargetSlots.length > 0) {
+      const ghostsDisplaced: Array<{ slotIndex: number; ghost: GameCardData }> = [];
+
       setActiveCards(prev => {
         const next = [...prev];
         plan.dropTargetSlots.forEach((slotIndex, idx) => {
           const card = plan.dropCards[idx];
           if (typeof slotIndex === 'number') {
+            const existing = next[slotIndex];
+            if (existing?.isGhost) {
+              ghostsDisplaced.push({ slotIndex, ghost: existing });
+            }
             next[slotIndex] = card ?? null;
           }
         });
         return next;
       });
 
-      // Transfer preview stacks to active stacks for dropped cards
+      // Transfer preview stacks to active stacks for dropped cards;
+      // ghost cards displaced by drops are pushed to the bottom of the stack
       setActiveCardStacks(prev => {
         const next = { ...prev };
+        for (const { slotIndex, ghost } of ghostsDisplaced) {
+          next[slotIndex] = [ghost, ...(next[slotIndex] ?? [])];
+        }
         plan.dropPreviewIndices.forEach((previewIdx, i) => {
           const targetSlot = plan.dropTargetSlots[i];
           const stackForThisPreview = previewCardStacks[previewIdx];
@@ -5789,6 +6188,95 @@ export default function GameBoard() {
     }
   };
 
+  // Waterfall side-effects: all non-animation effects a waterfall produces.
+  // Called from triggerWaterfall and from the soft-waterfall knight spell.
+  const applyWaterfallSideEffects = (dropCount?: number) => {
+    (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
+      const item = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+      if (item?.waterfallAttackBoost) {
+        const newValue = (item.value ?? 0) + item.waterfallAttackBoost;
+        setEquipmentSlotById(slotId, { ...item, value: newValue });
+        addGameLog('equip', `${item.name} 瀑流强化：攻击力 +${item.waterfallAttackBoost}（${newValue}）`);
+      }
+    });
+
+    if (hasEternalRelic(eternalRelicsRef.current, 'waterfall-heal')) {
+      const baseHeal = 4;
+      healHero(baseHeal);
+      const healAmount = amuletEffects.hasHeal ? baseHeal * 2 : baseHeal;
+      addGameLog('skill', `永恒护符·潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${amuletEffects.hasHeal ? '（治疗加倍）' : ''}`);
+    }
+    if (hasEternalRelic(eternalRelics, 'waterfall-discover')) {
+      const started = beginDiscoverFlow('eternal-relic-waterfall');
+      if (started) {
+        addGameLog('skill', '永恒护符·探秘：瀑流推进，发现专属卡！');
+      }
+    }
+    setTurnCount(prev => prev + 1);
+    addGameLog('waterfall', `第 ${turnCount + 1} 波开始${dropCount != null ? `，${dropCount} 张新卡牌` : ''}`);
+    {
+      const prevLeft = slotTempArmor.equipmentSlot1;
+      const prevRight = slotTempArmor.equipmentSlot2;
+      if (prevLeft !== 0 || prevRight !== 0) {
+        setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
+        addGameLog('magic', '瀑流重置，所有临时护甲归零');
+      }
+    }
+    if (slotTempAttack.equipmentSlot1 !== 0 || slotTempAttack.equipmentSlot2 !== 0) {
+      setSlotTempAttack({ equipmentSlot1: 0, equipmentSlot2: 0 });
+      addGameLog('combat', '瀑流重置：所有临时攻击力归零');
+    }
+    setActiveCards(prev => {
+      let changed = false;
+      const clearedNames: string[] = [];
+      const next = prev.map(c => {
+        if (!c || c.type !== 'monster') return c;
+        const tAtk = c.tempAttackBoost ?? 0;
+        const tHp = c.tempHpBoost ?? 0;
+        if (tAtk === 0 && tHp === 0) return c;
+        changed = true;
+        clearedNames.push(c.name);
+        const newAtk = Math.max(1, (c.attack ?? c.value ?? 0) - tAtk);
+        const newVal = Math.max(1, (c.value ?? 0) - tAtk);
+        const newMaxHp = Math.max(1, (c.maxHp ?? 0) - tHp);
+        const newHp = Math.min(c.hp ?? 0, newMaxHp);
+        const newBoost = Math.max(0, (c.specialAttackBoost ?? 0) - tAtk);
+        return { ...c, attack: newAtk, value: newVal, maxHp: newMaxHp, hp: newHp, specialAttackBoost: newBoost, tempAttackBoost: 0, tempHpBoost: 0 };
+      }) as typeof prev;
+      if (changed && clearedNames.length > 0) {
+        addGameLog('waterfall', `瀑流重置：${clearedNames.join('、')} 的临时增益消散了`);
+      }
+      return changed ? next : prev;
+    });
+    setDiscardedCards(prev => prev.map(c => {
+      if (c.type !== 'monster' || ((c.tempAttackBoost ?? 0) === 0 && (c.tempHpBoost ?? 0) === 0)) return c;
+      return { ...c, tempAttackBoost: 0, tempHpBoost: 0 };
+    }));
+    if (amuletEffects.hasLoneCard) {
+      const bpLen = engine.getState().backpackItems.length;
+      const loneAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'lone-card');
+      const loneThreshold = (loneAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
+      if (bpLen >= 1 && bpLen <= loneThreshold) {
+        const loneDrawn = drawClassCardsToBackpack(1, '孤注之符');
+        if (loneDrawn.length > 0) {
+          triggerClassDeckFlight(loneDrawn);
+          addGameLog('amulet', `孤注之符：背包仅剩 ${bpLen} 张牌，获得职业卡「${loneDrawn[0].name}」`);
+        }
+      }
+    }
+
+    const recycledCards = restorePermanentMagicFromRecycleBag();
+    if (recycledCards > 0) {
+      logWaterfall('recycle-restore', { restored: recycledCards });
+    }
+
+    if (permanentSkills.includes('幽魂净化')) {
+      setWraithPassiveEnabled(true);
+    }
+
+    resetHeroSkillForNewWave();
+  };
+
   // Waterfall mechanism - staged animation + dealing
   const triggerWaterfall = () => {
     if (waterfallLockRef.current || waterfallAnimation.isActive) {
@@ -5801,21 +6289,12 @@ export default function GameBoard() {
 
     waterfallLockRef.current = true;
 
-    (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
-      const item = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-      if (item?.waterfallAttackBoost) {
-        const newValue = (item.value ?? 0) + item.waterfallAttackBoost;
-        setEquipmentSlotById(slotId, { ...item, value: newValue });
-        addGameLog('equip', `${item.name} 瀑流强化：攻击力 +${item.waterfallAttackBoost}（${newValue}）`);
-      }
-    });
-
     const releaseWaterfallLock = (reason: string) => {
       waterfallLockRef.current = false;
       logWaterfall('trigger-abort', { reason });
     };
 
-    const baseEmptyColumns = getEmptyColumns(activeCards);
+    const baseEmptyColumns = getEmptyOrGhostColumns(activeCards);
     const forceCascade = cascadeResetWaterfallRef.current;
 
     if (forceCascade && baseEmptyColumns.length !== DUNGEON_COLUMN_COUNT) {
@@ -5899,73 +6378,7 @@ export default function GameBoard() {
 
     waterfallPendingRef.current = false;
     const sequenceId = ++waterfallSequenceRef.current;
-    if (selectedHeroSkillRef.current === 'waterfall-heal') {
-      const baseHeal = 4;
-      healHero(baseHeal);
-      const healAmount = amuletEffects.hasHeal ? baseHeal * 2 : baseHeal;
-      addGameLog('skill', `潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${amuletEffects.hasHeal ? '（治疗加倍）' : ''}`);
-    }
-    setTurnCount(prev => prev + 1);
-    addGameLog('waterfall', `第 ${turnCount + 1} 波开始，${dropCount} 张新卡牌`);
-    {
-      const prevLeft = slotTempArmor.equipmentSlot1;
-      const prevRight = slotTempArmor.equipmentSlot2;
-      if (prevLeft !== 0 || prevRight !== 0) {
-        setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
-        addGameLog('magic', '瀑流重置，所有临时护甲归零');
-      }
-    }
-    if (slotTempAttack.equipmentSlot1 !== 0 || slotTempAttack.equipmentSlot2 !== 0) {
-      setSlotTempAttack({ equipmentSlot1: 0, equipmentSlot2: 0 });
-      addGameLog('combat', '瀑流重置：所有临时攻击力归零');
-    }
-    setActiveCards(prev => {
-      let changed = false;
-      const clearedNames: string[] = [];
-      const next = prev.map(c => {
-        if (!c || c.type !== 'monster') return c;
-        const tAtk = c.tempAttackBoost ?? 0;
-        const tHp = c.tempHpBoost ?? 0;
-        if (tAtk === 0 && tHp === 0) return c;
-        changed = true;
-        clearedNames.push(c.name);
-        const newAtk = Math.max(1, (c.attack ?? c.value ?? 0) - tAtk);
-        const newVal = Math.max(1, (c.value ?? 0) - tAtk);
-        const newMaxHp = Math.max(1, (c.maxHp ?? 0) - tHp);
-        const newHp = Math.min(c.hp ?? 0, newMaxHp);
-        const newBoost = Math.max(0, (c.specialAttackBoost ?? 0) - tAtk);
-        return { ...c, attack: newAtk, value: newVal, maxHp: newMaxHp, hp: newHp, specialAttackBoost: newBoost, tempAttackBoost: 0, tempHpBoost: 0 };
-      }) as typeof prev;
-      if (changed && clearedNames.length > 0) {
-        addGameLog('waterfall', `瀑流重置：${clearedNames.join('、')} 的临时增益消散了`);
-      }
-      return changed ? next : prev;
-    });
-    setDiscardedCards(prev => prev.map(c => {
-      if (c.type !== 'monster' || ((c.tempAttackBoost ?? 0) === 0 && (c.tempHpBoost ?? 0) === 0)) return c;
-      return { ...c, tempAttackBoost: 0, tempHpBoost: 0 };
-    }));
-    if (amuletEffects.hasLoneCard) {
-      const bpLen = engine.getState().backpackItems.length;
-      const loneAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'lone-card');
-      const loneThreshold = (loneAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
-      if (bpLen >= 1 && bpLen <= loneThreshold) {
-        const loneDrawn = drawClassCardsToBackpack(1, '孤注之符');
-        if (loneDrawn.length > 0) {
-          triggerClassDeckFlight(loneDrawn);
-          addGameLog('amulet', `孤注之符：背包仅剩 ${bpLen} 张牌，获得职业卡「${loneDrawn[0].name}」`);
-        }
-      }
-    }
-
-    const recycledCards = restorePermanentMagicFromRecycleBag();
-    if (recycledCards > 0) {
-      logWaterfall('recycle-restore', { restored: recycledCards });
-    }
-
-    if (permanentSkills.includes('幽魂净化')) {
-      setWraithPassiveEnabled(true);
-    }
+    applyWaterfallSideEffects(dropCount);
 
     logWaterfall('trigger', {
       emptySlots: emptyColumns,
@@ -6076,7 +6489,6 @@ export default function GameBoard() {
     };
     pendingPreviewStacksRef.current = newPreviewStacks;
     cascadeResetWaterfallRef.current = false;
-    resetHeroSkillForNewWave();
 
     setWaterfallAnimation({
       phase: resolvedDropCards.length > 0 ? 'dropping' : discardCard ? 'discarding' : 'dealing',
@@ -6118,11 +6530,15 @@ export default function GameBoard() {
 
     const isRemovedCardBuglet = cardToRemove?.isBuglet === true;
 
+    const willSwarmSpawn = !isRemovedCardBuglet && activeCards.some((c, i) =>
+      c && i !== slotIndex && c.type === 'monster' && c.swarmSpawn && !c.isBuglet && !c.isStunned,
+    );
+
     if (addToGraveyardAutomatically && cardToRemove) {
       discardCardToGraveyard(cardToRemove, { owner: 'dungeon' });
     }
 
-    if (cardToRemove && !options?.skipAutoDraw) {
+    if (cardToRemove && !options?.skipAutoDraw && !willSwarmSpawn) {
       registerDungeonCardProcessed(cardToRemove.id, 'remove-card');
     }
     
@@ -6131,6 +6547,9 @@ export default function GameBoard() {
     
     // Delay actual removal for animation
     setTimeout(() => {
+      let spawnedBuglet: GameCardData | null = null;
+      let hordeRageTriggered = false;
+      const hordeRageMonstersToEngage: GameCardData[] = [];
       setActiveCards(prev => {
         const index = findSlotIndexByCardId(prev, cardId);
         if (index === -1) {
@@ -6139,16 +6558,48 @@ export default function GameBoard() {
 
         const updated = [...prev];
 
-        // Swarm passive: if a non-Buglet card is removed and Swarm monsters are present, spawn a Buglet
+        // Swarm passive: if a non-Buglet card is removed and Swarm monsters are present, spawn a Buglet (enraged)
         const hasSwarmMonster = updated.some((c, i) =>
           c && i !== index && c.type === 'monster' && c.swarmSpawn && !c.isBuglet && !c.isStunned,
         );
         if (hasSwarmMonster && !isRemovedCardBuglet) {
-          updated[index] = createBugletCard();
-          addGameLog('combat', `虫群效果：小虫子在第 ${index + 1} 列生成！`);
+          const buglet = createBugletCard();
+          updated[index] = buglet;
+          spawnedBuglet = buglet;
+          addGameLog('combat', `虫群效果：小虫子（激怒）在第 ${index + 1} 列生成！`);
+
+          // Horde rage: if a swarm with swarmHordeRage exists and monster count ≥ 3, buff all unbuffed monsters
+          const hordeSwarm = updated.find(c => c && c.swarmHordeRage && !c.isStunned);
+          const monsterCount = updated.filter(c => c && c.type === 'monster').length;
+          if (hordeSwarm && monsterCount >= 3) {
+            const hasUnbuffed = updated.some(c => c && c.type === 'monster' && !c.swarmHordeBuffed);
+            if (hasUnbuffed) {
+              hordeRageTriggered = true;
+              for (let k = 0; k < updated.length; k++) {
+                const m = updated[k];
+                if (!m || m.type !== 'monster') continue;
+                if (!m.swarmHordeBuffed) {
+                  updated[k] = {
+                    ...m,
+                    attack: (m.attack ?? m.value) + 3,
+                    value: m.value + 3,
+                    hp: (m.hp ?? 0) + 3,
+                    maxHp: (m.maxHp ?? 0) + 3,
+                    swarmHordeBuffed: true,
+                  };
+                }
+                hordeRageMonstersToEngage.push(updated[k]!);
+              }
+              // Update spawnedBuglet reference to the buffed version
+              spawnedBuglet = updated[index] as GameCardData;
+              const monsterNames = updated.filter(c => c && c.type === 'monster').map(c => c!.name);
+              addGameLog('combat', `${hordeSwarm.name} 虫群集结！激活行怪物≥3，所有怪物+3攻击+3血量！（${monsterNames.join('、')}）`);
+            }
+          }
         } else {
           // Stack pop: if there are stacked cards below, promote the top one
-          const stack = activeCardStacks[index];
+          // Read from engine state to avoid stale closure (e.g. Graveyard Amulet adds stacks after removeCard is called)
+          const stack = engine.getState().activeCardStacks[index];
           if (stack && stack.length > 0) {
             const nextCard = stack[stack.length - 1];
             updated[index] = nextCard;
@@ -6174,13 +6625,12 @@ export default function GameBoard() {
           }
         }
 
-        const remainingCount = countActiveRowSlots(updated);
+        const remainingCount = countActiveRowSlotsExcludeGhost(updated);
         
-        // Check if exactly 1 card remains - trigger waterfall
+        // Check if exactly 1 card remains - trigger waterfall (ghost cards don't count)
     if (remainingCount === 1) {
       waterfallPendingRef.current = true;
     } else if (remainingCount === 0) {
-          // Should not happen with waterfall mechanism, but handle it
       if (remainingDeck.length === 0 && countActiveRowSlots(previewCards) === 0) {
             addGameLog('system', '胜利！地牢已被征服！');
             setVictory(true);
@@ -6192,6 +6642,17 @@ export default function GameBoard() {
         return updated;
       });
       
+      if (hordeRageTriggered) {
+        setHeroSkillBanner(`虫群集结！全体怪物+3攻击+3血量！`);
+        for (const m of hordeRageMonstersToEngage) {
+          if (!isMonsterEngaged(m.id)) {
+            beginCombatRef.current(m, 'monster');
+          }
+        }
+      } else if (spawnedBuglet) {
+        beginCombatRef.current(spawnedBuglet, 'monster');
+      }
+
       // Clear from removing set
       setRemovingCards(prev => {
         const next = new Set(prev);
@@ -6263,7 +6724,7 @@ export default function GameBoard() {
 
 
   useEffect(() => {
-    const activeCount = countActiveRowSlots(activeCards);
+    const activeCount = countActiveRowSlotsExcludeGhost(activeCards);
     const emptySlots = DUNGEON_COLUMN_COUNT - activeCount;
     const shouldCascade = emptySlots >= 4;
 
@@ -6417,10 +6878,12 @@ export default function GameBoard() {
     addGameLog,
     triggerHeroBleedAnimation,
     triggerMonsterBleedAnimation,
+    triggerMonsterHealAnimation,
     triggerWeaponSwingAnimation,
     triggerShieldBlockAnimation,
     tryStartShieldReflectDirectedFx,
     tryStartBossRetaliationDirectedFx,
+    tryStartGolemLayerReflectFx,
     tryStartArcaneBladeSpellFx,
     animSpeed,
     requestDiceOutcome,
@@ -6454,6 +6917,7 @@ export default function GameBoard() {
     handLockedForMonsterPhaseRef,
     suppressDeathWardRef,
     selectedHeroSkillRef,
+    eternalRelicsRef,
     handCardsRef,
     endHeroTurnGuardRef,
     beginCombatRef,
@@ -6564,6 +7028,7 @@ export default function GameBoard() {
     triggerClassDeckFlight,
     triggerGraveNova,
     triggerWaterfall,
+    applyWaterfallSideEffects,
     queueWaterfallTimeout,
     consumeCardFromHand,
     requestDiceOutcome,
@@ -6617,6 +7082,7 @@ export default function GameBoard() {
     disposeOwnedEquipmentCard,
     addPermanentMagicToRecycleBag,
     amuletEffects,
+    eternalRelicsRef,
     healHero,
     applyDamage,
     beginCombat,
@@ -6638,6 +7104,7 @@ export default function GameBoard() {
     drawCardsFromBackpack,
     resolveFateSight,
     resolveStatSwap,
+    resolveRepairEnrageDice,
     addGameLog,
     pushUndoSnapshot,
     clearUndoStack,
@@ -6694,7 +7161,9 @@ export default function GameBoard() {
     requestGraveyardSelection,
     startShopFlow,
     beginDiscoverFlow,
+    beginDiscoverFlowAsync,
     handleDiscoverFallback,
+    handleCardUpgrade,
     normalizeEventEffect,
     handleSkillCard,
     drawCardsFromBackpack,
@@ -6806,7 +7275,7 @@ export default function GameBoard() {
           });
           addGameLog('event', `${card.name} 被放置到地城第 ${targetSlot + 1} 列。`);
           if (card.name === '命运之刃') {
-            applyDamage(5, 'general');
+            applyDamage(5, 'general', { selfInflicted: true });
             addGameLog('event', '命运之刃：从手牌打出，失去 5 点生命。');
             setHeroSkillBanner(`${card.name} 出现在地城中！失去 5 点生命。`);
           } else {
@@ -6843,6 +7312,42 @@ export default function GameBoard() {
       // #endregion
 
       tickRecycleForge();
+
+      if (lastPlayedFlankRef.current && card.flankDraw) {
+        for (let i = 0; i < card.flankDraw; i++) {
+          drawFromBackpackToHand();
+        }
+        addGameLog('magic', `侧击效果：${card.name} 抽取 ${card.flankDraw} 张牌`);
+        setHeroSkillBanner(`侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。`);
+      }
+
+      if (lastPlayedFlankRef.current && card.flankEffectId) {
+        if (card.flankEffectId.startsWith('persuadeCost-')) {
+          const amount = parseInt(card.flankEffectId.replace('persuadeCost-', ''), 10) || 1;
+          setPersuadeCostModifier(prev => prev - amount);
+          addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${amount}`);
+          setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${amount}！`);
+        } else if (card.flankEffectId.startsWith('stunCap+')) {
+          const amount = parseInt(card.flankEffectId.replace('stunCap+', ''), 10) || 5;
+          setStunCap(prev => Math.min(100, prev + amount));
+          addGameLog('event', `侧击效果：${card.name} 击晕上限 +${amount}%`);
+          setHeroSkillBanner(`侧击！${card.name} 击晕上限 +${amount}%！`);
+        } else if (card.flankEffectId.startsWith('damage:')) {
+          const amount = parseInt(card.flankEffectId.replace('damage:', ''), 10) || 5;
+          const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
+            (c): c is GameCardData => Boolean(c && c.type === 'monster'),
+          );
+          if (monsters.length > 0) {
+            const target = monsters[Math.floor(Math.random() * monsters.length)];
+            dealDamageToMonster(target, amount);
+            addGameLog('event', `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害`);
+            setHeroSkillBanner(`侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！`);
+          } else {
+            addGameLog('event', `侧击效果：${card.name} 没有可攻击的怪物`);
+            setHeroSkillBanner(`侧击！但没有可攻击的怪物。`);
+          }
+        }
+      }
 
       if (card.type === 'monster') {
         resetDragState();
@@ -6916,9 +7421,16 @@ export default function GameBoard() {
         removeCard(card.id, false);
       } else if (card.type === 'event' || (card.type === 'building' && card.eventChoices)) {
         const freshBladeCard =
-          card.name === '命运之刃' ? activeCards.find(c => c?.id === card.id) ?? card : card;
+          (card.name === '命运之刃' || card.name === '增幅祭坛')
+            ? activeCards.find(c => c?.id === card.id) ?? card
+            : card;
         if (card.name === '命运之刃' && !freshBladeCard.hasReleaseCharge) {
           setHeroSkillBanner('命运之刃暂无释放次数。');
+          resetDragState();
+          return;
+        }
+        if (card.name === '增幅祭坛' && !freshBladeCard.hasReleaseCharge) {
+          setHeroSkillBanner('增幅祭坛暂无释放次数。');
           resetDragState();
           return;
         }
@@ -7100,20 +7612,22 @@ export default function GameBoard() {
     const success = value >= persuadeState.threshold;
     setPersuadeState(prev => prev ? { ...prev, phase: 'result', diceValue: value, success } : null);
 
+    // Regardless of success or failure, un-engage the monster (remove enraged state)
+    if (isMonsterEngaged(persuadeState.monster.id)) {
+      setCombatState(prev => {
+        const remaining = prev.engagedMonsterIds.filter(id => id !== persuadeState.monster.id);
+        if (remaining.length === 0) return { ...initialCombatState };
+        return { ...prev, engagedMonsterIds: remaining };
+      });
+      addGameLog('combat', `${persuadeState.monster.name} 被劝降后恢复了平静（解除激怒）。`);
+    }
+
     if (success) {
       const { monster, targetSlot } = persuadeState;
       const monsterAttack = monster.attack ?? monster.value;
       const monsterArmor = monster.hp ?? monster.value;
       const durabilityBonus = engine.getState().persuadeSuccessDurabilityBonus ?? 0;
       const monsterMaxDurability = (monster.hpLayers ?? monster.fury ?? 1) + durabilityBonus;
-
-      if (isMonsterEngaged(monster.id)) {
-        setCombatState(prev => {
-          const remaining = prev.engagedMonsterIds.filter(id => id !== monster.id);
-          if (remaining.length === 0) return { ...initialCombatState };
-          return { ...prev, engagedMonsterIds: remaining };
-        });
-      }
 
       if (targetSlot === 'backpack') {
         const persuadedCard: GameCardData = {
@@ -7129,7 +7643,7 @@ export default function GameBoard() {
         const equipSlot = targetSlot;
         const equippedItem = equipSlot === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
         const reserve = getEquipmentReserve(equipSlot);
-        const slotCap = equipmentSlotCapacity[equipSlot];
+        const slotCap = equipmentSlotCapacity[equipSlot] ?? 1;
         const totalEquipped = (equippedItem ? 1 : 0) + reserve.length;
 
         if (totalEquipped < slotCap) {
@@ -7202,6 +7716,7 @@ export default function GameBoard() {
               next[monsterColIndex] = [...(next[monsterColIndex] ?? []), ...picked];
               return next;
             });
+            triggerGraveyardStackFlight(monsterColIndex, picked);
             const names = picked.map(c => `「${c.name}」`).join('、');
             addGameLog('amulet', `墓地回响符：${names}从墓地堆叠在第 ${monsterColIndex + 1} 列！`);
           }
@@ -7341,7 +7856,7 @@ export default function GameBoard() {
           addGameLog('magic', `回收「${card.name}」至回收袋（贪婪诅咒消耗了 3 金币）。`);
           setHeroSkillBanner(`${card.name} 已回收至回收袋，失去 3 金币。`);
         } else if (card.isCurse) {
-          applyDamage(3);
+          applyDamage(3, 'general', { selfInflicted: true });
           addGameLog('magic', `回收「${card.name}」至回收袋（血咒吸取了 3 点生命）。`);
           setHeroSkillBanner(`${card.name} 已回收至回收袋，失去 3 点生命。`);
         } else {
@@ -7435,13 +7950,13 @@ export default function GameBoard() {
         return;
       }
 
-      if (selectedHeroSkillRef.current === 'shield-wall' && card.type === 'weapon') {
-        setHeroSkillBanner('雷盾心法：不能装备武器！');
+      if (hasEternalRelic(eternalRelicsRef.current, 'shield-wall') && card.type === 'weapon') {
+        setHeroSkillBanner('永恒护符·雷盾心法：不能装备武器！');
         resetDragState();
         return;
       }
 
-      const slotCap = equipmentSlotCapacity[equipSlot];
+      const slotCap = equipmentSlotCapacity[equipSlot] ?? 1;
       const reserve = getEquipmentReserve(equipSlot);
       const totalEquipped = (equippedItem ? 1 : 0) + reserve.length;
 
@@ -7518,6 +8033,10 @@ export default function GameBoard() {
           setSlotTempAttack(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 2 }));
           addGameLog('equip', `${equipCard.name} 入场效果：该装备栏临时攻击 +2！`);
         }
+        if (equipCard.onEquipEffect === 'temp-armor-3') {
+          setSlotTempArmor(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
+          addGameLog('equip', `${equipCard.name} 入场效果：该装备栏临时护甲 +3！`);
+        }
         if (equipCard.onEquipEffect === 'persuade-bonus-10') {
           persuadeAmuletBonusRef.current += 10;
           addGameLog('equip', `${equipCard.name} 入场效果：下次劝降成功率 +10%（累计 +${persuadeAmuletBonusRef.current}%）`);
@@ -7544,6 +8063,10 @@ export default function GameBoard() {
           } else {
             addGameLog('equip', `${equipCard.name} 入场效果：另一个装备栏没有装备。`);
           }
+        }
+        if (equipCard.onEquipEffect === 'perm-slot-damage+1') {
+          setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
+          addGameLog('equip', `${equipCard.name} 入场效果：该装备栏永久攻击 +1！`);
         }
       }
 
@@ -7590,6 +8113,7 @@ export default function GameBoard() {
   const heroSkillSlotTargeting = pendingHeroSkillAction?.type === 'slot';
   const heroSkillMonsterTargeting = pendingHeroSkillAction?.type === 'monster';
   const heroMagicTargeting = Boolean(pendingHeroMagicAction);
+  const heroMagicSlotTargeting = pendingHeroMagicAction?.step === 'slot-select';
   const heroMagicMonsterTargeting = pendingHeroMagicAction?.step === 'monster-select';
   const magicTargeting = Boolean(pendingMagicAction);
   const magicSlotTargeting = pendingMagicAction?.step === 'slot-select';
@@ -7600,7 +8124,7 @@ export default function GameBoard() {
   const playerTargetingActive =
     heroSkillTargeting || heroMagicTargeting || magicTargeting || potionTargeting;
   const slotTargetingActive =
-    heroSkillSlotTargeting || Boolean(magicSlotTargeting) || Boolean(potionSlotTargeting);
+    heroSkillSlotTargeting || Boolean(heroMagicSlotTargeting) || Boolean(magicSlotTargeting) || Boolean(potionSlotTargeting);
   const monsterTargetingActive =
     heroSkillMonsterTargeting || heroMagicMonsterTargeting || Boolean(magicMonsterTargeting);
   const dungeonTargetingActive = Boolean(magicDungeonTargeting);
@@ -7614,11 +8138,13 @@ export default function GameBoard() {
           : 'Select Slot';
   const slotTargetingLabel = heroSkillSlotTargeting
     ? heroSkillSlotLabel
-    : magicSlotTargeting
-      ? pendingMagicAction?.prompt
-      : potionSlotTargeting
-        ? pendingPotionAction?.prompt
-        : undefined;
+    : heroMagicSlotTargeting
+      ? pendingHeroMagicAction?.prompt
+      : magicSlotTargeting
+        ? pendingMagicAction?.prompt
+        : potionSlotTargeting
+          ? pendingPotionAction?.prompt
+          : undefined;
   const heroSkillPrompt = pendingHeroMagicAction?.prompt
     ? pendingHeroMagicAction.prompt
     : pendingPotionAction?.prompt
@@ -7722,6 +8248,7 @@ export default function GameBoard() {
     Boolean(handMagicUpgradeModal) ||
     Boolean(mirrorCopyModal) ||
     Boolean(permGrantModal) ||
+    Boolean(amplifyModal) ||
     detailsModalOpen ||
     heroDetailsOpen ||
     (eventModalOpen && !eventModalMinimized) ||
@@ -8088,6 +8615,31 @@ export default function GameBoard() {
   const eventPendingLocked = eventModalMinimized && eventModalOpen && !!currentEventCard;
   const pendingBlock = combatState.pendingBlock;
   const showBlockButtons = Boolean(pendingBlock);
+  const inCombat = engagedMonsters.some(m => !monsterDefeatStates[m.id]);
+  const computeSlotActionCount = (slotId: EquipmentSlotId): number | null => {
+    if (!inCombat) return null;
+    const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+    if (!slotItem) return null;
+
+    if (combatState.currentTurn === 'hero') {
+      let count = 0;
+      if (!combatState.heroAttacksThisTurn[slotId]) count += 1;
+      count += extraAttackCharges;
+      if (berserkerRageActive && !berserkerSlotUsed[slotId]) count += 1;
+      if (amuletEffects.hasFlash && !flashSlotUsed[slotId]) count += 1;
+      if (gambitExtraActive) count += Math.max(0, gambitExtraPerSlot - (gambitSlotUsed[slotId] ?? 0));
+      if ((slotItem as any)?.weaponExtraAttack && !weaponExtraAttackUsed[slotId]) count += 1;
+      return count;
+    }
+
+    if (combatState.currentTurn === 'monster' && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
+      return Math.max(0, blockDurabilityPerSlot - (combatState.slotDurabilityUsedThisTurn?.[slotId] ?? 0));
+    }
+
+    return null;
+  };
+  const slotActionCount1 = computeSlotActionCount('equipmentSlot1');
+  const slotActionCount2 = computeSlotActionCount('equipmentSlot2');
   useLayoutEffect(() => {
     updateHeroFramePosition();
   }, [
@@ -8507,6 +9059,8 @@ export default function GameBoard() {
     disabled: boolean = false
   ) => {
     if (!pendingBlock) return null;
+    const isDurabilityExhausted = target !== 'hero' &&
+      (combatState.slotDurabilityUsedThisTurn?.[target as EquipmentSlotId] ?? 0) >= blockDurabilityPerSlot;
     return (
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
         <button
@@ -8526,7 +9080,9 @@ export default function GameBoard() {
           style={{ '--dh-overlay-scale': (overlayScale * stageScale).toString() } as CSSProperties}
         >
           <span className="block-button__label">{label}</span>
-          <span className="block-button__meta">Damage: {pendingBlock.attackValue}</span>
+          <span className="block-button__meta">
+            {isDurabilityExhausted ? '耐久用尽' : `Damage: ${pendingBlock.attackValue}`}
+          </span>
         </button>
       </div>
     );
@@ -8633,6 +9189,7 @@ export default function GameBoard() {
               (!gambitExtraActive || (gambitSlotUsed.equipmentSlot1 ?? 0) >= gambitExtraPerSlot) &&
               (!(equipmentSlot1 as any)?.weaponExtraAttack || Boolean(weaponExtraAttackUsed.equipmentSlot1))
             }
+            slotActionCount={slotActionCount1}
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot1}
             isStunFrozen={heroStunned}
             onDrop={(card) => {
@@ -8662,7 +9219,7 @@ export default function GameBoard() {
             onCardClick={handleCardClick}
           />
           {showBlockButtons &&
-            renderBlockButton('equipmentSlot1', 'Block (Left)', !canShieldBlock('equipmentSlot1'))}
+            renderBlockButton('equipmentSlot1', 'Block (Left)', !canShieldBlock('equipmentSlot1') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot1 ?? 0) >= blockDurabilityPerSlot)}
         </>
       ),
     },
@@ -8765,6 +9322,7 @@ export default function GameBoard() {
               (!gambitExtraActive || (gambitSlotUsed.equipmentSlot2 ?? 0) >= gambitExtraPerSlot) &&
               (!(equipmentSlot2 as any)?.weaponExtraAttack || Boolean(weaponExtraAttackUsed.equipmentSlot2))
             }
+            slotActionCount={slotActionCount2}
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot2}
             isStunFrozen={heroStunned}
             onDrop={(card) => {
@@ -8794,7 +9352,7 @@ export default function GameBoard() {
             onCardClick={handleCardClick}
           />
           {showBlockButtons &&
-            renderBlockButton('equipmentSlot2', 'Block (Right)', !canShieldBlock('equipmentSlot2'))}
+            renderBlockButton('equipmentSlot2', 'Block (Right)', !canShieldBlock('equipmentSlot2') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot2 ?? 0) >= blockDurabilityPerSlot)}
         </>
       ),
     },
@@ -9189,6 +9747,7 @@ export default function GameBoard() {
                     (card.type === 'monster' || card.type === 'building')
                   }
                   bleedAnimation={Boolean(monsterBleedStates[card.id])}
+                  healAnimation={Boolean(monsterHealStates[card.id])}
                   defeatAnimation={Boolean(monsterDefeatStates[card.id])}
                   className={`${removingCards.has(card.id) ? 'animate-card-remove' : 'shadow-lg'} ${
                     (isMonsterTurnLock && !monsterTargetHighlight && !dungeonTargetHighlight) ||
@@ -9457,6 +10016,12 @@ export default function GameBoard() {
             )}
       </div>
 
+      {/* Eternal Relics — between hero row frame and hand */}
+      <EternalRelicBar
+        relics={eternalRelics}
+        onRelicClick={handleEternalRelicClick}
+      />
+
       {/* Hand Display - Dedicated space */}
       <div ref={handAreaRef} className={`flex-shrink-0 relative w-full px-2 md:px-6 ${isFlat ? 'pb-0' : 'pb-4'}`}>
         <HandDisplay
@@ -9601,9 +10166,12 @@ export default function GameBoard() {
                 ? DIRECTED_REFLECT_PROJECTILE_SIZE
                 : flight.kind === 'arcane-blade-spell'
                   ? DIRECTED_ARCANE_PROJECTILE_SIZE
-                  : DIRECTED_RETALIATION_PROJECTILE_SIZE;
+                  : flight.kind === 'golem-layer-reflect'
+                    ? DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE
+                    : DIRECTED_RETALIATION_PROJECTILE_SIZE;
             const isReflect = flight.kind === 'shield-reflect';
             const isArcane = flight.kind === 'arcane-blade-spell';
+            const isGolemLayer = flight.kind === 'golem-layer-reflect';
             return (
               <div
                 key={flight.id}
@@ -9612,11 +10180,13 @@ export default function GameBoard() {
                   else directedCombatFxElementMapRef.current.delete(flight.id);
                 }}
                 className={
-                  isArcane
-                    ? 'absolute rounded-full border-2 border-purple-400/95 bg-gradient-to-br from-violet-300/95 via-purple-500/90 to-indigo-700/90 shadow-[0_0_20px_rgba(139,92,246,0.95)] ring-2 ring-purple-200/50'
-                    : isReflect
-                      ? 'absolute rounded-full border-2 border-amber-400/95 bg-gradient-to-br from-amber-200/95 via-yellow-400/90 to-orange-500/90 shadow-[0_0_18px_rgba(251,191,36,0.95)] ring-2 ring-amber-100/50'
-                      : 'absolute rounded-full border-2 border-rose-800/95 bg-gradient-to-br from-rose-300/95 via-red-600/90 to-red-950/95 shadow-[0_0_22px_rgba(220,38,38,0.85)] ring-2 ring-rose-200/45'
+                  isGolemLayer
+                    ? 'absolute rounded-full border-2 border-stone-500/95 bg-gradient-to-br from-stone-300/95 via-amber-700/90 to-stone-800/95 shadow-[0_0_20px_rgba(120,83,50,0.9)] ring-2 ring-amber-300/50'
+                    : isArcane
+                      ? 'absolute rounded-full border-2 border-purple-400/95 bg-gradient-to-br from-violet-300/95 via-purple-500/90 to-indigo-700/90 shadow-[0_0_20px_rgba(139,92,246,0.95)] ring-2 ring-purple-200/50'
+                      : isReflect
+                        ? 'absolute rounded-full border-2 border-amber-400/95 bg-gradient-to-br from-amber-200/95 via-yellow-400/90 to-orange-500/90 shadow-[0_0_18px_rgba(251,191,36,0.95)] ring-2 ring-amber-100/50'
+                        : 'absolute rounded-full border-2 border-rose-800/95 bg-gradient-to-br from-rose-300/95 via-red-600/90 to-red-950/95 shadow-[0_0_22px_rgba(220,38,38,0.85)] ring-2 ring-rose-200/45'
                 }
                 style={{
                   width: sz,
@@ -9650,6 +10220,35 @@ export default function GameBoard() {
                   opacity: 0,
                   willChange: 'transform, opacity',
                   contain: 'layout style',
+                }}
+              >
+                <GameCard card={flight.card} disableInteractions />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {graveyardStackFlights.length > 0 && (
+        <div className="pointer-events-none absolute inset-0 z-[38]">
+          {graveyardStackFlights.map(flight => {
+            const cardWidth = gridCardSize?.width ?? 140;
+            const cardHeight = gridCardSize?.height ?? 210;
+            return (
+              <div
+                key={flight.id}
+                ref={el => {
+                  if (el) graveyardStackFlightElementMapRef.current.set(flight.id, el);
+                  else graveyardStackFlightElementMapRef.current.delete(flight.id);
+                }}
+                className="absolute"
+                style={{
+                  width: cardWidth,
+                  height: cardHeight,
+                  opacity: 0,
+                  willChange: 'transform, opacity',
+                  contain: 'layout style',
+                  filter: 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.7))',
                 }}
               >
                 <GameCard card={flight.card} disableInteractions />
@@ -9754,6 +10353,15 @@ export default function GameBoard() {
         amuletSlots={amuletSlots}
         handCards={handCards}
         onConfirm={resolveMirrorCopy}
+      />
+
+      <AmplifyModal
+        open={Boolean(amplifyModal)}
+        onClose={cancelAmplify}
+        equipmentSlot1={equipmentSlot1}
+        equipmentSlot2={equipmentSlot2}
+        handCards={handCards}
+        onConfirm={resolveAmplify}
       />
 
       <PermGrantModal
@@ -9916,6 +10524,27 @@ export default function GameBoard() {
         fullBoardInteractionLocked={fullBoardInteractionLocked}
         onUndo={handleUndo}
       />
+
+      {/* Eternal Relic Detail Modal */}
+      {selectedEternalRelic && (
+        <Dialog open={eternalRelicModalOpen} onOpenChange={setEternalRelicModalOpen}>
+          <DialogContent className="max-w-xs">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-300">
+                <img
+                  src={selectedEternalRelic.image}
+                  alt={selectedEternalRelic.name}
+                  className="w-10 h-10 rounded-full border-2 border-amber-400/60 object-cover"
+                />
+                {selectedEternalRelic.name}
+              </DialogTitle>
+              <DialogDescription className="text-sm pt-2">
+                {selectedEternalRelic.description}
+              </DialogDescription>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

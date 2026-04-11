@@ -59,6 +59,11 @@ import knightScrollBladeStormImage from '@assets/generated_images/knight_scroll_
 import knightScrollBladeFlankImage from '@assets/generated_images/knight_scroll_blade_flank.png';
 import knightScrollFortifyFlankImage from '@assets/generated_images/knight_scroll_fortify_flank.png';
 import knightScrollBagFetchImage from '@assets/generated_images/knight_scroll_bag_fetch.png';
+import knightMagicBloodDrawImage from '@assets/generated_images/knight_magic_blood_draw.png';
+import knightWeaponResonanceBladeImage from '@assets/generated_images/knight_weapon_resonance_blade.png';
+import knightShieldEnduranceImage from '@assets/generated_images/knight_shield_endurance.png';
+import knightAmuletArmorHalveEndureImage from '@assets/generated_images/knight_amulet_armor_halve_endure.png';
+import knightMagicRepairEnrageDiceImage from '@assets/generated_images/knight_magic_repair_enrage_dice.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -198,7 +203,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: potionBackpackExpandImage,
     classCard: true,
-    description: '掷骰决定效果：25% 护符上限+1 / 25% 左装备栏+1 / 25% 右装备栏+1 / 25% 背包+3。',
+    description: '选择一项效果：护符上限+1 / 左装备栏+1 / 右装备栏+1 / 背包+3。',
     potionEffect: 'dice-backpack-expand',
   });
 
@@ -464,7 +469,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: bloodrageAmuletImage,
     classCard: true,
-    description: '每次失去生命时，所有装备栏临时攻击 +2。',
+    description: '每次对自己造成伤害时，所有装备栏临时攻击 +2。',
     amuletEffect: 'bloodrage-attack',
   });
 
@@ -506,6 +511,16 @@ export function generateKnightDeck(): KnightCardData[] {
     classCard: true,
     description: '每击晕一次怪物，从回收袋随机取回两张牌到手牌。',
     amuletEffect: 'stun-recycle-to-hand',
+  });
+
+  pushCard({
+    type: 'amulet',
+    name: '磐石坚守符',
+    value: 1,
+    image: knightAmuletArmorHalveEndureImage,
+    classCard: true,
+    description: '所有装备栏的临时护甲减半（向下取整），但格挡耐久次数 +1。',
+    amuletEffect: 'armor-halve-endure',
   });
 
   // === NEW POTIONS (2 cards) ===
@@ -564,6 +579,18 @@ export function generateKnightDeck(): KnightCardData[] {
     magicType: 'instant',
     magicEffect: '选择一张手牌赋予转型效果。',
     knightEffect: 'transform-grant',
+  });
+
+  pushCard({
+    type: 'magic',
+    name: '符位开辟',
+    value: 0,
+    image: salvageAmuletImage,
+    classCard: true,
+    description: '一次性：护符栏上限 +1。',
+    magicType: 'instant',
+    magicEffect: '护符栏上限 +1。',
+    knightEffect: 'amulet-expand',
   });
 
   // === NEW PERMANENT MAGIC (2 cards) ===
@@ -673,6 +700,43 @@ export function generateKnightDeck(): KnightCardData[] {
     recycleDelay: 1,
   });
 
+  pushCard({
+    type: 'magic',
+    name: '血契抽引',
+    value: 0,
+    image: knightMagicBloodDrawImage,
+    classCard: true,
+    description: '永久：失去 1 点生命，抽 3 张牌。',
+    magicType: 'permanent',
+    magicEffect: '失去 1 HP，抽 3 张牌。',
+    knightEffect: 'blood-draw',
+    maxUpgradeLevel: 2,
+  });
+
+  pushCard({
+    type: 'magic',
+    name: '锻造赌运',
+    value: 0,
+    image: knightMagicRepairEnrageDiceImage,
+    classCard: true,
+    description: '永久：选择一个装备和一个怪物，掷骰——80% 该装备 +1 耐久，20% 该怪物 -1 血层并激怒。',
+    magicType: 'permanent',
+    magicEffect: '掷骰：80% 修复装备，20% 怪物减层激怒。',
+    knightEffect: 'repair-enrage-dice',
+  });
+
+  pushCard({
+    type: 'magic',
+    name: '血祭裁决',
+    value: 0,
+    image: dedupeKnightMagicMissingHpSmiteImage,
+    classCard: true,
+    description: '永久：选择一个怪物，失去一半剩余生命值，对该怪物造成失去血量 ×2 的伤害。',
+    magicType: 'permanent',
+    magicEffect: '失去半血，造成双倍伤害。',
+    knightEffect: 'blood-sacrifice-strike',
+  });
+
   // === NEW HERO MAGIC (2 cards) ===
   pushCard({
     type: 'hero-magic',
@@ -691,7 +755,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: dedupeKnightHeroReviveTomeImage,
     classCard: true,
-    description: '每受到 3 次伤害充满数值条。释放：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
+    description: '每对自己造成 3 次伤害充满数值条。释放：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
     heroMagicId: 'revive-blessing',
     heroMagicEffect: '英雄魔法：解锁或触发复生祝福。',
   });
@@ -710,6 +774,19 @@ export function generateKnightDeck(): KnightCardData[] {
     shieldBashStunRate: 5,
   });
 
+  pushCard({
+    type: 'shield',
+    name: '坚韧磐盾',
+    value: 3,
+    image: knightShieldEnduranceImage,
+    classCard: true,
+    description: '该护盾的格挡耐久次数 +1（每 2 次护甲耗尽才消耗 1 耐久）。',
+    shieldExtraBlocksPerDurability: 1,
+    durability: 3,
+    maxDurability: 3,
+    armorMax: 3,
+  });
+
   // === CLASS POTION ===
   pushCard({
     type: 'potion',
@@ -717,7 +794,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: knightChainPersuadePotionImage,
     classCard: true,
-    description: '永久被动：连续两次劝降同一个怪物时，成功概率 +15%。',
+    description: '获得永恒护符：连续两次劝降同一个怪物时，成功概率 +15%。',
     potionEffect: 'perm-persuade-consecutive',
   });
 
@@ -745,6 +822,19 @@ export function generateKnightDeck(): KnightCardData[] {
     durability: 3,
     maxDurability: 3,
     weaponExtraAttack: 1,
+  });
+
+  pushCard({
+    type: 'weapon',
+    name: '共鸣之刃',
+    value: 4,
+    image: knightWeaponResonanceBladeImage,
+    classCard: true,
+    description: '每次攻击时，给另一个装备栏 +2 临时攻击，并恢复其装备 1 点耐久。',
+    onAttackBuffOtherSlotTempAttack: 2,
+    onAttackRepairOtherSlot: 1,
+    durability: 2,
+    maxDurability: 2,
   });
 
   // Shuffle the deck

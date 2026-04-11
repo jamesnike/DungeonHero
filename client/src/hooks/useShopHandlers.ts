@@ -112,7 +112,7 @@ export interface ShopHandlersDeps {
   ghostBladeExileResolverRef: React.MutableRefObject<(() => void) | null>;
   /** 从专属发现弹窗完成时调用（药水「灵思药剂」等），替代 completeCurrentEvent */
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
-  onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard') => void) | null>;
+  onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard' | 'classPool') => void) | null>;
   persuadeAmuletBonusRef: React.MutableRefObject<number>;
 }
 
@@ -350,7 +350,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         } else {
           setBackpackItems(prev => [selectedCard, ...prev]);
           depsRef.current.triggerClassDeckFlight([selectedCard]);
-          depsRef.current.onNewCardGainedRef?.current?.(1);
+          depsRef.current.onNewCardGainedRef?.current?.(1, 'classPool');
         }
       }
 
@@ -435,7 +435,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         setClassDeck(deck => deck.filter(card => card.id !== purchasedCard.id));
         setBackpackItems(items => [purchasedCard, ...items]);
         depsRef.current.triggerClassDeckFlight([purchasedCard]);
-        depsRef.current.onNewCardGainedRef?.current?.(1);
+        depsRef.current.onNewCardGainedRef?.current?.(1, 'classPool');
 
         const next = [...prev];
         next[offeringIndex] = { ...offering, sold: true };
@@ -545,8 +545,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           break;
         }
         case STARTER_CARD_IDS.discardDraw: {
-          const discards = [1, 1, 2, 3];
-          const draws = [1, 2, 3, 4];
+          const discards = [1, 2, 3];
+          const draws = [2, 3, 4];
           const d = discards[newLevel] ?? 1;
           const dr = draws[newLevel] ?? 1;
           upgraded.description = `将 ${d} 张手牌移到回收袋，从背包抽取 ${dr} 张新牌。`;
@@ -753,6 +753,13 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
             upgraded.recycleDelay = newLevel >= 1 ? 1 : 2;
             upgraded.description = `永久：造成 ${dmg} 点伤害，翻看主牌堆顶 ${peek} 张牌，每有一张怪物牌，20% 概率击晕目标。`;
             upgraded.magicEffect = `造成 ${dmg} 点伤害并透视 ${peek} 张牌，可能击晕目标。`;
+            break;
+          }
+          case 'blood-draw': {
+            const bloodDrawCounts = [3, 4, 5];
+            const dc = bloodDrawCounts[newLevel] ?? 5;
+            upgraded.description = `永久：失去 1 点生命，抽 ${dc} 张牌。`;
+            upgraded.magicEffect = `失去 1 HP，抽 ${dc} 张牌。`;
             break;
           }
           default:

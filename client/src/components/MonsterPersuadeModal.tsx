@@ -119,6 +119,9 @@ export default function MonsterPersuadeModal({
                   <p className="mt-1 text-amber-600 dark:text-amber-400 font-medium">
                     从背包装备后，怪物原有能力将转化为对应的装备效果。
                   </p>
+                  <p className="mt-1 text-sky-600 dark:text-sky-400 font-medium">
+                    无论劝降成功或失败，怪物都将恢复平静（解除激怒状态）。
+                  </p>
                 </div>
               </div>
 
@@ -193,6 +196,9 @@ export default function MonsterPersuadeModal({
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {monster.name} 拒绝了你的劝降，{cost} 金币已消耗。
+                      </p>
+                      <p className="text-xs text-sky-500 mt-1">
+                        但 {monster.name} 已恢复平静（解除激怒）。
                       </p>
                     </div>
                   )}

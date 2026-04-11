@@ -27,6 +27,7 @@ export type CombatState = {
     isFollowUpAttack?: boolean;
   };
   slotBlocksThisTurn: Record<EquipmentSlotId, boolean>;
+  slotDurabilityUsedThisTurn: Record<EquipmentSlotId, number>;
 };
 
 export type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
@@ -223,6 +224,14 @@ export type PendingMagicAction =
     }
   | {
       card: GameCardData;
+      effect: 'blood-sacrifice-strike';
+      step: 'monster-select';
+      pendingDamage: number;
+      hpLost: number;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
       effect: 'eternal-repair';
       step: 'slot-select';
       prompt: string;
@@ -409,6 +418,32 @@ export type PendingMagicAction =
       prompt: string;
       isFlank?: boolean;
     }
+  | {
+      card: GameCardData;
+      effect: 'repair-enrage-dice';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'repair-enrage-dice';
+      step: 'monster-select';
+      slotId: EquipmentSlotId;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'bounty-spell-damage';
+      step: 'monster-select';
+      echoMultiplier?: number;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'equalize-temp-attack-armor';
+      step: 'slot-select';
+      prompt: string;
+    }
 
 /** 天眼审判：透视 + 击晕判定（关闭弹窗后掷骰） */
 export type DeckPeekModalStateFateSight = {
@@ -552,10 +587,22 @@ export type FateSwapFlight = {
   arcHeight: number;
 };
 
+/** 墓地回响符：墓地 → 地城格飞行动画（纯视觉，堆叠状态由调用方同步设置） */
+export type GraveyardStackFlight = {
+  id: string;
+  card: GameCardData;
+  start: Point;
+  end: Point;
+  startTime: number;
+  duration: number;
+  progress: number;
+  arcHeight: number;
+};
+
 /** 护盾反弹 / Boss 反噬 / 奥术之刃附魔：纯表现用定向抛物线投射（伤害由结算逻辑另行应用） */
 export type DirectedCombatFxFlight = {
   id: string;
-  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell';
+  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell' | 'golem-layer-reflect';
   start: Point;
   end: Point;
   startTime: number;
@@ -640,6 +687,8 @@ export type ActiveAmuletEffects = {
   hasStunUpgradeCap: boolean;
   hasRecycleBackpackExpand: boolean;
   hasDungeonGold: boolean;
+  hasArmorHalveEndure: boolean;
+  stunRateBoost: number;
 };
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';

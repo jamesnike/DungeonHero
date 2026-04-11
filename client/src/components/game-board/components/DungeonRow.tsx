@@ -30,6 +30,7 @@ export interface DungeonRowProps {
   playerTargetingActive: boolean;
   activeMonsterReward: unknown;
   monsterBleedStates: Record<string, boolean>;
+  monsterHealStates: Record<string, boolean>;
   monsterDefeatStates: Record<string, boolean>;
   removingCards: Set<string>;
   rageStripWidth: number;
@@ -71,6 +72,7 @@ function DungeonRowInner({
   playerTargetingActive,
   activeMonsterReward,
   monsterBleedStates,
+  monsterHealStates,
   monsterDefeatStates,
   removingCards,
   rageStripWidth,
@@ -245,6 +247,7 @@ function DungeonRowInner({
                     (card.type === 'monster' || card.type === 'building')
                   }
                   bleedAnimation={Boolean(monsterBleedStates[card.id])}
+                  healAnimation={Boolean(monsterHealStates[card.id])}
                   defeatAnimation={Boolean(monsterDefeatStates[card.id])}
                   className={`${removingCards.has(card.id) ? 'animate-card-remove' : 'shadow-lg'} ${
                     (isMonsterTurnLock &&

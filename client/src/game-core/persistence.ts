@@ -81,6 +81,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
       monsterAttackQueue: [...state.combatState.monsterAttackQueue],
       pendingBlock: state.combatState.pendingBlock ? { ...state.combatState.pendingBlock } : null,
       slotBlocksThisTurn: { ...state.combatState.slotBlocksThisTurn },
+      slotDurabilityUsedThisTurn: { ...state.combatState.slotDurabilityUsedThisTurn },
     },
     tempShield: state.tempShield,
     nextWeaponBonus: state.nextWeaponBonus,
@@ -106,6 +107,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     gambitExtraPerSlot: state.gambitExtraPerSlot,
     gambitSlotUsed: state.gambitSlotUsed,
     weaponExtraAttackUsed: state.weaponExtraAttackUsed,
+    blockDurabilityPerSlot: state.blockDurabilityPerSlot,
     heroSkillUsedThisWave: state.heroSkillUsedThisWave,
     extraSkillsUsedThisWave: state.extraSkillsUsedThisWave,
     handLimitBonus: state.handLimitBonus,
@@ -134,6 +136,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     previewCardStacks: state.previewCardStacks,
     activeCardStacks: state.activeCardStacks,
     waterfallDealBonus: state.waterfallDealBonus,
+    eternalRelics: state.eternalRelics.map(r => ({ ...r })),
   };
 }
 

@@ -366,7 +366,7 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 | Heal Amulet | `heal` | 所有回血效果翻倍 |
 | Balance Amulet | `balance` | 左栏临时攻击+3临时护甲-1，右栏临时护甲+3临时攻击-1 |
 | Life Amulet | `life` | 超杀吸血+4 |
-| Catapult Amulet | `catapult` | 每弃置1张牌，抽1张牌 |
+| Catapult Amulet | `catapult` | 每弃置1张牌，抽2张牌 |
 | Flash Amulet | `flash` | 攻击力减半，攻击次数+1 |
 | Strength Amulet | `strength` | 临时攻击+4，每次攻击自损2HP |
 
@@ -534,11 +534,11 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 条件 | 效果 |
 |------|------|
 | 技能"弃牌获利" (`discard-profit`) | +2 金币 |
-| 弹射护符 (`catapult`) | 从背包抽 1 张牌 |
+| 弹射护符 (`catapult`) | 从背包抽 2 张牌 |
 | 雷霆符印 (`discard-zap`) | `triggerDiscardShock()` 对随机怪物造成伤害 |
 
 > **规则：** 含"每"字样的触发器（弹射护符、雷霆符印、弃牌获利）一定在被弃牌自身效果之后结算。
-> 例：弃掉一张 `onDiscardDraw: 2` 的牌 → 先抽 2 张（牌自身效果）→ 然后弹射护符再抽 1 张。
+> 例：弃掉一张 `onDiscardDraw: 2` 的牌 → 先抽 2 张（牌自身效果）→ 然后弹射护符再抽 2 张。
 
 > **注意：** 当有牌在 Staging 区时，整个弃置副作用（Phase 1 + Phase 2）不会立即执行，而是排入队列，等 Staging 的牌结算完毕后依序执行。
 
@@ -612,15 +612,14 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 种族 | 精英能力 | 说明 |
 |------|---------|------|
-| Dragon | `ember-fury` | 流血效果升级为+3；Hero回合未掉血层则恢复一层 |
-| Skeleton | `bone-regen` | 虚骨再生：失去血层后50%概率恢复一层（D20 ≤ 10） |
+| Dragon | `ember-fury` | 流血效果升级为+3；龙息庇护：Hero回合未掉血层，为激活行另一个怪物恢复1血层 |
+| Skeleton | `bone-regen` | 虚骨再生：失去血层后50%概率恢复一层（D20 ≤ 10）|
 | Wraith | `wraith-rebirth` | 幽魂重生：血层降至1时50%概率全满（D20 ≤ 10） |
 | Ogre | `ogre-crit` | 蛮力暴击：攻击50%概率双倍伤害 + 狂暴连击：50%概率攻击两次 |
 | Goblin | `goblin-elite` | 偷取6金币；玩家金币≤10时攻击力与血量翻倍 |
 | Swarm | `swarm-elite` | 虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子 |
 
 精英怪还有特殊遗言：
-- 精英 Skeleton：`discard-hand-3`（随机弃回3张手牌）
 - 精英 Wraith：`wraith-haunt-4`（同行怪物攻击+4并打乱位置）
 
 ### 9.4 遗言系统 (`lastWords`)
@@ -636,7 +635,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 效果ID | 行为 |
 |--------|------|
-| `discard-hand-3` | 随机弃回最多3张手牌 |
+| `discard-hand-N` | 随机弃回最多N张手牌 |
 | `wraith-haunt-N` | 同行怪物攻击+N，同行卡牌位置随机打乱 |
 
 ### 9.5 复生系统 (`hasRevive`)
@@ -644,6 +643,9 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - 基础Skeleton有 `hasRevive: true`
 - 首次击杀时：`reviveUsed: true`，`currentLayer: 1`，HP恢复满
 - 第二次击杀时：正常死亡
+- Lv.1+ `skeletonNoLayerCost`：复生后攻击不消耗血层
+- Lv.2+ `skeletonLastWordsDiscard`：遗言效果，死亡时随机弃回玩家1张手牌
+- Lv.3 `skeletonReRevive`：同行其他怪物被击败时，若已复生过，再次获得复生
 - Boss变身后也有 `hasRevive`
 
 ### 9.6 怪物强化等级
@@ -659,8 +661,8 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 种族 | Lv.1 | Lv.2 | Lv.3 |
 |------|------|------|------|
-| Dragon | WF≥4: 攻+3 血+1 | WF≥8: 攻+5 血+4 | WF≥12: 攻+8 血+7 + 流血破甲 |
-| Skeleton | WF≥3: 攻+3 血+1 | WF≥7: 攻+6 血+2 | WF≥11: 攻+9 血+3 + 不朽之骨 |
+| Dragon | WF≥4: 攻+3 血+1 + 龙鳞护体 | WF≥8: 攻+5 血+4 + 龙息反击 | WF≥12: 攻+8 血+7 + 流血破甲 |
+| Skeleton | WF≥3: 攻+3 血+1 + 不朽之骨 | WF≥7: 攻+6 血+2 + 遗言弃1牌 | WF≥11: 攻+9 血+3 + 亡骨轮回 |
 | Goblin | WF≥3: 攻+2 血+1 | WF≥7: 攻+4 血+2 | WF≥11: 攻+6 血+4 + 贪婪强化 |
 | Ogre | WF≥5: 攻+3 血+1 + 击晕 | WF≥9: 攻+5 血+3 + 连击 | WF≥13: 攻+8 血+5 + 全技能 |
 | Wraith | WF≥4: 攻+3 血+1 | WF≥8: 攻+5 血+3 + 蓄积 | WF≥12: 攻+7 血+4 + 祝福 |
@@ -703,6 +705,8 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 **被动/反应技能（被攻击时）：**
 - `bossRetaliationDamage`（反噬）不生效
 - `bleedEffect`（流血攻击加成）不生效
+- `dragonAttackNoLayerCost`（龙鳞护体）不生效
+- `dragonDamageRetaliation`（龙息反击）不生效
 - `dragonBleedDestroy`（流血破甲）不生效
 - `bossFuryDiceChance`（韧性免血层损失）不生效
 - 精英特殊能力（骨再生 `bone-regen`、幽魂重生 `wraith-rebirth`、虫母 `swarm-elite`）不触发
@@ -716,6 +720,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - `hasRevive`（复生）不生效——击晕状态下击杀直接死亡
 - `lastWords`（遗言）不触发
 - `wraithDeathHeal`（怨灵祝福）不触发
+- `wraithDeathHealSpread`（怨灵遗言）不触发
 - `isFinalMonster`（Boss变身）不触发
 
 **场地技能：**
@@ -743,7 +748,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 风暴箭雨 | instant | 对行中所有怪物造成 `getSpellDamage(3) × echo` 伤害；命中 ≥3 只怪物时翻转为「箭雨余韵」(permanent) |
 | 箭雨余韵 | permanent | 对行中所有怪物造成 `getSpellDamage(1) × echo` 伤害，每命中 1 只怪物从回收袋随机抽 1 张牌入手牌（不含自身） |
 | 回响行囊 | instant | 弃回 `2×echo` 张手牌 → 从坟场发现 `2×echo` 张 → 从背包抽 `2×echo` 张 |
-| 潮涌铸甲 | instant | 2选1被动：A)瀑流铸剑—每次攻击该装备栏临时攻击+2；B)格挡铸甲—每次格挡该装备栏临时护甲+2 |
+| 潮涌铸甲 | instant | 2选1获得永恒护符：A)瀑流铸剑—每次攻击该装备栏临时攻击+2；B)格挡铸甲—每次格挡该装备栏临时护甲+2。可叠加 |
 | 点金裁决 | instant | 伤害 = `getSpellDamage(gold) × echo`，回复等量HP |
 | 涌泉满手 | instant | 恢复 8 点生命，手牌补充到上限（从背包抽牌，计算差值时不算自身） |
 | 不灭守护 | instant | 濒死时自动抵消致死伤害（无需主动打出） |
@@ -815,7 +820,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 名称 | `potionEffect` | 效果 |
 |------|----------------|------|
 | 奥术灌注 | `dice-arcane-infusion` | D20：槽位伤害/护甲翻倍 或 法术伤害翻倍 |
-| 无尽背袋灵药 | `dice-backpack-expand` | D20：护符+1 / 装备容量+1 / 背包+3 |
+| 无尽背袋灵药 | `dice-backpack-expand` | 选择：护符+1 / 装备容量+1 / 背包+3 |
 
 ---
 
@@ -915,7 +920,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 名称 | 效果 |
 |------|------|
 | 奥术灌注 | D20掷骰增强 |
-| 无尽背袋灵药 | D20掷骰扩容 |
+| 无尽背袋灵药 | 选择扩容效果 |
 
 ### 13.5 英雄魔法牌
 
@@ -957,7 +962,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 属性 | 值 |
 |------|-----|
 | 仪表上限 | 3 |
-| 充能来源 | 每次受到伤害 +1 |
+| 充能来源 | 每次对自己造成伤害 +1（仅自伤，不含怪物伤害） |
 | 激活条件 | 仪表已满 |
 | 效果 | 失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活） |
 | 使用限制 | 每瀑流周期只能使用一次 (`usedThisWave`) |

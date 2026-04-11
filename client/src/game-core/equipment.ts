@@ -223,6 +223,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
     hasStunUpgradeCap: false,
     hasRecycleBackpackExpand: false,
     hasDungeonGold: false,
+    hasArmorHalveEndure: false,
   };
 
   for (const amulet of amuletSlots) {
@@ -258,6 +259,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'stun-upgrade-cap': effects.hasStunUpgradeCap = true; break;
       case 'recycle-backpack-expand': effects.hasRecycleBackpackExpand = true; break;
       case 'dungeon-gold': effects.hasDungeonGold = true; break;
+      case 'armor-halve-endure': effects.hasArmorHalveEndure = true; break;
     }
   }
 

@@ -680,6 +680,7 @@ function GameBoardModalsInner({
         open={upgradeModalOpen}
         onOpenChange={onUpgradeModalChange}
         handCards={handCards}
+        backpackItems={backpackItems}
         equipmentSlot1={equipmentSlot1}
         equipmentSlot2={equipmentSlot2}
         amuletSlots={amuletSlots}

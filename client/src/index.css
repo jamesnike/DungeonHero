@@ -2456,9 +2456,9 @@ html {
 }
 
 .skill-draft-type-passive {
-  background: rgba(40, 160, 120, 0.1);
-  color: #1a8a60;
-  border: 1px solid rgba(40, 160, 120, 0.2);
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .skill-draft-divider {

@@ -387,3 +387,400 @@ Icon sizing scales with `--dh-card-instance-scale` inside cards; header icons us
 5. **Mobile-First Gestures**: Optimized for thumb reach zones and one-handed play
 6. **Framework-Agnostic Core**: All game state and logic lives in pure TypeScript (`game-core/`), enabling future portability (e.g., to Canvas/Pixi, native, or server-side simulation) without rewriting game rules
 7. **Thin React Shell**: React is responsible only for rendering and UI interactions — it subscribes to the external `GameEngine` store and dispatches mutations back through hook handlers
+
+---
+
+## Block Durability Count (格挡耐久次数)
+
+The Block Durability Count mechanic limits how many times shield durability can be consumed per equipment slot during a single monster turn. This prevents a single high-durability shield from absorbing unlimited hits in one monster turn.
+
+### Concept
+
+During a monster turn, each equipment slot can consume at most **N** durability points from its shield (default N = 1). Once the limit is reached, the shield in that slot is **disabled** for the rest of that monster turn — the hero must take damage to HP. The parameter N is tunable by card/event effects, similar to how extra attack charges work.
+
+**Key distinction**: Only actual durability *consumption* counts toward this limit. Blocks where the shield's armor is not fully depleted (i.e., no durability point is lost) do **not** count. However, once the limit is reached, the shield is fully disabled regardless of its armor state.
+
+### Data Model
+
+| Field | Location | Type | Default | Purpose |
+|-------|----------|------|---------|---------|
+| `slotDurabilityUsedThisTurn` | `CombatState` | `Record<EquipmentSlotId, number>` | `{ equipmentSlot1: 0, equipmentSlot2: 0 }` | Tracks durability points consumed per slot this monster turn |
+| `blockDurabilityPerSlot` | `GameState` | `number` | `1` | Maximum durability consumption per slot per monster turn (tunable) |
+
+### When Durability Is "Consumed"
+
+A durability point is consumed when **all** of these conditions are true:
+
+1. The shield's armor is fully depleted by the monster's attack (`shieldArmorDepleted === true`)
+2. The shield is not auto-evolved, not a full-block shield, and not under `unbreakableUntilWaterfall`
+3. The durability loss is not prevented by a save mechanic (perfect block save chance, bone regen)
+
+This covers two outcomes:
+- **Shield destroyed** (durability was ≤ 1): durability consumed, shield breaks (may revive)
+- **Shield survives** (durability > 1): durability decremented by 1, shield persists
+
+### Reset Timing
+
+```
+Hero Turn ──endHeroTurn──▶ Monster Turn Start
+                              │
+                              ▼
+                    Reset slotDurabilityUsedThisTurn to {0, 0}
+                              │
+                              ▼
+                       Monster Attacks
+                              │
+                    ┌─────────┴─────────┐
+                    ▼                   ▼
+              Block with shield    Block with hero HP
+                    │
+              Armor depleted?
+              ┌─────┴─────┐
+              No          Yes (durability -1)
+              │           │
+              │     Increment count
+              │           │
+              │     count >= limit?
+              │     ┌─────┴─────┐
+              │     No          Yes
+              │     │           │
+              │     Shield OK   Shield DISABLED
+              │     │           (must use hero HP)
+              └─────┴───────────┘
+                    │
+              Next monster attack...
+                    │
+              All monsters done ──▶ Hero Turn
+```
+
+### Combat Logic (`useCombatActions.ts`)
+
+**`resolveBlockChoice`**:
+1. **Early guard**: Before processing a shield block, checks if `slotDurabilityUsedThisTurn[slotId] >= blockDurabilityPerSlot`. If so, the shield is treated as unavailable (the block attempt is rejected by the UI, but this is a safety net).
+2. **Tracking**: A local `shieldDurabilityConsumed` flag is set to `true` when durability is actually consumed (shield destroyed or durability decremented). After block resolution, if the flag is true, `slotDurabilityUsedThisTurn[slotId]` is incremented via `setCombatState`.
+
+**State resets**:
+- `endHeroTurn`: Resets `slotDurabilityUsedThisTurn` to `{ 0, 0 }` when transitioning to monster turn
+- `beginCombat` (fresh combat): Includes the field via `initialCombatState`
+- `finishCombat`: Uses `initialCombatState` which includes the reset field
+- `endHeroTurnPatch` (pure): Explicitly resets `slotDurabilityUsedThisTurn` in the new combat state
+
+### UI
+
+**Block buttons** (`GameBoard.tsx`):
+- Block button for each slot is disabled when `slotDurabilityUsedThisTurn[slotId] >= blockDurabilityPerSlot`, in addition to the existing `canShieldBlock` check
+- `renderBlockButton` shows "耐久用尽" text instead of damage value when the slot is disabled due to durability limit
+
+**Slot action count overlay** (`EquipmentSlot.tsx`):
+- When dragging equipment during combat, the slot cell behind the dragged card shows a number:
+  - **Hero turn**: Remaining attack count for the slot (sum of base + extra attack sources)
+  - **Monster turn**: Remaining block durability = `blockDurabilityPerSlot - slotDurabilityUsedThisTurn[slotId]`
+  - **Count > 0**: Green number
+  - **Count = 0**: Red X mark (same as existing exhausted overlay)
+
+**CombatPanel** (`CombatPanel.tsx`):
+- Accepts `slotDurabilityUsedThisTurn` and `blockDurabilityPerSlot` as props
+- During monster turns, displays remaining block durability per slot with "耐久 N/M" or "耐久用尽" status
+
+### Persistence
+
+- `persistence.ts`: Snapshots `slotDurabilityUsedThisTurn` inside combat state and `blockDurabilityPerSlot` in game state
+- `gameStorage.ts`: `CombatStateSnapshot` includes optional `slotDurabilityUsedThisTurn`; `PersistedGameState` includes optional `blockDurabilityPerSlot`
+- Snapshot restore in `GameBoard.tsx`: Hydrates both fields with safe defaults (`{ equipmentSlot1: 0, equipmentSlot2: 0 }` and `1`) for backward compatibility
+
+### Implementation Files
+
+| File | Role |
+|------|------|
+| `components/game-board/types.ts` | `slotDurabilityUsedThisTurn` on `CombatState` |
+| `game-core/types.ts` | `blockDurabilityPerSlot` on `GameState` |
+| `game-core/constants.ts` | `initialCombatState` default |
+| `components/game-board/constants.ts` | Duplicate `initialCombatState` default |
+| `game-core/state.ts` | `blockDurabilityPerSlot: 1` in `initialState` |
+| `game-core/combat.ts` | `beginCombatPatch`, `endHeroTurnPatch`, `finishCombatPatch` resets |
+| `hooks/useCombatActions.ts` | `resolveBlockChoice` guard + counter, `endHeroTurn` / `beginCombat` resets |
+| `components/GameBoard.tsx` | Block button disable logic, slot action count computation, snapshot restore |
+| `components/EquipmentSlot.tsx` | `slotActionCount` overlay rendering |
+| `components/CombatPanel.tsx` | Block durability status display (props) |
+| `game-core/persistence.ts` | Snapshot serialization |
+| `lib/gameStorage.ts` | Persistence types |
+
+---
+
+## Building Cards (建筑)
+
+Building cards (`type: 'building'`) are persistent dungeon structures that remain on the board after placement. They are produced by event card flips (e.g., 破坏祭坛 → 破印祭坛, 命运骰盅 → 命运之刃, 诅咒骰局 → 诅咒碑) and occupy a slot in the active dungeon row.
+
+### Properties
+
+- **HP & Fury layers**: Buildings have `hp`, `maxHp`, and `fury` (layers) like monsters, but they do not attack the player.
+- **Destroyable**: Buildings can be attacked by weapons (they are valid weapon drop targets alongside monsters). When their HP reaches 0, they are destroyed and sent to the graveyard.
+- **Building Aura** (`buildingAura`): Some buildings have a passive aura effect that applies while the building is alive on the board. Aura is removed when the building is destroyed.
+  - `'suppress-adjacent-temp-attack'` — Adjacent player equipment slots ignore temporary attack bonuses.
+  - `'adjacent-magic-immune'` — Monsters adjacent to this building are immune to player magic damage.
+- **Event Choices**: Some buildings (e.g., 命运之刃) carry `eventChoices` that can be triggered by dragging to the hero zone, similar to event cards.
+- **Release Charge** (`hasReleaseCharge`): Buildings that support event choices gain a release charge when placed or when their position changes.
+- **Placement**: When played from hand or backpack, a building is placed into a random empty active row slot. If no empty slot exists, it is discarded to the graveyard.
+- **Cannot be stored in backpack**: Buildings are restricted from backpack storage (`isBackpackRestrictedCard` returns true for buildings).
+
+### Visual
+
+- A "建筑" (Building) caption badge is displayed at the top-left corner of the card.
+- HP is shown at the top-right with a heart icon (same as monsters).
+- Fury layer dots are shown below the HP (if fury > 1).
+
+---
+
+## Ghost Mechanic (幽灵)
+
+The Ghost mechanic (`isGhost: true` on `GameCardData`) makes a card transparent to the waterfall cascade system. Currently all building cards have the Ghost property.
+
+### Behavior
+
+1. **Does not block waterfall**: Ghost cards are excluded from the active row count when determining whether waterfall should trigger. If only ghost cards remain in the active row (no non-ghost cards), the game treats the row as effectively empty and triggers waterfall.
+
+2. **Does not count as a remaining card**: The ghost-aware helper `countActiveRowSlotsExcludeGhost()` is used for waterfall threshold checks (`emptySlots >= 4`) and the "1 card remaining" waterfall trigger. Ghost cards are invisible to these checks.
+
+3. **Slots treated as empty for drops**: The helper `getEmptyOrGhostColumns()` returns columns that are either truly empty or occupied only by a ghost card. During waterfall, preview cards can drop into ghost-occupied slots.
+
+4. **Stacks underneath falling cards**: When a preview card drops into a slot occupied by a ghost card during waterfall, the ghost card is pushed to the **bottom** of `activeCardStacks` for that slot. The falling card becomes the new top card. The ghost building persists underneath and resurfaces only after all stacked cards above it are removed (LIFO stack order — ghost at index 0 is last to pop).
+
+5. **Victory condition**: Ghost cards do not prevent victory. If the deck and preview are empty and only ghost buildings remain in the active row, the game declares victory.
+
+### Visual
+
+- Ghost cards display a small 👻 emoji badge next to the "建筑" label, with tooltip "幽灵：不阻挡瀑流，不计入剩余卡牌".
+
+### Implementation
+
+- **Type**: `isGhost?: boolean` on `GameCardData` (`GameCard.tsx`)
+- **Helpers**: `countActiveRowSlotsExcludeGhost()` and `getEmptyOrGhostColumns()` in `helpers.ts` and `game-board/utils.ts`
+- **Waterfall logic**: `GameBoard.tsx` uses the ghost-aware helpers for cascade threshold, empty column detection, and waterfall drop placement
+- **Card data**: All building `flipTarget.toCard` definitions in `deck.ts` set `isGhost: true`
+
+---
+
+## Amplify Mechanic (增幅)
+
+The Amplify mechanic allows the player to permanently boost a card's stats via the「增幅」magic card — a `Perm 1` permanent magic in the main deck's magic candidate pool.
+
+### Card Definition
+
+- **Type**: `magic`, `magicType: 'permanent'`, `magicEffect: 'amplify-card'`, `recycleDelay: 1`
+- **Defined in**: `deck.ts` → `createDeck()` magic pool (candidate 15 of 15)
+
+### Targeting
+
+When played, the card opens `AmplifyModal` for target selection. Eligible targets:
+
+| Source | Eligible types |
+|--------|---------------|
+| Equipment slots | Any equipped `weapon` or `shield` (including class-pool equipment) |
+| Hand cards | `weapon`, `shield`, or any card passing `isDamageMagic()` (excluding the 增幅 card itself) |
+
+The helper `isDamageMagic(card)` (`helpers.ts`) identifies damage-dealing magic cards. It returns `true` for:
+
+- Cards with `scalingDamage` (叠刺 mechanic)
+- Cards with `onDiscardDamage > 0`
+- Knight class damage effects via `knightEffect`:
+  `missile-bolt`, `armor-strike`, `missing-hp-smite`, `grave-nova`, `fate-sight`, `temp-attack-strike`, `weapon-sweep`, `overkill-upgrade`
+- Main deck damage effects via `magicEffect`:
+  `storm-volley-recycle`, `arcane-storm-magic-count`
+- Cards matched by name:
+  `风暴箭雨`, `点金裁决`, `混沌冲击`, `箭雨余韵`, `魔弹`, `雷震击`
+
+### Effects
+
+| Target type | Effect |
+|-------------|--------|
+| Weapon | `value` +1 (permanent attack increase) |
+| Shield | `armorMax` +1, `value` +1 (permanent armor increase) |
+| Damage magic with `scalingDamage` | `scalingDamage` +1 (叠刺 base increment) |
+| Other damage magic | `amplifyBonus` +1 (flat damage bonus) |
+
+All targets also receive `amplifyBonus` +1 for tracking purposes.
+
+### amplifyBonus Application Points
+
+The `amplifyBonus` field on `GameCardData` is read as `(card.amplifyBonus ?? 0)` and added to base damage in every damage calculation path for the supported spells:
+
+**Main deck magic** (`useCardPlayHandlers.ts`):
+- 风暴箭雨 (`storm-volley-recycle`): `getSpellDamage(3 + ampBonus)`
+- 点金裁决 (`blood-reckoning`): `getSpellDamage(gold + ampBonus)`
+- 箭雨余韵 (echo): `getSpellDamage(magicCount + ampBonus)`
+- 奥术风暴 (`arcane-storm-magic-count`): same pattern
+- 雷震击 (`thunder-stun`): `stunDmgPerHit[level] + ampBonus`
+- 混沌冲击 (`chaos-strike`): `getSpellDamage(3 + ampBonus)`
+
+**Knight class magic** (`useCardPlayHandlers.ts` + `useHeroActions.ts`):
+- 铠甲贯刺 (`armor-strike`): `getSpellDamage(scaledArmor + ampBonus)`
+- 残血终焉 (`missing-hp-smite`): `getSpellDamage(scaledDmg + ampBonus)`
+- 坟火新星 (`grave-nova`): `getSpellDamage(3 + ampBonus)` — `triggerGraveNova(card)` receives the card to read its bonus
+- 天眼审判 (`fate-sight`): `getSpellDamage(baseDmg + ampBonus)` inside `resolveFateSight`
+- 锋刃侧击 (`temp-attack-strike`): `getSpellDamage(tempAtk + ampBonus)`
+- 利刃风暴 (`weapon-sweep`): `computeHonorSweepWaveDamage(slotId) + ampBonus`
+- 淬炼冲击 (`overkill-upgrade`): `getSpellDamage(3 + ampBonus)`
+- 魔力飞弹 (`missile-bolt`): `getSpellDamage(2 + ampBonus)`
+
+### State & Persistence
+
+- **`amplifyBonus?: number`** on `GameCardData` (`GameCard.tsx`) — cumulative bonus counter, persisted with the card across zones (hand → equipment → graveyard → recycle bag).
+- **`amplifyModal: { sourceCardId: string } | null`** on `GameState` (`types.ts`) — modal open state, initialized to `null` in `createInitialGameState()`.
+
+### Implementation Files
+
+| File | Role |
+|------|------|
+| `game-core/helpers.ts` | `isDamageMagic()` — target eligibility check |
+| `game-core/types.ts` | `AmplifySelection` type, `amplifyModal` state |
+| `game-core/state.ts` | `amplifyModal: null` initialization |
+| `game-core/deck.ts` | 增幅 card definition in magic pool |
+| `components/AmplifyModal.tsx` | Target selection UI |
+| `hooks/useCardPlayHandlers.ts` | `resolveAmplify`, `cancelAmplify`, `triggerGraveNova(card)`, damage application points |
+| `hooks/useHeroActions.ts` | Knight effect damage application points, `applyWeaponSweepMagic` |
+| `hooks/useCardOperations.ts` | Passes card to `triggerGraveNova(card)` on discard |
+| `components/GameBoard.tsx` | Wires modal + handlers |
+
+---
+
+## Eternal Relics (永恒护符)
+
+Eternal Relics are permanent passive items inspired by Slay the Spire's relic system. Unlike regular amulets (临时护符) which occupy limited amulet slots, eternal relics are always active and do not take up any slot. They are displayed as miniaturized circular icons between the Hero Row and the Hand Row.
+
+### Design Principles
+
+- **Passive-only**: All passive abilities in the game manifest as eternal relics. Hero skills are exclusively active.
+- **Permanent**: Once acquired, a relic's effect lasts for the entire run. Relics cannot be removed or destroyed.
+- **Non-slot**: Relics do not occupy amulet slots, equipment slots, or any other inventory space.
+
+### Acquisition Sources
+
+| Source | Timing | Details |
+|--------|--------|---------|
+| Starting relic | Game start | Every run begins with `waterfall-discover` (瀑流时发现一张专属卡) |
+| Magic card「潮涌铸甲」 | During play | 2-choose-1: `bulwark-attack` (瀑流铸剑) or `bulwark-armor` (格挡铸甲). Stackable — playing the card again increases the stack count |
+| Potion「护符永铸药」 | During play | Select an equipped amulet → remove it from the amulet slot → convert it to an eternal relic with the same image and effect |
+
+### Data Model
+
+**Type definitions** (`game-core/types.ts`):
+
+```
+EternalRelicId = 'waterfall-discover' | 'waterfall-heal' | 'vitality-well'
+               | 'discard-profit' | 'heal-to-damage' | 'early-surge'
+               | 'shield-wall' | 'summon-minion'
+               | 'bulwark-attack' | 'bulwark-armor'
+               | `amulet-eternal-${string}`     // dynamic IDs for amulet-converted relics
+
+EternalRelic {
+  id: EternalRelicId
+  name: string
+  description: string
+  image: string
+  initialMaxHpBonus?: number        // applied at game start
+  initialGoldBonus?: number
+  initialShopLevel?: number
+  initialWaterfallBonus?: number
+  initialClassCardDraw?: number
+  initialSpellDamageBonus?: number
+  amuletEffect?: AmuletEffectId     // when converted from an amulet
+  amuletAuraBonus?: AmuletAuraBonus // aura stats carried from the original amulet
+  upgradeLevel?: number             // upgrade level from the original amulet
+}
+```
+
+**Game state** (`GameState`):
+- `eternalRelics: EternalRelic[]` — initialized to `getStartingRelics()` (contains `waterfall-discover`)
+
+### Relic Registry (`lib/eternalRelics.ts`)
+
+All predefined relics are stored in `RELIC_REGISTRY`. Utility functions:
+
+| Function | Purpose |
+|----------|---------|
+| `getEternalRelic(id)` | Look up a relic definition by ID |
+| `getStartingRelics()` | Returns the starting relics array (`[waterfall-discover]`) |
+| `hasEternalRelic(relics, id)` | Check if a relic is owned |
+| `getSelectableRelics(exclude)` | Get all relics eligible for selection, excluding owned and card-only relics |
+| `sampleRelics(count, exclude)` | Random sample from selectable relics |
+
+**Card-only relics** (`CARD_ONLY_RELICS`): `bulwark-attack` and `bulwark-armor` are excluded from generic selection — they are only obtainable through the 潮涌铸甲 magic card.
+
+### Amulet-to-Relic Conversion
+
+The potion「护符永铸药」(`amulet-to-eternal-relic`) converts an equipped amulet into an eternal relic:
+
+1. Player uses the potion → choice dialog shows all equipped amulets
+2. Player selects one → amulet is removed from `amuletSlots`
+3. A new `EternalRelic` is created with:
+   - `id`: `` `amulet-eternal-${amuletEffect}` ``
+   - `name`: `永恒护符·${amulet.name}`
+   - `image`: same as the original amulet
+   - `amuletEffect`, `amuletAuraBonus`, `upgradeLevel`: copied from the original amulet
+4. The relic is appended to `eternalRelics`
+
+### Effect Computation
+
+The `amuletEffects` computation in `GameBoard.tsx` processes **both** amulet slots and eternal relics:
+
+```
+amuletEffects = useMemo(() => {
+  state = createEmptyAmuletEffects();
+  for (slot of amuletSlots)    → applyAmuletEffect(state, slot.amuletEffect, ...)
+  for (relic of eternalRelics) → if (relic.amuletEffect) applyAmuletEffect(...)
+  return state;
+}, [amuletSlots, eternalRelics]);
+```
+
+This means an amulet converted to a relic continues to function identically — its effect is included in the same `amuletEffects` object that all game logic reads.
+
+Non-amulet relic effects (e.g., `waterfall-heal`, `discard-profit`) are checked directly via `hasEternalRelic(eternalRelicsRef.current, 'relic-id')` at their respective trigger points.
+
+### UI
+
+**EternalRelicBar** (`components/EternalRelicBar.tsx`):
+- Positioned between the Hero Row and Hand Row using `position: absolute; bottom: 0; transform: translateY(50%)`
+- Zero height container (`height: 0`) — does not affect layout
+- Each relic rendered as a 40×40px circular icon with amber border
+- Hover: tooltip showing name + description
+- Click: opens a detail dialog modal
+
+**Detail Modal** (`GameBoard.tsx`):
+- `selectedEternalRelic` / `eternalRelicModalOpen` state
+- Displays relic name, image, and full description in a `Dialog` component
+
+### Passive Effect Trigger Points
+
+| Relic ID | Effect | Trigger location |
+|----------|--------|-----------------|
+| `waterfall-discover` | Discover a class card on waterfall | `GameBoard.tsx` → `applyWaterfallSideEffects` |
+| `waterfall-heal` | Heal 4 HP on waterfall | `GameBoard.tsx` → `applyWaterfallSideEffects` |
+| `discard-profit` | +2 gold per discard | `useCardOperations.ts` → discard handler |
+| `heal-to-damage` | +1 permanent weapon damage per 5 HP healed | `useCombatActions.ts` → heal tracking |
+| `summon-minion` | Spawn minion at game start; +1/+1 per kill | `useCombatActions.ts` → monster kill |
+| `shield-wall` | Block weapon equip; thunder seal at start | `GameBoard.tsx` → `handleCardToSlot`, `handleCardDraftComplete` |
+| `bulwark-attack` | +2 temp attack per weapon attack (stacks) | `useCombatActions.ts` → attack resolution |
+| `bulwark-armor` | +2 temp armor per shield block (stacks) | `useCombatActions.ts` → block resolution |
+| `amulet-eternal-*` | Same as the original amulet effect | `GameBoard.tsx` → `amuletEffects` computation |
+
+### Persistence
+
+- **Serialization** (`persistence.ts`): `eternalRelics` is serialized via `state.eternalRelics.map(r => ({ ...r }))` — all fields including `amuletEffect`, `amuletAuraBonus`, `upgradeLevel` are preserved
+- **Persisted type** (`gameStorage.ts`): `PersistedEternalRelic` with `id`, `name`, `description`, `image`, optional `amuletEffect`, `amuletAuraBonus`, `upgradeLevel`
+- **Hydration** (`GameBoard.tsx`): Falls back to `getStartingRelics()` for old saves without relics
+
+### Implementation Files
+
+| File | Role |
+|------|------|
+| `game-core/types.ts` | `EternalRelicId`, `EternalRelic` interface, `eternalRelics` on `GameState` |
+| `game-core/state.ts` | `eternalRelics: []` initialization |
+| `lib/eternalRelics.ts` | Relic registry, utility functions (`getEternalRelic`, `hasEternalRelic`, etc.) |
+| `components/EternalRelicBar.tsx` | Relic icon bar UI |
+| `components/GameBoard.tsx` | `amuletEffects` computation (includes relics), relic detail modal, waterfall side effects, starting relic initialization |
+| `hooks/useCardPlayHandlers.ts` | 潮涌铸甲 relic grant, 护符永铸药 amulet-to-relic conversion |
+| `hooks/useCardOperations.ts` | `discard-profit` relic check |
+| `hooks/useCombatActions.ts` | `summon-minion`, `heal-to-damage`, `bulwark-attack`, `bulwark-armor` relic checks |
+| `game-core/deck.ts` | 护符永铸药 potion card definition |
+| `game-core/persistence.ts` | Relic serialization |
+| `lib/gameStorage.ts` | `PersistedEternalRelic` type, persistence field |

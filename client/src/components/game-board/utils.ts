@@ -53,8 +53,9 @@ import dedupeEventArcaneGuildImage from '@assets/generated_images/card_dedupe_ev
 import dedupeEventFateDiceCupImage from '@assets/generated_images/card_dedupe_event_fate_dice_cup.png';
 import dedupeEventChaosDiceGameImage from '@assets/generated_images/card_dedupe_event_chaos_dice_game.png';
 import dedupeEventCursedDiceImage from '@assets/generated_images/card_dedupe_knight_magic_fortune_wheel.png';
-import dedupeEventCursedDiceBuildingImage from '@assets/generated_images/card_dedupe_magic_event_fortify.png';
+import dedupeEventCursedDiceBuildingImage from '@assets/generated_images/card_dedupe_cursed_stele_building.png';
 import potionEternalInscribeImage from '@assets/generated_images/card_dedupe_potion_eternal_perm.png';
+import potionAmuletToRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 
 import type { CardType, GameCardData } from '../GameCard';
 import {
@@ -120,6 +121,9 @@ export const flattenActiveRowSlots = (slots: ActiveRowSlots): GameCardData[] =>
 export const countActiveRowSlots = (slots: ActiveRowSlots): number =>
   slots.reduce((count, card) => (card ? count + 1 : count), 0);
 
+export const countActiveRowSlotsExcludeGhost = (slots: ActiveRowSlots): number =>
+  slots.reduce((count, card) => (card && !card.isGhost ? count + 1 : count), 0);
+
 const sanitizeCardMetadata = <T extends GameCardData>(card: T): T => {
   const { fromSlot, ...rest } = card as T & { fromSlot?: string };
   return { ...rest } as T;
@@ -133,6 +137,9 @@ export const sanitizeSlotRow = (slots: ActiveRowSlots): ActiveRowSlots =>
 
 export const getEmptyColumns = (slots: ActiveRowSlots): number[] =>
   DUNGEON_COLUMNS.filter(columnIndex => !slots[columnIndex]);
+
+export const getEmptyOrGhostColumns = (slots: ActiveRowSlots): number[] =>
+  DUNGEON_COLUMNS.filter(columnIndex => !slots[columnIndex] || slots[columnIndex]?.isGhost);
 
 export const getFilledPreviewColumns = (slots: ActiveRowSlots): number[] =>
   DUNGEON_COLUMNS.filter(columnIndex => Boolean(slots[columnIndex]));
@@ -546,6 +553,14 @@ export function createDeck(): GameCardData[] {
       potionEffect: 'grant-perm-2',
       description: '选择一张没有 Perm 属性的手牌，赋予 Perm 2（被移除后进入回收袋，经 2 次瀑流返回背包）。',
     },
+    {
+      type: 'potion',
+      name: '护符永铸药',
+      value: 0,
+      image: potionAmuletToRelicImage,
+      potionEffect: 'amulet-to-eternal-relic',
+      description: '选择一个护符栏中的护符，将其转化为永恒护符（移除护符，效果永久生效）。',
+    },
   ];
 
   potionCards.forEach(card => {
@@ -650,7 +665,7 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: dedupeMagicTideArmorImage,
     magicType: 'instant',
-    magicEffect: '2选1被动：瀑流铸剑（每次攻击该栏临时攻击+2）或格挡铸甲（每次格挡该栏临时护甲+2）。',
+    magicEffect: '2选1获得永恒护符：瀑流铸剑（每次攻击该栏临时攻击+2）或格挡铸甲（每次格挡该栏临时护甲+2）。可叠加。',
   });
 
   deck.push({
@@ -1180,6 +1195,33 @@ export function createDeck(): GameCardData[] {
           { id: 'cursed-dice-armor-halve', range: [9, 12], label: '所有装备栏永久护甲加成减半', effect: 'halveSlotShieldBonus' },
           { id: 'cursed-dice-lifesteal-loss', range: [13, 16], label: '超杀吸血 -3', effect: 'spellLifesteal-3' },
           { id: 'cursed-dice-amulet-cap', range: [17, 20], label: '护符栏上限 -1', effect: 'amuletCapacity-1' },
+        ],
+      },
+    ],
+  });
+
+  // ---------------------------------------------------------------------------
+  // Event: 赋能神殿 (Empowerment Shrine)
+  // ---------------------------------------------------------------------------
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '赋能神殿',
+    value: 0,
+    image: dedupeEventResonanceForgeImage,
+    description: '掷骰子，为一张手牌赋予侧击或转型效果。',
+    eventChoices: [
+      {
+        text: '掷出赋能骰：侧击劝降-1/侧击击晕+5%/转型抽2/转型回2血/侧击伤害5',
+        hint: '随机赋予一张手牌新的侧击或转型效果',
+        effect: 'noop',
+        requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+        diceTable: [
+          { id: 'shrine-flank-persuade', range: [1, 4] as [number, number], label: '侧击：劝降费用永久 -1', effect: 'grantFlankPersuadeCost:1' },
+          { id: 'shrine-flank-stun', range: [5, 8] as [number, number], label: '侧击：击晕上限 +5%', effect: 'grantFlankStunCap:5' },
+          { id: 'shrine-transform-draw', range: [9, 12] as [number, number], label: '转型：抽 2 张牌', effect: 'grantTransformDraw:2' },
+          { id: 'shrine-transform-heal', range: [13, 16] as [number, number], label: '转型：恢复 2 HP', effect: 'grantTransformHeal:2' },
+          { id: 'shrine-flank-damage', range: [17, 20] as [number, number], label: '侧击：对随机怪物造成 5 点伤害', effect: 'grantFlankDamage:5' },
         ],
       },
     ],

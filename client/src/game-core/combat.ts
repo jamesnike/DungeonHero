@@ -122,6 +122,7 @@ export function beginCombatPatch(
       heroDamageThisTurn: {} as Record<string, number>,
       monsterAttackQueue: [] as string[],
       slotBlocksThisTurn: { equipmentSlot1: false, equipmentSlot2: false } as Record<EquipmentSlotId, boolean>,
+      slotDurabilityUsedThisTurn: { equipmentSlot1: 0, equipmentSlot2: 0 } as Record<EquipmentSlotId, number>,
     };
     if (initiator === 'monster') {
       return {
@@ -229,6 +230,24 @@ export function endHeroTurnPatch(
       }
     }
 
+    if (monster.eliteHealOtherMonster && !monster.isStunned && !heroTurnLayerLossIds.has(monster.id)) {
+      const otherMonsters = newActiveCards
+        .map((c, i) => ({ card: c, index: i }))
+        .filter(({ card }) => card && card.type === 'monster' && card.id !== monster.id && (card.currentLayer ?? card.fury ?? 1) < (card.fury ?? card.hpLayers ?? 1));
+      if (otherMonsters.length > 0) {
+        const target = otherMonsters[Math.floor(Math.random() * otherMonsters.length)];
+        const targetCard = target.card!;
+        const targetLayer = (targetCard.currentLayer ?? targetCard.fury ?? 1) + 1;
+        newActiveCards[target.index] = {
+          ...targetCard,
+          currentLayer: targetLayer,
+          hp: targetCard.maxHp ?? targetCard.hp ?? 0,
+        };
+        logs.push({ type: 'combat', message: `${monster.name} 龙息庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
+        return;
+      }
+    }
+
   });
 
   const sortedMonsters = [...engagedMonsters].sort((a, b) => {
@@ -246,6 +265,7 @@ export function endHeroTurnPatch(
     monsterAttackQueue: sortedMonsters.map(m => m.id),
     pendingBlock: null,
     slotBlocksThisTurn: { equipmentSlot1: false, equipmentSlot2: false },
+    slotDurabilityUsedThisTurn: { equipmentSlot1: 0, equipmentSlot2: 0 },
   };
 
   return {
@@ -562,6 +582,8 @@ export interface MonsterTurnEndResult {
   activeCards: ActiveRowSlots;
   logs: Array<{ type: string; message: string }>;
   banners: string[];
+  wraithEnrage: boolean;
+  wraithDestroyAmulet: boolean;
 }
 
 export function applyMonsterTurnEndEffects(
@@ -571,8 +593,21 @@ export function applyMonsterTurnEndEffects(
   const logs: Array<{ type: string; message: string }> = [];
   const banners: string[] = [];
   let changed = false;
+  let wraithEnrage = false;
+  let wraithDestroyAmulet = false;
 
-  const next = activeCards.map(card => {
+  // Check for wraith aura effects from engaged, non-stunned wraiths
+  let auraBoost = 0;
+  for (const card of activeCards) {
+    if (!card || !engagedMonsterIds.includes(card.id) || card.isStunned) continue;
+    if (card.wraithAuraAttack && card.wraithAuraAttack > 0) {
+      auraBoost = Math.max(auraBoost, card.wraithAuraAttack);
+    }
+    if (card.wraithTurnEnrage) wraithEnrage = true;
+    if (card.wraithDestroyAmulet) wraithDestroyAmulet = true;
+  }
+
+  let next = activeCards.map(card => {
     if (!card || !engagedMonsterIds.includes(card.id)) return card;
     let updated = card;
 
@@ -583,6 +618,7 @@ export function applyMonsterTurnEndEffects(
       return updated;
     }
 
+    // Legacy wraith tier-2: self-only attack boost
     if (updated.wraithTurnAttack && updated.wraithTurnAttack > 0) {
       const boost = updated.wraithTurnAttack;
       changed = true;
@@ -596,8 +632,14 @@ export function applyMonsterTurnEndEffects(
       const growth = updated.golemSpellGrowth;
       const newReflect = updated.antiMagicReflect + growth;
       changed = true;
-      logs.push({ type: 'combat', message: `${updated.name} 法力吞噬：反魔伤害 +${growth}！（当前 ${newReflect}）` });
-      updated = { ...updated, antiMagicReflect: newReflect };
+      const parts: string[] = [`反魔伤害 +${growth}（当前 ${newReflect}）`];
+      let newLayerReflect = updated.golemLayerLossReflect;
+      if (newLayerReflect != null) {
+        newLayerReflect = newLayerReflect + growth;
+        parts.push(`岩层反震系数 +${growth}（当前 ${newLayerReflect}）`);
+      }
+      logs.push({ type: 'combat', message: `${updated.name} 法力吞噬：${parts.join('，')}！` });
+      updated = { ...updated, antiMagicReflect: newReflect, ...(newLayerReflect != null ? { golemLayerLossReflect: newLayerReflect } : {}) };
     }
 
     if (updated.bossLastStandAura && (updated.currentLayer ?? 1) === 1) {
@@ -614,10 +656,29 @@ export function applyMonsterTurnEndEffects(
     return updated !== card ? updated : card;
   });
 
+  // Wraith aura: boost ALL active row monsters
+  if (auraBoost > 0) {
+    const boostedNames: string[] = [];
+    next = next.map(card => {
+      if (!card || card.type !== 'monster') return card;
+      const newAttack = (card.attack ?? card.value ?? 0) + auraBoost;
+      const newValue = (card.value ?? 0) + auraBoost;
+      boostedNames.push(card.name);
+      return { ...card, attack: newAttack, value: newValue, tempAttackBoost: (card.tempAttackBoost ?? 0) + auraBoost };
+    });
+    changed = true;
+    if (boostedNames.length > 0) {
+      logs.push({ type: 'combat', message: `怨念光环：激活行所有怪物攻击力 +${auraBoost}！（${boostedNames.join('、')}）` });
+      banners.push(`怨念光环！全体怪物攻击力 +${auraBoost}！`);
+    }
+  }
+
   return {
     activeCards: changed ? next as ActiveRowSlots : activeCards,
     logs,
     banners,
+    wraithEnrage,
+    wraithDestroyAmulet,
   };
 }
 

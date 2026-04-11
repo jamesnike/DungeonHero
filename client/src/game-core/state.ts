@@ -51,7 +51,7 @@ export function createInitialGameState(): GameState {
     equipmentSlot2: null,
     equipmentSlot1Reserve: [],
     equipmentSlot2Reserve: [],
-    equipmentSlotCapacity: {},
+    equipmentSlotCapacity: { equipmentSlot1: 1, equipmentSlot2: 1 },
     equipmentSlotBonuses: createEmptySlotBonusState(),
     amuletSlots: [],
     maxAmuletSlots: 2,
@@ -118,6 +118,7 @@ export function createInitialGameState(): GameState {
     gambitExtraPerSlot: 1,
     gambitSlotUsed: {},
     weaponExtraAttackUsed: {},
+    blockDurabilityPerSlot: 1,
 
     pendingHeroSkillAction: null,
     pendingHeroMagicAction: null,
@@ -154,6 +155,7 @@ export function createInitialGameState(): GameState {
     handMagicUpgradeModal: null,
     mirrorCopyModal: null,
     permGrantModal: null,
+    amplifyModal: null,
     graveyardDiscoverState: null,
     graveyardDiscoverDelivery: 'backpack',
     cardActionContext: null,
@@ -172,6 +174,8 @@ export function createInitialGameState(): GameState {
     drawPending: false,
     isHydrated: false,
     heroSkillBanner: null,
+
+    eternalRelics: [],
 
     gameLogEntries: [],
   };
