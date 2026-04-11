@@ -148,6 +148,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasStunUpgradeCap: false,
   hasRecycleBackpackExpand: false,
   hasDungeonGold: false,
+  hasEndTurnDraw: false,
   stunRateBoost: 0,
 });
 

@@ -412,7 +412,7 @@ export function createDeck(): GameCardData[] {
       Skeleton: { tag: 'bone-regen',     desc: '虚骨再生：每次失去血层后，50%概率恢复一层。' },
       Wraith:   { tag: 'wraith-rebirth', desc: '幽魂重生：血层降至1时，30%概率血层全满。' },
       Ogre:     { tag: 'ogre-crit',      desc: '蛮力暴击：攻击时50%概率双倍伤害。\n狂暴连击：70%概率攻击两次。' },
-      Goblin:   { tag: 'goblin-elite',   desc: '动手：偷取6金币。\n玩家金币≤10时，攻击力与血量翻倍。' },
+      Goblin:   { tag: 'goblin-elite',   desc: '窃宝精英：自身下方每有1张牌，15%概率偷走玩家装备或护符，堆叠在自身下方。' },
       Swarm:    { tag: 'swarm-elite',    desc: '虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子。' },
       Golem:    { tag: 'golem-elite',   desc: '岩石护体：每次最多受到 5 点伤害。' },
     };
@@ -439,8 +439,7 @@ export function createDeck(): GameCardData[] {
         chosen.lastWords = 'wraith-haunt-4';
       }
       if (type === 'Goblin') {
-        chosen.onAttackEffect = 'steal-gold-6';
-        chosen.eliteLowGoldPower = true;
+        chosen.goblinStealEquip = true;
         chosen.waterfallEffect = { type: 'goldLoss', amount: 12, description: '被挤出时：失去 12 金币' };
       }
       if (type === 'Skeleton') {
@@ -714,6 +713,14 @@ export function createDeck(): GameCardData[] {
       potionEffect: 'amulet-to-eternal-relic',
       description: '选择一个护符栏中的护符，将其转化为永恒护符（移除护符，效果永久生效）。',
     },
+    {
+      type: 'potion',
+      name: '回合汲取药',
+      value: 5,
+      image: potionImage,
+      potionEffect: 'grant-amulet-end-turn-draw',
+      description: '获得永久护符「回合汲取」：每次结束英雄回合时，从背包抽 1 张牌。',
+    },
   ];
 
   potionCards.forEach(card => {
@@ -966,8 +973,9 @@ export function createDeck(): GameCardData[] {
   });
 
   // Event cards
+  const crossroadsId = `event-${id++}`;
   deck.push({
-    id: `event-${id++}`,
+    id: crossroadsId,
     type: 'event',
     name: '命运十字路口',
     value: 0,
@@ -980,6 +988,21 @@ export function createDeck(): GameCardData[] {
       { text: '拓展行囊（背包上限 +5）', effect: 'backpackSize+5', hint: '背包容量永久增加 5' },
       { text: '选择一张牌升级', effect: 'upgradeCard', hint: '从所有可升级的牌中选择一张进行升级' },
     ],
+    flipTarget: {
+      toCard: {
+        id: `${crossroadsId}-flip-left-swap`,
+        type: 'magic',
+        name: '命运挪移',
+        value: 0,
+        image: skillScrollImage,
+        magicType: 'permanent',
+        magicEffect: 'crossroads-left-swap',
+        description: '永久魔法（Perm 2）：将地城行最左边的两张牌交换位置。',
+        recycleDelay: 2,
+      },
+      destination: 'backpack',
+      banner: '命运十字路口翻转为「命运挪移」，已放入背包。',
+    },
   });
 
   const vaultId = `event-${id++}`;
@@ -1426,7 +1449,7 @@ export function createDeck(): GameCardData[] {
       },
       { text: '翻转商会卷轴', effect: 'guildFlipToMagic', hint: '翻转为永久魔法「血金术」，放入背包' },
       { text: '展示权威（劝降等级 +1，下次劝降免费）', effect: ['persuadeLevel+1', 'persuadeNextFree'], hint: '劝降更强怪物，下次劝降不花金币' },
-      { text: '整合回收袋（洗入背包）', effect: 'recycleToBackpack', hint: '将回收袋中的所有牌洗入背包' },
+      { text: '整合回收袋（洗入背包）', effect: 'recycleToBackpack', hint: '将回收袋中的所有牌洗入背包，获得「回收轮转」魔法' },
       { text: '翻转为「奇术轮转」', effect: 'guildFlipToHandRecycleMagic', hint: '翻转为永久魔法：所有手牌移入回收袋，再从回收袋随机 2 张移到手上' },
     ],
   });
@@ -1919,9 +1942,9 @@ export function createDeck(): GameCardData[] {
         hint: '获得 15 金币，并获得一张 Lv1 永久魔法「战斗鼓舞」放入背包',
       },
       {
-        text: '铸甲军械（抽3张牌，获得随机专属护盾，获得Lv1「铸甲术」）',
-        effect: ['drawHeroCards:3', 'grantRandomClassShield', 'grantStarterTempArmor'],
-        hint: '从背包抽 3 张牌，从专属牌堆获得一张随机护盾，并获得 Lv1「铸甲术」',
+        text: '铸甲军械（抽3张牌，获得Lv1「铸甲术」）',
+        effect: ['drawHeroCards:3', 'grantStarterTempArmor'],
+        hint: '从背包抽 3 张牌，并获得 Lv1「铸甲术」',
       },
       {
         text: '雷霆试炼（击晕上限+10%，获得Lv1「雷震击」）',
@@ -2020,7 +2043,7 @@ export const STARTER_CARD_IDS = {
 } as const;
 
 export function getStarterBaseId(cardId: string): string {
-  return cardId.replace(/-pick-\d+$/, '');
+  return cardId.replace(/-pick-\d+$/, '').replace(/-evt-\d+-[a-z0-9]+$/, '');
 }
 
 // ---------------------------------------------------------------------------

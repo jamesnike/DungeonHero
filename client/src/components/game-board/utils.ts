@@ -173,6 +173,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasStunUpgradeCap: false,
   hasRecycleBackpackExpand: false,
   hasDungeonGold: false,
+  hasEndTurnDraw: false,
 });
 
 export const logWaterfallInvariant = (
@@ -560,6 +561,14 @@ export function createDeck(): GameCardData[] {
       image: potionAmuletToRelicImage,
       potionEffect: 'amulet-to-eternal-relic',
       description: '选择一个护符栏中的护符，将其转化为永恒护符（移除护符，效果永久生效）。',
+    },
+    {
+      type: 'potion',
+      name: '回合汲取药',
+      value: 5,
+      image: potionImage,
+      potionEffect: 'grant-amulet-end-turn-draw',
+      description: '获得永久护符「回合汲取」：每次结束英雄回合时，从背包抽 1 张牌。',
     },
   ];
 

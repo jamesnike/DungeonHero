@@ -50,6 +50,7 @@ import recallScrollImage from '@assets/generated_images/knight_recall_scroll.png
 import monsterDoomScrollImage from '@assets/generated_images/knight_monster_doom_scroll.png';
 import heavyShieldKnightBashImage from '@assets/generated_images/card_dedupe_shield_heavy_knight_bash.png';
 import knightChainPersuadePotionImage from '@assets/generated_images/knight_potion_chain_persuade.png';
+import knightEquipEmpowerPotionImage from '@assets/generated_images/knight_potion_equip_empower.png';
 import knightExchangeBladeImage from '@assets/generated_images/knight_weapon_exchange_blade.png';
 import knightRageCleaveImage from '@assets/generated_images/knight_weapon_rage_cleave.png';
 import dedupeKnightMagicFortuneWheelImage from '@assets/generated_images/card_dedupe_knight_magic_fortune_wheel.png';
@@ -551,9 +552,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: fusionScrollImage,
     classCard: true,
-    description: '一次性：融合同种怪物——2只融合为精英，3只融合为骷髅王（隐藏Boss）。不同种怪物不能融合。',
+    description: '一次性：融合装备栏中同种族的怪物装备——2个融合为该种族的精英怪物装备（4耐久），3个Skeleton融合为「骷髅王」。融合后加入手牌。',
     magicType: 'instant',
-    magicEffect: '选择激活行同种怪物进行融合。',
+    magicEffect: '融合装备栏中同种族的怪物装备。',
     knightEffect: 'monster-fusion',
   });
 
@@ -625,9 +626,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: recallScrollImage,
     classCard: true,
-    description: '永久：失去 2 点生命，回手一张牌。',
+    description: '永久：失去 2 点生命，回手一张牌，抽 1 张牌。',
     magicType: 'permanent',
-    magicEffect: '失去 2 HP，回手一张牌。',
+    magicEffect: '失去 2 HP，回手一张牌，抽 1 张牌。',
     knightEffect: 'recall-equipment',
     maxUpgradeLevel: 2,
   });
@@ -796,6 +797,16 @@ export function generateKnightDeck(): KnightCardData[] {
     classCard: true,
     description: '获得永恒护符：连续两次劝降同一个怪物时，成功概率 +15%。',
     potionEffect: 'perm-persuade-consecutive',
+  });
+
+  pushCard({
+    type: 'potion',
+    name: '铸锋药剂',
+    value: 0,
+    image: knightEquipEmpowerPotionImage,
+    classCard: true,
+    description: '获得永久护符：当装备上装备时，该装备栏获得 3 临时攻击和 3 临时护甲。',
+    potionEffect: 'perm-equip-empower',
   });
 
   // === CLASS WEAPONS ===

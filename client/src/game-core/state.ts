@@ -150,6 +150,7 @@ export function createInitialGameState(): GameState {
 
     discoverModalOpen: false,
     discoverOptions: [],
+    discoverSourceLabel: null,
     deleteModalOpen: false,
     upgradeModalOpen: false,
     handMagicUpgradeModal: null,

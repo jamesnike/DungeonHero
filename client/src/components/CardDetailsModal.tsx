@@ -654,6 +654,32 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Tier-2 Upgrade: Goblin Stack Heal */}
+            {card.type === 'monster' && card.goblinStackHeal && (
+              <div className="bg-emerald-500/15 p-3 rounded-md border border-emerald-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 shrink-0 text-emerald-500" />
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">贼窝疗养</span>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">怪物回合结束时，自身下方每有1张牌，15%概率恢复1血层。</p>
+                </div>
+              </div>
+            )}
+
+            {/* Elite: Goblin Steal Equip */}
+            {card.type === 'monster' && card.goblinStealEquip && (
+              <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                    <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">窃宝</span>
+                  </div>
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">怪物回合结束时，自身下方每有1张牌，15%概率偷走玩家装备栏里的装备或护符栏里的护符，堆叠在自身下方。</p>
+                </div>
+              </div>
+            )}
+
             {/* Tier-3 Upgrade: Goblin Steal Scale */}
             {card.type === 'monster' && card.goblinStealScale && (
               <div className="bg-emerald-500/15 p-3 rounded-md border border-emerald-500/30">
@@ -842,11 +868,17 @@ export default function CardDetailsModal({
                 if (card.goblinStealCard) {
                   effects.push({ title: '窃牌贼', desc: '攻击时随机偷走一张玩家手牌，堆叠在自身下方。被偷的牌弹出时自动抽 1 张牌。', color: 'emerald' });
                 }
+                if (card.goblinStackHeal) {
+                  effects.push({ title: '哥布林劝降', desc: '攻击怪物时自动发动免费劝降，成功则怪物加入背包。', color: 'emerald' });
+                }
                 if (card.eliteLowGoldPower) {
                   effects.push({ title: '贪婪强化', desc: '当玩家金币 ≥ 30 时，该装备攻击力和护盾值翻倍。', color: 'amber' });
                 }
+                if (card.goblinStealEquip) {
+                  effects.push({ title: '精英劝降', desc: '若所在装备栏为多装备且下层有装备，劝降概率 +30%。', color: 'red' });
+                }
                 if (card.goblinStealScale) {
-                  effects.push({ title: '贪婪成长', desc: '每偷到 X 金币，攻击力和护甲值各 +X。', color: 'emerald' });
+                  effects.push({ title: '贼窝疗养', desc: '若所在装备栏为多装备且下层有装备，玩家回合结束时 30% 概率恢复 1 耐久。', color: 'emerald' });
                 }
               } else if (mType === 'Ogre') {
                 if (card.enterEffect === 'auto-engage') {
@@ -869,8 +901,14 @@ export default function CardDetailsModal({
                     color: card.reviveUsed ? 'gray' : 'emerald',
                   });
                 }
+                if (card.skeletonLastWordsDiscard) {
+                  effects.push({ title: '遗言', desc: '装备被毁坏时，抽 1 张牌。', color: 'amber' });
+                }
+                if (card.skeletonReRevive) {
+                  effects.push({ title: '亡骨轮回', desc: '当另一个装备栏的装备被毁坏时，若本装备没有「复生」，获得「复生」。', color: 'emerald' });
+                }
                 if (card.monsterSpecial === 'bone-regen') {
-                  effects.push({ title: '虚骨再生', desc: '每次失去耐久，50% 概率恢复一层。', color: 'gray' });
+                  effects.push({ title: '虚骨再生', desc: '每次失去耐久，50% 概率恢复 1 耐久。', color: 'emerald' });
                 }
               } else if (mType === 'Wraith') {
                 if (card.lastWords?.startsWith('wraith-haunt')) {
@@ -880,31 +918,53 @@ export default function CardDetailsModal({
                 if (card.monsterSpecial === 'wraith-rebirth') {
                   effects.push({
                     title: card.wraithRebirthUsed ? '幽魂重生（已触发）' : '幽魂重生',
-                    desc: '耐久第一次降到 1 时，耐久回满。',
+                    desc: '耐久第一次降到 1 时，50% 概率耐久回满。',
                     color: card.wraithRebirthUsed ? 'gray' : 'purple',
                   });
                 }
-                if (card.wraithDeathHeal) {
-                  effects.push({ title: '遗言', desc: '另一个装备栏的装备耐久 +1。', color: 'purple' });
+                if (card.wraithDeathHealSpread) {
+                  effects.push({ title: '怨灵传承', desc: '遗言：另一装备耐久 +1，并获得遗言「怨灵祝福：另一装备耐久 +1」。', color: 'purple' });
+                } else if (card.wraithDeathHeal) {
+                  effects.push({ title: '怨灵祝福', desc: '遗言：另一个装备栏的装备耐久 +1。', color: 'purple' });
+                }
+                if (card.wraithTurnEnrage) {
+                  effects.push({ title: '怨灵诅咒', desc: '每次瀑流时，使激活行所有怪物激怒，护符栏上限 +1。', color: 'purple' });
+                }
+              } else if (mType === 'Swarm') {
+                if (card.swarmCorrode) {
+                  effects.push({ title: '虫蚀', desc: '攻击时，立刻让攻击目标 -1 血层。', color: 'emerald' });
+                }
+                if (card.swarmBugletShield) {
+                  effects.push({ title: '虫盾共生', desc: '若另一装备栏的装备是小虫子，格挡时不掉耐久。', color: 'emerald' });
+                }
+                if (card.monsterSpecial === 'swarm-elite') {
+                  effects.push({ title: '虫母孵化', desc: '每次掉耐久时，将另一装备栏的装备替换为小虫子。', color: 'red' });
                 }
               } else if (mType === 'Dragon') {
                 if (card.bleedEffect) {
                   effects.push({ title: '流血', desc: '每失去 1 耐久，攻击力 +3。', color: 'orange' });
                 }
                 if (card.eliteRegenHeroTurn) {
-                  effects.push({ title: '龙息回复', desc: '若怪物回合内 Hero 未掉血，该装备立即恢复 1 耐久。', color: 'amber' });
+                  effects.push({ title: '龙息回复', desc: '若怪物回合内 Hero 未掉血，50% 概率为另一装备栏的装备恢复 1 耐久。', color: 'amber' });
                 }
                 if (card.eliteHealOtherMonster) {
                   effects.push({ title: '龙息庇护', desc: 'Hero 回合未掉血层时，为激活行另一个怪物恢复 1 血层。', color: 'emerald' });
                 }
-                if (card.dragonAttackNoLayerCost) {
-                  effects.push({ title: '龙鳞护体', desc: '攻击不消耗血层。', color: 'amber' });
-                }
                 if (card.dragonDamageRetaliation) {
-                  effects.push({ title: '龙息反击', desc: `每受到一次伤害，对玩家造成 ${card.dragonDamageRetaliation} 点法术伤害。`, color: 'red' });
+                  effects.push({ title: '龙息反击', desc: '每格挡一次，对随机怪物造成 2 点伤害。', color: 'red' });
                 }
                 if (card.dragonBleedDestroy) {
-                  effects.push({ title: '流血破甲', desc: '每失去 1 耐久，对所有血层数大于该装备剩余耐久的怪物造成 1 血层伤害。', color: 'orange' });
+                  effects.push({ title: '流血破甲', desc: '每失去 1 耐久，破坏所有耐久度 > 该装备剩余耐久的装备（包括自己的）。', color: 'orange' });
+                }
+              } else if (mType === 'Golem') {
+                if (card.golemLayerLossReflect && card.golemLayerLossReflect > 0) {
+                  effects.push({ title: '岩层反震', desc: `每次掉 1 耐久，对随机怪物造成 ${card.golemLayerLossReflect}×已损失耐久 的伤害。`, color: 'amber' });
+                }
+                if (card.golemSpellGrowth && card.golemSpellGrowth > 0) {
+                  effects.push({ title: '法力吞噬', desc: `每次瀑流时，岩层反震伤害系数 +${card.golemSpellGrowth}。`, color: 'amber' });
+                }
+                if (card.maxDamagePerHit != null) {
+                  effects.push({ title: '岩石护体', desc: `作为护盾时，每次格挡最多只掉 ${card.maxDamagePerHit} 护甲。`, color: 'cyan' });
                 }
               }
 

@@ -77,6 +77,9 @@ const NAME_TO_KEY: Record<string, string> = {
   祭坛秘术: 'altar-ritual',
   劝降祝福: 'persuade-boost',
   赏金裁决: 'bounty-spell',
+  命运挪移: 'crossroads-left-swap',
+  墓语遗愿: 'crypt-deathwish',
+  回收轮转: 'guild-recycle-reshuffle',
 };
 
 function hashName(s: string): number {

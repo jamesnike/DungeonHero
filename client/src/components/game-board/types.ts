@@ -688,6 +688,7 @@ export type ActiveAmuletEffects = {
   hasRecycleBackpackExpand: boolean;
   hasDungeonGold: boolean;
   hasArmorHalveEndure: boolean;
+  hasEndTurnDraw: boolean;
   stunRateBoost: number;
 };
 

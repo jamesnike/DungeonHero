@@ -139,6 +139,7 @@ export type EternalRelicId =
   | 'bulwark-armor'
   | 'chain-persuade'
   | 'recycle-shuffle'
+  | 'equip-empower'
   | `amulet-eternal-${string}`;
 
 export interface EternalRelic {
@@ -315,7 +316,7 @@ export interface GameState {
   gambitExtraActive: boolean;
   gambitExtraPerSlot: number;
   gambitSlotUsed: Record<string, number>;
-  weaponExtraAttackUsed: Record<string, boolean>;
+  weaponExtraAttackUsed: Record<string, number>;
   blockDurabilityPerSlot: number;
 
   // --- Targeting / pending actions ---
@@ -353,6 +354,7 @@ export interface GameState {
   // --- Discover / card actions ---
   discoverModalOpen: boolean;
   discoverOptions: GameCardData[];
+  discoverSourceLabel: string | null;
   deleteModalOpen: boolean;
   upgradeModalOpen: boolean;
   handMagicUpgradeModal: { sourceCardId: string } | null;

@@ -185,7 +185,7 @@ export interface EndHeroTurnResult {
   berserkerSlotUsed: Record<string, boolean>;
   flashSlotUsed: Record<string, boolean>;
   gambitSlotUsed: Record<string, number>;
-  weaponExtraAttackUsed: Record<string, boolean>;
+  weaponExtraAttackUsed: Record<string, number>;
   logs: Array<{ type: string; message: string }>;
 }
 

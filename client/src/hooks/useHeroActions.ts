@@ -358,6 +358,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         getEquipmentReserve,
         clearEquipmentSlotById,
         setEquipmentReserve,
+        setEquipmentSlotById,
         disposeOwnedEquipmentCard,
         updateMonsterCard,
       } = depsRef.current;
@@ -383,7 +384,15 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
             const reserve = getEquipmentReserve(sid);
             reserve.forEach(r => slotsToDestroy.push({ id: sid, item: r }));
           }
-          const destroyedCount = slotsToDestroy.length;
+          let destroyedCount = 0;
+          const survivedSlots: Record<EquipmentSlotId, EquipmentItem | null> = {
+            equipmentSlot1: null,
+            equipmentSlot2: null,
+          };
+          const survivedReserves: Record<EquipmentSlotId, EquipmentItem[]> = {
+            equipmentSlot1: [],
+            equipmentSlot2: [],
+          };
           slotsToDestroy.forEach(({ id: sid, item }) => {
             if (item.onDestroyHeal) {
               depsRef.current.healHero(item.onDestroyHeal);
@@ -415,12 +424,33 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
             if (item.onDestroyEffect) {
               addGameLog('equip', `${item.name} 遗言：${item.onDestroyEffect}`);
             }
-            disposeOwnedEquipmentCard(item, { isDestruction: true });
+            const isMonsterEquipMD = item.type === 'monster';
+            const nativeReviveMD = isMonsterEquipMD && item.hasRevive && !item.reviveUsed;
+            const equipReviveMD = item.hasEquipmentRevive && !item.equipmentReviveUsed;
+            if (nativeReviveMD || equipReviveMD) {
+              const revived = nativeReviveMD
+                ? { ...item, durability: 1, reviveUsed: true }
+                : { ...item, durability: 1, equipmentReviveUsed: true };
+              const isMainSlot = (sid === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2)?.id === item.id;
+              if (isMainSlot) {
+                survivedSlots[sid] = revived as EquipmentItem;
+              } else {
+                survivedReserves[sid].push(revived as EquipmentItem);
+              }
+              addGameLog('equip', `${item.name} 复生！以 1 耐久复活！`);
+            } else {
+              disposeOwnedEquipmentCard(item, { isDestruction: true });
+              destroyedCount++;
+            }
           });
-          clearEquipmentSlotById('equipmentSlot1');
-          clearEquipmentSlotById('equipmentSlot2');
-          setEquipmentReserve('equipmentSlot1', []);
-          setEquipmentReserve('equipmentSlot2', []);
+          for (const sid of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
+            if (survivedSlots[sid]) {
+              setEquipmentSlotById(sid, survivedSlots[sid]);
+            } else {
+              clearEquipmentSlotById(sid);
+            }
+            setEquipmentReserve(sid, survivedReserves[sid]);
+          }
 
           if (destroyedCount > 0) {
             const totalDebuff = destroyedCount * 2;
@@ -2518,6 +2548,16 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
     const pLevel = engine.getState().persuadeLevel ?? 1;
     rate += (pLevel - 1) * 5;
+
+    for (const eSlot of [equipmentSlot1, equipmentSlot2] as const) {
+      if (eSlot && eSlot.type === 'monster' && eSlot.goblinStealEquip) {
+        const eSlotId: EquipmentSlotId = eSlot === equipmentSlot1 ? 'equipmentSlot1' : 'equipmentSlot2';
+        const eReserve = eSlotId === 'equipmentSlot1' ? engine.getState().equipmentSlot1Reserve : engine.getState().equipmentSlot2Reserve;
+        if (eReserve.length > 0) {
+          rate += 30;
+        }
+      }
+    }
 
     const clamped = Math.max(5, Math.min(75, rate));
     return Math.round(clamped / 5) * 5;

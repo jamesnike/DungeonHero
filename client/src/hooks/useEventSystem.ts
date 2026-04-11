@@ -115,11 +115,11 @@ export interface EventSystemDeps {
   startShopFlow: (card: GameCardData | null) => boolean;
   beginDiscoverFlow: (
     effect: string,
-    options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[] },
+    options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string },
   ) => boolean;
   beginDiscoverFlowAsync: (
     source: string,
-    opts?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[] },
+    opts?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string },
   ) => Promise<void>;
   handleDiscoverFallback: () => void;
   handleCardUpgrade: (cardId: string) => void;
@@ -1103,6 +1103,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         addGameLog('event', '墓语密室（全效）：劝降等级+1，劝降费用 -2');
         const discoverStarted = depsRef.current.beginDiscoverFlow('crypt-all-discover-weapon', {
           filter: (card: GameCardData) => card.type === 'weapon',
+          sourceLabel: currentEventCard?.name ?? '墓语密室',
         });
         if (discoverStarted) {
           eventResolutionDeferred = true;
@@ -1179,15 +1180,27 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                   addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
                 }
               }
-              depsRef.current.disposeOwnedEquipmentCard(slotItem, { isDestruction: true });
-              depsRef.current.clearEquipmentSlotById(below.slotId);
-              const reserve = below.slotId === 'equipmentSlot1' ? equipmentSlot1Reserve : equipmentSlot2Reserve;
-              if (reserve.length > 0) {
-                const promoted = reserve[reserve.length - 1];
-                depsRef.current.setEquipmentSlotById(below.slotId, promoted);
-                depsRef.current.setEquipmentReserve(below.slotId, reserve.slice(0, -1));
+              const isMonsterEquipCR = slotItem.type === 'monster';
+              const nativeReviveCR = isMonsterEquipCR && slotItem.hasRevive && !slotItem.reviveUsed;
+              const equipReviveCR = slotItem.hasEquipmentRevive && !slotItem.equipmentReviveUsed;
+              if (nativeReviveCR || equipReviveCR) {
+                const revived = nativeReviveCR
+                  ? { ...slotItem, durability: 1, reviveUsed: true }
+                  : { ...slotItem, durability: 1, equipmentReviveUsed: true };
+                depsRef.current.setEquipmentSlotById(below.slotId, revived as EquipmentItem);
+                addGameLog('equip', `${slotItem.name} 复生！以 1 耐久复活！`);
+                setHeroSkillBanner(`${slotItem.name} 复生了！获得全部显示选项的效果！`);
+              } else {
+                depsRef.current.disposeOwnedEquipmentCard(slotItem, { isDestruction: true });
+                depsRef.current.clearEquipmentSlotById(below.slotId);
+                const reserve = below.slotId === 'equipmentSlot1' ? equipmentSlot1Reserve : equipmentSlot2Reserve;
+                if (reserve.length > 0) {
+                  const promoted = reserve[reserve.length - 1];
+                  depsRef.current.setEquipmentSlotById(below.slotId, promoted);
+                  depsRef.current.setEquipmentReserve(below.slotId, reserve.slice(0, -1));
+                }
+                setHeroSkillBanner(`破坏了「${slotItem.name}」！获得全部显示选项的效果！`);
               }
-              setHeroSkillBanner(`破坏了「${slotItem.name}」！获得全部显示选项的效果！`);
             }
           } else if (below?.type === 'amulet' && amuletSlots.length > 0) {
             const topAmulet = amuletSlots[amuletSlots.length - 1];
@@ -1751,6 +1764,20 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           addGameLog('event', '事件效果：回收袋为空');
           setHeroSkillBanner('回收袋中没有卡牌。');
         }
+        const guildRecycleCard: GameCardData = {
+          id: `guild-recycle-reshuffle-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'magic',
+          name: '回收轮转',
+          value: 0,
+          image: skillScrollImage,
+          magicType: 'permanent',
+          magicEffect: 'guild-recycle-reshuffle',
+          description: '永久魔法（Perm 1）：将回收袋洗回背包，抽 1 张牌。',
+          recycleDelay: 1,
+        };
+        depsRef.current.addCardToBackpack(guildRecycleCard);
+        addGameLog('event', '事件效果：获得「回收轮转」');
+        setHeroSkillBanner('整合完成！获得「回收轮转」，已放入背包。');
       } else if (effect === 'recycleBagDiscover') {
         const recycled = engine.getState().permanentMagicRecycleBag;
         if (recycled.length > 0) {
@@ -1980,7 +2007,6 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           destroyedItem = slotsWithItems[0].item!;
           destroyedSlotId = slotsWithItems[0].id;
           addGameLog('event', `事件效果：破坏装备「${destroyedItem.name}」`);
-          depsRef.current.sacrificeEquipment(destroyedSlotId);
         } else {
           const selected = await requestEquipmentSelection({
             prompt: '选择要破坏的装备',
@@ -1990,7 +2016,6 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             destroyedItem = (selected === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2) as EquipmentItem | null;
             destroyedSlotId = selected;
             addGameLog('event', `事件效果：破坏装备「${destroyedItem?.name ?? '未知'}」`);
-            depsRef.current.sacrificeEquipment(selected);
           }
         }
         if (destroyedItem && destroyedSlotId) {
@@ -2046,6 +2071,19 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             } else {
               addGameLog('equip', `${destroyedItem.name} 遗言：${destroyedItem.onDestroyEffect}`);
             }
+          }
+          const isMonsterEquipDE = destroyedItem.type === 'monster';
+          const nativeReviveDE = isMonsterEquipDE && destroyedItem.hasRevive && !destroyedItem.reviveUsed;
+          const equipReviveDE = destroyedItem.hasEquipmentRevive && !destroyedItem.equipmentReviveUsed;
+          if (nativeReviveDE || equipReviveDE) {
+            const revived = nativeReviveDE
+              ? { ...destroyedItem, durability: 1, reviveUsed: true }
+              : { ...destroyedItem, durability: 1, equipmentReviveUsed: true };
+            depsRef.current.setEquipmentSlotById(destroyedSlotId, revived as EquipmentItem);
+            addGameLog('equip', `${destroyedItem.name} 复生！以 1 耐久复活！`);
+            setHeroSkillBanner(`${destroyedItem.name} 复生了！`);
+          } else {
+            depsRef.current.sacrificeEquipment(destroyedSlotId);
           }
         }
       } else if (effect === 'slotLeftDamage+2') {
@@ -2522,7 +2560,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         depsRef.current.triggerClassDeckFlight(drawn);
       } else if (effect === 'discoverClass') {
         addGameLog('event', '事件效果：发现职业牌');
-        const started = depsRef.current.beginDiscoverFlow(effect);
+        const started = depsRef.current.beginDiscoverFlow(effect, { sourceLabel: currentEventCard?.name });
         if (started) {
           eventResolutionDeferred = true;
           break;
@@ -2533,6 +2571,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         addGameLog('event', '事件效果：发现专属武器');
         const started = depsRef.current.beginDiscoverFlow(effect, {
           filter: (card: GameCardData) => card.type === 'weapon',
+          sourceLabel: currentEventCard?.name,
         });
         if (started) {
           eventResolutionDeferred = true;
@@ -2544,6 +2583,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         addGameLog('event', '事件效果：发现专属魔法牌');
         const started = depsRef.current.beginDiscoverFlow(effect, {
           filter: (card: GameCardData) => card.type === 'magic' || card.type === 'hero-magic',
+          sourceLabel: currentEventCard?.name,
         });
         if (started) {
           eventResolutionDeferred = true;
@@ -2578,6 +2618,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         if (tempCards.length > 0) {
           const started = depsRef.current.beginDiscoverFlow(effect, {
             overridePool: tempCards,
+            sourceLabel: currentEventCard?.name,
           });
           if (started) {
             eventResolutionDeferred = true;
@@ -2704,23 +2745,53 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             }
           }
         };
+        const checkEquipRevive = (item: GameCardData): boolean => {
+          const isMonsterEquipDA = item.type === 'monster';
+          const nativeR = isMonsterEquipDA && item.hasRevive && !item.reviveUsed;
+          const equipR = item.hasEquipmentRevive && !item.equipmentReviveUsed;
+          return !!(nativeR || equipR);
+        };
+        const applyEquipRevive = (item: GameCardData): GameCardData => {
+          const isMonsterEquipDA = item.type === 'monster';
+          const nativeR = isMonsterEquipDA && item.hasRevive && !item.reviveUsed;
+          return nativeR
+            ? { ...item, durability: 1, reviveUsed: true }
+            : { ...item, durability: 1, equipmentReviveUsed: true };
+        };
+        let revived = 0;
         destroySlots.forEach(slot => {
           const reserve = depsRef.current.getEquipmentReserve(slot.id);
+          const survivedReserve: EquipmentItem[] = [];
           reserve.forEach(r => {
             triggerItemLastWords(r, slot.id);
-            depsRef.current.disposeOwnedEquipmentCard(r, { isDestruction: true });
+            if (checkEquipRevive(r)) {
+              survivedReserve.push(applyEquipRevive(r) as EquipmentItem);
+              addGameLog('equip', `${r.name} 复生！以 1 耐久复活！`);
+              revived++;
+            } else {
+              depsRef.current.disposeOwnedEquipmentCard(r, { isDestruction: true });
+              destroyed++;
+            }
           });
-          depsRef.current.setEquipmentReserve(slot.id, []);
+          depsRef.current.setEquipmentReserve(slot.id, survivedReserve);
           if (slot.item) {
             triggerItemLastWords(slot.item, slot.id);
-            depsRef.current.disposeOwnedEquipmentCard(slot.item, { isDestruction: true });
-            depsRef.current.clearEquipmentSlotById(slot.id);
-            destroyed++;
+            if (checkEquipRevive(slot.item)) {
+              depsRef.current.setEquipmentSlotById(slot.id, applyEquipRevive(slot.item) as EquipmentItem);
+              addGameLog('equip', `${slot.item.name} 复生！以 1 耐久复活！`);
+              revived++;
+            } else {
+              depsRef.current.disposeOwnedEquipmentCard(slot.item, { isDestruction: true });
+              depsRef.current.clearEquipmentSlotById(slot.id);
+              destroyed++;
+            }
           }
-          destroyed += reserve.length;
         });
-        if (destroyed > 0) {
-          setHeroSkillBanner('所有装备都被摧毁了！');
+        if (destroyed > 0 || revived > 0) {
+          const parts: string[] = [];
+          if (destroyed > 0) parts.push(`${destroyed} 件装备被摧毁`);
+          if (revived > 0) parts.push(`${revived} 件装备复生`);
+          setHeroSkillBanner(parts.join('，') + '！');
         } else {
           setHeroSkillBanner('你没有装备可以被摧毁。');
         }
@@ -3160,6 +3231,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
 
         await depsRef.current.beginDiscoverFlowAsync('amplify-altar-discover-class', {
           filter: eligibleFilter,
+          sourceLabel: eventCardSnapshot?.name ?? '增幅祭坛',
         });
 
         const stAfter = engine.getState();

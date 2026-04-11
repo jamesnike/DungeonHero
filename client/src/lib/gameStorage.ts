@@ -1,7 +1,8 @@
-import type { GameCardData } from '@/components/GameCard';
+import type { GameCardData, EventDiceRange } from '@/components/GameCard';
 import type { HeroVariant } from '@/lib/heroes';
 import type { KnightCardData } from '@/lib/knightDeck';
 import { sanitizeHeroMagicState, type HeroMagicState } from '@/lib/heroMagic';
+import type { HeroSkillDefinition } from '@/lib/heroSkills';
 
 interface PersistedEternalRelic {
   id: string;
@@ -11,6 +12,57 @@ interface PersistedEternalRelic {
   amuletEffect?: string;
   amuletAuraBonus?: { attack?: number; defense?: number; maxHp?: number };
   upgradeLevel?: number;
+}
+
+export interface PersistedShopOffering {
+  card: GameCardData;
+  price: number;
+  sold?: boolean;
+}
+
+export interface PersistedMonsterRewardOption {
+  id: string;
+  title: string;
+  description: string;
+  detail?: string;
+  effect: Record<string, unknown>;
+}
+
+export interface PersistedMonsterRewardDrop {
+  monsterName: string;
+  options: PersistedMonsterRewardOption[];
+  monsterInstanceId?: string;
+}
+
+export interface PersistedPersuadeState {
+  monster: GameCardData;
+  targetSlot: 'backpack';
+  phase: string;
+  threshold: number;
+  successRate: number;
+  diceValue: number | null;
+  success: boolean | null;
+}
+
+export interface PersistedMagicChoiceModal {
+  title: string;
+  subtitle?: string;
+  options: Array<{ id: string; label: string; description: string }>;
+}
+
+export interface PersistedEventDiceModal {
+  title: string;
+  subtitle?: string;
+  entries: EventDiceRange[];
+  rolledValue: number | null;
+  highlightedId: string | null;
+}
+
+export interface PersistedDeathWardPrompt {
+  card: GameCardData;
+  source: 'hand' | 'backpack';
+  pendingDamage: number;
+  sourceType: 'combat' | 'general';
 }
 
 export const GAME_STATE_STORAGE_KEY = 'dungeonhero:game-state:v1';
@@ -122,7 +174,7 @@ export interface PersistedGameState {
   gambitExtraActive?: boolean;
   gambitExtraPerSlot?: number;
   gambitSlotUsed?: Record<string, number>;
-  weaponExtraAttackUsed?: Record<string, boolean>;
+  weaponExtraAttackUsed?: Record<string, number>;
   blockDurabilityPerSlot?: number;
   heroSkillUsedThisWave?: boolean;
   /** 本波已用的额外英雄技能 id（商店发现等） */
@@ -137,8 +189,10 @@ export interface PersistedGameState {
   eventModalMinimized?: boolean;
   stunCap?: number;
   heroStunned?: boolean;
+  cardGainUpgradeProgress?: number;
   recycleBackpackProgress?: number;
   swapUpgradeProgress?: number;
+  bugletAmuletObtained?: boolean;
   statSwapCardObtained?: boolean;
   persuadeLevel?: number;
   persuadeCostModifier?: number;
@@ -152,6 +206,40 @@ export interface PersistedGameState {
   activeCardStacks?: Record<number, GameCardData[]>;
   waterfallDealBonus?: number;
   eternalRelics?: PersistedEternalRelic[];
+
+  // --- Modal states (persisted so they survive page refresh) ---
+  discoverModalOpen?: boolean;
+  discoverOptions?: GameCardData[];
+  discoverSourceLabel?: string | null;
+  deleteModalOpen?: boolean;
+  upgradeModalOpen?: boolean;
+  showCardDraft?: boolean;
+  cardDraftPool?: GameCardData[];
+  shopModalOpen?: boolean;
+  shopModalMinimized?: boolean;
+  shopOfferings?: PersistedShopOffering[];
+  shopSourceEvent?: GameCardData | null;
+  shopDeleteUsed?: boolean;
+  shopHealUsed?: boolean;
+  shopLevelUpUsed?: boolean;
+  shopSkillDiscoverUsed?: boolean;
+  shopSkillOptions?: HeroSkillDefinition[];
+  shopSkillSelectOpen?: boolean;
+  monsterRewardQueue?: PersistedMonsterRewardDrop[];
+  activeMonsterReward?: PersistedMonsterRewardDrop | null;
+  selectedMonsterRewards?: PersistedMonsterRewardOption[] | null;
+  graveyardDiscoverState?: GameCardData[] | null;
+  graveyardDiscoverDelivery?: 'backpack' | 'hand-first';
+  ghostBladeExileCards?: GameCardData[] | null;
+  handMagicUpgradeModal?: { sourceCardId: string } | null;
+  mirrorCopyModal?: { sourceCardId: string } | null;
+  permGrantModal?: { sourceCardId: string; sourceType: string; meta?: Record<string, number> } | null;
+  amplifyModal?: { sourceCardId: string } | null;
+  equipmentPrompt?: { prompt: string; subtext?: string } | null;
+  persuadeState?: PersistedPersuadeState | null;
+  magicChoiceModal?: PersistedMagicChoiceModal | null;
+  eventDiceModal?: PersistedEventDiceModal | null;
+  deathWardPrompt?: PersistedDeathWardPrompt | null;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

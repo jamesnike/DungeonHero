@@ -12,6 +12,7 @@ import relicBulwarkAttackImage from '@assets/generated_images/magical_sword_weap
 import relicBulwarkArmorImage from '@assets/generated_images/card_dedupe_magic_tide_armor.png';
 import relicChainPersuadeImage from '@assets/generated_images/knight_potion_chain_persuade.png';
 import relicRecycleShuffleImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
+import relicEquipEmpowerImage from '@assets/generated_images/knight_potion_equip_empower.png';
 
 const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'waterfall-discover': {
@@ -92,6 +93,12 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
     description: '战斗结束或瀑流推进时，将回收袋中的卡牌洗入背包。',
     image: relicRecycleShuffleImage,
   },
+  'equip-empower': {
+    id: 'equip-empower',
+    name: '永恒护符·铸锋药剂',
+    description: '当装备上装备时，该装备栏获得 3 临时攻击和 3 临时护甲。',
+    image: relicEquipEmpowerImage,
+  },
 };
 
 export function getEternalRelic(id: EternalRelicId): EternalRelic {
@@ -106,7 +113,7 @@ export function hasEternalRelic(relics: EternalRelic[], id: EternalRelicId): boo
   return relics.some(r => r.id === id);
 }
 
-const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle']);
+const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower']);
 
 export function getSelectableRelics(exclude: EternalRelicId[]): EternalRelic[] {
   const excludeSet = new Set(exclude);

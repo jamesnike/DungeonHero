@@ -377,7 +377,7 @@ export default function GameBoard() {
     currentEventCard, resolvingDungeonCardId,
     eventModalOpen, eventModalMinimized,
     eventDiceModal, eventTransformState, persuadeState, persuadeLevel, persuadeCostModifier, magicChoiceModal,
-    discoverModalOpen, discoverOptions, deleteModalOpen, upgradeModalOpen, handMagicUpgradeModal, mirrorCopyModal, permGrantModal, amplifyModal,
+    discoverModalOpen, discoverOptions, discoverSourceLabel, deleteModalOpen, upgradeModalOpen, handMagicUpgradeModal, mirrorCopyModal, permGrantModal, amplifyModal,
     graveyardDiscoverState, graveyardDiscoverDelivery,
     cardActionContext, equipmentPrompt, ghostBladeExileCards,
     gameOver, victory, showSkillSelection, showCardDraft, cardDraftPool,
@@ -616,6 +616,9 @@ export default function GameBoard() {
         case 'dungeon-gold':
           state.hasDungeonGold = true;
           break;
+        case 'end-turn-draw':
+          state.hasEndTurnDraw = true;
+          break;
       }
       if (auraBonus) {
         if (typeof auraBonus.attack === 'number') state.aura.attack += auraBonus.attack;
@@ -732,6 +735,7 @@ export default function GameBoard() {
     handleMonsterTargetSelection,
     handleWeaponToMonster,
     recordClassDamageDiscoverHit,
+    updateDamageDiscoverCounter,
   } = combatActions;
 
   // ---------------------------------------------------------------------------
@@ -1263,6 +1267,7 @@ export default function GameBoard() {
   const storingCardIdsRef = useRef<Set<string>>(new Set());
   const previousActiveCardsRef = useRef<ActiveRowSlots>(createEmptyActiveRow());
   const freshGameStartRef = useRef(false);
+  const suppressTurnAmuletReapplyRef = useRef(false);
   const processedDungeonCardIdsRef = useRef<Set<string>>(new Set());
   const heroTurnLayerLossIdsRef = useRef<Set<string>>(new Set());
   const heroTookDamageThisMonsterTurnRef = useRef(false);
@@ -2066,23 +2071,27 @@ export default function GameBoard() {
     setFlashSlotUsed({});
     setGambitExtraActive(false);
     setGambitSlotUsed({});
-    if (amuletEffects.hasStrength) {
-      setSlotTempAttack(prev => ({
-        equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
-        equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
-      }));
-      addGameLog('amulet', '力量护符：所有装备栏临时攻击 +4！');
-    }
-    if (amuletEffects.hasBalance) {
-      setSlotTempAttack(prev => ({
-        equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
-        equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
-      }));
-      setSlotTempArmor(prev => ({
-        equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
-        equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
-      }));
-      addGameLog('amulet', '均衡护符：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1');
+    if (suppressTurnAmuletReapplyRef.current) {
+      suppressTurnAmuletReapplyRef.current = false;
+    } else {
+      if (amuletEffects.hasStrength) {
+        setSlotTempAttack(prev => ({
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
+        }));
+        addGameLog('amulet', '力量护符：所有装备栏临时攻击 +4！');
+      }
+      if (amuletEffects.hasBalance) {
+        setSlotTempAttack(prev => ({
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
+        }));
+        setSlotTempArmor(prev => ({
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
+        }));
+        addGameLog('amulet', '均衡护符：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1');
+      }
     }
   }, [turnCount, clearBerserkTurnBuff]);
 
@@ -3227,10 +3236,30 @@ export default function GameBoard() {
         if (card.onDestroyEffect) {
           addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
         }
-        if (slotId === 'equipmentSlot1') setEquipmentSlot1(null);
-        else setEquipmentSlot2(null);
-        disposeOwnedEquipmentCard(card, { isDestruction: true });
-        addGameLog('combat', `${monsterName} 流血破甲：破坏了「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}）！`);
+        const isMonsterEquipDB = card.type === 'monster';
+        const nativeReviveDB = isMonsterEquipDB && card.hasRevive && !card.reviveUsed;
+        const equipReviveDB = card.hasEquipmentRevive && !card.equipmentReviveUsed;
+        if (nativeReviveDB || equipReviveDB) {
+          const revived = nativeReviveDB
+            ? { ...card, durability: 1, reviveUsed: true }
+            : { ...card, durability: 1, equipmentReviveUsed: true };
+          setEquipmentSlotById(slotId, revived as EquipmentItem);
+          addGameLog('equip', `${card.name} 复生！以 1 耐久复活！`);
+          addGameLog('combat', `${monsterName} 流血破甲：攻击「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}），但它复生了！`);
+        } else {
+          if (slotId === 'equipmentSlot1') setEquipmentSlot1(null);
+          else setEquipmentSlot2(null);
+          disposeOwnedEquipmentCard(card, { isDestruction: true });
+          addGameLog('combat', `${monsterName} 流血破甲：破坏了「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}）！`);
+          const skelOtherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+          const skelOtherItem = skelOtherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+          if (skelOtherItem && skelOtherItem.type === 'monster' && (skelOtherItem as GameCardData).skeletonReRevive
+            && (!(skelOtherItem as GameCardData).hasRevive || (skelOtherItem as GameCardData).reviveUsed)) {
+            setEquipmentSlotById(skelOtherSlotId, { ...skelOtherItem, hasRevive: true, reviveUsed: false } as EquipmentItem);
+            addGameLog('equip', `${skelOtherItem.name} 亡骨轮回：获得了「复生」！`);
+            setHeroSkillBanner(`${skelOtherItem.name} 亡骨轮回！`);
+          }
+        }
         return true;
       }
       return false;
@@ -4360,12 +4389,19 @@ export default function GameBoard() {
           dragonEquipSlots.push({ slotId: 'equipmentSlot2', item: equipmentSlot2 });
         }
         for (const { slotId: dSlotId, item: dItem } of dragonEquipSlots) {
-          const curDur = dItem.durability ?? 0;
-          const maxDur = dItem.maxDurability ?? 0;
-          if (curDur < maxDur) {
-            setEquipmentSlotById(dSlotId, { ...dItem, durability: curDur + 1 } as EquipmentItem);
-            addGameLog('equip', `${dItem.name} 龙息回复：Hero 未受伤，恢复 1 耐久！（${curDur + 1}/${maxDur}）`);
-            setHeroSkillBanner(`${dItem.name} 龙息回复！`);
+          if (Math.random() < 0.5) {
+            const otherSlotId: EquipmentSlotId = dSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+            const otherItem = otherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+            if (otherItem && otherItem.durability != null && otherItem.maxDurability != null && otherItem.durability < otherItem.maxDurability) {
+              const newDur = otherItem.durability + 1;
+              setEquipmentSlotById(otherSlotId, { ...otherItem, durability: newDur } as EquipmentItem);
+              addGameLog('equip', `${dItem.name} 龙息回复：Hero 未受伤，${otherItem.name} 恢复 1 耐久！（${newDur}/${otherItem.maxDurability}）`);
+              setHeroSkillBanner(`${dItem.name} 龙息回复！${otherItem.name} +1 耐久！`);
+            } else {
+              addGameLog('equip', `${dItem.name} 龙息回复：判定成功，但另一装备栏无可恢复的装备。`);
+            }
+          } else {
+            addGameLog('equip', `${dItem.name} 龙息回复：判定失败（50%）。`);
           }
         }
       }
@@ -4491,6 +4527,85 @@ export default function GameBoard() {
           setAmuletSlots(prev => prev.filter(a => a.id !== targetAmulet.id));
           addGameLog('combat', `怨灵诅咒：摧毁了护符「${targetAmulet.name}」！`);
           setHeroSkillBanner(`怨灵诅咒！护符「${targetAmulet.name}」被摧毁！`);
+        }
+      }
+
+      // Goblin Lv2: stack heal — per stacked card below, 15% chance restore 1 layer
+      for (const card of activeCards) {
+        if (!card || !engagedIds.includes(card.id) || card.isStunned || !card.goblinStackHeal) continue;
+        const goblinColIndex = activeCards.findIndex(c => c?.id === card.id);
+        if (goblinColIndex < 0) continue;
+        const stacks = engine.getState().activeCardStacks[goblinColIndex] ?? [];
+        if (stacks.length === 0) continue;
+        let healCount = 0;
+        for (let i = 0; i < stacks.length; i++) {
+          if (Math.random() < 0.15) healCount++;
+        }
+        if (healCount > 0) {
+          setActiveCards(prev => {
+            const next = [...prev];
+            const m = next[goblinColIndex];
+            if (!m) return prev;
+            const maxLayers = m.hpLayers ?? m.fury ?? 1;
+            const currentLayer = m.currentLayer ?? 1;
+            const restored = Math.min(healCount, maxLayers - currentLayer);
+            if (restored <= 0) return prev;
+            const fullHp = m.maxHp ?? m.hp ?? 0;
+            next[goblinColIndex] = { ...m, currentLayer: currentLayer + restored, hp: fullHp };
+            addGameLog('combat', `${m.name} 贼窝疗养：恢复了 ${restored} 血层！（${currentLayer} → ${currentLayer + restored}）`);
+            setHeroSkillBanner(`${m.name} 贼窝疗养！恢复 ${restored} 血层！`);
+            return next as typeof prev;
+          });
+        }
+      }
+
+      // Goblin Elite: steal equip — per stacked card below, 15% chance steal equipment or amulet
+      for (const card of activeCards) {
+        if (!card || !engagedIds.includes(card.id) || card.isStunned || !card.goblinStealEquip) continue;
+        const goblinColIndex = activeCards.findIndex(c => c?.id === card.id);
+        if (goblinColIndex < 0) continue;
+        const stacks = engine.getState().activeCardStacks[goblinColIndex] ?? [];
+        if (stacks.length === 0) continue;
+        let stealCount = 0;
+        for (let i = 0; i < stacks.length; i++) {
+          if (Math.random() < 0.15) stealCount++;
+        }
+        for (let s = 0; s < stealCount; s++) {
+          const state = engine.getState();
+          const candidates: Array<{ source: 'equip'; slotId: EquipmentSlotId; item: GameCardData } | { source: 'amulet'; item: GameCardData }> = [];
+          if (state.equipmentSlot1) candidates.push({ source: 'equip', slotId: 'equipmentSlot1', item: state.equipmentSlot1 as GameCardData });
+          if (state.equipmentSlot2) candidates.push({ source: 'equip', slotId: 'equipmentSlot2', item: state.equipmentSlot2 as GameCardData });
+          for (const amulet of state.amuletSlots) {
+            candidates.push({ source: 'amulet', item: amulet as GameCardData });
+          }
+          if (candidates.length === 0) break;
+          const pick = candidates[Math.floor(Math.random() * candidates.length)];
+          const stolenCard = { ...pick.item, stolenByGoblin: true };
+          if (pick.source === 'equip') {
+            clearEquipmentSlotById(pick.slotId);
+            addGameLog('combat', `${card.name} 窃宝：偷走了装备「${pick.item.name}」！`);
+          } else {
+            const reversal = computeAmuletAuraReversal([pick.item]);
+            if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
+              setSlotTempAttack(prev => ({
+                equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
+                equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
+              }));
+            }
+            if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
+              setSlotTempArmor(prev => ({
+                equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
+                equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
+              }));
+            }
+            setAmuletSlots(prev => prev.filter(a => a.id !== pick.item.id));
+            addGameLog('combat', `${card.name} 窃宝：偷走了护符「${pick.item.name}」！`);
+          }
+          setActiveCardStacks(prev => ({
+            ...prev,
+            [goblinColIndex]: [...(prev[goblinColIndex] ?? []), stolenCard],
+          }));
+          setHeroSkillBanner(`${card.name} 窃宝！偷走了「${pick.item.name}」！`);
         }
       }
     }
@@ -4903,14 +5018,22 @@ export default function GameBoard() {
     processedDungeonCardIdsRef.current.clear();
     previousActiveCardsRef.current = createEmptyActiveRow();
     lastWaterfallSequenceRef.current = null;
+    suppressTurnAmuletReapplyRef.current = true;
 
     const savedForgeCount = snapshot.recycleForgePlayCount ?? 0;
+    const savedDamageStreak = snapshot.classDamageDiscoverStreak ?? 0;
     const restoredAmulets = mapAmulets(snapshot.amuletSlots).map(slot => {
-      if (slot?.amuletEffect !== 'recycle-forge') return slot;
-      return {
-        ...slot,
-        description: `每使用或弃回 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${savedForgeCount % 5}/5]`,
-      };
+      if (slot?.amuletEffect === 'recycle-forge') {
+        return {
+          ...slot,
+          description: `每使用或弃回 5 张牌，将回收袋里的卡牌放回背包，然后抽 2 张牌。(可超手牌上限) [${savedForgeCount % 5}/5]`,
+        };
+      }
+      if (slot?.amuletEffect === 'damage-class-discover') {
+        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 3 : 5;
+        return { ...slot, _counterDisplay: `${savedDamageStreak}/${threshold}` };
+      }
+      return slot;
     });
 
     const restoredCombat: CombatState =
@@ -5046,6 +5169,37 @@ export default function GameBoard() {
       undoCount: undoStackRef.current.length,
       isHydrated: true,
       totalWins: getTotalWins(),
+
+      // --- Restore modal states ---
+      discoverModalOpen: Boolean(snapshot.discoverModalOpen),
+      discoverOptions: Array.isArray(snapshot.discoverOptions) ? snapshot.discoverOptions : [],
+      discoverSourceLabel: snapshot.discoverSourceLabel ?? null,
+      deleteModalOpen: Boolean(snapshot.deleteModalOpen),
+      upgradeModalOpen: Boolean(snapshot.upgradeModalOpen),
+      showCardDraft: Boolean(snapshot.showCardDraft),
+      cardDraftPool: Array.isArray(snapshot.cardDraftPool) ? snapshot.cardDraftPool : [],
+      shopModalOpen: Boolean(snapshot.shopModalOpen),
+      shopModalMinimized: Boolean(snapshot.shopModalMinimized),
+      shopOfferings: Array.isArray(snapshot.shopOfferings) ? snapshot.shopOfferings as import('@/game-core/types').ShopOffering[] : [],
+      shopSourceEvent: snapshot.shopSourceEvent ?? null,
+      shopDeleteUsed: Boolean(snapshot.shopDeleteUsed),
+      shopHealUsed: Boolean(snapshot.shopHealUsed),
+      shopLevelUpUsed: Boolean(snapshot.shopLevelUpUsed),
+      shopSkillDiscoverUsed: Boolean(snapshot.shopSkillDiscoverUsed),
+      shopSkillOptions: Array.isArray(snapshot.shopSkillOptions) ? snapshot.shopSkillOptions : [],
+      shopSkillSelectOpen: Boolean(snapshot.shopSkillSelectOpen),
+      monsterRewardQueue: Array.isArray(snapshot.monsterRewardQueue) ? snapshot.monsterRewardQueue as import('@/game-core/types').MonsterRewardDrop[] : [],
+      activeMonsterReward: (snapshot.activeMonsterReward as import('@/game-core/types').MonsterRewardDrop | null) ?? null,
+      selectedMonsterRewards: (snapshot.selectedMonsterRewards as import('@/game-core/types').MonsterRewardOption[] | null) ?? null,
+      graveyardDiscoverState: snapshot.graveyardDiscoverState ?? null,
+      graveyardDiscoverDelivery: snapshot.graveyardDiscoverDelivery ?? 'backpack',
+      ghostBladeExileCards: snapshot.ghostBladeExileCards ?? null,
+      handMagicUpgradeModal: snapshot.handMagicUpgradeModal ?? null,
+      mirrorCopyModal: snapshot.mirrorCopyModal ?? null,
+      permGrantModal: (snapshot.permGrantModal as import('@/game-core/types').GameState['permGrantModal']) ?? null,
+      amplifyModal: snapshot.amplifyModal ?? null,
+      persuadeState: (snapshot.persuadeState as import('@/game-core/types').PersuadeModalState | null) ?? null,
+      deathWardPrompt: (snapshot.deathWardPrompt as import('@/game-core/types').DeathWardPromptState | null) ?? null,
     });
 
     // Stacking state (previewCardStacks, activeCardStacks) is hydrated via engine state
@@ -5982,24 +6136,52 @@ export default function GameBoard() {
                 addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
               }
             };
+            const revived: string[] = [];
             (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
               const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
               if (slotItem) {
-                destroyed.push(slotItem.name);
-                triggerLW(slotItem as GameCardData, slotId);
-                disposeOwnedEquipmentCard({ ...slotItem }, { isDestruction: true });
+                const card = slotItem as GameCardData;
+                triggerLW(card, slotId);
+                const isMonsterEquipWF = card.type === 'monster';
+                const nativeReviveWF = isMonsterEquipWF && card.hasRevive && !card.reviveUsed;
+                const equipReviveWF = card.hasEquipmentRevive && !card.equipmentReviveUsed;
+                if (nativeReviveWF || equipReviveWF) {
+                  const revivedItem = nativeReviveWF
+                    ? { ...card, durability: 1, reviveUsed: true }
+                    : { ...card, durability: 1, equipmentReviveUsed: true };
+                  setEquipmentSlotById(slotId, revivedItem as EquipmentItem);
+                  addGameLog('equip', `${card.name} 复生！以 1 耐久复活！`);
+                  revived.push(card.name);
+                } else {
+                  destroyed.push(slotItem.name);
+                  disposeOwnedEquipmentCard({ ...slotItem }, { isDestruction: true });
+                  clearEquipmentSlotById(slotId);
+                }
               }
               const reserve = slotId === 'equipmentSlot1' ? equipmentSlot1Reserve : equipmentSlot2Reserve;
+              const survivedReserveWF: EquipmentItem[] = [];
               reserve.forEach(r => {
-                destroyed.push(r.name);
-                triggerLW(r as GameCardData, slotId);
-                disposeOwnedEquipmentCard({ ...r }, { isDestruction: true });
+                const rCard = r as GameCardData;
+                triggerLW(rCard, slotId);
+                const isMonsterEquipR = rCard.type === 'monster';
+                const nativeR = isMonsterEquipR && rCard.hasRevive && !rCard.reviveUsed;
+                const equipR = rCard.hasEquipmentRevive && !rCard.equipmentReviveUsed;
+                if (nativeR || equipR) {
+                  const revivedR = nativeR
+                    ? { ...r, durability: 1, reviveUsed: true }
+                    : { ...r, durability: 1, equipmentReviveUsed: true };
+                  survivedReserveWF.push(revivedR as EquipmentItem);
+                  addGameLog('equip', `${rCard.name} 复生！以 1 耐久复活！`);
+                  revived.push(rCard.name);
+                } else {
+                  destroyed.push(r.name);
+                  disposeOwnedEquipmentCard({ ...r }, { isDestruction: true });
+                }
               });
-              clearEquipmentSlotById(slotId);
-              setEquipmentReserve(slotId, []);
+              setEquipmentReserve(slotId, survivedReserveWF);
             });
             if (destroyed.length > 0) {
-              addGameLog('waterfall', `${cardName} 被挤出，破坏了所有装备：${destroyed.join('、')}`);
+              addGameLog('waterfall', `${cardName} 被挤出，破坏了所有装备：${destroyed.join('、')}${revived.length > 0 ? `（${revived.join('、')} 复生）` : ''}`);
               setHeroSkillBanner(`${cardName} 的贪婪吞噬了你的所有装备！`);
             } else {
               addGameLog('waterfall', `${cardName} 被挤出，但没有装备可破坏。`);
@@ -6207,7 +6389,7 @@ export default function GameBoard() {
       addGameLog('skill', `永恒护符·潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${amuletEffects.hasHeal ? '（治疗加倍）' : ''}`);
     }
     if (hasEternalRelic(eternalRelics, 'waterfall-discover')) {
-      const started = beginDiscoverFlow('eternal-relic-waterfall');
+      const started = beginDiscoverFlow('eternal-relic-waterfall', { sourceLabel: '永恒护符·探秘' });
       if (started) {
         addGameLog('skill', '永恒护符·探秘：瀑流推进，发现专属卡！');
       }
@@ -6268,6 +6450,39 @@ export default function GameBoard() {
     const recycledCards = restorePermanentMagicFromRecycleBag();
     if (recycledCards > 0) {
       logWaterfall('recycle-restore', { restored: recycledCards });
+    }
+
+    let hasWraithEquipEnrage = false;
+    for (const wsId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
+      const wItem = wsId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+      if (wItem && wItem.type === 'monster' && wItem.wraithTurnEnrage) {
+        hasWraithEquipEnrage = true;
+        break;
+      }
+    }
+    if (hasWraithEquipEnrage) {
+      const rowMonsters = activeCards.filter(
+        (c): c is GameCardData => Boolean(c && c.type === 'monster' && !c.isStunned),
+      );
+      for (const m of rowMonsters) {
+        if (!isMonsterEngaged(m.id)) {
+          beginCombat(m, 'monster');
+        }
+      }
+      if (rowMonsters.length > 0) {
+        addGameLog('equip', '怨灵诅咒：瀑流时激活行所有怪物激怒！');
+      }
+      setMaxAmuletSlots(prev => prev + 1);
+      addGameLog('equip', '怨灵诅咒：护符栏上限 +1！');
+    }
+
+    for (const gsId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
+      const gItem = gsId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+      if (gItem && gItem.type === 'monster' && gItem.golemSpellGrowth && gItem.golemSpellGrowth > 0 && gItem.golemLayerLossReflect) {
+        const newCoeff = gItem.golemLayerLossReflect + gItem.golemSpellGrowth;
+        setEquipmentSlotById(gsId, { ...gItem, golemLayerLossReflect: newCoeff });
+        addGameLog('equip', `${gItem.name} 法力吞噬：瀑流强化，岩层反震系数 +${gItem.golemSpellGrowth}（当前 ${newCoeff}）`);
+      }
     }
 
     if (permanentSkills.includes('幽魂净化')) {
@@ -6924,6 +7139,7 @@ export default function GameBoard() {
     bulwarkTempArmorRef,
     persuadeAmuletBonusRef,
     persuadeDiscountRef,
+    computePersuadeSuccessRate,
     setPersuadeTempDiscount,
     undoStackRef,
     setUndoCount,
@@ -7529,15 +7745,25 @@ export default function GameBoard() {
               eventChoices: [...eventCard.eventChoices],
             };
           } else {
-            const choice: EventChoiceDefinition = {
-              text: '两侧皆为怪物（获得翻转效果）',
-              effect: 'crypt-all-effects',
-              hint: reasonParts.join('，'),
-              requires: [{ type: 'hand', min: 999, message: reasonParts.join('，') }],
+            const altFlipTarget = {
+              toCard: {
+                id: `${eventCard.id}-flip-crypt-deathwish`,
+                type: 'magic' as const,
+                name: '墓语遗愿',
+                value: 0,
+                image: skillScrollImage,
+                magicType: 'permanent' as const,
+                magicEffect: 'crypt-deathwish',
+                description: '永久魔法（Perm 2）：选择一个装备，触发其遗言效果，抽 1 张牌。',
+                recycleDelay: 2,
+              },
+              destination: 'backpack' as const,
+              banner: '墓语密室翻转为「墓语遗愿」，已放入背包。',
             };
             eventCard = {
               ...eventCard,
-              eventChoices: [...eventCard.eventChoices, choice],
+              flipTarget: altFlipTarget,
+              eventChoices: [...eventCard.eventChoices],
             };
           }
         }
@@ -7676,6 +7902,12 @@ export default function GameBoard() {
         addGameLog('combat', `劝降成功！装备 ${monster.name}（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterMaxDurability}耐久）`);
         setHeroSkillBanner(`劝降成功！${monster.name} 已装备！`);
 
+        if (hasEternalRelic(eternalRelics, 'equip-empower')) {
+          setSlotTempAttack(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
+          setSlotTempArmor(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
+          addGameLog('equip', `铸锋药剂：${monster.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
+        }
+
         if (monster.monsterType === 'Ogre' || monster.name === 'Ogre') {
           if (monster.enterEffect === 'auto-engage') {
             const rowMonsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
@@ -7775,6 +8007,11 @@ export default function GameBoard() {
       if (card.amuletEffect === 'recycle-forge') {
         setRecycleForgePlayCount(0);
         updateRecycleForgeCounter(0);
+      }
+      if (card.amuletEffect === 'damage-class-discover') {
+        const streak = engine.getState().classDamageDiscoverStreak ?? 0;
+        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 3 : 5;
+        updateDamageDiscoverCounter(streak, threshold);
       }
 
       if (card.amuletEffect === 'balance') {
@@ -8068,6 +8305,12 @@ export default function GameBoard() {
           setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
           addGameLog('equip', `${equipCard.name} 入场效果：该装备栏永久攻击 +1！`);
         }
+      }
+
+      if (hasEternalRelic(eternalRelics, 'equip-empower')) {
+        setSlotTempAttack(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
+        setSlotTempArmor(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
+        addGameLog('equip', `铸锋药剂：${equipCard.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
       }
 
       if (isMonsterFromHand && (card.monsterType === 'Ogre' || card.name === 'Ogre')) {
@@ -9617,7 +9860,7 @@ export default function GameBoard() {
                         key={stackCard.id}
                         className="absolute inset-0 rounded-md overflow-hidden pointer-events-none"
                         style={{
-                          zIndex: sIdx,
+                          zIndex: 0,
                           transform: `translateY(${y}%)`,
                           opacity: 0.4 - sIdx * 0.1,
                           filter: 'brightness(0.6)',
@@ -9630,6 +9873,7 @@ export default function GameBoard() {
                   })}
                   <GameCard
                     card={card}
+                    className={hasPreviewStack ? 'relative z-[5]' : ''}
                     disableInteractions
                     onClick={() => handleCardClick(card)}
                   />
@@ -9717,7 +9961,7 @@ export default function GameBoard() {
                       key={stackCard.id}
                       className="absolute inset-0 rounded-md overflow-hidden pointer-events-none"
                       style={{
-                        zIndex: sIdx,
+                        zIndex: 0,
                         transform: `translateY(${y}%)`,
                         opacity: 0.5 - sIdx * 0.1,
                         filter: 'brightness(0.7)',
@@ -9749,7 +9993,7 @@ export default function GameBoard() {
                   bleedAnimation={Boolean(monsterBleedStates[card.id])}
                   healAnimation={Boolean(monsterHealStates[card.id])}
                   defeatAnimation={Boolean(monsterDefeatStates[card.id])}
-                  className={`${removingCards.has(card.id) ? 'animate-card-remove' : 'shadow-lg'} ${
+                  className={`${hasActiveStack ? 'relative z-[5]' : ''} ${removingCards.has(card.id) ? 'animate-card-remove' : 'shadow-lg'} ${
                     (isMonsterTurnLock && !monsterTargetHighlight && !dungeonTargetHighlight) ||
                     (isResolvingCard && !isEventPendingCell)
                       ? 'opacity-60 pointer-events-none'
@@ -10406,6 +10650,7 @@ export default function GameBoard() {
         permanentMagicRecycleBag={permanentMagicRecycleBag}
         discoverModalOpen={discoverModalOpen}
         discoverOptions={discoverOptions}
+        discoverSourceLabel={discoverSourceLabel}
         onDiscoverSelect={handleDiscoverSelect}
         onDiscoverCancel={handleDiscoverCancel}
         graveyardDiscoverState={graveyardDiscoverState}

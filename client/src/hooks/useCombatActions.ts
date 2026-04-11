@@ -122,8 +122,8 @@ export interface CombatActionsDeps {
   triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
   triggerStealCardFlight: (card: GameCardData, targetMonsterId: string) => Promise<void>;
   dragonBleedDestroyEquipment: (monsterName: string, remainingLayers: number) => void;
-  beginDiscoverFlow: (source: string) => boolean;
-  beginDiscoverFlowAsync: (source: string) => Promise<void>;
+  beginDiscoverFlow: (source: string, options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string }) => boolean;
+  beginDiscoverFlowAsync: (source: string, opts?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string }) => Promise<void>;
   requestDaggerSelfDestruct: (weaponName: string, remainingDurability: number) => Promise<boolean>;
 
   // --- Refs ---
@@ -145,6 +145,7 @@ export interface CombatActionsDeps {
   bulwarkTempArmorRef: React.MutableRefObject<number>;
   persuadeAmuletBonusRef: React.MutableRefObject<number>;
   persuadeDiscountRef: React.MutableRefObject<{ costReduction: number; rateBonus: number } | null>;
+  computePersuadeSuccessRate: (monster: GameCardData) => number;
   setPersuadeTempDiscount: React.Dispatch<React.SetStateAction<number>>;
   undoStackRef: React.MutableRefObject<any[]>;
   setUndoCount: (value: number | ((prev: number) => number)) => void;
@@ -252,8 +253,16 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   const setDeathWardPrompt = useEngineSetter('deathWardPrompt');
   const setSelectedMonsterRewards = useEngineSetter('selectedMonsterRewards');
   const setClassDamageDiscoverStreak = useEngineSetter('classDamageDiscoverStreak');
+  const setAmuletSlots = useEngineSetter('amuletSlots');
   const setHeroStunned = useEngineSetter('heroStunned');
   const setStunCap = useEngineSetter('stunCap');
+
+  const updateDamageDiscoverCounter = useCallback((displayCount: number, threshold: number) => {
+    setAmuletSlots(prev => prev.map(slot => {
+      if (slot?.amuletEffect !== 'damage-class-discover') return slot;
+      return { ...slot, _counterDisplay: `${displayCount}/${threshold}` };
+    }));
+  }, [setAmuletSlots]);
 
   const recordClassDamageDiscoverHit = useCallback(() => {
     const d = depsRef.current;
@@ -264,17 +273,20 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     const streak = st.classDamageDiscoverStreak ?? 0;
     const next = streak + 1;
     if (next >= threshold) {
-      const started = d.beginDiscoverFlow('damage-class-discover');
+      const amuletName = discoverAmulet?.name ?? '战痕之符';
+      const started = d.beginDiscoverFlow('damage-class-discover', { sourceLabel: amuletName });
       if (started) {
-        d.addGameLog('amulet', `战痕之符：累计 ${threshold} 次造成伤害，发现专属牌！`);
+        d.addGameLog('amulet', `${amuletName}：累计 ${threshold} 次造成伤害，发现专属牌！`);
       } else {
-        d.addGameLog('amulet', `战痕之符：累计 ${threshold} 次造成伤害，但职业牌堆已空。`);
+        d.addGameLog('amulet', `${amuletName}：累计 ${threshold} 次造成伤害，但职业牌堆已空。`);
       }
       setClassDamageDiscoverStreak(0);
+      updateDamageDiscoverCounter(0, threshold);
     } else {
       setClassDamageDiscoverStreak(next);
+      updateDamageDiscoverCounter(next, threshold);
     }
-  }, [engine, setClassDamageDiscoverStreak]);
+  }, [engine, setClassDamageDiscoverStreak, updateDamageDiscoverCounter]);
 
   // -- Derived values (duplicated from GameBoard for local use) ---------------
   // depsRef.current may be null during the first render pass (populated later
@@ -758,6 +770,25 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         }
 
         return next;
+      });
+    }
+
+    if (monster.bugletLastWordsHeal && !monster.isStunned) {
+      setActiveCards(prev => {
+        const healedNames: string[] = [];
+        const next = prev.map(c => {
+          if (!c || c.id === monster.id || !c.isBuglet || c.type !== 'monster') return c;
+          const maxLayers = c.hpLayers ?? c.fury ?? 1;
+          const curLayer = c.currentLayer ?? maxLayers;
+          if (curLayer >= maxLayers) return c;
+          healedNames.push(c.name);
+          return { ...c, currentLayer: curLayer + 1 };
+        }) as ActiveRowSlots;
+        if (healedNames.length > 0) {
+          depsRef.current.addGameLog('combat', `${monster.name} 虫群遗念：${healedNames.join('、')} 恢复了1血层！`);
+          setHeroSkillBanner(`${monster.name} 虫群遗念！其他小虫子恢复1血层！`);
+        }
+        return healedNames.length > 0 ? next : prev;
       });
     }
 
@@ -1618,7 +1649,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     const ae = depsRef.current.amuletEffects;
     const canUseFlashExtra = ae.hasFlash && slotAlreadyAttacked && !flashSlotUsed[slotId];
     const canUseGambitExtra = gambitExtraActive && slotAlreadyAttacked && (gambitSlotUsed[slotId] ?? 0) < gambitExtraPerSlot;
-    const canUseWeaponExtra = !!(slotItem.weaponExtraAttack) && slotAlreadyAttacked && !weaponExtraAttackUsed[slotId];
+    const canUseWeaponExtra = !!(slotItem.weaponExtraAttack) && slotAlreadyAttacked && (weaponExtraAttackUsed[slotId] ?? 0) < (slotItem.weaponExtraAttack ?? 0);
     const needsExtraCharge = slotAlreadyAttacked || !hasBaseAttack;
     if (!isBuildingNoEngaged && needsExtraCharge && !canUseBerserkerExtra && !canUseFlashExtra && !canUseGambitExtra && !canUseWeaponExtra && extraAttackCharges <= 0) {
       return;
@@ -1815,6 +1846,27 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       }
     }
 
+    if (!monsterDefeated && isMonsterEquip && slotItem.swarmCorrode && !isBuildingTarget && targetMonster.type === 'monster') {
+      const swarmLayersBefore = workingMonster.currentLayer ?? workingMonster.fury ?? 1;
+      if (swarmLayersBefore > 1) {
+        const swarmNewLayer = swarmLayersBefore - 1;
+        workingMonster = {
+          ...workingMonster,
+          currentLayer: swarmNewLayer,
+          hp: workingMonster.maxHp ?? workingMonster.hp ?? 0,
+        };
+        addGameLog('equip', `${slotItem.name} 虫蚀：${targetMonster.name} 立刻 -1 血层！（剩余 ${swarmNewLayer} 层）`);
+        setHeroSkillBanner(`${slotItem.name} 虫蚀！-1 血层！`);
+        depsRef.current.heroTurnLayerLossIdsRef.current.add(targetMonster.id);
+      } else if (swarmLayersBefore === 1) {
+        workingMonster = { ...workingMonster, currentLayer: 0, hp: 0 };
+        addGameLog('equip', `${slotItem.name} 虫蚀：${targetMonster.name} 最后 1 层被吞噬！`);
+        applyHeroKillEffects(workingMonster.hp ?? 0);
+        handleMonsterDefeated(targetMonster);
+        monsterDefeated = true;
+      }
+    }
+
     if (overkillHitCount > 0 && attackEffectiveLifesteal > 0) {
       healHero(attackEffectiveLifesteal * overkillHitCount, { healLogVariant: 'overkill-lifesteal' });
     }
@@ -1907,7 +1959,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     }
 
     if (usingWeaponExtra) {
-      setWeaponExtraAttackUsed(prev => ({ ...prev, [slotId]: true }));
+      setWeaponExtraAttackUsed(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 1 }));
     }
 
     if (isMonsterEquip && slotItem.onAttackEffect?.startsWith('steal-gold-')) {
@@ -1955,7 +2007,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
       if (!skipDurabilityLoss) {
         const weaponDurability = slotItem.durability ?? 1;
-        if (isMonsterEquip && slotItem.monsterSpecial === 'bone-regen') {
+        if (isMonsterEquip && (slotItem.monsterSpecial === 'bone-regen' || slotItem.monsterSpecial === 'skeleton-king')) {
           const boneResult = await requestDiceOutcome({
             title: slotItem.name,
             subtitle: '虚骨再生判定',
@@ -1977,7 +2029,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           // --- 遗言 effects (fire BEFORE revive, regardless of revive availability) ---
           const hasLastWords = slotItem.onDestroyHeal || slotItem.onDestroyGold || slotItem.onDestroyDraw
             || slotItem.onDestroyClassDraw || slotItem.onDestroyPermanentDamage || slotItem.onDestroyPermanentShield || slotItem.onDestroyEffect
-            || (isMonsterEquip && (slotItem.lastWords || slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread));
+            || (isMonsterEquip && (slotItem.lastWords || slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread || slotItem.skeletonLastWordsDiscard));
           if (hasLastWords) {
             addGameLog('equip', `${slotItem.name} 遗言触发！`);
           }
@@ -2049,6 +2101,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                 setHeroSkillBanner(`${slotItem.name} 遗言：抽取 ${drawnNames.length} 张牌！`);
               }
             }
+            if (slotItem.skeletonLastWordsDiscard) {
+              const skelDrawn = drawFromBackpackToHand();
+              if (skelDrawn) {
+                addGameLog('equip', `${slotItem.name} 遗言：抽到了「${skelDrawn.name}」`);
+                setHeroSkillBanner(`${slotItem.name} 遗言：抽取 1 张牌！`);
+              }
+            }
             if (slotItem.lastWords?.startsWith('wraith-haunt')) {
               const hauntAmount = parseInt(slotItem.lastWords.replace('wraith-haunt-', ''), 10) || 2;
               const otherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -2058,15 +2117,21 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                 addGameLog('equip', `${slotItem.name} 遗言：${otherItem.name} 获得临时攻击力 +${hauntAmount}！`);
               }
             }
-            if (slotItem.wraithDeathHeal) {
+            if (slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread) {
               const otherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
               const otherItem = otherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
               if (otherItem && otherItem.durability != null && otherItem.maxDurability != null) {
                 const newDur = Math.min(otherItem.maxDurability, otherItem.durability + 1);
+                let updatedOther = { ...otherItem } as EquipmentItem;
                 if (newDur > otherItem.durability) {
-                  setEquipmentSlotById(otherSlotId, { ...otherItem, durability: newDur } as EquipmentItem);
+                  updatedOther = { ...updatedOther, durability: newDur };
                   addGameLog('equip', `${slotItem.name} 怨灵祝福：${otherItem.name} 耐久 +1！`);
                 }
+                if (slotItem.wraithDeathHealSpread && !otherItem.wraithDeathHeal) {
+                  updatedOther = { ...updatedOther, wraithDeathHeal: 1 };
+                  addGameLog('equip', `${slotItem.name} 怨灵传承：${otherItem.name} 获得遗言「怨灵祝福」！`);
+                }
+                setEquipmentSlotById(otherSlotId, updatedOther);
               }
             }
           }
@@ -2097,6 +2162,14 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             } else {
               clearEquipmentSlotWithPromote(slotId);
             }
+            const skelReReviveSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+            const skelReReviveItem = skelReReviveSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+            if (skelReReviveItem && skelReReviveItem.type === 'monster' && skelReReviveItem.skeletonReRevive
+              && (!skelReReviveItem.hasRevive || skelReReviveItem.reviveUsed)) {
+              setEquipmentSlotById(skelReReviveSlotId, { ...skelReReviveItem, hasRevive: true, reviveUsed: false } as EquipmentItem);
+              addGameLog('equip', `${skelReReviveItem.name} 亡骨轮回：获得了「复生」！`);
+              setHeroSkillBanner(`${skelReReviveItem.name} 亡骨轮回！`);
+            }
           }
         } else {
           const safeDurability = weaponDurability <= 1 ? weaponDurability : weaponDurability - 1;
@@ -2117,26 +2190,82 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             }
             if (slotItem.dragonBleedDestroy) {
               const remainingDur = updatedDurability;
-              const boardMonsters = flattenActiveRowSlots(depsRef.current.activeCardsLatestRef.current).filter(
-                (c): c is GameCardData => Boolean(c && c.type === 'monster'),
-              );
-              for (const m of boardMonsters) {
-                const layers = m.currentLayer ?? m.fury ?? 1;
-                if (layers > remainingDur) {
-                  dealDamageToMonster(m, m.hp ?? m.value, { pulses: 1 });
-                  addGameLog('equip', `${slotItem.name} 流血破甲：对 ${m.name} 造成 1 血层伤害！`);
+              const otherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+              const otherItem = otherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+              let destroyed = false;
+              if (otherItem && (otherItem.durability ?? 0) > remainingDur) {
+                const card = otherItem as GameCardData;
+                const isOtherMonster = card.type === 'monster';
+                const nativeRevive = isOtherMonster && card.hasRevive && !card.reviveUsed;
+                const equipRevive = card.hasEquipmentRevive && !card.equipmentReviveUsed;
+                if (nativeRevive || equipRevive) {
+                  const revived = nativeRevive
+                    ? { ...card, durability: 1, reviveUsed: true }
+                    : { ...card, durability: 1, equipmentReviveUsed: true };
+                  setEquipmentSlotById(otherSlotId, revived as EquipmentItem);
+                  addGameLog('equip', `${slotItem.name} 流血破甲：「${otherItem.name}」（耐久 ${otherItem.durability} > ${remainingDur}）复生了！`);
+                } else {
+                  clearEquipmentSlotWithPromote(otherSlotId);
+                  disposeOwnedEquipmentCard(card, { isDestruction: true });
+                  addGameLog('equip', `${slotItem.name} 流血破甲：破坏了「${otherItem.name}」（耐久 ${otherItem.durability} > ${remainingDur}）！`);
+                  if (slotItem.type === 'monster' && slotItem.skeletonReRevive
+                    && (!slotItem.hasRevive || slotItem.reviveUsed)) {
+                    updatedSlotItem = { ...updatedSlotItem, hasRevive: true, reviveUsed: false };
+                    addGameLog('equip', `${slotItem.name} 亡骨轮回：获得了「复生」！`);
+                    setHeroSkillBanner(`${slotItem.name} 亡骨轮回！`);
+                  }
                 }
+                destroyed = true;
               }
-              if (boardMonsters.some(m => (m.currentLayer ?? m.fury ?? 1) > remainingDur)) {
-                setHeroSkillBanner(`${slotItem.name} 流血破甲！`);
+              if (destroyed) {
+                setHeroSkillBanner(`${slotItem.name} 流血破甲！高耐久装备被破坏！`);
               }
             }
             if (slotItem.monsterSpecial === 'wraith-rebirth' && updatedDurability === 1 && !slotItem.wraithRebirthUsed) {
-              const maxDur = slotItem.maxDurability ?? weaponDurability;
-              updatedSlotItem = { ...updatedSlotItem, durability: maxDur, wraithRebirthUsed: true };
-              updatedDurability = maxDur;
-              addGameLog('equip', `${slotItem.name} 幽魂重生：耐久回满！（${maxDur}）`);
-              setHeroSkillBanner(`${slotItem.name} 幽魂重生！`);
+              if (Math.random() < 0.5) {
+                const maxDur = slotItem.maxDurability ?? weaponDurability;
+                updatedSlotItem = { ...updatedSlotItem, durability: maxDur, wraithRebirthUsed: true };
+                updatedDurability = maxDur;
+                addGameLog('equip', `${slotItem.name} 幽魂重生：耐久回满！（${maxDur}）`);
+                setHeroSkillBanner(`${slotItem.name} 幽魂重生！`);
+              } else {
+                updatedSlotItem = { ...updatedSlotItem, wraithRebirthUsed: true };
+                addGameLog('equip', `${slotItem.name} 幽魂重生失败！（50%）`);
+              }
+            }
+            if (slotItem.monsterSpecial === 'swarm-elite') {
+              const otherSwarmSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+              const otherSwarmItem = otherSwarmSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+              if (otherSwarmItem) {
+                disposeOwnedEquipmentCard(otherSwarmItem as GameCardData, { isDestruction: true });
+              }
+              const bugletEquip = createBugletCard();
+              const bugletAsEquip: EquipmentItem = {
+                ...bugletEquip,
+                durability: 1,
+                maxDurability: 1,
+              };
+              setEquipmentSlotById(otherSwarmSlotId, bugletAsEquip);
+              addGameLog('equip', `${slotItem.name} 虫母孵化：${otherSwarmItem ? otherSwarmItem.name + ' 被替换为' : ''}小虫子！`);
+              setHeroSkillBanner(`${slotItem.name} 虫母孵化！`);
+            }
+            if (slotItem.golemLayerLossReflect && slotItem.golemLayerLossReflect > 0) {
+              const golemMaxDur = slotItem.maxDurability ?? weaponDurability;
+              const golemLostDur = golemMaxDur - updatedDurability;
+              if (golemLostDur > 0) {
+                const golemCoeff = slotItem.golemLayerLossReflect;
+                const golemReflectDmg = golemCoeff * golemLostDur;
+                const golemTargets = flattenActiveRowSlots(depsRef.current.activeCardsLatestRef.current).filter(
+                  (c): c is GameCardData => Boolean(c && c.type === 'monster'),
+                );
+                if (golemTargets.length > 0) {
+                  const golemTarget = golemTargets[Math.floor(Math.random() * golemTargets.length)];
+                  depsRef.current.tryStartShieldReflectDirectedFx(slotId, golemTarget.id);
+                  dealDamageToMonster(golemTarget, golemReflectDmg, { pulses: 1 });
+                  addGameLog('equip', `${slotItem.name} 岩层反震：${golemCoeff}×${golemLostDur} = ${golemReflectDmg} 点伤害，命中 ${golemTarget.name}！`);
+                  setHeroSkillBanner(`${slotItem.name} 岩层反震！${golemReflectDmg} 伤害！`);
+                }
+              }
             }
           }
           setEquipmentSlotById(slotId, updatedSlotItem as EquipmentItem);
@@ -2296,6 +2425,38 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       }
     }
 
+    if (!monsterDefeated && isMonsterEquip && slotItem.goblinStackHeal && targetMonster.type === 'monster') {
+      const st = engine.getState();
+      const backpackFull = st.backpackItems.length >= (12 + st.backpackCapacityModifier);
+      if (!backpackFull) {
+        const clampedPersuadeRate = depsRef.current.computePersuadeSuccessRate(targetMonster);
+        const persuadeThreshold = Math.round((clampedPersuadeRate / 100) * 20);
+        const persuadeResult = await requestDiceOutcome({
+          title: `${slotItem.name} 劝降`,
+          subtitle: `对 ${targetMonster.name} 发动劝降（${clampedPersuadeRate}%）`,
+          entries: [
+            { id: 'success', range: [1, persuadeThreshold] as [number, number], label: '劝降成功！', effect: 'none' },
+            { id: 'fail', range: [persuadeThreshold + 1, 20] as [number, number], label: '劝降失败', effect: 'none' },
+          ],
+        });
+        if (persuadeResult?.id === 'success') {
+          const monsterMaxDur = targetMonster.fury ?? targetMonster.hpLayers ?? 1;
+          const persuadedCard: GameCardData = {
+            ...targetMonster,
+            durability: monsterMaxDur,
+            maxDurability: monsterMaxDur,
+          };
+          depsRef.current.addCardToBackpack(persuadedCard, { pendingDungeonCardId: targetMonster.id });
+          depsRef.current.removeCard(targetMonster.id, false);
+          monsterDefeated = true;
+          addGameLog('equip', `${slotItem.name} 劝降成功！${targetMonster.name} 加入背包！`);
+          setHeroSkillBanner(`${slotItem.name} 劝降了 ${targetMonster.name}！`);
+        } else {
+          addGameLog('equip', `${slotItem.name} 劝降 ${targetMonster.name} 失败。`);
+        }
+      }
+    }
+
     if (slotItem.daggerSelfDestructDiscover && !weaponDestroyed && weaponSurvivedWithDurability > 0) {
       const confirmed = await depsRef.current.requestDaggerSelfDestruct(
         slotItem.name,
@@ -2307,7 +2468,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         disposeOwnedEquipmentCard({ ...slotItem, durability: 0 }, { isDestruction: true });
         clearEquipmentSlotWithPromote(slotId);
         for (let i = 0; i < weaponSurvivedWithDurability; i++) {
-          await depsRef.current.beginDiscoverFlowAsync(`${slotItem.name}-自毁`);
+          await depsRef.current.beginDiscoverFlowAsync(`${slotItem.name}-自毁`, { sourceLabel: slotItem.name });
         }
       }
     }
@@ -2428,6 +2589,31 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     setGambitSlotUsed({});
     setWeaponExtraAttackUsed({});
 
+    const goblinSlots: EquipmentSlotId[] = ['equipmentSlot1', 'equipmentSlot2'];
+    for (const gsId of goblinSlots) {
+      const gItem = gsId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+      if (!gItem || gItem.type !== 'monster' || !gItem.goblinStealScale) continue;
+      const gReserve = gsId === 'equipmentSlot1' ? engine.getState().equipmentSlot1Reserve : engine.getState().equipmentSlot2Reserve;
+      if (gReserve.length === 0) continue;
+      if (Math.random() < 0.3) {
+        const curDur = gItem.durability ?? 0;
+        const maxDur = gItem.maxDurability ?? curDur;
+        if (curDur < maxDur) {
+          setEquipmentSlotById(gsId, { ...gItem, durability: curDur + 1 } as EquipmentItem);
+          depsRef.current.addGameLog('equip', `${gItem.name} 贼窝疗养：恢复 1 耐久（${curDur + 1}/${maxDur}）`);
+          setHeroSkillBanner(`${gItem.name} 恢复了 1 耐久！`);
+        }
+      }
+    }
+
+    if (depsRef.current.amuletEffects.hasEndTurnDraw) {
+      const drawn = depsRef.current.drawFromBackpackToHand();
+      if (drawn) {
+        depsRef.current.addGameLog('amulet', `回合汲取：结束回合，抽到了「${drawn.name}」`);
+        setHeroSkillBanner(`回合汲取：抽到了「${drawn.name}」！`);
+      }
+    }
+
     const sortedMonsters = [...engagedMonsters].sort((a, b) => {
       const idxA = activeCards.findIndex(c => c?.id === a.id);
       const idxB = activeCards.findIndex(c => c?.id === b.id);
@@ -2515,7 +2701,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     if (target !== 'hero') {
       const blockSlotId = target as EquipmentSlotId;
       const slotItem = blockSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-      const durabilityLimitReached = (combatState.slotDurabilityUsedThisTurn[blockSlotId] ?? 0) >= blockDurabilityPerSlot;
+      const equipBlockBonus = slotItem?.equipBlockDurabilityBonus ?? 0;
+      const durabilityLimitReached = (combatState.slotDurabilityUsedThisTurn[blockSlotId] ?? 0) >= (blockDurabilityPerSlot + equipBlockBonus);
       if (slotItem && (slotItem.type === 'shield' || slotItem.type === 'monster') && !durabilityLimitReached) {
         blockedWithShield = true;
         const knightShield = slotItem as GameCardData & { knightEffect?: string };
@@ -2550,21 +2737,26 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             const currentArmor = storedMonsterArmor + monsterBonusRemaining;
             depsRef.current.triggerShieldBlockAnimation(blockSlotId);
             const blocked = Math.min(remainingDamage, currentArmor);
-            const newArmor = Math.max(0, currentArmor - remainingDamage);
-            shieldArmorDepleted = newArmor <= 0 && remainingDamage > 0;
+            const golemArmorCap = slotItem.maxDamagePerHit;
+            const effectiveArmorDamage = golemArmorCap != null ? Math.min(blocked, golemArmorCap) : blocked;
+            const newArmor = Math.max(0, currentArmor - effectiveArmorDamage);
+            shieldArmorDepleted = newArmor <= 0 && effectiveArmorDamage > 0;
             remainingDamage = Math.max(0, remainingDamage - currentArmor);
 
             if (shieldArmorDepleted) {
               const { armor: _clearArmor, armorBonusDamaged: _clearBonusDmg, ...resetBase } = slotItem;
               workingShieldItem = resetBase as typeof slotItem;
             } else {
-              const consumeFromBonus = Math.min(blocked, monsterBonusRemaining);
-              const consumeFromBase = blocked - consumeFromBonus;
+              const consumeFromBonus = Math.min(effectiveArmorDamage, monsterBonusRemaining);
+              const consumeFromBase = effectiveArmorDamage - consumeFromBonus;
               const newBaseArmor = Math.max(0, storedMonsterArmor - consumeFromBase);
               const newBonusDamaged = existingBonusDamaged + consumeFromBonus;
               workingShieldItem = { ...slotItem, armor: newBaseArmor, armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined };
             }
 
+            if (golemArmorCap != null && blocked > golemArmorCap) {
+              depsRef.current.addGameLog('combat', `${slotItem.name} 岩石护体：护甲最多掉 ${golemArmorCap}！`);
+            }
             if (shieldArmorDepleted) {
               depsRef.current.addGameLog('combat', `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲击破！耐久 -1）`);
             } else {
@@ -2632,6 +2824,21 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           setHeroSkillBanner(`守望者链接！${otherSlotLabel}装备栏临时护甲 +${grantAmount}！`);
         }
 
+        if (slotItem.type === 'monster' && slotItem.dragonDamageRetaliation && slotItem.dragonDamageRetaliation > 0) {
+          const dragonBlockMonsters = flattenActiveRowSlots(depsRef.current.activeCardsLatestRef.current).filter(
+            (c): c is GameCardData => Boolean(c && c.type === 'monster'),
+          );
+          if (dragonBlockMonsters.length > 0) {
+            const randomTarget = dragonBlockMonsters[Math.floor(Math.random() * dragonBlockMonsters.length)];
+            depsRef.current.tryStartShieldReflectDirectedFx(blockSlotId, randomTarget.id);
+            await new Promise<void>(r => setTimeout(r, depsRef.current.animSpeed(SHIELD_REFLECT_ANIM_MS)));
+            if (stale()) return;
+            dealDamageToMonster(randomTarget, 2, { pulses: 1 });
+            depsRef.current.addGameLog('equip', `${slotItem.name} 龙息反击：对 ${randomTarget.name} 造成 2 点伤害！`);
+            setHeroSkillBanner(`${slotItem.name} 龙息反击！`);
+          }
+        }
+
         let evolveBlockCount: number | undefined;
         let shieldAutoEvolved = false;
         if (slotItem.shieldBlockAutoUpgradeCount) {
@@ -2680,7 +2887,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             return;
           }
 
-          if (!skipShieldDurabilityLoss && isMonsterEquipShield && slotItem.monsterSpecial === 'bone-regen') {
+          if (!skipShieldDurabilityLoss && isMonsterEquipShield && (slotItem.monsterSpecial === 'bone-regen' || slotItem.monsterSpecial === 'skeleton-king')) {
             const boneResult = await requestDiceOutcome({
               title: slotItem.name,
               subtitle: '虚骨再生判定',
@@ -2693,6 +2900,15 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               skipShieldDurabilityLoss = true;
               depsRef.current.addGameLog('equip', `${slotItem.name} 虚骨再生：幸运保住了耐久！`);
               setHeroSkillBanner(`${slotItem.name} 虚骨再生！`);
+            }
+          }
+          if (!skipShieldDurabilityLoss && isMonsterEquipShield && slotItem.swarmBugletShield) {
+            const otherBugletSlotId: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+            const otherBugletItem = otherBugletSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+            if (otherBugletItem && otherBugletItem.type === 'monster' && otherBugletItem.isBuglet) {
+              skipShieldDurabilityLoss = true;
+              depsRef.current.addGameLog('equip', `${slotItem.name} 虫盾共生：另一装备栏有小虫子，耐久不减！`);
+              setHeroSkillBanner(`${slotItem.name} 虫盾共生！`);
             }
           }
           let extraBlockCounterPatch: Record<string, number> = {};
@@ -2716,7 +2932,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               // --- 遗言 effects (fire BEFORE revive, regardless of revive availability) ---
               const hasShieldLastWords = slotItem.onDestroyHeal || slotItem.onDestroyGold || slotItem.onDestroyDraw
                 || slotItem.onDestroyClassDraw || slotItem.onDestroyPermanentDamage || slotItem.onDestroyPermanentShield || slotItem.onDestroyEffect
-                || (isMonsterEquipShield && (slotItem.lastWords || slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread));
+                || (isMonsterEquipShield && (slotItem.lastWords || slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread || slotItem.skeletonLastWordsDiscard));
               if (hasShieldLastWords) {
                 depsRef.current.addGameLog('equip', `${slotItem.name} 遗言触发！`);
               }
@@ -2788,6 +3004,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                     setHeroSkillBanner(`${slotItem.name} 遗言：抽取 ${drawnNames.length} 张牌！`);
                   }
                 }
+                if (slotItem.skeletonLastWordsDiscard) {
+                  const skelBlockDrawn = drawFromBackpackToHand();
+                  if (skelBlockDrawn) {
+                    depsRef.current.addGameLog('equip', `${slotItem.name} 遗言：抽到了「${skelBlockDrawn.name}」`);
+                    setHeroSkillBanner(`${slotItem.name} 遗言：抽取 1 张牌！`);
+                  }
+                }
                 if (slotItem.lastWords?.startsWith('wraith-haunt')) {
                   const hauntAmount = parseInt(slotItem.lastWords.replace('wraith-haunt-', ''), 10) || 2;
                   const otherShieldSlotId: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -2797,15 +3020,21 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                     depsRef.current.addGameLog('equip', `${slotItem.name} 遗言：${otherShieldItem.name} 获得临时攻击力 +${hauntAmount}！`);
                   }
                 }
-                if (slotItem.wraithDeathHeal) {
+                if (slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread) {
                   const otherShieldSlotId: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
                   const otherShieldItem = otherShieldSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
                   if (otherShieldItem && otherShieldItem.durability != null && otherShieldItem.maxDurability != null) {
                     const newDur = Math.min(otherShieldItem.maxDurability, otherShieldItem.durability + 1);
+                    let updatedOther = { ...otherShieldItem } as EquipmentItem;
                     if (newDur > otherShieldItem.durability) {
-                      setEquipmentSlotById(otherShieldSlotId, { ...otherShieldItem, durability: newDur } as EquipmentItem);
+                      updatedOther = { ...updatedOther, durability: newDur };
                       depsRef.current.addGameLog('equip', `${slotItem.name} 怨灵祝福：${otherShieldItem.name} 耐久 +1！`);
                     }
+                    if (slotItem.wraithDeathHealSpread && !otherShieldItem.wraithDeathHeal) {
+                      updatedOther = { ...updatedOther, wraithDeathHeal: 1 };
+                      depsRef.current.addGameLog('equip', `${slotItem.name} 怨灵传承：${otherShieldItem.name} 获得遗言「怨灵祝福」！`);
+                    }
+                    setEquipmentSlotById(otherShieldSlotId, updatedOther);
                   }
                 }
               }
@@ -2836,6 +3065,14 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                 } else {
                   clearEquipmentSlotWithPromote(blockSlotId);
                 }
+                const skelBlockReReviveSlotId: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+                const skelBlockReReviveItem = skelBlockReReviveSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+                if (skelBlockReReviveItem && skelBlockReReviveItem.type === 'monster' && skelBlockReReviveItem.skeletonReRevive
+                  && (!skelBlockReReviveItem.hasRevive || skelBlockReReviveItem.reviveUsed)) {
+                  setEquipmentSlotById(skelBlockReReviveSlotId, { ...skelBlockReReviveItem, hasRevive: true, reviveUsed: false } as EquipmentItem);
+                  depsRef.current.addGameLog('equip', `${skelBlockReReviveItem.name} 亡骨轮回：获得了「复生」！`);
+                  setHeroSkillBanner(`${skelBlockReReviveItem.name} 亡骨轮回！`);
+                }
               }
             } else {
               const nextDurability = shieldDurability <= 1 ? shieldDurability : shieldDurability - 1;
@@ -2859,23 +3096,78 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                 }
                 if (slotItem.dragonBleedDestroy) {
                   const remainingBlockDur = updatedBlockDurability;
-                  const blockBoardMonsters = flattenActiveRowSlots(depsRef.current.activeCardsLatestRef.current).filter(
-                    (c): c is GameCardData => Boolean(c && c.type === 'monster'),
-                  );
-                  for (const m of blockBoardMonsters) {
-                    const layers = m.currentLayer ?? m.fury ?? 1;
-                    if (layers > remainingBlockDur) {
-                      dealDamageToMonster(m, m.hp ?? m.value, { pulses: 1 });
-                      depsRef.current.addGameLog('equip', `${slotItem.name} 流血破甲：对 ${m.name} 造成 1 血层伤害！`);
+                  const otherBlockSlotId: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+                  const otherBlockItem = otherBlockSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+                  if (otherBlockItem && (otherBlockItem.durability ?? 0) > remainingBlockDur) {
+                    const otherBlockCard = otherBlockItem as GameCardData;
+                    const isOtherBlockMonster = otherBlockCard.type === 'monster';
+                    const nativeBlockRevive = isOtherBlockMonster && otherBlockCard.hasRevive && !otherBlockCard.reviveUsed;
+                    const equipBlockRevive = otherBlockCard.hasEquipmentRevive && !otherBlockCard.equipmentReviveUsed;
+                    if (nativeBlockRevive || equipBlockRevive) {
+                      const revived = nativeBlockRevive
+                        ? { ...otherBlockCard, durability: 1, reviveUsed: true }
+                        : { ...otherBlockCard, durability: 1, equipmentReviveUsed: true };
+                      setEquipmentSlotById(otherBlockSlotId, revived as EquipmentItem);
+                      depsRef.current.addGameLog('equip', `${slotItem.name} 流血破甲：「${otherBlockItem.name}」（耐久 ${otherBlockItem.durability} > ${remainingBlockDur}）复生了！`);
+                    } else {
+                      clearEquipmentSlotWithPromote(otherBlockSlotId);
+                      disposeOwnedEquipmentCard(otherBlockCard, { isDestruction: true });
+                      depsRef.current.addGameLog('equip', `${slotItem.name} 流血破甲：破坏了「${otherBlockItem.name}」（耐久 ${otherBlockItem.durability} > ${remainingBlockDur}）！`);
+                      if (slotItem.type === 'monster' && slotItem.skeletonReRevive
+                        && (!slotItem.hasRevive || slotItem.reviveUsed)) {
+                        updatedBlockItem = { ...updatedBlockItem, hasRevive: true, reviveUsed: false };
+                        depsRef.current.addGameLog('equip', `${slotItem.name} 亡骨轮回：获得了「复生」！`);
+                        setHeroSkillBanner(`${slotItem.name} 亡骨轮回！`);
+                      }
                     }
+                    setHeroSkillBanner(`${slotItem.name} 流血破甲！高耐久装备被破坏！`);
                   }
                 }
                 if (slotItem.monsterSpecial === 'wraith-rebirth' && updatedBlockDurability === 1 && !slotItem.wraithRebirthUsed) {
-                  const maxDur = slotItem.maxDurability ?? shieldDurability;
-                  updatedBlockItem = { ...updatedBlockItem, durability: maxDur, wraithRebirthUsed: true };
-                  updatedBlockDurability = maxDur;
-                  depsRef.current.addGameLog('equip', `${slotItem.name} 幽魂重生：耐久回满！（${maxDur}）`);
-                  setHeroSkillBanner(`${slotItem.name} 幽魂重生！`);
+                  if (Math.random() < 0.5) {
+                    const maxDur = slotItem.maxDurability ?? shieldDurability;
+                    updatedBlockItem = { ...updatedBlockItem, durability: maxDur, wraithRebirthUsed: true };
+                    updatedBlockDurability = maxDur;
+                    depsRef.current.addGameLog('equip', `${slotItem.name} 幽魂重生：耐久回满！（${maxDur}）`);
+                    setHeroSkillBanner(`${slotItem.name} 幽魂重生！`);
+                  } else {
+                    updatedBlockItem = { ...updatedBlockItem, wraithRebirthUsed: true };
+                    depsRef.current.addGameLog('equip', `${slotItem.name} 幽魂重生失败！（50%）`);
+                  }
+                }
+                if (slotItem.monsterSpecial === 'swarm-elite') {
+                  const otherSwarmBlockSlotId: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+                  const otherSwarmBlockItem = otherSwarmBlockSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+                  if (otherSwarmBlockItem) {
+                    disposeOwnedEquipmentCard(otherSwarmBlockItem as GameCardData, { isDestruction: true });
+                  }
+                  const bugletEquip = createBugletCard();
+                  const bugletAsEquip: EquipmentItem = {
+                    ...bugletEquip,
+                    durability: 1,
+                    maxDurability: 1,
+                  };
+                  setEquipmentSlotById(otherSwarmBlockSlotId, bugletAsEquip);
+                  depsRef.current.addGameLog('equip', `${slotItem.name} 虫母孵化：${otherSwarmBlockItem ? otherSwarmBlockItem.name + ' 被替换为' : ''}小虫子！`);
+                  setHeroSkillBanner(`${slotItem.name} 虫母孵化！`);
+                }
+                if (slotItem.golemLayerLossReflect && slotItem.golemLayerLossReflect > 0) {
+                  const golemMaxDur = slotItem.maxDurability ?? shieldDurability;
+                  const golemLostDur = golemMaxDur - updatedBlockDurability;
+                  if (golemLostDur > 0) {
+                    const golemCoeff = slotItem.golemLayerLossReflect;
+                    const golemReflectDmg = golemCoeff * golemLostDur;
+                    const golemTargets = flattenActiveRowSlots(depsRef.current.activeCardsLatestRef.current).filter(
+                      (c): c is GameCardData => Boolean(c && c.type === 'monster'),
+                    );
+                    if (golemTargets.length > 0) {
+                      const golemTarget = golemTargets[Math.floor(Math.random() * golemTargets.length)];
+                      depsRef.current.tryStartShieldReflectDirectedFx(blockSlotId, golemTarget.id);
+                      dealDamageToMonster(golemTarget, golemReflectDmg, { pulses: 1 });
+                      depsRef.current.addGameLog('equip', `${slotItem.name} 岩层反震：${golemCoeff}×${golemLostDur} = ${golemReflectDmg} 点伤害，命中 ${golemTarget.name}！`);
+                      setHeroSkillBanner(`${slotItem.name} 岩层反震！${golemReflectDmg} 伤害！`);
+                    }
+                  }
                 }
               }
               setEquipmentSlotById(blockSlotId, updatedBlockItem as EquipmentItem);
@@ -2920,10 +3212,31 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       if (corrodeItem && (corrodeItem.durability ?? 0) > 0) {
         const corrodedDur = (corrodeItem.durability ?? 1) - 1;
         if (corrodedDur <= 0) {
-          depsRef.current.addGameLog('combat', `${monster.name} 腐蚀甲壳：${corrodeItem.name} 被腐蚀摧毁！`);
-          setHeroSkillBanner(`${monster.name} 腐蚀摧毁了 ${corrodeItem.name}！`);
-          disposeOwnedEquipmentCard({ ...corrodeItem }, { isDestruction: true });
-          clearEquipmentSlotWithPromote(corrodeSlotId);
+          const isMonsterEquipCorr = corrodeItem.type === 'monster';
+          const nativeReviveCorr = isMonsterEquipCorr && corrodeItem.hasRevive && !corrodeItem.reviveUsed;
+          const equipReviveCorr = corrodeItem.hasEquipmentRevive && !corrodeItem.equipmentReviveUsed;
+          if (nativeReviveCorr || equipReviveCorr) {
+            const revivedCorr = nativeReviveCorr
+              ? { ...corrodeItem, durability: 1, reviveUsed: true }
+              : { ...corrodeItem, durability: 1, equipmentReviveUsed: true };
+            setEquipmentSlotById(corrodeSlotId, revivedCorr as EquipmentItem);
+            depsRef.current.addGameLog('combat', `${monster.name} 腐蚀甲壳：${corrodeItem.name} 被腐蚀，但复生了！`);
+            depsRef.current.addGameLog('equip', `${corrodeItem.name} 复生！以 1 耐久复活！`);
+            setHeroSkillBanner(`${corrodeItem.name} 复生了！`);
+          } else {
+            depsRef.current.addGameLog('combat', `${monster.name} 腐蚀甲壳：${corrodeItem.name} 被腐蚀摧毁！`);
+            setHeroSkillBanner(`${monster.name} 腐蚀摧毁了 ${corrodeItem.name}！`);
+            disposeOwnedEquipmentCard({ ...corrodeItem }, { isDestruction: true });
+            clearEquipmentSlotWithPromote(corrodeSlotId);
+            const skelCorrodeOtherSlotId: EquipmentSlotId = corrodeSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+            const skelCorrodeOtherItem = skelCorrodeOtherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+            if (skelCorrodeOtherItem && skelCorrodeOtherItem.type === 'monster' && skelCorrodeOtherItem.skeletonReRevive
+              && (!skelCorrodeOtherItem.hasRevive || skelCorrodeOtherItem.reviveUsed)) {
+              setEquipmentSlotById(skelCorrodeOtherSlotId, { ...skelCorrodeOtherItem, hasRevive: true, reviveUsed: false } as EquipmentItem);
+              depsRef.current.addGameLog('equip', `${skelCorrodeOtherItem.name} 亡骨轮回：获得了「复生」！`);
+              setHeroSkillBanner(`${skelCorrodeOtherItem.name} 亡骨轮回！`);
+            }
+          }
         } else {
           setEquipmentSlotById(corrodeSlotId, { ...corrodeItem, durability: corrodedDur } as EquipmentItem);
           depsRef.current.addGameLog('combat', `${monster.name} 腐蚀甲壳：${corrodeItem.name} 耐久 -1（${corrodeItem.durability} → ${corrodedDur}）`);
@@ -3300,9 +3613,14 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           addGameLog('equip', `${slotItem.name} 遗言：获得专属卡「${classDrawn.map(c => c.name).join('、')}」`);
         }
       }
-      const equipReviveAvailable = slotItem.hasEquipmentRevive && !slotItem.equipmentReviveUsed;
-      if (equipReviveAvailable) {
-        setEquipmentSlotById(slotId, { ...slotItem, durability: 1, equipmentReviveUsed: true } as EquipmentItem);
+      const isMonsterEquipSB = slotItem.type === 'monster';
+      const nativeReviveSB = isMonsterEquipSB && slotItem.hasRevive && !slotItem.reviveUsed;
+      const equipReviveSB = slotItem.hasEquipmentRevive && !slotItem.equipmentReviveUsed;
+      if (nativeReviveSB || equipReviveSB) {
+        const revivedSB = nativeReviveSB
+          ? { ...slotItem, durability: 1, reviveUsed: true }
+          : { ...slotItem, durability: 1, equipmentReviveUsed: true };
+        setEquipmentSlotById(slotId, revivedSB as EquipmentItem);
         addGameLog('equip', `${slotItem.name} 复生！以 1 耐久复活！`);
         setHeroSkillBanner(`${slotItem.name} 复生了！`);
       } else {
@@ -3356,7 +3674,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     const canUseFlashExtra = hwAe.hasFlash && slotAlreadyAttacked && !flashSlotUsed[slotId];
     const canUseGambitExtra = gambitExtraActive && slotAlreadyAttacked && (gambitSlotUsed[slotId] ?? 0) < gambitExtraPerSlot;
     const hwSlotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-    const canUseWeaponExtraHw = !!(hwSlotItem?.weaponExtraAttack) && slotAlreadyAttacked && !weaponExtraAttackUsed[slotId];
+    const canUseWeaponExtraHw = !!(hwSlotItem?.weaponExtraAttack) && slotAlreadyAttacked && (weaponExtraAttackUsed[slotId] ?? 0) < (hwSlotItem?.weaponExtraAttack ?? 0);
     const needsExtraCharge = slotAlreadyAttacked || !hasBaseAttack;
     if (needsExtraCharge && !canUseBerserkerExtra && !canUseFlashExtra && !canUseGambitExtra && !canUseWeaponExtraHw && extraAttackCharges <= 0) {
       return;
@@ -3420,5 +3738,6 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     handleWeaponToMonster,
 
     recordClassDamageDiscoverHit,
+    updateDamageDiscoverCounter,
   };
 }

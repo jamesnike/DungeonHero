@@ -26,7 +26,7 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
         onMinimize();
       }
     }}>
-      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-pink-500" />
@@ -65,16 +65,16 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
                     <span className="text-sm text-muted-foreground">{effectText}</span>
                   )}
                   {choice.diceTable && (
-                    <div className="grid gap-1 text-xs text-muted-foreground">
+                    <div className="grid gap-1 text-xs text-muted-foreground min-w-0">
                       {choice.diceTable.map(entry => (
                         <div
                           key={entry.id}
-                          className="flex items-center justify-between rounded border border-border px-2 py-1"
+                          className="flex items-start justify-between gap-2 rounded border border-border px-2 py-1 min-w-0"
                         >
-                          <span className="font-mono text-sm text-foreground">
+                          <span className="font-mono text-sm text-foreground shrink-0">
                             {formatRange(entry.range)}
                           </span>
-                          <span className="text-right text-sm text-foreground">{entry.label}</span>
+                          <span className="text-right text-sm text-foreground break-words min-w-0">{entry.label}</span>
                         </div>
                       ))}
                     </div>

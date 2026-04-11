@@ -169,6 +169,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         case 'recycle-backpack-expand': state.hasRecycleBackpackExpand = true; break;
         case 'dungeon-gold': state.hasDungeonGold = true; break;
         case 'stun-rate-boost': state.stunRateBoost += 20; break;
+        case 'end-turn-draw': state.hasEndTurnDraw = true; break;
       }
       const bonus = slot.amuletAuraBonus;
       if (bonus) {

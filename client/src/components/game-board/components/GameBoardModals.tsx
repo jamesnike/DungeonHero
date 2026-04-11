@@ -94,6 +94,7 @@ export type GameBoardModalsProps = {
   // --- Discover class ---
   discoverModalOpen: boolean;
   discoverOptions: GameCardData[];
+  discoverSourceLabel: string | null;
   onDiscoverSelect: (cardId: string) => void;
   onDiscoverCancel: () => void;
 
@@ -296,6 +297,7 @@ function GameBoardModalsInner({
 
   discoverModalOpen,
   discoverOptions,
+  discoverSourceLabel,
   onDiscoverSelect,
   onDiscoverCancel,
 
@@ -553,6 +555,11 @@ function GameBoardModalsInner({
         cards={discoverOptions}
         onSelect={onDiscoverSelect}
         onCancel={onDiscoverCancel}
+        description={
+          discoverSourceLabel
+            ? `来自「${discoverSourceLabel}」的效果 — 从三张候选卡中挑选一张，其余卡牌会放回 Class Deck。`
+            : undefined
+        }
       />
 
       <DiscoverClassModal

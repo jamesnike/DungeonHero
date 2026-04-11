@@ -28,13 +28,13 @@ export default function EventDiceModal({
 }: EventDiceModalProps) {
   return (
     <Dialog open={open} onOpenChange={value => !value && onClose?.()}>
-      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
           <DialogDescription>{subtitle ?? 'Roll the d20 to determine your fate.'}</DialogDescription>
         </DialogHeader>
 
-        <div className="mt-4 grid gap-4">
+        <div className="mt-4 grid gap-4 min-w-0">
           <div className="rounded-lg border border-border/60 bg-muted/30 p-3 min-h-[260px]">
             <DiceRoller
               interactive={false}
@@ -49,25 +49,25 @@ export default function EventDiceModal({
               {rolledValue ?? '…'}
             </Badge>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             {entries.map(entry => {
               const highlighted = entry.id === resolvedEntryId;
               return (
                 <div
                   key={entry.id}
-                  className={`rounded border px-3 py-2 text-sm transition-all ${
+                  className={`rounded border px-3 py-2 text-sm transition-all min-w-0 ${
                     highlighted
                       ? 'border-primary bg-primary/10 text-foreground'
                       : 'border-border text-muted-foreground'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-sm text-foreground">
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <span className="font-mono text-sm text-foreground shrink-0">
                       {formatRange(entry.range)}
                     </span>
-                    <span className="font-semibold text-foreground">{entry.label}</span>
+                    <span className="font-semibold text-foreground text-right break-words min-w-0">{entry.label}</span>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xs text-muted-foreground mt-1 break-words">
                     {describeEffect(entry.effect)}
                   </div>
                 </div>

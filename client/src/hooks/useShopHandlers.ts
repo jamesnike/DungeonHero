@@ -121,6 +121,8 @@ export type BeginDiscoverFlowOptions = {
   filter?: (card: GameCardData) => boolean;
   /** 直接提供候选池，跳过 classDeck（用于起始背包等外部卡源） */
   overridePool?: GameCardData[];
+  /** 触发发现的来源卡牌/效果名称，显示在弹窗上 */
+  sourceLabel?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -194,6 +196,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
   const setEventModalMinimized = useEngineSetter('eventModalMinimized');
   const setDiscoverModalOpen = useEngineSetter('discoverModalOpen');
   const setDiscoverOptions = useEngineSetter('discoverOptions');
+  const setDiscoverSourceLabel = useEngineSetter('discoverSourceLabel');
   const setCardActionContext = useEngineSetter('cardActionContext');
   const setGraveyardDiscoverState = useEngineSetter('graveyardDiscoverState');
   const setGhostBladeExileCards = useEngineSetter('ghostBladeExileCards');
@@ -303,6 +306,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         setClassDeck(prev => prev.filter(card => !optionIds.has(card.id)));
       }
       setDiscoverOptions(options);
+      setDiscoverSourceLabel(opts?.sourceLabel ?? null);
       setDiscoverModalOpen(true);
 
       depsRef.current.addGameLog(
@@ -316,7 +320,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
       return true;
     },
-    [classDeck, setClassDeck, setDiscoverOptions, setDiscoverModalOpen],
+    [classDeck, setClassDeck, setDiscoverOptions, setDiscoverSourceLabel, setDiscoverModalOpen],
   );
 
   const handleDiscoverFallback = useCallback((): boolean => {
@@ -337,6 +341,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
       setDiscoverModalOpen(false);
       setDiscoverOptions([]);
+      setDiscoverSourceLabel(null);
 
       if (remainingCards.length) {
         depsRef.current.returnCardsToClassDeck(remainingCards);
@@ -374,6 +379,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       setBackpackItems,
       setDiscoverModalOpen,
       setDiscoverOptions,
+      setDiscoverSourceLabel,
     ],
   );
 
@@ -386,6 +392,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
       setDiscoverModalOpen(false);
       setDiscoverOptions([]);
+      setDiscoverSourceLabel(null);
 
       depsRef.current.addGameLog('skill', '发现专属卡：放弃选择');
 
@@ -402,6 +409,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       discoverOptions,
       setDiscoverModalOpen,
       setDiscoverOptions,
+      setDiscoverSourceLabel,
     ],
   );
 
@@ -614,6 +622,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         }
         case STARTER_CARD_IDS.damageClassDiscoverAmulet: {
           upgraded.description = '每造成 3 次伤害（武器、护符、法术等任意来源），发现一张专属牌。';
+          const streak = engine.getState().classDamageDiscoverStreak ?? 0;
+          upgraded._counterDisplay = `${streak}/3`;
           break;
         }
         case STARTER_CARD_IDS.stunUpgradeCapAmulet: {
@@ -1400,7 +1410,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           return false;
         }
         case 'discoverClass': {
-          const started = beginDiscoverFlow('monster-reward');
+          const started = beginDiscoverFlow('monster-reward', { sourceLabel: '战利品' });
           if (started) {
             depsRef.current.addGameLog('combat', '战利品：发现一张专属牌');
             setHeroSkillBanner('发现了一张专属牌！');

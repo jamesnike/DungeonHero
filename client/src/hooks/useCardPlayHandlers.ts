@@ -37,6 +37,7 @@ import {
   INITIAL_HP,
   DUNGEON_COLUMN_COUNT,
   HAND_LIMIT,
+  BASE_BACKPACK_CAPACITY,
   createEmptyActiveRow,
 } from '@/game-core/constants';
 import {
@@ -132,7 +133,7 @@ export interface CardPlayHandlersDeps {
   ) => Promise<boolean>;
   beginDiscoverFlow: (
     source: string,
-    options?: { filter?: (card: GameCardData) => boolean },
+    options?: { filter?: (card: GameCardData) => boolean; sourceLabel?: string },
   ) => boolean;
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
   getAttackBonus: () => number;
@@ -1740,6 +1741,19 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         return;
       }
 
+      if (effect === 'perm-equip-empower') {
+        if (!hasEternalRelic(eternalRelics, 'equip-empower')) {
+          const relic = getEternalRelic('equip-empower');
+          setEternalRelics(prev => [...prev, relic]);
+          depsRef.current.addGameLog('potion', '获得永恒护符·铸锋药剂：装备上装备时，该装备栏获得 3 临时攻击和 3 临时护甲！');
+          await finalizePotionCard(card, { banner: '获得永恒护符·铸锋药剂！装备时获得 +3 临时攻击/+3 临时护甲。' });
+        } else {
+          depsRef.current.addGameLog('potion', '永恒护符·铸锋药剂：效果已存在，无法叠加。');
+          await finalizePotionCard(card, { banner: '效果已存在，无法叠加。' });
+        }
+        return;
+      }
+
       if (effect === 'grant-perm-2') {
         const eligible = handCards.filter(c => c.id !== card.id && !cardHasPermFlag(c));
         if (eligible.length === 0) {
@@ -1830,6 +1844,32 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         return;
       }
 
+      if (effect === 'grant-amulet-end-turn-draw') {
+        const alreadyHas = engine.getState().amuletSlots.some(a => a?.amuletEffect === 'end-turn-draw');
+        if (alreadyHas) {
+          depsRef.current.addGameLog('potion', '回合汲取药：护符效果已存在，无法叠加。');
+          await finalizePotionCard(card, { banner: '护符效果已存在，无法叠加。' });
+          return;
+        }
+        const newAmulet: GameCardData = {
+          id: `amulet-end-turn-draw-${Date.now()}`,
+          type: 'amulet',
+          name: '回合汲取',
+          value: 0,
+          image: card.image,
+          description: '每次结束英雄回合时，从背包抽 1 张牌。',
+          amuletEffect: 'end-turn-draw',
+        };
+        const maxSlots = engine.getState().maxAmuletSlots;
+        setAmuletSlots(prev => {
+          const next = [...prev, { ...newAmulet, fromSlot: 'amulet' } as import('@/components/game-board/types').AmuletItem];
+          return next.slice(-maxSlots);
+        });
+        depsRef.current.addGameLog('potion', '回合汲取药：获得护符「回合汲取」！结束英雄回合时抽 1 张牌。');
+        await finalizePotionCard(card, { banner: '获得护符「回合汲取」！结束英雄回合时抽 1 张牌。' });
+        return;
+      }
+
       if (effect === 'discover-class-magic') {
         const isClassMagic = (c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic';
         const result = await new Promise<{ banner: string } | null>(resolve => {
@@ -1837,7 +1877,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             depsRef.current.discoverPotionCompletionRef.current = null;
             resolve(payload);
           };
-          const started = depsRef.current.beginDiscoverFlow('potion-class-magic', { filter: isClassMagic });
+          const started = depsRef.current.beginDiscoverFlow('potion-class-magic', { filter: isClassMagic, sourceLabel: card.name });
           if (!started) {
             depsRef.current.discoverPotionCompletionRef.current = null;
             resolve(null);
@@ -2029,95 +2069,162 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         return true;
       }
       case 'monster-fusion': {
-        const activeMonsters = flattenActiveRowSlots(activeCards).filter(c => c?.type === 'monster');
-        const typeGroups: Record<string, typeof activeMonsters> = {};
-        activeMonsters.forEach(m => {
-          const key = m.monsterType ?? m.name;
+        const st = engine.getState();
+
+        type EquippedMonsterInfo = { card: GameCardData; slotId: EquipmentSlotId; isSurface: boolean };
+        const allEquippedMonsters: EquippedMonsterInfo[] = [];
+        for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
+          const surface = slotId === 'equipmentSlot1' ? st.equipmentSlot1 : st.equipmentSlot2;
+          const reserve = depsRef.current.getEquipmentReserve(slotId);
+          if (surface && surface.type === 'monster') {
+            allEquippedMonsters.push({ card: surface, slotId, isSurface: true });
+          }
+          for (const r of reserve) {
+            if (r.type === 'monster') {
+              allEquippedMonsters.push({ card: r, slotId, isSurface: false });
+            }
+          }
+        }
+
+        const typeGroups: Record<string, EquippedMonsterInfo[]> = {};
+        allEquippedMonsters.forEach(m => {
+          const key = m.card.monsterType ?? m.card.name;
           if (!typeGroups[key]) typeGroups[key] = [];
           typeGroups[key].push(m);
         });
         const fusibleGroups = Object.entries(typeGroups).filter(([, g]) => g.length >= 2);
         if (fusibleGroups.length === 0) {
-          setHeroSkillBanner('激活行没有可融合的同种怪物（需要至少 2 只同种怪物）。');
+          setHeroSkillBanner('没有可融合的同种怪物装备（需要至少 2 个同种族的怪物装备）。');
           return true;
         }
+
         const [groupName, group] = fusibleGroups.reduce(
-          (best, cur) => (cur[1].length >= best[1].length ? cur : best),
+          (best, cur) => {
+            if (cur[0] === 'Skeleton' && cur[1].length >= 3) return cur;
+            if (best[0] === 'Skeleton' && best[1].length >= 3) return best;
+            return cur[1].length >= best[1].length ? cur : best;
+          },
           fusibleGroups[0],
         );
+
         depsRef.current.consumeClassCardFromHand(card.id);
         const fusionCount = group.length;
-        const totalAtk = group.reduce((s, m) => s + (m.attack ?? m.value), 0);
-        const totalHp = group.reduce((s, m) => s + (m.hp ?? m.value), 0);
-        const totalLayers = group.reduce((s, m) => s + (m.fury ?? m.hpLayers ?? 1), 0);
+        const fusionIds = new Set(group.map(m => m.card.id));
 
-        group.forEach(m => {
-          const idx = activeCards.findIndex(c => c?.id === m.id);
-          if (idx >= 0) {
-            setActiveCards(prev => {
-              const next = [...prev];
-              next[idx] = null;
-              return next;
-            });
+        for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
+          const surface = slotId === 'equipmentSlot1' ? st.equipmentSlot1 : st.equipmentSlot2;
+          const reserve = depsRef.current.getEquipmentReserve(slotId);
+          const surfaceRemoved = surface && fusionIds.has(surface.id);
+          const removedReserve = reserve.filter(r => fusionIds.has(r.id));
+          const remainingReserve = reserve.filter(r => !fusionIds.has(r.id));
+
+          if (surfaceRemoved) depsRef.current.addToGraveyard(surface);
+          removedReserve.forEach(r => depsRef.current.addToGraveyard(r));
+
+          if (surfaceRemoved) {
+            if (remainingReserve.length > 0) {
+              depsRef.current.setEquipmentSlotById(slotId, remainingReserve[0]);
+              depsRef.current.setEquipmentReserve(slotId, remainingReserve.slice(1));
+            } else {
+              depsRef.current.setEquipmentSlotById(slotId, null);
+              depsRef.current.setEquipmentReserve(slotId, []);
+            }
+          } else if (removedReserve.length > 0) {
+            depsRef.current.setEquipmentReserve(slotId, remainingReserve);
           }
-        });
+        }
 
-        if (fusionCount >= 3) {
-          const skeletonKing: GameCardData = {
-            id: `fusion-king-${Date.now()}`,
-            type: 'monster',
-            name: 'Skeleton King',
-            monsterType: 'Skeleton',
-            value: totalAtk + 5,
-            attack: totalAtk + 5,
-            hp: totalHp + 10,
-            maxHp: totalHp + 10,
-            fury: Math.min(4, totalLayers + 1),
-            hpLayers: Math.min(4, totalLayers + 1),
-            currentLayer: Math.min(4, totalLayers + 1),
-            image: group[0].image,
-            monsterSpecial: 'skeleton-king',
-            monsterSpecialDesc: '骷髅王：隐藏Boss。击杀奖励丰厚。',
-            description: '隐藏Boss「骷髅王」，由三只同种怪物融合而成。',
+        const raceNameMap: Record<string, string> = {
+          Dragon: '龙族', Skeleton: '骷髅', Goblin: '哥布林',
+          Ogre: '食人魔', Wraith: '幽灵', Swarm: '虫群', Golem: '魔像',
+        };
+        const elitePropsMap: Record<string, Partial<GameCardData>> = {
+          Dragon: {
+            monsterSpecial: 'ember-fury',
+            monsterSpecialDesc: '融合精英：流血（每失去1耐久攻击+3）+ 龙息庇护。',
+            bleedEffect: 'attack+3', eliteHealOtherMonster: true,
+          },
+          Skeleton: {
+            monsterSpecial: 'bone-regen',
+            monsterSpecialDesc: '融合精英：虚骨再生（50%不消耗耐久）+ 复生。',
             hasRevive: true,
-          };
-          const emptyIdx = activeCards.findIndex(c => !c);
-          if (emptyIdx >= 0) {
-            setActiveCards(prev => {
-              const next = [...prev];
-              next[emptyIdx] = skeletonKing;
-              return next;
-            });
-          }
-          finalizeMagicCard(card, { banner: `${fusionCount} 只 ${groupName} 融合为隐藏Boss「骷髅王」！` });
-        } else {
-          const eliteName = `Elite ${groupName}`;
-          const eliteMonster: GameCardData = {
-            id: `fusion-elite-${Date.now()}`,
+          },
+          Goblin: {
+            monsterSpecial: 'goblin-elite',
+            monsterSpecialDesc: '融合精英：攻击偷取3金币 + 窃宝。',
+            goblinStealEquip: true, onAttackEffect: 'steal-gold-3',
+          },
+          Ogre: {
+            monsterSpecial: 'ogre-crit',
+            monsterSpecialDesc: '融合精英：攻击伤害翻倍 + 50%概率额外攻击一次。',
+            eliteDoubleAttack: true, weaponExtraAttack: 1,
+          },
+          Wraith: {
+            monsterSpecial: 'wraith-rebirth',
+            monsterSpecialDesc: '融合精英：幽魂重生（耐久降至1时回满）+ 幽魂作祟遗言。',
+            lastWords: 'wraith-haunt-4',
+          },
+          Swarm: {
+            monsterSpecial: 'swarm-elite',
+            monsterSpecialDesc: '融合精英：虫群繁殖 + 虫母（受伤时替换地城牌为小虫子）。',
+            swarmSpawn: true,
+          },
+          Golem: {
+            monsterSpecial: 'golem-elite',
+            monsterSpecialDesc: '融合精英：岩石护体（每次最多受5伤）+ 反魔。',
+            maxDamagePerHit: 5, antiMagicReflect: 2,
+          },
+        };
+
+        let fusedEquip: GameCardData;
+        const totalAtk = group.reduce((s, m) => s + (m.card.attack ?? m.card.value), 0);
+        const totalHp = group.reduce((s, m) => s + (m.card.hp ?? m.card.value), 0);
+
+        if (groupName === 'Skeleton' && fusionCount >= 3) {
+          fusedEquip = {
+            id: `fusion-skeleton-king-${Date.now()}`,
             type: 'monster',
-            name: eliteName,
-            monsterType: groupName,
-            value: totalAtk + 2,
-            attack: totalAtk + 2,
-            hp: totalHp + 5,
-            maxHp: totalHp + 5,
-            fury: Math.min(4, totalLayers),
-            hpLayers: Math.min(4, totalLayers),
-            currentLayer: Math.min(4, totalLayers),
-            image: group[0].image,
-            monsterSpecial: 'fusion-elite',
-            monsterSpecialDesc: '融合精英：由两只同种怪物融合而成。',
-            description: '精英怪物，由两只同种怪物融合而成。',
+            name: '骷髅王',
+            monsterType: 'Skeleton',
+            value: 10,
+            attack: 10,
+            hp: 10,
+            maxHp: 10,
+            durability: 4,
+            maxDurability: 4,
+            image: group[0].card.image,
+            monsterSpecial: 'skeleton-king',
+            monsterSpecialDesc: '骷髅王：拥有所有精英Skeleton效果。攻击次数+4，格挡耐久次数+4。',
+            description: '骷髅王：虚骨再生 + 复生 + 攻击次数+4 + 格挡耐久次数+4。',
+            hasRevive: true,
+            weaponExtraAttack: 4,
+            equipBlockDurabilityBonus: 4,
           };
-          const emptyIdx = activeCards.findIndex(c => !c);
-          if (emptyIdx >= 0) {
-            setActiveCards(prev => {
-              const next = [...prev];
-              next[emptyIdx] = eliteMonster;
-              return next;
-            });
-          }
-          finalizeMagicCard(card, { banner: `2 只 ${groupName} 融合为精英怪物「${eliteName}」！` });
+          setHandCards(prev => [...prev, fusedEquip]);
+          finalizeMagicCard(card, { banner: `${fusionCount} 个 Skeleton 装备融合为「骷髅王」！已加入手牌。` });
+        } else {
+          const eliteProps = elitePropsMap[groupName] ?? {
+            monsterSpecial: 'fusion-elite',
+            monsterSpecialDesc: '融合精英：由两个同种怪物装备融合而成。',
+          };
+          const cnName = raceNameMap[groupName] ?? groupName;
+          fusedEquip = {
+            id: `fusion-elite-equip-${Date.now()}`,
+            type: 'monster',
+            name: `精英${cnName}`,
+            monsterType: groupName,
+            value: totalAtk,
+            attack: totalAtk,
+            hp: totalHp,
+            maxHp: totalHp,
+            durability: 4,
+            maxDurability: 4,
+            image: group[0].card.image,
+            description: `融合精英怪物装备，由两个${cnName}装备融合而成。`,
+            ...eliteProps,
+          };
+          setHandCards(prev => [...prev, fusedEquip]);
+          finalizeMagicCard(card, { banner: `2 个 ${groupName} 装备融合为「精英${cnName}」！已加入手牌。` });
         }
         return true;
       }
@@ -2798,7 +2905,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     switch (diceResult.id) {
       case 'fw-discover': {
         const isClassMagic = (c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic';
-        const started = depsRef.current.beginDiscoverFlow('fortune-wheel', { filter: isClassMagic });
+        const started = depsRef.current.beginDiscoverFlow('fortune-wheel', { filter: isClassMagic, sourceLabel: card.name });
         banner = started ? '际遇轮盘：发现一张专属魔法卡（三选一）。' : '际遇轮盘：专属牌堆已耗尽，无法发现。';
         break;
       }
@@ -3072,7 +3179,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         break;
       }
       case 'chaos-2': {
-        const started = depsRef.current.beginDiscoverFlow('chaos-dice');
+        const started = depsRef.current.beginDiscoverFlow('chaos-dice', { sourceLabel: card.name });
         banner = started ? '混沌骰运：发现 1 张专属（三选一）。' : '混沌骰运想要发现卡牌，但卡组已耗尽。';
         break;
       }
@@ -3851,10 +3958,14 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         depsRef.current.applyDamage(hpCost, 'general', { selfInflicted: true });
         const result = await performReturnToHand();
         if (result.success) {
-          depsRef.current.addGameLog('magic', `紧急回收：失去 ${hpCost} HP，${result.itemName} 从${result.slotLabel}回到手牌`);
-          finalizeMagicCard(card, { banner: `紧急回收：失去 ${hpCost} HP，${result.itemName} 已回到手牌！` });
+          const drawn = drawCardsFromBackpack(1);
+          const drawMsg = drawn > 0 ? `，抽了 ${drawn} 张牌` : '';
+          depsRef.current.addGameLog('magic', `紧急回收：失去 ${hpCost} HP，${result.itemName} 从${result.slotLabel}回到手牌${drawMsg}`);
+          finalizeMagicCard(card, { banner: `紧急回收：失去 ${hpCost} HP，${result.itemName} 已回到手牌${drawMsg}！` });
         } else {
-          finalizeMagicCard(card, { banner: `紧急回收：失去 ${hpCost} HP，回手取消。` });
+          const drawn = drawCardsFromBackpack(1);
+          const drawMsg = drawn > 0 ? `，抽了 ${drawn} 张牌` : '';
+          finalizeMagicCard(card, { banner: `紧急回收：失去 ${hpCost} HP，回手取消${drawMsg}。` });
         }
         return;
       }
@@ -3894,6 +4005,112 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         }
         depsRef.current.addGameLog('magic', `奇术轮转：${movedCount} 张手牌移入回收袋，取回 ${toDraw.length} 张。`);
         finalizeMagicCard(card, { banner: `奇术轮转：${movedCount} 张手牌洗入回收袋，取回 ${toDraw.length} 张！` });
+        return;
+      }
+      if (card.magicEffect === 'crypt-deathwish') {
+        const slots = depsRef.current.getEquipmentSlots().filter(s => s.item);
+        if (slots.length === 0) {
+          finalizeMagicCard(card, { banner: '墓语遗愿无效（没有已装备的装备）。' });
+          return;
+        }
+        let chosenSlot: EquipmentSlotId;
+        if (slots.length === 1) {
+          chosenSlot = slots[0].id;
+        } else {
+          const selected = await depsRef.current.requestEquipmentSelection({
+            prompt: '选择一个装备，触发其遗言效果',
+            subtext: '不会破坏装备，仅触发遗言效果并抽 1 张牌。',
+          });
+          if (!selected) {
+            finalizeMagicCard(card, { banner: '取消了墓语遗愿。' });
+            return;
+          }
+          chosenSlot = selected;
+        }
+        const slotItem = chosenSlot === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (!slotItem) {
+          finalizeMagicCard(card, { banner: '墓语遗愿：目标装备已不存在。' });
+          return;
+        }
+        const parts: string[] = [];
+        if (slotItem.onDestroyHeal) {
+          depsRef.current.healHero(slotItem.onDestroyHeal);
+          parts.push(`恢复 ${slotItem.onDestroyHeal} HP`);
+        }
+        if (slotItem.onDestroyGold) {
+          setGold(prev => prev + slotItem.onDestroyGold!);
+          parts.push(`获得 ${slotItem.onDestroyGold} 金币`);
+        }
+        if (slotItem.onDestroyDraw) {
+          for (let di = 0; di < slotItem.onDestroyDraw; di++) depsRef.current.drawFromBackpackToHand();
+          parts.push(`抽 ${slotItem.onDestroyDraw} 张牌`);
+        }
+        if (slotItem.onDestroyClassDraw) {
+          const classDrawn = depsRef.current.drawClassCardsToBackpack(slotItem.onDestroyClassDraw, `${slotItem.name}-墓语遗愿`);
+          if (classDrawn.length > 0) {
+            depsRef.current.triggerClassDeckFlight(classDrawn);
+            parts.push(`获得专属卡「${classDrawn.map(c => c.name).join('、')}」`);
+          }
+        }
+        if (slotItem.onDestroyPermanentDamage) {
+          depsRef.current.setEquipmentSlotBonus(chosenSlot, 'damage', cur => cur + slotItem.onDestroyPermanentDamage!);
+          parts.push(`装备栏永久伤害 +${slotItem.onDestroyPermanentDamage}`);
+        }
+        if (slotItem.onDestroyPermanentShield) {
+          depsRef.current.setEquipmentSlotBonus(chosenSlot, 'shield', cur => cur + slotItem.onDestroyPermanentShield!);
+          parts.push(`装备栏永久护甲 +${slotItem.onDestroyPermanentShield}`);
+        }
+        if (slotItem.onDestroyEffect) {
+          if (slotItem.onDestroyEffect === 'hand-equip-buff-2-2') {
+            setHandCards(prev => {
+              const buffed: string[] = [];
+              const next = prev.map(c => {
+                if (c.type === 'weapon' || c.type === 'shield') {
+                  buffed.push(c.name);
+                  return { ...c, value: (c.value ?? 0) + 2, armorMax: c.armorMax != null ? c.armorMax + 2 : undefined };
+                }
+                return c;
+              });
+              if (buffed.length > 0) {
+                parts.push(`${buffed.join('、')} +2攻击 +2护甲`);
+              }
+              return next;
+            });
+          } else {
+            parts.push(slotItem.onDestroyEffect);
+          }
+        }
+        depsRef.current.drawFromBackpackToHand();
+        parts.push('抽 1 张牌');
+        const effectSummary = parts.length > 0 ? parts.join('，') : '无遗言效果';
+        depsRef.current.addGameLog('magic', `墓语遗愿：触发「${slotItem.name}」遗言 → ${effectSummary}`);
+        finalizeMagicCard(card, { banner: `墓语遗愿：「${slotItem.name}」遗言触发！${effectSummary}` });
+        return;
+      }
+      if (card.magicEffect === 'guild-recycle-reshuffle') {
+        const recycled = permanentMagicRecycleBag;
+        if (recycled.length > 0) {
+          const st = engine.getState();
+          const cap = Math.max(1, BASE_BACKPACK_CAPACITY + st.backpackCapacityModifier);
+          const currentBp = st.backpackItems;
+          const available = cap - currentBp.length;
+          const shuffled = [...recycled].sort(() => Math.random() - 0.5);
+          const toAdd = shuffled.slice(0, Math.max(0, available));
+          const overflow = shuffled.slice(Math.max(0, available));
+          if (toAdd.length > 0) {
+            setBackpackItems(prev => [...toAdd, ...prev]);
+          }
+          setPermanentMagicRecycleBag(overflow);
+          depsRef.current.addGameLog('magic', `回收轮转：将 ${toAdd.length} 张卡牌从回收袋洗入背包${overflow.length > 0 ? `（${overflow.length} 张因容量不足留在回收袋）` : ''}`);
+        } else {
+          depsRef.current.addGameLog('magic', '回收轮转：回收袋为空');
+        }
+        depsRef.current.drawFromBackpackToHand();
+        const bagCount = recycled.length;
+        const banner = bagCount > 0
+          ? `回收轮转：回收袋洗入背包，抽 1 张牌！`
+          : '回收轮转：回收袋为空，抽 1 张牌。';
+        finalizeMagicCard(card, { banner });
         return;
       }
       if (card.name === '哥布林的戏法') {
@@ -4299,6 +4516,37 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           finalizeMagicCard(card, { banner: `血金术：以 ${1 * echoMultiplier} 点生命换取 ${2 * echoMultiplier} 金币。${isEchoTriggered ? '（回响×2）' : ''}` });
           return;
         }
+        case 'crossroads-left-swap': {
+          let firstIdx = -1;
+          let secondIdx = -1;
+          for (let i = 0; i < activeCards.length; i++) {
+            if (activeCards[i] != null) {
+              if (firstIdx === -1) firstIdx = i;
+              else if (secondIdx === -1) { secondIdx = i; break; }
+            }
+          }
+          if (firstIdx === -1 || secondIdx === -1) {
+            finalizeMagicCard(card, { banner: '命运挪移无效（地城行剩余卡牌不足 2 张）。' });
+            return;
+          }
+          const firstCard = activeCards[firstIdx]!;
+          const secondCard = activeCards[secondIdx]!;
+          for (let swapI = 0; swapI < echoMultiplier; swapI++) {
+            setActiveCards(prev => {
+              const next = [...prev] as ActiveRowSlots;
+              const tmp = next[firstIdx];
+              next[firstIdx] = next[secondIdx];
+              next[secondIdx] = tmp;
+              return next;
+            });
+          }
+          const banner = echoMultiplier > 1
+            ? `命运挪移 ×${echoMultiplier}：${firstCard.name} ↔ ${secondCard.name}（回响）`
+            : `命运挪移：${firstCard.name} ↔ ${secondCard.name} 位置互换！`;
+          depsRef.current.addGameLog('magic', `命运挪移：${firstCard.name} 与 ${secondCard.name} 互换 ${echoMultiplier} 次。`);
+          finalizeMagicCard(card, { banner });
+          return;
+        }
         case STARTER_CARD_IDS.tempArmor: {
           const armorAmounts = [2, 3, 4];
           const armorAmt = armorAmounts[card.upgradeLevel ?? 0] ?? 2;
@@ -4692,6 +4940,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             depsRef.current.addGameLog('magic', `祭坛秘术：弃回 ${discarded.map(c => c.name).join('、')}`);
             const started = depsRef.current.beginDiscoverFlow('altar-discard-discover', {
               filter: (c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic',
+              sourceLabel: card.name,
             });
             if (started) {
               finalizeMagicCard(card, { banner: `祭坛秘术：弃回 ${discarded.length} 张牌，发现专属魔法卡…` });
@@ -4951,6 +5200,11 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           } else {
             depsRef.current.addGameLog('equip', `${card.name} 入场效果：另一个装备栏没有装备。`);
           }
+        }
+        if (hasEternalRelic(eternalRelics, 'equip-empower')) {
+          setSlotTempAttack(prev => ({ ...prev, [emptySlot]: (prev[emptySlot] ?? 0) + 3 }));
+          setSlotTempArmor(prev => ({ ...prev, [emptySlot]: (prev[emptySlot] ?? 0) + 3 }));
+          depsRef.current.addGameLog('equip', `铸锋药剂：${card.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
         }
       } else {
         depsRef.current.addGameLog('equip', `装备失败：没有空槽位（${card.name}）`);
