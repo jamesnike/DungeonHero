@@ -527,6 +527,33 @@ export default function GameBoard() {
   /** 每次 hydrate / 新开局递增；格挡等异步结算在 await 后若发现过期则立刻放弃，避免撤销后仍写入旧闭包数据 */
   const combatAsyncEpochRef = useRef(0);
   // amuletSlotsRef eliminated — use engine.getState().amuletSlots in closures
+
+  // When slotTempArmor increases, repair shield base armor up to armorMax
+  const prevSlotTempArmorRef = useRef(slotTempArmor);
+  useLayoutEffect(() => {
+    const prev = prevSlotTempArmorRef.current;
+    for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as const) {
+      const oldTemp = prev[slotId] ?? 0;
+      const newTemp = slotTempArmor[slotId] ?? 0;
+      if (newTemp > oldTemp) {
+        const increase = newTemp - oldTemp;
+        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+        if (slotItem && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
+          const baseArmorMax = slotItem.type === 'monster'
+            ? (slotItem.hp ?? slotItem.value)
+            : (slotItem.armorMax ?? slotItem.value);
+          const currentArmor = slotItem.armor ?? baseArmorMax;
+          if (currentArmor < baseArmorMax) {
+            const repair = Math.min(increase, baseArmorMax - currentArmor);
+            const setter = slotId === 'equipmentSlot1' ? setEquipmentSlot1 : setEquipmentSlot2;
+            setter({ ...slotItem, armor: currentArmor + repair } as EquipmentItem);
+          }
+        }
+      }
+    }
+    prevSlotTempArmorRef.current = slotTempArmor;
+  }, [slotTempArmor, equipmentSlot1, equipmentSlot2, setEquipmentSlot1, setEquipmentSlot2]);
+
   useLayoutEffect(() => {
     const el = headerWrapperRef.current;
     if (!el) return;
@@ -631,6 +658,9 @@ export default function GameBoard() {
           break;
         case 'end-turn-draw':
           state.hasEndTurnDraw = true;
+          break;
+        case 'stun-rate-boost':
+          state.stunRateBoost += 20;
           break;
       }
       if (auraBonus) {
@@ -3481,7 +3511,7 @@ export default function GameBoard() {
         }
         registerDungeonCardProcessed(prevCard.id, 'slot-cleared');
       }
-      if ((isFreshGame || !isInitialSetup) && !prevCard && nextCard && nextCard.type === 'monster' && (nextCard.enterEffect || nextCard.ogreEnterDiscard)) {
+      if ((isFreshGame || !isInitialSetup) && (!prevCard || prevCard.isGhost) && nextCard && nextCard.type === 'monster' && (nextCard.enterEffect || nextCard.ogreEnterDiscard)) {
         newlyLandedMonsters.push(nextCard);
       }
     }
@@ -5368,6 +5398,7 @@ export default function GameBoard() {
       amplifyModal: snapshot.amplifyModal ?? null,
       persuadeState: (snapshot.persuadeState as import('@/game-core/types').PersuadeModalState | null) ?? null,
       deathWardPrompt: (snapshot.deathWardPrompt as import('@/game-core/types').DeathWardPromptState | null) ?? null,
+      gameLogEntries: (loadGameLog()?.entries ?? []) as import('@/components/GameLogPanel').LogEntry[],
     });
 
     // Stacking state (previewCardStacks, activeCardStacks) is hydrated via engine state
@@ -5630,6 +5661,11 @@ export default function GameBoard() {
 
     // Restore full engine state from snapshot
     engine.replaceState(snapshot);
+
+    // Sync game log localStorage with restored state
+    const restoredLog = snapshot.gameLogEntries ?? [];
+    gameLogIdRef.current = restoredLog.length > 0 ? Math.max(...restoredLog.map(e => e.id)) : 0;
+    saveGameLog(restoredLog, gameLogIdRef.current);
 
     // Sync refs that mirror engine state
     syncMonsterRewardQueuedInstanceIdsRef(
@@ -7025,7 +7061,7 @@ export default function GameBoard() {
           pendingRemovals: pendingDungeonRemovalsRef.current,
           lock: waterfallLockRef.current,
         });
-        // Defer to the main effect to fire the waterfall with fresh state.
+        setActiveCards(prev => [...prev] as ActiveRowSlots);
       }
     }, 300);
     pendingDungeonRemovalsRef.current += 1;

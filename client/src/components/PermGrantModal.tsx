@@ -15,7 +15,8 @@ type PermGrantSourceType =
   | 'transform-grant' | 'equipment-enchant' | 'essence-extract'
   | 'flank-grant' | 'transform-gold-grant'
   | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant'
-  | 'transform-draw-grant' | 'transform-heal-grant';
+  | 'transform-draw-grant' | 'transform-heal-grant'
+  | 'transform-recycle-grant';
 
 interface PermGrantModalProps {
   open: boolean;
@@ -31,6 +32,7 @@ const FLANK_GRANT_TYPES = new Set<string>([
 ]);
 const TRANSFORM_GRANT_TYPES = new Set<string>([
   'transform-grant', 'transform-gold-grant', 'transform-draw-grant', 'transform-heal-grant',
+  'transform-recycle-grant',
 ]);
 
 export default function PermGrantModal({
@@ -79,6 +81,7 @@ export default function PermGrantModal({
     'flank-damage-grant': '赋能神殿 · 侧击',
     'transform-draw-grant': '赋能神殿 · 转型',
     'transform-heal-grant': '赋能神殿 · 转型',
+    'transform-recycle-grant': '唤回秘药',
   };
   const descMap: Record<string, string> = {
     'equipment-enchant': '选择一张手牌中的装备弃置，将其攻击/护甲值随机附魔到装备栏的一件装备上',
@@ -91,6 +94,7 @@ export default function PermGrantModal({
     'flank-damage-grant': '选择一张手牌赋予「侧击：对随机怪物造成 5 点伤害」（任何类型的牌均可）',
     'transform-draw-grant': '选择一张手牌赋予「转型：抽 2 张牌」（任何类型的牌均可）',
     'transform-heal-grant': '选择一张手牌赋予「转型：恢复 2 HP」（任何类型的牌均可）',
+    'transform-recycle-grant': '选择一张手牌赋予「转型：回收袋取回 1 张牌」',
   };
   const emptyMap: Record<string, string> = {
     'equipment-enchant': '手牌中没有可弃置的装备卡',
@@ -103,6 +107,7 @@ export default function PermGrantModal({
     'flank-damage-grant': '手牌中没有可赋予侧击效果的卡牌',
     'transform-draw-grant': '手牌中没有可赋予转型效果的卡牌',
     'transform-heal-grant': '手牌中没有可赋予转型效果的卡牌',
+    'transform-recycle-grant': '手牌中没有可赋予转型效果的卡牌',
   };
   const confirmMap: Record<string, string> = {
     'equipment-enchant': '附魔',
@@ -115,6 +120,7 @@ export default function PermGrantModal({
     'flank-damage-grant': '赋予',
     'transform-draw-grant': '赋予',
     'transform-heal-grant': '赋予',
+    'transform-recycle-grant': '赋予',
   };
   const title = titleMap[sourceType] ?? '永恒铭刻';
   const description = descMap[sourceType] ?? '选择一张手牌赋予 Perm 2（被移除后经 2 次瀑流返回背包）';

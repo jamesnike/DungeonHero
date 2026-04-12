@@ -435,7 +435,10 @@ export function getMagicSubtypeBracketLabel(card: GameCardData): string | null {
     return `Perm ${card.recycleDelay}`;
   }
   if (card.type !== 'magic' || !card.magicType) return null;
-  if (card.magicType === 'instant') return '即时';
+  if (card.magicType === 'instant') {
+    if (card.recycleDelay != null && card.recycleDelay > 0) return `Perm ${card.recycleDelay} 即时`;
+    return '即时';
+  }
   if (card.magicType === 'permanent') {
     const d = card.recycleDelay ?? 1;
     return d > 1 ? `永久 ${d}` : '永久';

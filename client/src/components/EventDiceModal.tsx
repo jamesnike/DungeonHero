@@ -49,23 +49,23 @@ export default function EventDiceModal({
               {rolledValue ?? '…'}
             </Badge>
           </div>
-          <div className="space-y-2 min-w-0">
+          <div className="space-y-2 min-w-0 overflow-hidden">
             {entries.map(entry => {
               const highlighted = entry.id === resolvedEntryId;
               return (
                 <div
                   key={entry.id}
-                  className={`rounded border px-3 py-2 text-sm transition-all min-w-0 ${
+                  className={`rounded border px-3 py-2 text-sm transition-all min-w-0 overflow-hidden ${
                     highlighted
                       ? 'border-primary bg-primary/10 text-foreground'
                       : 'border-border text-muted-foreground'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2 min-w-0">
+                  <div className="flex items-start gap-2 min-w-0">
                     <span className="font-mono text-sm text-foreground shrink-0">
                       {formatRange(entry.range)}
                     </span>
-                    <span className="font-semibold text-foreground text-right break-words min-w-0">{entry.label}</span>
+                    <span className="font-semibold text-foreground break-words min-w-0">{entry.label}</span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 break-words">
                     {describeEffect(entry.effect)}

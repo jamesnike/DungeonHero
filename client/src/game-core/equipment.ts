@@ -15,7 +15,7 @@ import type {
   EquipmentRepairTarget,
 } from '@/components/game-board/types';
 import type { GameState } from './types';
-import { MAX_AMULET_SLOTS } from './constants';
+import { MAX_AMULET_SLOTS, createEmptyAmuletEffects } from './constants';
 
 // ---------------------------------------------------------------------------
 // Slot read helpers
@@ -200,34 +200,7 @@ export function consumeDurabilityPure(
 // ---------------------------------------------------------------------------
 
 export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletEffects {
-  const effects: ActiveAmuletEffects = {
-    aura: { attack: 0, defense: 0, maxHp: 0 },
-    hasHeal: false,
-    hasBalance: false,
-    lifeOverkillBonus: 0,
-    hasCatapult: false,
-    hasFlash: false,
-    hasStrength: false,
-    hasDualGuard: false,
-    hasDiscardShock: false,
-    hasFlipGold: false,
-    hasRecycleForge: false,
-    hasLoneCard: false,
-    hasEquipmentSalvage: false,
-    hasBloodrageAttack: false,
-    hasPersuadeOnTempAttack: false,
-    hasPersuadeGrantRecycleFetch: false,
-    hasDamageClassDiscover: false,
-    hasPersuadeGraveyardStack: false,
-    hasStunRecycleToHand: false,
-    hasMonsterKillUpgrade: false,
-    hasSwapUpgrade: false,
-    hasStunUpgradeCap: false,
-    hasRecycleBackpackExpand: false,
-    hasDungeonGold: false,
-    hasArmorHalveEndure: false,
-    hasMonsterEquipBuff: false,
-  };
+  const effects: ActiveAmuletEffects = createEmptyAmuletEffects();
 
   for (const amulet of amuletSlots) {
     if (amulet.amuletAuraBonus) {
@@ -264,6 +237,8 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'dungeon-gold': effects.hasDungeonGold = true; break;
       case 'armor-halve-endure': effects.hasArmorHalveEndure = true; break;
       case 'monster-equip-buff': effects.hasMonsterEquipBuff = true; break;
+      case 'stun-rate-boost': effects.stunRateBoost += 20; break;
+      case 'end-turn-draw': effects.hasEndTurnDraw = true; break;
     }
   }
 

@@ -1261,11 +1261,11 @@ export default function CardDetailsModal({
                       </div>
                     )}
                     {choice.diceTable?.length ? (
-                      <div className="mt-2 space-y-1 border-t border-border/50 pt-2">
+                      <div className="mt-2 space-y-1 border-t border-border/50 pt-2 overflow-hidden">
                         {choice.diceTable.map(entry => (
-                          <div key={entry.id} className="flex items-center justify-between text-[11px]">
-                            <span className="font-mono text-foreground">{formatRange(entry.range)}</span>
-                            <span className="text-muted-foreground">{entry.label}</span>
+                          <div key={entry.id} className="flex items-start gap-2 text-[11px] min-w-0">
+                            <span className="font-mono text-foreground shrink-0">{formatRange(entry.range)}</span>
+                            <span className="text-muted-foreground break-words min-w-0">{entry.label}</span>
                           </div>
                         ))}
                       </div>

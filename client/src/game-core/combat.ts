@@ -81,15 +81,19 @@ export function computeOverkill(
   damage: number,
   _maxLayerLoss?: number,
 ): number {
-  if (damage <= 0) return 0;
+  let effectiveDamage = damage;
+  if (monster.maxDamagePerHit && effectiveDamage > monster.maxDamagePerHit && !monster.isStunned) {
+    effectiveDamage = monster.maxDamagePerHit;
+  }
+  if (effectiveDamage <= 0) return 0;
 
   if (!monster.maxHp || monster.hp == null) {
     const hp = monster.hp || monster.value || 0;
-    return Math.max(0, damage - hp);
+    return Math.max(0, effectiveDamage - hp);
   }
 
   const hpNow = monster.hp ?? 0;
-  return Math.max(0, damage - hpNow);
+  return Math.max(0, effectiveDamage - hpNow);
 }
 
 /** True if this damage would overkill the current layer. */

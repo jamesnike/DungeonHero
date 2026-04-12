@@ -727,7 +727,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         logHeroMagic('finalize-card', { cardId: card.id, name: card.name });
       }
 
-      if (isPermanentMagicCard(card)) {
+      if (isPermanentMagicCard(card) || (card.recycleDelay != null && card.recycleDelay > 0)) {
         depsRef.current.addPermanentMagicToRecycleBag(card);
       } else {
         depsRef.current.addToGraveyard(card);
@@ -805,6 +805,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
       if (card.flipTarget) {
         await depsRef.current.applyCardFlip(card);
+      } else if (card.recycleDelay != null && card.recycleDelay > 0) {
+        depsRef.current.addPermanentMagicToRecycleBag(card);
       } else {
         depsRef.current.addToGraveyard(card);
       }

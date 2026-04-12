@@ -369,14 +369,18 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     damage: number,
     _maxLayerLoss?: number,
   ): GameCardData => {
-    if (damage <= 0) {
+    let effectiveDamage = damage;
+    if (monster.maxDamagePerHit && effectiveDamage > monster.maxDamagePerHit && !monster.isStunned) {
+      effectiveDamage = monster.maxDamagePerHit;
+    }
+    if (effectiveDamage <= 0) {
       return monster;
     }
     if (!monster.maxHp || monster.hp == null) {
       return {
         ...monster,
-        hp: Math.max(0, (monster.hp || monster.value) - damage),
-        value: Math.max(0, (monster.hp || monster.value) - damage),
+        hp: Math.max(0, (monster.hp || monster.value) - effectiveDamage),
+        value: Math.max(0, (monster.hp || monster.value) - effectiveDamage),
       };
     }
 
@@ -384,8 +388,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     const hpNow = monster.hp ?? 0;
     if (layers <= 0 || hpNow <= 0) return monster;
 
-    if (damage < hpNow) {
-      return { ...monster, hp: hpNow - damage };
+    if (effectiveDamage < hpNow) {
+      return { ...monster, hp: hpNow - effectiveDamage };
     }
 
     const newLayer = layers - 1;
@@ -1054,6 +1058,10 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     if (monster.type === 'building') {
       dealDamageToBuilding(monster, effectiveDamage, options);
       return;
+    }
+
+    if (monster.maxDamagePerHit && effectiveDamage > monster.maxDamagePerHit && !monster.isStunned) {
+      depsRef.current.addGameLog('combat', `${monster.name} 岩石护体：伤害上限 ${monster.maxDamagePerHit}（原始 ${effectiveDamage}）！`);
     }
 
     recordClassDamageDiscoverHit();
@@ -2431,18 +2439,10 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           dragonBleedDestroyEquipment(targetMonster.name, layersAfterAttack);
         }
         if (targetMonster.monsterSpecial === 'bone-regen') {
-          if (slotItem.ghostBladeExile) {
-            await checkHollowSkeletonRestore(targetMonster.id, targetMonster.name, layersBeforeAttack, layersAfterAttack);
-          } else {
-            void checkHollowSkeletonRestore(targetMonster.id, targetMonster.name, layersBeforeAttack, layersAfterAttack);
-          }
+          await checkHollowSkeletonRestore(targetMonster.id, targetMonster.name, layersBeforeAttack, layersAfterAttack);
         }
         if (targetMonster.monsterSpecial === 'wraith-rebirth') {
-          if (slotItem.ghostBladeExile) {
-            await checkWraithRebirth(targetMonster.id, targetMonster.name, targetMonster.fury ?? targetMonster.hpLayers ?? 1, layersBeforeAttack, layersAfterAttack);
-          } else {
-            void checkWraithRebirth(targetMonster.id, targetMonster.name, targetMonster.fury ?? targetMonster.hpLayers ?? 1, layersBeforeAttack, layersAfterAttack);
-          }
+          await checkWraithRebirth(targetMonster.id, targetMonster.name, targetMonster.fury ?? targetMonster.hpLayers ?? 1, layersBeforeAttack, layersAfterAttack);
         }
 
         if (targetMonster.monsterSpecial === 'swarm-elite') {

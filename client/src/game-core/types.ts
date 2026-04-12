@@ -370,7 +370,7 @@ export interface GameState {
   /** 镜影摹形：选择复制目标 */
   mirrorCopyModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
-  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant'; meta?: Record<string, number> } | null;
+  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant' | 'transform-recycle-grant'; meta?: Record<string, number> } | null;
   /** 增幅：选择装备栏或手牌中的装备/伤害魔法进行增幅 */
   amplifyModal: { sourceCardId: string } | null;
   graveyardDiscoverState: GameCardData[] | null;

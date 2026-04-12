@@ -44,7 +44,7 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
               <Button
                 key={index}
                 variant="outline"
-                className="h-auto w-full justify-start p-4 text-left"
+                className="h-auto w-full justify-start p-4 text-left whitespace-normal overflow-hidden"
                 disabled={disabled}
                 onClick={() => !disabled && onChoice(index)}
               >
@@ -65,16 +65,16 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
                     <span className="text-sm text-muted-foreground">{effectText}</span>
                   )}
                   {choice.diceTable && (
-                    <div className="grid gap-1 text-xs text-muted-foreground min-w-0">
+                    <div className="grid gap-1 text-xs text-muted-foreground w-full overflow-hidden">
                       {choice.diceTable.map(entry => (
                         <div
                           key={entry.id}
-                          className="flex items-start justify-between gap-2 rounded border border-border px-2 py-1 min-w-0"
+                          className="flex items-start gap-2 rounded border border-border px-2 py-1 min-w-0"
                         >
-                          <span className="font-mono text-sm text-foreground shrink-0">
+                          <span className="font-mono text-xs text-foreground shrink-0">
                             {formatRange(entry.range)}
                           </span>
-                          <span className="text-right text-sm text-foreground break-words min-w-0">{entry.label}</span>
+                          <span className="text-xs text-foreground break-words min-w-0">{entry.label}</span>
                         </div>
                       ))}
                     </div>
