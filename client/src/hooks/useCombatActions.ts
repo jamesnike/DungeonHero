@@ -48,6 +48,7 @@ const COMBAT_BLOCK_TO_REFLECT_MS = 220;
 const SHIELD_REFLECT_ANIM_MS = 1020;
 const BOSS_RETALIATION_ANIM_MS = 920;
 const GOLEM_LAYER_REFLECT_ANIM_MS = 850;
+const DRAGON_BREATH_ANIM_MS = 880;
 const ARCANE_BLADE_SPELL_ANIM_MS = 780;
 const DEFEAT_ANIMATION_DURATION = 950;
 
@@ -98,6 +99,7 @@ export interface CombatActionsDeps {
   tryStartBossRetaliationDirectedFx: (monsterId: string) => void;
   tryStartGolemLayerReflectFx: (monsterId: string) => void;
   tryStartArcaneBladeSpellFx: (slotId: EquipmentSlotId, monsterId: string) => void;
+  tryStartDragonBreathFx: (monsterId: string, targetSlotId: EquipmentSlotId | 'hero') => void;
   animSpeed: (ms: number) => number;
 
   // --- Async helpers ---
@@ -585,7 +587,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
   // -- handleMonsterDefeated --------------------------------------------------
 
-  const handleMonsterDefeated = (monster: GameCardData) => {
+  const handleMonsterDefeated = (monster: GameCardData, opts?: { killedByMinion?: boolean }) => {
     if (depsRef.current.pendingDefeatIdsRef.current.has(monster.id)) return;
 
     if (monster.isFinalMonster && !monster.bossPhase && !monster.isStunned) {
@@ -666,7 +668,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     depsRef.current.setMonsterDefeatStates(prev => ({ ...prev, [monster.id]: true }));
     depsRef.current.addGameLog('combat', `${monster.name} 被击败！`);
 
-    if (depsRef.current.eternalRelicsRef.current.some(r => r.id === 'summon-minion')) {
+    if (opts?.killedByMinion && depsRef.current.eternalRelicsRef.current.some(r => r.id === 'summon-minion')) {
       const buffMinion = (card: GameCardData): GameCardData => ({
         ...card,
         attack: (card.attack ?? card.value) + 1,
@@ -938,8 +940,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       depsRef.current.addGameLog('combat', `${monster.name} 不朽之骨：攻击不消耗血层！`);
       return;
     }
-    if (monster.dragonAttackNoLayerCost && !monster.isStunned) {
-      depsRef.current.addGameLog('combat', `${monster.name} 龙鳞护体：攻击不消耗血层！`);
+    if (monster.dragonAttackNoLayerCost && monster.dragonNoLayerCostActive && !monster.isStunned) {
+      depsRef.current.addGameLog('combat', `${monster.name} 龙鳞护体：上回合已掉血层，本次攻击不消耗血层！`);
       return;
     }
     const currentLayer = monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1;
@@ -1080,10 +1082,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     }
 
     if (monster.dragonDamageRetaliation && monster.dragonDamageRetaliation > 0 && !monster.isStunned) {
-      const retDmg = monster.dragonDamageRetaliation;
-      depsRef.current.applyDamage(retDmg);
-      depsRef.current.addGameLog('combat', `${monster.name} 龙息反击：对玩家造成 ${retDmg} 点法术伤害！`);
-      setHeroSkillBanner(`${monster.name} 龙息反击！受到 ${retDmg} 点伤害！`);
+      applyDragonBreathRetaliation(monster.id, monster.name, monster.dragonDamageRetaliation);
     }
 
     const ae = depsRef.current.amuletEffects;
@@ -1239,10 +1238,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     }
 
     if (monsterSnapshot.dragonDamageRetaliation && monsterSnapshot.dragonDamageRetaliation > 0 && !monsterSnapshot.isStunned && scaledDamage > 0) {
-      const dragonRetDmg = monsterSnapshot.dragonDamageRetaliation;
-      depsRef.current.applyDamage(dragonRetDmg);
-      depsRef.current.addGameLog('combat', `${monsterSnapshot.name} 龙息反击：对玩家造成 ${dragonRetDmg} 点法术伤害！`);
-      setHeroSkillBanner(`${monsterSnapshot.name} 龙息反击！受到 ${dragonRetDmg} 点伤害！`);
+      applyDragonBreathRetaliation(monsterSnapshot.id, monsterSnapshot.name, monsterSnapshot.dragonDamageRetaliation);
     }
 
     const retDmg = monsterSnapshot.bossRetaliationDamage ?? 0;
@@ -1500,6 +1496,54 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     ],
   );
 
+  // -- applyDragonBreathRetaliation -------------------------------------------
+
+  const applyDragonBreathRetaliation = (
+    monsterId: string,
+    monsterName: string,
+    retDmg: number,
+  ) => {
+    const { setEquipmentSlotById, triggerShieldBlockAnimation, addGameLog } = depsRef.current;
+    const slots: { slotId: EquipmentSlotId; item: GameCardData | null }[] = [
+      { slotId: 'equipmentSlot1', item: equipmentSlot1 },
+      { slotId: 'equipmentSlot2', item: equipmentSlot2 },
+    ];
+    const validShields = slots.filter(
+      s => s.item && (s.item.type === 'shield' || s.item.type === 'monster'),
+    ) as { slotId: EquipmentSlotId; item: GameCardData }[];
+
+    if (validShields.length > 0) {
+      const target = validShields[Math.floor(Math.random() * validShields.length)];
+      const { slotId, item } = target;
+
+      depsRef.current.tryStartDragonBreathFx(monsterId, slotId);
+      triggerShieldBlockAnimation(slotId);
+
+      const isMonsterEquip = item.type === 'monster';
+      const baseArmor = isMonsterEquip
+        ? (item.hp ?? item.value)
+        : (item.armorMax ?? item.value);
+      const storedArmor = Math.min(item.armor ?? baseArmor, baseArmor);
+      const newArmor = Math.max(0, storedArmor - retDmg);
+
+      if (newArmor <= 0) {
+        const { armor: _ca, armorBonusDamaged: _cb, ...resetBase } = item;
+        setEquipmentSlotById(slotId, resetBase as EquipmentItem);
+      } else {
+        setEquipmentSlotById(slotId, { ...item, armor: newArmor } as EquipmentItem);
+      }
+
+      const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
+      addGameLog('combat', `${monsterName} 龙息反击：对${slotLabel}装备 ${item.name} 造成 ${retDmg} 点护甲伤害（${storedArmor}→${newArmor}）`);
+      setHeroSkillBanner(`${monsterName} 龙息反击！${item.name} 护甲 -${Math.min(retDmg, storedArmor)}！`);
+    } else {
+      depsRef.current.tryStartDragonBreathFx(monsterId, 'hero');
+      applyDamage(retDmg);
+      addGameLog('combat', `${monsterName} 龙息反击：对玩家造成 ${retDmg} 点法术伤害！`);
+      setHeroSkillBanner(`${monsterName} 龙息反击！受到 ${retDmg} 点伤害！`);
+    }
+  };
+
   // -- getEngagedMonsterCards / getActiveCombatMonster / finishCombat ----------
 
   const getEngagedMonsterCards = (): GameCardData[] => {
@@ -1719,6 +1763,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       addHeroMagicGauge, triggerGhostBladeExile, dragonBleedDestroyEquipment } = depsRef.current;
 
     const isMonsterEquip = slotItem.type === 'monster';
+    const isMinionAttack = isMonsterEquip && !!(slotItem as GameCardData).isMinionCard;
     const goblinGoldPowerActive = isMonsterEquip && slotItem.eliteLowGoldPower && gold >= 30;
     const rawWeaponValue = isMonsterEquip ? (slotItem.attack ?? slotItem.value) : slotItem.value;
     const weaponValue = goblinGoldPowerActive ? rawWeaponValue * 2 : rawWeaponValue;
@@ -1891,7 +1936,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           handleBuildingDestroyed(targetMonster);
           monsterDefeated = true;
         } else if (targetMonster.hasRevive && !targetMonster.reviveUsed) {
-          handleMonsterDefeated(targetMonster);
+          handleMonsterDefeated(targetMonster, { killedByMinion: isMinionAttack });
           workingMonster = {
             ...workingMonster,
             currentLayer: 1,
@@ -1901,7 +1946,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           };
         } else {
           applyHeroKillEffects(monsterHpBefore);
-          handleMonsterDefeated(targetMonster);
+          handleMonsterDefeated(targetMonster, { killedByMinion: isMinionAttack });
           monsterDefeated = true;
         }
       }
@@ -1923,7 +1968,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         workingMonster = { ...workingMonster, currentLayer: 0, hp: 0 };
         addGameLog('equip', `${slotItem.name} 虫蚀：${targetMonster.name} 最后 1 层被吞噬！`);
         applyHeroKillEffects(workingMonster.hp ?? 0);
-        handleMonsterDefeated(targetMonster);
+        handleMonsterDefeated(targetMonster, { killedByMinion: isMinionAttack });
         monsterDefeated = true;
       }
     }
@@ -2380,10 +2425,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       }
       if (targetMonster.type === 'monster' && !targetMonster.isStunned) {
         if (targetMonster.dragonDamageRetaliation && targetMonster.dragonDamageRetaliation > 0) {
-          const dragonRetDmg = targetMonster.dragonDamageRetaliation;
-          depsRef.current.applyDamage(dragonRetDmg);
-          addGameLog('combat', `${targetMonster.name} 龙息反击：对玩家造成 ${dragonRetDmg} 点法术伤害！`);
-          setHeroSkillBanner(`${targetMonster.name} 龙息反击！受到 ${dragonRetDmg} 点伤害！`);
+          applyDragonBreathRetaliation(targetMonster.id, targetMonster.name, targetMonster.dragonDamageRetaliation);
         }
         if (targetMonster.dragonBleedDestroy && layersAfterAttack < layersBeforeAttack && layersAfterAttack > 0) {
           dragonBleedDestroyEquipment(targetMonster.name, layersAfterAttack);
@@ -2512,8 +2554,122 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       if (confirmed) {
         addGameLog('equip', `${slotItem.name} 自毁！发现 ${weaponSurvivedWithDurability} 张专属牌！`);
         setHeroSkillBanner(`${slotItem.name} 自毁！`);
-        disposeOwnedEquipmentCard({ ...slotItem, durability: 0 }, { isDestruction: true });
-        clearEquipmentSlotWithPromote(slotId);
+
+        // --- 遗言 effects (treat self-destruct as normal destruction) ---
+        const hasLastWords = slotItem.onDestroyHeal || slotItem.onDestroyGold || slotItem.onDestroyDraw
+          || slotItem.onDestroyClassDraw || slotItem.onDestroyPermanentDamage || slotItem.onDestroyPermanentShield || slotItem.onDestroyEffect
+          || (isMonsterEquip && (slotItem.lastWords || slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread || slotItem.skeletonLastWordsDiscard));
+        if (hasLastWords) {
+          addGameLog('equip', `${slotItem.name} 遗言触发！`);
+        }
+        if (slotItem.onDestroyHeal) {
+          healHero(slotItem.onDestroyHeal);
+          addGameLog('equip', `${slotItem.name} 遗言：恢复了 ${slotItem.onDestroyHeal} 点生命`);
+        }
+        if (slotItem.onDestroyGold) {
+          setGold(prev => prev + slotItem.onDestroyGold!);
+          addGameLog('equip', `${slotItem.name} 遗言：获得了 ${slotItem.onDestroyGold} 金币`);
+        }
+        if (slotItem.onDestroyDraw) {
+          const drawnNames: string[] = [];
+          for (let i = 0; i < slotItem.onDestroyDraw; i++) {
+            const drawn = drawFromBackpackToHand();
+            if (drawn) drawnNames.push(drawn.name);
+          }
+          if (drawnNames.length > 0) {
+            addGameLog('equip', `${slotItem.name} 遗言：抽到了 ${drawnNames.join('、')}`);
+          }
+        }
+        if (slotItem.onDestroyClassDraw) {
+          const classDrawn = depsRef.current.drawClassCardsToBackpack(slotItem.onDestroyClassDraw, `${slotItem.name}-遗言`);
+          if (classDrawn.length > 0) {
+            depsRef.current.triggerClassDeckFlight(classDrawn);
+            addGameLog('equip', `${slotItem.name} 遗言：获得专属卡「${classDrawn.map(c => c.name).join('、')}」`);
+          }
+        }
+        if (slotItem.onDestroyPermanentDamage) {
+          setEquipmentSlotBonus(slotId, 'damage', cur => cur + slotItem.onDestroyPermanentDamage!);
+          addGameLog('equip', `${slotItem.name} 遗言：该装备栏永久伤害 +${slotItem.onDestroyPermanentDamage}！`);
+          setHeroSkillBanner(`${slotItem.name} 遗言！永久伤害 +${slotItem.onDestroyPermanentDamage}！`);
+        }
+        if (slotItem.onDestroyPermanentShield) {
+          setEquipmentSlotBonus(slotId, 'shield', cur => cur + slotItem.onDestroyPermanentShield!);
+          addGameLog('equip', `${slotItem.name} 遗言：该装备栏永久护甲 +${slotItem.onDestroyPermanentShield}！`);
+          setHeroSkillBanner(`${slotItem.name} 遗言！永久护甲 +${slotItem.onDestroyPermanentShield}！`);
+        }
+        if (slotItem.onDestroyEffect) {
+          if (slotItem.onDestroyEffect === 'slot-temp-buff-3-3') {
+            setSlotTempAttack(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 3 }));
+            setSlotTempArmor(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 3 }));
+            addGameLog('equip', `${slotItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
+            setHeroSkillBanner(`${slotItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
+          } else {
+            addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
+          }
+        }
+        if (isMonsterEquip) {
+          if (slotItem.lastWords === 'discard-hand-3') {
+            const drawnNames: string[] = [];
+            for (let i = 0; i < 3; i++) {
+              const drawn = drawFromBackpackToHand();
+              if (drawn) drawnNames.push(drawn.name);
+            }
+            if (drawnNames.length > 0) {
+              addGameLog('equip', `${slotItem.name} 遗言：抽到了 ${drawnNames.join('、')}`);
+              setHeroSkillBanner(`${slotItem.name} 遗言：抽取 ${drawnNames.length} 张牌！`);
+            }
+          }
+          if (slotItem.skeletonLastWordsDiscard) {
+            const skelDrawn = drawFromBackpackToHand();
+            if (skelDrawn) {
+              addGameLog('equip', `${slotItem.name} 遗言：抽到了「${skelDrawn.name}」`);
+              setHeroSkillBanner(`${slotItem.name} 遗言：抽取 1 张牌！`);
+            }
+          }
+          if (slotItem.lastWords?.startsWith('wraith-haunt')) {
+            const hauntAmount = parseInt(slotItem.lastWords.replace('wraith-haunt-', ''), 10) || 2;
+            const otherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+            const otherItem = otherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+            if (otherItem) {
+              setEquipmentSlotBonus(otherSlotId, 'damage', cur => cur + hauntAmount);
+              addGameLog('equip', `${slotItem.name} 遗言：${otherItem.name} 获得临时攻击力 +${hauntAmount}！`);
+            }
+          }
+          if (slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread) {
+            const otherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+            const otherItem = otherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+            if (otherItem && otherItem.durability != null && otherItem.maxDurability != null) {
+              const newDur = Math.min(otherItem.maxDurability, otherItem.durability + 1);
+              let updatedOther = { ...otherItem } as EquipmentItem;
+              if (newDur > otherItem.durability) {
+                updatedOther = { ...updatedOther, durability: newDur };
+                addGameLog('equip', `${slotItem.name} 怨灵祝福：${otherItem.name} 耐久 +1！`);
+              }
+              if (slotItem.wraithDeathHealSpread && !otherItem.wraithDeathHeal) {
+                updatedOther = { ...updatedOther, wraithDeathHeal: 1 };
+                addGameLog('equip', `${slotItem.name} 怨灵传承：${otherItem.name} 获得遗言「怨灵祝福」！`);
+              }
+              setEquipmentSlotById(otherSlotId, updatedOther);
+            }
+          }
+        }
+
+        // --- 复生 check (after 遗言) ---
+        const nativeReviveAvailable = isMonsterEquip && slotItem.hasRevive && !slotItem.reviveUsed;
+        const equipReviveAvailable = slotItem.hasEquipmentRevive && !slotItem.equipmentReviveUsed;
+        const canRevive = nativeReviveAvailable || equipReviveAvailable;
+        if (canRevive) {
+          const reviveUpdate = nativeReviveAvailable
+            ? { ...slotItem, durability: 1, reviveUsed: true }
+            : { ...slotItem, durability: 1, equipmentReviveUsed: true };
+          setEquipmentSlotById(slotId, reviveUpdate as EquipmentItem);
+          addGameLog('equip', `${slotItem.name} 复生！以 1 耐久复活！`);
+          setHeroSkillBanner(`${slotItem.name} 复生了！`);
+        } else {
+          disposeOwnedEquipmentCard({ ...slotItem, durability: 0 }, { isDestruction: true });
+          clearEquipmentSlotWithPromote(slotId);
+        }
+
         for (let i = 0; i < weaponSurvivedWithDurability; i++) {
           await depsRef.current.beginDiscoverFlowAsync(`${slotItem.name}-自毁`, { sourceLabel: slotItem.name });
         }
@@ -2673,6 +2829,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       }
     });
 
+    engagedMonsters.forEach(monster => {
+      if (monster.dragonAttackNoLayerCost) {
+        const lostLayer = depsRef.current.heroTurnLayerLossIdsRef.current.has(monster.id);
+        updateMonsterCard(monster.id, (card) => ({ ...card, dragonNoLayerCostActive: lostLayer }));
+      }
+    });
+
     depsRef.current.heroTurnLayerLossIdsRef.current.clear();
     setBerserkerSlotUsed({});
     setFlashSlotUsed({});
@@ -2808,12 +2971,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         const baseArmorMax = slotItem.armorMax ?? slotItem.value;
         const effectiveArmorMax = baseArmorMax + permanentBonus + rawSlotTemp;
 
-        if (isFullBlockShield) {
-          depsRef.current.triggerShieldBlockAnimation(blockSlotId);
-          depsRef.current.addGameLog('combat', `${slotItem.name} 完全格挡了 ${remainingDamage} 点伤害！`);
-          setHeroSkillBanner(`${slotItem.name} 完全格挡！`);
-          remainingDamage = 0;
-        } else {
+        {
           const isMonsterEquipShield = slotItem.type === 'monster';
 
           if (isMonsterEquipShield) {
@@ -2831,7 +2989,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             const effectiveArmorDamage = golemArmorCap != null ? Math.min(blocked, golemArmorCap) : blocked;
             const newArmor = Math.max(0, currentArmor - effectiveArmorDamage);
             shieldArmorDepleted = newArmor <= 0 && effectiveArmorDamage > 0;
-            remainingDamage = Math.max(0, remainingDamage - currentArmor);
+            remainingDamage = isFullBlockShield ? 0 : Math.max(0, remainingDamage - currentArmor);
 
             if (shieldArmorDepleted) {
               const { armor: _clearArmor, armorBonusDamaged: _clearBonusDmg, ...resetBase } = slotItem;
@@ -2847,7 +3005,10 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             if (golemArmorCap != null && blocked > golemArmorCap) {
               depsRef.current.addGameLog('combat', `${slotItem.name} 岩石护体：护甲最多掉 ${golemArmorCap}！`);
             }
-            if (shieldArmorDepleted) {
+            if (isFullBlockShield) {
+              depsRef.current.addGameLog('combat', `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newArmor}）`);
+              setHeroSkillBanner(`${slotItem.name} 完全格挡！`);
+            } else if (shieldArmorDepleted) {
               depsRef.current.addGameLog('combat', `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲击破！耐久 -1）`);
             } else {
               depsRef.current.addGameLog('combat', `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲 ${currentArmor}→${newArmor}）`);
@@ -2862,7 +3023,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             const blocked = Math.min(remainingDamage, currentArmor);
             const newArmor = Math.max(0, currentArmor - remainingDamage);
             shieldArmorDepleted = newArmor <= 0 && remainingDamage > 0;
-            remainingDamage = Math.max(0, remainingDamage - currentArmor);
+            remainingDamage = isFullBlockShield ? 0 : Math.max(0, remainingDamage - currentArmor);
 
             if (shieldArmorDepleted) {
               const { armor: _clearArmor, armorBonusDamaged: _clearBonusDmg, ...resetBase } = slotItem;
@@ -2875,7 +3036,10 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               workingShieldItem = { ...slotItem, armor: newBaseArmor, armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined };
             }
 
-            if (shieldArmorDepleted) {
+            if (isFullBlockShield) {
+              depsRef.current.addGameLog('combat', `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newArmor}）`);
+              setHeroSkillBanner(`${slotItem.name} 完全格挡！`);
+            } else if (shieldArmorDepleted) {
               depsRef.current.addGameLog('combat', `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲击破！耐久 -1）`);
             } else {
               depsRef.current.addGameLog('combat', `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲 ${currentArmor}→${newArmor}）`);
@@ -2956,7 +3120,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         }
 
         let perfectBlockSaved = false;
-        if (!shieldAutoEvolved && !isFullBlockShield && isPerfectBlockThisShield && !unbreakableUntilWaterfall[blockSlotId]) {
+        if (!shieldAutoEvolved && isPerfectBlockThisShield && !unbreakableUntilWaterfall[blockSlotId]) {
           const saveChance = slotItem.shieldPerfectBlockSaveChance;
           if (saveChance && saveChance > 0 && !unbreakableNext) {
             const threshold = Math.round((saveChance / 100) * 20);
@@ -2978,7 +3142,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           return;
         }
 
-        if (!shieldAutoEvolved && !isFullBlockShield && !unbreakableUntilWaterfall[blockSlotId] && shieldArmorDepleted) {
+        if (!shieldAutoEvolved && !unbreakableUntilWaterfall[blockSlotId] && shieldArmorDepleted) {
           let skipShieldDurabilityLoss = perfectBlockSaved;
           const isMonsterEquipShield = slotItem.type === 'monster';
 
@@ -3260,7 +3424,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               }
             }
           }
-        } else if (!shieldAutoEvolved && !isFullBlockShield && !shieldArmorDepleted) {
+        } else if (!shieldAutoEvolved && !shieldArmorDepleted) {
           const evolveCountWork = evolveBlockCount !== undefined ? { _shieldBlockCount: evolveBlockCount } : {};
           setEquipmentSlotById(blockSlotId, { ...workingShieldItem, ...evolveCountWork } as EquipmentItem);
         }
@@ -3299,6 +3463,107 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           const isMonsterEquipCorr = corrodeItem.type === 'monster';
           const nativeReviveCorr = isMonsterEquipCorr && corrodeItem.hasRevive && !corrodeItem.reviveUsed;
           const equipReviveCorr = corrodeItem.hasEquipmentRevive && !corrodeItem.equipmentReviveUsed;
+
+          // --- 遗言 effects (fire BEFORE revive, same as normal shield break) ---
+          const hasCorrodeLastWords = corrodeItem.onDestroyHeal || corrodeItem.onDestroyGold || corrodeItem.onDestroyDraw
+            || corrodeItem.onDestroyClassDraw || corrodeItem.onDestroyPermanentDamage || corrodeItem.onDestroyPermanentShield || corrodeItem.onDestroyEffect
+            || (isMonsterEquipCorr && (corrodeItem.lastWords || corrodeItem.wraithDeathHeal || corrodeItem.wraithDeathHealSpread || corrodeItem.skeletonLastWordsDiscard));
+          if (hasCorrodeLastWords) {
+            depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言触发！`);
+          }
+          if (corrodeItem.onDestroyHeal) {
+            healHero(corrodeItem.onDestroyHeal);
+            depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：恢复了 ${corrodeItem.onDestroyHeal} 点生命`);
+          }
+          if (corrodeItem.onDestroyGold) {
+            setGold(prev => prev + corrodeItem.onDestroyGold!);
+            depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：获得了 ${corrodeItem.onDestroyGold} 金币`);
+          }
+          if (corrodeItem.onDestroyDraw) {
+            const corrodeDrawNames: string[] = [];
+            for (let i = 0; i < corrodeItem.onDestroyDraw; i++) {
+              const drawn = drawFromBackpackToHand();
+              if (drawn) corrodeDrawNames.push(drawn.name);
+            }
+            if (corrodeDrawNames.length > 0) {
+              depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：抽到了 ${corrodeDrawNames.join('、')}`);
+            }
+          }
+          if (corrodeItem.onDestroyClassDraw) {
+            const classDrawn = depsRef.current.drawClassCardsToBackpack(corrodeItem.onDestroyClassDraw, `${corrodeItem.name}-遗言`);
+            if (classDrawn.length > 0) {
+              depsRef.current.triggerClassDeckFlight(classDrawn);
+              depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：获得专属卡「${classDrawn.map((c: any) => c.name).join('、')}」`);
+            }
+          }
+          if (corrodeItem.onDestroyPermanentDamage) {
+            setEquipmentSlotBonus(corrodeSlotId, 'damage', cur => cur + corrodeItem.onDestroyPermanentDamage!);
+            depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：该装备栏永久伤害 +${corrodeItem.onDestroyPermanentDamage}！`);
+            setHeroSkillBanner(`${corrodeItem.name} 遗言！永久伤害 +${corrodeItem.onDestroyPermanentDamage}！`);
+          }
+          if (corrodeItem.onDestroyPermanentShield) {
+            setEquipmentSlotBonus(corrodeSlotId, 'shield', cur => cur + corrodeItem.onDestroyPermanentShield!);
+            depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：该装备栏永久护甲 +${corrodeItem.onDestroyPermanentShield}！`);
+            setHeroSkillBanner(`${corrodeItem.name} 遗言！永久护甲 +${corrodeItem.onDestroyPermanentShield}！`);
+          }
+          if (corrodeItem.onDestroyEffect) {
+            if (corrodeItem.onDestroyEffect === 'slot-temp-buff-3-3') {
+              setSlotTempAttack(prev => ({ ...prev, [corrodeSlotId]: (prev[corrodeSlotId] ?? 0) + 3 }));
+              setSlotTempArmor(prev => ({ ...prev, [corrodeSlotId]: (prev[corrodeSlotId] ?? 0) + 3 }));
+              depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
+              setHeroSkillBanner(`${corrodeItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
+            } else {
+              depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：${corrodeItem.onDestroyEffect}`);
+            }
+          }
+          if (isMonsterEquipCorr) {
+            if (corrodeItem.lastWords === 'discard-hand-3') {
+              const drawnNames: string[] = [];
+              for (let i = 0; i < 3; i++) {
+                const drawn = drawFromBackpackToHand();
+                if (drawn) drawnNames.push(drawn.name);
+              }
+              if (drawnNames.length > 0) {
+                depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：抽到了 ${drawnNames.join('、')}`);
+                setHeroSkillBanner(`${corrodeItem.name} 遗言：抽取 ${drawnNames.length} 张牌！`);
+              }
+            }
+            if (corrodeItem.skeletonLastWordsDiscard) {
+              const skelDrawn = drawFromBackpackToHand();
+              if (skelDrawn) {
+                depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：抽到了「${skelDrawn.name}」`);
+                setHeroSkillBanner(`${corrodeItem.name} 遗言：抽取 1 张牌！`);
+              }
+            }
+            if (corrodeItem.lastWords?.startsWith('wraith-haunt')) {
+              const hauntAmount = parseInt(corrodeItem.lastWords.replace('wraith-haunt-', ''), 10) || 2;
+              const otherCorrodeSlotId: EquipmentSlotId = corrodeSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+              const otherCorrodeItem = otherCorrodeSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+              if (otherCorrodeItem) {
+                setEquipmentSlotBonus(otherCorrodeSlotId, 'damage', cur => cur + hauntAmount);
+                depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：${otherCorrodeItem.name} 获得临时攻击力 +${hauntAmount}！`);
+              }
+            }
+            if (corrodeItem.wraithDeathHeal || corrodeItem.wraithDeathHealSpread) {
+              const otherCorrodeSlotId: EquipmentSlotId = corrodeSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+              const otherCorrodeItem = otherCorrodeSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+              if (otherCorrodeItem && otherCorrodeItem.durability != null && otherCorrodeItem.maxDurability != null) {
+                const newDur = Math.min(otherCorrodeItem.maxDurability, otherCorrodeItem.durability + 1);
+                let updatedOther = { ...otherCorrodeItem } as EquipmentItem;
+                if (newDur > otherCorrodeItem.durability) {
+                  updatedOther = { ...updatedOther, durability: newDur };
+                  depsRef.current.addGameLog('equip', `${corrodeItem.name} 怨灵祝福：${otherCorrodeItem.name} 耐久 +1！`);
+                }
+                if (corrodeItem.wraithDeathHealSpread && !otherCorrodeItem.wraithDeathHeal) {
+                  updatedOther = { ...updatedOther, wraithDeathHeal: 1 };
+                  depsRef.current.addGameLog('equip', `${corrodeItem.name} 怨灵传承：${otherCorrodeItem.name} 获得遗言「怨灵祝福」！`);
+                }
+                setEquipmentSlotById(otherCorrodeSlotId, updatedOther);
+              }
+            }
+          }
+
+          // --- Revive check (after 遗言) ---
           if (nativeReviveCorr || equipReviveCorr) {
             const revivedCorr = nativeReviveCorr
               ? { ...corrodeItem, durability: 1, reviveUsed: true }

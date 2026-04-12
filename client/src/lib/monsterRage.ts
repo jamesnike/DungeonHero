@@ -28,7 +28,7 @@ const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
 
 const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
   Dragon:   [
-    { waterfallLevel: 4, attackBonus: 4, hpBonus: 2, specialAbility: 'dragon-attack-no-layer-cost', specialDesc: '龙鳞护体：攻击不消耗血层' },
+    { waterfallLevel: 4, attackBonus: 4, hpBonus: 2, specialAbility: 'dragon-attack-no-layer-cost', specialDesc: '龙鳞护体：上回合掉过血层时，本次攻击不消耗血层' },
     { waterfallLevel: 8, attackBonus: 7, hpBonus: 6, specialAbility: 'dragon-damage-retaliation', specialDesc: '龙鳞护体 + 龙息反击：每受到一次伤害，对玩家造成 3 点法术伤害' },
     { waterfallLevel: 12, attackBonus: 10, hpBonus: 10, specialAbility: 'dragon-all', specialDesc: '龙鳞护体 + 龙息反击 + 流血破甲：每失去一个血层，破坏耐久度 > 剩余血层数的装备' },
   ],

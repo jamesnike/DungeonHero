@@ -1215,7 +1215,7 @@ export function createDeck(): GameCardData[] {
     name: '战血荣誉',
     value: 0,
     image: dedupeEventBattleHonorImage,
-    description: '选择一项奖励。结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
+    description: '结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
     eventChoices: [
       { text: '整理呼吸（回复 8 HP，超杀吸血+1）', effect: ['heal+8', 'spellLifesteal+1'] },
       { text: '回收战利品（金币 +15，打开商店）', effect: ['gold+15', 'openShop'] },
@@ -1310,7 +1310,7 @@ export function createDeck(): GameCardData[] {
     name: '双重燃烧',
     value: 0,
     image: dedupeEventCrimsonPactImage,
-    description: '选择选项后翻转为「双重燃烧（觉醒）」，代价更高但可反复使用。',
+    description: '选择选项后翻转为「双重燃烧（觉醒）」。',
     eventChoices: [
       { text: '血价交易（-2 HP，发现专属）', effect: 'hp-2,discoverClass' },
       {
@@ -1566,22 +1566,22 @@ export function createDeck(): GameCardData[] {
     name: '奥术回廊',
     value: 0,
     image: skillScrollImage,
-    description: '魔法能量在此汇聚，选择一种方式汲取力量。选择选项后翻转为「奥术风暴」或「奥术护盾」。',
+    description: '选择选项后翻转为「奥术风暴」或「奥术护盾」。',
     eventChoices: [
       {
         text: '法术回响（下一张Magic触发两次）',
         effect: 'flipToDoubleNextMagic',
-        hint: '直接激活法术回响：下一张法术的效果将触发两次',
+        hint: '直接激活法术回响：下一张法术的效果将触发两次，翻转为「奥术风暴」',
       },
       {
         text: '发现一张专属Magic卡',
         effect: 'discoverClassMagic',
-        hint: '从专属牌堆发现一张魔法/英雄魔法牌（三选一）',
+        hint: '从专属牌堆发现一张魔法/英雄魔法牌（三选一），翻转为「奥术风暴」',
       },
       {
         text: '获得1张专属Hero Magic',
         effect: 'drawClassHeroMagic:1',
-        hint: '从专属牌堆抽取1张英雄魔法卡放入背包',
+        hint: '从专属牌堆抽取1张英雄魔法卡放入背包，翻转为「奥术风暴」',
       },
       {
         id: 'arcane-starter-magic',
@@ -1615,7 +1615,7 @@ export function createDeck(): GameCardData[] {
         image: skillScrollImage,
         magicType: 'permanent',
         magicEffect: 'arcane-storm-magic-count',
-        description: '永久魔法（Perm 1）：造成 X 点伤害，X = 本回合已使用的魔法卡数量。',
+        description: '永久魔法（Perm 1）：造成 X 点伤害，X = 已使用的魔法卡数量。使用后计数清零。',
         recycleDelay: 1,
       },
       destination: 'backpack',
@@ -1629,7 +1629,7 @@ export function createDeck(): GameCardData[] {
     name: '劝降祭典',
     value: 0,
     image: persuadeScrollCharmImage,
-    description: '掷出诅咒骰子，获得一项劝降增强。若装备着怀柔之印或劝降归袋符，将升级它们。',
+    description: '若装备着怀柔之印或劝降归袋符，将升级它们。',
     eventChoices: [
       {
         text: '掷出劝降骰：劝降等级+1/劝降费用-2/连劝减半/种族加成/耐久增强',
@@ -1653,7 +1653,7 @@ export function createDeck(): GameCardData[] {
     name: '诅咒骰局',
     value: 0,
     image: dedupeEventCursedDiceImage,
-    description: '掷出诅咒骰子，承受一项惩罚，然后翻转为「诅咒碑」建筑。',
+    description: '掷骰后翻转为「诅咒碑」建筑。',
     waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0, description: '被挤出时：摧毁所有护符，弃回所有手牌' },
     eventChoices: [
       {
@@ -1701,7 +1701,7 @@ export function createDeck(): GameCardData[] {
     name: '战备工坊',
     value: 0,
     image: skillScrollImage,
-    description: '装备锻造与强化之所，选择一种方式改良你的装备。翻转条件：激活行有至少 1 张装备牌时，翻转为「装备附魔」。',
+    description: '翻转条件：激活行有至少 1 张装备牌时，翻转为「装备附魔」。',
     eventChoices: [
       {
         id: 'arsenal-left-dur',
@@ -1771,7 +1771,7 @@ export function createDeck(): GameCardData[] {
     name: '附魔祭坛',
     value: 0,
     image: skillScrollImage,
-    description: '古老的祭坛散发着附魔之力。若此牌下方有堆叠牌，处理后将消耗下方牌并驻留。可翻转为「祭坛秘术」。',
+    description: '若此牌下方有堆叠牌，处理后将消耗下方牌并驻留。可翻转为「祭坛秘术」。',
     stayIfStacked: true,
     eventChoices: [
       {
@@ -1864,7 +1864,7 @@ export function createDeck(): GameCardData[] {
     name: '增幅仪式',
     value: 0,
     image: dedupeEventResonanceForgeImage,
-    description: '古老的增幅仪式，可将一张牌的力量凝聚为增幅祭坛，或复制已增幅的卡牌。',
+    description: '可将一张牌增幅为祭坛，或复制已增幅的卡牌。',
     eventChoices: [
       {
         id: 'amplify-equip',
@@ -1913,7 +1913,7 @@ export function createDeck(): GameCardData[] {
     name: '英雄试炼',
     value: 0,
     image: dedupeEventBattleHonorImage,
-    description: '试炼之门开启，选择一条道路获得力量与奖赏。',
+    description: '选择一项奖励。',
     eventChoices: [
       {
         text: '战鼓激励（金币+15，获得Lv1「战斗鼓舞」）',

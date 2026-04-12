@@ -953,7 +953,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         currentLayer: 4,
         maxHp: 1,
         image: minionImage,
-        description: '忠诚的小随从，可装备。每击杀一只怪物，攻击 +1、防御 +1。',
+        description: '忠诚的小随从，可装备。每次用小随从击杀怪物，攻击 +1、防御 +1。',
         isMinionCard: true,
       };
       depsRef.current.addCardToBackpack(minionCard);

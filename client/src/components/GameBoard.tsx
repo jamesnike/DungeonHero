@@ -267,7 +267,9 @@ const DIRECTED_REFLECT_PROJECTILE_SIZE = 50;
 const DIRECTED_RETALIATION_PROJECTILE_SIZE = 52;
 const DIRECTED_ARCANE_PROJECTILE_SIZE = 44;
 const DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE = 48;
+const DIRECTED_DRAGON_BREATH_PROJECTILE_SIZE = 50;
 const ARCANE_BLADE_SPELL_ANIM_MS = 780;
+const DRAGON_BREATH_ANIM_MS = 880;
 const DISCARD_SHOCK_FLIGHT_BASE_DURATION = 520;
 const DISCARD_SHOCK_FLIGHT_VARIANCE = 140;
 const DISCARD_SHOCK_ARC_MIN = 36;
@@ -450,6 +452,7 @@ export default function GameBoard() {
   const setBerserkTurnBuff = useEngineSetter('berserkTurnBuff');
   const setExtraAttackCharges = useEngineSetter('extraAttackCharges');
   const setDoubleNextMagic = useEngineSetter('doubleNextMagic');
+  const setMagicCardsPlayedThisTurn = useEngineSetter('magicCardsPlayedThisTurn');
   const setHeroSkillUsedThisWave = useEngineSetter('heroSkillUsedThisWave');
   const setBerserkerRageActive = useEngineSetter('berserkerRageActive');
   const setBerserkerSlotUsed = useEngineSetter('berserkerSlotUsed');
@@ -619,6 +622,12 @@ export default function GameBoard() {
           break;
         case 'dungeon-gold':
           state.hasDungeonGold = true;
+          break;
+        case 'armor-halve-endure':
+          state.hasArmorHalveEndure = true;
+          break;
+        case 'monster-equip-buff':
+          state.hasMonsterEquipBuff = true;
           break;
         case 'end-turn-draw':
           state.hasEndTurnDraw = true;
@@ -2977,7 +2986,9 @@ export default function GameBoard() {
             ? DIRECTED_ARCANE_PROJECTILE_SIZE
             : flight.kind === 'golem-layer-reflect'
               ? DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE
-              : DIRECTED_RETALIATION_PROJECTILE_SIZE;
+              : flight.kind === 'dragon-breath'
+                ? DIRECTED_DRAGON_BREATH_PROJECTILE_SIZE
+                : DIRECTED_RETALIATION_PROJECTILE_SIZE;
       const el = directedCombatFxElementMapRef.current.get(flight.id);
       if (el) {
         const eased = easeInOutCubic(clamp(progress));
@@ -3162,6 +3173,51 @@ export default function GameBoard() {
         duration: animSpeed(Math.max(350, ARCANE_BLADE_SPELL_ANIM_MS - 60 + Math.random() * 50)),
         progress: 0,
         arcHeight: 28 + Math.random() * 40,
+      };
+      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
+      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
+      startDirectedCombatFxFlightAnimation();
+      return true;
+    },
+    [startDirectedCombatFxFlightAnimation],
+  );
+
+  const tryStartDragonBreathFx = useCallback(
+    (monsterId: string, targetSlotId: EquipmentSlotId | 'hero'): boolean => {
+      if (typeof window === 'undefined') return false;
+      const surfaceEl = gameSurfaceRef.current;
+      const monsterCell = monsterCellRefs.current[monsterId];
+      const targetIdx =
+        targetSlotId === 'hero'
+          ? HERO_ROW_HERO_INDEX
+          : targetSlotId === 'equipmentSlot1'
+            ? HERO_ROW_EQUIPMENT_1_INDEX
+            : HERO_ROW_EQUIPMENT_2_INDEX;
+      const targetCell = heroRowCellRefs.current[targetIdx];
+      if (!surfaceEl || !monsterCell || !targetCell) {
+        return false;
+      }
+      const surfaceRect = surfaceEl.getBoundingClientRect();
+      const startRect = monsterCell.getBoundingClientRect();
+      const endRect = targetCell.getBoundingClientRect();
+      const baseTime = performance.now();
+      const start: Point = {
+        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
+        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
+      };
+      const end: Point = {
+        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
+        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
+      };
+      const flight: DirectedCombatFxFlight = {
+        id: `dragon-breath-${monsterId}-${baseTime}`,
+        kind: 'dragon-breath',
+        start,
+        end,
+        startTime: baseTime,
+        duration: animSpeed(Math.max(360, DRAGON_BREATH_ANIM_MS - 80 + Math.random() * 50)),
+        progress: 0,
+        arcHeight: 36 + Math.random() * 48,
       };
       directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
       setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
@@ -5720,7 +5776,7 @@ export default function GameBoard() {
           currentLayer: 4,
           maxHp: 1,
           image: minionImage,
-          description: '忠诚的小随从，可装备。每击杀一只怪物，攻击 +1、防御 +1。',
+          description: '忠诚的小随从，可装备。每次用小随从击杀怪物，攻击 +1、防御 +1。',
           isMinionCard: true,
         };
         addCardToBackpack(minionCard);
@@ -6046,6 +6102,9 @@ export default function GameBoard() {
     } else {
       setPreviewCardStacks({});
     }
+
+    const dealCardNames = plan.nextPreviewCards.map(c => `「${c.name}」`).join('、');
+    addGameLog('waterfall', `发牌：${dealCardNames} 进入预览行`);
 
     logWaterfall('deal-start', {
       nextPreviewCount: plan.nextPreviewCards.length,
@@ -6479,7 +6538,7 @@ export default function GameBoard() {
       }
     }
     setTurnCount(prev => prev + 1);
-    addGameLog('waterfall', `第 ${turnCount + 1} 波开始${dropCount != null ? `，${dropCount} 张新卡牌` : ''}`);
+    addGameLog('turn', `══ 第 ${turnCount + 1} 波 ══`);
     {
       const prevLeft = slotTempArmor.equipmentSlot1;
       const prevRight = slotTempArmor.equipmentSlot2;
@@ -6567,6 +6626,7 @@ export default function GameBoard() {
       }
     }
 
+    setMagicCardsPlayedThisTurn(0);
     resetHeroSkillForNewWave();
   };
 
@@ -7188,6 +7248,7 @@ export default function GameBoard() {
     tryStartBossRetaliationDirectedFx,
     tryStartGolemLayerReflectFx,
     tryStartArcaneBladeSpellFx,
+    tryStartDragonBreathFx,
     animSpeed,
     requestDiceOutcome,
     addHeroMagicGauge,
@@ -7891,6 +7952,7 @@ export default function GameBoard() {
           addCardToBackpack(card, {
             pendingDungeonCardId: isDungeonCard ? card.id : undefined,
           });
+          addGameLog('deck', `获得「${card.name}」→ 背包`);
           removeCard(card.id, false);
         } else {
     // // toast({ 
@@ -8309,6 +8371,7 @@ export default function GameBoard() {
       addCardToBackpack(card, {
         pendingDungeonCardId: isDungeonCard ? card.id : undefined,
       });
+      addGameLog('deck', `获得「${card.name}」→ 背包`);
       removeCard(card.id, false);
       resetDragState();
     } else if (slotId.startsWith('slot-equipment')) {
@@ -10177,7 +10240,7 @@ export default function GameBoard() {
                   defeatAnimation={Boolean(monsterDefeatStates[card.id])}
                   className={`${hasActiveStack ? 'relative z-[5]' : ''} ${removingCards.has(card.id) ? 'animate-card-remove' : 'shadow-lg'} ${
                     (isMonsterTurnLock && !monsterTargetHighlight && !dungeonTargetHighlight) ||
-                    (isResolvingCard && !isEventPendingCell)
+                    (isResolvingCard && !isEventPendingCell && !monsterTargetHighlight && !dungeonTargetHighlight)
                       ? 'opacity-60 pointer-events-none'
                       : ''
                   } ${
@@ -10185,19 +10248,19 @@ export default function GameBoard() {
                   } ${dungeonTargetHighlight ? 'dungeon-target-highlight animate-pulse' : ''}`.trim()}
                   isEngaged={isEngagedMonster}
                   onClick={() => {
-                    if (isEventPendingCell) {
-                      setEventModalMinimized(false);
+                    if (
+                      monsterTargetingActive &&
+                      (card.type === 'monster' || card.type === 'building')
+                    ) {
+                      handleMonsterTargetSelection(card);
                       return;
                     }
                     if (dungeonTargetingActive) {
                       handleDungeonCardSelection(card);
                       return;
                     }
-                    if (
-                      monsterTargetingActive &&
-                      (card.type === 'monster' || card.type === 'building')
-                    ) {
-                      handleMonsterTargetSelection(card);
+                    if (isEventPendingCell) {
+                      setEventModalMinimized(false);
                       return;
                     }
                     if (isMonsterTurnLock || isResolvingCard) return;
@@ -10594,10 +10657,13 @@ export default function GameBoard() {
                   ? DIRECTED_ARCANE_PROJECTILE_SIZE
                   : flight.kind === 'golem-layer-reflect'
                     ? DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE
-                    : DIRECTED_RETALIATION_PROJECTILE_SIZE;
+                    : flight.kind === 'dragon-breath'
+                      ? DIRECTED_DRAGON_BREATH_PROJECTILE_SIZE
+                      : DIRECTED_RETALIATION_PROJECTILE_SIZE;
             const isReflect = flight.kind === 'shield-reflect';
             const isArcane = flight.kind === 'arcane-blade-spell';
             const isGolemLayer = flight.kind === 'golem-layer-reflect';
+            const isDragonBreath = flight.kind === 'dragon-breath';
             return (
               <div
                 key={flight.id}
@@ -10606,13 +10672,15 @@ export default function GameBoard() {
                   else directedCombatFxElementMapRef.current.delete(flight.id);
                 }}
                 className={
-                  isGolemLayer
-                    ? 'absolute rounded-full border-2 border-stone-500/95 bg-gradient-to-br from-stone-300/95 via-amber-700/90 to-stone-800/95 shadow-[0_0_20px_rgba(120,83,50,0.9)] ring-2 ring-amber-300/50'
-                    : isArcane
-                      ? 'absolute rounded-full border-2 border-purple-400/95 bg-gradient-to-br from-violet-300/95 via-purple-500/90 to-indigo-700/90 shadow-[0_0_20px_rgba(139,92,246,0.95)] ring-2 ring-purple-200/50'
-                      : isReflect
-                        ? 'absolute rounded-full border-2 border-amber-400/95 bg-gradient-to-br from-amber-200/95 via-yellow-400/90 to-orange-500/90 shadow-[0_0_18px_rgba(251,191,36,0.95)] ring-2 ring-amber-100/50'
-                        : 'absolute rounded-full border-2 border-rose-800/95 bg-gradient-to-br from-rose-300/95 via-red-600/90 to-red-950/95 shadow-[0_0_22px_rgba(220,38,38,0.85)] ring-2 ring-rose-200/45'
+                  isDragonBreath
+                    ? 'absolute rounded-full border-2 border-orange-500/95 bg-gradient-to-br from-yellow-300/95 via-orange-500/90 to-red-700/95 shadow-[0_0_22px_rgba(249,115,22,0.95)] ring-2 ring-yellow-200/50'
+                    : isGolemLayer
+                      ? 'absolute rounded-full border-2 border-stone-500/95 bg-gradient-to-br from-stone-300/95 via-amber-700/90 to-stone-800/95 shadow-[0_0_20px_rgba(120,83,50,0.9)] ring-2 ring-amber-300/50'
+                      : isArcane
+                        ? 'absolute rounded-full border-2 border-purple-400/95 bg-gradient-to-br from-violet-300/95 via-purple-500/90 to-indigo-700/90 shadow-[0_0_20px_rgba(139,92,246,0.95)] ring-2 ring-purple-200/50'
+                        : isReflect
+                          ? 'absolute rounded-full border-2 border-amber-400/95 bg-gradient-to-br from-amber-200/95 via-yellow-400/90 to-orange-500/90 shadow-[0_0_18px_rgba(251,191,36,0.95)] ring-2 ring-amber-100/50'
+                          : 'absolute rounded-full border-2 border-rose-800/95 bg-gradient-to-br from-rose-300/95 via-red-600/90 to-red-950/95 shadow-[0_0_22px_rgba(220,38,38,0.85)] ring-2 ring-rose-200/45'
                 }
                 style={{
                   width: sz,

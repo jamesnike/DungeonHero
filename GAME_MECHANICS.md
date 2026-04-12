@@ -381,7 +381,7 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 
 | 名称 | `amuletEffect` | 效果 |
 |------|----------------|------|
-| 熔炉之心 | `flip-gold` | 每次卡牌翻转获得 3 金币 |
+| 熔炉之心 | `flip-gold` | 每次卡牌翻转获得 4 金币 |
 
 ---
 
@@ -662,7 +662,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 种族 | Lv.1 | Lv.2 | Lv.3 |
 |------|------|------|------|
-| Dragon | WF≥4: 攻+3 血+1 + 龙鳞护体 | WF≥8: 攻+5 血+4 + 龙鳞护体+龙息反击 | WF≥12: 攻+8 血+7 + 龙鳞护体+龙息反击+流血破甲 |
+| Dragon | WF≥4: 攻+3 血+1 + 龙鳞护体（上回合掉血层时不耗血层） | WF≥8: 攻+5 血+4 + 龙鳞护体+龙息反击 | WF≥12: 攻+8 血+7 + 龙鳞护体+龙息反击+流血破甲 |
 | Skeleton | WF≥3: 攻+3 血+1 + 不朽之骨 | WF≥7: 攻+6 血+2 + 不朽之骨+遗言弃1牌 | WF≥11: 攻+9 血+3 + 不朽之骨+遗言+亡骨轮回 |
 | Goblin | WF≥3: 攻+2 血+1 + 窃牌贼 | WF≥7: 攻+4 血+2 + 窃牌贼+贼窝疗养 | WF≥11: 攻+6 血+4 + 窃牌贼+贼窝疗养+贪婪强化 |
 | Ogre | WF≥5: 攻+3 血+1 + 击晕 | WF≥9: 攻+5 血+3 + 击晕+连击 | WF≥13: 攻+8 血+5 + 震慑+击晕+连击 |
@@ -1085,7 +1085,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
    - `backpack`：放入背包
    - `hand`：放入手牌
    - 默认/`graveyard`：进坟场
-3. 如果有"熔炉之心"护符 (`hasFlipGold`)：获得 `FLIP_GOLD_REWARD(3)` 金币
+3. 如果有"熔炉之心"护符 (`hasFlipGold`)：获得 `FLIP_GOLD_REWARD(4)` 金币
 
 ### 18.2 翻转回退 (`_flipBackCard`)
 
@@ -1127,7 +1127,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | `BALANCE_ATTACK_PENALTY` | 1 | GameBoard.tsx |
 | `BALANCE_SHIELD_PENALTY` | 1 | GameBoard.tsx |
 | `STRENGTH_SELF_DAMAGE` | 2 | GameBoard.tsx |
-| `FLIP_GOLD_REWARD` | 3 | GameBoard.tsx |
+| `FLIP_GOLD_REWARD` | 4 | GameBoard.tsx |
 | `DEFEAT_ANIMATION_DURATION` | 950ms | GameBoard.tsx |
 | `COMBAT_ANIMATION_DURATION` | 1200ms | GameBoard.tsx |
 | `COMBAT_ANIMATION_STAGGER` | 180ms | GameBoard.tsx |

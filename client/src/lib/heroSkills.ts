@@ -169,8 +169,8 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'summon-minion',
     name: '随从召唤',
-    description: '被动：开局获得小随从 (每次击杀怪物，小随从攻击 +1、防御 +1)',
-    effect: '被动：开局获得小随从 (每次击杀怪物，小随从攻击 +1、防御 +1)',
+    description: '被动：开局获得小随从 (每次用小随从击杀怪物，小随从攻击 +1、防御 +1)',
+    effect: '被动：开局获得小随从 (每次用小随从击杀怪物，小随从攻击 +1、防御 +1)',
     type: 'passive',
     requiresTarget: null,
   },

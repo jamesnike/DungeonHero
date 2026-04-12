@@ -11,6 +11,7 @@ import {
   GameCardData,
   getMagicSubtypeBracketLabel,
   formatScalingSpellDamageLine,
+  useArcaneStormDamage,
   waterfallsUntilBackpackFromRecycle,
 } from './GameCard';
 import {
@@ -38,6 +39,7 @@ export default function BackpackViewerModal({
   recycleCards = [],
   onCardSelect,
 }: BackpackViewerModalProps) {
+  const arcaneStormDamage = useArcaneStormDamage();
   const displayedCards = [...cards].sort((a, b) => a.name.localeCompare(b.name)); // Backpack is unordered
   const recycleBagCards = [...recycleCards].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -123,6 +125,10 @@ export default function BackpackViewerModal({
         {card.scalingDamage != null ? (
           <p className="text-xs text-muted-foreground line-clamp-3">
             {formatScalingSpellDamageLine(card.scalingDamage)}
+          </p>
+        ) : card.magicEffect === 'arcane-storm-magic-count' ? (
+          <p className="text-xs font-semibold text-muted-foreground line-clamp-3">
+            当下 {arcaneStormDamage + (card.amplifyBonus ?? 0)} 点
           </p>
         ) : (
           card.description && (

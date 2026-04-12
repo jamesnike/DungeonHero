@@ -606,7 +606,7 @@ export type GraveyardStackFlight = {
 /** 护盾反弹 / Boss 反噬 / 奥术之刃附魔：纯表现用定向抛物线投射（伤害由结算逻辑另行应用） */
 export type DirectedCombatFxFlight = {
   id: string;
-  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell' | 'golem-layer-reflect';
+  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell' | 'golem-layer-reflect' | 'dragon-breath';
   start: Point;
   end: Point;
   startTime: number;

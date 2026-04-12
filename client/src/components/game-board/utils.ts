@@ -950,7 +950,7 @@ export function createDeck(): GameCardData[] {
     name: '战血荣誉',
     value: 0,
     image: dedupeEventBattleHonorImage,
-    description: '选择一项奖励。结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
+    description: '结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
     eventChoices: [
       { text: '整理呼吸（回复 8 HP，超杀吸血+1）', effect: ['heal+8', 'spellLifesteal+1'] },
       { text: '回收战利品（金币 +15，打开商店）', effect: ['gold+15', 'openShop'] },
@@ -1014,7 +1014,7 @@ export function createDeck(): GameCardData[] {
     name: '双重燃烧',
     value: 0,
     image: dedupeEventCrimsonPactImage,
-    description: '选择选项后翻转为「双重燃烧（觉醒）」，代价更高但可反复使用。',
+    description: '选择选项后翻转为「双重燃烧（觉醒）」。',
     eventChoices: [
       { text: '血价交易（-2 HP，发现专属）', effect: 'hp-2,discoverClass' },
       {
@@ -1160,7 +1160,7 @@ export function createDeck(): GameCardData[] {
     name: '劝降祭典',
     value: 0,
     image: dedupePersuadeScrollCharmImage,
-    description: '掷出诅咒骰子，获得一项劝降增强。若装备着怀柔之印或劝降归袋符，将升级它们。',
+    description: '若装备着怀柔之印或劝降归袋符，将升级它们。',
     eventChoices: [
       {
         text: '掷出劝降骰：劝降等级+1/劝降费用-2/连劝减半/种族加成/耐久增强',
@@ -1183,7 +1183,7 @@ export function createDeck(): GameCardData[] {
     name: '诅咒骰局',
     value: 0,
     image: dedupeEventCursedDiceImage,
-    description: '掷出诅咒骰子，承受一项惩罚，然后翻转为「诅咒碑」建筑。',
+    description: '掷骰后翻转为「诅咒碑」建筑。',
     waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0, description: '被挤出时：摧毁所有护符，弃回所有手牌' },
     eventChoices: [
       {

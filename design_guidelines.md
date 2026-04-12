@@ -842,7 +842,7 @@ Non-amulet relic effects (e.g., `waterfall-heal`, `discard-profit`) are checked 
 | `waterfall-heal` | Heal 4 HP on waterfall | `GameBoard.tsx` → `applyWaterfallSideEffects` |
 | `discard-profit` | +2 gold per discard | `useCardOperations.ts` → discard handler |
 | `heal-to-damage` | +1 permanent weapon damage per 5 HP healed | `useCombatActions.ts` → heal tracking |
-| `summon-minion` | Spawn minion at game start; +1/+1 per kill | `useCombatActions.ts` → monster kill |
+| `summon-minion` | Spawn minion at game start; +1/+1 per minion kill | `useCombatActions.ts` → monster kill |
 | `shield-wall` | Block weapon equip; thunder seal at start | `GameBoard.tsx` → `handleCardToSlot`, `handleCardDraftComplete` |
 | `bulwark-attack` | +2 temp attack per weapon attack (stacks) | `useCombatActions.ts` → attack resolution |
 | `bulwark-armor` | +2 temp armor per shield block (stacks) | `useCombatActions.ts` → block resolution |

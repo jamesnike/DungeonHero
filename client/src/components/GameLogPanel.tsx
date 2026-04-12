@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { ScrollText, Minimize2, Maximize2, Trash2 } from 'lucide-react';
+import { ScrollText, Minimize2, Maximize2, Trash2, Copy, Check } from 'lucide-react';
 import { memo, useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 
@@ -18,7 +18,8 @@ export type LogEntryType =
   | 'skill'
   | 'gold'
   | 'deck'
-  | 'system';
+  | 'system'
+  | 'turn';
 
 export interface LogEntry {
   id: number;
@@ -43,6 +44,7 @@ const LOG_TYPE_COLORS: Record<LogEntryType, string> = {
   gold: 'text-yellow-300',
   deck: 'text-teal-400',
   system: 'text-gray-400',
+  turn: 'text-amber-300',
 };
 
 const LOG_TYPE_LABELS: Record<LogEntryType, string> = {
@@ -61,6 +63,7 @@ const LOG_TYPE_LABELS: Record<LogEntryType, string> = {
   gold: 'Gold',
   deck: 'Deck',
   system: 'System',
+  turn: 'Turn',
 };
 
 interface GameLogPanelProps {
@@ -87,6 +90,7 @@ function GameLogPanelInner({
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const hasCustomPositionRef = useRef(false);
@@ -123,6 +127,20 @@ function GameLogPanelInner({
   }, [entries.length]);
 
   const reversedEntries = useMemo(() => [...entries].reverse(), [entries]);
+
+  const handleCopyLog = useCallback(() => {
+    const text = entries
+      .map(e =>
+        e.type === 'turn'
+          ? `\n${e.message}\n`
+          : `[${LOG_TYPE_LABELS[e.type]}] ${e.message}`,
+      )
+      .join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 1500);
+    });
+  }, [entries]);
 
   useEffect(() => {
     const target = cardRef.current;
@@ -347,6 +365,18 @@ function GameLogPanelInner({
               </span>
             </div>
             <div className="flex items-center gap-0.5 flex-shrink-0">
+              {entries.length > 0 && (
+                <button
+                  type="button"
+                  className="rounded-md p-1 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                  onClick={handleCopyLog}
+                  title="Copy log to clipboard"
+                >
+                  {copySuccess
+                    ? <Check className="combat-panel__icon text-emerald-400" />
+                    : <Copy className="combat-panel__icon" />}
+                </button>
+              )}
               {onClear && entries.length > 0 && (
                 <button
                   type="button"
@@ -374,16 +404,26 @@ function GameLogPanelInner({
             {entries.length === 0 ? (
               <p className="combat-panel__stat text-muted-foreground text-center py-4">No events yet</p>
             ) : (
-              reversedEntries.map(entry => (
-                <div key={entry.id} className="flex gap-1.5 items-start leading-tight">
-                  <span className={`combat-panel__badge font-semibold flex-shrink-0 pt-px ${LOG_TYPE_COLORS[entry.type]}`}>
-                    {LOG_TYPE_LABELS[entry.type]}
-                  </span>
-                  <span className="combat-panel__stat text-foreground/80 break-words min-w-0">
-                    {entry.message}
-                  </span>
-                </div>
-              ))
+              reversedEntries.map(entry =>
+                entry.type === 'turn' ? (
+                  <div key={entry.id} className="flex items-center gap-2 py-1 my-0.5">
+                    <div className="flex-1 h-px bg-amber-400/40" />
+                    <span className="combat-panel__badge font-bold text-amber-300 whitespace-nowrap">
+                      {entry.message}
+                    </span>
+                    <div className="flex-1 h-px bg-amber-400/40" />
+                  </div>
+                ) : (
+                  <div key={entry.id} className="flex gap-1.5 items-start leading-tight">
+                    <span className={`combat-panel__badge font-semibold flex-shrink-0 pt-px ${LOG_TYPE_COLORS[entry.type]}`}>
+                      {LOG_TYPE_LABELS[entry.type]}
+                    </span>
+                    <span className="combat-panel__stat text-foreground/80 break-words min-w-0">
+                      {entry.message}
+                    </span>
+                  </div>
+                ),
+              )
             )}
           </div>
         </div>

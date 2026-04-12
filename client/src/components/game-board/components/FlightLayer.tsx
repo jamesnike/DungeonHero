@@ -21,7 +21,7 @@ export interface DiscardShockFlight {
 
 export interface DirectedCombatFxFlight {
   id: string;
-  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell';
+  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell' | 'dragon-breath';
 }
 
 export interface FlightLayerProps {

@@ -97,7 +97,7 @@ export interface EventSystemDeps {
   damageMonsterWithLayerOverflow: (monster: GameCardData, damage: number, maxLayers?: number) => GameCardData;
   checkHollowSkeletonRestore: (monsterId: string, monsterName: string, layersBefore: number, layersAfter: number) => void;
   checkWraithRebirth: (monsterId: string, monsterName: string, monsterFury: number, layersBefore: number, layersAfter: number) => void;
-  handleMonsterDefeated: (monster: GameCardData) => void;
+  handleMonsterDefeated: (monster: GameCardData, opts?: { killedByMinion?: boolean }) => void;
   recordClassDamageDiscoverHit: () => void;
 
   // --- Functions from useShopHandlers (Layer 2) ---
@@ -395,6 +395,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       }
 
       pendingAutoDrawsRef.current -= 1;
+      addGameLog('deck', `自动抽牌：「${drawn.name}」→ 手牌`);
       logBackpackDraw('auto-draw-delivered', {
         cardId: drawn.id,
         pending: pendingAutoDrawsRef.current,

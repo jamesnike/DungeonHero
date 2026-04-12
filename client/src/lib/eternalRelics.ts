@@ -67,7 +67,7 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'summon-minion': {
     id: 'summon-minion',
     name: '永恒护符·随从召唤',
-    description: '开局获得小随从，每次击杀怪物，小随从攻击 +1、防御 +1。',
+    description: '开局获得小随从，每次用小随从击杀怪物，小随从攻击 +1、防御 +1。',
     image: relicSummonMinionImage,
   },
   'bulwark-attack': {

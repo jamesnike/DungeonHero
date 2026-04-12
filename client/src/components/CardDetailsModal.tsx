@@ -5,6 +5,7 @@ import {
   type GameCardData,
   isPermRecycleEquipment,
   formatScalingSpellDamageLine,
+  useArcaneStormDamage,
 } from "./GameCard";
 import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade, getUpgradeTierCount } from "@/lib/monsterRage";
 import { isUpgradeableCard, isCardAtMaxUpgrade } from "./CardUpgradeModal";
@@ -33,6 +34,7 @@ export default function CardDetailsModal({
   currentTurn,
   monsterRewards,
 }: CardDetailsModalProps) {
+  const arcaneStormDamage = useArcaneStormDamage();
   if (!card) return null;
 
   const rageRule = card.type === 'monster' ? getMonsterRageRule(card.name) : null;
@@ -327,7 +329,7 @@ export default function CardDetailsModal({
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
-                    该怪物攻击时不消耗血层。
+                    若上个Hero回合该怪物掉过血层，则本次攻击不消耗血层。
                   </p>
                 </div>
               </div>
@@ -968,6 +970,10 @@ export default function CardDetailsModal({
                 }
               }
 
+              if (card.onDestroyEffect === 'slot-temp-buff-3-3') {
+                effects.push({ title: '遗言', desc: '装备毁坏时，该装备栏 +3 临时攻击 +3 临时护甲。', color: 'amber' });
+              }
+
               if (effects.length === 0) return null;
 
               const colorMap: Record<string, { bg: string; border: string; title: string; text: string }> = {
@@ -1093,6 +1099,21 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Equipment Last Words from potion (weapon/shield) */}
+            {(card.type === 'weapon' || card.type === 'shield') && card.onDestroyEffect === 'slot-temp-buff-3-3' && (
+              <div className="p-3 rounded-md border bg-amber-500/15 border-amber-500/30">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skull className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                      遗言
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">装备毁坏时，该装备栏 +3 临时攻击 +3 临时护甲。</p>
+                </div>
+              </div>
+            )}
+
             {/* Potion Details */}
             {card.type === 'potion' && (
               <div className="bg-green-500/10 p-3 rounded-md border border-green-500/20">
@@ -1130,6 +1151,15 @@ export default function CardDetailsModal({
                     <p className="font-semibold text-foreground">
                       {formatScalingSpellDamageLine(card.scalingDamage)}
                     </p>
+                  ) : card.magicEffect === 'arcane-storm-magic-count' ? (
+                    <>
+                      <p className="font-semibold text-foreground">
+                        当下 {arcaneStormDamage + (card.amplifyBonus ?? 0)} 点
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        伤害 = 已使用的魔法卡累计数量{(card.amplifyBonus ?? 0) > 0 ? ` + ${card.amplifyBonus} 增幅` : ''} + 永久法术伤害加成。使用后计数清零。
+                      </p>
+                    </>
                   ) : (card as GameCardData & { knightEffect?: string }).knightEffect === 'chaos-dice' ||
                     card.name === '混沌骰运' ? (
                     CHAOS_DICE_SPELL_DESCRIPTION

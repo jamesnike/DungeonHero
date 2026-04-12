@@ -3450,7 +3450,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       setMagicCardsPlayedThisTurn(prev => prev + 1);
     }
 
-    const isEchoTriggered = doubleNextMagic && card.type === 'magic' && card.magicEffect !== 'double-next-magic';
+    const liveDoubleNextMagic = engine.getState().doubleNextMagic;
+    const isEchoTriggered = liveDoubleNextMagic && card.type === 'magic' && card.magicEffect !== 'double-next-magic';
     if (isEchoTriggered) {
       setDoubleNextMagic(false);
       depsRef.current.addGameLog('magic', `法术回响：${card.name} 的效果将触发两次！`);
@@ -5056,9 +5057,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             const magicCount = engine.getState().magicCardsPlayedThisTurn;
             const baseDmg = Math.max(0, magicCount + (card.amplifyBonus ?? 0));
             const totalDmg = getSpellDamage(baseDmg) * echoMultiplier;
+            setMagicCardsPlayedThisTurn(0);
             const monsters = flattenActiveRowSlots(activeCards).filter(isDamageableTarget);
             if (monsters.length === 0 || totalDmg <= 0) {
-              finalizeMagicCard(card, { banner: `奥术风暴：本回合使用了 ${magicCount} 张魔法卡，但没有可攻击的目标。` });
+              finalizeMagicCard(card, { banner: `奥术风暴：本回合使用了 ${magicCount} 张魔法卡，但没有可攻击的目标。已重置计数。` });
               return;
             }
             if (monsters.length === 1) {
@@ -5066,7 +5068,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               if (!depsRef.current.isMonsterEngaged(target.id)) depsRef.current.beginCombat(target, 'hero');
               depsRef.current.dealDamageToMonster(target, totalDmg, { isSpellDamage: true });
               finalizeMagicCard(card, {
-                banner: `奥术风暴：本回合 ${magicCount} 张魔法卡，对 ${target.name} 造成 ${totalDmg} 点伤害。${isEchoTriggered ? '（回响×2）' : ''}`,
+                banner: `奥术风暴：${magicCount} 张魔法卡，对 ${target.name} 造成 ${totalDmg} 点伤害。计数已重置。${isEchoTriggered ? '（回响×2）' : ''}`,
                 dealtDamage: true,
               });
               return;
@@ -5077,9 +5079,9 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               step: 'monster-select',
               pendingDamage: baseDmg,
               echoMultiplier,
-              prompt: `奥术风暴：选择一个目标，造成 ${totalDmg} 点伤害（本回合 ${magicCount} 张魔法卡）。`,
+              prompt: `奥术风暴：选择一个目标，造成 ${totalDmg} 点伤害（${magicCount} 张魔法卡）。`,
             });
-            setHeroSkillBanner(`奥术风暴：本回合 ${magicCount} 张魔法卡，选择目标造成 ${totalDmg} 点伤害。`);
+            setHeroSkillBanner(`奥术风暴：${magicCount} 张魔法卡，选择目标造成 ${totalDmg} 点伤害。`);
             return;
           }
           if (card.magicEffect === 'altar-discard-discover') {

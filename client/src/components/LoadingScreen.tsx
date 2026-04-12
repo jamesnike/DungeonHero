@@ -45,6 +45,52 @@ import eventScrollImage from '@assets/generated_images/chibi_event_scroll.png';
 import heroPortrait from '@assets/generated_images/chibi_hero_adventurer_character.png';
 import cardBackImage from '@assets/generated_images/card_back_design.png';
 
+/** Starter card pool images (used by CardDraftModal at game start) */
+import starterCombatRallyImage from '@assets/generated_images/card_dedupe_starter_combat_rally.png';
+import starterFineRepairImage from '@assets/generated_images/card_dedupe_starter_fine_repair.png';
+import starterDiscardDrawImage from '@assets/generated_images/card_dedupe_starter_discard_draw.png';
+import starterMazeRewindImage from '@assets/generated_images/card_dedupe_starter_maze_rewind.png';
+import starterWorldSwapImage from '@assets/generated_images/card_dedupe_starter_world_swap.png';
+import starterNoviceSwordImage from '@assets/generated_images/starter_novice_sword.png';
+import starterScrollArmorImage from '@assets/generated_images/starter_scroll_armor.png';
+import starterBountyBladeImage from '@assets/generated_images/starter_bounty_blade.png';
+import starterGhostBladeImage from '@assets/generated_images/starter_ghost_blade.png';
+import starterLuckyDaggerImage from '@assets/generated_images/starter_lucky_dagger.png';
+import starterWaterfallSwordImage from '@assets/generated_images/starter_waterfall_sword.png';
+import starterPersuadeBladeImage from '@assets/generated_images/starter_persuade_blade.png';
+import starterImmortalHammerImage from '@assets/generated_images/starter_immortal_hammer.png';
+import starterGuardianShieldImage from '@assets/generated_images/starter_guardian_shield.png';
+import starterLinkShieldImage from '@assets/generated_images/starter_link_shield.png';
+import starterScrollHealImage from '@assets/generated_images/starter_scroll_heal.png';
+import starterPotionForgeImage from '@assets/generated_images/starter_potion_forge.png';
+import starterPotionDurabilityImage from '@assets/generated_images/starter_potion_durability.png';
+import starterScrollSummonImage from '@assets/generated_images/starter_scroll_summon.png';
+import starterScrollDimensionImage from '@assets/generated_images/starter_scroll_dimension.png';
+import starterAmuletLoneImage from '@assets/generated_images/card_dedupe_starter_amulet_lone.png';
+import starterAmuletPersuadeDiscountImage from '@assets/generated_images/starter_amulet_persuade_discount.png';
+import starterAmuletMissileImage from '@assets/generated_images/starter_amulet_missile.png';
+import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
+import starterAmuletSwapUpgradeImage from '@assets/generated_images/starter_amulet_swap_upgrade.png';
+import starterAmuletStunCapImage from '@assets/generated_images/starter_amulet_stun_cap.png';
+import starterAmuletRecycleExpandImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
+import starterAmuletDungeonGoldImage from '@assets/generated_images/starter_amulet_dungeon_gold.png';
+import starterScrollReviveImage from '@assets/generated_images/starter_scroll_revive.png';
+import starterScrollRecallImage from '@assets/generated_images/starter_scroll_recall.png';
+import starterMagicMissileImage from '@assets/generated_images/card_dedupe_starter_magic_missile.png';
+import starterScrollGamblerImage from '@assets/generated_images/starter_scroll_gambler.png';
+import starterScrollRecycleEchoImage from '@assets/generated_images/starter_scroll_recycle_echo.png';
+import starterPotionSpellDamageImage from '@assets/generated_images/starter_potion_spell_damage.png';
+import starterPotionLifestealImage from '@assets/generated_images/starter_potion_lifesteal.png';
+import starterPotionStunImage from '@assets/generated_images/starter_potion_stun.png';
+import starterSlotCapacityPotionImage from '@assets/generated_images/card_dedupe_potion_slot_capacity_starter.png';
+import starterScrollUpgradeImage from '@assets/generated_images/starter_scroll_upgrade.png';
+import starterScrollEternalInscribeImage from '@assets/generated_images/starter_scroll_eternal_inscribe.png';
+import starterScrollFateDeepImage from '@assets/generated_images/starter_scroll_fate_deep.png';
+import starterPotionHandLimitImage from '@assets/generated_images/starter_potion_hand_limit.png';
+import starterBackpackSizePotionImage from '@assets/generated_images/card_dedupe_starter_potion_backpack_size.png';
+import starterWaterfallDealPotionImage from '@assets/generated_images/card_dedupe_starter_potion_waterfall_deal.png';
+import starterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
+
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
   swordImage, axeImage, daggerImage, daggerWeaponImage, holyBladeImage, maceImage,
@@ -64,6 +110,24 @@ const ALL_IMAGES = [
   knightGuardianShieldImage,
   skillScrollImage, eventScrollImage,
   heroPortrait, cardBackImage,
+  // Starter card pool
+  starterCombatRallyImage, starterFineRepairImage, starterDiscardDrawImage,
+  starterMazeRewindImage, starterWorldSwapImage, starterNoviceSwordImage,
+  starterScrollArmorImage, starterBountyBladeImage, starterGhostBladeImage,
+  starterLuckyDaggerImage, starterWaterfallSwordImage, starterPersuadeBladeImage,
+  starterImmortalHammerImage, starterGuardianShieldImage, starterLinkShieldImage,
+  starterScrollHealImage, starterPotionForgeImage, starterPotionDurabilityImage,
+  starterScrollSummonImage, starterScrollDimensionImage, starterAmuletLoneImage,
+  starterAmuletPersuadeDiscountImage, starterAmuletMissileImage,
+  starterAmuletDamageDiscoverImage, starterAmuletSwapUpgradeImage,
+  starterAmuletStunCapImage, starterAmuletRecycleExpandImage,
+  starterAmuletDungeonGoldImage, starterScrollReviveImage, starterScrollRecallImage,
+  starterMagicMissileImage, starterScrollGamblerImage, starterScrollRecycleEchoImage,
+  starterPotionSpellDamageImage, starterPotionLifestealImage, starterPotionStunImage,
+  starterSlotCapacityPotionImage, starterScrollUpgradeImage,
+  starterScrollEternalInscribeImage, starterScrollFateDeepImage,
+  starterPotionHandLimitImage, starterBackpackSizePotionImage,
+  starterWaterfallDealPotionImage, starterThunderStrikeImage,
 ];
 
 const FLAVOR_TEXTS = [
