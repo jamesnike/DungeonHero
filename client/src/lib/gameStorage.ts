@@ -113,7 +113,7 @@ export interface PersistedGameState {
   shopLevel: number;
   cardsPlayed: number;
   recycleForgePlayCount?: number;
-  /** 战伤刻印：已造成伤害次数 streak 0–4 */
+  /** 战伤刻印：已造成伤害次数 streak 0–9 */
   classDamageDiscoverStreak?: number;
   totalDamageTaken: number;
   totalHealed: number;

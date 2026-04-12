@@ -173,6 +173,7 @@ import {
   INITIAL_GOLD,
   INITIAL_TURN_COUNT,
   PERSUADE_COST,
+  MIN_PERSUADE_COST,
   FINAL_MONSTER_MARK_DESCRIPTION,
   SELLABLE_TYPES,
   EQUIPMENT_TYPES,
@@ -653,6 +654,34 @@ export default function GameBoard() {
     }
     return state;
   }, [amuletSlots, eternalRelics]);
+
+  useEffect(() => {
+    const st = engine.getState();
+    const needsInit = st.amuletSlots.some(slot => {
+      if (!slot) return false;
+      if (slot.amuletEffect === 'damage-class-discover' && !slot._counterDisplay) return true;
+      if (slot.amuletEffect === 'swap-upgrade' && !slot._counterDisplay) return true;
+      if (slot.amuletEffect === 'recycle-backpack-expand' && !slot._counterDisplay) return true;
+      return false;
+    });
+    if (!needsInit) return;
+    setAmuletSlots(prev => prev.map(slot => {
+      if (!slot || slot._counterDisplay) return slot;
+      if (slot.amuletEffect === 'damage-class-discover') {
+        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 3 : 10;
+        return { ...slot, _counterDisplay: `${st.classDamageDiscoverStreak ?? 0}/${threshold}` };
+      }
+      if (slot.amuletEffect === 'swap-upgrade') {
+        return { ...slot, _counterDisplay: `${st.swapUpgradeProgress ?? 0}/3` };
+      }
+      if (slot.amuletEffect === 'recycle-backpack-expand') {
+        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        return { ...slot, _counterDisplay: `${st.recycleBackpackProgress ?? 0}/${threshold}` };
+      }
+      return slot;
+    }));
+  }, [amuletSlots, engine, setAmuletSlots]);
+
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
 
   // ---------------------------------------------------------------------------
@@ -799,8 +828,8 @@ export default function GameBoard() {
     daggerSelfDestructResolverRef.current = null;
   }, []);
 
-  const handleHandMagicUpgradeSelect = useCallback((cardId: string) => {
-    handleCardUpgrade(cardId);
+  const handleHandMagicUpgradeSelect = useCallback((cardIds: string[]) => {
+    for (const cardId of cardIds) handleCardUpgrade(cardId);
     setHandMagicUpgradeModal(null);
   }, [handleCardUpgrade, setHandMagicUpgradeModal]);
 
@@ -830,6 +859,7 @@ export default function GameBoard() {
     handleKnightInstantMagic,
     handleKnightPermanentMagic,
     handlePlayCardFromHand,
+    applyTransformAndUpdateCategory,
     isPermanentMagicCard,
     normalizeEventEffect,
     chaosStrikeHasOverkill,
@@ -1206,6 +1236,7 @@ export default function GameBoard() {
   const waterfallLockRef = useRef(false);
   const cascadeResetWaterfallRef = useRef(false);
   const pendingDungeonRemovalsRef = useRef(0);
+  const pendingDungeonUseRef = useRef<Set<string>>(new Set());
   const waterfallPendingRef = useRef(false);
   const waterfallSequenceRef = useRef(0);
   const lastWaterfallSequenceRef = useRef<number | null>(null);
@@ -5093,12 +5124,21 @@ export default function GameBoard() {
         };
       }
       if (slot?.amuletEffect === 'damage-class-discover') {
-        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 3 : 5;
+        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 3 : 10;
         return { ...slot, _counterDisplay: `${savedDamageStreak}/${threshold}` };
       }
       if (slot?.amuletEffect === 'monster-kill-upgrade') {
         const killProgress = snapshot.monsterKillUpgradeProgress ?? 0;
         return { ...slot, _counterDisplay: `${killProgress}/5` };
+      }
+      if (slot?.amuletEffect === 'swap-upgrade') {
+        const swapProg = snapshot.swapUpgradeProgress ?? 0;
+        return { ...slot, _counterDisplay: `${swapProg}/3` };
+      }
+      if (slot?.amuletEffect === 'recycle-backpack-expand') {
+        const recycleProg = snapshot.recycleBackpackProgress ?? 0;
+        const recycleThreshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        return { ...slot, _counterDisplay: `${recycleProg}/${recycleThreshold}` };
       }
       return slot;
     });
@@ -5326,6 +5366,7 @@ export default function GameBoard() {
 
     // Clear stale tracking refs
     storingCardIdsRef.current.clear();
+    pendingDungeonUseRef.current.clear();
     pendingAutoDrawsRef.current = 0;
     skipNextEventAutoDrawRef.current = false;
     skipEventFlipRef.current = false;
@@ -5511,6 +5552,7 @@ export default function GameBoard() {
 
     // Clear stale tracking refs
     storingCardIdsRef.current.clear();
+    pendingDungeonUseRef.current.clear();
     processedDungeonCardIdsRef.current.clear();
     pendingAutoDrawsRef.current = 0;
     skipNextEventAutoDrawRef.current = false;
@@ -6930,7 +6972,17 @@ export default function GameBoard() {
     logWaterfall('remove-pending-increment', { pending: pendingDungeonRemovalsRef.current });
   };
 
+  const markDungeonCardPendingUse = (cardId: string) => {
+    pendingDungeonUseRef.current.add(cardId);
+  };
 
+  const removePendingDungeonCard = (cardId: string) => {
+    const wasPending = pendingDungeonUseRef.current.delete(cardId);
+    const inActiveRow = activeCards.some(c => c?.id === cardId);
+    if (wasPending || inActiveRow) {
+      removeCard(cardId, false);
+    }
+  };
 
   const wasDraggedFromHand = (cardId: string) =>
     draggedCardSource === 'hand' && draggedCard?.id === cardId;
@@ -7143,6 +7195,7 @@ export default function GameBoard() {
     requestCardAction,
     queueMonsterReward,
     removeCard,
+    markDungeonCardPendingUse,
     pushUndoSnapshot,
     clearUndoStack,
     clearUndoStorage,
@@ -7166,6 +7219,7 @@ export default function GameBoard() {
     activeCardsLatestRef,
     fullBoardInteractionLockedRef,
     handLockedForMonsterPhaseRef,
+    heroStunnedRef,
     suppressDeathWardRef,
     selectedHeroSkillRef,
     eternalRelicsRef,
@@ -7208,6 +7262,7 @@ export default function GameBoard() {
     addGameLog,
     pushUndoSnapshot,
     clearUndoStack,
+    removePendingDungeonCard,
     triggerClassDeckFlight,
     triggerDiscardFlight,
     completeCurrentEvent,
@@ -7275,6 +7330,7 @@ export default function GameBoard() {
     pushUndoSnapshot,
     clearUndoStack,
     removeCard,
+    removePendingDungeonCard,
     queueCardIntoHand,
     triggerDiscardFlight,
     triggerClassDeckFlight,
@@ -7361,6 +7417,7 @@ export default function GameBoard() {
     pushUndoSnapshot,
     clearUndoStack,
     removeCard,
+    removePendingDungeonCard,
     triggerClassDeckFlight,
     triggerFateSwapFlight,
     clearAllBackpackHandFallbacks,
@@ -7576,9 +7633,17 @@ export default function GameBoard() {
       if (lastPlayedFlankRef.current && card.flankEffectId) {
         if (card.flankEffectId.startsWith('persuadeCost-')) {
           const amount = parseInt(card.flankEffectId.replace('persuadeCost-', ''), 10) || 1;
-          setPersuadeCostModifier(prev => prev - amount);
-          addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${amount}`);
-          setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${amount}！`);
+          const currentMod = engine.getState().persuadeCostModifier ?? 0;
+          const currentCost = PERSUADE_COST + currentMod;
+          if (currentCost <= MIN_PERSUADE_COST) {
+            addGameLog('event', `劝降费用已达下限（${currentCost} 金币），无法再降低`);
+            setHeroSkillBanner(`侧击！${card.name} 劝降费用已达下限，无法再降低。`);
+          } else {
+            const actualAmount = Math.min(amount, currentCost - MIN_PERSUADE_COST);
+            setPersuadeCostModifier(prev => prev - actualAmount);
+            addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${actualAmount}`);
+            setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${actualAmount}！`);
+          }
         } else if (card.flankEffectId.startsWith('stunCap+')) {
           const amount = parseInt(card.flankEffectId.replace('stunCap+', ''), 10) || 5;
           setStunCap(prev => Math.min(100, prev + amount));
@@ -7619,6 +7684,8 @@ export default function GameBoard() {
         resetDragState();
         return;
       }
+
+      applyTransformAndUpdateCategory(card);
     } else {
       if (isFromBackpack) {
         setBackpackItems(prev => prev.filter(c => c.id !== card.id));
@@ -7665,12 +7732,14 @@ export default function GameBoard() {
         return;
       }
       // Purchasing from dungeon - auto-equip/use
+      // Card stays in the active row until its popup/effect fully resolves,
+      // preventing premature waterfall triggers.
       if (card.type === 'potion') {
+        markDungeonCardPendingUse(card.id);
         void handlePotionConsumption(card);
-        removeCard(card.id, false);
       } else if (card.type === 'magic' || card.type === 'hero-magic') {
+        markDungeonCardPendingUse(card.id);
         handleSkillCard(card);
-        removeCard(card.id, false);
       } else if (card.type === 'event' || (card.type === 'building' && card.eventChoices)) {
         const freshBladeCard =
           (card.name === '命运之刃' || card.name === '增幅祭坛')
@@ -8073,8 +8142,23 @@ export default function GameBoard() {
       }
       if (card.amuletEffect === 'damage-class-discover') {
         const streak = engine.getState().classDamageDiscoverStreak ?? 0;
-        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 3 : 5;
+        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 3 : 10;
         updateDamageDiscoverCounter(streak, threshold);
+      }
+      if (card.amuletEffect === 'swap-upgrade') {
+        const prog = engine.getState().swapUpgradeProgress ?? 0;
+        setAmuletSlots(prev => prev.map(slot => {
+          if (slot?.amuletEffect !== 'swap-upgrade') return slot;
+          return { ...slot, _counterDisplay: `${prog}/3` };
+        }));
+      }
+      if (card.amuletEffect === 'recycle-backpack-expand') {
+        const prog = engine.getState().recycleBackpackProgress ?? 0;
+        const recycleThreshold = (card.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        setAmuletSlots(prev => prev.map(slot => {
+          if (slot?.amuletEffect !== 'recycle-backpack-expand') return slot;
+          return { ...slot, _counterDisplay: `${prog}/${recycleThreshold}` };
+        }));
       }
 
       if (card.amuletEffect === 'balance') {
@@ -10011,8 +10095,8 @@ export default function GameBoard() {
             const card = activeCards[index];
             const colWidth = rageStripWidth;
             const isEngagedMonster = Boolean(card && card.type === 'monster' && isMonsterEngaged(card.id));
-            const isResolvingCard = resolvingDungeonCardId === card?.id;
-            const isEventPendingCell = isResolvingCard && eventPendingLocked;
+            const isResolvingCard = resolvingDungeonCardId === card?.id || (card != null && pendingDungeonUseRef.current.has(card.id));
+            const isEventPendingCell = resolvingDungeonCardId === card?.id && eventPendingLocked;
             const isMonsterTurnLock =
               showMonsterAttackIndicator ||
               isWaterfallLocked ||
@@ -10076,7 +10160,7 @@ export default function GameBoard() {
                   }
                   onDragEnd={handleDragEndFromDungeon}
                   onWeaponDrop={
-                    playerTargetingActive || fullBoardInteractionLocked
+                    playerTargetingActive || fullBoardInteractionLocked || heroStunned
                       ? undefined
                       : (weapon) => handleWeaponToMonster(weapon, card)
                   }
@@ -10084,6 +10168,7 @@ export default function GameBoard() {
                     !playerTargetingActive &&
                     !fullBoardInteractionLocked &&
                     !handLockedForMonsterPhase &&
+                    !heroStunned &&
                     (draggedEquipment?.type === 'weapon' || draggedEquipment?.type === 'monster' || (draggedEquipment?.type === 'shield' && !!draggedEquipment?.shieldBashStunRate)) &&
                     (card.type === 'monster' || card.type === 'building')
                   }

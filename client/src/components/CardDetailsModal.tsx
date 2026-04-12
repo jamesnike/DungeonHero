@@ -487,7 +487,7 @@ export default function CardDetailsModal({
                     <Zap className="w-4 h-4 shrink-0 text-cyan-500" />
                     <span className="font-extrabold text-sm text-cyan-700 dark:text-cyan-300 tracking-wide">蛮力击晕</span>
                   </div>
-                  <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200 pl-6">攻击时20%概率击晕玩家，冻结装备栏和护符栏一回合。手牌仍可使用，但无法装备/卸下装备和护符。</p>
+                  <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200 pl-6">攻击时30%概率击晕玩家，冻结装备栏和护符栏一回合。手牌仍可使用，但无法装备/卸下装备和护符。</p>
                 </div>
               </div>
             )}

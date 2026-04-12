@@ -124,6 +124,7 @@ export interface HeroActionsDeps {
   pushUndoSnapshot: () => void;
   clearUndoStack: () => void;
   removeCard: (cardId: string, animate: boolean, opts?: { skipAutoDraw?: boolean }) => void;
+  removePendingDungeonCard: (cardId: string) => void;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerFateSwapFlight: (activeSlotIdx: number, oldCard: GameCardData, newCard: GameCardData) => void;
   clearAllBackpackHandFallbacks: () => void;
@@ -229,6 +230,14 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   const setEquipmentSlotCapacity = useEngineSetter('equipmentSlotCapacity');
   const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
   const setSwapUpgradeProgress = useEngineSetter('swapUpgradeProgress');
+  const setAmuletSlots = useEngineSetter('amuletSlots');
+
+  const updateSwapUpgradeCounter = useCallback((displayCount: number, threshold: number) => {
+    setAmuletSlots(prev => prev.map(slot => {
+      if (slot?.amuletEffect !== 'swap-upgrade') return slot;
+      return { ...slot, _counterDisplay: `${displayCount}/${threshold}` };
+    }));
+  }, [setAmuletSlots]);
 
   // -- Convenience accessors --------------------------------------------------
 
@@ -781,7 +790,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
           applyDamage(2, 'general', { selfInflicted: true });
           const heroSkillDamage = getSpellDamage(3);
-          dealDamageToMonster(monsters[0], heroSkillDamage, { pulses: 2 });
+          dealDamageToMonster(monsters[0], heroSkillDamage, { pulses: 2, isSpellDamage: true });
           markSkillUsed(skillDef.id);
           setHeroSkillBanner(`Crimson Strike dealt ${heroSkillDamage} damage.`);
           break;
@@ -1092,6 +1101,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           dealDamageToMonster(m, waveDamage, {
             pulses: 2,
             animationDelay: hitIndex * HONOR_SWEEP_HIT_STAGGER_MS,
+            isSpellDamage: true,
           });
           hitIndex += 1;
         });
@@ -1138,6 +1148,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         dealDamageToMonster(m, waveDamage, {
           pulses: 2,
           animationDelay: hitIndex * HONOR_SWEEP_HIT_STAGGER_MS,
+          isSpellDamage: true,
         });
         hitIndex += 1;
       });
@@ -1311,7 +1322,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (monsters.length === 1) {
           const totalDamage = getSpellDamage(scaledArmor + ampBonus);
           if (!isMonsterEngaged(monsters[0].id)) beginCombat(monsters[0], 'hero');
-          dealDamageToMonster(monsters[0], totalDamage, { pulses: 2 });
+          dealDamageToMonster(monsters[0], totalDamage, { pulses: 2, isSpellDamage: true });
           finalizeMagicCard(pendingMagicAction.card, { banner: `御甲破击造成 ${totalDamage} 点伤害（护甲 ${armorPct}%）。` });
           return;
         }
@@ -1818,15 +1829,15 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
 
-      if (pendingPotionAction.effect === 'grant-lastwords-hand-equip-buff') {
+      if (pendingPotionAction.effect === 'grant-lastwords-slot-temp-buff') {
         const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
         if (!slotItem) {
           setHeroSkillBanner('该装备栏没有装备。');
           return;
         }
-        setEquipmentSlotById(slotId, { ...slotItem, onDestroyEffect: 'hand-equip-buff-2-2' });
-        addGameLog('potion', `遗赠淬炼药：${slotItem.name} 获得遗言：手牌装备 +2攻击 +2护甲！`);
-        void finalizePotionCard(pendingPotionAction.card, { banner: `${slotItem.name} 获得遗言：手牌装备 +2攻击 +2护甲！` });
+        setEquipmentSlotById(slotId, { ...slotItem, onDestroyEffect: 'slot-temp-buff-3-3' });
+        addGameLog('potion', `遗赠淬炼药：${slotItem.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！`);
+        void finalizePotionCard(pendingPotionAction.card, { banner: `${slotItem.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！` });
         setPendingPotionAction(null);
         return;
       }
@@ -1853,7 +1864,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
       depsRef.current.applyDamage(2, 'general', { selfInflicted: true });
       const heroSkillDamage = depsRef.current.getSpellDamage(pendingHeroSkillAction.baseDamage ?? 3);
-      depsRef.current.dealDamageToMonster(monster, heroSkillDamage, { pulses: 2 });
+      depsRef.current.dealDamageToMonster(monster, heroSkillDamage, { pulses: 2, isSpellDamage: true });
 
       markSkillUsed(pendingHeroSkillAction.skillId);
       setPendingHeroSkillAction(null);
@@ -1887,6 +1898,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         healHero,
         addPermanentMagicToRecycleBag,
         removeCard,
+        removePendingDungeonCard,
         setEquipmentSlotById,
         updateMonsterCard,
         chaosStrikeHasOverkill,
@@ -1904,7 +1916,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        dealDamageToMonster(monster, totalDamage, { pulses: 2 });
+        dealDamageToMonster(monster, totalDamage, { pulses: 2, isSpellDamage: true });
         finalizeMagicCard(pendingMagicAction.card, {
           banner: `御甲破击造成 ${totalDamage} 点伤害。`,
         });
@@ -1917,7 +1929,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        dealDamageToMonster(monster, totalDamage, { pulses: 2 });
+        dealDamageToMonster(monster, totalDamage, { pulses: 2, isSpellDamage: true });
         const healed = healHero(totalDamage);
         const healText = healed > 0 ? `，恢复 ${healed} 点生命` : '';
         finalizeMagicCard(pendingMagicAction.card, {
@@ -1956,7 +1968,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        dealDamageToMonster(monster, totalDamage, { pulses: 2 });
+        dealDamageToMonster(monster, totalDamage, { pulses: 2, isSpellDamage: true });
         finalizeMagicCard(pendingMagicAction.card, {
           banner: `残血裁决释放 ${totalDamage} 点伤害（${smitePct}%）。`,
         });
@@ -1985,9 +1997,10 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        dealDamageToMonster(monster, totalDamage, { pulses: 2 });
+        dealDamageToMonster(monster, totalDamage, { pulses: 2, isSpellDamage: true });
         const updatedCard = pendingMagicAction.card;
         addPermanentMagicToRecycleBag(updatedCard);
+        removePendingDungeonCard(updatedCard.id);
         removeCard(updatedCard.id, false);
         setPendingMagicAction(null);
         const nextBase = updatedCard.scalingDamage ?? strikeBase + 1;
@@ -2006,7 +2019,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (!isMonsterEngaged(monster.id)) {
           beginCombat(monster, 'hero');
         }
-        dealDamageToMonster(monster, totalDamage, { pulses: 2 });
+        dealDamageToMonster(monster, totalDamage, { pulses: 2, isSpellDamage: true });
         finalizeMagicCard(pendingMagicAction.card, {
           banner: `奥术风暴：对 ${monster.name} 造成 ${totalDamage} 点伤害。${echo > 1 ? '（回响×' + echo + '）' : ''}`,
         });
@@ -2019,7 +2032,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         }
         const chaosDamage = getSpellDamage(3 + (pendingMagicAction.card.amplifyBonus ?? 0));
         const overkill = chaosStrikeHasOverkill(monster, chaosDamage);
-        dealDamageToMonster(monster, chaosDamage);
+        dealDamageToMonster(monster, chaosDamage, { isSpellDamage: true });
         let chaosBanner: string;
         if (overkill) {
           const drawn = drawCardsFromBackpack(2, { ignoreLimit: true });
@@ -2057,7 +2070,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         }
         const okDamage = getSpellDamage(3 + (pendingMagicAction.card.amplifyBonus ?? 0));
         const overkill = chaosStrikeHasOverkill(monster, okDamage);
-        dealDamageToMonster(monster, okDamage);
+        dealDamageToMonster(monster, okDamage, { isSpellDamage: true });
         let okBanner: string;
         if (overkill) {
           setUpgradeModalOpen(true);
@@ -2120,7 +2133,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       if (pendingMagicAction.effect === 'missile-bolt') {
         const totalDmg = getSpellDamage(2 + (pendingMagicAction.card.amplifyBonus ?? 0));
         if (!isMonsterEngaged(monster.id)) beginCombat(monster, 'hero');
-        dealDamageToMonster(monster, totalDmg, { pulses: 2 });
+        dealDamageToMonster(monster, totalDmg, { pulses: 2, isSpellDamage: true });
         addGameLog('magic', `魔弹：对 ${monster.name} 造成 ${totalDmg} 点法术伤害`);
         finalizeMagicCard(pendingMagicAction.card, { banner: `魔弹：对 ${monster.name} 造成 ${totalDmg} 点伤害！` });
         return;
@@ -2134,7 +2147,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         const hitDmg = getSpellDamage(baseDmgPerHit) * echo;
         const totalDmg = hitDmg * hits;
         if (!isMonsterEngaged(monster.id)) beginCombat(monster, 'hero');
-        dealDamageToMonster(monster, totalDmg, { pulses: 2 });
+        dealDamageToMonster(monster, totalDmg, { pulses: 2, isSpellDamage: true });
         let stunText = '';
         let stunned = monster.isStunned;
         const threshold = Math.round((stunPct / 100) * 20);
@@ -2256,9 +2269,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           const prog = engine.getState().swapUpgradeProgress + 1;
           if (prog >= 3) {
             setSwapUpgradeProgress(0);
+            updateSwapUpgradeCounter(0, 3);
             swapUpgradeTrigger = true;
           } else {
             setSwapUpgradeProgress(prog);
+            updateSwapUpgradeCounter(prog, 3);
             addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
           }
         }
@@ -2313,9 +2328,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           const prog = engine.getState().swapUpgradeProgress + 1;
           if (prog >= 3) {
             setSwapUpgradeProgress(0);
+            updateSwapUpgradeCounter(0, 3);
             swapUpgradeTrigger2 = true;
           } else {
             setSwapUpgradeProgress(prog);
+            updateSwapUpgradeCounter(prog, 3);
             addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
           }
         }
@@ -2355,9 +2372,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           const prog = engine.getState().swapUpgradeProgress + 1;
           if (prog >= 3) {
             setSwapUpgradeProgress(0);
+            updateSwapUpgradeCounter(0, 3);
             swapUpgradeTrigger3 = true;
           } else {
             setSwapUpgradeProgress(prog);
+            updateSwapUpgradeCounter(prog, 3);
             addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
           }
         }
@@ -2395,9 +2414,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         const prog = engine.getState().swapUpgradeProgress + 1;
         if (prog >= 3) {
           setSwapUpgradeProgress(0);
+          updateSwapUpgradeCounter(0, 3);
           swapUpgradeTrigger4 = true;
         } else {
           setSwapUpgradeProgress(prog);
+          updateSwapUpgradeCounter(prog, 3);
           addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
         }
       }

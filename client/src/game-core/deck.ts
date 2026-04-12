@@ -701,8 +701,8 @@ export function createDeck(): GameCardData[] {
       name: '遗赠淬炼药',
       value: 6,
       image: potionEquipmentRepairImage,
-      potionEffect: 'grant-lastwords-hand-equip-buff',
-      description: '选择一个装备，使其获得遗言：手牌里的装备 +2 攻击 +2 护甲。',
+      potionEffect: 'grant-lastwords-slot-temp-buff',
+      description: '选择一个装备，使其获得遗言：该装备栏 +3 临时攻击 +3 临时护甲。',
     },
     {
       type: 'potion',
@@ -908,8 +908,8 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: dedupeMagicArcaneRefineImage,
     magicType: 'instant',
-    magicEffect: '选择手牌中一张魔法牌进行升级。',
-    description: '一次性：选择手牌中一张可升级的魔法牌，使其升级一次。',
+    magicEffect: '升级手牌中至多 2 张魔法牌。',
+    description: '一次性：选择手牌中至多 2 张可升级的魔法牌，各升级一次。',
   });
 
   deck.push({
@@ -941,8 +941,8 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: dedupeMagicStunWaveImage,
     magicType: 'instant',
-    magicEffect: '击晕上限 +10%。',
-    description: '一次性：击晕上限 +10%。转型：对激活行所有怪物 60% 击晕。',
+    magicEffect: '击晕上限 +10%。对激活行所有怪物 60% 击晕。',
+    description: '一次性：击晕上限 +10%。对激活行所有怪物 60% 击晕。',
     knightEffect: 'stun-wave',
   });
 
@@ -2317,7 +2317,7 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletDamageDiscoverImage,
       amuletEffect: 'damage-class-discover',
-      description: '每造成 5 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
+      description: '每造成 10 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
     },
     {
       id: STARTER_CARD_IDS.swapUpgradeAmulet,

@@ -17,6 +17,7 @@ export const INITIAL_HP = 20;
 export const INITIAL_GOLD = 10;
 export const INITIAL_TURN_COUNT = 1;
 export const PERSUADE_COST = 10;
+export const MIN_PERSUADE_COST = 2;
 export const INITIAL_PERSUADE_LEVEL = 1;
 export const INITIAL_STUN_CAP = 10;
 export const MAX_PERSUADE_LEVEL = 4;

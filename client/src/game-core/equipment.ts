@@ -174,6 +174,7 @@ export function repairDurabilityPure(
   const result: GameCardData = { ...equipment, durability: newDurability };
   if (equipment.type === 'shield' && equipment.armorMax != null) {
     delete result.armor;
+    delete result.armorBonusDamaged;
   }
   return result;
 }
@@ -189,6 +190,7 @@ export function consumeDurabilityPure(
   const result: GameCardData = { ...equipment, durability: newDurability };
   if (equipment.type === 'shield' && equipment.armorMax != null) {
     delete result.armor;
+    delete result.armorBonusDamaged;
   }
   return { equipment: result, destroyed: false };
 }

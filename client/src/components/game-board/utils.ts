@@ -739,8 +739,8 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: dedupeMagicArcaneRefineImage,
     magicType: 'instant',
-    magicEffect: '选择手牌中一张魔法牌进行升级。',
-    description: '一次性：选择手牌中一张可升级的魔法牌，使其升级一次。',
+    magicEffect: '升级手牌中至多 2 张魔法牌。',
+    description: '一次性：选择手牌中至多 2 张可升级的魔法牌，各升级一次。',
   });
 
   deck.push({

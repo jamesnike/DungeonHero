@@ -11,12 +11,14 @@ import { ArrowBigUpDash } from 'lucide-react';
 import GameCard, { type GameCardData } from './GameCard';
 import { isUpgradeableCard, isCardAtMaxUpgrade } from './CardUpgradeModal';
 
+const MAX_SELECT = 2;
+
 interface HandMagicUpgradeModalProps {
   open: boolean;
   onClose: () => void;
   handCards: GameCardData[];
   sourceCardId: string | null;
-  onUpgrade: (cardId: string) => void;
+  onUpgrade: (cardIds: string[]) => void;
 }
 
 export default function HandMagicUpgradeModal({
@@ -26,22 +28,32 @@ export default function HandMagicUpgradeModal({
   sourceCardId,
   onUpgrade,
 }: HandMagicUpgradeModalProps) {
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
 
   const upgradeableMagics = handCards.filter(
     c => c.id !== sourceCardId && c.type === 'magic' && isUpgradeableCard(c) && !isCardAtMaxUpgrade(c),
   );
 
+  const toggleCard = (cardId: string) => {
+    setSelectedCardIds(prev => {
+      if (prev.includes(cardId)) return prev.filter(id => id !== cardId);
+      if (prev.length >= MAX_SELECT) return prev;
+      return [...prev, cardId];
+    });
+  };
+
   const handleConfirm = () => {
-    if (!selectedCardId) return;
-    onUpgrade(selectedCardId);
-    setSelectedCardId(null);
+    if (selectedCardIds.length === 0) return;
+    onUpgrade(selectedCardIds);
+    setSelectedCardIds([]);
   };
 
   const handleClose = () => {
-    setSelectedCardId(null);
+    setSelectedCardIds([]);
     onClose();
   };
+
+  const effectiveMax = Math.min(MAX_SELECT, upgradeableMagics.length);
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
@@ -52,7 +64,7 @@ export default function HandMagicUpgradeModal({
             秘法精炼
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            选择手牌中一张魔法牌进行升级
+            选择手牌中至多 {effectiveMax} 张魔法牌进行升级（已选 {selectedCardIds.length}/{effectiveMax}）
           </DialogDescription>
         </DialogHeader>
 
@@ -64,12 +76,12 @@ export default function HandMagicUpgradeModal({
           ) : (
             <div className="upgrade-modal-card-grid">
               {upgradeableMagics.map(card => {
-                const selected = card.id === selectedCardId;
+                const selected = selectedCardIds.includes(card.id);
                 return (
                   <div
                     key={card.id}
                     className={`upgrade-modal-card-slot${selected ? ' upgrade-modal-card-slot--selected' : ''}`}
-                    onClick={() => setSelectedCardId(prev => (prev === card.id ? null : card.id))}
+                    onClick={() => toggleCard(card.id)}
                   >
                     <GameCard card={card} disableInteractions />
                   </div>
@@ -85,12 +97,12 @@ export default function HandMagicUpgradeModal({
             {upgradeableMagics.length > 0 && (
               <Button
                 size="sm"
-                disabled={!selectedCardId}
+                disabled={selectedCardIds.length === 0}
                 onClick={handleConfirm}
                 className="bg-violet-600 hover:bg-violet-700 text-white"
               >
                 <ArrowBigUpDash className="w-4 h-4 mr-1" />
-                升级
+                升级（{selectedCardIds.length}）
               </Button>
             )}
           </div>

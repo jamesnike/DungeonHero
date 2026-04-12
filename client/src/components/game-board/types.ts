@@ -144,6 +144,8 @@ export type MonsterRewardDrop = {
   options: MonsterRewardOption[];
   /** Same as GameCardData.id; used to dedupe rewards when defeat fires twice (e.g. double discard-zap). */
   monsterInstanceId?: string;
+  /** Original monster card data, used to defer graveyard placement until reward is resolved. */
+  monsterCard?: GameCardData;
 };
 
 export type DungeonDropAssignment = {
@@ -529,7 +531,7 @@ export type PendingPotionAction =
     }
   | {
       card: GameCardData;
-      effect: 'grant-lastwords-hand-equip-buff';
+      effect: 'grant-lastwords-slot-temp-buff';
       step: 'slot-select';
       prompt: string;
     };

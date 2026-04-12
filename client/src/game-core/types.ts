@@ -144,6 +144,7 @@ export type EternalRelicId =
   | 'persuade-same-halve'
   | 'persuade-race-bonus'
   | 'persuade-durability-bonus'
+  | 'end-turn-draw'
   | `amulet-eternal-${string}`;
 
 export interface EternalRelic {
@@ -224,7 +225,7 @@ export interface GameState {
   turnDamageTaken: number;
   cardsPlayed: number;
   recycleForgePlayCount: number;
-  /** 战伤刻印：0–4，累计 5 次造成伤害触发发现专属牌后归零 */
+  /** 战伤刻印：0–9，累计 10 次造成伤害触发发现专属牌后归零 */
   classDamageDiscoverStreak: number;
   waveDiscardCount: number;
   totalWins: number;

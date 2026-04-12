@@ -70,7 +70,7 @@ export interface CardOperationsDeps {
   clearUndoStack: () => void;
   pushUndoSnapshot: () => void;
   updateMonsterCard: (id: string, updater: (m: GameCardData) => GameCardData) => void;
-  dealDamageToMonster: (monster: GameCardData, damage: number, options?: { animationDelay?: number; pulses?: number }) => void;
+  dealDamageToMonster: (monster: GameCardData, damage: number, options?: { animationDelay?: number; pulses?: number; isSpellDamage?: boolean }) => void;
   getSpellDamage: (baseDamage: number) => number;
 }
 
@@ -301,18 +301,26 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       const state = engine.getState();
       const recycleAmulet = state.amuletSlots.find(s => s?.amuletEffect === 'recycle-backpack-expand');
       if (recycleAmulet) {
-        const recycleThreshold = 10;
+        const recycleThreshold = (recycleAmulet.upgradeLevel ?? 0) >= 1 ? 6 : 10;
         const progress = state.recycleBackpackProgress + 1;
         if (progress >= recycleThreshold) {
           setRecycleBackpackProgress(0);
           setBackpackCapacityModifier(prev => prev + 3);
+          setAmuletSlots(prev => prev.map(slot => {
+            if (slot?.amuletEffect !== 'recycle-backpack-expand') return slot;
+            return { ...slot, _counterDisplay: `0/${recycleThreshold}` };
+          }));
           depsRef.current.addGameLog('amulet', `积蓄之符：累计回收 ${recycleThreshold} 张牌，背包上限 +3！`);
         } else {
           setRecycleBackpackProgress(progress);
+          setAmuletSlots(prev => prev.map(slot => {
+            if (slot?.amuletEffect !== 'recycle-backpack-expand') return slot;
+            return { ...slot, _counterDisplay: `${progress}/${recycleThreshold}` };
+          }));
         }
       }
     },
-    [setPermanentMagicRecycleBag, engine, setRecycleBackpackProgress, setBackpackCapacityModifier],
+    [setPermanentMagicRecycleBag, engine, setRecycleBackpackProgress, setBackpackCapacityModifier, setAmuletSlots],
   );
 
   const restorePermanentMagicFromRecycleBag = useCallback(() => {
@@ -547,7 +555,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         if (monsters.length > 0) {
           const target = monsters[Math.floor(Math.random() * monsters.length)];
           const dmg = depsRef.current.getSpellDamage(card.onDiscardDamage);
-          depsRef.current.dealDamageToMonster(target, dmg, { pulses: 2 });
+          depsRef.current.dealDamageToMonster(target, dmg, { pulses: 2, isSpellDamage: true });
           depsRef.current.addGameLog('magic', `${card.name} 被弃：对 ${target.name} 造成 ${dmg} 点法术伤害`);
           setHeroSkillBanner(`${card.name} 被弃，对 ${target.name} 造成了 ${dmg} 点伤害！`);
         }
@@ -634,14 +642,17 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       const baseArmor = slotItem.hp ?? slotItem.value;
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTemp = slotTempArmor[slotId] ?? 0;
-      return Math.max(0, baseArmor + defenseBonus + slotShieldBonus + rawSlotTemp);
+      const bonusDamaged = slotItem.armorBonusDamaged ?? 0;
+      return Math.max(0, baseArmor + defenseBonus + slotShieldBonus + rawSlotTemp - bonusDamaged);
     }
     const baseArmorMax = slotItem.armorMax ?? slotItem.value;
     const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
     const rawSlotTemp = slotTempArmor[slotId] ?? 0;
     const permanentBonus = Math.max(0, defenseBonus + slotShieldBonus);
+    const bonusDamaged = slotItem.armorBonusDamaged ?? 0;
     const storedBaseArmor = Math.min(slotItem.armor ?? baseArmorMax, baseArmorMax);
-    const currentArmor = storedBaseArmor + permanentBonus + rawSlotTemp;
+    const effectiveBonus = Math.max(0, permanentBonus + rawSlotTemp - bonusDamaged);
+    const currentArmor = storedBaseArmor + effectiveBonus;
     const effectiveArmorMax = baseArmorMax + permanentBonus + rawSlotTemp;
     return Math.min(currentArmor, effectiveArmorMax);
   };
@@ -682,12 +693,14 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     if (slotItem.type === 'shield') {
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTemp = slotTempArmor[slotId] ?? 0;
-      const permanentShieldBonus = Math.max(0, defenseBonus + slotShieldBonus);
+      const rawBonus = Math.max(0, defenseBonus + slotShieldBonus) + rawSlotTemp;
+      const bonusDamaged = slotItem.armorBonusDamaged ?? 0;
+      const permanentShieldBonus = Math.max(0, rawBonus - bonusDamaged);
 
       return {
         appliesTo: 'shield',
         modifier: 0,
-        permanentShieldBonus: permanentShieldBonus + rawSlotTemp,
+        permanentShieldBonus,
       };
     }
 
@@ -707,13 +720,15 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTempMonster = slotTempArmor[slotId] ?? 0;
-      const shieldModifier = defenseBonus + slotShieldBonus + rawSlotTempMonster;
+      const monsterBonusDamaged = slotItem.armorBonusDamaged ?? 0;
+      const monsterRawBonus = Math.max(0, defenseBonus + slotShieldBonus) + rawSlotTempMonster;
+      const effectiveShieldMod = Math.max(0, monsterRawBonus - monsterBonusDamaged);
 
       return {
         appliesTo: 'monster' as const,
         modifier,
-        shieldModifier,
-        permanentShieldBonus: Math.max(0, defenseBonus + slotShieldBonus),
+        shieldModifier: effectiveShieldMod,
+        permanentShieldBonus: effectiveShieldMod,
         flashHalve: amuletEffects.hasFlash,
       };
     }

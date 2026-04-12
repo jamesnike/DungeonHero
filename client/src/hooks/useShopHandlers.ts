@@ -84,6 +84,7 @@ export interface ShopHandlersDeps {
   addGameLog: (type: LogEntryType, message: string) => void;
   pushUndoSnapshot: () => void;
   clearUndoStack: () => void;
+  removePendingDungeonCard: (cardId: string) => void;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerDiscardFlight: (
     card: GameCardData,
@@ -663,6 +664,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         }
         case STARTER_CARD_IDS.recycleBackpackExpandAmulet: {
           upgraded.description = '每回收 6 张牌，背包上限 +3。';
+          const recycleProg = engine.getState().recycleBackpackProgress ?? 0;
+          upgraded._counterDisplay = `${recycleProg}/6`;
           break;
         }
         case STARTER_CARD_IDS.dungeonGoldAmulet: {
@@ -1393,14 +1396,14 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
   // -- Monster rewards --------------------------------------------------------
 
   const queueMonsterReward = useCallback(
-    (monster: GameCardData) => {
+    (monster: GameCardData): boolean => {
       const options = depsRef.current.getMonsterRewardsPreview(monster);
       if (!options.length) {
-        return;
+        return false;
       }
       const mid = monster.id;
       if (mid && depsRef.current.monsterRewardQueuedInstanceIdsRef.current.has(mid)) {
-        return;
+        return false;
       }
       if (mid) {
         depsRef.current.monsterRewardQueuedInstanceIdsRef.current.add(mid);
@@ -1411,8 +1414,10 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           monsterInstanceId: mid,
           monsterName: monster.name ?? '神秘怪物',
           options,
+          monsterCard: monster,
         },
       ]);
+      return true;
     },
     [setMonsterRewardQueue],
   );
@@ -1603,6 +1608,10 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       const doneId = activeMonsterReward.monsterInstanceId;
       if (doneId) {
         depsRef.current.monsterRewardQueuedInstanceIdsRef.current.delete(doneId);
+        depsRef.current.removePendingDungeonCard(doneId);
+      }
+      if (activeMonsterReward.monsterCard) {
+        depsRef.current.addToGraveyard(activeMonsterReward.monsterCard);
       }
       setActiveMonsterReward(null);
     },

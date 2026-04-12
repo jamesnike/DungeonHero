@@ -191,6 +191,7 @@ export default function EquipmentSlot({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragDepth(0);
+    if (isStunFrozen) return;
     const cardData = e.dataTransfer.getData('card');
     if (cardData) {
       onDrop?.(JSON.parse(cardData));
@@ -352,6 +353,7 @@ export default function EquipmentSlot({
                   className="absolute inset-0"
                   style={{ zIndex: 20 + rIdx, transform: `translateY(${y}%)`, touchAction: 'none' }}
                   onPointerDown={(e) => {
+                    if (isStunFrozen) return;
                     e.preventDefault();
                     const el = e.currentTarget;
                     el.setPointerCapture(e.pointerId);
@@ -388,12 +390,12 @@ export default function EquipmentSlot({
                     delete el.dataset.swipeBaseY;
                   }}
                 >
-                  <GameCard
-                    card={{ ...reserveCard, fromSlot: slotId } as GameCardData}
-                    disableInteractions
-                    amuletDescriptionVariant="topThird"
-                    className="shadow-md opacity-80"
-                  />
+              <GameCard
+                card={{ ...reserveCard, fromSlot: slotId } as GameCardData}
+                disableInteractions
+                amuletDescriptionVariant="topThird"
+                className={`shadow-md opacity-80 ${isStunFrozen ? 'pointer-events-none' : ''}`}
+              />
                 </div>
               );
             })}
@@ -409,6 +411,7 @@ export default function EquipmentSlot({
               <GameCard
                 card={equipmentDisplayCard!}
                 equipmentStatModifier={statModifier}
+                disableInteractions={isStunFrozen}
                 onDragStart={(card) => wrappedOnDragStart({ ...card, fromSlot: slotId })}
                 onDragEnd={wrappedOnDragEnd}
                 onClick={onCardClick ? () => onCardClick(gameCardData!) : undefined}
@@ -445,6 +448,7 @@ export default function EquipmentSlot({
             <GameCard 
               card={type === 'equipment' ? equipmentDisplayCard! : gameCardData!}
               equipmentStatModifier={statModifier}
+              disableInteractions={isStunFrozen}
               onDragStart={(card) => wrappedOnDragStart({ ...card, fromSlot: slotId })}
               onDragEnd={wrappedOnDragEnd}
               onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData!) : undefined}
@@ -510,8 +514,8 @@ export default function EquipmentSlot({
       )}
       {isStunFrozen && type === 'equipment' && (
         <>
-          <div className="pointer-events-none absolute inset-0 z-[35] rounded-md bg-cyan-400/20 border-2 border-cyan-400/60 animate-pulse" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-cyan-600/90 text-white font-bold px-3 py-1 rounded-full shadow-lg border-2 border-cyan-300 text-xs whitespace-nowrap animate-pulse">
+          <div className="absolute inset-0 z-[35] rounded-md bg-cyan-400/20 border-2 border-cyan-400/60 animate-pulse cursor-not-allowed" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-cyan-600/90 text-white font-bold px-3 py-1 rounded-full shadow-lg border-2 border-cyan-300 text-xs whitespace-nowrap animate-pulse pointer-events-none">
             击晕冻结
           </div>
         </>

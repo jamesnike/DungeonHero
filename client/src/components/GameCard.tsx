@@ -115,7 +115,7 @@ export type PotionEffectId =
   | 'perm-waterfall-deal+1'
   | 'grant-perm-2'
   | 'perm-persuade-consecutive'
-  | 'grant-lastwords-hand-equip-buff'
+  | 'grant-lastwords-slot-temp-buff'
   | 'amulet-to-eternal-relic'
   | 'grant-amulet-end-turn-draw';
 
@@ -1568,9 +1568,8 @@ const amuletEffectText =
                            (card.type === 'monster' && card.durability != null) ? (() => {
                             const baseArmorMax = card.type === 'monster' ? (card.hp ?? card.value) : card.armorMax!;
                             const curBaseArmor = Math.min(card.armor ?? baseArmorMax, baseArmorMax);
-                            const rawPermBonus = equipmentStatModifier?.permanentShieldBonus ?? 0;
+                            const permBonus = equipmentStatModifier?.permanentShieldBonus ?? 0;
                             const bonusDamaged = card.armorBonusDamaged ?? 0;
-                            const permBonus = Math.max(0, rawPermBonus - bonusDamaged);
                             return (
                               <>
                                 <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
@@ -1802,7 +1801,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手：每次攻击时触发">动手</span>
                     )}
                     {card.ogreStun && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="蛮力击晕：攻击时20%概率击晕玩家（装备栏和护符栏冻结一回合）">击晕</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="蛮力击晕：攻击时30%概率击晕玩家（装备栏和护符栏冻结一回合）">击晕</span>
                     )}
                     {card.eliteDoubleAttack && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="狂暴连击：攻击时70%概率再攻击一次">连击</span>

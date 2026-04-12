@@ -21,6 +21,8 @@ import {
   MAX_SHOP_LEVEL,
   BASE_BACKPACK_CAPACITY,
   HAND_LIMIT,
+  PERSUADE_COST,
+  MIN_PERSUADE_COST,
 } from '@/game-core/constants';
 import {
   logBackpackDraw,
@@ -1167,22 +1169,11 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                 addGameLog('equip', `${slotItem.name} 遗言：该装备栏永久护甲 +${slotItem.onDestroyPermanentShield}！`);
               }
               if (slotItem.onDestroyEffect) {
-                if (slotItem.onDestroyEffect === 'hand-equip-buff-2-2') {
-                  setHandCards(prev => {
-                    const buffed: string[] = [];
-                    const next = prev.map(c => {
-                      if (c.type === 'weapon' || c.type === 'shield') {
-                        buffed.push(c.name);
-                        return { ...c, value: (c.value ?? 0) + 2, armorMax: c.armorMax != null ? c.armorMax + 2 : undefined };
-                      }
-                      return c;
-                    });
-                    if (buffed.length > 0) {
-                      addGameLog('equip', `${slotItem.name} 遗言：${buffed.join('、')} 获得 +2攻击 +2护甲！`);
-                      setHeroSkillBanner(`${slotItem.name} 遗言！手牌装备 +2攻击 +2护甲！`);
-                    }
-                    return next;
-                  });
+                if (slotItem.onDestroyEffect === 'slot-temp-buff-3-3') {
+                  setSlotTempAttack(prev => ({ ...prev, [below.slotId]: (prev[below.slotId] ?? 0) + 3 }));
+                  setSlotTempArmor(prev => ({ ...prev, [below.slotId]: (prev[below.slotId] ?? 0) + 3 }));
+                  addGameLog('equip', `${slotItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
+                  setHeroSkillBanner(`${slotItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
                 } else {
                   addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
                 }
@@ -1650,9 +1641,17 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       } else if (effect.startsWith('persuadeCost-')) {
         const amount = parseInt(effect.replace('persuadeCost-', ''), 10) || 0;
         if (amount > 0) {
-          setPersuadeCostModifier(prev => prev - amount);
-          addGameLog('event', `事件效果：劝降费用永久 -${amount}`);
-          setHeroSkillBanner(`劝降费用永久减少 ${amount} 金币。`);
+          const currentMod = engine.getState().persuadeCostModifier ?? 0;
+          const currentCost = PERSUADE_COST + currentMod;
+          if (currentCost <= MIN_PERSUADE_COST) {
+            addGameLog('event', `劝降费用已达下限（${currentCost} 金币），无法再降低`);
+            setHeroSkillBanner(`劝降费用已达下限，无法再降低。`);
+          } else {
+            const actualAmount = Math.min(amount, currentCost - MIN_PERSUADE_COST);
+            setPersuadeCostModifier(prev => prev - actualAmount);
+            addGameLog('event', `事件效果：劝降费用永久 -${actualAmount}`);
+            setHeroSkillBanner(`劝降费用永久减少 ${actualAmount} 金币。`);
+          }
         }
       } else if (effect.startsWith('persuadeNextCostReduction:')) {
         const amount = parseInt(effect.replace('persuadeNextCostReduction:', ''), 10) || 3;
@@ -2122,22 +2121,11 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             addGameLog('equip', `${destroyedItem.name} 遗言：该装备栏永久护甲 +${destroyedItem.onDestroyPermanentShield}！`);
           }
           if (destroyedItem.onDestroyEffect) {
-            if (destroyedItem.onDestroyEffect === 'hand-equip-buff-2-2') {
-              setHandCards(prev => {
-                const buffed: string[] = [];
-                const next = prev.map(c => {
-                  if (c.type === 'weapon' || c.type === 'shield') {
-                    buffed.push(c.name);
-                    return { ...c, value: (c.value ?? 0) + 2, armorMax: c.armorMax != null ? c.armorMax + 2 : undefined };
-                  }
-                  return c;
-                });
-                if (buffed.length > 0) {
-                  addGameLog('equip', `${destroyedItem.name} 遗言：${buffed.join('、')} 获得 +2攻击 +2护甲！`);
-                  setHeroSkillBanner(`${destroyedItem.name} 遗言！手牌装备 +2攻击 +2护甲！`);
-                }
-                return next;
-              });
+            if (destroyedItem.onDestroyEffect === 'slot-temp-buff-3-3') {
+              setSlotTempAttack(prev => ({ ...prev, [destroyedSlotId]: (prev[destroyedSlotId] ?? 0) + 3 }));
+              setSlotTempArmor(prev => ({ ...prev, [destroyedSlotId]: (prev[destroyedSlotId] ?? 0) + 3 }));
+              addGameLog('equip', `${destroyedItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
+              setHeroSkillBanner(`${destroyedItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
             } else {
               addGameLog('equip', `${destroyedItem.name} 遗言：${destroyedItem.onDestroyEffect}`);
             }
@@ -2820,21 +2808,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             addGameLog('equip', `${item.name} 遗言：该装备栏永久护甲 +${item.onDestroyPermanentShield}！`);
           }
           if (item.onDestroyEffect) {
-            if (item.onDestroyEffect === 'hand-equip-buff-2-2') {
-              setHandCards(prev => {
-                const buffed: string[] = [];
-                const next = prev.map(c => {
-                  if (c.type === 'weapon' || c.type === 'shield') {
-                    buffed.push(c.name);
-                    return { ...c, value: (c.value ?? 0) + 2, armorMax: c.armorMax != null ? c.armorMax + 2 : undefined };
-                  }
-                  return c;
-                });
-                if (buffed.length > 0) {
-                  addGameLog('equip', `${item.name} 遗言：${buffed.join('、')} 获得 +2攻击 +2护甲！`);
-                }
-                return next;
-              });
+            if (item.onDestroyEffect === 'slot-temp-buff-3-3') {
+              setSlotTempAttack(prev => ({ ...prev, [sid]: (prev[sid] ?? 0) + 3 }));
+              setSlotTempArmor(prev => ({ ...prev, [sid]: (prev[sid] ?? 0) + 3 }));
+              addGameLog('equip', `${item.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
             } else {
               addGameLog('equip', `${item.name} 遗言：${item.onDestroyEffect}`);
             }

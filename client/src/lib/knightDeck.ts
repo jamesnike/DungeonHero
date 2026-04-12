@@ -492,7 +492,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: starterAmuletDamageDiscoverImage,
     classCard: true,
-    description: '每造成 5 次伤害（武器、护符、法术等任意来源对怪物造成伤害均计数），发现一张专属牌。',
+    description: '每造成 10 次伤害（武器、护符、法术等任意来源对怪物造成伤害均计数），发现一张专属牌。',
     amuletEffect: 'damage-class-discover',
   });
 

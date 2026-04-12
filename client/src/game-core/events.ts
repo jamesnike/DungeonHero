@@ -12,7 +12,7 @@ import type {
   EquipmentSlotId,
 } from '@/components/game-board/types';
 import type { GameState } from './types';
-import { INITIAL_HP, FLIP_GOLD_REWARD } from './constants';
+import { INITIAL_HP, FLIP_GOLD_REWARD, PERSUADE_COST, MIN_PERSUADE_COST } from './constants';
 import { flattenActiveRowSlots } from './helpers';
 
 // ---------------------------------------------------------------------------
@@ -263,8 +263,14 @@ export function applySimpleEffect(
     logs.push({ type: 'event', message: `击晕上限 +${amount}%` });
   } else if (effectToken.startsWith('persuadeCost-')) {
     const amount = parseInt(effectToken.replace('persuadeCost-', ''), 10) || 0;
-    patch = { persuadeCostModifier: (state.persuadeCostModifier ?? 0) - amount };
-    logs.push({ type: 'event', message: `劝降费用永久 -${amount}` });
+    const currentCost = PERSUADE_COST + (state.persuadeCostModifier ?? 0);
+    if (currentCost <= MIN_PERSUADE_COST) {
+      logs.push({ type: 'event', message: `劝降费用已达下限（${currentCost} 金币），无法再降低` });
+    } else {
+      const actualAmount = Math.min(amount, currentCost - MIN_PERSUADE_COST);
+      patch = { persuadeCostModifier: (state.persuadeCostModifier ?? 0) - actualAmount };
+      logs.push({ type: 'event', message: `劝降费用永久 -${actualAmount}` });
+    }
   } else if (effectToken.startsWith('slotLeftDefense+')) {
     const amount = parseInt(effectToken.replace('slotLeftDefense+', ''), 10) || 0;
     patch = {

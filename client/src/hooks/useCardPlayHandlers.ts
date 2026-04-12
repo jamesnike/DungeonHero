@@ -37,6 +37,8 @@ import {
   INITIAL_HP,
   HAND_LIMIT,
   BASE_BACKPACK_CAPACITY,
+  PERSUADE_COST,
+  MIN_PERSUADE_COST,
   createEmptyActiveRow,
 } from '@/game-core/constants';
 import {
@@ -147,6 +149,7 @@ export interface CardPlayHandlersDeps {
   pushUndoSnapshot: () => void;
   clearUndoStack: () => void;
   removeCard: (cardId: string, animate: boolean, opts?: { skipAutoDraw?: boolean }) => void;
+  removePendingDungeonCard: (cardId: string) => void;
   queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
   triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
@@ -323,6 +326,13 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
   const addGameLog = (type: LogEntryType, message: string) =>
     depsRef.current.addGameLog(type, message);
+
+  const updateSwapUpgradeCounter = useCallback((displayCount: number, threshold: number) => {
+    setAmuletSlots(prev => prev.map(slot => {
+      if (slot?.amuletEffect !== 'swap-upgrade') return slot;
+      return { ...slot, _counterDisplay: `${displayCount}/${threshold}` };
+    }));
+  }, [setAmuletSlots]);
 
   // -- Spell damage ----------------------------------------------------------
 
@@ -723,6 +733,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         depsRef.current.addToGraveyard(card);
       }
 
+      depsRef.current.removePendingDungeonCard(card.id);
       depsRef.current.removeCard(card.id, false);
       setPendingMagicAction(null);
       depsRef.current.echoRemainingRef.current = 0;
@@ -789,6 +800,9 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         setHeroSkillBanner(options.banner);
       }
       setPendingPotionAction(current => (current && current.card.id === card.id ? null : current));
+
+      depsRef.current.removePendingDungeonCard(card.id);
+
       if (card.flipTarget) {
         await depsRef.current.applyCardFlip(card);
       } else {
@@ -1814,7 +1828,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         return;
       }
 
-      if (effect === 'grant-lastwords-hand-equip-buff') {
+      if (effect === 'grant-lastwords-slot-temp-buff') {
         const slotsWithEquip = depsRef.current.getEquipmentSlots().filter(s => s.item != null);
         if (slotsWithEquip.length === 0) {
           depsRef.current.addGameLog('potion', '遗赠淬炼药：没有可赋予遗言的装备。');
@@ -1824,18 +1838,18 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         if (slotsWithEquip.length === 1) {
           const slot = slotsWithEquip[0];
           const item = slot.item!;
-          depsRef.current.setEquipmentSlotById(slot.id, { ...item, onDestroyEffect: 'hand-equip-buff-2-2' });
-          depsRef.current.addGameLog('potion', `遗赠淬炼药：${item.name} 获得遗言：手牌装备 +2攻击 +2护甲！`);
-          await finalizePotionCard(card, { banner: `${item.name} 获得遗言：手牌装备 +2攻击 +2护甲！` });
+          depsRef.current.setEquipmentSlotById(slot.id, { ...item, onDestroyEffect: 'slot-temp-buff-3-3' });
+          depsRef.current.addGameLog('potion', `遗赠淬炼药：${item.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！`);
+          await finalizePotionCard(card, { banner: `${item.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！` });
           return;
         }
         setPendingPotionAction({
           card,
-          effect: 'grant-lastwords-hand-equip-buff',
+          effect: 'grant-lastwords-slot-temp-buff',
           step: 'slot-select',
-          prompt: '选择一个装备，赋予遗言：手牌装备 +2攻击 +2护甲。',
+          prompt: '选择一个装备，赋予遗言：该装备栏 +3临时攻击 +3临时护甲。',
         });
-        setHeroSkillBanner('选择一个装备，赋予遗言：手牌装备 +2攻击 +2护甲。');
+        setHeroSkillBanner('选择一个装备，赋予遗言：该装备栏 +3临时攻击 +3临时护甲。');
         return;
       }
 
@@ -1887,28 +1901,15 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
 
       if (effect === 'grant-amulet-end-turn-draw') {
-        const alreadyHas = engine.getState().amuletSlots.some(a => a?.amuletEffect === 'end-turn-draw');
-        if (alreadyHas) {
-          depsRef.current.addGameLog('potion', '回合汲取药：护符效果已存在，无法叠加。');
-          await finalizePotionCard(card, { banner: '护符效果已存在，无法叠加。' });
+        if (hasEternalRelic(eternalRelics, 'end-turn-draw')) {
+          depsRef.current.addGameLog('potion', '回合汲取药：永恒护符效果已存在，无法叠加。');
+          await finalizePotionCard(card, { banner: '永恒护符效果已存在，无法叠加。' });
           return;
         }
-        const newAmulet: GameCardData = {
-          id: `amulet-end-turn-draw-${Date.now()}`,
-          type: 'amulet',
-          name: '回合汲取',
-          value: 0,
-          image: card.image,
-          description: '每次结束英雄回合时，从背包抽 1 张牌。',
-          amuletEffect: 'end-turn-draw',
-        };
-        const maxSlots = engine.getState().maxAmuletSlots;
-        setAmuletSlots(prev => {
-          const next = [...prev, { ...newAmulet, fromSlot: 'amulet' } as import('@/components/game-board/types').AmuletItem];
-          return next.slice(-maxSlots);
-        });
-        depsRef.current.addGameLog('potion', '回合汲取药：获得护符「回合汲取」！结束英雄回合时抽 1 张牌。');
-        await finalizePotionCard(card, { banner: '获得护符「回合汲取」！结束英雄回合时抽 1 张牌。' });
+        const relic = getEternalRelic('end-turn-draw');
+        setEternalRelics(prev => [...prev, relic]);
+        depsRef.current.addGameLog('potion', '回合汲取药：获得永恒护符「回合汲取」！结束英雄回合时抽 1 张牌。');
+        await finalizePotionCard(card, { banner: '获得永恒护符「回合汲取」！结束英雄回合时抽 1 张牌。' });
         return;
       }
 
@@ -2125,13 +2126,22 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       case 'persuade-discount': {
         const costDiscount = 2 * ((card.upgradeLevel ?? 0) + 1);
         const rateBonus = 10 * ((card.upgradeLevel ?? 0) + 1);
-        setPersuadeCostModifier(prev => prev - costDiscount);
+        const currentMod = engine.getState().persuadeCostModifier ?? 0;
+        const currentCost = PERSUADE_COST + currentMod;
+        let actualDiscount = 0;
+        if (currentCost > MIN_PERSUADE_COST) {
+          actualDiscount = Math.min(costDiscount, currentCost - MIN_PERSUADE_COST);
+          setPersuadeCostModifier(prev => prev - actualDiscount);
+        }
         depsRef.current.persuadeDiscountRef.current = {
           costReduction: 0,
           rateBonus,
         };
         if (card.classCard) depsRef.current.consumeClassCardFromHand(card.id);
-        finalizeMagicCard(card, { banner: `怀柔令发动：劝降费用永久 -${costDiscount}，下次劝降成功率 +${rateBonus}%！` });
+        const costMsg = actualDiscount > 0
+          ? `劝降费用永久 -${actualDiscount}`
+          : `劝降费用已达下限`;
+        finalizeMagicCard(card, { banner: `怀柔令发动：${costMsg}，下次劝降成功率 +${rateBonus}%！` });
         return true;
       }
       case 'monster-fusion': {
@@ -2998,6 +3008,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
     depsRef.current.addGameLog('magic', `魔法：${card.name} — ${banner}`);
     setHeroSkillBanner(banner);
+    depsRef.current.removePendingDungeonCard(card.id);
     depsRef.current.removeCard(card.id, false);
     setPendingMagicAction(null);
 
@@ -3359,18 +3370,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
   const resolveStunWave = async (card: GameCardData) => {
     depsRef.current.clearUndoStack();
-    const prevCategory = engine.getState().lastPlayedCardCategory;
-    const curCategory = getCardPlayCategory(card);
-    const transformTriggered = prevCategory != null && prevCategory !== curCategory;
-
-    if (!transformTriggered) {
-      finalizeMagicCard(card, { banner: `震慑领域：击晕上限 +10%（当前 ${Math.min(100, stunCap + 10)}%）！` });
-      return;
-    }
 
     const monsters = flattenActiveRowSlots(activeCards).filter(c => c.type === 'monster' && !c.isStunned);
     if (monsters.length === 0) {
-      finalizeMagicCard(card, { banner: '震慑领域：击晕上限 +10%。转型触发！但没有可击晕的怪物。' });
+      finalizeMagicCard(card, { banner: `震慑领域：击晕上限 +10%（当前 ${Math.min(100, stunCap + 10)}%）。没有可击晕的怪物。` });
       return;
     }
 
@@ -3406,7 +3409,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     }
 
     finalizeMagicCard(card, {
-      banner: `震慑领域：击晕上限 +10%。转型触发！${stunResults.join('，')}。`,
+      banner: `震慑领域：击晕上限 +10%。${stunResults.join('，')}。`,
     });
   };
 
@@ -3553,6 +3556,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               description: '对激活行所有怪物造成 1 点伤害，每击中一个怪物，从回收袋随机抽 1 张牌加入手牌。',
             };
             depsRef.current.addGameLog('magic', `风暴箭雨命中 ${monsters.length} 只怪物，翻转为「箭雨余韵」！`);
+            depsRef.current.removePendingDungeonCard(card.id);
             depsRef.current.removeCard(card.id, false);
             setPendingMagicAction(null);
             await depsRef.current.triggerEventTransform(card, flippedCard, '风暴箭雨翻转为「箭雨余韵」');
@@ -3918,7 +3922,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         }
         case '秘法精炼': {
           depsRef.current.openHandMagicUpgradeModal(card.id);
-          finalizeMagicCard(card, { banner: '秘法精炼：选择一张魔法牌进行升级。' });
+          finalizeMagicCard(card, { banner: '秘法精炼：选择至多 2 张魔法牌进行升级。' });
           return;
         }
         case '专属召唤': {
@@ -4053,6 +4057,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
       
       depsRef.current.addToGraveyard(card);
+      depsRef.current.removePendingDungeonCard(card.id);
       depsRef.current.removeCard(card.id, false);
       depsRef.current.stagingCardsRef.current =
         depsRef.current.stagingCardsRef.current.filter(c => c.id !== card.id);
@@ -4175,21 +4180,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           parts.push(`装备栏永久护甲 +${slotItem.onDestroyPermanentShield}`);
         }
         if (slotItem.onDestroyEffect) {
-          if (slotItem.onDestroyEffect === 'hand-equip-buff-2-2') {
-            setHandCards(prev => {
-              const buffed: string[] = [];
-              const next = prev.map(c => {
-                if (c.type === 'weapon' || c.type === 'shield') {
-                  buffed.push(c.name);
-                  return { ...c, value: (c.value ?? 0) + 2, armorMax: c.armorMax != null ? c.armorMax + 2 : undefined };
-                }
-                return c;
-              });
-              if (buffed.length > 0) {
-                parts.push(`${buffed.join('、')} +2攻击 +2护甲`);
-              }
-              return next;
-            });
+          if (slotItem.onDestroyEffect === 'slot-temp-buff-3-3') {
+            setSlotTempAttack(prev => ({ ...prev, [chosenSlot]: (prev[chosenSlot] ?? 0) + 3 }));
+            setSlotTempArmor(prev => ({ ...prev, [chosenSlot]: (prev[chosenSlot] ?? 0) + 3 }));
+            parts.push('该装备栏 +3临时攻击 +3临时护甲');
           } else {
             parts.push(slotItem.onDestroyEffect);
           }
@@ -4546,9 +4540,11 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               const prog = engine.getState().swapUpgradeProgress + 1;
               if (prog >= 3) {
                 setSwapUpgradeProgress(0);
+                updateSwapUpgradeCounter(0, 3);
                 reshuffleSingleUpgrade = true;
               } else {
                 setSwapUpgradeProgress(prog);
+                updateSwapUpgradeCounter(prog, 3);
                 depsRef.current.addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
               }
             }
@@ -4614,6 +4610,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             }
             if (prog !== engine.getState().swapUpgradeProgress) {
               setSwapUpgradeProgress(prog);
+              updateSwapUpgradeCounter(prog, 3);
               if (prog > 0) {
                 depsRef.current.addGameLog('amulet', `流转之符：交换位置（${prog}/3）`);
               }
@@ -5006,6 +5003,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
                 }
               }
               depsRef.current.addPermanentMagicToRecycleBag(updatedCard);
+              depsRef.current.removePendingDungeonCard(card.id);
               depsRef.current.removeCard(card.id, false);
               setPendingMagicAction(null);
               depsRef.current.addGameLog(
@@ -5320,6 +5318,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
       
       depsRef.current.addToGraveyard(card);
+      depsRef.current.removePendingDungeonCard(card.id);
       depsRef.current.removeCard(card.id, false);
 
       depsRef.current.stagingCardsRef.current =
@@ -5327,6 +5326,71 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       depsRef.current.drainPendingDiscardEffects();
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // applyTransformAndUpdateCategory
+  // ---------------------------------------------------------------------------
+
+  const applyTransformAndUpdateCategory = (card: GameCardData) => {
+    if (card.transformEffect && card.type !== 'event') {
+      const prevCat = engine.getState().lastPlayedCardCategory;
+      const curCat = getCardPlayCategory(card);
+      if (prevCat != null && prevCat !== curCat) {
+        if (card.transformEffect === 'graveyard-random-magic') {
+          const graveyard = engine.getState().discardedCards;
+          const magicCards = graveyard.filter(c => c.type === 'magic');
+          if (magicCards.length > 0) {
+            const picked = magicCards[Math.floor(Math.random() * magicCards.length)];
+            setDiscardedCards(prev => prev.filter(c => c.id !== picked.id));
+            depsRef.current.queueCardIntoHand(picked);
+            depsRef.current.addGameLog('magic', `转型触发：从坟场获得「${picked.name}」！`);
+            setHeroSkillBanner(`转型触发！从坟场获得「${picked.name}」！`);
+          } else {
+            depsRef.current.addGameLog('magic', '转型触发：坟场没有魔法卡牌。');
+            setHeroSkillBanner('转型触发！但坟场没有魔法卡牌。');
+          }
+        } else if (card.transformEffect?.startsWith('gold:')) {
+          const goldAmount = parseInt(card.transformEffect.replace('gold:', ''), 10) || 3;
+          setGold(prev => prev + goldAmount);
+          depsRef.current.addGameLog('gold', `转型触发：获得 ${goldAmount} 金币！`);
+          setHeroSkillBanner(`转型触发！获得 ${goldAmount} 金币！`);
+        } else if (card.transformEffect?.startsWith('draw:')) {
+          const drawCount = parseInt(card.transformEffect.replace('draw:', ''), 10) || 2;
+          for (let i = 0; i < drawCount; i++) {
+            depsRef.current.drawFromBackpackToHand();
+          }
+          depsRef.current.addGameLog('magic', `转型触发：抽取 ${drawCount} 张牌！`);
+          setHeroSkillBanner(`转型触发！抽取了 ${drawCount} 张牌！`);
+        } else if (card.transformEffect?.startsWith('heal:')) {
+          const healAmount = parseInt(card.transformEffect.replace('heal:', ''), 10) || 2;
+          setHp(prev => Math.min(prev + healAmount, engine.getState().maxHp));
+          depsRef.current.addGameLog('event', `转型触发：恢复 ${healAmount} HP！`);
+          setHeroSkillBanner(`转型触发！恢复了 ${healAmount} HP！`);
+        } else if (card.transformEffect?.startsWith('recycle-to-hand:')) {
+          const count = parseInt(card.transformEffect.replace('recycle-to-hand:', ''), 10) || 1;
+          const bag = engine.getState().permanentMagicRecycleBag.filter(c => c.id !== card.id);
+          if (bag.length > 0) {
+            const shuffled = [...bag].sort(() => Math.random() - 0.5);
+            const picks = shuffled.slice(0, Math.min(count, bag.length));
+            const pickIds = new Set(picks.map(p => p.id));
+            setPermanentMagicRecycleBag(prev => prev.filter(c => !pickIds.has(c.id)));
+            for (const pick of picks) {
+              depsRef.current.queueCardIntoHand(pick);
+            }
+            const names = picks.map(p => `「${p.name}」`).join('、');
+            depsRef.current.addGameLog('magic', `转型触发：从回收袋取回${names}！`);
+            setHeroSkillBanner(`转型触发！从回收袋取回${names}！`);
+          } else {
+            depsRef.current.addGameLog('magic', '转型触发：回收袋为空。');
+            setHeroSkillBanner('转型触发！但回收袋为空。');
+          }
+        }
+      }
+    }
+    if (card.type !== 'event') {
+      setLastPlayedCardCategory(getCardPlayCategory(card));
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // handlePlayCardFromHand
@@ -5355,9 +5419,17 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     if (depsRef.current.lastPlayedFlankRef.current && card.flankEffectId) {
       if (card.flankEffectId.startsWith('persuadeCost-')) {
         const amount = parseInt(card.flankEffectId.replace('persuadeCost-', ''), 10) || 1;
-        setPersuadeCostModifier(prev => prev - amount);
-        depsRef.current.addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${amount}`);
-        setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${amount}！`);
+        const currentMod = engine.getState().persuadeCostModifier ?? 0;
+        const currentCost = PERSUADE_COST + currentMod;
+        if (currentCost <= MIN_PERSUADE_COST) {
+          depsRef.current.addGameLog('event', `劝降费用已达下限（${currentCost} 金币），无法再降低`);
+          setHeroSkillBanner(`侧击！${card.name} 劝降费用已达下限，无法再降低。`);
+        } else {
+          const actualAmount = Math.min(amount, currentCost - MIN_PERSUADE_COST);
+          setPersuadeCostModifier(prev => prev - actualAmount);
+          depsRef.current.addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${actualAmount}`);
+          setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${actualAmount}！`);
+        }
       } else if (card.flankEffectId.startsWith('stunCap+')) {
         const amount = parseInt(card.flankEffectId.replace('stunCap+', ''), 10) || 5;
         setStunCap(prev => Math.min(100, prev + amount));
@@ -5466,65 +5538,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
     }
 
-    if (card.transformEffect && card.type !== 'event') {
-      const prevCat = engine.getState().lastPlayedCardCategory;
-      const curCat = getCardPlayCategory(card);
-      if (prevCat != null && prevCat !== curCat) {
-        if (card.transformEffect === 'graveyard-random-magic') {
-          const graveyard = engine.getState().discardedCards;
-          const magicCards = graveyard.filter(c => c.type === 'magic');
-          if (magicCards.length > 0) {
-            const picked = magicCards[Math.floor(Math.random() * magicCards.length)];
-            setDiscardedCards(prev => prev.filter(c => c.id !== picked.id));
-            depsRef.current.queueCardIntoHand(picked);
-            depsRef.current.addGameLog('magic', `转型触发：从坟场获得「${picked.name}」！`);
-            setHeroSkillBanner(`转型触发！从坟场获得「${picked.name}」！`);
-          } else {
-            depsRef.current.addGameLog('magic', '转型触发：坟场没有魔法卡牌。');
-            setHeroSkillBanner('转型触发！但坟场没有魔法卡牌。');
-          }
-        } else if (card.transformEffect?.startsWith('gold:')) {
-          const goldAmount = parseInt(card.transformEffect.replace('gold:', ''), 10) || 3;
-          setGold(prev => prev + goldAmount);
-          depsRef.current.addGameLog('gold', `转型触发：获得 ${goldAmount} 金币！`);
-          setHeroSkillBanner(`转型触发！获得 ${goldAmount} 金币！`);
-        } else if (card.transformEffect?.startsWith('draw:')) {
-          const drawCount = parseInt(card.transformEffect.replace('draw:', ''), 10) || 2;
-          for (let i = 0; i < drawCount; i++) {
-            depsRef.current.drawFromBackpackToHand();
-          }
-          depsRef.current.addGameLog('magic', `转型触发：抽取 ${drawCount} 张牌！`);
-          setHeroSkillBanner(`转型触发！抽取了 ${drawCount} 张牌！`);
-        } else if (card.transformEffect?.startsWith('heal:')) {
-          const healAmount = parseInt(card.transformEffect.replace('heal:', ''), 10) || 2;
-          setHp(prev => Math.min(prev + healAmount, engine.getState().maxHp));
-          depsRef.current.addGameLog('event', `转型触发：恢复 ${healAmount} HP！`);
-          setHeroSkillBanner(`转型触发！恢复了 ${healAmount} HP！`);
-        } else if (card.transformEffect?.startsWith('recycle-to-hand:')) {
-          const count = parseInt(card.transformEffect.replace('recycle-to-hand:', ''), 10) || 1;
-          const bag = engine.getState().permanentMagicRecycleBag.filter(c => c.id !== card.id);
-          if (bag.length > 0) {
-            const shuffled = [...bag].sort(() => Math.random() - 0.5);
-            const picks = shuffled.slice(0, Math.min(count, bag.length));
-            const pickIds = new Set(picks.map(p => p.id));
-            setPermanentMagicRecycleBag(prev => prev.filter(c => !pickIds.has(c.id)));
-            for (const pick of picks) {
-              depsRef.current.queueCardIntoHand(pick);
-            }
-            const names = picks.map(p => `「${p.name}」`).join('、');
-            depsRef.current.addGameLog('magic', `转型触发：从回收袋取回${names}！`);
-            setHeroSkillBanner(`转型触发！从回收袋取回${names}！`);
-          } else {
-            depsRef.current.addGameLog('magic', '转型触发：回收袋为空。');
-            setHeroSkillBanner('转型触发！但回收袋为空。');
-          }
-        }
-      }
-    }
-
-    if (card.type !== 'event') {
-      setLastPlayedCardCategory(getCardPlayCategory(card));
-    }
+    applyTransformAndUpdateCategory(card);
   };
 
   // ---------------------------------------------------------------------------
@@ -5559,6 +5573,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     handleKnightInstantMagic,
     handleKnightPermanentMagic,
     handlePlayCardFromHand,
+    applyTransformAndUpdateCategory,
 
     // Internal helpers exposed for GameBoard
     isPermanentMagicCard,

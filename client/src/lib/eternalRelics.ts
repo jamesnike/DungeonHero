@@ -124,6 +124,13 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
     description: '劝降成功的怪物起始耐久 +1。',
     image: relicChainPersuadeImage,
   },
+  'end-turn-draw': {
+    id: 'end-turn-draw',
+    name: '永恒护符·回合汲取',
+    description: '每次结束英雄回合时，从背包抽 1 张牌。',
+    image: relicEarlySurgeImage,
+    amuletEffect: 'end-turn-draw',
+  },
 };
 
 export function getEternalRelic(id: EternalRelicId): EternalRelic {
@@ -138,7 +145,7 @@ export function hasEternalRelic(relics: EternalRelic[], id: EternalRelicId): boo
   return relics.some(r => r.id === id);
 }
 
-const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus']);
+const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus', 'end-turn-draw']);
 
 export function getSelectableRelics(exclude: EternalRelicId[]): EternalRelic[] {
   const excludeSet = new Set(exclude);

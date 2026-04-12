@@ -93,6 +93,7 @@ export default function AmuletSlot({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragDepth(0);
+    if (isStunFrozen) return;
     const cardData = e.dataTransfer.getData('card');
     if (cardData) {
       const card = JSON.parse(cardData);
@@ -180,12 +181,12 @@ export default function AmuletSlot({
             return (
               <div
                 key={card.id}
-                className={`absolute inset-0 ${disableAnimations ? 'pointer-events-none' : ''}`.trim()}
+                className={`absolute inset-0 ${disableAnimations || isStunFrozen ? 'pointer-events-none' : ''}`.trim()}
                 style={getStackTransform(index)}
               >
                 <GameCard 
                   card={card}
-                  disableInteractions={disableAnimations}
+                  disableInteractions={disableAnimations || isStunFrozen}
                   onDragStart={(dragCard) => onDragStart?.(dragCard)}
                   onDragEnd={onDragEnd}
                   onClick={() => onCardClick?.(card)}
@@ -212,8 +213,8 @@ export default function AmuletSlot({
       )}
       {isStunFrozen && (
         <>
-          <div className="pointer-events-none absolute inset-0 z-[35] rounded-xl bg-cyan-400/20 border-2 border-cyan-400/60 animate-pulse" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-cyan-600/90 text-white font-bold px-3 py-1 rounded-full shadow-lg border-2 border-cyan-300 text-xs whitespace-nowrap animate-pulse">
+          <div className="absolute inset-0 z-[35] rounded-xl bg-cyan-400/20 border-2 border-cyan-400/60 animate-pulse cursor-not-allowed" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-cyan-600/90 text-white font-bold px-3 py-1 rounded-full shadow-lg border-2 border-cyan-300 text-xs whitespace-nowrap animate-pulse pointer-events-none">
             击晕冻结
           </div>
         </>

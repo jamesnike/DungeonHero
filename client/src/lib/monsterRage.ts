@@ -43,7 +43,7 @@ const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
     { waterfallLevel: 11, attackBonus: 6, hpBonus: 8, specialAbility: 'goblin-steal-scale', specialDesc: '窃牌贼 + 贼窝疗养 + 贪婪强化：每偷到X金币，攻击力和生命值 +X' },
   ],
   Ogre:     [
-    { waterfallLevel: 5, attackBonus: 3, hpBonus: 2, specialAbility: 'ogre-stun', specialDesc: '蛮力击晕：攻击时20%概率击晕玩家（装备栏和护符栏冻结一回合）' },
+    { waterfallLevel: 5, attackBonus: 3, hpBonus: 2, specialAbility: 'ogre-stun', specialDesc: '蛮力击晕：攻击时30%概率击晕玩家（装备栏和护符栏冻结一回合）' },
     { waterfallLevel: 9, attackBonus: 5, hpBonus: 4, specialAbility: 'ogre-stun-double', specialDesc: '蛮力击晕 + 狂暴连击：攻击时70%概率再攻击一次' },
     { waterfallLevel: 13, attackBonus: 8, hpBonus: 6, specialAbility: 'ogre-all', specialDesc: '蛮力震慑 + 蛮力击晕 + 狂暴连击' },
   ],
