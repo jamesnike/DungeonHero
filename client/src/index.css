@@ -934,6 +934,10 @@ html {
     gap: var(--dh-grid-gap-y, 0.5rem) var(--dh-grid-gap-x, 0.5rem);
   }
 
+  .game-grid-narrow {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
   .dh-grid-cell {
     padding: var(--dh-card-padding, 0.25rem);
     contain: layout style;
@@ -1453,6 +1457,15 @@ html {
   .dh-hero-icon {
     width: calc(1.2rem * var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1));
     height: calc(1.2rem * var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1));
+  }
+
+  .dh-hero-stats-bar {
+    gap: calc(0.5rem * var(--dh-hero-instance-scale, 1));
+    padding: calc(0.25rem * var(--dh-hero-instance-scale, 1))
+             calc(0.75rem * var(--dh-hero-instance-scale, 1));
+  }
+  .dh-hero-stats-bar--flat {
+    padding: 0 calc(0.5rem * var(--dh-hero-instance-scale, 1));
   }
 
   .dh-deck-label {

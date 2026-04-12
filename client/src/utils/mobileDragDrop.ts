@@ -10,7 +10,7 @@ let dragElement: HTMLElement | null = null;
 let dragPreview: HTMLElement | null = null;
 let touchTarget: HTMLElement | null = null;
 
-const DRAG_THRESHOLD = 10;
+const DRAG_THRESHOLD = 5;
 const HIT_TEST_INTERVAL = 5;
 
 const reusableMoveDetail: DragData = { type: 'card', data: null, clientX: 0, clientY: 0 };
@@ -49,6 +49,7 @@ export const initMobileDrag = (
     dragCellEl = element.closest('.dh-grid-cell') as HTMLElement | null;
     if (dragCellEl) dragCellEl.style.zIndex = '9999';
 
+    element.style.transition = 'none';
     element.classList.add('mobile-dragging');
     element.style.transform = `translate3d(${touchX - originCenterX}px, ${touchY - originCenterY}px, 0) scale(1.05)`;
 
@@ -58,7 +59,7 @@ export const initMobileDrag = (
     lastTouchY = touchY;
     hasLastTouch = true;
 
-    requestAnimationFrame(() => onDragStart?.());
+    onDragStart?.();
   };
 
   const handleTouchStart = (e: TouchEvent) => {
@@ -73,6 +74,9 @@ export const initMobileDrag = (
     hitTestCounter = 0;
 
     cachedRect = element.getBoundingClientRect();
+
+    element.style.transition = 'transform 80ms ease-out';
+    element.style.transform = 'scale(1.03)';
   };
 
   let pendingTouchX = 0;
@@ -144,6 +148,7 @@ export const initMobileDrag = (
       dragCellEl = null;
     }
     element.classList.remove('mobile-dragging');
+    element.style.transition = '';
     element.style.transform = 'none';
     element.style.opacity = '1';
     element.style.visibility = '';
@@ -154,6 +159,8 @@ export const initMobileDrag = (
 
     if (!dragStarted) {
       hasLastTouch = false;
+      element.style.transition = '';
+      element.style.transform = '';
       element.click();
       return;
     }

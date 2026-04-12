@@ -1464,6 +1464,9 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           if (started) {
             depsRef.current.addGameLog('combat', '战利品：发现一张专属牌');
             setHeroSkillBanner('发现了一张专属牌！');
+            await new Promise<void>(resolve => {
+              depsRef.current.discoverPotionCompletionRef.current = () => { resolve(); };
+            });
             return true;
           }
           const fallbackSuccess = handleDiscoverFallback();

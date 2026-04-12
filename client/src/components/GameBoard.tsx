@@ -26,7 +26,7 @@ import GameCard, {
 import EquipmentSlot from './EquipmentSlot';
 // CombatPanel removed — only the standalone End Hero Turn button is used
 import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
-import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag, Trophy, Skull } from 'lucide-react';
+import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag, Trophy, Skull, Dices } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import AmuletSlot from './AmuletSlot';
@@ -1382,6 +1382,14 @@ export default function GameBoard() {
   const [gridCardSize, setGridCardSize] = useState<{width: number, height: number} | undefined>(undefined);
   const gridCardSizeRef = useRef(gridCardSize);
   const isCompactViewport = gameViewport.width < 500;
+  const isNarrowLayout = gameViewport.width < 640;
+  const isNarrowLayoutRef = useRef(isNarrowLayout);
+  isNarrowLayoutRef.current = isNarrowLayout;
+  useEffect(() => {
+    if (isNarrowLayout) {
+      heroRowCellRefs.current[HERO_ROW_CLASS_DECK_INDEX] = null;
+    }
+  }, [isNarrowLayout]);
   const rageStripWidth = useMemo(() => {
     if (!gridCardSize?.width) {
       return isCompactViewport ? 9 : 14;
@@ -1498,7 +1506,10 @@ export default function GameBoard() {
   const updateHeroFramePosition = useCallback(() => {
     const container = gridWrapperRef.current;
     const firstCell = heroRowCellRefs.current[0];
-    const lastCell = heroRowCellRefs.current[heroRowCellRefs.current.length - 1];
+    let lastCell: HTMLDivElement | null = null;
+    for (let i = heroRowCellRefs.current.length - 1; i >= 0; i--) {
+      if (heroRowCellRefs.current[i]) { lastCell = heroRowCellRefs.current[i]; break; }
+    }
     if (!container || !firstCell || !lastCell) {
       return;
     }
@@ -1747,6 +1758,7 @@ export default function GameBoard() {
 
   const [deckViewerOpen, setDeckViewerOpen] = useState(false);
   const [deckPeekState, setDeckPeekState] = useState<import('./game-board/types').DeckPeekModalState | null>(null);
+  const [narrowDiceModalOpen, setNarrowDiceModalOpen] = useState(false);
 
   const gameLogIdRef = useRef<number>(loadGameLog()?.nextId ?? 0);
   const addGameLog = useCallback((type: LogEntryType, message: string) => {
@@ -9918,9 +9930,9 @@ export default function GameBoard() {
         />
       ),
     },
-    {
+    ...(!isNarrowLayout ? [{
       id: 'hero-row-class-deck',
-      dropZone: 'other',
+      dropZone: 'other' as const,
       innerClassName: 'bg-card-foreground/5 rounded-lg',
       render: () => (
         <ClassDeck
@@ -9930,7 +9942,7 @@ export default function GameBoard() {
           onCardSelect={handleCardClick}
         />
       ),
-    },
+    }] : []),
   ];
 
   const remainingCardsCount = remainingDeck.length;
@@ -10071,9 +10083,9 @@ export default function GameBoard() {
             className="flex-1 min-h-0 relative flex justify-start lg:justify-center"
           >
             <div ref={gridWrapperRef} className="relative flex-1 w-full">
-              {/* 3×7 Card Grid (6 dungeon columns + 1 utility column) */}
+              {/* 3×N Card Grid (5 dungeon columns + optional utility column) */}
               <div 
-                className="game-grid grid mx-auto h-full max-w-[1350px]"
+                className={`game-grid ${isNarrowLayout ? 'game-grid-narrow' : ''} grid mx-auto h-full max-w-[1350px]`}
                 style={{ 
                   gridAutoRows: 'minmax(0, 1fr)'
                 }}>
@@ -10178,16 +10190,18 @@ export default function GameBoard() {
             );
           })}
           
-          {/* Row 1, last col: DiceRoller */}
-          <div className={cellWrapperClass}>
-            <div className={cellInnerClass}>
-              <DiceRoller 
-                onRoll={(value) => console.log('Rolled:', value)}
-                className="w-full h-full"
-                scaleMultiplier={stageScale}
-              />
+          {/* Row 1, last col: DiceRoller (hidden in narrow layout) */}
+          {!isNarrowLayout && (
+            <div className={cellWrapperClass}>
+              <div className={cellInnerClass}>
+                <DiceRoller 
+                  onRoll={(value) => console.log('Rolled:', value)}
+                  className="w-full h-full"
+                  scaleMultiplier={stageScale}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Row 2: Active Row - DUNGEON_COLUMN_COUNT cards + GraveyardZone */}
           {DUNGEON_COLUMNS.map((index) => {
@@ -10404,18 +10418,20 @@ export default function GameBoard() {
             );
           })}
           
-          {/* Row 2, last col: GraveyardZone */}
-          <div className={cellWrapperClass}>
-            <div className={cellInnerClass} ref={setGraveyardRef}>
-              <GraveyardZone
-                onDrop={handleGraveyardDropStable}
-                isDropTarget={graveyardDropEnabled}
-                shouldHighlight={shouldHighlightGraveyard}
-                discardedCards={discardedCards}
-                onCardSelect={handleCardClick}
-              />
+          {/* Row 2, last col: GraveyardZone (hidden in narrow layout) */}
+          {!isNarrowLayout && (
+            <div className={cellWrapperClass}>
+              <div className={cellInnerClass} ref={setGraveyardRef}>
+                <GraveyardZone
+                  onDrop={handleGraveyardDropStable}
+                  isDropTarget={graveyardDropEnabled}
+                  shouldHighlight={shouldHighlightGraveyard}
+                  discardedCards={discardedCards}
+                  onCardSelect={handleCardClick}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Row 3: Hero Row - 6 slots (Amulet, Equipment×2, Hero, Backpack, ClassDeck) */}
           {heroRowSlots.map((slot, index) => {
@@ -10434,6 +10450,62 @@ export default function GameBoard() {
             );
           })}
               </div>
+
+              {/* Narrow layout: floating sidebar buttons aligned to each row */}
+              {isNarrowLayout && (
+                <>
+                  {/* Dice — aligned with preview row (row 1) */}
+                  <div className="absolute right-0 z-30 pr-0.5" style={{ top: 'calc(100% / 6)', transform: 'translateY(-50%)' }}>
+                    <button
+                      onClick={() => setNarrowDiceModalOpen(true)}
+                      className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-rose-600 bg-gradient-to-br from-rose-950/90 via-rose-900/70 to-rose-800/50 text-rose-200 hover:border-rose-400 hover:scale-105 transition-all duration-150 shadow-md"
+                    >
+                      <Dices className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Graveyard — aligned with active row (row 2) */}
+                  <div className="absolute right-0 z-30 pr-0.5" style={{ top: '50%', transform: 'translateY(-50%)' }}>
+                    <GraveyardZone
+                      compact
+                      discardedCards={discardedCards}
+                      onCardSelect={handleCardClick}
+                    />
+                  </div>
+
+                  {/* ClassDeck — aligned with hero row (row 3) */}
+                  <div className="absolute right-0 z-30 pr-0.5" style={{ top: 'calc(500% / 6)', transform: 'translateY(-50%)' }}>
+                    <ClassDeck
+                      compact
+                      classCards={classDeck}
+                      deckName="Knight Deck"
+                      onCardSelect={handleCardClick}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Narrow layout: DiceRoller modal */}
+              {isNarrowLayout && (
+                <Dialog open={narrowDiceModalOpen} onOpenChange={setNarrowDiceModalOpen}>
+                  <DialogContent className="max-w-sm flex flex-col items-center gap-4">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Dices className="w-6 h-6" />
+                        Chaos Dice
+                      </DialogTitle>
+                      <DialogDescription>Roll the d20</DialogDescription>
+                    </DialogHeader>
+                    <div className="w-[220px] h-[220px]">
+                      <DiceRoller
+                        className="w-full h-full"
+                        scaleMultiplier={1}
+                      />
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+
               <div
                 ref={heroFrameRef}
                 className={`hero-row-frame ${isFlat ? HERO_GAP_VARIABLE_CLASS_FLAT : HERO_GAP_VARIABLE_CLASS}`}

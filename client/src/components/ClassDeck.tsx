@@ -26,6 +26,7 @@ interface ClassDeckProps {
   className?: string;
   deckName?: string;
   onCardSelect?: (card: GameCardData) => void;
+  compact?: boolean;
 }
 
 function ClassDeckComponent({
@@ -33,6 +34,7 @@ function ClassDeckComponent({
   className = '',
   deckName = 'Knight Deck',
   onCardSelect,
+  compact = false,
 }: ClassDeckProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
@@ -51,45 +53,60 @@ function ClassDeckComponent({
   
   return (
     <>
-      <Card 
-        className={cn(
-          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-transform duration-200 hover:scale-[1.01]',
-          className
-        )}
-        onClick={() => startTransition(() => setViewerOpen(true))}
-        data-testid="class-deck"
-      >
-        {isFlat ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-indigo-100">
-            <span className="dh-deck-label font-semibold uppercase tracking-wide">{deckName}</span>
-            <span className="font-mono font-bold text-lg">{classCards.length}</span>
-          </div>
-        ) : (
-          <>
-            <StackedCardPile 
-              count={classCards.length} 
-              className="rounded-xl"
-              variant="bright"
-              label={deckName}
-            />
-            <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3">
-              <div className="flex items-center justify-between dh-deck-label uppercase tracking-wide text-indigo-100">
-                <span className="font-semibold flex items-center gap-1">
-                  <Shield className="dh-icon-inline text-indigo-200" />
-                  {deckName}
-                </span>
-                <Badge variant="outline" className="bg-black/30 text-white font-mono dh-deck-badge px-1.5 py-0.5">
-                  {classCards.length}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-end gap-1 text-indigo-100">
-                <Eye className="dh-icon-inline" />
-                <span className="dh-deck-badge font-medium">Browse</span>
-              </div>
+      {compact ? (
+        <button
+          onClick={() => startTransition(() => setViewerOpen(true))}
+          data-testid="class-deck-compact"
+          className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-indigo-600 bg-gradient-to-br from-indigo-950/90 via-indigo-900/70 to-indigo-800/50 text-indigo-200 hover:border-indigo-400 hover:scale-105 transition-all duration-150 shadow-md"
+        >
+          <Shield className="w-5 h-5" />
+          {classCards.length > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-indigo-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5 leading-none">
+              {classCards.length}
+            </span>
+          )}
+        </button>
+      ) : (
+        <Card 
+          className={cn(
+            'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-transform duration-200 hover:scale-[1.01]',
+            className
+          )}
+          onClick={() => startTransition(() => setViewerOpen(true))}
+          data-testid="class-deck"
+        >
+          {isFlat ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-indigo-100">
+              <span className="dh-deck-label font-semibold uppercase tracking-wide">{deckName}</span>
+              <span className="font-mono font-bold text-lg">{classCards.length}</span>
             </div>
-          </>
-        )}
-      </Card>
+          ) : (
+            <>
+              <StackedCardPile 
+                count={classCards.length} 
+                className="rounded-xl"
+                variant="bright"
+                label={deckName}
+              />
+              <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3">
+                <div className="flex items-center justify-between dh-deck-label uppercase tracking-wide text-indigo-100">
+                  <span className="font-semibold flex items-center gap-1">
+                    <Shield className="dh-icon-inline text-indigo-200" />
+                    {deckName}
+                  </span>
+                  <Badge variant="outline" className="bg-black/30 text-white font-mono dh-deck-badge px-1.5 py-0.5">
+                    {classCards.length}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-end gap-1 text-indigo-100">
+                  <Eye className="dh-icon-inline" />
+                  <span className="dh-deck-badge font-medium">Browse</span>
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
         <DialogContent

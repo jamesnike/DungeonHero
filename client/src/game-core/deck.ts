@@ -177,7 +177,7 @@ import starterNoviceSwordImage from '@assets/generated_images/starter_novice_swo
 import starterImmortalHammerImage from '@assets/generated_images/starter_immortal_hammer.png';
 import starterScrollRecycleEchoImage from '@assets/generated_images/starter_scroll_recycle_echo.png';
 import starterPotionSpellDamageImage from '@assets/generated_images/starter_potion_spell_damage.png';
-import starterScrollEternalInscribeImage from '@assets/generated_images/starter_scroll_eternal_inscribe.png';
+
 
 // ---------------------------------------------------------------------------
 // patchPersistedMainDeckWeaponImage
@@ -2018,7 +2018,6 @@ export const STARTER_CARD_IDS = {
   stunUpgradeCapAmulet: 'starter-amulet-stun-upgrade-cap',
   recycleBackpackExpandAmulet: 'starter-amulet-recycle-backpack-expand',
   dungeonGoldAmulet: 'starter-amulet-dungeon-gold',
-  permGrantMagic: 'starter-instant-perm-grant',
   recycleDrawMagic: 'starter-perm-recycle-draw',
 } as const;
 
@@ -2462,16 +2461,6 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'instant',
       magicEffect: '即时魔法：升级一张牌。',
       description: '一次性使用，选择一张牌进行升级。',
-    },
-    {
-      id: STARTER_CARD_IDS.permGrantMagic,
-      type: 'magic',
-      name: '永恒铭刻',
-      value: 0,
-      image: starterScrollEternalInscribeImage,
-      magicType: 'instant',
-      magicEffect: '即时魔法：选择一张没有 Perm 属性的手牌，赋予 Perm 2。',
-      description: '一次性使用，选择一张手牌赋予 Perm 2（被移除后经 2 次瀑流返回背包）。',
     },
     {
       id: STARTER_CARD_IDS.fateSwapDeep,

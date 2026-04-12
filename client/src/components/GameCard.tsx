@@ -893,6 +893,19 @@ const amuletEffectText =
         )}`
       : null;
   const equipmentStatModifierColor = 'text-emerald-600';
+  const equipmentModifierNum =
+    !isFlashHalveAttack &&
+    equipmentStatModifier &&
+    (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') &&
+    equipmentStatModifier.appliesTo === card.type
+      ? equipmentStatModifier.modifier
+      : 0;
+  const equipmentShieldModifierNum =
+    equipmentStatModifier &&
+    card.type === 'monster' &&
+    equipmentStatModifier.appliesTo === 'monster'
+      ? (equipmentStatModifier.shieldModifier ?? 0)
+      : 0;
 
   const monsterAttackModifier = (() => {
     if (card.type !== 'monster') return 0;
@@ -1420,6 +1433,12 @@ const amuletEffectText =
                             <span className="dh-card__stat font-black text-purple-700 drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                               {flashHalvedValue}
                             </span>
+                          ) : isCompact ? (
+                            <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
+                              (monsterAttackModifier > 0 || equipmentModifierNum !== 0) ? 'text-orange-600' : 'text-black'
+                            }`}>
+                              {monsterAttackBase + monsterAttackModifier + equipmentModifierNum}
+                            </span>
                           ) : (
                             <>
                               <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
@@ -1443,18 +1462,28 @@ const amuletEffectText =
                     <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
                       <div className="relative group flex items-center">
                         <div className="flex items-baseline gap-0 mr-1">
-                          <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
-                            {monsterHpBase}
-                          </span>
-                          {monsterHpModifier > 0 && (
-                            <span className="dh-card__stat font-black text-emerald-600 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]">
-                              +{monsterHpModifier}
+                          {isCompact ? (
+                            <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
+                              (monsterHpModifier > 0 || equipmentShieldModifierNum !== 0) ? 'text-emerald-600' : 'text-black'
+                            }`}>
+                              {monsterHpBase + monsterHpModifier + equipmentShieldModifierNum}
                             </span>
-                          )}
-                          {equipmentShieldModifierText && (
-                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]`}>
-                              {equipmentShieldModifierText}
-                            </span>
+                          ) : (
+                            <>
+                              <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
+                                {monsterHpBase}
+                              </span>
+                              {monsterHpModifier > 0 && (
+                                <span className="dh-card__stat font-black text-emerald-600 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]">
+                                  +{monsterHpModifier}
+                                </span>
+                              )}
+                              {equipmentShieldModifierText && (
+                                <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]`}>
+                                  {equipmentShieldModifierText}
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                         {!isCompact && (
@@ -1586,6 +1615,16 @@ const amuletEffectText =
                             const curBaseArmor = Math.min(card.armor ?? baseArmorMax, baseArmorMax);
                             const permBonus = equipmentStatModifier?.permanentShieldBonus ?? 0;
                             const bonusDamaged = card.armorBonusDamaged ?? 0;
+                            if (isCompact && permBonus > 0) {
+                              const totalArmor = curBaseArmor + permBonus;
+                              return (
+                                <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
+                                  curBaseArmor < baseArmorMax || bonusDamaged > 0 ? 'text-orange-500' : 'text-emerald-600'
+                                }`}>
+                                  {totalArmor}
+                                </span>
+                              );
+                            }
                             return (
                               <>
                                 <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
@@ -1600,15 +1639,27 @@ const amuletEffectText =
                                 )}
                               </>
                             );
-                          })() : (
-                            <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${flashHalvedValue != null && card.type === 'weapon' ? 'text-purple-700' : 'text-black'}`}>
-                              {flashHalvedValue != null && card.type === 'weapon' ? flashHalvedValue : card.value}
+                          })() : isCompact ? (
+                            <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
+                              flashHalvedValue != null && card.type === 'weapon' ? 'text-purple-700'
+                              : equipmentModifierNum !== 0 ? 'text-emerald-600'
+                              : 'text-black'
+                            }`}>
+                              {flashHalvedValue != null && card.type === 'weapon'
+                                ? flashHalvedValue
+                                : card.value + equipmentModifierNum}
                             </span>
-                          )}
-                          {equipmentStatModifierText && (
-                            <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}>
-                              {equipmentStatModifierText}
-                            </span>
+                          ) : (
+                            <>
+                              <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${flashHalvedValue != null && card.type === 'weapon' ? 'text-purple-700' : 'text-black'}`}>
+                                {flashHalvedValue != null && card.type === 'weapon' ? flashHalvedValue : card.value}
+                              </span>
+                              {equipmentStatModifierText && (
+                                <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}>
+                                  {equipmentStatModifierText}
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>

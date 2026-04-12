@@ -4723,23 +4723,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           finalizeMagicCard(card, { banner: healed > 0 ? `治愈术：回复 ${healed} 点生命。` : '生命值已满。' });
           return;
         }
-        case STARTER_CARD_IDS.permGrantMagic: {
-          const eligible = handCards.filter(c => c.id !== card.id && !cardHasPermFlag(c));
-          if (eligible.length === 0) {
-            depsRef.current.addGameLog('magic', '永恒铭刻：手牌中没有可赋予永恒属性的卡牌。');
-            finalizeMagicCard(card, { banner: '手牌中没有可赋予永恒属性的卡牌。' });
-            return;
-          }
-          if (eligible.length === 1) {
-            const target = eligible[0];
-            setHandCards(prev => prev.map(c => c.id === target.id ? { ...c, recycleDelay: 2 } : c));
-            depsRef.current.addGameLog('magic', `永恒铭刻：「${target.name}」获得 Perm 2 属性！`);
-            finalizeMagicCard(card, { banner: `「${target.name}」获得 Perm 2！被移除后将经 2 次瀑流返回背包。` });
-            return;
-          }
-          setPermGrantModal({ sourceCardId: card.id, sourceType: 'magic' });
-          return;
-        }
         case STARTER_CARD_IDS.classSummon: {
           const wasPlayedFromHand = handCards.some(c => c.id === card.id);
           const actualHandCount = handCards.length - (wasPlayedFromHand ? 1 : 0);

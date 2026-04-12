@@ -28,9 +28,10 @@ interface GraveyardZoneProps {
   discardedCards: GameCardData[];
   shouldHighlight?: boolean;
   onCardSelect?: (card: GameCardData) => void;
+  compact?: boolean;
 }
 
-function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect }: GraveyardZoneProps) {
+function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect, compact = false }: GraveyardZoneProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [dragDepth, setDragDepth] = React.useState(0);
@@ -112,49 +113,64 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
 
   return (
     <>
-      <Card
-        ref={graveyardRef}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => setViewerOpen(true)}
-        data-testid="graveyard-zone"
-        className={cn(
-          'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/80 via-slate-900/50 to-zinc-900/30 transition-[border-color,ring,box-shadow] duration-200',
-          isReadyToReceive && !isHoverActive && 'border-dashed border-primary animate-pulse',
-          isHoverActive && 'ring-4 ring-destructive/60 animate-pulse scale-105 ring-destructive bg-destructive/20',
-          !isDropTarget && 'hover:scale-[1.01]'
-        )}
-      >
-        {isFlat ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-200">
-            <span className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wide">Graveyard</span>
-            <span className="font-mono font-bold text-lg">{discardedCards.length}</span>
-          </div>
-        ) : (
-          <>
-            <StackedCardPile 
-              count={discardedCards.length} 
-              className="rounded-xl" 
-              variant="muted"
-              label="Graveyard"
-            />
-            <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3">
-              <div className="flex items-center justify-between text-[8px] sm:text-[10px] uppercase tracking-wide text-slate-200">
-                <span className="font-semibold">Graveyard</span>
-                <Badge variant="outline" className="bg-black/40 text-white font-mono text-[9px] sm:text-sm px-1 sm:px-2 py-0 sm:py-0.5">
-                  {discardedCards.length}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-end gap-1 sm:gap-2 text-white/90">
-                <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="text-[9px] sm:text-[11px] font-medium">View</span>
-              </div>
+      {compact ? (
+        <button
+          onClick={() => setViewerOpen(true)}
+          data-testid="graveyard-zone-compact"
+          className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-slate-600 bg-gradient-to-br from-slate-950/90 via-slate-900/70 to-zinc-900/50 text-slate-200 hover:border-slate-400 hover:scale-105 transition-all duration-150 shadow-md"
+        >
+          <Skull className="w-5 h-5" />
+          {discardedCards.length > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-destructive text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5 leading-none">
+              {discardedCards.length}
+            </span>
+          )}
+        </button>
+      ) : (
+        <Card
+          ref={graveyardRef}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => setViewerOpen(true)}
+          data-testid="graveyard-zone"
+          className={cn(
+            'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-slate-950/80 via-slate-900/50 to-zinc-900/30 transition-[border-color,ring,box-shadow] duration-200',
+            isReadyToReceive && !isHoverActive && 'border-dashed border-primary animate-pulse',
+            isHoverActive && 'ring-4 ring-destructive/60 animate-pulse scale-105 ring-destructive bg-destructive/20',
+            !isDropTarget && 'hover:scale-[1.01]'
+          )}
+        >
+          {isFlat ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-200">
+              <span className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wide">Graveyard</span>
+              <span className="font-mono font-bold text-lg">{discardedCards.length}</span>
             </div>
-          </>
-        )}
-      </Card>
+          ) : (
+            <>
+              <StackedCardPile 
+                count={discardedCards.length} 
+                className="rounded-xl" 
+                variant="muted"
+                label="Graveyard"
+              />
+              <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3">
+                <div className="flex items-center justify-between text-[8px] sm:text-[10px] uppercase tracking-wide text-slate-200">
+                  <span className="font-semibold">Graveyard</span>
+                  <Badge variant="outline" className="bg-black/40 text-white font-mono text-[9px] sm:text-sm px-1 sm:px-2 py-0 sm:py-0.5">
+                    {discardedCards.length}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-end gap-1 sm:gap-2 text-white/90">
+                  <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <span className="text-[9px] sm:text-[11px] font-medium">View</span>
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
         <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto" data-testid="graveyard-viewer-modal">

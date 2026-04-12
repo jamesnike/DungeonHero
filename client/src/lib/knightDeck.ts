@@ -67,6 +67,7 @@ import knightMagicRepairEnrageDiceImage from '@assets/generated_images/knight_ma
 import dedupeMagicUndeathGuardImage from '@assets/generated_images/card_dedupe_magic_undeath_guard.png';
 import knightPotionRecycleGrantImage from '@assets/generated_images/card_dedupe_potion_haste_draw.png';
 import dedupeMagicArcaneRefineImage from '@assets/generated_images/card_dedupe_magic_arcane_refine.png';
+import starterScrollEternalInscribeImage from '@assets/generated_images/starter_scroll_eternal_inscribe.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -608,6 +609,18 @@ export function generateKnightDeck(): KnightCardData[] {
     magicEffect: '濒死时抵消致死伤害。',
     knightEffect: 'death-ward',
     maxUpgradeLevel: 2,
+  });
+
+  pushCard({
+    type: 'magic',
+    name: '永恒铭刻',
+    value: 0,
+    image: starterScrollEternalInscribeImage,
+    classCard: true,
+    description: '一次性使用，选择一张没有 Perm 属性的手牌，赋予 Perm 2（被移除后经 2 次瀑流返回背包）。',
+    magicType: 'instant',
+    magicEffect: '即时魔法：选择一张没有 Perm 属性的手牌，赋予 Perm 2。',
+    knightEffect: 'perm-grant',
   });
 
   // === NEW PERMANENT MAGIC (2 cards) ===

@@ -293,7 +293,7 @@ function HeroCardInner({
       style={{ '--dh-hero-instance-scale': appliedHeroScale.toString() } as CSSProperties}
     >
       <div
-        className={`pointer-events-none absolute left-1/2 z-30 flex items-center gap-2 rounded-full border border-border bg-background/95 dh-hero-small font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'px-2 py-0' : 'px-3 py-1'}`}
+        className={`pointer-events-none absolute left-1/2 z-30 flex items-center rounded-full border border-border bg-background/95 dh-hero-small dh-hero-stats-bar font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'dh-hero-stats-bar--flat' : ''}`}
         style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
       >
         <span className="flex items-center gap-1 text-purple-500" title="法术伤害加成">
