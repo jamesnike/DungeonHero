@@ -29,9 +29,10 @@ interface GraveyardZoneProps {
   shouldHighlight?: boolean;
   onCardSelect?: (card: GameCardData) => void;
   compact?: boolean;
+  compactStyle?: React.CSSProperties;
 }
 
-function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect, compact = false }: GraveyardZoneProps) {
+function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect, compact = false, compactStyle }: GraveyardZoneProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [dragDepth, setDragDepth] = React.useState(0);
@@ -117,11 +118,12 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
         <button
           onClick={() => setViewerOpen(true)}
           data-testid="graveyard-zone-compact"
-          className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-slate-600 bg-gradient-to-br from-slate-950/90 via-slate-900/70 to-zinc-900/50 text-slate-200 hover:border-slate-400 hover:scale-105 transition-all duration-150 shadow-md"
+          className="relative flex flex-col items-center justify-center rounded-l-lg border border-r-0 border-slate-400/30 bg-slate-700/20 text-slate-300/70 hover:bg-slate-600/30 hover:border-slate-400/50 transition-all duration-150"
+          style={compactStyle}
         >
-          <Skull className="w-5 h-5" />
+          <Skull className="w-4 h-4" />
           {discardedCards.length > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-destructive text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5 leading-none">
+            <span className="mt-0.5 text-[9px] font-bold leading-none text-slate-300">
               {discardedCards.length}
             </span>
           )}

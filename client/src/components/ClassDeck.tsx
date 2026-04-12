@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, startTransition } from 'react';
+import { memo, useMemo, useState, startTransition, type CSSProperties } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Shield, Eye } from 'lucide-react';
@@ -27,6 +27,7 @@ interface ClassDeckProps {
   deckName?: string;
   onCardSelect?: (card: GameCardData) => void;
   compact?: boolean;
+  compactStyle?: CSSProperties;
 }
 
 function ClassDeckComponent({
@@ -35,6 +36,7 @@ function ClassDeckComponent({
   deckName = 'Knight Deck',
   onCardSelect,
   compact = false,
+  compactStyle,
 }: ClassDeckProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
@@ -57,11 +59,12 @@ function ClassDeckComponent({
         <button
           onClick={() => startTransition(() => setViewerOpen(true))}
           data-testid="class-deck-compact"
-          className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-indigo-600 bg-gradient-to-br from-indigo-950/90 via-indigo-900/70 to-indigo-800/50 text-indigo-200 hover:border-indigo-400 hover:scale-105 transition-all duration-150 shadow-md"
+          className="relative flex flex-col items-center justify-center rounded-l-lg border border-r-0 border-indigo-400/30 bg-indigo-700/20 text-indigo-300/70 hover:bg-indigo-600/30 hover:border-indigo-400/50 transition-all duration-150"
+          style={compactStyle}
         >
-          <Shield className="w-5 h-5" />
+          <Shield className="w-4 h-4" />
           {classCards.length > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-indigo-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-0.5 leading-none">
+            <span className="mt-0.5 text-[9px] font-bold leading-none text-indigo-300">
               {classCards.length}
             </span>
           )}

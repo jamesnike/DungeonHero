@@ -51,7 +51,7 @@ function GameHeaderInner({
       return;
     }
     const BASE_WIDTH = 1180;
-    const MIN_SCALE = 0.62;
+    const MIN_SCALE = 0.42;
     const MAX_SCALE = 1.35;
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
     const updateScale = () => {
@@ -74,8 +74,9 @@ function GameHeaderInner({
   return (
     <div
       ref={headerRef}
-      className={`game-header h-auto px-4 bg-card border-b border-card-border flex items-center justify-between gap-4 ${isFlat ? 'py-0.5' : 'py-3'}`}
+      className="game-header h-auto bg-card border-b border-card-border flex items-center justify-between"
       style={headerStyle}
+      data-flat={isFlat || undefined}
     >
       <div className="game-header__group">
         <div className="game-header__trophy" data-testid="header-trophy">
@@ -127,7 +128,7 @@ function GameHeaderInner({
         <Handshake className="game-header__icon text-purple-500" />
         <Badge variant="secondary" className="game-header__badge font-mono">
           Lv.{persuadeLevel}
-          <span className={`ml-1 ${persuadeTempDiscount > 0 ? 'text-green-400' : persuadeTempDiscount < 0 ? 'text-red-400' : 'text-amber-500'}`}>{persuadeCost}g</span>
+          <span className={`game-header__badge-sep ${persuadeTempDiscount > 0 ? 'text-green-400' : persuadeTempDiscount < 0 ? 'text-red-400' : 'text-amber-500'}`}>{persuadeCost}g</span>
         </Badge>
       </div>
 

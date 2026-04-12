@@ -1329,7 +1329,7 @@ const amuletEffectText =
                   </div>
                 )}
                 {(card.type === 'weapon' || card.type === 'shield') && card.permEquipment && (
-                  <div className="absolute top-1 right-1 z-10 pointer-events-none">
+                  <div className="dh-card__overlay-tr z-10 pointer-events-none">
                     <span
                       className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${
                         isCompact ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'
@@ -1341,7 +1341,7 @@ const amuletEffectText =
                   </div>
                 )}
                 {card.type === 'amulet' && card.recycleDelay != null && (
-                  <div className="absolute top-1 right-1 z-10 pointer-events-none">
+                  <div className="dh-card__overlay-tr z-10 pointer-events-none">
                     <span
                       className={`dh-card__caption flex items-center rounded-sm border border-violet-300/50 bg-violet-800/60 font-bold uppercase tracking-wide text-violet-50 shadow-sm ${
                         isCompact ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'
@@ -1353,7 +1353,7 @@ const amuletEffectText =
                   </div>
                 )}
                 {card.type !== 'amulet' && !card.permEquipment && !isPermanentMagicCard && !card.isPermanentEvent && card.recycleDelay != null && card.recycleDelay > 0 && (
-                  <div className="absolute top-1 right-1 z-10 pointer-events-none">
+                  <div className="dh-card__overlay-tr z-10 pointer-events-none">
                     <span
                       className={`dh-card__caption flex items-center rounded-sm border border-amber-300/50 bg-amber-800/60 font-bold uppercase tracking-wide text-amber-50 shadow-sm ${
                         isCompact ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'
@@ -1419,10 +1419,10 @@ const amuletEffectText =
                 {/* STAT OVERLAYS */}
                 {card.type === 'monster' && (
                   <>
-                    <div className="absolute top-1 left-1">
+                    <div className="dh-card__overlay-tl">
                       <div className="relative group flex items-center">
                         {!isCompact && (
-                          <div className="mr-1">
+                          <div className="dh-card__icon-gap">
                             <Sword className={`dh-card__icon drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] ${
                               monsterAttackModifier > 0 ? 'text-orange-500' : 'text-red-500'
                             }`} />
@@ -1459,9 +1459,9 @@ const amuletEffectText =
                         </div>
                       </div>
                     </div>
-                    <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
+                    <div className="dh-card__overlay-tr flex flex-col items-end gap-0">
                       <div className="relative group flex items-center">
-                        <div className="flex items-baseline gap-0 mr-1">
+                        <div className="flex items-baseline gap-0 dh-card__icon-gap">
                           {isCompact ? (
                             <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
                               (monsterHpModifier > 0 || equipmentShieldModifierNum !== 0) ? 'text-emerald-600' : 'text-black'
@@ -1533,7 +1533,7 @@ const amuletEffectText =
 
                 {card.type === 'building' && (
                   <>
-                    <div className="absolute top-1 left-1 z-10 pointer-events-none flex items-center gap-0.5">
+                    <div className="dh-card__overlay-tl z-10 pointer-events-none flex items-center gap-0.5">
                       <span className="dh-card__caption rounded-sm border border-stone-500/60 bg-stone-700/75 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-100">
                         建筑
                       </span>
@@ -1555,9 +1555,9 @@ const amuletEffectText =
                         </div>
                       </div>
                     )}
-                    <div className="absolute top-1 right-1 flex flex-col items-end gap-0">
+                    <div className="dh-card__overlay-tr flex flex-col items-end gap-0">
                       <div className="relative group flex items-center">
-                        <div className="flex items-baseline gap-0 mr-1">
+                        <div className="flex items-baseline gap-0 dh-card__icon-gap">
                           <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
                             {card.hp ?? card.value ?? 0}
                           </span>
@@ -1597,10 +1597,10 @@ const amuletEffectText =
 
                 {(card.type === 'weapon' || card.type === 'shield') && (
                   <>
-                    <div className="absolute top-1 left-1">
+                    <div className="dh-card__overlay-tl">
                       <div className="relative group flex items-center">
                         {!isCompact && (
-                          <div className="mr-1">
+                          <div className="dh-card__icon-gap">
                             {card.type === 'weapon' ? (
                               <Sword className="dh-card__icon text-amber-400 fill-amber-400 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]" />
                             ) : (
@@ -1665,7 +1665,7 @@ const amuletEffectText =
                       </div>
                     </div>
                     {(card.durability !== undefined || card.maxDurability !== undefined) && totalDurabilityDots > 0 && (
-                      <div className={`absolute ${isCompact ? 'top-1 right-1' : 'top-1.5 right-1.5'} flex flex-col items-end`}>
+                      <div className={`dh-card__overlay-tr flex flex-col items-end ${isCompact ? '' : 'dh-card__overlay-tr--lg'}`}>
                         <div className={`flex ${isCompact ? 'gap-px' : 'gap-0.5'}`}>
                           {Array.from({ length: totalDurabilityDots }).map((_, i) => {
                             const dotValue = i + 1;
@@ -1709,7 +1709,7 @@ const amuletEffectText =
               
               {/* Text Area */}
               <div
-                className={`flex-1 ${isCompact ? 'p-0.5' : 'p-1'} flex flex-col items-center justify-start text-center overflow-hidden relative ${hasCornerDeco ? 'z-[1] ' : ''}${cardTextAreaBgClass}`}
+                className={`flex-1 ${isCompact ? 'dh-card__text-area--compact' : 'dh-card__text-area'} flex flex-col items-center justify-start text-center overflow-hidden relative ${hasCornerDeco ? 'z-[1] ' : ''}${cardTextAreaBgClass}`}
               >
                 <h3 className={`dh-card__name font-serif font-semibold w-full truncate ${isCompact ? 'px-0' : 'px-1'} ${
                   isThemedImageCard ? 'text-gray-900' : ''

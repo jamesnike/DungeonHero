@@ -1534,6 +1534,22 @@ export default function GameBoard() {
       }
       return nextPosition;
     });
+
+    if (isNarrowLayoutRef.current) {
+      const previewCell = previewCellRefs.current[0];
+      const activeCell = activeCellRefs.current[0];
+      const heroCell = firstCell;
+      if (previewCell && activeCell && heroCell) {
+        const pRect = previewCell.getBoundingClientRect();
+        const aRect = activeCell.getBoundingClientRect();
+        const hRect = heroCell.getBoundingClientRect();
+        setNarrowSidebarPositions({
+          row1Y: pRect.top + pRect.height / 2,
+          row2Y: aRect.top + aRect.height / 2,
+          row3Y: hRect.top + hRect.height / 2,
+        });
+      }
+    }
   }, []);
   const registerHeroRowCellRef = useCallback(
     (index: number) => (el: HTMLDivElement | null) => {
@@ -1722,7 +1738,18 @@ export default function GameBoard() {
     if (typeof window === 'undefined') return;
     const handleResize = () => updateHeroFramePosition();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    const wrapper = gridWrapperRef.current;
+    let ro: ResizeObserver | undefined;
+    if (wrapper) {
+      ro = new ResizeObserver(handleResize);
+      ro.observe(wrapper);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      ro?.disconnect();
+    };
   }, [updateHeroFramePosition]);
   useEffect(() => {
     const sequenceId = waterfallAnimation.sequenceId;
@@ -1759,6 +1786,7 @@ export default function GameBoard() {
   const [deckViewerOpen, setDeckViewerOpen] = useState(false);
   const [deckPeekState, setDeckPeekState] = useState<import('./game-board/types').DeckPeekModalState | null>(null);
   const [narrowDiceModalOpen, setNarrowDiceModalOpen] = useState(false);
+  const [narrowSidebarPositions, setNarrowSidebarPositions] = useState<{ row1Y: number; row2Y: number; row3Y: number } | null>(null);
 
   const gameLogIdRef = useRef<number>(loadGameLog()?.nextId ?? 0);
   const addGameLog = useCallback((type: LogEntryType, message: string) => {
@@ -10451,61 +10479,6 @@ export default function GameBoard() {
           })}
               </div>
 
-              {/* Narrow layout: floating sidebar buttons aligned to each row */}
-              {isNarrowLayout && (
-                <>
-                  {/* Dice — aligned with preview row (row 1) */}
-                  <div className="absolute right-0 z-30 pr-0.5" style={{ top: 'calc(100% / 6)', transform: 'translateY(-50%)' }}>
-                    <button
-                      onClick={() => setNarrowDiceModalOpen(true)}
-                      className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-rose-600 bg-gradient-to-br from-rose-950/90 via-rose-900/70 to-rose-800/50 text-rose-200 hover:border-rose-400 hover:scale-105 transition-all duration-150 shadow-md"
-                    >
-                      <Dices className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  {/* Graveyard — aligned with active row (row 2) */}
-                  <div className="absolute right-0 z-30 pr-0.5" style={{ top: '50%', transform: 'translateY(-50%)' }}>
-                    <GraveyardZone
-                      compact
-                      discardedCards={discardedCards}
-                      onCardSelect={handleCardClick}
-                    />
-                  </div>
-
-                  {/* ClassDeck — aligned with hero row (row 3) */}
-                  <div className="absolute right-0 z-30 pr-0.5" style={{ top: 'calc(500% / 6)', transform: 'translateY(-50%)' }}>
-                    <ClassDeck
-                      compact
-                      classCards={classDeck}
-                      deckName="Knight Deck"
-                      onCardSelect={handleCardClick}
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Narrow layout: DiceRoller modal */}
-              {isNarrowLayout && (
-                <Dialog open={narrowDiceModalOpen} onOpenChange={setNarrowDiceModalOpen}>
-                  <DialogContent className="max-w-sm flex flex-col items-center gap-4">
-                    <DialogHeader>
-                      <DialogTitle className="flex items-center gap-2">
-                        <Dices className="w-6 h-6" />
-                        Chaos Dice
-                      </DialogTitle>
-                      <DialogDescription>Roll the d20</DialogDescription>
-                    </DialogHeader>
-                    <div className="w-[220px] h-[220px]">
-                      <DiceRoller
-                        className="w-full h-full"
-                        scaleMultiplier={1}
-                      />
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              )}
-
               <div
                 ref={heroFrameRef}
                 className={`hero-row-frame ${isFlat ? HERO_GAP_VARIABLE_CLASS_FLAT : HERO_GAP_VARIABLE_CLASS}`}
@@ -11154,6 +11127,61 @@ export default function GameBoard() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Narrow layout: fixed sidebar strips flush with screen right edge */}
+      {isNarrowLayout && narrowSidebarPositions && (() => {
+        const cardH = gridCardSize?.height ?? 100;
+        const stripW = Math.max(18, Math.round(cardH * 0.14));
+        const stripStyle: CSSProperties = { width: stripW, height: cardH };
+        return (
+          <>
+            <button
+              onClick={() => setNarrowDiceModalOpen(true)}
+              className="fixed z-40 flex flex-col items-center justify-center rounded-l-lg border border-r-0 border-rose-400/30 bg-rose-800/20 text-rose-300/70 hover:bg-rose-700/30 hover:border-rose-400/50 transition-all duration-150"
+              style={{ ...stripStyle, right: 0, top: narrowSidebarPositions.row1Y, transform: 'translateY(-50%)' }}
+            >
+              <Dices className="w-4 h-4" />
+            </button>
+
+            <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row2Y, transform: 'translateY(-50%)' }}>
+              <GraveyardZone
+                compact
+                compactStyle={stripStyle}
+                discardedCards={discardedCards}
+                onCardSelect={handleCardClick}
+              />
+            </div>
+
+            <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row3Y, transform: 'translateY(-50%)' }}>
+              <ClassDeck
+                compact
+                compactStyle={stripStyle}
+                classCards={classDeck}
+                deckName="Knight Deck"
+                onCardSelect={handleCardClick}
+              />
+            </div>
+
+            <Dialog open={narrowDiceModalOpen} onOpenChange={setNarrowDiceModalOpen}>
+              <DialogContent className="max-w-sm flex flex-col items-center gap-4">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Dices className="w-6 h-6" />
+                    Chaos Dice
+                  </DialogTitle>
+                  <DialogDescription>Roll the d20</DialogDescription>
+                </DialogHeader>
+                <div className="w-[220px] h-[220px]">
+                  <DiceRoller
+                    className="w-full h-full"
+                    scaleMultiplier={1}
+                  />
+                </div>
+              </DialogContent>
+            </Dialog>
+          </>
+        );
+      })()}
     </div>
   );
 }
