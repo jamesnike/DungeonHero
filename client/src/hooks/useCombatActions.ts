@@ -1734,26 +1734,38 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   // -- performHeroAttack ------------------------------------------------------
 
   const performHeroAttack = async (slotId: EquipmentSlotId, targetMonster: GameCardData) => {
-    const isBuildingNoEngaged = targetMonster.type === 'building' && combatState.engagedMonsterIds.length === 0;
+    // Read latest state from engine to avoid stale closure values
+    // (GameCard memo skips onWeaponDrop comparison, so the callback may capture outdated state)
+    const latest = engine.getState();
+    const latestCombat = latest.combatState;
+    const latestEquip1 = latest.equipmentSlot1;
+    const latestEquip2 = latest.equipmentSlot2;
 
-    if (!isBuildingNoEngaged && combatState.currentTurn !== 'hero') {
+    const isBuildingNoEngaged = targetMonster.type === 'building' && latestCombat.engagedMonsterIds.length === 0;
+
+    if (!isBuildingNoEngaged && latestCombat.currentTurn !== 'hero') {
       return;
     }
 
-    const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+    const slotItem = slotId === 'equipmentSlot1' ? latestEquip1 : latestEquip2;
     if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) {
       return;
     }
 
-    const slotAlreadyAttacked = combatState.heroAttacksThisTurn[slotId];
-    const hasBaseAttack = combatState.heroAttacksRemaining > 0;
-    const canUseBerserkerExtra = berserkerRageActive && slotAlreadyAttacked && !berserkerSlotUsed[slotId];
+    const slotAlreadyAttacked = latestCombat.heroAttacksThisTurn[slotId];
+    const hasBaseAttack = latestCombat.heroAttacksRemaining > 0;
+    const latestBerserkerSlotUsed = latest.berserkerSlotUsed;
+    const latestFlashSlotUsed = latest.flashSlotUsed;
+    const latestGambitSlotUsed = latest.gambitSlotUsed;
+    const latestWeaponExtraAttackUsed = latest.weaponExtraAttackUsed;
+    const latestExtraAttackCharges = latest.extraAttackCharges;
+    const canUseBerserkerExtra = latest.berserkerRageActive && slotAlreadyAttacked && !latestBerserkerSlotUsed[slotId];
     const ae = depsRef.current.amuletEffects;
-    const canUseFlashExtra = ae.hasFlash && slotAlreadyAttacked && !flashSlotUsed[slotId];
-    const canUseGambitExtra = gambitExtraActive && slotAlreadyAttacked && (gambitSlotUsed[slotId] ?? 0) < gambitExtraPerSlot;
-    const canUseWeaponExtra = !!(slotItem.weaponExtraAttack) && slotAlreadyAttacked && (weaponExtraAttackUsed[slotId] ?? 0) < (slotItem.weaponExtraAttack ?? 0);
+    const canUseFlashExtra = ae.hasFlash && slotAlreadyAttacked && !latestFlashSlotUsed[slotId];
+    const canUseGambitExtra = latest.gambitExtraActive && slotAlreadyAttacked && (latestGambitSlotUsed[slotId] ?? 0) < latest.gambitExtraPerSlot;
+    const canUseWeaponExtra = !!(slotItem.weaponExtraAttack) && slotAlreadyAttacked && (latestWeaponExtraAttackUsed[slotId] ?? 0) < (slotItem.weaponExtraAttack ?? 0);
     const needsExtraCharge = slotAlreadyAttacked || !hasBaseAttack;
-    if (!isBuildingNoEngaged && needsExtraCharge && !canUseBerserkerExtra && !canUseFlashExtra && !canUseGambitExtra && !canUseWeaponExtra && extraAttackCharges <= 0) {
+    if (!isBuildingNoEngaged && needsExtraCharge && !canUseBerserkerExtra && !canUseFlashExtra && !canUseGambitExtra && !canUseWeaponExtra && latestExtraAttackCharges <= 0) {
       return;
     }
     if (!isBuildingNoEngaged && !needsExtraCharge && !hasBaseAttack) {
@@ -1763,7 +1775,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     const usingFlashExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && canUseFlashExtra;
     const usingGambitExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && canUseGambitExtra;
     const usingWeaponExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && canUseWeaponExtra;
-    const usingExtraCharge = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingWeaponExtra && extraAttackCharges > 0;
+    const usingExtraCharge = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingWeaponExtra && latestExtraAttackCharges > 0;
 
     const { addGameLog, getEquipmentSlotBonus, setEquipmentSlotBonus, setEquipmentSlotById,
       clearEquipmentSlotWithPromote, drawFromBackpackToHand, disposeOwnedEquipmentCard,
@@ -4011,17 +4023,21 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       return;
     }
 
-    const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-    if (slotItem?.type === 'shield' && slotItem.shieldBashStunRate) {
+    // Read latest state from engine to avoid stale closure values
+    const hw = engine.getState();
+    const hwCombat = hw.combatState;
+    const hwSlotItem = slotId === 'equipmentSlot1' ? hw.equipmentSlot1 : hw.equipmentSlot2;
+
+    if (hwSlotItem?.type === 'shield' && hwSlotItem.shieldBashStunRate) {
       if (monster.type === 'building') return;
-      if (!slotItem.shieldBashUnlimited) {
-        const bashSlotAttacked = combatState.heroAttacksThisTurn[slotId];
-        const bashHasBase = combatState.heroAttacksRemaining > 0;
+      if (!hwSlotItem.shieldBashUnlimited) {
+        const bashSlotAttacked = hwCombat.heroAttacksThisTurn[slotId];
+        const bashHasBase = hwCombat.heroAttacksRemaining > 0;
         if (bashSlotAttacked || !bashHasBase) {
           return;
         }
       } else {
-        if ((slotItem.durability ?? 0) <= 0) return;
+        if ((hwSlotItem.durability ?? 0) <= 0) return;
       }
       if (!depsRef.current.isMonsterEngaged(monster.id)) {
         beginCombat(monster, 'hero');
@@ -4035,16 +4051,15 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       return;
     }
 
-    const slotAlreadyAttacked = combatState.heroAttacksThisTurn[slotId];
-    const hasBaseAttack = combatState.heroAttacksRemaining > 0;
-    const canUseBerserkerExtra = berserkerRageActive && slotAlreadyAttacked && !berserkerSlotUsed[slotId];
+    const slotAlreadyAttacked = hwCombat.heroAttacksThisTurn[slotId];
+    const hasBaseAttack = hwCombat.heroAttacksRemaining > 0;
+    const canUseBerserkerExtra = hw.berserkerRageActive && slotAlreadyAttacked && !hw.berserkerSlotUsed[slotId];
     const hwAe = depsRef.current.amuletEffects;
-    const canUseFlashExtra = hwAe.hasFlash && slotAlreadyAttacked && !flashSlotUsed[slotId];
-    const canUseGambitExtra = gambitExtraActive && slotAlreadyAttacked && (gambitSlotUsed[slotId] ?? 0) < gambitExtraPerSlot;
-    const hwSlotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-    const canUseWeaponExtraHw = !!(hwSlotItem?.weaponExtraAttack) && slotAlreadyAttacked && (weaponExtraAttackUsed[slotId] ?? 0) < (hwSlotItem?.weaponExtraAttack ?? 0);
+    const canUseFlashExtra = hwAe.hasFlash && slotAlreadyAttacked && !hw.flashSlotUsed[slotId];
+    const canUseGambitExtra = hw.gambitExtraActive && slotAlreadyAttacked && (hw.gambitSlotUsed[slotId] ?? 0) < hw.gambitExtraPerSlot;
+    const canUseWeaponExtraHw = !!(hwSlotItem?.weaponExtraAttack) && slotAlreadyAttacked && (hw.weaponExtraAttackUsed[slotId] ?? 0) < (hwSlotItem?.weaponExtraAttack ?? 0);
     const needsExtraCharge = slotAlreadyAttacked || !hasBaseAttack;
-    if (needsExtraCharge && !canUseBerserkerExtra && !canUseFlashExtra && !canUseGambitExtra && !canUseWeaponExtraHw && extraAttackCharges <= 0) {
+    if (needsExtraCharge && !canUseBerserkerExtra && !canUseFlashExtra && !canUseGambitExtra && !canUseWeaponExtraHw && hw.extraAttackCharges <= 0) {
       return;
     }
 
