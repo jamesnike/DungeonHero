@@ -2920,6 +2920,17 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         void resolveFortuneWheel(card);
         return true;
       }
+      case 'essence-extract': {
+        depsRef.current.consumeClassCardFromHand(card.id);
+        const otherHand = engine.getState().handCards.filter(c => c.id !== card.id);
+        if (otherHand.length === 0) {
+          finalizeMagicCard(card, { banner: '手牌中没有可移除的卡牌。' });
+          return true;
+        }
+        setPermGrantModal({ sourceCardId: card.id, sourceType: 'essence-extract' });
+        setHeroSkillBanner('精华萃取：选择一张手牌移除。');
+        return true;
+      }
       default:
         return false;
     }
@@ -4947,16 +4958,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             deckDepth: depth,
           });
           setHeroSkillBanner(`选择地城行一张牌，与牌堆顶 ${depth} 张中随机一张交换。`);
-          return;
-        }
-        case STARTER_CARD_IDS.essenceExtract: {
-          const otherHand = engine.getState().handCards.filter(c => c.id !== card.id);
-          if (otherHand.length === 0) {
-            finalizeMagicCard(card, { banner: '手牌中没有可移除的卡牌。' });
-            return;
-          }
-          setPermGrantModal({ sourceCardId: card.id, sourceType: 'essence-extract' });
-          setHeroSkillBanner('精华萃取：选择一张手牌移除。');
           return;
         }
         default: {

@@ -66,6 +66,7 @@ import knightAmuletArmorHalveEndureImage from '@assets/generated_images/knight_a
 import knightMagicRepairEnrageDiceImage from '@assets/generated_images/knight_magic_repair_enrage_dice.png';
 import dedupeMagicUndeathGuardImage from '@assets/generated_images/card_dedupe_magic_undeath_guard.png';
 import knightPotionRecycleGrantImage from '@assets/generated_images/card_dedupe_potion_haste_draw.png';
+import dedupeMagicArcaneRefineImage from '@assets/generated_images/card_dedupe_magic_arcane_refine.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -875,6 +876,19 @@ export function generateKnightDeck(): KnightCardData[] {
     onAttackRepairOtherSlot: 1,
     durability: 2,
     maxDurability: 2,
+  });
+
+  pushCard({
+    type: 'magic',
+    name: '精华萃取',
+    value: 0,
+    image: dedupeMagicArcaneRefineImage,
+    classCard: true,
+    magicType: 'permanent',
+    magicEffect: '永久魔法：移除一张手牌（从游戏中删除），根据移除的牌类型获得装备栏永久加成。',
+    description: '移除一张手牌。一次性魔法→左栏攻击+1；装备→右栏攻击+1；护符→右栏护甲+1；怪物/药水→左栏护甲+1。',
+    knightEffect: 'essence-extract',
+    recycleDelay: 2,
   });
 
   // Shuffle the deck

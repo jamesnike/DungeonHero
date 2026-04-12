@@ -1729,14 +1729,12 @@ export function createDeck(): GameCardData[] {
         text: '左装备栏本回合攻击次数+1',
         effect: 'slotLeftExtraAttack',
         hint: '左装备栏本回合可多攻击一次',
-        requires: [{ type: 'equipment', slot: 'left', message: '左装备栏没有装备' }],
       },
       {
         id: 'arsenal-right-extra',
         text: '右装备栏本回合攻击次数+1',
         effect: 'slotRightExtraAttack',
         hint: '右装备栏本回合可多攻击一次',
-        requires: [{ type: 'equipment', slot: 'right', message: '右装备栏没有装备' }],
       },
       {
         id: 'arsenal-discard-equip',
@@ -2021,7 +2019,6 @@ export const STARTER_CARD_IDS = {
   dungeonGoldAmulet: 'starter-amulet-dungeon-gold',
   permGrantMagic: 'starter-instant-perm-grant',
   recycleDrawMagic: 'starter-perm-recycle-draw',
-  essenceExtract: 'starter-perm-essence-extract',
 } as const;
 
 export function getStarterBaseId(cardId: string): string {
@@ -2523,17 +2520,6 @@ export function createStarterCardPool(): GameCardData[] {
       description: '对一个怪物造成 1 点法术伤害 2 次，每次有 20% 概率击晕目标。',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
-    },
-    {
-      id: STARTER_CARD_IDS.essenceExtract,
-      type: 'magic',
-      name: '精华萃取',
-      value: 0,
-      image: dedupeMagicArcaneRefineImage,
-      magicType: 'permanent',
-      magicEffect: '永久魔法：移除一张手牌（从游戏中删除），根据移除的牌类型获得装备栏永久加成。',
-      description: '移除一张手牌。一次性魔法→左栏攻击+1；装备→右栏攻击+1；护符→右栏护甲+1；怪物/药水→左栏护甲+1。',
-      recycleDelay: 2,
     },
   ];
 }
