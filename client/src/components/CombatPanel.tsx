@@ -22,6 +22,7 @@ interface CombatPanelProps {
   equipmentSlot2: (GameCardData & { type: 'weapon' | 'shield' | 'monster' }) | null;
   slotDurabilityUsedThisTurn: Record<EquipmentSlotId, number>;
   blockDurabilityPerSlot: number;
+  amuletBlockDurabilityBonus?: number;
   stageScale?: number;
   onDragHandlePointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   isDragging?: boolean;
@@ -50,6 +51,7 @@ export default function CombatPanel({
   equipmentSlot2,
   slotDurabilityUsedThisTurn,
   blockDurabilityPerSlot,
+  amuletBlockDurabilityBonus = 0,
   stageScale = 1,
   onDragHandlePointerDown,
   isDragging = false,
@@ -333,13 +335,15 @@ export default function CombatPanel({
                     const item = sid === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
                     if (!item || (item.type !== 'shield' && item.type !== 'monster')) return null;
                     const used = slotDurabilityUsedThisTurn[sid] ?? 0;
-                    const remaining = Math.max(0, blockDurabilityPerSlot - used);
+                    const equipBonus = (item as any).equipBlockDurabilityBonus ?? 0;
+                    const effectiveLimit = blockDurabilityPerSlot + equipBonus + amuletBlockDurabilityBonus;
+                    const remaining = Math.max(0, effectiveLimit - used);
                     const label = sid === 'equipmentSlot1' ? 'Left' : 'Right';
                     return (
                       <div key={sid} className="flex flex-col px-2 py-1 rounded-md border bg-background/50">
                         <span className="combat-panel__slot-label uppercase tracking-wide text-muted-foreground">{label}</span>
                         <span className={`combat-panel__stat font-medium ${remaining <= 0 ? 'text-red-500' : 'text-green-500'}`}>
-                          {remaining <= 0 ? '耐久用尽' : `耐久 ${remaining}/${blockDurabilityPerSlot}`}
+                          {remaining <= 0 ? '耐久用尽' : `耐久 ${remaining}/${effectiveLimit}`}
                         </span>
                       </div>
                     );

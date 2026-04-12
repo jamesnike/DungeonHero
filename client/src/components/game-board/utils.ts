@@ -27,7 +27,6 @@ import dedupeMagicTideArmorImage from '@assets/generated_images/card_dedupe_magi
 import dedupeMagicGoldJudgmentImage from '@assets/generated_images/card_dedupe_magic_gold_judgment.png';
 import dedupeMagicFullHandSpringImage from '@assets/generated_images/card_dedupe_magic_full_hand_spring.png';
 import dedupeMagicEquivalentExchangeImage from '@assets/generated_images/card_dedupe_magic_equivalent_exchange.png';
-import dedupeMagicUndeathGuardImage from '@assets/generated_images/card_dedupe_magic_undeath_guard.png';
 import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dedupeMagicArcaneRefineImage from '@assets/generated_images/card_dedupe_magic_arcane_refine.png';
 import dedupePersuadeScrollCharmImage from '@assets/generated_images/card_dedupe_persuade_scroll_charm.png';
@@ -705,19 +704,6 @@ export function createDeck(): GameCardData[] {
     image: dedupeMagicEquivalentExchangeImage,
     magicType: 'instant',
     magicEffect: '选择一件装备和一个非Boss怪物，互换它们的耐久与血层数。',
-  });
-
-  deck.push({
-    id: `magic-${id++}`,
-    type: 'magic',
-    name: '不灭守护',
-    value: 0,
-    image: dedupeMagicUndeathGuardImage,
-    magicType: 'instant',
-    magicEffect: '濒死时抵消致死伤害。',
-    description: '一次性：只能在受到致命伤害时打出，抵消该次伤害。',
-    knightEffect: 'death-ward',
-    maxUpgradeLevel: 2,
   });
 
   deck.push({

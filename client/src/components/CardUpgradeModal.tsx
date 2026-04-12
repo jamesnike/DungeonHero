@@ -42,6 +42,7 @@ interface CardUpgradeModalProps {
   equipmentSlot2: GameCardData | null;
   amuletSlots: GameCardData[];
   onUpgrade: (cardId: string) => void;
+  maxUpgrades?: number;
 }
 
 export default function CardUpgradeModal({
@@ -53,8 +54,12 @@ export default function CardUpgradeModal({
   equipmentSlot2,
   amuletSlots,
   onUpgrade,
+  maxUpgrades,
 }: CardUpgradeModalProps) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [upgradesUsed, setUpgradesUsed] = useState(0);
+
+  const remainingUpgrades = maxUpgrades != null ? maxUpgrades - upgradesUsed : Infinity;
 
   const upgradeableHand = handCards.filter(isUpgradeableCard);
   const upgradeableBackpack = backpackItems.filter(isUpgradeableCard);
@@ -71,11 +76,18 @@ export default function CardUpgradeModal({
     if (!target || isCardAtMaxUpgrade(target)) return;
     onUpgrade(selectedCardId);
     setSelectedCardId(null);
+    const nextUsed = upgradesUsed + 1;
+    setUpgradesUsed(nextUsed);
+    if (maxUpgrades != null && nextUsed >= maxUpgrades) {
+      onOpenChange(false);
+      setUpgradesUsed(0);
+    }
   };
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
       setSelectedCardId(null);
+      setUpgradesUsed(0);
     }
     onOpenChange(nextOpen);
   };
@@ -127,7 +139,9 @@ export default function CardUpgradeModal({
             卡牌升级
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            选择一张卡牌进行升级
+            {maxUpgrades != null
+              ? `选择卡牌进行升级（剩余 ${remainingUpgrades} 次）`
+              : '选择一张卡牌进行升级'}
           </DialogDescription>
         </DialogHeader>
 

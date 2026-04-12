@@ -12,7 +12,7 @@ import GameCard, { type GameCardData, cardHasPermFlag } from './GameCard';
 
 type PermGrantSourceType =
   | 'potion' | 'magic'
-  | 'transform-grant' | 'equipment-enchant'
+  | 'transform-grant' | 'equipment-enchant' | 'essence-extract'
   | 'flank-grant' | 'transform-gold-grant'
   | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant'
   | 'transform-draw-grant' | 'transform-heal-grant';
@@ -44,12 +44,14 @@ export default function PermGrantModal({
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const isEquipEnchant = sourceType === 'equipment-enchant';
+  const isEssenceExtract = sourceType === 'essence-extract';
   const isFlankType = FLANK_GRANT_TYPES.has(sourceType);
   const isTransformType = TRANSFORM_GRANT_TYPES.has(sourceType);
 
   const eligibleCards = handCards.filter(c => {
     if (c.id === sourceCardId) return false;
     if (isEquipEnchant) return c.type === 'weapon' || c.type === 'shield';
+    if (isEssenceExtract) return true;
     if (isFlankType) return !c.flankEffect;
     if (isTransformType) return !c.transformBonus;
     return !cardHasPermFlag(c);
@@ -68,6 +70,7 @@ export default function PermGrantModal({
 
   const titleMap: Record<string, string> = {
     'equipment-enchant': '装备附魔',
+    'essence-extract': '精华萃取',
     'transform-grant': '蜕变赋灵',
     'flank-grant': '赋予侧击',
     'transform-gold-grant': '赋予转型',
@@ -79,6 +82,7 @@ export default function PermGrantModal({
   };
   const descMap: Record<string, string> = {
     'equipment-enchant': '选择一张手牌中的装备弃置，将其攻击/护甲值随机附魔到装备栏的一件装备上',
+    'essence-extract': '移除一张手牌（从游戏中删除）。一次性魔法→左栏攻击+1；装备→右栏攻击+1；护符→右栏护甲+1；怪物/药水→左栏护甲+1',
     'transform-grant': '选择一张手牌赋予「转型：随机获得坟场一张魔法卡」',
     'flank-grant': '选择一张手牌赋予「侧击：抽1张牌」（打出时处于手牌最左或最右位置时触发）',
     'transform-gold-grant': '选择一张手牌赋予「转型：+3金币」（打出前一张牌与本牌类型不同时触发）',
@@ -90,6 +94,7 @@ export default function PermGrantModal({
   };
   const emptyMap: Record<string, string> = {
     'equipment-enchant': '手牌中没有可弃置的装备卡',
+    'essence-extract': '手牌中没有可移除的卡牌',
     'flank-grant': '手牌中没有可赋予侧击效果的卡牌',
     'transform-gold-grant': '手牌中没有可赋予转型效果的卡牌',
     'transform-grant': '手牌中没有可赋予转型效果的卡牌',
@@ -101,6 +106,7 @@ export default function PermGrantModal({
   };
   const confirmMap: Record<string, string> = {
     'equipment-enchant': '附魔',
+    'essence-extract': '萃取',
     'transform-grant': '赋灵',
     'flank-grant': '赋予',
     'transform-gold-grant': '赋予',

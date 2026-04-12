@@ -21,7 +21,6 @@ import dedupeKnightMagicDeckJudgeImage from '@assets/generated_images/card_dedup
 import dedupeKnightMagicRecycleFlareImage from '@assets/generated_images/card_dedupe_knight_magic_recycle_flare.png';
 import dedupeKnightMagicChaosDiceImage from '@assets/generated_images/card_dedupe_knight_magic_chaos_dice.png';
 import dedupeKnightMagicFateSightImage from '@assets/generated_images/card_dedupe_knight_magic_fate_sight.png';
-import dedupeKnightMagicSoftWaterfallImage from '@assets/generated_images/card_dedupe_knight_magic_soft_waterfall.png';
 import dedupeKnightMagicMirrorCopyImage from '@assets/generated_images/card_dedupe_knight_magic_mirror_copy.png';
 import dedupeKnightMagicArmorStunConvertImage from '@assets/generated_images/card_dedupe_knight_magic_armor_stun_convert.png';
 import dedupeKnightMagicOverkillUpgradeImage from '@assets/generated_images/card_dedupe_knight_magic_overkill_upgrade.png';
@@ -65,6 +64,8 @@ import knightWeaponResonanceBladeImage from '@assets/generated_images/knight_wea
 import knightShieldEnduranceImage from '@assets/generated_images/knight_shield_endurance.png';
 import knightAmuletArmorHalveEndureImage from '@assets/generated_images/knight_amulet_armor_halve_endure.png';
 import knightMagicRepairEnrageDiceImage from '@assets/generated_images/knight_magic_repair_enrage_dice.png';
+import dedupeMagicUndeathGuardImage from '@assets/generated_images/card_dedupe_magic_undeath_guard.png';
+import knightPotionRecycleGrantImage from '@assets/generated_images/card_dedupe_potion_haste_draw.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -94,7 +95,8 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 6,
     image: holyBladeImage,
     classCard: true,
-    description: '每次攻击时恢复 2 点生命。',
+    description: '入场：恢复 3 点生命。每次攻击时恢复 2 点生命。',
+    onEquipEffect: 'heal-3',
     healOnAttack: 2,
     durability: 2,
     maxDurability: 2,
@@ -106,7 +108,8 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 4,
     image: swiftDaggerKnightImage,
     classCard: true,
-    description: '用此武器杀死怪物时耐久度回满。',
+    description: '入场：所有装备栏临时攻击 +2。用此武器杀死怪物时耐久度回满。',
+    onEquipEffect: 'all-temp-attack-2',
     durability: 2,
     maxDurability: 2,
     restoreDurabilityOnKill: true,
@@ -145,7 +148,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 4,
     image: thornedShieldImage,
     classCard: true,
-    description: '格挡时反弹一半的攻击伤害给攻击者（向上取整）。',
+    description: '格挡时反弹一半的攻击伤害给攻击者（向上取整），并加上该装备栏的永久攻击和临时攻击。',
     reflectHalfDamage: true,
     durability: 2,
     maxDurability: 2,
@@ -251,9 +254,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: dedupeKnightMagicDeadPactImage,
     classCard: true,
-    description: '一次性：从坟场发现一张怪物牌，加入手牌。',
+    description: '一次性：从坟场发现两张怪物牌，加入手牌。',
     magicType: 'instant',
-    magicEffect: '从坟场发现一张怪物牌。',
+    magicEffect: '从坟场发现两张怪物牌。',
     knightEffect: 'monster-recruit',
   });
 
@@ -293,6 +296,7 @@ export function generateKnightDeck(): KnightCardData[] {
     magicType: 'permanent',
     magicEffect: '被弃置时爆炸伤害。',
     knightEffect: 'grave-nova',
+    maxUpgradeLevel: 1,
   });
 
   pushCard({
@@ -315,9 +319,9 @@ export function generateKnightDeck(): KnightCardData[] {
     image: dedupeKnightMagicDeckJudgeImage,
     classCard: true,
     description:
-      '一次性：翻看主牌堆顶 5 张牌（不抽牌、不改变牌序）；其中每有一张怪物牌，须删除一张你的牌（手牌、背包、装备、护符或回收袋）。',
+      '一次性：翻看主牌堆顶 6 张牌；每有一张怪物牌须删除一张牌，每有一张 Event 左右装备栏临时攻击+2，每有一张装备则装备耐久+1，每有一张 Magic 永久法术伤害+1，每有一张 Potion +2HP。',
     magicType: 'instant',
-    magicEffect: '透视主牌堆顶并依怪物张数删牌。',
+    magicEffect: '透视牌堆顶并依类型获得增益/惩罚。',
     knightEffect: 'deck-judge-delete',
   });
 
@@ -360,18 +364,6 @@ export function generateKnightDeck(): KnightCardData[] {
     maxUpgradeLevel: 1,
   });
 
-  pushCard({
-    type: 'magic',
-    name: '暗流涌动',
-    value: 0,
-    image: dedupeKnightMagicSoftWaterfallImage,
-    classCard: true,
-    description: '永久：触发柔和瀑流——预览行中正下方为空位的牌落入激活行，其余预览牌不动；仅对腾出的预览位补牌。',
-    magicType: 'permanent',
-    magicEffect: '柔和瀑流：空位补牌，不挤掉现有牌。',
-    knightEffect: 'soft-waterfall',
-    recycleDelay: 1,
-  });
 
   // === NEW WEAPONS (2 cards) ===
   pushCard({
@@ -433,8 +425,8 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 5,
     image: evolvingShieldImage,
     classCard: true,
-    description: '格挡 4 次后自动升级（护甲 +2、耐久 +1、耐久上限 +1）。',
-    shieldBlockAutoUpgradeCount: 4,
+    description: '格挡 3 次后自动升级（护甲 +2、耐久 +1、耐久上限 +1）。',
+    shieldBlockAutoUpgradeCount: 3,
     durability: 2,
     maxDurability: 2,
     armorMax: 5,
@@ -520,8 +512,18 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: knightAmuletArmorHalveEndureImage,
     classCard: true,
-    description: '所有装备栏的临时护甲减半（向下取整），但格挡耐久次数 +1。',
+    description: '每回合格挡耐久上限 +1。',
     amuletEffect: 'armor-halve-endure',
+  });
+
+  pushCard({
+    type: 'amulet',
+    name: '驯兽铸印',
+    value: 1,
+    image: persuadeAuraAmuletImage,
+    classCard: true,
+    description: '每次装备一个怪物时，选择：该装备栏永久攻击 +1 或 永久护甲 +1。',
+    amuletEffect: 'monster-equip-buff',
   });
 
   // === NEW POTIONS (2 cards) ===
@@ -594,6 +596,19 @@ export function generateKnightDeck(): KnightCardData[] {
     knightEffect: 'amulet-expand',
   });
 
+  pushCard({
+    type: 'magic',
+    name: '不灭守护',
+    value: 0,
+    image: dedupeMagicUndeathGuardImage,
+    classCard: true,
+    description: '一次性：只能在受到致命伤害时打出，抵消该次伤害。',
+    magicType: 'instant',
+    magicEffect: '濒死时抵消致死伤害。',
+    knightEffect: 'death-ward',
+    maxUpgradeLevel: 2,
+  });
+
   // === NEW PERMANENT MAGIC (2 cards) ===
   pushCard({
     type: 'magic',
@@ -601,10 +616,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: dedupeKnightMagicArmorStunConvertImage,
     classCard: true,
-    description: '永久：选择一个护盾，每 1 点护甲值使击晕上限 +1%，然后该装备栏临时护甲清零。',
+    description: '永久：选择一个护盾，每 1 点护甲值使击晕上限 +1%。',
     magicType: 'permanent',
     magicEffect: '护甲转化为击晕上限。',
     knightEffect: 'armor-stun-convert',
+    maxUpgradeLevel: 1,
   });
 
   pushCard({
@@ -653,9 +669,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: knightScrollFortifyFlankImage,
     classCard: true,
-    description: '永久：选择一个装备，+3 临时护甲。侧击：赋予该装备复生。',
+    description: '永久：选择一个装备，+3（每次使用后数值 +1）临时护甲。侧击：赋予该装备复生。',
     magicType: 'permanent',
-    magicEffect: '+3 临时护甲，侧击赋予复生。',
+    magicEffect: '+3(递增) 临时护甲，侧击赋予复生。',
     knightEffect: 'flank-fortify',
     flankEffect: '赋予该装备复生',
     recycleDelay: 1,
@@ -681,11 +697,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: knightScrollTransformRepairImage,
     classCard: true,
-    description: '永久：选择一个装备，恢复 1 耐久。转型：给该装备栏 +3 临时攻击。',
+    description: '永久：选择一个装备，恢复 1 耐久。转型：给该装备栏 +3 临时攻击（每次触发后数值 +1）。',
     magicType: 'permanent',
-    magicEffect: '修复 1 耐久，转型 +3 临时攻击。',
+    magicEffect: '修复 1 耐久，转型 +3(递增) 临时攻击。',
     knightEffect: 'transform-repair',
-    transformBonus: '给该装备栏 +3 临时攻击',
+    transformBonus: '给该装备栏 +3 临时攻击（每次触发后数值 +1）',
   });
 
   pushCard({
@@ -768,11 +784,12 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 2,
     image: heavyShieldKnightBashImage,
     classCard: true,
-    description: '可拖动到怪物上猛击（不造成伤害），5%×护甲值 概率击晕。',
+    description: '可拖动到怪物上猛击（不造成伤害），5%×护甲值 概率击晕。每回合不限次数，有耐久即可使用。',
     durability: 4,
     maxDurability: 4,
     armorMax: 2,
     shieldBashStunRate: 5,
+    shieldBashUnlimited: true,
   });
 
   pushCard({
@@ -781,8 +798,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 3,
     image: knightShieldEnduranceImage,
     classCard: true,
-    description: '该护盾的格挡耐久次数 +1（每 2 次护甲耗尽才消耗 1 耐久）。',
-    shieldExtraBlocksPerDurability: 1,
+    description: '该护盾每回合可消耗的耐久上限 +1（怪物回合最多消耗 2 耐久）。怪物攻击该护盾后死亡时，耐久度回满。',
+    equipBlockDurabilityBonus: 1,
+    shieldRefillOnMonsterDeath: true,
     durability: 3,
     maxDurability: 3,
     armorMax: 3,
@@ -795,7 +813,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 0,
     image: knightChainPersuadePotionImage,
     classCard: true,
-    description: '获得永恒护符：连续两次劝降同一个怪物时，成功概率 +15%。',
+    description: '获得永恒护符：连续劝降同一个怪物时，每次累计成功概率 +15%。',
     potionEffect: 'perm-persuade-consecutive',
   });
 
@@ -807,6 +825,16 @@ export function generateKnightDeck(): KnightCardData[] {
     classCard: true,
     description: '获得永久护符：当装备上装备时，该装备栏获得 3 临时攻击和 3 临时护甲。',
     potionEffect: 'perm-equip-empower',
+  });
+
+  pushCard({
+    type: 'potion',
+    name: '唤回秘药',
+    value: 0,
+    image: knightPotionRecycleGrantImage,
+    classCard: true,
+    description: '选择一张手牌，赋予「转型：从回收袋随机取 1 张牌加入手牌」。',
+    potionEffect: 'transform-recycle-grant',
   });
 
   // === CLASS WEAPONS ===
@@ -829,10 +857,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 4,
     image: knightRageCleaveImage,
     classCard: true,
-    description: '该武器每回合可攻击 2 次（攻击次数 +1）。',
+    description: '该武器每回合可攻击 2 次（攻击次数 +1）。每次攻击时，所有怪物攻击力 -1。',
     durability: 3,
     maxDurability: 3,
     weaponExtraAttack: 1,
+    onAttackDebuffAllMonsterAttack: 1,
   });
 
   pushCard({

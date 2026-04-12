@@ -98,7 +98,7 @@
 | 盾牌 | 6 | Wooden×2, Iron×2, Heavy×2 |
 | 药水 | 6 | 治疗/修复/背包/洞察等 |
 | 护符 | 6 | Heal, Balance, Life, Guardian, Flash, Strength |
-| 魔法 | 5 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 点金裁决, 涌泉满手, 等价交换, 不灭守护, 冥途拾遗, 怀柔令, 秘法精炼（候选11，每局选5） |
+| 魔法 | 5 | 瀑流重置, 风暴箭雨, 回响行囊, 潮涌铸甲, 点金裁决, 涌泉满手, 等价交换, 冥途拾遗, 怀柔令, 秘法精炼（候选10，每局选5） |
 | 事件 | 14 | 各类事件 |
 
 ### 2.2 初始背包（选秀制）
@@ -571,7 +571,8 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 ### 8.7 坟火新星 (`grave-nova`)
 
 - 触发时机：该牌被**弃置**时（不是被删除时）
-- 效果：对当前行所有怪物造成 `getSpellDamage(3)` 伤害
+- 效果：对当前行所有怪物造成 `getSpellDamage(baseDmg)` 伤害（Lv0: 3, Lv1: 6）
+- 可升级：最高 1 级
 - 牌本身进入回收袋（永久牌）
 - 使用 `activeCardsLatestRef.current` 获取最新怪物列表（避免闭包过时）
 
@@ -596,7 +597,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - 攻击力 2，生命 1，1 层血
 - 击杀小虫子不会再生成新的小虫子（防止无限循环）
 - 击杀小虫子的战利品固定为 1 个选项：获得 2-3 金币
-- 死亡时 5% 概率翻转为「虫蜕之冠」护符（`amuletEffect: 'card-gain-upgrade'`，每新获得 3 张牌自动升级 1 张牌）。每局仅可触发一次，获得后不再翻转。
+- 死亡时 5% 概率翻转为「虫蜕之冠」护符（`amuletEffect: 'monster-kill-upgrade'`，每击杀 5 个怪物选择一张牌升级）。每局仅可触发一次，获得后不再翻转。
 
 ### 9.2 血层系统
 
@@ -733,6 +734,8 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 ## 10. 魔法系统
 
+> **建筑与魔法伤害：** 所有建筑（`type === 'building'`，如诅咒碑、增幅祭坛、命运之刃）都是魔法伤害的合法目标。魔法伤害选择目标时，同时检查 `type === 'monster'` 和 `type === 'building'`（通过 `isDamageableTarget` 辅助函数）。建筑自身不受其光环保护（如诅咒碑的 `adjacent-magic-immune` 光环仅保护相邻怪物，不保护建筑自身）。
+
 ### 10.1 魔法类型
 
 | `magicType` | 使用后去向 | 说明 |
@@ -760,17 +763,16 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 名称 | `magicType` | `knightEffect` | 效果 |
 |------|-------------|----------------|------|
-| 亡者之契 | instant | `monster-recruit` | 从坟场发现一张怪物牌（3选1），加入手牌 |
+| 亡者之契 | instant | `monster-recruit` | 从坟场发现两张怪物牌（各3选1），加入手牌 |
 | 浴血贪念 | instant | `blood-greed` | 获得金币 = `max(0, maxHp - hp)`，添加贪婪诅咒到背包 |
 | 铠甲贯刺 | permanent | `armor-strike` | 选择装备槽的护甲值 → 对怪物造成 `getSpellDamage(armor)` |
 | 残血终焉 | permanent | `missing-hp-smite` | 伤害 = `getSpellDamage(maxHp - hp)` |
-| 坟火新星 | permanent | `grave-nova` | 永久：被弃置时对所有怪物造成 `getSpellDamage(3)` |
+| 坟火新星 | permanent | `grave-nova` | 永久：被弃置时对所有怪物造成 `getSpellDamage(3/6)` 伤害（可升 1 级） |
 | 孤注一掷 | instant | `berserk-gambit` | HP降至1，本回合武器+4，每个武器栏可多攻击一次（与狂战叠加） |
 | 回收灵焰 | permanent | `recycle-flare` | 立即恢复回收袋中的牌，从背包抽最多2张 |
 | 混沌骰运 | permanent | `chaos-dice` | D20掷骰，5种随机效果 |
 | 天眼审判 | permanent | `fate-sight` | 造成3点伤害，翻看牌堆顶3张牌，每有1张怪物牌20%击晕目标（Perm 2，可升级） |
-| 护甲凝雷 | permanent | `armor-stun-convert` | 选择一个护盾，每1点护甲值使击晕上限+1%，然后该装备栏临时护甲清零 |
-| 暗流涌动 | permanent | `soft-waterfall` | 柔和瀑流：预览行中正下方为空位的牌落入激活行，其余预览牌不动；仅对腾出的预览位从牌堆补牌（Perm 1） |
+| 护甲凝雷 | permanent | `armor-stun-convert` | 选择一个护盾，每1点护甲值使击晕上限+1%/+2%（可升 1 级） |
 | 淬炼冲击 | permanent | `overkill-upgrade` | 对一个怪物造成 `getSpellDamage(3)` 伤害。超杀：升级一张牌（Perm 1） |
 
 ### 10.4 混沌骰运效果表
@@ -942,7 +944,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 属性 | 值 |
 |------|-----|
-| 仪表上限 | 8 |
+| 仪表上限 | 10 |
 | 充能来源 | 每次受到伤害 +1 |
 | 激活条件 | 仪表已满 |
 | 效果选择 | 全回复HP **或** 选择一个怪物清除所有 fury（血层归零） |
@@ -1137,7 +1139,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | `INITIAL_GOLD` | 10 | constants.ts |
 | `DECK_SIZE` | 64 | GameBoard.tsx |
 | D20 50%阈值 | 1–10 vs 11–20 | 通用 |
-| 坟火新星基础伤害 | 3 | GameBoard.tsx |
+| 坟火新星基础伤害 | 3 / 6（升级后） | GameBoard.tsx |
 | 雷霆符印伤害 | `max(0, 1 + permanentSpellDamageBonus)` | GameBoard.tsx |
 | 荣誉之血弃置伤害 | `getSpellDamage(1)` | GameBoard.tsx |
 | Boss反击伤害 | 3 | GameBoard.tsx |

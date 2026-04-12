@@ -189,7 +189,7 @@ export interface PersistedGameState {
   eventModalMinimized?: boolean;
   stunCap?: number;
   heroStunned?: boolean;
-  cardGainUpgradeProgress?: number;
+  monsterKillUpgradeProgress?: number;
   recycleBackpackProgress?: number;
   swapUpgradeProgress?: number;
   bugletAmuletObtained?: boolean;
@@ -197,6 +197,7 @@ export interface PersistedGameState {
   persuadeLevel?: number;
   persuadeCostModifier?: number;
   lastPersuadeTargetId?: string | null;
+  consecutivePersuadeCount?: number;
   persuadeSameTargetCostHalve?: boolean;
   persuadeRaceBonus?: Record<string, number>;
   persuadeSuccessDurabilityBonus?: number;
@@ -223,6 +224,8 @@ export interface PersistedGameState {
   shopHealUsed?: boolean;
   shopLevelUpUsed?: boolean;
   shopSkillDiscoverUsed?: boolean;
+  shopEquipAttackUsed?: boolean;
+  shopEquipArmorUsed?: boolean;
   shopSkillOptions?: HeroSkillDefinition[];
   shopSkillSelectOpen?: boolean;
   monsterRewardQueue?: PersistedMonsterRewardDrop[];

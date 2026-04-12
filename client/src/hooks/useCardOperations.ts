@@ -32,8 +32,10 @@ import {
   sanitizeCardMetadata,
   logBackpackDraw,
   computeAmuletAuraReversal,
+  isDamageableTarget,
 } from '@/game-core/helpers';
 import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingAura';
+import { resetMonsterForGraveyard } from '@/game-core/cards';
 
 // ---------------------------------------------------------------------------
 // Deps: external dependencies injected by GameBoard
@@ -235,7 +237,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
   const sanitizeCardForGraveyard = (card: GameCardData): GameCardData => {
     const { fromSlot, ...rest } = card as GameCardData & { fromSlot?: string };
-    return { ...rest };
+    return resetMonsterForGraveyard({ ...rest });
   };
 
   // -- Functions --------------------------------------------------------------
@@ -299,7 +301,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       const state = engine.getState();
       const recycleAmulet = state.amuletSlots.find(s => s?.amuletEffect === 'recycle-backpack-expand');
       if (recycleAmulet) {
-        const recycleThreshold = (recycleAmulet.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        const recycleThreshold = 10;
         const progress = state.recycleBackpackProgress + 1;
         if (progress >= recycleThreshold) {
           setRecycleBackpackProgress(0);
@@ -540,7 +542,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         }
       } else if (card.onDiscardDamage) {
         const monsters = flattenActiveRowSlots(activeCards).filter(
-          (c): c is GameCardData => Boolean(c && c.type === 'monster'),
+          (c): c is GameCardData => isDamageableTarget(c),
         );
         if (monsters.length > 0) {
           const target = monsters[Math.floor(Math.random() * monsters.length)];
@@ -632,17 +634,15 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       const baseArmor = slotItem.hp ?? slotItem.value;
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTemp = slotTempArmor[slotId] ?? 0;
-      const slotTemp = amuletEffects.hasArmorHalveEndure ? Math.floor(rawSlotTemp / 2) : rawSlotTemp;
-      return Math.max(0, baseArmor + defenseBonus + slotShieldBonus + slotTemp);
+      return Math.max(0, baseArmor + defenseBonus + slotShieldBonus + rawSlotTemp);
     }
     const baseArmorMax = slotItem.armorMax ?? slotItem.value;
     const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
     const rawSlotTemp = slotTempArmor[slotId] ?? 0;
-    const slotTemp = amuletEffects.hasArmorHalveEndure ? Math.floor(rawSlotTemp / 2) : rawSlotTemp;
     const permanentBonus = Math.max(0, defenseBonus + slotShieldBonus);
     const storedBaseArmor = Math.min(slotItem.armor ?? baseArmorMax, baseArmorMax);
-    const currentArmor = storedBaseArmor + permanentBonus + slotTemp;
-    const effectiveArmorMax = baseArmorMax + permanentBonus + slotTemp;
+    const currentArmor = storedBaseArmor + permanentBonus + rawSlotTemp;
+    const effectiveArmorMax = baseArmorMax + permanentBonus + rawSlotTemp;
     return Math.min(currentArmor, effectiveArmorMax);
   };
 
@@ -682,13 +682,12 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     if (slotItem.type === 'shield') {
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTemp = slotTempArmor[slotId] ?? 0;
-      const slotTemp = amuletEffects.hasArmorHalveEndure ? Math.floor(rawSlotTemp / 2) : rawSlotTemp;
       const permanentShieldBonus = Math.max(0, defenseBonus + slotShieldBonus);
 
       return {
         appliesTo: 'shield',
         modifier: 0,
-        permanentShieldBonus: permanentShieldBonus + slotTemp,
+        permanentShieldBonus: permanentShieldBonus + rawSlotTemp,
       };
     }
 
@@ -708,8 +707,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTempMonster = slotTempArmor[slotId] ?? 0;
-      const slotTempMonster = amuletEffects.hasArmorHalveEndure ? Math.floor(rawSlotTempMonster / 2) : rawSlotTempMonster;
-      const shieldModifier = defenseBonus + slotShieldBonus + slotTempMonster;
+      const shieldModifier = defenseBonus + slotShieldBonus + rawSlotTempMonster;
 
       return {
         appliesTo: 'monster' as const,
@@ -878,11 +876,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         } else {
           const kept = next.slice(0, backpackCapacity);
           next.slice(backpackCapacity).forEach(overflowCard => {
-            if (isRecyclableFromHand(overflowCard)) {
-              addPermanentMagicToRecycleBag(overflowCard);
-            } else {
-              addToGraveyard(overflowCard);
-            }
+            addPermanentMagicToRecycleBag(overflowCard);
           });
           finalList = kept;
         }
@@ -910,11 +904,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       }
       const kept = prev.slice(0, backpackCapacity);
       prev.slice(backpackCapacity).forEach(overflowCard => {
-        if (isRecyclableFromHand(overflowCard)) {
-          addPermanentMagicToRecycleBag(overflowCard);
-        } else {
-          addToGraveyard(overflowCard);
-        }
+        addPermanentMagicToRecycleBag(overflowCard);
       });
       return kept;
     });

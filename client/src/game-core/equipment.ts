@@ -218,12 +218,13 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
     hasDamageClassDiscover: false,
     hasPersuadeGraveyardStack: false,
     hasStunRecycleToHand: false,
-    hasCardGainUpgrade: false,
+    hasMonsterKillUpgrade: false,
     hasSwapUpgrade: false,
     hasStunUpgradeCap: false,
     hasRecycleBackpackExpand: false,
     hasDungeonGold: false,
     hasArmorHalveEndure: false,
+    hasMonsterEquipBuff: false,
   };
 
   for (const amulet of amuletSlots) {
@@ -252,7 +253,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'damage-class-discover': effects.hasDamageClassDiscover = true; break;
       case 'persuade-graveyard-stack': effects.hasPersuadeGraveyardStack = true; break;
       case 'stun-recycle-to-hand': effects.hasStunRecycleToHand = true; break;
-      case 'card-gain-upgrade': effects.hasCardGainUpgrade = true; break;
+      case 'monster-kill-upgrade': effects.hasMonsterKillUpgrade = true; break;
       case 'attack-persuade-discount': effects.hasAttackPersuadeDiscount = true; break;
       case 'card-gain-missile': effects.hasCardGainMissile = true; break;
       case 'swap-upgrade': effects.hasSwapUpgrade = true; break;
@@ -260,6 +261,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'recycle-backpack-expand': effects.hasRecycleBackpackExpand = true; break;
       case 'dungeon-gold': effects.hasDungeonGold = true; break;
       case 'armor-halve-endure': effects.hasArmorHalveEndure = true; break;
+      case 'monster-equip-buff': effects.hasMonsterEquipBuff = true; break;
     }
   }
 

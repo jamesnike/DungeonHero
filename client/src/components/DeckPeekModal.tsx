@@ -77,19 +77,19 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
   }
 
   if (state.mode === 'deck-judge-delete') {
-    const { peekedCards, monsterCount, deleteCount } = state;
+    const { peekedCards, monsterCount, deleteCount, gains } = state;
     return (
       <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
         <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto" overlayClassName="bg-black/30">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Eye className="w-5 h-5 text-indigo-400" />
-              主牌堆预览
+              命数裁断
             </DialogTitle>
           </DialogHeader>
 
           <p className="text-sm text-muted-foreground text-center px-1">
-            仅翻看牌堆顶的牌，不改变牌序、不抽牌。
+            翻看牌堆顶的牌，依类型获得增益或惩罚。
           </p>
 
           <div className="flex items-center justify-center gap-3 py-4 flex-wrap">
@@ -100,7 +100,12 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
                 <div
                   key={card.id}
                   className={`w-[100px] h-[140px] flex-shrink-0 transition-transform duration-300 ${
-                    card.type === 'monster' ? 'ring-2 ring-red-400 rounded-lg' : ''
+                    card.type === 'monster' ? 'ring-2 ring-red-400 rounded-lg'
+                    : card.type === 'event' || card.type === 'building' ? 'ring-2 ring-violet-400 rounded-lg'
+                    : card.type === 'weapon' || card.type === 'shield' ? 'ring-2 ring-blue-400 rounded-lg'
+                    : card.type === 'magic' ? 'ring-2 ring-purple-400 rounded-lg'
+                    : card.type === 'potion' ? 'ring-2 ring-green-400 rounded-lg'
+                    : ''
                   }`}
                   style={{ animationDelay: `${idx * 100}ms` }}
                 >
@@ -110,21 +115,24 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
             )}
           </div>
 
-          <div className="space-y-2 text-center">
-            <p className="text-sm text-muted-foreground">
-              已翻看牌堆顶 {peekedCards.length} 张，其中{' '}
-              <span className="font-bold text-red-400">{monsterCount}</span> 张怪物牌
-            </p>
-            <p className="text-base font-semibold text-foreground">
-              {deleteCount > 0
-                ? `须从手牌、背包、装备、护符或回收袋中删除 ${deleteCount} 张牌。`
-                : '无需删除牌。'}
-            </p>
-          </div>
+          {gains.length > 0 && (
+            <div className="space-y-1 text-center">
+              <p className="text-sm font-semibold text-foreground mb-2">效果：</p>
+              {gains.map((g, i) => (
+                <p key={i} className={`text-sm ${g.label.includes('删除') ? 'text-red-400' : 'text-amber-300'}`}>
+                  {g.label} <span className="font-bold">×{g.count}</span>
+                </p>
+              ))}
+            </div>
+          )}
+
+          {gains.length === 0 && peekedCards.length > 0 && (
+            <p className="text-sm text-muted-foreground text-center">无效果。</p>
+          )}
 
           <div className="flex justify-center pt-2">
             <Button variant="outline" onClick={onClose}>
-              关闭
+              {deleteCount > 0 ? '确认' : '关闭'}
             </Button>
           </div>
         </DialogContent>

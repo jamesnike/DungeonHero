@@ -184,6 +184,74 @@ On mobile (`viewport < 768px`):
 
 ---
 
+## Deck Dealing & Monster Density (牌堆发牌与怪物密度)
+
+### Dealing Pattern
+
+Every deal (initial rows and every waterfall) puts **6 cards** onto the board: **5 cells** in the preview/active row + **1 card stacked** underneath a non-monster cell. The stacking logic **skips monster cards** — it searches forward in the remaining deck for the next non-monster to use as the stacked card; any monsters encountered are pushed back to the front of the deck.
+
+### Monster Density Rule (硬性规则)
+
+**Every 6-card chunk must contain 1–2 monsters. This rule must never be broken.**
+
+After `createDeck()` returns a shuffled pool, `initGame` in `GameBoard.tsx` enforces this via a non-overlapping chunk scan (`CHUNK = 6`, `MIN_MONSTERS = 1`, `MAX_MONSTERS = 2`). For each 6-card window, monsters are swapped in or out from elsewhere in the deck until the constraint is satisfied.
+
+### Why the Guarantee Can Break
+
+The chunk balancing runs on the full `deckWithClassEvents` array, but the subsequent **initial dealing** process can disrupt the ordering:
+
+1. **`ensureRowHasMonster`**: If the first 5 cards dealt (for a row) contain no monster, this helper swaps a monster **from the front of the remaining queue** into the row. This steals a monster that was balanced into a later chunk, potentially leaving that chunk with 0 monsters.
+
+2. **`extractFirstNonMonster`**: For each row's stacked card, this helper searches from the front of the remaining queue and **removes** the first non-monster it finds. This shifts indices and can further misalign chunks.
+
+When consecutive chunks have their only monster near the end (e.g., chunk 0's monster at index 5, chunk 1's at index 11, chunk 2's at index 17), the initial dealing steals the first two, and the third chunk — now the first waterfall row — gets 0 monsters.
+
+### Mandatory Fix Pattern
+
+After all initial dealing is complete (preview row + active row + their stacked cards), the remaining `dealQueue` must be **re-balanced** with the same chunk=6 density algorithm before it becomes `remainingDeck`. This ensures every future waterfall row will still satisfy the 1–2 monster guarantee regardless of what the initial dealing displaced.
+
+```
+Full deck ──[chunk balance]──▶ deckWithClassEvents
+                                │
+                         ┌──────┴──────┐
+                         ▼             ▼
+                    Preview (5+1)  Active (5+1)
+                    ensureRowHasMonster ← may steal monsters
+                    extractFirstNonMonster ← shifts indices
+                         │
+                         ▼
+                    dealQueue (remaining)
+                         │
+                    [chunk re-balance]  ◀── CRITICAL: re-apply CHUNK=6 guarantee
+                         │
+                         ▼
+                    remainingDeck ──▶ waterfall deals (5+1 each)
+```
+
+---
+
+## Recycle Bag (回收袋) Rules
+
+### `_recycleWaits` Cooldown — Mandatory
+
+Every card entering the recycle bag carries a `_recycleWaits` counter (defaults to `recycleDelay` on the card, typically 1–2). **All** code paths that move cards from the recycle bag back to the backpack **must** respect this counter:
+
+1. Decrement `_recycleWaits` by 1.
+2. Only cards whose decremented value reaches ≤ 0 are eligible to return to the backpack.
+3. Cards still cooling down (`_recycleWaits > 0` after decrement) remain in the recycle bag.
+
+**No exceptions.** This applies to every trigger: waterfall restore, end-of-combat flush, eternal relic effects (幽魂净化), guild magic (回收轮转), and any future paths.
+
+### Backpack Capacity — Always Enforced
+
+When cards are restored from the recycle bag, the number of cards actually moved into the backpack must not exceed the available capacity (`backpackCapacity - currentBackpackItems.length`). Overflow cards that are ready but cannot fit stay in the recycle bag.
+
+### Backpack Overflow → Recycle Bag
+
+When the backpack is full and the player gains a card (discover, reward, event, etc.), or when the backpack capacity is reduced below the current item count, **all** excess cards go to the recycle bag — never to the graveyard.
+
+---
+
 ## Typography
 
 **Font Families** (via Google Fonts CDN):
@@ -392,11 +460,21 @@ Icon sizing scales with `--dh-card-instance-scale` inside cards; header icons us
 
 ## Block Durability Count (格挡耐久次数)
 
+格挡耐久次数 = 每个怪物回合，某装备栏的护盾**最多能消耗的耐久点数**。
+
 The Block Durability Count mechanic limits how many times shield durability can be consumed per equipment slot during a single monster turn. This prevents a single high-durability shield from absorbing unlimited hits in one monster turn.
 
 ### Concept
 
-During a monster turn, each equipment slot can consume at most **N** durability points from its shield (default N = 1). Once the limit is reached, the shield in that slot is **disabled** for the rest of that monster turn — the hero must take damage to HP. The parameter N is tunable by card/event effects, similar to how extra attack charges work.
+During a monster turn, each equipment slot can consume at most **N** durability points from its shield. Once the limit is reached, the shield in that slot is **disabled** for the rest of that monster turn — the hero must take damage to HP.
+
+The effective limit **N** per slot is:
+
+```
+N = blockDurabilityPerSlot          (global base, default 1)
+  + equipBlockDurabilityBonus       (per-equipment bonus, e.g. 坚韧磐盾 +1, 骷髅王 +4)
+  + amuletBlockBonus                (磐石坚守符 amulet: all slots +1)
+```
 
 **Key distinction**: Only actual durability *consumption* counts toward this limit. Blocks where the shield's armor is not fully depleted (i.e., no durability point is lost) do **not** count. However, once the limit is reached, the shield is fully disabled regardless of its armor state.
 
@@ -405,7 +483,9 @@ During a monster turn, each equipment slot can consume at most **N** durability 
 | Field | Location | Type | Default | Purpose |
 |-------|----------|------|---------|---------|
 | `slotDurabilityUsedThisTurn` | `CombatState` | `Record<EquipmentSlotId, number>` | `{ equipmentSlot1: 0, equipmentSlot2: 0 }` | Tracks durability points consumed per slot this monster turn |
-| `blockDurabilityPerSlot` | `GameState` | `number` | `1` | Maximum durability consumption per slot per monster turn (tunable) |
+| `blockDurabilityPerSlot` | `GameState` | `number` | `1` | Global base maximum durability consumption per slot per monster turn |
+| `equipBlockDurabilityBonus` | `GameCardData` (equipment) | `number` | `0` | Per-equipment bonus to the slot's durability limit |
+| `hasArmorHalveEndure` | `AmuletEffects` | `boolean` | `false` | 磐石坚守符 amulet: all slots +1 to block durability limit |
 
 ### When Durability Is "Consumed"
 
@@ -456,7 +536,7 @@ Hero Turn ──endHeroTurn──▶ Monster Turn Start
 ### Combat Logic (`useCombatActions.ts`)
 
 **`resolveBlockChoice`**:
-1. **Early guard**: Before processing a shield block, checks if `slotDurabilityUsedThisTurn[slotId] >= blockDurabilityPerSlot`. If so, the shield is treated as unavailable (the block attempt is rejected by the UI, but this is a safety net).
+1. **Early guard**: Before processing a shield block, computes the effective limit as `blockDurabilityPerSlot + equipBlockDurabilityBonus + amuletBlockBonus` and checks if `slotDurabilityUsedThisTurn[slotId] >= effectiveLimit`. If so, the shield is treated as unavailable (the block attempt is rejected by the UI, but this is a safety net).
 2. **Tracking**: A local `shieldDurabilityConsumed` flag is set to `true` when durability is actually consumed (shield destroyed or durability decremented). After block resolution, if the flag is true, `slotDurabilityUsedThisTurn[slotId]` is incremented via `setCombatState`.
 
 **State resets**:
@@ -468,18 +548,19 @@ Hero Turn ──endHeroTurn──▶ Monster Turn Start
 ### UI
 
 **Block buttons** (`GameBoard.tsx`):
-- Block button for each slot is disabled when `slotDurabilityUsedThisTurn[slotId] >= blockDurabilityPerSlot`, in addition to the existing `canShieldBlock` check
+- Block button for each slot is disabled when `slotDurabilityUsedThisTurn[slotId] >= effectiveLimit` (where `effectiveLimit = blockDurabilityPerSlot + equipBlockDurabilityBonus + amuletBlockBonus`), in addition to the existing `canShieldBlock` check
 - `renderBlockButton` shows "耐久用尽" text instead of damage value when the slot is disabled due to durability limit
 
 **Slot action count overlay** (`EquipmentSlot.tsx`):
 - When dragging equipment during combat, the slot cell behind the dragged card shows a number:
   - **Hero turn**: Remaining attack count for the slot (sum of base + extra attack sources)
-  - **Monster turn**: Remaining block durability = `blockDurabilityPerSlot - slotDurabilityUsedThisTurn[slotId]`
+  - **Monster turn**: Remaining block durability = `effectiveLimit - slotDurabilityUsedThisTurn[slotId]`
   - **Count > 0**: Green number
   - **Count = 0**: Red X mark (same as existing exhausted overlay)
 
 **CombatPanel** (`CombatPanel.tsx`):
-- Accepts `slotDurabilityUsedThisTurn` and `blockDurabilityPerSlot` as props
+- Accepts `slotDurabilityUsedThisTurn`, `blockDurabilityPerSlot`, and `amuletBlockDurabilityBonus` as props
+- Computes effective limit per slot as `blockDurabilityPerSlot + equipBlockDurabilityBonus + amuletBlockDurabilityBonus`
 - During monster turns, displays remaining block durability per slot with "耐久 N/M" or "耐久用尽" status
 
 ### Persistence
@@ -514,7 +595,7 @@ Building cards (`type: 'building'`) are persistent dungeon structures that remai
 ### Properties
 
 - **HP & Fury layers**: Buildings have `hp`, `maxHp`, and `fury` (layers) like monsters, but they do not attack the player.
-- **Destroyable**: Buildings can be attacked by weapons (they are valid weapon drop targets alongside monsters). When their HP reaches 0, they are destroyed and sent to the graveyard.
+- **Destroyable**: Buildings can be attacked by weapons and damaged by magic (they are valid targets for all damage sources alongside monsters). When their HP reaches 0, they are destroyed and sent to the graveyard.
 - **Building Aura** (`buildingAura`): Some buildings have a passive aura effect that applies while the building is alive on the board. Aura is removed when the building is destroyed.
   - `'suppress-adjacent-temp-attack'` — Adjacent player equipment slots ignore temporary attack bonuses.
   - `'adjacent-magic-immune'` — Monsters adjacent to this building are immune to player magic damage.
@@ -619,7 +700,7 @@ The `amplifyBonus` field on `GameCardData` is read as `(card.amplifyBonus ?? 0)`
 **Knight class magic** (`useCardPlayHandlers.ts` + `useHeroActions.ts`):
 - 铠甲贯刺 (`armor-strike`): `getSpellDamage(scaledArmor + ampBonus)`
 - 残血终焉 (`missing-hp-smite`): `getSpellDamage(scaledDmg + ampBonus)`
-- 坟火新星 (`grave-nova`): `getSpellDamage(3 + ampBonus)` — `triggerGraveNova(card)` receives the card to read its bonus
+- 坟火新星 (`grave-nova`): `getSpellDamage(baseDmg + ampBonus)` — baseDmg = [3, 6][upgradeLevel], `triggerGraveNova(card)` receives the card to read its bonus
 - 天眼审判 (`fate-sight`): `getSpellDamage(baseDmg + ampBonus)` inside `resolveFateSight`
 - 锋刃侧击 (`temp-attack-strike`): `getSpellDamage(tempAtk + ampBonus)`
 - 利刃风暴 (`weapon-sweep`): `computeHonorSweepWaveDamage(slotId) + ampBonus`

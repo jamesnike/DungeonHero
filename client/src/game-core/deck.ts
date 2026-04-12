@@ -94,7 +94,6 @@ import dedupeMagicTideArmorImage from '@assets/generated_images/card_dedupe_magi
 import dedupeMagicGoldJudgmentImage from '@assets/generated_images/card_dedupe_magic_gold_judgment.png';
 import dedupeMagicFullHandSpringImage from '@assets/generated_images/card_dedupe_magic_full_hand_spring.png';
 import dedupeMagicEquivalentExchangeImage from '@assets/generated_images/card_dedupe_magic_equivalent_exchange.png';
-import dedupeMagicUndeathGuardImage from '@assets/generated_images/card_dedupe_magic_undeath_guard.png';
 import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dedupeMagicArcaneRefineImage from '@assets/generated_images/card_dedupe_magic_arcane_refine.png';
 import dedupeMagicOmniscienceImage from '@assets/generated_images/card_dedupe_magic_omniscience.png';
@@ -879,19 +878,6 @@ export function createDeck(): GameCardData[] {
   deck.push({
     id: `magic-${id++}`,
     type: 'magic',
-    name: '不灭守护',
-    value: 0,
-    image: dedupeMagicUndeathGuardImage,
-    magicType: 'instant',
-    magicEffect: '濒死时抵消致死伤害。',
-    description: '一次性：只能在受到致命伤害时打出，抵消该次伤害。',
-    knightEffect: 'death-ward',
-    maxUpgradeLevel: 2,
-  });
-
-  deck.push({
-    id: `magic-${id++}`,
-    type: 'magic',
     name: '冥途拾遗',
     value: 0,
     image: dedupeMagicUnderworldRelicImage,
@@ -986,6 +972,11 @@ export function createDeck(): GameCardData[] {
       { text: '献祭体魄（永久 +8 生命上限）', effect: 'maxhpperm+8', hint: '上限提升会保留整局' },
       { text: '拓展行囊（背包上限 +5）', effect: 'backpackSize+5', hint: '背包容量永久增加 5' },
       { text: '选择一张牌升级', effect: 'upgradeCard', hint: '从所有可升级的牌中选择一张进行升级' },
+      {
+        text: '净化杂质（删 2 张牌）',
+        effect: 'deleteCard:2',
+        requires: [{ type: 'cardPool', pools: ['hand', 'backpack'], min: 2, message: '需要至少 2 张可删除的卡牌' }],
+      },
     ],
     flipTarget: {
       toCard: {
@@ -1020,12 +1011,11 @@ export function createDeck(): GameCardData[] {
       },
       {
         text: '翻找黄金（掷骰决定收益）',
-        hint: '25% +20金 / 25% +30金 / 25% -10金 / 25% -10金且弃回1手牌',
+        hint: '30% +20金 / 30% +30金 / 40% -10金',
         diceTable: [
-          { id: 'vault-gold20', range: [1, 5], label: '+20 金币', effect: 'gold+20' },
-          { id: 'vault-gold30', range: [6, 10], label: '+30 金币', effect: 'gold+30' },
-          { id: 'vault-gold-10', range: [11, 15], label: '-10 金币', effect: 'gold-10' },
-          { id: 'vault-gold-10d', range: [16, 20], label: '-10 金币，弃回 1 张手牌', effect: 'gold-10,randomDiscardHand:1' },
+          { id: 'vault-gold20', range: [1, 6], label: '+20 金币', effect: 'gold+20' },
+          { id: 'vault-gold30', range: [7, 12], label: '+30 金币', effect: 'gold+30' },
+          { id: 'vault-gold-10', range: [13, 20], label: '-10 金币', effect: 'gold-10' },
         ],
       },
       {
@@ -1039,10 +1029,10 @@ export function createDeck(): GameCardData[] {
       },
       {
         text: '寻找怀柔之道（掷骰决定劝降效果）',
-        hint: '60% 本回合劝降金币-5 / 40% 本回合劝降成功率-10%',
+        hint: '60% 下一次劝降免费 / 40% 下一次劝降成功率-10%',
         diceTable: [
-          { id: 'vault-persuade-cheap', range: [1, 12], label: '本回合劝降金币 -5', effect: 'persuadeNextCostReduction:5' },
-          { id: 'vault-persuade-penalty', range: [13, 20], label: '本回合劝降成功率 -10%', effect: 'persuadeNextRatePenalty:10' },
+          { id: 'vault-persuade-free', range: [1, 12], label: '下一次劝降免费', effect: 'persuadeNextFree' },
+          { id: 'vault-persuade-penalty', range: [13, 20], label: '下一次劝降成功率 -10%', effect: 'persuadeNextRatePenalty:10' },
         ],
       },
       {
@@ -1065,7 +1055,7 @@ export function createDeck(): GameCardData[] {
           { text: '翻阅卷轴（抽 3 张牌）', effect: 'drawHeroCards:3' },
           { text: '联络商贩（商店等级 +1，劝降等级 +1）', effect: ['shopLevel+1', 'persuadeLevel+1'], hint: '商店等级与劝降等级各 +1' },
           { text: '召唤商队（金币+10 且 打开商店）', effect: ['gold+10', 'openShop'], hint: '获得 10 金币并立刻开启商店' },
-          { text: '深入探索（受 3 伤害，瀑流+1，翻转回去）', effect: 'vault-flipback', hint: '受到 3 点伤害，瀑流计数 +1，宝库翻转回未开启状态' },
+          { text: '深入探索（受 4 伤害，翻转回去）', effect: 'vault-flipback', hint: '受到 4 点伤害，宝库翻转回未开启状态' },
           { text: '展示权威（劝降等级 +1，击晕上限+10%）', effect: ['persuadeLevel+1', 'stunCap+10'], hint: '劝降更强怪物，击晕概率上限 +10%' },
           { text: '护甲加持（所有装备栏 临时护甲+4）', effect: 'allSlotTempArmor:4', hint: '所有装备栏获得 4 点临时护甲' },
         ],
@@ -1092,7 +1082,7 @@ export function createDeck(): GameCardData[] {
         requires: [{ type: 'equipmentAny', message: '需要至少一件装备' }],
       },
       { id: 'shadow-pact-gold', text: '支付赎金（损失 15 金币）', effect: 'gold-15', requires: [{ type: 'gold', min: 15, message: '需要至少 15 金币' }] },
-      { text: '扩展手牌（手牌上限 +1，跳过翻转）', effect: 'handLimit+1', skipFlip: true },
+      { text: '扩展手牌（手牌上限 +1，背包上限 +3，跳过翻转）', effect: ['handLimit+1', 'backpackSize+3'], skipFlip: true },
       { id: 'shadow-pact-shop', text: '贬低商贩（商店等级 -1）', effect: 'shopLevel-1', requires: [{ type: 'shopLevel', min: 1, message: '商店等级已为 0' }] },
       { id: 'shadow-pact-persuade', text: '削弱威慑（劝降等级 -1）', effect: 'persuadeLevel-1', requires: [{ type: 'persuadeLevel', min: 2, message: '劝降等级已为最低' }] },
       {
@@ -1127,11 +1117,11 @@ export function createDeck(): GameCardData[] {
     value: 0,
     image: dedupeEventResonanceForgeImage,
     eventChoices: [
-      { text: '左槽淬火（左槽永久伤害 +2，恢复1耐久）', effect: ['slotLeftDamage+2', 'repairSlot:left:1'] },
-      { text: '右槽固化（右槽永久护甲 +2，恢复1耐久）', effect: ['slotRightDefense+2', 'repairSlot:right:1'] },
-      { text: '翻转轨道（左右装备互换，各恢复1耐久）', effect: ['swapEquipmentSlots', 'repairSlot:both:1'] },
-      { text: '左槽铸盾（左槽永久护甲 +2，恢复1耐久）', effect: ['slotLeftDefense+2', 'repairSlot:left:1'] },
-      { text: '右槽磨刃（右槽永久伤害 +2，恢复1耐久）', effect: ['slotRightDamage+2', 'repairSlot:right:1'] },
+      { text: '左槽淬火（左槽永久伤害 +2，恢复2耐久）', effect: ['slotLeftDamage+2', 'repairSlot:left:2'] },
+      { text: '右槽固化（右槽永久护甲 +2，恢复2耐久）', effect: ['slotRightDefense+2', 'repairSlot:right:2'] },
+      { text: '翻转轨道（左右装备互换，各+1耐久上限，各恢复1耐久）', effect: ['swapEquipmentSlots', 'slotLeftDurMax+1', 'slotRightDurMax+1', 'repairSlot:both:1'] },
+      { text: '左槽铸盾（左槽永久护甲 +2，恢复2耐久）', effect: ['slotLeftDefense+2', 'repairSlot:left:2'] },
+      { text: '右槽磨刃（右槽永久伤害 +2，恢复2耐久）', effect: ['slotRightDamage+2', 'repairSlot:right:2'] },
     ],
     flipTarget: {
       toCard: {
@@ -1169,18 +1159,6 @@ export function createDeck(): GameCardData[] {
         requires: [{ type: 'equipment', slot: 'right', message: '右侧装备栏为空' }],
       },
       {
-        id: 'greedy-current-left',
-        text: '献祭当前左手装备（金币 +15）',
-        effect: 'discardCurrentLeftForGold+15',
-        requires: [{ type: 'equipment', slot: 'left', message: '左侧装备栏为空' }],
-      },
-      {
-        id: 'greedy-current-right',
-        text: '献祭当前右手装备（金币 +15）',
-        effect: 'discardCurrentRightForGold+15',
-        requires: [{ type: 'equipment', slot: 'right', message: '右侧装备栏为空' }],
-      },
-      {
         id: 'greedy-amulet',
         text: '粉碎所有护符（每个 +10 金币）',
         effect: 'amuletsToGold+10',
@@ -1191,45 +1169,40 @@ export function createDeck(): GameCardData[] {
         text: '献血离开（掉 8 HP）',
         effect: 'hp-8',
         hint: '仅当其他献祭方式全部不可用时可选',
-        requiresDisabledChoices: ['greedy-left', 'greedy-right', 'greedy-current-left', 'greedy-current-right', 'greedy-amulet'],
+        requiresDisabledChoices: ['greedy-left', 'greedy-right', 'greedy-amulet'],
         requiresDisabledReason: '仍有其他献祭方式可用',
       },
       {
         id: 'greedy-delete',
-        text: '焚毁卡牌（选择至多 3 张牌删除，每张 -5 金币）',
-        effect: 'deleteCardForGold:3:-5',
-        hint: '选择至多 3 张卡牌永久删除，每删 1 张消耗 5 金币',
+        text: '焚毁卡牌（选择至多 3 张牌删除，每张 -3 金币）',
+        effect: 'deleteCardForGold:3:-3',
+        hint: '选择至多 3 张卡牌永久删除，每删 1 张消耗 3 金币',
         requires: [{ type: 'cardPool', pools: ['hand', 'backpack'], min: 1, message: '需要至少 1 张可删除的卡牌' }],
       },
       {
         id: 'greedy-discard-all',
-        text: '弃回所有手牌（每张 +3 金币）',
-        effect: 'discardAllHandForGold:3',
-        hint: '弃回所有手牌并为每张获得 3 金币',
+        text: '弃回所有手牌（每张 +5 金币）',
+        effect: 'discardAllHandForGold:5',
+        hint: '弃回所有手牌并为每张获得 5 金币',
         requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
       },
     ],
     waterfallEffect: { type: 'destroyAllEquipment', amount: 0, description: '被挤出时：破坏玩家所有装备' },
     flipTarget: {
       toCard: {
-        id: `${greedyAltarEventId}-seal-altar`,
-        type: 'building',
-        name: '破印祭坛',
+        id: `${greedyAltarEventId}-flip`,
+        type: 'magic',
+        name: '破印遗物',
         value: 0,
-        image: dedupeEventSealAltarBuildingImage,
-        buildingAura: 'suppress-adjacent-temp-attack',
-        isGhost: true,
-        fury: 1,
-        hpLayers: 1,
-        currentLayer: 1,
-        hp: 6,
-        maxHp: 6,
-        description:
-          '光环（在场时生效，毁坏后消失）：在预览行、地城激活行与英雄行构成的 5 列棋盘上，与本建筑八邻（含斜向）相邻格子中的玩家装备，不受该装备栏「临时攻击」数值加成（血怒等其它加成仍生效）。',
+        image: dedupeEventGreedyAltarImage,
+        magicType: 'instant',
+        knightEffect: 'graveyard-discover-equip-amulet',
+        magicEffect: '一次性：从坟场发现一张装备或护符（三选一）。',
+        description: '从坟场发现一张装备或护符（三选一），加入背包。',
       },
-      destination: 'stay',
-      message: '破坏祭坛凝固为破印祭坛！',
-      banner: '破坏祭坛翻转为「破印祭坛」',
+      destination: 'backpack',
+      message: '破坏祭坛翻转为「破印遗物」！',
+      banner: '破坏祭坛翻转为「破印遗物」，已放入背包。',
     },
   });
 
@@ -1268,8 +1241,8 @@ export function createDeck(): GameCardData[] {
           },
         ],
       },
-      { text: '强化意志（击晕上限 +10%，激活行怪物攻击-2）', effect: ['stunCap+10', 'activeRowMonsterAttack-2'] },
-      { text: '选择一张牌升级', effect: 'upgradeCard', hint: '从所有可升级的牌中选择一张进行升级' },
+      { text: '强化意志（击晕上限 +10%，翻转为永久魔法）', effect: ['stunCap+10', 'flipToMonsterAttackDebuff'], hint: '击晕上限 +10%，翻转为 Perm 1 魔法：激活行怪物攻击-2' },
+      { text: '选择至多两张牌升级', effect: 'upgradeCard:2', hint: '从所有可升级的牌中选择至多两张进行升级' },
     ],
   });
 
@@ -1307,9 +1280,9 @@ export function createDeck(): GameCardData[] {
       },
       {
         id: 'curse-hand-shrink',
-        text: '封印牌位（手牌上限 -1）',
-        effect: 'handLimit-1',
-        hint: '手牌上限永久降低 1',
+        text: '封印牌位（手牌上限 -1，翻转为武器）',
+        effect: ['handLimit-1', 'flipToCurseWeapon'],
+        hint: '手牌上限永久降低 1，翻转为 2攻1耐久武器（入场：耐久度上限+1）',
       },
       {
         id: 'curse-atk-recall',
@@ -1387,7 +1360,7 @@ export function createDeck(): GameCardData[] {
     eventChoices: [
       { text: '翻转成「回响残页」', effect: 'flipToDiscardDrawMagic', hint: '翻转为永久魔法：被弃回时，抽 2 张牌' },
       { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh', hint: '翻转为永久法术伤害 +2、最大生命值 -5 的药剂' },
-      { text: '翻转成「淬炼药剂」', effect: 'flipToLeftDurabilityPotion', hint: '翻转为左装备栏耐久上限 +1 的药剂' },
+      { text: '翻转成「淬炼药剂」', effect: 'flipToLeftDurabilityPotion', hint: '翻转为左装备栏耐久上限 +2 的药剂（翻转后为右装备栏耐久上限 +2）' },
       { text: '翻转成「置换药剂」', effect: 'flipToEquipSwapPotion', hint: '翻转为药水：选择一个装备回手，若另一栏有装备则换到该位置' },
       { text: '翻转成「扩容药剂」', effect: 'flipToHandLimitPotion', hint: '翻转为药水：永久手牌上限 +1' },
       {
@@ -1395,7 +1368,7 @@ export function createDeck(): GameCardData[] {
         effect: 'flipToClassMagicDiscoverPotion',
         hint: '翻转为药水：使用时从专属牌堆发现一张魔法牌（三选一）',
       },
-      { text: '翻转成「升级卷轴」', effect: 'flipToUpgradeScroll', hint: '翻转为即时魔法：选择一张牌进行升级' },
+      { text: '获得两张「升级卷轴」', effect: 'grantTwoUpgradeScrolls', hint: '直接获得两张一次性升级卷轴放入背包' },
     ],
   });
 
@@ -1425,7 +1398,7 @@ export function createDeck(): GameCardData[] {
         effect: ['graveyardDiscover', 'graveyardDiscover'],
         requires: [{ type: 'graveyard', min: 1, message: '坟场中没有可召回的卡牌' }],
       },
-      { text: '召唤商贩（回收袋发现一张牌，打开商店）', effect: ['recycleBagDiscover', 'openShop'] },
+      { text: '召唤商贩（发现一张专属magic牌，打开商店）', effect: ['discoverClassMagic', 'openShop'] },
       { text: '空间扩展（背包上限 +5）', effect: 'backpackSize+5' },
       { text: '强化意志（发现专属武器，击晕上限 +10%）', effect: ['stunCap+10', 'discoverClassWeapon'], hint: '发现一张专属武器，击晕概率上限 +10%' },
       { text: '威压交涉（劝降等级+1，劝降费用 -2）', effect: ['persuadeLevel+1', 'persuadeCost-2'], hint: '劝降等级提升，费用永久减少 2' },
@@ -1462,11 +1435,11 @@ export function createDeck(): GameCardData[] {
     image: dedupeEventFateDiceCupImage,
     eventChoices: [
       {
-        text: '掷出不同结果：金币+10并打开商店/商店等级+1并劝降费用-2/法术伤害+1并超杀吸血+1/摧毁所有护符/发现两张专属卡，然后翻转成"命运之刃"。',
+        text: '掷出不同结果：金币+10并打开商店/商店等级+1并永久劝降费用-2/法术伤害+1并超杀吸血+1/摧毁所有护符/发现两张专属卡，然后翻转成"命运之刃"。',
         hint: '20% 触发不同奖励或惩罚',
         diceTable: [
           { id: 'dice11-shop', range: [1, 4], label: '金币+10，打开商店', effect: ['gold+10', 'openShop'] },
-          { id: 'dice11-level', range: [5, 8], label: '商店等级 +1，劝降费用-2', effect: ['shopLevel+1', 'persuadeCost-2'] },
+          { id: 'dice11-level', range: [5, 8], label: '商店等级 +1，永久劝降费用-2', effect: ['shopLevel+1', 'persuadeCost-2'] },
           { id: 'dice11-spell', range: [9, 12], label: '法术伤害 +1，超杀吸血+1', effect: ['spellDamage+1', 'spellLifesteal+1'] },
           { id: 'dice11-amulets', range: [13, 16], label: '摧毁所有护符', effect: 'removeAllAmulets' },
           { id: 'dice11-discover', range: [17, 20], label: '发现两张专属卡', effect: 'drawClass2' },
@@ -1556,7 +1529,7 @@ export function createDeck(): GameCardData[] {
         diceTable: [
           { id: 'rift-burst', range: [1, 7], label: '锋刃祝福：所有装备栏临时攻击+4', effect: 'allSlotTempAttack:4' },
           { id: 'rift-shrink', range: [8, 14], label: '时空收缩：Waterfall 进度 -2', effect: 'turnCount-2' },
-          { id: 'rift-cost', range: [15, 20], label: '空间代价：背包 -2，获得法术回响', effect: ['backpackSize-2', 'flipToDoubleNextMagic'] },
+          { id: 'rift-cost', range: [15, 20], label: '空间代价：背包 -2，激活法术回响', effect: ['backpackSize-2', 'flipToDoubleNextMagic'] },
           { id: 'rift-shoplevel', range: [1, 10], label: '时空侵蚀：商店等级 -1，劝降等级-1', effect: ['shopLevel-1', 'persuadeLevel-1'] },
           { id: 'rift-monsteratk', range: [11, 20], label: '时空压缩：激活行怪物攻击力 -3', effect: 'activeRowMonsterAttack-3' },
         ],
@@ -1571,7 +1544,7 @@ export function createDeck(): GameCardData[] {
         image: dedupeMagicTimeMirrorFlipImage,
         magicType: 'permanent',
         magicEffect: 'equalize-temp-attack-armor',
-        description: '永久魔法（Perm 2）：选择一个装备栏，使得临时攻击和临时护甲相等（增加较低的一方）。',
+        description: '永久魔法（Perm 2）：选择一个装备栏，临时攻击 +2，然后使得临时攻击和临时护甲相等（增加较低的一方）。',
         recycleDelay: 2,
       },
       destination: 'backpack',
@@ -1591,7 +1564,7 @@ export function createDeck(): GameCardData[] {
       {
         text: '法术回响（下一张Magic触发两次）',
         effect: 'flipToDoubleNextMagic',
-        hint: '获得一张「法术回响」永久魔法放入背包',
+        hint: '直接激活法术回响：下一张法术的效果将触发两次',
       },
       {
         text: '发现一张专属Magic卡',
@@ -1606,21 +1579,24 @@ export function createDeck(): GameCardData[] {
       {
         id: 'arcane-starter-magic',
         text: '发现一张起始背包的Magic卡',
-        effect: 'discoverStarterMagic',
-        hint: '从起始背包候选魔法池中发现一张（三选一）',
+        effect: ['discoverStarterMagic', 'flipToArcaneShield'],
+        hint: '从起始背包候选魔法池中发现一张（三选一），翻转为「奥术护盾」',
+        skipFlip: true,
       },
       {
         id: 'arcane-graveyard-magic',
         text: '发现一张坟场的Magic卡',
-        effect: 'graveyardDiscoverMagic',
-        hint: '从坟场中发现一张魔法卡加入背包',
+        effect: ['graveyardDiscoverMagic', 'flipToArcaneShield'],
+        hint: '从坟场中发现一张魔法卡加入背包，翻转为「奥术护盾」',
         requires: [{ type: 'graveyard', min: 1, message: '坟场中没有卡牌' }],
+        skipFlip: true,
       },
       {
         id: 'arcane-recycle-magic',
         text: '回收袋至多2张Magic移到手上',
-        effect: 'recycleBagMagicToHand:2',
-        hint: '从回收袋中取出至多2张魔法卡加入手牌',
+        effect: ['recycleBagMagicToHand:2', 'flipToArcaneShield'],
+        hint: '从回收袋中取出至多2张魔法卡加入手牌，翻转为「奥术护盾」',
+        skipFlip: true,
       },
     ],
     flipTarget: {
@@ -1718,7 +1694,7 @@ export function createDeck(): GameCardData[] {
     name: '战备工坊',
     value: 0,
     image: skillScrollImage,
-    description: '装备锻造与强化之所，选择一种方式改良你的装备。',
+    description: '装备锻造与强化之所，选择一种方式改良你的装备。翻转条件：激活行有至少 1 张装备牌。',
     eventChoices: [
       {
         id: 'arsenal-left-dur',
@@ -1777,7 +1753,7 @@ export function createDeck(): GameCardData[] {
       destination: 'backpack',
       message: '战备工坊翻转为「装备附魔」，已放入背包。',
     },
-    flipCondition: 'activeRowEquipment:2',
+    flipCondition: 'activeRowEquipment:1',
   });
 
   // ---------------------------------------------------------------------------
@@ -1826,9 +1802,9 @@ export function createDeck(): GameCardData[] {
       },
       {
         id: 'altar-flip',
-        text: '翻转为「祭坛秘术」永久魔法',
+        text: '翻转为「祭坛秘术」即时魔法',
         effect: 'noop',
-        hint: '该牌翻转为 Perm 1 魔法：弃回 2 张手牌，发现 1 张专属 Magic 卡',
+        hint: '该牌翻转为一次性魔法：发现 1 张专属 Magic 卡',
       },
     ],
     flipTarget: {
@@ -1838,10 +1814,9 @@ export function createDeck(): GameCardData[] {
         name: '祭坛秘术',
         value: 0,
         image: skillScrollImage,
-        magicType: 'permanent',
-        magicEffect: 'altar-discard-discover',
-        description: '永久魔法（Perm 1）：弃回 2 张手牌，发现 1 张专属 Magic 卡。',
-        recycleDelay: 1,
+        magicType: 'instant',
+        magicEffect: 'altar-discover-class-magic',
+        description: '一次性魔法：发现 1 张专属 Magic 卡。',
       },
       destination: 'backpack',
       message: '附魔祭坛翻转为「祭坛秘术」，已放入背包。',
@@ -2039,6 +2014,7 @@ export const STARTER_CARD_IDS = {
   dungeonGoldAmulet: 'starter-amulet-dungeon-gold',
   permGrantMagic: 'starter-instant-perm-grant',
   recycleDrawMagic: 'starter-perm-recycle-draw',
+  essenceExtract: 'starter-perm-essence-extract',
 } as const;
 
 export function getStarterBaseId(cardId: string): string {
@@ -2315,7 +2291,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterAmuletLoneImage,
       amuletEffect: 'lone-card',
       description: '每次瀑流时（回收前），若背包卡牌数量为 1，获得一张职业专属牌。',
-      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.attackPersuadeAmulet,
@@ -2325,7 +2300,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletPersuadeDiscountImage,
       amuletEffect: 'attack-persuade-discount',
       description: '每攻击一次，下次劝降费用 -3（可叠加）。',
-      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.cardGainMissileAmulet,
@@ -2335,7 +2309,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletMissileImage,
       amuletEffect: 'card-gain-missile',
       description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。',
-      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.damageClassDiscoverAmulet,
@@ -2345,7 +2318,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletDamageDiscoverImage,
       amuletEffect: 'damage-class-discover',
       description: '每造成 5 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
-      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.swapUpgradeAmulet,
@@ -2364,7 +2336,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletStunCapImage,
       amuletEffect: 'stun-upgrade-cap',
       description: '每击晕一次怪物，击晕上限 +5%。',
-      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.recycleBackpackExpandAmulet,
@@ -2374,7 +2345,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletRecycleExpandImage,
       amuletEffect: 'recycle-backpack-expand',
       description: '每回收 10 张牌，背包上限 +3。',
-      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.dungeonGoldAmulet,
@@ -2384,7 +2354,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletDungeonGoldImage,
       amuletEffect: 'dungeon-gold',
       description: '每处理 1 张地城牌，金币 +1。',
-      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.undyingBlessing,
@@ -2543,10 +2512,21 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterThunderStrikeImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：对一个怪物造成 1 点伤害 2 次，每次 10% 击晕。',
-      description: '对一个怪物造成 1 点法术伤害 2 次，每次有 10% 概率击晕目标。',
+      magicEffect: '永久魔法：对一个怪物造成 1 点伤害 2 次，每次 20% 击晕。',
+      description: '对一个怪物造成 1 点法术伤害 2 次，每次有 20% 概率击晕目标。',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
+    },
+    {
+      id: STARTER_CARD_IDS.essenceExtract,
+      type: 'magic',
+      name: '精华萃取',
+      value: 0,
+      image: dedupeMagicArcaneRefineImage,
+      magicType: 'permanent',
+      magicEffect: '永久魔法：移除一张手牌（从游戏中删除），根据移除的牌类型获得装备栏永久加成。',
+      description: '移除一张手牌。一次性魔法→左栏攻击+1；装备→右栏攻击+1；护符→右栏护甲+1；怪物/药水→左栏护甲+1。',
+      recycleDelay: 2,
     },
   ];
 }

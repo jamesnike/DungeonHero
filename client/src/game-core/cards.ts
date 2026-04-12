@@ -7,6 +7,7 @@ import type { ActiveRowSlots } from '@/components/game-board/types';
 import type { GameState } from './types';
 import { HAND_LIMIT, BASE_BACKPACK_CAPACITY, DUNGEON_COLUMN_COUNT } from './constants';
 import { isBackpackRestrictedCard, flattenActiveRowSlots } from './helpers';
+import { applyMonsterRage } from '@/lib/monsterRage';
 
 // ---------------------------------------------------------------------------
 // Hand operations
@@ -51,7 +52,9 @@ export function addCardToBackpackPure(
   }
   const capacity = getEffectiveBackpackCapacity(state);
   if (state.backpackItems.length >= capacity) {
-    return { discardedCards: [...state.discardedCards, card] };
+    return {
+      permanentMagicRecycleBag: [...state.permanentMagicRecycleBag, card],
+    };
   }
   return { backpackItems: [...state.backpackItems, card] };
 }
@@ -129,6 +132,32 @@ export function drawMultipleFromBackpack(
 }
 
 // ---------------------------------------------------------------------------
+// Monster stat reset for graveyard
+// ---------------------------------------------------------------------------
+
+/**
+ * Reset a monster's attack / HP / fury back to its "entering active row" state
+ * by clearing all combat-acquired modifiers and re-applying rage from base stats.
+ * Non-monster cards pass through unchanged.
+ */
+export function resetMonsterForGraveyard(card: GameCardData): GameCardData {
+  if (card.type !== 'monster') return card;
+
+  const cleaned: GameCardData = {
+    ...card,
+    specialAttackBoost: 0,
+    tempAttackBoost: 0,
+    tempHpBoost: 0,
+    lowGoldBuffActive: false,
+    reviveUsed: false,
+    durability: undefined,
+    maxDurability: undefined,
+  };
+
+  return applyMonsterRage(cleaned, cleaned.rageTurn ?? 1);
+}
+
+// ---------------------------------------------------------------------------
 // Graveyard operations
 // ---------------------------------------------------------------------------
 
@@ -137,7 +166,7 @@ export function addToGraveyardPure(
   card: GameCardData,
 ): Partial<GameState> {
   return {
-    discardedCards: [...state.discardedCards, card],
+    discardedCards: [...state.discardedCards, resetMonsterForGraveyard(card)],
   };
 }
 
@@ -153,7 +182,7 @@ export function discardAllHandCardsPure(
     discarded: hand,
     patch: {
       handCards: [],
-      discardedCards: [...state.discardedCards, ...hand],
+      discardedCards: [...state.discardedCards, ...hand.map(resetMonsterForGraveyard)],
     },
   };
 }
@@ -242,12 +271,17 @@ export function processRecycleBag(
     }
   }
 
+  const capacity = getEffectiveBackpackCapacity(state);
+  const availableSlots = Math.max(0, capacity - state.backpackItems.length);
+  const toRestore = ready.slice(0, availableSlots);
+  const overflow = ready.slice(availableSlots);
+
   return {
-    restored: ready,
-    remaining: stillWaiting,
+    restored: toRestore,
+    remaining: [...overflow, ...stillWaiting],
     patch: {
-      permanentMagicRecycleBag: stillWaiting,
-      backpackItems: [...state.backpackItems, ...ready],
+      permanentMagicRecycleBag: [...overflow, ...stillWaiting],
+      backpackItems: [...state.backpackItems, ...toRestore],
     },
   };
 }

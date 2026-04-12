@@ -141,6 +141,9 @@ export type EternalRelicId =
   | 'recycle-shuffle'
   | 'equip-empower'
   | 'wraith-purification'
+  | 'persuade-same-halve'
+  | 'persuade-race-bonus'
+  | 'persuade-durability-bonus'
   | `amulet-eternal-${string}`;
 
 export interface EternalRelic {
@@ -269,7 +272,7 @@ export interface GameState {
   permanentSpellLifesteal: number;
   stunCap: number;
   heroStunned: boolean;
-  cardGainUpgradeProgress: number;
+  monsterKillUpgradeProgress: number;
   recycleBackpackProgress: number;
   swapUpgradeProgress: number;
   bugletAmuletObtained: boolean;
@@ -280,6 +283,7 @@ export interface GameState {
   persuadeLevel: number;
   persuadeCostModifier: number;
   lastPersuadeTargetId: string | null;
+  consecutivePersuadeCount: number;
   persuadeSameTargetCostHalve: boolean;
   persuadeRaceBonus: Record<string, number>;
   persuadeSuccessDurabilityBonus: number;
@@ -340,6 +344,8 @@ export interface GameState {
   shopHealUsed: boolean;
   shopLevelUpUsed: boolean;
   shopSkillDiscoverUsed: boolean;
+  shopEquipAttackUsed: boolean;
+  shopEquipArmorUsed: boolean;
   shopSkillOptions: HeroSkillDefinition[];
 
   // --- Events ---
@@ -358,11 +364,12 @@ export interface GameState {
   discoverSourceLabel: string | null;
   deleteModalOpen: boolean;
   upgradeModalOpen: boolean;
+  upgradeModalMaxCount: number | undefined;
   handMagicUpgradeModal: { sourceCardId: string } | null;
   /** 镜影摹形：选择复制目标 */
   mirrorCopyModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
-  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant'; meta?: Record<string, number> } | null;
+  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant'; meta?: Record<string, number> } | null;
   /** 增幅：选择装备栏或手牌中的装备/伤害魔法进行增幅 */
   amplifyModal: { sourceCardId: string } | null;
   graveyardDiscoverState: GameCardData[] | null;

@@ -454,13 +454,15 @@ export type DeckPeekModalStateFateSight = {
   targetMonsterName: string;
 };
 
-/** 命数裁断等：仅翻看主牌堆顶，用于判定删牌数量 */
+/** 命数裁断：翻看主牌堆顶，依类型获得增益/惩罚 */
 export type DeckPeekModalStateDeckJudge = {
   mode: 'deck-judge-delete';
   peekedCards: GameCardData[];
   monsterCount: number;
-  /** 与 monsterCount 相同；展示「将删除 N 张」 */
+  /** 需要删除的牌数（等于 monsterCount，不足时取可删数量） */
   deleteCount: number;
+  /** 各类型产生的增益列表 */
+  gains: DungeonInsightGain[];
 };
 
 /** 万象探知：翻看牌堆顶并根据类型获得增益 */
@@ -680,7 +682,7 @@ export type ActiveAmuletEffects = {
   hasDamageClassDiscover: boolean;
   hasPersuadeGraveyardStack: boolean;
   hasStunRecycleToHand: boolean;
-  hasCardGainUpgrade: boolean;
+  hasMonsterKillUpgrade: boolean;
   hasAttackPersuadeDiscount: boolean;
   hasCardGainMissile: boolean;
   hasSwapUpgrade: boolean;
@@ -688,6 +690,7 @@ export type ActiveAmuletEffects = {
   hasRecycleBackpackExpand: boolean;
   hasDungeonGold: boolean;
   hasArmorHalveEndure: boolean;
+  hasMonsterEquipBuff: boolean;
   hasEndTurnDraw: boolean;
   stunRateBoost: number;
 };

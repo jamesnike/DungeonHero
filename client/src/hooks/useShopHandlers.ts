@@ -20,6 +20,7 @@ import {
   SHOP_HEAL_AMOUNT,
   SHOP_LEVEL_UP_COST,
   SHOP_SKILL_DISCOVER_COST,
+  SHOP_EQUIP_BOOST_COST,
   MAX_SHOP_LEVEL,
   DEV_MODE,
 } from '@/game-core/constants';
@@ -148,6 +149,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     shopHealUsed,
     shopLevelUpUsed,
     shopSkillDiscoverUsed,
+    shopEquipAttackUsed,
+    shopEquipArmorUsed,
     discoverOptions,
     graveyardDiscoverState,
     ghostBladeExileCards,
@@ -186,6 +189,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
   const setShopHealUsed = useEngineSetter('shopHealUsed');
   const setShopLevelUpUsed = useEngineSetter('shopLevelUpUsed');
   const setShopSkillDiscoverUsed = useEngineSetter('shopSkillDiscoverUsed');
+  const setShopEquipAttackUsed = useEngineSetter('shopEquipAttackUsed');
+  const setShopEquipArmorUsed = useEngineSetter('shopEquipArmorUsed');
   const setShopSkillOptions = useEngineSetter('shopSkillOptions');
   const setShopModalOpen = useEngineSetter('shopModalOpen');
   const setShopModalMinimized = useEngineSetter('shopModalMinimized');
@@ -274,6 +279,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       setShopHealUsed(false);
       setShopLevelUpUsed(false);
       setShopSkillDiscoverUsed(false);
+      setShopEquipAttackUsed(false);
+      setShopEquipArmorUsed(false);
       setDeleteModalOpen(false);
       setShopModalOpen(true);
       setShopModalMinimized(false);
@@ -512,6 +519,30 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     setShopLevelUpUsed(true);
     setHeroSkillBanner(`花费 ${SHOP_LEVEL_UP_COST} 金币，商店等级提升了！`);
   }, [engine, shopLevelUpUsed, shopLevel, setGold, setShopLevel, setShopLevelUpUsed, setHeroSkillBanner]);
+
+  const handleShopEquipAttackRequest = useCallback(() => {
+    depsRef.current.pushUndoSnapshot();
+    if (shopEquipAttackUsed || engine.getState().gold < SHOP_EQUIP_BOOST_COST) return;
+    depsRef.current.addGameLog('shop', `商店：全装备栏永久攻击 +1（-${SHOP_EQUIP_BOOST_COST} 金币）`);
+    setGold(prev => prev - SHOP_EQUIP_BOOST_COST);
+    (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
+      depsRef.current.setEquipmentSlotBonus(slotId, 'damage', cur => cur + 1);
+    });
+    setShopEquipAttackUsed(true);
+    setHeroSkillBanner(`花费 ${SHOP_EQUIP_BOOST_COST} 金币，所有装备栏永久攻击 +1！`);
+  }, [engine, shopEquipAttackUsed, setGold, setShopEquipAttackUsed, setHeroSkillBanner]);
+
+  const handleShopEquipArmorRequest = useCallback(() => {
+    depsRef.current.pushUndoSnapshot();
+    if (shopEquipArmorUsed || engine.getState().gold < SHOP_EQUIP_BOOST_COST) return;
+    depsRef.current.addGameLog('shop', `商店：全装备栏永久护甲 +1（-${SHOP_EQUIP_BOOST_COST} 金币）`);
+    setGold(prev => prev - SHOP_EQUIP_BOOST_COST);
+    (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
+      depsRef.current.setEquipmentSlotBonus(slotId, 'shield', cur => cur + 1);
+    });
+    setShopEquipArmorUsed(true);
+    setHeroSkillBanner(`花费 ${SHOP_EQUIP_BOOST_COST} 金币，所有装备栏永久护甲 +1！`);
+  }, [engine, shopEquipArmorUsed, setGold, setShopEquipArmorUsed, setHeroSkillBanner]);
 
   // -- Card upgrade -----------------------------------------------------------
 
@@ -770,6 +801,20 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
             const dc = bloodDrawCounts[newLevel] ?? 5;
             upgraded.description = `永久：失去 1 点生命，抽 ${dc} 张牌。`;
             upgraded.magicEffect = `失去 1 HP，抽 ${dc} 张牌。`;
+            break;
+          }
+          case 'grave-nova': {
+            const novaDmgs = [3, 6];
+            const nd = novaDmgs[newLevel] ?? 6;
+            upgraded.description = `永久：当此牌被弃置时，对当前行所有怪物造成 ${nd} 点伤害。`;
+            upgraded.magicEffect = `被弃置时造成 ${nd} 点爆炸伤害。`;
+            break;
+          }
+          case 'armor-stun-convert': {
+            const stunPerArmor = [1, 2];
+            const sp = stunPerArmor[newLevel] ?? 2;
+            upgraded.description = `永久：选择一个护盾，每 1 点护甲值使击晕上限 +${sp}%。`;
+            upgraded.magicEffect = `护甲转化为击晕上限（每点 +${sp}%）。`;
             break;
           }
           default:
@@ -1588,6 +1633,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     handleShopDeleteRequest,
     handleShopHealRequest,
     handleShopLevelUpRequest,
+    handleShopEquipAttackRequest,
+    handleShopEquipArmorRequest,
 
     // Card upgrade
     handleCardUpgrade,

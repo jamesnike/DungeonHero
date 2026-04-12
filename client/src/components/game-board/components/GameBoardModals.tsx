@@ -130,6 +130,11 @@ export type GameBoardModalsProps = {
   canDiscoverSkill: boolean;
   discoverSkillDisabledReason?: string;
   onShopSkillDiscoverRequest: () => void;
+  shopEquipBoostCost: number;
+  shopEquipAttackUsed: boolean;
+  shopEquipArmorUsed: boolean;
+  onShopEquipAttackRequest: () => void;
+  onShopEquipArmorRequest: () => void;
 
   // --- Shop skill select ---
   shopSkillSelectOpen: boolean;
@@ -194,6 +199,7 @@ export type GameBoardModalsProps = {
 
   // --- Card upgrade ---
   upgradeModalOpen: boolean;
+  upgradeModalMaxCount?: number;
   onUpgradeModalChange: (open: boolean) => void;
   equipmentSlot1: EquipmentItem | null;
   equipmentSlot2: EquipmentItem | null;
@@ -330,6 +336,11 @@ function GameBoardModalsInner({
   canDiscoverSkill,
   discoverSkillDisabledReason,
   onShopSkillDiscoverRequest,
+  shopEquipBoostCost,
+  shopEquipAttackUsed,
+  shopEquipArmorUsed,
+  onShopEquipAttackRequest,
+  onShopEquipArmorRequest,
 
   shopSkillSelectOpen,
   shopSkillOptions,
@@ -380,6 +391,7 @@ function GameBoardModalsInner({
   onPersuadeClose,
 
   upgradeModalOpen,
+  upgradeModalMaxCount,
   onUpgradeModalChange,
   equipmentSlot1,
   equipmentSlot2,
@@ -601,6 +613,11 @@ function GameBoardModalsInner({
         canDiscoverSkill={canDiscoverSkill}
         discoverSkillDisabledReason={discoverSkillDisabledReason}
         onShopSkillDiscoverRequest={onShopSkillDiscoverRequest}
+        shopEquipBoostCost={shopEquipBoostCost}
+        shopEquipAttackUsed={shopEquipAttackUsed}
+        shopEquipArmorUsed={shopEquipArmorUsed}
+        onShopEquipAttackRequest={onShopEquipAttackRequest}
+        onShopEquipArmorRequest={onShopEquipArmorRequest}
       />
 
       <ShopSkillSelectModal
@@ -683,6 +700,7 @@ function GameBoardModalsInner({
       <CardUpgradeModal
         open={upgradeModalOpen}
         onOpenChange={onUpgradeModalChange}
+        maxUpgrades={upgradeModalMaxCount}
         handCards={handCards}
         backpackItems={backpackItems}
         equipmentSlot1={equipmentSlot1}

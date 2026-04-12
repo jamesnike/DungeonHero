@@ -71,6 +71,9 @@ export const normalizeHeroEquipmentSlotFromDrag = (
 // Card helpers
 // ---------------------------------------------------------------------------
 
+export const isDamageableTarget = (card: GameCardData | null | undefined): card is GameCardData =>
+  Boolean(card && (card.type === 'monster' || card.type === 'building'));
+
 export const isBackpackRestrictedCard = (card: GameCardData | null): boolean =>
   Boolean(
     card &&

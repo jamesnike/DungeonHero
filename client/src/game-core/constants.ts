@@ -55,6 +55,7 @@ export const SHOP_HEAL_COST = 5;
 export const SHOP_HEAL_AMOUNT = 5;
 export const SHOP_LEVEL_UP_COST = 10;
 export const SHOP_SKILL_DISCOVER_COST = 10;
+export const SHOP_EQUIP_BOOST_COST = 15;
 
 // ---------------------------------------------------------------------------
 // Combat balance
@@ -141,7 +142,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasDamageClassDiscover: false,
   hasPersuadeGraveyardStack: false,
   hasStunRecycleToHand: false,
-  hasCardGainUpgrade: false,
+  hasMonsterKillUpgrade: false,
   hasAttackPersuadeDiscount: false,
   hasCardGainMissile: false,
   hasSwapUpgrade: false,

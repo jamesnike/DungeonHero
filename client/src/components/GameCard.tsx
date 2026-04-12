@@ -144,7 +144,7 @@ export type AmuletEffectId =
   | 'stun-upgrade-cap'
   | 'recycle-backpack-expand'
   | 'dungeon-gold'
-  | 'card-gain-upgrade'
+  | 'monster-kill-upgrade'
   | 'end-turn-draw';
 
 export type AmuletAuraBonus = {
@@ -255,6 +255,7 @@ export interface GameCardData {
   damageReflect?: number; // Damage reflected back to attacker when blocking
   shieldPerfectBlockSaveChance?: number; // % chance to save durability on perfect block
   shieldBashStunRate?: number; // Per-armor-point stun % when shield-bashing a monster (e.g. 5 → 5% × armor)
+  shieldBashUnlimited?: boolean; // Shield bash has no per-turn limit; can bash as long as durability remains
   reflectHalfDamage?: boolean; // Reflect half of incoming attack damage back to attacker
   // Class card properties
   classCard?: boolean; // Marks as a class card
@@ -280,6 +281,7 @@ export interface GameCardData {
   healOnAttack?: number; // Heal this amount each time this weapon attacks
   onAttackBuffOtherSlotTempAttack?: number; // Give the OTHER equipment slot +N temp attack on each attack
   onAttackRepairOtherSlot?: number; // Restore N durability to the OTHER equipment slot on each attack
+  onAttackDebuffAllMonsterAttack?: number; // Reduce ALL active row monsters' attack by N on each attack
   daggerSelfDestructDiscover?: boolean; // 匕首: after attack, optionally destroy weapon to discover class cards (1 per remaining durability)
   ghostBladeExile?: boolean; // 虚灵刀: after each attack, offer to exile cards from graveyard
   postAttackHandRecycle?: boolean; // After each attack, optionally move a hand card to recycle bag and draw one
@@ -301,6 +303,7 @@ export interface GameCardData {
   _shieldBlockCount?: number; // Internal counter for blocks performed
   shieldExtraBlocksPerDurability?: number; // Extra armor-depleted blocks before losing 1 durability
   equipBlockDurabilityBonus?: number; // Per-equipment bonus to blockDurabilityPerSlot (how many durability can be consumed per monster turn)
+  shieldRefillOnMonsterDeath?: boolean; // Refill durability to max when the attacking monster dies after its attack (e.g. layer drop to 0)
   _shieldDurabilityBlockCounter?: number; // Runtime counter for extra-block durability tracking
   _counterDisplay?: string; // Dynamic counter text shown on card (e.g. "2/5")
   blockGrantTempArmorToOther?: boolean; // On block, grant temp armor equal to shield value to other slot

@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpCircle, Coins, Heart, ShoppingBag, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowUpCircle, Coins, Heart, Shield, ShoppingBag, Sparkles, Sword, Trash2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
 import {
   EventPatternPreview,
@@ -57,6 +57,11 @@ interface ShopModalProps {
   canDiscoverSkill?: boolean;
   discoverSkillDisabledReason?: string;
   onShopSkillDiscoverRequest?: () => void;
+  shopEquipBoostCost?: number;
+  shopEquipAttackUsed?: boolean;
+  shopEquipArmorUsed?: boolean;
+  onShopEquipAttackRequest?: () => void;
+  onShopEquipArmorRequest?: () => void;
 }
 
 export default function ShopModal({
@@ -88,6 +93,11 @@ export default function ShopModal({
   canDiscoverSkill = true,
   discoverSkillDisabledReason,
   onShopSkillDiscoverRequest,
+  shopEquipBoostCost = 15,
+  shopEquipAttackUsed,
+  shopEquipArmorUsed,
+  onShopEquipAttackRequest,
+  onShopEquipArmorRequest,
 }: ShopModalProps) {
   const isBackpackFull = backpackCount >= backpackCapacity;
   const deleteOptionDisabled = !canDeleteCard;
@@ -237,7 +247,7 @@ export default function ShopModal({
               );
             })}
 
-            {shopLevel >= 1 && (
+            {(
               <div
                 className={`flex flex-col gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4 shadow-sm sm:flex-row sm:items-center ${deleteOptionDisabled ? 'opacity-70' : ''}`}
               >
@@ -267,7 +277,7 @@ export default function ShopModal({
               </div>
             )}
 
-            {shopLevel >= 2 && (() => {
+            {shopLevel >= 1 && (() => {
               const isFullHp = typeof hp === 'number' && typeof maxHp === 'number' && hp >= maxHp;
               const canAffordHeal = gold >= healCost;
               const healDisabled = shopHealUsed || isFullHp || !canAffordHeal;
@@ -310,6 +320,86 @@ export default function ShopModal({
                     </Button>
                   </div>
                 </div>
+              );
+            })()}
+
+            {shopLevel >= 2 && (() => {
+              const canAffordAttack = gold >= shopEquipBoostCost;
+              const attackDisabled = shopEquipAttackUsed || !canAffordAttack;
+              const canAffordArmor = gold >= shopEquipBoostCost;
+              const armorDisabled = shopEquipArmorUsed || !canAffordArmor;
+              return (
+                <>
+                  <div
+                    className={`flex flex-col gap-3 rounded-md border border-red-500/40 bg-red-500/5 p-4 shadow-sm sm:flex-row sm:items-center ${attackDisabled ? 'opacity-70' : ''}`}
+                  >
+                    <div className="flex gap-3 flex-1">
+                      <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-red-500/10 text-red-600 flex items-center justify-center">
+                        <Sword className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-semibold text-red-700 dark:text-red-400">强化攻击</p>
+                          <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-700 dark:text-red-400">
+                            每次商店限一次
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          花费 {shopEquipBoostCost} 金币，所有装备栏永久攻击 +1。
+                        </p>
+                        {shopEquipAttackUsed && <p className="text-xs text-red-700 dark:text-red-400">本次商店的强化攻击机会已使用。</p>}
+                        {!shopEquipAttackUsed && !canAffordAttack && <p className="text-xs text-destructive">金币不足。</p>}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        价格：<span className="text-lg font-semibold text-yellow-500">{shopEquipBoostCost}</span> 金币
+                      </span>
+                      <Button
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                        disabled={attackDisabled}
+                        onClick={onShopEquipAttackRequest}
+                      >
+                        强化攻击
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`flex flex-col gap-3 rounded-md border border-sky-500/40 bg-sky-500/5 p-4 shadow-sm sm:flex-row sm:items-center ${armorDisabled ? 'opacity-70' : ''}`}
+                  >
+                    <div className="flex gap-3 flex-1">
+                      <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-sky-500/10 text-sky-600 flex items-center justify-center">
+                        <Shield className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-semibold text-sky-700 dark:text-sky-400">强化护甲</p>
+                          <Badge variant="outline" className="text-[10px] border-sky-500/50 text-sky-700 dark:text-sky-400">
+                            每次商店限一次
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          花费 {shopEquipBoostCost} 金币，所有装备栏永久护甲 +1。
+                        </p>
+                        {shopEquipArmorUsed && <p className="text-xs text-sky-700 dark:text-sky-400">本次商店的强化护甲机会已使用。</p>}
+                        {!shopEquipArmorUsed && !canAffordArmor && <p className="text-xs text-destructive">金币不足。</p>}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        价格：<span className="text-lg font-semibold text-yellow-500">{shopEquipBoostCost}</span> 金币
+                      </span>
+                      <Button
+                        className="bg-sky-600 hover:bg-sky-700 text-white"
+                        disabled={armorDisabled}
+                        onClick={onShopEquipArmorRequest}
+                      >
+                        强化护甲
+                      </Button>
+                    </div>
+                  </div>
+                </>
               );
             })()}
 

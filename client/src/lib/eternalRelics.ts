@@ -85,7 +85,7 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'chain-persuade': {
     id: 'chain-persuade',
     name: '永恒护符·连劝秘药',
-    description: '连续两次劝降同一个怪物时，成功概率 +15%。',
+    description: '连续劝降同一个怪物时，每次累计成功概率 +15%。',
     image: relicChainPersuadeImage,
   },
   'recycle-shuffle': {
@@ -103,8 +103,26 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'wraith-purification': {
     id: 'wraith-purification',
     name: '永恒护符·幽魂净化',
-    description: '每当背包空了，将回收袋洗回背包（没有使用上限）。',
+    description: '每当玩家回合结束时，将回收袋所有牌洗回背包（无次数限制）。',
     image: relicWraithPurificationImage,
+  },
+  'persuade-same-halve': {
+    id: 'persuade-same-halve',
+    name: '永恒护符·连劝减半',
+    description: '连续劝降同一怪物，第二次费用减半。',
+    image: relicChainPersuadeImage,
+  },
+  'persuade-race-bonus': {
+    id: 'persuade-race-bonus',
+    name: '永恒护符·种族怀柔',
+    description: 'Skeleton/Wraith 劝降成功率 +20%。',
+    image: relicChainPersuadeImage,
+  },
+  'persuade-durability-bonus': {
+    id: 'persuade-durability-bonus',
+    name: '永恒护符·劝降耐久',
+    description: '劝降成功的怪物起始耐久 +1。',
+    image: relicChainPersuadeImage,
   },
 };
 
@@ -120,7 +138,7 @@ export function hasEternalRelic(relics: EternalRelic[], id: EternalRelicId): boo
   return relics.some(r => r.id === id);
 }
 
-const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification']);
+const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus']);
 
 export function getSelectableRelics(exclude: EternalRelicId[]): EternalRelic[] {
   const excludeSet = new Set(exclude);

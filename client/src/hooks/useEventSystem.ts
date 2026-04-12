@@ -28,6 +28,7 @@ import {
   computeAmuletAuraReversal,
   isDamageMagic,
 } from '@/game-core/helpers';
+import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
 import {
   createGraveyardRecallCard,
 } from '@/lib/knightDeck';
@@ -256,12 +257,15 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   const setPersuadeRaceBonus = useEngineSetter('persuadeRaceBonus');
   const setPersuadeSuccessDurabilityBonus = useEngineSetter('persuadeSuccessDurabilityBonus');
   const setPermanentMagicRecycleBag = useEngineSetter('permanentMagicRecycleBag');
+  const setEternalRelics = useEngineSetter('eternalRelics');
   const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
+  const setUpgradeModalMaxCount = useEngineSetter('upgradeModalMaxCount');
   const setGambitExtraActive = useEngineSetter('gambitExtraActive');
   const setGambitExtraPerSlot = useEngineSetter('gambitExtraPerSlot');
   const setGambitSlotUsed = useEngineSetter('gambitSlotUsed');
   const setPermGrantModal = useEngineSetter('permGrantModal');
   const setActiveCardStacks = useEngineSetter('activeCardStacks');
+  const setDoubleNextMagic = useEngineSetter('doubleNextMagic');
 
   // -- Derived values ---------------------------------------------------------
 
@@ -455,10 +459,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       }
 
       if (depsRef.current.amuletEffects.hasDungeonGold) {
-        const goldAmulet = engine.getState().amuletSlots.find(s => s?.amuletEffect === 'dungeon-gold');
-        const goldAmount = (goldAmulet?.upgradeLevel ?? 0) >= 1 ? 2 : 1;
-        setGold(prev => prev + goldAmount);
-        addGameLog('amulet', `拾荒之符：处理地城牌，金币 +${goldAmount}`);
+        setGold(prev => prev + 1);
+        addGameLog('amulet', `拾荒之符：处理地城牌，金币 +1`);
       }
 
       pendingAutoDrawsRef.current += 1;
@@ -1041,22 +1043,27 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         setTurnCount(prev => Math.max(1, prev - 2));
         setHeroSkillBanner('时空收缩：怪物成长进度回退了 2 步！');
       } else if (effect === 'flipToDoubleNextMagic') {
+        setDoubleNextMagic(true);
+        addGameLog('event', '事件效果：法术回响已激活，下一张法术的效果将触发两次');
+        setHeroSkillBanner('法术回响已激活！下一张法术的效果将触发两次。');
+      } else if (effect === 'flipToArcaneShield') {
         if (currentEventCard) {
-          const doubleCard: GameCardData = {
-            id: `double-magic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          const shieldCard: GameCardData = {
+            id: `arcane-shield-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             type: 'magic',
-            name: '法术回响',
+            name: '奥术护盾',
             value: 0,
             image: skillScrollImage,
             magicType: 'permanent',
-            magicEffect: 'double-next-magic',
-            description: '永久魔法：使用后，下一张法术的效果将触发两次。',
+            magicEffect: 'arcane-shield-stun-cap',
+            description: '永久魔法（Perm 2）：击晕上限 +X%，X = 本回合已使用的非伤害魔法卡数量。',
+            recycleDelay: 2,
           };
-          await depsRef.current.triggerEventTransform(currentEventCard, doubleCard, '契约裂隙涌出回响之力…');
+          await depsRef.current.triggerEventTransform(currentEventCard, shieldCard, '奥术回廊翻转为「奥术护盾」…');
           depsRef.current.skipNextEventAutoDrawRef.current = true;
-          depsRef.current.addCardToBackpack(doubleCard);
-          addGameLog('event', '事件效果：获得「法术回响」');
-          setHeroSkillBanner('裂隙中浮现了「法术回响」，已放入背包。');
+          depsRef.current.addCardToBackpack(shieldCard);
+          addGameLog('event', '事件效果：奥术回廊翻转成了「奥术护盾」');
+          setHeroSkillBanner('奥术回廊翻转为奥术护盾，已放入背包。');
           if (depsRef.current.amuletEffects.hasFlipGold) {
             setGold(prev => prev + FLIP_GOLD_REWARD);
             addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
@@ -1244,6 +1251,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                 depsRef.current.triggerClassDeckFlight(drawn);
               } else if (eff === 'upgradeCard') {
                 addGameLog('event', '命运十字路口：选择一张牌升级');
+                setUpgradeModalMaxCount(undefined);
                 setUpgradeModalOpen(true);
               }
             }
@@ -1323,8 +1331,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             name: '淬炼药剂',
             value: 0,
             image: potionWeaponRepairImage,
-            description: '使用时左装备栏的装备耐久上限 +1。翻转后为右装备栏耐久上限 +1 的药剂。',
-            potionEffect: 'left-slot-durability-max+1',
+            description: '使用时左装备栏的装备耐久上限 +2。翻转后为右装备栏耐久上限 +2 的药剂。',
+            potionEffect: 'left-slot-durability-max+2',
             flipTarget: {
               toCard: {
                 id: flipPotionId,
@@ -1332,8 +1340,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                 name: '淬炼药剂（右）',
                 value: 0,
                 image: potionWeaponRepairImage,
-                description: '使用时右装备栏的装备耐久上限 +1。',
-                potionEffect: 'right-slot-durability-max+1',
+                description: '使用时右装备栏的装备耐久上限 +2。',
+                potionEffect: 'right-slot-durability-max+2',
               },
               destination: 'backpack',
               banner: '淬炼药剂翻转，右侧淬炼之力凝结…',
@@ -1344,6 +1352,29 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           depsRef.current.addCardToBackpack(durabilityPotion);
           addGameLog('event', '事件效果：遗稿翻转成了「淬炼药剂」');
           setHeroSkillBanner('遗稿翻转成了淬炼药剂，已放入背包。');
+          if (depsRef.current.amuletEffects.hasFlipGold) {
+            setGold(prev => prev + FLIP_GOLD_REWARD);
+            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+          }
+        }
+      } else if (effect === 'flipToMonsterAttackDebuff') {
+        if (currentEventCard) {
+          const debuffCard: GameCardData = {
+            id: `monster-atk-debuff-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'magic',
+            name: '威压之令',
+            value: 0,
+            image: skillScrollImage,
+            magicType: 'permanent',
+            magicEffect: 'active-row-monster-attack-debuff',
+            description: '永久魔法（Perm 1）：激活行所有怪物攻击力 -2。',
+            recycleDelay: 1,
+          };
+          await depsRef.current.triggerEventTransform(currentEventCard, debuffCard, '战血荣誉翻转为「威压之令」…');
+          depsRef.current.skipNextEventAutoDrawRef.current = true;
+          depsRef.current.addCardToBackpack(debuffCard);
+          addGameLog('event', '事件效果：战血荣誉翻转成了「威压之令」');
+          setHeroSkillBanner('战血荣誉翻转为威压之令，已放入背包。');
           if (depsRef.current.amuletEffects.hasFlipGold) {
             setGold(prev => prev + FLIP_GOLD_REWARD);
             addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
@@ -1506,8 +1537,11 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         }
       } else if (effect === 'persuadeSameTargetCostHalve') {
         setPersuadeSameTargetCostHalve(true);
+        if (!hasEternalRelic(engine.getState().eternalRelics, 'persuade-same-halve')) {
+          setEternalRelics(prev => [...prev, getEternalRelic('persuade-same-halve')]);
+        }
         addGameLog('event', '事件效果：连续劝降同一怪物，第二次费用减半');
-        setHeroSkillBanner('连续劝降同一怪物时，第二次费用减半！');
+        setHeroSkillBanner('获得永恒护符·连劝减半！');
       } else if (effect.startsWith('persuadeRaceBonus:')) {
         const parts = effect.replace('persuadeRaceBonus:', '').split(':');
         const races = parts[0].split(',');
@@ -1517,13 +1551,19 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           races.forEach(race => { next[race] = (next[race] ?? 0) + bonus; });
           return next;
         });
+        if (!hasEternalRelic(engine.getState().eternalRelics, 'persuade-race-bonus')) {
+          setEternalRelics(prev => [...prev, getEternalRelic('persuade-race-bonus')]);
+        }
         addGameLog('event', `事件效果：${races.join('、')} 劝降成功率 +${bonus}%`);
-        setHeroSkillBanner(`${races.join('、')} 的劝降成功率永久 +${bonus}%！`);
+        setHeroSkillBanner(`获得永恒护符·种族怀柔！${races.join('、')} 劝降率 +${bonus}%！`);
       } else if (effect.startsWith('persuadeSuccessDurabilityBonus+')) {
         const amount = parseInt(effect.replace('persuadeSuccessDurabilityBonus+', ''), 10) || 1;
         setPersuadeSuccessDurabilityBonus(prev => prev + amount);
+        if (!hasEternalRelic(engine.getState().eternalRelics, 'persuade-durability-bonus')) {
+          setEternalRelics(prev => [...prev, getEternalRelic('persuade-durability-bonus')]);
+        }
         addGameLog('event', `事件效果：劝降成功的怪物起始耐久 +${amount}`);
-        setHeroSkillBanner(`劝降成功的怪物起始耐久 +${amount}！`);
+        setHeroSkillBanner(`获得永恒护符·劝降耐久！起始耐久 +${amount}！`);
       } else if (effect === 'upgradePersuadeAmulets') {
         const currentAmulets = engine.getState().amuletSlots;
         let upgraded = false;
@@ -1929,6 +1969,22 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
           }
         }
+      } else if (effect === 'grantTwoUpgradeScrolls') {
+        for (let i = 0; i < 2; i++) {
+          const scroll: GameCardData = {
+            id: `upgrade-scroll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${i}`,
+            type: 'magic',
+            name: '升级卷轴',
+            value: 0,
+            image: starterScrollUpgradeImage,
+            magicType: 'instant',
+            magicEffect: '即时魔法：升级一张牌。',
+            description: '一次性使用，选择一张牌进行升级。',
+          };
+          depsRef.current.addCardToBackpack(scroll);
+        }
+        addGameLog('event', '事件效果：获得了 2 张「升级卷轴」');
+        setHeroSkillBanner('获得了 2 张升级卷轴，已放入背包。');
       } else if (effect.startsWith('discardCards:')) {
         const discardCount = parseInt(effect.replace('discardCards:', ''), 10) || 1;
         const success = await depsRef.current.requestCardAction('discard-recycle', discardCount, {
@@ -2156,6 +2212,29 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           depsRef.current.addCardToBackpack(blessingCard);
           addGameLog('event', '事件效果：血咒仪式翻转成了「不灭赐福」');
           setHeroSkillBanner('血咒仪式翻转成了不灭赐福，已放入背包。');
+          if (depsRef.current.amuletEffects.hasFlipGold) {
+            setGold(prev => prev + FLIP_GOLD_REWARD);
+            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+          }
+        }
+      } else if (effect === 'flipToCurseWeapon') {
+        if (currentEventCard) {
+          const curseWeapon: GameCardData = {
+            id: `curse-weapon-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'weapon',
+            name: '封印之刃',
+            value: 2,
+            image: skillScrollImage,
+            durability: 1,
+            maxDurability: 1,
+            onEquipEffect: 'durability-max+1',
+            description: '入场：当前装备栏耐久度上限 +1。',
+          };
+          await depsRef.current.triggerEventTransform(currentEventCard, curseWeapon, '血咒仪式翻转为封印之刃…');
+          depsRef.current.skipNextEventAutoDrawRef.current = true;
+          depsRef.current.addCardToBackpack(curseWeapon);
+          addGameLog('event', '事件效果：血咒仪式翻转成了「封印之刃」');
+          setHeroSkillBanner('血咒仪式翻转成了封印之刃，已放入背包。');
           if (depsRef.current.amuletEffects.hasFlipGold) {
             setGold(prev => prev + FLIP_GOLD_REWARD);
             addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
@@ -2673,10 +2752,12 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           eventResolutionDeferred = true;
           break;
         }
-      } else if (effect === 'upgradeCard') {
-        addGameLog('event', '事件效果：选择一张牌升级');
+      } else if (effect === 'upgradeCard' || effect.startsWith('upgradeCard:')) {
+        const count = effect.startsWith('upgradeCard:') ? parseInt(effect.split(':')[1], 10) || 1 : undefined;
+        addGameLog('event', count ? `事件效果：选择至多 ${count} 张牌升级` : '事件效果：选择一张牌升级');
+        setUpgradeModalMaxCount(count);
         setUpgradeModalOpen(true);
-        setHeroSkillBanner('选择一张牌进行升级。');
+        setHeroSkillBanner(count ? `选择至多 ${count} 张牌进行升级。` : '选择一张牌进行升级。');
       } else if (effect === 'repairAll') {
         addGameLog('event', '事件效果：全部装备耐久回满');
         const slots = depsRef.current.getEquipmentSlots();
@@ -2823,7 +2904,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         setCurrentEventCard(null);
         finalizeEventResolution({ removeFromDungeon: false });
 
-        const damage = 3;
+        const damage = 4;
         setHp(prev => Math.max(0, prev - damage));
         depsRef.current.addHeroMagicGauge('holy-light', 1);
         addGameLog('event', `秘藏宝库深入探索：受到 ${damage} 点伤害`);
@@ -2839,15 +2920,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           addGameLog('event', '秘藏宝库翻转回未开启状态');
         }
 
-        setTurnCount(prev => prev + 1);
-        addGameLog('event', '瀑流计数 +1');
-        if (depsRef.current.bulwarkTempArmorRef.current > 0) {
-          const pL = gs.slotTempArmor.equipmentSlot1 ?? 0;
-          const pR = gs.slotTempArmor.equipmentSlot2 ?? 0;
-          setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
-        }
-
-        setHeroSkillBanner(`深入探索！受到 ${damage} 点伤害，瀑流计数 +1！`);
+        setHeroSkillBanner(`深入探索！受到 ${damage} 点伤害！`);
         eventResolutionDeferred = true;
         break;
       } else if (effect === 'fate-dice-strike') {
