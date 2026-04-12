@@ -44,6 +44,7 @@ import warhammerImage from '@assets/generated_images/thunder_warhammer.png';
 import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
 import ironShieldImage from '@assets/generated_images/cute_iron_shield.png';
 import heavyShieldImage from '@assets/generated_images/card_dedupe_shield_heavy_main.png';
+import bastionShieldImage from '@assets/generated_images/knight_bastion_shield.png';
 
 // ---------------------------------------------------------------------------
 // Potion images
@@ -490,12 +491,11 @@ export function createDeck(): GameCardData[] {
       card.onEquipEffect = 'spell-lifesteal+1';
       card.overkillDraw = 1;
       card.description = '入场：超杀吸血 +1。超杀：抽 1 张牌。';
-      const hbDurability = Math.floor(Math.random() * 2) + 1;
-      card.durability = hbDurability;
-      card.maxDurability = hbDurability;
+      card.durability = 2;
+      card.maxDurability = 2;
     }
     if (weaponType.name === '虚灵刀') {
-      card.durability = Math.floor(Math.random() * 3) + 1;
+      card.durability = Math.floor(Math.random() * 2) + 2;
       card.maxDurability = card.durability;
       card.ghostBladeExile = true;
       card.description = '每次攻击后，可从坟场选择卡牌移除出游戏。';
@@ -534,9 +534,8 @@ export function createDeck(): GameCardData[] {
     }
     if (weaponType.name === '战锤') {
       card.value = Math.floor(Math.random() * 3) + 1;
-      const whDurability = Math.floor(Math.random() * 2) + 1;
-      card.durability = whDurability;
-      card.maxDurability = whDurability;
+      card.durability = 2;
+      card.maxDurability = 2;
       card.weaponStunChance = 40;
       card.onEquipEffect = 'stunCap+5';
       card.description = '入场：击晕上限 +5%。击晕率 40%。';
@@ -550,7 +549,7 @@ export function createDeck(): GameCardData[] {
     { name: 'Wooden Shield', value: 2, image: woodenShieldImage },
     { name: 'Iron Shield', value: 3, image: ironShieldImage },
     { name: 'Heavy Shield', value: 4, image: heavyShieldImage },
-    { name: '壁垒之盾', value: 0, image: woodenShieldImage },
+    { name: '壁垒之盾', value: 0, image: bastionShieldImage },
   ];
   
   // 2 shields of each type (8 total)
@@ -562,7 +561,7 @@ export function createDeck(): GameCardData[] {
     } else if (shieldType.name === 'Iron Shield') {
       durability = Math.floor(Math.random() * 3) + 1; // 1-3
     } else if (shieldType.name === '壁垒之盾') {
-      durability = Math.floor(Math.random() * 2) + 1; // 1-2
+      durability = 2;
     } else {
       durability = Math.floor(Math.random() * 2) + 1; // 1-2
     }
@@ -965,7 +964,7 @@ export function createDeck(): GameCardData[] {
     name: '命运十字路口',
     value: 0,
     image: dedupeEventFateCrossroadsImage,
-    description: '打开时向左平移至被阻挡位置。若正下方有装备或护符，可破坏它并获得全部效果。',
+    description: '打开时向左平移至被阻挡位置。若正下方有装备或护符，可破坏它并获得全部效果。选择任意选项后翻转为「命运挪移」。',
     eventChoices: [
       { text: '倾听命运的低语（发现2张专属卡）', effect: 'drawClass2', hint: '获得 2 张职业牌放入背包' },
       { text: '与命运商贩交谈（商店等级+1 并 打开商店）', effect: ['shopLevel+1', 'openShop'], hint: '商店等级+1 并立刻开启商店' },
@@ -1002,6 +1001,7 @@ export function createDeck(): GameCardData[] {
     name: '秘藏宝库',
     value: 0,
     image: dedupeEventSecretVaultImage,
+    description: '选择选项后翻转为「秘藏宝库（已开启）」，可重复使用。',
     eventChoices: [
       {
         text: '搜刮遗物（获得两张专属卡，随机弃回两张手牌）',
@@ -1072,6 +1072,7 @@ export function createDeck(): GameCardData[] {
     name: '暗影契约',
     value: 0,
     image: dedupeEventShadowPactImage,
+    description: '选择选项后翻转为「暗影之刺」永久魔法（扩展手牌选项除外）。',
     eventChoices: [
       { text: '签下血约（受到 8 点伤害）', effect: 'hp-8' },
       {
@@ -1116,6 +1117,7 @@ export function createDeck(): GameCardData[] {
     name: '共鸣熔炉',
     value: 0,
     image: dedupeEventResonanceForgeImage,
+    description: '选择选项后翻转为「熔炉之心」护符。',
     eventChoices: [
       { text: '左槽淬火（左槽永久伤害 +2，恢复2耐久）', effect: ['slotLeftDamage+2', 'repairSlot:left:2'] },
       { text: '右槽固化（右槽永久护甲 +2，恢复2耐久）', effect: ['slotRightDefense+2', 'repairSlot:right:2'] },
@@ -1145,6 +1147,7 @@ export function createDeck(): GameCardData[] {
     name: '破坏祭坛',
     value: 0,
     image: dedupeEventGreedyAltarImage,
+    description: '选择选项后翻转为「破印遗物」一次性魔法。',
     eventChoices: [
       {
         id: 'greedy-left',
@@ -1307,6 +1310,7 @@ export function createDeck(): GameCardData[] {
     name: '双重燃烧',
     value: 0,
     image: dedupeEventCrimsonPactImage,
+    description: '选择选项后翻转为「双重燃烧（觉醒）」，代价更高但可反复使用。',
     eventChoices: [
       { text: '血价交易（-2 HP，发现专属）', effect: 'hp-2,discoverClass' },
       {
@@ -1379,7 +1383,7 @@ export function createDeck(): GameCardData[] {
     name: '墓语密室',
     value: 0,
     image: dedupeEventCryptWhisperImage,
-    description: '若左右两侧都是怪物，可获得翻转效果。',
+    description: '左右两侧都是怪物时，翻转为「墓语回响」；否则翻转为「墓语遗愿」。',
     eventChoices: [
       {
         text: '净化杂质（删 3 张牌）',
@@ -1433,6 +1437,7 @@ export function createDeck(): GameCardData[] {
     name: '命运骰盅',
     value: 0,
     image: dedupeEventFateDiceCupImage,
+    description: '掷骰后翻转为「命运之刃」建筑。',
     eventChoices: [
       {
         text: '掷出不同结果：金币+10并打开商店/商店等级+1并永久劝降费用-2/法术伤害+1并超杀吸血+1/摧毁所有护符/发现两张专属卡，然后翻转成"命运之刃"。',
@@ -1479,6 +1484,7 @@ export function createDeck(): GameCardData[] {
     name: '混沌骰局',
     value: 0,
     image: dedupeEventChaosDiceGameImage,
+    description: '掷骰后翻转为「混沌冲击」永久魔法。',
     eventChoices: [
       {
         text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗回背包并抽2张牌，并翻转为"混沌冲击"。',
@@ -1522,6 +1528,7 @@ export function createDeck(): GameCardData[] {
     name: '时空收缩',
     value: 0,
     image: dedupeEventTimeRiftImage,
+    description: '掷骰后翻转为「时空镜像」永久魔法。',
     eventChoices: [
       {
         text: '掷出不同结果：锋刃祝福/时空收缩/空间代价。',
@@ -1559,7 +1566,7 @@ export function createDeck(): GameCardData[] {
     name: '奥术回廊',
     value: 0,
     image: skillScrollImage,
-    description: '魔法能量在此汇聚，选择一种方式汲取力量。',
+    description: '魔法能量在此汇聚，选择一种方式汲取力量。选择选项后翻转为「奥术风暴」或「奥术护盾」。',
     eventChoices: [
       {
         text: '法术回响（下一张Magic触发两次）',
@@ -1694,7 +1701,7 @@ export function createDeck(): GameCardData[] {
     name: '战备工坊',
     value: 0,
     image: skillScrollImage,
-    description: '装备锻造与强化之所，选择一种方式改良你的装备。翻转条件：激活行有至少 1 张装备牌。',
+    description: '装备锻造与强化之所，选择一种方式改良你的装备。翻转条件：激活行有至少 1 张装备牌时，翻转为「装备附魔」。',
     eventChoices: [
       {
         id: 'arsenal-left-dur',
@@ -1766,7 +1773,7 @@ export function createDeck(): GameCardData[] {
     name: '附魔祭坛',
     value: 0,
     image: skillScrollImage,
-    description: '古老的祭坛散发着附魔之力。若此牌下方有堆叠牌，处理后将消耗下方牌并驻留。',
+    description: '古老的祭坛散发着附魔之力。若此牌下方有堆叠牌，处理后将消耗下方牌并驻留。可翻转为「祭坛秘术」。',
     stayIfStacked: true,
     eventChoices: [
       {
