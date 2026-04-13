@@ -141,7 +141,6 @@ import starterAmuletStunCapImage from '@assets/generated_images/starter_amulet_s
 import starterAmuletRecycleExpandImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
 import starterAmuletDungeonGoldImage from '@assets/generated_images/starter_amulet_dungeon_gold.png';
 import dedupeStarterBackpackSizePotionImage from '@assets/generated_images/card_dedupe_starter_potion_backpack_size.png';
-import dedupeStarterWaterfallDealPotionImage from '@assets/generated_images/card_dedupe_starter_potion_waterfall_deal.png';
 import dedupeStarterSlotCapacityPotionImage from '@assets/generated_images/card_dedupe_potion_slot_capacity_starter.png';
 
 export { dedupeMagicUnderworldRelicImage };
@@ -2009,7 +2008,6 @@ export const STARTER_CARD_IDS = {
   fateSwapDeep: 'starter-perm-fate-swap-deep',
   handLimitPotion: 'starter-potion-hand-limit',
   backpackSizePotion: 'starter-potion-backpack-size-2',
-  waterfallDealPotion: 'starter-potion-waterfall-deal',
   stunStrike: 'starter-perm-stun-strike',
   attackPersuadeAmulet: 'starter-amulet-attack-persuade',
   cardGainMissileAmulet: 'starter-amulet-card-gain-missile',
@@ -2489,15 +2487,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterBackpackSizePotionImage,
       potionEffect: 'perm-backpack-size+5',
       description: '背包上限 +5。',
-    },
-    {
-      id: STARTER_CARD_IDS.waterfallDealPotion,
-      type: 'potion',
-      name: '瀑流增幅药',
-      value: 0,
-      image: dedupeStarterWaterfallDealPotionImage,
-      potionEffect: 'perm-waterfall-deal+1',
-      description: '永久：每次瀑流发牌数 +1。多出的牌堆叠在预览行的非怪物格子上。',
     },
     {
       id: STARTER_CARD_IDS.stunStrike,
