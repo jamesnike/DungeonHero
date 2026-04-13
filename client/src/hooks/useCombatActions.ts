@@ -2423,6 +2423,23 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       }
     }
 
+    if (isMinionAttack && monsterDefeated && !weaponDestroyed &&
+      (depsRef.current.eternalRelicsRef.current.some(r => r.id === 'summon-minion') || depsRef.current.selectedHeroSkillRef.current === 'summon-minion')) {
+      const minionSetter = slotId === 'equipmentSlot1' ? setEquipmentSlot1 : setEquipmentSlot2;
+      minionSetter(prev => {
+        if (!prev || !(prev as GameCardData).isMinionCard) return prev;
+        const card = prev as GameCardData;
+        return {
+          ...card,
+          attack: (card.attack ?? card.value) + 1,
+          value: (card.attack ?? card.value) + 1,
+          hp: (card.hp ?? 1) + 1,
+          maxHp: (card.maxHp ?? card.hp ?? 1) + 1,
+        } as EquipmentItem;
+      });
+      addGameLog('skill', '随从成长：攻击 +1、防御 +1');
+    }
+
     if (!monsterDefeated && targetMonster.type === 'monster' && slotItem.persuadeBoostOnHit) {
       const isTargetElite = Boolean(targetMonster.monsterSpecial);
       const actualBoost = isTargetElite
