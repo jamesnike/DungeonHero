@@ -88,6 +88,8 @@ export function createInitialGameState(): GameState {
     persuadeSameTargetCostHalve: false,
     persuadeRaceBonus: {},
     persuadeSuccessDurabilityBonus: 0,
+    persuadeAmuletBonus: 0,
+    persuadeDiscount: null,
     lastPlayedCardCategory: null,
     magicCardsPlayedThisTurn: 0,
 

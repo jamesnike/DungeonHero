@@ -492,7 +492,13 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       setBackpackItems(prev => {
         const next = [...drawnCards, ...prev];
         if (next.length <= backpackCapacity) return next;
-        next.slice(backpackCapacity).forEach(c => addToGraveyard(c));
+        const overflow = next.slice(backpackCapacity);
+        if (overflow.length > 0) {
+          setPermanentMagicRecycleBag(bag => [
+            ...bag,
+            ...overflow.map(c => ({ ...c, _recycleWaits: c.recycleDelay ?? 1 })),
+          ]);
+        }
         return next.slice(0, backpackCapacity);
       });
 
@@ -516,7 +522,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
       return drawnCards;
     },
-    [backpackItems.length, classDeck, backpackCapacity, setClassDeck, setBackpackItems],
+    [backpackItems.length, classDeck, backpackCapacity, setClassDeck, setBackpackItems, setPermanentMagicRecycleBag],
   );
 
   const returnCardsToClassDeck = useCallback((cards: GameCardData[]) => {

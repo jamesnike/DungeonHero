@@ -201,6 +201,8 @@ export interface PersistedGameState {
   persuadeSameTargetCostHalve?: boolean;
   persuadeRaceBonus?: Record<string, number>;
   persuadeSuccessDurabilityBonus?: number;
+  persuadeAmuletBonus?: number;
+  persuadeDiscount?: { costReduction: number; rateBonus: number } | null;
   lastPlayedCardCategory?: string | null;
   magicCardsPlayedThisTurn?: number;
   previewCardStacks?: Record<number, GameCardData[]>;

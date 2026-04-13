@@ -463,6 +463,8 @@ export default function GameBoard() {
   const setPendingHeroSkillAction = useEngineSetter('pendingHeroSkillAction');
   const setPendingHeroMagicAction = useEngineSetter('pendingHeroMagicAction');
   const setPersuadeCostModifier = useEngineSetter('persuadeCostModifier');
+  const setPersuadeAmuletBonus = useEngineSetter('persuadeAmuletBonus');
+  const setPersuadeDiscount = useEngineSetter('persuadeDiscount');
   const setPendingMagicAction = useEngineSetter('pendingMagicAction');
   const setPendingPotionAction = useEngineSetter('pendingPotionAction');
   const setDeathWardPrompt = useEngineSetter('deathWardPrompt');
@@ -983,8 +985,6 @@ export default function GameBoard() {
     if (!delta) return;
     setShopLevel(prev => Math.min(MAX_SHOP_LEVEL, Math.max(0, Math.floor(prev + delta))));
   }, []);
-  const persuadeDiscountRef = useRef<{ costReduction: number; rateBonus: number } | null>(null);
-  const persuadeAmuletBonusRef = useRef(0);
   const onNewCardGainedRef = useRef<((count: number, source?: 'graveyard' | 'classPool') => void) | null>(null);
   const [persuadeTempDiscount, setPersuadeTempDiscount] = useState(0);
   const stagingCardsRef = useRef<GameCardData[]>([]);
@@ -5180,8 +5180,8 @@ export default function GameBoard() {
     monsterRewardQueuedInstanceIdsRef.current.clear();
     lastWaterfallSequenceRef.current = null;
     cardDraftPendingSkillRef.current = null;
-    persuadeDiscountRef.current = null;
-    persuadeAmuletBonusRef.current = 0;
+    setPersuadeDiscount(null);
+    setPersuadeAmuletBonus(0);
     setPersuadeTempDiscount(0);
     // classCardPreviewIdRef is already set above
   };
@@ -5352,6 +5352,8 @@ export default function GameBoard() {
       persuadeSameTargetCostHalve: snapshot.persuadeSameTargetCostHalve ?? false,
       persuadeRaceBonus: snapshot.persuadeRaceBonus ?? {},
       persuadeSuccessDurabilityBonus: snapshot.persuadeSuccessDurabilityBonus ?? 0,
+      persuadeAmuletBonus: snapshot.persuadeAmuletBonus ?? 0,
+      persuadeDiscount: snapshot.persuadeDiscount ?? null,
       lastPlayedCardCategory: snapshot.lastPlayedCardCategory ?? null,
       magicCardsPlayedThisTurn: snapshot.magicCardsPlayedThisTurn ?? 0,
       backpackCapacityModifier: snapshot.backpackCapacityModifier ?? 0,
@@ -7364,8 +7366,6 @@ export default function GameBoard() {
     endHeroTurnGuardRef,
     beginCombatRef,
     bulwarkTempArmorRef,
-    persuadeAmuletBonusRef,
-    persuadeDiscountRef,
     computePersuadeSuccessRate,
     setPersuadeTempDiscount,
     undoStackRef,
@@ -7419,7 +7419,6 @@ export default function GameBoard() {
     ghostBladeExileResolverRef,
     discoverPotionCompletionRef,
     onNewCardGainedRef,
-    persuadeAmuletBonusRef,
   };
 
   // Populate cardPlayHandlers deps ref (all function deps are now defined)
@@ -7492,8 +7491,6 @@ export default function GameBoard() {
     graveyardDiscoverDeliveryRef,
     fullBoardInteractionLockedRef,
     handLockedForMonsterPhaseRef,
-    persuadeDiscountRef,
-    persuadeAmuletBonusRef,
     setPersuadeTempDiscount,
     setDeckPeekState,
     openHandMagicUpgradeModal: (sourceCardId: string) => {
@@ -7564,8 +7561,6 @@ export default function GameBoard() {
     fullBoardInteractionLockedRef,
     echoRemainingRef,
     echoTotalRef,
-    persuadeDiscountRef,
-    persuadeAmuletBonusRef,
     setPersuadeTempDiscount,
     activeCardsLatestRef,
   };
@@ -7632,8 +7627,6 @@ export default function GameBoard() {
     heroTurnLayerLossIdsRef,
     bulwarkTempArmorRef,
     handCardsRef,
-    persuadeDiscountRef,
-    persuadeAmuletBonusRef,
     setPersuadeTempDiscount,
   };
 
@@ -8568,8 +8561,9 @@ export default function GameBoard() {
           addGameLog('equip', `${equipCard.name} 入场效果：该装备栏临时护甲 +3！`);
         }
         if (equipCard.onEquipEffect === 'persuade-bonus-10') {
-          persuadeAmuletBonusRef.current += 10;
-          addGameLog('equip', `${equipCard.name} 入场效果：下次劝降成功率 +10%（累计 +${persuadeAmuletBonusRef.current}%）`);
+          const newBonus = engine.getState().persuadeAmuletBonus + 10;
+          setPersuadeAmuletBonus(newBonus);
+          addGameLog('equip', `${equipCard.name} 入场效果：下次劝降成功率 +10%（累计 +${newBonus}%）`);
         }
         if (equipCard.onEquipEffect === 'spell-lifesteal+1') {
           setPermanentSpellLifesteal(prev => prev + 1);
@@ -11046,7 +11040,7 @@ export default function GameBoard() {
         persuadeOpen={Boolean(persuadeState)}
         persuadeMonster={persuadeState?.monster ?? null}
         persuadeCost={(() => {
-          let c = Math.max(0, PERSUADE_COST + persuadeCostModifier - (persuadeDiscountRef.current?.costReduction ?? 0));
+          let c = Math.max(0, PERSUADE_COST + persuadeCostModifier - (engine.getState().persuadeDiscount?.costReduction ?? 0));
           if (persuadeState?.monster && engine.getState().persuadeSameTargetCostHalve && engine.getState().lastPersuadeTargetId === persuadeState.monster.id) {
             c = Math.floor(c / 2);
           }

@@ -31,6 +31,15 @@ const EVENT_NAME_TO_KEY: Record<string, string> = {
   '封印卷轴（翻转示例）': 'evt-seal-demo',
   冥途幻变: 'evt-nether-veil',
   赋能神殿: 'evt-empowerment-shrine',
+  药剂遗稿: 'evt-potion-manuscript',
+  时空收缩: 'evt-spacetime-shrink',
+  奥术回廊: 'evt-arcane-corridor',
+  诅咒骰局: 'evt-curse-dice',
+  劝降祭典: 'evt-persuade-festival',
+  战备工坊: 'evt-war-workshop',
+  附魔祭坛: 'evt-enchant-altar',
+  增幅仪式: 'evt-amplify-ritual',
+  英雄试炼: 'evt-hero-trial',
 };
 
 export function resolveEventPatternKey(card: EventPatternCardRef): string | null {

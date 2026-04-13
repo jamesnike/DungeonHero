@@ -138,8 +138,6 @@ export interface HeroActionsDeps {
   fullBoardInteractionLockedRef: React.MutableRefObject<boolean>;
   echoRemainingRef: React.MutableRefObject<number>;
   echoTotalRef: React.MutableRefObject<number>;
-  persuadeDiscountRef: React.MutableRefObject<{ costReduction: number; rateBonus: number } | null>;
-  persuadeAmuletBonusRef: React.MutableRefObject<number>;
   setPersuadeTempDiscount: React.Dispatch<React.SetStateAction<number>>;
   activeCardsLatestRef: React.MutableRefObject<ActiveRowSlots>;
 }
@@ -151,6 +149,8 @@ export interface HeroActionsDeps {
 export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>) {
   const engine = useGameEngine();
   const gs = useGameState(s => s);
+  const setPersuadeAmuletBonus = useEngineSetter('persuadeAmuletBonus');
+  const setPersuadeDiscount = useEngineSetter('persuadeDiscount');
 
   const {
     hp,
@@ -1215,8 +1215,9 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         }));
         if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
           const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
-          depsRef.current.persuadeAmuletBonusRef.current += pBonus;
-          depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
+          const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+          setPersuadeAmuletBonus(newBonus);
+          depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
         }
         finalizeMagicCard(pendingMagicAction.card, {
           banner: `${label} 临时攻击力 +${burstAmount}。${(pendingMagicAction.echoMultiplier ?? 1) > 1 ? '（回响×2）' : ''}`,
@@ -1289,7 +1290,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           parts.push(`转型：临时攻击 +${tempAtkBonus}`);
           if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
             const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
-            depsRef.current.persuadeAmuletBonusRef.current += pBonus;
+            setPersuadeAmuletBonus(prev => prev + pBonus);
           }
           const newTriggers = triggerCount + 1;
           const nextAtk = 3 + newTriggers;
@@ -2570,13 +2571,18 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
     if (isElite) rate -= 15;
 
+    const isHighLayer = mLayers >= 3;
+    if (isHighLayer) rate -= 15;
+
+    const bonusScale = isHighLayer ? 0.5 : 1;
+
     const persuadeBoost = (monster as any)._persuadeBoost ?? 0;
-    rate += persuadeBoost;
+    rate += persuadeBoost * bonusScale;
 
-    const discountBonus = depsRef.current.persuadeDiscountRef.current?.rateBonus ?? 0;
-    rate += discountBonus;
+    const discountBonus = engine.getState().persuadeDiscount?.rateBonus ?? 0;
+    rate += discountBonus * bonusScale;
 
-    rate += depsRef.current.persuadeAmuletBonusRef.current;
+    rate += engine.getState().persuadeAmuletBonus * bonusScale;
 
     if (depsRef.current.eternalRelicsRef.current.some(r => r.id === 'chain-persuade')) {
       const st2 = engine.getState();
@@ -2603,12 +2609,13 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       }
     }
 
-    const clamped = Math.max(5, Math.min(75, rate));
+    const maxRate = isHighLayer ? 60 : 75;
+    const clamped = Math.max(5, Math.min(maxRate, rate));
     return Math.round(clamped / 5) * 5;
   };
 
   const getPersuadeEffectiveCost = (card?: GameCardData): number => {
-    const costReduction = depsRef.current.persuadeDiscountRef.current?.costReduction ?? 0;
+    const costReduction = engine.getState().persuadeDiscount?.costReduction ?? 0;
     const st = engine.getState();
     const permCostMod = st.persuadeCostModifier ?? 0;
     let cost = Math.max(0, PERSUADE_COST + permCostMod - costReduction);
@@ -2664,7 +2671,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     const isSameTarget = currentState.lastPersuadeTargetId === persuadeState.monster.id;
     setConsecutivePersuadeCount(isSameTarget ? currentState.consecutivePersuadeCount + 1 : 1);
     setLastPersuadeTargetId(persuadeState.monster.id);
-    depsRef.current.persuadeDiscountRef.current = null;
+    setPersuadeDiscount(null);
     depsRef.current.setPersuadeTempDiscount(0);
     setPersuadeState(prev => prev ? { ...prev, phase: 'rolling' } : null);
     depsRef.current.setPersuadeRollKey(prev => prev + 1);

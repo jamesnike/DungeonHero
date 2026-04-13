@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { CuteSticker, ALL_STICKER_KEYS } from './MagicNameFlankIcons';
 
 import dragonImage from '@assets/generated_images/cute_chibi_dragon_monster.png';
 import skeletonImage from '@assets/generated_images/cute_chibi_skeleton_monster.png';
@@ -294,10 +295,33 @@ export default function LoadingScreen({ onReady }: LoadingScreenProps) {
     return () => clearInterval(interval);
   }, []);
 
+  const stickerWarmRef = useRef(false);
+  const [stickersRendered, setStickersRendered] = useState(false);
+
+  useEffect(() => {
+    if (stickerWarmRef.current) return;
+    stickerWarmRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setStickersRendered(true);
+      });
+    });
+  }, []);
+
+  const stickerSvgs = useMemo(
+    () =>
+      ALL_STICKER_KEYS.map((k) => (
+        <svg key={k} viewBox="0 0 32 32" width="1" height="1">
+          <CuteSticker k={k} />
+        </svg>
+      )),
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
-    // +1 fonts, +1 CSS animation warm, +1 canvas warm
-    const totalTasks = ALL_IMAGES.length + 3;
+    // +1 fonts, +1 CSS animation warm, +1 canvas warm, +1 sticker SVG warm
+    const totalTasks = ALL_IMAGES.length + 4;
     let completed = 0;
 
     const tick = () => {
@@ -316,8 +340,12 @@ export default function LoadingScreen({ onReady }: LoadingScreenProps) {
     warmCssAnimations().then(tick);
     warmCanvas2D().then(tick);
 
+    if (stickersRendered) {
+      tick();
+    }
+
     return () => { cancelled = true; };
-  }, [handleComplete]);
+  }, [handleComplete, stickersRendered]);
 
   return (
     <div className={`loading-screen ${fadeOut ? 'loading-screen--fade-out' : ''}`}>
@@ -342,6 +370,10 @@ export default function LoadingScreen({ onReady }: LoadingScreenProps) {
         <p className="loading-screen__percent">{progress}%</p>
 
         <p className="loading-screen__flavor">{FLAVOR_TEXTS[flavorIdx]}</p>
+      </div>
+      {/* Hidden sticker SVGs — forces browser to parse & cache all SVG paths */}
+      <div aria-hidden style={{ position: 'absolute', top: -9999, left: -9999, width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}>
+        {stickerSvgs}
       </div>
       {/* Hidden font-rendering probes to force browser to rasterize all weights */}
       <div aria-hidden style={{ position: 'absolute', top: -9999, left: -9999, opacity: 0, pointerEvents: 'none' }}>

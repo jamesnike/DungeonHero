@@ -115,7 +115,6 @@ export interface ShopHandlersDeps {
   /** 从专属发现弹窗完成时调用（药水「灵思药剂」等），替代 completeCurrentEvent */
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
   onNewCardGainedRef: React.MutableRefObject<((count: number, source?: 'graveyard' | 'classPool') => void) | null>;
-  persuadeAmuletBonusRef: React.MutableRefObject<number>;
 }
 
 export type BeginDiscoverFlowOptions = {
@@ -134,6 +133,7 @@ export type BeginDiscoverFlowOptions = {
 export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps>) {
   const engine = useGameEngine();
   const gs = useGameState(s => s);
+  const setPersuadeAmuletBonus = useEngineSetter('persuadeAmuletBonus');
 
   const {
     hp,
@@ -358,8 +358,8 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       if (selectedCard) {
         depsRef.current.addGameLog('skill', `发现专属卡：选入「${selectedCard.name}」`);
         if (backpackItems.length >= depsRef.current.backpackCapacity) {
-          depsRef.current.addToGraveyard(selectedCard);
-          depsRef.current.addGameLog('skill', `背包已满，「${selectedCard.name}」进入墓地`);
+          setPermanentMagicRecycleBag(prev => [...prev, { ...selectedCard, _recycleWaits: selectedCard.recycleDelay ?? 1 }]);
+          depsRef.current.addGameLog('skill', `背包已满，「${selectedCard.name}」进入回收袋`);
         } else {
           setBackpackItems(prev => [selectedCard, ...prev]);
           depsRef.current.triggerClassDeckFlight([selectedCard]);
@@ -372,7 +372,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         depsRef.current.discoverPotionCompletionRef.current = null;
         const banner = selectedCard
           ? backpackItems.length >= depsRef.current.backpackCapacity
-            ? `「${selectedCard.name}」已进入墓地（背包已满）。`
+            ? `「${selectedCard.name}」已进入回收袋（背包已满）。`
             : `获得专属魔法「${selectedCard.name}」！`
           : '未发现卡牌。';
         completion({ banner });
@@ -385,6 +385,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       backpackItems.length,
       discoverOptions,
       setBackpackItems,
+      setPermanentMagicRecycleBag,
       setDiscoverModalOpen,
       setDiscoverOptions,
       setDiscoverSourceLabel,
@@ -1541,7 +1542,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         }
         case 'persuadeRateBonus': {
           const amount = eff.amount;
-          depsRef.current.persuadeAmuletBonusRef.current += amount;
+          setPersuadeAmuletBonus(prev => prev + amount);
           depsRef.current.addGameLog('combat', `战利品：劝降成功率永久 +${amount}%`);
           setHeroSkillBanner(`劝降成功率永久 +${amount}%`);
           return true;

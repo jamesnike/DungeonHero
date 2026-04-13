@@ -26,6 +26,11 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'transform-repair': 'knight-transform-repair',
   'transform-grant': 'knight-transform-grant',
   'weapon-sweep': 'knight-weapon-sweep',
+  'persuade-discount': 'mercy-decree',
+  'stun-wave': 'stun-domain',
+  'stat-swap': 'knight-stat-swap',
+  'missile-bolt': 'magic-bolt',
+  'graveyard-discover-equip-amulet': 'graveyard-discover-relic',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -80,6 +85,50 @@ const NAME_TO_KEY: Record<string, string> = {
   命运挪移: 'crossroads-left-swap',
   墓语遗愿: 'crypt-deathwish',
   回收轮转: 'guild-recycle-reshuffle',
+  等价交换: 'equivalent-exchange',
+  怀柔令: 'mercy-decree',
+  秘法精炼: 'arcane-refine',
+  天机铸炼: 'celestial-forge',
+  震慑领域: 'stun-domain',
+  增幅: 'amplify-magic',
+  铸甲术: 'armor-craft',
+  维度扭曲: 'dimension-warp',
+  不灭赐福: 'undying-blessing',
+  回收术: 'recall-equip',
+  魔法飞弹: 'magic-missile',
+  赌徒之计: 'gambler-ploy',
+  回收余韵: 'recycle-echo',
+  深层交织: 'deep-weave',
+  雷震击: 'thunder-strike',
+  精华萃取: 'essence-extract',
+  治愈术: 'healing-art',
+  专属召唤: 'class-summon',
+  升级卷轴: 'upgrade-scroll',
+  天眼审判: 'divine-eye',
+  紧急回收: 'emergency-recall',
+  锋刃侧击: 'blade-flank',
+  固壁侧守: 'wall-flank-guard',
+  际遇轮盘: 'fortune-wheel',
+  血契抽引: 'blood-pact-draw',
+  锻造赌运: 'forge-gamble',
+  血祭裁决: 'blood-sacrifice',
+  亡者之契: 'undead-pact',
+  命数裁断: 'fate-decree',
+  魔物融合: 'monster-fusion',
+  镜影摹形: 'mirror-copy',
+  符位开辟: 'amulet-expand',
+  永恒铭刻: 'eternal-inscription',
+  灭世裁决: 'hero-monster-doom',
+  时空镜像: 'spacetime-mirror',
+  奥术护盾: 'arcane-shield',
+  回响残页: 'echo-remnant',
+  墓语回响: 'crypt-echo',
+  虚空置换: 'void-swap',
+  威压之令: 'monster-attack-debuff',
+  颠倒乾坤: 'knight-stat-swap',
+  归袋抽引: 'recycle-fetch',
+  魔弹: 'magic-bolt',
+  破印遗物: 'graveyard-discover-relic',
 };
 
 function hashName(s: string): number {
@@ -105,6 +154,7 @@ export function resolveMagicPatternKey(card: MagicPatternCardRef): string | null
     if (card.heroMagicId === 'holy-light') return 'hero-holy-light';
     if (card.heroMagicId === 'berserker-rage') return 'hero-berserker-rage';
     if (card.heroMagicId === 'revive-blessing') return 'hero-revive-blessing';
+    if (card.heroMagicId === 'monster-doom') return 'hero-monster-doom';
     return NAME_TO_KEY[card.name] ?? `fallback-${hashName(card.name) % 12}`;
   }
   if (card.type !== 'magic') return null;
@@ -118,6 +168,16 @@ export function resolveMagicPatternKey(card: MagicPatternCardRef): string | null
   if (card.magicEffect === 'altar-discard-discover') return 'altar-ritual';
   if (card.magicEffect === 'persuade-boost-draw') return 'persuade-boost';
   if (card.magicEffect === 'bounty-spell-damage') return 'bounty-spell';
+  if (card.magicEffect === 'storm-volley-recycle') return 'storm-volley';
+  if (card.magicEffect === 'equalize-temp-attack-armor') return 'spacetime-mirror';
+  if (card.magicEffect === 'arcane-shield-stun-cap') return 'arcane-shield';
+  if (card.magicEffect === 'swap-backpack-recycle') return 'void-swap';
+  if (card.magicEffect === 'active-row-monster-attack-debuff') return 'monster-attack-debuff';
+  if (card.magicEffect === 'amplify-target') return 'amplify-target';
+  if (card.magicEffect === 'backpack-magic-discover') return 'tome-search';
+  if (card.magicEffect === 'crossroads-left-swap') return 'crossroads-left-swap';
+  if (card.magicEffect === 'guild-hand-recycle') return 'guild-hand-recycle';
+  if (card.magicEffect === 'guild-recycle-reshuffle') return 'guild-recycle-reshuffle';
 
   const ke = card.knightEffect;
   if (ke && KNIGHT_EFFECT_TO_KEY[ke]) {

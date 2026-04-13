@@ -151,8 +151,6 @@ export interface CombatActionsDeps {
   endHeroTurnGuardRef: React.MutableRefObject<boolean>;
   beginCombatRef: React.MutableRefObject<(monster: GameCardData, initiator: CombatInitiator) => void>;
   bulwarkTempArmorRef: React.MutableRefObject<number>;
-  persuadeAmuletBonusRef: React.MutableRefObject<number>;
-  persuadeDiscountRef: React.MutableRefObject<{ costReduction: number; rateBonus: number } | null>;
   computePersuadeSuccessRate: (monster: GameCardData) => number;
   setPersuadeTempDiscount: React.Dispatch<React.SetStateAction<number>>;
   undoStackRef: React.MutableRefObject<any[]>;
@@ -180,6 +178,8 @@ export interface CombatActionsDeps {
 export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDeps>) {
   const engine = useGameEngine();
   const gs = useGameState(s => s);
+  const setPersuadeAmuletBonus = useEngineSetter('persuadeAmuletBonus');
+  const setPersuadeDiscount = useEngineSetter('persuadeDiscount');
 
   const {
     hp,
@@ -1480,8 +1480,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
           if (ae.hasPersuadeOnTempAttack) {
             const pBonus = ae.persuadeOnTempAttackBonus || 5;
-            depsRef.current.persuadeAmuletBonusRef.current += pBonus;
-            depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
+            const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+            setPersuadeAmuletBonus(newBonus);
+            depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
           }
         }
       }
@@ -2029,15 +2030,15 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     }
 
     if (ae.hasAttackPersuadeDiscount) {
-      const existing = depsRef.current.persuadeDiscountRef?.current;
+      const existing = engine.getState().persuadeDiscount;
       const currentReduction = existing?.costReduction ?? 0;
       const currentRate = existing?.rateBonus ?? 0;
       const discountStep = 3;
       const newReduction = currentReduction + discountStep;
-      depsRef.current.persuadeDiscountRef.current = {
+      setPersuadeDiscount({
         costReduction: newReduction,
         rateBonus: currentRate,
-      };
+      });
       depsRef.current.setPersuadeTempDiscount(newReduction);
       addGameLog('amulet', `降服之符：攻击后下次劝降费用 -${discountStep}（累计 -${newReduction}）`);
     }
@@ -2427,8 +2428,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       const actualBoost = isTargetElite
         ? (slotItem.persuadeBoostOnHitElite ?? Math.floor(slotItem.persuadeBoostOnHit / 2))
         : slotItem.persuadeBoostOnHit;
-      depsRef.current.persuadeAmuletBonusRef.current += actualBoost;
-      addGameLog('equip', `${slotItem.name}：下次劝降概率 +${actualBoost}%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）${isTargetElite ? '（精英减半）' : ''}`);
+      const newBonus = engine.getState().persuadeAmuletBonus + actualBoost;
+      setPersuadeAmuletBonus(newBonus);
+      addGameLog('equip', `${slotItem.name}：下次劝降概率 +${actualBoost}%（累计 +${newBonus}%）${isTargetElite ? '（精英减半）' : ''}`);
     }
 
     if (!monsterDefeated) {

@@ -199,8 +199,6 @@ export interface CardPlayHandlersDeps {
   graveyardDiscoverDeliveryRef: React.MutableRefObject<'backpack' | 'hand-first'>;
   fullBoardInteractionLockedRef: React.MutableRefObject<boolean>;
   handLockedForMonsterPhaseRef: React.MutableRefObject<boolean>;
-  persuadeDiscountRef: React.MutableRefObject<{ costReduction: number; rateBonus: number } | null>;
-  persuadeAmuletBonusRef: React.MutableRefObject<number>;
   setPersuadeTempDiscount: React.Dispatch<React.SetStateAction<number>>;
   lastPlayedFlankRef: React.MutableRefObject<boolean>;
 }
@@ -212,6 +210,8 @@ export interface CardPlayHandlersDeps {
 export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHandlersDeps>) {
   const engine = useGameEngine();
   const gs = useGameState(s => s);
+  const setPersuadeAmuletBonus = useEngineSetter('persuadeAmuletBonus');
+  const setPersuadeDiscount = useEngineSetter('persuadeDiscount');
 
   const {
     hp,
@@ -942,7 +942,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
       const sourceCard = depsRef.current.stagingCardsRef.current.find(c => c.id === modal.sourceCardId);
       if (!sourceCard) return;
-      const targetCard = engine.getState().handCards.find(c => c.id === targetCardId);
+      const targetCard = depsRef.current.handCardsRef.current.find(c => c.id === targetCardId)
+        ?? engine.getState().handCards.find(c => c.id === targetCardId);
       if (!targetCard) return;
 
       if (modal.sourceType === 'transform-grant') {
@@ -1791,7 +1792,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
 
       if (effect === 'transform-recycle-grant') {
-        const eligible = handCards.filter(c => c.id !== card.id && !c.transformBonus);
+        const eligible = depsRef.current.handCardsRef.current.filter(c => c.id !== card.id && !c.transformBonus);
         if (eligible.length === 0) {
           depsRef.current.addGameLog('potion', '唤回秘药：手牌中没有可赋予转型效果的卡牌。');
           await finalizePotionCard(card, { banner: '手牌中没有可赋予转型效果的卡牌。' });
@@ -1813,7 +1814,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       }
 
       if (effect === 'grant-perm-2') {
-        const eligible = handCards.filter(c => c.id !== card.id && !cardHasPermFlag(c));
+        const liveHand = depsRef.current.handCardsRef.current;
+        const eligible = liveHand.filter(c => c.id !== card.id && !cardHasPermFlag(c));
         if (eligible.length === 0) {
           depsRef.current.addGameLog('potion', '永恒铭刻药：手牌中没有可赋予永恒属性的卡牌。');
           await finalizePotionCard(card, { banner: '手牌中没有可赋予永恒属性的卡牌。' });
@@ -2065,8 +2067,9 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           depsRef.current.addBerserkTurnBuff(buffAmt);
           if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
             const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
-            depsRef.current.persuadeAmuletBonusRef.current += pBonus;
-            depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
+            const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+            setPersuadeAmuletBonus(newBonus);
+            depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
           }
         }
         setGambitExtraActive(true);
@@ -2135,10 +2138,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           actualDiscount = Math.min(costDiscount, currentCost - MIN_PERSUADE_COST);
           setPersuadeCostModifier(prev => prev - actualDiscount);
         }
-        depsRef.current.persuadeDiscountRef.current = {
+        setPersuadeDiscount({
           costReduction: 0,
           rateBonus,
-        };
+        });
         if (card.classCard) depsRef.current.consumeClassCardFromHand(card.id);
         const costMsg = actualDiscount > 0
           ? `劝降费用永久 -${actualDiscount}`
@@ -2886,7 +2889,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             parts.push(`转型：临时攻击 +${tempAtkBonus}`);
             if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
               const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
-              depsRef.current.persuadeAmuletBonusRef.current += pBonus;
+              setPersuadeAmuletBonus(prev => prev + pBonus);
             }
             const newTriggers = triggerCount + 1;
             const nextAtk = 3 + newTriggers;
@@ -2985,10 +2988,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         break;
       }
       case 'fw-persuade': {
-        depsRef.current.persuadeDiscountRef.current = {
+        setPersuadeDiscount({
           costReduction: 0,
           rateBonus: 20,
-        };
+        });
         banner = '际遇轮盘：下次劝降成功率 +20%。';
         break;
       }
@@ -3526,6 +3529,20 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     
     if (card.magicType === 'instant') {
       if (handleKnightInstantMagic(knightCard)) {
+        return;
+      }
+      if (card.magicEffect === 'amplify-card') {
+        const hasEquip1 = equipmentSlot1 && (equipmentSlot1.type === 'weapon' || equipmentSlot1.type === 'shield');
+        const hasEquip2 = equipmentSlot2 && (equipmentSlot2.type === 'weapon' || equipmentSlot2.type === 'shield');
+        const eligibleHand = handCards.filter(
+          c => c.id !== card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c)),
+        );
+        if (!hasEquip1 && !hasEquip2 && eligibleHand.length === 0) {
+          finalizeMagicCard(card, { banner: '增幅：没有可增幅的目标（装备栏无装备，手牌中无装备或伤害魔法）。' });
+          return;
+        }
+        setAmplifyModal({ sourceCardId: card.id });
+        setHeroSkillBanner('增幅：选择一张牌进行增幅。');
         return;
       }
       switch (card.name) {
@@ -4072,7 +4089,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return;
         }
         case '永恒铭刻': {
-          const eligible = handCards.filter(c => c.id !== card.id && !cardHasPermFlag(c));
+          const liveHand = depsRef.current.handCardsRef.current;
+          const eligible = liveHand.filter(c => c.id !== card.id && !cardHasPermFlag(c));
           if (eligible.length === 0) {
             depsRef.current.addGameLog('magic', '永恒铭刻：手牌中没有可赋予永恒属性的卡牌。');
             finalizeMagicCard(card, { banner: '手牌中没有可赋予永恒属性的卡牌。' });
@@ -4411,6 +4429,37 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         setHeroSkillBanner('选择地城行一张卡牌，与正上方预览行卡牌互换。');
         return;
       }
+      if (card.magicEffect === 'crossroads-left-swap') {
+        let firstIdx = -1;
+        let secondIdx = -1;
+        for (let i = 0; i < activeCards.length; i++) {
+          if (activeCards[i] != null) {
+            if (firstIdx === -1) firstIdx = i;
+            else if (secondIdx === -1) { secondIdx = i; break; }
+          }
+        }
+        if (firstIdx === -1 || secondIdx === -1) {
+          finalizeMagicCard(card, { banner: '命运挪移无效（地城行剩余卡牌不足 2 张）。' });
+          return;
+        }
+        const firstCard = activeCards[firstIdx]!;
+        const secondCard = activeCards[secondIdx]!;
+        for (let swapI = 0; swapI < echoMultiplier; swapI++) {
+          setActiveCards(prev => {
+            const next = [...prev] as ActiveRowSlots;
+            const tmp = next[firstIdx];
+            next[firstIdx] = next[secondIdx];
+            next[secondIdx] = tmp;
+            return next;
+          });
+        }
+        const banner = echoMultiplier > 1
+          ? `命运挪移 ×${echoMultiplier}：${firstCard.name} ↔ ${secondCard.name}（回响）`
+          : `命运挪移：${firstCard.name} ↔ ${secondCard.name} 位置互换！`;
+        depsRef.current.addGameLog('magic', `命运挪移：${firstCard.name} 与 ${secondCard.name} 互换 ${echoMultiplier} 次。`);
+        finalizeMagicCard(card, { banner });
+        return;
+      }
       switch (getStarterBaseId(card.id)) {
         case STARTER_CARD_IDS.weaponBurst: {
           const burstBase = 2 + 2 * (card.upgradeLevel ?? 0);
@@ -4676,37 +4725,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           setGold(prev => prev + 2 * echoMultiplier);
           depsRef.current.addGameLog('magic', `血金术：受到 ${1 * echoMultiplier} 点伤害，获得 ${2 * echoMultiplier} 金币`);
           finalizeMagicCard(card, { banner: `血金术：以 ${1 * echoMultiplier} 点生命换取 ${2 * echoMultiplier} 金币。${isEchoTriggered ? '（回响×2）' : ''}` });
-          return;
-        }
-        case 'crossroads-left-swap': {
-          let firstIdx = -1;
-          let secondIdx = -1;
-          for (let i = 0; i < activeCards.length; i++) {
-            if (activeCards[i] != null) {
-              if (firstIdx === -1) firstIdx = i;
-              else if (secondIdx === -1) { secondIdx = i; break; }
-            }
-          }
-          if (firstIdx === -1 || secondIdx === -1) {
-            finalizeMagicCard(card, { banner: '命运挪移无效（地城行剩余卡牌不足 2 张）。' });
-            return;
-          }
-          const firstCard = activeCards[firstIdx]!;
-          const secondCard = activeCards[secondIdx]!;
-          for (let swapI = 0; swapI < echoMultiplier; swapI++) {
-            setActiveCards(prev => {
-              const next = [...prev] as ActiveRowSlots;
-              const tmp = next[firstIdx];
-              next[firstIdx] = next[secondIdx];
-              next[secondIdx] = tmp;
-              return next;
-            });
-          }
-          const banner = echoMultiplier > 1
-            ? `命运挪移 ×${echoMultiplier}：${firstCard.name} ↔ ${secondCard.name}（回响）`
-            : `命运挪移：${firstCard.name} ↔ ${secondCard.name} 位置互换！`;
-          depsRef.current.addGameLog('magic', `命运挪移：${firstCard.name} 与 ${secondCard.name} 互换 ${echoMultiplier} 次。`);
-          finalizeMagicCard(card, { banner });
           return;
         }
         case STARTER_CARD_IDS.tempArmor: {
@@ -5172,20 +5190,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             finalizeMagicCard(card, { banner: '法术回响已激活！下一张法术的效果将触发两次。' });
             return;
           }
-          if (card.magicEffect === 'amplify-card') {
-            const hasEquip1 = equipmentSlot1 && (equipmentSlot1.type === 'weapon' || equipmentSlot1.type === 'shield');
-            const hasEquip2 = equipmentSlot2 && (equipmentSlot2.type === 'weapon' || equipmentSlot2.type === 'shield');
-            const eligibleHand = handCards.filter(
-              c => c.id !== card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c)),
-            );
-            if (!hasEquip1 && !hasEquip2 && eligibleHand.length === 0) {
-              finalizeMagicCard(card, { banner: '增幅：没有可增幅的目标（装备栏无装备，手牌中无装备或伤害魔法）。' });
-              return;
-            }
-            setAmplifyModal({ sourceCardId: card.id });
-            setHeroSkillBanner('增幅：选择一张牌进行增幅。');
-            return;
-          }
           if (card.magicEffect === 'amplify-target') {
             const targetId = card._amplifyTargetCardId;
             const targetName = card._amplifyTargetName ?? '未知';
@@ -5281,7 +5285,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           }
           if (card.magicEffect === 'persuade-boost-draw') {
             const normalBoost = 15 * echoMultiplier;
-            depsRef.current.persuadeAmuletBonusRef.current += normalBoost;
+            setPersuadeAmuletBonus(prev => prev + normalBoost);
             depsRef.current.addGameLog('magic', `劝降祝福：下次劝降成功率 +${normalBoost}%（精英 +${10 * echoMultiplier}%），抽 1 张牌`);
             const drawn = drawCardsFromBackpack(1 * echoMultiplier);
             const drawText = drawn > 0 ? `，抽了 ${drawn} 张牌` : '';
@@ -5506,8 +5510,9 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           depsRef.current.addGameLog('equip', `${card.name} 入场效果：该装备栏临时护甲 +3！`);
         }
         if (card.onEquipEffect === 'persuade-bonus-10') {
-          depsRef.current.persuadeAmuletBonusRef.current += 10;
-          depsRef.current.addGameLog('equip', `${card.name} 入场效果：下次劝降成功率 +10%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
+          const newBonus = engine.getState().persuadeAmuletBonus + 10;
+          setPersuadeAmuletBonus(newBonus);
+          depsRef.current.addGameLog('equip', `${card.name} 入场效果：下次劝降成功率 +10%（累计 +${newBonus}%）`);
         }
         if (card.onEquipEffect === 'spell-lifesteal+1') {
           setPermanentSpellLifesteal(prev => prev + 1);

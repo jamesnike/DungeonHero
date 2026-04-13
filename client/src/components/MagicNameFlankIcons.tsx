@@ -61,6 +61,79 @@ const TINT_BY_KEY: Record<string, string> = {
   'evt-chaos-dice-game': 'from-purple-400/45 to-pink-400/40',
   'evt-seal-demo': 'from-indigo-300/45 to-violet-500/45',
   'evt-nether-veil': 'from-indigo-500/50 to-purple-700/50',
+  'evt-potion-manuscript': 'from-emerald-400/45 to-teal-500/45',
+  'evt-spacetime-shrink': 'from-blue-500/45 to-indigo-600/45',
+  'evt-arcane-corridor': 'from-purple-400/45 to-blue-500/45',
+  'evt-curse-dice': 'from-red-600/50 to-purple-800/50',
+  'evt-persuade-festival': 'from-amber-300/45 to-rose-400/45',
+  'evt-war-workshop': 'from-stone-400/45 to-orange-500/45',
+  'evt-enchant-altar': 'from-violet-500/45 to-amber-400/40',
+  'evt-empowerment-shrine': 'from-yellow-400/45 to-violet-500/45',
+  'evt-amplify-ritual': 'from-sky-400/45 to-violet-500/45',
+  'evt-hero-trial': 'from-amber-500/45 to-red-500/45',
+  'storm-volley': 'from-violet-400/45 to-sky-500/45',
+  'tome-search': 'from-amber-300/45 to-stone-500/45',
+  'hero-revive-blessing': 'from-emerald-400/45 to-yellow-400/40',
+  'knight-honor-sweep': 'from-red-500/50 to-amber-500/45',
+  'knight-armor-stun-convert': 'from-slate-400/45 to-yellow-500/45',
+  'knight-overkill-upgrade': 'from-orange-500/50 to-red-600/45',
+  'knight-transform-repair': 'from-teal-400/45 to-sky-500/45',
+  'knight-transform-grant': 'from-purple-400/45 to-teal-500/45',
+  'knight-weapon-sweep': 'from-red-400/50 to-slate-600/45',
+  'dungeon-insight': 'from-indigo-400/45 to-amber-400/40',
+  'arcane-storm': 'from-violet-500/50 to-cyan-500/45',
+  'equipment-enchant': 'from-amber-400/45 to-purple-500/45',
+  'altar-ritual': 'from-violet-400/50 to-rose-400/40',
+  'persuade-boost': 'from-sky-300/45 to-green-400/40',
+  'bounty-spell': 'from-amber-500/50 to-red-500/45',
+  'crossroads-left-swap': 'from-violet-400/45 to-sky-400/40',
+  'crypt-deathwish': 'from-stone-500/50 to-purple-500/45',
+  'guild-recycle-reshuffle': 'from-teal-400/45 to-indigo-400/40',
+  'equivalent-exchange': 'from-amber-400/45 to-slate-500/45',
+  'mercy-decree': 'from-green-300/45 to-sky-400/40',
+  'arcane-refine': 'from-purple-400/45 to-cyan-400/40',
+  'celestial-forge': 'from-amber-400/45 to-indigo-500/45',
+  'stun-domain': 'from-yellow-500/50 to-violet-500/45',
+  'amplify-magic': 'from-sky-400/45 to-rose-400/40',
+  'armor-craft': 'from-slate-400/45 to-blue-500/45',
+  'dimension-warp': 'from-indigo-500/50 to-fuchsia-500/45',
+  'undying-blessing': 'from-yellow-300/45 to-emerald-400/40',
+  'recall-equip': 'from-orange-400/45 to-cyan-400/40',
+  'magic-missile': 'from-cyan-400/50 to-violet-500/45',
+  'gambler-ploy': 'from-amber-500/50 to-purple-400/40',
+  'recycle-echo': 'from-teal-300/45 to-blue-400/40',
+  'deep-weave': 'from-indigo-400/45 to-emerald-400/40',
+  'thunder-strike': 'from-yellow-400/50 to-blue-600/50',
+  'essence-extract': 'from-emerald-400/45 to-violet-400/40',
+  'healing-art': 'from-rose-300/45 to-green-400/40',
+  'class-summon': 'from-amber-400/45 to-violet-500/45',
+  'upgrade-scroll': 'from-amber-300/45 to-sky-400/40',
+  'divine-eye': 'from-indigo-400/50 to-amber-500/45',
+  'emergency-recall': 'from-red-500/50 to-orange-400/40',
+  'blade-flank': 'from-red-400/45 to-slate-500/45',
+  'wall-flank-guard': 'from-blue-400/45 to-slate-500/45',
+  'fortune-wheel': 'from-amber-400/45 to-purple-500/45',
+  'blood-pact-draw': 'from-red-500/50 to-indigo-500/45',
+  'forge-gamble': 'from-orange-500/50 to-stone-500/45',
+  'blood-sacrifice': 'from-red-700/55 to-amber-500/40',
+  'undead-pact': 'from-stone-500/50 to-green-700/45',
+  'fate-decree': 'from-indigo-500/50 to-rose-400/40',
+  'monster-fusion': 'from-purple-500/50 to-orange-400/40',
+  'mirror-copy': 'from-sky-400/45 to-slate-400/40',
+  'amulet-expand': 'from-violet-400/45 to-emerald-400/40',
+  'eternal-inscription': 'from-amber-500/50 to-indigo-600/50',
+  'hero-monster-doom': 'from-red-600/55 to-slate-800/50',
+  'spacetime-mirror': 'from-blue-400/45 to-indigo-500/45',
+  'arcane-shield': 'from-cyan-400/45 to-violet-400/40',
+  'echo-remnant': 'from-stone-400/45 to-amber-400/40',
+  'crypt-echo': 'from-violet-400/45 to-stone-500/45',
+  'void-swap': 'from-indigo-600/50 to-purple-800/50',
+  'monster-attack-debuff': 'from-red-400/45 to-blue-500/45',
+  'knight-stat-swap': 'from-teal-400/45 to-rose-400/40',
+  'recycle-fetch': 'from-green-400/45 to-cyan-400/40',
+  'magic-bolt': 'from-cyan-500/50 to-violet-400/40',
+  'graveyard-discover-relic': 'from-stone-400/45 to-amber-500/45',
+  'amplify-target': 'from-sky-400/45 to-amber-400/40',
 };
 
 export function tintForKey(k: string): string {
@@ -605,10 +678,654 @@ export function CuteSticker({ k }: { k: string }) {
           <path stroke="#4c1d95" d="M12 12l8 8M20 12l-8 8" />
         </g>
       );
+
+    /* ── new event glyphs ── */
+    case 'evt-potion-manuscript':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#d6d3d1" d="M9 8h10v18H9z" />
+          <path fill="none" d="M12 12h4M12 15h3" />
+          <path fill="#6ee7b7" d="M22 14c0-2 1-3 3-3v8c-2 0-3-1-3-3v-2z" />
+        </g>
+      );
+    case 'evt-spacetime-shrink':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#93c5fd" d="M12 8h8l-2 8 2 8h-8l2-8z" />
+          <path fill="none" stroke="#3b82f6" d="M10 16h12" strokeWidth="2" />
+        </g>
+      );
+    case 'evt-arcane-corridor':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#ddd6fe" d="M10 24V12a6 6 0 0 1 12 0v12" />
+          <path fill="none" stroke="#7c3aed" d="M13 24V14a3 3 0 0 1 6 0v10" />
+          <circle cx="16" cy="12" r="1.5" fill="#c084fc" />
+        </g>
+      );
+    case 'evt-curse-dice':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="10" width="10" height="10" rx="1.5" fill="#fca5a5" transform="rotate(-6 14 15)" />
+          <circle cx="12" cy="13" r="1" fill="#7f1d1d" />
+          <circle cx="16" cy="17" r="1" fill="#7f1d1d" />
+          <path fill="none" stroke="#991b1b" d="M21 8c2 2 3 5 2 8" />
+          <path fill="none" stroke="#991b1b" d="M24 9c1 3 1 6-1 9" />
+        </g>
+      );
+    case 'evt-persuade-festival':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fde68a" d="M10 14c0-3 3-5 6-5s6 2 6 5-3 6-6 10c-3-4-6-7-6-10z" />
+          <path fill="none" stroke="#d97706" d="M13 14h6M16 11v6" />
+        </g>
+      );
+    case 'evt-war-workshop':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#a8a29e" d="M8 20h16v4H8z" />
+          <path fill="#78716c" d="M12 12h8v8h-8z" />
+          <path fill="#d6d3d1" d="M15 6h2v8h-2z" />
+          <path fill="#f59e0b" d="M11 6h10v3H11z" />
+        </g>
+      );
+    case 'evt-enchant-altar':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#e9d5ff" d="M10 16h12v6H10z" />
+          <path fill="#c4b5fd" d="M12 16l4-6 4 6" />
+          <circle cx="16" cy="12" r="2" fill="#a78bfa" />
+          <path fill="none" stroke="#7c3aed" d="M16 7v3" />
+        </g>
+      );
+    case 'evt-empowerment-shrine':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="8" y="18" width="16" height="4" rx="0.5" fill="#d6d3d1" />
+          <rect x="10" y="10" width="3" height="8" fill="#c4b5fd" />
+          <rect x="19" y="10" width="3" height="8" fill="#c4b5fd" />
+          <path fill="#fde047" d="M14 8h4l-2-3z" />
+        </g>
+      );
+    case 'evt-amplify-ritual':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#bae6fd" d="M16 22l-6-6 3-3 3 3 3-3 3 3z" />
+          <path fill="none" stroke="#0ea5e9" d="M16 14V6M12 10l4-4 4 4" strokeWidth="2.5" />
+        </g>
+      );
+    case 'evt-hero-trial':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fcd34d" d="M16 6l-8 8v8h16v-8z" />
+          <path fill="#f59e0b" d="M16 10l2 4h-4z" />
+          <path fill="none" stroke="#92400e" d="M12 18h8" />
+        </g>
+      );
+
+    /* ── magic keys that had no case ── */
+    case 'storm-volley':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round">
+          <path fill="none" stroke="#6366f1" d="M8 8l4 10M13 7l3 11M18 8l2 10M23 7l1 11" strokeWidth="2" />
+          <path fill="none" stroke="#a5b4fc" d="M6 22h20" />
+        </g>
+      );
+    case 'tome-search':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fde68a" d="M8 10h10v12H8z" />
+          <path fill="none" d="M10 14h6M10 17h4" />
+          <circle cx="22" cy="14" r="4" fill="none" stroke="#d97706" strokeWidth="2.5" />
+          <path stroke="#d97706" d="M25 17l3 3" strokeWidth="2.5" />
+        </g>
+      );
+    case 'hero-revive-blessing':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#86efac" d="M16 8c-4 1-7 5-7 9l7-3 7 3c0-4-3-8-7-9z" />
+          <path fill="#34d399" d="M16 22l-7-8 7 3 7-3z" />
+        </g>
+      );
+    case 'knight-honor-sweep':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" fill="none">
+          <path stroke="#ef4444" d="M8 20C12 10 20 8 26 10" strokeWidth="3" />
+          <path stroke="#fca5a5" d="M10 22c4-8 10-10 14-9" strokeWidth="1.5" />
+        </g>
+      );
+    case 'knight-armor-stun-convert':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#94a3b8" d="M10 10h12v8l-6 5-6-5z" />
+          <path fill="#fde047" d="M16 11l-2 5h4l-2 6 4-4h-3l2-5h-3z" />
+        </g>
+      );
+    case 'knight-overkill-upgrade':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fb923c" d="M14 8h4v10h-4z" />
+          <path fill="#f97316" d="M10 18l6 6 6-6" />
+          <path fill="none" stroke="#7c2d12" d="M16 6v4M13 8l3-3 3 3" strokeWidth="2" />
+        </g>
+      );
+    case 'knight-transform-repair':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#5eead4" d="M10 16a6 6 0 0 1 12 0" />
+          <path fill="#99f6e4" d="M10 16a6 6 0 0 0 12 0" />
+          <path fill="#94a3b8" d="M18 10h3v3l-4 4v-4z" />
+        </g>
+      );
+    case 'knight-transform-grant':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#c4b5fd" d="M16 8c-4 2-6 6-4 10 1-2 3-4 4-4s3 2 4 4c2-4 0-8-4-10z" />
+          <path fill="none" stroke="#7c3aed" d="M12 20c1 2 3 3 4 3s3-1 4-3" />
+        </g>
+      );
+    case 'knight-weapon-sweep':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" fill="none">
+          <path stroke="#ef4444" d="M16 16l-8-8" strokeWidth="2.5" />
+          <path stroke="#f87171" d="M16 16l8-8" strokeWidth="2.5" />
+          <path stroke="#dc2626" d="M16 16v-10" strokeWidth="2.5" />
+          <circle cx="16" cy="16" r="2.5" fill="#fee2e2" stroke={O} />
+        </g>
+      );
+    case 'dungeon-insight':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#818cf8" d="M6 16c4-6 8-8 10-8s6 2 10 8c-4 6-8 8-10 8s-6-2-10-8z" />
+          <circle cx="16" cy="16" r="3.5" fill="#e0e7ff" />
+          <circle cx="16" cy="16" r="1.5" fill="#312e81" />
+        </g>
+      );
+    case 'arcane-storm':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round">
+          <circle cx="16" cy="16" r="4" fill="#c084fc" />
+          <path fill="none" stroke="#7c3aed" d="M16 6v4M16 22v4M6 16h4M22 16h4" strokeWidth="2.5" />
+          <path fill="none" stroke="#a855f7" d="M10 10l3 3M23 23l-3-3M23 10l-3 3M10 23l3-3" strokeWidth="2" />
+        </g>
+      );
+    case 'equipment-enchant':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#94a3b8" d="M14 6h4v14h-4z" />
+          <path fill="#cbd5e1" d="M10 20h12v3H10z" />
+          <path fill="none" stroke="#c084fc" d="M11 10l2-2M21 10l-2-2M11 14l2-1M21 14l-2-1" strokeWidth="1.8" />
+        </g>
+      );
+    case 'altar-ritual':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <circle cx="16" cy="16" r="7" stroke="#a78bfa" />
+          <circle cx="16" cy="16" r="3" stroke="#7c3aed" />
+          <path stroke="#8b5cf6" d="M16 9v3M16 20v3M9 16h3M20 16h3" />
+        </g>
+      );
+    case 'persuade-boost':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#bfdbfe" d="M16 8c-3 1-5 4-5 7 2 0 4 1 5 3 1-2 3-3 5-3 0-3-2-6-5-7z" />
+          <path fill="#93c5fd" d="M10 18c2 2 4 3 6 4 2-1 4-2 6-4-2 0-4 1-6 3-2-2-4-3-6-3z" />
+        </g>
+      );
+    case 'bounty-spell':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="16" cy="16" r="6" fill="#fde047" />
+          <path fill="none" stroke="#854d0e" d="M16 12v8M12 16h8" strokeWidth="2" />
+          <path fill="none" stroke="#dc2626" d="M8 8l4 4M24 8l-4 4M8 24l4-4M24 24l-4-4" />
+        </g>
+      );
+    case 'crossroads-left-swap':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <rect x="7" y="10" width="6" height="8" rx="1" fill="#c4b5fd" />
+          <rect x="19" y="14" width="6" height="8" rx="1" fill="#ddd6fe" />
+          <path stroke="#6d28d9" d="M13 14h6M13 12l-2 2 2 2" strokeWidth="2" />
+          <path stroke="#6d28d9" d="M19 18h-6M19 16l2 2-2 2" strokeWidth="2" />
+        </g>
+      );
+    case 'crypt-deathwish':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#d6d3d1" d="M11 22V14c0-3 2-5 5-5s5 2 5 5v8" />
+          <path fill="none" stroke="#78716c" d="M14 16h4M16 14v4" />
+          <path fill="none" stroke="#a78bfa" d="M8 18c2-1 3-3 3-5" />
+        </g>
+      );
+    case 'guild-recycle-reshuffle':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path stroke="#2dd4bf" d="M10 12a6 6 0 0 1 6-4" />
+          <path fill="#2dd4bf" d="M16 6l2 3-3 1 1-4z" />
+          <path stroke="#818cf8" d="M22 20a6 6 0 0 1-6 4" />
+          <path fill="#818cf8" d="M16 26l-2-3 3-1-1 4z" />
+          <rect x="12" y="12" width="8" height="8" rx="1" fill="#f0fdf4" stroke={O} />
+        </g>
+      );
+
+    /* ── main deck magic ── */
+    case 'equivalent-exchange':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fcd34d" d="M16 8l-8 8h6v6h4v-6h6z" transform="rotate(0 16 16)" />
+          <path fill="#94a3b8" d="M10 12h4v2h-4zM18 18h4v2h-4z" />
+          <path fill="none" stroke="#78716c" d="M16 6v2M16 24v2" />
+        </g>
+      );
+    case 'mercy-decree':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#86efac" d="M12 10c-2 0-4 2-4 5s4 7 8 9c4-2 8-6 8-9s-2-5-4-5-4 2-4 4c0-2-2-4-4-4z" />
+          <path fill="#fef08a" d="M14 18h4l-2 3z" />
+        </g>
+      );
+    case 'arcane-refine':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#e9d5ff" d="M13 10h6l2 6-4 2-4-2z" />
+          <path fill="#c4b5fd" d="M11 16l5 2 5-2v6h-10z" />
+          <circle cx="16" cy="8" r="1.5" fill="#a78bfa" />
+          <circle cx="20" cy="12" r="1" fill="#c084fc" />
+        </g>
+      );
+    case 'celestial-forge':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#a8a29e" d="M10 18h12v4H10z" />
+          <path fill="#94a3b8" d="M14 12h4v6h-4z" />
+          <path fill="#fde047" d="M16 6l1.5 3.5h3.5l-3 2.5 1.5 3.5-3.5-2.5-3.5 2.5 1.5-3.5-3-2.5h3.5z" />
+        </g>
+      );
+    case 'stun-domain':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" fill="none">
+          <circle cx="16" cy="16" r="3" fill="#fde047" />
+          <circle cx="16" cy="16" r="6" stroke="#eab308" strokeWidth="1.8" />
+          <circle cx="16" cy="16" r="9" stroke="#fbbf24" strokeWidth="1.5" opacity="0.6" />
+        </g>
+      );
+    case 'amplify-magic':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#bae6fd" d="M12 14h8v8h-8z" />
+          <path fill="none" stroke="#0284c7" d="M16 10v-4M12 8l4-4 4 4" strokeWidth="2.5" />
+          <path fill="none" stroke="#0ea5e9" d="M10 18l-3-2M22 18l3-2" />
+        </g>
+      );
+
+    /* ── starter permanent magic ── */
+    case 'armor-craft':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#93c5fd" d="M10 10h12v8l-6 5-6-5z" />
+          <path fill="none" stroke="#1e40af" d="M13 14h6M16 11v6" />
+        </g>
+      );
+    case 'dimension-warp':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path stroke="#a855f7" d="M8 8h6v6h-6z" transform="skewX(-8)" />
+          <path stroke="#6366f1" d="M18 14h6v6h-6z" transform="skewX(8)" />
+          <path stroke="#c084fc" d="M14 14l4 0M14 14l0 4" strokeWidth="1.8" />
+        </g>
+      );
+    case 'undying-blessing':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fef08a" d="M16 6c-3 0-7 2-7 5s7 3 7 3 7 0 7-3-4-5-7-5z" />
+          <path fill="#fde68a" d="M12 14l4 10 4-10" />
+          <path fill="none" stroke="#ca8a04" d="M16 16v4" />
+        </g>
+      );
+    case 'recall-equip':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fed7aa" d="M14 10h8v10h-8z" />
+          <path fill="none" stroke="#c2410c" d="M14 15H8M8 12l-3 3 3 3" strokeWidth="2.2" />
+        </g>
+      );
+    case 'magic-missile':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round">
+          <path fill="#67e8f9" d="M8 12l6-2-1 4z" />
+          <path fill="#22d3ee" d="M12 16l6-2-1 4z" />
+          <path fill="#06b6d4" d="M16 20l6-2-1 4z" />
+        </g>
+      );
+    case 'gambler-ploy':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="8" y="10" width="8" height="11" rx="1" fill="#fef08a" transform="rotate(-5 12 15.5)" />
+          <rect x="17" y="11" width="7" height="7" rx="1" fill="#e9d5ff" transform="rotate(8 20.5 14.5)" />
+          <circle cx="20" cy="14" r="1" fill="#6d28d9" />
+        </g>
+      );
+    case 'recycle-echo':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" fill="none">
+          <path stroke="#2dd4bf" d="M16 8a8 8 0 0 1 0 16" strokeWidth="2.2" />
+          <path stroke="#5eead4" d="M16 24a8 8 0 0 1 0-16" strokeWidth="2.2" />
+          <path stroke="#14b8a6" d="M12 14c2-2 4-2 6 0s4 2 6 0" />
+        </g>
+      );
+    case 'deep-weave':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" fill="none">
+          <path stroke="#6366f1" d="M12 8c0 4 4 6 4 10s-4 6-4 10" strokeWidth="2" />
+          <path stroke="#34d399" d="M20 8c0 4-4 6-4 10s4 6 4 10" strokeWidth="2" />
+        </g>
+      );
+    case 'thunder-strike':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fde047" d="M12 6l-4 10h5l-2 8 10-12h-5l4-6z" />
+          <path fill="#facc15" d="M20 8l-3 8h4l-1 6 5-8h-4l3-6z" />
+        </g>
+      );
+    case 'essence-extract':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#d8b4fe" d="M16 10l-5 6 5 6 5-6z" />
+          <path fill="none" stroke="#7c3aed" d="M16 10v12M11 16h10" />
+          <path fill="none" stroke="#a855f7" d="M10 10l2-2M22 10l-2-2" />
+        </g>
+      );
+
+    /* ── starter instant magic ── */
+    case 'healing-art':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fda4af" d="M16 24c-5-4-9-8-9-12 0-3 2-5 5-5 2 0 3 1 4 3 1-2 2-3 4-3 3 0 5 2 5 5 0 4-4 8-9 12z" />
+        </g>
+      );
+    case 'class-summon':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="16" cy="16" r="7" fill="none" stroke="#a78bfa" strokeWidth="2" />
+          <path fill="#fde047" d="M16 10l1.5 3.5 3.5.5-2.5 2.5.5 3.5-3-1.5-3 1.5.5-3.5-2.5-2.5 3.5-.5z" />
+        </g>
+      );
+    case 'upgrade-scroll':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fde68a" d="M10 8h12v16H10z" />
+          <path fill="#fcd34d" d="M10 8c-1 0-2 1-2 2v14c0-1 1-2 2-2" />
+          <path fill="none" stroke="#92400e" d="M16 18v-6M13 15l3-3 3 3" strokeWidth="2" />
+        </g>
+      );
+
+    /* ── knight permanent magic ── */
+    case 'divine-eye':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#e0e7ff" d="M6 16c4-5 7-7 10-7s6 2 10 7c-4 5-7 7-10 7s-6-2-10-7z" />
+          <circle cx="16" cy="16" r="3" fill="#818cf8" />
+          <path fill="#fde047" d="M16 6l1 3h3l-2.5 2 1 3-2.5-2-2.5 2 1-3-2.5-2h3z" />
+        </g>
+      );
+    case 'emergency-recall':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="16" cy="14" r="7" fill="#fecaca" />
+          <path fill="#dc2626" d="M15 10h2v6h-2z" />
+          <circle cx="16" cy="19" r="1.2" fill="#dc2626" />
+          <path fill="none" stroke="#b91c1c" d="M10 22l-3 3M22 22l3 3" strokeWidth="2" />
+        </g>
+      );
+    case 'blade-flank':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#f87171" d="M22 8L8 18l2 2 14-10z" />
+          <path fill="none" stroke="#fca5a5" d="M6 20l4 2" strokeWidth="2" />
+          <path fill="none" stroke="#991b1b" d="M24 7l2 1" />
+        </g>
+      );
+    case 'wall-flank-guard':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#93c5fd" d="M8 10h6v12H8z" />
+          <path fill="#60a5fa" d="M14 10l4 2v10l-4 2V10z" />
+          <path fill="none" stroke="#1e3a8a" d="M10 14h2v4h-2z" />
+        </g>
+      );
+    case 'fortune-wheel':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="16" cy="16" r="8" fill="#fde68a" />
+          <path fill="none" stroke="#92400e" d="M16 8v16M8 16h16M10 10l12 12M22 10L10 22" />
+          <circle cx="16" cy="16" r="2" fill="#f59e0b" />
+        </g>
+      );
+    case 'blood-pact-draw':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fca5a5" d="M16 8c-2 0-4 2-4 5s4 7 4 7 4-4 4-7-2-5-4-5z" />
+          <rect x="18" y="14" width="5" height="7" rx="0.5" fill="#e0e7ff" />
+          <rect x="20" y="16" width="5" height="7" rx="0.5" fill="#c7d2fe" />
+        </g>
+      );
+    case 'forge-gamble':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#a8a29e" d="M8 18h10v4H8z" />
+          <path fill="#78716c" d="M11 14h4v4h-4z" />
+          <rect x="20" y="10" width="6" height="6" rx="1" fill="#e9d5ff" transform="rotate(12 23 13)" />
+          <circle cx="23" cy="13" r="0.8" fill="#6d28d9" />
+        </g>
+      );
+    case 'blood-sacrifice':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fca5a5" d="M14 8h4v6h-4z" />
+          <path fill="#ef4444" d="M12 14h8l-4 10z" />
+          <path fill="none" stroke="#7f1d1d" d="M10 12h12" strokeWidth="2" />
+        </g>
+      );
+
+    /* ── knight instant magic ── */
+    case 'undead-pact':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#d6d3d1" d="M12 12c0-3 2-5 4-5s4 2 4 5v2h-8z" />
+          <rect x="10" y="14" width="12" height="8" rx="1" fill="#a8a29e" />
+          <circle cx="14" cy="11" r="1" fill="#1c1917" />
+          <circle cx="18" cy="11" r="1" fill="#1c1917" />
+        </g>
+      );
+    case 'fate-decree':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="16" cy="15" r="7" fill="#e0e7ff" />
+          <path fill="none" stroke="#4338ca" d="M12 13c2 2 4 2 6 0M13 18h6" />
+          <path fill="#818cf8" d="M16 6l-1 3h2z" />
+          <path stroke="#6366f1" d="M16 3v3" strokeWidth="2" />
+        </g>
+      );
+    case 'monster-fusion':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="14" r="4" fill="#fca5a5" />
+          <circle cx="21" cy="14" r="4" fill="#93c5fd" />
+          <path fill="#d8b4fe" d="M14 18l2 6 2-6c-1-1-3-1-4 0z" />
+          <path fill="none" stroke="#6d28d9" d="M13 14h6" strokeWidth="1.5" />
+        </g>
+      );
+    case 'mirror-copy':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="7" y="10" width="7" height="10" rx="1" fill="#bae6fd" />
+          <rect x="18" y="10" width="7" height="10" rx="1" fill="#bfdbfe" />
+          <path fill="none" stroke="#64748b" d="M16 8v16" strokeWidth="1.5" strokeDasharray="2 2" />
+        </g>
+      );
+    case 'amulet-expand':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#d8b4fe" d="M16 8l-6 6v6l6 4 6-4v-6z" />
+          <path fill="none" stroke="#581c87" d="M13 16h6M16 13v6" strokeWidth="2.5" />
+        </g>
+      );
+    case 'eternal-inscription':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="10" y="8" width="12" height="16" rx="1" fill="#fde68a" />
+          <path fill="none" stroke="#92400e" d="M13 12h6M13 15h4M13 18h5" />
+          <circle cx="22" cy="10" r="2" fill="#fbbf24" />
+        </g>
+      );
+
+    /* ── hero magic ── */
+    case 'hero-monster-doom':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fca5a5" d="M16 8l-8 8 4 4h8l4-4z" />
+          <path fill="#ef4444" d="M13 14h6v4h-6z" />
+          <path fill="none" stroke="#7f1d1d" d="M14 16h4" strokeWidth="2" />
+          <path stroke="#dc2626" d="M8 8l3 3M24 8l-3 3" strokeWidth="2" />
+        </g>
+      );
+
+    /* ── event-derived magic ── */
+    case 'spacetime-mirror':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#93c5fd" d="M8 12h6v8H8z" />
+          <path fill="#a5b4fc" d="M18 12h6v8h-6z" />
+          <path fill="none" stroke="#3b82f6" d="M16 10v12" strokeDasharray="2 2" />
+          <path fill="none" stroke="#6366f1" d="M11 14h-1M21 18h1" />
+        </g>
+      );
+    case 'arcane-shield':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#67e8f9" d="M10 10h12v8l-6 5-6-5z" />
+          <circle cx="16" cy="14" r="3" fill="#a5f3fc" />
+          <path fill="#22d3ee" d="M16 11l1.5 2-1.5 1-1.5-1z" />
+        </g>
+      );
+    case 'echo-remnant':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#e7e5e4" d="M10 8h10v14l-4 2-6-2z" />
+          <path fill="none" d="M13 12h5M13 15h3" />
+          <path fill="none" stroke="#a8a29e" d="M20 8l2-2M20 16l3 0" />
+        </g>
+      );
+    case 'crypt-echo':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#d6d3d1" d="M11 22V14c0-3 2-5 5-5s5 2 5 5v8" />
+          <path fill="none" stroke="#8b5cf6" d="M9 18c-2-1-3-3-3-5M23 18c2-1 3-3 3-5" strokeWidth="2" />
+        </g>
+      );
+    case 'void-swap':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" fill="none">
+          <circle cx="16" cy="16" r="7" stroke="#6366f1" strokeWidth="2" />
+          <path stroke="#a855f7" d="M16 10c3 2 3 4 0 6s-3 4 0 6" strokeWidth="2" />
+        </g>
+      );
+    case 'monster-attack-debuff':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#94a3b8" d="M12 8h8v12h-8z" />
+          <path fill="#ef4444" d="M16 14v6M13 17l3 3 3-3" />
+          <path fill="none" stroke="#dc2626" d="M9 12l-2 2M23 12l2 2" />
+        </g>
+      );
+    case 'knight-stat-swap':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fca5a5" d="M8 8h10v10H8z" />
+          <path fill="#93c5fd" d="M14 14h10v10H14z" />
+          <path fill="none" stroke="#1c1917" d="M18 10l4 4M22 10l-2 2" strokeWidth="2" />
+          <path fill="none" stroke="#1c1917" d="M14 22l-4-4M10 22l2-2" strokeWidth="2" />
+        </g>
+      );
+    case 'recycle-fetch':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#bbf7d0" d="M11 12h10l-1.5 10h-7z" />
+          <path fill="none" d="M13 12c0-3 1.5-4 3-4s3 1 3 4" />
+          <path fill="none" stroke="#15803d" d="M16 16v5M14 19l2 2 2-2" strokeWidth="2" />
+        </g>
+      );
+    case 'magic-bolt':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#67e8f9" d="M10 16l12-6-2 6 2 6z" />
+          <path fill="#06b6d4" d="M14 14l4-2v4z" />
+        </g>
+      );
+    case 'graveyard-discover-relic':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#d6d3d1" d="M8 20h16v3H8z" />
+          <path fill="#a8a29e" d="M10 14h4v6h-4z" />
+          <path fill="#fde047" d="M18 12h6v5h-6z" />
+          <path fill="none" stroke="#92400e" d="M20 14h2v2h-2z" />
+        </g>
+      );
+    case 'amplify-target':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="16" cy="16" r="7" fill="none" stroke="#0ea5e9" strokeWidth="2" />
+          <circle cx="16" cy="16" r="3.5" fill="none" stroke="#38bdf8" strokeWidth="1.5" />
+          <path fill="none" stroke="#0284c7" d="M16 6v4M16 22v4M6 16h4M22 16h4" strokeWidth="1.5" />
+          <circle cx="16" cy="16" r="1.5" fill="#0ea5e9" />
+        </g>
+      );
     default:
       return cuteFallbackSticker(hashStickerKey(k));
   }
 }
+
+/** Every distinct sticker key that has a dedicated CuteSticker case (for preload cache). */
+export const ALL_STICKER_KEYS: readonly string[] = [
+  // fallback shapes
+  'fallback-0','fallback-1','fallback-2','fallback-3','fallback-4','fallback-5',
+  'fallback-6','fallback-7','fallback-8','fallback-9','fallback-10','fallback-11',
+  // starter / main magic
+  'battle-rally','master-repair','out-with-old','blessing-wind','labyrinth-retreat','world-swap',
+  'waterfall-reset','storm-rain','echo-bag','bulwark-ram','blood-gold-debt','eternal-mend',
+  'heal-echo','ember-echo','shadow-spike','chaos-strike','goblin-trick','curse-seal',
+  'spell-echo','blood-gold-rite','guild-hand-recycle','war-blood-seal',
+  // hero magic
+  'hero-holy-light','hero-berserker-rage','hero-revive-blessing','hero-monster-doom',
+  // knight class magic
+  'knight-blood-greed','knight-armor-strike','knight-missing-hp-smite','knight-grave-nova',
+  'knight-berserk-gambit','knight-recycle-flare','knight-death-ward','knight-chaos-dice',
+  'knight-graveyard-recall','knight-greed-curse','knight-honor-sweep',
+  'knight-armor-stun-convert','knight-overkill-upgrade','knight-transform-repair',
+  'knight-transform-grant','knight-weapon-sweep','knight-stat-swap',
+  // event glyphs
+  'evt-fate-crossroads','evt-vault','evt-shadow-pact','evt-resonance-forge','evt-greed-altar',
+  'evt-honor-echo','evt-blood-curse-rite','evt-crimson-pact','evt-tomb-chamber','evt-arcane-guild',
+  'evt-fate-dice-cup','evt-chaos-dice-game','evt-seal-demo','evt-nether-veil',
+  'evt-potion-manuscript','evt-spacetime-shrink','evt-arcane-corridor','evt-curse-dice',
+  'evt-persuade-festival','evt-war-workshop','evt-enchant-altar','evt-empowerment-shrine',
+  'evt-amplify-ritual','evt-hero-trial',
+  // main deck magic (new)
+  'equivalent-exchange','mercy-decree','arcane-refine','celestial-forge','stun-domain','amplify-magic',
+  'storm-volley','tome-search','dungeon-insight','arcane-storm','equipment-enchant','altar-ritual',
+  'persuade-boost','bounty-spell','crossroads-left-swap','crypt-deathwish','guild-recycle-reshuffle',
+  // starter magic (new)
+  'armor-craft','dimension-warp','undying-blessing','recall-equip','magic-missile',
+  'gambler-ploy','recycle-echo','deep-weave','thunder-strike','essence-extract',
+  'healing-art','class-summon','upgrade-scroll',
+  // knight magic (new)
+  'divine-eye','emergency-recall','blade-flank','wall-flank-guard','fortune-wheel',
+  'blood-pact-draw','forge-gamble','blood-sacrifice','undead-pact','fate-decree',
+  'monster-fusion','mirror-copy','amulet-expand','eternal-inscription',
+  // event-derived magic
+  'spacetime-mirror','arcane-shield','echo-remnant','crypt-echo','void-swap',
+  'monster-attack-debuff','recycle-fetch','magic-bolt','graveyard-discover-relic','amplify-target',
+];
 
 export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({
   card,

@@ -34,6 +34,7 @@ import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
 import {
   createGraveyardRecallCard,
 } from '@/lib/knightDeck';
+import sealBladeImage from '@assets/generated_images/knight_seal_blade.png';
 import {
   STARTER_CARD_IDS,
   skillScrollImage,
@@ -158,8 +159,6 @@ export interface EventSystemDeps {
   heroTurnLayerLossIdsRef: React.MutableRefObject<Set<string>>;
   bulwarkTempArmorRef: React.MutableRefObject<number>;
   handCardsRef: React.MutableRefObject<GameCardData[]>;
-  persuadeDiscountRef: React.MutableRefObject<{ costReduction: number; rateBonus: number } | null>;
-  persuadeAmuletBonusRef: React.MutableRefObject<number>;
   setPersuadeTempDiscount: React.Dispatch<React.SetStateAction<number>>;
 }
 
@@ -170,6 +169,8 @@ export interface EventSystemDeps {
 export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>) {
   const engine = useGameEngine();
   const gs = useGameState(s => s);
+  const setPersuadeAmuletBonus = useEngineSetter('persuadeAmuletBonus');
+  const setPersuadeDiscount = useEngineSetter('persuadeDiscount');
 
   const {
     hp,
@@ -740,14 +741,20 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       setBackpackItems(prev => {
         const next = [...cards, ...prev];
         if (next.length <= backpackCapacity) return next;
-        next.slice(backpackCapacity).forEach(c => depsRef.current.addToGraveyard(c));
+        const overflow = next.slice(backpackCapacity);
+        if (overflow.length > 0) {
+          setPermanentMagicRecycleBag(bag => [
+            ...bag,
+            ...overflow.map(c => ({ ...c, _recycleWaits: c.recycleDelay ?? 1 })),
+          ]);
+        }
         return next.slice(0, backpackCapacity);
       });
       addGameLog('skill', `从职业牌组底部获得 ${takeCount} 张牌：${cards.map(c => c.name).join('、')}`);
       depsRef.current.triggerClassDeckFlight(cards);
       return cards;
     },
-    [addGameLog, backpackCapacity, backpackItems.length, classDeck, setBackpackItems, setClassDeck],
+    [addGameLog, backpackCapacity, backpackItems.length, classDeck, setBackpackItems, setClassDeck, setPermanentMagicRecycleBag],
   );
 
   // ---------------------------------------------------------------------------
@@ -1656,49 +1663,49 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         }
       } else if (effect.startsWith('persuadeNextCostReduction:')) {
         const amount = parseInt(effect.replace('persuadeNextCostReduction:', ''), 10) || 3;
-        const existing = depsRef.current.persuadeDiscountRef?.current;
+        const existing = engine.getState().persuadeDiscount;
         const currentReduction = existing?.costReduction ?? 0;
         const currentRate = existing?.rateBonus ?? 0;
         const newReduction = currentReduction + amount;
-        depsRef.current.persuadeDiscountRef.current = {
+        setPersuadeDiscount({
           costReduction: newReduction,
           rateBonus: currentRate,
-        };
+        });
         depsRef.current.setPersuadeTempDiscount(newReduction);
         addGameLog('event', `事件效果：下一次劝降费用 -${amount}`);
         setHeroSkillBanner(`下一次劝降将减免 ${newReduction} 金币！`);
       } else if (effect.startsWith('persuadeNextRatePenalty:')) {
         const amount = parseInt(effect.replace('persuadeNextRatePenalty:', ''), 10) || 10;
-        const existing = depsRef.current.persuadeDiscountRef?.current;
+        const existing = engine.getState().persuadeDiscount;
         const currentReduction = existing?.costReduction ?? 0;
         const currentRate = existing?.rateBonus ?? 0;
         const newRate = currentRate - amount;
-        depsRef.current.persuadeDiscountRef.current = {
+        setPersuadeDiscount({
           costReduction: currentReduction,
           rateBonus: newRate,
-        };
+        });
         addGameLog('event', `事件效果：本回合劝降成功率 -${amount}%`);
         setHeroSkillBanner(`本回合劝降成功率降低 ${amount}%！`);
       } else if (effect.startsWith('persuadeNextCostIncrease:')) {
         const amount = parseInt(effect.replace('persuadeNextCostIncrease:', ''), 10) || 10;
-        const existing = depsRef.current.persuadeDiscountRef?.current;
+        const existing = engine.getState().persuadeDiscount;
         const currentReduction = existing?.costReduction ?? 0;
         const currentRate = existing?.rateBonus ?? 0;
         const newReduction = currentReduction - amount;
-        depsRef.current.persuadeDiscountRef.current = {
+        setPersuadeDiscount({
           costReduction: newReduction,
           rateBonus: currentRate,
-        };
+        });
         depsRef.current.setPersuadeTempDiscount(newReduction);
         addGameLog('event', `事件效果：下一次劝降费用 +${amount}`);
         setHeroSkillBanner(`下一次劝降将额外花费 ${amount} 金币！`);
       } else if (effect === 'persuadeNextFree') {
-        const existing = depsRef.current.persuadeDiscountRef?.current;
+        const existing = engine.getState().persuadeDiscount;
         const currentRate = existing?.rateBonus ?? 0;
-        depsRef.current.persuadeDiscountRef.current = {
+        setPersuadeDiscount({
           costReduction: 999,
           rateBonus: currentRate,
-        };
+        });
         depsRef.current.setPersuadeTempDiscount(999);
         addGameLog('event', '事件效果：下次劝降免费');
         setHeroSkillBanner('下次劝降将不花费金币！');
@@ -1715,8 +1722,9 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           });
           if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
             const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
-            depsRef.current.persuadeAmuletBonusRef.current += pBonus;
-            addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${depsRef.current.persuadeAmuletBonusRef.current}%）`);
+            const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+            setPersuadeAmuletBonus(newBonus);
+            addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
           }
           const names = slots.map(s => s.item!.name).join('、');
           addGameLog('event', `事件效果：所有装备临时攻击 +${amount}`);
@@ -2213,7 +2221,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             type: 'weapon',
             name: '封印之刃',
             value: 2,
-            image: skillScrollImage,
+            image: sealBladeImage,
             durability: 1,
             maxDurability: 1,
             onEquipEffect: 'durability-max+1',
