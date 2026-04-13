@@ -4856,35 +4856,10 @@ export default function GameBoard() {
       const nonMonsters = deckWithClassEvents.filter(c => c.type !== 'monster');
 
       if (isQuickMode) {
-        // Quick mode: all elites go to second half (none in first 2 rows = first 12 cards)
-        const firstHalf = [
-          ...nonEliteMonsters.slice(0, Math.min(Math.floor(nonEliteMonsters.length / 2), halfSize)),
-          ...nonMonsters.slice(0, halfSize - Math.min(Math.floor(nonEliteMonsters.length / 2), halfSize)),
-        ];
-        const secondHalf = [
-          ...nonEliteMonsters.slice(Math.min(Math.floor(nonEliteMonsters.length / 2), halfSize)),
-          ...eliteMonsters,
-          ...nonMonsters.slice(halfSize - Math.min(Math.floor(nonEliteMonsters.length / 2), halfSize)),
-        ];
-        firstHalf.sort(() => Math.random() - 0.5);
-        secondHalf.sort(() => Math.random() - 0.5);
-
-        // Ensure no elite in the first 12 cards (2 rows + stacks)
-        for (let i = 0; i < Math.min(12, firstHalf.length); i++) {
-          if (firstHalf[i].monsterSpecial) {
-            let swapTarget = -1;
-            for (let k = 12; k < firstHalf.length; k++) {
-              if (!firstHalf[k].monsterSpecial) { swapTarget = k; break; }
-            }
-            if (swapTarget >= 0) {
-              const tmp = firstHalf[i];
-              firstHalf[i] = firstHalf[swapTarget];
-              firstHalf[swapTarget] = tmp;
-            }
-          }
-        }
-
-        deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
+        // Quick mode: shuffle normally, density balancing will handle monster
+        // distribution. After that, push elites out of first 12 cards by swapping
+        // with non-elite MONSTERS (preserves monster count per region).
+        deckWithClassEvents.sort(() => Math.random() - 0.5);
       } else {
         // Pull 1 random elite into the first half
         let earlyElite: typeof eliteMonsters[0] | null = null;
@@ -4977,6 +4952,27 @@ export default function GameBoard() {
             monsterIndices.push(fillIdx);
           } else {
             break;
+          }
+        }
+      }
+    }
+
+    // Quick mode: push elites out of first 12 cards by swapping with
+    // non-elite monsters from later positions (preserves monster density).
+    if (isQuickMode) {
+      for (let i = 0; i < Math.min(12, deckWithClassEvents.length); i++) {
+        if (deckWithClassEvents[i].monsterSpecial) {
+          let swapTarget = -1;
+          for (let k = 12; k < deckWithClassEvents.length; k++) {
+            if (deckWithClassEvents[k].type === 'monster' && !deckWithClassEvents[k].monsterSpecial) {
+              swapTarget = k;
+              break;
+            }
+          }
+          if (swapTarget >= 0) {
+            const tmp = deckWithClassEvents[i];
+            deckWithClassEvents[i] = deckWithClassEvents[swapTarget];
+            deckWithClassEvents[swapTarget] = tmp;
           }
         }
       }
@@ -6319,6 +6315,23 @@ export default function GameBoard() {
             if (slotTempAttack.equipmentSlot1 !== 0 || slotTempAttack.equipmentSlot2 !== 0) {
               setSlotTempAttack({ equipmentSlot1: 0, equipmentSlot2: 0 });
             }
+            if (amuletEffects.hasStrength) {
+              setSlotTempAttack(prev => ({
+                equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
+                equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
+              }));
+            }
+            if (amuletEffects.hasBalance) {
+              setSlotTempAttack(prev => ({
+                equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
+                equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
+              }));
+              setSlotTempArmor(prev => ({
+                equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
+                equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
+              }));
+            }
+            suppressTurnAmuletReapplyRef.current = true;
             setActiveCards(prev => {
               let changed = false;
               const next = prev.map(c => {
@@ -6670,6 +6683,26 @@ export default function GameBoard() {
       setSlotTempAttack({ equipmentSlot1: 0, equipmentSlot2: 0 });
       addGameLog('combat', '瀑流重置：所有临时攻击力归零');
     }
+    // Aura amulets re-apply their temp bonuses after every waterfall reset
+    if (amuletEffects.hasStrength) {
+      setSlotTempAttack(prev => ({
+        equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
+        equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
+      }));
+      addGameLog('amulet', '力量护符（光环）：所有装备栏临时攻击 +4');
+    }
+    if (amuletEffects.hasBalance) {
+      setSlotTempAttack(prev => ({
+        equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
+        equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
+      }));
+      setSlotTempArmor(prev => ({
+        equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
+        equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
+      }));
+      addGameLog('amulet', '均衡护符（光环）：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1');
+    }
+    suppressTurnAmuletReapplyRef.current = true;
     setActiveCards(prev => {
       let changed = false;
       const clearedNames: string[] = [];

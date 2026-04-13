@@ -136,6 +136,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     persuadeDiscount: state.persuadeDiscount ? { ...state.persuadeDiscount } : null,
     lastPlayedCardCategory: state.lastPlayedCardCategory,
     magicCardsPlayedThisTurn: state.magicCardsPlayedThisTurn,
+    damageMagicPlayedThisTurn: state.damageMagicPlayedThisTurn,
     previewCardStacks: state.previewCardStacks,
     activeCardStacks: state.activeCardStacks,
     waterfallDealBonus: state.waterfallDealBonus,

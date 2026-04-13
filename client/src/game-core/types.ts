@@ -296,6 +296,8 @@ export interface GameState {
   lastPlayedCardCategory: string | null;
   /** 本波已使用的 magic 卡数量（瀑流重置，不含 hero-magic） */
   magicCardsPlayedThisTurn: number;
+  /** 本波已使用的造成伤害的 magic 卡数量（瀑流重置） */
+  damageMagicPlayedThisTurn: number;
 
   // --- Combat ---
   combatState: CombatState;

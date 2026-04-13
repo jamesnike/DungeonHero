@@ -208,5 +208,6 @@ export function waterfallResetsPure(state: GameState): Partial<GameState> {
     heroSkillUsedThisWave: false,
     extraSkillsUsedThisWave: [],
     magicCardsPlayedThisTurn: 0,
+    damageMagicPlayedThisTurn: 0,
   };
 }

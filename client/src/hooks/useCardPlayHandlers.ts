@@ -290,6 +290,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   const setSlotTempAttack = useEngineSetter('slotTempAttack');
   const setDoubleNextMagic = useEngineSetter('doubleNextMagic');
   const setMagicCardsPlayedThisTurn = useEngineSetter('magicCardsPlayedThisTurn');
+  const setDamageMagicPlayedThisTurn = useEngineSetter('damageMagicPlayedThisTurn');
   const setBulwarkPassiveActive = useEngineSetter('bulwarkPassiveActive');
   const setBulwarkTempArmorStacks = useEngineSetter('bulwarkTempArmorStacks');
   const setEternalRelics = useEngineSetter('eternalRelics');
@@ -722,6 +723,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             setHeroSkillBanner(`${ac.name} 反魔！受到 ${reflectDmg} 点伤害！`);
           }
         }
+      }
+
+      if (card.type === 'magic' && options?.dealtDamage) {
+        setDamageMagicPlayedThisTurn(prev => prev + 1);
       }
 
       if (card.type === 'hero-magic') {
@@ -5138,6 +5143,20 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               prompt: `奥术风暴：选择一个目标，造成 ${totalDmg} 点伤害（${magicCount} 张魔法卡）。`,
             });
             setHeroSkillBanner(`奥术风暴：${magicCount} 张魔法卡，选择目标造成 ${totalDmg} 点伤害。`);
+            return;
+          }
+          if (card.magicEffect === 'arcane-shield-stun-cap') {
+            const totalMagic = engine.getState().magicCardsPlayedThisTurn;
+            const damageMagic = engine.getState().damageMagicPlayedThisTurn;
+            const nonDamageCount = Math.max(0, totalMagic - damageMagic);
+            const stunGain = nonDamageCount * echoMultiplier;
+            if (stunGain > 0) {
+              setStunCap(prev => Math.min(100, prev + stunGain));
+            }
+            const newCap = Math.min(100, stunCap + stunGain);
+            finalizeMagicCard(card, {
+              banner: `奥术护盾：本回合 ${nonDamageCount} 张非伤害魔法卡，击晕上限 +${stunGain}%（当前 ${newCap}%）。${isEchoTriggered ? '（回响×2）' : ''}`,
+            });
             return;
           }
           if (card.magicEffect === 'altar-discard-discover') {

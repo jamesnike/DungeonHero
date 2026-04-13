@@ -92,6 +92,7 @@ export function createInitialGameState(): GameState {
     persuadeDiscount: null,
     lastPlayedCardCategory: null,
     magicCardsPlayedThisTurn: 0,
+    damageMagicPlayedThisTurn: 0,
 
     combatState: { ...initialCombatState },
     tempShield: 0,

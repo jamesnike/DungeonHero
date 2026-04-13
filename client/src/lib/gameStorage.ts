@@ -205,6 +205,7 @@ export interface PersistedGameState {
   persuadeDiscount?: { costReduction: number; rateBonus: number } | null;
   lastPlayedCardCategory?: string | null;
   magicCardsPlayedThisTurn?: number;
+  damageMagicPlayedThisTurn?: number;
   previewCardStacks?: Record<number, GameCardData[]>;
   activeCardStacks?: Record<number, GameCardData[]>;
   waterfallDealBonus?: number;
