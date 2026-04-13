@@ -503,7 +503,11 @@ export default function EquipmentSlot({
         </>
       )}
       {heroSkillHighlight && heroSkillLabel && (
-        <div className="absolute top-1/2 left-1/2 z-40 equip-slot-target-btn bg-amber-500 text-white font-bold py-2 rounded-full shadow-lg border-2 border-amber-300 cursor-pointer select-none whitespace-nowrap text-center">
+        <div
+          className="absolute top-1/2 left-1/2 z-40 equip-slot-target-btn bg-amber-500 text-white font-bold py-2 rounded-full shadow-lg border-2 border-amber-300 cursor-pointer select-none whitespace-nowrap text-center"
+          onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onClick?.(); }}
+        >
           {heroSkillLabel}
         </div>
       )}
