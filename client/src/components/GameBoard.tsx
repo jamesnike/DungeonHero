@@ -11141,6 +11141,9 @@ export default function GameBoard() {
               <GraveyardZone
                 compact
                 compactStyle={stripStyle}
+                onDrop={handleGraveyardDropStable}
+                isDropTarget={graveyardDropEnabled}
+                shouldHighlight={shouldHighlightGraveyard}
                 discardedCards={discardedCards}
                 onCardSelect={handleCardClick}
               />

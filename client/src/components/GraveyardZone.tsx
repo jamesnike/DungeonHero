@@ -39,24 +39,39 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
   const isOver = dragDepth > 0;
   const [viewerOpen, setViewerOpen] = useState(false);
   const graveyardRef = useRef<HTMLDivElement>(null);
+  const compactRef = useRef<HTMLButtonElement>(null);
   const isReadyToReceive = shouldHighlight && isDropTarget;
   const isHoverActive = isReadyToReceive && isOver;
   
-  // Set up mobile drop support
+  // Set up mobile drop support (full card)
   useEffect(() => {
     if (!graveyardRef.current || !onDrop) return;
     
     const cleanup = initMobileDrop(
       graveyardRef.current,
       (dragData) => {
-        // Handle both card and equipment drops
         onDrop(dragData.data);
       },
-      ['card', 'equipment'] // Accept both card and equipment drops
+      ['card', 'equipment']
     );
     
     return cleanup;
   }, [onDrop]);
+
+  // Set up mobile drop support (compact button)
+  useEffect(() => {
+    if (!compact || !compactRef.current || !onDrop) return;
+
+    const cleanup = initMobileDrop(
+      compactRef.current,
+      (dragData) => {
+        onDrop(dragData.data);
+      },
+      ['card', 'equipment']
+    );
+
+    return cleanup;
+  }, [compact, onDrop]);
   
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -116,9 +131,21 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
     <>
       {compact ? (
         <button
+          ref={compactRef}
           onClick={() => setViewerOpen(true)}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           data-testid="graveyard-zone-compact"
-          className="relative flex flex-col items-center justify-center rounded-l-lg border border-r-0 border-slate-400/30 bg-slate-700/20 text-slate-300/70 hover:bg-slate-600/30 hover:border-slate-400/50 transition-all duration-150"
+          className={cn(
+            'relative flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
+            isHoverActive
+              ? 'border-destructive bg-destructive/30 text-white ring-2 ring-destructive/60 scale-110'
+              : isReadyToReceive
+                ? 'border-primary/50 bg-slate-600/30 text-slate-200 animate-pulse'
+                : 'border-slate-400/30 bg-slate-700/20 text-slate-300/70 hover:bg-slate-600/30 hover:border-slate-400/50'
+          )}
           style={compactStyle}
         >
           <Skull className="w-4 h-4" />
