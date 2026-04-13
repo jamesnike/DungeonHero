@@ -140,11 +140,11 @@ export const heroSkills: HeroSkillDefinition[] = [
   {
     id: 'early-surge',
     name: '先发制人',
-    description: '开局多两波瀑布，并获得额外专属牌。',
-    effect: '被动：开局瀑布 +2，抽 3 张专属牌。',
+    description: '开局多一波瀑布，并获得额外专属牌。',
+    effect: '被动：开局瀑布 +1，抽 3 张专属牌。',
     type: 'passive',
     requiresTarget: null,
-    initialWaterfallBonus: 2,
+    initialWaterfallBonus: 1,
     initialClassCardDraw: 3,
   },
   {

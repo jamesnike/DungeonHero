@@ -404,7 +404,7 @@ export function useArcaneStormDamage(): number {
 
 export function isPermRecycleEquipment(card: GameCardData | null | undefined): boolean {
   return Boolean(
-    card && (card.type === 'weapon' || card.type === 'shield') && card.permEquipment,
+    card && (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') && card.permEquipment,
   );
 }
 

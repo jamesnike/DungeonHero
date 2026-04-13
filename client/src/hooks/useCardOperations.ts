@@ -288,7 +288,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       if (isPermRecycleEquipment(sanitized)) {
         const maxD = sanitized.maxDurability ?? sanitized.durability ?? 1;
         payload = { ...sanitized, durability: maxD, maxDurability: maxD };
-      } else if ((sanitized.type === 'weapon' || sanitized.type === 'shield') && sanitized.recycleDelay != null && sanitized.recycleDelay > 0) {
+      } else if ((sanitized.type === 'weapon' || sanitized.type === 'shield' || sanitized.type === 'monster') && sanitized.recycleDelay != null && sanitized.recycleDelay > 0) {
         payload = { ...sanitized, durability: 1 };
       }
       const withWaits: GameCardData = { ...payload, _recycleWaits: payload.recycleDelay ?? 1 };
@@ -844,7 +844,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       return;
     }
     const toRecycleBag = isPermRecycleEquipment(card) ||
-      ((card.type === 'weapon' || card.type === 'shield') && card.recycleDelay != null && card.recycleDelay > 0);
+      ((card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') && card.recycleDelay != null && card.recycleDelay > 0);
     if (toRecycleBag) {
       addPermanentMagicToRecycleBag(card);
     } else {
@@ -1006,7 +1006,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         return false;
       }
       const toRecycleBag = isPermRecycleEquipment(slotItem) ||
-        ((slotItem.type === 'weapon' || slotItem.type === 'shield') && slotItem.recycleDelay != null && slotItem.recycleDelay > 0);
+        ((slotItem.type === 'weapon' || slotItem.type === 'shield' || slotItem.type === 'monster') && slotItem.recycleDelay != null && slotItem.recycleDelay > 0);
       if (toRecycleBag) {
         addPermanentMagicToRecycleBag(slotItem);
       } else {
@@ -1038,7 +1038,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       let count = 0;
       const sendToGrave = (item: EquipmentItem) => {
         const toRecycleBag = isPermRecycleEquipment(item) ||
-          ((item.type === 'weapon' || item.type === 'shield') && item.recycleDelay != null && item.recycleDelay > 0);
+          ((item.type === 'weapon' || item.type === 'shield' || item.type === 'monster') && item.recycleDelay != null && item.recycleDelay > 0);
         if (toRecycleBag) {
           addPermanentMagicToRecycleBag(item);
         } else {

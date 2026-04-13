@@ -52,9 +52,9 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'early-surge': {
     id: 'early-surge',
     name: '永恒护符·先发制人',
-    description: '开局瀑流 +2，抽 3 张专属牌。',
+    description: '开局瀑流 +1，抽 3 张专属牌。',
     image: relicEarlySurgeImage,
-    initialWaterfallBonus: 2,
+    initialWaterfallBonus: 1,
     initialClassCardDraw: 3,
   },
   'shield-wall': {

@@ -4928,11 +4928,14 @@ export default function GameBoard() {
       }
     }
 
-    // Balance monster density: 1–2 monsters per non-overlapping chunk
+    // Balance monster density: 1–2 monsters per non-overlapping chunk.
+    // Quick mode uses CHUNK=5 because waterfall deals exactly 5 cards per row
+    // (the +1 stack card is always a non-monster, so it doesn't affect row
+    // monster composition and shifts the deck unpredictably).
     {
       const MIN_MONSTERS = 1;
       const MAX_MONSTERS = 2;
-      const CHUNK = 6;
+      const CHUNK = isQuickMode ? 5 : 6;
       for (let start = 0; start + CHUNK <= deckWithClassEvents.length; start += CHUNK) {
         const chunkEnd = start + CHUNK;
         const monsterIndices: number[] = [];
@@ -5118,7 +5121,7 @@ export default function GameBoard() {
     {
       const MIN_MONSTERS = 1;
       const MAX_MONSTERS = 2;
-      const CHUNK = 6;
+      const CHUNK = isQuickMode ? 5 : 6;
       for (let start = 0; start + CHUNK <= dealQueue.length; start += CHUNK) {
         const chunkEnd = start + CHUNK;
         const monsterIndices: number[] = [];
