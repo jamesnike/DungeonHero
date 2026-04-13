@@ -383,6 +383,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           pending: pendingAutoDrawsRef.current,
           backpackCount: st.backpackItems.length,
         });
+        pendingAutoDrawsRef.current = 0;
         break;
       }
 
@@ -392,6 +393,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           pending: pendingAutoDrawsRef.current,
           backpackCount: engine.getState().backpackItems.length,
         });
+        pendingAutoDrawsRef.current = 0;
         break;
       }
 
@@ -403,10 +405,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         backpackCount: engine.getState().backpackItems.length,
       });
     }
-  }, [handCards.length]);
+  }, []);
 
   useEffect(() => {
-    if (isSettledForAutoDraw) {
+    if (isSettledForAutoDraw && pendingAutoDrawsRef.current > 0) {
       processPendingAutoDraws();
     }
   }, [isSettledForAutoDraw, backpackItems.length, handCards.length, processPendingAutoDraws, autoDrawTrigger]);
@@ -3592,11 +3594,21 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   // Return bag
   // ---------------------------------------------------------------------------
 
+  const unregisterProcessedCardId = useCallback((cardId: string) => {
+    processedDungeonCardIdsRef.current.delete(cardId);
+  }, []);
+
+  const clearAllProcessedCardIds = useCallback(() => {
+    processedDungeonCardIdsRef.current.clear();
+  }, []);
+
   return {
     startEventResolution,
     processPendingAutoDraws,
     enqueueAutoDraw,
     registerDungeonCardProcessed,
+    unregisterProcessedCardId,
+    clearAllProcessedCardIds,
     requestDiceOutcome,
     handleDiceRollResult,
     cancelDiceModal,

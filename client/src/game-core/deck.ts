@@ -352,7 +352,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       {
         name: 'Swarm',
         image: swarmImage,
-        minAttack: 2, maxAttack: 4,
+        minAttack: 3, maxAttack: 5,
         minHp: 6, maxHp: 9,
         minFury: 2, maxFury: 2,
         waterfallEffect: { type: 'swarmInfest' as const, amount: 3, description: '被挤出时：在主牌堆顶加入 3 只小虫子' },
@@ -396,7 +396,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         ...(monsterType.name === 'Dragon' ? { bleedEffect: 'attack+2' } : {}),
         ...(monsterType.name === 'Ogre' ? { enterEffect: 'auto-engage' } : {}),
         ...(monsterType.name === 'Wraith' ? { lastWords: 'wraith-haunt-2' } : {}),
-        ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-3' } : {}),
+        ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-5' } : {}),
         ...(monsterType.name === 'Swarm' ? { swarmSpawn: true, description: '虫群：场上有虫群怪物时，每移除一张地城牌，在该位置生成一只小虫子。' } : {}),
         ...(monsterType.name === 'Golem' ? { antiMagicReflect: 2, description: '反魔：玩家每使用一张法术牌，对玩家造成 2 点伤害。' } : {}),
       });
@@ -448,7 +448,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
           ...(monsterType.name === 'Dragon' ? { bleedEffect: 'attack+2' } : {}),
           ...(monsterType.name === 'Ogre' ? { enterEffect: 'auto-engage' } : {}),
           ...(monsterType.name === 'Wraith' ? { lastWords: 'wraith-haunt-2' } : {}),
-          ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-3' } : {}),
+          ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-5' } : {}),
           ...(monsterType.name === 'Swarm' ? { swarmSpawn: true, description: '虫群：场上有虫群怪物时，每移除一张地城牌，在该位置生成一只小虫子。' } : {}),
           ...(monsterType.name === 'Golem' ? { antiMagicReflect: 2, description: '反魔：玩家每使用一张法术牌，对玩家造成 2 点伤害。' } : {}),
         };
@@ -482,6 +482,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       }
       if (type === 'Goblin') {
         chosen.goblinStealEquip = true;
+        chosen.onAttackEffect = 'steal-gold-8';
         chosen.waterfallEffect = { type: 'goldLoss', amount: 12, description: '被挤出时：失去 12 金币' };
       }
       if (type === 'Skeleton') {
@@ -499,7 +500,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     const goblinsForTrick = deck.filter(
       (c): c is GameCardData => c.type === 'monster' && c.monsterType === 'Goblin',
     );
-    if (goblinsForTrick.length > 0) {
+    if (goblinsForTrick.length > 0 && (!isQuick || Math.random() < 0.5)) {
       const trickCarrier = goblinsForTrick[Math.floor(Math.random() * goblinsForTrick.length)];
       trickCarrier.goblinTrickCarrier = true;
     }
@@ -2308,8 +2309,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollSummonImage,
       magicType: 'instant',
-      magicEffect: '即时魔法：弃回 2 张牌，获得一张职业专属卡。',
-      description: '弃回 2 张牌，获得一张职业专属卡。',
+      magicEffect: '即时魔法：弃回至多 2 张牌，获得一张职业专属卡。',
+      description: '弃回至多 2 张手牌，获得一张职业专属卡。手牌不足 2 张时仍可使用。',
       maxUpgradeLevel: 1,
     },
     {
@@ -2358,7 +2359,7 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletDamageDiscoverImage,
       amuletEffect: 'damage-class-discover',
-      description: '每造成 10 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
+      description: '每造成 8 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
     },
     {
       id: STARTER_CARD_IDS.swapUpgradeAmulet,

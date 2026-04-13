@@ -2238,8 +2238,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           },
           Goblin: {
             monsterSpecial: 'goblin-elite',
-            monsterSpecialDesc: '融合精英：攻击偷取3金币 + 窃宝。',
-            goblinStealEquip: true, onAttackEffect: 'steal-gold-3',
+            monsterSpecialDesc: '融合精英：攻击偷取8金币 + 窃宝。',
+            goblinStealEquip: true, onAttackEffect: 'steal-gold-8',
           },
           Ogre: {
             monsterSpecial: 'ogre-crit',
@@ -2603,26 +2603,21 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       case 'temp-attack-strike': {
         const isFlank = depsRef.current.lastPlayedFlankRef.current;
         depsRef.current.consumeClassCardFromHand(card.id);
-        const allSlots = depsRef.current.getEquipmentSlots().filter(slot => slot.item != null);
-        if (allSlots.length === 0) {
-          finalizeMagicCard(card, { banner: '没有装备可选择。' });
-          return true;
-        }
-        const slotsWithTempAtk = allSlots.filter(slot => (gs.slotTempAttack[slot.id] ?? 0) > 0);
-        if (slotsWithTempAtk.length === 0) {
-          finalizeMagicCard(card, { banner: '所有装备栏都没有临时攻击。' });
-          return true;
-        }
-        if (slotsWithTempAtk.length === 1) {
-          const slotId = slotsWithTempAtk[0].id;
+        const allSlots = depsRef.current.getEquipmentSlots();
+        if (allSlots.length === 1) {
+          const slotId = allSlots[0].id;
           const tempAtk = gs.slotTempAttack[slotId] ?? 0;
+          const totalDamage = getSpellDamage(tempAtk + (card.amplifyBonus ?? 0));
+          if (totalDamage <= 0) {
+            finalizeMagicCard(card, { banner: '该装备栏没有临时攻击，造成 0 点伤害。' });
+            return true;
+          }
           const monsters = flattenActiveRowSlots(activeCards).filter(isDamageableTarget);
           if (monsters.length === 0) {
             finalizeMagicCard(card, { banner: '当前没有可攻击的怪物。' });
             return true;
           }
           const target = monsters[Math.floor(Math.random() * monsters.length)];
-          const totalDamage = getSpellDamage(tempAtk + (card.amplifyBonus ?? 0));
           if (!depsRef.current.isMonsterEngaged(target.id)) depsRef.current.beginCombat(target, 'hero');
           depsRef.current.dealDamageToMonster(target, totalDamage, { pulses: 2, isSpellDamage: true });
           let stunText = '';
@@ -4000,19 +3995,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         case '专属召唤': {
           const wasPlayedFromHand = handCards.some(c => c.id === card.id);
           const actualHandCount = handCards.length - (wasPlayedFromHand ? 1 : 0);
-          if (actualHandCount < 2) {
-            finalizeMagicCard(card, { banner: '手牌不足 2 张，无法使用。' });
-            return;
-          }
-          void depsRef.current.requestCardAction('discard-recycle', 2, {
-            title: '专属召唤：弃回 2 张牌',
-            description: '弃回 2 张牌，获得一张职业专属卡。',
-            handOnly: true,
-          }).then(success => {
-            if (!success) {
-              finalizeMagicCard(card, { banner: '取消了专属召唤。' });
-              return;
-            }
+          const discardCount = Math.min(actualHandCount, 2);
+          const doSummon = () => {
             const classDrawn = depsRef.current.drawClassCardsToBackpack(1, '专属召唤');
             if (classDrawn.length > 0) {
               depsRef.current.triggerClassDeckFlight(classDrawn);
@@ -4021,7 +4005,22 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             } else {
               finalizeMagicCard(card, { banner: '职业牌堆已空。' });
             }
-          });
+          };
+          if (discardCount === 0) {
+            doSummon();
+          } else {
+            void depsRef.current.requestCardAction('discard-recycle', discardCount, {
+              title: `专属召唤：弃回 ${discardCount} 张牌`,
+              description: `弃回 ${discardCount} 张牌，获得一张职业专属卡。`,
+              handOnly: true,
+            }).then(success => {
+              if (!success) {
+                finalizeMagicCard(card, { banner: '取消了专属召唤。' });
+                return;
+              }
+              doSummon();
+            });
+          }
           return;
         }
         case '升级卷轴': {
@@ -4339,7 +4338,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return;
         }
         for (const hc of otherHandCards) {
-          depsRef.current.discardCardToGraveyard(hc, { owner: 'player', forceRecycleBag: true });
+          depsRef.current.addCardToBackpack(hc);
         }
         setHandCards(prev => prev.filter(c => c.id === card.id));
         const drawn: GameCardData[] = [];
@@ -4350,7 +4349,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         if (drawn.length > 0) {
           for (const d of drawn) depsRef.current.queueCardIntoHand(d);
         }
-        depsRef.current.addGameLog('magic', `哥布林的戏法：${count} 张手牌洗入回收袋，抽了 ${drawn.length} 张新牌。`);
+        depsRef.current.addGameLog('magic', `哥布林的戏法：${count} 张手牌洗入背包，抽了 ${drawn.length} 张新牌。`);
         finalizeMagicCard(card, { banner: `哥布林的戏法：刷新了 ${count} 张手牌！` });
         return;
       }
@@ -4785,19 +4784,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         case STARTER_CARD_IDS.classSummon: {
           const wasPlayedFromHand = handCards.some(c => c.id === card.id);
           const actualHandCount = handCards.length - (wasPlayedFromHand ? 1 : 0);
-          if (actualHandCount < 2) {
-            finalizeMagicCard(card, { banner: '手牌不足 2 张，无法使用。' });
-            return;
-          }
-          void depsRef.current.requestCardAction('discard-recycle', 2, {
-            title: '专属召唤：弃回 2 张牌',
-            description: '弃回 2 张牌，获得一张职业专属卡。',
-            handOnly: true,
-          }).then(success => {
-            if (!success) {
-              finalizeMagicCard(card, { banner: '取消了专属召唤。' });
-              return;
-            }
+          const discardCount = Math.min(actualHandCount, 2);
+          const doSummon = () => {
             const classDrawn = depsRef.current.drawClassCardsToBackpack(1, '专属召唤');
             if (classDrawn.length > 0) {
               depsRef.current.triggerClassDeckFlight(classDrawn);
@@ -4806,7 +4794,22 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             } else {
               finalizeMagicCard(card, { banner: '职业牌堆已空。' });
             }
-          });
+          };
+          if (discardCount === 0) {
+            doSummon();
+          } else {
+            void depsRef.current.requestCardAction('discard-recycle', discardCount, {
+              title: `专属召唤：弃回 ${discardCount} 张牌`,
+              description: `弃回 ${discardCount} 张牌，获得一张职业专属卡。`,
+              handOnly: true,
+            }).then(success => {
+              if (!success) {
+                finalizeMagicCard(card, { banner: '取消了专属召唤。' });
+                return;
+              }
+              doSummon();
+            });
+          }
           return;
         }
         case STARTER_CARD_IDS.dimensionWarp: {
@@ -5421,7 +5424,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   // ---------------------------------------------------------------------------
 
   const applyTransformAndUpdateCategory = (card: GameCardData) => {
-    if (card.transformEffect && card.type !== 'event') {
+    if (card.transformEffect) {
       const prevCat = engine.getState().lastPlayedCardCategory;
       const curCat = getCardPlayCategory(card);
       if (prevCat != null && prevCat !== curCat) {
@@ -5476,9 +5479,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         }
       }
     }
-    if (card.type !== 'event') {
-      setLastPlayedCardCategory(getCardPlayCategory(card));
-    }
+    setLastPlayedCardCategory(getCardPlayCategory(card));
   };
 
   // ---------------------------------------------------------------------------

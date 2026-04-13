@@ -433,7 +433,7 @@ export default function CardDetailsModal({
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">
-                    每次攻击时偷取{card.onAttackEffect === 'steal-gold-6' ? ' 6 ' : ' 3 '}金币。
+                    每次攻击时偷取 {card.onAttackEffect?.replace('steal-gold-', '') ?? '5'} 金币。
                   </p>
                 </div>
               </div>
@@ -612,7 +612,7 @@ export default function CardDetailsModal({
                     <Sword className="w-4 h-4 shrink-0 text-purple-500" />
                     <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨念光环</span>
                   </div>
-                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">每个怪物回合结束时，激活行所有怪物攻击力 +{card.wraithAuraAttack}。</p>
+                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">每个怪物回合结束时，激活行所有怪物攻击力 +{card.wraithAuraAttack}（无需激怒）。</p>
                 </div>
               </div>
             )}

@@ -6,6 +6,7 @@ import type { LogEntryType } from '@/components/GameLogPanel';
 import type {
   ActiveAmuletEffects,
   ActiveRowSlots,
+  DeckPeekModalState,
   EquipmentItem,
   EquipmentRepairTarget,
   EquipmentSlotId,
@@ -128,6 +129,10 @@ export interface HeroActionsDeps {
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerFateSwapFlight: (activeSlotIdx: number, oldCard: GameCardData, newCard: GameCardData) => void;
   clearAllBackpackHandFallbacks: () => void;
+
+  // --- Deck peek modal ---
+  setDeckPeekState: React.Dispatch<React.SetStateAction<DeckPeekModalState | null>>;
+  deckJudgePeekCloseRef: React.MutableRefObject<(() => void) | null>;
 
   // --- Local state not in engine ---
   setHeroSkillArrow: (val: HeroSkillArrowState | null) => void;
@@ -1173,7 +1178,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   // ---------------------------------------------------------------------------
 
   const handleMagicSlotSelection = useCallback(
-    (slotId: EquipmentSlotId) => {
+    async (slotId: EquipmentSlotId) => {
       if (!pendingMagicAction || pendingMagicAction.step !== 'slot-select') {
         return;
       }
@@ -1361,20 +1366,10 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       }
 
       if (pendingMagicAction.effect === 'temp-attack-strike') {
-        const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-        if (!slotItem) {
-          setHeroSkillBanner('该装备栏为空，请选择其他装备栏。');
-          return;
-        }
         const tempAtk = gs.slotTempAttack[slotId] ?? 0;
-        if (tempAtk <= 0) {
-          const otherSlots = getEquipmentSlots().filter(s => s.id !== slotId && s.item != null);
-          const hasOtherTempAtk = otherSlots.some(s => (gs.slotTempAttack[s.id] ?? 0) > 0);
-          if (!hasOtherTempAtk) {
-            finalizeMagicCard(pendingMagicAction.card, { banner: '所有装备栏都没有临时攻击。' });
-            return;
-          }
-          setHeroSkillBanner('该装备栏没有临时攻击，请选择其他装备栏。');
+        const totalDamage = getSpellDamage(tempAtk + (pendingMagicAction.card.amplifyBonus ?? 0));
+        if (totalDamage <= 0) {
+          finalizeMagicCard(pendingMagicAction.card, { banner: '该装备栏没有临时攻击，造成 0 点伤害。' });
           return;
         }
         const monsters = flattenActiveRowSlots(activeCards).filter(isDamageableTarget);
@@ -1383,7 +1378,6 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           return;
         }
         const target = monsters[Math.floor(Math.random() * monsters.length)];
-        const totalDamage = getSpellDamage(tempAtk + (pendingMagicAction.card.amplifyBonus ?? 0));
         if (!isMonsterEngaged(target.id)) beginCombat(target, 'hero');
         dealDamageToMonster(target, totalDamage, { pulses: 2, isSpellDamage: true });
         const isFlank = pendingMagicAction.isFlank ?? false;
@@ -1615,6 +1609,23 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         const peekedCards = deck.slice(0, peekCount);
         const eventCount = peekedCards.filter(c => c.type === 'event').length;
 
+        const gains: { label: string; count: number }[] = [];
+        if (eventCount > 0) {
+          gains.push({ label: `${slotItem.name} 耐久上限 +1 并恢复 1 点耐久`, count: eventCount });
+        }
+
+        if (peekCount > 0) {
+          depsRef.current.setDeckPeekState({
+            mode: 'dungeon-insight',
+            peekedCards,
+            gains,
+          });
+
+          await new Promise<void>(resolve => {
+            depsRef.current.deckJudgePeekCloseRef.current = () => resolve();
+          });
+        }
+
         if (eventCount > 0) {
           const oldMaxDur = slotItem.maxDurability ?? slotItem.durability ?? 0;
           const curDur = slotItem.durability ?? oldMaxDur;
@@ -1626,9 +1637,8 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           addGameLog('magic', `天机铸炼：翻看 ${peekCount} 张牌，0 张事件 → 无增益`);
         }
 
-        const cardNames = peekedCards.map(c => c.name).join('、');
         const banner = peekCount > 0
-          ? `天机铸炼翻看 ${peekCount} 张牌（${cardNames}）：${eventCount} 张事件，${eventCount > 0 ? `${slotItem.name} 耐久上限 +${eventCount}，恢复 ${eventCount} 点耐久。` : '无增益。'}`
+          ? `天机铸炼翻看 ${peekCount} 张牌：${eventCount} 张事件，${eventCount > 0 ? `${slotItem.name} 耐久上限 +${eventCount}，恢复 ${eventCount} 点耐久。` : '无增益。'}`
           : '天机铸炼：主牌堆已空，无效果。';
         finalizeMagicCard(pendingMagicAction.card, { banner });
         return;

@@ -276,7 +276,8 @@ export type CardPlayCategory =
   | 'shield'
   | 'amulet'
   | 'potion'
-  | 'monster-equipment';
+  | 'monster-equipment'
+  | 'event';
 
 export function getCardPlayCategory(card: GameCardData): CardPlayCategory {
   const t: CardType = card.type;
@@ -289,6 +290,7 @@ export function getCardPlayCategory(card: GameCardData): CardPlayCategory {
   if (t === 'amulet') return 'amulet';
   if (t === 'potion') return 'potion';
   if (t === 'monster') return 'monster-equipment';
+  if (t === 'event' || t === 'building') return 'event';
   return 'instant-magic';
 }
 

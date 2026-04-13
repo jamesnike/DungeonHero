@@ -494,6 +494,7 @@ export default function GameBoard() {
   const setDiscoverOptions = useEngineSetter('discoverOptions');
   const setDeleteModalOpen = useEngineSetter('deleteModalOpen');
   const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
+  const setUpgradeModalMaxCount = useEngineSetter('upgradeModalMaxCount');
   const setHandMagicUpgradeModal = useEngineSetter('handMagicUpgradeModal');
   const setMirrorCopyModal = useEngineSetter('mirrorCopyModal');
   const setGraveyardDiscoverState = useEngineSetter('graveyardDiscoverState');
@@ -870,6 +871,11 @@ export default function GameBoard() {
     daggerSelfDestructResolverRef.current = null;
   }, []);
 
+  const handleUpgradeModalChange = useCallback((open: boolean) => {
+    setUpgradeModalOpen(open);
+    if (!open) setUpgradeModalMaxCount(undefined);
+  }, [setUpgradeModalOpen, setUpgradeModalMaxCount]);
+
   const handleHandMagicUpgradeSelect = useCallback((cardIds: string[]) => {
     for (const cardId of cardIds) handleCardUpgrade(cardId);
     setHandMagicUpgradeModal(null);
@@ -960,6 +966,8 @@ export default function GameBoard() {
     processPendingAutoDraws,
     enqueueAutoDraw,
     registerDungeonCardProcessed,
+    unregisterProcessedCardId,
+    clearAllProcessedCardIds,
     requestDiceOutcome,
     handleDiceRollResult,
     cancelDiceModal,
@@ -4437,12 +4445,29 @@ export default function GameBoard() {
     if (!isHydrated || gameOver) {
       return;
     }
-    const serialized = JSON.stringify(persistedState);
+    // Cards in-flight (backpack→hand animation) have already been removed from
+    // backpackItems but not yet inserted into handCards.  Include them in the
+    // persisted snapshot so they survive a page reload mid-animation.
+    const inFlight = backpackHandFlightsRef.current;
+    let stateToSave = persistedState;
+    if (inFlight.length > 0) {
+      const existingIds = new Set(persistedState.handCards.map(c => c.id));
+      const missing = inFlight
+        .filter(f => !f.delivered && !existingIds.has(f.card.id))
+        .map(f => f.card);
+      if (missing.length > 0) {
+        stateToSave = {
+          ...persistedState,
+          handCards: [...persistedState.handCards, ...missing],
+        };
+      }
+    }
+    const serialized = JSON.stringify(stateToSave);
     if (lastPersistedStateRef.current === serialized) {
       return;
     }
     lastPersistedStateRef.current = serialized;
-    saveGameState(persistedState);
+    saveGameState(stateToSave);
   }, [persistedState, isHydrated, gameOver]);
 
   useEffect(() => {
@@ -4572,12 +4597,12 @@ export default function GameBoard() {
 
       const engagedIds = combatState.engagedMonsterIds;
 
-      // Wraith aura: check if any engaged wraith has wraithAuraAttack
+      // Wraith aura: triggers for ALL active-row wraiths (engaged or not)
       let auraBoost = 0;
       let hasWraithEnrage = false;
       let hasWraithDestroyAmulet = false;
       for (const card of activeCards) {
-        if (!card || !engagedIds.includes(card.id) || card.isStunned) continue;
+        if (!card || card.type !== 'monster' || card.isStunned) continue;
         if (card.wraithAuraAttack && card.wraithAuraAttack > 0) {
           auraBoost = Math.max(auraBoost, card.wraithAuraAttack);
         }
@@ -4830,9 +4855,11 @@ export default function GameBoard() {
     setHeroVariant(getRandomHero());
     clearAllHandDeliveryGuards();
     processedDungeonCardIdsRef.current.clear();
+    clearAllProcessedCardIds();
     previousActiveCardsRef.current = createEmptyActiveRow();
     freshGameStartRef.current = true;
     const isQuickMode = mode === 'quick';
+    const initialTurnCount = isQuickMode ? 2 : INITIAL_TURN_COUNT;
     const newDeck = createDeck(mode);
     for (let i = 0; i < newDeck.length; i++) {
       if (newDeck[i].type === 'event') {
@@ -5040,7 +5067,7 @@ export default function GameBoard() {
     ensureRowHasMonster(previewRaw, dealQueue);
     const initialPreview = fillActiveRowSlots(previewRaw).map((card, slotIdx) => {
       if (!card) return null;
-      const raged = applyMonsterRage(card, INITIAL_TURN_COUNT + 1);
+      const raged = applyMonsterRage(card, initialTurnCount + 1);
       if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
         return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
       }
@@ -5056,7 +5083,7 @@ export default function GameBoard() {
         .filter(i => i >= 0);
       if (nonMonsterPreviewIndices.length > 0) {
         const targetIdx = nonMonsterPreviewIndices[Math.floor(Math.random() * nonMonsterPreviewIndices.length)];
-        initialPreviewStacks[targetIdx] = [applyMonsterRage(previewStackCard, INITIAL_TURN_COUNT + 1)];
+        initialPreviewStacks[targetIdx] = [applyMonsterRage(previewStackCard, initialTurnCount + 1)];
       }
     }
 
@@ -5065,7 +5092,7 @@ export default function GameBoard() {
     ensureRowHasMonster(activeRaw, dealQueue);
     const initialActive = fillActiveRowSlots(activeRaw).map((card, slotIdx) => {
       if (!card) return null;
-      const raged = applyMonsterRage(card, INITIAL_TURN_COUNT);
+      const raged = applyMonsterRage(card, initialTurnCount);
       if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
         return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
       }
@@ -5081,7 +5108,7 @@ export default function GameBoard() {
         .filter(i => i >= 0);
       if (nonMonsterActiveIndices.length > 0) {
         const targetIdx = nonMonsterActiveIndices[Math.floor(Math.random() * nonMonsterActiveIndices.length)];
-        initialActiveStacks[targetIdx] = [applyMonsterRage(activeStackCard, INITIAL_TURN_COUNT)];
+        initialActiveStacks[targetIdx] = [applyMonsterRage(activeStackCard, initialTurnCount)];
       }
     }
 
@@ -5162,6 +5189,7 @@ export default function GameBoard() {
     engine.replaceState({
       ...createInitialGameState(),
       gameMode: mode,
+      turnCount: initialTurnCount,
       heroVariant: newHero,
       heroClass: newHeroClass,
       previewCards: initialPreview,
@@ -5268,6 +5296,7 @@ export default function GameBoard() {
 
     clearAllHandDeliveryGuards();
     processedDungeonCardIdsRef.current.clear();
+    clearAllProcessedCardIds();
     previousActiveCardsRef.current = createEmptyActiveRow();
     lastWaterfallSequenceRef.current = null;
     suppressTurnAmuletReapplyRef.current = true;
@@ -5715,6 +5744,7 @@ export default function GameBoard() {
     storingCardIdsRef.current.clear();
     pendingDungeonUseRef.current.clear();
     processedDungeonCardIdsRef.current.clear();
+    clearAllProcessedCardIds();
     pendingAutoDrawsRef.current = 0;
     skipNextEventAutoDrawRef.current = false;
     skipEventFlipRef.current = false;
@@ -6146,10 +6176,12 @@ export default function GameBoard() {
   }, [activeMonsterReward, monsterRewardQueue]);
 
 
+  discardedCardsRef.current = discardedCards;
   useEffect(() => {
     discardedCardsRef.current = discardedCards;
   }, [discardedCards]);
 
+  handCardsRef.current = handCards;
   useEffect(() => {
     handCardsRef.current = handCards;
   }, [handCards]);
@@ -7108,6 +7140,7 @@ export default function GameBoard() {
           if (stack && stack.length > 0) {
             const nextCard = stack[stack.length - 1];
             updated[index] = nextCard;
+            unregisterProcessedCardId(nextCard.id);
             setActiveCardStacks(prev => {
               const newStacks = { ...prev };
               const remaining = stack.slice(0, -1);
@@ -7238,6 +7271,21 @@ export default function GameBoard() {
 
 
 
+  const interactiveModalBlocksWaterfall =
+    discoverModalOpen ||
+    Boolean(magicChoiceModal) ||
+    Boolean(equipmentPrompt) ||
+    Boolean(activeMonsterReward) ||
+    Boolean(graveyardDiscoverState) ||
+    Boolean(ghostBladeExileCards) ||
+    Boolean(deathWardPrompt) ||
+    Boolean(daggerSelfDestructPrompt) ||
+    Boolean(handMagicUpgradeModal) ||
+    Boolean(mirrorCopyModal) ||
+    Boolean(permGrantModal) ||
+    Boolean(amplifyModal) ||
+    Boolean(eventTransformState);
+
   useEffect(() => {
     const activeCount = countActiveRowSlotsExcludeGhost(activeCards);
     const emptySlots = DUNGEON_COLUMN_COUNT - activeCount;
@@ -7266,6 +7314,11 @@ export default function GameBoard() {
       logWaterfall('waterfall-pending-set', { emptySlots });
     }
 
+    if (interactiveModalBlocksWaterfall) {
+      logWaterfall('waterfall-deferred-modal-open', { emptySlots });
+      return;
+    }
+
     if (
       waterfallPendingRef.current &&
       pendingDungeonRemovalsRef.current === 0 &&
@@ -7276,7 +7329,7 @@ export default function GameBoard() {
       waterfallPendingRef.current = false;
       triggerWaterfall();
     }
-  }, [activeCards, waterfallAnimation.isActive, triggerWaterfall, resolvingDungeonCardId]);
+  }, [activeCards, waterfallAnimation.isActive, triggerWaterfall, resolvingDungeonCardId, interactiveModalBlocksWaterfall]);
 
   function handleSellCard(item: any) {
     pushUndoSnapshot();
@@ -7629,6 +7682,8 @@ export default function GameBoard() {
     triggerClassDeckFlight,
     triggerFateSwapFlight,
     clearAllBackpackHandFallbacks,
+    setDeckPeekState,
+    deckJudgePeekCloseRef,
     setHeroSkillArrow,
     setPersuadeRollKey,
     waterfallActive,
@@ -7885,6 +7940,7 @@ export default function GameBoard() {
         setCurrentEventCard(cleanedCard);
         eventChoiceProcessingRef.current = false;
         setEventModalOpen(true);
+        applyTransformAndUpdateCategory(card);
         resetDragState();
         return;
       }
@@ -7929,9 +7985,11 @@ export default function GameBoard() {
           setCurrentEventCard(cleanedCard);
           eventChoiceProcessingRef.current = false;
           setEventModalOpen(true);
+          applyTransformAndUpdateCategory(card);
           resetDragState();
           return;
         }
+        applyTransformAndUpdateCategory(card);
         resetDragState();
         return;
       }
@@ -7940,9 +7998,11 @@ export default function GameBoard() {
       // preventing premature waterfall triggers.
       if (card.type === 'potion') {
         markDungeonCardPendingUse(card.id);
+        applyTransformAndUpdateCategory(card);
         void handlePotionConsumption(card);
       } else if (card.type === 'magic' || card.type === 'hero-magic') {
         markDungeonCardPendingUse(card.id);
+        applyTransformAndUpdateCategory(card);
         handleSkillCard(card);
       } else if (card.type === 'event' || (card.type === 'building' && card.eventChoices)) {
         const freshBladeCard =
@@ -8080,6 +8140,7 @@ export default function GameBoard() {
         setCurrentEventCard(eventCard);
         eventChoiceProcessingRef.current = false;
         setEventModalOpen(true);
+        applyTransformAndUpdateCategory(card);
         resetDragState();
         return;
       } else if (card.type === 'monster') {
@@ -8407,6 +8468,8 @@ export default function GameBoard() {
         discardCardToGraveyard(displaced, { owner: 'player' });
       }
 
+      applyTransformAndUpdateCategory(card);
+
       if (isCardFromHand(card)) {
         if (!consumeCardFromHand(card)) {
           return;
@@ -8728,6 +8791,8 @@ export default function GameBoard() {
           }
         }
       }
+
+      applyTransformAndUpdateCategory(card);
 
       if (isCardFromHand(card)) {
         if (!consumeCardFromHand(card)) {
@@ -11139,7 +11204,7 @@ export default function GameBoard() {
         onPersuadeClose={handlePersuadeClose}
         upgradeModalOpen={upgradeModalOpen}
         upgradeModalMaxCount={upgradeModalMaxCount}
-        onUpgradeModalChange={setUpgradeModalOpen}
+        onUpgradeModalChange={handleUpgradeModalChange}
         equipmentSlot1={equipmentSlot1}
         equipmentSlot2={equipmentSlot2}
         amuletSlots={amuletSlots}

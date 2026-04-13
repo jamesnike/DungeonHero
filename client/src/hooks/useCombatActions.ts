@@ -285,7 +285,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     if (!d?.amuletEffects.hasDamageClassDiscover) return;
     const st = engine.getState();
       const discoverAmulet = st.amuletSlots.find(s => s?.amuletEffect === 'damage-class-discover');
-    const threshold = 10;
+    const threshold = 8;
     const streak = st.classDamageDiscoverStreak ?? 0;
     const next = streak + 1;
     if (next >= threshold) {
@@ -672,7 +672,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     depsRef.current.setMonsterDefeatStates(prev => ({ ...prev, [monster.id]: true }));
     depsRef.current.addGameLog('combat', `${monster.name} 被击败！`);
 
-    if (opts?.killedByMinion && depsRef.current.eternalRelicsRef.current.some(r => r.id === 'summon-minion')) {
+    if (opts?.killedByMinion && (depsRef.current.eternalRelicsRef.current.some(r => r.id === 'summon-minion') || depsRef.current.selectedHeroSkillRef.current === 'summon-minion')) {
       const buffMinion = (card: GameCardData): GameCardData => ({
         ...card,
         attack: (card.attack ?? card.value) + 1,
@@ -853,8 +853,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           value: 0,
           image: goblinImage,
           magicType: 'permanent',
-          magicEffect: '永久魔法：将所有其他手牌洗入回收袋，然后从背包抽取等量的牌。',
-          description: '使用后将手中所有其他牌（包括非永久牌）洗入回收袋，再从背包随机抽取相同数量的新牌。回收袋中的牌将在下次瀑流时回到背包。',
+          magicEffect: '永久魔法：将所有其他手牌洗入背包，然后从背包抽取等量的牌。',
+          description: '使用后将手中所有其他牌（包括非永久牌）洗入背包，再从背包随机抽取相同数量的新牌。',
         };
         depsRef.current.triggerEventTransform(monster, goblinMagic, '哥布林的秘密！');
         depsRef.current.addCardToBackpack(goblinMagic);
@@ -3900,11 +3900,15 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
     if (!slotItem || slotItem.type !== 'shield' || !slotItem.shieldBashStunRate) return;
 
-    const { addGameLog, setEquipmentSlotById, clearEquipmentSlotWithPromote,
+    const { addGameLog, getEquipmentSlotBonus, setEquipmentSlotById, clearEquipmentSlotWithPromote,
       disposeOwnedEquipmentCard, requestDiceOutcome, triggerWeaponSwingAnimation } = depsRef.current;
 
     const ae = depsRef.current.amuletEffects;
-    const armorValue = slotItem.armorMax ?? slotItem.value ?? 0;
+    const baseArmorMax = slotItem.armorMax ?? slotItem.value ?? 0;
+    const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
+    const permanentBonus = Math.max(0, depsRef.current.defenseBonus + slotShieldBonus);
+    const rawSlotTemp = slotTempArmor[slotId] ?? 0;
+    const armorValue = baseArmorMax + permanentBonus + rawSlotTemp;
     const bashStunChance = slotItem.shieldBashStunRate * armorValue + (ae.stunRateBoost ?? 0);
     const effectiveBashStun = stunCap > 0 ? Math.min(bashStunChance, stunCap) : bashStunChance;
 

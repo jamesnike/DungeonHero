@@ -586,7 +586,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 |------|---------|
 | Dragon | `bleedEffect: 'attack+2'`（每失去1血层，攻击+2） |
 | Skeleton | `hasRevive: true`（首次击杀后复生1层血） |
-| Goblin | `onAttackEffect: 'steal-gold-3'`（攻击偷3金） |
+| Goblin | `onAttackEffect: 'steal-gold-5'`（攻击偷5金，精英偷8金） |
 | Ogre | `enterEffect: 'auto-engage'`（进场自动开战） |
 | Wraith | `lastWords: 'wraith-haunt-2'`（遗言：同行怪物攻击+2并打乱位置） |
 | Swarm | `swarmSpawn: true`（虫群被动：场上有虫群怪时，每移除一张地城牌，在该位置生成一只小虫子） |
@@ -794,7 +794,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 战血之印 | 战血荣誉翻转 | `honor-blood`：弃置时将激活行所有怪物攻击力 -2 |
 | 血金术 | 奇术商会翻转 | `guild-blood-gold`：-1 HP → +2 金 × echo |
 | 法术回响 | 时空收缩翻转 | 下一张魔法效果翻倍 |
-| 哥布林的戏法 | 怪物击杀 | 其他手牌全部回收 |
+| 哥布林的戏法 | 怪物击杀 | 其他手牌全部洗入背包 |
 
 ---
 

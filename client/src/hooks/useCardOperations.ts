@@ -395,15 +395,16 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
   const drawFromBackpackToHand = (): GameCardData | null => {
     const flightsCount = depsRef.current.backpackHandFlightsRef.current.length;
-    const liveHandSize = depsRef.current.handCardsRef.current.length;
-    const liveHandLimit = HAND_LIMIT + (engine.getState().handLimitBonus ?? 0);
+    const st = engine.getState();
+    const liveHandSize = st.handCards.length;
+    const liveHandLimit = HAND_LIMIT + (st.handLimitBonus ?? 0);
     const availableSlots = Math.max(0, liveHandLimit - (liveHandSize + flightsCount));
     logBackpackDraw('draw-request', {
       handSize: liveHandSize,
       flights: flightsCount,
       availableSlots,
       backpackStateCount: backpackItems.length,
-      backpackRefCount: engine.getState().backpackItems.length,
+      backpackRefCount: st.backpackItems.length,
     });
     if (availableSlots <= 0) {
       return null;

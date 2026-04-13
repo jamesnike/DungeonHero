@@ -838,7 +838,9 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     setBackpackItems(prev => prev.map(upgradeCard));
     setPermanentMagicRecycleBag(prev => prev.map(upgradeCard));
 
-    setUpgradeModalOpen(false);
+    if (engine.getState().upgradeModalMaxCount == null) {
+      setUpgradeModalOpen(false);
+    }
 
     depsRef.current.addGameLog('shop', `卡牌升级：「${upgradedName || '卡牌'}」升级成功！`);
     setHeroSkillBanner(`「${upgradedName || '卡牌'}」升级成功！`);

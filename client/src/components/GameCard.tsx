@@ -1908,7 +1908,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`怨灵祝福：死亡时同行怪物生命+${card.wraithDeathHeal}`}>祝福</span>
                     )}
                     {card.wraithAuraAttack != null && card.wraithAuraAttack > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`怨念光环：每个怪物回合结束时，激活行所有怪物攻击力 +${card.wraithAuraAttack}`}>光环</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`怨念光环：每个怪物回合结束时，激活行所有怪物攻击力 +${card.wraithAuraAttack}（无需激怒）`}>光环</span>
                     )}
                     {card.wraithDeathHealSpread != null && card.wraithDeathHealSpread > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`怨灵遗言：死亡时同行怪物生命 +${card.wraithDeathHealSpread}，并传递此遗言`}>遗言</span>

@@ -292,7 +292,7 @@ export interface GameState {
   persuadeAmuletBonus: number;
   /** "Next persuade" temporary cost/rate modifier (cleared on persuade confirm) */
   persuadeDiscount: { costReduction: number; rateBonus: number } | null;
-  /** 转型关键词：上一张「使用」的牌的类型分类（不含弃置/回收/事件） */
+  /** 转型关键词：上一张「使用」的牌的类型分类（不含弃置/回收），包含手牌和激活行 */
   lastPlayedCardCategory: string | null;
   /** 本波已使用的 magic 卡数量（瀑流重置，不含 hero-magic） */
   magicCardsPlayedThisTurn: number;

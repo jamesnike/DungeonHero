@@ -392,7 +392,7 @@ export function createDeck(): GameCardData[] {
       description: isEliteMonster ? ELITE_MONSTER_DISCARD_WARNING : undefined,
     };
     if (monsterType.name === 'Goblin' || monsterType.name === 'Goblin Warlock') {
-      monsterCard.onAttackEffect = 'steal-gold-3';
+      monsterCard.onAttackEffect = 'steal-gold-5';
     }
     deck.push(monsterCard);
   }

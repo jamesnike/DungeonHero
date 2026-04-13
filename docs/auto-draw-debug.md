@@ -6,7 +6,7 @@
 - Logs showed multiple `draw-request` entries without the expected `draw-success`.
 
 ## Root Cause
-- Auto-draws were triggered immediately inside `removeCard`. When multiple cards were cleared in quick succession, the draw logic ran back-to-back while the hand animation/flight system still treated cards as “in transit”.
+- Auto-draws were triggered immediately inside `removeCard`. When multiple cards were cleared in quick succession, the draw logic ran back-to-back while the hand animation/flight system still treated cards as "in transit".
 - Because draws were synchronous, later calls could pop cards from the backpack when the hand state snapshot still showed the previous size. If the animation failed to queue (e.g., DOM not ready), the fallback timer restored the card, but the user-visible state temporarily showed missing cards, creating the perception that draws were lost.
 - There was no pacing between automatic draws, so any hiccup in the animation pipeline compounded quickly.
 
@@ -29,5 +29,56 @@
 3. Empty the backpack and resolve a dungeon card—logs should show `auto-blocked (backpack-empty)` while the pending counter stays > 0 until new items are acquired.
 4. Run `npm run build` (or dev server) and monitor for `auto-*` log spam; counts should align with actual draws and the pending counter should not diverge.
 
-Following this checklist should prevent the “backpack decrements / hand unchanged” issue from resurfacing. If the behaviour drifts again, start by reviewing the log markers above—they capture each branch of the auto-draw state machine. 
+Following this checklist should prevent the "backpack decrements / hand unchanged" issue from resurfacing. If the behaviour drifts again, start by reviewing the log markers above—they capture each branch of the auto-draw state machine.
 
+## Round 2 — Intermittent "No Draw After Processing Dungeon Card"
+
+### Symptom
+- After processing a dungeon card, no auto-draw occurs (hand stays the same)
+- Undo + refresh + redo fixes it
+- Ignoring and processing the next dungeon card also triggers the draw normally
+
+### Root Cause: "Dead Pending" state
+
+The auto-draw pipeline has two layers of slot-checking that can disagree:
+
+1. `processPendingAutoDraws` (in `useEventSystem`) checks `engine.getState().handCards.length` — always current
+2. `drawFromBackpackToHand` (in `useCardOperations`) was checking `handCardsRef.current.length` — potentially stale
+
+When these disagreed, `processPendingAutoDraws` saw "slots available" and called `drawFromBackpackToHand`, which saw "no slots" (stale ref) and returned `null`. The pending counter stayed positive but **no effect dependency changed**, so the effect never re-fired. The draw was silently lost.
+
+Why the ref could be stale: `handCardsRef` was synced via `useEffect` (post-render), but auto-draw effects in `useEventSystem` (registered at line ~957 in GameBoard) ran **before** the sync effect (registered at line ~6153). Flight completions, delivery guard callbacks, and other async hand modifications could leave the ref out of sync.
+
+Why "next card works": processing the next card calls `setAutoDrawTrigger(v => v + 1)`, changing an effect dependency, re-triggering the effect. By then the ref is usually in sync.
+
+### Fixes Applied
+
+1. **Single source of truth for hand size**: `drawFromBackpackToHand` now reads hand size from `engine.getState().handCards.length` instead of `handCardsRef.current.length`. Both layers now use the same authoritative source.
+
+2. **All exit paths forfeit pending draws**: Previously, the `null`-draw and backpack-empty paths did `break` without zeroing `pendingAutoDrawsRef`, creating a "zombie" counter that blocked future draws if no dependency changed. Now all three exit paths (`hand-full`, `backpack-empty`, `null-draw`) set `pendingAutoDrawsRef.current = 0`.
+
+3. **Render-time ref sync**: `handCardsRef.current = handCards` is now assigned during render (before effects) in addition to the existing `useEffect`. This ensures all effects see the current value regardless of registration order.
+
+4. **Stable `processPendingAutoDraws`**: Dependencies changed from `[handCards.length]` to `[]` since the function body reads everything from `engine.getState()` and refs.
+
+---
+
+## Round 3 — Stacked Card Promotion Skips Auto-Draw
+
+### Root Cause
+
+`useEventSystem` maintains its own `processedDungeonCardIdsRef` (separate from GameBoard's). When a dungeon card is processed, its ID is added to this set to prevent duplicate auto-draw registration.
+
+When the Graveyard Amulet (`hasPersuadeGraveyardStack`) stacks previously-processed cards from the graveyard below a monster, those cards retain their original IDs. After the top card is removed (stack pop), the graveyard card is promoted to the active row. When the player later processes this promoted card, `registerDungeonCardProcessed` finds the ID already in the set and returns early — no `pendingAutoDrawsRef++`, no `setAutoDrawTrigger`, no auto-draw.
+
+The `slot-cleared` backup path is also blocked because it uses the same `registerDungeonCardProcessed` function.
+
+### Why "next card works"
+
+Processing the next card increments `autoDrawTrigger`, but the real issue is that `pendingAutoDrawsRef` was never incremented for the stacked card, so there's nothing queued. The auto-draw that does trigger is for the next card's own processing.
+
+### Fixes Applied
+
+1. **Unregister promoted card IDs**: When stack pop promotes a card to the active row, its ID is removed from `processedDungeonCardIdsRef` via `unregisterProcessedCardId(nextCard.id)`. This ensures re-promoted cards are treated as fresh for auto-draw purposes.
+
+2. **Sync dual refs on reset**: `useEventSystem`'s `processedDungeonCardIdsRef` is now cleared (`clearAllProcessedCardIds()`) alongside GameBoard's ref during new game, hydration, and undo.
