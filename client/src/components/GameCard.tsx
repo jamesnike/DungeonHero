@@ -176,6 +176,7 @@ export interface EventDiceRange {
   range: [number, number];
   label: string;
   effect: EventEffectExpression;
+  skipFlip?: boolean;
 }
 
 export interface EventChoiceDefinition {

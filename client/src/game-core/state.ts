@@ -173,6 +173,7 @@ export function createInitialGameState(): GameState {
     shopModalMinimized: false,
     shopSkillSelectOpen: false,
 
+    gameMode: 'normal',
     gameOver: false,
     victory: false,
     showSkillSelection: false,

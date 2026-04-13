@@ -276,9 +276,10 @@ export function pruneEventChoicesToThree(card: GameCardData): GameCardData {
 // createDeck
 // ---------------------------------------------------------------------------
 
-export function createDeck(): GameCardData[] {
+export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] {
   const deck: GameCardData[] = [];
   let id = 0;
+  const isQuick = mode === 'quick';
 
     const monsterPrefixes: Record<string, string[]> = {
       Dragon: ['Ancient', 'Crimson', 'Shadow', 'Storm', 'Frost', 'Ember', 'Iron', 'Void', 'Thunder', 'Ashen', 'Feral', 'Dread'],
@@ -366,8 +367,8 @@ export function createDeck(): GameCardData[] {
       },
     ];
 
-    // 21 monsters total (3 per type, 7 races)
-    for (let i = 0; i < 21; i++) {
+    const monsterCount = isQuick ? 7 : 21;
+    for (let i = 0; i < monsterCount; i++) {
       const monsterType = monsterTypes[i % monsterTypes.length];
       const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
       const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
@@ -415,7 +416,49 @@ export function createDeck(): GameCardData[] {
       Swarm:    { tag: 'swarm-elite',    desc: '虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子。' },
       Golem:    { tag: 'golem-elite',   desc: '岩石护体：每次最多受到 5 点伤害。' },
     };
+
+    // Quick mode: only 3 randomly chosen types get elites (as additional monster cards)
+    let eliteTypes = Object.keys(monstersByType);
+    if (isQuick) {
+      eliteTypes = [...eliteTypes].sort(() => Math.random() - 0.5).slice(0, 3);
+      for (const type of eliteTypes) {
+        const monsterType = monsterTypes.find(mt => mt.name === type)!;
+        const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
+        const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
+        const fury = Math.floor(Math.random() * (monsterType.maxFury - monsterType.minFury + 1)) + monsterType.minFury;
+        const eliteCard: GameCardData = {
+          id: `monster-${id++}`,
+          type: 'monster',
+          name: pickPrefix(monsterType.name),
+          monsterType: monsterType.name,
+          value: attack,
+          attack: attack,
+          hp: hp,
+          maxHp: hp,
+          baseAttack: attack,
+          baseHp: hp,
+          fury: fury,
+          hpLayers: fury,
+          currentLayer: fury,
+          image: monsterType.image,
+          waterfallEffect: monsterType.waterfallEffect,
+          upgradeLevel: 0,
+          maxUpgradeLevel: getUpgradeTierCount(monsterType.name),
+          ...(monsterType.name === 'Skeleton' ? { hasRevive: true } : {}),
+          ...(monsterType.name === 'Dragon' ? { bleedEffect: 'attack+2' } : {}),
+          ...(monsterType.name === 'Ogre' ? { enterEffect: 'auto-engage' } : {}),
+          ...(monsterType.name === 'Wraith' ? { lastWords: 'wraith-haunt-2' } : {}),
+          ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-3' } : {}),
+          ...(monsterType.name === 'Swarm' ? { swarmSpawn: true, description: '虫群：场上有虫群怪物时，每移除一张地城牌，在该位置生成一只小虫子。' } : {}),
+          ...(monsterType.name === 'Golem' ? { antiMagicReflect: 2, description: '反魔：玩家每使用一张法术牌，对玩家造成 2 点伤害。' } : {}),
+        };
+        deck.push(eliteCard);
+        (monstersByType[type] ??= []).push(eliteCard);
+      }
+    }
+
     for (const [type, monsters] of Object.entries(monstersByType)) {
+      if (isQuick && !eliteTypes.includes(type)) continue;
       const spec = specialMap[type];
       if (!spec || !monsters.length) continue;
       const chosen = monsters[Math.floor(Math.random() * monsters.length)];
@@ -1527,17 +1570,17 @@ export function createDeck(): GameCardData[] {
     name: '时空收缩',
     value: 0,
     image: dedupeEventTimeRiftImage,
-    description: '掷骰后翻转为「时空镜像」永久魔法。',
+    description: '掷骰，若结果为「时空收缩」或「时空侵蚀」则翻转为「时空镜像」永久魔法。',
     eventChoices: [
       {
         text: '掷出不同结果：锋刃祝福/时空收缩/空间代价。',
         hint: '35% 锋刃祝福 / 35% 时空收缩 / 30% 空间代价',
         diceTable: [
-          { id: 'rift-burst', range: [1, 7], label: '锋刃祝福：所有装备栏临时攻击+4', effect: 'allSlotTempAttack:4' },
+          { id: 'rift-burst', range: [1, 7], label: '锋刃祝福：所有装备栏临时攻击+4', effect: 'allSlotTempAttack:4', skipFlip: true },
           { id: 'rift-shrink', range: [8, 14], label: '时空收缩：Waterfall 进度 -2', effect: 'turnCount-2' },
-          { id: 'rift-cost', range: [15, 20], label: '空间代价：背包 -2，激活法术回响', effect: ['backpackSize-2', 'flipToDoubleNextMagic'] },
+          { id: 'rift-cost', range: [15, 20], label: '空间代价：背包 -2，激活法术回响', effect: ['backpackSize-2', 'flipToDoubleNextMagic'], skipFlip: true },
           { id: 'rift-shoplevel', range: [1, 10], label: '时空侵蚀：商店等级 -1，劝降等级-1', effect: ['shopLevel-1', 'persuadeLevel-1'] },
-          { id: 'rift-monsteratk', range: [11, 20], label: '时空压缩：激活行怪物攻击力 -3', effect: 'activeRowMonsterAttack-3' },
+          { id: 'rift-monsteratk', range: [11, 20], label: '时空压缩：激活行怪物攻击力 -3', effect: 'activeRowMonsterAttack-3', skipFlip: true },
         ],
       },
     ],
@@ -1943,13 +1986,9 @@ export function createDeck(): GameCardData[] {
     ],
   });
 
-  const deckLimits: Partial<Record<GameCardData['type'], number>> = {
-    magic: 7,
-    amulet: 5,
-    potion: 6,
-    shield: 5,
-    weapon: 6,
-  };
+  const deckLimits: Partial<Record<GameCardData['type'], number>> = isQuick
+    ? { magic: 3, amulet: 3, potion: 3, shield: 3, weapon: 3, event: 11 }
+    : { magic: 7, amulet: 5, potion: 6, shield: 5, weapon: 6 };
 
   for (const [type, limit] of Object.entries(deckLimits) as [GameCardData['type'], number][]) {
     const indices = deck.reduce<number[]>((acc, c, i) => { if (c.type === type) acc.push(i); return acc; }, []);

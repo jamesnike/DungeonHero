@@ -888,6 +888,9 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         return;
       }
       effects.push(...depsRef.current.normalizeEventEffect(diceResult.effect));
+      if (diceResult.skipFlip && currentEventCard?.flipTarget) {
+        skipEventFlipRef.current = true;
+      }
     }
 
     let eventResolutionDeferred = false;

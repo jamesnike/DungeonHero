@@ -389,6 +389,7 @@ export interface GameState {
   shopSkillSelectOpen: boolean;
 
   // --- Game flow ---
+  gameMode: 'normal' | 'quick';
   gameOver: boolean;
   victory: boolean;
   showSkillSelection: boolean;

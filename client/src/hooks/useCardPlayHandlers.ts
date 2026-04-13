@@ -33,6 +33,7 @@ import {
   skillScrollImage,
   forgeHeartAmuletImage,
 } from '@/game-core/deck';
+import { applyMonsterUpgradeLevel, getUpgradeTierByLevel, getUpgradeTierCount } from '@/lib/monsterRage';
 import {
   INITIAL_HP,
   HAND_LIMIT,
@@ -2262,33 +2263,54 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         const totalHp = group.reduce((s, m) => s + (m.card.hp ?? m.card.value), 0);
 
         if (groupName === 'Skeleton' && fusionCount >= 3) {
+          const skLv3Tier = getUpgradeTierByLevel('Skeleton', 3);
+          const skLv3Atk = skLv3Tier?.attackBonus ?? 0;
+          const skLv3Hp = skLv3Tier?.hpBonus ?? 0;
           fusedEquip = {
             id: `fusion-skeleton-king-${Date.now()}`,
             type: 'monster',
             name: '骷髅王',
             monsterType: 'Skeleton',
             value: 10,
-            attack: 10,
-            hp: 10,
-            maxHp: 10,
+            attack: 10 + skLv3Atk,
+            hp: 10 + skLv3Hp,
+            maxHp: 10 + skLv3Hp,
+            baseAttack: 10,
+            baseHp: 10,
             durability: 4,
             maxDurability: 4,
             image: group[0].card.image,
             monsterSpecial: 'skeleton-king',
-            monsterSpecialDesc: '骷髅王：拥有所有精英Skeleton效果。攻击次数+4，格挡耐久次数+4。',
-            description: '骷髅王：虚骨再生 + 复生 + 攻击次数+4 + 格挡耐久次数+4。',
+            monsterSpecialDesc: `骷髅王（Lv3）：拥有所有精英Skeleton效果。攻击次数+4，格挡耐久次数+4。${skLv3Tier?.specialDesc ?? ''}`,
+            description: `骷髅王（Lv3）：虚骨再生 + 复生 + 攻击次数+4 + 格挡耐久次数+4 + ${skLv3Tier?.specialDesc ?? ''}`,
             hasRevive: true,
             weaponExtraAttack: 4,
             equipBlockDurabilityBonus: 4,
+            upgradeLevel: 3,
+            maxUpgradeLevel: getUpgradeTierCount('Skeleton'),
           };
+          fusedEquip = applyMonsterUpgradeLevel(fusedEquip, 3);
+          fusedEquip.monsterSpecial = 'skeleton-king';
+          fusedEquip.hasRevive = true;
+          fusedEquip.weaponExtraAttack = 4;
+          fusedEquip.equipBlockDurabilityBonus = 4;
+          fusedEquip.attack = 10 + skLv3Atk;
+          fusedEquip.value = 10 + skLv3Atk;
+          fusedEquip.hp = 10 + skLv3Hp;
+          fusedEquip.maxHp = 10 + skLv3Hp;
+          fusedEquip.monsterSpecialDesc = `骷髅王（Lv3）：拥有所有精英Skeleton效果。攻击次数+4，格挡耐久次数+4。${skLv3Tier?.specialDesc ?? ''}`;
+          fusedEquip.description = `骷髅王（Lv3）：虚骨再生 + 复生 + 攻击次数+4 + 格挡耐久次数+4 + ${skLv3Tier?.specialDesc ?? ''}`;
           setHandCards(prev => [...prev, fusedEquip]);
-          finalizeMagicCard(card, { banner: `${fusionCount} 个 Skeleton 装备融合为「骷髅王」！已加入手牌。` });
+          finalizeMagicCard(card, { banner: `${fusionCount} 个 Skeleton 装备融合为「骷髅王」（Lv3）！已加入手牌。` });
         } else {
           const eliteProps = elitePropsMap[groupName] ?? {
             monsterSpecial: 'fusion-elite',
             monsterSpecialDesc: '融合精英：由两个同种怪物装备融合而成。',
           };
           const cnName = raceNameMap[groupName] ?? groupName;
+          const lv3Tier = getUpgradeTierByLevel(groupName, 3);
+          const lv3AtkBonus = lv3Tier?.attackBonus ?? 0;
+          const lv3HpBonus = lv3Tier?.hpBonus ?? 0;
           fusedEquip = {
             id: `fusion-elite-equip-${Date.now()}`,
             type: 'monster',
@@ -2298,14 +2320,28 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             attack: totalAtk,
             hp: totalHp,
             maxHp: totalHp,
+            baseAttack: totalAtk,
+            baseHp: totalHp,
             durability: 4,
             maxDurability: 4,
             image: group[0].card.image,
-            description: `融合精英怪物装备，由两个${cnName}装备融合而成。`,
+            description: `融合精英怪物装备（Lv3），由两个${cnName}装备融合而成。`,
             ...eliteProps,
           };
+          fusedEquip = applyMonsterUpgradeLevel(fusedEquip, 3);
+          Object.assign(fusedEquip, eliteProps);
+          fusedEquip.upgradeLevel = 3;
+          fusedEquip.maxUpgradeLevel = getUpgradeTierCount(groupName);
+          fusedEquip.attack = totalAtk + lv3AtkBonus;
+          fusedEquip.value = totalAtk + lv3AtkBonus;
+          fusedEquip.hp = totalHp + lv3HpBonus;
+          fusedEquip.maxHp = totalHp + lv3HpBonus;
+          const eliteDesc = eliteProps.monsterSpecialDesc ?? '';
+          const lv3Desc = lv3Tier?.specialDesc ?? '';
+          fusedEquip.monsterSpecialDesc = lv3Desc ? `${eliteDesc} ${lv3Desc}` : eliteDesc;
+          fusedEquip.description = `融合精英怪物装备（Lv3），由两个${cnName}装备融合而成。${fusedEquip.monsterSpecialDesc}`;
           setHandCards(prev => [...prev, fusedEquip]);
-          finalizeMagicCard(card, { banner: `2 个 ${groupName} 装备融合为「精英${cnName}」！已加入手牌。` });
+          finalizeMagicCard(card, { banner: `2 个 ${groupName} 装备融合为「精英${cnName}」（Lv3）！已加入手牌。` });
         }
         return true;
       }
@@ -4883,6 +4919,23 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
                   stunText = ` 第${hit}击击晕成功！`;
                   depsRef.current.addGameLog('combat', `${monsters[0].name} 被雷震击晕了！`);
 
+                  if (depsRef.current.amuletEffects.hasStunRecycleToHand) {
+                    setPermanentMagicRecycleBag(prev => {
+                      if (prev.length === 0) return prev;
+                      const count = Math.min(2, prev.length);
+                      const remaining = [...prev];
+                      const pickedCards: typeof prev = [];
+                      for (let i = 0; i < count; i++) {
+                        const idx = Math.floor(Math.random() * remaining.length);
+                        pickedCards.push(remaining[idx]);
+                        remaining.splice(idx, 1);
+                      }
+                      setHandCards(hand => [...hand, ...pickedCards]);
+                      depsRef.current.addGameLog('equip', `击晕回收：从回收袋取回「${pickedCards.map(c => c.name).join('」「')}」到手牌`);
+                      return remaining;
+                    });
+                  }
+
                   if (depsRef.current.amuletEffects.hasStunUpgradeCap) {
                     setStunCap(prev => {
                       const next = Math.min(100, prev + 5);
@@ -5181,6 +5234,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               effect: 'equalize-temp-attack-armor',
               step: 'slot-select',
               prompt: '选择一个装备栏，临时攻击+2，然后使临时攻击与临时护甲相等。',
+              echoMultiplier,
             });
             setHeroSkillBanner('时空镜像：选择一个装备栏。');
             return;

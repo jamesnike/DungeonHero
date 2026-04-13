@@ -212,6 +212,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   const setPendingHeroSkillAction = useEngineSetter('pendingHeroSkillAction');
   const setPendingHeroMagicAction = useEngineSetter('pendingHeroMagicAction');
   const setPendingMagicAction = useEngineSetter('pendingMagicAction');
+  const setPermanentMagicRecycleBag = useEngineSetter('permanentMagicRecycleBag');
   const setPendingPotionAction = useEngineSetter('pendingPotionAction');
   const setPersuadeState = useEngineSetter('persuadeState');
   const setLastPersuadeTargetId = useEngineSetter('lastPersuadeTargetId');
@@ -1456,23 +1457,27 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
           setHeroSkillBanner('该装备栏为空。');
           return;
         }
-        const tempAtk = gs.slotTempAttack[slotId] ?? 0;
+        const echoMul = pendingMagicAction.echoMultiplier ?? 1;
+        const atkBoost = 2 * echoMul;
+        setSlotTempAttack(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + atkBoost }));
+        addGameLog('magic', `时空镜像：${slotItem.name} 临时攻击 +${atkBoost}`);
+
+        const tempAtk = (gs.slotTempAttack[slotId] ?? 0) + atkBoost;
         const tempArm = gs.slotTempArmor[slotId] ?? 0;
         if (tempAtk === tempArm) {
-          addGameLog('magic', `时空镜像：${slotItem.name} 临时攻击(${tempAtk})与临时护甲(${tempArm})已相等，无变化。`);
-          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击与临时护甲已相等（${tempAtk}），无需调整。` });
+          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击 +${atkBoost}，攻防已相等（${tempAtk}）。` });
           return;
         }
         if (tempAtk > tempArm) {
           const delta = tempAtk - tempArm;
           setSlotTempArmor(prev => ({ ...prev, [slotId]: tempAtk }));
           addGameLog('magic', `时空镜像：${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}`);
-          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}。` });
+          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击 +${atkBoost}，临时护甲 +${delta}，攻防均为 ${tempAtk}。` });
         } else {
           const delta = tempArm - tempAtk;
-          setSlotTempAttack(prev => ({ ...prev, [slotId]: tempArm }));
-          addGameLog('magic', `时空镜像：${slotItem.name} 临时攻击 +${delta}，临时攻击与临时护甲均为 ${tempArm}`);
-          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击 +${delta}，临时攻击与临时护甲均为 ${tempArm}。` });
+          setSlotTempAttack(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + delta }));
+          addGameLog('magic', `时空镜像：${slotItem.name} 临时攻击再 +${delta}，临时攻击与临时护甲均为 ${tempArm}`);
+          finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击 +${atkBoost + delta}，攻防均为 ${tempArm}。` });
         }
         return;
       }
@@ -2168,6 +2173,23 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
               stunned = true;
               stunText = ` 第${hit}击击晕成功！`;
               addGameLog('combat', `${monster.name} 被雷震击晕了！`);
+
+              if (depsRef.current.amuletEffects.hasStunRecycleToHand) {
+                setPermanentMagicRecycleBag(prev => {
+                  if (prev.length === 0) return prev;
+                  const count = Math.min(2, prev.length);
+                  const remaining = [...prev];
+                  const pickedCards: typeof prev = [];
+                  for (let i = 0; i < count; i++) {
+                    const idx = Math.floor(Math.random() * remaining.length);
+                    pickedCards.push(remaining[idx]);
+                    remaining.splice(idx, 1);
+                  }
+                  setHandCards(prev => [...prev, ...pickedCards]);
+                  addGameLog('equip', `击晕回收：从回收袋取回「${pickedCards.map(c => c.name).join('」「')}」到手牌`);
+                  return remaining;
+                });
+              }
 
               if (depsRef.current.amuletEffects.hasStunUpgradeCap) {
                 setStunCap(prev => {

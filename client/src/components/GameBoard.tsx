@@ -59,6 +59,7 @@ import { serializeGameState } from '@/game-core/persistence';
 import type { MagicChoiceModalState, GameState } from '@/game-core/types';
 // import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
 import { GameBoardModals } from './game-board/components/GameBoardModals';
+import { GameModeSelectModal } from './game-board/components/GameModeSelectModal';
 import DeckPeekModal from '@/components/DeckPeekModal';
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
@@ -990,6 +991,7 @@ export default function GameBoard() {
   const stagingCardsRef = useRef<GameCardData[]>([]);
   const pendingDiscardEffectsQueueRef = useRef<import('@/hooks/useCardOperations').PendingDiscardEffect[]>([]);
   const [gameOverMinimized, setGameOverMinimized] = useState(false);
+  const [showGameModeSelect, setShowGameModeSelect] = useState(false);
   const [draggedCard, setDraggedCard] = useState<GameCardData | null>(null);
   const [draggedCardSource, setDraggedCardSource] = useState<DragOrigin | null>(null);
   const [heroRowDropState, setHeroRowDropState] = useState<HeroRowDropType | null>(null);
@@ -4822,7 +4824,7 @@ export default function GameBoard() {
     });
   }, [gold, addGameLog]);
 
-  const initGame = () => {
+  const initGame = (mode: 'normal' | 'quick' = 'normal') => {
     combatAsyncEpochRef.current += 1;
     setCombatState(initialCombatState);
     setHeroVariant(getRandomHero());
@@ -4830,7 +4832,8 @@ export default function GameBoard() {
     processedDungeonCardIdsRef.current.clear();
     previousActiveCardsRef.current = createEmptyActiveRow();
     freshGameStartRef.current = true;
-    const newDeck = createDeck();
+    const isQuickMode = mode === 'quick';
+    const newDeck = createDeck(mode);
     for (let i = 0; i < newDeck.length; i++) {
       if (newDeck[i].type === 'event') {
         newDeck[i] = pruneEventChoicesToThree(newDeck[i]);
@@ -4852,46 +4855,78 @@ export default function GameBoard() {
       const nonEliteMonsters = deckWithClassEvents.filter(c => c.type === 'monster' && !c.monsterSpecial);
       const nonMonsters = deckWithClassEvents.filter(c => c.type !== 'monster');
 
-      // Pull 1 random elite into the first half
-      let earlyElite: typeof eliteMonsters[0] | null = null;
-      const remainingElites = [...eliteMonsters];
-      if (remainingElites.length > 0) {
-        const idx = Math.floor(Math.random() * remainingElites.length);
-        earlyElite = remainingElites.splice(idx, 1)[0];
-      }
+      if (isQuickMode) {
+        // Quick mode: all elites go to second half (none in first 2 rows = first 12 cards)
+        const firstHalf = [
+          ...nonEliteMonsters.slice(0, Math.min(Math.floor(nonEliteMonsters.length / 2), halfSize)),
+          ...nonMonsters.slice(0, halfSize - Math.min(Math.floor(nonEliteMonsters.length / 2), halfSize)),
+        ];
+        const secondHalf = [
+          ...nonEliteMonsters.slice(Math.min(Math.floor(nonEliteMonsters.length / 2), halfSize)),
+          ...eliteMonsters,
+          ...nonMonsters.slice(halfSize - Math.min(Math.floor(nonEliteMonsters.length / 2), halfSize)),
+        ];
+        firstHalf.sort(() => Math.random() - 0.5);
+        secondHalf.sort(() => Math.random() - 0.5);
 
-      const totalMonsters = eliteMonsters.length + nonEliteMonsters.length;
-      const firstHalfMonsterCount = Math.min(Math.floor(totalMonsters / 2), nonEliteMonsters.length);
-
-      const firstHalf = [
-        ...nonEliteMonsters.slice(0, firstHalfMonsterCount),
-        ...nonMonsters.slice(0, halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
-        ...(earlyElite ? [earlyElite] : []),
-      ];
-      const secondHalf = [
-        ...nonEliteMonsters.slice(firstHalfMonsterCount),
-        ...remainingElites,
-        ...nonMonsters.slice(halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
-      ];
-
-      firstHalf.sort(() => Math.random() - 0.5);
-      secondHalf.sort(() => Math.random() - 0.5);
-
-      // Ensure the early elite lands in positions 12–29 (not in the first 12 cards)
-      if (earlyElite && firstHalf.length > 12) {
-        const eliteIdx = firstHalf.indexOf(earlyElite);
-        if (eliteIdx >= 0 && eliteIdx < 12) {
-          const swapTarget = 12 + Math.floor(Math.random() * (firstHalf.length - 12));
-          const tmp = firstHalf[eliteIdx];
-          firstHalf[eliteIdx] = firstHalf[swapTarget];
-          firstHalf[swapTarget] = tmp;
+        // Ensure no elite in the first 12 cards (2 rows + stacks)
+        for (let i = 0; i < Math.min(12, firstHalf.length); i++) {
+          if (firstHalf[i].monsterSpecial) {
+            let swapTarget = -1;
+            for (let k = 12; k < firstHalf.length; k++) {
+              if (!firstHalf[k].monsterSpecial) { swapTarget = k; break; }
+            }
+            if (swapTarget >= 0) {
+              const tmp = firstHalf[i];
+              firstHalf[i] = firstHalf[swapTarget];
+              firstHalf[swapTarget] = tmp;
+            }
+          }
         }
-      }
 
-      deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
+        deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
+      } else {
+        // Pull 1 random elite into the first half
+        let earlyElite: typeof eliteMonsters[0] | null = null;
+        const remainingElites = [...eliteMonsters];
+        if (remainingElites.length > 0) {
+          const idx = Math.floor(Math.random() * remainingElites.length);
+          earlyElite = remainingElites.splice(idx, 1)[0];
+        }
+
+        const totalMonsters = eliteMonsters.length + nonEliteMonsters.length;
+        const firstHalfMonsterCount = Math.min(Math.floor(totalMonsters / 2), nonEliteMonsters.length);
+
+        const firstHalf = [
+          ...nonEliteMonsters.slice(0, firstHalfMonsterCount),
+          ...nonMonsters.slice(0, halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
+          ...(earlyElite ? [earlyElite] : []),
+        ];
+        const secondHalf = [
+          ...nonEliteMonsters.slice(firstHalfMonsterCount),
+          ...remainingElites,
+          ...nonMonsters.slice(halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
+        ];
+
+        firstHalf.sort(() => Math.random() - 0.5);
+        secondHalf.sort(() => Math.random() - 0.5);
+
+        // Ensure the early elite lands in positions 12–29 (not in the first 12 cards)
+        if (earlyElite && firstHalf.length > 12) {
+          const eliteIdx = firstHalf.indexOf(earlyElite);
+          if (eliteIdx >= 0 && eliteIdx < 12) {
+            const swapTarget = 12 + Math.floor(Math.random() * (firstHalf.length - 12));
+            const tmp = firstHalf[eliteIdx];
+            firstHalf[eliteIdx] = firstHalf[swapTarget];
+            firstHalf[swapTarget] = tmp;
+          }
+        }
+
+        deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
+      }
     }
 
-    // Balance monster density: 1–2 monsters per non-overlapping chunk of 6 cards
+    // Balance monster density: 1–2 monsters per non-overlapping chunk
     {
       const MIN_MONSTERS = 1;
       const MAX_MONSTERS = 2;
@@ -5056,7 +5091,7 @@ export default function GameBoard() {
 
     // Re-balance monster density in dealQueue after initial dealing.
     // ensureRowHasMonster + extractFirstNonMonster can steal monsters from later
-    // chunks, leaving them with 0 monsters — violating the 1-2 per 6 rule.
+    // chunks, leaving them with 0 monsters — violating the density rule.
     {
       const MIN_MONSTERS = 1;
       const MAX_MONSTERS = 2;
@@ -5130,6 +5165,7 @@ export default function GameBoard() {
       : null;
     engine.replaceState({
       ...createInitialGameState(),
+      gameMode: mode,
       heroVariant: newHero,
       heroClass: newHeroClass,
       previewCards: initialPreview,
@@ -5732,12 +5768,17 @@ export default function GameBoard() {
   }, [engine, clearWaterfallTimeouts, syncMonsterRewardQueuedInstanceIdsRef]);
 
   const handleNewGame = () => {
+    setShowGameModeSelect(true);
+  };
+
+  const handleGameModeSelect = (mode: 'normal' | 'quick') => {
+    setShowGameModeSelect(false);
     clearGameState();
     lastPersistedStateRef.current = null;
     clearUndoStack();
     clearGameLog();
     setGameOverMinimized(false);
-    initGame();
+    initGame(mode);
     setIsHydrated(true);
   };
 
@@ -10940,6 +10981,12 @@ export default function GameBoard() {
         sourceCardId={permGrantModal?.sourceCardId ?? null}
         sourceType={permGrantModal?.sourceType ?? 'magic'}
         onConfirm={resolvePermGrant}
+      />
+
+      <GameModeSelectModal
+        open={showGameModeSelect}
+        onSelect={handleGameModeSelect}
+        onCancel={() => setShowGameModeSelect(false)}
       />
 
       <GameBoardModals
