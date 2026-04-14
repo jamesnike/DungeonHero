@@ -674,7 +674,7 @@ export default function CardDetailsModal({
                     <Scroll className="w-4 h-4 shrink-0 text-emerald-500" />
                     <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">窃牌贼</span>
                   </div>
-                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">攻击时随机偷走一张玩家手牌，堆叠在自身下方。击杀后被偷的牌逐张成为地城牌，每弹出一张自动抽 1 张牌。</p>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">攻击时随机偷走一张玩家手牌，堆叠在自身下方。击杀后被偷的牌逐张成为地城牌。</p>
                 </div>
               </div>
             )}
@@ -909,7 +909,7 @@ export default function CardDetailsModal({
                   effects.push({ title: '动手偷钱', desc: `攻击时为 Hero 偷取 ${amt} 金币。`, color: 'emerald' });
                 }
                 if (card.goblinStealCard) {
-                  effects.push({ title: '窃牌贼', desc: '攻击时随机偷走一张玩家手牌，堆叠在自身下方。被偷的牌弹出时自动抽 1 张牌。', color: 'emerald' });
+                  effects.push({ title: '窃牌贼', desc: '攻击时随机偷走一张玩家手牌，堆叠在自身下方。', color: 'emerald' });
                 }
                 if (card.goblinStackHeal) {
                   effects.push({ title: '哥布林劝降', desc: '攻击怪物时自动发动免费劝降，成功则怪物加入背包。', color: 'emerald' });

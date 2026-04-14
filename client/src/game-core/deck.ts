@@ -1796,7 +1796,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         image: skillScrollImage,
         magicType: 'permanent',
         magicEffect: 'equipment-enchant-discard',
-        description: '永久魔法（Perm 2）：弃置手牌中一张装备，将其攻击/护甲值随机附加到装备栏的某件装备上。',
+        description: '永久魔法（Perm 2）：弃置手牌中一张装备，将其攻击/护甲值随机附加到装备栏的某件装备上，并使该装备耐久上限+1、耐久+1。',
         recycleDelay: 2,
       },
       destination: 'backpack',

@@ -977,19 +977,31 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return;
         }
         const randomSlot = equippedSlots[Math.floor(Math.random() * equippedSlots.length)];
+        const item = randomSlot.item!;
+        const updated = { ...item };
         const parts: string[] = [];
         if (atkBonus > 0) {
-          depsRef.current.setEquipmentSlotBonus(randomSlot.id, 'damage', v => v + atkBonus);
+          updated.value = (updated.value ?? 0) + atkBonus;
+          updated.attack = (updated.attack ?? 0) + atkBonus;
+          if (updated.baseAttack != null) updated.baseAttack += atkBonus;
           parts.push(`攻击 +${atkBonus}`);
         }
         if (armorBonus > 0) {
-          depsRef.current.setEquipmentSlotBonus(randomSlot.id, 'shield', v => v + armorBonus);
+          if (updated.armorMax != null) {
+            updated.armorMax += armorBonus;
+          }
           parts.push(`护甲 +${armorBonus}`);
         }
+        if (updated.maxDurability != null) {
+          updated.maxDurability += 1;
+          updated.durability = (updated.durability ?? 0) + 1;
+          parts.push('耐久上限 +1，耐久 +1');
+        }
+        depsRef.current.setEquipmentSlotById(randomSlot.id, updated);
         const statDesc = parts.length > 0 ? parts.join('，') : '（无加成）';
-        depsRef.current.addGameLog('magic', `装备附魔：弃置「${targetCard.name}」，「${randomSlot.item!.name}」${statDesc}`);
+        depsRef.current.addGameLog('magic', `装备附魔：弃置「${targetCard.name}」，「${item.name}」${statDesc}`);
         finalizeMagicCard(sourceCard, {
-          banner: `装备附魔：弃置「${targetCard.name}」→「${randomSlot.item!.name}」${statDesc}！`,
+          banner: `装备附魔：弃置「${targetCard.name}」→「${item.name}」${statDesc}！`,
         });
         return;
       }

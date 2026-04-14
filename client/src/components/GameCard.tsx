@@ -341,7 +341,7 @@ export interface GameCardData {
   wraithTurnEnrage?: boolean; // Wraith tier-3: enrage all active row monsters at end of monster turn
   wraithDestroyAmulet?: boolean; // Wraith tier-3: destroy a random amulet at end of monster turn
   goblinStealCard?: boolean; // Goblin tier-1+: steal a random hand card on attack, stacked under this monster
-  stolenByGoblin?: boolean; // Card was stolen by a Goblin and stacked under it; triggers auto-draw on stack pop
+  stolenByGoblin?: boolean; // Card was stolen by a Goblin and stacked under it
   goblinStealScale?: boolean; // Goblin tier-3: +X atk/hp per X gold stolen
   goblinHasStolen?: boolean; // Tracks if this goblin successfully stole gold
   goblinStackHeal?: boolean; // Goblin tier-2: at end of monster turn, per card below, 15% chance restore 1 layer

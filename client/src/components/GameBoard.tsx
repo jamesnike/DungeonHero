@@ -2791,10 +2791,10 @@ export default function GameBoard() {
     if (Math.random() < 0.15) {
       pushOption({
         id: createMonsterRewardOptionId(),
-        title: '劝降成功率 +10%',
+        title: '劝降成功率 +5%',
         description: '提升交涉能力，劝降怪物的成功率提高。',
         detail: '永久增益',
-        effect: { type: 'persuadeRateBonus', amount: 10 },
+        effect: { type: 'persuadeRateBonus', amount: 5 },
       });
     }
     if (!gs.statSwapCardObtained && Math.random() < 0.03) {
@@ -4831,7 +4831,7 @@ export default function GameBoard() {
           }
           if (candidates.length === 0) break;
           const pick = candidates[Math.floor(Math.random() * candidates.length)];
-          const stolenCard = { ...pick.item, stolenByGoblin: true };
+          const stolenCard = { ...pick.item };
           if (pick.source === 'equip') {
             clearEquipmentSlotById(pick.slotId);
             addGameLog('combat', `${card.name} 窃宝：偷走了装备「${pick.item.name}」！`);
@@ -7255,12 +7255,6 @@ export default function GameBoard() {
               return newStacks;
             });
             addGameLog('system', `堆叠揭示：「${nextCard.name}」从第 ${index + 1} 列堆叠中浮现！`);
-            if (nextCard.stolenByGoblin) {
-              const drawn = drawFromBackpackToHand();
-              if (drawn) {
-                addGameLog('system', `窃牌归还：自动抽取「${drawn.name}」！`);
-              }
-            }
           } else {
             updated[index] = null;
           }

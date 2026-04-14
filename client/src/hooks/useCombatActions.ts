@@ -3855,7 +3855,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           await depsRef.current.triggerStealCardFlight(stolenCard, monster.id);
           if (stale()) return;
           setHandCards(prev => prev.filter(c => c.id !== stolenCard.id));
-          const markedCard = { ...stolenCard, stolenByGoblin: true };
+          const markedCard = { ...stolenCard };
           setActiveCardStacks(prev => ({
             ...prev,
             [goblinColIndex]: [...(prev[goblinColIndex] ?? []), markedCard],
