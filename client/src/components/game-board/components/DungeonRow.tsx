@@ -4,13 +4,14 @@
  * Handles monster rage overlays, engagement states, and targeting highlights.
  */
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import GameCard from '@/components/GameCard';
 import type { GameCardData, EquipmentCardStatModifier } from '@/components/GameCard';
 import GraveyardZone from '@/components/GraveyardZone';
-import { Calendar } from 'lucide-react';
+import { Calendar, ShieldOff } from 'lucide-react';
 import type { ActiveRowSlots, CombatState, PendingMagicAction, EquipmentSlotId } from '../types';
 import { DUNGEON_COLUMNS, MONSTER_RAGE_BASE_TRANSLATE_PX, MONSTER_RAGE_TRANSLATE_ADJUST_PX } from '../constants';
+import { getColumnsWithCurseMonumentAura } from '@/game-core/buildingAura';
 
 export interface DungeonRowProps {
   activeCards: ActiveRowSlots;
@@ -100,6 +101,11 @@ function DungeonRowInner({
     isWaterfallLocked ||
     isDefeatAnimationPlaying ||
     fullBoardInteractionLocked;
+
+  const curseMonumentCols = useMemo(
+    () => getColumnsWithCurseMonumentAura(activeCards, activeCardStacks),
+    [activeCards, activeCardStacks],
+  );
 
   return (
     <>
@@ -290,6 +296,14 @@ function DungeonRowInner({
               {hasStack && (
                 <div className="absolute top-[-8px] right-[-8px] z-40 bg-amber-500 text-white rounded-full w-6 h-6 flex items-center justify-center border-2 border-background shadow-md font-bold text-xs">
                   {stackedCards.length + 1}
+                </div>
+              )}
+              {curseMonumentCols.has(index) && card.type === 'monster' && (
+                <div
+                  className="absolute bottom-[-4px] left-[-4px] z-40 bg-purple-700 text-white rounded-full w-6 h-6 flex items-center justify-center border-2 border-background shadow-md"
+                  title="诅咒碑光环：免疫魔法伤害"
+                >
+                  <ShieldOff className="w-3.5 h-3.5" />
                 </div>
               )}
               {isEventPendingCell && (

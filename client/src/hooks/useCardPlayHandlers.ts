@@ -2858,7 +2858,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           effect: 'honor-sweep',
           step: 'slot-select',
           prompt:
-            '选择一把武器：对激活行所有怪物造成等同于该攻击力的法术伤害（每轮每怪分开结算），不耗耐久；该栏临时攻击 -5。',
+            '选择一把武器：对激活行所有怪物造成等同于该攻击力的法术伤害，每击杀一个怪物升级一张牌。',
         });
         setHeroSkillBanner('战血横扫：选择一把武器。');
         return true;

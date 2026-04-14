@@ -1277,9 +1277,9 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         ],
       },
       {
-        text: '战血横扫（翻转为永久法术）',
+        text: '战血横扫（翻转为即时法术）',
         effect: 'flipToHonorSweepMagic',
-        hint: '翻转为「战血横扫」：选武器对激活行怪造成等同攻击力的多轮法术伤害（不耗耐久），该栏临时攻击 -5；可升级增加轮数',
+        hint: '翻转为「战血横扫」：选武器对激活行所有怪物造成等同攻击力的法术伤害，每击杀一个怪物升级一张牌',
         requires: [
           {
             type: 'leftmostIsEnraged',
@@ -1719,7 +1719,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         name: '诅咒碑',
         value: 0,
         image: dedupeEventCursedDiceBuildingImage,
-        buildingAura: 'adjacent-magic-immune',
+        buildingAura: 'stacked-magic-immune',
         isGhost: true,
         fury: 1,
         hpLayers: 1,
@@ -1727,7 +1727,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         hp: 8,
         maxHp: 8,
         description:
-          '建筑（血量 8）：光环——左右相邻格中的怪物不受玩家魔法伤害。可被攻击摧毁。',
+          '建筑（血量 8）：光环——堆叠在诅咒碑之上的怪物不受玩家魔法伤害。可被攻击摧毁。',
       },
       destination: 'stay',
       message: '诅咒骰局翻转为诅咒碑！',

@@ -1431,14 +1431,11 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             name: '战血横扫',
             value: 0,
             image: skillScrollImage,
-            magicType: 'permanent',
+            magicType: 'instant',
             magicEffect: 'honor-sweep',
             knightEffect: 'honor-sweep',
-            maxUpgradeLevel: 2,
-            upgradeLevel: 0,
-            recycleDelay: 1,
             description:
-              '永久魔法：选择一把武器，对激活行所有怪物造成等同于该武器当前攻击力的法术伤害（每轮、每只怪分开结算），不消耗耐久；该武器栏临时攻击 -5。可升级 2 次：每级额外多一轮全额伤害。',
+              '即时魔法：选择一把武器，对激活行所有怪物造成等同于该武器当前攻击力的法术伤害；每击杀一个怪物，升级一张牌。',
           };
           await depsRef.current.triggerEventTransform(currentEventCard, honorSweepCard, '战血荣誉翻转为「战血横扫」…');
           depsRef.current.skipNextEventAutoDrawRef.current = true;

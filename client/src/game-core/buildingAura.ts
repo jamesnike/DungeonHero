@@ -8,8 +8,8 @@ import type { ActiveRowSlots, EquipmentItem, EquipmentSlotId } from '@/component
 import { DUNGEON_COLUMN_COUNT } from './constants';
 
 export const BUILDING_AURA_SUPPRESS_ADJACENT_TEMP_ATTACK = 'suppress-adjacent-temp-attack' as const;
-export const BUILDING_AURA_ADJACENT_MAGIC_IMMUNE = 'adjacent-magic-immune' as const;
-export type BuildingAuraId = typeof BUILDING_AURA_SUPPRESS_ADJACENT_TEMP_ATTACK | typeof BUILDING_AURA_ADJACENT_MAGIC_IMMUNE;
+export const BUILDING_AURA_STACKED_MAGIC_IMMUNE = 'stacked-magic-immune' as const;
+export type BuildingAuraId = typeof BUILDING_AURA_SUPPRESS_ADJACENT_TEMP_ATTACK | typeof BUILDING_AURA_STACKED_MAGIC_IMMUNE;
 
 const BUILDING_ROW = 1;
 const HERO_EQUIP_COL: Record<EquipmentSlotId, number> = {
@@ -62,24 +62,43 @@ export function getEquipmentSlotsWithSuppressedTempAttack(
   return suppressed;
 }
 
-function isAdjacentMagicImmuneAura(card: GameCardData | null | undefined): boolean {
+function isStackedMagicImmuneAura(card: GameCardData | null | undefined): boolean {
   return (
     card?.type === 'building' &&
-    card.buildingAura === BUILDING_AURA_ADJACENT_MAGIC_IMMUNE
+    card.buildingAura === BUILDING_AURA_STACKED_MAGIC_IMMUNE
   );
 }
 
 /**
- * 检查指定地城列中的怪物是否因相邻建筑光环而免疫玩家魔法伤害。
- * 仅检查同行（active row）左右相邻格。
+ * 检查指定地城列中的怪物是否因下方堆叠的诅咒碑光环而免疫玩家魔法伤害。
+ * 检查该列 activeCardStacks 中是否存在诅咒碑建筑。
  */
 export function isMonsterMagicImmuneByBuilding(
   activeCards: ActiveRowSlots,
+  activeCardStacks: Record<number, GameCardData[]>,
   monsterCol: number,
 ): boolean {
-  const leftCol = monsterCol - 1;
-  const rightCol = monsterCol + 1;
-  if (leftCol >= 0 && isAdjacentMagicImmuneAura(activeCards[leftCol])) return true;
-  if (rightCol < DUNGEON_COLUMN_COUNT && isAdjacentMagicImmuneAura(activeCards[rightCol])) return true;
-  return false;
+  const stack = activeCardStacks[monsterCol];
+  if (!stack || stack.length === 0) return false;
+  return stack.some(isStackedMagicImmuneAura);
+}
+
+/**
+ * 返回所有因下方诅咒碑而获得魔法免疫的列索引集合。
+ * 用于 UI 显示光环指示器。
+ */
+export function getColumnsWithCurseMonumentAura(
+  activeCards: ActiveRowSlots,
+  activeCardStacks: Record<number, GameCardData[]>,
+): Set<number> {
+  const cols = new Set<number>();
+  for (let col = 0; col < DUNGEON_COLUMN_COUNT; col++) {
+    const topCard = activeCards[col];
+    if (!topCard || (topCard.type !== 'monster' && topCard.type !== 'building')) continue;
+    const stack = activeCardStacks[col];
+    if (stack && stack.some(isStackedMagicImmuneAura)) {
+      cols.add(col);
+    }
+  }
+  return cols;
 }

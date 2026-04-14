@@ -956,6 +956,8 @@ export default function GameBoard() {
     handleHeroMagicChoice,
     applyHonorSweepMagic,
     applyWeaponSweepMagic,
+    honorSweepUpgradesPending,
+    clearHonorSweepUpgrades,
   } = heroActions;
 
   // --- Layer 5: Event System ---
@@ -1287,6 +1289,7 @@ export default function GameBoard() {
   const pendingDungeonRemovalsRef = useRef(0);
   const pendingDungeonUseRef = useRef<Set<string>>(new Set());
   const waterfallPendingRef = useRef(false);
+  const waterfallDiscoverPendingRef = useRef(false);
   const waterfallSequenceRef = useRef(0);
   const lastWaterfallSequenceRef = useRef<number | null>(null);
   const previewCellRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -5584,6 +5587,7 @@ export default function GameBoard() {
     waterfallTimeoutsRef.current = [];
     waterfallLockRef.current = false;
     waterfallPendingRef.current = false;
+    waterfallDiscoverPendingRef.current = false;
     waterfallSequenceRef.current = 0;
     pendingDungeonRemovalsRef.current = 0;
     setWaterfallAnimation(initialWaterfallAnimationState);
@@ -5708,6 +5712,7 @@ export default function GameBoard() {
     waterfallTimeoutsRef.current = [];
     waterfallLockRef.current = false;
     waterfallPendingRef.current = false;
+    waterfallDiscoverPendingRef.current = false;
     setWaterfallAnimation(initialWaterfallAnimationState);
 
     // Cancel all in-flight combat animation timeouts
@@ -6191,6 +6196,18 @@ export default function GameBoard() {
     setWraithPassiveUnlockPopup(true);
   }, [activeMonsterReward, monsterRewardQueue]);
 
+  useEffect(() => {
+    if (honorSweepUpgradesPending <= 0) return;
+    if (activeMonsterReward || monsterRewardQueue.length > 0) return;
+    if (discoverModalOpen || eventModalOpen || waterfallAnimation.isActive) return;
+    const emptySlots = DUNGEON_COLUMN_COUNT - countActiveRowSlotsExcludeGhost(activeCards);
+    if (emptySlots >= 4) return;
+    const count = honorSweepUpgradesPending;
+    clearHonorSweepUpgrades();
+    setUpgradeModalMaxCount(count);
+    setUpgradeModalOpen(true);
+    setHeroSkillBanner(`战血横扫：选择至多 ${count} 张牌升级！`);
+  }, [honorSweepUpgradesPending, activeMonsterReward, monsterRewardQueue, discoverModalOpen, eventModalOpen, waterfallAnimation.isActive, activeCards, clearHonorSweepUpgrades, setUpgradeModalMaxCount, setUpgradeModalOpen, setHeroSkillBanner]);
 
   discardedCardsRef.current = discardedCards;
   useEffect(() => {
@@ -6218,6 +6235,14 @@ export default function GameBoard() {
     waterfallPlanRef.current = null;
     setWaterfallAnimation(initialWaterfallAnimationState);
     waterfallLockRef.current = false;
+
+    if (waterfallDiscoverPendingRef.current) {
+      waterfallDiscoverPendingRef.current = false;
+      const started = beginDiscoverFlow('eternal-relic-waterfall', { sourceLabel: '永恒护符·探秘' });
+      if (started) {
+        addGameLog('skill', '永恒护符·探秘：瀑流推进，发现专属卡！');
+      }
+    }
   };
 
   const startWaterfallDeal = () => {
@@ -6725,10 +6750,7 @@ export default function GameBoard() {
       addGameLog('skill', `永恒护符·潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${amuletEffects.hasHeal ? '（治疗加倍）' : ''}`);
     }
     if (hasEternalRelic(eternalRelics, 'waterfall-discover')) {
-      const started = beginDiscoverFlow('eternal-relic-waterfall', { sourceLabel: '永恒护符·探秘' });
-      if (started) {
-        addGameLog('skill', '永恒护符·探秘：瀑流推进，发现专属卡！');
-      }
+      waterfallDiscoverPendingRef.current = true;
     }
     setTurnCount(prev => prev + 1);
     addGameLog('turn', `══ 第 ${turnCount + 1} 波 ══`);
@@ -7302,6 +7324,7 @@ export default function GameBoard() {
 
   const interactiveModalBlocksWaterfall =
     discoverModalOpen ||
+    upgradeModalOpen ||
     Boolean(magicChoiceModal) ||
     Boolean(equipmentPrompt) ||
     Boolean(activeMonsterReward) ||
@@ -8254,16 +8277,20 @@ export default function GameBoard() {
       const monsterArmor = monster.hp ?? monster.value;
       const durabilityBonus = engine.getState().persuadeSuccessDurabilityBonus ?? 0;
       const monsterMaxDurability = (monster.hpLayers ?? monster.fury ?? 1) + durabilityBonus;
+      const monsterStartDurability = Math.min(
+        (monster.currentLayer ?? monster.hpLayers ?? monster.fury ?? 1) + durabilityBonus,
+        monsterMaxDurability,
+      );
 
       if (targetSlot === 'backpack') {
         const persuadedCard: GameCardData = {
           ...monster,
-          durability: monsterMaxDurability,
+          durability: monsterStartDurability,
           maxDurability: monsterMaxDurability,
         };
         addCardToBackpack(persuadedCard, { pendingDungeonCardId: monster.id });
         removeCard(monster.id, false);
-        addGameLog('combat', `劝降成功！${monster.name} 加入背包（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterMaxDurability}耐久）`);
+        addGameLog('combat', `劝降成功！${monster.name} 加入背包（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterStartDurability}/${monsterMaxDurability}耐久）`);
         setHeroSkillBanner(`劝降成功！${monster.name} 已加入背包！`);
       } else {
         const equipSlot = targetSlot;
@@ -8294,12 +8321,12 @@ export default function GameBoard() {
           value: monsterAttack,
           attack: monsterAttack,
           hp: monsterArmor,
-          durability: monsterMaxDurability,
+          durability: monsterStartDurability,
           maxDurability: monsterMaxDurability,
         } as EquipmentItem;
         setEquipmentSlotById(equipSlot, equipCard);
         removeCard(monster.id, false);
-        addGameLog('combat', `劝降成功！装备 ${monster.name}（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterMaxDurability}耐久）`);
+        addGameLog('combat', `劝降成功！装备 ${monster.name}（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterStartDurability}/${monsterMaxDurability}耐久）`);
         setHeroSkillBanner(`劝降成功！${monster.name} 已装备！`);
 
         if (hasEternalRelic(eternalRelics, 'equip-empower')) {

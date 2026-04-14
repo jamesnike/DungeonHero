@@ -598,7 +598,7 @@ Building cards (`type: 'building'`) are persistent dungeon structures that remai
 - **Destroyable**: Buildings can be attacked by weapons and damaged by magic (they are valid targets for all damage sources alongside monsters). When their HP reaches 0, they are destroyed and sent to the graveyard.
 - **Building Aura** (`buildingAura`): Some buildings have a passive aura effect that applies while the building is alive on the board. Aura is removed when the building is destroyed.
   - `'suppress-adjacent-temp-attack'` — Adjacent player equipment slots ignore temporary attack bonuses.
-  - `'adjacent-magic-immune'` — Monsters adjacent to this building are immune to player magic damage.
+  - `'stacked-magic-immune'` — Monsters stacked on top of this building are immune to player magic damage.
 - **Event Choices**: Some buildings (e.g., 命运之刃) carry `eventChoices` that can be triggered by dragging to the hero zone, similar to event cards.
 - **Release Charge** (`hasReleaseCharge`): Buildings that support event choices gain a release charge when placed or when their position changes.
 - **Placement**: When played from hand or backpack, a building is placed into a random empty active row slot. If no empty slot exists, it is discarded to the graveyard.

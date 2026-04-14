@@ -738,7 +738,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 ## 10. 魔法系统
 
-> **建筑与魔法伤害：** 所有建筑（`type === 'building'`，如诅咒碑、增幅祭坛、命运之刃）都是魔法伤害的合法目标。魔法伤害选择目标时，同时检查 `type === 'monster'` 和 `type === 'building'`（通过 `isDamageableTarget` 辅助函数）。建筑自身不受其光环保护（如诅咒碑的 `adjacent-magic-immune` 光环仅保护相邻怪物，不保护建筑自身）。
+> **建筑与魔法伤害：** 所有建筑（`type === 'building'`，如诅咒碑、增幅祭坛、命运之刃）都是魔法伤害的合法目标。魔法伤害选择目标时，同时检查 `type === 'monster'` 和 `type === 'building'`（通过 `isDamageableTarget` 辅助函数）。建筑自身不受其光环保护（如诅咒碑的 `stacked-magic-immune` 光环仅保护堆叠在其上方的怪物，不保护建筑自身）。
 
 ### 10.1 魔法类型
 

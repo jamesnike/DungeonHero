@@ -1029,9 +1029,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     options?: { animationDelay?: number; pulses?: number; isSpellDamage?: boolean },
   ) => {
     if (options?.isSpellDamage && monster.type === 'monster') {
-      const activeCards = engine.getState().activeCards;
-      const monsterCol = activeCards.findIndex(c => c?.id === monster.id);
-      if (monsterCol >= 0 && isMonsterMagicImmuneByBuilding(activeCards, monsterCol)) {
+      const st = engine.getState();
+      const monsterCol = st.activeCards.findIndex(c => c?.id === monster.id);
+      if (monsterCol >= 0 && isMonsterMagicImmuneByBuilding(st.activeCards, st.activeCardStacks, monsterCol)) {
         depsRef.current.addGameLog('combat', `${monster.name} 受到诅咒碑光环保护，免疫魔法伤害！`);
         return;
       }
@@ -2578,9 +2578,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         });
         if (persuadeResult?.id === 'success') {
           const monsterMaxDur = targetMonster.fury ?? targetMonster.hpLayers ?? 1;
+          const monsterStartDur = Math.min(
+            targetMonster.currentLayer ?? targetMonster.fury ?? targetMonster.hpLayers ?? 1,
+            monsterMaxDur,
+          );
           const persuadedCard: GameCardData = {
             ...targetMonster,
-            durability: monsterMaxDur,
+            durability: monsterStartDur,
             maxDurability: monsterMaxDur,
           };
           depsRef.current.addCardToBackpack(persuadedCard, { pendingDungeonCardId: targetMonster.id });

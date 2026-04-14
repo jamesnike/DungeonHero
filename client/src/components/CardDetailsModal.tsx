@@ -1404,7 +1404,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
         return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时将激活行所有怪物攻击力 -2';
       }
       if (token === 'flipToHonorSweepMagic') {
-        return '事件卡翻为「战血横扫」永久法术并收入背包：选武器对激活行造成等同攻击力的多轮法术伤害（不耗耐久），该栏临时攻击 -5；可升级 2 次增加轮数';
+        return '事件卡翻为「战血横扫」即时法术并收入背包：选武器对激活行所有怪物造成等同攻击力的法术伤害，每击杀一个怪物升级一张牌';
       }
       if (token === 'fate-dice-strike')
         return '对右侧相邻卡牌生效：非怪物则摧毁；怪物则激怒并穿透打掉 2 层血（可击杀）';

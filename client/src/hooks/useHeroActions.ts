@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useGameEngine, useGameState, useEngineSetter } from '@/hooks/useGameEngine';
 import type { GameCardData, HeroMagicId, EventDiceRange } from '@/components/GameCard';
 import type { KnightCardData } from '@/lib/knightDeck';
@@ -30,7 +30,8 @@ import {
   pickRandomHandCardsForDiscardPreferGraveyard,
   isDamageableTarget,
 } from '@/game-core/helpers';
-import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingAura';
+import { getEquipmentSlotsWithSuppressedTempAttack, isMonsterMagicImmuneByBuilding } from '@/game-core/buildingAura';
+import { damageMonsterWithLayerOverflow } from '@/game-core/combat';
 import { applyMonsterRage } from '@/lib/monsterRage';
 
 // ---------------------------------------------------------------------------
@@ -236,8 +237,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   const setSlotTempArmor = useEngineSetter('slotTempArmor');
   const setEquipmentSlotCapacity = useEngineSetter('equipmentSlotCapacity');
   const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
+  const setUpgradeModalMaxCount = useEngineSetter('upgradeModalMaxCount');
   const setSwapUpgradeProgress = useEngineSetter('swapUpgradeProgress');
   const setAmuletSlots = useEngineSetter('amuletSlots');
+
+  const [honorSweepUpgradesPending, setHonorSweepUpgradesPending] = useState(0);
 
   const updateSwapUpgradeCounter = useCallback((displayCount: number, threshold: number) => {
     setAmuletSlots(prev => prev.map(slot => {
@@ -1103,7 +1107,6 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         return;
       }
       const waveDamage = computeHonorSweepWaveDamage(slotId);
-      const hitCount = 1 + ((card as KnightCardData).upgradeLevel ?? 0);
       const monsters = flattenActiveRowSlots(st.activeCards).filter(isDamageableTarget);
       if (monsters.length === 0) {
         finalizeMagicCard(card, { banner: '激活行没有怪物。' });
@@ -1113,32 +1116,55 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         finalizeMagicCard(card, { banner: '当前攻击力为 0，未造成伤害。' });
         return;
       }
+
+      let killCount = 0;
       let hitIndex = 0;
-      for (let wave = 0; wave < hitCount; wave += 1) {
-        monsters.forEach(m => {
-          if (!m) return;
-          if (!isMonsterEngaged(m.id)) beginCombat(m, 'hero');
-          dealDamageToMonster(m, waveDamage, {
-            pulses: 2,
-            animationDelay: hitIndex * HONOR_SWEEP_HIT_STAGGER_MS,
-            isSpellDamage: true,
-          });
-          hitIndex += 1;
+      monsters.forEach(m => {
+        if (!m) return;
+        if (!isMonsterEngaged(m.id)) beginCombat(m, 'hero');
+
+        const monsterCol = st.activeCards.findIndex(c => c?.id === m.id);
+        if (monsterCol >= 0 && isMonsterMagicImmuneByBuilding(st.activeCards, st.activeCardStacks, monsterCol)) {
+          return;
+        }
+        let effectiveDmg = waveDamage;
+        if (m.spellDamageReduction && !m.isStunned) {
+          effectiveDmg = Math.max(1, Math.floor(effectiveDmg * (1 - m.spellDamageReduction)));
+        }
+        if (m.swarmBugletShield && !m.isStunned && st.activeCards.some(c => c && c.isBuglet)) {
+          effectiveDmg = 0;
+        }
+        if (effectiveDmg > 0) {
+          const result = damageMonsterWithLayerOverflow(m, effectiveDmg, 1);
+          if ((result.currentLayer ?? 0) <= 0 || (result.hp ?? 0) <= 0) {
+            killCount++;
+          }
+        }
+
+        dealDamageToMonster(m, waveDamage, {
+          pulses: 2,
+          animationDelay: hitIndex * HONOR_SWEEP_HIT_STAGGER_MS,
+          isSpellDamage: true,
         });
-      }
-      setSlotTempAttack(prev => ({
-        ...prev,
-        [slotId]: (prev[slotId] ?? 0) - 5,
-      }));
+        hitIndex += 1;
+      });
+
+      const killMsg = killCount > 0 ? `，击杀 ${killCount} 只怪物` : '';
       addGameLog(
         'magic',
-        `战血横扫：${slotItem.name} 对激活行造成 ${hitCount} 轮伤害（每段 ${waveDamage}），该栏临时攻击 -5。`,
+        `战血横扫：${slotItem.name} 对激活行所有怪物造成 ${waveDamage} 点法术伤害${killMsg}。`,
       );
+      if (killCount > 0) {
+        addGameLog('magic', `战血横扫：击杀奖励，选择至多 ${killCount} 张牌升级！`);
+        setTimeout(() => {
+          setHonorSweepUpgradesPending(killCount);
+        }, 1100);
+      }
       finalizeMagicCard(card, {
-        banner: `战血横扫：${hitCount} 轮、每段 ${waveDamage} 点伤害（${slotItem.name}，不耗耐久），该武器栏临时攻击 -5。`,
+        banner: `战血横扫：${waveDamage} 点伤害（${slotItem.name}）${killCount > 0 ? `，击杀 ${killCount} 只，选择牌升级！` : '。'}`,
       });
     },
-    [computeHonorSweepWaveDamage, engine, setHeroSkillBanner, setSlotTempAttack],
+    [computeHonorSweepWaveDamage, engine, setHeroSkillBanner],
   );
 
   const applyWeaponSweepMagic = useCallback(
@@ -2814,5 +2840,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     handleExtraHeroSkillButtonClick,
     handleHeroMagicTrigger,
     handleHeroMagicChoice,
+    honorSweepUpgradesPending,
+    clearHonorSweepUpgrades: () => setHonorSweepUpgradesPending(0),
   };
 }

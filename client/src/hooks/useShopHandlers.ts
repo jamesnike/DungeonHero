@@ -617,11 +617,13 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         }
         case STARTER_CARD_IDS.trainingBlade: {
           if (newLevel === 1) {
-            upgraded.value = 3;
-          } else if (newLevel === 2) {
-            upgraded.value = 3;
+            upgraded.value = 4;
             upgraded.durability = Math.min((card.durability ?? 2) + 1, 3);
             upgraded.maxDurability = 3;
+          } else if (newLevel === 2) {
+            upgraded.value = 5;
+            upgraded.durability = Math.min((card.durability ?? 3) + 1, 4);
+            upgraded.maxDurability = 4;
           }
           break;
         }

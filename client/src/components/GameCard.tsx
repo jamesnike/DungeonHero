@@ -361,7 +361,7 @@ export interface GameCardData {
   /** 击晕状态：被击晕的怪物所有技能完全无效（攻击、被动、反应、遗言、复生、场地效果全部禁用），持续一个怪物回合后自动恢复 */
   isStunned?: boolean;
   /** 建筑光环 id：在场时生效，建筑被毁坏后消失 */
-  buildingAura?: 'suppress-adjacent-temp-attack' | 'adjacent-magic-immune';
+  buildingAura?: 'suppress-adjacent-temp-attack' | 'stacked-magic-immune';
   // Permanent event properties
   isPermanentEvent?: boolean; // Stays in dungeon after effect; recyclable like perm magic
   hasReleaseCharge?: boolean; // Gained on appearance or position change; consumed on effect use
