@@ -26,7 +26,7 @@ import GameCard, {
 import EquipmentSlot from './EquipmentSlot';
 // CombatPanel removed — only the standalone End Hero Turn button is used
 import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
-import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag, Trophy, Skull, Dices } from 'lucide-react';
+import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag, Trophy, Skull, Dices, ShieldOff } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import AmuletSlot from './AmuletSlot';
@@ -239,7 +239,7 @@ import {
   computeAmuletAuraReversal,
   isDamageableTarget,
 } from '@/game-core/helpers';
-import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingAura';
+import { getEquipmentSlotsWithSuppressedTempAttack, getColumnsWithCurseMonumentAura } from '@/game-core/buildingAura';
 
 // ---------------------------------------------------------------------------
 // UI-only constants (layout, animation timing, CSS classes)
@@ -3632,7 +3632,7 @@ export default function GameBoard() {
           const rowMonstersToEngage = activeCards.filter(c => c && c.type === 'monster') as GameCardData[];
           for (const m of rowMonstersToEngage) {
             if (!isMonsterEngaged(m.id)) {
-              beginCombat(m, 'monster');
+              beginCombat(m, 'hero');
             }
           }
         }
@@ -7281,7 +7281,7 @@ export default function GameBoard() {
         setHeroSkillBanner(`虫群集结！全体怪物+3攻击+3血量！`);
         for (const m of hordeRageMonstersToEngage) {
           if (!isMonsterEngaged(m.id)) {
-            beginCombatRef.current(m, 'monster');
+            beginCombatRef.current(m, 'hero');
           }
         }
       } else if (spawnedBuglet) {
@@ -9953,6 +9953,10 @@ export default function GameBoard() {
     () => getEquipmentSlotsWithSuppressedTempAttack(activeCards, equipmentSlot1, equipmentSlot2),
     [activeCards, equipmentSlot1, equipmentSlot2],
   );
+  const curseMonumentCols = useMemo(
+    () => getColumnsWithCurseMonumentAura(activeCards, activeCardStacks),
+    [activeCards, activeCardStacks],
+  );
   const heroRowSlots: HeroRowSlotConfig[] = [
     {
       id: 'hero-row-amulet',
@@ -10624,6 +10628,14 @@ export default function GameBoard() {
                 {hasActiveStack && (
                   <div className="absolute top-[-4px] right-[-4px] z-40 bg-amber-500 text-white rounded-full w-5 h-5 flex items-center justify-center border-2 border-background shadow-md font-bold text-xs pointer-events-none">
                     {activeStackedCards.length + 1}
+                  </div>
+                )}
+                {curseMonumentCols.has(index) && card.type === 'monster' && (
+                  <div
+                    className="absolute bottom-[-4px] left-[-4px] z-40 bg-purple-700 text-white rounded-full w-5 h-5 flex items-center justify-center border-2 border-background shadow-md pointer-events-none"
+                    title="诅咒碑光环：免疫魔法伤害"
+                  >
+                    <ShieldOff className="w-3 h-3" />
                   </div>
                 )}
               </>
