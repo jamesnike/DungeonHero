@@ -140,7 +140,7 @@ export function drawMultipleFromBackpack(
  * by clearing all combat-acquired modifiers and re-applying rage from base stats.
  * Non-monster cards pass through unchanged.
  */
-export function resetMonsterForGraveyard(card: GameCardData): GameCardData {
+export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false): GameCardData {
   if (card.type !== 'monster') return card;
 
   const cleaned: GameCardData = {
@@ -154,7 +154,7 @@ export function resetMonsterForGraveyard(card: GameCardData): GameCardData {
     maxDurability: undefined,
   };
 
-  return applyMonsterRage(cleaned, cleaned.rageTurn ?? 1);
+  return applyMonsterRage(cleaned, cleaned.rageTurn ?? 1, isQuickMode);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +166,7 @@ export function addToGraveyardPure(
   card: GameCardData,
 ): Partial<GameState> {
   return {
-    discardedCards: [...state.discardedCards, resetMonsterForGraveyard(card)],
+    discardedCards: [...state.discardedCards, resetMonsterForGraveyard(card, state.gameMode === 'quick')],
   };
 }
 
@@ -182,7 +182,7 @@ export function discardAllHandCardsPure(
     discarded: hand,
     patch: {
       handCards: [],
-      discardedCards: [...state.discardedCards, ...hand.map(resetMonsterForGraveyard)],
+      discardedCards: [...state.discardedCards, ...hand.map(c => resetMonsterForGraveyard(c, state.gameMode === 'quick'))],
     },
   };
 }

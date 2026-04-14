@@ -353,7 +353,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       {
         name: 'Swarm',
         image: swarmImage,
-        minAttack: 3, maxAttack: 5,
+        minAttack: 3, maxAttack: 4,
         minHp: 6, maxHp: 9,
         minFury: 2, maxFury: 2,
         waterfallEffect: { type: 'swarmInfest' as const, amount: 3, description: '被挤出时：在主牌堆顶加入 3 只小虫子' },
@@ -855,7 +855,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     value: 0,
     image: dedupeMagicWaterfallResetImage,
     magicType: 'instant',
-    magicEffect: '将激活行的所有卡牌置于牌堆底（不打乱其余牌序），然后触发瀑布。'
+    magicEffect: '将激活行的所有卡牌（含堆叠牌，幽灵建筑除外）置于牌堆底，然后触发瀑布。'
   });
 
   deck.push({
@@ -997,7 +997,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     image: skillScrollImage,
     magicType: 'instant',
     magicEffect: 'amplify-card',
-    description: '一次性魔法：选择一张装备栏或手牌中的装备/伤害魔法，生成一张永久魔法（Perm 2）对其进行增幅（武器攻击+1，护盾护甲+1，伤害魔法伤害+1）。',
+    description: '一次性魔法：选择一张装备栏或手牌中的装备/伤害魔法，生成一张永久魔法（Perm 2）对其进行增幅（武器攻击+2，护盾护甲+2，伤害魔法伤害+2）。',
   });
 
   // Event cards
@@ -2177,8 +2177,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollArmorImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备栏，+2 临时护甲。',
-      description: '选择一个装备栏，+2 临时护甲。',
+      magicEffect: '永久魔法：选择一个装备栏，+2 临时护甲。升级1：+4。升级2：+6。',
+      description: '选择一个装备栏，+2 临时护甲。升级1：+4。升级2：+6。',
       maxUpgradeLevel: 2,
     },
     {

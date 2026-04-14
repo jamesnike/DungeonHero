@@ -321,6 +321,7 @@ export interface GameCardData {
   bossLastStandAura?: boolean; // At 1 layer: +5 atk & heal 8 HP per monster turn end
   bossLayerCap?: boolean; // (deprecated) Max 1 layer loss per hero turn
   bossFuryDiceChance?: boolean; // Boss: 50% chance to skip layer loss on attack (dice roll)
+  bossEnrageGraveyardSummon?: number; // Boss: on enrage, pull N cards from graveyard and stack on other slots
   // Tier-3 waterfall upgrade abilities
   ogreStun?: boolean; // Ogre tier-1+: 20% chance to stun the player on attack (freezes equipment/amulet slots)
   ogreEnterDiscard?: boolean; // Ogre tier-3: randomly discard a player hand card on enter
@@ -383,7 +384,7 @@ export interface GameCardData {
   stayIfStacked?: boolean;
   /** 幽灵属性：不阻挡瀑流、不计入激活行剩余卡牌数；瀑流时垫在最下方 */
   isGhost?: boolean;
-  /** 增幅加成：每次增幅 +1，武器加攻击/护盾加护甲/伤害魔法加伤害 */
+  /** 增幅加成：每次增幅 +2，武器加攻击/护盾加护甲/伤害魔法加伤害 */
   amplifyBonus?: number;
   /** 增幅祭坛：发动时增幅目标卡牌的 ID */
   _amplifyTargetCardId?: string;
@@ -1718,7 +1719,7 @@ const amuletEffectText =
                   {card.name}
                 </h3>
 
-                {card.type === 'monster' && card.durability != null && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect) && (
+                {card.type === 'monster' && card.durability != null && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.bossRetaliationDamage || card.bossLastStandAura || card.bossFuryDiceChance || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手偷钱：攻击时为Hero偷钱">偷钱</span>
@@ -1822,9 +1823,21 @@ const amuletEffectText =
                     {card.golemSpellGrowth != null && card.golemSpellGrowth > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={card.durability != null ? `法力吞噬：每次瀑流时反震系数 +${card.golemSpellGrowth}` : `法力吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}，反震系数 +${card.golemSpellGrowth}`}>吞噬</span>
                     )}
+                    {card.bossRetaliationDamage != null && card.bossRetaliationDamage > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反噬：每次受到伤害，对英雄造成 ${card.bossRetaliationDamage} 点直接伤害（无视护盾）`}>反噬</span>
+                    )}
+                    {card.bossLastStandAura && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束 +5 攻击，恢复 1 血层">暴走</span>
+                    )}
+                    {card.bossFuryDiceChance && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="韧性：攻击后 50% 概率不掉血层（掷骰判定）">韧性</span>
+                    )}
+                    {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒`}>召唤</span>
+                    )}
                   </div>
                 )}
-                {card.type === 'monster' && card.durability == null && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth) && (
+                {card.type === 'monster' && card.durability == null && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossFuryDiceChance || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
                     {card.monsterSpecial && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.description ?? '精英怪物'}>精英</span>
@@ -1945,6 +1958,18 @@ const amuletEffectText =
                     )}
                     {card.golemSpellGrowth != null && card.golemSpellGrowth > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`法力吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}，反震系数 +${card.golemSpellGrowth}`}>吞噬</span>
+                    )}
+                    {card.bossRetaliationDamage != null && card.bossRetaliationDamage > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反噬：每次受到伤害，对英雄造成 ${card.bossRetaliationDamage} 点直接伤害（无视护盾）`}>反噬</span>
+                    )}
+                    {card.bossLastStandAura && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束 +5 攻击，恢复 1 血层">暴走</span>
+                    )}
+                    {card.bossFuryDiceChance && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="韧性：攻击后 50% 概率不掉血层（掷骰判定）">韧性</span>
+                    )}
+                    {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒`}>召唤</span>
                     )}
                     {card.isStunned && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title="晕眩：本回合无法行动">晕眩</span>
@@ -2102,7 +2127,12 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.onDiscardDraw !== b.onDiscardDraw ||
       a.potionEffect !== b.potionEffect ||
       a.amuletEffect !== b.amuletEffect ||
-      a.onDestroyEffect !== b.onDestroyEffect
+      a.onDestroyEffect !== b.onDestroyEffect ||
+      a.bossPhase !== b.bossPhase ||
+      a.bossRetaliationDamage !== b.bossRetaliationDamage ||
+      a.bossLastStandAura !== b.bossLastStandAura ||
+      a.bossFuryDiceChance !== b.bossFuryDiceChance ||
+      a.bossEnrageGraveyardSummon !== b.bossEnrageGraveyardSummon
     ) {
       return false;
     }

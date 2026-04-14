@@ -158,6 +158,7 @@ export type GameBoardModalsProps = {
   detailsModalOpen: boolean;
   onDetailsModalChange: (open: boolean) => void;
   currentTurn: number;
+  isQuickMode?: boolean;
   monsterRewardPreviewForModal: MonsterRewardPreview[] | null;
 
   // --- Hero details ---
@@ -360,6 +361,7 @@ function GameBoardModalsInner({
   detailsModalOpen,
   onDetailsModalChange,
   currentTurn,
+  isQuickMode,
   monsterRewardPreviewForModal,
 
   heroDetailsOpen,
@@ -651,6 +653,7 @@ function GameBoardModalsInner({
         onOpenChange={onDetailsModalChange}
         currentTurn={currentTurn}
         monsterRewards={monsterRewardPreviewForModal ?? undefined}
+        isQuickMode={isQuickMode}
       />
 
       <HeroDetailsModal

@@ -76,9 +76,10 @@ const normalizeTurn = (turn: number): number => {
   return Math.max(1, Math.floor(turn));
 };
 
-const calculateFromRule = (rule: MonsterRageRule, turn: number): number => {
+const calculateFromRule = (rule: MonsterRageRule, turn: number, isQuickMode = false): number => {
   const normalizedTurn = normalizeTurn(turn);
-  const rawValue = rule.base + Math.floor(normalizedTurn / rule.interval);
+  const effectiveInterval = isQuickMode ? Math.max(1, rule.interval - 1) : rule.interval;
+  const rawValue = rule.base + Math.floor(normalizedTurn / effectiveInterval);
   return Math.min(MAX_RAGE_LAYERS, rawValue);
 };
 
@@ -122,12 +123,12 @@ export const getWaterfallUpgradeLevel = (monsterType: string, waterfall: number)
   return level;
 };
 
-export const calculateMonsterRage = (monsterName: string, turn: number): number | null => {
+export const calculateMonsterRage = (monsterName: string, turn: number, isQuickMode = false): number | null => {
   const rule = getMonsterRageRule(monsterName);
   if (!rule) {
     return null;
   }
-  return calculateFromRule(rule, turn);
+  return calculateFromRule(rule, turn, isQuickMode);
 };
 
 const applySpecialAbility = (result: GameCardData, ability: string): void => {
@@ -226,7 +227,7 @@ const applySpecialAbility = (result: GameCardData, ability: string): void => {
   }
 };
 
-export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData => {
+export const applyMonsterRage = (card: GameCardData, turn: number, isQuickMode = false): GameCardData => {
   if (card.type !== 'monster') {
     return card;
   }
@@ -236,7 +237,7 @@ export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData
     return card;
   }
   const normalizedTurn = normalizeTurn(turn);
-  const rage = calculateFromRule(rule, normalizedTurn);
+  const rage = calculateFromRule(rule, normalizedTurn, isQuickMode);
 
   const baseAtk = card.baseAttack ?? card.attack ?? card.value ?? 0;
   const baseHp = card.baseHp ?? card.maxHp ?? card.hp ?? card.value ?? 0;

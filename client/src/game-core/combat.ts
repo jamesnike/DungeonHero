@@ -762,11 +762,12 @@ export function createBossCard(monster: GameCardData): GameCardData {
     bossRetaliationDamage: 3,
     bossLastStandAura: true,
     bossFuryDiceChance: true,
+    bossEnrageGraveyardSummon: 4,
     attack: (monster.attack ?? monster.value ?? 0) + 5,
     value: (monster.value ?? 0) + 5,
     tempAttackBoost: (monster.tempAttackBoost ?? 0) + 5,
     name: `${monster.name} (Boss)`,
-    description: `Boss形态！反噬3；1层时攻+5并恢复1层；受攻时50%概率不掉层。`,
+    description: `Boss形态！反噬3；1层时攻+5并恢复1层；受攻时50%概率不掉层；激怒时从坟场召唤4张牌（含2怪物）。`,
   };
 }
 

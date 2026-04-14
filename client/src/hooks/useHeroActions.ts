@@ -10,6 +10,7 @@ import type {
   EquipmentItem,
   EquipmentRepairTarget,
   EquipmentSlotId,
+  FlightSourceHint,
   HeroMagicActivationOrigin,
   HeroSkillArrowState,
   PendingMagicAction,
@@ -45,6 +46,7 @@ export interface HeroActionsDeps {
     options?: { owner?: 'player' | 'dungeon'; forceGraveyard?: boolean; forceRecycleBag?: boolean },
   ) => void;
   ensureCardInHand: (card: GameCardData) => void;
+  queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
   drawFromBackpackToHand: () => GameCardData | null;
   drawClassCardsToBackpack: (
     count: number,
@@ -450,7 +452,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
                   const idx = Math.floor(Math.random() * graveyard.length);
                   const picked = graveyard[idx];
                   setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                  setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                  depsRef.current.queueCardIntoHand(picked, 'graveyard');
                   addGameLog('equip', `${item.name} 遗言：从坟场获得了「${picked.name}」！`);
                 } else {
                   addGameLog('equip', `${item.name} 遗言：坟场没有可用的牌。`);
@@ -1642,7 +1644,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       if (pendingMagicAction.effect === 'temp-armor') {
         const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
         const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
-        const armorAmounts = [2, 3, 4];
+        const armorAmounts = [2, 4, 6];
         const armorAmt = armorAmounts[pendingMagicAction.card.upgradeLevel ?? 0] ?? 2;
         setSlotTempArmor(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + armorAmt }));
         if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
@@ -2392,7 +2394,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         const maxIdx = Math.min(depth, deckLen);
         const swapIdx = Math.floor(Math.random() * maxIdx);
         const deckCard = remainingDeck[swapIdx];
-        const ragedDeckCard = applyMonsterRage(deckCard, turnCount);
+        const ragedDeckCard = applyMonsterRage(deckCard, turnCount, gs.gameMode === 'quick');
         depsRef.current.triggerFateSwapFlight(activeSlotIdx, card, ragedDeckCard);
         setRemainingDeck(prev => {
           const next = [...prev];

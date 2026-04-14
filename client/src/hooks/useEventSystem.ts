@@ -1198,7 +1198,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                     const idx = Math.floor(Math.random() * graveyard.length);
                     const picked = graveyard[idx];
                     setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                    setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                    depsRef.current.queueCardIntoHand(picked, 'graveyard');
                     addGameLog('equip', `${slotItem.name} 遗言：从坟场获得了「${picked.name}」！`);
                   } else {
                     addGameLog('equip', `${slotItem.name} 遗言：坟场没有可用的牌。`);
@@ -2170,7 +2170,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                 const idx = Math.floor(Math.random() * graveyard.length);
                 const picked = graveyard[idx];
                 setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                depsRef.current.queueCardIntoHand(picked, 'graveyard');
                 addGameLog('equip', `${destroyedItem.name} 遗言：从坟场获得了「${picked.name}」！`);
               } else {
                 addGameLog('equip', `${destroyedItem.name} 遗言：坟场没有可用的牌。`);
@@ -2872,7 +2872,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                 const idx = Math.floor(Math.random() * graveyard.length);
                 const picked = graveyard[idx];
                 setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                depsRef.current.queueCardIntoHand(picked, 'graveyard');
                 addGameLog('equip', `${item.name} 遗言：从坟场获得了「${picked.name}」！`);
               } else {
                 addGameLog('equip', `${item.name} 遗言：坟场没有可用的牌。`);
@@ -2960,6 +2960,9 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             return next;
           });
           addGameLog('event', '秘藏宝库翻转回未开启状态');
+        } else if (cellIdx === -1 && flipBack && flipBack.type === 'event') {
+          depsRef.current.queueCardIntoHand({ ...flipBack });
+          addGameLog('event', '秘藏宝库翻转回未开启状态，加入手牌');
         }
 
         setHeroSkillBanner(`深入探索！受到 ${damage} 点伤害！`);
@@ -3558,16 +3561,16 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         if (deleteSuccess) {
           const applyAmplifyToCard = (card: GameCardData): GameCardData => {
             if (card.type === 'weapon' || card.type === 'monster') {
-              const newVal = card.value + 1;
-              return { ...card, value: newVal, amplifyBonus: (card.amplifyBonus ?? 0) + 1 };
+              const newVal = card.value + 2;
+              return { ...card, value: newVal, amplifyBonus: (card.amplifyBonus ?? 0) + 2 };
             } else if (card.type === 'shield') {
               const oldArmor = card.armorMax ?? card.value;
-              return { ...card, armorMax: oldArmor + 1, value: card.value + 1, amplifyBonus: (card.amplifyBonus ?? 0) + 1 };
+              return { ...card, armorMax: oldArmor + 2, value: card.value + 2, amplifyBonus: (card.amplifyBonus ?? 0) + 2 };
             } else if (card.type === 'magic') {
               if (card.scalingDamage != null) {
-                return { ...card, scalingDamage: (card.scalingDamage ?? 0) + 1, amplifyBonus: (card.amplifyBonus ?? 0) + 1 };
+                return { ...card, scalingDamage: (card.scalingDamage ?? 0) + 2, amplifyBonus: (card.amplifyBonus ?? 0) + 2 };
               }
-              return { ...card, amplifyBonus: (card.amplifyBonus ?? 0) + 1 };
+              return { ...card, amplifyBonus: (card.amplifyBonus ?? 0) + 2 };
             }
             return card;
           };

@@ -387,6 +387,7 @@ export default function GameBoard() {
     discoverModalOpen, discoverOptions, discoverSourceLabel, deleteModalOpen, upgradeModalOpen, upgradeModalMaxCount, handMagicUpgradeModal, mirrorCopyModal, permGrantModal, amplifyModal,
     graveyardDiscoverState, graveyardDiscoverDelivery,
     cardActionContext, equipmentPrompt, ghostBladeExileCards,
+    gameMode,
     gameOver, victory, showSkillSelection, showCardDraft, cardDraftPool,
     drawPending, isHydrated, heroSkillBanner,
     monstersDefeated, totalDamageTaken, totalHealed, turnDamageTaken,
@@ -3415,7 +3416,7 @@ export default function GameBoard() {
               const idx = Math.floor(Math.random() * graveyard.length);
               const picked = graveyard[idx];
               setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-              ensureCardInHand(picked);
+              queueCardIntoHand(picked, 'graveyard');
               addGameLog('equip', `${card.name} 遗言：从坟场获得了「${picked.name}」！`);
             } else {
               addGameLog('equip', `${card.name} 遗言：坟场没有可用的牌。`);
@@ -4035,6 +4036,49 @@ export default function GameBoard() {
     startGraveyardStackFlightAnimation();
   }, [animSpeed, startGraveyardStackFlightAnimation]);
 
+  const triggerGraveyardToBackpackFlight = useCallback((cards: GameCardData[]) => {
+    if (!cards.length || typeof window === 'undefined') return;
+    const surfaceEl = gameSurfaceRef.current;
+    const graveyardEl = graveyardCellRef.current;
+    const backpackCell = heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX];
+
+    if (!surfaceEl || !graveyardEl || !backpackCell) return;
+
+    const surfaceRect = surfaceEl.getBoundingClientRect();
+    const graveyardRect = graveyardEl.getBoundingClientRect();
+    const backpackRect = backpackCell.getBoundingClientRect();
+    const baseTime = performance.now();
+
+    const graveyardCenter: Point = {
+      x: graveyardRect.left + graveyardRect.width / 2 - surfaceRect.left,
+      y: graveyardRect.top + graveyardRect.height / 2 - surfaceRect.top,
+    };
+    const backpackCenter: Point = {
+      x: backpackRect.left + backpackRect.width / 2 - surfaceRect.left,
+      y: backpackRect.top + backpackRect.height / 2 - surfaceRect.top,
+    };
+
+    const flights: GraveyardStackFlight[] = cards.map((card, i) => ({
+      id: `graveyard-backpack-${card.id}-${baseTime}`,
+      card,
+      start: {
+        x: graveyardCenter.x + (Math.random() - 0.5) * 16,
+        y: graveyardCenter.y + (Math.random() - 0.5) * 10,
+      },
+      end: {
+        x: backpackCenter.x + (Math.random() - 0.5) * 12,
+        y: backpackCenter.y + (Math.random() - 0.5) * 8,
+      },
+      startTime: baseTime + i * 120,
+      duration: animSpeed(GRAVEYARD_STACK_FLIGHT_DURATION),
+      progress: 0,
+      arcHeight: GRAVEYARD_STACK_ARC_HEIGHT + Math.random() * 20,
+    }));
+
+    graveyardStackFlightsRef.current = [...graveyardStackFlightsRef.current, ...flights];
+    setGraveyardStackFlights(graveyardStackFlightsRef.current);
+    startGraveyardStackFlightAnimation();
+  }, [animSpeed, startGraveyardStackFlightAnimation]);
 
 
 
@@ -4135,7 +4179,9 @@ export default function GameBoard() {
 
       const surfaceEl = gameSurfaceRef.current;
       let sourceCell: HTMLDivElement | null = null;
-      if (sourceHint === 'equipmentSlot1') {
+      if (sourceHint === 'graveyard') {
+        sourceCell = graveyardCellRef.current;
+      } else if (sourceHint === 'equipmentSlot1') {
         sourceCell = heroRowCellRefs.current[HERO_ROW_EQUIPMENT_1_INDEX];
       } else if (sourceHint === 'equipmentSlot2') {
         sourceCell = heroRowCellRefs.current[HERO_ROW_EQUIPMENT_2_INDEX];
@@ -5086,7 +5132,7 @@ export default function GameBoard() {
     ensureRowHasMonster(previewRaw, dealQueue);
     const initialPreview = fillActiveRowSlots(previewRaw).map((card, slotIdx) => {
       if (!card) return null;
-      const raged = applyMonsterRage(card, initialTurnCount + 1);
+      const raged = applyMonsterRage(card, initialTurnCount + 1, isQuickMode);
       if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
         return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
       }
@@ -5102,7 +5148,7 @@ export default function GameBoard() {
         .filter(i => i >= 0);
       if (nonMonsterPreviewIndices.length > 0) {
         const targetIdx = nonMonsterPreviewIndices[Math.floor(Math.random() * nonMonsterPreviewIndices.length)];
-        initialPreviewStacks[targetIdx] = [applyMonsterRage(previewStackCard, initialTurnCount + 1)];
+        initialPreviewStacks[targetIdx] = [applyMonsterRage(previewStackCard, initialTurnCount + 1, isQuickMode)];
       }
     }
 
@@ -5111,7 +5157,7 @@ export default function GameBoard() {
     ensureRowHasMonster(activeRaw, dealQueue);
     const initialActive = fillActiveRowSlots(activeRaw).map((card, slotIdx) => {
       if (!card) return null;
-      const raged = applyMonsterRage(card, initialTurnCount);
+      const raged = applyMonsterRage(card, initialTurnCount, isQuickMode);
       if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
         return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
       }
@@ -5127,7 +5173,7 @@ export default function GameBoard() {
         .filter(i => i >= 0);
       if (nonMonsterActiveIndices.length > 0) {
         const targetIdx = nonMonsterActiveIndices[Math.floor(Math.random() * nonMonsterActiveIndices.length)];
-        initialActiveStacks[targetIdx] = [applyMonsterRage(activeStackCard, initialTurnCount)];
+        initialActiveStacks[targetIdx] = [applyMonsterRage(activeStackCard, initialTurnCount, isQuickMode)];
       }
     }
 
@@ -6123,7 +6169,7 @@ export default function GameBoard() {
         let insertIndex = 0;
         for (let col = 0; col < DUNGEON_COLUMN_COUNT; col++) {
           if (!nextSlots[col] && insertIndex < newCards.length) {
-            nextSlots[col] = applyMonsterRage(newCards[insertIndex++], drawSpawnTurn);
+            nextSlots[col] = applyMonsterRage(newCards[insertIndex++], drawSpawnTurn, gameMode === 'quick');
           }
         }
         
@@ -6279,7 +6325,7 @@ export default function GameBoard() {
     }));
 
     setPreviewCards(fillActiveRowSlots(plan.nextPreviewCards).map(card =>
-      card ? applyMonsterRage(card, turnCount + 1) : null,
+      card ? applyMonsterRage(card, turnCount + 1, gameMode === 'quick') : null,
     ) as ActiveRowSlots);
 
     // Apply pending preview stacks from waterfall deal bonus
@@ -6487,7 +6533,7 @@ export default function GameBoard() {
                     const idx = Math.floor(Math.random() * graveyard.length);
                     const picked = graveyard[idx];
                     setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                    ensureCardInHand(picked);
+                    queueCardIntoHand(picked, 'graveyard');
                     addGameLog('equip', `${card.name} 遗言：从坟场获得了「${picked.name}」！`);
                   } else {
                     addGameLog('equip', `${card.name} 遗言：坟场没有可用的牌。`);
@@ -6979,7 +7025,7 @@ export default function GameBoard() {
     const dropPreviewIndices = dropAssignments.map(pair => pair.previewIndex);
     const dropTargetSlots = dropAssignments.map(pair => pair.slotIndex);
     const spawnTurn = turnCount + 1;
-    const resolvedDropCards = dropAssignments.map(pair => applyMonsterRage(pair.card, spawnTurn));
+    const resolvedDropCards = dropAssignments.map(pair => applyMonsterRage(pair.card, spawnTurn, gameMode === 'quick'));
 
     const remainingPreviewOrdered = Array.from(unusedPreview).sort((a, b) => b - a);
     // Never discard the final monster (future boss) — pick a different card
@@ -7482,6 +7528,7 @@ export default function GameBoard() {
     addCardToBackpack,
     drawFromBackpackToHand,
     drawFromRecycleBagToHand,
+    queueCardIntoHand,
     drawClassCardsToBackpack,
     triggerClassDeckFlight,
     getEquipmentSlots,
@@ -7524,6 +7571,7 @@ export default function GameBoard() {
     finalizeMagicCard,
     triggerDiscardFlight,
     triggerStealCardFlight,
+    triggerGraveyardStackFlight,
     dragonBleedDestroyEquipment,
     beginDiscoverFlow,
     beginDiscoverFlowAsync,
@@ -7650,6 +7698,7 @@ export default function GameBoard() {
     triggerDiscardFlight,
     triggerClassDeckFlight,
     triggerGraveNova,
+    triggerGraveyardToBackpackFlight,
     triggerWaterfall,
     applyWaterfallSideEffects,
     queueWaterfallTimeout,
@@ -7690,6 +7739,7 @@ export default function GameBoard() {
   heroActionsDepsRef.current = {
     discardCardToGraveyard,
     ensureCardInHand,
+    queueCardIntoHand,
     drawFromBackpackToHand,
     drawClassCardsToBackpack,
     getEquipmentSlots,
@@ -11263,6 +11313,7 @@ export default function GameBoard() {
         detailsModalOpen={detailsModalOpen}
         onDetailsModalChange={handleDetailsModalChange}
         currentTurn={turnCount}
+        isQuickMode={gameMode === 'quick'}
         monsterRewardPreviewForModal={monsterRewardPreviewForModal}
         heroDetailsOpen={heroDetailsOpen}
         onHeroDetailsChange={setHeroDetailsOpen}

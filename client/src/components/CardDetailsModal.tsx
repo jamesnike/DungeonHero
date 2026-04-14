@@ -25,6 +25,7 @@ interface CardDetailsModalProps {
   onOpenChange: (open: boolean) => void;
   currentTurn: number;
   monsterRewards?: MonsterRewardPreview[] | null;
+  isQuickMode?: boolean;
 }
 
 export default function CardDetailsModal({
@@ -33,6 +34,7 @@ export default function CardDetailsModal({
   onOpenChange,
   currentTurn,
   monsterRewards,
+  isQuickMode = false,
 }: CardDetailsModalProps) {
   const arcaneStormDamage = useArcaneStormDamage();
   if (!card) return null;
@@ -41,7 +43,7 @@ export default function CardDetailsModal({
   const rageTurn = card.type === 'monster' ? (card.rageTurn ?? currentTurn) : null;
   const computedRage =
     card.type === 'monster' && rageRule && rageTurn
-      ? calculateMonsterRage(card.name, rageTurn) ?? null
+      ? calculateMonsterRage(card.name, rageTurn, isQuickMode) ?? null
       : null;
   const rageDisplayValue =
     card.type === 'monster'
@@ -405,18 +407,18 @@ export default function CardDetailsModal({
               </div>
             )}
 
-            {/* Monster Elite Double Attack */}
-            {card.type === 'monster' && card.eliteDoubleAttack && (
-              <div className="bg-violet-500/15 p-3 rounded-md border border-violet-500/30 relative overflow-hidden">
+            {/* Ogre Crit - 蛮力暴击 */}
+            {card.type === 'monster' && card.monsterSpecial === 'ogre-crit' && (
+              <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30 relative overflow-hidden">
                 <div className="relative flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
-                    <Sword className="w-4 h-4 shrink-0 text-violet-500" />
-                    <span className="font-extrabold text-sm text-violet-700 dark:text-violet-300 tracking-wide">
-                      连击
+                    <Sword className="w-4 h-4 shrink-0 text-red-500" />
+                    <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
+                      蛮力暴击
                     </span>
                   </div>
-                  <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">
-                    攻击时 50% 概率攻击两次。
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
+                    攻击时 50% 概率双倍伤害。
                   </p>
                 </div>
               </div>
@@ -832,6 +834,23 @@ export default function CardDetailsModal({
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
                     攻击后 50% 概率不掉血层（掷骰判定）。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Boss: Enrage Graveyard Summon */}
+            {card.type === 'monster' && card.bossEnrageGraveyardSummon && card.bossEnrageGraveyardSummon > 0 && (
+              <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Skull className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">
+                      亡灵召唤
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">
+                    被激怒时，从坟场取 {card.bossEnrageGraveyardSummon} 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒。
                   </p>
                 </div>
               </div>

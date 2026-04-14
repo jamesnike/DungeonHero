@@ -99,6 +99,21 @@ import sealBladeImage from '@assets/generated_images/knight_seal_blade.png';
 import persuadeRecycleAmuletImage from '@assets/generated_images/knight_persuade_recycle_amulet.png';
 import thunderStrikeAmuletImage from '@assets/generated_images/knight_thunder_strike_amulet.png';
 
+import relicWaterfallDiscoverImage from '@assets/generated_images/relic_waterfall_discover.png';
+import relicWaterfallHealImage from '@assets/generated_images/relic_waterfall_heal.png';
+import relicDiscardProfitImage from '@assets/generated_images/relic_discard_profit.png';
+import relicHealToDamageImage from '@assets/generated_images/relic_heal_to_damage.png';
+import relicEarlySurgeImage from '@assets/generated_images/relic_early_surge.png';
+import relicShieldWallImage from '@assets/generated_images/relic_shield_wall.png';
+import relicSummonMinionImage from '@assets/generated_images/relic_summon_minion.png';
+import relicBulwarkAttackImage from '@assets/generated_images/relic_bulwark_attack.png';
+import relicBulwarkArmorImage from '@assets/generated_images/relic_bulwark_armor.png';
+import relicRecycleShuffleImage from '@assets/generated_images/relic_recycle_shuffle.png';
+import relicWraithPurificationImage from '@assets/generated_images/relic_wraith_purification.png';
+import relicPersuadeSameHalveImage from '@assets/generated_images/relic_persuade_same_halve.png';
+import relicPersuadeRaceBonusImage from '@assets/generated_images/relic_persuade_race_bonus.png';
+import relicPersuadeDurabilityImage from '@assets/generated_images/relic_persuade_durability.png';
+
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
   swordImage, axeImage, daggerImage, daggerWeaponImage, holyBladeImage, maceImage,
@@ -139,6 +154,11 @@ const ALL_IMAGES = [
   cursedSteleBuildingImage, knightEquipEmpowerPotionImage,
   bastionShieldImage, sealBladeImage, persuadeRecycleAmuletImage,
   thunderStrikeAmuletImage,
+  relicWaterfallDiscoverImage, relicWaterfallHealImage, relicDiscardProfitImage,
+  relicHealToDamageImage, relicEarlySurgeImage, relicShieldWallImage,
+  relicSummonMinionImage, relicBulwarkAttackImage, relicBulwarkArmorImage,
+  relicRecycleShuffleImage, relicWraithPurificationImage,
+  relicPersuadeSameHalveImage, relicPersuadeRaceBonusImage, relicPersuadeDurabilityImage,
 ];
 
 const FLAVOR_TEXTS = [

@@ -17,6 +17,7 @@ import type {
   EquipmentItem,
   EquipmentSlotBonusState,
   EquipmentSlotId,
+  FlightSourceHint,
   MonsterRewardDrop,
   SlotPermanentBonus,
   SlotTempArmorState,
@@ -70,6 +71,7 @@ export interface CombatActionsDeps {
   ) => void;
   drawFromBackpackToHand: () => GameCardData | null;
   drawFromRecycleBagToHand: (count: number) => GameCardData[];
+  queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
   drawClassCardsToBackpack: (count: number, source: string, filter?: (card: GameCardData) => boolean) => GameCardData[];
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   getEquipmentSlots: () => { id: EquipmentSlotId; item: EquipmentItem | null }[];
@@ -128,6 +130,7 @@ export interface CombatActionsDeps {
   finalizeMagicCard: (card: GameCardData, opts?: { banner?: string; dealtDamage?: boolean }) => void;
   triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
   triggerStealCardFlight: (card: GameCardData, targetMonsterId: string) => Promise<void>;
+  triggerGraveyardStackFlight: (targetCellIndex: number, cards: GameCardData[]) => void;
   dragonBleedDestroyEquipment: (monsterName: string, remainingLayers: number) => void;
   beginDiscoverFlow: (source: string, options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string }) => boolean;
   beginDiscoverFlowAsync: (source: string, opts?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string }) => Promise<void>;
@@ -608,11 +611,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         bossRetaliationDamage: 3,
         bossLastStandAura: true,
         bossFuryDiceChance: true,
+        bossEnrageGraveyardSummon: 4,
         description: [
           '反噬：每次受到伤害，对英雄造成 3 点直接伤害（无视护盾）',
           '复生：首次被击杀后以 1 血层复活',
           '暴走光环：血层为 1 时，每个怪物回合结束 +5 攻击，恢复 1 血层',
           '韧性：攻击后 50% 概率不掉血层（掷骰判定）',
+          '亡灵召唤：被激怒时，从坟场取 4 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒',
         ].join('\n'),
       };
       if (monster.lastWords) {
@@ -1067,8 +1072,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
     recordClassDamageDiscoverHit();
 
-    const layersBefore = monster.currentLayer ?? monster.fury ?? 1;
-    const updatedMonster = damageMonsterWithLayerOverflow(monster, effectiveDamage, 1);
+    const liveMonster = engine.getState().activeCards.find(c => c?.id === monster.id) ?? monster;
+    const layersBefore = liveMonster.currentLayer ?? liveMonster.fury ?? 1;
+    const updatedMonster = damageMonsterWithLayerOverflow(liveMonster, effectiveDamage, 1);
     const baseDelay = options?.animationDelay ?? 0;
     const pulses = Math.max(1, options?.pulses ?? 1);
     for (let i = 0; i < pulses; i += 1) {
@@ -1097,7 +1103,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     const ae = depsRef.current.amuletEffects;
     const effectiveLifesteal = permanentSpellLifesteal + ae.lifeOverkillBonus;
     if (effectiveLifesteal > 0) {
-      const overkill = computeOverkill(monster, effectiveDamage);
+      const overkill = computeOverkill(liveMonster, effectiveDamage);
       if (overkill > 0) {
         healHero(effectiveLifesteal, { healLogVariant: 'overkill-lifesteal' });
       }
@@ -1107,6 +1113,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       (updatedMonster.currentLayer ?? 0) <= 0 || (updatedMonster.hp ?? 0) <= 0;
     if (monsterDefeated) {
       handleMonsterDefeated(monster);
+      if (!depsRef.current.pendingDefeatIdsRef.current.has(monster.id) && monster.monsterSpecial === 'bone-regen' && !monster.isStunned) {
+        void checkHollowSkeletonRestore(monster.id, monster.name, layersBefore, 0, true);
+      }
     } else {
       updateMonsterCard(monster.id, (card) => damageMonsterWithLayerOverflow(card, effectiveDamage, 1));
       const layersAfter = updatedMonster.currentLayer ?? 0;
@@ -1262,6 +1271,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
     if (defeatedByReflect) {
       handleMonsterDefeated(monsterSnapshot);
+      if (!depsRef.current.pendingDefeatIdsRef.current.has(monsterSnapshot.id) && monsterSnapshot.monsterSpecial === 'bone-regen' && !monsterSnapshot.isStunned) {
+        void checkHollowSkeletonRestore(monsterSnapshot.id, monsterSnapshot.name, layersBeforeReflect, 0, true);
+      }
       return {
         shouldApplyBossRetaliation: false,
         bossRetaliationDamage: retDmg,
@@ -1632,6 +1644,80 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     }
 
     depsRef.current.addGameLog('combat', `与 ${monster.name} 进入战斗（HP: ${monster.hp ?? monster.value}${(monster.currentLayer ?? 1) > 1 ? ` ×${monster.currentLayer}层` : ''}）`);
+
+    // Boss skill: on enrage, summon cards from graveyard to other active slots
+    const alreadyEngaged = currentLiveIds.includes(monster.id);
+    if (!alreadyEngaged && monster.bossEnrageGraveyardSummon && monster.bossEnrageGraveyardSummon > 0) {
+      const summonCount = monster.bossEnrageGraveyardSummon;
+      const st = engine.getState();
+      const graveyardCopy = [...st.discardedCards];
+      const bossCol = st.activeCards.findIndex(c => c?.id === monster.id);
+      const otherSlots = st.activeCards
+        .map((_, i) => i)
+        .filter(i => i !== bossCol && i >= 0 && i < st.activeCards.length);
+
+      if (graveyardCopy.length > 0 && otherSlots.length > 0) {
+        const picked: GameCardData[] = [];
+        const count = Math.min(summonCount, graveyardCopy.length, otherSlots.length);
+
+        const graveyardMonsters = graveyardCopy.filter(c => c.type === 'monster');
+        const graveyardOthers = graveyardCopy.filter(c => c.type !== 'monster');
+        const guaranteedMonsters = Math.min(2, graveyardMonsters.length, count);
+        for (let i = 0; i < guaranteedMonsters; i++) {
+          const ri = Math.floor(Math.random() * graveyardMonsters.length);
+          picked.push(graveyardMonsters.splice(ri, 1)[0]);
+        }
+        const remaining = count - picked.length;
+        const remainingPool = [...graveyardMonsters, ...graveyardOthers];
+        for (let i = 0; i < remaining && remainingPool.length > 0; i++) {
+          const ri = Math.floor(Math.random() * remainingPool.length);
+          picked.push(remainingPool.splice(ri, 1)[0]);
+        }
+        const pickedIds = new Set(picked.map(c => c.id));
+        graveyardCopy.length = 0;
+        graveyardCopy.push(...st.discardedCards.filter(c => !pickedIds.has(c.id)));
+        if (picked.length > 0) {
+          setDiscardedCards(graveyardCopy);
+
+          const shuffledSlots = [...otherSlots].sort(() => Math.random() - 0.5).slice(0, picked.length);
+          const summonedMonsterIds: string[] = [];
+
+          setActiveCardStacks(prev => {
+            const next = { ...prev };
+            for (let i = 0; i < picked.length; i++) {
+              const slotIdx = shuffledSlots[i];
+              next[slotIdx] = [...(next[slotIdx] ?? []), picked[i]];
+            }
+            return next;
+          });
+
+          for (let i = 0; i < picked.length; i++) {
+            depsRef.current.triggerGraveyardStackFlight(shuffledSlots[i], [picked[i]]);
+            if (picked[i].type === 'monster') {
+              summonedMonsterIds.push(picked[i].id);
+            }
+          }
+
+          const names = picked.map(c => `「${c.name}」`).join('、');
+          depsRef.current.addGameLog('combat', `${monster.name} 亡灵召唤：从坟场召唤了 ${names} 堆叠到激活行！`);
+          setHeroSkillBanner(`${monster.name} 亡灵召唤！从坟场召唤了 ${picked.length} 张牌！`);
+
+          // Enrage any summoned monsters after a short delay
+          if (summonedMonsterIds.length > 0) {
+            setTimeout(() => {
+              for (const mid of summonedMonsterIds) {
+                const liveCard = engine.getState().activeCards.find(c => c?.id === mid);
+                if (liveCard && liveCard.type === 'monster' && !depsRef.current.isMonsterEngaged(mid)) {
+                  depsRef.current.beginCombatRef.current(liveCard, initiator);
+                  depsRef.current.addGameLog('combat', `${liveCard.name} 被激怒了！`);
+                }
+              }
+            }, 400);
+          }
+        }
+      }
+    }
+
     setCombatState(prev => {
       const liveEngagedIds = prev.engagedMonsterIds.filter(
         id => !depsRef.current.pendingDefeatIdsRef.current.has(id),
@@ -1966,6 +2052,27 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             reviveUsed: true,
             ...(targetMonster.skeletonNoLayerCost ? { skeletonNoLayerCostActive: true } : {}),
           };
+          if (targetMonster.monsterSpecial === 'bone-regen' && !targetMonster.isStunned) {
+            const boneResult = await requestDiceOutcome({
+              title: targetMonster.name,
+              subtitle: '虚骨再生',
+              entries: [
+                { id: 'restore', range: [1, 10] as [number, number], label: '恢复 1 层血层', effect: 'none' },
+                { id: 'fail', range: [11, 20] as [number, number], label: '再生失败', effect: 'none' },
+              ],
+            });
+            if (boneResult?.id === 'restore') {
+              workingMonster = {
+                ...workingMonster,
+                currentLayer: (workingMonster.currentLayer ?? 0) + 1,
+                hp: workingMonster.maxHp ?? workingMonster.hp ?? 0,
+              };
+              addGameLog('combat', `${targetMonster.name} 的虚骨再生了一层！`);
+              setHeroSkillBanner(`${targetMonster.name} 恢复了 1 层血层！`);
+            } else {
+              addGameLog('combat', `${targetMonster.name} 的再生尝试失败。`);
+            }
+          }
         } else {
           applyHeroKillEffects(monsterHpBefore);
           handleMonsterDefeated(targetMonster, { killedByMinion: isMinionAttack });
@@ -2212,7 +2319,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                 const idx = Math.floor(Math.random() * graveyard.length);
                 const picked = graveyard[idx];
                 setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                depsRef.current.queueCardIntoHand(picked, 'graveyard');
                 addGameLog('equip', `${slotItem.name} 遗言：从坟场获得了「${picked.name}」！`);
               } else {
                 addGameLog('equip', `${slotItem.name} 遗言：坟场没有可用的牌。`);
@@ -2666,7 +2773,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               const idx = Math.floor(Math.random() * graveyard.length);
               const picked = graveyard[idx];
               setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-              setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+              depsRef.current.queueCardIntoHand(picked, 'graveyard');
               addGameLog('equip', `${slotItem.name} 遗言：从坟场获得了「${picked.name}」！`);
             } else {
               addGameLog('equip', `${slotItem.name} 遗言：坟场没有可用的牌。`);
@@ -3321,7 +3428,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                     const idx = Math.floor(Math.random() * graveyard.length);
                     const picked = graveyard[idx];
                     setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                    setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                    depsRef.current.queueCardIntoHand(picked, 'graveyard');
                     depsRef.current.addGameLog('equip', `${slotItem.name} 遗言：从坟场获得了「${picked.name}」！`);
                   } else {
                     depsRef.current.addGameLog('equip', `${slotItem.name} 遗言：坟场没有可用的牌。`);
@@ -3619,7 +3726,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                 const idx = Math.floor(Math.random() * graveyard.length);
                 const picked = graveyard[idx];
                 setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                depsRef.current.queueCardIntoHand(picked, 'graveyard');
                 depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：从坟场获得了「${picked.name}」！`);
               } else {
                 depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：坟场没有可用的牌。`);

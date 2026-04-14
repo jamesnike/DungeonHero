@@ -237,7 +237,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
   const sanitizeCardForGraveyard = (card: GameCardData): GameCardData => {
     const { fromSlot, ...rest } = card as GameCardData & { fromSlot?: string };
-    return resetMonsterForGraveyard({ ...rest });
+    return resetMonsterForGraveyard({ ...rest }, gs.gameMode === 'quick');
   };
 
   // -- Functions --------------------------------------------------------------
@@ -978,6 +978,14 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
             next[idx] = placedCard;
             return next;
           });
+        } else if (flip.toCard.type === 'event') {
+          const cardWithFlip: GameCardData = { ...card };
+          const placedCard: GameCardData = {
+            ...flip.toCard,
+            _flipBackCard: cardWithFlip,
+          };
+          ensureCardInHand(placedCard);
+          depsRef.current.addGameLog('event', `${flip.toCard.name} 加入手牌`);
         }
       } else if (destination === 'backpack') {
         addCardToBackpack(flip.toCard);

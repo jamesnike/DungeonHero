@@ -28,11 +28,11 @@ type SelectionState =
   | null;
 
 function getAmplifyPreview(card: GameCardData): string {
-  if (card.type === 'weapon') return `攻击力 ${card.value} → ${card.value + 1}`;
-  if (card.type === 'shield') return `护甲 ${card.armorMax ?? card.value} → ${(card.armorMax ?? card.value) + 1}`;
+  if (card.type === 'weapon') return `攻击力 ${card.value} → ${card.value + 2}`;
+  if (card.type === 'shield') return `护甲 ${card.armorMax ?? card.value} → ${(card.armorMax ?? card.value) + 2}`;
   if (card.type === 'magic') {
-    if (card.scalingDamage != null) return `叠刺基数 ${card.scalingDamage} → ${card.scalingDamage + 1}`;
-    const bonus = (card.amplifyBonus ?? 0) + 1;
+    if (card.scalingDamage != null) return `叠刺基数 ${card.scalingDamage} → ${card.scalingDamage + 2}`;
+    const bonus = (card.amplifyBonus ?? 0) + 2;
     return `伤害 +${bonus}`;
   }
   return '';

@@ -678,12 +678,12 @@ The helper `isDamageMagic(card)` (`helpers.ts`) identifies damage-dealing magic 
 
 | Target type | Effect |
 |-------------|--------|
-| Weapon | `value` +1 (permanent attack increase) |
-| Shield | `armorMax` +1, `value` +1 (permanent armor increase) |
-| Damage magic with `scalingDamage` | `scalingDamage` +1 (叠刺 base increment) |
-| Other damage magic | `amplifyBonus` +1 (flat damage bonus) |
+| Weapon | `value` +2 (permanent attack increase) |
+| Shield | `armorMax` +2, `value` +2 (permanent armor increase) |
+| Damage magic with `scalingDamage` | `scalingDamage` +2 (叠刺 base increment) |
+| Other damage magic | `amplifyBonus` +2 (flat damage bonus) |
 
-All targets also receive `amplifyBonus` +1 for tracking purposes.
+All targets also receive `amplifyBonus` +2 for tracking purposes.
 
 ### amplifyBonus Application Points
 

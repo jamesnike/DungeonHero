@@ -1,19 +1,22 @@
 import type { EternalRelic, EternalRelicId } from '@/game-core/types';
 
-import relicWaterfallDiscoverImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
-import relicWaterfallHealImage from '@assets/generated_images/card_dedupe_knight_magic_soft_waterfall.png';
+import relicWaterfallDiscoverImage from '@assets/generated_images/relic_waterfall_discover.png';
+import relicWaterfallHealImage from '@assets/generated_images/relic_waterfall_heal.png';
 import relicVitalityWellImage from '@assets/generated_images/chibi_forge_heart_amulet.png';
-import relicDiscardProfitImage from '@assets/generated_images/cute_cartoon_gold_coins.png';
-import relicHealToDamageImage from '@assets/generated_images/starter_waterfall_sword.png';
-import relicEarlySurgeImage from '@assets/generated_images/card_dedupe_starter_potion_waterfall_deal.png';
-import relicShieldWallImage from '@assets/generated_images/chibi_thunder_amulet.png';
-import relicSummonMinionImage from '@assets/generated_images/chibi_minion_follower.png';
-import relicBulwarkAttackImage from '@assets/generated_images/magical_sword_weapon_card.png';
-import relicBulwarkArmorImage from '@assets/generated_images/card_dedupe_magic_tide_armor.png';
+import relicDiscardProfitImage from '@assets/generated_images/relic_discard_profit.png';
+import relicHealToDamageImage from '@assets/generated_images/relic_heal_to_damage.png';
+import relicEarlySurgeImage from '@assets/generated_images/relic_early_surge.png';
+import relicShieldWallImage from '@assets/generated_images/relic_shield_wall.png';
+import relicSummonMinionImage from '@assets/generated_images/relic_summon_minion.png';
+import relicBulwarkAttackImage from '@assets/generated_images/relic_bulwark_attack.png';
+import relicBulwarkArmorImage from '@assets/generated_images/relic_bulwark_armor.png';
 import relicChainPersuadeImage from '@assets/generated_images/knight_potion_chain_persuade.png';
-import relicRecycleShuffleImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
+import relicRecycleShuffleImage from '@assets/generated_images/relic_recycle_shuffle.png';
 import relicEquipEmpowerImage from '@assets/generated_images/knight_potion_equip_empower.png';
-import relicWraithPurificationImage from '@assets/generated_images/cute_chibi_wraith_monster.png';
+import relicWraithPurificationImage from '@assets/generated_images/relic_wraith_purification.png';
+import relicPersuadeSameHalveImage from '@assets/generated_images/relic_persuade_same_halve.png';
+import relicPersuadeRaceBonusImage from '@assets/generated_images/relic_persuade_race_bonus.png';
+import relicPersuadeDurabilityImage from '@assets/generated_images/relic_persuade_durability.png';
 
 const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'waterfall-discover': {
@@ -110,19 +113,19 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
     id: 'persuade-same-halve',
     name: '永恒护符·连劝减半',
     description: '连续劝降同一怪物，第二次费用减半。',
-    image: relicChainPersuadeImage,
+    image: relicPersuadeSameHalveImage,
   },
   'persuade-race-bonus': {
     id: 'persuade-race-bonus',
     name: '永恒护符·种族怀柔',
     description: 'Skeleton/Wraith 劝降成功率 +20%。',
-    image: relicChainPersuadeImage,
+    image: relicPersuadeRaceBonusImage,
   },
   'persuade-durability-bonus': {
     id: 'persuade-durability-bonus',
     name: '永恒护符·劝降耐久',
     description: '劝降成功的怪物起始耐久 +1。',
-    image: relicChainPersuadeImage,
+    image: relicPersuadeDurabilityImage,
   },
   'end-turn-draw': {
     id: 'end-turn-draw',

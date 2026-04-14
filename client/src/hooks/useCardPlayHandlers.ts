@@ -155,6 +155,7 @@ export interface CardPlayHandlersDeps {
   triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerGraveNova: (graveNovaCard?: GameCardData) => void;
+  triggerGraveyardToBackpackFlight: (cards: GameCardData[]) => void;
   triggerWaterfall: () => void;
   applyWaterfallSideEffects: () => void;
   queueWaterfallTimeout: (callback: () => void, delay: number, label?: string) => void;
@@ -320,6 +321,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   const setCardsPlayed = useEngineSetter('cardsPlayed');
   const setMirrorCopyModal = useEngineSetter('mirrorCopyModal');
   const setPermGrantModal = useEngineSetter('permGrantModal');
+  const setActiveCardStacks = useEngineSetter('activeCardStacks');
   const setAmplifyModal = useEngineSetter('amplifyModal');
   const setPersuadeCostModifier = useEngineSetter('persuadeCostModifier');
   const setLastPlayedCardCategory = useEngineSetter('lastPlayedCardCategory');
@@ -1111,7 +1113,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         image: skillScrollImage,
         magicType: 'permanent',
         magicEffect: 'amplify-target',
-        description: `永久魔法（Perm 2）：对「${targetName}」进行增幅（武器攻击+1，护盾护甲+1，伤害魔法伤害+1）。`,
+        description: `永久魔法（Perm 2）：对「${targetName}」进行增幅（武器攻击+2，护盾护甲+2，伤害魔法伤害+2）。`,
         recycleDelay: 2,
         _amplifyTargetCardId: targetCardId,
         _amplifyTargetName: targetName,
@@ -3054,6 +3056,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       depsRef.current.addCardToBackpack(c);
     });
 
+    if (recalled.length > 0) {
+      depsRef.current.triggerGraveyardToBackpackFlight(recalled);
+    }
+
     const banner = recalled.length > 0
       ? `冥途拾遗从坟场召回了 ${recalled.length} 张牌：${recalled.map(c => c.name).join('、')}`
       : '坟场中没有可召回的卡牌。';
@@ -3584,17 +3590,45 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       switch (card.name) {
         case '瀑流重置': {
           depsRef.current.cascadeResetWaterfallRef.current = true;
-          const activeRowCards = flattenActiveRowSlots(activeCards).filter(c => c.id !== card.id);
-          if (activeRowCards.length > 0) {
-            setActiveCards(createEmptyActiveRow());
-            setRemainingDeck(prev => [...prev, ...activeRowCards]);
+          const currentStacks = engine.getState().activeCardStacks;
+          const cardsToBottom: GameCardData[] = [];
+          const ghostRow = createEmptyActiveRow();
+          for (let col = 0; col < activeCards.length; col++) {
+            const topCard = activeCards[col];
+            if (topCard && topCard.id !== card.id) {
+              if (topCard.isGhost) {
+                ghostRow[col] = topCard;
+              } else {
+                cardsToBottom.push(topCard);
+              }
+            }
+            const stack = currentStacks[col] ?? [];
+            for (const sc of stack) {
+              if (!sc.isGhost) {
+                cardsToBottom.push(sc);
+              }
+            }
+          }
+          if (cardsToBottom.length > 0) {
+            setActiveCards(ghostRow);
+            setActiveCardStacks(prev => {
+              const next: Record<number, GameCardData[]> = {};
+              for (let col = 0; col < activeCards.length; col++) {
+                if (ghostRow[col]) {
+                  const kept = (prev[col] ?? []).filter(c => c.isGhost);
+                  if (kept.length > 0) next[col] = kept;
+                }
+              }
+              return next;
+            });
+            setRemainingDeck(prev => [...prev, ...cardsToBottom]);
             depsRef.current.queueWaterfallTimeout(() => {
               depsRef.current.triggerWaterfall();
             }, 50);
           } else {
             depsRef.current.triggerWaterfall();
           }
-          finalizeMagicCard(card, { banner: '瀑流重置：当前波次已置于牌堆底。' });
+          finalizeMagicCard(card, { banner: '瀑流重置：当前波次已置于牌堆底（含堆叠牌）。' });
           return;
         }
         case '风暴箭雨': {
@@ -4291,7 +4325,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               const idx = Math.floor(Math.random() * graveyard.length);
               const picked = graveyard[idx];
               setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-              depsRef.current.ensureCardInHand(picked);
+              depsRef.current.queueCardIntoHand(picked, 'graveyard');
               parts.push(`从坟场获得「${picked.name}」`);
             } else {
               parts.push('坟场没有可用的牌');
@@ -5295,21 +5329,21 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               if (slot1.type === 'weapon') {
                 depsRef.current.setEquipmentSlotById('equipmentSlot1', {
                   ...slot1,
-                  value: slot1.value + 1,
-                  amplifyBonus: (slot1.amplifyBonus ?? 0) + 1,
+                  value: slot1.value + 2,
+                  amplifyBonus: (slot1.amplifyBonus ?? 0) + 2,
                 });
-                depsRef.current.addGameLog('magic', `增幅：${targetName} 攻击力 +1（${slot1.value}→${slot1.value + 1}）`);
-                finalizeMagicCard(card, { banner: `增幅：${targetName} 攻击力 +1（${slot1.value}→${slot1.value + 1}）！` });
+                depsRef.current.addGameLog('magic', `增幅：${targetName} 攻击力 +2（${slot1.value}→${slot1.value + 2}）`);
+                finalizeMagicCard(card, { banner: `增幅：${targetName} 攻击力 +2（${slot1.value}→${slot1.value + 2}）！` });
               } else {
                 const oldArmor = slot1.armorMax ?? slot1.value;
                 depsRef.current.setEquipmentSlotById('equipmentSlot1', {
                   ...slot1,
-                  armorMax: oldArmor + 1,
-                  value: slot1.value + 1,
-                  amplifyBonus: (slot1.amplifyBonus ?? 0) + 1,
+                  armorMax: oldArmor + 2,
+                  value: slot1.value + 2,
+                  amplifyBonus: (slot1.amplifyBonus ?? 0) + 2,
                 });
-                depsRef.current.addGameLog('magic', `增幅：${targetName} 护甲 +1（${oldArmor}→${oldArmor + 1}）`);
-                finalizeMagicCard(card, { banner: `增幅：${targetName} 护甲 +1（${oldArmor}→${oldArmor + 1}）！` });
+                depsRef.current.addGameLog('magic', `增幅：${targetName} 护甲 +2（${oldArmor}→${oldArmor + 2}）`);
+                finalizeMagicCard(card, { banner: `增幅：${targetName} 护甲 +2（${oldArmor}→${oldArmor + 2}）！` });
               }
               return;
             }
@@ -5317,21 +5351,21 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               if (slot2.type === 'weapon') {
                 depsRef.current.setEquipmentSlotById('equipmentSlot2', {
                   ...slot2,
-                  value: slot2.value + 1,
-                  amplifyBonus: (slot2.amplifyBonus ?? 0) + 1,
+                  value: slot2.value + 2,
+                  amplifyBonus: (slot2.amplifyBonus ?? 0) + 2,
                 });
-                depsRef.current.addGameLog('magic', `增幅：${targetName} 攻击力 +1（${slot2.value}→${slot2.value + 1}）`);
-                finalizeMagicCard(card, { banner: `增幅：${targetName} 攻击力 +1（${slot2.value}→${slot2.value + 1}）！` });
+                depsRef.current.addGameLog('magic', `增幅：${targetName} 攻击力 +2（${slot2.value}→${slot2.value + 2}）`);
+                finalizeMagicCard(card, { banner: `增幅：${targetName} 攻击力 +2（${slot2.value}→${slot2.value + 2}）！` });
               } else {
                 const oldArmor = slot2.armorMax ?? slot2.value;
                 depsRef.current.setEquipmentSlotById('equipmentSlot2', {
                   ...slot2,
-                  armorMax: oldArmor + 1,
-                  value: slot2.value + 1,
-                  amplifyBonus: (slot2.amplifyBonus ?? 0) + 1,
+                  armorMax: oldArmor + 2,
+                  value: slot2.value + 2,
+                  amplifyBonus: (slot2.amplifyBonus ?? 0) + 2,
                 });
-                depsRef.current.addGameLog('magic', `增幅：${targetName} 护甲 +1（${oldArmor}→${oldArmor + 1}）`);
-                finalizeMagicCard(card, { banner: `增幅：${targetName} 护甲 +1（${oldArmor}→${oldArmor + 1}）！` });
+                depsRef.current.addGameLog('magic', `增幅：${targetName} 护甲 +2（${oldArmor}→${oldArmor + 2}）`);
+                finalizeMagicCard(card, { banner: `增幅：${targetName} 护甲 +2（${oldArmor}→${oldArmor + 2}）！` });
               }
               return;
             }
@@ -5339,33 +5373,33 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             if (handTarget) {
               if (handTarget.type === 'weapon') {
                 setHandCards(prev => prev.map(c =>
-                  c.id === targetId ? { ...c, value: c.value + 1, amplifyBonus: (c.amplifyBonus ?? 0) + 1 } : c,
+                  c.id === targetId ? { ...c, value: c.value + 2, amplifyBonus: (c.amplifyBonus ?? 0) + 2 } : c,
                 ));
-                depsRef.current.addGameLog('magic', `增幅：${targetName} 攻击力 +1（${handTarget.value}→${handTarget.value + 1}）`);
-                finalizeMagicCard(card, { banner: `增幅：${targetName} 攻击力 +1（${handTarget.value}→${handTarget.value + 1}）！` });
+                depsRef.current.addGameLog('magic', `增幅：${targetName} 攻击力 +2（${handTarget.value}→${handTarget.value + 2}）`);
+                finalizeMagicCard(card, { banner: `增幅：${targetName} 攻击力 +2（${handTarget.value}→${handTarget.value + 2}）！` });
               } else if (handTarget.type === 'shield') {
                 const oldArmor = handTarget.armorMax ?? handTarget.value;
                 setHandCards(prev => prev.map(c =>
                   c.id === targetId
-                    ? { ...c, armorMax: (c.armorMax ?? c.value) + 1, value: c.value + 1, amplifyBonus: (c.amplifyBonus ?? 0) + 1 }
+                    ? { ...c, armorMax: (c.armorMax ?? c.value) + 2, value: c.value + 2, amplifyBonus: (c.amplifyBonus ?? 0) + 2 }
                     : c,
                 ));
-                depsRef.current.addGameLog('magic', `增幅：${targetName} 护甲 +1（${oldArmor}→${oldArmor + 1}）`);
-                finalizeMagicCard(card, { banner: `增幅：${targetName} 护甲 +1（${oldArmor}→${oldArmor + 1}）！` });
+                depsRef.current.addGameLog('magic', `增幅：${targetName} 护甲 +2（${oldArmor}→${oldArmor + 2}）`);
+                finalizeMagicCard(card, { banner: `增幅：${targetName} 护甲 +2（${oldArmor}→${oldArmor + 2}）！` });
               } else if (handTarget.type === 'magic') {
                 if (handTarget.scalingDamage != null) {
                   setHandCards(prev => prev.map(c =>
-                    c.id === targetId ? { ...c, scalingDamage: (c.scalingDamage ?? 0) + 1, amplifyBonus: (c.amplifyBonus ?? 0) + 1 } : c,
+                    c.id === targetId ? { ...c, scalingDamage: (c.scalingDamage ?? 0) + 2, amplifyBonus: (c.amplifyBonus ?? 0) + 2 } : c,
                   ));
-                  depsRef.current.addGameLog('magic', `增幅：${targetName} 叠刺基数 +1（${handTarget.scalingDamage}→${(handTarget.scalingDamage ?? 0) + 1}）`);
-                  finalizeMagicCard(card, { banner: `增幅：${targetName} 叠刺基数 +1！` });
+                  depsRef.current.addGameLog('magic', `增幅：${targetName} 叠刺基数 +2（${handTarget.scalingDamage}→${(handTarget.scalingDamage ?? 0) + 2}）`);
+                  finalizeMagicCard(card, { banner: `增幅：${targetName} 叠刺基数 +2！` });
                 } else {
-                  const newBonus = (handTarget.amplifyBonus ?? 0) + 1;
+                  const newBonus = (handTarget.amplifyBonus ?? 0) + 2;
                   setHandCards(prev => prev.map(c =>
                     c.id === targetId ? { ...c, amplifyBonus: newBonus } : c,
                   ));
-                  depsRef.current.addGameLog('magic', `增幅：${targetName} 伤害 +1（增幅 ×${newBonus}）`);
-                  finalizeMagicCard(card, { banner: `增幅：${targetName} 伤害 +1！` });
+                  depsRef.current.addGameLog('magic', `增幅：${targetName} 伤害 +2（增幅 ×${newBonus}）`);
+                  finalizeMagicCard(card, { banner: `增幅：${targetName} 伤害 +2！` });
                 }
               } else {
                 finalizeMagicCard(card, { banner: `增幅：「${targetName}」类型无法增幅。` });

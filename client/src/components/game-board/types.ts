@@ -32,7 +32,7 @@ export type CombatState = {
 
 export type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
-export type FlightSourceHint = EquipmentSlotId | 'amulet';
+export type FlightSourceHint = EquipmentSlotId | 'amulet' | 'graveyard';
 
 export type EquipmentItem = GameCardData & {
   type: 'weapon' | 'shield' | 'monster';
