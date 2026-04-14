@@ -2178,7 +2178,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         isBuildingTarget || prev.engagedMonsterIds.includes(targetMonster.id)
           ? prev.engagedMonsterIds
           : [...prev.engagedMonsterIds, targetMonster.id],
-      heroAttacksRemaining: isBuildingNoEngaged
+      heroAttacksRemaining: isBuildingNoEngaged || usingBerserkerExtra || usingFlashExtra || usingGambitExtra || usingWeaponExtra || usingExtraCharge
         ? prev.heroAttacksRemaining
         : prev.heroAttacksRemaining > 0 ? Math.max(0, prev.heroAttacksRemaining - 1) : prev.heroAttacksRemaining,
       heroAttacksThisTurn: isBuildingNoEngaged

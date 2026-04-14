@@ -9457,12 +9457,15 @@ export default function GameBoard() {
 
     if (combatState.currentTurn === 'hero') {
       let count = 0;
-      if (!combatState.heroAttacksThisTurn[slotId]) count += 1;
+      const slotAttacked = combatState.heroAttacksThisTurn[slotId];
+      if (!slotAttacked && combatState.heroAttacksRemaining > 0) count += 1;
       count += extraAttackCharges;
-      if (berserkerRageActive && !berserkerSlotUsed[slotId]) count += 1;
-      if (amuletEffects.hasFlash && !flashSlotUsed[slotId]) count += 1;
-      if (gambitExtraActive) count += Math.max(0, gambitExtraPerSlot - (gambitSlotUsed[slotId] ?? 0));
-      if ((slotItem as any)?.weaponExtraAttack && !weaponExtraAttackUsed[slotId]) count += 1;
+      if (slotAttacked || count > 0) {
+        if (berserkerRageActive && !berserkerSlotUsed[slotId]) count += 1;
+        if (amuletEffects.hasFlash && !flashSlotUsed[slotId]) count += 1;
+        if (gambitExtraActive) count += Math.max(0, gambitExtraPerSlot - (gambitSlotUsed[slotId] ?? 0));
+        if ((slotItem as any)?.weaponExtraAttack && !weaponExtraAttackUsed[slotId]) count += 1;
+      }
       return count;
     }
 
