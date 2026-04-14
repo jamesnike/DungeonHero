@@ -744,9 +744,9 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
   2. 选择手牌赋予「侧击：抽1张牌」 → `grantFlankDraw:1`（需至少1手牌，skipFlip）
   3. 选择护符赋予 Perm 2 → `grantAmuletPerm`（需至少1护符，skipFlip）
   4. 选择手牌赋予「转型：+3金币」 → `grantTransformGold:3`（需至少1手牌，skipFlip）
-  5. 翻转为「祭坛秘术」永久魔法 → `noop`（仅此选项不 skipFlip，触发翻转）
-- 翻转为「祭坛秘术」（永久魔法 Perm 1），destination: backpack
-  - 效果：弃回 2 张手牌，发现 1 张专属 Magic 卡（`altar-discard-discover`）
+  5. 翻转为「祭坛秘术」一次性法术 → `noop`（仅此选项不 skipFlip，触发翻转）
+- 翻转为「祭坛秘术」（一次性法术 instant），destination: backpack
+  - 效果：弃回至多 2 张手牌，发现 1 张专属 Magic 卡（`altar-discard-discover`）
 
 ---
 

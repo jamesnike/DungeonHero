@@ -5,6 +5,7 @@ const MAX_RAGE_LAYERS = 4;
 export type MonsterRageRule = {
   base: number;
   interval: number;
+  minInterval?: number;
 };
 
 export type MonsterUpgrade = {
@@ -19,7 +20,7 @@ const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
   Dragon: { base: 2, interval: 5 },
   Skeleton: { base: 1, interval: 4 },
   Goblin: { base: 1, interval: 4 },
-  Ogre: { base: 1, interval: 3 },
+  Ogre: { base: 1, interval: 3, minInterval: 3 },
   Wraith: { base: 1, interval: 4 },
   Swarm: { base: 2, interval: 5 },
   Buglet: { base: 1, interval: 5 },
@@ -78,7 +79,7 @@ const normalizeTurn = (turn: number): number => {
 
 const calculateFromRule = (rule: MonsterRageRule, turn: number, isQuickMode = false): number => {
   const normalizedTurn = normalizeTurn(turn);
-  const effectiveInterval = isQuickMode ? Math.max(1, rule.interval - 1) : rule.interval;
+  const effectiveInterval = isQuickMode ? Math.max(rule.minInterval ?? 1, rule.interval - 1) : rule.interval;
   const rawValue = rule.base + Math.floor(normalizedTurn / effectiveInterval);
   return Math.min(MAX_RAGE_LAYERS, rawValue);
 };

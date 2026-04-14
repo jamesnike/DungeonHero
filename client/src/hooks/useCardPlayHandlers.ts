@@ -4181,6 +4181,33 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return;
         }
       }
+      if (card.magicEffect === 'altar-discard-discover') {
+        const hand = engine.getState().handCards;
+        const playable = hand.filter(c => c.id !== card.id);
+        const discardCount = Math.min(playable.length, 2);
+        if (discardCount > 0) {
+          const discarded = pickRandomHandCardsForDiscardPreferGraveyard(playable, discardCount);
+          const discardIds = new Set(discarded.map(c => c.id));
+          setHandCards(prev => prev.filter(c => !discardIds.has(c.id)));
+          for (const dc of discarded) {
+            depsRef.current.discardCardToGraveyard(dc, { owner: 'player' });
+          }
+          depsRef.current.addGameLog('magic', `祭坛秘术：弃回 ${discarded.map(c => c.name).join('、')}`);
+        } else {
+          depsRef.current.addGameLog('magic', '祭坛秘术：没有手牌可弃回');
+        }
+        const started = depsRef.current.beginDiscoverFlow('altar-discard-discover', {
+          filter: (c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic',
+          sourceLabel: card.name,
+        });
+        if (started) {
+          finalizeMagicCard(card, { banner: `祭坛秘术：弃回 ${discardCount} 张牌，发现专属魔法卡…` });
+        } else {
+          depsRef.current.addGameLog('magic', '祭坛秘术：专属牌堆中没有魔法卡。');
+          finalizeMagicCard(card, { banner: `祭坛秘术：弃回 ${discardCount} 张牌，但专属牌堆中没有魔法卡。` });
+        }
+        return;
+      }
       
       if (knightCard.classCard) {
         depsRef.current.consumeClassCardFromHand(card.id);
@@ -5210,32 +5237,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             finalizeMagicCard(card, {
               banner: `奥术护盾：本回合 ${nonDamageCount} 张非伤害魔法卡，击晕上限 +${stunGain}%（当前 ${newCap}%）。${isEchoTriggered ? '（回响×2）' : ''}`,
             });
-            return;
-          }
-          if (card.magicEffect === 'altar-discard-discover') {
-            const hand = engine.getState().handCards;
-            const playable = hand.filter(c => c.id !== card.id);
-            if (playable.length < 2) {
-              finalizeMagicCard(card, { banner: `手牌不足 2 张，无法使用祭坛秘术。` });
-              return;
-            }
-            const discarded = pickRandomHandCardsForDiscardPreferGraveyard(playable, 2);
-            const discardIds = new Set(discarded.map(c => c.id));
-            setHandCards(prev => prev.filter(c => !discardIds.has(c.id)));
-            for (const dc of discarded) {
-              depsRef.current.discardCardToGraveyard(dc, { owner: 'player' });
-            }
-            depsRef.current.addGameLog('magic', `祭坛秘术：弃回 ${discarded.map(c => c.name).join('、')}`);
-            const started = depsRef.current.beginDiscoverFlow('altar-discard-discover', {
-              filter: (c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic',
-              sourceLabel: card.name,
-            });
-            if (started) {
-              finalizeMagicCard(card, { banner: `祭坛秘术：弃回 ${discarded.length} 张牌，发现专属魔法卡…` });
-            } else {
-              depsRef.current.addGameLog('magic', '祭坛秘术：专属牌堆中没有魔法卡。');
-              finalizeMagicCard(card, { banner: '祭坛秘术：弃回了手牌，但专属牌堆中没有魔法卡。' });
-            }
             return;
           }
           if (card.magicEffect === 'altar-discover-class-magic') {
