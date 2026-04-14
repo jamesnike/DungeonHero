@@ -1762,7 +1762,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="亡骨轮回：另一装备被毁坏时获得复生">轮回</span>
                     )}
                     {card.monsterSpecial === 'bone-regen' && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虚骨再生：每次失去耐久50%概率恢复">再生</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虚骨再生：每次失去耐久40%概率恢复">再生</span>
                     )}
                     {card.lastWords === 'discard-hand-3' && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="遗言：抽 3 张牌">遗言</span>

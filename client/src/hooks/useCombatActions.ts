@@ -445,8 +445,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       title: monsterName,
       subtitle: '虚骨再生',
       entries: [
-        { id: 'restore', range: [1, 10] as [number, number], label: '恢复 1 层血层', effect: 'none' },
-        { id: 'fail', range: [11, 20] as [number, number], label: '再生失败', effect: 'none' },
+        { id: 'restore', range: [1, 8] as [number, number], label: '恢复 1 层血层', effect: 'none' },
+        { id: 'fail', range: [9, 20] as [number, number], label: '再生失败', effect: 'none' },
       ],
     });
     if (result?.id === 'restore') {
@@ -1681,15 +1681,36 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
           const shuffledSlots = [...otherSlots].sort(() => Math.random() - 0.5).slice(0, picked.length);
           const summonedMonsterIds: string[] = [];
+          const directPlace: { slotIdx: number; card: GameCardData }[] = [];
+          const stackPlace: { slotIdx: number; card: GameCardData }[] = [];
 
-          setActiveCardStacks(prev => {
-            const next = { ...prev };
-            for (let i = 0; i < picked.length; i++) {
-              const slotIdx = shuffledSlots[i];
-              next[slotIdx] = [...(next[slotIdx] ?? []), picked[i]];
+          for (let i = 0; i < picked.length; i++) {
+            const slotIdx = shuffledSlots[i];
+            if (st.activeCards[slotIdx] == null) {
+              directPlace.push({ slotIdx, card: picked[i] });
+            } else {
+              stackPlace.push({ slotIdx, card: picked[i] });
             }
-            return next;
-          });
+          }
+
+          if (directPlace.length > 0) {
+            setActiveCards(prev => {
+              const next = [...prev] as typeof prev;
+              for (const { slotIdx, card: c } of directPlace) {
+                next[slotIdx] = c;
+              }
+              return next;
+            });
+          }
+          if (stackPlace.length > 0) {
+            setActiveCardStacks(prev => {
+              const next = { ...prev };
+              for (const { slotIdx, card: c } of stackPlace) {
+                next[slotIdx] = [...(next[slotIdx] ?? []), c];
+              }
+              return next;
+            });
+          }
 
           for (let i = 0; i < picked.length; i++) {
             depsRef.current.triggerGraveyardStackFlight(shuffledSlots[i], [picked[i]]);
@@ -1699,7 +1720,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           }
 
           const names = picked.map(c => `「${c.name}」`).join('、');
-          depsRef.current.addGameLog('combat', `${monster.name} 亡灵召唤：从坟场召唤了 ${names} 堆叠到激活行！`);
+          depsRef.current.addGameLog('combat', `${monster.name} 亡灵召唤：从坟场召唤了 ${names} 到激活行！`);
           setHeroSkillBanner(`${monster.name} 亡灵召唤！从坟场召唤了 ${picked.length} 张牌！`);
 
           // Enrage any summoned monsters after a short delay
@@ -2057,8 +2078,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               title: targetMonster.name,
               subtitle: '虚骨再生',
               entries: [
-                { id: 'restore', range: [1, 10] as [number, number], label: '恢复 1 层血层', effect: 'none' },
-                { id: 'fail', range: [11, 20] as [number, number], label: '再生失败', effect: 'none' },
+                { id: 'restore', range: [1, 8] as [number, number], label: '恢复 1 层血层', effect: 'none' },
+                { id: 'fail', range: [9, 20] as [number, number], label: '再生失败', effect: 'none' },
               ],
             });
             if (boneResult?.id === 'restore') {
@@ -2246,8 +2267,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             title: slotItem.name,
             subtitle: '虚骨再生判定',
             entries: [
-              { id: 'regen', range: [1, 10] as [number, number], label: '耐久保留！', effect: 'none' },
-              { id: 'lose', range: [11, 20] as [number, number], label: '耐久 -1', effect: 'none' },
+              { id: 'regen', range: [1, 8] as [number, number], label: '耐久保留！', effect: 'none' },
+              { id: 'lose', range: [9, 20] as [number, number], label: '耐久 -1', effect: 'none' },
             ],
           });
           if (boneResult?.id === 'regen') {
@@ -3332,8 +3353,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               title: slotItem.name,
               subtitle: '虚骨再生判定',
               entries: [
-                { id: 'regen', range: [1, 10] as [number, number], label: '耐久保留！', effect: 'none' },
-                { id: 'lose', range: [11, 20] as [number, number], label: '耐久 -1', effect: 'none' },
+                { id: 'regen', range: [1, 8] as [number, number], label: '耐久保留！', effect: 'none' },
+                { id: 'lose', range: [9, 20] as [number, number], label: '耐久 -1', effect: 'none' },
               ],
             });
             if (boneResult?.id === 'regen') {

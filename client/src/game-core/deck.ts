@@ -410,7 +410,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     });
     const specialMap: Record<string, { tag: string; desc: string; lastWords?: string }> = {
       Dragon:   { tag: 'ember-fury',     desc: '精英流血：每失去一个血层，攻击力+3。\n龙息庇护：Hero回合未掉血层，为激活行另一个怪物恢复1血层。' },
-      Skeleton: { tag: 'bone-regen',     desc: '虚骨再生：每次失去血层后，50%概率恢复一层。' },
+      Skeleton: { tag: 'bone-regen',     desc: '虚骨再生：每次失去血层后，40%概率恢复一层。' },
       Wraith:   { tag: 'wraith-rebirth', desc: '幽魂重生：血层降至1时，30%概率血层全满。' },
       Ogre:     { tag: 'ogre-crit',      desc: '蛮力暴击：攻击时50%概率双倍伤害。\n狂暴连击：70%概率攻击两次。' },
       Goblin:   { tag: 'goblin-elite',   desc: '窃宝精英：自身下方每有1张牌，15%概率偷走玩家装备或护符，堆叠在自身下方。' },

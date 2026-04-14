@@ -2254,7 +2254,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           },
           Skeleton: {
             monsterSpecial: 'bone-regen',
-            monsterSpecialDesc: '融合精英：虚骨再生（50%不消耗耐久）+ 复生。',
+            monsterSpecialDesc: '融合精英：虚骨再生（40%不消耗耐久）+ 复生。',
             hasRevive: true,
           },
           Goblin: {

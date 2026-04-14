@@ -951,7 +951,7 @@ export default function CardDetailsModal({
                   effects.push({ title: '亡骨轮回', desc: '当另一个装备栏的装备被毁坏时，若本装备没有「复生」，获得「复生」。', color: 'emerald' });
                 }
                 if (card.monsterSpecial === 'bone-regen') {
-                  effects.push({ title: '虚骨再生', desc: '每次失去耐久，50% 概率恢复 1 耐久。', color: 'emerald' });
+                  effects.push({ title: '虚骨再生', desc: '每次失去耐久，40% 概率恢复 1 耐久。', color: 'emerald' });
                 }
               } else if (mType === 'Wraith') {
                 if (card.lastWords?.startsWith('wraith-haunt')) {
