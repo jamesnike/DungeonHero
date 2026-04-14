@@ -92,6 +92,12 @@ import starterBackpackSizePotionImage from '@assets/generated_images/card_dedupe
 import starterWaterfallDealPotionImage from '@assets/generated_images/card_dedupe_starter_potion_waterfall_deal.png';
 import starterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
 
+import cursedSteleBuildingImage from '@assets/generated_images/card_dedupe_cursed_stele_building.png';
+import knightEquipEmpowerPotionImage from '@assets/generated_images/knight_potion_equip_empower.png';
+import bastionShieldImage from '@assets/generated_images/knight_bastion_shield.png';
+import sealBladeImage from '@assets/generated_images/knight_seal_blade.png';
+import persuadeRecycleAmuletImage from '@assets/generated_images/knight_persuade_recycle_amulet.png';
+
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
   swordImage, axeImage, daggerImage, daggerWeaponImage, holyBladeImage, maceImage,
@@ -129,6 +135,8 @@ const ALL_IMAGES = [
   starterScrollEternalInscribeImage, starterScrollFateDeepImage,
   starterPotionHandLimitImage, starterBackpackSizePotionImage,
   starterWaterfallDealPotionImage, starterThunderStrikeImage,
+  cursedSteleBuildingImage, knightEquipEmpowerPotionImage,
+  bastionShieldImage, sealBladeImage, persuadeRecycleAmuletImage,
 ];
 
 const FLAVOR_TEXTS = [
