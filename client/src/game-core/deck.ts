@@ -2460,8 +2460,8 @@ export function createStarterCardPool(): GameCardData[] {
       name: '法伤药水',
       value: 0,
       image: starterPotionSpellDamageImage,
-      potionEffect: 'perm-spell-damage+2',
-      description: '永久法术伤害 +2。',
+      potionEffect: 'perm-spell-damage',
+      description: '永久法术伤害 +1。',
     },
     {
       id: STARTER_CARD_IDS.spellLifestealPotion,
@@ -2469,8 +2469,8 @@ export function createStarterCardPool(): GameCardData[] {
       name: '超杀吸血药',
       value: 0,
       image: starterPotionLifestealImage,
-      potionEffect: 'perm-spell-lifesteal+2',
-      description: '永久超杀吸血 +2。',
+      potionEffect: 'perm-spell-lifesteal+1',
+      description: '永久超杀吸血 +1。',
     },
     {
       id: STARTER_CARD_IDS.stunPotion,
@@ -2525,8 +2525,8 @@ export function createStarterCardPool(): GameCardData[] {
       name: '空间拓展药',
       value: 0,
       image: dedupeStarterBackpackSizePotionImage,
-      potionEffect: 'perm-backpack-size+5',
-      description: '背包上限 +5。',
+      potionEffect: 'perm-backpack-size+3',
+      description: '背包上限 +3。',
     },
     {
       id: STARTER_CARD_IDS.stunStrike,

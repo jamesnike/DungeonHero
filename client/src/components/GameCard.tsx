@@ -108,6 +108,7 @@ export type PotionEffectId =
   | 'perm-hand-limit+1'
   | 'perm-hand-limit+2'
   | 'perm-backpack-size+2'
+  | 'perm-backpack-size+3'
   | 'perm-backpack-size+5'
   | 'swap-slot-damage-shield'
   | 'spell-lifesteal+1-maxhp+6'

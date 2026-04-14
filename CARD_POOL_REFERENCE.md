@@ -939,12 +939,12 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 |---|------|-------------|------|
 | 1 | 锻造强化 | perm-slot-damage+2 | 选择一个装备栏，永久伤害 +2。 |
 | 2 | 耐久补剂 | perm-equipment-durability-max+2 | 选择一个装备，耐久上限 +2。 |
-| 3 | 法伤药水 | perm-spell-damage+2 | 永久法术伤害 +2。 |
-| 4 | 超杀吸血药 | perm-spell-lifesteal+2 | 永久超杀吸血 +2。 |
+| 3 | 法伤药水 | perm-spell-damage | 永久法术伤害 +1。 |
+| 4 | 超杀吸血药 | perm-spell-lifesteal+1 | 永久超杀吸血 +1。 |
 | 5 | 眩晕药剂 | perm-stun-cap+10 | 击晕上限 +10%。 |
 | 6 | 扩容药剂 | perm-slot-capacity+1 | 选择一个装备栏，可装备上限 +1。 |
 | 7 | 手牌扩容药 | perm-hand-limit+1 | 手牌上限 +1。 |
-| 8 | 空间拓展药 | perm-backpack-size+5 | 背包上限 +5。 |
+| 8 | 空间拓展药 | perm-backpack-size+3 | 背包上限 +3。 |
 
 ---
 

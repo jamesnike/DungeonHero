@@ -1344,6 +1344,13 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         return;
       }
 
+      if (effect === 'perm-backpack-size+3') {
+        setBackpackCapacityModifier(prev => prev + 3);
+        depsRef.current.addGameLog('potion', '药水效果：背包上限 +3');
+        await finalizePotionCard(card, { banner: '背包上限 +3。' });
+        return;
+      }
+
       if (effect === 'perm-backpack-size+5') {
         setBackpackCapacityModifier(prev => prev + 5);
         depsRef.current.addGameLog('potion', '药水效果：背包上限 +5');
