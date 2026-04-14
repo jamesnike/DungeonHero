@@ -561,6 +561,10 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
 
       if (card.type === 'monster') {
         const result = applyMonsterUpgradeLevel(card, newLevel) as T;
+        if (result.maxDurability != null) {
+          (result as GameCardData).maxDurability = result.maxDurability + 1;
+          (result as GameCardData).durability = (result.durability ?? 0) + 1;
+        }
         upgradedName = result.name;
         return result;
       }
@@ -639,7 +643,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         case STARTER_CARD_IDS.magicMissile: {
           const boltCounts = [2, 3, 4];
           const bc = boltCounts[newLevel] ?? 4;
-          upgraded.description = `加入 ${bc} 张一次性「魔弹」到手牌（每张可对一个怪物造成 2 点法术伤害）。`;
+          upgraded.description = `加入 ${bc} 张一次性「魔弹」到手牌（每张可对一个怪物造成 1 点法术伤害）。`;
           upgraded.magicEffect = `永久魔法：手上加入 ${bc} 张一次性「魔弹」。`;
           break;
         }

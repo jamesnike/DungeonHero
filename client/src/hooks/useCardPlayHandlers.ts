@@ -2416,14 +2416,14 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
           return true;
         }
         if (monsters.length === 1) {
-          const boltDmg = getSpellDamage(2 + (card.amplifyBonus ?? 0));
+          const boltDmg = getSpellDamage(1 + (card.amplifyBonus ?? 0));
           if (!depsRef.current.isMonsterEngaged(monsters[0].id)) depsRef.current.beginCombat(monsters[0], 'hero');
           depsRef.current.dealDamageToMonster(monsters[0], boltDmg, { pulses: 2, isSpellDamage: true });
           depsRef.current.addGameLog('magic', `魔弹：对 ${monsters[0].name} 造成 ${boltDmg} 点法术伤害`);
           finalizeMagicCard(card, { banner: `魔弹：对 ${monsters[0].name} 造成 ${boltDmg} 点伤害！`, dealtDamage: true });
           return true;
         }
-        const boltPendingDmg = getSpellDamage(2 + (card.amplifyBonus ?? 0));
+        const boltPendingDmg = getSpellDamage(1 + (card.amplifyBonus ?? 0));
         setPendingMagicAction({
           card,
           effect: 'missile-bolt',
@@ -4958,8 +4958,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
               image: card.image,
               magicType: 'instant',
               knightEffect: 'missile-bolt',
-              magicEffect: '一次性：选择一个怪物，造成 2 点法术伤害。',
-              description: '选择一个怪物，造成 2 点法术伤害。',
+              magicEffect: '一次性：选择一个怪物，造成 1 点法术伤害。',
+              description: '选择一个怪物，造成 1 点法术伤害。',
             });
           }
           setHandCards(prev => [...prev, ...bolts]);

@@ -39,6 +39,8 @@ export default function CardDetailsModal({
   const arcaneStormDamage = useArcaneStormDamage();
   if (!card) return null;
 
+  const isMonsterEquipment = card.type === 'monster' && card.durability != null;
+
   const rageRule = card.type === 'monster' ? getMonsterRageRule(card.name) : null;
   const rageTurn = card.type === 'monster' ? (card.rageTurn ?? currentTurn) : null;
   const computedRage =
@@ -110,13 +112,13 @@ export default function CardDetailsModal({
       <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            {getCardIcon()}
+            {isMonsterEquipment ? <Sword className="w-6 h-6 text-amber-500" /> : getCardIcon()}
             <DialogTitle className="text-xl">{card.name}</DialogTitle>
           </div>
           <DialogDescription>
-            {card.type.toUpperCase()} {card.classCard ? '• KNIGHT CLASS' : ''}
+            {isMonsterEquipment ? '怪物装备' : card.type.toUpperCase()} {card.classCard ? '• KNIGHT CLASS' : ''}
           </DialogDescription>
-          {isUpgradeableCard(card) && (
+          {!isMonsterEquipment && isUpgradeableCard(card) && (
             <div className="flex items-center gap-2 mt-1">
               {isCardAtMaxUpgrade(card) ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-gray-500/15 px-2.5 py-0.5 text-xs font-semibold text-gray-500 dark:text-gray-400">
@@ -135,7 +137,7 @@ export default function CardDetailsModal({
         
         <div className="flex flex-col gap-4 py-4">
           {/* Monster Reward Preview */}
-          {card.type === 'monster' && monsterRewards?.length ? (
+          {card.type === 'monster' && !isMonsterEquipment && monsterRewards?.length ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
                 <Sparkles className="w-4 h-4" />
@@ -169,7 +171,7 @@ export default function CardDetailsModal({
           {/* Detailed Stats & Description */}
           <div className="space-y-3 text-sm">
             {/* Monster Details */}
-            {card.type === 'monster' && (() => {
+            {card.type === 'monster' && !isMonsterEquipment && (() => {
               const mType = card.monsterType ?? card.name;
               const upgrades = getMonsterUpgrades(mType);
               const activeUpgrade = rageTurn ? getActiveUpgrade(mType, rageTurn) : null;
@@ -240,6 +242,25 @@ export default function CardDetailsModal({
               );
             })()}
 
+            {/* Monster Equipment Stats */}
+            {isMonsterEquipment && (
+              <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
+                {card.attack != null && (
+                  <div className="flex items-center gap-2">
+                    <Sword className="w-4 h-4 text-amber-500" />
+                    <span>攻击: <span className="font-bold">{card.attack}</span></span>
+                  </div>
+                )}
+                {card.durability !== undefined && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">耐久:</span>
+                    <span className="font-bold">{card.durability}/{card.maxDurability || card.durability}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isMonsterEquipment && (<>
             {/* Waterfall Effect */}
             {(card.type === 'monster' || card.type === 'event') && card.waterfallEffect && (
               <div className="bg-orange-500/10 p-3 rounded-md border border-orange-500/20">
@@ -875,6 +896,7 @@ export default function CardDetailsModal({
                 </div>
               </div>
             )}
+            </>)}
 
             {/* Monster Equipment Effects */}
             {card.type === 'monster' && card.durability != null && (() => {
@@ -995,15 +1017,49 @@ export default function CardDetailsModal({
 
               if (effects.length === 0) return null;
 
-              const colorMap: Record<string, { bg: string; border: string; title: string; text: string }> = {
-                emerald: { bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', title: 'text-emerald-700 dark:text-emerald-300', text: 'text-emerald-800 dark:text-emerald-200' },
-                amber:   { bg: 'bg-amber-500/15',   border: 'border-amber-500/30',   title: 'text-amber-700 dark:text-amber-300',     text: 'text-amber-800 dark:text-amber-200' },
-                red:     { bg: 'bg-red-500/15',     border: 'border-red-500/30',     title: 'text-red-700 dark:text-red-300',         text: 'text-red-800 dark:text-red-200' },
-                violet:  { bg: 'bg-violet-500/15',  border: 'border-violet-500/30',  title: 'text-violet-700 dark:text-violet-300',   text: 'text-violet-800 dark:text-violet-200' },
-                cyan:    { bg: 'bg-cyan-500/15',    border: 'border-cyan-500/30',    title: 'text-cyan-700 dark:text-cyan-300',       text: 'text-cyan-800 dark:text-cyan-200' },
-                gray:    { bg: 'bg-gray-500/15',    border: 'border-gray-500/30',    title: 'text-gray-700 dark:text-gray-300',       text: 'text-gray-800 dark:text-gray-200' },
-                purple:  { bg: 'bg-purple-500/15',  border: 'border-purple-500/30',  title: 'text-purple-700 dark:text-purple-300',   text: 'text-purple-800 dark:text-purple-200' },
-                orange:  { bg: 'bg-orange-500/15',  border: 'border-orange-500/30',  title: 'text-orange-700 dark:text-orange-300',   text: 'text-orange-800 dark:text-orange-200' },
+              const colorMap: Record<string, { bg: string; border: string; title: string; text: string; iconColor: string }> = {
+                emerald: { bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', title: 'text-emerald-700 dark:text-emerald-300', text: 'text-emerald-800 dark:text-emerald-200', iconColor: 'text-emerald-500' },
+                amber:   { bg: 'bg-amber-500/15',   border: 'border-amber-500/30',   title: 'text-amber-700 dark:text-amber-300',     text: 'text-amber-800 dark:text-amber-200',   iconColor: 'text-amber-500' },
+                red:     { bg: 'bg-red-500/15',     border: 'border-red-500/30',     title: 'text-red-700 dark:text-red-300',         text: 'text-red-800 dark:text-red-200',       iconColor: 'text-red-500' },
+                violet:  { bg: 'bg-violet-500/15',  border: 'border-violet-500/30',  title: 'text-violet-700 dark:text-violet-300',   text: 'text-violet-800 dark:text-violet-200', iconColor: 'text-violet-500' },
+                cyan:    { bg: 'bg-cyan-500/15',    border: 'border-cyan-500/30',    title: 'text-cyan-700 dark:text-cyan-300',       text: 'text-cyan-800 dark:text-cyan-200',     iconColor: 'text-cyan-500' },
+                gray:    { bg: 'bg-gray-500/15',    border: 'border-gray-500/30',    title: 'text-gray-700 dark:text-gray-300',       text: 'text-gray-800 dark:text-gray-200',     iconColor: 'text-gray-400' },
+                purple:  { bg: 'bg-purple-500/15',  border: 'border-purple-500/30',  title: 'text-purple-700 dark:text-purple-300',   text: 'text-purple-800 dark:text-purple-200', iconColor: 'text-purple-500' },
+                orange:  { bg: 'bg-orange-500/15',  border: 'border-orange-500/30',  title: 'text-orange-700 dark:text-orange-300',   text: 'text-orange-800 dark:text-orange-200', iconColor: 'text-orange-500' },
+              };
+
+              const effectIconMap: Record<string, typeof Sword> = {
+                '动手偷钱': Coins,
+                '窃牌贼': Scroll,
+                '哥布林劝降': Heart,
+                '贪婪强化': AlertTriangle,
+                '精英劝降': AlertTriangle,
+                '贼窝疗养': Coins,
+                '入场激怒': Zap,
+                '蛮力震慑': Zap,
+                '蛮力暴击': Sword,
+                '连击': Zap,
+                '复生': Heart,
+                '复生（已触发）': Heart,
+                '遗言': Skull,
+                '亡骨轮回': Skull,
+                '虚骨再生': Sparkles,
+                '幽魂重生': Sparkles,
+                '幽魂重生（已触发）': Sparkles,
+                '怨灵传承': Heart,
+                '怨灵祝福': Heart,
+                '怨灵诅咒': Sword,
+                '虫蚀': Sword,
+                '虫盾共生': Shield,
+                '虫母孵化': Sparkles,
+                '流血': Sword,
+                '龙息回复': Heart,
+                '龙息庇护': Heart,
+                '龙息反击': Flame,
+                '流血破甲': Sword,
+                '岩层反震': Sparkles,
+                '法力吞噬': Sparkles,
+                '岩石护体': Shield,
               };
 
               return (
@@ -1014,13 +1070,17 @@ export default function CardDetailsModal({
                   </div>
                   {effects.map((eff, idx) => {
                     const c = colorMap[eff.color] ?? colorMap.gray;
+                    const EffIcon = effectIconMap[eff.title] ?? Sparkles;
                     return (
                       <div key={idx} className={`${c.bg} p-3 rounded-md border ${c.border}`}>
                         <div className="flex flex-col gap-1.5">
-                          <span className={`font-extrabold text-sm ${c.title} tracking-wide`}>
-                            {eff.title}
-                          </span>
-                          <p className={`text-sm font-semibold ${c.text} pl-2`}>
+                          <div className="flex items-center gap-2">
+                            <EffIcon className={`w-4 h-4 shrink-0 ${c.iconColor}`} />
+                            <span className={`font-extrabold text-sm ${c.title} tracking-wide`}>
+                              {eff.title}
+                            </span>
+                          </div>
+                          <p className={`text-sm font-semibold ${c.text} pl-6`}>
                             {eff.desc}
                           </p>
                         </div>
@@ -1087,7 +1147,7 @@ export default function CardDetailsModal({
             )}
 
             {/* Equipment Revive Keyword (from 不灭赐福) */}
-            {(card.type === 'weapon' || card.type === 'shield') && card.hasEquipmentRevive && (
+            {(card.type === 'weapon' || card.type === 'shield' || isMonsterEquipment) && card.hasEquipmentRevive && (
               <div className={`p-3 rounded-md border relative overflow-hidden ${
                 card.equipmentReviveUsed
                   ? 'bg-gray-500/10 border-gray-500/30'
@@ -1346,6 +1406,7 @@ export default function CardDetailsModal({
 
             {/* General Description */}
             {card.description &&
+              !isMonsterEquipment &&
               card.type !== 'magic' &&
               card.type !== 'hero-magic' &&
               card.type !== 'event' &&

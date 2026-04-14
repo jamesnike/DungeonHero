@@ -7,13 +7,13 @@ import relicDiscardProfitImage from '@assets/generated_images/relic_discard_prof
 import relicHealToDamageImage from '@assets/generated_images/relic_heal_to_damage.png';
 import relicEarlySurgeImage from '@assets/generated_images/relic_early_surge.png';
 import relicShieldWallImage from '@assets/generated_images/relic_shield_wall.png';
-import relicSummonMinionImage from '@assets/generated_images/relic_summon_minion.png';
+import relicSummonMinionImage from '@assets/generated_images/chibi_minion_follower.png';
 import relicBulwarkAttackImage from '@assets/generated_images/relic_bulwark_attack.png';
 import relicBulwarkArmorImage from '@assets/generated_images/relic_bulwark_armor.png';
 import relicChainPersuadeImage from '@assets/generated_images/knight_potion_chain_persuade.png';
 import relicRecycleShuffleImage from '@assets/generated_images/relic_recycle_shuffle.png';
 import relicEquipEmpowerImage from '@assets/generated_images/knight_potion_equip_empower.png';
-import relicWraithPurificationImage from '@assets/generated_images/relic_wraith_purification.png';
+import relicWraithPurificationImage from '@assets/generated_images/cute_chibi_wraith_monster.png';
 import relicPersuadeSameHalveImage from '@assets/generated_images/relic_persuade_same_halve.png';
 import relicPersuadeRaceBonusImage from '@assets/generated_images/relic_persuade_race_bonus.png';
 import relicPersuadeDurabilityImage from '@assets/generated_images/relic_persuade_durability.png';

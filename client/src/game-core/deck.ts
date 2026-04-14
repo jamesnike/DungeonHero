@@ -2089,8 +2089,8 @@ export function createMagicBoltCard(): GameCardData {
     image: dedupeMissileBoltTokenImage,
     magicType: 'instant',
     knightEffect: 'missile-bolt',
-    magicEffect: '一次性：选择一个怪物，造成 2 点法术伤害。',
-    description: '选择一个怪物，造成 2 点法术伤害。',
+    magicEffect: '一次性：选择一个怪物，造成 1 点法术伤害。',
+    description: '选择一个怪物，造成 1 点法术伤害。',
   } as GameCardData;
 }
 
@@ -2350,7 +2350,7 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletMissileImage,
       amuletEffect: 'card-gain-missile',
-      description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。',
+      description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
     },
     {
       id: STARTER_CARD_IDS.damageClassDiscoverAmulet,
@@ -2427,7 +2427,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterMagicMissileImage,
       magicType: 'permanent',
       magicEffect: '永久魔法：手上加入 2 张一次性「魔弹」。',
-      description: '加入 2 张一次性「魔弹」到手牌（每张可对一个怪物造成 2 点法术伤害）。',
+      description: '加入 2 张一次性「魔弹」到手牌（每张可对一个怪物造成 1 点法术伤害）。',
       maxUpgradeLevel: 2,
     },
     {

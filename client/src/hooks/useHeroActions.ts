@@ -2207,7 +2207,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       }
 
       if (pendingMagicAction.effect === 'missile-bolt') {
-        const totalDmg = getSpellDamage(2 + (pendingMagicAction.card.amplifyBonus ?? 0));
+        const totalDmg = getSpellDamage(1 + (pendingMagicAction.card.amplifyBonus ?? 0));
         if (!isMonsterEngaged(monster.id)) beginCombat(monster, 'hero');
         dealDamageToMonster(monster, totalDmg, { pulses: 2, isSpellDamage: true });
         addGameLog('magic', `魔弹：对 ${monster.name} 造成 ${totalDmg} 点法术伤害`);
@@ -2667,6 +2667,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     if (isHighLayer) rate -= 15;
 
     const bonusScale = isHighLayer ? 0.5 : 1;
+
+    const liveMonster = (engine.getState().activeCards as GameCardData[]).find(c => c?.id === monster.id);
+    if ((liveMonster ?? monster).isStunned) {
+      rate += 10 * bonusScale;
+    }
 
     const persuadeBoost = (monster as any)._persuadeBoost ?? 0;
     rate += persuadeBoost * bonusScale;

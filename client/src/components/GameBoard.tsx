@@ -2659,10 +2659,10 @@ export default function GameBoard() {
       if (backpackItems.length === 0 || handTotal >= effectiveHandLimit) {
         return null;
       }
-      const amount = 1;
+      const amount = 2;
       return {
         id: createMonsterRewardOptionId(),
-        title: '从背包抽 1 张牌',
+        title: '从背包抽 2 张牌',
         description: '快速检索背包里的资源。',
         detail: '资源调度',
         effect: { type: 'drawBackpack', amount },
@@ -5715,8 +5715,14 @@ export default function GameBoard() {
       for (let i = 0; i < boltsPerTrigger; i++) {
         bolts.push(createMagicBoltCard());
       }
-      setHandCards(prev => [...prev, ...bolts]);
-      addGameLog('amulet', `弹幕之符：获得 ${boltsPerTrigger} 张「魔弹」`);
+      setHandCards(prev => {
+        if (prev.length >= effectiveHandLimit) {
+          addGameLog('amulet', `弹幕之符：手牌已满，未生成「魔弹」`);
+          return prev;
+        }
+        addGameLog('amulet', `弹幕之符：获得 ${boltsPerTrigger} 张「魔弹」`);
+        return [...prev, ...bolts];
+      });
     }
   };
 
