@@ -97,6 +97,7 @@ import knightEquipEmpowerPotionImage from '@assets/generated_images/knight_potio
 import bastionShieldImage from '@assets/generated_images/knight_bastion_shield.png';
 import sealBladeImage from '@assets/generated_images/knight_seal_blade.png';
 import persuadeRecycleAmuletImage from '@assets/generated_images/knight_persuade_recycle_amulet.png';
+import thunderStrikeAmuletImage from '@assets/generated_images/knight_thunder_strike_amulet.png';
 
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
@@ -137,6 +138,7 @@ const ALL_IMAGES = [
   starterWaterfallDealPotionImage, starterThunderStrikeImage,
   cursedSteleBuildingImage, knightEquipEmpowerPotionImage,
   bastionShieldImage, sealBladeImage, persuadeRecycleAmuletImage,
+  thunderStrikeAmuletImage,
 ];
 
 const FLAVOR_TEXTS = [

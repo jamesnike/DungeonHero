@@ -8812,10 +8812,59 @@ export default function GameBoard() {
       applyTransformAndUpdateCategory(card);
 
       if (isCardFromHand(card)) {
+        const handArr = handCardsRef.current;
+        const flankIdx = handArr.findIndex(c => c.id === card.id);
+        const isFlank = flankIdx >= 0 && (flankIdx === 0 || flankIdx === handArr.length - 1);
+        lastPlayedFlankRef.current = isFlank;
+
         if (!consumeCardFromHand(card)) {
           return;
         }
         tickRecycleForge();
+
+        if (isFlank && card.flankDraw) {
+          for (let i = 0; i < card.flankDraw; i++) {
+            drawFromBackpackToHand();
+          }
+          addGameLog('magic', `侧击效果：${card.name} 抽取 ${card.flankDraw} 张牌`);
+          setHeroSkillBanner(`侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。`);
+        }
+
+        if (isFlank && card.flankEffectId) {
+          if (card.flankEffectId.startsWith('persuadeCost-')) {
+            const amount = parseInt(card.flankEffectId.replace('persuadeCost-', ''), 10) || 1;
+            const currentMod = engine.getState().persuadeCostModifier ?? 0;
+            const currentCost = PERSUADE_COST + currentMod;
+            if (currentCost <= MIN_PERSUADE_COST) {
+              addGameLog('event', `劝降费用已达下限（${currentCost} 金币），无法再降低`);
+              setHeroSkillBanner(`侧击！${card.name} 劝降费用已达下限，无法再降低。`);
+            } else {
+              const actualAmount = Math.min(amount, currentCost - MIN_PERSUADE_COST);
+              setPersuadeCostModifier(prev => prev - actualAmount);
+              addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${actualAmount}`);
+              setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${actualAmount}！`);
+            }
+          } else if (card.flankEffectId.startsWith('stunCap+')) {
+            const amount = parseInt(card.flankEffectId.replace('stunCap+', ''), 10) || 5;
+            setStunCap(prev => Math.min(100, prev + amount));
+            addGameLog('event', `侧击效果：${card.name} 击晕上限 +${amount}%`);
+            setHeroSkillBanner(`侧击！${card.name} 击晕上限 +${amount}%！`);
+          } else if (card.flankEffectId.startsWith('damage:')) {
+            const amount = parseInt(card.flankEffectId.replace('damage:', ''), 10) || 5;
+            const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
+              (c): c is GameCardData => isDamageableTarget(c),
+            );
+            if (monsters.length > 0) {
+              const target = monsters[Math.floor(Math.random() * monsters.length)];
+              dealDamageToMonster(target, amount);
+              addGameLog('event', `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害`);
+              setHeroSkillBanner(`侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！`);
+            } else {
+              addGameLog('event', `侧击效果：${card.name} 没有可攻击的怪物`);
+              setHeroSkillBanner(`侧击！但没有可攻击的怪物。`);
+            }
+          }
+        }
       } else {
         removeCard(card.id, false);
       }

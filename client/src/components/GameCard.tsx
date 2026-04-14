@@ -1952,7 +1952,7 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect) && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.flankEffect || card.transformBonus) && (
                   <div className="dh-card__keyword-row">
                     {card.hasEquipmentRevive && (
                       <span className={`dh-card__keyword-tag ${card.equipmentReviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
@@ -1962,6 +1962,12 @@ const amuletEffectText =
                     )}
                     {card.onDestroyEffect === 'slot-temp-buff-3-3' && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：装备毁坏时该装备栏 +3临时攻击 +3临时护甲">遗言</span>
+                    )}
+                    {card.flankEffect && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={`侧击：处于手牌最左/最右时触发 - ${card.flankEffect}`}>侧击：{card.flankEffect}</span>
+                    )}
+                    {card.transformBonus && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={`转型：前一张牌类型不同时触发 - ${card.transformBonus}`}>转型：{card.transformBonus}</span>
                     )}
                   </div>
                 )}

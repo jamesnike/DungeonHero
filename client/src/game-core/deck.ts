@@ -45,6 +45,7 @@ import woodenShieldImage from '@assets/generated_images/cute_wooden_shield.png';
 import ironShieldImage from '@assets/generated_images/cute_iron_shield.png';
 import heavyShieldImage from '@assets/generated_images/card_dedupe_shield_heavy_main.png';
 import bastionShieldImage from '@assets/generated_images/knight_bastion_shield.png';
+import thunderStrikeAmuletImage from '@assets/generated_images/knight_thunder_strike_amulet.png';
 
 // ---------------------------------------------------------------------------
 // Potion images
@@ -833,7 +834,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       type: 'amulet',
       name: '雷击护符',
       value: 5,
-      image: strengthAmuletImage,
+      image: thunderStrikeAmuletImage,
       description: '光环：所有击晕率 +20%（仍受击晕上限约束）。',
       amuletEffect: 'stun-rate-boost',
     },

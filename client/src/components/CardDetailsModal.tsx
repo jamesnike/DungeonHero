@@ -1099,6 +1099,20 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Equipment Flank / Transform Keywords */}
+            {(card.type === 'weapon' || card.type === 'shield') && card.flankEffect && (
+              <div className="mt-2 flex items-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-800 dark:text-cyan-200">
+                <span className="font-bold">侧击</span>
+                <span>手牌最左/最右时打出：{card.flankEffect}</span>
+              </div>
+            )}
+            {(card.type === 'weapon' || card.type === 'shield') && card.transformBonus && (
+              <div className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800 dark:text-amber-200">
+                <span className="font-bold">转型</span>
+                <span>上一张使用的牌类型不同时：{card.transformBonus}</span>
+              </div>
+            )}
+
             {/* Equipment Last Words from potion (weapon/shield) */}
             {(card.type === 'weapon' || card.type === 'shield') && card.onDestroyEffect === 'slot-temp-buff-3-3' && (
               <div className="p-3 rounded-md border bg-amber-500/15 border-amber-500/30">
