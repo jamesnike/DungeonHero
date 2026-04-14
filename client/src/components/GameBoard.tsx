@@ -718,7 +718,7 @@ export default function GameBoard() {
         return { ...slot, _counterDisplay: `${st.swapUpgradeProgress ?? 0}/3` };
       }
       if (slot.amuletEffect === 'recycle-backpack-expand') {
-        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 8;
         return { ...slot, _counterDisplay: `${st.recycleBackpackProgress ?? 0}/${threshold}` };
       }
       return slot;
@@ -3406,7 +3406,20 @@ export default function GameBoard() {
           addGameLog('equip', `${card.name} 遗言：该装备栏永久护甲 +${card.onDestroyPermanentShield}！`);
         }
         if (card.onDestroyEffect) {
-          addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
+          if (card.onDestroyEffect === 'graveyard-to-hand') {
+            const graveyard = engine.getState().discardedCards;
+            if (graveyard.length > 0) {
+              const idx = Math.floor(Math.random() * graveyard.length);
+              const picked = graveyard[idx];
+              setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+              ensureCardInHand(picked);
+              addGameLog('equip', `${card.name} 遗言：从坟场获得了「${picked.name}」！`);
+            } else {
+              addGameLog('equip', `${card.name} 遗言：坟场没有可用的牌。`);
+            }
+          } else {
+            addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
+          }
         }
         const isMonsterEquipDB = card.type === 'monster';
         const nativeReviveDB = isMonsterEquipDB && card.hasRevive && !card.reviveUsed;
@@ -5327,7 +5340,7 @@ export default function GameBoard() {
       }
       if (slot?.amuletEffect === 'recycle-backpack-expand') {
         const recycleProg = snapshot.recycleBackpackProgress ?? 0;
-        const recycleThreshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        const recycleThreshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 8;
         return { ...slot, _counterDisplay: `${recycleProg}/${recycleThreshold}` };
       }
       return slot;
@@ -6443,7 +6456,20 @@ export default function GameBoard() {
                 addGameLog('equip', `${card.name} 遗言：该装备栏永久护甲 +${card.onDestroyPermanentShield}！`);
               }
               if (card.onDestroyEffect) {
-                addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
+                if (card.onDestroyEffect === 'graveyard-to-hand') {
+                  const graveyard = engine.getState().discardedCards;
+                  if (graveyard.length > 0) {
+                    const idx = Math.floor(Math.random() * graveyard.length);
+                    const picked = graveyard[idx];
+                    setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+                    ensureCardInHand(picked);
+                    addGameLog('equip', `${card.name} 遗言：从坟场获得了「${picked.name}」！`);
+                  } else {
+                    addGameLog('equip', `${card.name} 遗言：坟场没有可用的牌。`);
+                  }
+                } else {
+                  addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
+                }
               }
             };
             const revived: string[] = [];
@@ -6511,7 +6537,7 @@ export default function GameBoard() {
           }
           case 'spellDecay': {
             const decayAmount = wfx.amount;
-            setPermanentSpellDamageBonus(prev => Math.max(0, prev - decayAmount));
+            setPermanentSpellDamageBonus(prev => prev - decayAmount);
             addGameLog('waterfall', `${cardName} 被挤出，永久法术伤害加成 -${decayAmount}`);
             setHeroSkillBanner(`${cardName} 的反魔结界削弱了你的法术伤害！-${decayAmount}`);
             waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
@@ -7191,7 +7217,7 @@ export default function GameBoard() {
           }
         }
       } else if (spawnedBuglet) {
-        beginCombatRef.current(spawnedBuglet, 'monster');
+        beginCombatRef.current(spawnedBuglet, 'hero');
       }
 
       // Clear from removing set
@@ -8351,17 +8377,17 @@ export default function GameBoard() {
         }
       }
 
-      if (amuletEffects.hasPersuadeGrantRecycleFetch) {
-        const fetchCount = amuletEffects.persuadeGrantRecycleFetchCount || 1;
-        for (let fi = 0; fi < fetchCount; fi++) {
-          queueCardIntoHand(createPersuadeRecycleFetchMagicCard());
-        }
-        addGameLog('amulet', `劝降归袋符：${fetchCount} 张「归袋抽引」已加入手牌。`);
-      }
-
     } else {
       addGameLog('combat', `劝降失败！${persuadeState.monster.name} 拒绝了劝降。（掷出 ${value}，需要 ≥${persuadeState.threshold}）`);
       setHeroSkillBanner(`劝降失败！${persuadeState.monster.name} 不为所动。`);
+    }
+
+    if (amuletEffects.hasPersuadeGrantRecycleFetch) {
+      const fetchCount = amuletEffects.persuadeGrantRecycleFetchCount || 1;
+      for (let fi = 0; fi < fetchCount; fi++) {
+        queueCardIntoHand(createPersuadeRecycleFetchMagicCard());
+      }
+      addGameLog('amulet', `劝降归袋符：${fetchCount} 张「归袋抽引」已加入手牌。`);
     }
   };
 
@@ -8423,7 +8449,7 @@ export default function GameBoard() {
       }
       if (card.amuletEffect === 'recycle-backpack-expand') {
         const prog = engine.getState().recycleBackpackProgress ?? 0;
-        const recycleThreshold = (card.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        const recycleThreshold = (card.upgradeLevel ?? 0) >= 1 ? 6 : 8;
         setAmuletSlots(prev => prev.map(slot => {
           if (slot?.amuletEffect !== 'recycle-backpack-expand') return slot;
           return { ...slot, _counterDisplay: `${prog}/${recycleThreshold}` };
@@ -8673,18 +8699,6 @@ export default function GameBoard() {
       setEquipmentSlotById(equipSlot, equipCard);
 
       if (equipCard.onEquipEffect) {
-        if (equipCard.onEquipEffect === 'graveyard-to-hand') {
-          const graveyard = engine.getState().discardedCards;
-          if (graveyard.length > 0) {
-            const idx = Math.floor(Math.random() * graveyard.length);
-            const picked = graveyard[idx];
-            setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-            ensureCardInHand(picked);
-            addGameLog('equip', `${equipCard.name} 入场效果：从坟场获得了「${picked.name}」！`);
-          } else {
-            addGameLog('equip', `${equipCard.name} 入场效果：坟场没有可用的牌。`);
-          }
-        }
         if (equipCard.onEquipEffect === 'temp-attack-2') {
           setSlotTempAttack(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 2 }));
           addGameLog('equip', `${equipCard.name} 入场效果：该装备栏临时攻击 +2！`);

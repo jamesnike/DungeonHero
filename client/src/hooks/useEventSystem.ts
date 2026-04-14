@@ -1187,6 +1187,22 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
                   setSlotTempArmor(prev => ({ ...prev, [below.slotId]: (prev[below.slotId] ?? 0) + 3 }));
                   addGameLog('equip', `${slotItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
                   setHeroSkillBanner(`${slotItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
+                  if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+                    const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+                    setPersuadeAmuletBonus(prev => prev + pBonus * 2);
+                    addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）`);
+                  }
+                } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
+                  const graveyard = engine.getState().discardedCards;
+                  if (graveyard.length > 0) {
+                    const idx = Math.floor(Math.random() * graveyard.length);
+                    const picked = graveyard[idx];
+                    setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+                    setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                    addGameLog('equip', `${slotItem.name} 遗言：从坟场获得了「${picked.name}」！`);
+                  } else {
+                    addGameLog('equip', `${slotItem.name} 遗言：坟场没有可用的牌。`);
+                  }
                 } else {
                   addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
                 }
@@ -1482,7 +1498,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       } else if (effect.startsWith('spellLifesteal-')) {
         const amount = parseInt(effect.replace('spellLifesteal-', ''), 10) || 1;
         setPermanentSpellLifesteal(prev => {
-          const next = Math.max(0, prev - amount);
+          const next = prev - amount;
           addGameLog('event', `事件效果：超杀吸血永久 -${amount}`);
           setHeroSkillBanner(`超杀吸血永久 -${amount}（当前 ${next}）。`);
           return next;
@@ -1574,22 +1590,22 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         const newAmulets = currentAmulets.map(amulet => {
           if (amulet.amuletEffect === 'persuade-on-temp-attack' && (amulet.upgradeLevel ?? 0) < 1) {
             upgraded = true;
-            addGameLog('event', `怀柔之印升级：每获得一次临时攻击加成，下一次劝降率 +10%`);
+            addGameLog('event', `怀柔之印升级：每获得一次临时攻击或临时护甲加成，下一次劝降率 +10%`);
             setHeroSkillBanner('怀柔之印已升级！劝降率加成从 +5% 提升到 +10%！');
             return {
               ...amulet,
               upgradeLevel: 1,
-              description: '（已升级）每获得一次临时攻击加成，下一次劝降率 +10%。',
+              description: '（已升级）每获得一次临时攻击或临时护甲加成，下一次劝降率 +10%。',
             };
           }
           if (amulet.amuletEffect === 'persuade-grant-recycle-fetch' && (amulet.upgradeLevel ?? 0) < 1) {
             upgraded = true;
-            addGameLog('event', `劝降归袋符升级：每劝降成功一次，将两张「归袋抽引」加入手牌`);
-            setHeroSkillBanner('劝降归袋符已升级！每次劝降成功获得 2 张归袋抽引！');
+            addGameLog('event', `劝降归袋符升级：每劝降一次，将两张「归袋抽引」加入手牌`);
+            setHeroSkillBanner('劝降归袋符已升级！每次劝降获得 2 张归袋抽引！');
             return {
               ...amulet,
               upgradeLevel: 1,
-              description: '（已升级）每劝降成功一次，将两张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。',
+              description: '（已升级）每劝降一次，将两张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。',
             };
           }
           return amulet;
@@ -1746,6 +1762,12 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             slots.forEach(s => { next[s.id] = (next[s.id] ?? 0) + amount; });
             return next;
           });
+          if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+            const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+            const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+            setPersuadeAmuletBonus(newBonus);
+            addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
+          }
           const names = slots.map(s => s.item!.name).join('、');
           addGameLog('event', `事件效果：所有装备栏临时护甲 +${amount}`);
           setHeroSkillBanner(`${names} 临时护甲 +${amount}！`);
@@ -2140,6 +2162,22 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
               setSlotTempArmor(prev => ({ ...prev, [destroyedSlotId]: (prev[destroyedSlotId] ?? 0) + 3 }));
               addGameLog('equip', `${destroyedItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
               setHeroSkillBanner(`${destroyedItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
+              if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+                const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+                setPersuadeAmuletBonus(prev => prev + pBonus * 2);
+                addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）`);
+              }
+            } else if (destroyedItem.onDestroyEffect === 'graveyard-to-hand') {
+              const graveyard = engine.getState().discardedCards;
+              if (graveyard.length > 0) {
+                const idx = Math.floor(Math.random() * graveyard.length);
+                const picked = graveyard[idx];
+                setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+                setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                addGameLog('equip', `${destroyedItem.name} 遗言：从坟场获得了「${picked.name}」！`);
+              } else {
+                addGameLog('equip', `${destroyedItem.name} 遗言：坟场没有可用的牌。`);
+              }
             } else {
               addGameLog('equip', `${destroyedItem.name} 遗言：${destroyedItem.onDestroyEffect}`);
             }
@@ -2826,6 +2864,22 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
               setSlotTempAttack(prev => ({ ...prev, [sid]: (prev[sid] ?? 0) + 3 }));
               setSlotTempArmor(prev => ({ ...prev, [sid]: (prev[sid] ?? 0) + 3 }));
               addGameLog('equip', `${item.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
+              if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+                const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+                setPersuadeAmuletBonus(prev => prev + pBonus * 2);
+                addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）`);
+              }
+            } else if (item.onDestroyEffect === 'graveyard-to-hand') {
+              const graveyard = engine.getState().discardedCards;
+              if (graveyard.length > 0) {
+                const idx = Math.floor(Math.random() * graveyard.length);
+                const picked = graveyard[idx];
+                setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+                setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                addGameLog('equip', `${item.name} 遗言：从坟场获得了「${picked.name}」！`);
+              } else {
+                addGameLog('equip', `${item.name} 遗言：坟场没有可用的牌。`);
+              }
             } else {
               addGameLog('equip', `${item.name} 遗言：${item.onDestroyEffect}`);
             }

@@ -725,6 +725,22 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
           break;
       }
 
+      const ae = (card as any).amuletEffect as string | undefined;
+      if (ae) {
+        switch (ae) {
+          case 'persuade-on-temp-attack': {
+            upgraded.description = '（已升级）每获得一次临时攻击或临时护甲加成，下一次劝降率 +10%。';
+            break;
+          }
+          case 'persuade-grant-recycle-fetch': {
+            upgraded.description = '（已升级）每劝降一次，将两张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。';
+            break;
+          }
+          default:
+            break;
+        }
+      }
+
       const ke = (card as any).knightEffect as string | undefined;
       if (ke) {
         switch (ke) {

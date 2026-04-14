@@ -24,7 +24,7 @@ export const MAX_PERSUADE_LEVEL = 4;
 
 export const DECK_SIZE = 64;
 export const DUNGEON_COLUMN_COUNT = 5;
-export const BASE_BACKPACK_CAPACITY = 12;
+export const BASE_BACKPACK_CAPACITY = 10;
 export const HAND_LIMIT = 6;
 export const MAX_AMULET_SLOTS = 2;
 export const MAX_SHOP_LEVEL = 3;

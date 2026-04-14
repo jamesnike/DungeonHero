@@ -301,7 +301,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       const state = engine.getState();
       const recycleAmulet = state.amuletSlots.find(s => s?.amuletEffect === 'recycle-backpack-expand');
       if (recycleAmulet) {
-        const recycleThreshold = (recycleAmulet.upgradeLevel ?? 0) >= 1 ? 6 : 10;
+        const recycleThreshold = (recycleAmulet.upgradeLevel ?? 0) >= 1 ? 6 : 8;
         const progress = state.recycleBackpackProgress + 1;
         if (progress >= recycleThreshold) {
           setRecycleBackpackProgress(0);

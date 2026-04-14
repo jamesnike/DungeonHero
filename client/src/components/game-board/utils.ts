@@ -506,8 +506,8 @@ export function createDeck(): GameCardData[] {
       card.description = '遗言：恢复 3 点生命。';
     }
     if (shieldType.name === 'Iron Shield') {
-      card.onEquipEffect = 'graveyard-to-hand';
-      card.description = '入场：随机获得一张坟场的牌，移到手牌。';
+      card.onDestroyEffect = 'graveyard-to-hand';
+      card.description = '遗言：随机获得一张坟场的牌，移到手牌。';
     }
     if (shieldType.name === 'Heavy Shield') {
       card.damageReflect = 1;

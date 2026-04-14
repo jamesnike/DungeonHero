@@ -263,6 +263,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   const setClassDamageDiscoverStreak = useEngineSetter('classDamageDiscoverStreak');
   const setAmuletSlots = useEngineSetter('amuletSlots');
   const setHeroStunned = useEngineSetter('heroStunned');
+  const setDiscardedCards = useEngineSetter('discardedCards');
   const setStunCap = useEngineSetter('stunCap');
   const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
   const setMonsterKillUpgradeProgress = useEngineSetter('monsterKillUpgradeProgress');
@@ -2200,6 +2201,22 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               setSlotTempArmor(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 3 }));
               addGameLog('equip', `${slotItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
               setHeroSkillBanner(`${slotItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
+              if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+                const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+                setPersuadeAmuletBonus(prev => prev + pBonus * 2);
+                addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）`);
+              }
+            } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
+              const graveyard = engine.getState().discardedCards;
+              if (graveyard.length > 0) {
+                const idx = Math.floor(Math.random() * graveyard.length);
+                const picked = graveyard[idx];
+                setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+                setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                addGameLog('equip', `${slotItem.name} 遗言：从坟场获得了「${picked.name}」！`);
+              } else {
+                addGameLog('equip', `${slotItem.name} 遗言：坟场没有可用的牌。`);
+              }
             } else {
               addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
             }
@@ -2634,6 +2651,22 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
             setSlotTempArmor(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + 3 }));
             addGameLog('equip', `${slotItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
             setHeroSkillBanner(`${slotItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
+            if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+              const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+              setPersuadeAmuletBonus(prev => prev + pBonus * 2);
+              addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）`);
+            }
+          } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
+            const graveyard = engine.getState().discardedCards;
+            if (graveyard.length > 0) {
+              const idx = Math.floor(Math.random() * graveyard.length);
+              const picked = graveyard[idx];
+              setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+              setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+              addGameLog('equip', `${slotItem.name} 遗言：从坟场获得了「${picked.name}」！`);
+            } else {
+              addGameLog('equip', `${slotItem.name} 遗言：坟场没有可用的牌。`);
+            }
           } else {
             addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
           }
@@ -3109,6 +3142,12 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
           const otherSlotLabel = otherSlot === 'equipmentSlot1' ? '左' : '右';
           depsRef.current.addGameLog('combat', `${slotItem.name} 守望者链接：${otherSlotLabel}装备栏临时护甲 +${grantAmount}！`);
           setHeroSkillBanner(`守望者链接！${otherSlotLabel}装备栏临时护甲 +${grantAmount}！`);
+          if (ae.hasPersuadeOnTempAttack) {
+            const pBonus = ae.persuadeOnTempAttackBonus || 5;
+            const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+            setPersuadeAmuletBonus(newBonus);
+            depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
+          }
         }
 
         if (slotItem.type === 'monster' && slotItem.dragonDamageRetaliation && slotItem.dragonDamageRetaliation > 0) {
@@ -3267,6 +3306,22 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
                   setSlotTempArmor(prev => ({ ...prev, [blockSlotId]: (prev[blockSlotId] ?? 0) + 3 }));
                   depsRef.current.addGameLog('equip', `${slotItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
                   setHeroSkillBanner(`${slotItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
+                  if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+                    const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+                    setPersuadeAmuletBonus(prev => prev + pBonus * 2);
+                    depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）`);
+                  }
+                } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
+                  const graveyard = engine.getState().discardedCards;
+                  if (graveyard.length > 0) {
+                    const idx = Math.floor(Math.random() * graveyard.length);
+                    const picked = graveyard[idx];
+                    setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+                    setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                    depsRef.current.addGameLog('equip', `${slotItem.name} 遗言：从坟场获得了「${picked.name}」！`);
+                  } else {
+                    depsRef.current.addGameLog('equip', `${slotItem.name} 遗言：坟场没有可用的牌。`);
+                  }
                 } else {
                   depsRef.current.addGameLog('equip', `${slotItem.name} 遗言：${slotItem.onDestroyEffect}`);
                 }
@@ -3482,6 +3537,12 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       setSlotTempArmor(prev => ({ ...prev, [blockSlotId]: (prev[blockSlotId] ?? 0) + tempGain }));
       const label = blockSlotId === 'equipmentSlot1' ? '左' : '右';
       depsRef.current.addGameLog('magic', `永恒护符·格挡铸甲：${label}装备栏临时护甲 +${tempGain}`);
+      if (ae.hasPersuadeOnTempAttack) {
+        const pBonus = ae.persuadeOnTempAttackBonus || 5;
+        const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+        setPersuadeAmuletBonus(newBonus);
+        depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
+      }
     }
 
     if (blockedWithShield && monster.swarmCorrode && !monster.isStunned) {
@@ -3543,6 +3604,22 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
               setSlotTempArmor(prev => ({ ...prev, [corrodeSlotId]: (prev[corrodeSlotId] ?? 0) + 3 }));
               depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！`);
               setHeroSkillBanner(`${corrodeItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！`);
+              if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+                const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+                setPersuadeAmuletBonus(prev => prev + pBonus * 2);
+                depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）`);
+              }
+            } else if (corrodeItem.onDestroyEffect === 'graveyard-to-hand') {
+              const graveyard = engine.getState().discardedCards;
+              if (graveyard.length > 0) {
+                const idx = Math.floor(Math.random() * graveyard.length);
+                const picked = graveyard[idx];
+                setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+                setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：从坟场获得了「${picked.name}」！`);
+              } else {
+                depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：坟场没有可用的牌。`);
+              }
             } else {
               depsRef.current.addGameLog('equip', `${corrodeItem.name} 遗言：${corrodeItem.onDestroyEffect}`);
             }
@@ -3744,9 +3821,10 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         refillItem.maxDurability &&
         depsRef.current.pendingDefeatIdsRef.current.has(monster.id)
       ) {
-        setEquipmentSlotById(refillSlotId, { ...refillItem, durability: refillItem.maxDurability } as EquipmentItem);
-        depsRef.current.addGameLog('equip', `${refillItem.name} 坚韧：怪物死亡，耐久度回满！`);
-        setHeroSkillBanner(`${refillItem.name} 耐久度回满！`);
+        const newDur = Math.min((refillItem.durability ?? 0) + 1, refillItem.maxDurability);
+        setEquipmentSlotById(refillSlotId, { ...refillItem, durability: newDur } as EquipmentItem);
+        depsRef.current.addGameLog('equip', `${refillItem.name} 坚韧：怪物死亡，耐久度恢复 1！`);
+        setHeroSkillBanner(`${refillItem.name} 耐久度恢复 1！`);
       }
     }
 

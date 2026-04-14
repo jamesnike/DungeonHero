@@ -40,7 +40,7 @@ export const MONSTER_RAGE_TRANSLATE_ADJUST_PX =
 
 export const DUNGEON_COLUMNS = Array.from({ length: DUNGEON_COLUMN_COUNT }, (_, index) => index);
 
-export const BASE_BACKPACK_CAPACITY = 12;
+export const BASE_BACKPACK_CAPACITY = 10;
 export const HAND_LIMIT = 6;
 export const ELITE_MONSTER_NAMES = ['Elder Dragon', 'Bone Overlord', 'Goblin Warlock', 'Ogre Juggernaut'] as const;
 export const ELITE_MONSTER_NAME_SET = new Set<string>(ELITE_MONSTER_NAMES);

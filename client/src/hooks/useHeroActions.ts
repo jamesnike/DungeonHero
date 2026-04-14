@@ -208,6 +208,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   const setGold = useEngineSetter('gold');
   const setActiveCards = useEngineSetter('activeCards');
   const setHandCards = useEngineSetter('handCards');
+  const setDiscardedCards = useEngineSetter('discardedCards');
   const setPreviewCards = useEngineSetter('previewCards');
   const setRemainingDeck = useEngineSetter('remainingDeck');
   const setHeroMagicState = useEngineSetter('heroMagicState');
@@ -439,7 +440,20 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
               addGameLog('equip', `${item.name} 遗言：该装备栏永久护甲 +${item.onDestroyPermanentShield}！`);
             }
             if (item.onDestroyEffect) {
-              addGameLog('equip', `${item.name} 遗言：${item.onDestroyEffect}`);
+              if (item.onDestroyEffect === 'graveyard-to-hand') {
+                const graveyard = engine.getState().discardedCards;
+                if (graveyard.length > 0) {
+                  const idx = Math.floor(Math.random() * graveyard.length);
+                  const picked = graveyard[idx];
+                  setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+                  setHandCards(prev => prev.some(e => e.id === picked.id) ? prev : [...prev, picked]);
+                  addGameLog('equip', `${item.name} 遗言：从坟场获得了「${picked.name}」！`);
+                } else {
+                  addGameLog('equip', `${item.name} 遗言：坟场没有可用的牌。`);
+                }
+              } else {
+                addGameLog('equip', `${item.name} 遗言：${item.onDestroyEffect}`);
+              }
             }
             const isMonsterEquipMD = item.type === 'monster';
             const nativeReviveMD = isMonsterEquipMD && item.hasRevive && !item.reviveUsed;
@@ -1421,6 +1435,12 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         const useCount = (pendingMagicAction.card as any)._flankFortifyUses ?? 0;
         const armorBonus = 3 + useCount;
         setSlotTempArmor(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + armorBonus }));
+        if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+          const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+          const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+          setPersuadeAmuletBonus(newBonus);
+          depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
+        }
         const isFlank = pendingMagicAction.isFlank ?? false;
         let flankText = '';
         if (isFlank) {
@@ -1465,6 +1485,12 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         if (tempAtk > tempArm) {
           const delta = tempAtk - tempArm;
           setSlotTempArmor(prev => ({ ...prev, [slotId]: tempAtk }));
+          if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+            const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+            const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+            setPersuadeAmuletBonus(newBonus);
+            depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
+          }
           addGameLog('magic', `时空镜像：${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}`);
           finalizeMagicCard(pendingMagicAction.card, { banner: `${slotItem.name} 临时攻击 +${atkBoost}，临时护甲 +${delta}，攻防均为 ${tempAtk}。` });
         } else {
@@ -1593,6 +1619,12 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
         const armorAmounts = [2, 3, 4];
         const armorAmt = armorAmounts[pendingMagicAction.card.upgradeLevel ?? 0] ?? 2;
         setSlotTempArmor(prev => ({ ...prev, [slotId]: (prev[slotId] ?? 0) + armorAmt }));
+        if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+          const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+          const newBonus = engine.getState().persuadeAmuletBonus + pBonus;
+          setPersuadeAmuletBonus(newBonus);
+          depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）`);
+        }
         finalizeMagicCard(pendingMagicAction.card, { banner: `${label} 获得 +${armorAmt} 临时护甲。` });
         addGameLog('magic', `铸甲术：${label} +${armorAmt} 临时护甲`);
         return;

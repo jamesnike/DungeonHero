@@ -305,7 +305,7 @@ export interface GameCardData {
   _shieldBlockCount?: number; // Internal counter for blocks performed
   shieldExtraBlocksPerDurability?: number; // Extra armor-depleted blocks before losing 1 durability
   equipBlockDurabilityBonus?: number; // Per-equipment bonus to blockDurabilityPerSlot (how many durability can be consumed per monster turn)
-  shieldRefillOnMonsterDeath?: boolean; // Refill durability to max when the attacking monster dies after its attack (e.g. layer drop to 0)
+  shieldRefillOnMonsterDeath?: boolean; // Restore 1 durability when the attacking monster dies after its attack (e.g. layer drop to 0)
   _shieldDurabilityBlockCounter?: number; // Runtime counter for extra-block durability tracking
   _counterDisplay?: string; // Dynamic counter text shown on card (e.g. "2/5")
   blockGrantTempArmorToOther?: boolean; // On block, grant temp armor equal to shield value to other slot

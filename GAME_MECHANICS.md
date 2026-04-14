@@ -296,9 +296,13 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 
 | 效果ID | 行为 |
 |--------|------|
-| `graveyard-to-hand` | 随机从坟场取 1 张牌加入手牌 |
 
 #### 遗言 (`onDestroyEffect` / `onDestroyHeal` / `onDestroyGold` / `onDestroyDraw` / `onDestroyPermanentDamage`)
+
+| `onDestroyEffect` 效果ID | 行为 |
+|--------|------|
+| `graveyard-to-hand` | 随机从坟场取 1 张牌加入手牌 |
+| `slot-temp-buff-3-3` | 该装备栏 +3 临时攻击 +3 临时护甲 |
 
 装备被摧毁时触发。包括：耐久耗尽、被事件效果破坏、被怪物效果破坏等所有摧毁路径。
 
@@ -899,7 +903,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 名称 | 攻击力 | 耐久 | 特殊 |
 |------|-------|------|------|
 | 圣光之刃 | 6 | 2/2 | `healOnAttack: 2`（攻击回2HP） |
-| 疾风短剑 | 4 | 3/3 | `restoreDurabilityOnKill: true`（击杀恢复耐久） |
+| 疾风短剑 | 3 | 3/3 | `restoreDurabilityOnKill: true`（击杀恢复耐久） |
 | 碎雷战锤 | 4 | 2/2 | `weaponBonus: 1`（槽位永久+1伤害） |
 
 ### 13.2 盾牌

@@ -632,8 +632,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       card.description = '遗言：恢复 3 点生命。';
     }
     if (shieldType.name === 'Iron Shield') {
-      card.onEquipEffect = 'graveyard-to-hand';
-      card.description = '入场：随机获得一张坟场的牌，移到手牌。';
+      card.onDestroyEffect = 'graveyard-to-hand';
+      card.description = '遗言：随机获得一张坟场的牌，移到手牌。';
     }
     if (shieldType.name === '壁垒之盾') {
       card.onEquipEffect = 'temp-armor-3';
@@ -2234,9 +2234,9 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterPersuadeBladeImage,
       durability: 2,
       maxDurability: 2,
-      persuadeBoostOnHit: 20,
+      persuadeBoostOnHit: 15,
       persuadeBoostOnHitElite: 10,
-      description: '每攻击一次，下次劝降成功概率 +20%（精英 +10%）。',
+      description: '每攻击一次，下次劝降成功概率 +15%（精英 +10%）。',
     },
     {
       id: STARTER_CARD_IDS.immortalHammer,
@@ -2386,7 +2386,7 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletRecycleExpandImage,
       amuletEffect: 'recycle-backpack-expand',
-      description: '每回收 10 张牌，背包上限 +3。',
+      description: '每回收 8 张牌，背包上限 +3。',
     },
     {
       id: STARTER_CARD_IDS.dungeonGoldAmulet,

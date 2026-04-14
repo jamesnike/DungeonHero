@@ -141,7 +141,7 @@ export function applyWaterfallEffect(
       const decay = effect.amount;
       return {
         permanentMaxHpBonus: Math.max(0, state.permanentMaxHpBonus - decay),
-        permanentSpellDamageBonus: Math.max(0, state.permanentSpellDamageBonus - decay),
+        permanentSpellDamageBonus: state.permanentSpellDamageBonus - decay,
         equipmentSlotBonuses: {
           equipmentSlot1: {
             damage: Math.max(0, state.equipmentSlotBonuses.equipmentSlot1.damage - decay),
@@ -179,7 +179,7 @@ export function applyWaterfallEffect(
 
     case 'spellDecay':
       return {
-        permanentSpellDamageBonus: Math.max(0, state.permanentSpellDamageBonus - effect.amount),
+        permanentSpellDamageBonus: state.permanentSpellDamageBonus - effect.amount,
       };
 
     case 'destroyAllAmuletsAndDiscardHand':

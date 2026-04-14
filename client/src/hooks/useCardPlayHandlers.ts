@@ -4280,6 +4280,22 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
             setSlotTempAttack(prev => ({ ...prev, [chosenSlot]: (prev[chosenSlot] ?? 0) + 3 }));
             setSlotTempArmor(prev => ({ ...prev, [chosenSlot]: (prev[chosenSlot] ?? 0) + 3 }));
             parts.push('该装备栏 +3临时攻击 +3临时护甲');
+            if (depsRef.current.amuletEffects.hasPersuadeOnTempAttack) {
+              const pBonus = depsRef.current.amuletEffects.persuadeOnTempAttackBonus || 5;
+              setPersuadeAmuletBonus(prev => prev + pBonus * 2);
+              depsRef.current.addGameLog('equip', `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）`);
+            }
+          } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
+            const graveyard = engine.getState().discardedCards;
+            if (graveyard.length > 0) {
+              const idx = Math.floor(Math.random() * graveyard.length);
+              const picked = graveyard[idx];
+              setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
+              depsRef.current.ensureCardInHand(picked);
+              parts.push(`从坟场获得「${picked.name}」`);
+            } else {
+              parts.push('坟场没有可用的牌');
+            }
           } else {
             parts.push(slotItem.onDestroyEffect);
           }
@@ -5556,18 +5572,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         depsRef.current.setEquipmentSlotById(emptySlot, { ...card } as EquipmentItem);
         depsRef.current.addGameLog('equip', `手牌装备：${card.name}（${card.type === 'weapon' ? `${card.value}攻` : `${card.value}防`}）至${emptySlot === 'equipmentSlot1' ? '左' : '右'}槽`);
 
-        if (card.onEquipEffect === 'graveyard-to-hand') {
-          const graveyard = engine.getState().discardedCards;
-          if (graveyard.length > 0) {
-            const idx = Math.floor(Math.random() * graveyard.length);
-            const picked = graveyard[idx];
-            setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-            depsRef.current.ensureCardInHand(picked);
-            depsRef.current.addGameLog('equip', `${card.name} 入场效果：从坟场获得了「${picked.name}」！`);
-          } else {
-            depsRef.current.addGameLog('equip', `${card.name} 入场效果：坟场没有可用的牌。`);
-          }
-        }
         if (card.onEquipEffect === 'temp-attack-2') {
           setSlotTempAttack(prev => ({ ...prev, [emptySlot]: (prev[emptySlot] ?? 0) + 2 }));
           depsRef.current.addGameLog('equip', `${card.name} 入场效果：该装备栏临时攻击 +2！`);

@@ -43,7 +43,7 @@ import bloodrageAmuletImage from '@assets/generated_images/knight_bloodrage_amul
 import persuadeAuraAmuletImage from '@assets/generated_images/knight_persuade_aura_amulet.png';
 import statSwapPotionImage from '@assets/generated_images/knight_stat_swap_potion.png';
 import lifestealPotionImage from '@assets/generated_images/knight_lifesteal_potion.png';
-import persuadeScrollAmuletDedupeImage from '@assets/generated_images/card_dedupe_persuade_scroll_amulet.png';
+import persuadeScrollAmuletDedupeImage from '@assets/generated_images/knight_persuade_recycle_amulet.png';
 import fusionScrollImage from '@assets/generated_images/knight_fusion_scroll.png';
 import recallScrollImage from '@assets/generated_images/knight_recall_scroll.png';
 import monsterDoomScrollImage from '@assets/generated_images/knight_monster_doom_scroll.png';
@@ -107,7 +107,7 @@ export function generateKnightDeck(): KnightCardData[] {
   pushCard({
     type: 'weapon',
     name: '疾风短剑',
-    value: 4,
+    value: 3,
     image: swiftDaggerKnightImage,
     classCard: true,
     description: '入场：所有装备栏临时攻击 +2。用此武器杀死怪物时耐久度回满。',
@@ -474,8 +474,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: persuadeAuraAmuletImage,
     classCard: true,
-    description: '每获得一次临时攻击加成，下一次劝降率 +5%。',
+    description: '每获得一次临时攻击或临时护甲加成，下一次劝降率 +5%。',
     amuletEffect: 'persuade-on-temp-attack',
+    maxUpgradeLevel: 1,
   });
 
   pushCard({
@@ -484,8 +485,9 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 1,
     image: persuadeScrollAmuletDedupeImage,
     classCard: true,
-    description: '每劝降成功一次，将一张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。',
+    description: '每劝降一次，将一张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。',
     amuletEffect: 'persuade-grant-recycle-fetch',
+    maxUpgradeLevel: 1,
   });
 
   pushCard({
@@ -812,7 +814,7 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 3,
     image: knightShieldEnduranceImage,
     classCard: true,
-    description: '该护盾每回合可消耗的耐久上限 +1（怪物回合最多消耗 2 耐久）。怪物攻击该护盾后死亡时，耐久度回满。',
+    description: '该护盾每回合可消耗的耐久上限 +1（怪物回合最多消耗 2 耐久）。怪物攻击该护盾后死亡时，耐久度恢复 1。',
     equipBlockDurabilityBonus: 1,
     shieldRefillOnMonsterDeath: true,
     durability: 3,
@@ -871,11 +873,11 @@ export function generateKnightDeck(): KnightCardData[] {
     value: 4,
     image: knightRageCleaveImage,
     classCard: true,
-    description: '该武器每回合可攻击 2 次（攻击次数 +1）。每次攻击时，所有怪物攻击力 -1。',
+    description: '该武器每回合可攻击 2 次（攻击次数 +1）。每次攻击时，所有怪物攻击力 -2。',
     durability: 3,
     maxDurability: 3,
     weaponExtraAttack: 1,
-    onAttackDebuffAllMonsterAttack: 1,
+    onAttackDebuffAllMonsterAttack: 2,
   });
 
   pushCard({
@@ -918,7 +920,7 @@ export function createKnightDiscoveryEvents(): GameCardData[] {
 const createDynamicKnightCardId = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-/** 劝降归袋符：劝降成功时加入手牌的一次性魔法。 */
+/** 劝降归袋符：劝降时加入手牌的一次性魔法。 */
 export const createPersuadeRecycleFetchMagicCard = (): KnightCardData => ({
   id: createDynamicKnightCardId('persuade-recycle-fetch'),
   type: 'magic',
