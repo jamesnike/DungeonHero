@@ -83,7 +83,7 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto" data-testid="deck-viewer-modal">
+      <DialogContent className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto" data-testid="deck-viewer-modal">
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl">Remaining Deck</DialogTitle>
           <DialogDescription>

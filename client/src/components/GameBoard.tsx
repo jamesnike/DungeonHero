@@ -789,7 +789,6 @@ export default function GameBoard() {
     repairEquipmentDurability,
     handleHeroMagicCard,
     handlePlayCardFromHand,
-    applyTransformAndUpdateCategory,
     isPermanentMagicCard,
     normalizeEventEffect,
     chaosStrikeHasOverkill,
@@ -5685,33 +5684,9 @@ export default function GameBoard() {
       }
 
       if (card.type === 'building') {
-        const emptySlots: number[] = [];
-        for (let i = 0; i < DUNGEON_COLUMN_COUNT; i++) {
-          if (activeCards[i] == null) emptySlots.push(i);
-        }
-        if (emptySlots.length > 0) {
-          let rng = engine.getState().rng;
-          const [targetSlot, rng2] = pickRandom(emptySlots, rng); rng = rng2;
-          dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
-          dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: prev => {
-            const next = [...prev] as typeof prev;
-            next[targetSlot] = { ...card, hasReleaseCharge: true, _fateBladeLastSlot: targetSlot };
-            return next;
-          } });
-          addGameLog('event', `${card.name} 被放置到地城第 ${targetSlot + 1} 列。`);
-          if (card.name === '命运之刃') {
-            applyDamage(5, 'general', { selfInflicted: true });
-            addGameLog('event', '命运之刃：从手牌打出，失去 5 点生命。');
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 出现在地城中！失去 5 点生命。` });
-          } else {
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 出现在地城中！` });
-          }
-        } else {
-          discardCardToGraveyard(card, { owner: 'player' });
-          addGameLog('event', `${card.name}：地城没有空位，已送入坟场。`);
-          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `地城没有空位，${card.name} 已送入坟场。` });
-        }
-        applyTransformAndUpdateCategory(card);
+        // Reducer 处理放置 / 命运之刃自伤 / 满位入坟 / transform 链。
+        // Hook 已通过 consumeCardFromHand(card) 在前面消耗了来源。
+        dispatch({ type: 'PLACE_BUILDING_IN_DUNGEON', card, source: 'hand' });
         resetDragState();
         return;
       }
@@ -5799,41 +5774,25 @@ export default function GameBoard() {
         const cleanedCard = card.eventChoices
           ? { ...card, eventChoices: card.eventChoices.filter(c => c.effect !== 'crossroads-destroy-below') }
           : card;
+        // SET_CURRENT_EVENT reducer auto-enqueues APPLY_TRANSFORM_CATEGORY.
         dispatch({ type: 'SET_CURRENT_EVENT', card: cleanedCard });
         eventChoiceProcessingRef.current = false;
         dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: true });
-        applyTransformAndUpdateCategory(card);
         resetDragState();
         return;
       }
 
-      applyTransformAndUpdateCategory(card);
+      // RESOLVE_POTION / RESOLVE_MAGIC reducers auto-enqueue APPLY_TRANSFORM_CATEGORY.
+      // Other card types (monster) handled above via early-return.
     } else {
       if (isFromBackpack) {
         dispatch({ type: 'UPDATE_BACKPACK_ITEMS', updater: prev => prev.filter(c => c.id !== card.id) });
 
         if (card.type === 'building') {
-          const emptySlots: number[] = [];
-          for (let i = 0; i < DUNGEON_COLUMN_COUNT; i++) {
-            if (activeCards[i] == null) emptySlots.push(i);
-          }
-          if (emptySlots.length > 0) {
-            let rng = engine.getState().rng;
-            const [targetSlot, rng2] = pickRandom(emptySlots, rng); rng = rng2;
-            dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
-            dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: prev => {
-              const next = [...prev] as typeof prev;
-              next[targetSlot] = { ...card, hasReleaseCharge: true, _fateBladeLastSlot: targetSlot };
-              return next;
-            } });
-            addGameLog('event', `${card.name} 被放置到地城第 ${targetSlot + 1} 列。`);
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 出现在地城中！` });
-          } else {
-            discardCardToGraveyard(card, { owner: 'player' });
-            addGameLog('event', `${card.name}：地城没有空位，已送入坟场。`);
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `地城没有空位，${card.name} 已送入坟场。` });
-          }
-          applyTransformAndUpdateCategory(card);
+          // Reducer 处理放置 / 满位入坟 / transform 链。
+          // Hook 已通过上面的 UPDATE_BACKPACK_ITEMS 移除了来源。
+          // 注意：从背包打出 building 不触发"命运之刃自伤"（与旧行为一致）。
+          dispatch({ type: 'PLACE_BUILDING_IN_DUNGEON', card, source: 'backpack' });
           resetDragState();
           return;
         }
@@ -5849,27 +5808,27 @@ export default function GameBoard() {
           const cleanedCard = card.eventChoices
             ? { ...card, eventChoices: card.eventChoices.filter(c => c.effect !== 'crossroads-destroy-below') }
             : card;
+          // SET_CURRENT_EVENT reducer auto-enqueues APPLY_TRANSFORM_CATEGORY.
           dispatch({ type: 'SET_CURRENT_EVENT', card: cleanedCard });
           eventChoiceProcessingRef.current = false;
           dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: true });
-          applyTransformAndUpdateCategory(card);
           resetDragState();
           return;
         }
-        applyTransformAndUpdateCategory(card);
+        // RESOLVE_POTION / RESOLVE_MAGIC reducers auto-enqueue APPLY_TRANSFORM_CATEGORY.
         resetDragState();
         return;
       }
       // Purchasing from dungeon - auto-equip/use
       if (card.type === 'potion') {
         markDungeonCardPendingUse(card.id);
-        applyTransformAndUpdateCategory(card);
         stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
+        // RESOLVE_POTION reducer auto-enqueues APPLY_TRANSFORM_CATEGORY.
         dispatch({ type: 'RESOLVE_POTION', cardId: card.id, card } as any);
       } else if (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'curse') {
         markDungeonCardPendingUse(card.id);
-        applyTransformAndUpdateCategory(card);
         stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
+        // RESOLVE_MAGIC reducer auto-enqueues APPLY_TRANSFORM_CATEGORY.
         dispatch({ type: 'RESOLVE_MAGIC', cardId: card.id, card } as any);
       } else if (card.type === 'event' || (card.type === 'building' && card.eventChoices)) {
         const freshBladeCard =
@@ -6004,10 +5963,10 @@ export default function GameBoard() {
           }
         }
         startEventResolution(eventCard.id, 'dungeon');
+        // SET_CURRENT_EVENT reducer auto-enqueues APPLY_TRANSFORM_CATEGORY.
         dispatch({ type: 'SET_CURRENT_EVENT', card: eventCard });
         eventChoiceProcessingRef.current = false;
         dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: true });
-        applyTransformAndUpdateCategory(card);
         resetDragState();
         return;
       } else if (card.type === 'monster') {
@@ -6331,7 +6290,9 @@ export default function GameBoard() {
         discardCardToGraveyard(displaced, { owner: 'player' });
       }
 
-      applyTransformAndUpdateCategory(card);
+      // Reducer enqueues APPLY_TRANSFORM_CATEGORY (thin marker — placement
+      // bookkeeping above is unchanged).
+      dispatch({ type: 'EQUIP_AMULET_FROM_HAND', card });
 
       if (isCardFromHand(card)) {
         if (!consumeCardFromHand(card)) {
@@ -6627,7 +6588,9 @@ export default function GameBoard() {
         }
       }
 
-      applyTransformAndUpdateCategory(card);
+      // Reducer enqueues APPLY_TRANSFORM_CATEGORY (thin marker — capacity /
+      // displacement / on-equip bookkeeping above is unchanged).
+      dispatch({ type: 'EQUIP_FROM_HAND', card });
 
       if (isCardFromHand(card)) {
         const handArr = handCardsRef.current;

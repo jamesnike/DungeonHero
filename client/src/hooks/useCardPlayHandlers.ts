@@ -348,10 +348,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     dispatch({ type: 'TRIGGER_GRAVE_NOVA', card: graveNovaCard });
   }, [dispatch]);
 
-  const applyTransformAndUpdateCategory = (card: GameCardData) => {
-    dispatch({ type: 'APPLY_TRANSFORM_CATEGORY', card });
-  };
-
   const resolveFateSight = (card: GameCardData, target: GameCardData, baseDmg: number, peekCount: number) => {
     dispatch({
       type: 'RESOLVE_FATE_SIGHT',
@@ -905,7 +901,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
     handleHeroMagicCard,
     handlePlayCardFromHand,
-    applyTransformAndUpdateCategory,
 
     isPermanentMagicCard,
     normalizeEventEffect,

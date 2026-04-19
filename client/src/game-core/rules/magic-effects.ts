@@ -2106,8 +2106,9 @@ export function resolveKnightPermanentMagic(
 
     case 'blood-draw': {
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1 * echoMultiplier, source: 'blood-draw', selfInflicted: true });
+      const bloodDrawCount = ([3, 4, 5][card.upgradeLevel ?? 0] ?? 5) * echoMultiplier;
       const drawState = { ...state, ...patch } as GameState;
-      const drawResult = drawMultipleFromBackpack(drawState, 2 * echoMultiplier);
+      const drawResult = drawMultipleFromBackpack(drawState, bloodDrawCount);
       if (drawResult.cards.length > 0) {
         mergePatch(patch, drawResult.patch);
         for (const d of drawResult.cards) {

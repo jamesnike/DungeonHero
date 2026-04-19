@@ -675,6 +675,38 @@ export interface ApplyTransformCategoryAction {
   card: GameCardData;
 }
 
+/**
+ * 把一张 building 牌（含命运之刃 / 增幅祭坛等）从手牌或背包放进地城列。
+ * Reducer 自己负责：随机选空 slot、放置到 activeCards 或 discardedCards、emit 日志、
+ * 处理命运之刃自伤、末尾 enqueue APPLY_TRANSFORM_CATEGORY。
+ * Hook 仍负责调用前的来源清理（consumeCardFromHand / removeCard 等）。
+ */
+export interface PlaceBuildingInDungeonAction {
+  type: 'PLACE_BUILDING_IN_DUNGEON';
+  card: GameCardData;
+  source: 'hand' | 'backpack';
+}
+
+/**
+ * Thin marker — 标记"手牌打出装备（武器/盾/怪物装备）到装备栏"是一次 play。
+ * Reducer 仅 enqueue APPLY_TRANSFORM_CATEGORY；装备放置/displacement/on-equip 等
+ * 同步副作用仍由 hook 层处理。
+ */
+export interface EquipFromHandAction {
+  type: 'EQUIP_FROM_HAND';
+  card: GameCardData;
+}
+
+/**
+ * Thin marker — 标记"手牌打出护符到护符栏"是一次 play。
+ * Reducer 仅 enqueue APPLY_TRANSFORM_CATEGORY；护符放置/aura/displacement 等
+ * 仍由 hook 层处理。
+ */
+export interface EquipAmuletFromHandAction {
+  type: 'EQUIP_AMULET_FROM_HAND';
+  card: GameCardData;
+}
+
 export interface ResolveDeckJudgeAction {
   type: 'RESOLVE_DECK_JUDGE';
   card: GameCardData;
@@ -1761,6 +1793,9 @@ export type GameAction =
   | AmplifyCardsByNameAction
   | ResolvePermGrantAction
   | ApplyTransformCategoryAction
+  | PlaceBuildingInDungeonAction
+  | EquipFromHandAction
+  | EquipAmuletFromHandAction
   | ResolveDeckJudgeAction
   | ResolveFateSightAction
   | ResolveStatSwapAction

@@ -765,7 +765,21 @@ function reduceCompleteHeroMagic(
     payload: { magicId, origin },
   });
 
-  return applyPatch(state, patch, sideEffects);
+  // 英雄魔法完成时纳入 transform 链。COMPLETE_HERO_MAGIC 是所有成功完成路径
+  // （同步：monster-doom / berserker-rage / revive-blessing 单装备；交互：
+  // holy-light / revive-blessing 多装备 → APPLY_REVIVE_BLESSING）的汇聚点。
+  // 失败的早期退出（未掌握、pending、未充能、no-equipment 等）不会走到这里。
+  const syntheticHeroMagicCard = {
+    id: magicId,
+    type: 'hero-magic',
+    name: magicId,
+    value: 0,
+  } as GameCardData;
+  const enqueuedActions: GameAction[] = [
+    { type: 'APPLY_TRANSFORM_CATEGORY', card: syntheticHeroMagicCard },
+  ];
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------

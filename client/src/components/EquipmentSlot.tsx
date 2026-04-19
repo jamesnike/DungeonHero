@@ -265,6 +265,17 @@ export default function EquipmentSlot({
       onClick={onClick ? handleClick : undefined}
       style={{ '--dh-hero-instance-scale': appliedSlotScale.toString() } as CSSProperties}
     >
+      {/* Drop-zone extension below the slot — extends the receive area downward
+          so the upper half of a dragged card hovering past the bottom edge still equips. */}
+      <div
+        aria-hidden
+        className="absolute left-0 right-0 top-full"
+        style={{
+          height: '20%',
+          pointerEvents: acceptsDrop ? 'auto' : 'none',
+          zIndex: 1,
+        }}
+      />
       {/* Permanent bonus header */}
       {type === 'equipment' && (
         <div

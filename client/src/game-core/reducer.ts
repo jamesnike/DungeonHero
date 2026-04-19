@@ -188,9 +188,9 @@ function computeAmuletCounterDisplay(
       return `${state.recycleBackpackProgress ?? 0}/${threshold}`;
     }
     case 'flip-overkill-lifesteal':
-      return `${state.flipOverkillLifestealProgress ?? 0}/8`;
+      return `${state.flipOverkillLifestealProgress ?? 0}/5`;
     case 'equip-amulet-cap':
-      return `${state.equipAmuletCapProgress ?? 0}/8`;
+      return `${state.equipAmuletCapProgress ?? 0}/6`;
     case 'stun-attempt-discover':
       return `${state.stunAttemptDiscoverProgress ?? 0}/6`;
     default:

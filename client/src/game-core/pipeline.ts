@@ -259,6 +259,10 @@ function isInputContinuation(action: GameAction): boolean {
     case 'ENTER_PLAYER_INPUT':
     case 'TRIGGER_GRAVE_NOVA':
     case 'PROCESS_HERO_MAGIC_CARD':
+    // Transform chain — enqueued by RESOLVE_MAGIC / RESOLVE_POTION /
+    // SET_CURRENT_EVENT / COMPLETE_HERO_MAGIC / PLACE_BUILDING_IN_DUNGEON /
+    // EQUIP_* as a follow-up; never a player input action.
+    case 'APPLY_TRANSFORM_CATEGORY':
       return true;
     default:
       return false;

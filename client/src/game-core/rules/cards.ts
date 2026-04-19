@@ -33,7 +33,7 @@ import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, comput
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
-import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT } from '../constants';
+import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp } from './magic-effects';
@@ -112,6 +112,19 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
       return reduceCancelPermGrant(state);
     case 'APPLY_TRANSFORM_CATEGORY':
       return reduceApplyTransformCategory(state, action);
+    case 'PLACE_BUILDING_IN_DUNGEON':
+      return reducePlaceBuildingInDungeon(state, action);
+    case 'EQUIP_FROM_HAND':
+    case 'EQUIP_AMULET_FROM_HAND':
+      // Thin marker — only purpose is to put the play through the transform chain.
+      // Hook layer still handles capacity/displacement/on-equip/etc. for these.
+      return {
+        state,
+        sideEffects: [],
+        enqueuedActions: [
+          { type: 'APPLY_TRANSFORM_CATEGORY', card: action.card },
+        ],
+      };
     case 'RESOLVE_DECK_JUDGE':
       return reduceResolveDeckJudge(state, action);
     case 'RESOLVE_FATE_SIGHT':
@@ -690,8 +703,8 @@ function reduceResolvePotion(
 ): ReduceResult {
   // Try card-schema engine first; fall back to legacy if not registered
   const engineResult = executeCardEffects(state, action.card);
-  if (engineResult) return engineResult;
-  return resolveAllPotionEffects(state, action.card);
+  const result = engineResult ?? resolveAllPotionEffects(state, action.card);
+  return appendTransformEnqueue(result, action.card);
 }
 
 // ---------------------------------------------------------------------------
@@ -703,8 +716,89 @@ function reduceResolveMagic(
   action: Extract<GameAction, { type: 'RESOLVE_MAGIC' }>,
 ): ReduceResult {
   const engineResult = executeMagicCardEffects(state, action.card, action.target, action.isFlank);
-  if (engineResult) return engineResult;
-  return resolveAllMagicEffects(state, action.card, action.target, action.isFlank);
+  const result = engineResult ?? resolveAllMagicEffects(state, action.card, action.target, action.isFlank);
+  return appendTransformEnqueue(result, action.card);
+}
+
+// ---------------------------------------------------------------------------
+// appendTransformEnqueue — helper to push APPLY_TRANSFORM_CATEGORY at the
+// END of a ReduceResult.enqueuedActions, so transform fires AFTER all the
+// reducer's own follow-up actions (matches the legacy hook-layer behavior of
+// dispatching RESOLVE_* and APPLY_TRANSFORM_CATEGORY sequentially).
+// ---------------------------------------------------------------------------
+
+function appendTransformEnqueue(result: ReduceResult, card: GameCardData): ReduceResult {
+  return {
+    ...result,
+    enqueuedActions: [
+      ...(result.enqueuedActions ?? []),
+      { type: 'APPLY_TRANSFORM_CATEGORY', card },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// PLACE_BUILDING_IN_DUNGEON — place a building card from hand or backpack
+// into a randomly chosen empty active-row slot. If no empty slot exists,
+// route the card to the player's graveyard. Always enqueues
+// APPLY_TRANSFORM_CATEGORY so the play participates in the transform chain.
+//
+// Hook layer is still responsible for *removing* the card from its source
+// (consumeCardFromHand / UPDATE_BACKPACK_ITEMS) BEFORE dispatching this
+// action; the reducer only performs the destination-side bookkeeping.
+// ---------------------------------------------------------------------------
+
+function reducePlaceBuildingInDungeon(
+  state: GameState,
+  action: Extract<GameAction, { type: 'PLACE_BUILDING_IN_DUNGEON' }>,
+): ReduceResult {
+  const { card, source } = action;
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+  const enqueuedActions: GameAction[] = [];
+
+  const emptySlots: number[] = [];
+  for (let i = 0; i < DUNGEON_COLUMN_COUNT; i++) {
+    if (state.activeCards[i] == null) emptySlots.push(i);
+  }
+
+  if (emptySlots.length > 0) {
+    const [targetSlot, nextRng] = pickRandom(emptySlots, state.rng);
+    patch.rng = nextRng;
+    const placed = { ...card, hasReleaseCharge: true, _fateBladeLastSlot: targetSlot } as GameCardData;
+    const nextRow = [...(state.activeCards as (GameCardData | null)[])];
+    nextRow[targetSlot] = placed;
+    patch.activeCards = nextRow as ActiveRowSlots;
+
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: `${card.name} 被放置到地城第 ${targetSlot + 1} 列。` },
+    });
+
+    // 命运之刃的"出手 -5HP"只在从手牌打出时触发，与 hook 层旧行为保持一致。
+    if (source === 'hand' && card.name === '命运之刃') {
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 5, source: 'general', selfInflicted: true });
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'event', message: '命运之刃：从手牌打出，失去 5 点生命。' },
+      });
+      patch.heroSkillBanner = `${card.name} 出现在地城中！失去 5 点生命。`;
+    } else {
+      patch.heroSkillBanner = `${card.name} 出现在地城中！`;
+    }
+  } else {
+    // 没空位 → 进入玩家坟场
+    enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card, owner: 'player' });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: `${card.name}：地城没有空位，已送入坟场。` },
+    });
+    patch.heroSkillBanner = `地城没有空位，${card.name} 已送入坟场。`;
+  }
+
+  enqueuedActions.push({ type: 'APPLY_TRANSFORM_CATEGORY', card });
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------

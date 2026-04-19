@@ -40,6 +40,9 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
   const [viewerOpen, setViewerOpen] = useState(false);
   const graveyardRef = useRef<HTMLDivElement>(null);
   const compactRef = useRef<HTMLButtonElement>(null);
+  // Inner visible strip — used for mobile drop hit-testing so the wider invisible
+  // hit-extension on the outer button only applies to mouse (HTML5) drag, not touch.
+  const compactInnerRef = useRef<HTMLSpanElement>(null);
   const isReadyToReceive = shouldHighlight && isDropTarget;
   const isHoverActive = isReadyToReceive && isOver;
   
@@ -58,12 +61,14 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
     return cleanup;
   }, [onDrop]);
 
-  // Set up mobile drop support (compact button)
+  // Mobile drop: register on the inner visible strip (NOT the wider outer button),
+  // so finger drops only register when the touch actually lands on the visible
+  // sidebar — avoiding false positives near the right equipment slot.
   useEffect(() => {
-    if (!compact || !compactRef.current || !onDrop) return;
+    if (!compact || !compactInnerRef.current || !onDrop) return;
 
     const cleanup = initMobileDrop(
-      compactRef.current,
+      compactInnerRef.current,
       (dragData) => {
         onDrop(dragData.data);
       },
@@ -75,6 +80,8 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
 
   // Mobile: mirror onDragEnter/onDragLeave by tracking touch position over the
   // compact button so the scale-up "drop target" effect also works on touch.
+  // Hit-test against the INNER visible strip (not the wider outer button), so
+  // the visual feedback only triggers when the finger actually touches the strip.
   useEffect(() => {
     if (!compact || !isDropTarget) {
       setDragDepth(0);
@@ -85,7 +92,7 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
     const handleMobileMove = (e: Event) => {
       const detail = (e as CustomEvent).detail as DragData | undefined;
       if (!detail || (detail.type !== 'card' && detail.type !== 'equipment')) return;
-      const el = compactRef.current;
+      const el = compactInnerRef.current;
       if (!el) return;
       const cx = detail.clientX;
       const cy = detail.clientY;
@@ -204,6 +211,7 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
             style={outerStyle}
           >
             <span
+              ref={compactInnerRef}
               className={cn(
                 'flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
                 // Mirror the BackpackZone compact button's drag-feedback rules
@@ -273,7 +281,7 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
       )}
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto" data-testid="graveyard-viewer-modal">
+        <DialogContent className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto" data-testid="graveyard-viewer-modal">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Skull className="w-6 h-6" />

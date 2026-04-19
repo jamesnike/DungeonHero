@@ -33,8 +33,21 @@ export function reduceEventActions(state: GameState, action: GameAction): Reduce
       return reduceResolveEventChoice(state, action);
     case 'CONTINUE_EVENT_EFFECTS':
       return reduceContinueEventEffects(state);
-    case 'SET_CURRENT_EVENT':
-      return applyPatch(state, { currentEventCard: action.card });
+    case 'SET_CURRENT_EVENT': {
+      const result = applyPatch(state, { currentEventCard: action.card });
+      // 当事件卡被放入 currentEventCard 时，视为"打出一张事件牌"，触发 transform 链。
+      // action.card === null 表示关闭事件 modal，不算 play。
+      if (action.card) {
+        return {
+          ...result,
+          enqueuedActions: [
+            ...(result.enqueuedActions ?? []),
+            { type: 'APPLY_TRANSFORM_CATEGORY', card: action.card },
+          ],
+        };
+      }
+      return result;
+    }
     case 'RESOLVE_EVENT_GRANT_EQUIP_FLIP_REPAIR':
       return reduceResolveEventGrantEquipFlipRepair(state, action);
     default:

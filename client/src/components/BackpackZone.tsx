@@ -39,6 +39,9 @@ function BackpackZoneInner({
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const dropRef = useRef<HTMLDivElement>(null);
   const compactRef = useRef<HTMLButtonElement>(null);
+  // Inner visible strip — used for mobile drop hit-testing so the wider invisible
+  // hit-extension on the outer button only applies to mouse (HTML5) drag, not touch.
+  const compactInnerRef = useRef<HTMLSpanElement>(null);
   const [dragDepth, setDragDepth] = useState(0);
   const isOver = dragDepth > 0;
 
@@ -58,10 +61,13 @@ function BackpackZoneInner({
     return cleanup;
   }, [onDrop]);
 
+  // Mobile drop: register on the inner visible strip (NOT the wider outer button),
+  // so finger drops only register when the touch actually lands on the visible
+  // sidebar — avoiding false positives near the right equipment slot.
   useEffect(() => {
-    if (!compact || !compactRef.current || !onDrop) return;
+    if (!compact || !compactInnerRef.current || !onDrop) return;
     const cleanup = initMobileDrop(
-      compactRef.current,
+      compactInnerRef.current,
       (dragData) => {
         if (dragData.type === 'card') {
           onDrop(dragData.data as GameCardData);
@@ -74,6 +80,8 @@ function BackpackZoneInner({
 
   // Mobile: mirror onDragEnter/onDragLeave by tracking touch position over the
   // compact button so the scale-up "drop target" effect also works on touch.
+  // Hit-test against the INNER visible strip (not the wider outer button), so
+  // the visual feedback only triggers when the finger actually touches the strip.
   useEffect(() => {
     if (!compact || !isDropTarget) {
       setDragDepth(0);
@@ -84,7 +92,7 @@ function BackpackZoneInner({
     const handleMobileMove = (e: Event) => {
       const detail = (e as CustomEvent).detail as DragData | undefined;
       if (!detail || detail.type !== 'card') return;
-      const el = compactRef.current;
+      const el = compactInnerRef.current;
       if (!el) return;
       const cx = detail.clientX;
       const cy = detail.clientY;
@@ -184,6 +192,7 @@ function BackpackZoneInner({
         style={outerStyle}
       >
         <span
+          ref={compactInnerRef}
           className={cn(
             'flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
             isDropTarget && isOver

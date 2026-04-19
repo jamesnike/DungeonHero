@@ -162,6 +162,17 @@ export default function AmuletSlot({
       data-testid="slot-amulet"
       style={{ '--dh-hero-instance-scale': appliedSlotScale.toString() } as CSSProperties}
     >
+      {/* Drop-zone extension below the slot — extends the receive area downward
+          so the upper half of a dragged card hovering past the bottom edge still equips. */}
+      <div
+        aria-hidden
+        className="absolute left-0 right-0 top-full"
+        style={{
+          height: '20%',
+          pointerEvents: isDropTarget ? 'auto' : 'none',
+          zIndex: 1,
+        }}
+      />
       {hasAmulets ? (
         <div
           className={`relative h-full w-full overflow-visible transition-opacity duration-200 ${
