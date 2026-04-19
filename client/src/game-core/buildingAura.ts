@@ -31,7 +31,7 @@ export function getAdjacentEquipmentSlotsForDungeonColumn(dungeonCol: number): E
       if (nc === HERO_EQUIP_COL.equipmentSlot2) set.add('equipmentSlot2');
     }
   }
-  return [...set];
+  return Array.from(set);
 }
 
 function isSuppressTempAttackAura(card: GameCardData | null | undefined): boolean {

@@ -1,0 +1,183 @@
+/**
+ * UI State Reducers — handles pending-action state machines and modal toggles.
+ *
+ * These actions replace useEngineSetter calls for fields that represent
+ * pending user interactions (modals, prompts, targeting contexts).
+ */
+
+import type { GameState } from '../types';
+import type { GameAction } from '../actions';
+import type { ReduceResult } from '../reducer';
+import { applyPatch } from '../reducer';
+
+export function reduceUIStateActions(
+  state: GameState,
+  action: GameAction,
+): ReduceResult | null {
+  switch (action.type) {
+    // --- Pending-action state machines ---
+
+    case 'SET_PENDING_MAGIC':
+      return applyPatch(state, { pendingMagicAction: action.payload });
+
+    case 'SET_PENDING_POTION':
+      return applyPatch(state, { pendingPotionAction: action.payload });
+
+    case 'SET_PENDING_HERO_SKILL':
+      return applyPatch(state, { pendingHeroSkillAction: action.payload });
+
+    case 'SET_PENDING_HERO_MAGIC':
+      return applyPatch(state, { pendingHeroMagicAction: action.payload });
+
+    case 'SET_DEATH_WARD_PROMPT':
+      return applyPatch(state, { deathWardPrompt: action.payload });
+
+    case 'SET_CARD_ACTION_CONTEXT':
+      return applyPatch(state, { cardActionContext: action.payload });
+
+    case 'SET_GRAVEYARD_DISCOVER_STATE': {
+      const patch: Partial<GameState> = { graveyardDiscoverState: action.payload };
+      if (action.delivery !== undefined) {
+        patch.graveyardDiscoverDelivery = action.delivery;
+      }
+      return applyPatch(state, patch);
+    }
+
+    case 'SET_PERM_GRANT_MODAL':
+      return applyPatch(state, { permGrantModal: action.payload });
+
+    case 'SET_EQUIPMENT_PROMPT':
+      return applyPatch(state, { equipmentPrompt: action.payload });
+
+    case 'SET_MIRROR_COPY_MODAL':
+      return applyPatch(state, { mirrorCopyModal: action.payload });
+
+    case 'SET_AMPLIFY_MODAL':
+      return applyPatch(state, { amplifyModal: action.payload });
+
+    case 'SET_EVENT_DICE_MODAL':
+      return applyPatch(state, { eventDiceModal: action.payload });
+
+    case 'SET_MAGIC_CHOICE_MODAL':
+      return applyPatch(state, { magicChoiceModal: action.payload });
+
+    case 'SET_PERSUADE_STATE':
+      return applyPatch(state, { persuadeState: action.payload });
+
+    case 'SET_EVENT_TRANSFORM_STATE':
+      return applyPatch(state, { eventTransformState: action.payload });
+
+    case 'SET_HAND_MAGIC_UPGRADE_MODAL':
+      return applyPatch(state, { handMagicUpgradeModal: action.payload });
+
+    case 'SET_GHOST_BLADE_EXILE_CARDS': {
+      const enqueuedActions: GameAction[] = [];
+      if (action.payload === null && state.monsterRewardQueue.length > 0 && !state.activeMonsterReward) {
+        enqueuedActions.push({ type: 'DEQUEUE_MONSTER_REWARD' });
+      }
+      return applyPatch(state, { ghostBladeExileCards: action.payload }, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);
+    }
+
+    case 'SET_PREVIEW_CARDS':
+      return applyPatch(state, { previewCards: action.payload });
+
+    case 'SET_SWAP_UPGRADE_PROGRESS':
+      return applyPatch(state, { swapUpgradeProgress: action.payload });
+
+    // --- UI modal toggles ---
+
+    case 'SET_EVENT_MODAL_OPEN':
+      return applyPatch(state, { eventModalOpen: action.open });
+
+    case 'SET_EVENT_MODAL_MINIMIZED':
+      return applyPatch(state, { eventModalMinimized: action.minimized });
+
+    case 'SET_DELETE_MODAL_OPEN':
+      return applyPatch(state, { deleteModalOpen: action.open });
+
+    case 'SET_UPGRADE_MODAL_OPEN': {
+      const patch: Partial<GameState> = { upgradeModalOpen: action.open };
+      if (action.maxCount !== undefined) {
+        patch.upgradeModalMaxCount = action.maxCount;
+      }
+      return applyPatch(state, patch);
+    }
+
+    case 'SET_DISCOVER_MODAL': {
+      const patch: Partial<GameState> = { discoverModalOpen: action.open };
+      if (action.options !== undefined) {
+        patch.discoverOptions = action.options;
+      }
+      if (action.sourceLabel !== undefined) {
+        patch.discoverSourceLabel = action.sourceLabel;
+      }
+      // When closing the modal, drain one pending class-discover from the queue
+      // so multi-discover effects (e.g. 弃装重铸) pop modals one at a time.
+      const enqueuedActions: GameAction[] = [];
+      if (!action.open && state.pendingClassDiscoverQueue.length > 0) {
+        const [nextEntry, ...rest] = state.pendingClassDiscoverQueue;
+        patch.pendingClassDiscoverQueue = rest;
+        enqueuedActions.push({
+          type: 'BEGIN_DISCOVER',
+          source: nextEntry.source,
+          pool: state.classDeck,
+          sourceLabel: nextEntry.sourceLabel ?? undefined,
+        });
+      }
+      return applyPatch(state, patch, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);
+    }
+
+    case 'SET_SHOP_MODAL_OPEN':
+      return applyPatch(state, { shopModalOpen: action.open });
+
+    case 'SET_SHOP_MODAL_MINIMIZED':
+      return applyPatch(state, { shopModalMinimized: action.minimized });
+
+    case 'SET_HERO_SKILL_BANNER':
+      return applyPatch(state, { heroSkillBanner: action.message });
+
+    case 'SET_GAME_OVER':
+      return applyPatch(state, { gameOver: true, victory: action.victory });
+
+    // --- UI / Phase / Meta flags ---
+
+    case 'SET_PHASE':
+      return applyPatch(state, { phase: action.phase });
+
+    case 'SET_UNDO_COUNT':
+      return applyPatch(state, { undoCount: action.count });
+
+    case 'SET_HYDRATED':
+      return applyPatch(state, { isHydrated: true });
+
+    case 'SET_DRAW_PENDING':
+      return applyPatch(state, { drawPending: action.value });
+
+    case 'SET_SHOW_SKILL_SELECTION':
+      return applyPatch(state, { showSkillSelection: action.show });
+
+    case 'SET_SHOW_CARD_DRAFT':
+      return applyPatch(state, { showCardDraft: action.show });
+
+    case 'SET_CARD_DRAFT_POOL':
+      return applyPatch(state, { cardDraftPool: action.pool });
+
+    case 'SET_TOTAL_WINS':
+      return applyPatch(state, { totalWins: action.count });
+
+    case 'SET_SELECTED_MONSTER_REWARDS':
+      return applyPatch(state, { selectedMonsterRewards: action.options });
+
+    case 'SET_RESOLVING_DUNGEON_CARD':
+      return applyPatch(state, { resolvingDungeonCardId: action.cardId });
+
+    case 'RESET_RECYCLE_FORGE_COUNT':
+      return applyPatch(state, { recycleForgePlayCount: 0 });
+
+    case 'SELECT_HERO_SKILL':
+      return applyPatch(state, { selectedHeroSkill: action.skillId });
+
+    default:
+      return null;
+  }
+}

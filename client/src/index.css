@@ -1235,6 +1235,45 @@ html {
     box-shadow: 0 0 0 1px hsl(var(--primary) / 0.35), 0 2px 5px rgba(0,0,0,0.2);
   }
 
+  /* "已翻转" badge — appears top-right on cards that resulted from a stay flip
+     (i.e. card._flipBackCard is set). Distinct desaturated palette so it
+     reads as "this already happened" rather than the brighter
+     pre-flip "翻转" pill. */
+  .dh-card__flipped-badge {
+    position: absolute;
+    top: calc(0.4rem * var(--dh-card-instance-scale, 1));
+    right: calc(0.45rem * var(--dh-card-instance-scale, 1));
+    padding: calc(0.18rem * var(--dh-card-instance-scale, 1)) calc(0.45rem * var(--dh-card-instance-scale, 1));
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: calc(0.58rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
+    color: rgba(248, 250, 252, 0.95);
+    background: linear-gradient(135deg, rgba(71, 85, 105, 0.92), rgba(51, 65, 85, 0.92));
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.55), 0 4px 10px rgba(0,0,0,0.28);
+    letter-spacing: 0.06em;
+    z-index: 12;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: calc(0.22rem * var(--dh-card-instance-scale, 1));
+  }
+
+  .dh-card__flipped-badge--compact {
+    top: calc(0.15rem * var(--dh-card-instance-scale, 1));
+    right: calc(0.2rem * var(--dh-card-instance-scale, 1));
+    padding: calc(0.08rem * var(--dh-card-instance-scale, 1)) calc(0.25rem * var(--dh-card-instance-scale, 1));
+    font-size: calc(0.42rem * var(--dh-card-font-scale, 1) * var(--dh-card-instance-scale, 1));
+    gap: calc(0.14rem * var(--dh-card-instance-scale, 1));
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.4), 0 2px 5px rgba(0,0,0,0.22);
+  }
+
+  .dh-card__flipped-badge-icon {
+    display: inline-block;
+    line-height: 1;
+    transform: translateY(-1px);
+    font-size: 1.05em;
+  }
+
   .dh-card__text-area {
     padding: calc(0.25rem * var(--dh-card-instance-scale, 1));
   }

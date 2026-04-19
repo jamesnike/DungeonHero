@@ -128,7 +128,10 @@ function DungeonRowInner({
             pendingMagicAction?.effect === 'shuffle-dungeon' ||
             pendingMagicAction?.effect === 'dungeon-swap-select' ||
             pendingMagicAction?.effect === 'dungeon-preview-swap' ||
-            pendingMagicAction?.effect === 'fate-swap');
+            pendingMagicAction?.effect === 'fate-swap' ||
+            pendingMagicAction?.effect === 'flip-back-active' ||
+            pendingMagicAction?.effect === 'flip-active-card' ||
+            pendingMagicAction?.effect === 'deck-top-swap-gold');
         const monsterLayerValue =
           card && card.type === 'monster'
             ? Math.min(

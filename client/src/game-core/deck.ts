@@ -8,6 +8,8 @@
 import type { GameCardData, EventDiceRange } from '@/components/GameCard';
 import { FLIP_GOLD_REWARD } from './constants';
 import { getUpgradeTierCount } from '@/lib/monsterRage';
+import type { RngState } from './rng';
+import { nextInt, nextBool, shuffle as rngShuffle, pickRandom, nextId } from './rng';
 
 // ---------------------------------------------------------------------------
 // Monster images
@@ -56,6 +58,10 @@ import potionWeaponRepairImageImport from '@assets/generated_images/cute_potion_
 const potionWeaponRepairImage = potionWeaponRepairImageImport;
 export { potionWeaponRepairImage };
 import potionEquipmentRepairImage from '@assets/generated_images/cute_potion_equipment_repair.png';
+import potionShieldFortifyImage from '@assets/generated_images/knight_potion_shield_fortify.png';
+import flipLifestealAmuletImage from '@assets/generated_images/knight_flip_lifesteal_amulet.png';
+import equipAmuletCapImage from '@assets/generated_images/knight_equip_amulet_cap_amulet.png';
+import stunDiscoverAmuletImage from '@assets/generated_images/knight_stun_discover_amulet.png';
 import potionBackpackAwakenImage from '@assets/generated_images/card_dedupe_potion_backpack_awaken.png';
 import potionInsightClassImage from '@assets/generated_images/card_dedupe_potion_insight.png';
 import potionEternalInscribeImage from '@assets/generated_images/card_dedupe_potion_eternal_perm.png';
@@ -76,6 +82,7 @@ import balanceAmuletImage from '@assets/generated_images/chibi_balance_amulet.pn
 import lifestealAmuletImage from '@assets/generated_images/chibi_lifesteal_amulet.png';
 import flashAmuletImage from '@assets/generated_images/chibi_flash_amulet.png';
 import forgeHeartAmuletImage from '@assets/generated_images/chibi_forge_heart_amulet.png';
+import arcSealAmuletImage from '@assets/generated_images/knight_arc_seal_amulet.png';
 
 // ---------------------------------------------------------------------------
 // Skill / Event images (re-exported for use by GameBoard)
@@ -105,6 +112,7 @@ import dedupeMagicShadowSpikeFlipImage from '@assets/generated_images/card_dedup
 import dedupeMagicChaosImpactFlipImage from '@assets/generated_images/card_dedupe_magic_chaos_impact_flip.png';
 import dedupeMagicTimeMirrorFlipImage from '@assets/generated_images/card_dedupe_magic_time_mirror_flip.png';
 import dedupeMagicVoidSwapImage from '@assets/generated_images/card_dedupe_magic_void_swap.png';
+import dedupeMagicWeaponManualImage from '@assets/generated_images/card_dedupe_knight_magic_battle_spirit.png';
 import dedupeEventFateCrossroadsImage from '@assets/generated_images/card_dedupe_event_fate_crossroads.png';
 import dedupeEventSecretVaultImage from '@assets/generated_images/card_dedupe_event_secret_vault.png';
 import dedupeEventSecretVaultOpenImage from '@assets/generated_images/card_dedupe_event_secret_vault_open.png';
@@ -206,43 +214,47 @@ export function patchPersistedMainDeckWeaponImage(card: GameCardData): GameCardD
 // pruneEventChoicesToThree
 // ---------------------------------------------------------------------------
 
-export function pruneEventChoicesToThree(card: GameCardData): GameCardData {
+export function pruneEventChoicesToThree(
+  card: GameCardData,
+  rng: RngState,
+): [GameCardData, RngState] {
+  let cur = rng;
+
   if (card.type !== 'event' || !card.eventChoices) {
     if (card.flipTarget?.toCard?.type === 'event') {
-      return {
-        ...card,
-        flipTarget: {
-          ...card.flipTarget,
-          toCard: pruneEventChoicesToThree(card.flipTarget.toCard),
+      const [innerCard, rngI] = pruneEventChoicesToThree(card.flipTarget.toCard, cur);
+      cur = rngI;
+      return [
+        {
+          ...card,
+          flipTarget: {
+            ...card.flipTarget,
+            toCard: innerCard,
+          },
         },
-      };
+        cur,
+      ];
     }
-    return card;
+    return [card, cur];
   }
 
   const fallbackChoices = card.eventChoices.filter(c => c.requiresDisabledChoices?.length);
   let choices = card.eventChoices.filter(c => !c.requiresDisabledChoices?.length);
 
   if (choices.length > 3) {
-    const indices = Array.from({ length: choices.length }, (_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-    choices = [choices[indices[0]], choices[indices[1]], choices[indices[2]]];
+    const [shuffledChoices, rngS] = rngShuffle(choices, cur);
+    cur = rngS;
+    choices = [shuffledChoices[0], shuffledChoices[1], shuffledChoices[2]];
   }
 
   choices = choices.map(choice => {
     if (!choice.diceTable || choice.diceTable.length <= 3) return choice;
-    const dIndices = Array.from({ length: choice.diceTable.length }, (_, i) => i);
-    for (let i = dIndices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [dIndices[i], dIndices[j]] = [dIndices[j], dIndices[i]];
-    }
+    const [shuffledDice, rngD] = rngShuffle(choice.diceTable, cur);
+    cur = rngD;
     const picked: EventDiceRange[] = [
-      { ...choice.diceTable[dIndices[0]], range: [1, 7] },
-      { ...choice.diceTable[dIndices[1]], range: [8, 14] },
-      { ...choice.diceTable[dIndices[2]], range: [15, 20] },
+      { ...shuffledDice[0], range: [1, 7] },
+      { ...shuffledDice[1], range: [8, 14] },
+      { ...shuffledDice[2], range: [15, 20] },
     ];
     return { ...choice, diceTable: picked, hint: `35% ${picked[0].label} / 35% ${picked[1].label} / 30% ${picked[2].label}` };
   });
@@ -261,26 +273,56 @@ export function pruneEventChoicesToThree(card: GameCardData): GameCardData {
   let result: GameCardData = { ...card, eventChoices: choices };
 
   if (result.flipTarget?.toCard?.type === 'event') {
+    const [innerCard, rngI] = pruneEventChoicesToThree(result.flipTarget.toCard, cur);
+    cur = rngI;
     result = {
       ...result,
       flipTarget: {
         ...result.flipTarget,
-        toCard: pruneEventChoicesToThree(result.flipTarget.toCard),
+        toCard: innerCard,
       },
     };
   }
 
-  return result;
+  return [result, cur];
 }
 
 // ---------------------------------------------------------------------------
 // createDeck
 // ---------------------------------------------------------------------------
 
-export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] {
+export function createDeck(
+  mode: 'normal' | 'quick' = 'normal',
+  rng?: RngState,
+): [GameCardData[], RngState] {
   const deck: GameCardData[] = [];
   let id = 0;
   const isQuick = mode === 'quick';
+
+  // Seeded RNG threading. If no rng is passed (legacy call sites), fall back to
+  // a fresh seed based on the time so we still don't crash but get a deterministic
+  // run for that single call.
+  let cur: RngState = rng ?? { seed: Date.now() | 0, state: Date.now() | 0 };
+  const randInt = (min: number, max: number): number => {
+    const [v, next] = nextInt(cur, min, max);
+    cur = next;
+    return v;
+  };
+  const randShuffle = <T>(arr: readonly T[]): T[] => {
+    const [v, next] = rngShuffle(arr, cur);
+    cur = next;
+    return v;
+  };
+  const randPick = <T>(arr: readonly T[]): T => {
+    const [v, next] = pickRandom(arr, cur);
+    cur = next;
+    return v;
+  };
+  const randBool = (p = 0.5): boolean => {
+    const [v, next] = nextBool(cur, p);
+    cur = next;
+    return v;
+  };
 
     const monsterPrefixes: Record<string, string[]> = {
       Dragon: ['Ancient', 'Crimson', 'Shadow', 'Storm', 'Frost', 'Ember', 'Iron', 'Void', 'Thunder', 'Ashen', 'Feral', 'Dread'],
@@ -300,7 +342,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       const used = usedPrefixes[typeName];
       if (used.size >= pool.length) used.clear();
       let idx: number;
-      do { idx = Math.floor(Math.random() * pool.length); } while (used.has(idx));
+      do { idx = randInt(0, pool.length - 1); } while (used.has(idx));
       used.add(idx);
       return `${pool[idx]} ${typeName}`;
     };
@@ -371,9 +413,9 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     const monsterCount = isQuick ? 7 : 21;
     for (let i = 0; i < monsterCount; i++) {
       const monsterType = monsterTypes[i % monsterTypes.length];
-      const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
-      const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
-      const fury = Math.floor(Math.random() * (monsterType.maxFury - monsterType.minFury + 1)) + monsterType.minFury;
+      const attack = randInt(monsterType.minAttack, monsterType.maxAttack);
+      const hp = randInt(monsterType.minHp, monsterType.maxHp);
+      const fury = randInt(monsterType.minFury, monsterType.maxFury);
       
       deck.push({
         id: `monster-${id++}`,
@@ -421,12 +463,12 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     // Quick mode: only 3 randomly chosen types get elites (as additional monster cards)
     let eliteTypes = Object.keys(monstersByType);
     if (isQuick) {
-      eliteTypes = [...eliteTypes].sort(() => Math.random() - 0.5).slice(0, 3);
+      eliteTypes = randShuffle(eliteTypes).slice(0, 3);
       for (const type of eliteTypes) {
         const monsterType = monsterTypes.find(mt => mt.name === type)!;
-        const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
-        const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
-        const fury = Math.floor(Math.random() * (monsterType.maxFury - monsterType.minFury + 1)) + monsterType.minFury;
+        const attack = randInt(monsterType.minAttack, monsterType.maxAttack);
+        const hp = randInt(monsterType.minHp, monsterType.maxHp);
+        const fury = randInt(monsterType.minFury, monsterType.maxFury);
         const eliteCard: GameCardData = {
           id: `monster-${id++}`,
           type: 'monster',
@@ -462,7 +504,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       if (isQuick && !eliteTypes.includes(type)) continue;
       const spec = specialMap[type];
       if (!spec || !monsters.length) continue;
-      const chosen = monsters[Math.floor(Math.random() * monsters.length)];
+      const chosen = randPick(monsters);
       chosen.monsterSpecial = spec.tag;
       chosen.monsterSpecialDesc = spec.desc;
       chosen.description = spec.desc;
@@ -501,8 +543,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     const goblinsForTrick = deck.filter(
       (c): c is GameCardData => c.type === 'monster' && c.monsterType === 'Goblin',
     );
-    if (goblinsForTrick.length > 0 && (!isQuick || Math.random() < 0.5)) {
-      const trickCarrier = goblinsForTrick[Math.floor(Math.random() * goblinsForTrick.length)];
+    if (goblinsForTrick.length > 0 && (!isQuick || randBool(0.5))) {
+      const trickCarrier = randPick(goblinsForTrick);
       trickCarrier.goblinTrickCarrier = true;
     }
 
@@ -516,12 +558,12 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     { name: '奥术之刃', image: arcaneBladeImage },
     { name: '战锤', image: warhammerImage },
   ];
-  const selectedWeapons = [...weaponTypes].sort(() => Math.random() - 0.5).slice(0, 6);
-  
+  const selectedWeapons = randShuffle(weaponTypes).slice(0, 6);
+
   for (let i = 0; i < 6; i++) {
     const weaponType = selectedWeapons[i];
-    const value = Math.floor(Math.random() * 5) + 2;
-    const durability = Math.floor(Math.random() * 4) + 1;
+    const value = randInt(2, 6);
+    const durability = randInt(1, 4);
     const card: GameCardData = {
       id: `weapon-${id++}`,
       type: 'weapon',
@@ -539,14 +581,14 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       card.maxDurability = 2;
     }
     if (weaponType.name === '虚灵刀') {
-      card.durability = Math.floor(Math.random() * 2) + 2;
+      card.durability = randInt(2, 3);
       card.maxDurability = card.durability;
       card.ghostBladeExile = true;
       card.description = '每次攻击后，可从坟场选择卡牌移除出游戏。';
     }
     if (weaponType.name === 'Mace') {
-      card.value = Math.floor(Math.random() * 2) + 1;
-      card.durability = Math.floor(Math.random() * 2) + 2;
+      card.value = randInt(1, 2);
+      card.durability = randInt(2, 3);
       card.maxDurability = card.durability;
       card.description = '入场：该装备栏临时攻击 +2。攻击后掷骰：50% 概率不消耗耐久。';
       card.weaponDurabilitySaveChance = 50;
@@ -561,7 +603,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       card.description = '入场：下次劝降成功率 +10%。攻击后，可自毁来发现专属牌。';
     }
     if (weaponType.name === 'Sword') {
-      card.value = Math.floor(Math.random() * 3) + 4;
+      card.value = randInt(4, 6);
       card.durability = 1;
       card.maxDurability = 1;
       card.waterfallAttackBoost = 1;
@@ -569,15 +611,15 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       card.description = '每次瀑流触发时，攻击力 +1。遗言：获得 4 金币。';
     }
     if (weaponType.name === '奥术之刃') {
-      card.value = Math.floor(Math.random() * 2) + 1;
-      const abDurability = Math.floor(Math.random() * 2) + 2;
+      card.value = randInt(1, 2);
+      const abDurability = randInt(2, 3);
       card.durability = abDurability;
       card.maxDurability = abDurability;
       card.postAttackSpellDamage = 1;
       card.description = '攻击后，随机对一个怪物造成 1 点法术伤害（受法术伤害加成）。';
     }
     if (weaponType.name === '战锤') {
-      card.value = Math.floor(Math.random() * 3) + 1;
+      card.value = randInt(1, 3);
       card.durability = 2;
       card.maxDurability = 2;
       card.weaponStunChance = 40;
@@ -601,17 +643,17 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     const shieldType = shieldTypes[i % shieldTypes.length];
     let durability: number;
     if (shieldType.name === 'Wooden Shield') {
-      durability = Math.floor(Math.random() * 2) + 1; // 1-2
+      durability = randInt(1, 2);
     } else if (shieldType.name === 'Iron Shield') {
-      durability = Math.floor(Math.random() * 3) + 1; // 1-3
+      durability = randInt(1, 3);
     } else if (shieldType.name === '壁垒之盾') {
       durability = 2;
     } else {
-      durability = Math.floor(Math.random() * 2) + 1; // 1-2
+      durability = randInt(1, 2);
     }
     let shieldValue = shieldType.value;
     if (shieldType.name === '壁垒之盾') {
-      shieldValue = Math.floor(Math.random() * 2) + 1; // 1-2
+      shieldValue = randInt(1, 2);
     }
     const card: GameCardData = {
       id: `shield-${id++}`,
@@ -663,8 +705,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
           magicEffect: '永久魔法：使用时立即回复 2 点生命。',
           description: '使用时立即回复 2 点生命。使用后回到回收袋，瀑流后可再次使用。',
         },
-        destination: 'backpack',
-        banner: '治疗药水翻转成"治愈余韵"，已放入背包。',
+        destination: 'stay',
+        banner: '治疗药水翻转成"治愈余韵"！',
         message: '药水瓶中浮现淡淡的治愈光芒…',
       },
     },
@@ -726,8 +768,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
           magicEffect: '使用时从背包抽 1 张手牌，并永久法术伤害 +1。',
           description: '使用时从背包抽 1 张手牌，并永久法术伤害 +1。',
         },
-        destination: 'backpack',
-        banner: '药剂翻转成"余烬回响"，已放入背包。',
+        destination: 'stay',
+        banner: '药剂翻转成"余烬回响"！',
         message: '药剂残瓶翻转出新的符文光芒…',
       },
     },
@@ -762,6 +804,14 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       image: potionImage,
       potionEffect: 'grant-amulet-end-turn-draw',
       description: '获得永久护符「回合汲取」：每次结束英雄回合时，从背包抽 1 张牌。',
+    },
+    {
+      type: 'potion',
+      name: '雷震淬刃药',
+      value: 6,
+      image: starterPotionStunImage,
+      potionEffect: 'grant-weapon-stun-chance+40',
+      description: '选择装备栏中的一个武器，永久击晕率 +40%。',
     },
   ];
 
@@ -837,6 +887,14 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
       image: thunderStrikeAmuletImage,
       description: '光环：所有击晕率 +20%（仍受击晕上限约束）。',
       amuletEffect: 'stun-rate-boost',
+    },
+    {
+      type: 'amulet',
+      name: '弧能之符',
+      value: 5,
+      image: arcSealAmuletImage,
+      description: '每翻转一张牌，对激活行随机怪物造成 1 点法术伤害。多张可叠加。',
+      amuletEffect: 'flip-zap',
     },
   ];
 
@@ -1000,6 +1058,22 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
     description: '一次性魔法：选择一张装备栏或手牌中的装备/伤害魔法，生成一张永久魔法（Perm 2）对其进行增幅（武器攻击+2，护盾护甲+2，伤害魔法伤害+2）。',
   });
 
+  // 兵器谱：选择一个装备栏，本回合该装备栏攻击次数 +2（独立于全局额外攻击次数；
+  // 即使该栏为空也可生效，会附着在该栏上等待装备进入）。
+  // 上手关键词：当此卡进入手牌时（抽牌、坟场/回收袋/装备栏回手等），随机一个
+  // 装备栏临时攻击 +2。克隆/复制/初始发牌等不触发。
+  deck.push({
+    id: `magic-${id++}`,
+    type: 'magic',
+    name: '兵器谱',
+    value: 0,
+    image: dedupeMagicWeaponManualImage,
+    magicType: 'instant',
+    magicEffect: 'weapon-manual',
+    description: '一次性魔法：选择一个装备栏，本回合该装备栏攻击次数 +2。\n上手：随机一个装备栏临时攻击 +2。',
+    onEnterHandEffect: 'weapon-manual-onhand',
+  });
+
   // Event cards
   const crossroadsId = `event-${id++}`;
   deck.push({
@@ -1033,8 +1107,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         description: '永久魔法（Perm 2）：将地城行最左边的两张牌交换位置。',
         recycleDelay: 2,
       },
-      destination: 'backpack',
-      banner: '命运十字路口翻转为「命运挪移」，已放入背包。',
+      destination: 'stay',
+      banner: '命运十字路口翻转为「命运挪移」！',
     },
   });
 
@@ -1150,8 +1224,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         description: '每用过一次叠刺+1；卡面数字为叠刺层数。',
         scalingDamage: 1,
       },
-      destination: 'backpack',
-      message: '暗影契约翻转为「暗影之刺」，已放入背包。',
+      destination: 'stay',
+      message: '暗影契约翻转为「暗影之刺」！',
     },
   });
 
@@ -1179,8 +1253,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         description: `每有一张牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。可熔炉灵焰`,
         amuletEffect: 'flip-gold',
       },
-      destination: 'backpack',
-      banner: '共鸣熔炉翻转为「熔炉之心」，已放入背包。',
+      destination: 'stay',
+      banner: '共鸣熔炉翻转为「熔炉之心」！',
     },
   });
 
@@ -1247,9 +1321,9 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         magicEffect: '一次性：从坟场发现一张装备或护符（三选一）。',
         description: '从坟场发现一张装备或护符（三选一），加入背包。',
       },
-      destination: 'backpack',
+      destination: 'stay',
       message: '破坏祭坛翻转为「破印遗物」！',
-      banner: '破坏祭坛翻转为「破印遗物」，已放入背包。',
+      banner: '破坏祭坛翻转为「破印遗物」！',
     },
   });
 
@@ -1560,8 +1634,45 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         magicEffect: '永久魔法：对一个怪物造成 3 点伤害。超杀：抽 2 张牌。(可超手牌上限)',
         description: '对一个怪物造成 3 点伤害。超杀：抽 2 张牌。(可超手牌上限)',
       },
-      destination: 'backpack',
+      destination: 'stay',
       message: '混沌骰局翻转为混沌冲击！',
+    },
+  });
+
+  const volleyDiceId = `event-${id++}`;
+  deck.push({
+    id: volleyDiceId,
+    type: 'event',
+    name: '弹幕骰局',
+    value: 0,
+    image: dedupeStarterMagicMissileImage,
+    description: '掷骰决定弹幕赐福，结束后翻转为「弹幕之符」放入背包。',
+    eventChoices: [
+      {
+        text: '掷出不同结果：4魔弹/瀑流增幅护符/法强超杀+1/魔弹击晕护符/魔弹抽牌护符/Lv1魔法飞弹。',
+        hint: '约 17% 概率触发任一结果',
+        diceTable: [
+          { id: 'volley-bolts', range: [1, 4], label: '获得 4 张「魔弹」（满手时入背包/回收袋）', effect: 'gainBolts:4' },
+          { id: 'volley-amplify-relic', range: [5, 7], label: '永恒护符·瀑流增幅魔弹：每次瀑流，所有「魔弹」永久增幅 +1', effect: 'grantMissileWaterfallAmplify' },
+          { id: 'volley-spell', range: [8, 10], label: '法术伤害 +1，超杀吸血 +1', effect: ['spellDamage+1', 'spellLifesteal+1'] },
+          { id: 'volley-stun-relic', range: [11, 13], label: '永恒护符·震荡弹幕：所有「魔弹」造成伤害后 20% 击晕（受击晕上限影响）', effect: 'grantMissileStun20' },
+          { id: 'volley-draw-relic', range: [14, 16], label: '永恒护符·汲取弹幕：所有「魔弹」造成伤害后抽 1 张牌', effect: 'grantMissileDraw1' },
+          { id: 'volley-knight-missile', range: [17, 20], label: '获得 1 张 Lv1「魔法飞弹」（放入背包）', effect: 'grantKnightMagicMissileLv1' },
+        ],
+      },
+    ],
+    flipTarget: {
+      toCard: {
+        id: `${volleyDiceId}-flip`,
+        type: 'amulet',
+        name: '弹幕之符',
+        value: 0,
+        image: starterAmuletMissileImage,
+        amuletEffect: 'card-gain-missile',
+        description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
+      },
+      destination: 'backpack',
+      message: '弹幕骰局翻转为「弹幕之符」，已放入背包！',
     },
   });
 
@@ -1598,7 +1709,7 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         description: '永久魔法（Perm 2）：选择一个装备栏，临时攻击 +2，然后使得临时攻击和临时护甲相等（增加较低的一方）。',
         recycleDelay: 2,
       },
-      destination: 'backpack',
+      destination: 'stay',
       message: '时空收缩翻转为时空镜像！',
     },
   });
@@ -1662,8 +1773,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         description: '永久魔法（Perm 1）：造成 X 点伤害，X = 已使用的魔法卡数量。使用后计数清零。',
         recycleDelay: 1,
       },
-      destination: 'backpack',
-      message: '奥术回廊翻转为「奥术风暴」，已放入背包。',
+      destination: 'stay',
+      message: '奥术回廊翻转为「奥术风暴」！',
     },
   });
 
@@ -1799,8 +1910,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         description: '永久魔法（Perm 2）：弃置手牌中一张装备，将其攻击/护甲值随机附加到装备栏的某件装备上，并使该装备耐久上限+1、耐久+1。',
         recycleDelay: 2,
       },
-      destination: 'backpack',
-      message: '战备工坊翻转为「装备附魔」，已放入背包。',
+      destination: 'stay',
+      message: '战备工坊翻转为「装备附魔」！',
     },
     flipCondition: 'activeRowEquipment:1',
   });
@@ -1867,8 +1978,8 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
         magicEffect: 'altar-discard-discover',
         description: '一次性法术：弃回至多 2 张手牌，发现 1 张专属 Magic 卡。',
       },
-      destination: 'backpack',
-      message: '附魔祭坛翻转为「祭坛秘术」，已放入背包。',
+      destination: 'stay',
+      message: '附魔祭坛翻转为「祭坛秘术」！',
     },
   });
 
@@ -1949,6 +2060,54 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
   });
 
   // ---------------------------------------------------------------------------
+  // Event #22: 翻转之契 (Pact of Reversal)
+  // 命运反转，万物皆可翻面。本身右上角无翻转图标 —— 选项 3/4 通过 flipTo* token
+  // 让事件卡转化为新卡（放入背包/手牌），其它选项选完即消耗。
+  // ---------------------------------------------------------------------------
+  deck.push({
+    id: `event-${id++}`,
+    type: 'event',
+    name: '翻转之契',
+    value: 0,
+    image: eventScrollImage,
+    description: '命运反转，万物皆可翻面。选择一种翻转之力。',
+    eventChoices: [
+      {
+        text: '万象齐转（翻转激活行所有可翻转/已翻转的牌）',
+        effect: 'flipAllActiveRow',
+        hint: '从左到右依次翻转激活行所有右上角带「翻转/已翻转」图标的牌',
+      },
+      {
+        text: '掌握技艺（获得起始背包的「乾坤一翻」放入背包）',
+        effect: 'grantActiveRowFlip',
+        hint: '获得 1 张起始永久魔法「乾坤一翻」（选择当前行一张可翻转或已翻转的卡牌，将其翻转）',
+      },
+      {
+        text: '凝结翻印（翻转为护符「翻印之符」放入背包）',
+        effect: 'flipToFlipPersuadeAmulet',
+        hint: '翻转为新护符「翻印之符」：每翻转一张牌，下一次劝降成功率 +10%（叠加，劝降一次后清空）',
+      },
+      {
+        text: '凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包）',
+        effect: 'flipToFlipMonsterDebuffMagic',
+        hint: '翻转为新一次性魔法「翻覆震慑」：选择一个怪物，到下次瀑流前，每翻转一张牌该怪物攻击力 -1',
+      },
+      {
+        text: '铭刻技艺（赋予一张手牌：每次上手击晕上限 +3%）',
+        effect: 'grantHandStunCapBonus',
+        hint: '选择一张手牌，永久赋予其上手效果：进入手牌时击晕上限 +3%（永久，跟随该卡）',
+        requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+      },
+      {
+        text: '熔铸耐久（选一件装备：每翻转一次该装备恢复 1 耐久）',
+        effect: 'grantEquipFlipRepairBuff',
+        hint: '选择一件装备（含 reserve），永久赋予其词条：每次翻转触发时该装备恢复 1 耐久',
+        requires: [{ type: 'equipmentAny', message: '需要至少一件装备' }],
+      },
+    ],
+  });
+
+  // ---------------------------------------------------------------------------
   // Event #21: 英雄试炼 (Hero's Trial)
   // ---------------------------------------------------------------------------
   deck.push({
@@ -1994,17 +2153,14 @@ export function createDeck(mode: 'normal' | 'quick' = 'normal'): GameCardData[] 
   for (const [type, limit] of Object.entries(deckLimits) as [GameCardData['type'], number][]) {
     const indices = deck.reduce<number[]>((acc, c, i) => { if (c.type === type) acc.push(i); return acc; }, []);
     if (indices.length <= limit) continue;
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-    const removeSet = new Set(indices.slice(limit));
+    const shuffledIndices = randShuffle(indices);
+    const removeSet = new Set(shuffledIndices.slice(limit));
     for (let i = deck.length - 1; i >= 0; i--) {
       if (removeSet.has(i)) deck.splice(i, 1);
     }
   }
 
-  return deck.sort(() => Math.random() - 0.5);
+  return [randShuffle(deck), cur];
 }
 
 // ---------------------------------------------------------------------------
@@ -2017,6 +2173,7 @@ export const STARTER_CARD_IDS = {
   reshuffle: 'starter-perm-reshuffle',
   discardDraw: 'starter-perm-discard-draw',
   dungeonSwap: 'starter-perm-dungeon-swap',
+  activeRowFlip: 'starter-perm-active-row-flip',
   trainingBlade: 'starter-weapon-training-blade',
   shieldWallStarter: 'starter-shield-shield-wall',
   healEcho: 'starter-perm-heal-echo',
@@ -2048,6 +2205,7 @@ export const STARTER_CARD_IDS = {
   fateSwapDeep: 'starter-perm-fate-swap-deep',
   handLimitPotion: 'starter-potion-hand-limit',
   backpackSizePotion: 'starter-potion-backpack-size-2',
+  bothSlotsShieldPotion: 'starter-potion-both-slots-shield',
   stunStrike: 'starter-perm-stun-strike',
   attackPersuadeAmulet: 'starter-amulet-attack-persuade',
   cardGainMissileAmulet: 'starter-amulet-card-gain-missile',
@@ -2057,6 +2215,18 @@ export const STARTER_CARD_IDS = {
   recycleBackpackExpandAmulet: 'starter-amulet-recycle-backpack-expand',
   dungeonGoldAmulet: 'starter-amulet-dungeon-gold',
   recycleDrawMagic: 'starter-perm-recycle-draw',
+  surveyAction: 'starter-perm-survey-action',
+  missileForgeBlade: 'starter-weapon-missile-forge-blade',
+  bountyGoldBlade: 'starter-weapon-bounty-gold-blade',
+  rushAttackBlade: 'starter-weapon-rush-attack-blade',
+  legacyShield: 'starter-shield-legacy',
+  spiritGuardShield: 'starter-shield-spirit-guard',
+  flipOverkillLifestealAmulet: 'starter-amulet-flip-overkill-lifesteal',
+  equipAmuletCapAmulet: 'starter-amulet-equip-amulet-cap',
+  stunAttemptDiscoverAmulet: 'starter-amulet-stun-attempt-discover',
+  transformStreakStrike: 'starter-perm-transform-streak-strike',
+  flankSlotTempAttack: 'starter-perm-flank-slot-temp-attack',
+  deckTopSwapGold: 'starter-perm-deck-top-swap-gold',
 } as const;
 
 export function getStarterBaseId(cardId: string): string {
@@ -2080,9 +2250,10 @@ export function createStarterHealEchoCard(): GameCardData {
   };
 }
 
-export function createMagicBoltCard(): GameCardData {
-  return {
-    id: `missile-bolt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+export function createMagicBoltCard(rng: RngState): [GameCardData, RngState] {
+  const [id, nextRng] = nextId(rng, 'missile-bolt');
+  const card: GameCardData = {
+    id,
     type: 'magic',
     name: '魔弹',
     value: 0,
@@ -2092,6 +2263,7 @@ export function createMagicBoltCard(): GameCardData {
     magicEffect: '一次性：选择一个怪物，造成 1 点法术伤害。',
     description: '选择一个怪物，造成 1 点法术伤害。',
   } as GameCardData;
+  return [card, nextRng];
 }
 
 // ---------------------------------------------------------------------------
@@ -2158,6 +2330,21 @@ export function createStarterCardPool(): GameCardData[] {
       description: '扭转地城秩序，将最左与最右的卡牌互换。',
       recycleDelay: 2,
       maxUpgradeLevel: 2,
+    },
+    {
+      // 乾坤一翻 — Perm 2. Choose an active-row card whose face can change
+      // (has flipTarget OR _flipBackCard) and flip it to the other side.
+      // No legal target → still consumed (play_full_cost_noop, mirrors 血誓回卷).
+      id: STARTER_CARD_IDS.activeRowFlip,
+      type: 'magic',
+      name: '乾坤一翻',
+      value: 0,
+      image: dedupeStarterWorldSwapImage,
+      magicType: 'permanent',
+      magicEffect: '永久魔法：选择当前行一张可翻转或已翻转的卡牌，将其翻转。',
+      description: '选择当前行一张可翻转或已翻转的卡牌，将其翻转到另一面。',
+      recycleDelay: 2,
+      maxUpgradeLevel: 0,
     },
     {
       id: STARTER_CARD_IDS.trainingBlade,
@@ -2272,6 +2459,63 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 3,
       onEquipEffect: 'other-slot-durability+1',
       description: '入场：另一个装备栏的装备 +1 耐久。',
+    },
+    {
+      id: STARTER_CARD_IDS.missileForgeBlade,
+      type: 'weapon',
+      name: '魔弹冶刃',
+      value: 2,
+      image: starterPersuadeBladeImage,
+      durability: 2,
+      maxDurability: 2,
+      overkillAmplifyMissile: 1,
+      description: '超杀：所有「魔弹」永久增幅 +1（每次超杀触发一次）。',
+    },
+    {
+      id: STARTER_CARD_IDS.bountyGoldBlade,
+      type: 'weapon',
+      name: '赏金之剑',
+      value: 2,
+      image: starterBountyBladeImage,
+      durability: 2,
+      maxDurability: 2,
+      onEquipEffect: 'gold+6',
+      description: '入场：金币 +6。',
+    },
+    {
+      id: STARTER_CARD_IDS.rushAttackBlade,
+      type: 'weapon',
+      name: '足锡冲锋',
+      value: 1,
+      image: starterNoviceSwordImage,
+      durability: 2,
+      maxDurability: 2,
+      onEquipEffect: 'temp-attack-3',
+      description: '入场：该装备栏临时攻击 +3。',
+    },
+    {
+      id: STARTER_CARD_IDS.legacyShield,
+      type: 'shield',
+      name: '遗愿重盾',
+      value: 3,
+      image: starterGuardianShieldImage,
+      durability: 2,
+      maxDurability: 2,
+      armorMax: 3,
+      onDestroyEffect: 'slot-temp-armor-3',
+      description: '遗言：该装备栏临时护甲 +3。',
+    },
+    {
+      id: STARTER_CARD_IDS.spiritGuardShield,
+      type: 'shield',
+      name: '灵潢守盾',
+      value: 2,
+      image: starterLinkShieldImage,
+      durability: 3,
+      maxDurability: 3,
+      armorMax: 2,
+      waterfallTempArmor: 2,
+      description: '每次瀑流，该装备栏临时护甲 +2。',
     },
     {
       id: STARTER_CARD_IDS.healMagic,
@@ -2398,14 +2642,41 @@ export function createStarterCardPool(): GameCardData[] {
       description: '每处理 1 张地城牌，金币 +1。',
     },
     {
+      id: STARTER_CARD_IDS.flipOverkillLifestealAmulet,
+      type: 'amulet',
+      name: '翻血之符',
+      value: 0,
+      image: flipLifestealAmuletImage,
+      amuletEffect: 'flip-overkill-lifesteal',
+      description: '每翻转 8 张牌，超杀吸血永久 +1。',
+    },
+    {
+      id: STARTER_CARD_IDS.equipAmuletCapAmulet,
+      type: 'amulet',
+      name: '集甲之符',
+      value: 0,
+      image: equipAmuletCapImage,
+      amuletEffect: 'equip-amulet-cap',
+      description: '每装备 8 个装备，护符栏上限 +1。',
+    },
+    {
+      id: STARTER_CARD_IDS.stunAttemptDiscoverAmulet,
+      type: 'amulet',
+      name: '眩学之符',
+      value: 0,
+      image: stunDiscoverAmuletImage,
+      amuletEffect: 'stun-attempt-discover',
+      description: '每尝试击晕 6 次，发现一张专属牌。',
+    },
+    {
       id: STARTER_CARD_IDS.undyingBlessing,
       type: 'magic',
       name: '不灭赐福',
       value: 0,
       image: starterScrollReviveImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生）。',
-      description: '赋予装备复生能力。已复生的装备可再次赋予。',
+      magicEffect: '永久魔法：选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），然后失去 2 点生命。',
+      description: '赋予装备复生能力，失去 2 点生命。已复生的装备可再次赋予。',
       recycleDelay: 2,
       maxUpgradeLevel: 1,
     },
@@ -2448,11 +2719,26 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollRecycleEchoImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：被回收时，从背包抽 1 张牌。',
-      description: '被回收时，从背包抽 1 张牌。',
+      magicEffect: '永久魔法：使用：将回收袋洗回背包（所有牌剩余瀑流 -1，就绪的牌回背包）。被回收时，从背包抽 1 张牌。',
+      description: '使用：将回收袋洗回背包（所有牌剩余瀑流 -1，就绪的牌回背包）。被回收时，从背包抽 1 张牌。',
       recycleDelay: 1,
       onDiscardDraw: 1,
       maxUpgradeLevel: 2,
+    },
+    {
+      // 查阅动作 (Survey Action) — 起始背包 Perm 1：从背包抽 2 张牌。
+      // 上手：随机一个装备栏 临时攻击 +1（升级后 +2）。
+      id: STARTER_CARD_IDS.surveyAction,
+      type: 'magic',
+      name: '查阅动作',
+      value: 0,
+      image: dedupeStarterDiscardDrawImage,
+      magicType: 'permanent',
+      magicEffect: '永久魔法：从背包抽 2 张牌。',
+      description: '从背包抽 2 张牌。\n上手：随机一个装备栏 临时攻击 +1。',
+      recycleDelay: 1,
+      onEnterHandEffect: 'survey-action-onhand',
+      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.spellDmgPotion,
@@ -2529,6 +2815,15 @@ export function createStarterCardPool(): GameCardData[] {
       description: '背包上限 +3。',
     },
     {
+      id: STARTER_CARD_IDS.bothSlotsShieldPotion,
+      type: 'potion',
+      name: '盾坚药',
+      value: 0,
+      image: potionShieldFortifyImage,
+      potionEffect: 'perm-both-slots-shield+1',
+      description: '左右装备栏永久护甲 +1。',
+    },
+    {
       id: STARTER_CARD_IDS.stunStrike,
       type: 'magic',
       name: '雷震击',
@@ -2539,6 +2834,44 @@ export function createStarterCardPool(): GameCardData[] {
       description: '对一个怪物造成 1 点法术伤害 2 次，每次有 20% 概率击晕目标。',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
+    },
+    {
+      // 不设 `magicEffect`：避免被 `resolveEffectId` 短路到 `magic:<long-text>`。
+      // 走 starter-id 路径，由 card-schema/definitions/magic.ts 的
+      // `starter:starter-perm-transform-streak-strike` resolver 处理。
+      id: STARTER_CARD_IDS.transformStreakStrike,
+      type: 'magic',
+      name: '连环转律',
+      value: 0,
+      image: dedupeStarterCombatRallyImage,
+      magicType: 'permanent',
+      description: '造成 X 点法术伤害，X 为此前连续转型的次数（含本牌）。同类型连出会断链。',
+      recycleDelay: 2,
+      maxUpgradeLevel: 0,
+    },
+    {
+      // 同上：不设 `magicEffect`，走 starter-id 路径。
+      id: STARTER_CARD_IDS.flankSlotTempAttack,
+      type: 'magic',
+      name: '锐意鼓舞',
+      value: 0,
+      image: dedupeStarterCombatRallyImage,
+      magicType: 'permanent',
+      description: '左装备栏 +3 临时攻击；侧击则改为右装备栏 +3。升级 1：+5。',
+      recycleDelay: 1,
+      maxUpgradeLevel: 1,
+    },
+    {
+      // 同上：不设 `magicEffect`，走 starter-id 路径。
+      id: STARTER_CARD_IDS.deckTopSwapGold,
+      type: 'magic',
+      name: '运势博弈',
+      value: 0,
+      image: dedupeStarterWorldSwapImage,
+      magicType: 'permanent',
+      description: '与牌堆顶交换一张当前行卡牌；同类型奖励 +10 金币，否则 -1。',
+      recycleDelay: 2,
+      maxUpgradeLevel: 0,
     },
   ];
 }

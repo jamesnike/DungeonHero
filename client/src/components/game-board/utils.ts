@@ -54,9 +54,11 @@ import dedupeEventChaosDiceGameImage from '@assets/generated_images/card_dedupe_
 import dedupeEventCursedDiceImage from '@assets/generated_images/card_dedupe_knight_magic_fortune_wheel.png';
 import dedupeEventCursedDiceBuildingImage from '@assets/generated_images/card_dedupe_cursed_stele_building.png';
 import potionEternalInscribeImage from '@assets/generated_images/card_dedupe_potion_eternal_perm.png';
-import potionAmuletToRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
+import potionAmuletToRelicImage from '@assets/generated_images/potion_amulet_to_relic.png';
 
 import type { CardType, GameCardData } from '../GameCard';
+import type { RngState } from '@/game-core/rng';
+import { nextInt, shuffle as rngShuffle } from '@/game-core/rng';
 import {
   DEV_MODE,
   DUNGEON_COLUMNS,
@@ -157,6 +159,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasStrength: false,
   hasDualGuard: false,
   hasDiscardShock: false,
+  flipZapCount: 0,
   hasFlipGold: false,
   hasRecycleForge: false,
   hasLoneCard: false,
@@ -168,11 +171,20 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   persuadeGrantRecycleFetchCount: 0,
   hasDamageClassDiscover: false,
   hasPersuadeGraveyardStack: false,
+  hasStunRecycleToHand: false,
+  hasMonsterKillUpgrade: false,
+  hasAttackPersuadeDiscount: false,
+  hasCardGainMissile: false,
   hasSwapUpgrade: false,
   hasStunUpgradeCap: false,
   hasRecycleBackpackExpand: false,
   hasDungeonGold: false,
+  hasArmorHalveEndure: false,
+  hasMonsterEquipBuff: false,
   hasEndTurnDraw: false,
+  hasLastWordsMonsterDebuff: false,
+  stunRateBoost: 0,
+  hasStunGold: false,
 });
 
 export const logWaterfallInvariant = (
@@ -199,7 +211,7 @@ export const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: 
   Boolean(rect && clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom);
 
 export const isBackpackRestrictedCard = (card: GameCardData | null) =>
-  Boolean(card && (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion'));
+  Boolean(card && (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion' || card.type === 'curse'));
 
 export const getShopPrice = (card: GameCardData): number => {
   if (SHOP_TYPE_PRICES[card.type as CardType] !== undefined) {
@@ -262,8 +274,8 @@ export const clamp = (value: number, min = 0, max = 1) => Math.min(Math.max(valu
 export const easeInOutCubic = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
-export const getRandomInt = (min: number, max: number) =>
-  Math.floor(Math.random() * (max - min + 1)) + min;
+export const getRandomInt = (min: number, max: number, rng: RngState): [number, RngState] =>
+  nextInt(rng, min, max);
 
 export const logHeroMagic = (...args: unknown[]) => {
   if (!DEV_MODE) {
@@ -283,9 +295,10 @@ export const logBackpackDraw = (tag: string, payload?: unknown) => {
   }
 };
 
-export function createDeck(): GameCardData[] {
+export function createDeck(rng: RngState): [GameCardData[], RngState] {
   const deck: GameCardData[] = [];
   let id = 0;
+  let currentRng = rng;
 
   const monsterTypes = [
     {
@@ -372,9 +385,9 @@ export function createDeck(): GameCardData[] {
 
   for (let i = 0; i < 16; i++) {
     const monsterType = monsterTypes[i % monsterTypes.length];
-    const attack = Math.floor(Math.random() * (monsterType.maxAttack - monsterType.minAttack + 1)) + monsterType.minAttack;
-    const hp = Math.floor(Math.random() * (monsterType.maxHp - monsterType.minHp + 1)) + monsterType.minHp;
-    const fury = Math.floor(Math.random() * (monsterType.maxFury - monsterType.minFury + 1)) + monsterType.minFury;
+    let attack: number; [attack, currentRng] = nextInt(currentRng, monsterType.minAttack, monsterType.maxAttack);
+    let hp: number; [hp, currentRng] = nextInt(currentRng, monsterType.minHp, monsterType.maxHp);
+    let fury: number; [fury, currentRng] = nextInt(currentRng, monsterType.minFury, monsterType.maxFury);
     const isEliteMonster = ELITE_MONSTER_NAME_SET.has(monsterType.name);
 
     const monsterCard: GameCardData = {
@@ -406,12 +419,14 @@ export function createDeck(): GameCardData[] {
     { name: '奥术之刃', image: arcaneBladeImage },
     { name: '战锤', image: warhammerImage },
   ];
-  const selectedWeapons = [...weaponTypes].sort(() => Math.random() - 0.5).slice(0, 6);
+  let selectedWeapons: typeof weaponTypes;
+  [selectedWeapons, currentRng] = rngShuffle([...weaponTypes], currentRng);
+  selectedWeapons = selectedWeapons.slice(0, 6);
 
   for (let i = 0; i < 6; i++) {
     const weaponType = selectedWeapons[i];
-    const value = Math.floor(Math.random() * 5) + 2;
-    const durability = Math.floor(Math.random() * 4) + 1;
+    let value: number; [value, currentRng] = nextInt(currentRng, 2, 6);
+    let durability: number; [durability, currentRng] = nextInt(currentRng, 1, 4);
     const card: GameCardData = {
       id: `weapon-${id++}`,
       type: 'weapon',
@@ -429,7 +444,7 @@ export function createDeck(): GameCardData[] {
       card.maxDurability = 2;
     }
     if (weaponType.name === '虚灵刀') {
-      card.durability = Math.floor(Math.random() * 2) + 2;
+      [card.durability, currentRng] = nextInt(currentRng, 2, 3);
       card.maxDurability = card.durability;
       card.ghostBladeExile = true;
       card.description = '每次攻击后，可从坟场选择卡牌移除出游戏。';
@@ -455,15 +470,15 @@ export function createDeck(): GameCardData[] {
       card.description = '每次瀑流触发时，攻击力 +1。遗言：获得 4 金币。';
     }
     if (weaponType.name === '奥术之刃') {
-      card.value = Math.floor(Math.random() * 2) + 1;
-      const abDurability = Math.floor(Math.random() * 2) + 2;
+      [card.value, currentRng] = nextInt(currentRng, 1, 2);
+      let abDurability: number; [abDurability, currentRng] = nextInt(currentRng, 2, 3);
       card.durability = abDurability;
       card.maxDurability = abDurability;
       card.postAttackSpellDamage = 1;
       card.description = '攻击后，随机对一个怪物造成 1 点法术伤害（受法术伤害加成）。';
     }
     if (weaponType.name === '战锤') {
-      card.value = Math.floor(Math.random() * 3) + 1;
+      [card.value, currentRng] = nextInt(currentRng, 1, 3);
       card.durability = 2;
       card.maxDurability = 2;
       card.weaponStunChance = 40;
@@ -485,11 +500,11 @@ export function createDeck(): GameCardData[] {
   shieldDistribution.forEach(shieldType => {
     let durability: number;
     if (shieldType.name === 'Wooden Shield') {
-      durability = Math.floor(Math.random() * 2) + 1; // 1-2
+      [durability, currentRng] = nextInt(currentRng, 1, 2);
     } else if (shieldType.name === 'Iron Shield') {
-      durability = Math.floor(Math.random() * 3) + 1; // 1-3
+      [durability, currentRng] = nextInt(currentRng, 1, 3);
     } else {
-      durability = Math.floor(Math.random() * 2) + 2; // 2-3
+      [durability, currentRng] = nextInt(currentRng, 2, 3);
     }
     const card: GameCardData = {
       id: `shield-${id++}`,
@@ -549,7 +564,7 @@ export function createDeck(): GameCardData[] {
       value: 6,
       image: potionEternalInscribeImage,
       potionEffect: 'grant-perm-2',
-      description: '选择一张没有 Perm 属性的手牌，赋予 Perm 2（被移除后进入回收袋，经 2 次瀑流返回背包）。',
+      description: '选择一张没有 Perm 属性的手牌，赋予 Perm 3（被移除后进入回收袋，经 3 次瀑流返回背包）。',
     },
     {
       type: 'potion',
@@ -606,7 +621,7 @@ export function createDeck(): GameCardData[] {
       name: 'Catapult Amulet',
       value: 5,
       image: dedupeAmuletCatapultImage,
-      description: '每弃置1张牌，抽1张牌。',
+      description: '每手动弃置1张牌，抽2张牌。',
       amuletEffect: 'catapult',
     },
     {
@@ -1227,7 +1242,9 @@ export function createDeck(): GameCardData[] {
     ],
   });
 
-  return deck.sort(() => Math.random() - 0.5);
+  let shuffledDeck: GameCardData[];
+  [shuffledDeck, currentRng] = rngShuffle(deck, currentRng);
+  return [shuffledDeck, currentRng];
 }
 
 export function createStarterBackpack(): GameCardData[] {

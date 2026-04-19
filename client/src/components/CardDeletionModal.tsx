@@ -1,7 +1,9 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useEffect, useMemo, useState } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Backpack, Hand, Recycle, Shield, Sparkles, Trash2 } from 'lucide-react';
+import { Backpack, Check, Hand, Recycle, Shield, Sparkles, Trash2 } from 'lucide-react';
 import type { GameCardData } from './GameCard';
 import type { CardActionKeyword } from './game-board/types';
 import {
@@ -13,6 +15,8 @@ import {
 import { isRecyclableFromHand } from '@/game-core/helpers';
 
 export type CardSource = 'hand' | 'backpack' | 'recycleBag' | 'equipment' | 'amulet';
+
+export type CardDeletionSelection = { cardId: string; source: CardSource };
 
 interface CardDeletionModalProps {
   open: boolean;
@@ -29,6 +33,9 @@ interface CardDeletionModalProps {
   requiredCount?: number;
   remainingCount?: number;
   handOnly?: boolean;
+  selectionMode?: 'each' | 'batch';
+  maxCount?: number;
+  onBatchConfirm?: (selections: CardDeletionSelection[]) => void;
 }
 
 const sectionIconMap: Record<CardSource, typeof Backpack> = {
@@ -37,6 +44,14 @@ const sectionIconMap: Record<CardSource, typeof Backpack> = {
   recycleBag: Recycle,
   equipment: Shield,
   amulet: Sparkles,
+};
+
+const KEYWORD_BUTTON_LABEL: Record<CardActionKeyword, string> = {
+  delete: '删除',
+  'discard-only': '弃置',
+  'recycle-only': '回收',
+  'discard-recycle': '弃回',
+  'move-to': '移动',
 };
 
 export default function CardDeletionModal({
@@ -54,7 +69,21 @@ export default function CardDeletionModal({
   requiredCount,
   remainingCount,
   handOnly,
+  selectionMode = 'each',
+  maxCount,
+  onBatchConfirm,
 }: CardDeletionModalProps) {
+  const isBatch = selectionMode === 'batch' && !!onBatchConfirm;
+  const batchMax = maxCount ?? requiredCount ?? 1;
+
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    if (open) {
+      setSelectedKeys(new Set());
+    }
+  }, [open]);
+
   const headerTitle = title ?? '选择要删除的卡牌';
   const headerDescription =
     description ?? '删除后该卡牌会被送入坟场，无法再回到手牌或背包。';
@@ -70,6 +99,39 @@ export default function CardDeletionModal({
       );
     }
     return next;
+  };
+
+  const keyOf = (source: CardSource, cardId: string) => `${source}:${cardId}`;
+
+  const sourceLookup = useMemo(() => {
+    const map = new Map<string, { card: GameCardData; source: CardSource }>();
+    const add = (cards: GameCardData[], source: CardSource) => {
+      for (const c of cards) map.set(keyOf(source, c.id), { card: c, source });
+    };
+    add(handCards, 'hand');
+    add(backpackCards, 'backpack');
+    add(recycleBagCards, 'recycleBag');
+    add(equipmentCards, 'equipment');
+    add(amuletCards, 'amulet');
+    return map;
+  }, [handCards, backpackCards, recycleBagCards, equipmentCards, amuletCards]);
+
+  const handleCardClick = (cardId: string, source: CardSource) => {
+    if (!isBatch) {
+      onDeleteCard(cardId, source);
+      return;
+    }
+    const k = keyOf(source, cardId);
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(k)) {
+        next.delete(k);
+      } else {
+        if (next.size >= batchMax) return prev;
+        next.add(k);
+      }
+      return next;
+    });
   };
 
   const renderCardSection = (sectionTitle: string, cards: GameCardData[], source: CardSource) => {
@@ -98,41 +160,53 @@ export default function CardDeletionModal({
           <p className="text-xs text-muted-foreground">{emptyText}</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {filtered.map(card => (
-              <Card
-                key={`${source}-${card.id}`}
-                className="flex gap-3 p-3 cursor-pointer border-border/60 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                onClick={() => onDeleteCard(card.id, source)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={event => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onDeleteCard(card.id, source);
-                  }
-                }}
-              >
-                <div className="relative h-16 w-12 overflow-hidden rounded-sm bg-muted">
-                  {isMagicSpellCardType(card.type) ? (
-                    <MagicSpellPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
-                  ) : isEventCardType(card.type) ? (
-                    <EventPatternPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
-                  ) : (
-                    card.image && <img src={card.image} alt={card.name} className="h-full w-full object-cover" />
+            {filtered.map(card => {
+              const k = keyOf(source, card.id);
+              const isSelected = isBatch && selectedKeys.has(k);
+              const reachedMax = isBatch && !isSelected && selectedKeys.size >= batchMax;
+              return (
+                <Card
+                  key={`${source}-${card.id}`}
+                  className={`relative flex gap-3 p-3 cursor-pointer border-border/60 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+                    isSelected ? 'ring-2 ring-destructive bg-destructive/10' : ''
+                  } ${reachedMax ? 'opacity-50' : ''}`}
+                  onClick={() => handleCardClick(card.id, source)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      handleCardClick(card.id, source);
+                    }
+                  }}
+                >
+                  {isSelected && (
+                    <div className="absolute top-1 left-1 rounded-full bg-destructive text-destructive-foreground p-0.5">
+                      <Check className="w-3 h-3" />
+                    </div>
                   )}
-                  <Badge className="absolute top-1 right-1 text-[10px] px-1 py-0" variant="secondary">
-                    {card.type.toUpperCase()}
-                  </Badge>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold">{card.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{card.type}</p>
-                  {card.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">{card.description}</p>
-                  )}
-                </div>
-              </Card>
-            ))}
+                  <div className="relative h-16 w-12 overflow-hidden rounded-sm bg-muted">
+                    {isMagicSpellCardType(card.type) ? (
+                      <MagicSpellPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+                    ) : isEventCardType(card.type) ? (
+                      <EventPatternPreview card={card} aspect="none" className="absolute inset-0 h-full w-full rounded-sm" />
+                    ) : (
+                      card.image && <img src={card.image} alt={card.name} className="h-full w-full object-cover" />
+                    )}
+                    <Badge className="absolute top-1 right-1 text-[10px] px-1 py-0" variant="secondary">
+                      {card.type.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">{card.name}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{card.type}</p>
+                    {card.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{card.description}</p>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
@@ -144,8 +218,31 @@ export default function CardDeletionModal({
   const showBackpack = !handOnly && keyword === 'delete';
   const showRecycleBag = !handOnly && keyword === 'delete';
 
+  const confirmLabel = KEYWORD_BUTTON_LABEL[keyword] ?? '确认';
+
+  const handleBatchConfirm = () => {
+    if (!onBatchConfirm) return;
+    const selections: CardDeletionSelection[] = [];
+    Array.from(selectedKeys).forEach(k => {
+      const entry = sourceLookup.get(k);
+      if (entry) selections.push({ cardId: entry.card.id, source: entry.source });
+    });
+    onBatchConfirm(selections);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={next => {
+        if (!next && isBatch) {
+          if (onBatchConfirm) {
+            onBatchConfirm([]);
+            return;
+          }
+        }
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto" overlayClassName="bg-black/30">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -160,10 +257,16 @@ export default function CardDeletionModal({
               </span>
             )}
           </DialogDescription>
-          {requiredCount !== undefined && remainingCount !== undefined && requiredCount > 1 && (
+          {isBatch ? (
             <p className="text-xs text-muted-foreground">
-              还需选择 {remainingCount} / {requiredCount} 张卡牌
+              已选 {selectedKeys.size} / {batchMax} 张卡牌（最多 {batchMax} 张）
             </p>
+          ) : (
+            requiredCount !== undefined && remainingCount !== undefined && requiredCount > 1 && (
+              <p className="text-xs text-muted-foreground">
+                还需选择 {remainingCount} / {requiredCount} 张卡牌
+              </p>
+            )
           )}
         </DialogHeader>
 
@@ -174,6 +277,25 @@ export default function CardDeletionModal({
           {showBackpack && renderCardSection('背包', backpackCards, 'backpack')}
           {showRecycleBag && recycleBagCards.length > 0 && renderCardSection('回收袋', recycleBagCards, 'recycleBag')}
         </div>
+
+        {isBatch && (
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => onBatchConfirm?.([])}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBatchConfirm}
+              disabled={selectedKeys.size === 0}
+            >
+              {confirmLabel}
+              {selectedKeys.size > 0 ? `（${selectedKeys.size}）` : ''}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

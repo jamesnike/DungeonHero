@@ -23,6 +23,7 @@ interface CombatPanelProps {
   slotDurabilityUsedThisTurn: Record<EquipmentSlotId, number>;
   blockDurabilityPerSlot: number;
   amuletBlockDurabilityBonus?: number;
+  slotBattleSpiritBonus?: Record<string, number>;
   stageScale?: number;
   onDragHandlePointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
   isDragging?: boolean;
@@ -52,6 +53,7 @@ export default function CombatPanel({
   slotDurabilityUsedThisTurn,
   blockDurabilityPerSlot,
   amuletBlockDurabilityBonus = 0,
+  slotBattleSpiritBonus,
   stageScale = 1,
   onDragHandlePointerDown,
   isDragging = false,
@@ -336,7 +338,8 @@ export default function CombatPanel({
                     if (!item || (item.type !== 'shield' && item.type !== 'monster')) return null;
                     const used = slotDurabilityUsedThisTurn[sid] ?? 0;
                     const equipBonus = (item as any).equipBlockDurabilityBonus ?? 0;
-                    const effectiveLimit = blockDurabilityPerSlot + equipBonus + amuletBlockDurabilityBonus;
+                    const battleSpiritBonus = (slotBattleSpiritBonus ?? {})[sid] ?? 0;
+                    const effectiveLimit = blockDurabilityPerSlot + equipBonus + amuletBlockDurabilityBonus + battleSpiritBonus;
                     const remaining = Math.max(0, effectiveLimit - used);
                     const label = sid === 'equipmentSlot1' ? 'Left' : 'Right';
                     return (

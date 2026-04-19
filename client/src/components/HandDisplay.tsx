@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
+import { inFlightHandStore } from './game-board/in-flight-hand-store';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 
 const CARD_RATIO = 0.76;
@@ -48,6 +49,16 @@ function HandDisplayInner({
   dimForCombatLock = false,
   onCardClick,
 }: HandDisplayProps) {
+  // Read in-flight ids in the same render pass as the hand cards. The store
+  // is updated synchronously by GameBoard's flight handler *before* the
+  // engine's notify fires, so the freshly drawn card already appears in
+  // this set when React first renders its slot — the slot is painted with
+  // opacity: 0 from the first frame, no flash.
+  const inFlightCardIds = useSyncExternalStore(
+    inFlightHandStore.subscribe,
+    inFlightHandStore.getSnapshot,
+    inFlightHandStore.getSnapshot,
+  );
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [isDraggingCard, setIsDraggingCard] = useState(false);
@@ -201,6 +212,7 @@ function HandDisplayInner({
             const totalWidth = handCards.length * cardWidth * horizontalStepFactor;
             const startX = -totalWidth / 2;
             const cardX = startX + (index * cardWidth * horizontalStepFactor);
+            const isInFlight = inFlightCardIds?.has(card.id) ?? false;
 
             return (
               <div
@@ -218,16 +230,19 @@ function HandDisplayInner({
               >
                 <div
                   ref={el => { cardInnerRefs.current[index] = el; }}
-                  className={`h-full w-full flex items-end justify-center ${disableAnimations ? 'pointer-events-none' : 'pointer-events-auto'}`.trim()}
+                  className={`h-full w-full flex items-end justify-center ${disableAnimations || isInFlight ? 'pointer-events-none' : 'pointer-events-auto'}`.trim()}
                   style={{
                     transform: `translateY(${hiddenHeight}px) scale(1)`,
                     willChange: 'transform',
                     transition: disableAnimations ? 'none' : 'transform 200ms ease-out',
+                    opacity: isInFlight ? 0 : 1,
                   }}
                   onMouseEnter={() => activateHover(index)}
                   onMouseMove={() => activateHover(index)}
                   onMouseLeave={deactivateHover}
                   data-testid={`hand-card-${index}`}
+                  data-in-flight={isInFlight ? 'true' : undefined}
+                  aria-hidden={isInFlight ? true : undefined}
                 >
                   <GameCard
                     card={card}

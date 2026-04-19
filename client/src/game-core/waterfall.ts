@@ -14,7 +14,7 @@ import type {
 } from '@/components/game-board/types';
 import type { GameState } from './types';
 import { DUNGEON_COLUMN_COUNT, DUNGEON_COLUMNS } from './constants';
-import { getWaterfallPreviewDiscardDestination, flattenActiveRowSlots } from './helpers';
+import { getWaterfallPreviewDiscardDestination, flattenActiveRowSlots, getEmptyOrGhostColumns } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Plan the waterfall sequence (pure)
@@ -183,9 +183,10 @@ export function applyWaterfallEffect(
       };
 
     case 'destroyAllAmuletsAndDiscardHand':
+      // Curses are immune to forced discard — they remain in hand.
       return {
         amuletSlots: [],
-        handCards: [],
+        handCards: state.handCards.filter(c => c.type === 'curse'),
       };
 
     default:

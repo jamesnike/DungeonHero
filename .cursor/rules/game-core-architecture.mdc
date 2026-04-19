@@ -1,0 +1,70 @@
+---
+description: Game core architecture — deterministic reducer with action-driven state management
+alwaysApply: true
+---
+
+# Game Core Architecture
+
+The game uses a deterministic, action-driven architecture. All game logic lives in `client/src/game-core/`.
+
+## The Golden Rule
+
+```
+Hook → dispatch(ACTION) → Reducer mutates state + emits SideEffects → Hook listens via useGameEvent → triggers UI/animations
+```
+
+**NEVER** add game logic (RNG, HP changes, gold changes, card moves, equipment mutations) directly in hooks.
+**NEVER** mutate game state outside the reducer — `useEngineSetter` has been removed, `engine.setState()` is forbidden for game logic.
+
+## Core Principles
+
+1. **Single source of truth**: `GameState` in the engine, accessed via `useGameEngine()` / `useGameState()`
+2. **Action-driven**: State changes happen via `dispatch(GameAction)` → `reduce()` → `ReduceResult`
+3. **Pure reducers**: `reduce(state, action) → { state, sideEffects, enqueuedActions }` — no side effects in reducers
+4. **UI reacts to side effects**: Hooks subscribe to reducer-emitted events via `useGameEvent()`
+5. **Card effects are data-driven**: All card behaviors registered in `card-schema/definitions/`, never as inline branches
+
+## Where Things Live
+
+| Concern | Location | Example |
+|---------|----------|---------|
+| State mutation | `game-core/rules/*.ts` | `reduceDealDamageToMonster` |
+| Pure computation | `game-core/helpers.ts` | `computePersuadeSuccessRatePure` |
+| Side effect types | `game-core/event-bus.ts` (`GameEventMap`) | `'combat:monsterBleed'` |
+| Action types | `game-core/actions.ts` (`GameAction`) | `DEAL_DAMAGE_TO_MONSTER` |
+| UI reactions | Hooks via `useGameEvent` | `useGameEvent('combat:monsterBleed', ...)` |
+| Thin dispatch | Hooks | `dispatch({ type: 'USE_HERO_SKILL', skillId })` |
+
+## Reducer Structure (`game-core/rules/`)
+
+| Module | Actions Handled |
+|--------|----------------|
+| `cards.ts` | PLAY_CARD, DRAW_CARDS, RESOLVE_POTION, RESOLVE_MAGIC, EQUIP_CARD, APPLY_DISCARD_EFFECTS, APPLY_CARD_FLIP, DISPOSE_EQUIPMENT_CARD, TICK_RECYCLE_FORGE, RETURN_EQUIPMENT_TO_HAND, DELETE_CARD, etc. |
+| `combat.ts` | DEAL_DAMAGE_TO_MONSTER, MONSTER_DEFEATED, EXECUTE_LAST_WORDS, INITIATE_WEAPON_ATTACK, APPLY_HERO_KILL_EFFECTS, PERFORM_HERO_ATTACK, RESOLVE_BLOCK, PERFORM_SHIELD_BASH, etc. |
+| `dungeon.ts` | TRIGGER_WATERFALL, DRAW_DUNGEON_ROW, MONSTER_ENTERED_ROW, CHECK_WRAITH_PURIFICATION |
+| `economy.ts` | MODIFY_GOLD, SET_EQUIPMENT_SLOT, UPDATE_AMULET_SLOT, CONVERT_AMULETS_TO_GOLD, field mutations |
+| `equipment-effects.ts` | Equipment break/revive, last-words resolution, slot clear with promote |
+| `events.ts` | START_EVENT, RESOLVE_EVENT_CHOICE, APPLY_EVENT_EFFECT, RESOLVE_EVENT_INTERACTION, COMPLETE_EVENT |
+| `hero.ts` | USE_HERO_SKILL, RESOLVE_HERO_SKILL_TARGET, ACTIVATE_HERO_MAGIC, RESOLVE_HERO_MAGIC_TARGET, RESOLVE_MAGIC_SLOT_SELECTION, RESOLVE_MAGIC_MONSTER_SELECTION, RESOLVE_DUNGEON_CARD_SELECTION |
+| `shop.ts` | BEGIN_DISCOVER, CONFIRM_DELETE_CARD, APPLY_MONSTER_REWARD, REQUEST_GRAVEYARD_SELECTION, BEGIN_GHOST_BLADE_EXILE, SHOP_SELECT_SKILL |
+| `turn.ts` | START_TURN, END_TURN, ADVANCE_MONSTER_TURN, waterfall turn reset |
+| `waterfall.ts` | APPLY_WATERFALL_EFFECTS, APPLY_WATERFALL_DISCARD_EFFECTS (eternal relic effects, amulet temp mods, wraith enrage, discard-effect resolution) |
+| `potion-effects.ts` | Potion effect resolution (repair, stat boost, transform, perm-grant) |
+| `magic-effects.ts` | Magic effect resolution (damage spells, buffs, deck manipulation) |
+| `init.ts` | INIT_GAME — deck construction, hero selection, initial deal |
+| `ui-state.ts` | SET_DISCOVER_MODAL, SET_EVENT_MODAL_OPEN, SET_PERM_GRANT_MODAL, all UI modal state setters |
+
+## Rules
+
+- **Never** put game logic (state mutations, damage calc, effect resolution) in React hooks or components
+- **Always** use `dispatch()` to trigger state changes — never mutate state directly via setters
+- New card effects go in `card-schema/definitions/`, not as if/else branches
+- Side effects from reducers are `SideEffect[]` objects — hooks listen via `useGameEvent()`
+- The `drain()` mechanism processes `enqueuedActions` sequentially after each `reduce()`
+
+## When Adding a New Game Mechanic
+
+1. Define the action in `actions.ts`
+2. Add reducer logic in the appropriate `rules/*.ts` file
+3. Emit side effects for any UI needs (add types to `GameEventMap` in `event-bus.ts`)
+4. Hook dispatches the action and listens for side effects via `useGameEvent`

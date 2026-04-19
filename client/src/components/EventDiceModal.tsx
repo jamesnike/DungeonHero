@@ -13,6 +13,11 @@ interface EventDiceModalProps {
   autoRollTrigger: number;
   onRollResult: (value: number) => void;
   onClose?: () => void;
+  /**
+   * Pre-rolled D20 from reducer's seeded RNG. When provided, the dice animation
+   * will land on this value (UI is purely visual playback).
+   */
+  predeterminedRoll?: number | null;
 }
 
 export default function EventDiceModal({
@@ -25,6 +30,7 @@ export default function EventDiceModal({
   autoRollTrigger,
   onRollResult,
   onClose,
+  predeterminedRoll,
 }: EventDiceModalProps) {
   return (
     <Dialog open={open} onOpenChange={value => !value && onClose?.()}>
@@ -40,6 +46,7 @@ export default function EventDiceModal({
               interactive={false}
               autoRollTrigger={autoRollTrigger}
               onRoll={onRollResult}
+              targetValue={predeterminedRoll ?? undefined}
               className="min-h-[220px]"
             />
           </div>

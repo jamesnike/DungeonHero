@@ -373,6 +373,9 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 | Catapult Amulet | `catapult` | 每弃置1张牌，抽2张牌 |
 | Flash Amulet | `flash` | 攻击力减半，攻击次数+1 |
 | Strength Amulet | `strength` | 临时攻击+4，每次攻击自损2HP |
+| Graveyard Amulet | `persuade-graveyard-stack` | 劝降成功时，在原怪物格堆叠 2 张墓地随机牌 |
+| 雷击护符 | `stun-rate-boost` | 光环：所有击晕率 +20%（仍受击晕上限约束） |
+| 弧能之符 | `flip-zap` | 每翻转一张牌，对激活行随机怪物造成 1 点法术伤害（`max(0, 1 + permanentSpellDamageBonus)`）；多张可叠加，每张独立结算 |
 
 ### 6.6 骑士职业护符
 
@@ -687,15 +690,11 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - `hasRevive: true`
 - `bossRetaliationDamage: 3`（每次被攻击反击3点）
 - `bossLastStandAura: true`
-- `bossFuryDiceChance: true`
 
 **Boss末日光环** (`bossLastStandAura`)：
-- 当Boss只剩1层血时，在怪物回合开始：
-  - 攻击力 +5
-  - 血层 +1，HP恢复满
-
-**Boss韧性** (`bossFuryDiceChance`)：
-- 攻击后50%概率不掉血层（D20 ≤ 10）
+- 当Boss只剩1层血时，在每个怪物回合结束：
+  - 激活行所有怪物攻击力 +5
+  - 激活行所有怪物 血层 +1（不超过最大血层），HP恢复满
 
 ### 9.8 击晕状态 (`isStunned`)
 
@@ -713,7 +712,6 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - `dragonAttackNoLayerCost`（龙鳞护体）不生效
 - `dragonDamageRetaliation`（龙息反击）不生效
 - `dragonBleedDestroy`（流血破甲）不生效
-- `bossFuryDiceChance`（韧性免血层损失）不生效
 - 精英特殊能力（骨再生 `bone-regen`、幽魂重生 `wraith-rebirth`、虫母 `swarm-elite`）不触发
 
 **回合结束技能：**
@@ -767,12 +765,13 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 名称 | `magicType` | `knightEffect` | 效果 |
 |------|-------------|----------------|------|
-| 亡者之契 | instant | `monster-recruit` | 从坟场发现两张怪物牌（各3选1），加入手牌 |
+| 亡者之契 | instant | `monster-recruit` | 从坟场随机获得两张怪物牌，加入手牌 |
 | 浴血贪念 | instant | `blood-greed` | 获得金币 = `max(0, maxHp - hp)`，添加贪婪诅咒到背包 |
 | 铠甲贯刺 | permanent | `armor-strike` | 选择装备槽的护甲值 → 对怪物造成 `getSpellDamage(armor)` |
 | 残血终焉 | permanent | `missing-hp-smite` | 伤害 = `getSpellDamage(maxHp - hp)` |
 | 坟火新星 | permanent | `grave-nova` | 永久：被弃置时对所有怪物造成 `getSpellDamage(3/6)` 伤害（可升 1 级） |
 | 孤注一掷 | instant | `berserk-gambit` | HP降至1，本回合武器+4，每个武器栏可多攻击一次（与狂战叠加） |
+| 战意激发 | instant | `battle-spirit` | 选择一个装备栏：每英雄回合多攻击 +1（升级 +2），且每怪物回合格挡耐久上限 +1（升级 +2）；持续到下次瀑流 |
 | 回收灵焰 | permanent | `recycle-flare` | 立即恢复回收袋中的牌，从背包抽最多2张 |
 | 混沌骰运 | permanent | `chaos-dice` | D20掷骰，5种随机效果 |
 | 天眼审判 | permanent | `fate-sight` | 造成3点伤害，翻看牌堆顶3张牌，每有1张怪物牌20%击晕目标（Perm 2，可升级） |
@@ -920,6 +919,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 |------|------|
 | 双守护圣盾 | 完美格挡时永久+1护甲到该槽位 |
 | 雷霆符印 | 弃牌时对随机怪物造成伤害（`max(0, 1 + permanentSpellDamageBonus)`） |
+| 弧能之符 | 每次卡牌翻转（`APPLY_CARD_FLIP`，含 stay/backpack/hand/graveyard 各路由）对激活行随机怪物造成法术伤害（`max(0, 1 + permanentSpellDamageBonus)`）；多张独立触发 |
 
 ### 13.4 药水
 
@@ -1090,6 +1090,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
    - `hand`：放入手牌
    - 默认/`graveyard`：进坟场
 3. 如果有"熔炉之心"护符 (`hasFlipGold`)：获得 `FLIP_GOLD_REWARD(4)` 金币
+4. 如果有"弧能之符"护符 (`flipZapCount > 0`)：每张独立向激活行随机怪物释放一次法术伤害（`max(0, 1 + permanentSpellDamageBonus)`），通过 `card:flipShock` 事件由 UI 管线分别动画化结算
 
 ### 18.2 翻转回退 (`_flipBackCard`)
 
@@ -1145,6 +1146,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | D20 50%阈值 | 1–10 vs 11–20 | 通用 |
 | 坟火新星基础伤害 | 3 / 6（升级后） | GameBoard.tsx |
 | 雷霆符印伤害 | `max(0, 1 + permanentSpellDamageBonus)` | GameBoard.tsx |
+| 弧能之符伤害 | `max(0, 1 + permanentSpellDamageBonus)`（每张独立结算） | GameBoard.tsx |
 | 荣誉之血弃置伤害 | `getSpellDamage(1)` | GameBoard.tsx |
 | Boss反击伤害 | 3 | GameBoard.tsx |
 | Boss末日光环攻击加成 | +5 | GameBoard.tsx |

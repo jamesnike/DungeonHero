@@ -7,6 +7,8 @@
  */
 
 import type { GameCardData, HeroMagicId } from '@/components/GameCard';
+import type { RngState } from './rng';
+import { nextRandom, nextInt, nextBool, shuffle as rngShuffle, pickRandom } from './rng';
 import type {
   CombatState,
   CombatInitiator,
@@ -21,6 +23,8 @@ import type { EquipmentBuffSnapshot } from '@/lib/gameStorage';
 import type { GameState } from './types';
 import { initialCombatState, INITIAL_HP, STRENGTH_SELF_DAMAGE } from './constants';
 import { flattenActiveRowSlots } from './helpers';
+import { getHeroSkillById } from '@/lib/heroSkills';
+import type { HeroSkillId } from '@/lib/heroSkills';
 
 // ---------------------------------------------------------------------------
 // Pure computation: monster damage (overflow does NOT penetrate layers)
@@ -56,7 +60,7 @@ export function damageMonsterWithLayerOverflow(
   const newLayer = layers - 1;
 
   let attackBoost = 0;
-  if (monster.bleedEffect?.startsWith('attack+') && newLayer > 0 && !monster.isStunned) {
+  if (monster.bleedEffect?.startsWith('attack+') && newLayer > 0) {
     attackBoost = parseInt(monster.bleedEffect.replace('attack+', ''), 10) || 0;
   }
 
@@ -191,12 +195,14 @@ export interface EndHeroTurnResult {
   gambitSlotUsed: Record<string, number>;
   weaponExtraAttackUsed: Record<string, number>;
   logs: Array<{ type: string; message: string }>;
+  rng: RngState;
 }
 
 export function endHeroTurnPatch(
   state: GameState,
   heroTurnLayerLossIds: Set<string>,
 ): EndHeroTurnResult {
+  let rng = state.rng;
   const logs: Array<{ type: string; message: string }> = [];
   const engagedMonsters = flattenActiveRowSlots(state.activeCards).filter(
     c => c.type === 'monster' && state.combatState.engagedMonsterIds.includes(c.id),
@@ -211,6 +217,7 @@ export function endHeroTurnPatch(
       gambitSlotUsed: {},
       weaponExtraAttackUsed: {},
       logs: [{ type: 'combat', message: '战斗结束' }],
+      rng: state.rng,
     };
   }
 
@@ -239,7 +246,8 @@ export function endHeroTurnPatch(
         .map((c, i) => ({ card: c, index: i }))
         .filter(({ card }) => card && card.type === 'monster' && card.id !== monster.id && (card.currentLayer ?? card.fury ?? 1) < (card.fury ?? card.hpLayers ?? 1));
       if (otherMonsters.length > 0) {
-        const target = otherMonsters[Math.floor(Math.random() * otherMonsters.length)];
+        const [target, nextRng] = pickRandom(otherMonsters, rng);
+        rng = nextRng;
         const targetCard = target.card!;
         const targetLayer = (targetCard.currentLayer ?? targetCard.fury ?? 1) + 1;
         newActiveCards[target.index] = {
@@ -252,6 +260,36 @@ export function endHeroTurnPatch(
       }
     }
 
+  });
+
+  // Non-engaged dragons in the active row also trigger 龙息庇护:
+  // outside of combat the dragon cannot lose layers, so the "未掉血层" condition is implicitly satisfied.
+  const nonEngagedDragons = flattenActiveRowSlots(state.activeCards).filter(
+    c =>
+      c.type === 'monster' &&
+      c.eliteHealOtherMonster &&
+      !state.combatState.engagedMonsterIds.includes(c.id) &&
+      !c.isStunned &&
+      !heroTurnLayerLossIds.has(c.id),
+  );
+  nonEngagedDragons.forEach(dragon => {
+    const idx = newActiveCards.findIndex(c => c?.id === dragon.id);
+    if (idx < 0) return;
+    const otherMonsters = newActiveCards
+      .map((c, i) => ({ card: c, index: i }))
+      .filter(({ card }) => card && card.type === 'monster' && card.id !== dragon.id && (card.currentLayer ?? card.fury ?? 1) < (card.fury ?? card.hpLayers ?? 1));
+    if (otherMonsters.length > 0) {
+      const [target, nextRng] = pickRandom(otherMonsters, rng);
+      rng = nextRng;
+      const targetCard = target.card!;
+      const targetLayer = (targetCard.currentLayer ?? targetCard.fury ?? 1) + 1;
+      newActiveCards[target.index] = {
+        ...targetCard,
+        currentLayer: targetLayer,
+        hp: targetCard.maxHp ?? targetCard.hp ?? 0,
+      };
+      logs.push({ type: 'combat', message: `${dragon.name} 龙息庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
+    }
   });
 
   const sortedMonsters = [...engagedMonsters].sort((a, b) => {
@@ -280,6 +318,7 @@ export function endHeroTurnPatch(
     gambitSlotUsed: {},
     weaponExtraAttackUsed: {},
     logs,
+    rng,
   };
 }
 
@@ -355,7 +394,28 @@ export function finishCombatPatch(): Partial<GameState> {
     flashSlotUsed: {},
     gambitSlotUsed: {},
     weaponExtraAttackUsed: {},
+    heroStunned: false,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Max HP (pure computation, single source of truth)
+// ---------------------------------------------------------------------------
+
+export function computeMaxHp(state: GameState, amuletEffects: ActiveAmuletEffects): number {
+  const ironWillBonus = state.permanentSkills.includes('Iron Will') ? 3 : 0;
+  const heroSkillDef = getHeroSkillById(state.selectedHeroSkill as HeroSkillId | null);
+  const heroSkillBonus = heroSkillDef?.initialMaxHpBonus ?? 0;
+  const eternalMaxHpBonus = Array.isArray(state.eternalRelics)
+    ? state.eternalRelics.reduce((sum, r) => sum + (r.initialMaxHpBonus ?? 0), 0)
+    : 0;
+  const raw = INITIAL_HP
+    + (amuletEffects.aura.maxHp || 0)
+    + (state.permanentMaxHpBonus || 0)
+    + ironWillBonus
+    + heroSkillBonus
+    + eternalMaxHpBonus;
+  return Number.isFinite(raw) ? raw : INITIAL_HP;
 }
 
 // ---------------------------------------------------------------------------
@@ -376,30 +436,39 @@ export function computeHeal(
   baseAmount: number,
   amuletEffects: ActiveAmuletEffects,
 ): HealResult {
+  const safeHp = Number.isFinite(state.hp) ? state.hp : 0;
+  const safeTotalHealed = Number.isFinite(state.totalHealed) ? state.totalHealed : 0;
+  const safeHealAccum = Number.isFinite(state.healAccumulator) ? state.healAccumulator : 0;
+  const safeBase = Number.isFinite(baseAmount) ? baseAmount : 0;
+
   const multiplier = amuletEffects.hasHeal ? 2 : 1;
-  const adjustedAmount = Math.max(0, Math.floor(baseAmount * multiplier));
-  const maxHp = INITIAL_HP + state.permanentMaxHpBonus + amuletEffects.aura.maxHp;
-  const actualHeal = adjustedAmount <= 0 ? 0 : Math.min(adjustedAmount, Math.max(0, maxHp - state.hp));
+  const adjustedAmount = Math.max(0, Math.floor(safeBase * multiplier));
+  const maxHp = computeMaxHp(state, amuletEffects);
+  const actualHeal = adjustedAmount <= 0 ? 0 : Math.min(adjustedAmount, Math.max(0, maxHp - safeHp));
 
   const result: HealResult = {
-    hp: Math.min(maxHp, state.hp + adjustedAmount),
-    totalHealed: state.totalHealed + actualHeal,
-    healAccumulator: state.healAccumulator + actualHeal,
+    hp: Math.min(maxHp, safeHp + adjustedAmount),
+    totalHealed: safeTotalHealed + actualHeal,
+    healAccumulator: safeHealAccum + actualHeal,
     actualHeal,
   };
 
-  if (actualHeal > 0 && state.selectedHeroSkill === 'heal-to-damage') {
-    const prevAccum = state.healAccumulator;
+  const hasHealToDamage =
+    state.selectedHeroSkill === 'heal-to-damage' ||
+    state.eternalRelics.some(r => r.id === 'heal-to-damage');
+
+  if (actualHeal > 0 && hasHealToDamage) {
+    const prevAccum = safeHealAccum;
     const newAccum = prevAccum + actualHeal;
     const bonusGained = Math.floor(newAccum / 5) - Math.floor(prevAccum / 5);
     if (bonusGained > 0) {
       result.equipmentSlotBonuses = {
         equipmentSlot1: {
-          damage: state.equipmentSlotBonuses.equipmentSlot1.damage + bonusGained,
+          damage: (state.equipmentSlotBonuses.equipmentSlot1.damage || 0) + bonusGained,
           shield: state.equipmentSlotBonuses.equipmentSlot1.shield,
         },
         equipmentSlot2: {
-          damage: state.equipmentSlotBonuses.equipmentSlot2.damage + bonusGained,
+          damage: (state.equipmentSlotBonuses.equipmentSlot2.damage || 0) + bonusGained,
           shield: state.equipmentSlotBonuses.equipmentSlot2.shield,
         },
       };
@@ -431,14 +500,20 @@ export function computeDamage(
   rawDamage: number,
   amuletEffects: ActiveAmuletEffects,
   hasDeathWardCard: boolean,
+  opts?: { selfInflicted?: boolean },
 ): DamageResult {
-  let remaining = Math.max(0, Math.floor(rawDamage));
+  const safeHp = Number.isFinite(state.hp) ? state.hp : 0;
+  const safeTotalDmg = Number.isFinite(state.totalDamageTaken) ? state.totalDamageTaken : 0;
+  const safeTurnDmg = Number.isFinite(state.turnDamageTaken) ? state.turnDamageTaken : 0;
+  const safeShield = Number.isFinite(state.tempShield) ? state.tempShield : 0;
+
+  let remaining = Math.max(0, Math.floor(Number.isFinite(rawDamage) ? rawDamage : 0));
   if (remaining <= 0) {
     return {
-      hp: state.hp,
-      tempShield: state.tempShield,
-      totalDamageTaken: state.totalDamageTaken,
-      turnDamageTaken: state.turnDamageTaken,
+      hp: safeHp,
+      tempShield: safeShield,
+      totalDamageTaken: safeTotalDmg,
+      turnDamageTaken: safeTurnDmg,
       appliedDamage: 0,
       shieldAbsorbed: 0,
       gameOver: false,
@@ -446,7 +521,7 @@ export function computeDamage(
   }
 
   let shieldAbsorbed = 0;
-  let tempShield = state.tempShield;
+  let tempShield = safeShield;
   if (tempShield > 0 && remaining > 0) {
     shieldAbsorbed = Math.min(tempShield, remaining);
     remaining -= shieldAbsorbed;
@@ -455,22 +530,22 @@ export function computeDamage(
 
   if (remaining <= 0) {
     return {
-      hp: state.hp,
+      hp: safeHp,
       tempShield,
-      totalDamageTaken: state.totalDamageTaken,
-      turnDamageTaken: state.turnDamageTaken,
+      totalDamageTaken: safeTotalDmg,
+      turnDamageTaken: safeTurnDmg,
       appliedDamage: 0,
       shieldAbsorbed,
       gameOver: false,
     };
   }
 
-  if (remaining >= state.hp && hasDeathWardCard && !state.deathWardPrompt) {
+  if (remaining >= safeHp && hasDeathWardCard && !state.deathWardPrompt) {
     return {
-      hp: state.hp,
+      hp: safeHp,
       tempShield,
-      totalDamageTaken: state.totalDamageTaken,
-      turnDamageTaken: state.turnDamageTaken,
+      totalDamageTaken: safeTotalDmg,
+      turnDamageTaken: safeTurnDmg,
       appliedDamage: 0,
       shieldAbsorbed,
       gameOver: false,
@@ -478,23 +553,23 @@ export function computeDamage(
     };
   }
 
-  const newHp = Math.max(0, state.hp - remaining);
-  const appliedDamage = state.hp - newHp;
+  const newHp = Math.max(0, safeHp - remaining);
+  const appliedDamage = safeHp - newHp;
 
   const result: DamageResult = {
     hp: newHp,
     tempShield,
-    totalDamageTaken: state.totalDamageTaken + appliedDamage,
-    turnDamageTaken: state.turnDamageTaken + appliedDamage,
+    totalDamageTaken: safeTotalDmg + appliedDamage,
+    turnDamageTaken: safeTurnDmg + appliedDamage,
     appliedDamage,
     shieldAbsorbed,
     gameOver: newHp === 0,
   };
 
-  if (appliedDamage > 0 && amuletEffects.hasBloodrageAttack) {
+  if (appliedDamage > 0 && amuletEffects.hasBloodrageAttack && opts?.selfInflicted) {
     result.berserkTurnBuff = {
-      equipmentSlot1: (state.berserkTurnBuff.equipmentSlot1 ?? 0) + 3,
-      equipmentSlot2: (state.berserkTurnBuff.equipmentSlot2 ?? 0) + 3,
+      equipmentSlot1: (state.berserkTurnBuff.equipmentSlot1 ?? 0) + 2,
+      equipmentSlot2: (state.berserkTurnBuff.equipmentSlot2 ?? 0) + 2,
     };
   }
 
@@ -582,28 +657,107 @@ export function pruneStaleEngagedIds(
 // Monster turn-end effects (stun clear, wraith aura, boss last stand)
 // ---------------------------------------------------------------------------
 
+export interface DragonRegenEffect {
+  slotId: EquipmentSlotId;
+  itemName: string;
+  otherSlotId: EquipmentSlotId;
+  otherItemName: string;
+  newDurability: number;
+  maxDurability: number;
+  success: boolean;
+}
+
+export interface GoblinStackHealEffect {
+  monsterId: string;
+  monsterName: string;
+  restored: number;
+  fromLayer: number;
+  toLayer: number;
+}
+
+export interface GoblinStealTarget {
+  source: 'equip' | 'amulet';
+  slotId?: EquipmentSlotId;
+  itemId: string;
+  itemName: string;
+  goblinName: string;
+  colIndex: number;
+}
+
 export interface MonsterTurnEndResult {
   activeCards: ActiveRowSlots;
   logs: Array<{ type: string; message: string }>;
   banners: string[];
   wraithEnrage: boolean;
   wraithDestroyAmulet: boolean;
+  /** Monsters to force-engage via BEGIN_COMBAT (wraith enrage) */
+  monstersToEngage: Array<{ id: string; name: string }>;
+  /** Dragon regen effects on equipment */
+  dragonRegenEffects: DragonRegenEffect[];
+  /** Goblin stack heal results */
+  goblinStackHeals: GoblinStackHealEffect[];
+  /** Goblin steal targets (caller must apply equipment/amulet removal) */
+  goblinStealTargets: GoblinStealTarget[];
+  rng: RngState;
 }
 
 export function applyMonsterTurnEndEffects(
   activeCards: ActiveRowSlots,
   engagedMonsterIds: string[],
+  rngIn: RngState,
+  opts?: {
+    heroTookDamageThisMonsterTurn?: boolean;
+    equipmentSlot1?: GameCardData | null;
+    equipmentSlot2?: GameCardData | null;
+    activeCardStacks?: Record<number, GameCardData[]>;
+  },
 ): MonsterTurnEndResult {
+  let rng = rngIn;
   const logs: Array<{ type: string; message: string }> = [];
   const banners: string[] = [];
   let changed = false;
   let wraithEnrage = false;
   let wraithDestroyAmulet = false;
+  const dragonRegenEffects: DragonRegenEffect[] = [];
+  const goblinStackHeals: GoblinStackHealEffect[] = [];
+  const goblinStealTargets: GoblinStealTarget[] = [];
+  const monstersToEngage: Array<{ id: string; name: string }> = [];
 
-  // Check for wraith aura effects from engaged, non-stunned wraiths
+  // Dragon elite regen: if hero wasn't damaged, 50% chance to restore 1 durability on other equipment slot
+  if (opts && !opts.heroTookDamageThisMonsterTurn) {
+    const dragonSlots: Array<{ slotId: EquipmentSlotId; item: GameCardData }> = [];
+    if (opts.equipmentSlot1?.type === 'monster' && (opts.equipmentSlot1 as GameCardData).eliteRegenHeroTurn) {
+      dragonSlots.push({ slotId: 'equipmentSlot1', item: opts.equipmentSlot1 });
+    }
+    if (opts.equipmentSlot2?.type === 'monster' && (opts.equipmentSlot2 as GameCardData).eliteRegenHeroTurn) {
+      dragonSlots.push({ slotId: 'equipmentSlot2', item: opts.equipmentSlot2 });
+    }
+    for (const { slotId, item } of dragonSlots) {
+      const otherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+      const otherItem = otherSlotId === 'equipmentSlot1' ? opts.equipmentSlot1 : opts.equipmentSlot2;
+      const [roll, nextRng] = nextBool(rng);
+      rng = nextRng;
+      if (roll && otherItem && otherItem.durability != null && otherItem.maxDurability != null
+        && otherItem.durability < otherItem.maxDurability) {
+        const newDur = otherItem.durability + 1;
+        dragonRegenEffects.push({
+          slotId, itemName: item.name, otherSlotId, otherItemName: otherItem.name!,
+          newDurability: newDur, maxDurability: otherItem.maxDurability, success: true,
+        });
+        logs.push({ type: 'equip', message: `${item.name} 龙息回复：Hero 未受伤，${otherItem.name} 恢复 1 耐久！（${newDur}/${otherItem.maxDurability}）` });
+        banners.push(`${item.name} 龙息回复！${otherItem.name} +1 耐久！`);
+      } else if (roll) {
+        logs.push({ type: 'equip', message: `${item.name} 龙息回复：判定成功，但另一装备栏无可恢复的装备。` });
+      } else {
+        logs.push({ type: 'equip', message: `${item.name} 龙息回复：判定失败（50%）。` });
+      }
+    }
+  }
+
+  // Check for wraith aura effects from ALL active-row wraiths (not just engaged)
   let auraBoost = 0;
   for (const card of activeCards) {
-    if (!card || !engagedMonsterIds.includes(card.id) || card.isStunned) continue;
+    if (!card || card.type !== 'monster' || card.isStunned) continue;
     if (card.wraithAuraAttack && card.wraithAuraAttack > 0) {
       auraBoost = Math.max(auraBoost, card.wraithAuraAttack);
     }
@@ -646,19 +800,41 @@ export function applyMonsterTurnEndEffects(
       updated = { ...updated, antiMagicReflect: newReflect, ...(newLayerReflect != null ? { golemLayerLossReflect: newLayerReflect } : {}) };
     }
 
-    if (updated.bossLastStandAura && (updated.currentLayer ?? 1) === 1) {
-      changed = true;
-      const newAttack = (updated.attack ?? updated.value ?? 0) + 5;
-      const newValue = (updated.value ?? 0) + 5;
-      const newLayer = (updated.currentLayer ?? 1) + 1;
-      const fullHp = updated.maxHp ?? updated.hp ?? 0;
-      logs.push({ type: 'combat', message: `${updated.name} 暴走光环：攻击 +5，恢复至 ${newLayer} 血层！` });
-      banners.push(`${updated.name} 暴走光环发动！`);
-      return { ...updated, attack: newAttack, value: newValue, hp: fullHp, currentLayer: newLayer, tempAttackBoost: (updated.tempAttackBoost ?? 0) + 5 };
-    }
-
     return updated !== card ? updated : card;
   });
+
+  // Boss last-stand aura: when an engaged boss has 1 layer, ALL row monsters get +5 atk & +1 layer (heal to full HP).
+  const lastStandBoss = activeCards.find(c =>
+    c && c.type === 'monster' && !c.isStunned && c.bossLastStandAura
+      && engagedMonsterIds.includes(c.id) && (c.currentLayer ?? 1) === 1,
+  );
+  if (lastStandBoss) {
+    const boostedNames: string[] = [];
+    next = next.map(card => {
+      if (!card || card.type !== 'monster') return card;
+      const newAttack = (card.attack ?? card.value ?? 0) + 5;
+      const newValue = (card.value ?? 0) + 5;
+      const maxLayers = card.fury ?? card.hpLayers ?? 1;
+      const currentLayer = card.currentLayer ?? 1;
+      const canHealLayer = currentLayer < maxLayers;
+      const newLayer = canHealLayer ? currentLayer + 1 : currentLayer;
+      const fullHp = card.maxHp ?? card.hp ?? 0;
+      boostedNames.push(card.name);
+      return {
+        ...card,
+        attack: newAttack,
+        value: newValue,
+        hp: fullHp,
+        currentLayer: newLayer,
+        tempAttackBoost: (card.tempAttackBoost ?? 0) + 5,
+      };
+    });
+    changed = true;
+    if (boostedNames.length > 0) {
+      logs.push({ type: 'combat', message: `${lastStandBoss.name} 暴走光环：激活行所有怪物攻击 +5，恢复 1 血层！（${boostedNames.join('、')}）` });
+      banners.push(`${lastStandBoss.name} 暴走光环！全体怪物 +5 攻击，恢复 1 血层！`);
+    }
+  }
 
   // Wraith aura: boost ALL active row monsters
   if (auraBoost > 0) {
@@ -677,12 +853,84 @@ export function applyMonsterTurnEndEffects(
     }
   }
 
+  // Wraith enrage: collect non-engaged, non-stunned monsters
+  if (wraithEnrage) {
+    for (const card of activeCards) {
+      if (!card || card.type !== 'monster' || card.isStunned) continue;
+      if (!engagedMonsterIds.includes(card.id)) {
+        monstersToEngage.push({ id: card.id, name: card.name });
+      }
+    }
+  }
+
+  // Goblin stack heal: per stacked card below, 15% chance restore 1 layer
+  if (opts?.activeCardStacks) {
+    for (const card of activeCards) {
+      if (!card || !engagedMonsterIds.includes(card.id) || card.isStunned || !card.goblinStackHeal) continue;
+      const colIndex = activeCards.findIndex(c => c?.id === card.id);
+      if (colIndex < 0) continue;
+      const stacks = opts.activeCardStacks[colIndex] ?? [];
+      if (stacks.length === 0) continue;
+      let healCount = 0;
+      for (let i = 0; i < stacks.length; i++) {
+        const [healed, nextRng] = nextBool(rng, 0.15);
+        rng = nextRng;
+        if (healed) healCount++;
+      }
+      if (healCount > 0) {
+        const maxLayers = card.hpLayers ?? card.fury ?? 1;
+        const currentLayer = card.currentLayer ?? 1;
+        const restored = Math.min(healCount, maxLayers - currentLayer);
+        if (restored > 0) {
+          const fullHp = card.maxHp ?? card.hp ?? 0;
+          const cardIdx = next.findIndex(c => c?.id === card.id);
+          if (cardIdx >= 0) {
+            next[cardIdx] = { ...card, currentLayer: currentLayer + restored, hp: fullHp };
+            changed = true;
+          }
+          goblinStackHeals.push({
+            monsterId: card.id, monsterName: card.name,
+            restored, fromLayer: currentLayer, toLayer: currentLayer + restored,
+          });
+          logs.push({ type: 'combat', message: `${card.name} 贼窝疗养：恢复了 ${restored} 血层！（${currentLayer} → ${currentLayer + restored}）` });
+          banners.push(`${card.name} 贼窝疗养！恢复 ${restored} 血层！`);
+        }
+      }
+    }
+
+    // Goblin steal equip: per stacked card below, 15% chance steal
+    for (const card of activeCards) {
+      if (!card || !engagedMonsterIds.includes(card.id) || card.isStunned || !card.goblinStealEquip) continue;
+      const colIndex = activeCards.findIndex(c => c?.id === card.id);
+      if (colIndex < 0) continue;
+      const stacks = opts.activeCardStacks[colIndex] ?? [];
+      if (stacks.length === 0) continue;
+      let stealCount = 0;
+      for (let i = 0; i < stacks.length; i++) {
+        const [stolen, nextRng] = nextBool(rng, 0.15);
+        rng = nextRng;
+        if (stolen) stealCount++;
+      }
+      for (let s = 0; s < stealCount; s++) {
+        goblinStealTargets.push({
+          source: 'equip', goblinName: card.name, colIndex,
+          itemId: '', itemName: '',
+        });
+      }
+    }
+  }
+
   return {
     activeCards: changed ? next as ActiveRowSlots : activeCards,
     logs,
     banners,
     wraithEnrage,
     wraithDestroyAmulet,
+    monstersToEngage,
+    dragonRegenEffects,
+    goblinStackHeals,
+    goblinStealTargets,
+    rng,
   };
 }
 
@@ -761,13 +1009,12 @@ export function createBossCard(monster: GameCardData): GameCardData {
     reviveUsed: false,
     bossRetaliationDamage: 3,
     bossLastStandAura: true,
-    bossFuryDiceChance: true,
     bossEnrageGraveyardSummon: 4,
     attack: (monster.attack ?? monster.value ?? 0) + 5,
     value: (monster.value ?? 0) + 5,
     tempAttackBoost: (monster.tempAttackBoost ?? 0) + 5,
     name: `${monster.name} (Boss)`,
-    description: `Boss形态！反噬3；1层时攻+5并恢复1层；受攻时50%概率不掉层；激怒时从坟场召唤4张牌（含2怪物）。`,
+    description: `Boss形态！反噬3；1层时全行怪物攻+5并恢复1血层；激怒时从坟场召唤4张牌（含2怪物）。`,
   };
 }
 
@@ -779,7 +1026,8 @@ export function applyWraithHauntEffect(
   activeCards: ActiveRowSlots,
   monsterId: string,
   atkBoost: number,
-): ActiveRowSlots {
+  rngIn: RngState,
+): [ActiveRowSlots, RngState] {
   const occupiedIndices: number[] = [];
   const occupiedCards: (GameCardData | null)[] = [];
 
@@ -790,21 +1038,17 @@ export function applyWraithHauntEffect(
     occupiedCards.push(c);
   }
 
-  if (occupiedIndices.length === 0) return activeCards;
+  if (occupiedIndices.length === 0) return [activeCards, rngIn];
 
-  const shuffle = <T,>(arr: T[]): T[] => {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  };
-
-  let shuffled = shuffle(occupiedCards);
+  let rng = rngIn;
+  let [shuffled, nextRng] = rngShuffle(occupiedCards, rng);
+  rng = nextRng;
   if (occupiedCards.length >= 2) {
     const sameOrder = shuffled.every((c, i) => c === occupiedCards[i]);
-    if (sameOrder) shuffled = shuffle(occupiedCards);
+    if (sameOrder) {
+      [shuffled, nextRng] = rngShuffle(occupiedCards, rng);
+      rng = nextRng;
+    }
   }
 
   const next = [...activeCards] as ActiveRowSlots;
@@ -821,5 +1065,5 @@ export function applyWraithHauntEffect(
     next[occupiedIndices[i]] = card;
   }
 
-  return next;
+  return [next, rng];
 }

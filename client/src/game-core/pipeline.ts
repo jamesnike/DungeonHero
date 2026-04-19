@@ -1,0 +1,266 @@
+/**
+ * Resolution Pipeline — drives the action queue to completion.
+ *
+ * The pipeline processes queued actions one at a time. After each action,
+ * any follow-up actions returned by the reducer are prepended to the queue
+ * (so sub-steps execute before the next top-level action).
+ *
+ * The pipeline pauses when:
+ *   - The queue is empty (all done)
+ *   - The state enters an "awaiting input" phase (player must act)
+ *   - A safety limit is reached (prevents infinite loops)
+ *
+ * All functions are pure — they take state + queue and return updated
+ * versions. The GameEngine wraps this with notification and event emission.
+ */
+
+import type { GameState } from './types';
+import type { GameAction } from './actions';
+import type { SideEffect } from './reducer';
+import { reduce } from './reducer';
+import { dequeue, enqueueFront, isEmpty } from './queue';
+import { DEV_MODE } from './constants';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface PipelineResult {
+  /** Final state after processing. */
+  state: GameState;
+  /** Remaining queue (may be non-empty if paused for input). */
+  queue: GameAction[];
+  /** All side effects accumulated during processing. */
+  sideEffects: SideEffect[];
+  /** Number of actions processed in this run. */
+  stepsProcessed: number;
+  /** True if the pipeline paused due to awaiting player input. */
+  pausedForInput: boolean;
+}
+
+/** Phases that pause the pipeline to wait for player input. */
+const INPUT_PHASES = new Set([
+  'awaitingBlock',
+  'playerInput',
+  'awaitingTarget',
+  'awaitingDice',
+  'awaitingEventChoice',
+  'awaitingShopAction',
+  'awaitingRewardChoice',
+  'awaitingPotionTarget',
+  'awaitingMagicTarget',
+  'awaitingDeathWard',
+  'awaitingEquipmentPrompt',
+  'awaitingDiscoverChoice',
+  'awaitingUpgradeChoice',
+  'awaitingDeleteChoice',
+]);
+
+const MAX_STEPS = 200;
+
+// ---------------------------------------------------------------------------
+// Process a single action (exposed for testing)
+// ---------------------------------------------------------------------------
+
+export interface StepResult {
+  state: GameState;
+  queue: GameAction[];
+  sideEffects: SideEffect[];
+}
+
+export function processStep(state: GameState, queue: GameAction[]): StepResult {
+  const [action, remaining] = dequeue(queue);
+  if (!action) {
+    return { state, queue: remaining, sideEffects: [] };
+  }
+
+  const result = reduce(state, action);
+
+  // Prepend follow-up actions so sub-steps resolve before the rest
+  const newQueue = enqueueFront(remaining, result.enqueuedActions);
+
+  return {
+    state: result.state,
+    queue: newQueue,
+    sideEffects: result.sideEffects,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Drain: process all queued actions until pause or completion
+// ---------------------------------------------------------------------------
+
+export function drain(state: GameState, queue: GameAction[]): PipelineResult {
+  let current = state;
+  let currentQueue = queue;
+  const allSideEffects: SideEffect[] = [];
+  let steps = 0;
+
+  while (!isEmpty(currentQueue) && steps < MAX_STEPS) {
+    // Check if we should pause for player input BEFORE processing
+    if (current.phase && INPUT_PHASES.has(current.phase)) {
+      // Only pause if the queue's next action isn't a continuation trigger
+      const next = currentQueue[0];
+      if (next && isInputContinuation(next)) {
+        // This is a player response — keep processing
+      } else {
+        return {
+          state: current,
+          queue: currentQueue,
+          sideEffects: allSideEffects,
+          stepsProcessed: steps,
+          pausedForInput: true,
+        };
+      }
+    }
+
+    const stepResult = processStep(current, currentQueue);
+    current = stepResult.state;
+    currentQueue = stepResult.queue;
+    allSideEffects.push(...stepResult.sideEffects);
+    steps++;
+
+    // After processing, check if the new state requires input
+    if (current.phase && INPUT_PHASES.has(current.phase) && !isEmpty(currentQueue)) {
+      const next = currentQueue[0];
+      if (!next || !isInputContinuation(next)) {
+        return {
+          state: current,
+          queue: currentQueue,
+          sideEffects: allSideEffects,
+          stepsProcessed: steps,
+          pausedForInput: true,
+        };
+      }
+    }
+  }
+
+  if (steps >= MAX_STEPS && DEV_MODE) {
+    console.error(`[pipeline] Safety limit reached (${MAX_STEPS} steps). Possible infinite loop.`);
+  }
+
+  return {
+    state: current,
+    queue: currentQueue,
+    sideEffects: allSideEffects,
+    stepsProcessed: steps,
+    pausedForInput: false,
+  };
+}
+
+/**
+ * Actions that should continue processing even when the pipeline is in an
+ * input-awaiting phase. This includes both player responses and internal
+ * follow-up actions enqueued by the reducer (damage, heals, card routing, etc.).
+ *
+ * Only actions that genuinely require a NEW player decision (not already
+ * in-flight) should be excluded — those are the ones the pipeline pauses for.
+ */
+function isInputContinuation(action: GameAction): boolean {
+  switch (action.type) {
+    // Combat — player responses
+    case 'RESOLVE_BLOCK':
+    case 'PLAY_CARD':
+    case 'PERFORM_HERO_ATTACK':
+    case 'PERFORM_SHIELD_BASH':
+    case 'END_TURN':
+    // Combat — internal follow-ups
+    case 'DEAL_DAMAGE_TO_MONSTER':
+    case 'MONSTER_DEFEATED':
+    case 'APPLY_DAMAGE':
+    case 'APPLY_DRAGON_BREATH_RETALIATION':
+    case 'APPLY_SHIELD_REFLECT':
+    case 'DECREMENT_FURY':
+    case 'BEGIN_COMBAT':
+    case 'ADVANCE_MONSTER_TURN':
+    case 'APPLY_MONSTER_TURN_END_EFFECTS':
+    case 'APPLY_HERO_KILL_EFFECTS':
+    case 'CHECK_HONOR_SWEEP_UPGRADES':
+    // Event — player responses
+    case 'RESOLVE_EVENT_CHOICE':
+    case 'COMPLETE_EVENT':
+    case 'FINALIZE_EVENT':
+    // Event — internal follow-ups
+    case 'APPLY_CARD_FLIP':
+    case 'APPLY_EVENT_EFFECT':
+    // Shop — player responses
+    case 'CLOSE_SHOP':
+    case 'PURCHASE':
+    case 'SHOP_HEAL':
+    case 'SHOP_LEVEL_UP':
+    case 'SHOP_DELETE_EQUIPMENT':
+    case 'SHOP_DISCOVER':
+    case 'SHOP_EQUIP_BOOST':
+    case 'SHOP_SELECT_SKILL':
+    // Reward continuations
+    case 'APPLY_MONSTER_REWARD':
+    case 'DEQUEUE_MONSTER_REWARD':
+    case 'BEGIN_DISCOVER':
+    // Pending-action continuations (player chose a target / dismissed modal)
+    case 'SET_PENDING_MAGIC':
+    case 'SET_PENDING_POTION':
+    case 'SET_PENDING_HERO_SKILL':
+    case 'SET_PENDING_HERO_MAGIC':
+    case 'SET_DEATH_WARD_PROMPT':
+    case 'SET_EQUIPMENT_PROMPT':
+    // Card resolution — player responses & continuations
+    case 'RESOLVE_POTION':
+    case 'RESOLVE_MAGIC':
+    case 'FINALIZE_POTION_CARD':
+    case 'FINALIZE_MAGIC_CARD':
+    case 'FINALIZE_CARD_PLAY':
+    // Hero skill/magic continuations
+    case 'USE_HERO_SKILL':
+    case 'ACTIVATE_HERO_MAGIC':
+    case 'COMPLETE_HERO_MAGIC':
+    case 'APPLY_REVIVE_BLESSING':
+    case 'APPLY_BERSERKER_RAGE':
+    // Card deletion / upgrade continuations
+    case 'DELETE_CARD':
+    case 'UPGRADE_CARD':
+    // Interactive response continuations
+    case 'RESOLVE_DICE':
+    case 'ROLL_DICE_FOR_FLOW':
+    case 'RESOLVE_EQUIPMENT_CHOICE':
+    case 'RESOLVE_MAGIC_CHOICE':
+    case 'RESOLVE_CARD_ACTION':
+    case 'RESOLVE_GRAVEYARD_SELECTION':
+    case 'RESOLVE_FATE_SIGHT':
+    case 'RESOLVE_STAT_SWAP':
+    // Internal state mutations enqueued by reducers
+    case 'HEAL':
+    case 'MODIFY_GOLD':
+    case 'MODIFY_PERMANENT_STAT':
+    case 'MODIFY_STUN_CAP':
+    case 'MODIFY_EQUIPMENT_DURABILITY':
+    case 'ADD_TO_GRAVEYARD':
+    case 'ADD_TO_RECYCLE_BAG':
+    case 'ADD_TO_BACKPACK':
+    case 'ADD_CARDS_TO_HAND':
+    case 'ADD_PERMANENT_MAGIC_TO_RECYCLE':
+    case 'ADD_MAGIC_GAUGE':
+    case 'ADD_BERSERK_BUFF':
+    case 'DRAW_CARDS':
+    case 'DRAW_FROM_BACKPACK':
+    case 'DRAW_CLASS_TO_BACKPACK':
+    case 'ENFORCE_BACKPACK_CAPACITY':
+    case 'RESTORE_RECYCLE_BAG':
+    case 'REMOVE_CLASS_CARD_FROM_HAND':
+    case 'APPLY_DISCARD_EFFECTS':
+    case 'UPDATE_MONSTER_CARD':
+    case 'REGISTER_DUNGEON_CARD_PROCESSED':
+    case 'SET_HERO_SKILL_BANNER':
+    case 'SET_COMBAT_FLAG':
+    case 'SET_GAMBIT_STATE':
+    case 'SET_UPGRADE_MODAL_OPEN':
+    case 'CHECK_HORDE_SWARM':
+    case 'CHECK_ELITE_GOLD_BUFF':
+    case 'START_TURN':
+    case 'ENTER_PLAYER_INPUT':
+    case 'TRIGGER_GRAVE_NOVA':
+    case 'PROCESS_HERO_MAGIC_CARD':
+      return true;
+    default:
+      return false;
+  }
+}

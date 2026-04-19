@@ -1,0 +1,39 @@
+---
+description: Testing conventions for game-core reducer logic
+globs: client/src/game-core/__tests__/**/*.ts
+alwaysApply: false
+---
+
+# Testing Conventions
+
+## All reducer logic must have tests
+
+Tests live in `client/src/game-core/__tests__/`. Run with `npx vitest run`.
+
+## Test structure
+
+```typescript
+import { reduce } from '../reducer';
+import { createInitialState } from '../rules/init';
+
+it('should handle DEAL_DAMAGE_TO_MONSTER', () => {
+  const state = createInitialState(/* seed */);
+  // setup state with monsters, equipment, etc.
+  const { state: newState, sideEffects } = reduce(state, {
+    type: 'DEAL_DAMAGE_TO_MONSTER',
+    monsterId: 'test-monster',
+    damage: 5,
+    source: 'weapon',
+  });
+  expect(newState.monsters[0].hp).toBe(/* expected */);
+  expect(sideEffects).toContainEqual(
+    expect.objectContaining({ event: 'combat:monsterBleed' })
+  );
+});
+```
+
+## Verify after changes
+
+After any change to `game-core/rules/*.ts`, run:
+1. `npx tsc --noEmit` — type check passes
+2. `npx vitest run` — all tests pass (currently 281 tests)

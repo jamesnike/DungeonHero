@@ -1,0 +1,86 @@
+---
+description: Reducer implementation patterns — RNG, action chaining, interactive flows
+globs: client/src/game-core/rules/**/*.ts, client/src/game-core/reducer.ts
+alwaysApply: false
+---
+
+# Reducer Implementation Patterns
+
+## RNG in reducers
+
+All randomness MUST go through `state.rng` (seeded RNG from `game-core/rng.ts`). Never use `Math.random()`.
+
+```typescript
+import { nextInt, nextBool, shuffle, pickRandom, nextId } from '../rng';
+
+// ✅ Use state.rng — always carry updated rng forward
+const { value: roll, rng: rng1 } = nextInt(state.rng, 1, 20);
+const { items: shuffled, rng: rng2 } = shuffle(rng1, candidates);
+const { value: id, rng: rng3 } = nextId(rng2);
+patch.rng = rng3; // include in returned state patch
+
+// ❌ Never use Math.random — breaks deterministic replay
+const value = Math.floor(Math.random() * 100);
+```
+
+`Math.random()` is only acceptable in UI-only code (animations, particles) — never in `game-core/` or `hooks/` for game logic.
+
+## Action chaining via queue
+
+When a reducer action triggers follow-up actions, enqueue them:
+
+```typescript
+// After killing a monster, process its rewards
+return {
+  state: newState,
+  sideEffects,
+  enqueuedActions: [{ type: 'MONSTER_DEFEATED', monsterId }]
+};
+```
+
+## Interactive flows (multi-step actions)
+
+For actions requiring player input mid-resolution:
+
+1. Reducer sets a pending state field (e.g., `pendingHeroSkillAction`)
+2. Reducer emits a side effect requesting UI input (e.g., `hero:skillRequiresTarget`)
+3. Hook listens via `useGameEvent`, shows selection UI
+4. User makes selection → hook dispatches a continuation action (e.g., `RESOLVE_HERO_SKILL_TARGET`)
+5. Reducer completes the effect
+
+```typescript
+// In reducer — step 1-2
+state = { ...state, pendingHeroSkillAction: { skillId, step: 'select-target' } };
+sideEffects.push({ event: 'hero:skillRequiresTarget', payload: { skillId } });
+
+// In hook — step 3-4
+useGameEvent('hero:skillRequiresTarget', ({ skillId }) => {
+  showTargetSelector(skillId);
+});
+const onTargetSelected = (targetId) => {
+  dispatch({ type: 'RESOLVE_HERO_SKILL_TARGET', targetId });
+};
+```
+
+## Multi-step logic via enqueuedActions
+
+Never perform sequential imperative steps in hooks. Use `enqueuedActions` for multi-step game logic:
+
+```typescript
+// ✅ Reducer enqueues follow-up actions
+return applyPatch(state, patch, sideEffects, [
+  { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId, damage, source: 'reflect' },
+  { type: 'CHECK_BATTLE_END' },
+]);
+
+// ❌ WRONG — sequential dispatch from hooks
+dispatch({ type: 'DEAL_DAMAGE_TO_MONSTER', ... });
+dispatch({ type: 'CHECK_BATTLE_END' }); // race condition!
+```
+
+The engine's `drain()` mechanism processes `enqueuedActions` sequentially after each `reduce()`, guaranteeing correct ordering.
+
+## Pure helpers
+
+Extract reusable game-rule computations to `game-core/helpers.ts` as pure functions.
+These can be safely used by both reducers and hooks for display purposes.

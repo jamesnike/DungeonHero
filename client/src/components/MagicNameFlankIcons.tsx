@@ -42,6 +42,7 @@ const TINT_BY_KEY: Record<string, string> = {
   'knight-missing-hp-smite': 'from-rose-500/50 to-red-800/50',
   'knight-grave-nova': 'from-orange-500/50 to-amber-700/45',
   'knight-berserk-gambit': 'from-red-500/55 to-yellow-500/40',
+  'knight-battle-spirit': 'from-orange-500/55 to-yellow-400/40',
   'knight-recycle-flare': 'from-amber-400/50 to-orange-500/45',
   'knight-death-ward': 'from-slate-500/50 to-cyan-400/40',
   'knight-chaos-dice': 'from-purple-400/50 to-pink-500/45',
@@ -204,7 +205,7 @@ export const EventTitleBand = memo(function EventTitleBand({
 });
 
 export function isMagicSpellCardType(type: string): boolean {
-  return type === 'magic' || type === 'hero-magic';
+  return type === 'magic' || type === 'hero-magic' || type === 'curse';
 }
 
 export { isEventCardType };
@@ -535,6 +536,14 @@ export function CuteSticker({ k }: { k: string }) {
         <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
           <path fill="#f87171" d="M10 20c2-10 6-12 6-12s4 2 6 12" />
           <path fill="none" stroke="#dc2626" d="M12 12l4 3-2 5M20 12l-4 3 2 5" />
+        </g>
+      );
+    case 'knight-battle-spirit':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#f97316" d="M16 5c-3 4-5 6-5 9a5 5 0 0 0 10 0c0-3-2-5-5-9z" />
+          <path fill="#fde047" d="M14 14l2-3 2 3-1 4-2-1z" />
+          <path fill="none" stroke="#facc15" d="M7 22h18M9 26h14" />
         </g>
       );
     case 'knight-recycle-flare':
@@ -1299,7 +1308,7 @@ export const ALL_STICKER_KEYS: readonly string[] = [
   'hero-holy-light','hero-berserker-rage','hero-revive-blessing','hero-monster-doom',
   // knight class magic
   'knight-blood-greed','knight-armor-strike','knight-missing-hp-smite','knight-grave-nova',
-  'knight-berserk-gambit','knight-recycle-flare','knight-death-ward','knight-chaos-dice',
+  'knight-berserk-gambit','knight-battle-spirit','knight-recycle-flare','knight-death-ward','knight-chaos-dice',
   'knight-graveyard-recall','knight-greed-curse','knight-honor-sweep',
   'knight-armor-stun-convert','knight-overkill-upgrade','knight-transform-repair',
   'knight-transform-grant','knight-weapon-sweep','knight-stat-swap',

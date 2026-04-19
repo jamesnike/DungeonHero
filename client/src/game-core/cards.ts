@@ -6,8 +6,10 @@ import type { GameCardData } from '@/components/GameCard';
 import type { ActiveRowSlots } from '@/components/game-board/types';
 import type { GameState } from './types';
 import { HAND_LIMIT, BASE_BACKPACK_CAPACITY, DUNGEON_COLUMN_COUNT } from './constants';
-import { isBackpackRestrictedCard, flattenActiveRowSlots } from './helpers';
+import { isBackpackRestrictedCard, flattenActiveRowSlots, isRecyclableFromHand } from './helpers';
 import { applyMonsterRage } from '@/lib/monsterRage';
+import type { RngState } from './rng';
+import { nextInt, shuffle as rngShuffle } from './rng';
 
 // ---------------------------------------------------------------------------
 // Hand operations
@@ -84,7 +86,7 @@ export function drawFromBackpackToHandPure(
     if (filtered.length > 0) pool = filtered;
   }
 
-  const index = Math.floor(Math.random() * pool.length);
+  const [index, rng] = nextInt(state.rng, 0, pool.length - 1);
   const card = pool[index];
 
   return {
@@ -92,6 +94,7 @@ export function drawFromBackpackToHandPure(
     patch: {
       handCards: [...state.handCards, card],
       backpackItems: state.backpackItems.filter(c => c.id !== card.id),
+      rng,
     },
   };
 }
@@ -108,10 +111,12 @@ export function drawMultipleFromBackpack(
   let currentHand = [...state.handCards];
   let currentBackpack = [...state.backpackItems];
   const limit = options?.ignoreLimit ? Infinity : getEffectiveHandLimit(state);
+  let rng = state.rng;
 
   for (let i = 0; i < count; i++) {
     if (currentHand.length >= limit || currentBackpack.length === 0) break;
-    const index = Math.floor(Math.random() * currentBackpack.length);
+    const [index, nextRng] = nextInt(rng, 0, currentBackpack.length - 1);
+    rng = nextRng;
     const card = currentBackpack[index];
     cards.push(card);
     currentHand.push(card);
@@ -127,6 +132,7 @@ export function drawMultipleFromBackpack(
     patch: {
       handCards: currentHand,
       backpackItems: currentBackpack,
+      rng,
     },
   };
 }
@@ -177,14 +183,23 @@ export function addToGraveyardPure(
 export function discardAllHandCardsPure(
   state: GameState,
 ): { discarded: GameCardData[]; patch: Partial<GameState> } {
+  // Curses are immune to forced discard — they stay in hand.
   const hand = [...state.handCards];
-  return {
-    discarded: hand,
-    patch: {
-      handCards: [],
-      discardedCards: [...state.discardedCards, ...hand.map(c => resetMonsterForGraveyard(c, state.gameMode === 'quick'))],
-    },
+  const kept = hand.filter(c => c.type === 'curse');
+  const discarded = hand.filter(c => c.type !== 'curse');
+  const recycled = discarded.filter(c => isRecyclableFromHand(c));
+  const toGrave = discarded.filter(c => !isRecyclableFromHand(c));
+  const patch: Partial<GameState> = {
+    handCards: kept,
+    discardedCards: [...state.discardedCards, ...toGrave.map(c => resetMonsterForGraveyard(c, state.gameMode === 'quick'))],
   };
+  if (recycled.length > 0) {
+    patch.permanentMagicRecycleBag = [
+      ...state.permanentMagicRecycleBag,
+      ...recycled.map(c => ({ ...c, _recycleWaits: c.recycleDelay ?? 2 } as GameCardData)),
+    ];
+  }
+  return { discarded, patch };
 }
 
 // ---------------------------------------------------------------------------
@@ -290,13 +305,8 @@ export function processRecycleBag(
 // Deck operations
 // ---------------------------------------------------------------------------
 
-export function shuffleDeck(deck: GameCardData[]): GameCardData[] {
-  const shuffled = [...deck];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
+export function shuffleDeck(deck: GameCardData[], rng: RngState): [GameCardData[], RngState] {
+  return rngShuffle(deck, rng);
 }
 
 export function drawFromDeck(

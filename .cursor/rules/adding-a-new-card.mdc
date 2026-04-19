@@ -1,0 +1,122 @@
+---
+description: End-to-end checklist for adding a new card — data shape, registries, handlers, tests, and forbidden flows
+globs: client/src/game-core/deck.ts, client/src/game-core/card-schema/**, client/src/lib/knightDeck.ts, client/src/components/GameCard.tsx
+alwaysApply: false
+---
+
+# Adding a New Card — End-to-End Flow
+
+A card has TWO halves: **data** (in a deck file) and **behavior** (registered in `card-schema/`). Both must be added; behavior is NEVER inlined into hooks, components, or `rules/*.ts` switch blocks.
+
+## 1. Pick the data home
+
+| Card origin | File | Helper |
+|---|----|----|
+| Main dungeon deck (monsters, generic loot) | [`game-core/deck.ts`](client/src/game-core/deck.ts) `createDeck()` | inline push into `deck` array |
+| Starter / class-shared cards | [`game-core/deck.ts`](client/src/game-core/deck.ts) `createStarterCardPool()` + add id to `STARTER_CARD_IDS` | — |
+| Knight class-specific deck | [`lib/knightDeck.ts`](client/src/lib/knightDeck.ts) `generateKnightDeck()` | — |
+| Runtime-generated tokens (e.g. 魔弹) | factory function in `deck.ts` / `knightDeck.ts` | use `nextId(rng, prefix)` |
+
+For starter/class cards: also add a key to `STARTER_CARD_IDS` (deck.ts ~line 2023). `getStarterBaseId(card.id)` strips suffixes (`-pick-N`, `-evt-…`, `-disc-…`) so the registry key matches across runtime variants.
+
+## 2. Fill `GameCardData` correctly
+
+Every card needs `{ id, type, name, value, image }`. Then add the dispatch field that determines which registry routes the card. **Only set ONE primary effect field** (priority order matters — see [`registry.ts` `resolveEffectId`](client/src/game-core/card-schema/registry.ts)):
+
+| `card.type` | Required dispatch field | Resolves to effectId |
+|---|----|----|
+| `'potion'` | `potionEffect: PotionEffectId` (typed; add to union in [`GameCard.tsx`](client/src/components/GameCard.tsx)) | `potion:{potionEffect}` |
+| `'magic'` (class) | `knightEffect: string` | `knight:{knightEffect}` |
+| `'magic'` (generic) | `magicEffect: string` | `magic:{magicEffect}` |
+| `'magic'` (starter) | only the starter id is needed | `starter:{starterBaseId}` |
+| `'hero-magic'` | `heroMagicId: HeroMagicId` (typed) | `hero-magic:{heroMagicId}` |
+| `'weapon'` / `'shield'` | `onEquipEffect?: string` (optional, only if it has an entry effect) | on-equip registry |
+| `'amulet'` | `amuletEffect: AmuletEffectId` (typed) | metadata read by `computeAmuletEffects` |
+| `'monster'` | `monsterType`, `attack`, `hp`, `fury`, `baseAttack`, `baseHp`, optional `lastWords`/`enterEffect`/`bleedEffect`/etc. | tier/rage tables in `lib/monsterRage.ts` |
+
+Common optional fields: `description`, `magicType: 'instant' | 'permanent'`, `recycleDelay`, `maxUpgradeLevel`, `durability`/`maxDurability` (equipment), `_counterDisplay` (UI counter).
+
+Add the image as `import xxxImage from '@assets/generated_images/<file>.png'` and pass it as `image: xxxImage`.
+
+## 3. Register behavior in `card-schema/`
+
+Pick the right registry based on `card.type`:
+
+### Potions → [`card-schema/definitions/potions.ts`](client/src/game-core/card-schema/definitions/potions.ts)
+
+```typescript
+{
+  effectId: 'potion:my-effect',
+  effects: [
+    { type: 'log', logType: 'potion', message: '使用 ${card.name}' },
+    { type: 'heal', amount: 'cardValue' },
+    { type: 'finalize' },
+  ],
+  tags: ['healing'],
+}
+```
+
+Compose from `CardEffect` primitives in [`types.ts`](client/src/game-core/card-schema/types.ts) (heal/shield/draw/modifyStat/repairSlot/grantEternalRelic/log/banner/finalize/etc.). If a primitive is missing, **add a new variant to `CardEffect`** and implement the executor in [`executors.ts`](client/src/game-core/card-schema/executors.ts) — never reach for `custom` first.
+
+### Magic & Knight → [`card-schema/definitions/magic.ts`](client/src/game-core/card-schema/definitions/magic.ts)
+
+Prefer declarative `effects[]`. Use `resolver: MagicResolver` ONLY for complex effects that need full state access (multi-step, RNG, interactive). Resolvers live in [`rules/magic-effects.ts`](client/src/game-core/rules/magic-effects.ts) and are imported by name into the registration block.
+
+### Equipment on-equip → [`card-schema/definitions/equipment.ts`](client/src/game-core/card-schema/definitions/equipment.ts)
+
+```typescript
+const myEffect: OnEquipHandler = (state, card, slotId, patch, sideEffects, enqueuedActions) => {
+  patch.someField = ...;
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: '...' } });
+};
+registerOnEquipAll([{ id: 'my-effect', handler: myEffect }]);
+```
+
+Match the `id` to the card's `onEquipEffect` string.
+
+### Upgrade behavior → [`card-schema/definitions/upgrades.ts`](client/src/game-core/card-schema/definitions/upgrades.ts)
+
+If `maxUpgradeLevel > 0` and upgrades change card stats/text, register an `OnUpgradeHandler` keyed by `starter:{id}` / `amulet:{ae}` / `knight:{ke}` / `monster:default`. Mutates the `upgraded` copy in place.
+
+### Custom escape hatch → [`card-schema/custom-handlers.ts`](client/src/game-core/card-schema/custom-handlers.ts)
+
+ONLY when an effect can't be modeled by `CardEffect` primitives AND adding a new primitive isn't feasible. Reference via `{ type: 'custom', handlerId: 'my-id' }` in the `effects[]` array. Treat new uses as a code smell — prefer extending `CardEffect`.
+
+## 4. Add a test
+
+In [`game-core/__tests__/`](client/src/game-core/__tests__/), dispatch `PLAY_CARD` (or the relevant action) and assert on `result.state` + `result.sideEffects`. See [`testing.mdc`](.cursor/rules/testing.mdc).
+
+```typescript
+it('PLAY_CARD with my-new-potion heals 5', () => {
+  const card = { id: 'p1', type: 'potion' as const, name: 'Test', value: 5, potionEffect: 'my-effect' };
+  const state = makeState({ handCards: [card], hp: 10 });
+  const result = reduce(state, { type: 'PLAY_CARD', cardId: 'p1' });
+  expect(result.state.hp).toBe(15);
+});
+```
+
+## 5. Verify
+
+1. `npx tsc --noEmit` passes (no new TS errors in your touched files)
+2. `npx vitest run` — your new test + existing UPGRADE_CARD/PLAY_CARD/RESOLVE_POTION/RESOLVE_MAGIC tests pass
+3. Hand-test in the game: card draws, plays, upgrades, and recycles correctly
+
+## Forbidden flows — DO NOT
+
+- Add `potionEffect` / `magicEffect` / `knightEffect` / `onEquipEffect` switch/if-else in **hooks** ([`useCardPlayHandlers`](client/src/hooks/useCardPlayHandlers.ts), [`useCombatActions`](client/src/hooks/useCombatActions.ts), etc.) or **components** ([`GameBoard.tsx`](client/src/components/GameBoard.tsx)) — see [`no-imperative-card-handlers.mdc`](.cursor/rules/no-imperative-card-handlers.mdc)
+- Add card-specific branches in `rules/cards.ts`, `rules/magic-effects.ts`, `rules/potion-effects.ts` — they are dispatchers, not behavior tables
+- Resurrect removed handlers (`handlePotionConsumption`, `handleSkillCard`, `handleKnightInstantMagic`, `handleKnightPermanentMagic`)
+- Use `Math.random()` anywhere in the registered handlers — use `state.rng` via `nextInt`/`pickRandom`/`shuffle`/`nextBool`/`nextId` from [`rng.ts`](client/src/game-core/rng.ts) and carry `rng` forward in the patch ([`type-safety-conventions.mdc`](.cursor/rules/type-safety-conventions.mdc))
+- Mutate `GameState` outside the reducer / executor pipeline — handlers only mutate `patch` / `sideEffects` / `enqueuedActions` (or, for on-equip/on-upgrade, the provided card copy)
+- Forget to set `maxUpgradeLevel` if you also register an upgrade handler — without it `applyUpgrade` returns `null` early
+- Mix multiple primary dispatch fields on one card (e.g. both `potionEffect` and `magicEffect`) — `resolveEffectId` priority will silently shadow the others
+
+## Quick checklist
+
+- [ ] Card data added to the right deck file with `id`, `type`, `name`, `value`, `image`, plus typed dispatch field
+- [ ] (If starter/class) `STARTER_CARD_IDS` updated
+- [ ] `CardDefinition` (potion/magic) **or** `OnEquipHandler` (equipment) registered in `definitions/`
+- [ ] (If `maxUpgradeLevel > 0`) `OnUpgradeHandler` registered in `definitions/upgrades.ts`
+- [ ] No new switch/if-else on `*Effect` fields in hooks / components / `rules/`
+- [ ] Test added in `game-core/__tests__/` covering the happy path
+- [ ] `npx tsc --noEmit` and `npx vitest run` clean for the touched scope

@@ -1,0 +1,54 @@
+---
+description: Interactive continuation flows — ui:request* → player input → RESOLVE_* pattern
+globs: client/src/game-core/rules/**/*.ts, client/src/hooks/*.ts
+alwaysApply: false
+---
+
+# Interactive Continuation Flows
+
+When game logic needs player input mid-resolution, use the **request → resolve** pattern.
+
+## The pattern
+
+```
+Reducer emits ui:request* side effect
+  → Hook listens via useGameEvent, shows modal/prompt
+  → Player makes choice
+  → Hook dispatches RESOLVE_* action with raw user input
+  → Reducer completes the effect with full game logic
+```
+
+## Available flows
+
+| Request (side effect) | Modal | Resolution (action) |
+|-----------------------|-------|-------------------|
+| `ui:requestDice` | Dice roll modal | `RESOLVE_DICE` |
+| `ui:requestEquipmentChoice` | Slot picker | `RESOLVE_EQUIPMENT_CHOICE` |
+| `ui:requestMagicChoice` | Magic option picker | `RESOLVE_MAGIC_CHOICE` |
+| `ui:requestCardAction` | Card action selector | `RESOLVE_CARD_ACTION` |
+| `ui:requestGraveyardSelection` | Graveyard card picker | `RESOLVE_GRAVEYARD_SELECTION` |
+
+## Critical rules
+
+1. **Hook sends raw user input only** — the RESOLVE_* action payload must be the player's choice (selected slot ID, dice roll value, chosen card IDs), not computed game effects
+2. **Reducer performs all resolution logic** — damage calc, card movement, stat changes all happen inside the RESOLVE_* handler in `rules/*.ts`
+3. **Never resolve game effects in the hook's callback** — the hook callback should only `dispatch()`
+4. **Context passthrough** — use the `context` field on request/resolve actions to carry state needed for deferred resolution
+
+```typescript
+// ✅ Hook sends raw user choice
+useGameEvent('ui:requestEquipmentChoice', ({ slots, prompt, context }) => {
+  showSlotPicker(slots, prompt);
+  onSlotPicked = (slotId) => dispatch({ type: 'RESOLVE_EQUIPMENT_CHOICE', slotId, context });
+});
+
+// ❌ WRONG — hook resolves the effect
+useGameEvent('ui:requestEquipmentChoice', ({ slots }) => {
+  showSlotPicker(slots);
+  onSlotPicked = (slotId) => {
+    const equip = state.equipmentSlots[slotId]; // game logic in hook!
+    equip.durability += 2;                       // state mutation in hook!
+    engine.setState(state);
+  };
+});
+```

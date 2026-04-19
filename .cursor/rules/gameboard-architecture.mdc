@@ -1,0 +1,156 @@
+---
+description: GameBoard.tsx architectural rules — prevent it from growing back into a monolith
+globs: client/src/components/GameBoard.tsx, client/src/components/game-board/**
+alwaysApply: false
+---
+
+# GameBoard.tsx Architecture Rules
+
+GameBoard.tsx is the root container for the game. It has been systematically slimmed from ~9000+ lines.
+The following rules exist to prevent regression — do NOT let it grow thicker again.
+
+## Core Principle
+
+GameBoard is an **orchestrator**, not an **implementor**.
+It wires hooks, provides contexts, and renders layout containers.
+It should NOT contain domain logic, animation math, or modal rendering details.
+
+## What MUST NOT be added to GameBoard.tsx
+
+### 1. New modal / overlay rendering
+All modals are rendered by container components under `game-board/containers/`.
+Never add modal JSX directly to GameBoard. Create a new container or extend an existing one.
+
+### 2. New animation / RAF logic
+Animation systems must live in dedicated hooks under `game-board/hooks/`:
+- Combat animation triggers → `useCombatAnimationTriggers`
+- Directed combat FX (shield reflect, boss retaliation, etc.) → `useDirectedCombatFx`
+- Sword overlay computation → `useSwordOverlay`
+- Card flight RAF loops remain in GameBoard only until extracted
+
+### 3. New derived state that only one child needs
+If a computed value is only consumed by ActiveRow, HeroRow, or a single container,
+put it in that component's own hook or let it self-subscribe via `useShallowGameState`.
+Example: `useActiveRowDerivedState` handles targeting/lock/curse flags.
+
+### 4. New props to pass down when context already exists
+Use `useModalCallbacks()` and `useModalUI()` instead of adding props from GameBoard.
+
+## Architecture Map
+
+```
+GameBoard.tsx (root orchestrator)
+├── Hooks it calls:
+│   ├── useShallowGameState     — game engine state slice
+│   ├── useCombatVisuals        — animation state (bleed/heal/swing/block)
+│   ├── useCombatAnimationTriggers — trigger functions + timeout refs
+│   ├── useDirectedCombatFx     — directed projectile RAF + triggers
+│   ├── useSwordOverlay         — sword vector computation
+│   ├── useFlightState          — card flight state arrays
+│   ├── useCardOperations       — card manipulation helpers
+│   ├── useCombatActions        — combat action handlers
+│   ├── useHeroActions          — hero skill/magic handlers
+│   ├── useCardPlayHandlers     — card play from hand
+│   ├── useEventSystem          — event resolution
+│   └── useShopHandlers         — shop purchase handlers
+│
+├── Contexts it provides:
+│   ├── ModalCallbacksProvider  — ~50 handler callbacks
+│   └── ModalUIProvider         — local UI state + setters
+│
+├── Modal containers (zero-prop, self-subscribing):
+│   ├── ShopContainer
+│   ├── EventContainer
+│   ├── HeroInfoContainer
+│   ├── DiscoverContainer
+│   ├── CardViewerContainer
+│   ├── RewardContainer
+│   ├── GameFlowContainer
+│   ├── MagicCardContainer
+│   └── BoardOverlayButtons
+│
+├── Board layout components:
+│   ├── PreviewRow
+│   ├── ActiveRow          — uses useActiveRowDerivedState internally
+│   ├── HeroRowSection
+│   ├── HandContainer
+│   ├── FlightOverlayLayer — renders ALL flight types (including classDeckFlights)
+│   └── SwordOverlay
+│
+└── Other:
+    ├── EternalRelicContainer
+    ├── FloatingPillsContainer
+    ├── GameLogContainer
+    └── NarrowSidebar
+```
+
+## Container Pattern (for new containers)
+
+Every container under `game-board/containers/` MUST follow this pattern:
+
+```tsx
+import { memo } from 'react';
+import { useShallowGameState } from '@/hooks/useGameEngine';
+import { useModalCallbacks } from '../contexts/ModalCallbacksContext';
+import { useModalUI } from '../contexts/ModalUIContext';      // only if needed
+
+function XxxContainerInner() {
+  const gs = useShallowGameState(s => ({
+    /* only the fields this container needs */
+  }));
+  const cb = useModalCallbacks();
+  // const ui = useModalUI();  // only if needed
+
+  if (!gs.someOpenFlag) return null;
+  return <SomeModal ... />;
+}
+
+export const XxxContainer = memo(XxxContainerInner);
+```
+
+Key rules:
+- `memo()` wrap is mandatory
+- Subscribe to the narrowest possible state slice
+- Never receive props from GameBoard (use context)
+- Never import GameBoard-internal variables
+
+## Hook Extraction Pattern (for new hooks)
+
+When extracting logic from GameBoard into `game-board/hooks/`:
+
+1. Hook owns its own `useRef` / `useState` internally
+2. Hook receives only stable inputs (refs, engine, setters)
+3. Hook returns named functions + refs that GameBoard can destructure
+4. Hook includes its own cleanup `useEffect` if it manages timeouts/RAF
+5. Related constants move into the hook file, not GameBoard
+
+## Self-Subscribing Component Pattern
+
+Components that can derive state from the game engine should do so:
+
+```tsx
+// ✅ GOOD — ActiveRow subscribes to its own state
+const derived = useActiveRowDerivedState();  // inside ActiveRow
+
+// ❌ BAD — GameBoard computes and passes down
+const targeting = computeTargeting(gameState);  // in GameBoard
+<ActiveRow targeting={targeting} />              // prop drilling
+```
+
+## What still legitimately lives in GameBoard
+
+These remain because they cross-cut multiple children or manage shared mutable state:
+
+- Undo stack management (`undoStackRef`, `pushUndoSnapshot`, `handleUndo`)
+- Waterfall orchestration (plan, phases, timeouts — crosses ActiveRow + PreviewRow + Hand)
+- Card flight trigger functions (need DOM refs from multiple rows)
+- Drag state management (shared across HeroRow, ActiveRow, Hand)
+- Game init / hydrate / persistence
+- Domain hook deps-ref wiring (`combatDepsRef.current = { ... }`)
+
+If extracting any of these, the replacement must still handle cross-cutting coordination.
+
+## File Size Guardrail
+
+GameBoard.tsx is currently ~8400 lines. Any PR that increases it by >50 net lines
+should justify why the logic cannot live in a hook, container, or child component.

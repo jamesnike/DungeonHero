@@ -28,6 +28,7 @@ const EVENT_NAME_TO_KEY: Record<string, string> = {
   奇术商会: 'evt-arcane-guild',
   命运骰盅: 'evt-fate-dice-cup',
   混沌骰局: 'evt-chaos-dice-game',
+  弹幕骰局: 'evt-volley-dice',
   '封印卷轴（翻转示例）': 'evt-seal-demo',
   冥途幻变: 'evt-nether-veil',
   赋能神殿: 'evt-empowerment-shrine',

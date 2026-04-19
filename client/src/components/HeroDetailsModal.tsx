@@ -47,6 +47,7 @@ interface HeroDetailsModalProps {
     spellLifesteal: number;
     tempShield: number;
     permanentMaxHpBonus: number;
+    stunCap: number;
   };
   heroSkills: HeroSkillDefinition[];
   permanentSkills: string[];

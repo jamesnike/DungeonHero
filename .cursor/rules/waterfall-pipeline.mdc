@@ -1,0 +1,34 @@
+---
+description: Waterfall pipeline — all waterfall state logic in rules/waterfall.ts, animation in GameBoard
+globs: client/src/game-core/rules/waterfall.ts, client/src/components/GameBoard.tsx
+alwaysApply: false
+---
+
+# Waterfall Pipeline
+
+All waterfall state mutations live in `rules/waterfall.ts`. `GameBoard.tsx` only handles animation sequencing.
+
+## Actions
+
+| Action | Purpose |
+|--------|---------|
+| `APPLY_WATERFALL_EFFECTS` | Eternal relic effects, amulet temp mods, recycle restore, wraith enrage, hero skill reset |
+| `APPLY_WATERFALL_DISCARD_EFFECTS` | Per-card discard effects: return-to-deck, bonus decay, gold loss, damage, equipment destruction, swarm infest |
+
+## Flow
+
+```
+TRIGGER_WATERFALL (dungeon.ts)
+  → emits waterfall:started, waterfall:dropPhase, waterfall:discardPhase, waterfall:dealPhase
+  → GameBoard.tsx animates each phase via useGameEvent listeners
+  → After animation completes: dispatch(APPLY_WATERFALL_EFFECTS)
+  → For each discarded card: dispatch(APPLY_WATERFALL_DISCARD_EFFECTS)
+  → emits waterfall:completed when done
+```
+
+## Rules
+
+- **Never** put waterfall state mutations (relic effects, discard penalties, deck manipulation) in `GameBoard.tsx`
+- `GameBoard.tsx` only sequences animations and dispatches actions at the right time
+- Discard effects that modify the remaining deck use `nextRemainingDeck` parameter for in-place planning
+- Waterfall discover (eternal relic) is triggered via `enqueuedActions` → `BEGIN_DISCOVER`

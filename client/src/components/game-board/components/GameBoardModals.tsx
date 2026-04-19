@@ -1,14 +1,18 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Sword, Swords, Undo2, Wrench } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+
+import { useShallowGameState, useDispatch } from '@/hooks/useGameEngine';
+import { BASE_BACKPACK_CAPACITY, PERSUADE_COST, HAND_LIMIT, INITIAL_HP } from '@/game-core/constants';
+import { getHeroSkillById, heroSkills as allHeroSkills } from '@/lib/heroSkills';
 
 import VictoryDefeatModal from '@/components/VictoryDefeatModal';
 import DeckViewerModal from '@/components/DeckViewerModal';
 import BackpackViewerModal from '@/components/BackpackViewerModal';
 import DiscoverClassModal from '@/components/DiscoverClassModal';
 import GraveyardExileModal from '@/components/GraveyardExileModal';
-import ShopModal, { type ShopOffering } from '@/components/ShopModal';
+import ShopModal from '@/components/ShopModal';
 import ShopSkillSelectModal from '@/components/ShopSkillSelectModal';
 import CardFlipOverlay from '@/components/CardFlipOverlay';
 import CardDeletionModal from '@/components/CardDeletionModal';
@@ -23,24 +27,18 @@ import EventDiceModal from '@/components/EventDiceModal';
 import EquipmentSelectModal from '@/components/EquipmentSelectModal';
 import MagicChoiceModal from '@/components/MagicChoiceModal';
 import HeroSkillSelection from '@/components/HeroSkillSelection';
+import HandMagicUpgradeModal from '@/components/HandMagicUpgradeModal';
+import MirrorCopyModal from '@/components/MirrorCopyModal';
+import AmplifyModal from '@/components/AmplifyModal';
+import PermGrantModal from '@/components/PermGrantModal';
 
 import type { GameCardData } from '@/components/GameCard';
-import type { HeroVariant } from '@/lib/heroes';
 import type { HeroSkillDefinition } from '@/lib/heroSkills';
-import type { MagicChoiceModalState } from '@/game-core/types';
+import type { MagicChoiceModalState, MirrorCopySelection, AmplifySelection } from '@/game-core/types';
+import type { RngState } from '@/game-core/rng';
 
 import type {
-  AmuletItem,
-  CardActionContext,
-  DeathWardPromptState,
-  EquipmentItem,
-  EquipmentPromptState,
   EquipmentSlotId,
-  EventDiceModalState,
-  EventTransformState,
-  HeroStatsSummary,
-  MonsterRewardDrop,
-  MonsterRewardPreview,
 } from '../types';
 
 import type { CardSource } from '@/components/CardDeletionModal';
@@ -51,7 +49,6 @@ export type GameBoardModalsProps = {
   overlayZoom: number;
 
   // --- Death Ward ---
-  deathWardPrompt: DeathWardPromptState | null;
   onDeathWardConfirm: () => void;
   onDeathWardDecline: () => void;
 
@@ -65,202 +62,133 @@ export type GameBoardModalsProps = {
   onWraithPassiveUnlockChange: (open: boolean) => void;
 
   // --- Victory / Defeat ---
-  gameOver: boolean;
   gameOverMinimized: boolean;
-  victory: boolean;
-  gold: number;
-  hp: number;
-  maxHp: number;
   onRestart: () => void;
   onGameOverMinimize: () => void;
-  monstersDefeated: number;
-  totalDamageTaken: number;
-  totalHealed: number;
   stageScale: number;
 
   // --- Deck viewer ---
   deckViewerOpen: boolean;
   onDeckViewerChange: (open: boolean) => void;
-  remainingDeck: GameCardData[];
   onCardSelect: (card: GameCardData) => void;
 
   // --- Backpack viewer ---
   backpackViewerOpen: boolean;
   onBackpackViewerChange: (open: boolean) => void;
-  backpackItems: GameCardData[];
-  backpackCapacity: number;
-  permanentMagicRecycleBag: GameCardData[];
 
   // --- Discover class ---
-  discoverModalOpen: boolean;
-  discoverOptions: GameCardData[];
-  discoverSourceLabel: string | null;
   onDiscoverSelect: (cardId: string) => void;
   onDiscoverCancel: () => void;
 
   // --- Graveyard discover ---
-  graveyardDiscoverState: GameCardData[] | null;
   onGraveyardDiscoverSelect: (cardId: string) => void;
   onGraveyardDiscoverCancel: () => void;
 
   // --- Graveyard exile ---
-  ghostBladeExileCards: GameCardData[] | null;
   onGhostBladeExileConfirm: (selectedIds: string[]) => void;
 
   // --- Shop ---
-  shopModalOpen: boolean;
-  shopModalMinimized: boolean;
-  shopOfferings: ShopOffering[];
-  shopLevel: number;
-  canDeleteCardInShop: boolean;
-  shopDeleteDisabledReason?: string;
   onShopDeleteRequest: () => void;
   onShopPurchase: (cardId: string) => void;
   onShopClose: () => void;
   onShopMinimize: () => void;
-  shopSourceEvent?: string;
-  shopHealUsed: boolean;
   onShopHealRequest: () => void;
   shopHealCost: number;
   shopLevelUpCost: number;
-  shopLevelUpUsed: boolean;
   onShopLevelUpRequest: () => void;
   shopSkillDiscoverCost: number;
-  shopSkillDiscoverUsed: boolean;
-  canDiscoverSkill: boolean;
-  discoverSkillDisabledReason?: string;
   onShopSkillDiscoverRequest: () => void;
   shopEquipBoostCost: number;
-  shopEquipAttackUsed: boolean;
-  shopEquipArmorUsed: boolean;
   onShopEquipAttackRequest: () => void;
   onShopEquipArmorRequest: () => void;
 
   // --- Shop skill select ---
-  shopSkillSelectOpen: boolean;
-  shopSkillOptions: HeroSkillDefinition[];
   onShopSkillSelect: (skillId: string) => void;
 
-  // --- Card flip overlay ---
-  eventTransformState: EventTransformState | null;
-
   // --- Card deletion ---
-  deleteModalOpen: boolean;
   onDeleteModalChange: (open: boolean) => void;
-  handCards: GameCardData[];
-  equipmentCards: GameCardData[];
-  amuletCards: GameCardData[];
   onDeleteCardConfirm: (cardId: string, source: CardDeletionSource) => void;
-  cardActionContext: CardActionContext | null;
+  onBatchDeleteConfirm?: (selections: Array<{ cardId: string; source: CardDeletionSource }>) => void;
 
   // --- Card details ---
   selectedCard: GameCardData | null;
   detailsModalOpen: boolean;
   onDetailsModalChange: (open: boolean) => void;
-  currentTurn: number;
-  isQuickMode?: boolean;
-  monsterRewardPreviewForModal: MonsterRewardPreview[] | null;
 
   // --- Hero details ---
   heroDetailsOpen: boolean;
   onHeroDetailsChange: (open: boolean) => void;
-  heroVariant: HeroVariant;
-  heroDetailsStats: HeroStatsSummary;
-  heroDetailsSkills: HeroSkillDefinition[];
-  permanentSkills: string[];
-  permanentSkillStacks: Record<string, number>;
   heroMagicInfo?: HeroMagicDisplayInfo[];
-  heroCapacityLimits: {
-    hand: number;
-    backpack: number;
-    amuletSlots: number;
-    equipmentSlotLeft: number;
-    equipmentSlotRight: number;
-  };
 
   // --- Monster reward ---
-  activeMonsterReward: MonsterRewardDrop | null;
   onMonsterRewardSelect: (optionId: string) => void;
 
   // --- Monster persuade ---
-  persuadeOpen: boolean;
-  persuadeMonster: GameCardData | null;
-  persuadeCost: number;
-  persuadeThreshold: number;
-  persuadeSuccessRate: number;
-  persuadeTargetLabel: string;
-  persuadePhase: PersuadePhase;
-  persuadeDiceValue: number | null;
-  persuadeSuccess: boolean | null;
   persuadeRollKey: number;
-  persuadeLevel: number;
   onPersuadeConfirm: () => void;
   onPersuadeDiceResult: (value: number) => void;
   onPersuadeClose: () => void;
 
   // --- Card upgrade ---
-  upgradeModalOpen: boolean;
-  upgradeModalMaxCount?: number;
   onUpgradeModalChange: (open: boolean) => void;
-  equipmentSlot1: EquipmentItem | null;
-  equipmentSlot2: EquipmentItem | null;
-  amuletSlots: AmuletItem[];
   onCardUpgrade: (cardId: string) => void;
 
   // --- Event choice ---
-  eventModalOpen: boolean;
-  eventModalMinimized: boolean;
-  currentEventCard: GameCardData | null;
   onEventChoice: (choiceIndex: number) => void;
   eventChoiceStates: EventChoiceAvailability[];
   onEventMinimize: () => void;
 
   // --- Event dice ---
-  eventDiceModal: EventDiceModalState | null;
   eventDiceRollKey: number;
   onDiceRollResult: (value: number) => void;
   onDiceModalClose: () => void;
 
   // --- Magic choice ---
-  magicChoiceModal: MagicChoiceModalState | null;
   onMagicChoice: (choiceId: string) => void;
 
   // --- Equipment select ---
-  equipmentPrompt: EquipmentPromptState | null;
   onEquipmentPromptSelect: (slotId: EquipmentSlotId) => void;
   onEquipmentPromptCancel: () => void;
 
   // --- Hero magic choice prompt ---
-  heroMagicChoicePrompt: { id: string; prompt: string } | null;
   onCancelHeroMagicAction: () => void;
   onHeroMagicChoice: (choice: 'heal' | 'purge') => void;
 
   // --- Potion choice dialog ---
-  potionChoiceDialogOpen: boolean;
   onCancelPotionAction: () => void;
   onPotionChoiceSelection: (choice: 'repair' | 'upgrade') => void;
 
   // --- Hero skill selection ---
-  showSkillSelection: boolean;
   onSkillSelection: (skillId: string) => void;
 
   // --- Card draft ---
-  showCardDraft: boolean;
-  cardDraftPool: GameCardData[];
   onCardDraftComplete: (selectedCards: GameCardData[]) => void;
 
   // --- Class card preview ---
   classCardPreview: GameCardData | null;
 
   // --- End Hero Turn button ---
-  isCombatPanelVisible: boolean;
-  combatCurrentTurn: 'hero' | 'monster';
   headerHeight: number;
   endHeroTurnDisabled: boolean;
   onEndHeroTurn: () => void;
 
+  // --- Hand magic upgrade ---
+  onHandMagicUpgradeSelect: (cardIds: string[]) => void;
+  onHandMagicUpgradeClose: () => void;
+
+  // --- Mirror copy ---
+  onMirrorCopyConfirm: (selection: MirrorCopySelection) => void;
+  onMirrorCopyCancel: () => void;
+
+  // --- Amplify ---
+  onAmplifyConfirm: (selection: AmplifySelection) => void;
+  onAmplifyCancel: () => void;
+
+  // --- Perm grant ---
+  onPermGrantConfirm: (cardId: string) => void;
+  onPermGrantCancel: () => void;
+
   // --- Undo button ---
-  undoCount: number;
   fullBoardInteractionLocked: boolean;
   onUndo: () => void;
 };
@@ -268,7 +196,6 @@ export type GameBoardModalsProps = {
 function GameBoardModalsInner({
   overlayZoom,
 
-  deathWardPrompt,
   onDeathWardConfirm,
   onDeathWardDecline,
   daggerSelfDestructPrompt,
@@ -278,174 +205,371 @@ function GameBoardModalsInner({
   wraithPassiveUnlockPopup,
   onWraithPassiveUnlockChange,
 
-  gameOver,
   gameOverMinimized,
-  victory,
-  gold,
-  hp,
-  maxHp,
   onRestart,
   onGameOverMinimize,
-  monstersDefeated,
-  totalDamageTaken,
-  totalHealed,
   stageScale,
 
   deckViewerOpen,
   onDeckViewerChange,
-  remainingDeck,
   onCardSelect,
 
   backpackViewerOpen,
   onBackpackViewerChange,
-  backpackItems,
-  backpackCapacity,
-  permanentMagicRecycleBag,
 
-  discoverModalOpen,
-  discoverOptions,
-  discoverSourceLabel,
   onDiscoverSelect,
   onDiscoverCancel,
 
-  graveyardDiscoverState,
   onGraveyardDiscoverSelect,
   onGraveyardDiscoverCancel,
 
-  ghostBladeExileCards,
   onGhostBladeExileConfirm,
 
-  shopModalOpen,
-  shopModalMinimized,
-  shopOfferings,
-  shopLevel,
-  canDeleteCardInShop,
-  shopDeleteDisabledReason,
   onShopDeleteRequest,
   onShopPurchase,
   onShopClose,
   onShopMinimize,
-  shopSourceEvent,
-  shopHealUsed,
   onShopHealRequest,
   shopHealCost,
   shopLevelUpCost,
-  shopLevelUpUsed,
   onShopLevelUpRequest,
   shopSkillDiscoverCost,
-  shopSkillDiscoverUsed,
-  canDiscoverSkill,
-  discoverSkillDisabledReason,
   onShopSkillDiscoverRequest,
   shopEquipBoostCost,
-  shopEquipAttackUsed,
-  shopEquipArmorUsed,
   onShopEquipAttackRequest,
   onShopEquipArmorRequest,
 
-  shopSkillSelectOpen,
-  shopSkillOptions,
   onShopSkillSelect,
 
-  eventTransformState,
-
-  deleteModalOpen,
   onDeleteModalChange,
-  handCards,
-  equipmentCards,
-  amuletCards,
   onDeleteCardConfirm,
-  cardActionContext,
+  onBatchDeleteConfirm,
 
   selectedCard,
   detailsModalOpen,
   onDetailsModalChange,
-  currentTurn,
-  isQuickMode,
-  monsterRewardPreviewForModal,
 
   heroDetailsOpen,
   onHeroDetailsChange,
-  heroVariant,
-  heroDetailsStats,
-  heroDetailsSkills,
-  permanentSkills,
-  permanentSkillStacks,
   heroMagicInfo,
-  heroCapacityLimits,
 
-  activeMonsterReward,
   onMonsterRewardSelect,
 
-  persuadeOpen,
-  persuadeMonster,
-  persuadeCost,
-  persuadeThreshold,
-  persuadeSuccessRate,
-  persuadeTargetLabel,
-  persuadePhase,
-  persuadeDiceValue,
-  persuadeSuccess,
   persuadeRollKey,
-  persuadeLevel,
   onPersuadeConfirm,
   onPersuadeDiceResult,
   onPersuadeClose,
 
-  upgradeModalOpen,
-  upgradeModalMaxCount,
   onUpgradeModalChange,
-  equipmentSlot1,
-  equipmentSlot2,
-  amuletSlots,
   onCardUpgrade,
 
-  eventModalOpen,
-  eventModalMinimized,
-  currentEventCard,
   onEventChoice,
   eventChoiceStates,
   onEventMinimize,
 
-  eventDiceModal,
   eventDiceRollKey,
   onDiceRollResult,
   onDiceModalClose,
 
-  magicChoiceModal,
   onMagicChoice,
 
-  equipmentPrompt,
   onEquipmentPromptSelect,
   onEquipmentPromptCancel,
 
-  heroMagicChoicePrompt,
   onCancelHeroMagicAction,
   onHeroMagicChoice,
 
-  potionChoiceDialogOpen,
   onCancelPotionAction,
   onPotionChoiceSelection,
 
-  showSkillSelection,
   onSkillSelection,
 
-  showCardDraft,
-  cardDraftPool,
   onCardDraftComplete,
 
   classCardPreview,
 
-  isCombatPanelVisible,
-  combatCurrentTurn,
   headerHeight,
   endHeroTurnDisabled,
   onEndHeroTurn,
 
-  undoCount,
+  onHandMagicUpgradeSelect,
+  onHandMagicUpgradeClose,
+  onMirrorCopyConfirm,
+  onMirrorCopyCancel,
+  onAmplifyConfirm,
+  onAmplifyCancel,
+  onPermGrantConfirm,
+  onPermGrantCancel,
+
   fullBoardInteractionLocked,
   onUndo,
 }: GameBoardModalsProps) {
+  const _dispatch = useDispatch();
+  const _gs = useShallowGameState(s => ({
+    deathWardPrompt: s.deathWardPrompt,
+    gameOver: s.gameOver,
+    victory: s.victory,
+    gold: s.gold,
+    hp: s.hp,
+    remainingDeck: s.remainingDeck,
+    backpackItems: s.backpackItems,
+    permanentMagicRecycleBag: s.permanentMagicRecycleBag,
+    discoverModalOpen: s.discoverModalOpen,
+    discoverOptions: s.discoverOptions,
+    discoverSourceLabel: s.discoverSourceLabel,
+    graveyardDiscoverState: s.graveyardDiscoverState,
+    ghostBladeExileCards: s.ghostBladeExileCards,
+    shopModalOpen: s.shopModalOpen,
+    shopModalMinimized: s.shopModalMinimized,
+    shopOfferings: s.shopOfferings,
+    shopLevel: s.shopLevel,
+    shopSourceEvent: s.shopSourceEvent,
+    shopHealUsed: s.shopHealUsed,
+    shopLevelUpUsed: s.shopLevelUpUsed,
+    shopSkillDiscoverUsed: s.shopSkillDiscoverUsed,
+    shopEquipAttackUsed: s.shopEquipAttackUsed,
+    shopEquipArmorUsed: s.shopEquipArmorUsed,
+    shopSkillSelectOpen: s.shopSkillSelectOpen,
+    shopSkillOptions: s.shopSkillOptions,
+    eventTransformState: s.eventTransformState,
+    deleteModalOpen: s.deleteModalOpen,
+    handCards: s.handCards,
+    cardActionContext: s.cardActionContext,
+    heroVariant: s.heroVariant,
+    permanentSkills: s.permanentSkills,
+    activeMonsterReward: s.activeMonsterReward,
+    persuadeState: s.persuadeState,
+    persuadeLevel: s.persuadeLevel,
+    upgradeModalOpen: s.upgradeModalOpen,
+    upgradeModalMaxCount: s.upgradeModalMaxCount,
+    equipmentSlot1: s.equipmentSlot1,
+    equipmentSlot2: s.equipmentSlot2,
+    amuletSlots: s.amuletSlots,
+    eventModalOpen: s.eventModalOpen,
+    eventModalMinimized: s.eventModalMinimized,
+    currentEventCard: s.currentEventCard,
+    eventDiceModal: s.eventDiceModal,
+    magicChoiceModal: s.magicChoiceModal,
+    equipmentPrompt: s.equipmentPrompt,
+    showSkillSelection: s.showSkillSelection,
+    showCardDraft: s.showCardDraft,
+    cardDraftPool: s.cardDraftPool,
+    undoCount: s.undoCount,
+    monstersDefeated: s.monstersDefeated,
+    totalDamageTaken: s.totalDamageTaken,
+    totalHealed: s.totalHealed,
+    turnCount: s.turnCount,
+    gameMode: s.gameMode,
+    combatState: s.combatState,
+    backpackCapacityModifier: s.backpackCapacityModifier,
+    pendingHeroMagicAction: s.pendingHeroMagicAction,
+    pendingPotionAction: s.pendingPotionAction,
+    handMagicUpgradeModal: s.handMagicUpgradeModal,
+    mirrorCopyModal: s.mirrorCopyModal,
+    amplifyModal: s.amplifyModal,
+    permGrantModal: s.permGrantModal,
+    shopDeleteUsed: s.shopDeleteUsed,
+    equipmentSlot1Reserve: s.equipmentSlot1Reserve,
+    equipmentSlot2Reserve: s.equipmentSlot2Reserve,
+    persuadeCostModifier: s.persuadeCostModifier,
+    persuadeDiscount: s.persuadeDiscount,
+    persuadeSameTargetCostHalve: s.persuadeSameTargetCostHalve,
+    lastPersuadeTargetId: s.lastPersuadeTargetId,
+    handLimitBonus: s.handLimitBonus,
+    maxAmuletSlots: s.maxAmuletSlots,
+    equipmentSlotCapacity: s.equipmentSlotCapacity,
+    rng: s.rng,
+    selectedHeroSkill: s.selectedHeroSkill,
+    extraHeroSkills: s.extraHeroSkills,
+    selectedMonsterRewards: s.selectedMonsterRewards,
+    tempShield: s.tempShield,
+    weaponMasterBonus: s.weaponMasterBonus,
+    shieldMasterBonus: s.shieldMasterBonus,
+    defensiveStanceActive: s.defensiveStanceActive,
+    bulwarkPassiveActive: s.bulwarkPassiveActive,
+    bulwarkTempArmorStacks: s.bulwarkTempArmorStacks,
+    eternalRelics: s.eternalRelics,
+    permanentMaxHpBonus: s.permanentMaxHpBonus,
+    permanentSpellDamageBonus: s.permanentSpellDamageBonus,
+    permanentSpellLifesteal: s.permanentSpellLifesteal,
+    stunCap: s.stunCap,
+  }));
+
+  const { deathWardPrompt, gameOver, victory, gold, hp, remainingDeck, backpackItems, permanentMagicRecycleBag,
+    discoverModalOpen, discoverOptions, discoverSourceLabel, graveyardDiscoverState, ghostBladeExileCards,
+    shopModalOpen, shopModalMinimized, shopOfferings, shopLevel, shopSourceEvent: shopSourceEventCard,
+    shopHealUsed, shopLevelUpUsed, shopSkillDiscoverUsed, shopEquipAttackUsed, shopEquipArmorUsed,
+    shopSkillSelectOpen, shopSkillOptions, eventTransformState,
+    deleteModalOpen, handCards, cardActionContext, heroVariant, permanentSkills,
+    activeMonsterReward, persuadeState, persuadeLevel,
+    upgradeModalOpen, upgradeModalMaxCount, equipmentSlot1, equipmentSlot2, amuletSlots,
+    eventModalOpen, eventModalMinimized, currentEventCard, eventDiceModal, magicChoiceModal, equipmentPrompt,
+    showSkillSelection, showCardDraft, cardDraftPool, undoCount,
+    monstersDefeated, totalDamageTaken, totalHealed,
+    turnCount, gameMode, combatState, backpackCapacityModifier,
+    pendingHeroMagicAction, pendingPotionAction,
+    handMagicUpgradeModal, mirrorCopyModal, amplifyModal, permGrantModal,
+    shopDeleteUsed, equipmentSlot1Reserve, equipmentSlot2Reserve,
+    persuadeCostModifier, persuadeDiscount, persuadeSameTargetCostHalve, lastPersuadeTargetId,
+    handLimitBonus, maxAmuletSlots, equipmentSlotCapacity,
+    rng,
+    selectedHeroSkill, extraHeroSkills, selectedMonsterRewards,
+    tempShield, weaponMasterBonus, shieldMasterBonus, defensiveStanceActive,
+    bulwarkPassiveActive, bulwarkTempArmorStacks, eternalRelics,
+    permanentMaxHpBonus, permanentSpellDamageBonus, permanentSpellLifesteal, stunCap,
+  } = _gs;
+
+  const currentTurn = turnCount;
+  const isQuickMode = gameMode === 'quick';
+  const shopSourceEvent = shopSourceEventCard?.name ?? undefined;
+  const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
+  const persuadeOpen = Boolean(persuadeState);
+  const persuadeMonster = persuadeState?.monster ?? null;
+  const persuadeThreshold = persuadeState?.threshold ?? 0;
+  const persuadeSuccessRate = persuadeState?.successRate ?? 0;
+  const persuadeTargetLabel = persuadeState ? '背包' : '';
+  const persuadePhase: PersuadePhase = (persuadeState?.phase as PersuadePhase) ?? 'confirm';
+  const persuadeDiceValue = persuadeState?.diceValue ?? null;
+  const persuadeSuccess = persuadeState?.success ?? null;
+  const heroMagicChoicePrompt = pendingHeroMagicAction?.step === 'choice'
+    ? { id: pendingHeroMagicAction.id, prompt: pendingHeroMagicAction.prompt ?? '' }
+    : null;
+  const potionChoiceDialogOpen = Boolean(pendingPotionAction?.step === 'choice');
+  const isCombatPanelVisible = combatState.engagedMonsterIds.length > 0;
+  const combatCurrentTurn = combatState.currentTurn;
+
+  const flatEquipmentCards: GameCardData[] = ([equipmentSlot1, ...equipmentSlot1Reserve, equipmentSlot2, ...equipmentSlot2Reserve] as (GameCardData | null)[])
+    .filter(Boolean) as GameCardData[];
+  const flatAmuletCards: GameCardData[] = amuletSlots;
+  const deletableCardCount = handCards.length + backpackItems.length + permanentMagicRecycleBag.length
+    + flatEquipmentCards.length + flatAmuletCards.length;
+  const _canDeleteCardInShop = !shopDeleteUsed && deletableCardCount > 0;
+  const _shopDeleteDisabledReason = shopDeleteUsed
+    ? '本次商店已使用过删除'
+    : deletableCardCount === 0 ? '没有可以删除的卡牌' : undefined;
+
+  const _persuadeCost = (() => {
+    let c = Math.max(0, PERSUADE_COST + persuadeCostModifier - (persuadeDiscount?.costReduction ?? 0));
+    if (persuadeState?.monster && persuadeSameTargetCostHalve && lastPersuadeTargetId === persuadeState.monster.id) {
+      c = Math.floor(c / 2);
+    }
+    return c;
+  })();
+
+  const handleRngUpdate = (nextRng: RngState) => {
+    _dispatch({ type: 'SET_GAME_FLAGS', patch: { rng: nextRng } });
+  };
+
+  const _heroCapacityLimits = {
+    hand: HAND_LIMIT + handLimitBonus,
+    backpack: backpackCapacity,
+    amuletSlots: maxAmuletSlots,
+    equipmentSlotLeft: equipmentSlotCapacity.equipmentSlot1 ?? 1,
+    equipmentSlotRight: equipmentSlotCapacity.equipmentSlot2 ?? 1,
+  };
+
+  const _aura = useMemo(() => {
+    let attack = 0, defense = 0, mHp = 0;
+    for (const slot of amuletSlots) {
+      if (!slot) continue;
+      if (slot.amuletAuraBonus) {
+        attack += slot.amuletAuraBonus.attack ?? 0;
+        defense += slot.amuletAuraBonus.defense ?? 0;
+        mHp += slot.amuletAuraBonus.maxHp ?? 0;
+      }
+      if (typeof slot.value === 'number' && slot.effect) {
+        if (slot.effect === 'attack' && !(slot.amuletAuraBonus && typeof slot.amuletAuraBonus.attack === 'number')) attack += slot.value;
+        if (slot.effect === 'defense' && !(slot.amuletAuraBonus && typeof slot.amuletAuraBonus.defense === 'number')) defense += slot.value;
+        if (slot.effect === 'health' && !(slot.amuletAuraBonus && typeof slot.amuletAuraBonus.maxHp === 'number')) mHp += slot.value;
+      }
+    }
+    for (const relic of eternalRelics) {
+      if (relic.amuletAuraBonus) {
+        attack += relic.amuletAuraBonus.attack ?? 0;
+        defense += relic.amuletAuraBonus.defense ?? 0;
+        mHp += relic.amuletAuraBonus.maxHp ?? 0;
+      }
+    }
+    return { attack, defense, maxHp: mHp };
+  }, [amuletSlots, eternalRelics]);
+
+  const _selectedHeroSkillDef = useMemo(
+    () => getHeroSkillById(selectedHeroSkill),
+    [selectedHeroSkill],
+  );
+
+  const _eternalMaxHpBonus = useMemo(
+    () => eternalRelics.reduce((sum, r) => sum + (r.initialMaxHpBonus ?? 0), 0),
+    [eternalRelics],
+  );
+
+  const _maxHp = INITIAL_HP + _aura.maxHp + permanentMaxHpBonus +
+    (permanentSkills.includes('Iron Will') ? 3 : 0) +
+    (_selectedHeroSkillDef?.initialMaxHpBonus ?? 0) +
+    _eternalMaxHpBonus;
+
+  const _attackBonus = _aura.attack +
+    (permanentSkills.includes('Weapon Master') ? 1 : 0) +
+    weaponMasterBonus +
+    (permanentSkills.includes('Berserker Rage') ? Math.floor((_maxHp - hp) / 2) : 0) +
+    (permanentSkills.includes('Battle Frenzy') && hp < _maxHp / 2 ? 2 : 0);
+
+  const _defenseBonus = _aura.defense +
+    (permanentSkills.includes('Iron Skin') ? 1 : 0) +
+    shieldMasterBonus +
+    (defensiveStanceActive ? 1 : 0);
+
+  const _heroDetailsStats = useMemo(() => ({
+    hp,
+    maxHp: _maxHp,
+    gold,
+    attackBonus: _attackBonus,
+    defenseBonus: _defenseBonus,
+    spellDamageBonus: permanentSpellDamageBonus,
+    spellLifesteal: permanentSpellLifesteal,
+    tempShield,
+    permanentMaxHpBonus,
+    stunCap,
+  }), [hp, _maxHp, gold, _attackBonus, _defenseBonus, permanentSpellDamageBonus, permanentSpellLifesteal, tempShield, permanentMaxHpBonus, stunCap]);
+
+  const _heroDetailsSkills = useMemo(() => {
+    const skills: import('@/lib/heroSkills').HeroSkillDefinition[] = [];
+    if (_selectedHeroSkillDef) skills.push(_selectedHeroSkillDef);
+    for (const id of extraHeroSkills) {
+      const def = getHeroSkillById(id);
+      if (def) skills.push(def);
+    }
+    return skills;
+  }, [_selectedHeroSkillDef, extraHeroSkills]);
+
+  const _permanentSkillStacks = useMemo(() => ({
+    '潮涌铸甲': bulwarkPassiveActive + bulwarkTempArmorStacks,
+    '潮涌铸甲·瀑流': bulwarkPassiveActive,
+    '潮涌铸甲·格挡': bulwarkTempArmorStacks,
+  }), [bulwarkPassiveActive, bulwarkTempArmorStacks]);
+
+  const _monsterRewardPreview = useMemo(() => {
+    if (selectedCard?.type !== 'monster' || !selectedMonsterRewards?.length) return null;
+    return selectedMonsterRewards.map(option => ({
+      id: option.id,
+      title: option.title,
+      description: option.description,
+      detail: option.detail,
+    }));
+  }, [selectedCard, selectedMonsterRewards]);
+
+  const _canDiscoverSkill = useMemo(() => {
+    const ownedCount = (selectedHeroSkill ? 1 : 0) + extraHeroSkills.length;
+    return allHeroSkills.length - ownedCount >= 3;
+  }, [selectedHeroSkill, extraHeroSkills.length]);
+
+  const _discoverSkillDisabledReason = useMemo(() => {
+    const ownedCount = (selectedHeroSkill ? 1 : 0) + extraHeroSkills.length;
+    return allHeroSkills.length - ownedCount < 3
+      ? '已学习太多技能，没有足够的未学技能可供选择。'
+      : undefined;
+  }, [selectedHeroSkill, extraHeroSkills.length]);
+
   return (
     <>
       {deathWardPrompt && (
@@ -595,15 +719,15 @@ function GameBoardModalsInner({
         backpackCount={backpackItems.length}
         backpackCapacity={backpackCapacity}
         shopLevel={shopLevel}
-        canDeleteCard={canDeleteCardInShop}
-        deleteDisabledReason={shopDeleteDisabledReason}
+        canDeleteCard={_canDeleteCardInShop}
+        deleteDisabledReason={_shopDeleteDisabledReason}
         onDeleteRequest={onShopDeleteRequest}
         onBuy={onShopPurchase}
         onFinish={onShopClose}
         onMinimize={onShopMinimize}
         sourceEventName={shopSourceEvent}
         hp={hp}
-        maxHp={maxHp}
+        maxHp={_maxHp}
         healCost={shopHealCost}
         shopHealUsed={shopHealUsed}
         onHealRequest={onShopHealRequest}
@@ -612,8 +736,8 @@ function GameBoardModalsInner({
         onShopLevelUpRequest={onShopLevelUpRequest}
         shopSkillDiscoverCost={shopSkillDiscoverCost}
         shopSkillDiscoverUsed={shopSkillDiscoverUsed}
-        canDiscoverSkill={canDiscoverSkill}
-        discoverSkillDisabledReason={discoverSkillDisabledReason}
+        canDiscoverSkill={_canDiscoverSkill}
+        discoverSkillDisabledReason={_discoverSkillDisabledReason}
         onShopSkillDiscoverRequest={onShopSkillDiscoverRequest}
         shopEquipBoostCost={shopEquipBoostCost}
         shopEquipAttackUsed={shopEquipAttackUsed}
@@ -636,8 +760,8 @@ function GameBoardModalsInner({
         handCards={handCards}
         backpackCards={backpackItems}
         recycleBagCards={permanentMagicRecycleBag}
-        equipmentCards={equipmentCards}
-        amuletCards={amuletCards}
+        equipmentCards={flatEquipmentCards}
+        amuletCards={flatAmuletCards}
         keyword={cardActionContext?.keyword}
         onDeleteCard={onDeleteCardConfirm}
         title={cardActionContext?.title}
@@ -645,6 +769,9 @@ function GameBoardModalsInner({
         requiredCount={cardActionContext?.requiredCount}
         remainingCount={cardActionContext?.remainingCount}
         handOnly={cardActionContext?.handOnly}
+        selectionMode={cardActionContext?.selectionMode}
+        maxCount={cardActionContext?.maxCount}
+        onBatchConfirm={onBatchDeleteConfirm}
       />
 
       <CardDetailsModal 
@@ -652,7 +779,7 @@ function GameBoardModalsInner({
         open={detailsModalOpen}
         onOpenChange={onDetailsModalChange}
         currentTurn={currentTurn}
-        monsterRewards={monsterRewardPreviewForModal ?? undefined}
+        monsterRewards={_monsterRewardPreview ?? undefined}
         isQuickMode={isQuickMode}
       />
 
@@ -660,12 +787,12 @@ function GameBoardModalsInner({
         open={heroDetailsOpen}
         onOpenChange={onHeroDetailsChange}
         heroVariant={heroVariant}
-        stats={heroDetailsStats}
-        heroSkills={heroDetailsSkills}
+        stats={_heroDetailsStats}
+        heroSkills={_heroDetailsSkills}
         permanentSkills={permanentSkills}
-        permanentSkillStacks={permanentSkillStacks}
+        permanentSkillStacks={_permanentSkillStacks}
         heroMagicInfo={heroMagicInfo}
-        capacityLimits={heroCapacityLimits}
+        capacityLimits={_heroCapacityLimits}
       />
 
       {activeMonsterReward && (
@@ -686,7 +813,7 @@ function GameBoardModalsInner({
         open={persuadeOpen}
         monster={persuadeMonster}
         gold={gold}
-        cost={persuadeCost}
+        cost={_persuadeCost}
         threshold={persuadeThreshold}
         successRate={persuadeSuccessRate}
         targetLabel={persuadeTargetLabel}
@@ -731,8 +858,10 @@ function GameBoardModalsInner({
           autoRollTrigger={eventDiceRollKey}
           onRollResult={onDiceRollResult}
           onClose={onDiceModalClose}
+          predeterminedRoll={eventDiceModal.predeterminedRoll}
         />
       )}
+
 
       <MagicChoiceModal
         open={Boolean(magicChoiceModal)}
@@ -826,6 +955,8 @@ function GameBoardModalsInner({
         isOpen={showSkillSelection}
         onSelectSkill={onSkillSelection}
         classCardPreview={classCardPreview}
+        rng={rng}
+        onRngUpdate={handleRngUpdate}
       />
 
       {showCardDraft && (
@@ -838,6 +969,8 @@ function GameBoardModalsInner({
           overlayZoom={overlayZoom}
           classCardPreview={classCardPreview}
           roundTypes={['potion','equipment','amulet','general','general','general']}
+          rng={rng}
+          onRngUpdate={handleRngUpdate}
         />
       )}
 
@@ -897,6 +1030,43 @@ function GameBoardModalsInner({
           </div>
         )}
       </div>
+
+      <HandMagicUpgradeModal
+        open={Boolean(handMagicUpgradeModal)}
+        onClose={onHandMagicUpgradeClose}
+        handCards={handCards}
+        sourceCardId={handMagicUpgradeModal?.sourceCardId ?? null}
+        onUpgrade={onHandMagicUpgradeSelect}
+      />
+
+      <MirrorCopyModal
+        open={Boolean(mirrorCopyModal)}
+        onClose={onMirrorCopyCancel}
+        equipmentSlot1={equipmentSlot1}
+        equipmentSlot2={equipmentSlot2}
+        amuletSlots={amuletSlots}
+        handCards={handCards}
+        onConfirm={onMirrorCopyConfirm}
+      />
+
+      <AmplifyModal
+        open={Boolean(amplifyModal)}
+        onClose={onAmplifyCancel}
+        equipmentSlot1={equipmentSlot1}
+        equipmentSlot2={equipmentSlot2}
+        handCards={handCards}
+        onConfirm={onAmplifyConfirm}
+      />
+
+      <PermGrantModal
+        open={Boolean(permGrantModal)}
+        onClose={onPermGrantCancel}
+        handCards={handCards}
+        amuletSlots={amuletSlots}
+        sourceCardId={permGrantModal?.sourceCardId ?? null}
+        sourceType={permGrantModal?.sourceType ?? 'magic'}
+        onConfirm={onPermGrantConfirm}
+      />
     </>
   );
 }

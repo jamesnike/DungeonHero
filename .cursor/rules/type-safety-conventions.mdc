@@ -1,0 +1,66 @@
+---
+description: Type safety conventions — equipment/amulet narrowing, event naming, RNG
+globs: client/src/game-core/**/*.ts
+alwaysApply: false
+---
+
+# Type Safety Conventions
+
+## EquipmentItem / AmuletItem narrowing
+
+`GameState` uses narrow types for equipment and amulet slots:
+
+```typescript
+equipmentSlot1: EquipmentItem | null;  // GameCardData & { type: 'weapon' | 'shield' | 'monster' }
+amuletSlots: AmuletItem[];             // GameCardData & { type: 'amulet' }
+equipmentSlot1Reserve: EquipmentItem[];
+```
+
+When assigning `GameCardData` to these fields in reducer patches, use explicit type assertions:
+
+```typescript
+// ✅ Assert when the runtime type is known to be correct
+patch.equipmentSlot1 = { ...card, durability: maxDurability } as EquipmentItem;
+patch.amuletSlots = state.amuletSlots.filter(a => a.id !== cardId) as AmuletItem[];
+patch.equipmentSlot1Reserve = survivors as EquipmentItem[];
+
+// ❌ Don't assign raw GameCardData — TypeScript will error
+patch.equipmentSlot1 = card; // Error: GameCardData not assignable to EquipmentItem
+```
+
+Import from `game-board/types`:
+
+```typescript
+import type { EquipmentItem, AmuletItem } from '@/components/game-board/types';
+```
+
+## GameEventMap naming conventions
+
+| Prefix | Use for | Example |
+|--------|---------|---------|
+| `combat:` | Combat flows, damage, block | `combat:monsterDamaged` |
+| `equipment:` | Equipment equip/break/repair | `equipment:destroyed` |
+| `card:` | Card draw/play/discard/flip | `card:discardShock` |
+| `hero:` | Hero skill/magic UI | `hero:skillRequiresTarget` |
+| `shop:` | Shop flows | `shop:discoverStarted` |
+| `event:` | Dungeon event flows | `event:completed` |
+| `waterfall:` | Waterfall phases | `waterfall:completed` |
+| `ui:` | Generic UI (banners, prompts) | `ui:requestDice` |
+| `interactive:` | Continuation responses | `interactive:diceResolved` |
+
+Before creating a new event, check if it already exists — reuse existing events rather than creating duplicates.
+
+## Seeded RNG — no Math.random()
+
+All game-logic randomness must use `state.rng` from `game-core/rng.ts`:
+
+```typescript
+import { nextInt, nextBool, shuffle, pickRandom } from '../rng';
+
+const { value: roll, rng: rng1 } = nextInt(state.rng, 1, 20);
+const { items: shuffled, rng: rng2 } = shuffle(rng1, candidates);
+// Always carry the updated rng into the returned state
+patch.rng = rng2;
+```
+
+`Math.random()` is only acceptable for UI-only purposes (animations, particle effects) — never for game logic.

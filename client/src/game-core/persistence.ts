@@ -2,11 +2,13 @@
  * Persistence Domain — serialization helpers for game state.
  */
 
-import type { GameCardData } from '@/components/GameCard';
-import type { PersistedGameState } from '@/lib/gameStorage';
+import type { GameCardData, CurseEffectId } from '@/components/GameCard';
+import type { PersistedGameState, PersistedShopOffering } from '@/lib/gameStorage';
 import type { GameState } from './types';
 import { sanitizeCardMetadata, sanitizeCardList, sanitizeSlotRow } from './helpers';
 import { sanitizeHeroMagicState } from '@/lib/heroMagic';
+import bloodCurseSealImage from '@assets/generated_images/card_curse_blood_seal.png';
+import greedCurseImage from '@assets/generated_images/card_curse_greed.png';
 
 // ---------------------------------------------------------------------------
 // Serialize GameState → PersistedGameState
@@ -71,6 +73,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
       equipmentSlot2: state.berserkTurnBuff.equipmentSlot2 ?? 0,
     },
     extraAttackCharges: state.extraAttackCharges,
+    slotExtraAttacks: { ...(state.slotExtraAttacks ?? { equipmentSlot1: 0, equipmentSlot2: 0 }) },
     combatState: {
       engagedMonsterIds: state.combatState.engagedMonsterIds,
       initiator: state.combatState.initiator,
@@ -108,6 +111,8 @@ export function serializeGameState(state: GameState): PersistedGameState {
     gambitSlotUsed: state.gambitSlotUsed,
     weaponExtraAttackUsed: state.weaponExtraAttackUsed,
     blockDurabilityPerSlot: state.blockDurabilityPerSlot,
+    slotBattleSpiritBonus: state.slotBattleSpiritBonus,
+    slotBattleSpiritUsed: state.slotBattleSpiritUsed,
     heroSkillUsedThisWave: state.heroSkillUsedThisWave,
     extraSkillsUsedThisWave: state.extraSkillsUsedThisWave,
     handLimitBonus: state.handLimitBonus,
@@ -123,6 +128,10 @@ export function serializeGameState(state: GameState): PersistedGameState {
     monsterKillUpgradeProgress: state.monsterKillUpgradeProgress,
     recycleBackpackProgress: state.recycleBackpackProgress,
     swapUpgradeProgress: state.swapUpgradeProgress,
+    flipOverkillLifestealProgress: state.flipOverkillLifestealProgress,
+    equipAmuletCapProgress: state.equipAmuletCapProgress,
+    stunAttemptDiscoverProgress: state.stunAttemptDiscoverProgress,
+    flipDebuffMonsterId: state.flipDebuffMonsterId,
     bugletAmuletObtained: state.bugletAmuletObtained,
     statSwapCardObtained: state.statSwapCardObtained,
     persuadeLevel: state.persuadeLevel,
@@ -135,6 +144,8 @@ export function serializeGameState(state: GameState): PersistedGameState {
     persuadeAmuletBonus: state.persuadeAmuletBonus,
     persuadeDiscount: state.persuadeDiscount ? { ...state.persuadeDiscount } : null,
     lastPlayedCardCategory: state.lastPlayedCardCategory,
+    transformChainPrevCategory: state.transformChainPrevCategory,
+    consecutiveTransformStreak: state.consecutiveTransformStreak,
     magicCardsPlayedThisTurn: state.magicCardsPlayedThisTurn,
     damageMagicPlayedThisTurn: state.damageMagicPlayedThisTurn,
     previewCardStacks: state.previewCardStacks,
@@ -177,6 +188,141 @@ export function serializeGameState(state: GameState): PersistedGameState {
     magicChoiceModal: state.magicChoiceModal as any,
     eventDiceModal: state.eventDiceModal as any,
     deathWardPrompt: state.deathWardPrompt as any,
+    rng: state.rng ? { seed: state.rng.seed, state: state.rng.state } : undefined,
+    amplifiedCardBonus: { ...state.amplifiedCardBonus },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy curse migration
+// ---------------------------------------------------------------------------
+//
+// Curse cards historically lived as `type: 'magic'` with `isCurse: true` and
+// `magicType: 'permanent'`. They are now their own `type: 'curse'` with a
+// dedicated `curseEffect` discriminator and new artwork. Saved games from
+// before the refactor contain the legacy shape; rewrite those entries on
+// load so the engine treats them correctly going forward.
+
+interface LegacyCurseCard extends GameCardData {
+  isCurse?: boolean;
+  knightEffect?: string;
+}
+
+const isLegacyCurseCard = (card: GameCardData | null | undefined): card is LegacyCurseCard => {
+  if (!card) return false;
+  if (card.type === 'curse') return false;
+  const legacy = card as LegacyCurseCard;
+  if (legacy.isCurse === true) return true;
+  if (card.name === '血咒之印' || card.name === '贪婪诅咒') return true;
+  return false;
+};
+
+const inferCurseEffect = (card: LegacyCurseCard): CurseEffectId => {
+  if (card.knightEffect === 'greed-curse' || card.name === '贪婪诅咒') {
+    return 'greed-curse';
+  }
+  return 'blood-curse';
+};
+
+const migrateCurseCard = (card: GameCardData): GameCardData => {
+  if (!isLegacyCurseCard(card)) return card;
+  const curseEffect = inferCurseEffect(card);
+  const isGreed = curseEffect === 'greed-curse';
+  const migrated: GameCardData = {
+    ...card,
+    type: 'curse',
+    name: isGreed ? '贪婪诅咒' : '血咒之印',
+    image: isGreed ? greedCurseImage : bloodCurseSealImage,
+    description: isGreed
+      ? '诅咒：使用时失去 3 金币，使用后回到背包；无法被回收或弃置。'
+      : '诅咒：使用时失去 3 点生命，使用后回到背包；无法被回收或弃置。',
+    curseEffect,
+  };
+  delete (migrated as LegacyCurseCard).isCurse;
+  delete migrated.magicType;
+  delete migrated.magicEffect;
+  delete (migrated as LegacyCurseCard).knightEffect;
+  return migrated;
+};
+
+const migrateCardList = (
+  list: ReadonlyArray<GameCardData | null> | null | undefined,
+): GameCardData[] | null | undefined => {
+  if (list == null) return list as null | undefined;
+  return list.map(c => (c ? migrateCurseCard(c) : c)) as GameCardData[];
+};
+
+const migrateSlotRow = (
+  row: ReadonlyArray<GameCardData | null> | null | undefined,
+): Array<GameCardData | null> | null | undefined => {
+  if (row == null) return row as null | undefined;
+  return row.map(c => (c ? migrateCurseCard(c) : c));
+};
+
+const migrateShopOfferings = (
+  offerings: PersistedShopOffering[] | null | undefined,
+): PersistedShopOffering[] | null | undefined => {
+  if (offerings == null) return offerings;
+  return offerings.map(o => ({ ...o, card: migrateCurseCard(o.card) }));
+};
+
+/**
+ * Migrate legacy curse data in a persisted snapshot. Rewrites every card list
+ * to the new `type: 'curse'` shape and relocates curses found in graveyard /
+ * permanent magic recycle bag back into the backpack (their new resting
+ * place after use).
+ */
+export function migratePersistedState(
+  snapshot: PersistedGameState,
+): PersistedGameState {
+  const migrated: PersistedGameState = {
+    ...snapshot,
+    previewCards: migrateSlotRow(snapshot.previewCards) as PersistedGameState['previewCards'],
+    activeCards: migrateSlotRow(snapshot.activeCards) as PersistedGameState['activeCards'],
+    remainingDeck: migrateCardList(snapshot.remainingDeck) as PersistedGameState['remainingDeck'],
+    discardedCards: migrateCardList(snapshot.discardedCards) as PersistedGameState['discardedCards'],
+    handCards: migrateCardList(snapshot.handCards) as PersistedGameState['handCards'],
+    equipmentSlot1: snapshot.equipmentSlot1 ? migrateCurseCard(snapshot.equipmentSlot1) : snapshot.equipmentSlot1,
+    equipmentSlot2: snapshot.equipmentSlot2 ? migrateCurseCard(snapshot.equipmentSlot2) : snapshot.equipmentSlot2,
+    equipmentSlot1Reserve: migrateCardList(snapshot.equipmentSlot1Reserve) as PersistedGameState['equipmentSlot1Reserve'],
+    equipmentSlot2Reserve: migrateCardList(snapshot.equipmentSlot2Reserve) as PersistedGameState['equipmentSlot2Reserve'],
+    amuletSlots: migrateCardList(snapshot.amuletSlots) as PersistedGameState['amuletSlots'],
+    backpackItems: migrateCardList(snapshot.backpackItems) as PersistedGameState['backpackItems'],
+    permanentMagicRecycleBag: migrateCardList(snapshot.permanentMagicRecycleBag) as PersistedGameState['permanentMagicRecycleBag'],
+    classDeck: migrateCardList(snapshot.classDeck) as PersistedGameState['classDeck'],
+    classCardsInHand: migrateCardList(snapshot.classCardsInHand as GameCardData[]) as PersistedGameState['classCardsInHand'],
+    discoverOptions: migrateCardList(snapshot.discoverOptions) as PersistedGameState['discoverOptions'],
+    cardDraftPool: migrateCardList(snapshot.cardDraftPool) as PersistedGameState['cardDraftPool'],
+    shopOfferings: migrateShopOfferings(snapshot.shopOfferings) as PersistedGameState['shopOfferings'],
+    graveyardDiscoverState: migrateCardList(snapshot.graveyardDiscoverState) as PersistedGameState['graveyardDiscoverState'],
+    ghostBladeExileCards: migrateCardList(snapshot.ghostBladeExileCards) as PersistedGameState['ghostBladeExileCards'],
+  };
+
+  // Curses are no longer allowed to live in graveyard or permanent recycle bag.
+  // Move any that were stranded there back into the backpack.
+  const stranded: GameCardData[] = [];
+  const stripCurses = (
+    list: ReadonlyArray<GameCardData> | null | undefined,
+  ): GameCardData[] | null | undefined => {
+    if (list == null) return list;
+    const kept: GameCardData[] = [];
+    for (const card of list) {
+      if (card && card.type === 'curse') {
+        stranded.push(card);
+      } else if (card) {
+        kept.push(card);
+      }
+    }
+    return kept;
+  };
+  migrated.discardedCards = stripCurses(migrated.discardedCards) as PersistedGameState['discardedCards'];
+  migrated.permanentMagicRecycleBag = stripCurses(migrated.permanentMagicRecycleBag) as PersistedGameState['permanentMagicRecycleBag'];
+
+  if (stranded.length > 0) {
+    const backpack = (migrated.backpackItems ?? []) as GameCardData[];
+    migrated.backpackItems = [...backpack, ...stranded];
+  }
+
+  return migrated;
 }
 

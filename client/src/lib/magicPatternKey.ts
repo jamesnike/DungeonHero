@@ -6,7 +6,9 @@ const STARTER_ID_TO_KEY: Record<string, string> = {
   'starter-perm-discard-draw': 'out-with-old',
   'starter-perm-reshuffle': 'labyrinth-retreat',
   'starter-perm-dungeon-swap': 'world-swap',
+  'starter-perm-active-row-flip': 'active-row-flip',
   'starter-perm-heal-two': 'blessing-wind',
+  'starter-perm-survey-action': 'survey-action',
 };
 
 const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
@@ -15,6 +17,7 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'missing-hp-smite': 'knight-missing-hp-smite',
   'grave-nova': 'knight-grave-nova',
   'berserk-gambit': 'knight-berserk-gambit',
+  'battle-spirit': 'knight-battle-spirit',
   'recycle-flare': 'knight-recycle-flare',
   'death-ward': 'knight-death-ward',
   'chaos-dice': 'knight-chaos-dice',
@@ -30,7 +33,10 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'stun-wave': 'stun-domain',
   'stat-swap': 'knight-stat-swap',
   'missile-bolt': 'magic-bolt',
+  'missile-storm': 'missile-storm',
   'graveyard-discover-equip-amulet': 'graveyard-discover-relic',
+  'flip-back-active': 'knight-blood-oath-scroll',
+  'temp-attack-double': 'knight-temp-attack-double',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -51,6 +57,7 @@ const NAME_TO_KEY: Record<string, string> = {
   祝福之风: 'blessing-wind',
   迷宫回溯: 'labyrinth-retreat',
   乾坤挪移: 'world-swap',
+  乾坤一翻: 'active-row-flip',
   哥布林的戏法: 'goblin-trick',
   血咒之印: 'curse-seal',
   战血横扫: 'knight-honor-sweep',
@@ -67,6 +74,7 @@ const NAME_TO_KEY: Record<string, string> = {
   残血终焉: 'knight-missing-hp-smite',
   坟火新星: 'knight-grave-nova',
   孤注一掷: 'knight-berserk-gambit',
+  战意激发: 'knight-battle-spirit',
   回收灵焰: 'knight-recycle-flare',
   不灭守护: 'knight-death-ward',
   混沌骰运: 'knight-chaos-dice',
@@ -107,6 +115,7 @@ const NAME_TO_KEY: Record<string, string> = {
   天眼审判: 'divine-eye',
   紧急回收: 'emergency-recall',
   锋刃侧击: 'blade-flank',
+  锋芒倍增: 'knight-temp-attack-double',
   固壁侧守: 'wall-flank-guard',
   际遇轮盘: 'fortune-wheel',
   血契抽引: 'blood-pact-draw',
@@ -128,7 +137,10 @@ const NAME_TO_KEY: Record<string, string> = {
   颠倒乾坤: 'knight-stat-swap',
   归袋抽引: 'recycle-fetch',
   魔弹: 'magic-bolt',
+  魔弹风暴: 'missile-storm',
   破印遗物: 'graveyard-discover-relic',
+  血誓回卷: 'knight-blood-oath-scroll',
+  查阅动作: 'survey-action',
 };
 
 function hashName(s: string): number {
@@ -146,6 +158,7 @@ export type MagicPatternCardRef = {
   magicEffect?: string;
   heroMagicId?: string;
   knightEffect?: string;
+  curseEffect?: string;
   isCurse?: boolean;
 };
 
@@ -156,6 +169,10 @@ export function resolveMagicPatternKey(card: MagicPatternCardRef): string | null
     if (card.heroMagicId === 'revive-blessing') return 'hero-revive-blessing';
     if (card.heroMagicId === 'monster-doom') return 'hero-monster-doom';
     return NAME_TO_KEY[card.name] ?? `fallback-${hashName(card.name) % 12}`;
+  }
+  if (card.type === 'curse') {
+    if (card.curseEffect === 'greed-curse') return 'knight-greed-curse';
+    return 'curse-seal';
   }
   if (card.type !== 'magic') return null;
 
@@ -170,6 +187,7 @@ export function resolveMagicPatternKey(card: MagicPatternCardRef): string | null
   if (card.magicEffect === 'bounty-spell-damage') return 'bounty-spell';
   if (card.magicEffect === 'storm-volley-recycle') return 'storm-volley';
   if (card.magicEffect === 'equalize-temp-attack-armor') return 'spacetime-mirror';
+  if (card.magicEffect === 'weapon-manual') return 'weapon-manual';
   if (card.magicEffect === 'arcane-shield-stun-cap') return 'arcane-shield';
   if (card.magicEffect === 'swap-backpack-recycle') return 'void-swap';
   if (card.magicEffect === 'active-row-monster-attack-debuff') return 'monster-attack-debuff';

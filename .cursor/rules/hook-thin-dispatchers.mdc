@@ -1,0 +1,58 @@
+---
+description: All hooks are thin dispatchers — zero game logic in the hook layer
+globs: client/src/hooks/*.ts
+alwaysApply: false
+---
+
+# Hook Layer: Thin Dispatchers Only
+
+Every hook in `client/src/hooks/` is a **thin dispatcher**. It dispatches actions and listens for side effects — nothing else.
+
+## What hooks MUST NOT do
+
+- Compute damage, gold, HP, card movement, or any game-rule logic
+- Call `Math.random()` — all RNG is seeded via `state.rng` inside reducers
+- Read `engine.getState()` to make game-rule decisions (read state only for UI display)
+- Perform sequential imperative steps (do A, then B, then C) — use `enqueuedActions` in the reducer
+- Call `engine.setState()` — it was removed; only the reducer mutates state
+
+## Migrated hooks — complete list
+
+| Hook | Role | Reducer target |
+|------|------|---------------|
+| `useCardOperations.ts` | Card draw, discard, equip, backpack, recycle | `rules/cards.ts`, `rules/economy.ts` |
+| `useCombatActions.ts` | Weapon attack, kill effects, damage, block | `rules/combat.ts` |
+| `useCardPlayHandlers.ts` | Potion/magic finalization, mirror copy, amplify, deck judge | `rules/cards.ts` |
+| `useHeroActions.ts` | Skill use, magic activation, slot/monster selection, persuade | `rules/hero.ts` |
+| `useShopHandlers.ts` | Discover, delete, reward, graveyard selection, ghost blade | `rules/shop.ts` |
+| `useEventSystem.ts` | Event choice, event interaction, event completion, auto-draw | `rules/events.ts` |
+
+## Correct pattern
+
+```typescript
+// ✅ Hook dispatches, reducer does the work
+const beginDiscover = (source: string) => {
+  dispatch({ type: 'BEGIN_DISCOVER', source, pool: [] });
+};
+
+// ✅ Hook listens for UI side effects
+useGameEvent('shop:discoverStarted', ({ pool }) => {
+  setDiscoverOptions(pool);
+});
+```
+
+```typescript
+// ❌ WRONG — hook computes game logic
+const beginDiscover = (source: string) => {
+  const pool = shuffle(allCards).slice(0, 3); // game logic in hook!
+  engine.setState({ discoverOptions: pool }); // direct state mutation!
+};
+```
+
+## When adding new game behavior
+
+1. Define the action in `actions.ts`
+2. Add reducer logic in the appropriate `rules/*.ts` file
+3. Emit side effects for UI needs (add to `GameEventMap`)
+4. Hook dispatches the action — **no logic before or after**
+5. Hook listens for side effects via `useGameEvent` if UI animation is needed

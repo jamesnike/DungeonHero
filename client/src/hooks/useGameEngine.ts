@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { getGameEngine, type GameEngine, type GameState, type GameEventKey, type GameEventMap } from '@/game-core';
+import { getGameEngine, type GameEngine, type GameAction, type GameState, type GameEventKey, type GameEventMap } from '@/game-core';
 
 /**
  * Returns the GameEngine singleton. Stable across renders.
@@ -22,13 +22,10 @@ export function useGameEngine(): GameEngine {
  *
  * ```tsx
  * const hp = useGameState(s => s.hp);
- * const { gold, turnCount } = useGameState(s => ({ gold: s.gold, turnCount: s.turnCount }));
  * ```
  *
- * Note: if the selector returns a new object each time (like the second
- * example above), every engine state change will trigger a re-render of
- * this component. For fine-grained control, select primitives or use
- * React.memo / useMemo to stabilize objects.
+ * For primitives this works perfectly. For selectors that return new objects,
+ * use `useShallowGameState` instead to avoid unnecessary re-renders.
  */
 export function useGameState<T>(selector: (state: GameState) => T): T {
   const engine = useGameEngine();
@@ -49,31 +46,62 @@ export function useGameState<T>(selector: (state: GameState) => T): T {
   return useSyncExternalStore(stableSubscribe, stableGetSnapshot);
 }
 
+function shallowEqual<T extends Record<string, unknown>>(a: T, b: T): boolean {
+  const keysA = Object.keys(a);
+  if (keysA.length !== Object.keys(b).length) return false;
+  for (const key of keysA) {
+    if (!Object.is((a as any)[key], (b as any)[key])) return false;
+  }
+  return true;
+}
+
 /**
- * Create a setter function for a single GameState field that mirrors the
- * React `useState` setter API: accepts either a value or an updater
- * function. Delegates to `engine.setState()` so the engine remains the
- * single source of truth.
+ * Like `useGameState`, but uses shallow equality to compare the selected
+ * object. This prevents re-renders when the selector returns a new object
+ * whose fields haven't actually changed.
  *
  * ```tsx
- * const setHp = useEngineSetter('hp');
- * setHp(10);             // direct value
- * setHp(prev => prev + 1); // updater function
+ * const { gold, hp } = useShallowGameState(s => ({ gold: s.gold, hp: s.hp }));
  * ```
  */
-export function useEngineSetter<K extends keyof GameState>(key: K) {
+export function useShallowGameState<T extends Record<string, unknown>>(
+  selector: (state: GameState) => T,
+): T {
+  const engine = useGameEngine();
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
+  const cachedRef = useRef<T | undefined>(undefined);
+
+  const stableGetSnapshot = useCallback(() => {
+    const next = selectorRef.current(engine.getSnapshot());
+    if (cachedRef.current !== undefined && shallowEqual(cachedRef.current, next)) {
+      return cachedRef.current;
+    }
+    cachedRef.current = next;
+    return next;
+  }, [engine]);
+
+  const stableSubscribe = useCallback(
+    (onStoreChange: () => void) => engine.subscribe(onStoreChange),
+    [engine],
+  );
+
+  return useSyncExternalStore(stableSubscribe, stableGetSnapshot);
+}
+
+/**
+ * Returns a stable dispatch function for sending GameActions to the engine.
+ *
+ * ```tsx
+ * const dispatch = useDispatch();
+ * dispatch({ type: 'END_TURN', heroTurnLayerLossIds: [] });
+ * ```
+ */
+export function useDispatch(): (action: GameAction) => void {
   const engine = useGameEngine();
   return useCallback(
-    (value: GameState[K] | ((prev: GameState[K]) => GameState[K])) => {
-      if (typeof value === 'function') {
-        engine.setState(prev => ({
-          [key]: (value as (p: GameState[K]) => GameState[K])(prev[key]),
-        }));
-      } else {
-        engine.setState({ [key]: value } as Partial<GameState>);
-      }
-    },
-    [engine, key],
+    (action: GameAction) => engine.dispatch(action),
+    [engine],
   );
 }
 

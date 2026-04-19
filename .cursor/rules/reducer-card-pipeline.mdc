@@ -1,0 +1,42 @@
+---
+description: Reducer card play pipeline — how PLAY_CARD routes through the game core
+globs: client/src/game-core/rules/cards.ts
+alwaysApply: false
+---
+
+# Reducer Card Play Pipeline
+
+`PLAY_CARD` is the single entry point for playing cards from hand. All card logic lives in the reducer, not in React hooks.
+
+## Flow
+
+```
+dispatch({ type: 'PLAY_CARD' })
+  → reducePlayCard()
+    → removes card from hand
+    → applies flank effects (flankDraw, flankEffectId)
+    → routes by card.type:
+      - weapon/shield → slot assignment + executeOnEquip() + equip-empower relic
+      - potion → enqueue RESOLVE_POTION
+      - magic/hero-magic → enqueue RESOLVE_MAGIC
+
+RESOLVE_POTION
+  → executeMagicCardEffects() (card-schema engine, try first)
+  → fallback: resolveAllPotionEffects() (legacy)
+
+RESOLVE_MAGIC
+  → executeMagicCardEffects() (card-schema engine, try first)
+    → curse pre-processing
+    → magic counter + echo/double-next
+    → CardDefinition lookup → resolver or effects pipeline
+  → fallback: resolveAllMagicEffects() (legacy)
+```
+
+## Rules
+
+- **Never** put card play logic in `useCardPlayHandlers.ts` or `GameBoard.tsx` — it belongs in `rules/cards.ts`
+- `handlePlayCardFromHand` must remain a thin wrapper: `dispatch({ type: 'PLAY_CARD', cardId, target })`
+- The card-schema engine always runs first; legacy resolvers are fallbacks only
+- New potion/magic effects must be registered in `card-schema/definitions/`, not added as branches in `potion-effects.ts` or `magic-effects.ts`
+- Equipment on-equip effects go through `executeOnEquip()` registry, not inline if/else in `reducePlayCard`
+- Side effects (UI events) are emitted via `SideEffect[]` from the reducer, consumed by `useGameEvent` listeners in hooks

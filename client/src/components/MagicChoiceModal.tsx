@@ -12,6 +12,7 @@ export interface MagicChoiceModalState {
   title: string;
   subtitle?: string;
   options: MagicChoiceOption[];
+  flowContext?: Record<string, unknown>;
 }
 
 interface MagicChoiceModalProps {

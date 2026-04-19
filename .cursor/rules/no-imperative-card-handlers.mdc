@@ -1,0 +1,29 @@
+---
+description: Prevent re-introducing imperative card handlers in hooks/components
+globs: client/src/hooks/useCardPlayHandlers.ts, client/src/components/GameBoard.tsx
+alwaysApply: false
+---
+
+# No Imperative Card Handlers
+
+The following large imperative functions were **removed** because all card logic is now in the reducer + card-schema engine:
+
+- `handlePotionConsumption` (~735 lines) — replaced by `RESOLVE_POTION` → `executeCardEffects()`
+- `handleSkillCard` (~2000 lines) — replaced by `RESOLVE_MAGIC` → `executeMagicCardEffects()`
+- `handleKnightInstantMagic` (~430 lines) — replaced by magic resolver registry
+- `handleKnightPermanentMagic` (~525 lines) — replaced by magic resolver registry
+- Inline `onEquipEffect` if/else chains — replaced by `executeOnEquip()` registry
+
+## Rules
+
+- **Never** re-create `handlePotionConsumption`, `handleSkillCard`, or `handleKnightInstantMagic/PermanentMagic` in hooks
+- **Never** add `potionEffect`/`magicEffect`/`knightEffect` switch/if-else blocks in hooks or components
+- **Never** add `onEquipEffect` if/else chains in `GameBoard.tsx` or hooks — use `definitions/equipment.ts`
+- `handlePlayCardFromHand` must stay as a thin `dispatch({ type: 'PLAY_CARD' })` wrapper
+- UI-only concerns (animations, modals, flights) belong in `useGameEvent` listeners, not in card play handlers
+- The only card-related functions that should remain in `useCardPlayHandlers.ts` are:
+  - `handleHeroMagicCard` — hero magic gauge UI bridge
+  - `finalizeMagicCard` / `finalizePotionCard` — post-resolution UI cleanup
+  - `resolveDeckJudgeDelete`, `resolveRepairEnrageDice` — async UI helpers for interactive effects
+  - `applyTransformAndUpdateCategory` — transform effect UI trigger
+  - Utility helpers (getSpellDamage, drawCardsFromBackpack, etc.)

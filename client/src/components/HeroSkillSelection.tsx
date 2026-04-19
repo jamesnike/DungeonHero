@@ -4,33 +4,41 @@ import type { GameCardData } from './GameCard';
 import { heroSkills, type HeroSkillDefinition } from '@/lib/heroSkills';
 import { getEternalRelic } from '@/lib/eternalRelics';
 import type { EternalRelicId } from '@/game-core/types';
+import type { RngState } from '@/game-core/rng';
+import { shuffle as rngShuffle } from '@/game-core/rng';
 
 interface HeroSkillSelectionProps {
   isOpen: boolean;
   onSelectSkill: (skillId: string) => void;
   classCardPreview?: GameCardData | null;
+  rng: RngState;
+  onRngUpdate: (rng: RngState) => void;
 }
 
-function sampleSkills(count: number): HeroSkillDefinition[] {
-  const shuffled = [...heroSkills].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+function sampleSkills(count: number, rng: RngState): [HeroSkillDefinition[], RngState] {
+  const [shuffled, nextRng] = rngShuffle(heroSkills, rng);
+  return [shuffled.slice(0, count), nextRng];
 }
 
-export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPreview }: HeroSkillSelectionProps) {
+export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPreview, rng, onRngUpdate }: HeroSkillSelectionProps) {
   const overlayScale = useOverlayScale();
   const [choices, setChoices] = useState<HeroSkillDefinition[]>([]);
   const prevIsOpen = useRef(false);
 
   useEffect(() => {
     if (isOpen && !prevIsOpen.current) {
-      setChoices(sampleSkills(3));
+      const [sampled, nextRng] = sampleSkills(3, rng);
+      setChoices(sampled);
+      onRngUpdate(nextRng);
     }
     prevIsOpen.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleReroll = useCallback(() => {
-    setChoices(sampleSkills(3));
-  }, []);
+    const [sampled, nextRng] = sampleSkills(3, rng);
+    setChoices(sampled);
+    onRngUpdate(nextRng);
+  }, [rng, onRngUpdate]);
 
   if (!isOpen) return null;
 

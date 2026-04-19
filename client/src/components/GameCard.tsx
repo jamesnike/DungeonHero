@@ -64,10 +64,19 @@ export type CardType =
   | 'amulet'
   | 'magic'
   | 'hero-magic'
+  | 'curse'
   | 'event'
   | 'building'
   | 'skill'
   | 'coin';
+
+/**
+ * Curse subtype — distinguishes the two curse cards. Curse cards have their
+ * own top-level `type: 'curse'` (they are NOT magic cards). They cannot be
+ * recycled, discarded to the graveyard, or removed by any forced-discard
+ * effect. After being played they return to the player's backpack.
+ */
+export type CurseEffectId = 'blood-curse' | 'greed-curse' | 'frenzy-curse';
 
 export type EquipmentCardStatModifier = {
   appliesTo: 'weapon' | 'shield' | 'monster';
@@ -83,6 +92,7 @@ export type PotionEffectId =
   | 'repair-weapon-2'
   | 'repair-weapon-3'
   | 'boost-both-slots'
+  | 'perm-both-slots-shield+1'
   | 'repair-choice'
   | 'draw-backpack-4'
   | 'discover-class-3'
@@ -119,7 +129,10 @@ export type PotionEffectId =
   | 'perm-persuade-consecutive'
   | 'grant-lastwords-slot-temp-buff'
   | 'amulet-to-eternal-relic'
-  | 'grant-amulet-end-turn-draw';
+  | 'grant-amulet-end-turn-draw'
+  | 'perm-equip-empower'
+  | 'transform-recycle-grant'
+  | 'grant-weapon-stun-chance+40';
 
 export type AmuletEffectId =
   | 'heal'
@@ -130,6 +143,7 @@ export type AmuletEffectId =
   | 'strength'
   | 'dual-guard'
   | 'discard-zap'
+  | 'flip-zap'
   | 'flip-gold'
   | 'recycle-forge'
   | 'lone-card'
@@ -147,7 +161,16 @@ export type AmuletEffectId =
   | 'recycle-backpack-expand'
   | 'dungeon-gold'
   | 'monster-kill-upgrade'
-  | 'end-turn-draw';
+  | 'end-turn-draw'
+  | 'stun-rate-boost'
+  | 'armor-halve-endure'
+  | 'monster-equip-buff'
+  | 'lastwords-monster-debuff'
+  | 'stun-gold'
+  | 'flip-overkill-lifesteal'
+  | 'equip-amulet-cap'
+  | 'stun-attempt-discover'
+  | 'persuade-on-flip';
 
 export type AmuletAuraBonus = {
   attack?: number;
@@ -217,7 +240,10 @@ export interface GameCardData {
   skillType?: 'instant' | 'permanent'; // For class skills
   skillEffect?: string; // Description of skill effect
   eventChoices?: EventChoiceDefinition[]; // For event cards
+  /** @deprecated Use `card.type === 'curse'` instead. Kept only for legacy reads — new curse cards no longer set this. */
   isCurse?: boolean;
+  /** Identifies which curse card this is. Only set when `type === 'curse'`. */
+  curseEffect?: CurseEffectId;
   // Monster-specific properties
   monsterType?: string; // Base type for rage lookup (Dragon, Skeleton, etc.)
   monsterSpecial?: string; // Special champion ability tag (ember-fury, bone-regen, etc.)
@@ -272,11 +298,29 @@ export interface GameCardData {
   _flipBackCard?: GameCardData;
   scalingDamage?: number; // Self-scaling damage for permanent magic cards
   recycleDelay?: number; // Waterfalls to wait in recycle bag before restoring (default 1)
+  /**
+   * 凡化咒标记：表示此牌的 Perm 属性已被剥离。
+   * 仍保留 magicType（用于法术效果路由），但 cardHasPermFlag、回收袋判定、UI 标识等都视为非 Perm。
+   * 使用后进坟场而非回收袋；可被「永恒铭刻」/「永恒铭刻药」重新赋予 Perm（清除此标记）。
+   */
+  permStripped?: boolean;
   _recycleWaits?: number; // Internal: remaining waterfalls before this card leaves the recycle bag
   onDestroyHeal?: number; // Heal this amount when equipment is destroyed
   onDestroyGold?: number; // Gain this much gold when equipment is destroyed
   onEquipEffect?: string; // Trigger effect when this equipment is first equipped (入场)
   onDestroyEffect?: string; // General last-words effect when equipment is destroyed (遗言)
+  /** 上手关键词：当此卡进入手牌时（抽牌、坟场/回收袋/装备栏回手、卡牌翻面等）自动触发的效果 ID。 */
+  onEnterHandEffect?: string;
+  /** 内部标记：进入手牌时跳过 onEnterHandEffect 触发（用于克隆/复制/初始发牌等不应触发的来源）。 */
+  _skipOnEnterHand?: boolean;
+  /** 翻转之契 option 6 — 该装备每次卡牌翻转时恢复 1 耐久。绑定在装备卡上，跟随装备进入 reserve / 主槽。 */
+  _flipRepairBuff?: boolean;
+  /**
+   * 「生长之盾」类装备效果：每当发生一次卡牌翻转，且此卡当前装备在主槽中时，
+   * 触发一次 AMPLIFY_CARDS_BY_NAME(cardName, +2)，所有同名副本累计共享 +2 攻击/护甲。
+   * 仅在主槽（equipmentSlot1/2）触发，reserve/手牌/坟场等位置不触发。
+   */
+  amplifyOnFlip?: boolean;
   onDiscardDamage?: number; // Base spell damage dealt to random monster when discarded
   onDiscardDraw?: number; // Draw this many cards from backpack when discarded
   critChance?: number; // % chance to deal double damage on attack
@@ -285,6 +329,7 @@ export interface GameCardData {
   onAttackBuffOtherSlotTempAttack?: number; // Give the OTHER equipment slot +N temp attack on each attack
   onAttackRepairOtherSlot?: number; // Restore N durability to the OTHER equipment slot on each attack
   onAttackDebuffAllMonsterAttack?: number; // Reduce ALL active row monsters' attack by N on each attack
+  onAttackAmplifyMissileGenerate?: boolean; // After each attack: amplify '魔弹' +1 globally and add a (newly amplified) bolt to backpack (overflow → recycle bag)
   daggerSelfDestructDiscover?: boolean; // 匕首: after attack, optionally destroy weapon to discover class cards (1 per remaining durability)
   ghostBladeExile?: boolean; // 虚灵刀: after each attack, offer to exile cards from graveyard
   postAttackHandRecycle?: boolean; // After each attack, optionally move a hand card to recycle bag and draw one
@@ -292,6 +337,7 @@ export interface GameCardData {
   postAttackSpellDamage?: number; // After attacking, deal this much spell damage (boosted by spell damage bonus) to a random monster
   healOnKill?: number; // Heal this amount when this weapon kills a monster
   waterfallAttackBoost?: number; // Increase weapon's own attack by this amount each waterfall
+  waterfallTempArmor?: number; // On each waterfall, grant this much temporary armor to the wearing slot
   killGoldScaling?: boolean; // Weapon gives increasing gold per kill (counter starts at 1, increments each kill)
   killGoldCounter?: number; // Current gold bonus for next kill with this weapon
   persuadeBoostOnHit?: number; // Increase target monster's persuade rate by this % on hit
@@ -300,6 +346,7 @@ export interface GameCardData {
   doubleDamageOnStunned?: boolean; // Deal double damage when attacking stunned monsters
   overkillDraw?: number; // Draw this many cards from backpack on each overkill hit
   overkillRecycleToHand?: number; // Move this many cards from recycle bag to hand on each overkill hit
+  overkillAmplifyMissile?: number; // On each overkill hit, amplify all 魔弹 cards by this amount
   onDestroyPermanentDamage?: number; // Add permanent damage to slot when this equipment is destroyed
   onDestroyPermanentShield?: number; // Add permanent armor to slot when this equipment is destroyed
   shieldBlockAutoUpgradeCount?: number; // Auto-upgrade shield after this many blocks
@@ -319,9 +366,8 @@ export interface GameCardData {
   isFinalMonster?: boolean; // Last monster in the deck — transforms into boss on defeat
   bossPhase?: boolean; // Monster has transformed into boss form
   bossRetaliationDamage?: number; // Direct damage to hero (ignoring shields) each time boss takes a hit
-  bossLastStandAura?: boolean; // At 1 layer: +5 atk & heal 8 HP per monster turn end
+  bossLastStandAura?: boolean; // At 1 layer: ALL row monsters +5 atk & restore 1 layer per monster turn end
   bossLayerCap?: boolean; // (deprecated) Max 1 layer loss per hero turn
-  bossFuryDiceChance?: boolean; // Boss: 50% chance to skip layer loss on attack (dice roll)
   bossEnrageGraveyardSummon?: number; // Boss: on enrage, pull N cards from graveyard and stack on other slots
   // Tier-3 waterfall upgrade abilities
   ogreStun?: boolean; // Ogre tier-1+: 20% chance to stun the player on attack (freezes equipment/amulet slots)
@@ -417,6 +463,8 @@ export function waterfallsUntilBackpackFromRecycle(card: GameCardData): number {
 
 /** 判断卡牌是否已有任何形式的 Perm 属性（永久魔法 / 永久装备 / 永驻事件 / 显式 recycleDelay） */
 export function cardHasPermFlag(card: GameCardData): boolean {
+  // 凡化咒已剥离 Perm 属性 — 即使 magicType 仍为 permanent 也视为非 Perm。
+  if (card.permStripped) return false;
   if (card.magicType === 'permanent') return true;
   if (card.permEquipment) return true;
   if (card.isPermanentEvent) return true;
@@ -443,6 +491,7 @@ export function getMagicSubtypeBracketLabel(card: GameCardData): string | null {
     return '即时';
   }
   if (card.magicType === 'permanent') {
+    if (card.permStripped) return '即时';
     const d = card.recycleDelay ?? 1;
     return d > 1 ? `永久 ${d}` : '永久';
   }
@@ -469,6 +518,11 @@ interface GameCardProps {
   shieldBlockVariant?: number;
   equipmentStatModifier?: EquipmentCardStatModifier | null;
   showExhaustedOverlay?: boolean;
+  /**
+   * Hide event-card choice/dice list (preview-row context).
+   * Description text and waterfall warning are kept.
+   */
+  hideEventChoices?: boolean;
 }
 
 function GameCardInner({
@@ -491,6 +545,7 @@ function GameCardInner({
   shieldBlockVariant = 0,
   equipmentStatModifier = null,
   showExhaustedOverlay = false,
+  hideEventChoices = false,
 }: GameCardProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
@@ -512,12 +567,28 @@ function GameCardInner({
   const isMagicLikeCard = card.type === 'magic' || card.type === 'hero-magic';
   const isEventCard = card.type === 'event';
   const isTitleBandCard = isMagicLikeCard || isEventCard;
-  const isPermanentMagicCard = card.type === 'magic' && card.magicType === 'permanent';
+  const isPermanentMagicCard = card.type === 'magic' && card.magicType === 'permanent' && !card.permStripped;
   const permRecycleWaterfalls = card.recycleDelay ?? 1;
   /** 永久法术：卡面始终显示 PERM + 瀑流计数（含 1）；永驻事件、永久装备仍仅在 >1 时显示数字 */
   const showPermMagicRecycleNumber = isPermanentMagicCard;
   const showPermEventRecycleNumber = Boolean(card.isPermanentEvent) && permRecycleWaterfalls > 1;
   const showPermEquipmentRecycleNumber = permRecycleWaterfalls > 1;
+  /**
+   * 标准布局卡牌（武器/护盾/怪物/建筑）右上角已被 HP/耐久点占用，
+   * 把 Perm 标识移到名称旁内联显示（参考永久魔法的标识样式），避免被覆盖。
+   */
+  const hasStandardLayoutCornerStats =
+    card.type === 'weapon' ||
+    card.type === 'shield' ||
+    card.type === 'monster' ||
+    card.type === 'building';
+  const inlinePermVariant: 'cyan' | 'amber' | null = (() => {
+    if (!hasStandardLayoutCornerStats) return null;
+    if ((card.type === 'weapon' || card.type === 'shield') && card.permEquipment) return 'cyan';
+    if (card.recycleDelay != null && card.recycleDelay > 0) return 'amber';
+    return null;
+  })();
+  const showInlinePermPill = inlinePermVariant !== null;
   const healingPotionEffects: PotionEffectId[] = ['heal-5', 'heal-7'];
   const isHealingPotion =
     isPotionCard && (!card.potionEffect || healingPotionEffects.includes(card.potionEffect));
@@ -817,6 +888,7 @@ const amuletEffectText =
   })();
   const cardImageHeightClass = isThemedImageCard ? 'h-[60%]' : 'h-[65%]';
   const hasFlipTarget = Boolean(card.flipTarget);
+  const hasBeenFlipped = Boolean(card._flipBackCard) && !hasFlipTarget;
 
   const cardImageBackdropClass = (() => {
     if (isThemedImageCard) {
@@ -973,6 +1045,12 @@ const amuletEffectText =
               翻转
             </div>
           )}
+          {hasBeenFlipped && (
+            <div className={`dh-card__flipped-badge ${isCompact || isFlat ? 'dh-card__flipped-badge--compact' : ''}`} title="此卡牌已翻转">
+              <span className="dh-card__flipped-badge-icon" aria-hidden>↻</span>
+              <span>已翻转</span>
+            </div>
+          )}
 
           {isTextOnlyCard ? (
             /* ========== EVENT / MAGIC: full-height text layout with decorative edges ========== */
@@ -1027,7 +1105,7 @@ const amuletEffectText =
                     {isEventCard ? 'Event' : card.type === 'hero-magic' ? 'Hero Magic' : 'Magic'}
                   </span>
                 ) : null}
-                {(isPermanentMagicCard || card.isPermanentEvent) && (
+                {(isPermanentMagicCard || card.isPermanentEvent || (card.type === 'magic' && !card.permStripped && card.recycleDelay != null && card.recycleDelay > 0)) && (
                   <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
                     <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
                     <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
@@ -1181,6 +1259,15 @@ const amuletEffectText =
                         <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
                           当下 {arcaneStormDamage + (card.amplifyBonus ?? 0)} 点
                         </span>
+                      ) : card.knightEffect === 'missile-bolt' ? (
+                        <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
+                          选择一个怪物，造成 {1 + (card.amplifyBonus ?? 0)} 点法术伤害。
+                          {(card.amplifyBonus ?? 0) > 0 && (
+                            <span className="ml-1 text-fuchsia-700 dark:text-fuchsia-300">
+                              (+{card.amplifyBonus})
+                            </span>
+                          )}
+                        </span>
                       ) : (
                         <>
                           {card.description || card.magicEffect || card.heroMagicEffect}
@@ -1211,7 +1298,7 @@ const amuletEffectText =
                           {card.description}
                         </div>
                       )}
-                      {card.eventChoices?.map((choice, idx) =>
+                      {!hideEventChoices && card.eventChoices?.map((choice, idx) =>
                         choice.diceTable?.length ? (
                           <div key={idx} className="flex flex-col gap-0.5">
                             <div className="dh-card__event-option text-left break-words leading-snug text-zinc-900">
@@ -1331,7 +1418,7 @@ const amuletEffectText =
                     </div>
                   </div>
                 )}
-                {(card.type === 'weapon' || card.type === 'shield') && card.permEquipment && (
+                {(card.type === 'weapon' || card.type === 'shield') && card.permEquipment && !showInlinePermPill && (
                   <div className="dh-card__overlay-tr z-10 pointer-events-none">
                     <span
                       className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${
@@ -1355,7 +1442,7 @@ const amuletEffectText =
                     </span>
                   </div>
                 )}
-                {card.type !== 'amulet' && !card.permEquipment && !isPermanentMagicCard && !card.isPermanentEvent && card.recycleDelay != null && card.recycleDelay > 0 && (
+                {card.type !== 'amulet' && !card.permEquipment && !isPermanentMagicCard && !card.isPermanentEvent && card.recycleDelay != null && card.recycleDelay > 0 && !showInlinePermPill && (
                   <div className="dh-card__overlay-tr z-10 pointer-events-none">
                     <span
                       className={`dh-card__caption flex items-center rounded-sm border border-amber-300/50 bg-amber-800/60 font-bold uppercase tracking-wide text-amber-50 shadow-sm ${
@@ -1714,13 +1801,36 @@ const amuletEffectText =
               <div
                 className={`flex-1 ${isCompact ? 'dh-card__text-area--compact' : 'dh-card__text-area'} flex flex-col items-center justify-start text-center overflow-hidden relative ${hasCornerDeco ? 'z-[1] ' : ''}${cardTextAreaBgClass}`}
               >
-                <h3 className={`dh-card__name font-serif font-semibold w-full truncate ${isCompact ? 'px-0' : 'px-1'} ${
-                  isThemedImageCard ? 'text-gray-900' : ''
-                }`} title={card.name}>
-                  {card.name}
-                </h3>
+                {showInlinePermPill ? (
+                  <div className={`flex w-full items-center justify-center gap-1 ${isCompact ? 'px-0' : 'px-1'}`}>
+                    <span
+                      className={`dh-card__caption flex items-center rounded-sm border font-bold uppercase tracking-wide shadow-sm shrink-0 ${
+                        inlinePermVariant === 'cyan'
+                          ? 'border-cyan-300/50 bg-cyan-800/50 text-cyan-50'
+                          : 'border-amber-300/50 bg-amber-800/60 text-amber-50'
+                      } ${isCompact ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}
+                    >
+                      <Infinity className="dh-icon-inline--compact shrink-0" aria-hidden />
+                      <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
+                    </span>
+                    <h3
+                      className={`dh-card__name font-serif font-semibold min-w-0 flex-1 truncate ${
+                        isThemedImageCard ? 'text-gray-900' : ''
+                      }`}
+                      title={card.name}
+                    >
+                      {card.name}
+                    </h3>
+                  </div>
+                ) : (
+                  <h3 className={`dh-card__name font-serif font-semibold w-full truncate ${isCompact ? 'px-0' : 'px-1'} ${
+                    isThemedImageCard ? 'text-gray-900' : ''
+                  }`} title={card.name}>
+                    {card.name}
+                  </h3>
+                )}
 
-                {card.type === 'monster' && card.durability != null && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.bossRetaliationDamage || card.bossLastStandAura || card.bossFuryDiceChance || card.bossEnrageGraveyardSummon) && (
+                {card.type === 'monster' && card.durability != null && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手偷钱：攻击时为Hero偷钱">偷钱</span>
@@ -1785,6 +1895,18 @@ const amuletEffectText =
                     {card.onDestroyEffect === 'slot-temp-buff-3-3' && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：装备毁坏时该装备栏 +3临时攻击 +3临时护甲">遗言</span>
                     )}
+                    {card.onDestroyEffect?.startsWith('stunCap+') && (() => {
+                      const amt = parseInt(card.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
+                      return amt > 0 ? (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`遗言：装备毁坏时击晕上限 +${amt}%`}>遗言</span>
+                      ) : null;
+                    })()}
+                    {card.onDestroyEffect?.startsWith('allSlotTempArmor:') && (() => {
+                      const amt = parseInt(card.onDestroyEffect.replace('allSlotTempArmor:', ''), 10) || 0;
+                      return amt > 0 ? (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`遗言：装备毁坏时所有装备栏 +${amt}临时护甲`}>遗言</span>
+                      ) : null;
+                    })()}
                     {card.wraithTurnEnrage && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="怨灵诅咒：瀑流时激怒所有怪物+护符上限+1">诅咒</span>
                     )}
@@ -1828,17 +1950,14 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反噬：每次受到伤害，对英雄造成 ${card.bossRetaliationDamage} 点直接伤害（无视护盾）`}>反噬</span>
                     )}
                     {card.bossLastStandAura && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束 +5 攻击，恢复 1 血层">暴走</span>
-                    )}
-                    {card.bossFuryDiceChance && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="韧性：攻击后 50% 概率不掉血层（掷骰判定）">韧性</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒`}>召唤</span>
                     )}
                   </div>
                 )}
-                {card.type === 'monster' && card.durability == null && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossFuryDiceChance || card.bossEnrageGraveyardSummon) && (
+                {card.type === 'monster' && card.durability == null && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
                     {card.monsterSpecial && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.description ?? '精英怪物'}>精英</span>
@@ -1964,10 +2083,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反噬：每次受到伤害，对英雄造成 ${card.bossRetaliationDamage} 点直接伤害（无视护盾）`}>反噬</span>
                     )}
                     {card.bossLastStandAura && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束 +5 攻击，恢复 1 血层">暴走</span>
-                    )}
-                    {card.bossFuryDiceChance && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="韧性：攻击后 50% 概率不掉血层（掷骰判定）">韧性</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒`}>召唤</span>
@@ -1989,6 +2105,18 @@ const amuletEffectText =
                     {card.onDestroyEffect === 'slot-temp-buff-3-3' && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：装备毁坏时该装备栏 +3临时攻击 +3临时护甲">遗言</span>
                     )}
+                    {card.onDestroyEffect?.startsWith('stunCap+') && (() => {
+                      const amt = parseInt(card.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
+                      return amt > 0 ? (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`遗言：装备毁坏时击晕上限 +${amt}%`}>遗言</span>
+                      ) : null;
+                    })()}
+                    {card.onDestroyEffect?.startsWith('allSlotTempArmor:') && (() => {
+                      const amt = parseInt(card.onDestroyEffect.replace('allSlotTempArmor:', ''), 10) || 0;
+                      return amt > 0 ? (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`遗言：装备毁坏时所有装备栏 +${amt}临时护甲`}>遗言</span>
+                      ) : null;
+                    })()}
                     {card.flankEffect && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={`侧击：处于手牌最左/最右时触发 - ${card.flankEffect}`}>侧击：{card.flankEffect}</span>
                     )}
@@ -2132,7 +2260,6 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.bossPhase !== b.bossPhase ||
       a.bossRetaliationDamage !== b.bossRetaliationDamage ||
       a.bossLastStandAura !== b.bossLastStandAura ||
-      a.bossFuryDiceChance !== b.bossFuryDiceChance ||
       a.bossEnrageGraveyardSummon !== b.bossEnrageGraveyardSummon
     ) {
       return false;
@@ -2152,7 +2279,8 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
     prev.weaponSwingVariant === next.weaponSwingVariant &&
     prev.shieldBlockVariant === next.shieldBlockVariant &&
     prev.equipmentStatModifier === next.equipmentStatModifier &&
-    prev.showExhaustedOverlay === next.showExhaustedOverlay
+    prev.showExhaustedOverlay === next.showExhaustedOverlay &&
+    prev.hideEventChoices === next.hideEventChoices
   );
 }
 

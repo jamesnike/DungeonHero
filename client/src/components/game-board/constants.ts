@@ -12,7 +12,7 @@ export const INITIAL_TURN_COUNT = 1;
 
 export const SELLABLE_TYPES = ['potion', 'weapon', 'shield', 'amulet', 'magic', 'hero-magic'] as const;
 export const EQUIPMENT_TYPES = ['weapon', 'shield', 'amulet'] as const;
-export const CONSUMABLE_TYPES = ['potion', 'magic', 'hero-magic'] as const;
+export const CONSUMABLE_TYPES = ['potion', 'magic', 'hero-magic', 'curse'] as const;
 
 export const MAX_AMULET_SLOTS = 2;
 export const DECK_SIZE = 64;

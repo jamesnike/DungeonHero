@@ -7,6 +7,8 @@
 
 import type { GameCardData, CardType, EquipmentCardStatModifier, AmuletEffectId } from '@/components/GameCard';
 import { isPermRecycleEquipment } from '@/components/GameCard';
+import type { RngState } from './rng';
+import { shuffle as rngShuffle } from './rng';
 import type {
   ActiveRowSlots,
   EquipmentSlotId,
@@ -24,7 +26,11 @@ import {
   BALANCE_ATTACK_PENALTY,
   BALANCE_SHIELD_BONUS,
   BALANCE_SHIELD_PENALTY,
+  PERSUADE_COST,
 } from './constants';
+import type { GameState, EternalRelic } from './types';
+import { computeAmuletEffects } from './equipment';
+import { getEquipmentSlotsWithSuppressedTempAttack } from './buildingAura';
 
 // ---------------------------------------------------------------------------
 // Math helpers
@@ -35,9 +41,6 @@ export const clamp = (value: number, min = 0, max = 1): number =>
 
 export const easeInOutCubic = (t: number): number =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-
-export const getRandomInt = (min: number, max: number): number =>
-  Math.floor(Math.random() * (max - min + 1)) + min;
 
 // ---------------------------------------------------------------------------
 // Label helpers
@@ -80,6 +83,7 @@ export const isBackpackRestrictedCard = (card: GameCardData | null): boolean =>
       (card.type === 'magic' ||
         card.type === 'hero-magic' ||
         card.type === 'potion' ||
+        card.type === 'curse' ||
         card.type === 'building' ||
         card.isPermanentEvent),
   );
@@ -141,6 +145,99 @@ export const findSlotIndexByCardId = (slots: ActiveRowSlots, cardId: string): nu
   slots.findIndex(card => card?.id === cardId);
 
 // ---------------------------------------------------------------------------
+// Building slot sync (fate-blade / amplify-altar release charge repair)
+// ---------------------------------------------------------------------------
+
+const RELEASE_CHARGE_BUILDING_NAMES = ['命运之刃', '增幅祭坛'];
+
+/**
+ * When a release-charge building (命运之刃 / 增幅祭坛) moves to a new slot,
+ * update `_fateBladeLastSlot` to the current index and optionally grant
+ * `hasReleaseCharge` if it didn't already have one. Returns a new array if
+ * any card was patched, or `null` if nothing changed.
+ */
+export function syncBuildingSlotsPure(activeCards: ActiveRowSlots): ActiveRowSlots | null {
+  let changed = false;
+  let result: ActiveRowSlots | null = null;
+
+  for (const buildingName of RELEASE_CHARGE_BUILDING_NAMES) {
+    const idx = activeCards.findIndex(c => c?.name === buildingName && c.type === 'building');
+    if (idx === -1) continue;
+    const card = activeCards[idx]!;
+    if (card._fateBladeLastSlot === idx) continue;
+
+    if (!result) result = [...activeCards] as ActiveRowSlots;
+    result[idx] = {
+      ...card,
+      hasReleaseCharge: true,
+      _fateBladeLastSlot: idx,
+    };
+    changed = true;
+  }
+
+  return changed ? result : null;
+}
+
+// ---------------------------------------------------------------------------
+// Amplify (按卡名累计的增幅加成)
+// ---------------------------------------------------------------------------
+
+/**
+ * 单步把 `amount` 点增幅加成应用到一张卡上（不可变更新，返回新对象）。
+ *  - 武器/怪物卡：value += amount
+ *  - 护盾：armorMax += amount, value += amount
+ *  - 带 scalingDamage 的伤害魔法（叠刺）：scalingDamage += amount
+ *  - 其它魔法：仅更新 amplifyBonus（damage 计算路径会读取 amplifyBonus）
+ *  - 其它类型：原样返回
+ *
+ * `amplifyBonus` 在所有可增幅类型上都会同步累加，作为展示与持久化跟踪。
+ */
+export function applyAmplifyToCard<T extends GameCardData>(card: T, amount: number): T {
+  if (!amount) return card;
+  if (card.type === 'weapon' || card.type === 'monster') {
+    return { ...card, value: card.value + amount, amplifyBonus: (card.amplifyBonus ?? 0) + amount };
+  }
+  if (card.type === 'shield') {
+    const oldArmor = card.armorMax ?? card.value;
+    return {
+      ...card,
+      armorMax: oldArmor + amount,
+      value: card.value + amount,
+      amplifyBonus: (card.amplifyBonus ?? 0) + amount,
+    };
+  }
+  if (card.type === 'magic') {
+    if (card.scalingDamage != null) {
+      return {
+        ...card,
+        scalingDamage: (card.scalingDamage ?? 0) + amount,
+        amplifyBonus: (card.amplifyBonus ?? 0) + amount,
+      };
+    }
+    return { ...card, amplifyBonus: (card.amplifyBonus ?? 0) + amount };
+  }
+  return card;
+}
+
+/**
+ * 在卡牌"创建"时（运行时工厂如 createMagicBoltCard / createGreedCurseCard 等），
+ * 根据当前 `amplifiedCardBonus` map 应用按卡名累计的增幅加成。如果该卡名从未被增幅，
+ * 直接返回原卡。
+ *
+ * 注意：此 helper **只**应用 map 中存储的总量，与卡上现有的 amplifyBonus 不叠加 —
+ * 工厂返回的新卡 amplifyBonus 通常为 undefined/0，所以叠加结果就是 map 中的值。
+ */
+export function applyAmplifyOnCreate<T extends GameCardData>(
+  card: T,
+  amplifiedCardBonus: Record<string, number> | undefined | null,
+): T {
+  if (!amplifiedCardBonus) return card;
+  const amount = amplifiedCardBonus[card.name] ?? 0;
+  if (!amount) return card;
+  return applyAmplifyToCard(card, amount);
+}
+
+// ---------------------------------------------------------------------------
 // Card metadata sanitization
 // ---------------------------------------------------------------------------
 
@@ -159,8 +256,21 @@ export const sanitizeSlotRow = (slots: ActiveRowSlots): ActiveRowSlots =>
 // Hand discard: recycle bag vs graveyard (must match discardCardToGraveyard)
 // ---------------------------------------------------------------------------
 
+/**
+ * Curses are a top-level card type (`type: 'curse'`). They cannot be recycled,
+ * discarded to the graveyard, or removed by any forced-discard effect — the
+ * only way to remove a curse from the player's collection is to play it.
+ */
+export function isCurseCard(card: GameCardData | null | undefined): boolean {
+  return Boolean(card && card.type === 'curse');
+}
+
 /** 手牌弃回时进入回收袋（而非坟场）的牌，与 useCardOperations 路由一致。 */
 export function isRecyclableFromHand(card: GameCardData | null | undefined): boolean {
+  // Curses can never be recycled or discarded — they're locked to backpack/hand.
+  if (isCurseCard(card)) return false;
+  // 凡化咒已剥离 Perm — 即使 magicType 仍为 permanent 也按非 Perm 处理（进坟场）
+  if (card?.permStripped) return false;
   return Boolean(
     card &&
       ((card.type === 'magic' && card.magicType === 'permanent') ||
@@ -172,25 +282,22 @@ export function isRecyclableFromHand(card: GameCardData | null | undefined): boo
 
 /**
  * 效果要求随机弃回手牌时：优先弃可进坟场的牌，不足时再弃会进回收袋的牌（各组内仍随机）。
+ * 诅咒牌永远不会被随机弃回（无法离开手牌/背包）。
  */
 export function pickRandomHandCardsForDiscardPreferGraveyard(
   hand: GameCardData[],
   count: number,
-): GameCardData[] {
-  if (count <= 0 || hand.length === 0) return [];
-  const n = Math.min(count, hand.length);
-  const graveyardFirst = hand.filter(c => !isRecyclableFromHand(c));
-  const recycleRest = hand.filter(c => isRecyclableFromHand(c));
-  const shuffleInPlace = <T,>(a: T[]) => {
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  };
-  const g = shuffleInPlace([...graveyardFirst]);
-  const r = shuffleInPlace([...recycleRest]);
-  return [...g, ...r].slice(0, n);
+  rng: RngState,
+): [GameCardData[], RngState] {
+  if (count <= 0 || hand.length === 0) return [[], rng];
+  const eligible = hand.filter(c => !isCurseCard(c));
+  if (eligible.length === 0) return [[], rng];
+  const n = Math.min(count, eligible.length);
+  const graveyardFirst = eligible.filter(c => !isRecyclableFromHand(c));
+  const recycleRest = eligible.filter(c => isRecyclableFromHand(c));
+  const [g, rng2] = rngShuffle(graveyardFirst, rng);
+  const [r, rng3] = rngShuffle(recycleRest, rng2);
+  return [[...g, ...r].slice(0, n), rng3];
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +330,8 @@ export function getWaterfallPreviewDiscardDestination(
   if (wfx && (card.type === 'monster' || card.type === 'event') && wfx.type === 'returnToDeck') {
     return 'deck';
   }
+  // 凡化咒已剥离 Perm — 直接进坟场
+  if (card.permStripped) return 'graveyard';
   const isPerm =
     (card.type === 'magic' && card.magicType === 'permanent') ||
     card.type === 'amulet' ||
@@ -282,6 +391,8 @@ export type CardPlayCategory =
 export function getCardPlayCategory(card: GameCardData): CardPlayCategory {
   const t: CardType = card.type;
   if (t === 'magic') {
+    // 凡化咒已剥离 Perm — 即使 magicType 仍为 permanent 也按 instant 分类（影响动画/弃置去向）
+    if (card.permStripped) return 'instant-magic';
     return card.magicType === 'permanent' ? 'perm-magic' : 'instant-magic';
   }
   if (t === 'hero-magic') return 'hero-magic';
@@ -361,4 +472,193 @@ export function isDamageMagic(card: GameCardData): boolean {
   ];
   if (damageNames.includes(card.name)) return true;
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Persuade — pure computation helpers
+// ---------------------------------------------------------------------------
+
+export function getPersuadeEffectiveCostPure(state: GameState, card?: GameCardData): number {
+  const costReduction = (state.persuadeDiscount as any)?.costReduction ?? 0;
+  const permCostMod = (state as any).persuadeCostModifier ?? 0;
+  let cost = Math.max(0, PERSUADE_COST + permCostMod - costReduction);
+  if ((state as any).persuadeSameTargetCostHalve && card && (state as any).lastPersuadeTargetId === card.id) {
+    cost = Math.floor(cost / 2);
+  }
+  return cost;
+}
+
+// ---------------------------------------------------------------------------
+// Sweep — pure wave-damage computation
+// ---------------------------------------------------------------------------
+
+export function computeHonorSweepWaveDamagePure(
+  state: GameState,
+  slotId: EquipmentSlotId,
+): number {
+  const slotItem = (slotId === 'equipmentSlot1'
+    ? state.equipmentSlot1
+    : state.equipmentSlot2) as GameCardData | null;
+  if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) return 0;
+
+  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const isMonsterEquip = slotItem.type === 'monster';
+  const rawWeaponValue = isMonsterEquip ? (slotItem.attack ?? slotItem.value) : slotItem.value;
+  const goblinGoldPowerActive =
+    isMonsterEquip && Boolean((slotItem as any).eliteLowGoldPower && state.gold >= 30);
+  const weaponValue = goblinGoldPowerActive ? rawWeaponValue * 2 : rawWeaponValue;
+
+  const bonuses = (state as any).equipmentSlotBonuses ?? {};
+  const slotDamageBonus = bonuses[slotId]?.damage ?? 0;
+
+  let slotTempAttackBonus = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+  const suppressed = getEquipmentSlotsWithSuppressedTempAttack(
+    state.activeCards,
+    state.equipmentSlot1,
+    state.equipmentSlot2,
+  );
+  if (suppressed.has(slotId)) slotTempAttackBonus = 0;
+
+  const slotBerserkBonus = ((state as any).berserkTurnBuff ?? {})[slotId] ?? 0;
+  const attackBonus = ae.aura?.attack ?? 0;
+
+  const base = Math.max(
+    0,
+    weaponValue + attackBonus + slotDamageBonus + slotBerserkBonus + slotTempAttackBonus,
+  );
+  return computeSpellDamagePure(state, base);
+}
+
+// ---------------------------------------------------------------------------
+// Spell / Armor / Attack pure computations (used by reducers and hooks)
+// ---------------------------------------------------------------------------
+
+export function computeSpellDamagePure(state: GameState, baseDamage: number): number {
+  return Math.max(0, baseDamage + ((state as any).permanentSpellDamageBonus ?? 0));
+}
+
+export function computeDefenseBonusPure(state: GameState): number {
+  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ironSkin = ((state as any).permanentSkills ?? []).includes('Iron Skin') ? 1 : 0;
+  const shieldMaster = (state as any).shieldMasterBonus ?? 0;
+  const defensiveStance = (state as any).defensiveStanceActive ? 1 : 0;
+  return (ae.aura?.defense ?? 0) + ironSkin + shieldMaster + defensiveStance;
+}
+
+export function computeSlotArmorValuePure(
+  state: GameState,
+  slotId: import('@/components/game-board/types').EquipmentSlotId,
+): number {
+  const slotItem = (slotId === 'equipmentSlot1'
+    ? state.equipmentSlot1
+    : state.equipmentSlot2) as GameCardData | null;
+  if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) return 0;
+
+  const bonuses = (state as any).equipmentSlotBonuses ?? {};
+  const slotShieldBonus = bonuses[slotId]?.shield ?? 0;
+  const rawSlotTemp = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+  const defBonus = computeDefenseBonusPure(state);
+  const bonusDamaged = (slotItem as any).armorBonusDamaged ?? 0;
+
+  if (slotItem.type === 'monster') {
+    const baseArmor = slotItem.hp ?? slotItem.value;
+    return Math.max(0, baseArmor + defBonus + slotShieldBonus + rawSlotTemp - bonusDamaged);
+  }
+
+  const baseArmorMax = (slotItem as any).armorMax ?? slotItem.value;
+  const permanentBonus = Math.max(0, defBonus + slotShieldBonus);
+  const storedBaseArmor = Math.min((slotItem as any).armor ?? baseArmorMax, baseArmorMax);
+  const effectiveBonus = Math.max(0, permanentBonus + rawSlotTemp - bonusDamaged);
+  const currentArmor = storedBaseArmor + effectiveBonus;
+  const effectiveArmorMax = baseArmorMax + permanentBonus + rawSlotTemp;
+  return Math.min(currentArmor, effectiveArmorMax);
+}
+
+// ---------------------------------------------------------------------------
+// Persuade — pure computation helpers
+// ---------------------------------------------------------------------------
+
+export function computePersuadeSuccessRatePure(state: GameState, monster: GameCardData): number {
+  const eq1 = state.equipmentSlot1 as GameCardData | null;
+  const eq2 = state.equipmentSlot2 as GameCardData | null;
+  const bonuses = (state as any).equipmentSlotBonuses ?? {};
+
+  let heroWeaponDmg = 0;
+  for (const slot of [eq1, eq2]) {
+    if (slot && (slot.type === 'weapon' || slot.type === 'monster')) {
+      heroWeaponDmg += slot.attack ?? slot.value ?? 0;
+    }
+  }
+  heroWeaponDmg += bonuses.equipmentSlot1?.damage ?? 0;
+  heroWeaponDmg += bonuses.equipmentSlot2?.damage ?? 0;
+
+  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  heroWeaponDmg += ae.aura.attack;
+
+  const heroHp = state.hp;
+  const heroSpell = (state as any).permanentSpellDamageBonus ?? 0;
+  const heroEffectiveDmg = Math.max(1, heroWeaponDmg + heroSpell * 0.4);
+
+  const mAtk = monster.attack ?? monster.value;
+  const mHp = monster.hp ?? monster.value;
+  const mLayers = monster.hpLayers ?? monster.fury ?? 1;
+  const isElite = Boolean(monster.monsterSpecial || monster.bossPhase);
+
+  const monsterToughness = mHp * mLayers;
+  const turnsToKill = monsterToughness / heroEffectiveDmg;
+  const turnsToBeKilled = heroHp / Math.max(1, mAtk);
+  const dominance = turnsToBeKilled / Math.max(0.1, turnsToKill);
+
+  const logDom = Math.log2(Math.max(0.01, dominance));
+  let rate = 40 + logDom * 8.75;
+
+  if (isElite) rate -= 15;
+
+  const isHighLayer = mLayers >= 3;
+  if (isHighLayer) rate -= 15;
+
+  const bonusScale = isHighLayer ? 0.5 : 1;
+
+  const liveMonster = (state.activeCards as GameCardData[]).find(c => c?.id === monster.id);
+  if ((liveMonster ?? monster).isStunned) {
+    rate += 10 * bonusScale;
+  }
+
+  const persuadeBoost = (monster as any)._persuadeBoost ?? 0;
+  rate += persuadeBoost * bonusScale;
+
+  const discountBonus = (state.persuadeDiscount as any)?.rateBonus ?? 0;
+  rate += discountBonus * bonusScale;
+
+  rate += (state as any).persuadeAmuletBonus * bonusScale;
+
+  const relics = (state.eternalRelics ?? []) as EternalRelic[];
+  if (relics.some(r => r.id === 'chain-persuade')) {
+    if ((state as any).lastPersuadeTargetId && (state as any).lastPersuadeTargetId === monster.id) {
+      rate += 15 * ((state as any).consecutivePersuadeCount ?? 0);
+    }
+  }
+
+  const raceBonus = (state as any).persuadeRaceBonus ?? {};
+  if (monster.monsterType && raceBonus[monster.monsterType]) {
+    rate += raceBonus[monster.monsterType];
+  }
+
+  const pLevel = (state as any).persuadeLevel ?? 1;
+  rate += (pLevel - 1) * 5;
+
+  for (const [eSlot, slotId] of [[eq1, 'equipmentSlot1'], [eq2, 'equipmentSlot2']] as const) {
+    if (eSlot && eSlot.type === 'monster' && (eSlot as any).goblinStealEquip) {
+      const eReserve = slotId === 'equipmentSlot1'
+        ? (state as any).equipmentSlot1Reserve
+        : (state as any).equipmentSlot2Reserve;
+      if (eReserve && eReserve.length > 0) {
+        rate += 30;
+      }
+    }
+  }
+
+  const maxRate = isHighLayer ? 60 : 75;
+  const clamped = Math.max(5, Math.min(maxRate, rate));
+  return Math.round(clamped / 5) * 5;
 }

@@ -1,0 +1,44 @@
+---
+description: Combat pipeline — all combat logic is in the reducer, hooks are thin dispatchers
+globs: client/src/hooks/useCombatActions.ts, client/src/game-core/rules/combat.ts
+alwaysApply: false
+---
+
+# Combat Pipeline Rules
+
+All combat state logic lives in `rules/combat.ts`. The hook `useCombatActions.ts` is a **thin dispatcher layer**.
+
+## Migrated functions — DO NOT revert to imperative
+
+These functions in `useCombatActions.ts` are **thin dispatchers**. Do not add game logic back into them:
+
+| Function | Dispatches |
+|----------|-----------|
+| `dealDamageToMonster` | `DEAL_DAMAGE_TO_MONSTER` |
+| `handleMonsterDefeated` | `MONSTER_DEFEATED` |
+| `executeLastWords` | `EXECUTE_LAST_WORDS` |
+| `decrementMonsterFury` | `DECREMENT_FURY` |
+| `applyShieldReflectDamage` | `APPLY_SHIELD_REFLECT` |
+| `applyDragonBreathRetaliation` | `APPLY_DRAGON_BREATH_RETALIATION` |
+| `applyBossRetaliationDamage` | `APPLY_DAMAGE` |
+
+## Side effects for UI
+
+The reducer emits `combat:*` side effects. The hook subscribes via `useGameEvent`:
+
+- `combat:monsterBleed` → bleed animation
+- `combat:monsterDefeated` → defeat animation + card removal
+- `combat:bossTransform` → transform animation
+- `combat:lastWordsDiscard` → discard flight
+- `combat:boneRegenCheck` / `combat:wraithRebirthCheck` → dice flows
+- `combat:dragonBreathFx` → FX
+- `combat:golemReflect` → hero bleed animation
+- `combat:classDamageDiscoverTriggered` → discover flow
+- `combat:buildingDestroyed` → removal animation
+
+## Adding new combat behavior
+
+1. Add logic to `reduceDealDamageToMonster` or create a new reducer in `rules/combat.ts`
+2. Emit a side effect for UI: `sideEffects.push({ event: 'combat:newEffect', payload: {...} })`
+3. Add the event type to `GameEventMap` in `event-bus.ts`
+4. Add a `useGameEvent('combat:newEffect', ...)` listener in `useCombatActions.ts`

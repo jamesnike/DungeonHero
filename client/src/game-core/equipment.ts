@@ -53,8 +53,8 @@ export function setEquipmentInSlot(
   slotId: EquipmentSlotId,
   item: GameCardData | null,
 ): Partial<GameState> {
-  if (slotId === 'equipmentSlot1') return { equipmentSlot1: item };
-  return { equipmentSlot2: item };
+  if (slotId === 'equipmentSlot1') return { equipmentSlot1: item as EquipmentItem | null };
+  return { equipmentSlot2: item as EquipmentItem | null };
 }
 
 export function setSlotBonusPure(
@@ -130,8 +130,8 @@ export function clearSlotWithPromote(
     return {
       ...setEquipmentInSlot(state, slotId, promoted),
       ...(slotId === 'equipmentSlot1'
-        ? { equipmentSlot1Reserve: rest }
-        : { equipmentSlot2Reserve: rest }),
+        ? { equipmentSlot1Reserve: rest as EquipmentItem[] }
+        : { equipmentSlot2Reserve: rest as EquipmentItem[] }),
     };
   }
   return setEquipmentInSlot(state, slotId, null);
@@ -156,8 +156,8 @@ export function swapReserveToTop(
   return {
     ...setEquipmentInSlot(state, slotId, swapped),
     ...(slotId === 'equipmentSlot1'
-      ? { equipmentSlot1Reserve: newReserve }
-      : { equipmentSlot2Reserve: newReserve }),
+      ? { equipmentSlot1Reserve: newReserve as EquipmentItem[] }
+      : { equipmentSlot2Reserve: newReserve as EquipmentItem[] }),
   };
 }
 
@@ -201,8 +201,12 @@ export function consumeDurabilityPure(
 
 export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletEffects {
   const effects: ActiveAmuletEffects = createEmptyAmuletEffects();
+  if (!Array.isArray(amuletSlots)) return effects;
 
   for (const amulet of amuletSlots) {
+    if (!amulet) continue;
+    const upgradeLevel = amulet.upgradeLevel ?? 0;
+
     if (amulet.amuletAuraBonus) {
       effects.aura.attack += amulet.amuletAuraBonus.attack ?? 0;
       effects.aura.defense += amulet.amuletAuraBonus.defense ?? 0;
@@ -218,13 +222,20 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'strength': effects.hasStrength = true; break;
       case 'dual-guard': effects.hasDualGuard = true; break;
       case 'discard-zap': effects.hasDiscardShock = true; break;
+      case 'flip-zap': effects.flipZapCount += 1; break;
       case 'flip-gold': effects.hasFlipGold = true; break;
       case 'recycle-forge': effects.hasRecycleForge = true; break;
       case 'lone-card': effects.hasLoneCard = true; break;
       case 'equipment-salvage': effects.hasEquipmentSalvage = true; break;
       case 'bloodrage-attack': effects.hasBloodrageAttack = true; break;
-      case 'persuade-on-temp-attack': effects.hasPersuadeOnTempAttack = true; break;
-      case 'persuade-grant-recycle-fetch': effects.hasPersuadeGrantRecycleFetch = true; break;
+      case 'persuade-on-temp-attack':
+        effects.hasPersuadeOnTempAttack = true;
+        effects.persuadeOnTempAttackBonus = upgradeLevel >= 1 ? 20 : 10;
+        break;
+      case 'persuade-grant-recycle-fetch':
+        effects.hasPersuadeGrantRecycleFetch = true;
+        effects.persuadeGrantRecycleFetchCount = upgradeLevel >= 1 ? 2 : 1;
+        break;
       case 'damage-class-discover': effects.hasDamageClassDiscover = true; break;
       case 'persuade-graveyard-stack': effects.hasPersuadeGraveyardStack = true; break;
       case 'stun-recycle-to-hand': effects.hasStunRecycleToHand = true; break;
@@ -237,8 +248,32 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'dungeon-gold': effects.hasDungeonGold = true; break;
       case 'armor-halve-endure': effects.hasArmorHalveEndure = true; break;
       case 'monster-equip-buff': effects.hasMonsterEquipBuff = true; break;
+      case 'lastwords-monster-debuff': effects.hasLastWordsMonsterDebuff = true; break;
       case 'stun-rate-boost': effects.stunRateBoost += 20; break;
       case 'end-turn-draw': effects.hasEndTurnDraw = true; break;
+      case 'stun-gold': effects.hasStunGold = true; break;
+      // The following amulets are checked via direct amuletSlots.find(...) in
+      // their reducers; no aggregated flag needed. Cases are listed for
+      // documentation / completeness so they are recognised registered effects.
+      case 'flip-overkill-lifesteal':
+      case 'equip-amulet-cap':
+      case 'stun-attempt-discover':
+      case 'persuade-on-flip':
+        break;
+    }
+
+    // Slot value/effect aura contributions (when not already covered by amuletAuraBonus)
+    if (typeof amulet.value === 'number' && amulet.effect) {
+      const hasAura = amulet.amuletAuraBonus;
+      if (amulet.effect === 'attack' && !(hasAura && typeof hasAura.attack === 'number')) {
+        effects.aura.attack += amulet.value;
+      }
+      if (amulet.effect === 'defense' && !(hasAura && typeof hasAura.defense === 'number')) {
+        effects.aura.defense += amulet.value;
+      }
+      if (amulet.effect === 'health' && !(hasAura && typeof hasAura.maxHp === 'number')) {
+        effects.aura.maxHp += amulet.value;
+      }
     }
   }
 
@@ -284,7 +319,7 @@ export function equipAmuletPure(
   amulet: GameCardData,
 ): Partial<GameState> | null {
   if (!canEquipAmulet(state)) return null;
-  return { amuletSlots: [...state.amuletSlots, amulet] };
+  return { amuletSlots: [...state.amuletSlots, amulet as AmuletItem] };
 }
 
 export function removeAmuletPure(

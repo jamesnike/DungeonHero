@@ -7,6 +7,7 @@
  */
 
 import type { GameState } from './types';
+import { createRng } from './rng';
 import { createInitialHeroMagicState } from '@/lib/heroMagic';
 import {
   INITIAL_HP,
@@ -43,6 +44,7 @@ export function createInitialGameState(): GameState {
     previewCardStacks: {},
     activeCardStacks: {},
     waterfallDealBonus: 0,
+    pendingWaterfallPlan: null,
     remainingDeck: [],
     discardedCards: [],
     handCards: [],
@@ -76,6 +78,10 @@ export function createInitialGameState(): GameState {
     monsterKillUpgradeProgress: 0,
     recycleBackpackProgress: 0,
     swapUpgradeProgress: 0,
+    flipOverkillLifestealProgress: 0,
+    equipAmuletCapProgress: 0,
+    stunAttemptDiscoverProgress: 0,
+    flipDebuffMonsterId: null,
     bugletAmuletObtained: false,
     statSwapCardObtained: false,
     handLimitBonus: 0,
@@ -91,6 +97,8 @@ export function createInitialGameState(): GameState {
     persuadeAmuletBonus: 0,
     persuadeDiscount: null,
     lastPlayedCardCategory: null,
+    transformChainPrevCategory: null,
+    consecutiveTransformStreak: 0,
     magicCardsPlayedThisTurn: 0,
     damageMagicPlayedThisTurn: 0,
 
@@ -113,6 +121,7 @@ export function createInitialGameState(): GameState {
     nextAttackLifestealSlot: null,
     berserkTurnBuff: createEmptyEquipmentBuffState(),
     extraAttackCharges: 0,
+    slotExtraAttacks: { equipmentSlot1: 0, equipmentSlot2: 0 },
     doubleNextMagic: false,
     heroSkillUsedThisWave: false,
     berserkerRageActive: false,
@@ -123,6 +132,8 @@ export function createInitialGameState(): GameState {
     gambitSlotUsed: {},
     weaponExtraAttackUsed: {},
     blockDurabilityPerSlot: 1,
+    slotBattleSpiritBonus: {},
+    slotBattleSpiritUsed: {},
 
     pendingHeroSkillAction: null,
     pendingHeroMagicAction: null,
@@ -147,6 +158,8 @@ export function createInitialGameState(): GameState {
 
     currentEventCard: null,
     resolvingDungeonCardId: null,
+    pendingEventEffects: [],
+    pendingEventSkipFlip: false,
     eventModalOpen: false,
     eventModalMinimized: false,
     eventDiceModal: null,
@@ -157,6 +170,7 @@ export function createInitialGameState(): GameState {
     discoverModalOpen: false,
     discoverOptions: [],
     discoverSourceLabel: null,
+    pendingClassDiscoverQueue: [],
     deleteModalOpen: false,
     upgradeModalOpen: false,
     upgradeModalMaxCount: undefined,
@@ -185,7 +199,22 @@ export function createInitialGameState(): GameState {
     heroSkillBanner: null,
 
     eternalRelics: [],
+    classCardPreviewId: null,
 
     gameLogEntries: [],
+
+    honorSweepUpgradesPending: 0,
+
+    amplifiedCardBonus: {},
+
+    processedDungeonCardIds: [],
+    pendingAutoDrawCount: 0,
+
+    actionQueue: [],
+    phase: 'idle',
+    actionLog: [],
+
+    rng: createRng(Date.now()),
+    lastFlowDiceRoll: null,
   };
 }

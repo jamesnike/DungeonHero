@@ -212,6 +212,31 @@ export function deactivateBerserkerRage(): Partial<GameState> {
 }
 
 // ---------------------------------------------------------------------------
+// Wave reset (new dungeon wave)
+// ---------------------------------------------------------------------------
+
+export function resetHeroWavePure(state: GameState): Partial<GameState> {
+  return {
+    heroSkillUsedThisWave: false,
+    extraSkillsUsedThisWave: [],
+    pendingHeroSkillAction: null,
+    pendingHeroMagicAction: null,
+    heroSkillBanner: null,
+    pendingMagicAction: null,
+    pendingPotionAction: null,
+    heroMagicState: resetAllMagicWaveFlags(state.heroMagicState),
+    berserkerRageActive: false,
+    berserkerSlotUsed: {},
+    flashSlotUsed: {},
+    gambitExtraActive: false,
+    gambitSlotUsed: {},
+    unbreakableUntilWaterfall: { equipmentSlot1: false, equipmentSlot2: false },
+    slotBattleSpiritBonus: {},
+    slotBattleSpiritUsed: {},
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Potion finalization helpers
 // ---------------------------------------------------------------------------
 
@@ -219,7 +244,8 @@ export function finalizeMagicCardPure(
   state: GameState,
   card: GameCardData,
 ): Partial<GameState> {
-  const isPermanent = card.magicType === 'permanent';
+  // 凡化咒已剥离 Perm — 即使 magicType 仍为 permanent 也按即时处理（进坟场）
+  const isPermanent = card.magicType === 'permanent' && !card.permStripped;
   if (isPermanent) {
     const recycled = {
       ...card,

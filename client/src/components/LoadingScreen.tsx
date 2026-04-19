@@ -113,6 +113,19 @@ import relicWraithPurificationImage from '@assets/generated_images/relic_wraith_
 import relicPersuadeSameHalveImage from '@assets/generated_images/relic_persuade_same_halve.png';
 import relicPersuadeRaceBonusImage from '@assets/generated_images/relic_persuade_race_bonus.png';
 import relicPersuadeDurabilityImage from '@assets/generated_images/relic_persuade_durability.png';
+import potionAmuletToRelicImage from '@assets/generated_images/potion_amulet_to_relic.png';
+import knightMagicMissileCrossbowImage from '@assets/generated_images/knight_magic_missile_crossbow.png';
+import knightArcSealAmuletImage from '@assets/generated_images/knight_arc_seal_amulet.png';
+import knightThunderGoldAmuletImage from '@assets/generated_images/knight_thunder_gold_amulet.png';
+import knightPotionShieldFortifyImage from '@assets/generated_images/knight_potion_shield_fortify.png';
+import knightFlipLifestealAmuletImage from '@assets/generated_images/knight_flip_lifesteal_amulet.png';
+import knightEquipAmuletCapImage from '@assets/generated_images/knight_equip_amulet_cap_amulet.png';
+import knightStunDiscoverAmuletImage from '@assets/generated_images/knight_stun_discover_amulet.png';
+import knightMonsterEquipBuffAmuletImage from '@assets/generated_images/knight_monster_equip_buff_amulet.png';
+import knightThunderstrikeBastionShieldImage from '@assets/generated_images/knight_thunderstrike_bastion_shield.png';
+import knightBashShieldImage from '@assets/generated_images/knight_bash_shield.png';
+import knightCommunalDefenseShieldImage from '@assets/generated_images/knight_communal_defense_shield.png';
+import knightGrowthShieldImage from '@assets/generated_images/knight_growth_shield.png';
 
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
@@ -159,6 +172,19 @@ const ALL_IMAGES = [
   relicSummonMinionImage, relicBulwarkAttackImage, relicBulwarkArmorImage,
   relicRecycleShuffleImage, relicWraithPurificationImage,
   relicPersuadeSameHalveImage, relicPersuadeRaceBonusImage, relicPersuadeDurabilityImage,
+  potionAmuletToRelicImage,
+  knightMagicMissileCrossbowImage,
+  knightArcSealAmuletImage,
+  knightThunderGoldAmuletImage,
+  knightPotionShieldFortifyImage,
+  knightFlipLifestealAmuletImage,
+  knightEquipAmuletCapImage,
+  knightStunDiscoverAmuletImage,
+  knightMonsterEquipBuffAmuletImage,
+  knightThunderstrikeBastionShieldImage,
+  knightBashShieldImage,
+  knightCommunalDefenseShieldImage,
+  knightGrowthShieldImage,
 ];
 
 const FLAVOR_TEXTS = [

@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
+import type { RngState } from '@/game-core/rng';
+import { shuffle as rngShuffle, pickRandom, nextId } from '@/game-core/rng';
 
 export type DraftRoundType = 'general' | 'equipment' | 'potion' | 'amulet';
 
@@ -13,25 +15,34 @@ export interface CardDraftModalProps {
   classCardPreview?: GameCardData | null;
   /** Per-round type overrides. Unspecified rounds default to 'general'. */
   roundTypes?: DraftRoundType[];
+  rng: RngState;
+  onRngUpdate: (rng: RngState) => void;
 }
 
-function sampleFromPool(pool: GameCardData[], count: number): GameCardData[] {
-  if (pool.length === 0) return [];
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+function sampleFromPool(pool: GameCardData[], count: number, rng: RngState): [GameCardData[], RngState] {
+  if (pool.length === 0) return [[], rng];
+  let currentRng = rng;
+  let shuffled: GameCardData[];
+  [shuffled, currentRng] = rngShuffle(pool, currentRng);
   const result: GameCardData[] = [];
   const usedNames = new Set<string>();
   for (const card of shuffled) {
     if (result.length >= count) break;
     if (!usedNames.has(card.name)) {
-      result.push({ ...card, id: `${card.id}-draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` });
+      let id: string;
+      [id, currentRng] = nextId(currentRng, `${card.id}-draft`);
+      result.push({ ...card, id });
       usedNames.add(card.name);
     }
   }
   while (result.length < count && shuffled.length > 0) {
-    const c = shuffled[Math.floor(Math.random() * shuffled.length)];
-    result.push({ ...c, id: `${c.id}-draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` });
+    let c: GameCardData;
+    [c, currentRng] = pickRandom(shuffled, currentRng);
+    let id: string;
+    [id, currentRng] = nextId(currentRng, `${c.id}-draft`);
+    result.push({ ...c, id });
   }
-  return result;
+  return [result, currentRng];
 }
 
 export default function CardDraftModal({
@@ -43,6 +54,8 @@ export default function CardDraftModal({
   overlayZoom = 1,
   classCardPreview,
   roundTypes,
+  rng,
+  onRngUpdate,
 }: CardDraftModalProps) {
   const poolsByType = useMemo(() => {
     const equipmentOnly = pool.filter(c => c.type === 'weapon' || c.type === 'shield');
@@ -64,17 +77,21 @@ export default function CardDraftModal({
 
   const [round, setRound] = useState(0);
   const [picks, setPicks] = useState<GameCardData[]>([]);
-  const [currentChoices, setCurrentChoices] = useState<GameCardData[]>(() =>
-    sampleFromPool(getPoolForRound(0), choicesPerRound),
-  );
+  const [currentChoices, setCurrentChoices] = useState<GameCardData[]>(() => {
+    const [sampled, nextRng] = sampleFromPool(getPoolForRound(0), choicesPerRound, rng);
+    Promise.resolve().then(() => onRngUpdate(nextRng));
+    return sampled;
+  });
   const [picking, setPicking] = useState(false);
 
   const currentRoundType = getRoundType(round);
 
   const regenerateChoices = useCallback(() => {
-    setCurrentChoices(sampleFromPool(getPoolForRound(round), choicesPerRound));
+    const [sampled, nextRng] = sampleFromPool(getPoolForRound(round), choicesPerRound, rng);
+    setCurrentChoices(sampled);
+    onRngUpdate(nextRng);
     setPicking(false);
-  }, [getPoolForRound, round, choicesPerRound]);
+  }, [getPoolForRound, round, choicesPerRound, rng, onRngUpdate]);
 
   const handlePick = useCallback(
     (idx: number) => {
@@ -96,10 +113,12 @@ export default function CardDraftModal({
         return;
       }
       setRound(nextRound);
-      setCurrentChoices(sampleFromPool(getPoolForRound(nextRound), choicesPerRound));
+      const [sampled, nextRng] = sampleFromPool(getPoolForRound(nextRound), choicesPerRound, rng);
+      setCurrentChoices(sampled);
+      onRngUpdate(nextRng);
       setPicking(false);
     },
-    [picking, currentChoices, picks, round, totalRounds, choicesPerRound, onComplete, getPoolForRound],
+    [picking, currentChoices, picks, round, totalRounds, choicesPerRound, onComplete, getPoolForRound, rng, onRngUpdate],
   );
 
   const pickedSummary = useMemo(() => {

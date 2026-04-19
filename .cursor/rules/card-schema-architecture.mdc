@@ -1,0 +1,46 @@
+---
+description: Card schema architecture — how card effects are defined, registered, and executed
+globs: client/src/game-core/card-schema/**
+alwaysApply: false
+---
+
+# Card Schema Architecture
+
+All card behavior is data-driven via a **CardEffect pipeline** + **handler registry**. Never add card logic as inline if/else branches.
+
+## Core Types (`types.ts`)
+
+- **`CardEffect`** — discriminated union of ~25 atomic effect primitives (heal, damage, draw, modifyStat, equipment, interactive, log, etc.)
+- **`CardDefinition`** — a registered card template: `{ effectId, effects: CardEffect[], tags?, resolver?: MagicResolver }`
+- **`MagicResolver`** — full-control function for complex magic effects that bypasses the declarative pipeline
+- **`ExecutionContext`** — mutable context passed through the pipeline (state, card, patch, sideEffects, enqueuedActions, magic?)
+- **`OnEquipHandler`** — function for equipment on-equip effects receiving slot-specific context
+
+## Adding a New Card Effect
+
+1. **Potion**: Add a `CardDefinition` in `definitions/potions.ts` with `effectId: 'potion:<id>'` and an `effects[]` array
+2. **Magic**: Add a `CardDefinition` in `definitions/magic.ts` with `effectId: 'magic:<id>'` — use `resolver` for complex effects, `effects[]` for simple ones
+3. **Equipment on-equip**: Add an `OnEquipHandler` in `definitions/equipment.ts` via `registerOnEquipAll`
+4. **New effect primitive**: Add a variant to `CardEffect` union in `types.ts`, implement executor in `executors.ts`
+
+## File Responsibilities
+
+| File | Role |
+|------|------|
+| `types.ts` | CardEffect union, CardDefinition, ExecutionContext, MagicResolver |
+| `registry.ts` | `resolveEffectId()` maps card → effectId; `getCardDefinition()` looks up registered definitions |
+| `engine.ts` | `executeCardEffects()` for potions; `executeMagicCardEffects()` for magic (handles curse/echo/counter pre-processing) |
+| `executors.ts` | One pure function per CardEffect type |
+| `on-equip.ts` | On-equip effect registry and `executeOnEquip()` |
+| `definitions/potions.ts` | ~47 potion CardDefinitions |
+| `definitions/magic.ts` | ~77 magic CardDefinitions (resolvers imported from `rules/magic-effects.ts`) |
+| `definitions/equipment.ts` | 10 on-equip handlers |
+| `custom-handlers.ts` | Escape hatch for effects not yet declaratively modeled |
+
+## Rules
+
+- **Never** add card logic as if/else branches in hooks or components
+- **Always** register new effects in the appropriate `definitions/` file
+- `CardDefinition.resolver` is only for complex interactive effects — prefer declarative `effects[]` when possible
+- Effect executors must be **pure** — mutate only `ExecutionContext` (patch, sideEffects, enqueuedActions)
+- `resolveEffectId()` priority: `potionEffect` → `heroMagicId` → `knightEffect` → `magicEffect` → `starterBaseId` → `card.name` → `scalingDamage`

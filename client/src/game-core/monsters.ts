@@ -5,123 +5,203 @@
 import type { GameCardData } from '@/components/GameCard';
 import type {
   EquipmentSlotId,
+  EquipmentItem,
   MonsterRewardEffect,
   MonsterRewardOption,
   MonsterRewardDrop,
   ActiveRowSlots,
+  SlotPermanentBonus,
+  EquipmentRepairTarget,
 } from '@/components/game-board/types';
 import type { GameState } from './types';
-import { PERSUADE_COST, INITIAL_HP } from './constants';
+import type { RngState } from './rng';
+import { nextInt, nextBool, nextId, nextRandom } from './rng';
+import { PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, HAND_LIMIT } from './constants';
 import { flattenActiveRowSlots } from './helpers';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function hasRepairableEquipment(state: GameState): boolean {
+  for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as const) {
+    const item = state[slotId];
+    if (!item) continue;
+    const maxDur = item.maxDurability ?? item.durability ?? 0;
+    if (maxDur <= 0) continue;
+    if ((item.durability ?? maxDur) < maxDur) return true;
+  }
+  return false;
+}
+
+function isUpgradeableCard(card: GameCardData): boolean {
+  const TYPES = new Set(['magic', 'weapon', 'shield', 'potion', 'amulet', 'monster']);
+  if (!TYPES.has(card.type)) return false;
+  return (card.maxUpgradeLevel ?? 0) > 0;
+}
+
+function isCardAtMaxUpgrade(card: GameCardData): boolean {
+  return (card.upgradeLevel ?? 0) >= (card.maxUpgradeLevel ?? 0);
+}
+
+function slotLabel(slotId: EquipmentSlotId): string {
+  return slotId === 'equipmentSlot1' ? '左侧装备栏' : '右侧装备栏';
+}
+
+function bonusLabel(bonusType: keyof SlotPermanentBonus): string {
+  return bonusType === 'damage' ? '伤害' : '护甲';
+}
 
 // ---------------------------------------------------------------------------
 // Monster reward generation
 // ---------------------------------------------------------------------------
 
-export function generateMonsterRewardOptions(monster: GameCardData): MonsterRewardOption[] {
+export function generateMonsterRewardOptions(
+  monster: GameCardData,
+  state: GameState,
+  rng: RngState,
+): [MonsterRewardOption[], RngState] {
+  let r = rng;
+  const mkId = (): string => { const [id, next] = nextId(r, 'monster-reward'); r = next; return id; };
+
   if (monster.isBuglet) {
-    const amount = 2 + Math.floor(Math.random() * 2);
-    return [{
-      id: `reward-gold-${monster.id}`,
-      title: '战利品',
-      description: `获得 ${amount} 金币`,
-      effect: { type: 'gold', amount },
-    }];
+    const [amount, r2] = nextInt(r, 2, 3); r = r2;
+    return [[{ id: mkId(), title: `获得 ${amount} 金币`, description: '小虫子身上掉落的零星金币。', detail: '即时奖励', effect: { type: 'gold', amount } }], r];
   }
+
+  const isElite = Boolean(monster.monsterSpecial);
+  const maxHp = INITIAL_HP + state.permanentMaxHpBonus;
+  const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
+  const effectiveHandLimit = HAND_LIMIT + (state.handLimitBonus ?? 0);
 
   const options: MonsterRewardOption[] = [];
-  const layers = monster.fury ?? monster.hpLayers ?? 1;
-  const isElite = Boolean(monster.monsterSpecial);
-  const isBoss = Boolean(monster.bossPhase);
+  const usedKeys = new Set<string>();
+  const pushOption = (option?: MonsterRewardOption | null) => {
+    if (!option) return;
+    const key = `${option.effect.type}-${option.detail ?? option.title}`;
+    if (usedKeys.has(key)) return;
+    usedKeys.add(key);
+    options.push(option);
+  };
 
-  const goldAmount = isBoss ? 25 : isElite ? 15 : 5 + layers * 2;
-  options.push({
-    id: `reward-gold-${monster.id}`,
-    title: '战利品',
-    description: `获得 ${goldAmount} 金币`,
-    effect: { type: 'gold', amount: goldAmount },
-  });
+  const createSlotBonusOption = (): MonsterRewardOption => {
+    const [pickSlot, r2] = nextBool(r); r = r2;
+    const slotId: EquipmentSlotId = pickSlot ? 'equipmentSlot1' : 'equipmentSlot2';
+    const [pickDamage, r3] = nextBool(r); r = r3;
+    const bt: keyof SlotPermanentBonus = pickDamage ? 'damage' : 'shield';
+    return { id: mkId(), title: `${slotLabel(slotId)} +1 ${bonusLabel(bt)}`, description: '永久强化该装备槽位的基础属性。', detail: '持久增益', effect: { type: 'slotBonus', slotId, bonusType: bt, amount: 1 } };
+  };
 
-  const healAmount = isBoss ? 15 : isElite ? 10 : 3 + layers;
-  options.push({
-    id: `reward-heal-${monster.id}`,
-    title: '战后休整',
-    description: `恢复 ${healAmount} 点生命`,
-    effect: { type: 'heal', amount: healAmount },
-  });
+  const createGoldOption = (): MonsterRewardOption => {
+    const [amount, r2] = nextInt(r, 5, 8); r = r2;
+    return { id: mkId(), title: `获得 ${amount} 金币`, description: '拾取战场上散落的金币。', detail: '即时奖励', effect: { type: 'gold', amount } };
+  };
 
-  if (isBoss) {
-    options.push({
-      id: `reward-maxhp-${monster.id}`,
-      title: '生命精华',
-      description: '永久最大生命 +5',
-      effect: { type: 'maxHp', amount: 5 },
-    });
-    options.push({
-      id: `reward-spell-${monster.id}`,
-      title: '奥术精华',
-      description: '永久法术伤害 +2',
-      effect: { type: 'spellDamage', amount: 2 },
-    });
-  } else if (isElite) {
-    const bonusType: 'damage' | 'shield' = Math.random() < 0.5 ? 'damage' : 'shield';
-    const slotId: EquipmentSlotId = Math.random() < 0.5 ? 'equipmentSlot1' : 'equipmentSlot2';
-    const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
-    const bonusLabel = bonusType === 'damage' ? '伤害' : '护甲';
-    options.push({
-      id: `reward-slot-${monster.id}`,
-      title: `${slotLabel}槽${bonusLabel}强化`,
-      description: `${slotLabel}装备栏永久${bonusLabel} +2`,
-      effect: { type: 'slotBonus', slotId, bonusType, amount: 2 },
-    });
+  const createHealOption = (): MonsterRewardOption | null => {
+    if (state.hp >= maxHp) return null;
+    const [amount, r2] = nextInt(r, 2, 4); r = r2;
+    return { id: mkId(), title: `回复 ${amount} 点生命`, description: '抚平战斗中留下的伤痕。', detail: '即时治疗', effect: { type: 'heal', amount } };
+  };
+
+  const createRepairOption = (): MonsterRewardOption | null => {
+    if (!hasRepairableEquipment(state)) return null;
+    return { id: mkId(), title: '修复 1 点耐久', description: '选择一件武器或护盾，恢复 1 点耐久值。', detail: '装备保养', effect: { type: 'repair', amount: 1, targets: ['weapon', 'shield', 'monster'] as EquipmentRepairTarget[] } };
+  };
+
+  const createDrawOption = (): MonsterRewardOption | null => {
+    if (state.backpackItems.length === 0 || state.handCards.length >= effectiveHandLimit) return null;
+    return { id: mkId(), title: '从背包抽 2 张牌', description: '快速检索背包里的资源。', detail: '资源调度', effect: { type: 'drawBackpack', amount: 2 } };
+  };
+
+  const createDiscoverOption = (): MonsterRewardOption | null => {
+    if (state.classDeck.length === 0 || state.backpackItems.length >= backpackCapacity) return null;
+    return { id: mkId(), title: '发现一张专属牌', description: '从职业卡牌中挑选新的战术手段。', detail: isElite ? '精英掉落' : '稀有掉落', effect: { type: 'discoverClass' } };
+  };
+
+  const createGraveyardDiscoverOption = (): MonsterRewardOption | null => {
+    if (state.discardedCards.length === 0 || state.backpackItems.length >= backpackCapacity) return null;
+    return { id: mkId(), title: '发现一张坟场牌', description: '从坟场中挑选一张卡牌放入背包。', detail: isElite ? '精英掉落' : '稀有掉落', effect: { type: 'discoverGraveyard' } };
+  };
+
+  const createMaxHpOption = (): MonsterRewardOption => {
+    const [pickTwo, r2] = nextBool(r); r = r2;
+    const amount = pickTwo ? 2 : 3;
+    return { id: mkId(), title: `最大生命 +${amount}`, description: '淬炼体魄，扩张体能上限。', detail: '永久增益', effect: { type: 'maxHp', amount } };
+  };
+
+  const createBackpackCapacityOption = (): MonsterRewardOption =>
+    ({ id: mkId(), title: '背包上限 +1', description: '扩展背包空间，容纳更多物资。', detail: '永久增益', effect: { type: 'backpackCapacity', amount: 1 } });
+
+  const createSpellDamageOption = (): MonsterRewardOption =>
+    ({ id: mkId(), title: '法术伤害 +1', description: '聚焦奥术，让法术造成更多伤害。', detail: '永久增益', effect: { type: 'spellDamage', amount: 1 } });
+
+  const createSpellLifestealOption = (): MonsterRewardOption =>
+    ({ id: mkId(), title: '超杀吸血 +1', description: '汲取超杀的力量，将溢出伤害转化为治疗。', detail: '永久增益', effect: { type: 'spellLifesteal', amount: 1 } });
+
+  const createStunCapOption = (): MonsterRewardOption =>
+    ({ id: mkId(), title: '击晕上限 +5%', description: '强化精神力，提高击晕怪物的概率上限。', detail: '永久增益', effect: { type: 'stunCap', amount: 5 } });
+
+  const createUpgradeOption = (): MonsterRewardOption | null => {
+    const hasUpgradeable =
+      state.handCards.some(c => isUpgradeableCard(c) && !isCardAtMaxUpgrade(c))
+      || [state.equipmentSlot1, state.equipmentSlot2].some(c => c != null && isUpgradeableCard(c) && !isCardAtMaxUpgrade(c))
+      || state.amuletSlots.some(c => c != null && isUpgradeableCard(c) && !isCardAtMaxUpgrade(c));
+    if (!hasUpgradeable) return null;
+    return { id: mkId(), title: '升级一张牌', description: '选择一张可升级的卡牌，提升其品质。', detail: '战术强化', effect: { type: 'upgradeCard' } };
+  };
+
+  pushOption(createSlotBonusOption());
+  pushOption(createSlotBonusOption());
+  pushOption(createGoldOption());
+  pushOption(createHealOption());
+  pushOption(createRepairOption());
+  pushOption(createDrawOption());
+  { let proc: boolean; if (!isElite) { [proc, r] = nextBool(r, 0.10); } else { proc = true; } if (proc) pushOption(createDiscoverOption()); }
+  pushOption(createGraveyardDiscoverOption());
+  pushOption(createMaxHpOption());
+  { const [proc, r2] = nextBool(r, 0.25); r = r2; if (proc) pushOption(createUpgradeOption()); }
+  { const [proc, r2] = nextBool(r, 0.15); r = r2; if (proc) pushOption(createSpellDamageOption()); }
+  { const [proc, r2] = nextBool(r, 0.15); r = r2; if (proc) pushOption(createSpellLifestealOption()); }
+  { const [proc, r2] = nextBool(r, 0.15); r = r2; if (proc) pushOption(createStunCapOption()); }
+  { const [proc, r2] = nextBool(r, 0.15); r = r2; if (proc) pushOption(createBackpackCapacityOption()); }
+  {
+    const [proc, r2] = nextBool(r, 0.15); r = r2;
+    if (proc) {
+      pushOption({ id: mkId(), title: '劝降成功率 +5%', description: '提升交涉能力，劝降怪物的成功率提高。', detail: '永久增益', effect: { type: 'persuadeRateBonus', amount: 5 } });
+    }
+  }
+  {
+    const [proc, r2] = nextBool(r, 0.03); r = r2;
+    if (!state.statSwapCardObtained && proc) {
+      pushOption({ id: mkId(), title: '获得魔法卡「颠倒乾坤」', description: '永久魔法（Perm 2）：选择一个怪物，将其攻击和血量上限对换。侧击：50% 击晕。', detail: '极稀有掉落', effect: { type: 'grantStatSwapCard' } });
+    }
   }
 
-  if (!isBoss) {
-    options.push({
-      id: `reward-discover-${monster.id}`,
-      title: '职业探索',
-      description: '发现一张专属卡',
-      effect: { type: 'discoverClass' },
-    });
-  }
+  // Weighted selection without replacement: discoverClass / discoverGraveyard are
+  // boosted so they win the random pick more often when present in the pool.
+  const getRewardWeight = (opt: MonsterRewardOption): number => {
+    if (opt.effect.type === 'discoverClass' || opt.effect.type === 'discoverGraveyard') return 3;
+    return 1;
+  };
 
-  if (layers >= 3 || isElite) {
-    options.push({
-      id: `reward-repair-${monster.id}`,
-      title: '装备修复',
-      description: '恢复所有装备 2 点耐久',
-      effect: { type: 'repair', amount: 2, targets: ['weapon', 'shield', 'monster'] },
-    });
+  const pool = [...options];
+  const selected: MonsterRewardOption[] = [];
+  while (selected.length < 2 && pool.length > 0) {
+    const totalWeight = pool.reduce((sum, opt) => sum + getRewardWeight(opt), 0);
+    const [roll, r2] = nextRandom(r); r = r2;
+    let target = roll * totalWeight;
+    let chosenIdx = pool.length - 1;
+    for (let i = 0; i < pool.length; i++) {
+      target -= getRewardWeight(pool[i]);
+      if (target <= 0) { chosenIdx = i; break; }
+    }
+    const [option] = pool.splice(chosenIdx, 1);
+    if (option) selected.push(option);
   }
-
-  if (Math.random() < 0.15) {
-    options.push({
-      id: `reward-spell-${monster.id}`,
-      title: '奥术精华',
-      description: '永久法术伤害 +1',
-      effect: { type: 'spellDamage', amount: 1 },
-    });
+  while (selected.length < 2) {
+    selected.push(createGoldOption());
   }
-
-  if (Math.random() < 0.15) {
-    options.push({
-      id: `reward-lifesteal-${monster.id}`,
-      title: '超杀吸血 +1',
-      description: '汲取超杀的力量，将溢出伤害转化为治疗。',
-      effect: { type: 'spellLifesteal', amount: 1 },
-    });
-  }
-
-  if (Math.random() < 0.15) {
-    options.push({
-      id: `reward-stuncap-${monster.id}`,
-      title: '击晕上限 +5%',
-      description: '强化精神力，提高击晕怪物的概率上限。',
-      effect: { type: 'stunCap', amount: 5 },
-    });
-  }
-
-  return options;
+  return [selected, r];
 }
 
 // ---------------------------------------------------------------------------
@@ -270,8 +350,8 @@ export function persuadeSuccessPatch(
     gold: state.gold - Math.max(0, PERSUADE_COST + (state.persuadeCostModifier ?? 0)),
     activeCards,
     ...(targetSlotId === 'equipmentSlot1'
-      ? { equipmentSlot1: monsterEquip }
-      : { equipmentSlot2: monsterEquip }),
+      ? { equipmentSlot1: monsterEquip as EquipmentItem }
+      : { equipmentSlot2: monsterEquip as EquipmentItem }),
   };
 }
 

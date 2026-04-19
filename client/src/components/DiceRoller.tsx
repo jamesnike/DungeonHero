@@ -7,6 +7,8 @@ interface DiceRollerProps {
   interactive?: boolean;
   autoRollTrigger?: number;
   scaleMultiplier?: number;
+  /** If provided, the next auto-roll will land on this d20 value (1–20) instead of a random face. */
+  targetValue?: number;
 }
 
 type Vec3 = [number, number, number];
@@ -32,6 +34,7 @@ export default function DiceRoller({
   interactive = true,
   autoRollTrigger,
   scaleMultiplier = 1,
+  targetValue,
 }: DiceRollerProps) {
 
   const [isRolling, setIsRolling] = useState(false);
@@ -40,6 +43,8 @@ export default function DiceRoller({
   const animationRef = useRef<number>();
   const orientationRef = useRef<Quat>(IDENTITY);
   const [diceSize, setDiceSize] = useState<number | null>(null);
+  const targetValueRef = useRef<number | undefined>(targetValue);
+  targetValueRef.current = targetValue;
   const rollStateRef = useRef<{
     start: number;
     duration: number;
@@ -223,7 +228,14 @@ export default function DiceRoller({
   const rollDice = useCallback(() => {
     if (isRolling) return;
     setIsRolling(true);
-    const targetFaceIndex = Math.floor(Math.random() * faces.length);
+    const requestedValue = targetValueRef.current;
+    let targetFaceIndex = -1;
+    if (requestedValue != null) {
+      targetFaceIndex = FACE_VALUES.findIndex(v => v === requestedValue);
+    }
+    if (targetFaceIndex < 0) {
+      targetFaceIndex = Math.floor(Math.random() * faces.length);
+    }
     const alignQuat = quaternionFromVectors(faces[targetFaceIndex].normal, [0, 0, 1]);
     const twistQuat = quatFromAxisAngle([0, 0, 1], Math.random() * Math.PI * 2);
     const spinAxis = normalize([Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]);

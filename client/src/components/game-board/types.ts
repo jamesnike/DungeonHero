@@ -87,11 +87,19 @@ export type EventDiceModalState = {
   entries: EventDiceRange[];
   rolledValue: number | null;
   highlightedId: string | null;
+  flowContext?: Record<string, unknown>;
+  /**
+   * Pre-rolled D20 from reducer's seeded RNG. When set, the dice animation
+   * will land on this value instead of a UI-random face. UI is purely visual
+   * playback; the RNG source of truth is the reducer.
+   */
+  predeterminedRoll?: number | null;
 };
 
 export type EquipmentPromptState = {
   prompt: string;
   subtext?: string;
+  flowContext?: Record<string, unknown>;
 };
 
 export type EventTransformState = {
@@ -112,6 +120,8 @@ export type CardActionContext = {
   description?: string;
   handOnly?: boolean;
   moveToDestination?: 'recycle-bag' | 'graveyard';
+  selectionMode?: 'each' | 'batch';
+  maxCount?: number;
 };
 
 export type MonsterRewardEffect =
@@ -174,7 +184,7 @@ export type PendingHeroSkillAction =
   | { skillId: HeroSkillId; type: 'slot' }
   | { skillId: HeroSkillId; type: 'monster'; baseDamage?: number };
 
-export type HeroMagicActivationOrigin = 'gauge' | 'card';
+export type HeroMagicActivationOrigin = 'gauge' | 'card' | 'event' | 'skill';
 
 export type PendingHeroMagicAction =
   | {
@@ -209,6 +219,21 @@ export type PendingMagicAction =
       step: 'monster-select';
       slotId: EquipmentSlotId;
       pendingDamage: number;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'armor-double-strike';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      // 整顿背囊：背包上限 +1 之后，从 手牌/护符/装备 中至多选 3 张放回背包顶部。
+      // maxSelections 在 resolver 阶段计算（受新背包剩余空间和「最多 3 张」共同约束）。
+      card: GameCardData;
+      effect: 'reorganize-backpack';
+      step: 'multi-select';
+      maxSelections: number;
       prompt: string;
     }
   | {
@@ -277,6 +302,22 @@ export type PendingMagicAction =
       leftIdx: number;
     }
   | {
+      // 血誓回卷：选择 active row 一张「已翻转」卡牌（带 _flipBackCard）翻回原形。
+      card: GameCardData;
+      effect: 'flip-back-active';
+      step: 'dungeon-select';
+      prompt: string;
+    }
+  | {
+      // 乾坤一翻：选择 active row 一张可翻转 (flipTarget) 或已翻转 (_flipBackCard) 的卡牌，
+      // 将其翻到另一面。正向翻转走 APPLY_CARD_FLIP（触发 flip-zap / flip-gold 等护符联动），
+      // 反向翻转直接修改 activeCards + 派发 card:flippedInCell 动画。
+      card: GameCardData;
+      effect: 'flip-active-card';
+      step: 'dungeon-select';
+      prompt: string;
+    }
+  | {
       card: GameCardData;
       effect: 'scaling-damage';
       step: 'monster-select';
@@ -329,6 +370,12 @@ export type PendingMagicAction =
   | {
       card: GameCardData;
       effect: 'grant-revive';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'battle-spirit';
       step: 'slot-select';
       prompt: string;
     }
@@ -446,6 +493,42 @@ export type PendingMagicAction =
       step: 'slot-select';
       prompt: string;
     }
+  | {
+      card: GameCardData;
+      effect: 'weapon-manual';
+      step: 'slot-select';
+      echoMultiplier?: number;
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'temp-attack-double';
+      step: 'slot-select';
+      echoMultiplier?: number;
+      prompt: string;
+    }
+  | {
+      // 连环转律：根据连续转型链长度对所选怪物造成法术伤害。
+      card: GameCardData;
+      effect: 'transform-streak-strike';
+      step: 'monster-select';
+      prompt: string;
+      data?: { damage: number; streak: number };
+    }
+  | {
+      // 运势博弈：选择 active row 一张卡，与主牌堆顶交换；同类型 +10 金币，否则 -1。
+      card: GameCardData;
+      effect: 'deck-top-swap-gold';
+      step: 'dungeon-select';
+      prompt: string;
+    }
+  | {
+      // 翻覆震慑（翻转之契 option 4）：选一个怪物挂 buff，到下次瀑流前每翻转一张牌该怪物 -1 攻击。
+      card: GameCardData;
+      effect: 'flip-monster-debuff';
+      step: 'monster-select';
+      prompt: string;
+    }
 
 /** 天眼审判：透视 + 击晕判定（关闭弹窗后掷骰） */
 export type DeckPeekModalStateFateSight = {
@@ -534,6 +617,18 @@ export type PendingPotionAction =
       effect: 'grant-lastwords-slot-temp-buff';
       step: 'slot-select';
       prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'perm-stun-cap+10';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'grant-weapon-stun-chance+40';
+      step: 'slot-select';
+      prompt: string;
     };
 
 export type HeroSkillArrowState = {
@@ -606,7 +701,7 @@ export type GraveyardStackFlight = {
 /** 护盾反弹 / Boss 反噬 / 奥术之刃附魔：纯表现用定向抛物线投射（伤害由结算逻辑另行应用） */
 export type DirectedCombatFxFlight = {
   id: string;
-  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell' | 'golem-layer-reflect' | 'dragon-breath';
+  kind: 'shield-reflect' | 'boss-retaliation' | 'arcane-blade-spell' | 'golem-layer-reflect' | 'dragon-breath' | 'missile-storm';
   start: Point;
   end: Point;
   startTime: number;
@@ -672,6 +767,8 @@ export type ActiveAmuletEffects = {
   hasStrength: boolean;
   hasDualGuard: boolean;
   hasDiscardShock: boolean;
+  /** Number of equipped 弧能之符 amulets — each triggers an independent flip-zap on every card flip. */
+  flipZapCount: number;
   hasFlipGold: boolean;
   hasRecycleForge: boolean;
   hasLoneCard: boolean;
@@ -694,7 +791,9 @@ export type ActiveAmuletEffects = {
   hasArmorHalveEndure: boolean;
   hasMonsterEquipBuff: boolean;
   hasEndTurnDraw: boolean;
+  hasLastWordsMonsterDebuff: boolean;
   stunRateBoost: number;
+  hasStunGold: boolean;
 };
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';

@@ -1,0 +1,50 @@
+---
+description: Event bus and side effect conventions for UI communication
+globs: client/src/game-core/event-bus.ts, client/src/game-core/actions.ts
+alwaysApply: false
+---
+
+# Event Bus & Side Effects
+
+## Side Effects vs Direct State
+
+The reducer returns `ReduceResult = { state: GameState, sideEffects: SideEffect[] }`.
+Side effects are the **only** way the reducer communicates with the UI layer.
+
+## Adding a new side effect
+
+1. Add the event type and payload to `GameEventMap` in `event-bus.ts`:
+   ```typescript
+   'combat:newEffect': { monsterId: string; damage: number };
+   ```
+2. Emit it from the reducer:
+   ```typescript
+   sideEffects.push({ event: 'combat:newEffect', payload: { monsterId, damage } });
+   ```
+3. Listen in the hook:
+   ```typescript
+   useGameEvent('combat:newEffect', ({ monsterId, damage }) => { /* animate */ });
+   ```
+
+## Naming conventions
+
+| Prefix | Purpose | Example |
+|--------|---------|---------|
+| `combat:` | Combat animations and flows | `combat:monsterBleed` |
+| `hero:` | Hero skill/magic UI flows | `hero:skillRequiresTarget` |
+| `card:` | Card play/draw/discard/flip effects | `card:potionResolved` |
+| `cards:` | Batch card draw animations | `cards:classDrawn` |
+| `equipment:` | Equipment draw/equip/break effects | `equipment:destroyed` |
+| `shop:` | Shop and discover flows | `shop:discoverStarted` |
+| `event:` | Dungeon event flows | `event:completed` |
+| `waterfall:` | Waterfall phases | `waterfall:completed` |
+| `ui:` | Generic UI (banners, request-prompts) | `ui:requestDice` |
+| `interactive:` | Continuation responses after player input | `interactive:diceResolved` |
+
+## Rules
+
+- Every event in `GameEventMap` must be fully typed — no `any` payloads.
+- Do not duplicate event names. If an event already exists, extend its payload instead.
+- The `ui:banner` payload uses `{ text: string }` (not `message`).
+- Before creating a new event key, search `GameEventMap` — a suitable event may already exist.
+- Use the correct canonical name (e.g. `equipment:destroyed` not `equipment:disposed`, `waterfall:completed` not `waterfall:complete`).

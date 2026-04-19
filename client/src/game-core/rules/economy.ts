@@ -1,0 +1,922 @@
+/**
+ * Economy / Field Mutation Rules — handles typed field mutation actions.
+ *
+ * These actions replace SET_STATE bridge patches with typed, replayable actions
+ * for gold, stats, equipment, amulets, card zones, and game flags.
+ */
+
+import type { GameState } from '../types';
+import type { GameAction } from '../actions';
+import type { ReduceResult, SideEffect } from '../reducer';
+import { applyPatch } from '../reducer';
+import type { GameCardData } from '@/components/GameCard';
+import type { ActiveRowSlots, AmuletItem, EquipmentItem } from '@/components/game-board/types';
+import type { KnightCardData } from '@/lib/knightDeck';
+import { BASE_BACKPACK_CAPACITY } from '../constants';
+import { markSkillUsedPure } from '../hero';
+import { shuffle as rngShuffle, nextInt } from '../rng';
+import { getEffectiveHandLimit, addCardToBackpackPure } from '../cards';
+import { computeAmuletEffects } from '../equipment';
+
+// Helper: enqueue +10 gold + log when a stun is applied and 雷金护符 is equipped
+function maybeEnqueueStunGold(
+  state: GameState,
+  enqueuedActions: GameAction[],
+  sideEffects: SideEffect[],
+  monsterName: string,
+): void {
+  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  if (!ae.hasStunGold) return;
+  enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10, source: 'amulet-stun-gold' } as GameAction);
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'amulet', message: `雷金护符：${monsterName} 被击晕，金币 +10` },
+  });
+}
+
+export function reduceEconomyActions(
+  state: GameState,
+  action: GameAction,
+): ReduceResult | null {
+  switch (action.type) {
+    case 'MODIFY_GOLD':
+      return applyPatch(state, { gold: state.gold + action.delta });
+
+    case 'MODIFY_STUN_CAP':
+      return applyPatch(state, { stunCap: state.stunCap + action.delta });
+
+    case 'MODIFY_SLOT_TEMP_ATTACK':
+      return applyPatch(state, {
+        slotTempAttack: {
+          ...state.slotTempAttack,
+          [action.slotId]: (state.slotTempAttack[action.slotId] ?? 0) + action.delta,
+        },
+      });
+
+    case 'MODIFY_SLOT_TEMP_ARMOR':
+      return applyPatch(state, {
+        slotTempArmor: {
+          ...state.slotTempArmor,
+          [action.slotId]: (state.slotTempArmor[action.slotId] ?? 0) + action.delta,
+        },
+      });
+
+    case 'SET_COMBAT_FLAG':
+      return applyPatch(state, { [action.flag]: action.value } as Partial<GameState>);
+
+    case 'MODIFY_PERMANENT_STAT':
+      return applyPatch(state, {
+        [action.stat]: (state[action.stat] as number) + action.delta,
+      } as Partial<GameState>);
+
+    case 'ADD_CARD_TO_HAND':
+      return applyPatch(state, { handCards: [...state.handCards, action.card] });
+
+    case 'ADD_CARDS_TO_HAND':
+      return applyPatch(state, { handCards: [...state.handCards, ...action.cards] });
+
+    case 'REMOVE_CARD_FROM_HAND':
+      return applyPatch(state, { handCards: state.handCards.filter(c => c.id !== action.cardId) });
+
+    case 'REMOVE_CARDS_FROM_HAND': {
+      const removeSet = new Set(action.cardIds);
+      return applyPatch(state, { handCards: state.handCards.filter(c => !removeSet.has(c.id)) });
+    }
+
+    case 'DISCARD_ALL_HAND':
+      // Curses cannot be discarded — they remain in hand.
+      return applyPatch(state, { handCards: state.handCards.filter(c => c.type === 'curse') });
+
+    case 'UPDATE_HAND_CARDS':
+      return applyPatch(state, { handCards: action.updater(state.handCards) });
+
+    case 'UPDATE_MONSTER_CARD':
+      return applyPatch(state, {
+        activeCards: patchMonsterInActiveCards(state.activeCards, action.monsterId, action.patch),
+      });
+
+    case 'FLUSH_RECYCLE_TO_BACKPACK': {
+      const capacity = BASE_BACKPACK_CAPACITY + (state.backpackCapacityModifier ?? 0);
+      const available = Math.max(0, capacity - state.backpackItems.length);
+      const toMove = state.permanentMagicRecycleBag.slice(0, available);
+      const remaining = state.permanentMagicRecycleBag.slice(available);
+      return applyPatch(state, {
+        backpackItems: [...state.backpackItems, ...toMove],
+        permanentMagicRecycleBag: remaining,
+      });
+    }
+
+    case 'ADD_PERMANENT_MAGIC_TO_RECYCLE':
+      return applyPatch(state, {
+        permanentMagicRecycleBag: [...state.permanentMagicRecycleBag, action.card],
+      });
+
+    case 'REMOVE_PERMANENT_MAGIC_FROM_RECYCLE':
+      return applyPatch(state, {
+        permanentMagicRecycleBag: state.permanentMagicRecycleBag.filter(c => c.id !== action.cardId),
+      });
+
+    case 'SET_EQUIPMENT_SLOT':
+      return applyPatch(state, { [action.slotId]: action.card } as Partial<GameState>);
+
+    case 'MODIFY_EQUIPMENT_DURABILITY': {
+      const equip = state[action.slotId];
+      if (!equip) return applyPatch(state, {});
+      return applyPatch(state, {
+        [action.slotId]: {
+          ...equip,
+          durability: (equip.durability ?? 0) + action.delta,
+        },
+      } as Partial<GameState>);
+    }
+
+    case 'UPDATE_AMULET_SLOT': {
+      const newSlots = [...state.amuletSlots];
+      if (action.slotIndex >= 0 && action.slotIndex < newSlots.length && newSlots[action.slotIndex]) {
+        newSlots[action.slotIndex] = { ...newSlots[action.slotIndex], ...action.patch } as AmuletItem;
+      }
+      return applyPatch(state, { amuletSlots: newSlots });
+    }
+
+    case 'MODIFY_MAX_AMULET_SLOTS':
+      return applyPatch(state, { maxAmuletSlots: state.maxAmuletSlots + action.delta });
+
+    case 'REMOVE_AMULET':
+      return applyPatch(state, {
+        amuletSlots: state.amuletSlots.filter(slot => slot?.id !== action.cardId),
+      });
+
+    case 'RETURN_CARDS_TO_CLASS_DECK': {
+      const combined = [...state.classDeck, ...action.cards];
+      const [shuffled, newRng] = rngShuffle(combined, state.rng);
+      return applyPatch(state, { classDeck: shuffled, rng: newRng });
+    }
+
+    // --- Card / Deck / Recycle state ---
+
+    case 'SET_HAND_CARDS':
+      return applyPatch(state, { handCards: action.cards });
+
+    case 'ADD_CLASS_CARD_TO_HAND':
+      return applyPatch(state, { classCardsInHand: [...state.classCardsInHand, action.card as KnightCardData] });
+
+    case 'REMOVE_CLASS_CARD_FROM_HAND':
+      return applyPatch(state, { classCardsInHand: state.classCardsInHand.filter(c => c.id !== action.cardId) });
+
+    case 'SET_DISCARDED_CARDS':
+      return applyPatch(state, { discardedCards: action.cards });
+
+    case 'SET_MAGIC_RECYCLE_BAG':
+      return applyPatch(state, { permanentMagicRecycleBag: action.bag });
+
+    case 'SET_CLASS_DECK_AND_BACKPACK': {
+      const patch: Partial<GameState> = {
+        classDeck: action.classDeck,
+        backpackItems: action.backpackItems,
+      };
+      if (action.permanentMagicRecycleBag !== undefined) {
+        patch.permanentMagicRecycleBag = action.permanentMagicRecycleBag;
+      }
+      return applyPatch(state, patch);
+    }
+
+    case 'SET_BACKPACK_ITEMS':
+      return applyPatch(state, { backpackItems: action.items });
+
+    case 'UPDATE_GAME_LOG':
+      return applyPatch(state, {
+        gameLogEntries: [...state.gameLogEntries, action.entry],
+      });
+
+    // --- Equipment / Amulet state ---
+
+    case 'SWAP_EQUIPMENT_SLOTS': {
+      type SlotId = import('@/components/game-board/types').EquipmentSlotId;
+      const left = state.equipmentSlot1;
+      const right = state.equipmentSlot2;
+      const leftAll = [left, ...state.equipmentSlot1Reserve].filter(Boolean) as EquipmentItem[];
+      const rightAll = [right, ...state.equipmentSlot2Reserve].filter(Boolean) as EquipmentItem[];
+      const cap1 = state.equipmentSlotCapacity.equipmentSlot1 ?? 1;
+      const cap2 = state.equipmentSlotCapacity.equipmentSlot2 ?? 1;
+      const swapCount = Math.min(cap1, cap2);
+
+      const leftSwap = leftAll.slice(0, swapCount);
+      const leftKeep = leftAll.slice(swapCount);
+      const rightSwap = rightAll.slice(0, swapCount);
+      const rightKeep = rightAll.slice(swapCount);
+
+      const newLeft = [...rightSwap, ...leftKeep];
+      const newRight = [...leftSwap, ...rightKeep];
+
+      const [newLeft1, ...newLeft1Reserve] = newLeft.length > 0
+        ? newLeft : [null as unknown as EquipmentItem];
+      const [newRight1, ...newRight1Reserve] = newRight.length > 0
+        ? newRight : [null as unknown as EquipmentItem];
+
+      return applyPatch(state, {
+        equipmentSlot1: newLeft1 ? { ...newLeft1, fromSlot: 'equipmentSlot1' as SlotId } : null,
+        equipmentSlot2: newRight1 ? { ...newRight1, fromSlot: 'equipmentSlot2' as SlotId } : null,
+        equipmentSlot1Reserve: (newLeft1Reserve ?? []).map(e => ({ ...e, fromSlot: 'equipmentSlot1' as SlotId })) as EquipmentItem[],
+        equipmentSlot2Reserve: (newRight1Reserve ?? []).map(e => ({ ...e, fromSlot: 'equipmentSlot2' as SlotId })) as EquipmentItem[],
+      });
+    }
+
+    case 'FILTER_EQUIPMENT_RESERVES':
+      return applyPatch(state, {
+        equipmentSlot1Reserve: state.equipmentSlot1Reserve.filter(c => c.id !== action.cardId),
+        equipmentSlot2Reserve: state.equipmentSlot2Reserve.filter(c => c.id !== action.cardId),
+      });
+
+    case 'SET_AMULET_SLOTS':
+      return applyPatch(state, { amuletSlots: action.slots as AmuletItem[] });
+
+    case 'SET_RECYCLE_BACKPACK_PROGRESS':
+      return applyPatch(state, { recycleBackpackProgress: action.progress });
+
+    case 'REMOVE_PREVIEW_CARD_STACKS': {
+      const next = { ...state.previewCardStacks };
+      for (const idx of action.indices) {
+        delete next[idx];
+      }
+      return applyPatch(state, { previewCardStacks: next });
+    }
+
+    case 'INCREMENT_TURN_COUNT':
+      return applyPatch(state, { turnCount: state.turnCount + action.delta });
+
+    case 'SET_HAND_LIMIT_BONUS':
+      return applyPatch(state, { handLimitBonus: action.bonus });
+
+    case 'SET_EQUIPMENT_SLOT_CAPACITY': {
+      const prev = state.equipmentSlotCapacity;
+      return applyPatch(state, {
+        equipmentSlotCapacity: { ...prev, [action.slotId]: (prev[action.slotId] ?? 1) + action.delta },
+      });
+    }
+
+    case 'SET_EQUIPMENT_RESERVE':
+      return applyPatch(state, action.slotId === 'equipmentSlot1'
+        ? { equipmentSlot1Reserve: action.items as EquipmentItem[] }
+        : { equipmentSlot2Reserve: action.items as EquipmentItem[] }
+      );
+
+    case 'SET_EQUIPMENT_SLOT_BONUS': {
+      const prev = state.equipmentSlotBonuses;
+      return applyPatch(state, {
+        equipmentSlotBonuses: {
+          ...prev,
+          [action.slotId]: {
+            ...prev[action.slotId],
+            [action.bonusType]: action.value,
+          },
+        },
+      });
+    }
+
+    case 'SET_SLOT_ATTACK_BURST': {
+      const prev = state.slotAttackBursts;
+      return applyPatch(state, {
+        slotAttackBursts: { ...prev, [action.slotId]: (prev[action.slotId] ?? 0) + action.amount },
+      });
+    }
+
+    case 'CLEAR_BERSERK_BUFF':
+      return applyPatch(state, { berserkTurnBuff: { equipmentSlot1: 0, equipmentSlot2: 0 } });
+
+    case 'ADD_BERSERK_BUFF': {
+      const prev = state.berserkTurnBuff;
+      return applyPatch(state, {
+        berserkTurnBuff: {
+          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + action.amount,
+          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + action.amount,
+        },
+      });
+    }
+
+    case 'RECORD_CLASS_DAMAGE_DISCOVER': {
+      if (!action.increment) {
+        return applyPatch(state, { classDamageDiscoverStreak: action.streak ?? 0 });
+      }
+
+      const discoverAmulet = (state.amuletSlots as GameCardData[]).find(
+        s => s?.amuletEffect === 'damage-class-discover',
+      );
+      if (!discoverAmulet) return applyPatch(state, {});
+
+      const upgradeLevel = discoverAmulet.upgradeLevel ?? 0;
+      const threshold = upgradeLevel >= 1 ? 3 : 8;
+      const nextStreak = (state.classDamageDiscoverStreak ?? 0) + 1;
+      const sideEffects: SideEffect[] = [];
+
+      if (nextStreak >= threshold) {
+        sideEffects.push({ event: 'combat:classDamageDiscoverTriggered', payload: { threshold } });
+        return applyPatch(state, { classDamageDiscoverStreak: 0 }, sideEffects);
+      }
+      return applyPatch(state, { classDamageDiscoverStreak: nextStreak });
+    }
+
+    case 'SET_PERSUADE_DISCOUNT':
+      return applyPatch(state, { persuadeDiscount: action.discount });
+
+    case 'SET_PERSUADE_AMULET_BONUS':
+      return applyPatch(state, { persuadeAmuletBonus: action.bonus });
+
+    case 'ADD_PERMANENT_SKILL':
+      return applyPatch(state, {
+        permanentSkills: [...state.permanentSkills, action.skill],
+      });
+
+    case 'UPDATE_HERO_MAGIC_ENTRY':
+      return applyPatch(state, {
+        heroMagicState: { ...state.heroMagicState, [action.magicId]: action.entry },
+      });
+
+    case 'SET_GAME_FLAGS':
+      return applyPatch(state, action.patch as Partial<GameState>);
+
+    case 'UPDATE_ACTIVE_CARDS':
+      return applyPatch(state, { activeCards: action.updater(state.activeCards) });
+
+    case 'UPDATE_DISCARDED_CARDS':
+      return applyPatch(state, { discardedCards: action.updater(state.discardedCards) });
+
+    case 'UPDATE_BACKPACK_ITEMS':
+      return applyPatch(state, { backpackItems: action.updater(state.backpackItems) });
+
+    case 'UPDATE_RECYCLE_BAG':
+      return applyPatch(state, { permanentMagicRecycleBag: action.updater(state.permanentMagicRecycleBag) });
+
+    case 'UPDATE_ETERNAL_RELICS':
+      return applyPatch(state, { eternalRelics: action.updater(state.eternalRelics) });
+
+    case 'UPDATE_CLASS_DECK':
+      return applyPatch(state, { classDeck: action.updater(state.classDeck) });
+
+    case 'UPDATE_REMAINING_DECK':
+      return applyPatch(state, { remainingDeck: action.updater(state.remainingDeck) });
+
+    case 'UPDATE_AMULET_SLOTS':
+      return applyPatch(state, { amuletSlots: action.updater(state.amuletSlots) as AmuletItem[] });
+
+    // --- Interactive continuations (RESOLVE_*) ---
+    case 'RESOLVE_DICE':
+      return reduceResolveDice(state, action);
+    case 'ROLL_DICE_FOR_FLOW':
+      return reduceRollDiceForFlow(state);
+    case 'RESOLVE_EQUIPMENT_CHOICE':
+      return reduceResolveEquipmentChoice(state, action);
+    case 'RESOLVE_MAGIC_CHOICE':
+      return reduceResolveMagicChoice(state, action);
+    case 'RESOLVE_CARD_ACTION':
+      return reduceResolveCardAction(state, action);
+    case 'RESOLVE_GRAVEYARD_SELECTION':
+      return reduceResolveGraveyardSelection(state, action);
+
+    case 'MARK_SKILL_USED':
+      return applyPatch(state, markSkillUsedPure(state, action.skillId));
+
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Interactive continuation handlers
+// ---------------------------------------------------------------------------
+
+function reduceRollDiceForFlow(state: GameState): ReduceResult {
+  const [roll, nextRng] = nextInt(state.rng, 1, 20);
+  return applyPatch(state, { rng: nextRng, lastFlowDiceRoll: roll }, [], []);
+}
+
+function reduceResolveDice(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_DICE' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const ctx = action.context ?? {};
+  const flowId = ctx.flowId as string | undefined;
+
+  sideEffects.push({
+    event: 'interactive:diceResolved',
+    payload: { value: action.value, outcomeId: action.outcomeId, context: ctx },
+  });
+
+  let newState = { ...state, phase: 'playerInput' as GameState['phase'] };
+
+  switch (flowId) {
+    case 'skeleton-restore': {
+      const mId = ctx.monsterId as string;
+      const mName = ctx.monsterName as string;
+      if (action.outcomeId === 'restore') {
+        newState = {
+          ...newState,
+          activeCards: newState.activeCards.map(c =>
+            c?.id === mId
+              ? { ...c, currentLayer: (c.currentLayer ?? 0) + 1, hp: c.maxHp ?? c.hp ?? 0 }
+              : c,
+          ) as typeof newState.activeCards,
+        };
+        enqueuedActions.push(
+          { type: 'SET_HERO_SKILL_BANNER', message: `${mName} 恢复了 1 层血层！` } as GameAction,
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的虚骨再生了一层！`, timestamp: Date.now() } } as GameAction,
+        );
+      } else {
+        enqueuedActions.push(
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的再生尝试失败。`, timestamp: Date.now() } } as GameAction,
+        );
+      }
+      break;
+    }
+
+    case 'wraith-rebirth': {
+      const mId = ctx.monsterId as string;
+      const mName = ctx.monsterName as string;
+      const mFury = ctx.monsterFury as number;
+      if (action.outcomeId === 'rebirth') {
+        newState = {
+          ...newState,
+          activeCards: newState.activeCards.map(c =>
+            c?.id === mId
+              ? { ...c, currentLayer: mFury, hp: c.maxHp ?? c.hp ?? 0 }
+              : c,
+          ) as typeof newState.activeCards,
+        };
+        enqueuedActions.push(
+          { type: 'SET_HERO_SKILL_BANNER', message: `${mName} 血层全部回满了！` } as GameAction,
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的幽魂之力爆发，血层全部回满！`, timestamp: Date.now() } } as GameAction,
+        );
+      } else {
+        enqueuedActions.push(
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的重生尝试失败。`, timestamp: Date.now() } } as GameAction,
+        );
+      }
+      break;
+    }
+
+    case 'repair-enrage': {
+      const slotId = ctx.slotId as string;
+      const mId = ctx.monsterId as string;
+      const mName = ctx.monsterName as string;
+      const oldLayers = ctx.monsterCurrentLayer as number;
+      const mAtk = ctx.monsterAttack as number;
+      if (action.outcomeId === 'repair') {
+        const slotItem = slotId === 'equipmentSlot1' ? newState.equipmentSlot1 : newState.equipmentSlot2;
+        if (slotItem && slotItem.durability != null && slotItem.maxDurability != null) {
+          const newDur = Math.min(slotItem.maxDurability, slotItem.durability + 1);
+          newState = {
+            ...newState,
+            [slotId]: { ...slotItem, durability: newDur },
+          };
+          enqueuedActions.push(
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'magic' as any, message: `锻造赌运：${slotItem.name} 耐久 +1（${slotItem.durability}→${newDur}）`, timestamp: Date.now() } } as GameAction,
+          );
+        }
+      } else if (action.outcomeId === 'enrage') {
+        if (oldLayers > 1) {
+          newState = {
+            ...newState,
+            activeCards: newState.activeCards.map(c =>
+              c?.id === mId
+                ? { ...c, currentLayer: oldLayers - 1, hp: c.maxHp ?? c.hp ?? 0, attack: mAtk + 2, value: mAtk + 2 }
+                : c,
+            ) as typeof newState.activeCards,
+          };
+          enqueuedActions.push(
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'magic' as any, message: `锻造赌运失败：${mName} 失去 1 血层（${oldLayers}→${oldLayers - 1}）并激怒（攻击+2）！`, timestamp: Date.now() } } as GameAction,
+          );
+        } else {
+          newState = {
+            ...newState,
+            activeCards: newState.activeCards.map(c =>
+              c?.id === mId
+                ? { ...c, attack: mAtk + 2, value: mAtk + 2 }
+                : c,
+            ) as typeof newState.activeCards,
+          };
+          enqueuedActions.push(
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'magic' as any, message: `锻造赌运失败：${mName} 已是最后血层，激怒（攻击+2）！`, timestamp: Date.now() } } as GameAction,
+          );
+        }
+      }
+      break;
+    }
+
+    case 'fortune-wheel': {
+      const card = ctx.card as GameCardData | undefined;
+      newState = { ...newState, pendingMagicAction: null, heroSkillBanner: null };
+      switch (action.outcomeId) {
+        case 'fw-discover': {
+          sideEffects.push({
+            event: 'card:fortuneWheelDiscover',
+            payload: { card },
+          });
+          enqueuedActions.push(
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'magic' as any, message: '际遇轮盘：发现一张专属魔法卡（三选一）。', timestamp: Date.now() } } as GameAction,
+          );
+          break;
+        }
+        case 'fw-draw': {
+          enqueuedActions.push(
+            { type: 'DRAW_FROM_BACKPACK', count: 2, ignoreLimit: true } as GameAction,
+            { type: 'SET_HERO_SKILL_BANNER', message: '际遇轮盘：从背包抽了牌。' } as GameAction,
+          );
+          break;
+        }
+        case 'fw-delete': {
+          sideEffects.push({
+            event: 'card:fortuneWheelDelete',
+            payload: { card },
+          });
+          break;
+        }
+        case 'fw-persuade': {
+          newState = { ...newState, persuadeDiscount: { costReduction: 0, rateBonus: 20 } };
+          enqueuedActions.push(
+            { type: 'SET_HERO_SKILL_BANNER', message: '际遇轮盘：下次劝降成功率 +20%。' } as GameAction,
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'magic' as any, message: '际遇轮盘：下次劝降成功率 +20%。', timestamp: Date.now() } } as GameAction,
+          );
+          break;
+        }
+        default:
+          break;
+      }
+      if (card) {
+        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false } as GameAction);
+      }
+      break;
+    }
+
+    case 'chaos-dice': {
+      const card = ctx.card as GameCardData | undefined;
+      newState = { ...newState, pendingMagicAction: null, heroSkillBanner: null };
+      switch (action.outcomeId) {
+        case 'chaos-1': {
+          sideEffects.push({
+            event: 'card:chaosEquipReturn',
+            payload: { card },
+          });
+          break;
+        }
+        case 'chaos-2': {
+          sideEffects.push({
+            event: 'card:chaosDiscover',
+            payload: { card },
+          });
+          break;
+        }
+        case 'chaos-3': {
+          sideEffects.push({
+            event: 'card:chaosShop',
+            payload: { card },
+          });
+          break;
+        }
+        case 'chaos-4': {
+          const monsters = (newState.activeCards || [])
+            .flat()
+            .filter((c): c is GameCardData => !!c && c.type === 'monster' && (c.hp ?? 0) > 0);
+          if (monsters.length > 0) {
+            let rng = newState.rng;
+            let idx: number;
+            [idx, rng] = nextInt(rng, 0, monsters.length - 1);
+            newState = { ...newState, rng };
+            const target = monsters[idx];
+            enqueuedActions.push(
+              { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: 3, source: 'chaos-lightning', isSpellDamage: true } as GameAction,
+              { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: 3, source: 'chaos-lightning-2', isSpellDamage: true } as GameAction,
+            );
+            enqueuedActions.push(
+              { type: 'SET_HERO_SKILL_BANNER', message: `${target.name} 被混沌雷击连续打中！` } as GameAction,
+            );
+          } else {
+            enqueuedActions.push(
+              { type: 'SET_HERO_SKILL_BANNER', message: '没有怪物可以承受混沌雷击。' } as GameAction,
+            );
+          }
+          break;
+        }
+        case 'chaos-5': {
+          sideEffects.push({
+            event: 'card:chaosDiscardDraw',
+            payload: { card },
+          });
+          break;
+        }
+        default:
+          break;
+      }
+      if (card) {
+        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: action.outcomeId === 'chaos-4' } as GameAction);
+      }
+      break;
+    }
+
+    case 'arcane-infusion': {
+      const card = ctx.card as GameCardData | undefined;
+      newState = { ...newState, pendingPotionAction: null };
+      const slotMap: Record<string, { slotId: string; stat: 'attack' | 'armor' }> = {
+        'ai-l-dmg': { slotId: 'equipmentSlot1', stat: 'attack' },
+        'ai-l-shd': { slotId: 'equipmentSlot1', stat: 'armor' },
+        'ai-r-dmg': { slotId: 'equipmentSlot2', stat: 'attack' },
+        'ai-r-shd': { slotId: 'equipmentSlot2', stat: 'armor' },
+      };
+      const mapping = action.outcomeId ? slotMap[action.outcomeId] : undefined;
+      if (mapping) {
+        const slotItem = newState[mapping.slotId as 'equipmentSlot1' | 'equipmentSlot2'];
+        if (slotItem) {
+          const currentVal = mapping.stat === 'attack' ? (slotItem.value ?? 0) : (slotItem.armor ?? 0);
+          const doubled = currentVal * 2;
+          const updated = mapping.stat === 'attack'
+            ? { ...slotItem, value: doubled }
+            : { ...slotItem, armor: doubled };
+          newState = { ...newState, [mapping.slotId]: updated };
+          enqueuedActions.push(
+            { type: 'SET_HERO_SKILL_BANNER', message: `奥术灌注：${slotItem.name} 的${mapping.stat === 'attack' ? '伤害' : '护甲'}翻倍（${currentVal}→${doubled}）！` } as GameAction,
+          );
+        }
+      } else if (action.outcomeId === 'ai-spell') {
+        const currentBonus = newState.permanentSpellDamageBonus ?? 0;
+        newState = { ...newState, permanentSpellDamageBonus: currentBonus * 2 };
+        enqueuedActions.push(
+          { type: 'SET_HERO_SKILL_BANNER', message: `奥术灌注：法术伤害加成翻倍（${currentBonus}→${currentBonus * 2}）！` } as GameAction,
+        );
+      }
+      if (card) {
+        enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card } as GameAction);
+      }
+      break;
+    }
+
+    case 'stun-domain': {
+      const monsterIndex = ctx.monsterIndex as number;
+      const monstersInfo = ctx.monsters as Array<{ id: string; name: string }>;
+      const stunPctD = ctx.stunPct as number;
+      const thresholdD = ctx.threshold as number;
+      const stunResults = [...(ctx.stunResults as string[] ?? [])];
+      const cardD = ctx.card as GameCardData | undefined;
+      const curMonster = monstersInfo[monsterIndex];
+
+      if (action.outcomeId === 'stun') {
+        newState = {
+          ...newState,
+          activeCards: patchMonsterInActiveCards(newState.activeCards, curMonster.id, { isStunned: true }),
+        };
+        enqueuedActions.push(
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${curMonster.name} 被震慑领域击晕了！`, timestamp: Date.now() } } as GameAction,
+        );
+        stunResults.push(`${curMonster.name} 击晕`);
+        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, curMonster.name);
+      } else {
+        stunResults.push(`${curMonster.name} 未击晕`);
+      }
+
+      const nextIndex = monsterIndex + 1;
+      if (nextIndex < monstersInfo.length) {
+        const [sdRoll, sdRng] = nextInt(newState.rng, 1, 20);
+        newState = { ...newState, rng: sdRng };
+        sideEffects.push({
+          event: 'ui:requestDice' as any,
+          payload: {
+            title: monstersInfo[nextIndex].name,
+            subtitle: `震慑领域击晕判定（${stunPctD}%）`,
+            entries: [
+              { id: 'stun', range: [1, thresholdD], label: '击晕成功！', effect: 'none' },
+              { id: 'miss', range: [thresholdD + 1, 20], label: '未击晕', effect: 'none' },
+            ],
+            flowContext: { ...ctx, monsterIndex: nextIndex, stunResults },
+            predeterminedRoll: sdRoll,
+          },
+        });
+      } else {
+        const bannerText = `震慑领域：击晕上限 +10%。${stunResults.join('，')}。`;
+        sideEffects.push({ event: 'ui:banner', payload: { text: bannerText } });
+        if (cardD) {
+          enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: cardD, dealtDamage: false } as GameAction);
+        }
+      }
+      break;
+    }
+
+    case 'fate-sight-stun': {
+      const mId = ctx.targetMonsterId as string;
+      const mName = ctx.targetMonsterName as string;
+      const fateCard = ctx.card as GameCardData | undefined;
+      if (action.outcomeId === 'stun') {
+        newState = {
+          ...newState,
+          activeCards: patchMonsterInActiveCards(newState.activeCards, mId, { isStunned: true }),
+        };
+        enqueuedActions.push(
+          { type: 'SET_HERO_SKILL_BANNER', message: `命运透视击晕了 ${mName}！` } as GameAction,
+        );
+        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, mName);
+      }
+      if (fateCard) {
+        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: fateCard, dealtDamage: false } as GameAction);
+      }
+      break;
+    }
+
+    case 'stat-swap-stun': {
+      const mId = ctx.targetMonsterId as string;
+      const mName = ctx.targetMonsterName as string;
+      const swapCard = ctx.card as GameCardData | undefined;
+      if (action.outcomeId === 'stun') {
+        newState = {
+          ...newState,
+          activeCards: patchMonsterInActiveCards(newState.activeCards, mId, { isStunned: true }),
+        };
+        enqueuedActions.push(
+          { type: 'SET_HERO_SKILL_BANNER', message: `颠倒乾坤击晕了 ${mName}！` } as GameAction,
+        );
+        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, mName);
+      }
+      if (swapCard) {
+        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: swapCard, dealtDamage: false } as GameAction);
+      }
+      break;
+    }
+
+    case 'thunder-stun': {
+      const mId = ctx.monsterId as string;
+      const mName = ctx.monsterName as string;
+      const hit = ctx.hit as number;
+      const maxHits = ctx.maxHits as number;
+      const stunPct = ctx.stunPct as number;
+      const threshold = ctx.threshold as number;
+
+      if (action.outcomeId === 'stun') {
+        newState = {
+          ...newState,
+          activeCards: patchMonsterInActiveCards(newState.activeCards, mId, { isStunned: true }),
+        };
+        enqueuedActions.push(
+          { type: 'SET_HERO_SKILL_BANNER', message: `雷震击：第${hit}击击晕成功！` } as GameAction,
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 被雷震击晕了！`, timestamp: Date.now() } } as GameAction,
+        );
+        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, mName);
+      } else if (hit < maxHits) {
+        const [tsRoll, tsRng] = nextInt(newState.rng, 1, 20);
+        newState = { ...newState, rng: tsRng };
+        sideEffects.push({
+          event: 'ui:requestDice' as any,
+          payload: {
+            title: mName,
+            subtitle: `雷震击晕判定 第${hit + 1}击（${stunPct}%）`,
+            entries: [
+              { id: 'stun', range: [1, threshold], label: '击晕成功！', effect: 'none' },
+              { id: 'miss', range: [threshold + 1, 20], label: '未击晕', effect: 'none' },
+            ],
+            flowContext: { ...ctx, hit: hit + 1 },
+            predeterminedRoll: tsRoll,
+          },
+        });
+      } else {
+        enqueuedActions.push(
+          { type: 'SET_HERO_SKILL_BANNER', message: `雷震击：未能击晕。` } as GameAction,
+        );
+      }
+      break;
+    }
+
+    default:
+      break;
+  }
+
+  return { state: newState, sideEffects, enqueuedActions };
+}
+
+function reduceResolveEquipmentChoice(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_EQUIPMENT_CHOICE' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const ctx = action.context ?? {};
+
+  sideEffects.push({
+    event: 'interactive:equipmentChoiceResolved',
+    payload: { slotId: action.slotId, context: ctx },
+  });
+
+  return applyPatch(state, { phase: 'playerInput' as GameState['phase'] }, sideEffects);
+}
+
+function reduceResolveMagicChoice(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_MAGIC_CHOICE' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const ctx = action.context ?? {};
+
+  sideEffects.push({
+    event: 'interactive:magicChoiceResolved',
+    payload: { choiceId: action.choiceId, context: ctx },
+  });
+
+  return applyPatch(state, { phase: 'playerInput' as GameState['phase'] }, sideEffects);
+}
+
+function reduceResolveCardAction(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_CARD_ACTION' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const ctx = action.context ?? {};
+
+  sideEffects.push({
+    event: 'interactive:cardActionResolved',
+    payload: { cardId: action.cardId, actionType: action.actionType, context: ctx },
+  });
+
+  return applyPatch(state, { phase: 'playerInput' as GameState['phase'] }, sideEffects);
+}
+
+function reduceResolveGraveyardSelection(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_GRAVEYARD_SELECTION' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const ctx = action.context ?? {};
+  const cardId = action.cardIds[0];
+  if (!cardId) {
+    return applyPatch(state, { phase: 'playerInput' as GameState['phase'] }, sideEffects);
+  }
+
+  const rawSelected =
+    (state.graveyardDiscoverState ?? []).find(c => c.id === cardId) ??
+    state.discardedCards.find(c => c.id === cardId);
+
+  if (!rawSelected) {
+    return applyPatch(state, { phase: 'playerInput' as GameState['phase'] }, sideEffects);
+  }
+
+  // Monster cards in graveyard had their durability cleared by
+  // resetMonsterForGraveyard. When recovered into hand/backpack, restore
+  // equipment-ready durability so they behave & display as monster equipment
+  // (matching the persuade flow).
+  const selected: GameCardData =
+    rawSelected.type === 'monster' && rawSelected.durability == null
+      ? (() => {
+          const base = rawSelected.fury ?? rawSelected.hpLayers ?? 1;
+          return { ...rawSelected, durability: base, maxDurability: base };
+        })()
+      : rawSelected;
+
+  const patch: Partial<GameState> = {};
+  patch.discardedCards = state.discardedCards.filter(c => c.id !== cardId);
+  patch.graveyardDiscoverState = null;
+
+  const delivery = (ctx.delivery as string) ?? state.graveyardDiscoverDelivery ?? 'backpack';
+  const handLimit = getEffectiveHandLimit(state);
+  const toHand =
+    delivery === 'hand-first' &&
+    state.handCards.length < handLimit &&
+    !state.handCards.some(c => c.id === selected.id);
+
+  if (toHand) {
+    patch.handCards = [...state.handCards, selected];
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: `坟场发现：入手牌「${selected.name}」` },
+    });
+    patch.heroSkillBanner = `「${selected.name}」已加入手牌。`;
+  } else {
+    const bpPatch = addCardToBackpackPure({ ...state, ...patch } as GameState, selected);
+    Object.assign(patch, bpPatch);
+    const logMsg =
+      delivery === 'hand-first'
+        ? `坟场发现：手牌已满，「${selected.name}」进入背包`
+        : `坟场发现：选入背包「${selected.name}」`;
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: logMsg } });
+    if (delivery === 'hand-first') {
+      patch.heroSkillBanner = `手牌已满，「${selected.name}」已进入背包。`;
+    }
+  }
+
+  sideEffects.push({
+    event: 'interactive:graveyardSelectionResolved',
+    payload: { cardIds: action.cardIds, context: ctx, card: selected },
+  });
+
+  const pending = state.pendingPotionAction;
+  if (pending && (pending as any).effect === 'discover-graveyard-magic') {
+    patch.pendingPotionAction = null;
+    enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card: (pending as any).card });
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+function patchMonsterInActiveCards(
+  activeCards: ActiveRowSlots,
+  monsterId: string,
+  patch: Partial<GameCardData>,
+): ActiveRowSlots {
+  return activeCards.map(card => {
+    if (!card || card.id !== monsterId) return card;
+    return { ...card, ...patch };
+  }) as ActiveRowSlots;
+}

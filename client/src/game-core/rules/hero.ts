@@ -1,0 +1,2315 @@
+/**
+ * Hero Rules — handles hero skill and ability actions in the reducer.
+ *
+ * Covers: USE_HERO_SKILL, ADD_MAGIC_GAUGE, PERSUADE_MONSTER, SWEEP, RESET_HERO_WAVE.
+ *
+ * Complex hero skill resolution (multi-step UI flows, dice rolls) is
+ * delegated to side effects for the UI layer to handle.
+ */
+
+import type { GameState } from '../types';
+import type { GameAction } from '../actions';
+import type { ReduceResult, SideEffect } from '../reducer';
+import { applyPatch, noChange } from '../reducer';
+import type { GameCardData } from '@/components/GameCard';
+import type { ActiveRowSlots, EquipmentSlotId, EquipmentItem, PendingMagicAction } from '@/components/game-board/types';
+import { computeMaxHp, checkSwapUpgrade, applyMissileRelicEffects, executeArmorDoubleStrike } from './magic-effects';
+import { DUNGEON_COLUMN_COUNT, PERSUADE_COST, MIN_PERSUADE_COST, createEmptyAmuletEffects } from '../constants';
+import {
+  flattenActiveRowSlots,
+  isDamageableTarget,
+  pickRandomHandCardsForDiscardPreferGraveyard,
+  sanitizeCardMetadata,
+  computeHonorSweepWaveDamagePure,
+  computeSpellDamagePure,
+  computeSlotArmorValuePure,
+  getCardPlayCategory,
+} from '../helpers';
+import {
+  resetHeroWavePure,
+  addMagicGauge,
+  setMagicUsedThisWave,
+  resetMagicGauge,
+  isMagicGaugeFull,
+  markSkillUsedPure,
+} from '../hero';
+import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
+import { computeEquipmentBreakEffects } from './equipment-effects';
+import { computeAmuletEffects } from '../equipment';
+import { nextInt, pickRandom } from '../rng';
+import { damageMonsterWithLayerOverflow } from '../combat';
+import { isMonsterMagicImmuneByBuilding, getEquipmentSlotsWithSuppressedTempAttack } from '../buildingAura';
+import { applyMonsterRage } from '@/lib/monsterRage';
+
+export function reduceHeroActions(state: GameState, action: GameAction): ReduceResult | null {
+  switch (action.type) {
+    case 'USE_HERO_SKILL':
+      return reduceUseHeroSkill(state, action);
+    case 'RESOLVE_HERO_SKILL_TARGET':
+      return reduceResolveHeroSkillTarget(state, action);
+    case 'ADD_MAGIC_GAUGE':
+      return reduceAddMagicGauge(state, action);
+    case 'PERSUADE_MONSTER':
+      return reducePersuadeMonster(state, action);
+    case 'SWEEP':
+      return reduceSweep(state, action);
+    case 'RESET_HERO_WAVE':
+      return reduceResetHeroWave(state);
+    case 'ACTIVATE_HERO_MAGIC':
+      return reduceActivateHeroMagic(state, action);
+    case 'COMPLETE_HERO_MAGIC':
+      return reduceCompleteHeroMagic(state, action);
+    case 'RESOLVE_HERO_MAGIC_TARGET':
+      return reduceResolveHeroMagicTarget(state, action);
+    case 'APPLY_REVIVE_BLESSING':
+      return reduceApplyReviveBlessing(state, action);
+    case 'CHECK_HONOR_SWEEP_UPGRADES':
+      return reduceCheckHonorSweepUpgrades(state);
+    case 'RESOLVE_MAGIC_SLOT_SELECTION':
+      return reduceMagicSlotSelection(state, action);
+    case 'RESOLVE_MAGIC_MONSTER_SELECTION':
+      return reduceMagicMonsterSelection(state, action);
+    case 'RESOLVE_DUNGEON_CARD_SELECTION':
+      return reduceDungeonCardSelection(state, action);
+    case 'RESOLVE_PUSH_TO_BACKPACK_TOP':
+      return reducePushToBackpackTop(state, action);
+    case 'RESOLVE_DICE':
+      return reduceDiceForHero(state, action);
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// USE_HERO_SKILL
+// ---------------------------------------------------------------------------
+
+function reduceUseHeroSkill(
+  state: GameState,
+  action: Extract<GameAction, { type: 'USE_HERO_SKILL' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  sideEffects.push({
+    event: 'hero:skillUsed',
+    payload: { skillId: action.skillId, target: action.target },
+  });
+
+  const skillId = action.skillId;
+
+  switch (skillId) {
+    case 'blood-draw': {
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 3, source: 'general', selfInflicted: true });
+      let current = { ...state, ...patch };
+      const drawnNames: string[] = [];
+      for (let i = 0; i < 2; i++) {
+        const { card, patch: drawPatch } = drawFromBackpackToHandPure(current);
+        if (card) {
+          Object.assign(patch, drawPatch);
+          current = { ...current, ...drawPatch };
+          drawnNames.push(card.name);
+          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: card.id, source: 'backpack' } });
+        }
+      }
+      Object.assign(patch, markSkillUsedPure(state, skillId as any));
+      if (drawnNames.length > 0) {
+        patch.heroSkillBanner = `失去 3 生命，抽到「${drawnNames.join('」「')}」！`;
+        sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `血契抽牌：失去 3 生命，抽到「${drawnNames.join('」「')}」` } });
+      } else {
+        patch.heroSkillBanner = '失去 3 生命，但背包为空或手牌已满。';
+        sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: '血契抽牌：失去 3 生命，未能抽牌' } });
+      }
+      break;
+    }
+    case 'gold-discovery': {
+      const cost = 6;
+      if ((state.gold ?? 0) < cost) {
+        patch.heroSkillBanner = `金币不足！需要 ${cost} 金币（当前 ${state.gold}）。`;
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (state.classDeck.length === 0) {
+        patch.heroSkillBanner = '专属牌堆已空，无法发动。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      patch.gold = (state.gold ?? 0) - cost;
+      enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: 1 });
+      Object.assign(patch, markSkillUsedPure(state, skillId as any));
+      sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `黄金探秘：花费 ${cost} 金币` } });
+      break;
+    }
+    case 'vanguard-swap': {
+      const cards = state.activeCards as (GameCardData | null)[];
+      let firstIdx = -1;
+      let secondIdx = -1;
+      for (let i = 0; i < cards.length; i++) {
+        if (cards[i] != null) {
+          if (firstIdx === -1) firstIdx = i;
+          else if (secondIdx === -1) { secondIdx = i; break; }
+        }
+      }
+      if (firstIdx === -1 || secondIdx === -1) {
+        patch.heroSkillBanner = '先锋换阵无效（地城行卡牌不足 2 张）。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const cardA = cards[firstIdx]!;
+      const cardB = cards[secondIdx]!;
+      const next = [...cards];
+      const tmp = next[firstIdx];
+      next[firstIdx] = next[secondIdx];
+      next[secondIdx] = tmp;
+      patch.activeCards = next;
+      Object.assign(patch, markSkillUsedPure(state, skillId as any));
+      patch.heroSkillBanner = `${cardA.name} ↔ ${cardB.name} 位置互换！`;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `先锋换阵：${cardA.name} 与 ${cardB.name} 互换位置。` } });
+      const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
+      if (swapTrigger) {
+        patch.heroSkillBanner = '流转之符：选择一张牌进行升级。';
+      }
+      break;
+    }
+    case 'armor-pact': {
+      const emptySlots: EquipmentSlotId[] = [];
+      if (!state.equipmentSlot1) emptySlots.push('equipmentSlot1');
+      if (!state.equipmentSlot2) emptySlots.push('equipmentSlot2');
+      if (emptySlots.length === 0) {
+        patch.heroSkillBanner = '需要至少一个空装备槽才能发动。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (emptySlots.length === 1) {
+        const emptySlot = emptySlots[0];
+        const bonuses = { ...(state.equipmentSlotBonuses ?? {}) };
+        bonuses[emptySlot] = { ...(bonuses[emptySlot] ?? {}), shield: ((bonuses[emptySlot] as any)?.shield ?? 0) + 1 };
+        patch.equipmentSlotBonuses = bonuses as typeof state.equipmentSlotBonuses;
+        const otherSlot: EquipmentSlotId = emptySlot === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+        const otherItem = otherSlot === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+        if (otherItem) {
+          patch[emptySlot] = otherItem;
+          patch[otherSlot] = null as any;
+          sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `虚位铸甲：「${(otherItem as GameCardData).name}」移至强化槽位` } });
+        }
+        Object.assign(patch, markSkillUsedPure(state, skillId as any));
+        patch.heroSkillBanner = '装备槽永久护甲 +1。';
+      } else {
+        patch.pendingHeroSkillAction = { skillId: 'armor-pact' as any, type: 'slot' };
+        patch.heroSkillBanner = '选择空槽以获得 +1 永久护甲。';
+        sideEffects.push({ event: 'hero:skillRequiresTarget', payload: { skillId: 'armor-pact', targetType: 'slot' } });
+      }
+      break;
+    }
+    case 'durability-for-blood': {
+      const eq1 = state.equipmentSlot1 as GameCardData | null;
+      const eq2 = state.equipmentSlot2 as GameCardData | null;
+      if (!eq1 && !eq2) {
+        patch.heroSkillBanner = 'Equip a weapon or shield before reinforcing.';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const repairableSlots: { id: EquipmentSlotId; item: GameCardData }[] = [];
+      if (eq1) {
+        const maxD = eq1.maxDurability ?? eq1.durability ?? 0;
+        const curD = eq1.durability ?? maxD;
+        if (maxD > 0 && curD < maxD) repairableSlots.push({ id: 'equipmentSlot1', item: eq1 });
+      }
+      if (eq2) {
+        const maxD = eq2.maxDurability ?? eq2.durability ?? 0;
+        const curD = eq2.durability ?? maxD;
+        if (maxD > 0 && curD < maxD) repairableSlots.push({ id: 'equipmentSlot2', item: eq2 });
+      }
+      if (repairableSlots.length === 0) {
+        patch.heroSkillBanner = 'No equipment needs repair.';
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (repairableSlots.length === 1) {
+        const slot = repairableSlots[0];
+        const maxDurability = slot.item.maxDurability ?? slot.item.durability ?? 0;
+        const currentDurability = slot.item.durability ?? maxDurability;
+        patch[slot.id] = { ...slot.item, durability: Math.min(maxDurability, currentDurability + 1) } as any;
+        enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1, source: 'general', selfInflicted: true });
+        Object.assign(patch, markSkillUsedPure(state, skillId as any));
+        patch.heroSkillBanner = 'Durability increased by 1.';
+      } else {
+        patch.pendingHeroSkillAction = { skillId: 'durability-for-blood' as any, type: 'slot' };
+        patch.heroSkillBanner = 'Select an equipped slot to repair.';
+        sideEffects.push({ event: 'hero:skillRequiresTarget', payload: { skillId: 'durability-for-blood', targetType: 'slot' } });
+      }
+      break;
+    }
+    case 'blood-strike': {
+      const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
+      if (monsters.length === 0) {
+        patch.heroSkillBanner = 'No monsters available to strike.';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const baseDamage = 3;
+      const spellDmg = computeSpellDamagePure(state, baseDamage);
+      if (monsters.length === 1) {
+        enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 2, source: 'general', selfInflicted: true });
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: spellDmg, source: 'blood-strike', isSpellDamage: true });
+        Object.assign(patch, markSkillUsedPure(state, skillId as any));
+        patch.heroSkillBanner = `Crimson Strike dealt ${spellDmg} damage.`;
+      } else {
+        patch.pendingHeroSkillAction = { skillId: 'blood-strike' as any, type: 'monster', baseDamage };
+        patch.heroSkillBanner = `Select a monster to deal ${spellDmg} damage.`;
+        sideEffects.push({ event: 'hero:skillRequiresTarget', payload: { skillId: 'blood-strike', targetType: 'monster' } });
+      }
+      break;
+    }
+    case 'graveyard-recall': {
+      if (action.target === 'resolve-recall') {
+        Object.assign(patch, markSkillUsedPure(state, skillId as any));
+        break;
+      }
+      const hand = state.handCards as GameCardData[];
+      if (hand.length < 2) {
+        patch.heroSkillBanner = `手牌不足！需要至少 2 张手牌（当前 ${hand.length}）。`;
+        return applyPatch(state, patch, sideEffects);
+      }
+      if ((state.discardedCards as GameCardData[]).length === 0) {
+        patch.heroSkillBanner = '坟场中没有可召回的卡牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      sideEffects.push({
+        event: 'hero:skillRequiresInteraction',
+        payload: { skillId: 'graveyard-recall', step: 'discard-phase' },
+      });
+      break;
+    }
+    case 'discard-empower': {
+      const hand = state.handCards as GameCardData[];
+      const eq1 = state.equipmentSlot1 as GameCardData | null;
+      const eq2 = state.equipmentSlot2 as GameCardData | null;
+      if (hand.length === 0) {
+        patch.heroSkillBanner = '需要至少 1 张手牌才能发动。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (!eq1 && !eq2) {
+        patch.heroSkillBanner = '需要至少一个装备才能发动。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      let rng = state.rng;
+      const [discardedCards, rngAfter] = pickRandomHandCardsForDiscardPreferGraveyard(hand, 1, rng);
+      rng = rngAfter;
+      const discarded = discardedCards[0];
+      if (!discarded) return applyPatch(state, patch, sideEffects);
+      patch.rng = rng;
+      patch.handCards = hand.filter(c => c.id !== discarded.id);
+      patch.discardedCards = [...(state.discardedCards as GameCardData[]), discarded];
+      sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `噬血砺锋：弃置「${discarded.name}」` } });
+      sideEffects.push({ event: 'combat:lastWordsDiscard', payload: { cards: [discarded], monsterName: '噬血砺锋' } });
+      const equippedSlots: EquipmentSlotId[] = [];
+      if (eq1) equippedSlots.push('equipmentSlot1');
+      if (eq2) equippedSlots.push('equipmentSlot2');
+      if (equippedSlots.length === 1) {
+        const slotId = equippedSlots[0];
+        const slotItem = slotId === 'equipmentSlot1' ? eq1 : eq2;
+        patch.slotAttackBursts = { ...(state.slotAttackBursts ?? {}), [slotId]: 2 };
+        patch.nextAttackLifestealSlot = slotId;
+        Object.assign(patch, markSkillUsedPure(state, skillId as any));
+        patch.heroSkillBanner = `${slotItem!.name} 的下次攻击 +2 伤害 且 吸血！`;
+        sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `噬血砺锋：${slotItem!.name} 下次攻击 +2 且吸血` } });
+      } else {
+        patch.pendingHeroSkillAction = { skillId: 'discard-empower' as any, type: 'slot' };
+        patch.heroSkillBanner = '选择一个装备：下次攻击 +2 伤害 且 吸血。';
+        sideEffects.push({ event: 'hero:skillRequiresTarget', payload: { skillId: 'discard-empower', targetType: 'slot' } });
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_HERO_SKILL_TARGET — resolves pending interactive hero skill
+// ---------------------------------------------------------------------------
+
+function reduceResolveHeroSkillTarget(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_HERO_SKILL_TARGET' }>,
+): ReduceResult {
+  const pending = state.pendingHeroSkillAction;
+  if (!pending) return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  switch (pending.skillId) {
+    case 'armor-pact': {
+      const slotId = action.slotId;
+      if (!slotId) return noChange(state);
+      const slotItem = slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+      if (slotItem) {
+        patch.heroSkillBanner = '请选择一个空的装备槽。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const bonuses = { ...(state.equipmentSlotBonuses ?? {}) };
+      bonuses[slotId] = { ...(bonuses[slotId] ?? {}), shield: ((bonuses[slotId] as any)?.shield ?? 0) + 1 };
+      patch.equipmentSlotBonuses = bonuses as typeof state.equipmentSlotBonuses;
+      const otherSlot: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+      const otherItem = otherSlot === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+      if (otherItem) {
+        patch[slotId] = otherItem;
+        patch[otherSlot] = null as any;
+        sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `虚位铸甲：「${(otherItem as GameCardData).name}」移至强化槽位` } });
+      }
+      Object.assign(patch, markSkillUsedPure(state, pending.skillId as any));
+      patch.pendingHeroSkillAction = null;
+      patch.heroSkillBanner = '装备槽永久护甲 +1。';
+      break;
+    }
+    case 'durability-for-blood': {
+      const slotId = action.slotId;
+      if (!slotId) return noChange(state);
+      const slotItem = (slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2) as GameCardData | null;
+      if (!slotItem) {
+        patch.heroSkillBanner = 'Equip an item in that slot first.';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const maxDurability = slotItem.maxDurability ?? slotItem.durability ?? 0;
+      const currentDurability = slotItem.durability ?? maxDurability;
+      if (maxDurability === 0 || currentDurability >= maxDurability) {
+        patch.heroSkillBanner = 'That item cannot be repaired further.';
+        return applyPatch(state, patch, sideEffects);
+      }
+      patch[slotId] = { ...slotItem, durability: Math.min(maxDurability, currentDurability + 1) } as any;
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1, source: 'general', selfInflicted: true });
+      Object.assign(patch, markSkillUsedPure(state, pending.skillId as any));
+      patch.pendingHeroSkillAction = null;
+      patch.heroSkillBanner = 'Durability increased by 1.';
+      break;
+    }
+    case 'blood-strike': {
+      const monsterId = action.monsterId;
+      if (!monsterId) return noChange(state);
+      const baseDamage = (pending as any).baseDamage ?? 3;
+      const spellDmg = computeSpellDamagePure(state, baseDamage);
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 2, source: 'general', selfInflicted: true });
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId, damage: spellDmg, source: 'blood-strike', isSpellDamage: true });
+      Object.assign(patch, markSkillUsedPure(state, pending.skillId as any));
+      patch.pendingHeroSkillAction = null;
+      patch.heroSkillBanner = `Crimson Strike dealt ${spellDmg} damage.`;
+      break;
+    }
+    case 'discard-empower': {
+      const slotId = action.slotId;
+      if (!slotId) return noChange(state);
+      const slotItem = (slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2) as GameCardData | null;
+      if (!slotItem) {
+        patch.heroSkillBanner = '请选择有装备的槽位。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      patch.slotAttackBursts = { ...(state.slotAttackBursts ?? {}), [slotId]: 2 };
+      patch.nextAttackLifestealSlot = slotId;
+      Object.assign(patch, markSkillUsedPure(state, pending.skillId as any));
+      patch.pendingHeroSkillAction = null;
+      patch.heroSkillBanner = `${slotItem.name} 的下次攻击 +2 伤害 且 吸血！`;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `噬血砺锋：${slotItem.name} 下次攻击 +2 且吸血` } });
+      break;
+    }
+    default:
+      return noChange(state);
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// ADD_MAGIC_GAUGE
+// ---------------------------------------------------------------------------
+
+function reduceAddMagicGauge(
+  state: GameState,
+  action: Extract<GameAction, { type: 'ADD_MAGIC_GAUGE' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+
+  const newMagicState = addMagicGauge(
+    state.heroMagicState,
+    action.gaugeType as any,
+    action.amount,
+  );
+
+  if (newMagicState !== state.heroMagicState) {
+    patch.heroMagicState = newMagicState;
+  }
+
+  sideEffects.push({
+    event: 'hero:magicGaugeAdded',
+    payload: { gaugeType: action.gaugeType, amount: action.amount },
+  });
+
+  // Check if gauge is now full
+  const gaugeEntry = newMagicState[action.gaugeType as keyof typeof newMagicState];
+  if (gaugeEntry && (gaugeEntry as any).unlocked) {
+    const wasFull = isMagicGaugeFull(state.heroMagicState, action.gaugeType as any);
+    const nowFull = isMagicGaugeFull(newMagicState, action.gaugeType as any);
+    if (!wasFull && nowFull) {
+      sideEffects.push({
+        event: 'hero:magicGaugeFull',
+        payload: { gaugeType: action.gaugeType },
+      });
+    }
+  }
+
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// PERSUADE_MONSTER
+// ---------------------------------------------------------------------------
+
+function reducePersuadeMonster(
+  state: GameState,
+  action: Extract<GameAction, { type: 'PERSUADE_MONSTER' }>,
+): ReduceResult {
+  const monster = state.activeCards.find(c => c?.id === action.monsterId);
+  if (!monster || monster.type !== 'monster') return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+
+  // Compute effective cost (matches hook's getPersuadeEffectiveCost)
+  const costReduction = state.persuadeDiscount?.costReduction ?? 0;
+  const permCostMod = state.persuadeCostModifier ?? 0;
+  let effectiveCost = Math.max(0, PERSUADE_COST + permCostMod - costReduction);
+  const sameTargetDiscount = state.persuadeSameTargetCostHalve && state.lastPersuadeTargetId === action.monsterId;
+  if (sameTargetDiscount) {
+    effectiveCost = Math.floor(effectiveCost / 2);
+  }
+
+  if ((state.gold ?? 0) < effectiveCost) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: `金币不足，无法劝降（需要 ${effectiveCost} 金币）` },
+    });
+    return applyPatch(state, {}, sideEffects);
+  }
+
+  patch.gold = (state.gold ?? 0) - effectiveCost;
+
+  // Track consecutive persuade attempts
+  const isSameTarget = state.lastPersuadeTargetId === action.monsterId;
+  patch.consecutivePersuadeCount = isSameTarget ? state.consecutivePersuadeCount + 1 : 1;
+  patch.lastPersuadeTargetId = action.monsterId;
+  patch.persuadeDiscount = null;
+
+  // Transition persuade modal to rolling phase
+  if (state.persuadeState) {
+    patch.persuadeState = { ...state.persuadeState, phase: 'rolling' };
+  }
+
+  sideEffects.push({
+    event: 'log:entry',
+    payload: {
+      type: 'system' as const,
+      message: `花费 ${effectiveCost} 金币尝试劝降 ${monster.name}…${sameTargetDiscount ? '（连劝减半）' : ''}`,
+    },
+  });
+
+  sideEffects.push({
+    event: 'hero:persuadeAttempt',
+    payload: {
+      monsterId: action.monsterId,
+      monsterName: monster.name,
+      cost: effectiveCost,
+    },
+  });
+
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// SWEEP
+// ---------------------------------------------------------------------------
+
+function reduceSweep(
+  state: GameState,
+  action: Extract<GameAction, { type: 'SWEEP' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+
+  sideEffects.push({
+    event: 'hero:sweep',
+    payload: { targetIds: action.targetIds },
+  });
+
+  return applyPatch(state, {}, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// RESET_HERO_WAVE
+// ---------------------------------------------------------------------------
+
+function reduceResetHeroWave(state: GameState): ReduceResult {
+  const patch = resetHeroWavePure(state);
+  const sideEffects: SideEffect[] = [{
+    event: 'log:entry',
+    payload: { type: 'system' as const, message: '新一波开始，英雄技能和魔法已重置。' },
+  }];
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// ACTIVATE_HERO_MAGIC — trigger hero magic ability (monster-doom, revive-blessing, etc.)
+// ---------------------------------------------------------------------------
+
+function reduceActivateHeroMagic(
+  state: GameState,
+  action: Extract<GameAction, { type: 'ACTIVATE_HERO_MAGIC' }>,
+): ReduceResult {
+  const { magicId, origin } = action;
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+  const enqueuedActions: GameAction[] = [];
+
+  const status = state.heroMagicState[magicId as keyof typeof state.heroMagicState];
+  if (!status || !(status as any).unlocked) {
+    sideEffects.push({ event: 'ui:banner', payload: { text: '尚未掌握该英雄魔法。' } });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  if (state.pendingHeroMagicAction) {
+    sideEffects.push({ event: 'ui:banner', payload: { text: '请先完成当前的英雄魔法动作。' } });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  if (origin === 'gauge') {
+    if (!isMagicGaugeFull(state.heroMagicState, magicId as any)) {
+      sideEffects.push({ event: 'ui:banner', payload: { text: '魔法仍在充能中。' } });
+      return applyPatch(state, patch, sideEffects);
+    }
+    if ((status as any).usedThisWave) {
+      sideEffects.push({ event: 'ui:banner', payload: { text: '该魔法已在本波使用。' } });
+      return applyPatch(state, patch, sideEffects);
+    }
+  }
+
+  switch (magicId) {
+    case 'revive-blessing': {
+      const equipSlots: EquipmentSlotId[] = [];
+      if (state.equipmentSlot1) equipSlots.push('equipmentSlot1');
+      if (state.equipmentSlot2) equipSlots.push('equipmentSlot2');
+
+      if (equipSlots.length === 0) {
+        sideEffects.push({ event: 'ui:banner', payload: { text: '没有可赐福的装备。' } });
+        return applyPatch(state, patch, sideEffects);
+      }
+
+      if (equipSlots.length === 1) {
+        const sid = equipSlots[0];
+        const item = sid === 'equipmentSlot1' ? state.equipmentSlot1! : state.equipmentSlot2!;
+        const REVIVE_BLESSING_COST = 3;
+        patch.hp = Math.max(1, state.hp - REVIVE_BLESSING_COST);
+        patch[sid] = { ...item, hasEquipmentRevive: true, equipmentReviveUsed: false } as any;
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'magic', message: `复生祝福：失去 ${REVIVE_BLESSING_COST} 生命，${item.name} 获得复生能力` },
+        });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `${item.name} 获得了复生祝福！` } });
+        enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId, origin });
+      } else {
+        patch.pendingHeroMagicAction = {
+          id: 'revive-blessing',
+          step: 'slot-select',
+          origin,
+          prompt: '选择一个装备赋予复生。',
+        } as any;
+        sideEffects.push({ event: 'ui:banner', payload: { text: '选择一个装备赋予复生。' } });
+      }
+      return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
+    }
+
+    case 'monster-doom': {
+      type SlotEntry = { id: EquipmentSlotId; item: GameCardData };
+      const slotsToDestroy: SlotEntry[] = [];
+      for (const sid of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
+        const item = sid === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+        if (item) slotsToDestroy.push({ id: sid, item });
+      }
+
+      let destroyedCount = 0;
+      const survivedSlots: Record<EquipmentSlotId, EquipmentItem | null> = {
+        equipmentSlot1: null,
+        equipmentSlot2: null,
+      };
+
+      const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+
+      for (const { id: sid, item } of slotsToDestroy) {
+        const isMonsterEquip = item.type === 'monster';
+        const nativeRevive = isMonsterEquip && item.hasRevive && !item.reviveUsed;
+        const equipRevive = item.hasEquipmentRevive && !item.equipmentReviveUsed;
+
+        if (nativeRevive || equipRevive) {
+          const revived = nativeRevive
+            ? { ...item, durability: 1, reviveUsed: true }
+            : { ...item, durability: 1, equipmentReviveUsed: true };
+          survivedSlots[sid] = revived as EquipmentItem;
+          sideEffects.push({
+            event: 'log:entry',
+            payload: { type: 'equip', message: `${item.name} 复生！以 1 耐久复活！` },
+          });
+        } else {
+          const breakResult = computeEquipmentBreakEffects(state, sid, item, amuletEffects);
+          sideEffects.push(...breakResult.sideEffects);
+          Object.assign(patch, breakResult.patch);
+          patch.rng = breakResult.rng;
+          if (breakResult.drawFromBackpack > 0) {
+            enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: breakResult.drawFromBackpack });
+          }
+          if (breakResult.classCardDraw > 0) {
+            sideEffects.push({
+              event: 'equipment:classCardDraw',
+              payload: { count: breakResult.classCardDraw, source: item.name },
+            });
+          }
+          enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+          destroyedCount++;
+        }
+      }
+
+      patch.equipmentSlot1 = survivedSlots.equipmentSlot1;
+      patch.equipmentSlot2 = survivedSlots.equipmentSlot2;
+
+      if (destroyedCount > 0) {
+        const totalDebuff = destroyedCount * 2;
+        const updatedCards = (state.activeCards as any[]).map(slot => {
+          if (!slot || slot.type !== 'monster') return slot;
+          const newAtk = Math.max(1, (slot.attack ?? slot.value) - totalDebuff);
+          const newMaxHp = Math.max(1, (slot.maxHp ?? slot.hp ?? slot.value) - totalDebuff);
+          const newHp = Math.min(slot.hp ?? slot.value, newMaxHp);
+          return { ...slot, attack: newAtk, value: newAtk, maxHp: newMaxHp, hp: newHp };
+        });
+        patch.activeCards = updatedCards;
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'magic', message: `灭世裁决：摧毁 ${destroyedCount} 件装备，所有怪物 -${totalDebuff}攻/-${totalDebuff}血上限！` },
+        });
+        sideEffects.push({
+          event: 'ui:banner',
+          payload: { text: `灭世裁决！摧毁 ${destroyedCount} 件装备，怪物全体 -${totalDebuff}/-${totalDebuff}！` },
+        });
+      } else {
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'magic', message: '灭世裁决发动但没有装备可摧毁。' },
+        });
+        sideEffects.push({ event: 'ui:banner', payload: { text: '灭世裁决：没有装备可摧毁。' } });
+      }
+
+      enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId, origin });
+      return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
+    }
+
+    case 'holy-light': {
+      patch.pendingHeroMagicAction = {
+        id: 'holy-light',
+        step: 'choice',
+        origin,
+        prompt: '选择圣光效果：回满血 或 净化一个怪物的怒气。',
+      } as any;
+      patch.heroSkillBanner = '选择圣光效果：回满血 或 净化一个怪物的怒气。';
+      return applyPatch(state, patch, sideEffects);
+    }
+
+    case 'berserker-rage': {
+      patch.berserkerRageActive = true;
+      patch.berserkerSlotUsed = {};
+      patch.heroSkillBanner = '狂战发动：直到下次瀑布前，每个武器栏每回合可多攻击一次，且所有攻击不消耗耐久。';
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'magic', message: '狂战发动！' },
+      });
+      enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId, origin });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    default:
+      sideEffects.push({
+        event: 'hero:magicActivated',
+        payload: { magicId, origin },
+      });
+      return applyPatch(state, patch, sideEffects);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// COMPLETE_HERO_MAGIC — mark magic as used, reset gauge
+// ---------------------------------------------------------------------------
+
+function reduceCompleteHeroMagic(
+  state: GameState,
+  action: Extract<GameAction, { type: 'COMPLETE_HERO_MAGIC' }>,
+): ReduceResult {
+  const { magicId, origin } = action;
+  const patch: Partial<GameState> = {};
+  const sideEffects: SideEffect[] = [];
+
+  let magicState = state.heroMagicState;
+
+  if (origin === 'gauge') {
+    magicState = setMagicUsedThisWave(magicState, magicId as any);
+    magicState = resetMagicGauge(magicState, magicId as any);
+  }
+
+  patch.heroMagicState = magicState;
+  patch.pendingHeroMagicAction = null;
+
+  sideEffects.push({
+    event: 'hero:magicCompleted',
+    payload: { magicId, origin },
+  });
+
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_HERO_MAGIC_TARGET — continuation for interactive hero magic
+// ---------------------------------------------------------------------------
+
+function reduceResolveHeroMagicTarget(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_HERO_MAGIC_TARGET' }>,
+): ReduceResult {
+  const pending = state.pendingHeroMagicAction as any;
+  if (!pending) return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  if (pending.id === 'holy-light') {
+    if (action.choice === 'heal') {
+      const heroMaxHp = computeMaxHp(state);
+      const healed = Math.max(0, heroMaxHp - state.hp);
+      patch.hp = heroMaxHp;
+      const banner = healed > 0 ? `圣光恢复了 ${healed} 点生命。` : '生命已满，圣光充能被清空。';
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `圣光发动（回满生命）：${banner}` } });
+      patch.heroSkillBanner = banner;
+      patch.pendingHeroMagicAction = null;
+      enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: pending.origin ?? 'gauge' });
+    } else if (action.choice === 'purge') {
+      const monsters = (state.activeCards as (GameCardData | null)[]).filter(
+        (c): c is GameCardData => c != null && c.type === 'monster',
+      );
+      if (monsters.length === 0) {
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '圣光净化失败：场上没有怪物。' } });
+        patch.heroSkillBanner = '场上没有怪物可以净化。';
+        patch.pendingHeroMagicAction = null;
+        enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: pending.origin ?? 'gauge' });
+      } else if (monsters.length === 1) {
+        const m = monsters[0];
+        const updated = (state.activeCards as any[]).map(slot => {
+          if (!slot || slot.id !== m.id) return slot;
+          return { ...slot, fury: 0, hpLayers: 1, currentLayer: 1, hp: slot.maxHp ?? slot.hp ?? slot.value ?? 0 };
+        });
+        patch.activeCards = updated;
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `圣光发动（净化怒气）：${m.name} 的怒气被净化！` } });
+        patch.heroSkillBanner = `${m.name} 的怒气被圣光净化！`;
+        patch.pendingHeroMagicAction = null;
+        enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: pending.origin ?? 'gauge' });
+      } else {
+        patch.pendingHeroMagicAction = { ...pending, step: 'monster-select', prompt: '选择一个怪物以净化其怒气。' };
+        patch.heroSkillBanner = '选择一个怪物以净化其怒气。';
+      }
+    } else if (action.monsterId && pending.step === 'monster-select') {
+      const updated = (state.activeCards as any[]).map(slot => {
+        if (!slot || slot.id !== action.monsterId) return slot;
+        return { ...slot, fury: 0, hpLayers: 1, currentLayer: 1, hp: slot.maxHp ?? slot.hp ?? slot.value ?? 0 };
+      });
+      const target = (state.activeCards as any[]).find(c => c?.id === action.monsterId);
+      patch.activeCards = updated;
+      const name = target?.name ?? '怪物';
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `圣光发动（净化怒气）：${name} 的怒气被净化！` } });
+      patch.heroSkillBanner = `${name} 的怒气被圣光净化！`;
+      patch.pendingHeroMagicAction = null;
+      enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: pending.origin ?? 'gauge' });
+    } else {
+      return noChange(state);
+    }
+  } else if (pending.id === 'revive-blessing' && action.slotId) {
+    enqueuedActions.push({ type: 'APPLY_REVIVE_BLESSING', slotId: action.slotId });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  } else {
+    return noChange(state);
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// APPLY_REVIVE_BLESSING — grant equipment revive to a specific slot
+// ---------------------------------------------------------------------------
+
+function reduceApplyReviveBlessing(
+  state: GameState,
+  action: Extract<GameAction, { type: 'APPLY_REVIVE_BLESSING' }>,
+): ReduceResult {
+  const { slotId } = action;
+  const item = slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+  if (!item) return noChange(state);
+
+  const REVIVE_BLESSING_COST = 3;
+  const patch: Partial<GameState> = {};
+  const sideEffects: SideEffect[] = [];
+
+  patch.hp = Math.max(1, state.hp - REVIVE_BLESSING_COST);
+  patch[slotId] = { ...item, hasEquipmentRevive: true, equipmentReviveUsed: false } as any;
+  patch.pendingHeroMagicAction = null;
+
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'magic', message: `复生祝福：失去 ${REVIVE_BLESSING_COST} 生命，${item.name} 获得复生能力` },
+  });
+  sideEffects.push({ event: 'ui:banner', payload: { text: `${item.name} 获得了复生祝福！` } });
+
+  // Determine origin from pending action
+  const pending = state.pendingHeroMagicAction;
+  const origin = (pending as any)?.origin ?? 'gauge';
+
+  const enqueuedActions: GameAction[] = [
+    { type: 'COMPLETE_HERO_MAGIC', magicId: 'revive-blessing', origin },
+  ];
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// CHECK_HONOR_SWEEP_UPGRADES — Phase 8D
+// ---------------------------------------------------------------------------
+
+function reduceCheckHonorSweepUpgrades(state: GameState): ReduceResult {
+  if (state.honorSweepUpgradesPending <= 0) return noChange(state);
+  if (state.activeMonsterReward || state.monsterRewardQueue.length > 0) return noChange(state);
+  if (state.discoverModalOpen || state.eventModalOpen) return noChange(state);
+
+  const occupied = (state.activeCards as GameCardData[]).filter(c => c && !(c as any).isGhost).length;
+  const emptySlots = DUNGEON_COLUMN_COUNT - occupied;
+  if (emptySlots >= 4) return noChange(state);
+
+  const count = state.honorSweepUpgradesPending;
+  return applyPatch(state, {
+    honorSweepUpgradesPending: 0,
+    upgradeModalOpen: true,
+    upgradeModalMaxCount: count,
+    heroSkillBanner: `战血横扫：选择至多 ${count} 张牌升级！`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Helpers — shared utilities for the magic selection reducers
+// ---------------------------------------------------------------------------
+
+function getSlotItem(state: GameState, slotId: EquipmentSlotId): GameCardData | null {
+  return (slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2) as GameCardData | null;
+}
+
+function applyFinalizeMagic(
+  state: GameState,
+  patch: Partial<GameState>,
+  sideEffects: SideEffect[],
+  enqueuedActions: GameAction[],
+  card: GameCardData,
+  banner: string,
+  opts?: { dealtDamage?: boolean },
+): ReduceResult {
+  patch.pendingMagicAction = null;
+  patch.heroSkillBanner = banner;
+  enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: opts?.dealtDamage });
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+function isMonsterEngaged(state: GameState, monsterId: string): boolean {
+  return (state.combatState?.engagedMonsterIds ?? []).includes(monsterId);
+}
+
+function ensureEngaged(state: GameState, monster: GameCardData, enqueuedActions: GameAction[]): void {
+  if (!isMonsterEngaged(state, monster.id)) {
+    enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
+  }
+}
+
+function checkPersuadeOnTempAttack(
+  state: GameState,
+  patch: Partial<GameState>,
+  sideEffects: SideEffect[],
+): void {
+  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+  if (!ae.hasPersuadeOnTempAttack) return;
+  const pBonus = ae.persuadeOnTempAttackBonus || 10;
+  const newBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
+  patch.persuadeAmuletBonus = newBonus;
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）` } });
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_MAGIC_SLOT_SELECTION — Phase 5a
+// ---------------------------------------------------------------------------
+
+function reduceMagicSlotSelection(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_MAGIC_SLOT_SELECTION' }>,
+): ReduceResult {
+  const pending = state.pendingMagicAction as PendingMagicAction | null;
+  if (!pending || pending.step !== 'slot-select') return noChange(state);
+
+  const { slotId } = action;
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+  const slotItem = getSlotItem(state, slotId);
+
+  switch (pending.effect) {
+    case 'honor-sweep': {
+      const waveDamage = computeHonorSweepWaveDamagePure(state, slotId);
+      if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) {
+        patch.heroSkillBanner = '请选择已装备的武器。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
+      if (monsters.length === 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '激活行没有怪物。');
+      }
+      if (waveDamage <= 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '当前攻击力为 0，未造成伤害。');
+      }
+
+      let killCount = 0;
+      for (const m of monsters) {
+        ensureEngaged(state, m, enqueuedActions);
+        const monsterCol = (state.activeCards as (GameCardData | null)[]).findIndex(c => c?.id === m.id);
+        if (monsterCol >= 0 && isMonsterMagicImmuneByBuilding(state.activeCards as ActiveRowSlots, state.activeCardStacks ?? {}, monsterCol)) {
+          continue;
+        }
+        let effectiveDmg = waveDamage;
+        if (m.spellDamageReduction && !m.isStunned) {
+          effectiveDmg = Math.max(1, Math.floor(effectiveDmg * (1 - m.spellDamageReduction)));
+        }
+        if ((m as any).swarmBugletShield && !m.isStunned && (state.activeCards as (GameCardData | null)[]).some(c => c && (c as any).isBuglet)) {
+          effectiveDmg = 0;
+        }
+        if (effectiveDmg > 0) {
+          const result = damageMonsterWithLayerOverflow(m, effectiveDmg, 1);
+          if ((result.currentLayer ?? 0) <= 0 || (result.hp ?? 0) <= 0) killCount++;
+        }
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: m.id, damage: waveDamage, source: 'honor-sweep', isSpellDamage: true });
+      }
+      sideEffects.push({ event: 'hero:sweepDamage', payload: { monsterIds: monsters.map(m => m.id), damage: waveDamage, staggerMs: 100, isSpellDamage: true } });
+
+      const killMsg = killCount > 0 ? `，击杀 ${killCount} 只怪物` : '';
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `战血横扫：${slotItem.name} 对激活行所有怪物造成 ${waveDamage} 点法术伤害${killMsg}。` } });
+      if (killCount > 0) {
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `战血横扫：击杀奖励，选择至多 ${killCount} 张牌升级！` } });
+        patch.honorSweepUpgradesPending = killCount;
+        enqueuedActions.push({ type: 'CHECK_HONOR_SWEEP_UPGRADES' });
+      }
+      const banner = `战血横扫：${waveDamage} 点伤害（${slotItem.name}）${killCount > 0 ? `，击杀 ${killCount} 只，选择牌升级！` : '。'}`;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'weapon-sweep': {
+      if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) {
+        patch.heroSkillBanner = '请选择已装备的武器。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const waveDamage = computeHonorSweepWaveDamagePure(state, slotId) + (pending.card.amplifyBonus ?? 0);
+      const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
+      if (monsters.length === 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '激活行没有怪物。');
+      }
+      if (waveDamage <= 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '当前攻击力为 0，未造成伤害。');
+      }
+      for (const m of monsters) {
+        ensureEngaged(state, m, enqueuedActions);
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: m.id, damage: waveDamage, source: 'weapon-sweep', isSpellDamage: true });
+      }
+      sideEffects.push({ event: 'hero:sweepDamage', payload: { monsterIds: monsters.map(m => m.id), damage: waveDamage, staggerMs: 100, isSpellDamage: true } });
+      const newTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: newTempAtk - 3 };
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `利刃风暴：${slotItem.name} 对激活行所有怪物造成 ${waveDamage} 点伤害，该栏临时攻击 -3。` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `利刃风暴：${waveDamage} 点伤害（${slotItem.name}，不耗耐久），该武器栏临时攻击 -3。`);
+    }
+
+    case 'weapon-burst': {
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const burstBase = 2 + 2 * (pending.card.upgradeLevel ?? 0);
+      const burstAmount = burstBase * ((pending as any).echoMultiplier ?? 1);
+      const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + burstAmount };
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      const echoText = ((pending as any).echoMultiplier ?? 1) > 1 ? '（回响×2）' : '';
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${label} 临时攻击力 +${burstAmount}。${echoText}`);
+    }
+
+    case 'temp-attack-double': {
+      // 锋芒倍增：选定装备栏的临时攻击 +2 后整体翻倍。
+      // 公式：final = (curTempAtk + 2*echo) * 2
+      // 允许选择空槽（与 weapon-burst / weapon-manual 一致），效果保留至该槽
+      // 装备进入时仍生效。
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const addAmt = 2 * echoMul;
+      const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      const afterAdd = curTempAtk + addAmt;
+      const finalVal = afterAdd * 2;
+      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: finalVal };
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      const echoText = echoMul > 1 ? '（回响×2）' : '';
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `锋芒倍增：${label} 临时攻击 +${addAmt} 后翻倍：${curTempAtk} → ${finalVal}。${echoText}`);
+    }
+
+    case 'weapon-manual': {
+      // 兵器谱主效果：本回合该装备栏额外攻击次数 +N（N=2*echo）。
+      // 即使该装备栏当前为空也允许选择，效果会保留至该回合结束（与全局
+      // extraAttackCharges 独立，仅由对应栏的攻击消耗）。
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const bonus = 2 * echoMul;
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const cur = ((state as any).slotExtraAttacks ?? { equipmentSlot1: 0, equipmentSlot2: 0 })[slotId] ?? 0;
+      patch.slotExtraAttacks = {
+        ...((state as any).slotExtraAttacks ?? { equipmentSlot1: 0, equipmentSlot2: 0 }),
+        [slotId]: cur + bonus,
+      };
+      const echoText = echoMul > 1 ? '（回响×2）' : '';
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `兵器谱：${label} 本回合攻击次数 +${bonus}。${echoText}`);
+    }
+
+    case 'repair-one': {
+      if (!slotItem) {
+        patch.heroSkillBanner = '该槽位没有可修复的装备。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const maxDur = (slotItem as any).maxDurability ?? slotItem.durability ?? 0;
+      const curDur = slotItem.durability ?? maxDur;
+      if (maxDur === 0) {
+        patch.heroSkillBanner = '这件装备无法修复。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (curDur >= maxDur) {
+        patch.heroSkillBanner = '该装备已经处于满耐久。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const repairUpgLvl = pending.card.upgradeLevel ?? 0;
+      const repairBaseAmounts = [1, 2, 2];
+      const repairAmount = (repairBaseAmounts[repairUpgLvl] ?? 2) * ((pending as any).echoMultiplier ?? 1);
+      patch[slotId] = { ...slotItem, durability: Math.min(maxDur, curDur + repairAmount) } as any;
+      let drawMsg = '';
+      if (repairUpgLvl >= 2) {
+        let current = { ...state, ...patch };
+        const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(current);
+        Object.assign(patch, drawPatch);
+        if (drawn) {
+          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+        }
+        drawMsg = drawn ? `，抽到「${drawn.name}」` : '';
+      }
+      const echoText = ((pending as any).echoMultiplier ?? 1) > 1 ? '（回响×2）' : '';
+      const repairBanner = pending.card.magicEffect === 'honor-blood'
+        ? `战血之印：${slotItem.name} 恢复 ${repairAmount} 点耐久。${echoText}`
+        : `${slotItem.name} 恢复了 ${repairAmount} 点耐久${drawMsg}。${echoText}`;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, repairBanner);
+    }
+
+    case 'transform-repair': {
+      if (!slotItem) {
+        patch.heroSkillBanner = '该槽位没有装备。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const maxDur = (slotItem as any).maxDurability ?? slotItem.durability ?? 0;
+      const curDur = slotItem.durability ?? maxDur;
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const repairAmt = 1 * echoMul;
+      const triggerCount = (pending.card as any)._transformRepairTriggers ?? 0;
+      const transformAtkBase = 3 + triggerCount;
+      const parts: string[] = [];
+      if (maxDur > 0 && curDur < maxDur) {
+        patch[slotId] = { ...slotItem, durability: Math.min(maxDur, curDur + repairAmt) } as any;
+        parts.push(`${slotItem.name} 耐久 +${repairAmt}`);
+      } else {
+        parts.push(`${slotItem.name} 已满耐久`);
+      }
+      let updatedCard = pending.card;
+      if ((pending as any).transformTriggered) {
+        const tempAtkBonus = transformAtkBase * echoMul;
+        const curTA = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+        patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTA + tempAtkBonus };
+        parts.push(`转型：临时攻击 +${tempAtkBonus}`);
+        checkPersuadeOnTempAttack(state, patch, sideEffects);
+        const newTriggers = triggerCount + 1;
+        const nextAtk = 3 + newTriggers;
+        updatedCard = {
+          ...pending.card,
+          _transformRepairTriggers: newTriggers,
+          transformBonus: `给该装备栏 +${nextAtk} 临时攻击（每次触发后数值 +1）`,
+        } as GameCardData;
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, updatedCard, parts.join('。') + '。');
+    }
+
+    case 'armor-strike': {
+      if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) {
+        patch.heroSkillBanner = '请选择一面盾牌来转化护甲。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const rawArmor = computeSlotArmorValuePure(state, slotId);
+      const armorPcts = [100, 150];
+      const armorPct = armorPcts[pending.card.upgradeLevel ?? 0] ?? 150;
+      const scaledArmor = Math.floor(rawArmor * armorPct / 100);
+      if (scaledArmor <= 0) {
+        patch.heroSkillBanner = '该盾牌目前没有可用的护甲。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const ampBonus = pending.card.amplifyBonus ?? 0;
+      const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
+      const totalDamage = computeSpellDamagePure(state, scaledArmor + ampBonus);
+      if (monsters.length === 1) {
+        ensureEngaged(state, monsters[0], enqueuedActions);
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `御甲破击造成 ${totalDamage} 点伤害（护甲 ${armorPct}%）。`);
+      }
+      patch.pendingMagicAction = {
+        card: pending.card, effect: 'armor-strike', step: 'monster-select',
+        slotId, pendingDamage: scaledArmor,
+        prompt: `选择一个怪物，承受 ${totalDamage} 点护甲伤害。`,
+      } as PendingMagicAction;
+      patch.heroSkillBanner = '选择一个怪物承受你的护甲一击。';
+      return applyPatch(state, patch, sideEffects);
+    }
+
+    case 'armor-double-strike': {
+      if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) {
+        patch.heroSkillBanner = '请选择一面护盾。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      return executeArmorDoubleStrike(state, pending.card, slotId, sideEffects, patch, enqueuedActions);
+    }
+
+    case 'armor-stun-convert': {
+      if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) {
+        patch.heroSkillBanner = '请选择一面护盾。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const stunPerArmors = [1, 2];
+      const stunPerArmor = stunPerArmors[pending.card.upgradeLevel ?? 0] ?? 2;
+      const armorValue = computeSlotArmorValuePure(state, slotId);
+      const totalStun = armorValue * stunPerArmor;
+      const stunGain = Math.min(totalStun, 100 - (state.stunCap ?? 0));
+      if (stunGain > 0) {
+        patch.stunCap = (state.stunCap ?? 0) + totalStun;
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `护甲凝雷：护甲 ${armorValue} → 击晕上限 +${stunGain}%` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `护甲 ${armorValue} 点 → 击晕上限 +${stunGain}%！`);
+    }
+
+    case 'temp-attack-strike': {
+      const tempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      const totalDamage = computeSpellDamagePure(state, tempAtk + (pending.card.amplifyBonus ?? 0));
+      if (totalDamage <= 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          '该装备栏没有临时攻击，造成 0 点伤害。');
+      }
+      const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
+      if (monsters.length === 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          '当前没有可攻击的怪物。');
+      }
+      let rng = state.rng;
+      const [target, rng2] = pickRandom(monsters, rng);
+      rng = rng2;
+      patch.rng = rng;
+      ensureEngaged(state, target, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: totalDamage, source: 'temp-attack-strike', isSpellDamage: true });
+      const isFlank = (pending as any).isFlank ?? false;
+      let stunText = '';
+      if (isFlank && !target.isStunned) {
+        const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+        const effectiveFlankStun = Math.min(40 + (ae.stunRateBoost ?? 0), state.stunCap ?? 0);
+        const threshold = Math.round((effectiveFlankStun / 100) * 20);
+        if (threshold > 0) {
+          let flankRoll: number;
+          [flankRoll, rng] = nextInt(rng, 1, 20);
+          patch.rng = rng;
+          sideEffects.push({ event: 'ui:requestDice', payload: {
+            title: target.name,
+            subtitle: `侧击击晕判定（${effectiveFlankStun}%）`,
+            entries: [
+              { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
+              { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
+            ],
+            context: { flowId: 'flank-stun', monsterId: target.id, monsterName: target.name, magicCardId: pending.card.id },
+            predeterminedRoll: flankRoll,
+          } });
+          stunText = '（侧击：击晕判定中…）';
+        }
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `锋刃侧击：对 ${target.name} 造成 ${totalDamage} 点伤害${isFlank ? '（侧击触发）' : ''}` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `锋刃侧击对 ${target.name} 造成 ${totalDamage} 点伤害！${stunText}`, { dealtDamage: true });
+    }
+
+    case 'flank-fortify': {
+      if (!slotItem) {
+        patch.heroSkillBanner = '该装备栏为空。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const useCount = (pending.card as any)._flankFortifyUses ?? 0;
+      const armorBonus = 3 + useCount;
+      const curTA = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+      patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTA + armorBonus };
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      const isFlank = (pending as any).isFlank ?? false;
+      let flankText = '';
+      if (isFlank) {
+        if (!(slotItem as any).hasEquipmentRevive || (slotItem as any).equipmentReviveUsed) {
+          patch[slotId] = { ...slotItem, hasEquipmentRevive: true, equipmentReviveUsed: false } as any;
+          flankText = ` 侧击触发：${slotItem.name} 获得复生！`;
+          sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `固壁侧守（侧击）：${slotItem.name} 获得复生能力` } });
+        } else {
+          flankText = ` 侧击触发：${slotItem.name} 已有复生，无额外效果。`;
+        }
+      }
+      const newUses = useCount + 1;
+      const nextArmor = 3 + newUses;
+      const updatedCard = {
+        ...pending.card,
+        _flankFortifyUses: newUses,
+        description: `永久：选择一个装备，+${nextArmor}（每次使用后数值 +1）临时护甲。侧击：赋予该装备复生。`,
+        magicEffect: `+${nextArmor}(递增) 临时护甲，侧击赋予复生。`,
+      } as GameCardData;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `固壁侧守：${slotItem.name} +${armorBonus} 临时护甲` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, updatedCard,
+        `${slotItem.name} +${armorBonus} 临时护甲。${flankText}`);
+    }
+
+    case 'equalize-temp-attack-armor': {
+      if (!slotItem) {
+        patch.heroSkillBanner = '该装备栏为空。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const atkBoost = 2 * echoMul;
+      const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + atkBoost };
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时攻击 +${atkBoost}` } });
+      const tempAtk = curTempAtk + atkBoost;
+      const tempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+      if (tempAtk === tempArm) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `${slotItem.name} 临时攻击 +${atkBoost}，攻防已相等（${tempAtk}）。`);
+      }
+      if (tempAtk > tempArm) {
+        const delta = tempAtk - tempArm;
+        patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: tempArm + delta };
+        checkPersuadeOnTempAttack(state, patch, sideEffects);
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}` } });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `${slotItem.name} 临时攻击 +${atkBoost}，临时护甲 +${delta}，攻防均为 ${tempAtk}。`);
+      }
+      const delta = tempArm - tempAtk;
+      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + atkBoost + delta };
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时攻击再 +${delta}，临时攻击与临时护甲均为 ${tempArm}` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${slotItem.name} 临时攻击 +${atkBoost + delta}，攻防均为 ${tempArm}。`);
+    }
+
+    case 'eternal-repair': {
+      if (!slotItem) {
+        patch.heroSkillBanner = '该装备栏为空。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (slotItem.type !== 'weapon' && slotItem.type !== 'monster') {
+        patch.heroSkillBanner = '涌泉满手只能对武器或随从使用。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${slotItem.name} 在下个瀑流前使用不消耗耐久。` } });
+      const echoRemaining = ((pending as any).echoRemaining ?? 1) - 1;
+      if (echoRemaining > 0) {
+        const otherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+        const otherItem = getSlotItem(state, otherSlotId);
+        if (otherItem && (otherItem.type === 'weapon' || otherItem.type === 'monster')) {
+          const totalEcho = (pending as any).echoRemaining ?? 1;
+          const echoLabel = `（回响：第 ${totalEcho - echoRemaining + 1}/${totalEcho} 次）`;
+          patch.pendingMagicAction = {
+            card: pending.card, effect: 'eternal-repair', step: 'slot-select',
+            prompt: `${slotItem.name} 已获得涌泉满手。继续选择下一把武器。${echoLabel}`,
+            echoRemaining,
+          } as PendingMagicAction;
+          patch.heroSkillBanner = `${slotItem.name} 已获得涌泉满手。继续选择下一把。${echoLabel}`;
+          return applyPatch(state, patch, sideEffects);
+        }
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${slotItem.name} 获得涌泉满手。`);
+    }
+
+    case 'soul-swap': {
+      if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'shield')) {
+        patch.heroSkillBanner = '请选择一件武器或盾牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const durability = slotItem.durability ?? 0;
+      if (durability <= 0) {
+        patch.heroSkillBanner = '该装备耐久为零，无法交换。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const swapMonsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(
+        c => c.type === 'monster' && !c.bossPhase && !c.isFinalMonster,
+      );
+      if (swapMonsters.length === 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          '没有可选的非Boss怪物。');
+      }
+      if (swapMonsters.length === 1) {
+        const target = swapMonsters[0];
+        const oldLayers = target.currentLayer ?? 1;
+        const newMaxDur = Math.max((slotItem as any).maxDurability ?? durability, oldLayers);
+        patch[slotId] = { ...slotItem, durability: oldLayers, maxDurability: newMaxDur } as any;
+        const updatedCards = (state.activeCards as any[]).map(slot => {
+          if (!slot || slot.id !== target.id) return slot;
+          return { ...slot, currentLayer: durability, hp: slot.maxHp ?? slot.hp ?? 0, fury: Math.max(slot.fury ?? 0, durability), hpLayers: Math.max(slot.hpLayers ?? 0, durability) };
+        });
+        patch.activeCards = updatedCards;
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `等价交换：${slotItem.name} 耐久 ${durability}→${oldLayers}，${target.name} 血层 ${oldLayers}→${durability}。`);
+      }
+      patch.pendingMagicAction = {
+        card: pending.card, effect: 'soul-swap', step: 'monster-select',
+        slotId, slotDurability: durability,
+        prompt: `选择一个非Boss怪物，与 ${slotItem.name}（耐久 ${durability}）互换血层。`,
+      } as PendingMagicAction;
+      patch.heroSkillBanner = `等价交换：选择一个怪物与 ${slotItem.name}（耐久 ${durability}）互换血层。`;
+      return applyPatch(state, patch, sideEffects);
+    }
+
+    case 'repair-enrage-dice': {
+      if (!slotItem) {
+        patch.heroSkillBanner = '请选择一个有装备的栏位。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
+      if (monsters.length === 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '没有可选的怪物。');
+      }
+      if (monsters.length === 1) {
+        const [reRoll, reRng] = nextInt(patch.rng ?? state.rng, 1, 20);
+        patch.rng = reRng;
+        sideEffects.push({ event: 'ui:requestDice', payload: {
+          title: monsters[0].name,
+          subtitle: '赌运修炼判定',
+          entries: [
+            { id: 'repair', range: [1, 10] as [number, number], label: '修复成功！', effect: 'none' },
+            { id: 'enrage', range: [11, 20] as [number, number], label: '怪物暴怒！', effect: 'none' },
+          ],
+          context: { flowId: 'repair-enrage-dice', slotId, monsterId: monsters[0].id, cardId: pending.card.id },
+          predeterminedRoll: reRoll,
+        } });
+        patch.pendingMagicAction = null;
+        return applyPatch(state, patch, sideEffects);
+      }
+      patch.pendingMagicAction = {
+        card: pending.card, effect: 'repair-enrage-dice', step: 'monster-select',
+        slotId,
+        prompt: '选择一个怪物作为赌运目标。',
+      } as PendingMagicAction;
+      patch.heroSkillBanner = `已选择 ${slotItem.name}，选择一个怪物作为赌运目标。`;
+      return applyPatch(state, patch, sideEffects);
+    }
+
+    case 'temp-armor': {
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const armorAmounts = [2, 4, 6];
+      const armorAmt = armorAmounts[pending.card.upgradeLevel ?? 0] ?? 2;
+      const curTA = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+      patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTA + armorAmt };
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `铸甲术：${label} +${armorAmt} 临时护甲` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${label} 获得 +${armorAmt} 临时护甲。`);
+    }
+
+    case 'battle-spirit': {
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const lvl = pending.card.upgradeLevel ?? 0;
+      const bonusAmt = lvl >= 1 ? 2 : 1;
+      const curBonus = ((state as any).slotBattleSpiritBonus ?? {})[slotId] ?? 0;
+      patch.slotBattleSpiritBonus = {
+        ...((state as any).slotBattleSpiritBonus ?? {}),
+        [slotId]: curBonus + bonusAmt,
+      };
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'magic',
+          message: `战意激发：${label} 每英雄回合可多攻击 ${bonusAmt} 次，且每怪物回合格挡耐久上限 +${bonusAmt}（持续到下次瀑流）。`,
+        },
+      });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${label} 战意激发：+${bonusAmt} 攻击 / +${bonusAmt} 格挡耐久（至下次瀑流）。`);
+    }
+
+    case 'event-fortify': {
+      if (!slotItem) {
+        patch.heroSkillBanner = '该装备栏为空。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const deck = state.remainingDeck as GameCardData[];
+      const peekCount = Math.min(3, deck.length);
+      const peekedCards = deck.slice(0, peekCount);
+      const eventCount = peekedCards.filter(c => c.type === 'event').length;
+      const gains: Array<{ label: string; count: number }> = [];
+      if (eventCount > 0) {
+        gains.push({ label: `${slotItem.name} 耐久上限 +1 并恢复 1 点耐久`, count: eventCount });
+        const oldMaxDur = (slotItem as any).maxDurability ?? slotItem.durability ?? 0;
+        const curDur = slotItem.durability ?? oldMaxDur;
+        const newMaxDur = oldMaxDur + eventCount;
+        const newDur = Math.min(newMaxDur, curDur + eventCount);
+        patch[slotId] = { ...slotItem, maxDurability: newMaxDur, durability: newDur } as any;
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天机铸炼：翻看 ${peekCount} 张牌，${eventCount} 张事件 → ${slotItem.name} 耐久上限 +${eventCount}（${oldMaxDur}→${newMaxDur}），耐久恢复 ${newDur - curDur}（${curDur}→${newDur}）` } });
+      } else {
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天机铸炼：翻看 ${peekCount} 张牌，0 张事件 → 无增益` } });
+      }
+      if (peekCount > 0) {
+        sideEffects.push({ event: 'hero:deckPeekRequest', payload: { mode: 'dungeon-insight', peekedCards, gains } });
+      }
+      const banner = peekCount > 0
+        ? `天机铸炼翻看 ${peekCount} 张牌：${eventCount} 张事件，${eventCount > 0 ? `${slotItem.name} 耐久上限 +${eventCount}，恢复 ${eventCount} 点耐久。` : '无增益。'}`
+        : '天机铸炼：主牌堆已空，无效果。';
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'grant-revive': {
+      if (!slotItem) {
+        patch.heroSkillBanner = '该装备栏为空。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      patch[slotId] = { ...slotItem, hasEquipmentRevive: true, equipmentReviveUsed: false } as any;
+      let drawMsg = '';
+      if ((pending.card.upgradeLevel ?? 0) >= 1) {
+        let current = { ...state, ...patch };
+        const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(current);
+        Object.assign(patch, drawPatch);
+        if (drawn) {
+          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+        }
+        drawMsg = drawn ? ` 抽到「${drawn.name}」。` : '';
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `不灭赐福：${slotItem.name} 获得复生能力，失去 2 生命${drawMsg}` } });
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 2, source: 'undying-blessing', selfInflicted: true });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${slotItem.name} 获得了不灭赐福！失去 2 生命。${drawMsg}`);
+    }
+
+    default:
+      return noChange(state);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_MAGIC_MONSTER_SELECTION — Phase 5b
+// ---------------------------------------------------------------------------
+
+function reduceMagicMonsterSelection(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_MAGIC_MONSTER_SELECTION' }>,
+): ReduceResult {
+  const pending = state.pendingMagicAction as PendingMagicAction | null;
+  if (!pending || pending.step !== 'monster-select') return noChange(state);
+
+  const { monsterId } = action;
+  const monster = (state.activeCards as (GameCardData | null)[]).find(c => c?.id === monsterId);
+  if (!monster) return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  switch (pending.effect) {
+    case 'armor-strike': {
+      const baseDamage = (pending as any).pendingDamage ?? 0;
+      if (baseDamage <= 0 && (pending.card.amplifyBonus ?? 0) <= 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '护甲一击没有造成伤害。');
+      }
+      const totalDamage = computeSpellDamagePure(state, baseDamage + (pending.card.amplifyBonus ?? 0));
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, `御甲破击造成 ${totalDamage} 点伤害。`);
+    }
+
+    case 'blood-reckoning': {
+      const echo = (pending as any).echoMultiplier ?? 1;
+      const totalDamage = computeSpellDamagePure(state, state.gold + (pending.card.amplifyBonus ?? 0)) * echo;
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'blood-reckoning', isSpellDamage: true });
+      enqueuedActions.push({ type: 'HEAL', amount: totalDamage, source: 'blood-reckoning' });
+      const healText = totalDamage > 0 ? `，恢复 ${totalDamage} 点生命` : '';
+      const echoText = echo > 1 ? '（回响×2）' : '';
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `点金裁决造成 ${totalDamage} 点伤害${healText}！${echoText}`);
+    }
+
+    case 'bounty-spell-damage': {
+      const echo = (pending as any).echoMultiplier ?? 1;
+      const baseDmg = 5 + (pending.card.amplifyBonus ?? 0);
+      const totalDamage = computeSpellDamagePure(state, baseDmg) * echo;
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'bounty-spell-damage', isSpellDamage: true });
+      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: totalDamage, source: 'bounty-spell-damage' });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `赏金裁决：对 ${monster.name} 造成 ${totalDamage} 点法术伤害，获得 ${totalDamage} 金币` } });
+      const echoText = echo > 1 ? '（回响×2）' : '';
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `赏金裁决：${totalDamage} 点伤害 → ${totalDamage} 金币！${echoText}`, { dealtDamage: true });
+    }
+
+    case 'missing-hp-smite': {
+      const smitePcts = [50, 100, 150];
+      const smitePct = smitePcts[pending.card.upgradeLevel ?? 0] ?? 150;
+      const heroMaxHp = computeMaxHp(state);
+      const missingHp = Math.max(0, heroMaxHp - state.hp);
+      const scaledDmg = Math.floor(missingHp * smitePct / 100);
+      const totalDamage = computeSpellDamagePure(state, scaledDmg + (pending.card.amplifyBonus ?? 0));
+      if (totalDamage <= 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '你处于满血状态，没有造成伤害。');
+      }
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'missing-hp-smite', isSpellDamage: true });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `残血裁决释放 ${totalDamage} 点伤害（${smitePct}%）。`);
+    }
+
+    case 'blood-sacrifice-strike': {
+      const hpToLose = (pending as any).hpLost ?? 0;
+      const totalDamage = (pending as any).pendingDamage ?? 0;
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpToLose, source: 'general', selfInflicted: true });
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'blood-sacrifice-strike', isSpellDamage: true });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `血祭裁决：献祭 ${hpToLose} 点生命，对 ${monster.name} 造成 ${totalDamage} 点伤害！`, { dealtDamage: true });
+    }
+
+    case 'scaling-damage': {
+      const strikeBase = (pending as any).pendingDamage ?? 1;
+      const echo = (pending as any).echoMultiplier ?? 1;
+      const totalDamage = computeSpellDamagePure(state, strikeBase) * echo;
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'scaling-damage', isSpellDamage: true });
+      enqueuedActions.push({ type: 'ADD_PERMANENT_MAGIC_TO_RECYCLE', card: pending.card });
+      patch.pendingMagicAction = null;
+      const nextBase = pending.card.scalingDamage ?? strikeBase + 1;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster.name} 造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）` } });
+      sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: pending.card.id, animate: false } });
+      patch.heroSkillBanner = `${pending.card.name} 下一击叠刺 ${nextBase}`;
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    case 'arcane-storm': {
+      const stormBase = (pending as any).pendingDamage ?? 1;
+      const echo = (pending as any).echoMultiplier ?? 1;
+      const totalDamage = computeSpellDamagePure(state, stormBase) * echo;
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'arcane-storm', isSpellDamage: true });
+      const echoText = echo > 1 ? `（回响×${echo}）` : '';
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `奥术风暴：对 ${monster.name} 造成 ${totalDamage} 点伤害。${echoText}`);
+    }
+
+    case 'chaos-strike': {
+      ensureEngaged(state, monster, enqueuedActions);
+      const chaosDamage = computeSpellDamagePure(state, 3 + (pending.card.amplifyBonus ?? 0));
+      const overkill = chaosDamage > (monster.hp ?? monster.value ?? 0);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: chaosDamage, source: 'chaos-strike', isSpellDamage: true });
+      let chaosBanner: string;
+      if (overkill) {
+        enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 2 });
+        chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosDamage} 伤害，超杀！抽 2 张牌。`;
+      } else {
+        chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosDamage} 点伤害。`;
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: chaosBanner } });
+      const echoRemaining = ((pending as any).echoRemaining ?? 1) - 1;
+      if (echoRemaining > 0) {
+        const remainingMonsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
+        if (remainingMonsters.length > 0) {
+          const totalEcho = (pending as any).echoRemaining ?? 1;
+          const echoLabel = `（回响：第 ${totalEcho - echoRemaining + 1}/${totalEcho} 次）`;
+          patch.pendingMagicAction = {
+            card: pending.card, effect: 'chaos-strike', step: 'monster-select',
+            prompt: `${chaosBanner} 继续选择目标。${echoLabel}`,
+            data: {}, echoRemaining,
+          } as PendingMagicAction;
+          patch.heroSkillBanner = `${chaosBanner} 继续选择目标。${echoLabel}`;
+          return applyPatch(state, patch, sideEffects, enqueuedActions);
+        }
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, chaosBanner);
+    }
+
+    case 'overkill-upgrade': {
+      ensureEngaged(state, monster, enqueuedActions);
+      const okDamage = computeSpellDamagePure(state, 3 + (pending.card.amplifyBonus ?? 0));
+      const overkill = okDamage > (monster.hp ?? monster.value ?? 0);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: okDamage, source: 'overkill-upgrade', isSpellDamage: true });
+      let okBanner: string;
+      if (overkill) {
+        enqueuedActions.push({ type: 'SET_UPGRADE_MODAL_OPEN', open: true });
+        okBanner = `淬炼冲击对 ${monster.name} 造成 ${okDamage} 伤害，超杀！选择一张牌升级。`;
+      } else {
+        okBanner = `淬炼冲击对 ${monster.name} 造成 ${okDamage} 点伤害。`;
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: okBanner } });
+      const echoRemaining = ((pending as any).echoRemaining ?? 1) - 1;
+      if (echoRemaining > 0) {
+        const remainingMonsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
+        if (remainingMonsters.length > 0) {
+          const totalEcho = (pending as any).echoRemaining ?? 1;
+          const echoLabel = `（回响：第 ${totalEcho - echoRemaining + 1}/${totalEcho} 次）`;
+          patch.pendingMagicAction = {
+            card: pending.card, effect: 'overkill-upgrade', step: 'monster-select',
+            prompt: `${okBanner} 继续选择目标。${echoLabel}`,
+            data: {}, echoRemaining,
+          } as PendingMagicAction;
+          patch.heroSkillBanner = `${okBanner} 继续选择目标。${echoLabel}`;
+          return applyPatch(state, patch, sideEffects, enqueuedActions);
+        }
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, okBanner);
+    }
+
+    case 'flip-monster-debuff': {
+      // 翻覆震慑 — set state.flipDebuffMonsterId to the chosen monster.
+      // Cleared at next waterfall (rules/waterfall.ts) or when monster leaves active row.
+      patch.flipDebuffMonsterId = monster.id;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `翻覆震慑：${monster.name} 进入震慑（每翻转一张牌 -1 攻击，至下次瀑流）。`);
+    }
+
+    case 'soul-swap': {
+      if (monster.bossPhase || monster.isFinalMonster) {
+        patch.heroSkillBanner = '不能对Boss使用等价交换。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const swapSlotId = (pending as any).slotId as EquipmentSlotId;
+      const swapSlotItem = getSlotItem(state, swapSlotId);
+      if (!swapSlotItem) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '装备已不存在，等价交换取消。');
+      }
+      const oldDurability = swapSlotItem.durability ?? 0;
+      const oldMonsterLayers = monster.currentLayer ?? 1;
+      const newMaxDur = Math.max((swapSlotItem as any).maxDurability ?? oldDurability, oldMonsterLayers);
+      patch[swapSlotId] = { ...swapSlotItem, durability: oldMonsterLayers, maxDurability: newMaxDur } as any;
+      const updatedCards = (state.activeCards as any[]).map(slot => {
+        if (!slot || slot.id !== monster.id) return slot;
+        return { ...slot, currentLayer: oldDurability, hp: slot.maxHp ?? slot.hp ?? 0, fury: Math.max(slot.fury ?? 0, oldDurability), hpLayers: Math.max(slot.hpLayers ?? 0, oldDurability) };
+      });
+      patch.activeCards = updatedCards;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `等价交换：${swapSlotItem.name} 耐久 ${oldDurability}→${oldMonsterLayers}，${monster.name} 血层 ${oldMonsterLayers}→${oldDurability}。`);
+    }
+
+    case 'missile-bolt': {
+      const totalDmg = computeSpellDamagePure(state, 1 + (pending.card.amplifyBonus ?? 0));
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDmg, source: 'missile-bolt', isSpellDamage: true });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `魔弹：对 ${monster.name} 造成 ${totalDmg} 点法术伤害` } });
+      applyMissileRelicEffects(state, patch, sideEffects, enqueuedActions, monster);
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `魔弹：对 ${monster.name} 造成 ${totalDmg} 点伤害！`);
+    }
+
+    case 'stun-strike': {
+      const echo = (pending as any).echoMultiplier ?? 1;
+      const baseDmgPerHit = (pending as any).data?.baseDmgPerHit ?? 1;
+      const stunPct = Math.min((pending as any).data?.stunPct ?? 10, state.stunCap ?? 0);
+      const hits = (pending as any).data?.hits ?? 2;
+      const hitDmg = computeSpellDamagePure(state, baseDmgPerHit) * echo;
+      const totalDmg = hitDmg * hits;
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDmg, source: 'stun-strike', isSpellDamage: true });
+      const threshold = Math.round((stunPct / 100) * 20);
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `雷震击：对 ${monster.name} 造成 ${hitDmg}×${hits} 点法术伤害` } });
+      if (threshold > 0 && !monster.isStunned) {
+        const [hsRoll, hsRng] = nextInt(patch.rng ?? state.rng, 1, 20);
+        patch.rng = hsRng;
+        sideEffects.push({ event: 'ui:requestDice', payload: {
+          title: monster.name,
+          subtitle: `雷震击晕判定 第1击（${stunPct}%）`,
+          entries: [
+            { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
+            { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
+          ],
+          context: { flowId: 'hero-stun', monsterId: monster.id, monsterName: monster.name, currentHit: 1, totalHits: hits, stunPct, hitDmg, magicCardId: pending.card.id },
+          predeterminedRoll: hsRoll,
+        } });
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `雷震击：对 ${monster.name} 造成 ${hitDmg}×${hits} 点伤害！${threshold > 0 ? '' : ' 未能击晕。'}`);
+    }
+
+    case 'fate-sight': {
+      // Delegate to RESOLVE_FATE_SIGHT in rules/cards.ts which emits the full
+      // card:fateSightPeekReady payload (monsterCount/stunChance/targetMonsterName)
+      // and handles the post-peek stun dice + FINALIZE_MAGIC_CARD flow.
+      const baseDamages = [3, 4];
+      const peekCounts = [3, 4];
+      const baseDmg = baseDamages[pending.card.upgradeLevel ?? 0] ?? 3;
+      const peekCount = peekCounts[pending.card.upgradeLevel ?? 0] ?? 3;
+      patch.pendingMagicAction = null;
+      enqueuedActions.push({
+        type: 'RESOLVE_FATE_SIGHT',
+        card: pending.card,
+        targetMonsterId: monster.id,
+        baseDmg,
+        peekCount,
+      });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    case 'stat-swap': {
+      const isFlank = (pending as any).isFlank ?? false;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `攻防互换：对 ${monster.name}${isFlank ? '（侧击）' : ''}` } });
+      patch.pendingMagicAction = null;
+      enqueuedActions.push({ type: 'RESOLVE_STAT_SWAP', card: pending.card, targetMonsterId: monster.id, isFlank });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    case 'repair-enrage-dice': {
+      const repairSlotId = (pending as any).slotId as EquipmentSlotId;
+      const [reRoll, reRng] = nextInt(patch.rng ?? state.rng, 1, 20);
+      patch.rng = reRng;
+      sideEffects.push({ event: 'ui:requestDice', payload: {
+        title: monster.name,
+        subtitle: '赌运修炼判定',
+        entries: [
+          { id: 'repair', range: [1, 10] as [number, number], label: '修复成功！', effect: 'none' },
+          { id: 'enrage', range: [11, 20] as [number, number], label: '怪物暴怒！', effect: 'none' },
+        ],
+        context: { flowId: 'repair-enrage-dice', slotId: repairSlotId, monsterId: monster.id, cardId: pending.card.id },
+        predeterminedRoll: reRoll,
+      } });
+      patch.pendingMagicAction = null;
+      return applyPatch(state, patch, sideEffects);
+    }
+
+    case 'transform-streak-strike': {
+      const dmg = (pending as any).data?.damage ?? 0;
+      const streak = (pending as any).data?.streak ?? 0;
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({
+        type: 'DEAL_DAMAGE_TO_MONSTER',
+        monsterId: monster.id,
+        damage: dmg,
+        source: 'transform-streak-strike',
+        isSpellDamage: true,
+      });
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'magic', message: `${pending.card.name}：连续转型 ${streak}，对 ${monster.name} 造成 ${dmg} 点法术伤害。` },
+      });
+      return applyFinalizeMagic(
+        state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name}：连续转型 ${streak} → ${dmg} 点伤害！`,
+        { dealtDamage: true },
+      );
+    }
+
+    default:
+      return noChange(state);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_DUNGEON_CARD_SELECTION — Phase 5d
+// ---------------------------------------------------------------------------
+
+function reduceDungeonCardSelection(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_DUNGEON_CARD_SELECTION' }>,
+): ReduceResult {
+  const pending = state.pendingMagicAction as PendingMagicAction | null;
+  if (!pending || pending.step !== 'dungeon-select') return noChange(state);
+
+  const { cardId } = action;
+  const activeCards = state.activeCards as (GameCardData | null)[];
+  const card = activeCards.find(c => c?.id === cardId);
+  if (!card) return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  switch (pending.effect) {
+    case 'dungeon-preview-swap': {
+      const activeSlotIdx = activeCards.findIndex(c => c?.id === card.id);
+      if (activeSlotIdx === -1) {
+        patch.heroSkillBanner = '请选择地城行中的卡牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const previewCards = state.previewCards as (GameCardData | null)[];
+      const previewCard = previewCards[activeSlotIdx];
+      if (!previewCard) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '正上方预览行没有卡牌，无法互换。');
+      }
+      const newActive = [...activeCards] as typeof activeCards;
+      newActive[activeSlotIdx] = previewCard;
+      patch.activeCards = newActive as any;
+      const newPreview = [...previewCards] as typeof previewCards;
+      newPreview[activeSlotIdx] = card;
+      patch.previewCards = newPreview as any;
+      let drawMsg = '';
+      if ((pending.card.upgradeLevel ?? 0) >= 2) {
+        let current = { ...state, ...patch };
+        const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(current);
+        Object.assign(patch, drawPatch);
+        if (drawn) {
+          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+        }
+        drawMsg = drawn ? ` 抽到「${drawn.name}」。` : '';
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `维度扭曲：${card.name} ↔ ${previewCard.name} 互换行位置${drawMsg}` } });
+      const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
+      const banner = `${card.name} ↔ ${previewCard.name} 行位置互换！${drawMsg}`;
+      if (swapTrigger) {
+        patch.heroSkillBanner = '流转之符：选择一张牌进行升级。';
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'fate-swap': {
+      const activeSlotIdx = activeCards.findIndex(c => c?.id === card.id);
+      if (activeSlotIdx === -1) {
+        patch.heroSkillBanner = '请选择地城行中的卡牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const depth = (pending as any).deckDepth ?? 5;
+      const deck = state.remainingDeck as GameCardData[];
+      if (deck.length === 0) {
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '牌堆已空，无法交换。');
+      }
+      const maxIdx = Math.min(depth, deck.length);
+      let rng = state.rng;
+      const [swapIdx, rng2] = nextInt(rng, 0, maxIdx - 1);
+      rng = rng2;
+      patch.rng = rng;
+      const deckCard = deck[swapIdx];
+      const turnCount = (state as any).turnCount ?? 0;
+      const ragedDeckCard = applyMonsterRage(deckCard, turnCount, (state as any).gameMode === 'quick');
+      sideEffects.push({ event: 'hero:fateSwapFlight', payload: { activeSlotIdx, oldCard: card, newCard: ragedDeckCard } });
+      const newDeck = [...deck];
+      newDeck[swapIdx] = sanitizeCardMetadata(card);
+      patch.remainingDeck = newDeck as any;
+      let persuadeMsg = '';
+      if (ragedDeckCard.type === 'monster') {
+        const isElite = Boolean(ragedDeckCard.monsterSpecial || ragedDeckCard.bossPhase);
+        const boost = isElite ? 15 : 30;
+        (ragedDeckCard as any)._persuadeBoost = ((ragedDeckCard as any)._persuadeBoost ?? 0) + boost;
+        persuadeMsg = ` ${ragedDeckCard.name} 劝降概率 +${boost}%${isElite ? '（精英）' : ''}`;
+      }
+      const newActive = [...activeCards] as typeof activeCards;
+      newActive[activeSlotIdx] = ragedDeckCard;
+      patch.activeCards = newActive as any;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：${card.name} 与牌堆第 ${swapIdx + 1} 张 ${deckCard.name} 交换${persuadeMsg}` } });
+      const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
+      const banner = `${card.name} ↔ ${deckCard.name}（牌堆第 ${swapIdx + 1} 张）交换！${persuadeMsg}`;
+      if (swapTrigger) {
+        patch.heroSkillBanner = '流转之符：选择一张牌进行升级。';
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'dungeon-swap-select': {
+      const selIdx = activeCards.findIndex(c => c?.id === card.id);
+      if (selIdx === -1) {
+        patch.heroSkillBanner = '请选择地城行中的卡牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const swapLeftIdx = (pending as any).leftIdx as number;
+      if (selIdx === swapLeftIdx) {
+        patch.heroSkillBanner = '不能选择最左边的卡牌自身。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const leftC = activeCards[swapLeftIdx]!;
+      const newActive = [...activeCards] as typeof activeCards;
+      const tmp = newActive[swapLeftIdx];
+      newActive[swapLeftIdx] = newActive[selIdx];
+      newActive[selIdx] = tmp;
+      patch.activeCards = newActive as any;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `乾坤挪移：${card.name} 与 ${leftC.name} 互换位置。` } });
+      const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
+      const banner = `${card.name} ↔ ${leftC.name} 位置互换！`;
+      if (swapTrigger) {
+        patch.heroSkillBanner = '流转之符：选择一张牌进行升级。';
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'return-dungeon-bottom':
+    case 'shuffle-dungeon': {
+      const isActiveCard = activeCards.some(c => c?.id === card.id);
+      if (!isActiveCard) {
+        patch.heroSkillBanner = '请选择当前地城中的卡牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: card.id, animate: false } });
+      const newActive = activeCards.map(c => c?.id === card.id ? null : c);
+      patch.activeCards = newActive as any;
+      const sanitizedCard = sanitizeCardMetadata(card);
+      const newDeck = [...(state.remainingDeck as GameCardData[]), sanitizedCard];
+      patch.remainingDeck = newDeck as any;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${card.name} 已置于牌堆底。` } });
+      const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
+      const echoRemaining = ((pending as any).echoRemaining ?? 1) - 1;
+      if (echoRemaining > 0) {
+        const remainingDungeonCards = newActive.filter(c => c != null);
+        if (remainingDungeonCards.length > 0) {
+          const totalEcho = (pending as any).echoRemaining ?? 1;
+          const currentRound = totalEcho - echoRemaining + 1;
+          const echoLabel = `（回响：第 ${currentRound}/${totalEcho} 次）`;
+          patch.pendingMagicAction = {
+            card: pending.card, effect: 'return-dungeon-bottom', step: 'dungeon-select',
+            prompt: `选择一张地城卡牌，置于牌堆底。${echoLabel}`,
+            echoRemaining: echoRemaining,
+          } as PendingMagicAction;
+          if (swapTrigger) {
+            patch.heroSkillBanner = '流转之符：选择一张牌进行升级。';
+          } else {
+            patch.heroSkillBanner = `${card.name} 已置于牌堆底。继续选择下一张。${echoLabel}`;
+          }
+          return applyPatch(state, patch, sideEffects, enqueuedActions);
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '回响：地城中没有更多卡牌可选。' } });
+      }
+      const banner = `${card.name} 已置于牌堆底。`;
+      if (swapTrigger) {
+        patch.heroSkillBanner = '流转之符：选择一张牌进行升级。';
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'flip-back-active': {
+      // 血誓回卷：将选中的「已翻转」卡（带 _flipBackCard）翻回原始形态。
+      // 复用 card:flippedInCell 动画 + 直接以保存的 _flipBackCard 替换该格。
+      const idx = activeCards.findIndex(c => c?.id === card.id);
+      if (idx === -1) {
+        patch.heroSkillBanner = '请选择当前行的卡牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (!card._flipBackCard || card.flipTarget) {
+        patch.heroSkillBanner = '该卡牌不是已翻转状态，无法逆转。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const original = card._flipBackCard as GameCardData;
+      const restored: GameCardData = { ...original };
+      const newActive = [...activeCards] as typeof activeCards;
+      newActive[idx] = restored;
+      patch.activeCards = newActive as any;
+      sideEffects.push({
+        event: 'card:flippedInCell',
+        payload: { cellIndex: idx, fromCard: card, toCard: restored, message: `${card.name} → ${restored.name}` },
+      });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `血誓回卷：${card.name} 翻回 ${restored.name}。` } });
+      return applyFinalizeMagic(
+        state, patch, sideEffects, enqueuedActions, pending.card,
+        `血誓回卷：${card.name} → ${restored.name}！`,
+      );
+    }
+
+    case 'deck-top-swap-gold': {
+      const idx = activeCards.findIndex(c => c?.id === card.id);
+      if (idx === -1) {
+        patch.heroSkillBanner = '请选择当前行的卡牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const deck = state.remainingDeck as GameCardData[];
+      if (deck.length === 0) {
+        return applyFinalizeMagic(
+          state, patch, sideEffects, enqueuedActions, pending.card,
+          `${pending.card.name}：牌堆已空，无法交换。`,
+        );
+      }
+      const deckTop = deck[0];
+      const turnCount = (state as any).turnCount ?? 0;
+      const ragedDeckTop = applyMonsterRage(deckTop, turnCount, (state as any).gameMode === 'quick');
+
+      const newActive = [...activeCards] as typeof activeCards;
+      newActive[idx] = ragedDeckTop;
+      patch.activeCards = newActive as any;
+      const newDeck = [sanitizeCardMetadata(card), ...deck.slice(1)];
+      patch.remainingDeck = newDeck as any;
+      sideEffects.push({
+        event: 'hero:fateSwapFlight',
+        payload: { activeSlotIdx: idx, oldCard: card, newCard: ragedDeckTop },
+      });
+
+      const sameCategory = getCardPlayCategory(card) === getCardPlayCategory(ragedDeckTop);
+      const goldDelta = sameCategory ? 10 : -1;
+      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldDelta, source: 'deck-top-swap-gold' });
+      const goldText = sameCategory
+        ? `同类型 → +${goldDelta} 金币`
+        : `不同类型 → ${goldDelta} 金币`;
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'magic', message: `${pending.card.name}：${card.name} ↔ ${ragedDeckTop.name}（牌堆顶）。${goldText}。` },
+      });
+
+      const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
+      const banner = `${card.name} ↔ ${ragedDeckTop.name}（牌堆顶）！${goldText}！`;
+      if (swapTrigger) {
+        patch.heroSkillBanner = '流转之符：选择一张牌进行升级。';
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'flip-active-card': {
+      // 乾坤一翻：将选中的可翻转 (flipTarget) 或已翻转 (_flipBackCard) 卡牌翻转。
+      // 与 flip-back-active 不同：该效果同时支持正向翻转——正向走 APPLY_CARD_FLIP
+      // 以触发护符联动 (flip-zap / flip-gold)；反向直接修改 activeCards + 派发动画。
+      const idx = activeCards.findIndex(c => c?.id === card.id);
+      if (idx === -1) {
+        patch.heroSkillBanner = '请选择当前行的卡牌。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (!card.flipTarget && !card._flipBackCard) {
+        patch.heroSkillBanner = '该卡牌没有可翻转的另一面。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      if (card.flipTarget) {
+        enqueuedActions.push({ type: 'APPLY_CARD_FLIP', card, cellIndex: idx });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `乾坤一翻：${card.name} → ${card.flipTarget.toCard.name}。` } });
+        return applyFinalizeMagic(
+          state, patch, sideEffects, enqueuedActions, pending.card,
+          `乾坤一翻：${card.name} → ${card.flipTarget.toCard.name}！`,
+        );
+      }
+      const original = card._flipBackCard as GameCardData;
+      const restored: GameCardData = { ...original };
+      const newActive = [...activeCards] as typeof activeCards;
+      newActive[idx] = restored;
+      patch.activeCards = newActive as any;
+      sideEffects.push({
+        event: 'card:flippedInCell',
+        payload: { cellIndex: idx, fromCard: card, toCard: restored, message: `${card.name} → ${restored.name}` },
+      });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `乾坤一翻：${card.name} 翻回 ${restored.name}。` } });
+      return applyFinalizeMagic(
+        state, patch, sideEffects, enqueuedActions, pending.card,
+        `乾坤一翻：${card.name} → ${restored.name}！`,
+      );
+    }
+
+    default:
+      return noChange(state);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_DICE for hero flows (stun-strike, flank-stun, repair-enrage)
+// ---------------------------------------------------------------------------
+
+function reduceDiceForHero(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_DICE' }>,
+): ReduceResult | null {
+  const ctx = action.context as Record<string, any> | undefined;
+  if (!ctx) return null;
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  if (ctx.flowId === 'hero-stun') {
+    const { monsterId, monsterName, currentHit, totalHits, stunPct } = ctx;
+    if (action.outcomeId === 'stun') {
+      enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId, patch: { isStunned: true } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 被雷震击晕了！` } });
+      const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+      if (ae.hasStunRecycleToHand) {
+        const bag = state.permanentMagicRecycleBag as GameCardData[];
+        if (bag.length > 0) {
+          const count = Math.min(2, bag.length);
+          let remaining = [...bag];
+          const pickedCards: GameCardData[] = [];
+          let rng = state.rng;
+          for (let i = 0; i < count; i++) {
+            const [idx, rng2] = nextInt(rng, 0, remaining.length - 1);
+            rng = rng2;
+            pickedCards.push(remaining[idx]);
+            remaining.splice(idx, 1);
+          }
+          patch.rng = rng;
+          patch.permanentMagicRecycleBag = remaining as any;
+          enqueuedActions.push({ type: 'ADD_CARDS_TO_HAND', cards: pickedCards });
+          sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `击晕回收：从回收袋取回「${pickedCards.map(c => c.name).join('」「')}」到手牌` } });
+        }
+      }
+      if (ae.hasStunUpgradeCap) {
+        patch.stunCap = Math.min(100, (state.stunCap ?? 0) + 5);
+        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +5%（当前 ${patch.stunCap}%）` } });
+      }
+      if (ae.hasStunGold) {
+        enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10, source: 'amulet-stun-gold' });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +10` } });
+      }
+    } else if (currentHit < totalHits) {
+      const threshold = Math.round((stunPct / 100) * 20);
+      const [hsRoll, hsRng] = nextInt(patch.rng ?? state.rng, 1, 20);
+      patch.rng = hsRng;
+      sideEffects.push({ event: 'ui:requestDice', payload: {
+        title: monsterName,
+        subtitle: `雷震击晕判定 第${currentHit + 1}击（${stunPct}%）`,
+        entries: [
+          { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
+          { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
+        ],
+        context: { ...ctx, currentHit: currentHit + 1 },
+        predeterminedRoll: hsRoll,
+      } });
+    }
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  if (ctx.flowId === 'flank-stun') {
+    const { monsterId, monsterName } = ctx;
+    if (action.outcomeId === 'stun') {
+      enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId, patch: { isStunned: true } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 被侧击击晕了！` } });
+      const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+      if (ae.hasStunUpgradeCap) {
+        patch.stunCap = Math.min(100, (state.stunCap ?? 0) + 5);
+        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +5%（当前 ${patch.stunCap}%）` } });
+      }
+      if (ae.hasStunGold) {
+        enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10, source: 'amulet-stun-gold' });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +10` } });
+      }
+    }
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_PUSH_TO_BACKPACK_TOP — 整顿背囊 multi-select confirmation
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply the player's final selection for 整顿背囊 (`reorganize-backpack`).
+ *
+ * For each selection, locate and remove the card from its source location:
+ *   - hand:      remove from `state.handCards` by card id
+ *   - amulet:    remove from `state.amuletSlots` by card id
+ *   - equipment: clear `equipmentSlot1` / `equipmentSlot2` (no break flow,
+ *                no last-words, no salvage — per design)
+ *
+ * Then append the collected cards to `backpackItems` in selection order so
+ * the last selected card lands at the array's tail (the conceptual "top").
+ *
+ * Selection rules:
+ *   - Caps at `pending.maxSelections` (additional entries are ignored).
+ *   - Skips the played card itself (defense in depth — the UI is also
+ *     responsible for filtering it out, but the reducer must not let it slip
+ *     through and end up bag-stuffed).
+ *   - Skips duplicate selections of the same id+source.
+ *   - Silently skips selections whose source/id no longer exist.
+ *   - 0 selections is allowed (the player can confirm with an empty array
+ *     and just keep the +1 capacity bonus).
+ */
+function reducePushToBackpackTop(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_PUSH_TO_BACKPACK_TOP' }>,
+): ReduceResult {
+  const pending = state.pendingMagicAction as PendingMagicAction | null;
+  if (!pending || pending.effect !== 'reorganize-backpack' || pending.step !== 'multi-select') {
+    return noChange(state);
+  }
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  const playedCardId = pending.card.id;
+  const seen = new Set<string>();
+
+  // Working copies — only mutated if a corresponding selection actually resolves.
+  let nextHand = state.handCards;
+  let nextAmulets = state.amuletSlots;
+  let nextSlot1 = state.equipmentSlot1;
+  let nextSlot2 = state.equipmentSlot2;
+  const cardsToPush: GameCardData[] = [];
+
+  const cap = Math.max(0, pending.maxSelections);
+  const requested = Array.isArray(action.selections) ? action.selections : [];
+
+  for (const sel of requested) {
+    if (cardsToPush.length >= cap) break;
+    if (!sel || typeof sel.id !== 'string') continue;
+    const key = `${sel.source}:${sel.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    if (sel.source === 'hand') {
+      if (sel.id === playedCardId) continue;
+      const card = nextHand.find(c => c.id === sel.id);
+      if (!card) continue;
+      cardsToPush.push(card);
+      nextHand = nextHand.filter(c => c.id !== sel.id);
+    } else if (sel.source === 'amulet') {
+      const card = (nextAmulets as GameCardData[]).find(c => c?.id === sel.id);
+      if (!card) continue;
+      cardsToPush.push(card);
+      nextAmulets = (nextAmulets as GameCardData[]).filter(c => c?.id !== sel.id) as typeof state.amuletSlots;
+    } else if (sel.source === 'equipment') {
+      if (sel.id === 'equipmentSlot1' && nextSlot1) {
+        cardsToPush.push(nextSlot1 as GameCardData);
+        nextSlot1 = null;
+      } else if (sel.id === 'equipmentSlot2' && nextSlot2) {
+        cardsToPush.push(nextSlot2 as GameCardData);
+        nextSlot2 = null;
+      }
+    }
+  }
+
+  if (nextHand !== state.handCards) patch.handCards = nextHand;
+  if (nextAmulets !== state.amuletSlots) patch.amuletSlots = nextAmulets;
+  if (nextSlot1 !== state.equipmentSlot1) patch.equipmentSlot1 = nextSlot1 as EquipmentItem | null;
+  if (nextSlot2 !== state.equipmentSlot2) patch.equipmentSlot2 = nextSlot2 as EquipmentItem | null;
+  if (cardsToPush.length > 0) {
+    patch.backpackItems = [...state.backpackItems, ...cardsToPush];
+  }
+
+  if (cardsToPush.length > 0) {
+    const names = cardsToPush.map(c => c.name).join('」、「');
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'magic', message: `整顿背囊：将「${names}」放回背包顶部（共 ${cardsToPush.length} 张）。` },
+    });
+  } else {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'magic', message: '整顿背囊：未选择任何牌放回背包。' },
+    });
+  }
+
+  return applyFinalizeMagic(
+    state,
+    patch,
+    sideEffects,
+    enqueuedActions,
+    pending.card,
+    cardsToPush.length > 0
+      ? `整顿背囊：放回 ${cardsToPush.length} 张牌到背包顶部。`
+      : '整顿背囊：背包上限 +1（未选择任何牌）。',
+  );
+}
+

@@ -16,12 +16,16 @@ type PermGrantSourceType =
   | 'flank-grant' | 'transform-gold-grant'
   | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant'
   | 'transform-draw-grant' | 'transform-heal-grant'
-  | 'transform-recycle-grant';
+  | 'transform-recycle-grant'
+  | 'amulet-perm-grant'
+  | 'on-hand-stun-cap-grant';
 
 interface PermGrantModalProps {
   open: boolean;
   onClose: () => void;
   handCards: GameCardData[];
+  /** Currently equipped amulets — only used when sourceType is 'amulet-perm-grant'. */
+  amuletSlots?: GameCardData[];
   sourceCardId: string | null;
   sourceType: PermGrantSourceType;
   onConfirm: (cardId: string) => void;
@@ -39,6 +43,7 @@ export default function PermGrantModal({
   open,
   onClose,
   handCards,
+  amuletSlots,
   sourceCardId,
   sourceType,
   onConfirm,
@@ -49,15 +54,24 @@ export default function PermGrantModal({
   const isEssenceExtract = sourceType === 'essence-extract';
   const isFlankType = FLANK_GRANT_TYPES.has(sourceType);
   const isTransformType = TRANSFORM_GRANT_TYPES.has(sourceType);
+  const isAmuletPermGrant = sourceType === 'amulet-perm-grant';
+  const isOnHandStunCapGrant = sourceType === 'on-hand-stun-cap-grant';
 
-  const eligibleCards = handCards.filter(c => {
-    if (c.id === sourceCardId) return false;
-    if (isEquipEnchant) return c.type === 'weapon' || c.type === 'shield';
-    if (isEssenceExtract) return true;
-    if (isFlankType) return !c.flankEffect;
-    if (isTransformType) return !c.transformBonus;
-    return !cardHasPermFlag(c);
-  });
+  // For amulet-perm-grant, the candidate pool is the currently equipped amulets
+  // (filtered to those that don't already have Perm 2 or stronger).
+  const eligibleCards = isAmuletPermGrant
+    ? (amuletSlots ?? []).filter(a => !a.recycleDelay || a.recycleDelay < 2)
+    : handCards.filter(c => {
+        if (c.id === sourceCardId) return false;
+        if (isEquipEnchant) return c.type === 'weapon' || c.type === 'shield';
+        if (isEssenceExtract) return true;
+        if (isFlankType) return !c.flankEffect;
+        if (isTransformType) return !c.transformBonus;
+        // 翻转之契 option 5 — exclude cards that already carry an on-enter-hand
+        // effect (would otherwise clobber existing keywords like 兵器谱/血誓回卷/查阅动作)
+        if (isOnHandStunCapGrant) return !c.onEnterHandEffect;
+        return !cardHasPermFlag(c);
+      });
 
   const handleConfirm = () => {
     if (!selectedCardId) return;
@@ -82,6 +96,8 @@ export default function PermGrantModal({
     'transform-draw-grant': '赋能神殿 · 转型',
     'transform-heal-grant': '赋能神殿 · 转型',
     'transform-recycle-grant': '唤回秘药',
+    'amulet-perm-grant': '附魔祭坛 · 护符 Perm 2',
+    'on-hand-stun-cap-grant': '翻转之契 · 铭刻技艺',
   };
   const descMap: Record<string, string> = {
     'equipment-enchant': '选择一张手牌中的装备弃置，将其攻击/护甲值随机附魔到装备栏的一件装备上',
@@ -95,6 +111,8 @@ export default function PermGrantModal({
     'transform-draw-grant': '选择一张手牌赋予「转型：抽 2 张牌」（任何类型的牌均可）',
     'transform-heal-grant': '选择一张手牌赋予「转型：恢复 2 HP」（任何类型的牌均可）',
     'transform-recycle-grant': '选择一张手牌赋予「转型：回收袋取回 1 张牌」',
+    'amulet-perm-grant': '选择一个已装备的护符，赋予 Perm 2（被移除后经 2 次瀑流返回背包）',
+    'on-hand-stun-cap-grant': '选择一张手牌，永久赋予「上手：击晕上限 +3%」（每次进入手牌触发，已带其它上手词条的卡不可选）',
   };
   const emptyMap: Record<string, string> = {
     'equipment-enchant': '手牌中没有可弃置的装备卡',
@@ -108,6 +126,8 @@ export default function PermGrantModal({
     'transform-draw-grant': '手牌中没有可赋予转型效果的卡牌',
     'transform-heal-grant': '手牌中没有可赋予转型效果的卡牌',
     'transform-recycle-grant': '手牌中没有可赋予转型效果的卡牌',
+    'amulet-perm-grant': '没有可赋予 Perm 2 的护符（所有护符已是 Perm 2 或更高）',
+    'on-hand-stun-cap-grant': '手牌中没有可赋予「上手：击晕上限 +3%」的卡牌',
   };
   const confirmMap: Record<string, string> = {
     'equipment-enchant': '附魔',
@@ -121,9 +141,11 @@ export default function PermGrantModal({
     'transform-draw-grant': '赋予',
     'transform-heal-grant': '赋予',
     'transform-recycle-grant': '赋予',
+    'amulet-perm-grant': '赋予',
+    'on-hand-stun-cap-grant': '铭刻',
   };
   const title = titleMap[sourceType] ?? '永恒铭刻';
-  const description = descMap[sourceType] ?? '选择一张手牌赋予 Perm 2（被移除后经 2 次瀑流返回背包）';
+  const description = descMap[sourceType] ?? '选择一张手牌赋予 Perm 3（被移除后经 3 次瀑流返回背包）';
   const emptyText = emptyMap[sourceType] ?? '手牌中没有可赋予永恒属性的卡牌';
   const confirmText = confirmMap[sourceType] ?? '铭刻';
 

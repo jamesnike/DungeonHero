@@ -36,7 +36,7 @@ export const FLIP_GOLD_REWARD = 4;
 
 export const SELLABLE_TYPES: readonly CardType[] = ['potion', 'weapon', 'shield', 'amulet', 'magic', 'hero-magic', 'monster'] as const;
 export const EQUIPMENT_TYPES: readonly CardType[] = ['weapon', 'shield', 'amulet'] as const;
-export const CONSUMABLE_TYPES: readonly CardType[] = ['potion', 'magic', 'hero-magic'] as const;
+export const CONSUMABLE_TYPES: readonly CardType[] = ['potion', 'magic', 'hero-magic', 'curse'] as const;
 
 // ---------------------------------------------------------------------------
 // Shop
@@ -56,7 +56,7 @@ export const SHOP_HEAL_COST = 5;
 export const SHOP_HEAL_AMOUNT = 5;
 export const SHOP_LEVEL_UP_COST = 10;
 export const SHOP_SKILL_DISCOVER_COST = 10;
-export const SHOP_EQUIP_BOOST_COST = 15;
+export const SHOP_EQUIP_BOOST_COST = 10;
 
 // ---------------------------------------------------------------------------
 // Combat balance
@@ -131,6 +131,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasStrength: false,
   hasDualGuard: false,
   hasDiscardShock: false,
+  flipZapCount: 0,
   hasFlipGold: false,
   hasRecycleForge: false,
   hasLoneCard: false,
@@ -150,8 +151,12 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   hasStunUpgradeCap: false,
   hasRecycleBackpackExpand: false,
   hasDungeonGold: false,
+  hasArmorHalveEndure: false,
+  hasMonsterEquipBuff: false,
   hasEndTurnDraw: false,
+  hasLastWordsMonsterDebuff: false,
   stunRateBoost: 0,
+  hasStunGold: false,
 });
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,31 @@
+---
+description: Event choice handler — dungeon event logic in reducer
+globs: client/src/hooks/useEventSystem.ts, client/src/game-core/rules/events.ts
+alwaysApply: false
+---
+
+# Event Choice Handler Rules
+
+`handleEventChoice` logic lives in the reducer layer (`rules/events.ts`).
+`useEventSystem.ts` dispatches `HANDLE_EVENT_CHOICE` and listens for side effects.
+
+## Pattern
+
+```typescript
+// Hook — thin dispatcher
+const handleEventChoice = (choiceId: string) => {
+  dispatch({ type: 'HANDLE_EVENT_CHOICE', choiceId });
+};
+
+// Reducer — all game logic
+function reduceHandleEventChoice(state, action, sideEffects) {
+  // mutation logic here
+}
+```
+
+## Do NOT add event resolution logic back into `useEventSystem.ts`
+
+All dungeon event outcomes (stat changes, card rewards, gold changes, equipment changes)
+must be resolved in the reducer. The hook only handles:
+- Dispatching the chosen option
+- Listening for UI side effects (animations, transitions)

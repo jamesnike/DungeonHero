@@ -1,4 +1,6 @@
 import type { EternalRelic, EternalRelicId } from '@/game-core/types';
+import type { RngState } from '@/game-core/rng';
+import { shuffle as rngShuffle } from '@/game-core/rng';
 
 import relicWaterfallDiscoverImage from '@assets/generated_images/relic_waterfall_discover.png';
 import relicWaterfallHealImage from '@assets/generated_images/relic_waterfall_heal.png';
@@ -134,6 +136,24 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
     image: relicEarlySurgeImage,
     amuletEffect: 'end-turn-draw',
   },
+  'missile-amplify-on-waterfall': {
+    id: 'missile-amplify-on-waterfall',
+    name: '永恒护符·瀑流增幅魔弹',
+    description: '每次瀑流推进时，所有「魔弹」永久增幅 +1。',
+    image: relicWaterfallDiscoverImage,
+  },
+  'missile-stun-20': {
+    id: 'missile-stun-20',
+    name: '永恒护符·震荡弹幕',
+    description: '所有「魔弹」造成伤害后有 20% 概率击晕目标（受击晕上限影响）。',
+    image: relicShieldWallImage,
+  },
+  'missile-draw-1': {
+    id: 'missile-draw-1',
+    name: '永恒护符·汲取弹幕',
+    description: '所有「魔弹」造成伤害后从背包抽 1 张牌。',
+    image: relicEarlySurgeImage,
+  },
 };
 
 export function getEternalRelic(id: EternalRelicId): EternalRelic {
@@ -148,15 +168,15 @@ export function hasEternalRelic(relics: EternalRelic[], id: EternalRelicId): boo
   return relics.some(r => r.id === id);
 }
 
-const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus', 'end-turn-draw']);
+const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus', 'end-turn-draw', 'missile-amplify-on-waterfall', 'missile-stun-20', 'missile-draw-1']);
 
 export function getSelectableRelics(exclude: EternalRelicId[]): EternalRelic[] {
   const excludeSet = new Set(exclude);
   return Object.values(RELIC_REGISTRY).filter(r => !excludeSet.has(r.id) && !CARD_ONLY_RELICS.has(r.id));
 }
 
-export function sampleRelics(count: number, exclude: EternalRelicId[]): EternalRelic[] {
+export function sampleRelics(count: number, exclude: EternalRelicId[], rng: RngState): [EternalRelic[], RngState] {
   const pool = getSelectableRelics(exclude);
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+  const [shuffled, nextRng] = rngShuffle(pool, rng);
+  return [shuffled.slice(0, count), nextRng];
 }

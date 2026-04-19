@@ -2,6 +2,7 @@ import type { GameCardData, EventDiceRange } from '@/components/GameCard';
 import type { HeroVariant } from '@/lib/heroes';
 import type { KnightCardData } from '@/lib/knightDeck';
 import { sanitizeHeroMagicState, type HeroMagicState } from '@/lib/heroMagic';
+import { migratePersistedState } from '@/game-core/persistence';
 import type { HeroSkillDefinition } from '@/lib/heroSkills';
 
 interface PersistedEternalRelic {
@@ -152,6 +153,8 @@ export interface PersistedGameState {
   turnDamageTaken: number;
   berserkTurnBuff: EquipmentBuffSnapshot;
   extraAttackCharges: number;
+  /** 兵器谱：本回合该装备栏额外攻击次数（独立于全局 extraAttackCharges） */
+  slotExtraAttacks?: Record<string, number>;
   combatState?: CombatStateSnapshot;
   tempShield?: number;
   nextWeaponBonus?: number;
@@ -176,6 +179,8 @@ export interface PersistedGameState {
   gambitSlotUsed?: Record<string, number>;
   weaponExtraAttackUsed?: Record<string, number>;
   blockDurabilityPerSlot?: number;
+  slotBattleSpiritBonus?: Record<string, number>;
+  slotBattleSpiritUsed?: Record<string, number>;
   heroSkillUsedThisWave?: boolean;
   /** 本波已用的额外英雄技能 id（商店发现等） */
   extraSkillsUsedThisWave?: string[];
@@ -192,6 +197,10 @@ export interface PersistedGameState {
   monsterKillUpgradeProgress?: number;
   recycleBackpackProgress?: number;
   swapUpgradeProgress?: number;
+  flipOverkillLifestealProgress?: number;
+  equipAmuletCapProgress?: number;
+  stunAttemptDiscoverProgress?: number;
+  flipDebuffMonsterId?: string | null;
   bugletAmuletObtained?: boolean;
   statSwapCardObtained?: boolean;
   persuadeLevel?: number;
@@ -204,6 +213,8 @@ export interface PersistedGameState {
   persuadeAmuletBonus?: number;
   persuadeDiscount?: { costReduction: number; rateBonus: number } | null;
   lastPlayedCardCategory?: string | null;
+  transformChainPrevCategory?: string | null;
+  consecutiveTransformStreak?: number;
   magicCardsPlayedThisTurn?: number;
   damageMagicPlayedThisTurn?: number;
   previewCardStacks?: Record<number, GameCardData[]>;
@@ -246,6 +257,9 @@ export interface PersistedGameState {
   magicChoiceModal?: PersistedMagicChoiceModal | null;
   eventDiceModal?: PersistedEventDiceModal | null;
   deathWardPrompt?: PersistedDeathWardPrompt | null;
+  rng?: { seed: number; state: number };
+  /** 按卡名累计的增幅加成（增幅祭坛 / 增幅魔法）。 */
+  amplifiedCardBonus?: Record<string, number>;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -264,10 +278,11 @@ export const loadGameState = (): PersistedGameState | null => {
     if (parsed.version !== STORAGE_VERSION) {
       return null;
     }
-    return {
+    const hydrated: PersistedGameState = {
       ...(parsed as PersistedGameState),
       heroMagicState: sanitizeHeroMagicState(parsed.heroMagicState),
     };
+    return migratePersistedState(hydrated);
   } catch (error) {
     console.warn('[GameStorage] Failed to load state', error);
     return null;

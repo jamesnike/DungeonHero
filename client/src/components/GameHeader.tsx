@@ -4,40 +4,37 @@ import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
 import { memo, useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
+import { useShallowGameState } from '@/hooks/useGameEngine';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
+import { PERSUADE_COST } from '@/game-core/constants';
 
 interface GameHeaderProps {
-  hp: number;
   maxHp: number;
-  gold: number;
-  cardsRemaining: number;
-  shopLevel: number;
-  persuadeLevel: number;
-  persuadeCost: number;
   persuadeTempDiscount?: number;
-  turnCount: number;
-  totalWins?: number;
   onDeckClick?: () => void;
   onNewGame?: () => void;
   /** 瀑流「回牌堆」挤掉动画飞向牌库计数按钮 */
-  deckFlyTargetRef?: Ref<HTMLButtonElement | null>;
+  deckFlyTargetRef?: Ref<HTMLButtonElement>;
 }
 
 function GameHeaderInner({
-  hp,
   maxHp,
-  gold,
-  cardsRemaining,
-  shopLevel,
-  persuadeLevel,
-  persuadeCost,
   persuadeTempDiscount = 0,
-  turnCount,
-  totalWins = 0,
   onDeckClick,
   onNewGame,
   deckFlyTargetRef,
 }: GameHeaderProps) {
+  const {
+    hp, gold, turnCount, shopLevel,
+    persuadeLevel, persuadeCostModifier, totalWins,
+    remainingDeck,
+  } = useShallowGameState(s => ({
+    hp: s.hp, gold: s.gold, turnCount: s.turnCount, shopLevel: s.shopLevel,
+    persuadeLevel: s.persuadeLevel, persuadeCostModifier: s.persuadeCostModifier,
+    totalWins: s.totalWins, remainingDeck: s.remainingDeck,
+  }));
+  const cardsRemaining = remainingDeck.length;
+  const persuadeCost = Math.max(0, PERSUADE_COST + persuadeCostModifier - persuadeTempDiscount);
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const headerRef = useRef<HTMLDivElement | null>(null);

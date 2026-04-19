@@ -1,0 +1,42 @@
+---
+description: Card play handlers — all card effects resolved in reducer, hooks are thin dispatchers
+globs: client/src/hooks/useCardPlayHandlers.ts, client/src/game-core/rules/cards.ts
+alwaysApply: false
+---
+
+# Card Play Handler Rules
+
+All card play effects are resolved in the reducer layer (`rules/cards.ts`).
+`useCardPlayHandlers.ts` is a **thin dispatcher layer**.
+
+## Migrated card handlers — DO NOT add game logic back
+
+| Handler | Dispatches |
+|---------|-----------|
+| `handleSkillCard` | `PLAY_SKILL_CARD` |
+| `handlePotionConsumption` | `CONSUME_POTION` |
+| `handleKnightInstantMagic` | `PLAY_KNIGHT_INSTANT_MAGIC` |
+| `handleKnightPermanentMagic` | `PLAY_KNIGHT_PERMANENT_MAGIC` |
+
+## Pattern for card effects
+
+```typescript
+// ✅ CORRECT — dispatch and let reducer handle
+const handleSkillCard = (card: KnightCardData, slotId: string) => {
+  dispatch({ type: 'PLAY_SKILL_CARD', cardId: card.instanceId, slotId });
+};
+
+// ❌ WRONG — imperative mutation in hook
+const handleSkillCard = (card: KnightCardData, slotId: string) => {
+  const newState = { ...state };
+  newState.hero.hp -= card.cost;
+  // ... more mutations
+  engine.setState(newState);
+};
+```
+
+## UI animations for card effects
+
+Use `useGameEvent` to listen for side effects emitted by the reducer:
+- `cards:classDrawn` → class deck draw animation
+- `ui:banner` → banner messages

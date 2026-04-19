@@ -1,0 +1,60 @@
+---
+description: Hero skills and magic — all logic in reducer, hooks are thin dispatchers
+globs: client/src/hooks/useHeroActions.ts, client/src/game-core/rules/hero.ts
+alwaysApply: false
+---
+
+# Hero Skills & Magic Rules
+
+## Hero Skills
+
+All hero skill effects are resolved in `rules/hero.ts` → `reduceUseHeroSkill`.
+
+| Skill | Where | Notes |
+|-------|-------|-------|
+| `blood-draw` | reducer | Direct effect |
+| `gold-discovery` | reducer | Direct effect |
+| `vanguard-swap` | reducer | Direct effect |
+| `armor-pact` | reducer | Direct effect |
+| `durability-for-blood` | reducer | Direct effect |
+| `blood-strike` | reducer | Emits `hero:skillRequiresTarget` for monster selection |
+| `graveyard-recall` | reducer | Emits `hero:skillRequiresInteraction` for multi-step UI |
+| `discard-empower` | reducer | Direct effect |
+
+### Interactive skill flow
+
+For skills requiring player input:
+
+```
+dispatch(USE_HERO_SKILL) → reducer sets pendingHeroSkillAction + emits side effect
+  → hook listens via useGameEvent → shows UI for selection
+  → user selects → dispatch(RESOLVE_HERO_SKILL_TARGET) → reducer completes the effect
+```
+
+**NEVER** resolve interactive skill effects directly in the hook.
+
+## Hero Magic
+
+| Magic | Where | Notes |
+|-------|-------|-------|
+| `holy-light` | reducer | `ACTIVATE_HERO_MAGIC` → choice prompt → `RESOLVE_HERO_MAGIC_TARGET` |
+| `berserker-rage` | reducer | `ACTIVATE_HERO_MAGIC` → direct effect |
+| `monster-doom` | reducer | via `ACTIVATE_HERO_MAGIC` |
+| `revive-blessing` | reducer | `ACTIVATE_HERO_MAGIC` → slot selection → `RESOLVE_HERO_MAGIC_TARGET` |
+
+### Magic handlers — fully migrated to reducer
+
+All magic handlers now live in `rules/hero.ts`. The hook functions are thin dispatchers:
+
+| Hook function | Dispatches |
+|---------------|-----------|
+| `handleMagicSlotSelection` | `RESOLVE_MAGIC_SLOT_SELECTION` |
+| `handleMagicMonsterSelection` | `RESOLVE_MAGIC_MONSTER_SELECTION` |
+| `handleDungeonCardSelection` | `RESOLVE_DUNGEON_CARD_SELECTION` |
+
+**NEVER** add magic slot/monster/dungeon selection logic back into `useHeroActions.ts`.
+
+## Persuade calculations
+
+`computePersuadeSuccessRatePure` and `getPersuadeEffectiveCostPure` are pure functions in `game-core/helpers.ts`.
+Do not add state-dependent calculations inline in hooks.

@@ -1,4 +1,6 @@
 import heroPortrait from '@assets/generated_images/chibi_hero_adventurer_character.png';
+import type { RngState } from '@/game-core/rng';
+import { pickRandom } from '@/game-core/rng';
 
 export interface HeroVariant {
   id: string;
@@ -40,9 +42,8 @@ export const heroVariants: HeroVariant[] = [
   },
 ];
 
-export const getRandomHero = (): HeroVariant => {
-  const index = Math.floor(Math.random() * heroVariants.length);
-  const variant = heroVariants[index];
-  return { ...variant };
+export const getRandomHero = (rng: RngState): [HeroVariant, RngState] => {
+  const [variant, nextRng] = pickRandom(heroVariants, rng);
+  return [{ ...variant }, nextRng];
 };
 

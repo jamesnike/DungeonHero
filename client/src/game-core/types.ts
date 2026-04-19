@@ -145,6 +145,9 @@ export type EternalRelicId =
   | 'persuade-race-bonus'
   | 'persuade-durability-bonus'
   | 'end-turn-draw'
+  | 'missile-amplify-on-waterfall'
+  | 'missile-stun-20'
+  | 'missile-draw-1'
   | `amulet-eternal-${string}`;
 
 export interface EternalRelic {
@@ -166,9 +169,33 @@ export interface EternalRelic {
 }
 
 // ---------------------------------------------------------------------------
+// Game Phase — where we are in the turn / resolution pipeline
+// ---------------------------------------------------------------------------
+
+export type GamePhase =
+  | 'idle'                    // no active combat or between waves
+  | 'playerInput'             // hero's turn — waiting for player action
+  | 'monsterTurn'             // monsters are attacking (queue being processed)
+  | 'awaitingBlock'           // a monster attack is pending — player must block/take
+  | 'awaitingTarget'          // player must choose a target (card/skill/etc.)
+  | 'awaitingDice'            // waiting for a dice roll result
+  | 'awaitingEventChoice'     // event card presented — waiting for choice
+  | 'awaitingShopAction'      // shop open — waiting for player action
+  | 'awaitingRewardChoice'    // monster reward selection
+  | 'awaitingPotionTarget'    // potion requires target selection
+  | 'awaitingMagicTarget'     // magic requires target selection
+  | 'awaitingDeathWard'       // death ward triggered — player must decide
+  | 'awaitingEquipmentPrompt' // equipment prompt (slot choice, etc.)
+  | 'awaitingDiscoverChoice'  // discover modal — player must pick a card
+  | 'awaitingUpgradeChoice'   // upgrade modal — player must pick cards
+  | 'awaitingDeleteChoice'    // delete modal — player must pick a card
+  | 'resolving';              // pipeline is actively processing actions
+
+// ---------------------------------------------------------------------------
 // GameState — the unified, authoritative game state managed by GameEngine
 // ---------------------------------------------------------------------------
 
+import type { GameAction } from './actions';
 import type { GameCardData } from '@/components/GameCard';
 import type {
   CombatState,
@@ -240,6 +267,8 @@ export interface GameState {
   activeCardStacks: Record<number, GameCardData[]>;
   /** Bonus cards dealt per waterfall (from 瀑流增幅药) */
   waterfallDealBonus: number;
+  /** Computed waterfall plan waiting for UI animation; persisted so it survives refresh/undo */
+  pendingWaterfallPlan: import('./rules/waterfall').WaterfallDropPlan | null;
   remainingDeck: GameCardData[];
   discardedCards: GameCardData[];
   handCards: GameCardData[];
@@ -276,6 +305,11 @@ export interface GameState {
   monsterKillUpgradeProgress: number;
   recycleBackpackProgress: number;
   swapUpgradeProgress: number;
+  flipOverkillLifestealProgress: number;
+  equipAmuletCapProgress: number;
+  stunAttemptDiscoverProgress: number;
+  /** 翻覆震慑 buff: id of the monster suffering -1 attack on every flip until next waterfall */
+  flipDebuffMonsterId: string | null;
   bugletAmuletObtained: boolean;
   statSwapCardObtained: boolean;
   handLimitBonus: number;
@@ -294,6 +328,10 @@ export interface GameState {
   persuadeDiscount: { costReduction: number; rateBonus: number } | null;
   /** 转型关键词：上一张「使用」的牌的类型分类（不含弃置/回收），包含手牌和激活行 */
   lastPlayedCardCategory: string | null;
+  /** 转型链：上一次 APPLY_TRANSFORM_CATEGORY 处理的卡的类别（用于连续转型计数，不被 magic resolver 篡改） */
+  transformChainPrevCategory: string | null;
+  /** 连续不同类型出牌次数（包含当前最近一次出牌；同类型连出会重置为 0） */
+  consecutiveTransformStreak: number;
   /** 本波已使用的 magic 卡数量（瀑流重置，不含 hero-magic） */
   magicCardsPlayedThisTurn: number;
   /** 本波已使用的造成伤害的 magic 卡数量（瀑流重置） */
@@ -320,6 +358,8 @@ export interface GameState {
   nextAttackLifestealSlot: EquipmentSlotId | null;
   berserkTurnBuff: EquipmentBuffSnapshot;
   extraAttackCharges: number;
+  /** 兵器谱：本回合该装备栏额外攻击次数（独立于全局 extraAttackCharges，仅由对应栏的攻击消耗）。回合结束清零。 */
+  slotExtraAttacks: SlotTempArmorState;
   doubleNextMagic: boolean;
   heroSkillUsedThisWave: boolean;
   berserkerRageActive: boolean;
@@ -330,6 +370,10 @@ export interface GameState {
   gambitSlotUsed: Record<string, number>;
   weaponExtraAttackUsed: Record<string, number>;
   blockDurabilityPerSlot: number;
+  /** 战意激发: per-slot bonus that grants +N attacks/hero-turn AND +N block durability cap/monster-turn for the chosen slot. Persists until next waterfall. */
+  slotBattleSpiritBonus: Record<string, number>;
+  /** Counter of battle-spirit extra attacks consumed by each slot in the current hero turn (resets on START_TURN / RESET_TURN_STATE). */
+  slotBattleSpiritUsed: Record<string, number>;
 
   // --- Targeting / pending actions ---
   pendingHeroSkillAction: PendingHeroSkillAction | null;
@@ -358,6 +402,8 @@ export interface GameState {
   // --- Events ---
   currentEventCard: GameCardData | null;
   resolvingDungeonCardId: string | null;
+  pendingEventEffects: string[];
+  pendingEventSkipFlip: boolean;
   eventModalOpen: boolean;
   eventModalMinimized: boolean;
   eventDiceModal: EventDiceModalState | null;
@@ -369,6 +415,15 @@ export interface GameState {
   discoverModalOpen: boolean;
   discoverOptions: GameCardData[];
   discoverSourceLabel: string | null;
+  /**
+   * Queue of class-deck discovers waiting to fire one after another.
+   * Each entry triggers a fresh BEGIN_DISCOVER (re-pulled from current
+   * `classDeck`) when the previous discover modal closes. Used by
+   * effects that destroy multiple equipment in a single resolution
+   * (e.g. 弃装重铸) so the player sees one discover popup per destroyed
+   * piece.
+   */
+  pendingClassDiscoverQueue: Array<{ source: string; sourceLabel?: string | null }>;
   deleteModalOpen: boolean;
   upgradeModalOpen: boolean;
   upgradeModalMaxCount: number | undefined;
@@ -376,7 +431,7 @@ export interface GameState {
   /** 镜影摹形：选择复制目标 */
   mirrorCopyModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
-  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant' | 'transform-recycle-grant'; meta?: Record<string, number> } | null;
+  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant'; meta?: Record<string, number> } | null;
   /** 增幅：选择装备栏或手牌中的装备/伤害魔法进行增幅 */
   amplifyModal: { sourceCardId: string } | null;
   graveyardDiscoverState: GameCardData[] | null;
@@ -404,6 +459,47 @@ export interface GameState {
   // --- Eternal relics ---
   eternalRelics: EternalRelic[];
 
+  // --- Init-derived UI state ---
+  /** ID of the class-deck card shown as preview after game init (RNG-picked). */
+  classCardPreviewId: string | null;
+
   // --- Game log ---
   gameLogEntries: LogEntry[];
+
+  // --- Honor sweep (Phase 8D) ---
+  honorSweepUpgradesPending: number;
+
+  // --- Amplify (按卡名累计) ---
+  /**
+   * 按卡名累计的增幅加成。键为卡名（GameCardData.name），
+   * 值为该名称已累计的增幅点数。增幅祭坛触发时会同时：
+   *   1) 把数值累加到此 map；
+   *   2) 立刻把数值应用到所有同名卡（手牌/装备/装备储备/背包/坟场/回收袋/职业牌组/地下城行），
+   *   3) 后续运行时生成的同名卡在创建时通过 applyAmplifyOnCreate 自动应用此 map 中的数值。
+   */
+  amplifiedCardBonus: Record<string, number>;
+
+  // --- Dungeon card processing (Phase 8B) ---
+  processedDungeonCardIds: string[];
+  pendingAutoDrawCount: number;
+
+  // --- Action system (game-core pipeline) ---
+  /** FIFO queue of pending actions to be resolved by the pipeline. */
+  actionQueue: GameAction[];
+  /** Current phase of the game turn / resolution flow. */
+  phase: GamePhase;
+  /** Action history for debugging / replay (only populated when enabled). */
+  actionLog: Array<{ action: GameAction; timestamp: number }>;
+
+  // --- Seeded RNG ---
+  /** Deterministic PRNG state carried on game state for reproducible randomness. */
+  rng: import('./rng').RngState;
+
+  /**
+   * Transient stash for the most recent ROLL_DICE_FOR_FLOW result. Set by the
+   * reducer; read immediately by the dispatching hook to seed a UI dice modal
+   * with the predetermined value. Not persisted across turns; consumers should
+   * treat any non-immediate read as undefined behavior.
+   */
+  lastFlowDiceRoll: number | null;
 }

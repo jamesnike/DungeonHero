@@ -1,0 +1,32 @@
+---
+description: When requirements are unclear or ambiguous, stop and ask clarifying questions before making any changes
+alwaysApply: true
+---
+
+# Ask Before Changing
+
+## Core Rule
+
+When the user's request is ambiguous, under-specified, or could be interpreted in multiple ways, **STOP and ask clarifying questions** before writing any code. Never assume intent and make changes on your own.
+
+## When to Stop and Ask
+
+- The user describes desired behavior but not exact implementation details
+- Multiple valid interpretations exist for the same request
+- The change would affect foundational/shared state, data structures, or core game logic
+- You are unsure which fields, properties, or systems should be involved
+- The scope of the change is unclear (e.g. "swap equipment" — swap what exactly? just the cards? the slot properties too?)
+
+## What NOT to Do
+
+- ❌ Do NOT add extra changes beyond what the user explicitly asked for
+- ❌ Do NOT "fix" or "improve" unrelated code while implementing a requested change
+- ❌ Do NOT guess at the intended scope and modify foundational state (capacities, bonuses, buff states, etc.) unless the user explicitly says to
+- ❌ Do NOT assume a broader scope just because it "seems logical"
+
+## What to Do
+
+- ✅ Re-state your understanding of the requirement and ask for confirmation before coding
+- ✅ If you see multiple valid approaches, list them and ask which one the user wants
+- ✅ Make the minimal change that matches the user's explicit request — nothing more
+- ✅ If the user's description implies touching sensitive shared state, confirm first

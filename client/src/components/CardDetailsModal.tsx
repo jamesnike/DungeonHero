@@ -26,6 +26,12 @@ interface CardDetailsModalProps {
   currentTurn: number;
   monsterRewards?: MonsterRewardPreview[] | null;
   isQuickMode?: boolean;
+  /**
+   * Hide event-card choice list (preview-row context).
+   * Description / waterfall warning are still shown.
+   * Only applies to event cards (not buildings).
+   */
+  hideEventChoices?: boolean;
 }
 
 export default function CardDetailsModal({
@@ -35,6 +41,7 @@ export default function CardDetailsModal({
   currentTurn,
   monsterRewards,
   isQuickMode = false,
+  hideEventChoices = false,
 }: CardDetailsModalProps) {
   const arcaneStormDamage = useArcaneStormDamage();
   if (!card) return null;
@@ -837,24 +844,7 @@ export default function CardDetailsModal({
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">
-                    血层为 1 时，每个怪物回合结束 +5 攻击，恢复 1 血层。
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Boss: Fury Dice Chance */}
-            {card.type === 'monster' && card.bossFuryDiceChance && (
-              <div className="bg-amber-500/15 p-3 rounded-md border border-amber-500/30 relative overflow-hidden">
-                <div className="relative flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4 shrink-0 text-amber-500" />
-                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
-                      韧性
-                    </span>
-                  </div>
-                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
-                    攻击后 50% 概率不掉血层（掷骰判定）。
+                    血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层。
                   </p>
                 </div>
               </div>
@@ -1207,6 +1197,44 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Equipment Last Words: stunCap+N (e.g. 雷震守护盾) */}
+            {(card.type === 'weapon' || card.type === 'shield') && card.onDestroyEffect?.startsWith('stunCap+') && (() => {
+              const amt = parseInt(card.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
+              if (amt <= 0) return null;
+              return (
+                <div className="p-3 rounded-md border bg-amber-500/15 border-amber-500/30">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <Skull className="w-4 h-4 shrink-0 text-amber-500" />
+                      <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                        遗言
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">装备毁坏时，击晕上限 +{amt}%（封顶 100%）。</p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Equipment Last Words: allSlotTempArmor:N (e.g. 共御圣盾) */}
+            {(card.type === 'weapon' || card.type === 'shield') && card.onDestroyEffect?.startsWith('allSlotTempArmor:') && (() => {
+              const amt = parseInt(card.onDestroyEffect.replace('allSlotTempArmor:', ''), 10) || 0;
+              if (amt <= 0) return null;
+              return (
+                <div className="p-3 rounded-md border bg-amber-500/15 border-amber-500/30">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <Skull className="w-4 h-4 shrink-0 text-amber-500" />
+                      <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                        遗言
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">装备毁坏时，所有装备栏 +{amt} 临时护甲。</p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Potion Details */}
             {card.type === 'potion' && (
               <div className="bg-green-500/10 p-3 rounded-md border border-green-500/20">
@@ -1231,9 +1259,9 @@ export default function CardDetailsModal({
             {card.type === 'magic' && (
               <div className="bg-cyan-500/10 p-3 rounded-md border border-cyan-500/20">
                 <div className="mb-1 font-semibold text-cyan-700 dark:text-cyan-400">
-                  Type: {card.magicType === 'instant' ? 'Instant Spell' : 'Permanent Skill'}
+                  Type: {(card.magicType === 'instant' || card.permStripped) ? 'Instant Spell' : 'Permanent Skill'}
                 </div>
-                {card.magicType === 'permanent' && (
+                {card.magicType === 'permanent' && !card.permStripped && (
                   <div className="mb-2 inline-flex items-center gap-1 rounded-md border border-cyan-500/45 bg-cyan-950/25 px-2 py-1 text-xs font-bold tracking-wide text-cyan-900 dark:text-cyan-100">
                     PERM
                     <span className="tabular-nums">{card.recycleDelay ?? 1}</span>
@@ -1256,6 +1284,17 @@ export default function CardDetailsModal({
                   ) : (card as GameCardData & { knightEffect?: string }).knightEffect === 'chaos-dice' ||
                     card.name === '混沌骰运' ? (
                     CHAOS_DICE_SPELL_DESCRIPTION
+                  ) : (card as GameCardData & { knightEffect?: string }).knightEffect === 'missile-bolt' ? (
+                    <>
+                      <p className="font-semibold text-foreground">
+                        选择一个怪物，造成 {1 + (card.amplifyBonus ?? 0)} 点法术伤害。
+                      </p>
+                      {(card.amplifyBonus ?? 0) > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          基础 1 + {card.amplifyBonus} 增幅 = {1 + (card.amplifyBonus ?? 0)} 点
+                        </p>
+                      )}
+                    </>
                   ) : (
                     card.description || card.magicEffect
                   )}
@@ -1333,7 +1372,7 @@ export default function CardDetailsModal({
                 <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{card.description}</p>
               </div>
             )}
-            {(card.type === 'event' || card.type === 'building') && card.eventChoices && (
+            {(card.type === 'event' || card.type === 'building') && card.eventChoices && !(card.type === 'event' && hideEventChoices) && (
               <div className="space-y-2">
                 <div className="font-semibold mb-1">{card.type === 'building' ? '建筑能力' : '事件选项'}</div>
                 {card.eventChoices.map((choice, idx) => (
@@ -1479,7 +1518,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'allSlotDamage-1') return '所有装备栏永久攻击 -1';
       if (token === 'allSlotShield-1') return '所有装备栏永久护甲 -1';
       if (token === 'flipToRecallEquip') return '翻转为「回收术」永久魔法：回手一张牌，抽 1 张牌';
-      if (token === 'flipToUndyingBlessing') return '翻转为「不灭赐福」永久魔法：赋予装备复生能力';
+      if (token === 'flipToUndyingBlessing') return '翻转为「不灭赐福」永久魔法：赋予装备复生能力，失去 2 点生命';
       if (token === 'flipToHonorBloodMagic') {
         return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时将激活行所有怪物攻击力 -2';
       }

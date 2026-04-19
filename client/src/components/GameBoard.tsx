@@ -25,13 +25,21 @@ import GameCard, {
 } from './GameCard';
 import EquipmentSlot from './EquipmentSlot';
 // CombatPanel removed — only the standalone End Hero Turn button is used
-import GameLogPanel, { type LogEntry, type LogEntryType } from './GameLogPanel';
-import { Sword, Swords, Calendar, Undo2, Wrench, ShoppingBag, Trophy, Skull, Dices, ShieldOff } from 'lucide-react';
+import { type LogEntry, type LogEntryType } from './GameLogPanel';
+import GameLogContainer from './game-board/components/GameLogContainer';
+import EternalRelicContainer from './game-board/components/EternalRelicContainer';
+import FloatingPillsContainer from './game-board/components/FloatingPillsContainer';
+import SwordOverlay from './game-board/components/SwordOverlay';
+import { useSwordOverlay } from './game-board/hooks/useSwordOverlay';
+import { useCombatAnimationTriggers } from './game-board/hooks/useCombatAnimationTriggers';
+import { useDirectedCombatFx } from './game-board/hooks/useDirectedCombatFx';
+import HandContainer from './game-board/components/HandContainer';
+import { inFlightHandStore } from './game-board/in-flight-hand-store';
+import { Swords, Undo2, Wrench, Dices, ShieldOff } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import AmuletSlot from './AmuletSlot';
 import GraveyardZone from './GraveyardZone';
-import HandDisplay from './HandDisplay';
 import VictoryDefeatModal from './VictoryDefeatModal';
 import DeckViewerModal from './DeckViewerModal';
 import EventChoiceModal, { type EventChoiceAvailability } from './EventChoiceModal';
@@ -46,19 +54,39 @@ import MonsterRewardModal from '@/components/MonsterRewardModal';
 import MonsterPersuadeModal, { type PersuadePhase } from './MonsterPersuadeModal';
 import HeroDetailsModal from './HeroDetailsModal';
 import MagicChoiceModal from './MagicChoiceModal';
+import { PreviewRow } from './game-board/components/PreviewRow';
+import { ActiveRow, type ActiveRowInteractionState, type ActiveRowCallbacks } from './game-board/components/ActiveRow';
+import { HeroRowSection } from './game-board/components/HeroRowSection';
+import { NarrowSidebar } from './game-board/components/NarrowSidebar';
+import FlightOverlayLayer from './game-board/components/FlightOverlayLayer';
+import { InCellFlipOverlayLayer } from './game-board/components/InCellFlipOverlayLayer';
+import { useInCellFlipAnimation } from './game-board/hooks/useInCellFlipAnimation';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
-import { useGameEngine, useGameState, useEngineSetter } from '@/hooks/useGameEngine';
+import { useGameEngine, useShallowGameState, useDispatch, useGameEvent } from '@/hooks/useGameEngine';
 import { useCardOperations, type CardOperationsDeps } from '@/hooks/useCardOperations';
 import { useCombatActions, type CombatActionsDeps } from '@/hooks/useCombatActions';
+import { useCombatVisuals } from '@/hooks/useCombatVisuals';
+import { useFlightState } from '@/hooks/useFlightState';
 import { useShopHandlers, type ShopHandlersDeps } from '@/hooks/useShopHandlers';
 import { useCardPlayHandlers, type CardPlayHandlersDeps } from '@/hooks/useCardPlayHandlers';
 import { useHeroActions, type HeroActionsDeps } from '@/hooks/useHeroActions';
 import { useEventSystem, type EventSystemDeps } from '@/hooks/useEventSystem';
-import { createInitialGameState } from '@/game-core';
+import { createInitialGameState, computeReturnToDeckInsertion } from '@/game-core';
 import { serializeGameState } from '@/game-core/persistence';
 import type { MagicChoiceModalState, GameState } from '@/game-core/types';
 // import { useToast } from '@/hooks/use-toast'; // Disabled toast notifications
-import { GameBoardModals } from './game-board/components/GameBoardModals';
+import { ModalCallbacksProvider, type ModalCallbacks } from './game-board/contexts/ModalCallbacksContext';
+import { ModalUIProvider, type ModalUIState } from './game-board/contexts/ModalUIContext';
+import { ShopContainer } from './game-board/containers/ShopContainer';
+import { EventContainer } from './game-board/containers/EventContainer';
+import { CombatDiceContainer } from './game-board/containers/CombatDiceContainer';
+import { HeroInfoContainer } from './game-board/containers/HeroInfoContainer';
+import { DiscoverContainer } from './game-board/containers/DiscoverContainer';
+import { CardViewerContainer } from './game-board/containers/CardViewerContainer';
+import { RewardContainer } from './game-board/containers/RewardContainer';
+import { GameFlowContainer } from './game-board/containers/GameFlowContainer';
+import { MagicCardContainer } from './game-board/containers/MagicCardContainer';
+import { BoardOverlayButtons } from './game-board/containers/BoardOverlayButtons';
 import { GameModeSelectModal } from './game-board/components/GameModeSelectModal';
 import DeckPeekModal from '@/components/DeckPeekModal';
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
@@ -83,20 +111,14 @@ import { getRandomHero, type HeroVariant } from '@/lib/heroes';
 import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, getTotalWins, incrementTotalWins, type PersistedGameState } from '@/lib/gameStorage';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import { getStartingRelics, hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
-import EternalRelicBar from './EternalRelicBar';
 import CardDetailsModal from './CardDetailsModal';
-import CardUpgradeModal, { isUpgradeableCard, isCardAtMaxUpgrade } from './CardUpgradeModal';
-import HandMagicUpgradeModal from './HandMagicUpgradeModal';
-import MirrorCopyModal from './MirrorCopyModal';
-import AmplifyModal from './AmplifyModal';
-import PermGrantModal from './PermGrantModal';
+import CardUpgradeModal from './CardUpgradeModal';
 import CardDraftModal from './CardDraftModal';
 import DiscoverClassModal from './DiscoverClassModal';
 import GraveyardExileModal from './GraveyardExileModal';
 import CardDeletionModal from './CardDeletionModal';
 import ShopModal, { type ShopOffering } from './ShopModal';
 import ShopSkillSelectModal from './ShopSkillSelectModal';
-import CardFlipOverlay from './CardFlipOverlay';
 import { type DragData } from '../utils/mobileDragDrop';
 import type {
   ActiveAmuletEffects,
@@ -145,10 +167,8 @@ import type {
   Point,
   SlotPermanentBonus,
   SlotTempArmorState,
-  SwordVector,
   WaterfallAnimationState,
   WaterfallDiscardDestination,
-  WaterfallPlan,
 } from './game-board/types';
 
 // Game-core: deck creation, card images, and constants
@@ -169,6 +189,7 @@ import {
   potionWeaponRepairImage,
   createMagicBoltCard,
 } from '@/game-core/deck';
+import bloodCurseSealImage from '@assets/generated_images/card_curse_blood_seal.png';
 import {
   INITIAL_HP,
   INITIAL_GOLD,
@@ -188,11 +209,7 @@ import {
   SHOP_MAX_OFFERINGS,
   SHOP_REQUIRED_TYPES,
   SHOP_TYPE_PRICES,
-  SHOP_HEAL_COST,
   SHOP_HEAL_AMOUNT,
-  SHOP_LEVEL_UP_COST,
-  SHOP_SKILL_DISCOVER_COST,
-  SHOP_EQUIP_BOOST_COST,
   MAX_SHOP_LEVEL,
   BALANCE_ATTACK_BONUS,
   BALANCE_SHIELD_BONUS,
@@ -210,10 +227,7 @@ import {
 import {
   clamp,
   easeInOutCubic,
-  getRandomInt,
   formatRepairTargetLabel,
-  describeSlotLabel,
-  describeBonusLabel,
   normalizeHeroEquipmentSlotFromDrag,
   isBackpackRestrictedCard,
   isHeroRowHighlightCard,
@@ -238,8 +252,12 @@ import {
   pickRandomHandCardsForDiscardPreferGraveyard,
   computeAmuletAuraReversal,
   isDamageableTarget,
+  applyAmplifyOnCreate,
 } from '@/game-core/helpers';
-import { getEquipmentSlotsWithSuppressedTempAttack, getColumnsWithCurseMonumentAura } from '@/game-core/buildingAura';
+import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingAura';
+import type { RngState } from '@/game-core/rng';
+import { nextRandom, nextInt, nextBool, shuffle as rngShuffle, pickRandom, nextId } from '@/game-core/rng';
+import { pickGraveyardCardExcluding } from '@/game-core/rules/equipment-effects';
 
 // ---------------------------------------------------------------------------
 // UI-only constants (layout, animation timing, CSS classes)
@@ -264,33 +282,15 @@ const HERO_ROW_HERO_INDEX = 2;
 const HERO_ROW_EQUIPMENT_2_INDEX = 3;
 const HERO_ROW_BACKPACK_INDEX = 4;
 const HERO_ROW_CLASS_DECK_INDEX = 5;
-const DIRECTED_REFLECT_PROJECTILE_SIZE = 50;
-const DIRECTED_RETALIATION_PROJECTILE_SIZE = 52;
-const DIRECTED_ARCANE_PROJECTILE_SIZE = 44;
-const DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE = 48;
-const DIRECTED_DRAGON_BREATH_PROJECTILE_SIZE = 50;
-const ARCANE_BLADE_SPELL_ANIM_MS = 780;
-const DRAGON_BREATH_ANIM_MS = 880;
 const DISCARD_SHOCK_FLIGHT_BASE_DURATION = 520;
 const DISCARD_SHOCK_FLIGHT_VARIANCE = 140;
 const DISCARD_SHOCK_ARC_MIN = 36;
 const DISCARD_SHOCK_ARC_VARIANCE = 52;
 const DISCARD_SHOCK_PROJECTILE_SIZE = 56;
-const COMBAT_ANIMATION_DURATION = 1200;
-const COMBAT_ANIMATION_STAGGER = 180;
 /** 格挡动画与反弹动画之间的间隔（ms） */
 const COMBAT_BLOCK_TO_REFLECT_MS = 220;
-/** 护盾反弹特效时长，与 index.css shield-reflect-* 大致对齐 */
-const SHIELD_REFLECT_ANIM_MS = 1020;
-/** Boss 反噬特效时长，与 boss-retaliation-* 大致对齐 */
-const BOSS_RETALIATION_ANIM_MS = 920;
-const GOLEM_LAYER_REFLECT_ANIM_MS = 850;
 const DEFEAT_ANIMATION_DURATION = 950;
-const COMBAT_PANEL_DEFAULT_WIDTH = 170;
-const COMBAT_PANEL_DEFAULT_HEIGHT = 320;
-const COMBAT_PANEL_EDGE_PADDING = 12;
-const COMBAT_PANEL_DEFAULT_POSITION_CLASS =
-  'top-2 left-1/2 -translate-x-1/2 sm:left-auto sm:right-4 sm:translate-x-0 sm:top-4';
+
 const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: number) =>
   Boolean(
     rect &&
@@ -345,184 +345,93 @@ export default function GameBoard() {
   // GameEngine — single source of truth for all core game state
   // ---------------------------------------------------------------------------
   const engine = useGameEngine();
-  const gs = useGameState(s => s);
+  const dispatch = useDispatch();
 
   const {
-    hp, gold, turnCount, shopLevel,
-    previewCards, activeCards, remainingDeck, discardedCards, handCards,
+    hp,
+    previewCards, activeCards, discardedCards, handCards,
     equipmentSlot1, equipmentSlot2,
     equipmentSlot1Reserve, equipmentSlot2Reserve,
-    equipmentSlotCapacity, equipmentSlotBonuses,
+    equipmentSlotCapacity,
     amuletSlots, maxAmuletSlots,
-    backpackItems, permanentMagicRecycleBag, backpackCapacityModifier,
-    classDeck, classCardsInHand,
-    heroVariant, heroClass, selectedHeroSkill,
+    backpackItems, backpackCapacityModifier,
+    classDeck,
+    heroVariant, selectedHeroSkill,
     extraHeroSkills, extraSkillsUsedThisWave,
     permanentSkills, permanentMaxHpBonus, permanentSpellDamageBonus,
     permanentSpellLifesteal, stunCap, heroStunned, handLimitBonus,
-    heroMagicState, wraithPassiveEnabled,
-    combatState, tempShield,
-    nextWeaponBonus, nextShieldBonus, weaponMasterBonus, shieldMasterBonus,
-    vampiricNextAttack, unbreakableNext, unbreakableUntilWaterfall,
-    bulwarkPassiveActive, bulwarkTempArmorStacks, slotTempArmor, slotTempAttack,
-    defensiveStanceActive, slotAttackBursts, nextAttackLifestealSlot,
-    berserkTurnBuff, extraAttackCharges, doubleNextMagic,
+    heroMagicState,
+    combatState,
+    weaponMasterBonus, shieldMasterBonus,
+    unbreakableUntilWaterfall,
+    slotTempArmor, slotTempAttack,
+    defensiveStanceActive,
+    berserkTurnBuff, extraAttackCharges,
+    slotExtraAttacks,
     heroSkillUsedThisWave, berserkerRageActive, berserkerSlotUsed,
     flashSlotUsed,
     gambitExtraActive, gambitExtraPerSlot, gambitSlotUsed,
     weaponExtraAttackUsed,
     blockDurabilityPerSlot,
+    slotBattleSpiritBonus, slotBattleSpiritUsed: slotBattleSpiritUsedMap,
     pendingHeroSkillAction, pendingHeroMagicAction,
-    pendingMagicAction, pendingPotionAction, deathWardPrompt,
-    monsterRewardQueue, activeMonsterReward, selectedMonsterRewards,
-    monsterRewardPreviewCache,
-    shopOfferings, shopSourceEvent,
-    shopDeleteUsed, shopHealUsed, shopLevelUpUsed,
-    shopSkillDiscoverUsed, shopEquipAttackUsed, shopEquipArmorUsed,
-    shopSkillOptions,
-    shopModalOpen, shopModalMinimized, shopSkillSelectOpen,
-    currentEventCard, resolvingDungeonCardId,
+    pendingMagicAction, pendingPotionAction,
+    activeMonsterReward,
+    shopModalOpen, shopModalMinimized,
     eventModalOpen, eventModalMinimized,
-    eventDiceModal, eventTransformState, persuadeState, persuadeLevel, persuadeCostModifier, magicChoiceModal,
-    discoverModalOpen, discoverOptions, discoverSourceLabel, deleteModalOpen, upgradeModalOpen, upgradeModalMaxCount, handMagicUpgradeModal, mirrorCopyModal, permGrantModal, amplifyModal,
-    graveyardDiscoverState, graveyardDiscoverDelivery,
-    cardActionContext, equipmentPrompt, ghostBladeExileCards,
-    gameMode,
-    gameOver, victory, showSkillSelection, showCardDraft, cardDraftPool,
-    drawPending, isHydrated, heroSkillBanner,
-    monstersDefeated, totalDamageTaken, totalHealed, turnDamageTaken,
-    healAccumulator, cardsPlayed, recycleForgePlayCount,
-    waveDiscardCount, totalWins, undoCount,
-    gameLogEntries,
-    waterfallDealBonus,
-    previewCardStacks,
+    graveyardDiscoverState,
+    gameOver, showSkillSelection, showCardDraft,
+    isHydrated, heroSkillBanner,
     activeCardStacks,
     eternalRelics,
-  } = gs;
+  } = useShallowGameState(s => ({
+    hp: s.hp,
+    previewCards: s.previewCards, activeCards: s.activeCards,
+    discardedCards: s.discardedCards, handCards: s.handCards,
+    equipmentSlot1: s.equipmentSlot1, equipmentSlot2: s.equipmentSlot2,
+    equipmentSlot1Reserve: s.equipmentSlot1Reserve, equipmentSlot2Reserve: s.equipmentSlot2Reserve,
+    equipmentSlotCapacity: s.equipmentSlotCapacity,
+    amuletSlots: s.amuletSlots, maxAmuletSlots: s.maxAmuletSlots,
+    backpackItems: s.backpackItems,
+    backpackCapacityModifier: s.backpackCapacityModifier,
+    classDeck: s.classDeck,
+    heroVariant: s.heroVariant, selectedHeroSkill: s.selectedHeroSkill,
+    extraHeroSkills: s.extraHeroSkills, extraSkillsUsedThisWave: s.extraSkillsUsedThisWave,
+    permanentSkills: s.permanentSkills, permanentMaxHpBonus: s.permanentMaxHpBonus,
+    permanentSpellDamageBonus: s.permanentSpellDamageBonus,
+    permanentSpellLifesteal: s.permanentSpellLifesteal, stunCap: s.stunCap,
+    heroStunned: s.heroStunned, handLimitBonus: s.handLimitBonus,
+    heroMagicState: s.heroMagicState,
+    combatState: s.combatState,
+    weaponMasterBonus: s.weaponMasterBonus, shieldMasterBonus: s.shieldMasterBonus,
+    unbreakableUntilWaterfall: s.unbreakableUntilWaterfall,
+   
+    slotTempArmor: s.slotTempArmor, slotTempAttack: s.slotTempAttack,
+    defensiveStanceActive: s.defensiveStanceActive,
+    berserkTurnBuff: s.berserkTurnBuff, extraAttackCharges: s.extraAttackCharges,
+    slotExtraAttacks: s.slotExtraAttacks,
+    heroSkillUsedThisWave: s.heroSkillUsedThisWave, berserkerRageActive: s.berserkerRageActive,
+    berserkerSlotUsed: s.berserkerSlotUsed, flashSlotUsed: s.flashSlotUsed,
+    gambitExtraActive: s.gambitExtraActive, gambitExtraPerSlot: s.gambitExtraPerSlot,
+    gambitSlotUsed: s.gambitSlotUsed, weaponExtraAttackUsed: s.weaponExtraAttackUsed,
+    blockDurabilityPerSlot: s.blockDurabilityPerSlot,
+    slotBattleSpiritBonus: s.slotBattleSpiritBonus, slotBattleSpiritUsed: s.slotBattleSpiritUsed,
+    pendingHeroSkillAction: s.pendingHeroSkillAction, pendingHeroMagicAction: s.pendingHeroMagicAction,
+    pendingMagicAction: s.pendingMagicAction, pendingPotionAction: s.pendingPotionAction,
+    activeMonsterReward: s.activeMonsterReward,
+    shopModalOpen: s.shopModalOpen, shopModalMinimized: s.shopModalMinimized,
+    eventModalOpen: s.eventModalOpen, eventModalMinimized: s.eventModalMinimized,
+    graveyardDiscoverState: s.graveyardDiscoverState,
+    gameOver: s.gameOver, showSkillSelection: s.showSkillSelection,
+    showCardDraft: s.showCardDraft,
+    isHydrated: s.isHydrated, heroSkillBanner: s.heroSkillBanner,
+    activeCardStacks: s.activeCardStacks,
+    eternalRelics: s.eternalRelics,
+  }));
 
-  // Shim setters — identical API to React's useState setters
-  const setHp = useEngineSetter('hp');
-  const setGold = useEngineSetter('gold');
-  const setTurnCount = useEngineSetter('turnCount');
-  const setShopLevel = useEngineSetter('shopLevel');
-  const setPreviewCards = useEngineSetter('previewCards');
-  const setActiveCards = useEngineSetter('activeCards');
-  const setRemainingDeck = useEngineSetter('remainingDeck');
-  const setDiscardedCards = useEngineSetter('discardedCards');
-  const setHandCards = useEngineSetter('handCards');
-  const setEquipmentSlot1 = useEngineSetter('equipmentSlot1');
-  const setEquipmentSlot2 = useEngineSetter('equipmentSlot2');
-  const setEquipmentSlot1Reserve = useEngineSetter('equipmentSlot1Reserve');
-  const setEquipmentSlot2Reserve = useEngineSetter('equipmentSlot2Reserve');
-  const setEquipmentSlotCapacity = useEngineSetter('equipmentSlotCapacity');
-  const setEquipmentSlotBonuses = useEngineSetter('equipmentSlotBonuses');
-  const setMaxAmuletSlots = useEngineSetter('maxAmuletSlots');
-  const setAmuletSlots = useEngineSetter('amuletSlots');
-  const setBackpackItems = useEngineSetter('backpackItems');
-  const setPermanentMagicRecycleBag = useEngineSetter('permanentMagicRecycleBag');
-  const setBackpackCapacityModifier = useEngineSetter('backpackCapacityModifier');
-  const setClassDeck = useEngineSetter('classDeck');
-  const setClassCardsInHand = useEngineSetter('classCardsInHand');
-  const setHeroVariant = useEngineSetter('heroVariant');
-  const setSelectedHeroSkill = useEngineSetter('selectedHeroSkill');
-  const setExtraHeroSkills = useEngineSetter('extraHeroSkills');
-  const setExtraSkillsUsedThisWave = useEngineSetter('extraSkillsUsedThisWave');
-  const setPermanentSkills = useEngineSetter('permanentSkills');
-  const setPermanentMaxHpBonus = useEngineSetter('permanentMaxHpBonus');
-  const setPermanentSpellDamageBonus = useEngineSetter('permanentSpellDamageBonus');
-  const setPermanentSpellLifesteal = useEngineSetter('permanentSpellLifesteal');
-  const setStunCap = useEngineSetter('stunCap');
-  const setHandLimitBonus = useEngineSetter('handLimitBonus');
-  const setHeroMagicState = useEngineSetter('heroMagicState');
-  const setWraithPassiveEnabled = useEngineSetter('wraithPassiveEnabled');
-  const setCombatState = useEngineSetter('combatState');
-  const setTempShield = useEngineSetter('tempShield');
-  const setNextWeaponBonus = useEngineSetter('nextWeaponBonus');
-  const setNextShieldBonus = useEngineSetter('nextShieldBonus');
-  const setWeaponMasterBonus = useEngineSetter('weaponMasterBonus');
-  const setShieldMasterBonus = useEngineSetter('shieldMasterBonus');
-  const setVampiricNextAttack = useEngineSetter('vampiricNextAttack');
-  const setUnbreakableNext = useEngineSetter('unbreakableNext');
-  const setUnbreakableUntilWaterfall = useEngineSetter('unbreakableUntilWaterfall');
-  const setBulwarkPassiveActive = useEngineSetter('bulwarkPassiveActive');
-  const setBulwarkTempArmorStacks = useEngineSetter('bulwarkTempArmorStacks');
-  const setSlotTempArmor = useEngineSetter('slotTempArmor');
-  const setSlotTempAttack = useEngineSetter('slotTempAttack');
-  const setDefensiveStanceActive = useEngineSetter('defensiveStanceActive');
-  const setSlotAttackBursts = useEngineSetter('slotAttackBursts');
-  const setNextAttackLifestealSlot = useEngineSetter('nextAttackLifestealSlot');
-  const setBerserkTurnBuff = useEngineSetter('berserkTurnBuff');
-  const setExtraAttackCharges = useEngineSetter('extraAttackCharges');
-  const setDoubleNextMagic = useEngineSetter('doubleNextMagic');
-  const setMagicCardsPlayedThisTurn = useEngineSetter('magicCardsPlayedThisTurn');
-  const setHeroSkillUsedThisWave = useEngineSetter('heroSkillUsedThisWave');
-  const setBerserkerRageActive = useEngineSetter('berserkerRageActive');
-  const setBerserkerSlotUsed = useEngineSetter('berserkerSlotUsed');
-  const setFlashSlotUsed = useEngineSetter('flashSlotUsed');
-  const setGambitExtraActive = useEngineSetter('gambitExtraActive');
-  const setGambitExtraPerSlot = useEngineSetter('gambitExtraPerSlot');
-  const setGambitSlotUsed = useEngineSetter('gambitSlotUsed');
-  const setPendingHeroSkillAction = useEngineSetter('pendingHeroSkillAction');
-  const setPendingHeroMagicAction = useEngineSetter('pendingHeroMagicAction');
-  const setPersuadeCostModifier = useEngineSetter('persuadeCostModifier');
-  const setPersuadeAmuletBonus = useEngineSetter('persuadeAmuletBonus');
-  const setPersuadeDiscount = useEngineSetter('persuadeDiscount');
-  const setPendingMagicAction = useEngineSetter('pendingMagicAction');
-  const setPendingPotionAction = useEngineSetter('pendingPotionAction');
-  const setDeathWardPrompt = useEngineSetter('deathWardPrompt');
-  const setMonsterRewardQueue = useEngineSetter('monsterRewardQueue');
-  const setActiveMonsterReward = useEngineSetter('activeMonsterReward');
-  const setSelectedMonsterRewards = useEngineSetter('selectedMonsterRewards');
-  const setShopOfferings = useEngineSetter('shopOfferings');
-  const setShopSourceEvent = useEngineSetter('shopSourceEvent');
-  const setShopDeleteUsed = useEngineSetter('shopDeleteUsed');
-  const setShopHealUsed = useEngineSetter('shopHealUsed');
-  const setShopLevelUpUsed = useEngineSetter('shopLevelUpUsed');
-  const setShopSkillDiscoverUsed = useEngineSetter('shopSkillDiscoverUsed');
-  const setShopSkillOptions = useEngineSetter('shopSkillOptions');
-  const setShopModalOpen = useEngineSetter('shopModalOpen');
-  const setShopModalMinimized = useEngineSetter('shopModalMinimized');
-  const setShopSkillSelectOpen = useEngineSetter('shopSkillSelectOpen');
-  const setCurrentEventCard = useEngineSetter('currentEventCard');
-  const setResolvingDungeonCardId = useEngineSetter('resolvingDungeonCardId');
-  const setEventModalOpen = useEngineSetter('eventModalOpen');
-  const setEventModalMinimized = useEngineSetter('eventModalMinimized');
-  const setEventDiceModal = useEngineSetter('eventDiceModal');
-  const setEventTransformState = useEngineSetter('eventTransformState');
-  const setPersuadeState = useEngineSetter('persuadeState');
-  const setMagicChoiceModal = useEngineSetter('magicChoiceModal');
-  const setDiscoverModalOpen = useEngineSetter('discoverModalOpen');
-  const setDiscoverOptions = useEngineSetter('discoverOptions');
-  const setDeleteModalOpen = useEngineSetter('deleteModalOpen');
-  const setUpgradeModalOpen = useEngineSetter('upgradeModalOpen');
-  const setUpgradeModalMaxCount = useEngineSetter('upgradeModalMaxCount');
-  const setHandMagicUpgradeModal = useEngineSetter('handMagicUpgradeModal');
-  const setMirrorCopyModal = useEngineSetter('mirrorCopyModal');
-  const setGraveyardDiscoverState = useEngineSetter('graveyardDiscoverState');
-  const setCardActionContext = useEngineSetter('cardActionContext');
-  const setEquipmentPrompt = useEngineSetter('equipmentPrompt');
-  const setGhostBladeExileCards = useEngineSetter('ghostBladeExileCards');
-  const setGameOver = useEngineSetter('gameOver');
-  const setVictory = useEngineSetter('victory');
-  const setShowSkillSelection = useEngineSetter('showSkillSelection');
-  const setShowCardDraft = useEngineSetter('showCardDraft');
-  const setCardDraftPool = useEngineSetter('cardDraftPool');
-  const setDrawPending = useEngineSetter('drawPending');
-  const setIsHydrated = useEngineSetter('isHydrated');
-  const setHeroSkillBanner = useEngineSetter('heroSkillBanner');
-  const setMonstersDefeated = useEngineSetter('monstersDefeated');
-  const setTotalDamageTaken = useEngineSetter('totalDamageTaken');
-  const setTotalHealed = useEngineSetter('totalHealed');
-  const setTurnDamageTaken = useEngineSetter('turnDamageTaken');
-  const setCardsPlayed = useEngineSetter('cardsPlayed');
-  const setRecycleForgePlayCount = useEngineSetter('recycleForgePlayCount');
-  const setWaveDiscardCount = useEngineSetter('waveDiscardCount');
-  const setTotalWins = useEngineSetter('totalWins');
-  const setUndoCount = useEngineSetter('undoCount');
-  const setGameLogEntries = useEngineSetter('gameLogEntries');
-  const setPreviewCardStacks = useEngineSetter('previewCardStacks');
-  const setActiveCardStacks = useEngineSetter('activeCardStacks');
-  const setEternalRelics = useEngineSetter('eternalRelics');
+  // -- State helpers -----------------------------------------------------------
+
+  type GS = GameState;
 
   // hpRef/goldRef eliminated — use engine.getState().hp / .gold in closures
   const undoStackRef = useRef<GameState[]>(
@@ -550,14 +459,13 @@ export default function GameBoard() {
           const currentArmor = slotItem.armor ?? baseArmorMax;
           if (currentArmor < baseArmorMax) {
             const repair = Math.min(increase, baseArmorMax - currentArmor);
-            const setter = slotId === 'equipmentSlot1' ? setEquipmentSlot1 : setEquipmentSlot2;
-            setter({ ...slotItem, armor: currentArmor + repair } as EquipmentItem);
+            dispatch({ type: 'SET_EQUIPMENT_SLOT', slotId, card: { ...slotItem, armor: currentArmor + repair } as EquipmentItem });
           }
         }
       }
     }
     prevSlotTempArmorRef.current = slotTempArmor;
-  }, [slotTempArmor, equipmentSlot1, equipmentSlot2, setEquipmentSlot1, setEquipmentSlot2]);
+  }, [slotTempArmor, equipmentSlot1, equipmentSlot2]);
 
   useLayoutEffect(() => {
     const el = headerWrapperRef.current;
@@ -605,6 +513,9 @@ export default function GameBoard() {
         case 'discard-zap':
           state.hasDiscardShock = true;
           break;
+        case 'flip-zap':
+          state.flipZapCount += 1;
+          break;
         case 'flip-gold':
           state.hasFlipGold = true;
           break;
@@ -622,7 +533,7 @@ export default function GameBoard() {
           break;
         case 'persuade-on-temp-attack':
           state.hasPersuadeOnTempAttack = true;
-          state.persuadeOnTempAttackBonus = upgradeLevel >= 1 ? 10 : 5;
+          state.persuadeOnTempAttackBonus = upgradeLevel >= 1 ? 20 : 10;
           break;
         case 'persuade-grant-recycle-fetch':
           state.hasPersuadeGrantRecycleFetch = true;
@@ -667,6 +578,9 @@ export default function GameBoard() {
         case 'stun-rate-boost':
           state.stunRateBoost += 20;
           break;
+        case 'stun-gold':
+          state.hasStunGold = true;
+          break;
       }
       if (auraBonus) {
         if (typeof auraBonus.attack === 'number') state.aura.attack += auraBonus.attack;
@@ -699,32 +613,7 @@ export default function GameBoard() {
     return state;
   }, [amuletSlots, eternalRelics]);
 
-  useEffect(() => {
-    const st = engine.getState();
-    const needsInit = st.amuletSlots.some(slot => {
-      if (!slot) return false;
-      if (slot.amuletEffect === 'damage-class-discover' && !slot._counterDisplay) return true;
-      if (slot.amuletEffect === 'swap-upgrade' && !slot._counterDisplay) return true;
-      if (slot.amuletEffect === 'recycle-backpack-expand' && !slot._counterDisplay) return true;
-      return false;
-    });
-    if (!needsInit) return;
-    setAmuletSlots(prev => prev.map(slot => {
-      if (!slot || slot._counterDisplay) return slot;
-      if (slot.amuletEffect === 'damage-class-discover') {
-        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 3 : 10;
-        return { ...slot, _counterDisplay: `${st.classDamageDiscoverStreak ?? 0}/${threshold}` };
-      }
-      if (slot.amuletEffect === 'swap-upgrade') {
-        return { ...slot, _counterDisplay: `${st.swapUpgradeProgress ?? 0}/3` };
-      }
-      if (slot.amuletEffect === 'recycle-backpack-expand') {
-        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 8;
-        return { ...slot, _counterDisplay: `${st.recycleBackpackProgress ?? 0}/${threshold}` };
-      }
-      return slot;
-    }));
-  }, [amuletSlots, engine, setAmuletSlots]);
+  // Amulet counter display sync now runs automatically in reducer postProcessAmuletCounters
 
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
 
@@ -742,7 +631,6 @@ export default function GameBoard() {
     restorePermanentMagicFromRecycleBag,
     drawFromRecycleBagToHand,
     tickRecycleForge,
-    updateRecycleForgeCounter,
     drawClassCardsToBackpack,
     returnCardsToClassDeck,
     applyDiscardSideEffects,
@@ -786,8 +674,6 @@ export default function GameBoard() {
     consumeExtraAttackCharge,
     damageMonsterWithLayerOverflow,
     updateMonsterCard,
-    checkHollowSkeletonRestore,
-    checkWraithRebirth,
     executeLastWords,
     handleMonsterDefeated,
     decrementMonsterFury,
@@ -801,7 +687,6 @@ export default function GameBoard() {
     getActiveCombatMonster,
     finishCombat,
     beginCombat,
-    applyHeroKillEffects,
     performHeroAttack,
     endHeroTurn,
     resolveBlockChoice,
@@ -823,7 +708,6 @@ export default function GameBoard() {
     generateShopOfferings,
     startShopFlow,
     beginDiscoverFlow,
-    beginDiscoverFlowAsync,
     handleDiscoverFallback,
     handleDiscoverSelect,
     handleDiscoverCancel,
@@ -843,7 +727,9 @@ export default function GameBoard() {
     triggerGhostBladeExile,
     handleGhostBladeExileConfirm,
     requestCardAction,
+    requestCardActionBatch,
     handleDeleteCardConfirm,
+    handleBatchDeleteConfirm,
     handleDeleteModalOpenChange,
     queueMonsterReward,
     applyMonsterReward,
@@ -873,18 +759,17 @@ export default function GameBoard() {
   }, []);
 
   const handleUpgradeModalChange = useCallback((open: boolean) => {
-    setUpgradeModalOpen(open);
-    if (!open) setUpgradeModalMaxCount(undefined);
-  }, [setUpgradeModalOpen, setUpgradeModalMaxCount]);
+    dispatch({ type: 'SET_UPGRADE_MODAL_OPEN', open: open, ...(open ? {} : { maxCount: undefined }) });
+  }, []);
 
   const handleHandMagicUpgradeSelect = useCallback((cardIds: string[]) => {
     for (const cardId of cardIds) handleCardUpgrade(cardId);
-    setHandMagicUpgradeModal(null);
-  }, [handleCardUpgrade, setHandMagicUpgradeModal]);
+    dispatch({ type: 'SET_HAND_MAGIC_UPGRADE_MODAL', payload: null });
+  }, [handleCardUpgrade]);
 
   const handleHandMagicUpgradeClose = useCallback(() => {
-    setHandMagicUpgradeModal(null);
-  }, [setHandMagicUpgradeModal]);
+    dispatch({ type: 'SET_HAND_MAGIC_UPGRADE_MODAL', payload: null });
+  }, []);
 
   // --- Layer 3: Card Play Handlers ---
   const cardPlayDepsRef = useRef<CardPlayHandlersDeps>(null!);
@@ -902,11 +787,7 @@ export default function GameBoard() {
     finalizePotionCard,
     resolvePotionRepairForSlot,
     repairEquipmentDurability,
-    handlePotionConsumption,
-    handleSkillCard,
     handleHeroMagicCard,
-    handleKnightInstantMagic,
-    handleKnightPermanentMagic,
     handlePlayCardFromHand,
     applyTransformAndUpdateCategory,
     isPermanentMagicCard,
@@ -946,6 +827,7 @@ export default function GameBoard() {
     handleHeroSkillMonsterSelection,
     handleMagicMonsterSelection,
     handleDungeonCardSelection,
+    handleBackpackReorganizeConfirm,
     handleSlotTargetSelection,
     computePersuadeSuccessRate,
     canPersuadeMonster,
@@ -989,14 +871,16 @@ export default function GameBoard() {
 
   const [backpackViewerOpen, setBackpackViewerOpen] = useState(false);
   const [heroDetailsOpen, setHeroDetailsOpen] = useState(false);
-  const [classDeckFlights, setClassDeckFlights] = useState<ClassDeckFlight[]>([]);
   const cardActionResolverRef = useRef<(() => void) | null>(null);
   const cardActionRemainingRef = useRef(0);
+  const cardActionBatchResolverRef = useRef<
+    ((selections: Array<{ cardId: string; source: 'hand' | 'backpack' | 'recycleBag' | 'equipment' | 'amulet' }>) => void) | null
+  >(null);
   const deletingCardIdsRef = useRef(new Set<string>());
   const adjustShopLevel = useCallback((delta: number) => {
     if (!delta) return;
-    setShopLevel(prev => Math.min(MAX_SHOP_LEVEL, Math.max(0, Math.floor(prev + delta))));
-  }, []);
+    dispatch({ type: 'ADJUST_SHOP_LEVEL', delta: Math.floor(delta) });
+  }, [engine]);
   const onNewCardGainedRef = useRef<((count: number, source?: 'graveyard' | 'classPool') => void) | null>(null);
   const [persuadeTempDiscount, setPersuadeTempDiscount] = useState(0);
   const stagingCardsRef = useRef<GameCardData[]>([]);
@@ -1009,287 +893,74 @@ export default function GameBoard() {
   const [draggedEquipment, setDraggedEquipment] = useState<any | null>(null);
   const [isDragSessionActive, setIsDragSessionActive] = useState(false);
   const [removingCards, setRemovingCards] = useState<Set<string>>(new Set());
-  const [takingDamage, setTakingDamage] = useState(false);
-  const [healing, setHealing] = useState(false);
-  const [heroBleedActive, setHeroBleedActive] = useState(false);
-  const [monsterBleedStates, setMonsterBleedStates] = useState<Record<string, number>>({});
-  const [monsterHealStates, setMonsterHealStates] = useState<Record<string, number>>({});
-  const [monsterDefeatStates, setMonsterDefeatStates] = useState<Record<string, boolean>>({});
-  const [weaponSwingStates, setWeaponSwingStates] = useState<Record<EquipmentSlotId, number>>({
-    equipmentSlot1: 0,
-    equipmentSlot2: 0,
-  });
-  const [shieldBlockStates, setShieldBlockStates] = useState<Record<EquipmentSlotId, number>>({
-    equipmentSlot1: 0,
-    equipmentSlot2: 0,
-  });
-  const [weaponSwingVariant, setWeaponSwingVariant] = useState<Record<EquipmentSlotId, 0 | 1>>({
-    equipmentSlot1: 0,
-    equipmentSlot2: 0,
-  });
-  const [shieldBlockVariant, setShieldBlockVariant] = useState<Record<EquipmentSlotId, 0 | 1>>({
-    equipmentSlot1: 0,
-    equipmentSlot2: 0,
-  });
-  const [directedCombatFxFlights, setDirectedCombatFxFlights] = useState<DirectedCombatFxFlight[]>([]);
-  const [isCombatPanelMinimized, setIsCombatPanelMinimized] = useState(true);
-  const [combatPanelPosition, setCombatPanelPosition] = useState<{ x: number; y: number } | null>(null);
-  const [combatPanelSize, setCombatPanelSize] = useState({ width: 0, height: 0 });
-  const [isCombatPanelDragging, setIsCombatPanelDragging] = useState(false);
-  const combatPanelWrapperRef = useRef<HTMLDivElement | null>(null);
-  const combatPanelDragSessionRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-  } | null>(null);
-  const combatPanelHasCustomPositionRef = useRef(false);
-  const combatPanelWindowListenersRef = useRef<{
-    move: (event: PointerEvent) => void;
-    up: (event: PointerEvent) => void;
-  } | null>(null);
+  const {
+    takingDamage, setTakingDamage,
+    healing, setHealing,
+    heroBleedActive, setHeroBleedActive,
+    monsterBleedStates, setMonsterBleedStates,
+    monsterHealStates, setMonsterHealStates,
+    monsterDefeatStates, setMonsterDefeatStates,
+    weaponSwingStates, setWeaponSwingStates,
+    shieldBlockStates, setShieldBlockStates,
+    weaponSwingVariant, setWeaponSwingVariant,
+    shieldBlockVariant, setShieldBlockVariant,
+  } = useCombatVisuals();
   const boardRef = useRef<HTMLDivElement>(null);
   const gameSurfaceRef = useRef<HTMLDivElement | null>(null);
   const headerWrapperRef = useRef<HTMLDivElement | null>(null);
   const [headerHeight, setHeaderHeight] = useState(48);
   const gridWrapperRef = useRef<HTMLDivElement | null>(null);
-  const animationDelayTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const heroBleedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const monsterBleedTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>[]>>({});
-  const monsterHealTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>[]>>({});
-  const weaponSwingTimeoutsRef = useRef<Record<EquipmentSlotId, ReturnType<typeof setTimeout>[]>>({
-    equipmentSlot1: [],
-    equipmentSlot2: [],
-  });
-  const shieldBlockTimeoutsRef = useRef<Record<EquipmentSlotId, ReturnType<typeof setTimeout>[]>>({
-    equipmentSlot1: [],
-    equipmentSlot2: [],
-  });
-  const directedCombatFxFlightsRef = useRef<DirectedCombatFxFlight[]>([]);
-  const directedCombatFxElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const directedCombatFxFlightAnimationRef = useRef<number | null>(null);
-  const scheduleAnimationStart = useCallback((fn: () => void, delay = 0) => {
-    const run = () => {
-      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-        window.requestAnimationFrame(() => fn());
-      } else {
-        fn();
-      }
-    };
-    if (delay <= 0) {
-      run();
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      animationDelayTimeoutsRef.current = animationDelayTimeoutsRef.current.filter(id => id !== timeoutId);
-      run();
-    }, delay);
-    animationDelayTimeoutsRef.current.push(timeoutId);
-  }, []);
-  const triggerHeroBleedAnimation = useCallback(
-    (delay = 0) => {
-      if (heroBleedTimeoutRef.current) {
-        clearTimeout(heroBleedTimeoutRef.current);
-        heroBleedTimeoutRef.current = null;
-      }
-      setHeroBleedActive(false);
-      const start = () => {
-        setHeroBleedActive(true);
-        heroBleedTimeoutRef.current = setTimeout(() => {
-          setHeroBleedActive(false);
-          heroBleedTimeoutRef.current = null;
-        }, animSpeed(COMBAT_ANIMATION_DURATION));
-      };
-      scheduleAnimationStart(start, delay);
-    },
-    [scheduleAnimationStart],
-  );
-  const triggerMonsterBleedAnimation = useCallback(
-    (monsterId: string, delay = 0) => {
-      if (!monsterId) return;
-      scheduleAnimationStart(() => {
-        setMonsterBleedStates(prev => ({
-          ...prev,
-          [monsterId]: (prev[monsterId] ?? 0) + 1,
-        }));
-        const timeoutId = setTimeout(() => {
-          setMonsterBleedStates(prev => {
-            const current = prev[monsterId];
-            if (!current) {
-              return prev;
-            }
-            if (current <= 1) {
-              const next = { ...prev };
-              delete next[monsterId];
-              return next;
-            }
-            return {
-              ...prev,
-              [monsterId]: current - 1,
-            };
-          });
-          monsterBleedTimeoutsRef.current[monsterId] =
-            (monsterBleedTimeoutsRef.current[monsterId] || []).filter(id => id !== timeoutId);
-          if (!monsterBleedTimeoutsRef.current[monsterId]?.length) {
-            delete monsterBleedTimeoutsRef.current[monsterId];
-          }
-        }, animSpeed(COMBAT_ANIMATION_DURATION));
-        monsterBleedTimeoutsRef.current[monsterId] = [
-          ...(monsterBleedTimeoutsRef.current[monsterId] || []),
-          timeoutId,
-        ];
-      }, delay);
-    },
-    [scheduleAnimationStart],
-  );
-  const triggerMonsterHealAnimation = useCallback(
-    (monsterId: string, delay = 0) => {
-      if (!monsterId) return;
-      scheduleAnimationStart(() => {
-        setMonsterHealStates(prev => ({
-          ...prev,
-          [monsterId]: (prev[monsterId] ?? 0) + 1,
-        }));
-        const timeoutId = setTimeout(() => {
-          setMonsterHealStates(prev => {
-            const current = prev[monsterId];
-            if (!current) return prev;
-            if (current <= 1) {
-              const next = { ...prev };
-              delete next[monsterId];
-              return next;
-            }
-            return { ...prev, [monsterId]: current - 1 };
-          });
-          monsterHealTimeoutsRef.current[monsterId] =
-            (monsterHealTimeoutsRef.current[monsterId] || []).filter(id => id !== timeoutId);
-          if (!monsterHealTimeoutsRef.current[monsterId]?.length) {
-            delete monsterHealTimeoutsRef.current[monsterId];
-          }
-        }, animSpeed(COMBAT_ANIMATION_DURATION));
-        monsterHealTimeoutsRef.current[monsterId] = [
-          ...(monsterHealTimeoutsRef.current[monsterId] || []),
-          timeoutId,
-        ];
-      }, delay);
-    },
-    [scheduleAnimationStart],
-  );
-  const startWeaponSwingPulse = useCallback(
-    (slotId: EquipmentSlotId, delay = 0) => {
-      scheduleAnimationStart(() => {
-        setWeaponSwingStates(prev => ({
-          ...prev,
-          [slotId]: (prev[slotId] ?? 0) + 1,
-        }));
-        const timeoutId = setTimeout(() => {
-          setWeaponSwingStates(prev => {
-            const current = prev[slotId] ?? 0;
-            const nextCount = Math.max(0, current - 1);
-            return {
-              ...prev,
-              [slotId]: nextCount,
-            };
-          });
-          weaponSwingTimeoutsRef.current[slotId] = (weaponSwingTimeoutsRef.current[slotId] || []).filter(
-            id => id !== timeoutId,
-          );
-        }, animSpeed(COMBAT_ANIMATION_DURATION));
-        weaponSwingTimeoutsRef.current[slotId] = [
-          ...(weaponSwingTimeoutsRef.current[slotId] || []),
-          timeoutId,
-        ];
-      }, delay);
-    },
-    [scheduleAnimationStart],
-  );
-  const startShieldBlockPulse = useCallback(
-    (slotId: EquipmentSlotId, delay = 0) => {
-      scheduleAnimationStart(() => {
-        setShieldBlockStates(prev => ({
-          ...prev,
-          [slotId]: (prev[slotId] ?? 0) + 1,
-        }));
-        const timeoutId = setTimeout(() => {
-          setShieldBlockStates(prev => {
-            const current = prev[slotId] ?? 0;
-            const nextCount = Math.max(0, current - 1);
-            return {
-              ...prev,
-              [slotId]: nextCount,
-            };
-          });
-          shieldBlockTimeoutsRef.current[slotId] = (shieldBlockTimeoutsRef.current[slotId] || []).filter(
-            id => id !== timeoutId,
-          );
-        }, animSpeed(COMBAT_ANIMATION_DURATION));
-        shieldBlockTimeoutsRef.current[slotId] = [
-          ...(shieldBlockTimeoutsRef.current[slotId] || []),
-          timeoutId,
-        ];
-      }, delay);
-    },
-    [scheduleAnimationStart],
-  );
-  const triggerWeaponSwingAnimation = useCallback(
-    (slotId: EquipmentSlotId, delay = 0, options?: { echoes?: number }) => {
-      const echoes = Math.max(1, options?.echoes ?? 1);
-      for (let i = 0; i < echoes; i += 1) {
-        startWeaponSwingPulse(slotId, delay + i * Math.floor(COMBAT_ANIMATION_STAGGER / 2));
-      }
-      setWeaponSwingVariant(prev => ({
-        ...prev,
-        [slotId]: prev[slotId] === 0 ? 1 : 0,
-      }));
-    },
-    [startWeaponSwingPulse],
-  );
-  const triggerShieldBlockAnimation = useCallback(
-    (slotId: EquipmentSlotId, delay = 0, options?: { echoes?: number }) => {
-      const echoes = Math.max(1, options?.echoes ?? 2);
-      for (let i = 0; i < echoes; i += 1) {
-        startShieldBlockPulse(slotId, delay + i * Math.floor(COMBAT_ANIMATION_STAGGER / 2));
-      }
-      setShieldBlockVariant(prev => ({
-        ...prev,
-        [slotId]: prev[slotId] === 0 ? 1 : 0,
-      }));
-    },
-    [startShieldBlockPulse],
-  );
-  useEffect(() => {
-    return () => {
-      if (heroBleedTimeoutRef.current) {
-        clearTimeout(heroBleedTimeoutRef.current);
-      }
-      animationDelayTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
-      Object.values(monsterBleedTimeoutsRef.current).forEach(timeouts => {
-        timeouts.forEach(timeout => clearTimeout(timeout));
-      });
-      Object.values(weaponSwingTimeoutsRef.current).forEach(timeouts => {
-        timeouts.forEach(timeout => clearTimeout(timeout));
-      });
-      Object.values(shieldBlockTimeoutsRef.current).forEach(timeouts => {
-        timeouts.forEach(timeout => clearTimeout(timeout));
-      });
-      if (directedCombatFxFlightAnimationRef.current !== null) {
-        cancelAnimationFrame(directedCombatFxFlightAnimationRef.current);
-      }
-    };
-  }, []);
+  const combatAnims = useCombatAnimationTriggers({
+    setHeroBleedActive,
+    setMonsterBleedStates,
+    setMonsterHealStates,
+    setWeaponSwingStates,
+    setShieldBlockStates,
+    setWeaponSwingVariant,
+    setShieldBlockVariant,
+  }, animSpeed);
+  const {
+    triggerHeroBleedAnimation,
+    triggerMonsterBleedAnimation,
+    triggerMonsterHealAnimation,
+    triggerWeaponSwingAnimation,
+    triggerShieldBlockAnimation,
+    animationDelayTimeoutsRef,
+    heroBleedTimeoutRef,
+    monsterBleedTimeoutsRef,
+    monsterHealTimeoutsRef,
+    weaponSwingTimeoutsRef,
+    shieldBlockTimeoutsRef,
+  } = combatAnims;
   const heroCellRef = useRef<HTMLDivElement>(null);
   const heroRowCellRefs = useRef<Array<HTMLDivElement | null>>(Array(6).fill(null));
   const monsterCellRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const directedCombatFx = useDirectedCombatFx(
+    { gameSurfaceRef, heroRowCellRefs, monsterCellRefs },
+    animSpeed,
+  );
+  const {
+    directedCombatFxFlights,
+    directedCombatFxFlightsRef,
+    directedCombatFxElementMapRef,
+    directedCombatFxFlightAnimationRef,
+    tryStartShieldReflectDirectedFx,
+    tryStartBossRetaliationDirectedFx,
+    tryStartGolemLayerReflectFx,
+    tryStartArcaneBladeSpellFx,
+    tryStartDragonBreathFx,
+    tryStartMissileStormFx,
+    setDirectedCombatFxFlights,
+  } = directedCombatFx;
+
+  const swordOverlay = useSwordOverlay({ boardRef, heroCellRef, monsterCellRefs });
+
   const [monsterRageInsets, setMonsterRageInsets] = useState<Record<string, MonsterRageInset>>({});
-  const waterfallPlanRef = useRef<WaterfallPlan | null>(null);
-  const pendingPreviewStacksRef = useRef<Record<number, GameCardData[]>>({});
   const waterfallTimeoutsRef = useRef<number[]>([]);
   const waterfallLockRef = useRef(false);
-  const cascadeResetWaterfallRef = useRef(false);
   const pendingDungeonRemovalsRef = useRef(0);
   const pendingDungeonUseRef = useRef<Set<string>>(new Set());
-  const waterfallPendingRef = useRef(false);
   const waterfallDiscoverPendingRef = useRef(false);
   const waterfallSequenceRef = useRef(0);
   const lastWaterfallSequenceRef = useRef<number | null>(null);
@@ -1307,32 +978,35 @@ export default function GameBoard() {
   const classDeckFlightAnimationRef = useRef<number | null>(null);
   const classDeckFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const activeCellRefs = useRef<Array<HTMLDivElement | null>>(Array(5).fill(null));
-  const [fateSwapFlights, setFateSwapFlights] = useState<FateSwapFlight[]>([]);
+  const { inCellFlips } = useInCellFlipAnimation(activeCellRefs);
+  const {
+    classDeckFlights, setClassDeckFlights,
+    fateSwapFlights, setFateSwapFlights,
+    graveyardStackFlights, setGraveyardStackFlights,
+    backpackHandFlights, setBackpackHandFlights,
+    discardShockFlights, setDiscardShockFlights,
+    discardShockInteractionLocked, setDiscardShockInteractionLocked,
+    flipShockFlights, setFlipShockFlights,
+    flipShockInteractionLocked, setFlipShockInteractionLocked,
+    discardFlights, setDiscardFlights,
+    stealCardFlights, setStealCardFlights,
+  } = useFlightState();
   const fateSwapFlightsRef = useRef<FateSwapFlight[]>([]);
   const fateSwapFlightAnimationRef = useRef<number | null>(null);
   const fateSwapFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [graveyardStackFlights, setGraveyardStackFlights] = useState<GraveyardStackFlight[]>([]);
   const graveyardStackFlightsRef = useRef<GraveyardStackFlight[]>([]);
   const graveyardStackFlightAnimationRef = useRef<number | null>(null);
   const graveyardStackFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [backpackHandFlights, setBackpackHandFlights] = useState<BackpackHandFlight[]>([]);
   const backpackHandFlightsRef = useRef<BackpackHandFlight[]>([]);
   const backpackHandFlightAnimationRef = useRef<number | null>(null);
   const backpackFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [discardShockFlights, setDiscardShockFlights] = useState<DiscardShockFlight[]>([]);
-  /** 弃牌雷击队列/弹道未结束时禁止玩家操作（与最小化 Event/Shop 合并为 fullBoardInteractionLocked） */
-  const [discardShockInteractionLocked, setDiscardShockInteractionLocked] = useState(false);
   const discardShockFlightsRef = useRef<DiscardShockFlight[]>([]);
   const discardShockFlightAnimationRef = useRef<number | null>(null);
   const discardShockElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  // Discard flight animation (hand → graveyard / backpack)
-  const [discardFlights, setDiscardFlights] = useState<DiscardFlight[]>([]);
   const discardFlightsRef = useRef<DiscardFlight[]>([]);
   const discardFlightAnimationRef = useRef<number | null>(null);
   const discardFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const discardFlightResolveMapRef = useRef<Map<string, () => void>>(new Map());
-  // Steal card flight animation (hand → Goblin dungeon slot)
-  const [stealCardFlights, setStealCardFlights] = useState<DiscardFlight[]>([]);
   const stealCardFlightsRef = useRef<DiscardFlight[]>([]);
   const stealCardFlightAnimationRef = useRef<number | null>(null);
   const stealCardFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -1342,6 +1016,15 @@ export default function GameBoard() {
   const discardShockSeqInFlightRef = useRef(false);
   const flushDiscardShockQueueRef = useRef<() => void>(() => {});
   const applyDiscardShockHitRef = useRef<(flight: DiscardShockFlight) => void>(() => {});
+  // 弧能之符 (flip-zap): mirrors the discard-shock pipeline but triggered on every
+  // APPLY_CARD_FLIP. Each equipped 弧能之符 amulet enqueues one independent zap.
+  const flipShockFlightsRef = useRef<DiscardShockFlight[]>([]);
+  const flipShockFlightAnimationRef = useRef<number | null>(null);
+  const flipShockElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const flipShockProcQueueRef = useRef<{ showBanner: boolean }[]>([]);
+  const flipShockSeqInFlightRef = useRef(false);
+  const flushFlipShockQueueRef = useRef<() => void>(() => {});
+  const applyFlipShockHitRef = useRef<(flight: DiscardShockFlight) => void>(() => {});
   const beginCombatRef = useRef<(monster: GameCardData, initiator: CombatInitiator) => void>(() => {});
   beginCombatRef.current = beginCombat;
   const activeCardsLatestRef = useRef<ActiveRowSlots>(activeCards);
@@ -1649,30 +1332,7 @@ export default function GameBoard() {
     draggedCardRef.current = draggedCard;
   }, [draggedCard]);
 
-  useEffect(() => {
-    const releaseChargeNames = ['命运之刃', '增幅祭坛'];
-    for (const buildingName of releaseChargeNames) {
-      const bldgIdx = activeCards.findIndex(c => c?.name === buildingName && c.type === 'building');
-      if (bldgIdx === -1) continue;
-      const bldg = activeCards[bldgIdx]!;
-      if (bldg._fateBladeLastSlot !== bldgIdx) {
-        const shouldGrantCharge = !bldg.hasReleaseCharge;
-        setActiveCards(prev => {
-          const next = [...prev] as typeof prev;
-          const idx = next.findIndex(c => c?.name === buildingName && c.type === 'building');
-          if (idx === -1) return prev;
-          const card = next[idx]!;
-          if (card._fateBladeLastSlot === idx) return prev;
-          next[idx] = {
-            ...card,
-            hasReleaseCharge: shouldGrantCharge ? true : card.hasReleaseCharge,
-            _fateBladeLastSlot: idx,
-          };
-          return next;
-        });
-      }
-    }
-  }, [activeCards]);
+  // syncBuildingSlotsPure now runs automatically in reducer postProcessActiveCards
 
   useEffect(() => {
     setViewportWidth(gameViewport.width);
@@ -1707,8 +1367,7 @@ export default function GameBoard() {
     monsterCardSignature,
     gridMetrics.padding,
     gridCardSize?.width,
-    gridCardSize?.height,
-  ]);
+    gridCardSize?.height]);
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -1730,8 +1389,7 @@ export default function GameBoard() {
     waterfallAnimation.discardSlot,
     waterfallAnimation.discardDestination,
     updatePreviewToDeckVector,
-    updatePreviewToGraveyardVector,
-  ]);
+    updatePreviewToGraveyardVector]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1774,7 +1432,7 @@ export default function GameBoard() {
       return;
     }
     lastWaterfallSequenceRef.current = sequenceId;
-    setWaveDiscardCount(0);
+    (0);
   }, [waterfallAnimation.sequenceId]);
 
   const queueWaterfallTimeout = useCallback((callback: () => void, delay: number, label?: string) => {
@@ -1799,41 +1457,119 @@ export default function GameBoard() {
 
   const [deckViewerOpen, setDeckViewerOpen] = useState(false);
   const [deckPeekState, setDeckPeekState] = useState<import('./game-board/types').DeckPeekModalState | null>(null);
-  const [narrowDiceModalOpen, setNarrowDiceModalOpen] = useState(false);
   const [narrowSidebarPositions, setNarrowSidebarPositions] = useState<{ row1Y: number; row2Y: number; row3Y: number } | null>(null);
 
   const gameLogIdRef = useRef<number>(loadGameLog()?.nextId ?? 0);
   const addGameLog = useCallback((type: LogEntryType, message: string) => {
     const id = ++gameLogIdRef.current;
-    setGameLogEntries(prev => {
-      const next = [...prev, { id, type, message, timestamp: Date.now() }];
-      saveGameLog(next, gameLogIdRef.current);
-      return next;
-    });
-  }, []);
+    const entry = { id, type, message, timestamp: Date.now() };
+    dispatch({ type: 'UPDATE_GAME_LOG', entry });
+    saveGameLog(engine.getState().gameLogEntries, gameLogIdRef.current);
+  }, [engine]);
   const clearGameLog = useCallback(() => {
-    setGameLogEntries([]);
+    dispatch({ type: 'SET_GAME_FLAGS', patch: { gameLogEntries: [] } });
     gameLogIdRef.current = 0;
     clearGameLogStorage();
   }, []);
+
+  useGameEvent('log:entry', ({ type, message }) => {
+    addGameLog(type as LogEntryType, message);
+  });
+
+  useGameEvent('waterfall:discoverPending', () => {
+    waterfallDiscoverPendingRef.current = true;
+  });
+
+  useGameEvent('waterfall:wraithEnrage', ({ monsterIds }) => {
+    for (const mId of monsterIds) {
+      if (!isMonsterEngaged(mId)) {
+        const card = activeCards.find(c => c?.id === mId);
+        if (card) beginCombat(card, 'monster');
+      }
+    }
+  });
+
+  useGameEvent('waterfall:classDrawn', ({ cards }) => {
+    triggerClassDeckFlight(cards);
+  });
+
+  // Reducer computed a waterfall plan — wait for pending removal animations, then start
+  useGameEvent('waterfall:planReady', () => {
+    const tryStart = () => {
+      if (pendingDungeonRemovalsRef.current > 0) {
+        setTimeout(tryStart, 50);
+        return;
+      }
+      startWaterfallAnimation();
+    };
+    tryStart();
+  });
+
+  // waterfall:discardEffect no longer needs UI-side handling.
+  // The reducer syncs updatedRemainingDeck into pendingWaterfallPlan automatically.
+
+  // --- Equipment event listeners ---
+
+  useGameEvent('equipment:destroyed', ({ slotId, cardId }) => {
+    console.log('[equipment:destroyed]', { slotId, cardId });
+  });
+
+  useGameEvent('equipment:clearSlotWithPromote', ({ slotId }) => {
+    console.log('[equipment:clearSlotWithPromote]', { slotId });
+  });
+
+  useGameEvent('equipment:drawFromBackpack', ({ count }) => {
+    for (let i = 0; i < count; i++) drawFromBackpackToHand();
+  });
+
+  useGameEvent('equipment:drawFromRecycleBag', ({ count }) => {
+    console.log('[equipment:drawFromRecycleBag]', { count });
+  });
+
+  useGameEvent('equipment:classCardDraw', ({ count }) => {
+    console.log('[equipment:classCardDraw]', { count });
+  });
+
+  useGameEvent('equipment:repaired', ({ slotId, amount }) => {
+    addGameLog('equip', `装备修复：槽位 ${slotId} 修复了 ${amount} 点耐久`);
+  });
+
+  useGameEvent('equipment:graveyardToHand', ({ itemName }) => {
+    console.log('[equipment:graveyardToHand]', { itemName });
+  });
+
+  useGameEvent('equipment:lastWordsHeal', ({ amount, itemName }) => {
+    healHero(amount);
+    addGameLog('equip', `${itemName} 遗言：恢复了 ${amount} 点生命`);
+  });
+
+  // --- Game lifecycle event listeners ---
+
+  useGameEvent('game:started', () => {
+    console.log('[game:started]');
+  });
+
+  useGameEvent('game:over', ({ victory }) => {
+    console.log('[game:over]', { victory });
+  });
+
+  // --- Additional combat event listeners ---
+
+  useGameEvent('combat:wraithPurified', () => {
+    addGameLog('combat', '亡灵已被净化！');
+  });
+
+  useGameEvent('combat:heroTookDamageThisMonsterTurn', () => {
+    console.log('[combat:heroTookDamageThisMonsterTurn]');
+  });
+
+  useGameEvent('combat:monsterRewardQueued', ({ monsterId }) => {
+    console.log('[combat:monsterRewardQueued]', { monsterId });
+  });
+
   const discardedCardsRef = useRef<GameCardData[]>([]);
   const handCardsRef = useRef<GameCardData[]>([]);
-  const flatEquipmentCards: GameCardData[] = useMemo(() =>
-    ([equipmentSlot1, ...equipmentSlot1Reserve, equipmentSlot2, ...equipmentSlot2Reserve] as (GameCardData | null)[])
-      .filter(Boolean) as GameCardData[],
-    [equipmentSlot1, equipmentSlot1Reserve, equipmentSlot2, equipmentSlot2Reserve],
-  );
-  const flatAmuletCards: GameCardData[] = amuletSlots;
-  const deletableCardCount = handCards.length + backpackItems.length + permanentMagicRecycleBag.length
-    + flatEquipmentCards.length + flatAmuletCards.length;
-  const canDeleteCardInShop = !shopDeleteUsed && deletableCardCount > 0;
-  const shopDeleteDisabledReason = shopDeleteUsed
-    ? '本次商店的删牌机会已用完。'
-    : deletableCardCount === 0
-      ? '当前没有可以删除的卡牌。'
-      : undefined;
-  const [isDraggingToHand, setIsDraggingToHand] = useState(false); // Show hand acquisition zone
-  const [isDraggingFromDungeon, setIsDraggingFromDungeon] = useState(false); // Track if dragging from dungeon
+  // isDraggingToHand / isDraggingFromDungeon removed (values were never read)
   // wraithPassiveEnabledRef eliminated — use engine.getState().wraithPassiveEnabled
   const [wraithPassiveUnlockPopup, setWraithPassiveUnlockPopup] = useState(false);
   const eventChoiceProcessingRef = useRef(false);
@@ -1841,7 +1577,7 @@ export default function GameBoard() {
   const minimizedModalLocksBoard =
     (eventModalOpen && eventModalMinimized) || (shopModalOpen && shopModalMinimized) || (gameOver && gameOverMinimized);
   const fullBoardInteractionLocked =
-    discardShockInteractionLocked || minimizedModalLocksBoard;
+    discardShockInteractionLocked || flipShockInteractionLocked || minimizedModalLocksBoard;
   const fullBoardInteractionLockedRef = useRef(false);
   fullBoardInteractionLockedRef.current = fullBoardInteractionLocked;
   const graveyardDropGuardRef = useRef<{ blocked: boolean }>({ blocked: false });
@@ -1883,7 +1619,7 @@ export default function GameBoard() {
   }, []);
 
   const bulwarkTempArmorRef = useRef(0);
-  bulwarkTempArmorRef.current = bulwarkTempArmorStacks;
+  bulwarkTempArmorRef.current = engine.getState().bulwarkTempArmorStacks;
   const engagedMonsterIdsRef = useRef<string[]>(initialCombatState.engagedMonsterIds);
   engagedMonsterIdsRef.current = combatState.engagedMonsterIds;
   const isMonsterEngaged = (monsterId: string) => combatState.engagedMonsterIds.includes(monsterId);
@@ -1898,10 +1634,8 @@ export default function GameBoard() {
   handLockedForMonsterPhaseRef.current = handLockedForMonsterPhase;
   const heroStunnedRef = useRef(false);
   heroStunnedRef.current = heroStunned;
-  const [swordVectors, setSwordVectors] = useState<Record<string, SwordVector>>({});
   const echoRemainingRef = useRef(0);
   const echoTotalRef = useRef(0);
-  const monsterRewardPreviewCacheRef = useRef<Record<string, MonsterRewardOption[]>>({});
 
 
 
@@ -2012,6 +1746,21 @@ export default function GameBoard() {
       discardShockProcQueueRef.current = [];
       discardShockSeqInFlightRef.current = false;
 
+      if (flipShockFlightAnimationRef.current !== null) {
+        cancelAnimationFrame(flipShockFlightAnimationRef.current);
+        flipShockFlightAnimationRef.current = null;
+      }
+      for (const flight of flipShockFlightsRef.current) {
+        if (!flight.delivered) {
+          applyFlipShockHitRef.current(flight);
+        }
+      }
+      flipShockFlightsRef.current = [];
+      setFlipShockFlights([]);
+      flipShockElementMapRef.current.clear();
+      flipShockProcQueueRef.current = [];
+      flipShockSeqInFlightRef.current = false;
+
       for (const flight of backpackHandFlightsRef.current) {
         if (!flight.delivered) {
           ensureCardInHand(flight.card);
@@ -2019,6 +1768,7 @@ export default function GameBoard() {
       }
       backpackHandFlightsRef.current = [];
       setBackpackHandFlights([]);
+      inFlightHandStore.clear();
 
       classDeckFlightsRef.current = [];
       setClassDeckFlights([]);
@@ -2058,6 +1808,9 @@ export default function GameBoard() {
       const timeoutId = window.setTimeout(() => {
         backpackHandFlightFallbacksRef.current.delete(card.id);
         logBackpackDraw('fallback-fire', { cardId: card.id });
+        // Reveal the slot before ensuring the card in hand, so the fallback
+        // path mirrors the normal flight-complete path.
+        inFlightHandStore.remove(card.id);
         ensureCardInHand(card);
       }, fallbackDelay);
 
@@ -2084,7 +1837,7 @@ export default function GameBoard() {
       }
       const timeoutId = window.setTimeout(() => {
         guards.delete(snapshot.id);
-        setHandCards(prev => {
+        dispatch({ type: 'UPDATE_HAND_CARDS', updater: prev => {
           if (prev.some(existingCard => existingCard.id === snapshot.id)) {
             return prev;
           }
@@ -2093,7 +1846,7 @@ export default function GameBoard() {
             name: snapshot.name,
           });
           return [...prev, snapshot];
-        });
+        } });
       }, HAND_DELIVERY_GUARD_DELAY);
       guards.set(snapshot.id, { card: snapshot, timeoutId });
       logBackpackDraw('hand-guard-scheduled', {
@@ -2102,7 +1855,7 @@ export default function GameBoard() {
         pending: guards.size,
       });
     },
-    [setHandCards],
+    [],
   );
 
   const queueCardIntoHand = (card: GameCardData, sourceHint?: FlightSourceHint) => {
@@ -2144,17 +1897,35 @@ export default function GameBoard() {
     };
   }, [clearAllHandDeliveryGuards]);
 
+  // --- Draw animation listeners (wire reducer side-effects → flight overlay) ---
+  useGameEvent('card:drawnToHand', ({ cardId }) => {
+    const card = engine.getState().handCards.find(c => c.id === cardId);
+    if (card) queueCardIntoHand(card);
+  });
 
+  useGameEvent('card:queueToHand', ({ card, sourceHint }) => {
+    queueCardIntoHand(card, sourceHint as FlightSourceHint | undefined);
+  });
+
+  useGameEvent('card:drawnFromBackpack', ({ cards }) => {
+    for (const card of cards) queueCardIntoHand(card);
+  });
+
+  useGameEvent('card:restoredFromRecycleBag', ({ cardId }) => {
+    const card = engine.getState().handCards.find(c => c.id === cardId);
+    if (card) queueCardIntoHand(card);
+  });
 
   const findDeathWardCard = useCallback(
     (): { card: GameCardData; source: 'hand' | 'backpack' } | null => {
-      const fromHand = handCards.find(
+      const s = engine.getState();
+      const fromHand = s.handCards.find(
         candidate => (candidate as KnightCardData | undefined)?.knightEffect === 'death-ward',
       );
       if (fromHand) {
         return { card: fromHand, source: 'hand' };
       }
-      const fromBackpack = backpackItems.find(
+      const fromBackpack = s.backpackItems.find(
         candidate => (candidate as KnightCardData | undefined)?.knightEffect === 'death-ward',
       );
       if (fromBackpack) {
@@ -2162,16 +1933,13 @@ export default function GameBoard() {
       }
       return null;
     },
-    [backpackItems, handCards],
+    [engine],
   );
 
-  useEffect(() => {
-    if (activeMonsterReward || monsterRewardQueue.length === 0 || ghostBladeExileCards) {
-      return;
-    }
-    setActiveMonsterReward(monsterRewardQueue[0]);
-    setMonsterRewardQueue(prev => prev.slice(1));
-  }, [activeMonsterReward, monsterRewardQueue, ghostBladeExileCards]);
+  // DEQUEUE_MONSTER_REWARD is now triggered by the reducer pipeline:
+  // - MONSTER_DEFEATED enqueues it after queueing rewards
+  // - APPLY_MONSTER_REWARD enqueues it after clearing activeMonsterReward
+  // - SET_GHOST_BLADE_EXILE_CARDS enqueues it when clearing exile cards
   const cellWrapperClass = "flex w-full h-full min-w-0 min-h-0";
   const cellInnerClass = "flex w-full h-full dh-grid-cell";
   const updateHeroRowDropHighlight = useCallback((card: GameCardData | null) => {
@@ -2183,6 +1951,8 @@ export default function GameBoard() {
     [selectedHeroSkill],
   );
 
+  // UI-bridge: defensive ref cleanup when graveyard discover state clears
+  // (primary cleanup is at the call sites in useShopHandlers)
   useEffect(() => {
     if (!graveyardDiscoverState) {
       graveyardDiscoverDeliveryRef.current = 'backpack';
@@ -2193,36 +1963,7 @@ export default function GameBoard() {
     }
   }, [graveyardDiscoverState]);
 
-  useEffect(() => {
-    setTurnDamageTaken(0);
-    clearBerserkTurnBuff();
-    setExtraAttackCharges(0);
-    setFlashSlotUsed({});
-    setGambitExtraActive(false);
-    setGambitSlotUsed({});
-    if (suppressTurnAmuletReapplyRef.current) {
-      suppressTurnAmuletReapplyRef.current = false;
-    } else {
-      if (amuletEffects.hasStrength) {
-        setSlotTempAttack(prev => ({
-          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
-          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
-        }));
-        addGameLog('amulet', '力量护符：所有装备栏临时攻击 +4！');
-      }
-      if (amuletEffects.hasBalance) {
-        setSlotTempAttack(prev => ({
-          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
-          equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
-        }));
-        setSlotTempArmor(prev => ({
-          equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
-          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
-        }));
-        addGameLog('amulet', '均衡护符：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1');
-      }
-    }
-  }, [turnCount, clearBerserkTurnBuff]);
+  // [turnCount] effect DELETED — handled by START_TURN reducer in game-core/rules/turn.ts
 
   const heroFrameRef = useRef<HTMLDivElement | null>(null);
   const updateHeroFrameBounds = useCallback(() => {
@@ -2307,239 +2048,11 @@ export default function GameBoard() {
       zIndex: heroFrameHighlightActive ? 25 : 5,
     };
   }, [heroFrameMetrics.padding, heroFramePosition, heroFrameStyle, heroFrameHighlightActive]);
-  const isCombatPanelVisible = combatState.engagedMonsterIds.length > 0;
-  const clampCombatPanelPosition = useCallback(
-    (x: number, y: number, size?: { width: number; height: number }) => {
-      const width = size?.width || combatPanelSize.width || COMBAT_PANEL_DEFAULT_WIDTH;
-      const height = size?.height || combatPanelSize.height || COMBAT_PANEL_DEFAULT_HEIGHT;
-      const maxX = Math.max(COMBAT_PANEL_EDGE_PADDING, gameViewport.width - width - COMBAT_PANEL_EDGE_PADDING);
-      const maxY = Math.max(COMBAT_PANEL_EDGE_PADDING, gameViewport.height - height - COMBAT_PANEL_EDGE_PADDING);
-      return {
-        x: Math.min(Math.max(COMBAT_PANEL_EDGE_PADDING, x), maxX),
-        y: Math.min(Math.max(COMBAT_PANEL_EDGE_PADDING, y), maxY),
-      };
-    },
-    [combatPanelSize.height, combatPanelSize.width, gameViewport.width, gameViewport.height],
-  );
-  const computeDefaultCombatPanelPosition = useCallback(() => {
-    const vpWidth = gameViewport.width;
-    const vpHeight = gameViewport.height;
-    const width = combatPanelSize.width || COMBAT_PANEL_DEFAULT_WIDTH;
-    const height = combatPanelSize.height || COMBAT_PANEL_DEFAULT_HEIGHT;
-    const undoBottom = 16;
-    const undoButtonHeight = 44;
-    const gap = 8;
-    const top = vpHeight - undoBottom - undoButtonHeight - gap - height;
-    const left = vpWidth - width - 16;
-    return clampCombatPanelPosition(left, top, { width, height });
-  }, [clampCombatPanelPosition, combatPanelSize.height, combatPanelSize.width, gameViewport.width, gameViewport.height]);
-  const teardownCombatPanelDrag = useCallback(() => {
-    if (typeof window !== 'undefined' && combatPanelWindowListenersRef.current) {
-      window.removeEventListener('pointermove', combatPanelWindowListenersRef.current.move);
-      window.removeEventListener('pointerup', combatPanelWindowListenersRef.current.up);
-      window.removeEventListener('pointercancel', combatPanelWindowListenersRef.current.up);
-    }
-    combatPanelWindowListenersRef.current = null;
-    combatPanelDragSessionRef.current = null;
-    setIsCombatPanelDragging(false);
-  }, []);
-  useEffect(() => {
-    return () => {
-      teardownCombatPanelDrag();
-    };
-  }, [teardownCombatPanelDrag]);
-  useEffect(() => {
-    if (!isCombatPanelVisible) {
-      teardownCombatPanelDrag();
-      setIsCombatPanelMinimized(true);
-    }
-  }, [isCombatPanelVisible, teardownCombatPanelDrag]);
-  useLayoutEffect(() => {
-    if (!isCombatPanelVisible) {
-      return;
-    }
-    setCombatPanelPosition(prev => {
-      if (prev) {
-        return prev;
-      }
-      const next = computeDefaultCombatPanelPosition();
-      return next ?? prev;
-    });
-  }, [computeDefaultCombatPanelPosition, isCombatPanelVisible]);
-  useLayoutEffect(() => {
-    if (!isCombatPanelVisible) {
-      return;
-    }
-    const target = combatPanelWrapperRef.current;
-    if (!target) {
-      return;
-    }
-    const updateSize = () => {
-      const rect = target.getBoundingClientRect();
-      setCombatPanelSize(prev => {
-        if (Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5) {
-          return prev;
-        }
-        return { width: rect.width, height: rect.height };
-      });
-    };
-    updateSize();
-    if (typeof ResizeObserver === 'undefined') {
-      return;
-    }
-    const observer = new ResizeObserver(entries => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
-      }
-      const { width, height } = entry.contentRect;
-      setCombatPanelSize(prev => {
-        if (Math.abs(prev.width - width) < 0.5 && Math.abs(prev.height - height) < 0.5) {
-          return prev;
-        }
-        return { width, height };
-      });
-    });
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [isCombatPanelVisible, isCombatPanelMinimized]);
-  useEffect(() => {
-    if (!isCombatPanelVisible) {
-      return;
-    }
-    setCombatPanelPosition(prev => {
-      if (!prev) {
-        return prev;
-      }
-      const clamped = clampCombatPanelPosition(prev.x, prev.y);
-      if (Math.abs(clamped.x - prev.x) < 0.5 && Math.abs(clamped.y - prev.y) < 0.5) {
-        return prev;
-      }
-      return clamped;
-    });
-  }, [clampCombatPanelPosition, combatPanelSize.height, combatPanelSize.width, isCombatPanelVisible]);
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const handleResize = () => {
-      if (!isCombatPanelVisible) {
-        return;
-      }
-      setCombatPanelPosition(prev => {
-        if (!prev || !combatPanelHasCustomPositionRef.current) {
-          return computeDefaultCombatPanelPosition() ?? prev;
-        }
-        const clamped = clampCombatPanelPosition(prev.x, prev.y);
-        if (Math.abs(clamped.x - prev.x) < 0.5 && Math.abs(clamped.y - prev.y) < 0.5) {
-          return prev;
-        }
-        return clamped;
-      });
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [clampCombatPanelPosition, computeDefaultCombatPanelPosition, isCombatPanelVisible]);
-  const handleCombatPanelPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!isCombatPanelVisible) {
-        return;
-      }
-      if (event.button !== 0 && event.pointerType !== 'touch') {
-        return;
-      }
-      if (combatPanelDragSessionRef.current) {
-        return;
-      }
-      const resolvedPosition = combatPanelPosition ?? computeDefaultCombatPanelPosition();
-      if (!resolvedPosition) {
-        return;
-      }
-      if (!combatPanelPosition) {
-        setCombatPanelPosition(resolvedPosition);
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      const session = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        originX: resolvedPosition.x,
-        originY: resolvedPosition.y,
-      };
-      combatPanelDragSessionRef.current = session;
-      combatPanelHasCustomPositionRef.current = true;
-      setIsCombatPanelDragging(true);
-      const handlePointerMove = (nativeEvent: PointerEvent) => {
-        if (!combatPanelDragSessionRef.current || nativeEvent.pointerId !== session.pointerId) {
-          return;
-        }
-        nativeEvent.preventDefault();
-        const deltaX = nativeEvent.clientX - session.startX;
-        const deltaY = nativeEvent.clientY - session.startY;
-        const nextPosition = clampCombatPanelPosition(session.originX + deltaX, session.originY + deltaY);
-        setCombatPanelPosition(prev => {
-          if (prev && Math.abs(prev.x - nextPosition.x) < 0.5 && Math.abs(prev.y - nextPosition.y) < 0.5) {
-            return prev;
-          }
-          return nextPosition;
-        });
-      };
-      const handlePointerUp = (nativeEvent: PointerEvent) => {
-        if (!combatPanelDragSessionRef.current || nativeEvent.pointerId !== session.pointerId) {
-          return;
-        }
-        nativeEvent.preventDefault();
-        teardownCombatPanelDrag();
-      };
-      combatPanelWindowListenersRef.current = {
-        move: handlePointerMove,
-        up: handlePointerUp,
-      };
-      window.addEventListener('pointermove', handlePointerMove);
-      window.addEventListener('pointerup', handlePointerUp);
-      window.addEventListener('pointercancel', handlePointerUp);
-    },
-    [
-      clampCombatPanelPosition,
-      combatPanelPosition,
-      computeDefaultCombatPanelPosition,
-      isCombatPanelVisible,
-      teardownCombatPanelDrag,
-    ],
-  );
-  const combatPanelStyle = useMemo<CSSProperties>(() => {
-    const scaledMin = Math.round(135 * stageScale);
-    const scaledMax = Math.round(170 * stageScale);
-    const style: CSSProperties & Record<`--${string}`, string> = {
-        '--combat-panel-width': `clamp(${scaledMin}px, ${11 * stageScale}vw, ${scaledMax}px)`,
-        width: 'min(var(--combat-panel-width), calc(100% - 1.5rem))',
-    };
-    if (combatPanelPosition) {
-      style.left = `${combatPanelPosition.x}px`;
-      style.top = `${combatPanelPosition.y}px`;
-    }
-    return style;
-  }, [combatPanelPosition, stageScale]);
-  const combatPanelWrapperClassName = useMemo(
-    () =>
-      [
-        fullBoardInteractionLocked ? 'pointer-events-none' : 'pointer-events-auto',
-        'absolute z-40 combat-panel-wrapper',
-        isCombatPanelDragging ? 'combat-panel-wrapper--dragging' : '',
-        combatPanelPosition ? '' : COMBAT_PANEL_DEFAULT_POSITION_CLASS,
-      ]
-        .filter(Boolean)
-        .join(' '),
-    [combatPanelPosition, isCombatPanelDragging, fullBoardInteractionLocked],
-  );
 
   const resetDragState = useCallback(() => {
     setDraggedCard(null);
     setDraggedEquipment(null);
     setDraggedCardSource(null);
-    setIsDraggingFromDungeon(false);
-    setIsDraggingToHand(false);
     setHeroRowDropState(null);
     setIsDragSessionActive(false);
     heroFrameDropIntentRef.current = false;
@@ -2572,280 +2085,18 @@ export default function GameBoard() {
   }, [isDragSessionActive, resetDragState]);
 
 
-  const createMonsterRewardOptionId = () => `monster-reward-${Math.random().toString(36).slice(2)}`;
-
-  const generateMonsterRewardOptions = (monster: GameCardData): MonsterRewardOption[] => {
-    if (monster.isBuglet) {
-      const amount = getRandomInt(2, 3);
-      return [{
-        id: createMonsterRewardOptionId(),
-        title: `获得 ${amount} 金币`,
-        description: '小虫子身上掉落的零星金币。',
-        detail: '即时奖励',
-        effect: { type: 'gold', amount },
-      }];
-    }
-
-    const isElite = Boolean(monster.monsterSpecial);
-    const options: MonsterRewardOption[] = [];
-    const usedKeys = new Set<string>();
-    const pushOption = (option?: MonsterRewardOption | null) => {
-      if (!option) {
-        return;
-      }
-      const key = `${option.effect.type}-${option.detail ?? option.title}`;
-      if (usedKeys.has(key)) {
-        return;
-      }
-      usedKeys.add(key);
-      options.push(option);
-    };
-
-    const createSlotBonusOption = (): MonsterRewardOption => {
-      const slotId = Math.random() < 0.5 ? 'equipmentSlot1' : 'equipmentSlot2';
-      const bonusType: keyof SlotPermanentBonus = Math.random() < 0.5 ? 'damage' : 'shield';
-      const amount = 1;
-      const slotLabel = describeSlotLabel(slotId);
-      const statLabel = describeBonusLabel(bonusType);
-      return {
-        id: createMonsterRewardOptionId(),
-        title: `${slotLabel} +${amount} ${statLabel}`,
-        description: '永久强化该装备槽位的基础属性。',
-        detail: '持久增益',
-        effect: { type: 'slotBonus', slotId, bonusType, amount },
-      };
-    };
-
-    const createGoldOption = (): MonsterRewardOption => {
-      const amount = getRandomInt(5, 8);
-      return {
-        id: createMonsterRewardOptionId(),
-        title: `获得 ${amount} 金币`,
-        description: '拾取战场上散落的金币。',
-        detail: '即时奖励',
-        effect: { type: 'gold', amount },
-      };
-    };
-
-    const createHealOption = (): MonsterRewardOption | null => {
-      if (hp >= maxHp) {
-        return null;
-      }
-      const amount = getRandomInt(2, 4);
-      return {
-        id: createMonsterRewardOptionId(),
-        title: `回复 ${amount} 点生命`,
-        description: '抚平战斗中留下的伤痕。',
-        detail: '即时治疗',
-        effect: { type: 'heal', amount },
-      };
-    };
-
-    const createRepairOption = (): MonsterRewardOption | null => {
-      if (!getRepairableEquipmentSlots().length) {
-        return null;
-      }
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '修复 1 点耐久',
-        description: '选择一件武器或护盾，恢复 1 点耐久值。',
-        detail: '装备保养',
-        effect: { type: 'repair', amount: 1, targets: ['weapon', 'shield', 'monster'] },
-      };
-    };
-
-    const createDrawOption = (): MonsterRewardOption | null => {
-      const handTotal = handCards.length + backpackHandFlights.length;
-      if (backpackItems.length === 0 || handTotal >= effectiveHandLimit) {
-        return null;
-      }
-      const amount = 2;
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '从背包抽 2 张牌',
-        description: '快速检索背包里的资源。',
-        detail: '资源调度',
-        effect: { type: 'drawBackpack', amount },
-      };
-    };
-
-    const createDiscoverOption = (): MonsterRewardOption | null => {
-      if (classDeck.length === 0 || backpackItems.length >= backpackCapacity) {
-        return null;
-      }
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '发现一张专属牌',
-        description: '从职业卡牌中挑选新的战术手段。',
-        detail: isElite ? '精英掉落' : '稀有掉落',
-        effect: { type: 'discoverClass' },
-      };
-    };
-
-    const createGraveyardDiscoverOption = (): MonsterRewardOption | null => {
-      if (!isElite) return null;
-      if (discardedCards.length === 0 || backpackItems.length >= backpackCapacity) {
-        return null;
-      }
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '发现一张坟场牌',
-        description: '从坟场中挑选一张卡牌放入背包。',
-        detail: '精英掉落',
-        effect: { type: 'discoverGraveyard' },
-      };
-    };
-
-    const createMaxHpOption = (): MonsterRewardOption => {
-      const amount = Math.random() < 0.5 ? 2 : 3;
-      return {
-        id: createMonsterRewardOptionId(),
-        title: `最大生命 +${amount}`,
-        description: '淬炼体魄，扩张体能上限。',
-        detail: '永久增益',
-        effect: { type: 'maxHp', amount },
-      };
-    };
-
-    const createBackpackCapacityOption = (): MonsterRewardOption => {
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '背包上限 +1',
-        description: '扩展背包空间，容纳更多物资。',
-        detail: '永久增益',
-        effect: { type: 'backpackCapacity', amount: 1 },
-      };
-    };
-
-    const createSpellDamageOption = (): MonsterRewardOption => {
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '法术伤害 +1',
-        description: '聚焦奥术，让法术造成更多伤害。',
-        detail: '永久增益',
-        effect: { type: 'spellDamage', amount: 1 },
-      };
-    };
-
-    const createSpellLifestealOption = (): MonsterRewardOption => {
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '超杀吸血 +1',
-        description: '汲取超杀的力量，将溢出伤害转化为治疗。',
-        detail: '永久增益',
-        effect: { type: 'spellLifesteal', amount: 1 },
-      };
-    };
-
-    const createStunCapOption = (): MonsterRewardOption => {
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '击晕上限 +5%',
-        description: '强化精神力，提高击晕怪物的概率上限。',
-        detail: '永久增益',
-        effect: { type: 'stunCap', amount: 5 },
-      };
-    };
-
-    const createUpgradeOption = (): MonsterRewardOption | null => {
-      const hasUpgradeable =
-        handCards.some(c => isUpgradeableCard(c) && !isCardAtMaxUpgrade(c))
-        || [equipmentSlot1, equipmentSlot2].some(c => c != null && isUpgradeableCard(c) && !isCardAtMaxUpgrade(c))
-        || amuletSlots.some(c => isUpgradeableCard(c) && !isCardAtMaxUpgrade(c));
-      if (!hasUpgradeable) return null;
-      return {
-        id: createMonsterRewardOptionId(),
-        title: '升级一张牌',
-        description: '选择一张可升级的卡牌，提升其品质。',
-        detail: '战术强化',
-        effect: { type: 'upgradeCard' },
-      };
-    };
-
-    pushOption(createSlotBonusOption());
-    pushOption(createSlotBonusOption());
-    pushOption(createGoldOption());
-    pushOption(createHealOption());
-    pushOption(createRepairOption());
-    pushOption(createDrawOption());
-    if (isElite || Math.random() < 0.10) {
-      pushOption(createDiscoverOption());
-    }
-    pushOption(createGraveyardDiscoverOption());
-    pushOption(createMaxHpOption());
-    if (Math.random() < 0.25) {
-      pushOption(createUpgradeOption());
-    }
-    if (Math.random() < 0.15) {
-      pushOption(createSpellDamageOption());
-    }
-    if (Math.random() < 0.15) {
-      pushOption(createSpellLifestealOption());
-    }
-    if (Math.random() < 0.15) {
-      pushOption(createStunCapOption());
-    }
-    if (Math.random() < 0.15) {
-      pushOption(createBackpackCapacityOption());
-    }
-    if (Math.random() < 0.15) {
-      pushOption({
-        id: createMonsterRewardOptionId(),
-        title: '劝降成功率 +5%',
-        description: '提升交涉能力，劝降怪物的成功率提高。',
-        detail: '永久增益',
-        effect: { type: 'persuadeRateBonus', amount: 5 },
-      });
-    }
-    if (!gs.statSwapCardObtained && Math.random() < 0.03) {
-      pushOption({
-        id: createMonsterRewardOptionId(),
-        title: '获得魔法卡「颠倒乾坤」',
-        description: '永久魔法（Perm 2）：选择一个怪物，将其攻击和血量上限对换。侧击：50% 击晕。',
-        detail: '极稀有掉落',
-        effect: { type: 'grantStatSwapCard' },
-      });
-    }
-
-    const pool = [...options];
-    const selected: MonsterRewardOption[] = [];
-    while (selected.length < 2 && pool.length > 0) {
-      const index = Math.floor(Math.random() * pool.length);
-      const [option] = pool.splice(index, 1);
-      if (option) {
-        selected.push(option);
-      }
-    }
-    while (selected.length < 2) {
-      selected.push(createGoldOption());
-    }
-    return selected;
-  };
-
   const getMonsterRewardsPreview = useCallback(
     (monster: GameCardData): MonsterRewardOption[] => {
-      const cached = monsterRewardPreviewCacheRef.current[monster.id];
-      if (cached) {
-        return cached;
-      }
-      const generated = generateMonsterRewardOptions(monster);
-      monsterRewardPreviewCacheRef.current = {
-        ...monsterRewardPreviewCacheRef.current,
-        [monster.id]: generated,
-      };
-      return generated;
+      const cached = engine.getState().monsterRewardPreviewCache[monster.id];
+      if (cached) return cached;
+      // Cache miss (e.g. legacy save before the pre-generation fix). Generate
+      // and cache via the reducer so it survives undo and matches the actual
+      // reward when this monster dies.
+      dispatch({ type: 'CACHE_MONSTER_REWARD_PREVIEW', monster });
+      return engine.getState().monsterRewardPreviewCache[monster.id] ?? [];
     },
-    [generateMonsterRewardOptions],
+    [engine, dispatch],
   );
-
-  const forgetMonsterRewardsPreview = useCallback((monsterId: string) => {
-    if (!monsterRewardPreviewCacheRef.current[monsterId]) {
-      return;
-    }
-    const next = { ...monsterRewardPreviewCacheRef.current };
-    delete next[monsterId];
-    monsterRewardPreviewCacheRef.current = next;
-  }, []);
 
   const handleCardClick = useCallback(
     (card: GameCardData) => {
@@ -2853,9 +2104,9 @@ export default function GameBoard() {
       setSelectedCard(card);
       if (card.type === 'monster') {
         const preview = getMonsterRewardsPreview(card);
-        setSelectedMonsterRewards(preview);
+        dispatch({ type: 'SET_SELECTED_MONSTER_REWARDS', options: preview });
       } else {
-        setSelectedMonsterRewards(null);
+        (null);
       }
       setDetailsModalOpen(true);
     },
@@ -2865,7 +2116,7 @@ export default function GameBoard() {
   const handleDetailsModalChange = useCallback((open: boolean) => {
     setDetailsModalOpen(open);
     if (!open) {
-      setSelectedMonsterRewards(null);
+      (null);
     }
   }, []);
 
@@ -2886,10 +2137,10 @@ export default function GameBoard() {
       addGameLog('amulet', `弃牌雷击对 ${monster.name} 造成 ${flight.damage} 点伤害`);
       dealDamageToMonster(monster, flight.damage, { pulses: flight.pulses });
       if (flight.showBanner) {
-        setHeroSkillBanner(`${monster.name} 被弃牌雷击击中，受到 ${flight.damage} 点伤害。`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${monster.name} 被弃牌雷击击中，受到 ${flight.damage} 点伤害。` });
       }
     },
-    [addGameLog, dealDamageToMonster, setHeroSkillBanner],
+    [addGameLog, dealDamageToMonster],
   );
   applyDiscardShockHitRef.current = applyDiscardShockHit;
 
@@ -3052,264 +2303,7 @@ export default function GameBoard() {
     [amuletSlots, startDiscardShockFlightAnimation],
   );
 
-  const updateDirectedCombatFxFlightAnimation = useCallback((timestamp: number) => {
-    const flights = directedCombatFxFlightsRef.current;
-    if (!flights.length) {
-      directedCombatFxFlightAnimationRef.current = null;
-      return;
-    }
-    for (let i = 0; i < flights.length; i++) {
-      const flight = flights[i];
-      const elapsed = timestamp - flight.startTime;
-      const progress = elapsed < 0 ? 0 : clamp(elapsed / flight.duration);
-      flight.progress = progress;
-      const projectileSize =
-        flight.kind === 'shield-reflect'
-          ? DIRECTED_REFLECT_PROJECTILE_SIZE
-          : flight.kind === 'arcane-blade-spell'
-            ? DIRECTED_ARCANE_PROJECTILE_SIZE
-            : flight.kind === 'golem-layer-reflect'
-              ? DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE
-              : flight.kind === 'dragon-breath'
-                ? DIRECTED_DRAGON_BREATH_PROJECTILE_SIZE
-                : DIRECTED_RETALIATION_PROJECTILE_SIZE;
-      const el = directedCombatFxElementMapRef.current.get(flight.id);
-      if (el) {
-        const eased = easeInOutCubic(clamp(progress));
-        const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
-        const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
-        const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
-        const y = linearY - arcOffset;
-        const isArcane = flight.kind === 'arcane-blade-spell';
-        const scale = isArcane ? 0.6 + eased * 0.5 : 0.78 + eased * 0.35;
-        const fadeIn = eased < 0.08 ? clamp(eased / 0.08) : 1;
-        const fadeOut = eased > 0.88 ? clamp(1 - (eased - 0.88) / 0.12) : 1;
-        el.style.transform = `translate(${x - projectileSize / 2}px, ${y - projectileSize / 2}px) scale(${scale})`;
-        el.style.opacity = String(fadeIn * fadeOut);
-      }
-    }
-    const remaining = flights.filter(f => f.progress < 1);
-    if (remaining.length !== flights.length) {
-      directedCombatFxFlightsRef.current = remaining;
-      setDirectedCombatFxFlights(remaining);
-    }
-    if (remaining.length > 0) {
-      directedCombatFxFlightAnimationRef.current = window.requestAnimationFrame(updateDirectedCombatFxFlightAnimation);
-    } else {
-      directedCombatFxFlightAnimationRef.current = null;
-    }
-  }, []);
-
-  const startDirectedCombatFxFlightAnimation = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    if (directedCombatFxFlightAnimationRef.current !== null) return;
-    directedCombatFxFlightAnimationRef.current = window.requestAnimationFrame(updateDirectedCombatFxFlightAnimation);
-  }, [updateDirectedCombatFxFlightAnimation]);
-
-  const tryStartShieldReflectDirectedFx = useCallback(
-    (slotId: EquipmentSlotId, monsterId: string): boolean => {
-      if (typeof window === 'undefined') return false;
-      const surfaceEl = gameSurfaceRef.current;
-      const equipIdx =
-        slotId === 'equipmentSlot1' ? HERO_ROW_EQUIPMENT_1_INDEX : HERO_ROW_EQUIPMENT_2_INDEX;
-      const equipCell = heroRowCellRefs.current[equipIdx];
-      const monsterCell = monsterCellRefs.current[monsterId];
-      if (!surfaceEl || !equipCell || !monsterCell) {
-        return false;
-      }
-      const surfaceRect = surfaceEl.getBoundingClientRect();
-      const startRect = equipCell.getBoundingClientRect();
-      const endRect = monsterCell.getBoundingClientRect();
-      const baseTime = performance.now();
-      const start: Point = {
-        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 8,
-        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 8,
-      };
-      const end: Point = {
-        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 12,
-        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 12,
-      };
-      const flight: DirectedCombatFxFlight = {
-        id: `shield-reflect-${monsterId}-${baseTime}`,
-        kind: 'shield-reflect',
-        start,
-        end,
-        startTime: baseTime,
-        duration: animSpeed(Math.max(380, SHIELD_REFLECT_ANIM_MS - 80 + Math.random() * 60)),
-        progress: 0,
-        arcHeight: 32 + Math.random() * 48,
-      };
-      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
-      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
-      startDirectedCombatFxFlightAnimation();
-      return true;
-    },
-    [startDirectedCombatFxFlightAnimation],
-  );
-
-  const tryStartBossRetaliationDirectedFx = useCallback(
-    (monsterId: string): boolean => {
-      if (typeof window === 'undefined') return false;
-      const surfaceEl = gameSurfaceRef.current;
-      const monsterCell = monsterCellRefs.current[monsterId];
-      const heroCell = heroRowCellRefs.current[HERO_ROW_HERO_INDEX];
-      if (!surfaceEl || !monsterCell || !heroCell) {
-        return false;
-      }
-      const surfaceRect = surfaceEl.getBoundingClientRect();
-      const startRect = monsterCell.getBoundingClientRect();
-      const endRect = heroCell.getBoundingClientRect();
-      const baseTime = performance.now();
-      const start: Point = {
-        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
-        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
-      };
-      const end: Point = {
-        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
-        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
-      };
-      const flight: DirectedCombatFxFlight = {
-        id: `boss-retaliation-${monsterId}-${baseTime}`,
-        kind: 'boss-retaliation',
-        start,
-        end,
-        startTime: baseTime,
-        duration: animSpeed(Math.max(360, BOSS_RETALIATION_ANIM_MS - 80 + Math.random() * 50)),
-        progress: 0,
-        arcHeight: 36 + Math.random() * 52,
-      };
-      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
-      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
-      startDirectedCombatFxFlightAnimation();
-      return true;
-    },
-    [startDirectedCombatFxFlightAnimation],
-  );
-
-  const tryStartGolemLayerReflectFx = useCallback(
-    (monsterId: string): boolean => {
-      if (typeof window === 'undefined') return false;
-      const surfaceEl = gameSurfaceRef.current;
-      const monsterCell = monsterCellRefs.current[monsterId];
-      const heroCell = heroRowCellRefs.current[HERO_ROW_HERO_INDEX];
-      if (!surfaceEl || !monsterCell || !heroCell) {
-        return false;
-      }
-      const surfaceRect = surfaceEl.getBoundingClientRect();
-      const startRect = monsterCell.getBoundingClientRect();
-      const endRect = heroCell.getBoundingClientRect();
-      const baseTime = performance.now();
-      const start: Point = {
-        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
-        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
-      };
-      const end: Point = {
-        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
-        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
-      };
-      const flight: DirectedCombatFxFlight = {
-        id: `golem-layer-reflect-${monsterId}-${baseTime}`,
-        kind: 'golem-layer-reflect',
-        start,
-        end,
-        startTime: baseTime,
-        duration: animSpeed(Math.max(320, GOLEM_LAYER_REFLECT_ANIM_MS - 60 + Math.random() * 40)),
-        progress: 0,
-        arcHeight: 40 + Math.random() * 48,
-      };
-      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
-      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
-      startDirectedCombatFxFlightAnimation();
-      return true;
-    },
-    [startDirectedCombatFxFlightAnimation],
-  );
-
-  const tryStartArcaneBladeSpellFx = useCallback(
-    (slotId: EquipmentSlotId, monsterId: string): boolean => {
-      if (typeof window === 'undefined') return false;
-      const surfaceEl = gameSurfaceRef.current;
-      const equipIdx =
-        slotId === 'equipmentSlot1' ? HERO_ROW_EQUIPMENT_1_INDEX : HERO_ROW_EQUIPMENT_2_INDEX;
-      const equipCell = heroRowCellRefs.current[equipIdx];
-      const monsterCell = monsterCellRefs.current[monsterId];
-      if (!surfaceEl || !equipCell || !monsterCell) {
-        return false;
-      }
-      const surfaceRect = surfaceEl.getBoundingClientRect();
-      const startRect = equipCell.getBoundingClientRect();
-      const endRect = monsterCell.getBoundingClientRect();
-      const baseTime = performance.now();
-      const start: Point = {
-        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 6,
-        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 6,
-      };
-      const end: Point = {
-        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
-        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
-      };
-      const flight: DirectedCombatFxFlight = {
-        id: `arcane-blade-spell-${monsterId}-${baseTime}`,
-        kind: 'arcane-blade-spell',
-        start,
-        end,
-        startTime: baseTime,
-        duration: animSpeed(Math.max(350, ARCANE_BLADE_SPELL_ANIM_MS - 60 + Math.random() * 50)),
-        progress: 0,
-        arcHeight: 28 + Math.random() * 40,
-      };
-      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
-      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
-      startDirectedCombatFxFlightAnimation();
-      return true;
-    },
-    [startDirectedCombatFxFlightAnimation],
-  );
-
-  const tryStartDragonBreathFx = useCallback(
-    (monsterId: string, targetSlotId: EquipmentSlotId | 'hero'): boolean => {
-      if (typeof window === 'undefined') return false;
-      const surfaceEl = gameSurfaceRef.current;
-      const monsterCell = monsterCellRefs.current[monsterId];
-      const targetIdx =
-        targetSlotId === 'hero'
-          ? HERO_ROW_HERO_INDEX
-          : targetSlotId === 'equipmentSlot1'
-            ? HERO_ROW_EQUIPMENT_1_INDEX
-            : HERO_ROW_EQUIPMENT_2_INDEX;
-      const targetCell = heroRowCellRefs.current[targetIdx];
-      if (!surfaceEl || !monsterCell || !targetCell) {
-        return false;
-      }
-      const surfaceRect = surfaceEl.getBoundingClientRect();
-      const startRect = monsterCell.getBoundingClientRect();
-      const endRect = targetCell.getBoundingClientRect();
-      const baseTime = performance.now();
-      const start: Point = {
-        x: startRect.left + startRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
-        y: startRect.top + startRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
-      };
-      const end: Point = {
-        x: endRect.left + endRect.width / 2 - surfaceRect.left + (Math.random() - 0.5) * 10,
-        y: endRect.top + endRect.height / 2 - surfaceRect.top + (Math.random() - 0.5) * 10,
-      };
-      const flight: DirectedCombatFxFlight = {
-        id: `dragon-breath-${monsterId}-${baseTime}`,
-        kind: 'dragon-breath',
-        start,
-        end,
-        startTime: baseTime,
-        duration: animSpeed(Math.max(360, DRAGON_BREATH_ANIM_MS - 80 + Math.random() * 50)),
-        progress: 0,
-        arcHeight: 36 + Math.random() * 48,
-      };
-      directedCombatFxFlightsRef.current = [...directedCombatFxFlightsRef.current, flight];
-      setDirectedCombatFxFlights(directedCombatFxFlightsRef.current);
-      startDirectedCombatFxFlightAnimation();
-      return true;
-    },
-    [startDirectedCombatFxFlightAnimation],
-  );
+  // Directed combat FX (shield reflect, boss retaliation, etc.) now managed by useDirectedCombatFx hook
 
   const flushDiscardShockQueue = useCallback(() => {
     const bumpLock = () => {
@@ -3340,7 +2334,9 @@ export default function GameBoard() {
     }
 
     const { showBanner } = queue.shift()!;
-    const target = monsters[Math.floor(Math.random() * monsters.length)];
+    let rng = engine.getState().rng;
+    const [target, rng2] = pickRandom(monsters, rng); rng = rng2;
+    dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
     const dmg = Math.max(0, 1 + permanentSpellDamageBonus);
 
     discardShockSeqInFlightRef.current = true;
@@ -3353,7 +2349,7 @@ export default function GameBoard() {
       addGameLog('amulet', `弃牌雷击对 ${target.name} 造成 ${dmg} 点伤害`);
       dealDamageToMonster(target, dmg, { pulses: 2 });
       if (showBanner) {
-        setHeroSkillBanner(`${target.name} 被弃牌雷击击中，受到 ${dmg} 点伤害。`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${target.name} 被弃牌雷击击中，受到 ${dmg} 点伤害。` });
       }
       queueMicrotask(() => {
         flushDiscardShockQueueRef.current();
@@ -3367,14 +2363,265 @@ export default function GameBoard() {
     clearUndoStorage,
     dealDamageToMonster,
     permanentSpellDamageBonus,
-    setHeroSkillBanner,
-    setUndoCount,
-    tryStartDiscardShockFlight,
-  ]);
+    tryStartDiscardShockFlight]);
 
   useLayoutEffect(() => {
     flushDiscardShockQueueRef.current = flushDiscardShockQueue;
   }, [flushDiscardShockQueue]);
+
+  // ---------------------------------------------------------------------------
+  // 弧能之符 (flip-zap) animation pipeline — mirrors the discard-shock pipeline
+  // above, but is triggered by `card:flipShock` (one independent zap per equipped
+  // 弧能之符 amulet, fired on every APPLY_CARD_FLIP). Damage is spell-damage and
+  // scales with permanentSpellDamageBonus, just like discard-zap.
+  // ---------------------------------------------------------------------------
+
+  const applyFlipShockHit = useCallback(
+    (flight: DiscardShockFlight) => {
+      const row = activeCardsLatestRef.current;
+      const monster = flattenActiveRowSlots(row).find(
+        (c): c is GameCardData =>
+          Boolean(c && c.type === 'monster' && c.id === flight.targetMonsterId),
+      );
+      if (!monster) {
+        return;
+      }
+      if (flight.damage > 0 && !engagedMonsterIdsRef.current.includes(monster.id)) {
+        beginCombatRef.current(monster, 'hero');
+      }
+      addGameLog('amulet', `弧能之符对 ${monster.name} 造成 ${flight.damage} 点法术伤害`);
+      dealDamageToMonster(monster, flight.damage, { pulses: flight.pulses, isSpellDamage: true });
+      if (flight.showBanner) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${monster.name} 被弧能之符击中，受到 ${flight.damage} 点法术伤害。` });
+      }
+    },
+    [addGameLog, dealDamageToMonster],
+  );
+  applyFlipShockHitRef.current = applyFlipShockHit;
+
+  const syncFlipShockInteractionLock = useCallback(() => {
+    const busy =
+      flipShockProcQueueRef.current.length > 0 ||
+      flipShockSeqInFlightRef.current ||
+      flipShockFlightsRef.current.length > 0;
+    setFlipShockInteractionLocked(busy);
+  }, [setFlipShockInteractionLocked]);
+
+  const syncFlipShockInteractionLockRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    syncFlipShockInteractionLockRef.current = syncFlipShockInteractionLock;
+  }, [syncFlipShockInteractionLock]);
+
+  const updateFlipShockFlightAnimation = useCallback(
+    (timestamp: number) => {
+      const flights = flipShockFlightsRef.current;
+      if (!flights.length) {
+        flipShockFlightAnimationRef.current = null;
+        syncFlipShockInteractionLockRef.current();
+        return;
+      }
+
+      let hasActive = false;
+      const toHit: DiscardShockFlight[] = [];
+      let hasCompleted = false;
+      const projectileSize = DISCARD_SHOCK_PROJECTILE_SIZE;
+
+      for (let i = 0; i < flights.length; i++) {
+        const flight = flights[i];
+        const elapsed = timestamp - flight.startTime;
+        let progress: number;
+        if (elapsed < 0) {
+          hasActive = true;
+          progress = 0;
+        } else {
+          progress = clamp(elapsed / flight.duration);
+        }
+        flight.progress = progress;
+        if (progress < 1) {
+          hasActive = true;
+          if (!flight.delivered && progress >= 0.88) {
+            toHit.push(flight);
+            flight.delivered = true;
+          }
+        } else {
+          if (!flight.delivered) {
+            toHit.push(flight);
+            flight.delivered = true;
+          }
+          hasCompleted = true;
+        }
+
+        const el = flipShockElementMapRef.current.get(flight.id);
+        if (el) {
+          const eased = easeInOutCubic(clamp(progress));
+          const x = flight.start.x + (flight.end.x - flight.start.x) * eased;
+          const linearY = flight.start.y + (flight.end.y - flight.start.y) * eased;
+          const arcOffset = Math.sin(Math.PI * eased) * flight.arcHeight;
+          const y = linearY - arcOffset;
+          const scale = 0.78 + eased * 0.35;
+          const fadeIn = eased < 0.08 ? clamp(eased / 0.08) : 1;
+          const fadeOut = eased > 0.88 ? clamp(1 - (eased - 0.88) / 0.12) : 1;
+          el.style.transform = `translate(${x - projectileSize / 2}px, ${y - projectileSize / 2}px) scale(${scale})`;
+          el.style.opacity = String(fadeIn * fadeOut);
+        }
+      }
+
+      toHit.forEach(f => applyFlipShockHit(f));
+
+      if (hasCompleted) {
+        const prevLen = flights.length;
+        const remaining = flights.filter(f => f.progress < 1);
+        flipShockFlightsRef.current = remaining;
+        setFlipShockFlights(remaining);
+        if (remaining.length < prevLen) {
+          flipShockSeqInFlightRef.current = false;
+          queueMicrotask(() => {
+            flushFlipShockQueueRef.current();
+            syncFlipShockInteractionLockRef.current();
+          });
+        }
+      }
+
+      if (hasActive && flipShockFlightsRef.current.length > 0) {
+        flipShockFlightAnimationRef.current = window.requestAnimationFrame(updateFlipShockFlightAnimation);
+      } else {
+        flipShockFlightAnimationRef.current = null;
+        syncFlipShockInteractionLockRef.current();
+      }
+    },
+    [applyFlipShockHit, setFlipShockFlights],
+  );
+
+  const startFlipShockFlightAnimation = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (flipShockFlightAnimationRef.current !== null) return;
+    flipShockFlightAnimationRef.current = window.requestAnimationFrame(updateFlipShockFlightAnimation);
+  }, [updateFlipShockFlightAnimation]);
+
+  const tryStartFlipShockFlight = useCallback(
+    (targetMonsterId: string, damage: number, pulses: number, showBanner: boolean): boolean => {
+      if (typeof window === 'undefined') return false;
+      const surfaceEl = gameSurfaceRef.current;
+      const amuletCell = heroRowCellRefs.current[HERO_ROW_AMULET_INDEX];
+      const monsterCell = monsterCellRefs.current[targetMonsterId];
+      if (!surfaceEl || !amuletCell || !monsterCell) {
+        return false;
+      }
+      const surfaceRect = surfaceEl.getBoundingClientRect();
+      const amuletRect = amuletCell.getBoundingClientRect();
+      const monsterRect = monsterCell.getBoundingClientRect();
+      const baseTime = performance.now();
+      const start: Point = {
+        x:
+          amuletRect.left +
+          amuletRect.width / 2 -
+          surfaceRect.left +
+          (Math.random() - 0.5) * 10,
+        y:
+          amuletRect.top +
+          amuletRect.height / 2 -
+          surfaceRect.top +
+          (Math.random() - 0.5) * 8,
+      };
+      const end: Point = {
+        x:
+          monsterRect.left +
+          monsterRect.width / 2 -
+          surfaceRect.left +
+          (Math.random() - 0.5) * 14,
+        y:
+          monsterRect.top +
+          monsterRect.height / 2 -
+          surfaceRect.top +
+          (Math.random() - 0.5) * 14,
+      };
+      const zapAmulet = amuletSlots.find(a => a.amuletEffect === 'flip-zap');
+      const flight: DiscardShockFlight = {
+        id: `flip-shock-${targetMonsterId}-${baseTime}-${Math.random().toString(36).slice(2, 6)}`,
+        targetMonsterId,
+        start,
+        end,
+        startTime: baseTime,
+        duration: animSpeed(DISCARD_SHOCK_FLIGHT_BASE_DURATION + Math.random() * DISCARD_SHOCK_FLIGHT_VARIANCE),
+        progress: 0,
+        arcHeight: DISCARD_SHOCK_ARC_MIN + Math.random() * DISCARD_SHOCK_ARC_VARIANCE,
+        damage,
+        pulses,
+        projectileImage: zapAmulet?.image,
+        showBanner,
+      };
+      flipShockFlightsRef.current = [...flipShockFlightsRef.current, flight];
+      setFlipShockFlights(flipShockFlightsRef.current);
+      startFlipShockFlightAnimation();
+      return true;
+    },
+    [amuletSlots, setFlipShockFlights, startFlipShockFlightAnimation],
+  );
+
+  const flushFlipShockQueue = useCallback(() => {
+    const bumpLock = () => {
+      syncFlipShockInteractionLockRef.current();
+    };
+    if (flipShockSeqInFlightRef.current) {
+      bumpLock();
+      return;
+    }
+    const queue = flipShockProcQueueRef.current;
+    if (queue.length === 0) {
+      bumpLock();
+      return;
+    }
+
+    if (!engine.getState().amuletSlots.some(s => s?.amuletEffect === 'flip-zap')) {
+      flipShockProcQueueRef.current = [];
+      bumpLock();
+      return;
+    }
+    const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
+      (c): c is GameCardData => isDamageableTarget(c),
+    );
+    if (monsters.length === 0) {
+      flipShockProcQueueRef.current = [];
+      bumpLock();
+      return;
+    }
+
+    const { showBanner } = queue.shift()!;
+    let rng = engine.getState().rng;
+    const [target, rng2] = pickRandom(monsters, rng); rng = rng2;
+    dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+    const dmg = Math.max(0, 1 + permanentSpellDamageBonus);
+
+    flipShockSeqInFlightRef.current = true;
+    const started = tryStartFlipShockFlight(target.id, dmg, 2, showBanner);
+    if (!started) {
+      flipShockSeqInFlightRef.current = false;
+      if (dmg > 0 && !engagedMonsterIdsRef.current.includes(target.id)) {
+        beginCombatRef.current(target, 'hero');
+      }
+      addGameLog('amulet', `弧能之符对 ${target.name} 造成 ${dmg} 点法术伤害`);
+      dealDamageToMonster(target, dmg, { pulses: 2, isSpellDamage: true });
+      if (showBanner) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${target.name} 被弧能之符击中，受到 ${dmg} 点法术伤害。` });
+      }
+      queueMicrotask(() => {
+        flushFlipShockQueueRef.current();
+        syncFlipShockInteractionLockRef.current();
+      });
+    } else {
+      bumpLock();
+    }
+  }, [
+    addGameLog,
+    dealDamageToMonster,
+    engine,
+    permanentSpellDamageBonus,
+    tryStartFlipShockFlight,
+  ]);
+
+  useLayoutEffect(() => {
+    flushFlipShockQueueRef.current = flushFlipShockQueue;
+  }, [flushFlipShockQueue]);
 
   const dragonBleedDestroyEquipment = (monsterName: string, remainingLayers: number) => {
     const destroySlot = (slotId: 'equipmentSlot1' | 'equipmentSlot2', item: EquipmentItem | null) => {
@@ -3387,7 +2634,7 @@ export default function GameBoard() {
           addGameLog('equip', `${card.name} 遗言：恢复了 ${card.onDestroyHeal} 点生命`);
         }
         if (card.onDestroyGold) {
-          setGold(prev => prev + card.onDestroyGold!);
+          dispatch({ type: 'MODIFY_GOLD', delta: card.onDestroyGold!, source: 'equipment-destroy-gold' });
           addGameLog('equip', `${card.name} 遗言：获得了 ${card.onDestroyGold} 金币`);
         }
         if (card.onDestroyDraw) {
@@ -3395,11 +2642,7 @@ export default function GameBoard() {
           addGameLog('equip', `${card.name} 遗言：抽取了 ${card.onDestroyDraw} 张牌`);
         }
         if (card.onDestroyClassDraw) {
-          const drawn = drawClassCardsToBackpack(card.onDestroyClassDraw, `${card.name}-遗言`);
-          if (drawn.length > 0) {
-            triggerClassDeckFlight(drawn);
-            addGameLog('equip', `${card.name} 遗言：获得专属卡「${drawn.map(c => c.name).join('、')}」`);
-          }
+          drawClassCardsToBackpack(card.onDestroyClassDraw, `${card.name}-遗言`);
         }
         if (card.onDestroyPermanentDamage) {
           setEquipmentSlotBonus(slotId, 'damage', cur => cur + card.onDestroyPermanentDamage!);
@@ -3412,12 +2655,12 @@ export default function GameBoard() {
         if (card.onDestroyEffect) {
           if (card.onDestroyEffect === 'graveyard-to-hand') {
             const graveyard = engine.getState().discardedCards;
-            if (graveyard.length > 0) {
-              const idx = Math.floor(Math.random() * graveyard.length);
-              const picked = graveyard[idx];
-              setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-              queueCardIntoHand(picked, 'graveyard');
-              addGameLog('equip', `${card.name} 遗言：从坟场获得了「${picked.name}」！`);
+            const pick = pickGraveyardCardExcluding(graveyard, card.id, engine.getState().rng);
+            if (pick) {
+              dispatch({ type: 'SET_GAME_FLAGS', patch: { rng: pick.rng } });
+              dispatch({ type: 'UPDATE_DISCARDED_CARDS', updater: prev => prev.filter((_, i) => i !== pick.idx) });
+              queueCardIntoHand(pick.picked, 'graveyard');
+              addGameLog('equip', `${card.name} 遗言：从坟场获得了「${pick.picked.name}」！`);
             } else {
               addGameLog('equip', `${card.name} 遗言：坟场没有可用的牌。`);
             }
@@ -3436,8 +2679,7 @@ export default function GameBoard() {
           addGameLog('equip', `${card.name} 复生！以 1 耐久复活！`);
           addGameLog('combat', `${monsterName} 流血破甲：攻击「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}），但它复生了！`);
         } else {
-          if (slotId === 'equipmentSlot1') setEquipmentSlot1(null);
-          else setEquipmentSlot2(null);
+          dispatch({ type: 'SET_EQUIPMENT_SLOT', slotId: slotId as 'equipmentSlot1' | 'equipmentSlot2', card: null });
           disposeOwnedEquipmentCard(card, { isDestruction: true });
           addGameLog('combat', `${monsterName} 流血破甲：破坏了「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}）！`);
           const skelOtherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -3446,7 +2688,7 @@ export default function GameBoard() {
             && (!(skelOtherItem as GameCardData).hasRevive || (skelOtherItem as GameCardData).reviveUsed)) {
             setEquipmentSlotById(skelOtherSlotId, { ...skelOtherItem, hasRevive: true, reviveUsed: false } as EquipmentItem);
             addGameLog('equip', `${skelOtherItem.name} 亡骨轮回：获得了「复生」！`);
-            setHeroSkillBanner(`${skelOtherItem.name} 亡骨轮回！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${skelOtherItem.name} 亡骨轮回！` });
           }
         }
         return true;
@@ -3456,12 +2698,13 @@ export default function GameBoard() {
     const d1 = destroySlot('equipmentSlot1', equipmentSlot1);
     const d2 = destroySlot('equipmentSlot2', equipmentSlot2);
     if (d1 || d2) {
-      setHeroSkillBanner(`${monsterName} 流血破甲！高耐久装备被破坏！`);
+      dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${monsterName} 流血破甲！高耐久装备被破坏！` });
     }
   };
 
   const triggerDiscardShock = useCallback(() => {
-    if (!engine.getState().amuletSlots.some(s => s?.amuletEffect === 'discard-zap')) {
+    const s = engine.getState();
+    if (!s.amuletSlots.some(slot => slot?.amuletEffect === 'discard-zap')) {
       return;
     }
     const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
@@ -3471,11 +2714,32 @@ export default function GameBoard() {
       return;
     }
     const showBanner =
-      !pendingHeroSkillAction && !pendingMagicAction && !pendingPotionAction;
+      !s.pendingHeroSkillAction && !s.pendingMagicAction && !s.pendingPotionAction;
     discardShockProcQueueRef.current.push({ showBanner });
     flushDiscardShockQueueRef.current();
     syncDiscardShockInteractionLockRef.current();
-  }, [pendingHeroSkillAction, pendingMagicAction, pendingPotionAction]);
+  }, [engine]);
+
+  const triggerFlipShock = useCallback((count: number) => {
+    if (count <= 0) return;
+    const s = engine.getState();
+    if (!s.amuletSlots.some(slot => slot?.amuletEffect === 'flip-zap')) {
+      return;
+    }
+    const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
+      (c): c is GameCardData => isDamageableTarget(c),
+    );
+    if (monsters.length === 0) {
+      return;
+    }
+    const showBanner =
+      !s.pendingHeroSkillAction && !s.pendingMagicAction && !s.pendingPotionAction;
+    for (let i = 0; i < count; i++) {
+      flipShockProcQueueRef.current.push({ showBanner });
+    }
+    flushFlipShockQueueRef.current();
+    syncFlipShockInteractionLockRef.current();
+  }, [engine]);
 
   const syncMonsterRewardQueuedInstanceIdsRef = useCallback(
     (queue: MonsterRewardDrop[], active: MonsterRewardDrop | null) => {
@@ -3490,15 +2754,7 @@ export default function GameBoard() {
   );
 
   const resetHeroTurnUsage = () => {
-    setCombatState(prev => ({
-      ...prev,
-      heroAttacksThisTurn: {
-        equipmentSlot1: false,
-        equipmentSlot2: false,
-      },
-      heroAttacksRemaining: 2,
-      heroDamageThisTurn: {},
-    }));
+    dispatch({ type: 'RESET_HERO_TURN_USAGE' });
   };
 
   const effectiveHandLimit = HAND_LIMIT + handLimitBonus;
@@ -3519,38 +2775,7 @@ export default function GameBoard() {
     (permanentSkills.includes('Iron Skin') ? 1 : 0) +
     shieldMasterBonus + // Knight class bonus to all shields
     (defensiveStanceActive ? 1 : 0); // Defensive stance damage reduction
-  const heroDetailsStats = {
-    hp,
-    maxHp,
-    gold,
-    attackBonus,
-    defenseBonus,
-    spellDamageBonus: permanentSpellDamageBonus,
-    spellLifesteal: permanentSpellLifesteal,
-    tempShield,
-    permanentMaxHpBonus,
-    stunCap,
-  };
-  const monsterRewardPreviewForModal = useMemo(() => {
-    if (selectedCard?.type !== 'monster' || !selectedMonsterRewards?.length) {
-      return null;
-    }
-    return selectedMonsterRewards.map(option => ({
-      id: option.id,
-      title: option.title,
-      description: option.description,
-      detail: option.detail,
-    }));
-  }, [selectedCard, selectedMonsterRewards]);
-  const heroDetailsSkills = useMemo(() => {
-    const skills: HeroSkillDefinition[] = [];
-    if (selectedHeroSkillDef) skills.push(selectedHeroSkillDef);
-    for (const id of extraHeroSkills) {
-      const def = getHeroSkillById(id);
-      if (def) skills.push(def);
-    }
-    return skills;
-  }, [selectedHeroSkillDef, extraHeroSkills]);
+ 
 
   
 
@@ -3560,128 +2785,31 @@ export default function GameBoard() {
 
 
 
+  // [activeCards] animation bookkeeping — slot-cleared registration is now handled by
+  // postProcessActiveCards in reducer.ts (enqueues REGISTER_DUNGEON_CARD_PROCESSED)
   useEffect(() => {
     const prevSlots = previousActiveCardsRef.current;
     const isInitialSetup = prevSlots.every(s => s === null);
-    const isFreshGame = isInitialSetup && freshGameStartRef.current;
-    if (isFreshGame) {
+    if (isInitialSetup && freshGameStartRef.current) {
       freshGameStartRef.current = false;
     }
-    const newlyLandedMonsters: GameCardData[] = [];
-    for (let column = 0; column < DUNGEON_COLUMN_COUNT; column += 1) {
-      const prevCard = prevSlots[column];
-      const nextCard = activeCards[column];
-      if (prevCard && !nextCard) {
-        if (storingCardIdsRef.current.has(prevCard.id)) {
-          logBackpackDraw('slot-cleared-deferred', { cardId: prevCard.id });
-          continue;
-        }
-        registerDungeonCardProcessed(prevCard.id, 'slot-cleared');
-      }
-      if ((isFreshGame || !isInitialSetup) && (!prevCard || prevCard.isGhost) && nextCard && nextCard.type === 'monster' && (nextCard.enterEffect || nextCard.ogreEnterDiscard)) {
-        newlyLandedMonsters.push(nextCard);
-      }
-    }
     previousActiveCardsRef.current = activeCards;
+  }, [activeCards]);
 
-    if (newlyLandedMonsters.length > 0) {
-      for (const monster of newlyLandedMonsters) {
-        if (monster.enterEffect === 'auto-engage') {
-          const rowMonsters = activeCards.filter(c => c && c.type === 'monster') as GameCardData[];
-          const names = rowMonsters.map(m => m.name);
-          addGameLog('combat', `${monster.name} 入场：整行怪物进入激怒状态！（${names.join('、')}）`);
-          setHeroSkillBanner(`${monster.name} 入场！全体怪物激怒！`);
-          for (const m of rowMonsters) {
-            beginCombat(m, 'hero');
-          }
-        }
-        if (monster.ogreEnterDiscard && handCards.length > 0) {
-          const [discarded] = pickRandomHandCardsForDiscardPreferGraveyard(handCards, 1);
-          setHandCards(prev => prev.filter(c => c.id !== discarded.id));
-          discardCardToGraveyard(discarded, { owner: 'player' });
-          addGameLog('combat', `${monster.name} 蛮力震慑：随机弃回了手牌「${discarded.name}」！`);
-          setHeroSkillBanner(`${monster.name} 震慑！弃回了「${discarded.name}」！`);
-        }
-      }
-    }
-
-    if (isFreshGame || !isInitialSetup) {
-      const rowMonsterCount = activeCards.filter(c => c && c.type === 'monster').length;
-      const hasHordeRageSwarm = activeCards.some(c => c && c.swarmHordeRage && !c.isStunned);
-      if (hasHordeRageSwarm && rowMonsterCount >= 3) {
-        const hasUnbuffed = activeCards.some(c => c && c.type === 'monster' && !c.swarmHordeBuffed);
-        if (hasUnbuffed) {
-          setActiveCards(prev => {
-            const next = prev.map(card => {
-              if (!card || card.type !== 'monster' || card.swarmHordeBuffed) return card;
-              return {
-                ...card,
-                attack: (card.attack ?? card.value) + 3,
-                value: card.value + 3,
-                hp: (card.hp ?? 0) + 3,
-                maxHp: (card.maxHp ?? 0) + 3,
-                swarmHordeBuffed: true,
-              };
-            }) as ActiveRowSlots;
-            return next;
-          });
-          const swarmCard = activeCards.find(c => c && c.swarmHordeRage);
-          const monsterNames = activeCards.filter(c => c && c.type === 'monster').map(c => c!.name);
-          addGameLog('combat', `${swarmCard!.name} 虫群集结！激活行怪物≥3，所有怪物+3攻击+3血量！（${monsterNames.join('、')}）`);
-          setHeroSkillBanner(`虫群集结！全体怪物+3攻击+3血量！`);
-          const rowMonstersToEngage = activeCards.filter(c => c && c.type === 'monster') as GameCardData[];
-          for (const m of rowMonstersToEngage) {
-            if (!isMonsterEngaged(m.id)) {
-              beginCombat(m, 'hero');
-            }
-          }
-        }
-      }
-
-      const isLowGold = gold <= 10;
-      setActiveCards(prev => {
-        let changed = false;
-        const next = prev.map(card => {
-          if (!card || card.type !== 'monster' || !card.eliteLowGoldPower) return card;
-          if (isLowGold && !card.lowGoldBuffActive) {
-            changed = true;
-            addGameLog('combat', `${card.name} 感受到了贪婪的力量！攻击力与血量翻倍！`);
-            setHeroSkillBanner(`${card.name} 贪婪强化！攻击力与血量翻倍！`);
-            return {
-              ...card,
-              attack: (card.attack ?? card.value) * 2,
-              value: card.value * 2,
-              hp: (card.hp ?? 0) * 2,
-              maxHp: (card.maxHp ?? 0) * 2,
-              lowGoldBuffActive: true,
-            };
-          }
-          return card;
-        });
-        return changed ? next : prev;
-      });
-    }
-  }, [activeCards, registerDungeonCardProcessed]);
-
+  // UI-bridge: track backpack-store animation completion and clear storingCardIds ref
   useEffect(() => {
-    if (storingCardIdsRef.current.size === 0) {
-      return;
-    }
+    if (storingCardIdsRef.current.size === 0) return;
     const readyIds: string[] = [];
     storingCardIdsRef.current.forEach(cardId => {
       if (backpackItems.some(card => card.id === cardId)) {
         readyIds.push(cardId);
       }
     });
-    if (!readyIds.length) {
-      return;
-    }
     readyIds.forEach(cardId => {
       storingCardIdsRef.current.delete(cardId);
       logBackpackDraw('backpack-store-ready', { cardId });
-      registerDungeonCardProcessed(cardId, 'backpack-store');
     });
-  }, [backpackItems, registerDungeonCardProcessed]);
+  }, [backpackItems]);
 
 
 
@@ -3912,8 +3040,7 @@ export default function GameBoard() {
         duration,
         progress: 0,
         arcHeight: FATE_SWAP_ARC_HEIGHT,
-      },
-    ];
+      }];
 
     fateSwapFlightsRef.current = [...fateSwapFlightsRef.current, ...flights];
     setFateSwapFlights(fateSwapFlightsRef.current);
@@ -4145,6 +3272,11 @@ export default function GameBoard() {
       });
       cardsToDeliver.forEach(card => {
         clearBackpackHandFallback(card.id);
+        // Reveal the hand slot in the same render that ensures the card is
+        // present — by removing the id from the in-flight store first, the
+        // subsequent React render reads `inFlightCardIds.has(card.id) === false`
+        // and paints the slot with `opacity: 1`, "landing" the card visually.
+        inFlightHandStore.remove(card.id);
         ensureCardInHand(card);
       });
     }
@@ -4241,6 +3373,12 @@ export default function GameBoard() {
         progress: 0,
         arcHeight: BACKPACK_FLIGHT_ARC_MIN + Math.random() * BACKPACK_FLIGHT_ARC_VARIANCE,
       };
+
+      // Mark this card as in-flight in the external store BEFORE the engine
+      // notifies React of the new handCards state. Because HandDisplay reads
+      // both stores via `useSyncExternalStore`, the very first render of the
+      // newly drawn card slot already sees `opacity: 0` — no flash.
+      inFlightHandStore.add(card.id);
 
       backpackHandFlightsRef.current = [...backpackHandFlightsRef.current, flight];
       setBackpackHandFlights(backpackHandFlightsRef.current);
@@ -4482,7 +3620,7 @@ export default function GameBoard() {
     } else {
       initGame();
     }
-    setIsHydrated(true);
+    dispatch({ type: 'SET_HYDRATED' });
   }, []);
 
   useEffect(() => {
@@ -4498,18 +3636,11 @@ export default function GameBoard() {
     };
   }, [adjustShopLevel]);
 
-  const persistedState = useMemo<PersistedGameState>(
-    () => serializeGameState(gs),
-    [gs],
-  );
-
   useEffect(() => {
     if (!isHydrated || gameOver) {
       return;
     }
-    // Cards in-flight (backpack→hand animation) have already been removed from
-    // backpackItems but not yet inserted into handCards.  Include them in the
-    // persisted snapshot so they survive a page reload mid-animation.
+    const persistedState = serializeGameState(engine.getState());
     const inFlight = backpackHandFlightsRef.current;
     let stateToSave = persistedState;
     if (inFlight.length > 0) {
@@ -4530,7 +3661,7 @@ export default function GameBoard() {
     }
     lastPersistedStateRef.current = serialized;
     saveGameState(stateToSave);
-  }, [persistedState, isHydrated, gameOver]);
+  });
 
   useEffect(() => {
     if (!isHydrated || !gameOver) {
@@ -4548,6 +3679,7 @@ export default function GameBoard() {
     backpackHandFlightsRef.current = [];
     backpackFlightElementMapRef.current.clear();
     setBackpackHandFlights([]);
+    inFlightHandStore.clear();
     fateSwapFlightsRef.current = [];
     fateSwapFlightElementMapRef.current.clear();
     setFateSwapFlights([]);
@@ -4571,6 +3703,15 @@ export default function GameBoard() {
     setDiscardShockFlights([]);
     discardShockProcQueueRef.current = [];
     discardShockSeqInFlightRef.current = false;
+    if (flipShockFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(flipShockFlightAnimationRef.current);
+      flipShockFlightAnimationRef.current = null;
+    }
+    flipShockFlightsRef.current = [];
+    flipShockElementMapRef.current.clear();
+    setFlipShockFlights([]);
+    flipShockProcQueueRef.current = [];
+    flipShockSeqInFlightRef.current = false;
   }, [gameOver, clearAllBackpackHandFallbacks]);
 
   useEffect(() => {
@@ -4600,678 +3741,43 @@ export default function GameBoard() {
     };
   }, []);
 
-  useEffect(() => {
-    if (combatState.currentTurn !== 'monster') return;
-    if (combatState.pendingBlock) return;
-    advanceMonsterTurn();
-  }, [combatState.currentTurn, combatState.pendingBlock, combatState.monsterAttackQueue, advanceMonsterTurn, activeCards]);
+  // Monster turn advance effect DELETED — handled by END_TURN enqueue chain in game-core
 
   // Safety net: prune stale engaged IDs whose cards no longer exist on the board
   // and whose defeat timeout already fired (not in pendingDefeatIds).
-  useEffect(() => {
-    if (combatState.engagedMonsterIds.length === 0) return;
-    const staleIds = combatState.engagedMonsterIds.filter(
-      id =>
-        !activeCards.some(c => c?.id === id) &&
-        !pendingDefeatIdsRef.current.has(id),
-    );
-    if (staleIds.length === 0) return;
-    setCombatState(prev => {
-      const remaining = prev.engagedMonsterIds.filter(id => !staleIds.includes(id));
-      if (remaining.length === prev.engagedMonsterIds.length) return prev;
-      if (remaining.length === 0) return { ...initialCombatState };
-      return { ...prev, engagedMonsterIds: remaining };
-    });
-  }, [combatState.engagedMonsterIds, activeCards]);
+  // Stale engaged IDs pruning now runs automatically in reducer postProcessActiveCards
 
+  // Monster→hero transition effect DELETED — all logic (dragon regen, wraith enrage/aura/amulet destroy,
+  // goblin stack heal/steal, stun clear, boss last stand) handled by APPLY_MONSTER_TURN_END_EFFECTS reducer
+  // heroTurnLayerLossIdsRef is cleared at END_TURN in useCombatActions;
+  // this useMemo-driven clear is a defensive reset when turn transitions to hero
   const prevTurnRef = useRef(combatState.currentTurn);
-  useEffect(() => {
-    if (prevTurnRef.current === 'monster' && combatState.currentTurn === 'hero') {
-      setBerserkerSlotUsed({});
-      setFlashSlotUsed({});
-      heroTurnLayerLossIdsRef.current.clear();
+  if (prevTurnRef.current === 'monster' && combatState.currentTurn === 'hero') {
+    heroTurnLayerLossIdsRef.current.clear();
+  }
+  prevTurnRef.current = combatState.currentTurn;
 
-      if (!heroTookDamageThisMonsterTurnRef.current) {
-        const dragonEquipSlots: Array<{ slotId: EquipmentSlotId; item: EquipmentItem }> = [];
-        if (equipmentSlot1?.type === 'monster' && equipmentSlot1.eliteRegenHeroTurn) {
-          dragonEquipSlots.push({ slotId: 'equipmentSlot1', item: equipmentSlot1 });
-        }
-        if (equipmentSlot2?.type === 'monster' && equipmentSlot2.eliteRegenHeroTurn) {
-          dragonEquipSlots.push({ slotId: 'equipmentSlot2', item: equipmentSlot2 });
-        }
-        for (const { slotId: dSlotId, item: dItem } of dragonEquipSlots) {
-          if (Math.random() < 0.5) {
-            const otherSlotId: EquipmentSlotId = dSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
-            const otherItem = otherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-            if (otherItem && otherItem.durability != null && otherItem.maxDurability != null && otherItem.durability < otherItem.maxDurability) {
-              const newDur = otherItem.durability + 1;
-              setEquipmentSlotById(otherSlotId, { ...otherItem, durability: newDur } as EquipmentItem);
-              addGameLog('equip', `${dItem.name} 龙息回复：Hero 未受伤，${otherItem.name} 恢复 1 耐久！（${newDur}/${otherItem.maxDurability}）`);
-              setHeroSkillBanner(`${dItem.name} 龙息回复！${otherItem.name} +1 耐久！`);
-            } else {
-              addGameLog('equip', `${dItem.name} 龙息回复：判定成功，但另一装备栏无可恢复的装备。`);
-            }
-          } else {
-            addGameLog('equip', `${dItem.name} 龙息回复：判定失败（50%）。`);
-          }
-        }
-      }
-
-      const engagedIds = combatState.engagedMonsterIds;
-
-      // Wraith aura: triggers for ALL active-row wraiths (engaged or not)
-      let auraBoost = 0;
-      let hasWraithEnrage = false;
-      let hasWraithDestroyAmulet = false;
-      for (const card of activeCards) {
-        if (!card || card.type !== 'monster' || card.isStunned) continue;
-        if (card.wraithAuraAttack && card.wraithAuraAttack > 0) {
-          auraBoost = Math.max(auraBoost, card.wraithAuraAttack);
-        }
-        if (card.wraithTurnEnrage) hasWraithEnrage = true;
-        if (card.wraithDestroyAmulet) hasWraithDestroyAmulet = true;
-      }
-
-      setActiveCards(prev => {
-        let changed = false;
-        const next = prev.map(card => {
-          if (!card || !engagedIds.includes(card.id)) return card;
-
-          let updated = card;
-
-          if (updated.isStunned) {
-            changed = true;
-            addGameLog('combat', `${updated.name} 从晕眩中恢复了。`);
-            updated = { ...updated, isStunned: false };
-            return updated;
-          }
-
-          // Legacy wraith tier-2: self-only attack boost
-          if (updated.wraithTurnAttack && updated.wraithTurnAttack > 0) {
-            const boost = updated.wraithTurnAttack;
-            changed = true;
-            const newAttack = (updated.attack ?? updated.value ?? 0) + boost;
-            const newValue = (updated.value ?? 0) + boost;
-            addGameLog('combat', `${updated.name} 怨念蓄积：攻击力 +${boost}！（当前 ${newAttack}）`);
-            updated = { ...updated, attack: newAttack, value: newValue, tempAttackBoost: (updated.tempAttackBoost ?? 0) + boost };
-          }
-
-          if (!updated.bossLastStandAura) return updated !== card ? updated : card;
-          if ((updated.currentLayer ?? 1) !== 1) return updated !== card ? updated : card;
-          changed = true;
-          const newAttack = (updated.attack ?? updated.value ?? 0) + 5;
-          const newValue = (updated.value ?? 0) + 5;
-          const newLayer = (updated.currentLayer ?? 1) + 1;
-          const fullHp = updated.maxHp ?? updated.hp ?? 0;
-          addGameLog('combat', `${updated.name} 暴走光环：攻击 +5，恢复至 ${newLayer} 血层！`);
-          setHeroSkillBanner(`${updated.name} 暴走光环发动！`);
-          return {
-            ...updated,
-            attack: newAttack,
-            value: newValue,
-            hp: fullHp,
-            currentLayer: newLayer,
-            tempAttackBoost: (updated.tempAttackBoost ?? 0) + 5,
-          };
-        });
-        return changed ? (next as typeof prev) : prev;
-      });
-
-      // Wraith Lv1+: aura attack boost to ALL active row monsters
-      if (auraBoost > 0) {
-        setActiveCards(prev => {
-          const boostedNames: string[] = [];
-          const next = prev.map(card => {
-            if (!card || card.type !== 'monster') return card;
-            const newAttack = (card.attack ?? card.value ?? 0) + auraBoost;
-            const newValue = (card.value ?? 0) + auraBoost;
-            boostedNames.push(card.name);
-            return { ...card, attack: newAttack, value: newValue, tempAttackBoost: (card.tempAttackBoost ?? 0) + auraBoost };
-          }) as typeof prev;
-          if (boostedNames.length > 0) {
-            addGameLog('combat', `怨念光环：激活行所有怪物攻击力 +${auraBoost}！（${boostedNames.join('、')}）`);
-            setHeroSkillBanner(`怨念光环！全体怪物攻击力 +${auraBoost}！`);
-          }
-          return next;
-        });
-      }
-
-      // Wraith Lv3: enrage all active row monsters
-      if (hasWraithEnrage) {
-        const rowMonsters = activeCards.filter(
-          (c): c is GameCardData => Boolean(c && c.type === 'monster' && !c.isStunned),
-        );
-        for (const m of rowMonsters) {
-          if (!isMonsterEngaged(m.id)) {
-            beginCombat(m, 'monster');
-          }
-        }
-        if (rowMonsters.length > 0) {
-          const names = rowMonsters.filter(m => !engagedIds.includes(m.id)).map(m => m.name);
-          if (names.length > 0) {
-            addGameLog('combat', `怨灵诅咒：激活行怪物被激怒！（${names.join('、')}）`);
-            setHeroSkillBanner(`怨灵诅咒！全体怪物激怒！`);
-          }
-        }
-      }
-
-      // Wraith Lv3: destroy a random amulet
-      if (hasWraithDestroyAmulet) {
-        const currentAmulets = engine.getState().amuletSlots;
-        if (currentAmulets.length > 0) {
-          const targetIdx = Math.floor(Math.random() * currentAmulets.length);
-          const targetAmulet = currentAmulets[targetIdx];
-          const reversal = computeAmuletAuraReversal([targetAmulet]);
-          if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
-            setSlotTempAttack(prev => ({
-              equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
-              equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
-            }));
-          }
-          if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
-            setSlotTempArmor(prev => ({
-              equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
-              equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
-            }));
-          }
-          addToGraveyard(targetAmulet);
-          setAmuletSlots(prev => prev.filter(a => a.id !== targetAmulet.id));
-          addGameLog('combat', `怨灵诅咒：摧毁了护符「${targetAmulet.name}」！`);
-          setHeroSkillBanner(`怨灵诅咒！护符「${targetAmulet.name}」被摧毁！`);
-        }
-      }
-
-      // Goblin Lv2: stack heal — per stacked card below, 15% chance restore 1 layer
-      for (const card of activeCards) {
-        if (!card || !engagedIds.includes(card.id) || card.isStunned || !card.goblinStackHeal) continue;
-        const goblinColIndex = activeCards.findIndex(c => c?.id === card.id);
-        if (goblinColIndex < 0) continue;
-        const stacks = engine.getState().activeCardStacks[goblinColIndex] ?? [];
-        if (stacks.length === 0) continue;
-        let healCount = 0;
-        for (let i = 0; i < stacks.length; i++) {
-          if (Math.random() < 0.15) healCount++;
-        }
-        if (healCount > 0) {
-          setActiveCards(prev => {
-            const next = [...prev];
-            const m = next[goblinColIndex];
-            if (!m) return prev;
-            const maxLayers = m.hpLayers ?? m.fury ?? 1;
-            const currentLayer = m.currentLayer ?? 1;
-            const restored = Math.min(healCount, maxLayers - currentLayer);
-            if (restored <= 0) return prev;
-            const fullHp = m.maxHp ?? m.hp ?? 0;
-            next[goblinColIndex] = { ...m, currentLayer: currentLayer + restored, hp: fullHp };
-            addGameLog('combat', `${m.name} 贼窝疗养：恢复了 ${restored} 血层！（${currentLayer} → ${currentLayer + restored}）`);
-            setHeroSkillBanner(`${m.name} 贼窝疗养！恢复 ${restored} 血层！`);
-            return next as typeof prev;
-          });
-        }
-      }
-
-      // Goblin Elite: steal equip — per stacked card below, 15% chance steal equipment or amulet
-      for (const card of activeCards) {
-        if (!card || !engagedIds.includes(card.id) || card.isStunned || !card.goblinStealEquip) continue;
-        const goblinColIndex = activeCards.findIndex(c => c?.id === card.id);
-        if (goblinColIndex < 0) continue;
-        const stacks = engine.getState().activeCardStacks[goblinColIndex] ?? [];
-        if (stacks.length === 0) continue;
-        let stealCount = 0;
-        for (let i = 0; i < stacks.length; i++) {
-          if (Math.random() < 0.15) stealCount++;
-        }
-        for (let s = 0; s < stealCount; s++) {
-          const state = engine.getState();
-          const candidates: Array<{ source: 'equip'; slotId: EquipmentSlotId; item: GameCardData } | { source: 'amulet'; item: GameCardData }> = [];
-          if (state.equipmentSlot1) candidates.push({ source: 'equip', slotId: 'equipmentSlot1', item: state.equipmentSlot1 as GameCardData });
-          if (state.equipmentSlot2) candidates.push({ source: 'equip', slotId: 'equipmentSlot2', item: state.equipmentSlot2 as GameCardData });
-          for (const amulet of state.amuletSlots) {
-            candidates.push({ source: 'amulet', item: amulet as GameCardData });
-          }
-          if (candidates.length === 0) break;
-          const pick = candidates[Math.floor(Math.random() * candidates.length)];
-          const stolenCard = { ...pick.item };
-          if (pick.source === 'equip') {
-            clearEquipmentSlotById(pick.slotId);
-            addGameLog('combat', `${card.name} 窃宝：偷走了装备「${pick.item.name}」！`);
-          } else {
-            const reversal = computeAmuletAuraReversal([pick.item]);
-            if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
-              setSlotTempAttack(prev => ({
-                equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
-                equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
-              }));
-            }
-            if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
-              setSlotTempArmor(prev => ({
-                equipmentSlot1: (prev.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
-                equipmentSlot2: (prev.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
-              }));
-            }
-            setAmuletSlots(prev => prev.filter(a => a.id !== pick.item.id));
-            addGameLog('combat', `${card.name} 窃宝：偷走了护符「${pick.item.name}」！`);
-          }
-          setActiveCardStacks(prev => ({
-            ...prev,
-            [goblinColIndex]: [...(prev[goblinColIndex] ?? []), stolenCard],
-          }));
-          setHeroSkillBanner(`${card.name} 窃宝！偷走了「${pick.item.name}」！`);
-        }
-      }
-    }
-    prevTurnRef.current = combatState.currentTurn;
-  }, [combatState.currentTurn]);
-
-  useEffect(() => {
-    const isLowGold = gold <= 10;
-    setActiveCards(prev => {
-      let changed = false;
-      const next = prev.map(card => {
-        if (!card || card.type !== 'monster' || !card.eliteLowGoldPower) return card;
-        if (isLowGold && !card.lowGoldBuffActive) {
-          changed = true;
-          addGameLog('combat', `${card.name} 感受到了贪婪的力量！攻击力与血量翻倍！`);
-          setHeroSkillBanner(`${card.name} 贪婪强化！攻击力与血量翻倍！`);
-          const atkBefore = card.attack ?? card.value;
-          const hpBefore = card.hp ?? 0;
-          const maxHpBefore = card.maxHp ?? 0;
-          return {
-            ...card,
-            attack: atkBefore * 2,
-            value: card.value * 2,
-            hp: hpBefore * 2,
-            maxHp: maxHpBefore * 2,
-            lowGoldBuffActive: true,
-            tempAttackBoost: (card.tempAttackBoost ?? 0) + atkBefore,
-            tempHpBoost: (card.tempHpBoost ?? 0) + maxHpBefore,
-          };
-        }
-        if (!isLowGold && card.lowGoldBuffActive) {
-          changed = true;
-          addGameLog('combat', `${card.name} 的贪婪强化消退了。`);
-          const newAtk = Math.floor((card.attack ?? card.value) / 2);
-          const newMaxHp = Math.floor((card.maxHp ?? 0) / 2);
-          const prevTempAtk = Math.floor((card.tempAttackBoost ?? 0) / 2);
-          const prevTempHp = Math.floor((card.tempHpBoost ?? 0) / 2);
-          return {
-            ...card,
-            attack: newAtk,
-            value: Math.floor(card.value / 2),
-            hp: Math.ceil((card.hp ?? 0) / 2),
-            maxHp: newMaxHp,
-            lowGoldBuffActive: false,
-            tempAttackBoost: prevTempAtk,
-            tempHpBoost: prevTempHp,
-          };
-        }
-        return card;
-      });
-      return changed ? next : prev;
-    });
-  }, [gold, addGameLog]);
+  // [gold] elite buff effect DELETED — handled by CHECK_ELITE_GOLD_BUFF reducer in game-core/rules/dungeon.ts
 
   const initGame = (mode: 'normal' | 'quick' = 'normal') => {
     combatAsyncEpochRef.current += 1;
-    setCombatState(initialCombatState);
-    setHeroVariant(getRandomHero());
     clearAllHandDeliveryGuards();
     processedDungeonCardIdsRef.current.clear();
     clearAllProcessedCardIds();
     previousActiveCardsRef.current = createEmptyActiveRow();
     freshGameStartRef.current = true;
-    const isQuickMode = mode === 'quick';
-    const initialTurnCount = isQuickMode ? 2 : INITIAL_TURN_COUNT;
-    const newDeck = createDeck(mode);
-    for (let i = 0; i < newDeck.length; i++) {
-      if (newDeck[i].type === 'event') {
-        newDeck[i] = pruneEventChoicesToThree(newDeck[i]);
-      }
-    }
-    // Add Knight discovery events to main deck
-    const knightEvents = createKnightDiscoveryEvents();
-    for (let i = 0; i < knightEvents.length; i++) {
-      if (knightEvents[i].type === 'event') {
-        knightEvents[i] = pruneEventChoicesToThree(knightEvents[i]);
-      }
-    }
-    const deckWithClassEvents = [...newDeck, ...knightEvents].sort(() => Math.random() - 0.5);
 
-    // Balance monster distribution: 1 elite in first half (positions 13–30), rest in second half
-    {
-      const halfSize = Math.floor(deckWithClassEvents.length / 2);
-      const eliteMonsters = deckWithClassEvents.filter(c => c.monsterSpecial);
-      const nonEliteMonsters = deckWithClassEvents.filter(c => c.type === 'monster' && !c.monsterSpecial);
-      const nonMonsters = deckWithClassEvents.filter(c => c.type !== 'monster');
+    dispatch({ type: 'INIT_GAME', mode, totalWins: getTotalWins(), eternalRelics: getStartingRelics() });
 
-      if (isQuickMode) {
-        // Quick mode: shuffle normally, density balancing will handle monster
-        // distribution. After that, push elites out of first 12 cards by swapping
-        // with non-elite MONSTERS (preserves monster count per region).
-        deckWithClassEvents.sort(() => Math.random() - 0.5);
-      } else {
-        // Pull 1 random elite into the first half
-        let earlyElite: typeof eliteMonsters[0] | null = null;
-        const remainingElites = [...eliteMonsters];
-        if (remainingElites.length > 0) {
-          const idx = Math.floor(Math.random() * remainingElites.length);
-          earlyElite = remainingElites.splice(idx, 1)[0];
-        }
+    // Read back classCardPreviewId from the new state
+    const st = engine.getState();
+    classCardPreviewIdRef.current = st.classCardPreviewId;
 
-        const totalMonsters = eliteMonsters.length + nonEliteMonsters.length;
-        const firstHalfMonsterCount = Math.min(Math.floor(totalMonsters / 2), nonEliteMonsters.length);
-
-        const firstHalf = [
-          ...nonEliteMonsters.slice(0, firstHalfMonsterCount),
-          ...nonMonsters.slice(0, halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
-          ...(earlyElite ? [earlyElite] : []),
-        ];
-        const secondHalf = [
-          ...nonEliteMonsters.slice(firstHalfMonsterCount),
-          ...remainingElites,
-          ...nonMonsters.slice(halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
-        ];
-
-        firstHalf.sort(() => Math.random() - 0.5);
-        secondHalf.sort(() => Math.random() - 0.5);
-
-        // Ensure the early elite lands in positions 12–29 (not in the first 12 cards)
-        if (earlyElite && firstHalf.length > 12) {
-          const eliteIdx = firstHalf.indexOf(earlyElite);
-          if (eliteIdx >= 0 && eliteIdx < 12) {
-            const swapTarget = 12 + Math.floor(Math.random() * (firstHalf.length - 12));
-            const tmp = firstHalf[eliteIdx];
-            firstHalf[eliteIdx] = firstHalf[swapTarget];
-            firstHalf[swapTarget] = tmp;
-          }
-        }
-
-        deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
-      }
-    }
-
-    // Balance monster density: 1–2 monsters per non-overlapping chunk.
-    // Quick mode uses CHUNK=5 because waterfall deals exactly 5 cards per row
-    // (the +1 stack card is always a non-monster, so it doesn't affect row
-    // monster composition and shifts the deck unpredictably).
-    {
-      const MIN_MONSTERS = 1;
-      const MAX_MONSTERS = 2;
-      const CHUNK = isQuickMode ? 5 : 6;
-      for (let start = 0; start + CHUNK <= deckWithClassEvents.length; start += CHUNK) {
-        const chunkEnd = start + CHUNK;
-        const monsterIndices: number[] = [];
-        const nonMonsterIndices: number[] = [];
-        for (let j = start; j < chunkEnd; j++) {
-          if (deckWithClassEvents[j].type === 'monster') monsterIndices.push(j);
-          else nonMonsterIndices.push(j);
-        }
-        while (monsterIndices.length > MAX_MONSTERS) {
-          const excessIdx = monsterIndices.pop()!;
-          let swapTarget = -1;
-          for (let k = chunkEnd; k < deckWithClassEvents.length; k++) {
-            if (deckWithClassEvents[k].type !== 'monster') { swapTarget = k; break; }
-          }
-          if (swapTarget === -1) {
-            for (let k = start - 1; k >= 0; k--) {
-              if (deckWithClassEvents[k].type !== 'monster') { swapTarget = k; break; }
-            }
-          }
-          if (swapTarget >= 0) {
-            const tmp = deckWithClassEvents[excessIdx];
-            deckWithClassEvents[excessIdx] = deckWithClassEvents[swapTarget];
-            deckWithClassEvents[swapTarget] = tmp;
-          } else {
-            break;
-          }
-        }
-        while (monsterIndices.length < MIN_MONSTERS) {
-          const fillIdx = nonMonsterIndices.pop()!;
-          if (fillIdx === undefined) break;
-          let swapTarget = -1;
-          for (let k = chunkEnd; k < deckWithClassEvents.length; k++) {
-            if (deckWithClassEvents[k].type === 'monster') { swapTarget = k; break; }
-          }
-          if (swapTarget === -1) {
-            for (let k = start - 1; k >= 0; k--) {
-              if (deckWithClassEvents[k].type === 'monster') { swapTarget = k; break; }
-            }
-          }
-          if (swapTarget >= 0) {
-            const tmp = deckWithClassEvents[fillIdx];
-            deckWithClassEvents[fillIdx] = deckWithClassEvents[swapTarget];
-            deckWithClassEvents[swapTarget] = tmp;
-            monsterIndices.push(fillIdx);
-          } else {
-            break;
-          }
-        }
-      }
-    }
-
-    // Quick mode: push elites out of first 12 cards by swapping with
-    // non-elite monsters from later positions (preserves monster density).
-    if (isQuickMode) {
-      for (let i = 0; i < Math.min(12, deckWithClassEvents.length); i++) {
-        if (deckWithClassEvents[i].monsterSpecial) {
-          let swapTarget = -1;
-          for (let k = 12; k < deckWithClassEvents.length; k++) {
-            if (deckWithClassEvents[k].type === 'monster' && !deckWithClassEvents[k].monsterSpecial) {
-              swapTarget = k;
-              break;
-            }
-          }
-          if (swapTarget >= 0) {
-            const tmp = deckWithClassEvents[i];
-            deckWithClassEvents[i] = deckWithClassEvents[swapTarget];
-            deckWithClassEvents[swapTarget] = tmp;
-          }
-        }
-      }
-    }
-
-    // Guarantee at least one monster among the last 3 cards of the deck
-    {
-      const len = deckWithClassEvents.length;
-      if (len >= 3) {
-        const tail = deckWithClassEvents.slice(len - 3);
-        const hasMonsterInTail = tail.some(c => c.type === 'monster');
-        if (!hasMonsterInTail) {
-          // Find the latest monster earlier in the deck (search from end, skip last 3)
-          let swapIdx = -1;
-          for (let i = len - 4; i >= 0; i--) {
-            if (deckWithClassEvents[i].type === 'monster') {
-              swapIdx = i;
-              break;
-            }
-          }
-          if (swapIdx >= 0) {
-            const targetIdx = len - 1 - Math.floor(Math.random() * 3);
-            const tmp = deckWithClassEvents[swapIdx];
-            deckWithClassEvents[swapIdx] = deckWithClassEvents[targetIdx];
-            deckWithClassEvents[targetIdx] = tmp;
-          }
-        }
-      }
-    }
-
-    let lastMonsterDeckIndex = -1;
-    for (let mi = deckWithClassEvents.length - 1; mi >= 0; mi -= 1) {
-      if (deckWithClassEvents[mi].type === 'monster') {
-        lastMonsterDeckIndex = mi;
-        break;
-      }
-    }
-
-    // Build a mutable deal queue; extract non-monster cards for stacking
-    const dealQueue = [...deckWithClassEvents];
-
-    // Helper: extract the first non-monster from dealQueue starting at `from`, returns it and removes from queue
-    const extractFirstNonMonster = (from: number): GameCardData | null => {
-      for (let i = from; i < dealQueue.length; i++) {
-        if (dealQueue[i].type !== 'monster') {
-          return dealQueue.splice(i, 1)[0];
-        }
-      }
-      return null;
-    };
-
-    // Ensure a raw row has at least 1 monster; if not, swap one in from the queue
-    const ensureRowHasMonster = (row: GameCardData[], queue: GameCardData[]) => {
-      if (row.some(c => c.type === 'monster')) return;
-      const qMonsterIdx = queue.findIndex(c => c.type === 'monster');
-      if (qMonsterIdx < 0) return;
-      const rowSwapIdx = Math.floor(Math.random() * row.length);
-      const tmp = row[rowSwapIdx];
-      row[rowSwapIdx] = queue[qMonsterIdx];
-      queue[qMonsterIdx] = tmp;
-    };
-
-    // Preview row: 5 cards from deal queue
-    const previewRaw = dealQueue.splice(0, 5);
-    ensureRowHasMonster(previewRaw, dealQueue);
-    const initialPreview = fillActiveRowSlots(previewRaw).map((card, slotIdx) => {
-      if (!card) return null;
-      const raged = applyMonsterRage(card, initialTurnCount + 1, isQuickMode);
-      if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
-        return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
-      }
-      return raged;
-    }) as ActiveRowSlots;
-
-    // Preview stack: first non-monster from remainder → stack on a random non-monster preview cell
-    const initialPreviewStacks: Record<number, GameCardData[]> = {};
-    const previewStackCard = extractFirstNonMonster(0);
-    if (previewStackCard) {
-      const nonMonsterPreviewIndices = initialPreview
-        .map((c, i) => (c && c.type !== 'monster' ? i : -1))
-        .filter(i => i >= 0);
-      if (nonMonsterPreviewIndices.length > 0) {
-        const targetIdx = nonMonsterPreviewIndices[Math.floor(Math.random() * nonMonsterPreviewIndices.length)];
-        initialPreviewStacks[targetIdx] = [applyMonsterRage(previewStackCard, initialTurnCount + 1, isQuickMode)];
-      }
-    }
-
-    // Active row: next 5 cards from deal queue
-    const activeRaw = dealQueue.splice(0, 5);
-    ensureRowHasMonster(activeRaw, dealQueue);
-    const initialActive = fillActiveRowSlots(activeRaw).map((card, slotIdx) => {
-      if (!card) return null;
-      const raged = applyMonsterRage(card, initialTurnCount, isQuickMode);
-      if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
-        return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
-      }
-      return raged;
-    }) as ActiveRowSlots;
-
-    // Active stack: first non-monster from remainder → stack on a random non-monster active cell
-    const initialActiveStacks: Record<number, GameCardData[]> = {};
-    const activeStackCard = extractFirstNonMonster(0);
-    if (activeStackCard) {
-      const nonMonsterActiveIndices = initialActive
-        .map((c, i) => (c && c.type !== 'monster' ? i : -1))
-        .filter(i => i >= 0);
-      if (nonMonsterActiveIndices.length > 0) {
-        const targetIdx = nonMonsterActiveIndices[Math.floor(Math.random() * nonMonsterActiveIndices.length)];
-        initialActiveStacks[targetIdx] = [applyMonsterRage(activeStackCard, initialTurnCount, isQuickMode)];
-      }
-    }
-
-    // Re-balance monster density in dealQueue after initial dealing.
-    // ensureRowHasMonster + extractFirstNonMonster can steal monsters from later
-    // chunks, leaving them with 0 monsters — violating the density rule.
-    {
-      const MIN_MONSTERS = 1;
-      const MAX_MONSTERS = 2;
-      const CHUNK = isQuickMode ? 5 : 6;
-      for (let start = 0; start + CHUNK <= dealQueue.length; start += CHUNK) {
-        const chunkEnd = start + CHUNK;
-        const monsterIndices: number[] = [];
-        const nonMonsterIndices: number[] = [];
-        for (let j = start; j < chunkEnd; j++) {
-          if (dealQueue[j].type === 'monster') monsterIndices.push(j);
-          else nonMonsterIndices.push(j);
-        }
-        while (monsterIndices.length > MAX_MONSTERS) {
-          const excessIdx = monsterIndices.pop()!;
-          let swapTarget = -1;
-          for (let k = chunkEnd; k < dealQueue.length; k++) {
-            if (dealQueue[k].type !== 'monster') { swapTarget = k; break; }
-          }
-          if (swapTarget === -1) {
-            for (let k = start - 1; k >= 0; k--) {
-              if (dealQueue[k].type !== 'monster') { swapTarget = k; break; }
-            }
-          }
-          if (swapTarget >= 0) {
-            const tmp = dealQueue[excessIdx];
-            dealQueue[excessIdx] = dealQueue[swapTarget];
-            dealQueue[swapTarget] = tmp;
-          } else {
-            break;
-          }
-        }
-        while (monsterIndices.length < MIN_MONSTERS) {
-          const fillIdx = nonMonsterIndices.pop()!;
-          if (fillIdx === undefined) break;
-          let swapTarget = -1;
-          for (let k = chunkEnd; k < dealQueue.length; k++) {
-            if (dealQueue[k].type === 'monster') { swapTarget = k; break; }
-          }
-          if (swapTarget === -1) {
-            for (let k = start - 1; k >= 0; k--) {
-              if (dealQueue[k].type === 'monster') { swapTarget = k; break; }
-            }
-          }
-          if (swapTarget >= 0) {
-            const tmp = dealQueue[fillIdx];
-            dealQueue[fillIdx] = dealQueue[swapTarget];
-            dealQueue[swapTarget] = tmp;
-            monsterIndices.push(fillIdx);
-          } else {
-            break;
-          }
-        }
-      }
-    }
-
-    // Remaining deck — mark final monster by matching the original deck index
-    const initialRemaining = dealQueue.map((card) => {
-      const origIdx = deckWithClassEvents.indexOf(card);
-      if (origIdx === lastMonsterDeckIndex && card.type === 'monster') {
-        return { ...card, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
-      }
-      return card;
-    });
-
-    // Build full initial state and replace in one call
-    const newHero = getRandomHero();
-    const newHeroClass = (newHero.classTitle ?? '').toLowerCase();
-    const newClassDeck = newHeroClass === 'knight' ? generateKnightDeck() : [];
-    classCardPreviewIdRef.current = newClassDeck.length > 0
-      ? newClassDeck[Math.floor(Math.random() * newClassDeck.length)].id
-      : null;
-    engine.replaceState({
-      ...createInitialGameState(),
-      gameMode: mode,
-      turnCount: initialTurnCount,
-      heroVariant: newHero,
-      heroClass: newHeroClass,
-      previewCards: initialPreview,
-      activeCards: initialActive,
-      previewCardStacks: initialPreviewStacks,
-      activeCardStacks: initialActiveStacks,
-      remainingDeck: initialRemaining,
-      classDeck: newClassDeck,
-      eternalRelics: getStartingRelics(),
-      showSkillSelection: true,
-      totalWins: getTotalWins(),
-    });
-
-    // Reset UI-only state + refs
+    // Reset UI-only state + refs (animations, flights, etc.)
     setBackpackHandFlights([]);
     backpackHandFlightsRef.current = [];
     backpackFlightElementMapRef.current.clear();
+    inFlightHandStore.clear();
     if (typeof window !== 'undefined' && backpackHandFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
       backpackHandFlightAnimationRef.current = null;
@@ -5299,16 +3805,24 @@ export default function GameBoard() {
       window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
       discardShockFlightAnimationRef.current = null;
     }
+    setFlipShockFlights([]);
+    flipShockFlightsRef.current = [];
+    flipShockElementMapRef.current.clear();
+    flipShockProcQueueRef.current = [];
+    flipShockSeqInFlightRef.current = false;
+    if (typeof window !== 'undefined' && flipShockFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(flipShockFlightAnimationRef.current);
+      flipShockFlightAnimationRef.current = null;
+    }
     clearAllBackpackHandFallbacks();
     setBackpackViewerOpen(false);
     ghostBladeExileResolverRef.current = null;
     monsterRewardQueuedInstanceIdsRef.current.clear();
     lastWaterfallSequenceRef.current = null;
     cardDraftPendingSkillRef.current = null;
-    setPersuadeDiscount(null);
-    setPersuadeAmuletBonus(0);
+    dispatch({ type: 'SET_PERSUADE_DISCOUNT', discount: null });
+    dispatch({ type: 'SET_PERSUADE_AMULET_BONUS', bonus: 0 });
     setPersuadeTempDiscount(0);
-    // classCardPreviewIdRef is already set above
   };
 
   const hydrateGameState = (snapshot: PersistedGameState) => {
@@ -5426,6 +3940,10 @@ export default function GameBoard() {
       recycleBackpackProgress: snapshot.recycleBackpackProgress ?? 0,
       swapUpgradeProgress: snapshot.swapUpgradeProgress ?? 0,
       monsterKillUpgradeProgress: snapshot.monsterKillUpgradeProgress ?? 0,
+      flipOverkillLifestealProgress: snapshot.flipOverkillLifestealProgress ?? 0,
+      equipAmuletCapProgress: snapshot.equipAmuletCapProgress ?? 0,
+      stunAttemptDiscoverProgress: snapshot.stunAttemptDiscoverProgress ?? 0,
+      flipDebuffMonsterId: snapshot.flipDebuffMonsterId ?? null,
       bugletAmuletObtained: Boolean(snapshot.bugletAmuletObtained),
       totalDamageTaken: snapshot.totalDamageTaken ?? 0,
       totalHealed: snapshot.totalHealed ?? 0,
@@ -5456,13 +3974,16 @@ export default function GameBoard() {
         ? { equipmentSlot1: snapshot.berserkTurnBuff.equipmentSlot1 ?? 0, equipmentSlot2: snapshot.berserkTurnBuff.equipmentSlot2 ?? 0 }
         : createEmptyEquipmentBuffState(),
       extraAttackCharges: snapshot.extraAttackCharges ?? 0,
+      slotExtraAttacks: snapshot.slotExtraAttacks
+        ? { equipmentSlot1: snapshot.slotExtraAttacks.equipmentSlot1 ?? 0, equipmentSlot2: snapshot.slotExtraAttacks.equipmentSlot2 ?? 0 }
+        : { equipmentSlot1: 0, equipmentSlot2: 0 },
       permanentMagicRecycleBag: Array.isArray(snapshot.permanentMagicRecycleBag) ? snapshot.permanentMagicRecycleBag.map(patchPersistedMainDeckWeaponImage) : [],
       classDeck: Array.isArray(snapshot.classDeck) ? snapshot.classDeck : [],
       classCardsInHand: Array.isArray(snapshot.classCardsInHand) ? snapshot.classCardsInHand : [],
       selectedHeroSkill: (snapshot.selectedHeroSkill ?? null) as HeroSkillId | null,
       extraHeroSkills: Array.isArray((snapshot as any).extraHeroSkills) ? (snapshot as any).extraHeroSkills : [],
       showSkillSelection: typeof snapshot.showSkillSelection === 'boolean' ? snapshot.showSkillSelection : true,
-      heroVariant: snapshot.heroVariant ?? getRandomHero(),
+      heroVariant: snapshot.heroVariant ?? (() => { let rng = engine.getState().rng; const [h, r] = getRandomHero(rng); dispatch({ type: 'SET_GAME_FLAGS', patch: { rng: r } }); return h; })(),
       heroClass: ((snapshot.heroVariant?.classTitle ?? '') as string).toLowerCase(),
       permanentSkills: Array.isArray(snapshot.permanentSkills) ? snapshot.permanentSkills : [],
       wraithPassiveEnabled: Boolean(snapshot.wraithPassiveEnabled),
@@ -5481,6 +4002,8 @@ export default function GameBoard() {
       persuadeAmuletBonus: snapshot.persuadeAmuletBonus ?? 0,
       persuadeDiscount: snapshot.persuadeDiscount ?? null,
       lastPlayedCardCategory: snapshot.lastPlayedCardCategory ?? null,
+      transformChainPrevCategory: snapshot.transformChainPrevCategory ?? null,
+      consecutiveTransformStreak: snapshot.consecutiveTransformStreak ?? 0,
       magicCardsPlayedThisTurn: snapshot.magicCardsPlayedThisTurn ?? 0,
       backpackCapacityModifier: snapshot.backpackCapacityModifier ?? 0,
       heroMagicState: sanitizeHeroMagicState(snapshot.heroMagicState),
@@ -5501,6 +4024,8 @@ export default function GameBoard() {
       gambitSlotUsed: snapshot.gambitSlotUsed ?? {},
       weaponExtraAttackUsed: snapshot.weaponExtraAttackUsed ?? {},
       blockDurabilityPerSlot: snapshot.blockDurabilityPerSlot ?? 1,
+      slotBattleSpiritBonus: snapshot.slotBattleSpiritBonus ?? {},
+      slotBattleSpiritUsed: snapshot.slotBattleSpiritUsed ?? {},
       combatState: restoredCombat,
       heroSkillUsedThisWave: Boolean(snapshot.heroSkillUsedThisWave),
       extraSkillsUsedThisWave: Array.isArray(snapshot.extraSkillsUsedThisWave) ? snapshot.extraSkillsUsedThisWave : [],
@@ -5567,6 +4092,7 @@ export default function GameBoard() {
       persuadeState: (snapshot.persuadeState as import('@/game-core/types').PersuadeModalState | null) ?? null,
       deathWardPrompt: (snapshot.deathWardPrompt as import('@/game-core/types').DeathWardPromptState | null) ?? null,
       gameLogEntries: (loadGameLog()?.entries ?? []) as import('@/components/GameLogPanel').LogEntry[],
+      amplifiedCardBonus: snapshot.amplifiedCardBonus ?? {},
     });
 
     // Stacking state (previewCardStacks, activeCardStacks) is hydrated via engine state
@@ -5581,14 +4107,16 @@ export default function GameBoard() {
 
     const restoredClassDeck = Array.isArray(snapshot.classDeck) ? snapshot.classDeck : [];
     if (snapshot.showSkillSelection && restoredClassDeck.length > 0) {
-      classCardPreviewIdRef.current = restoredClassDeck[Math.floor(Math.random() * restoredClassDeck.length)].id;
+      let rng = engine.getState().rng;
+      const [picked, rng2] = pickRandom(restoredClassDeck, rng); rng = rng2;
+      classCardPreviewIdRef.current = picked.id;
+      dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
     } else {
       classCardPreviewIdRef.current = null;
     }
 
     // Reset UI-only animation states
     setHeroSkillArrow(null);
-    setSwordVectors({});
     setTakingDamage(false);
     setHealing(false);
 
@@ -5629,10 +4157,8 @@ export default function GameBoard() {
     pendingDefeatIdsRef.current.clear();
 
     clearWaterfallTimeouts();
-    waterfallPlanRef.current = null;
     waterfallTimeoutsRef.current = [];
     waterfallLockRef.current = false;
-    waterfallPendingRef.current = false;
     waterfallDiscoverPendingRef.current = false;
     waterfallSequenceRef.current = 0;
     pendingDungeonRemovalsRef.current = 0;
@@ -5661,6 +4187,7 @@ export default function GameBoard() {
     setBackpackHandFlights([]);
     backpackHandFlightsRef.current = [];
     backpackFlightElementMapRef.current.clear();
+    inFlightHandStore.clear();
     if (backpackHandFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
       backpackHandFlightAnimationRef.current = null;
@@ -5674,6 +4201,15 @@ export default function GameBoard() {
       window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
       discardShockFlightAnimationRef.current = null;
     }
+    setFlipShockFlights([]);
+    flipShockFlightsRef.current = [];
+    flipShockElementMapRef.current.clear();
+    flipShockProcQueueRef.current = [];
+    flipShockSeqInFlightRef.current = false;
+    if (flipShockFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(flipShockFlightAnimationRef.current);
+      flipShockFlightAnimationRef.current = null;
+    }
     if (directedCombatFxFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(directedCombatFxFlightAnimationRef.current);
       directedCombatFxFlightAnimationRef.current = null;
@@ -5682,6 +4218,13 @@ export default function GameBoard() {
     setDirectedCombatFxFlights([]);
     directedCombatFxElementMapRef.current.clear();
     clearAllBackpackHandFallbacks();
+
+    // If the hydrated state has a pendingWaterfallPlan, start the animation.
+    // The plan is persisted in GameState, so it survives refresh.
+    const hydratedState = engine.getState();
+    if (hydratedState.pendingWaterfallPlan) {
+      setTimeout(() => startWaterfallAnimation(), 300);
+    }
   };
 
   const MAX_UNDO_STACK = 10;
@@ -5697,13 +4240,13 @@ export default function GameBoard() {
     if (stack.length > MAX_UNDO_STACK) {
       stack.splice(0, stack.length - MAX_UNDO_STACK);
     }
-    setUndoCount(stack.length);
+    dispatch({ type: 'SET_UNDO_COUNT', count: stack.length });
     saveUndoStack(stack);
   }, [engine]);
 
   const clearUndoStack = useCallback(() => {
     undoStackRef.current = [];
-    setUndoCount(0);
+    dispatch({ type: 'SET_UNDO_COUNT', count: 0 });
     clearUndoStorage();
   }, []);
 
@@ -5711,18 +4254,22 @@ export default function GameBoard() {
   onNewCardGainedRef.current = (count: number, source?: 'graveyard' | 'classPool') => {
     if (amuletEffects.hasCardGainMissile && (source === 'graveyard' || source === 'classPool')) {
       const boltsPerTrigger = 1;
+      let rng = engine.getState().rng;
       const bolts: GameCardData[] = [];
+      const bonusMap = engine.getState().amplifiedCardBonus;
       for (let i = 0; i < boltsPerTrigger; i++) {
-        bolts.push(createMagicBoltCard());
+        const [bolt, rng2] = createMagicBoltCard(rng); rng = rng2;
+        bolts.push(applyAmplifyOnCreate(bolt, bonusMap));
       }
-      setHandCards(prev => {
+      dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+      dispatch({ type: 'UPDATE_HAND_CARDS', updater: prev => {
         if (prev.length >= effectiveHandLimit) {
           addGameLog('amulet', `弹幕之符：手牌已满，未生成「魔弹」`);
           return prev;
         }
         addGameLog('amulet', `弹幕之符：获得 ${boltsPerTrigger} 张「魔弹」`);
         return [...prev, ...bolts];
-      });
+      } });
     }
   };
 
@@ -5731,6 +4278,7 @@ export default function GameBoard() {
     addGameLog,
     triggerDiscardFlight,
     triggerDiscardShock,
+    triggerFlipShock,
     triggerGraveNova,
     queueCardIntoHand,
     handCardsRef,
@@ -5755,15 +4303,13 @@ export default function GameBoard() {
     if (stack.length === 0) return;
     if (fullBoardInteractionLockedRef.current) return;
     const snapshot = stack.pop()!;
-    setUndoCount(stack.length);
+    dispatch({ type: 'SET_UNDO_COUNT', count: stack.length });
     saveUndoStack(stack);
 
     // Cancel any in-progress waterfall animations
     clearWaterfallTimeouts();
-    waterfallPlanRef.current = null;
     waterfallTimeoutsRef.current = [];
     waterfallLockRef.current = false;
-    waterfallPendingRef.current = false;
     waterfallDiscoverPendingRef.current = false;
     setWaterfallAnimation(initialWaterfallAnimationState);
 
@@ -5804,6 +4350,16 @@ export default function GameBoard() {
     discardShockProcQueueRef.current = [];
     discardShockSeqInFlightRef.current = false;
     setDiscardShockInteractionLocked(false);
+    if (flipShockFlightAnimationRef.current !== null) {
+      window.cancelAnimationFrame(flipShockFlightAnimationRef.current);
+      flipShockFlightAnimationRef.current = null;
+    }
+    flipShockFlightsRef.current = [];
+    flipShockElementMapRef.current.clear();
+    setFlipShockFlights([]);
+    flipShockProcQueueRef.current = [];
+    flipShockSeqInFlightRef.current = false;
+    setFlipShockInteractionLocked(false);
 
     // Reset visual animation states
     setHeroBleedActive(false);
@@ -5855,7 +4411,7 @@ export default function GameBoard() {
         const doneId = snapshot.activeMonsterReward.monsterInstanceId;
         graveyardDiscoverResolverRef.current = () => {
           if (doneId) monsterRewardQueuedInstanceIdsRef.current.delete(doneId);
-          setActiveMonsterReward(null);
+          dispatch({ type: 'CLEAR_ACTIVE_MONSTER_REWARD' });
         };
       } else {
         graveyardDiscoverResolverRef.current = () => {};
@@ -5863,7 +4419,12 @@ export default function GameBoard() {
     }
     cardActionRemainingRef.current = snapshot.cardActionContext?.remainingCount ?? 0;
     deletingCardIdsRef.current.clear();
-    monsterRewardPreviewCacheRef.current = snapshot.monsterRewardPreviewCache;
+
+    // If the restored state has a pendingWaterfallPlan, resume animation.
+    // The plan is part of GameState so it survives undo.
+    if (engine.getState().pendingWaterfallPlan) {
+      setTimeout(() => startWaterfallAnimation(), 100);
+    }
   }, [engine, clearWaterfallTimeouts, syncMonsterRewardQueuedInstanceIdsRef]);
 
   const handleNewGame = () => {
@@ -5878,7 +4439,7 @@ export default function GameBoard() {
     clearGameLog();
     setGameOverMinimized(false);
     initGame(mode);
-    setIsHydrated(true);
+    dispatch({ type: 'SET_HYDRATED' });
   };
 
   // Handle skill selection — active skills set as hero skill, passive skills become eternal relics
@@ -5890,79 +4451,79 @@ export default function GameBoard() {
 
       if (isPassive) {
         const relic = getEternalRelic(skillId as import('@/game-core/types').EternalRelicId);
-        setEternalRelics(prev => [...prev, relic]);
+        dispatch({ type: 'UPDATE_ETERNAL_RELICS', updater: prev => [...prev, relic] });
         addGameLog('system', `获得永恒护符：${relic.name}`);
 
         const initialBonus = relic.initialMaxHpBonus ?? 0;
         if (initialBonus) {
           addGameLog('system', `开局加成：最大生命 +${initialBonus}`);
-          setHp(INITIAL_HP + initialBonus);
+          (INITIAL_HP + initialBonus);
         }
         const initialGold = relic.initialGoldBonus ?? 0;
         if (initialGold) {
-          setGold(prev => prev + initialGold);
+          dispatch({ type: 'MODIFY_GOLD', delta: initialGold, source: 'relic-initial-gold' });
           addGameLog('gold', `开局加成：金币 +${initialGold}`);
         }
         const initialWaterfall = relic.initialWaterfallBonus ?? 0;
         if (initialWaterfall) {
-          setTurnCount(prev => prev + initialWaterfall);
+          dispatch({ type: 'INCREMENT_TURN_COUNT', delta: initialWaterfall });
           addGameLog('system', `开局加成：瀑流回合 +${initialWaterfall}`);
         }
         const initialShopLv = relic.initialShopLevel;
         if (initialShopLv != null && initialShopLv > 0) {
-          setShopLevel(Math.min(MAX_SHOP_LEVEL, initialShopLv));
+          dispatch({ type: 'SET_SHOP_LEVEL', level: initialShopLv });
           addGameLog('shop', `开局加成：商店等级 ${Math.min(MAX_SHOP_LEVEL, initialShopLv)}`);
         }
         const initialSpellDmg = relic.initialSpellDamageBonus ?? 0;
         if (initialSpellDmg) {
-          setPermanentSpellDamageBonus(prev => prev + initialSpellDmg);
+          dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'permanentSpellDamageBonus', delta: initialSpellDmg });
           addGameLog('skill', `开局加成：永久法术伤害 +${initialSpellDmg}`);
         }
       } else {
-        setSelectedHeroSkill(skillId as HeroSkillId);
+        dispatch({ type: 'SELECT_HERO_SKILL', skillId: skillId as HeroSkillId });
         addGameLog('system', `选择英雄技能：${definition?.name ?? skillId}`);
 
         const initialBonus = definition?.initialMaxHpBonus ?? 0;
         if (initialBonus) {
           addGameLog('system', `开局加成：最大生命 +${initialBonus}`);
-          setHp(INITIAL_HP + initialBonus);
+          (INITIAL_HP + initialBonus);
         }
         const initialGold = definition?.initialGoldBonus ?? 0;
         if (initialGold) {
-          setGold(prev => prev + initialGold);
+          dispatch({ type: 'MODIFY_GOLD', delta: initialGold, source: 'skill-initial-gold' });
           addGameLog('gold', `开局加成：金币 +${initialGold}`);
         }
         const initialWaterfall = definition?.initialWaterfallBonus ?? 0;
         if (initialWaterfall) {
-          setTurnCount(prev => prev + initialWaterfall);
+          dispatch({ type: 'INCREMENT_TURN_COUNT', delta: initialWaterfall });
           addGameLog('system', `开局加成：瀑流回合 +${initialWaterfall}`);
         }
         const initialShopLv = definition?.initialShopLevel;
         if (initialShopLv != null && initialShopLv > 0) {
-          setShopLevel(Math.min(MAX_SHOP_LEVEL, initialShopLv));
+          dispatch({ type: 'SET_SHOP_LEVEL', level: initialShopLv });
           addGameLog('shop', `开局加成：商店等级 ${Math.min(MAX_SHOP_LEVEL, initialShopLv)}`);
         }
         const initialBackpackCap = definition?.initialBackpackCapacityBonus ?? 0;
         if (initialBackpackCap) {
-          setBackpackCapacityModifier(prev => prev + initialBackpackCap);
+          dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'backpackCapacityModifier', delta: initialBackpackCap });
           addGameLog('skill', `开局加成：背包上限 +${initialBackpackCap}`);
         }
         const initialHandLimit = definition?.initialHandLimitBonus ?? 0;
-        setHandLimitBonus(initialHandLimit);
+        dispatch({ type: 'SET_HAND_LIMIT_BONUS', bonus: initialHandLimit });
         if (initialHandLimit) {
           addGameLog('skill', `开局加成：手牌上限 +${initialHandLimit}`);
         }
         const initialSpellDmg = definition?.initialSpellDamageBonus ?? 0;
         if (initialSpellDmg) {
-          setPermanentSpellDamageBonus(prev => prev + initialSpellDmg);
+          dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'permanentSpellDamageBonus', delta: initialSpellDmg });
           addGameLog('skill', `开局加成：永久法术伤害 +${initialSpellDmg}`);
         }
       }
 
-      setShowSkillSelection(false);
+      dispatch({ type: 'SET_SHOW_SKILL_SELECTION', show: false });
       cardDraftPendingSkillRef.current = skillId;
-      setCardDraftPool(createStarterCardPool());
-      setShowCardDraft(true);
+      dispatch({ type: 'SET_CARD_DRAFT_POOL', pool: createStarterCardPool() });
+      dispatch({ type: 'SET_SHOW_CARD_DRAFT', show: true });
     });
   };
 
@@ -5975,10 +4536,12 @@ export default function GameBoard() {
     let classDrawn: GameCardData[] = [];
 
     engine.batch(() => {
-      setShowCardDraft(false);
-      setCardDraftPool([]);
+      dispatch({ type: 'SET_SHOW_CARD_DRAFT', show: false });
+      dispatch({ type: 'SET_CARD_DRAFT_POOL', pool: [] });
 
-      setBackpackItems(picks);
+      for (const pick of picks) {
+        addCardToBackpack(pick);
+      }
       addGameLog('system', `起始卡牌选择完毕：${picks.map(c => c.name).join('、')}`);
 
       if (hasEternalRelic(currentRelics, 'summon-minion')) {
@@ -6009,7 +4572,7 @@ export default function GameBoard() {
           c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap',
         );
         if (thunderSeal) {
-          setClassDeck(prev => prev.filter(c => c.id !== thunderSeal.id));
+          dispatch({ type: 'UPDATE_CLASS_DECK', updater: prev => prev.filter(c => c.id !== thunderSeal.id) });
           addCardToBackpack(thunderSeal);
           triggerClassDeckFlight([thunderSeal]);
         }
@@ -6022,37 +4585,31 @@ export default function GameBoard() {
       const skillClassCards = (definition?.type === 'passive') ? 0 : (definition?.initialClassCardDraw ?? 0);
       const relicClassCards = currentRelics.reduce((sum, r) => sum + (r.initialClassCardDraw ?? 0), 0);
       const totalClassCards = baseClassCards + skillClassCards + relicClassCards;
-      const classFilter = hasEternalRelic(currentRelics, 'shield-wall')
-        ? (card: GameCardData) => !(card.type === 'amulet' && (card as GameCardData).amuletEffect === 'discard-zap')
-        : undefined;
+      const hasShieldWall = hasEternalRelic(currentRelics, 'shield-wall');
+      const thunderSealIds = hasShieldWall
+        ? classDeck.filter(c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap').map(c => c.id)
+        : [];
 
       const previewId = classCardPreviewIdRef.current;
       const previewCard = previewId ? classDeck.find(c => c.id === previewId) : null;
-      const previewPassesFilter = previewCard && (!classFilter || classFilter(previewCard));
+      const previewExcluded = previewCard && thunderSealIds.includes(previewCard.id);
 
-      if (previewPassesFilter && previewCard) {
+      if (previewCard && !previewExcluded) {
         addCardToBackpack(previewCard);
-        setClassDeck(prev => prev.filter(c => c.id !== previewCard.id));
+        dispatch({ type: 'UPDATE_CLASS_DECK', updater: prev => prev.filter(c => c.id !== previewCard.id) });
         addGameLog('skill', `获得专属卡（开场）：${previewCard.name}`);
         classDrawn.push(previewCard);
 
         const remaining = totalClassCards - 1;
         if (remaining > 0) {
-          const extraFilter = (card: GameCardData) => {
-            if (card.id === previewId) return false;
-            return classFilter ? classFilter(card) : true;
-          };
-          const more = drawClassCardsToBackpack(remaining, '开场', extraFilter);
-          classDrawn.push(...more);
+          const excludeIds = [previewId!, ...thunderSealIds];
+          drawClassCardsToBackpack(remaining, '开场', { excludeIds });
         }
       } else {
-        classDrawn = drawClassCardsToBackpack(totalClassCards, '开场', classFilter);
+        const excludeIds = thunderSealIds.length > 0 ? thunderSealIds : undefined;
+        drawClassCardsToBackpack(totalClassCards, '开场', excludeIds ? { excludeIds } : undefined);
       }
       classCardPreviewIdRef.current = null;
-
-      if (classDrawn.length > 0) {
-        triggerClassDeckFlight(classDrawn);
-      }
     });
 
     const baseHandCards = 2;
@@ -6065,15 +4622,7 @@ export default function GameBoard() {
     setTimeout(() => {
       engine.batch(() => {
         for (let i = 0; i < totalHandCards; i++) {
-          const drawn = drawFromBackpackToHand();
-          if (drawn) {
-            addGameLog(
-              i < baseHandCards ? 'system' : 'skill',
-              i < baseHandCards
-                ? `开场抽牌：「${drawn.name}」`
-                : `开局加成：抽到手牌「${drawn.name}」`,
-            );
-          }
+          drawFromBackpackToHand();
         }
       });
     }, classFlightDelay);
@@ -6122,73 +4671,21 @@ export default function GameBoard() {
     return null;
   };
 
+  // drawPending: thin animation bridge — 500ms delay then dispatch to reducer
   useEffect(() => {
-    if (!drawPending) return;
-    
-    const timer = setTimeout(() => {
-      let carriedSlot: { card: GameCardData; index: number } | null = null;
-      
-      // First, capture the unplayed non-ghost card and its original slot
-      setActiveCards(prev => {
-        const remaining = flattenActiveRowSlots(prev).filter(c => !c.isGhost);
-        if (remaining.length === 1) {
-          const onlyCard = remaining[0];
-          carriedSlot = {
-            card: onlyCard,
-            index: findSlotIndexByCardId(prev, onlyCard.id),
-          };
-        } else {
-          carriedSlot = null;
-        }
-        return prev;
-      });
-      
-      // Then update both deck and active cards
-      setRemainingDeck(prevRemaining => {
-        const occupiedSlots = carriedSlot ? 1 : 0;
-        const availableSlots = DUNGEON_COLUMN_COUNT - occupiedSlots;
-        const cardsToDraw = Math.min(availableSlots, prevRemaining.length);
-        
-        if (cardsToDraw === 0 && !carriedSlot) {
-          addGameLog('system', '胜利！地牢已被征服！');
-          setVictory(true);
-          setGameOver(true);
-          setTotalWins(incrementTotalWins());
-          setActiveCards(createEmptyActiveRow());
-          setCardsPlayed(0);
-          setDrawPending(false);
-          return prevRemaining;
-        }
-
-        const newCards = prevRemaining.slice(0, cardsToDraw);
-        if (newCards.length > 0) {
-          addGameLog('deck', `翻开 ${newCards.length} 张地牢牌：${newCards.map(c => c.name).join('、')}`);
-        }
-        const nextSlots = createEmptyActiveRow();
-        const drawSpawnTurn = turnCount;
-
-        if (carriedSlot) {
-          const targetIndex = carriedSlot.index >= 0 ? carriedSlot.index : 0;
-          nextSlots[targetIndex] = carriedSlot.card;
-        }
-
-        let insertIndex = 0;
-        for (let col = 0; col < DUNGEON_COLUMN_COUNT; col++) {
-          if (!nextSlots[col] && insertIndex < newCards.length) {
-            nextSlots[col] = applyMonsterRage(newCards[insertIndex++], drawSpawnTurn, gameMode === 'quick');
-          }
-        }
-        
-        setActiveCards(nextSlots);
-        setCardsPlayed(0);
-        setDrawPending(false);
-        
-        return prevRemaining.slice(cardsToDraw); // Remove drawn cards from deck
-      });
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [drawPending]);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const check = () => {
+      if (!engine.getState().drawPending) return;
+      timer = setTimeout(() => {
+        timer = null;
+        dispatch({ type: 'SET_DRAW_PENDING', value: false });
+        engine.dispatch({ type: 'DRAW_DUNGEON_ROW' });
+      }, 500);
+    };
+    check();
+    const unsub = engine.subscribe(check);
+    return () => { unsub(); if (timer) clearTimeout(timer); };
+  }, [engine]);
 
 
 
@@ -6198,68 +4695,33 @@ export default function GameBoard() {
 
 
 
-  const createCurseCard = (sourceCard?: GameCardData): GameCardData => ({
-    id: `curse-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    type: 'magic',
-    name: '血咒之印',
-    value: 0,
-    image: sourceCard?.image ?? eventScrollImage,
-    description: '永久魔法：使用和弃置时，都失去 3 点生命值。',
-    magicType: 'permanent',
-    magicEffect: 'curse',
-    isCurse: true,
-  });
+  const createCurseCard = (_sourceCard?: GameCardData): GameCardData => {
+    let rng = engine.getState().rng;
+    const [id, rng2] = nextId(rng, 'curse'); rng = rng2;
+    dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+    return {
+      id,
+      type: 'curse',
+      name: '血咒之印',
+      value: 0,
+      image: bloodCurseSealImage,
+      description: '诅咒：使用时失去 3 点生命，使用后回到背包；无法被回收或弃置。',
+      curseEffect: 'blood-curse',
+    };
+  };
 
 
 
 
 
-  useEffect(() => {
-    enforceBackpackCapacity();
-  }, [backpackCapacity, enforceBackpackCapacity]);
+  // Backpack capacity enforcement DELETED — handled by ENFORCE_BACKPACK_CAPACITY reducer
 
-  const pendingWraithPassiveUnlockRef = useRef(false);
+  // Wraith purification check DELETED — handled by CHECK_WRAITH_PURIFICATION reducer
+  // Wraith passive unlock popup useEffect DELETED — pendingWraithPassiveUnlockRef was never set to true (dead code)
 
-  useEffect(() => {
-    if (hasEternalRelic(eternalRelics, 'wraith-purification')) return;
-    if (pendingWraithPassiveUnlockRef.current) return;
-    if (monstersDefeated === 0) return;
-
-    const hasWraith =
-      activeCards.some(c => c?.monsterType === 'Wraith') ||
-      previewCards.some(c => c?.monsterType === 'Wraith') ||
-      remainingDeck.some(c => c.monsterType === 'Wraith');
-
-    if (!hasWraith) {
-      pendingWraithPassiveUnlockRef.current = true;
-      const relic = getEternalRelic('wraith-purification');
-      setEternalRelics(prev => {
-        if (hasEternalRelic(prev, 'wraith-purification')) return prev;
-        return [...prev, relic];
-      });
-      addGameLog('skill', `所有幽魂已被消灭！获得${relic.name}`);
-    }
-  }, [activeCards, previewCards, remainingDeck, eternalRelics, monstersDefeated, addGameLog]);
-
-  useEffect(() => {
-    if (!pendingWraithPassiveUnlockRef.current) return;
-    if (activeMonsterReward || monsterRewardQueue.length > 0) return;
-    pendingWraithPassiveUnlockRef.current = false;
-    setWraithPassiveUnlockPopup(true);
-  }, [activeMonsterReward, monsterRewardQueue]);
-
-  useEffect(() => {
-    if (honorSweepUpgradesPending <= 0) return;
-    if (activeMonsterReward || monsterRewardQueue.length > 0) return;
-    if (discoverModalOpen || eventModalOpen || waterfallAnimation.isActive) return;
-    const emptySlots = DUNGEON_COLUMN_COUNT - countActiveRowSlotsExcludeGhost(activeCards);
-    if (emptySlots >= 4) return;
-    const count = honorSweepUpgradesPending;
-    clearHonorSweepUpgrades();
-    setUpgradeModalMaxCount(count);
-    setUpgradeModalOpen(true);
-    setHeroSkillBanner(`战血横扫：选择至多 ${count} 张牌升级！`);
-  }, [honorSweepUpgradesPending, activeMonsterReward, monsterRewardQueue, discoverModalOpen, eventModalOpen, waterfallAnimation.isActive, activeCards, clearHonorSweepUpgrades, setUpgradeModalMaxCount, setUpgradeModalOpen, setHeroSkillBanner]);
+  // Honor sweep upgrade modal gating moved to reducer:
+  // - CHECK_HONOR_SWEEP_UPGRADES action is dispatched after honorSweepUpgradesPending is set
+  // - APPLY_MONSTER_REWARD enqueues CHECK_HONOR_SWEEP_UPGRADES when reward queue clears
 
   discardedCardsRef.current = discardedCards;
   useEffect(() => {
@@ -6284,9 +4746,10 @@ export default function GameBoard() {
 
   const resetWaterfallAnimation = () => {
     clearWaterfallTimeouts();
-    waterfallPlanRef.current = null;
     setWaterfallAnimation(initialWaterfallAnimationState);
     waterfallLockRef.current = false;
+
+    dispatch({ type: 'COMPLETE_WATERFALL' });
 
     if (waterfallDiscoverPendingRef.current) {
       waterfallDiscoverPendingRef.current = false;
@@ -6298,22 +4761,15 @@ export default function GameBoard() {
   };
 
   const startWaterfallDeal = () => {
-    const plan = waterfallPlanRef.current;
+    const plan = engine.getState().pendingWaterfallPlan;
     if (!plan) {
       resetWaterfallAnimation();
       return;
     }
 
-    setRemainingDeck(plan.nextRemainingDeck);
-
     if (plan.nextPreviewCards.length === 0) {
-      setPreviewCards(createEmptyActiveRow());
-      if (plan.shouldDeclareVictory && countActiveRowSlotsExcludeGhost(activeCards) === 0) {
-        addGameLog('system', '胜利！地牢已被征服！');
-        setVictory(true);
-        setGameOver(true);
-        setTotalWins(incrementTotalWins());
-      }
+      // Delegate victory check + preview clear to the reducer
+      dispatch({ type: 'APPLY_WATERFALL_DEAL' });
       resetWaterfallAnimation();
       return;
     }
@@ -6330,21 +4786,8 @@ export default function GameBoard() {
       sequenceId: prev.sequenceId,
     }));
 
-    setPreviewCards(fillActiveRowSlots(plan.nextPreviewCards).map(card =>
-      card ? applyMonsterRage(card, turnCount + 1, gameMode === 'quick') : null,
-    ) as ActiveRowSlots);
-
-    // Apply pending preview stacks from waterfall deal bonus
-    const stacksToApply = pendingPreviewStacksRef.current;
-    if (Object.keys(stacksToApply).length > 0) {
-      setPreviewCardStacks(stacksToApply);
-      pendingPreviewStacksRef.current = {};
-    } else {
-      setPreviewCardStacks({});
-    }
-
-    const dealCardNames = plan.nextPreviewCards.map(c => `「${c.name}」`).join('、');
-    addGameLog('waterfall', `发牌：${dealCardNames} 进入预览行`);
+    // Delegate preview fill + deck update to the reducer
+    dispatch({ type: 'APPLY_WATERFALL_DEAL' });
 
     logWaterfall('deal-start', {
       nextPreviewCount: plan.nextPreviewCards.length,
@@ -6357,316 +4800,19 @@ export default function GameBoard() {
   };
 
   const handleWaterfallDiscardComplete = () => {
-    const plan = waterfallPlanRef.current;
+    const plan = engine.getState().pendingWaterfallPlan;
     if (!plan) {
       resetWaterfallAnimation();
       return;
     }
 
     if (plan.discardCard) {
-      const previewCol =
-        plan.discardPreviewIndex != null ? String(plan.discardPreviewIndex + 1) : '?';
-      addGameLog(
-        'waterfall',
-        `瀑流挤掉：「${plan.discardCard.name}」（预览第 ${previewCol} 列 · ${plan.discardCard.type}）`,
-      );
-      /** 尚未变身 Boss 的「最终之敌」被挤出时不进坟场，置于 remaining 牌堆底（不打乱牌序） */
-      const tryReturnFinalMonsterPrecursorToDeck = (card: GameCardData): boolean => {
-        if (card.type !== 'monster' || !card.isFinalMonster || card.bossPhase) {
-          return false;
-        }
-        addGameLog('waterfall', `${card.name}（最终之敌）被挤出，置于牌堆底以待决战`);
-        plan.nextRemainingDeck.push(card);
-        setHeroSkillBanner(`${card.name} 隐入牌堆……终局之战尚未到来。`);
-        return true;
-      };
-      const waterfallDiscardToGraveyardUnlessFinal = (card: GameCardData) => {
-        if (!tryReturnFinalMonsterPrecursorToDeck(card)) {
-          discardCardToGraveyard(card, { owner: 'dungeon' });
-        }
-      };
-      const wfx = plan.discardCard.waterfallEffect;
-      if (wfx && (plan.discardCard.type === 'monster' || plan.discardCard.type === 'event')) {
-        const cardName = plan.discardCard.name;
-        switch (wfx.type) {
-          case 'returnToDeck': {
-            const back = plan.discardCard!;
-            const isWraith = back.type === 'monster' && back.monsterType === 'Wraith';
-            if (isWraith) {
-              const insertIdx = Math.floor(Math.random() * (plan.nextRemainingDeck.length + 1));
-              plan.nextRemainingDeck.splice(insertIdx, 0, back);
-              addGameLog('waterfall', `${cardName} 化为幽影，随机回到剩余牌堆某处`);
-              setHeroSkillBanner(`${cardName} 化为幽影，消散在牌堆深处……`);
-            } else {
-              addGameLog('waterfall', `${cardName} 化为幽影，置于牌堆底`);
-              plan.nextRemainingDeck.push(back);
-              setHeroSkillBanner(`${cardName} 化为幽影，置于牌堆底。`);
-            }
-            break;
-          }
-          case 'bonusDecay':
-            addGameLog('waterfall', `${cardName} 诅咒削弱装备/法术加成 -${wfx.amount}`);
-            (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
-              (['damage', 'shield'] as (keyof SlotPermanentBonus)[]).forEach(bonusType => {
-                setEquipmentSlotBonus(slotId, bonusType, v => v - wfx.amount);
-              });
-            });
-            setPermanentSpellDamageBonus(prev => prev - wfx.amount);
-            setHeroSkillBanner(`${cardName} 的诅咒削弱了你的装备与法术加成！`);
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          case 'goldLoss':
-            addGameLog('waterfall', `${cardName} 偷走 ${wfx.amount} 金币`);
-            setGold(prev => Math.max(0, prev - wfx.amount));
-            setHeroSkillBanner(`${cardName} 逃跑时偷走了 ${wfx.amount} 金币！`);
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          case 'damage':
-            addGameLog('waterfall', `${cardName} 临死反扑，造成 ${wfx.amount} 点伤害`);
-            applyDamage(wfx.amount);
-            setHeroSkillBanner(`${cardName} 临死反扑，造成 ${wfx.amount} 点伤害！`);
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          case 'turnBoost':
-            addGameLog('waterfall', `${cardName} 龙息加速 waterfall +${wfx.amount}`);
-            setTurnCount(prev => prev + wfx.amount);
-            {
-              const pL = slotTempArmor.equipmentSlot1;
-              const pR = slotTempArmor.equipmentSlot2;
-              if (pL !== 0 || pR !== 0) {
-                setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
-              }
-            }
-            if (slotTempAttack.equipmentSlot1 !== 0 || slotTempAttack.equipmentSlot2 !== 0) {
-              setSlotTempAttack({ equipmentSlot1: 0, equipmentSlot2: 0 });
-            }
-            if (amuletEffects.hasStrength) {
-              setSlotTempAttack(prev => ({
-                equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
-                equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
-              }));
-            }
-            if (amuletEffects.hasBalance) {
-              setSlotTempAttack(prev => ({
-                equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
-                equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
-              }));
-              setSlotTempArmor(prev => ({
-                equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
-                equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
-              }));
-            }
-            suppressTurnAmuletReapplyRef.current = true;
-            setActiveCards(prev => {
-              let changed = false;
-              const next = prev.map(c => {
-                if (!c || c.type !== 'monster') return c;
-                const tAtk = c.tempAttackBoost ?? 0;
-                const tHp = c.tempHpBoost ?? 0;
-                if (tAtk === 0 && tHp === 0) return c;
-                changed = true;
-                const newAtk = Math.max(1, (c.attack ?? c.value ?? 0) - tAtk);
-                const newVal = Math.max(1, (c.value ?? 0) - tAtk);
-                const newMaxHp = Math.max(1, (c.maxHp ?? 0) - tHp);
-                const newHp = Math.min(c.hp ?? 0, newMaxHp);
-                const newBoost = Math.max(0, (c.specialAttackBoost ?? 0) - tAtk);
-                return { ...c, attack: newAtk, value: newVal, maxHp: newMaxHp, hp: newHp, specialAttackBoost: newBoost, tempAttackBoost: 0, tempHpBoost: 0 };
-              }) as typeof prev;
-              return changed ? next : prev;
-            });
-            setDiscardedCards(prev => prev.map(c => {
-              if (c.type !== 'monster' || ((c.tempAttackBoost ?? 0) === 0 && (c.tempHpBoost ?? 0) === 0)) return c;
-              return { ...c, tempAttackBoost: 0, tempHpBoost: 0 };
-            }));
-            setHeroSkillBanner(`${cardName} 的龙息加速了 waterfall 进程 +${wfx.amount}！`);
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          case 'boostRowMonsterAttack': {
-            const boost = wfx.amount;
-            const boosted: string[] = [];
-            setActiveCards(prev =>
-              prev.map(card => {
-                if (card?.type === 'monster') {
-                  boosted.push(card.name);
-                  return { ...card, attack: (card.attack ?? card.value ?? 0) + boost, value: (card.value ?? 0) + boost, tempAttackBoost: (card.tempAttackBoost ?? 0) + boost };
-                }
-                return card;
-              }) as ActiveRowSlots,
-            );
-            if (boosted.length > 0) {
-              addGameLog('waterfall', `${cardName} 被挤出，所有怪物攻击 +${boost}：${boosted.join('、')}`);
-              setHeroSkillBanner(`${cardName} 的血咒强化了所有怪物！攻击 +${boost}！`);
-            } else {
-              addGameLog('waterfall', `${cardName} 被挤出，但没有怪物可强化。`);
-            }
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          }
-          case 'destroyAllEquipment': {
-            const destroyed: string[] = [];
-            const triggerLW = (card: GameCardData, sid: EquipmentSlotId) => {
-              if (card.onDestroyHeal) {
-                healHero(card.onDestroyHeal);
-                addGameLog('equip', `${card.name} 遗言：恢复了 ${card.onDestroyHeal} 点生命`);
-              }
-              if (card.onDestroyGold) {
-                setGold(prev => prev + card.onDestroyGold!);
-                addGameLog('equip', `${card.name} 遗言：获得了 ${card.onDestroyGold} 金币`);
-              }
-              if (card.onDestroyDraw) {
-                for (let di = 0; di < card.onDestroyDraw; di++) drawFromBackpackToHand();
-                addGameLog('equip', `${card.name} 遗言：抽取了 ${card.onDestroyDraw} 张牌`);
-              }
-              if (card.onDestroyClassDraw) {
-                const drawn = drawClassCardsToBackpack(card.onDestroyClassDraw, `${card.name}-遗言`);
-                if (drawn.length > 0) {
-                  triggerClassDeckFlight(drawn);
-                  addGameLog('equip', `${card.name} 遗言：获得专属卡「${drawn.map(c => c.name).join('、')}」`);
-                }
-              }
-              if (card.onDestroyPermanentDamage) {
-                setEquipmentSlotBonus(sid, 'damage', cur => cur + card.onDestroyPermanentDamage!);
-                addGameLog('equip', `${card.name} 遗言：该装备栏永久伤害 +${card.onDestroyPermanentDamage}！`);
-              }
-              if (card.onDestroyPermanentShield) {
-                setEquipmentSlotBonus(sid, 'shield', cur => cur + card.onDestroyPermanentShield!);
-                addGameLog('equip', `${card.name} 遗言：该装备栏永久护甲 +${card.onDestroyPermanentShield}！`);
-              }
-              if (card.onDestroyEffect) {
-                if (card.onDestroyEffect === 'graveyard-to-hand') {
-                  const graveyard = engine.getState().discardedCards;
-                  if (graveyard.length > 0) {
-                    const idx = Math.floor(Math.random() * graveyard.length);
-                    const picked = graveyard[idx];
-                    setDiscardedCards(prev => prev.filter((_, i) => i !== idx));
-                    queueCardIntoHand(picked, 'graveyard');
-                    addGameLog('equip', `${card.name} 遗言：从坟场获得了「${picked.name}」！`);
-                  } else {
-                    addGameLog('equip', `${card.name} 遗言：坟场没有可用的牌。`);
-                  }
-                } else {
-                  addGameLog('equip', `${card.name} 遗言：${card.onDestroyEffect}`);
-                }
-              }
-            };
-            const revived: string[] = [];
-            (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
-              const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-              if (slotItem) {
-                const card = slotItem as GameCardData;
-                triggerLW(card, slotId);
-                const isMonsterEquipWF = card.type === 'monster';
-                const nativeReviveWF = isMonsterEquipWF && card.hasRevive && !card.reviveUsed;
-                const equipReviveWF = card.hasEquipmentRevive && !card.equipmentReviveUsed;
-                if (nativeReviveWF || equipReviveWF) {
-                  const revivedItem = nativeReviveWF
-                    ? { ...card, durability: 1, reviveUsed: true }
-                    : { ...card, durability: 1, equipmentReviveUsed: true };
-                  setEquipmentSlotById(slotId, revivedItem as EquipmentItem);
-                  addGameLog('equip', `${card.name} 复生！以 1 耐久复活！`);
-                  revived.push(card.name);
-                } else {
-                  destroyed.push(slotItem.name);
-                  disposeOwnedEquipmentCard({ ...slotItem }, { isDestruction: true });
-                  clearEquipmentSlotById(slotId);
-                }
-              }
-              const reserve = slotId === 'equipmentSlot1' ? equipmentSlot1Reserve : equipmentSlot2Reserve;
-              const survivedReserveWF: EquipmentItem[] = [];
-              reserve.forEach(r => {
-                const rCard = r as GameCardData;
-                triggerLW(rCard, slotId);
-                const isMonsterEquipR = rCard.type === 'monster';
-                const nativeR = isMonsterEquipR && rCard.hasRevive && !rCard.reviveUsed;
-                const equipR = rCard.hasEquipmentRevive && !rCard.equipmentReviveUsed;
-                if (nativeR || equipR) {
-                  const revivedR = nativeR
-                    ? { ...r, durability: 1, reviveUsed: true }
-                    : { ...r, durability: 1, equipmentReviveUsed: true };
-                  survivedReserveWF.push(revivedR as EquipmentItem);
-                  addGameLog('equip', `${rCard.name} 复生！以 1 耐久复活！`);
-                  revived.push(rCard.name);
-                } else {
-                  destroyed.push(r.name);
-                  disposeOwnedEquipmentCard({ ...r }, { isDestruction: true });
-                }
-              });
-              setEquipmentReserve(slotId, survivedReserveWF);
-            });
-            if (destroyed.length > 0) {
-              addGameLog('waterfall', `${cardName} 被挤出，破坏了所有装备：${destroyed.join('、')}${revived.length > 0 ? `（${revived.join('、')} 复生）` : ''}`);
-              setHeroSkillBanner(`${cardName} 的贪婪吞噬了你的所有装备！`);
-            } else {
-              addGameLog('waterfall', `${cardName} 被挤出，但没有装备可破坏。`);
-            }
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          }
-          case 'swarmInfest': {
-            const bugCount = wfx.amount;
-            for (let bi = 0; bi < bugCount; bi++) {
-              plan.nextRemainingDeck.unshift(createBugletCard());
-            }
-            addGameLog('waterfall', `${cardName} 被挤出，${bugCount} 只小虫子涌入了牌堆顶！`);
-            setHeroSkillBanner(`${cardName} 被挤出！${bugCount} 只小虫子混入了牌堆！`);
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          }
-          case 'spellDecay': {
-            const decayAmount = wfx.amount;
-            setPermanentSpellDamageBonus(prev => prev - decayAmount);
-            addGameLog('waterfall', `${cardName} 被挤出，永久法术伤害加成 -${decayAmount}`);
-            setHeroSkillBanner(`${cardName} 的反魔结界削弱了你的法术伤害！-${decayAmount}`);
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          }
-          case 'destroyAllAmuletsAndDiscardHand': {
-            const removedAmulets = [...amuletSlots];
-            if (removedAmulets.length > 0) {
-              removedAmulets.forEach(a => addToGraveyard(a as GameCardData));
-              setAmuletSlots([]);
-              addGameLog('waterfall', `${cardName} 被挤出，摧毁了 ${removedAmulets.length} 枚护符：${removedAmulets.map(a => a.name).join('、')}`);
-            }
-            const handSnapshot = [...handCards];
-            if (handSnapshot.length > 0) {
-              discardAllHandCards();
-              addGameLog('waterfall', `${cardName} 被挤出，弃回了 ${handSnapshot.length} 张手牌`);
-            }
-            if (removedAmulets.length > 0 || handSnapshot.length > 0) {
-              setHeroSkillBanner(`${cardName} 被挤出：摧毁了所有护符，弃回了全部手牌！`);
-            } else {
-              addGameLog('waterfall', `${cardName} 被挤出，但没有护符和手牌。`);
-            }
-            waterfallDiscardToGraveyardUnlessFinal(plan.discardCard);
-            break;
-          }
-          default:
-            if (!tryReturnFinalMonsterPrecursorToDeck(plan.discardCard)) {
-              discardCardToGraveyard(plan.discardCard);
-            }
-            break;
-        }
-      } else {
-        if (!tryReturnFinalMonsterPrecursorToDeck(plan.discardCard)) {
-          discardCardToGraveyard(plan.discardCard);
-        }
-      }
-    }
-
-    // Also discard any stacked cards on the discarded preview slot
-    if (plan.discardPreviewIndex != null) {
-      const discardedStacks = previewCardStacks[plan.discardPreviewIndex];
-      if (discardedStacks && discardedStacks.length > 0) {
-        for (const stackCard of discardedStacks) {
-          discardCardToGraveyard(stackCard, { owner: 'dungeon' });
-          addGameLog('waterfall', `瀑流挤掉堆叠：「${stackCard.name}」一并被挤出`);
-        }
-        setPreviewCardStacks(prev => {
-          const next = { ...prev };
-          delete next[plan.discardPreviewIndex!];
-          return next;
-        });
-      }
+      dispatch({
+        type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
+        discardCard: plan.discardCard,
+        nextRemainingDeck: plan.nextRemainingDeck,
+        discardPreviewIndex: plan.discardPreviewIndex,
+      });
     }
 
     logWaterfall('discard-complete', {
@@ -6681,14 +4827,14 @@ export default function GameBoard() {
       sequenceId: prev.sequenceId,
     }));
 
-    setPreviewCards(createEmptyActiveRow());
+    dispatch({ type: 'SET_PREVIEW_CARDS', payload: createEmptyActiveRow() });
     queueWaterfallTimeout(() => {
       startWaterfallDeal();
     }, 150, 'discard-to-deal-delay');
   };
 
   const handleWaterfallDropComplete = () => {
-    const plan = waterfallPlanRef.current;
+    const plan = engine.getState().pendingWaterfallPlan;
     if (!plan) {
       resetWaterfallAnimation();
       return;
@@ -6696,61 +4842,12 @@ export default function GameBoard() {
 
     logWaterfall('drop-complete', {
       dropTargetSlots: plan.dropTargetSlots,
-      dropCards: plan.dropCards.map(card => card.id),
+      dropCards: plan.resolvedDropCards.map(card => card.id),
       discardPlanned: Boolean(plan.discardCard),
     });
 
-    if (plan.dropTargetSlots.length > 0) {
-      const ghostsDisplaced: Array<{ slotIndex: number; ghost: GameCardData }> = [];
-
-      setActiveCards(prev => {
-        const next = [...prev];
-        plan.dropTargetSlots.forEach((slotIndex, idx) => {
-          const card = plan.dropCards[idx];
-          if (typeof slotIndex === 'number') {
-            const existing = next[slotIndex];
-            if (existing?.isGhost) {
-              ghostsDisplaced.push({ slotIndex, ghost: existing });
-            }
-            next[slotIndex] = card ?? null;
-          }
-        });
-        return next;
-      });
-
-      // Transfer preview stacks to active stacks for dropped cards;
-      // ghost cards displaced by drops are pushed to the bottom of the stack
-      setActiveCardStacks(prev => {
-        const next = { ...prev };
-        for (const { slotIndex, ghost } of ghostsDisplaced) {
-          next[slotIndex] = [ghost, ...(next[slotIndex] ?? [])];
-        }
-        plan.dropPreviewIndices.forEach((previewIdx, i) => {
-          const targetSlot = plan.dropTargetSlots[i];
-          const stackForThisPreview = previewCardStacks[previewIdx];
-          if (stackForThisPreview && stackForThisPreview.length > 0) {
-            next[targetSlot] = [...(next[targetSlot] ?? []), ...stackForThisPreview];
-          }
-        });
-        return next;
-      });
-
-      // Clear dropped preview cells and their stacks so they don't flash after animation ends
-      setPreviewCards(prev => {
-        const next = [...prev] as ActiveRowSlots;
-        for (const previewIdx of plan.dropPreviewIndices) {
-          next[previewIdx] = null;
-        }
-        return next;
-      });
-      setPreviewCardStacks(prev => {
-        const next = { ...prev };
-        for (const previewIdx of plan.dropPreviewIndices) {
-          delete next[previewIdx];
-        }
-        return next;
-      });
-    }
+    // Delegate all state mutations (activeCards, stacks, preview clear) to the reducer
+    dispatch({ type: 'APPLY_WATERFALL_DROP' });
 
     setWaterfallAnimation(prev => ({
       ...prev,
@@ -6777,373 +4874,71 @@ export default function GameBoard() {
       }, animSpeed(WATERFALL_DISCARD_DURATION), 'drop-to-discard');
     } else {
       queueWaterfallTimeout(() => {
-        setPreviewCards(createEmptyActiveRow());
         startWaterfallDeal();
       }, 150, 'drop-to-deal-delay');
     }
   };
 
-  // Waterfall side-effects: all non-animation effects a waterfall produces.
-  // Called from triggerWaterfall.
-  const applyWaterfallSideEffects = (dropCount?: number) => {
-    (['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]).forEach(slotId => {
-      const item = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-      if (item?.waterfallAttackBoost) {
-        const newValue = (item.value ?? 0) + item.waterfallAttackBoost;
-        setEquipmentSlotById(slotId, { ...item, value: newValue });
-        addGameLog('equip', `${item.name} 瀑流强化：攻击力 +${item.waterfallAttackBoost}（${newValue}）`);
-      }
-    });
+  // Start waterfall animation from the plan stored in engine state.
+  // Called both when waterfall:planReady fires and on hydrate/undo recovery.
+  const startWaterfallAnimation = () => {
+    const plan = engine.getState().pendingWaterfallPlan;
+    if (!plan) return;
 
-    if (hasEternalRelic(eternalRelicsRef.current, 'waterfall-heal')) {
-      const baseHeal = 4;
-      healHero(baseHeal);
-      const healAmount = amuletEffects.hasHeal ? baseHeal * 2 : baseHeal;
-      addGameLog('skill', `永恒护符·潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${amuletEffects.hasHeal ? '（治疗加倍）' : ''}`);
-    }
-    if (hasEternalRelic(eternalRelics, 'waterfall-discover')) {
-      waterfallDiscoverPendingRef.current = true;
-    }
-    setTurnCount(prev => prev + 1);
-    addGameLog('turn', `══ 第 ${turnCount + 1} 波 ══`);
-    {
-      const prevLeft = slotTempArmor.equipmentSlot1;
-      const prevRight = slotTempArmor.equipmentSlot2;
-      if (prevLeft !== 0 || prevRight !== 0) {
-        setSlotTempArmor({ equipmentSlot1: 0, equipmentSlot2: 0 });
-        addGameLog('magic', '瀑流重置，所有临时护甲归零');
-      }
-    }
-    if (slotTempAttack.equipmentSlot1 !== 0 || slotTempAttack.equipmentSlot2 !== 0) {
-      setSlotTempAttack({ equipmentSlot1: 0, equipmentSlot2: 0 });
-      addGameLog('combat', '瀑流重置：所有临时攻击力归零');
-    }
-    // Aura amulets re-apply their temp bonuses after every waterfall reset
-    if (amuletEffects.hasStrength) {
-      setSlotTempAttack(prev => ({
-        equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
-        equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
-      }));
-      addGameLog('amulet', '力量护符（光环）：所有装备栏临时攻击 +4');
-    }
-    if (amuletEffects.hasBalance) {
-      setSlotTempAttack(prev => ({
-        equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
-        equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
-      }));
-      setSlotTempArmor(prev => ({
-        equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
-        equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
-      }));
-      addGameLog('amulet', '均衡护符（光环）：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1');
-    }
-    suppressTurnAmuletReapplyRef.current = true;
-    setActiveCards(prev => {
-      let changed = false;
-      const clearedNames: string[] = [];
-      const next = prev.map(c => {
-        if (!c || c.type !== 'monster') return c;
-        const tAtk = c.tempAttackBoost ?? 0;
-        const tHp = c.tempHpBoost ?? 0;
-        if (tAtk === 0 && tHp === 0) return c;
-        changed = true;
-        clearedNames.push(c.name);
-        const newAtk = Math.max(1, (c.attack ?? c.value ?? 0) - tAtk);
-        const newVal = Math.max(1, (c.value ?? 0) - tAtk);
-        const newMaxHp = Math.max(1, (c.maxHp ?? 0) - tHp);
-        const newHp = Math.min(c.hp ?? 0, newMaxHp);
-        const newBoost = Math.max(0, (c.specialAttackBoost ?? 0) - tAtk);
-        return { ...c, attack: newAtk, value: newVal, maxHp: newMaxHp, hp: newHp, specialAttackBoost: newBoost, tempAttackBoost: 0, tempHpBoost: 0 };
-      }) as typeof prev;
-      if (changed && clearedNames.length > 0) {
-        addGameLog('waterfall', `瀑流重置：${clearedNames.join('、')} 的临时增益消散了`);
-      }
-      return changed ? next : prev;
-    });
-    setDiscardedCards(prev => prev.map(c => {
-      if (c.type !== 'monster' || ((c.tempAttackBoost ?? 0) === 0 && (c.tempHpBoost ?? 0) === 0)) return c;
-      return { ...c, tempAttackBoost: 0, tempHpBoost: 0 };
-    }));
-    if (amuletEffects.hasLoneCard) {
-      const bpLen = engine.getState().backpackItems.length;
-      if (bpLen === 1) {
-        const loneDrawn = drawClassCardsToBackpack(1, '孤注之符');
-        if (loneDrawn.length > 0) {
-          triggerClassDeckFlight(loneDrawn);
-          addGameLog('amulet', `孤注之符：背包仅剩 ${bpLen} 张牌，获得职业卡「${loneDrawn[0].name}」`);
-        }
-      }
-    }
-
-    const recycledCards = restorePermanentMagicFromRecycleBag();
-    if (recycledCards > 0) {
-      logWaterfall('recycle-restore', { restored: recycledCards });
-    }
-
-    let hasWraithEquipEnrage = false;
-    for (const wsId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
-      const wItem = wsId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-      if (wItem && wItem.type === 'monster' && wItem.wraithTurnEnrage) {
-        hasWraithEquipEnrage = true;
-        break;
-      }
-    }
-    if (hasWraithEquipEnrage) {
-      const rowMonsters = activeCards.filter(
-        (c): c is GameCardData => Boolean(c && c.type === 'monster' && !c.isStunned),
-      );
-      for (const m of rowMonsters) {
-        if (!isMonsterEngaged(m.id)) {
-          beginCombat(m, 'monster');
-        }
-      }
-      if (rowMonsters.length > 0) {
-        addGameLog('equip', '怨灵诅咒：瀑流时激活行所有怪物激怒！');
-      }
-      setMaxAmuletSlots(prev => prev + 1);
-      addGameLog('equip', '怨灵诅咒：护符栏上限 +1！');
-    }
-
-    for (const gsId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
-      const gItem = gsId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-      if (gItem && gItem.type === 'monster' && gItem.golemSpellGrowth && gItem.golemSpellGrowth > 0 && gItem.golemLayerLossReflect) {
-        const newCoeff = gItem.golemLayerLossReflect + gItem.golemSpellGrowth;
-        setEquipmentSlotById(gsId, { ...gItem, golemLayerLossReflect: newCoeff });
-        addGameLog('equip', `${gItem.name} 法力吞噬：瀑流强化，岩层反震系数 +${gItem.golemSpellGrowth}（当前 ${newCoeff}）`);
-      }
-    }
-
-    setMagicCardsPlayedThisTurn(0);
-    resetHeroSkillForNewWave();
-  };
-
-  // Waterfall mechanism - staged animation + dealing
-  const triggerWaterfall = () => {
-    if (waterfallLockRef.current || waterfallAnimation.isActive) {
-      logWaterfall('trigger-blocked', {
-        lock: waterfallLockRef.current,
-        animActive: waterfallAnimation.isActive,
-      });
+    if (waterfallLockRef.current) {
+      logWaterfall('trigger-blocked', { lock: waterfallLockRef.current });
       return;
     }
-
     waterfallLockRef.current = true;
 
-    const releaseWaterfallLock = (reason: string) => {
-      waterfallLockRef.current = false;
-      logWaterfall('trigger-abort', { reason });
-    };
-
-    const baseEmptyColumns = getEmptyOrGhostColumns(activeCards);
-    const forceCascade = cascadeResetWaterfallRef.current;
-
-    if (forceCascade && baseEmptyColumns.length !== DUNGEON_COLUMN_COUNT) {
-      releaseWaterfallLock('cascade-row-not-empty');
-      queueWaterfallTimeout(triggerWaterfall, 50, 'cascade-reset-retry');
-      return;
+    // UI effects for stuck final monsters
+    for (const card of plan.stuckFinalMonsters) {
+      addGameLog('waterfall', `${card.name}（最终之敌）无法入场，返回牌堆顶等待决战`);
+      dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 隐入牌堆……终局之战尚未到来。` });
     }
 
-    const cascadeFullDrop = forceCascade && baseEmptyColumns.length === DUNGEON_COLUMN_COUNT;
-    const emptyColumns = cascadeFullDrop ? DUNGEON_COLUMNS : baseEmptyColumns;
-
-    if (emptyColumns.length === 0) {
-      releaseWaterfallLock('no-empty-slots');
-      return;
-    }
-
-    const previewIndices = getFilledPreviewColumns(previewCards);
-    const filledPreviewCount = previewIndices.length;
-    const emptyColumnSet = new Set(emptyColumns);
-
-    let dropAssignments: DungeonDropAssignment[] = [];
-    const unusedPreview = new Set(previewIndices);
-
-    if (cascadeFullDrop) {
-      dropAssignments = previewIndices
-        .map(previewIndex => {
-          const card = previewCards[previewIndex];
-          return card ? { previewIndex, card, slotIndex: previewIndex } : null;
-        })
-        .filter((assignment): assignment is DungeonDropAssignment => Boolean(assignment));
-      unusedPreview.clear();
-    } else {
-      // Each preview card falls straight down to its own column if the slot below is empty;
-      // if the slot below is occupied, the card is blocked.
-      for (const previewIndex of previewIndices) {
-        if (!emptyColumnSet.has(previewIndex)) continue;
-        const card = previewCards[previewIndex];
-        if (!card) continue;
-        dropAssignments.push({ previewIndex, card, slotIndex: previewIndex });
-        unusedPreview.delete(previewIndex);
-      }
-
-      // Late game: if preview has fewer than 5 cards and all blocked cards
-      // can fit into remaining empty active slots, redirect them instead of discarding.
-      if (unusedPreview.size > 0 && filledPreviewCount < DUNGEON_COLUMN_COUNT) {
-        const usedSlots = new Set(dropAssignments.map(a => a.slotIndex));
-        const remainingEmpty = emptyColumns.filter(col => !usedSlots.has(col)).sort((a, b) => a - b);
-        if (remainingEmpty.length >= unusedPreview.size) {
-          const blockedIndices = Array.from(unusedPreview).sort((a, b) => a - b);
-          let emptyIdx = 0;
-          for (const previewIndex of blockedIndices) {
-            const card = previewCards[previewIndex];
-            if (!card) continue;
-            dropAssignments.push({ previewIndex, card, slotIndex: remainingEmpty[emptyIdx] });
-            unusedPreview.delete(previewIndex);
-            emptyIdx++;
-          }
-        }
+    // UI effects for preview stacking
+    for (const [idx, cards] of Object.entries(plan.newPreviewStacks)) {
+      for (const bonusCard of cards) {
+        addGameLog('waterfall', `瀑流堆叠：「${bonusCard.name}」堆叠在预览行第 ${Number(idx) + 1} 列`);
       }
     }
-
-    const dropCount = dropAssignments.length;
 
     logWaterfall('drop-plan', {
-      emptySlots: emptyColumns,
-      previewIndices,
-      filledPreviewCount,
-      dropCount,
-      blockedPreview: Array.from(unusedPreview),
-      previewSnapshot: previewIndices.map(index => previewCards[index]?.id ?? null),
-      assignments: dropAssignments.map(({ previewIndex, slotIndex }) => ({
+      dropCount: plan.dropAssignments.length,
+      assignments: plan.dropAssignments.map(({ previewIndex, slotIndex }) => ({
         previewIndex,
         slotIndex,
       })),
     });
 
-    if (dropAssignments.length === 0 && previewIndices.length === 0 && remainingDeck.length === 0) {
-      releaseWaterfallLock('no-preview-cards-no-deck');
-      return;
-    }
-
-    waterfallPendingRef.current = false;
     const sequenceId = ++waterfallSequenceRef.current;
-    applyWaterfallSideEffects(dropCount);
+
+    // Dispatch turn reset + effects now (before animation)
+    dispatch({ type: 'WATERFALL_TURN_RESET' });
+    dispatch({ type: 'APPLY_WATERFALL_EFFECTS' });
+    suppressTurnAmuletReapplyRef.current = true;
 
     logWaterfall('trigger', {
-      emptySlots: emptyColumns,
-      filledPreviewCount,
-      dropCount,
+      dropCount: plan.resolvedDropCards.length,
       sequenceId,
-      assignments: dropAssignments.map(({ previewIndex, slotIndex }) => ({ previewIndex, slotIndex })),
+      assignments: plan.dropAssignments.map(({ previewIndex, slotIndex }) => ({ previewIndex, slotIndex })),
     });
 
-    const dropPreviewIndices = dropAssignments.map(pair => pair.previewIndex);
-    const dropTargetSlots = dropAssignments.map(pair => pair.slotIndex);
-    const spawnTurn = turnCount + 1;
-    const resolvedDropCards = dropAssignments.map(pair => applyMonsterRage(pair.card, spawnTurn, gameMode === 'quick'));
-
-    const remainingPreviewOrdered = Array.from(unusedPreview).sort((a, b) => b - a);
-    // Never discard the final monster (future boss) — pick a different card
-    const discardPreviewIndex =
-      remainingPreviewOrdered.find(idx => !previewCards[idx]?.isFinalMonster) ?? null;
-    const discardCard =
-      discardPreviewIndex !== null ? previewCards[discardPreviewIndex] : null;
-
-    // If the final monster is blocked but protected from discard, force-drop it
-    if (discardPreviewIndex !== null) {
-      unusedPreview.delete(discardPreviewIndex);
-    }
-    for (const blockedIdx of Array.from(unusedPreview)) {
-      const card = previewCards[blockedIdx];
-      if (!card?.isFinalMonster) continue;
-      const usedSlots = new Set([
-        ...dropAssignments.map(a => a.slotIndex),
-        ...activeCards.map((c, i) => (c ? i : -1)).filter(i => i >= 0),
-      ]);
-      for (let slot = 0; slot < DUNGEON_COLUMN_COUNT; slot++) {
-        if (!usedSlots.has(slot)) {
-          dropAssignments.push({ previewIndex: blockedIdx, card, slotIndex: slot });
-          unusedPreview.delete(blockedIdx);
-          break;
-        }
-      }
-    }
-
-    const stuckFinalMonsters: GameCardData[] = [];
-    for (const stuckIdx of Array.from(unusedPreview)) {
-      const card = previewCards[stuckIdx];
-      if (card?.isFinalMonster) {
-        stuckFinalMonsters.push(card);
-        unusedPreview.delete(stuckIdx);
-        addGameLog('waterfall', `${card.name}（最终之敌）无法入场，返回牌堆顶等待决战`);
-        setHeroSkillBanner(`${card.name} 隐入牌堆……终局之战尚未到来。`);
-      }
-    }
-
-    const effectiveDeck = [...stuckFinalMonsters, ...remainingDeck];
-    const baseDealCount = Math.min(DUNGEON_COLUMN_COUNT, effectiveDeck.length);
-    const nextPreviewCards = effectiveDeck.slice(0, baseDealCount);
-    let nextRemainingDeck = effectiveDeck.slice(baseDealCount);
-
-    // Default +1 stack per waterfall + any waterfallDealBonus extra stacks
-    // Monster cards are never stacked — they remain in the deck
-    const newPreviewStacks: Record<number, GameCardData[]> = {};
-    const defaultStackCount = 1;
-    const totalBonusCount = defaultStackCount + waterfallDealBonus;
-    if (totalBonusCount > 0 && nextRemainingDeck.length > 0 && nextPreviewCards.length > 0) {
-      const bonusCards: GameCardData[] = [];
-      const skippedCards: GameCardData[] = [];
-      for (let di = 0; di < nextRemainingDeck.length && bonusCards.length < totalBonusCount; di++) {
-        if (nextRemainingDeck[di].type === 'monster') {
-          skippedCards.push(nextRemainingDeck[di]);
-        } else {
-          bonusCards.push(nextRemainingDeck[di]);
-        }
-      }
-      const consumed = bonusCards.length + skippedCards.length;
-      nextRemainingDeck = [...skippedCards, ...nextRemainingDeck.slice(consumed)];
-
-      for (const bonusCard of bonusCards) {
-        const nonMonsterIndices = nextPreviewCards
-          .map((c, i) => (c && c.type !== 'monster' ? i : -1))
-          .filter(i => i >= 0);
-        if (nonMonsterIndices.length > 0) {
-          const targetIdx = nonMonsterIndices[Math.floor(Math.random() * nonMonsterIndices.length)];
-          if (!newPreviewStacks[targetIdx]) {
-            newPreviewStacks[targetIdx] = [];
-          }
-          newPreviewStacks[targetIdx].push(bonusCard);
-          addGameLog('waterfall', `瀑流堆叠：「${bonusCard.name}」堆叠在预览行第 ${targetIdx + 1} 列`);
-        }
-      }
-    }
-
-    const shouldDeclareVictory =
-      nextPreviewCards.length === 0 && effectiveDeck.length === 0;
-
-    const planDiscardCard = cascadeFullDrop ? null : discardCard;
-    const planDiscardPreviewIndex = cascadeFullDrop ? null : discardPreviewIndex;
-    const planDiscardDestination = getWaterfallPreviewDiscardDestination(planDiscardCard);
-
-    waterfallPlanRef.current = {
-      dropCards: resolvedDropCards,
-      dropPreviewIndices,
-      dropTargetSlots,
-      discardCard: planDiscardCard,
-      discardPreviewIndex: planDiscardPreviewIndex,
-      discardDestination: planDiscardDestination,
-      nextPreviewCards,
-      nextRemainingDeck,
-      shouldDeclareVictory,
-    };
-    pendingPreviewStacksRef.current = newPreviewStacks;
-    cascadeResetWaterfallRef.current = false;
-
     setWaterfallAnimation({
-      phase: resolvedDropCards.length > 0 ? 'dropping' : discardCard ? 'discarding' : 'dealing',
+      phase: plan.resolvedDropCards.length > 0 ? 'dropping' : plan.discardCard ? 'discarding' : 'dealing',
       isActive: true,
-      droppingSlots: resolvedDropCards.length > 0 ? dropPreviewIndices : [],
+      droppingSlots: plan.resolvedDropCards.length > 0 ? plan.dropPreviewIndices : [],
       landingSlots: [],
-      discardSlot: resolvedDropCards.length === 0 ? discardPreviewIndex : null,
-      discardDestination: planDiscardDestination,
+      discardSlot: plan.resolvedDropCards.length === 0 ? plan.discardPreviewIndex : null,
+      discardDestination: plan.discardDestination,
       dealingSlots: [],
       sequenceId,
     });
 
-    if (resolvedDropCards.length > 0) {
+    if (plan.resolvedDropCards.length > 0) {
       queueWaterfallTimeout(handleWaterfallDropComplete, animSpeed(WATERFALL_DROP_DURATION), 'drop-phase-timeout');
-    } else if (discardCard) {
+    } else if (plan.discardCard) {
       queueWaterfallTimeout(handleWaterfallDiscardComplete, animSpeed(WATERFALL_DISCARD_DURATION), 'discard-phase-timeout');
     } else {
       startWaterfallDeal();
@@ -7187,10 +4982,11 @@ export default function GameBoard() {
     
     // Delay actual removal for animation
     setTimeout(() => {
+      try {
       let spawnedBuglet: GameCardData | null = null;
       let hordeRageTriggered = false;
       const hordeRageMonstersToEngage: GameCardData[] = [];
-      setActiveCards(prev => {
+      dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: prev => {
         const index = findSlotIndexByCardId(prev, cardId);
         if (index === -1) {
           return prev;
@@ -7203,7 +4999,7 @@ export default function GameBoard() {
           c && i !== index && c.type === 'monster' && c.swarmSpawn && !c.isBuglet && !c.isStunned,
         );
         if (hasSwarmMonster && !isRemovedCardBuglet) {
-          const buglet = createBugletCard();
+          const buglet = applyAmplifyOnCreate(createBugletCard(), engine.getState().amplifiedCardBonus);
           updated[index] = buglet;
           spawnedBuglet = buglet;
           addGameLog('combat', `虫群效果：小虫子（激怒）在第 ${index + 1} 列生成！`);
@@ -7244,41 +5040,38 @@ export default function GameBoard() {
             const nextCard = stack[stack.length - 1];
             updated[index] = nextCard;
             unregisterProcessedCardId(nextCard.id);
-            setActiveCardStacks(prev => {
-              const newStacks = { ...prev };
-              const remaining = stack.slice(0, -1);
-              if (remaining.length === 0) {
-                delete newStacks[index];
-              } else {
-                newStacks[index] = remaining;
-              }
-              return newStacks;
-            });
+            const popStacks = { ...engine.getState().activeCardStacks };
+            const remaining = stack.slice(0, -1);
+            if (remaining.length === 0) {
+              delete popStacks[index];
+            } else {
+              popStacks[index] = remaining;
+            }
+            dispatch({ type: 'SET_ACTIVE_CARD_STACKS', stacks: popStacks });
             addGameLog('system', `堆叠揭示：「${nextCard.name}」从第 ${index + 1} 列堆叠中浮现！`);
           } else {
             updated[index] = null;
           }
         }
 
+        // Waterfall trigger check is now handled by the reducer's post-processing
+        // of UPDATE_ACTIVE_CARDS (computes plan + emits waterfall:planReady).
+        // Victory check for empty row with no deck/preview is also kept here
+        // as a fallback for the case where no waterfall plan can be computed.
         const remainingCount = countActiveRowSlotsExcludeGhost(updated);
-        
-        // Check if exactly 1 card remains - trigger waterfall (ghost cards don't count)
-    if (remainingCount === 1) {
-      waterfallPendingRef.current = true;
-    } else if (remainingCount === 0) {
-      if (remainingDeck.length === 0 && countActiveRowSlots(previewCards) === 0) {
+        if (remainingCount === 0) {
+          if (engine.getState().remainingDeck.length === 0 && countActiveRowSlots(engine.getState().previewCards) === 0) {
             addGameLog('system', '胜利！地牢已被征服！');
-            setVictory(true);
-            setGameOver(true);
-            setTotalWins(incrementTotalWins());
+            dispatch({ type: 'SET_GAME_OVER', victory: true });
+            dispatch({ type: 'SET_TOTAL_WINS', count: incrementTotalWins() });
           }
         }
         
         return updated;
-      });
+      } });
       
       if (hordeRageTriggered) {
-        setHeroSkillBanner(`虫群集结！全体怪物+3攻击+3血量！`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `虫群集结！全体怪物+3攻击+3血量！` });
         for (const m of hordeRageMonstersToEngage) {
           if (!isMonsterEngaged(m.id)) {
             beginCombatRef.current(m, 'hero');
@@ -7294,20 +5087,12 @@ export default function GameBoard() {
         next.delete(cardId);
         return next;
       });
-
+      } finally {
       pendingDungeonRemovalsRef.current = Math.max(0, pendingDungeonRemovalsRef.current - 1);
       logWaterfall('remove-complete', {
         cardId,
         pendingAfter: pendingDungeonRemovalsRef.current,
-        waterfallPending: waterfallPendingRef.current,
-        lock: waterfallLockRef.current,
       });
-      if (pendingDungeonRemovalsRef.current === 0 && waterfallPendingRef.current && !waterfallLockRef.current) {
-        logWaterfall('waterfall-ready-post-removal', {
-          pendingRemovals: pendingDungeonRemovalsRef.current,
-          lock: waterfallLockRef.current,
-        });
-        setActiveCards(prev => [...prev] as ActiveRowSlots);
       }
     }, 300);
     pendingDungeonRemovalsRef.current += 1;
@@ -7318,12 +5103,14 @@ export default function GameBoard() {
     pendingDungeonUseRef.current.add(cardId);
   };
 
-  const removePendingDungeonCard = (cardId: string) => {
+  const removePendingDungeonCard = (cardId: string): boolean => {
     const wasPending = pendingDungeonUseRef.current.delete(cardId);
     const inActiveRow = activeCards.some(c => c?.id === cardId);
     if (wasPending || inActiveRow) {
       removeCard(cardId, false);
+      return true;
     }
+    return false;
   };
 
   const wasDraggedFromHand = (cardId: string) =>
@@ -7353,11 +5140,11 @@ export default function GameBoard() {
     clearBackpackHandFallback(cardId);
 
     handCardsRef.current = handCardsRef.current.filter(c => c.id !== cardId);
-    setHandCards(prev => {
+    dispatch({ type: 'UPDATE_HAND_CARDS', updater: prev => {
       const next = prev.filter(c => c.id !== cardId);
       handCardsRef.current = next;
       return next;
-    });
+    } });
 
     if (draggedFromHand) {
       setDraggedCard(null);
@@ -7368,73 +5155,15 @@ export default function GameBoard() {
 
 
 
-  const interactiveModalBlocksWaterfall =
-    discoverModalOpen ||
-    upgradeModalOpen ||
-    Boolean(magicChoiceModal) ||
-    Boolean(equipmentPrompt) ||
-    Boolean(activeMonsterReward) ||
-    Boolean(graveyardDiscoverState) ||
-    Boolean(ghostBladeExileCards) ||
-    Boolean(deathWardPrompt) ||
-    Boolean(daggerSelfDestructPrompt) ||
-    Boolean(handMagicUpgradeModal) ||
-    Boolean(mirrorCopyModal) ||
-    Boolean(permGrantModal) ||
-    Boolean(amplifyModal) ||
-    Boolean(eventTransformState);
-
-  useEffect(() => {
-    const activeCount = countActiveRowSlotsExcludeGhost(activeCards);
-    const emptySlots = DUNGEON_COLUMN_COUNT - activeCount;
-    const shouldCascade = emptySlots >= 4;
-
-    logWaterfall('active-change', {
-      activeCount,
-      emptySlots,
-      shouldCascade,
-      pendingRemovals: pendingDungeonRemovalsRef.current,
-      waterfallPending: waterfallPendingRef.current,
-      lock: waterfallLockRef.current,
-      animActive: waterfallAnimation.isActive,
-    });
-
-    if (!shouldCascade) {
-      if (waterfallPendingRef.current) {
-        logWaterfall('waterfall-pending-reset', { reason: 'threshold-not-met' });
-      }
-      waterfallPendingRef.current = false;
-      return;
-    }
-
-    if (!waterfallPendingRef.current) {
-      waterfallPendingRef.current = true;
-      logWaterfall('waterfall-pending-set', { emptySlots });
-    }
-
-    if (interactiveModalBlocksWaterfall) {
-      logWaterfall('waterfall-deferred-modal-open', { emptySlots });
-      return;
-    }
-
-    if (
-      waterfallPendingRef.current &&
-      pendingDungeonRemovalsRef.current === 0 &&
-      !waterfallLockRef.current &&
-      !waterfallAnimation.isActive
-    ) {
-      logWaterfall('waterfall-trigger-from-effect', { emptySlots });
-      waterfallPendingRef.current = false;
-      triggerWaterfall();
-    }
-  }, [activeCards, waterfallAnimation.isActive, triggerWaterfall, resolvingDungeonCardId, interactiveModalBlocksWaterfall]);
+  // Waterfall is triggered by the reducer (postProcessActiveCards computes plan + emits waterfall:planReady).
+  // The UI listens for the event, waits for pending removal animations, then runs the animation sequence.
 
   function handleSellCard(item: any) {
     pushUndoSnapshot();
     const itemType = item.type as CardType;
 
     // Only allow selling defined card types
-    if (!isSellableType(itemType) || item.isCurse) {
+    if (!isSellableType(itemType) || item.type === 'curse') {
       return;
     }
     
@@ -7484,34 +5213,28 @@ export default function GameBoard() {
         break;
       case 'amulet':
         if (sellItem.amuletEffect === 'balance') {
-          setSlotTempAttack(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_ATTACK_BONUS,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_ATTACK_PENALTY,
-          }));
-          setSlotTempArmor(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_SHIELD_PENALTY,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_SHIELD_BONUS,
-          }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -BALANCE_ATTACK_BONUS });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: BALANCE_ATTACK_PENALTY });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot1', delta: BALANCE_SHIELD_PENALTY });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot2', delta: -BALANCE_SHIELD_BONUS });
         }
         if (sellItem.amuletEffect === 'strength') {
-          setSlotTempAttack(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - 4,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - 4,
-          }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -4 });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: -4 });
         }
-        setAmuletSlots(prev => prev.filter(slot => slot?.id !== sellItem.id));
+        dispatch({ type: 'REMOVE_AMULET', cardId: sellItem.id });
         break;
       case 'hand':
         consumeCardFromHand(sellItem);
         tickRecycleForge();
         break;
       case 'backpack':
-        setBackpackItems(prev => prev.filter(c => c.id !== sellItem.id));
+        dispatch({ type: 'UPDATE_BACKPACK_ITEMS', updater: prev => prev.filter(c => c.id !== sellItem.id) });
         break;
       default:
       // Item from dungeon - use removeCard to properly trigger waterfall (don't add to graveyard again)
         removeCard(sellItem.id, false);
-      setCardsPlayed(prev => prev + 1);
+      dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'cardsPlayed', delta: 1 });
         break;
     }
 
@@ -7553,11 +5276,13 @@ export default function GameBoard() {
     tryStartGolemLayerReflectFx,
     tryStartArcaneBladeSpellFx,
     tryStartDragonBreathFx,
+    tryStartMissileStormFx,
     animSpeed,
     requestDiceOutcome,
     addHeroMagicGauge,
     triggerGhostBladeExile,
     requestCardAction,
+    requestCardActionBatch,
     queueMonsterReward,
     removeCard,
     markDungeonCardPendingUse,
@@ -7574,10 +5299,11 @@ export default function GameBoard() {
     triggerGraveyardStackFlight,
     dragonBleedDestroyEquipment,
     beginDiscoverFlow,
-    beginDiscoverFlowAsync,
     requestDaggerSelfDestruct,
+    discoverPotionCompletionRef,
     combatAsyncEpochRef,
     pendingDefeatIdsRef,
+    pendingDungeonUseRef,
     goblinStolenIdsRef,
     heroTurnLayerLossIdsRef,
     heroTookDamageThisMonsterTurnRef,
@@ -7596,7 +5322,6 @@ export default function GameBoard() {
     computePersuadeSuccessRate,
     setPersuadeTempDiscount,
     undoStackRef,
-    setUndoCount,
     setMonsterDefeatStates,
     setMonsterBleedStates,
     setHealing,
@@ -7637,6 +5362,7 @@ export default function GameBoard() {
     maxHp,
     cardActionResolverRef,
     cardActionRemainingRef,
+    cardActionBatchResolverRef,
     deletingCardIdsRef,
     monsterRewardQueuedInstanceIdsRef,
     discardedCardsRef,
@@ -7686,6 +5412,8 @@ export default function GameBoard() {
     isMonsterEngaged,
     addBerserkTurnBuff,
     requestCardAction,
+    requestCardActionBatch,
+    requestGraveyardSelection,
     beginDiscoverFlow,
     generateShopOfferings,
     queueMonsterReward,
@@ -7699,8 +5427,6 @@ export default function GameBoard() {
     triggerClassDeckFlight,
     triggerGraveNova,
     triggerGraveyardToBackpackFlight,
-    triggerWaterfall,
-    applyWaterfallSideEffects,
     queueWaterfallTimeout,
     consumeCardFromHand,
     requestDiceOutcome,
@@ -7712,7 +5438,6 @@ export default function GameBoard() {
     backpackHandFlightsRef,
     discardedCardsRef,
     activeCardsLatestRef,
-    cascadeResetWaterfallRef,
     echoRemainingRef,
     echoTotalRef,
     graveyardDiscoverResolverRef,
@@ -7722,10 +5447,10 @@ export default function GameBoard() {
     setPersuadeTempDiscount,
     setDeckPeekState,
     openHandMagicUpgradeModal: (sourceCardId: string) => {
-      setHandMagicUpgradeModal({ sourceCardId });
+      dispatch({ type: 'SET_HAND_MAGIC_UPGRADE_MODAL', payload: { sourceCardId } });
     },
     openMirrorCopyModal: (sourceCardId: string) => {
-      setMirrorCopyModal({ sourceCardId });
+      dispatch({ type: 'SET_MIRROR_COPY_MODAL', payload: { sourceCardId } });
     },
     discoverPotionCompletionRef,
     deckJudgePeekCloseRef,
@@ -7733,6 +5458,7 @@ export default function GameBoard() {
     applyHonorSweepMagic,
     applyWeaponSweepMagic,
     lastPlayedFlankRef,
+    completeCurrentEvent,
   };
 
   // Populate heroActions deps ref (all function deps are now defined)
@@ -7761,6 +5487,7 @@ export default function GameBoard() {
     updateMonsterCard,
     isMonsterEngaged,
     requestCardAction,
+    requestCardActionBatch,
     requestGraveyardSelection,
     getSpellDamage,
     requestDiceOutcome,
@@ -7825,19 +5552,16 @@ export default function GameBoard() {
     updateMonsterCard,
     isMonsterEngaged,
     damageMonsterWithLayerOverflow,
-    checkHollowSkeletonRestore,
-    checkWraithRebirth,
     handleMonsterDefeated,
     recordClassDamageDiscoverHit,
     requestCardAction,
+    requestCardActionBatch,
     requestGraveyardSelection,
     startShopFlow,
     beginDiscoverFlow,
-    beginDiscoverFlowAsync,
     handleDiscoverFallback,
     handleCardUpgrade,
     normalizeEventEffect,
-    handleSkillCard,
     drawCardsFromBackpack,
     queueCardIntoHand,
     addHeroMagicGauge,
@@ -7859,6 +5583,7 @@ export default function GameBoard() {
     bulwarkTempArmorRef,
     handCardsRef,
     setPersuadeTempDiscount,
+    discoverPotionCompletionRef,
   };
 
   function handleCardToHero(card: GameCardData) {
@@ -7896,7 +5621,7 @@ export default function GameBoard() {
         // #endregion
         return;
       }
-      if (spentCard.type === 'magic' || spentCard.type === 'hero-magic') {
+      if (spentCard.type === 'magic' || spentCard.type === 'hero-magic' || spentCard.type === 'curse') {
         // Routing handled exclusively by handleSkillCard / finalizeMagicCard
         // to avoid double graveyard/recycle-bag insertions.
         return;
@@ -7937,24 +5662,26 @@ export default function GameBoard() {
           if (activeCards[i] == null) emptySlots.push(i);
         }
         if (emptySlots.length > 0) {
-          const targetSlot = emptySlots[Math.floor(Math.random() * emptySlots.length)];
-          setActiveCards(prev => {
+          let rng = engine.getState().rng;
+          const [targetSlot, rng2] = pickRandom(emptySlots, rng); rng = rng2;
+          dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+          dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: prev => {
             const next = [...prev] as typeof prev;
             next[targetSlot] = { ...card, hasReleaseCharge: true, _fateBladeLastSlot: targetSlot };
             return next;
-          });
+          } });
           addGameLog('event', `${card.name} 被放置到地城第 ${targetSlot + 1} 列。`);
           if (card.name === '命运之刃') {
             applyDamage(5, 'general', { selfInflicted: true });
             addGameLog('event', '命运之刃：从手牌打出，失去 5 点生命。');
-            setHeroSkillBanner(`${card.name} 出现在地城中！失去 5 点生命。`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 出现在地城中！失去 5 点生命。` });
           } else {
-            setHeroSkillBanner(`${card.name} 出现在地城中！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 出现在地城中！` });
           }
         } else {
           discardCardToGraveyard(card, { owner: 'player' });
           addGameLog('event', `${card.name}：地城没有空位，已送入坟场。`);
-          setHeroSkillBanner(`地城没有空位，${card.name} 已送入坟场。`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `地城没有空位，${card.name} 已送入坟场。` });
         }
         resetDragState();
         return;
@@ -7988,7 +5715,7 @@ export default function GameBoard() {
           drawFromBackpackToHand();
         }
         addGameLog('magic', `侧击效果：${card.name} 抽取 ${card.flankDraw} 张牌`);
-        setHeroSkillBanner(`侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。` });
       }
 
       if (lastPlayedFlankRef.current && card.flankEffectId) {
@@ -7998,31 +5725,33 @@ export default function GameBoard() {
           const currentCost = PERSUADE_COST + currentMod;
           if (currentCost <= MIN_PERSUADE_COST) {
             addGameLog('event', `劝降费用已达下限（${currentCost} 金币），无法再降低`);
-            setHeroSkillBanner(`侧击！${card.name} 劝降费用已达下限，无法再降低。`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 劝降费用已达下限，无法再降低。` });
           } else {
             const actualAmount = Math.min(amount, currentCost - MIN_PERSUADE_COST);
-            setPersuadeCostModifier(prev => prev - actualAmount);
+            dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'persuadeCostModifier', delta: -actualAmount });
             addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${actualAmount}`);
-            setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${actualAmount}！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 劝降费用永久 -${actualAmount}！` });
           }
         } else if (card.flankEffectId.startsWith('stunCap+')) {
           const amount = parseInt(card.flankEffectId.replace('stunCap+', ''), 10) || 5;
-          setStunCap(prev => Math.min(100, prev + amount));
+          dispatch({ type: 'MODIFY_STUN_CAP', delta: amount });
           addGameLog('event', `侧击效果：${card.name} 击晕上限 +${amount}%`);
-          setHeroSkillBanner(`侧击！${card.name} 击晕上限 +${amount}%！`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 击晕上限 +${amount}%！` });
         } else if (card.flankEffectId.startsWith('damage:')) {
           const amount = parseInt(card.flankEffectId.replace('damage:', ''), 10) || 5;
           const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
             (c): c is GameCardData => isDamageableTarget(c),
           );
           if (monsters.length > 0) {
-            const target = monsters[Math.floor(Math.random() * monsters.length)];
+            let rng = engine.getState().rng;
+            const [target, rng2] = pickRandom(monsters, rng); rng = rng2;
+            dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
             dealDamageToMonster(target, amount);
             addGameLog('event', `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害`);
-            setHeroSkillBanner(`侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！` });
           } else {
             addGameLog('event', `侧击效果：${card.name} 没有可攻击的怪物`);
-            setHeroSkillBanner(`侧击！但没有可攻击的怪物。`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！但没有可攻击的怪物。` });
           }
         }
       }
@@ -8031,17 +5760,19 @@ export default function GameBoard() {
         resetDragState();
         return;
       } else if (card.type === 'potion') {
-        void handlePotionConsumption(card);
-      } else if (card.type === 'magic' || card.type === 'hero-magic') {
-        handleSkillCard(card);
+        stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
+        dispatch({ type: 'RESOLVE_POTION', cardId: card.id, card } as any);
+      } else if (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'curse') {
+        stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
+        dispatch({ type: 'RESOLVE_MAGIC', cardId: card.id, card, isFlank: lastPlayedFlankRef.current } as any);
       } else if (card.type === 'event') {
         startEventResolution(null, 'hand');
         const cleanedCard = card.eventChoices
           ? { ...card, eventChoices: card.eventChoices.filter(c => c.effect !== 'crossroads-destroy-below') }
           : card;
-        setCurrentEventCard(cleanedCard);
+        dispatch({ type: 'SET_CURRENT_EVENT', card: cleanedCard });
         eventChoiceProcessingRef.current = false;
-        setEventModalOpen(true);
+        dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: true });
         applyTransformAndUpdateCategory(card);
         resetDragState();
         return;
@@ -8050,7 +5781,7 @@ export default function GameBoard() {
       applyTransformAndUpdateCategory(card);
     } else {
       if (isFromBackpack) {
-        setBackpackItems(prev => prev.filter(c => c.id !== card.id));
+        dispatch({ type: 'UPDATE_BACKPACK_ITEMS', updater: prev => prev.filter(c => c.id !== card.id) });
 
         if (card.type === 'building') {
           const emptySlots: number[] = [];
@@ -8058,35 +5789,39 @@ export default function GameBoard() {
             if (activeCards[i] == null) emptySlots.push(i);
           }
           if (emptySlots.length > 0) {
-            const targetSlot = emptySlots[Math.floor(Math.random() * emptySlots.length)];
-            setActiveCards(prev => {
+            let rng = engine.getState().rng;
+            const [targetSlot, rng2] = pickRandom(emptySlots, rng); rng = rng2;
+            dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+            dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: prev => {
               const next = [...prev] as typeof prev;
               next[targetSlot] = { ...card, hasReleaseCharge: true, _fateBladeLastSlot: targetSlot };
               return next;
-            });
+            } });
             addGameLog('event', `${card.name} 被放置到地城第 ${targetSlot + 1} 列。`);
-            setHeroSkillBanner(`${card.name} 出现在地城中！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 出现在地城中！` });
           } else {
             discardCardToGraveyard(card, { owner: 'player' });
             addGameLog('event', `${card.name}：地城没有空位，已送入坟场。`);
-            setHeroSkillBanner(`地城没有空位，${card.name} 已送入坟场。`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `地城没有空位，${card.name} 已送入坟场。` });
           }
           resetDragState();
           return;
         }
 
         if (card.type === 'potion') {
-          void handlePotionConsumption(card);
-        } else if (card.type === 'magic' || card.type === 'hero-magic') {
-          handleSkillCard(card);
+          stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
+          dispatch({ type: 'RESOLVE_POTION', cardId: card.id, card } as any);
+        } else if (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'curse') {
+          stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
+          dispatch({ type: 'RESOLVE_MAGIC', cardId: card.id, card } as any);
         } else if (card.type === 'event') {
           startEventResolution(null, 'hand');
           const cleanedCard = card.eventChoices
             ? { ...card, eventChoices: card.eventChoices.filter(c => c.effect !== 'crossroads-destroy-below') }
             : card;
-          setCurrentEventCard(cleanedCard);
+          dispatch({ type: 'SET_CURRENT_EVENT', card: cleanedCard });
           eventChoiceProcessingRef.current = false;
-          setEventModalOpen(true);
+          dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: true });
           applyTransformAndUpdateCategory(card);
           resetDragState();
           return;
@@ -8096,28 +5831,28 @@ export default function GameBoard() {
         return;
       }
       // Purchasing from dungeon - auto-equip/use
-      // Card stays in the active row until its popup/effect fully resolves,
-      // preventing premature waterfall triggers.
       if (card.type === 'potion') {
         markDungeonCardPendingUse(card.id);
         applyTransformAndUpdateCategory(card);
-        void handlePotionConsumption(card);
-      } else if (card.type === 'magic' || card.type === 'hero-magic') {
+        stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
+        dispatch({ type: 'RESOLVE_POTION', cardId: card.id, card } as any);
+      } else if (card.type === 'magic' || card.type === 'hero-magic' || card.type === 'curse') {
         markDungeonCardPendingUse(card.id);
         applyTransformAndUpdateCategory(card);
-        handleSkillCard(card);
+        stagingCardsRef.current = [...stagingCardsRef.current.filter(c => c.id !== card.id), card];
+        dispatch({ type: 'RESOLVE_MAGIC', cardId: card.id, card } as any);
       } else if (card.type === 'event' || (card.type === 'building' && card.eventChoices)) {
         const freshBladeCard =
           (card.name === '命运之刃' || card.name === '增幅祭坛')
             ? activeCards.find(c => c?.id === card.id) ?? card
             : card;
         if (card.name === '命运之刃' && !freshBladeCard.hasReleaseCharge) {
-          setHeroSkillBanner('命运之刃暂无释放次数。');
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '命运之刃暂无释放次数。' });
           resetDragState();
           return;
         }
         if (card.name === '增幅祭坛' && !freshBladeCard.hasReleaseCharge) {
-          setHeroSkillBanner('增幅祭坛暂无释放次数。');
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '增幅祭坛暂无释放次数。' });
           resetDragState();
           return;
         }
@@ -8131,12 +5866,12 @@ export default function GameBoard() {
               targetIdx = i;
             }
             if (targetIdx !== currentIdx) {
-              setActiveCards(prev => {
+              dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: prev => {
                 const next = [...prev] as ActiveRowSlots;
                 next[targetIdx] = prev[currentIdx];
                 next[currentIdx] = null;
                 return next;
-              });
+              } });
               addGameLog('event', `命运十字路口向左平移至第 ${targetIdx + 1} 列`);
             }
           }
@@ -8181,8 +5916,7 @@ export default function GameBoard() {
                   text: destroyLabel,
                   effect: 'crossroads-destroy-below',
                   hint: '破坏正下方的装备或护符，同时获得其余显示选项的全部效果',
-                },
-              ],
+                }],
             };
           }
         }
@@ -8239,9 +5973,9 @@ export default function GameBoard() {
           }
         }
         startEventResolution(eventCard.id, 'dungeon');
-        setCurrentEventCard(eventCard);
+        dispatch({ type: 'SET_CURRENT_EVENT', card: eventCard });
         eventChoiceProcessingRef.current = false;
-        setEventModalOpen(true);
+        dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: true });
         applyTransformAndUpdateCategory(card);
         resetDragState();
         return;
@@ -8307,17 +6041,14 @@ export default function GameBoard() {
   };
 
   const handlePersuadeDiceResult = (value: number) => {
+    const persuadeState = engine.getState().persuadeState;
     if (!persuadeState) return;
     const success = value >= persuadeState.threshold;
-    setPersuadeState(prev => prev ? { ...prev, phase: 'result', diceValue: value, success } : null);
+    dispatch({ type: 'SET_PERSUADE_STATE', payload: { ...persuadeState, phase: 'result' as const, diceValue: value, success } });
 
     // Regardless of success or failure, un-engage the monster (remove enraged state)
     if (isMonsterEngaged(persuadeState.monster.id)) {
-      setCombatState(prev => {
-        const remaining = prev.engagedMonsterIds.filter(id => id !== persuadeState.monster.id);
-        if (remaining.length === 0) return { ...initialCombatState };
-        return { ...prev, engagedMonsterIds: remaining };
-      });
+      dispatch({ type: 'DISENGAGE_MONSTER', monsterId: persuadeState.monster.id });
       addGameLog('combat', `${persuadeState.monster.name} 被劝降后恢复了平静（解除激怒）。`);
     }
 
@@ -8341,7 +6072,7 @@ export default function GameBoard() {
         addCardToBackpack(persuadedCard, { pendingDungeonCardId: monster.id });
         removeCard(monster.id, false);
         addGameLog('combat', `劝降成功！${monster.name} 加入背包（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterStartDurability}/${monsterMaxDurability}耐久）`);
-        setHeroSkillBanner(`劝降成功！${monster.name} 已加入背包！`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `劝降成功！${monster.name} 已加入背包！` });
       } else {
         const equipSlot = targetSlot;
         const equippedItem = equipSlot === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
@@ -8355,12 +6086,12 @@ export default function GameBoard() {
           }
         } else if (equippedItem) {
           if (reserve.length > 0) {
-            disposeOwnedEquipmentCard(reserve[0]);
+            disposeOwnedEquipmentCard(reserve[0], { isDestruction: true, triggerLastWords: true, fromSlotId: equipSlot });
             addGameLog('equip', `卸下 ${reserve[0].name}`);
             const newReserve = reserve.slice(1);
             setEquipmentReserve(equipSlot, [...newReserve, equippedItem]);
           } else {
-            disposeOwnedEquipmentCard(equippedItem);
+            disposeOwnedEquipmentCard(equippedItem, { isDestruction: true, triggerLastWords: true, fromSlotId: equipSlot });
             addGameLog('equip', `卸下 ${equippedItem.name}`);
           }
         }
@@ -8377,11 +6108,11 @@ export default function GameBoard() {
         setEquipmentSlotById(equipSlot, equipCard);
         removeCard(monster.id, false);
         addGameLog('combat', `劝降成功！装备 ${monster.name}（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterStartDurability}/${monsterMaxDurability}耐久）`);
-        setHeroSkillBanner(`劝降成功！${monster.name} 已装备！`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `劝降成功！${monster.name} 已装备！` });
 
-        if (hasEternalRelic(eternalRelics, 'equip-empower')) {
-          setSlotTempAttack(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
-          setSlotTempArmor(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
+        if (hasEternalRelic(engine.getState().eternalRelics, 'equip-empower')) {
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: equipSlot, delta: 3 });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: equipSlot, delta: 3 });
           addGameLog('equip', `铸锋药剂：${monster.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
         }
 
@@ -8392,17 +6123,16 @@ export default function GameBoard() {
               subtitle: `${monster.name} 已装备，选择强化效果`,
               options: [
                 { id: 'attack', label: '永久攻击 +1', description: '该装备栏永久攻击 +1。' },
-                { id: 'shield', label: '永久护甲 +1', description: '该装备栏永久护甲 +1。' },
-              ],
+                { id: 'shield', label: '永久护甲 +1', description: '该装备栏永久护甲 +1。' }],
             });
             if (choiceId === 'attack') {
               setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
               addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +1！`);
-              setHeroSkillBanner(`驯兽铸印：永久攻击 +1！`);
+              dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +1！` });
             } else {
               setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + 1);
               addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久护甲 +1！`);
-              setHeroSkillBanner(`驯兽铸印：永久护甲 +1！`);
+              dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久护甲 +1！` });
             }
           })();
         }
@@ -8422,10 +6152,7 @@ export default function GameBoard() {
             }
           }
           if (monster.ogreEnterDiscard) {
-            const drawn = drawFromBackpackToHand();
-            if (drawn) {
-              addGameLog('equip', `${monster.name} 装备效果：抽取了一张牌（${drawn.name}）`);
-            }
+            drawFromBackpackToHand();
           }
         }
       }
@@ -8436,17 +6163,17 @@ export default function GameBoard() {
           const graveyard = engine.getState().discardedCards;
           const graveyardCopy = [...graveyard];
           const picked: GameCardData[] = [];
+          let rng = engine.getState().rng;
           for (let i = 0; i < 2 && graveyardCopy.length > 0; i++) {
-            const ri = Math.floor(Math.random() * graveyardCopy.length);
+            const [ri, rng2] = nextInt(rng, 0, graveyardCopy.length - 1); rng = rng2;
             picked.push(graveyardCopy.splice(ri, 1)[0]);
           }
+          dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
           if (picked.length > 0) {
-            setDiscardedCards(graveyardCopy);
-            setActiveCardStacks(prev => {
-              const next = { ...prev };
-              next[monsterColIndex] = [...(next[monsterColIndex] ?? []), ...picked];
-              return next;
-            });
+            (graveyardCopy);
+            const graveyardStacks = { ...engine.getState().activeCardStacks };
+            graveyardStacks[monsterColIndex] = [...(graveyardStacks[monsterColIndex] ?? []), ...picked];
+            dispatch({ type: 'SET_ACTIVE_CARD_STACKS', stacks: graveyardStacks });
             triggerGraveyardStackFlight(monsterColIndex, picked);
             const names = picked.map(c => `「${c.name}」`).join('、');
             addGameLog('amulet', `墓地回响符：${names}从墓地堆叠在第 ${monsterColIndex + 1} 列！`);
@@ -8456,20 +6183,24 @@ export default function GameBoard() {
 
     } else {
       addGameLog('combat', `劝降失败！${persuadeState.monster.name} 拒绝了劝降。（掷出 ${value}，需要 ≥${persuadeState.threshold}）`);
-      setHeroSkillBanner(`劝降失败！${persuadeState.monster.name} 不为所动。`);
+      dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `劝降失败！${persuadeState.monster.name} 不为所动。` });
     }
 
     if (amuletEffects.hasPersuadeGrantRecycleFetch) {
       const fetchCount = amuletEffects.persuadeGrantRecycleFetchCount || 1;
+      let rng = engine.getState().rng;
+      const bonusMap = engine.getState().amplifiedCardBonus;
       for (let fi = 0; fi < fetchCount; fi++) {
-        queueCardIntoHand(createPersuadeRecycleFetchMagicCard());
+        const [card, rng2] = createPersuadeRecycleFetchMagicCard(rng); rng = rng2;
+        queueCardIntoHand(applyAmplifyOnCreate(card as GameCardData, bonusMap));
       }
+      dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
       addGameLog('amulet', `劝降归袋符：${fetchCount} 张「归袋抽引」已加入手牌。`);
     }
   };
 
   const handlePersuadeClose = () => {
-    setPersuadeState(null);
+    dispatch({ type: 'SET_PERSUADE_STATE', payload: null });
     resetDragState();
   };
 
@@ -8487,30 +6218,33 @@ export default function GameBoard() {
         return;
       }
 
-      if (amuletSlots.some(slot => slot?.id === card.id)) {
-        resetDragState();
-        return;
-      }
-
       let displacedAmulet: AmuletItem | null = null;
 
-      setAmuletSlots(prev => {
+      {
+        const prev = engine.getState().amuletSlots;
         const alreadyEquipped = prev.some(slot => slot?.id === card.id);
         const filtered = prev.filter(slot => slot?.id !== card.id);
         const next = [...filtered];
 
-        if (!alreadyEquipped && next.length >= maxAmuletSlots) {
+        if (alreadyEquipped) {
+          // Reorder: move existing amulet to top of stack
+          const updated = [...next, { ...card, fromSlot: 'amulet' } as AmuletItem];
+          dispatch({ type: 'UPDATE_AMULET_SLOTS', updater: () => updated.slice(-maxAmuletSlots) });
+          resetDragState();
+          return;
+        }
+
+        if (next.length >= maxAmuletSlots) {
           displacedAmulet = next.shift() ?? null;
         }
 
         const updated = [...next, { ...card, fromSlot: 'amulet' } as AmuletItem];
-        return updated.slice(-maxAmuletSlots);
-      });
+        dispatch({ type: 'UPDATE_AMULET_SLOTS', updater: () => updated.slice(-maxAmuletSlots) });
+      }
 
       addGameLog('amulet', `装备护符：${card.name}`);
       if (card.amuletEffect === 'recycle-forge') {
-        setRecycleForgePlayCount(0);
-        updateRecycleForgeCounter(0);
+        dispatch({ type: 'RESET_RECYCLE_FORGE_COUNT' });
       }
       if (card.amuletEffect === 'damage-class-discover') {
         const streak = engine.getState().classDamageDiscoverStreak ?? 0;
@@ -8519,56 +6253,44 @@ export default function GameBoard() {
       }
       if (card.amuletEffect === 'swap-upgrade') {
         const prog = engine.getState().swapUpgradeProgress ?? 0;
-        setAmuletSlots(prev => prev.map(slot => {
+        dispatch({ type: 'UPDATE_AMULET_SLOTS', updater: prev => prev.map(slot => {
           if (slot?.amuletEffect !== 'swap-upgrade') return slot;
           return { ...slot, _counterDisplay: `${prog}/3` };
-        }));
+        }) });
       }
       if (card.amuletEffect === 'recycle-backpack-expand') {
         const prog = engine.getState().recycleBackpackProgress ?? 0;
         const recycleThreshold = (card.upgradeLevel ?? 0) >= 1 ? 6 : 8;
-        setAmuletSlots(prev => prev.map(slot => {
+        dispatch({ type: 'UPDATE_AMULET_SLOTS', updater: prev => prev.map(slot => {
           if (slot?.amuletEffect !== 'recycle-backpack-expand') return slot;
           return { ...slot, _counterDisplay: `${prog}/${recycleThreshold}` };
-        }));
+        }) });
       }
 
       if (card.amuletEffect === 'balance') {
-        setSlotTempAttack(prev => ({
-          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS,
-          equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY,
-        }));
-        setSlotTempArmor(prev => ({
-          equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY,
-          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS,
-        }));
+        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: BALANCE_ATTACK_BONUS });
+        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: -BALANCE_ATTACK_PENALTY });
+        dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot1', delta: -BALANCE_SHIELD_PENALTY });
+        dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot2', delta: BALANCE_SHIELD_BONUS });
         addGameLog('amulet', '均衡护符生效：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1');
       }
       if (card.amuletEffect === 'strength') {
-        setSlotTempAttack(prev => ({
-          equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 4,
-          equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 4,
-        }));
+        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: 4 });
+        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: 4 });
         addGameLog('amulet', '力量护符生效：所有装备栏临时攻击 +4！');
       }
 
       if (displacedAmulet !== null) {
         const displaced = displacedAmulet as AmuletItem;
         if (displaced.amuletEffect === 'balance') {
-          setSlotTempAttack(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_ATTACK_BONUS,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_ATTACK_PENALTY,
-          }));
-          setSlotTempArmor(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_SHIELD_PENALTY,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_SHIELD_BONUS,
-          }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -BALANCE_ATTACK_BONUS });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: BALANCE_ATTACK_PENALTY });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot1', delta: BALANCE_SHIELD_PENALTY });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot2', delta: -BALANCE_SHIELD_BONUS });
         }
         if (displaced.amuletEffect === 'strength') {
-          setSlotTempAttack(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - 4,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - 4,
-          }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -4 });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: -4 });
         }
         addGameLog('amulet', `卸下护符：${displaced.name}`);
         discardCardToGraveyard(displaced, { owner: 'player' });
@@ -8582,7 +6304,7 @@ export default function GameBoard() {
         }
         tickRecycleForge();
       } else if (backpackItems.some(c => c.id === card.id)) {
-        setBackpackItems(prev => prev.filter(c => c.id !== card.id));
+        dispatch({ type: 'UPDATE_BACKPACK_ITEMS', updater: prev => prev.filter(c => c.id !== card.id) });
       } else {
         removeCard(card.id, false);
       }
@@ -8598,29 +6320,25 @@ export default function GameBoard() {
           addPermanentMagicToRecycleBag(card);
           applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
           addGameLog('equip', `回收永久装备「${card.name}」至回收袋。`);
-          setHeroSkillBanner(`${card.name} 已回收至回收袋。`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 已回收至回收袋。` });
           tickRecycleForge();
         }
         resetDragState();
         return;
       }
       if (handCards.some(c => c.id === card.id)) {
+        // Curses cannot be recycled or discarded — only played.
+        if (card.type === 'curse') {
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 是诅咒，无法回收或弃置。` });
+          resetDragState();
+          return;
+        }
         if (!consumeCardFromHand(card)) {
           resetDragState();
           return;
         }
-        if (card.isCurse && (card as any).knightEffect === 'greed-curse') {
-          setGold(prev => Math.max(0, prev - 3));
-          addGameLog('magic', `回收「${card.name}」至回收袋（贪婪诅咒消耗了 3 金币）。`);
-          setHeroSkillBanner(`${card.name} 已回收至回收袋，失去 3 金币。`);
-        } else if (card.isCurse) {
-          applyDamage(3, 'general', { selfInflicted: true });
-          addGameLog('magic', `回收「${card.name}」至回收袋（血咒吸取了 3 点生命）。`);
-          setHeroSkillBanner(`${card.name} 已回收至回收袋，失去 3 点生命。`);
-        } else {
-          addGameLog('magic', `回收「${card.name}」至回收袋。`);
-          setHeroSkillBanner(`${card.name} 已回收至回收袋。`);
-        }
+        addGameLog('magic', `回收「${card.name}」至回收袋。`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 已回收至回收袋。` });
         discardCardToGraveyard(card, { owner: 'player', forceRecycleBag: true });
         tickRecycleForge();
         resetDragState();
@@ -8636,26 +6354,20 @@ export default function GameBoard() {
           return;
         }
         if (card.amuletEffect === 'balance') {
-          setSlotTempAttack(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - BALANCE_ATTACK_BONUS,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + BALANCE_ATTACK_PENALTY,
-          }));
-          setSlotTempArmor(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + BALANCE_SHIELD_PENALTY,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - BALANCE_SHIELD_BONUS,
-          }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -BALANCE_ATTACK_BONUS });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: BALANCE_ATTACK_PENALTY });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot1', delta: BALANCE_SHIELD_PENALTY });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot2', delta: -BALANCE_SHIELD_BONUS });
         }
         if (card.amuletEffect === 'strength') {
-          setSlotTempAttack(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) - 4,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) - 4,
-          }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -4 });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: -4 });
         }
-        setAmuletSlots(prev => prev.filter(slot => slot?.id !== card.id));
+        dispatch({ type: 'REMOVE_AMULET', cardId: card.id });
         addPermanentMagicToRecycleBag(card);
         applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
         addGameLog('magic', `回收护符「${card.name}」至回收袋。`);
-        setHeroSkillBanner(`${card.name} 已回收至回收袋。`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 已回收至回收袋。` });
         tickRecycleForge();
         resetDragState();
         return;
@@ -8710,7 +6422,7 @@ export default function GameBoard() {
       }
 
       if (hasEternalRelic(eternalRelicsRef.current, 'shield-wall') && card.type === 'weapon') {
-        setHeroSkillBanner('永恒护符·雷盾心法：不能装备武器！');
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '永恒护符·雷盾心法：不能装备武器！' });
         resetDragState();
         return;
       }
@@ -8726,12 +6438,12 @@ export default function GameBoard() {
       } else {
         if (equippedItem && equippedItem.id !== card.id) {
           if (reserve.length > 0) {
-            disposeOwnedEquipmentCard(reserve[0]);
+            disposeOwnedEquipmentCard(reserve[0], { isDestruction: true, triggerLastWords: true, fromSlotId: equipSlot });
             addGameLog('equip', `卸下 ${reserve[0].name}`);
             const newReserve = reserve.slice(1);
             setEquipmentReserve(equipSlot, equippedItem ? [...newReserve, equippedItem] : newReserve);
           } else {
-            disposeOwnedEquipmentCard(equippedItem);
+            disposeOwnedEquipmentCard(equippedItem, { isDestruction: true, triggerLastWords: true, fromSlotId: equipSlot });
             addGameLog('equip', `卸下 ${equippedItem.name}`);
           }
         }
@@ -8777,31 +6489,29 @@ export default function GameBoard() {
 
       if (equipCard.onEquipEffect) {
         if (equipCard.onEquipEffect === 'temp-attack-2') {
-          setSlotTempAttack(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 2 }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: equipSlot, delta: 2 });
           addGameLog('equip', `${equipCard.name} 入场效果：该装备栏临时攻击 +2！`);
         }
         if (equipCard.onEquipEffect === 'all-temp-attack-2') {
-          setSlotTempAttack(prev => ({
-            equipmentSlot1: (prev.equipmentSlot1 ?? 0) + 2,
-            equipmentSlot2: (prev.equipmentSlot2 ?? 0) + 2,
-          }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: 2 });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: 2 });
           addGameLog('equip', `${equipCard.name} 入场效果：所有装备栏临时攻击 +2！`);
         }
         if (equipCard.onEquipEffect === 'temp-armor-3') {
-          setSlotTempArmor(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: equipSlot, delta: 3 });
           addGameLog('equip', `${equipCard.name} 入场效果：该装备栏临时护甲 +3！`);
         }
         if (equipCard.onEquipEffect === 'persuade-bonus-10') {
           const newBonus = engine.getState().persuadeAmuletBonus + 10;
-          setPersuadeAmuletBonus(newBonus);
+          dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'persuadeAmuletBonus', delta: 10 });
           addGameLog('equip', `${equipCard.name} 入场效果：下次劝降成功率 +10%（累计 +${newBonus}%）`);
         }
         if (equipCard.onEquipEffect === 'spell-lifesteal+1') {
-          setPermanentSpellLifesteal(prev => prev + 1);
+          dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'permanentSpellLifesteal', delta: 1 });
           addGameLog('equip', `${equipCard.name} 入场效果：超杀吸血 +1！`);
         }
         if (equipCard.onEquipEffect === 'stunCap+5') {
-          setStunCap(prev => Math.min(100, prev + 5));
+          dispatch({ type: 'MODIFY_STUN_CAP', delta: 5 });
           addGameLog('equip', `${equipCard.name} 入场效果：击晕上限 +5%！`);
         }
         if (equipCard.onEquipEffect === 'other-slot-durability+1') {
@@ -8836,9 +6546,9 @@ export default function GameBoard() {
         }
       }
 
-      if (hasEternalRelic(eternalRelics, 'equip-empower')) {
-        setSlotTempAttack(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
-        setSlotTempArmor(prev => ({ ...prev, [equipSlot]: (prev[equipSlot] ?? 0) + 3 }));
+      if (hasEternalRelic(engine.getState().eternalRelics, 'equip-empower')) {
+        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: equipSlot, delta: 3 });
+        dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: equipSlot, delta: 3 });
         addGameLog('equip', `铸锋药剂：${equipCard.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
       }
 
@@ -8849,17 +6559,16 @@ export default function GameBoard() {
             subtitle: `${equipCard.name} 已装备，选择强化效果`,
             options: [
               { id: 'attack', label: '永久攻击 +1', description: '该装备栏永久攻击 +1。' },
-              { id: 'shield', label: '永久护甲 +1', description: '该装备栏永久护甲 +1。' },
-            ],
+              { id: 'shield', label: '永久护甲 +1', description: '该装备栏永久护甲 +1。' }],
           });
           if (choiceId === 'attack') {
             setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
             addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +1！`);
-            setHeroSkillBanner(`驯兽铸印：永久攻击 +1！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +1！` });
           } else {
             setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + 1);
             addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久护甲 +1！`);
-            setHeroSkillBanner(`驯兽铸印：永久护甲 +1！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久护甲 +1！` });
           }
         })();
       }
@@ -8879,10 +6588,7 @@ export default function GameBoard() {
           }
         }
         if (card.ogreEnterDiscard) {
-          const drawn = drawFromBackpackToHand();
-          if (drawn) {
-            addGameLog('equip', `${card.name} 装备效果：抽取了一张牌（${drawn.name}）`);
-          }
+          drawFromBackpackToHand();
         }
       }
 
@@ -8904,7 +6610,7 @@ export default function GameBoard() {
             drawFromBackpackToHand();
           }
           addGameLog('magic', `侧击效果：${card.name} 抽取 ${card.flankDraw} 张牌`);
-          setHeroSkillBanner(`侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 抽取了 ${card.flankDraw} 张牌。` });
         }
 
         if (isFlank && card.flankEffectId) {
@@ -8914,31 +6620,33 @@ export default function GameBoard() {
             const currentCost = PERSUADE_COST + currentMod;
             if (currentCost <= MIN_PERSUADE_COST) {
               addGameLog('event', `劝降费用已达下限（${currentCost} 金币），无法再降低`);
-              setHeroSkillBanner(`侧击！${card.name} 劝降费用已达下限，无法再降低。`);
+              dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 劝降费用已达下限，无法再降低。` });
             } else {
               const actualAmount = Math.min(amount, currentCost - MIN_PERSUADE_COST);
-              setPersuadeCostModifier(prev => prev - actualAmount);
+              dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'persuadeCostModifier', delta: -actualAmount });
               addGameLog('event', `侧击效果：${card.name} 劝降费用永久 -${actualAmount}`);
-              setHeroSkillBanner(`侧击！${card.name} 劝降费用永久 -${actualAmount}！`);
+              dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 劝降费用永久 -${actualAmount}！` });
             }
           } else if (card.flankEffectId.startsWith('stunCap+')) {
             const amount = parseInt(card.flankEffectId.replace('stunCap+', ''), 10) || 5;
-            setStunCap(prev => Math.min(100, prev + amount));
+            dispatch({ type: 'MODIFY_STUN_CAP', delta: amount });
             addGameLog('event', `侧击效果：${card.name} 击晕上限 +${amount}%`);
-            setHeroSkillBanner(`侧击！${card.name} 击晕上限 +${amount}%！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 击晕上限 +${amount}%！` });
           } else if (card.flankEffectId.startsWith('damage:')) {
             const amount = parseInt(card.flankEffectId.replace('damage:', ''), 10) || 5;
             const monsters = flattenActiveRowSlots(activeCardsLatestRef.current).filter(
               (c): c is GameCardData => isDamageableTarget(c),
             );
             if (monsters.length > 0) {
-              const target = monsters[Math.floor(Math.random() * monsters.length)];
+              let rng = engine.getState().rng;
+              const [target, rng2] = pickRandom(monsters, rng); rng = rng2;
+              dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
               dealDamageToMonster(target, amount);
               addGameLog('event', `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害`);
-              setHeroSkillBanner(`侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！`);
+              dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！` });
             } else {
               addGameLog('event', `侧击效果：${card.name} 没有可攻击的怪物`);
-              setHeroSkillBanner(`侧击！但没有可攻击的怪物。`);
+              dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！但没有可攻击的怪物。` });
             }
           }
         }
@@ -9066,8 +6774,7 @@ export default function GameBoard() {
     pendingHeroSkillAction,
     pendingMagicAction,
     pendingPotionAction,
-    waterfallActive,
-  ]);
+    waterfallActive]);
 
   const heroMagicChoicePrompt =
     pendingHeroMagicAction?.step === 'choice'
@@ -9077,35 +6784,29 @@ export default function GameBoard() {
   const potionChoiceDialogOpen =
     pendingPotionAction?.effect === 'repair-choice' && pendingPotionAction.step === 'choice';
 
-  const modalOverlayBlocksEndHeroTurn =
-    gameOver ||
-    showSkillSelection ||
-    showCardDraft ||
-    backpackViewerOpen ||
-    deckViewerOpen ||
-    discoverModalOpen ||
-    Boolean(graveyardDiscoverState) ||
-    Boolean(ghostBladeExileCards) ||
-    (shopModalOpen && !shopModalMinimized) ||
-    shopSkillSelectOpen ||
-    deleteModalOpen ||
-    upgradeModalOpen ||
-    Boolean(handMagicUpgradeModal) ||
-    Boolean(mirrorCopyModal) ||
-    Boolean(permGrantModal) ||
-    Boolean(amplifyModal) ||
-    detailsModalOpen ||
-    heroDetailsOpen ||
-    (eventModalOpen && !eventModalMinimized) ||
-    Boolean(eventDiceModal) ||
-    Boolean(magicChoiceModal) ||
-    Boolean(equipmentPrompt) ||
-    Boolean(eventTransformState) ||
-    Boolean(activeMonsterReward) ||
-    Boolean(deathWardPrompt) ||
-    Boolean(daggerSelfDestructPrompt) ||
-    potionChoiceDialogOpen ||
-    Boolean(deckPeekState);
+  const modalOverlayBlocksEndHeroTurn = (() => {
+    if (gameOver || showSkillSelection || showCardDraft) return true;
+    if (backpackViewerOpen || deckViewerOpen || detailsModalOpen || heroDetailsOpen) return true;
+    if (shopModalOpen && !shopModalMinimized) return true;
+    if (eventModalOpen && !eventModalMinimized) return true;
+    if (Boolean(graveyardDiscoverState) || Boolean(activeMonsterReward)) return true;
+    if (Boolean(daggerSelfDestructPrompt) || potionChoiceDialogOpen || Boolean(deckPeekState)) return true;
+    const gs = engine.getState();
+    return Boolean(gs.discoverModalOpen) ||
+      Boolean(gs.ghostBladeExileCards) ||
+      Boolean(gs.shopSkillSelectOpen) ||
+      Boolean(gs.deleteModalOpen) ||
+      Boolean(gs.upgradeModalOpen) ||
+      Boolean(gs.handMagicUpgradeModal) ||
+      Boolean(gs.mirrorCopyModal) ||
+      Boolean(gs.permGrantModal) ||
+      Boolean(gs.amplifyModal) ||
+      Boolean(gs.eventDiceModal) ||
+      Boolean(gs.magicChoiceModal) ||
+      Boolean(gs.equipmentPrompt) ||
+      Boolean(gs.eventTransformState) ||
+      Boolean(gs.deathWardPrompt);
+  })();
 
   const endHeroTurnDisabled =
     fullBoardInteractionLocked || modalOverlayBlocksEndHeroTurn || playerTargetingActive;
@@ -9170,6 +6871,9 @@ export default function GameBoard() {
     if (!slotItem || !slotItem.type) {
       return false;
     }
+    if (pendingPotionAction.effect === 'grant-weapon-stun-chance+40') {
+      return slotItem.type === 'weapon';
+    }
     if ('allowedTypes' in pendingPotionAction && pendingPotionAction.allowedTypes) {
       if (!pendingPotionAction.allowedTypes.includes(slotItem.type)) {
         return false;
@@ -9181,6 +6885,9 @@ export default function GameBoard() {
     if (pendingPotionAction.effect === 'perm-equipment-durability-max+1' ||
         pendingPotionAction.effect === 'perm-equipment-durability-max+2') {
       return slotItem.durability != null;
+    }
+    if (pendingPotionAction.effect === 'grant-lastwords-slot-temp-buff') {
+      return true;
     }
     const maxDurability = slotItem.maxDurability ?? slotItem.durability ?? 0;
     const currentDurability = slotItem.durability ?? maxDurability;
@@ -9250,7 +6957,7 @@ export default function GameBoard() {
   }, [heroSkillTargeting, updateHeroSkillArrowFromMouse]);
   const handleDragCardFromHand = (card: GameCardData) => {
     const targetingActive = playerTargetingActive;
-  const isSpellCard = card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion';
+  const isSpellCard = card.type === 'magic' || card.type === 'hero-magic' || card.type === 'potion' || card.type === 'curse';
     if (
       (waterfallAnimation.isActive && !isSpellCard) ||
       targetingActive ||
@@ -9423,8 +7130,6 @@ export default function GameBoard() {
     setDraggedCard(card);
     draggedCardRef.current = card;
     setDraggedCardSource('dungeon');
-    setIsDraggingFromDungeon(true);
-    setIsDraggingToHand(true);
     startDragSession();
   };
   
@@ -9438,15 +7143,13 @@ export default function GameBoard() {
     heroFrameDropIntentRef.current = false;
     setDraggedCard(null);
     setDraggedCardSource((current) => (current === 'dungeon' ? null : current));
-    setIsDraggingFromDungeon(false);
-    setIsDraggingToHand(false);
     setHeroRowDropState(null);
   };
 
   const engagedMonsters = getEngagedMonsterCards();
   const isWaterfallLocked = waterfallActive;
   const isDefeatAnimationPlaying = Object.keys(monsterDefeatStates).length > 0;
-  const eventPendingLocked = eventModalMinimized && eventModalOpen && !!currentEventCard;
+  const eventPendingLocked = eventModalMinimized && eventModalOpen && !!engine.getState().currentEventCard;
   const pendingBlock = combatState.pendingBlock;
   const showBlockButtons = Boolean(pendingBlock);
   const inCombat = engagedMonsters.some(m => !monsterDefeatStates[m.id]);
@@ -9460,11 +7163,15 @@ export default function GameBoard() {
       const slotAttacked = combatState.heroAttacksThisTurn[slotId];
       if (!slotAttacked && combatState.heroAttacksRemaining > 0) count += 1;
       count += extraAttackCharges;
+      count += (slotExtraAttacks ?? {})[slotId] ?? 0;
       if (slotAttacked || count > 0) {
         if (berserkerRageActive && !berserkerSlotUsed[slotId]) count += 1;
         if (amuletEffects.hasFlash && !flashSlotUsed[slotId]) count += 1;
         if (gambitExtraActive) count += Math.max(0, gambitExtraPerSlot - (gambitSlotUsed[slotId] ?? 0));
         if ((slotItem as any)?.weaponExtraAttack && !weaponExtraAttackUsed[slotId]) count += 1;
+        const battleSpiritBonus = (slotBattleSpiritBonus ?? {})[slotId] ?? 0;
+        const battleSpiritUsed = (slotBattleSpiritUsedMap ?? {})[slotId] ?? 0;
+        if (battleSpiritBonus > 0) count += Math.max(0, battleSpiritBonus - battleSpiritUsed);
       }
       return count;
     }
@@ -9472,7 +7179,8 @@ export default function GameBoard() {
     if (combatState.currentTurn === 'monster' && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
       const equipBonus = (slotItem as any).equipBlockDurabilityBonus ?? 0;
       const amuletBonus = amuletEffects.hasArmorHalveEndure ? 1 : 0;
-      return Math.max(0, blockDurabilityPerSlot + equipBonus + amuletBonus - (combatState.slotDurabilityUsedThisTurn?.[slotId] ?? 0));
+      const battleSpiritBonus = (slotBattleSpiritBonus ?? {})[slotId] ?? 0;
+      return Math.max(0, blockDurabilityPerSlot + equipBonus + amuletBonus + battleSpiritBonus - (combatState.slotDurabilityUsedThisTurn?.[slotId] ?? 0));
     }
 
     return null;
@@ -9493,10 +7201,9 @@ export default function GameBoard() {
     heroVariant,
     showBlockButtons,
     viewportWidth,
-    gameViewport.height,
-  ]);
+    gameViewport.height]);
   const draggedCardIsSpell =
-    draggedCard?.type === 'magic' || draggedCard?.type === 'hero-magic' || draggedCard?.type === 'potion';
+    draggedCard?.type === 'magic' || draggedCard?.type === 'hero-magic' || draggedCard?.type === 'potion' || draggedCard?.type === 'curse';
   const heroRowInteractionLocked =
     playerTargetingActive ||
     isDefeatAnimationPlaying ||
@@ -9512,7 +7219,7 @@ export default function GameBoard() {
     Boolean(card && isRecyclableFromHand(card));
   const canSellDraggedCard =
     draggedCard
-      ? ((isSellableType(draggedCard.type) && !draggedCard.isCurse && !(draggedCard.type === 'monster' && !draggedCard.isMinionCard))
+      ? ((isSellableType(draggedCard.type) && draggedCard.type !== 'curse' && !(draggedCard.type === 'monster' && !draggedCard.isMinionCard))
         || draggedCard.isPermanentEvent === true)
         && !isPermCard(draggedCard)
         && draggedCard.type !== 'building'
@@ -9901,8 +7608,9 @@ export default function GameBoard() {
     const targetItem = target === 'equipmentSlot1' ? equipmentSlot1 : target === 'equipmentSlot2' ? equipmentSlot2 : null;
     const targetEquipBonus = (targetItem as any)?.equipBlockDurabilityBonus ?? 0;
     const targetAmuletBonus = amuletEffects.hasArmorHalveEndure ? 1 : 0;
+    const targetBattleSpiritBonus = target !== 'hero' ? ((slotBattleSpiritBonus ?? {})[target as EquipmentSlotId] ?? 0) : 0;
     const isDurabilityExhausted = target !== 'hero' &&
-      (combatState.slotDurabilityUsedThisTurn?.[target as EquipmentSlotId] ?? 0) >= (blockDurabilityPerSlot + targetEquipBonus + targetAmuletBonus);
+      (combatState.slotDurabilityUsedThisTurn?.[target as EquipmentSlotId] ?? 0) >= (blockDurabilityPerSlot + targetEquipBonus + targetAmuletBonus + targetBattleSpiritBonus);
     return (
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
         <button
@@ -9956,11 +7664,9 @@ export default function GameBoard() {
     () => getEquipmentSlotsWithSuppressedTempAttack(activeCards, equipmentSlot1, equipmentSlot2),
     [activeCards, equipmentSlot1, equipmentSlot2],
   );
-  const curseMonumentCols = useMemo(
-    () => getColumnsWithCurseMonumentAura(activeCards, activeCardStacks),
-    [activeCards, activeCardStacks],
-  );
-  const heroRowSlots: HeroRowSlotConfig[] = [
+  // curseMonumentCols moved to useActiveRowDerivedState
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const heroRowSlots: HeroRowSlotConfig[] = useMemo(() => [
     {
       id: 'hero-row-amulet',
       dropZone: 'other',
@@ -10030,6 +7736,7 @@ export default function GameBoard() {
               engagedMonsters.some(m => !monsterDefeatStates[m.id]) &&
               combatState.heroAttacksThisTurn.equipmentSlot1 &&
               extraAttackCharges <= 0 &&
+              ((slotExtraAttacks ?? {}).equipmentSlot1 ?? 0) <= 0 &&
               (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot1)) &&
               (!amuletEffects.hasFlash || Boolean(flashSlotUsed.equipmentSlot1)) &&
               (!gambitExtraActive || (gambitSlotUsed.equipmentSlot1 ?? 0) >= gambitExtraPerSlot) &&
@@ -10065,7 +7772,7 @@ export default function GameBoard() {
             onCardClick={handleCardClick}
           />
           {showBlockButtons &&
-            renderBlockButton('equipmentSlot1', 'Block (Left)', !canShieldBlock('equipmentSlot1') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot1 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot1 as any)?.equipBlockDurabilityBonus ?? 0) + (amuletEffects.hasArmorHalveEndure ? 1 : 0)))}
+            renderBlockButton('equipmentSlot1', 'Block (Left)', !canShieldBlock('equipmentSlot1') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot1 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot1 as any)?.equipBlockDurabilityBonus ?? 0) + (amuletEffects.hasArmorHalveEndure ? 1 : 0) + ((slotBattleSpiritBonus ?? {}).equipmentSlot1 ?? 0)))}
         </>
       ),
     },
@@ -10163,6 +7870,7 @@ export default function GameBoard() {
               engagedMonsters.some(m => !monsterDefeatStates[m.id]) &&
               combatState.heroAttacksThisTurn.equipmentSlot2 &&
               extraAttackCharges <= 0 &&
+              ((slotExtraAttacks ?? {}).equipmentSlot2 ?? 0) <= 0 &&
               (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot2)) &&
               (!amuletEffects.hasFlash || Boolean(flashSlotUsed.equipmentSlot2)) &&
               (!gambitExtraActive || (gambitSlotUsed.equipmentSlot2 ?? 0) >= gambitExtraPerSlot) &&
@@ -10198,7 +7906,7 @@ export default function GameBoard() {
             onCardClick={handleCardClick}
           />
           {showBlockButtons &&
-            renderBlockButton('equipmentSlot2', 'Block (Right)', !canShieldBlock('equipmentSlot2') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot2 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot2 as any)?.equipBlockDurabilityBonus ?? 0) + (amuletEffects.hasArmorHalveEndure ? 1 : 0)))}
+            renderBlockButton('equipmentSlot2', 'Block (Right)', !canShieldBlock('equipmentSlot2') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot2 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot2 as any)?.equipBlockDurabilityBonus ?? 0) + (amuletEffects.hasArmorHalveEndure ? 1 : 0) + ((slotBattleSpiritBonus ?? {}).equipmentSlot2 ?? 0)))}
         </>
       ),
     },
@@ -10253,10 +7961,41 @@ export default function GameBoard() {
           onCardSelect={handleCardClick}
         />
       ),
-    }] : []),
-  ];
-
-  const remainingCardsCount = remainingDeck.length;
+    }] : [])], [
+    hp, maxHp, amuletSlots, maxAmuletSlots, amuletEffects,
+    equipmentSlot1, equipmentSlot2, equipmentSlot1Reserve, equipmentSlot2Reserve,
+    equipmentSlotCapacity,
+    equipmentSlot1StatModifier, equipmentSlot2StatModifier,
+    equipmentSlot1Highlight, equipmentSlot2Highlight,
+    equipmentSlot1DropAvailable, equipmentSlot2DropAvailable,
+    equipmentSlot1MonsterTarget, equipmentSlot2MonsterTarget,
+    backpackItems, backpackCapacity, classDeck, handCards,
+    heroVariant, heroStunned, combatState,
+    permanentSpellDamageBonus, permanentSpellLifesteal, stunCap,
+    slotTempArmor, slotTempAttack, berserkTurnBuff, extraAttackCharges,
+    slotExtraAttacks,
+    berserkerRageActive, berserkerSlotUsed, flashSlotUsed,
+    gambitExtraActive, gambitExtraPerSlot, gambitSlotUsed,
+    weaponExtraAttackUsed, blockDurabilityPerSlot, unbreakableUntilWaterfall,
+    engagedMonsters, stageScale,
+    handLockedForMonsterPhase, fullBoardInteractionLocked,
+    isWaterfallLocked, isDefeatAnimationPlaying, playerTargetingActive,
+    heroSkillTargeting, slotTargetingActive, slotTargetingLabel,
+    heroSkillPrompt, heroMagicUiState, heroSkillInfo, extraHeroSkillInfos,
+    selectedHeroSkillDef, showBlockButtons,
+    draggingDungeonMonsterForPersuade, heroCardDropHighlight,
+    draggedCard, draggedCardSource, draggedEquipment,
+    isNarrowLayout, takingDamage, healing, heroBleedActive,
+    monsterDefeatStates, weaponSwingStates, weaponSwingVariant,
+    shieldBlockStates, shieldBlockVariant,
+    tempAttackSuppressedByBuildingAura,
+    handleCardToSlot, handleCardClick, handleCardToHero,
+    handleSlotTargetSelection, handleHeroSkillButtonClick, cancelHeroSkillAction,
+    handleExtraHeroSkillButtonClick, handleHeroMagicTrigger,
+    handleBackpackClick, swapEquipmentToTop, getEquipmentSlotBonus,
+    renderBlockButton, canShieldBlock, canCardGoToBackpack,
+    isRecyclableFromHand, isPermRecycleEquipment,
+  ]);
 
   const handleDeckClick = useCallback(() => {
     if (fullBoardInteractionLockedRef.current) return;
@@ -10268,118 +8007,172 @@ export default function GameBoard() {
     handleSellCard(card);
   }, [handleSellCard]);
 
-  const handleShopMinimize = useCallback(() => setShopModalMinimized(true), [setShopModalMinimized]);
-  const handleEventMinimize = useCallback(() => setEventModalMinimized(true), [setEventModalMinimized]);
+  const handleShopMinimize = useCallback(() => dispatch({ type: 'SET_SHOP_MODAL_MINIMIZED', minimized: true }), []);
+  const handleEventMinimize = useCallback(() => dispatch({ type: 'SET_EVENT_MODAL_MINIMIZED', minimized: true }), []);
   const handleGameOverMinimize = useCallback(() => setGameOverMinimized(true), []);
 
-  const canDiscoverSkill = useMemo(() => {
-    const ownedCount = (selectedHeroSkill ? 1 : 0) + extraHeroSkills.length;
-    return allHeroSkills.length - ownedCount >= 3;
-  }, [selectedHeroSkill, extraHeroSkills.length]);
+ 
 
-  const discoverSkillDisabledReason = useMemo(() => {
-    const ownedCount = (selectedHeroSkill ? 1 : 0) + extraHeroSkills.length;
-    return allHeroSkills.length - ownedCount < 3
-      ? '已学习太多技能，没有足够的未学技能可供选择。'
-      : undefined;
-  }, [selectedHeroSkill, extraHeroSkills.length]);
+ 
 
-  const permanentSkillStacks = useMemo(() => ({
-    '潮涌铸甲': bulwarkPassiveActive + bulwarkTempArmorStacks,
-    '潮涌铸甲·瀑流': bulwarkPassiveActive,
-    '潮涌铸甲·格挡': bulwarkTempArmorStacks,
-  }), [bulwarkPassiveActive, bulwarkTempArmorStacks]);
+  // Sword overlay state now managed by useSwordOverlay hook
 
-  const heroCapacityLimits = useMemo(() => ({
-    hand: effectiveHandLimit,
-    backpack: backpackCapacity,
-    amuletSlots: maxAmuletSlots,
-    equipmentSlotLeft: equipmentSlotCapacity.equipmentSlot1 ?? 1,
-    equipmentSlotRight: equipmentSlotCapacity.equipmentSlot2 ?? 1,
-  }), [effectiveHandLimit, backpackCapacity, maxAmuletSlots, equipmentSlotCapacity.equipmentSlot1, equipmentSlotCapacity.equipmentSlot2]);
-  const showMonsterAttackIndicator = Boolean(
-    handLockedForMonsterPhase && engagedMonsters.length > 0,
-  );
-  const activeSwordMonsterId = combatState.pendingBlock?.monsterId ?? null;
+  const activeRowInteraction = useMemo<ActiveRowInteractionState>(() => ({
+    isWaterfallLocked,
+    isDefeatAnimationPlaying,
+    fullBoardInteractionLocked,
+    draggedEquipment,
+    rageStripWidth,
+    isCompactViewport,
+    cellWrapperClass,
+    cellInnerClass,
+    monsterBleedStates,
+    monsterHealStates,
+    monsterDefeatStates,
+    removingCards,
+    pendingDungeonUseRef,
+  }), [
+    isWaterfallLocked, isDefeatAnimationPlaying,
+    fullBoardInteractionLocked, draggedEquipment, rageStripWidth, isCompactViewport,
+    cellWrapperClass, cellInnerClass,
+    monsterBleedStates, monsterHealStates, monsterDefeatStates,
+    removingCards, pendingDungeonUseRef,
+  ]);
 
-  const updateSwordVectors = useCallback(() => {
-    if (!showMonsterAttackIndicator) {
-      setSwordVectors({});
-      return;
-    }
+  const activeRowCallbacks = useMemo<ActiveRowCallbacks>(() => ({
+    setActiveCellRef,
+    handleDragStartFromDungeon,
+    handleDragEndFromDungeon,
+    handleWeaponToMonster,
+    handleMonsterTargetSelection,
+    handleDungeonCardSelection,
+    handleCardClick,
+    getMonsterRageOverlayStyle,
+    registerMonsterCellRef,
+  }), [
+    setActiveCellRef, handleDragStartFromDungeon, handleDragEndFromDungeon,
+    handleWeaponToMonster, handleMonsterTargetSelection, handleDungeonCardSelection,
+    handleCardClick, getMonsterRageOverlayStyle, registerMonsterCellRef,
+  ]);
 
-    const boardEl = boardRef.current;
-    const heroEl = heroCellRef.current;
-    if (!boardEl || !heroEl) {
-      setSwordVectors({});
-      return;
-    }
+  const modalCallbacks = useMemo<ModalCallbacks>(() => ({
+    onCardSelect: handleCardClick,
+    onShopPurchase: handleShopPurchase,
+    onShopClose: handleShopClose,
+    onShopMinimize: handleShopMinimize,
+    onShopHealRequest: handleShopHealRequest,
+    onShopLevelUpRequest: handleShopLevelUpRequest,
+    onShopDeleteRequest: handleShopDeleteRequest,
+    onShopSkillDiscoverRequest: handleShopSkillDiscoverRequest,
+    onShopEquipAttackRequest: handleShopEquipAttackRequest,
+    onShopEquipArmorRequest: handleShopEquipArmorRequest,
+    onShopSkillSelect: handleShopSkillSelect,
+    onEventChoice: handleEventChoice,
+    onEventMinimize: handleEventMinimize,
+    onDiceRollResult: handleDiceRollResult,
+    onDiceModalClose: cancelDiceModal,
+    onMagicChoice: handleMagicChoice,
+    onEquipmentPromptSelect: handleEquipmentPromptSelection,
+    onEquipmentPromptCancel: cancelEquipmentPrompt,
+    onDiscoverSelect: handleDiscoverSelect,
+    onDiscoverCancel: handleDiscoverCancel,
+    onGraveyardDiscoverSelect: handleGraveyardDiscoverSelect,
+    onGraveyardDiscoverCancel: handleGraveyardDiscoverCancel,
+    onGhostBladeExileConfirm: handleGhostBladeExileConfirm,
+    onMonsterRewardSelect: handleMonsterRewardSelection,
+    onPersuadeConfirm: handlePersuadeConfirm,
+    onPersuadeDiceResult: handlePersuadeDiceResult,
+    onPersuadeClose: handlePersuadeClose,
+    onDeleteModalChange: handleDeleteModalOpenChange,
+    onDeleteCardConfirm: handleDeleteCardConfirm,
+    onBatchDeleteConfirm: handleBatchDeleteConfirm,
+    onDetailsModalChange: handleDetailsModalChange,
+    onHeroDetailsChange: setHeroDetailsOpen,
+    onUpgradeModalChange: handleUpgradeModalChange,
+    onCardUpgrade: handleCardUpgrade,
+    onHandMagicUpgradeSelect: handleHandMagicUpgradeSelect,
+    onHandMagicUpgradeClose: handleHandMagicUpgradeClose,
+    onMirrorCopyConfirm: resolveMirrorCopy,
+    onMirrorCopyCancel: cancelMirrorCopy,
+    onAmplifyConfirm: resolveAmplify,
+    onAmplifyCancel: cancelAmplify,
+    onPermGrantConfirm: resolvePermGrant,
+    onPermGrantCancel: cancelPermGrant,
+    onBackpackReorganizeConfirm: handleBackpackReorganizeConfirm,
+    onCancelHeroMagicAction: cancelHeroMagicAction,
+    onHeroMagicChoice: handleHeroMagicChoice,
+    onCancelPotionAction: cancelPotionAction,
+    onPotionChoiceSelection: handlePotionChoiceSelection,
+    onDeathWardConfirm: handleDeathWardConfirm,
+    onDeathWardDecline: handleDeathWardDecline,
+    onDaggerSelfDestructConfirm: handleDaggerSelfDestructConfirm,
+    onDaggerSelfDestructDecline: handleDaggerSelfDestructDecline,
+    onSkillSelection: handleSkillSelection,
+    onCardDraftComplete: handleCardDraftComplete,
+    onRestart: handleNewGame,
+    onEndHeroTurn: endHeroTurn,
+    onUndo: handleUndo,
+    onGameOverMinimize: handleGameOverMinimize,
+    onWraithPassiveUnlockChange: setWraithPassiveUnlockPopup,
+    onDeckViewerChange: setDeckViewerOpen,
+    onBackpackViewerChange: setBackpackViewerOpen,
+  }), [
+    handleCardClick, handleShopPurchase, handleShopClose, handleShopMinimize,
+    handleShopHealRequest, handleShopLevelUpRequest, handleShopDeleteRequest,
+    handleShopSkillDiscoverRequest, handleShopEquipAttackRequest, handleShopEquipArmorRequest,
+    handleShopSkillSelect, handleEventChoice, handleEventMinimize,
+    handleDiceRollResult, cancelDiceModal, handleMagicChoice,
+    handleEquipmentPromptSelection, cancelEquipmentPrompt,
+    handleDiscoverSelect, handleDiscoverCancel,
+    handleGraveyardDiscoverSelect, handleGraveyardDiscoverCancel, handleGhostBladeExileConfirm,
+    handleMonsterRewardSelection, handlePersuadeConfirm, handlePersuadeDiceResult, handlePersuadeClose,
+    handleDeleteModalOpenChange, handleDeleteCardConfirm, handleBatchDeleteConfirm, handleDetailsModalChange,
+    handleUpgradeModalChange, handleCardUpgrade,
+    handleHandMagicUpgradeSelect, handleHandMagicUpgradeClose,
+    resolveMirrorCopy, cancelMirrorCopy, resolveAmplify, cancelAmplify,
+    resolvePermGrant, cancelPermGrant,
+    handleBackpackReorganizeConfirm,
+    cancelHeroMagicAction, handleHeroMagicChoice, cancelPotionAction, handlePotionChoiceSelection,
+    handleDeathWardConfirm, handleDeathWardDecline,
+    handleDaggerSelfDestructConfirm, handleDaggerSelfDestructDecline,
+    handleSkillSelection, handleCardDraftComplete, handleNewGame,
+    endHeroTurn, handleUndo, handleGameOverMinimize,
+  ]);
 
-    const boardRect = boardEl.getBoundingClientRect();
-    const heroRect = heroEl.getBoundingClientRect();
-    const heroCenter = {
-      x: heroRect.left + heroRect.width / 2,
-      y: heroRect.top + heroRect.height / 2,
-    };
-
-    const vectors: Record<string, SwordVector> = {};
-    combatState.engagedMonsterIds.forEach(monsterId => {
-      const monsterEl = monsterCellRefs.current[monsterId];
-      if (!monsterEl) return;
-
-      const monsterRect = monsterEl.getBoundingClientRect();
-      const monsterCenter = {
-        x: monsterRect.left + monsterRect.width / 2,
-        y: monsterRect.top + monsterRect.height / 2,
-      };
-
-      const dx = heroCenter.x - monsterCenter.x;
-      const dy = heroCenter.y - monsterCenter.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      if (!length) return;
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-
-      const midX = (monsterCenter.x + heroCenter.x) / 2 - boardRect.left;
-      const midY = (monsterCenter.y + heroCenter.y) / 2 - boardRect.top;
-
-      vectors[monsterId] = {
-        left: midX,
-        top: midY,
-        angle,
-        length,
-      };
-    });
-
-    setSwordVectors(vectors);
-  }, [combatState.engagedMonsterIds, showMonsterAttackIndicator, activeCards]);
-
-  useEffect(() => {
-    if (!showMonsterAttackIndicator) {
-      setSwordVectors({});
-      return;
-    }
-
-    updateSwordVectors();
-    const handleResize = () => updateSwordVectors();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [showMonsterAttackIndicator, updateSwordVectors]);
+  const modalUI = useMemo<ModalUIState>(() => ({
+    selectedCard,
+    detailsModalOpen,
+    deckViewerOpen,
+    backpackViewerOpen,
+    heroDetailsOpen,
+    gameOverMinimized,
+    daggerSelfDestructPrompt,
+    wraithPassiveUnlockPopup,
+    eventDiceRollKey,
+    persuadeRollKey,
+    eventChoiceStates,
+    overlayZoom,
+    stageScale,
+    headerHeight,
+    classCardPreview: classCardPreviewIdRef.current ? (classDeck.find(c => c.id === classCardPreviewIdRef.current) ?? null) : null,
+    heroMagicInfo: heroMagicUiState,
+    endHeroTurnDisabled,
+    fullBoardInteractionLocked,
+  }), [
+    selectedCard, detailsModalOpen, deckViewerOpen, backpackViewerOpen,
+    heroDetailsOpen, gameOverMinimized, daggerSelfDestructPrompt, wraithPassiveUnlockPopup,
+    eventDiceRollKey, persuadeRollKey, eventChoiceStates,
+    overlayZoom, stageScale, headerHeight, classDeck,
+    heroMagicUiState, endHeroTurnDisabled, fullBoardInteractionLocked,
+  ]);
 
   return (
     <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...((minimizedModalLocksBoard || gameOver) ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
       {/* Header - Fixed height */}
       <div className="flex-shrink-0" ref={headerWrapperRef}>
         <GameHeader
-          hp={hp}
           maxHp={maxHp}
-          gold={gold}
-          cardsRemaining={remainingCardsCount}
-          turnCount={turnCount}
-          shopLevel={shopLevel}
-          persuadeLevel={persuadeLevel}
-          persuadeCost={Math.max(0, PERSUADE_COST + persuadeCostModifier - persuadeTempDiscount)}
           persuadeTempDiscount={persuadeTempDiscount}
-          totalWins={totalWins}
           deckFlyTargetRef={deckFlyTargetRef}
           onDeckClick={handleDeckClick}
           onNewGame={handleNewGame}
@@ -10401,105 +8194,15 @@ export default function GameBoard() {
                   gridAutoRows: 'minmax(0, 1fr)'
                 }}>
           {/* Row 1: Preview Row - DUNGEON_COLUMN_COUNT cards + DiceRoller */}
-          {DUNGEON_COLUMNS.map((index) => {
-            const card = previewCards[index];
-            const isDroppingPreview = waterfallAnimation.droppingSlots.includes(index);
-            const isDiscardingPreview = waterfallAnimation.discardSlot === index;
-            const isDealingPreview = waterfallAnimation.dealingSlots.includes(index);
-            const isDeckReturnDiscard =
-              isDiscardingPreview && waterfallAnimation.discardDestination === 'deck';
-            const flyVector = isDeckReturnDiscard
-              ? (previewDeckReturnVectors[index] ?? DECK_RETURN_VECTOR_DEFAULT)
-              : (previewGraveyardVectors[index] ?? GRAVEYARD_VECTOR_DEFAULT);
-            const previewAnimationStyle: CSSProperties & Record<`--${string}`, string> = isDeckReturnDiscard
-              ? {
-                  '--deck-return-offset-x': `${flyVector.offsetX}px`,
-                  '--deck-return-offset-y': `${flyVector.offsetY}px`,
-                }
-              : {
-                  '--graveyard-offset-x': `${flyVector.offsetX}px`,
-                  '--graveyard-offset-y': `${flyVector.offsetY}px`,
-                };
-            const previewAnimationClass = [
-              isDroppingPreview ? 'animate-preview-drop' : '',
-              isDiscardingPreview && !isDeckReturnDiscard ? 'animate-preview-graveyard' : '',
-              isDiscardingPreview && isDeckReturnDiscard ? 'animate-preview-deck-return' : '',
-              isDealingPreview ? 'animate-preview-deal' : '',
-            ]
-              .filter(Boolean)
-              .join(' ');
-
-            const previewStackedCards = previewCardStacks[index] ?? [];
-            const hasPreviewStack = previewStackedCards.length > 0;
-            const isPreviewAnimating = isDroppingPreview || isDiscardingPreview || isDealingPreview;
-
-            return card ? (
-              <div 
-                key={`preview-${index}`}
-                className={`opacity-60 ${cellWrapperClass}${hasPreviewStack ? ' relative overflow-visible' : ''}`}
-                data-testid={`preview-card-${index}`}
-                ref={el => setPreviewCellRef(index, el)}
-              >
-                <div 
-                  className={`${cellInnerClass} ${hasPreviewStack ? 'relative' : ''} ${previewAnimationClass}`.trim()}
-                  style={previewAnimationStyle}
-                >
-                  {hasPreviewStack && previewStackedCards.map((stackCard, sIdx) => {
-                    if (isPreviewAnimating) {
-                      return (
-                        <div
-                          key={stackCard.id}
-                          className="absolute inset-0 pointer-events-none"
-                          style={{ zIndex: -1, opacity: 0, padding: 'var(--dh-card-padding, 0.25rem)' }}
-                        >
-                          <GameCard card={stackCard} disableInteractions />
-                        </div>
-                      );
-                    }
-                    const offsetStep = 8;
-                    const y = -(previewStackedCards.length - sIdx) * offsetStep;
-                    return (
-                      <div
-                        key={stackCard.id}
-                        className="absolute inset-0 rounded-md overflow-hidden pointer-events-none"
-                        style={{
-                          zIndex: 0,
-                          transform: `translateY(${y}%)`,
-                          opacity: 0.4 - sIdx * 0.1,
-                          filter: 'brightness(0.6)',
-                          padding: 'var(--dh-card-padding, 0.25rem)',
-                        }}
-                      >
-                        <GameCard card={stackCard} disableInteractions />
-                      </div>
-                    );
-                  })}
-                  <GameCard
-                    card={card}
-                    className={hasPreviewStack ? 'relative z-[5]' : ''}
-                    disableInteractions
-                    onClick={() => handleCardClick(card)}
-                  />
-                  {hasPreviewStack && (
-                    <div className="absolute top-[-4px] right-[-4px] z-40 bg-amber-500 text-white rounded-full w-5 h-5 flex items-center justify-center border-2 border-background shadow-md font-bold text-xs pointer-events-none">
-                      {previewStackedCards.length + 1}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div 
-                key={`preview-empty-${index}`} 
-                className={cellWrapperClass}
-                ref={el => setPreviewCellRef(index, el)}
-              >
-                <div 
-                  className={cellInnerClass}
-                  style={previewAnimationStyle}
-                />
-              </div>
-            );
-          })}
+          <PreviewRow
+            waterfallAnimation={waterfallAnimation}
+            graveyardVectors={previewGraveyardVectors}
+            deckReturnVectors={previewDeckReturnVectors}
+            cellWrapperClass={cellWrapperClass}
+            cellInnerClass={cellInnerClass}
+            onCellRef={setPreviewCellRef}
+            onCardClick={handleCardClick}
+          />
           
           {/* Row 1, last col: DiceRoller (hidden in narrow layout) */}
           {!isNarrowLayout && (
@@ -10515,227 +8218,10 @@ export default function GameBoard() {
           )}
 
           {/* Row 2: Active Row - DUNGEON_COLUMN_COUNT cards + GraveyardZone */}
-          {DUNGEON_COLUMNS.map((index) => {
-            const card = activeCards[index];
-            const colWidth = rageStripWidth;
-            const isEngagedMonster = Boolean(card && card.type === 'monster' && isMonsterEngaged(card.id));
-            const isResolvingCard = resolvingDungeonCardId === card?.id || (card != null && pendingDungeonUseRef.current.has(card.id));
-            const isEventPendingCell = resolvingDungeonCardId === card?.id && eventPendingLocked;
-            const isMonsterTurnLock =
-              showMonsterAttackIndicator ||
-              isWaterfallLocked ||
-              isDefeatAnimationPlaying ||
-              fullBoardInteractionLocked;
-            const monsterTargetHighlight = Boolean(
-              monsterTargetingActive &&
-                card &&
-                (card.type === 'monster' || card.type === 'building'),
-            );
-            const dungeonTargetHighlight =
-              dungeonTargetingActive &&
-              (pendingMagicAction?.effect === 'return-dungeon-bottom' ||
-                pendingMagicAction?.effect === 'shuffle-dungeon' ||
-                pendingMagicAction?.effect === 'dungeon-swap-select' ||
-                pendingMagicAction?.effect === 'dungeon-preview-swap' ||
-                pendingMagicAction?.effect === 'fate-swap');
-            const monsterLayerValue =
-              card && card.type === 'monster'
-                ? Math.min(4, Math.max(card.currentLayer ?? card.hpLayers ?? card.fury ?? 0, 0))
-                : 0;
-
-            if (!card) {
-              return (
-                <div 
-                  key={`active-empty-${index}`} 
-                  className={cellWrapperClass}
-                  ref={el => setActiveCellRef(index, el)}
-                />
-              );
-            }
-
-            const activeStackedCards = activeCardStacks[index] ?? [];
-            const hasActiveStack = activeStackedCards.length > 0;
-
-            const gameCardNode = (
-              <>
-                {hasActiveStack && activeStackedCards.map((stackCard, sIdx) => {
-                  const offsetStep = 8;
-                  const y = -(activeStackedCards.length - sIdx) * offsetStep;
-                  return (
-                    <div
-                      key={stackCard.id}
-                      className="absolute inset-0 rounded-md overflow-hidden pointer-events-none"
-                      style={{
-                        zIndex: 0,
-                        transform: `translateY(${y}%)`,
-                        opacity: 0.5 - sIdx * 0.1,
-                        filter: 'brightness(0.7)',
-                        padding: 'var(--dh-card-padding, 0.25rem)',
-                      }}
-                    >
-                      <GameCard card={stackCard} disableInteractions />
-                    </div>
-                  );
-                })}
-                <GameCard
-                  card={card}
-                  onDragStart={
-                    isMonsterTurnLock || playerTargetingActive ? undefined : handleDragStartFromDungeon
-                  }
-                  onDragEnd={handleDragEndFromDungeon}
-                  onWeaponDrop={
-                    playerTargetingActive || fullBoardInteractionLocked || heroStunned
-                      ? undefined
-                      : (weapon) => handleWeaponToMonster(weapon, card)
-                  }
-                  isWeaponDropTarget={
-                    !playerTargetingActive &&
-                    !fullBoardInteractionLocked &&
-                    !handLockedForMonsterPhase &&
-                    !heroStunned &&
-                    (draggedEquipment?.type === 'weapon' || draggedEquipment?.type === 'monster' || (draggedEquipment?.type === 'shield' && !!draggedEquipment?.shieldBashStunRate)) &&
-                    (card.type === 'monster' || card.type === 'building')
-                  }
-                  bleedAnimation={Boolean(monsterBleedStates[card.id])}
-                  healAnimation={Boolean(monsterHealStates[card.id])}
-                  defeatAnimation={Boolean(monsterDefeatStates[card.id])}
-                  className={`${hasActiveStack ? 'relative z-[5]' : ''} ${removingCards.has(card.id) ? 'animate-card-remove' : 'shadow-lg'} ${
-                    (isMonsterTurnLock && !monsterTargetHighlight && !dungeonTargetHighlight) ||
-                    (isResolvingCard && !isEventPendingCell && !monsterTargetHighlight && !dungeonTargetHighlight)
-                      ? 'opacity-60 pointer-events-none'
-                      : ''
-                  } ${
-                    monsterTargetHighlight ? 'monster-target-highlight animate-pulse' : ''
-                  } ${dungeonTargetHighlight ? 'dungeon-target-highlight animate-pulse' : ''}`.trim()}
-                  isEngaged={isEngagedMonster}
-                  onClick={() => {
-                    if (
-                      monsterTargetingActive &&
-                      (card.type === 'monster' || card.type === 'building')
-                    ) {
-                      handleMonsterTargetSelection(card);
-                      return;
-                    }
-                    if (dungeonTargetingActive) {
-                      handleDungeonCardSelection(card);
-                      return;
-                    }
-                    if (isEventPendingCell) {
-                      setEventModalMinimized(false);
-                      return;
-                    }
-                    if (isMonsterTurnLock || isResolvingCard) return;
-                    handleCardClick(card);
-                  }}
-                />
-                {hasActiveStack && (
-                  <div className="absolute top-[-4px] right-[-4px] z-40 bg-amber-500 text-white rounded-full w-5 h-5 flex items-center justify-center border-2 border-background shadow-md font-bold text-xs pointer-events-none">
-                    {activeStackedCards.length + 1}
-                  </div>
-                )}
-                {curseMonumentCols.has(index) && card.type === 'monster' && (
-                  <div
-                    className="absolute bottom-[-4px] left-[-4px] z-40 bg-purple-700 text-white rounded-full w-5 h-5 flex items-center justify-center border-2 border-background shadow-md pointer-events-none"
-                    title="诅咒碑光环：免疫魔法伤害"
-                  >
-                    <ShieldOff className="w-3 h-3" />
-                  </div>
-                )}
-              </>
-            );
-
-            const isMonster = card.type === 'monster';
-
-            const rageBaseTranslate = isCompactViewport ? 1 : MONSTER_RAGE_BASE_TRANSLATE_PX;
-            const monsterTranslateX = isMonster
-              ? rageBaseTranslate +
-                (monsterLayerValue > 0
-                  ? Math.max(
-                      (monsterLayerValue - 1) * colWidth + MONSTER_RAGE_TRANSLATE_ADJUST_PX,
-                      0,
-                    )
-                  : 0)
-              : 0;
-
-            const activeCellWrapper = isMonster
-              ? `${cellWrapperClass} relative overflow-visible`
-              : hasActiveStack
-                ? `${cellWrapperClass} relative overflow-visible`
-                : cellWrapperClass;
-
-            return (
-              <div 
-                key={`active-${index}`}
-                ref={el => setActiveCellRef(index, el)}
-                className={`${activeCellWrapper}${isEventPendingCell ? ' event-pending-cell' : ''}${card?.hasReleaseCharge ? ' fate-blade-charged' : ''}`}
-                style={isEventPendingCell ? { pointerEvents: 'auto' } : undefined}
-              >
-                {isMonster && (
-                  <div
-                    className="absolute z-0 flex flex-row-reverse overflow-hidden rounded-md bg-destructive/10"
-                    style={getMonsterRageOverlayStyle(card.id)}
-                  >
-                    {[1, 2, 3, 4].map((num) => {
-                      const isActiveLayer = monsterLayerValue > 0 && num === monsterLayerValue;
-                      const stripsToLeft = num - 1;
-                      const stripOffsetPx = stripsToLeft * colWidth;
-                      const furyColumnClasses = [
-                        'monster-rage-column h-full flex items-center justify-center border-l border-border/20 font-mono font-bold transition-colors',
-                        isActiveLayer
-                          ? 'bg-destructive/80 text-destructive-foreground shadow-inner shadow-destructive/60'
-                          : 'bg-transparent text-destructive/30 opacity-30',
-                      ]
-                        .filter(Boolean)
-                        .join(' ');
-                      return (
-                        <div
-                          key={num}
-                          className={furyColumnClasses}
-                          style={{ width: `${colWidth}px` }}
-                          data-strip-offset={stripOffsetPx}
-                        >
-                          {num}
-                        </div>
-                      );
-                    })}
-                    <div className="flex-1 bg-background/50" />
-                  </div>
-                )}
-                <div
-                  ref={isMonster ? registerMonsterCellRef(card.id) : undefined}
-                  className={`${cellInnerClass} relative z-20 transition-transform duration-300 ease-out`.trim()}
-                  style={{
-                    transform:
-                      isMonster && monsterTranslateX > 0
-                        ? `translateX(-${monsterTranslateX}px)`
-                        : 'none',
-                  }}
-                >
-                  {gameCardNode}
-                  {isEventPendingCell && (
-                    <div
-                      className="absolute inset-0 z-30 flex items-center justify-center rounded-md cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEventModalMinimized(false);
-                      }}
-                      onTouchEnd={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setEventModalMinimized(false);
-                      }}
-                    >
-                      <div className="absolute inset-0 rounded-md ring-2 ring-pink-500 animate-pulse" />
-                      <div className="bg-pink-600/90 rounded-full px-2.5 py-1 flex items-center gap-1 shadow-lg">
-                        <Calendar className="w-3 h-3 text-white" />
-                        <span className="text-white text-xs font-bold">待处理</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          <ActiveRow
+            interaction={activeRowInteraction}
+            callbacks={activeRowCallbacks}
+          />
           
           {/* Row 2, last col: GraveyardZone (hidden in narrow layout) */}
           {!isNarrowLayout && (
@@ -10753,21 +8239,13 @@ export default function GameBoard() {
           )}
 
           {/* Row 3: Hero Row - 6 slots (Amulet, Equipment×2, Hero, Backpack, ClassDeck) */}
-          {heroRowSlots.map((slot, index) => {
-            const innerClass = `${cellInnerClass} relative z-10 ${slot.innerClassName ?? ''}`.trim();
-            return (
-              <div
-                key={slot.id}
-                className={`${cellWrapperClass} ${slot.wrapperClassName ?? ''}`.trim()}
-                ref={registerHeroRowCellRef(index)}
-                {...getHeroRowMagicDropHandlers(slot.dropZone)}
-              >
-                <div className={innerClass} ref={slot.innerRef}>
-                  {slot.render()}
-                </div>
-              </div>
-            );
-          })}
+          <HeroRowSection
+            heroRowSlots={heroRowSlots}
+            cellWrapperClass={cellWrapperClass}
+            cellInnerClass={cellInnerClass}
+            registerHeroRowCellRef={registerHeroRowCellRef}
+            getHeroRowMagicDropHandlers={getHeroRowMagicDropHandlers}
+          />
               </div>
 
               <div
@@ -10776,66 +8254,12 @@ export default function GameBoard() {
                 style={heroFrameOverlayStyle}
               />
             </div>
-            {classDeckFlights.length > 0 && (
-              <div className="pointer-events-none absolute inset-0 z-20">
-                {classDeckFlights.map(flight => {
-                  const cardWidth = gridCardSize?.width ?? 140;
-                  const cardHeight = gridCardSize?.height ?? 210;
-                  return (
-                    <div
-                      key={flight.id}
-                      ref={el => {
-                        if (el) classDeckFlightElementMapRef.current.set(flight.id, el);
-                        else classDeckFlightElementMapRef.current.delete(flight.id);
-                      }}
-                      className="absolute class-flight-card"
-                      style={{
-                        width: cardWidth,
-                        height: cardHeight,
-                        opacity: 0,
-                        willChange: 'transform, opacity',
-                        contain: 'layout style',
-                      }}
-                    >
-                      <GameCard card={flight.card} disableInteractions />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {showMonsterAttackIndicator &&
-              Object.entries(swordVectors).map(([monsterId, vector]) => {
-                const isActiveSword = activeSwordMonsterId === monsterId;
-                return (
-                  <div key={`sword-${monsterId}`} className="pointer-events-none absolute inset-0 z-30">
-                    <div
-                      className={`absolute flex items-center ${isActiveSword ? 'opacity-100 animate-pulse' : 'opacity-30'}`}
-                      style={{
-                        left: vector.left,
-                        top: vector.top,
-                        width: vector.length,
-                        transform: `translate(-50%, -50%) rotate(${vector.angle}deg)`,
-                        transformOrigin: 'center',
-                      }}
-                    >
-                      <div
-                        className={`w-full h-1 bg-gradient-to-r from-transparent rounded-full blur-[1px] ${
-                          isActiveSword
-                            ? 'via-destructive/70 to-destructive'
-                            : 'via-destructive/20 to-destructive/20'
-                        }`}
-                      />
-                      <Sword
-                        className={`ml-2 w-6 h-6 transform rotate-90 ${
-                          isActiveSword
-                            ? 'text-destructive drop-shadow-[0_0_14px_rgba(239,68,68,0.9)]'
-                            : 'text-destructive/40'
-                        }`}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+            {/* classDeckFlights rendering moved to FlightOverlayLayer */}
+            <SwordOverlay
+              show={swordOverlay.showMonsterAttackIndicator}
+              swordVectors={swordOverlay.swordVectors}
+              activeSwordMonsterId={swordOverlay.activeSwordMonsterId}
+            />
           </div>
         </div>
             {heroSkillArrow && (
@@ -10878,318 +8302,57 @@ export default function GameBoard() {
       </div>
 
       {/* Eternal Relics — between hero row frame and hand */}
-      <EternalRelicBar
-        relics={eternalRelics}
+      <EternalRelicContainer
         onRelicClick={handleEternalRelicClick}
       />
 
       {/* Hand Display - Dedicated space */}
-      <div ref={handAreaRef} className={`flex-shrink-0 relative w-full px-2 md:px-6 ${isFlat ? 'pb-0' : 'pb-4'}`}>
-        <HandDisplay
-          handCards={handCards}
-          onPlayCard={handlePlayCardFromHand}
-          onDragCardFromHand={handleDragCardFromHand}
-          onDragEndFromHand={handleDragEndFromHand}
-          maxHandSize={effectiveHandLimit}
-          cardSize={gridCardSize} // Pass the measured size to HandDisplay
-          disableAnimations={isWaterfallLocked || fullBoardInteractionLocked || handLockedForMonsterPhase}
-          dimForCombatLock={handLockedForMonsterPhase}
-          onCardClick={handleCardClick}
-        />
-      </div>
+      <HandContainer
+        handAreaRef={handAreaRef}
+        isFlat={isFlat}
+        onPlayCard={handlePlayCardFromHand}
+        onDragCardFromHand={handleDragCardFromHand}
+        onDragEndFromHand={handleDragEndFromHand}
+        onCardClick={handleCardClick}
+        gridCardSize={gridCardSize ?? { width: 140, height: 210 }}
+        isWaterfallLocked={isWaterfallLocked}
+        fullBoardInteractionLocked={fullBoardInteractionLocked}
+      />
 
       {/* CombatPanel removed — End Hero Turn button lives in the top-right overlay below */}
-      <GameLogPanel
-        entries={gameLogEntries}
+      <GameLogContainer
         onClear={clearGameLog}
         stageScale={stageScale}
       />
 
-      {/* Discard flights: hand → graveyard / backpack */}
-      {discardFlights.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-30">
-          {discardFlights.map(flight => {
-            const cardWidth = gridCardSize?.width ?? 140;
-            const cardHeight = gridCardSize?.height ?? 210;
-            return (
-              <div
-                key={flight.id}
-                ref={el => {
-                  if (el) discardFlightElementMapRef.current.set(flight.id, el);
-                  else discardFlightElementMapRef.current.delete(flight.id);
-                }}
-                className="absolute"
-                style={{
-                  width: cardWidth,
-                  height: cardHeight,
-                  opacity: 0,
-                  willChange: 'transform, opacity',
-                  contain: 'layout style',
-                }}
-              >
-                <GameCard card={flight.card} disableInteractions />
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <FlightOverlayLayer
+        classDeckFlights={classDeckFlights}
+        discardFlights={discardFlights}
+        stealCardFlights={stealCardFlights}
+        backpackHandFlights={backpackHandFlights}
+        discardShockFlights={discardShockFlights}
+        flipShockFlights={flipShockFlights}
+        directedCombatFxFlights={directedCombatFxFlights}
+        fateSwapFlights={fateSwapFlights}
+        graveyardStackFlights={graveyardStackFlights}
+        gridCardSize={gridCardSize ?? null}
+        classDeckFlightElementMapRef={classDeckFlightElementMapRef}
+        discardFlightElementMapRef={discardFlightElementMapRef}
+        stealCardFlightElementMapRef={stealCardFlightElementMapRef}
+        backpackFlightElementMapRef={backpackFlightElementMapRef}
+        discardShockElementMapRef={discardShockElementMapRef}
+        flipShockElementMapRef={flipShockElementMapRef}
+        directedCombatFxElementMapRef={directedCombatFxElementMapRef}
+        fateSwapFlightElementMapRef={fateSwapFlightElementMapRef}
+        graveyardStackFlightElementMapRef={graveyardStackFlightElementMapRef}
+      />
 
-      {/* Steal card flights: hand → Goblin */}
-      {stealCardFlights.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-[31]">
-          {stealCardFlights.map(flight => {
-            const cardWidth = gridCardSize?.width ?? 140;
-            const cardHeight = gridCardSize?.height ?? 210;
-            return (
-              <div
-                key={flight.id}
-                ref={el => {
-                  if (el) stealCardFlightElementMapRef.current.set(flight.id, el);
-                  else stealCardFlightElementMapRef.current.delete(flight.id);
-                }}
-                className="absolute"
-                style={{
-                  width: cardWidth,
-                  height: cardHeight,
-                  opacity: 0,
-                  willChange: 'transform, opacity',
-                  contain: 'layout style',
-                }}
-              >
-                <GameCard card={flight.card} disableInteractions />
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <InCellFlipOverlayLayer inCellFlips={inCellFlips} />
 
-      {backpackHandFlights.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-30">
-          {backpackHandFlights.map(flight => {
-            const cardWidth = gridCardSize?.width ?? 140;
-            const cardHeight = gridCardSize?.height ?? 210;
-            return (
-              <div
-                key={flight.id}
-                ref={el => {
-                  if (el) backpackFlightElementMapRef.current.set(flight.id, el);
-                  else backpackFlightElementMapRef.current.delete(flight.id);
-                }}
-                className="absolute"
-                style={{
-                  width: cardWidth,
-                  height: cardHeight,
-                  opacity: 0,
-                  willChange: 'transform, opacity',
-                  contain: 'layout style',
-                }}
-              >
-                <GameCard card={flight.card} disableInteractions />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {discardShockFlights.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-[35]">
-          {discardShockFlights.map(flight => (
-            <div
-              key={flight.id}
-              ref={el => {
-                if (el) discardShockElementMapRef.current.set(flight.id, el);
-                else discardShockElementMapRef.current.delete(flight.id);
-              }}
-              className="absolute rounded-full border-2 border-amber-300/90 bg-amber-500/20 shadow-[0_0_16px_rgba(251,191,36,0.9)] overflow-hidden ring-2 ring-yellow-200/40"
-              style={{
-                width: DISCARD_SHOCK_PROJECTILE_SIZE,
-                height: DISCARD_SHOCK_PROJECTILE_SIZE,
-                opacity: 0,
-                willChange: 'transform, opacity',
-                contain: 'layout style',
-              }}
-            >
-              {flight.projectileImage ? (
-                <img src={flight.projectileImage} alt="" className="h-full w-full object-cover" draggable={false} />
-              ) : (
-                <div className="h-full w-full bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-600" />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {directedCombatFxFlights.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-[36]">
-          {directedCombatFxFlights.map(flight => {
-            const sz =
-              flight.kind === 'shield-reflect'
-                ? DIRECTED_REFLECT_PROJECTILE_SIZE
-                : flight.kind === 'arcane-blade-spell'
-                  ? DIRECTED_ARCANE_PROJECTILE_SIZE
-                  : flight.kind === 'golem-layer-reflect'
-                    ? DIRECTED_GOLEM_LAYER_PROJECTILE_SIZE
-                    : flight.kind === 'dragon-breath'
-                      ? DIRECTED_DRAGON_BREATH_PROJECTILE_SIZE
-                      : DIRECTED_RETALIATION_PROJECTILE_SIZE;
-            const isReflect = flight.kind === 'shield-reflect';
-            const isArcane = flight.kind === 'arcane-blade-spell';
-            const isGolemLayer = flight.kind === 'golem-layer-reflect';
-            const isDragonBreath = flight.kind === 'dragon-breath';
-            return (
-              <div
-                key={flight.id}
-                ref={el => {
-                  if (el) directedCombatFxElementMapRef.current.set(flight.id, el);
-                  else directedCombatFxElementMapRef.current.delete(flight.id);
-                }}
-                className={
-                  isDragonBreath
-                    ? 'absolute rounded-full border-2 border-orange-500/95 bg-gradient-to-br from-yellow-300/95 via-orange-500/90 to-red-700/95 shadow-[0_0_22px_rgba(249,115,22,0.95)] ring-2 ring-yellow-200/50'
-                    : isGolemLayer
-                      ? 'absolute rounded-full border-2 border-stone-500/95 bg-gradient-to-br from-stone-300/95 via-amber-700/90 to-stone-800/95 shadow-[0_0_20px_rgba(120,83,50,0.9)] ring-2 ring-amber-300/50'
-                      : isArcane
-                        ? 'absolute rounded-full border-2 border-purple-400/95 bg-gradient-to-br from-violet-300/95 via-purple-500/90 to-indigo-700/90 shadow-[0_0_20px_rgba(139,92,246,0.95)] ring-2 ring-purple-200/50'
-                        : isReflect
-                          ? 'absolute rounded-full border-2 border-amber-400/95 bg-gradient-to-br from-amber-200/95 via-yellow-400/90 to-orange-500/90 shadow-[0_0_18px_rgba(251,191,36,0.95)] ring-2 ring-amber-100/50'
-                          : 'absolute rounded-full border-2 border-rose-800/95 bg-gradient-to-br from-rose-300/95 via-red-600/90 to-red-950/95 shadow-[0_0_22px_rgba(220,38,38,0.85)] ring-2 ring-rose-200/45'
-                }
-                style={{
-                  width: sz,
-                  height: sz,
-                  opacity: 0,
-                  willChange: 'transform, opacity',
-                  contain: 'layout style',
-                }}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {fateSwapFlights.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-[37]">
-          {fateSwapFlights.map(flight => {
-            const cardWidth = gridCardSize?.width ?? 140;
-            const cardHeight = gridCardSize?.height ?? 210;
-            return (
-              <div
-                key={flight.id}
-                ref={el => {
-                  if (el) fateSwapFlightElementMapRef.current.set(flight.id, el);
-                  else fateSwapFlightElementMapRef.current.delete(flight.id);
-                }}
-                className="absolute fate-swap-flight-card"
-                style={{
-                  width: cardWidth,
-                  height: cardHeight,
-                  opacity: 0,
-                  willChange: 'transform, opacity',
-                  contain: 'layout style',
-                }}
-              >
-                <GameCard card={flight.card} disableInteractions />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {graveyardStackFlights.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-[38]">
-          {graveyardStackFlights.map(flight => {
-            const cardWidth = gridCardSize?.width ?? 140;
-            const cardHeight = gridCardSize?.height ?? 210;
-            return (
-              <div
-                key={flight.id}
-                ref={el => {
-                  if (el) graveyardStackFlightElementMapRef.current.set(flight.id, el);
-                  else graveyardStackFlightElementMapRef.current.delete(flight.id);
-                }}
-                className="absolute"
-                style={{
-                  width: cardWidth,
-                  height: cardHeight,
-                  opacity: 0,
-                  willChange: 'transform, opacity',
-                  contain: 'layout style',
-                  filter: 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.7))',
-                }}
-              >
-                <GameCard card={flight.card} disableInteractions />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Event-pending floating restore button */}
-      {eventModalOpen && eventModalMinimized && (
-        <div
-          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-pink-600/90 px-5 py-2.5 shadow-lg cursor-pointer select-none event-pending-restore-btn hover:bg-pink-600 transition-colors"
-          style={{ pointerEvents: 'auto' }}
-          onClick={() => setEventModalMinimized(false)}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            setEventModalMinimized(false);
-          }}
-        >
-          <Calendar className="w-4 h-4 text-white" />
-          <span className="text-white text-sm font-semibold whitespace-nowrap">
-            {currentEventCard?.name ?? '事件'} — 点击恢复
-          </span>
-        </div>
-      )}
-
-      {/* Shop-minimized floating restore button */}
-      {shopModalOpen && shopModalMinimized && (
-        <div
-          className={`absolute left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-600/90 px-5 py-2.5 shadow-lg cursor-pointer select-none hover:bg-amber-600 transition-colors ${
-            eventModalOpen && eventModalMinimized ? 'bottom-32' : 'bottom-20'
-          }`}
-          style={{ pointerEvents: 'auto' }}
-          onClick={() => setShopModalMinimized(false)}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            setShopModalMinimized(false);
-          }}
-        >
-          <ShoppingBag className="w-4 h-4 text-white" />
-          <span className="text-white text-sm font-semibold whitespace-nowrap">
-            商店 — 点击恢复
-          </span>
-        </div>
-      )}
-
-      {/* Game-over minimized floating restore button */}
-      {gameOver && gameOverMinimized && (
-        <div
-          className={`absolute left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full px-5 py-2.5 shadow-lg cursor-pointer select-none transition-colors ${
-            victory
-              ? 'bg-emerald-600/90 hover:bg-emerald-600'
-              : 'bg-red-700/90 hover:bg-red-700'
-          } ${
-            (eventModalOpen && eventModalMinimized && shopModalOpen && shopModalMinimized) ? 'bottom-44'
-            : ((eventModalOpen && eventModalMinimized) || (shopModalOpen && shopModalMinimized)) ? 'bottom-32'
-            : 'bottom-20'
-          }`}
-          style={{ pointerEvents: 'auto' }}
-          onClick={() => setGameOverMinimized(false)}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            setGameOverMinimized(false);
-          }}
-        >
-          {victory
-            ? <Trophy className="w-4 h-4 text-white" />
-            : <Skull className="w-4 h-4 text-white" />
-          }
-          <span className="text-white text-sm font-semibold whitespace-nowrap">
-            {victory ? '胜利' : '失败'} — 点击恢复
-          </span>
-        </div>
-      )}
+      <FloatingPillsContainer
+        gameOverMinimized={gameOverMinimized}
+        setGameOverMinimized={setGameOverMinimized}
+      />
 
       <DeckPeekModal
         state={deckPeekState}
@@ -11203,207 +8366,26 @@ export default function GameBoard() {
         }}
       />
 
-      <HandMagicUpgradeModal
-        open={Boolean(handMagicUpgradeModal)}
-        onClose={handleHandMagicUpgradeClose}
-        handCards={handCards}
-        sourceCardId={handMagicUpgradeModal?.sourceCardId ?? null}
-        onUpgrade={handleHandMagicUpgradeSelect}
-      />
-
-      <MirrorCopyModal
-        open={Boolean(mirrorCopyModal)}
-        onClose={cancelMirrorCopy}
-        equipmentSlot1={equipmentSlot1}
-        equipmentSlot2={equipmentSlot2}
-        amuletSlots={amuletSlots}
-        handCards={handCards}
-        onConfirm={resolveMirrorCopy}
-      />
-
-      <AmplifyModal
-        open={Boolean(amplifyModal)}
-        onClose={cancelAmplify}
-        equipmentSlot1={equipmentSlot1}
-        equipmentSlot2={equipmentSlot2}
-        handCards={handCards}
-        onConfirm={resolveAmplify}
-      />
-
-      <PermGrantModal
-        open={Boolean(permGrantModal)}
-        onClose={cancelPermGrant}
-        handCards={handCards}
-        sourceCardId={permGrantModal?.sourceCardId ?? null}
-        sourceType={permGrantModal?.sourceType ?? 'magic'}
-        onConfirm={resolvePermGrant}
-      />
-
       <GameModeSelectModal
         open={showGameModeSelect}
         onSelect={handleGameModeSelect}
         onCancel={() => setShowGameModeSelect(false)}
       />
 
-      <GameBoardModals
-        overlayZoom={overlayZoom}
-        deathWardPrompt={deathWardPrompt}
-        onDeathWardConfirm={handleDeathWardConfirm}
-        onDeathWardDecline={handleDeathWardDecline}
-        daggerSelfDestructPrompt={daggerSelfDestructPrompt}
-        onDaggerSelfDestructConfirm={handleDaggerSelfDestructConfirm}
-        onDaggerSelfDestructDecline={handleDaggerSelfDestructDecline}
-        wraithPassiveUnlockPopup={wraithPassiveUnlockPopup}
-        onWraithPassiveUnlockChange={setWraithPassiveUnlockPopup}
-        gameOver={gameOver}
-        gameOverMinimized={gameOverMinimized}
-        victory={victory}
-        gold={gold}
-        hp={hp}
-        maxHp={maxHp}
-        onRestart={handleNewGame}
-        onGameOverMinimize={handleGameOverMinimize}
-        monstersDefeated={monstersDefeated}
-        totalDamageTaken={totalDamageTaken}
-        totalHealed={totalHealed}
-        stageScale={stageScale}
-        deckViewerOpen={deckViewerOpen}
-        onDeckViewerChange={setDeckViewerOpen}
-        remainingDeck={remainingDeck}
-        onCardSelect={handleCardClick}
-        backpackViewerOpen={backpackViewerOpen}
-        onBackpackViewerChange={setBackpackViewerOpen}
-        backpackItems={backpackItems}
-        backpackCapacity={backpackCapacity}
-        permanentMagicRecycleBag={permanentMagicRecycleBag}
-        discoverModalOpen={discoverModalOpen}
-        discoverOptions={discoverOptions}
-        discoverSourceLabel={discoverSourceLabel}
-        onDiscoverSelect={handleDiscoverSelect}
-        onDiscoverCancel={handleDiscoverCancel}
-        graveyardDiscoverState={graveyardDiscoverState}
-        onGraveyardDiscoverSelect={handleGraveyardDiscoverSelect}
-        onGraveyardDiscoverCancel={handleGraveyardDiscoverCancel}
-        ghostBladeExileCards={ghostBladeExileCards}
-        onGhostBladeExileConfirm={handleGhostBladeExileConfirm}
-        shopModalOpen={shopModalOpen}
-        shopModalMinimized={shopModalMinimized}
-        shopOfferings={shopOfferings}
-        shopLevel={shopLevel}
-        canDeleteCardInShop={canDeleteCardInShop}
-        shopDeleteDisabledReason={shopDeleteDisabledReason}
-        onShopDeleteRequest={handleShopDeleteRequest}
-        onShopPurchase={handleShopPurchase}
-        onShopClose={handleShopClose}
-        onShopMinimize={handleShopMinimize}
-        shopSourceEvent={shopSourceEvent?.name ?? undefined}
-        shopHealUsed={shopHealUsed}
-        onShopHealRequest={handleShopHealRequest}
-        shopHealCost={SHOP_HEAL_COST}
-        shopLevelUpCost={SHOP_LEVEL_UP_COST}
-        shopLevelUpUsed={shopLevelUpUsed}
-        onShopLevelUpRequest={handleShopLevelUpRequest}
-        shopSkillDiscoverCost={SHOP_SKILL_DISCOVER_COST}
-        shopSkillDiscoverUsed={shopSkillDiscoverUsed}
-        canDiscoverSkill={canDiscoverSkill}
-        discoverSkillDisabledReason={discoverSkillDisabledReason}
-        onShopSkillDiscoverRequest={handleShopSkillDiscoverRequest}
-        shopEquipBoostCost={SHOP_EQUIP_BOOST_COST}
-        shopEquipAttackUsed={shopEquipAttackUsed}
-        shopEquipArmorUsed={shopEquipArmorUsed}
-        onShopEquipAttackRequest={handleShopEquipAttackRequest}
-        onShopEquipArmorRequest={handleShopEquipArmorRequest}
-        shopSkillSelectOpen={shopSkillSelectOpen}
-        shopSkillOptions={shopSkillOptions}
-        onShopSkillSelect={handleShopSkillSelect}
-        eventTransformState={eventTransformState}
-        deleteModalOpen={deleteModalOpen}
-        onDeleteModalChange={handleDeleteModalOpenChange}
-        handCards={handCards}
-        equipmentCards={flatEquipmentCards}
-        amuletCards={flatAmuletCards}
-        onDeleteCardConfirm={handleDeleteCardConfirm}
-        cardActionContext={cardActionContext}
-        selectedCard={selectedCard}
-        detailsModalOpen={detailsModalOpen}
-        onDetailsModalChange={handleDetailsModalChange}
-        currentTurn={turnCount}
-        isQuickMode={gameMode === 'quick'}
-        monsterRewardPreviewForModal={monsterRewardPreviewForModal}
-        heroDetailsOpen={heroDetailsOpen}
-        onHeroDetailsChange={setHeroDetailsOpen}
-        heroVariant={heroVariant}
-        heroDetailsStats={heroDetailsStats}
-        heroDetailsSkills={heroDetailsSkills}
-        permanentSkills={permanentSkills}
-        permanentSkillStacks={permanentSkillStacks}
-        heroMagicInfo={heroMagicUiState}
-        heroCapacityLimits={heroCapacityLimits}
-        activeMonsterReward={activeMonsterReward}
-        onMonsterRewardSelect={handleMonsterRewardSelection}
-        persuadeOpen={Boolean(persuadeState)}
-        persuadeMonster={persuadeState?.monster ?? null}
-        persuadeCost={(() => {
-          let c = Math.max(0, PERSUADE_COST + persuadeCostModifier - (engine.getState().persuadeDiscount?.costReduction ?? 0));
-          if (persuadeState?.monster && engine.getState().persuadeSameTargetCostHalve && engine.getState().lastPersuadeTargetId === persuadeState.monster.id) {
-            c = Math.floor(c / 2);
-          }
-          return c;
-        })()}
-        persuadeThreshold={persuadeState?.threshold ?? 10}
-        persuadeSuccessRate={persuadeState?.successRate ?? 50}
-        persuadeTargetLabel={persuadeState?.targetSlot === 'backpack' ? '背包' : '装备栏'}
-        persuadePhase={persuadeState?.phase ?? 'confirm'}
-        persuadeDiceValue={persuadeState?.diceValue ?? null}
-        persuadeSuccess={persuadeState?.success ?? null}
-        persuadeRollKey={persuadeRollKey}
-        persuadeLevel={persuadeLevel}
-        onPersuadeConfirm={handlePersuadeConfirm}
-        onPersuadeDiceResult={handlePersuadeDiceResult}
-        onPersuadeClose={handlePersuadeClose}
-        upgradeModalOpen={upgradeModalOpen}
-        upgradeModalMaxCount={upgradeModalMaxCount}
-        onUpgradeModalChange={handleUpgradeModalChange}
-        equipmentSlot1={equipmentSlot1}
-        equipmentSlot2={equipmentSlot2}
-        amuletSlots={amuletSlots}
-        onCardUpgrade={handleCardUpgrade}
-        eventModalOpen={eventModalOpen}
-        eventModalMinimized={eventModalMinimized}
-        currentEventCard={currentEventCard}
-        onEventChoice={handleEventChoice}
-        eventChoiceStates={eventChoiceStates}
-        onEventMinimize={handleEventMinimize}
-        eventDiceModal={eventDiceModal}
-        eventDiceRollKey={eventDiceRollKey}
-        onDiceRollResult={handleDiceRollResult}
-        onDiceModalClose={cancelDiceModal}
-        magicChoiceModal={magicChoiceModal}
-        onMagicChoice={handleMagicChoice}
-        equipmentPrompt={equipmentPrompt}
-        onEquipmentPromptSelect={handleEquipmentPromptSelection}
-        onEquipmentPromptCancel={cancelEquipmentPrompt}
-        heroMagicChoicePrompt={heroMagicChoicePrompt}
-        onCancelHeroMagicAction={cancelHeroMagicAction}
-        onHeroMagicChoice={handleHeroMagicChoice}
-        potionChoiceDialogOpen={potionChoiceDialogOpen}
-        onCancelPotionAction={cancelPotionAction}
-        onPotionChoiceSelection={handlePotionChoiceSelection}
-        showSkillSelection={showSkillSelection}
-        onSkillSelection={handleSkillSelection}
-        showCardDraft={showCardDraft}
-        cardDraftPool={cardDraftPool}
-        onCardDraftComplete={handleCardDraftComplete}
-        classCardPreview={classCardPreviewIdRef.current ? (classDeck.find(c => c.id === classCardPreviewIdRef.current) ?? null) : null}
-        isCombatPanelVisible={isCombatPanelVisible}
-        combatCurrentTurn={combatState.currentTurn}
-        headerHeight={headerHeight}
-        endHeroTurnDisabled={endHeroTurnDisabled}
-        onEndHeroTurn={endHeroTurn}
-        undoCount={undoCount}
-        fullBoardInteractionLocked={fullBoardInteractionLocked}
-        onUndo={handleUndo}
-      />
+      <ModalCallbacksProvider value={modalCallbacks}>
+        <ModalUIProvider value={modalUI}>
+          <ShopContainer />
+          <EventContainer />
+          <CombatDiceContainer />
+          <HeroInfoContainer />
+          <DiscoverContainer />
+          <CardViewerContainer />
+          <RewardContainer />
+          <GameFlowContainer />
+          <MagicCardContainer />
+          <BoardOverlayButtons />
+        </ModalUIProvider>
+      </ModalCallbacksProvider>
 
       {/* Eternal Relic Detail Modal */}
       {selectedEternalRelic && (
@@ -11427,62 +8409,16 @@ export default function GameBoard() {
       )}
 
       {/* Narrow layout: fixed sidebar strips flush with screen right edge */}
-      {isNarrowLayout && narrowSidebarPositions && (() => {
-        const cardH = gridCardSize?.height ?? 100;
-        const stripW = Math.max(18, Math.round(cardH * 0.14));
-        const stripStyle: CSSProperties = { width: stripW, height: cardH };
-        return (
-          <>
-            <button
-              onClick={() => setNarrowDiceModalOpen(true)}
-              className="fixed z-40 flex flex-col items-center justify-center rounded-l-lg border border-r-0 border-rose-400/30 bg-rose-800/20 text-rose-300/70 hover:bg-rose-700/30 hover:border-rose-400/50 transition-all duration-150"
-              style={{ ...stripStyle, right: 0, top: narrowSidebarPositions.row1Y, transform: 'translateY(-50%)' }}
-            >
-              <Dices className="w-4 h-4" />
-            </button>
-
-            <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row2Y, transform: 'translateY(-50%)' }}>
-              <GraveyardZone
-                compact
-                compactStyle={stripStyle}
-                onDrop={handleGraveyardDropStable}
-                isDropTarget={graveyardDropEnabled}
-                shouldHighlight={shouldHighlightGraveyard}
-                discardedCards={discardedCards}
-                onCardSelect={handleCardClick}
-              />
-            </div>
-
-            <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row3Y, transform: 'translateY(-50%)' }}>
-              <ClassDeck
-                compact
-                compactStyle={stripStyle}
-                classCards={classDeck}
-                deckName="Knight Deck"
-                onCardSelect={handleCardClick}
-              />
-            </div>
-
-            <Dialog open={narrowDiceModalOpen} onOpenChange={setNarrowDiceModalOpen}>
-              <DialogContent className="max-w-sm flex flex-col items-center gap-4">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Dices className="w-6 h-6" />
-                    Chaos Dice
-                  </DialogTitle>
-                  <DialogDescription>Roll the d20</DialogDescription>
-                </DialogHeader>
-                <div className="w-[220px] h-[220px]">
-                  <DiceRoller
-                    className="w-full h-full"
-                    scaleMultiplier={1}
-                  />
-                </div>
-              </DialogContent>
-            </Dialog>
-          </>
-        );
-      })()}
+      {isNarrowLayout && narrowSidebarPositions && (
+        <NarrowSidebar
+          narrowSidebarPositions={narrowSidebarPositions}
+          gridCardSize={gridCardSize ?? null}
+          handleGraveyardDropStable={handleGraveyardDropStable}
+          graveyardDropEnabled={graveyardDropEnabled}
+          shouldHighlightGraveyard={shouldHighlightGraveyard}
+          onCardSelect={handleCardClick}
+        />
+      )}
     </div>
   );
 }

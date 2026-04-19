@@ -1,0 +1,305 @@
+/**
+ * Turn Rules — handles turn-flow actions in the reducer.
+ *
+ * Covers: START_TURN, END_TURN, ADVANCE_MONSTER_TURN,
+ * APPLY_MONSTER_TURN_END_EFFECTS, ENTER_PLAYER_INPUT, RESET_TURN_STATE.
+ *
+ * Delegates heavy computation to the existing pure functions in combat.ts.
+ */
+
+import type { GameState } from '../types';
+import type { GameAction } from '../actions';
+import type { ReduceResult, SideEffect } from '../reducer';
+import { applyPatch, noChange } from '../reducer';
+import {
+  endHeroTurnPatch,
+  advanceMonsterTurnPatch,
+  applyMonsterTurnEndEffects,
+  finishCombatPatch,
+} from '../combat';
+import {
+  initialCombatState,
+  createEmptyEquipmentBuffState,
+  BALANCE_ATTACK_BONUS,
+  BALANCE_SHIELD_BONUS,
+  BALANCE_ATTACK_PENALTY,
+  BALANCE_SHIELD_PENALTY,
+} from '../constants';
+import { computeAmuletEffects } from '../equipment';
+import type { RngState } from '../rng';
+import { nextInt } from '../rng';
+
+export function reduceTurnActions(state: GameState, action: GameAction): ReduceResult | null {
+  switch (action.type) {
+    case 'END_TURN':
+      return reduceEndTurn(state, action);
+    case 'ADVANCE_MONSTER_TURN':
+      return reduceAdvanceMonsterTurn(state);
+    case 'APPLY_MONSTER_TURN_END_EFFECTS':
+      return reduceMonsterTurnEndEffects(state);
+    case 'START_TURN':
+      return reduceStartTurn(state, action);
+    case 'ENTER_PLAYER_INPUT':
+      return applyPatch(state, { phase: 'playerInput' });
+    case 'RESET_TURN_STATE':
+      return reduceResetTurnState(state);
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// END_TURN
+// ---------------------------------------------------------------------------
+
+function reduceEndTurn(
+  state: GameState,
+  action: Extract<GameAction, { type: 'END_TURN' }>,
+): ReduceResult {
+  const heroTurnLayerLossIds = new Set(action.heroTurnLayerLossIds);
+  const result = endHeroTurnPatch(state, heroTurnLayerLossIds);
+
+  const sideEffects: SideEffect[] = [];
+  for (const log of result.logs) {
+    sideEffects.push({ event: 'log:entry', payload: { type: log.type, message: log.message } });
+  }
+
+  const patch: Partial<GameState> = {
+    combatState: result.combatState,
+    activeCards: result.activeCards,
+    berserkerSlotUsed: result.berserkerSlotUsed,
+    flashSlotUsed: result.flashSlotUsed,
+    gambitSlotUsed: result.gambitSlotUsed,
+    weaponExtraAttackUsed: result.weaponExtraAttackUsed,
+    rng: result.rng,
+    phase: 'monsterTurn',
+  };
+
+  // If combat ended (no engaged monsters), no need to advance
+  if (result.combatState.engagedMonsterIds.length === 0) {
+    return applyPatch(state, {
+      ...patch,
+      phase: 'playerInput',
+    }, sideEffects);
+  }
+
+  // Enqueue the monster turn advancement
+  return applyPatch(state, patch, sideEffects, [
+    { type: 'ADVANCE_MONSTER_TURN' },
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// ADVANCE_MONSTER_TURN
+// ---------------------------------------------------------------------------
+
+function reduceAdvanceMonsterTurn(state: GameState): ReduceResult {
+  const result = advanceMonsterTurnPatch(state.combatState, state.activeCards);
+  const sideEffects: SideEffect[] = [];
+
+  for (const skip of result.skippedMonsters) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'combat', message: `${skip.name} 被晕眩，跳过攻击。` },
+    });
+    sideEffects.push({
+      event: 'combat:stunApplied',
+      payload: { monsterId: skip.id },
+    });
+  }
+
+  const newCombat = result.combatState;
+
+  // Switched back to hero turn — enqueue monster turn-end effects then start turn
+  if (newCombat.currentTurn === 'hero' && state.combatState.currentTurn === 'monster') {
+    return applyPatch(state, { combatState: newCombat }, sideEffects, [
+      { type: 'APPLY_MONSTER_TURN_END_EFFECTS' },
+    ]);
+  }
+
+  // Monster has a pending block — wait for player input (RESOLVE_BLOCK)
+  if (newCombat.pendingBlock) {
+    sideEffects.push({
+      event: 'combat:monsterAttack',
+      payload: {
+        monsterId: newCombat.pendingBlock.monsterId,
+        damage: newCombat.pendingBlock.attackValue,
+      },
+    });
+    return applyPatch(
+      state,
+      { combatState: newCombat, phase: 'awaitingBlock' },
+      sideEffects,
+    );
+  }
+
+  return applyPatch(state, { combatState: newCombat }, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// APPLY_MONSTER_TURN_END_EFFECTS
+// ---------------------------------------------------------------------------
+
+function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
+  const result = applyMonsterTurnEndEffects(
+    state.activeCards,
+    state.combatState.engagedMonsterIds,
+    state.rng,
+    {
+      heroTookDamageThisMonsterTurn: false, // TODO: track via state field
+      equipmentSlot1: state.equipmentSlot1,
+      equipmentSlot2: state.equipmentSlot2,
+      activeCardStacks: state.activeCardStacks,
+    },
+  );
+
+  const sideEffects: SideEffect[] = [];
+  for (const log of result.logs) {
+    sideEffects.push({ event: 'log:entry', payload: { type: log.type, message: log.message } });
+  }
+  for (const banner of result.banners) {
+    sideEffects.push({ event: 'ui:banner', payload: { text: banner } });
+  }
+
+  const patch: Partial<GameState> = {
+    activeCards: result.activeCards,
+    berserkerSlotUsed: {},
+    flashSlotUsed: {},
+    rng: result.rng,
+  };
+
+  // Apply dragon regen equipment changes
+  for (const regen of result.dragonRegenEffects) {
+    if (regen.success) {
+      const otherItem = regen.otherSlotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+      if (otherItem) {
+        patch[regen.otherSlotId] = { ...otherItem, durability: regen.newDurability } as GameState['equipmentSlot1'];
+      }
+    }
+  }
+
+  // Wraith destroy amulet
+  if (result.wraithDestroyAmulet && state.amuletSlots.length > 0) {
+    const [targetIdx, nextRng] = nextInt(state.rng, 0, state.amuletSlots.length - 1);
+    patch.rng = nextRng;
+    const targetAmulet = state.amuletSlots[targetIdx];
+    patch.amuletSlots = state.amuletSlots.filter(a => a.id !== targetAmulet.id);
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'combat', message: `怨灵诅咒：摧毁了护符「${targetAmulet.name}」！` },
+    });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `怨灵诅咒！护符「${targetAmulet.name}」被摧毁！` } });
+    sideEffects.push({ event: 'equipment:destroyed', payload: { slotId: `amulet-${targetAmulet.id}`, cardId: targetAmulet.id } });
+  }
+
+  // Wraith enrage: emit side effects for beginCombat calls
+  if (result.monstersToEngage.length > 0) {
+    for (const m of result.monstersToEngage) {
+      sideEffects.push({ event: 'combat:autoEngage', payload: { monsterId: m.id, monsterName: m.name } });
+    }
+    const names = result.monstersToEngage.map(m => m.name);
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'combat', message: `怨灵诅咒：激活行怪物被激怒！（${names.join('、')}）` },
+    });
+    sideEffects.push({ event: 'ui:banner', payload: { text: '怨灵诅咒！全体怪物激怒！' } });
+  }
+
+  // Goblin steal: emit side effects for the bridge layer to handle
+  for (const steal of result.goblinStealTargets) {
+    sideEffects.push({ event: 'combat:goblinStealCard', payload: { monsterId: steal.itemId, monsterName: steal.goblinName } });
+  }
+
+  // Enqueue START_TURN after monster turn-end effects
+  return applyPatch(state, patch, sideEffects, [{ type: 'START_TURN' }]);
+}
+
+// ---------------------------------------------------------------------------
+// START_TURN — hero turn begins (after monster turn-end effects)
+// ---------------------------------------------------------------------------
+
+function reduceStartTurn(
+  state: GameState,
+  action: Extract<GameAction, { type: 'START_TURN' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+
+  const patch: Partial<GameState> = {
+    turnDamageTaken: 0,
+    berserkTurnBuff: createEmptyEquipmentBuffState(),
+    extraAttackCharges: 0,
+    slotExtraAttacks: { equipmentSlot1: 0, equipmentSlot2: 0 },
+    berserkerRageActive: false,
+    berserkerSlotUsed: {},
+    flashSlotUsed: {},
+    gambitExtraActive: false,
+    gambitSlotUsed: {},
+    weaponExtraAttackUsed: {},
+    slotBattleSpiritUsed: {},
+    doubleNextMagic: false,
+    magicCardsPlayedThisTurn: 0,
+    damageMagicPlayedThisTurn: 0,
+    phase: 'playerInput',
+  };
+
+  // Apply strength/balance amulet temp bonuses at turn start
+  if (!action.suppressAmuletReapply) {
+    const ae = computeAmuletEffects(state.amuletSlots as import('@/components/GameCard').GameCardData[]);
+    if (ae.hasStrength) {
+      const tempAttack = { ...(state.slotTempAttack ?? {}) };
+      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + 4;
+      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) + 4;
+      patch.slotTempAttack = tempAttack;
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'amulet', message: '力量护符：所有装备栏临时攻击 +4！' },
+      });
+    }
+    if (ae.hasBalance) {
+      const tempAttack = patch.slotTempAttack
+        ? { ...patch.slotTempAttack }
+        : { ...(state.slotTempAttack ?? {}) };
+      const tempArmor = { ...(state.slotTempArmor ?? {}) };
+      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS;
+      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY;
+      tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY;
+      tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS;
+      patch.slotTempAttack = tempAttack;
+      patch.slotTempArmor = tempArmor;
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'amulet', message: '均衡护符：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1' },
+      });
+    }
+  }
+
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'turn', message: `回合 ${state.turnCount} — 英雄行动阶段` },
+  });
+
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// RESET_TURN_STATE — granular reset (used at waterfall / wave boundary)
+// ---------------------------------------------------------------------------
+
+function reduceResetTurnState(state: GameState): ReduceResult {
+  return applyPatch(state, {
+    turnDamageTaken: 0,
+    berserkTurnBuff: createEmptyEquipmentBuffState(),
+    extraAttackCharges: 0,
+    slotExtraAttacks: { equipmentSlot1: 0, equipmentSlot2: 0 },
+    berserkerRageActive: false,
+    berserkerSlotUsed: {},
+    flashSlotUsed: {},
+    gambitExtraActive: false,
+    gambitSlotUsed: {},
+    weaponExtraAttackUsed: {},
+    slotBattleSpiritUsed: {},
+    doubleNextMagic: false,
+    magicCardsPlayedThisTurn: 0,
+    damageMagicPlayedThisTurn: 0,
+  });
+}
