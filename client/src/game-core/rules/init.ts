@@ -71,9 +71,68 @@ export function reduceInitGame(
     const nonMonsters = deckWithClassEvents.filter(c => c.type !== 'monster');
 
     if (isQuickMode) {
-      const [shuffled, rngS] = rngShuffle([...deckWithClassEvents], rng);
-      rng = rngS;
-      deckWithClassEvents.splice(0, deckWithClassEvents.length, ...shuffled);
+      // Quick-mode monster layout:
+      //   • Each non-overlapping 4-card chunk holds EXACTLY one monster.
+      //   • Leftover monsters (count > number of chunks) are placed in random
+      //     empty positions within the back 18 cards.
+      //   • Non-monster cards fill the remaining slots in shuffled order.
+      // Elites are pushed out of the first 12 cards by a later step.
+      const len = deckWithClassEvents.length;
+      let monsters: GameCardData[];
+      {
+        const [s, r] = rngShuffle([...eliteMonsters, ...nonEliteMonsters], rng);
+        rng = r;
+        monsters = s;
+      }
+      let nonMonstersShuffled: GameCardData[];
+      {
+        const [s, r] = rngShuffle(nonMonsters, rng);
+        rng = r;
+        nonMonstersShuffled = s;
+      }
+
+      const result: (GameCardData | null)[] = new Array(len).fill(null);
+      const numChunks = Math.floor(len / 4);
+      let monsterIdx = 0;
+
+      for (let chunkIdx = 0; chunkIdx < numChunks && monsterIdx < monsters.length; chunkIdx++) {
+        const start = chunkIdx * 4;
+        const [slotOff, rngS] = nextInt(rng, 0, 3);
+        rng = rngS;
+        result[start + slotOff] = monsters[monsterIdx++];
+      }
+
+      // Snap back18Start to the next chunk boundary so leftover monsters can't
+      // straddle the boundary into an "early" chunk (e.g. for a 36-card deck
+      // back18Start = 18 sits inside chunk 4 [16-19]; without snapping, the
+      // leftover landing at pos 18 or 19 would give chunk 4 two monsters).
+      // Positions past `numChunks * 4` are outside any chunk and always safe.
+      const rawBack18Start = Math.max(0, len - 18);
+      const back18Start = Math.max(rawBack18Start, Math.ceil(rawBack18Start / 4) * 4);
+      while (monsterIdx < monsters.length) {
+        const emptySlots: number[] = [];
+        for (let i = back18Start; i < len; i++) {
+          if (result[i] === null) emptySlots.push(i);
+        }
+        if (emptySlots.length === 0) break;
+        const [pickIdx, rngP] = nextInt(rng, 0, emptySlots.length - 1);
+        rng = rngP;
+        result[emptySlots[pickIdx]] = monsters[monsterIdx++];
+      }
+      while (monsterIdx < monsters.length) {
+        const idx = result.findIndex(c => c === null);
+        if (idx < 0) break;
+        result[idx] = monsters[monsterIdx++];
+      }
+
+      let nmIdx = 0;
+      for (let i = 0; i < len; i++) {
+        if (result[i] === null) {
+          result[i] = nonMonstersShuffled[nmIdx++] ?? null;
+        }
+      }
+
+      deckWithClassEvents.splice(0, deckWithClassEvents.length, ...(result as GameCardData[]));
     } else {
       let earlyElite: typeof eliteMonsters[0] | null = null;
       const remainingElites = [...eliteMonsters];
@@ -124,11 +183,16 @@ export function reduceInitGame(
     }
   }
 
-  // --- Balance monster density: 1–2 monsters per non-overlapping chunk ---
-  // CHUNK must equal `dealRowBatch`'s batch size (DUNGEON_COLUMN_COUNT) so the
-  // first batch lines up with one chunk and per-row monster invariants
-  // (≥1, ≤2 monsters) are preserved as the deck is consumed.
-  {
+  // --- Balance monster density per chunk (normal mode only) ---
+  // 1-2 monsters per non-overlapping chunk. CHUNK must equal `dealRowBatch`'s
+  // batch size (DUNGEON_COLUMN_COUNT) so the first batch lines up with one
+  // chunk and per-row monster invariants are preserved as the deck is
+  // consumed.
+  // Quick mode skips this pass — its bespoke placement above (1 monster per
+  // chunk + 1 leftover in back-18) is already optimal and any rebalance here
+  // would either move the leftover out of the back-18 zone or push an extra
+  // monster into the early chunks.
+  if (!isQuickMode) {
     const MIN_MONSTERS = 1;
     const MAX_MONSTERS = 2;
     const CHUNK = DUNGEON_COLUMN_COUNT;
@@ -204,10 +268,11 @@ export function reduceInitGame(
   }
 
   // --- Guarantee at least one monster in the back half of the deck ---
-  // The front half is already monster-balanced by the chunk pass below; we only
-  // need to make sure the deck doesn't run dry of monsters near the end so the
-  // final waterfall(s) can still field a monster row.
-  {
+  // Normal mode only — the front half is already monster-balanced by the chunk
+  // pass above; we only need to make sure the deck doesn't run dry of monsters
+  // near the end so the final waterfall(s) can still field a monster row.
+  // Quick mode handles its own back-18 placement in the layout step above.
+  if (!isQuickMode) {
     const len = deckWithClassEvents.length;
     if (len >= 2) {
       const halfStart = Math.floor(len / 2);
@@ -299,9 +364,13 @@ export function reduceInitGame(
   const initialActiveStacks: Record<number, GameCardData[]> = {};
 
   // --- Re-balance monster density in dealQueue after initial dealing ---
-  // CHUNK must match the `dealRowBatch` batch size (DUNGEON_COLUMN_COUNT) so
-  // each future waterfall preview row also satisfies the 1-2 monster invariant.
-  {
+  // Normal mode: 1-2 monsters per chunk. CHUNK must match `dealRowBatch` batch
+  // size (DUNGEON_COLUMN_COUNT) so each future waterfall preview row satisfies
+  // the invariant.
+  // Quick mode skips this pass for the same reason as the init-time chunk
+  // pass: the bespoke placement is already optimal and rebalancing would
+  // disturb the back-18 leftover monster.
+  if (!isQuickMode) {
     const MIN_MONSTERS = 1;
     const MAX_MONSTERS = 2;
     const CHUNK = DUNGEON_COLUMN_COUNT;

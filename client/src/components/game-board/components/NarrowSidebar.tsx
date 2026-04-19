@@ -1,4 +1,4 @@
-import React, { memo, type CSSProperties } from 'react';
+import React, { memo, type CSSProperties, type Ref } from 'react';
 import GraveyardZone from '@/components/GraveyardZone';
 import ClassDeck from '@/components/ClassDeck';
 import BackpackZone from '@/components/BackpackZone';
@@ -16,6 +16,9 @@ interface NarrowSidebarProps {
   onBackpackDrop: (card: GameCardData) => void;
   onBackpackOpenViewer: () => void;
   backpackCapacity: number;
+  /** Ref to the compact backpack button — used as the source position
+   *  for backpack→hand draw flights when in narrow layout. */
+  compactBackpackCellRef?: Ref<HTMLButtonElement>;
 }
 
 export const NarrowSidebar = memo(function NarrowSidebar({
@@ -29,6 +32,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
   onBackpackDrop,
   onBackpackOpenViewer,
   backpackCapacity,
+  compactBackpackCellRef,
 }: NarrowSidebarProps) {
   const discardedCards = useGameState(s => s.discardedCards);
   const classDeck = useGameState(s => s.classDeck);
@@ -71,6 +75,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
           isDropTarget={backpackDropEnabled}
           onDrop={onBackpackDrop}
           onOpenViewer={onBackpackOpenViewer}
+          compactCellRef={compactBackpackCellRef}
         />
       </div>
     </>

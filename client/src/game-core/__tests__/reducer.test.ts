@@ -996,6 +996,73 @@ describe('reducer', () => {
     });
   });
 
+  describe('PLAY_CARD — magic-class-discover (咒纹刻印)', () => {
+    const magicCard = {
+      id: 'mg1',
+      type: 'magic' as const,
+      name: 'Test Magic',
+      value: 0,
+      magicEffect: 'noop-test',
+    };
+    const heroMagicCard = {
+      id: 'hm1',
+      type: 'hero-magic' as const,
+      name: 'Hero Magic',
+      value: 0,
+      heroMagicId: 'holy-light' as const,
+    };
+    const discoverAmulet = {
+      id: 'cmd-amulet',
+      type: 'amulet' as const,
+      name: '咒纹刻印',
+      value: 1,
+      amuletEffect: 'magic-class-discover' as const,
+    };
+
+    it('does nothing when amulet is not equipped', () => {
+      const state = makeState({
+        handCards: [magicCard as any],
+        classMagicDiscoverStreak: 5,
+      });
+      const result = reduce(state, { type: 'PLAY_CARD', cardId: 'mg1' });
+      expect(result.state.classMagicDiscoverStreak).toBe(5);
+    });
+
+    it('increments classMagicDiscoverStreak when amulet is equipped and a magic card is played', () => {
+      const state = makeState({
+        handCards: [magicCard as any],
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = reduce(state, { type: 'PLAY_CARD', cardId: 'mg1' });
+      expect(result.state.classMagicDiscoverStreak).toBe(4);
+      expect(result.sideEffects.some(e => e.event === 'combat:classMagicDiscoverTriggered')).toBe(false);
+    });
+
+    it('resets to 0 and emits classMagicDiscoverTriggered when threshold (8) is reached', () => {
+      const state = makeState({
+        handCards: [magicCard as any],
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 7,
+      });
+      const result = reduce(state, { type: 'PLAY_CARD', cardId: 'mg1' });
+      expect(result.state.classMagicDiscoverStreak).toBe(0);
+      const triggered = result.sideEffects.find(e => e.event === 'combat:classMagicDiscoverTriggered');
+      expect(triggered).toBeDefined();
+      expect((triggered?.payload as any)?.threshold).toBe(8);
+    });
+
+    it('does not increment when a hero-magic card is played', () => {
+      const state = makeState({
+        handCards: [heroMagicCard as any],
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = reduce(state, { type: 'PLAY_CARD', cardId: 'hm1' });
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
+    });
+  });
+
   describe('MONSTER_DEFEATED', () => {
     const makeMonster = (overrides?: Partial<any>) => ({
       id: 'm1', type: 'monster' as const, name: 'Goblin', value: 5,

@@ -27,6 +27,7 @@ export type GameEventMap = {
   };
   'combat:classDamageHit': {};
   'combat:classDamageDiscoverTriggered': { threshold: number };
+  'combat:classMagicDiscoverTriggered': { threshold: number };
   'combat:stunAttemptDiscoverTriggered': { threshold: number };
   'combat:buildingDestroyed': { buildingId: string };
   'combat:lastWordsDiscard': {

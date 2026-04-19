@@ -152,6 +152,7 @@ export type AmuletEffectId =
   | 'persuade-on-temp-attack'
   | 'persuade-grant-recycle-fetch'
   | 'damage-class-discover'
+  | 'magic-class-discover'
   | 'persuade-graveyard-stack'
   | 'stun-recycle-to-hand'
   | 'attack-persuade-discount'
@@ -453,6 +454,22 @@ export function useArcaneStormDamage(): number {
 export function isPermRecycleEquipment(card: GameCardData | null | undefined): boolean {
   return Boolean(
     card && (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') && card.permEquipment,
+  );
+}
+
+/**
+ * UI-side guard: should this monster card be rendered using the equipment
+ * layout rather than the active-row layout?
+ *
+ * The canonical signal is `durability != null` (set by
+ * `primeMonsterAsEquipment` whenever a monster lands in
+ * hand/backpack/recycle). We also accept `maxDurability` as a fallback so
+ * the equipment layout is preserved even if `durability` was momentarily
+ * zeroed before display.
+ */
+export function isMonsterEquipmentCard(card: GameCardData | null | undefined): boolean {
+  return Boolean(
+    card && card.type === 'monster' && (card.durability != null || card.maxDurability != null),
   );
 }
 
@@ -841,7 +858,7 @@ const amuletEffectText =
   };
 
   const upgradeLevel = card.upgradeLevel ?? 0;
-  const showUpgradeBadge = upgradeLevel > 0 && !(card.type === 'monster' && card.durability == null);
+  const showUpgradeBadge = upgradeLevel > 0 && !(card.type === 'monster' && !isMonsterEquipmentCard(card));
 
   const showBleedOverlay = Boolean(bleedAnimation);
   const showHealOverlay = Boolean(healAnimation);
@@ -1702,9 +1719,8 @@ const amuletEffectText =
                           </div>
                         )}
                         <div className="flex items-baseline gap-0">
-                          {(card.type === 'shield' && card.armorMax != null && card.armorMax > 0) ||
-                           (card.type === 'monster' && card.durability != null) ? (() => {
-                            const baseArmorMax = card.type === 'monster' ? (card.hp ?? card.value) : card.armorMax!;
+                          {(card.type === 'shield' && card.armorMax != null && card.armorMax > 0) ? (() => {
+                            const baseArmorMax = card.armorMax!;
                             const curBaseArmor = Math.min(card.armor ?? baseArmorMax, baseArmorMax);
                             const permBonus = equipmentStatModifier?.permanentShieldBonus ?? 0;
                             const bonusDamaged = card.armorBonusDamaged ?? 0;
@@ -1833,7 +1849,7 @@ const amuletEffectText =
                   </h3>
                 )}
 
-                {card.type === 'monster' && card.durability != null && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
+                {isMonsterEquipmentCard(card) && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手偷钱：攻击时为Hero偷钱">偷钱</span>
@@ -1960,7 +1976,7 @@ const amuletEffectText =
                     )}
                   </div>
                 )}
-                {card.type === 'monster' && card.durability == null && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
+                {card.type === 'monster' && !isMonsterEquipmentCard(card) && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
                     {card.monsterSpecial && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.description ?? '精英怪物'}>精英</span>

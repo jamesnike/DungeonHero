@@ -116,6 +116,8 @@ export interface PersistedGameState {
   recycleForgePlayCount?: number;
   /** 战伤刻印：已造成伤害次数 streak 0–9 */
   classDamageDiscoverStreak?: number;
+  /** 咒纹刻印：已使用 magic 牌次数 streak 0–7 */
+  classMagicDiscoverStreak?: number;
   totalDamageTaken: number;
   totalHealed: number;
   healAccumulator: number;

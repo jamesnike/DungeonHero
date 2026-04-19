@@ -254,6 +254,8 @@ export interface GameState {
   recycleForgePlayCount: number;
   /** 战伤刻印：0–9，累计 10 次造成伤害触发发现专属牌后归零 */
   classDamageDiscoverStreak: number;
+  /** 咒纹刻印：0–7，累计 8 次使用 magic 牌触发发现专属牌后归零 */
+  classMagicDiscoverStreak: number;
   waveDiscardCount: number;
   totalWins: number;
   undoCount: number;

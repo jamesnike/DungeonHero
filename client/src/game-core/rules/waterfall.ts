@@ -219,13 +219,19 @@ export function computeWaterfallDropPlan(
   const newPreviewStacks: Record<number, GameCardData[]> = {};
   void waterfallDealBonus;
 
-  // Runtime guarantee: every freshly dealt preview row must contain at least
-  // one monster (and at most 2). Init-time chunk balancing handles this for
-  // the static deck, but card-effect deck reordering / stacking-deletion can
+  // Runtime guarantee: every freshly dealt preview row must satisfy the
+  // per-mode monster invariant. Init-time chunk balancing handles this for the
+  // static deck, but card-effect deck reordering / stacking-deletion can
   // disturb that invariant — this is the safety net.
+  //   • Normal mode: 1–2 monsters per row.
+  //   • Quick  mode: 0–1 monsters per row (each 4-card row holds at most 1
+  //                  monster; rows with 0 monsters are allowed because the
+  //                  init layout intentionally leaves a leftover monster in
+  //                  the back 18 cards).
   {
-    const MIN_MONSTERS_PER_ROW = 1;
-    const MAX_MONSTERS_PER_ROW = 2;
+    const isQuickMode = state.gameMode === 'quick';
+    const MIN_MONSTERS_PER_ROW = isQuickMode ? 0 : 1;
+    const MAX_MONSTERS_PER_ROW = isQuickMode ? 1 : 2;
     const previewMonsterIndices: number[] = [];
     const previewNonMonsterIndices: number[] = [];
     for (let i = 0; i < nextPreviewCards.length; i++) {

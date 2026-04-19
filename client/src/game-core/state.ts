@@ -35,6 +35,7 @@ export function createInitialGameState(): GameState {
     cardsPlayed: 0,
     recycleForgePlayCount: 0,
     classDamageDiscoverStreak: 0,
+    classMagicDiscoverStreak: 0,
     waveDiscardCount: 0,
     totalWins: 0,
     undoCount: 0,

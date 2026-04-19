@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { Backpack as BackpackIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,12 @@ interface BackpackZoneProps {
   onOpenViewer?: () => void;
   compact?: boolean;
   compactStyle?: CSSProperties;
+  /**
+   * Optional ref forwarded to the compact-mode button element so callers
+   * (e.g. backpack→hand flight animation) can read its DOM rect when the
+   * full-size hero-row backpack cell is not mounted (narrow layout).
+   */
+  compactCellRef?: Ref<HTMLButtonElement>;
 }
 
 function BackpackZoneInner({
@@ -27,6 +33,7 @@ function BackpackZoneInner({
   onOpenViewer,
   compact = false,
   compactStyle,
+  compactCellRef,
 }: BackpackZoneProps) {
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
@@ -98,7 +105,14 @@ function BackpackZoneInner({
   if (compact) {
     return (
       <button
-        ref={compactRef}
+        ref={(el) => {
+          compactRef.current = el;
+          if (typeof compactCellRef === 'function') {
+            compactCellRef(el);
+          } else if (compactCellRef) {
+            (compactCellRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
+          }
+        }}
         onClick={onOpenViewer}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
@@ -117,7 +131,7 @@ function BackpackZoneInner({
       >
         <BackpackIcon className="w-4 h-4" />
         {backpackCount > 0 && (
-          <span className="mt-0.5 text-[9px] font-bold leading-none text-amber-100">
+          <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-amber-500/90 ring-1 ring-amber-200/70 shadow-sm">
             {backpackCount}
           </span>
         )}

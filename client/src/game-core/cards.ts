@@ -28,7 +28,8 @@ export function addCardToHand(state: GameState, card: GameCardData): Partial<Gam
   if (state.handCards.length >= limit) {
     return {};
   }
-  return { handCards: [...state.handCards, card] };
+  const primed = primeMonsterAsEquipment(card, state.gameMode === 'quick');
+  return { handCards: [...state.handCards, primed] };
 }
 
 export function removeCardFromHand(state: GameState, cardId: string): Partial<GameState> {
@@ -49,16 +50,17 @@ export function addCardToBackpackPure(
   state: GameState,
   card: GameCardData,
 ): Partial<GameState> {
-  if (isBackpackRestrictedCard(card)) {
-    return { backpackItems: [...state.backpackItems, card] };
+  const primed = primeMonsterAsEquipment(card, state.gameMode === 'quick');
+  if (isBackpackRestrictedCard(primed)) {
+    return { backpackItems: [...state.backpackItems, primed] };
   }
   const capacity = getEffectiveBackpackCapacity(state);
   if (state.backpackItems.length >= capacity) {
     return {
-      permanentMagicRecycleBag: [...state.permanentMagicRecycleBag, card],
+      permanentMagicRecycleBag: [...state.permanentMagicRecycleBag, primed],
     };
   }
-  return { backpackItems: [...state.backpackItems, card] };
+  return { backpackItems: [...state.backpackItems, primed] };
 }
 
 export function removeCardFromBackpack(state: GameState, cardId: string): Partial<GameState> {
@@ -163,6 +165,32 @@ export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false
   return applyMonsterRage(cleaned, cleaned.rageTurn ?? 1, isQuickMode);
 }
 
+/**
+ * Ensure a monster card is "equipment-shaped" before it lands in hand /
+ * backpack / recycle bag. Mirrors what `persuadeSuccessPatch` does for the
+ * persuade flow:
+ *   1. Strip combat-acquired buffs/debuffs via `resetMonsterForGraveyard`
+ *      (consistent with the graveyard recovery path) so the card represents
+ *      its baseline equipment form.
+ *   2. Seed `durability` / `maxDurability` from the monster's fury / hp
+ *      layers so the UI (`CardDetailsModal.isMonsterEquipment`, `GameCard`)
+ *      treats it as a monster equipment.
+ *
+ * Non-monster cards and monsters that already carry durability are returned
+ * unchanged.
+ */
+export function primeMonsterAsEquipment(
+  card: GameCardData,
+  isQuickMode = false,
+): GameCardData {
+  if (card.type !== 'monster') return card;
+  if (card.durability != null && card.maxDurability != null) return card;
+
+  const reset = resetMonsterForGraveyard(card, isQuickMode);
+  const base = reset.fury ?? reset.hpLayers ?? 1;
+  return { ...reset, durability: base, maxDurability: base };
+}
+
 // ---------------------------------------------------------------------------
 // Graveyard operations
 // ---------------------------------------------------------------------------
@@ -196,7 +224,10 @@ export function discardAllHandCardsPure(
   if (recycled.length > 0) {
     patch.permanentMagicRecycleBag = [
       ...state.permanentMagicRecycleBag,
-      ...recycled.map(c => ({ ...c, _recycleWaits: c.recycleDelay ?? 2 } as GameCardData)),
+      ...recycled.map(c => {
+        const primed = primeMonsterAsEquipment(c, state.gameMode === 'quick');
+        return { ...primed, _recycleWaits: primed.recycleDelay ?? 2 } as GameCardData;
+      }),
     ];
   }
   return { discarded, patch };
@@ -266,8 +297,9 @@ export function addToRecycleBag(
   state: GameState,
   card: GameCardData,
 ): Partial<GameState> {
+  const primed = primeMonsterAsEquipment(card, state.gameMode === 'quick');
   return {
-    permanentMagicRecycleBag: [...state.permanentMagicRecycleBag, card],
+    permanentMagicRecycleBag: [...state.permanentMagicRecycleBag, primed],
   };
 }
 

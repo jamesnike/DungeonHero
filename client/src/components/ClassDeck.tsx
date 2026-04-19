@@ -64,7 +64,7 @@ function ClassDeckComponent({
         >
           <Shield className="w-4 h-4" />
           {classCards.length > 0 && (
-            <span className="mt-0.5 text-[9px] font-bold leading-none text-indigo-300">
+            <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-indigo-500/90 ring-1 ring-indigo-200/70 shadow-sm">
               {classCards.length}
             </span>
           )}

@@ -318,6 +318,19 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     updateDamageDiscoverCounter(0, threshold);
   });
 
+  useGameEvent('combat:classMagicDiscoverTriggered', ({ threshold }) => {
+    const st = engine.getState();
+    const discoverAmulet = (st.amuletSlots as GameCardData[]).find(s => s?.amuletEffect === 'magic-class-discover');
+    const amuletName = discoverAmulet?.name ?? '咒纹刻印';
+    const started = depsRef.current.beginDiscoverFlow('magic-class-discover', { sourceLabel: amuletName });
+    if (started) {
+      depsRef.current.addGameLog('amulet', `${amuletName}：累计 ${threshold} 张 magic 牌，发现专属牌！`);
+    } else {
+      depsRef.current.addGameLog('amulet', `${amuletName}：累计 ${threshold} 张 magic 牌，但职业牌堆已空。`);
+    }
+    updateMagicDiscoverCounter(0, threshold);
+  });
+
   useGameEvent('combat:stunAttemptDiscoverTriggered', ({ threshold }) => {
     const st = engine.getState();
     const discoverAmulet = (st.amuletSlots as GameCardData[]).find(s => s?.amuletEffect === 'stun-attempt-discover');
@@ -570,6 +583,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   const updateDamageDiscoverCounter = useCallback((displayCount: number, threshold: number) => {
     dispatch({ type: 'UPDATE_AMULET_SLOTS', updater: prev => prev.map(slot => {
       if (slot?.amuletEffect !== 'damage-class-discover') return slot;
+      return { ...slot, _counterDisplay: `${displayCount}/${threshold}` };
+    }) });
+  }, [dispatch]);
+
+  const updateMagicDiscoverCounter = useCallback((displayCount: number, threshold: number) => {
+    dispatch({ type: 'UPDATE_AMULET_SLOTS', updater: prev => prev.map(slot => {
+      if (slot?.amuletEffect !== 'magic-class-discover') return slot;
       return { ...slot, _counterDisplay: `${displayCount}/${threshold}` };
     }) });
   }, [dispatch]);
@@ -982,5 +1002,6 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
     recordClassDamageDiscoverHit,
     updateDamageDiscoverCounter,
+    updateMagicDiscoverCounter,
   };
 }

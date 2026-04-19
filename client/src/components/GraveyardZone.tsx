@@ -150,7 +150,7 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
         >
           <Skull className="w-4 h-4" />
           {discardedCards.length > 0 && (
-            <span className="mt-0.5 text-[9px] font-bold leading-none text-slate-300">
+            <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-slate-500/90 ring-1 ring-slate-200/70 shadow-sm">
               {discardedCards.length}
             </span>
           )}

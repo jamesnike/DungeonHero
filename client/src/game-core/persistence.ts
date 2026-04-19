@@ -26,6 +26,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     cardsPlayed: state.cardsPlayed,
     recycleForgePlayCount: state.recycleForgePlayCount,
     classDamageDiscoverStreak: state.classDamageDiscoverStreak,
+    classMagicDiscoverStreak: state.classMagicDiscoverStreak,
     totalDamageTaken: state.totalDamageTaken,
     totalHealed: state.totalHealed,
     healAccumulator: state.healAccumulator,

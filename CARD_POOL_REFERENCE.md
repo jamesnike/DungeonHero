@@ -1042,7 +1042,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 | 4 | 血怒战符 | bloodrage-attack | 每次对自己造成伤害时，所有装备栏临时攻击 +2。 | — |
 | 5 | 怀柔之印 | persuade-on-temp-attack | 每获得一次临时攻击或临时护甲加成，下一次劝降率 +10%。升级后：+20%。 | 最高 1 级 |
 | 6 | 劝降归袋符 | persuade-grant-recycle-fetch | 每劝降一次，将一张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。升级后：每次 2 张。 | 最高 1 级 |
-| 7 | 战伤刻印 | damage-class-discover | 每造成 10 次伤害（武器、护符、法术等任意来源对怪物造成伤害均计数），发现一张专属牌。 | — |
+| 7 | 咒纹刻印 | magic-class-discover | 每使用 8 张 magic 牌（仅 type === 'magic'，不含 hero-magic / curse），发现一张专属牌。 | — |
 | 8 | 晕锤归袋符 | stun-recycle-to-hand | 每击晕一次怪物，从回收袋随机取回两张牌到手牌。 | — |
 | 9 | 磐石坚守符 | armor-halve-endure | 每回合格挡耐久上限 +1。 | — |
 | 10 | 驯兽铸印 | monster-equip-buff | 每次装备一个怪物时，选择：该装备栏永久攻击 +1 或 永久护甲 +1。 | — |

@@ -854,16 +854,10 @@ function reduceResolveGraveyardSelection(
   }
 
   // Monster cards in graveyard had their durability cleared by
-  // resetMonsterForGraveyard. When recovered into hand/backpack, restore
-  // equipment-ready durability so they behave & display as monster equipment
-  // (matching the persuade flow).
-  const selected: GameCardData =
-    rawSelected.type === 'monster' && rawSelected.durability == null
-      ? (() => {
-          const base = rawSelected.fury ?? rawSelected.hpLayers ?? 1;
-          return { ...rawSelected, durability: base, maxDurability: base };
-        })()
-      : rawSelected;
+  // resetMonsterForGraveyard. The hand/backpack add-helpers below
+  // (addCardToHand / addCardToBackpackPure) re-prime them as monster
+  // equipment via primeMonsterAsEquipment, matching the persuade flow.
+  const selected: GameCardData = rawSelected;
 
   const patch: Partial<GameState> = {};
   patch.discardedCards = state.discardedCards.filter(c => c.id !== cardId);

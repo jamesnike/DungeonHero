@@ -297,17 +297,17 @@ function HeroCardInner({
         style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
       >
         <span className="flex items-center gap-1 text-purple-500" title="法术伤害加成">
-          <Sparkles className="dh-hero-icon" />
+          {!isCompact && <Sparkles className="dh-hero-icon" />}
           <span className={`font-mono dh-hero-chip ${spellDamageDisplay < 0 ? 'text-red-500' : ''}`}>{spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}</span>
         </span>
         <span className="text-muted-foreground/50">|</span>
         <span className="flex items-center gap-1 text-rose-400" title="超杀吸血">
-          <Droplets className="dh-hero-icon" />
+          {!isCompact && <Droplets className="dh-hero-icon" />}
           <span className="font-mono dh-hero-chip">{spellLifesteal}</span>
         </span>
         <span className="text-muted-foreground/50">|</span>
         <span className="flex items-center gap-1 text-orange-500" title="击晕上限">
-          <Zap className="dh-hero-icon" />
+          {!isCompact && <Zap className="dh-hero-icon" />}
           <span className="font-mono dh-hero-chip">{stunCap}%</span>
         </span>
       </div>

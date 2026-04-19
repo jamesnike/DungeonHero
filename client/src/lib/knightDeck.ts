@@ -618,12 +618,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
 
   pushCard({
     type: 'amulet',
-    name: '战伤刻印',
+    name: '咒纹刻印',
     value: 1,
     image: starterAmuletDamageDiscoverImage,
     classCard: true,
-    description: '每造成 10 次伤害（武器、护符、法术等任意来源对怪物造成伤害均计数），发现一张专属牌。',
-    amuletEffect: 'damage-class-discover',
+    description: '每使用 8 张 magic 牌，发现一张专属牌。',
+    amuletEffect: 'magic-class-discover',
   });
 
   pushCard({

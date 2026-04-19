@@ -695,6 +695,7 @@ export default function GameBoard() {
     handleWeaponToMonster,
     recordClassDamageDiscoverHit,
     updateDamageDiscoverCounter,
+    updateMagicDiscoverCounter,
   } = combatActions;
 
   // ---------------------------------------------------------------------------
@@ -965,6 +966,11 @@ export default function GameBoard() {
   const previewCellRefs = useRef<Array<HTMLDivElement | null>>([]);
   const graveyardCellRef = useRef<HTMLDivElement | null>(null);
   const classDeckCellRef = useRef<HTMLDivElement | null>(null);
+  // In narrow layout, the hero-row backpack cell is unmounted and the
+  // backpack lives as a compact button in NarrowSidebar. This ref is wired
+  // to that compact button so backpack→hand flight animations have a valid
+  // source position when the full-size cell ref is null.
+  const compactBackpackCellRef = useRef<HTMLButtonElement | null>(null);
   const deckFlyTargetRef = useRef<HTMLButtonElement | null>(null);
   const heroFrameBoundsRef = useRef<DOMRect | null>(null);
   const heroFrameDropIntentRef = useRef(false);
@@ -3313,7 +3319,7 @@ export default function GameBoard() {
       }
 
       const surfaceEl = gameSurfaceRef.current;
-      let sourceCell: HTMLDivElement | null = null;
+      let sourceCell: HTMLElement | null = null;
       if (sourceHint === 'graveyard') {
         sourceCell = graveyardCellRef.current;
       } else if (sourceHint === 'equipmentSlot1') {
@@ -3323,7 +3329,11 @@ export default function GameBoard() {
       } else if (sourceHint === 'amulet') {
         sourceCell = heroRowCellRefs.current[HERO_ROW_AMULET_INDEX];
       } else {
-        sourceCell = heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX];
+        sourceCell = heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX]
+          // Narrow layout: hero-row backpack cell is unmounted; fall back to
+          // the compact backpack button rendered in NarrowSidebar so the
+          // draw animation still flies from the visible backpack position.
+          ?? compactBackpackCellRef.current;
       }
       const handContainer = handAreaRef.current;
 
@@ -3885,6 +3895,7 @@ export default function GameBoard() {
 
     const savedForgeCount = snapshot.recycleForgePlayCount ?? 0;
     const savedDamageStreak = snapshot.classDamageDiscoverStreak ?? 0;
+    const savedMagicStreak = snapshot.classMagicDiscoverStreak ?? 0;
     const restoredAmulets = mapAmulets(snapshot.amuletSlots).map(slot => {
       if (slot?.amuletEffect === 'recycle-forge') {
         return {
@@ -3895,6 +3906,9 @@ export default function GameBoard() {
       if (slot?.amuletEffect === 'damage-class-discover') {
         const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 3 : 10;
         return { ...slot, _counterDisplay: `${savedDamageStreak}/${threshold}` };
+      }
+      if (slot?.amuletEffect === 'magic-class-discover') {
+        return { ...slot, _counterDisplay: `${savedMagicStreak}/8` };
       }
       if (slot?.amuletEffect === 'monster-kill-upgrade') {
         const killProgress = snapshot.monsterKillUpgradeProgress ?? 0;
@@ -3940,6 +3954,7 @@ export default function GameBoard() {
       cardsPlayed: snapshot.cardsPlayed ?? 0,
       recycleForgePlayCount: savedForgeCount,
       classDamageDiscoverStreak: snapshot.classDamageDiscoverStreak ?? 0,
+      classMagicDiscoverStreak: snapshot.classMagicDiscoverStreak ?? 0,
       recycleBackpackProgress: snapshot.recycleBackpackProgress ?? 0,
       swapUpgradeProgress: snapshot.swapUpgradeProgress ?? 0,
       monsterKillUpgradeProgress: snapshot.monsterKillUpgradeProgress ?? 0,
@@ -6264,6 +6279,10 @@ export default function GameBoard() {
         const threshold = (card.upgradeLevel ?? 0) >= 1 ? 3 : 10;
         updateDamageDiscoverCounter(streak, threshold);
       }
+      if (card.amuletEffect === 'magic-class-discover') {
+        const streak = engine.getState().classMagicDiscoverStreak ?? 0;
+        updateMagicDiscoverCounter(streak, 8);
+      }
       if (card.amuletEffect === 'swap-upgrade') {
         const prog = engine.getState().swapUpgradeProgress ?? 0;
         dispatch({ type: 'UPDATE_AMULET_SLOTS', updater: prev => prev.map(slot => {
@@ -8419,6 +8438,7 @@ export default function GameBoard() {
           shouldHighlightGraveyard={shouldHighlightGraveyard}
           onCardSelect={handleCardClick}
           backpackCapacity={backpackCapacity}
+          compactBackpackCellRef={compactBackpackCellRef}
           backpackDropEnabled={
             !isWaterfallLocked &&
             !isDefeatAnimationPlaying &&

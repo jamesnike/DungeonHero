@@ -4,6 +4,7 @@ import {
   type EventRequirement,
   type GameCardData,
   isPermRecycleEquipment,
+  isMonsterEquipmentCard,
   formatScalingSpellDamageLine,
   useArcaneStormDamage,
 } from "./GameCard";
@@ -46,7 +47,7 @@ export default function CardDetailsModal({
   const arcaneStormDamage = useArcaneStormDamage();
   if (!card) return null;
 
-  const isMonsterEquipment = card.type === 'monster' && card.durability != null;
+  const isMonsterEquipment = isMonsterEquipmentCard(card);
 
   const rageRule = card.type === 'monster' ? getMonsterRageRule(card.name) : null;
   const rageTurn = card.type === 'monster' ? (card.rageTurn ?? currentTurn) : null;

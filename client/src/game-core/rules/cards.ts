@@ -305,6 +305,24 @@ function reducePlayCard(
       event: 'card:magicPlayed',
       payload: { card, target: action.target },
     });
+
+    // 咒纹刻印：每使用 8 张 magic 牌（仅 type === 'magic'，不计 hero-magic / curse），
+    // 发现一张专属牌。计数与触发都在此完成；UI 由 combat:classMagicDiscoverTriggered 监听。
+    if (card.type === 'magic') {
+      const magicDiscoverAmulet = (state.amuletSlots as GameCardData[]).find(
+        s => s?.amuletEffect === 'magic-class-discover',
+      );
+      if (magicDiscoverAmulet) {
+        const threshold = 8;
+        const nextStreak = (state.classMagicDiscoverStreak ?? 0) + 1;
+        if (nextStreak >= threshold) {
+          patch.classMagicDiscoverStreak = 0;
+          sideEffects.push({ event: 'combat:classMagicDiscoverTriggered', payload: { threshold } });
+        } else {
+          patch.classMagicDiscoverStreak = nextStreak;
+        }
+      }
+    }
   }
 
   // Notify transform/category update
