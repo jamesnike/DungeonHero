@@ -28,6 +28,7 @@ import {
 } from './MagicNameFlankIcons';
 import { resolveMagicPatternKey } from '@/lib/magicPatternKey';
 import { resolveEventPatternKey } from '@/lib/eventPatternKey';
+import { getOnEnterHandShortLabel } from '@/game-core/card-schema/on-enter-hand';
 
 const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
@@ -1286,9 +1287,12 @@ const amuletEffectText =
                       {card.flankEffect && (
                         <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block mt-0.5">侧击：{card.flankEffect}</span>
                       )}
-                      {card.onEnterHandEffect === 'stun-cap-bonus-3' && (
-                        <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block mt-0.5" title="铭刻技艺（翻转之契）：每次此牌进入手牌时击晕上限 +3%（硬上限 100%）">铭刻</span>
-                      )}
+                      {(() => {
+                        const onHandLabel = getOnEnterHandShortLabel(card);
+                        return onHandLabel ? (
+                          <span className="dh-card__keyword-tag dh-card__keyword-tag--onhand inline-block mt-0.5" title="上手：此牌进入手牌时自动触发效果">{onHandLabel}</span>
+                        ) : null;
+                      })()}
                     </div>
                   )}
                   {!isMagicLikeCard && card.transformBonus && (
@@ -2103,7 +2107,7 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.flankEffect || card.transformBonus || card._flipRepairBuff || card.onEnterHandEffect === 'stun-cap-bonus-3') && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect) && (
                   <div className="dh-card__keyword-row">
                     {card.hasEquipmentRevive && (
                       <span className={`dh-card__keyword-tag ${card.equipmentReviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
@@ -2135,9 +2139,12 @@ const amuletEffectText =
                     {card._flipRepairBuff && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="熔铸耐久（翻转之契）：每次卡牌翻转时该装备恢复 1 耐久（不超过耐久上限）">熔铸</span>
                     )}
-                    {card.onEnterHandEffect === 'stun-cap-bonus-3' && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="铭刻技艺（翻转之契）：每次此牌进入手牌时击晕上限 +3%（硬上限 100%）">铭刻</span>
-                    )}
+                    {(() => {
+                      const onHandLabel = getOnEnterHandShortLabel(card);
+                      return onHandLabel ? (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--onhand" title="上手：此牌进入手牌时自动触发效果">{onHandLabel}</span>
+                      ) : null;
+                    })()}
                   </div>
                 )}
 
@@ -2166,11 +2173,14 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'potion' || card.type === 'amulet') && card.onEnterHandEffect === 'stun-cap-bonus-3' && (
-                  <div className="dh-card__keyword-row">
-                    <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="铭刻技艺（翻转之契）：每次此牌进入手牌时击晕上限 +3%（硬上限 100%）">铭刻</span>
-                  </div>
-                )}
+                {(card.type === 'potion' || card.type === 'amulet') && !!card.onEnterHandEffect && (() => {
+                  const onHandLabel = getOnEnterHandShortLabel(card);
+                  return onHandLabel ? (
+                    <div className="dh-card__keyword-row">
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onhand" title="上手：此牌进入手牌时自动触发效果">{onHandLabel}</span>
+                    </div>
+                  ) : null;
+                })()}
 
                 <div className="absolute bottom-1 right-1 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
                   {getCardIcon()}

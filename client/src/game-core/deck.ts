@@ -2756,8 +2756,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: flipLifestealAmuletImage,
       amuletEffect: 'flip-overkill-lifesteal',
-      description: '每翻转 8 张牌，超杀吸血永久 +1。',
-      shortDescription: '每翻转 8 张牌：超杀吸血永久 +1',
+      description: '每翻转 5 张牌，超杀吸血永久 +1。',
+      shortDescription: '每翻转 5 张牌：超杀吸血永久 +1',
     },
     {
       id: STARTER_CARD_IDS.equipAmuletCapAmulet,
@@ -2766,8 +2766,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: equipAmuletCapImage,
       amuletEffect: 'equip-amulet-cap',
-      description: '每装备 8 个装备，护符栏上限 +1。',
-      shortDescription: '每装备 8 件装备：护符栏上限 +1',
+      description: '每装备 6 个装备，护符栏上限 +1。',
+      shortDescription: '每装备 6 件装备：护符栏上限 +1',
     },
     {
       id: STARTER_CARD_IDS.stunAttemptDiscoverAmulet,

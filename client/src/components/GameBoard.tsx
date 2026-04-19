@@ -4635,8 +4635,8 @@ export default function GameBoard() {
     const skillHandDraw = (definition?.type === 'passive') ? 0 : (definition?.initialHandDraw ?? 0);
     const totalHandCards = baseHandCards + skillHandDraw;
     const classFlightDelay = classDrawn.length > 0
-      ? CLASS_FLIGHT_BASE_DURATION + CLASS_FLIGHT_VARIANCE
-        + Math.max(0, classDrawn.length - 1) * CLASS_FLIGHT_STAGGER + 300
+      ? Math.round(CLASS_FLIGHT_BASE_DURATION * 0.6)
+        + Math.max(0, classDrawn.length - 1) * CLASS_FLIGHT_STAGGER
       : 200;
     setTimeout(() => {
       engine.batch(() => {

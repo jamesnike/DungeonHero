@@ -573,7 +573,7 @@ function reduceDrawFromBackpack(
 }
 
 // ---------------------------------------------------------------------------
-// 集甲之符 (equip-amulet-cap) — 每装备 8 件 → maxAmuletSlots +1
+// 集甲之符 (equip-amulet-cap) — 每装备 6 件 → maxAmuletSlots +1
 //
 // 共享辅助：被 EQUIP_CARD 与 PLAY_CARD（weapon/shield 分支）调用。
 // 调用一次代表"一次装备事件"，与是否顶替/入库存无关——参见 ASK 中
@@ -589,7 +589,7 @@ function applyEquipAmuletCapProgress(
     s => s?.amuletEffect === 'equip-amulet-cap',
   );
   if (!equipCapAmulet) return;
-  const equipThreshold = 8;
+  const equipThreshold = 6;
   const baseProgress = patch.equipAmuletCapProgress ?? state.equipAmuletCapProgress ?? 0;
   const next = baseProgress + 1;
   if (next >= equipThreshold) {
@@ -1309,12 +1309,12 @@ function reduceApplyCardFlip(
     });
   }
 
-  // 翻血之符 (flip-overkill-lifesteal): every 8 flips → permanentSpellLifesteal +1
+  // 翻血之符 (flip-overkill-lifesteal): every 5 flips → permanentSpellLifesteal +1
   const flipLifestealAmulet = (state.amuletSlots as GameCardData[]).find(
     s => s?.amuletEffect === 'flip-overkill-lifesteal',
   );
   if (flipLifestealAmulet) {
-    const flipThreshold = 8;
+    const flipThreshold = 5;
     const flipProgress = (state.flipOverkillLifestealProgress ?? 0) + 1;
     if (flipProgress >= flipThreshold) {
       patch.flipOverkillLifestealProgress = 0;
@@ -2222,7 +2222,10 @@ function reduceApplyTransformCategory(
 
   if (!card.transformEffect) return applyPatch(state, patch);
 
-  const prevCat = state.lastPlayedCardCategory;
+  // 使用 chainPrevCat（transformChainPrevCategory）而不是 state.lastPlayedCardCategory，
+  // 因为后者会被 magic resolver 在 APPLY_TRANSFORM_CATEGORY 之前提前覆盖为当前牌的类别，
+  // 导致 magic 牌的 transform 永远不会触发。chainPrevCat 只在本 reducer 中维护，是可靠值。
+  const prevCat = chainPrevCat;
   if (prevCat == null || prevCat === curCat) return applyPatch(state, patch);
 
   if (card.transformEffect === 'graveyard-random-magic') {

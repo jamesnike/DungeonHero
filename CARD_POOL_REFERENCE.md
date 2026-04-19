@@ -916,8 +916,8 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 | 6 | 震慑之符 | stun-upgrade-cap | 每击晕一次怪物，击晕上限 +5%。 |
 | 7 | 积蓄之符 | recycle-backpack-expand | 每回收 8 张牌，背包上限 +3。 |
 | 8 | 拾荒之符 | dungeon-gold | 每处理 1 张地城牌，金币 +1。 |
-| 9 | 翻血之符 | flip-overkill-lifesteal | 每翻转 8 张牌，超杀吸血永久 +1。 |
-| 10 | 集甲之符 | equip-amulet-cap | 每装备 8 个装备，护符栏上限 +1。 |
+| 9 | 翻血之符 | flip-overkill-lifesteal | 每翻转 5 张牌，超杀吸血永久 +1。 |
+| 10 | 集甲之符 | equip-amulet-cap | 每装备 6 个装备，护符栏上限 +1。 |
 | 11 | 眩学之符 | stun-attempt-discover | 每尝试击晕 6 次，发现一张专属牌。 |
 
 ## 特殊掉落护符

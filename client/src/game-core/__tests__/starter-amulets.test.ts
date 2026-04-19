@@ -18,7 +18,7 @@ function makeState(overrides?: Partial<GameState>): GameState {
 }
 
 // ---------------------------------------------------------------------------
-// 1) 翻血之符 (flip-overkill-lifesteal): every 8 flips → permanentSpellLifesteal +1
+// 1) 翻血之符 (flip-overkill-lifesteal): every 5 flips → permanentSpellLifesteal +1
 // ---------------------------------------------------------------------------
 
 describe('starter amulet: 翻血之符 (flip-overkill-lifesteal)', () => {
@@ -48,7 +48,7 @@ describe('starter amulet: 翻血之符 (flip-overkill-lifesteal)', () => {
   it('increments progress on each flip without crossing threshold', () => {
     const state = makeState({
       amuletSlots: [flipAmulet] as any,
-      flipOverkillLifestealProgress: 3,
+      flipOverkillLifestealProgress: 2,
     });
     const action: GameAction = {
       type: 'APPLY_CARD_FLIP',
@@ -56,14 +56,14 @@ describe('starter amulet: 翻血之符 (flip-overkill-lifesteal)', () => {
       cellIndex: null,
     };
     const result = reduce(state, action);
-    expect(result.state.flipOverkillLifestealProgress).toBe(4);
+    expect(result.state.flipOverkillLifestealProgress).toBe(3);
     expect(result.state.permanentSpellLifesteal).toBe(0);
   });
 
-  it('triggers permanentSpellLifesteal +1 when crossing 8-flip threshold', () => {
+  it('triggers permanentSpellLifesteal +1 when crossing 5-flip threshold', () => {
     const state = makeState({
       amuletSlots: [flipAmulet] as any,
-      flipOverkillLifestealProgress: 7,
+      flipOverkillLifestealProgress: 4,
       permanentSpellLifesteal: 2,
     });
     const action: GameAction = {
@@ -79,7 +79,7 @@ describe('starter amulet: 翻血之符 (flip-overkill-lifesteal)', () => {
   it('does nothing when amulet is not equipped', () => {
     const state = makeState({
       amuletSlots: [] as any,
-      flipOverkillLifestealProgress: 7,
+      flipOverkillLifestealProgress: 4,
       permanentSpellLifesteal: 0,
     });
     const action: GameAction = {
@@ -88,13 +88,13 @@ describe('starter amulet: 翻血之符 (flip-overkill-lifesteal)', () => {
       cellIndex: null,
     };
     const result = reduce(state, action);
-    expect(result.state.flipOverkillLifestealProgress).toBe(7);
+    expect(result.state.flipOverkillLifestealProgress).toBe(4);
     expect(result.state.permanentSpellLifesteal).toBe(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 2) 集甲之符 (equip-amulet-cap): every 8 equips → maxAmuletSlots +1
+// 2) 集甲之符 (equip-amulet-cap): every 6 equips → maxAmuletSlots +1
 // ---------------------------------------------------------------------------
 
 describe('starter amulet: 集甲之符 (equip-amulet-cap)', () => {
@@ -123,14 +123,14 @@ describe('starter amulet: 集甲之符 (equip-amulet-cap)', () => {
     expect(result.state.maxAmuletSlots).toBe(2);
   });
 
-  it('triggers maxAmuletSlots +1 when crossing 8-equip threshold', () => {
+  it('triggers maxAmuletSlots +1 when crossing 6-equip threshold', () => {
     const weapon = {
       id: 'w2', type: 'weapon' as const, name: 'Sword', value: 1,
       durability: 1, maxDurability: 1,
     };
     const state = makeState({
       amuletSlots: [equipAmulet] as any,
-      equipAmuletCapProgress: 7,
+      equipAmuletCapProgress: 5,
       maxAmuletSlots: 2,
       handCards: [weapon] as any,
     });
@@ -150,7 +150,7 @@ describe('starter amulet: 集甲之符 (equip-amulet-cap)', () => {
     };
     const state = makeState({
       amuletSlots: [] as any,
-      equipAmuletCapProgress: 7,
+      equipAmuletCapProgress: 5,
       maxAmuletSlots: 2,
       handCards: [weapon] as any,
     });
@@ -159,7 +159,7 @@ describe('starter amulet: 集甲之符 (equip-amulet-cap)', () => {
       cardId: 'w3',
       slotId: 'equipmentSlot1',
     });
-    expect(result.state.equipAmuletCapProgress).toBe(7);
+    expect(result.state.equipAmuletCapProgress).toBe(5);
     expect(result.state.maxAmuletSlots).toBe(2);
   });
 
@@ -255,7 +255,7 @@ describe('starter amulet: 集甲之符 (equip-amulet-cap)', () => {
     };
     const state = makeState({
       amuletSlots: [equipAmulet] as any,
-      equipAmuletCapProgress: 6,
+      equipAmuletCapProgress: 3,
       maxAmuletSlots: 2,
       equipmentSlot1: oldL as any,
       equipmentSlot2: oldR as any,
@@ -266,17 +266,17 @@ describe('starter amulet: 集甲之符 (equip-amulet-cap)', () => {
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'w-disp' } as GameAction]);
     expect(result.state.equipmentSlot1?.id).toBe('w-disp');
-    expect(result.state.equipAmuletCapProgress).toBe(7);
+    expect(result.state.equipAmuletCapProgress).toBe(4);
   });
 
-  it('PLAY_CARD: 8 件后跨过阈值 → 护符栏上限 +1', () => {
+  it('PLAY_CARD: 6 件后跨过阈值 → 护符栏上限 +1', () => {
     const newWeapon = {
       id: 'w-thr', type: 'weapon' as const, name: 'Threshold', value: 2,
       durability: 1, maxDurability: 1,
     };
     const state = makeState({
       amuletSlots: [equipAmulet] as any,
-      equipAmuletCapProgress: 7,
+      equipAmuletCapProgress: 5,
       maxAmuletSlots: 2,
       equipmentSlot1: null,
       handCards: [newWeapon] as any,

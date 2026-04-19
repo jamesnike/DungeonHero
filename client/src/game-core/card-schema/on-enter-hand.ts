@@ -62,3 +62,40 @@ export function executeOnEnterHand(
 export function getOnEnterHandRegistrySize(): number {
   return registry.size;
 }
+
+/**
+ * UI helper: short label shown in the 「上手」 keyword tag on cards.
+ * Returns a brief Chinese summary of what triggers when the card enters hand.
+ *
+ * Returns `null` if the card has no `onEnterHandEffect` set, or if the effect
+ * id is unknown (renderers should fall back to hiding the tag in that case).
+ *
+ * Keep these strings short — they appear inside a small pill-shaped tag in
+ * `GameCard.tsx`. Detailed wording belongs in the card's `description` /
+ * `shortDescription`.
+ */
+export function getOnEnterHandShortLabel(card: GameCardData): string | null {
+  const effectId = card.onEnterHandEffect;
+  if (!effectId) return null;
+  switch (effectId) {
+    case 'weapon-manual-onhand':
+      return '上手：随机一栏 +2 临时攻';
+    case 'blood-oath-scroll-onhand':
+      return '上手：+1 生命';
+    case 'survey-action-onhand': {
+      const buffByLevel = [1, 2];
+      const bonus = buffByLevel[card.upgradeLevel ?? 0] ?? 1;
+      return `上手：随机一栏 +${bonus} 临时攻`;
+    }
+    case 'three-card-thunder-onhand':
+      return '上手：全场 1 法伤';
+    case 'frenzy-curse-onhand':
+      return '上手：随机一栏 +1 临时攻';
+    case 'growth-blade-onhand':
+      return '上手：同名 +2 攻击';
+    case 'stun-cap-bonus-3':
+      return '上手：+3% 击晕上限';
+    default:
+      return null;
+  }
+}
