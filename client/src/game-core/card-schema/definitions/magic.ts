@@ -481,7 +481,7 @@ const guildRecycleReshuffle: CardDefinition = {
 const crossroadsLeftSwap: CardDefinition = {
   effectId: 'magic:crossroads-left-swap',
   effects: [],
-  tags: ['magic', 'permanent'],
+  tags: ['magic', 'instant'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
     const cards = state.activeCards as (GameCardData | null)[];
     let firstIdx = -1;
@@ -621,7 +621,7 @@ const arcaneStormMagicCount: CardDefinition = {
 const equipmentEnchantDiscard: CardDefinition = {
   effectId: 'magic:equipment-enchant-discard',
   effects: [],
-  tags: ['magic', 'permanent', 'interactive'],
+  tags: ['magic', 'instant', 'interactive'],
   resolver: (state, card, sideEffects, patch, enqueuedActions) => {
     const handEquip = state.handCards.filter(
       c => c.id !== card.id && (c.type === 'weapon' || c.type === 'shield'),
@@ -1689,6 +1689,12 @@ const knightMirrorCopy: CardDefinition = {
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
+    patch.pendingMagicAction = {
+      card,
+      effect: 'mirror-copy',
+      step: 'modal-select',
+      prompt: '镜影摹形：选择一张牌进行复制。',
+    } as any;
     sideEffects.push({ event: 'card:mirrorCopyRequested' as any, payload: { card } });
     return applyPatch(state, patch, sideEffects);
   },

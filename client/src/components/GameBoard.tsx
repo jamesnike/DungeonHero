@@ -45,7 +45,6 @@ import DeckViewerModal from './DeckViewerModal';
 import EventChoiceModal, { type EventChoiceAvailability } from './EventChoiceModal';
 import EventDiceModal from './EventDiceModal';
 import EquipmentSelectModal from './EquipmentSelectModal';
-import DiceRoller from './DiceRoller';
 import ClassDeck from './ClassDeck';
 import HeroSkillSelection from './HeroSkillSelection';
 import BackpackZone from './BackpackZone';
@@ -281,7 +280,6 @@ const HERO_ROW_EQUIPMENT_1_INDEX = 1;
 const HERO_ROW_HERO_INDEX = 2;
 const HERO_ROW_EQUIPMENT_2_INDEX = 3;
 const HERO_ROW_BACKPACK_INDEX = 4;
-const HERO_ROW_CLASS_DECK_INDEX = 5;
 const DISCARD_SHOCK_FLIGHT_BASE_DURATION = 520;
 const DISCARD_SHOCK_FLIGHT_VARIANCE = 140;
 const DISCARD_SHOCK_ARC_MIN = 36;
@@ -966,6 +964,7 @@ export default function GameBoard() {
   const lastWaterfallSequenceRef = useRef<number | null>(null);
   const previewCellRefs = useRef<Array<HTMLDivElement | null>>([]);
   const graveyardCellRef = useRef<HTMLDivElement | null>(null);
+  const classDeckCellRef = useRef<HTMLDivElement | null>(null);
   const deckFlyTargetRef = useRef<HTMLButtonElement | null>(null);
   const heroFrameBoundsRef = useRef<DOMRect | null>(null);
   const heroFrameDropIntentRef = useRef(false);
@@ -1084,7 +1083,8 @@ export default function GameBoard() {
   isNarrowLayoutRef.current = isNarrowLayout;
   useEffect(() => {
     if (isNarrowLayout) {
-      heroRowCellRefs.current[HERO_ROW_CLASS_DECK_INDEX] = null;
+      heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX] = null;
+      classDeckCellRef.current = null;
     }
   }, [isNarrowLayout]);
   const rageStripWidth = useMemo(() => {
@@ -1199,6 +1199,9 @@ export default function GameBoard() {
   }, []);
   const setGraveyardRef = useCallback((el: HTMLDivElement | null) => {
     graveyardCellRef.current = el;
+  }, []);
+  const setClassDeckCellRef = useCallback((el: HTMLDivElement | null) => {
+    classDeckCellRef.current = el;
   }, []);
   const updateHeroFramePosition = useCallback(() => {
     const container = gridWrapperRef.current;
@@ -2888,7 +2891,7 @@ export default function GameBoard() {
   const triggerClassDeckFlight = useCallback((cards: GameCardData[]) => {
     if (!cards.length || typeof window === 'undefined') return;
     const boardEl = boardRef.current;
-    const classDeckCell = heroRowCellRefs.current[HERO_ROW_CLASS_DECK_INDEX];
+    const classDeckCell = classDeckCellRef.current;
     const backpackCell = heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX];
 
     if (!boardEl || !classDeckCell || !backpackCell) return;
@@ -5204,6 +5207,15 @@ export default function GameBoard() {
                 : null);
 
     const sanitizedCard = sanitizeCardMetadata(sellItem);
+
+    // When the discarded card came from hand, remove it from hand BEFORE dispatching the
+    // discard. Otherwise the engine's synchronous drain of APPLY_DISCARD_EFFECTS (e.g.
+    // Catapult Amulet's enqueued DRAW_CARDS) would see the discarded card still in hand
+    // and the hand-limit check could block the draw.
+    if (fallbackOrigin === 'hand') {
+      consumeCardFromHand(sellItem);
+    }
+
     discardCardToGraveyard(sanitizedCard, { owner: 'player' });
 
     switch (fallbackOrigin) {
@@ -5225,7 +5237,6 @@ export default function GameBoard() {
         dispatch({ type: 'REMOVE_AMULET', cardId: sellItem.id });
         break;
       case 'hand':
-        consumeCardFromHand(sellItem);
         tickRecycleForge();
         break;
       case 'backpack':
@@ -5683,6 +5694,7 @@ export default function GameBoard() {
           addGameLog('event', `${card.name}：地城没有空位，已送入坟场。`);
           dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `地城没有空位，${card.name} 已送入坟场。` });
         }
+        applyTransformAndUpdateCategory(card);
         resetDragState();
         return;
       }
@@ -5804,6 +5816,7 @@ export default function GameBoard() {
             addGameLog('event', `${card.name}：地城没有空位，已送入坟场。`);
             dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `地城没有空位，${card.name} 已送入坟场。` });
           }
+          applyTransformAndUpdateCategory(card);
           resetDragState();
           return;
         }
@@ -7910,9 +7923,9 @@ export default function GameBoard() {
         </>
       ),
     },
-    {
+    ...(!isNarrowLayout ? [{
       id: 'hero-row-backpack',
-      dropZone: 'backpack',
+      dropZone: 'backpack' as const,
       render: () => (
         <BackpackZone
           backpackCount={backpackItems.length}
@@ -7946,19 +7959,6 @@ export default function GameBoard() {
             )
           }
           onOpenViewer={handleBackpackClick}
-        />
-      ),
-    },
-    ...(!isNarrowLayout ? [{
-      id: 'hero-row-class-deck',
-      dropZone: 'other' as const,
-      innerClassName: 'bg-card-foreground/5 rounded-lg',
-      render: () => (
-        <ClassDeck
-          classCards={classDeck}
-          className="w-full h-full"
-          deckName="Knight Deck"
-          onCardSelect={handleCardClick}
         />
       ),
     }] : [])], [
@@ -8187,13 +8187,13 @@ export default function GameBoard() {
             className="flex-1 min-h-0 relative flex justify-start lg:justify-center"
           >
             <div ref={gridWrapperRef} className="relative flex-1 w-full">
-              {/* 3×N Card Grid (5 dungeon columns + optional utility column) */}
+              {/* 3×N Card Grid (4 dungeon columns + optional utility column) */}
               <div 
                 className={`game-grid ${isNarrowLayout ? 'game-grid-narrow' : ''} grid mx-auto h-full max-w-[1350px]`}
                 style={{ 
                   gridAutoRows: 'minmax(0, 1fr)'
                 }}>
-          {/* Row 1: Preview Row - DUNGEON_COLUMN_COUNT cards + DiceRoller */}
+          {/* Row 1: Preview Row - DUNGEON_COLUMN_COUNT cards + ClassDeck */}
           <PreviewRow
             waterfallAnimation={waterfallAnimation}
             graveyardVectors={previewGraveyardVectors}
@@ -8204,14 +8204,15 @@ export default function GameBoard() {
             onCardClick={handleCardClick}
           />
           
-          {/* Row 1, last col: DiceRoller (hidden in narrow layout) */}
+          {/* Row 1, last col: ClassDeck (hidden in narrow layout) */}
           {!isNarrowLayout && (
             <div className={cellWrapperClass}>
-              <div className={cellInnerClass}>
-                <DiceRoller 
-                  onRoll={(value) => console.log('Rolled:', value)}
+              <div className={`${cellInnerClass} bg-card-foreground/5 rounded-lg`} ref={setClassDeckCellRef}>
+                <ClassDeck
+                  classCards={classDeck}
                   className="w-full h-full"
-                  scaleMultiplier={stageScale}
+                  deckName="Knight Deck"
+                  onCardSelect={handleCardClick}
                 />
               </div>
             </div>
@@ -8238,7 +8239,7 @@ export default function GameBoard() {
             </div>
           )}
 
-          {/* Row 3: Hero Row - 6 slots (Amulet, Equipment×2, Hero, Backpack, ClassDeck) */}
+          {/* Row 3: Hero Row - 5 slots (Amulet, Equipment×2, Hero, Backpack); Backpack hidden in narrow layout */}
           <HeroRowSection
             heroRowSlots={heroRowSlots}
             cellWrapperClass={cellWrapperClass}
@@ -8417,6 +8418,36 @@ export default function GameBoard() {
           graveyardDropEnabled={graveyardDropEnabled}
           shouldHighlightGraveyard={shouldHighlightGraveyard}
           onCardSelect={handleCardClick}
+          backpackCapacity={backpackCapacity}
+          backpackDropEnabled={
+            !isWaterfallLocked &&
+            !isDefeatAnimationPlaying &&
+            !playerTargetingActive &&
+            !fullBoardInteractionLocked &&
+            !(draggedCardSource === 'amulet' && draggedCard && !isRecyclableFromHand(draggedCard)) &&
+            (
+              (draggedCard !== null &&
+              !draggedEquipment &&
+              (
+                (backpackItems.length < backpackCapacity &&
+                canCardGoToBackpack(draggedCard) &&
+                !handCards.some(c => c.id === draggedCard.id))
+                ||
+                handCards.some(c => c.id === draggedCard.id)
+                ||
+                (draggingDungeonMonsterForPersuade && backpackItems.length < backpackCapacity)
+                ||
+                (draggedCardSource === 'amulet' && isRecyclableFromHand(draggedCard))
+              ))
+              ||
+              (draggedEquipment && isPermRecycleEquipment(draggedEquipment as GameCardData))
+            )
+          }
+          onBackpackDrop={(card) => {
+            if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
+            handleCardToSlot(card, 'slot-backpack');
+          }}
+          onBackpackOpenViewer={handleBackpackClick}
         />
       )}
     </div>

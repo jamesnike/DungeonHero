@@ -28,7 +28,7 @@ export const HERO_GAP_VARIABLE_CLASS =
 
 export const DEV_MODE = process.env.NODE_ENV !== 'production';
 
-export const DUNGEON_COLUMN_COUNT = 5;
+export const DUNGEON_COLUMN_COUNT = 4;
 export const GRAVEYARD_VECTOR_DEFAULT = { offsetX: 60, offsetY: 160 };
 export const MONSTER_RAGE_COLUMN_BORDER_PX = 1;
 export const MONSTER_CARD_BORDER_PX = 4;
@@ -49,7 +49,6 @@ export const ELITE_MONSTER_DISCARD_WARNING = '弃置到坟场时会触发混沌�
 export const HAND_INSERTION_RETRY_INTERVAL_MS = 150;
 export const HAND_INSERTION_MAX_RETRIES = 5;
 export const HERO_ROW_BACKPACK_INDEX = 4;
-export const HERO_ROW_CLASS_DECK_INDEX = 5;
 
 export const BALANCE_ATTACK_BONUS = 3;
 export const BALANCE_SHIELD_BONUS = 3;

@@ -2574,7 +2574,6 @@ function reduceTriggerGraveNova(
   }
 
   patch.heroSkillBanner = `殉烈爆鸣释放，对所有怪物造成 ${dmg} 点伤害！`;
-  sideEffects.push({ event: 'card:graveNova', payload: { card: graveNovaCard } });
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }

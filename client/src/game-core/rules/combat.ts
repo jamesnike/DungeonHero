@@ -176,50 +176,70 @@ function reduceBeginCombat(
       .filter(i => i !== bossCol && i >= 0 && i < state.activeCards.length);
 
     if (graveyardCopy.length > 0 && otherSlots.length > 0) {
-      const rawPicked: import('@/components/GameCard').GameCardData[] = [];
-      const count = Math.min(summonCount, graveyardCopy.length, otherSlots.length);
+      // Fixed split: up to 2 monsters + up to 2 non-monsters (capped by graveyard supply and free cells).
+      const slotsAvailable = Math.min(summonCount, otherSlots.length);
+      const monsterTarget = Math.min(2, slotsAvailable);
+      const nonMonsterTarget = Math.min(2, slotsAvailable - monsterTarget);
 
       const graveyardMonsters = graveyardCopy.filter(c => c.type === 'monster');
       const graveyardOthers = graveyardCopy.filter(c => c.type !== 'monster');
-      const guaranteedMonsters = Math.min(2, graveyardMonsters.length, count);
-      for (let i = 0; i < guaranteedMonsters; i++) {
+
+      const rawMonsters: import('@/components/GameCard').GameCardData[] = [];
+      const monstersToPick = Math.min(monsterTarget, graveyardMonsters.length);
+      for (let i = 0; i < monstersToPick; i++) {
         let ri: number;
         [ri, rng] = nextInt(rng, 0, graveyardMonsters.length - 1);
-        rawPicked.push(graveyardMonsters.splice(ri, 1)[0]);
+        rawMonsters.push(graveyardMonsters.splice(ri, 1)[0]);
       }
-      const remaining = count - rawPicked.length;
-      const remainingPool = [...graveyardMonsters, ...graveyardOthers];
-      for (let i = 0; i < remaining && remainingPool.length > 0; i++) {
+
+      const rawNonMonsters: import('@/components/GameCard').GameCardData[] = [];
+      const nonMonstersToPick = Math.min(nonMonsterTarget, graveyardOthers.length);
+      for (let i = 0; i < nonMonstersToPick; i++) {
         let ri: number;
-        [ri, rng] = nextInt(rng, 0, remainingPool.length - 1);
-        rawPicked.push(remainingPool.splice(ri, 1)[0]);
+        [ri, rng] = nextInt(rng, 0, graveyardOthers.length - 1);
+        rawNonMonsters.push(graveyardOthers.splice(ri, 1)[0]);
       }
 
       // Re-apply monster rage so summoned monsters scale to the current waterfall level.
       const isQuick = state.gameMode === 'quick';
-      const picked = rawPicked.map(c => applyMonsterRage(c, state.turnCount, isQuick));
+      const summonedMonsterCards = rawMonsters.map(c => applyMonsterRage(c, state.turnCount, isQuick));
+      const summonedNonMonsterCards = rawNonMonsters; // non-monsters unchanged
+      const picked = [...summonedMonsterCards, ...summonedNonMonsterCards];
+
+      if (picked.length === 0) return applyPatch(state, { ...patch, rng }, sideEffects, enqueuedActions);
 
       const pickedIds = new Set(picked.map(c => c.id));
       patch.discardedCards = state.discardedCards.filter(c => !pickedIds.has(c.id));
 
       const newActiveCards = [...state.activeCards] as typeof state.activeCards;
       const newStacks = { ...state.activeCardStacks };
+
+      // Choose target cells: one cell per monster, plus one shared cell for both non-monsters.
+      const cellsNeeded = summonedMonsterCards.length + (summonedNonMonsterCards.length > 0 ? 1 : 0);
       let shuffledOtherSlots: number[];
       [shuffledOtherSlots, rng] = rngShuffle(otherSlots, rng);
-      const shuffledSlots = shuffledOtherSlots.slice(0, picked.length);
+      const chosenSlots = shuffledOtherSlots.slice(0, cellsNeeded);
 
-      for (let i = 0; i < picked.length; i++) {
-        const slotIdx = shuffledSlots[i];
+      // Helper: place a card on top of a slot, sinking any existing top into the stack.
+      const placeOnTop = (slotIdx: number, card: import('@/components/GameCard').GameCardData) => {
         const existingTop = newActiveCards[slotIdx];
-        if (existingTop == null) {
-          newActiveCards[slotIdx] = picked[i];
-        } else {
-          // Sink the existing top into the stack (last position = next to surface),
-          // and place the summoned card as the new top.
+        if (existingTop != null) {
           newStacks[slotIdx] = [...(newStacks[slotIdx] ?? []), existingTop];
-          newActiveCards[slotIdx] = picked[i];
         }
+        newActiveCards[slotIdx] = card;
+      };
+
+      // Place monsters: each on its own cell.
+      for (let i = 0; i < summonedMonsterCards.length; i++) {
+        placeOnTop(chosenSlots[i], summonedMonsterCards[i]);
       }
+
+      // Place non-monsters: stack BOTH on the last chosen cell (2nd ends up as top).
+      const stackSlot = summonedNonMonsterCards.length > 0 ? chosenSlots[summonedMonsterCards.length] : -1;
+      for (let i = 0; i < summonedNonMonsterCards.length; i++) {
+        placeOnTop(stackSlot, summonedNonMonsterCards[i]);
+      }
+
       patch.activeCards = newActiveCards;
       patch.activeCardStacks = newStacks;
 
@@ -229,10 +249,10 @@ function reduceBeginCombat(
         payload: { type: 'combat', message: `${monster.name} 亡灵召唤：从坟场召唤了 ${names} 到激活行！` },
       });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 亡灵召唤！从坟场召唤了 ${picked.length} 张牌！` } });
-      sideEffects.push({ event: 'combat:graveyardSummon', payload: { slots: shuffledSlots, cards: picked } });
+      sideEffects.push({ event: 'combat:graveyardSummon', payload: { slots: chosenSlots, cards: picked } });
 
       // Force-engage every summoned monster so they enter combat immediately.
-      const summonedMonsters = picked.filter(c => c.type === 'monster' && !c.isStunned);
+      const summonedMonsters = summonedMonsterCards.filter(c => !c.isStunned);
       if (summonedMonsters.length > 0) {
         for (const m of summonedMonsters) {
           sideEffects.push({
@@ -2998,38 +3018,72 @@ function reduceResolveBlock(
       sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 偷走了 ${stealTarget} 金币！` } });
       if (actualStolen > 0) {
         sideEffects.push({ event: 'combat:goblinStolen', payload: { monsterId: monster.id } });
-        if (monster.goblinStealScale) {
+        // Only the trick-carrier needs the 「stole gold」 mark — that mark blocks
+        // 「哥布林的戏法」 from dropping on this goblin's death. Non-carriers don't
+        // affect the drop check, so leave them alone.
+        const isTrickCarrier = Boolean(monster.goblinTrickCarrier);
+        const needsStatBuff = Boolean(monster.goblinStealScale);
+        if (isTrickCarrier || needsStatBuff) {
           const monsterActiveCards = (patch.activeCards ?? [...state.activeCards]) as ActiveRowSlots;
           const monsterIdx = monsterActiveCards.findIndex(c => c?.id === monster.id);
           if (monsterIdx >= 0 && monsterActiveCards[monsterIdx]) {
             const m = monsterActiveCards[monsterIdx]!;
-            monsterActiveCards[monsterIdx] = {
-              ...m,
-              attack: (m.attack ?? m.value) + actualStolen,
-              value: m.value + actualStolen,
-              hp: (m.hp ?? 0) + actualStolen,
-              maxHp: (m.maxHp ?? 0) + actualStolen,
-              tempAttackBoost: (m.tempAttackBoost ?? 0) + actualStolen,
-              tempHpBoost: (m.tempHpBoost ?? 0) + actualStolen,
-              goblinHasStolen: true,
-            };
+            let updated: GameCardData = m;
+            if (needsStatBuff) {
+              updated = {
+                ...updated,
+                attack: (m.attack ?? m.value) + actualStolen,
+                value: m.value + actualStolen,
+                hp: (m.hp ?? 0) + actualStolen,
+                maxHp: (m.maxHp ?? 0) + actualStolen,
+                tempAttackBoost: (m.tempAttackBoost ?? 0) + actualStolen,
+                tempHpBoost: (m.tempHpBoost ?? 0) + actualStolen,
+              };
+            }
+            if (isTrickCarrier) {
+              updated = { ...updated, goblinHasStolen: true };
+            }
+            monsterActiveCards[monsterIdx] = updated;
             patch.activeCards = monsterActiveCards;
           }
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'combat', message: `${monster.name} 贪婪强化：攻击力 +${actualStolen}，生命值 +${actualStolen}！` },
-          });
+          if (needsStatBuff) {
+            sideEffects.push({
+              event: 'log:entry',
+              payload: { type: 'combat', message: `${monster.name} 贪婪强化：攻击力 +${actualStolen}，生命值 +${actualStolen}！` },
+            });
+          }
         }
       }
     }
   }
 
-  // Monster steal card
+  // Monster steal card (Goblin 窃牌贼: pick a random hand card and stack it under self)
   if (monster.goblinStealCard) {
-    sideEffects.push({
-      event: 'combat:goblinStealCard',
-      payload: { monsterId: monster.id, monsterName: monster.name },
-    });
+    const currentHand = (patch.handCards ?? state.handCards) as GameCardData[];
+    const goblinColIndex = (patch.activeCards ?? state.activeCards).findIndex(c => c?.id === monster.id);
+    if (currentHand.length > 0 && goblinColIndex >= 0) {
+      let pickIdx: number;
+      [pickIdx, rng] = nextInt(rng, 0, currentHand.length - 1);
+      const stolenCard = currentHand[pickIdx];
+      patch.handCards = currentHand.filter((_, i) => i !== pickIdx);
+      const prevStacks = (patch.activeCardStacks ?? state.activeCardStacks) ?? {};
+      patch.activeCardStacks = {
+        ...prevStacks,
+        [goblinColIndex]: [...(prevStacks[goblinColIndex] ?? []), stolenCard],
+      };
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'combat', message: `${monster.name} 偷走了手牌「${stolenCard.name}」！` },
+      });
+      sideEffects.push({
+        event: 'ui:banner',
+        payload: { text: `${monster.name} 偷走了「${stolenCard.name}」！` },
+      });
+      sideEffects.push({
+        event: 'combat:goblinStealCard',
+        payload: { monsterId: monster.id, monsterName: monster.name, card: stolenCard },
+      });
+    }
   }
 
   // Monster double attack

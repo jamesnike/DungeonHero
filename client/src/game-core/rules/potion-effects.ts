@@ -566,10 +566,12 @@ export function resolveAllPotionEffects(
 
   // --- Dice backpack expand (magic choice) ---
   if (effect === 'dice-backpack-expand') {
+    // Use a non-targeting `step` so equipment slots don't enter slot-select
+    // hover mode — only the MagicChoiceModal should drive resolution.
     patch.pendingPotionAction = {
       card,
-      effect: 'perm-slot-damage+1',
-      step: 'slot-select',
+      effect: 'backpack-expand',
+      step: 'magic-choice',
       prompt: '选择灵药效果',
     } as any;
     sideEffects.push({
@@ -962,6 +964,68 @@ export function resolvePendingPotion(
       patch.heroSkillBanner = null;
       log(sideEffects, 'potion', '眩晕药剂：击晕上限 +10%');
       banner(sideEffects, '击晕上限 +10%！');
+      enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    // --- Amulet to eternal relic (player picked which amulet) ---
+    case 'amulet-to-eternal-relic': {
+      const choiceId = (action as any).choiceId as string | undefined;
+      if (choiceId == null) return null;
+      const index = Number.parseInt(choiceId, 10);
+      if (Number.isNaN(index)) return null;
+      const amulets = state.amuletSlots as GameCardData[];
+      const amulet = amulets[index];
+      if (!amulet) {
+        patch.pendingPotionAction = null;
+        patch.heroSkillBanner = null;
+        banner(sideEffects, '所选护符已不存在。');
+        enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
+      }
+      const result = applyAmuletToEternalRelic(state, { amulet, index }, card, sideEffects, enqueuedActions);
+      Object.assign(patch, result);
+      patch.pendingPotionAction = null;
+      patch.heroSkillBanner = null;
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    // --- Backpack expand (4-option magic choice from 无尽背袋灵药) ---
+    case 'backpack-expand' as any: {
+      const choiceId = (action as any).choiceId as string | undefined;
+      if (!choiceId) return null;
+      switch (choiceId) {
+        case 'bp-amulet':
+          patch.maxAmuletSlots = (state.maxAmuletSlots ?? 0) + 1;
+          log(sideEffects, 'potion', `${card.name}：护符栏上限 +1`);
+          banner(sideEffects, '护符栏上限 +1！');
+          break;
+        case 'bp-left':
+          patch.equipmentSlotCapacity = {
+            ...state.equipmentSlotCapacity,
+            equipmentSlot1: (state.equipmentSlotCapacity.equipmentSlot1 ?? 1) + 1,
+          };
+          log(sideEffects, 'potion', `${card.name}：左装备栏容量 +1`);
+          banner(sideEffects, '左装备栏容量 +1！');
+          break;
+        case 'bp-right':
+          patch.equipmentSlotCapacity = {
+            ...state.equipmentSlotCapacity,
+            equipmentSlot2: (state.equipmentSlotCapacity.equipmentSlot2 ?? 1) + 1,
+          };
+          log(sideEffects, 'potion', `${card.name}：右装备栏容量 +1`);
+          banner(sideEffects, '右装备栏容量 +1！');
+          break;
+        case 'bp-bag':
+          patch.backpackCapacityModifier = (state.backpackCapacityModifier ?? 0) + 3;
+          log(sideEffects, 'potion', `${card.name}：背包容量 +3`);
+          banner(sideEffects, '背包容量 +3！');
+          break;
+        default:
+          return null;
+      }
+      patch.pendingPotionAction = null;
+      patch.heroSkillBanner = null;
       enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }

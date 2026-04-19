@@ -23,7 +23,7 @@ import type { GameAction } from '../actions';
 import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch, noChange } from '../reducer';
 import type { RngState } from '../rng';
-import { nextInt, pickRandom } from '../rng';
+import { nextInt } from '../rng';
 import { pickGraveyardCardExcluding } from './equipment-effects';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import {
@@ -214,61 +214,42 @@ export function computeWaterfallDropPlan(
   const nextPreviewCards = effectiveDeck.slice(0, baseDealCount);
   let nextRemainingDeck = effectiveDeck.slice(baseDealCount);
 
-  // Preview stacking: draw bonus non-monster cards and stack them on random non-monster previews
+  // Stacking has been removed: every preview slot holds exactly one card.
+  // Reserve the structure for downstream payload shape compatibility.
   const newPreviewStacks: Record<number, GameCardData[]> = {};
-  const defaultStackCount = 1;
-  const totalBonusCount = defaultStackCount + waterfallDealBonus;
-  if (totalBonusCount > 0 && nextRemainingDeck.length > 0 && nextPreviewCards.length > 0) {
-    const bonusCards: GameCardData[] = [];
-    const skippedCards: GameCardData[] = [];
-    for (let di = 0; di < nextRemainingDeck.length && bonusCards.length < totalBonusCount; di++) {
-      if (nextRemainingDeck[di].type === 'monster') {
-        skippedCards.push(nextRemainingDeck[di]);
-      } else {
-        bonusCards.push(nextRemainingDeck[di]);
-      }
-    }
-    const consumed = bonusCards.length + skippedCards.length;
-    nextRemainingDeck = [...skippedCards, ...nextRemainingDeck.slice(consumed)];
+  void waterfallDealBonus;
 
-    for (const bonusCard of bonusCards) {
-      const nonMonsterIndices = nextPreviewCards
-        .map((c, i) => (c && c.type !== 'monster' ? i : -1))
-        .filter(i => i >= 0);
-      if (nonMonsterIndices.length > 0) {
-        const [targetIdx, rng2] = pickRandom(nonMonsterIndices, rng);
-        rng = rng2;
-        if (!newPreviewStacks[targetIdx]) {
-          newPreviewStacks[targetIdx] = [];
-        }
-        newPreviewStacks[targetIdx].push(bonusCard);
-      }
-    }
-  }
-
-  // Re-balance monster density: stacking extraction can push skipped monsters
-  // to the front of the remaining deck, causing the next preview draw to exceed
-  // the 1-2 monster per row constraint.
+  // Runtime guarantee: every freshly dealt preview row must contain at least
+  // one monster (and at most 2). Init-time chunk balancing handles this for
+  // the static deck, but card-effect deck reordering / stacking-deletion can
+  // disturb that invariant — this is the safety net.
   {
+    const MIN_MONSTERS_PER_ROW = 1;
     const MAX_MONSTERS_PER_ROW = 2;
-    const nextDrawSize = Math.min(DUNGEON_COLUMN_COUNT, nextRemainingDeck.length);
-    const frontMonsterIndices: number[] = [];
-    for (let i = 0; i < nextDrawSize; i++) {
-      if (nextRemainingDeck[i].type === 'monster') frontMonsterIndices.push(i);
+    const previewMonsterIndices: number[] = [];
+    const previewNonMonsterIndices: number[] = [];
+    for (let i = 0; i < nextPreviewCards.length; i++) {
+      if (nextPreviewCards[i].type === 'monster') previewMonsterIndices.push(i);
+      else previewNonMonsterIndices.push(i);
     }
-    while (frontMonsterIndices.length > MAX_MONSTERS_PER_ROW) {
-      const excessIdx = frontMonsterIndices.pop()!;
-      let swapTarget = -1;
-      for (let k = nextDrawSize; k < nextRemainingDeck.length; k++) {
-        if (nextRemainingDeck[k].type !== 'monster') { swapTarget = k; break; }
-      }
-      if (swapTarget >= 0) {
-        const tmp = nextRemainingDeck[excessIdx];
-        nextRemainingDeck[excessIdx] = nextRemainingDeck[swapTarget];
-        nextRemainingDeck[swapTarget] = tmp;
-      } else {
-        break;
-      }
+    // Top-up: bring a monster from the remaining deck if preview is monster-empty
+    while (previewMonsterIndices.length < MIN_MONSTERS_PER_ROW && previewNonMonsterIndices.length > 0) {
+      const monsterDeckIdx = nextRemainingDeck.findIndex(c => c.type === 'monster');
+      if (monsterDeckIdx < 0) break;
+      const swapPreviewIdx = previewNonMonsterIndices.pop()!;
+      const tmp = nextPreviewCards[swapPreviewIdx];
+      nextPreviewCards[swapPreviewIdx] = nextRemainingDeck[monsterDeckIdx];
+      nextRemainingDeck[monsterDeckIdx] = tmp;
+      previewMonsterIndices.push(swapPreviewIdx);
+    }
+    // Cap: shed excess monsters back into the remaining deck
+    while (previewMonsterIndices.length > MAX_MONSTERS_PER_ROW) {
+      const nonMonsterDeckIdx = nextRemainingDeck.findIndex(c => c.type !== 'monster');
+      if (nonMonsterDeckIdx < 0) break;
+      const excessPreviewIdx = previewMonsterIndices.pop()!;
+      const tmp = nextPreviewCards[excessPreviewIdx];
+      nextPreviewCards[excessPreviewIdx] = nextRemainingDeck[nonMonsterDeckIdx];
+      nextRemainingDeck[nonMonsterDeckIdx] = tmp;
     }
   }
 

@@ -69,7 +69,7 @@
 | 反噬 | 每次受到伤害，对英雄造成 3 点直接伤害（无视护盾） |
 | 复生 | 首次被击杀后以 1 血层复活 |
 | 暴走光环 | 血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层 |
-| 亡灵召唤 | 被激怒时，从坟场取 4 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒 |
+| 亡灵召唤 | 被激怒时，从坟场取 4 张牌：2 怪物各占 1 个非 boss 格的顶层，2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒 |
 
 Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能和强化。
 
@@ -453,8 +453,8 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
   3. 献祭体魄（永久 +8 生命上限） → `maxhpperm+8`
   4. 拓展行囊（背包上限 +5） → `backpackSize+5`
   5. 选择一张牌升级 → `upgradeCard`
-- 翻转：选择任意选项后翻转为「命运挪移」（永久魔法 Perm 2），放入背包
-  - 命运挪移：将地城行最左边的两张牌交换位置。`magicEffect: 'crossroads-left-swap'`，`recycleDelay: 2`
+- 翻转：选择任意选项后翻转为「命运挪移」（一次性魔法），放入背包
+  - 命运挪移：将地城行最左边的两张牌交换位置。`magicEffect: 'crossroads-left-swap'`
 
 ---
 
@@ -673,13 +673,14 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 ### 15. 奥术回廊
 
 - 描述：选择选项后翻转为「奥术风暴」或「奥术护盾」。
-- 选项（3选2随机）：
+- 选项（7选3随机）：
   1. 法术回响（下一张Magic触发两次） → `flipToDoubleNextMagic` → 翻转为「奥术风暴」
   2. 发现一张专属Magic卡 → `discoverClassMagic` → 翻转为「奥术风暴」
   3. 获得1张专属Hero Magic → `drawClassHeroMagic:1` → 翻转为「奥术风暴」
   4. 发现一张起始背包的Magic卡 → `discoverStarterMagic` → 翻转为「奥术护盾」
   5. 发现一张坟场的Magic卡 → `graveyardDiscoverMagic`（需坟场≥1） → 翻转为「奥术护盾」
   6. 回收袋至多2张Magic移到手上 → `recycleBagMagicToHand:2` → 翻转为「奥术护盾」
+  7. 净化奥能（删除至多 2 张牌，跳过翻转） → `deleteCard:2`（需手牌或背包 ≥ 1，skipFlip）
 - 翻转为「奥术风暴」（永久魔法 Perm 1），destination: backpack
   - 效果：造成 X 点伤害，X = 已使用的魔法卡累计数量。使用后计数清零，瀑流也会清零。（`arcane-storm-magic-count`）
 - 翻转为「奥术护盾」（永久魔法 Perm 2），destination: backpack

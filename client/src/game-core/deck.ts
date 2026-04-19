@@ -1102,10 +1102,9 @@ export function createDeck(
         name: '命运挪移',
         value: 0,
         image: skillScrollImage,
-        magicType: 'permanent',
+        magicType: 'instant',
         magicEffect: 'crossroads-left-swap',
-        description: '永久魔法（Perm 2）：将地城行最左边的两张牌交换位置。',
-        recycleDelay: 2,
+        description: '一次性：将地城行最左边的两张牌交换位置。',
       },
       destination: 'stay',
       banner: '命运十字路口翻转为「命运挪移」！',
@@ -1760,6 +1759,14 @@ export function createDeck(
         hint: '从回收袋中取出至多2张魔法卡加入手牌，翻转为「奥术护盾」',
         skipFlip: true,
       },
+      {
+        id: 'arcane-purify',
+        text: '净化奥能（删除至多 2 张牌，跳过翻转）',
+        effect: 'deleteCard:2',
+        hint: '从手牌或背包中删除至多 2 张卡牌，本次不翻转',
+        requires: [{ type: 'cardPool', pools: ['hand', 'backpack'], min: 1, message: '需要至少 1 张可删除的卡牌' }],
+        skipFlip: true,
+      },
     ],
     flipTarget: {
       toCard: {
@@ -1905,10 +1912,9 @@ export function createDeck(
         name: '装备附魔',
         value: 0,
         image: skillScrollImage,
-        magicType: 'permanent',
+        magicType: 'instant',
         magicEffect: 'equipment-enchant-discard',
-        description: '永久魔法（Perm 2）：弃置手牌中一张装备，将其攻击/护甲值随机附加到装备栏的某件装备上，并使该装备耐久上限+1、耐久+1。',
-        recycleDelay: 2,
+        description: '一次性魔法：弃置手牌中一张装备，将其攻击/护甲值随机附加到装备栏的某件装备上，并使该装备耐久上限+1、耐久+1。',
       },
       destination: 'stay',
       message: '战备工坊翻转为「装备附魔」！',
@@ -2335,13 +2341,15 @@ export function createStarterCardPool(): GameCardData[] {
       // 乾坤一翻 — Perm 2. Choose an active-row card whose face can change
       // (has flipTarget OR _flipBackCard) and flip it to the other side.
       // No legal target → still consumed (play_full_cost_noop, mirrors 血誓回卷).
+      // 不设 `magicEffect`：避免被 `resolveEffectId` 短路到 `magic:<long-text>`
+      // 而错过 card-schema/definitions/magic.ts 中
+      // `starter:starter-perm-active-row-flip` resolver。
       id: STARTER_CARD_IDS.activeRowFlip,
       type: 'magic',
       name: '乾坤一翻',
       value: 0,
       image: dedupeStarterWorldSwapImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择当前行一张可翻转或已翻转的卡牌，将其翻转。',
       description: '选择当前行一张可翻转或已翻转的卡牌，将其翻转到另一面。',
       recycleDelay: 2,
       maxUpgradeLevel: 0,

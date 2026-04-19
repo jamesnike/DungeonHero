@@ -861,7 +861,7 @@ export default function CardDetailsModal({
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">
-                    被激怒时，从坟场取 {card.bossEnrageGraveyardSummon} 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒。
+                    被激怒时，从坟场取 {card.bossEnrageGraveyardSummon} 张牌：2 张怪物各占 1 个非 boss 格子（成为顶层），2 张非怪物堆叠在另一个非 boss 格子上。被召唤的怪物立即激怒。
                   </p>
                 </div>
               </div>

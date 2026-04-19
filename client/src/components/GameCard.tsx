@@ -1279,6 +1279,9 @@ const amuletEffectText =
                       {card.flankEffect && (
                         <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block mt-0.5">侧击：{card.flankEffect}</span>
                       )}
+                      {card.onEnterHandEffect === 'stun-cap-bonus-3' && (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--elite inline-block mt-0.5" title="铭刻技艺（翻转之契）：每次此牌进入手牌时击晕上限 +3%（硬上限 100%）">铭刻</span>
+                      )}
                     </div>
                   )}
                   {!isMagicLikeCard && card.transformBonus && (
@@ -1953,7 +1956,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒`}>召唤</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层，2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
                     )}
                   </div>
                 )}
@@ -2086,7 +2089,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌（固定含 2 张怪物）堆叠到其他格子，怪物也被激怒`}>召唤</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层，2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
                     )}
                     {card.isStunned && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title="晕眩：本回合无法行动">晕眩</span>
@@ -2094,7 +2097,7 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.flankEffect || card.transformBonus) && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.flankEffect || card.transformBonus || card._flipRepairBuff || card.onEnterHandEffect === 'stun-cap-bonus-3') && (
                   <div className="dh-card__keyword-row">
                     {card.hasEquipmentRevive && (
                       <span className={`dh-card__keyword-tag ${card.equipmentReviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
@@ -2123,6 +2126,12 @@ const amuletEffectText =
                     {card.transformBonus && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={`转型：前一张牌类型不同时触发 - ${card.transformBonus}`}>转型：{card.transformBonus}</span>
                     )}
+                    {card._flipRepairBuff && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="熔铸耐久（翻转之契）：每次卡牌翻转时该装备恢复 1 耐久（不超过耐久上限）">熔铸</span>
+                    )}
+                    {card.onEnterHandEffect === 'stun-cap-bonus-3' && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="铭刻技艺（翻转之契）：每次此牌进入手牌时击晕上限 +3%（硬上限 100%）">铭刻</span>
+                    )}
                   </div>
                 )}
 
@@ -2150,7 +2159,13 @@ const amuletEffectText =
                     {potionDescription}
                   </div>
                 )}
-                
+
+                {(card.type === 'potion' || card.type === 'amulet') && card.onEnterHandEffect === 'stun-cap-bonus-3' && (
+                  <div className="dh-card__keyword-row">
+                    <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="铭刻技艺（翻转之契）：每次此牌进入手牌时击晕上限 +3%（硬上限 100%）">铭刻</span>
+                  </div>
+                )}
+
                 <div className="absolute bottom-1 right-1 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
                   {getCardIcon()}
                 </div>
@@ -2257,6 +2272,8 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.potionEffect !== b.potionEffect ||
       a.amuletEffect !== b.amuletEffect ||
       a.onDestroyEffect !== b.onDestroyEffect ||
+      a.onEnterHandEffect !== b.onEnterHandEffect ||
+      a._flipRepairBuff !== b._flipRepairBuff ||
       a.bossPhase !== b.bossPhase ||
       a.bossRetaliationDamage !== b.bossRetaliationDamage ||
       a.bossLastStandAura !== b.bossLastStandAura ||

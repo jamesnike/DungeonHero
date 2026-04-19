@@ -14,6 +14,7 @@ import { createDeck, pruneEventChoicesToThree } from '../deck';
 import { fillActiveRowSlots } from '../helpers';
 import { shuffle as rngShuffle, nextInt, pickRandom } from '../rng';
 import { INITIAL_TURN_COUNT, FINAL_MONSTER_MARK_DESCRIPTION } from '../constants';
+import { DUNGEON_COLUMN_COUNT } from '@/components/game-board/constants';
 import { getRandomHero } from '@/lib/heroes';
 import { generateKnightDeck, createKnightDiscoveryEvents } from '@/lib/knightDeck';
 import { applyMonsterRage } from '@/lib/monsterRage';
@@ -124,14 +125,13 @@ export function reduceInitGame(
   }
 
   // --- Balance monster density: 1–2 monsters per non-overlapping chunk ---
-  // CHUNK must equal `dealRowBatch`'s batch size (6 = 5 row slots + 1 stack
-  // card). Otherwise the first batch can straddle two chunks and pull in an
-  // extra monster from the next chunk's head, exceeding the per-row monster
-  // cap (regression observed on quick mode where CHUNK was 5).
+  // CHUNK must equal `dealRowBatch`'s batch size (DUNGEON_COLUMN_COUNT) so the
+  // first batch lines up with one chunk and per-row monster invariants
+  // (≥1, ≤2 monsters) are preserved as the deck is consumed.
   {
     const MIN_MONSTERS = 1;
     const MAX_MONSTERS = 2;
-    const CHUNK = 6;
+    const CHUNK = DUNGEON_COLUMN_COUNT;
     for (let start = 0; start + CHUNK <= deckWithClassEvents.length; start += CHUNK) {
       const chunkEnd = start + CHUNK;
       const monsterIndices: number[] = [];
@@ -203,26 +203,32 @@ export function reduceInitGame(
     }
   }
 
-  // --- Guarantee at least one monster among the last 3 cards ---
+  // --- Guarantee at least one monster in the back half of the deck ---
+  // The front half is already monster-balanced by the chunk pass below; we only
+  // need to make sure the deck doesn't run dry of monsters near the end so the
+  // final waterfall(s) can still field a monster row.
   {
     const len = deckWithClassEvents.length;
-    if (len >= 3) {
-      const tail = deckWithClassEvents.slice(len - 3);
-      const hasMonsterInTail = tail.some(c => c.type === 'monster');
-      if (!hasMonsterInTail) {
-        let swapIdx = -1;
-        for (let i = len - 4; i >= 0; i--) {
+    if (len >= 2) {
+      const halfStart = Math.floor(len / 2);
+      const hasMonsterInBackHalf = deckWithClassEvents
+        .slice(halfStart)
+        .some(c => c.type === 'monster');
+      if (!hasMonsterInBackHalf) {
+        let swapMonsterIdx = -1;
+        for (let i = halfStart - 1; i >= 0; i--) {
           if (deckWithClassEvents[i].type === 'monster') {
-            swapIdx = i;
+            swapMonsterIdx = i;
             break;
           }
         }
-        if (swapIdx >= 0) {
-          const [targetOff, rngT] = nextInt(rng, 0, 2);
+        if (swapMonsterIdx >= 0) {
+          const backRange = len - halfStart;
+          const [targetOff, rngT] = nextInt(rng, 0, backRange - 1);
           rng = rngT;
-          const targetIdx = len - 1 - targetOff;
-          const tmp = deckWithClassEvents[swapIdx];
-          deckWithClassEvents[swapIdx] = deckWithClassEvents[targetIdx];
+          const targetIdx = halfStart + targetOff;
+          const tmp = deckWithClassEvents[swapMonsterIdx];
+          deckWithClassEvents[swapMonsterIdx] = deckWithClassEvents[targetIdx];
           deckWithClassEvents[targetIdx] = tmp;
         }
       }
@@ -252,38 +258,18 @@ export function reduceInitGame(
     queue[qMonsterIdx] = tmp;
   };
 
-  // Deal a single row as one 6-card batch from dealQueue:
-  //   - 1 non-monster from the batch becomes the stack card
-  //   - the remaining 5 become the row's base cards
-  // Aligns each row with one CHUNK (=6 in normal mode), so monster-density
-  // balancing carries over to per-row composition (≤2 monsters per row).
-  // If the batch happens to be all monsters, swap one with a non-monster
-  // from the rest of the queue so the row can still have a stack card.
-  const dealRowBatch = (): { row: GameCardData[]; stackCard: GameCardData | null } => {
-    const batch = dealQueue.splice(0, 6);
-    let stackBatchIdx = batch.findIndex(c => c.type !== 'monster');
-
-    if (stackBatchIdx < 0 && batch.length > 0) {
-      const queueNonMonsterIdx = dealQueue.findIndex(c => c.type !== 'monster');
-      if (queueNonMonsterIdx >= 0) {
-        const [batchIdx, rngB] = nextInt(rng, 0, batch.length - 1);
-        rng = rngB;
-        const tmp = batch[batchIdx];
-        batch[batchIdx] = dealQueue[queueNonMonsterIdx];
-        dealQueue[queueNonMonsterIdx] = tmp;
-        stackBatchIdx = batchIdx;
-      }
-    }
-
-    let stackCard: GameCardData | null = null;
-    if (stackBatchIdx >= 0) {
-      stackCard = batch.splice(stackBatchIdx, 1)[0];
-    }
-    return { row: batch, stackCard };
+  // Deal a single row as one DUNGEON_COLUMN_COUNT-card batch from dealQueue.
+  // Stacking has been removed, so the entire batch becomes the row's base
+  // cards. Aligns each row with one CHUNK (=DUNGEON_COLUMN_COUNT), so the
+  // monster-density balancing carries over to per-row composition
+  // (≥1 and ≤2 monsters per row).
+  const dealRowBatch = (): { row: GameCardData[] } => {
+    const batch = dealQueue.splice(0, DUNGEON_COLUMN_COUNT);
+    return { row: batch };
   };
 
-  // --- Preview row: deal 6 cards (5 base + 1 stack) ---
-  const { row: previewRaw, stackCard: previewStackCard } = dealRowBatch();
+  // --- Preview row: deal DUNGEON_COLUMN_COUNT cards ---
+  const { row: previewRaw } = dealRowBatch();
   ensureRowHasMonster(previewRaw, dealQueue);
   const initialPreview = fillActiveRowSlots(previewRaw).map((card) => {
     if (!card) return null;
@@ -294,21 +280,11 @@ export function reduceInitGame(
     return raged;
   }) as ActiveRowSlots;
 
-  // --- Preview stack: place stack card on a random non-monster preview cell ---
+  // --- Preview stack: stacking removed; preview cells hold one card each. ---
   const initialPreviewStacks: Record<number, GameCardData[]> = {};
-  if (previewStackCard) {
-    const nonMonsterPreviewIndices = initialPreview
-      .map((c, i) => (c && c.type !== 'monster' ? i : -1))
-      .filter(i => i >= 0);
-    if (nonMonsterPreviewIndices.length > 0) {
-      const [picked, rngP] = pickRandom(nonMonsterPreviewIndices, rng);
-      rng = rngP;
-      initialPreviewStacks[picked] = [applyMonsterRage(previewStackCard, initialTurnCount + 1, isQuickMode)];
-    }
-  }
 
-  // --- Active row: deal next 6 cards (5 base + 1 stack) ---
-  const { row: activeRaw, stackCard: activeStackCard } = dealRowBatch();
+  // --- Active row: deal next DUNGEON_COLUMN_COUNT cards ---
+  const { row: activeRaw } = dealRowBatch();
   ensureRowHasMonster(activeRaw, dealQueue);
   const initialActive = fillActiveRowSlots(activeRaw).map((card) => {
     if (!card) return null;
@@ -319,26 +295,16 @@ export function reduceInitGame(
     return raged;
   }) as ActiveRowSlots;
 
-  // --- Active stack: place stack card on a random non-monster active cell ---
+  // --- Active stack: stacking removed; active cells hold one card each. ---
   const initialActiveStacks: Record<number, GameCardData[]> = {};
-  if (activeStackCard) {
-    const nonMonsterActiveIndices = initialActive
-      .map((c, i) => (c && c.type !== 'monster' ? i : -1))
-      .filter(i => i >= 0);
-    if (nonMonsterActiveIndices.length > 0) {
-      const [picked, rngP] = pickRandom(nonMonsterActiveIndices, rng);
-      rng = rngP;
-      initialActiveStacks[picked] = [applyMonsterRage(activeStackCard, initialTurnCount, isQuickMode)];
-    }
-  }
 
   // --- Re-balance monster density in dealQueue after initial dealing ---
-  // CHUNK must match the `dealRowBatch` batch size (6) for the same reason
-  // as the pre-deal balancing above.
+  // CHUNK must match the `dealRowBatch` batch size (DUNGEON_COLUMN_COUNT) so
+  // each future waterfall preview row also satisfies the 1-2 monster invariant.
   {
     const MIN_MONSTERS = 1;
     const MAX_MONSTERS = 2;
-    const CHUNK = 6;
+    const CHUNK = DUNGEON_COLUMN_COUNT;
     for (let start = 0; start + CHUNK <= dealQueue.length; start += CHUNK) {
       const chunkEnd = start + CHUNK;
       const monsterIndices: number[] = [];

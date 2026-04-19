@@ -26,8 +26,11 @@ import {
   BALANCE_SHIELD_PENALTY,
 } from '../constants';
 import { computeAmuletEffects } from '../equipment';
+import { computeAmuletAuraReversal } from '../helpers';
 import type { RngState } from '../rng';
 import { nextInt } from '../rng';
+import type { GameCardData } from '@/components/GameCard';
+import type { EquipmentItem, AmuletItem, EquipmentSlotId } from '@/components/game-board/types';
 
 export function reduceTurnActions(state: GameState, action: GameAction): ReduceResult | null {
   switch (action.type) {
@@ -205,9 +208,86 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
     sideEffects.push({ event: 'ui:banner', payload: { text: '怨灵诅咒！全体怪物激怒！' } });
   }
 
-  // Goblin steal: emit side effects for the bridge layer to handle
-  for (const steal of result.goblinStealTargets) {
-    sideEffects.push({ event: 'combat:goblinStealCard', payload: { monsterId: steal.itemId, monsterName: steal.goblinName } });
+  // Goblin "窃宝": for each successful 15% roll, pick one of the player's
+  // currently-equipped equipment / amulet uniformly at random, remove it
+  // (reversing amulet aura if applicable), and stack it under the goblin
+  // (so the existing stack-pop mechanism returns it as a dungeon card on
+  // the goblin's death).
+  if (result.goblinStealTargets.length > 0) {
+    let stealRng = patch.rng ?? result.rng;
+    let curEquip1: EquipmentItem | null =
+      (patch.equipmentSlot1 as EquipmentItem | null | undefined) ?? state.equipmentSlot1;
+    let curEquip2: EquipmentItem | null =
+      (patch.equipmentSlot2 as EquipmentItem | null | undefined) ?? state.equipmentSlot2;
+    let curAmulets: AmuletItem[] =
+      (patch.amuletSlots as AmuletItem[] | undefined) ?? state.amuletSlots;
+    let curStacks: Record<number, GameCardData[]> =
+      (patch.activeCardStacks as Record<number, GameCardData[]> | undefined) ?? state.activeCardStacks;
+    let tempAttack = patch.slotTempAttack ?? state.slotTempAttack ?? { equipmentSlot1: 0, equipmentSlot2: 0 };
+    let tempArmor = patch.slotTempArmor ?? state.slotTempArmor ?? { equipmentSlot1: 0, equipmentSlot2: 0 };
+    let mutated = false;
+
+    for (const steal of result.goblinStealTargets) {
+      type Candidate =
+        | { source: 'equip'; slotId: EquipmentSlotId; item: EquipmentItem }
+        | { source: 'amulet'; item: AmuletItem };
+      const candidates: Candidate[] = [];
+      if (curEquip1) candidates.push({ source: 'equip', slotId: 'equipmentSlot1', item: curEquip1 });
+      if (curEquip2) candidates.push({ source: 'equip', slotId: 'equipmentSlot2', item: curEquip2 });
+      for (const a of curAmulets) {
+        if (a) candidates.push({ source: 'amulet', item: a });
+      }
+      if (candidates.length === 0) break;
+
+      let pickIdx: number;
+      [pickIdx, stealRng] = nextInt(stealRng, 0, candidates.length - 1);
+      const pick = candidates[pickIdx];
+
+      if (pick.source === 'equip') {
+        if (pick.slotId === 'equipmentSlot1') curEquip1 = null;
+        else curEquip2 = null;
+      } else {
+        const reversal = computeAmuletAuraReversal([pick.item]);
+        tempAttack = {
+          equipmentSlot1: (tempAttack.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
+          equipmentSlot2: (tempAttack.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
+        };
+        tempArmor = {
+          equipmentSlot1: (tempArmor.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
+          equipmentSlot2: (tempArmor.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
+        };
+        curAmulets = curAmulets.filter(a => a.id !== pick.item.id);
+      }
+
+      const stolenCard = pick.item as GameCardData;
+      const prevStack = curStacks[steal.colIndex] ?? [];
+      curStacks = { ...curStacks, [steal.colIndex]: [...prevStack, stolenCard] };
+      mutated = true;
+
+      const labelKind = pick.source === 'equip' ? '装备' : '护符';
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'combat', message: `${steal.goblinName} 窃宝：偷走了${labelKind}「${stolenCard.name}」！` },
+      });
+      sideEffects.push({
+        event: 'ui:banner',
+        payload: { text: `${steal.goblinName} 窃宝！偷走了「${stolenCard.name}」！` },
+      });
+      sideEffects.push({
+        event: 'combat:goblinStealCard',
+        payload: { monsterId: steal.goblinId, monsterName: steal.goblinName, card: stolenCard },
+      });
+    }
+
+    if (mutated) {
+      patch.equipmentSlot1 = curEquip1;
+      patch.equipmentSlot2 = curEquip2;
+      patch.amuletSlots = curAmulets;
+      patch.activeCardStacks = curStacks;
+      patch.slotTempAttack = tempAttack;
+      patch.slotTempArmor = tempArmor;
+      patch.rng = stealRng;
+    }
   }
 
   // Enqueue START_TURN after monster turn-end effects

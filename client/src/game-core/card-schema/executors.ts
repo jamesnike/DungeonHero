@@ -553,6 +553,11 @@ function executeAmuletToEternalRelic(ctx: ExecutionContext, _effect: CardEffect)
     return;
   }
 
+  ctx.patch.pendingPotionAction = {
+    card: ctx.card,
+    effect: 'amulet-to-eternal-relic',
+    step: 'magic-choice',
+  };
   ctx.sideEffects.push({
     event: 'ui:requestMagicChoice' as any,
     payload: {
@@ -608,15 +613,19 @@ function executeDiceRoll(ctx: ExecutionContext, effect: CardEffect): void {
 function executeMagicChoice(ctx: ExecutionContext, effect: CardEffect): void {
   if (effect.type !== 'magicChoice') return;
   const config = effect.config as Record<string, unknown>;
+  const flowId = (config.flowId as string) ?? 'magic-choice';
+  // Use a non-targeting `step` so the equipment slots don't enter
+  // hover-select mode. The resolver in `resolvePendingPotion` routes
+  // by `effect` (= flowId) when a RESOLVE_MAGIC_CHOICE arrives.
   ctx.patch.pendingPotionAction = {
     card: ctx.card,
-    effect: 'perm-slot-damage+1' as any,
-    step: 'slot-select',
+    effect: flowId as any,
+    step: 'magic-choice' as any,
     prompt: (config.subtitle as string) ?? '',
   } as any;
   const payload = { ...config };
   if (!payload.flowContext) {
-    payload.flowContext = { flowId: (config.flowId as string) ?? 'magic-choice', card: ctx.card };
+    payload.flowContext = { flowId, card: ctx.card };
   }
   ctx.sideEffects.push({
     event: 'ui:requestMagicChoice' as any,

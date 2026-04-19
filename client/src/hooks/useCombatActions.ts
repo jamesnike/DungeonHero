@@ -385,12 +385,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     shieldRefillPendingRef.current.set(monsterId, slotId);
   });
 
-  useGameEvent('combat:goblinStealCard', ({ monsterId, monsterName }) => {
-    const st = engine.getState();
-    const hand = st.handCards as GameCardData[];
-    if (hand.length > 0) {
-      depsRef.current.goblinStolenIdsRef.current.add(monsterId);
-    }
+  useGameEvent('combat:goblinStealCard', ({ monsterId, card }) => {
+    depsRef.current.goblinStolenIdsRef.current.add(monsterId);
+    void depsRef.current.triggerStealCardFlight(card as GameCardData, monsterId);
   });
 
   useGameEvent('combat:postAttackHandRecycle', async ({ itemName }) => {

@@ -73,7 +73,11 @@ export type GameEventMap = {
   'combat:postAttackHandRecycle': { itemName: string };
   'combat:addMagicGauge': { gaugeType: string; amount: number };
   'combat:persuadeDiscountUpdate': { newReduction: number };
-  'combat:goblinStealCard': { monsterId: string; monsterName: string };
+  'combat:goblinStealCard': {
+    monsterId: string;
+    monsterName: string;
+    card: import('@/components/GameCard').GameCardData;
+  };
   'combat:autoEngage': { monsterId: string; monsterName: string };
   'combat:goblinStolen': { target: unknown };
   'combat:goblinPersuadeAttempt': { slotId: string; monsterId: string; monsterName: string; itemName: string };

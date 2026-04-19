@@ -1,9 +1,7 @@
-import React, { memo, useState, type CSSProperties } from 'react';
-import { Dices } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import React, { memo, type CSSProperties } from 'react';
 import GraveyardZone from '@/components/GraveyardZone';
 import ClassDeck from '@/components/ClassDeck';
-import DiceRoller from '@/components/DiceRoller';
+import BackpackZone from '@/components/BackpackZone';
 import type { GameCardData } from '@/components/GameCard';
 import { useGameState } from '@/hooks/useGameEngine';
 
@@ -14,6 +12,10 @@ interface NarrowSidebarProps {
   graveyardDropEnabled: boolean;
   shouldHighlightGraveyard: boolean;
   onCardSelect: (card: GameCardData) => void;
+  backpackDropEnabled: boolean;
+  onBackpackDrop: (card: GameCardData) => void;
+  onBackpackOpenViewer: () => void;
+  backpackCapacity: number;
 }
 
 export const NarrowSidebar = memo(function NarrowSidebar({
@@ -23,10 +25,14 @@ export const NarrowSidebar = memo(function NarrowSidebar({
   graveyardDropEnabled,
   shouldHighlightGraveyard,
   onCardSelect,
+  backpackDropEnabled,
+  onBackpackDrop,
+  onBackpackOpenViewer,
+  backpackCapacity,
 }: NarrowSidebarProps) {
-  const [narrowDiceModalOpen, setNarrowDiceModalOpen] = useState(false);
   const discardedCards = useGameState(s => s.discardedCards);
   const classDeck = useGameState(s => s.classDeck);
+  const backpackCount = useGameState(s => s.backpackItems.length);
 
   const cardH = gridCardSize?.height ?? 100;
   const stripW = Math.max(18, Math.round(cardH * 0.14));
@@ -34,13 +40,15 @@ export const NarrowSidebar = memo(function NarrowSidebar({
 
   return (
     <>
-      <button
-        onClick={() => setNarrowDiceModalOpen(true)}
-        className="fixed z-40 flex flex-col items-center justify-center rounded-l-lg border border-r-0 border-rose-400/30 bg-rose-800/20 text-rose-300/70 hover:bg-rose-700/30 hover:border-rose-400/50 transition-all duration-150"
-        style={{ ...stripStyle, right: 0, top: narrowSidebarPositions.row1Y, transform: 'translateY(-50%)' }}
-      >
-        <Dices className="w-4 h-4" />
-      </button>
+      <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row1Y, transform: 'translateY(-50%)' }}>
+        <ClassDeck
+          compact
+          compactStyle={stripStyle}
+          classCards={classDeck}
+          deckName="Knight Deck"
+          onCardSelect={onCardSelect}
+        />
+      </div>
 
       <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row2Y, transform: 'translateY(-50%)' }}>
         <GraveyardZone
@@ -55,32 +63,16 @@ export const NarrowSidebar = memo(function NarrowSidebar({
       </div>
 
       <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row3Y, transform: 'translateY(-50%)' }}>
-        <ClassDeck
+        <BackpackZone
           compact
           compactStyle={stripStyle}
-          classCards={classDeck}
-          deckName="Knight Deck"
-          onCardSelect={onCardSelect}
+          backpackCount={backpackCount}
+          capacity={backpackCapacity}
+          isDropTarget={backpackDropEnabled}
+          onDrop={onBackpackDrop}
+          onOpenViewer={onBackpackOpenViewer}
         />
       </div>
-
-      <Dialog open={narrowDiceModalOpen} onOpenChange={setNarrowDiceModalOpen}>
-        <DialogContent className="max-w-sm flex flex-col items-center gap-4">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Dices className="w-6 h-6" />
-              Chaos Dice
-            </DialogTitle>
-            <DialogDescription>Roll the d20</DialogDescription>
-          </DialogHeader>
-          <div className="w-[220px] h-[220px]">
-            <DiceRoller
-              className="w-full h-full"
-              scaleMultiplier={1}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 });

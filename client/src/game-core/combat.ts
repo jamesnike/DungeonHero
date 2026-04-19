@@ -675,11 +675,15 @@ export interface GoblinStackHealEffect {
   toLayer: number;
 }
 
+/**
+ * One successful 15% steal roll under a goblin. The actual item to steal is
+ * picked later in `reduceMonsterTurnEndEffects` (which has access to the
+ * full game state — equipment slots, amulet slots, stacks). Keep this struct
+ * minimal: the reducer only needs the goblin's column and name to attribute
+ * the steal to the right monster.
+ */
 export interface GoblinStealTarget {
-  source: 'equip' | 'amulet';
-  slotId?: EquipmentSlotId;
-  itemId: string;
-  itemName: string;
+  goblinId: string;
   goblinName: string;
   colIndex: number;
 }
@@ -912,10 +916,7 @@ export function applyMonsterTurnEndEffects(
         if (stolen) stealCount++;
       }
       for (let s = 0; s < stealCount; s++) {
-        goblinStealTargets.push({
-          source: 'equip', goblinName: card.name, colIndex,
-          itemId: '', itemName: '',
-        });
+        goblinStealTargets.push({ goblinId: card.id, goblinName: card.name, colIndex });
       }
     }
   }
@@ -1014,7 +1015,7 @@ export function createBossCard(monster: GameCardData): GameCardData {
     value: (monster.value ?? 0) + 5,
     tempAttackBoost: (monster.tempAttackBoost ?? 0) + 5,
     name: `${monster.name} (Boss)`,
-    description: `Boss形态！反噬3；1层时全行怪物攻+5并恢复1血层；激怒时从坟场召唤4张牌（含2怪物）。`,
+    description: `Boss形态！反噬3；1层时全行怪物攻+5并恢复1血层；激怒时从坟场召唤2怪物各占1格（顶层）+ 2非怪物堆叠在另一格。`,
   };
 }
 

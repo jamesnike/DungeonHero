@@ -629,6 +629,11 @@ export type PendingPotionAction =
       effect: 'grant-weapon-stun-chance+40';
       step: 'slot-select';
       prompt: string;
+    }
+  | {
+      card: GameCardData;
+      effect: 'amulet-to-eternal-relic';
+      step: 'magic-choice';
     };
 
 export type HeroSkillArrowState = {
