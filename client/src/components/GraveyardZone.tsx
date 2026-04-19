@@ -16,7 +16,7 @@ import {
   isEventCardType,
   isMagicSpellCardType,
 } from './MagicNameFlankIcons';
-import { initMobileDrop } from '../utils/mobileDragDrop';
+import { initMobileDrop, type DragData } from '../utils/mobileDragDrop';
 import StackedCardPile from './StackedCardPile';
 import { cn } from '@/lib/utils';
 import { useGameViewport } from '@/contexts/GameViewportContext';
@@ -72,7 +72,46 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
 
     return cleanup;
   }, [compact, onDrop]);
-  
+
+  // Mobile: mirror onDragEnter/onDragLeave by tracking touch position over the
+  // compact button so the scale-up "drop target" effect also works on touch.
+  useEffect(() => {
+    if (!compact || !isDropTarget) {
+      setDragDepth(0);
+      return;
+    }
+
+    let inside = false;
+    const handleMobileMove = (e: Event) => {
+      const detail = (e as CustomEvent).detail as DragData | undefined;
+      if (!detail || (detail.type !== 'card' && detail.type !== 'equipment')) return;
+      const el = compactRef.current;
+      if (!el) return;
+      const cx = detail.clientX;
+      const cy = detail.clientY;
+      if (typeof cx !== 'number' || typeof cy !== 'number') return;
+      const rect = el.getBoundingClientRect();
+      const within = cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom;
+      if (within !== inside) {
+        inside = within;
+        setDragDepth(within ? 1 : 0);
+      }
+    };
+    const handleMobileEnd = () => {
+      if (inside) {
+        inside = false;
+        setDragDepth(0);
+      }
+    };
+
+    document.addEventListener('mobile-drag-move', handleMobileMove);
+    document.addEventListener('mobile-drag-end', handleMobileEnd);
+    return () => {
+      document.removeEventListener('mobile-drag-move', handleMobileMove);
+      document.removeEventListener('mobile-drag-end', handleMobileEnd);
+    };
+  }, [compact, isDropTarget]);
+
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     if (isDropTarget) {

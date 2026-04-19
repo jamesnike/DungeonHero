@@ -1092,60 +1092,15 @@ const amuletEffectText =
                     : `${isCompact ? 'inset-[3px]' : 'inset-[6px]'} border border-cyan-500/35`
               }`} />
 
-              {/* Type label banner at top */}
-              <div className={`relative z-10 flex items-center justify-center gap-1.5 py-1.5 ${isCompact ? 'px-0.5' : 'px-2'} ${
-                isEventCard
-                  ? 'bg-violet-300/55'
-                  : card.type === 'hero-magic'
-                    ? 'bg-rose-300/55'
-                    : 'bg-cyan-200/60'
-              }`}>
-                {getCardIcon()}
-                {isFlat ? (
-                  <span className={`dh-card__caption font-bold truncate max-w-[80%] ${
-                    isEventCard
-                      ? 'text-violet-950'
-                      : card.type === 'hero-magic'
-                        ? 'text-rose-950'
-                        : 'text-cyan-950'
-                  }`}>
-                    {card.name}
-                  </span>
-                ) : !isCompact ? (
-                  <span className={`dh-card__caption font-bold uppercase tracking-widest ${
-                    isEventCard
-                      ? 'text-violet-950'
-                      : card.type === 'hero-magic'
-                        ? 'text-rose-950'
-                        : 'text-cyan-950'
-                  }`}>
-                    {isEventCard ? 'Event' : card.type === 'hero-magic' ? 'Hero Magic' : 'Magic'}
-                  </span>
-                ) : null}
-                {(isPermanentMagicCard || card.isPermanentEvent || (card.type === 'magic' && !card.permStripped && card.recycleDelay != null && card.recycleDelay > 0)) && (
-                  <span className={`dh-card__caption flex items-center rounded-sm border border-cyan-300/50 bg-cyan-800/50 font-bold uppercase tracking-wide text-cyan-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}>
-                    <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
-                    <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Divider line */}
-              <div
-                className={`h-px ${isCompact ? 'mx-1' : 'mx-3'} ${
-                  isTitleBandCard ? '-mb-px' : ''
-                } ${
-                  isEventCard
-                    ? 'bg-gradient-to-r from-transparent via-violet-500/40 to-transparent'
-                    : card.type === 'hero-magic'
-                      ? 'bg-gradient-to-r from-transparent via-rose-500/40 to-transparent'
-                      : 'bg-gradient-to-r from-transparent via-cyan-600/35 to-transparent'
-                }`}
-              />
+              {/* NOTE: Top type-label banner ("EVENT" / "MAGIC" / "HERO MAGIC") and the
+                  divider that followed it have been removed for event/magic/hero-magic
+                  text-only cards to maximize body space. The title row sits at the top
+                  via `topAttached` on EventTitleBand / MagicTitleBand. The permanent ∞
+                  badge has been relocated into the title band itself. */}
 
               {/* Card name (magic / hero-magic: fused band — wash + flanks + title) */}
               {isMagicLikeCard ? (
-                <MagicTitleBand card={card} compact={isCompact} isFlat={isFlat}>
+                <MagicTitleBand card={card} compact={isCompact} isFlat={isFlat} topAttached>
                   {hideTitleBandSideGlyph ? (
                     <h3
                       className={`dh-card__name relative z-20 isolate flex w-full min-w-0 items-center justify-center truncate bg-white/22 px-1.5 py-0 text-center font-serif font-bold leading-snug ${
@@ -1176,9 +1131,24 @@ const amuletEffectText =
                       />
                     </div>
                   )}
+                  {(isPermanentMagicCard || (card.type === 'magic' && !card.permStripped && card.recycleDelay != null && card.recycleDelay > 0)) && (
+                    <span
+                      className={`dh-card__caption pointer-events-none absolute right-0.5 top-1/2 z-30 flex -translate-y-1/2 items-center rounded-sm border font-bold uppercase tracking-wide shadow-sm ${
+                        card.type === 'hero-magic'
+                          ? 'border-rose-300/60 bg-rose-900/70 text-rose-50'
+                          : 'border-cyan-300/60 bg-cyan-900/70 text-cyan-50'
+                      } ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}
+                      title="永久法术"
+                    >
+                      <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
+                      {permRecycleWaterfalls > 1 && (
+                        <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
+                      )}
+                    </span>
+                  )}
                 </MagicTitleBand>
               ) : isEventCard ? (
-                <EventTitleBand card={card} compact={isCompact} isFlat={isFlat}>
+                <EventTitleBand card={card} compact={isCompact} isFlat={isFlat} topAttached>
                   {hideTitleBandSideGlyph ? (
                     <div className="flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] w-full min-w-0 flex-1 items-stretch sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
                       <h3
@@ -1206,6 +1176,17 @@ const amuletEffectText =
                         aria-hidden
                       />
                     </div>
+                  )}
+                  {card.isPermanentEvent && (
+                    <span
+                      className={`dh-card__caption pointer-events-none absolute right-0.5 top-1/2 z-30 flex -translate-y-1/2 items-center rounded-sm border border-violet-300/60 bg-violet-900/70 font-bold uppercase tracking-wide text-violet-50 shadow-sm ${isCompact || isFlat ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'}`}
+                      title="永久事件"
+                    >
+                      <Infinity className={isCompact || isFlat ? 'dh-icon-inline--compact' : 'dh-icon-inline'} />
+                      {permRecycleWaterfalls > 1 && (
+                        <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
+                      )}
+                    </span>
                   )}
                 </EventTitleBand>
               ) : (

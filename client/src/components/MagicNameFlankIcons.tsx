@@ -148,11 +148,16 @@ export const MagicTitleBand = memo(function MagicTitleBand({
   card,
   compact,
   isFlat,
+  topAttached,
   children,
 }: {
   card: MagicPatternCardRef;
   compact?: boolean;
   isFlat?: boolean;
+  /** When true, the band is the top-most element (no banner above it).
+   *  Use a small positive top margin instead of the default negative overlap,
+   *  otherwise the band gets clipped by the parent's `overflow-hidden`. */
+  topAttached?: boolean;
   children: ReactNode;
 }) {
   const k = resolveMagicPatternKey(card);
@@ -161,11 +166,12 @@ export const MagicTitleBand = memo(function MagicTitleBand({
   const sheen = rose
     ? 'from-white/55 via-rose-50/38 to-rose-950/12'
     : 'from-white/55 via-cyan-50/35 to-sky-900/12';
+  const topMarginClass = topAttached
+    ? (isFlat ? 'mt-0.5 mx-0.5' : compact ? 'mt-0.5 mx-0.5' : 'mt-1 mx-1')
+    : (isFlat ? '-mt-0.5 mx-0.5' : compact ? '-mt-1 mx-0.5' : '-mt-1.5 mx-1');
   return (
     <div
-      className={`relative z-10 flex min-w-0 items-stretch overflow-hidden rounded-md border border-transparent shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] ${
-        isFlat ? '-mt-0.5 mx-0.5' : compact ? '-mt-1 mx-0.5' : '-mt-1.5 mx-1'
-      }`}
+      className={`relative z-10 flex min-w-0 items-stretch overflow-hidden rounded-md border border-transparent shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] ${topMarginClass}`}
     >
       <div
         className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${tint} mix-blend-multiply opacity-[0.22]`}
@@ -183,18 +189,24 @@ export const EventTitleBand = memo(function EventTitleBand({
   card: _card,
   compact,
   isFlat,
+  topAttached,
   children,
 }: {
   card: EventPatternCardRef;
   compact?: boolean;
   isFlat?: boolean;
+  /** When true, the band is the top-most element (no banner above it).
+   *  Use a small positive top margin instead of the default negative overlap,
+   *  otherwise the band gets clipped by the parent's `overflow-hidden`. */
+  topAttached?: boolean;
   children: ReactNode;
 }) {
+  const topMarginClass = topAttached
+    ? (isFlat ? 'mt-0.5 mx-0.5' : compact ? 'mt-0.5 mx-0.5' : 'mt-1 mx-1')
+    : (isFlat ? '-mt-0.5 mx-0.5' : compact ? '-mt-1 mx-0.5' : '-mt-1.5 mx-1');
   return (
     <div
-      className={`relative z-10 flex min-w-0 items-stretch overflow-hidden rounded-md border border-transparent shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] ${
-        isFlat ? '-mt-0.5 mx-0.5' : compact ? '-mt-1 mx-0.5' : '-mt-1.5 mx-1'
-      }`}
+      className={`relative z-10 flex min-w-0 items-stretch overflow-hidden rounded-md border border-transparent shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] ${topMarginClass}`}
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/50 via-stone-50/22 to-stone-900/6" />
       <div className="relative z-10 flex min-h-[calc(1.3rem*var(--dh-card-instance-scale,1))] min-w-0 flex-1 items-stretch gap-0 sm:min-h-[calc(1.4rem*var(--dh-card-instance-scale,1))]">
