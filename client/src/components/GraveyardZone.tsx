@@ -129,33 +129,65 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
 
   return (
     <>
-      {compact ? (
-        <button
-          ref={compactRef}
-          onClick={() => setViewerOpen(true)}
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          data-testid="graveyard-zone-compact"
-          className={cn(
-            'relative flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
-            isHoverActive
-              ? 'border-destructive bg-destructive/30 text-white ring-2 ring-destructive/60 scale-110'
-              : isReadyToReceive
-                ? 'border-primary/50 bg-slate-600/30 text-slate-200 animate-pulse'
-                : 'border-slate-400/30 bg-slate-700/20 text-slate-300/70 hover:bg-slate-600/30 hover:border-slate-400/50'
-          )}
-          style={compactStyle}
-        >
-          <Skull className="w-4 h-4" />
-          {discardedCards.length > 0 && (
-            <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-slate-500/90 ring-1 ring-slate-200/70 shadow-sm">
-              {discardedCards.length}
+      {compact ? (() => {
+        // Visible strip stays narrow (flush with the screen's right edge),
+        // but the drop hit-area is widened leftward via a transparent outer
+        // button so cards register as accepted before being dragged most of
+        // the way past the screen edge. The visible strip is rendered as a
+        // right-aligned inner span and owns the visual styling.
+        //
+        // The extension is ONLY applied while a drop-eligible card is being
+        // dragged — otherwise the wider invisible area would intercept
+        // clicks meant for active-row cards underneath the right edge.
+        const stripWidth =
+          typeof compactStyle?.width === 'number' ? compactStyle.width : 22;
+        const stripHeight =
+          typeof compactStyle?.height === 'number' ? compactStyle.height : 100;
+        const hitExtension = isDropTarget
+          ? Math.max(48, Math.round(stripHeight * 0.4))
+          : 0;
+        const outerStyle: React.CSSProperties = {
+          ...compactStyle,
+          width: stripWidth + hitExtension,
+        };
+        const innerStyle: React.CSSProperties = { width: stripWidth, height: '100%' };
+
+        return (
+          <button
+            ref={compactRef}
+            onClick={() => setViewerOpen(true)}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            data-testid="graveyard-zone-compact"
+            className="group relative flex items-stretch justify-end bg-transparent border-0 p-0 cursor-pointer"
+            style={outerStyle}
+          >
+            <span
+              className={cn(
+                'flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
+                // Mirror the BackpackZone compact button's drag-feedback rules
+                // (no extra `shouldHighlight` gate) so the slight scale-up on
+                // hover fires under the same droppable condition.
+                isDropTarget && isOver
+                  ? 'border-destructive bg-destructive/30 text-white ring-2 ring-destructive/60 scale-110'
+                  : isDropTarget
+                    ? 'border-primary/50 bg-slate-600/30 text-slate-200 animate-pulse'
+                    : 'border-slate-400/30 bg-slate-700/20 text-slate-300/70 group-hover:bg-slate-600/30 group-hover:border-slate-400/50'
+              )}
+              style={innerStyle}
+            >
+              <Skull className="w-4 h-4" />
+              {discardedCards.length > 0 && (
+                <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-slate-500/90 ring-1 ring-slate-200/70 shadow-sm">
+                  {discardedCards.length}
+                </span>
+              )}
             </span>
-          )}
-        </button>
-      ) : (
+          </button>
+        );
+      })() : (
         <Card
           ref={graveyardRef}
           onDragEnter={handleDragEnter}

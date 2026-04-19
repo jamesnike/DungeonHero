@@ -149,7 +149,6 @@ function GameFlowContainerInner() {
           totalRounds={6}
           choicesPerRound={3}
           onComplete={cb.onCardDraftComplete}
-          overlayZoom={ui.overlayZoom}
           classCardPreview={ui.classCardPreview}
           roundTypes={['potion','equipment','amulet','general','general','general']}
           rng={gs.rng}

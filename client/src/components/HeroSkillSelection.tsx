@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useOverlayScale } from '@/hooks/use-overlay-scale';
+import { useFitToViewport } from '@/hooks/use-fit-to-viewport';
 import type { GameCardData } from './GameCard';
 import { heroSkills, type HeroSkillDefinition } from '@/lib/heroSkills';
 import { getEternalRelic } from '@/lib/eternalRelics';
@@ -21,7 +21,8 @@ function sampleSkills(count: number, rng: RngState): [HeroSkillDefinition[], Rng
 }
 
 export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPreview, rng, onRngUpdate }: HeroSkillSelectionProps) {
-  const overlayScale = useOverlayScale();
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const overlayScale = useFitToViewport(modalRef);
   const [choices, setChoices] = useState<HeroSkillDefinition[]>([]);
   const prevIsOpen = useRef(false);
 
@@ -44,7 +45,7 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPre
 
   return (
     <div className="card-draft-overlay" style={{ zoom: overlayScale }}>
-      <div className="card-draft-modal">
+      <div className="card-draft-modal" ref={modalRef}>
         <div className="card-draft-header">
           <h2 className="card-draft-title">选择英雄技能</h2>
           <p className="card-draft-subtitle">

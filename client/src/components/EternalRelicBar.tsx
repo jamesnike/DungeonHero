@@ -83,7 +83,13 @@ export default function EternalRelicBar({ relics, onRelicClick }: EternalRelicBa
                 <button
                   type="button"
                   className="relative rounded-full border-2 border-amber-400/70 bg-background/80 shadow-md hover:border-amber-300 hover:scale-110 transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 select-none touch-none"
-                  style={{ width: RELIC_ICON_SIZE + 8, height: RELIC_ICON_SIZE + 8, padding: 3 }}
+                  style={{
+                    width: RELIC_ICON_SIZE + 8,
+                    height: RELIC_ICON_SIZE + 8,
+                    padding: 3,
+                    WebkitTouchCallout: 'none',
+                    WebkitUserSelect: 'none',
+                  }}
                   onClick={(e) => handleClick(relic, e)}
                   onPointerDown={(e) => handlePointerDown(e, relic.id)}
                   onPointerUp={handlePointerEnd}
@@ -96,8 +102,14 @@ export default function EternalRelicBar({ relics, onRelicClick }: EternalRelicBa
                   <img
                     src={relic.image}
                     alt={relic.name}
-                    className="w-full h-full rounded-full object-cover"
+                    className="w-full h-full rounded-full object-cover pointer-events-none select-none"
                     draggable={false}
+                    style={{
+                      WebkitTouchCallout: 'none',
+                      WebkitUserSelect: 'none',
+                      WebkitUserDrag: 'none',
+                    } as React.CSSProperties}
+                    onContextMenu={(e) => e.preventDefault()}
                   />
                   <div className="absolute inset-0 rounded-full ring-1 ring-amber-500/30 pointer-events-none" />
                 </button>

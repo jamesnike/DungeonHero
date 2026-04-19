@@ -966,7 +966,6 @@ function GameBoardModalsInner({
           totalRounds={6}
           choicesPerRound={3}
           onComplete={onCardDraftComplete}
-          overlayZoom={overlayZoom}
           classCardPreview={classCardPreview}
           roundTypes={['potion','equipment','amulet','general','general','general']}
           rng={rng}

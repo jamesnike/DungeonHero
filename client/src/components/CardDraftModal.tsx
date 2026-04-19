@@ -1,5 +1,6 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import GameCard, { type GameCardData } from './GameCard';
+import { useFitToViewport } from '@/hooks/use-fit-to-viewport';
 import type { RngState } from '@/game-core/rng';
 import { shuffle as rngShuffle, pickRandom, nextId } from '@/game-core/rng';
 
@@ -11,7 +12,6 @@ export interface CardDraftModalProps {
   totalRounds: number;
   choicesPerRound: number;
   onComplete: (picks: GameCardData[]) => void;
-  overlayZoom?: number;
   classCardPreview?: GameCardData | null;
   /** Per-round type overrides. Unspecified rounds default to 'general'. */
   roundTypes?: DraftRoundType[];
@@ -51,12 +51,13 @@ export default function CardDraftModal({
   totalRounds,
   choicesPerRound,
   onComplete,
-  overlayZoom = 1,
   classCardPreview,
   roundTypes,
   rng,
   onRngUpdate,
 }: CardDraftModalProps) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const overlayZoom = useFitToViewport(modalRef);
   const poolsByType = useMemo(() => {
     const equipmentOnly = pool.filter(c => c.type === 'weapon' || c.type === 'shield');
     const potionOnly = pool.filter(c => c.type === 'potion');
@@ -135,7 +136,7 @@ export default function CardDraftModal({
 
   return (
     <div className="card-draft-overlay" style={{ zoom: overlayZoom }}>
-      <div className="card-draft-modal">
+      <div className="card-draft-modal" ref={modalRef}>
         <div className="card-draft-header">
           <h2 className="card-draft-title">选择起始卡牌</h2>
           <p className="card-draft-subtitle">

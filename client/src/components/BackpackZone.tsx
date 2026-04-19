@@ -103,6 +103,28 @@ function BackpackZoneInner({
   };
 
   if (compact) {
+    // The visible "strip" is intentionally narrow (so it sits flush against
+    // the screen's right edge), but a narrow strip is hard to hit while
+    // dragging. We expand the drop hit-area leftward by giving the outer
+    // button a larger transparent width; the visible strip is rendered as
+    // a right-aligned inner span so the look stays exactly the same.
+    //
+    // The extension is ONLY applied while a drop-eligible card is being
+    // dragged — otherwise the wider invisible area would intercept clicks
+    // meant for hero/active-row cards underneath the right screen edge.
+    const stripWidth =
+      typeof compactStyle?.width === 'number' ? compactStyle.width : 22;
+    const stripHeight =
+      typeof compactStyle?.height === 'number' ? compactStyle.height : 100;
+    const hitExtension = isDropTarget
+      ? Math.max(48, Math.round(stripHeight * 0.4))
+      : 0;
+    const outerStyle: CSSProperties = {
+      ...compactStyle,
+      width: stripWidth + hitExtension,
+    };
+    const innerStyle: CSSProperties = { width: stripWidth, height: '100%' };
+
     return (
       <button
         ref={(el) => {
@@ -119,22 +141,27 @@ function BackpackZoneInner({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         data-testid="slot-backpack-compact"
-        className={cn(
-          'relative flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
-          isDropTarget && isOver
-            ? 'border-amber-300 bg-amber-500/30 text-white ring-2 ring-amber-400/60 scale-110'
-            : isDropTarget
-              ? 'border-primary/50 bg-amber-700/30 text-amber-200 animate-pulse'
-              : 'border-amber-400/30 bg-amber-800/20 text-amber-200/80 hover:bg-amber-700/30 hover:border-amber-400/50'
-        )}
-        style={compactStyle}
+        className="group relative flex items-stretch justify-end bg-transparent border-0 p-0 cursor-pointer"
+        style={outerStyle}
       >
-        <BackpackIcon className="w-4 h-4" />
-        {backpackCount > 0 && (
-          <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-amber-500/90 ring-1 ring-amber-200/70 shadow-sm">
-            {backpackCount}
-          </span>
-        )}
+        <span
+          className={cn(
+            'flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
+            isDropTarget && isOver
+              ? 'border-amber-300 bg-amber-500/30 text-white ring-2 ring-amber-400/60 scale-110'
+              : isDropTarget
+                ? 'border-primary/50 bg-amber-700/30 text-amber-200 animate-pulse'
+                : 'border-amber-400/30 bg-amber-800/20 text-amber-200/80 group-hover:bg-amber-700/30 group-hover:border-amber-400/50'
+          )}
+          style={innerStyle}
+        >
+          <BackpackIcon className="w-4 h-4" />
+          {backpackCount > 0 && (
+            <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-amber-500/90 ring-1 ring-amber-200/70 shadow-sm">
+              {backpackCount}
+            </span>
+          )}
+        </span>
       </button>
     );
   }

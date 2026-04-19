@@ -1715,9 +1715,9 @@ html {
   }
 
   .game-header__button {
-    font-size: calc(0.78rem * var(--header-scale));
-    padding: calc(0.38rem * var(--header-scale)) calc(0.95rem * var(--header-scale));
-    min-height: calc(2rem * var(--header-scale));
+    font-size: calc(1.1rem * var(--header-scale));
+    padding: calc(0.45rem * var(--header-scale)) calc(1.1rem * var(--header-scale));
+    min-height: calc(2.3rem * var(--header-scale));
   }
 
   .game-header__button--icon {
@@ -1733,7 +1733,7 @@ html {
   }
 
   .game-header__badge {
-    font-size: calc(0.95rem * var(--header-scale));
+    font-size: calc(1.25rem * var(--header-scale));
     padding: calc(0.25rem * var(--header-scale)) calc(0.75rem * var(--header-scale));
   }
 
@@ -1742,8 +1742,7 @@ html {
   }
 
   .game-header__trophy-count {
-    font-size: calc(1.15rem * var(--header-scale));
-    color: #eab308;
+    font-size: calc(1.25rem * var(--header-scale));
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 
@@ -1756,6 +1755,47 @@ html {
     font-size: calc(0.6rem * var(--header-scale));
     letter-spacing: 0.12em;
   }
+
+  /* Watermark icon pattern: icons sit behind the text/badge as a faded backdrop
+     to save horizontal space. Applied to header stat/deck/shop/trophy items. */
+  .game-header__stat,
+  .game-header__deck,
+  .game-header__shop,
+  .game-header__trophy {
+    position: relative;
+    isolation: isolate;
+    padding-inline: calc(0.55rem * var(--header-scale));
+  }
+
+  .game-header__stat > .game-header__icon,
+  .game-header__deck > .game-header__icon,
+  .game-header__shop > .game-header__icon,
+  .game-header__trophy > .game-header__icon {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: calc(2.6rem * var(--header-scale));
+    height: calc(2.6rem * var(--header-scale));
+    transform: translate(-50%, -50%);
+    opacity: 0.42;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .game-header__stat > :not(.game-header__icon),
+  .game-header__deck > :not(.game-header__icon),
+  .game-header__shop > :not(.game-header__icon),
+  .game-header__trophy > :not(.game-header__icon) {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Lighter watermark for the main deck and persuade items */
+  .game-header__deck > .game-header__icon,
+  [data-testid="header-persuade-level"] > .game-header__icon {
+    opacity: 0.22;
+  }
+
   .equipment-select__button {
     transition: transform 150ms ease, opacity 150ms ease;
     padding: 0.85rem;
@@ -2390,6 +2430,8 @@ html {
   padding: 28px 32px 24px;
   max-width: 700px;
   width: 92vw;
+  max-height: 95vh;
+  overflow-y: auto;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 16px;

@@ -78,11 +78,16 @@ function GameHeaderInner({
       <div className="game-header__group">
         <div className="game-header__trophy" data-testid="header-trophy">
           <Trophy className="game-header__icon text-yellow-500" />
-          <span className="game-header__trophy-count font-mono font-bold">{totalWins}</span>
+          <span className="game-header__trophy-count font-mono font-bold text-black">{totalWins}</span>
         </div>
 
         <div className="game-header__controls">
-          <Button onClick={onNewGame} variant="outline" size="sm" data-testid="button-new-game" className="game-header__button">
+          <Button
+            onClick={onNewGame}
+            size="sm"
+            data-testid="button-new-game"
+            className="game-header__button bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold border border-amber-300 shadow-md ring-2 ring-amber-400/40"
+          >
             New Game
           </Button>
           <HelpDialog buttonClassName="game-header__button game-header__button--icon" />
@@ -116,22 +121,22 @@ function GameHeaderInner({
 
       <div className="game-header__shop" data-testid="header-shop-level">
         <ShoppingBag className="game-header__icon text-amber-500" />
-        <Badge variant="secondary" className="game-header__badge font-mono">
+        <Badge variant="secondary" className="game-header__badge font-mono bg-transparent border-transparent">
           Lv.{shopLevel}
         </Badge>
       </div>
 
       <div className="game-header__shop" data-testid="header-persuade-level" title={`劝降等级 Lv.${persuadeLevel}（可劝降 ≤${persuadeLevel} 血层怪物）/ 费用 ${persuadeCost} 金${persuadeTempDiscount ? `（临时${persuadeTempDiscount > 0 ? '减免' : '加价'} ${Math.abs(persuadeTempDiscount)}）` : ''}`}>
         <Handshake className="game-header__icon text-purple-500" />
-        <Badge variant="secondary" className="game-header__badge font-mono">
+        <Badge variant="secondary" className="game-header__badge font-mono bg-transparent border-transparent">
           Lv.{persuadeLevel}
-          <span className={`game-header__badge-sep ${persuadeTempDiscount > 0 ? 'text-green-400' : persuadeTempDiscount < 0 ? 'text-red-400' : 'text-amber-500'}`}>{persuadeCost}g</span>
+          <span className={`game-header__badge-sep ${persuadeTempDiscount > 0 ? 'text-green-400' : persuadeTempDiscount < 0 ? 'text-red-400' : 'text-black'}`}>{persuadeCost}g</span>
         </Badge>
       </div>
 
       <div className="game-header__stat" data-testid="header-gold">
         <Coins className="game-header__icon text-yellow-500" />
-        <span className="game-header__value font-mono font-bold text-yellow-500">
+        <span className="game-header__value font-mono font-bold text-black">
           {gold}
         </span>
       </div>

@@ -177,10 +177,11 @@ export function generateMonsterRewardOptions(
     }
   }
 
-  // Weighted selection without replacement: discoverClass / discoverGraveyard are
-  // boosted so they win the random pick more often when present in the pool.
+  // Weighted selection without replacement: discoverClass is boosted so it wins
+  // the random pick more often when present in the pool. discoverGraveyard uses
+  // the default weight (slightly reduced from its previous boosted weight).
   const getRewardWeight = (opt: MonsterRewardOption): number => {
-    if (opt.effect.type === 'discoverClass' || opt.effect.type === 'discoverGraveyard') return 3;
+    if (opt.effect.type === 'discoverClass') return 3;
     return 1;
   };
 

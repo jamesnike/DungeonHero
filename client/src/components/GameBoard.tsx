@@ -86,6 +86,7 @@ import { RewardContainer } from './game-board/containers/RewardContainer';
 import { GameFlowContainer } from './game-board/containers/GameFlowContainer';
 import { MagicCardContainer } from './game-board/containers/MagicCardContainer';
 import { BoardOverlayButtons } from './game-board/containers/BoardOverlayButtons';
+import { UndoButtonContainer } from './game-board/containers/UndoButtonContainer';
 import { GameModeSelectModal } from './game-board/components/GameModeSelectModal';
 import DeckPeekModal from '@/components/DeckPeekModal';
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
@@ -7232,8 +7233,46 @@ export default function GameBoard() {
     classDeck.length,
     heroVariant,
     showBlockButtons,
-    viewportWidth,
-    gameViewport.height]);
+    // Use direct context values so the layout effect re-runs on the same
+    // render that the viewport actually changes (the `viewportWidth` state
+    // lags by one tick because it's derived via a regular useEffect).
+    // Also include `isNarrowLayout` so transitions across the breakpoint
+    // recompute narrow-sidebar positions immediately.
+    gameViewport.width,
+    gameViewport.height,
+    isNarrowLayout,
+    gridCardSize?.width,
+    gridCardSize?.height]);
+
+  // Per-cell ResizeObserver: the existing observer only watches the grid
+  // wrapper, which catches viewport-driven reflows but can miss cases where
+  // an individual hero/active/preview cell reflows without the wrapper
+  // changing size (e.g. a sibling row growing/shrinking). Observing the
+  // three cells used for narrow-sidebar positioning ensures the compact
+  // buttons stay glued to their rows on every resize.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isNarrowLayout) return;
+    const cells: HTMLElement[] = [];
+    const previewCell = previewCellRefs.current[0];
+    const activeCell = activeCellRefs.current[0];
+    const heroCell = heroRowCellRefs.current[0];
+    if (previewCell) cells.push(previewCell);
+    if (activeCell) cells.push(activeCell);
+    if (heroCell) cells.push(heroCell);
+    if (cells.length === 0) return;
+
+    const ro = new ResizeObserver(() => updateHeroFramePosition());
+    cells.forEach(cell => ro.observe(cell));
+    return () => ro.disconnect();
+  }, [
+    isNarrowLayout,
+    updateHeroFramePosition,
+    // Re-bind the observer if the rows that own these cells re-render with
+    // new DOM nodes (e.g. when previewCards / activeCards change content).
+    previewCards,
+    activeCards,
+    heroVariant,
+  ]);
   const draggedCardIsSpell =
     draggedCard?.type === 'magic' || draggedCard?.type === 'hero-magic' || draggedCard?.type === 'potion' || draggedCard?.type === 'curse';
   const heroRowInteractionLocked =
@@ -7327,6 +7366,15 @@ export default function GameBoard() {
         const backpackCell = heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX];
         const backpackRect = backpackCell?.getBoundingClientRect() ?? null;
         insideBackpack = pointInsideRect(backpackRect, clientX, clientY);
+        // Narrow layout: the hero-row backpack cell is not rendered; the
+        // backpack instead lives as a compact button in NarrowSidebar
+        // overlaying the right side of the hero frame. Exclude that region
+        // too so the backpack sidebar always wins over the hero-row drop
+        // when the cursor is over the compact button.
+        if (!insideBackpack && compactBackpackCellRef.current) {
+          const compactRect = compactBackpackCellRef.current.getBoundingClientRect();
+          insideBackpack = pointInsideRect(compactRect, clientX, clientY);
+        }
       }
 
       if (heroFrameHitTestLogCountRef.current < 6) {
@@ -8324,6 +8372,13 @@ export default function GameBoard() {
       {/* Eternal Relics — between hero row frame and hand */}
       <EternalRelicContainer
         onRelicClick={handleEternalRelicClick}
+      />
+
+      {/* Undo button — aligned with eternal relic bar at hero-row-frame bottom */}
+      <UndoButtonContainer
+        onUndo={handleUndo}
+        stageScale={stageScale}
+        fullBoardInteractionLocked={fullBoardInteractionLocked}
       />
 
       {/* Hand Display - Dedicated space */}
