@@ -2418,6 +2418,7 @@ html {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(6px);
 }

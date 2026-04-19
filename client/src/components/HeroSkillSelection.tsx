@@ -44,8 +44,12 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPre
   if (!isOpen) return null;
 
   return (
-    <div className="card-draft-overlay" style={{ zoom: overlayScale }}>
-      <div className="card-draft-modal" ref={modalRef}>
+    <div className="card-draft-overlay">
+      <div
+        className="card-draft-modal"
+        ref={modalRef}
+        style={{ transform: `scale(${overlayScale})`, transformOrigin: 'center center' }}
+      >
         <div className="card-draft-header">
           <h2 className="card-draft-title">选择英雄技能</h2>
           <p className="card-draft-subtitle">

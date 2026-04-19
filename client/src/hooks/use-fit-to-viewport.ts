@@ -10,11 +10,15 @@ interface FitOptions {
 }
 
 /**
- * Returns a scale (suitable for CSS `zoom`) that ensures the referenced
- * element fits inside the viewport. The element is measured via its layout
- * box (`offsetWidth`/`offsetHeight`), which CSS `zoom` does not affect, so
- * applying the returned value back to an ancestor will not feed back into
- * the measurement.
+ * Returns a scale (suitable for CSS `transform: scale(...)`) that ensures
+ * the referenced element fits inside the viewport. The element is measured
+ * via its layout box (`offsetWidth`/`offsetHeight`), which `transform` does
+ * not affect, so applying the returned value back to the same element via
+ * `transform: scale()` will NOT cause a measurement feedback loop.
+ *
+ * NOTE: do NOT apply the returned value via CSS `zoom`. iOS Safari's `zoom`
+ * implementation alters descendant offset measurements, which produces an
+ * infinite scale ↔ measure feedback loop and visible flicker.
  */
 export function useFitToViewport(
   ref: RefObject<HTMLElement | null>,

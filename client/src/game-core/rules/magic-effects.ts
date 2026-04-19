@@ -1117,7 +1117,7 @@ export function resolvePermanentMagic(
     }
 
     case STARTER_CARD_IDS.fateSwapDeep: {
-      const depth = 5;
+      const depth = 4;
       const dungeonCards = flattenActiveRowSlots(state.activeCards);
       if (dungeonCards.length === 0) {
         banner(sideEffects, '地城行没有卡牌。');

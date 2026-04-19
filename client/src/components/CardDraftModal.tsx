@@ -135,8 +135,12 @@ export default function CardDraftModal({
   if (!isOpen) return null;
 
   return (
-    <div className="card-draft-overlay" style={{ zoom: overlayZoom }}>
-      <div className="card-draft-modal" ref={modalRef}>
+    <div className="card-draft-overlay">
+      <div
+        className="card-draft-modal"
+        ref={modalRef}
+        style={{ transform: `scale(${overlayZoom})`, transformOrigin: 'center center' }}
+      >
         <div className="card-draft-header">
           <h2 className="card-draft-title">选择起始卡牌</h2>
           <p className="card-draft-subtitle">

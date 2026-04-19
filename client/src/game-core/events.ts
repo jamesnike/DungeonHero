@@ -326,69 +326,69 @@ function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | nu
   const defs: Record<string, () => FlipCardDef> = {
     flipToArcaneShield: () => {
       [id, rng] = nextId(rng, 'arcane-shield');
-      return { card: { id, type: 'magic', name: '奥术护盾', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'arcane-shield-stun-cap', description: '永久魔法（Perm 2）：击晕上限 +X%，X = 本回合已使用的非伤害魔法卡数量。', recycleDelay: 2 }, rng, banner: '奥术回廊翻转为奥术护盾，已放入背包。', logMessage: '事件效果：奥术回廊翻转成了「奥术护盾」', transformMessage: '奥术回廊翻转为「奥术护盾」…' };
+      return { card: { id, type: 'magic', name: '奥术护盾', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'arcane-shield-stun-cap', description: '永久魔法（Perm 2）：击晕上限 +X%，X = 本回合已使用的非伤害魔法卡数量。', shortDescription: '击晕上限 +X%（X ＝ 本回合非伤害魔法数）', recycleDelay: 2 }, rng, banner: '奥术回廊翻转为奥术护盾，已放入背包。', logMessage: '事件效果：奥术回廊翻转成了「奥术护盾」', transformMessage: '奥术回廊翻转为「奥术护盾」…' };
     },
     guildFlipToMagic: () => {
-      return { card: { id: 'guild-blood-gold', type: 'magic', name: '血金术', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: '永久魔法：受到 1 点伤害，获得 2 金币。', description: '以鲜血换取黄金，奇术商会的禁忌手段。' }, rng, banner: '商会卷轴翻转为「血金术」，已放入背包。', logMessage: '事件效果：获得「血金术」', transformMessage: '奇术商会翻转为「血金术」…' };
+      return { card: { id: 'guild-blood-gold', type: 'magic', name: '血金术', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: '永久魔法：受到 1 点伤害，获得 2 金币。', description: '以鲜血换取黄金，奇术商会的禁忌手段。', shortDescription: '-1 生命；+2 金币' }, rng, banner: '商会卷轴翻转为「血金术」，已放入背包。', logMessage: '事件效果：获得「血金术」', transformMessage: '奇术商会翻转为「血金术」…' };
     },
     guildFlipToHandRecycleMagic: () => {
       [id, rng] = nextId(rng, 'guild-hand-recycle');
-      return { card: { id, type: 'magic', name: '奇术轮转', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'guild-hand-recycle', description: '奇术商会的秘传手法：将所有手牌移入回收袋，再从回收袋随机取回 2 张。' }, rng, banner: '商会卷轴翻转为「奇术轮转」，已放入背包。', logMessage: '事件效果：获得「奇术轮转」', transformMessage: '奇术商会翻转为「奇术轮转」…' };
+      return { card: { id, type: 'magic', name: '奇术轮转', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'guild-hand-recycle', description: '奇术商会的秘传手法：将所有手牌移入回收袋，再从回收袋随机取回 2 张。', shortDescription: '所有手牌入回收袋；回收袋随机 2 张入手' }, rng, banner: '商会卷轴翻转为「奇术轮转」，已放入背包。', logMessage: '事件效果：获得「奇术轮转」', transformMessage: '奇术商会翻转为「奇术轮转」…' };
     },
     flipToPaperAsh: () => {
       [id, rng] = nextId(rng, 'paper-ash');
-      return { card: { id, type: 'potion', name: '纸灰药剂', value: 0, image: potionSpellDamageImage, description: '使用时永久让法术伤害 +2；最大生命值 -5。', potionEffect: 'perm-spell-damage-2' }, rng, banner: '遗稿翻转成了纸灰药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「纸灰药剂」', transformMessage: '残页翻转，药香浮现…' };
+      return { card: { id, type: 'potion', name: '纸灰药剂', value: 0, image: potionSpellDamageImage, description: '使用时永久让法术伤害 +2；最大生命值 -5。', shortDescription: '永久法伤 +2；生命上限 -5', potionEffect: 'perm-spell-damage-2' }, rng, banner: '遗稿翻转成了纸灰药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「纸灰药剂」', transformMessage: '残页翻转，药香浮现…' };
     },
     flipToLeftDurabilityPotion: () => {
       let flipPotionId: string;
       [flipPotionId, rng] = nextId(rng, 'right-dur-potion');
       [id, rng] = nextId(rng, 'left-dur-potion');
-      const card: any = { id, type: 'potion', name: '淬炼药剂', value: 0, image: potionWeaponRepairImage, description: '使用时左装备栏的装备耐久上限 +2。翻转后为右装备栏耐久上限 +2 的药剂。', potionEffect: 'left-slot-durability-max+2', flipTarget: { toCard: { id: flipPotionId, type: 'potion', name: '淬炼药剂（右）', value: 0, image: potionWeaponRepairImage, description: '使用时右装备栏的装备耐久上限 +2。', potionEffect: 'right-slot-durability-max+2' }, destination: 'backpack', banner: '淬炼药剂翻转，右侧淬炼之力凝结…' } };
+      const card: any = { id, type: 'potion', name: '淬炼药剂', value: 0, image: potionWeaponRepairImage, description: '使用时左装备栏的装备耐久上限 +2。翻转后为右装备栏耐久上限 +2 的药剂。', shortDescription: '左栏装备耐久上限 +2', potionEffect: 'left-slot-durability-max+2', flipTarget: { toCard: { id: flipPotionId, type: 'potion', name: '淬炼药剂（右）', value: 0, image: potionWeaponRepairImage, description: '使用时右装备栏的装备耐久上限 +2。', shortDescription: '右栏装备耐久上限 +2', potionEffect: 'right-slot-durability-max+2' }, destination: 'backpack', banner: '淬炼药剂翻转，右侧淬炼之力凝结…' } };
       return { card, rng, banner: '遗稿翻转成了淬炼药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「淬炼药剂」', transformMessage: '残页翻转，淬炼之力凝结…' };
     },
     flipToMonsterAttackDebuff: () => {
       [id, rng] = nextId(rng, 'monster-atk-debuff');
-      return { card: { id, type: 'magic', name: '威压之令', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'active-row-monster-attack-debuff', description: '永久魔法（Perm 1）：激活行所有怪物攻击力 -2。', recycleDelay: 1 }, rng, banner: '战血荣誉翻转为威压之令，已放入背包。', logMessage: '事件效果：战血荣誉翻转成了「威压之令」', transformMessage: '战血荣誉翻转为「威压之令」…' };
+      return { card: { id, type: 'magic', name: '威压之令', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'active-row-monster-attack-debuff', description: '永久魔法（Perm 1）：激活行所有怪物攻击力 -2。', shortDescription: '激活行所有怪物攻击 -2', recycleDelay: 1 }, rng, banner: '战血荣誉翻转为威压之令，已放入背包。', logMessage: '事件效果：战血荣誉翻转成了「威压之令」', transformMessage: '战血荣誉翻转为「威压之令」…' };
     },
     flipToHonorBloodMagic: () => {
       [id, rng] = nextId(rng, 'honor-blood');
-      return { card: { id, type: 'magic', name: '战血之印', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'honor-blood', description: '永久魔法：打出时失去 1 点生命，选择一件装备恢复 1 点耐久（法术回响时恢复 2）。被弃置时将激活行所有怪物攻击力 -2。' }, rng, banner: '战血荣誉翻转为战血之印，已放入背包。', logMessage: '事件效果：战血荣誉翻转成了「战血之印」', transformMessage: '战血荣誉翻转为「战血之印」…' };
+      return { card: { id, type: 'magic', name: '战血之印', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'honor-blood', description: '永久魔法：打出时失去 1 点生命，选择一件装备恢复 1 点耐久（法术回响时恢复 2）。被弃置时将激活行所有怪物攻击力 -2。', shortDescription: '-1 生命；一件装备 +1 耐久；弃置时激活行怪物攻击 -2' }, rng, banner: '战血荣誉翻转为战血之印，已放入背包。', logMessage: '事件效果：战血荣誉翻转成了「战血之印」', transformMessage: '战血荣誉翻转为「战血之印」…' };
     },
     flipToHonorSweepMagic: () => {
       [id, rng] = nextId(rng, 'honor-sweep');
-      return { card: { id, type: 'magic', name: '战血横扫', value: 0, image: skillScrollImage, magicType: 'instant', magicEffect: 'honor-sweep', knightEffect: 'honor-sweep', description: '即时魔法：选择一把武器，对激活行所有怪物造成等同于该武器当前攻击力的法术伤害；每击杀一个怪物，升级一张牌。' }, rng, banner: '战血荣誉翻转为战血横扫，已放入背包。', logMessage: '事件效果：战血荣誉翻转成了「战血横扫」', transformMessage: '战血荣誉翻转为「战血横扫」…' };
+      return { card: { id, type: 'magic', name: '战血横扫', value: 0, image: skillScrollImage, magicType: 'instant', magicEffect: 'honor-sweep', knightEffect: 'honor-sweep', description: '即时魔法：选择一把武器，对激活行所有怪物造成等同于该武器当前攻击力的法术伤害；每击杀一个怪物，升级一张牌。', shortDescription: '武器攻击作法伤横扫激活行；每击杀升级 1 张牌' }, rng, banner: '战血荣誉翻转为战血横扫，已放入背包。', logMessage: '事件效果：战血荣誉翻转成了「战血横扫」', transformMessage: '战血荣誉翻转为「战血横扫」…' };
     },
     flipToEquipSwapPotion: () => {
       [id, rng] = nextId(rng, 'equip-swap-potion');
-      return { card: { id, type: 'potion', name: '置换药剂', value: 0, image: potionWeaponRepairImage, description: '使用时选择一个装备回到手牌；若另一栏有装备，则换到该位置。', potionEffect: 'equip-swap' }, rng, banner: '遗稿翻转成了置换药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「置换药剂」', transformMessage: '残页翻转，置换之力凝结…' };
+      return { card: { id, type: 'potion', name: '置换药剂', value: 0, image: potionWeaponRepairImage, description: '使用时选择一个装备回到手牌；若另一栏有装备，则换到该位置。', shortDescription: '一件装备回手；另一栏装备换位', potionEffect: 'equip-swap' }, rng, banner: '遗稿翻转成了置换药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「置换药剂」', transformMessage: '残页翻转，置换之力凝结…' };
     },
     flipToHandLimitPotion: () => {
       [id, rng] = nextId(rng, 'hand-limit-potion');
-      return { card: { id, type: 'potion', name: '扩容药剂', value: 0, image: potionSpellDamageImage, description: '使用时永久手牌上限 +1。', potionEffect: 'hand-limit+1' }, rng, banner: '遗稿翻转成了扩容药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「扩容药剂」', transformMessage: '残页翻转，扩容之力涌现…' };
+      return { card: { id, type: 'potion', name: '扩容药剂', value: 0, image: potionSpellDamageImage, description: '使用时永久手牌上限 +1。', shortDescription: '手牌上限 +1', potionEffect: 'hand-limit+1' }, rng, banner: '遗稿翻转成了扩容药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「扩容药剂」', transformMessage: '残页翻转，扩容之力涌现…' };
     },
     flipToClassMagicDiscoverPotion: () => {
       [id, rng] = nextId(rng, 'class-magic-discover-potion');
-      return { card: { id, type: 'potion', name: '灵思药剂', value: 0, image: potionSpellDamageImage, description: '使用时从专属牌堆三选一发现一张魔法牌（魔法/英雄魔法）。', potionEffect: 'discover-class-magic' }, rng, banner: '遗稿翻转成了灵思药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「灵思药剂」', transformMessage: '残页翻转，灵思渗入药剂…' };
+      return { card: { id, type: 'potion', name: '灵思药剂', value: 0, image: potionSpellDamageImage, description: '使用时从专属牌堆三选一发现一张魔法牌（魔法/英雄魔法）。', shortDescription: '从专属池发现 1 张魔法（3 选 1）', potionEffect: 'discover-class-magic' }, rng, banner: '遗稿翻转成了灵思药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「灵思药剂」', transformMessage: '残页翻转，灵思渗入药剂…' };
     },
     flipToDiscardDrawMagic: () => {
       [id, rng] = nextId(rng, 'discard-draw-magic');
-      return { card: { id, type: 'magic', name: '回响残页', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'on-discard-draw-2', description: '永久魔法：被弃回时，从背包抽 2 张牌。', onDiscardDraw: 2, recycleDelay: 1 }, rng, banner: '遗稿翻转成了回响残页，已放入背包。', logMessage: '事件效果：遗稿翻转成了「回响残页」', transformMessage: '残页翻转，回响之力涌出…' };
+      return { card: { id, type: 'magic', name: '回响残页', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'on-discard-draw-2', description: '永久魔法：被弃回时，从背包抽 2 张牌。', shortDescription: '被弃回时抽 2 张', onDiscardDraw: 2, recycleDelay: 1 }, rng, banner: '遗稿翻转成了回响残页，已放入背包。', logMessage: '事件效果：遗稿翻转成了「回响残页」', transformMessage: '残页翻转，回响之力涌出…' };
     },
     flipToUpgradeScroll: () => {
       [id, rng] = nextId(rng, 'upgrade-scroll');
-      return { card: { id, type: 'magic', name: '升级卷轴', value: 0, image: starterScrollUpgradeImage, magicType: 'instant', magicEffect: '即时魔法：升级一张牌。', description: '一次性使用，选择一张牌进行升级。' }, rng, banner: '遗稿翻转成了升级卷轴，已放入背包。', logMessage: '事件效果：遗稿翻转成了「升级卷轴」', transformMessage: '遗稿翻转为升级卷轴…' };
+      return { card: { id, type: 'magic', name: '升级卷轴', value: 0, image: starterScrollUpgradeImage, magicType: 'instant', magicEffect: '即时魔法：升级一张牌。', description: '一次性使用，选择一张牌进行升级。', shortDescription: '升级 1 张牌' }, rng, banner: '遗稿翻转成了升级卷轴，已放入背包。', logMessage: '事件效果：遗稿翻转成了「升级卷轴」', transformMessage: '遗稿翻转为升级卷轴…' };
     },
     flipToRecallEquip: () => {
       [id, rng] = nextId(rng, `${STARTER_CARD_IDS.recallEquip}-pick`);
-      return { card: { id, type: 'magic', name: '回收术', value: 0, image: starterScrollRecallImage, magicType: 'permanent', magicEffect: '永久魔法：回手一张牌，抽 1 张牌。', description: '回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌。', knightEffect: 'recall-equipment' }, rng, banner: '血咒仪式翻转成了回收术，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「回收术」', transformMessage: '血咒仪式翻转为回收术…' };
+      return { card: { id, type: 'magic', name: '回收术', value: 0, image: starterScrollRecallImage, magicType: 'permanent', magicEffect: '永久魔法：回手一张牌，抽 1 张牌。', description: '回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌。', shortDescription: '回手 1 张装备/护符；抽 1 张', knightEffect: 'recall-equipment' }, rng, banner: '血咒仪式翻转成了回收术，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「回收术」', transformMessage: '血咒仪式翻转为回收术…' };
     },
     flipToUndyingBlessing: () => {
       [id, rng] = nextId(rng, `${STARTER_CARD_IDS.undyingBlessing}-pick`);
-      return { card: { id, type: 'magic', name: '不灭赐福', value: 0, image: starterScrollReviveImage, magicType: 'permanent', magicEffect: '永久魔法：选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），然后失去 2 点生命。', description: '赋予装备复生能力，失去 2 点生命。已复生的装备可再次赋予。', recycleDelay: 2 }, rng, banner: '血咒仪式翻转成了不灭赐福，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「不灭赐福」', transformMessage: '血咒仪式翻转为不灭赐福…' };
+      return { card: { id, type: 'magic', name: '不灭赐福', value: 0, image: starterScrollReviveImage, magicType: 'permanent', magicEffect: '永久魔法：选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），然后失去 2 点生命。', description: '赋予装备复生能力，失去 2 点生命。已复生的装备可再次赋予。', shortDescription: '一件装备获得复生；失去 2 生命', recycleDelay: 2 }, rng, banner: '血咒仪式翻转成了不灭赐福，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「不灭赐福」', transformMessage: '血咒仪式翻转为不灭赐福…' };
     },
     flipToCurseWeapon: () => {
       [id, rng] = nextId(rng, 'curse-weapon');
-      return { card: { id, type: 'weapon', name: '封印之刃', value: 2, image: sealBladeImage, durability: 1, maxDurability: 1, onEquipEffect: 'durability-max+1', description: '入场：当前装备栏耐久度上限 +1。' }, rng, banner: '血咒仪式翻转成了封印之刃，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「封印之刃」', transformMessage: '血咒仪式翻转为封印之刃…' };
+      return { card: { id, type: 'weapon', name: '封印之刃', value: 2, image: sealBladeImage, durability: 1, maxDurability: 1, onEquipEffect: 'durability-max+1', description: '入场：当前装备栏耐久度上限 +1。', shortDescription: '入场本栏耐久上限 +1' }, rng, banner: '血咒仪式翻转成了封印之刃，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「封印之刃」', transformMessage: '血咒仪式翻转为封印之刃…' };
     },
     // 翻转之契 option 3 — 翻印之符 (persuade-on-flip amulet)
     flipToFlipPersuadeAmulet: () => {
@@ -402,6 +402,7 @@ function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | nu
           image: flipPrintAmuletImage,
           amuletEffect: 'persuade-on-flip',
           description: '护符：每翻转一张牌，下次劝降成功率 +10%（叠加，劝降一次后清空）。',
+          shortDescription: '每翻转 1 张牌：下次劝降率 +10%（叠加）',
         },
         rng,
         banner: '翻转之契翻转为「翻印之符」，已放入背包。',
@@ -422,6 +423,7 @@ function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | nu
           magicType: 'instant',
           magicEffect: 'flip-monster-debuff',
           description: '一次性魔法：选择一个怪物，到下次瀑流前，每翻转一张牌该怪物攻击力 -1（叠加，最低 0）。怪物离场则失效。',
+          shortDescription: '至下次瀑流：每翻转 1 张牌目标怪物攻击 -1',
         },
         rng,
         banner: '翻转之契翻转为「翻覆震慑」，已放入背包。',
@@ -799,6 +801,7 @@ export function applySimpleEffect(
       magicType: 'permanent',
       magicEffect: 'double-next-magic',
       description: '永久魔法：下一张法术的效果将触发两次。',
+      shortDescription: '下一张法术触发两次',
       recycleDelay: 1,
     };
     patch = {
@@ -959,6 +962,7 @@ export function applySimpleEffect(
           ...amulet,
           upgradeLevel: 1,
           description: '（已升级）每获得一次临时攻击或临时护甲加成，下一次劝降率 +10%。',
+          shortDescription: '（已升级）每获临时攻/护：下次劝降率 +10%',
         };
       }
       if (amulet.amuletEffect === 'persuade-grant-recycle-fetch' && (amulet.upgradeLevel ?? 0) < 1) {
@@ -968,6 +972,7 @@ export function applySimpleEffect(
           ...amulet,
           upgradeLevel: 1,
           description: '（已升级）每劝降一次，将两张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。',
+          shortDescription: '（已升级）每劝降：手牌 +2 张「归袋抽引」',
         };
       }
       return amulet;
@@ -1517,6 +1522,7 @@ export function applySimpleEffect(
       magicType: 'permanent',
       magicEffect: 'guild-recycle-reshuffle',
       description: '永久魔法（Perm 1）：回收袋洗回背包（所有牌剩余瀑流 -1），抽 1 张牌。',
+      shortDescription: '回收袋全部洗回背包；抽 1 张',
       recycleDelay: 1,
     };
     const bpCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
@@ -1549,6 +1555,7 @@ export function applySimpleEffect(
         magicType: 'instant',
         magicEffect: '即时魔法：升级一张牌。',
         description: '一次性使用，选择一张牌进行升级。',
+        shortDescription: '升级 1 张牌',
       };
       if (newBp.length < backpackCap) {
         newBp.push(scroll);
@@ -1650,6 +1657,7 @@ export function applySimpleEffect(
       id, type: 'curse', name: '血咒之印', value: 0,
       image: bloodCurseSealImage,
       description: '诅咒：使用时失去 3 点生命，使用后回到背包；无法被回收或弃置。',
+      shortDescription: '使用时 -3 生命；用后回到背包',
       curseEffect: 'blood-curse',
     };
     addCardToBackpackPatch(state, patch, curseCard);
@@ -1667,6 +1675,7 @@ export function applySimpleEffect(
       id, type: 'curse', name: '血咒之印', value: 0,
       image: bloodCurseSealImage,
       description: '诅咒：使用时失去 3 点生命，使用后回到背包；无法被回收或弃置。',
+      shortDescription: '使用时 -3 生命；用后回到背包',
       curseEffect: 'blood-curse',
     };
     addCardToBackpackPatch(state, patch, curseCard);
@@ -1804,6 +1813,7 @@ export function applySimpleEffect(
       magicType: 'permanent',
       magicEffect: '永久魔法：手上加入 3 张一次性「魔弹」。',
       description: '加入 3 张一次性「魔弹」到手牌（每张可对一个怪物造成 1 点法术伤害）。',
+      shortDescription: '加入 3 张「魔弹」到手牌（每张 1 法伤）',
       upgradeLevel: 1,
       maxUpgradeLevel: 2,
     } as GameCardData;
@@ -2060,6 +2070,7 @@ export function applySimpleEffect(
       magicType: 'permanent',
       magicEffect: 'persuade-boost-draw',
       description: '永久魔法（Perm 1）：下次劝降成功率 +15%（精英 +10%），抽 1 张牌。',
+      shortDescription: '下次劝降率 +15%（精英 +10%）；抽 1 张',
       recycleDelay: 1,
     };
     const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
@@ -2085,6 +2096,7 @@ export function applySimpleEffect(
       magicType: 'permanent',
       magicEffect: 'bounty-spell-damage',
       description: '永久魔法（Perm 1）：选择一个怪物，造成 5 点法术伤害，获得等同于造成伤害的金币。',
+      shortDescription: '5 法伤；伤害换金币',
       recycleDelay: 1,
     };
     const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);

@@ -476,6 +476,7 @@ function reduceMonsterRewardGrantStatSwap(state: GameState): ReduceResult {
     image: statSwapCardImage,
     classCard: true,
     description: '永久：选择一个怪物，将其攻击和血量上限对换。侧击：50% 击晕。',
+    shortDescription: '怪物攻击与血量上限互换；侧击 50% 击晕',
     magicType: 'permanent',
     magicEffect: '攻击与血量上限互换。',
     knightEffect: 'stat-swap',

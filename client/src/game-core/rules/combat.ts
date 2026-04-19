@@ -1797,7 +1797,32 @@ function reducePerformHeroAttack(
   if (isMonsterEquip && (slotItem as GameCardData).monsterSpecial === 'ogre-crit') {
     isCrit = true;
   }
-  const stunnedDoubleMultiplier = (slotItem as GameCardData).doubleDamageOnStunned && targetMonster.isStunned ? 2 : 1;
+
+  // Pre-roll stun for weapons with `doubleDamageOnStunned` so a stun landing
+  // THIS attack can also enable damage doubling. The result is reused by the
+  // post-damage stun block so we never roll twice.
+  let preRolledStun: { roll: number; threshold: number; effectiveChance: number } | null = null;
+  let preRolledStunSuccess = false;
+  if ((slotItem as GameCardData).doubleDamageOnStunned && !targetMonster.isStunned) {
+    const preStunChanceRaw = ((slotItem as GameCardData).weaponStunChance ?? 0) + (ae.stunRateBoost ?? 0);
+    const preStunChance = state.stunCap > 0 ? Math.min(preStunChanceRaw, state.stunCap) : preStunChanceRaw;
+    if (preStunChance > 0) {
+      const preStunThreshold = Math.round((preStunChance / 100) * 20);
+      if (preStunThreshold > 0) {
+        let preStunRoll: number;
+        [preStunRoll, rng] = nextInt(rng, 1, 20);
+        preRolledStunSuccess = preStunRoll <= preStunThreshold;
+        preRolledStun = { roll: preStunRoll, threshold: preStunThreshold, effectiveChance: preStunChance };
+        sideEffects.push({
+          event: 'combat:diceRoll',
+          payload: { title: targetMonster.name, subtitle: '击晕判定', roll: preStunRoll, threshold: preStunThreshold, success: preRolledStunSuccess },
+        });
+      }
+    }
+  }
+
+  const stunnedDoubleMultiplier = (slotItem as GameCardData).doubleDamageOnStunned
+    && (targetMonster.isStunned || preRolledStunSuccess) ? 2 : 1;
   const preFinalDamage = (isCrit ? baseDamage * 2 : baseDamage) * stunnedDoubleMultiplier;
   const finalDamage = ae.hasFlash ? Math.max(0, Math.floor(preFinalDamage / 2)) : preFinalDamage;
 
@@ -2394,17 +2419,27 @@ function reducePerformHeroAttack(
       }
 
       // Weapon stun chance
-      const weaponStunChance = ((slotItem as GameCardData).weaponStunChance ?? 0) + (ae.stunRateBoost ?? 0);
-      const effectiveStunChance = state.stunCap > 0 ? Math.min(weaponStunChance, state.stunCap) : weaponStunChance;
+      const weaponStunChance = preRolledStun
+        ? preRolledStun.effectiveChance
+        : ((slotItem as GameCardData).weaponStunChance ?? 0) + (ae.stunRateBoost ?? 0);
+      const effectiveStunChance = preRolledStun
+        ? preRolledStun.effectiveChance
+        : (state.stunCap > 0 ? Math.min(weaponStunChance, state.stunCap) : weaponStunChance);
       if (effectiveStunChance > 0 && !workingMonster.isStunned) {
-        const stunThreshold = Math.round((effectiveStunChance / 100) * 20);
+        const stunThreshold = preRolledStun ? preRolledStun.threshold : Math.round((effectiveStunChance / 100) * 20);
         if (stunThreshold > 0) {
           let stunRoll: number;
-          [stunRoll, rng] = nextInt(rng, 1, 20);
-          sideEffects.push({
-            event: 'combat:diceRoll',
-            payload: { title: targetMonster.name, subtitle: '击晕判定', roll: stunRoll, threshold: stunThreshold, success: stunRoll <= stunThreshold },
-          });
+          if (preRolledStun) {
+            // Reuse the pre-attack roll so we don't roll twice. Dice-roll
+            // side effect was already emitted before damage calculation.
+            stunRoll = preRolledStun.roll;
+          } else {
+            [stunRoll, rng] = nextInt(rng, 1, 20);
+            sideEffects.push({
+              event: 'combat:diceRoll',
+              payload: { title: targetMonster.name, subtitle: '击晕判定', roll: stunRoll, threshold: stunThreshold, success: stunRoll <= stunThreshold },
+            });
+          }
 
           // 眩学之符 (stun-attempt-discover): increment per stun-attempt dice roll
           const stunAttemptAmuletWeapon = (state.amuletSlots as GameCardData[]).find(

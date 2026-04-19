@@ -126,6 +126,7 @@ import knightThunderstrikeBastionShieldImage from '@assets/generated_images/knig
 import knightBashShieldImage from '@assets/generated_images/knight_bash_shield.png';
 import knightCommunalDefenseShieldImage from '@assets/generated_images/knight_communal_defense_shield.png';
 import knightGrowthShieldImage from '@assets/generated_images/knight_growth_shield.png';
+import knightGrowthBladeImage from '@assets/generated_images/knight_growth_blade.png';
 
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
@@ -185,6 +186,7 @@ const ALL_IMAGES = [
   knightBashShieldImage,
   knightCommunalDefenseShieldImage,
   knightGrowthShieldImage,
+  knightGrowthBladeImage,
 ];
 
 const FLAVOR_TEXTS = [

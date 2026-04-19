@@ -4725,6 +4725,7 @@ export default function GameBoard() {
       value: 0,
       image: bloodCurseSealImage,
       description: '诅咒：使用时失去 3 点生命，使用后回到背包；无法被回收或弃置。',
+      shortDescription: '使用时 -3 生命；用后回到背包',
       curseEffect: 'blood-curse',
     };
   };
@@ -5989,6 +5990,7 @@ export default function GameBoard() {
                 magicType: 'permanent' as const,
                 magicEffect: 'crypt-deathwish',
                 description: '永久魔法（Perm 2）：选择一个装备，触发其遗言效果，抽 1 张牌。',
+                shortDescription: '触发一件装备的遗言效果；抽 1 张',
                 recycleDelay: 2,
               },
               destination: 'backpack' as const,

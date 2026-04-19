@@ -292,7 +292,13 @@ export interface GameCardData {
   knightEffect?: string; // Effect dispatch key (used by class cards and some main-deck magic)
   /** 损毁或强制弃置时进入回收袋，经 recycleDelay 次瀑流回背包（与永久法术共用回收区） */
   permEquipment?: boolean;
-  description?: string; // Card effect description
+  description?: string; // Card effect description (shown in detail modal & tooltips — full text)
+  /**
+   * 卡面短描述：卡牌 UI 上展示的极简版描述（省略 corner case / 触发条件细节）。
+   * 渲染优先级：shortDescription > description。
+   * 详情弹窗（CardDetailsModal）与 hover tooltip 始终读取 `description` 完整版。
+   */
+  shortDescription?: string;
   potionEffect?: PotionEffectId;
   flipTarget?: CardFlipTarget;
   flipCondition?: string;
@@ -610,7 +616,9 @@ function GameCardInner({
   const isHealingPotion =
     isPotionCard && (!card.potionEffect || healingPotionEffects.includes(card.potionEffect));
   const potionDescription =
-    isPotionCard && !isHealingPotion ? card.description ?? null : null;
+    isPotionCard && !isHealingPotion
+      ? card.shortDescription ?? card.description ?? null
+      : null;
 
   const isEquipmentCard = card.type === 'weapon' || card.type === 'shield' || (card.type === 'monster' && 'fromSlot' in card);
   const mobileDragType =
@@ -844,7 +852,8 @@ const formatAuraBonusText = (bonus?: AmuletAuraBonus | null) => {
 
 const amuletEffectText =
   card.type === 'amulet'
-    ? card.description ||
+    ? card.shortDescription ||
+      card.description ||
       formatAuraBonusText(card.amuletAuraBonus) ||
       (card.effect && typeof card.value === 'number' ? `+${card.value} ${card.effect}` : null)
     : null;
@@ -918,7 +927,7 @@ const amuletEffectText =
       case 'weapon':
         return 'bg-amber-200/30';
       case 'shield':
-        return 'bg-blue-300/36';
+        return 'bg-blue-300/50';
       default:
         return 'bg-gradient-to-b from-muted to-card';
     }
@@ -936,7 +945,7 @@ const amuletEffectText =
       case 'weapon':
         return 'bg-amber-200/30';
       case 'shield':
-        return 'bg-blue-300/36';
+        return 'bg-blue-300/50';
       default:
         return 'bg-card';
     }
@@ -1268,7 +1277,7 @@ const amuletEffectText =
                         </span>
                       ) : (
                         <>
-                          {card.description || card.magicEffect || card.heroMagicEffect}
+                          {card.shortDescription || card.description || card.magicEffect || card.heroMagicEffect}
                         </>
                       )}
                       {card.transformBonus && (
@@ -1294,9 +1303,9 @@ const amuletEffectText =
                   )}
                   {isEventCard && (
                     <div className="relative z-10 w-full flex flex-col gap-1">
-                      {card.description && (
+                      {(card.shortDescription || card.description) && (
                         <div className="dh-card__event-option text-left break-words leading-snug text-violet-800/70 italic">
-                          {card.description}
+                          {card.shortDescription || card.description}
                         </div>
                       )}
                       {!hideEventChoices && card.eventChoices?.map((choice, idx) =>
@@ -2132,9 +2141,9 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && card.description && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.shortDescription || card.description) && (
                   <div className={`dh-card__body-text w-full text-gray-800 ${isCompact ? 'px-0' : 'px-1'} leading-tight`}>
-                    {card.description}
+                    {card.shortDescription || card.description}
                     {card.shieldBlockAutoUpgradeCount != null && (
                       <span className="ml-1 font-bold text-amber-600">
                         [{card._shieldBlockCount ?? 0}/{card.shieldBlockAutoUpgradeCount}]
@@ -2203,6 +2212,7 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.permEquipment !== b.permEquipment ||
       a.recycleDelay !== b.recycleDelay ||
       a.description !== b.description ||
+      a.shortDescription !== b.shortDescription ||
       a.magicEffect !== b.magicEffect ||
       a.scalingDamage !== b.scalingDamage ||
       a.transformBonus !== b.transformBonus ||

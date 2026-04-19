@@ -66,7 +66,7 @@ import potionBackpackAwakenImage from '@assets/generated_images/card_dedupe_poti
 import potionInsightClassImage from '@assets/generated_images/card_dedupe_potion_insight.png';
 import potionEternalInscribeImage from '@assets/generated_images/card_dedupe_potion_eternal_perm.png';
 import potionTwilightImage from '@assets/generated_images/cute_potion_twilight.png';
-import potionAmuletToRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
+import potionAmuletToRelicImage from '@assets/generated_images/potion_amulet_to_relic.png';
 import potionSpellDamageImageImport from '@assets/generated_images/cute_potion_spell_damage.png';
 const potionSpellDamageImage = potionSpellDamageImageImport;
 export { potionSpellDamageImage };
@@ -694,6 +694,7 @@ export function createDeck(
       image: potionImage,
       potionEffect: 'heal-5',
       description: '立即回复5点生命，随后翻转为永久魔法。',
+      shortDescription: '+5 生命；翻转为永久魔法',
       flipTarget: {
         toCard: {
           id: 'potion-flip-heal',
@@ -704,6 +705,7 @@ export function createDeck(
           magicType: 'permanent',
           magicEffect: '永久魔法：使用时立即回复 2 点生命。',
           description: '使用时立即回复 2 点生命。使用后回到回收袋，瀑流后可再次使用。',
+          shortDescription: '使用 +2 生命',
         },
         destination: 'stay',
         banner: '治疗药水翻转成"治愈余韵"！',
@@ -717,6 +719,7 @@ export function createDeck(
       image: potionConcentratedHealImage,
       potionEffect: 'heal-14',
       description: '立即回复14点生命。',
+      shortDescription: '+14 生命',
     },
     {
       type: 'potion',
@@ -725,6 +728,7 @@ export function createDeck(
       image: potionWeaponRepairImage,
       potionEffect: 'repair-choice',
       description: '左右装备都恢复2点耐久 或 左右装备都耐久上限+1。',
+      shortDescription: '二选一：双栏 +2 耐久 / 双栏耐久上限 +1',
     },
     {
       type: 'potion',
@@ -733,6 +737,7 @@ export function createDeck(
       image: potionEquipmentRepairImage,
       potionEffect: 'boost-both-slots',
       description: '左右装备栏永久伤害+1，护甲+1。',
+      shortDescription: '双栏永久 +1 伤害 +1 护甲',
     },
     {
       type: 'potion',
@@ -741,6 +746,7 @@ export function createDeck(
       image: potionBackpackAwakenImage,
       potionEffect: 'draw-backpack-4',
       description: '从背包随机抽最多4张牌到手牌；手牌上限+1后若仍有空位，再抽1张。背包容量+1。',
+      shortDescription: '从背包抽至多 4 张；手牌上限+1，背包+1',
     },
     {
       type: 'potion',
@@ -749,6 +755,7 @@ export function createDeck(
       image: potionInsightClassImage,
       potionEffect: 'discover-class-3',
       description: '获得三张职业卡牌。',
+      shortDescription: '获得 3 张职业卡',
     },
     {
       type: 'potion',
@@ -757,6 +764,7 @@ export function createDeck(
       image: potionTwilightImage,
       potionEffect: 'discover-graveyard-magic',
       description: '从墓地发现一张魔法卡（3选1），随后翻到另一面。',
+      shortDescription: '坟场发现 1 张魔法（3 选 1）；翻面',
       flipTarget: {
         toCard: {
           id: 'potion-flip-twilight',
@@ -767,6 +775,7 @@ export function createDeck(
           magicType: 'instant',
           magicEffect: '使用时从背包抽 1 张手牌，并永久法术伤害 +1。',
           description: '使用时从背包抽 1 张手牌，并永久法术伤害 +1。',
+          shortDescription: '从背包抽 1 张；永久法伤 +1',
         },
         destination: 'stay',
         banner: '药剂翻转成"余烬回响"！',
@@ -780,6 +789,7 @@ export function createDeck(
       image: potionEternalInscribeImage,
       potionEffect: 'grant-perm-2',
       description: '选择一张没有 Perm 属性的手牌，赋予 Perm 2（被移除后进入回收袋，经 2 次瀑流返回背包）。',
+      shortDescription: '为一张手牌赋予 Perm 2',
     },
     {
       type: 'potion',
@@ -788,6 +798,7 @@ export function createDeck(
       image: potionEquipmentRepairImage,
       potionEffect: 'grant-lastwords-slot-temp-buff',
       description: '选择一个装备，使其获得遗言：该装备栏 +3 临时攻击 +3 临时护甲。',
+      shortDescription: '为一件装备赋予遗言：该栏 +3 攻 +3 护',
     },
     {
       type: 'potion',
@@ -796,6 +807,7 @@ export function createDeck(
       image: potionAmuletToRelicImage,
       potionEffect: 'amulet-to-eternal-relic',
       description: '选择一个护符栏中的护符，将其转化为永恒护符（移除护符，效果永久生效）。',
+      shortDescription: '一枚护符 → 永恒护符',
     },
     {
       type: 'potion',
@@ -804,6 +816,7 @@ export function createDeck(
       image: potionImage,
       potionEffect: 'grant-amulet-end-turn-draw',
       description: '获得永久护符「回合汲取」：每次结束英雄回合时，从背包抽 1 张牌。',
+      shortDescription: '获得永久护符：回合结束抽 1 张',
     },
     {
       type: 'potion',
@@ -812,6 +825,7 @@ export function createDeck(
       image: starterPotionStunImage,
       potionEffect: 'grant-weapon-stun-chance+40',
       description: '选择装备栏中的一个武器，永久击晕率 +40%。',
+      shortDescription: '一把武器永久 +40% 击晕率',
     },
   ];
 
@@ -830,6 +844,7 @@ export function createDeck(
       value: 5,
       image: lifeAmuletImage,
       description: '所有回血效果翻倍',
+      shortDescription: '所有回血效果翻倍',
       amuletEffect: 'heal',
     },
     {
@@ -838,6 +853,7 @@ export function createDeck(
       value: 5,
       image: balanceAmuletImage,
       description: '左边装备栏临时攻击+3临时护甲-1，右边装备栏临时护甲+3临时攻击-1',
+      shortDescription: '左栏 +3攻 -1护；右栏 +3护 -1攻',
       amuletEffect: 'balance',
     },
     {
@@ -846,6 +862,7 @@ export function createDeck(
       value: 5,
       image: lifestealAmuletImage,
       description: '超杀吸血+4。',
+      shortDescription: '超杀吸血 +4',
       amuletEffect: 'life',
     },
     {
@@ -854,6 +871,7 @@ export function createDeck(
       value: 5,
       image: dedupeAmuletCatapultImage,
       description: '每弃置1张牌，抽2张牌。',
+      shortDescription: '每弃置 1 张，抽 2 张',
       amuletEffect: 'catapult',
     },
     {
@@ -862,6 +880,7 @@ export function createDeck(
       value: 5,
       image: flashAmuletImage,
       description: '所有装备攻击力减半，攻击次数+1',
+      shortDescription: '装备攻击减半；攻击次数 +1',
       amuletEffect: 'flash',
     },
     {
@@ -870,6 +889,7 @@ export function createDeck(
       value: 5,
       image: strengthAmuletImage,
       description: '所有装备栏临时攻击+4，每攻击一次，失去2血',
+      shortDescription: '全栏 +4 临时攻；每次攻击 -2 生命',
       amuletEffect: 'strength',
     },
     {
@@ -878,6 +898,7 @@ export function createDeck(
       value: 5,
       image: dedupeAmuletGraveyardStackImage,
       description: '劝降成功时，在原怪物格堆叠2张墓地随机牌。',
+      shortDescription: '劝降成功时该格堆叠 2 张坟场牌',
       amuletEffect: 'persuade-graveyard-stack',
     },
     {
@@ -886,6 +907,7 @@ export function createDeck(
       value: 5,
       image: thunderStrikeAmuletImage,
       description: '光环：所有击晕率 +20%（仍受击晕上限约束）。',
+      shortDescription: '光环：击晕率 +20%',
       amuletEffect: 'stun-rate-boost',
     },
     {
@@ -894,6 +916,7 @@ export function createDeck(
       value: 5,
       image: arcSealAmuletImage,
       description: '每翻转一张牌，对激活行随机怪物造成 1 点法术伤害。多张可叠加。',
+      shortDescription: '每翻转 1 张牌：随机怪物 1 法伤',
       amuletEffect: 'flip-zap',
     },
   ];
@@ -985,6 +1008,7 @@ export function createDeck(
     magicType: 'instant',
     magicEffect: '坟场随机取回 3 张牌。',
     description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。',
+    shortDescription: '坟场随机取至多 3 张入背包',
     knightEffect: 'graveyard-recall',
     maxUpgradeLevel: 3,
   });
@@ -998,6 +1022,7 @@ export function createDeck(
     magicType: 'instant',
     magicEffect: '劝降费用永久 -2，下次成功率 +10%。',
     description: '一次性：劝降费用永久降低 2 金币，下次劝降成功率 +10%。',
+    shortDescription: '劝降费用永久 -2；下次成功率 +10%',
     knightEffect: 'persuade-discount',
     maxUpgradeLevel: 2,
   });
@@ -1011,6 +1036,7 @@ export function createDeck(
     magicType: 'instant',
     magicEffect: '升级手牌中至多 2 张魔法牌。',
     description: '一次性：选择手牌中至多 2 张可升级的魔法牌，各升级一次。',
+    shortDescription: '升级至多 2 张手牌中的魔法',
   });
 
   deck.push({
@@ -1022,6 +1048,7 @@ export function createDeck(
     magicType: 'instant',
     magicEffect: '翻看主牌堆顶 5 张牌，根据卡牌类型获得永久增益。',
     description: '一次性：翻看牌堆顶 5 张牌。怪物→随机装备栏攻击+1，装备→随机装备栏护甲+1，魔法→法强+1，护符→超杀吸血+1，药水→击晕上限+5%。',
+    shortDescription: '透视牌堆顶 5 张，按类型获得永久增益',
   });
 
   deck.push({
@@ -1033,6 +1060,7 @@ export function createDeck(
     magicType: 'instant',
     magicEffect: '选择一件装备，翻看牌堆顶 3 张牌，其中有 X 张事件牌，则该装备耐久上限 +X 并恢复 X 点耐久。',
     description: '一次性：选择一件装备，翻看牌堆顶 3 张牌。每有一张事件牌，该装备耐久度上限 +1 并恢复 1 点耐久。',
+    shortDescription: '透视牌堆顶 3 张：每张 Event 给装备 +1 耐久上限+1 耐久',
   });
 
   deck.push({
@@ -1044,6 +1072,7 @@ export function createDeck(
     magicType: 'instant',
     magicEffect: '击晕上限 +10%。对激活行所有怪物 60% 击晕。',
     description: '一次性：击晕上限 +10%。对激活行所有怪物 60% 击晕。',
+    shortDescription: '击晕上限 +10%；全场怪物 60% 击晕',
     knightEffect: 'stun-wave',
   });
 
@@ -1056,6 +1085,7 @@ export function createDeck(
     magicType: 'instant',
     magicEffect: 'amplify-card',
     description: '一次性魔法：选择一张装备栏或手牌中的装备/伤害魔法，生成一张永久魔法（Perm 2）对其进行增幅（武器攻击+2，护盾护甲+2，伤害魔法伤害+2）。',
+    shortDescription: '生成 Perm 2 增幅一张装备/伤害魔法',
   });
 
   // 兵器谱：选择一个装备栏，本回合该装备栏攻击次数 +2（独立于全局额外攻击次数；
@@ -1071,6 +1101,7 @@ export function createDeck(
     magicType: 'instant',
     magicEffect: 'weapon-manual',
     description: '一次性魔法：选择一个装备栏，本回合该装备栏攻击次数 +2。\n上手：随机一个装备栏临时攻击 +2。',
+    shortDescription: '本回合所选栏攻击 +2 次；上手随机栏 +2 临时攻',
     onEnterHandEffect: 'weapon-manual-onhand',
   });
 
@@ -1083,6 +1114,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventFateCrossroadsImage,
     description: '打开时向左平移至被阻挡位置。若正下方有装备或护符，可破坏它并获得全部效果。选择任意选项后翻转为「命运挪移」。',
+    shortDescription: '打开时向左平移；选项后翻为「命运挪移」',
     eventChoices: [
       { text: '倾听命运的低语（发现2张专属卡）', effect: 'drawClass2', hint: '获得 2 张职业牌放入背包' },
       { text: '与命运商贩交谈（商店等级+1 并 打开商店）', effect: ['shopLevel+1', 'openShop'], hint: '商店等级+1 并立刻开启商店' },
@@ -1105,6 +1137,7 @@ export function createDeck(
         magicType: 'instant',
         magicEffect: 'crossroads-left-swap',
         description: '一次性：将地城行最左边的两张牌交换位置。',
+        shortDescription: '地城行最左 2 张互换',
       },
       destination: 'stay',
       banner: '命运十字路口翻转为「命运挪移」！',
@@ -1119,6 +1152,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventSecretVaultImage,
     description: '选择选项后翻转为「秘藏宝库（已开启）」，可重复使用。',
+    shortDescription: '选项后翻为「秘藏宝库（已开启）」',
     eventChoices: [
       {
         text: '搜刮遗物（获得两张专属卡，随机弃回两张手牌）',
@@ -1190,6 +1224,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventShadowPactImage,
     description: '选择选项后翻转为「暗影之刺」永久魔法（扩展手牌选项除外）。',
+    shortDescription: '选项后翻为「暗影之刺」永久魔法',
     eventChoices: [
       { text: '签下血约（受到 8 点伤害）', effect: 'hp-8' },
       {
@@ -1221,6 +1256,7 @@ export function createDeck(
         magicType: 'permanent',
         magicEffect: '永久：对怪造成伤害；用后叠刺+1，回回收袋。',
         description: '每用过一次叠刺+1；卡面数字为叠刺层数。',
+        shortDescription: '伤害 ＝ 叠刺层数；用后 +1 层',
         scalingDamage: 1,
       },
       destination: 'stay',
@@ -1235,6 +1271,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventResonanceForgeImage,
     description: '选择选项后翻转为「熔炉之心」护符。',
+    shortDescription: '选项后翻为「熔炉之心」护符',
     eventChoices: [
       { text: '左槽淬火（左槽永久伤害 +2，恢复2耐久）', effect: ['slotLeftDamage+2', 'repairSlot:left:2'] },
       { text: '右槽固化（右槽永久护甲 +2，恢复2耐久）', effect: ['slotRightDefense+2', 'repairSlot:right:2'] },
@@ -1250,6 +1287,7 @@ export function createDeck(
         value: 0,
         image: forgeHeartAmuletImage,
         description: `每有一张牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。可熔炉灵焰`,
+        shortDescription: `每翻转 1 张牌：+${FLIP_GOLD_REWARD} 金币`,
         amuletEffect: 'flip-gold',
       },
       destination: 'stay',
@@ -1265,6 +1303,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventGreedyAltarImage,
     description: '选择选项后翻转为「破印遗物」一次性魔法。',
+    shortDescription: '选项后翻为「破印遗物」一次性魔法',
     eventChoices: [
       {
         id: 'greedy-left',
@@ -1319,6 +1358,7 @@ export function createDeck(
         knightEffect: 'graveyard-discover-equip-amulet',
         magicEffect: '一次性：从坟场发现一张装备或护符（三选一）。',
         description: '从坟场发现一张装备或护符（三选一），加入背包。',
+        shortDescription: '坟场发现 1 张装备或护符（3 选 1）',
       },
       destination: 'stay',
       message: '破坏祭坛翻转为「破印遗物」！',
@@ -1333,6 +1373,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventBattleHonorImage,
     description: '结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
+    shortDescription: '结算后右侧所有怪物激怒',
     eventChoices: [
       { text: '整理呼吸（回复 8 HP，超杀吸血+1）', effect: ['heal+8', 'spellLifesteal+1'] },
       { text: '回收战利品（金币 +15，打开商店）', effect: ['gold+15', 'openShop'] },
@@ -1428,6 +1469,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventCrimsonPactImage,
     description: '选择选项后翻转为「双重燃烧（觉醒）」。',
+    shortDescription: '选项后翻为「双重燃烧（觉醒）」',
     eventChoices: [
       { text: '血价交易（-2 HP，发现专属）', effect: 'hp-2,discoverClass' },
       {
@@ -1451,6 +1493,7 @@ export function createDeck(
         value: 0,
         image: dedupeEventCrimsonPactAwakenedImage,
         description: '使用后进入墓地。若预览行正上方是魔法牌，触发魔法共鸣，翻转为「虚空置换」永久魔法。',
+        shortDescription: '上方为魔法牌时触发共鸣翻转',
         eventChoices: [
           { text: '鲜血献祭（-6 HP，发现专属）', effect: 'hp-6,discoverClass' },
           {
@@ -1501,6 +1544,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventCryptWhisperImage,
     description: '左右两侧都是怪物时，翻转为「墓语回响」；否则翻转为「墓语遗愿」。',
+    shortDescription: '依两侧是否为怪物翻为不同卡',
     eventChoices: [
       {
         text: '净化杂质（删 3 张牌）',
@@ -1555,6 +1599,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventFateDiceCupImage,
     description: '掷骰后翻转为「命运之刃」建筑。',
+    shortDescription: '掷骰后翻为「命运之刃」建筑',
     eventChoices: [
       {
         text: '掷出不同结果：金币+10并打开商店/商店等级+1并永久劝降费用-2/法术伤害+1并超杀吸血+1/摧毁所有护符/发现两张专属卡，然后翻转成"命运之刃"。',
@@ -1585,6 +1630,7 @@ export function createDeck(
         maxHp: 3,
         description:
           '建筑：仅血量与血层，不攻击；可被伤害直至毁坏后进坟场。从手牌打出时失去 5 点生命。出场或换位时获得一次释放机会：右侧为药水/武器/护盾/事件则摧毁并送入坟场；右侧为怪物则激怒，直接打掉 2 层血（可击杀）；右侧无牌则从背包抽 2 张牌。',
+        shortDescription: '出场/换位释放：依右邻牌摧毁/打 2 层血/抽 2 张',
         eventChoices: [
           { text: '释放命运之刃', hint: '对右侧相邻卡牌造成效果（事件会进坟场）', effect: 'fate-dice-strike' },
         ],
@@ -1602,6 +1648,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventChaosDiceGameImage,
     description: '掷骰后翻转为「混沌冲击」永久魔法。',
+    shortDescription: '掷骰后翻为「混沌冲击」永久魔法',
     eventChoices: [
       {
         text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗回背包并抽2张牌，并翻转为"混沌冲击"。',
@@ -1632,6 +1679,7 @@ export function createDeck(
         magicType: 'permanent',
         magicEffect: '永久魔法：对一个怪物造成 3 点伤害。超杀：抽 2 张牌。(可超手牌上限)',
         description: '对一个怪物造成 3 点伤害。超杀：抽 2 张牌。(可超手牌上限)',
+        shortDescription: '3 点伤害；超杀抽 2 张',
       },
       destination: 'stay',
       message: '混沌骰局翻转为混沌冲击！',
@@ -1646,6 +1694,7 @@ export function createDeck(
     value: 0,
     image: dedupeStarterMagicMissileImage,
     description: '掷骰决定弹幕赐福，结束后翻转为「弹幕之符」放入背包。',
+    shortDescription: '掷骰获得弹幕赐福；翻为「弹幕之符」入背包',
     eventChoices: [
       {
         text: '掷出不同结果：4魔弹/瀑流增幅护符/法强超杀+1/魔弹击晕护符/魔弹抽牌护符/Lv1魔法飞弹。',
@@ -1669,6 +1718,7 @@ export function createDeck(
         image: starterAmuletMissileImage,
         amuletEffect: 'card-gain-missile',
         description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
+        shortDescription: '每次从坟场/专属池获牌：入手 1 张「魔弹」',
       },
       destination: 'backpack',
       message: '弹幕骰局翻转为「弹幕之符」，已放入背包！',
@@ -1683,6 +1733,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventTimeRiftImage,
     description: '掷骰，若结果为「时空收缩」或「时空侵蚀」则翻转为「时空镜像」永久魔法。',
+    shortDescription: '掷骰；特定结果翻为「时空镜像」',
     eventChoices: [
       {
         text: '掷出不同结果：锋刃祝福/时空收缩/空间代价。',
@@ -1706,6 +1757,7 @@ export function createDeck(
         magicType: 'permanent',
         magicEffect: 'equalize-temp-attack-armor',
         description: '永久魔法（Perm 2）：选择一个装备栏，临时攻击 +2，然后使得临时攻击和临时护甲相等（增加较低的一方）。',
+        shortDescription: '该栏临时攻 +2；临时攻/护拉平',
         recycleDelay: 2,
       },
       destination: 'stay',
@@ -1721,6 +1773,7 @@ export function createDeck(
     value: 0,
     image: skillScrollImage,
     description: '选择选项后翻转为「奥术风暴」或「奥术护盾」。',
+    shortDescription: '选项后翻为「奥术风暴」或「奥术护盾」',
     eventChoices: [
       {
         text: '法术回响（下一张Magic触发两次）',
@@ -1778,6 +1831,7 @@ export function createDeck(
         magicType: 'permanent',
         magicEffect: 'arcane-storm-magic-count',
         description: '永久魔法（Perm 1）：造成 X 点伤害，X = 已使用的魔法卡数量。使用后计数清零。',
+        shortDescription: '伤害 ＝ 已使用魔法数；用后计数清零',
         recycleDelay: 1,
       },
       destination: 'stay',
@@ -1792,6 +1846,7 @@ export function createDeck(
     value: 0,
     image: persuadeScrollCharmImage,
     description: '若装备着怀柔之印或劝降归袋符，将升级它们。',
+    shortDescription: '升级劝降相关护符',
     eventChoices: [
       {
         text: '掷出劝降骰：劝降等级+1/劝降费用-2/连劝减半/种族加成/耐久增强',
@@ -1816,6 +1871,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventCursedDiceImage,
     description: '掷骰后翻转为「诅咒碑」建筑。',
+    shortDescription: '掷骰后翻为「诅咒碑」建筑',
     waterfallEffect: { type: 'destroyAllAmuletsAndDiscardHand', amount: 0, description: '被挤出时：摧毁所有护符，弃回所有手牌' },
     eventChoices: [
       {
@@ -1846,6 +1902,7 @@ export function createDeck(
         maxHp: 8,
         description:
           '建筑（血量 8）：光环——堆叠在诅咒碑之上的怪物不受玩家魔法伤害。可被攻击摧毁。',
+        shortDescription: '光环：堆叠之上的怪物免疫法术伤害',
       },
       destination: 'stay',
       message: '诅咒骰局翻转为诅咒碑！',
@@ -1864,6 +1921,7 @@ export function createDeck(
     value: 0,
     image: skillScrollImage,
     description: '翻转条件：激活行有至少 1 张装备牌时，翻转为「装备附魔」。',
+    shortDescription: '激活行有装备时可翻为「装备附魔」',
     eventChoices: [
       {
         id: 'arsenal-left-dur',
@@ -1915,6 +1973,7 @@ export function createDeck(
         magicType: 'instant',
         magicEffect: 'equipment-enchant-discard',
         description: '一次性魔法：弃置手牌中一张装备，将其攻击/护甲值随机附加到装备栏的某件装备上，并使该装备耐久上限+1、耐久+1。',
+        shortDescription: '弃 1 张手牌装备，将数值附加到一件装备上 +1 耐久上限/耐久',
       },
       destination: 'stay',
       message: '战备工坊翻转为「装备附魔」！',
@@ -1933,6 +1992,7 @@ export function createDeck(
     value: 0,
     image: skillScrollImage,
     description: '若此牌下方有堆叠牌，处理后将消耗下方牌并驻留。可翻转为「祭坛秘术」。',
+    shortDescription: '下方有堆叠时消耗它并驻留；可翻为「祭坛秘术」',
     stayIfStacked: true,
     eventChoices: [
       {
@@ -1983,6 +2043,7 @@ export function createDeck(
         magicType: 'instant',
         magicEffect: 'altar-discard-discover',
         description: '一次性法术：弃回至多 2 张手牌，发现 1 张专属 Magic 卡。',
+        shortDescription: '弃回至多 2 张手牌，发现 1 张专属 Magic',
       },
       destination: 'stay',
       message: '附魔祭坛翻转为「祭坛秘术」！',
@@ -1999,6 +2060,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventResonanceForgeImage,
     description: '掷骰子，为一张手牌赋予侧击或转型效果。',
+    shortDescription: '掷骰：为一张手牌赋予侧击/转型',
     eventChoices: [
       {
         text: '掷出赋能骰：侧击劝降-1/侧击击晕+5%/转型抽2/转型回2血/侧击伤害5',
@@ -2026,6 +2088,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventResonanceForgeImage,
     description: '可将一张牌增幅为祭坛，或复制已增幅的卡牌。',
+    shortDescription: '增幅一张牌为祭坛，或复制已增幅的牌',
     eventChoices: [
       {
         id: 'amplify-equip',
@@ -2077,6 +2140,7 @@ export function createDeck(
     value: 0,
     image: eventScrollImage,
     description: '命运反转，万物皆可翻面。选择一种翻转之力。',
+    shortDescription: '命运反转，万物皆可翻面',
     eventChoices: [
       {
         text: '万象齐转（翻转激活行所有可翻转/已翻转的牌）',
@@ -2123,6 +2187,7 @@ export function createDeck(
     value: 0,
     image: dedupeEventBattleHonorImage,
     description: '选择一项奖励。',
+    shortDescription: '选择一项奖励',
     eventChoices: [
       {
         text: '战鼓激励（金币+15，获得Lv1「战斗鼓舞」）',
@@ -2253,6 +2318,7 @@ export function createStarterHealEchoCard(): GameCardData {
     magicType: 'permanent',
     magicEffect: '永久魔法：使用时立即回复 2 点生命。',
     description: '使用时立即回复 2 点生命。使用后回到回收袋，瀑流后可再次使用。',
+    shortDescription: '使用 +2 生命',
   };
 }
 
@@ -2268,6 +2334,7 @@ export function createMagicBoltCard(rng: RngState): [GameCardData, RngState] {
     knightEffect: 'missile-bolt',
     magicEffect: '一次性：选择一个怪物，造成 1 点法术伤害。',
     description: '选择一个怪物，造成 1 点法术伤害。',
+    shortDescription: '对一个怪物造成 1 法伤',
   } as GameCardData;
   return [card, nextRng];
 }
@@ -2287,6 +2354,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一个装备栏，临时攻击力 +2。',
       description: '选择一个装备栏，临时攻击力 +2（瀑流后重置）。',
+      shortDescription: '所选栏 +2 临时攻',
       maxUpgradeLevel: 2,
     },
     {
@@ -2298,6 +2366,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：失去 2 点生命，选择一个装备恢复 1 点耐久。',
       description: '失去 2 点生命，选择一个装备恢复 1 点耐久。',
+      shortDescription: '失去 2 生命；一件装备 +1 耐久',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
     },
@@ -2310,6 +2379,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：将 1 张手牌移到回收袋，从背包抽 2 张牌。',
       description: '将 1 张手牌移到回收袋，从背包抽取 2 张新牌。',
+      shortDescription: '弃 1 张手牌入回收袋；抽 2 张',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
     },
@@ -2322,6 +2392,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城卡牌，置于牌堆底（不打乱牌堆）。',
       description: '将一张地城卡牌放到牌堆最底部。',
+      shortDescription: '一张地城牌置于牌堆底',
       recycleDelay: 3,
       maxUpgradeLevel: 2,
     },
@@ -2334,6 +2405,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：将地城行最左和最右的卡牌对换位置。',
       description: '扭转地城秩序，将最左与最右的卡牌互换。',
+      shortDescription: '地城行最左与最右互换',
       recycleDelay: 2,
       maxUpgradeLevel: 2,
     },
@@ -2351,6 +2423,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterWorldSwapImage,
       magicType: 'permanent',
       description: '选择当前行一张可翻转或已翻转的卡牌，将其翻转到另一面。',
+      shortDescription: '翻转激活行一张可翻牌',
       recycleDelay: 2,
       maxUpgradeLevel: 0,
     },
@@ -2373,6 +2446,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一个装备栏，+2 临时护甲。升级1：+4。升级2：+6。',
       description: '选择一个装备栏，+2 临时护甲。升级1：+4。升级2：+6。',
+      shortDescription: '所选栏 +2 临时护（Lv1: +4 / Lv2: +6）',
       maxUpgradeLevel: 2,
     },
     {
@@ -2386,6 +2460,7 @@ export function createStarterCardPool(): GameCardData[] {
       killGoldScaling: true,
       killGoldCounter: 2,
       description: '每击杀一个怪物获得金币（首次+2，之后每次递增）。',
+      shortDescription: '每击杀怪物 +金币（首次 +2，递增）',
     },
     {
       id: STARTER_CARD_IDS.ghostBlade2,
@@ -2397,6 +2472,7 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 2,
       ghostBladeExile: true,
       description: '每次攻击后，可从坟场选择卡牌移除出游戏。',
+      shortDescription: '攻击后可从坟场移除 1 张牌',
     },
     {
       id: STARTER_CARD_IDS.luckyDagger,
@@ -2409,6 +2485,7 @@ export function createStarterCardPool(): GameCardData[] {
       critChance: 50,
       weaponDurabilitySaveChance: 50,
       description: '50% 暴击（双倍伤害），50% 不消耗耐久。',
+      shortDescription: '50% 暴击；50% 不耗耐久',
     },
     {
       id: STARTER_CARD_IDS.waterfallSword,
@@ -2420,6 +2497,7 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 1,
       waterfallAttackBoost: 1,
       description: '每次瀑流攻击力+1。初始攻击力高但耐久仅1。',
+      shortDescription: '每次瀑流攻击 +1',
     },
     {
       id: STARTER_CARD_IDS.persuadeBlade,
@@ -2432,6 +2510,7 @@ export function createStarterCardPool(): GameCardData[] {
       persuadeBoostOnHit: 15,
       persuadeBoostOnHitElite: 10,
       description: '每攻击一次，下次劝降成功概率 +15%（精英 +10%）。',
+      shortDescription: '每次攻击下次劝降率 +15%（精英 +10%）',
     },
     {
       id: STARTER_CARD_IDS.immortalHammer,
@@ -2444,6 +2523,7 @@ export function createStarterCardPool(): GameCardData[] {
       weaponStunChance: 20,
       hasEquipmentRevive: true,
       description: '20% 击晕。复生：首次毁坏时以 1 耐久复生。',
+      shortDescription: '20% 击晕；复生 1 次',
     },
     {
       id: STARTER_CARD_IDS.guardianShield,
@@ -2456,6 +2536,7 @@ export function createStarterCardPool(): GameCardData[] {
       armorMax: 2,
       onDestroyDraw: 2,
       description: '遗言：从背包抽 2 张牌。',
+      shortDescription: '遗言：抽 2 张',
     },
     {
       id: STARTER_CARD_IDS.linkShield,
@@ -2467,6 +2548,7 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 3,
       onEquipEffect: 'other-slot-durability+1',
       description: '入场：另一个装备栏的装备 +1 耐久。',
+      shortDescription: '入场：另一栏装备 +1 耐久',
     },
     {
       id: STARTER_CARD_IDS.missileForgeBlade,
@@ -2478,6 +2560,7 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 2,
       overkillAmplifyMissile: 1,
       description: '超杀：所有「魔弹」永久增幅 +1（每次超杀触发一次）。',
+      shortDescription: '超杀：所有「魔弹」永久 +1 增幅',
     },
     {
       id: STARTER_CARD_IDS.bountyGoldBlade,
@@ -2489,6 +2572,7 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 2,
       onEquipEffect: 'gold+6',
       description: '入场：金币 +6。',
+      shortDescription: '入场 +6 金币',
     },
     {
       id: STARTER_CARD_IDS.rushAttackBlade,
@@ -2500,6 +2584,7 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 2,
       onEquipEffect: 'temp-attack-3',
       description: '入场：该装备栏临时攻击 +3。',
+      shortDescription: '入场本栏 +3 临时攻',
     },
     {
       id: STARTER_CARD_IDS.legacyShield,
@@ -2512,6 +2597,7 @@ export function createStarterCardPool(): GameCardData[] {
       armorMax: 3,
       onDestroyEffect: 'slot-temp-armor-3',
       description: '遗言：该装备栏临时护甲 +3。',
+      shortDescription: '遗言：本栏 +3 临时护',
     },
     {
       id: STARTER_CARD_IDS.spiritGuardShield,
@@ -2524,6 +2610,7 @@ export function createStarterCardPool(): GameCardData[] {
       armorMax: 2,
       waterfallTempArmor: 2,
       description: '每次瀑流，该装备栏临时护甲 +2。',
+      shortDescription: '每次瀑流本栏 +2 临时护',
     },
     {
       id: STARTER_CARD_IDS.healMagic,
@@ -2534,6 +2621,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'instant',
       magicEffect: '即时魔法：回复 5 点生命。',
       description: '一次性使用，立即回复 5 点生命。',
+      shortDescription: '+5 生命',
       maxUpgradeLevel: 2,
     },
     {
@@ -2544,6 +2632,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterPotionForgeImage,
       potionEffect: 'perm-slot-damage+2',
       description: '选择一个装备栏，永久伤害 +2。',
+      shortDescription: '所选栏永久 +2 伤害',
     },
     {
       id: STARTER_CARD_IDS.durabilityPotion,
@@ -2553,6 +2642,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterPotionDurabilityImage,
       potionEffect: 'perm-equipment-durability-max+2',
       description: '选择一个装备，耐久上限 +2。',
+      shortDescription: '一件装备耐久上限 +2',
     },
     {
       id: STARTER_CARD_IDS.classSummon,
@@ -2563,6 +2653,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'instant',
       magicEffect: '即时魔法：弃回至多 2 张牌，获得一张职业专属卡。',
       description: '弃回至多 2 张手牌，获得一张职业专属卡。手牌不足 2 张时仍可使用。',
+      shortDescription: '弃回至多 2 张手牌，获得 1 张职业牌',
       maxUpgradeLevel: 1,
     },
     {
@@ -2574,6 +2665,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一张地城行卡牌，与正上方预览行卡牌互换位置。',
       description: '将地城行的一张牌和它正上方预览行的牌互换。',
+      shortDescription: '一张地城牌与正上方预览牌互换',
       recycleDelay: 2,
       maxUpgradeLevel: 2,
     },
@@ -2585,6 +2677,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterAmuletLoneImage,
       amuletEffect: 'lone-card',
       description: '每次瀑流时（回收前），若背包卡牌数量为 1，获得一张职业专属牌。',
+      shortDescription: '瀑流时若背包仅 1 张：获得 1 张职业牌',
     },
     {
       id: STARTER_CARD_IDS.attackPersuadeAmulet,
@@ -2594,6 +2687,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletPersuadeDiscountImage,
       amuletEffect: 'attack-persuade-discount',
       description: '每攻击一次，下次劝降费用 -3（可叠加）。',
+      shortDescription: '每次攻击下次劝降费用 -3（可叠加）',
     },
     {
       id: STARTER_CARD_IDS.cardGainMissileAmulet,
@@ -2603,6 +2697,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletMissileImage,
       amuletEffect: 'card-gain-missile',
       description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
+      shortDescription: '每次从坟场/专属池获牌：入手 1 张「魔弹」',
     },
     {
       id: STARTER_CARD_IDS.damageClassDiscoverAmulet,
@@ -2612,6 +2707,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletDamageDiscoverImage,
       amuletEffect: 'damage-class-discover',
       description: '每造成 8 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
+      shortDescription: '每造成 8 次伤害：发现 1 张专属',
     },
     {
       id: STARTER_CARD_IDS.swapUpgradeAmulet,
@@ -2621,6 +2717,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletSwapUpgradeImage,
       amuletEffect: 'swap-upgrade',
       description: '每交换 3 次位置，升级 1 张牌。',
+      shortDescription: '每交换 3 次位置：升级 1 张牌',
     },
     {
       id: STARTER_CARD_IDS.stunUpgradeCapAmulet,
@@ -2630,6 +2727,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletStunCapImage,
       amuletEffect: 'stun-upgrade-cap',
       description: '每击晕一次怪物，击晕上限 +5%。',
+      shortDescription: '每击晕怪物 1 次：击晕上限 +5%',
     },
     {
       id: STARTER_CARD_IDS.recycleBackpackExpandAmulet,
@@ -2639,6 +2737,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletRecycleExpandImage,
       amuletEffect: 'recycle-backpack-expand',
       description: '每回收 8 张牌，背包上限 +3。',
+      shortDescription: '每回收 8 张牌：背包上限 +3',
     },
     {
       id: STARTER_CARD_IDS.dungeonGoldAmulet,
@@ -2648,6 +2747,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterAmuletDungeonGoldImage,
       amuletEffect: 'dungeon-gold',
       description: '每处理 1 张地城牌，金币 +1。',
+      shortDescription: '每处理 1 张地城牌：+1 金币',
     },
     {
       id: STARTER_CARD_IDS.flipOverkillLifestealAmulet,
@@ -2657,6 +2757,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: flipLifestealAmuletImage,
       amuletEffect: 'flip-overkill-lifesteal',
       description: '每翻转 8 张牌，超杀吸血永久 +1。',
+      shortDescription: '每翻转 8 张牌：超杀吸血永久 +1',
     },
     {
       id: STARTER_CARD_IDS.equipAmuletCapAmulet,
@@ -2666,6 +2767,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: equipAmuletCapImage,
       amuletEffect: 'equip-amulet-cap',
       description: '每装备 8 个装备，护符栏上限 +1。',
+      shortDescription: '每装备 8 件装备：护符栏上限 +1',
     },
     {
       id: STARTER_CARD_IDS.stunAttemptDiscoverAmulet,
@@ -2675,6 +2777,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: stunDiscoverAmuletImage,
       amuletEffect: 'stun-attempt-discover',
       description: '每尝试击晕 6 次，发现一张专属牌。',
+      shortDescription: '每尝试击晕 6 次：发现 1 张专属',
     },
     {
       id: STARTER_CARD_IDS.undyingBlessing,
@@ -2685,6 +2788,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），然后失去 2 点生命。',
       description: '赋予装备复生能力，失去 2 点生命。已复生的装备可再次赋予。',
+      shortDescription: '一件装备获得复生；失去 2 生命',
       recycleDelay: 2,
       maxUpgradeLevel: 1,
     },
@@ -2697,6 +2801,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：回手一张牌，抽 1 张牌。',
       description: '回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌。',
+      shortDescription: '回手 1 张装备/护符；抽 1 张',
     },
     {
       id: STARTER_CARD_IDS.magicMissile,
@@ -2707,6 +2812,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：手上加入 2 张一次性「魔弹」。',
       description: '加入 2 张一次性「魔弹」到手牌（每张可对一个怪物造成 1 点法术伤害）。',
+      shortDescription: '手上加入 2 张「魔弹」',
       maxUpgradeLevel: 2,
     },
     {
@@ -2718,6 +2824,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：失去 1 点生命，获得 1 金币，从背包抽 1 张牌。',
       description: '失去 1 点生命，获得 1 金币，从背包抽 1 张牌。',
+      shortDescription: '-1 生命；+1 金币；抽 1 张',
       maxUpgradeLevel: 2,
     },
     {
@@ -2729,6 +2836,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：使用：将回收袋洗回背包（所有牌剩余瀑流 -1，就绪的牌回背包）。被回收时，从背包抽 1 张牌。',
       description: '使用：将回收袋洗回背包（所有牌剩余瀑流 -1，就绪的牌回背包）。被回收时，从背包抽 1 张牌。',
+      shortDescription: '回收袋剩余瀑流 -1；被回收时抽 1 张',
       recycleDelay: 1,
       onDiscardDraw: 1,
       maxUpgradeLevel: 2,
@@ -2744,6 +2852,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：从背包抽 2 张牌。',
       description: '从背包抽 2 张牌。\n上手：随机一个装备栏 临时攻击 +1。',
+      shortDescription: '抽 2 张；上手随机一栏 +1 临时攻',
       recycleDelay: 1,
       onEnterHandEffect: 'survey-action-onhand',
       maxUpgradeLevel: 1,
@@ -2756,6 +2865,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterPotionSpellDamageImage,
       potionEffect: 'perm-spell-damage',
       description: '永久法术伤害 +1。',
+      shortDescription: '永久法伤 +1',
     },
     {
       id: STARTER_CARD_IDS.spellLifestealPotion,
@@ -2765,6 +2875,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterPotionLifestealImage,
       potionEffect: 'perm-spell-lifesteal+1',
       description: '永久超杀吸血 +1。',
+      shortDescription: '永久超杀吸血 +1',
     },
     {
       id: STARTER_CARD_IDS.stunPotion,
@@ -2774,6 +2885,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterPotionStunImage,
       potionEffect: 'perm-stun-cap+10',
       description: '击晕上限 +10%。',
+      shortDescription: '击晕上限 +10%',
     },
     {
       id: STARTER_CARD_IDS.slotCapacityPotion,
@@ -2783,6 +2895,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterSlotCapacityPotionImage,
       potionEffect: 'perm-slot-capacity+1',
       description: '选择一个装备栏，可装备上限 +1。',
+      shortDescription: '所选栏装备上限 +1',
     },
     {
       id: STARTER_CARD_IDS.upgradeScroll,
@@ -2793,6 +2906,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'instant',
       magicEffect: '即时魔法：升级一张牌。',
       description: '一次性使用，选择一张牌进行升级。',
+      shortDescription: '升级 1 张牌',
     },
     {
       id: STARTER_CARD_IDS.fateSwapDeep,
@@ -2801,8 +2915,9 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollFateDeepImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择地城行一张牌，与牌堆顶 5 张中随机一张交换位置。如果换出来的牌是怪物，则其劝降概率 +30%（精英 +15%）。',
-      description: '深入命运：与即将到来的 5 张牌之一交换，换出怪物时提升劝降概率。',
+      magicEffect: '永久魔法：选择地城行一张牌，与牌堆顶 4 张中随机一张交换位置。如果换出来的牌是怪物，则其劝降概率 +30%（精英 +15%）。',
+      description: '深入命运：与即将到来的 4 张牌之一交换，换出怪物时提升劝降概率。',
+      shortDescription: '与牌堆顶 4 张随机一张互换；换出怪物时劝降率 +30%',
     },
     {
       id: STARTER_CARD_IDS.handLimitPotion,
@@ -2812,6 +2927,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterPotionHandLimitImage,
       potionEffect: 'perm-hand-limit+1',
       description: '手牌上限 +1。',
+      shortDescription: '手牌上限 +1',
     },
     {
       id: STARTER_CARD_IDS.backpackSizePotion,
@@ -2821,6 +2937,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterBackpackSizePotionImage,
       potionEffect: 'perm-backpack-size+3',
       description: '背包上限 +3。',
+      shortDescription: '背包上限 +3',
     },
     {
       id: STARTER_CARD_IDS.bothSlotsShieldPotion,
@@ -2830,6 +2947,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: potionShieldFortifyImage,
       potionEffect: 'perm-both-slots-shield+1',
       description: '左右装备栏永久护甲 +1。',
+      shortDescription: '双栏永久 +1 护甲',
     },
     {
       id: STARTER_CARD_IDS.stunStrike,
@@ -2840,6 +2958,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicType: 'permanent',
       magicEffect: '永久魔法：对一个怪物造成 1 点伤害 2 次，每次 20% 击晕。',
       description: '对一个怪物造成 1 点法术伤害 2 次，每次有 20% 概率击晕目标。',
+      shortDescription: '1 法伤 ×2；每次 20% 击晕',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
     },
@@ -2854,6 +2973,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterCombatRallyImage,
       magicType: 'permanent',
       description: '造成 X 点法术伤害，X 为此前连续转型的次数（含本牌）。同类型连出会断链。',
+      shortDescription: '伤害 ＝ 连续转型次数',
       recycleDelay: 2,
       maxUpgradeLevel: 0,
     },
@@ -2866,6 +2986,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterCombatRallyImage,
       magicType: 'permanent',
       description: '左装备栏 +3 临时攻击；侧击则改为右装备栏 +3。升级 1：+5。',
+      shortDescription: '左栏 +3 临时攻；侧击改右栏 +3',
       recycleDelay: 1,
       maxUpgradeLevel: 1,
     },
@@ -2878,6 +2999,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterWorldSwapImage,
       magicType: 'permanent',
       description: '与牌堆顶交换一张当前行卡牌；同类型奖励 +10 金币，否则 -1。',
+      shortDescription: '与牌堆顶互换 1 张当前行牌；同类 +10 金币',
       recycleDelay: 2,
       maxUpgradeLevel: 0,
     },
@@ -2901,6 +3023,7 @@ export function createCrimsonVoidSwapMagic(): GameCardData {
     magicType: 'permanent',
     magicEffect: 'swap-backpack-recycle',
     description: '永久魔法：将背包与永久魔法回收袋内的所有牌对换（瀑流延迟 1）。',
+    shortDescription: '背包与永久魔法回收袋全部互换',
     recycleDelay: 1,
     maxUpgradeLevel: 1,
   };

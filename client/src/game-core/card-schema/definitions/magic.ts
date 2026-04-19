@@ -1175,6 +1175,7 @@ const starterMagicMissile: CardDefinition = {
         knightEffect: 'missile-bolt',
         magicEffect: '一次性：选择一个怪物，造成 1 点法术伤害。',
         description: '选择一个怪物，造成 1 点法术伤害。',
+        shortDescription: '对一个怪物造成 1 法伤',
       } as GameCardData);
     }
     patch.rng = rng;
