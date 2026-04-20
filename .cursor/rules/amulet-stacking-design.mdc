@@ -1,0 +1,122 @@
+---
+description: Design requirements for new amulet (护符) effects — stacking semantics, aggregation, and consumer rules
+globs: client/src/game-core/equipment.ts,client/src/game-core/deck.ts,client/src/game-core/card-schema/definitions/upgrades.ts,client/src/game-core/rules/**,client/src/components/game-board/types.ts
+alwaysApply: false
+---
+
+# Adding a New Amulet — Stacking-First Design
+
+Every amulet **MUST** be designed so that N copies equipped at once still work. The universal rule:
+
+> **Each equipped amulet operates independently. Visible effects naturally aggregate.**
+
+There is no "no-stack" amulet. Even amulets with seemingly-binary effects (e.g. `双守护圣盾`) must scale with N — otherwise duplicates are dead loot.
+
+## 1. Pick the stacking category
+
+Before writing any code, decide which category your amulet falls into:
+
+| Category | Aggregation field shape | Consumer formula | Examples |
+|---|---|---|---|
+| **Linear (×N)** | `xCount: number` (++) | magnitude × N | `dual-guard`, `strength`, `balance`, `stun-rate-boost` (+20N), `stun-gold` (+10N) |
+| **Compound (2^N)** | `xCount: number` (++) | `Math.pow(2, count)` | `heal` (×2^N), `flash` (attack / 2^N) |
+| **Summed bonus** | `xCount: number` + `xBonus: number` (per-amulet bonus summed) | use `xBonus` directly | `persuade-on-temp-attack` (10/20 per amulet), `persuade-grant-recycle-fetch` (1/2 per amulet via `…Total`) |
+| **Progress counter** | `xCount: number` (++) | streak/progress `+= count` per qualifying event | `damage-class-discover`, `magic-class-discover`, `monster-kill-upgrade`, `flip-overkill-lifesteal`, `recycle-backpack-expand`, `equip-amulet-cap`, `stun-attempt-discover`, `swap-upgrade` |
+| **Discrete event ×N** | `xCount: number` (++) | fire `count` independent triggers (or magnitude × N) | `discard-zap`, `flip-zap`, `catapult` (2N draws), `flip-gold` (5N gold), `card-gain-missile`, `dungeon-gold`, `monster-equip-buff` |
+| **Independent ×N** | `xCount: number` (++) | each amulet's effect applied independently | `recycle-forge`, `equipment-salvage`, `lone-card` |
+
+If the new amulet doesn't fit one of these — **stop and ask** the user before inventing a new stacking shape.
+
+## 2. Required wiring
+
+### a. Add the typed effect id
+
+`AmuletEffectId` union in [`GameCard.tsx`](client/src/components/GameCard.tsx). Use `kebab-case`.
+
+### b. Add the aggregation field
+
+[`ActiveAmuletEffects`](client/src/components/game-board/types.ts) — pick a shape from the table above.
+Add a JSDoc comment explaining the stacking convention if it's non-obvious (compound / summed bonus).
+
+### c. Initialize in the empty factory
+
+[`createEmptyAmuletEffects`](client/src/game-core/constants.ts) — counters → `0`, sums → `0`.
+
+### d. Aggregate in the canonical switch
+
+[`computeAmuletEffects`](client/src/game-core/equipment.ts) — `case 'my-effect': effects.myCount += 1; break;` (or `+= bonus`). **Never** assign (`= 1` / `= bonus`); always accumulate.
+
+```typescript
+// ❌ BAD — doesn't stack
+case 'dual-guard': effects.hasDualGuard = true; break;
+case 'life': effects.lifeOverkillBonus = 4; break;
+
+// ✅ GOOD — stacks linearly
+case 'dual-guard': effects.dualGuardCount += 1; break;
+case 'life': effects.lifeOverkillBonus += 4; break;
+```
+
+### e. Consume by count, not by boolean
+
+In rule files / hooks / components, gate on `count > 0` and **scale the magnitude by count**:
+
+```typescript
+// ❌ BAD — single-amulet behavior
+if (amuletFx.hasFlipGold) {
+  patch.gold = (state.gold ?? 0) + FLIP_GOLD_REWARD;
+}
+
+// ✅ GOOD — N amulets → N × reward
+if (amuletFx.flipGoldCount > 0) {
+  patch.gold = (state.gold ?? 0) + FLIP_GOLD_REWARD * amuletFx.flipGoldCount;
+}
+```
+
+For **progress counters**, increment by `count`, not `+1`:
+
+```typescript
+// ❌ BAD — 1 amulet vs 5 amulets behave the same
+const amulet = state.amuletSlots.find(s => s?.amuletEffect === 'monster-kill-upgrade');
+if (amulet) progress += 1;
+
+// ✅ GOOD — N amulets fire threshold N× faster
+const amulets = state.amuletSlots.filter(s => s?.amuletEffect === 'monster-kill-upgrade');
+if (amulets.length > 0) progress += amulets.length;
+```
+
+For **discrete event triggers** that emit a side-effect for UI animation, pass `count` in the payload and have the consumer queue N animations:
+
+```typescript
+// reducer side
+sideEffects.push({ event: 'card:flipShock', payload: { count: amuletFx.flipZapCount } });
+
+// hook side
+useGameEvent('card:flipShock', ({ count }) => {
+  for (let i = 0; i < count; i++) queueZapFlight();
+});
+```
+
+### f. Add a stacking test
+
+In [`amulet-stacking.test.ts`](client/src/game-core/__tests__/amulet-stacking.test.ts), add a case under the matching category that asserts on the count/bonus produced by `computeAmuletEffects` for `[amulet, amulet]` (and where applicable, the consumer-side magnitude).
+
+## 3. Forbidden patterns
+
+- ❌ `effects.hasMyAmulet: boolean` — booleans cannot stack
+- ❌ `effects.myField = value` (assignment) inside the switch — clobbers prior amulets
+- ❌ `if (state.amuletSlots.some(s => s?.amuletEffect === 'x'))` in consumer code — bypasses the count and treats N copies as 1
+- ❌ `amuletSlots.find(...)` to advance a progress counter by `+1` — must use `filter().length` and add `length`
+- ❌ Designing an amulet whose duplicates are explicitly "no-op" — all amulets must scale, even if subtly
+
+## 4. Quick checklist
+
+- [ ] Stacking category chosen and matches one of the 6 shapes above
+- [ ] `AmuletEffectId` union extended
+- [ ] `ActiveAmuletEffects` field added (with JSDoc if non-linear)
+- [ ] `createEmptyAmuletEffects` initializes the new field
+- [ ] `computeAmuletEffects` switch case uses `+=` (never `=`)
+- [ ] All consumers gate on `count > 0` and scale by `count` (or use the summed bonus field)
+- [ ] Progress counters use `filter().length`, not `find()`
+- [ ] Discrete event side-effects carry `count` in payload; consumers loop `count` times
+- [ ] Stacking test added in `amulet-stacking.test.ts`
+- [ ] `npx tsc --noEmit` and `npx vitest run client/src/game-core/__tests__/amulet-stacking.test.ts` clean

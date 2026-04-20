@@ -222,6 +222,7 @@ const armorStrike: OnUpgradeHandler = (upgraded, newLevel) => {
   const pcts = [100, 150];
   const pct = pcts[newLevel] ?? 150;
   upgraded.description = `永久：选择一件护甲装备，对目标怪物造成等同护甲值 ${pct}% 的伤害。`;
+  upgraded.shortDescription = `一件护甲值 ${pct}% 转化为伤害`;
   upgraded.magicEffect = `护甲值 ${pct}% 转化为伤害。`;
 };
 
@@ -229,6 +230,7 @@ const armorDoubleStrike: OnUpgradeHandler = (upgraded, newLevel) => {
   const pcts = [50, 75];
   const pct = pcts[newLevel] ?? 75;
   upgraded.description = `永久：选择一面护盾，对随机 2 个怪物各造成 ${pct}% 护甲值的法术伤害，然后该护盾耐久 -1。`;
+  upgraded.shortDescription = `${pct}% 护甲法伤随机 2 怪；该盾耐久 -1`;
   upgraded.magicEffect = `护甲值 ${pct}% 伤害随机两怪，盾耐久 -1。`;
 };
 
@@ -308,6 +310,7 @@ const armorStunConvert: OnUpgradeHandler = (upgraded, newLevel) => {
   const stunPerArmor = [1, 2];
   const sp = stunPerArmor[newLevel] ?? 2;
   upgraded.description = `永久：选择一个护盾，每 1 点护甲值使击晕上限 +${sp}%。`;
+  upgraded.shortDescription = `所选护盾每 1 护甲，击晕上限 +${sp}%`;
   upgraded.magicEffect = `护甲转化为击晕上限（每点 +${sp}%）。`;
 };
 

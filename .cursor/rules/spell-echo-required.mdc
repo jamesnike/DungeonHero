@@ -1,0 +1,85 @@
+---
+description: 新增或修改魔法卡（magic / hero-magic）时，必须同步处理「法术回响（Spell Echo）」机制
+globs: client/src/game-core/card-schema/definitions/magic.ts,client/src/game-core/rules/magic-effects.ts,client/src/game-core/rules/hero.ts
+alwaysApply: false
+---
+
+# 法术回响 (Spell Echo) 同步规则
+
+每当新增 / 修改一张 **magic** 或 **hero-magic** 卡时，必须**同步**实现「法术回响」行为，否则视为不完整的实现。
+
+## Echo 机制速览
+
+- 玩家打出 `双倍下次魔法` (`double-next-magic`) 后，状态机置位 `state.doubleNextMagic = true`
+- 下一张非自身魔法卡（不含 hero magic / curse）resolver 会收到：
+  - `echoMultiplier: 2`
+  - `isEchoTriggered: true`
+- `card-schema/engine.ts` 自动消耗该 flag。**禁止**在 reducer / resolver 内手动消耗。
+- 详细说明见 `magic-effects.ts` 顶部 `法术回响 AUDIT TABLE` 与 `GAME_MECHANICS.md §19`。
+
+## 三种实现策略
+
+| 类型 | 适用场景 | 实现方式 |
+|---|---|---|
+| **A 数值类 (NUMERIC)** | 伤害 / 治疗 / 抽牌 / 金币 / 加成 / 修复 / Buff 层数 等可乘的数值 | 把数值乘以 `echoMultiplier` |
+| **B 模态类 (MODAL)** | 需要玩家选择目标的卡（怪物 / 槽位 / 手牌） | 在 `pendingMagicAction` 写入 `echoRemaining: echoMultiplier`；reducer 收尾调 `maybeRepromptEcho()` 重新弹出第二次选择 |
+| **C 结构类 (STRUCTURAL)** | 整副洗牌 / 全场翻面 / 状态置换 等无可乘量的「一次性结构操作」 | 循环执行 `echoMultiplier` 次（第二次往往是 no-op），并在 banner 中提示「回响：二次结算无额外效果」 |
+| **B\* UI 委派模态** | discover / upgrade 等 UI 层独立管理的模态 | 仅触发一次，banner 提示「回响触发但当前不支持自动连开」 |
+
+## 必做清单（PR / Commit 前自检）
+
+每次改动魔法卡时，**完成以下全部步骤**：
+
+1. **Resolver 签名**：函数接收 `echoMultiplier: number` 与 `isEchoTriggered: boolean`，并真正使用它们。
+2. **数值乘法**：所有 `damage / heal / draw / gold / armor / buff` 等数值乘以 `echoMultiplier`。
+3. **`pendingMagicAction`**：模态类卡写入 `echoRemaining` 或 `echoMultiplier`，并在对应 reducer 分支消费。
+4. **Banner / 日志**：当 `isEchoTriggered === true` 或 `echoMultiplier > 1` 时，输出形如 `（回响×N）` 的提示。
+5. **更新 AUDIT TABLE**：在 `client/src/game-core/rules/magic-effects.ts` 顶部表格中加入 / 修改该卡的条目（标注 A / B / C / B\*）。
+6. **测试**：若引入新分类或新模式，向以下文件之一添加用例：
+   - `client/src/game-core/__tests__/spell-echo-numeric.test.ts`
+   - `client/src/game-core/__tests__/spell-echo-modal.test.ts`
+   - `client/src/game-core/__tests__/spell-echo-structural.test.ts`
+
+## 边界规则（不可违反）
+
+- ❌ Hero Magic（法力槽魔法）与 Curse 卡 **绝不参与** Echo —— `engine.ts` 已守卫，禁止在 resolver 内重复检查。
+- ❌ `double-next-magic` 自身被回响时**不再叠加** —— 已在 `engine.ts` 处理，禁止在 resolver 内再实现。
+- ❌ 不要绕过 `echoMultiplier` 直接读 `state.doubleNextMagic`；该 flag 由引擎统一消耗。
+- ❌ 不要在 reducer 内执行 RNG / 副作用以外的「重放」—— 全部经 `dispatch` + `pendingMagicAction.echoRemaining` 流转。
+
+## 反例（错误实现）
+
+```typescript
+// ❌ BAD — 没用 echoMultiplier，回响后伤害不翻倍
+function resolveFireball(state, card, ...) {
+  const dmg = computeSpellDamagePure(state, 5);
+  enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', damage: dmg, ... });
+}
+
+// ❌ BAD — 模态卡未写 echoRemaining，第二次选择被跳过
+patch.pendingMagicAction = { card, effect: 'pick-monster', step: 'monster-select' };
+```
+
+## 正例
+
+```typescript
+// ✅ GOOD — A 数值类
+function resolveFireball(state, card, ..., echoMultiplier, isEchoTriggered) {
+  const dmg = computeSpellDamagePure(state, 5) * echoMultiplier;
+  const echoTag = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+  enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', damage: dmg, ... });
+  banner(sideEffects, `火球术：${dmg} 点伤害。${echoTag}`);
+}
+
+// ✅ GOOD — B 模态类
+patch.pendingMagicAction = {
+  card, effect: 'pick-monster', step: 'monster-select',
+  echoRemaining: echoMultiplier,    // 关键
+} as PendingMagicAction;
+
+// reducer 中：
+const reprompt = maybeRepromptEcho(state, patch, sideEffects, enqueuedActions, ...);
+if (reprompt) return reprompt;
+```
+
+不确定卡牌应归入哪一类时，**先停下来询问用户**，再依据 `ask-before-changing` 规则确认范围。

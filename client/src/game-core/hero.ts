@@ -185,8 +185,8 @@ export function tickRecycleForge(
   state: GameState,
   amuletEffects: ActiveAmuletEffects,
 ): Partial<GameState> | null {
-  if (!amuletEffects.hasRecycleForge) return null;
-  const newCount = state.recycleForgePlayCount + 1;
+  if (amuletEffects.recycleForgeCount <= 0) return null;
+  const newCount = state.recycleForgePlayCount + amuletEffects.recycleForgeCount;
   if (newCount >= 3) {
     return { recycleForgePlayCount: 0 };
   }
@@ -223,6 +223,7 @@ export function resetHeroWavePure(state: GameState): Partial<GameState> {
     pendingHeroMagicAction: null,
     heroSkillBanner: null,
     pendingMagicAction: null,
+    pendingHandDiscardSelection: null,
     pendingPotionAction: null,
     heroMagicState: resetAllMagicWaveFlags(state.heroMagicState),
     berserkerRageActive: false,

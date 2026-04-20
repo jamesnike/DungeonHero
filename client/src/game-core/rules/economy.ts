@@ -18,6 +18,7 @@ import { shuffle as rngShuffle, nextInt } from '../rng';
 import { getEffectiveHandLimit, addCardToBackpackPure } from '../cards';
 import { computeAmuletEffects } from '../equipment';
 import { computeSpellDamagePure } from '../helpers';
+import type { PendingMonsterEndDice } from '../types';
 
 // Helper: enqueue +10 gold + log when a stun is applied and 雷金护符 is equipped
 function maybeEnqueueStunGold(
@@ -27,11 +28,12 @@ function maybeEnqueueStunGold(
   monsterName: string,
 ): void {
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-  if (!ae.hasStunGold) return;
-  enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10, source: 'amulet-stun-gold' } as GameAction);
+  if (ae.stunGoldCount <= 0) return;
+  const n = ae.stunGoldCount;
+  enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10 * n, source: 'amulet-stun-gold' } as GameAction);
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'amulet', message: `雷金护符：${monsterName} 被击晕，金币 +10` },
+    payload: { type: 'amulet', message: `雷金护符：${monsterName} 被击晕，金币 +${10 * n}` },
   });
 }
 
@@ -299,14 +301,16 @@ export function reduceEconomyActions(
         return applyPatch(state, { classDamageDiscoverStreak: action.streak ?? 0 });
       }
 
-      const discoverAmulet = (state.amuletSlots as GameCardData[]).find(
+      // Each equipped damage-class-discover amulet ticks the counter
+      // independently (N amulets → +N progress per qualifying hit).
+      const discoverAmulets = (state.amuletSlots as GameCardData[]).filter(
         s => s?.amuletEffect === 'damage-class-discover',
       );
-      if (!discoverAmulet) return applyPatch(state, {});
+      if (discoverAmulets.length === 0) return applyPatch(state, {});
 
-      const upgradeLevel = discoverAmulet.upgradeLevel ?? 0;
-      const threshold = upgradeLevel >= 1 ? 3 : 8;
-      const nextStreak = (state.classDamageDiscoverStreak ?? 0) + 1;
+      const anyUpgraded = discoverAmulets.some(a => (a.upgradeLevel ?? 0) >= 1);
+      const threshold = anyUpgraded ? 3 : 8;
+      const nextStreak = (state.classDamageDiscoverStreak ?? 0) + discoverAmulets.length;
       const sideEffects: SideEffect[] = [];
 
       if (nextStreak >= threshold) {
@@ -819,11 +823,135 @@ function reduceResolveDice(
       break;
     }
 
+    case 'goblin-heal':
+    case 'goblin-steal': {
+      // Pop the front entry from the queue; we already know it's our flow
+      // because the flowId was set when the dice event was emitted.
+      const queue = newState.pendingMonsterEndDiceQueue ?? [];
+      const [flow, ...rest] = queue;
+      if (!flow) break;
+
+      if (flow.kind === 'goblin-heal' && flow.success) {
+        const newLayer = Math.min(flow.maxLayers, flow.currentLayer + 1);
+        if (newLayer > flow.currentLayer) {
+          newState = {
+            ...newState,
+            activeCards: newState.activeCards.map(c =>
+              c?.id === flow.goblinId
+                ? { ...c, currentLayer: newLayer, hp: c.maxHp ?? c.hp ?? 0 }
+                : c,
+            ) as typeof newState.activeCards,
+          };
+          enqueuedActions.push(
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${flow.goblinName} 贼窝疗养：恢复了 1 血层！（${flow.currentLayer} → ${newLayer}）`, timestamp: Date.now() } } as GameAction,
+            { type: 'SET_HERO_SKILL_BANNER', message: `${flow.goblinName} 贼窝疗养！恢复 1 血层！` } as GameAction,
+          );
+        }
+      } else if (flow.kind === 'goblin-heal') {
+        enqueuedActions.push(
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${flow.goblinName} 贼窝疗养判定失败。`, timestamp: Date.now() } } as GameAction,
+        );
+      }
+
+      if (flow.kind === 'goblin-steal' && flow.success && flow.pickedItem) {
+        // Apply the actual steal: remove picked item from equipment / amulets,
+        // then stack the stolen card under the goblin so the existing
+        // stack-pop mechanism can return it as a dungeon card on the goblin's
+        // death. Amulet aura reversal is handled centrally by
+        // `postProcessAmuletAura` in reducer.ts.
+        const stolenCard = flow.pickedItem;
+        let nextEquip1 = newState.equipmentSlot1;
+        let nextEquip2 = newState.equipmentSlot2;
+        let nextAmulets = newState.amuletSlots;
+
+        if (flow.pickedSource === 'equip' && flow.pickedSlotId) {
+          if (flow.pickedSlotId === 'equipmentSlot1') nextEquip1 = null;
+          else nextEquip2 = null;
+        } else if (flow.pickedSource === 'amulet') {
+          nextAmulets = newState.amuletSlots.filter(a => a.id !== stolenCard.id) as AmuletItem[];
+        }
+
+        const prevStack = newState.activeCardStacks[flow.colIndex] ?? [];
+        const nextStacks = {
+          ...newState.activeCardStacks,
+          [flow.colIndex]: [...prevStack, stolenCard],
+        };
+
+        newState = {
+          ...newState,
+          equipmentSlot1: nextEquip1,
+          equipmentSlot2: nextEquip2,
+          amuletSlots: nextAmulets,
+          activeCardStacks: nextStacks,
+        };
+
+        const labelKind = flow.pickedSource === 'equip' ? '装备' : '护符';
+        enqueuedActions.push(
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${flow.goblinName} 窃宝：偷走了${labelKind}「${stolenCard.name}」！`, timestamp: Date.now() } } as GameAction,
+          { type: 'SET_HERO_SKILL_BANNER', message: `${flow.goblinName} 窃宝！偷走了「${stolenCard.name}」！` } as GameAction,
+        );
+        sideEffects.push({
+          event: 'combat:goblinStealCard',
+          payload: { monsterId: flow.goblinId, monsterName: flow.goblinName, card: stolenCard },
+        });
+      } else if (flow.kind === 'goblin-steal') {
+        enqueuedActions.push(
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${flow.goblinName} 窃宝判定失败。`, timestamp: Date.now() } } as GameAction,
+        );
+      }
+
+      // Drain the queue. If more dice remain, fire the next check event and
+      // stay in `awaitingDice`. Otherwise clear the queue and enqueue
+      // START_TURN so the hero turn finally begins.
+      newState = { ...newState, pendingMonsterEndDiceQueue: rest };
+      if (rest.length > 0) {
+        emitGoblinDiceCheck(rest[0], sideEffects);
+        newState = { ...newState, phase: 'awaitingDice' };
+      } else {
+        enqueuedActions.push({ type: 'START_TURN' } as GameAction);
+      }
+      break;
+    }
+
     default:
       break;
   }
 
   return { state: newState, sideEffects, enqueuedActions };
+}
+
+/**
+ * Emit the right `combat:goblin*Check` side effect for the given pending dice
+ * flow. Hooks listen for these events and pop a dice modal animated to the
+ * pre-rolled D20 value.
+ */
+function emitGoblinDiceCheck(flow: PendingMonsterEndDice, sideEffects: SideEffect[]): void {
+  if (flow.kind === 'goblin-steal') {
+    sideEffects.push({
+      event: 'combat:goblinStealCheck',
+      payload: {
+        monsterId: flow.goblinId,
+        monsterName: flow.goblinName,
+        stackCount: flow.stackCount,
+        threshold: flow.threshold,
+        predeterminedRoll: flow.predeterminedRoll,
+        stolenItemName: flow.pickedItem?.name ?? null,
+      },
+    });
+  } else {
+    sideEffects.push({
+      event: 'combat:goblinHealCheck',
+      payload: {
+        monsterId: flow.goblinId,
+        monsterName: flow.goblinName,
+        stackCount: flow.stackCount,
+        threshold: flow.threshold,
+        predeterminedRoll: flow.predeterminedRoll,
+        currentLayer: flow.currentLayer,
+        maxLayers: flow.maxLayers,
+      },
+    });
+  }
 }
 
 function reduceResolveEquipmentChoice(

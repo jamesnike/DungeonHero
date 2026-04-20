@@ -561,6 +561,20 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   );
 
   // ---------------------------------------------------------------------------
+  // handleHandDiscardSelectionConfirm — 玩家在 HandDiscardSelectionModal 点击
+  // 「确认弃回」时的薄派发。reducer (RESOLVE_HAND_DISCARD_SELECTION) 自身会校验
+  // 选中数量与候选合法性，这里只做最薄的「有 pending 才派发」防御。
+  // ---------------------------------------------------------------------------
+  const handleHandDiscardSelectionConfirm = useCallback(
+    (cardIds: string[]) => {
+      const st = engine.getState();
+      if (!st.pendingHandDiscardSelection) return;
+      dispatch({ type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds });
+    },
+    [],
+  );
+
+  // ---------------------------------------------------------------------------
   // handleSlotTargetSelection
   // ---------------------------------------------------------------------------
 
@@ -817,6 +831,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     handleMagicMonsterSelection,
     handleDungeonCardSelection,
     handleBackpackReorganizeConfirm,
+    handleHandDiscardSelectionConfirm,
     handleSlotTargetSelection,
     computePersuadeSuccessRate,
     canPersuadeMonster,

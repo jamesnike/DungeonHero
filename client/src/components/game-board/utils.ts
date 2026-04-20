@@ -70,7 +70,6 @@ import {
   STARTER_CARD_IDS,
 } from './constants';
 import type {
-  ActiveAmuletEffects,
   ActiveRowSlots,
   EquipmentRepairTarget,
   EquipmentSlotBonusState,
@@ -145,47 +144,9 @@ export const getEmptyOrGhostColumns = (slots: ActiveRowSlots): number[] =>
 export const getFilledPreviewColumns = (slots: ActiveRowSlots): number[] =>
   DUNGEON_COLUMNS.filter(columnIndex => Boolean(slots[columnIndex]));
 
-export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
-  aura: {
-    attack: 0,
-    defense: 0,
-    maxHp: 0,
-  },
-  hasHeal: false,
-  hasBalance: false,
-  lifeOverkillBonus: 0,
-  hasCatapult: false,
-  hasFlash: false,
-  hasStrength: false,
-  hasDualGuard: false,
-  hasDiscardShock: false,
-  flipZapCount: 0,
-  hasFlipGold: false,
-  hasRecycleForge: false,
-  hasLoneCard: false,
-  hasEquipmentSalvage: false,
-  hasBloodrageAttack: false,
-  hasPersuadeOnTempAttack: false,
-  persuadeOnTempAttackBonus: 0,
-  hasPersuadeGrantRecycleFetch: false,
-  persuadeGrantRecycleFetchCount: 0,
-  hasDamageClassDiscover: false,
-  hasPersuadeGraveyardStack: false,
-  hasStunRecycleToHand: false,
-  hasMonsterKillUpgrade: false,
-  hasAttackPersuadeDiscount: false,
-  hasCardGainMissile: false,
-  hasSwapUpgrade: false,
-  hasStunUpgradeCap: false,
-  hasRecycleBackpackExpand: false,
-  hasDungeonGold: false,
-  hasArmorHalveEndure: false,
-  hasMonsterEquipBuff: false,
-  hasEndTurnDraw: false,
-  hasLastWordsMonsterDebuff: false,
-  stunRateBoost: 0,
-  hasStunGold: false,
-});
+// `createEmptyAmuletEffects` lives in `@/game-core/constants` — don't redefine here.
+// Dead code historically duplicated the factory and silently went stale when
+// new amulet effects were added.
 
 export const logWaterfallInvariant = (
   condition: boolean,

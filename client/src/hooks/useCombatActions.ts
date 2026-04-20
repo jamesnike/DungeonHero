@@ -300,6 +300,70 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     } as any);
   });
 
+  useGameEvent('combat:goblinStealCheck', ({ monsterId, monsterName, stackCount, threshold, predeterminedRoll, stolenItemName }) => {
+    // Threshold can hit the 20-cap when stackCount >= 7 — clamp the entry
+    // ranges so the dice modal never shows an empty "失败" segment.
+    const successCap = Math.min(20, Math.max(0, threshold));
+    const successPct = successCap * 5;
+    const subtitle = stolenItemName
+      ? `窃宝判定（${successPct}%）：欲偷「${stolenItemName}」`
+      : `窃宝判定（${successPct}%）`;
+    const entries: Array<{ id: string; range: [number, number]; label: string; effect: 'none' }> = [];
+    if (successCap >= 1) {
+      entries.push({
+        id: 'steal',
+        range: [1, successCap],
+        label: stolenItemName ? `偷走「${stolenItemName}」！` : '窃宝成功！',
+        effect: 'none',
+      });
+    }
+    if (successCap < 20) {
+      entries.push({
+        id: 'fail',
+        range: [Math.max(1, successCap + 1), 20],
+        label: '窃宝失败',
+        effect: 'none',
+      });
+    }
+    depsRef.current.requestDiceOutcome({
+      title: monsterName,
+      subtitle,
+      entries,
+      flowContext: { flowId: 'goblin-steal', monsterId, monsterName, stackCount },
+      predeterminedRoll,
+    } as any);
+  });
+
+  useGameEvent('combat:goblinHealCheck', ({ monsterId, monsterName, stackCount, threshold, predeterminedRoll, currentLayer, maxLayers }) => {
+    const successCap = Math.min(20, Math.max(0, threshold));
+    const successPct = successCap * 5;
+    const subtitle = `贼窝疗养判定（${successPct}%）：${currentLayer}/${maxLayers} 血层`;
+    const entries: Array<{ id: string; range: [number, number]; label: string; effect: 'none' }> = [];
+    if (successCap >= 1) {
+      entries.push({
+        id: 'heal',
+        range: [1, successCap],
+        label: '恢复 1 血层！',
+        effect: 'none',
+      });
+    }
+    if (successCap < 20) {
+      entries.push({
+        id: 'fail',
+        range: [Math.max(1, successCap + 1), 20],
+        label: '疗养失败',
+        effect: 'none',
+      });
+    }
+    depsRef.current.requestDiceOutcome({
+      title: monsterName,
+      subtitle,
+      entries,
+      flowContext: { flowId: 'goblin-heal', monsterId, monsterName, stackCount },
+      predeterminedRoll,
+    } as any);
+  });
+
   useGameEvent('combat:dragonBleedDestroy', ({ monsterName, layersRemaining }) => {
     depsRef.current.dragonBleedDestroyEquipment(monsterName, layersRemaining);
   });
@@ -511,7 +575,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
   useGameEvent('combat:classDamageHit', () => {
     const d = depsRef.current;
-    if (d?.amuletEffects.hasDamageClassDiscover) {
+    if (d?.amuletEffects.damageClassDiscoverCount && d.amuletEffects.damageClassDiscoverCount > 0) {
       dispatch({ type: 'RECORD_CLASS_DAMAGE_DISCOVER', increment: true });
     }
   });
@@ -642,7 +706,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
   const recordClassDamageDiscoverHit = useCallback(() => {
     const d = depsRef.current;
-    if (!d?.amuletEffects.hasDamageClassDiscover) return;
+    if (!d?.amuletEffects.damageClassDiscoverCount || d.amuletEffects.damageClassDiscoverCount <= 0) return;
     dispatch({ type: 'RECORD_CLASS_DAMAGE_DISCOVER', increment: true });
   }, [dispatch]);
 

@@ -376,7 +376,10 @@ function executeGrantLastWordsSlotTempBuff(ctx: ExecutionContext, _effect: CardE
   }
   if (slotsWithEquip.length === 1) {
     const slot = slotsWithEquip[0];
-    (ctx.patch as any)[slot.id] = { ...slot.item, onDestroyEffect: 'slot-temp-buff-3-3' };
+    (ctx.patch as any)[slot.id] = {
+      ...slot.item,
+      lastWordsSlotTempBuff: (slot.item.lastWordsSlotTempBuff ?? 0) + 1,
+    };
     log(ctx, 'potion', `遗赠淬炼药：${slot.item.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！`);
     banner(ctx, `${slot.item.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！`);
     ctx.enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card: ctx.card });

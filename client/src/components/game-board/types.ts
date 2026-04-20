@@ -212,6 +212,7 @@ export type PendingMagicAction =
       effect: 'armor-strike';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -220,12 +221,14 @@ export type PendingMagicAction =
       slotId: EquipmentSlotId;
       pendingDamage: number;
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'armor-double-strike';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       // 整顿背囊：背包上限 +1 之后，从 手牌/护符/装备 中至多选 3 张放回背包顶部。
@@ -235,12 +238,14 @@ export type PendingMagicAction =
       step: 'multi-select';
       maxSelections: number;
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'blood-reckoning';
       step: 'monster-select';
       echoMultiplier?: number;
+      echoRemaining?: number;
       prompt: string;
     }
   | {
@@ -248,6 +253,7 @@ export type PendingMagicAction =
       effect: 'missing-hp-smite';
       step: 'monster-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -256,6 +262,7 @@ export type PendingMagicAction =
       pendingDamage: number;
       hpLost: number;
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -300,6 +307,7 @@ export type PendingMagicAction =
       step: 'dungeon-select';
       prompt: string;
       leftIdx: number;
+      echoRemaining?: number;
     }
   | {
       // 血誓回卷：选择 active row 一张「已翻转」卡牌（带 _flipBackCard）翻回原形。
@@ -307,6 +315,7 @@ export type PendingMagicAction =
       effect: 'flip-back-active';
       step: 'dungeon-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       // 乾坤一翻：选择 active row 一张可翻转 (flipTarget) 或已翻转 (_flipBackCard) 的卡牌，
@@ -316,6 +325,7 @@ export type PendingMagicAction =
       effect: 'flip-active-card';
       step: 'dungeon-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -339,6 +349,7 @@ export type PendingMagicAction =
       effect: 'soul-swap';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -347,18 +358,21 @@ export type PendingMagicAction =
       slotId: EquipmentSlotId;
       slotDurability: number;
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'temp-armor';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'dungeon-preview-swap';
       step: 'dungeon-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -366,24 +380,28 @@ export type PendingMagicAction =
       step: 'preview-select';
       selectedActiveSlot: number;
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'grant-revive';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'battle-spirit';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'missile-bolt';
       step: 'monster-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -391,6 +409,7 @@ export type PendingMagicAction =
       step: 'monster-select';
       prompt: string;
       echoMultiplier?: number;
+      echoRemaining?: number;
       data?: { baseDmg: number; stunPct: number };
     }
   | {
@@ -399,30 +418,35 @@ export type PendingMagicAction =
       step: 'dungeon-select';
       prompt: string;
       deckDepth: number;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'fate-sight';
       step: 'monster-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'honor-sweep';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'weapon-sweep';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'armor-stun-convert';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -437,6 +461,7 @@ export type PendingMagicAction =
       effect: 'event-fortify';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -444,6 +469,7 @@ export type PendingMagicAction =
       step: 'slot-select';
       prompt: string;
       isFlank?: boolean;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -451,6 +477,7 @@ export type PendingMagicAction =
       step: 'slot-select';
       prompt: string;
       isFlank?: boolean;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -458,6 +485,7 @@ export type PendingMagicAction =
       step: 'monster-select';
       pendingDamage: number;
       echoMultiplier?: number;
+      echoRemaining?: number;
       prompt: string;
     }
   | {
@@ -466,12 +494,14 @@ export type PendingMagicAction =
       step: 'monster-select';
       prompt: string;
       isFlank?: boolean;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'repair-enrage-dice';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
@@ -479,12 +509,14 @@ export type PendingMagicAction =
       step: 'monster-select';
       slotId: EquipmentSlotId;
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'bounty-spell-damage';
       step: 'monster-select';
       echoMultiplier?: number;
+      echoRemaining?: number;
       prompt: string;
     }
   | {
@@ -492,12 +524,14 @@ export type PendingMagicAction =
       effect: 'equalize-temp-attack-armor';
       step: 'slot-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       card: GameCardData;
       effect: 'weapon-manual';
       step: 'slot-select';
       echoMultiplier?: number;
+      echoRemaining?: number;
       prompt: string;
     }
   | {
@@ -505,6 +539,7 @@ export type PendingMagicAction =
       effect: 'temp-attack-double';
       step: 'slot-select';
       echoMultiplier?: number;
+      echoRemaining?: number;
       prompt: string;
     }
   | {
@@ -514,6 +549,7 @@ export type PendingMagicAction =
       step: 'monster-select';
       prompt: string;
       data?: { damage: number; streak: number };
+      echoRemaining?: number;
     }
   | {
       // 运势博弈：选择 active row 一张卡，与主牌堆顶交换；同类型 +10 金币，否则 -1。
@@ -521,6 +557,7 @@ export type PendingMagicAction =
       effect: 'deck-top-swap-gold';
       step: 'dungeon-select';
       prompt: string;
+      echoRemaining?: number;
     }
   | {
       // 翻覆震慑（翻转之契 option 4）：选一个怪物挂 buff，到下次瀑流前每翻转一张牌该怪物 -1 攻击。
@@ -528,7 +565,65 @@ export type PendingMagicAction =
       effect: 'flip-monster-debuff';
       step: 'monster-select';
       prompt: string;
+      echoRemaining?: number;
+    };
+
+/**
+ * 手牌弃回多选状态：当玩家主动出的「弃 N 张手牌换收益」类卡牌触发时，
+ * 由 reducer 设置；UI 弹出 HandDiscardSelectionModal 让玩家精确选择 N 张
+ * 可弃手牌（排除诅咒牌、源卡牌本身），玩家不可取消。
+ *
+ * 当可弃手牌数 < 所需弃回数时，reducer 会**直接跳过本状态**，自动弃完
+ * 全部可弃手牌并继续后续逻辑——所以一旦 pendingHandDiscardSelection 非
+ * null，必然 eligibleHand.length >= count 且 count > 0。
+ */
+export type HandDiscardSelectionState = {
+  /** 用于在结算分支里识别下一步要做什么。 */
+  subEffect:
+    | 'discard-draw' // 汰旧迎新：弃 N 张到回收袋 → 从背包抽 M 张
+    | 'altar-discover' // 祭坛秘术：弃 N 张到坟场 → 发现专属魔法卡
+    | 'class-summon' // 专属召唤：弃 N 张到坟场 → 抽 1 张职业专属卡到背包
+    | 'echo-bag' // 回响行囊：弃 N 张到坟场 → 坟场发现 → 背包补抽
+    | 'discard-empower'; // 噬血砺锋：弃 1 张到坟场 → 装备攻击 +2 / 吸血
+  /** 必须选择的张数（严格相等才允许确认）。 */
+  count: number;
+  /** 触发该流程的源卡牌（魔法卡 id；技能时为 null）；用于把它从候选列表中过滤掉。 */
+  sourceCardId: string | null;
+  /** 弹窗顶部展示的提示文案。 */
+  prompt: string;
+  /** 弹窗标题（不同子效果用不同标题）。 */
+  title: string;
+  /** 子效果继续结算时所需的上下文（仅 reducer 内部使用，UI 不感知）。 */
+  context: HandDiscardContinuation;
+};
+
+/** RESOLVE_HAND_DISCARD_SELECTION 时由 reducer 读取，决定后续效果。 */
+export type HandDiscardContinuation =
+  | {
+      kind: 'discard-draw';
+      cardSnapshot: GameCardData;
+      drawCount: number;
+      echoTag: string;
     }
+  | {
+      kind: 'altar-discover';
+      cardSnapshot: GameCardData;
+    }
+  | {
+      kind: 'class-summon';
+      cardSnapshot: GameCardData;
+    }
+  | {
+      kind: 'echo-bag';
+      cardSnapshot: GameCardData;
+      discoverCount: number;
+      drawCount: number;
+      echoTag: string;
+    }
+  | {
+      kind: 'discard-empower';
+      skillId: string;
+    };
 
 /** 天眼审判：透视 + 击晕判定（关闭弹窗后掷骰） */
 export type DeckPeekModalStateFateSight = {
@@ -762,43 +857,64 @@ export type AmuletAuraTotals = {
   maxHp: number;
 };
 
+/**
+ * Aggregated amulet effects across all equipped amulets.
+ *
+ * **Stacking rule (universal):** every equipped amulet runs its handler
+ * INDEPENDENTLY. Duplicates of the same amulet stack naturally — multiple
+ * 双守护圣盾 each grant +1 perm armor on perfect block (so 2 amulets → +2),
+ * multiple 雷霆符印 each fire their own zap on discard, etc.
+ *
+ * Field naming convention:
+ * - `xxxCount: number` — how many of this amulet are equipped. Consumer
+ *   either gates with `count > 0` and multiplies a magnitude by `count`,
+ *   or loops `count` times for discrete-event amulets.
+ * - For "compound" amulets (heal/flash) the consumer interprets the count
+ *   as a multiplicative exponent (e.g. heal multiplier = 2^count).
+ * - For "summed bonus" amulets (persuade-on-temp-attack), the bonus field
+ *   accumulates each amulet's own bonus value (so `count` represents the
+ *   number of triggers, and the bonus represents the total grant magnitude).
+ */
 export type ActiveAmuletEffects = {
   aura: AmuletAuraTotals;
-  hasHeal: boolean;
-  hasBalance: boolean;
+  healCount: number;
+  balanceCount: number;
+  /** Sum of `4 × count` (4 per equipped 生命之符). */
   lifeOverkillBonus: number;
-  hasCatapult: boolean;
-  hasFlash: boolean;
-  hasStrength: boolean;
-  hasDualGuard: boolean;
-  hasDiscardShock: boolean;
+  catapultCount: number;
+  flashCount: number;
+  strengthCount: number;
+  dualGuardCount: number;
+  discardShockCount: number;
   /** Number of equipped 弧能之符 amulets — each triggers an independent flip-zap on every card flip. */
   flipZapCount: number;
-  hasFlipGold: boolean;
-  hasRecycleForge: boolean;
-  hasLoneCard: boolean;
-  hasEquipmentSalvage: boolean;
-  hasBloodrageAttack: boolean;
-  hasPersuadeOnTempAttack: boolean;
+  flipGoldCount: number;
+  recycleForgeCount: number;
+  loneCardCount: number;
+  equipmentSalvageCount: number;
+  bloodrageAttackCount: number;
+  persuadeOnTempAttackCount: number;
+  /** Sum of each equipped 怀柔之印's bonus (10 base / 20 upgraded), per trigger. */
   persuadeOnTempAttackBonus: number;
-  hasPersuadeGrantRecycleFetch: boolean;
   persuadeGrantRecycleFetchCount: number;
-  hasDamageClassDiscover: boolean;
-  hasPersuadeGraveyardStack: boolean;
-  hasStunRecycleToHand: boolean;
-  hasMonsterKillUpgrade: boolean;
-  hasAttackPersuadeDiscount: boolean;
-  hasCardGainMissile: boolean;
-  hasSwapUpgrade: boolean;
-  hasStunUpgradeCap: boolean;
-  hasRecycleBackpackExpand: boolean;
-  hasDungeonGold: boolean;
-  hasArmorHalveEndure: boolean;
-  hasMonsterEquipBuff: boolean;
-  hasEndTurnDraw: boolean;
-  hasLastWordsMonsterDebuff: boolean;
+  /** Sum of each equipped 劝降归袋符's per-trigger card count (1 base / 2 upgraded). */
+  persuadeGrantRecycleFetchTotal: number;
+  damageClassDiscoverCount: number;
+  persuadeGraveyardStackCount: number;
+  stunRecycleToHandCount: number;
+  monsterKillUpgradeCount: number;
+  attackPersuadeDiscountCount: number;
+  cardGainMissileCount: number;
+  swapUpgradeCount: number;
+  stunUpgradeCapCount: number;
+  recycleBackpackExpandCount: number;
+  dungeonGoldCount: number;
+  armorHalveEndureCount: number;
+  monsterEquipBuffCount: number;
+  endTurnDrawCount: number;
+  lastWordsMonsterDebuffCount: number;
   stunRateBoost: number;
-  hasStunGold: boolean;
+  stunGoldCount: number;
 };
 
 export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';

@@ -168,7 +168,7 @@ export function computeEquipmentDisplacementLastWords(
 
   const hasLastWords = slotItem.onDestroyHeal || slotItem.onDestroyGold || slotItem.onDestroyDraw
     || slotItem.onDestroyClassDraw || slotItem.onDestroyPermanentDamage || slotItem.onDestroyPermanentShield
-    || slotItem.onDestroyEffect
+    || slotItem.onDestroyEffect || slotItem.lastWordsSlotTempBuff
     || (isMonsterEquip && (slotItem.lastWords || slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread
       || slotItem.skeletonLastWordsDiscard));
 
@@ -176,17 +176,18 @@ export function computeEquipmentDisplacementLastWords(
     sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 遗言触发！` } });
   }
 
-  if (hasLastWords && amuletEffects.hasLastWordsMonsterDebuff) {
+  if (hasLastWords && amuletEffects.lastWordsMonsterDebuffCount > 0) {
+    const debuffPerTrigger = amuletEffects.lastWordsMonsterDebuffCount;
     const baseActive = (patch.activeCards ?? state.activeCards) as ActiveRowSlots;
     const debuffedActive = baseActive.map(c => {
       if (!c || c.type !== 'monster') return c;
       const curAtk = c.attack ?? c.value;
-      return { ...c, attack: Math.max(0, curAtk - 1) };
+      return { ...c, attack: Math.max(0, curAtk - debuffPerTrigger) };
     }) as ActiveRowSlots;
     patch.activeCards = debuffedActive;
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'amulet', message: `绝响之符：${slotItem.name} 遗言触发，激活行所有怪物攻击力 -1！` },
+      payload: { type: 'amulet', message: `绝响之符：${slotItem.name} 遗言触发，激活行所有怪物攻击力 -${debuffPerTrigger}！` },
     });
   }
 
@@ -243,28 +244,42 @@ export function computeEquipmentDisplacementLastWords(
     sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！永久护甲 +${slotItem.onDestroyPermanentShield}！` } });
   }
 
-  if (slotItem.onDestroyEffect) {
-    if (slotItem.onDestroyEffect === 'slot-temp-buff-3-3') {
-      const tempAttack = patch.slotTempAttack ?? { ...(state.slotTempAttack ?? {}) };
-      const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
-      tempAttack[slotId] = (tempAttack[slotId] ?? 0) + 3;
-      tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
-      patch.slotTempAttack = tempAttack;
-      patch.slotTempArmor = tempArmor;
+  // 遗赠淬炼药 — slot-temp-buff-3-3 stacks on top of any onDestroyEffect via the
+  // separate `lastWordsSlotTempBuff` counter, so it must fire independently and
+  // multiply by the number of times the potion was applied. Legacy save-game
+  // compat: equipment whose `onDestroyEffect` is literally 'slot-temp-buff-3-3'
+  // (set by the old overwriting potion code) also counts as 1 stack.
+  const tempBuffStacks = (slotItem.lastWordsSlotTempBuff ?? 0)
+    + (slotItem.onDestroyEffect === 'slot-temp-buff-3-3' ? 1 : 0);
+  if (tempBuffStacks > 0) {
+    const buffAmount = 3 * tempBuffStacks;
+    const tempAttack = patch.slotTempAttack ?? { ...(state.slotTempAttack ?? {}) };
+    const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
+    tempAttack[slotId] = (tempAttack[slotId] ?? 0) + buffAmount;
+    tempArmor[slotId] = (tempArmor[slotId] ?? 0) + buffAmount;
+    patch.slotTempAttack = tempAttack;
+    patch.slotTempArmor = tempArmor;
+    const stackSuffix = tempBuffStacks > 1 ? `（×${tempBuffStacks}）` : '';
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏 +${buffAmount}临时攻击 +${buffAmount}临时护甲！${stackSuffix}` },
+    });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +${buffAmount}临时攻击 +${buffAmount}临时护甲！${stackSuffix}` } });
+    if (amuletEffects.persuadeOnTempAttackCount > 0) {
+      // `persuadeOnTempAttackBonus` is already the per-trigger sum across all
+      // equipped 怀柔之印 (each amulet contributes its own 10 / 20 by upgrade).
+      // The buff applies twice (temp attack AND temp armor), times the stack count.
+      const pBonus = amuletEffects.persuadeOnTempAttackBonus;
+      patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus * 2 * tempBuffStacks;
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！` },
+        payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus * 2 * tempBuffStacks}%（临时攻击+临时护甲 ×${tempBuffStacks}）` },
       });
-      sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！` } });
-      if (amuletEffects.hasPersuadeOnTempAttack) {
-        const pBonus = amuletEffects.persuadeOnTempAttackBonus || 10;
-        patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus * 2;
-        sideEffects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）` },
-        });
-      }
-    } else if (slotItem.onDestroyEffect === 'slot-temp-armor-3') {
+    }
+  }
+
+  if (slotItem.onDestroyEffect && slotItem.onDestroyEffect !== 'slot-temp-buff-3-3') {
+    if (slotItem.onDestroyEffect === 'slot-temp-armor-3') {
       const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
       tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
       patch.slotTempArmor = tempArmor;
@@ -297,8 +312,8 @@ export function computeEquipmentDisplacementLastWords(
           payload: { type: 'equip', message: `${slotItem.name} 遗言：所有装备栏 +${amount}临时护甲！` },
         });
         sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！所有装备栏 +${amount}临时护甲！` } });
-        if (amuletEffects.hasPersuadeOnTempAttack) {
-          const pBonus = amuletEffects.persuadeOnTempAttackBonus || 10;
+        if (amuletEffects.persuadeOnTempAttackCount > 0) {
+          const pBonus = amuletEffects.persuadeOnTempAttackBonus;
           patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus;
           sideEffects.push({
             event: 'log:entry',
@@ -434,7 +449,7 @@ export function computeEquipmentBreakEffects(
 
   const hasLastWords = slotItem.onDestroyHeal || slotItem.onDestroyGold || slotItem.onDestroyDraw
     || slotItem.onDestroyClassDraw || slotItem.onDestroyPermanentDamage || slotItem.onDestroyPermanentShield
-    || slotItem.onDestroyEffect
+    || slotItem.onDestroyEffect || slotItem.lastWordsSlotTempBuff
     || (isMonsterEquip && (slotItem.lastWords || slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread
       || slotItem.skeletonLastWordsDiscard));
 
@@ -442,16 +457,17 @@ export function computeEquipmentBreakEffects(
     effects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 遗言触发！` } });
   }
 
-  if (hasLastWords && amuletEffects.hasLastWordsMonsterDebuff) {
+  if (hasLastWords && amuletEffects.lastWordsMonsterDebuffCount > 0) {
+    const debuffPerTrigger = amuletEffects.lastWordsMonsterDebuffCount;
     const debuffedActive = state.activeCards.map(c => {
       if (!c || c.type !== 'monster') return c;
       const curAtk = c.attack ?? c.value;
-      return { ...c, attack: Math.max(0, curAtk - 1) };
+      return { ...c, attack: Math.max(0, curAtk - debuffPerTrigger) };
     }) as ActiveRowSlots;
     patch.activeCards = debuffedActive;
     effects.push({
       event: 'log:entry',
-      payload: { type: 'amulet', message: `绝响之符：${slotItem.name} 遗言触发，激活行所有怪物攻击力 -1！` },
+      payload: { type: 'amulet', message: `绝响之符：${slotItem.name} 遗言触发，激活行所有怪物攻击力 -${debuffPerTrigger}！` },
     });
   }
 
@@ -512,29 +528,40 @@ export function computeEquipmentBreakEffects(
     effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！永久护甲 +${slotItem.onDestroyPermanentShield}！` } });
   }
 
-  // onDestroyEffect
-  if (slotItem.onDestroyEffect) {
-    if (slotItem.onDestroyEffect === 'slot-temp-buff-3-3') {
-      const tempAttack = { ...(state.slotTempAttack ?? {}) };
-      const tempArmor = { ...(state.slotTempArmor ?? {}) };
-      tempAttack[slotId] = (tempAttack[slotId] ?? 0) + 3;
-      tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
-      patch.slotTempAttack = tempAttack;
-      patch.slotTempArmor = tempArmor;
+  // 遗赠淬炼药 — slot-temp-buff-3-3 stacks on top of any onDestroyEffect via the
+  // separate `lastWordsSlotTempBuff` counter, so it must fire independently and
+  // multiply by the number of times the potion was applied. Legacy save-game
+  // compat: equipment whose `onDestroyEffect` is literally 'slot-temp-buff-3-3'
+  // (set by the old overwriting potion code) also counts as 1 stack.
+  const tempBuffStacks = (slotItem.lastWordsSlotTempBuff ?? 0)
+    + (slotItem.onDestroyEffect === 'slot-temp-buff-3-3' ? 1 : 0);
+  if (tempBuffStacks > 0) {
+    const buffAmount = 3 * tempBuffStacks;
+    const tempAttack = { ...(state.slotTempAttack ?? {}) };
+    const tempArmor = { ...(state.slotTempArmor ?? {}) };
+    tempAttack[slotId] = (tempAttack[slotId] ?? 0) + buffAmount;
+    tempArmor[slotId] = (tempArmor[slotId] ?? 0) + buffAmount;
+    patch.slotTempAttack = tempAttack;
+    patch.slotTempArmor = tempArmor;
+    const stackSuffix = tempBuffStacks > 1 ? `（×${tempBuffStacks}）` : '';
+    effects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏 +${buffAmount}临时攻击 +${buffAmount}临时护甲！${stackSuffix}` },
+    });
+    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +${buffAmount}临时攻击 +${buffAmount}临时护甲！${stackSuffix}` } });
+    if (amuletEffects.persuadeOnTempAttackCount > 0) {
+      const pBonus = amuletEffects.persuadeOnTempAttackBonus;
+      patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus * 2 * tempBuffStacks;
       effects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏 +3临时攻击 +3临时护甲！` },
+        payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus * 2 * tempBuffStacks}%（临时攻击+临时护甲 ×${tempBuffStacks}）` },
       });
-      effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +3临时攻击 +3临时护甲！` } });
-      if (amuletEffects.hasPersuadeOnTempAttack) {
-        const pBonus = amuletEffects.persuadeOnTempAttackBonus || 10;
-        patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus * 2;
-        effects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus * 2}%（临时攻击+临时护甲各一次）` },
-        });
-      }
-    } else if (slotItem.onDestroyEffect === 'slot-temp-armor-3') {
+    }
+  }
+
+  // onDestroyEffect (other variants — slot-temp-buff-3-3 handled above)
+  if (slotItem.onDestroyEffect && slotItem.onDestroyEffect !== 'slot-temp-buff-3-3') {
+    if (slotItem.onDestroyEffect === 'slot-temp-armor-3') {
       const tempArmor = { ...(state.slotTempArmor ?? {}) };
       tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
       patch.slotTempArmor = tempArmor;
@@ -567,8 +594,8 @@ export function computeEquipmentBreakEffects(
           payload: { type: 'equip', message: `${slotItem.name} 遗言：所有装备栏 +${amount}临时护甲！` },
         });
         effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！所有装备栏 +${amount}临时护甲！` } });
-        if (amuletEffects.hasPersuadeOnTempAttack) {
-          const pBonus = amuletEffects.persuadeOnTempAttackBonus || 10;
+        if (amuletEffects.persuadeOnTempAttackCount > 0) {
+          const pBonus = amuletEffects.persuadeOnTempAttackBonus;
           patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
           effects.push({
             event: 'log:entry',
@@ -709,9 +736,12 @@ export function computeEquipmentBreakEffects(
     });
 
     // 残骸回收符 (equipment-salvage amulet): for weapons/shields, return the broken
-    // card to hand with maxDurability-1 instead of being lost. If maxDur reaches 0
-    // the card is removed from the game entirely.
-    const canSalvage = amuletEffects.hasEquipmentSalvage
+    // card to hand with maxDurability-N instead of being lost (N = number of
+    // equipped salvage amulets — every amulet independently triggers a save,
+    // and each save costs one durability point). If maxDur reaches 0 the card
+    // is removed from the game entirely.
+    const salvageCount = amuletEffects.equipmentSalvageCount;
+    const canSalvage = salvageCount > 0
       && (slotItem.type === 'weapon' || slotItem.type === 'shield');
 
     // Wraith swap (50% chance to move other slot's item to this slot) — monster-only,
@@ -722,7 +752,7 @@ export function computeEquipmentBreakEffects(
     }
 
     if (canSalvage) {
-      const newMaxDur = (slotItem.maxDurability ?? 1) - 1;
+      const newMaxDur = (slotItem.maxDurability ?? 1) - salvageCount;
       patch[slotId] = null as unknown as EquipmentItem;
       effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
       if (newMaxDur <= 0) {

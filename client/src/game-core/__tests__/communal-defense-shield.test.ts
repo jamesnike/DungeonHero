@@ -99,7 +99,7 @@ describe('共御圣盾 last-words: computeEquipmentBreakEffects path', () => {
     expect(patch.slotTempArmor?.equipmentSlot2).toBe(12);
   });
 
-  it('triggers 怀柔之印 (hasPersuadeOnTempAttack) persuade bonus once per destroy', () => {
+  it('triggers 怀柔之印 persuade bonus once per destroy', () => {
     const shield = makeShield();
     const state = makeState({
       equipmentSlot1: shield as any,
@@ -108,7 +108,7 @@ describe('共御圣盾 last-words: computeEquipmentBreakEffects path', () => {
     });
     const amuletEffects = {
       ...createEmptyAmuletEffects(),
-      hasPersuadeOnTempAttack: true,
+      persuadeOnTempAttackCount: 1,
       persuadeOnTempAttackBonus: 5,
     };
     const { patch, sideEffects } = computeEquipmentBreakEffects(

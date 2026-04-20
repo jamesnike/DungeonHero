@@ -224,6 +224,7 @@ import {
   createEmptyActiveRow,
   createEmptyAmuletEffects,
 } from '@/game-core/constants';
+import { computeAmuletEffects } from '@/game-core/equipment';
 import {
   clamp,
   easeInOutCubic,
@@ -250,7 +251,6 @@ import {
   logHeroMagic,
   logBackpackDraw,
   pickRandomHandCardsForDiscardPreferGraveyard,
-  computeAmuletAuraReversal,
   isDamageableTarget,
   applyAmplifyOnCreate,
 } from '@/game-core/helpers';
@@ -478,138 +478,23 @@ export default function GameBoard() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // Aggregated amulet effects. Delegates to the canonical `computeAmuletEffects`
+  // in `game-core/equipment.ts` to ensure UI-side derivations match the reducer's
+  // view exactly. Eternal relics that carry an `amuletEffect` are folded in by
+  // synthesising a one-card list so they go through the same switch.
   const amuletEffects = useMemo<ActiveAmuletEffects>(() => {
-    const applyAmuletEffect = (
-      state: ActiveAmuletEffects,
-      amuletEffect: string | undefined,
-      upgradeLevel: number,
-      auraBonus?: import('@/components/GameCard').AmuletAuraBonus | null,
-      slotValue?: number,
-      slotEffect?: string,
-    ) => {
-      switch (amuletEffect) {
-        case 'heal':
-          state.hasHeal = true;
-          break;
-        case 'balance':
-          state.hasBalance = true;
-          break;
-        case 'life':
-          state.lifeOverkillBonus = 4;
-          break;
-        case 'catapult':
-          state.hasCatapult = true;
-          break;
-        case 'flash':
-          state.hasFlash = true;
-          break;
-        case 'strength':
-          state.hasStrength = true;
-          break;
-        case 'dual-guard':
-          state.hasDualGuard = true;
-          break;
-        case 'discard-zap':
-          state.hasDiscardShock = true;
-          break;
-        case 'flip-zap':
-          state.flipZapCount += 1;
-          break;
-        case 'flip-gold':
-          state.hasFlipGold = true;
-          break;
-        case 'recycle-forge':
-          state.hasRecycleForge = true;
-          break;
-        case 'lone-card':
-          state.hasLoneCard = true;
-          break;
-        case 'equipment-salvage':
-          state.hasEquipmentSalvage = true;
-          break;
-        case 'bloodrage-attack':
-          state.hasBloodrageAttack = true;
-          break;
-        case 'persuade-on-temp-attack':
-          state.hasPersuadeOnTempAttack = true;
-          state.persuadeOnTempAttackBonus = upgradeLevel >= 1 ? 20 : 10;
-          break;
-        case 'persuade-grant-recycle-fetch':
-          state.hasPersuadeGrantRecycleFetch = true;
-          state.persuadeGrantRecycleFetchCount = upgradeLevel >= 1 ? 2 : 1;
-          break;
-        case 'damage-class-discover':
-          state.hasDamageClassDiscover = true;
-          break;
-        case 'persuade-graveyard-stack':
-          state.hasPersuadeGraveyardStack = true;
-          break;
-        case 'stun-recycle-to-hand':
-          state.hasStunRecycleToHand = true;
-          break;
-        case 'attack-persuade-discount':
-          state.hasAttackPersuadeDiscount = true;
-          break;
-        case 'card-gain-missile':
-          state.hasCardGainMissile = true;
-          break;
-        case 'swap-upgrade':
-          state.hasSwapUpgrade = true;
-          break;
-        case 'stun-upgrade-cap':
-          state.hasStunUpgradeCap = true;
-          break;
-        case 'recycle-backpack-expand':
-          state.hasRecycleBackpackExpand = true;
-          break;
-        case 'dungeon-gold':
-          state.hasDungeonGold = true;
-          break;
-        case 'armor-halve-endure':
-          state.hasArmorHalveEndure = true;
-          break;
-        case 'monster-equip-buff':
-          state.hasMonsterEquipBuff = true;
-          break;
-        case 'end-turn-draw':
-          state.hasEndTurnDraw = true;
-          break;
-        case 'stun-rate-boost':
-          state.stunRateBoost += 20;
-          break;
-        case 'stun-gold':
-          state.hasStunGold = true;
-          break;
-      }
-      if (auraBonus) {
-        if (typeof auraBonus.attack === 'number') state.aura.attack += auraBonus.attack;
-        if (typeof auraBonus.defense === 'number') state.aura.defense += auraBonus.defense;
-        if (typeof auraBonus.maxHp === 'number') state.aura.maxHp += auraBonus.maxHp;
-      }
-      if (typeof slotValue === 'number' && slotEffect) {
-        if (slotEffect === 'attack' && !(auraBonus && typeof auraBonus.attack === 'number')) {
-          state.aura.attack += slotValue;
-        }
-        if (slotEffect === 'defense' && !(auraBonus && typeof auraBonus.defense === 'number')) {
-          state.aura.defense += slotValue;
-        }
-        if (slotEffect === 'health' && !(auraBonus && typeof auraBonus.maxHp === 'number')) {
-          state.aura.maxHp += slotValue;
-        }
-      }
-    };
-
-    const state = createEmptyAmuletEffects();
-    for (const slot of amuletSlots) {
-      if (!slot) continue;
-      applyAmuletEffect(state, slot.amuletEffect, slot.upgradeLevel ?? 0, slot.amuletAuraBonus, slot.value, slot.effect);
-    }
-    for (const relic of eternalRelics) {
-      if (relic.amuletEffect) {
-        applyAmuletEffect(state, relic.amuletEffect, relic.upgradeLevel ?? 0, relic.amuletAuraBonus);
-      }
-    }
-    return state;
+    const relicAsAmulets = eternalRelics
+      .filter(r => r.amuletEffect)
+      .map(r => ({
+        type: 'amulet' as const,
+        amuletEffect: r.amuletEffect,
+        amuletAuraBonus: r.amuletAuraBonus,
+        upgradeLevel: r.upgradeLevel,
+      } as unknown as GameCardData));
+    return computeAmuletEffects([
+      ...(amuletSlots as GameCardData[]),
+      ...relicAsAmulets,
+    ]);
   }, [amuletSlots, eternalRelics]);
 
   // Amulet counter display sync now runs automatically in reducer postProcessAmuletCounters
@@ -827,6 +712,7 @@ export default function GameBoard() {
     handleMagicMonsterSelection,
     handleDungeonCardSelection,
     handleBackpackReorganizeConfirm,
+    handleHandDiscardSelectionConfirm,
     handleSlotTargetSelection,
     computePersuadeSuccessRate,
     canPersuadeMonster,
@@ -2725,7 +2611,8 @@ export default function GameBoard() {
     }
   };
 
-  const triggerDiscardShock = useCallback(() => {
+  const triggerDiscardShock = useCallback((count: number) => {
+    if (count <= 0) return;
     const s = engine.getState();
     if (!s.amuletSlots.some(slot => slot?.amuletEffect === 'discard-zap')) {
       return;
@@ -2738,7 +2625,9 @@ export default function GameBoard() {
     }
     const showBanner =
       !s.pendingHeroSkillAction && !s.pendingMagicAction && !s.pendingPotionAction;
-    discardShockProcQueueRef.current.push({ showBanner });
+    for (let i = 0; i < count; i++) {
+      discardShockProcQueueRef.current.push({ showBanner });
+    }
     flushDiscardShockQueueRef.current();
     syncDiscardShockInteractionLockRef.current();
   }, [engine]);
@@ -4051,7 +3940,12 @@ export default function GameBoard() {
       eventModalMinimized: snapshot.eventModalMinimized ?? false,
       berserkerRageActive: snapshot.berserkerRageActive ?? false,
       berserkerSlotUsed: snapshot.berserkerSlotUsed ?? {},
-      flashSlotUsed: snapshot.flashSlotUsed ?? {},
+      flashSlotUsed: Object.fromEntries(
+        Object.entries(snapshot.flashSlotUsed ?? {}).map(([k, v]) => [
+          k,
+          typeof v === 'number' ? v : (v ? 1 : 0),
+        ]),
+      ) as Record<string, number>,
       gambitExtraActive: snapshot.gambitExtraActive ?? false,
       gambitExtraPerSlot: snapshot.gambitExtraPerSlot ?? 1,
       gambitSlotUsed: snapshot.gambitSlotUsed ?? {},
@@ -4291,8 +4185,8 @@ export default function GameBoard() {
 
   // Card-gain amulet callbacks
   onNewCardGainedRef.current = (count: number, source?: 'graveyard' | 'classPool') => {
-    if (amuletEffects.hasCardGainMissile && (source === 'graveyard' || source === 'classPool')) {
-      const boltsPerTrigger = 1;
+    if (amuletEffects.cardGainMissileCount > 0 && (source === 'graveyard' || source === 'classPool')) {
+      const boltsPerTrigger = amuletEffects.cardGainMissileCount;
       let rng = engine.getState().rng;
       const bolts: GameCardData[] = [];
       const bonusMap = engine.getState().amplifiedCardBonus;
@@ -6127,11 +6021,12 @@ export default function GameBoard() {
           addGameLog('equip', `铸锋药剂：${monster.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
         }
 
-        if (amuletEffects.hasMonsterEquipBuff) {
-          setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
-          setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + 1);
-          addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +1，永久护甲 +1！`);
-          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +1，永久护甲 +1！` });
+        if (amuletEffects.monsterEquipBuffCount > 0) {
+          const bump = amuletEffects.monsterEquipBuffCount;
+          setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + bump);
+          setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + bump);
+          addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +${bump}，永久护甲 +${bump}！`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${bump}，永久护甲 +${bump}！` });
         }
 
         if (monster.monsterType === 'Ogre' || monster.name === 'Ogre') {
@@ -6154,14 +6049,15 @@ export default function GameBoard() {
         }
       }
 
-      if (amuletEffects.hasPersuadeGraveyardStack) {
+      if (amuletEffects.persuadeGraveyardStackCount > 0) {
         const monsterColIndex = findSlotIndexByCardId(activeCards, monster.id);
         if (monsterColIndex >= 0) {
           const graveyard = engine.getState().discardedCards;
           const graveyardCopy = [...graveyard];
           const picked: GameCardData[] = [];
           let rng = engine.getState().rng;
-          for (let i = 0; i < 2 && graveyardCopy.length > 0; i++) {
+          const pickCount = 2 * amuletEffects.persuadeGraveyardStackCount;
+          for (let i = 0; i < pickCount && graveyardCopy.length > 0; i++) {
             const [ri, rng2] = nextInt(rng, 0, graveyardCopy.length - 1); rng = rng2;
             picked.push(graveyardCopy.splice(ri, 1)[0]);
           }
@@ -6183,8 +6079,8 @@ export default function GameBoard() {
       dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `劝降失败！${persuadeState.monster.name} 不为所动。` });
     }
 
-    if (amuletEffects.hasPersuadeGrantRecycleFetch) {
-      const fetchCount = amuletEffects.persuadeGrantRecycleFetchCount || 1;
+    if (amuletEffects.persuadeGrantRecycleFetchCount > 0) {
+      const fetchCount = amuletEffects.persuadeGrantRecycleFetchTotal;
       let rng = engine.getState().rng;
       const bonusMap = engine.getState().amplifiedCardBonus;
       for (let fi = 0; fi < fetchCount; fi++) {
@@ -6555,11 +6451,12 @@ export default function GameBoard() {
         addGameLog('equip', `铸锋药剂：${equipCard.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
       }
 
-      if (isMonsterFromHand && amuletEffects.hasMonsterEquipBuff) {
-        setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
-        setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + 1);
-        addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +1，永久护甲 +1！`);
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +1，永久护甲 +1！` });
+      if (isMonsterFromHand && amuletEffects.monsterEquipBuffCount > 0) {
+        const bump = amuletEffects.monsterEquipBuffCount;
+        setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + bump);
+        setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + bump);
+        addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +${bump}，永久护甲 +${bump}！`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +${bump}，永久护甲 +${bump}！` });
       }
 
       if (isMonsterFromHand && (card.monsterType === 'Ogre' || card.name === 'Ogre')) {
@@ -7158,7 +7055,9 @@ export default function GameBoard() {
       count += (slotExtraAttacks ?? {})[slotId] ?? 0;
       if (slotAttacked || count > 0) {
         if (berserkerRageActive && !berserkerSlotUsed[slotId]) count += 1;
-        if (amuletEffects.hasFlash && !flashSlotUsed[slotId]) count += 1;
+        if (amuletEffects.flashCount > 0) {
+          count += Math.max(0, amuletEffects.flashCount - (flashSlotUsed[slotId] ?? 0));
+        }
         if (gambitExtraActive) count += Math.max(0, gambitExtraPerSlot - (gambitSlotUsed[slotId] ?? 0));
         if ((slotItem as any)?.weaponExtraAttack && !weaponExtraAttackUsed[slotId]) count += 1;
         const battleSpiritBonus = (slotBattleSpiritBonus ?? {})[slotId] ?? 0;
@@ -7170,7 +7069,7 @@ export default function GameBoard() {
 
     if (combatState.currentTurn === 'monster' && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
       const equipBonus = (slotItem as any).equipBlockDurabilityBonus ?? 0;
-      const amuletBonus = amuletEffects.hasArmorHalveEndure ? 1 : 0;
+      const amuletBonus = amuletEffects.armorHalveEndureCount;
       const battleSpiritBonus = (slotBattleSpiritBonus ?? {})[slotId] ?? 0;
       return Math.max(0, blockDurabilityPerSlot + equipBonus + amuletBonus + battleSpiritBonus - (combatState.slotDurabilityUsedThisTurn?.[slotId] ?? 0));
     }
@@ -7646,7 +7545,7 @@ export default function GameBoard() {
     if (!pendingBlock) return null;
     const targetItem = target === 'equipmentSlot1' ? equipmentSlot1 : target === 'equipmentSlot2' ? equipmentSlot2 : null;
     const targetEquipBonus = (targetItem as any)?.equipBlockDurabilityBonus ?? 0;
-    const targetAmuletBonus = amuletEffects.hasArmorHalveEndure ? 1 : 0;
+    const targetAmuletBonus = amuletEffects.armorHalveEndureCount;
     const targetBattleSpiritBonus = target !== 'hero' ? ((slotBattleSpiritBonus ?? {})[target as EquipmentSlotId] ?? 0) : 0;
     const isDurabilityExhausted = target !== 'hero' &&
       (combatState.slotDurabilityUsedThisTurn?.[target as EquipmentSlotId] ?? 0) >= (blockDurabilityPerSlot + targetEquipBonus + targetAmuletBonus + targetBattleSpiritBonus);
@@ -7777,7 +7676,7 @@ export default function GameBoard() {
               extraAttackCharges <= 0 &&
               ((slotExtraAttacks ?? {}).equipmentSlot1 ?? 0) <= 0 &&
               (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot1)) &&
-              (!amuletEffects.hasFlash || Boolean(flashSlotUsed.equipmentSlot1)) &&
+              (amuletEffects.flashCount <= 0 || (flashSlotUsed.equipmentSlot1 ?? 0) >= amuletEffects.flashCount) &&
               (!gambitExtraActive || (gambitSlotUsed.equipmentSlot1 ?? 0) >= gambitExtraPerSlot) &&
               (!(equipmentSlot1 as any)?.weaponExtraAttack || Boolean(weaponExtraAttackUsed.equipmentSlot1))
             }
@@ -7811,7 +7710,7 @@ export default function GameBoard() {
             onCardClick={handleCardClick}
           />
           {showBlockButtons &&
-            renderBlockButton('equipmentSlot1', 'Block (Left)', !canShieldBlock('equipmentSlot1') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot1 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot1 as any)?.equipBlockDurabilityBonus ?? 0) + (amuletEffects.hasArmorHalveEndure ? 1 : 0) + ((slotBattleSpiritBonus ?? {}).equipmentSlot1 ?? 0)))}
+            renderBlockButton('equipmentSlot1', 'Block (Left)', !canShieldBlock('equipmentSlot1') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot1 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot1 as any)?.equipBlockDurabilityBonus ?? 0) + amuletEffects.armorHalveEndureCount + ((slotBattleSpiritBonus ?? {}).equipmentSlot1 ?? 0)))}
         </>
       ),
     },
@@ -7911,7 +7810,7 @@ export default function GameBoard() {
               extraAttackCharges <= 0 &&
               ((slotExtraAttacks ?? {}).equipmentSlot2 ?? 0) <= 0 &&
               (!berserkerRageActive || Boolean(berserkerSlotUsed.equipmentSlot2)) &&
-              (!amuletEffects.hasFlash || Boolean(flashSlotUsed.equipmentSlot2)) &&
+              (amuletEffects.flashCount <= 0 || (flashSlotUsed.equipmentSlot2 ?? 0) >= amuletEffects.flashCount) &&
               (!gambitExtraActive || (gambitSlotUsed.equipmentSlot2 ?? 0) >= gambitExtraPerSlot) &&
               (!(equipmentSlot2 as any)?.weaponExtraAttack || Boolean(weaponExtraAttackUsed.equipmentSlot2))
             }
@@ -7945,7 +7844,7 @@ export default function GameBoard() {
             onCardClick={handleCardClick}
           />
           {showBlockButtons &&
-            renderBlockButton('equipmentSlot2', 'Block (Right)', !canShieldBlock('equipmentSlot2') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot2 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot2 as any)?.equipBlockDurabilityBonus ?? 0) + (amuletEffects.hasArmorHalveEndure ? 1 : 0) + ((slotBattleSpiritBonus ?? {}).equipmentSlot2 ?? 0)))}
+            renderBlockButton('equipmentSlot2', 'Block (Right)', !canShieldBlock('equipmentSlot2') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot2 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot2 as any)?.equipBlockDurabilityBonus ?? 0) + amuletEffects.armorHalveEndureCount + ((slotBattleSpiritBonus ?? {}).equipmentSlot2 ?? 0)))}
         </>
       ),
     },
@@ -8127,6 +8026,7 @@ export default function GameBoard() {
     onPermGrantConfirm: resolvePermGrant,
     onPermGrantCancel: cancelPermGrant,
     onBackpackReorganizeConfirm: handleBackpackReorganizeConfirm,
+    onHandDiscardSelectionConfirm: handleHandDiscardSelectionConfirm,
     onCancelHeroMagicAction: cancelHeroMagicAction,
     onHeroMagicChoice: handleHeroMagicChoice,
     onCancelPotionAction: cancelPotionAction,
@@ -8161,6 +8061,7 @@ export default function GameBoard() {
     handleEventAmplifyHandSelect, cancelEventAmplifyHandPicker,
     resolvePermGrant, cancelPermGrant,
     handleBackpackReorganizeConfirm,
+    handleHandDiscardSelectionConfirm,
     cancelHeroMagicAction, handleHeroMagicChoice, cancelPotionAction, handlePotionChoiceSelection,
     handleDeathWardConfirm, handleDeathWardDecline,
     handleDaggerSelfDestructConfirm, handleDaggerSelfDestructDecline,

@@ -300,6 +300,20 @@ export function pickRandomHandCardsForDiscardPreferGraveyard(
   return [[...g, ...r].slice(0, n), rng3];
 }
 
+/**
+ * 玩家自选弃回 — 计算「可被玩家选择弃回的手牌列表」。
+ *
+ * 排除：诅咒牌（与 pickRandomHandCardsForDiscardPreferGraveyard 一致）、
+ * 以及触发本次效果的源卡牌本身（避免「弃自己抽自己」的悖论）。
+ * 不排序——UI 按当前手牌顺序展示即可，玩家自行选择。
+ */
+export function getEligibleHandDiscardCards(
+  hand: GameCardData[],
+  sourceCardId: string | null,
+): GameCardData[] {
+  return hand.filter(c => !isCurseCard(c) && (sourceCardId == null || c.id !== sourceCardId));
+}
+
 // ---------------------------------------------------------------------------
 // Grid layout metrics (pure computation, used by both core and UI)
 // ---------------------------------------------------------------------------
@@ -420,6 +434,12 @@ export interface AmuletAuraReversal {
  * Compute the slotTempAttack / slotTempArmor deltas needed to reverse the
  * aura effects of the given amulets.  Caller should apply both deltas after
  * clearing the amulet slots.
+ *
+ * @deprecated Manual reversal is no longer required at amulet-removal sites.
+ * The reducer pipeline runs `postProcessAmuletAura` after every action that
+ * mutates `amuletSlots`, which automatically diffs aura signatures and
+ * applies the temp attack/armor delta. Kept for backward compatibility with
+ * external callers and tests.
  */
 export function computeAmuletAuraReversal(
   amulets: readonly { amuletEffect?: AmuletEffectId }[],
@@ -441,6 +461,33 @@ export function computeAmuletAuraReversal(
     }
   }
   return result;
+}
+
+/**
+ * Aura "signature" of an amulet collection — the count of strength + balance
+ * amulets.  These are the only amuletEffects that contribute to
+ * slotTempAttack / slotTempArmor (the other auras live in computed display
+ * state, not in the temp slot values).
+ *
+ * Used by the reducer pipeline (`postProcessAmuletAura`) to detect aura
+ * changes between actions and apply the corresponding delta automatically.
+ */
+export interface AmuletAuraSignature {
+  strength: number;
+  balance: number;
+}
+
+export function computeAmuletAuraSignature(
+  amulets: readonly { amuletEffect?: AmuletEffectId }[] | null | undefined,
+): AmuletAuraSignature {
+  const sig: AmuletAuraSignature = { strength: 0, balance: 0 };
+  if (!amulets) return sig;
+  for (const a of amulets) {
+    if (!a) continue;
+    if (a.amuletEffect === 'strength') sig.strength += 1;
+    else if (a.amuletEffect === 'balance') sig.balance += 1;
+  }
+  return sig;
 }
 
 // ---------------------------------------------------------------------------

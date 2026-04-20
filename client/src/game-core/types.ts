@@ -45,6 +45,8 @@ export type {
   PendingHeroMagicAction,
   HeroMagicActivationOrigin,
   PendingMagicAction,
+  HandDiscardSelectionState,
+  HandDiscardContinuation,
   PendingPotionAction,
   CardActionContext,
   EquipmentPromptState,
@@ -239,6 +241,42 @@ export interface PersuadeModalState {
   success: boolean | null;
 }
 
+/**
+ * One pre-rolled goblin end-of-monster-turn dice flow waiting on player input.
+ * Stored in `pendingMonsterEndDiceQueue`; consumed one-at-a-time by
+ * `RESOLVE_DICE` so each goblin gets its own dice modal.
+ *
+ * - `goblin-steal`: goblin "窃宝". The item to steal is pre-picked at
+ *   flow-build time from the player's equipment / amulet slots.
+ * - `goblin-heal`: goblin "贼窝疗养". Restores 1 layer (capped at maxLayers).
+ */
+export type PendingMonsterEndDice =
+  | {
+      kind: 'goblin-steal';
+      goblinId: string;
+      goblinName: string;
+      colIndex: number;
+      stackCount: number;
+      predeterminedRoll: number;
+      threshold: number;
+      success: boolean;
+      pickedSource: 'equip' | 'amulet' | null;
+      pickedSlotId: EquipmentSlotId | null;
+      pickedItem: GameCardData | null;
+    }
+  | {
+      kind: 'goblin-heal';
+      goblinId: string;
+      goblinName: string;
+      colIndex: number;
+      stackCount: number;
+      predeterminedRoll: number;
+      threshold: number;
+      success: boolean;
+      currentLayer: number;
+      maxLayers: number;
+    };
+
 export interface GameState {
   // --- Core stats ---
   hp: number;
@@ -385,7 +423,12 @@ export interface GameState {
   heroSkillUsedThisWave: boolean;
   berserkerRageActive: boolean;
   berserkerSlotUsed: Record<string, boolean>;
-  flashSlotUsed: Record<string, boolean>;
+  /**
+   * Number of flash extra attacks already consumed by each slot in the current
+   * hero turn. With N equipped 闪光符 (flashCount=N), each slot can spend up to
+   * N flash extras per turn. Reset on START_TURN / RESET_TURN_STATE.
+   */
+  flashSlotUsed: Record<string, number>;
   gambitExtraActive: boolean;
   gambitExtraPerSlot: number;
   gambitSlotUsed: Record<string, number>;
@@ -400,8 +443,19 @@ export interface GameState {
   pendingHeroSkillAction: PendingHeroSkillAction | null;
   pendingHeroMagicAction: PendingHeroMagicAction | null;
   pendingMagicAction: PendingMagicAction | null;
+  /** 手牌「玩家自选」弃回多选状态；非 null 时 UI 弹出 HandDiscardSelectionModal。 */
+  pendingHandDiscardSelection: HandDiscardSelectionState | null;
   pendingPotionAction: PendingPotionAction | null;
   deathWardPrompt: DeathWardPromptState | null;
+
+  /**
+   * Queue of pre-rolled goblin "贼窝疗养"/"窃宝" dice flows that need to be
+   * shown to the player at the end of the monster turn. While this queue is
+   * non-empty the pipeline parks at `phase: 'awaitingDice'`; each
+   * `RESOLVE_DICE` pops the front entry, applies its effect, then either
+   * triggers the next dice modal or finally enqueues `START_TURN`.
+   */
+  pendingMonsterEndDiceQueue: PendingMonsterEndDice[];
 
   // --- Monster rewards ---
   monsterRewardQueue: MonsterRewardDrop[];

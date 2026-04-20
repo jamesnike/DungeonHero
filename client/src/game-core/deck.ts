@@ -455,7 +455,7 @@ export function createDeck(
       Skeleton: { tag: 'bone-regen',     desc: '虚骨再生：每次失去血层后，40%概率恢复一层。' },
       Wraith:   { tag: 'wraith-rebirth', desc: '幽魂重生：血层降至1时，30%概率血层全满。' },
       Ogre:     { tag: 'ogre-crit',      desc: '蛮力暴击：攻击时50%概率双倍伤害。\n狂暴连击：70%概率攻击两次。' },
-      Goblin:   { tag: 'goblin-elite',   desc: '窃宝精英：自身下方每有1张牌，15%概率偷走玩家装备或护符，堆叠在自身下方。' },
+      Goblin:   { tag: 'goblin-elite',   desc: '窃宝精英：怪物回合结束掷骰，自身下方每有1张牌，成功率 +25%（最高100%），成功则偷走玩家1件装备或护符并堆叠在自身下方。' },
       Swarm:    { tag: 'swarm-elite',    desc: '虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子。' },
       Golem:    { tag: 'golem-elite',   desc: '岩石护体：每次最多受到 5 点伤害。' },
     };

@@ -87,7 +87,11 @@ export type EquipmentCardStatModifier = {
   modifier: number;
   shieldModifier?: number;
   permanentShieldBonus?: number;
-  flashHalve?: boolean;
+  /**
+   * Number of equipped 闪光符 amulets. Display divides effective attack by `2^flashCount`,
+   * matching combat resolution where each flash compounds independently.
+   */
+  flashCount?: number;
 };
 
 export type PotionEffectId =
@@ -331,6 +335,15 @@ export interface GameCardData {
   onDestroyGold?: number; // Gain this much gold when equipment is destroyed
   onEquipEffect?: string; // Trigger effect when this equipment is first equipped (入场)
   onDestroyEffect?: string; // General last-words effect when equipment is destroyed (遗言)
+  /**
+   * 遗赠淬炼药: number of times this potion has been applied to the equipment.
+   * On destruction, fires `slot-temp-buff-3-3 × lastWordsSlotTempBuff` (each
+   * stack contributes +3 temp attack and +3 temp armor to the slot). Stacks
+   * ON TOP of any existing onDestroyEffect (e.g. Iron Shield's
+   * graveyard-to-hand) without overwriting it, and accumulates across multiple
+   * potion uses on the same equipment.
+   */
+  lastWordsSlotTempBuff?: number;
   /** 上手关键词：当此卡进入手牌时（抽牌、坟场/回收袋/装备栏回手、卡牌翻面等）自动触发的效果 ID。 */
   onEnterHandEffect?: string;
   /** 内部标记：进入手牌时跳过 onEnterHandEffect 触发（用于克隆/复制/初始发牌等不应触发的来源）。 */
@@ -415,8 +428,8 @@ export interface GameCardData {
   stolenByGoblin?: boolean; // Card was stolen by a Goblin and stacked under it
   goblinStealScale?: boolean; // Goblin tier-3: +X atk/hp per X gold stolen
   goblinHasStolen?: boolean; // Tracks if this goblin successfully stole gold
-  goblinStackHeal?: boolean; // Goblin tier-2: at end of monster turn, per card below, 15% chance restore 1 layer
-  goblinStealEquip?: boolean; // Goblin elite: per card below, 15% chance steal equipment or amulet
+  goblinStackHeal?: boolean; // Goblin tier-2: at end of monster turn, single D20 roll where threshold = min(stackCount * 3, 20); on success restore 1 layer
+  goblinStealEquip?: boolean; // Goblin elite: at end of monster turn, single D20 roll where threshold = min(stackCount * 5, 20); on success steal 1 equipment or amulet
   swarmHordeRage?: boolean; // Swarm tier-1: when ≥3 monsters in active row, all get enraged +3 atk/hp
   swarmHordeBuffed?: boolean; // Tracks if this monster already received the horde buff
   swarmCorrode?: boolean; // Swarm tier-2: on attack, blocking shield loses 1 durability (doesn't count as block durability use)
@@ -1018,12 +1031,16 @@ const amuletEffectText =
     : 'select-none w-auto max-h-[82%] max-w-[82%] object-contain';
 
   const modSpacer = '';
+  const flashCountForDisplay = equipmentStatModifier?.flashCount ?? 0;
   const isFlashHalveAttack =
-    equipmentStatModifier?.flashHalve &&
+    flashCountForDisplay > 0 &&
     (card.type === 'weapon' || card.type === 'monster') &&
-    (equipmentStatModifier.appliesTo === 'weapon' || equipmentStatModifier.appliesTo === 'monster');
+    (equipmentStatModifier?.appliesTo === 'weapon' || equipmentStatModifier?.appliesTo === 'monster');
   const flashHalvedValue = isFlashHalveAttack
-    ? Math.max(0, Math.floor((card.value + (equipmentStatModifier?.modifier ?? 0)) / 2))
+    ? Math.max(
+        0,
+        Math.floor((card.value + (equipmentStatModifier?.modifier ?? 0)) / Math.pow(2, flashCountForDisplay)),
+      )
     : null;
   const equipmentStatModifierText =
     !isFlashHalveAttack &&
@@ -1914,7 +1931,7 @@ const amuletEffectText =
                   </h3>
                 )}
 
-                {isMonsterEquipmentCard(card) && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
+                {isMonsterEquipmentCard(card) && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手偷钱：攻击时为Hero偷钱">偷钱</span>
@@ -1976,9 +1993,17 @@ const amuletEffectText =
                     {card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && !card.wraithDeathHealSpread && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="怨灵祝福：遗言另一装备耐久+1">祝福</span>
                     )}
-                    {card.onDestroyEffect === 'slot-temp-buff-3-3' && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：装备毁坏时该装备栏 +3临时攻击 +3临时护甲">遗言</span>
-                    )}
+                    {(card.onDestroyEffect === 'slot-temp-buff-3-3' || (card.lastWordsSlotTempBuff ?? 0) > 0) && (() => {
+                      const stacks = (card.lastWordsSlotTempBuff ?? 0)
+                        + (card.onDestroyEffect === 'slot-temp-buff-3-3' ? 1 : 0);
+                      const amt = 3 * stacks;
+                      return (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords"
+                          title={`遗言：装备毁坏时该装备栏 +${amt}临时攻击 +${amt}临时护甲${stacks > 1 ? `（×${stacks} 层）` : ''}`}>
+                          {stacks > 1 ? `遗言×${stacks}` : '遗言'}
+                        </span>
+                      );
+                    })()}
                     {card.onDestroyEffect?.startsWith('stunCap+') && (() => {
                       const amt = parseInt(card.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
                       return amt > 0 ? (
@@ -2143,10 +2168,10 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="贪婪强化：偷到金币后攻击力和生命值同步增长">贪婪</span>
                     )}
                     {card.goblinStackHeal && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="贼窝疗养：回合结束时，自身下方每有1张牌，15%概率恢复1血层">疗养</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="贼窝疗养：回合结束掷骰，自身下方每有1张牌成功率 +15%（最高100%），成功则恢复1血层">疗养</span>
                     )}
                     {card.goblinStealEquip && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="窃宝：自身下方每有1张牌，15%概率偷走装备或护符">窃宝</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="窃宝：回合结束掷骰，自身下方每有1张牌成功率 +25%（最高100%），成功则偷走1件装备或护符">窃宝</span>
                     )}
                     {card.antiMagicReflect != null && card.antiMagicReflect > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`反魔：玩家每使用一张法术牌，对玩家造成 ${card.antiMagicReflect} 点伤害`}>反魔</span>
@@ -2181,7 +2206,7 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
                   <div className="dh-card__keyword-row">
                     {card.hasEquipmentRevive && (
                       <span className={`dh-card__keyword-tag ${card.equipmentReviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
@@ -2189,9 +2214,17 @@ const amuletEffectText =
                         {card.equipmentReviveUsed ? '已复生' : '复生'}
                       </span>
                     )}
-                    {card.onDestroyEffect === 'slot-temp-buff-3-3' && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：装备毁坏时该装备栏 +3临时攻击 +3临时护甲">遗言</span>
-                    )}
+                    {(card.onDestroyEffect === 'slot-temp-buff-3-3' || (card.lastWordsSlotTempBuff ?? 0) > 0) && (() => {
+                      const stacks = (card.lastWordsSlotTempBuff ?? 0)
+                        + (card.onDestroyEffect === 'slot-temp-buff-3-3' ? 1 : 0);
+                      const amt = 3 * stacks;
+                      return (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords"
+                          title={`遗言：装备毁坏时该装备栏 +${amt}临时攻击 +${amt}临时护甲${stacks > 1 ? `（×${stacks} 层）` : ''}`}>
+                          {stacks > 1 ? `遗言×${stacks}` : '遗言'}
+                        </span>
+                      );
+                    })()}
                     {card.onDestroyEffect?.startsWith('stunCap+') && (() => {
                       const amt = parseInt(card.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
                       return amt > 0 ? (
@@ -2356,6 +2389,7 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.swarmBugletShield !== b.swarmBugletShield ||
       a.hasEquipmentRevive !== b.hasEquipmentRevive ||
       a.equipmentReviveUsed !== b.equipmentReviveUsed ||
+      a.lastWordsSlotTempBuff !== b.lastWordsSlotTempBuff ||
       a._shieldBlockCount !== b._shieldBlockCount ||
       a._counterDisplay !== b._counterDisplay ||
       a.magicType !== b.magicType ||

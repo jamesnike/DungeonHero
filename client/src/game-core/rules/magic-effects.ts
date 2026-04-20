@@ -6,6 +6,127 @@
  * effects compute state patches and enqueue follow-up actions directly.
  *
  * The reducer's `reduceResolveMagic` in `rules/cards.ts` delegates here.
+ *
+ * ===========================================================================
+ * 法术回响（Spell Echo）AUDIT TABLE
+ * ===========================================================================
+ * `state.doubleNextMagic` is set by 法术回响 (`double-next-magic`). The next
+ * non-self magic card consumes it and `echoMultiplier = 2` is passed into the
+ * resolver. Each card has ONE of three echo behaviours:
+ *
+ *   A — NUMERIC: multiply numeric outputs (damage, heal, draw count, gold,
+ *       buff stacks, repair amount, etc.) by `echoMultiplier`.
+ *   B — MODAL: re-trigger the same modal twice. Stored via
+ *       `pendingMagicAction.echoRemaining = 2`; the corresponding hero.ts
+ *       reducer (RESOLVE_MAGIC_*_SELECTION) calls `maybeRepromptEcho()` to
+ *       re-prompt the second selection rather than finalize.
+ *   C — STRUCTURAL: card has no useful numeric knob (e.g. cascade reset,
+ *       backpack swap). When echoed, the entire effect runs twice (the second
+ *       run is often a no-op) and a banner notes "回响：二次结算无额外效果".
+ *   B* — UI-DELEGATED MODAL: discover/upgrade modals owned by the UI layer
+ *        cannot currently be re-opened from the reducer. echoMultiplier is
+ *        forwarded into the pendingMagicAction / event payload, but only the
+ *        first invocation actually opens the UI. A banner notifies the player
+ *        that the second pass did not retrigger. Future work: extend the UI
+ *        layer to consume `echoRemaining` and re-open after each completion.
+ *
+ * ┌──────────────────────────────────┬─────┬───────────────────────────────┐
+ * │ Card / effectId                  │ Cat │ Notes                         │
+ * ├──────────────────────────────────┼─────┼───────────────────────────────┤
+ * │ honor-blood (战血之印)           │ A/B │ self-dmg fixed; repair ×N     │
+ * │ active-row-monster-attack-debuff │ A   │ -atk amount ×N                │
+ * │ flip-monster-debuff              │ B   │ second pick → second monster  │
+ * │ amplify-card                     │ B   │ open modal twice              │
+ * │ altar-discard-discover           │ B*  │ discover once + echo banner   │
+ * │ cascade-reset (瀑流重置)         │ C   │ second pass = no-op + banner  │
+ * │ storm-volley (风暴箭雨)          │ A   │ damage ×N                     │
+ * │ fountain-hand (涌泉满手)         │ A   │ heal & draw ×N                │
+ * │ ember-echo (余烬回响)            │ A   │ buff/draw ×N                  │
+ * │ heal (治愈术)                    │ A   │ healAmt ×N                    │
+ * │ blood-reckoning (点金裁决)       │ A/B │ damage ×N + modal re-prompt   │
+ * │ soul-swap (等价交换)             │ B   │ pick slot+monster twice       │
+ * │ perm-grant (永恒铭刻)            │ B   │ pick card twice               │
+ * │ upgrade-scroll                   │ B*  │ modal once + echo banner only │
+ * │ arcane-refine (秘法精炼)         │ B*  │ modal once + echo banner only │
+ * │ event-fortify (天机铸炼)         │ B   │ pick slot twice (peek twice)  │
+ * │ double-next-magic                │ —   │ engine guards: never echoed   │
+ * │ swap-backpack-recycle            │ C   │ swap-back-and-forth = no-op   │
+ * │ guild-hand-recycle               │ A   │ draw ×N                       │
+ * │ guild-recycle-reshuffle          │ A   │ draw ×N                       │
+ * │ crossroads-left-swap             │ A   │ swap×N (even N = no-op)       │
+ * │ persuade-boost-draw              │ A   │ +%/draw ×N                    │
+ * │ bounty-spell-damage              │ A/B │ dmg ×N + modal re-prompt      │
+ * │ arcane-shield-stun-cap           │ A   │ stunCap gain ×N               │
+ * │ storm-volley-recycle             │ A   │ damage ×N                     │
+ * │ arcane-storm-magic-count         │ A   │ damage ×N                     │
+ * │ equipment-enchant-discard        │ B   │ pick equip twice              │
+ * │ amplify-target                   │ A   │ amplify amount ×N             │
+ * │ altar-discover-class-magic       │ B*  │ discover once + echo banner   │
+ * │ equalize-attack-armor            │ A/B │ +2 atk ×N + modal re-prompt   │
+ * │ crypt-deathwish                  │ B   │ delegated UI re-prompt        │
+ * │ weapon-manual                    │ A/B │ +bonus ×N + modal re-prompt   │
+ * │ chaos-strike (混沌冲击)          │ B   │ existing echoRemaining        │
+ * │ overkill-upgrade (淬炼冲击)      │ B   │ existing echoRemaining        │
+ * │ dimension-warp (维度扭曲)        │ B   │ pick swap twice               │
+ * │ goblin-trick (哥布林的戏法)      │ C   │ second shuffle = no-op        │
+ * │ scaling-damage                   │ A   │ damage ×N                     │
+ * │ STARTER weapon-burst             │ A   │ +atk ×N                       │
+ * │ STARTER repair-one               │ A   │ repair ×N                     │
+ * │ STARTER temp-armor               │ A   │ armor ×N                      │
+ * │ STARTER heal-magic               │ A   │ healAmt ×N                    │
+ * │ STARTER heal-echo                │ A   │ heal ×N                       │
+ * │ STARTER reshuffle                │ B   │ existing echoRemaining        │
+ * │ STARTER dungeon-swap             │ A   │ swap×N (even N = no-op)       │
+ * │ STARTER active-row-flip          │ B   │ pick flip twice               │
+ * │ STARTER fate-swap-deep           │ B   │ pick swap twice               │
+ * │ STARTER dimension-warp           │ B   │ pick swap twice               │
+ * │ STARTER undying-blessing         │ B   │ pick slot twice               │
+ * │ STARTER magic-missile            │ A   │ bolt count ×N                 │
+ * │ STARTER stun-strike              │ A/B │ dmg ×N + modal re-prompt      │
+ * │ STARTER gambler-gambit           │ A   │ gold/draw ×N                  │
+ * │ STARTER recycle-draw-magic       │ C   │ second pass = no-op           │
+ * │ STARTER guild-blood-gold         │ A   │ dmg/gold ×N                   │
+ * │ STARTER transform-streak-strike  │ A/B │ dmg ×N + modal re-prompt      │
+ * │ STARTER flank-slot-temp-attack   │ A   │ +atk ×N                       │
+ * │ STARTER deck-top-swap-gold       │ B   │ pick swap twice               │
+ * │ KNIGHT blood-greed               │ A   │ gold delta ×N (curse fixed)   │
+ * │ KNIGHT berserk-gambit            │ A   │ buff stacks ×N                │
+ * │ KNIGHT battle-spirit             │ B   │ pick slot twice               │
+ * │ KNIGHT persuade-discount         │ A   │ discount/rate ×N              │
+ * │ KNIGHT recycle-random-to-hand    │ A   │ pick count ×N                 │
+ * │ KNIGHT amulet-expand             │ A   │ +slots ×N                     │
+ * │ KNIGHT grave-nova                │ A   │ damage ×N                     │
+ * │ KNIGHT missile-bolt              │ A/B │ dmg ×N + modal re-prompt      │
+ * │ KNIGHT missile-storm             │ A   │ damage ×N (bolts repeat)      │
+ * │ KNIGHT death-ward                │ —   │ passive — echo no-op + banner │
+ * │ KNIGHT fortune-wheel             │ B   │ dice re-roll twice            │
+ * │ KNIGHT chaos-dice                │ B   │ dice re-roll twice            │
+ * │ KNIGHT graveyard-recall          │ A   │ recall count ×N               │
+ * │ KNIGHT graveyard-discover-equip  │ B*  │ discover once + echo banner   │
+ * │ KNIGHT monster-recruit           │ A   │ recruit count ×N              │
+ * │ KNIGHT monster-fusion            │ C   │ fusion not stackable; banner  │
+ * │ KNIGHT mirror-copy               │ B   │ pick card twice               │
+ * │ KNIGHT deck-judge-delete         │ B   │ pick delete twice             │
+ * │ KNIGHT transform-grant           │ B   │ transform pick twice          │
+ * │ KNIGHT strip-perm-hand           │ C   │ strips all; echo banner only  │
+ * │ KNIGHT armor-strike              │ A   │ damage ×N                     │
+ * │ KNIGHT armor-double-strike       │ A   │ damage ×N                     │
+ * │ KNIGHT three-card-thunder        │ A   │ damage ×N                     │
+ * │ KNIGHT reorganize-backpack       │ A   │ +cap ×N                       │
+ * │ KNIGHT honor-sweep               │ A   │ damage ×N                     │
+ * │ KNIGHT weapon-sweep              │ A   │ damage ×N                     │
+ * │ KNIGHT missing-hp-smite          │ A   │ damage ×N                     │
+ * │ KNIGHT blood-sacrifice-strike    │ A   │ damage ×N                     │
+ * │ KNIGHT blood-draw                │ A   │ draw ×N                       │
+ * │ KNIGHT recall-equipment          │ B   │ pick equipment twice          │
+ * │ KNIGHT discard-rebuild           │ A   │ discover queue ×N             │
+ * │ KNIGHT armor-stun-convert        │ B   │ pick slot twice               │
+ * │ KNIGHT temp-attack-double        │ A/B │ +atk ×N + modal re-prompt     │
+ * └──────────────────────────────────┴─────┴───────────────────────────────┘
+ *
+ * Hero magic (法力槽) and curses (`type: 'curse'`) are OUT OF SCOPE — Spell
+ * Echo never applies to them (engine guard at engine.ts).
+ * ===========================================================================
  */
 
 import type { GameState } from '../types';
@@ -14,7 +135,13 @@ import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch, noChange } from '../reducer';
 import type { GameCardData } from '@/components/GameCard';
 import { cardHasPermFlag } from '@/components/GameCard';
-import type { EquipmentSlotId, EquipmentItem, PendingMagicAction } from '@/components/game-board/types';
+import type {
+  EquipmentSlotId,
+  EquipmentItem,
+  PendingMagicAction,
+  HandDiscardSelectionState,
+  HandDiscardContinuation,
+} from '@/components/game-board/types';
 import {
   flattenActiveRowSlots,
   isDamageableTarget,
@@ -22,6 +149,7 @@ import {
   getCardPlayCategory,
   isDamageMagic,
   pickRandomHandCardsForDiscardPreferGraveyard,
+  getEligibleHandDiscardCards,
   applyAmplifyOnCreate,
   computeSlotArmorValuePure,
 } from '../helpers';
@@ -50,6 +178,7 @@ import {
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots } from '../equipment';
 import { chaosStrikeHasOverkill } from '../combat';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
+import { markSkillUsedPure } from '../hero';
 import { STARTER_CARD_IDS, getStarterBaseId, skillScrollImage } from '../deck';
 import { createGreedCurseCard } from '@/lib/knightDeck';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
@@ -107,9 +236,10 @@ export function applyMissileRelicEffects(
         enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId: target.id, patch: { isStunned: true } });
         log(sideEffects, 'magic', `永恒护符·震荡弹幕：${target.name} 被击晕了！`);
         const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-        if (ae.hasStunGold) {
-          enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10, source: 'amulet-stun-gold' });
-          log(sideEffects, 'amulet', `雷金护符：${target.name} 被击晕，金币 +10`);
+        if (ae.stunGoldCount > 0) {
+          const sn = ae.stunGoldCount;
+          enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10 * sn, source: 'amulet-stun-gold' });
+          log(sideEffects, 'amulet', `雷金护符：${target.name} 被击晕，金币 +${10 * sn}`);
         }
       }
     }
@@ -142,6 +272,366 @@ export function getEquippedSlots(state: GameState): Array<{ id: EquipmentSlotId;
 }
 
 /**
+ * 「玩家自选弃回」流程的统一入口。
+ *
+ * - 当可弃手牌（排除诅咒、源卡牌）数量 >= requiredCount 且 requiredCount > 0：
+ *   写入 patch.pendingHandDiscardSelection，返回 { mode: 'modal' } 给调用者，
+ *   调用者必须立即 return（**不要** finalize 卡牌、**不要** 入队后续动作），
+ *   等玩家在 HandDiscardSelectionModal 里点击确认后由 RESOLVE_HAND_DISCARD_SELECTION
+ *   接着跑后续逻辑。
+ *
+ * - 否则（可弃手牌不足 / requiredCount 为 0）：跳过弹窗，直接把所有可弃手牌
+ *   按「优先坟场、其次回收袋」的现有顺序自动弃完，返回 { mode: 'auto', discarded }
+ *   给调用者继续在本帧内完成全部后续效果。
+ */
+export function requestOrAutoHandDiscard(
+  state: GameState,
+  patch: Partial<GameState>,
+  opts: {
+    sourceCardId: string | null;
+    requiredCount: number;
+    title: string;
+    prompt: string;
+    subEffect: HandDiscardSelectionState['subEffect'];
+    context: HandDiscardContinuation;
+  },
+): { mode: 'modal' } | { mode: 'auto'; discarded: GameCardData[] } {
+  const eligible = getEligibleHandDiscardCards(state.handCards as GameCardData[], opts.sourceCardId);
+  if (opts.requiredCount > 0 && eligible.length >= opts.requiredCount) {
+    patch.pendingHandDiscardSelection = {
+      subEffect: opts.subEffect,
+      count: opts.requiredCount,
+      sourceCardId: opts.sourceCardId,
+      prompt: opts.prompt,
+      title: opts.title,
+      context: opts.context,
+    };
+    return { mode: 'modal' };
+  }
+  // 自动弃掉「可弃手牌不足 requiredCount」的全部牌（也可能是 0 张）。
+  // 注意把源卡牌排除——它在 PLAY_CARD 后通常已不在手牌，但部分流程仍会保留，
+  // 这里用 eligible（已剔除源 + 诅咒）作为 pickRandom 的输入，避免选到自己。
+  const autoCount = Math.min(eligible.length, opts.requiredCount);
+  if (autoCount <= 0) return { mode: 'auto', discarded: [] };
+  const rng = patch.rng ?? state.rng;
+  const [discarded, rngAfter] = pickRandomHandCardsForDiscardPreferGraveyard(eligible, autoCount, rng);
+  patch.rng = rngAfter;
+  return { mode: 'auto', discarded };
+}
+
+// ---------------------------------------------------------------------------
+// 弃回后续效果 — 由触发方（自动分支）和 RESOLVE_HAND_DISCARD_SELECTION（玩家
+// 选择分支）共用。所有 finalize* 都假定 `discarded` 已是「需要弃掉的卡牌列表」，
+// 不会再做诅咒/源卡牌过滤；它们负责：
+//   1. 把 discarded 从 handCards 中移除（写入 patch.handCards）
+//   2. 把 discarded 入队到 ADD_TO_RECYCLE_BAG / ADD_TO_GRAVEYARD（按效果定）
+//   3. 写日志/banner、设置 lastPlayedCardCategory、入队 FINALIZE_MAGIC_CARD
+//   4. 完成各自后续效果（抽牌、发现、职业抽牌等）
+// ---------------------------------------------------------------------------
+
+export function finalizeDiscardDraw(
+  state: GameState,
+  card: GameCardData,
+  discarded: GameCardData[],
+  drawCount: number,
+  echoTag: string,
+  sideEffects: SideEffect[],
+  patch: Partial<GameState>,
+  enqueuedActions: GameAction[],
+): ReduceResult {
+  if (discarded.length > 0) {
+    const discardIds = new Set(discarded.map(c => c.id));
+    patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
+    for (const dc of discarded) {
+      enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: dc });
+    }
+    log(sideEffects, 'magic', `汰旧迎新：移回 ${discarded.map(c => c.name).join('、')} 至回收袋`);
+  }
+  const drawState = { ...state, ...patch } as GameState;
+  const drawResult = drawMultipleFromBackpack(drawState, drawCount);
+  if (drawResult.cards.length > 0) {
+    mergePatch(patch, drawResult.patch);
+    for (const d of drawResult.cards) {
+      sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
+    }
+  }
+  const drawMsg = drawResult.cards.length > 0 ? `抽了 ${drawResult.cards.length} 张牌` : '背包为空';
+  banner(sideEffects, `汰旧迎新：移回 ${discarded.length} 张牌，${drawMsg}。${echoTag}`);
+  patch.lastPlayedCardCategory = getCardPlayCategory(card);
+  enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+export function finalizeAltarDiscardDiscover(
+  state: GameState,
+  card: GameCardData,
+  discarded: GameCardData[],
+  sideEffects: SideEffect[],
+  patch: Partial<GameState>,
+  enqueuedActions: GameAction[],
+): ReduceResult {
+  const discardCount = discarded.length;
+  if (discardCount > 0) {
+    const discardIds = new Set(discarded.map(c => c.id));
+    patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
+    for (const dc of discarded) {
+      enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+    }
+    log(sideEffects, 'magic', `祭坛秘术：弃回 ${discarded.map(c => c.name).join('、')}`);
+  }
+  const classDeck = patch.classDeck ?? state.classDeck ?? [];
+  const discoverPool = classDeck.filter((c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic');
+  if (discoverPool.length > 0) {
+    let drng = patch.rng ?? state.rng;
+    let shuffled: GameCardData[];
+    [shuffled, drng] = rngShuffle(discoverPool, drng);
+    patch.rng = drng;
+    const candidates = shuffled.slice(0, Math.min(3, discoverPool.length));
+    const candidateIds = new Set(candidates.map(c => c.id));
+    patch.classDeck = classDeck.filter((c: GameCardData) => !candidateIds.has(c.id));
+    sideEffects.push({
+      event: 'card:discoverRequested' as any,
+      payload: { source: 'altar-discard-discover', candidates, sourceLabel: card.name },
+    });
+    banner(sideEffects, `祭坛秘术：弃回 ${discardCount} 张牌，发现专属魔法卡…`);
+  } else {
+    log(sideEffects, 'magic', '祭坛秘术：专属牌堆中没有魔法卡。');
+    banner(sideEffects, `祭坛秘术：弃回 ${discardCount} 张牌，但专属牌堆中没有魔法卡。`);
+  }
+  patch.lastPlayedCardCategory = getCardPlayCategory(card);
+  enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+export function finalizeClassSummon(
+  state: GameState,
+  card: GameCardData,
+  discarded: GameCardData[],
+  sideEffects: SideEffect[],
+  patch: Partial<GameState>,
+  enqueuedActions: GameAction[],
+): ReduceResult {
+  const discardCount = discarded.length;
+  if (discardCount > 0) {
+    const discardIds = new Set(discarded.map(c => c.id));
+    patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
+    for (const dc of discarded) {
+      enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+    }
+    log(sideEffects, 'magic', `专属召唤：弃回 ${discarded.map(c => c.name).join('、')}`);
+  }
+  enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: 1 });
+  sideEffects.push({
+    event: 'card:classDrawRequested' as any,
+    payload: { count: 1, source: '专属召唤' },
+  });
+  banner(sideEffects, `专属召唤：弃回 ${discardCount} 张牌，获得一张职业专属卡！`);
+  patch.lastPlayedCardCategory = getCardPlayCategory(card);
+  enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+export function finalizeEchoBag(
+  state: GameState,
+  card: GameCardData,
+  discarded: GameCardData[],
+  discoverCount: number,
+  drawCount: number,
+  echoTag: string,
+  sideEffects: SideEffect[],
+  patch: Partial<GameState>,
+  enqueuedActions: GameAction[],
+): ReduceResult {
+  const actualDiscard = discarded.length;
+  if (actualDiscard > 0) {
+    const discardIds = new Set(discarded.map(c => c.id));
+    patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
+    for (const dc of discarded) {
+      enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+    }
+    log(sideEffects, 'magic', `回响行囊：弃回 ${discarded.map(c => c.name).join('、')}`);
+  }
+  // 坟场计数：现有 + 本次刚入队的；ADD_TO_GRAVEYARD 在 drain 后才生效。
+  const currentGraveyardSize = (state.discardedCards ?? []).length;
+  const graveyardSize = currentGraveyardSize + actualDiscard;
+  if (graveyardSize > 0 && discoverCount > 0) {
+    sideEffects.push({
+      event: 'card:echoBagDiscover',
+      payload: { card, discoverCount, drawCount },
+    });
+    log(sideEffects, 'magic', `回响行囊：从坟场发现 ${discoverCount} 张牌…`);
+    banner(sideEffects, `回响行囊：弃回 ${actualDiscard} 张牌，从坟场发现…${echoTag}`);
+    patch.lastPlayedCardCategory = getCardPlayCategory(card);
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+  // 坟场为空：跳过发现，直接补抽。
+  const drawState = { ...state, ...patch } as GameState;
+  const drawResult = drawMultipleFromBackpack(drawState, drawCount, { ignoreLimit: true });
+  if (drawResult.cards.length > 0) {
+    mergePatch(patch, drawResult.patch);
+    for (const d of drawResult.cards) {
+      sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
+    }
+  }
+  const drawMsg = drawResult.cards.length > 0 ? `抽了 ${drawResult.cards.length} 张牌` : '背包为空';
+  banner(sideEffects, `回响行囊：弃回 ${actualDiscard} 张牌，坟场为空，${drawMsg}。${echoTag}`);
+  patch.lastPlayedCardCategory = getCardPlayCategory(card);
+  enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+/**
+ * 噬血砺锋（discard-empower 英雄技能）的弃回后续：把选中的 1 张手牌移入坟场，
+ * 触发 lastWordsDiscard 动画；如果只装备了 1 件武器/盾，立刻给该装备挂上「下次
+ * 攻击 +2 + 吸血」并标记技能已用；否则切到 pendingHeroSkillAction（slot-select），
+ * 由后续 RESOLVE_HERO_SKILL_TARGET 完成。
+ */
+export function finalizeDiscardEmpower(
+  state: GameState,
+  discarded: GameCardData[],
+  skillId: string,
+  sideEffects: SideEffect[],
+  patch: Partial<GameState>,
+  enqueuedActions: GameAction[],
+): ReduceResult {
+  const dc = discarded[0];
+  if (!dc) return applyPatch(state, patch, sideEffects, enqueuedActions);
+  patch.handCards = (state.handCards as GameCardData[]).filter(c => c.id !== dc.id);
+  patch.discardedCards = [...(state.discardedCards as GameCardData[]), dc];
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'skill', message: `噬血砺锋：弃置「${dc.name}」` },
+  });
+  sideEffects.push({
+    event: 'combat:lastWordsDiscard',
+    payload: { cards: [dc], monsterName: '噬血砺锋' },
+  });
+  const eq1 = state.equipmentSlot1 as GameCardData | null;
+  const eq2 = state.equipmentSlot2 as GameCardData | null;
+  const equippedSlots: EquipmentSlotId[] = [];
+  if (eq1) equippedSlots.push('equipmentSlot1');
+  if (eq2) equippedSlots.push('equipmentSlot2');
+  if (equippedSlots.length === 1) {
+    const slotId = equippedSlots[0];
+    const slotItem = slotId === 'equipmentSlot1' ? eq1 : eq2;
+    patch.slotAttackBursts = { ...(state.slotAttackBursts ?? {}), [slotId]: 2 };
+    patch.nextAttackLifestealSlot = slotId;
+    Object.assign(patch, markSkillUsedPure(state, skillId as any));
+    patch.heroSkillBanner = `${slotItem!.name} 的下次攻击 +2 伤害 且 吸血！`;
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'skill', message: `噬血砺锋：${slotItem!.name} 下次攻击 +2 且吸血` },
+    });
+  } else {
+    patch.pendingHeroSkillAction = { skillId: skillId as any, type: 'slot' };
+    patch.heroSkillBanner = '选择一个装备：下次攻击 +2 伤害 且 吸血。';
+    sideEffects.push({
+      event: 'hero:skillRequiresTarget',
+      payload: { skillId, targetType: 'slot' },
+    });
+  }
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_HAND_DISCARD_SELECTION — 玩家在 HandDiscardSelectionModal 点击「确认弃回」
+// 后由该 reducer 接力。负责：校验选择、清空 pendingHandDiscardSelection、按
+// subEffect 调用对应 finalize* 完成后续效果。
+//
+// 与「自动分支」共用 finalize*；最终落到同一组日志/侧效产物。
+// ---------------------------------------------------------------------------
+
+export function resolveHandDiscardSelection(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_HAND_DISCARD_SELECTION' }>,
+): ReduceResult {
+  const pending = state.pendingHandDiscardSelection;
+  if (!pending) return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  if (action.cardIds.length !== pending.count) {
+    return noChange(state);
+  }
+  const eligibleCards = getEligibleHandDiscardCards(
+    state.handCards as GameCardData[],
+    pending.sourceCardId,
+  );
+  const eligibleById = new Map(eligibleCards.map(c => [c.id, c]));
+  const discarded: GameCardData[] = [];
+  const seen = new Set<string>();
+  for (const cardId of action.cardIds) {
+    if (seen.has(cardId)) return noChange(state);
+    seen.add(cardId);
+    const c = eligibleById.get(cardId);
+    if (!c) return noChange(state);
+    discarded.push(c);
+  }
+
+  patch.pendingHandDiscardSelection = null;
+
+  switch (pending.context.kind) {
+    case 'discard-draw':
+      return finalizeDiscardDraw(
+        state,
+        pending.context.cardSnapshot,
+        discarded,
+        pending.context.drawCount,
+        pending.context.echoTag,
+        sideEffects,
+        patch,
+        enqueuedActions,
+      );
+    case 'altar-discover':
+      return finalizeAltarDiscardDiscover(
+        state,
+        pending.context.cardSnapshot,
+        discarded,
+        sideEffects,
+        patch,
+        enqueuedActions,
+      );
+    case 'class-summon':
+      return finalizeClassSummon(
+        state,
+        pending.context.cardSnapshot,
+        discarded,
+        sideEffects,
+        patch,
+        enqueuedActions,
+      );
+    case 'echo-bag':
+      return finalizeEchoBag(
+        state,
+        pending.context.cardSnapshot,
+        discarded,
+        pending.context.discoverCount,
+        pending.context.drawCount,
+        pending.context.echoTag,
+        sideEffects,
+        patch,
+        enqueuedActions,
+      );
+    case 'discard-empower':
+      return finalizeDiscardEmpower(
+        state,
+        discarded,
+        pending.context.skillId,
+        sideEffects,
+        patch,
+        enqueuedActions,
+      );
+    default: {
+      const _exhaustive: never = pending.context;
+      void _exhaustive;
+      return noChange(state);
+    }
+  }
+}
+
+/**
  * 流转之符 (`swap-upgrade`) progress tick. Call once per "position swap" effect
  * regardless of echo multiplier (consistent across 乾坤挪移、命运挪移、维度扭曲、
  * 深层交织、先锋换阵 etc.). Returns true when the third swap triggered the
@@ -155,11 +645,15 @@ export function checkSwapUpgrade(
   enqueuedActions: GameAction[],
 ): boolean {
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
-  if (!ae.hasSwapUpgrade) return false;
+  if (ae.swapUpgradeCount <= 0) return false;
+  // Each equipped 流转之符 advances the shared progress counter once per swap.
+  // Equivalent to N independent counters with synchronised ticks (still
+  // triggers at the 3-progress threshold, just N× as often).
+  const inc = ae.swapUpgradeCount;
   const baseProg = (patch.swapUpgradeProgress ?? state.swapUpgradeProgress ?? 0);
-  const prog = baseProg + 1;
+  const prog = baseProg + inc;
   if (prog >= 3) {
-    patch.swapUpgradeProgress = 0;
+    patch.swapUpgradeProgress = prog % 3;
     enqueuedActions.push({ type: 'SET_UPGRADE_MODAL_OPEN', open: true });
     sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: '流转之符：交换 3 次位置，选择一张牌升级！' } });
     return true;
@@ -394,10 +888,12 @@ export function resolveInstantMagic(
 
     case '治愈术': {
       const healAmounts = [5, 3, 5];
-      const healAmt = healAmounts[card.upgradeLevel ?? 0] ?? 5;
+      const healBase = healAmounts[card.upgradeLevel ?? 0] ?? 5;
+      const healAmt = healBase * echoMultiplier;
+      const echoTagH = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
       enqueuedActions.push({ type: 'HEAL', amount: healAmt, source: 'heal-magic' });
-      log(sideEffects, 'magic', `治愈术：恢复 ${healAmt} 点生命`);
-      banner(sideEffects, `治愈术：回复 ${healAmt} 点生命。`);
+      log(sideEffects, 'magic', `治愈术：恢复 ${healAmt} 点生命${echoTagH}`);
+      banner(sideEffects, `治愈术：回复 ${healAmt} 点生命。${echoTagH}`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -407,10 +903,10 @@ export function resolveInstantMagic(
       return resolveBloodReckoning(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
     case '等价交换':
-      return resolveSoulSwap(state, card, sideEffects, patch, enqueuedActions);
+      return resolveSoulSwap(state, card, sideEffects, patch, enqueuedActions, echoMultiplier);
 
     case '永恒铭刻':
-      return resolvePermGrant(state, card, sideEffects, patch, enqueuedActions);
+      return resolvePermGrant(state, card, sideEffects, patch, enqueuedActions, echoMultiplier);
 
     case '专属召唤': {
       const playable = state.handCards.filter(c => c.id !== card.id);
@@ -436,7 +932,10 @@ export function resolveInstantMagic(
 
     case '升级卷轴': {
       patch.upgradeModalOpen = true;
-      banner(sideEffects, '升级卷轴：选择一张牌进行升级。');
+      // 法术回响（B）：modal 仅 echo 一次提示，二次不实际开启（升级模态无队列字段，避免 UI 状态污染）。
+      banner(sideEffects, echoMultiplier > 1
+        ? '升级卷轴：回响触发——升级模态当前不支持自动连开，请于关闭后再次打出该卡以达成等价效果（本次仅生效一次）。'
+        : '升级卷轴：选择一张牌进行升级。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -444,7 +943,9 @@ export function resolveInstantMagic(
 
     case '秘法精炼': {
       patch.handMagicUpgradeModal = { sourceCardId: card.id };
-      banner(sideEffects, '秘法精炼：选择至多 2 张魔法牌进行升级。');
+      banner(sideEffects, echoMultiplier > 1
+        ? '秘法精炼：回响触发——精炼模态当前不支持自动连开，本次仅生效一次（最多 2 张）。'
+        : '秘法精炼：选择至多 2 张魔法牌进行升级。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -571,39 +1072,20 @@ export function resolveInstantMagic(
 
   // --- altar-discard-discover ---
   if (effect === 'altar-discard-discover') {
-    // Discard 2 random hand cards, then delegate discover to UI
-    const playable = state.handCards.filter(c => c.id !== card.id);
-    const discardCount = Math.min(playable.length, 2);
-    if (discardCount > 0) {
-      let rng = state.rng;
-      const [discarded, rngAfter] = pickRandomHandCardsForDiscardPreferGraveyard(playable, discardCount, rng);
-      patch.rng = rngAfter;
-      const discardIds = new Set(discarded.map(c => c.id));
-      patch.handCards = state.handCards.filter(c => !discardIds.has(c.id));
-      for (const dc of discarded) {
-        enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
-      }
-      log(sideEffects, 'magic', `祭坛秘术：弃回 ${discarded.map(c => c.name).join('、')}`);
+    const promptText = '选择 2 张手牌弃回坟场（之后从职业魔法堆中发现 1 张）。';
+    const result = requestOrAutoHandDiscard(state, patch, {
+      sourceCardId: card.id,
+      requiredCount: 2,
+      title: '祭坛秘术',
+      prompt: promptText,
+      subEffect: 'altar-discover',
+      context: { kind: 'altar-discover', cardSnapshot: card },
+    });
+    if (result.mode === 'modal') {
+      banner(sideEffects, promptText);
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
-    const classDeck = patch.classDeck ?? state.classDeck ?? [];
-    const discoverPool = classDeck.filter((c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic');
-    if (discoverPool.length > 0) {
-      let drng = patch.rng ?? state.rng;
-      let shuffled: GameCardData[];
-      [shuffled, drng] = rngShuffle(discoverPool, drng);
-      patch.rng = drng;
-      const candidates = shuffled.slice(0, Math.min(3, discoverPool.length));
-      const candidateIds = new Set(candidates.map(c => c.id));
-      patch.classDeck = classDeck.filter((c: GameCardData) => !candidateIds.has(c.id));
-      sideEffects.push({ event: 'card:discoverRequested' as any, payload: { source: 'altar-discard-discover', candidates, sourceLabel: card.name } });
-      banner(sideEffects, `祭坛秘术：弃回 ${discardCount} 张牌，发现专属魔法卡…`);
-    } else {
-      log(sideEffects, 'magic', '祭坛秘术：专属牌堆中没有魔法卡。');
-      banner(sideEffects, `祭坛秘术：弃回 ${discardCount} 张牌，但专属牌堆中没有魔法卡。`);
-    }
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
+    return finalizeAltarDiscardDiscover(state, card, result.discarded, sideEffects, patch, enqueuedActions);
   }
 
   // Fallback: delegate to UI
@@ -640,10 +1122,22 @@ export function resolvePermanentMagic(
 
   // --- swap-backpack-recycle ---
   if (effect === 'swap-backpack-recycle') {
-    patch.backpackItems = state.permanentMagicRecycleBag.map(c => sanitizeCardMetadata(c));
-    patch.permanentMagicRecycleBag = state.backpackItems.map((c: GameCardData) => sanitizeCardMetadata(c));
-    log(sideEffects, 'magic', `虚空置换：背包与回收袋对换（背包现 ${patch.backpackItems.length} 张，回收袋现 ${patch.permanentMagicRecycleBag.length} 张）。`);
-    banner(sideEffects, '虚空置换：背包与永久魔法回收袋内容已对换。');
+    // 结构类（C）：执行 echoMultiplier 次置换。两次置换 = 还原 = 无额外效果。
+    // 对于偶数 echo (=2)，第二次置换抵消第一次；显式提示「二次结算无额外效果」。
+    let curBackpack = state.backpackItems as GameCardData[];
+    let curRecycle = state.permanentMagicRecycleBag as GameCardData[];
+    for (let i = 0; i < echoMultiplier; i++) {
+      const newBackpack = curRecycle.map(c => sanitizeCardMetadata(c));
+      const newRecycle = curBackpack.map(c => sanitizeCardMetadata(c));
+      curBackpack = newBackpack;
+      curRecycle = newRecycle;
+    }
+    patch.backpackItems = curBackpack;
+    patch.permanentMagicRecycleBag = curRecycle;
+    log(sideEffects, 'magic', `虚空置换：背包与回收袋对换（背包现 ${patch.backpackItems.length} 张，回收袋现 ${patch.permanentMagicRecycleBag.length} 张）${echoTag}${echoMultiplier > 1 && echoMultiplier % 2 === 0 ? '；回响：二次结算还原状态' : ''}。`);
+    banner(sideEffects, echoMultiplier > 1
+      ? `虚空置换：执行 ${echoMultiplier} 次（${echoMultiplier % 2 === 0 ? '回响：二次结算无额外效果' : '回响：累计奇数次置换'}）。`
+      : '虚空置换：背包与永久魔法回收袋内容已对换。');
     enqueuedActions.push({ type: 'ENFORCE_BACKPACK_CAPACITY' });
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -987,34 +1481,22 @@ export function resolvePermanentMagic(
       const draws = [2, 3, 4];
       const discardCount = discards[card.upgradeLevel ?? 0] ?? 1;
       const drawCount = draws[card.upgradeLevel ?? 0] ?? 2;
-      const playable = state.handCards.filter(c => c.id !== card.id);
-      const actualDiscard = Math.min(playable.length, discardCount);
-      if (actualDiscard > 0) {
-        let rng = patch.rng ?? state.rng;
-        const [discarded, rngAfter] = pickRandomHandCardsForDiscardPreferGraveyard(playable, actualDiscard, rng);
-        patch.rng = rngAfter;
-        const discardIds = new Set(discarded.map(c => c.id));
-        patch.handCards = state.handCards.filter(c => !discardIds.has(c.id));
-        for (const dc of discarded) {
-          enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: dc });
-        }
-        log(sideEffects, 'magic', `汰旧迎新：移回 ${discarded.map(c => c.name).join('、')} 至回收袋`);
+      const promptText = `选择 ${discardCount} 张手牌移回回收袋（之后从背包抽 ${drawCount} 张）。`;
+      const result = requestOrAutoHandDiscard(state, patch, {
+        sourceCardId: card.id,
+        requiredCount: discardCount,
+        title: '汰旧迎新',
+        prompt: promptText,
+        subEffect: 'discard-draw',
+        context: { kind: 'discard-draw', cardSnapshot: card, drawCount, echoTag },
+      });
+      if (result.mode === 'modal') {
+        // 等待玩家在弹窗里选择；finalize 由 RESOLVE_HAND_DISCARD_SELECTION 完成。
+        banner(sideEffects, promptText);
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
-      const drawState = { ...state, ...patch } as GameState;
-      const drawResult = drawMultipleFromBackpack(drawState, drawCount);
-      if (drawResult.cards.length > 0) {
-        mergePatch(patch, drawResult.patch);
-        for (const d of drawResult.cards) {
-          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
-        }
-      }
-      const drawMsg = drawResult.cards.length > 0
-        ? `抽了 ${drawResult.cards.length} 张牌`
-        : '背包为空';
-      banner(sideEffects, `汰旧迎新：移回 ${actualDiscard} 张牌，${drawMsg}。${echoTag}`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
+      // 自动分支：可弃手牌不足，按现有顺序自动弃完，剩下的逻辑与玩家选择路径共用。
+      return finalizeDiscardDraw(state, card, result.discarded, drawCount, echoTag, sideEffects, patch, enqueuedActions);
     }
 
     case STARTER_CARD_IDS.tempArmor: {
@@ -1403,16 +1885,17 @@ export function resolvePermanentMagic(
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
     if (slots.length === 1) {
-      return applyCryptDeathwish(state, card, slots[0].id, sideEffects, patch, enqueuedActions);
+      return applyCryptDeathwish(state, card, slots[0].id, sideEffects, patch, enqueuedActions, echoMultiplier);
     }
     patch.pendingMagicAction = {
       card,
       effect: 'crypt-deathwish',
       step: 'slot-select',
-      prompt: '选择一个装备，触发其遗言效果 2 次',
+      prompt: `选择一个装备，触发其遗言效果 ${2 * echoMultiplier} 次`,
+      echoMultiplier,
     } as any;
-    patch.heroSkillBanner = '墓语遗愿：选择一个装备触发遗言 2 次。';
-    sideEffects.push({ event: 'card:cryptDeathwishSelect' as any, payload: { card } });
+    patch.heroSkillBanner = `墓语遗愿：选择一个装备触发遗言 ${2 * echoMultiplier} 次。`;
+    sideEffects.push({ event: 'card:cryptDeathwishSelect' as any, payload: { card, echoMultiplier } });
     return applyPatch(state, patch, sideEffects);
   }
 
@@ -1687,10 +2170,10 @@ export function resolveKnightInstantMagic(
     }
 
     case 'monster-fusion':
-      return resolveMonsterFusion(state, card, sideEffects, patch, enqueuedActions);
+      return resolveMonsterFusion(state, card, sideEffects, patch, enqueuedActions, echoMultiplier);
 
     case 'transform-grant':
-      return resolveTransformGrant(state, card, sideEffects, patch, enqueuedActions);
+      return resolveTransformGrant(state, card, sideEffects, patch, enqueuedActions, echoMultiplier);
 
     case 'stun-wave':
       return resolveStunWave(state, card, sideEffects, patch, enqueuedActions);
@@ -1712,12 +2195,16 @@ export function resolveKnightInstantMagic(
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
-      sideEffects.push({ event: 'card:mirrorCopyRequested' as any, payload: { card } });
+      patch.pendingMagicAction = { card, effect: 'mirror-copy', step: 'mirror-copy-select', echoRemaining: echoMultiplier } as any;
+      sideEffects.push({ event: 'card:mirrorCopyRequested' as any, payload: { card, echoRemaining: echoMultiplier } });
+      if (echoMultiplier > 1) banner(sideEffects, `镜影摹形：回响触发，本次将选择 ${echoMultiplier} 张目标。`);
       return applyPatch(state, patch, sideEffects);
     }
 
     case 'deck-judge-delete': {
-      sideEffects.push({ event: 'card:deckJudgeRequested' as any, payload: { card } });
+      patch.pendingMagicAction = { card, effect: 'deck-judge-delete', step: 'deck-judge-select', echoRemaining: echoMultiplier } as any;
+      sideEffects.push({ event: 'card:deckJudgeRequested' as any, payload: { card, echoRemaining: echoMultiplier } });
+      if (echoMultiplier > 1) banner(sideEffects, `判牌：回响触发，将连续删除 ${echoMultiplier} 张牌。`);
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -1751,6 +2238,7 @@ export function executeArmorDoubleStrike(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
 ): ReduceResult {
   const slotItem = (slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2) as GameCardData | null;
   if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) {
@@ -1766,7 +2254,8 @@ export function executeArmorDoubleStrike(
   const rawArmor = computeSlotArmorValuePure(state, slotId);
   const scaledArmor = Math.floor(rawArmor * armorPct / 100);
   const ampBonus = card.amplifyBonus ?? 0;
-  const perTargetDamage = getSpellDamage(scaledArmor + ampBonus, state);
+  const perTargetDamage = getSpellDamage(scaledArmor + ampBonus, state) * echoMultiplier;
+  const echoTagADS = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
 
   // Pick up to 2 random monsters; if only 1 exists, hit it once (no doubling).
   const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
@@ -1789,7 +2278,7 @@ export function executeArmorDoubleStrike(
     }
     dealtDamage = true;
     log(sideEffects, 'magic',
-      `盾影双噬：${slotItem.name} 护甲 ${rawArmor} → 伤害 ${perTargetDamage}（${armorPct}%），命中 ${targets.length} 个怪物。`);
+      `盾影双噬：${slotItem.name} 护甲 ${rawArmor} → 伤害 ${perTargetDamage}（${armorPct}%），命中 ${targets.length} 个怪物。${echoTagADS}`);
   } else if (monsters.length === 0) {
     log(sideEffects, 'magic', `盾影双噬：激活行没有怪物，未造成伤害。`);
   } else {
@@ -1819,8 +2308,8 @@ export function executeArmorDoubleStrike(
 
   patch.pendingMagicAction = null;
   patch.heroSkillBanner = monsters.length > 0 && perTargetDamage > 0
-    ? `盾影双噬：每目标 ${perTargetDamage} 伤害，护盾耐久 -1。`
-    : `盾影双噬：护盾耐久 -1。`;
+    ? `盾影双噬：每目标 ${perTargetDamage} 伤害，护盾耐久 -1。${echoTagADS}`
+    : `盾影双噬：护盾耐久 -1。${echoTagADS}`;
   patch.lastPlayedCardCategory = getCardPlayCategory(card);
   enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage });
   return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1873,9 +2362,10 @@ export function resolveKnightPermanentMagic(
           const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? 150;
           const rawArmor = computeSlotArmorValuePure(state, slotId);
           const scaledArmor = Math.floor(rawArmor * armorPct / 100);
-          const totalDamage = getSpellDamage(scaledArmor + (card.amplifyBonus ?? 0), state);
+          const totalDamage = getSpellDamage(scaledArmor + (card.amplifyBonus ?? 0), state) * echoMultiplier;
+          const echoTagAS = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
           enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
-          banner(sideEffects, `御甲破击造成 ${totalDamage} 点伤害（护甲 ${armorPct}%）。`);
+          banner(sideEffects, `御甲破击造成 ${totalDamage} 点伤害（护甲 ${armorPct}%）。${echoTagAS}`);
           patch.lastPlayedCardCategory = getCardPlayCategory(card);
           enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
           return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1891,6 +2381,7 @@ export function resolveKnightPermanentMagic(
           slotId,
           pendingDamage: scaledArmor,
           prompt: `选择一个怪物，承受 ${getSpellDamage(scaledArmor + (card.amplifyBonus ?? 0), state)} 点护甲伤害。`,
+          echoMultiplier,
         } as any;
         patch.heroSkillBanner = '选择一个怪物承受你的护甲一击。';
         return applyPatch(state, patch, sideEffects);
@@ -1900,6 +2391,7 @@ export function resolveKnightPermanentMagic(
         effect: 'armor-strike',
         step: 'slot-select',
         prompt: '选择一个盾牌槽，将其护甲值转化为伤害。',
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = '选择一个盾牌，将护甲值转化为伤害。';
       return applyPatch(state, patch, sideEffects);
@@ -1917,13 +2409,14 @@ export function resolveKnightPermanentMagic(
       }
       // Auto-pick when only one shield is equipped (mirrors armor-strike).
       if (shieldSlots.length === 1) {
-        return executeArmorDoubleStrike(state, card, shieldSlots[0].id, sideEffects, patch, enqueuedActions);
+        return executeArmorDoubleStrike(state, card, shieldSlots[0].id, sideEffects, patch, enqueuedActions, echoMultiplier);
       }
       patch.pendingMagicAction = {
         card,
         effect: 'armor-double-strike',
         step: 'slot-select',
         prompt: '选择一面护盾，对随机 2 个怪物各造成 50% 护甲值伤害（耐久 -1）。',
+        echoMultiplier,
       } as PendingMagicAction;
       patch.heroSkillBanner = '盾影双噬：选择一面护盾。';
       return applyPatch(state, patch, sideEffects);
@@ -1953,7 +2446,8 @@ export function resolveKnightPermanentMagic(
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
 
-      const dmg = getSpellDamage(PER_MONSTER_DAMAGE + (card.amplifyBonus ?? 0), state);
+      const dmg = getSpellDamage(PER_MONSTER_DAMAGE + (card.amplifyBonus ?? 0), state) * echoMultiplier;
+      const echoTagTCT = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
       for (const target of monsters) {
         ensureEngagedLocal(state, target, enqueuedActions);
         enqueuedActions.push({
@@ -1964,8 +2458,8 @@ export function resolveKnightPermanentMagic(
           isSpellDamage: true,
         });
       }
-      log(sideEffects, 'magic', `三牌惊雷：背包 3 张牌触发，对 ${monsters.length} 个怪物各造成 ${dmg} 点法术伤害。`);
-      banner(sideEffects, `三牌惊雷：全场 ${dmg} 点法术伤害！`);
+      log(sideEffects, 'magic', `三牌惊雷：背包 3 张牌触发，对 ${monsters.length} 个怪物各造成 ${dmg} 点法术伤害。${echoTagTCT}`);
+      banner(sideEffects, `三牌惊雷：全场 ${dmg} 点法术伤害！${echoTagTCT}`);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
@@ -1975,19 +2469,21 @@ export function resolveKnightPermanentMagic(
       // player to pick up to 3 cards from hand / amulets / equipment slots and
       // push them onto the top of the backpack. Selection cap is further
       // bounded by the new backpack's free room (so we never overflow).
-      const MAX_PICK_REQUESTED = 3;
-      const newCapacityModifier = state.backpackCapacityModifier + 1;
+      const MAX_PICK_REQUESTED = 3 * echoMultiplier;
+      const capacityBonus = 1 * echoMultiplier;
+      const newCapacityModifier = state.backpackCapacityModifier + capacityBonus;
       const newCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + newCapacityModifier);
       const currentCount = (state.backpackItems ?? []).length;
       const room = Math.max(0, newCapacity - currentCount);
       const maxSelections = Math.min(MAX_PICK_REQUESTED, room);
+      const echoTagRB = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
 
       patch.backpackCapacityModifier = newCapacityModifier;
-      log(sideEffects, 'magic', `整顿背囊：背包上限 +1（${BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier} → ${newCapacity}）。`);
+      log(sideEffects, 'magic', `整顿背囊：背包上限 +${capacityBonus}（${BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier} → ${newCapacity}）${echoTagRB}。`);
 
       if (maxSelections === 0) {
-        // No room left even after the +1 — finalize immediately, skip selection.
-        banner(sideEffects, '整顿背囊：背包上限 +1（已满，无放回机会）。');
+        // No room left even after the bonus — finalize immediately, skip selection.
+        banner(sideEffects, `整顿背囊：背包上限 +${capacityBonus}（已满，无放回机会）${echoTagRB}。`);
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1999,6 +2495,7 @@ export function resolveKnightPermanentMagic(
         step: 'multi-select',
         maxSelections,
         prompt: `选择至多 ${maxSelections} 张牌（手牌 / 护符 / 装备）放回背包顶部。`,
+        echoMultiplier,
       } as PendingMagicAction;
       patch.heroSkillBanner = `整顿背囊：选择至多 ${maxSelections} 张牌放回背包顶部。`;
       return applyPatch(state, patch, sideEffects);
@@ -2017,6 +2514,7 @@ export function resolveKnightPermanentMagic(
         effect: 'honor-sweep',
         step: 'slot-select',
         prompt: '选择一个装备栏进行荣誉横扫。',
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = '荣誉横扫：选择一个装备栏。';
       return applyPatch(state, patch, sideEffects);
@@ -2037,6 +2535,7 @@ export function resolveKnightPermanentMagic(
         effect: 'weapon-sweep',
         step: 'slot-select',
         prompt: '选择一个武器栏进行武器横扫。',
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = '武器横扫：选择一个武器栏。';
       return applyPatch(state, patch, sideEffects);
@@ -2065,6 +2564,7 @@ export function resolveKnightPermanentMagic(
         effect: 'missing-hp-smite',
         step: 'monster-select',
         prompt: `选择一个怪物，造成 ${totalDmg} 点伤害（已损失生命 ${missingHp}）。`,
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = `血怒裁决：选择目标怪物（伤害 ${totalDmg}）。`;
       return applyPatch(state, patch, sideEffects);
@@ -2099,6 +2599,7 @@ export function resolveKnightPermanentMagic(
         pendingDamage: totalDmg,
         hpLost: hpCost,
         prompt: `选择一个怪物，造成 ${totalDmg} 点伤害。`,
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = `血祭裁决：选择目标怪物（伤害 ${totalDmg}）。`;
       return applyPatch(state, patch, sideEffects);
@@ -2234,6 +2735,7 @@ export function resolveKnightPermanentMagic(
         step: 'slot-select',
         prompt: '选择一个位置，将装备/护符回收到手牌。',
         data: { options, hpCost },
+        echoRemaining: echoMultiplier,
       } as any;
       patch.heroSkillBanner = '紧急回收：选择一个位置回手。';
       sideEffects.push({
@@ -2258,6 +2760,7 @@ export function resolveKnightPermanentMagic(
         effect: 'armor-stun-convert',
         step: 'slot-select',
         prompt: '选择一个护盾，将其护甲值转化为击晕上限。',
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = '选择一个护盾，将护甲值转化为击晕上限。';
       return applyPatch(state, patch, sideEffects);
@@ -2281,6 +2784,7 @@ export function resolveKnightPermanentMagic(
         step: 'monster-select',
         isFlank: !!isFlank,
         prompt: '选择一个怪物，将其攻击和血量上限对换。',
+        echoRemaining: echoMultiplier,
       } as any;
       patch.heroSkillBanner = '颠倒乾坤：选择目标怪物。';
       return applyPatch(state, patch, sideEffects);
@@ -2300,6 +2804,7 @@ export function resolveKnightPermanentMagic(
         step: 'slot-select',
         isFlank: !!isFlank,
         prompt: '选择一个装备栏，将其临时攻击转化为伤害。',
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = '锋刃侧击：选择一个装备栏。';
       return applyPatch(state, patch, sideEffects);
@@ -2319,6 +2824,7 @@ export function resolveKnightPermanentMagic(
         step: 'slot-select',
         isFlank: !!isFlank,
         prompt: '选择一个装备栏，赋予临时护甲。',
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = '固壁侧守：选择一个装备栏。';
       return applyPatch(state, patch, sideEffects);
@@ -2332,11 +2838,20 @@ export function resolveKnightPermanentMagic(
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
+      // 转型判定必须在此刻完成：本卡的 RESOLVE_MAGIC 末尾会 enqueue
+      // APPLY_TRANSFORM_CATEGORY，待玩家选择槽位后 hero.ts 再读时 lastPlayedCardCategory
+      // 已被覆盖为本卡自身类别，故必须把 transformTriggered 与 echoMultiplier
+      // 写入 pendingMagicAction 一并传递。
+      const prevCategory = state.lastPlayedCardCategory;
+      const curCategory = getCardPlayCategory(card);
+      const transformTriggered = prevCategory != null && prevCategory !== curCategory;
       patch.pendingMagicAction = {
         card,
         effect: 'transform-repair',
         step: 'slot-select',
         prompt: '选择一个装备，恢复 1 耐久。',
+        transformTriggered,
+        echoMultiplier,
       } as any;
       patch.heroSkillBanner = '蜕变修复：选择一个装备。';
       return applyPatch(state, patch, sideEffects);
@@ -2461,14 +2976,17 @@ export function resolveKnightPermanentMagic(
       patch.equipmentSlot2 = survivedSlots.equipmentSlot2;
 
       if (destroyedCount > 0) {
+        // 法术回响：发现次数 = 摧毁件数 × echoMultiplier。
+        const totalDiscoverCount = destroyedCount * echoMultiplier;
+        const echoTagDR = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
         log(
           sideEffects,
           'magic',
-          `${card.name}：摧毁 ${destroyedCount} 件装备，将发现 ${destroyedCount} 张专属牌！`,
+          `${card.name}：摧毁 ${destroyedCount} 件装备，将发现 ${totalDiscoverCount} 张专属牌！${echoTagDR}`,
         );
         banner(
           sideEffects,
-          `${card.name}：摧毁 ${destroyedCount} 件装备，发现 ${destroyedCount} 张专属牌…`,
+          `${card.name}：摧毁 ${destroyedCount} 件装备，发现 ${totalDiscoverCount} 张专属牌…${echoTagDR}`,
         );
 
         // Trigger one discover immediately, queue the rest. Each modal close
@@ -2481,8 +2999,8 @@ export function resolveKnightPermanentMagic(
             pool: classDeck,
             sourceLabel: card.name,
           });
-          if (destroyedCount > 1) {
-            const remaining = destroyedCount - 1;
+          if (totalDiscoverCount > 1) {
+            const remaining = totalDiscoverCount - 1;
             const queueAddition = Array.from({ length: remaining }, () => ({
               source: 'discard-rebuild',
               sourceLabel: card.name,
@@ -2599,19 +3117,26 @@ export function resolveFountainHand(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
+  isEchoTriggered: boolean = false,
 ): ReduceResult {
-  enqueuedActions.push({ type: 'HEAL', amount: 8, source: 'fountain-hand' });
+  const healAmount = 8 * echoMultiplier;
+  const echoTag = isEchoTriggered ? '（回响×2）' : '';
+  enqueuedActions.push({ type: 'HEAL', amount: healAmount, source: 'fountain-hand' });
   const handSize = state.handCards.filter(c => c.id !== card.id).length;
   const limit = getEffectiveHandLimit(state);
-  const deficit = Math.max(0, limit - handSize);
-  if (deficit <= 0 || state.backpackItems.length === 0) {
-    log(sideEffects, 'magic', '涌泉满手：恢复 8 点生命，手牌已满或背包为空。');
-    banner(sideEffects, '涌泉满手：恢复 8 点生命，手牌已满或背包为空。');
+  const baseDeficit = Math.max(0, limit - handSize);
+  // echo doubles the desired refill ceiling (capped by limit-handSize naturally),
+  // ensuring the player gets up to 2x the normal "fill hand" effect when echoed.
+  const desiredDraw = baseDeficit * echoMultiplier;
+  if (desiredDraw <= 0 || state.backpackItems.length === 0) {
+    log(sideEffects, 'magic', `涌泉满手：恢复 ${healAmount} 点生命，手牌已满或背包为空。`);
+    banner(sideEffects, `涌泉满手：恢复 ${healAmount} 点生命，手牌已满或背包为空。${echoTag}`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
-  const drawCount = Math.min(deficit, state.backpackItems.length);
+  const drawCount = Math.min(desiredDraw, baseDeficit, state.backpackItems.length);
   const drawResult = drawMultipleFromBackpack(state, drawCount);
   if (drawResult.cards.length > 0) {
     mergePatch(patch, drawResult.patch);
@@ -2619,8 +3144,8 @@ export function resolveFountainHand(
       sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
     }
   }
-  log(sideEffects, 'magic', `涌泉满手：恢复 8 点生命，从背包抽取 ${drawResult.cards.length} 张牌补充手牌。`);
-  banner(sideEffects, `涌泉满手：恢复 8 点生命，从背包抽了 ${drawResult.cards.length} 张牌。`);
+  log(sideEffects, 'magic', `涌泉满手：恢复 ${healAmount} 点生命，从背包抽取 ${drawResult.cards.length} 张牌补充手牌。`);
+  banner(sideEffects, `涌泉满手：恢复 ${healAmount} 点生命，从背包抽了 ${drawResult.cards.length} 张牌。${echoTag}`);
   patch.lastPlayedCardCategory = getCardPlayCategory(card);
   enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
   return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -2765,6 +3290,7 @@ export function resolveSoulSwap(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
 ): ReduceResult {
   const swapEquipSlots = getEquippedSlots(state).filter(slot =>
     (slot.item.type === 'weapon' || slot.item.type === 'shield') && (slot.item.durability ?? 0) > 0,
@@ -2815,6 +3341,7 @@ export function resolveSoulSwap(
       slotId: slot.id,
       slotDurability: durability,
       prompt: `选择一个非Boss怪物，与 ${slot.item.name}（耐久 ${durability}）互换血层。`,
+      echoRemaining: echoMultiplier,
     } as any;
     patch.heroSkillBanner = `等价交换：选择一个怪物与 ${slot.item.name} 互换。`;
     return applyPatch(state, patch, sideEffects);
@@ -2824,6 +3351,7 @@ export function resolveSoulSwap(
     effect: 'soul-swap',
     step: 'slot-select',
     prompt: '选择一件装备进行等价交换。',
+    echoRemaining: echoMultiplier,
   } as any;
   patch.heroSkillBanner = '等价交换：选择一件装备。';
   return applyPatch(state, patch, sideEffects);
@@ -2846,6 +3374,7 @@ export function resolvePermGrant(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
 ): ReduceResult {
   const eligible = state.handCards.filter(c => c.id !== card.id && !cardHasPermFlag(c));
   if (eligible.length === 0) {
@@ -2865,7 +3394,7 @@ export function resolvePermGrant(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
   patch.permGrantModal = { sourceCardId: card.id, sourceType: 'magic' as const };
-  patch.pendingMagicAction = { card, effect: 'perm-grant', step: 'perm-grant-select' } as any;
+  patch.pendingMagicAction = { card, effect: 'perm-grant', step: 'perm-grant-select', echoRemaining: echoMultiplier } as any;
   return applyPatch(state, patch, sideEffects);
 }
 
@@ -3008,8 +3537,12 @@ export function resolveAmplifyTarget(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
+  isEchoTriggered: boolean = false,
 ): ReduceResult {
   const targetName = card._amplifyTargetName;
+  const echoTag = isEchoTriggered ? '（回响×2）' : '';
+  const amplifyAmount = 2 * echoMultiplier;
 
   // 仅在 targetName 缺失（卡牌结构异常）时拒绝。
   // 之前会按 _amplifyTargetCardId 校验"原始那张卡是否仍在装备栏/手牌"，
@@ -3026,8 +3559,8 @@ export function resolveAmplifyTarget(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  enqueuedActions.push({ type: 'AMPLIFY_CARDS_BY_NAME', cardName: targetName, amount: 2, source: '增幅' });
-  banner(sideEffects, `增幅：所有「${targetName}」获得 +2 增幅！`);
+  enqueuedActions.push({ type: 'AMPLIFY_CARDS_BY_NAME', cardName: targetName, amount: amplifyAmount, source: '增幅' });
+  banner(sideEffects, `增幅：所有「${targetName}」获得 +${amplifyAmount} 增幅！${echoTag}`);
   patch.lastPlayedCardCategory = getCardPlayCategory(card);
   enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
   return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -3338,6 +3871,7 @@ function applyCryptDeathwish(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
 ): ReduceResult {
   const slotItem = state[slotId] as GameCardData | null;
   if (!slotItem) {
@@ -3358,7 +3892,8 @@ function applyCryptDeathwish(
   let totalDrawFromBackpack = 0;
   let totalClassCardDraw = 0;
   let mergedPatch: Partial<GameState> = patch;
-  for (let i = 0; i < 2; i++) {
+  const totalTriggers = 2 * echoMultiplier;
+  for (let i = 0; i < totalTriggers; i++) {
     const lw = computeEquipmentDisplacementLastWords(state, slotId, slotItem, amuletFx, mergedPatch);
     mergedPatch = lw.patch;
     sideEffects.push(...lw.sideEffects);
@@ -3373,9 +3908,10 @@ function applyCryptDeathwish(
   if (totalClassCardDraw > 0) {
     enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: totalClassCardDraw } as GameAction);
   }
-  enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
-  log(sideEffects, 'magic', `墓语遗愿：触发「${slotItem.name}」遗言 ×2，抽 1 张牌`);
-  banner(sideEffects, `墓语遗愿：「${slotItem.name}」遗言触发 2 次！抽 1 张牌`);
+  enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 * echoMultiplier } as GameAction);
+  const echoTagCD = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+  log(sideEffects, 'magic', `墓语遗愿：触发「${slotItem.name}」遗言 ×${totalTriggers}，抽 ${echoMultiplier} 张牌${echoTagCD}`);
+  banner(sideEffects, `墓语遗愿：「${slotItem.name}」遗言触发 ${totalTriggers} 次！抽 ${echoMultiplier} 张牌${echoTagCD}`);
   patch.pendingMagicAction = null;
   patch.heroSkillBanner = null;
   patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -3393,7 +3929,11 @@ export function resolveMonsterFusion(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
 ): ReduceResult {
+  // 法术回响（结构类）：融合操作不可拆分；当 echo>1 时仅提示二次结算无效。
+  // 这里保留为单次执行，并在结尾追加回响提示。
+  void echoMultiplier;
   type EquippedMonsterInfo = { card: GameCardData; slotId: EquipmentSlotId; isSurface: boolean };
   const allEquippedMonsters: EquippedMonsterInfo[] = [];
   for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
@@ -3515,9 +4055,10 @@ export function resolveMonsterFusion(
   }
 
   enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: fusedEquip } as GameAction);
+  const echoTagMF = echoMultiplier > 1 ? `（回响：融合不可叠加，二次结算无额外效果）` : '';
   const fusionBanner = isSkelKing
-    ? `${group.length} 个 Skeleton 装备融合为「骷髅王」（Lv3）！已加入手牌。`
-    : `2 个 ${groupName} 装备融合为「精英${cnName}」（Lv3）！已加入手牌。`;
+    ? `${group.length} 个 Skeleton 装备融合为「骷髅王」（Lv3）！已加入手牌。${echoTagMF}`
+    : `2 个 ${groupName} 装备融合为「精英${cnName}」（Lv3）！已加入手牌。${echoTagMF}`;
   banner(sideEffects, fusionBanner);
   log(sideEffects, 'magic', fusionBanner);
   patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -3535,6 +4076,7 @@ export function resolveTransformGrant(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
 ): ReduceResult {
   const eligible = state.handCards.filter(c => c.id !== card.id && !(c as any).transformBonus);
   if (eligible.length === 0) {
@@ -3556,8 +4098,9 @@ export function resolveTransformGrant(
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
-  patch.pendingMagicAction = { card, effect: 'transform-grant', step: 'perm-grant-select' } as any;
-  sideEffects.push({ event: 'card:transformGrantModal' as any, payload: { card } });
+  patch.pendingMagicAction = { card, effect: 'transform-grant', step: 'perm-grant-select', echoRemaining: echoMultiplier } as any;
+  sideEffects.push({ event: 'card:transformGrantModal' as any, payload: { card, echoRemaining: echoMultiplier } });
+  if (echoMultiplier > 1) banner(sideEffects, `蜕变赋灵：回响触发，将连续选择 ${echoMultiplier} 张目标。`);
   return applyPatch(state, patch, sideEffects);
 }
 
@@ -3798,7 +4341,7 @@ export function resolvePendingMagic(
 
 
       case 'crypt-deathwish':
-        return applyCryptDeathwish(state, card, slotId, sideEffects, patch, enqueuedActions);
+        return applyCryptDeathwish(state, card, slotId, sideEffects, patch, enqueuedActions, (pending as any).echoMultiplier ?? 1);
 
       default:
         break;

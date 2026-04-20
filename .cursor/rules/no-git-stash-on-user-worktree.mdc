@@ -1,0 +1,52 @@
+---
+description: Never use git stash on the user's working tree
+alwaysApply: true
+---
+
+# 禁止对用户工作树使用 git stash
+
+## 背景
+
+会话开始时用户工作树上往往已有大量未提交的本地修改（`git status` 列出的所有 M / ?? 文件）。
+这些修改是用户的工作进度，**不属于**当前对话需要碰的内容，但 stash 会把它们一起捕获。
+
+曾经发生的事故：
+
+1. 我修完某个 bug 后想用 `npx tsc --noEmit` 确认错误是不是我引入的；
+2. 为了排除其它未提交修改的干扰，我跑了 `git stash`；
+3. `git stash pop` 因冲突失败，stash 被保留；
+4. 我误判 stash 已经空了，跑了 `git stash drop`；
+5. **用户会话开始时 19 个文件的未提交修改全部丢失**；
+6. 只能靠 `git fsck --unreachable` + `git stash apply <sha>` 抢救回来。
+
+## 强制规则
+
+**绝对不要**对用户的工作树使用以下命令：
+
+- `git stash` / `git stash push`
+- `git stash pop` / `git stash apply`（操作上一步留下的 stash）
+- `git stash drop` / `git stash clear`
+- `git checkout <branch>`（会带走未提交修改）
+- `git reset --hard`
+- `git clean -fd`
+
+## 替代方案
+
+| 想做的事 | 错误做法 | 正确做法 |
+|---|----|----|
+| 排除其它修改干扰、看类型/测试错误 | `git stash` | 直接跑 `tsc --noEmit` / `vitest`，按文件路径过滤输出，只看自己改过的文件 |
+| 对比"修复前 vs 修复后" | `git stash` 切换 | `git diff <file>` 看 diff，或用 `git show HEAD:<file>` 临时读旧版 |
+| 临时回退某文件确认 bug 复现 | `git checkout HEAD -- <file>` 然后改完再恢复 | 复制文件到 `/tmp/` 备份，再做实验；或者直接读 `git show HEAD:<file>` |
+| "我只想要一个干净环境跑测试" | `git stash` | **不要**清环境。用户的修改就是当前事实，测试要在这个事实上跑 |
+
+## 唯一例外
+
+如果用户**显式要求**"先 stash 一下"或"清掉我的 working changes"，并且明确确认了风险，才可以执行——而且做完后必须立刻 `git stash list` 报告 stash sha 让用户能找回。
+
+## 自检
+
+每次想敲 `git stash` 之前，停下来问自己：
+
+> "用户有没有显式要求我这么做？"
+
+如果答案是"没有，是我自己想清环境"，那就别敲。

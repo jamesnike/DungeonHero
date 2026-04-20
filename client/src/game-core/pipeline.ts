@@ -176,6 +176,11 @@ function isInputContinuation(action: GameAction): boolean {
     case 'APPLY_MONSTER_TURN_END_EFFECTS':
     case 'APPLY_HERO_KILL_EFFECTS':
     case 'CHECK_HONOR_SWEEP_UPGRADES':
+    // Wraith purification — internal follow-up enqueued by MONSTER_DEFEATED
+    // when a wraith dies. Must run immediately so the unlock popup fires
+    // right after the kill, not after the player dismisses the reward modal
+    // (which would otherwise block the queue in `awaitingRewardChoice`).
+    case 'CHECK_WRAITH_PURIFICATION':
     // Event — player responses
     case 'RESOLVE_EVENT_CHOICE':
     case 'COMPLETE_EVENT':

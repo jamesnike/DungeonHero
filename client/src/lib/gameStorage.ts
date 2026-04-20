@@ -177,7 +177,7 @@ export interface PersistedGameState {
   doubleNextMagic?: boolean;
   berserkerRageActive?: boolean;
   berserkerSlotUsed?: Record<string, boolean>;
-  flashSlotUsed?: Record<string, boolean>;
+  flashSlotUsed?: Record<string, number | boolean>;
   gambitExtraActive?: boolean;
   gambitExtraPerSlot?: number;
   gambitSlotUsed?: Record<string, number>;

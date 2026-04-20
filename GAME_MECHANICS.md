@@ -624,7 +624,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | Skeleton | `bone-regen` | 虚骨再生：失去血层后40%概率恢复一层（D20 ≤ 8）|
 | Wraith | `wraith-rebirth` | 幽魂重生：血层降至1时50%概率全满（D20 ≤ 10） |
 | Ogre | `ogre-crit` | 蛮力暴击：攻击50%概率双倍伤害 + 狂暴连击：50%概率攻击两次 |
-| Goblin | `goblin-elite` | 窃宝精英：自身下方每有1张牌，15%概率偷走装备或护符 |
+| Goblin | `goblin-elite` | 窃宝精英：怪物回合结束掷一次 D20，自身下方每有 1 张牌成功率 +25%（最高 100%），成功则偷走 1 件装备或护符 |
 | Swarm | `swarm-elite` | 虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子 |
 
 精英怪还有特殊遗言：
@@ -1098,24 +1098,63 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 ---
 
-## 19. 回响机制 (Echo)
+## 19. 法术回响 (Spell Echo)
 
 ### 19.1 触发条件
 
-- `doubleNextMagic === true`
-- 使用的牌是 `type === 'magic'`
-- 使用的牌**不是** `magicEffect === 'double-next-magic'`（法术回响本身不自我回响）
+- `state.doubleNextMagic === true`（由「法术回响」卡或时空收缩事件设置）
+- 使用的牌是 `type === 'magic'`（不含 `type === 'curse'`，亦不含英雄魔法槽）
+- 使用的牌**不是** `magicEffect === 'double-next-magic'`（自我回响保护）
 
-### 19.2 效果
+### 19.2 引擎入口
 
-- `echoMultiplier = 2`
-- 所有数值效果 × 2
-- 部分多步流程使用 `echoRemaining` 逐步执行
+`card-schema/engine.ts` 在解析每张魔法牌时：
 
-### 19.3 来源
+1. 计算 `isEchoTriggered` —— 满足上述三条则为 `true`
+2. 如为 `true`：清除 `state.doubleNextMagic`，记录日志 + 推送 banner
+3. 如玩家在回响激活时再打一张 `double-next-magic`：仅刷新 `doubleNextMagic`（不会叠加），记录日志说明
+4. 计算 `echoMultiplier = isEchoTriggered ? 2 : 1`，并将 `echoMultiplier` / `isEchoTriggered` 透传给 `def.resolver(...)` 或填入 `ExecutionContext.magic`
 
-- 使用"法术回响"牌（`magicEffect: 'double-next-magic'`）
-- 时空收缩事件翻转
+### 19.3 卡牌端三种实现策略
+
+每张魔法卡的 resolver 必须显式归类到 ABC 三种之一，并在 `magic-effects.ts` 顶部审计表中登记：
+
+| 类别 | 适用 | 实现方式 |
+|------|------|----------|
+| **A — Numeric** | 输出可数值化（伤害、治疗、抽牌数、金币、buff 层数等） | 把数值 `× echoMultiplier`，banner 末尾追加「（回响×2）」 |
+| **B — Modal** | 需要玩家选择目标（装备栏 / 怪物 / 卡牌） | 在 `pendingMagicAction` 写入 `echoRemaining: echoMultiplier`；hero.ts 对应分支用 `maybeRepromptEcho()` 在第一次结算后再次弹窗 |
+| **C — Structural** | 没有数值旋钮（瀑流重置、背包/回收袋互换等） | 二次结算实际是 no-op，但 banner 注明「回响：二次结算无额外效果」 |
+
+> **不能省略**：即使「无额外效果」，也必须显式 banner 通知玩家，否则玩家无法察觉回响是否生效。
+
+### 19.4 模态卡的 echoRemaining 流程
+
+```
+resolver:                       hero.ts reducer:
+  patch.pendingMagicAction = {    1. 用 echoMultiplier 计算并应用一次效果
+    ...,                          2. const remaining = echoRemaining - 1
+    echoRemaining: echoMultiplier 3. if remaining > 0:
+  }                                    maybeRepromptEcho() 写入新的 pending
+                                       （prompt 加上「（回响：第 k/N 次）」）
+                                  4. else: applyFinalizeMagic()
+```
+
+`maybeRepromptEcho()`（`game-core/rules/hero.ts`）是统一的「再次弹窗」helper：
+- 入参：`prevPending`（带 `echoRemaining`）、`nextPending`（调用方计算）、`banner`
+- 行为：写 `patch.pendingMagicAction = nextPending`、写 banner、推日志、`applyPatch`
+- 仅在 `echoRemaining > 1` 时返回新的 `ReduceResult`，否则返回 `null` 让调用方走最终结算
+
+### 19.5 来源
+
+- 「法术回响」牌（`magicEffect: 'double-next-magic'`）
+- 时空收缩事件（`event-fortify` 等触发逻辑）
+
+### 19.6 边界规则
+
+- **诅咒**（`type === 'curse'`）永远不消耗也不触发回响（引擎守卫）
+- **英雄魔法**（hero magic / 法力槽）不在回响范围内
+- **double-next-magic 自身**：永远不会被回响触发；当回响已激活再打 `double-next-magic` 时，旧回响被「刷新」（仍仅生效一次），不会叠加为 ×4
+- **modal 卡的二次弹窗**：若没有合法的第二目标（如对怪物造成伤害但场上仅剩一个怪物），自动结束并直接 finalize
 
 ---
 

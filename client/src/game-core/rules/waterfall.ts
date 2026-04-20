@@ -305,16 +305,23 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
 
   const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]);
 
-  // Eternal relic: waterfall-heal
+  // Eternal relic: waterfall-heal. Note that the actual amount is multiplied
+  // inside `applyHeal` based on `healCount` (compound 2^N rule). The display
+  // string mirrors that math so the log tells the player the post-multiplier
+  // amount that will actually land.
   if (hasEternalRelic(state.eternalRelics, 'waterfall-heal')) {
     const baseHeal = 4;
-    const healAmount = amuletEffects.hasHeal ? baseHeal * 2 : baseHeal;
+    const healMul = Math.pow(2, amuletEffects.healCount);
+    const healAmount = baseHeal * healMul;
+    const healSuffix = amuletEffects.healCount > 0
+      ? `（治疗 ×${healMul}）`
+      : '';
     enqueuedActions.push({ type: 'HEAL', amount: baseHeal, source: 'waterfall-heal-relic' });
     sideEffects.push({
       event: 'log:entry',
       payload: {
         type: 'skill',
-        message: `永恒护符·潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${amuletEffects.hasHeal ? '（治疗加倍）' : ''}`,
+        message: `永恒护符·潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${healSuffix}`,
       },
     });
   }
@@ -347,20 +354,22 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
   // Apply directly to the patch (not via enqueuedActions) so the changes are
   // not skipped when the pipeline pauses for `playerInput` phase — see
   // `isInputContinuation` in pipeline.ts.
-  if (amuletEffects.hasStrength || amuletEffects.hasBalance) {
+  if (amuletEffects.strengthCount > 0 || amuletEffects.balanceCount > 0) {
     const tempAttack = { ...state.slotTempAttack };
     const tempArmor = { ...state.slotTempArmor };
-    if (amuletEffects.hasStrength) {
-      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + 4;
-      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) + 4;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: '力量护符（光环）：所有装备栏临时攻击 +4' } });
+    if (amuletEffects.strengthCount > 0) {
+      const n = amuletEffects.strengthCount;
+      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + 4 * n;
+      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) + 4 * n;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `力量护符（光环）：所有装备栏临时攻击 +${4 * n}` } });
     }
-    if (amuletEffects.hasBalance) {
-      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS;
-      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY;
-      tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY;
-      tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: '均衡护符（光环）：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1' } });
+    if (amuletEffects.balanceCount > 0) {
+      const n = amuletEffects.balanceCount;
+      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS * n;
+      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY * n;
+      tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY * n;
+      tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS * n;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `均衡护符（光环）：左栏临时攻击+${BALANCE_ATTACK_BONUS * n}护甲-${BALANCE_SHIELD_PENALTY * n}，右栏临时护甲+${BALANCE_SHIELD_BONUS * n}攻击-${BALANCE_ATTACK_PENALTY * n}` } });
     }
     patch.slotTempAttack = tempAttack;
     patch.slotTempArmor = tempArmor;
@@ -373,12 +382,14 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
   // for the wave; START_TURN should not touch it.
   patch.amuletAuraAppliedThisWave = true;
 
-  // Lone card amulet: draw class card when backpack has exactly 1 item
-  if (amuletEffects.hasLoneCard && state.backpackItems.length === 1) {
-    enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: 1, filter: undefined });
+  // Lone card amulet: when backpack has exactly 1 item at waterfall time, every
+  // equipped 孤注之符 independently triggers — fire N draws.
+  if (amuletEffects.loneCardCount > 0 && state.backpackItems.length === 1) {
+    const n = amuletEffects.loneCardCount;
+    enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: n, filter: undefined });
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'amulet', message: `孤注之符：背包仅剩 1 张牌，获得职业卡` },
+      payload: { type: 'amulet', message: `孤注之符：背包仅剩 1 张牌，获得 ${n} 张职业卡` },
     });
   }
 
@@ -530,15 +541,17 @@ function reduceApplyWaterfallDiscardEffects(
         const tempArmor: Record<EquipmentSlotId, number> = { equipmentSlot1: 0, equipmentSlot2: 0 };
 
         const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-        if (amuletEffects.hasStrength) {
-          tempAttack.equipmentSlot1 += 4;
-          tempAttack.equipmentSlot2 += 4;
+        if (amuletEffects.strengthCount > 0) {
+          const sn = amuletEffects.strengthCount;
+          tempAttack.equipmentSlot1 += 4 * sn;
+          tempAttack.equipmentSlot2 += 4 * sn;
         }
-        if (amuletEffects.hasBalance) {
-          tempAttack.equipmentSlot1 += BALANCE_ATTACK_BONUS;
-          tempAttack.equipmentSlot2 -= BALANCE_ATTACK_PENALTY;
-          tempArmor.equipmentSlot1 -= BALANCE_SHIELD_PENALTY;
-          tempArmor.equipmentSlot2 += BALANCE_SHIELD_BONUS;
+        if (amuletEffects.balanceCount > 0) {
+          const bn = amuletEffects.balanceCount;
+          tempAttack.equipmentSlot1 += BALANCE_ATTACK_BONUS * bn;
+          tempAttack.equipmentSlot2 -= BALANCE_ATTACK_PENALTY * bn;
+          tempArmor.equipmentSlot1 -= BALANCE_SHIELD_PENALTY * bn;
+          tempArmor.equipmentSlot2 += BALANCE_SHIELD_BONUS * bn;
         }
         patch.slotTempAttack = tempAttack;
         patch.slotTempArmor = tempArmor;
@@ -860,8 +873,8 @@ export function applyEquipDestroyLastWords(
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：所有装备栏 +${amount}临时护甲！` } });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 遗言！所有装备栏 +${amount}临时护甲！` } });
       const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-      if (amuletFx.hasPersuadeOnTempAttack) {
-        const pBonus = amuletFx.persuadeOnTempAttackBonus || 10;
+      if (amuletFx.persuadeOnTempAttackCount > 0) {
+        const pBonus = amuletFx.persuadeOnTempAttackBonus;
         patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus;
         sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%` } });
       }

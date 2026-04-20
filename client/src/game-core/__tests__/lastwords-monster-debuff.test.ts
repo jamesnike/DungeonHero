@@ -46,7 +46,7 @@ describe('绝响之符 (lastwords-monster-debuff amulet)', () => {
       const state = makeState({ activeCards, equipmentSlot1: weapon as any });
       const amuletEffects = {
         ...createEmptyAmuletEffects(),
-        hasLastWordsMonsterDebuff: true,
+        lastWordsMonsterDebuffCount: 1,
       };
 
       const result = computeEquipmentBreakEffects(state, 'equipmentSlot1', weapon, amuletEffects);
@@ -97,7 +97,7 @@ describe('绝响之符 (lastwords-monster-debuff amulet)', () => {
       const state = makeState({ activeCards, equipmentSlot1: weapon as any });
       const amuletEffects = {
         ...createEmptyAmuletEffects(),
-        hasLastWordsMonsterDebuff: true,
+        lastWordsMonsterDebuffCount: 1,
       };
 
       const result = computeEquipmentBreakEffects(state, 'equipmentSlot1', weapon, amuletEffects);
@@ -120,7 +120,7 @@ describe('绝响之符 (lastwords-monster-debuff amulet)', () => {
       const state = makeState({ activeCards, equipmentSlot1: weapon as any });
       const amuletEffects = {
         ...createEmptyAmuletEffects(),
-        hasLastWordsMonsterDebuff: true,
+        lastWordsMonsterDebuffCount: 1,
       };
 
       const result = computeEquipmentBreakEffects(state, 'equipmentSlot1', weapon, amuletEffects);
@@ -144,7 +144,7 @@ describe('绝响之符 (lastwords-monster-debuff amulet)', () => {
       const state = makeState({ activeCards });
       const amuletEffects = {
         ...createEmptyAmuletEffects(),
-        hasLastWordsMonsterDebuff: true,
+        lastWordsMonsterDebuffCount: 1,
       };
 
       const result = computeEquipmentDisplacementLastWords(
@@ -161,7 +161,7 @@ describe('绝响之符 (lastwords-monster-debuff amulet)', () => {
   });
 
   describe('computeAmuletEffects integration', () => {
-    it('sets hasLastWordsMonsterDebuff when a `lastwords-monster-debuff` amulet is equipped', () => {
+    it('sets lastWordsMonsterDebuffCount when a `lastwords-monster-debuff` amulet is equipped', () => {
       const amulet: GameCardData = {
         id: 'a1',
         type: 'amulet',
@@ -170,12 +170,12 @@ describe('绝响之符 (lastwords-monster-debuff amulet)', () => {
         amuletEffect: 'lastwords-monster-debuff',
       };
       const effects = computeAmuletEffects([amulet]);
-      expect(effects.hasLastWordsMonsterDebuff).toBe(true);
+      expect(effects.lastWordsMonsterDebuffCount).toBe(1);
     });
 
-    it('hasLastWordsMonsterDebuff is false by default', () => {
+    it('lastWordsMonsterDebuffCount is 0 by default', () => {
       const effects = computeAmuletEffects([]);
-      expect(effects.hasLastWordsMonsterDebuff).toBe(false);
+      expect(effects.lastWordsMonsterDebuffCount).toBe(0);
     });
   });
 });

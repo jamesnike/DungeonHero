@@ -24,14 +24,13 @@ import {
   BASE_BACKPACK_CAPACITY,
   FLIP_GOLD_REWARD,
   DEV_MODE,
-  createEmptyAmuletEffects,
 } from '@/game-core/constants';
+import { computeAmuletEffects } from '@/game-core/equipment';
 import {
   isRecyclableFromHand,
   flattenActiveRowSlots,
   sanitizeCardMetadata,
   logBackpackDraw,
-  computeAmuletAuraReversal,
   isDamageableTarget,
 } from '@/game-core/helpers';
 import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingAura';
@@ -53,7 +52,7 @@ export interface CardOperationsDeps {
   addGameLog: (type: LogEntryType, message: string) => void;
 
   triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
-  triggerDiscardShock: () => void;
+  triggerDiscardShock: (count: number) => void;
   triggerFlipShock: (count: number) => void;
   triggerGraveNova: (graveNovaCard?: GameCardData) => void;
   queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
@@ -143,59 +142,14 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
   // -- Derived values ---------------------------------------------------------
 
-  const amuletEffects = useMemo<ActiveAmuletEffects>(() => {
-    return amuletSlots.reduce<ActiveAmuletEffects>((state, slot) => {
-      if (!slot) return state;
-      switch (slot.amuletEffect) {
-        case 'heal': state.hasHeal = true; break;
-        case 'balance': state.hasBalance = true; break;
-        case 'life': state.lifeOverkillBonus = 4; break;
-        case 'catapult': state.hasCatapult = true; break;
-        case 'flash': state.hasFlash = true; break;
-        case 'strength': state.hasStrength = true; break;
-        case 'dual-guard': state.hasDualGuard = true; break;
-        case 'discard-zap': state.hasDiscardShock = true; break;
-        case 'flip-zap': state.flipZapCount += 1; break;
-        case 'flip-gold': state.hasFlipGold = true; break;
-        case 'recycle-forge': state.hasRecycleForge = true; break;
-        case 'lone-card': state.hasLoneCard = true; break;
-        case 'equipment-salvage': state.hasEquipmentSalvage = true; break;
-        case 'bloodrage-attack': state.hasBloodrageAttack = true; break;
-        case 'persuade-on-temp-attack':
-          state.hasPersuadeOnTempAttack = true;
-          state.persuadeOnTempAttackBonus = (slot.upgradeLevel ?? 0) >= 1 ? 20 : 10;
-          break;
-        case 'persuade-grant-recycle-fetch':
-          state.hasPersuadeGrantRecycleFetch = true;
-          state.persuadeGrantRecycleFetchCount = (slot.upgradeLevel ?? 0) >= 1 ? 2 : 1;
-          break;
-        case 'damage-class-discover': state.hasDamageClassDiscover = true; break;
-        case 'persuade-graveyard-stack': state.hasPersuadeGraveyardStack = true; break;
-        case 'swap-upgrade': state.hasSwapUpgrade = true; break;
-        case 'stun-upgrade-cap': state.hasStunUpgradeCap = true; break;
-        case 'recycle-backpack-expand': state.hasRecycleBackpackExpand = true; break;
-        case 'dungeon-gold': state.hasDungeonGold = true; break;
-        case 'stun-rate-boost': state.stunRateBoost += 20; break;
-        case 'end-turn-draw': state.hasEndTurnDraw = true; break;
-        case 'stun-gold': state.hasStunGold = true; break;
-      }
-      const bonus = slot.amuletAuraBonus;
-      if (bonus) {
-        if (typeof bonus.attack === 'number') state.aura.attack += bonus.attack;
-        if (typeof bonus.defense === 'number') state.aura.defense += bonus.defense;
-        if (typeof bonus.maxHp === 'number') state.aura.maxHp += bonus.maxHp;
-      }
-      if (typeof slot.value === 'number' && slot.effect) {
-        if (slot.effect === 'attack' && !(bonus && typeof bonus.attack === 'number'))
-          state.aura.attack += slot.value;
-        if (slot.effect === 'defense' && !(bonus && typeof bonus.defense === 'number'))
-          state.aura.defense += slot.value;
-        if (slot.effect === 'health' && !(bonus && typeof bonus.maxHp === 'number'))
-          state.aura.maxHp += slot.value;
-      }
-      return state;
-    }, createEmptyAmuletEffects());
-  }, [amuletSlots]);
+  // Delegate to the canonical aggregator in `game-core/equipment.ts` so that
+  // every consumer sees the same set of computed effects. Historically this
+  // hook duplicated the switch and silently went stale when new amulets were
+  // added — the duplicate is gone for good.
+  const amuletEffects = useMemo<ActiveAmuletEffects>(
+    () => computeAmuletEffects(amuletSlots as GameCardData[]),
+    [amuletSlots],
+  );
 
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
   const effectiveHandLimit = HAND_LIMIT + handLimitBonus;
@@ -406,7 +360,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       return {
         appliesTo: 'weapon',
         modifier,
-        flashHalve: amuletEffects.hasFlash,
+        flashCount: amuletEffects.flashCount,
       };
     }
 
@@ -449,7 +403,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         modifier,
         shieldModifier: effectiveShieldMod,
         permanentShieldBonus: effectiveShieldMod,
-        flashHalve: amuletEffects.hasFlash,
+        flashCount: amuletEffects.flashCount,
       };
     }
 
@@ -656,8 +610,8 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   // useGameEvent listeners — card animation triggers
   // ---------------------------------------------------------------------------
 
-  useGameEvent('card:discardShock', () => {
-    depsRef.current.triggerDiscardShock();
+  useGameEvent('card:discardShock', ({ count }) => {
+    depsRef.current.triggerDiscardShock(count);
   });
 
   useGameEvent('card:flipShock', ({ count }) => {

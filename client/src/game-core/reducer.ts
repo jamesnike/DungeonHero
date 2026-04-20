@@ -23,7 +23,17 @@ import { reduceHeroActions } from './rules/hero';
 import { reduceUIStateActions } from './rules/ui-state';
 import { reduceEconomyActions } from './rules/economy';
 import { reduceWaterfallActions } from './rules/waterfall';
-import { syncBuildingSlotsPure, countActiveRowSlotsExcludeGhost } from './helpers';
+import {
+  syncBuildingSlotsPure,
+  countActiveRowSlotsExcludeGhost,
+  computeAmuletAuraSignature,
+} from './helpers';
+import {
+  BALANCE_ATTACK_BONUS,
+  BALANCE_ATTACK_PENALTY,
+  BALANCE_SHIELD_BONUS,
+  BALANCE_SHIELD_PENALTY,
+} from './constants';
 import { computeWaterfallDropPlan } from './rules/waterfall';
 import { createRng } from './rng';
 import { pruneStaleEngagedIds } from './combat';
@@ -139,9 +149,34 @@ function postProcessActiveCards(
     }
   }
 
-  // 4. Waterfall trigger check — compute plan and store in state when ≤1 non-ghost card remains.
+  // 4. Victory short-circuit — if the deck and preview are exhausted and the
+  //    active row contains no real (non-ghost) cards, declare victory directly.
+  //    Ghost buildings never block victory (see design_guidelines.md §Ghost
+  //    Mechanic). We bypass the waterfall pipeline here so post-victory effects
+  //    like waterfall-heal / waterfall-discover are not triggered after the
+  //    game has already ended.
+  if (
+    !state.gameOver &&
+    !state.pendingWaterfallPlan &&
+    countActiveRowSlotsExcludeGhost(state.activeCards) === 0 &&
+    state.previewCards.every(c => !c) &&
+    state.remainingDeck.length === 0
+  ) {
+    state = { ...state, victory: true, gameOver: true };
+    result = {
+      ...result,
+      sideEffects: [
+        ...result.sideEffects,
+        { event: 'log:entry', payload: { type: 'system', message: '胜利！地牢已被征服！' } },
+        { event: 'game:over', payload: { victory: true } },
+      ],
+    };
+    mutated = true;
+  }
+
+  // 5. Waterfall trigger check — compute plan and store in state when ≤1 non-ghost card remains.
   //    The UI layer will animate the plan in phases and dispatch APPLY_WATERFALL_DROP / DEAL / COMPLETE.
-  if (!WATERFALL_EXEMPT_ACTIONS.has(action.type) && !state.pendingWaterfallPlan) {
+  if (!state.gameOver && !WATERFALL_EXEMPT_ACTIONS.has(action.type) && !state.pendingWaterfallPlan) {
     if (countActiveRowSlotsExcludeGhost(state.activeCards) <= 1) {
       const plan = computeWaterfallDropPlan(state, false);
       if (plan) {
@@ -253,11 +288,69 @@ function postProcessHandEntries(
 }
 
 // ---------------------------------------------------------------------------
+// Post-processing: keep slotTempAttack / slotTempArmor in sync with the
+// strength / balance amulet auras. Whenever any action mutates `amuletSlots`,
+// we diff the aura signature (strength + balance counts) before vs after and
+// apply the corresponding delta to the temp slot stats.
+//
+// This is the single source of truth for amulet aura ↔ temp stat coupling,
+// replacing the per-call manual reversal previously scattered across rules
+// (events, cards, shop, turn) and hooks.
+//
+// Exempt actions: the waterfall pipeline manages aura explicitly by zeroing
+// temp stats then re-stamping the aura — those actions intentionally leave
+// `amuletSlots` untouched, so the diff naturally returns 0 there. INIT_GAME
+// is meta-handled before postProcess runs and never hits this path.
+// ---------------------------------------------------------------------------
+
+function postProcessAmuletAura(
+  prevState: GameState,
+  result: ReduceResult,
+): ReduceResult {
+  if (result.state.amuletSlots === prevState.amuletSlots) return result;
+
+  const prevSig = computeAmuletAuraSignature(prevState.amuletSlots);
+  const nextSig = computeAmuletAuraSignature(result.state.amuletSlots);
+  const strengthDelta = nextSig.strength - prevSig.strength;
+  const balanceDelta = nextSig.balance - prevSig.balance;
+  if (strengthDelta === 0 && balanceDelta === 0) return result;
+
+  const baseAttack = result.state.slotTempAttack ?? { equipmentSlot1: 0, equipmentSlot2: 0 };
+  const baseArmor = result.state.slotTempArmor ?? { equipmentSlot1: 0, equipmentSlot2: 0 };
+
+  const tempAttack = { ...baseAttack };
+  const tempArmor = { ...baseArmor };
+
+  // Strength: +4/+4 attack per amulet
+  if (strengthDelta !== 0) {
+    tempAttack.equipmentSlot1 += strengthDelta * 4;
+    tempAttack.equipmentSlot2 += strengthDelta * 4;
+  }
+  // Balance: +A/-P attack on left/right, -P/+B armor on left/right per amulet
+  if (balanceDelta !== 0) {
+    tempAttack.equipmentSlot1 += balanceDelta * BALANCE_ATTACK_BONUS;
+    tempAttack.equipmentSlot2 -= balanceDelta * BALANCE_ATTACK_PENALTY;
+    tempArmor.equipmentSlot1 -= balanceDelta * BALANCE_SHIELD_PENALTY;
+    tempArmor.equipmentSlot2 += balanceDelta * BALANCE_SHIELD_BONUS;
+  }
+
+  return {
+    ...result,
+    state: {
+      ...result.state,
+      slotTempAttack: tempAttack,
+      slotTempArmor: tempArmor,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Combined post-processing
 // ---------------------------------------------------------------------------
 
 function postProcess(prevState: GameState, result: ReduceResult, action: GameAction): ReduceResult {
   let r = postProcessActiveCards(prevState, result, action);
+  r = postProcessAmuletAura(prevState, r);
   r = postProcessAmuletCounters(r);
   r = postProcessHandEntries(prevState, r, action);
   return r;

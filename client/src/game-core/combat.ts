@@ -191,7 +191,7 @@ export interface EndHeroTurnResult {
   combatState: CombatState;
   activeCards: ActiveRowSlots;
   berserkerSlotUsed: Record<string, boolean>;
-  flashSlotUsed: Record<string, boolean>;
+  flashSlotUsed: Record<string, number>;
   gambitSlotUsed: Record<string, number>;
   weaponExtraAttackUsed: Record<string, number>;
   logs: Array<{ type: string; message: string }>;
@@ -441,7 +441,7 @@ export function computeHeal(
   const safeHealAccum = Number.isFinite(state.healAccumulator) ? state.healAccumulator : 0;
   const safeBase = Number.isFinite(baseAmount) ? baseAmount : 0;
 
-  const multiplier = amuletEffects.hasHeal ? 2 : 1;
+  const multiplier = Math.pow(2, amuletEffects.healCount);
   const adjustedAmount = Math.max(0, Math.floor(safeBase * multiplier));
   const maxHp = computeMaxHp(state, amuletEffects);
   const actualHeal = adjustedAmount <= 0 ? 0 : Math.min(adjustedAmount, Math.max(0, maxHp - safeHp));
@@ -566,10 +566,11 @@ export function computeDamage(
     gameOver: newHp === 0,
   };
 
-  if (appliedDamage > 0 && amuletEffects.hasBloodrageAttack && opts?.selfInflicted) {
+  if (appliedDamage > 0 && amuletEffects.bloodrageAttackCount > 0 && opts?.selfInflicted) {
+    const bonus = 2 * amuletEffects.bloodrageAttackCount;
     result.berserkTurnBuff = {
-      equipmentSlot1: (state.berserkTurnBuff.equipmentSlot1 ?? 0) + 2,
-      equipmentSlot2: (state.berserkTurnBuff.equipmentSlot2 ?? 0) + 2,
+      equipmentSlot1: (state.berserkTurnBuff.equipmentSlot1 ?? 0) + bonus,
+      equipmentSlot2: (state.berserkTurnBuff.equipmentSlot2 ?? 0) + bonus,
     };
   }
 
@@ -607,7 +608,9 @@ export function computeAttackDamage(params: AttackDamageParams): number {
   );
 
   const preFinal = (params.isCrit ? baseDamage * 2 : baseDamage) * params.stunnedDoubleMultiplier;
-  return params.amuletEffects.hasFlash ? Math.max(0, Math.floor(preFinal / 2)) : preFinal;
+  return params.amuletEffects.flashCount > 0
+    ? Math.max(0, Math.floor(preFinal / Math.pow(2, params.amuletEffects.flashCount)))
+    : preFinal;
 }
 
 // ---------------------------------------------------------------------------
@@ -667,25 +670,40 @@ export interface DragonRegenEffect {
   success: boolean;
 }
 
-export interface GoblinStackHealEffect {
-  monsterId: string;
-  monsterName: string;
-  restored: number;
-  fromLayer: number;
-  toLayer: number;
-}
-
 /**
- * One successful 15% steal roll under a goblin. The actual item to steal is
- * picked later in `reduceMonsterTurnEndEffects` (which has access to the
- * full game state — equipment slots, amulet slots, stacks). Keep this struct
- * minimal: the reducer only needs the goblin's column and name to attribute
- * the steal to the right monster.
+ * Pre-rolled dice flow for a goblin "贼窝疗养" (stack heal) check at end of
+ * monster turn. A single D20 is rolled with seeded RNG; success threshold is
+ * `min(stackCount * 3, 20)` (so each stacked card grants +15% chance, capped
+ * at 100%). The actual heal is applied later in the `RESOLVE_DICE` handler
+ * after the player closes the dice modal.
  */
-export interface GoblinStealTarget {
+export interface GoblinStackHealDice {
   goblinId: string;
   goblinName: string;
   colIndex: number;
+  stackCount: number;
+  predeterminedRoll: number;
+  threshold: number;
+  success: boolean;
+  currentLayer: number;
+  maxLayers: number;
+}
+
+/**
+ * Pre-rolled dice flow for a goblin "窃宝" (steal equipment) check at end of
+ * monster turn. Single D20 with threshold `min(stackCount * 5, 20)` (each
+ * stacked card grants +25% steal chance, capped at 100%). The actual stolen
+ * item is picked at flow-build time (in `turn.ts`) and applied in the
+ * `RESOLVE_DICE` handler after the dice modal closes.
+ */
+export interface GoblinStealDice {
+  goblinId: string;
+  goblinName: string;
+  colIndex: number;
+  stackCount: number;
+  predeterminedRoll: number;
+  threshold: number;
+  success: boolean;
 }
 
 export interface MonsterTurnEndResult {
@@ -698,10 +716,16 @@ export interface MonsterTurnEndResult {
   monstersToEngage: Array<{ id: string; name: string }>;
   /** Dragon regen effects on equipment */
   dragonRegenEffects: DragonRegenEffect[];
-  /** Goblin stack heal results */
-  goblinStackHeals: GoblinStackHealEffect[];
-  /** Goblin steal targets (caller must apply equipment/amulet removal) */
-  goblinStealTargets: GoblinStealTarget[];
+  /**
+   * Goblin "贼窝疗养" pre-rolled dice flows. Caller must apply heal via
+   * `RESOLVE_DICE` after the dice modal closes.
+   */
+  goblinStackHealDice: GoblinStackHealDice[];
+  /**
+   * Goblin "窃宝" pre-rolled dice flows. Caller must pick a stolen item and
+   * apply it via `RESOLVE_DICE` after the dice modal closes.
+   */
+  goblinStealDice: GoblinStealDice[];
   rng: RngState;
 }
 
@@ -723,8 +747,8 @@ export function applyMonsterTurnEndEffects(
   let wraithEnrage = false;
   let wraithDestroyAmulet = false;
   const dragonRegenEffects: DragonRegenEffect[] = [];
-  const goblinStackHeals: GoblinStackHealEffect[] = [];
-  const goblinStealTargets: GoblinStealTarget[] = [];
+  const goblinStackHealDice: GoblinStackHealDice[] = [];
+  const goblinStealDice: GoblinStealDice[] = [];
   const monstersToEngage: Array<{ id: string; name: string }> = [];
 
   // Dragon elite regen: if hero wasn't damaged, 50% chance to restore 1 durability on other equipment slot
@@ -867,7 +891,17 @@ export function applyMonsterTurnEndEffects(
     }
   }
 
-  // Goblin stack heal: per stacked card below, 15% chance restore 1 layer
+  // Goblin "贼窝疗养" / "窃宝": single D20 roll per goblin where the success
+  // threshold scales with the number of cards stacked underneath.
+  //
+  //   贼窝疗养: threshold = min(stackCount * 3, 20)  // +15% per card, capped 100%
+  //   窃宝:     threshold = min(stackCount * 5, 20)  // +25% per card, capped 100%
+  //   roll <= threshold  => success (heal 1 layer / steal 1 item)
+  //
+  // We pre-roll the D20 here using seeded RNG and return the dice metadata in
+  // the result. The actual heal / steal mutation is deferred to the
+  // RESOLVE_DICE handler so the player sees a dice animation before the
+  // outcome is applied (matches the wraith-rebirth / bone-regen pattern).
   if (opts?.activeCardStacks) {
     for (const card of activeCards) {
       if (!card || !engagedMonsterIds.includes(card.id) || card.isStunned || !card.goblinStackHeal) continue;
@@ -875,49 +909,54 @@ export function applyMonsterTurnEndEffects(
       if (colIndex < 0) continue;
       const stacks = opts.activeCardStacks[colIndex] ?? [];
       if (stacks.length === 0) continue;
-      let healCount = 0;
-      for (let i = 0; i < stacks.length; i++) {
-        const [healed, nextRng] = nextBool(rng, 0.15);
-        rng = nextRng;
-        if (healed) healCount++;
-      }
-      if (healCount > 0) {
-        const maxLayers = card.hpLayers ?? card.fury ?? 1;
-        const currentLayer = card.currentLayer ?? 1;
-        const restored = Math.min(healCount, maxLayers - currentLayer);
-        if (restored > 0) {
-          const fullHp = card.maxHp ?? card.hp ?? 0;
-          const cardIdx = next.findIndex(c => c?.id === card.id);
-          if (cardIdx >= 0) {
-            next[cardIdx] = { ...card, currentLayer: currentLayer + restored, hp: fullHp };
-            changed = true;
-          }
-          goblinStackHeals.push({
-            monsterId: card.id, monsterName: card.name,
-            restored, fromLayer: currentLayer, toLayer: currentLayer + restored,
-          });
-          logs.push({ type: 'combat', message: `${card.name} 贼窝疗养：恢复了 ${restored} 血层！（${currentLayer} → ${currentLayer + restored}）` });
-          banners.push(`${card.name} 贼窝疗养！恢复 ${restored} 血层！`);
-        }
-      }
+
+      const maxLayers = card.hpLayers ?? card.fury ?? 1;
+      const currentLayer = card.currentLayer ?? 1;
+      // Skip the dice entirely when already at max layers — there's nothing
+      // to heal so showing a roll the player can't benefit from is noise.
+      if (currentLayer >= maxLayers) continue;
+
+      const threshold = Math.min(stacks.length * 3, 20);
+      let predeterminedRoll: number;
+      [predeterminedRoll, rng] = nextInt(rng, 1, 20);
+      const success = predeterminedRoll <= threshold;
+
+      goblinStackHealDice.push({
+        goblinId: card.id,
+        goblinName: card.name,
+        colIndex,
+        stackCount: stacks.length,
+        predeterminedRoll,
+        threshold,
+        success,
+        currentLayer,
+        maxLayers,
+      });
     }
 
-    // Goblin steal equip: per stacked card below, 15% chance steal
     for (const card of activeCards) {
       if (!card || !engagedMonsterIds.includes(card.id) || card.isStunned || !card.goblinStealEquip) continue;
       const colIndex = activeCards.findIndex(c => c?.id === card.id);
       if (colIndex < 0) continue;
       const stacks = opts.activeCardStacks[colIndex] ?? [];
       if (stacks.length === 0) continue;
-      let stealCount = 0;
-      for (let i = 0; i < stacks.length; i++) {
-        const [stolen, nextRng] = nextBool(rng, 0.15);
-        rng = nextRng;
-        if (stolen) stealCount++;
-      }
-      for (let s = 0; s < stealCount; s++) {
-        goblinStealTargets.push({ goblinId: card.id, goblinName: card.name, colIndex });
-      }
+
+      // 窃宝: each stacked card contributes +25% (threshold +5 on a D20),
+      // capped at 100%. Diverges from 贼窝疗养's +15% per stack.
+      const threshold = Math.min(stacks.length * 5, 20);
+      let predeterminedRoll: number;
+      [predeterminedRoll, rng] = nextInt(rng, 1, 20);
+      const success = predeterminedRoll <= threshold;
+
+      goblinStealDice.push({
+        goblinId: card.id,
+        goblinName: card.name,
+        colIndex,
+        stackCount: stacks.length,
+        predeterminedRoll,
+        threshold,
+        success,
+      });
     }
   }
 
@@ -929,8 +968,8 @@ export function applyMonsterTurnEndEffects(
     wraithDestroyAmulet,
     monstersToEngage,
     dragonRegenEffects,
-    goblinStackHeals,
-    goblinStealTargets,
+    goblinStackHealDice,
+    goblinStealDice,
     rng,
   };
 }

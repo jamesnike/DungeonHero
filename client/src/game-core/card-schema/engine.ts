@@ -95,11 +95,17 @@ export function executeMagicCardEffects(
   }
 
   // --- Pre-processing: Echo ---
+  // Spell Echo (法术回响) consumption rules:
+  //   * Only non-`double-next-magic` magic cards can be echoed (prevents stacking).
+  //   * Playing `double-next-magic` while echo is already active just refreshes the flag,
+  //     no stacking. We still log a hint so the player understands no extra trigger occurred.
   const isEchoTriggered = !!(state.doubleNextMagic && card.type === 'magic' && card.magicEffect !== 'double-next-magic');
   if (isEchoTriggered) {
     patch.doubleNextMagic = false;
     sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `法术回响：${card.name} 的效果将触发两次！` } });
     sideEffects.push({ event: 'ui:banner', payload: { text: `法术回响！${card.name} 效果触发两次！` } });
+  } else if (state.doubleNextMagic && card.type === 'magic' && card.magicEffect === 'double-next-magic') {
+    sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `法术回响：${card.name} 不会被回响触发，已刷新回响状态。` } });
   }
   const echoMultiplier = isEchoTriggered ? 2 : 1;
   const echoTag = isEchoTriggered ? '（回响×2）' : '';

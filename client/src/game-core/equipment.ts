@@ -213,47 +213,51 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       effects.aura.maxHp += amulet.amuletAuraBonus.maxHp ?? 0;
     }
 
+    // Universal stacking rule: every equipped amulet contributes independently.
+    // Each `case` below increments a counter (or sums a bonus). Consumers gate
+    // on `count > 0` and either multiply a magnitude by `count` or fire `count`
+    // independent triggers (see field doc on ActiveAmuletEffects).
     switch (amulet.amuletEffect) {
-      case 'heal': effects.hasHeal = true; break;
-      case 'balance': effects.hasBalance = true; break;
-      case 'life': effects.lifeOverkillBonus = 4; break;
-      case 'catapult': effects.hasCatapult = true; break;
-      case 'flash': effects.hasFlash = true; break;
-      case 'strength': effects.hasStrength = true; break;
-      case 'dual-guard': effects.hasDualGuard = true; break;
-      case 'discard-zap': effects.hasDiscardShock = true; break;
+      case 'heal': effects.healCount += 1; break;
+      case 'balance': effects.balanceCount += 1; break;
+      case 'life': effects.lifeOverkillBonus += 4; break;
+      case 'catapult': effects.catapultCount += 1; break;
+      case 'flash': effects.flashCount += 1; break;
+      case 'strength': effects.strengthCount += 1; break;
+      case 'dual-guard': effects.dualGuardCount += 1; break;
+      case 'discard-zap': effects.discardShockCount += 1; break;
       case 'flip-zap': effects.flipZapCount += 1; break;
-      case 'flip-gold': effects.hasFlipGold = true; break;
-      case 'recycle-forge': effects.hasRecycleForge = true; break;
-      case 'lone-card': effects.hasLoneCard = true; break;
-      case 'equipment-salvage': effects.hasEquipmentSalvage = true; break;
-      case 'bloodrage-attack': effects.hasBloodrageAttack = true; break;
+      case 'flip-gold': effects.flipGoldCount += 1; break;
+      case 'recycle-forge': effects.recycleForgeCount += 1; break;
+      case 'lone-card': effects.loneCardCount += 1; break;
+      case 'equipment-salvage': effects.equipmentSalvageCount += 1; break;
+      case 'bloodrage-attack': effects.bloodrageAttackCount += 1; break;
       case 'persuade-on-temp-attack':
-        effects.hasPersuadeOnTempAttack = true;
-        effects.persuadeOnTempAttackBonus = upgradeLevel >= 1 ? 20 : 10;
+        effects.persuadeOnTempAttackCount += 1;
+        effects.persuadeOnTempAttackBonus += upgradeLevel >= 1 ? 20 : 10;
         break;
       case 'persuade-grant-recycle-fetch':
-        effects.hasPersuadeGrantRecycleFetch = true;
-        effects.persuadeGrantRecycleFetchCount = upgradeLevel >= 1 ? 2 : 1;
+        effects.persuadeGrantRecycleFetchCount += 1;
+        effects.persuadeGrantRecycleFetchTotal += upgradeLevel >= 1 ? 2 : 1;
         break;
-      case 'damage-class-discover': effects.hasDamageClassDiscover = true; break;
-      case 'persuade-graveyard-stack': effects.hasPersuadeGraveyardStack = true; break;
-      case 'stun-recycle-to-hand': effects.hasStunRecycleToHand = true; break;
-      case 'monster-kill-upgrade': effects.hasMonsterKillUpgrade = true; break;
-      case 'attack-persuade-discount': effects.hasAttackPersuadeDiscount = true; break;
-      case 'card-gain-missile': effects.hasCardGainMissile = true; break;
-      case 'swap-upgrade': effects.hasSwapUpgrade = true; break;
-      case 'stun-upgrade-cap': effects.hasStunUpgradeCap = true; break;
-      case 'recycle-backpack-expand': effects.hasRecycleBackpackExpand = true; break;
-      case 'dungeon-gold': effects.hasDungeonGold = true; break;
-      case 'armor-halve-endure': effects.hasArmorHalveEndure = true; break;
-      case 'monster-equip-buff': effects.hasMonsterEquipBuff = true; break;
-      case 'lastwords-monster-debuff': effects.hasLastWordsMonsterDebuff = true; break;
+      case 'damage-class-discover': effects.damageClassDiscoverCount += 1; break;
+      case 'persuade-graveyard-stack': effects.persuadeGraveyardStackCount += 1; break;
+      case 'stun-recycle-to-hand': effects.stunRecycleToHandCount += 1; break;
+      case 'monster-kill-upgrade': effects.monsterKillUpgradeCount += 1; break;
+      case 'attack-persuade-discount': effects.attackPersuadeDiscountCount += 1; break;
+      case 'card-gain-missile': effects.cardGainMissileCount += 1; break;
+      case 'swap-upgrade': effects.swapUpgradeCount += 1; break;
+      case 'stun-upgrade-cap': effects.stunUpgradeCapCount += 1; break;
+      case 'recycle-backpack-expand': effects.recycleBackpackExpandCount += 1; break;
+      case 'dungeon-gold': effects.dungeonGoldCount += 1; break;
+      case 'armor-halve-endure': effects.armorHalveEndureCount += 1; break;
+      case 'monster-equip-buff': effects.monsterEquipBuffCount += 1; break;
+      case 'lastwords-monster-debuff': effects.lastWordsMonsterDebuffCount += 1; break;
       case 'stun-rate-boost': effects.stunRateBoost += 20; break;
-      case 'end-turn-draw': effects.hasEndTurnDraw = true; break;
-      case 'stun-gold': effects.hasStunGold = true; break;
-      // The following amulets are checked via direct amuletSlots.find(...) in
-      // their reducers; no aggregated flag needed. Cases are listed for
+      case 'end-turn-draw': effects.endTurnDrawCount += 1; break;
+      case 'stun-gold': effects.stunGoldCount += 1; break;
+      // The following amulets are checked via direct amuletSlots.find/filter(...)
+      // in their reducers; no aggregated count needed. Cases are listed for
       // documentation / completeness so they are recognised registered effects.
       case 'flip-overkill-lifesteal':
       case 'equip-amulet-cap':

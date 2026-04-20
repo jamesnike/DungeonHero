@@ -702,7 +702,10 @@ export function resolveAllPotionEffects(
     if (slotsWithEquip.length === 1) {
       const slot = slotsWithEquip[0];
       const item = slot.item;
-      (patch as any)[slot.id] = { ...item, onDestroyEffect: 'slot-temp-buff-3-3' };
+      (patch as any)[slot.id] = {
+        ...item,
+        lastWordsSlotTempBuff: (item.lastWordsSlotTempBuff ?? 0) + 1,
+      };
       log(sideEffects, 'potion', `遗赠淬炼药：${item.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！`);
       banner(sideEffects, `${item.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！`);
       enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
@@ -1036,7 +1039,10 @@ export function resolvePendingPotion(
       if (!slotId) return null;
       const item = state[slotId];
       if (!item) return null;
-      (patch as any)[slotId] = { ...item, onDestroyEffect: 'slot-temp-buff-3-3' };
+      (patch as any)[slotId] = {
+        ...item,
+        lastWordsSlotTempBuff: ((item as GameCardData).lastWordsSlotTempBuff ?? 0) + 1,
+      };
       patch.pendingPotionAction = null;
       patch.heroSkillBanner = null;
       log(sideEffects, 'potion', `遗赠淬炼药：${item.name} 获得遗言：该装备栏 +3临时攻击 +3临时护甲！`);

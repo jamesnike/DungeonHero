@@ -1563,6 +1563,30 @@ describe('reducer', () => {
       const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
       expect((result.state.activeCards[0] as any).attack).toBe(8);
     });
+
+    it('triggers golem layer-loss reflect when monster spends a layer to attack', () => {
+      const monster = { id: 'm1', type: 'monster' as const, name: 'Golem', value: 5, hp: 10, maxHp: 10, attack: 5, currentLayer: 3, fury: 3, golemLayerLossReflect: 2 };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const state = makeState({ activeCards: slots });
+      const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
+      // fury(3) - nextLayer(2) = 1 lost layer × coeff 2 = 2 reflect damage
+      const reflectAction = result.enqueuedActions.find(a =>
+        a.type === 'APPLY_DAMAGE' && (a as any).source === 'combat',
+      );
+      expect(reflectAction).toBeDefined();
+      expect((reflectAction as any).amount).toBe(2);
+      expect(result.sideEffects.some(e => e.event === 'combat:golemReflect')).toBe(true);
+    });
+
+    it('does not trigger golem reflect when stunned', () => {
+      const monster = { id: 'm1', type: 'monster' as const, name: 'Golem', value: 5, hp: 10, maxHp: 10, attack: 5, currentLayer: 3, fury: 3, golemLayerLossReflect: 2, isStunned: true };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const state = makeState({ activeCards: slots });
+      const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
+      expect(result.sideEffects.some(e => e.event === 'combat:golemReflect')).toBe(false);
+    });
   });
 
   describe('EXECUTE_LAST_WORDS', () => {

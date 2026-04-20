@@ -7,7 +7,9 @@ import MirrorCopyModal from '@/components/MirrorCopyModal';
 import AmplifyModal from '@/components/AmplifyModal';
 import PermGrantModal from '@/components/PermGrantModal';
 import BackpackReorganizeModal from '@/components/BackpackReorganizeModal';
+import HandDiscardSelectionModal from '@/components/HandDiscardSelectionModal';
 import type { GameCardData } from '@/components/GameCard';
+import { getEligibleHandDiscardCards } from '@/game-core/helpers';
 
 function MagicCardContainerInner() {
   const cb = useModalCallbacks();
@@ -19,6 +21,7 @@ function MagicCardContainerInner() {
     eventAmplifyHandPicker: s.eventAmplifyHandPicker,
     permGrantModal: s.permGrantModal,
     pendingMagicAction: s.pendingMagicAction,
+    pendingHandDiscardSelection: s.pendingHandDiscardSelection,
     handCards: s.handCards,
     equipmentSlot1: s.equipmentSlot1,
     equipmentSlot2: s.equipmentSlot2,
@@ -95,6 +98,20 @@ function MagicCardContainerInner() {
           equipmentSlot1={(gs.equipmentSlot1 as GameCardData | null) ?? null}
           equipmentSlot2={(gs.equipmentSlot2 as GameCardData | null) ?? null}
           onConfirm={cb.onBackpackReorganizeConfirm}
+        />
+      )}
+
+      {gs.pendingHandDiscardSelection && (
+        <HandDiscardSelectionModal
+          open
+          title={gs.pendingHandDiscardSelection.title}
+          prompt={gs.pendingHandDiscardSelection.prompt}
+          requiredCount={gs.pendingHandDiscardSelection.count}
+          eligibleHandCards={getEligibleHandDiscardCards(
+            gs.handCards as GameCardData[],
+            gs.pendingHandDiscardSelection.sourceCardId,
+          )}
+          onConfirm={cb.onHandDiscardSelectionConfirm}
         />
       )}
     </>

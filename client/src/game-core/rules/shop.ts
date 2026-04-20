@@ -25,7 +25,7 @@ import { dequeueMonsterRewardPure, generateMonsterRewardOptions } from '../monst
 import { upgradeCardPure } from '../cardUpgrade';
 import { SHOP_EQUIP_BOOST_COST, SHOP_SKILL_DISCOVER_COST, MAX_SHOP_LEVEL } from '../constants';
 import { shuffle as rngShuffle, nextId } from '../rng';
-import { computeAmuletAuraReversal, applyAmplifyOnCreate } from '../helpers';
+import { applyAmplifyOnCreate } from '../helpers';
 import { minionImage, createStarterHealEchoCard } from '../deck';
 import statSwapCardImage from '@assets/generated_images/knight_stat_swap_potion.png';
 
@@ -645,23 +645,8 @@ function reduceConfirmDeleteCard(
   } else if (source === 'amulet') {
     cardToDelete = state.amuletSlots.find(c => c.id === cardId) ?? null;
     if (cardToDelete) {
-      const reversal = computeAmuletAuraReversal([cardToDelete]);
-      const hasAttackDelta = reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0;
-      const hasArmorDelta = reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0;
-      if (hasAttackDelta) {
-        patch.slotTempAttack = {
-          ...state.slotTempAttack,
-          equipmentSlot1: state.slotTempAttack.equipmentSlot1 + reversal.tempAttackDelta.equipmentSlot1,
-          equipmentSlot2: state.slotTempAttack.equipmentSlot2 + reversal.tempAttackDelta.equipmentSlot2,
-        };
-      }
-      if (hasArmorDelta) {
-        patch.slotTempArmor = {
-          ...state.slotTempArmor,
-          equipmentSlot1: state.slotTempArmor.equipmentSlot1 + reversal.tempArmorDelta.equipmentSlot1,
-          equipmentSlot2: state.slotTempArmor.equipmentSlot2 + reversal.tempArmorDelta.equipmentSlot2,
-        };
-      }
+      // Aura reversal is handled centrally by `postProcessAmuletAura` in
+      // reducer.ts — no manual slotTempAttack/Armor diff needed here.
       patch.amuletSlots = state.amuletSlots.filter(c => c.id !== cardId);
     }
   }

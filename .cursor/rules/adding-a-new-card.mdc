@@ -31,7 +31,7 @@ Every card needs `{ id, type, name, value, image }`. Then add the dispatch field
 | `'magic'` (starter) | only the starter id is needed | `starter:{starterBaseId}` |
 | `'hero-magic'` | `heroMagicId: HeroMagicId` (typed) | `hero-magic:{heroMagicId}` |
 | `'weapon'` / `'shield'` | `onEquipEffect?: string` (optional, only if it has an entry effect) | on-equip registry |
-| `'amulet'` | `amuletEffect: AmuletEffectId` (typed) | metadata read by `computeAmuletEffects` |
+| `'amulet'` | `amuletEffect: AmuletEffectId` (typed) | metadata read by `computeAmuletEffects` — **MUST follow [`amulet-stacking-design.mdc`](.cursor/rules/amulet-stacking-design.mdc)** for N-copy semantics |
 | `'monster'` | `monsterType`, `attack`, `hp`, `fury`, `baseAttack`, `baseHp`, optional `lastWords`/`enterEffect`/`bleedEffect`/etc. | tier/rage tables in `lib/monsterRage.ts` |
 
 Common optional fields: `description`, `magicType: 'instant' | 'permanent'`, `recycleDelay`, `maxUpgradeLevel`, `durability`/`maxDurability` (equipment), `_counterDisplay` (UI counter).

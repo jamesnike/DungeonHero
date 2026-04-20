@@ -15,7 +15,7 @@ import type {
 } from '@/components/game-board/types';
 import type { GameState } from './types';
 import { INITIAL_HP, FLIP_GOLD_REWARD, PERSUADE_COST, MIN_PERSUADE_COST, BASE_BACKPACK_CAPACITY, MAX_SHOP_LEVEL, MAX_PERSUADE_LEVEL, HAND_LIMIT } from './constants';
-import { flattenActiveRowSlots, computeAmuletAuraReversal, pickRandomHandCardsForDiscardPreferGraveyard, isRecyclableFromHand, applyAmplifyOnCreate } from './helpers';
+import { flattenActiveRowSlots, pickRandomHandCardsForDiscardPreferGraveyard, isRecyclableFromHand, applyAmplifyOnCreate } from './helpers';
 import { computeAmuletEffects } from './equipment';
 import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
 import { applyEquipDestroyLastWords } from './rules/waterfall';
@@ -486,9 +486,10 @@ function applyFlipGoldBonus(
   logs: Array<{ type: string; message: string }>,
 ): boolean {
   const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-  if (amuletFx.hasFlipGold) {
-    patch.gold = (patch.gold ?? state.gold) + FLIP_GOLD_REWARD;
-    logs.push({ type: 'gold', message: `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。` });
+  if (amuletFx.flipGoldCount > 0) {
+    const goldGain = FLIP_GOLD_REWARD * amuletFx.flipGoldCount;
+    patch.gold = (patch.gold ?? state.gold) + goldGain;
+    logs.push({ type: 'gold', message: `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。` });
     return true;
   }
   return false;
@@ -843,8 +844,8 @@ export function applySimpleEffect(
       heroSkillBanner: `全装备栏临时攻击 +${amount}！`,
     };
     const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-    if (amuletFx.hasPersuadeOnTempAttack) {
-      const pBonus = amuletFx.persuadeOnTempAttackBonus || 10;
+    if (amuletFx.persuadeOnTempAttackCount > 0) {
+      const pBonus = amuletFx.persuadeOnTempAttackBonus;
       patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
       logs.push({ type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%` });
     }
@@ -859,8 +860,8 @@ export function applySimpleEffect(
       heroSkillBanner: `全装备栏临时护甲 +${amount}！`,
     };
     const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-    if (amuletFx.hasPersuadeOnTempAttack) {
-      const pBonus = amuletFx.persuadeOnTempAttackBonus || 10;
+    if (amuletFx.persuadeOnTempAttackCount > 0) {
+      const pBonus = amuletFx.persuadeOnTempAttackBonus;
       patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
       logs.push({ type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%` });
     }
@@ -1102,15 +1103,8 @@ export function applySimpleEffect(
 
   } else if (effectToken === 'removeAllAmulets') {
     if (state.amuletSlots.length > 0) {
-      const reversal = computeAmuletAuraReversal(state.amuletSlots);
-      patch.slotTempAttack = {
-        equipmentSlot1: (state.slotTempAttack?.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
-        equipmentSlot2: (state.slotTempAttack?.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
-      };
-      patch.slotTempArmor = {
-        equipmentSlot1: (state.slotTempArmor?.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
-        equipmentSlot2: (state.slotTempArmor?.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
-      };
+      // Aura reversal is handled centrally by `postProcessAmuletAura` in
+      // reducer.ts — clearing amuletSlots is enough.
       patch.discardedCards = [...state.discardedCards, ...state.amuletSlots];
       patch.amuletSlots = [];
       patch.heroSkillBanner = '所有护符都被粉碎了。';
@@ -1368,19 +1362,8 @@ export function applySimpleEffect(
 
   } else if (effectToken === 'amuletsToGold+10') {
     if (state.amuletSlots.length > 0) {
-      const reversal = computeAmuletAuraReversal(state.amuletSlots);
-      if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
-        patch.slotTempAttack = {
-          equipmentSlot1: (state.slotTempAttack?.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
-          equipmentSlot2: (state.slotTempAttack?.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
-        };
-      }
-      if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
-        patch.slotTempArmor = {
-          equipmentSlot1: (state.slotTempArmor?.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
-          equipmentSlot2: (state.slotTempArmor?.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
-        };
-      }
+      // Aura reversal is handled centrally by `postProcessAmuletAura` in
+      // reducer.ts — clearing amuletSlots is enough.
       const payout = 10 * state.amuletSlots.length;
       patch.discardedCards = [...state.discardedCards, ...state.amuletSlots];
       patch.amuletSlots = [];

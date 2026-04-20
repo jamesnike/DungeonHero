@@ -430,11 +430,12 @@ function reduceRegisterDungeonCardProcessed(
   const effects = computeAmuletEffects(state.amuletSlots);
   const sideEffects: SideEffect[] = [];
 
-  if (effects.hasDungeonGold) {
-    patch.gold = state.gold + 1;
+  if (effects.dungeonGoldCount > 0) {
+    const n = effects.dungeonGoldCount;
+    patch.gold = state.gold + n;
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'amulet', message: '拾荒之符：处理地城牌，金币 +1' },
+      payload: { type: 'amulet', message: `拾荒之符：处理地城牌，金币 +${n}` },
     });
   }
 

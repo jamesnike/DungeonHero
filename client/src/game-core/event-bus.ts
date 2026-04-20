@@ -25,6 +25,37 @@ export type GameEventMap = {
     /** Pre-rolled D20 from reducer's seeded RNG; UI dice animates to this value. */
     predeterminedRoll: number;
   };
+  /**
+   * Goblin "窃宝" elite skill: at end of monster turn, goblin rolls a single
+   * D20 with success threshold = `min(stackCount * 5, 20)` (each stacked card
+   * grants +25% steal chance, capped at 100%). Dice modal lets the player
+   * watch the roll before the actual steal applies via `RESOLVE_DICE`.
+   */
+  'combat:goblinStealCheck': {
+    monsterId: string;
+    monsterName: string;
+    stackCount: number;
+    threshold: number;
+    /** Pre-rolled D20 from reducer's seeded RNG; UI dice animates to this value. */
+    predeterminedRoll: number;
+    /** Pre-picked stolen item name (for modal subtitle). null when no candidates. */
+    stolenItemName: string | null;
+  };
+  /**
+   * Goblin "贼窝疗养" tier-2 skill: at end of monster turn, goblin rolls a
+   * single D20 to heal 1 layer. Same `min(stackCount * 3, 20)` threshold as
+   * 窃宝.
+   */
+  'combat:goblinHealCheck': {
+    monsterId: string;
+    monsterName: string;
+    stackCount: number;
+    threshold: number;
+    /** Pre-rolled D20 from reducer's seeded RNG; UI dice animates to this value. */
+    predeterminedRoll: number;
+    currentLayer: number;
+    maxLayers: number;
+  };
   'combat:classDamageHit': {};
   'combat:classDamageDiscoverTriggered': { threshold: number };
   'combat:classMagicDiscoverTriggered': { threshold: number };
@@ -319,7 +350,7 @@ export type GameEventMap = {
   'event:requestEventInteraction': { token: string; data: Record<string, unknown> };
 
   // UI animation triggers — emitted by reducer, consumed by hooks for animations
-  'card:discardShock': {};
+  'card:discardShock': { count: number };
   /** Emitted when a card flip resolves and the player has 弧能之符 amulets equipped.
    *  `count` = number of equipped amulets (each triggers an independent zap). */
   'card:flipShock': { count: number };

@@ -27,7 +27,6 @@ import {
 import {
   logBackpackDraw,
   pickRandomHandCardsForDiscardPreferGraveyard,
-  computeAmuletAuraReversal,
   isDamageMagic,
 } from '@/game-core/helpers';
 import { isReducerHandledEventToken } from '@/game-core/events';
@@ -1555,9 +1554,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
           const next = [...prev]; next[cellIdx] = altarBuilding; return next;
         }});
-        if (depsRef.current.amuletEffects.hasFlipGold) {
-          dispatch({ type: 'MODIFY_GOLD', delta: FLIP_GOLD_REWARD, source: 'flip-gold-amulet' });
-          addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+        if (depsRef.current.amuletEffects.flipGoldCount > 0) {
+          const goldGain = FLIP_GOLD_REWARD * depsRef.current.amuletEffects.flipGoldCount;
+          dispatch({ type: 'MODIFY_GOLD', delta: goldGain, source: 'flip-gold-amulet' });
+          addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。`);
         }
         addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${tName}`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅仪式翻转为增幅祭坛！目标：${tName}` });
@@ -1615,9 +1615,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
           const next = [...prev]; next[cellIdx] = altarBuilding; return next;
         }});
-        if (depsRef.current.amuletEffects.hasFlipGold) {
-          dispatch({ type: 'MODIFY_GOLD', delta: FLIP_GOLD_REWARD, source: 'flip-gold-amulet' });
-          addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+        if (depsRef.current.amuletEffects.flipGoldCount > 0) {
+          const goldGain = FLIP_GOLD_REWARD * depsRef.current.amuletEffects.flipGoldCount;
+          dispatch({ type: 'MODIFY_GOLD', delta: goldGain, source: 'flip-gold-amulet' });
+          addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。`);
         }
         addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${targetCard.name}`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅仪式翻转为增幅祭坛！目标：${targetCard.name}` });
@@ -1703,9 +1704,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
             const next = [...prev]; next[cellIdx] = altarBuilding; return next;
           }});
-          if (depsRef.current.amuletEffects.hasFlipGold) {
-            dispatch({ type: 'MODIFY_GOLD', delta: FLIP_GOLD_REWARD, source: 'flip-gold-amulet' });
-            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+          if (depsRef.current.amuletEffects.flipGoldCount > 0) {
+            const goldGain = FLIP_GOLD_REWARD * depsRef.current.amuletEffects.flipGoldCount;
+            dispatch({ type: 'MODIFY_GOLD', delta: goldGain, source: 'flip-gold-amulet' });
+            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。`);
           }
           addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${targetCard.name}`);
           dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅仪式翻转为增幅祭坛！目标：${targetCard.name}` });
@@ -1767,9 +1769,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
             const next = [...prev]; next[cellIdx] = altarBuilding; return next;
           }});
-          if (depsRef.current.amuletEffects.hasFlipGold) {
-            dispatch({ type: 'MODIFY_GOLD', delta: FLIP_GOLD_REWARD, source: 'flip-gold-amulet' });
-            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。`);
+          if (depsRef.current.amuletEffects.flipGoldCount > 0) {
+            const goldGain = FLIP_GOLD_REWARD * depsRef.current.amuletEffects.flipGoldCount;
+            dispatch({ type: 'MODIFY_GOLD', delta: goldGain, source: 'flip-gold-amulet' });
+            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。`);
           }
           addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${selected.name}（坟场召回至手牌）`);
           dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅仪式翻转为增幅祭坛！目标：${selected.name}` });

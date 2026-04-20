@@ -824,6 +824,19 @@ export interface ResolvePushToBackpackTopAction {
   selections: Array<{ source: 'hand' | 'amulet' | 'equipment'; id: string }>;
 }
 
+/**
+ * RESOLVE_HAND_DISCARD_SELECTION — 玩家手动选择 N 张手牌弃回的确认动作。
+ * 由 HandDiscardSelectionModal 在玩家点击「确认弃回」时派发。
+ *
+ * cardIds 长度必须严格等于 state.pendingHandDiscardSelection.count；不匹配视为
+ * 非法输入，reducer 会拒绝处理。reducer 会读取 pendingHandDiscardSelection.subEffect
+ * + context 来执行对应后续效果（弃到坟场/回收袋、抽牌、发现等）。
+ */
+export interface ResolveHandDiscardSelectionAction {
+  type: 'RESOLVE_HAND_DISCARD_SELECTION';
+  cardIds: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Event: resolve event interaction
 // ---------------------------------------------------------------------------
@@ -1835,6 +1848,7 @@ export type GameAction =
   | ResolveMagicMonsterSelectionAction
   | ResolveDungeonCardSelectionAction
   | ResolvePushToBackpackTopAction
+  | ResolveHandDiscardSelectionAction
   // Event: interaction
   | ResolveEventInteractionAction
   | ResolveEventGrantEquipFlipRepairAction

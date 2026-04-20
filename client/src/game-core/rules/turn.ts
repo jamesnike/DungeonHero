@@ -7,7 +7,7 @@
  * Delegates heavy computation to the existing pure functions in combat.ts.
  */
 
-import type { GameState } from '../types';
+import type { GameState, PendingMonsterEndDice } from '../types';
 import type { GameAction } from '../actions';
 import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch, noChange } from '../reducer';
@@ -27,7 +27,6 @@ import {
   BASE_BACKPACK_CAPACITY,
 } from '../constants';
 import { computeAmuletEffects } from '../equipment';
-import { computeAmuletAuraReversal } from '../helpers';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import type { RngState } from '../rng';
 import { nextInt } from '../rng';
@@ -252,26 +251,42 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
     sideEffects.push({ event: 'ui:banner', payload: { text: '怨灵诅咒！全体怪物激怒！' } });
   }
 
-  // Goblin "窃宝": for each successful 15% roll, pick one of the player's
-  // currently-equipped equipment / amulet uniformly at random, remove it
-  // (reversing amulet aura if applicable), and stack it under the goblin
-  // (so the existing stack-pop mechanism returns it as a dungeon card on
-  // the goblin's death).
-  if (result.goblinStealTargets.length > 0) {
-    let stealRng = patch.rng ?? result.rng;
+  // Build the goblin dice queue (贼窝疗养 + 窃宝). Each entry is a single D20
+  // roll with success threshold = `min(stackCount * 3, 20)` — the actual
+  // heal / steal application is deferred to RESOLVE_DICE so the player sees a
+  // dice modal for each goblin before the outcome lands.
+  const diceQueue: PendingMonsterEndDice[] = [];
+
+  for (const heal of result.goblinStackHealDice) {
+    diceQueue.push({
+      kind: 'goblin-heal',
+      goblinId: heal.goblinId,
+      goblinName: heal.goblinName,
+      colIndex: heal.colIndex,
+      stackCount: heal.stackCount,
+      predeterminedRoll: heal.predeterminedRoll,
+      threshold: heal.threshold,
+      success: heal.success,
+      currentLayer: heal.currentLayer,
+      maxLayers: heal.maxLayers,
+    });
+  }
+
+  // Pre-pick the would-be stolen item NOW (before the player sees the dice)
+  // so the displayed subtitle ("将偷走 …") matches what RESOLVE_DICE actually
+  // applies. We use a separate seeded-RNG cursor so successive goblins don't
+  // double-pick the same equipment / amulet within this single turn.
+  if (result.goblinStealDice.length > 0) {
+    let pickRng = patch.rng ?? result.rng;
     let curEquip1: EquipmentItem | null =
       (patch.equipmentSlot1 as EquipmentItem | null | undefined) ?? state.equipmentSlot1;
     let curEquip2: EquipmentItem | null =
       (patch.equipmentSlot2 as EquipmentItem | null | undefined) ?? state.equipmentSlot2;
     let curAmulets: AmuletItem[] =
       (patch.amuletSlots as AmuletItem[] | undefined) ?? state.amuletSlots;
-    let curStacks: Record<number, GameCardData[]> =
-      (patch.activeCardStacks as Record<number, GameCardData[]> | undefined) ?? state.activeCardStacks;
-    let tempAttack = patch.slotTempAttack ?? state.slotTempAttack ?? { equipmentSlot1: 0, equipmentSlot2: 0 };
-    let tempArmor = patch.slotTempArmor ?? state.slotTempArmor ?? { equipmentSlot1: 0, equipmentSlot2: 0 };
-    let mutated = false;
+    let pickRngAdvanced = false;
 
-    for (const steal of result.goblinStealTargets) {
+    for (const steal of result.goblinStealDice) {
       type Candidate =
         | { source: 'equip'; slotId: EquipmentSlotId; item: EquipmentItem }
         | { source: 'amulet'; item: AmuletItem };
@@ -281,61 +296,101 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
       for (const a of curAmulets) {
         if (a) candidates.push({ source: 'amulet', item: a });
       }
-      if (candidates.length === 0) break;
 
-      let pickIdx: number;
-      [pickIdx, stealRng] = nextInt(stealRng, 0, candidates.length - 1);
-      const pick = candidates[pickIdx];
+      let pickedSource: 'equip' | 'amulet' | null = null;
+      let pickedSlotId: EquipmentSlotId | null = null;
+      let pickedItem: GameCardData | null = null;
 
-      if (pick.source === 'equip') {
-        if (pick.slotId === 'equipmentSlot1') curEquip1 = null;
-        else curEquip2 = null;
-      } else {
-        const reversal = computeAmuletAuraReversal([pick.item]);
-        tempAttack = {
-          equipmentSlot1: (tempAttack.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
-          equipmentSlot2: (tempAttack.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
-        };
-        tempArmor = {
-          equipmentSlot1: (tempArmor.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
-          equipmentSlot2: (tempArmor.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
-        };
-        curAmulets = curAmulets.filter(a => a.id !== pick.item.id);
+      // Only advance the pick-RNG when there's actually something to pick.
+      // Otherwise we'd waste an RNG step on every empty-loadout turn and
+      // desynchronize replays vs. the previous behavior.
+      if (steal.success && candidates.length > 0) {
+        let pickIdx: number;
+        [pickIdx, pickRng] = nextInt(pickRng, 0, candidates.length - 1);
+        pickRngAdvanced = true;
+        const pick = candidates[pickIdx];
+        pickedSource = pick.source;
+        pickedItem = pick.item as GameCardData;
+        if (pick.source === 'equip') {
+          pickedSlotId = pick.slotId;
+          if (pick.slotId === 'equipmentSlot1') curEquip1 = null;
+          else curEquip2 = null;
+        } else {
+          curAmulets = curAmulets.filter(a => a.id !== pick.item.id);
+        }
       }
 
-      const stolenCard = pick.item as GameCardData;
-      const prevStack = curStacks[steal.colIndex] ?? [];
-      curStacks = { ...curStacks, [steal.colIndex]: [...prevStack, stolenCard] };
-      mutated = true;
-
-      const labelKind = pick.source === 'equip' ? '装备' : '护符';
-      sideEffects.push({
-        event: 'log:entry',
-        payload: { type: 'combat', message: `${steal.goblinName} 窃宝：偷走了${labelKind}「${stolenCard.name}」！` },
-      });
-      sideEffects.push({
-        event: 'ui:banner',
-        payload: { text: `${steal.goblinName} 窃宝！偷走了「${stolenCard.name}」！` },
-      });
-      sideEffects.push({
-        event: 'combat:goblinStealCard',
-        payload: { monsterId: steal.goblinId, monsterName: steal.goblinName, card: stolenCard },
+      diceQueue.push({
+        kind: 'goblin-steal',
+        goblinId: steal.goblinId,
+        goblinName: steal.goblinName,
+        colIndex: steal.colIndex,
+        stackCount: steal.stackCount,
+        predeterminedRoll: steal.predeterminedRoll,
+        threshold: steal.threshold,
+        success: steal.success,
+        pickedSource,
+        pickedSlotId,
+        pickedItem,
       });
     }
 
-    if (mutated) {
-      patch.equipmentSlot1 = curEquip1;
-      patch.equipmentSlot2 = curEquip2;
-      patch.amuletSlots = curAmulets;
-      patch.activeCardStacks = curStacks;
-      patch.slotTempAttack = tempAttack;
-      patch.slotTempArmor = tempArmor;
-      patch.rng = stealRng;
+    if (pickRngAdvanced) {
+      patch.rng = pickRng;
     }
   }
 
-  // Enqueue START_TURN after monster turn-end effects
-  return applyPatch(state, patch, sideEffects, [{ type: 'START_TURN' }]);
+  // No dice flows? Fall through to the normal START_TURN enqueue.
+  if (diceQueue.length === 0) {
+    return applyPatch(state, patch, sideEffects, [{ type: 'START_TURN' }]);
+  }
+
+  // Stash the queue and emit the first dice event. The pipeline parks at
+  // `awaitingDice` until `RESOLVE_DICE` fires (in `economy.ts`), which pops
+  // the front entry, applies its effect, then either emits the next dice
+  // event or finally enqueues `START_TURN` once the queue is drained.
+  patch.pendingMonsterEndDiceQueue = diceQueue;
+  patch.phase = 'awaitingDice';
+  emitGoblinDiceCheck(diceQueue[0], sideEffects);
+  return applyPatch(state, patch, sideEffects);
+}
+
+/**
+ * Push the right `combat:goblin*Check` side effect for the given pending dice
+ * flow. Used to trigger the initial dice modal at end of monster turn.
+ * (`economy.ts` has its own local copy for chaining subsequent dice in the
+ * queue — kept duplicated to avoid circular imports between rule modules.)
+ */
+function emitGoblinDiceCheck(
+  flow: PendingMonsterEndDice,
+  sideEffects: SideEffect[],
+): void {
+  if (flow.kind === 'goblin-steal') {
+    sideEffects.push({
+      event: 'combat:goblinStealCheck',
+      payload: {
+        monsterId: flow.goblinId,
+        monsterName: flow.goblinName,
+        stackCount: flow.stackCount,
+        threshold: flow.threshold,
+        predeterminedRoll: flow.predeterminedRoll,
+        stolenItemName: flow.pickedItem?.name ?? null,
+      },
+    });
+  } else {
+    sideEffects.push({
+      event: 'combat:goblinHealCheck',
+      payload: {
+        monsterId: flow.goblinId,
+        monsterName: flow.goblinName,
+        stackCount: flow.stackCount,
+        threshold: flow.threshold,
+        predeterminedRoll: flow.predeterminedRoll,
+        currentLayer: flow.currentLayer,
+        maxLayers: flow.maxLayers,
+      },
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -378,31 +433,33 @@ function reduceStartTurn(
   if (!action.suppressAmuletReapply && !state.amuletAuraAppliedThisWave) {
     const ae = computeAmuletEffects(state.amuletSlots as import('@/components/GameCard').GameCardData[]);
     let auraApplied = false;
-    if (ae.hasStrength) {
+    if (ae.strengthCount > 0) {
+      const n = ae.strengthCount;
       const tempAttack = { ...(state.slotTempAttack ?? {}) };
-      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + 4;
-      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) + 4;
+      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + 4 * n;
+      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) + 4 * n;
       patch.slotTempAttack = tempAttack;
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'amulet', message: '力量护符：所有装备栏临时攻击 +4！' },
+        payload: { type: 'amulet', message: `力量护符：所有装备栏临时攻击 +${4 * n}！` },
       });
       auraApplied = true;
     }
-    if (ae.hasBalance) {
+    if (ae.balanceCount > 0) {
+      const n = ae.balanceCount;
       const tempAttack = patch.slotTempAttack
         ? { ...patch.slotTempAttack }
         : { ...(state.slotTempAttack ?? {}) };
       const tempArmor = { ...(state.slotTempArmor ?? {}) };
-      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS;
-      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY;
-      tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY;
-      tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS;
+      tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + BALANCE_ATTACK_BONUS * n;
+      tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) - BALANCE_ATTACK_PENALTY * n;
+      tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) - BALANCE_SHIELD_PENALTY * n;
+      tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS * n;
       patch.slotTempAttack = tempAttack;
       patch.slotTempArmor = tempArmor;
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'amulet', message: '均衡护符：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1' },
+        payload: { type: 'amulet', message: `均衡护符：左栏临时攻击+${BALANCE_ATTACK_BONUS * n}护甲-${BALANCE_SHIELD_PENALTY * n}，右栏临时护甲+${BALANCE_SHIELD_BONUS * n}攻击-${BALANCE_ATTACK_PENALTY * n}` },
       });
       auraApplied = true;
     }

@@ -695,7 +695,7 @@ export default function CardDetailsModal({
                     <Heart className="w-4 h-4 shrink-0 text-emerald-500" />
                     <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">贼窝疗养</span>
                   </div>
-                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">怪物回合结束时，自身下方每有1张牌，15%概率恢复1血层。</p>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">怪物回合结束时掷一次骰子，自身下方每有1张牌成功率 +15%（最高100%），成功则恢复 1 血层。</p>
                 </div>
               </div>
             )}
@@ -708,7 +708,7 @@ export default function CardDetailsModal({
                     <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
                     <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">窃宝</span>
                   </div>
-                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">怪物回合结束时，自身下方每有1张牌，15%概率偷走玩家装备栏里的装备或护符栏里的护符，堆叠在自身下方。</p>
+                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">怪物回合结束时掷一次骰子，自身下方每有1张牌成功率 +25%（最高100%），成功则偷走玩家 1 件装备或护符并堆叠在自身下方。</p>
                 </div>
               </div>
             )}
@@ -1002,8 +1002,18 @@ export default function CardDetailsModal({
                 }
               }
 
-              if (card.onDestroyEffect === 'slot-temp-buff-3-3') {
-                effects.push({ title: '遗言', desc: '装备毁坏时，该装备栏 +3 临时攻击 +3 临时护甲。', color: 'amber' });
+              {
+                const stacks = (card.lastWordsSlotTempBuff ?? 0)
+                  + (card.onDestroyEffect === 'slot-temp-buff-3-3' ? 1 : 0);
+                if (stacks > 0) {
+                  const amt = 3 * stacks;
+                  const stackText = stacks > 1 ? `（遗赠淬炼药 ×${stacks} 层）` : '';
+                  effects.push({
+                    title: stacks > 1 ? `遗言 ×${stacks}` : '遗言',
+                    desc: `装备毁坏时，该装备栏 +${amt} 临时攻击 +${amt} 临时护甲。${stackText}`,
+                    color: 'amber',
+                  });
+                }
               }
 
               if (effects.length === 0) return null;
@@ -1184,19 +1194,28 @@ export default function CardDetailsModal({
             )}
 
             {/* Equipment Last Words from potion (weapon/shield) */}
-            {(card.type === 'weapon' || card.type === 'shield') && card.onDestroyEffect === 'slot-temp-buff-3-3' && (
-              <div className="p-3 rounded-md border bg-amber-500/15 border-amber-500/30">
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <Skull className="w-4 h-4 shrink-0 text-amber-500" />
-                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
-                      遗言
-                    </span>
+            {(card.type === 'weapon' || card.type === 'shield') && (() => {
+              const stacks = (card.lastWordsSlotTempBuff ?? 0)
+                + (card.onDestroyEffect === 'slot-temp-buff-3-3' ? 1 : 0);
+              if (stacks <= 0) return null;
+              const amt = 3 * stacks;
+              return (
+                <div className="p-3 rounded-md border bg-amber-500/15 border-amber-500/30">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <Skull className="w-4 h-4 shrink-0 text-amber-500" />
+                      <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                        {stacks > 1 ? `遗言 ×${stacks}` : '遗言'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
+                      装备毁坏时，该装备栏 +{amt} 临时攻击 +{amt} 临时护甲。
+                      {stacks > 1 ? `（遗赠淬炼药 ×${stacks} 层）` : ''}
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">装备毁坏时，该装备栏 +3 临时攻击 +3 临时护甲。</p>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Equipment Last Words: stunCap+N (e.g. 雷震守护盾) */}
             {(card.type === 'weapon' || card.type === 'shield') && card.onDestroyEffect?.startsWith('stunCap+') && (() => {

@@ -30,14 +30,14 @@ import {
   getEffectiveHandLimit,
 } from '../cards';
 import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
-import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, computeAmuletAuraReversal, isRecyclableFromHand, getCardPlayCategory, logHeroMagic, applyAmplifyToCard } from '../helpers';
+import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecyclableFromHand, getCardPlayCategory, logHeroMagic, applyAmplifyToCard } from '../helpers';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
-import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects } from './magic-effects';
+import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection } from './magic-effects';
 import { resolveAllPotionEffects, resolvePendingPotion } from './potion-effects';
 import { executeCardEffects, executeMagicCardEffects, executeOnEquip, executeOnEnterHand } from '../card-schema';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
@@ -67,6 +67,8 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
       return reduceResolvePotion(state, action);
     case 'RESOLVE_MAGIC':
       return reduceResolveMagic(state, action);
+    case 'RESOLVE_HAND_DISCARD_SELECTION':
+      return resolveHandDiscardSelection(state, action);
     case 'FINALIZE_CARD_PLAY':
       return reduceFinalizeCardPlay(state, action);
     case 'FINALIZE_MAGIC_CARD':
@@ -330,12 +332,13 @@ function reducePlayCard(
     // 咒纹刻印：每使用 8 张 magic 牌（仅 type === 'magic'，不计 hero-magic / curse），
     // 发现一张专属牌。计数与触发都在此完成；UI 由 combat:classMagicDiscoverTriggered 监听。
     if (card.type === 'magic') {
-      const magicDiscoverAmulet = (state.amuletSlots as GameCardData[]).find(
+      // Each equipped 咒纹刻印 ticks the streak independently (N → +N per cast).
+      const magicDiscoverCount = (state.amuletSlots as GameCardData[]).filter(
         s => s?.amuletEffect === 'magic-class-discover',
-      );
-      if (magicDiscoverAmulet) {
+      ).length;
+      if (magicDiscoverCount > 0) {
         const threshold = 8;
-        const nextStreak = (state.classMagicDiscoverStreak ?? 0) + 1;
+        const nextStreak = (state.classMagicDiscoverStreak ?? 0) + magicDiscoverCount;
         if (nextStreak >= threshold) {
           patch.classMagicDiscoverStreak = 0;
           sideEffects.push({ event: 'combat:classMagicDiscoverTriggered', payload: { threshold } });
@@ -517,12 +520,14 @@ function reduceAddToRecycleBag(
   sideEffects.push({ event: 'log:entry', payload: { type: 'deck', message: `「${action.card.name}」→ 回收袋` } });
 
   // 积蓄之符 amulet: recycle-backpack-expand progress
-  const recycleAmulet = (state.amuletSlots as GameCardData[]).find(
+  // Each equipped amulet ticks the counter independently (N → +N per recycle).
+  const recycleAmulets = (state.amuletSlots as GameCardData[]).filter(
     s => s?.amuletEffect === 'recycle-backpack-expand',
   );
-  if (recycleAmulet) {
-    const recycleThreshold = (recycleAmulet.upgradeLevel ?? 0) >= 1 ? 6 : 8;
-    const progress = (state.recycleBackpackProgress ?? 0) + 1;
+  if (recycleAmulets.length > 0) {
+    const anyUpgraded = recycleAmulets.some(a => (a.upgradeLevel ?? 0) >= 1);
+    const recycleThreshold = anyUpgraded ? 6 : 8;
+    const progress = (state.recycleBackpackProgress ?? 0) + recycleAmulets.length;
     if (progress >= recycleThreshold) {
       patch.recycleBackpackProgress = 0;
       patch.backpackCapacityModifier = (state.backpackCapacityModifier ?? 0) + 3;
@@ -608,19 +613,21 @@ function applyEquipAmuletCapProgress(
   patch: Partial<GameState>,
   sideEffects: SideEffect[],
 ): void {
-  const equipCapAmulet = (state.amuletSlots as GameCardData[]).find(
+  // Each equipped 集甲之符 ticks the equip counter independently
+  // (N → +N progress per equip event).
+  const equipCapAmulets = (state.amuletSlots as GameCardData[]).filter(
     s => s?.amuletEffect === 'equip-amulet-cap',
   );
-  if (!equipCapAmulet) return;
+  if (equipCapAmulets.length === 0) return;
   const equipThreshold = 6;
   const baseProgress = patch.equipAmuletCapProgress ?? state.equipAmuletCapProgress ?? 0;
-  const next = baseProgress + 1;
+  const next = baseProgress + equipCapAmulets.length;
   if (next >= equipThreshold) {
     patch.equipAmuletCapProgress = 0;
     patch.maxAmuletSlots = (patch.maxAmuletSlots ?? state.maxAmuletSlots ?? 0) + 1;
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'amulet', message: `${equipCapAmulet.name}：累计装备 ${equipThreshold} 个装备，护符栏上限 +1！` },
+      payload: { type: 'amulet', message: `${equipCapAmulets[0].name}：累计装备 ${equipThreshold} 个装备，护符栏上限 +1！` },
     });
   } else {
     patch.equipAmuletCapProgress = next;
@@ -1054,19 +1061,8 @@ function reduceDeleteCard(
   } else if (source === 'amulet') {
     cardToDelete = (state.amuletSlots as GameCardData[]).find(c => c.id === cardId) ?? null;
     if (cardToDelete) {
-      const reversal = computeAmuletAuraReversal([cardToDelete as any]);
-      if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
-        patch.slotTempAttack = {
-          equipmentSlot1: (state.slotTempAttack?.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
-          equipmentSlot2: (state.slotTempAttack?.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
-        };
-      }
-      if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
-        patch.slotTempArmor = {
-          equipmentSlot1: (state.slotTempArmor?.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
-          equipmentSlot2: (state.slotTempArmor?.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
-        };
-      }
+      // Aura reversal is handled centrally by `postProcessAmuletAura` in
+      // reducer.ts — no manual slotTempAttack/Armor diff needed here.
       patch.amuletSlots = (state.amuletSlots as GameCardData[]).filter(c => c.id !== cardId) as AmuletItem[];
     }
   }
@@ -1109,20 +1105,8 @@ function reduceConvertAmuletsToGold(
 
   if (!state.amuletSlots.length) return noChange(state);
 
-  const reversal = computeAmuletAuraReversal(state.amuletSlots);
-  if (reversal.tempAttackDelta.equipmentSlot1 !== 0 || reversal.tempAttackDelta.equipmentSlot2 !== 0) {
-    patch.slotTempAttack = {
-      equipmentSlot1: (state.slotTempAttack?.equipmentSlot1 ?? 0) + reversal.tempAttackDelta.equipmentSlot1,
-      equipmentSlot2: (state.slotTempAttack?.equipmentSlot2 ?? 0) + reversal.tempAttackDelta.equipmentSlot2,
-    };
-  }
-  if (reversal.tempArmorDelta.equipmentSlot1 !== 0 || reversal.tempArmorDelta.equipmentSlot2 !== 0) {
-    patch.slotTempArmor = {
-      equipmentSlot1: (state.slotTempArmor?.equipmentSlot1 ?? 0) + reversal.tempArmorDelta.equipmentSlot1,
-      equipmentSlot2: (state.slotTempArmor?.equipmentSlot2 ?? 0) + reversal.tempArmorDelta.equipmentSlot2,
-    };
-  }
-
+  // Aura reversal is handled centrally by `postProcessAmuletAura` in
+  // reducer.ts — clearing amuletSlots is enough.
   const payout = action.amountPer * state.amuletSlots.length;
   patch.discardedCards = [...state.discardedCards, ...state.amuletSlots];
   patch.amuletSlots = [];
@@ -1259,13 +1243,16 @@ function reduceApplyDiscardEffects(
   }
 
   const amuletFx = computeAmuletEffects(state.amuletSlots);
-  if (amuletFx.hasCatapult && owner === 'player' && !opts?.toRecycleBag && !opts?.isEquipmentDisplace) {
-    enqueuedActions.push({ type: 'DRAW_CARDS', count: 2, source: 'backpack' });
-    sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `弹射护符：弃置「${card.name}」后从背包抽牌` } });
+  if (amuletFx.catapultCount > 0 && owner === 'player' && !opts?.toRecycleBag && !opts?.isEquipmentDisplace) {
+    const drawCount = 2 * amuletFx.catapultCount;
+    enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `弹射护符：弃置「${card.name}」后从背包抽 ${drawCount} 张牌` } });
   }
 
-  if (card.amuletEffect !== 'discard-zap' && !opts?.toRecycleBag) {
-    sideEffects.push({ event: 'card:discardShock', payload: {} });
+  // 弃能之符 (discard-zap): one independent random-monster zap per equipped amulet on every discard.
+  // (Unless the card being discarded is itself a discard-zap amulet — to avoid infinite loop.)
+  if (card.amuletEffect !== 'discard-zap' && !opts?.toRecycleBag && amuletFx.discardShockCount > 0) {
+    sideEffects.push({ event: 'card:discardShock', payload: { count: amuletFx.discardShockCount } });
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1323,9 +1310,10 @@ function reduceApplyCardFlip(
   }
 
   const amuletFx = computeAmuletEffects(state.amuletSlots);
-  if (amuletFx.hasFlipGold) {
-    patch.gold = (state.gold ?? 0) + FLIP_GOLD_REWARD;
-    sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `熔炉之心：卡牌翻转，获得 ${FLIP_GOLD_REWARD} 金币。` } });
+  if (amuletFx.flipGoldCount > 0) {
+    const goldGain = FLIP_GOLD_REWARD * amuletFx.flipGoldCount;
+    patch.gold = (state.gold ?? 0) + goldGain;
+    sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。` } });
   }
 
   // 翻印之符 (persuade-on-flip): 每翻转一张牌 → 下次劝降成功率 +10%
@@ -1414,18 +1402,19 @@ function reduceApplyCardFlip(
   }
 
   // 翻血之符 (flip-overkill-lifesteal): every 5 flips → permanentSpellLifesteal +1
-  const flipLifestealAmulet = (state.amuletSlots as GameCardData[]).find(
+  // Each equipped amulet ticks the counter independently (N → +N per flip).
+  const flipLifestealAmulets = (state.amuletSlots as GameCardData[]).filter(
     s => s?.amuletEffect === 'flip-overkill-lifesteal',
   );
-  if (flipLifestealAmulet) {
+  if (flipLifestealAmulets.length > 0) {
     const flipThreshold = 5;
-    const flipProgress = (state.flipOverkillLifestealProgress ?? 0) + 1;
+    const flipProgress = (state.flipOverkillLifestealProgress ?? 0) + flipLifestealAmulets.length;
     if (flipProgress >= flipThreshold) {
       patch.flipOverkillLifestealProgress = 0;
       patch.permanentSpellLifesteal = (state.permanentSpellLifesteal ?? 0) + 1;
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'amulet', message: `${flipLifestealAmulet.name}：累计翻转 ${flipThreshold} 张牌，超杀吸血永久 +1！` },
+        payload: { type: 'amulet', message: `${flipLifestealAmulets[0].name}：累计翻转 ${flipThreshold} 张牌，超杀吸血永久 +1！` },
       });
     } else {
       patch.flipOverkillLifestealProgress = flipProgress;
@@ -1469,7 +1458,7 @@ function reduceApplyCardFlip(
   } else {
     sideEffects.push({
       event: 'event:cardTransformed',
-      payload: { fromCard: card, toCard: flip.toCard, message: flip.message ?? '', hasFlipGold: amuletFx.hasFlipGold },
+      payload: { fromCard: card, toCard: flip.toCard, message: flip.message ?? '', hasFlipGold: amuletFx.flipGoldCount > 0 },
     });
   }
 
@@ -1510,8 +1499,8 @@ function reduceDisposeEquipmentCard(
     }
   }
 
-  if (isDestruction && amuletFx.hasEquipmentSalvage && (card.type === 'weapon' || card.type === 'shield')) {
-    const newMaxDur = (card.maxDurability ?? 1) - 1;
+  if (isDestruction && amuletFx.equipmentSalvageCount > 0 && (card.type === 'weapon' || card.type === 'shield')) {
+    const newMaxDur = (card.maxDurability ?? 1) - amuletFx.equipmentSalvageCount;
     if (newMaxDur <= 0) {
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `残骸回收符：${card.name} 耐久上限归零，从游戏中移除！` } });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 耐久上限归零，移除！` } });
@@ -1581,7 +1570,10 @@ function reduceDiscardOwnedCard(
 // ---------------------------------------------------------------------------
 
 function reduceTickRecycleForge(state: GameState): ReduceResult {
-  if (!state.amuletSlots.some((s: GameCardData) => s?.amuletEffect === 'recycle-forge')) {
+  // Count amulets — each one ticks independently (N per play).
+  const recycleCount = (state.amuletSlots as GameCardData[])
+    .filter(s => s?.amuletEffect === 'recycle-forge').length;
+  if (recycleCount === 0) {
     return noChange(state);
   }
 
@@ -1589,7 +1581,7 @@ function reduceTickRecycleForge(state: GameState): ReduceResult {
   const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
 
-  const next = (state.recycleForgePlayCount ?? 0) + 1;
+  const next = (state.recycleForgePlayCount ?? 0) + recycleCount;
   patch.recycleForgePlayCount = next;
 
   if (next % 5 === 0) {

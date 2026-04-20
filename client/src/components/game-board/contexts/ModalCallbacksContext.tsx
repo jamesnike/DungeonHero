@@ -58,6 +58,7 @@ export interface ModalCallbacks {
   onPermGrantConfirm: (cardId: string) => void;
   onPermGrantCancel: () => void;
   onBackpackReorganizeConfirm: (selections: BackpackReorganizeSelection[]) => void;
+  onHandDiscardSelectionConfirm: (cardIds: string[]) => void;
 
   onCancelHeroMagicAction: () => void;
   onHeroMagicChoice: (choice: 'heal' | 'purge') => void;

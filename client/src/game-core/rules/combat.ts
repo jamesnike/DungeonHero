@@ -503,16 +503,16 @@ function reduceDealDamageToMonster(
   }
 
   // --- Class damage discover streak ---
+  // 学打之符 (damage-class-discover): N amulets each tick the streak independently.
+  // Threshold uses the highest upgradeLevel among equipped amulets.
   sideEffects.push({ event: 'combat:classDamageHit', payload: {} });
-  const streak = (state.classDamageDiscoverStreak ?? 0) + 1;
-  const hasDiscoverAmulet = (state.amuletSlots as GameCardData[]).some(
+  const discoverAmulets = (state.amuletSlots as GameCardData[]).filter(
     s => s?.amuletEffect === 'damage-class-discover',
   );
-  if (hasDiscoverAmulet) {
-    const upgradeLevel = (state.amuletSlots as GameCardData[]).find(
-      s => s?.amuletEffect === 'damage-class-discover',
-    )?.upgradeLevel ?? 0;
-    const threshold = upgradeLevel >= 1 ? 3 : 8;
+  if (discoverAmulets.length > 0) {
+    const streak = (state.classDamageDiscoverStreak ?? 0) + discoverAmulets.length;
+    const maxUpgradeLevel = Math.max(...discoverAmulets.map(a => a.upgradeLevel ?? 0));
+    const threshold = maxUpgradeLevel >= 1 ? 3 : 8;
     if (streak >= threshold) {
       patch.classDamageDiscoverStreak = 0;
       sideEffects.push({ event: 'combat:classDamageDiscoverTriggered', payload: { threshold } });
@@ -1028,10 +1028,11 @@ function reduceMonsterDefeated(
     patch.heroSkillBanner = `${monster.name} 留下了「虫蜕之冠」！`;
   }
 
-  // Monster-kill-upgrade counter
+  // Monster-kill-upgrade counter — each amulet ticks the kill counter
+  // independently (N amulets = +N progress per kill).
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-  if (ae.hasMonsterKillUpgrade) {
-    const killProgress = (state.monsterKillUpgradeProgress ?? 0) + 1;
+  if (ae.monsterKillUpgradeCount > 0) {
+    const killProgress = (state.monsterKillUpgradeProgress ?? 0) + ae.monsterKillUpgradeCount;
     if (killProgress >= 5) {
       patch.monsterKillUpgradeProgress = 0;
       patch.upgradeModalOpen = true;
@@ -1255,6 +1256,27 @@ function reduceDecrementFury(
         predeterminedRoll: rebirthRoll,
       },
     });
+  }
+
+  // Golem layer-loss reflect — also fires when the monster spends a layer to
+  // attack (DECREMENT_FURY), mirroring the DEAL_DAMAGE_TO_MONSTER branch.
+  if (monster.golemLayerLossReflect && monster.golemLayerLossReflect > 0
+    && nextLayer < currentLayer && !monster.isStunned) {
+    const totalLostLayers = (monster.fury ?? monster.hpLayers ?? 1) - nextLayer;
+    const reflectDmg = monster.golemLayerLossReflect * totalLostLayers;
+    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: reflectDmg, source: 'combat' });
+    sideEffects.push({
+      event: 'combat:golemReflect',
+      payload: { monsterId: action.monsterId, monsterName: monster.name, damage: reflectDmg },
+    });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: {
+        type: 'combat',
+        message: `${monster.name} 岩层反震：${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层，对英雄造成 ${reflectDmg} 点伤害！`,
+      },
+    });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 岩层反震！受到 ${reflectDmg} 点伤害！` } });
   }
 
   return applyPatch(state, { activeCards: activeCards as GameState['activeCards'], rng }, sideEffects, enqueuedActions);
@@ -1686,13 +1708,14 @@ function reducePerformShieldBash(
         },
       });
 
-      // 眩学之符 (stun-attempt-discover): increment per stun-attempt dice roll
-      const stunAttemptAmuletBash = (state.amuletSlots as GameCardData[]).find(
+      // 眩学之符 (stun-attempt-discover): N amulets each tick the counter
+      // independently per stun-attempt dice roll.
+      const stunAttemptAmuletCount = (state.amuletSlots as GameCardData[]).filter(
         s => s?.amuletEffect === 'stun-attempt-discover',
-      );
-      if (stunAttemptAmuletBash) {
+      ).length;
+      if (stunAttemptAmuletCount > 0) {
         const stunAttemptThreshold = 6;
-        const stunAttemptProgress = (state.stunAttemptDiscoverProgress ?? 0) + 1;
+        const stunAttemptProgress = (state.stunAttemptDiscoverProgress ?? 0) + stunAttemptAmuletCount;
         if (stunAttemptProgress >= stunAttemptThreshold) {
           patch.stunAttemptDiscoverProgress = 0;
           sideEffects.push({ event: 'combat:stunAttemptDiscoverTriggered', payload: { threshold: stunAttemptThreshold } });
@@ -1716,10 +1739,10 @@ function reducePerformShieldBash(
         });
         sideEffects.push({ event: 'ui:banner', payload: { text: `${targetMonster.name} 被盾击晕！` } });
 
-        // Stun recycle to hand
-        if (ae.hasStunRecycleToHand && state.permanentMagicRecycleBag.length > 0) {
+        // Stun recycle to hand — N amulets each pull 2 cards from the bag.
+        if (ae.stunRecycleToHandCount > 0 && state.permanentMagicRecycleBag.length > 0) {
           const bag = [...state.permanentMagicRecycleBag];
-          const count = Math.min(2, bag.length);
+          const count = Math.min(2 * ae.stunRecycleToHandCount, bag.length);
           const pickedCards: GameCardData[] = [];
           for (let i = 0; i < count; i++) {
             let idx: number;
@@ -1735,22 +1758,24 @@ function reducePerformShieldBash(
           });
         }
 
-        // Stun upgrade cap
-        if (ae.hasStunUpgradeCap) {
-          const nextCap = Math.min(100, state.stunCap + 5);
+        // Stun upgrade cap — each amulet bumps cap by 5.
+        if (ae.stunUpgradeCapCount > 0) {
+          const bump = 5 * ae.stunUpgradeCapCount;
+          const nextCap = Math.min(100, state.stunCap + bump);
           patch.stunCap = nextCap;
           sideEffects.push({
             event: 'log:entry',
-            payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +5%（当前 ${nextCap}%）` },
+            payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${nextCap}%）` },
           });
         }
 
-        // Stun gold
-        if (ae.hasStunGold) {
-          enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10, source: 'amulet-stun-gold' });
+        // Stun gold — each amulet grants +10 gold per stun.
+        if (ae.stunGoldCount > 0) {
+          const goldGain = 10 * ae.stunGoldCount;
+          enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
           sideEffects.push({
             event: 'log:entry',
-            payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +10` },
+            payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}` },
           });
         }
       }
@@ -1806,7 +1831,8 @@ function reducePerformHeroAttack(
   const slotAlreadyAttacked = combatState.heroAttacksThisTurn[slotId];
   const hasBaseAttack = combatState.heroAttacksRemaining > 0;
   const canUseBerserkerExtra = state.berserkerRageActive && slotAlreadyAttacked && !state.berserkerSlotUsed[slotId];
-  const canUseFlashExtra = ae.hasFlash && slotAlreadyAttacked && !state.flashSlotUsed[slotId];
+  const canUseFlashExtra = ae.flashCount > 0 && slotAlreadyAttacked
+    && (state.flashSlotUsed[slotId] ?? 0) < ae.flashCount;
   const canUseGambitExtra = state.gambitExtraActive && slotAlreadyAttacked
     && (state.gambitSlotUsed[slotId] ?? 0) < state.gambitExtraPerSlot;
   const canUseWeaponExtra = !!(slotItem as GameCardData).weaponExtraAttack && slotAlreadyAttacked
@@ -1905,7 +1931,9 @@ function reducePerformHeroAttack(
   const stunnedDoubleMultiplier = (slotItem as GameCardData).doubleDamageOnStunned
     && (targetMonster.isStunned || preRolledStunSuccess) ? 2 : 1;
   const preFinalDamage = (isCrit ? baseDamage * 2 : baseDamage) * stunnedDoubleMultiplier;
-  const finalDamage = ae.hasFlash ? Math.max(0, Math.floor(preFinalDamage / 2)) : preFinalDamage;
+  const finalDamage = ae.flashCount > 0
+    ? Math.max(0, Math.floor(preFinalDamage / Math.pow(2, ae.flashCount)))
+    : preFinalDamage;
 
   // --- Clear consumed bonuses ---
   if (appliedNextBonus > 0) patch.nextWeaponBonus = 0;
@@ -1929,7 +1957,7 @@ function reducePerformHeroAttack(
     event: 'log:entry',
     payload: {
       type: 'combat',
-      message: `使用 ${slotItem.name}(${slotItem.value}攻) 攻击 ${targetMonster.name}，伤害 ${finalDamage}${ae.hasFlash ? '（闪光减半）' : ''}`,
+      message: `使用 ${slotItem.name}(${slotItem.value}攻) 攻击 ${targetMonster.name}，伤害 ${finalDamage}${ae.flashCount > 0 ? `（闪光减伤 ÷${Math.pow(2, ae.flashCount)}）` : ''}`,
     },
   });
   sideEffects.push({ event: 'combat:weaponSwing', payload: { slotId, delay: 0, echoes: 2 } });
@@ -2224,15 +2252,16 @@ function reducePerformHeroAttack(
     patch.nextAttackLifestealSlot = null as unknown as typeof state.nextAttackLifestealSlot;
   }
 
-  // --- Strength self-damage ---
-  if (ae.hasStrength) {
-    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: STRENGTH_SELF_DAMAGE, source: 'general', selfInflicted: true });
+  // --- Strength self-damage --- each amulet hits independently for self-damage.
+  if (ae.strengthCount > 0) {
+    const totalSelf = STRENGTH_SELF_DAMAGE * ae.strengthCount;
+    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalSelf, source: 'general', selfInflicted: true });
   }
 
-  // --- Attack persuade discount ---
-  if (ae.hasAttackPersuadeDiscount) {
+  // --- Attack persuade discount --- each amulet stacks its own discount step.
+  if (ae.attackPersuadeDiscountCount > 0) {
     const existing = state.persuadeDiscount;
-    const discountStep = 3;
+    const discountStep = 3 * ae.attackPersuadeDiscountCount;
     const newReduction = (existing?.costReduction ?? 0) + discountStep;
     patch.persuadeDiscount = {
       costReduction: newReduction,
@@ -2290,7 +2319,10 @@ function reducePerformHeroAttack(
     patch.berserkerSlotUsed = { ...state.berserkerSlotUsed, [slotId]: true };
   }
   if (usingFlashExtra) {
-    patch.flashSlotUsed = { ...state.flashSlotUsed, [slotId]: true };
+    patch.flashSlotUsed = {
+      ...state.flashSlotUsed,
+      [slotId]: (state.flashSlotUsed[slotId] ?? 0) + 1,
+    };
   }
   if (usingGambitExtra) {
     patch.gambitSlotUsed = { ...state.gambitSlotUsed, [slotId]: (state.gambitSlotUsed[slotId] ?? 0) + 1 };
@@ -2578,13 +2610,14 @@ function reducePerformHeroAttack(
             });
           }
 
-          // 眩学之符 (stun-attempt-discover): increment per stun-attempt dice roll
-          const stunAttemptAmuletWeapon = (state.amuletSlots as GameCardData[]).find(
+          // 眩学之符 (stun-attempt-discover): N amulets each tick the counter
+          // independently per stun-attempt dice roll.
+          const stunAttemptAmuletWeaponCount = (state.amuletSlots as GameCardData[]).filter(
             s => s?.amuletEffect === 'stun-attempt-discover',
-          );
-          if (stunAttemptAmuletWeapon) {
+          ).length;
+          if (stunAttemptAmuletWeaponCount > 0) {
             const stunAttemptThresholdW = 6;
-            const stunAttemptProgressW = (patch.stunAttemptDiscoverProgress ?? state.stunAttemptDiscoverProgress ?? 0) + 1;
+            const stunAttemptProgressW = (patch.stunAttemptDiscoverProgress ?? state.stunAttemptDiscoverProgress ?? 0) + stunAttemptAmuletWeaponCount;
             if (stunAttemptProgressW >= stunAttemptThresholdW) {
               patch.stunAttemptDiscoverProgress = 0;
               sideEffects.push({ event: 'combat:stunAttemptDiscoverTriggered', payload: { threshold: stunAttemptThresholdW } });
@@ -2606,10 +2639,10 @@ function reducePerformHeroAttack(
             });
             sideEffects.push({ event: 'ui:banner', payload: { text: `${targetMonster.name} 被击晕！` } });
 
-            // Stun recycle to hand
-            if (ae.hasStunRecycleToHand && state.permanentMagicRecycleBag.length > 0) {
+            // Stun recycle to hand — N amulets each pull 2 cards from the bag.
+            if (ae.stunRecycleToHandCount > 0 && state.permanentMagicRecycleBag.length > 0) {
               const bag = [...state.permanentMagicRecycleBag];
-              const count = Math.min(2, bag.length);
+              const count = Math.min(2 * ae.stunRecycleToHandCount, bag.length);
               const pickedCards: GameCardData[] = [];
               for (let i = 0; i < count; i++) {
                 let idx: number;
@@ -2625,22 +2658,24 @@ function reducePerformHeroAttack(
               });
             }
 
-            // Stun upgrade cap
-            if (ae.hasStunUpgradeCap) {
-              const nextCap = Math.min(100, (patch.stunCap ?? state.stunCap) + 5);
+            // Stun upgrade cap — each amulet bumps cap by 5.
+            if (ae.stunUpgradeCapCount > 0) {
+              const bump = 5 * ae.stunUpgradeCapCount;
+              const nextCap = Math.min(100, (patch.stunCap ?? state.stunCap) + bump);
               patch.stunCap = nextCap;
               sideEffects.push({
                 event: 'log:entry',
-                payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +5%（当前 ${nextCap}%）` },
+                payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${nextCap}%）` },
               });
             }
 
-            // Stun gold
-            if (ae.hasStunGold) {
-              enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10, source: 'amulet-stun-gold' });
+            // Stun gold — each amulet grants +10 gold per stun.
+            if (ae.stunGoldCount > 0) {
+              const goldGain = 10 * ae.stunGoldCount;
+              enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
               sideEffects.push({
                 event: 'log:entry',
-                payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +10` },
+                payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}` },
               });
             }
           }
@@ -2779,7 +2814,7 @@ function reduceResolveBlock(
     const blockSlotId = action.slotId;
     const slotItem = getSlotItem(state, blockSlotId);
     const equipBlockBonus = (slotItem as GameCardData)?.equipBlockDurabilityBonus ?? 0;
-    const amuletBlockBonus = ae.hasArmorHalveEndure ? 1 : 0;
+    const amuletBlockBonus = ae.armorHalveEndureCount;
     const battleSpiritBlockBonus = (state.slotBattleSpiritBonus ?? {})[blockSlotId] ?? 0;
     const blockDurPerSlot = state.blockDurabilityPerSlot ?? 1;
     const durabilityLimitReached = (state.combatState.slotDurabilityUsedThisTurn[blockSlotId] ?? 0) >= (blockDurPerSlot + equipBlockBonus + amuletBlockBonus + battleSpiritBlockBonus);
@@ -2886,16 +2921,17 @@ function reduceResolveBlock(
 
       const isPerfectBlock = isFullBlockShield || remainingDamage === 0;
 
-      // Dual guard: perfect block bonus
-      if (isPerfectBlock && ae.hasDualGuard) {
+      // Dual guard: perfect block bonus — N amulets each grant +1 permanent armor.
+      if (isPerfectBlock && ae.dualGuardCount > 0) {
+        const armorGain = ae.dualGuardCount;
         const bonuses = { ...state.equipmentSlotBonuses };
-        bonuses[blockSlotId] = { ...bonuses[blockSlotId], shield: bonuses[blockSlotId].shield + 1 };
+        bonuses[blockSlotId] = { ...bonuses[blockSlotId], shield: bonuses[blockSlotId].shield + armorGain };
         patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
         sideEffects.push({
           event: 'log:entry',
-          payload: { type: 'combat', message: `完美格挡！双守护圣盾使该栏永久护甲 +1` },
+          payload: { type: 'combat', message: `完美格挡！双守护圣盾使该栏永久护甲 +${armorGain}` },
         });
-        sideEffects.push({ event: 'ui:banner', payload: { text: `完美格挡！该装备栏永久护甲 +1！` } });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `完美格挡！该装备栏永久护甲 +${armorGain}！` } });
       }
 
       // Block grant temp armor to other
@@ -2911,8 +2947,8 @@ function reduceResolveBlock(
           payload: { type: 'combat', message: `${slotItem.name} 守望者链接：${otherSlotLabel}装备栏临时护甲 +${grantAmount}！` },
         });
         sideEffects.push({ event: 'ui:banner', payload: { text: `守望者链接！${otherSlotLabel}装备栏临时护甲 +${grantAmount}！` } });
-        if (ae.hasPersuadeOnTempAttack) {
-          const pBonus = ae.persuadeOnTempAttackBonus || 10;
+        if (ae.persuadeOnTempAttackCount > 0) {
+          const pBonus = ae.persuadeOnTempAttackBonus;
           patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
           sideEffects.push({
             event: 'log:entry',
@@ -3134,8 +3170,8 @@ function reduceResolveBlock(
       event: 'log:entry',
       payload: { type: 'magic', message: `永恒护符·格挡铸甲：${label}装备栏临时护甲 +${tempGain}` },
     });
-    if (ae.hasPersuadeOnTempAttack) {
-      const pBonus = ae.persuadeOnTempAttackBonus || 10;
+    if (ae.persuadeOnTempAttackCount > 0) {
+      const pBonus = ae.persuadeOnTempAttackBonus;
       patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus;
       sideEffects.push({
         event: 'log:entry',
@@ -3412,7 +3448,8 @@ function reduceInitiateWeaponAttack(
   const slotAlreadyAttacked = combat.heroAttacksThisTurn[slotId];
   const hasBaseAttack = combat.heroAttacksRemaining > 0;
   const canUseBerserkerExtra = state.berserkerRageActive && slotAlreadyAttacked && !state.berserkerSlotUsed[slotId];
-  const canUseFlashExtra = ae.hasFlash && slotAlreadyAttacked && !state.flashSlotUsed[slotId];
+  const canUseFlashExtra = ae.flashCount > 0 && slotAlreadyAttacked
+    && (state.flashSlotUsed[slotId] ?? 0) < ae.flashCount;
   const canUseGambitExtra = state.gambitExtraActive && slotAlreadyAttacked && (state.gambitSlotUsed[slotId] ?? 0) < state.gambitExtraPerSlot;
   const canUseWeaponExtra = !!(slotItem as GameCardData).weaponExtraAttack && slotAlreadyAttacked
     && (state.weaponExtraAttackUsed[slotId] ?? 0) < ((slotItem as GameCardData).weaponExtraAttack ?? 0);
