@@ -366,6 +366,13 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
     patch.slotTempArmor = tempArmor;
   }
 
+  // Mark aura as applied for this wave so START_TURN's safety-net re-apply
+  // skips (otherwise strength/balance would stack each turn cycle). We always
+  // set this — even when no strength/balance amulet is equipped — because
+  // after this point slotTempAttack/Armor reflects the canonical aura state
+  // for the wave; START_TURN should not touch it.
+  patch.amuletAuraAppliedThisWave = true;
+
   // Lone card amulet: draw class card when backpack has exactly 1 item
   if (amuletEffects.hasLoneCard && state.backpackItems.length === 1) {
     enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: 1, filter: undefined });
@@ -535,6 +542,10 @@ function reduceApplyWaterfallDiscardEffects(
         }
         patch.slotTempAttack = tempAttack;
         patch.slotTempArmor = tempArmor;
+        // turnBoost performs the same reset+reapply that
+        // WATERFALL_TURN_RESET + APPLY_WATERFALL_EFFECTS do, so flag stays
+        // true (aura is in temps) — START_TURN must not double-apply.
+        patch.amuletAuraAppliedThisWave = true;
 
         // Clear monster temp boosts from active row
         const newActive = state.activeCards.map(c => {
@@ -880,6 +891,10 @@ function reduceApplyWaterfallTurnReset(state: GameState): ReduceResult {
   }
   patch.slotTempAttack = { equipmentSlot1: 0, equipmentSlot2: 0 };
   patch.slotTempArmor = { equipmentSlot1: 0, equipmentSlot2: 0 };
+  // Temp slots zeroed → amulet aura no longer present. Cleared here so that
+  // APPLY_WATERFALL_EFFECTS (next in the waterfall pipeline) can re-stamp
+  // the aura and flip the flag back to true.
+  patch.amuletAuraAppliedThisWave = false;
 
   // Clear monster temp boosts from active row
   const clearedNames: string[] = [];

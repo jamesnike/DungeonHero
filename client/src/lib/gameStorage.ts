@@ -171,6 +171,8 @@ export interface PersistedGameState {
   bulwarkTempArmorStacks?: number;
   slotTempArmor?: Record<string, number>;
   slotTempAttack?: Record<string, number>;
+  /** Whether amulet aura (strength/balance) is currently baked into slotTempAttack/slotTempArmor for this wave. Persisted so a reloaded save doesn't re-apply (and stack) the aura on the next START_TURN. */
+  amuletAuraAppliedThisWave?: boolean;
   defensiveStanceActive?: boolean;
   doubleNextMagic?: boolean;
   berserkerRageActive?: boolean;

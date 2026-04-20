@@ -4070,6 +4070,11 @@ export default function GameBoard() {
       slotTempAttack: snapshot.slotTempAttack
         ? { equipmentSlot1: snapshot.slotTempAttack.equipmentSlot1 ?? 0, equipmentSlot2: snapshot.slotTempAttack.equipmentSlot2 ?? 0 }
         : { equipmentSlot1: 0, equipmentSlot2: 0 },
+      // Default to true on load for legacy saves: their slotTempAttack /
+      // slotTempArmor already include the aura contribution, so we must
+      // suppress START_TURN's safety-net re-apply (otherwise it would
+      // stack and reproduce the bug on the very first post-load turn).
+      amuletAuraAppliedThisWave: snapshot.amuletAuraAppliedThisWave ?? true,
       statSwapCardObtained: Boolean((snapshot as any).statSwapCardObtained),
       doubleNextMagic: Boolean(snapshot.doubleNextMagic),
       defensiveStanceActive: Boolean(snapshot.defensiveStanceActive),

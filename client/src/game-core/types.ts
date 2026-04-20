@@ -355,6 +355,18 @@ export interface GameState {
   bulwarkTempArmorStacks: number;
   slotTempArmor: SlotTempArmorState;
   slotTempAttack: SlotTempArmorState;
+  /**
+   * Whether amulet aura contributions (strength / balance) are currently
+   * baked into `slotTempAttack` / `slotTempArmor`.
+   *
+   * - Set to `true` after the waterfall pipeline (APPLY_WATERFALL_EFFECTS,
+   *   turnBoost discard) has applied the aura into the temp slots.
+   * - Reset to `false` by WATERFALL_TURN_RESET, which zeroes the temp slots.
+   * - START_TURN's safety-net aura re-apply is gated on this flag being
+   *   `false`; otherwise the aura would stack each turn (e.g. balance going
+   *   from +3/-1 to +6/-2 after one monster turn cycle).
+   */
+  amuletAuraAppliedThisWave: boolean;
   defensiveStanceActive: boolean;
   slotAttackBursts: EquipmentBuffSnapshot;
   nextAttackLifestealSlot: EquipmentSlotId | null;

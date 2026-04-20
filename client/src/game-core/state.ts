@@ -117,6 +117,7 @@ export function createInitialGameState(): GameState {
     bulwarkTempArmorStacks: 0,
     slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 0 },
     slotTempAttack: { equipmentSlot1: 0, equipmentSlot2: 0 },
+    amuletAuraAppliedThisWave: false,
     defensiveStanceActive: false,
     slotAttackBursts: createEmptyEquipmentBuffState(),
     nextAttackLifestealSlot: null,

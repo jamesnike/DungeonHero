@@ -322,9 +322,18 @@ function reduceStartTurn(
     phase: 'playerInput',
   };
 
-  // Apply strength/balance amulet temp bonuses at turn start
-  if (!action.suppressAmuletReapply) {
+  // Apply strength/balance amulet temp bonuses at turn start.
+  //
+  // SAFETY-NET ONLY: the canonical aura application happens in the waterfall
+  // pipeline (APPLY_WATERFALL_EFFECTS / turnBoost discard), which sets
+  // `amuletAuraAppliedThisWave = true`. We skip here when the flag is true
+  // to avoid stacking — otherwise balance would go from +3/-1 to +6/-2 (and
+  // strength from +4/+4 to +8/+8) on every monster→hero turn transition.
+  // This branch only fires in edge cases where the flag is still false (e.g.
+  // brand-new game before the first waterfall has touched the temp slots).
+  if (!action.suppressAmuletReapply && !state.amuletAuraAppliedThisWave) {
     const ae = computeAmuletEffects(state.amuletSlots as import('@/components/GameCard').GameCardData[]);
+    let auraApplied = false;
     if (ae.hasStrength) {
       const tempAttack = { ...(state.slotTempAttack ?? {}) };
       tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + 4;
@@ -334,6 +343,7 @@ function reduceStartTurn(
         event: 'log:entry',
         payload: { type: 'amulet', message: '力量护符：所有装备栏临时攻击 +4！' },
       });
+      auraApplied = true;
     }
     if (ae.hasBalance) {
       const tempAttack = patch.slotTempAttack
@@ -350,6 +360,10 @@ function reduceStartTurn(
         event: 'log:entry',
         payload: { type: 'amulet', message: '均衡护符：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1' },
       });
+      auraApplied = true;
+    }
+    if (auraApplied) {
+      patch.amuletAuraAppliedThisWave = true;
     }
   }
 

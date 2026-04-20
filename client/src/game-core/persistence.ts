@@ -102,6 +102,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     bulwarkTempArmorStacks: state.bulwarkTempArmorStacks,
     slotTempArmor: { ...state.slotTempArmor },
     slotTempAttack: { ...state.slotTempAttack },
+    amuletAuraAppliedThisWave: state.amuletAuraAppliedThisWave,
     defensiveStanceActive: state.defensiveStanceActive,
     doubleNextMagic: state.doubleNextMagic,
     berserkerRageActive: state.berserkerRageActive,
