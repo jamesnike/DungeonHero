@@ -373,6 +373,60 @@ describe('EQUIP_AMULET_FROM_HAND (thin marker)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 7b. PLAY_CARD weapon/shield inline equip branch (landmine guard)
+//
+// reducePlayCard handles weapon/shield by inline-equipping into a slot
+// instead of routing through EQUIP_FROM_HAND. Make sure that branch also
+// auto-enqueues APPLY_TRANSFORM_CATEGORY so the inconsistency between
+// "drag to slot" (EQUIP_FROM_HAND) and "PLAY_CARD weapon" doesn't silently
+// drop transform.
+// ---------------------------------------------------------------------------
+
+describe('PLAY_CARD weapon/shield enqueues APPLY_TRANSFORM_CATEGORY', () => {
+  it('weapon: tail of enqueuedActions is APPLY_TRANSFORM_CATEGORY', () => {
+    const weapon: GameCardData = {
+      id: 'pw-1', type: 'weapon', name: 'Sword', value: 3, image: '',
+    } as GameCardData;
+    const state = makeState({ handCards: [weapon] as GameCardData[] });
+    const result = reduce(state, {
+      type: 'PLAY_CARD', cardId: weapon.id,
+    } as GameAction);
+    const tail = result.enqueuedActions[result.enqueuedActions.length - 1];
+    expect(tail?.type).toBe('APPLY_TRANSFORM_CATEGORY');
+    expect((tail as ApplyTransformCategoryAction).card.id).toBe('pw-1');
+  });
+
+  it('shield: tail of enqueuedActions is APPLY_TRANSFORM_CATEGORY', () => {
+    const shield: GameCardData = {
+      id: 'ps-1', type: 'shield', name: 'Buckler', value: 2, image: '',
+    } as GameCardData;
+    const state = makeState({ handCards: [shield] as GameCardData[] });
+    const result = reduce(state, {
+      type: 'PLAY_CARD', cardId: shield.id,
+    } as GameAction);
+    const tail = result.enqueuedActions[result.enqueuedActions.length - 1];
+    expect(tail?.type).toBe('APPLY_TRANSFORM_CATEGORY');
+    expect((tail as ApplyTransformCategoryAction).card.id).toBe('ps-1');
+  });
+
+  it('full dispatch flips transformChainPrevCategory to weapon after event', () => {
+    const weapon: GameCardData = {
+      id: 'pw-2', type: 'weapon', name: 'Sword', value: 3, image: '',
+    } as GameCardData;
+    const baseState = makeState({
+      handCards: [weapon] as GameCardData[],
+      lastPlayedCardCategory: 'event',
+      transformChainPrevCategory: 'event',
+    });
+    const out = dispatchFull(baseState, {
+      type: 'PLAY_CARD', cardId: weapon.id,
+    } as GameAction);
+    expect(out.state.lastPlayedCardCategory).toBe('weapon');
+    expect(out.state.transformChainPrevCategory).toBe('weapon');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 8. End-to-end repro of the original bug — Event then 查阅动作
 // ---------------------------------------------------------------------------
 

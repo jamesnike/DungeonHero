@@ -39,11 +39,17 @@ function BackpackZoneInner({
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const dropRef = useRef<HTMLDivElement>(null);
   const compactRef = useRef<HTMLButtonElement>(null);
-  // Inner visible strip — used for mobile drop hit-testing so the wider invisible
-  // hit-extension on the outer button only applies to mouse (HTML5) drag, not touch.
-  const compactInnerRef = useRef<HTMLSpanElement>(null);
   const [dragDepth, setDragDepth] = useState(0);
   const isOver = dragDepth > 0;
+  // Touch devices (primary pointer = coarse). On touch, the wider invisible
+  // `hitExtension` is disabled so the outer button never covers neighbouring
+  // elements (e.g. the right equipment slot). Mouse-driven HTML5 drag keeps
+  // the wider hit area for pointer precision.
+  const [isTouchDevice] = useState(() =>
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches
+  );
 
   useEffect(() => {
     if (!dropRef.current || !onDrop) return;
@@ -61,13 +67,12 @@ function BackpackZoneInner({
     return cleanup;
   }, [onDrop]);
 
-  // Mobile drop: register on the inner visible strip (NOT the wider outer button),
-  // so finger drops only register when the touch actually lands on the visible
-  // sidebar — avoiding false positives near the right equipment slot.
+  // Mobile drop registration. On touch the outer button has no hit-extension
+  // (see `hitExtension` below), so it exactly matches the visible strip.
   useEffect(() => {
-    if (!compact || !compactInnerRef.current || !onDrop) return;
+    if (!compact || !compactRef.current || !onDrop) return;
     const cleanup = initMobileDrop(
-      compactInnerRef.current,
+      compactRef.current,
       (dragData) => {
         if (dragData.type === 'card') {
           onDrop(dragData.data as GameCardData);
@@ -80,8 +85,6 @@ function BackpackZoneInner({
 
   // Mobile: mirror onDragEnter/onDragLeave by tracking touch position over the
   // compact button so the scale-up "drop target" effect also works on touch.
-  // Hit-test against the INNER visible strip (not the wider outer button), so
-  // the visual feedback only triggers when the finger actually touches the strip.
   useEffect(() => {
     if (!compact || !isDropTarget) {
       setDragDepth(0);
@@ -92,7 +95,7 @@ function BackpackZoneInner({
     const handleMobileMove = (e: Event) => {
       const detail = (e as CustomEvent).detail as DragData | undefined;
       if (!detail || detail.type !== 'card') return;
-      const el = compactInnerRef.current;
+      const el = compactRef.current;
       if (!el) return;
       const cx = detail.clientX;
       const cy = detail.clientY;
@@ -163,7 +166,10 @@ function BackpackZoneInner({
       typeof compactStyle?.width === 'number' ? compactStyle.width : 22;
     const stripHeight =
       typeof compactStyle?.height === 'number' ? compactStyle.height : 100;
-    const hitExtension = isDropTarget
+    // Wider invisible hit area is only useful for mouse precision. On touch
+    // devices we keep the hit area exactly at the visible strip, otherwise it
+    // would cover the right equipment slot and steal touches meant for it.
+    const hitExtension = isDropTarget && !isTouchDevice
       ? Math.max(48, Math.round(stripHeight * 0.4))
       : 0;
     const outerStyle: CSSProperties = {
@@ -192,7 +198,6 @@ function BackpackZoneInner({
         style={outerStyle}
       >
         <span
-          ref={compactInnerRef}
           className={cn(
             'flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
             isDropTarget && isOver

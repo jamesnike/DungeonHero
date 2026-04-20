@@ -306,6 +306,11 @@ function reducePlayCard(
 
     // 集甲之符：从手牌出装备牌算一次"装备事件"，不论是替换、入 reserve 还是顶替。
     applyEquipAmuletCapProgress(state, patch, sideEffects);
+
+    // Transform 链：weapon / shield 走 PLAY_CARD inline 装备分支，没有
+    // RESOLVE_MAGIC / RESOLVE_POTION 这样的下游 reducer 来代为 enqueue，
+    // 因此在此处显式加入，与 EQUIP_FROM_HAND 行为对齐。
+    enqueuedActions.push({ type: 'APPLY_TRANSFORM_CATEGORY', card });
   } else if (card.type === 'potion') {
     enqueuedActions.push({ type: 'RESOLVE_POTION', cardId: card.id, card });
     sideEffects.push({
