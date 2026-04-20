@@ -5463,6 +5463,7 @@ export default function GameBoard() {
     requestCardActionBatch,
     requestGraveyardSelection,
     beginDiscoverFlow,
+    startShopFlow,
     generateShopOfferings,
     queueMonsterReward,
     addGameLog,

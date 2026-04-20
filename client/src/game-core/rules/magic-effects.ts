@@ -3547,11 +3547,11 @@ export function resolveTransformGrant(
     const target = eligible[0];
     patch.handCards = state.handCards.map(c =>
       c.id === target.id
-        ? { ...c, transformBonus: '随机获得坟场一张魔法卡', transformEffect: 'graveyard-random-magic' } as GameCardData
+        ? { ...c, transformBonus: '失去 3 点生命，随机获得坟场一张魔法卡', transformEffect: 'graveyard-random-magic' } as GameCardData
         : c,
     );
     log(sideEffects, 'magic', `蜕变赋灵：「${target.name}」获得转型效果！`);
-    banner(sideEffects, `「${target.name}」获得转型：随机获得坟场一张魔法卡！`);
+    banner(sideEffects, `「${target.name}」获得转型：失去 3 点生命，随机获得坟场一张魔法卡！`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);

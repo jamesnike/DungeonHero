@@ -17,6 +17,7 @@ import { markSkillUsedPure } from '../hero';
 import { shuffle as rngShuffle, nextInt } from '../rng';
 import { getEffectiveHandLimit, addCardToBackpackPure } from '../cards';
 import { computeAmuletEffects } from '../equipment';
+import { computeSpellDamagePure } from '../helpers';
 
 // Helper: enqueue +10 gold + log when a stun is applied and 雷金护符 is equipped
 function maybeEnqueueStunGold(
@@ -521,8 +522,17 @@ function reduceResolveDice(
     }
 
     case 'fortune-wheel': {
-      const card = ctx.card as GameCardData | undefined;
+      // flowContext from the resolver only carries cardId, so fall back to
+      // pendingMagicAction.card. Without this, card was undefined for every
+      // fw-N branch — the bottom-of-block FINALIZE_MAGIC_CARD never fired
+      // and the card silently vanished.
+      const pendingCard = (newState.pendingMagicAction as any)?.card as GameCardData | undefined;
+      const card = (ctx.card as GameCardData | undefined) ?? pendingCard;
       newState = { ...newState, pendingMagicAction: null, heroSkillBanner: null };
+      // fw-delete is async — its hook (`card:fortuneWheelDelete`) dispatches
+      // FINALIZE_MAGIC_CARD itself after the player picks a card. The other
+      // branches are synchronous, so the reducer finalizes them.
+      let finalizeFromReducer = true;
       switch (action.outcomeId) {
         case 'fw-discover': {
           sideEffects.push({
@@ -546,6 +556,7 @@ function reduceResolveDice(
             event: 'card:fortuneWheelDelete',
             payload: { card },
           });
+          finalizeFromReducer = false;
           break;
         }
         case 'fw-persuade': {
@@ -559,15 +570,23 @@ function reduceResolveDice(
         default:
           break;
       }
-      if (card) {
+      if (card && finalizeFromReducer) {
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false } as GameAction);
       }
       break;
     }
 
     case 'chaos-dice': {
-      const card = ctx.card as GameCardData | undefined;
+      // flowContext from the resolver only carries cardId, so fall back to
+      // pendingMagicAction.card (set when the resolver fired). Without this
+      // the card was lost: every chaos-N branch downstream relies on it.
+      const pendingCard = (newState.pendingMagicAction as any)?.card as GameCardData | undefined;
+      const card = (ctx.card as GameCardData | undefined) ?? pendingCard;
       newState = { ...newState, pendingMagicAction: null, heroSkillBanner: null };
+      // chaos-1/2/3/5 are handled by hook listeners (they dispatch
+      // FINALIZE_MAGIC_CARD themselves after their async/UI flow). Only
+      // chaos-4 (synchronous lightning) is finalized here in the reducer.
+      let finalizeFromReducer = false;
       switch (action.outcomeId) {
         case 'chaos-1': {
           sideEffects.push({
@@ -600,18 +619,20 @@ function reduceResolveDice(
             [idx, rng] = nextInt(rng, 0, monsters.length - 1);
             newState = { ...newState, rng };
             const target = monsters[idx];
+            const lightningDmg = computeSpellDamagePure(newState, 3);
             enqueuedActions.push(
-              { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: 3, source: 'chaos-lightning', isSpellDamage: true } as GameAction,
-              { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: 3, source: 'chaos-lightning-2', isSpellDamage: true } as GameAction,
+              { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: lightningDmg, source: 'chaos-lightning', isSpellDamage: true } as GameAction,
+              { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: lightningDmg, source: 'chaos-lightning-2', isSpellDamage: true } as GameAction,
             );
             enqueuedActions.push(
-              { type: 'SET_HERO_SKILL_BANNER', message: `${target.name} 被混沌雷击连续打中！` } as GameAction,
+              { type: 'SET_HERO_SKILL_BANNER', message: `${target.name} 被混沌雷击连续打中！（${lightningDmg} × 2）` } as GameAction,
             );
           } else {
             enqueuedActions.push(
               { type: 'SET_HERO_SKILL_BANNER', message: '没有怪物可以承受混沌雷击。' } as GameAction,
             );
           }
+          finalizeFromReducer = true;
           break;
         }
         case 'chaos-5': {
@@ -624,7 +645,7 @@ function reduceResolveDice(
         default:
           break;
       }
-      if (card) {
+      if (card && finalizeFromReducer) {
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: action.outcomeId === 'chaos-4' } as GameAction);
       }
       break;

@@ -767,7 +767,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollTransformGrantImage,
     classCard: true,
-    description: '一次性：选择一张手牌，赋予「转型：随机获得坟场一张魔法卡」。',
+    description: '一次性：选择一张手牌，赋予「转型：失去 3 点生命，随机获得坟场一张魔法卡」。',
     shortDescription: '为一张手牌赋予转型效果',
     magicType: 'instant',
     magicEffect: '选择一张手牌赋予转型效果。',

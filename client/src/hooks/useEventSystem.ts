@@ -436,7 +436,6 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   );
 
   const handleDiceRollResult = useCallback((value: number) => {
-    depsRef.current.clearUndoStack();
     const prev = engine.getState().eventDiceModal;
     if (!prev) return;
 

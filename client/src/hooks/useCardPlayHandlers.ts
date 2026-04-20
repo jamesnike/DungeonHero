@@ -123,6 +123,7 @@ export interface CardPlayHandlersDeps {
     source: string,
     options?: { filter?: (card: GameCardData) => boolean; sourceLabel?: string; overridePool?: GameCardData[] },
   ) => boolean;
+  startShopFlow: (sourceCard: GameCardData | null) => boolean;
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
   getAttackBonus: () => number;
   applyHonorSweepMagic: (card: GameCardData, slotId: EquipmentSlotId) => void;
@@ -368,7 +369,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   };
 
   const resolveRepairEnrageDice = async (card: GameCardData, slotId: EquipmentSlotId, monster: GameCardData) => {
-    depsRef.current.clearUndoStack();
     dispatch({ type: 'ROLL_DICE_FOR_FLOW' });
     const repairEnragePredeterminedRoll = engine.getState().lastFlowDiceRoll ?? undefined;
     const diceResult = await depsRef.current.requestDiceOutcome({
@@ -795,20 +795,41 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     });
     if (!started) {
       addGameLog('magic', '混沌骰：职业牌堆已空，无法发现。');
-      if (card) {
-        dispatch({ type: 'FINALIZE_MAGIC_CARD', card: card as GameCardData });
-      }
+    }
+    // The chaos-dice card itself goes to the recycle bag immediately —
+    // the discover flow is independent and resolves on its own (player picks
+    // a card or cancels). Finalizing here ensures the card is not lost
+    // regardless of which path the discover flow takes.
+    if (card) {
+      dispatch({ type: 'FINALIZE_MAGIC_CARD', card: card as GameCardData });
     }
   });
 
   useGameEvent('card:chaosShop', ({ card }) => {
-    // TODO: wire chaos shop flow — needs startShopFlow in deps
-    console.debug('[CardPlay] Chaos shop triggered:', card?.name);
+    // Open a temporary shop sourced by the chaos-dice card itself.
+    // The shop modal is independent of the card's lifecycle, so finalize
+    // the chaos-dice card (into the recycle bag) immediately.
+    const opened = card ? depsRef.current.startShopFlow(card as GameCardData) : false;
+    if (!opened) {
+      addGameLog('magic', '混沌骰：职业牌堆已空，无法开启临时商店。');
+    } else {
+      addGameLog('magic', '混沌骰：开启了一个临时混沌商店！');
+    }
+    if (card) {
+      dispatch({ type: 'FINALIZE_MAGIC_CARD', card: card as GameCardData });
+    }
   });
 
-  useGameEvent('card:chaosDiscardDraw', ({ card }) => {
-    // TODO: wire chaos discard-draw flow — needs discard + draw async sequence
-    console.debug('[CardPlay] Chaos discard-draw triggered:', card?.name);
+  useGameEvent('card:chaosDiscardDraw', async ({ card }) => {
+    await depsRef.current.requestCardActionBatch('discard-recycle', 2, {
+      title: '混沌骰运：弃回 2 张手牌',
+      description: '从手牌中选择最多 2 张弃回，然后从背包抽 2 张牌。',
+      handOnly: true,
+    });
+    dispatch({ type: 'DRAW_FROM_BACKPACK', count: 2, ignoreLimit: true });
+    if (card) {
+      dispatch({ type: 'FINALIZE_MAGIC_CARD', card: card as GameCardData });
+    }
   });
 
   // ---------------------------------------------------------------------------

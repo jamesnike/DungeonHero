@@ -267,8 +267,6 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
   useGameEvent('combat:lastWordsDiscard', ({ cards }) => {
     const d = depsRef.current;
-    d.undoStackRef.current = [];
-    d.clearUndoStorage();
     (cards as GameCardData[]).forEach(card => {
       d.triggerDiscardFlight(card, d.isRecyclableFromHand(card) ? 'recycle-bag' : 'graveyard');
     });

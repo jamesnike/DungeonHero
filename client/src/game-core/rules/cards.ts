@@ -27,6 +27,7 @@ import {
   addCardToBackpackPure,
   processRecycleBag,
   resetMonsterForGraveyard,
+  getEffectiveHandLimit,
 } from '../cards';
 import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, computeAmuletAuraReversal, isRecyclableFromHand, getCardPlayCategory, logHeroMagic, applyAmplifyToCard } from '../helpers';
@@ -1676,13 +1677,27 @@ function reduceReturnEquipmentToHand(
   if (!slotItem) return noChange(state);
 
   const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
 
   const reserve = getReserve(state, slotId);
   const reserveKey = slotId === 'equipmentSlot1' ? 'equipmentSlot1Reserve' : 'equipmentSlot2Reserve';
 
   const cleanedItem = sanitizeCardMetadata(slotItem as GameCardData);
-  patch.handCards = [...state.handCards, cleanedItem];
+  // Honor the chaos-dice "装备回手（满则回收袋）" contract: if hand is at
+  // limit, route the equipment into the recycle bag instead of overflowing
+  // the hand. This is currently the only caller, so it's safe to apply
+  // unconditionally; future callers wanting strict hand-only behavior can
+  // extend the action payload.
+  const handFull = state.handCards.length >= getEffectiveHandLimit(state);
+  if (handFull) {
+    enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: cleanedItem });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `手牌已满，${slotItem.name} 进入回收袋` } });
+  } else {
+    patch.handCards = [...state.handCards, cleanedItem];
+    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 回到手牌` } });
+    sideEffects.push({ event: 'card:queueToHand', payload: { card: cleanedItem, sourceHint: slotId } });
+  }
 
   if (reserve.length > 0) {
     const promoted = reserve[reserve.length - 1];
@@ -1692,10 +1707,7 @@ function reduceReturnEquipmentToHand(
     patch[slotId] = null;
   }
 
-  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 回到手牌` } });
-  sideEffects.push({ event: 'card:queueToHand', payload: { card: cleanedItem, sourceHint: slotId } });
-
-  return applyPatch(state, patch, sideEffects);
+  return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -2140,13 +2152,13 @@ function reduceResolvePermGrant(
 
   if (modal.sourceType === 'transform-grant') {
     patch.handCards = state.handCards.map(c =>
-      c.id === targetCardId ? { ...c, transformBonus: '随机获得坟场一张魔法卡', transformEffect: 'graveyard-random-magic' } : c,
+      c.id === targetCardId ? { ...c, transformBonus: '失去 3 点生命，随机获得坟场一张魔法卡', transformEffect: 'graveyard-random-magic' } : c,
     );
     sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `蜕变赋灵：「${targetCard.name}」获得转型效果！` } });
     if (sourceCard.classCard) {
       enqueuedActions.push({ type: 'REMOVE_CLASS_CARD_FROM_HAND', cardId: sourceCard.id });
     }
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: `「${targetCard.name}」获得转型：随机获得坟场一张魔法卡！` });
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: `「${targetCard.name}」获得转型：失去 3 点生命，随机获得坟场一张魔法卡！` });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
@@ -2339,9 +2351,10 @@ function reduceApplyTransformCategory(
       patch.rng = rng;
       patch.discardedCards = state.discardedCards.filter(c => c.id !== picked.id);
       patch.handCards = [...state.handCards, picked];
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 3, source: 'general', selfInflicted: true });
       sideEffects.push({ event: 'card:queueToHand', payload: { card: picked } });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `转型触发：从坟场获得「${picked.name}」！` } });
-      sideEffects.push({ event: 'ui:banner', payload: { text: `转型触发！从坟场获得「${picked.name}」！` } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `转型触发：失去 3 点生命，从坟场获得「${picked.name}」！` } });
+      sideEffects.push({ event: 'ui:banner', payload: { text: `转型触发！失去 3 点生命，从坟场获得「${picked.name}」！` } });
     } else {
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '转型触发：坟场没有魔法卡牌。' } });
       sideEffects.push({ event: 'ui:banner', payload: { text: '转型触发！但坟场没有魔法卡牌。' } });
