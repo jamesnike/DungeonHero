@@ -41,16 +41,10 @@ export const NarrowSidebar = memo(function NarrowSidebar({
   const cardH = gridCardSize?.height ?? 100;
   const stripW = Math.max(18, Math.round(cardH * 0.14));
   const stripStyle: CSSProperties = { width: stripW, height: cardH };
-  // Small inset from the viewport edge. iOS Safari (especially on iPhone Pro
-  // Max) has edge-rejection + rounded device corners that make taps within the
-  // last few pixels unreliable. A tiny inset keeps the buttons visually flush
-  // while moving the tappable region into a reliable zone, and is also offset
-  // by `env(safe-area-inset-right)` for landscape / notched orientations.
-  const edgeInset = 'max(env(safe-area-inset-right, 0px), 4px)';
 
   return (
     <>
-      <div className="fixed z-40" style={{ right: edgeInset, top: narrowSidebarPositions.row1Y, transform: 'translateY(-50%)' }}>
+      <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row1Y, transform: 'translateY(-50%)' }}>
         <ClassDeck
           compact
           compactStyle={stripStyle}
@@ -60,7 +54,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
         />
       </div>
 
-      <div className="fixed z-40" style={{ right: edgeInset, top: narrowSidebarPositions.row2Y, transform: 'translateY(-50%)' }}>
+      <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row2Y, transform: 'translateY(-50%)' }}>
         <GraveyardZone
           compact
           compactStyle={stripStyle}
@@ -72,7 +66,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
         />
       </div>
 
-      <div className="fixed z-40" style={{ right: edgeInset, top: narrowSidebarPositions.row3Y, transform: 'translateY(-50%)' }}>
+      <div className="fixed z-40" style={{ right: 0, top: narrowSidebarPositions.row3Y, transform: 'translateY(-50%)' }}>
         <BackpackZone
           compact
           compactStyle={stripStyle}
