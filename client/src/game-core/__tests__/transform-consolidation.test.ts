@@ -309,13 +309,13 @@ describe('PLACE_BUILDING_IN_DUNGEON', () => {
 // 6. EQUIP_FROM_HAND  (thin marker)
 // ---------------------------------------------------------------------------
 
-describe('EQUIP_FROM_HAND (thin marker)', () => {
-  it('only enqueues APPLY_TRANSFORM_CATEGORY', () => {
+describe('EQUIP_FROM_HAND', () => {
+  it('without onEquipEffect: only enqueues APPLY_TRANSFORM_CATEGORY', () => {
     const weapon: GameCardData = {
       id: 'w1', type: 'weapon', name: 'Sword', value: 3, image: '',
     } as GameCardData;
     const result = reduce(makeState(), {
-      type: 'EQUIP_FROM_HAND', card: weapon,
+      type: 'EQUIP_FROM_HAND', card: weapon, slotId: 'equipmentSlot1',
     } as GameAction);
     expect(result.state).toBeDefined();
     expect(result.sideEffects).toEqual([]);
@@ -332,10 +332,34 @@ describe('EQUIP_FROM_HAND (thin marker)', () => {
       transformChainPrevCategory: 'event',
     });
     const out = dispatchFull(baseState, {
-      type: 'EQUIP_FROM_HAND', card: weapon,
+      type: 'EQUIP_FROM_HAND', card: weapon, slotId: 'equipmentSlot1',
     } as GameAction);
     expect(out.state.lastPlayedCardCategory).toBe('weapon');
     expect(out.state.transformChainPrevCategory).toBe('weapon');
+  });
+
+  it('runs onEquipEffect via the registry (gold+6 grants gold)', () => {
+    const weapon: GameCardData = {
+      id: 'w3', type: 'weapon', name: '赏金之剑', value: 2, image: '',
+      durability: 2, maxDurability: 2, onEquipEffect: 'gold+6',
+    } as GameCardData;
+    const baseState = makeState({ gold: 10 });
+    const out = dispatchFull(baseState, {
+      type: 'EQUIP_FROM_HAND', card: weapon, slotId: 'equipmentSlot1',
+    } as GameAction);
+    expect(out.state.gold).toBe(16);
+  });
+
+  it('runs onEquipEffect via the registry (temp-attack-3 boosts target slot)', () => {
+    const weapon: GameCardData = {
+      id: 'w4', type: 'weapon', name: '足锡冲锋', value: 1, image: '',
+      durability: 2, maxDurability: 2, onEquipEffect: 'temp-attack-3',
+    } as GameCardData;
+    const out = dispatchFull(makeState(), {
+      type: 'EQUIP_FROM_HAND', card: weapon, slotId: 'equipmentSlot2',
+    } as GameAction);
+    expect(out.state.slotTempAttack?.equipmentSlot2 ?? 0).toBe(3);
+    expect(out.state.slotTempAttack?.equipmentSlot1 ?? 0).toBe(0);
   });
 });
 

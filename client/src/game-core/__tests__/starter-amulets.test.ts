@@ -285,6 +285,85 @@ describe('starter amulet: 集甲之符 (equip-amulet-cap)', () => {
     expect(result.state.equipAmuletCapProgress).toBe(0);
     expect(result.state.maxAmuletSlots).toBe(3);
   });
+
+  // Regression: 拖拽装备到槽位走 EQUIP_FROM_HAND 路径，曾经漏调
+  // applyEquipAmuletCapProgress，导致 集甲之符 计数不动。
+  it('EQUIP_FROM_HAND: 拖拽装备入槽时也计 +1', () => {
+    const weapon = {
+      id: 'w-drag', type: 'weapon' as const, name: 'Drag', value: 2,
+      durability: 1, maxDurability: 1,
+    };
+    const state = makeState({
+      amuletSlots: [equipAmulet] as any,
+      equipAmuletCapProgress: 3,
+      maxAmuletSlots: 2,
+    });
+    const result = reduce(state, {
+      type: 'EQUIP_FROM_HAND',
+      card: weapon as any,
+      slotId: 'equipmentSlot1',
+    });
+    expect(result.state.equipAmuletCapProgress).toBe(4);
+  });
+
+  it('EQUIP_FROM_HAND: 跨阈值时护符栏上限 +1', () => {
+    const weapon = {
+      id: 'w-drag-thr', type: 'weapon' as const, name: 'DragThreshold', value: 2,
+      durability: 1, maxDurability: 1,
+    };
+    const state = makeState({
+      amuletSlots: [equipAmulet] as any,
+      equipAmuletCapProgress: 5,
+      maxAmuletSlots: 2,
+    });
+    const result = reduce(state, {
+      type: 'EQUIP_FROM_HAND',
+      card: weapon as any,
+      slotId: 'equipmentSlot1',
+    });
+    expect(result.state.equipAmuletCapProgress).toBe(0);
+    expect(result.state.maxAmuletSlots).toBe(3);
+  });
+
+  // monster 装备（拖怪物牌入槽）走的也是 EQUIP_FROM_HAND，应同样计数。
+  it('EQUIP_FROM_HAND: 拖怪物牌入装备槽也计 +1', () => {
+    const monsterEquip = {
+      id: 'm-equip', type: 'monster' as const, name: 'Goblin', value: 2,
+      attack: 2, hp: 2, durability: 1, maxDurability: 1,
+      monsterType: 'Goblin',
+    };
+    const state = makeState({
+      amuletSlots: [equipAmulet] as any,
+      equipAmuletCapProgress: 2,
+      maxAmuletSlots: 2,
+    });
+    const result = reduce(state, {
+      type: 'EQUIP_FROM_HAND',
+      card: monsterEquip as any,
+      slotId: 'equipmentSlot1',
+    });
+    expect(result.state.equipAmuletCapProgress).toBe(3);
+  });
+
+  it('EQUIP_FROM_HAND: 怪物装备跨阈值时护符栏上限 +1', () => {
+    const monsterEquip = {
+      id: 'm-equip-thr', type: 'monster' as const, name: 'Ogre', value: 5,
+      attack: 5, hp: 5, durability: 2, maxDurability: 2,
+      monsterType: 'Ogre',
+    };
+    const state = makeState({
+      amuletSlots: [equipAmulet] as any,
+      equipAmuletCapProgress: 5,
+      maxAmuletSlots: 2,
+    });
+    const result = reduce(state, {
+      type: 'EQUIP_FROM_HAND',
+      card: monsterEquip as any,
+      slotId: 'equipmentSlot1',
+    });
+    expect(result.state.equipAmuletCapProgress).toBe(0);
+    expect(result.state.maxAmuletSlots).toBe(3);
+  });
 });
 
 // ---------------------------------------------------------------------------

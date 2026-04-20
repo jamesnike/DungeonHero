@@ -693,13 +693,21 @@ export interface PlaceBuildingInDungeonAction {
 }
 
 /**
- * Thin marker — 标记"手牌打出装备（武器/盾/怪物装备）到装备栏"是一次 play。
- * Reducer 仅 enqueue APPLY_TRANSFORM_CATEGORY；装备放置/displacement/on-equip 等
- * 同步副作用仍由 hook 层处理。
+ * 标记"手牌拖到装备栏"是一次 play。
+ * Reducer 负责：
+ *   - 调用 `executeOnEquip` 跑装备的 onEquipEffect（金币 +6 / 临时攻 +3 等）
+ *   - 处理 `equip-empower` 永恒护符（该装备栏临时攻 +3、临时护甲 +3）
+ *   - enqueue APPLY_TRANSFORM_CATEGORY 进入 transform 链
+ * 装备槽放置 / displacement / 怪物特定入场效果 仍由 hook 层处理（dispatch
+ * 此 action 之前已经完成 SET_EQUIPMENT_SLOT）。
+ *
+ * `slotId` 必传：标记新装备落入的槽位，决定 onEquipEffect / equip-empower
+ * 作用于哪个槽。
  */
 export interface EquipFromHandAction {
   type: 'EQUIP_FROM_HAND';
   card: GameCardData;
+  slotId: EquipmentSlotId;
 }
 
 /**

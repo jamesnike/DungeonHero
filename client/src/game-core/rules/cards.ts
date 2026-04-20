@@ -118,9 +118,10 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
     case 'PLACE_BUILDING_IN_DUNGEON':
       return reducePlaceBuildingInDungeon(state, action);
     case 'EQUIP_FROM_HAND':
+      return reduceEquipFromHand(state, action);
     case 'EQUIP_AMULET_FROM_HAND':
       // Thin marker — only purpose is to put the play through the transform chain.
-      // Hook layer still handles capacity/displacement/on-equip/etc. for these.
+      // Hook layer still handles aura/displacement/etc. for amulets.
       return {
         state,
         sideEffects: [],
@@ -712,6 +713,53 @@ function reduceEquipCard(
   applyEquipAmuletCapProgress(state, patch, sideEffects);
 
   return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// EQUIP_FROM_HAND — 手牌拖到装备栏触发的"play"标记。
+//
+// 由 GameBoard 的 drag handler 在调用 SET_EQUIPMENT_SLOT 把卡放入槽位之后
+// dispatch 过来。Reducer 此时只负责跑装备的 onEquipEffect、equip-empower
+// 永恒护符这两类与槽位绑定的副作用，并把 transform 链续上。
+//
+// 注意：reducePlayCard 的 weapon/shield 分支已经自带相同的 on-equip /
+// equip-empower 逻辑，所以"点击出牌"的玩法不会经过这里——这条路径只服务
+// 于"拖到指定槽"的玩法，避免 drag 路径漏触发 on-equip（曾经的 bug：
+// 赏金之剑 / 足锡冲锋 拖到槽位时 gold+6 / temp-attack-3 没有效果）。
+// ---------------------------------------------------------------------------
+
+function reduceEquipFromHand(
+  state: GameState,
+  action: Extract<GameAction, { type: 'EQUIP_FROM_HAND' }>,
+): ReduceResult {
+  const { card, slotId } = action;
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+  const enqueuedActions: GameAction[] = [];
+
+  if (card.onEquipEffect) {
+    executeOnEquip(state, card, slotId, patch, sideEffects, enqueuedActions);
+  }
+
+  if (hasEternalRelic(state.eternalRelics ?? [], 'equip-empower')) {
+    const tempAttack = patch.slotTempAttack ?? { ...(state.slotTempAttack ?? {}) };
+    const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
+    tempAttack[slotId] = (tempAttack[slotId] ?? 0) + 3;
+    tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
+    patch.slotTempAttack = tempAttack;
+    patch.slotTempArmor = tempArmor;
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `铸锋药剂：${card.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！` },
+    });
+  }
+
+  // 集甲之符：拖拽装备到槽位也是一次"装备事件"，与 PLAY_CARD / EQUIP_CARD 路径对齐。
+  applyEquipAmuletCapProgress(state, patch, sideEffects);
+
+  enqueuedActions.push({ type: 'APPLY_TRANSFORM_CATEGORY', card });
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 function reduceResolvePotion(

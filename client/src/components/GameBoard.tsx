@@ -6386,70 +6386,9 @@ export default function GameBoard() {
       }
       setEquipmentSlotById(equipSlot, equipCard);
 
-      if (equipCard.onEquipEffect) {
-        if (equipCard.onEquipEffect === 'temp-attack-2') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: equipSlot, delta: 2 });
-          addGameLog('equip', `${equipCard.name} 入场效果：该装备栏临时攻击 +2！`);
-        }
-        if (equipCard.onEquipEffect === 'all-temp-attack-2') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: 2 });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: 2 });
-          addGameLog('equip', `${equipCard.name} 入场效果：所有装备栏临时攻击 +2！`);
-        }
-        if (equipCard.onEquipEffect === 'temp-armor-3') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: equipSlot, delta: 3 });
-          addGameLog('equip', `${equipCard.name} 入场效果：该装备栏临时护甲 +3！`);
-        }
-        if (equipCard.onEquipEffect === 'persuade-bonus-10') {
-          const newBonus = engine.getState().persuadeAmuletBonus + 10;
-          dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'persuadeAmuletBonus', delta: 10 });
-          addGameLog('equip', `${equipCard.name} 入场效果：下次劝降成功率 +10%（累计 +${newBonus}%）`);
-        }
-        if (equipCard.onEquipEffect === 'spell-lifesteal+1') {
-          dispatch({ type: 'MODIFY_PERMANENT_STAT', stat: 'permanentSpellLifesteal', delta: 1 });
-          addGameLog('equip', `${equipCard.name} 入场效果：超杀吸血 +1！`);
-        }
-        if (equipCard.onEquipEffect === 'stunCap+5') {
-          dispatch({ type: 'MODIFY_STUN_CAP', delta: 5 });
-          addGameLog('equip', `${equipCard.name} 入场效果：击晕上限 +5%！`);
-        }
-        if (equipCard.onEquipEffect === 'other-slot-durability+1') {
-          const otherSlotId: EquipmentSlotId = equipSlot === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
-          const otherItem = otherSlotId === 'equipmentSlot1' ? engine.getState().equipmentSlot1 : engine.getState().equipmentSlot2;
-          if (otherItem && otherItem.durability != null && otherItem.maxDurability != null) {
-            const newDur = Math.min(otherItem.maxDurability, otherItem.durability + 1);
-            if (newDur > otherItem.durability) {
-              setEquipmentSlotById(otherSlotId, { ...otherItem, durability: newDur });
-              addGameLog('equip', `${equipCard.name} 入场效果：${otherItem.name} 耐久 +1（${otherItem.durability} → ${newDur}）`);
-            } else {
-              addGameLog('equip', `${equipCard.name} 入场效果：${otherItem.name} 已满耐久。`);
-            }
-          } else {
-            addGameLog('equip', `${equipCard.name} 入场效果：另一个装备栏没有装备。`);
-          }
-        }
-        if (equipCard.onEquipEffect === 'perm-slot-damage+1') {
-          setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
-          addGameLog('equip', `${equipCard.name} 入场效果：该装备栏永久攻击 +1！`);
-        }
-        if (equipCard.onEquipEffect === 'heal-3') {
-          const healed = healHero(3);
-          addGameLog('equip', `${equipCard.name} 入场效果：恢复了 ${healed} 点生命！`);
-        }
-        if (equipCard.onEquipEffect === 'durability-max+1') {
-          const currentItem = equipSlot === 'equipmentSlot1' ? engine.getState().equipmentSlot1 : engine.getState().equipmentSlot2;
-          if (currentItem && currentItem.maxDurability != null) {
-            setEquipmentSlotById(equipSlot, { ...currentItem, maxDurability: currentItem.maxDurability + 1 });
-            addGameLog('equip', `${equipCard.name} 入场效果：耐久度上限 +1（${currentItem.maxDurability} → ${currentItem.maxDurability + 1}）`);
-          }
-        }
-      }
-
-      if (hasEternalRelic(engine.getState().eternalRelics, 'equip-empower')) {
-        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: equipSlot, delta: 3 });
-        dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: equipSlot, delta: 3 });
-        addGameLog('equip', `铸锋药剂：${equipCard.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
-      }
+      // onEquipEffect（gold+6 / temp-attack-2|3 / temp-armor-3 / heal-3 / …）
+      // 与 equip-empower 永恒护符的处理已下沉到 EQUIP_FROM_HAND reducer。
+      // 见 game-core/rules/cards.ts → reduceEquipFromHand。
 
       if (isMonsterFromHand && amuletEffects.monsterEquipBuffCount > 0) {
         const bump = amuletEffects.monsterEquipBuffCount;
@@ -6478,9 +6417,10 @@ export default function GameBoard() {
         }
       }
 
-      // Reducer enqueues APPLY_TRANSFORM_CATEGORY (thin marker — capacity /
-      // displacement / on-equip bookkeeping above is unchanged).
-      dispatch({ type: 'EQUIP_FROM_HAND', card });
+      // Reducer 跑 onEquipEffect / equip-empower / APPLY_TRANSFORM_CATEGORY。
+      // 槽位放置 / displacement / 怪物特定入场效果 仍由上面的 imperative
+      // 代码处理（在 dispatch 之前已经完成 SET_EQUIPMENT_SLOT 等）。
+      dispatch({ type: 'EQUIP_FROM_HAND', card, slotId: equipSlot });
 
       if (isCardFromHand(card)) {
         const handArr = handCardsRef.current;
