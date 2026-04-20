@@ -1244,6 +1244,11 @@ export interface SetAmplifyModalAction {
   payload: { sourceCardId: string } | null;
 }
 
+export interface SetEventAmplifyHandPickerAction {
+  type: 'SET_EVENT_AMPLIFY_HAND_PICKER';
+  payload: { eventCardId: string; cellIdx: number } | null;
+}
+
 export interface SetEventDiceModalAction {
   type: 'SET_EVENT_DICE_MODAL';
   payload: import('./types').EventDiceModalState | null;
@@ -1903,6 +1908,7 @@ export type GameAction =
   | SetEquipmentPromptAction
   | SetMirrorCopyModalAction
   | SetAmplifyModalAction
+  | SetEventAmplifyHandPickerAction
   | SetEventDiceModalAction
   | SetMagicChoiceModalAction
   | SetPersuadeStateAction

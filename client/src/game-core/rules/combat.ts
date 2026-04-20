@@ -740,6 +740,13 @@ function reduceMonsterDefeated(
 
   const monster = activeCards[idx]!;
 
+  // Re-entry guard: the monster card stays in activeCards for ~950ms while the
+  // defeat animation plays. If two enqueue sites (e.g. a combo that both
+  // drains a layer and deals damage in one play) both queue MONSTER_DEFEATED
+  // for the same id, the second one would re-run Branch C and queue a second
+  // reward drop with freshly-generated options. Skip the re-entry here.
+  if (monster.defeatProcessed) return noChange(state);
+
   // ---- Branch A: Boss transform ----
   if (monster.isFinalMonster && !monster.bossPhase && !monster.isStunned) {
     const bossCard = applyAmplifyOnCreate(createBossCard(monster), state.amplifiedCardBonus);
@@ -796,6 +803,16 @@ function reduceMonsterDefeated(
   }
 
   // ---- Branch C: Actual defeat ----
+  // Mark defeat-processed BEFORE any state mutation in this branch so the
+  // re-entry guard above bails on any subsequent MONSTER_DEFEATED for this
+  // monster while the card is still in `activeCards` waiting for the defeat
+  // animation to finish.
+  {
+    const markedCards = [...activeCards] as ActiveRowSlots;
+    markedCards[idx] = { ...monster, defeatProcessed: true } as GameCardData;
+    patch.activeCards = markedCards as GameState['activeCards'];
+  }
+
   sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 被击败！` } });
   sideEffects.push({ event: 'combat:monsterDefeated', payload: { monsterId: monster.id, monsterName: monster.name } });
 
@@ -2596,9 +2613,16 @@ function reducePerformHeroAttack(
 
   // --- Dagger self-destruct discover (async UI flow) ---
   if ((slotItem as GameCardData).daggerSelfDestructDiscover && !weaponDestroyed) {
+    // Use the post-attack durability (after the durability tick from this attack).
+    // patch[slotId] is set when this attack consumed durability; if the durability
+    // save kicked in (skipDurabilityLoss), patch[slotId] is unchanged so we fall
+    // back to the original. Either way this reflects "remaining durability after
+    // this attack" — i.e. how many discovers self-destruct will grant.
+    const postAttackItem = (patch[slotId] ?? slotItem) as GameCardData;
+    const remainingDurability = postAttackItem.durability ?? 1;
     sideEffects.push({
       event: 'combat:daggerSelfDestructPrompt',
-      payload: { slotId, itemName: slotItem.name, durability: slotItem.durability ?? 1 },
+      payload: { slotId, itemName: slotItem.name, durability: remainingDurability },
     });
   }
 

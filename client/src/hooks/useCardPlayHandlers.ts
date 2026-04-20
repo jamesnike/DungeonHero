@@ -674,8 +674,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
   useGameEvent('card:cryptDeathwishSelect', async () => {
     const slot = await depsRef.current.requestEquipmentSelection({
-      prompt: '选择一个装备，触发其遗言效果',
-      subtext: '墓语遗愿：遗言效果将被立即触发。',
+      prompt: '选择一个装备，触发其遗言效果 2 次',
+      subtext: '墓语遗愿：遗言效果将被立即触发 2 次，然后抽 1 张牌。',
     });
     if (slot) {
       dispatch({ type: 'RESOLVE_EQUIPMENT_CHOICE', slotId: slot });

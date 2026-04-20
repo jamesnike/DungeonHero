@@ -695,8 +695,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: monsterEquipBuffAmuletImage,
     classCard: true,
-    description: '每次装备一个怪物时，选择：该装备栏永久攻击 +1 或 永久护甲 +1。',
-    shortDescription: '装备怪物时本栏永久 +1 攻或 +1 护',
+    description: '每次装备一个怪物时，该装备栏永久攻击 +1 且 永久护甲 +1。',
+    shortDescription: '装备怪物时本栏永久 +1 攻且 +1 护',
     amuletEffect: 'monster-equip-buff',
   });
 

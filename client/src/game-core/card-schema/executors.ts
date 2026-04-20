@@ -335,12 +335,12 @@ function executeGrantWeaponStunChanceChoose(ctx: ExecutionContext, effect: CardE
   const weaponSlots: SlotInfo[] = [];
   for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as const) {
     const item = getEquipmentSlot(ctx, slotId);
-    if (item && item.type === 'weapon') weaponSlots.push({ id: slotId, item });
+    if (item && (item.type === 'weapon' || item.type === 'monster')) weaponSlots.push({ id: slotId, item });
   }
 
   if (weaponSlots.length === 0) {
-    log(ctx, 'potion', `${ctx.card.name}：装备栏没有武器，药剂失效。`);
-    banner(ctx, '装备栏没有武器，药剂失效。');
+    log(ctx, 'potion', `${ctx.card.name}：装备栏没有武器或怪物装备，药剂失效。`);
+    banner(ctx, '装备栏没有武器或怪物装备，药剂失效。');
     ctx.enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card: ctx.card });
     return;
   }
@@ -359,9 +359,9 @@ function executeGrantWeaponStunChanceChoose(ctx: ExecutionContext, effect: CardE
     card: ctx.card,
     effect: (ctx.card.potionEffect ?? 'grant-weapon-stun-chance+40') as any,
     step: 'slot-select',
-    prompt: `选择一个武器，永久击晕率 +${effect.amount}%。`,
+    prompt: `选择一个武器或怪物装备，永久击晕率 +${effect.amount}%。`,
   } as any;
-  ctx.patch.heroSkillBanner = `选择一个武器，永久击晕率 +${effect.amount}%。`;
+  ctx.patch.heroSkillBanner = `选择一个武器或怪物装备，永久击晕率 +${effect.amount}%。`;
   ctx.halt = true;
   ctx.enqueuedActions.length = 0;
 }

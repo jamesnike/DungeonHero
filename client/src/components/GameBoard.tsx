@@ -860,6 +860,8 @@ export default function GameBoard() {
     requestEquipmentSelection,
     handleEquipmentPromptSelection,
     cancelEquipmentPrompt,
+    handleEventAmplifyHandSelect,
+    cancelEventAmplifyHandPicker,
     evaluateChoiceRequirements,
     eventChoiceStates,
     gainClassDeckBottomCards,
@@ -4022,6 +4024,7 @@ export default function GameBoard() {
       persuadeRaceBonus: snapshot.persuadeRaceBonus ?? {},
       persuadeSuccessDurabilityBonus: snapshot.persuadeSuccessDurabilityBonus ?? 0,
       persuadeAmuletBonus: snapshot.persuadeAmuletBonus ?? 0,
+      permanentPersuadeBonus: snapshot.permanentPersuadeBonus ?? 0,
       persuadeDiscount: snapshot.persuadeDiscount ?? null,
       lastPlayedCardCategory: snapshot.lastPlayedCardCategory ?? null,
       transformChainPrevCategory: snapshot.transformChainPrevCategory ?? null,
@@ -4116,6 +4119,7 @@ export default function GameBoard() {
       mirrorCopyModal: snapshot.mirrorCopyModal ?? null,
       permGrantModal: (snapshot.permGrantModal as import('@/game-core/types').GameState['permGrantModal']) ?? null,
       amplifyModal: snapshot.amplifyModal ?? null,
+      eventAmplifyHandPicker: snapshot.eventAmplifyHandPicker ?? null,
       persuadeState: (snapshot.persuadeState as import('@/game-core/types').PersuadeModalState | null) ?? null,
       deathWardPrompt: (snapshot.deathWardPrompt as import('@/game-core/types').DeathWardPromptState | null) ?? null,
       gameLogEntries: (loadGameLog()?.entries ?? []) as import('@/components/GameLogPanel').LogEntry[],
@@ -5955,11 +5959,10 @@ export default function GameBoard() {
                 name: '墓语遗愿',
                 value: 0,
                 image: skillScrollImage,
-                magicType: 'permanent' as const,
+                magicType: 'instant' as const,
                 magicEffect: 'crypt-deathwish',
-                description: '永久魔法（Perm 2）：选择一个装备，触发其遗言效果，抽 1 张牌。',
-                shortDescription: '触发一件装备的遗言效果；抽 1 张',
-                recycleDelay: 2,
+                description: '即时魔法：选择一个装备，触发其遗言效果 2 次，抽 1 张牌。',
+                shortDescription: '触发一件装备的遗言效果 2 次；抽 1 张',
               },
               destination: 'backpack' as const,
               banner: '墓语密室翻转为「墓语遗愿」，已放入背包。',
@@ -6116,24 +6119,10 @@ export default function GameBoard() {
         }
 
         if (amuletEffects.hasMonsterEquipBuff) {
-          void (async () => {
-            const choiceId = await requestMagicChoice({
-              title: '驯兽铸印',
-              subtitle: `${monster.name} 已装备，选择强化效果`,
-              options: [
-                { id: 'attack', label: '永久攻击 +1', description: '该装备栏永久攻击 +1。' },
-                { id: 'shield', label: '永久护甲 +1', description: '该装备栏永久护甲 +1。' }],
-            });
-            if (choiceId === 'attack') {
-              setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
-              addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +1！`);
-              dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +1！` });
-            } else {
-              setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + 1);
-              addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久护甲 +1！`);
-              dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久护甲 +1！` });
-            }
-          })();
+          setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
+          setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + 1);
+          addGameLog('amulet', `驯兽铸印：${monster.name} 装备栏永久攻击 +1，永久护甲 +1！`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +1，永久护甲 +1！` });
         }
 
         if (monster.monsterType === 'Ogre' || monster.name === 'Ogre') {
@@ -6558,24 +6547,10 @@ export default function GameBoard() {
       }
 
       if (isMonsterFromHand && amuletEffects.hasMonsterEquipBuff) {
-        void (async () => {
-          const choiceId = await requestMagicChoice({
-            title: '驯兽铸印',
-            subtitle: `${equipCard.name} 已装备，选择强化效果`,
-            options: [
-              { id: 'attack', label: '永久攻击 +1', description: '该装备栏永久攻击 +1。' },
-              { id: 'shield', label: '永久护甲 +1', description: '该装备栏永久护甲 +1。' }],
-          });
-          if (choiceId === 'attack') {
-            setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
-            addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +1！`);
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +1！` });
-          } else {
-            setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + 1);
-            addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久护甲 +1！`);
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久护甲 +1！` });
-          }
-        })();
+        setEquipmentSlotBonus(equipSlot, 'damage', cur => cur + 1);
+        setEquipmentSlotBonus(equipSlot, 'shield', cur => cur + 1);
+        addGameLog('amulet', `驯兽铸印：${equipCard.name} 装备栏永久攻击 +1，永久护甲 +1！`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `驯兽铸印：永久攻击 +1，永久护甲 +1！` });
       }
 
       if (isMonsterFromHand && (card.monsterType === 'Ogre' || card.name === 'Ogre')) {
@@ -6808,6 +6783,7 @@ export default function GameBoard() {
       Boolean(gs.mirrorCopyModal) ||
       Boolean(gs.permGrantModal) ||
       Boolean(gs.amplifyModal) ||
+      Boolean(gs.eventAmplifyHandPicker) ||
       Boolean(gs.eventDiceModal) ||
       Boolean(gs.magicChoiceModal) ||
       Boolean(gs.equipmentPrompt) ||
@@ -6879,7 +6855,7 @@ export default function GameBoard() {
       return false;
     }
     if (pendingPotionAction.effect === 'grant-weapon-stun-chance+40') {
-      return slotItem.type === 'weapon';
+      return slotItem.type === 'weapon' || slotItem.type === 'monster';
     }
     if ('allowedTypes' in pendingPotionAction && pendingPotionAction.allowedTypes) {
       if (!pendingPotionAction.allowedTypes.includes(slotItem.type)) {
@@ -8137,6 +8113,8 @@ export default function GameBoard() {
     onMirrorCopyCancel: cancelMirrorCopy,
     onAmplifyConfirm: resolveAmplify,
     onAmplifyCancel: cancelAmplify,
+    onEventAmplifyHandConfirm: handleEventAmplifyHandSelect,
+    onEventAmplifyHandCancel: cancelEventAmplifyHandPicker,
     onPermGrantConfirm: resolvePermGrant,
     onPermGrantCancel: cancelPermGrant,
     onBackpackReorganizeConfirm: handleBackpackReorganizeConfirm,
@@ -8171,6 +8149,7 @@ export default function GameBoard() {
     handleUpgradeModalChange, handleCardUpgrade,
     handleHandMagicUpgradeSelect, handleHandMagicUpgradeClose,
     resolveMirrorCopy, cancelMirrorCopy, resolveAmplify, cancelAmplify,
+    handleEventAmplifyHandSelect, cancelEventAmplifyHandPicker,
     resolvePermGrant, cancelPermGrant,
     handleBackpackReorganizeConfirm,
     cancelHeroMagicAction, handleHeroMagicChoice, cancelPotionAction, handlePotionChoiceSelection,

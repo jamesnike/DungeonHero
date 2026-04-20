@@ -326,6 +326,13 @@ export interface GameState {
   persuadeSuccessDurabilityBonus: number;
   /** Accumulated persuade rate bonus from weapons, amulets, etc. (persisted) */
   persuadeAmuletBonus: number;
+  /**
+   * Truly permanent persuasion rate bonus (e.g. monster-loot
+   * `persuadeRateBonus` rewards). Unlike `persuadeAmuletBonus`, this is
+   * NOT cleared after a persuade attempt. Always added to the persuade
+   * success rate.
+   */
+  permanentPersuadeBonus: number;
   /** "Next persuade" temporary cost/rate modifier (cleared on persuade confirm) */
   persuadeDiscount: { costReduction: number; rateBonus: number } | null;
   /** 转型关键词：上一张「使用」的牌的类型分类（不含弃置/回收），包含手牌和激活行 */
@@ -448,6 +455,8 @@ export interface GameState {
   permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant'; meta?: Record<string, number> } | null;
   /** 增幅：选择装备栏或手牌中的装备/伤害魔法进行增幅 */
   amplifyModal: { sourceCardId: string } | null;
+  /** 增幅仪式（事件）：选择手牌中的装备/伤害魔法作为增幅祭坛目标 */
+  eventAmplifyHandPicker: { eventCardId: string; cellIdx: number } | null;
   graveyardDiscoverState: GameCardData[] | null;
   graveyardDiscoverDelivery: 'backpack' | 'hand-first';
   cardActionContext: CardActionContext | null;

@@ -215,6 +215,7 @@ export interface PersistedGameState {
   persuadeRaceBonus?: Record<string, number>;
   persuadeSuccessDurabilityBonus?: number;
   persuadeAmuletBonus?: number;
+  permanentPersuadeBonus?: number;
   persuadeDiscount?: { costReduction: number; rateBonus: number } | null;
   lastPlayedCardCategory?: string | null;
   transformChainPrevCategory?: string | null;
@@ -256,6 +257,7 @@ export interface PersistedGameState {
   mirrorCopyModal?: { sourceCardId: string } | null;
   permGrantModal?: { sourceCardId: string; sourceType: string; meta?: Record<string, number> } | null;
   amplifyModal?: { sourceCardId: string } | null;
+  eventAmplifyHandPicker?: { eventCardId: string; cellIdx: number } | null;
   equipmentPrompt?: { prompt: string; subtext?: string } | null;
   persuadeState?: PersistedPersuadeState | null;
   magicChoiceModal?: PersistedMagicChoiceModal | null;

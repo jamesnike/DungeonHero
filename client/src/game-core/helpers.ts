@@ -775,6 +775,12 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
 
   rate += (state as any).persuadeAmuletBonus * bonusScale;
 
+  // Permanent persuade bonus (e.g. monster-loot persuadeRateBonus rewards).
+  // Unlike persuadeAmuletBonus, this is NEVER consumed by a persuade attempt,
+  // so it always contributes — but it still respects the high-layer
+  // bonusScale to match the existing persuade-bonus balance.
+  rate += ((state as any).permanentPersuadeBonus ?? 0) * bonusScale;
+
   const relics = (state.eternalRelics ?? []) as EternalRelic[];
   if (relics.some(r => r.id === 'chain-persuade')) {
     if ((state as any).lastPersuadeTargetId && (state as any).lastPersuadeTargetId === monster.id) {

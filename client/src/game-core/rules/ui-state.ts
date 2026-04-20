@@ -55,6 +55,9 @@ export function reduceUIStateActions(
     case 'SET_AMPLIFY_MODAL':
       return applyPatch(state, { amplifyModal: action.payload });
 
+    case 'SET_EVENT_AMPLIFY_HAND_PICKER':
+      return applyPatch(state, { eventAmplifyHandPicker: action.payload });
+
     case 'SET_EVENT_DICE_MODAL':
       return applyPatch(state, { eventDiceModal: action.payload });
 

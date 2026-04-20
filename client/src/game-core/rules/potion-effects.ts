@@ -821,7 +821,7 @@ export function resolvePendingPotion(
       const slotId = (action as any).slotId as 'equipmentSlot1' | 'equipmentSlot2';
       if (!slotId) return null;
       const item = state[slotId];
-      if (!item || item.type !== 'weapon') return null;
+      if (!item || (item.type !== 'weapon' && item.type !== 'monster')) return null;
       const amount = 40;
       const prev = (item as GameCardData).weaponStunChance ?? 0;
       const next = prev + amount;

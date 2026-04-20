@@ -53,6 +53,8 @@ export interface ModalCallbacks {
   onMirrorCopyCancel: () => void;
   onAmplifyConfirm: (selection: AmplifySelection) => void;
   onAmplifyCancel: () => void;
+  onEventAmplifyHandConfirm: (cardId: string) => void;
+  onEventAmplifyHandCancel: () => void;
   onPermGrantConfirm: (cardId: string) => void;
   onPermGrantCancel: () => void;
   onBackpackReorganizeConfirm: (selections: BackpackReorganizeSelection[]) => void;

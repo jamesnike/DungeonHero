@@ -45,6 +45,18 @@ const SHIELD = {
   maxDurability: 3,
 };
 
+const MONSTER_EQUIP = {
+  id: 'm-goblin',
+  type: 'monster' as const,
+  name: 'Goblin',
+  value: 2,
+  image: '',
+  durability: 3,
+  maxDurability: 3,
+  attack: 2,
+  hp: 3,
+};
+
 describe('PLAY_CARD with grant-weapon-stun-chance+40 potion', () => {
   it('auto-applies +40% to the only equipped weapon', () => {
     const state = makeState({
@@ -128,6 +140,71 @@ describe('PLAY_CARD with grant-weapon-stun-chance+40 potion', () => {
     const state = makeState({
       handCards: [POTION] as any,
       equipmentSlot1: { ...SWORD, id: 'w1' } as any,
+      equipmentSlot2: { ...SHIELD, id: 's1' } as any,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'p-stun' } as GameAction]);
+    const slot1 = result.state.equipmentSlot1 as any;
+    const slot2 = result.state.equipmentSlot2 as any;
+    expect(slot1?.weaponStunChance).toBe(40);
+    expect(slot2?.weaponStunChance ?? 0).toBe(0);
+    expect(result.state.pendingPotionAction).toBeFalsy();
+  });
+
+  it('auto-applies +40% to the only equipped monster equipment', () => {
+    const state = makeState({
+      handCards: [POTION] as any,
+      equipmentSlot1: { ...MONSTER_EQUIP } as any,
+      equipmentSlot2: null,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'p-stun' } as GameAction]);
+    const slot1 = result.state.equipmentSlot1 as any;
+    expect(slot1?.weaponStunChance).toBe(40);
+    expect(slot1?._potionStunBonusApplied).toBe(true);
+    expect(result.state.pendingPotionAction).toBeFalsy();
+    expect(result.state.handCards.length).toBe(0);
+  });
+
+  it('prompts for selection when both a weapon and a monster equipment are equipped', () => {
+    const state = makeState({
+      handCards: [POTION] as any,
+      equipmentSlot1: { ...SWORD, id: 'w1' } as any,
+      equipmentSlot2: { ...MONSTER_EQUIP, id: 'm1' } as any,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'p-stun' } as GameAction]);
+    expect(result.state.pendingPotionAction).toBeTruthy();
+    expect(result.state.pendingPotionAction?.effect).toBe('grant-weapon-stun-chance+40');
+    expect(result.state.pendingPotionAction?.step).toBe('slot-select');
+  });
+
+  it('applies +40% to a chosen monster equipment slot', () => {
+    const state = makeState({
+      handCards: [POTION] as any,
+      equipmentSlot1: { ...SWORD, id: 'w1' } as any,
+      equipmentSlot2: { ...MONSTER_EQUIP, id: 'm1' } as any,
+    });
+
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: 'p-stun' } as GameAction]);
+    expect(afterPlay.state.pendingPotionAction).toBeTruthy();
+
+    const afterChoice = drain(afterPlay.state, [{
+      type: 'RESOLVE_EQUIPMENT_CHOICE',
+      slotId: 'equipmentSlot2',
+    } as GameAction]);
+    const slot1 = afterChoice.state.equipmentSlot1 as any;
+    const slot2 = afterChoice.state.equipmentSlot2 as any;
+    expect(slot1?.weaponStunChance ?? 0).toBe(0);
+    expect(slot2?.weaponStunChance).toBe(40);
+    expect(slot2?._potionStunBonusApplied).toBe(true);
+    expect(afterChoice.state.pendingPotionAction).toBeFalsy();
+  });
+
+  it('treats a monster equipment as eligible alongside a shield (skips shield)', () => {
+    const state = makeState({
+      handCards: [POTION] as any,
+      equipmentSlot1: { ...MONSTER_EQUIP, id: 'm1' } as any,
       equipmentSlot2: { ...SHIELD, id: 's1' } as any,
     });
 

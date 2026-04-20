@@ -258,6 +258,17 @@ export interface GameCardData {
   tempHpBoost?: number; // Temporary HP/maxHP boost, cleared at next waterfall
   hasRevive?: boolean; // Monster revives once at 1 HP layer on first death
   reviveUsed?: boolean; // Whether the revive has already been consumed
+  /**
+   * Set by `reduceMonsterDefeated` once Branch C (actual defeat) has run.
+   * The monster card stays in `activeCards` for ~950ms while the defeat
+   * animation plays, so a second `MONSTER_DEFEATED` for the same id (e.g. a
+   * combo move that drains layers AND deals damage in one play) would
+   * otherwise re-run the entire defeat branch — duplicating reward
+   * generation, monstersDefeated counter, buglet drops, etc. This flag
+   * makes that second pass a no-op. It is naturally cleared when the card
+   * is removed from `activeCards`.
+   */
+  defeatProcessed?: boolean;
   lastWords?: string; // Death trigger effect ID (fires on actual death, not revive)
   bleedEffect?: string; // Bleed keyword: triggers on every layer lost (e.g. 'attack+1', 'attack+3')
   eliteRegenHeroTurn?: boolean; // Elite dragon: restore 1 layer if hero turn ends without layer loss
@@ -1903,7 +1914,7 @@ const amuletEffectText =
                   </h3>
                 )}
 
-                {isMonsterEquipmentCard(card) && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
+                {isMonsterEquipmentCard(card) && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手偷钱：攻击时为Hero偷钱">偷钱</span>
@@ -2160,6 +2171,9 @@ const amuletEffectText =
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层，2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
+                    )}
+                    {card._potionStunBonusApplied && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title={`雷震淬刃药：永久击晕率 ${card.weaponStunChance ?? 0}%`}>击晕 {card.weaponStunChance ?? 0}%</span>
                     )}
                     {card.isStunned && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title="晕眩：本回合无法行动">晕眩</span>

@@ -227,6 +227,7 @@ function isInputContinuation(action: GameAction): boolean {
     case 'RESOLVE_GRAVEYARD_SELECTION':
     case 'RESOLVE_FATE_SIGHT':
     case 'RESOLVE_STAT_SWAP':
+    case 'RESOLVE_REPAIR_ENRAGE_DICE':
     // Internal state mutations enqueued by reducers
     case 'HEAL':
     case 'MODIFY_GOLD':

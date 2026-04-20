@@ -824,8 +824,8 @@ export function createDeck(
       value: 6,
       image: starterPotionStunImage,
       potionEffect: 'grant-weapon-stun-chance+40',
-      description: '选择装备栏中的一个武器，永久击晕率 +40%。',
-      shortDescription: '一把武器永久 +40% 击晕率',
+      description: '选择装备栏中的一个武器或怪物装备，永久击晕率 +40%。',
+      shortDescription: '一把武器/怪物装备永久 +40% 击晕率',
     },
   ];
 

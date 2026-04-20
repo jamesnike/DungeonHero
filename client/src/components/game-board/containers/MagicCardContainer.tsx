@@ -16,6 +16,7 @@ function MagicCardContainerInner() {
     handMagicUpgradeModal: s.handMagicUpgradeModal,
     mirrorCopyModal: s.mirrorCopyModal,
     amplifyModal: s.amplifyModal,
+    eventAmplifyHandPicker: s.eventAmplifyHandPicker,
     permGrantModal: s.permGrantModal,
     pendingMagicAction: s.pendingMagicAction,
     handCards: s.handCards,
@@ -61,6 +62,17 @@ function MagicCardContainerInner() {
         equipmentSlot2={gs.equipmentSlot2}
         handCards={gs.handCards}
         onConfirm={cb.onAmplifyConfirm}
+      />
+
+      <AmplifyModal
+        open={Boolean(gs.eventAmplifyHandPicker)}
+        onClose={cb.onEventAmplifyHandCancel}
+        equipmentSlot1={null}
+        equipmentSlot2={null}
+        handCards={gs.handCards}
+        onConfirm={(selection) => {
+          if (selection.kind === 'hand') cb.onEventAmplifyHandConfirm(selection.cardId);
+        }}
       />
 
       <PermGrantModal

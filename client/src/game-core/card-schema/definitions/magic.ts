@@ -28,7 +28,9 @@ import {
   getCardPlayCategory,
   isDamageMagic,
   pickRandomHandCardsForDiscardPreferGraveyard,
+  applyAmplifyOnCreate,
 } from '../../helpers';
+import { createGreedCurseCard } from '@/lib/knightDeck';
 import {
   drawFromBackpackToHandPure,
   drawMultipleFromBackpack,
@@ -780,7 +782,7 @@ const equalizeAttackArmor: CardDefinition = {
 const cryptDeathwish: CardDefinition = {
   effectId: 'magic:crypt-deathwish',
   effects: [],
-  tags: ['magic', 'permanent', 'interactive'],
+  tags: ['magic', 'instant', 'interactive'],
   resolver: (state, card, sideEffects, patch) => {
     sideEffects.push({ event: 'card:magicResolved', payload: { card } });
     return applyPatch(state, patch, sideEffects);
@@ -1367,11 +1369,25 @@ const knightBloodGreed: CardDefinition = {
     if (goldEarned > 0) {
       enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldEarned, source: 'blood-greed-card' });
     }
+
+    const rng = patch.rng ?? state.rng;
+    const [rawCurse, nextRng] = createGreedCurseCard(rng);
+    patch.rng = nextRng;
+    const curseCard = applyAmplifyOnCreate(rawCurse as GameCardData, state.amplifiedCardBonus);
+    mergePatch(patch, addCardToBackpackPure({ ...state, ...patch } as GameState, curseCard));
+
+    const canOpenShop = (card.upgradeLevel ?? 0) >= 1;
+    let shopOpened = false;
+    if (canOpenShop) {
+      sideEffects.push({ event: 'card:bloodGreedShop' as any, payload: { card } });
+      shopOpened = true;
+    }
+
     sideEffects.push({ event: 'card:magicResolved', payload: { card } });
     const baseBanner = goldEarned > 0
       ? `嗜血贪欲让你获得 ${goldEarned} 金币（已损失生命），并将"贪婪"塞入背包。`
       : '当前满血，贪欲只留下"贪婪"。';
-    banner(sideEffects, baseBanner);
+    banner(sideEffects, shopOpened ? `${baseBanner}商店已开启！` : baseBanner);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);

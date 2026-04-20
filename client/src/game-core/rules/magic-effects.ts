@@ -37,7 +37,7 @@ import {
 } from '../cards';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import type { RngState } from '../rng';
-import { pickGraveyardCardExcluding, computeEquipmentBreakEffects } from './equipment-effects';
+import { pickGraveyardCardExcluding, computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords } from './equipment-effects';
 import {
   INITIAL_HP,
   HAND_LIMIT,
@@ -1409,9 +1409,9 @@ export function resolvePermanentMagic(
       card,
       effect: 'crypt-deathwish',
       step: 'slot-select',
-      prompt: '选择一个装备，触发其遗言效果',
+      prompt: '选择一个装备，触发其遗言效果 2 次',
     } as any;
-    patch.heroSkillBanner = '墓语遗愿：选择一个装备触发遗言。';
+    patch.heroSkillBanner = '墓语遗愿：选择一个装备触发遗言 2 次。';
     sideEffects.push({ event: 'card:cryptDeathwishSelect' as any, payload: { card } });
     return applyPatch(state, patch, sideEffects);
   }
@@ -3349,83 +3349,33 @@ function applyCryptDeathwish(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  const parts: string[] = [];
-  if (slotItem.onDestroyHeal) {
-    enqueuedActions.push({ type: 'HEAL', amount: slotItem.onDestroyHeal } as GameAction);
-    parts.push(`恢复 ${slotItem.onDestroyHeal} HP`);
+  // Delegate to the canonical last-words computation so we cover both generic
+  // equipment (onDestroy* fields) and monster equipment (lastWords,
+  // skeletonLastWordsDiscard, wraithDeathHeal/Spread, etc.). Call it twice and
+  // chain the patches so cumulative effects (slot bonuses, temp buffs, etc.)
+  // stack correctly across the two triggers.
+  const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  let totalDrawFromBackpack = 0;
+  let totalClassCardDraw = 0;
+  let mergedPatch: Partial<GameState> = patch;
+  for (let i = 0; i < 2; i++) {
+    const lw = computeEquipmentDisplacementLastWords(state, slotId, slotItem, amuletFx, mergedPatch);
+    mergedPatch = lw.patch;
+    sideEffects.push(...lw.sideEffects);
+    enqueuedActions.push(...lw.enqueuedActions);
+    totalDrawFromBackpack += lw.drawFromBackpack;
+    totalClassCardDraw += lw.classCardDraw;
   }
-  if (slotItem.onDestroyGold) {
-    enqueuedActions.push({ type: 'MODIFY_GOLD', delta: slotItem.onDestroyGold, source: 'equipment-destroy-gold' });
-    parts.push(`获得 ${slotItem.onDestroyGold} 金币`);
+  Object.assign(patch, mergedPatch);
+  if (totalDrawFromBackpack > 0) {
+    enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: totalDrawFromBackpack } as GameAction);
   }
-  if (slotItem.onDestroyDraw) {
-    enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: slotItem.onDestroyDraw } as GameAction);
-    parts.push(`抽 ${slotItem.onDestroyDraw} 张牌`);
-  }
-  if (slotItem.onDestroyClassDraw) {
-    sideEffects.push({ event: 'card:classDrawRequested' as any, payload: { count: slotItem.onDestroyClassDraw, source: `${slotItem.name}-墓语遗愿` } });
-    parts.push(`获得 ${slotItem.onDestroyClassDraw} 张专属卡`);
-  }
-  if (slotItem.onDestroyPermanentDamage) {
-    const bonuses = (patch.equipmentSlotBonuses as any) ? { ...(patch.equipmentSlotBonuses as any) } : { ...state.equipmentSlotBonuses };
-    bonuses[slotId] = { ...bonuses[slotId], damage: bonuses[slotId].damage + slotItem.onDestroyPermanentDamage };
-    patch.equipmentSlotBonuses = bonuses;
-    parts.push(`装备栏永久伤害 +${slotItem.onDestroyPermanentDamage}`);
-  }
-  if (slotItem.onDestroyPermanentShield) {
-    const bonuses = (patch.equipmentSlotBonuses as any) ? { ...(patch.equipmentSlotBonuses as any) } : { ...state.equipmentSlotBonuses };
-    bonuses[slotId] = { ...bonuses[slotId], shield: bonuses[slotId].shield + slotItem.onDestroyPermanentShield };
-    patch.equipmentSlotBonuses = bonuses;
-    parts.push(`装备栏永久护甲 +${slotItem.onDestroyPermanentShield}`);
-  }
-  if (slotItem.onDestroyEffect) {
-    const dEffect = slotItem.onDestroyEffect as string;
-    if (dEffect === 'slot-temp-buff-3-3') {
-      const newTempAttack = { ...(state.slotTempAttack ?? {}), [slotId]: ((state.slotTempAttack ?? {})[slotId] ?? 0) + 3 };
-      const newTempArmor = { ...(state.slotTempArmor ?? {}), [slotId]: ((state.slotTempArmor ?? {})[slotId] ?? 0) + 3 };
-      patch.slotTempAttack = newTempAttack;
-      patch.slotTempArmor = newTempArmor;
-      parts.push('该装备栏 +3临时攻击 +3临时护甲');
-    } else if (dEffect === 'graveyard-to-hand') {
-      // Defensively exclude the slot item itself even though crypt-deathwish
-      // doesn't actually destroy it — keeps semantics consistent across paths.
-      const graveyard = (patch.discardedCards ?? state.discardedCards ?? []) as GameCardData[];
-      const curRng = (patch.rng ?? state.rng) as RngState;
-      const pick = pickGraveyardCardExcluding(graveyard, slotItem.id, curRng);
-      if (pick) {
-        patch.rng = pick.rng;
-        patch.discardedCards = graveyard.filter((_, i) => i !== pick.idx);
-        patch.handCards = [...(patch.handCards ?? state.handCards), pick.picked];
-        parts.push(`从坟场获得「${pick.picked.name}」`);
-      } else {
-        parts.push('坟场没有可用的牌');
-      }
-    } else if (dEffect.startsWith('stunCap+')) {
-      const amount = parseInt(dEffect.replace('stunCap+', ''), 10) || 0;
-      if (amount > 0) {
-        const current = patch.stunCap ?? state.stunCap ?? 0;
-        const next = Math.min(100, current + amount);
-        if (next > current) patch.stunCap = next;
-        parts.push(`击晕上限 +${amount}%（当前 ${next}%）`);
-      }
-    } else if (dEffect.startsWith('allSlotTempArmor:')) {
-      const amount = parseInt(dEffect.replace('allSlotTempArmor:', ''), 10) || 0;
-      if (amount > 0) {
-        const tempArmor = (patch.slotTempArmor as Record<string, number> | undefined) ?? { ...(state.slotTempArmor ?? {}) };
-        tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) + amount;
-        tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + amount;
-        patch.slotTempArmor = tempArmor as any;
-        parts.push(`所有装备栏 +${amount}临时护甲`);
-      }
-    } else {
-      parts.push(dEffect);
-    }
+  if (totalClassCardDraw > 0) {
+    enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: totalClassCardDraw } as GameAction);
   }
   enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
-  parts.push('抽 1 张牌');
-  const effectSummary = parts.length > 0 ? parts.join('，') : '无遗言效果';
-  log(sideEffects, 'magic', `墓语遗愿：触发「${slotItem.name}」遗言 → ${effectSummary}`);
-  banner(sideEffects, `墓语遗愿：「${slotItem.name}」遗言触发！${effectSummary}`);
+  log(sideEffects, 'magic', `墓语遗愿：触发「${slotItem.name}」遗言 ×2，抽 1 张牌`);
+  banner(sideEffects, `墓语遗愿：「${slotItem.name}」遗言触发 2 次！抽 1 张牌`);
   patch.pendingMagicAction = null;
   patch.heroSkillBanner = null;
   patch.lastPlayedCardCategory = getCardPlayCategory(card);

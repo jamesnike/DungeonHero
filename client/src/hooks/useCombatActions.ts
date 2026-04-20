@@ -34,6 +34,10 @@ import { damageMonsterWithLayerOverflow } from '@/game-core/combat';
 // ---------------------------------------------------------------------------
 const COMBAT_BLOCK_TO_REFLECT_MS = 220;
 const DEFEAT_ANIMATION_DURATION = 950;
+// Defer the dagger self-destruct prompt until the swing/bleed/durability animations
+// finish so the player can see the attack resolve before deciding whether to self-destruct.
+// Mirrors COMBAT_ANIMATION_DURATION in useCombatAnimationTriggers.ts (1200ms).
+const DAGGER_PROMPT_POST_ATTACK_DELAY_MS = 1200;
 
 // ---------------------------------------------------------------------------
 // Deps: external dependencies injected by GameBoard
@@ -190,6 +194,12 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   }));
 
   const shieldRefillPendingRef = React.useRef<Map<string, string>>(new Map());
+
+  // Track in-flight waterfall so we can defer the dagger self-destruct prompt
+  // (which would otherwise pop up in the middle of the waterfall animation
+  // when the same attack both kills the row's last monster and triggers the cascade).
+  const waterfallInProgressRef = React.useRef<boolean>(false);
+  const waterfallCompletionResolversRef = React.useRef<Array<() => void>>([]);
 
   // -- State patch helper ------------------------------------------------------
 
@@ -508,7 +518,33 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     }
   });
 
+  useGameEvent('waterfall:started', () => {
+    waterfallInProgressRef.current = true;
+  });
+
+  useGameEvent('waterfall:completed', () => {
+    waterfallInProgressRef.current = false;
+    const resolvers = waterfallCompletionResolversRef.current;
+    waterfallCompletionResolversRef.current = [];
+    for (const resolve of resolvers) resolve();
+  });
+
   useGameEvent('combat:daggerSelfDestructPrompt', async ({ slotId, itemName, durability }) => {
+    // Wait for the attack swing + monster bleed + durability tick animations to finish
+    // so the player sees the attack resolve before being asked about self-destruct.
+    await new Promise<void>(resolve => {
+      window.setTimeout(resolve, depsRef.current.animSpeed(DAGGER_PROMPT_POST_ATTACK_DELAY_MS));
+    });
+
+    // If this same attack also triggered a waterfall (e.g. it killed the last
+    // monster in the row), defer the prompt until the waterfall animation
+    // sequence is fully done so the modal/discover doesn't overlap it.
+    if (waterfallInProgressRef.current) {
+      await new Promise<void>(resolve => {
+        waterfallCompletionResolversRef.current.push(resolve);
+      });
+    }
+
     const confirmed = await depsRef.current.requestDaggerSelfDestruct(itemName, durability);
     if (!confirmed) return;
 

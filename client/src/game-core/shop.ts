@@ -339,7 +339,7 @@ export function applyMonsterRewardPure(
     case 'persuadeRateBonus':
       return {
         patch: {
-          persuadeAmuletBonus: state.persuadeAmuletBonus + (amount ?? 0),
+          permanentPersuadeBonus: (state.permanentPersuadeBonus ?? 0) + (amount ?? 0),
           heroSkillBanner: `劝降成功率永久 +${amount ?? 0}%`,
         },
         logMessage: `战利品：劝降成功率永久 +${amount ?? 0}%`,

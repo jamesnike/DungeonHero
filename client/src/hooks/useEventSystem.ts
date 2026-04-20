@@ -297,6 +297,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   const eventDiceResolverRef = useRef<((entry: EventDiceRange | null) => void) | null>(null);
   const magicChoiceResolverRef = useRef<((optionId: string) => void) | null>(null);
   const equipmentPromptResolverRef = useRef<((slot: EquipmentSlotId | null) => void) | null>(null);
+  const eventAmplifyHandResolverRef = useRef<((cardId: string | null) => void) | null>(null);
   const pendingAutoDrawsRef = useRef(0);
   const [autoDrawTrigger, setAutoDrawTrigger] = useState(0);
   const processedDungeonCardIdsRef = useRef<Set<string>>(new Set());
@@ -537,6 +538,37 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     }
     dispatch({ type: 'SET_EQUIPMENT_PROMPT', payload: null });
     dispatch({ type: 'SET_PHASE', phase: 'playerInput' });
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // requestEventAmplifyHandSelection / handleEventAmplifyHandSelect / cancelEventAmplifyHandPicker
+  //
+  // 增幅仪式（事件）选项 2「选择手牌中的装备或魔法」：当 eligible >= 2 时
+  // 弹出 AmplifyModal 让玩家选目标，eligible == 1 时由调用方直接自动选。
+  // ---------------------------------------------------------------------------
+
+  const requestEventAmplifyHandSelection = useCallback(
+    (config: { eventCardId: string; cellIdx: number }): Promise<string | null> => {
+      return new Promise(resolve => {
+        eventAmplifyHandResolverRef.current = resolve;
+        dispatch({ type: 'SET_EVENT_AMPLIFY_HAND_PICKER', payload: config });
+      });
+    },
+    [],
+  );
+
+  const handleEventAmplifyHandSelect = useCallback((cardId: string) => {
+    eventAmplifyHandResolverRef.current?.(cardId);
+    eventAmplifyHandResolverRef.current = null;
+    dispatch({ type: 'SET_EVENT_AMPLIFY_HAND_PICKER', payload: null });
+  }, []);
+
+  const cancelEventAmplifyHandPicker = useCallback(() => {
+    if (eventAmplifyHandResolverRef.current) {
+      eventAmplifyHandResolverRef.current(null);
+      eventAmplifyHandResolverRef.current = null;
+    }
+    dispatch({ type: 'SET_EVENT_AMPLIFY_HAND_PICKER', payload: null });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -1547,7 +1579,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         });
       }
 
-    // --- amplify-altar-from-hand: auto-pick from hand -> transform event to altar building ---
+    // --- amplify-altar-from-hand: pick from hand -> transform event to altar building ---
     } else if (token === 'amplify-altar-from-hand') {
       const eventCardSnapshot = eventCard;
       const resId = depsRef.current.eventResolutionRef.current?.cardId;
@@ -1559,12 +1591,9 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       const eligibleFilter = (c: GameCardData) =>
         c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c);
       const eligible = engine.getState().handCards.filter(eligibleFilter);
-      if (eligible.length === 0) {
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '手牌中没有符合条件的装备或伤害魔法。' });
-        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
-        depsRef.current.eventChoiceProcessingRef.current = false;
-      } else if (cellIdx !== -1) {
-        const targetCard = eligible[0];
+
+      const applyAmplifyHandTarget = (targetCard: GameCardData) => {
+        if (cellIdx === -1) return;
         let rng = engine.getState().rng;
         let _altarId: string;
         [_altarId, rng] = nextId(rng, 'amplify-altar');
@@ -1593,6 +1622,35 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         }
         addGameLog('event', `增幅仪式翻转为增幅祭坛，目标：${targetCard.name}`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅仪式翻转为增幅祭坛！目标：${targetCard.name}` });
+      };
+
+      if (eligible.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '手牌中没有符合条件的装备或伤害魔法。' });
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else if (cellIdx === -1) {
+        // event card no longer on board — skip silently
+      } else if (eligible.length === 1) {
+        applyAmplifyHandTarget(eligible[0]);
+      } else {
+        requestEventAmplifyHandSelection({
+          eventCardId: eventCardSnapshot?.id ?? '',
+          cellIdx,
+        }).then(selectedCardId => {
+          if (!selectedCardId) {
+            // 取消选择：解锁事件处理状态，等玩家在事件菜单重新选项
+            depsRef.current.eventChoiceProcessingRef.current = false;
+            return;
+          }
+          const targetCard = engine.getState().handCards.find(c => c.id === selectedCardId);
+          if (!targetCard) {
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '所选手牌已不在手牌中。' });
+            dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+            depsRef.current.eventChoiceProcessingRef.current = false;
+            return;
+          }
+          applyAmplifyHandTarget(targetCard);
+        });
       }
 
     // --- amplify-altar-discover-class: discover flow -> transform event to altar building ---
@@ -1826,6 +1884,9 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     requestEquipmentSelection,
     handleEquipmentPromptSelection,
     cancelEquipmentPrompt,
+    requestEventAmplifyHandSelection,
+    handleEventAmplifyHandSelect,
+    cancelEventAmplifyHandPicker,
     evaluateChoiceRequirements,
     eventChoiceStates,
     gainClassDeckBottomCards,
