@@ -1587,6 +1587,14 @@ export default function GameBoard() {
   // isDraggingToHand / isDraggingFromDungeon removed (values were never read)
   // wraithPassiveEnabledRef eliminated — use engine.getState().wraithPassiveEnabled
   const [wraithPassiveUnlockPopup, setWraithPassiveUnlockPopup] = useState(false);
+
+  // Open the unlock popup when the reducer reports wraith purification.
+  // (The earlier `combat:wraithPurified` listener above only logs; this one
+  //  also surfaces the modal so the player learns about the new relic.)
+  useGameEvent('combat:wraithPurified', () => {
+    setWraithPassiveUnlockPopup(true);
+  });
+
   const eventChoiceProcessingRef = useRef(false);
   /** Event / Shop 最小化时冻结主界面操作（与弃牌雷击共用 fullBoardInteractionLocked） */
   const minimizedModalLocksBoard =

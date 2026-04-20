@@ -1008,14 +1008,13 @@ export function createBossCard(monster: GameCardData): GameCardData {
     hp: fullHp,
     hasRevive: true,
     reviveUsed: false,
-    bossRetaliationDamage: 3,
     bossLastStandAura: true,
     bossEnrageGraveyardSummon: 4,
     attack: (monster.attack ?? monster.value ?? 0) + 5,
     value: (monster.value ?? 0) + 5,
     tempAttackBoost: (monster.tempAttackBoost ?? 0) + 5,
     name: `${monster.name} (Boss)`,
-    description: `Boss形态！反噬3；1层时全行怪物攻+5并恢复1血层；激怒时从坟场召唤2怪物各占1格（顶层）+ 2非怪物堆叠在另一格。`,
+    description: `Boss形态！1层时全行怪物攻+5并恢复1血层；激怒时从坟场召唤2怪物各占1格（顶层）+ 2非怪物堆叠在另一格。`,
   };
 }
 

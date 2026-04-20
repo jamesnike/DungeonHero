@@ -24,9 +24,11 @@ import {
   BALANCE_SHIELD_BONUS,
   BALANCE_ATTACK_PENALTY,
   BALANCE_SHIELD_PENALTY,
+  BASE_BACKPACK_CAPACITY,
 } from '../constants';
 import { computeAmuletEffects } from '../equipment';
 import { computeAmuletAuraReversal } from '../helpers';
+import { hasEternalRelic } from '@/lib/eternalRelics';
 import type { RngState } from '../rng';
 import { nextInt } from '../rng';
 import type { GameCardData } from '@/components/GameCard';
@@ -77,6 +79,48 @@ function reduceEndTurn(
     rng: result.rng,
     phase: 'monsterTurn',
   };
+
+  // Eternal relic·幽魂净化 — at every hero turn end, flush the recycle bag
+  // back into the backpack (no usage limit). Cards that don't fit the backpack
+  // capacity stay in the bag for next turn.
+  if (hasEternalRelic(state.eternalRelics ?? [], 'wraith-purification')) {
+    const bag = state.permanentMagicRecycleBag as (GameCardData & { _recycleWaits?: number })[];
+    if (bag.length > 0) {
+      const cleaned: GameCardData[] = bag.map(card => {
+        const { _recycleWaits, ...rest } = card;
+        return rest as GameCardData;
+      });
+      const capacity = Math.max(1, BASE_BACKPACK_CAPACITY + (state.backpackCapacityModifier ?? 0));
+      const currentBackpack = state.backpackItems as GameCardData[];
+      const available = Math.max(0, capacity - currentBackpack.length);
+      const toRestore = cleaned.slice(0, available);
+      const overflow = cleaned.slice(available);
+      patch.backpackItems = [...currentBackpack, ...toRestore];
+      patch.permanentMagicRecycleBag = overflow as GameCardData[];
+      if (toRestore.length > 0) {
+        sideEffects.push({
+          event: 'log:entry',
+          payload: {
+            type: 'skill',
+            message: `幽魂净化：回合结束，回收袋 ${toRestore.length} 张牌洗回背包：${toRestore.map(c => c.name).join('、')}`,
+          },
+        });
+        sideEffects.push({
+          event: 'ui:banner',
+          payload: { text: `幽魂净化：${toRestore.length} 张牌从回收袋洗回背包！` },
+        });
+      }
+      if (overflow.length > 0) {
+        sideEffects.push({
+          event: 'log:entry',
+          payload: {
+            type: 'skill',
+            message: `幽魂净化：背包已满，${overflow.length} 张牌留在回收袋等待。`,
+          },
+        });
+      }
+    }
+  }
 
   // If combat ended (no engaged monsters), no need to advance
   if (result.combatState.engagedMonsterIds.length === 0) {

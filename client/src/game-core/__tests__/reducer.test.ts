@@ -1153,13 +1153,49 @@ describe('reducer', () => {
       expect(buffed.hp).toBe(4);
     });
 
-    it('emits executeLastWords side effect for monsters with last words', () => {
+    it('runs last words inline on defeat (discards hand + emits combat:lastWordsDiscard)', () => {
       const monster = makeMonster({ lastWords: 'discard-hand-1' });
+      const handCard = { id: 'h1', type: 'magic' as const, name: 'Spell', value: 0 };
       const slots = Array.from({ length: 5 }, () => null) as any;
       slots[0] = monster;
-      const state = makeState({ activeCards: slots, combatState: { ...initialCombatState, engagedMonsterIds: ['m1'] } });
+      const state = makeState({
+        activeCards: slots,
+        handCards: [handCard as any],
+        combatState: { ...initialCombatState, engagedMonsterIds: ['m1'] },
+      });
       const result = reduce(state, { type: 'MONSTER_DEFEATED', monsterId: 'm1' });
-      expect(result.sideEffects.some(e => e.event === 'combat:executeLastWords')).toBe(true);
+      expect(result.state.handCards).toHaveLength(0);
+      expect(result.sideEffects.some(e => e.event === 'combat:lastWordsDiscard')).toBe(true);
+    });
+
+    it('runs skeleton last words BEFORE revive (hand discard happens, monster still revived)', () => {
+      const monster = {
+        id: 'sk1', type: 'monster' as const, name: 'Skeleton', value: 5,
+        hp: 0, maxHp: 5, attack: 5, monsterType: 'Skeleton',
+        hasRevive: true, skeletonLastWordsDiscard: true,
+      };
+      const handCard = { id: 'h1', type: 'magic' as const, name: 'Spell', value: 0 };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const state = makeState({
+        activeCards: slots,
+        handCards: [handCard as any],
+        combatState: { ...initialCombatState, engagedMonsterIds: ['sk1'] },
+      });
+      const result = reduce(state, { type: 'MONSTER_DEFEATED', monsterId: 'sk1' });
+      // Discard applied
+      expect(result.state.handCards).toHaveLength(0);
+      // Monster revived (still on board with reviveUsed)
+      const revived = (result.state.activeCards as any[]).find(c => c?.id === 'sk1');
+      expect(revived).toBeTruthy();
+      expect(revived.reviveUsed).toBe(true);
+      expect(revived.currentLayer).toBe(1);
+      // Side effect order: discard banner BEFORE revive log
+      const events = result.sideEffects.map(e => ({ event: e.event, payload: (e as any).payload }));
+      const discardIdx = events.findIndex(e => e.event === 'combat:lastWordsDiscard');
+      const reviveIdx = events.findIndex(e => e.event === 'log:entry' && /复生/.test(e.payload?.message ?? ''));
+      expect(discardIdx).toBeGreaterThanOrEqual(0);
+      expect(reviveIdx).toBeGreaterThan(discardIdx);
     });
 
     it('queues monster rewards when rewards exist', () => {

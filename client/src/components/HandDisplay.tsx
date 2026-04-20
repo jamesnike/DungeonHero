@@ -61,6 +61,16 @@ function HandDisplayInner({
   );
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
+  // On primary-touch devices, iOS / Android dispatch synthesized mouse
+  // events after a tap (mouseenter / mousemove without a matching
+  // mouseleave), which would activate the JS-driven hand-card raise/scale
+  // effect and leave it stuck. Detect once on mount so we can fully skip
+  // hover activation on touch.
+  const [isTouchDevice] = useState(() =>
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches,
+  );
   const [isDraggingCard, setIsDraggingCard] = useState(false);
   const [calculatedCardHeight, setCalculatedCardHeight] = useState<number>(() => getCardHeight(gameViewport.width));
   const [isCompactHand, setIsCompactHand] = useState<boolean>(gameViewport.width < 640);
@@ -181,13 +191,14 @@ function HandDisplayInner({
   });
 
   const activateHover = useCallback((index: number) => {
+    if (isTouchDevice) return;
     if (layoutRef.current.disableAnimations || layoutRef.current.isDragging) return;
     if (hoveredIndexRef.current === index) return;
 
     clearHoverDOM();
     applyHoverToDOM(index);
     hoveredIndexRef.current = index;
-  }, [clearHoverDOM, applyHoverToDOM]);
+  }, [isTouchDevice, clearHoverDOM, applyHoverToDOM]);
 
   const deactivateHover = useCallback(() => {
     if (layoutRef.current.disableAnimations) return;

@@ -106,7 +106,7 @@ function GameFlowContainerInner() {
             <div className="rounded-xl border border-purple-500/40 bg-purple-500/10 p-4">
               <div className="text-lg font-semibold text-purple-300">永恒护符·幽魂净化</div>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                每当背包空了，将回收袋洗回背包（没有使用上限）。
+                每当玩家回合结束时，将回收袋所有牌洗回背包（无次数限制）。
               </p>
             </div>
           </div>

@@ -1871,7 +1871,7 @@ export function resolveKnightPermanentMagic(
         if (monsters.length === 1) {
           const armorPcts = [100, 150];
           const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? 150;
-          const rawArmor = shieldSlots[0].item.value ?? 0;
+          const rawArmor = computeSlotArmorValuePure(state, slotId);
           const scaledArmor = Math.floor(rawArmor * armorPct / 100);
           const totalDamage = getSpellDamage(scaledArmor + (card.amplifyBonus ?? 0), state);
           enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
@@ -1882,7 +1882,7 @@ export function resolveKnightPermanentMagic(
         }
         const armorPcts = [100, 150];
         const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? 150;
-        const rawArmor = shieldSlots[0].item.value ?? 0;
+        const rawArmor = computeSlotArmorValuePure(state, slotId);
         const scaledArmor = Math.floor(rawArmor * armorPct / 100);
         patch.pendingMagicAction = {
           card,

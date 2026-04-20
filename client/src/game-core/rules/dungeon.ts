@@ -16,6 +16,7 @@ import { HAND_LIMIT, BASE_BACKPACK_CAPACITY } from '../constants';
 import { pickRandomHandCardsForDiscardPreferGraveyard, flattenActiveRowSlots, findSlotIndexByCardId } from '../helpers';
 import { DUNGEON_COLUMN_COUNT, createEmptyActiveRow } from '../constants';
 import { applyMonsterRage } from '@/lib/monsterRage';
+import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
 import {
   planWaterfall,
   applyWaterfallDrop,
@@ -375,21 +376,39 @@ function reduceEnforceBackpackCapacity(state: GameState): ReduceResult {
 // ---------------------------------------------------------------------------
 
 function reduceCheckWraithPurification(state: GameState): ReduceResult {
-  if (!state.wraithPassiveEnabled) return noChange(state);
+  // Idempotent: only grant once
+  if (hasEternalRelic(state.eternalRelics ?? [], 'wraith-purification')) {
+    return noChange(state);
+  }
 
-  // Check if all active row wraiths are defeated
-  const hasWraith = (state.activeCards as GameCardData[]).some(
-    c => c && c.type === 'monster' && c.monsterSpecial?.startsWith('wraith'),
-  );
+  // Wraiths still standing in the active row count — but a card marked
+  // `defeatProcessed` is in mid-removal and should be treated as gone so the
+  // check fires immediately when the last wraith dies (not one defeat later).
+  const isLiveWraith = (c: GameCardData | null | undefined) =>
+    !!c && c.type === 'monster' && !c.defeatProcessed && c.monsterType === 'Wraith';
+
+  const hasWraith =
+    (state.activeCards as (GameCardData | null)[]).some(isLiveWraith) ||
+    (state.previewCards as (GameCardData | null)[]).some(isLiveWraith) ||
+    (state.remainingDeck as GameCardData[]).some(c => c?.monsterType === 'Wraith');
+
   if (hasWraith) return noChange(state);
 
-  // Wraith purification complete — emit side effect for UI handling
-  const sideEffects: SideEffect[] = [{
-    event: 'combat:wraithPurified',
-    payload: {},
-  }];
+  // All wraiths cleared — grant the eternal relic and notify UI.
+  const relic = getEternalRelic('wraith-purification');
+  const sideEffects: SideEffect[] = [
+    { event: 'combat:wraithPurified', payload: {} },
+    {
+      event: 'log:entry',
+      payload: { type: 'skill', message: '所有幽魂已被消灭！获得永恒护符·幽魂净化。' },
+    },
+    { event: 'ui:banner', payload: { text: '获得永恒护符·幽魂净化！' } },
+  ];
 
-  return applyPatch(state, {}, sideEffects);
+  return applyPatch(state, {
+    eternalRelics: [...(state.eternalRelics ?? []), relic],
+    wraithPassiveEnabled: true,
+  }, sideEffects);
 }
 
 // ---------------------------------------------------------------------------

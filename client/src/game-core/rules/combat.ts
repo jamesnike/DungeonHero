@@ -14,6 +14,7 @@ import type { GameAction } from '../actions';
 import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch, noChange } from '../reducer';
 import { nextInt, nextBool, shuffle as rngShuffle, pickRandom, nextId } from '../rng';
+import type { RngState } from '../rng';
 import type { GameCardData } from '@/components/GameCard';
 import type { EquipmentSlotId, EquipmentSlotBonusState, ActiveRowSlots, EquipmentItem, AmuletItem, MonsterRewardOption } from '@/components/game-board/types';
 import {
@@ -759,13 +760,13 @@ function reduceMonsterDefeated(
       ? { ...initialCombatState }
       : { ...state.combatState, engagedMonsterIds: remaining };
 
+    if (monster.lastWords) {
+      rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
+    }
+
     patch.heroSkillBanner = `${monster.name} 暴走变身！`;
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 变身为 Boss！` } });
     sideEffects.push({ event: 'combat:bossTransform', payload: { monsterId: monster.id, originalMonster: monster, bossCard } });
-
-    if (monster.lastWords) {
-      sideEffects.push({ event: 'combat:executeLastWords', payload: { monster } });
-    }
 
     patch.rng = rng;
     return applyPatch(state, patch, sideEffects);
@@ -773,6 +774,16 @@ function reduceMonsterDefeated(
 
   // ---- Branch B: Revive ----
   if (monster.hasRevive && !monster.reviveUsed && !monster.isStunned) {
+    // Run last words FIRST so the discard (and its banner) resolves before the
+    // revive flips the monster back to alive. Same reduce — both end up
+    // committed atomically, but side-effect order drives banner / log order.
+    if (monster.lastWords) {
+      rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
+    }
+    if (monster.skeletonLastWordsDiscard && !monster.lastWords) {
+      rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, 'discard-hand-1', rng, sideEffects);
+    }
+
     const fullHp = monster.maxHp ?? monster.hp ?? monster.value ?? 0;
     const activateNoLayerCost = !!monster.skeletonNoLayerCost;
     const revived: GameCardData = {
@@ -782,20 +793,16 @@ function reduceMonsterDefeated(
       reviveUsed: true,
       ...(activateNoLayerCost ? { skeletonNoLayerCostActive: true } : {}),
     };
-    activeCards[idx] = revived;
-    patch.activeCards = activeCards as GameState['activeCards'];
+    // Pull the latest activeCards (last words may have shuffled them via wraith-haunt).
+    const reviveBaseCards = [...((patch.activeCards ?? activeCards) as ActiveRowSlots)] as ActiveRowSlots;
+    const reviveIdx = reviveBaseCards.findIndex(c => c?.id === monster.id);
+    if (reviveIdx >= 0) reviveBaseCards[reviveIdx] = revived;
+    patch.activeCards = reviveBaseCards as GameState['activeCards'];
     patch.heroSkillBanner = `${monster.name} 复生了！`;
 
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 触发了复生，以 1 血层重新站了起来！` } });
     if (activateNoLayerCost) {
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 不朽之骨：复生后攻击不再消耗血层！` } });
-    }
-
-    if (monster.lastWords) {
-      sideEffects.push({ event: 'combat:executeLastWords', payload: { monster } });
-    }
-    if (monster.skeletonLastWordsDiscard && !monster.lastWords) {
-      sideEffects.push({ event: 'combat:executeLastWords', payload: { monster: { ...monster, lastWords: 'discard-hand-1' } } });
     }
 
     patch.rng = rng;
@@ -816,12 +823,12 @@ function reduceMonsterDefeated(
   sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 被击败！` } });
   sideEffects.push({ event: 'combat:monsterDefeated', payload: { monsterId: monster.id, monsterName: monster.name } });
 
-  // Execute last words (hook handles the async flow)
+  // Execute last words inline so the discard / haunt actually applies.
   if (monster.lastWords && !monster.isStunned) {
-    sideEffects.push({ event: 'combat:executeLastWords', payload: { monster } });
+    rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
   }
   if (monster.skeletonLastWordsDiscard && !monster.lastWords && !monster.isStunned) {
-    sideEffects.push({ event: 'combat:executeLastWords', payload: { monster: { ...monster, lastWords: 'discard-hand-1' } } });
+    rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, 'discard-hand-1', rng, sideEffects);
   }
 
   // Minion buff — search all zones for isMinionCard, apply +1/+1
@@ -1134,6 +1141,13 @@ function reduceMonsterDefeated(
     sideEffects.push({ event: 'combat:combatEnded', payload: {} });
   }
 
+  // If a wraith was just killed, run the purification check (no-op if a
+  // wraith still exists anywhere in active/preview/deck or if the relic is
+  // already granted).
+  if (monster.monsterType === 'Wraith') {
+    enqueuedActions.push({ type: 'CHECK_WRAITH_PURIFICATION' });
+  }
+
   patch.rng = rng;
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
@@ -1254,41 +1268,49 @@ function reduceDecrementFury(
 //   - wraith-haunt-N: applies shuffle + attack boost (pure via applyWraithHauntEffect)
 // ---------------------------------------------------------------------------
 
-function reduceExecuteLastWords(
+/**
+ * Apply a monster's last words effect to the running patch in place.
+ *
+ * Used by both EXECUTE_LAST_WORDS and the MONSTER_DEFEATED branches that need
+ * to materialize the discard / haunt within the same reduce call (e.g. the
+ * revive branch must run last words before flipping the monster back to
+ * alive). Reads from `patch.X ?? state.X` so callers may safely chain it
+ * before/after their own patch mutations. Mutates `patch` and `sideEffects`;
+ * returns the advanced rng.
+ */
+function applyLastWordsToPatch(
   state: GameState,
-  action: Extract<GameAction, { type: 'EXECUTE_LAST_WORDS' }>,
-): ReduceResult {
-  const sideEffects: SideEffect[] = [];
-  const patch: Partial<GameState> = {};
-  let rng = state.rng;
-  const effect = action.lastWords;
-
-  const monster = state.activeCards.find(c => c?.id === action.monsterId);
-  const monsterName = monster?.name ?? 'Unknown';
-
+  patch: Partial<GameState>,
+  monsterId: string,
+  monsterName: string,
+  effect: string,
+  rng: RngState,
+  sideEffects: SideEffect[],
+): RngState {
   if (effect === 'discard-hand-3' || effect === 'discard-hand-1') {
     const maxDiscard = effect === 'discard-hand-1' ? 1 : 3;
-    const fullHand = state.handCards as GameCardData[];
+    const fullHand = (patch.handCards ?? state.handCards) as GameCardData[];
     // Curses are immune to forced discard.
     const currentHand = fullHand.filter(c => c.type !== 'curse');
     const discardCount = Math.min(maxDiscard, currentHand.length);
 
     if (discardCount <= 0) {
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 的遗言：随机弃回手牌，但玩家没有可弃的手牌。` } });
-      return applyPatch(state, {}, sideEffects);
+      return rng;
     }
 
     const indices = Array.from({ length: currentHand.length }, (_, i) => i);
+    let nextRng = rng;
     let shuffledIndices: number[];
-    [shuffledIndices, rng] = rngShuffle(indices, rng);
+    [shuffledIndices, nextRng] = rngShuffle(indices, nextRng);
     const toDiscardIndices = shuffledIndices.slice(0, discardCount);
     const toDiscard = toDiscardIndices.map(i => currentHand[i]);
     const discardIds = new Set(toDiscard.map(c => c.id));
     patch.handCards = fullHand.filter(c => !discardIds.has(c.id));
 
     // Route each discarded card to recycleBag or graveyard
-    const graveyard = [...(state.discardedCards as GameCardData[])];
-    const recycleBag = [...(state.permanentMagicRecycleBag as (GameCardData & { _recycleWaits?: number })[])];
+    const graveyard = [...((patch.discardedCards ?? state.discardedCards) as GameCardData[])];
+    const recycleBag = [...((patch.permanentMagicRecycleBag ?? state.permanentMagicRecycleBag) as (GameCardData & { _recycleWaits?: number })[])];
     for (const card of toDiscard) {
       if (isRecyclableFromHand(card)) {
         recycleBag.push({ ...card, _recycleWaits: card.recycleDelay ?? 2 } as any);
@@ -1307,21 +1329,45 @@ function reduceExecuteLastWords(
     });
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 的遗言：随机弃回了 ${discardCount} 张手牌（${names.join('、')}）` } });
     sideEffects.push({ event: 'ui:banner', payload: { text: `${monsterName} 的遗言：弃回了 ${names.join('、')}！` } });
+    return nextRng;
   }
 
   if (effect.startsWith('wraith-haunt-')) {
     const atkBoost = parseInt(effect.replace('wraith-haunt-', ''), 10) || 2;
-    const [shuffled, rngAfterWraith] = applyWraithHauntEffect(state.activeCards, action.monsterId, atkBoost, rng);
+    const baseCards = (patch.activeCards ?? state.activeCards) as ActiveRowSlots;
+    const [shuffled, nextRng] = applyWraithHauntEffect(baseCards, monsterId, atkBoost, rng);
     patch.activeCards = shuffled as GameState['activeCards'];
-    rng = rngAfterWraith;
 
-    const otherMonsters = state.activeCards.filter(c => c && c.id !== action.monsterId && c.type === 'monster');
+    const otherMonsters = baseCards.filter(c => c && c.id !== monsterId && c.type === 'monster');
     const parts: string[] = [];
     if (otherMonsters.length > 0) parts.push(`同行怪物攻击力 +${atkBoost}`);
     parts.push('同行卡牌位置打乱');
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 的遗言：${parts.join('，')}！` } });
     sideEffects.push({ event: 'ui:banner', payload: { text: `${monsterName} 的遗言：${parts.join('，')}！` } });
+    return nextRng;
   }
+
+  return rng;
+}
+
+function reduceExecuteLastWords(
+  state: GameState,
+  action: Extract<GameAction, { type: 'EXECUTE_LAST_WORDS' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+  const monster = state.activeCards.find(c => c?.id === action.monsterId);
+  const monsterName = monster?.name ?? 'Unknown';
+
+  const rng = applyLastWordsToPatch(
+    state,
+    patch,
+    action.monsterId,
+    monsterName,
+    action.lastWords,
+    state.rng,
+    sideEffects,
+  );
 
   patch.rng = rng;
   return applyPatch(state, patch, sideEffects);
