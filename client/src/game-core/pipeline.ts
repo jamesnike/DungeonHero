@@ -260,6 +260,17 @@ function isInputContinuation(action: GameAction): boolean {
     case 'TRIGGER_GRAVE_NOVA':
     case 'FIRE_MISSILE_STORM_BOLT':
     case 'PROCESS_HERO_MAGIC_CARD':
+    // 上手 (on-enter-hand) keyword — enqueued by postProcessHandEntries when
+    // a card with `onEnterHandEffect` is detected as newly added to handCards
+    // (auto-draw / draw / restore from recycle bag). Must run as a continuation
+    // so the effect fires while the game is in playerInput phase, otherwise
+    // the trigger gets stuck in the queue and the card never amplifies / heals
+    // / etc. (e.g. 生长之刃 stays at base attack value).
+    case 'TRIGGER_ON_ENTER_HAND':
+    case 'AMPLIFY_CARDS_BY_NAME':
+    // Auto-draw drain — dispatched from useEventSystem after a dungeon card is
+    // processed. Always a follow-up to gameplay, never a new player decision.
+    case 'PROCESS_AUTO_DRAWS':
     // Transform chain — enqueued by RESOLVE_MAGIC / RESOLVE_POTION /
     // SET_CURRENT_EVENT / COMPLETE_HERO_MAGIC / PLACE_BUILDING_IN_DUNGEON /
     // EQUIP_* as a follow-up; never a player input action.

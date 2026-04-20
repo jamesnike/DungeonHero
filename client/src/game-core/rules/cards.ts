@@ -421,7 +421,9 @@ function reduceTriggerOnEnterHand(
   const card = (state.handCards as GameCardData[]).find(c => c.id === action.cardId);
   if (!card || !card.onEnterHandEffect) return noChange(state);
 
-  const sideEffects: SideEffect[] = [];
+  const sideEffects: SideEffect[] = [
+    { event: 'log:entry', payload: { type: 'magic', message: `「${card.name}」触发上手效果。` } },
+  ];
   const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
 
