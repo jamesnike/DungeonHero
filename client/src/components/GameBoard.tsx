@@ -1532,7 +1532,11 @@ export default function GameBoard() {
   });
 
   useGameEvent('equipment:drawFromRecycleBag', ({ count }) => {
-    drawFromRecycleBagToHand(count);
+    // Reducer (rules/combat.ts overkillRecycleToHand block) already moves
+    // the cards from the recycle bag straight into the hand (with backpack
+    // overflow). This listener is UI-only: log it for now, future hook can
+    // attach a flight animation here if desired.
+    console.log('[equipment:drawFromRecycleBag]', { count });
   });
 
   useGameEvent('equipment:classCardDraw', ({ count }) => {

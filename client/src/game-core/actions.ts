@@ -133,6 +133,11 @@ export interface DealDamageToMonsterAction {
   damage: number;
   source: string;
   isSpellDamage?: boolean;
+  // Optional log line emitted ONLY when the damage actually lands (i.e. is not
+  // fully blocked by buglet shield / building immunity / spell resistance).
+  // Use this for spells whose pre-resolution log message would be misleading
+  // when blocked. Logged with type 'magic'.
+  landedLogMessage?: string;
 }
 
 // ---------------------------------------------------------------------------

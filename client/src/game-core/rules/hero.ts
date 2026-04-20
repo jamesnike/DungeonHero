@@ -1825,10 +1825,7 @@ function reduceMagicMonsterSelection(
         damage: dmg,
         source: 'transform-streak-strike',
         isSpellDamage: true,
-      });
-      sideEffects.push({
-        event: 'log:entry',
-        payload: { type: 'magic', message: `${pending.card.name}：连续转型 ${streak}，对 ${monster.name} 造成 ${dmg} 点法术伤害。` },
+        landedLogMessage: `${pending.card.name}：连续转型 ${streak}，对 ${monster.name} 造成 ${dmg} 点法术伤害。`,
       });
       return applyFinalizeMagic(
         state, patch, sideEffects, enqueuedActions, pending.card,

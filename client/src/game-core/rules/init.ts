@@ -28,7 +28,7 @@ export function reduceInitGame(
 ): ReduceResult {
   let rng: RngState = state.rng;
   const isQuickMode = mode === 'quick';
-  const initialTurnCount = isQuickMode ? 2 : INITIAL_TURN_COUNT;
+  const initialTurnCount = isQuickMode ? 1 : INITIAL_TURN_COUNT;
 
   // --- Hero variant (first pick, used only for the SET_GAME_FLAGS patch in the old code) ---
   const [, rng1] = getRandomHero(rng);

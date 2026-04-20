@@ -1944,8 +1944,8 @@ const starterTransformStreakStrike: CardDefinition = {
         damage: dmg,
         source: 'transform-streak-strike',
         isSpellDamage: true,
+        landedLogMessage: `${card.name}：连续转型 ${predictedStreak}，对 ${target.name} 造成 ${dmg} 点法术伤害。`,
       });
-      log(sideEffects, 'magic', `${card.name}：连续转型 ${predictedStreak}，对 ${target.name} 造成 ${dmg} 点法术伤害。`);
       banner(sideEffects, `${card.name}：连续转型 ${predictedStreak} → ${dmg} 点伤害！`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
@@ -1956,7 +1956,7 @@ const starterTransformStreakStrike: CardDefinition = {
       card,
       effect: 'transform-streak-strike',
       step: 'monster-select',
-      prompt: `${card.name}：选择一个怪物，造成 ${dmg} 点法术伤害（连续转型 ${predictedStreak}）。`,
+      prompt: `${card.name}：选择一个怪物，对其释放 ${dmg} 点法术伤害（连续转型 ${predictedStreak}）。`,
       data: { damage: dmg, streak: predictedStreak },
     } as any;
     patch.heroSkillBanner = `${card.name}：选择一个怪物（连续转型 ${predictedStreak} → ${dmg} 伤害）。`;

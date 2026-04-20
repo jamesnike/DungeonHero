@@ -29,7 +29,7 @@ import {
   applyWraithHauntEffect,
 } from '../combat';
 import { applyMonsterRage } from '@/lib/monsterRage';
-import { createEmptyAmuletEffects, STRENGTH_SELF_DAMAGE, initialCombatState, BASE_BACKPACK_CAPACITY, INITIAL_HP } from '../constants';
+import { createEmptyAmuletEffects, STRENGTH_SELF_DAMAGE, initialCombatState, BASE_BACKPACK_CAPACITY, INITIAL_HP, HAND_LIMIT } from '../constants';
 import { computeAmuletEffects } from '../equipment';
 import { getEquipmentSlotsWithSuppressedTempAttack, isMonsterMagicImmuneByBuilding } from '../buildingAura';
 import { flattenActiveRowSlots, isDamageableTarget, isRecyclableFromHand, applyAmplifyOnCreate } from '../helpers';
@@ -532,6 +532,15 @@ function reduceDealDamageToMonster(
   });
   sideEffects.push({ event: 'combat:monsterBleed', payload: { monsterId: action.monsterId, delay: 0 } });
 
+  // --- Landed log message (only fires when damage actually applies; blocked
+  // branches like swarmBugletShield / building immunity early-return above) ---
+  if (action.landedLogMessage) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'magic', message: action.landedLogMessage },
+    });
+  }
+
   // --- Boss retaliation ---
   if (monster.bossRetaliationDamage && monster.bossRetaliationDamage > 0 && !monster.isStunned) {
     enqueuedActions.push({
@@ -559,12 +568,17 @@ function reduceDealDamageToMonster(
     });
   }
 
-  // --- Overkill lifesteal ---
+  // --- Overkill (always logged so the player can see it triggered, even when
+  // no equipment/amulet effect benefits from it) ---
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
   const effectiveLifesteal = (state.permanentSpellLifesteal ?? 0) + (ae.lifeOverkillBonus ?? 0);
-  if (effectiveLifesteal > 0) {
-    const overkill = computeOverkill(monster, effectiveDamage);
-    if (overkill > 0) {
+  const overkill = computeOverkill(monster, effectiveDamage);
+  if (overkill > 0) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'combat', message: `超杀！${action.source} 对 ${monster.name} 造成 ${overkill} 点超额伤害` },
+    });
+    if (effectiveLifesteal > 0) {
       enqueuedActions.push({ type: 'HEAL', amount: effectiveLifesteal, source: 'overkill-lifesteal' });
     }
   }
@@ -1335,12 +1349,16 @@ function reduceApplyShieldReflect(
   // Class damage discover hit
   sideEffects.push({ event: 'combat:classDamageHit', payload: {} });
 
-  // Overkill lifesteal
+  // Overkill (always logged, even when no effect benefits from it)
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
   const effectiveLifesteal = (state.permanentSpellLifesteal ?? 0) + (ae.lifeOverkillBonus ?? 0);
-  if (effectiveLifesteal > 0) {
-    const overkill = computeOverkill(monster, action.damage);
-    if (overkill > 0) {
+  const overkill = computeOverkill(monster, action.damage);
+  if (overkill > 0) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'combat', message: `超杀！${action.sourceName} 对 ${monster.name} 造成 ${overkill} 点超额伤害` },
+    });
+    if (effectiveLifesteal > 0) {
       enqueuedActions.push({ type: 'HEAL', amount: effectiveLifesteal, source: 'overkill-lifesteal' });
     }
   }
@@ -1958,10 +1976,21 @@ function reducePerformHeroAttack(
       });
     }
 
-    // Overkill
-    if ((attackEffectiveLifesteal > 0 || (slotItem as GameCardData).overkillDraw || (slotItem as GameCardData).overkillRecycleToHand || (slotItem as GameCardData).overkillAmplifyMissile) && !isBuildingTarget) {
+    // Overkill — compute first, log unconditionally so the player can see it
+    // happened even when they have no overkill-triggering equipment/amulet.
+    if (!isBuildingTarget) {
       const ok = computeOverkill(workingMonster, finalDamage);
-      if (ok > 0) overkillHitCount += 1;
+      if (ok > 0) {
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'combat', message: `超杀！${slotItem.name} 对 ${targetMonster.name} 造成 ${ok} 点超额伤害` },
+        });
+        const hasOverkillEffect = attackEffectiveLifesteal > 0
+          || (slotItem as GameCardData).overkillDraw
+          || (slotItem as GameCardData).overkillRecycleToHand
+          || (slotItem as GameCardData).overkillAmplifyMissile;
+        if (hasOverkillEffect) overkillHitCount += 1;
+      }
     }
 
     workingMonster = updatedMonster;
@@ -2065,7 +2094,52 @@ function reducePerformHeroAttack(
   }
   if (overkillHitCount > 0 && (slotItem as GameCardData).overkillRecycleToHand) {
     const recycleCount = (slotItem as GameCardData).overkillRecycleToHand! * overkillHitCount;
-    sideEffects.push({ event: 'equipment:drawFromRecycleBag', payload: { count: recycleCount } });
+    // Move up to recycleCount cards from the recycle bag into hand. Pick
+    // randomly so the choice is non-deterministic in flavour. Cards keep no
+    // _recycleWaits once they're back in hand. If hand is full, overflow
+    // spills into the backpack (respecting backpack capacity is left to the
+    // existing addCard pipeline elsewhere — here we just append, matching the
+    // 击晕回收 pattern above).
+    const bag = [
+      ...((patch.permanentMagicRecycleBag ?? state.permanentMagicRecycleBag) as GameCardData[]),
+    ];
+    if (bag.length > 0) {
+      const pickCount = Math.min(recycleCount, bag.length);
+      const picked: GameCardData[] = [];
+      for (let i = 0; i < pickCount; i++) {
+        let idx: number;
+        [idx, rng] = nextInt(rng, 0, bag.length - 1);
+        const { _recycleWaits: _omit, ...clean } = bag[idx] as GameCardData & { _recycleWaits?: number };
+        picked.push(clean as GameCardData);
+        bag.splice(idx, 1);
+      }
+      patch.permanentMagicRecycleBag = bag;
+
+      const handLimit = HAND_LIMIT + (state.handLimitBonus ?? 0);
+      const currentHand = (patch.handCards ?? state.handCards) as GameCardData[];
+      const handRoom = Math.max(0, handLimit - currentHand.length);
+      const toHand = picked.slice(0, handRoom);
+      const overflow = picked.slice(handRoom);
+
+      if (toHand.length > 0) {
+        patch.handCards = [...currentHand, ...toHand];
+      }
+      if (overflow.length > 0) {
+        const currentBackpack = (patch.backpackItems ?? state.backpackItems) as GameCardData[];
+        patch.backpackItems = [...currentBackpack, ...overflow];
+      }
+
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'equip',
+          message: overflow.length > 0
+            ? `${slotItem.name} 超杀：从回收袋取回「${picked.map(c => c.name).join('」「')}」（${toHand.length} 入手，${overflow.length} 入背包）`
+            : `${slotItem.name} 超杀：从回收袋取回「${picked.map(c => c.name).join('」「')}」到手牌`,
+        },
+      });
+      sideEffects.push({ event: 'equipment:drawFromRecycleBag', payload: { count: toHand.length } });
+    }
   }
   if (overkillHitCount > 0 && (slotItem as GameCardData).overkillAmplifyMissile) {
     const amplifyAmount = (slotItem as GameCardData).overkillAmplifyMissile! * overkillHitCount;

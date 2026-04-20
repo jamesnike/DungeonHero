@@ -2218,7 +2218,7 @@ export function createDeck(
   });
 
   const deckLimits: Partial<Record<GameCardData['type'], number>> = isQuick
-    ? { magic: 3, amulet: 3, potion: 3, shield: 3, weapon: 3, event: 11 }
+    ? { magic: 4, amulet: 4, potion: 4, shield: 3, weapon: 4, event: 11 }
     : { magic: 7, amulet: 5, potion: 6, shield: 5, weapon: 6 };
 
   for (const [type, limit] of Object.entries(deckLimits) as [GameCardData['type'], number][]) {
