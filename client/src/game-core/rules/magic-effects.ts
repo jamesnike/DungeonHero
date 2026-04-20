@@ -3009,24 +3009,18 @@ export function resolveAmplifyTarget(
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
 ): ReduceResult {
-  const targetId = card._amplifyTargetCardId;
-  const targetName = card._amplifyTargetName ?? '未知';
-  if (!targetId) {
+  const targetName = card._amplifyTargetName;
+
+  // 仅在 targetName 缺失（卡牌结构异常）时拒绝。
+  // 之前会按 _amplifyTargetCardId 校验"原始那张卡是否仍在装备栏/手牌"，
+  // 但实际加成本就是按 NAME（AMPLIFY_CARDS_BY_NAME）应用到 amplifiedCardBonus
+  // map + 所有同名卡（手牌/装备/背包/坟场/回收袋/抽牌堆/职业牌组/地下城/护符/储备）。
+  // 用户场景：「增幅」magic 选中手牌中的「魔弹」生成 Perm 2 卡，
+  // 期间把那张「魔弹」打掉了；后续打出「增幅：魔弹」时按 ID 校验失败 → 整个生效被吞掉。
+  // 修复：移除 ID 校验，即使全场已无同名卡也照常记入 amplifiedCardBonus map，
+  // 未来生成的同名卡（如 createMagicBoltCard）会通过 applyAmplifyOnCreate 自动获得累计加成。
+  if (!targetName) {
     banner(sideEffects, '增幅：目标不存在。');
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
-
-  // 验证目标卡仍然存在（装备栏 / 手牌），否则按"已不存在"提示。
-  // 实际增益按 targetName 通过 AMPLIFY_CARDS_BY_NAME 应用到所有同名卡。
-  const inEquipment =
-    (state.equipmentSlot1 && state.equipmentSlot1.id === targetId) ||
-    (state.equipmentSlot2 && state.equipmentSlot2.id === targetId);
-  const handTarget = state.handCards.find(c => c.id === targetId);
-
-  if (!inEquipment && !handTarget) {
-    banner(sideEffects, `增幅：「${targetName}」不在装备栏或手牌中，无法增幅。`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);

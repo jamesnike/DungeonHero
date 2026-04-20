@@ -558,6 +558,18 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     }
   });
 
+  // 单发魔弹的飞射动画：每一发由 FIRE_MISSILE_STORM_BOLT 在选好目标后发出。
+  // 由于全部 BOLT actions 在同一次 drain 中同步入队/出队，事件几乎同时到达；
+  // 用 boltIndex × 180ms 的时间差让 FX 逐发播放出来，与原 missileStormSequence
+  // 的视觉节奏一致，但因为目标是动态选定的所以支持复生/重定向的情形。
+  const MISSILE_STORM_BOLT_STAGGER_MS = 180;
+  useGameEvent('combat:missileStormBolt', ({ targetId, boltIndex }) => {
+    const delay = depsRef.current.animSpeed(boltIndex * MISSILE_STORM_BOLT_STAGGER_MS);
+    window.setTimeout(() => {
+      depsRef.current.tryStartMissileStormFx(targetId);
+    }, delay);
+  });
+
   useGameEvent('combat:goblinPersuadeAttempt', ({ monsterName, itemName }) => {
     depsRef.current.addGameLog('combat', `${itemName}尝试说服 ${monsterName}！`);
   });

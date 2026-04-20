@@ -1496,33 +1496,23 @@ const knightMissileStorm: CardDefinition = {
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
-    let rng = patch.rng ?? state.rng;
-    const STAGGER_MS = 180;
-    const shots: Array<{ targetId: string; damage: number; delayMs: number }> = [];
-    for (let i = 0; i < graveyardBolts.length; i++) {
+    // 每一发魔弹的伤害在 resolver 阶段固化（保留每发 amplifyBonus 差异），
+    // 但目标在 FIRE_MISSILE_STORM_BOLT 真正发射时才挑选——这样:
+    //   - 前一发若击杀怪物，下一发会重新挑一个仍存活的怪物（不再浪费在尸体上）；
+    //   - 若怪物触发复生（MONSTER_DEFEATED Branch B 在两发之间运行），后续魔弹仍可命中；
+    //   - 若全场已无怪物，剩余魔弹熄灭并打日志。
+    const totalBolts = graveyardBolts.length;
+    for (let i = 0; i < totalBolts; i++) {
       const bolt = graveyardBolts[i];
-      let idx: number;
-      [idx, rng] = nextInt(rng, 0, monsters.length - 1);
-      patch.rng = rng;
-      const target = monsters[idx];
       const boltDmg = getSpellDamage(1 + (bolt.amplifyBonus ?? 0), state);
       enqueuedActions.push({
-        type: 'DEAL_DAMAGE_TO_MONSTER',
-        monsterId: target.id,
+        type: 'FIRE_MISSILE_STORM_BOLT',
         damage: boltDmg,
-        source: 'missile-storm',
-        isSpellDamage: true,
+        boltIndex: i,
+        totalBolts,
       });
-      log(sideEffects, 'magic', `魔弹风暴：第 ${i + 1} 枚魔弹对 ${target.name} 造成 ${boltDmg} 点法术伤害`);
-      applyMissileRelicEffects(state, patch, sideEffects, enqueuedActions, target);
-      rng = patch.rng ?? rng;
-      shots.push({ targetId: target.id, damage: boltDmg, delayMs: i * STAGGER_MS });
     }
-    sideEffects.push({
-      event: 'combat:missileStormSequence' as any,
-      payload: { shots },
-    });
-    banner(sideEffects, `魔弹风暴：从坟场调动 ${graveyardBolts.length} 枚「魔弹」连射！`);
+    banner(sideEffects, `魔弹风暴：从坟场调动 ${totalBolts} 枚「魔弹」连射！`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
     return applyPatch(state, patch, sideEffects, enqueuedActions);

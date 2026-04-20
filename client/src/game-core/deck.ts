@@ -2802,6 +2802,7 @@ export function createStarterCardPool(): GameCardData[] {
       magicEffect: '永久魔法：回手一张牌，抽 1 张牌。',
       description: '回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌。',
       shortDescription: '回手 1 张装备/护符；抽 1 张',
+      knightEffect: 'recall-equipment',
     },
     {
       id: STARTER_CARD_IDS.magicMissile,

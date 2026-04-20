@@ -10,7 +10,7 @@ import type { GameAction } from '../actions';
 import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch } from '../reducer';
 import type { GameCardData } from '@/components/GameCard';
-import type { ActiveRowSlots, AmuletItem, EquipmentItem } from '@/components/game-board/types';
+import type { ActiveRowSlots, AmuletItem, EquipmentItem, EquipmentSlotId } from '@/components/game-board/types';
 import type { KnightCardData } from '@/lib/knightDeck';
 import { BASE_BACKPACK_CAPACITY } from '../constants';
 import { markSkillUsedPure } from '../hero';
@@ -451,6 +451,23 @@ function reduceResolveDice(
         enqueuedActions.push(
           { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的重生尝试失败。`, timestamp: Date.now() } } as GameAction,
         );
+      }
+      break;
+    }
+
+    case 'repair-enrage-dice': {
+      const card = ctx.card as GameCardData | undefined;
+      const slotId = ctx.slotId as EquipmentSlotId | undefined;
+      const monsterId = ctx.monsterId as string | undefined;
+      const diceResultId = (action.outcomeId === 'repair' ? 'repair' : 'enrage') as 'repair' | 'enrage';
+      if (card && slotId && monsterId) {
+        enqueuedActions.push({
+          type: 'RESOLVE_REPAIR_ENRAGE_DICE',
+          card,
+          slotId,
+          monsterId,
+          diceResultId,
+        } as GameAction);
       }
       break;
     }

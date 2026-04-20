@@ -477,6 +477,147 @@ export function isDamageMagic(card: GameCardData): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// computeDamageMagicDisplayPure — UI 用：动态展示伤害 magic 卡牌当下的 base + amplifyBonus
+//
+// 仅作 raw_base_plus_amplify：不含 spellDamageBonus / 法术回响 / 等其他增益。
+// 与 reducer 实际造成伤害的公式（getSpellDamage(base+amp) * echo）刻意保持简洁，
+// 让玩家在手牌上一眼看出"本卡当下底子伤害"。
+//
+// 返回：
+//   { mode: 'replace', text, amplifyBonus } —— 用 text 整段替换原描述
+//   { mode: 'suffix', amplifyBonus }       —— 保留原描述，仅追加 (+N)（amp = 0 时调用方应跳过追加）
+//   null                                    —— 该卡不参与此 UI（保持原描述）
+// ---------------------------------------------------------------------------
+
+export type DamageMagicDisplay =
+  | { mode: 'replace'; text: string; amplifyBonus: number }
+  | { mode: 'suffix'; amplifyBonus: number }
+  | null;
+
+export interface DamageMagicDisplayState {
+  hp: number;
+  maxHp: number;
+  gold: number;
+}
+
+export function computeDamageMagicDisplayPure(
+  card: GameCardData,
+  state: DamageMagicDisplayState,
+): DamageMagicDisplay {
+  if (card.type !== 'magic') return null;
+  const amp = card.amplifyBonus ?? 0;
+
+  // ---------- Group B：固定 base + amp ----------
+
+  if (card.knightEffect === 'missile-bolt') {
+    const dmg = 1 + amp;
+    return { mode: 'replace', text: `选择一个怪物，造成 ${dmg} 点法术伤害。`, amplifyBonus: amp };
+  }
+
+  if (card.name === '风暴箭雨') {
+    const dmg = 3 + amp;
+    return { mode: 'replace', text: `对激活行的每个怪物造成 ${dmg} 点伤害。攻击对象越多越好。`, amplifyBonus: amp };
+  }
+
+  if (card.name === '混沌冲击') {
+    const dmg = 3 + amp;
+    return { mode: 'replace', text: `对一个怪物造成 ${dmg} 点伤害。超杀：抽 2 张牌。(可超手牌上限)`, amplifyBonus: amp };
+  }
+
+  if (card.knightEffect === 'overkill-upgrade') {
+    const dmg = 3 + amp;
+    return { mode: 'replace', text: `永久：对一个怪物造成 ${dmg} 点伤害。超杀：升级一张牌。`, amplifyBonus: amp };
+  }
+
+  if (card.knightEffect === 'grave-nova') {
+    const dmg = 3 + amp;
+    return { mode: 'replace', text: `永久：当此牌被弃置时，对当前行所有怪物造成 ${dmg} 点伤害。`, amplifyBonus: amp };
+  }
+
+  if (card.magicEffect === 'bounty-spell-damage') {
+    const dmg = 5 + amp;
+    return { mode: 'replace', text: `永久魔法（Perm 1）：选择一个怪物，造成 ${dmg} 点法术伤害，获得等同于造成伤害的金币。`, amplifyBonus: amp };
+  }
+
+  if (card.name === '雷震击') {
+    const stunDmgPerHit = [1, 2, 3];
+    const stunChances = [20, 40, 60];
+    const lvl = card.upgradeLevel ?? 0;
+    const perHit = (stunDmgPerHit[lvl] ?? 1) + amp;
+    const stunPct = stunChances[lvl] ?? 20;
+    return {
+      mode: 'replace',
+      text: `对一个怪物造成 ${perHit} 点法术伤害 2 次，每次有 ${stunPct}% 概率击晕目标。`,
+      amplifyBonus: amp,
+    };
+  }
+
+  if (card.magicEffect === 'storm-volley-recycle') {
+    const dmg = 1 + amp;
+    return {
+      mode: 'replace',
+      text: `对激活行所有怪物造成 ${dmg} 点伤害，每击中一个怪物，从回收袋随机抽 1 张牌加入手牌。`,
+      amplifyBonus: amp,
+    };
+  }
+
+  if (card.knightEffect === 'fate-sight') {
+    const baseDamages = [3, 4];
+    const lvl = card.upgradeLevel ?? 0;
+    const base = baseDamages[lvl] ?? 3;
+    const dmg = base + amp;
+    return {
+      mode: 'replace',
+      text: `永久：造成 ${dmg} 点伤害，翻看主牌堆顶 3 张牌，每有一张怪物牌，20% 概率击晕目标。`,
+      amplifyBonus: amp,
+    };
+  }
+
+  // ---------- Group C：状态相关 base + amp ----------
+
+  if (card.name === '点金裁决') {
+    const dmg = state.gold + amp;
+    return { mode: 'replace', text: `对任意怪物造成 ${dmg} 点伤害，并恢复等量生命。`, amplifyBonus: amp };
+  }
+
+  if (card.knightEffect === 'missing-hp-smite') {
+    const smitePcts = [50, 100, 150];
+    const lvl = card.upgradeLevel ?? 0;
+    const pct = smitePcts[lvl] ?? 50;
+    const missingHp = Math.max(0, state.maxHp - state.hp);
+    const scaledDmg = Math.floor(missingHp * pct / 100);
+    const dmg = scaledDmg + amp;
+    return {
+      mode: 'replace',
+      text: `永久：对一名怪物造成 ${dmg} 点伤害（已损失生命 ${pct}%）。`,
+      amplifyBonus: amp,
+    };
+  }
+
+  if (card.knightEffect === 'blood-sacrifice-strike') {
+    const hpCost = Math.floor(state.hp / 2);
+    const dmg = hpCost * 2 + amp;
+    return {
+      mode: 'replace',
+      text: `永久：选择一个怪物，失去一半剩余生命值，对该怪物造成 ${dmg} 点伤害。`,
+      amplifyBonus: amp,
+    };
+  }
+
+  // ---------- Group D：玩家输入相关（base 需要选槽后才能定）——只追加 (+N) ----------
+
+  if (
+    card.knightEffect === 'armor-strike' ||
+    card.knightEffect === 'temp-attack-strike' ||
+    card.knightEffect === 'weapon-sweep'
+  ) {
+    return { mode: 'suffix', amplifyBonus: amp };
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Persuade — pure computation helpers
 // ---------------------------------------------------------------------------
 

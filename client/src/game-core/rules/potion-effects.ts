@@ -825,7 +825,7 @@ export function resolvePendingPotion(
       const amount = 40;
       const prev = (item as GameCardData).weaponStunChance ?? 0;
       const next = prev + amount;
-      (patch as any)[slotId] = { ...item, weaponStunChance: next };
+      (patch as any)[slotId] = { ...item, weaponStunChance: next, _potionStunBonusApplied: true };
       patch.pendingPotionAction = null;
       patch.heroSkillBanner = null;
       log(sideEffects, 'potion', `${card.name}：${item.name} 击晕率 +${amount}%（${prev}% → ${next}%）`);

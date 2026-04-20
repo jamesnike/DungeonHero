@@ -103,7 +103,7 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
                   </Badge>
                 </div>
                 
-                <div className="grid grid-cols-6 gap-2">
+                <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
                   {cards.map((card) => (
                     <Card
                       key={card.id}

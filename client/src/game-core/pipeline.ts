@@ -258,6 +258,7 @@ function isInputContinuation(action: GameAction): boolean {
     case 'START_TURN':
     case 'ENTER_PLAYER_INPUT':
     case 'TRIGGER_GRAVE_NOVA':
+    case 'FIRE_MISSILE_STORM_BOLT':
     case 'PROCESS_HERO_MAGIC_CARD':
     // Transform chain — enqueued by RESOLVE_MAGIC / RESOLVE_POTION /
     // SET_CURRENT_EVENT / COMPLETE_HERO_MAGIC / PLACE_BUILDING_IN_DUNGEON /

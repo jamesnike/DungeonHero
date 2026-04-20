@@ -89,6 +89,18 @@ export type GameEventMap = {
   'combat:missileStormSequence': {
     shots: Array<{ targetId: string; damage: number; delayMs: number }>;
   };
+  /**
+   * 魔弹风暴：单发魔弹已发射（由 FIRE_MISSILE_STORM_BOLT 在选定目标后发出）。
+   * UI 监听此事件并按 boltIndex × stagger 间隔播放该发的飞射动画。
+   * 与 combat:missileStormSequence 的区别：本事件在每一发"实际命中目标"时
+   * 才发出，从而支持复生/重定向场景下的逐发动画。
+   */
+  'combat:missileStormBolt': {
+    targetId: string;
+    damage: number;
+    boltIndex: number;
+    totalBolts: number;
+  };
   'combat:heroTookDamageThisMonsterTurn': {};
   'combat:wraithPurified': {};
   'equipment:drawFromBackpack': { count: number };

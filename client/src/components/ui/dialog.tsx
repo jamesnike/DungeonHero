@@ -37,6 +37,39 @@ const dialogContentMotionDefault =
 const dialogContentMotionFade =
   "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0";
 
+/**
+ * Mounts a transparent click-absorber for ~350ms to swallow the synthesized
+ * "ghost click" iOS/Android dispatch after the user taps the dialog overlay
+ * to dismiss it. Without this, that delayed click lands on whatever element
+ * is now under the touch position (relics, cards on the board, etc.) and
+ * accidentally selects/activates them.
+ *
+ * z-index sits BELOW the dialog overlay (z-50) so it does not block normal
+ * overlay interaction if the dialog stays open for any reason; it only
+ * comes into play after the overlay/content unmount.
+ */
+function mountGhostClickShield(durationMs = 350) {
+  if (typeof document === "undefined") return
+  const shield = document.createElement("div")
+  shield.style.cssText =
+    "position:fixed;inset:0;z-index:49;background:transparent;pointer-events:auto;touch-action:none;"
+  shield.setAttribute("aria-hidden", "true")
+  shield.setAttribute("data-ghost-click-shield", "")
+  const swallow = (e: Event) => {
+    e.stopPropagation()
+    e.preventDefault()
+  }
+  shield.addEventListener("click", swallow)
+  shield.addEventListener("pointerdown", swallow)
+  shield.addEventListener("pointerup", swallow)
+  shield.addEventListener("touchstart", swallow, { passive: false })
+  shield.addEventListener("touchend", swallow, { passive: false })
+  document.body.appendChild(shield)
+  window.setTimeout(() => {
+    shield.remove()
+  }, durationMs)
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -45,12 +78,21 @@ const DialogContent = React.forwardRef<
     /** Set false to opt-out of viewport-based auto-zoom (default true). */
     autoScale?: boolean;
   }
->(({ className, children, overlayClassName, contentMotion = "default", style, autoScale = true, ...props }, ref) => {
+>(({ className, children, overlayClassName, contentMotion = "default", style, autoScale = true, onInteractOutside, ...props }, ref) => {
   const overlayScale = useOverlayScale();
   const mergedStyle: React.CSSProperties = {
     ...style,
     ...(autoScale ? { zoom: overlayScale } : undefined),
   };
+  const handleInteractOutside = React.useCallback(
+    (event: Parameters<NonNullable<typeof onInteractOutside>>[0]) => {
+      onInteractOutside?.(event);
+      if (!event.defaultPrevented) {
+        mountGhostClickShield();
+      }
+    },
+    [onInteractOutside],
+  );
   return (
     <DialogPortal>
       <DialogOverlay className={overlayClassName} />
@@ -62,6 +104,7 @@ const DialogContent = React.forwardRef<
           className
         )}
         style={mergedStyle}
+        onInteractOutside={handleInteractOutside}
         {...props}
       >
         {children}

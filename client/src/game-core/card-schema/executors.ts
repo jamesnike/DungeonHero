@@ -348,7 +348,7 @@ function executeGrantWeaponStunChanceChoose(ctx: ExecutionContext, effect: CardE
     const slot = weaponSlots[0];
     const prev = slot.item.weaponStunChance ?? 0;
     const next = prev + effect.amount;
-    (ctx.patch as any)[slot.id] = { ...slot.item, weaponStunChance: next };
+    (ctx.patch as any)[slot.id] = { ...slot.item, weaponStunChance: next, _potionStunBonusApplied: true };
     log(ctx, 'potion', `${ctx.card.name}：${slot.item.name} 击晕率 +${effect.amount}%（${prev}% → ${next}%）`);
     banner(ctx, `${slot.item.name} 击晕率 +${effect.amount}%！`);
     ctx.enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card: ctx.card });

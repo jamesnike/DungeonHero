@@ -1426,7 +1426,7 @@ function reduceMagicSlotSelection(
             { id: 'repair', range: [1, 10] as [number, number], label: '修复成功！', effect: 'none' },
             { id: 'enrage', range: [11, 20] as [number, number], label: '怪物暴怒！', effect: 'none' },
           ],
-          context: { flowId: 'repair-enrage-dice', slotId, monsterId: monsters[0].id, cardId: pending.card.id },
+          context: { flowId: 'repair-enrage-dice', slotId, monsterId: monsters[0].id, cardId: pending.card.id, card: pending.card },
           predeterminedRoll: reRoll,
         } });
         patch.pendingMagicAction = null;
@@ -1808,7 +1808,7 @@ function reduceMagicMonsterSelection(
           { id: 'repair', range: [1, 10] as [number, number], label: '修复成功！', effect: 'none' },
           { id: 'enrage', range: [11, 20] as [number, number], label: '怪物暴怒！', effect: 'none' },
         ],
-        context: { flowId: 'repair-enrage-dice', slotId: repairSlotId, monsterId: monster.id, cardId: pending.card.id },
+        context: { flowId: 'repair-enrage-dice', slotId: repairSlotId, monsterId: monster.id, cardId: pending.card.id, card: pending.card },
         predeterminedRoll: reRoll,
       } });
       patch.pendingMagicAction = null;

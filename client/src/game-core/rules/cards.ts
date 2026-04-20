@@ -36,7 +36,7 @@ import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
-import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp } from './magic-effects';
+import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects } from './magic-effects';
 import { resolveAllPotionEffects, resolvePendingPotion } from './potion-effects';
 import { executeCardEffects, executeMagicCardEffects, executeOnEquip, executeOnEnterHand } from '../card-schema';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
@@ -137,6 +137,8 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
       return reduceApplyBerserkerRage(state, action);
     case 'TRIGGER_GRAVE_NOVA':
       return reduceTriggerGraveNova(state, action);
+    case 'FIRE_MISSILE_STORM_BOLT':
+      return reduceFireMissileStormBolt(state, action);
     case 'RESOLVE_REPAIR_ENRAGE_DICE':
       return reduceResolveRepairEnrageDice(state, action);
     case 'TRIGGER_ON_ENTER_HAND':
@@ -2694,6 +2696,71 @@ function reduceTriggerGraveNova(
   }
 
   patch.heroSkillBanner = `殉烈爆鸣释放，对所有怪物造成 ${dmg} 点伤害！`;
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// FIRE_MISSILE_STORM_BOLT — fire one bolt from 魔弹风暴.
+//
+// Picks a random LIVE monster at fire time so:
+//   * If the previous bolt killed the original snapshot target, this bolt
+//     still lands on a remaining live monster (instead of being wasted).
+//   * If the original target was revived (Branch B of MONSTER_DEFEATED), it is
+//     part of the live pool again and may be re-targeted.
+//   * If no live targets remain (e.g. last monster died with no revive), the
+//     bolt fizzles with a log entry.
+//
+// The resolver pre-computed `damage` (with per-bolt amplify already applied)
+// so this reducer only needs to pick a target, enqueue the damage action, and
+// emit the FX side effect.
+// ---------------------------------------------------------------------------
+
+function reduceFireMissileStormBolt(
+  state: GameState,
+  action: Extract<GameAction, { type: 'FIRE_MISSILE_STORM_BOLT' }>,
+): ReduceResult {
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  const liveMonsters = flattenActiveRowSlots(state.activeCards).filter(
+    c => isDamageableTarget(c) && (c.hp ?? 0) > 0 && (c.currentLayer ?? 1) > 0,
+  );
+
+  if (liveMonsters.length === 0) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'magic', message: `魔弹风暴：第 ${action.boltIndex + 1} 枚魔弹熄灭——场上已无可击目标。` },
+    });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  const [target, nextRng] = pickRandom(liveMonsters, state.rng);
+  patch.rng = nextRng;
+
+  enqueuedActions.push({
+    type: 'DEAL_DAMAGE_TO_MONSTER',
+    monsterId: target.id,
+    damage: action.damage,
+    source: 'missile-storm',
+    isSpellDamage: true,
+  });
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'magic', message: `魔弹风暴：第 ${action.boltIndex + 1} 枚魔弹对 ${target.name} 造成 ${action.damage} 点法术伤害` },
+  });
+  sideEffects.push({
+    event: 'combat:missileStormBolt',
+    payload: {
+      targetId: target.id,
+      damage: action.damage,
+      boltIndex: action.boltIndex,
+      totalBolts: action.totalBolts,
+    },
+  });
+
+  applyMissileRelicEffects(state, patch, sideEffects, enqueuedActions, target);
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }

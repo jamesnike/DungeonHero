@@ -29,6 +29,9 @@ import {
 import { resolveMagicPatternKey } from '@/lib/magicPatternKey';
 import { resolveEventPatternKey } from '@/lib/eventPatternKey';
 import { getOnEnterHandShortLabel } from '@/game-core/card-schema/on-enter-hand';
+import { STARTER_CARD_IDS, getStarterBaseId } from '@/game-core/deck';
+import { computeDamageMagicDisplayPure, type DamageMagicDisplay } from '@/game-core/helpers';
+import { computeMaxHp } from '@/game-core/rules/magic-effects';
 
 const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
@@ -323,6 +326,8 @@ export interface GameCardData {
   _skipOnEnterHand?: boolean;
   /** 翻转之契 option 6 — 该装备每次卡牌翻转时恢复 1 耐久。绑定在装备卡上，跟随装备进入 reserve / 主槽。 */
   _flipRepairBuff?: boolean;
+  /** 「雷震淬刃药」标记：此武器被该药剂加强过；UI 在卡牌上显示「击晕 X%」keyword tag。仅作为来源标记，X 直接读 weaponStunChance 总值。 */
+  _potionStunBonusApplied?: boolean;
   /**
    * 「生长之盾」类装备效果：每当发生一次卡牌翻转，且此卡当前装备在主槽中时，
    * 触发一次 AMPLIFY_CARDS_BY_NAME(cardName, +2)，所有同名副本累计共享 +2 攻击/护甲。
@@ -458,6 +463,35 @@ export function useArcaneStormDamage(): number {
   return Math.max(0, magicCount + spellBonus);
 }
 
+/**
+ * 连环转律 (transformStreakStrike) — 预测此刻打出该卡造成的纯转型链伤害。
+ * 不含 spell-damage 加成 / amplifyBonus / echo（与 card-schema/definitions/magic.ts
+ * 的 `computePredictedTransformStreak` 保持一致的 raw streak 语义）。
+ *
+ *   prevChainCat == null            → { damage: 1, broken: false }（链空，本牌起头）
+ *   prevChainCat === 'perm-magic'   → { damage: 0, broken: true }（同类型断链）
+ *   else                            → { damage: prevStreak + 1, broken: false }
+ */
+function useTransformStreakDamage(): { damage: number; broken: boolean } {
+  const prevChainCat = useGameState(s => s.transformChainPrevCategory);
+  const prevStreak = useGameState(s => s.consecutiveTransformStreak);
+  const curCat = 'perm-magic';
+  if (prevChainCat == null) return { damage: 1, broken: false };
+  if (prevChainCat === curCat) return { damage: 0, broken: true };
+  return { damage: (prevStreak ?? 0) + 1, broken: false };
+}
+
+/**
+ * 伤害 magic 卡（Group B/C/D）当下的展示。订阅 hp / gold 等用于 Group C
+ * 的状态相关 base，pure 计算委托给 computeDamageMagicDisplayPure。
+ */
+function useDamageMagicDisplay(card: GameCardData): DamageMagicDisplay {
+  const hp = useGameState(s => s.hp);
+  const gold = useGameState(s => s.gold);
+  const maxHp = useGameState(s => computeMaxHp(s));
+  return computeDamageMagicDisplayPure(card, { hp, maxHp, gold });
+}
+
 export function isPermRecycleEquipment(card: GameCardData | null | undefined): boolean {
   return Boolean(
     card && (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') && card.permEquipment,
@@ -575,6 +609,11 @@ function GameCardInner({
   const isCompact = gameViewport.width < 500;
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const arcaneStormDamage = useArcaneStormDamage();
+  const transformStreakPredict = useTransformStreakDamage();
+  const damageMagicDisplay = useDamageMagicDisplay(card);
+  const isTransformStreakStrike =
+    card.type === 'magic'
+    && getStarterBaseId(card.id) === STARTER_CARD_IDS.transformStreakStrike;
   const [isDragging, setIsDragging] = useState(false);
   const [cardScale, setCardScale] = useState(1);
   const [cardWidthPx, setCardWidthPx] = useState(BASE_CARD_WIDTH);
@@ -1267,15 +1306,36 @@ const amuletEffectText =
                         <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
                           当下 {arcaneStormDamage + (card.amplifyBonus ?? 0)} 点
                         </span>
-                      ) : card.knightEffect === 'missile-bolt' ? (
+                      ) : isTransformStreakStrike ? (
+                        <span
+                          className={
+                            transformStreakPredict.broken
+                              ? 'block font-semibold text-rose-700 dark:text-rose-300'
+                              : 'block font-semibold text-cyan-950 dark:text-cyan-100'
+                          }
+                        >
+                          {transformStreakPredict.broken
+                            ? '断链 → 0 点'
+                            : `当下 ${transformStreakPredict.damage} 点`}
+                        </span>
+                      ) : damageMagicDisplay?.mode === 'replace' ? (
                         <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
-                          选择一个怪物，造成 {1 + (card.amplifyBonus ?? 0)} 点法术伤害。
-                          {(card.amplifyBonus ?? 0) > 0 && (
+                          {damageMagicDisplay.text}
+                          {damageMagicDisplay.amplifyBonus > 0 && (
                             <span className="ml-1 text-fuchsia-700 dark:text-fuchsia-300">
-                              (+{card.amplifyBonus})
+                              (+{damageMagicDisplay.amplifyBonus})
                             </span>
                           )}
                         </span>
+                      ) : damageMagicDisplay?.mode === 'suffix' ? (
+                        <>
+                          {card.shortDescription || card.description || card.magicEffect || card.heroMagicEffect}
+                          {damageMagicDisplay.amplifyBonus > 0 && (
+                            <span className="ml-1 font-semibold text-fuchsia-700 dark:text-fuchsia-300">
+                              (+{damageMagicDisplay.amplifyBonus})
+                            </span>
+                          )}
+                        </>
                       ) : (
                         <>
                           {card.shortDescription || card.description || card.magicEffect || card.heroMagicEffect}
@@ -2107,7 +2167,7 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect) && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
                   <div className="dh-card__keyword-row">
                     {card.hasEquipmentRevive && (
                       <span className={`dh-card__keyword-tag ${card.equipmentReviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
@@ -2145,6 +2205,9 @@ const amuletEffectText =
                         <span className="dh-card__keyword-tag dh-card__keyword-tag--onhand" title="上手：此牌进入手牌时自动触发效果">{onHandLabel}</span>
                       ) : null;
                     })()}
+                    {card.type === 'weapon' && card._potionStunBonusApplied && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title={`雷震淬刃药：永久击晕率 ${card.weaponStunChance ?? 0}%`}>击晕 {card.weaponStunChance ?? 0}%</span>
+                    )}
                   </div>
                 )}
 
@@ -2291,6 +2354,10 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.onDestroyEffect !== b.onDestroyEffect ||
       a.onEnterHandEffect !== b.onEnterHandEffect ||
       a._flipRepairBuff !== b._flipRepairBuff ||
+      a._potionStunBonusApplied !== b._potionStunBonusApplied ||
+      a.weaponStunChance !== b.weaponStunChance ||
+      a._potionStunBonusApplied !== b._potionStunBonusApplied ||
+      a.weaponStunChance !== b.weaponStunChance ||
       a.bossPhase !== b.bossPhase ||
       a.bossRetaliationDamage !== b.bossRetaliationDamage ||
       a.bossLastStandAura !== b.bossLastStandAura ||

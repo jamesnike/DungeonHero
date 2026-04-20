@@ -3,6 +3,14 @@ import type { Config } from "tailwindcss";
 export default {
   darkMode: ["class"],
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
+  future: {
+    // Wrap all `hover:*` utilities in `@media (hover: hover)` so they
+    // never fire on touch devices. Without this, iOS / Android keep the
+    // last-tapped element in the `:hover` state until another element is
+    // tapped, which looks exactly like a stuck "selected" highlight on
+    // cards, relics and buttons.
+    hoverOnlyWhenSupported: true,
+  },
   theme: {
     extend: {
       borderRadius: {

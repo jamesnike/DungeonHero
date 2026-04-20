@@ -1532,11 +1532,11 @@ export default function GameBoard() {
   });
 
   useGameEvent('equipment:drawFromRecycleBag', ({ count }) => {
-    console.log('[equipment:drawFromRecycleBag]', { count });
+    drawFromRecycleBagToHand(count);
   });
 
   useGameEvent('equipment:classCardDraw', ({ count }) => {
-    console.log('[equipment:classCardDraw]', { count });
+    drawClassCardsToBackpack(count, 'equipment-effect');
   });
 
   useGameEvent('equipment:repaired', ({ slotId, amount }) => {

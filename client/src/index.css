@@ -2685,3 +2685,22 @@ html {
   -webkit-box-orient: vertical;
 }
 
+/* ─── Touch-device interaction polish ─────────────────────────
+   On primary-touch devices (phones / tablets), suppress visual
+   "selected" residue from a tap:
+     1. Remove the iOS / Android default tap highlight overlay.
+     2. Drop the `:focus` outline that lingers after a tap on
+        clickable elements (cards, eternal relics, buttons,
+        modal triggers). Keyboard `:focus-visible` is preserved
+        so accessibility for keyboard users is unchanged.
+   Stuck `:hover` styles are handled at the Tailwind level via
+   `future.hoverOnlyWhenSupported` in tailwind.config.ts. */
+@media (hover: none) and (pointer: coarse) {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  *:focus:not(:focus-visible) {
+    outline: none !important;
+  }
+}
+

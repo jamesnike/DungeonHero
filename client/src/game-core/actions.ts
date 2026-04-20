@@ -748,6 +748,19 @@ export interface TriggerGraveNovaAction {
   card?: GameCardData;
 }
 
+/**
+ * 魔弹风暴 — fire one bolt. Each bolt picks a random live monster at fire time
+ * (so the bolt is not wasted if the original target died, and naturally lands
+ * on a revived monster if revival happens mid-storm). Pre-computed `damage`
+ * carries the per-bolt amplify already applied by the resolver.
+ */
+export interface FireMissileStormBoltAction {
+  type: 'FIRE_MISSILE_STORM_BOLT';
+  damage: number;
+  boltIndex: number;
+  totalBolts: number;
+}
+
 export interface CancelPermGrantAction {
   type: 'CANCEL_PERM_GRANT';
 }
@@ -1804,6 +1817,7 @@ export type GameAction =
   | ProcessHeroMagicCardAction
   | ApplyBerserkerRageAction
   | TriggerGraveNovaAction
+  | FireMissileStormBoltAction
   | CancelPermGrantAction
   | ResolveRepairEnrageDiceAction
   // Hero: magic selection, dungeon card
