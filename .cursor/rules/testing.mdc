@@ -10,22 +10,83 @@ alwaysApply: false
 
 Tests live in `client/src/game-core/__tests__/`. Run with `npx vitest run`.
 
+## End-to-end coverage is the default
+
+**Default to end-to-end tests that exercise the full dispatch chain a real user would trigger** — not isolated `reduce(state, oneAction)` calls.
+
+A reducer-only test is **necessary but not sufficient**. The `Hook → dispatch → Reducer → SideEffect → Hook` flow has many seams; testing just one seam can pass while the integrated path is broken.
+
+### Real bug this rule prevents
+
+When equipping a Strength Amulet, `slotTempAttack` should be `+4`, but it was `+8`. The reducer-only tests all passed because they only ran:
+
+```typescript
+const result = reduce(state, { type: 'UPDATE_AMULET_SLOTS', updater: () => [strengthAmulet] });
+expect(result.state.slotTempAttack.equipmentSlot1).toBe(4); // ✅ middleware adds +4
+```
+
+But the real `handleCardToSlot` hook in `GameBoard.tsx` dispatched **three** actions in sequence:
+
+```typescript
+dispatch({ type: 'UPDATE_AMULET_SLOTS', ... });           // middleware adds +4 (correct)
+dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', delta: 4 });  // legacy hook adds +4 again
+dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', delta: 4 });  // legacy hook adds +4 again
+// → final: +8, not +4
+```
+
+The reducer test **could not see this** because it never replayed the full hook sequence.
+
+### How to write end-to-end tests
+
+✅ **GOOD** — replay the actual sequence the hook would dispatch, on a single state:
+
+```typescript
+it('equipping a strength amulet results in +4/+4 slotTempAttack (not +8/+8)', () => {
+  let state = makeState({ amuletSlots: [], slotTempAttack: { equipmentSlot1: 0, equipmentSlot2: 0 } });
+  // Replay the exact actions handleCardToSlot dispatches for an amulet drop:
+  state = reduce(state, { type: 'UPDATE_AMULET_SLOTS', updater: () => [strengthAmulet] }).state;
+  // (After refactor, the hook should NOT dispatch MODIFY_SLOT_TEMP_ATTACK at all.
+  //  If a regression re-adds it, this test will see +8 and fail.)
+  expect(state.slotTempAttack.equipmentSlot1).toBe(4);
+  expect(state.slotTempAttack.equipmentSlot2).toBe(4);
+});
+```
+
+❌ **BAD** — only verifies the middleware in isolation; misses any extra dispatches the hook may add:
+
+```typescript
+it('UPDATE_AMULET_SLOTS adds +4 aura', () => {
+  const r = reduce(state, { type: 'UPDATE_AMULET_SLOTS', updater: () => [strengthAmulet] });
+  expect(r.state.slotTempAttack.equipmentSlot1).toBe(4);
+});
+```
+
+### When a hook does N dispatches, the test must do N dispatches
+
+If a real user action triggers `dispatch(A); dispatch(B); dispatch(C);` in a hook, the corresponding test must call `reduce()` three times in the same order, threading the state through. Anything less is fragile against the next refactor that adds/removes an intermediate dispatch.
+
+### Cover both directions
+
+For any "applies on equip / reverses on remove" effect (auras, buffs, modifiers, capacity bonuses, etc.):
+- Test the **add** path end-to-end (drop → final temp value matches the canonical magnitude, not 2× it)
+- Test the **remove** path end-to-end (sell / recycle / destroy → final temp value is 0, not negative)
+- Test the **swap** path (displaced amulet on full slot — the most common double-counting pitfall)
+
 ## Test structure
 
 ```typescript
 import { reduce } from '../reducer';
-import { createInitialState } from '../rules/init';
+import { createInitialGameState } from '../state';
 
 it('should handle DEAL_DAMAGE_TO_MONSTER', () => {
-  const state = createInitialState(/* seed */);
-  // setup state with monsters, equipment, etc.
+  const state = makeState({ /* setup */ });
   const { state: newState, sideEffects } = reduce(state, {
     type: 'DEAL_DAMAGE_TO_MONSTER',
     monsterId: 'test-monster',
     damage: 5,
     source: 'weapon',
   });
-  expect(newState.monsters[0].hp).toBe(/* expected */);
+  expect(newState.activeCards[0]?.hp).toBe(/* expected */);
   expect(sideEffects).toContainEqual(
     expect.objectContaining({ event: 'combat:monsterBleed' })
   );
@@ -34,6 +95,7 @@ it('should handle DEAL_DAMAGE_TO_MONSTER', () => {
 
 ## Verify after changes
 
-After any change to `game-core/rules/*.ts`, run:
+After any change to `game-core/rules/*.ts` **or** any hook that dispatches game actions:
 1. `npx tsc --noEmit` — type check passes
-2. `npx vitest run` — all tests pass (currently 281 tests)
+2. `npx vitest run` — all tests pass
+3. If you added a new hook → reducer dispatch path, add an end-to-end test that replays the full sequence (per above)

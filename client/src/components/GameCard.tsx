@@ -978,7 +978,16 @@ const amuletEffectText =
   })();
   const cardImageHeightClass = isThemedImageCard ? 'h-[60%]' : 'h-[65%]';
   const hasFlipTarget = Boolean(card.flipTarget);
-  const hasBeenFlipped = Boolean(card._flipBackCard) && !hasFlipTarget;
+  // `_flipBackCard` 字段长期挂在卡上（用于血誓回卷 / 乾坤一翻 / 万象齐转 /
+  // 秘藏宝库回退 / 命运之刃回退等机制读取原卡），但这些机制都只针对 active row
+  // 内的卡。一旦卡牌离开 active row（被拾取入手牌 / 装备 / 进背包 / 进墓地 /
+  // 进回收袋），这个字段就再无消费方，"已翻转" badge 也就没有意义 —— 例如暗影
+  // 之刺翻转后被玩家拿走，badge 不应该一直跟着它。所以 badge 只在卡牌仍在
+  // active row 中时显示。
+  const isInActiveRow = useGameState(s =>
+    s.activeCards.some(c => c?.id === card.id),
+  );
+  const hasBeenFlipped = Boolean(card._flipBackCard) && !hasFlipTarget && isInActiveRow;
 
   const cardImageBackdropClass = (() => {
     if (isThemedImageCard) {

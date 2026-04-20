@@ -211,10 +211,6 @@ import {
   SHOP_TYPE_PRICES,
   SHOP_HEAL_AMOUNT,
   MAX_SHOP_LEVEL,
-  BALANCE_ATTACK_BONUS,
-  BALANCE_SHIELD_BONUS,
-  BALANCE_ATTACK_PENALTY,
-  BALANCE_SHIELD_PENALTY,
   STRENGTH_SELF_DAMAGE,
   DEV_MODE,
   initialCombatState,
@@ -5155,16 +5151,8 @@ export default function GameBoard() {
         clearEquipmentSlotWithPromote(fallbackOrigin);
         break;
       case 'amulet':
-        if (sellItem.amuletEffect === 'balance') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -BALANCE_ATTACK_BONUS });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: BALANCE_ATTACK_PENALTY });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot1', delta: BALANCE_SHIELD_PENALTY });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot2', delta: -BALANCE_SHIELD_BONUS });
-        }
-        if (sellItem.amuletEffect === 'strength') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -4 });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: -4 });
-        }
+        // Aura reversal for the removed amulet is handled by the reducer's
+        // postProcessAmuletAura middleware (triggered by REMOVE_AMULET).
         dispatch({ type: 'REMOVE_AMULET', cardId: sellItem.id });
         break;
       case 'hand':
@@ -6164,31 +6152,22 @@ export default function GameBoard() {
         }) });
       }
 
+      // Amulet aura (strength / balance) is now applied automatically by the
+      // reducer's postProcessAmuletAura middleware whenever amuletSlots changes.
+      // Do NOT dispatch MODIFY_SLOT_TEMP_ATTACK/ARMOR here — that would
+      // double-apply on top of the middleware. Just emit the UI log lines.
       if (card.amuletEffect === 'balance') {
-        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: BALANCE_ATTACK_BONUS });
-        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: -BALANCE_ATTACK_PENALTY });
-        dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot1', delta: -BALANCE_SHIELD_PENALTY });
-        dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot2', delta: BALANCE_SHIELD_BONUS });
         addGameLog('amulet', '均衡护符生效：左栏临时攻击+3护甲-1，右栏临时护甲+3攻击-1');
       }
       if (card.amuletEffect === 'strength') {
-        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: 4 });
-        dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: 4 });
         addGameLog('amulet', '力量护符生效：所有装备栏临时攻击 +4！');
       }
 
       if (displacedAmulet !== null) {
         const displaced = displacedAmulet as AmuletItem;
-        if (displaced.amuletEffect === 'balance') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -BALANCE_ATTACK_BONUS });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: BALANCE_ATTACK_PENALTY });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot1', delta: BALANCE_SHIELD_PENALTY });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot2', delta: -BALANCE_SHIELD_BONUS });
-        }
-        if (displaced.amuletEffect === 'strength') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -4 });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: -4 });
-        }
+        // Aura reversal for displaced amulet is also handled by the middleware
+        // (the post-state's amuletSlots no longer contains it, so the diff
+        // produces a negative delta automatically).
         addGameLog('amulet', `卸下护符：${displaced.name}`);
         discardCardToGraveyard(displaced, { owner: 'player' });
       }
@@ -6252,16 +6231,8 @@ export default function GameBoard() {
           resetDragState();
           return;
         }
-        if (card.amuletEffect === 'balance') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -BALANCE_ATTACK_BONUS });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: BALANCE_ATTACK_PENALTY });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot1', delta: BALANCE_SHIELD_PENALTY });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: 'equipmentSlot2', delta: -BALANCE_SHIELD_BONUS });
-        }
-        if (card.amuletEffect === 'strength') {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot1', delta: -4 });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: 'equipmentSlot2', delta: -4 });
-        }
+        // Aura reversal for the recycled amulet is handled by the reducer's
+        // postProcessAmuletAura middleware (triggered by REMOVE_AMULET).
         dispatch({ type: 'REMOVE_AMULET', cardId: card.id });
         addPermanentMagicToRecycleBag(card);
         applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
