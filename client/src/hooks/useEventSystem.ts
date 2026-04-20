@@ -97,7 +97,12 @@ export interface EventSystemDeps {
   beginCombat: (monster: GameCardData, initiator: 'hero' | 'monster') => void;
   updateMonsterCard: (id: string, updater: (m: GameCardData) => GameCardData) => void;
   isMonsterEngaged: (monsterId: string) => boolean;
-  damageMonsterWithLayerOverflow: (monster: GameCardData, damage: number, maxLayers?: number) => GameCardData;
+  damageMonsterWithLayerOverflow: (
+    monster: GameCardData,
+    damage: number,
+    maxLayers?: number,
+    opts?: { bypassMaxPerHit?: boolean },
+  ) => GameCardData;
   handleMonsterDefeated: (monster: GameCardData, opts?: { killedByMinion?: boolean }) => void;
   recordClassDamageDiscoverHit: () => void;
 
@@ -1419,10 +1424,22 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           depsRef.current.beginCombat(rightCard, 'hero');
         }
         const layersBefore = rightCard.currentLayer ?? rightCard.fury ?? 1;
-        let updatedMonster = depsRef.current.damageMonsterWithLayerOverflow(rightCard, rightCard.hp ?? 0);
+        // 命运之刃语义是"直接打掉 2 层血"，必须无视 maxDamagePerHit
+        // （否则像 Golem 单层 HP 7 / cap 5 的精英只会被削 1 层）。
+        let updatedMonster = depsRef.current.damageMonsterWithLayerOverflow(
+          rightCard,
+          rightCard.hp ?? 0,
+          undefined,
+          { bypassMaxPerHit: true },
+        );
         depsRef.current.recordClassDamageDiscoverHit();
         if ((updatedMonster.currentLayer ?? 0) > 0) {
-          updatedMonster = depsRef.current.damageMonsterWithLayerOverflow(updatedMonster, updatedMonster.hp ?? 0);
+          updatedMonster = depsRef.current.damageMonsterWithLayerOverflow(
+            updatedMonster,
+            updatedMonster.hp ?? 0,
+            undefined,
+            { bypassMaxPerHit: true },
+          );
           depsRef.current.recordClassDamageDiscoverHit();
         }
         const defeatedByBlade = (updatedMonster.currentLayer ?? 0) <= 0 || (updatedMonster.hp ?? 0) <= 0;

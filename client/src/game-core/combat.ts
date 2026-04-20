@@ -34,9 +34,19 @@ export function damageMonsterWithLayerOverflow(
   monster: GameCardData,
   damage: number,
   _maxLayerLoss?: number,
+  opts?: { bypassMaxPerHit?: boolean },
 ): GameCardData {
   let effectiveDamage = damage;
-  if (monster.maxDamagePerHit && effectiveDamage > monster.maxDamagePerHit && !monster.isStunned) {
+  // bypassMaxPerHit is for "fixed-effect" sources (e.g. 命运之刃 fate-dice-strike)
+  // that semantically "directly strip N layers" and should ignore per-hit damage
+  // caps such as Golem's 岩石护体 (maxDamagePerHit = 5). Normal weapon / spell
+  // damage MUST keep the cap to preserve elite Golem's defensive identity.
+  if (
+    monster.maxDamagePerHit &&
+    effectiveDamage > monster.maxDamagePerHit &&
+    !monster.isStunned &&
+    !opts?.bypassMaxPerHit
+  ) {
     effectiveDamage = monster.maxDamagePerHit;
   }
   if (effectiveDamage <= 0) return monster;
