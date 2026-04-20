@@ -41,7 +41,7 @@ import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '..
 import { INITIAL_HP, PERSUADE_COST, MIN_PERSUADE_COST } from '../../constants';
 import { computeAmuletEffects } from '../../equipment';
 import { chaosStrikeHasOverkill } from '../../combat';
-import { STARTER_CARD_IDS, skillScrollImage } from '../../deck';
+import { STARTER_CARD_IDS, skillScrollImage, createMagicBoltCard } from '../../deck';
 
 import {
   getSpellDamage,
@@ -1242,23 +1242,16 @@ const starterMagicMissile: CardDefinition = {
     const boltBase = boltCounts[card.upgradeLevel ?? 0] ?? 2;
     const boltCount = boltBase * echoMultiplier;
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
+    // 走 createMagicBoltCard + applyAmplifyOnCreate 与魔弹连弩 / 投石手 gainBolts 一致，
+    // 让新生成的「魔弹」继承当前 amplifiedCardBonus['魔弹'] 累计值；不要内联构造，
+    // 否则任何已激活的魔弹增幅都不会作用到这批新魔弹上（典型 bug：先用魔弹连弩攻击
+    // 触发 +1 增幅，再打魔法飞弹，得到的魔弹仍然显示 1 点法术伤害）。
     const bolts: GameCardData[] = [];
     let rng = state.rng;
     for (let i = 0; i < boltCount; i++) {
-      let boltId: string;
-      [boltId, rng] = nextId(rng, 'missile-bolt');
-      bolts.push({
-        id: boltId,
-        type: 'magic',
-        name: '魔弹',
-        value: 0,
-        image: card.image,
-        magicType: 'instant',
-        knightEffect: 'missile-bolt',
-        magicEffect: '一次性：选择一个怪物，造成 1 点法术伤害。',
-        description: '选择一个怪物，造成 1 点法术伤害。',
-        shortDescription: '对一个怪物造成 1 法伤',
-      } as GameCardData);
+      let rawBolt: GameCardData;
+      [rawBolt, rng] = createMagicBoltCard(rng);
+      bolts.push(applyAmplifyOnCreate({ ...rawBolt, image: card.image }, state.amplifiedCardBonus));
     }
     patch.rng = rng;
     patch.handCards = [...state.handCards, ...bolts];

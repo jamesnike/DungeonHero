@@ -96,6 +96,78 @@ describe('弹幕骰局 — event token effects', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Regression: 魔法飞弹（starter:starter-perm-magic-missile）在 amplifiedCardBonus
+// 已经累积了「魔弹」+N 之后，新加入手牌的魔弹必须继承这个 +N。
+// 真实玩家场景：先用魔弹连弩攻击 → AMPLIFY_CARDS_BY_NAME({魔弹, 1}) 触发，
+// amplifiedCardBonus['魔弹'] = 1；之后打出魔法飞弹。修复前：新魔弹 amplifyBonus
+// 为 undefined，仍显示并造成 1 点伤害。修复后：amplifyBonus = 1，与其它
+// 现存魔弹一致。
+// 同时验证「法术回响 ×2」时翻倍出来的多张新魔弹也都带累计增幅。
+// ---------------------------------------------------------------------------
+describe('魔法飞弹 — amplifiedCardBonus inheritance (regression)', () => {
+  it('Lv0：amplifiedCardBonus[魔弹]=2 时，打出后手牌新加入的 2 张魔弹都带 +2', () => {
+    const missile = {
+      id: 'starter-perm-magic-missile-pick-1',
+      type: 'magic' as const,
+      name: '魔法飞弹',
+      value: 0,
+      magicType: 'permanent' as const,
+      classCard: true,
+      upgradeLevel: 0,
+    };
+    const state = makeState({
+      handCards: [missile] as any,
+      amplifiedCardBonus: { 魔弹: 2 },
+    });
+    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: missile.id }] as any);
+    const bolts = drained.state.handCards.filter(c => c.name === '魔弹');
+    expect(bolts.length).toBe(2);
+    bolts.forEach(b => expect(b.amplifyBonus).toBe(2));
+  });
+
+  it('Lv1：amplifiedCardBonus[魔弹]=1 时，3 张新魔弹都带 +1', () => {
+    const missile = {
+      id: 'starter-perm-magic-missile-pick-2',
+      type: 'magic' as const,
+      name: '魔法飞弹',
+      value: 0,
+      magicType: 'permanent' as const,
+      classCard: true,
+      upgradeLevel: 1,
+    };
+    const state = makeState({
+      handCards: [missile] as any,
+      amplifiedCardBonus: { 魔弹: 1 },
+    });
+    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: missile.id }] as any);
+    const bolts = drained.state.handCards.filter(c => c.name === '魔弹');
+    expect(bolts.length).toBe(3);
+    bolts.forEach(b => expect(b.amplifyBonus).toBe(1));
+  });
+
+  it('回响 ×2：双倍数量的新魔弹也都带累计增幅', () => {
+    const missile = {
+      id: 'starter-perm-magic-missile-pick-3',
+      type: 'magic' as const,
+      name: '魔法飞弹',
+      value: 0,
+      magicType: 'permanent' as const,
+      classCard: true,
+      upgradeLevel: 0,
+    };
+    const state = makeState({
+      handCards: [missile] as any,
+      amplifiedCardBonus: { 魔弹: 3 },
+      doubleNextMagic: true,
+    });
+    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: missile.id }] as any);
+    const bolts = drained.state.handCards.filter(c => c.name === '魔弹');
+    expect(bolts.length).toBe(4);
+    bolts.forEach(b => expect(b.amplifyBonus).toBe(3));
+  });
+});
+
 describe('弹幕骰局 — relic-driven missile-bolt effects', () => {
   it('missile-amplify-on-waterfall enqueues AMPLIFY_CARDS_BY_NAME on waterfall', () => {
     const state = makeState({ eternalRelics: [getEternalRelic('missile-amplify-on-waterfall')] });

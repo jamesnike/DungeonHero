@@ -1,0 +1,66 @@
+---
+description: Before touching any shared effect id / dispatch field used by multiple cards, list every card and every consumer call site to avoid silently breaking unrelated cards.
+alwaysApply: true
+---
+
+# Shared Effect ID — 改一个 feature 之前先列出所有卡
+
+## 背景：一次真实事故
+
+赏金之剑（`onEquipEffect: 'gold+6'`）和足锡冲锋（`onEquipEffect: 'temp-attack-3'`）
+两张新 starter 卡的入场效果在 game 里点不出来。
+根因：`GameBoard.tsx` 里有一条 imperative 的 `onEquipEffect` if-chain
+（违反 `no-imperative-card-handlers` 规则），加新卡的人只在
+`definitions/equipment.ts` 注册了 handler，没人记得补 GameBoard 的链——
+于是"拖到装备槽"路径漏触发，"点击出牌"路径正常，单元测试也只覆盖后者。
+
+bug 只在玩游戏时才会暴露。
+
+## 强制规则
+
+修改、新增、重命名以下任何一种"共享字段"时，**必须先全文搜索**它的所有
+**数据使用方**和**消费方**，列出来，确认每一个地方都行为一致或者你
+显式接受了差异。**不允许只改 feature、只验证当前手上这张卡然后收手。**
+
+| 共享字段 | 一般在哪 | 消费方至少要查 |
+|---|----|----|
+| `onEquipEffect` | `deck.ts` / `knightDeck.ts` / `events.ts` | `definitions/equipment.ts` 注册表 + GameBoard / hooks 里残留的 imperative 链 |
+| `potionEffect` | 所有 potion 卡 | `definitions/potions.ts` + 任何 `potion-effects.ts` 残留分支 |
+| `magicEffect` / `knightEffect` / `heroMagicId` | magic / knight / hero-magic 卡 | `definitions/magic.ts` + `magic-effects.ts` resolver |
+| `amuletEffect` (`AmuletEffectId`) | amulet 卡 | `computeAmuletEffects` switch + 所有 `amuletEffects.xxx` 消费方 + `amulet-stacking-design.mdc` 要求 |
+| `enterEffect` / `lastWords` / `bleedEffect` / `monsterType` | monster 卡 | combat reducer 的对应分支 + `monsterRage.ts` |
+| `flankEffectId` | hand 卡 | `reducePlayCard` 的 flank 分支 |
+| `eternalRelics` 的 relic id | `lib/eternalRelics.ts` | 所有 `hasEternalRelic(..., 'xxx')` 调用方 |
+
+## 强制流程（每次改这类字段都要走）
+
+1. **先列卡**：`Grep` 字段名（如 `onEquipEffect:`、`amuletEffect:`），列出所有持有它的卡。
+2. **再列消费方**：`Grep` 字段值（如 `'gold+6'`、`'durability-max+1'`），找出所有 if/switch/registry 入口。
+3. **逐一对照**：你这次改动是否影响每一张卡？每一个消费方？
+4. **写下来再改**：在思考阶段或回复里明确列出"这次会影响 X 张卡，Y 个消费方"，让 user 能 review。
+5. **测试要覆盖所有触发路径**：装备类至少同时跑 `PLAY_CARD`（点击）和 `EQUIP_FROM_HAND`（拖动）；魔法类至少跑 `RESOLVE_MAGIC` 和任何 echo / curse / counter 包裹路径。**只跑一条路径过了不算"修复"。**
+
+## What NOT to do
+
+- ❌ 看到 if/switch 链漏分支，**只补漏掉的那一条**就交工——没检查这条链本身是不是该删/迁移。
+- ❌ 加新 effect id（`'gold+6'`、`'temp-attack-3'` 这种），**只在注册表里注册**，不查 GameBoard / hooks 里有没有平行的 imperative 链需要同步。
+- ❌ 重命名 effect id，**只改一处定义**，不全文 `Grep` 字符串看消费方。
+- ❌ 修改某张卡的字段（如把 `onEquipEffect` 改成另一个 id），不查这个 id 是不是还被别的卡共用。
+- ❌ 测试只覆盖"我改的这张卡的当前路径"，不覆盖其他用同 effect 的卡 / 其他触发路径。
+
+## What to do
+
+- ✅ 改 effect 之前，**先搜字段名 + 字段值两遍**，把矩阵列出来（哪些卡用了 × 哪些消费方处理了）。
+- ✅ 看到平行的"注册表 + imperative 链"双轨，**优先消除双轨**（参考 `no-imperative-card-handlers.mdc`），而不是给双方都补分支。
+- ✅ 在回复里向 user 报告影响面：「这次改动影响 N 张卡：A、B、C…，M 个消费方：X、Y…，每一个我都核对过/或者请你确认」。
+- ✅ 写测试时主动覆盖**所有**已知触发路径，而不只是"我手上这张卡走的那条"。
+
+## 自检
+
+每次准备提交涉及共享 effect id 的改动前，停下来问自己：
+
+> "我有没有把所有用同一个 id / 同一个字段的卡全列出来？
+>  我有没有把这个 id 的所有消费入口（注册表、imperative 链、resolver、reducer 分支）都核对过？
+>  如果别人下周加一张同 id 的新卡，会不会因为我今天的改动悄悄出错？"
+
+如果任意一个回答是"没"或"不确定"，**回头补功课，再改**。

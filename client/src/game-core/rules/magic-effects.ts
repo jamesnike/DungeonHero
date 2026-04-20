@@ -179,7 +179,7 @@ import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots } from '../
 import { chaosStrikeHasOverkill } from '../combat';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
 import { markSkillUsedPure } from '../hero';
-import { STARTER_CARD_IDS, getStarterBaseId, skillScrollImage } from '../deck';
+import { STARTER_CARD_IDS, getStarterBaseId, skillScrollImage, createMagicBoltCard } from '../deck';
 import { createGreedCurseCard } from '@/lib/knightDeck';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
 import type { ActiveRowSlots, EquipmentSlotBonusState } from '@/components/game-board/types';
@@ -1683,22 +1683,14 @@ export function resolvePermanentMagic(
     case STARTER_CARD_IDS.magicMissile: {
       const boltCounts = [2, 3, 4];
       const boltCount = boltCounts[card.upgradeLevel ?? 0] ?? 2;
+      // 走 createMagicBoltCard + applyAmplifyOnCreate（与魔弹连弩 / gainBolts 一致），
+      // 让新生成的「魔弹」继承 amplifiedCardBonus['魔弹'] 的累计增幅。
       const bolts: GameCardData[] = [];
       let rng = state.rng;
       for (let i = 0; i < boltCount; i++) {
-        let boltId: string;
-        [boltId, rng] = nextId(rng, 'missile-bolt');
-        bolts.push({
-          id: boltId,
-          type: 'magic',
-          name: '魔弹',
-          value: 0,
-          image: card.image,
-          magicType: 'instant',
-          knightEffect: 'missile-bolt',
-          magicEffect: '一次性：选择一个怪物，造成 1 点法术伤害。',
-          description: '选择一个怪物，造成 1 点法术伤害。',
-        } as GameCardData);
+        let rawBolt: GameCardData;
+        [rawBolt, rng] = createMagicBoltCard(rng);
+        bolts.push(applyAmplifyOnCreate({ ...rawBolt, image: card.image }, state.amplifiedCardBonus));
       }
       patch.rng = rng;
       patch.handCards = [...state.handCards, ...bolts];
