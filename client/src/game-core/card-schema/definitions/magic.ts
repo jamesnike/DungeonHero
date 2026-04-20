@@ -241,6 +241,72 @@ const altarDiscardDiscover: CardDefinition = {
 // Instant Magic Effects (by card.name)
 // ============================================================================
 
+// 瀑流重置 — clear all non-ghost active-row cards (including stacks) to the
+// bottom of the dungeon deck (preserving deck order). Ghost slots stay put.
+// `postProcessActiveCards` auto-emits `waterfall:planReady` once the row is
+// emptied so the UI animates the waterfall as usual.
+//
+// The card has no proper `magicEffect` routing key (the field holds a long
+// description string), so it resolves via the `card:{name}` fallback in
+// `getCardDefinition`. Without this resolver the card fell through to the
+// "delegate to UI" branch which never enqueued FINALIZE_MAGIC_CARD, leaving
+// the play state stuck mid-resolution.
+const cascadeReset: CardDefinition = {
+  effectId: 'card:瀑流重置',
+  effects: [],
+  tags: ['magic', 'instant', 'waterfall', 'deck-manipulation'],
+  resolver: (state, card, sideEffects, patch, enqueuedActions) => {
+    const activeCards = state.activeCards as (GameCardData | null)[];
+    const activeStacks = state.activeCardStacks ?? {};
+
+    // Walk every column. Ghost top cards stay in place (with their stack
+    // intact); every other top card and every stacked card under it is
+    // collected for the deck-bottom batch.
+    const collected: GameCardData[] = [];
+    const newActive: (GameCardData | null)[] = [...activeCards];
+    const newStacks: Record<number, GameCardData[]> = {};
+
+    for (let col = 0; col < activeCards.length; col++) {
+      const top = activeCards[col];
+      const stack = activeStacks[col] ?? [];
+
+      if (top?.isGhost) {
+        if (stack.length > 0) newStacks[col] = stack;
+        continue;
+      }
+
+      if (top) {
+        collected.push(top);
+        newActive[col] = null;
+      }
+      // Preserve stack order so the bottom of each stack lands first in the
+      // deck-bottom batch (matches the visual top→bottom layering).
+      for (const stackedCard of stack) {
+        if (!stackedCard.isGhost) collected.push(stackedCard);
+      }
+    }
+
+    if (collected.length === 0) {
+      banner(sideEffects, '瀑流重置：激活行没有可回收的卡牌。');
+      log(sideEffects, 'magic', '瀑流重置：激活行无可回收的卡牌。');
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    patch.activeCards = newActive as ActiveRowSlots;
+    patch.activeCardStacks = newStacks;
+    patch.remainingDeck = [...(state.remainingDeck as GameCardData[]), ...collected];
+
+    log(sideEffects, 'magic', `瀑流重置：${collected.length} 张卡牌置于牌堆底，触发瀑流。`);
+    banner(sideEffects, `瀑流重置：${collected.length} 张卡牌置于牌堆底！`);
+
+    patch.lastPlayedCardCategory = getCardPlayCategory(card);
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  },
+};
+
 const stormVolley: CardDefinition = {
   effectId: 'card:风暴箭雨',
   effects: [],
@@ -1989,6 +2055,7 @@ const allMagicDefinitions: CardDefinition[] = [
   amplifyCard,
   altarDiscardDiscover,
   // Instant card.name
+  cascadeReset,
   stormVolley,
   fountainHand,
   emberEcho,

@@ -1878,7 +1878,12 @@ function reduceDungeonCardSelection(
       newActive[activeSlotIdx] = previewCard;
       patch.activeCards = newActive as any;
       const newPreview = [...previewCards] as typeof previewCards;
-      newPreview[activeSlotIdx] = card;
+      // Strip _fateBladeLastSlot so release-charge buildings (命运之刃 / 增幅祭坛)
+      // count this as a position change: when the card later returns to the
+      // active row, syncBuildingSlotsPure will see a slot mismatch and re-grant
+      // hasReleaseCharge so it's immediately usable again.
+      const { _fateBladeLastSlot: _stripped, ...cardWithoutSlotMemo } = card;
+      newPreview[activeSlotIdx] = cardWithoutSlotMemo as GameCardData;
       patch.previewCards = newPreview as any;
       let drawMsg = '';
       if ((pending.card.upgradeLevel ?? 0) >= 2) {

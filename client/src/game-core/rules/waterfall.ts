@@ -375,15 +375,20 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
     });
   }
 
-  // Recycle bag restore
-  const recycleResult = processRecycleBag(state);
-  if (recycleResult.restored.length > 0) {
-    patch.backpackItems = [...state.backpackItems, ...recycleResult.restored];
-    patch.permanentMagicRecycleBag = [...recycleResult.remaining];
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'waterfall', message: `回收袋恢复了 ${recycleResult.restored.length} 张牌到背包` },
-    });
+  // Recycle bag tick: every waterfall decrements `_recycleWaits` for each card in
+  // the bag. Ready cards (waits hit 0) return to the backpack; the rest stay in
+  // the bag with the decremented counter. Always write the remaining-bag patch —
+  // even when nothing is ready to restore — so the decrement is not lost.
+  if (state.permanentMagicRecycleBag.length > 0) {
+    const recycleResult = processRecycleBag(state);
+    patch.permanentMagicRecycleBag = recycleResult.remaining;
+    if (recycleResult.restored.length > 0) {
+      patch.backpackItems = [...state.backpackItems, ...recycleResult.restored];
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'waterfall', message: `回收袋恢复了 ${recycleResult.restored.length} 张牌到背包` },
+      });
+    }
   }
 
   // Wraith equipment enrage: when equipped wraith has wraithTurnEnrage,

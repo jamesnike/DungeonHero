@@ -309,12 +309,16 @@ export function processRecycleBag(
   const ready: GameCardData[] = [];
   const stillWaiting: GameCardData[] = [];
 
+  // Decrement-first semantics (matches design_guidelines.md, GAME_MECHANICS.md, and
+  // every other recycle-bag iteration in the codebase): subtract 1 from each card's
+  // remaining waterfalls, then cards with `_recycleWaits <= 0` become ready to return.
   for (const card of state.permanentMagicRecycleBag) {
-    const waits = card._recycleWaits ?? 0;
+    const waits = (card._recycleWaits ?? 1) - 1;
     if (waits <= 0) {
-      ready.push(card);
+      const { _recycleWaits: _omit, ...clean } = card as GameCardData & { _recycleWaits?: number };
+      ready.push(clean as GameCardData);
     } else {
-      stillWaiting.push({ ...card, _recycleWaits: waits - 1 });
+      stillWaiting.push({ ...card, _recycleWaits: waits });
     }
   }
 

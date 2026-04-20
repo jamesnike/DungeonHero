@@ -117,7 +117,7 @@ export default function CardDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             {isMonsterEquipment ? <Sword className="w-6 h-6 text-amber-500" /> : getCardIcon()}
