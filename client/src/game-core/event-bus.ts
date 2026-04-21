@@ -324,6 +324,19 @@ export type GameEventMap = {
     context?: Record<string, unknown>;
   };
   'ui:banner': { text: string };
+  /**
+   * Pipeline drain hit MAX_STEPS — some actions remain in `state.actionQueue`
+   * and will (best-effort) drain on the next dispatch. UI should warn the
+   * player; reducer/test code can also check `PipelineResult.overflowed`.
+   *
+   * `headActionTypes` is a sample (first 5) of the action.type strings that
+   * were left undrained, useful for diagnostic / bug-report screenshots.
+   */
+  'pipeline:overflow': {
+    stepsProcessed: number;
+    remainingQueueLength: number;
+    headActionTypes: string[];
+  };
   'ui:graveyardDiscover': {
     options: import('@/components/GameCard').GameCardData[];
     card: import('@/components/GameCard').GameCardData;

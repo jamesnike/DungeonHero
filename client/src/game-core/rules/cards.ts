@@ -330,25 +330,9 @@ function reducePlayCard(
       event: 'card:magicPlayed',
       payload: { card, target: action.target },
     });
-
-    // 咒纹刻印：每使用 8 张 magic 牌（仅 type === 'magic'，不计 hero-magic / curse），
-    // 发现一张专属牌。计数与触发都在此完成；UI 由 combat:classMagicDiscoverTriggered 监听。
-    if (card.type === 'magic') {
-      // Each equipped 咒纹刻印 ticks the streak independently (N → +N per cast).
-      const magicDiscoverCount = (state.amuletSlots as GameCardData[]).filter(
-        s => s?.amuletEffect === 'magic-class-discover',
-      ).length;
-      if (magicDiscoverCount > 0) {
-        const threshold = 8;
-        const nextStreak = (state.classMagicDiscoverStreak ?? 0) + magicDiscoverCount;
-        if (nextStreak >= threshold) {
-          patch.classMagicDiscoverStreak = 0;
-          sideEffects.push({ event: 'combat:classMagicDiscoverTriggered', payload: { threshold } });
-        } else {
-          patch.classMagicDiscoverStreak = nextStreak;
-        }
-      }
-    }
+    // 咒纹刻印的 streak 自增统一在 reduceResolveMagic 里完成，
+    // 这样可以同时覆盖 PLAY_CARD（点击播放）与 GameBoard.handleCardToHero
+    // 直接 dispatch RESOLVE_MAGIC（拖动出牌）两条触发路径。
   }
 
   // Notify transform/category update
@@ -783,7 +767,42 @@ function reduceResolveMagic(
 ): ReduceResult {
   const engineResult = executeMagicCardEffects(state, action.card, action.target, action.isFlank);
   const result = engineResult ?? resolveAllMagicEffects(state, action.card, action.target, action.isFlank);
-  return appendTransformEnqueue(result, action.card);
+  const withMagicDiscover = applyMagicClassDiscoverStreak(result, action.card);
+  return appendTransformEnqueue(withMagicDiscover, action.card);
+}
+
+// ---------------------------------------------------------------------------
+// 咒纹刻印 (magic-class-discover)：每使用 8 张 magic 牌（仅 type === 'magic'，
+// 不计 hero-magic / curse），发现一张专属牌。计数与触发都在 RESOLVE_MAGIC 收口
+// 完成，确保所有出牌路径（PLAY_CARD enqueue、GameBoard.handleCardToHero 直发、
+// useEventSystem 的 useKnightSkill event token 等）都会增加 streak。
+// echo / 回响在引擎内部循环，不会重复 dispatch RESOLVE_MAGIC，所以此处每次
+// dispatch 只会自增一次，与"使用一张魔法牌"的语义一致。
+// ---------------------------------------------------------------------------
+
+function applyMagicClassDiscoverStreak(result: ReduceResult, card: GameCardData): ReduceResult {
+  if (card.type !== 'magic') return result;
+  const stateAfter = result.state;
+  const magicDiscoverCount = (stateAfter.amuletSlots as GameCardData[]).filter(
+    s => s?.amuletEffect === 'magic-class-discover',
+  ).length;
+  if (magicDiscoverCount <= 0) return result;
+  const threshold = 8;
+  const nextStreak = (stateAfter.classMagicDiscoverStreak ?? 0) + magicDiscoverCount;
+  if (nextStreak >= threshold) {
+    return {
+      ...result,
+      state: { ...stateAfter, classMagicDiscoverStreak: 0 },
+      sideEffects: [
+        ...result.sideEffects,
+        { event: 'combat:classMagicDiscoverTriggered', payload: { threshold } },
+      ],
+    };
+  }
+  return {
+    ...result,
+    state: { ...stateAfter, classMagicDiscoverStreak: nextStreak },
+  };
 }
 
 // ---------------------------------------------------------------------------

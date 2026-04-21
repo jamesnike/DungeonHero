@@ -151,7 +151,16 @@ export default function PermGrantModal({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto">
+      {/*
+        Perm 赋予 / 装备附魔 / 精华萃取 / 蜕变赋灵 等永久铭刻弹窗：
+        玩家选哪张卡铭刻是有后果的选择，外点 / ESC 误关会丢失这次永久升级机会。
+        显式关闭路径："取消" / X / 确认按钮（赋予 / 铭刻 / 萃取 / 附魔...）。
+      */}
+      <DialogContent
+        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <InfinityIcon className="w-5 h-5 text-amber-500" />

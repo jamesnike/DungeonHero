@@ -57,7 +57,15 @@ export default function HandMagicUpgradeModal({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto">
+      {/*
+        手牌魔法精炼弹窗（秘法精炼）：玩家选了卡才有意义，外点 / ESC 误关会丢失
+        升级机会。和 CardUpgradeModal 同款保护，只允许"取消"按钮 / X / 确认 关闭。
+      */}
+      <DialogContent
+        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <ArrowBigUpDash className="w-5 h-5 text-violet-500" />

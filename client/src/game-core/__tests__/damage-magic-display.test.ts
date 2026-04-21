@@ -4,8 +4,9 @@
  * 覆盖：
  *   - Group B 固定 base + amp（魔弹 / 风暴箭雨 / 混沌冲击 / overkill-upgrade /
  *     bounty-spell-damage / 雷震击 / storm-volley-recycle / fate-sight / grave-nova）
- *   - Group C 状态相关 base + amp（点金裁决 / missing-hp-smite / blood-sacrifice-strike）
- *   - Group D 玩家输入相关（armor-strike / temp-attack-strike / weapon-sweep）→ suffix 模式
+ *   - Group C 状态相关 base + amp（点金裁决 / missing-hp-smite）
+ *   - Group D 保留原描述、仅追加 (+N)（armor-strike / temp-attack-strike /
+ *     weapon-sweep / blood-sacrifice-strike）→ suffix 模式
  *   - amp = 0 时仍返回正确 base 文案（调用方负责跳过 (+N) 渲染）
  *   - 非 magic 卡 / 非伤害 magic 卡 → null
  */
@@ -160,16 +161,9 @@ describe('computeDamageMagicDisplayPure — Group C (状态相关 base + amp)', 
     if (r?.mode === 'replace') expect(r.text).toContain('造成 0 点伤害');
   });
 
-  it('blood-sacrifice-strike: hp 21 → hpCost 10 → 20 + amp 2 → 22', () => {
-    const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'blood-sacrifice-strike', amplifyBonus: 2 }), { hp: 21, maxHp: 30, gold: 0 });
-    expect(r?.mode).toBe('replace');
-    if (r?.mode === 'replace') {
-      expect(r.text).toContain('造成 22 点伤害');
-    }
-  });
 });
 
-describe('computeDamageMagicDisplayPure — Group D (玩家输入相关 → suffix-only)', () => {
+describe('computeDamageMagicDisplayPure — Group D (保留原描述 → suffix-only)', () => {
   it('armor-strike: 返回 suffix 模式', () => {
     const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'armor-strike', amplifyBonus: 4 }), STATE);
     expect(r).toEqual({ mode: 'suffix', amplifyBonus: 4 });
@@ -183,6 +177,16 @@ describe('computeDamageMagicDisplayPure — Group D (玩家输入相关 → suff
   it('weapon-sweep: amp 2 → suffix 模式', () => {
     const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'weapon-sweep', amplifyBonus: 2 }), STATE);
     expect(r).toEqual({ mode: 'suffix', amplifyBonus: 2 });
+  });
+
+  it('blood-sacrifice-strike: amp 2 → suffix 模式（保留 shortDescription，不再动态替换）', () => {
+    const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'blood-sacrifice-strike', amplifyBonus: 2 }), { hp: 21, maxHp: 30, gold: 0 });
+    expect(r).toEqual({ mode: 'suffix', amplifyBonus: 2 });
+  });
+
+  it('blood-sacrifice-strike: amp 0 → suffix 模式 (调用方应跳过 (+N))', () => {
+    const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'blood-sacrifice-strike' }), STATE);
+    expect(r).toEqual({ mode: 'suffix', amplifyBonus: 0 });
   });
 });
 

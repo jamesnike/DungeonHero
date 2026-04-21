@@ -19,7 +19,6 @@ import type { GameAction } from './actions';
 import type { SideEffect } from './reducer';
 import { reduce } from './reducer';
 import { dequeue, enqueueFront, isEmpty } from './queue';
-import { DEV_MODE } from './constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +35,14 @@ export interface PipelineResult {
   stepsProcessed: number;
   /** True if the pipeline paused due to awaiting player input. */
   pausedForInput: boolean;
+  /**
+   * True if the pipeline aborted because it hit `MAX_STEPS`. The remaining
+   * actions are returned in `queue` and will (best-effort) drain on the next
+   * dispatch — but if a subsequent `replaceState` (undo / hydrate) wipes the
+   * queue first, those actions are lost. See `docs/auto-draw-debug.md`
+   * "Round 4" for the failure mode this surfaces.
+   */
+  overflowed: boolean;
 }
 
 /** Phases that pause the pipeline to wait for player input. */
@@ -56,7 +63,16 @@ const INPUT_PHASES = new Set([
   'awaitingDeleteChoice',
 ]);
 
-const MAX_STEPS = 200;
+/**
+ * Hard ceiling on actions drained per dispatch. Bumped from 200 to 500 after
+ * a real-game report where a late-game combo (long-chain echo + amulet aura
+ * cascade + on-enter-hand triggers) exceeded the old cap and silently left
+ * `TRIGGER_ON_ENTER_HAND` undrained — combined with a follow-up undo that
+ * wiped the queue, the on-enter-hand effect was lost forever. 500 still
+ * comfortably catches genuine infinite loops; observed real chains stay
+ * under 300. See `docs/auto-draw-debug.md` "Round 4".
+ */
+const MAX_STEPS = 500;
 
 // ---------------------------------------------------------------------------
 // Process a single action (exposed for testing)
@@ -110,6 +126,7 @@ export function drain(state: GameState, queue: GameAction[]): PipelineResult {
           sideEffects: allSideEffects,
           stepsProcessed: steps,
           pausedForInput: true,
+          overflowed: false,
         };
       }
     }
@@ -130,13 +147,32 @@ export function drain(state: GameState, queue: GameAction[]): PipelineResult {
           sideEffects: allSideEffects,
           stepsProcessed: steps,
           pausedForInput: true,
+          overflowed: false,
         };
       }
     }
   }
 
-  if (steps >= MAX_STEPS && DEV_MODE) {
-    console.error(`[pipeline] Safety limit reached (${MAX_STEPS} steps). Possible infinite loop.`);
+  // If we exited because we hit the cap (queue still non-empty), flag it
+  // loudly: always log (regardless of DEV_MODE — players need to see this
+  // in bug reports), and emit a `pipeline:overflow` SideEffect so UI can
+  // surface a non-blocking banner to the player.
+  const overflowed = steps >= MAX_STEPS && !isEmpty(currentQueue);
+  if (overflowed) {
+    const headActionTypes = currentQueue.slice(0, 5).map(a => a.type);
+    console.error(
+      `[pipeline] Safety limit reached (${MAX_STEPS} steps). ` +
+      `${currentQueue.length} action(s) left undrained: ${headActionTypes.join(', ')}` +
+      (currentQueue.length > 5 ? ', ...' : ''),
+    );
+    allSideEffects.push({
+      event: 'pipeline:overflow',
+      payload: {
+        stepsProcessed: steps,
+        remainingQueueLength: currentQueue.length,
+        headActionTypes,
+      },
+    });
   }
 
   return {
@@ -145,6 +181,7 @@ export function drain(state: GameState, queue: GameAction[]): PipelineResult {
     sideEffects: allSideEffects,
     stepsProcessed: steps,
     pausedForInput: false,
+    overflowed,
   };
 }
 

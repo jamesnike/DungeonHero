@@ -374,6 +374,16 @@ function postProcessHandEntries(
     if (!card.onEnterHandEffect) continue;
     if (card._skipOnEnterHand) continue;
     triggers.push({ type: 'TRIGGER_ON_ENTER_HAND', cardId: card.id });
+    // Trace enqueue — pairs with the `[on-enter-hand] fire` trace emitted by
+    // `executeOnEnterHand`. If a bug report shows enqueue without a matching
+    // fire, the trigger was lost (pipeline overflow + undo / hydrate wiping
+    // `state.actionQueue`). See `docs/auto-draw-debug.md` "Round 4".
+    console.debug('[on-enter-hand] enqueue', {
+      effectId: card.onEnterHandEffect,
+      cardId: card.id,
+      cardName: card.name,
+      sourceAction: action.type,
+    });
   }
 
   if (triggers.length === 0) return result;

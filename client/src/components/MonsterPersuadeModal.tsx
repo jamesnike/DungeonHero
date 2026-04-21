@@ -51,7 +51,19 @@ export default function MonsterPersuadeModal({
 
   return (
     <Dialog open={open} onOpenChange={value => { if (!value && phase !== 'rolling') onClose(); }}>
-      <DialogContent className="sm:max-w-md max-h-[95vh] overflow-y-auto persuade-modal">
+      {/*
+        劝降弹窗：
+        - confirm 阶段：玩家必须明确点"确认劝降"或"取消"按钮
+        - rolling 阶段：等骰动画结束，不可关闭（onOpenChange 已 guard）
+        - result 阶段：必须点"确定"按钮收尾，让 reducer 完成 persuade flow 收束
+        外点 / ESC 误关会让 pendingPersuade 状态卡住或丢失。
+        显式关闭路径："确认劝降" / "取消" / "确定" / X。
+      */}
+      <DialogContent
+        className="sm:max-w-md max-h-[95vh] overflow-y-auto persuade-modal"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <Target className="w-5 h-5 text-amber-500" />

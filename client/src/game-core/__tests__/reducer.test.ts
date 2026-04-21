@@ -996,7 +996,7 @@ describe('reducer', () => {
     });
   });
 
-  describe('PLAY_CARD — magic-class-discover (咒纹刻印)', () => {
+  describe('magic-class-discover (咒纹刻印) — both PLAY_CARD and direct RESOLVE_MAGIC paths', () => {
     const magicCard = {
       id: 'mg1',
       type: 'magic' as const,
@@ -1011,6 +1011,12 @@ describe('reducer', () => {
       value: 0,
       heroMagicId: 'holy-light' as const,
     };
+    const curseCard = {
+      id: 'cu1',
+      type: 'curse' as const,
+      name: 'Test Curse',
+      value: 0,
+    };
     const discoverAmulet = {
       id: 'cmd-amulet',
       type: 'amulet' as const,
@@ -1019,7 +1025,9 @@ describe('reducer', () => {
       amuletEffect: 'magic-class-discover' as const,
     };
 
-    it('does nothing when amulet is not equipped', () => {
+    // ---- PLAY_CARD path (HandContainer onPlayCard / 点击播放) -------------
+
+    it('PLAY_CARD: does nothing when amulet is not equipped', () => {
       const state = makeState({
         handCards: [magicCard as any],
         classMagicDiscoverStreak: 5,
@@ -1028,37 +1036,103 @@ describe('reducer', () => {
       expect(result.state.classMagicDiscoverStreak).toBe(5);
     });
 
-    it('increments classMagicDiscoverStreak when amulet is equipped and a magic card is played', () => {
+    it('PLAY_CARD: increments classMagicDiscoverStreak when amulet is equipped and a magic card is played', () => {
       const state = makeState({
         handCards: [magicCard as any],
         amuletSlots: [discoverAmulet as any],
         classMagicDiscoverStreak: 3,
       });
-      const result = reduce(state, { type: 'PLAY_CARD', cardId: 'mg1' });
+      // Drain the full pipeline so the enqueued RESOLVE_MAGIC actually runs
+      // (PLAY_CARD only enqueues; the streak now lives on RESOLVE_MAGIC).
+      const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'mg1' } as GameAction]);
       expect(result.state.classMagicDiscoverStreak).toBe(4);
       expect(result.sideEffects.some(e => e.event === 'combat:classMagicDiscoverTriggered')).toBe(false);
     });
 
-    it('resets to 0 and emits classMagicDiscoverTriggered when threshold (8) is reached', () => {
+    it('PLAY_CARD: resets to 0 and emits classMagicDiscoverTriggered when threshold (8) is reached', () => {
       const state = makeState({
         handCards: [magicCard as any],
         amuletSlots: [discoverAmulet as any],
         classMagicDiscoverStreak: 7,
       });
-      const result = reduce(state, { type: 'PLAY_CARD', cardId: 'mg1' });
+      const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'mg1' } as GameAction]);
       expect(result.state.classMagicDiscoverStreak).toBe(0);
       const triggered = result.sideEffects.find(e => e.event === 'combat:classMagicDiscoverTriggered');
       expect(triggered).toBeDefined();
       expect((triggered?.payload as any)?.threshold).toBe(8);
     });
 
-    it('does not increment when a hero-magic card is played', () => {
+    it('PLAY_CARD: does not increment when a hero-magic card is played', () => {
       const state = makeState({
         handCards: [heroMagicCard as any],
         amuletSlots: [discoverAmulet as any],
         classMagicDiscoverStreak: 3,
       });
-      const result = reduce(state, { type: 'PLAY_CARD', cardId: 'hm1' });
+      const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'hm1' } as GameAction]);
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
+    });
+
+    // ---- Direct RESOLVE_MAGIC path (GameBoard.handleCardToHero 拖拽出牌) -
+
+    it('RESOLVE_MAGIC (drag-to-hero path): increments streak just like PLAY_CARD', () => {
+      // 这是真实 bug 触发路径：玩家把魔法牌拖到 hero 时，GameBoard.handleCardToHero
+      // 会直接 dispatch RESOLVE_MAGIC 绕过 PLAY_CARD。Streak 必须在这条路径上也增加。
+      const state = makeState({
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'mg1', card: magicCard } as any);
+      expect(result.state.classMagicDiscoverStreak).toBe(4);
+    });
+
+    it('RESOLVE_MAGIC (drag-to-hero path): resets to 0 and emits trigger at threshold', () => {
+      const state = makeState({
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 7,
+      });
+      const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'mg1', card: magicCard } as any);
+      expect(result.state.classMagicDiscoverStreak).toBe(0);
+      expect(result.sideEffects.some(e => e.event === 'combat:classMagicDiscoverTriggered')).toBe(true);
+    });
+
+    it('RESOLVE_MAGIC (drag-to-hero path): does not increment for hero-magic', () => {
+      const state = makeState({
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'hm1', card: heroMagicCard } as any);
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
+    });
+
+    it('RESOLVE_MAGIC (drag-to-hero path): does not increment for curse', () => {
+      const state = makeState({
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'cu1', card: curseCard } as any);
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
+    });
+
+    it('does not double-count when PLAY_CARD enqueues RESOLVE_MAGIC (single drain = +1, not +2)', () => {
+      // PLAY_CARD 自己 enqueue 一个 RESOLVE_MAGIC，drain 整条管线只能加 1，
+      // 不能因为我们把逻辑搬到 RESOLVE_MAGIC 而出现重复计数。
+      const state = makeState({
+        handCards: [magicCard as any],
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 0,
+      });
+      const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'mg1' } as GameAction]);
+      expect(result.state.classMagicDiscoverStreak).toBe(1);
+    });
+
+    it('two equipped 咒纹刻印 increment streak by 2 per cast (stacking)', () => {
+      const a1 = { ...discoverAmulet, id: 'cmd-amulet-1' };
+      const a2 = { ...discoverAmulet, id: 'cmd-amulet-2' };
+      const state = makeState({
+        amuletSlots: [a1, a2] as any,
+        classMagicDiscoverStreak: 1,
+      });
+      const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'mg1', card: magicCard } as any);
       expect(result.state.classMagicDiscoverStreak).toBe(3);
     });
   });

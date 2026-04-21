@@ -27,9 +27,16 @@ export default function CombatDiceModal({
 }: CombatDiceModalProps) {
   return (
     <Dialog open={open}>
+      {/*
+        战斗骰窗口：reducer 已经决定了结果，UI 只是回放骰动画。
+        但若在动画期间被外点 / ESC 关掉，上层等待 onRollResult 的流程会卡死
+        （combat:weaponDiceRoll → 命中判定 → APPLY_HERO_KILL_EFFECTS）。
+        所有显式关闭路径：动画播完后 reducer 自己 SET_COMBAT_DICE_MODAL(null)。
+        onInteractOutside 同时覆盖 pointer 与 focus outside（比 onPointerDownOutside 更全）。
+      */}
       <DialogContent
         className="sm:max-w-md max-h-[95vh] overflow-y-auto overflow-x-hidden"
-        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>

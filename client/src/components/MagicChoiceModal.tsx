@@ -26,7 +26,16 @@ export default function MagicChoiceModal({ open, state, onChoice }: MagicChoiceM
 
   return (
     <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-md max-h-[95vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()}>
+      {/*
+        魔法分支选择窗口（如四元素之力、缘分之轮等）：必须做出一个 option 选择
+        才能完成本次魔法 resolve；外点 / ESC 关掉会卡住 pendingMagicAction。
+        显式关闭路径：点其中一个 option 按钮（onChoice）。
+      */}
+      <DialogContent
+        className="sm:max-w-md max-h-[95vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-purple-500" />

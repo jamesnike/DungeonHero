@@ -663,22 +663,15 @@ export function computeDamageMagicDisplayPure(
     };
   }
 
-  if (card.knightEffect === 'blood-sacrifice-strike') {
-    const hpCost = Math.floor(state.hp / 2);
-    const dmg = hpCost * 2 + amp;
-    return {
-      mode: 'replace',
-      text: `永久：选择一个怪物，失去一半剩余生命值，对该怪物造成 ${dmg} 点伤害。`,
-      amplifyBonus: amp,
-    };
-  }
-
-  // ---------- Group D：玩家输入相关（base 需要选槽后才能定）——只追加 (+N) ----------
-
+  // ---------- Group D：保留原描述，只追加 (+N) ----------
+  // - armor-strike / temp-attack-strike / weapon-sweep：base 由玩家选槽决定
+  // - blood-sacrifice-strike：用静态描述「失去一半生命；伤害 ＝ 失去血量 ×2」
+  //   即可表达，不再做动态数值替换
   if (
     card.knightEffect === 'armor-strike' ||
     card.knightEffect === 'temp-attack-strike' ||
-    card.knightEffect === 'weapon-sweep'
+    card.knightEffect === 'weapon-sweep' ||
+    card.knightEffect === 'blood-sacrifice-strike'
   ) {
     return { mode: 'suffix', amplifyBonus: amp };
   }

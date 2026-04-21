@@ -48,6 +48,7 @@ import {
 import { getHeroSkillById, type HeroSkillId } from '@/lib/heroSkills';
 import type { RngState } from '@/game-core/rng';
 import { nextRandom, nextInt, nextBool, shuffle as rngShuffle, pickRandom, nextId } from '@/game-core/rng';
+import { createDiceQueue } from './dice-queue';
 
 const COMBAT_ANIMATION_STAGGER = 180;
 
@@ -304,7 +305,31 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
 
   // -- Internal refs (only used by functions in this hook) --------------------
 
-  const eventDiceResolverRef = useRef<((entry: EventDiceRange | null) => void) | null>(null);
+  // FIFO queue for dice requests. When two dice are requested in the same
+  // reduce/drain tick (e.g. 雷震击 stun + bone-regen 虚骨再生), the earlier
+  // single-slot impl had the second overwrite the first, dropping the
+  // first dice's resolver entirely (so the monster never got stunned no
+  // matter the RNG). The queue shows them sequentially instead.
+  type DiceConfig = {
+    title: string;
+    subtitle?: string;
+    entries: EventDiceRange[];
+    flowContext?: Record<string, unknown>;
+    predeterminedRoll?: number;
+  };
+  const diceQueueRef = useRef(createDiceQueue<DiceConfig, EventDiceRange>(entry => {
+    dispatch({ type: 'SET_EVENT_DICE_MODAL', payload: {
+      title: entry.config.title,
+      subtitle: entry.config.subtitle,
+      entries: entry.config.entries,
+      rolledValue: null,
+      highlightedId: null,
+      flowContext: entry.config.flowContext,
+      predeterminedRoll: entry.config.predeterminedRoll ?? null,
+    } });
+    dispatch({ type: 'SET_PHASE', phase: 'awaitingDice' });
+    depsRef.current.setEventDiceRollKey(key => key + 1);
+  }));
   const magicChoiceResolverRef = useRef<((optionId: string) => void) | null>(null);
   const equipmentPromptResolverRef = useRef<((slot: EquipmentSlotId | null) => void) | null>(null);
   const eventAmplifyHandResolverRef = useRef<((cardId: string | null) => void) | null>(null);
@@ -433,20 +458,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       /** Pre-rolled D20 from reducer's seeded RNG. UI dice animates to this value. */
       predeterminedRoll?: number;
     }) => {
-      return new Promise<EventDiceRange | null>(resolve => {
-        eventDiceResolverRef.current = resolve;
-        dispatch({ type: 'SET_EVENT_DICE_MODAL', payload: {
-          title: config.title,
-          subtitle: config.subtitle,
-          entries: config.entries,
-          rolledValue: null,
-          highlightedId: null,
-          flowContext: config.flowContext,
-          predeterminedRoll: config.predeterminedRoll ?? null,
-        } });
-        dispatch({ type: 'SET_PHASE', phase: 'awaitingDice' });
-        depsRef.current.setEventDiceRollKey(key => key + 1);
-      });
+      return diceQueueRef.current.enqueue(config);
     },
     [],
   );
@@ -470,28 +482,29 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     } });
 
     window.setTimeout(() => {
-      eventDiceResolverRef.current?.(matched ?? null);
-      eventDiceResolverRef.current = null;
+      // complete() resolves the active resolver and auto-flushes the next
+      // queued entry (if any) by invoking the show callback we passed to
+      // createDiceQueue — that callback dispatches SET_EVENT_DICE_MODAL for
+      // the next dice. Any RESOLVE_DICE chain dispatched after this will
+      // see active=set (next dice already showing) and just queue behind it.
+      diceQueueRef.current.complete(matched ?? null);
       dispatch({
         type: 'RESOLVE_DICE',
         value,
         outcomeId: matched?.id ?? null,
         context: { title: prev.title, subtitle: prev.subtitle, ...prev.flowContext },
       });
-      // Only clear the modal if RESOLVE_DICE didn't trigger a new dice request.
-      // A new modal will have rolledValue === null; the old one has the roll result.
-      const currentModal = engine.getState().eventDiceModal;
-      if (!currentModal || currentModal.rolledValue != null) {
+      if (diceQueueRef.current.isIdle()) {
+        // No queued dice and chain didn't add one — close modal.
         dispatch({ type: 'SET_EVENT_DICE_MODAL', payload: null });
       }
     }, 900);
   }, [engine]);
 
   const cancelDiceModal = useCallback(() => {
-    if (eventDiceResolverRef.current) {
-      eventDiceResolverRef.current(null);
-      eventDiceResolverRef.current = null;
-    }
+    // Player manually closed the modal — drop the active dice and any queued
+    // dice (resolving each promise with null) so they don't pop up later.
+    diceQueueRef.current.cancel();
     dispatch({ type: 'SET_EVENT_DICE_MODAL', payload: null });
     dispatch({ type: 'SET_PHASE', phase: 'playerInput' });
   }, []);
@@ -897,6 +910,16 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     if (tokens.length > 0) {
       depsRef.current.eventChoiceProcessingRef.current = true;
     }
+  });
+
+  // Pipeline drain hit MAX_STEPS — show a non-blocking warning so the
+  // player knows some chained effects (e.g. on-enter-hand triggers) may
+  // have been deferred to the next dispatch, and may be lost entirely if
+  // they undo before the queue drains. See `docs/auto-draw-debug.md`
+  // "Round 4" for the bug class this surfaces.
+  useGameEvent('pipeline:overflow', ({ stepsProcessed, remainingQueueLength, headActionTypes }) => {
+    addGameLog('system', `效果链过长被截断：已执行 ${stepsProcessed} 步，剩余 ${remainingQueueLength} 个动作排队下一步执行（首批：${headActionTypes.join('、')}）。如有效果未发动，请截图上报。`);
+    dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `效果链过长被截断（${remainingQueueLength} 项排队）。如有效果未发动，请截图上报。` });
   });
 
   // ---------------------------------------------------------------------------

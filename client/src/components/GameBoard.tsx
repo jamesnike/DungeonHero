@@ -1501,13 +1501,27 @@ export default function GameBoard() {
   // isDraggingToHand / isDraggingFromDungeon removed (values were never read)
   // wraithPassiveEnabledRef eliminated — use engine.getState().wraithPassiveEnabled
   const [wraithPassiveUnlockPopup, setWraithPassiveUnlockPopup] = useState(false);
+  // 杀掉最后一只 Wraith 时，reducer 会在同一次 drain 里入队两件事：
+  //   1) DEQUEUE_MONSTER_REWARD → 打开战利品弹窗（MonsterRewardModal）
+  //   2) CHECK_WRAITH_PURIFICATION → emit 'combat:wraithPurified' → 打开本弹窗
+  // 两个 radix Dialog 同帧 open 时，幽魂弹窗叠在战利品弹窗上面。点击"知道了"
+  // 关闭幽魂弹窗的瞬间，原始 click 事件（或触屏 ghost click）会穿透到下层，
+  // 命中战利品 option 按钮（误选奖励）或 overlay（→ onPointerDownOutside →
+  // MINIMIZE_ALL_MODALS），玩家观感就是"战利品弹窗被挤掉/消失了"。
+  // 解决方案：把幽魂净化通知缓存为 pending，等所有 monsterReward 都消化完
+  // （activeMonsterReward 变 null）再弹，保证两个弹窗永远不同时存在。
+  const [wraithPassiveUnlockPending, setWraithPassiveUnlockPending] = useState(false);
 
-  // Open the unlock popup when the reducer reports wraith purification.
-  // (The earlier `combat:wraithPurified` listener above only logs; this one
-  //  also surfaces the modal so the player learns about the new relic.)
   useGameEvent('combat:wraithPurified', () => {
-    setWraithPassiveUnlockPopup(true);
+    setWraithPassiveUnlockPending(true);
   });
+
+  useEffect(() => {
+    if (wraithPassiveUnlockPending && !activeMonsterReward) {
+      setWraithPassiveUnlockPending(false);
+      setWraithPassiveUnlockPopup(true);
+    }
+  }, [wraithPassiveUnlockPending, activeMonsterReward]);
 
   const eventChoiceProcessingRef = useRef(false);
   /**
@@ -5244,6 +5258,28 @@ export default function GameBoard() {
           }
           dispatch({ type: 'SET_ACTIVE_CARD_STACKS', stacks: popStacks });
           addGameLog('system', `堆叠揭示：「${nextCard.name}」从第 ${index + 1} 列堆叠中浮现！`);
+
+          // Stack-pop fills the slot (card→card, not card→null), so the
+          // reducer's postProcessActiveCards slot-clear detection in step 4
+          // won't enqueue REGISTER_DUNGEON_CARD_PROCESSED. Mirror the fix in
+          // rules/events.ts COMPLETE_EVENT (see comment there) and explicitly
+          // register the just-removed card so:
+          //   • pendingAutoDrawCount bumps → backpack auto-draws to hand,
+          //   • on-enter-hand effects (e.g. 三牌惊雷 上手) fire on the drawn
+          //     card via postProcessHandEntries.
+          // Skip when the caller asked for no auto-draw (e.g. event flows
+          // that pre-mark the card themselves).
+          if (
+            !options?.skipAutoDraw
+            && cardToRemove
+            && !engine.getState().processedDungeonCardIds.includes(cardToRemove.id)
+          ) {
+            dispatch({
+              type: 'REGISTER_DUNGEON_CARD_PROCESSED',
+              cardId: cardToRemove.id,
+              source: 'slot-cleared',
+            });
+          }
         } else {
           updated[index] = null;
         }

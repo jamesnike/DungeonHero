@@ -243,7 +243,20 @@ export default function CardDeletionModal({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto" overlayClassName="bg-black/30">
+      {/*
+        卡牌删除/弃置/回收弹窗：
+        - 'each' 模式：每点一张卡立即触发 onDeleteCard，flow 是被强制的（如 删除 N 张），
+          外点 / ESC 误关会让 cardActionContext 卡住一个待处理状态。
+        - 'batch' 模式：玩家自己累计选择，确认或取消时统一提交。
+        外点 / ESC 全部禁掉，玩家只能用按钮（"取消" / 单卡点击 / 确认 / X）显式关闭。
+        参考 CardUpgradeModal 的同款历史 bug 注释。
+      */}
+      <DialogContent
+        className="max-w-2xl max-h-[95vh] overflow-y-auto"
+        overlayClassName="bg-black/30"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Trash2 className="w-5 h-5 text-destructive" />

@@ -883,7 +883,15 @@ function GameBoardModalsInner({
       
       {heroMagicChoicePrompt && (
         <Dialog open onOpenChange={(open) => { if (!open) onCancelHeroMagicAction(); }}>
-          <DialogContent className="sm:max-w-2xl">
+          {/*
+            英雄魔法分支选择（圣光）：必须选 heal 或 purge，否则 pendingHeroMagicAction 卡住。
+            显式关闭路径：选其中一个 option / X（→ onCancelHeroMagicAction 释放 MP）。
+          */}
+          <DialogContent
+            className="sm:max-w-2xl"
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Sword className="w-5 h-5 text-amber-500" />
@@ -918,7 +926,15 @@ function GameBoardModalsInner({
 
       {potionChoiceDialogOpen && (
         <Dialog open onOpenChange={(open) => { if (!open) onCancelPotionAction(); }}>
-          <DialogContent className="sm:max-w-2xl">
+          {/*
+            药水分支选择（装备修复剂）：必须选 repair 或 upgrade，否则 pendingPotionAction 卡住。
+            显式关闭路径：选其中一个 option / X（→ onCancelPotionAction 取消药水）。
+          */}
+          <DialogContent
+            className="sm:max-w-2xl"
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Wrench className="w-5 h-5 text-emerald-500" />

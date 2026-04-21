@@ -98,7 +98,15 @@ export default function AmplifyModal({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto">
+      {/*
+        增幅弹窗：玩家选哪张卡增幅是有后果的选择，外点 / ESC 误关会丢失增幅机会。
+        显式关闭路径："取消" / X / "确认增幅"。
+      */}
+      <DialogContent
+        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-amber-500" />

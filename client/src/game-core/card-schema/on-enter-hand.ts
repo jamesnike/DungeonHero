@@ -53,8 +53,18 @@ export function executeOnEnterHand(
   if (!effectId) return false;
 
   const handler = registry.get(effectId);
-  if (!handler) return false;
+  if (!handler) {
+    console.warn('[on-enter-hand] no handler registered for', effectId, 'on card', card.id);
+    return false;
+  }
 
+  // Trace fire — pairs with `[on-enter-hand] enqueue` traces from
+  // `postProcessHandEntries`. If a card shows up in a bug report as
+  // "drawn but on-hand effect didn't fire", a missing fire trace next to
+  // a present enqueue trace pinpoints the lost-trigger scenario (most
+  // likely cause: pipeline overflow + undo wiping `state.actionQueue`).
+  // See `docs/auto-draw-debug.md` "Round 4".
+  console.debug('[on-enter-hand] fire', { effectId, cardId: card.id, cardName: card.name });
   handler(state, card, patch, sideEffects, enqueuedActions);
   return true;
 }

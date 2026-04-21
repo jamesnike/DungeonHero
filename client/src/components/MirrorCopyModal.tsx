@@ -88,7 +88,15 @@ export default function MirrorCopyModal({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto">
+      {/*
+        镜影摹形弹窗：玩家选哪张卡复制是有后果的选择，外点 / ESC 误关会丢失复制机会。
+        显式关闭路径："取消" / X / "确认复制"。
+      */}
+      <DialogContent
+        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <Copy className="w-5 h-5 text-violet-500" />

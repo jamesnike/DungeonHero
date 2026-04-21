@@ -60,8 +60,18 @@ export default function EquipmentSelectModal({
 
   return (
     <Dialog open={open} onOpenChange={value => !value && onCancel()}>
+      {/*
+        装备选择弹窗承载着"待解决的 Promise"（修复耐久、强化、出售等）。
+        如果在玩家选择前被误关（外点遮罩、ESC、其他弹窗关闭时的 ghost click
+        穿透），上游 await requestEquipmentSelection 仍会拿到 cancel，但叠加
+        在下层的 CardUpgradeModal / 战利品队列等可能因此卡住或丢失状态。
+        参考 CardUpgradeModal 的同款历史 bug 注释。
+        这里只允许"Cancel" / X 两条显式路径关闭，禁掉 outside-click 与 ESC。
+      */}
       <DialogContent
         className="sm:max-w-xl equipment-select"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>{prompt}</DialogTitle>

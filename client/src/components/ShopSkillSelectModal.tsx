@@ -13,7 +13,15 @@ interface ShopSkillSelectModalProps {
 export default function ShopSkillSelectModal({ open, options, onSelect }: ShopSkillSelectModalProps) {
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-2xl" onPointerDownOutside={(e) => e.preventDefault()}>
+      {/*
+        英雄技能发现窗口：必须从 3 个技能中选 1 个，否则 SHOP_SELECT_SKILL flow 卡住。
+        显式关闭路径：点 3 张技能卡之一 onSelect(skillId)。
+      */}
+      <DialogContent
+        className="sm:max-w-2xl"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-purple-500" />

@@ -12,7 +12,16 @@ interface GameModeSelectModalProps {
 export function GameModeSelectModal({ open, onSelect, onCancel }: GameModeSelectModalProps) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
-      <DialogContent className="sm:max-w-lg" onPointerDownOutside={(e) => e.preventDefault()}>
+      {/*
+        游戏模式选择窗口（开局必选）：必须明确选 quick / normal 才能开始游戏。
+        显式关闭路径：点其中一个模式按钮 / X（→ onCancel 回标题）。
+        onInteractOutside 比 onPointerDownOutside 多覆盖 focus-outside 路径。
+      */}
+      <DialogContent
+        className="sm:max-w-lg"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-xl text-center">选择游戏模式</DialogTitle>
           <DialogDescription className="text-center">开始新的冒险之旅</DialogDescription>

@@ -39,20 +39,30 @@ const dialogContentMotionFade =
 
 /**
  * Mounts a transparent click-absorber for ~350ms to swallow the synthesized
- * "ghost click" iOS/Android dispatch after the user taps the dialog overlay
- * to dismiss it. Without this, that delayed click lands on whatever element
- * is now under the touch position (relics, cards on the board, etc.) and
- * accidentally selects/activates them.
+ * "ghost click" iOS/Android dispatch after the user closes a dialog. Without
+ * this, that delayed click lands on whatever element is now under the touch
+ * position and accidentally activates it.
  *
- * z-index sits BELOW the dialog overlay (z-50) so it does not block normal
- * overlay interaction if the dialog stays open for any reason; it only
- * comes into play after the overlay/content unmount.
+ * Two scenarios this protects:
+ *   1) Click lands on the game board (relics, cards) — the shield covers
+ *      everything below z-60 and absorbs it.
+ *   2) STACKED DIALOGS — closing the topmost dialog leaves another dialog's
+ *      overlay (z-50) directly underneath. Without the shield, a ghost click
+ *      hits that lower overlay → onPointerDownOutside → the lower dialog
+ *      gets accidentally dismissed too. The shield therefore sits ABOVE
+ *      every dialog overlay (z-60 > z-50) so the synthetic click cannot
+ *      reach a stacked dialog beneath the one that just closed.
+ *
+ * The shield mounts on EVERY DialogContent unmount (any close path: outside
+ * click, ESC, X button, Cancel button, programmatic state change). 350 ms
+ * is well above the longest synthetic-click delay browsers fire and short
+ * enough to be invisible to intentional rapid clicks on a dialog beneath.
  */
 function mountGhostClickShield(durationMs = 350) {
   if (typeof document === "undefined") return
   const shield = document.createElement("div")
   shield.style.cssText =
-    "position:fixed;inset:0;z-index:49;background:transparent;pointer-events:auto;touch-action:none;"
+    "position:fixed;inset:0;z-index:60;background:transparent;pointer-events:auto;touch-action:none;"
   shield.setAttribute("aria-hidden", "true")
   shield.setAttribute("data-ghost-click-shield", "")
   const swallow = (e: Event) => {
@@ -93,6 +103,17 @@ const DialogContent = React.forwardRef<
     },
     [onInteractOutside],
   );
+  // Belt-and-suspenders shield mount: also fire on full unmount so any close
+  // path that DIDN'T flow through onInteractOutside (X button, ESC,
+  // in-content button click, programmatic state change) still drops a shield.
+  // Critical for stacked-dialog scenarios where closing the top dialog must
+  // not let a ghost click reach the dialog overlay underneath. See
+  // mountGhostClickShield() comment for the full rationale.
+  React.useEffect(() => {
+    return () => {
+      mountGhostClickShield();
+    };
+  }, []);
   return (
     <DialogPortal>
       <DialogOverlay className={overlayClassName} />

@@ -132,7 +132,20 @@ export default function CardUpgradeModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto">
+      {/*
+        升级弹窗有后果（玩家选哪张牌升级），不能因为误触遮罩或 ESC 而消失。
+        历史 bug：淬炼冲击超杀时，本弹窗与战利品弹窗会同帧 open，战利品在上层；
+        玩家点遮罩想 minimize 战利品，下层升级弹窗也被同次 click 触发
+        onPointerDownOutside → onOpenChange(false) → SET_UPGRADE_MODAL_OPEN(false)
+        + maxCount 清空，升级机会直接丢失。
+        这里只允许"取消"按钮 / X 按钮 / 完成升级 三种显式路径关闭，
+        阻断 outside-click 与 ESC 路径。
+      */}
+      <DialogContent
+        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <ArrowBigUpDash className="w-5 h-5 text-emerald-500" />

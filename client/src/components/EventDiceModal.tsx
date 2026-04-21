@@ -34,7 +34,17 @@ export default function EventDiceModal({
 }: EventDiceModalProps) {
   return (
     <Dialog open={open} onOpenChange={value => !value && onClose?.()}>
-      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto overflow-x-hidden">
+      {/*
+        事件骰窗口：reducer 的 seeded RNG 已决定结果，UI 只是回放骰动画。
+        若动画期间被外点 / ESC 关掉，事件 flow 会卡住等不到 onRollResult，
+        APPLY_EVENT_EFFECT 不会被触发，事件结算丢失。
+        显式关闭路径：动画播完后由上层 dispatch SET_EVENT_DICE_MODAL(null)。
+      */}
+      <DialogContent
+        className="sm:max-w-xl max-h-[95vh] overflow-y-auto overflow-x-hidden"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
           <DialogDescription>{subtitle ?? 'Roll the d20 to determine your fate.'}</DialogDescription>
