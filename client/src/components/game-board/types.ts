@@ -222,6 +222,8 @@ export type PendingMagicAction =
       pendingDamage: number;
       prompt: string;
       echoRemaining?: number;
+      /** Hero Cell 是否作为合法目标（单目标伤害 magic 自伤路径）。 */
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -247,6 +249,7 @@ export type PendingMagicAction =
       echoMultiplier?: number;
       echoRemaining?: number;
       prompt: string;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -254,6 +257,7 @@ export type PendingMagicAction =
       step: 'monster-select';
       prompt: string;
       echoRemaining?: number;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -263,6 +267,7 @@ export type PendingMagicAction =
       hpLost: number;
       prompt: string;
       echoRemaining?: number;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -335,6 +340,7 @@ export type PendingMagicAction =
       pendingDamage: number;
       echoMultiplier?: number;
       prompt: string;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -343,6 +349,7 @@ export type PendingMagicAction =
       prompt: string;
       data: Record<string, unknown>;
       echoRemaining?: number;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -402,6 +409,7 @@ export type PendingMagicAction =
       step: 'monster-select';
       prompt: string;
       echoRemaining?: number;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -411,6 +419,7 @@ export type PendingMagicAction =
       echoMultiplier?: number;
       echoRemaining?: number;
       data?: { baseDmg: number; stunPct: number };
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -426,6 +435,7 @@ export type PendingMagicAction =
       step: 'monster-select';
       prompt: string;
       echoRemaining?: number;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -458,6 +468,7 @@ export type PendingMagicAction =
       echoMultiplier?: number;
       echoRemaining?: number;
       data?: { baseDmg: number; stunPct: number };
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -466,6 +477,7 @@ export type PendingMagicAction =
       prompt: string;
       data: Record<string, unknown>;
       echoRemaining?: number;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -498,6 +510,7 @@ export type PendingMagicAction =
       echoMultiplier?: number;
       echoRemaining?: number;
       prompt: string;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -529,6 +542,7 @@ export type PendingMagicAction =
       echoMultiplier?: number;
       echoRemaining?: number;
       prompt: string;
+      allowsHeroTarget?: boolean;
     }
   | {
       card: GameCardData;
@@ -561,6 +575,7 @@ export type PendingMagicAction =
       prompt: string;
       data?: { damage: number; streak: number };
       echoRemaining?: number;
+      allowsHeroTarget?: boolean;
     }
   | {
       // 运势博弈：选择 active row 一张卡，与主牌堆顶交换；同类型 +10 金币，否则 -1。
@@ -928,7 +943,7 @@ export type ActiveAmuletEffects = {
   stunGoldCount: number;
 };
 
-export type WaterfallPhase = 'idle' | 'dropping' | 'discarding' | 'dealing';
+export type WaterfallPhase = 'idle' | 'revealing' | 'dropping' | 'discarding' | 'dealing';
 
 /** 预览区被挤掉的卡：弃置→坟场 / 回收→回收袋 / 回主牌堆（动画目标不同） */
 export type WaterfallDiscardDestination = 'graveyard' | 'recycle-bag' | 'deck';

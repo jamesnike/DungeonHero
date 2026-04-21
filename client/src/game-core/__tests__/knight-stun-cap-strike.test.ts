@@ -2,14 +2,14 @@
  * 雷涌一击 (knight:stun-cap-strike) — Perm 1 magic.
  *
  * Behavior:
- *   - PLAY_CARD with 1 monster:
- *       deals ceil(stunCap / divisor) + amplifyBonus spell damage
- *       (divisor = 4 at lvl 0, 3 at lvl 1, gets * echoMultiplier)
- *       draws 1 card * echoMultiplier
- *       requests `hero-stun` dice with stunPct = min(60, stunCap)
- *   - PLAY_CARD with 0 monsters: card consumed, no damage / dice / draw
- *   - PLAY_CARD with >1 monsters: pendingMagicAction set, awaits selection
- *   - RESOLVE_MAGIC_MONSTER_SELECTION: same logic as 1-monster auto-pick
+ *   - PLAY_CARD always opens monster-select picker (allowsHeroTarget: true)
+ *     — single-target damage magic 自伤 path; hero cell 也是合法目标。
+ *     Damage / draw / dice resolve only after RESOLVE_MAGIC_MONSTER_SELECTION.
+ *   - Damage = ceil(stunCap / divisor) + amplifyBonus → spell damage formula
+ *       (divisor = 4 at lvl 0, 3 at lvl 1; ×echoMultiplier).
+ *   - Draws 1 card × echoMultiplier on monster target.
+ *   - Requests `hero-stun` dice with stunPct = min(60, stunCap) on monster target.
+ *   - Hero target: 自伤，无晕骰、无抽牌（详见 magic-self-target.test.ts）。
  *   - RESOLVE_DICE 'stun' outcome (via 'hero-stun' flow + sourceLabel):
  *       monster gets isStunned, all stun amulets fire (stun-recycle / stun-gold /
  *       stun-upgrade-cap), and log message uses card.name not 雷震.
@@ -81,8 +81,16 @@ function findDice(sideEffects: any[]) {
 }
 
 // ---------------------------------------------------------------------------
-// PLAY_CARD — single monster auto-pick
+// PLAY_CARD — single monster (now picker-only path; need MONSTER_SELECTION)
 // ---------------------------------------------------------------------------
+
+function playAndPick(state: GameState, cardId: string, monsterId: string) {
+  const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId } as GameAction]);
+  return drain(
+    afterPlay.state,
+    [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'stun-cap-strike', monsterId } as GameAction],
+  );
+}
 
 describe('雷涌一击 PLAY_CARD (single monster)', () => {
   it('lvl 0 / stunCap 40 → ceil(40/4)=10 spell damage, draws 1, requests stun dice (40%)', () => {
@@ -93,7 +101,7 @@ describe('雷涌一击 PLAY_CARD (single monster)', () => {
       backpackItems: [makeFiller('a')] as any,
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = playAndPick(state, card.id, 'm1');
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(40);
     const dice = findDice(result.sideEffects);
     expect(dice).toHaveLength(1);
@@ -113,7 +121,7 @@ describe('雷涌一击 PLAY_CARD (single monster)', () => {
       backpackItems: [makeFiller('a')] as any,
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = playAndPick(state, card.id, 'm1');
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(40);
     const dice = findDice(result.sideEffects);
     expect(dice[0].context.stunPct).toBe(30);
@@ -126,19 +134,20 @@ describe('雷涌一击 PLAY_CARD (single monster)', () => {
       stunCap: 100,
       activeCards: activeRowOf(makeMonster('m1', 100)),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = playAndPick(state, card.id, 'm1');
     const dice = findDice(result.sideEffects);
     expect(dice[0].context.stunPct).toBe(60);
   });
 
   it('stunCap 0 → no damage (ceil(0/4)=0), no dice (threshold 0)', () => {
+    // stunCap = 0 → totalDmg = 0；新行为：picker 仍弹出，但 select 后伤害为 0、不发晕骰。
     const card = makeCard('zero');
     const state = makeState({
       handCards: [card],
       stunCap: 0,
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = playAndPick(state, card.id, 'm1');
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(50);
     expect(findDice(result.sideEffects)).toHaveLength(0);
     expect(result.state.handCards.find(c => c.id === card.id)).toBeUndefined();
@@ -152,7 +161,7 @@ describe('雷涌一击 PLAY_CARD (single monster)', () => {
       permanentSpellDamageBonus: 2,
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = playAndPick(state, card.id, 'm1');
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(35);
   });
 
@@ -163,7 +172,7 @@ describe('雷涌一击 PLAY_CARD (single monster)', () => {
       stunCap: 35,
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = playAndPick(state, card.id, 'm1');
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(41);
   });
 });
@@ -173,7 +182,7 @@ describe('雷涌一击 PLAY_CARD (single monster)', () => {
 // ---------------------------------------------------------------------------
 
 describe('雷涌一击 PLAY_CARD (zero / multi monsters)', () => {
-  it('0 monsters: card consumed, no damage, no pending action', () => {
+  it('0 monsters: 不再 fizzle，picker 仍弹（hero 是唯一合法目标），allowsHeroTarget=true', () => {
     const card = makeCard('none');
     const state = makeState({
       handCards: [card],
@@ -182,7 +191,10 @@ describe('雷涌一击 PLAY_CARD (zero / multi monsters)', () => {
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     expect(result.state.handCards.find(c => c.id === card.id)).toBeUndefined();
-    expect(result.state.pendingMagicAction).toBeFalsy();
+    const pending = result.state.pendingMagicAction as any;
+    expect(pending?.effect).toBe('stun-cap-strike');
+    expect(pending?.step).toBe('monster-select');
+    expect(pending?.allowsHeroTarget).toBe(true);
   });
 
   it('2 monsters: pendingMagicAction set, no immediate damage', () => {
@@ -307,7 +319,7 @@ describe('雷涌一击 echo', () => {
       backpackItems: [makeFiller('a'), makeFiller('b'), makeFiller('c')] as any,
       activeCards: activeRowOf(makeMonster('m1', 100)),
     } as any);
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = playAndPick(state, card.id, 'm1');
     // base = ceil(40/4) = 10, ×2 echo = 20
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(80);
     // draws 2 cards

@@ -138,7 +138,11 @@ export interface CardPlayHandlersDeps {
   removeCard: (cardId: string, animate: boolean, opts?: { skipAutoDraw?: boolean }) => void;
   removePendingDungeonCard: (cardId: string) => boolean;
   queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
-  triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
+  triggerDiscardFlight: (
+    card: GameCardData,
+    destination: 'graveyard' | 'recycle-bag',
+    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+  ) => Promise<void>;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerGraveNova: (graveNovaCard?: GameCardData) => void;
   triggerGraveyardToBackpackFlight: (cards: GameCardData[]) => void;
@@ -490,6 +494,21 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   // ---------------------------------------------------------------------------
 
   useGameEvent('card:potionFinalized', ({ card }) => {
+    // Mirror the disposition routing inside reduceFinalizePotionCard
+    // (rules/cards.ts ~L1000-L1010):
+    //   - flipTarget present  → flips on the board (no flight)
+    //   - recycleDelay > 0    → recycle bag ✈️
+    //   - otherwise           → graveyard ✈️
+    // We must trigger the flight BEFORE removePendingDungeonCard because
+    // that schedules a setState that ultimately removes the card's DOM
+    // element; we need the element alive to capture the source rect.
+    if (!card.flipTarget) {
+      const destination: 'graveyard' | 'recycle-bag' =
+        card.recycleDelay != null && card.recycleDelay > 0
+          ? 'recycle-bag'
+          : 'graveyard';
+      void depsRef.current.triggerDiscardFlight(card, destination);
+    }
     depsRef.current.removePendingDungeonCard(card.id);
     depsRef.current.stagingCardsRef.current =
       depsRef.current.stagingCardsRef.current.filter(c => c.id !== card.id);
@@ -498,6 +517,24 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
   useGameEvent('card:magicFinalized', ({ card }) => {
     const d = depsRef.current;
+    // Mirror the disposition routing inside reduceFinalizeMagicCard
+    // (rules/cards.ts ~L955-L967):
+    //   - curse                                       → backpack (no flight; not a discard target)
+    //   - permStripped                                → graveyard ✈️
+    //   - permanent magic OR recycleDelay > 0         → recycle bag ✈️
+    //   - otherwise (instant magic / hero-magic etc.) → graveyard ✈️
+    // Same reasoning as potion: fly first, then strip the slot, otherwise
+    // the source DOM element is already gone by the time the listener runs.
+    const isCurse = card.type === 'curse';
+    if (!isCurse) {
+      const isPermanentMagic = card.type === 'magic' && card.magicType === 'permanent';
+      const hasRecycleDelay = card.recycleDelay != null && card.recycleDelay > 0;
+      const goesToRecycleBag = !card.permStripped && (isPermanentMagic || hasRecycleDelay);
+      const destination: 'graveyard' | 'recycle-bag' = goesToRecycleBag
+        ? 'recycle-bag'
+        : 'graveyard';
+      void d.triggerDiscardFlight(card, destination);
+    }
     // removePendingDungeonCard already calls removeCard internally when the
     // card is pending or in the active row, so we only need a fallback call
     // for cards that weren't tracked as dungeon cards (e.g. hand-only magic).

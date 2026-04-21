@@ -49,6 +49,12 @@ interface HeroCardProps {
   spellDamageBonus?: number;
   spellLifesteal?: number;
   stunCap?: number;
+  /**
+   * 单目标伤害 magic 处于 monster-select 阶段，且 pending.allowsHeroTarget 为 true
+   * 时由 GameBoard 传 true：给 hero 卡加紫色高亮 ring + pulse，提示玩家可以点击
+   * Hero Cell 把伤害落到自己身上（触发血怒战符等自伤效果）。
+   */
+  selfTargetActive?: boolean;
 }
 
 interface HeroSkillUiState {
@@ -117,6 +123,7 @@ function HeroCardInner({
   spellLifesteal = 0,
   stunCap = 10,
   onHeroClick,
+  selfTargetActive = false,
 }: HeroCardProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
@@ -293,24 +300,77 @@ function HeroCardInner({
       style={{ '--dh-hero-instance-scale': appliedHeroScale.toString() } as CSSProperties}
     >
       <div
-        className={`pointer-events-none absolute left-1/2 z-30 flex items-center rounded-full border border-border bg-background/95 dh-hero-small dh-hero-stats-bar font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'dh-hero-stats-bar--flat' : ''}`}
+        className={`pointer-events-none absolute left-1/2 z-30 flex items-center whitespace-nowrap dh-hero-chip ${isFlat ? 'gap-0.5' : 'gap-1'}`}
         style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
       >
-        <span className="flex items-center gap-1 text-purple-500" title="法术伤害加成">
-          {!isCompact && <Sparkles className="dh-hero-icon" />}
-          <span className={`font-mono dh-hero-chip ${spellDamageDisplay < 0 ? 'text-red-500' : ''}`}>{spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}</span>
+        <span
+          className={`dh-stat-sticker dh-stat-sticker--spell${spellDamageDisplay < 0 ? ' dh-stat-sticker--negative' : ''}`}
+          title="法术伤害加成"
+        >
+          {!isCompact && <Sparkles className="dh-stat-sticker__icon" />}
+          {spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}
         </span>
-        <span className="text-muted-foreground/50">|</span>
-        <span className="flex items-center gap-1 text-rose-400" title="超杀吸血">
-          {!isCompact && <Droplets className="dh-hero-icon" />}
-          <span className="font-mono dh-hero-chip">{spellLifesteal}</span>
+        <span className="dh-stat-sticker dh-stat-sticker--lifesteal" title="超杀吸血">
+          {!isCompact && <Droplets className="dh-stat-sticker__icon" />}
+          {spellLifesteal}
         </span>
-        <span className="text-muted-foreground/50">|</span>
-        <span className="flex items-center gap-1 text-orange-500" title="击晕上限">
-          {!isCompact && <Zap className="dh-hero-icon" />}
-          <span className="font-mono dh-hero-chip">{stunCap}%</span>
+        <span className="dh-stat-sticker dh-stat-sticker--stun" title="击晕上限">
+          {!isCompact && <Zap className="dh-stat-sticker__icon" />}
+          {stunCap}%
         </span>
       </div>
+      {showHealOverlay && (
+        // Hero heal "rising hearts" — rendered as a SIBLING of <Card> (not
+        // inside combat-overlay) on purpose:
+        //   - <Card> uses `overflow-hidden`
+        //   - the inner card body uses `overflow-hidden`
+        //   - `.combat-overlay` uses `contain: layout style paint` (which
+        //     clips at the card edges)
+        // All three would have cropped the hearts at the cell boundary,
+        // but the user explicitly asked for hearts that overflow above the
+        // Hero Cell. The outer hero wrapper (line ~298) is
+        // `overflow-visible`, so a sibling overlay positioned to span the
+        // cell can let its children freely escape upward as they rise.
+        // Monster heal in GameCard is unaffected — it still renders inside
+        // its own combat-overlay.
+        <div className="hero-heal-overlay" aria-hidden>
+          <span className="combat-overlay__shape combat-overlay__shape--hero-heal-heart" data-heart="1" />
+          <span className="combat-overlay__shape combat-overlay__shape--hero-heal-heart" data-heart="2" />
+          <span className="combat-overlay__shape combat-overlay__shape--hero-heal-heart" data-heart="3" />
+        </div>
+      )}
+      {showBleedOverlay && (
+        // Hero damage "blood splatter" — same architectural pattern as
+        // the heal hearts above (sibling of <Card>, lives in
+        // `.card-bleed-overlay` so the spray can fly past the cell edge).
+        // Renders one centre splash + 18 drops shot outward at hand-tuned
+        // irregular angles for an organic scatter rather than a clock-face.
+        // Drop distances live in index.css (160-260 % of cell radius) so
+        // most of the spray actually flies past the Hero Cell into the
+        // surrounding board space — that "完全飞溅出来" feel.
+        // Non-hero bleed paths in GameCard are untouched.
+        <div className="card-bleed-overlay" aria-hidden>
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-splash" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="1" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="2" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="3" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="4" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="5" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="6" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="7" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="8" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="9" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="10" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="11" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="12" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="13" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="14" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="15" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="16" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="17" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="18" />
+        </div>
+      )}
       <Card className={`
         relative h-full w-full border-4 border-amber-600 shadow-lg overflow-hidden
         transition-[border-color,transform,ring] duration-200
@@ -318,6 +378,7 @@ function HeroCardInner({
         ${isDropTarget && isOver ? 'scale-105 ring-4 ring-destructive bg-destructive/10' : ''}
         ${takingDamage ? 'animate-damage-flash' : ''}
         ${healing ? 'animate-heal-glow' : ''}
+        ${selfTargetActive ? 'hero-self-target-highlight cursor-crosshair' : ''}
       `}>
         <div className="h-full flex flex-col relative overflow-hidden bg-amber-900/40">
           {/* Decorative corner ornaments */}
@@ -326,23 +387,14 @@ function HeroCardInner({
           {/* Inner decorative border */}
           <div className={`absolute border border-amber-300/30 pointer-events-none rounded-sm ${isCompact ? 'inset-[3px]' : 'inset-[6px]'}`} />
 
-          {/* Combat overlays */}
-          {(showBleedOverlay || showHealOverlay || showWeaponSwing || showShieldBlock) && (
+          {/* Combat overlays — heal AND bleed are rendered OUTSIDE of
+              <Card> in their own sibling overlays (see `hero-heal-overlay`
+              and `card-bleed-overlay` above) so their effects can overflow
+              the Hero Cell instead of being clipped. Only weapon swing /
+              shield block remain inside this `combat-overlay`, and they
+              are intentionally clipped to the card area. */}
+          {(showWeaponSwing || showShieldBlock) && (
             <div className="combat-overlay">
-              {showBleedOverlay && (
-                <>
-                  <span className="combat-overlay__shape combat-overlay__shape--bleed" />
-                  <span className="combat-overlay__shape combat-overlay__shape--bleed-drip" data-stagger="1" />
-                  <span className="combat-overlay__shape combat-overlay__shape--bleed-ring" data-stagger="2" />
-                </>
-              )}
-              {showHealOverlay && (
-                <>
-                  <span className="combat-overlay__shape combat-overlay__shape--heal" />
-                  <span className="combat-overlay__shape combat-overlay__shape--heal-rise" data-stagger="1" />
-                  <span className="combat-overlay__shape combat-overlay__shape--heal-ring" data-stagger="2" />
-                </>
-              )}
               {showWeaponSwing && (
                 <>
                   <span className="combat-overlay__shape combat-overlay__shape--swing" />

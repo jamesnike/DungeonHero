@@ -51,7 +51,11 @@ export interface PendingDiscardEffect {
 export interface CardOperationsDeps {
   addGameLog: (type: LogEntryType, message: string) => void;
 
-  triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
+  triggerDiscardFlight: (
+    card: GameCardData,
+    destination: 'graveyard' | 'recycle-bag',
+    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+  ) => Promise<void>;
   triggerDiscardShock: (count: number) => void;
   triggerFlipShock: (count: number) => void;
   triggerGraveNova: (graveNovaCard?: GameCardData) => void;

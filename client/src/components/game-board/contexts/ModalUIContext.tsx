@@ -22,6 +22,9 @@ export interface ModalUIState {
   heroMagicInfo: HeroMagicDisplayInfo[] | undefined;
   endHeroTurnDisabled: boolean;
   fullBoardInteractionLocked: boolean;
+  /** True while at least one monster card is mid-death-animation (Lottie + card fade).
+   *  Used by RewardContainer to delay the reward modal until the animation finishes. */
+  isDefeatAnimationPlaying: boolean;
 }
 
 const ModalUIContext = createContext<ModalUIState | null>(null);

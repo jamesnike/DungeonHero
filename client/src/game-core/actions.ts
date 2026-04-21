@@ -808,7 +808,14 @@ export interface ResolveMagicSlotSelectionAction {
 export interface ResolveMagicMonsterSelectionAction {
   type: 'RESOLVE_MAGIC_MONSTER_SELECTION';
   magicId: string;
+  /** 当 targetType === 'hero' 时为空字符串，仅作占位。 */
   monsterId: string;
+  /**
+   * 单目标伤害 magic 现在允许把 Hero Cell 也作为合法目标（自伤路径）。
+   * 缺省 'monster' 以保持向后兼容；只有在 pendingMagicAction.allowsHeroTarget === true
+   * 且玩家点击 Hero Cell 时，UI 才会派送 'hero'。
+   */
+  targetType?: 'monster' | 'hero';
 }
 
 export interface ResolveDungeonCardSelectionAction {

@@ -3,8 +3,8 @@
  *
  * On play:
  *   - 0 shields equipped → cancel, no damage.
- *   - 1 shield equipped, 1 monster → auto-pick shield + auto-target, deal damage immediately.
- *   - 1 shield equipped, multi monsters → auto-pick shield, open monster-select prompt.
+ *   - 1 shield equipped → auto-pick shield, then **always** open monster-select picker
+ *     (single-target damage magic 自伤 path: hero cell 也是合法目标).
  *   - 2 shields equipped → open slot-select pendingMagicAction.
  *
  * Damage formula:
@@ -18,10 +18,10 @@
  *
  * Upgrade level: 0 → 100%, 1 → 150%.
  *
- * Regression: previously the auto-pick branches in `magic-effects.ts` used the raw
- * `shieldSlots[0].item.value`, ignoring permanent slot bonuses. The tests below
- * lock in the fix so the auto-pick path stays in sync with the manual slot-select
- * path (which has always used `computeSlotArmorValuePure` via `hero.ts`).
+ * Regression: previously the "1 shield + 1 monster" branch in `magic-effects.ts`
+ * used raw `shieldSlots[0].item.value`, ignoring permanent slot bonuses. The tests
+ * below now exercise the unified picker path (PLAY_CARD → MONSTER_SELECTION) and
+ * lock in that the picker's `pendingDamage` correctly comes from `computeSlotArmorValuePure`.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -95,10 +95,11 @@ function withSlot1ShieldBonus(bonus: number): Pick<GameState, 'equipmentSlotBonu
   };
 }
 
-describe('铠甲贯刺 (armor-strike) auto-pick branch — uses computeSlotArmorValuePure', () => {
-  it('1 shield + 1 monster: damage = current armor (base + permanent slot bonus), NOT raw value', () => {
+describe('铠甲贯刺 (armor-strike) 1-shield path — picker uses computeSlotArmorValuePure', () => {
+  it('1 shield + 1 monster: 选中怪物后伤害 = current armor (base + permanent slot bonus)，不是 raw value', () => {
     // The original bug: Iron Shield (value=3) with permanent +4 shows 7 in UI but
     // the auto-pick branch was reading `item.value` and dealing only 3 damage.
+    // 现在统一走 picker，所以补一步 RESOLVE_MAGIC_MONSTER_SELECTION。
     const card = makeCard('bug-repro');
     const shield = makeIronShield();
     const monster = makeMonster('m1', 100);
@@ -109,10 +110,17 @@ describe('铠甲贯刺 (armor-strike) auto-pick branch — uses computeSlotArmor
       activeCards: activeRowOf(monster),
       ...withSlot1ShieldBonus(4),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect((afterPlay.state.pendingMagicAction as any)?.effect).toBe('armor-strike');
+    expect((afterPlay.state.pendingMagicAction as any)?.step).toBe('monster-select');
+    expect((afterPlay.state.pendingMagicAction as any)?.pendingDamage).toBe(7);
+
+    const result = drain(
+      afterPlay.state,
+      [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'armor-strike', monsterId: 'm1' } as GameAction],
+    );
     expect(result.state.pendingMagicAction).toBeNull();
     const m = result.state.activeCards.find(c => c?.id === 'm1') as { hp: number } | undefined;
-    // 100% × 7 = 7 damage → 100 − 7 = 93 hp.
     expect(m?.hp).toBe(93);
   });
 
@@ -126,7 +134,11 @@ describe('铠甲贯刺 (armor-strike) auto-pick branch — uses computeSlotArmor
       equipmentSlot2: null,
       activeCards: activeRowOf(monster),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = drain(
+      afterPlay.state,
+      [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'armor-strike', monsterId: 'm1' } as GameAction],
+    );
     const m = result.state.activeCards.find(c => c?.id === 'm1') as { hp: number } | undefined;
     expect(m?.hp).toBe(97);
   });
@@ -142,9 +154,12 @@ describe('铠甲贯刺 (armor-strike) auto-pick branch — uses computeSlotArmor
       activeCards: activeRowOf(monster),
       ...withSlot1ShieldBonus(4),
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const result = drain(
+      afterPlay.state,
+      [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'armor-strike', monsterId: 'm1' } as GameAction],
+    );
     const m = result.state.activeCards.find(c => c?.id === 'm1') as { hp: number } | undefined;
-    // floor(7 × 1.5) = 10 → 100 − 10 = 90 hp.
     expect(m?.hp).toBe(90);
   });
 
@@ -199,8 +214,8 @@ describe('铠甲贯刺 (armor-strike) auto-pick branch — uses computeSlotArmor
   });
 });
 
-describe('铠甲贯刺 (armor-strike) manual slot-select branch — parity with auto-pick', () => {
-  it('RESOLVE_MAGIC_SLOT_SELECTION uses computeSlotArmorValuePure (same as auto-pick)', () => {
+describe('铠甲贯刺 (armor-strike) manual slot-select branch — parity with 1-shield path', () => {
+  it('RESOLVE_MAGIC_SLOT_SELECTION + monster-select 同样走 computeSlotArmorValuePure', () => {
     const card = makeCard('manual');
     const shield = makeIronShield();
     const monster = makeMonster('m1', 100);
@@ -217,11 +232,17 @@ describe('铠甲贯刺 (armor-strike) manual slot-select branch — parity with 
         prompt: '...',
       } as any,
     });
-    const result = drain(state, [
+    // slot-select 进入 monster-select；现在 monster-select 不再自动命中，必须再 select 一次。
+    const afterSlot = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'armor-strike', slotId: 'equipmentSlot1' } as GameAction,
     ]);
+    expect((afterSlot.state.pendingMagicAction as any)?.step).toBe('monster-select');
+
+    const result = drain(
+      afterSlot.state,
+      [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'armor-strike', monsterId: 'm1' } as GameAction],
+    );
     const m = result.state.activeCards.find(c => c?.id === 'm1') as { hp: number } | undefined;
-    // Same 7 damage as the auto-pick path.
     expect(m?.hp).toBe(93);
   });
 });

@@ -1232,21 +1232,16 @@ function reduceMagicSlotSelection(
       const ampBonus = pending.card.amplifyBonus ?? 0;
       const echoMulAS_S = (pending as any).echoMultiplier ?? 1;
       const echoTagAS_S = echoMulAS_S > 1 ? `（回响×${echoMulAS_S}）` : '';
-      const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
       const totalDamage = computeSpellDamagePure(state, scaledArmor + ampBonus) * echoMulAS_S;
-      if (monsters.length === 1) {
-        ensureEngaged(state, monsters[0], enqueuedActions);
-        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
-        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `御甲破击造成 ${totalDamage} 点伤害（护甲 ${armorPct}%）。${echoTagAS_S}`);
-      }
+      // 单目标伤害 magic：始终弹出 monster picker（包含 hero 自伤路径）。
       patch.pendingMagicAction = {
         card: pending.card, effect: 'armor-strike', step: 'monster-select',
         slotId, pendingDamage: scaledArmor,
-        prompt: `选择一个怪物，承受 ${totalDamage} 点护甲伤害。${echoTagAS_S}`,
+        prompt: `选择一个目标，承受 ${totalDamage} 点护甲伤害。${echoTagAS_S}`,
         echoMultiplier: echoMulAS_S,
+        allowsHeroTarget: true,
       } as PendingMagicAction;
-      patch.heroSkillBanner = '选择一个怪物承受你的护甲一击。';
+      patch.heroSkillBanner = '选择一个目标承受你的护甲一击。';
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -1623,9 +1618,21 @@ function reduceMagicMonsterSelection(
   const pending = state.pendingMagicAction as PendingMagicAction | null;
   if (!pending || pending.step !== 'monster-select') return noChange(state);
 
-  const { monsterId } = action;
-  const monster = (state.activeCards as (GameCardData | null)[]).find(c => c?.id === monsterId);
-  if (!monster) return noChange(state);
+  const targetType: 'monster' | 'hero' = action.targetType ?? 'monster';
+  // 当玩家选 Hero Cell 自伤时，pending.allowsHeroTarget 必须为 true，否则忽略；
+  // 这样可以防止"非单目标伤害 magic"误走自伤路径（例如 flip-monster-debuff 这类纯 debuff 卡）。
+  if (targetType === 'hero' && !(pending as { allowsHeroTarget?: boolean }).allowsHeroTarget) {
+    return noChange(state);
+  }
+
+  const monster = targetType === 'monster'
+    ? (state.activeCards as (GameCardData | null)[]).find(c => c?.id === action.monsterId)
+    : null;
+  if (targetType === 'monster' && !monster) return noChange(state);
+
+  const isHeroTarget = targetType === 'hero';
+  // 用于 log/banner 的目标显示名（hero 自伤路径下统一为 "自己"）。
+  const targetName = isHeroTarget ? '自己' : (monster as GameCardData).name;
 
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
@@ -1640,19 +1647,33 @@ function reduceMagicMonsterSelection(
       const echoMulAS = (pending as any).echoMultiplier ?? 1;
       const totalDamage = computeSpellDamagePure(state, baseDamage + (pending.card.amplifyBonus ?? 0)) * echoMulAS;
       const echoTagAS = echoMulAS > 1 ? `（回响×${echoMulAS}）` : '';
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
+      if (isHeroTarget) {
+        enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'armor-strike', selfInflicted: true });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, `御甲破击对自己造成 ${totalDamage} 点伤害！${echoTagAS}`, { dealtDamage: true });
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, `御甲破击造成 ${totalDamage} 点伤害。${echoTagAS}`);
     }
 
     case 'blood-reckoning': {
       const echo = (pending as any).echoMultiplier ?? 1;
       const totalDamage = computeSpellDamagePure(state, state.gold + (pending.card.amplifyBonus ?? 0)) * echo;
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'blood-reckoning', isSpellDamage: true });
-      enqueuedActions.push({ type: 'HEAL', amount: totalDamage, source: 'blood-reckoning' });
       const healText = totalDamage > 0 ? `，恢复 ${totalDamage} 点生命` : '';
       const echoText = echo > 1 ? '（回响×2）' : '';
+      if (isHeroTarget) {
+        // 自伤路径：先 APPLY_DAMAGE selfInflicted（触发血怒战符），再 HEAL 等量。
+        // 净 HP 变化 0，但 reduceApplyDamage 内部 appliedDamage > 0，所以 bloodrage 仍会触发。
+        if (totalDamage > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'blood-reckoning', selfInflicted: true });
+          enqueuedActions.push({ type: 'HEAL', amount: totalDamage, source: 'blood-reckoning' });
+        }
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `点金裁决对自己造成 ${totalDamage} 点伤害${healText}！${echoText}`, { dealtDamage: true });
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'blood-reckoning', isSpellDamage: true });
+      enqueuedActions.push({ type: 'HEAL', amount: totalDamage, source: 'blood-reckoning' });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `点金裁决造成 ${totalDamage} 点伤害${healText}！${echoText}`);
     }
@@ -1661,11 +1682,21 @@ function reduceMagicMonsterSelection(
       const echo = (pending as any).echoMultiplier ?? 1;
       const baseDmg = 5 + (pending.card.amplifyBonus ?? 0);
       const totalDamage = computeSpellDamagePure(state, baseDmg) * echo;
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'bounty-spell-damage', isSpellDamage: true });
-      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: totalDamage, source: 'bounty-spell-damage' });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `赏金裁决：对 ${monster.name} 造成 ${totalDamage} 点法术伤害，获得 ${totalDamage} 金币` } });
       const echoText = echo > 1 ? '（回响×2）' : '';
+      if (isHeroTarget) {
+        // 自伤路径仍发金币（"其他都能继续触发"），仅伤害落点改成自己。
+        if (totalDamage > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'bounty-spell-damage', selfInflicted: true });
+        }
+        enqueuedActions.push({ type: 'MODIFY_GOLD', delta: totalDamage, source: 'bounty-spell-damage' });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `赏金裁决：对自己造成 ${totalDamage} 点法术伤害，获得 ${totalDamage} 金币` } });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `赏金裁决：自伤 ${totalDamage} 点 → ${totalDamage} 金币！${echoText}`, { dealtDamage: true });
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'bounty-spell-damage', isSpellDamage: true });
+      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: totalDamage, source: 'bounty-spell-damage' });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `赏金裁决：对 ${monster!.name} 造成 ${totalDamage} 点法术伤害，获得 ${totalDamage} 金币` } });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `赏金裁决：${totalDamage} 点伤害 → ${totalDamage} 金币！${echoText}`, { dealtDamage: true });
     }
@@ -1682,8 +1713,13 @@ function reduceMagicMonsterSelection(
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '你处于满血状态，没有造成伤害。');
       }
       const echoTagMHS = echoMulMHS > 1 ? `（回响×${echoMulMHS}）` : '';
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'missing-hp-smite', isSpellDamage: true });
+      if (isHeroTarget) {
+        enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'missing-hp-smite', selfInflicted: true });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `残血裁决对自己释放 ${totalDamage} 点伤害（${smitePct}%）。${echoTagMHS}`, { dealtDamage: true });
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'missing-hp-smite', isSpellDamage: true });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `残血裁决释放 ${totalDamage} 点伤害（${smitePct}%）。${echoTagMHS}`);
     }
@@ -1694,23 +1730,43 @@ function reduceMagicMonsterSelection(
       const echoMulBSS = (pending as any).echoMultiplier ?? 1;
       const totalDamage = baseDmg * echoMulBSS;
       const echoTagBSS = echoMulBSS > 1 ? `（回响×${echoMulBSS}，仅伤害翻倍，献祭 HP 不翻倍）` : '';
+      // 献祭 HP 成本：无论目标是谁都先扣（与原行为一致）。
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpToLose, source: 'general', selfInflicted: true });
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'blood-sacrifice-strike', isSpellDamage: true });
+      if (isHeroTarget) {
+        // 选 hero 时再叠加一次法术伤害到自己（用户确认的"双扣"行为，bloodrage 可能因此被触发两次）。
+        if (totalDamage > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'blood-sacrifice-strike', selfInflicted: true });
+        }
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `血祭裁决：献祭 ${hpToLose} 点生命，再对自己造成 ${totalDamage} 点伤害！${echoTagBSS}`, { dealtDamage: true });
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'blood-sacrifice-strike', isSpellDamage: true });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `血祭裁决：献祭 ${hpToLose} 点生命，对 ${monster.name} 造成 ${totalDamage} 点伤害！${echoTagBSS}`, { dealtDamage: true });
+        `血祭裁决：献祭 ${hpToLose} 点生命，对 ${monster!.name} 造成 ${totalDamage} 点伤害！${echoTagBSS}`, { dealtDamage: true });
     }
 
     case 'scaling-damage': {
       const strikeBase = (pending as any).pendingDamage ?? 1;
       const echo = (pending as any).echoMultiplier ?? 1;
       const totalDamage = computeSpellDamagePure(state, strikeBase) * echo;
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'scaling-damage', isSpellDamage: true });
+      const nextBase = pending.card.scalingDamage ?? strikeBase + 1;
+      if (isHeroTarget) {
+        if (totalDamage > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'scaling-damage', selfInflicted: true });
+        }
+        enqueuedActions.push({ type: 'ADD_PERMANENT_MAGIC_TO_RECYCLE', card: pending.card });
+        patch.pendingMagicAction = null;
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对自己造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）` } });
+        sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: pending.card.id, animate: false } });
+        patch.heroSkillBanner = `${pending.card.name} 下一击叠刺 ${nextBase}`;
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'scaling-damage', isSpellDamage: true });
       enqueuedActions.push({ type: 'ADD_PERMANENT_MAGIC_TO_RECYCLE', card: pending.card });
       patch.pendingMagicAction = null;
-      const nextBase = pending.card.scalingDamage ?? strikeBase + 1;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster.name} 造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）` } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）` } });
       sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: pending.card.id, animate: false } });
       patch.heroSkillBanner = `${pending.card.name} 下一击叠刺 ${nextBase}`;
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1720,36 +1776,53 @@ function reduceMagicMonsterSelection(
       const stormBase = (pending as any).pendingDamage ?? 1;
       const echo = (pending as any).echoMultiplier ?? 1;
       const totalDamage = computeSpellDamagePure(state, stormBase) * echo;
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDamage, source: 'arcane-storm', isSpellDamage: true });
       const echoText = echo > 1 ? `（回响×${echo}）` : '';
+      if (isHeroTarget) {
+        if (totalDamage > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'arcane-storm', selfInflicted: true });
+        }
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `奥术风暴：对自己造成 ${totalDamage} 点伤害。${echoText}`, { dealtDamage: true });
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'arcane-storm', isSpellDamage: true });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `奥术风暴：对 ${monster.name} 造成 ${totalDamage} 点伤害。${echoText}`);
+        `奥术风暴：对 ${monster!.name} 造成 ${totalDamage} 点伤害。${echoText}`);
     }
 
     case 'chaos-strike': {
-      ensureEngaged(state, monster, enqueuedActions);
       const chaosDamage = computeSpellDamagePure(state, 3 + (pending.card.amplifyBonus ?? 0));
-      const overkill = chaosDamage > (monster.hp ?? monster.value ?? 0);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: chaosDamage, source: 'chaos-strike', isSpellDamage: true });
       let chaosBanner: string;
-      if (overkill) {
-        enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 2 });
-        chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosDamage} 伤害，超杀！抽 2 张牌。`;
+      if (isHeroTarget) {
+        // overkill 概念不适用：选 hero 时不抽牌，仅自伤。
+        if (chaosDamage > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: chaosDamage, source: 'chaos-strike', selfInflicted: true });
+        }
+        chaosBanner = `混沌冲击对自己造成 ${chaosDamage} 点伤害。`;
       } else {
-        chaosBanner = `混沌冲击对 ${monster.name} 造成 ${chaosDamage} 点伤害。`;
+        ensureEngaged(state, monster!, enqueuedActions);
+        const overkill = chaosDamage > (monster!.hp ?? monster!.value ?? 0);
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: chaosDamage, source: 'chaos-strike', isSpellDamage: true });
+        if (overkill) {
+          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 2 });
+          chaosBanner = `混沌冲击对 ${monster!.name} 造成 ${chaosDamage} 伤害，超杀！抽 2 张牌。`;
+        } else {
+          chaosBanner = `混沌冲击对 ${monster!.name} 造成 ${chaosDamage} 点伤害。`;
+        }
       }
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: chaosBanner } });
       const echoRemaining = ((pending as any).echoRemaining ?? 1) - 1;
       if (echoRemaining > 0) {
         const remainingMonsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
-        if (remainingMonsters.length > 0) {
+        // Echo 仍在继续：即便 active row 没怪也允许 hero 自伤路径。
+        if (remainingMonsters.length > 0 || isHeroTarget) {
           const totalEcho = (pending as any).echoRemaining ?? 1;
           const echoLabel = `（回响：第 ${totalEcho - echoRemaining + 1}/${totalEcho} 次）`;
           patch.pendingMagicAction = {
             card: pending.card, effect: 'chaos-strike', step: 'monster-select',
             prompt: `${chaosBanner} 继续选择目标。${echoLabel}`,
             data: {}, echoRemaining,
+            allowsHeroTarget: true,
           } as PendingMagicAction;
           patch.heroSkillBanner = `${chaosBanner} 继续选择目标。${echoLabel}`;
           return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1759,28 +1832,37 @@ function reduceMagicMonsterSelection(
     }
 
     case 'overkill-upgrade': {
-      ensureEngaged(state, monster, enqueuedActions);
       const okDamage = computeSpellDamagePure(state, 3 + (pending.card.amplifyBonus ?? 0));
-      const overkill = okDamage > (monster.hp ?? monster.value ?? 0);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: okDamage, source: 'overkill-upgrade', isSpellDamage: true });
       let okBanner: string;
-      if (overkill) {
-        enqueuedActions.push({ type: 'SET_UPGRADE_MODAL_OPEN', open: true });
-        okBanner = `淬炼冲击对 ${monster.name} 造成 ${okDamage} 伤害，超杀！选择一张牌升级。`;
+      if (isHeroTarget) {
+        // overkill 概念不适用：选 hero 时不开升级模态，仅自伤。
+        if (okDamage > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: okDamage, source: 'overkill-upgrade', selfInflicted: true });
+        }
+        okBanner = `淬炼冲击对自己造成 ${okDamage} 点伤害。`;
       } else {
-        okBanner = `淬炼冲击对 ${monster.name} 造成 ${okDamage} 点伤害。`;
+        ensureEngaged(state, monster!, enqueuedActions);
+        const overkill = okDamage > (monster!.hp ?? monster!.value ?? 0);
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: okDamage, source: 'overkill-upgrade', isSpellDamage: true });
+        if (overkill) {
+          enqueuedActions.push({ type: 'SET_UPGRADE_MODAL_OPEN', open: true });
+          okBanner = `淬炼冲击对 ${monster!.name} 造成 ${okDamage} 伤害，超杀！选择一张牌升级。`;
+        } else {
+          okBanner = `淬炼冲击对 ${monster!.name} 造成 ${okDamage} 点伤害。`;
+        }
       }
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: okBanner } });
       const echoRemaining = ((pending as any).echoRemaining ?? 1) - 1;
       if (echoRemaining > 0) {
         const remainingMonsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
-        if (remainingMonsters.length > 0) {
+        if (remainingMonsters.length > 0 || isHeroTarget) {
           const totalEcho = (pending as any).echoRemaining ?? 1;
           const echoLabel = `（回响：第 ${totalEcho - echoRemaining + 1}/${totalEcho} 次）`;
           patch.pendingMagicAction = {
             card: pending.card, effect: 'overkill-upgrade', step: 'monster-select',
             prompt: `${okBanner} 继续选择目标。${echoLabel}`,
             data: {}, echoRemaining,
+            allowsHeroTarget: true,
           } as PendingMagicAction;
           patch.heroSkillBanner = `${okBanner} 继续选择目标。${echoLabel}`;
           return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1795,11 +1877,13 @@ function reduceMagicMonsterSelection(
       // Note: only one monster can be in 震慑 at a time. Echo re-prompt picks a SECOND
       // monster which OVERWRITES the first; we still log + banner each pick so the
       // player understands the second selection replaced the first.
-      patch.flipDebuffMonsterId = monster.id;
+      // 此分支不设 allowsHeroTarget → 顶层守卫保证 monster 必为非空。
+      const m = monster!;
+      patch.flipDebuffMonsterId = m.id;
       const echoRemainingDebuff = ((pending as any).echoRemaining ?? 1) - 1;
       if (echoRemainingDebuff > 0) {
         const otherMonsters = (state.activeCards as (GameCardData | null)[])
-          .filter((c): c is GameCardData => Boolean(c && c.type === 'monster' && c.id !== monster.id));
+          .filter((c): c is GameCardData => Boolean(c && c.type === 'monster' && c.id !== m.id));
         if (otherMonsters.length > 0) {
           const totalEcho = (pending as any).echoRemaining ?? 1;
           const echoLabel = `（回响：第 ${totalEcho - echoRemainingDebuff + 1}/${totalEcho} 次，将覆盖前一次目标）`;
@@ -1814,17 +1898,19 @@ function reduceMagicMonsterSelection(
             state, patch, sideEffects, enqueuedActions,
             { card: pending.card, echoRemaining: (pending as any).echoRemaining },
             next,
-            `翻覆震慑：${monster.name} 进入震慑。${echoLabel}`,
+            `翻覆震慑：${m.name} 进入震慑。${echoLabel}`,
           );
           if (reprompt) return reprompt;
         }
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `翻覆震慑：${monster.name} 进入震慑（每翻转一张牌 -1 攻击，至下次瀑流）。`);
+        `翻覆震慑：${m.name} 进入震慑（每翻转一张牌 -1 攻击，至下次瀑流）。`);
     }
 
     case 'soul-swap': {
-      if (monster.bossPhase || monster.isFinalMonster) {
+      // 此分支不设 allowsHeroTarget → 顶层守卫保证 monster 必为非空。
+      const m = monster!;
+      if (m.bossPhase || m.isFinalMonster) {
         patch.heroSkillBanner = '不能对Boss使用等价交换。';
         return applyPatch(state, patch, sideEffects);
       }
@@ -1834,50 +1920,55 @@ function reduceMagicMonsterSelection(
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '装备已不存在，等价交换取消。');
       }
       const oldDurability = swapSlotItem.durability ?? 0;
-      const oldMonsterLayers = monster.currentLayer ?? 1;
+      const oldMonsterLayers = m.currentLayer ?? 1;
       const newMaxDur = Math.max((swapSlotItem as any).maxDurability ?? oldDurability, oldMonsterLayers);
       patch[swapSlotId] = { ...swapSlotItem, durability: oldMonsterLayers, maxDurability: newMaxDur } as any;
       const updatedCards = (state.activeCards as any[]).map(slot => {
-        if (!slot || slot.id !== monster.id) return slot;
+        if (!slot || slot.id !== m.id) return slot;
         return { ...slot, currentLayer: oldDurability, hp: slot.maxHp ?? slot.hp ?? 0, fury: Math.max(slot.fury ?? 0, oldDurability), hpLayers: Math.max(slot.hpLayers ?? 0, oldDurability) };
       });
       patch.activeCards = updatedCards;
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `等价交换：${swapSlotItem.name} 耐久 ${oldDurability}→${oldMonsterLayers}，${monster.name} 血层 ${oldMonsterLayers}→${oldDurability}。`);
+        `等价交换：${swapSlotItem.name} 耐久 ${oldDurability}→${oldMonsterLayers}，${m.name} 血层 ${oldMonsterLayers}→${oldDurability}。`);
     }
 
     case 'missile-bolt': {
       const totalDmg = computeSpellDamagePure(state, 1 + (pending.card.amplifyBonus ?? 0));
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDmg, source: 'missile-bolt', isSpellDamage: true });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `魔弹：对 ${monster.name} 造成 ${totalDmg} 点法术伤害` } });
-      applyMissileRelicEffects(state, patch, sideEffects, enqueuedActions, monster);
+      if (isHeroTarget) {
+        if (totalDmg > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDmg, source: 'missile-bolt', selfInflicted: true });
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `魔弹：对自己造成 ${totalDmg} 点法术伤害` } });
+      } else {
+        ensureEngaged(state, monster!, enqueuedActions);
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDmg, source: 'missile-bolt', isSpellDamage: true });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `魔弹：对 ${monster!.name} 造成 ${totalDmg} 点法术伤害` } });
+        applyMissileRelicEffects(state, patch, sideEffects, enqueuedActions, monster!);
+      }
       const echoRemainingMissile = ((pending as any).echoRemaining ?? 1) - 1;
       if (echoRemainingMissile > 0) {
-        const otherTargets = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(
-          c => isDamageableTarget(c) && c.id !== monster.id,
+        // hero 始终是合法目标（missile-bolt 上 allowsHeroTarget 永远 true），
+        // 所以总是继续 re-prompt — 玩家至少可以把剩余 echo 落到自己身上。
+        const totalEcho = (pending as any).echoRemaining ?? 1;
+        const echoLabel = `（回响：第 ${totalEcho - echoRemainingMissile + 1}/${totalEcho} 次）`;
+        const next: PendingMagicAction = {
+          card: pending.card,
+          effect: 'missile-bolt',
+          step: 'monster-select',
+          prompt: `选择下一个目标，造成 ${totalDmg} 点法术伤害。${echoLabel}`,
+          echoRemaining: echoRemainingMissile,
+          allowsHeroTarget: true,
+        } as PendingMagicAction;
+        const reprompt = maybeRepromptEcho(
+          state, patch, sideEffects, enqueuedActions,
+          { card: pending.card, echoRemaining: (pending as any).echoRemaining },
+          next,
+          `魔弹：对 ${targetName} 造成 ${totalDmg} 点伤害！${echoLabel}`,
         );
-        if (otherTargets.length > 0) {
-          const totalEcho = (pending as any).echoRemaining ?? 1;
-          const echoLabel = `（回响：第 ${totalEcho - echoRemainingMissile + 1}/${totalEcho} 次）`;
-          const next: PendingMagicAction = {
-            card: pending.card,
-            effect: 'missile-bolt',
-            step: 'monster-select',
-            prompt: `选择下一个怪物，造成 ${totalDmg} 点法术伤害。${echoLabel}`,
-            echoRemaining: echoRemainingMissile,
-          } as PendingMagicAction;
-          const reprompt = maybeRepromptEcho(
-            state, patch, sideEffects, enqueuedActions,
-            { card: pending.card, echoRemaining: (pending as any).echoRemaining },
-            next,
-            `魔弹：对 ${monster.name} 造成 ${totalDmg} 点伤害！${echoLabel}`,
-          );
-          if (reprompt) return reprompt;
-        }
+        if (reprompt) return reprompt;
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `魔弹：对 ${monster.name} 造成 ${totalDmg} 点伤害！`);
+        `魔弹：对 ${targetName} 造成 ${totalDmg} 点伤害！`);
     }
 
     case 'stun-strike': {
@@ -1887,26 +1978,35 @@ function reduceMagicMonsterSelection(
       const hits = (pending as any).data?.hits ?? 2;
       const hitDmg = computeSpellDamagePure(state, baseDmgPerHit) * echo;
       const totalDmg = hitDmg * hits;
-      ensureEngaged(state, monster, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: totalDmg, source: 'stun-strike', isSpellDamage: true });
       const threshold = Math.round((stunPct / 100) * 20);
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `雷震击：对 ${monster.name} 造成 ${hitDmg}×${hits} 点法术伤害` } });
-      if (threshold > 0 && !monster.isStunned) {
+      if (isHeroTarget) {
+        // 选 hero：纯自伤；不掷击晕骰（hero 不能被击晕）。
+        if (totalDmg > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDmg, source: 'stun-strike', selfInflicted: true });
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `雷震击：对自己造成 ${hitDmg}×${hits} 点法术伤害` } });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `雷震击：对自己造成 ${hitDmg}×${hits} 点伤害！`, { dealtDamage: true });
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDmg, source: 'stun-strike', isSpellDamage: true });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `雷震击：对 ${monster!.name} 造成 ${hitDmg}×${hits} 点法术伤害` } });
+      if (threshold > 0 && !monster!.isStunned) {
         const [hsRoll, hsRng] = nextInt(patch.rng ?? state.rng, 1, 20);
         patch.rng = hsRng;
         sideEffects.push({ event: 'ui:requestDice', payload: {
-          title: monster.name,
+          title: monster!.name,
           subtitle: `雷震击晕判定 第1击（${stunPct}%）`,
           entries: [
             { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
             { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
           ],
-          context: { flowId: 'hero-stun', monsterId: monster.id, monsterName: monster.name, currentHit: 1, totalHits: hits, stunPct, hitDmg, magicCardId: pending.card.id },
+          context: { flowId: 'hero-stun', monsterId: monster!.id, monsterName: monster!.name, currentHit: 1, totalHits: hits, stunPct, hitDmg, magicCardId: pending.card.id },
           predeterminedRoll: hsRoll,
         } });
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `雷震击：对 ${monster.name} 造成 ${hitDmg}×${hits} 点伤害！${threshold > 0 ? '' : ' 未能击晕。'}`);
+        `雷震击：对 ${monster!.name} 造成 ${hitDmg}×${hits} 点伤害！${threshold > 0 ? '' : ' 未能击晕。'}`);
     }
 
     case 'stun-cap-strike': {
@@ -1921,10 +2021,33 @@ function reduceMagicMonsterSelection(
       const totalDmg = computeSpellDamagePure(state, baseDmg + (pending.card.amplifyBonus ?? 0)) * echoMul;
       const drawCount = 1 * echoMul;
       const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
-      ensureEngaged(state, monster, enqueuedActions);
+      const threshold = Math.round((stunPct / 100) * 20);
+
+      if (isHeroTarget) {
+        // 选 hero：自伤 + 抽牌（"其他都能继续触发"）；不掷击晕骰（hero 不能被击晕）。
+        if (totalDmg > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDmg, source: 'stun-cap-strike', selfInflicted: true });
+        }
+        if (drawCount > 0) {
+          const drawState = { ...state, ...patch } as GameState;
+          const drawResult = drawMultipleFromBackpack(drawState, drawCount);
+          if (drawResult.cards.length > 0) {
+            Object.assign(patch, drawResult.patch);
+            for (const d of drawResult.cards) {
+              sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
+            }
+          }
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对自己造成 ${totalDmg} 点法术伤害，抽 ${drawCount} 张牌。${echoTag}` } });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `${pending.card.name}：自伤 ${totalDmg}，抽 ${drawCount} 张。${echoTag}`,
+          { dealtDamage: true });
+      }
+
+      ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({
         type: 'DEAL_DAMAGE_TO_MONSTER',
-        monsterId: monster.id,
+        monsterId: monster!.id,
         damage: totalDmg,
         source: 'stun-cap-strike',
         isSpellDamage: true,
@@ -1939,13 +2062,12 @@ function reduceMagicMonsterSelection(
           }
         }
       }
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster.name} 造成 ${totalDmg} 点法术伤害，抽 ${drawCount} 张牌。${echoTag}` } });
-      const threshold = Math.round((stunPct / 100) * 20);
-      if (threshold > 0 && !monster.isStunned) {
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDmg} 点法术伤害，抽 ${drawCount} 张牌。${echoTag}` } });
+      if (threshold > 0 && !monster!.isStunned) {
         const [hsRoll, hsRng] = nextInt(patch.rng ?? state.rng, 1, 20);
         patch.rng = hsRng;
         sideEffects.push({ event: 'ui:requestDice', payload: {
-          title: monster.name,
+          title: monster!.name,
           subtitle: `${pending.card.name} 击晕判定（${stunPct}%）`,
           entries: [
             { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
@@ -1954,8 +2076,8 @@ function reduceMagicMonsterSelection(
           context: {
             flowId: 'hero-stun',
             sourceLabel: pending.card.name,
-            monsterId: monster.id,
-            monsterName: monster.name,
+            monsterId: monster!.id,
+            monsterName: monster!.name,
             currentHit: 1,
             totalHits: 1,
             stunPct,
@@ -1977,11 +2099,38 @@ function reduceMagicMonsterSelection(
       const peekCounts = [3, 4];
       const baseDmg = baseDamages[pending.card.upgradeLevel ?? 0] ?? 3;
       const peekCount = peekCounts[pending.card.upgradeLevel ?? 0] ?? 3;
+      if (isHeroTarget) {
+        // 选 hero 时不走 RESOLVE_FATE_SIGHT（其逻辑强依赖 monster + 击晕）；
+        // 直接自伤 + 翻看牌堆（不掷击晕骰）。
+        const totalDmg = computeSpellDamagePure(state, baseDmg + (pending.card.amplifyBonus ?? 0));
+        if (totalDmg > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDmg, source: 'fate-sight', selfInflicted: true });
+        }
+        const deck = state.remainingDeck;
+        const peekedCards = deck.slice(0, Math.min(peekCount, deck.length));
+        sideEffects.push({
+          event: 'card:fateSightPeekReady',
+          payload: {
+            peekedCards,
+            monsterCount: peekedCards.filter(c => c.type === 'monster').length,
+            stunChance: 0,
+            targetMonsterName: '自己',
+            card: pending.card,
+            totalDamage: totalDmg,
+            targetMonsterId: '',
+            targetIsStunned: true, // 阻断 useCardPlayHandlers 的击晕判定流程
+            predeterminedRoll: 0,
+          },
+        });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天眼审判：对自己造成 ${totalDmg} 点法术伤害，翻看牌堆 ${peekedCards.length} 张。` } });
+        patch.pendingMagicAction = null;
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
+      }
       patch.pendingMagicAction = null;
       enqueuedActions.push({
         type: 'RESOLVE_FATE_SIGHT',
         card: pending.card,
-        targetMonsterId: monster.id,
+        targetMonsterId: monster!.id,
         baseDmg,
         peekCount,
       });
@@ -1989,25 +2138,29 @@ function reduceMagicMonsterSelection(
     }
 
     case 'stat-swap': {
+      // 此分支不设 allowsHeroTarget → 顶层守卫保证 monster 必为非空。
+      const m = monster!;
       const isFlank = (pending as any).isFlank ?? false;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `攻防互换：对 ${monster.name}${isFlank ? '（侧击）' : ''}` } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `攻防互换：对 ${m.name}${isFlank ? '（侧击）' : ''}` } });
       patch.pendingMagicAction = null;
-      enqueuedActions.push({ type: 'RESOLVE_STAT_SWAP', card: pending.card, targetMonsterId: monster.id, isFlank });
+      enqueuedActions.push({ type: 'RESOLVE_STAT_SWAP', card: pending.card, targetMonsterId: m.id, isFlank });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
     case 'repair-enrage-dice': {
+      // 此分支不设 allowsHeroTarget → 顶层守卫保证 monster 必为非空。
+      const m = monster!;
       const repairSlotId = (pending as any).slotId as EquipmentSlotId;
       const [reRoll, reRng] = nextInt(patch.rng ?? state.rng, 1, 20);
       patch.rng = reRng;
       sideEffects.push({ event: 'ui:requestDice', payload: {
-        title: monster.name,
+        title: m.name,
         subtitle: '赌运修炼判定',
         entries: [
           { id: 'repair', range: [1, 16] as [number, number], label: '修复成功！', effect: 'none' },
           { id: 'enrage', range: [17, 20] as [number, number], label: '怪物暴怒！', effect: 'none' },
         ],
-        context: { flowId: 'repair-enrage-dice', slotId: repairSlotId, monsterId: monster.id, cardId: pending.card.id, card: pending.card },
+        context: { flowId: 'repair-enrage-dice', slotId: repairSlotId, monsterId: m.id, cardId: pending.card.id, card: pending.card },
         predeterminedRoll: reRoll,
       } });
       patch.pendingMagicAction = null;
@@ -2017,14 +2170,25 @@ function reduceMagicMonsterSelection(
     case 'transform-streak-strike': {
       const dmg = (pending as any).data?.damage ?? 0;
       const streak = (pending as any).data?.streak ?? 0;
-      ensureEngaged(state, monster, enqueuedActions);
+      if (isHeroTarget) {
+        if (dmg > 0) {
+          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: dmg, source: 'transform-streak-strike', selfInflicted: true });
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：连续转型 ${streak}，对自己造成 ${dmg} 点法术伤害。` } });
+        return applyFinalizeMagic(
+          state, patch, sideEffects, enqueuedActions, pending.card,
+          `${pending.card.name}：连续转型 ${streak} → 自伤 ${dmg} 点！`,
+          { dealtDamage: true },
+        );
+      }
+      ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({
         type: 'DEAL_DAMAGE_TO_MONSTER',
-        monsterId: monster.id,
+        monsterId: monster!.id,
         damage: dmg,
         source: 'transform-streak-strike',
         isSpellDamage: true,
-        landedLogMessage: `${pending.card.name}：连续转型 ${streak}，对 ${monster.name} 造成 ${dmg} 点法术伤害。`,
+        landedLogMessage: `${pending.card.name}：连续转型 ${streak}，对 ${monster!.name} 造成 ${dmg} 点法术伤害。`,
       });
       return applyFinalizeMagic(
         state, patch, sideEffects, enqueuedActions, pending.card,
@@ -2070,6 +2234,17 @@ function reduceDungeonCardSelection(
       if (!previewCard) {
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '正上方预览行没有卡牌，无法互换。');
       }
+      // Emit the dimension-warp animation hint BEFORE we patch activeCards /
+      // previewCards. The hook listener fires synchronously inside the same
+      // dispatch call stack; at that moment the React state has been updated
+      // but the DOM hasn't re-rendered yet, so cell ref rects still match the
+      // pre-swap visual. The overlay anchored on those rects masks both cells
+      // for ~1s while the choreography (flip → swap → flip-back) plays out.
+      sideEffects.push({
+        event: 'hero:dimensionWarp',
+        payload: { cellIndex: activeSlotIdx, activeCard: card, previewCard },
+      });
+
       const newActive = [...activeCards] as typeof activeCards;
       newActive[activeSlotIdx] = previewCard;
       patch.activeCards = newActive as any;
@@ -2217,6 +2392,17 @@ function reduceDungeonCardSelection(
         return applyPatch(state, patch, sideEffects);
       }
       sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: card.id, animate: false } });
+      // 迷宫回溯 (and legacy shuffle-dungeon): emit arc-flight from the
+      // selected active cell to the deck pile. Captured slotIdx is stable
+      // across the React commit because cell DOM positions don't depend on
+      // which card occupies them.
+      const removedSlotIdx = activeCards.findIndex(c => c?.id === card.id);
+      if (removedSlotIdx !== -1) {
+        sideEffects.push({
+          event: 'magic:returnToDeck',
+          payload: { slotIdx: removedSlotIdx, card },
+        });
+      }
       const newActive = activeCards.map(c => c?.id === card.id ? null : c);
       patch.activeCards = newActive as any;
       const sanitizedCard = sanitizeCardMetadata(card);

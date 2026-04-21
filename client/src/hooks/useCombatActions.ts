@@ -33,7 +33,11 @@ import { damageMonsterWithLayerOverflow } from '@/game-core/combat';
 // UI-only animation constants (mirrored from GameBoard.tsx)
 // ---------------------------------------------------------------------------
 const COMBAT_BLOCK_TO_REFLECT_MS = 220;
-const DEFEAT_ANIMATION_DURATION = 950;
+// Keep in sync with GameBoard.tsx DEFEAT_ANIMATION_DURATION
+// and the dh-card-death keyframe duration in client/src/index.css.
+// 1400ms covers the Lottie explosion (~1.5s clipped) + the card grayscale/shrink/fade,
+// and gates the monster reward modal until the animation finishes.
+const DEFEAT_ANIMATION_DURATION = 1400;
 // Defer the dagger self-destruct prompt until the swing/bleed/durability animations
 // finish so the player can see the attack resolve before deciding whether to self-destruct.
 // Mirrors COMBAT_ANIMATION_DURATION in useCombatAnimationTriggers.ts (1200ms).
@@ -122,7 +126,11 @@ export interface CombatActionsDeps {
   consumeCardFromHand: (card: GameCardData) => void;
   consumeClassCardFromHand: (cardId: string) => void;
   finalizeMagicCard: (card: GameCardData, opts?: { banner?: string; dealtDamage?: boolean }) => void;
-  triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
+  triggerDiscardFlight: (
+    card: GameCardData,
+    destination: 'graveyard' | 'recycle-bag',
+    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+  ) => Promise<void>;
   triggerStealCardFlight: (card: GameCardData, targetMonsterId: string) => Promise<void>;
   triggerGraveyardStackFlight: (targetCellIndex: number, cards: GameCardData[]) => void;
   dragonBleedDestroyEquipment: (monsterName: string, remainingLayers: number) => void;
@@ -151,7 +159,6 @@ export interface CombatActionsDeps {
   bulwarkTempArmorRef: React.MutableRefObject<number>;
   computePersuadeSuccessRate: (monster: GameCardData) => number;
   setPersuadeTempDiscount: React.Dispatch<React.SetStateAction<number>>;
-  undoStackRef: React.MutableRefObject<any[]>;
 
   // --- Local React state setters (not engine state) ---
   setMonsterDefeatStates: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
@@ -525,9 +532,14 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     setTimeout(() => depsRef.current.setHealing(false), 1200);
   });
 
-  useGameEvent('combat:monsterAttack', ({ monsterId }) => {
-    depsRef.current.tryStartBossRetaliationDirectedFx(monsterId);
-  });
+  // NOTE: 'combat:monsterAttack' previously triggered a rose-orb projectile
+  // from the attacking monster to the hero (via tryStartBossRetaliationDirectedFx).
+  // The visual was reused from the boss-retaliation ability and looked out of
+  // place on every regular attack — removed per UX feedback. Special abilities
+  // that should still show that orb (e.g. combat:dragonBreathRetaliation) are
+  // handled by their own dedicated listeners below.
+  // The 'combat:monsterAttack' event itself is still emitted by the reducer
+  // (turn.ts) for any future consumer; we just no-op on the visual side.
 
   useGameEvent('combat:monsterDamaged', ({ monsterId, damage }) => {
     if (damage > 0) {

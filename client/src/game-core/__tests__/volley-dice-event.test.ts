@@ -186,6 +186,8 @@ describe('弹幕骰局 — relic-driven missile-bolt effects', () => {
   });
 
   it('missile-draw-1 enqueues DRAW_CARDS after the bolt deals damage (single-target)', () => {
+    // 注意：missile-bolt 现在统一走 picker（即使 1 只怪也不再自动命中），
+    // 所以需要补一步 RESOLVE_MAGIC_MONSTER_SELECTION 才能触发 relic 副作用。
     const monster = {
       id: 'm1', type: 'monster' as const, name: 'Goblin', value: 5,
       hp: 10, maxHp: 10, attack: 5,
@@ -198,8 +200,11 @@ describe('弹幕骰局 — relic-driven missile-bolt effects', () => {
       combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' },
     });
 
-    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: 'hb' }] as any);
-    // Look at side effects for the missile-draw-1 log
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: 'hb' }] as any);
+    const drained = drain(
+      afterPlay.state,
+      [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'missile-bolt', monsterId: 'm1' }] as any,
+    );
     const drawLog = drained.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('汲取弹幕'));
     expect(drawLog).toBeDefined();
   });
@@ -218,7 +223,11 @@ describe('弹幕骰局 — relic-driven missile-bolt effects', () => {
       combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' },
     });
 
-    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: 'hb' }] as any);
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: 'hb' }] as any);
+    const drained = drain(
+      afterPlay.state,
+      [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'missile-bolt', monsterId: 'm1' }] as any,
+    );
     const stunned = drained.state.activeCards[0];
     expect((stunned as any)?.isStunned).not.toBe(true);
   });
@@ -229,10 +238,6 @@ describe('弹幕骰局 — relic-driven missile-bolt effects', () => {
       hp: 10, maxHp: 10, attack: 5,
     };
     const bolt = { id: 'hb', type: 'magic' as const, name: '魔弹', value: 0, knightEffect: 'missile-bolt', magicType: 'instant' };
-    // 20% always passes when threshold = min(20, stunCap=100) = 20%; not guaranteed though.
-    // To force it, set stunCap=100 *and* check via a deterministic seed. Instead just check
-    // that across many seeds we get at least some stuns; for unit test simplicity, only
-    // verify the relic does not crash and gating respects no isStunned check.
     const state = makeState({
       activeCards: [monster, null, null, null, null] as any,
       handCards: [bolt] as any,
@@ -241,9 +246,11 @@ describe('弹幕骰局 — relic-driven missile-bolt effects', () => {
       combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' },
     });
 
-    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: 'hb' }] as any);
-    // With stunCap=100 the cap collapses to min(20,100)=20%. Just assert no crash; can't
-    // assert deterministic stun without a chosen RNG seed.
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: 'hb' }] as any);
+    const drained = drain(
+      afterPlay.state,
+      [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'missile-bolt', monsterId: 'm1' }] as any,
+    );
     expect(drained.state).toBeDefined();
   });
 });

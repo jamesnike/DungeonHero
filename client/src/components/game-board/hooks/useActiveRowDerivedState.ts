@@ -11,6 +11,11 @@ export interface ActiveRowDerivedState {
   heroStunned: boolean;
   eventPendingLocked: boolean;
   curseMonumentCols: Set<number>;
+  /**
+   * 当前 pendingMagicAction 是否允许 Hero Cell 作为合法目标（单目标伤害 magic 自伤路径）。
+   * GameBoard 用此 flag 给 hero-row-hero slot 加高亮 + 点击监听。
+   */
+  heroSelfTargetingActive: boolean;
 }
 
 export function useActiveRowDerivedState(): ActiveRowDerivedState {
@@ -39,6 +44,13 @@ export function useActiveRowDerivedState(): ActiveRowDerivedState {
   const heroMagicMonsterTargeting = gs.pendingHeroMagicAction?.step === 'monster-select';
   const magicMonsterTargeting = gs.pendingMagicAction?.step === 'monster-select';
   const monsterTargetingActive = heroSkillMonsterTargeting || heroMagicMonsterTargeting || Boolean(magicMonsterTargeting);
+
+  // 单目标伤害 magic 在 setup 阶段会带 allowsHeroTarget: true，UI 用它决定是否高亮
+  // Hero Cell 并允许点击触发自伤路径。仅在 monster-select step 下生效。
+  const heroSelfTargetingActive = Boolean(
+    magicMonsterTargeting
+      && (gs.pendingMagicAction as { allowsHeroTarget?: boolean } | null)?.allowsHeroTarget,
+  );
 
   const dungeonTargetingActive = Boolean(gs.pendingMagicAction?.step === 'dungeon-select');
 
@@ -69,5 +81,6 @@ export function useActiveRowDerivedState(): ActiveRowDerivedState {
     heroStunned: gs.heroStunned,
     eventPendingLocked,
     curseMonumentCols,
+    heroSelfTargetingActive,
   };
 }

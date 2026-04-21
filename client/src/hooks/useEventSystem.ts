@@ -156,7 +156,11 @@ export interface EventSystemDeps {
   triggerMonsterBleedAnimation: (monsterId: string, delay?: number) => void;
   dragonBleedDestroyEquipment: (monsterName: string, remainingLayers: number) => void;
   createCurseCard: (sourceCard?: GameCardData) => GameCardData;
-  triggerDiscardFlight: (card: GameCardData, destination: 'graveyard' | 'recycle-bag') => Promise<void>;
+  triggerDiscardFlight: (
+    card: GameCardData,
+    destination: 'graveyard' | 'recycle-bag',
+    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+  ) => Promise<void>;
 
   // --- Local state setters ---
   setEventDiceRollKey: React.Dispatch<React.SetStateAction<number>>;
@@ -215,11 +219,13 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     equipmentPrompt,
     persuadeState,
     upgradeModalOpen,
+    pendingAutoDrawCount,
   } = useShallowGameState(s => ({
     gold: s.gold,
     activeCards: s.activeCards,
     handCards: s.handCards,
     backpackItems: s.backpackItems,
+    pendingAutoDrawCount: s.pendingAutoDrawCount,
     discardedCards: s.discardedCards,
     equipmentSlot1: s.equipmentSlot1,
     equipmentSlot2: s.equipmentSlot2,
@@ -356,12 +362,18 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     dispatch({ type: 'PROCESS_AUTO_DRAWS' });
   }, [engine, dispatch]);
 
+  // Re-fire whenever `pendingAutoDrawCount` itself changes — this is the
+  // source of truth and is incremented by both the legacy hook callback
+  // (`registerDungeonCardProcessed` / `enqueueAutoDraw`) AND the reducer's
+  // `postProcessActiveCards` slot-clear detection (which dispatches
+  // `REGISTER_DUNGEON_CARD_PROCESSED` directly without going through the
+  // hook). Subscribing to the field guarantees the drain runs no matter
+  // which path bumped the counter. See docs/auto-draw-debug.md.
   useEffect(() => {
-    const st = engine.getState();
-    if (isSettledForAutoDraw && st.pendingAutoDrawCount > 0) {
+    if (isSettledForAutoDraw && pendingAutoDrawCount > 0) {
       dispatch({ type: 'PROCESS_AUTO_DRAWS' });
     }
-  }, [isSettledForAutoDraw, backpackItems.length, handCards.length, dispatch, engine, autoDrawTrigger]);
+  }, [isSettledForAutoDraw, pendingAutoDrawCount, backpackItems.length, handCards.length, dispatch, autoDrawTrigger]);
 
   // ---------------------------------------------------------------------------
   // enqueueAutoDraw (deferred — actual processing by useEffect)
@@ -851,8 +863,19 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   });
 
   // Event card removed from active row — trigger removal animation
-  useGameEvent('event:cardRemoved', ({ cardId, removed }) => {
+  useGameEvent('event:cardRemoved', ({ cardId, removed, card }) => {
     if (removed) {
+      // Fly the event card from its dungeon slot to the graveyard. We must
+      // call this BEFORE removeCard / before React commits the slot=null
+      // patch, otherwise the source DOM node is gone and the flight has no
+      // anchor. `triggerDiscardFlight` captures the source rect synchronously
+      // via the card's data-testid, then runs the overlay flight independently
+      // — so the slot-clear that follows in this same call stack is fine.
+      // No-flip events always end up in the graveyard (see reduceCompleteEvent
+      // line ~270, which pushes the card into discardedCards directly).
+      if (card) {
+        void depsRef.current.triggerDiscardFlight(card, 'graveyard');
+      }
       depsRef.current.removeCard(cardId, true);
     }
   });

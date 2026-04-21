@@ -276,26 +276,31 @@ export default function EquipmentSlot({
           zIndex: 1,
         }}
       />
-      {/* Permanent bonus header */}
+      {/* Permanent bonus header — 立体贴纸样式：每条数值一颗贴纸 */}
       {type === 'equipment' && (
         <div
-          className={`absolute left-1/2 z-30 flex items-center gap-1 sm:gap-2 rounded-full border border-border bg-background/95 dh-hero-chip font-bold tracking-wide text-muted-foreground shadow-lg whitespace-nowrap ${isFlat ? 'px-1.5 py-0 sm:px-2 sm:py-0' : 'px-2 py-0.5 sm:px-4 sm:py-1.5'}`}
+          className={`absolute left-1/2 z-30 flex items-center whitespace-nowrap dh-hero-chip ${isFlat ? 'gap-0.5 sm:gap-1' : 'gap-1 sm:gap-1.5'}`}
           style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
         >
           {tempAttackBonus !== 0 && (
-            <>
-              <span className={tempAttackBonus > 0 ? 'text-orange-400' : 'text-orange-400/60'}>{formatBonus(tempAttackBonus)}{!isCompact && ' ATK'}</span>
-              <span className="text-muted-foreground/50">|</span>
-            </>
+            <span className={`dh-stat-sticker dh-stat-sticker--atk${tempAttackBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
+              {formatBonus(tempAttackBonus)}
+              {!isCompact && <span className="dh-stat-sticker__label">ATK</span>}
+            </span>
           )}
-          <span className="text-red-500">{formatBonus(permanentDamageBonus)}{!isCompact && ' DMG'}</span>
-          <span className="text-muted-foreground/50">|</span>
-          <span className="text-blue-500">{formatBonus(permanentShieldBonus)}{!isCompact && ' SHD'}</span>
+          <span className={`dh-stat-sticker dh-stat-sticker--dmg${permanentDamageBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
+            {formatBonus(permanentDamageBonus)}
+            {!isCompact && <span className="dh-stat-sticker__label">DMG</span>}
+          </span>
+          <span className={`dh-stat-sticker dh-stat-sticker--shd${permanentShieldBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
+            {formatBonus(permanentShieldBonus)}
+            {!isCompact && <span className="dh-stat-sticker__label">SHD</span>}
+          </span>
           {tempShieldBonus !== 0 && (
-            <>
-              <span className="text-muted-foreground/50">|</span>
-              <span className={tempShieldBonus > 0 ? 'text-cyan-400' : 'text-cyan-400/60'}>{formatBonus(tempShieldBonus)}{!isCompact && ' TMP'}</span>
-            </>
+            <span className={`dh-stat-sticker dh-stat-sticker--tmp${tempShieldBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
+              {formatBonus(tempShieldBonus)}
+              {!isCompact && <span className="dh-stat-sticker__label">TMP</span>}
+            </span>
           )}
         </div>
       )}

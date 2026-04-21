@@ -1046,6 +1046,10 @@ function reduceResolveGraveyardSelection(
       payload: { type: 'event', message: `坟场发现：入手牌「${selected.name}」` },
     });
     patch.heroSkillBanner = `「${selected.name}」已加入手牌。`;
+    sideEffects.push({
+      event: 'card:queueToHand',
+      payload: { card: selected, sourceHint: 'graveyard' },
+    });
   } else {
     const bpPatch = addCardToBackpackPure({ ...state, ...patch } as GameState, selected);
     Object.assign(patch, bpPatch);
@@ -1057,6 +1061,10 @@ function reduceResolveGraveyardSelection(
     if (delivery === 'hand-first') {
       patch.heroSkillBanner = `手牌已满，「${selected.name}」已进入背包。`;
     }
+    sideEffects.push({
+      event: 'card:graveyardRecalled' as any,
+      payload: { cards: [selected] },
+    });
   }
 
   sideEffects.push({

@@ -68,6 +68,7 @@ export interface ShopHandlersDeps {
   triggerDiscardFlight: (
     card: GameCardData,
     destination: 'graveyard' | 'recycle-bag',
+    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
   ) => Promise<void>;
   completeCurrentEvent: (options?: { skipFlip?: boolean }) => void;
   getMonsterRewardsPreview: (monster: GameCardData) => MonsterRewardOption[];
@@ -776,17 +777,38 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         'monster',
         `战利品〔${activeMonsterReward.monsterName}〕：选择「${selected.title}」`,
       );
+      // Snapshot the defeated-monster card BEFORE dispatching the reward —
+      // applyMonsterReward will null out `activeMonsterReward` synchronously
+      // (via the APPLY_MONSTER_REWARD reducer's patch), and we still need the
+      // card data to drive the graveyard flight + the imperative addToGraveyard
+      // call below.
+      const monsterCardSnapshot = activeMonsterReward.monsterCard ?? null;
+      const doneId = activeMonsterReward.monsterInstanceId;
+
       const resolved = applyMonsterReward(selected);
       if (!resolved) {
         return;
       }
-      const doneId = activeMonsterReward.monsterInstanceId;
       if (doneId) {
         depsRef.current.monsterRewardQueuedInstanceIdsRef.current.delete(doneId);
+      }
+      // Fly the defeated monster card from its active-row slot to the
+      // graveyard cell BEFORE we strip the slot. `triggerDiscardFlight`
+      // captures source coords synchronously via `data-testid`, so as long
+      // as we call it before `removePendingDungeonCard` (which schedules the
+      // slot null via removeCard), the start position is correct. The flight
+      // overlay is rendered as an independent layer and continues running
+      // even after the original slot empties out a few frames later, giving
+      // a continuous "monster body falls into the graveyard" arc instead of
+      // the card just blinking out of existence.
+      if (monsterCardSnapshot) {
+        void depsRef.current.triggerDiscardFlight(monsterCardSnapshot, 'graveyard');
+      }
+      if (doneId) {
         depsRef.current.removePendingDungeonCard(doneId);
       }
-      if (activeMonsterReward.monsterCard) {
-        depsRef.current.addToGraveyard(activeMonsterReward.monsterCard);
+      if (monsterCardSnapshot) {
+        depsRef.current.addToGraveyard(monsterCardSnapshot);
       }
       dispatch({ type: 'CLEAR_ACTIVE_MONSTER_REWARD' });
     },

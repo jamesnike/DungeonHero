@@ -80,6 +80,7 @@ import {
   requestOrAutoHandDiscard,
   finalizeAltarDiscardDiscover,
   applyCryptDeathwish,
+  ensureMonsterEngaged,
 } from '../../rules/magic-effects';
 
 // ============================================================================
@@ -572,6 +573,15 @@ const crossroadsLeftSwap: CardDefinition = {
       next[secondIdx] = tmp;
     }
     patch.activeCards = next;
+    // Animation hint — emit ONCE regardless of echoMultiplier. For even
+    // multipliers the cards visually return to their original slots (no-op
+    // state-wise) but the banner says (回响×N) so the player understands.
+    if (echoMultiplier % 2 === 1) {
+      sideEffects.push({
+        event: 'magic:activeRowSwap',
+        payload: { leftSlotIdx: firstIdx, rightSlotIdx: secondIdx, leftCard: firstCard, rightCard: secondCard },
+      });
+    }
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
     const bannerText = echoMultiplier > 1
       ? `命运挪移 ×${echoMultiplier}：${firstCard.name} ↔ ${secondCard.name}（回响）`
@@ -615,33 +625,21 @@ const bountySpellDamage: CardDefinition = {
   effects: [],
   tags: ['magic', 'permanent', 'damage', 'gold'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
+    // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
+    // 不再因为没有怪物 / 只有一个怪物就 fizzle / 自动选；玩家可以选 Hero Cell 自伤
+    // → APPLY_DAMAGE selfInflicted 触发血怒战符等效果（金币副作用仍保留）。
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
-    const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-    if (monsters.length === 0) {
-      banner(sideEffects, '赏金裁决无效（没有怪物）。');
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
     const baseDmg = 5 + (card.amplifyBonus ?? 0);
     const totalDmg = getSpellDamage(baseDmg, state) * echoMultiplier;
-    if (monsters.length === 1) {
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDmg, source: 'bounty-spell-damage', isSpellDamage: true });
-      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: totalDmg, source: 'bounty-spell-damage' });
-      log(sideEffects, 'magic', `赏金裁决：对 ${monsters[0].name} 造成 ${totalDmg} 点法术伤害，获得 ${totalDmg} 金币`);
-      banner(sideEffects, `赏金裁决：${totalDmg} 点伤害 → ${totalDmg} 金币！${echoTag}`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
     patch.pendingMagicAction = {
       card,
       effect: 'bounty-spell-damage',
       step: 'monster-select',
       echoMultiplier,
-      prompt: `选择一个怪物，造成 ${totalDmg} 点法术伤害并获得等量金币。${echoTag}`,
+      prompt: `选择一个目标，造成 ${totalDmg} 点法术伤害并获得等量金币。${echoTag}`,
+      allowsHeroTarget: true,
     } as any;
-    patch.heroSkillBanner = '赏金裁决：选择目标怪物。';
+    patch.heroSkillBanner = '赏金裁决：选择目标。';
     return applyPatch(state, patch, sideEffects);
   },
 };
@@ -1030,9 +1028,18 @@ const starterReshuffle: CardDefinition = {
     }
     if (dungeonCards.length === 1 && echoMultiplier <= 1) {
       const target = dungeonCards[0];
+      const slotIdx = (state.activeCards as (GameCardData | null)[]).findIndex(c => c?.id === target.id);
       const newActive = (state.activeCards as (GameCardData | null)[]).map(c => c?.id === target.id ? null : c) as ActiveRowSlots;
       patch.activeCards = newActive;
       patch.remainingDeck = [...state.remainingDeck, sanitizeCardMetadata(target)];
+      // Arc-flight to the deck pile. Listener captures the active cell rect
+      // (still valid before React commits the patch) + deckFlyTargetRef.
+      if (slotIdx !== -1) {
+        sideEffects.push({
+          event: 'magic:returnToDeck',
+          payload: { slotIdx, card: target },
+        });
+      }
       banner(sideEffects, `${target.name} 已置于牌堆底。`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -1079,6 +1086,14 @@ const starterDungeonSwap: CardDefinition = {
     patch.activeCards = next;
     const leftCard = cards[leftIdx]!;
     const rightCard = cards[rightIdx]!;
+    // Animation hint — only emit when net state actually changed (odd echo).
+    // Even echo = swap-then-swap-back = no-op, animating it would be confusing.
+    if (echoMultiplier % 2 === 1) {
+      sideEffects.push({
+        event: 'magic:activeRowSwap',
+        payload: { leftSlotIdx: leftIdx, rightSlotIdx: rightIdx, leftCard, rightCard },
+      });
+    }
     const bnr = echoMultiplier > 1
       ? `乾坤挪移 ×${echoMultiplier}：${leftCard.name} ↔ ${rightCard.name}（回响）`
       : `${leftCard.name} ↔ ${rightCard.name} 位置互换！`;
@@ -1575,36 +1590,22 @@ const knightMissileBolt: CardDefinition = {
   effectId: 'knight:missile-bolt',
   effects: [],
   tags: ['knight', 'instant', 'damage'],
-  resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
-    const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier, isEchoTriggered) => {
+    // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
+    // 不再因为没有怪物 / 只有一个怪物就 fizzle / 自动选；玩家可以选 Hero Cell 自伤。
+    // 注意：missile-bolt 的命中后 relic 副作用（弹幕骰局等）只在选到怪物时才触发，
+    // 由 reduceMagicMonsterSelection (rules/hero.ts case 'missile-bolt') 内部分支处理。
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
-    if (monsters.length === 0) {
-      banner(sideEffects, `魔弹无效（没有怪物）。${echoTag}`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
     const boltDmg = getSpellDamage(1 + (card.amplifyBonus ?? 0), state);
-    if (monsters.length === 1) {
-      const target = monsters[0];
-      const totalHits = echoMultiplier;
-      const totalDmg = boltDmg * totalHits;
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: totalDmg, source: 'missile-bolt', isSpellDamage: true });
-      log(sideEffects, 'magic', `魔弹：对 ${target.name} 造成 ${boltDmg}${totalHits > 1 ? `×${totalHits}` : ''} 点法术伤害`);
-      banner(sideEffects, `魔弹：对 ${target.name} 造成 ${totalDmg} 点伤害！${echoTag}`);
-      applyMissileRelicEffects(state, patch, sideEffects, enqueuedActions, target);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
     patch.pendingMagicAction = {
       card,
       effect: 'missile-bolt',
       step: 'monster-select',
-      prompt: `选择一个怪物，造成 ${boltDmg} 点法术伤害。${echoTag}`,
+      prompt: `选择一个目标，造成 ${boltDmg} 点法术伤害。${echoTag}`,
       echoRemaining: echoMultiplier,
+      allowsHeroTarget: true,
     } as any;
-    patch.heroSkillBanner = `选择一个怪物，造成 ${boltDmg} 点法术伤害。${echoTag}`;
+    patch.heroSkillBanner = `选择一个目标，造成 ${boltDmg} 点法术伤害。${echoTag}`;
     return applyPatch(state, patch, sideEffects);
   },
 };
@@ -2000,14 +2001,6 @@ const starterTransformStreakStrike: CardDefinition = {
     const predictedStreak = computePredictedTransformStreak(state, card);
     const baseDmg = predictedStreak;
     const dmg = getSpellDamage(baseDmg, state) * echoMultiplier;
-    const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-
-    if (monsters.length === 0) {
-      banner(sideEffects, `${card.name}：没有可攻击的怪物（连续转型 ${predictedStreak}）。`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
 
     if (predictedStreak === 0) {
       banner(sideEffects, `${card.name}：连续转型断链，造成 0 点伤害。`);
@@ -2017,30 +2010,17 @@ const starterTransformStreakStrike: CardDefinition = {
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
-    if (monsters.length === 1) {
-      const target = monsters[0];
-      enqueuedActions.push({
-        type: 'DEAL_DAMAGE_TO_MONSTER',
-        monsterId: target.id,
-        damage: dmg,
-        source: 'transform-streak-strike',
-        isSpellDamage: true,
-        landedLogMessage: `${card.name}：连续转型 ${predictedStreak}，对 ${target.name} 造成 ${dmg} 点法术伤害。`,
-      });
-      banner(sideEffects, `${card.name}：连续转型 ${predictedStreak} → ${dmg} 点伤害！`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
-
+    // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径），
+    // 即便 active row 没怪物，玩家依然可以选 Hero Cell 自伤。
     patch.pendingMagicAction = {
       card,
       effect: 'transform-streak-strike',
       step: 'monster-select',
-      prompt: `${card.name}：选择一个怪物，对其释放 ${dmg} 点法术伤害（连续转型 ${predictedStreak}）。`,
+      prompt: `${card.name}：选择一个目标，对其释放 ${dmg} 点法术伤害（连续转型 ${predictedStreak}）。`,
       data: { damage: dmg, streak: predictedStreak },
+      allowsHeroTarget: true,
     } as any;
-    patch.heroSkillBanner = `${card.name}：选择一个怪物（连续转型 ${predictedStreak} → ${dmg} 伤害）。`;
+    patch.heroSkillBanner = `${card.name}：选择一个目标（连续转型 ${predictedStreak} → ${dmg} 伤害）。`;
     return applyPatch(state, patch, sideEffects);
   },
 };

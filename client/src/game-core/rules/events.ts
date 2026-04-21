@@ -273,7 +273,14 @@ function reduceCompleteEvent(
   // Emit side effect for auto-draw tracking (hook will handle animation/waterfall)
   sideEffects.push({
     event: 'event:cardRemoved' as any,
-    payload: { cardId: cardToComplete.id, cellIndex: eventCellIdx, removed: shouldRemoveFromDungeon },
+    payload: {
+      cardId: cardToComplete.id,
+      cellIndex: eventCellIdx,
+      removed: shouldRemoveFromDungeon,
+      // Pass the full card so the hook listener can fly the corpse to the
+      // graveyard before the slot DOM element disappears.
+      card: cardToComplete,
+    },
   });
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);

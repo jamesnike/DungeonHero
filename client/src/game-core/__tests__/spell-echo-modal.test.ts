@@ -95,7 +95,10 @@ describe('法术回响 — 模态类 re-prompt (Category B)', () => {
     expect(r3.state.pendingMagicAction).toBeNull();
   });
 
-  it('魔弹（场上仅一个怪物）：回响通过 echoMultiplier 直接折成 ×2 伤害（无第二个目标可选）', () => {
+  it('魔弹（场上仅一个怪物）：picker 仍然弹出，echo×2 也要 re-prompt（hero 永远是可选目标）', () => {
+    // 注意：单目标伤害 magic 现在统一弹 picker（即便只有 1 只怪物），以便玩家可以
+    // 选 Hero Cell 自伤。Echo×2 不再"折叠到一击"——每发魔弹都重新 re-prompt，
+    // 玩家可以分别决定每一发是打怪还是自伤。详见 magic-self-target.test.ts。
     const card = makeMissileBolt();
     const m1 = makeMonster('mon-1', '哥布林甲', 20);
 
@@ -107,14 +110,32 @@ describe('法术回响 — 模态类 re-prompt (Category B)', () => {
       maxHp: 20,
     });
 
-    const drained = drain(state, [
+    const r1 = drain(state, [
       { type: 'RESOLVE_MAGIC', cardId: card.id, card } as GameAction,
     ]);
 
-    // 单怪路径不开弹窗，直接结算两次伤害（1×2 = 2 点法术伤害）
-    expect(drained.state.pendingMagicAction).toBeNull();
-    expect(drained.state.doubleNextMagic).toBe(false);
-    const m1After = (drained.state.activeCards as any[]).find((c: any) => c?.id === 'mon-1');
+    expect(r1.state.pendingMagicAction).toBeTruthy();
+    expect((r1.state.pendingMagicAction as any).effect).toBe('missile-bolt');
+    expect((r1.state.pendingMagicAction as any).echoRemaining).toBe(2);
+    expect(r1.state.doubleNextMagic).toBe(false);
+
+    // 第一发：选 m1，1 点伤害，re-prompt 留着第二发
+    const r2 = drain({ ...r1.state, phase: 'idle' } as GameState, [
+      { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: card.id, monsterId: 'mon-1' } as GameAction,
+    ]);
+
+    expect(r2.state.pendingMagicAction).toBeTruthy();
+    expect((r2.state.pendingMagicAction as any).echoRemaining).toBe(1);
+    const m1Mid = (r2.state.activeCards as any[]).find((c: any) => c?.id === 'mon-1');
+    expect(m1Mid?.hp).toBe(20 - 1);
+
+    // 第二发：再选 m1，结算完后 pending 清空，总伤害 2
+    const r3 = drain({ ...r2.state, phase: 'idle' } as GameState, [
+      { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: card.id, monsterId: 'mon-1' } as GameAction,
+    ]);
+
+    expect(r3.state.pendingMagicAction).toBeNull();
+    const m1After = (r3.state.activeCards as any[]).find((c: any) => c?.id === 'mon-1');
     expect(m1After?.hp).toBe(20 - 2);
   });
 });

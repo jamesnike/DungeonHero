@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo, type CSSProperties } from 'react';
+import { useState, useEffect, useRef, memo, lazy, Suspense, type CSSProperties } from 'react';
 import { useGameState } from '@/hooks/useGameEngine';
 import { Card } from '@/components/ui/card';
 import {
@@ -32,6 +32,8 @@ import { getOnEnterHandShortLabel } from '@/game-core/card-schema/on-enter-hand'
 import { STARTER_CARD_IDS, getStarterBaseId } from '@/game-core/deck';
 import { computeDamageMagicDisplayPure, type DamageMagicDisplay } from '@/game-core/helpers';
 import { computeMaxHp } from '@/game-core/rules/magic-effects';
+
+const MonsterDeathLottie = lazy(() => import('@/components/effects/MonsterDeathLottie'));
 
 const MAX_DURABILITY_DOTS = 4;
 const BASE_CARD_WIDTH = 180;
@@ -1135,8 +1137,52 @@ const amuletEffectText =
         '--dh-card-instance-scale': cardScale.toString(),
       } as CSSProperties}
       data-engaged={engagedMonster ? 'true' : undefined}
+      data-defeat={
+        // Apply the defeat fade keyframe while EITHER:
+        //  (a) the explosion overlay is mid-run (`showDefeatOverlay`), OR
+        //  (b) the monster has been confirmed defeated by the reducer
+        //      (`card.defeatProcessed`, set in combat.ts Branch C) and is
+        //      still on the board waiting for the reward to be picked.
+        // Branch (b) is what keeps the card visually "frozen as dead"
+        // during the staging window between animation-end and reward-pick.
+        // The CSS uses `forwards` fill, so once the keyframe finishes the
+        // card sits at the final low-opacity / greyscale / shrunk state for
+        // as long as the attribute is present.
+        card.type === 'monster' && (showDefeatOverlay || Boolean(card.defeatProcessed))
+          ? 'true'
+          : undefined
+      }
       data-testid={`card-${card.type}-${card.id}`}
     >
+      {showBleedOverlay && card.type === 'monster' && (
+        // Monster damage blood-splatter. Rendered OUTSIDE <Card> (which
+        // has overflow-hidden) and outside the inner combat-overlay (which
+        // has paint containment) so the drops can fly visibly past the
+        // cell edge — the same architectural pattern HeroCard uses for
+        // its own bleed/heal overlays. Reuses the shared `card-bleed-*`
+        // CSS classes (HeroCard renders the identical structure).
+        <div className="card-bleed-overlay" aria-hidden>
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-splash" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="1" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="2" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="3" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="4" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="5" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="6" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="7" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="8" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="9" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="10" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="11" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="12" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="13" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="14" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="15" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="16" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="17" />
+          <span className="combat-overlay__shape combat-overlay__shape--card-bleed-drop" data-drop="18" />
+        </div>
+      )}
       <Card className={`
         w-full h-full border-4 ${getCardBorderColor()} overflow-hidden
         transition-shadow duration-200
@@ -1580,7 +1626,13 @@ const amuletEffectText =
                     data-swing-variant={showWeaponSwing ? weaponSwingVariant : undefined}
                     data-block-variant={showShieldBlock ? shieldBlockVariant : undefined}
                   >
-                    {showBleedOverlay && (
+                    {showBleedOverlay && card.type !== 'monster' && (
+                      // Non-monster (equipment-slot etc.) damage keeps the
+                      // original red blood-splatter CSS visual, scoped inside
+                      // the card area. Monster damage now uses the same
+                      // splatter as the hero — see `card-bleed-overlay`
+                      // below, rendered as a sibling of <Card> so the spray
+                      // can fly past the cell edge.
                       <>
                         <span className="combat-overlay__shape combat-overlay__shape--bleed" />
                         <span className="combat-overlay__shape combat-overlay__shape--bleed-drip" data-stagger="1" />
@@ -1608,12 +1660,10 @@ const amuletEffectText =
                         <span className="combat-overlay__shape combat-overlay__shape--block-spark" data-stagger="2" />
                       </>
                     )}
-                    {showDefeatOverlay && (
-                      <>
-                        <span className="combat-overlay__shape combat-overlay__shape--defeat" />
-                        <span className="combat-overlay__shape combat-overlay__shape--defeat-burst" data-stagger="1" />
-                        <span className="combat-overlay__shape combat-overlay__shape--defeat-fade" data-stagger="2" />
-                      </>
+                    {showDefeatOverlay && card.type === 'monster' && (
+                      <Suspense fallback={null}>
+                        <MonsterDeathLottie />
+                      </Suspense>
                     )}
                   </div>
                 )}

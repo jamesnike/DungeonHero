@@ -1,6 +1,4 @@
 import { Heart, Coins, Layers, Waves, ShoppingBag, Trophy, Handshake } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import HelpDialog from './HelpDialog';
 import { memo, useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
@@ -71,29 +69,29 @@ function GameHeaderInner({
   return (
     <div
       ref={headerRef}
-      className="game-header h-auto bg-card border-b border-card-border flex items-center justify-between"
+      className="game-header h-auto bg-transparent flex items-center justify-between"
       style={headerStyle}
       data-flat={isFlat || undefined}
     >
       <div className="game-header__group">
-        <div className="game-header__trophy" data-testid="header-trophy">
-          <Trophy className="game-header__icon text-yellow-500" />
-          <span className="game-header__trophy-count font-mono font-bold text-black">{totalWins}</span>
+        <div className="game-header__sticker-icon game-header__sticker-icon--trophy" data-testid="header-trophy">
+          <Trophy />
+          <span className="game-header__sticker-icon__num">{totalWins}</span>
         </div>
 
         <div className="game-header__controls">
-          <Button
+          <button
+            type="button"
             onClick={onNewGame}
-            size="sm"
             data-testid="button-new-game"
-            className="game-header__button bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-bold border border-amber-300 shadow-md ring-2 ring-amber-400/40"
+            className="game-header__sticker-button game-header__sticker-button--amber"
           >
             New Game
-          </Button>
+          </button>
           <HelpDialog buttonClassName="game-header__button game-header__button--icon" />
-          <div className="game-header__stat" data-testid="header-hp">
-            <Heart className="game-header__icon text-destructive" />
-            <span className="game-header__value font-mono font-bold">
+          <div className="game-header__sticker-icon game-header__sticker-icon--hp" data-testid="header-hp">
+            <Heart />
+            <span className="game-header__sticker-icon__num game-header__sticker-icon__num--small">
               {hp}/{maxHp}
             </span>
           </div>
@@ -103,40 +101,49 @@ function GameHeaderInner({
       <button
         ref={deckFlyTargetRef}
         onClick={onDeckClick}
-        className="game-header__deck hover-elevate active-elevate-2 rounded-md transition-transform"
+        type="button"
+        className="game-header__sticker-icon game-header__sticker-icon--deck"
         data-testid="header-deck"
       >
-        <Layers className="game-header__icon text-primary" />
-        <Badge variant="outline" className="game-header__badge font-mono">
-          {cardsRemaining}
-        </Badge>
+        <Layers />
+        <span className="game-header__sticker-icon__num">{cardsRemaining}</span>
       </button>
 
-      <div className="game-header__stat" data-testid="stat-waterfall-count">
-        <Waves className="game-header__icon text-blue-500" />
-        <Badge variant="outline" className="game-header__badge font-mono">
-          {turnCount}
-        </Badge>
+      <div className="game-header__sticker-icon game-header__sticker-icon--waterfall" data-testid="stat-waterfall-count">
+        <Waves />
+        <span className="game-header__sticker-icon__num">{turnCount}</span>
       </div>
 
-      <div className="game-header__shop" data-testid="header-shop-level">
-        <ShoppingBag className="game-header__icon text-amber-500" />
-        <Badge variant="secondary" className="game-header__badge font-mono bg-transparent border-transparent">
-          Lv.{shopLevel}
-        </Badge>
+      <div className="game-header__sticker-icon game-header__sticker-icon--shop" data-testid="header-shop-level">
+        <ShoppingBag />
+        <span className="game-header__sticker-icon__num">Lv{shopLevel}</span>
       </div>
 
-      <div className="game-header__shop" data-testid="header-persuade-level" title={`劝降等级 Lv.${persuadeLevel}（可劝降 ≤${persuadeLevel} 血层怪物）/ 费用 ${persuadeCost} 金${persuadeTempDiscount ? `（临时${persuadeTempDiscount > 0 ? '减免' : '加价'} ${Math.abs(persuadeTempDiscount)}）` : ''}`}>
-        <Handshake className="game-header__icon text-purple-500" />
-        <Badge variant="secondary" className="game-header__badge font-mono bg-transparent border-transparent">
-          Lv.{persuadeLevel}
-          <span className={`game-header__badge-sep ${persuadeTempDiscount > 0 ? 'text-green-400' : persuadeTempDiscount < 0 ? 'text-red-400' : 'text-black'}`}>{persuadeCost}g</span>
-        </Badge>
+      <div
+        className="game-header__sticker-icon game-header__sticker-icon--persuade"
+        data-testid="header-persuade-level"
+        title={`劝降等级 Lv.${persuadeLevel}（可劝降 ≤${persuadeLevel} 血层怪物）/ 费用 ${persuadeCost} 金${persuadeTempDiscount ? `（临时${persuadeTempDiscount > 0 ? '减免' : '加价'} ${Math.abs(persuadeTempDiscount)}）` : ''}`}
+      >
+        <Handshake />
+        <span className="game-header__sticker-icon__num game-header__sticker-icon__num--stack">
+          <span>Lv{persuadeLevel}</span>
+          <span
+            className={
+              persuadeTempDiscount > 0
+                ? 'game-header__sticker-icon__num-cost--up'
+                : persuadeTempDiscount < 0
+                ? 'game-header__sticker-icon__num-cost--down'
+                : ''
+            }
+          >
+            {persuadeCost}g
+          </span>
+        </span>
       </div>
 
-      <div className="game-header__stat" data-testid="header-gold">
-        <Coins className="game-header__icon text-yellow-500" />
-        <span className="game-header__value font-mono font-bold text-black">
+      <div className="game-header__sticker-icon game-header__sticker-icon--gold" data-testid="header-gold">
+        <Coins />
+        <span className="game-header__sticker-icon__num game-header__sticker-icon__num--small">
           {gold}
         </span>
       </div>

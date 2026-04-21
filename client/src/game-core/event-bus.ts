@@ -162,6 +162,17 @@ export type GameEventMap = {
   'equipment:destroyed': { slotId: string; cardId: string };
   'equipment:repaired': { slotId: string; amount: number };
   'equipment:swapped': {};
+  /**
+   * 装备/护符栏满时被新装备顶替（displaced）出去。UI 监听此事件触发
+   * 「装备栏 → 坟场 / 回收袋」的飞行动画。仅由 reduceDisposeEquipmentCard
+   * 在 `triggerLastWords === true` 且确实落到 graveyard / recycle-bag 时发出
+   * （残骸回收符把卡返回手牌的早返路径不会发出，因为那不是飞向坟场）。
+   */
+  'equipment:displaced': {
+    card: import('@/components/GameCard').GameCardData;
+    slotId: 'equipmentSlot1' | 'equipmentSlot2';
+    destination: 'graveyard' | 'recycle-bag';
+  };
 
   'waterfall:started': { sequenceId: number };
   'waterfall:dropPhase': { slots: number[] };
@@ -186,7 +197,18 @@ export type GameEventMap = {
   'event:choiceMade': { choiceId: string };
   'event:completed': { cardId: string };
   'event:finalized': {};
-  'event:cardRemoved': { cardId: string; cellIndex: number; removed: boolean };
+  'event:cardRemoved': {
+    cardId: string;
+    cellIndex: number;
+    removed: boolean;
+    /**
+     * Snapshot of the card the reducer is removing. Provided so the hook
+     * listener can drive a discard-flight animation BEFORE the React DOM
+     * commit removes the slot's card element. Optional for backwards-compat
+     * with any code path that may emit this event without the full snapshot.
+     */
+    card?: import('@/components/GameCard').GameCardData;
+  };
   'event:diceRolled': { value: number };
 
   'hero:skillUsed': { skillId: string };
@@ -213,6 +235,48 @@ export type GameEventMap = {
     activeSlotIdx: number;
     oldCard: import('@/components/GameCard').GameCardData;
     newCard: import('@/components/GameCard').GameCardData;
+  };
+  /**
+   * 维度扭曲 (Dimension Warp) — emitted from `reduceDungeonCardSelection`'s
+   * `dungeon-preview-swap` case BEFORE the reducer applies the swap to state.
+   * The hook captures both cell rects synchronously at listener time (DOM is
+   * still pre-swap because React hasn't committed the patch yet) and paints a
+   * 3D-flip + position-swap overlay on top of both cells. The cells underneath
+   * are masked while the post-swap React render finishes.
+   */
+  'hero:dimensionWarp': {
+    cellIndex: number;
+    activeCard: import('@/components/GameCard').GameCardData;
+    previewCard: import('@/components/GameCard').GameCardData;
+  };
+  /**
+   * 乾坤挪移 / 命运挪移 — both cards are face-up active row cards that simply
+   * trade slot positions. Hook captures both active cell rects and pushes two
+   * arc-flight overlays into the existing `fateSwapFlights` RAF system (arc +
+   * rotate + scale + fade — same visual vocabulary as 深层交织). No flip
+   * because nothing is being revealed.
+   *
+   * Emitted from BOTH the schema-based resolver and the legacy magic-effects.ts
+   * branch for each card (4 emit sites total: 乾坤挪移 ×2, 命运挪移 ×2).
+   */
+  'magic:activeRowSwap': {
+    leftSlotIdx: number;
+    rightSlotIdx: number;
+    leftCard: import('@/components/GameCard').GameCardData;
+    rightCard: import('@/components/GameCard').GameCardData;
+  };
+  /**
+   * 迷宫回溯 (Labyrinth Retreat) — a single active row card flies along an
+   * arc to the deck pile (deckFlyTargetRef). Reuses the same arc-flight RAF
+   * loop with just one outbound flight and no inbound counterpart.
+   *
+   * Emitted from THREE sites: schema resolver auto-path (length===1), legacy
+   * resolver auto-path, and the shared `return-dungeon-bottom` reducer case
+   * in `rules/hero.ts` (player-pick + echo continuations).
+   */
+  'magic:returnToDeck': {
+    slotIdx: number;
+    card: import('@/components/GameCard').GameCardData;
   };
   'hero:cardRemoved': { cardId: string; animate: boolean };
 

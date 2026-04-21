@@ -7,7 +7,7 @@ interface EternalRelicBarProps {
   onRelicClick: (relic: EternalRelic) => void;
 }
 
-const RELIC_ICON_SIZE = 32;
+const RELIC_ICON_SIZE = 44;
 const LONG_PRESS_DELAY_MS = 400;
 
 export default function EternalRelicBar({ relics, onRelicClick }: EternalRelicBarProps) {
@@ -82,11 +82,10 @@ export default function EternalRelicBar({ relics, onRelicClick }: EternalRelicBa
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="relative rounded-full border-2 border-amber-400/70 bg-background/80 shadow-md hover:border-amber-300 hover:scale-110 transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 select-none touch-none"
+                  className="dh-eternal-relic-sticker touch-none"
                   style={{
-                    width: RELIC_ICON_SIZE + 8,
-                    height: RELIC_ICON_SIZE + 8,
-                    padding: 3,
+                    width: RELIC_ICON_SIZE,
+                    height: RELIC_ICON_SIZE,
                     WebkitTouchCallout: 'none',
                     WebkitUserSelect: 'none',
                   }}
@@ -102,7 +101,6 @@ export default function EternalRelicBar({ relics, onRelicClick }: EternalRelicBa
                   <img
                     src={relic.image}
                     alt={relic.name}
-                    className="w-full h-full rounded-full object-cover pointer-events-none select-none"
                     draggable={false}
                     style={{
                       WebkitTouchCallout: 'none',
@@ -111,7 +109,6 @@ export default function EternalRelicBar({ relics, onRelicClick }: EternalRelicBa
                     } as React.CSSProperties}
                     onContextMenu={(e) => e.preventDefault()}
                   />
-                  <div className="absolute inset-0 rounded-full ring-1 ring-amber-500/30 pointer-events-none" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-[220px]">

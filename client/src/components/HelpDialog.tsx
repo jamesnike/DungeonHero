@@ -6,7 +6,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
 import { HelpCircle, Package } from 'lucide-react';
 
 import heroPortrait from '@assets/generated_images/chibi_hero_adventurer_character.png';
@@ -34,13 +33,18 @@ function CardImg({ src, alt, size = 40 }: { src: string; alt: string; size?: num
   );
 }
 
-export default function HelpDialog({ buttonClassName }: { buttonClassName?: string }) {
+export default function HelpDialog({ buttonClassName: _buttonClassName }: { buttonClassName?: string } = {}) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" data-testid="button-help" className={buttonClassName}>
+        <button
+          type="button"
+          data-testid="button-help"
+          className="game-header__sticker-icon game-header__sticker-icon--help"
+          aria-label="游戏指南"
+        >
           <HelpCircle />
-        </Button>
+        </button>
       </DialogTrigger>
       <DialogContent className="max-w-[min(95vw,540px)] max-h-[90vh] overflow-y-auto">
         <DialogHeader>

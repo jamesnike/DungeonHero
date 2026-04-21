@@ -38,7 +38,7 @@ import { routeReflectDamageToHero } from './combat';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
-import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection } from './magic-effects';
+import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection, ensureMonsterEngaged } from './magic-effects';
 import { resolveAllPotionEffects, resolvePendingPotion } from './potion-effects';
 import { executeCardEffects, executeMagicCardEffects, executeOnEquip, executeOnEnterHand } from '../card-schema';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
@@ -1609,6 +1609,26 @@ function reduceDisposeEquipmentCard(
     enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card });
   }
 
+  // 装备/护符栏被新装备顶替（由 reducePlayCard / reduceEquipCard /
+  // GameBoard 拖拽 & 劝降 路径用 triggerLastWords:true 标记）。UI 侧
+  // 监听 equipment:displaced，从来源槽位飞向坟场 / 回收袋。
+  // 残骸回收符（salvage）的早返路径（卡片回到手牌）在前面已经 return，
+  // 不会触发这里——避免误发"飞向坟场"动画。
+  if (triggerLastWords) {
+    const slotForDisplace =
+      fromSlotId
+      ?? ((card as GameCardData & { fromSlot?: EquipmentSlotId }).fromSlot)
+      ?? 'equipmentSlot1';
+    sideEffects.push({
+      event: 'equipment:displaced',
+      payload: {
+        card,
+        slotId: slotForDisplace,
+        destination: toRecycleBag ? 'recycle-bag' : 'graveyard',
+      },
+    });
+  }
+
   if (!isDestruction) {
     enqueuedActions.push({ type: 'APPLY_DISCARD_EFFECTS', card, owner: 'player', opts: { toRecycleBag, isEquipmentDisplace: true } });
   }
@@ -2830,6 +2850,7 @@ function reduceFireMissileStormBolt(
   const [target, nextRng] = pickRandom(liveMonsters, state.rng);
   patch.rng = nextRng;
 
+  ensureMonsterEngaged(state, target, enqueuedActions);
   enqueuedActions.push({
     type: 'DEAL_DAMAGE_TO_MONSTER',
     monsterId: target.id,

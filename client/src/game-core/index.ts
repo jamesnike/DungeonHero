@@ -53,6 +53,9 @@ export { drain, processStep } from './pipeline';
 export type { PipelineResult, StepResult } from './pipeline';
 
 type Listener = () => void;
+type UndoListener = (stack: readonly GameState[]) => void;
+
+const DEFAULT_UNDO_MAX_SIZE = 10;
 
 export class GameEngine {
   private _state: GameState;
@@ -60,6 +63,30 @@ export class GameEngine {
   private _eventBus = new EventBus();
   private _batchDepth = 0;
   private _batchDirty = false;
+
+  // ---------------------------------------------------------------------
+  // Undo stack — owned by the engine, NOT by any UI component.
+  //
+  // Snapshots are stored by reference. This is safe because every reducer
+  // returns a brand-new top-level state via `applyPatch`'s `{ ...state,
+  // ...patch }`, so the captured reference will never be mutated in place.
+  // No deep clone is needed — pushing is O(1).
+  //
+  // Persistence (localStorage write) is the SUBSCRIBER's responsibility,
+  // delivered via `subscribeUndo`. Subscribers should defer the actual IO
+  // (microtask / setTimeout) so the UI thread isn't blocked on the user
+  // gesture that triggered the checkpoint.
+  // ---------------------------------------------------------------------
+  private _undoStack: GameState[] = [];
+  private _undoMaxSize = DEFAULT_UNDO_MAX_SIZE;
+  private _undoListeners = new Set<UndoListener>();
+  /**
+   * Microtask-scoped guard that swallows duplicate `pushUndoCheckpoint`
+   * calls within the same JS tick. Mirrors the legacy `undoGuardRef`
+   * behaviour so a hook that defensively pushes from multiple call sites
+   * for the same user gesture only stores one snapshot.
+   */
+  private _undoGuard = false;
 
   constructor(initialState?: Partial<GameState>) {
     this._state = { ...createInitialGameState(), ...initialState };
@@ -236,6 +263,136 @@ export class GameEngine {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Undo API
+  // -----------------------------------------------------------------------
+
+  /**
+   * Capture the current state as an undo checkpoint.
+   *
+   * O(1) — stores the current `_state` by reference. The reducer-immutability
+   * invariant (every reducer returns `{ ...state, ...patch }`) guarantees
+   * the captured reference will never be mutated in place by subsequent
+   * dispatches.
+   *
+   * If multiple call sites fire within the same JS tick (a single user
+   * gesture often triggers a chain of `dispatch`es, each preceded by a
+   * defensive push), only the first push is recorded.
+   */
+  pushUndoCheckpoint(): void {
+    if (this._undoGuard) return;
+    this._undoGuard = true;
+    Promise.resolve().then(() => { this._undoGuard = false; });
+
+    this._undoStack.push(this._state);
+    if (this._undoStack.length > this._undoMaxSize) {
+      this._undoStack.splice(0, this._undoStack.length - this._undoMaxSize);
+    }
+    this._syncUndoCountField();
+    // NOTE: We deliberately do NOT call `_notify()` here. Every call site
+    // of `pushUndoCheckpoint` is followed (synchronously, in the same JS
+    // task) by either a `dispatch(...)` or a React state setter that will
+    // trigger a re-render. That subsequent render reads the freshly bumped
+    // `undoCount` from `_state`, so the undo badge stays in sync without
+    // an extra `_notify()` here. Calling `_notify()` from this method
+    // would cause **two** React re-renders per user gesture (one from the
+    // checkpoint, one from the dispatch), each of which re-runs the
+    // GameBoard `saveGameState` useEffect (heavy `JSON.stringify(state)`
+    // + sync localStorage IO) — measurable as drag-drop / animation jank.
+    //
+    // Persistence of the undo stack itself still happens, via the listener
+    // notification below; subscribers are expected to defer the IO so it
+    // does not land on the user gesture's render path.
+    this._notifyUndoListeners();
+  }
+
+  /**
+   * Pop the most recent checkpoint and restore engine state to it.
+   * Returns the restored snapshot, or `null` if the stack was empty.
+   *
+   * Notifies state listeners (so React re-renders with the restored state)
+   * and undo listeners (so persistence layers re-write the trimmed stack).
+   */
+  popUndoCheckpoint(): GameState | null {
+    const snapshot = this._undoStack.pop();
+    if (!snapshot) return null;
+    this._state = snapshot;
+    this._syncUndoCountField();
+    if (this._batchDepth > 0) {
+      this._batchDirty = true;
+    } else {
+      this._notify();
+    }
+    this._notifyUndoListeners();
+    return snapshot;
+  }
+
+  /** Clear the entire undo stack. Engine state is unaffected. */
+  clearUndoStack(): void {
+    if (this._undoStack.length === 0 && this._state.undoCount === 0) return;
+    this._undoStack = [];
+    this._syncUndoCountField();
+    if (this._batchDepth > 0) {
+      this._batchDirty = true;
+    } else {
+      this._notify();
+    }
+    this._notifyUndoListeners();
+  }
+
+  /**
+   * Restore an undo stack from external storage (e.g. on page hydration).
+   * Truncates to `_undoMaxSize` and syncs the `undoCount` field.
+   * Does NOT notify state listeners — caller is expected to be in the
+   * hydration phase already managing notifications.
+   */
+  restoreUndoStack(snapshots: GameState[]): void {
+    this._undoStack = snapshots.slice(-this._undoMaxSize);
+    this._syncUndoCountField();
+  }
+
+  /** Read-only access to the current undo stack (for persistence). */
+  getUndoStack(): readonly GameState[] {
+    return this._undoStack;
+  }
+
+  /** Number of available undo checkpoints. */
+  getUndoCount(): number {
+    return this._undoStack.length;
+  }
+
+  /**
+   * Subscribe to undo stack changes. Listeners receive the current stack
+   * and are expected to schedule (deferred) persistence themselves.
+   * Returns an unsubscribe function.
+   */
+  subscribeUndo(listener: UndoListener): () => void {
+    this._undoListeners.add(listener);
+    return () => { this._undoListeners.delete(listener); };
+  }
+
+  /**
+   * Keep `_state.undoCount` in lock-step with `_undoStack.length` without
+   * going through the reducer. The field exists purely as UI bookkeeping
+   * (the badge on the undo button); no reducer logic depends on it.
+   * Mutating it here avoids an extra `dispatch SET_UNDO_COUNT` round-trip
+   * on every push, which previously fired on every drag-to-hero gesture.
+   */
+  private _syncUndoCountField(): void {
+    if (this._state.undoCount !== this._undoStack.length) {
+      this._state = { ...this._state, undoCount: this._undoStack.length };
+    }
+  }
+
+  private _notifyUndoListeners(): void {
+    const stack = this._undoStack;
+    this._undoListeners.forEach(l => {
+      try { l(stack); } catch (err) {
+        console.error('[GameEngine] Error in undo listener:', err);
+      }
+    });
+  }
+
   /**
    * Batch multiple dispatch calls into a single notification.
    *
@@ -272,7 +429,9 @@ export class GameEngine {
    */
   reset(overrides?: Partial<GameState>): void {
     this._state = { ...createInitialGameState(), ...overrides };
+    this._undoStack = [];
     this._notify();
+    this._notifyUndoListeners();
   }
 
   /**
@@ -281,6 +440,8 @@ export class GameEngine {
   destroy(): void {
     this._listeners.clear();
     this._eventBus.removeAllListeners();
+    this._undoListeners.clear();
+    this._undoStack = [];
   }
 
   // -----------------------------------------------------------------------

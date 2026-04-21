@@ -68,8 +68,14 @@ describe('Event grants for starter permanent magics — id must strip to starter
 
       const drained = drain(stateWithCardAndMonster, [{ type: 'PLAY_CARD', cardId: stunStrike.id }] as any);
 
+      // 单目标伤害 magic 现在统一弹 picker — 显式选 m1 才结算
+      expect((drained.state as any).pendingMagicAction).toBeTruthy();
+      const final = drain({ ...drained.state, phase: 'idle' } as GameState, [
+        { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'stun-strike', monsterId: 'm1' } as any,
+      ]);
+
       // Lv0 雷震击 deals 1×2 = 2 spell damage (per design — see CARD_POOL_REFERENCE).
-      const monsterAfter = (drained.state.activeCards as any[]).find(c => c?.id === 'm1');
+      const monsterAfter = (final.state.activeCards as any[]).find(c => c?.id === 'm1');
       expect(monsterAfter).toBeDefined();
       expect(monsterAfter.hp).toBeLessThan(10);
     });

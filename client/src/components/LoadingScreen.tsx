@@ -274,10 +274,12 @@ const WARM_ANIMATION_CLASSES = [
   'combat-overlay__shape--heal',
   'combat-overlay__shape--heal-rise',
   'combat-overlay__shape--heal-ring',
-  // Combat: defeat
-  'combat-overlay__shape--defeat',
-  'combat-overlay__shape--defeat-burst',
-  'combat-overlay__shape--defeat-fade',
+  // Combat: hero rising-hearts heal (HeroCard only)
+  'combat-overlay__shape--hero-heal-heart',
+  // Combat: blood-splatter damage shared by HeroCard + GameCard (monsters)
+  'combat-overlay__shape--card-bleed-splash',
+  'combat-overlay__shape--card-bleed-drop',
+  // Combat: defeat — handled by Lottie + dh-card-wrapper[data-defeat] keyframes (warmed below)
 ];
 
 function warmCssAnimations(): Promise<void> {
@@ -293,6 +295,14 @@ function warmCssAnimations(): Promise<void> {
       el.style.animationIterationCount = '1';
       container.appendChild(el);
     });
+    // Warm the monster-death card-level keyframe (selector-driven via attribute).
+    const defeatEl = document.createElement('div');
+    defeatEl.className = 'dh-card-wrapper';
+    defeatEl.setAttribute('data-defeat', 'true');
+    defeatEl.style.animationDuration = '1ms';
+    defeatEl.style.animationDelay = '0s';
+    defeatEl.style.animationIterationCount = '1';
+    container.appendChild(defeatEl);
     document.body.appendChild(container);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -300,6 +310,25 @@ function warmCssAnimations(): Promise<void> {
         resolve();
       });
     });
+  });
+}
+
+/**
+ * Pre-fetch the monster death Lottie JSON so the first kill animates without a
+ * network/parse hitch. Fire-and-forget — warm cache only, no gating of progress.
+ * Matches the lazy import inside GameCard.tsx.
+ *
+ * NOTE: Damage hits used to share this asset via a sibling MonsterDamageLottie
+ * component, but reusing the death explosion for a non-fatal "hit" had an
+ * unfixable artifact: the asset's first frames already include darker smoke
+ * pixels around the bright core, so the damage overlay visually washed the
+ * card grey for its whole duration. Damage now uses the same shared
+ * blood-splatter as the hero (`combat-overlay__shape--card-bleed-*`) and
+ * no longer needs Lottie warming here.
+ */
+function warmMonsterDeathLottie(): void {
+  void import('@/components/effects/MonsterDeathLottie').catch(() => {
+    // Lottie failure should not block app boot; the GameCard Suspense fallback handles it.
   });
 }
 
@@ -397,6 +426,7 @@ export default function LoadingScreen({ onReady }: LoadingScreenProps) {
     preloadFonts().then(tick);
     warmCssAnimations().then(tick);
     warmCanvas2D().then(tick);
+    warmMonsterDeathLottie();
 
     if (stickersRendered) {
       tick();

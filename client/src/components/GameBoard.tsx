@@ -60,6 +60,8 @@ import { NarrowSidebar } from './game-board/components/NarrowSidebar';
 import FlightOverlayLayer from './game-board/components/FlightOverlayLayer';
 import { InCellFlipOverlayLayer } from './game-board/components/InCellFlipOverlayLayer';
 import { useInCellFlipAnimation } from './game-board/hooks/useInCellFlipAnimation';
+import { DimensionWarpOverlayLayer } from './game-board/components/DimensionWarpOverlayLayer';
+import { useDimensionWarpAnimation } from './game-board/hooks/useDimensionWarpAnimation';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
 import { useGameEngine, useShallowGameState, useDispatch, useGameEvent } from '@/hooks/useGameEngine';
 import { useCardOperations, type CardOperationsDeps } from '@/hooks/useCardOperations';
@@ -190,6 +192,7 @@ import {
   createMagicBoltCard,
 } from '@/game-core/deck';
 import bloodCurseSealImage from '@assets/generated_images/card_curse_blood_seal.png';
+import cardBackImage from '@assets/generated_images/card_back_design.png';
 import {
   INITIAL_HP,
   INITIAL_GOLD,
@@ -284,7 +287,11 @@ const DISCARD_SHOCK_ARC_VARIANCE = 52;
 const DISCARD_SHOCK_PROJECTILE_SIZE = 56;
 /** 格挡动画与反弹动画之间的间隔（ms） */
 const COMBAT_BLOCK_TO_REFLECT_MS = 220;
-const DEFEAT_ANIMATION_DURATION = 950;
+// Keep in sync with useCombatActions.ts DEFEAT_ANIMATION_DURATION
+// and the dh-card-death keyframe duration in client/src/index.css.
+// 1400ms covers the Lottie explosion (~1.5s clipped) + the card grayscale/shrink/fade,
+// and gates the monster reward modal until the animation finishes.
+const DEFEAT_ANIMATION_DURATION = 1400;
 
 const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: number) =>
   Boolean(
@@ -297,6 +304,7 @@ const pointInsideRect = (rect: DOMRect | null, clientX: number, clientY: number)
 const WATERFALL_DROP_DURATION = 650;
 const WATERFALL_DISCARD_DURATION = 450;
 const WATERFALL_DEAL_DURATION = 550;
+const WATERFALL_REVEAL_DURATION = 400;
 
 const CLASS_FLIGHT_BASE_DURATION = 900;
 const CLASS_FLIGHT_VARIANCE = 250;
@@ -371,10 +379,11 @@ export default function GameBoard() {
     slotBattleSpiritBonus, slotBattleSpiritUsed: slotBattleSpiritUsedMap,
     pendingHeroSkillAction, pendingHeroMagicAction,
     pendingMagicAction, pendingPotionAction,
-    activeMonsterReward,
+    activeMonsterReward, monsterRewardMinimized,
     shopModalOpen, shopModalMinimized,
     eventModalOpen, eventModalMinimized,
-    graveyardDiscoverState,
+    discoverModalOpen, discoverModalMinimized,
+    graveyardDiscoverState, graveyardDiscoverMinimized,
     gameOver, showSkillSelection, showCardDraft,
     isHydrated, heroSkillBanner,
     activeCardStacks,
@@ -413,10 +422,11 @@ export default function GameBoard() {
     slotBattleSpiritBonus: s.slotBattleSpiritBonus, slotBattleSpiritUsed: s.slotBattleSpiritUsed,
     pendingHeroSkillAction: s.pendingHeroSkillAction, pendingHeroMagicAction: s.pendingHeroMagicAction,
     pendingMagicAction: s.pendingMagicAction, pendingPotionAction: s.pendingPotionAction,
-    activeMonsterReward: s.activeMonsterReward,
+    activeMonsterReward: s.activeMonsterReward, monsterRewardMinimized: s.monsterRewardMinimized,
     shopModalOpen: s.shopModalOpen, shopModalMinimized: s.shopModalMinimized,
     eventModalOpen: s.eventModalOpen, eventModalMinimized: s.eventModalMinimized,
-    graveyardDiscoverState: s.graveyardDiscoverState,
+    discoverModalOpen: s.discoverModalOpen, discoverModalMinimized: s.discoverModalMinimized,
+    graveyardDiscoverState: s.graveyardDiscoverState, graveyardDiscoverMinimized: s.graveyardDiscoverMinimized,
     gameOver: s.gameOver, showSkillSelection: s.showSkillSelection,
     showCardDraft: s.showCardDraft,
     isHydrated: s.isHydrated, heroSkillBanner: s.heroSkillBanner,
@@ -429,10 +439,19 @@ export default function GameBoard() {
   type GS = GameState;
 
   // hpRef/goldRef eliminated — use engine.getState().hp / .gold in closures
-  const undoStackRef = useRef<GameState[]>(
-    (loadUndoStack() as any[]).filter((s: any) => s?.hp != null && s?.handCards) as GameState[],
-  );
-  const undoGuardRef = useRef(false);
+  //
+  // Undo stack lives in the engine (see GameEngine.pushUndoCheckpoint).
+  // Hydrate it once from localStorage on mount; persistence on subsequent
+  // mutations is wired via `engine.subscribeUndo` further below, with the
+  // actual `localStorage.setItem` deferred to a microtask so it never
+  // blocks the user gesture that triggered the checkpoint.
+  const undoHydratedRef = useRef(false);
+  if (!undoHydratedRef.current) {
+    undoHydratedRef.current = true;
+    const persisted = (loadUndoStack() as any[])
+      .filter((s: any) => s?.hp != null && s?.handCards) as GameState[];
+    if (persisted.length > 0) engine.restoreUndoStack(persisted);
+  }
   /** 每次 hydrate / 新开局递增；格挡等异步结算在 await 后若发现过期则立刻放弃，避免撤销后仍写入旧闭包数据 */
   const combatAsyncEpochRef = useRef(0);
   // amuletSlotsRef eliminated — use engine.getState().amuletSlots in closures
@@ -706,6 +725,7 @@ export default function GameBoard() {
     handlePotionSlotSelection,
     handleHeroSkillMonsterSelection,
     handleMagicMonsterSelection,
+    handleMagicHeroSelfTarget,
     handleDungeonCardSelection,
     handleBackpackReorganizeConfirm,
     handleHandDiscardSelectionConfirm,
@@ -868,6 +888,11 @@ export default function GameBoard() {
   const classDeckFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const activeCellRefs = useRef<Array<HTMLDivElement | null>>(Array(5).fill(null));
   const { inCellFlips } = useInCellFlipAnimation(activeCellRefs);
+  // 维度扭曲 (Dimension Warp) overlay choreography. Listens for the
+  // `hero:dimensionWarp` side effect emitted from `reduceDungeonCardSelection`
+  // and mounts a 2-card 3D-flip + position-swap overlay on top of the active
+  // cell + the preview cell directly above it for ~1.15s.
+  const { dimensionWarps } = useDimensionWarpAnimation(activeCellRefs, previewCellRefs);
   const {
     classDeckFlights, setClassDeckFlights,
     fateSwapFlights, setFateSwapFlights,
@@ -1440,6 +1465,13 @@ export default function GameBoard() {
     addGameLog('equip', `${itemName} 遗言：恢复了 ${amount} 点生命`);
   });
 
+  // 装备栏被新装备顶替时，被挤掉的旧装备从原槽位飞向坟场 / 回收袋。
+  // 触发源：reduceDisposeEquipmentCard（覆盖 PLAY_CARD 点击 / EQUIP_CARD /
+  // GameBoard 拖拽与劝降的全部 displacement 路径）。
+  useGameEvent('equipment:displaced', ({ card, slotId, destination }) => {
+    void triggerDiscardFlight(card, destination, slotId);
+  });
+
   // --- Game lifecycle event listeners ---
 
   useGameEvent('game:started', () => {
@@ -1478,9 +1510,20 @@ export default function GameBoard() {
   });
 
   const eventChoiceProcessingRef = useRef(false);
-  /** Event / Shop 最小化时冻结主界面操作（与弃牌雷击共用 fullBoardInteractionLocked） */
+  /**
+   * 任何"折叠中"的弹窗都冻结主界面操作（与弃牌雷击共用 fullBoardInteractionLocked）。
+   * 用同一条规则覆盖所有折叠态弹窗——Event / Shop / 专属发现 / 坟场召回 /
+   * 战利品 / 失败结算——只要其中至少一个处于"open + minimized"，棋盘
+   * （Dungeon、Hero Row、手牌、装备槽等）就完全 freeze，避免玩家在弹窗
+   * 隐藏时继续推进游戏导致状态错乱。展开任意 pill 即可恢复操作。
+   */
   const minimizedModalLocksBoard =
-    (eventModalOpen && eventModalMinimized) || (shopModalOpen && shopModalMinimized) || (gameOver && gameOverMinimized);
+    (eventModalOpen && eventModalMinimized) ||
+    (shopModalOpen && shopModalMinimized) ||
+    (discoverModalOpen && discoverModalMinimized) ||
+    (Boolean(graveyardDiscoverState) && graveyardDiscoverMinimized) ||
+    (Boolean(activeMonsterReward) && monsterRewardMinimized) ||
+    (gameOver && gameOverMinimized);
   const fullBoardInteractionLocked =
     discardShockInteractionLocked || flipShockInteractionLocked || minimizedModalLocksBoard;
   const fullBoardInteractionLockedRef = useRef(false);
@@ -2957,6 +3000,110 @@ export default function GameBoard() {
   }, [startFateSwapFlightAnimation]);
 
   // ---------------------------------------------------------------------------
+  // 乾坤挪移 / 命运挪移 — two active-row cards trade slot positions.
+  // Reuses the FateSwapFlight RAF system: two arc flights between the two
+  // active cells, one in each direction, simultaneous. Cards are face-up
+  // before AND after the swap, so we don't need a flip phase — the arc +
+  // rotate + scale + fade vocabulary (same as 深层交织) carries the magic
+  // intent. The cells underneath show post-swap state; the fade-in/fade-out
+  // on the overlays masks the brief moment when both versions are visible.
+  // ---------------------------------------------------------------------------
+  const triggerActiveRowSwapFlight = useCallback((
+    leftSlotIdx: number,
+    rightSlotIdx: number,
+    leftCard: GameCardData,
+    rightCard: GameCardData,
+  ) => {
+    if (typeof window === 'undefined') return;
+    const surfaceEl = gameSurfaceRef.current;
+    const leftCell = activeCellRefs.current[leftSlotIdx];
+    const rightCell = activeCellRefs.current[rightSlotIdx];
+    if (!surfaceEl || !leftCell || !rightCell) return;
+
+    const surfaceRect = surfaceEl.getBoundingClientRect();
+    const leftRect = leftCell.getBoundingClientRect();
+    const rightRect = rightCell.getBoundingClientRect();
+    const leftCenter: Point = {
+      x: leftRect.left + leftRect.width / 2 - surfaceRect.left,
+      y: leftRect.top + leftRect.height / 2 - surfaceRect.top,
+    };
+    const rightCenter: Point = {
+      x: rightRect.left + rightRect.width / 2 - surfaceRect.left,
+      y: rightRect.top + rightRect.height / 2 - surfaceRect.top,
+    };
+    const baseTime = performance.now();
+    const duration = animSpeed(FATE_SWAP_FLIGHT_DURATION);
+
+    const flights: FateSwapFlight[] = [
+      {
+        id: `active-swap-l2r-${leftCard.id}-${baseTime}`,
+        card: leftCard,
+        start: leftCenter,
+        end: rightCenter,
+        startTime: baseTime,
+        duration,
+        progress: 0,
+        arcHeight: FATE_SWAP_ARC_HEIGHT,
+      },
+      {
+        id: `active-swap-r2l-${rightCard.id}-${baseTime}`,
+        card: rightCard,
+        start: rightCenter,
+        end: leftCenter,
+        startTime: baseTime,
+        duration,
+        progress: 0,
+        arcHeight: FATE_SWAP_ARC_HEIGHT,
+      },
+    ];
+
+    fateSwapFlightsRef.current = [...fateSwapFlightsRef.current, ...flights];
+    setFateSwapFlights(fateSwapFlightsRef.current);
+    startFateSwapFlightAnimation();
+  }, [startFateSwapFlightAnimation]);
+
+  // ---------------------------------------------------------------------------
+  // 迷宫回溯 — single active-row card flies to the deck pile.
+  // Same RAF system, only the outbound flight (no inbound counterpart).
+  // ---------------------------------------------------------------------------
+  const triggerReturnToDeckFlight = useCallback((slotIdx: number, card: GameCardData) => {
+    if (typeof window === 'undefined') return;
+    const surfaceEl = gameSurfaceRef.current;
+    const activeCell = activeCellRefs.current[slotIdx];
+    const deckEl = deckFlyTargetRef.current;
+    if (!surfaceEl || !activeCell || !deckEl) return;
+
+    const surfaceRect = surfaceEl.getBoundingClientRect();
+    const cellRect = activeCell.getBoundingClientRect();
+    const deckRect = deckEl.getBoundingClientRect();
+    const cellCenter: Point = {
+      x: cellRect.left + cellRect.width / 2 - surfaceRect.left,
+      y: cellRect.top + cellRect.height / 2 - surfaceRect.top,
+    };
+    const deckCenter: Point = {
+      x: deckRect.left + deckRect.width / 2 - surfaceRect.left,
+      y: deckRect.top + deckRect.height / 2 - surfaceRect.top,
+    };
+    const baseTime = performance.now();
+    const duration = animSpeed(FATE_SWAP_FLIGHT_DURATION);
+
+    const flight: FateSwapFlight = {
+      id: `return-deck-${card.id}-${baseTime}`,
+      card,
+      start: cellCenter,
+      end: deckCenter,
+      startTime: baseTime,
+      duration,
+      progress: 0,
+      arcHeight: FATE_SWAP_ARC_HEIGHT,
+    };
+
+    fateSwapFlightsRef.current = [...fateSwapFlightsRef.current, flight];
+    setFateSwapFlights(fateSwapFlightsRef.current);
+    startFateSwapFlightAnimation();
+  }, [startFateSwapFlightAnimation]);
+
+  // ---------------------------------------------------------------------------
   // Graveyard Stack Flight (Graveyard Amulet: graveyard → dungeon cell)
   // ---------------------------------------------------------------------------
   const GRAVEYARD_STACK_FLIGHT_DURATION = 600;
@@ -3366,7 +3513,15 @@ export default function GameBoard() {
   }, [updateDiscardFlightAnimation]);
 
   const triggerDiscardFlight = useCallback(
-    (card: GameCardData, destination: 'graveyard' | 'recycle-bag'): Promise<void> => {
+    (
+      card: GameCardData,
+      destination: 'graveyard' | 'recycle-bag',
+      // 当卡片在被挤掉的瞬间 DOM 已经被新卡顶替（例如 reducer 同步把
+      // equipmentSlot1/amuletSlots 替换掉了），按 data-testid 查不到原卡。
+      // 这时传入对应栏位的 hint，用栏位 cell 的 boundingRect 当起点，
+      // 飞行方向仍然是「装备/护符栏 → 坟场」。
+      sourceHint?: FlightSourceHint,
+    ): Promise<void> => {
       if (typeof window === 'undefined') return Promise.resolve();
       const surfaceEl = gameSurfaceRef.current;
       const targetEl = destination === 'graveyard'
@@ -3377,10 +3532,26 @@ export default function GameBoard() {
       const surfaceRect = surfaceEl.getBoundingClientRect();
       const targetRect = targetEl.getBoundingClientRect();
 
-      const cardEl = surfaceEl.querySelector(
-        `[data-testid="card-${card.type}-${card.id}"]`,
-      ) as HTMLElement | null;
-      const sourceRect = cardEl?.getBoundingClientRect() ?? handAreaRef.current?.getBoundingClientRect();
+      let hintRect: DOMRect | null = null;
+      if (sourceHint === 'amulet') {
+        hintRect = heroRowCellRefs.current[HERO_ROW_AMULET_INDEX]?.getBoundingClientRect() ?? null;
+      } else if (sourceHint === 'equipmentSlot1') {
+        hintRect = heroRowCellRefs.current[HERO_ROW_EQUIPMENT_1_INDEX]?.getBoundingClientRect() ?? null;
+      } else if (sourceHint === 'equipmentSlot2') {
+        hintRect = heroRowCellRefs.current[HERO_ROW_EQUIPMENT_2_INDEX]?.getBoundingClientRect() ?? null;
+      } else if (sourceHint === 'graveyard') {
+        hintRect = graveyardCellRef.current?.getBoundingClientRect() ?? null;
+      }
+
+      const cardEl = hintRect
+        ? null
+        : (surfaceEl.querySelector(
+            `[data-testid="card-${card.type}-${card.id}"]`,
+          ) as HTMLElement | null);
+      const sourceRect =
+        hintRect
+        ?? cardEl?.getBoundingClientRect()
+        ?? handAreaRef.current?.getBoundingClientRect();
       if (!sourceRect) return Promise.resolve();
 
       const start: Point = {
@@ -3549,11 +3720,28 @@ export default function GameBoard() {
     };
   }, [adjustShopLevel]);
 
-  useEffect(() => {
-    if (!isHydrated || gameOver) {
-      return;
-    }
-    const persistedState = serializeGameState(engine.getState());
+  // Game-state persistence — debounced + macrotask-deferred.
+  //
+  // Why: serializeGameState() + JSON.stringify(state) + localStorage.setItem
+  // are all synchronous and block the main thread. Running them inside a
+  // depless useEffect (which fires on every render) puts a heavy IO write
+  // on the user-gesture render path, which manifests as drag-drop / animation
+  // jank — particularly visible during long-running flight animations
+  // (classDeckFlight, waterfall) where stutter is unmistakable.
+  //
+  // Strategy: the effect just *schedules* a flush via setTimeout. The flush
+  // body reads engine.getState() at flush time, so coalesced renders within
+  // the debounce window collapse into a single write of the latest state.
+  // On unmount, we synchronously flush so we don't lose the last snapshot
+  // (e.g. when the user navigates away mid-debounce).
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const PERSIST_DEBOUNCE_MS = 250;
+
+  const flushPersistedGameState = useCallback(() => {
+    persistTimerRef.current = null;
+    const state = engine.getState();
+    if (!state.isHydrated || state.gameOver) return;
+    const persistedState = serializeGameState(state);
     const inFlight = backpackHandFlightsRef.current;
     let stateToSave = persistedState;
     if (inFlight.length > 0) {
@@ -3574,11 +3762,31 @@ export default function GameBoard() {
     }
     lastPersistedStateRef.current = serialized;
     saveGameState(stateToSave);
+  }, [engine]);
+
+  useEffect(() => {
+    if (!isHydrated || gameOver) return;
+    if (persistTimerRef.current !== null) return;
+    persistTimerRef.current = setTimeout(flushPersistedGameState, PERSIST_DEBOUNCE_MS);
   });
+
+  useEffect(() => {
+    return () => {
+      if (persistTimerRef.current === null) return;
+      clearTimeout(persistTimerRef.current);
+      flushPersistedGameState();
+    };
+  }, [flushPersistedGameState]);
 
   useEffect(() => {
     if (!isHydrated || !gameOver) {
       return;
+    }
+    // Cancel any pending debounced persistence so a stale write doesn't
+    // resurrect game state after we've cleared it.
+    if (persistTimerRef.current !== null) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
     }
     clearGameState();
     lastPersistedStateRef.current = null;
@@ -3984,7 +4192,7 @@ export default function GameBoard() {
       activeCardStacks: snapshot.activeCardStacks ?? {},
       waterfallDealBonus: snapshot.waterfallDealBonus ?? 0,
       eternalRelics: Array.isArray(snapshot.eternalRelics) ? snapshot.eternalRelics as import('@/game-core/types').EternalRelic[] : getStartingRelics(),
-      undoCount: undoStackRef.current.length,
+      undoCount: engine.getUndoCount(),
       isHydrated: true,
       totalWins: getTotalWins(),
 
@@ -4160,28 +4368,69 @@ export default function GameBoard() {
     }
   };
 
-  const MAX_UNDO_STACK = 10;
-
+  // pushUndoSnapshot / clearUndoStack now thin-delegate to the engine. The
+  // engine stores snapshots by reference (no JSON.parse(JSON.stringify) deep
+  // clone — relies on the reducer-immutability invariant). Persistence to
+  // localStorage is wired via `engine.subscribeUndo` in the effect below
+  // and is **debounced + macrotask-deferred** so the heavy
+  // `JSON.stringify(stack)` + `setItem` never blocks the user gesture or
+  // the React commit/paint that follows it.
   const pushUndoSnapshot = useCallback(() => {
-    if (undoGuardRef.current) return;
-    undoGuardRef.current = true;
-    Promise.resolve().then(() => { undoGuardRef.current = false; });
-
-    const snapshot = JSON.parse(JSON.stringify(engine.getState())) as GameState;
-    const stack = undoStackRef.current;
-    stack.push(snapshot);
-    if (stack.length > MAX_UNDO_STACK) {
-      stack.splice(0, stack.length - MAX_UNDO_STACK);
-    }
-    dispatch({ type: 'SET_UNDO_COUNT', count: stack.length });
-    saveUndoStack(stack);
+    engine.pushUndoCheckpoint();
   }, [engine]);
 
   const clearUndoStack = useCallback(() => {
-    undoStackRef.current = [];
-    dispatch({ type: 'SET_UNDO_COUNT', count: 0 });
+    engine.clearUndoStack();
     clearUndoStorage();
-  }, []);
+  }, [engine]);
+
+  // Subscribe to engine undo stack changes and persist to localStorage off
+  // the critical path.
+  //
+  // History: an earlier version used `queueMicrotask`, but microtasks run
+  // at the end of the same task — i.e. AFTER React commit but BEFORE
+  // browser paint — so the ~30–100ms `JSON.stringify(10×GameState)` +
+  // `localStorage.setItem` cost still landed inside the user-gesture frame
+  // and made every "play a card" feel laggy. We need a true macrotask
+  // (setTimeout) to yield the main thread back to the browser so it can
+  // paint the post-action UI first; the persistence write then runs in a
+  // later frame where a missed deadline isn't visible to the player.
+  //
+  // Additionally we debounce: a single "play a card" gesture often pushes
+  // multiple checkpoints in a tight burst (defensive pushes from several
+  // hooks), and rapid play sessions chain many gestures together — without
+  // debouncing each push would re-stringify the entire stack. Coalescing
+  // to one write per ~250ms idle window cuts that to a single IO.
+  useEffect(() => {
+    const SAVE_DEBOUNCE_MS = 250;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let latest: readonly GameState[] = engine.getUndoStack();
+
+    const flush = () => {
+      timer = null;
+      // Cast to mutable for the storage signature; saveUndoStack only
+      // stringifies the input.
+      saveUndoStack(latest as unknown as unknown[]);
+    };
+
+    const unsubscribe = engine.subscribeUndo((stack) => {
+      latest = stack;
+      if (timer !== null) return;
+      timer = setTimeout(flush, SAVE_DEBOUNCE_MS);
+    });
+
+    return () => {
+      unsubscribe();
+      if (timer !== null) {
+        // Flush any pending stack on unmount so we don't lose checkpoints
+        // captured right before navigation. This is synchronous but only
+        // happens on teardown, not on the hot path.
+        clearTimeout(timer);
+        timer = null;
+        saveUndoStack(latest as unknown as unknown[]);
+      }
+    };
+  }, [engine]);
 
   // Card-gain amulet callbacks
   onNewCardGainedRef.current = (count: number, source?: 'graveyard' | 'classPool') => {
@@ -4232,12 +4481,13 @@ export default function GameBoard() {
   };
 
   const handleUndo = useCallback(() => {
-    const stack = undoStackRef.current;
-    if (stack.length === 0) return;
+    if (engine.getUndoStack().length === 0) return;
     if (fullBoardInteractionLockedRef.current) return;
-    const snapshot = stack.pop()!;
-    dispatch({ type: 'SET_UNDO_COUNT', count: stack.length });
-    saveUndoStack(stack);
+    // popUndoCheckpoint replaces engine state in place and notifies state
+    // listeners + the undo subscription (which schedules the microtask
+    // localStorage rewrite). No need for an extra `saveUndoStack` here.
+    const snapshot = engine.popUndoCheckpoint();
+    if (!snapshot) return;
 
     // Cancel any in-progress waterfall animations
     clearWaterfallTimeouts();
@@ -4324,9 +4574,20 @@ export default function GameBoard() {
       ghostBladeExileResolverRef.current();
       ghostBladeExileResolverRef.current = null;
     }
+    // Dagger self-destruct prompt is purely a hook-side awaiter (the side
+    // effect that opened it lives in the snapshot we just discarded). If we
+    // undo while the prompt is open, resolve the awaiter as "declined" and
+    // close the modal — otherwise it stays on screen forever and any later
+    // confirm/decline click operates on a state that no longer exists.
+    if (daggerSelfDestructResolverRef.current) {
+      daggerSelfDestructResolverRef.current(false);
+      daggerSelfDestructResolverRef.current = null;
+    }
+    setDaggerSelfDestructPrompt(null);
 
-    // Restore full engine state from snapshot
-    engine.replaceState(snapshot);
+    // Engine state was already restored to `snapshot` by popUndoCheckpoint
+    // above; no need for an explicit replaceState here. Continue with the
+    // out-of-band side effects that mirror engine state into UI refs.
 
     // Sync game log localStorage with restored state
     const restoredLog = snapshot.gameLogEntries ?? [];
@@ -4859,23 +5120,47 @@ export default function GameBoard() {
       assignments: plan.dropAssignments.map(({ previewIndex, slotIndex }) => ({ previewIndex, slotIndex })),
     });
 
-    setWaterfallAnimation({
-      phase: plan.resolvedDropCards.length > 0 ? 'dropping' : plan.discardCard ? 'discarding' : 'dealing',
-      isActive: true,
-      droppingSlots: plan.resolvedDropCards.length > 0 ? plan.dropPreviewIndices : [],
-      landingSlots: [],
-      discardSlot: plan.resolvedDropCards.length === 0 ? plan.discardPreviewIndex : null,
-      discardDestination: plan.discardDestination,
-      dealingSlots: [],
-      sequenceId,
-    });
+    // Preview-row reveal phase: cards are normally rendered face-down
+    // (see PreviewRow.tsx). Before the actual drop/discard/deal motion runs,
+    // we play a short flip animation that turns every non-empty preview cell
+    // face-up so the player can see what's about to happen. The reveal is
+    // purely visual — `previewCards` state is unchanged.
+    const proceedWithWaterfall = () => {
+      setWaterfallAnimation({
+        phase: plan.resolvedDropCards.length > 0 ? 'dropping' : plan.discardCard ? 'discarding' : 'dealing',
+        isActive: true,
+        droppingSlots: plan.resolvedDropCards.length > 0 ? plan.dropPreviewIndices : [],
+        landingSlots: [],
+        discardSlot: plan.resolvedDropCards.length === 0 ? plan.discardPreviewIndex : null,
+        discardDestination: plan.discardDestination,
+        dealingSlots: [],
+        sequenceId,
+      });
 
-    if (plan.resolvedDropCards.length > 0) {
-      queueWaterfallTimeout(handleWaterfallDropComplete, animSpeed(WATERFALL_DROP_DURATION), 'drop-phase-timeout');
-    } else if (plan.discardCard) {
-      queueWaterfallTimeout(handleWaterfallDiscardComplete, animSpeed(WATERFALL_DISCARD_DURATION), 'discard-phase-timeout');
+      if (plan.resolvedDropCards.length > 0) {
+        queueWaterfallTimeout(handleWaterfallDropComplete, animSpeed(WATERFALL_DROP_DURATION), 'drop-phase-timeout');
+      } else if (plan.discardCard) {
+        queueWaterfallTimeout(handleWaterfallDiscardComplete, animSpeed(WATERFALL_DISCARD_DURATION), 'discard-phase-timeout');
+      } else {
+        startWaterfallDeal();
+      }
+    };
+
+    const hasFaceDownCards = engine.getState().previewCards.some(Boolean);
+    if (hasFaceDownCards) {
+      setWaterfallAnimation({
+        phase: 'revealing',
+        isActive: true,
+        droppingSlots: [],
+        landingSlots: [],
+        discardSlot: null,
+        discardDestination: 'graveyard',
+        dealingSlots: [],
+        sequenceId,
+      });
+      queueWaterfallTimeout(proceedWithWaterfall, animSpeed(WATERFALL_REVEAL_DURATION), 'reveal-phase-complete');
     } else {
-      startWaterfallDeal();
+      proceedWithWaterfall();
     }
   };
 
@@ -5224,7 +5509,6 @@ export default function GameBoard() {
     bulwarkTempArmorRef,
     computePersuadeSuccessRate,
     setPersuadeTempDiscount,
-    undoStackRef,
     setMonsterDefeatStates,
     setMonsterBleedStates,
     setHealing,
@@ -5414,6 +5698,8 @@ export default function GameBoard() {
     removePendingDungeonCard,
     triggerClassDeckFlight,
     triggerFateSwapFlight,
+    triggerActiveRowSwapFlight,
+    triggerReturnToDeckFlight,
     clearAllBackpackHandFallbacks,
     setDeckPeekState,
     deckJudgePeekCloseRef,
@@ -5508,21 +5794,6 @@ export default function GameBoard() {
     const recordHandCardConsumption = (spentCard: GameCardData) => {
       if (spentCard.type === 'potion') {
         addToGraveyard(spentCard);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            sessionId:'debug-session',
-            runId:'run3',
-            hypothesisId:'M',
-            location:'GameBoard.tsx:recordHandCardConsumption',
-            message:'Potion routed to graveyard',
-            data:{cardId:spentCard.id, cardType:spentCard.type},
-            timestamp:Date.now()
-          })
-        }).catch(()=>{});
-        // #endregion
         return;
       }
       if (spentCard.type === 'magic' || spentCard.type === 'hero-magic' || spentCard.type === 'curse') {
@@ -5532,21 +5803,6 @@ export default function GameBoard() {
       }
       if (spentCard.type === 'event') {
         addToGraveyard(spentCard);
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            sessionId:'debug-session',
-            runId:'run3',
-            hypothesisId:'M',
-            location:'GameBoard.tsx:recordHandCardConsumption',
-            message:'Event routed to graveyard',
-            data:{cardId:spentCard.id, cardType:spentCard.type},
-            timestamp:Date.now()
-          })
-        }).catch(()=>{});
-        // #endregion
       }
     };
     
@@ -5569,25 +5825,6 @@ export default function GameBoard() {
       }
 
       recordHandCardConsumption(card);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          sessionId:'debug-session',
-          runId:'run3',
-          hypothesisId:'N',
-          location:'GameBoard.tsx:handleCardToHero',
-          message:'Hand card consumed',
-          data:{
-            cardId:card.id,
-            cardType:card.type,
-            heroFrameDropIntent:heroFrameDropIntentRef.current
-          },
-          timestamp:Date.now()
-        })
-      }).catch(()=>{});
-      // #endregion
 
       tickRecycleForge();
 
@@ -6142,6 +6379,10 @@ export default function GameBoard() {
         // (the post-state's amuletSlots no longer contains it, so the diff
         // produces a negative delta automatically).
         addGameLog('amulet', `卸下护符：${displaced.name}`);
+        // 与装备被顶替的逻辑对齐：从护符栏飞向坟场。此时 dispatch 已经
+        // 把这枚护符从 amuletSlots 移除（card-by-id 的 DOM 已不存在），
+        // 所以走 'amulet' sourceHint，用护符栏 cell 的位置作为飞行起点。
+        void triggerDiscardFlight(displaced, 'graveyard', 'amulet');
         discardCardToGraveyard(displaced, { owner: 'player' });
       }
 
@@ -6444,6 +6685,13 @@ export default function GameBoard() {
   const magicSlotTargeting = pendingMagicAction?.step === 'slot-select';
   const magicMonsterTargeting = pendingMagicAction?.step === 'monster-select';
   const magicDungeonTargeting = pendingMagicAction?.step === 'dungeon-select';
+  // 单目标伤害 magic 自伤路径：在 monster-select 阶段，pending 上挂了 allowsHeroTarget=true，
+  // 玩家可以点 Hero Cell 把伤害打到自己身上（触发血怒战符 / 力量护符 / 复生庇佑充能）。
+  // 见 magic-effects.ts 的 14 张单目标伤害卡 setup 路径。
+  const heroSelfTargetingActive = Boolean(
+    magicMonsterTargeting
+      && (pendingMagicAction as { allowsHeroTarget?: boolean } | null)?.allowsHeroTarget,
+  );
   const potionTargeting = Boolean(pendingPotionAction);
   const potionSlotTargeting = pendingPotionAction?.step === 'slot-select';
   const playerTargetingActive =
@@ -6672,13 +6920,6 @@ export default function GameBoard() {
   const equipmentSlot2Highlight =
     slotTargetingActive && (!potionSlotTargeting || isPotionSlotEligible('equipmentSlot2'));
 
-  const heroFrameHoverLogCountRef = useRef(0);
-  const heroFrameEnableLogCountRef = useRef(0);
-  const heroFrameHitTestLogCountRef = useRef(0);
-  const heroFrameStateLogCountRef = useRef(0);
-  const heroFrameDragOverLogCountRef = useRef(0);
-  const heroFrameDropCalcLogCountRef = useRef(0);
-
   const updateHeroSkillArrowFromMouse = useCallback(
     (clientX?: number, clientY?: number) => {
       if (!heroSkillTargeting) {
@@ -6738,32 +6979,11 @@ export default function GameBoard() {
       handLockedForMonsterPhaseRef.current
     )
       return;
-    heroFrameHoverLogCountRef.current = 0;
-    heroFrameEnableLogCountRef.current = 0;
-    heroFrameHitTestLogCountRef.current = 0;
-    heroFrameStateLogCountRef.current = 0;
-    heroFrameDragOverLogCountRef.current = 0;
-    heroFrameDropCalcLogCountRef.current = 0;
     setDraggedCard(card);
     draggedCardRef.current = card;
     setDraggedCardSource('hand');
     startDragSession();
     // Card stays in hand until successfully dropped
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        sessionId:'debug-session',
-        runId:'run2',
-        hypothesisId:'K',
-        location:'GameBoard.tsx:handleDragCardFromHand',
-        message:'Drag from hand started',
-        data:{cardId:card.id, cardType:card.type, waterfallActive:waterfallAnimation.isActive, targetingActive},
-        timestamp:Date.now()
-      })
-    }).catch(()=>{});
-    // #endregion
   };
 
   const handleDragEndFromHand = (event?: React.DragEvent) => {
@@ -6778,7 +6998,6 @@ export default function GameBoard() {
     const clientX = event?.clientX ?? null;
     const clientY = event?.clientY ?? null;
     let insideHeroFrame: boolean | null = null;
-    let usedFallbackPos = false;
 
     if (
       clientX !== null &&
@@ -6803,77 +7022,12 @@ export default function GameBoard() {
         updateHeroFrameBounds();
       }
       insideHeroFrame = isPointInsideHeroRowDropArea(x, y, draggedCardRef.current);
-      usedFallbackPos = true;
     }
 
     const dropAccepted =
       insideHeroFrame === true &&
       draggedCardRef.current &&
       isHeroRowHighlightCard(draggedCardRef.current);
-
-    if (heroFrameDropCalcLogCountRef.current < 6) {
-      heroFrameDropCalcLogCountRef.current += 1;
-      fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          sessionId:'debug-session',
-          runId:'run4',
-          hypothesisId:'T',
-          location:'GameBoard.tsx:handleDragEndFromHand',
-          message:'Drop calc',
-          data:{
-            insideHeroFrame,
-            usedFallbackPos,
-            heroFrameBounds: heroFrameBoundsRef.current ? {
-              left: heroFrameBoundsRef.current.left,
-              top: heroFrameBoundsRef.current.top,
-              right: heroFrameBoundsRef.current.right,
-              bottom: heroFrameBoundsRef.current.bottom,
-              width: heroFrameBoundsRef.current.width,
-              height: heroFrameBoundsRef.current.height,
-            } : null,
-            lastGlobal:lastGlobalDragPosRef.current,
-            clientX,
-            clientY,
-            dropAccepted,
-            heroFrameDropEnabled,
-            heroRowMagicDropActive,
-            draggedCardId:draggedCardRef.current?.id,
-            draggedCardType:draggedCardRef.current?.type
-          },
-          timestamp:Date.now()
-        })
-      }).catch(()=>{});
-    }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        sessionId:'debug-session',
-        runId:'run4',
-        hypothesisId:'O',
-        location:'GameBoard.tsx:handleDragEndFromHand',
-        message: dropAccepted ? 'Drop accepted' : 'Drop rejected',
-        data:{
-          dropAccepted,
-          heroFrameDropIntent:heroFrameDropIntentRef.current,
-          draggedCardId:draggedCardRef.current?.id,
-          draggedCardType:draggedCardRef.current?.type,
-          isHighlightCard: isHeroRowHighlightCard(draggedCardRef.current),
-          insideHeroFrame,
-          usedFallbackPos,
-          clientX,
-          clientY,
-          lastGlobal: lastGlobalDragPosRef.current,
-          heroRowDropState
-        },
-        timestamp:Date.now()
-      })
-    }).catch(()=>{});
-    // #endregion
 
     if (dropAccepted && draggedCardRef.current) {
       heroFrameDropIntentRef.current = true;
@@ -6894,12 +7048,6 @@ export default function GameBoard() {
       fullBoardInteractionLockedRef.current
     )
       return;
-    heroFrameHoverLogCountRef.current = 0;
-    heroFrameEnableLogCountRef.current = 0;
-    heroFrameHitTestLogCountRef.current = 0;
-    heroFrameStateLogCountRef.current = 0;
-    heroFrameDragOverLogCountRef.current = 0;
-    heroFrameDropCalcLogCountRef.current = 0;
     setDraggedCard(card);
     draggedCardRef.current = card;
     setDraggedCardSource('dungeon');
@@ -7119,32 +7267,6 @@ export default function GameBoard() {
         }
       }
 
-      if (heroFrameHitTestLogCountRef.current < 6) {
-        heroFrameHitTestLogCountRef.current += 1;
-        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            sessionId:'debug-session',
-            runId:'run4',
-            hypothesisId:'R',
-            location:'GameBoard.tsx:isPointInsideHeroRowDropArea',
-            message:'Hit test',
-            data:{
-              clientX,
-              clientY,
-              cardId:card.id,
-              cardType:card.type,
-              frameRect: frameRect ? {
-                left: frameRect.left, top: frameRect.top, right: frameRect.right, bottom: frameRect.bottom, width: frameRect.width, height: frameRect.height
-              } : null,
-              insideFrame,
-              insideBackpack
-            },
-            timestamp:Date.now()
-          })
-        }).catch(()=>{});
-      }
       if (!insideFrame) {
         return false;
       }
@@ -7161,104 +7283,19 @@ export default function GameBoard() {
     if (!heroFrameDropEnabled) {
       setHeroRowFrameDropActive(false);
       heroFrameDropIntentRef.current = false;
-      if (heroFrameEnableLogCountRef.current < 4) {
-        heroFrameEnableLogCountRef.current += 1;
-        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            sessionId:'debug-session',
-            runId:'run4',
-            hypothesisId:'Q',
-            location:'GameBoard.tsx:heroFrameEffect',
-            message:'Hero frame disabled',
-            data:{
-              heroFrameDropEnabled,
-              heroRowMagicDropActive,
-              draggedCardSource,
-              draggedCardType:draggedCard?.type
-            },
-            timestamp:Date.now()
-          })
-        }).catch(()=>{});
-      }
       return;
     }
 
-    if (heroFrameEnableLogCountRef.current < 4) {
-      heroFrameEnableLogCountRef.current += 1;
-      fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          sessionId:'debug-session',
-          runId:'run4',
-          hypothesisId:'Q',
-          location:'GameBoard.tsx:heroFrameEffect',
-          message:'Hero frame enabled',
-          data:{
-            heroFrameDropEnabled,
-            heroRowMagicDropActive,
-            draggedCardSource,
-            draggedCardType:draggedCard?.type
-          },
-          timestamp:Date.now()
-        })
-      }).catch(()=>{});
-    }
-
-    // Immediately show frame highlight when enabled
-    const logHeroFrameState = (active: boolean) => {
-      if (heroFrameStateLogCountRef.current < 6) {
-        heroFrameStateLogCountRef.current += 1;
-        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            sessionId:'debug-session',
-            runId:'run4',
-            hypothesisId:'S',
-            location:'GameBoard.tsx:heroFrameState',
-            message:'Frame state set',
-            data:{active},
-            timestamp:Date.now()
-          })
-        }).catch(()=>{});
-      }
-    };
-
     setHeroRowFrameDropActive(false);
-    logHeroFrameState(false);
 
     const setFrameActive = (active: boolean) => {
       setHeroRowFrameDropActive(prev => {
         if (prev === active) return prev;
-        logHeroFrameState(active);
         return active;
       });
     };
 
     const handleWindowDragOver = (event: WindowEventMap['dragover']) => {
-      if (heroFrameDragOverLogCountRef.current < 4) {
-        heroFrameDragOverLogCountRef.current += 1;
-        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            sessionId:'debug-session',
-            runId:'run4',
-            hypothesisId:'S',
-            location:'GameBoard.tsx:handleWindowDragOver',
-            message:'Dragover fired',
-            data:{
-              clientX:event.clientX,
-              clientY:event.clientY,
-              heroFrameDropEnabled
-            },
-            timestamp:Date.now()
-          })
-        }).catch(()=>{});
-      }
       lastGlobalDragPosRef.current = { x: event.clientX, y: event.clientY };
       const card = draggedCardRef.current;
       if (!card || !isHeroRowHighlightCard(card)) {
@@ -7266,34 +7303,6 @@ export default function GameBoard() {
         return;
       }
       const insideHeroFrame = isPointInsideHeroRowDropArea(event.clientX, event.clientY, card);
-      if (heroFrameHoverLogCountRef.current < 6) {
-        heroFrameHoverLogCountRef.current += 1;
-        fetch('http://127.0.0.1:7242/ingest/91117990-2058-4fa2-8ff0-1ab4226ecf98',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-            sessionId:'debug-session',
-            runId:'run4',
-            hypothesisId:'P',
-            location:'GameBoard.tsx:handleWindowDragOver',
-            message:'Hero frame hover',
-            data:{
-              cardId:card.id,
-              cardType:card.type,
-              insideHeroFrame,
-              clientX:event.clientX,
-              clientY:event.clientY,
-              heroFrameDropEnabled,
-              heroRowMagicDropActive,
-              frameRect: heroFrameRef.current ? (() => {
-                const r = heroFrameRef.current!.getBoundingClientRect();
-                return { left:r.left, top:r.top, right:r.right, bottom:r.bottom, width:r.width, height:r.height };
-              })() : null
-            },
-            timestamp:Date.now()
-          })
-        }).catch(()=>{});
-      }
       if (insideHeroFrame) {
         event.preventDefault();
         heroFrameDropIntentRef.current = true;
@@ -7650,12 +7659,15 @@ export default function GameBoard() {
             spellDamageBonus={permanentSpellDamageBonus}
             spellLifesteal={permanentSpellLifesteal}
             stunCap={stunCap}
+            selfTargetActive={heroSelfTargetingActive}
             onHeroClick={
-              playerTargetingActive || fullBoardInteractionLocked
-                ? undefined
-                : () => {
-                    setHeroDetailsOpen(true);
-                  }
+              heroSelfTargetingActive && !fullBoardInteractionLocked
+                ? () => handleMagicHeroSelfTarget()
+                : playerTargetingActive || fullBoardInteractionLocked
+                  ? undefined
+                  : () => {
+                      setHeroDetailsOpen(true);
+                    }
             }
           />
           {showBlockButtons && renderBlockButton('hero', 'Block (Hero)', false)}
@@ -7976,30 +7988,320 @@ export default function GameBoard() {
     heroMagicInfo: heroMagicUiState,
     endHeroTurnDisabled,
     fullBoardInteractionLocked,
+    isDefeatAnimationPlaying,
   }), [
     selectedCard, detailsModalOpen, deckViewerOpen, backpackViewerOpen,
     heroDetailsOpen, gameOverMinimized, daggerSelfDestructPrompt, wraithPassiveUnlockPopup,
     eventDiceRollKey, persuadeRollKey, eventChoiceStates,
     overlayZoom, stageScale, headerHeight, classDeck,
     heroMagicUiState, endHeroTurnDisabled, fullBoardInteractionLocked,
+    isDefeatAnimationPlaying,
   ]);
 
   return (
     <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...((minimizedModalLocksBoard || gameOver) ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
-      {/* Header - Fixed height */}
-      <div className="flex-shrink-0" ref={headerWrapperRef}>
-        <GameHeader
-          maxHp={maxHp}
-          persuadeTempDiscount={persuadeTempDiscount}
-          deckFlyTargetRef={deckFlyTargetRef}
-          onDeckClick={handleDeckClick}
-          onNewGame={handleNewGame}
+      {/* === 桌布区域：覆盖 menu bar + 主游戏区，从屏幕顶到 hero row 蓝边下沿 === */}
+      {/* wrapper 本身只负责布局（不带任何视觉），保持原大小 */}
+      <div className="relative flex-grow flex flex-col min-h-0">
+        {/* 桌布底色层：单独把视觉边缘往下伸 12px，不影响内部布局 */}
+        <div
+          className="pointer-events-none absolute"
+          aria-hidden
+          style={{
+            zIndex: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: '-12px',
+            background:
+              'linear-gradient(180deg, #c9b078 0%, #b29560 28%, #8a6535 60%, #5e3f1f 88%, #382410 100%)',
+            boxShadow:
+              'inset 0 80px 100px -60px rgba(232, 204, 144, 0.22), inset 0 -140px 160px -80px rgba(38, 22, 8, 0.58), inset 0 -1px 0 rgba(38, 22, 8, 0.7)',
+          }}
         />
-      </div>
-      
-      {/* Main game area - Flexible height */}
-      <div className={`flex-grow min-h-0 w-full px-2 relative z-10 ${isFlat ? 'py-0' : 'py-3 md:py-4'} md:px-4`}>
-        <div className={`flex flex-col h-full ${isFlat ? 'gap-0' : 'gap-3'}`}>
+        {/* 桌布纹理层：卡背 PNG 平铺 + 极低 opacity，只做花纹质感，不影响底色 */}
+        <div
+          className="pointer-events-none absolute"
+          aria-hidden
+          style={{
+            zIndex: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: '-12px',
+            backgroundImage: `url(${cardBackImage})`,
+            backgroundRepeat: 'repeat',
+            backgroundSize: '220px 220px',
+            mixBlendMode: 'overlay',
+            opacity: 0.18,
+          }}
+        />
+        {/* 桌布顶部高光层：模拟桌布微反光 */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-40"
+          aria-hidden
+          style={{
+            zIndex: 0,
+            background:
+              'radial-gradient(ellipse at 50% -20%, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 60%)',
+          }}
+        />
+
+        {/* === 桌布四周装饰：贴边浮雕宽滚边 + 四角铜雕花卷 === */}
+        {/* 多层 inset box-shadow 拼出"亮-暗-金-暗-亮"的厚浮雕滚边（约 22px 宽） */}
+        <div
+          className="pointer-events-none absolute"
+          aria-hidden
+          style={{
+            zIndex: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: '-12px',
+            boxShadow: [
+              'inset 0 0 0 2px rgba(255, 232, 178, 0.75)',
+              'inset 0 0 0 9px rgba(82, 54, 26, 0.7)',
+              'inset 0 0 0 13px rgba(196, 152, 88, 0.85)',
+              'inset 0 0 0 20px rgba(82, 54, 26, 0.65)',
+              'inset 0 0 0 22px rgba(255, 232, 178, 0.55)',
+              'inset 0 0 0 23px rgba(70, 46, 22, 0.4)',
+            ].join(', '),
+          }}
+        />
+        {/* 四角铜雕卷草 —— 三层（投影/主线/高光）叠加做浮雕 */}
+        {(['tl', 'tr', 'bl', 'br'] as const).map((corner) => {
+          const position =
+            corner === 'tl' ? { top: 0, left: 0, transform: 'none' as const }
+            : corner === 'tr' ? { top: 0, right: 0, transform: 'scaleX(-1)' as const }
+            : corner === 'bl' ? { bottom: '-12px', left: 0, transform: 'scaleY(-1)' as const }
+            : { bottom: '-12px', right: 0, transform: 'scale(-1, -1)' as const };
+
+          const renderOrnament = (color: string, dx: number, dy: number, strokeScale = 1) => (
+            <g transform={`translate(${dx}, ${dy})`} style={{ color }}>
+              {/* 外层 L 形角线（更粗、更长） */}
+              <path
+                d="M0 56 L0 6 Q 0 0 6 0 L56 0"
+                stroke="currentColor"
+                strokeWidth={4 * strokeScale}
+                fill="none"
+                strokeLinecap="round"
+              />
+              {/* 第二层伴线 —— 中线 */}
+              <path
+                d="M10 56 L10 14 Q 10 10 14 10 L56 10"
+                stroke="currentColor"
+                strokeWidth={2 * strokeScale}
+                fill="none"
+                strokeLinecap="round"
+                opacity="0.9"
+              />
+              {/* 第三层伴线 —— 内细线，加密层次 */}
+              <path
+                d="M16 56 L16 22 Q 16 20 18 20 L56 20"
+                stroke="currentColor"
+                strokeWidth={1 * strokeScale}
+                fill="none"
+                strokeLinecap="round"
+                opacity="0.55"
+              />
+              {/* 主卷草（更粗） */}
+              <path
+                d="M4 4 Q 32 8 38 36 Q 42 64 70 70"
+                stroke="currentColor"
+                strokeWidth={2.8 * strokeScale}
+                fill="none"
+                strokeLinecap="round"
+              />
+              {/* 卷草小叶尖 */}
+              <path
+                d="M70 70 Q 88 66 94 52"
+                stroke="currentColor"
+                strokeWidth={2.2 * strokeScale}
+                fill="none"
+                strokeLinecap="round"
+                opacity="0.95"
+              />
+              {/* 卷草上分支 */}
+              <path
+                d="M38 36 Q 52 42 58 56"
+                stroke="currentColor"
+                strokeWidth={1.7 * strokeScale}
+                fill="none"
+                strokeLinecap="round"
+                opacity="0.85"
+              />
+              {/* 卷草下分支 —— 一片小卷叶 */}
+              <path
+                d="M58 56 Q 66 60 64 70"
+                stroke="currentColor"
+                strokeWidth={1.4 * strokeScale}
+                fill="none"
+                strokeLinecap="round"
+                opacity="0.75"
+              />
+              {/* 节点珠粒 —— 大铆钉到小铆钉递减 */}
+              <circle cx="4" cy="4" r={5.5 * strokeScale} fill="currentColor" />
+              <circle cx="38" cy="36" r={3.2 * strokeScale} fill="currentColor" opacity="0.95" />
+              <circle cx="70" cy="70" r={2.4 * strokeScale} fill="currentColor" opacity="0.9" />
+              <circle cx="94" cy="52" r={1.6 * strokeScale} fill="currentColor" opacity="0.8" />
+              <circle cx="58" cy="56" r={1.4 * strokeScale} fill="currentColor" opacity="0.75" />
+              <circle cx="64" cy="70" r={1.1 * strokeScale} fill="currentColor" opacity="0.65" />
+            </g>
+          );
+
+          return (
+            <svg
+              key={corner}
+              className="pointer-events-none absolute"
+              width="132"
+              height="132"
+              viewBox="0 0 132 132"
+              aria-hidden
+              style={{
+                zIndex: 0,
+                ...position,
+                transformOrigin: 'center',
+              }}
+            >
+              {/* 第 1 层：最深投影（右下偏移大）—— 桌布表面下的暗坑 */}
+              {renderOrnament('rgba(8, 4, 0, 0.55)', 4, 4, 1.12)}
+              {/* 第 2 层：浅投影（右下偏移小） */}
+              {renderOrnament('rgba(20, 10, 2, 0.7)', 2, 2, 1.05)}
+              {/* 第 3 层：主线（深棕） */}
+              {renderOrnament('rgba(48, 26, 10, 1)', 0, 0, 1)}
+              {/* 第 4 层：金色中调（左上微偏）—— 雕件主反光 */}
+              {renderOrnament('rgba(196, 152, 88, 0.85)', -0.8, -0.8, 0.85)}
+              {/* 第 5 层：最亮高光（左上偏更多）—— 凸边受光最强处 */}
+              {renderOrnament('rgba(255, 232, 178, 0.85)', -1.6, -1.6, 0.7)}
+            </svg>
+          );
+        })}
+
+        {/* === 桌布下方区域：实木地板（俯视）=== */}
+        {/* 紧接桌布视觉下沿（top: 100% + 12px），用一个足够大的固定高度
+            视觉上"溢出"到 HandRow 那块，被外层 gameSurfaceRef 的 overflow-hidden 自然裁到屏幕底 */}
+        <div
+          className="pointer-events-none absolute"
+          aria-hidden
+          style={{
+            zIndex: 0,
+            top: 'calc(100% + 12px)',
+            left: 0,
+            right: 0,
+            height: '600px',
+            overflow: 'hidden',
+          }}
+        >
+          {/* 1. 木地板底色：暖棕（核桃木/橡木），从上往下略微变深，模拟环境光衰减 */}
+          <div
+            className="absolute inset-0"
+            aria-hidden
+            style={{
+              background:
+                'linear-gradient(180deg, #7a5230 0%, #6b4423 35%, #5a3819 75%, #432710 100%)',
+            }}
+          />
+          {/* 2. 横向板缝：每条板 110px 宽，板缝是一条很深的细线（模拟拼接缝） */}
+          <div
+            className="absolute inset-0"
+            aria-hidden
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(180deg, ' +
+                'rgba(0, 0, 0, 0) 0px, ' +
+                'rgba(0, 0, 0, 0) 106px, ' +
+                'rgba(0, 0, 0, 0.55) 108px, ' +
+                'rgba(0, 0, 0, 0.85) 110px, ' +
+                'rgba(255, 220, 170, 0.18) 111px, ' +
+                'rgba(0, 0, 0, 0) 113px)',
+            }}
+          />
+          {/* 3. 板与板的色差：相邻板色调略不同（一深一浅交替），打破单调 */}
+          <div
+            className="absolute inset-0"
+            aria-hidden
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(180deg, ' +
+                'rgba(255, 200, 150, 0.06) 0px, ' +
+                'rgba(255, 200, 150, 0.06) 110px, ' +
+                'rgba(0, 0, 0, 0.10) 110px, ' +
+                'rgba(0, 0, 0, 0.10) 220px)',
+            }}
+          />
+          {/* 4. 木纹竖向细线（密、细、不规则）：模拟木材自然纹理 */}
+          <div
+            className="absolute inset-0"
+            aria-hidden
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(90deg, ' +
+                'rgba(0, 0, 0, 0) 0px, ' +
+                'rgba(50, 28, 10, 0.18) 1px, ' +
+                'rgba(0, 0, 0, 0) 4px, ' +
+                'rgba(0, 0, 0, 0) 9px, ' +
+                'rgba(80, 50, 22, 0.14) 10px, ' +
+                'rgba(0, 0, 0, 0) 13px, ' +
+                'rgba(0, 0, 0, 0) 17px, ' +
+                'rgba(110, 75, 35, 0.10) 18px, ' +
+                'rgba(0, 0, 0, 0) 21px, ' +
+                'rgba(0, 0, 0, 0) 27px, ' +
+                'rgba(35, 18, 5, 0.16) 29px, ' +
+                'rgba(0, 0, 0, 0) 32px, ' +
+                'rgba(0, 0, 0, 0) 41px)',
+            }}
+          />
+          {/* 5. 木纹长周期色块（更宽的浅/深色块，让木材看起来"有树纹流向"） */}
+          <div
+            className="absolute inset-0"
+            aria-hidden
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(90deg, ' +
+                'rgba(0, 0, 0, 0) 0px, ' +
+                'rgba(255, 200, 145, 0.08) 60px, ' +
+                'rgba(0, 0, 0, 0) 130px, ' +
+                'rgba(0, 0, 0, 0.12) 200px, ' +
+                'rgba(0, 0, 0, 0) 280px)',
+            }}
+          />
+          {/* 6. 桌子投在地板上的阴影：顶部一条最深，向下迅速衰减 */}
+          <div
+            className="absolute inset-x-0 top-0"
+            aria-hidden
+            style={{
+              height: '60px',
+              background:
+                'linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.25) 40%, rgba(0, 0, 0, 0) 100%)',
+            }}
+          />
+          {/* 7. 边缘 vignette：让两侧略暗，整体更有"室内俯视"感 */}
+          <div
+            className="absolute inset-0"
+            aria-hidden
+            style={{
+              background:
+                'radial-gradient(ellipse at 50% 30%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.35) 100%)',
+            }}
+          />
+        </div>
+
+        {/* Header - Fixed height (透明背景，让桌布透出来) */}
+        <div className="relative z-[1] flex-shrink-0" ref={headerWrapperRef}>
+          <GameHeader
+            maxHp={maxHp}
+            persuadeTempDiscount={persuadeTempDiscount}
+            deckFlyTargetRef={deckFlyTargetRef}
+            onDeckClick={handleDeckClick}
+            onNewGame={handleNewGame}
+          />
+        </div>
+
+        {/* Main game area - Flexible height */}
+        <div
+          className={`flex-grow min-h-0 w-full px-2 relative z-[1] ${isFlat ? 'py-0' : 'py-3 md:py-4'} md:px-4`}
+        >
+          <div className={`relative flex flex-col h-full ${isFlat ? 'gap-0' : 'gap-3'}`}>
           <div
             ref={boardRef}
             className="flex-1 min-h-0 relative flex justify-start lg:justify-center"
@@ -8119,6 +8421,7 @@ export default function GameBoard() {
               </svg>
             )}
       </div>
+      </div>{/* === 桌布区域 end === */}
 
       {/* Eternal Relics — between hero row frame and hand */}
       <EternalRelicContainer
@@ -8174,6 +8477,8 @@ export default function GameBoard() {
       />
 
       <InCellFlipOverlayLayer inCellFlips={inCellFlips} />
+
+      <DimensionWarpOverlayLayer dimensionWarps={dimensionWarps} />
 
       <FloatingPillsContainer
         gameOverMinimized={gameOverMinimized}

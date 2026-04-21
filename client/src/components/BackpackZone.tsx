@@ -229,7 +229,9 @@ function BackpackZoneInner({
       onDrop={handleDrop}
       onClick={onOpenViewer}
       className={cn(
-        'relative h-full w-full cursor-pointer overflow-hidden border-2 border-dashed border-border bg-gradient-to-br from-amber-900/40 via-amber-800/20 to-yellow-700/10 transition-[border-color,background-color,transform] duration-200',
+        // overflow-visible：让 StackedCardPile 的"一摞牌"溢出 cell 上沿（与 Graveyard / ClassDeck 同款）。
+        // 主色调：深蓝（blue 系）—— 配合 StackedCardPile variant="blue" 的深蓝卡背一起定调为"深海蓝"。
+        'relative h-full w-full cursor-pointer overflow-visible border-2 border-dashed border-blue-400/50 bg-gradient-to-br from-blue-950/60 via-blue-900/35 to-indigo-900/20 transition-[border-color,background-color,transform] duration-200',
         isDropTarget && 'border-primary border-4 bg-primary/10 animate-pulse',
         isDropTarget && isOver && 'ring-4 ring-primary bg-primary/20 scale-[1.01]',
         !isDropTarget && 'hover:scale-[1.01]'
@@ -246,7 +248,7 @@ function BackpackZoneInner({
             count={backpackCount}
             className="rounded-xl"
             label="Backpack"
-            variant="muted"
+            variant="blue"
           />
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3 text-white/90">
             <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">

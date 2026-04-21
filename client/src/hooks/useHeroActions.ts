@@ -136,6 +136,13 @@ export interface HeroActionsDeps {
   removePendingDungeonCard: (cardId: string) => boolean;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerFateSwapFlight: (activeSlotIdx: number, oldCard: GameCardData, newCard: GameCardData) => void;
+  triggerActiveRowSwapFlight: (
+    leftSlotIdx: number,
+    rightSlotIdx: number,
+    leftCard: GameCardData,
+    rightCard: GameCardData,
+  ) => void;
+  triggerReturnToDeckFlight: (slotIdx: number, card: GameCardData) => void;
   clearAllBackpackHandFallbacks: () => void;
 
   // --- Deck peek modal ---
@@ -523,6 +530,26 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     [pendingMagicAction],
   );
 
+  // 单目标伤害 magic 自伤路径：玩家在 monster-select 阶段点击 Hero Cell。
+  // 只有 pending.allowsHeroTarget === true 才允许；reducer 端会把 selfInflicted 走通，
+  // 触发血怒战符 / 力量护符 / 复生庇佑充能 等"以己受伤为条件"的效果。
+  const handleMagicHeroSelfTarget = useCallback(
+    () => {
+      if (!pendingMagicAction || pendingMagicAction.step !== 'monster-select') {
+        return;
+      }
+      const allowsHero = (pendingMagicAction as { allowsHeroTarget?: boolean }).allowsHeroTarget;
+      if (!allowsHero) return;
+      dispatch({
+        type: 'RESOLVE_MAGIC_MONSTER_SELECTION',
+        magicId: pendingMagicAction.effect,
+        monsterId: '',
+        targetType: 'hero',
+      });
+    },
+    [pendingMagicAction],
+  );
+
   // ---------------------------------------------------------------------------
   // handleDungeonCardSelection
   // ---------------------------------------------------------------------------
@@ -753,6 +780,23 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     depsRef.current.triggerFateSwapFlight(activeSlotIdx, oldCard, newCard);
   });
 
+  // 乾坤挪移 / 命运挪移 — both auto-target two active-row cards. Reducer
+  // emits exactly once when the net swap actually changed state (odd echo
+  // multiplier). Listener captures cell rects via activeCellRefs and triggers
+  // two simultaneous arc flights between the two cells.
+  useGameEvent('magic:activeRowSwap', (payload) => {
+    const { leftSlotIdx, rightSlotIdx, leftCard, rightCard } = payload;
+    depsRef.current.triggerActiveRowSwapFlight(leftSlotIdx, rightSlotIdx, leftCard, rightCard);
+  });
+
+  // 迷宫回溯 — single active-row card flies to the deck pile. Emitted from
+  // both the schema/legacy auto-resolve paths and the player-pick reducer
+  // (return-dungeon-bottom / shuffle-dungeon).
+  useGameEvent('magic:returnToDeck', (payload) => {
+    const { slotIdx, card } = payload;
+    depsRef.current.triggerReturnToDeckFlight(slotIdx, card);
+  });
+
   useGameEvent('hero:cardRemoved', (payload) => {
     const { cardId, animate } = payload as { cardId: string; animate: boolean };
     depsRef.current.removeCard(cardId, animate);
@@ -829,6 +873,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     handlePotionSlotSelection,
     handleHeroSkillMonsterSelection,
     handleMagicMonsterSelection,
+    handleMagicHeroSelfTarget,
     handleDungeonCardSelection,
     handleBackpackReorganizeConfirm,
     handleHandDiscardSelectionConfirm,

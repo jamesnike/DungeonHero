@@ -1253,6 +1253,12 @@ export function resolvePermanentMagic(
       next[secondIdx] = tmp;
     }
     patch.activeCards = next;
+    if (echoMultiplier % 2 === 1) {
+      sideEffects.push({
+        event: 'magic:activeRowSwap',
+        payload: { leftSlotIdx: firstIdx, rightSlotIdx: secondIdx, leftCard: firstCard, rightCard: secondCard },
+      });
+    }
     const bannerText = echoMultiplier > 1
       ? `命运挪移 ×${echoMultiplier}：${firstCard.name} ↔ ${secondCard.name}（回响）`
       : `命运挪移：${firstCard.name} ↔ ${secondCard.name} 位置互换！`;
@@ -1286,32 +1292,19 @@ export function resolvePermanentMagic(
 
   // --- bounty-spell-damage ---
   if (effect === 'bounty-spell-damage') {
-    const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-    if (monsters.length === 0) {
-      banner(sideEffects, '赏金裁决无效（没有怪物）。');
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
+    // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
+    // 不再因为没有怪物 / 只有一个怪物就 fizzle / 自动选；玩家可以选 Hero Cell 自伤。
     const baseDmg = 5 + (card.amplifyBonus ?? 0);
     const totalDmg = getSpellDamage(baseDmg, state) * echoMultiplier;
-    if (monsters.length === 1) {
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDmg, source: 'bounty-spell-damage', isSpellDamage: true });
-      enqueuedActions.push({ type: 'MODIFY_GOLD', delta: totalDmg, source: 'bounty-spell-damage' });
-      log(sideEffects, 'magic', `赏金裁决：对 ${monsters[0].name} 造成 ${totalDmg} 点法术伤害，获得 ${totalDmg} 金币`);
-      banner(sideEffects, `赏金裁决：${totalDmg} 点伤害 → ${totalDmg} 金币！${echoTag}`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
     patch.pendingMagicAction = {
       card,
       effect: 'bounty-spell-damage',
       step: 'monster-select',
       echoMultiplier,
-      prompt: `选择一个怪物，造成 ${totalDmg} 点法术伤害并获得等量金币。${echoTag}`,
+      prompt: `选择一个目标，造成 ${totalDmg} 点法术伤害并获得等量金币。${echoTag}`,
+      allowsHeroTarget: true,
     } as any;
-    patch.heroSkillBanner = '赏金裁决：选择目标怪物。';
+    patch.heroSkillBanner = '赏金裁决：选择目标。';
     return applyPatch(state, patch, sideEffects);
   }
 
@@ -1544,9 +1537,16 @@ export function resolvePermanentMagic(
       }
       if (dungeonCards.length === 1 && echoMultiplier <= 1) {
         const target = dungeonCards[0];
+        const slotIdx = (state.activeCards as (GameCardData | null)[]).findIndex(c => c?.id === target.id);
         const newActive = (state.activeCards as (GameCardData | null)[]).map(c => c?.id === target.id ? null : c) as ActiveRowSlots;
         patch.activeCards = newActive;
         patch.remainingDeck = [...state.remainingDeck, sanitizeCardMetadata(target)];
+        if (slotIdx !== -1) {
+          sideEffects.push({
+            event: 'magic:returnToDeck',
+            payload: { slotIdx, card: target },
+          });
+        }
         banner(sideEffects, `${target.name} 已置于牌堆底。`);
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -1588,6 +1588,12 @@ export function resolvePermanentMagic(
       patch.activeCards = next;
       const leftCard = cards[leftIdx]!;
       const rightCard = cards[rightIdx]!;
+      if (echoMultiplier % 2 === 1) {
+        sideEffects.push({
+          event: 'magic:activeRowSwap',
+          payload: { leftSlotIdx: leftIdx, rightSlotIdx: rightIdx, leftCard, rightCard },
+        });
+      }
       const bnr = echoMultiplier > 1
         ? `乾坤挪移 ×${echoMultiplier}：${leftCard.name} ↔ ${rightCard.name}（回响）`
         : `${leftCard.name} ↔ ${rightCard.name} 位置互换！`;
@@ -2043,31 +2049,16 @@ export function resolveKnightInstantMagic(
     }
 
     case 'missile-bolt': {
-      const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-      if (monsters.length === 0) {
-        banner(sideEffects, '魔弹无效（没有怪物）。');
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
+      // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
       const boltDmg = getSpellDamage(1 + (card.amplifyBonus ?? 0), state);
-      if (monsters.length === 1) {
-        const target = monsters[0];
-        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: boltDmg, source: 'missile-bolt', isSpellDamage: true });
-        log(sideEffects, 'magic', `魔弹：对 ${target.name} 造成 ${boltDmg} 点法术伤害`);
-        banner(sideEffects, `魔弹：对 ${target.name} 造成 ${boltDmg} 点伤害！`);
-        applyMissileRelicEffects(state, patch, sideEffects, enqueuedActions, target);
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
       patch.pendingMagicAction = {
         card,
         effect: 'missile-bolt',
         step: 'monster-select',
-        prompt: `选择一个怪物，造成 ${boltDmg} 点法术伤害。`,
+        prompt: `选择一个目标，造成 ${boltDmg} 点法术伤害。`,
+        allowsHeroTarget: true,
       } as any;
-      patch.heroSkillBanner = `选择一个怪物，造成 ${boltDmg} 点法术伤害。`;
+      patch.heroSkillBanner = `选择一个目标，造成 ${boltDmg} 点法术伤害。`;
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -2260,7 +2251,7 @@ export function executeArmorDoubleStrike(
     const targets = shuffled.slice(0, 2);
     patch.rng = rng;
     for (const target of targets) {
-      ensureEngagedLocal(state, target, enqueuedActions);
+      ensureMonsterEngaged(state, target, enqueuedActions);
       enqueuedActions.push({
         type: 'DEAL_DAMAGE_TO_MONSTER',
         monsterId: target.id,
@@ -2308,10 +2299,75 @@ export function executeArmorDoubleStrike(
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
-function ensureEngagedLocal(state: GameState, monster: GameCardData, enqueuedActions: GameAction[]): void {
+/**
+ * 确保被法术伤害命中的怪物进入交战（被激怒）。
+ * 普通武器攻击会在 `PERFORM_HERO_ATTACK` 里把目标加入 `engagedMonsterIds`，
+ * 但 `DEAL_DAMAGE_TO_MONSTER` 自身不做这件事——所以任何"非武器攻击"路径
+ * （魔弹 / 魔弹风暴 / 弧能之符 / 弃牌雷击 / 各类 spell-damage 法术）
+ * 在打前都需要主动 enqueue `BEGIN_COMBAT`，否则会出现"打了没激怒"的 bug。
+ *
+ * 同名 helper 在 `hero.ts` 也有一份本地副本（`ensureEngaged`），改动时记得同步行为。
+ */
+export function ensureMonsterEngaged(state: GameState, monster: GameCardData, enqueuedActions: GameAction[]): void {
   if (!(state.combatState?.engagedMonsterIds ?? []).includes(monster.id)) {
     enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
   }
+}
+
+/**
+ * 单目标伤害 magic 的统一"伤害落点"路由：
+ *  - target.type === 'monster'  → ensureMonsterEngaged + DEAL_DAMAGE_TO_MONSTER（isSpellDamage），并触发 onMonsterHit 回调
+ *  - target.type === 'hero'     → APPLY_DAMAGE { selfInflicted: true }（自伤路径，自动触发血怒战符 / 复生赐福 / 力量护符）
+ *
+ * 选 hero 时跳过所有 monster-only 的 on-hit 副作用（overkill / lifesteal / 金币 / streak 等都属于"打中怪物才生效"的，
+ * 通过不调用 onMonsterHit 来天然跳过）。bloodrage / revive-blessing 由 reduceApplyDamage + computeDamage 自动接通。
+ *
+ * 添加新单目标伤害 magic 时请走这个 helper，不要自己 enqueue DEAL_DAMAGE_TO_MONSTER。
+ */
+export type SpellDamageTarget =
+  | { type: 'monster'; monster: GameCardData }
+  | { type: 'hero' };
+
+export function resolveSpellDamageHit(
+  state: GameState,
+  target: SpellDamageTarget,
+  damage: number,
+  source: string,
+  sideEffects: SideEffect[],
+  enqueuedActions: GameAction[],
+  opts?: {
+    /** 命中怪物时执行的额外效果（missile relic / 金币 / streak / persuade 等）。选 hero 时不会被调用。 */
+    onMonsterHit?: (monster: GameCardData) => void;
+    /** 用于 log/banner 的卡牌名；缺省 '法术'。 */
+    cardName?: string;
+    /** 自定义 log/banner 文案；提供后将忽略 cardName 默认文案。 */
+    selfHitLog?: string;
+    selfHitBanner?: string;
+  },
+): void {
+  if (target.type === 'hero') {
+    if (damage > 0) {
+      enqueuedActions.push({
+        type: 'APPLY_DAMAGE',
+        amount: damage,
+        source,
+        selfInflicted: true,
+      });
+    }
+    const name = opts?.cardName ?? '法术';
+    log(sideEffects, 'magic', opts?.selfHitLog ?? `${name}：对自己造成 ${damage} 点法术伤害`);
+    banner(sideEffects, opts?.selfHitBanner ?? `${name}：对自己造成 ${damage} 点伤害！`);
+    return;
+  }
+  ensureMonsterEngaged(state, target.monster, enqueuedActions);
+  enqueuedActions.push({
+    type: 'DEAL_DAMAGE_TO_MONSTER',
+    monsterId: target.monster.id,
+    damage,
+    source,
+    isSpellDamage: true,
+  });
+  opts?.onMonsterHit?.(target.monster);
 }
 
 export function resolveKnightPermanentMagic(
@@ -2341,28 +2397,9 @@ export function resolveKnightPermanentMagic(
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
       if (shieldSlots.length === 1) {
+        // 单目标伤害 magic：始终弹出 monster picker（包含 hero 自伤路径）。
+        // 不再因为没有怪物 / 只有一个怪物就 fizzle / 自动选。
         const slotId = shieldSlots[0].id;
-        const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-        if (monsters.length === 0) {
-          banner(sideEffects, '没有怪物可攻击。');
-          patch.lastPlayedCardCategory = getCardPlayCategory(card);
-          enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-          return applyPatch(state, patch, sideEffects, enqueuedActions);
-        }
-        // Auto-pick single slot, then check if single or multi monster
-        if (monsters.length === 1) {
-          const armorPcts = [100, 150];
-          const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? 150;
-          const rawArmor = computeSlotArmorValuePure(state, slotId);
-          const scaledArmor = Math.floor(rawArmor * armorPct / 100);
-          const totalDamage = getSpellDamage(scaledArmor + (card.amplifyBonus ?? 0), state) * echoMultiplier;
-          const echoTagAS = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
-          enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
-          banner(sideEffects, `御甲破击造成 ${totalDamage} 点伤害（护甲 ${armorPct}%）。${echoTagAS}`);
-          patch.lastPlayedCardCategory = getCardPlayCategory(card);
-          enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-          return applyPatch(state, patch, sideEffects, enqueuedActions);
-        }
         const armorPcts = [100, 150];
         const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? 150;
         const rawArmor = computeSlotArmorValuePure(state, slotId);
@@ -2373,10 +2410,11 @@ export function resolveKnightPermanentMagic(
           step: 'monster-select',
           slotId,
           pendingDamage: scaledArmor,
-          prompt: `选择一个怪物，承受 ${getSpellDamage(scaledArmor + (card.amplifyBonus ?? 0), state)} 点护甲伤害。`,
+          prompt: `选择一个目标，承受 ${getSpellDamage(scaledArmor + (card.amplifyBonus ?? 0), state)} 点护甲伤害。`,
           echoMultiplier,
+          allowsHeroTarget: true,
         } as any;
-        patch.heroSkillBanner = '选择一个怪物承受你的护甲一击。';
+        patch.heroSkillBanner = '选择一个目标承受你的护甲一击。';
         return applyPatch(state, patch, sideEffects);
       }
       patch.pendingMagicAction = {
@@ -2442,7 +2480,7 @@ export function resolveKnightPermanentMagic(
       const dmg = getSpellDamage(PER_MONSTER_DAMAGE + (card.amplifyBonus ?? 0), state) * echoMultiplier;
       const echoTagTCT = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
       for (const target of monsters) {
-        ensureEngagedLocal(state, target, enqueuedActions);
+        ensureMonsterEngaged(state, target, enqueuedActions);
         enqueuedActions.push({
           type: 'DEAL_DAMAGE_TO_MONSTER',
           monsterId: target.id,
@@ -2535,31 +2573,19 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'missing-hp-smite': {
-      const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-      if (monsters.length === 0) {
-        banner(sideEffects, '没有怪物可攻击。');
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
+      // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
       const maxHp = computeMaxHp(state);
       const missingHp = Math.max(0, maxHp - state.hp);
       const totalDmg = getSpellDamage(missingHp + (card.amplifyBonus ?? 0), state);
-      if (monsters.length === 1) {
-        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDmg, source: 'missing-hp-smite', isSpellDamage: true });
-        banner(sideEffects, `血怒裁决：损失生命 ${missingHp} → ${totalDmg} 点伤害！`);
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
       patch.pendingMagicAction = {
         card,
         effect: 'missing-hp-smite',
         step: 'monster-select',
-        prompt: `选择一个怪物，造成 ${totalDmg} 点伤害（已损失生命 ${missingHp}）。`,
+        prompt: `选择一个目标，造成 ${totalDmg} 点伤害（已损失生命 ${missingHp}）。`,
         echoMultiplier,
+        allowsHeroTarget: true,
       } as any;
-      patch.heroSkillBanner = `血怒裁决：选择目标怪物（伤害 ${totalDmg}）。`;
+      patch.heroSkillBanner = `血怒裁决：选择目标（伤害 ${totalDmg}）。`;
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -2569,32 +2595,21 @@ export function resolveKnightPermanentMagic(
         banner(sideEffects, '生命值不足，无法使用血祭裁决。');
         return applyPatch(state, patch, sideEffects);
       }
-      const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-      if (monsters.length === 0) {
-        banner(sideEffects, '没有怪物可攻击。');
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
-      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpCost, source: 'blood-sacrifice', selfInflicted: true });
+      // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
+      // 注意：献祭 HP 成本统一在 reducer 的 monster-selection 分支里扣，
+      // 不在 setup 阶段提前 push（避免 hero 路径下双扣不可控）。
       const totalDmg = getSpellDamage(hpCost * 2 + (card.amplifyBonus ?? 0), state);
-      if (monsters.length === 1) {
-        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDmg, source: 'blood-sacrifice', isSpellDamage: true });
-        banner(sideEffects, `血祭裁决：失去 ${hpCost} HP，造成 ${totalDmg} 点伤害！`);
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
       patch.pendingMagicAction = {
         card,
         effect: 'blood-sacrifice-strike',
         step: 'monster-select',
         pendingDamage: totalDmg,
         hpLost: hpCost,
-        prompt: `选择一个怪物，造成 ${totalDmg} 点伤害。`,
+        prompt: `选择一个目标，造成 ${totalDmg} 点伤害（将先献祭 ${hpCost} HP）。`,
         echoMultiplier,
+        allowsHeroTarget: true,
       } as any;
-      patch.heroSkillBanner = `血祭裁决：选择目标怪物（伤害 ${totalDmg}）。`;
+      patch.heroSkillBanner = `血祭裁决：选择目标（献祭 ${hpCost} HP，伤害 ${totalDmg}）。`;
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -2763,7 +2778,7 @@ export function resolveKnightPermanentMagic(
       // 雷涌一击：⌈stunCap / divisor⌉ 法伤 + 60% 击晕（受 stunCap 上限约束）+ 抽 1。
       // divisor 由升级等级决定（lvl 0 → 4，lvl 1 → 3）；amplifyBonus 算入 base damage。
       // Echo：伤害与抽牌都 ×N，但击晕掷骰仍只发生 1 次（与 stun-strike 同惯例）。
-      const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
+      // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
       const divisors = [4, 3];
       const divisor = divisors[card.upgradeLevel ?? 0] ?? 3;
       const stunCap = state.stunCap ?? 0;
@@ -2773,79 +2788,16 @@ export function resolveKnightPermanentMagic(
       const drawCount = 1 * echoMultiplier;
       const echoTag = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
 
-      if (monsters.length === 0) {
-        banner(sideEffects, `${card.name}无效（没有怪物）。`);
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
-
-      if (monsters.length === 1) {
-        const target = monsters[0];
-        enqueuedActions.push({
-          type: 'DEAL_DAMAGE_TO_MONSTER',
-          monsterId: target.id,
-          damage: totalDmg,
-          source: 'stun-cap-strike',
-          isSpellDamage: true,
-        });
-        // 抽牌（多张时使用 drawMultipleFromBackpack；1 张走单 helper 也行，统一用 multi）
-        if (drawCount > 0) {
-          const drawState = { ...state, ...patch } as GameState;
-          const drawResult = drawMultipleFromBackpack(drawState, drawCount);
-          if (drawResult.cards.length > 0) {
-            mergePatch(patch, drawResult.patch);
-            for (const d of drawResult.cards) {
-              sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
-            }
-          }
-        }
-        log(sideEffects, 'magic', `${card.name}：对 ${target.name} 造成 ${totalDmg} 点法术伤害（晕上限 ${stunCap}% / ÷${divisor}），抽 ${drawCount} 张牌。${echoTag}`);
-        // 击晕掷骰（受 stunCap 上限约束；roll 一次）
-        const threshold = Math.round((stunPct / 100) * 20);
-        if (threshold > 0 && !target.isStunned) {
-          let stunRoll: number;
-          let stunRng: RngState;
-          [stunRoll, stunRng] = nextInt(patch.rng ?? state.rng, 1, 20);
-          patch.rng = stunRng;
-          sideEffects.push({
-            event: 'ui:requestDice' as any,
-            payload: {
-              title: target.name,
-              subtitle: `${card.name} 击晕判定（${stunPct}%）`,
-              entries: [
-                { id: 'stun', range: [1, threshold], label: '击晕成功！', effect: 'none' },
-                { id: 'miss', range: [threshold + 1, 20], label: '未击晕', effect: 'none' },
-              ],
-              context: {
-                flowId: 'hero-stun',
-                sourceLabel: card.name,
-                monsterId: target.id,
-                monsterName: target.name,
-                currentHit: 1,
-                totalHits: 1,
-                stunPct,
-                magicCardId: card.id,
-              },
-              predeterminedRoll: stunRoll,
-            },
-          });
-        }
-        banner(sideEffects, `${card.name}：${totalDmg} 点法伤，${threshold > 0 ? `${stunPct}% 击晕，` : ''}抽 ${drawCount} 张。${echoTag}`);
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
-
       patch.pendingMagicAction = {
         card,
         effect: 'stun-cap-strike',
         step: 'monster-select',
-        prompt: `选择一个怪物，造成 ${totalDmg} 点法术伤害（${stunPct}% 击晕），抽 ${drawCount} 张牌。${echoTag}`,
+        prompt: `选择一个目标，造成 ${totalDmg} 点法术伤害（${stunPct}% 击晕），抽 ${drawCount} 张牌。${echoTag}`,
         echoMultiplier,
         data: { baseDmg, stunPct },
+        allowsHeroTarget: true,
       } as any;
-      patch.heroSkillBanner = `${card.name}：选择一个怪物（${totalDmg} 法伤，${stunPct}% 晕）。`;
+      patch.heroSkillBanner = `${card.name}：选择一个目标（${totalDmg} 法伤，${stunPct}% 晕）。`;
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -3114,30 +3066,15 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'fate-sight': {
-      const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-      if (monsters.length === 0) {
-        banner(sideEffects, '天眼审判无效（没有怪物）。');
-        patch.lastPlayedCardCategory = getCardPlayCategory(card);
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
-      if (monsters.length === 1) {
-        patch.pendingMagicAction = {
-          card,
-          effect: 'fate-sight',
-          step: 'monster-select',
-          prompt: `对 ${monsters[0].name} 造成伤害并翻看牌堆。`,
-        } as any;
-        enqueuedActions.push({ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: card.id, monsterId: monsters[0].id });
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
+      // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
       patch.pendingMagicAction = {
         card,
         effect: 'fate-sight',
         step: 'monster-select',
-        prompt: '选择一个怪物，造成伤害并翻看牌堆。',
+        prompt: '选择一个目标，造成伤害并翻看牌堆。',
+        allowsHeroTarget: true,
       } as any;
-      patch.heroSkillBanner = '天眼审判：选择目标怪物。';
+      patch.heroSkillBanner = '天眼审判：选择目标。';
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -3347,30 +3284,17 @@ export function resolveBloodReckoning(
   echoMultiplier: number,
   isEchoTriggered: boolean,
 ): ReduceResult {
-  const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-  if (monsters.length === 0) {
-    banner(sideEffects, '点金裁决无效（没有怪物）。');
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
+  // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
   const totalDamage = getSpellDamage(state.gold + (card.amplifyBonus ?? 0), state) * echoMultiplier;
-  if (monsters.length === 1) {
-    enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDamage, source: 'blood-reckoning', isSpellDamage: true });
-    enqueuedActions.push({ type: 'HEAL', amount: totalDamage, source: 'blood-reckoning' });
-    banner(sideEffects, `点金裁决造成 ${totalDamage} 点伤害！${isEchoTriggered ? '（回响×2）' : ''}`);
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
   patch.pendingMagicAction = {
     card,
     effect: 'blood-reckoning',
     step: 'monster-select',
     echoMultiplier,
-    prompt: `选择一个怪物，造成 ${totalDamage} 点伤害并恢复等量生命。${isEchoTriggered ? '（回响×2）' : ''}`,
+    prompt: `选择一个目标，造成 ${totalDamage} 点伤害并恢复等量生命。${isEchoTriggered ? '（回响×2）' : ''}`,
+    allowsHeroTarget: true,
   } as any;
-  patch.heroSkillBanner = '点金裁决就绪，请选择目标怪物。';
+  patch.heroSkillBanner = '点金裁决就绪，请选择目标。';
   return applyPatch(state, patch, sideEffects);
 }
 
@@ -3595,20 +3519,14 @@ export function resolveArcaneStorm(
   const magicCount = patch.magicCardsPlayedThisTurn ?? state.magicCardsPlayedThisTurn ?? 0;
   const baseDmg = Math.max(0, magicCount + (card.amplifyBonus ?? 0));
   const totalDmg = getSpellDamage(baseDmg, state) * echoMultiplier;
-  const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-  if (monsters.length === 0 || totalDmg <= 0) {
-    banner(sideEffects, `奥术风暴：本回合使用了 ${magicCount} 张魔法卡，但没有可攻击的目标。`);
+  // 真零伤害仍 fizzle（与目标无关）。
+  if (totalDmg <= 0) {
+    banner(sideEffects, `奥术风暴：本回合使用了 ${magicCount} 张魔法卡，伤害为 0。${isEchoTriggered ? '（回响×2）' : ''}`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
-  if (monsters.length === 1) {
-    enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDmg, source: 'arcane-storm', isSpellDamage: true });
-    banner(sideEffects, `奥术风暴：${magicCount} 张魔法卡，对 ${monsters[0].name} 造成 ${totalDmg} 点伤害。${isEchoTriggered ? '（回响×2）' : ''}`);
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
+  // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
   patch.pendingMagicAction = {
     card,
     effect: 'arcane-storm',
@@ -3616,6 +3534,7 @@ export function resolveArcaneStorm(
     pendingDamage: baseDmg,
     echoMultiplier,
     prompt: `奥术风暴：选择一个目标，造成 ${totalDmg} 点伤害（${magicCount} 张魔法卡）。`,
+    allowsHeroTarget: true,
   } as any;
   patch.heroSkillBanner = `奥术风暴：${magicCount} 张魔法卡，选择目标造成 ${totalDmg} 点伤害。`;
   return applyPatch(state, patch, sideEffects);
@@ -3665,35 +3584,9 @@ export function resolveChaosStrike(
   echoMultiplier: number,
   isEchoTriggered: boolean,
 ): ReduceResult {
-  const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-  if (monsters.length === 0) {
-    banner(sideEffects, '混沌冲击无效（没有怪物）。');
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
+  // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
+  // 选 hero 时不存在 overkill 概念（hero.ts 分支会跳过抽牌）。
   const chaosBase = 3 + (card.amplifyBonus ?? 0);
-  if (monsters.length === 1 && echoMultiplier <= 1) {
-    const target = monsters[0];
-    const chaosDamage = getSpellDamage(chaosBase, state);
-    const overkill = chaosStrikeHasOverkill(target, chaosDamage);
-    enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: chaosDamage, source: 'chaos-strike', isSpellDamage: true });
-    if (overkill) {
-      const drawResult = drawMultipleFromBackpack(state, 2, { ignoreLimit: true });
-      if (drawResult.cards.length > 0) {
-        mergePatch(patch, drawResult.patch);
-        for (const d of drawResult.cards) {
-          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
-        }
-      }
-      banner(sideEffects, `混沌冲击对 ${target.name} 造成 ${chaosDamage} 伤害，超杀！抽 ${drawResult.cards.length} 张牌。`);
-    } else {
-      banner(sideEffects, `混沌冲击对 ${target.name} 造成 ${chaosDamage} 点伤害。`);
-    }
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
   const chaosDamage = getSpellDamage(chaosBase, state);
   const echoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
   patch.pendingMagicAction = {
@@ -3703,6 +3596,7 @@ export function resolveChaosStrike(
     prompt: `选择一个目标，对其造成 ${chaosDamage} 点伤害。超杀：抽 2 张牌。${echoLabel}`,
     data: {},
     echoRemaining: echoMultiplier,
+    allowsHeroTarget: true,
   } as any;
   patch.heroSkillBanner = `选择一个目标，造成 ${chaosBase} 点伤害。超杀：抽 2 张牌。${echoLabel}`;
   return applyPatch(state, patch, sideEffects);
@@ -3717,29 +3611,9 @@ export function resolveOverkillUpgrade(
   echoMultiplier: number,
   isEchoTriggered: boolean,
 ): ReduceResult {
-  const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-  if (monsters.length === 0) {
-    banner(sideEffects, '淬炼冲击无效（没有怪物）。');
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
+  // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
+  // 选 hero 时不存在 overkill 概念（hero.ts 分支会跳过升级模态）。
   const okBase = 3 + (card.amplifyBonus ?? 0);
-  if (monsters.length === 1 && echoMultiplier <= 1) {
-    const target = monsters[0];
-    const okDamage = getSpellDamage(okBase, state);
-    const overkill = chaosStrikeHasOverkill(target, okDamage);
-    enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: okDamage, source: 'overkill-upgrade', isSpellDamage: true });
-    if (overkill) {
-      patch.upgradeModalOpen = true;
-      banner(sideEffects, `淬炼冲击对 ${target.name} 造成 ${okDamage} 伤害，超杀！选择一张牌升级。`);
-    } else {
-      banner(sideEffects, `淬炼冲击对 ${target.name} 造成 ${okDamage} 点伤害。`);
-    }
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
   const okDamage = getSpellDamage(okBase, state);
   const echoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
   patch.pendingMagicAction = {
@@ -3749,6 +3623,7 @@ export function resolveOverkillUpgrade(
     prompt: `选择一个目标，对其造成 ${okDamage} 点伤害。超杀：升级一张牌。${echoLabel}`,
     data: {},
     echoRemaining: echoMultiplier,
+    allowsHeroTarget: true,
   } as any;
   patch.heroSkillBanner = `选择一个目标，造成 3 点伤害。超杀：升级一张牌。${echoLabel}`;
   return applyPatch(state, patch, sideEffects);
@@ -3844,64 +3719,18 @@ export function resolveStunStrike(
   const rawStunPct = stunChances[card.upgradeLevel ?? 0] ?? 10;
   const stunPct = Math.min(rawStunPct, state.stunCap ?? 10);
   const hitDmg = getSpellDamage(baseDmgPerHit, state) * echoMultiplier;
-  const totalDmg = hitDmg * hits;
-  const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-
-  if (monsters.length === 0) {
-    banner(sideEffects, '没有怪物可攻击。');
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
-
-  if (monsters.length === 1) {
-    enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: totalDmg, source: 'stun-strike', isSpellDamage: true });
-    log(sideEffects, 'magic', `雷震击：对 ${monsters[0].name} 造成 ${hitDmg}×${hits} 点法术伤害`);
-    banner(sideEffects, `雷震击：对 ${monsters[0].name} 造成 ${hitDmg}×${hits} 点伤害！`);
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
-
-    const threshold = Math.round((stunPct / 100) * 20);
-    if (threshold > 0 && !monsters[0].isStunned) {
-      let stunRoll: number;
-      let stunRng: RngState;
-      [stunRoll, stunRng] = nextInt(patch.rng ?? state.rng, 1, 20);
-      patch.rng = stunRng;
-      sideEffects.push({
-        event: 'ui:requestDice' as any,
-        payload: {
-          title: monsters[0].name,
-          subtitle: `雷震击晕判定 第1击（${stunPct}%）`,
-          entries: [
-            { id: 'stun', range: [1, threshold], label: '击晕成功！', effect: 'none' },
-            { id: 'miss', range: [threshold + 1, 20], label: '未击晕', effect: 'none' },
-          ],
-          flowContext: {
-            flowId: 'thunder-stun',
-            monsterId: monsters[0].id,
-            monsterName: monsters[0].name,
-            hit: 1,
-            maxHits: hits,
-            stunPct,
-            threshold,
-            card,
-          },
-          predeterminedRoll: stunRoll,
-        },
-      });
-    }
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
-
+  // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
+  // 选 hero 时不掷击晕骰（hero 不能被击晕）。
   patch.pendingMagicAction = {
     card,
     effect: 'stun-strike',
     step: 'monster-select',
-    prompt: `选择一个怪物，造成 ${hitDmg}×${hits} 点法术伤害（每击 ${stunPct}% 击晕）。`,
+    prompt: `选择一个目标，造成 ${hitDmg}×${hits} 点法术伤害（每击 ${stunPct}% 击晕）。`,
     echoMultiplier,
     data: { baseDmgPerHit, stunPct, hits },
+    allowsHeroTarget: true,
   } as any;
-  patch.heroSkillBanner = `选择一个怪物，造成 ${hitDmg}×${hits} 点伤害（每击 ${stunPct}% 击晕）。`;
+  patch.heroSkillBanner = `选择一个目标，造成 ${hitDmg}×${hits} 点伤害（每击 ${stunPct}% 击晕）。`;
   return applyPatch(state, patch, sideEffects);
 }
 
@@ -3915,29 +3744,13 @@ export function resolveScalingDamage(
   isEchoTriggered: boolean,
 ): ReduceResult {
   const strikeBase = card.scalingDamage!;
-  const currentDamage = getSpellDamage(strikeBase, state) * echoMultiplier;
-  const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
-  if (monsters.length === 0) {
-    banner(sideEffects, `${card.name}无效（没有怪物）。`);
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
   const nextBase = strikeBase + 1;
   const updatedCard: GameCardData = {
     ...card,
     scalingDamage: nextBase,
     magicEffect: `下一击叠刺 ${nextBase}`,
   };
-  if (monsters.length === 1) {
-    enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: currentDamage, source: 'scaling-damage', isSpellDamage: true });
-    log(sideEffects, 'magic', `${card.name}：对 ${monsters[0].name} 造成 ${currentDamage} 点（下一击叠刺 ${nextBase}）`);
-    banner(sideEffects, `${card.name} 下一击叠刺 ${nextBase}`);
-    // Card goes to recycle bag with updated scaling
-    enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: updatedCard });
-    patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
+  // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
   patch.pendingMagicAction = {
     card: updatedCard,
     effect: 'scaling-damage',
@@ -3945,6 +3758,7 @@ export function resolveScalingDamage(
     pendingDamage: strikeBase,
     echoMultiplier,
     prompt: `选择目标（本刺叠刺 ${strikeBase}）`,
+    allowsHeroTarget: true,
   } as any;
   patch.heroSkillBanner = `${card.name} 请选择目标 · 本刺叠刺 ${strikeBase}`;
   return applyPatch(state, patch, sideEffects);

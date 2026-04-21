@@ -45,7 +45,7 @@ function RewardContainerInner() {
     <>
       {gs.activeMonsterReward && (
         <MonsterRewardModal
-          open={!gs.monsterRewardMinimized}
+          open={!gs.monsterRewardMinimized && !ui.isDefeatAnimationPlaying}
           monsterName={gs.activeMonsterReward.monsterName}
           options={gs.activeMonsterReward.options.map(option => ({
             id: option.id,

@@ -72,7 +72,8 @@ function ClassDeckComponent({
       ) : (
         <Card 
           className={cn(
-            'relative h-full w-full cursor-pointer overflow-hidden border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-transform duration-200 hover:scale-[1.01]',
+            // overflow-visible：让 StackedCardPile 的"一摞牌"溢出 cell 上沿（与 Graveyard / Backpack 同款）。
+            'relative h-full w-full cursor-pointer overflow-visible border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-transform duration-200 hover:scale-[1.01]',
             className
           )}
           onClick={() => startTransition(() => setViewerOpen(true))}

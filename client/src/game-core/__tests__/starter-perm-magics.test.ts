@@ -116,7 +116,12 @@ describe('连环转律 (transformStreakStrike)', () => {
       transformChainPrevCategory: null,
       consecutiveTransformStreak: 0,
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    // 单目标伤害 magic 现在统一弹 picker（即便只有 1 只怪），需要显式选目标
+    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(r1.state.pendingMagicAction).toBeTruthy();
+    const result = drain({ ...r1.state, phase: 'idle' } as any, [
+      { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'transform-streak-strike', monsterId: 'm1' } as GameAction,
+    ]);
     const targetAfter = (result.state.activeCards as any[]).find(c => c?.id === 'm1');
     expect(targetAfter?.hp).toBe(9);
   });
@@ -131,7 +136,11 @@ describe('连环转律 (transformStreakStrike)', () => {
       transformChainPrevCategory: 'potion',
       consecutiveTransformStreak: 1,
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(r1.state.pendingMagicAction).toBeTruthy();
+    const result = drain({ ...r1.state, phase: 'idle' } as any, [
+      { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'transform-streak-strike', monsterId: 'm1' } as GameAction,
+    ]);
     const targetAfter = (result.state.activeCards as any[]).find(c => c?.id === 'm1');
     expect(targetAfter?.hp).toBe(8);
   });
@@ -146,7 +155,11 @@ describe('连环转律 (transformStreakStrike)', () => {
       transformChainPrevCategory: 'event',
       consecutiveTransformStreak: 3,
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(r1.state.pendingMagicAction).toBeTruthy();
+    const result = drain({ ...r1.state, phase: 'idle' } as any, [
+      { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'transform-streak-strike', monsterId: 'm1' } as GameAction,
+    ]);
     const targetAfter = (result.state.activeCards as any[]).find(c => c?.id === 'm1');
     expect(targetAfter?.hp).toBe(16);
   });
