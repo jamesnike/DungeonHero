@@ -314,6 +314,15 @@ const armorStunConvert: OnUpgradeHandler = (upgraded, newLevel) => {
   upgraded.magicEffect = `护甲转化为击晕上限（每点 +${sp}%）。`;
 };
 
+// 雷涌一击 (knight:stun-cap-strike)：升 1 把除数从 4 调到 3（伤害更高，stun 率不变）。
+const stunCapStrike: OnUpgradeHandler = (upgraded, newLevel) => {
+  const divisors = [4, 3];
+  const div = divisors[newLevel] ?? 3;
+  upgraded.description = `永久：对一个怪物造成 ⌈击晕上限/${div}⌉ 点法术伤害，60% 击晕（受击晕上限约束），然后抽 1 张牌。`;
+  upgraded.shortDescription = `⌈晕上限/${div}⌉ 法伤；60% 晕；抽 1`;
+  upgraded.magicEffect = `电涌：晕上限 1/${div} 法伤 + 60% 晕 + 抽 1。`;
+};
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -364,4 +373,5 @@ registerOnUpgradeAll([
   { id: 'knight:blood-draw', handler: bloodDraw },
   { id: 'knight:grave-nova', handler: graveNova },
   { id: 'knight:armor-stun-convert', handler: armorStunConvert },
+  { id: 'knight:stun-cap-strike', handler: stunCapStrike },
 ]);

@@ -782,7 +782,9 @@ export interface ResolveRepairEnrageDiceAction {
   type: 'RESOLVE_REPAIR_ENRAGE_DICE';
   card: GameCardData;
   slotId: EquipmentSlotId;
-  monsterId: string;
+  // monsterId is optional: when no monsters are on the board, the card can
+  // still be played; an enrage outcome simply has no target to enrage.
+  monsterId?: string;
   diceResultId: 'repair' | 'enrage';
 }
 
@@ -1350,6 +1352,40 @@ export interface SetShopModalOpenAction {
 export interface SetShopModalMinimizedAction {
   type: 'SET_SHOP_MODAL_MINIMIZED';
   minimized: boolean;
+}
+
+export interface SetDiscoverModalMinimizedAction {
+  type: 'SET_DISCOVER_MODAL_MINIMIZED';
+  minimized: boolean;
+}
+
+export interface SetGraveyardDiscoverMinimizedAction {
+  type: 'SET_GRAVEYARD_DISCOVER_MINIMIZED';
+  minimized: boolean;
+}
+
+export interface SetMonsterRewardMinimizedAction {
+  type: 'SET_MONSTER_REWARD_MINIMIZED';
+  minimized: boolean;
+}
+
+/**
+ * Fold every currently-open foldable modal in one shot.
+ * Dispatched by any foldable modal's outside-click / X / ESC path so that
+ * a single dismiss gesture collapses the entire modal stack at once.
+ *
+ * Foldable modals covered:
+ *   - eventModal (event choice)
+ *   - shopModal
+ *   - discoverModal (class discover)
+ *   - graveyardDiscoverState (graveyard recall)
+ *   - activeMonsterReward (loot)
+ *
+ * Each surviving open-state gets its own bottom pill via FloatingPillsContainer
+ * so the player can restore them individually.
+ */
+export interface MinimizeAllModalsAction {
+  type: 'MINIMIZE_ALL_MODALS';
 }
 
 export interface SetHeroSkillBannerAction {
@@ -1947,6 +1983,10 @@ export type GameAction =
   | SetDiscoverModalAction
   | SetShopModalOpenAction
   | SetShopModalMinimizedAction
+  | SetDiscoverModalMinimizedAction
+  | SetGraveyardDiscoverMinimizedAction
+  | SetMonsterRewardMinimizedAction
+  | MinimizeAllModalsAction
   | SetHeroSkillBannerAction
   | SetGameOverAction
   // Honor sweep (Phase 8D)

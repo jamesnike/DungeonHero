@@ -31,6 +31,7 @@ import { hasEternalRelic } from '@/lib/eternalRelics';
 import type { RngState } from '../rng';
 import { nextInt } from '../rng';
 import type { GameCardData } from '@/components/GameCard';
+import { cardHasPermFlag } from '@/components/GameCard';
 import type { EquipmentItem, AmuletItem, EquipmentSlotId } from '@/components/game-board/types';
 
 export function reduceTurnActions(state: GameState, action: GameAction): ReduceResult | null {
@@ -200,6 +201,7 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
   );
 
   const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
   for (const log of result.logs) {
     sideEffects.push({ event: 'log:entry', payload: { type: log.type, message: log.message } });
   }
@@ -230,6 +232,14 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
     patch.rng = nextRng;
     const targetAmulet = state.amuletSlots[targetIdx];
     patch.amuletSlots = state.amuletSlots.filter(a => a.id !== targetAmulet.id);
+    // Perm-flagged amulets (附魔祭坛 加 Perm 2 / 凡化咒未剥离) must route to the
+    // permanent magic recycle bag instead of vanishing — mirrors the destruction
+    // routing for Perm-tagged equipment in `equipment-effects.ts` and
+    // `cards.ts:reduceDisposeEquipmentCard`. Non-Perm amulets keep the original
+    // "vanish on wraith curse" behavior (no graveyard entry).
+    if (cardHasPermFlag(targetAmulet)) {
+      enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: targetAmulet });
+    }
     sideEffects.push({
       event: 'log:entry',
       payload: { type: 'combat', message: `怨灵诅咒：摧毁了护符「${targetAmulet.name}」！` },
@@ -341,18 +351,23 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
   }
 
   // No dice flows? Fall through to the normal START_TURN enqueue.
+  // Wraith-destroyed Perm amulet (`enqueuedActions` may already contain
+  // ADD_TO_RECYCLE_BAG) MUST resolve before START_TURN so the recycle bag
+  // is populated before the new turn's draw / waterfall logic runs.
   if (diceQueue.length === 0) {
-    return applyPatch(state, patch, sideEffects, [{ type: 'START_TURN' }]);
+    return applyPatch(state, patch, sideEffects, [...enqueuedActions, { type: 'START_TURN' }]);
   }
 
   // Stash the queue and emit the first dice event. The pipeline parks at
   // `awaitingDice` until `RESOLVE_DICE` fires (in `economy.ts`), which pops
   // the front entry, applies its effect, then either emits the next dice
   // event or finally enqueues `START_TURN` once the queue is drained.
+  // Any ADD_TO_RECYCLE_BAG from wraith curse runs before the dice flow so the
+  // recycle bag reflects reality before goblin steal/heal dice resolve.
   patch.pendingMonsterEndDiceQueue = diceQueue;
   patch.phase = 'awaitingDice';
   emitGoblinDiceCheck(diceQueue[0], sideEffects);
-  return applyPatch(state, patch, sideEffects);
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 /**

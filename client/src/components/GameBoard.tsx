@@ -2566,6 +2566,7 @@ export default function GameBoard() {
               dispatch({ type: 'UPDATE_DISCARDED_CARDS', updater: prev => prev.filter((_, i) => i !== pick.idx) });
               queueCardIntoHand(pick.picked, 'graveyard');
               addGameLog('equip', `${card.name} 遗言：从坟场获得了「${pick.picked.name}」！`);
+              onNewCardGainedRef.current?.(1, 'graveyard');
             } else {
               addGameLog('equip', `${card.name} 遗言：坟场没有可用的牌。`);
             }
@@ -3989,6 +3990,7 @@ export default function GameBoard() {
 
       // --- Restore modal states ---
       discoverModalOpen: Boolean(snapshot.discoverModalOpen),
+      discoverModalMinimized: Boolean(snapshot.discoverModalMinimized),
       discoverOptions: Array.isArray(snapshot.discoverOptions) ? snapshot.discoverOptions : [],
       discoverSourceLabel: snapshot.discoverSourceLabel ?? null,
       deleteModalOpen: Boolean(snapshot.deleteModalOpen),
@@ -4009,8 +4011,10 @@ export default function GameBoard() {
       shopSkillSelectOpen: Boolean(snapshot.shopSkillSelectOpen),
       monsterRewardQueue: Array.isArray(snapshot.monsterRewardQueue) ? snapshot.monsterRewardQueue as import('@/game-core/types').MonsterRewardDrop[] : [],
       activeMonsterReward: (snapshot.activeMonsterReward as import('@/game-core/types').MonsterRewardDrop | null) ?? null,
+      monsterRewardMinimized: Boolean(snapshot.monsterRewardMinimized),
       selectedMonsterRewards: (snapshot.selectedMonsterRewards as import('@/game-core/types').MonsterRewardOption[] | null) ?? null,
       graveyardDiscoverState: snapshot.graveyardDiscoverState ?? null,
+      graveyardDiscoverMinimized: Boolean(snapshot.graveyardDiscoverMinimized),
       graveyardDiscoverDelivery: snapshot.graveyardDiscoverDelivery ?? 'backpack',
       ghostBladeExileCards: snapshot.ghostBladeExileCards ?? null,
       handMagicUpgradeModal: snapshot.handMagicUpgradeModal ?? null,
@@ -4893,29 +4897,36 @@ export default function GameBoard() {
       return;
     }
 
-    const isRemovedCardBuglet = cardToRemove?.isBuglet === true;
-
-    const willSwarmSpawn = !isRemovedCardBuglet && activeCards.some((c, i) =>
-      c && i !== slotIndex && c.type === 'monster' && c.swarmSpawn && !c.isBuglet && !c.isStunned,
-    );
-
     if (addToGraveyardAutomatically && cardToRemove) {
       discardCardToGraveyard(cardToRemove, { owner: 'dungeon' });
     }
 
-    if (cardToRemove && !options?.skipAutoDraw && !willSwarmSpawn) {
-      registerDungeonCardProcessed(cardToRemove.id, 'remove-card');
+    // REGISTER_DUNGEON_CARD_PROCESSED is now driven by the reducer's
+    // postProcessActiveCards (slot-clear detection in step 4). It runs AFTER
+    // the swarm-spawn step, so slots that get swarm-replaced by a Buglet are
+    // automatically NOT counted as processed — matching the legacy
+    // `willSwarmSpawn` skip behavior (no auto-draw, no dungeon-gold amulet).
+    //
+    // To honor `skipAutoDraw: true`, we pre-mark the card as processed via a
+    // direct field patch (NOT via REGISTER_DUNGEON_CARD_PROCESSED, which
+    // increments pendingAutoDrawCount). The reducer's slot-clear detection
+    // then sees the id is already in the list and skips re-registration.
+    if (cardToRemove && options?.skipAutoDraw) {
+      const st = engine.getState();
+      if (!st.processedDungeonCardIds.includes(cardToRemove.id)) {
+        dispatch({
+          type: 'SET_GAME_FLAGS',
+          patch: { processedDungeonCardIds: [...st.processedDungeonCardIds, cardToRemove.id] },
+        });
+      }
     }
-    
+
     // Add card to removing set for animation
     setRemovingCards(prev => new Set(prev).add(cardId));
-    
+
     // Delay actual removal for animation
     setTimeout(() => {
       try {
-      let spawnedBuglet: GameCardData | null = null;
-      let hordeRageTriggered = false;
-      const hordeRageMonstersToEngage: GameCardData[] = [];
       dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: prev => {
         const index = findSlotIndexByCardId(prev, cardId);
         if (index === -1) {
@@ -4924,64 +4935,32 @@ export default function GameBoard() {
 
         const updated = [...prev];
 
-        // Swarm passive: if a non-Buglet card is removed and Swarm monsters are present, spawn a Buglet (enraged)
-        const hasSwarmMonster = updated.some((c, i) =>
-          c && i !== index && c.type === 'monster' && c.swarmSpawn && !c.isBuglet && !c.isStunned,
-        );
-        if (hasSwarmMonster && !isRemovedCardBuglet) {
-          const buglet = applyAmplifyOnCreate(createBugletCard(), engine.getState().amplifiedCardBonus);
-          updated[index] = buglet;
-          spawnedBuglet = buglet;
-          addGameLog('combat', `虫群效果：小虫子（激怒）在第 ${index + 1} 列生成！`);
-
-          // Horde rage: if a swarm with swarmHordeRage exists and monster count ≥ 3, buff all unbuffed monsters
-          const hordeSwarm = updated.find(c => c && c.swarmHordeRage && !c.isStunned);
-          const monsterCount = updated.filter(c => c && c.type === 'monster').length;
-          if (hordeSwarm && monsterCount >= 3) {
-            const hasUnbuffed = updated.some(c => c && c.type === 'monster' && !c.swarmHordeBuffed);
-            if (hasUnbuffed) {
-              hordeRageTriggered = true;
-              for (let k = 0; k < updated.length; k++) {
-                const m = updated[k];
-                if (!m || m.type !== 'monster') continue;
-                if (!m.swarmHordeBuffed) {
-                  updated[k] = {
-                    ...m,
-                    attack: (m.attack ?? m.value) + 3,
-                    value: m.value + 3,
-                    hp: (m.hp ?? 0) + 3,
-                    maxHp: (m.maxHp ?? 0) + 3,
-                    swarmHordeBuffed: true,
-                  };
-                }
-                hordeRageMonstersToEngage.push(updated[k]!);
-              }
-              // Update spawnedBuglet reference to the buffed version
-              spawnedBuglet = updated[index] as GameCardData;
-              const monsterNames = updated.filter(c => c && c.type === 'monster').map(c => c!.name);
-              addGameLog('combat', `${hordeSwarm.name} 虫群集结！激活行怪物≥3，所有怪物+3攻击+3血量！（${monsterNames.join('、')}）`);
-            }
-          }
-        } else {
-          // Stack pop: if there are stacked cards below, promote the top one
-          // Read from engine state to avoid stale closure (e.g. Graveyard Amulet adds stacks after removeCard is called)
-          const stack = engine.getState().activeCardStacks[index];
-          if (stack && stack.length > 0) {
-            const nextCard = stack[stack.length - 1];
-            updated[index] = nextCard;
-            unregisterProcessedCardId(nextCard.id);
-            const popStacks = { ...engine.getState().activeCardStacks };
-            const remaining = stack.slice(0, -1);
-            if (remaining.length === 0) {
-              delete popStacks[index];
-            } else {
-              popStacks[index] = remaining;
-            }
-            dispatch({ type: 'SET_ACTIVE_CARD_STACKS', stacks: popStacks });
-            addGameLog('system', `堆叠揭示：「${nextCard.name}」从第 ${index + 1} 列堆叠中浮现！`);
+        // Stack pop: if there are stacked cards below, promote the top one.
+        // Read from engine state to avoid stale closure (e.g. Graveyard Amulet
+        // adds stacks after removeCard is called).
+        //
+        // Stack-pop wins over swarm spawn — see SWARM_SPAWN_EXEMPT_ACTIONS in
+        // reducer.ts. If a stack pops, `curr` is non-null and the reducer's
+        // postProcessActiveCards swarm-spawn branch (step 3) is skipped.
+        // Otherwise the slot becomes null and postProcess will react: spawn a
+        // Buglet if a Swarm monster is present, else leave it empty and
+        // enqueue REGISTER_DUNGEON_CARD_PROCESSED.
+        const stack = engine.getState().activeCardStacks[index];
+        if (stack && stack.length > 0) {
+          const nextCard = stack[stack.length - 1];
+          updated[index] = nextCard;
+          unregisterProcessedCardId(nextCard.id);
+          const popStacks = { ...engine.getState().activeCardStacks };
+          const remaining = stack.slice(0, -1);
+          if (remaining.length === 0) {
+            delete popStacks[index];
           } else {
-            updated[index] = null;
+            popStacks[index] = remaining;
           }
+          dispatch({ type: 'SET_ACTIVE_CARD_STACKS', stacks: popStacks });
+          addGameLog('system', `堆叠揭示：「${nextCard.name}」从第 ${index + 1} 列堆叠中浮现！`);
+        } else {
+          updated[index] = null;
         }
 
         // Waterfall trigger check is now handled by the reducer's post-processing
@@ -4996,20 +4975,14 @@ export default function GameBoard() {
             dispatch({ type: 'SET_TOTAL_WINS', count: incrementTotalWins() });
           }
         }
-        
+
         return updated;
       } });
-      
-      if (hordeRageTriggered) {
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `虫群集结！全体怪物+3攻击+3血量！` });
-        for (const m of hordeRageMonstersToEngage) {
-          if (!isMonsterEngaged(m.id)) {
-            beginCombatRef.current(m, 'hero');
-          }
-        }
-      } else if (spawnedBuglet) {
-        beginCombatRef.current(spawnedBuglet, 'hero');
-      }
+
+      // Buglet engagement is driven by the reducer's `combat:autoEngage` side
+      // effect (see useCombatActions). Horde rage banner + buffs are driven
+      // by the enqueued CHECK_HORDE_SWARM action. No imperative follow-up
+      // needed here.
 
       // Clear from removing set
       setRemovingCards(prev => {
@@ -5834,8 +5807,8 @@ export default function GameBoard() {
                 description: '使用时回复 3 点生命。被弃置时从背包抽 3 张牌。',
                 onDiscardDraw: 3,
               },
-              destination: 'backpack' as const,
-              banner: '墓语密室翻转为「墓语回响」，已放入背包。',
+              destination: 'stay' as const,
+              banner: '墓语密室翻转为「墓语回响」，留在地城原位！',
             };
             eventCard = {
               ...eventCard,
@@ -5855,8 +5828,8 @@ export default function GameBoard() {
                 description: '即时魔法：选择一个装备，触发其遗言效果 2 次，抽 1 张牌。',
                 shortDescription: '触发一件装备的遗言效果 2 次；抽 1 张',
               },
-              destination: 'backpack' as const,
-              banner: '墓语密室翻转为「墓语遗愿」，已放入背包。',
+              destination: 'stay' as const,
+              banner: '墓语密室翻转为「墓语遗愿」，留在地城原位！',
             };
             eventCard = {
               ...eventCard,
@@ -7843,8 +7816,12 @@ export default function GameBoard() {
     handleSellCard(card);
   }, [handleSellCard]);
 
-  const handleShopMinimize = useCallback(() => dispatch({ type: 'SET_SHOP_MODAL_MINIMIZED', minimized: true }), []);
-  const handleEventMinimize = useCallback(() => dispatch({ type: 'SET_EVENT_MODAL_MINIMIZED', minimized: true }), []);
+  // Outside-click / X / ESC on Shop or Event collapses every open foldable
+  // modal at once (event / shop / discover / graveyard discover / reward).
+  // Each one keeps its own bottom pill in FloatingPillsContainer for individual
+  // restore. See MINIMIZE_ALL_MODALS in rules/ui-state.ts.
+  const handleShopMinimize = useCallback(() => dispatch({ type: 'MINIMIZE_ALL_MODALS' }), []);
+  const handleEventMinimize = useCallback(() => dispatch({ type: 'MINIMIZE_ALL_MODALS' }), []);
   const handleGameOverMinimize = useCallback(() => setGameOverMinimized(true), []);
 
  

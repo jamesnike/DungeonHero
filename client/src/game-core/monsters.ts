@@ -285,6 +285,7 @@ export function queueMonsterRewardPure(
   return {
     activeMonsterReward: drop,
     selectedMonsterRewards: null,
+    monsterRewardMinimized: false,
   };
 }
 
@@ -295,6 +296,7 @@ export function dequeueMonsterRewardPure(
     return {
       activeMonsterReward: null,
       selectedMonsterRewards: null,
+      monsterRewardMinimized: false,
     };
   }
   const [next, ...rest] = state.monsterRewardQueue;
@@ -302,6 +304,7 @@ export function dequeueMonsterRewardPure(
     monsterRewardQueue: rest,
     activeMonsterReward: next,
     selectedMonsterRewards: null,
+    monsterRewardMinimized: false,
   };
 }
 

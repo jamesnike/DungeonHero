@@ -34,6 +34,7 @@ import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecy
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
+import { routeReflectDamageToHero } from './combat';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
@@ -913,22 +914,31 @@ function reduceFinalizeMagicCard(
     patch.heroSkillBanner = banner;
   }
 
-  // Anti-magic reflect: unstunned monsters with antiMagicReflect deal damage to hero
+  // Anti-magic reflect: unstunned monsters with antiMagicReflect deal damage
+  // to hero. Each monster's reflect routes through the shared dragon-breath-
+  // style helper: a random shield slot's armor absorbs first; if no shield is
+  // equipped, the damage falls onto tempShield/HP via APPLY_DAMAGE. The rng
+  // is chained across monsters so every random shield pick uses fresh entropy.
+  let rng = state.rng;
+  let armorPatch: Partial<GameState> = {};
+  // Use the running armorPatch as a snapshot so successive reflects in the
+  // same loop see each other's slot changes (an armor break in one iteration
+  // must be visible to the next).
+  let liveState = state;
   const activeCards = flattenActiveRowSlots(state.activeCards);
   for (const ac of activeCards) {
     if (ac && ac.antiMagicReflect && ac.antiMagicReflect > 0 && !ac.isStunned) {
       const reflectDmg = ac.antiMagicReflect;
-      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: reflectDmg, source: `anti-magic-reflect:${ac.name}` });
-      sideEffects.push({
-        event: 'log:entry',
-        payload: { type: 'combat', message: `${ac.name} 反魔：对英雄造成 ${reflectDmg} 点伤害！` },
-      });
-      sideEffects.push({
-        event: 'ui:banner',
-        payload: { text: `${ac.name} 反魔！受到 ${reflectDmg} 点伤害！` },
-      });
+      const route = routeReflectDamageToHero(liveState, reflectDmg, ac.name, '反魔', rng);
+      armorPatch = { ...armorPatch, ...route.patch };
+      liveState = { ...liveState, ...route.patch };
+      rng = route.rng;
+      sideEffects.push(...route.sideEffects);
+      enqueuedActions.push(...route.enqueuedActions);
     }
   }
+  Object.assign(patch, armorPatch);
+  patch.rng = rng;
 
   // Damage magic counter
   if (card.type === 'magic' && dealtDamage) {
@@ -1230,6 +1240,17 @@ function reduceDrawClassToBackpack(
     event: 'cards:classDrawn',
     payload: { cards: drawn },
   });
+
+  // 「弹幕之符」(card-gain-missile) etc.: emit once per gain event
+  // ("同时获得多张算一次") regardless of count. Overflow-only draws (all
+  // cards spilled to recycle bag) do not count as a gain — match the
+  // ADD_TO_BACKPACK convention which suppresses the event on full overflow.
+  if (toBackpack.length > 0) {
+    sideEffects.push({
+      event: 'card:newCardGained',
+      payload: { count: 1, source: 'classPool' },
+    });
+  }
 
   return applyPatch(state, patch, sideEffects);
 }
@@ -1547,7 +1568,23 @@ function reduceDisposeEquipmentCard(
     }
   }
 
-  if (isDestruction && amuletFx.equipmentSalvageCount > 0 && (card.type === 'weapon' || card.type === 'shield')) {
+  // Perm-priority: equipment carrying a Perm flag (永恒铭刻 / native permEquipment)
+  // MUST route to the recycle bag, even when 残骸回收符 is equipped. Salvage
+  // would otherwise consume the card (or vanish it via maxDur underflow), which
+  // contradicts the contract「Perm 装备损毁后进回收袋」. Determined here so the
+  // salvage early-return below skips Perm cards.
+  const isPermRecycle = !card.permStripped && (
+    isPermRecycleEquipment(card)
+    || ((card.type === 'weapon' || card.type === 'shield' || card.type === 'monster')
+      && card.recycleDelay != null && card.recycleDelay > 0)
+  );
+
+  if (
+    !isPermRecycle
+    && isDestruction
+    && amuletFx.equipmentSalvageCount > 0
+    && (card.type === 'weapon' || card.type === 'shield')
+  ) {
     const newMaxDur = (card.maxDurability ?? 1) - amuletFx.equipmentSalvageCount;
     if (newMaxDur <= 0) {
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `残骸回收符：${card.name} 耐久上限归零，从游戏中移除！` } });
@@ -1564,8 +1601,7 @@ function reduceDisposeEquipmentCard(
     return applyPatch(state, patch, sideEffects);
   }
 
-  const toRecycleBag = isPermRecycleEquipment(card) ||
-    ((card.type === 'weapon' || card.type === 'shield' || card.type === 'monster') && card.recycleDelay != null && card.recycleDelay > 0);
+  const toRecycleBag = isPermRecycle;
 
   if (toRecycleBag) {
     enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
@@ -2844,6 +2880,14 @@ function reduceResolveRepairEnrageDice(
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, banner: '锻造赌运：装备已不存在。' });
     }
   } else {
+    // No monsterId means the card was played while the board had no monsters.
+    // The enrage outcome has nothing to enrage — equipment gains no durability,
+    // we just log the miss and finalize.
+    if (!monsterId) {
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '锻造赌运失败：场上没有怪物可激怒。' } });
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, banner: '锻造赌运失败：场上没有怪物可激怒。' });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
     const monster = flattenActiveRowSlots(state.activeCards).find(c => c.id === monsterId);
     if (!monster) {
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, banner: '锻造赌运失败：目标怪物已消失。' });

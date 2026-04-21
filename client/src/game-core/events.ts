@@ -7,7 +7,7 @@
  */
 
 import type { GameCardData, EventEffectExpression, EventChoiceDefinition, EventRequirement } from '@/components/GameCard';
-import { isPermRecycleEquipment } from '@/components/GameCard';
+import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
 import type {
   ActiveRowSlots,
   EquipmentItem,
@@ -348,7 +348,7 @@ function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | nu
     },
     flipToMonsterAttackDebuff: () => {
       [id, rng] = nextId(rng, 'monster-atk-debuff');
-      return { card: { id, type: 'magic', name: '威压之令', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'active-row-monster-attack-debuff', description: '永久魔法（Perm 1）：激活行所有怪物攻击力 -2。', shortDescription: '激活行所有怪物攻击 -2', recycleDelay: 1 }, rng, banner: '战血荣誉翻转为威压之令，已放入背包。', logMessage: '事件效果：战血荣誉翻转成了「威压之令」', transformMessage: '战血荣誉翻转为「威压之令」…' };
+      return { card: { id, type: 'magic', name: '威压之令', value: 0, image: skillScrollImage, magicType: 'instant', magicEffect: 'active-row-monster-attack-debuff', description: '即时魔法：激活行所有怪物攻击力 -3。', shortDescription: '激活行所有怪物攻击 -3' }, rng, banner: '战血荣誉翻转为威压之令，已放入背包。', logMessage: '事件效果：战血荣誉翻转成了「威压之令」', transformMessage: '战血荣誉翻转为「威压之令」…' };
     },
     flipToHonorBloodMagic: () => {
       [id, rng] = nextId(rng, 'honor-blood');
@@ -383,7 +383,12 @@ function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | nu
       return { card: { id, type: 'magic', name: '回收术', value: 0, image: starterScrollRecallImage, magicType: 'permanent', magicEffect: '永久魔法：回手一张牌，抽 1 张牌。', description: '回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌。', shortDescription: '回手 1 张装备/护符；抽 1 张', knightEffect: 'recall-equipment' }, rng, banner: '血咒仪式翻转成了回收术，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「回收术」', transformMessage: '血咒仪式翻转为回收术…' };
     },
     flipToUndyingBlessing: () => {
-      [id, rng] = nextId(rng, `${STARTER_CARD_IDS.undyingBlessing}-pick`);
+      // Suffix MUST match `getStarterBaseId`'s strip pattern so the played
+      // card routes through `resolvePermanentMagic`'s starter switch
+      // (case STARTER_CARD_IDS.undyingBlessing). Without `-1`, the base36
+      // suffix from nextId leaves the id unstrippable and the card silently
+      // no-ops (same class of bug as the雷震击 / 战斗鼓舞 / 铸甲术 grants).
+      [id, rng] = nextId(rng, `${STARTER_CARD_IDS.undyingBlessing}-evt-1`);
       return { card: { id, type: 'magic', name: '不灭赐福', value: 0, image: starterScrollReviveImage, magicType: 'permanent', magicEffect: '永久魔法：选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），然后失去 2 点生命。', description: '赋予装备复生能力，失去 2 点生命。已复生的装备可再次赋予。', shortDescription: '一件装备获得复生；失去 2 生命', recycleDelay: 2 }, rng, banner: '血咒仪式翻转成了不灭赐福，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「不灭赐福」', transformMessage: '血咒仪式翻转为不灭赐福…' };
     },
     flipToCurseWeapon: () => {
@@ -1105,8 +1110,23 @@ export function applySimpleEffect(
     if (state.amuletSlots.length > 0) {
       // Aura reversal is handled centrally by `postProcessAmuletAura` in
       // reducer.ts — clearing amuletSlots is enough.
-      patch.discardedCards = [...state.discardedCards, ...state.amuletSlots];
+      //
+      // Perm-flagged amulets (附魔祭坛 加 Perm 2 / native permEquipment / 凡化咒
+      // 未剥离) MUST route to the permanent magic recycle bag; non-Perm amulets
+      // go to the graveyard. Mirrors the wraith-curse routing in
+      // `turn.ts:reduceMonsterTurnEndEffects` and the equipment-destruction
+      // contract in `equipment-effects.ts`.
+      const permAmulets: GameCardData[] = [];
+      const nonPermAmulets: GameCardData[] = [];
+      for (const a of state.amuletSlots) {
+        if (cardHasPermFlag(a as GameCardData)) permAmulets.push(a as GameCardData);
+        else nonPermAmulets.push(a as GameCardData);
+      }
+      patch.discardedCards = [...state.discardedCards, ...nonPermAmulets];
       patch.amuletSlots = [];
+      for (const card of permAmulets) {
+        allEnqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
+      }
       patch.heroSkillBanner = '所有护符都被粉碎了。';
       logs.push({ type: 'event', message: `粉碎 ${state.amuletSlots.length} 枚护符` });
     } else {
@@ -1599,7 +1619,15 @@ export function applySimpleEffect(
     [shuffledMagic, discoverRng] = rngShuffle([...starterMagicCards], discoverRng);
     const discoverTempCards = shuffledMagic.slice(0, 3).map(c => {
       let _id: string;
-      [_id, discoverRng] = nextId(discoverRng, `${c.id}-disc`);
+      // Suffix MUST be strippable by `getStarterBaseId` so that, when the
+      // player picks one and later plays it, `resolvePermanentMagic`'s
+      // starter-id switch can route to the correct handler. The `-disc-1`
+      // shape pairs with the relaxed `-disc-\d+(-[a-z0-9]+)?$` strip
+      // pattern (see deck.ts:getStarterBaseId). Previously `-disc` (no
+      // digits) silently broke every starter magic delivered through this
+      // discover flow — including 连环转律 / 锐意鼓舞 / 运势博弈 (which
+      // explicitly omit `magicEffect` to rely on starter-id routing).
+      [_id, discoverRng] = nextId(discoverRng, `${c.id}-disc-1`);
       return { ...c, id: _id };
     });
     patch.rng = discoverRng;
@@ -2026,7 +2054,12 @@ export function applySimpleEffect(
     if (template) {
       let rng = state.rng;
       let _id: string;
-      [_id, rng] = nextId(rng, `${template.id}-evt`);
+      // Suffix MUST match `getStarterBaseId`'s strip pattern `-evt-\d+-[a-z0-9]+$`
+      // so resolvePermanentMagic's starter switch can route the granted card.
+      // Without the `-1` segment, the base36 suffix from nextId leaves the id
+      // unstrippable and the played card silently no-ops (real bug for
+      // 雷震击 / 战斗鼓舞 / 铸甲术 granted from events).
+      [_id, rng] = nextId(rng, `${template.id}-evt-1`);
       patch.rng = rng;
       const card: GameCardData = { ...template, id: _id };
       const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);

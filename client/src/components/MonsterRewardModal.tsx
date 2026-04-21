@@ -14,11 +14,22 @@ interface MonsterRewardModalProps {
   monsterName: string;
   options: MonsterRewardModalOption[];
   onSelect: (optionId: string) => void;
+  /**
+   * Optional: outside-click / X / ESC fold handler. When provided, the dialog's
+   * built-in dismiss gestures call this instead of staying open. Mirrors the
+   * Shop/Event modal "fold to bottom pill" pattern.
+   */
+  onMinimize?: () => void;
 }
 
-export default function MonsterRewardModal({ open, monsterName, options, onSelect }: MonsterRewardModalProps) {
+export default function MonsterRewardModal({ open, monsterName, options, onSelect, onMinimize }: MonsterRewardModalProps) {
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && onMinimize) onMinimize();
+      }}
+    >
       <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

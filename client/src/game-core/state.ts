@@ -148,6 +148,7 @@ export function createInitialGameState(): GameState {
 
     monsterRewardQueue: [],
     activeMonsterReward: null,
+    monsterRewardMinimized: false,
     selectedMonsterRewards: null,
     monsterRewardPreviewCache: {},
 
@@ -173,6 +174,7 @@ export function createInitialGameState(): GameState {
     magicChoiceModal: null,
 
     discoverModalOpen: false,
+    discoverModalMinimized: false,
     discoverOptions: [],
     discoverSourceLabel: null,
     pendingClassDiscoverQueue: [],
@@ -185,6 +187,7 @@ export function createInitialGameState(): GameState {
     amplifyModal: null,
     eventAmplifyHandPicker: null,
     graveyardDiscoverState: null,
+    graveyardDiscoverMinimized: false,
     graveyardDiscoverDelivery: 'backpack',
     cardActionContext: null,
     equipmentPrompt: null,

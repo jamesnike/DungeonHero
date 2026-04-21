@@ -66,7 +66,7 @@ export function reduceShopActions(state: GameState, action: GameAction): ReduceR
         shopLevel: Math.min(MAX_SHOP_LEVEL, Math.max(0, action.level)),
       });
     case 'CLEAR_ACTIVE_MONSTER_REWARD':
-      return applyPatch(state, { activeMonsterReward: null });
+      return applyPatch(state, { activeMonsterReward: null, monsterRewardMinimized: false });
     case 'CACHE_MONSTER_REWARD_PREVIEW':
       return reduceCacheMonsterRewardPreview(state, action);
     case 'SET_ACTIVE_CARD_STACKS':
@@ -514,7 +514,15 @@ function reduceMonsterRewardGrantStatSwap(state: GameState): ReduceResult {
 }
 
 function reduceDequeueMonsterReward(state: GameState): ReduceResult {
-  if (state.activeMonsterReward || state.monsterRewardQueue.length === 0 || state.ghostBladeExileCards) {
+  if (state.activeMonsterReward || state.ghostBladeExileCards) {
+    return noChange(state);
+  }
+  if (state.monsterRewardQueue.length === 0) {
+    // Nothing queued — but defensively clear any stale minimized flag so
+    // a previously-folded reward doesn't leave dangling pill state behind.
+    if (state.monsterRewardMinimized) {
+      return applyPatch(state, { monsterRewardMinimized: false });
+    }
     return noChange(state);
   }
   const patch = dequeueMonsterRewardPure(state);

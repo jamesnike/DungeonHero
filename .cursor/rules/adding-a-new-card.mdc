@@ -17,7 +17,7 @@ A card has TWO halves: **data** (in a deck file) and **behavior** (registered in
 | Knight class-specific deck | [`lib/knightDeck.ts`](client/src/lib/knightDeck.ts) `generateKnightDeck()` | — |
 | Runtime-generated tokens (e.g. 魔弹) | factory function in `deck.ts` / `knightDeck.ts` | use `nextId(rng, prefix)` |
 
-For starter/class cards: also add a key to `STARTER_CARD_IDS` (deck.ts ~line 2023). `getStarterBaseId(card.id)` strips suffixes (`-pick-N`, `-evt-…`, `-disc-…`) so the registry key matches across runtime variants.
+For starter/class cards: also add a key to `STARTER_CARD_IDS` (deck.ts ~line 2241). `getStarterBaseId(card.id)` strips runtime suffixes so the registry key matches across runtime variants — but the suffix MUST follow `-{pick|evt|disc}-{N}[-{base36}]` shape (the leading `-N` digit segment is required). When a new event / discover code path generates card ids via `nextId`, see [`event-grant-card-id-suffix.mdc`](event-grant-card-id-suffix.mdc) for the exact prefix template — getting this wrong silently makes the granted card no-op when played.
 
 ## 2. Fill `GameCardData` correctly
 

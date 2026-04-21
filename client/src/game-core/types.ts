@@ -460,6 +460,8 @@ export interface GameState {
   // --- Monster rewards ---
   monsterRewardQueue: MonsterRewardDrop[];
   activeMonsterReward: MonsterRewardDrop | null;
+  /** True when the active monster reward modal has been folded to the bottom pill. */
+  monsterRewardMinimized: boolean;
   selectedMonsterRewards: MonsterRewardOption[] | null;
   monsterRewardPreviewCache: Record<string, MonsterRewardOption[]>;
 
@@ -488,6 +490,8 @@ export interface GameState {
 
   // --- Discover / card actions ---
   discoverModalOpen: boolean;
+  /** True when the class-discover modal has been folded to the bottom pill. */
+  discoverModalMinimized: boolean;
   discoverOptions: GameCardData[];
   discoverSourceLabel: string | null;
   /**
@@ -512,6 +516,8 @@ export interface GameState {
   /** 增幅仪式（事件）：选择手牌中的装备/伤害魔法作为增幅祭坛目标 */
   eventAmplifyHandPicker: { eventCardId: string; cellIdx: number } | null;
   graveyardDiscoverState: GameCardData[] | null;
+  /** True when the graveyard-discover modal has been folded to the bottom pill. */
+  graveyardDiscoverMinimized: boolean;
   graveyardDiscoverDelivery: 'backpack' | 'hand-first';
   cardActionContext: CardActionContext | null;
   equipmentPrompt: EquipmentPromptState | null;

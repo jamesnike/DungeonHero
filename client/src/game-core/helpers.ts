@@ -508,6 +508,7 @@ export function isDamageMagic(card: GameCardData): boolean {
     'temp-attack-strike',
     'weapon-sweep',
     'overkill-upgrade',
+    'stun-cap-strike',
   ];
   if (card.knightEffect && damageKnightEffects.includes(card.knightEffect)) return true;
   const damageEffects = [
@@ -545,6 +546,9 @@ export interface DamageMagicDisplayState {
   hp: number;
   maxHp: number;
   gold: number;
+  // 雷涌一击 (knight:stun-cap-strike) 用：base = ceil(stunCap / divisor)。
+  // 旧 caller 不传时按 0 处理（界面会显示 0 法伤，符合"晕上限 0% 时无威胁"语义）。
+  stunCap?: number;
 }
 
 export function computeDamageMagicDisplayPure(
@@ -621,6 +625,24 @@ export function computeDamageMagicDisplayPure(
   }
 
   // ---------- Group C：状态相关 base + amp ----------
+
+  // 雷涌一击：base = ⌈stunCap / divisor⌉；divisor 由升级等级决定（lvl0=4, lvl1=3）。
+  // 显示的 stun 概率 = min(60, stunCap)，与 reducer 实际行为一致。
+  if (card.knightEffect === 'stun-cap-strike') {
+    const divisors = [4, 3];
+    const lvl = card.upgradeLevel ?? 0;
+    const div = divisors[lvl] ?? 3;
+    const stunCap = state.stunCap ?? 0;
+    const base = Math.ceil(stunCap / div);
+    const dmg = base + amp;
+    const stunPct = Math.min(60, stunCap);
+    return {
+      mode: 'replace',
+      text: `永久：对一个怪物造成 ${dmg} 点法术伤害（晕上限 ${stunCap}% / ÷${div}），${stunPct}% 击晕，然后抽 1 张牌。`,
+      amplifyBonus: amp,
+    };
+  }
+
 
   if (card.name === '点金裁决') {
     const dmg = state.gold + amp;

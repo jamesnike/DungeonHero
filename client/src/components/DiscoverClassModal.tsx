@@ -6,6 +6,12 @@ interface DiscoverClassModalProps {
   cards: GameCardData[];
   onSelect: (cardId: string) => void;
   onCancel?: () => void;
+  /**
+   * Optional: outside-click / X / ESC fold handler. When provided, the dialog's
+   * built-in dismiss gestures call this instead of staying open. Mirrors the
+   * Shop/Event modal "fold to bottom pill" pattern.
+   */
+  onMinimize?: () => void;
   title?: string;
   description?: string;
 }
@@ -15,6 +21,7 @@ export default function DiscoverClassModal({
   cards,
   onSelect,
   onCancel,
+  onMinimize,
   title,
   description,
 }: DiscoverClassModalProps) {
@@ -23,7 +30,12 @@ export default function DiscoverClassModal({
     description ?? '从三张候选卡中挑选一张，其余卡牌会放回 Class Deck。';
 
   return (
-    <Dialog open={open}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && onMinimize) onMinimize();
+      }}
+    >
       <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto p-5 sm:p-8">
         <DialogHeader>
           <DialogTitle>{headerTitle}</DialogTitle>

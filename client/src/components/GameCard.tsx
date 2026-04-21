@@ -513,7 +513,8 @@ function useDamageMagicDisplay(card: GameCardData): DamageMagicDisplay {
   const hp = useGameState(s => s.hp);
   const gold = useGameState(s => s.gold);
   const maxHp = useGameState(s => computeMaxHp(s));
-  return computeDamageMagicDisplayPure(card, { hp, maxHp, gold });
+  const stunCap = useGameState(s => s.stunCap ?? 0);
+  return computeDamageMagicDisplayPure(card, { hp, maxHp, gold, stunCap });
 }
 
 export function isPermRecycleEquipment(card: GameCardData | null | undefined): boolean {
@@ -2071,7 +2072,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层，2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时当前血层为 1），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
                     )}
                   </div>
                 )}
@@ -2204,7 +2205,7 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层，2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时当前血层为 1），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
                     )}
                     {card._potionStunBonusApplied && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title={`雷震淬刃药：永久击晕率 ${card.weaponStunChance ?? 0}%`}>击晕 {card.weaponStunChance ?? 0}%</span>

@@ -372,9 +372,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     depsRef.current.removeCard(buildingId, true);
   });
 
-  useGameEvent('combat:golemReflect', ({ monsterId }) => {
+  useGameEvent('combat:golemReflect', ({ monsterId, hitSlotId }) => {
     depsRef.current.tryStartGolemLayerReflectFx(monsterId);
-    depsRef.current.triggerHeroBleedAnimation();
+    // When a shield slot absorbed the hit, the hero did not actually bleed;
+    // skipping the bleed animation avoids misleading red-flash feedback.
+    if (hitSlotId == null) {
+      depsRef.current.triggerHeroBleedAnimation();
+    }
   });
 
   useGameEvent('combat:classDamageDiscoverTriggered', ({ threshold }) => {

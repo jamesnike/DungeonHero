@@ -69,6 +69,7 @@ import knightScrollBagFetchImage from '@assets/generated_images/knight_scroll_ba
 import knightMagicBloodDrawImage from '@assets/generated_images/knight_magic_blood_draw.png';
 import knightWeaponResonanceBladeImage from '@assets/generated_images/knight_weapon_resonance_blade.png';
 import dedupeStarterMagicMissileImage from '@assets/generated_images/knight_magic_missile_crossbow.png';
+import dedupeStarterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
 import knightShieldEnduranceImage from '@assets/generated_images/knight_shield_endurance.png';
 import knightGrowthShieldImage from '@assets/generated_images/knight_growth_shield.png';
 import knightAmuletArmorHalveEndureImage from '@assets/generated_images/knight_amulet_armor_halve_endure.png';
@@ -839,6 +840,24 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     magicType: 'permanent',
     magicEffect: '护甲转化为击晕上限。',
     knightEffect: 'armor-stun-convert',
+    maxUpgradeLevel: 1,
+  });
+
+  // 雷涌一击 (Perm 1)：对一个怪物造成 ⌈击晕上限/4⌉ 点法术伤害（基于 state.stunCap，
+  // 升 1 后改为 ⌈击晕上限/3⌉），单次 60% 击晕（与所有击晕一致受 stunCap 上限约束），
+  // 然后抽 1 张牌。回响：伤害 ×N，抽牌 ×N，击晕掷骰仍只发生一次。
+  pushCard({
+    type: 'magic',
+    name: '雷涌一击',
+    value: 0,
+    image: dedupeStarterThunderStrikeImage,
+    classCard: true,
+    description: '永久：对一个怪物造成 ⌈击晕上限/4⌉ 点法术伤害，60% 击晕（受击晕上限约束），然后抽 1 张牌。',
+    shortDescription: '⌈晕上限/4⌉ 法伤；60% 晕；抽 1',
+    magicType: 'permanent',
+    magicEffect: '电涌：晕上限 1/4 法伤 + 60% 晕 + 抽 1。',
+    knightEffect: 'stun-cap-strike',
+    recycleDelay: 1,
     maxUpgradeLevel: 1,
   });
 

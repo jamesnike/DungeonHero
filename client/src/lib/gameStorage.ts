@@ -229,8 +229,11 @@ export interface PersistedGameState {
 
   // --- Modal states (persisted so they survive page refresh) ---
   discoverModalOpen?: boolean;
+  discoverModalMinimized?: boolean;
   discoverOptions?: GameCardData[];
   discoverSourceLabel?: string | null;
+  graveyardDiscoverMinimized?: boolean;
+  monsterRewardMinimized?: boolean;
   deleteModalOpen?: boolean;
   upgradeModalOpen?: boolean;
   showCardDraft?: boolean;

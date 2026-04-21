@@ -36,7 +36,12 @@ export function reduceUIStateActions(
       return applyPatch(state, { cardActionContext: action.payload });
 
     case 'SET_GRAVEYARD_DISCOVER_STATE': {
-      const patch: Partial<GameState> = { graveyardDiscoverState: action.payload };
+      const patch: Partial<GameState> = {
+        graveyardDiscoverState: action.payload,
+        // Always reset the minimized flag — both on open (fresh modal must
+        // not start folded) and on close (defensive cleanup).
+        graveyardDiscoverMinimized: false,
+      };
       if (action.delivery !== undefined) {
         patch.graveyardDiscoverDelivery = action.delivery;
       }
@@ -107,7 +112,12 @@ export function reduceUIStateActions(
     }
 
     case 'SET_DISCOVER_MODAL': {
-      const patch: Partial<GameState> = { discoverModalOpen: action.open };
+      const patch: Partial<GameState> = {
+        discoverModalOpen: action.open,
+        // Always reset minimized — opening a fresh modal must not inherit
+        // a leftover folded state, closing should clean up too.
+        discoverModalMinimized: false,
+      };
       if (action.options !== undefined) {
         patch.discoverOptions = action.options;
       }
@@ -135,6 +145,28 @@ export function reduceUIStateActions(
 
     case 'SET_SHOP_MODAL_MINIMIZED':
       return applyPatch(state, { shopModalMinimized: action.minimized });
+
+    case 'SET_DISCOVER_MODAL_MINIMIZED':
+      return applyPatch(state, { discoverModalMinimized: action.minimized });
+
+    case 'SET_GRAVEYARD_DISCOVER_MINIMIZED':
+      return applyPatch(state, { graveyardDiscoverMinimized: action.minimized });
+
+    case 'SET_MONSTER_REWARD_MINIMIZED':
+      return applyPatch(state, { monsterRewardMinimized: action.minimized });
+
+    case 'MINIMIZE_ALL_MODALS': {
+      // Only mark currently-open modals as minimized. Touching closed ones
+      // is harmless but pointless and would noise up state diffs.
+      const patch: Partial<GameState> = {};
+      if (state.eventModalOpen && !state.eventModalMinimized) patch.eventModalMinimized = true;
+      if (state.shopModalOpen && !state.shopModalMinimized) patch.shopModalMinimized = true;
+      if (state.discoverModalOpen && !state.discoverModalMinimized) patch.discoverModalMinimized = true;
+      if (state.graveyardDiscoverState && !state.graveyardDiscoverMinimized) patch.graveyardDiscoverMinimized = true;
+      if (state.activeMonsterReward && !state.monsterRewardMinimized) patch.monsterRewardMinimized = true;
+      if (Object.keys(patch).length === 0) return applyPatch(state, {});
+      return applyPatch(state, patch);
+    }
 
     case 'SET_HERO_SKILL_BANNER':
       return applyPatch(state, { heroSkillBanner: action.message });

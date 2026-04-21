@@ -851,6 +851,7 @@ export function applyEquipDestroyLastWords(
       patch.discardedCards = pool.filter((_, i) => i !== pick.idx);
       enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: pick.picked });
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：从坟场获得了「${pick.picked.name}」！` } });
+      sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
     } else {
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：坟场没有可用的牌。` } });
     }

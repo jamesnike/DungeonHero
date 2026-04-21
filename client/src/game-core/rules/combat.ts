@@ -202,8 +202,14 @@ function reduceBeginCombat(
       }
 
       // Re-apply monster rage so summoned monsters scale to the current waterfall level.
+      // Boss graveyard summon: summoned monsters enter with currentLayer = 1
+      // (max hpLayers / rage cap is left at the rage value, so layer-regen mechanics
+      //  like 暴走光环 / 复生 can still restore layers up to the normal cap).
       const isQuick = state.gameMode === 'quick';
-      const summonedMonsterCards = rawMonsters.map(c => applyMonsterRage(c, state.turnCount, isQuick));
+      const summonedMonsterCards = rawMonsters.map(c => {
+        const raged = applyMonsterRage(c, state.turnCount, isQuick);
+        return { ...raged, currentLayer: 1 };
+      });
       const summonedNonMonsterCards = rawNonMonsters; // non-monsters unchanged
       const picked = [...summonedMonsterCards, ...summonedNonMonsterCards];
 
@@ -666,24 +672,26 @@ function reduceDealDamageToMonster(
       });
     }
 
-    // Golem layer-loss reflect — deterministic enqueue, no more setTimeout
+    // Golem layer-loss reflect — routes via shared shield/HP helper.
     if (monster.golemLayerLossReflect && monster.golemLayerLossReflect > 0
       && layersAfter < layersBefore && !monster.isStunned) {
       const totalLostLayers = (monster.fury ?? monster.hpLayers ?? 1) - layersAfter;
       const reflectDmg = monster.golemLayerLossReflect * totalLostLayers;
-      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: reflectDmg, source: 'combat' });
+      const reflectLabel = `岩层反震（${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
+      const route = routeReflectDamageToHero(state, reflectDmg, monster.name, reflectLabel, rng);
+      Object.assign(patch, route.patch);
+      rng = route.rng;
       sideEffects.push({
         event: 'combat:golemReflect',
-        payload: { monsterId: action.monsterId, monsterName: monster.name, damage: reflectDmg },
-      });
-      sideEffects.push({
-        event: 'log:entry',
         payload: {
-          type: 'combat',
-          message: `${monster.name} 岩层反震：${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层，对英雄造成 ${reflectDmg} 点伤害！`,
+          monsterId: action.monsterId,
+          monsterName: monster.name,
+          damage: reflectDmg,
+          hitSlotId: route.hitSlotId,
         },
       });
-      sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 岩层反震！受到 ${reflectDmg} 点伤害！` } });
+      sideEffects.push(...route.sideEffects);
+      enqueuedActions.push(...route.enqueuedActions);
     }
 
     // Swarm-elite — replace a random non-monster board card with buglet
@@ -1260,26 +1268,34 @@ function reduceDecrementFury(
 
   // Golem layer-loss reflect — also fires when the monster spends a layer to
   // attack (DECREMENT_FURY), mirroring the DEAL_DAMAGE_TO_MONSTER branch.
+  let reflectPatch: Partial<GameState> = {};
   if (monster.golemLayerLossReflect && monster.golemLayerLossReflect > 0
     && nextLayer < currentLayer && !monster.isStunned) {
     const totalLostLayers = (monster.fury ?? monster.hpLayers ?? 1) - nextLayer;
     const reflectDmg = monster.golemLayerLossReflect * totalLostLayers;
-    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: reflectDmg, source: 'combat' });
+    const reflectLabel = `岩层反震（${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
+    const route = routeReflectDamageToHero(state, reflectDmg, monster.name, reflectLabel, rng);
+    reflectPatch = route.patch;
+    rng = route.rng;
     sideEffects.push({
       event: 'combat:golemReflect',
-      payload: { monsterId: action.monsterId, monsterName: monster.name, damage: reflectDmg },
-    });
-    sideEffects.push({
-      event: 'log:entry',
       payload: {
-        type: 'combat',
-        message: `${monster.name} 岩层反震：${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层，对英雄造成 ${reflectDmg} 点伤害！`,
+        monsterId: action.monsterId,
+        monsterName: monster.name,
+        damage: reflectDmg,
+        hitSlotId: route.hitSlotId,
       },
     });
-    sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 岩层反震！受到 ${reflectDmg} 点伤害！` } });
+    sideEffects.push(...route.sideEffects);
+    enqueuedActions.push(...route.enqueuedActions);
   }
 
-  return applyPatch(state, { activeCards: activeCards as GameState['activeCards'], rng }, sideEffects, enqueuedActions);
+  return applyPatch(
+    state,
+    { ...reflectPatch, activeCards: activeCards as GameState['activeCards'], rng },
+    sideEffects,
+    enqueuedActions,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1529,21 +1545,43 @@ function reduceApplyShieldReflect(
 }
 
 // ---------------------------------------------------------------------------
-// APPLY_DRAGON_BREATH_RETALIATION
+// routeReflectDamageToHero — shared "dragon-breath-style" routing helper
 //
-// Dragon breath: pick a random shield slot (or hero if none), compute armor
-// damage. Pure state change — animation is a side effect.
+// Picks a random equipment slot containing a shield (or monster equip), and
+// reduces its armor by `damage`. If no shield slot is present, enqueues
+// APPLY_DAMAGE so the damage falls onto tempShield/HP.
+//
+// Used by:
+//   - 龙息反击 (APPLY_DRAGON_BREATH_RETALIATION)
+//   - 反魔 (FINALIZE_MAGIC_CARD anti-magic loop in rules/cards.ts)
+//   - 岩层反震 (DEAL_DAMAGE_TO_MONSTER, DECREMENT_FURY, PERFORM_HERO_ATTACK)
+//
+// Side effects pushed: log + banner only. Caller is responsible for any
+// extra animation events (e.g. combat:dragonBreathFx, combat:golemReflect)
+// — they can read `hitSlotId` from the result to point the animation at
+// the absorbing slot, or pass `'hero'` as the fallback when null.
 // ---------------------------------------------------------------------------
 
-function reduceApplyDragonBreathRetaliation(
+export interface ReflectRouteResult {
+  patch: Partial<GameState>;
+  sideEffects: SideEffect[];
+  enqueuedActions: GameAction[];
+  rng: RngState;
+  /** Slot whose armor absorbed the hit, or `null` if it fell through to HP. */
+  hitSlotId: EquipmentSlotId | null;
+}
+
+export function routeReflectDamageToHero(
   state: GameState,
-  action: Extract<GameAction, { type: 'APPLY_DRAGON_BREATH_RETALIATION' }>,
-): ReduceResult {
+  damage: number,
+  monsterName: string,
+  reflectLabel: string,
+  rngIn?: RngState,
+): ReflectRouteResult {
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
-  let rng = state.rng;
-  const retDmg = action.damage;
+  let rng = rngIn ?? state.rng;
 
   const slots: Array<{ slotId: EquipmentSlotId; item: GameCardData | null }> = [
     { slotId: 'equipmentSlot1', item: state.equipmentSlot1 as GameCardData | null },
@@ -1558,12 +1596,10 @@ function reduceApplyDragonBreathRetaliation(
     [target, rng] = pickRandom(validShields, rng);
     const { slotId, item } = target;
 
-    sideEffects.push({ event: 'combat:dragonBreathFx', payload: { monsterId: action.monsterId, targetSlotId: slotId } });
-
     const isMonsterEquip = item.type === 'monster';
     const baseArmor = isMonsterEquip ? (item.hp ?? item.value) : (item.armorMax ?? item.value);
     const storedArmor = Math.min(item.armor ?? baseArmor, baseArmor);
-    const newArmor = Math.max(0, storedArmor - retDmg);
+    const newArmor = Math.max(0, storedArmor - damage);
 
     if (newArmor <= 0) {
       const { armor: _ca, armorBonusDamaged: _cb, ...resetBase } = item;
@@ -1575,21 +1611,48 @@ function reduceApplyDragonBreathRetaliation(
     const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'combat', message: `${action.monsterName} 龙息反击：对${slotLabel}装备 ${item.name} 造成 ${retDmg} 点护甲伤害（${storedArmor}→${newArmor}）` },
+      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：对${slotLabel}装备 ${item.name} 造成 ${damage} 点护甲伤害（${storedArmor}→${newArmor}）` },
     });
-    sideEffects.push({ event: 'ui:banner', payload: { text: `${action.monsterName} 龙息反击！${item.name} 护甲 -${Math.min(retDmg, storedArmor)}！` } });
-  } else {
-    sideEffects.push({ event: 'combat:dragonBreathFx', payload: { monsterId: action.monsterId, targetSlotId: 'hero' } });
-    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: retDmg, source: 'combat' });
     sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'combat', message: `${action.monsterName} 龙息反击：对玩家造成 ${retDmg} 点法术伤害！` },
+      event: 'ui:banner',
+      payload: { text: `${monsterName} ${reflectLabel}！${item.name} 护甲 -${Math.min(damage, storedArmor)}！` },
     });
-    sideEffects.push({ event: 'ui:banner', payload: { text: `${action.monsterName} 龙息反击！受到 ${retDmg} 点伤害！` } });
+
+    return { patch, sideEffects, enqueuedActions, rng, hitSlotId: slotId };
   }
 
-  patch.rng = rng;
-  return applyPatch(state, patch, sideEffects, enqueuedActions);
+  enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: damage, source: 'combat' });
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：对玩家造成 ${damage} 点法术伤害！` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${monsterName} ${reflectLabel}！受到 ${damage} 点伤害！` },
+  });
+  return { patch, sideEffects, enqueuedActions, rng, hitSlotId: null };
+}
+
+// ---------------------------------------------------------------------------
+// APPLY_DRAGON_BREATH_RETALIATION
+//
+// Dragon breath: routes damage via routeReflectDamageToHero, then emits the
+// dragon-breath-specific FX event pointing at the absorbing slot (or hero).
+// ---------------------------------------------------------------------------
+
+function reduceApplyDragonBreathRetaliation(
+  state: GameState,
+  action: Extract<GameAction, { type: 'APPLY_DRAGON_BREATH_RETALIATION' }>,
+): ReduceResult {
+  const route = routeReflectDamageToHero(state, action.damage, action.monsterName, '龙息反击');
+  const sideEffects: SideEffect[] = [
+    {
+      event: 'combat:dragonBreathFx',
+      payload: { monsterId: action.monsterId, targetSlotId: route.hitSlotId ?? 'hero' },
+    },
+    ...route.sideEffects,
+  ];
+  return applyPatch(state, { ...route.patch, rng: route.rng }, sideEffects, route.enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------
@@ -2142,6 +2205,33 @@ function reducePerformHeroAttack(
         sideEffects.push({ event: 'combat:monsterDefeated', payload: { monsterId: targetMonster.id, monsterName: targetMonster.name } });
         monsterDefeated = true;
       }
+    }
+
+    // --- Golem layer-loss reflect ---
+    // Mirrors the DEAL_DAMAGE_TO_MONSTER / DECREMENT_FURY branches: fires when
+    // the monster loses a layer from this hit but is not defeated. The total
+    // lost layers is measured from the original fury / hpLayers baseline so
+    // damage scales with how worn-down the golem already is.
+    if (!monsterDefeated && !isBuildingTarget
+      && targetMonster.golemLayerLossReflect && targetMonster.golemLayerLossReflect > 0
+      && layerAfterHit < layerBeforeHit && !targetMonster.isStunned) {
+      const totalLostLayers = (targetMonster.fury ?? targetMonster.hpLayers ?? 1) - layerAfterHit;
+      const reflectDmg = targetMonster.golemLayerLossReflect * totalLostLayers;
+      const reflectLabel = `岩层反震（${targetMonster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
+      const route = routeReflectDamageToHero(state, reflectDmg, targetMonster.name, reflectLabel, rng);
+      Object.assign(patch, route.patch);
+      rng = route.rng;
+      sideEffects.push({
+        event: 'combat:golemReflect',
+        payload: {
+          monsterId: targetMonsterId,
+          monsterName: targetMonster.name,
+          damage: reflectDmg,
+          hitSlotId: route.hitSlotId,
+        },
+      });
+      sideEffects.push(...route.sideEffects);
+      enqueuedActions.push(...route.enqueuedActions);
     }
   }
 

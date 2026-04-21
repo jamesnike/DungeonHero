@@ -268,6 +268,14 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         return;
       }
 
+      // If discover was one step in a multi-effect event chain (e.g.
+      // ['discoverClassMagic', 'openShop'] from 墓语密室「召唤商贩」),
+      // resume the remaining tokens instead of finalizing the event now.
+      if (engine.getState().pendingEventEffects.length > 0) {
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        return;
+      }
+
       depsRef.current.completeCurrentEvent();
     },
     [
@@ -295,11 +303,16 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         return;
       }
 
+      if (engine.getState().pendingEventEffects.length > 0) {
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        return;
+      }
+
       depsRef.current.completeCurrentEvent();
     },
     [
       discoverOptions,
-      dispatch,
+      engine, dispatch,
     ],
   );
 

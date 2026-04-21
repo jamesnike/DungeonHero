@@ -463,9 +463,12 @@ function reduceResolveDice(
     case 'repair-enrage-dice': {
       const card = ctx.card as GameCardData | undefined;
       const slotId = ctx.slotId as EquipmentSlotId | undefined;
+      // monsterId may be undefined when the card was played with no monsters
+      // on the board — the enrage outcome will degrade gracefully in
+      // reduceResolveRepairEnrageDice (装备不获得耐久，仅记录失败日志).
       const monsterId = ctx.monsterId as string | undefined;
       const diceResultId = (action.outcomeId === 'repair' ? 'repair' : 'enrage') as 'repair' | 'enrage';
-      if (card && slotId && monsterId) {
+      if (card && slotId) {
         enqueuedActions.push({
           type: 'RESOLVE_REPAIR_ENRAGE_DICE',
           card,

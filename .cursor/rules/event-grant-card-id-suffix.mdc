@@ -1,0 +1,100 @@
+---
+description: Event-granted starter / class cards — id suffix MUST match getStarterBaseId's strip pattern, otherwise the played card silently no-ops
+globs: client/src/game-core/events.ts, client/src/game-core/deck.ts, client/src/lib/knightDeck.ts, client/src/hooks/useEventSystem.ts
+alwaysApply: false
+---
+
+# Event-Granted Card IDs Must Be Strippable
+
+When an event grants a **starter / class permanent magic** card, the `nextId(rng, prefix)` call MUST produce an id that `getStarterBaseId` can strip back to the registered `STARTER_CARD_IDS.X` value. Otherwise the card lands in the player's backpack but **does absolutely nothing when played** (the `resolvePermanentMagic` switch falls through silently).
+
+This is the class of bug that affected 雷震击 / 战斗鼓舞 / 铸甲术 / 不灭赐福 / `discoverStarterMagic` 全套 (15+ cards) — all from the same root cause.
+
+## Who is at risk
+
+A card relies on starter-id routing (and therefore needs strippable id) when it has **none** of these higher-priority dispatch keys (see [`registry.ts` `resolveEffectId`](client/src/game-core/card-schema/registry.ts)):
+
+- `potionEffect` — registered potion
+- `heroMagicId` — registered hero magic
+- `knightEffect` — registered knight effect (e.g. `'recall-equipment'`)
+- A `magicEffect` value that is itself a **registered effect id** (e.g. `'honor-blood'`, `'guild-hand-recycle'`)
+
+If `magicEffect` is set to a **description string** like `'永久魔法：选择一个装备...'` (very common for starter cards), routing **falls through to starter-id**. Some cards (`transformStreakStrike`, `flankSlotTempAttack`, `deckTopSwapGold`) explicitly omit `magicEffect` to force starter-id routing.
+
+## The strip rule (`getStarterBaseId`)
+
+```ts
+return cardId
+  .replace(/-pick-\d+(-[a-z0-9]+)?$/, '')
+  .replace(/-evt-\d+(-[a-z0-9]+)?$/, '')
+  .replace(/-disc-\d+(-[a-z0-9]+)?$/, '');
+```
+
+Strippable shapes:
+- `${id}-pick-{N}` or `${id}-pick-{N}-{base36}`
+- `${id}-evt-{N}` or `${id}-evt-{N}-{base36}`
+- `${id}-disc-{N}` or `${id}-disc-{N}-{base36}`
+
+The leading `-N` digit segment is **required** (defense against false-positive strips on substrings like `-discard-` / `-discover-`).
+
+## ✅ Correct patterns
+
+```ts
+// Event grant via factory:
+[id, rng] = nextId(rng, `${STARTER_CARD_IDS.stunStrike}-evt-1`);
+// → 'starter-perm-stun-strike-evt-1-{base36}' → strips to 'starter-perm-stun-strike' ✓
+
+// Discover seed in event:
+[id, rng] = nextId(rng, `${c.id}-disc-1`);
+// → 'starter-perm-X-disc-1-{base36}' → strips to 'starter-perm-X' ✓
+
+// Knight deck factory (pure-digit counter):
+id: `${STARTER_CARD_IDS.magicMissile}-pick-901`,
+// → strips to 'starter-perm-magic-missile' ✓
+```
+
+## ❌ Forbidden patterns
+
+```ts
+// Missing -N digit segment — base36 suffix from nextId won't strip:
+[id, rng] = nextId(rng, `${template.id}-evt`);
+//                                          ^^^^ BUG
+// → 'starter-perm-stun-strike-evt-{base36}' → DOES NOT STRIP → no-op when played
+
+[id, rng] = nextId(rng, `${STARTER_CARD_IDS.undyingBlessing}-pick`);
+//                                                            ^^^^^ BUG
+// → 99% of RNG runs leave letters in suffix → DOES NOT STRIP → no-op
+
+[_id, discoverRng] = nextId(discoverRng, `${c.id}-disc`);
+//                                                ^^^^^ BUG
+// → no -disc-{digit} segment → DOES NOT STRIP → entire discover modal yields dead cards
+```
+
+## Mandatory checklist when adding/modifying an event-grant code path
+
+1. **Find the `nextId` call** that produces the new card id. Confirm the prefix ends in `-pick-{N}` / `-evt-{N}` / `-disc-{N}` (with the digit segment).
+2. **Identify the routing field** the card relies on (`potionEffect` / `knightEffect` / starter-id / etc.).
+   - If it's starter-id, the strip must succeed — write the test below.
+   - If it's `knightEffect` with a registered handler (like `recall-equipment`), strip success is irrelevant — but document this assumption.
+3. **Add a regression test** in `client/src/game-core/__tests__/event-grant-starter-perm-magics.test.ts`:
+   - Assert `getStarterBaseId(grantedCard.id)` equals the expected `STARTER_CARD_IDS.X`.
+   - Assert `PLAY_CARD` actually produces the expected effect (damage, prompt, side effect) — strip-only assertion is necessary but not sufficient.
+4. **If you change `getStarterBaseId`** — also add cases in the same test file proving:
+   - All three suffix shapes (`-pick`, `-evt`, `-disc`) strip correctly.
+   - Real wild-card ids like `'curse-discard-hand'` and `'amplify-discover'` are NOT mis-stripped.
+
+## How to spot this bug from a user report
+
+> "Event 给的某某卡，拖到 X 后没有任何效果"
+
+→ Suspect this rule. Trace:
+1. Find the `APPLY_EVENT_EFFECT` token that grants the card → locate the `nextId(...)` call.
+2. Compute the resulting id by hand: prefix + `-{base36}`.
+3. Run that id through `getStarterBaseId` mentally (or in a quick test). If it doesn't strip to a `STARTER_CARD_IDS.X` value, that's the bug.
+4. Confirm the card has no `potionEffect` / `knightEffect` / registered `magicEffect` that would short-circuit the routing.
+
+## Related
+
+- [`adding-a-new-card.mdc`](adding-a-new-card.mdc) — overall card-add flow
+- [`shared-effect-id-impact-check.mdc`](shared-effect-id-impact-check.mdc) — when one bug-fix touches N cards through a shared dispatch point
+- [`testing.mdc`](testing.mdc) — end-to-end test requirement (PLAY_CARD assertion, not just id-strip assertion)

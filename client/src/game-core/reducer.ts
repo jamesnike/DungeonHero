@@ -12,6 +12,7 @@
 import type { GameState } from './types';
 import type { GameAction } from './actions';
 import type { GameEventKey, GameEventMap } from './event-bus';
+import type { ActiveRowSlots } from '@/components/game-board/types';
 import { DEV_MODE, DUNGEON_COLUMN_COUNT } from './constants';
 import { reduceTurnActions } from './rules/turn';
 import { reduceCombatActions } from './rules/combat';
@@ -27,7 +28,9 @@ import {
   syncBuildingSlotsPure,
   countActiveRowSlotsExcludeGhost,
   computeAmuletAuraSignature,
+  applyAmplifyOnCreate,
 } from './helpers';
+import { createBugletCard } from './deck';
 import {
   BALANCE_ATTACK_BONUS,
   BALANCE_ATTACK_PENALTY,
@@ -111,6 +114,29 @@ const CARD_PROCESSING_EXEMPT_ACTIONS = new Set<GameAction['type']>([
   'REGISTER_DUNGEON_CARD_PROCESSED',
 ]);
 
+// Actions that should NOT trigger swarm-spawn (bulk row mutations / waterfall
+// pipeline / setup). All other reducer-driven slot clearings (event removal,
+// monster defeat via removeCard, magic-removed dungeon cards, …) go through
+// postProcessActiveCards and let the swarm passive react.
+const SWARM_SPAWN_EXEMPT_ACTIONS = new Set<GameAction['type']>([
+  'INIT_GAME',
+  'TRIGGER_WATERFALL',
+  'DRAW_DUNGEON_ROW',
+  'MONSTER_ENTERED_ROW',
+  'CHECK_HORDE_SWARM',
+  'CHECK_ELITE_GOLD_BUFF',
+  'START_TURN',
+  'END_TURN',
+  'ADVANCE_MONSTER_TURN',
+  'APPLY_MONSTER_TURN_END_EFFECTS',
+  'APPLY_WATERFALL_DROP',
+  'APPLY_WATERFALL_DEAL',
+  'COMPLETE_WATERFALL',
+  'WATERFALL_TURN_RESET',
+  'APPLY_WATERFALL_EFFECTS',
+  'APPLY_WATERFALL_DISCARD_EFFECTS',
+]);
+
 const EMPTY_DEFEAT_IDS = new Set<string>();
 
 function postProcessActiveCards(
@@ -138,7 +164,77 @@ function postProcessActiveCards(
     mutated = true;
   }
 
-  // 3. Detect cards removed from dungeon slots → enqueue REGISTER_DUNGEON_CARD_PROCESSED
+  // 3. Swarm passive (`swarmSpawn`): if a non-Buglet dungeon card was just
+  //    removed AND a swarm monster (with `swarmSpawn`, not stunned, not a
+  //    buglet) is on the active row, spawn a Buglet at the cleared slot.
+  //    Centralised here so that ANY reducer path that clears a dungeon slot
+  //    (event resolution, magic, combat, removeCard hook via
+  //    UPDATE_ACTIVE_CARDS, …) consistently triggers the passive — matching
+  //    the design intent that 「每移除一张地城牌」 should spawn a buglet,
+  //    regardless of code path.
+  //
+  //    Stack-pop wins over swarm spawn: if a slot was repopulated from a
+  //    stacked card before postProcess runs (events.ts COMPLETE_EVENT,
+  //    removeCard hook), `curr` is non-null and we skip the spawn.
+  //
+  //    NOTE: Runs BEFORE step 4 (REGISTER_DUNGEON_CARD_PROCESSED) so that
+  //    swarm-replaced slots don't get counted as "processed" — preserves the
+  //    legacy hook behavior where buglet-replacement skipped auto-draw and
+  //    dungeon-gold amulet effects.
+  if (!SWARM_SPAWN_EXEMPT_ACTIONS.has(action.type)) {
+    for (let col = 0; col < DUNGEON_COLUMN_COUNT; col++) {
+      const prev = prevState.activeCards[col];
+      const curr = state.activeCards[col];
+      if (!prev || curr) continue;
+      if (prev.isBuglet) continue;
+      const hasSwarmMonster = state.activeCards.some(
+        (c, i) =>
+          c != null &&
+          i !== col &&
+          c.type === 'monster' &&
+          c.swarmSpawn === true &&
+          c.isBuglet !== true &&
+          c.isStunned !== true,
+      );
+      if (!hasSwarmMonster) continue;
+
+      const buglet = applyAmplifyOnCreate(createBugletCard(), state.amplifiedCardBonus);
+      const nextActive = [...state.activeCards] as ActiveRowSlots;
+      nextActive[col] = buglet;
+      state = { ...state, activeCards: nextActive };
+      mutated = true;
+
+      result = {
+        ...result,
+        sideEffects: [
+          ...result.sideEffects,
+          {
+            event: 'log:entry',
+            payload: { type: 'combat', message: `虫群效果：小虫子（激怒）在第 ${col + 1} 列生成！` },
+          },
+          {
+            event: 'ui:banner',
+            payload: { text: '虫群效果：小虫子（激怒）生成！' },
+          },
+          {
+            event: 'combat:autoEngage',
+            payload: { monsterId: buglet.id, monsterName: buglet.name },
+          },
+        ],
+      };
+
+      // Horde rage check (CHECK_HORDE_SWARM is idempotent + no-op when
+      // conditions aren't met). Enqueue once per spawn so a multi-clear
+      // burst still gets one re-evaluation per new monster.
+      extraActions.push({ type: 'CHECK_HORDE_SWARM' });
+    }
+  }
+
+  // 4. Detect cards removed from dungeon slots → enqueue REGISTER_DUNGEON_CARD_PROCESSED.
+  //    Uses post-step-3 `state.activeCards` so swarm-replaced slots (now holding a
+  //    buglet) are NOT detected here, mirroring the legacy `removeCard` hook
+  //    behavior of skipping `registerDungeonCardProcessed` when a buglet spawn
+  //    would replace the slot.
   if (!CARD_PROCESSING_EXEMPT_ACTIONS.has(action.type)) {
     for (let col = 0; col < DUNGEON_COLUMN_COUNT; col++) {
       const prev = prevState.activeCards[col];

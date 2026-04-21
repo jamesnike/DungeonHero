@@ -449,6 +449,17 @@ export type PendingMagicAction =
       echoRemaining?: number;
     }
   | {
+      // 雷涌一击：对一个怪物造成 ⌈stunCap / divisor⌉ 法伤 + 60% 击晕 + 抽 1。
+      // divisor 由升级等级决定（lvl 0 → 4，lvl 1 → 3）。stun roll 一次。
+      card: GameCardData;
+      effect: 'stun-cap-strike';
+      step: 'monster-select';
+      prompt: string;
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      data?: { baseDmg: number; stunPct: number };
+    }
+  | {
       card: GameCardData;
       effect: 'overkill-upgrade';
       step: 'monster-select';

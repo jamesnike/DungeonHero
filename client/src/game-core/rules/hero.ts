@@ -34,7 +34,7 @@ import {
   markSkillUsedPure,
 } from '../hero';
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
-import { computeEquipmentBreakEffects } from './equipment-effects';
+import { computeEquipmentBreakEffects, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
 import { computeAmuletEffects } from '../equipment';
 import { nextInt, pickRandom } from '../rng';
 import { damageMonsterWithLayerOverflow } from '../combat';
@@ -663,7 +663,14 @@ function reduceActivateHeroMagic(
               payload: { count: breakResult.classCardDraw, source: item.name },
             });
           }
-          enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+          // Perm-flagged equipment routes to the recycle bag, not the graveyard.
+          // Mirrors DISPOSE_EQUIPMENT_CARD's routing decision so 永恒铭刻 装备
+          // 被怪物末日摧毁后仍能回到回收袋。
+          if (shouldRouteEquipmentToPermRecycle(item)) {
+            enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: item });
+          } else {
+            enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+          }
           destroyedCount++;
         }
       }
@@ -1459,20 +1466,20 @@ function reduceMagicSlotSelection(
         return applyPatch(state, patch, sideEffects);
       }
       const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
-      if (monsters.length === 0) {
-        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, '没有可选的怪物。');
-      }
-      if (monsters.length === 1) {
+      // 无怪物时也允许打出：直接掷骰；enrage 结果在 cards.ts 中会因
+      // 找不到目标而仅记录失败日志，装备不获得耐久。
+      if (monsters.length <= 1) {
         const [reRoll, reRng] = nextInt(patch.rng ?? state.rng, 1, 20);
         patch.rng = reRng;
+        const targetMonster = monsters[0];
         sideEffects.push({ event: 'ui:requestDice', payload: {
-          title: monsters[0].name,
+          title: targetMonster?.name ?? slotItem.name,
           subtitle: '赌运修炼判定',
           entries: [
             { id: 'repair', range: [1, 16] as [number, number], label: '修复成功！', effect: 'none' },
-            { id: 'enrage', range: [17, 20] as [number, number], label: '怪物暴怒！', effect: 'none' },
+            { id: 'enrage', range: [17, 20] as [number, number], label: targetMonster ? '怪物暴怒！' : '失败！无怪物可激怒', effect: 'none' },
           ],
-          context: { flowId: 'repair-enrage-dice', slotId, monsterId: monsters[0].id, cardId: pending.card.id, card: pending.card },
+          context: { flowId: 'repair-enrage-dice', slotId, monsterId: targetMonster?.id, cardId: pending.card.id, card: pending.card },
           predeterminedRoll: reRoll,
         } });
         patch.pendingMagicAction = null;
@@ -1900,6 +1907,66 @@ function reduceMagicMonsterSelection(
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `雷震击：对 ${monster.name} 造成 ${hitDmg}×${hits} 点伤害！${threshold > 0 ? '' : ' 未能击晕。'}`);
+    }
+
+    case 'stun-cap-strike': {
+      // 雷涌一击 manual monster-select. Mirror auto-pick path in
+      // resolveKnightPermanentMagic / 'stun-cap-strike' (single-monster branch):
+      //   1. damage = ceil(stunCap / divisor) * spellDamage * echo
+      //   2. always draw `1 * echo` cards
+      //   3. single 60% (capped to stunCap) stun dice
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const baseDmg = (pending as any).data?.baseDmg ?? 0;
+      const stunPct = Math.min((pending as any).data?.stunPct ?? 0, state.stunCap ?? 0);
+      const totalDmg = computeSpellDamagePure(state, baseDmg + (pending.card.amplifyBonus ?? 0)) * echoMul;
+      const drawCount = 1 * echoMul;
+      const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
+      ensureEngaged(state, monster, enqueuedActions);
+      enqueuedActions.push({
+        type: 'DEAL_DAMAGE_TO_MONSTER',
+        monsterId: monster.id,
+        damage: totalDmg,
+        source: 'stun-cap-strike',
+        isSpellDamage: true,
+      });
+      if (drawCount > 0) {
+        const drawState = { ...state, ...patch } as GameState;
+        const drawResult = drawMultipleFromBackpack(drawState, drawCount);
+        if (drawResult.cards.length > 0) {
+          Object.assign(patch, drawResult.patch);
+          for (const d of drawResult.cards) {
+            sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
+          }
+        }
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster.name} 造成 ${totalDmg} 点法术伤害，抽 ${drawCount} 张牌。${echoTag}` } });
+      const threshold = Math.round((stunPct / 100) * 20);
+      if (threshold > 0 && !monster.isStunned) {
+        const [hsRoll, hsRng] = nextInt(patch.rng ?? state.rng, 1, 20);
+        patch.rng = hsRng;
+        sideEffects.push({ event: 'ui:requestDice', payload: {
+          title: monster.name,
+          subtitle: `${pending.card.name} 击晕判定（${stunPct}%）`,
+          entries: [
+            { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
+            { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
+          ],
+          context: {
+            flowId: 'hero-stun',
+            sourceLabel: pending.card.name,
+            monsterId: monster.id,
+            monsterName: monster.name,
+            currentHit: 1,
+            totalHits: 1,
+            stunPct,
+            magicCardId: pending.card.id,
+          },
+          predeterminedRoll: hsRoll,
+        } });
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name}：${totalDmg} 法伤${threshold > 0 ? `，${stunPct}% 晕` : ''}，抽 ${drawCount} 张。${echoTag}`,
+        { dealtDamage: true });
     }
 
     case 'fate-sight': {
@@ -2360,9 +2427,15 @@ function reduceDiceForHero(
 
   if (ctx.flowId === 'hero-stun') {
     const { monsterId, monsterName, currentHit, totalHits, stunPct } = ctx;
+    // Optional `sourceLabel` lets non-雷震击 callers (e.g. 雷涌一击 / 'stun-cap-strike')
+    // surface their own card name in the stun log without forking the whole flow.
+    // Existing callers that don't pass it keep the original text (向后兼容).
+    const stunLabel = (typeof ctx.sourceLabel === 'string' && ctx.sourceLabel.length > 0)
+      ? ctx.sourceLabel
+      : '雷震';
     if (action.outcomeId === 'stun') {
       enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId, patch: { isStunned: true } });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 被雷震击晕了！` } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 被${stunLabel}击晕了！` } });
       const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
       if (ae.stunRecycleToHandCount > 0) {
         const bag = state.permanentMagicRecycleBag as GameCardData[];

@@ -1402,7 +1402,7 @@ export function createDeck(
           },
         ],
       },
-      { text: '强化意志（击晕上限 +10%，翻转为永久魔法）', effect: ['stunCap+10', 'flipToMonsterAttackDebuff'], hint: '击晕上限 +10%，翻转为 Perm 1 魔法：激活行怪物攻击-2' },
+      { text: '强化意志（击晕上限 +10%，翻转为即时魔法）', effect: ['stunCap+10', 'flipToMonsterAttackDebuff'], hint: '击晕上限 +10%，翻转为即时魔法：激活行怪物攻击-3' },
       { text: '选择至多两张牌升级', effect: 'upgradeCard:2', hint: '从所有可升级的牌中选择至多两张进行升级' },
     ],
   });
@@ -1543,8 +1543,8 @@ export function createDeck(
     name: '墓语密室',
     value: 0,
     image: dedupeEventCryptWhisperImage,
-    description: '左右两侧都是怪物时，翻转为「墓语回响」；否则翻转为「墓语遗愿」。',
-    shortDescription: '依两侧是否为怪物翻为不同卡',
+    description: '左右两侧都是怪物时，翻转为「墓语回响」；否则翻转为「墓语遗愿」。翻转后留在地城原位。',
+    shortDescription: '依两侧是否为怪物翻为不同卡；翻后留原位',
     eventChoices: [
       {
         text: '净化杂质（删 3 张牌）',
@@ -1568,6 +1568,26 @@ export function createDeck(
       { text: '强化意志（发现专属武器，击晕上限 +10%）', effect: ['stunCap+10', 'discoverClassWeapon'], hint: '发现一张专属武器，击晕概率上限 +10%' },
       { text: '威压交涉（劝降等级+1，劝降费用 -2）', effect: ['persuadeLevel+1', 'persuadeCost-2'], hint: '劝降等级提升，费用永久减少 2' },
     ],
+    // Static placeholder so the "翻转" badge shows on this card while it sits
+    // in the active row (`hasFlipTarget = Boolean(card.flipTarget)` in
+    // GameCard.tsx). At resolution time, `handleCardToHero` (GameBoard.tsx)
+    // overrides this with the actual context-dependent target — either
+    // 「墓语回响」 (both neighbors are monsters) or 「墓语遗愿」 (otherwise).
+    // Both branches use `destination: 'stay'`, mirroring this placeholder.
+    flipTarget: {
+      toCard: {
+        id: `${cryptId}-flip-placeholder`,
+        type: 'magic',
+        name: '墓语遗愿',
+        value: 0,
+        image: skillScrollImage,
+        magicType: 'instant',
+        magicEffect: 'crypt-deathwish',
+        description: '即时魔法：选择一个装备，触发其遗言效果 2 次，抽 1 张牌。',
+        shortDescription: '触发一件装备的遗言效果 2 次；抽 1 张',
+      },
+      destination: 'stay',
+    },
   });
 
   deck.push({
@@ -2300,8 +2320,36 @@ export const STARTER_CARD_IDS = {
   deckTopSwapGold: 'starter-perm-deck-top-swap-gold',
 } as const;
 
+/**
+ * Strip runtime-instance suffixes from a card id so it matches the
+ * registered `STARTER_CARD_IDS.X` value used as a routing key in
+ * `resolvePermanentMagic` / `card-schema/registry`.
+ *
+ * Recognized suffix shapes (each optional, applied in order):
+ *   `-pick-{N}`              — knightDeck / shop discover (pure-digit counter)
+ *   `-pick-{N}-{base36}`     — discover-pick reissues
+ *   `-evt-{N}`               — event grant (counter only)
+ *   `-evt-{N}-{base36}`      — event grant via nextId (most common runtime form)
+ *   `-disc-{N}`              — event-driven discover seed (counter only)
+ *   `-disc-{N}-{base36}`     — event-driven discover seed via nextId
+ *
+ * The leading `-N` digit segment is required so we don't accidentally
+ * strip card-id segments that happen to contain `-disc` (e.g.
+ * `'curse-discard-hand'`) or `-pick` substrings.
+ *
+ * History: previously the regex was `-pick-\d+$` and `-evt-\d+-[a-z0-9]+$`,
+ * which silently failed for several event-grant code paths
+ * (grantStarterStunStrike / WeaponBurst / TempArmor used `-evt`,
+ * flipToUndyingBlessing used `-pick` + base36 letters,
+ * discoverStarterMagic used `-disc` which had no strip rule at all).
+ * The relaxed form below tolerates all those variants while keeping the
+ * digit-segment guard against false positives.
+ */
 export function getStarterBaseId(cardId: string): string {
-  return cardId.replace(/-pick-\d+$/, '').replace(/-evt-\d+-[a-z0-9]+$/, '');
+  return cardId
+    .replace(/-pick-\d+(-[a-z0-9]+)?$/, '')
+    .replace(/-evt-\d+(-[a-z0-9]+)?$/, '')
+    .replace(/-disc-\d+(-[a-z0-9]+)?$/, '');
 }
 
 // ---------------------------------------------------------------------------

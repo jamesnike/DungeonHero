@@ -313,6 +313,107 @@ describe('锻造赌运 — RESOLVE_REPAIR_ENRAGE_DICE outcome', () => {
 // 4. End-to-end via RESOLVE_DICE (the full live flow used by useEventSystem)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 4a. No-monster path — the card MUST still be playable when the board is empty
+// ---------------------------------------------------------------------------
+
+describe('锻造赌运 — no monsters on board (still playable)', () => {
+  it('PLAY_CARD with no monsters: still opens slot-select (does NOT auto-finalize)', () => {
+    const card = makeForgeGambleCard('nm-play');
+    const weapon = makeWeapon('w1', 2, 5);
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: weapon,
+      activeCards: activeRowOf(),
+    });
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(result.state.pendingMagicAction).not.toBeNull();
+    expect((result.state.pendingMagicAction as any).effect).toBe('repair-enrage-dice');
+    expect((result.state.pendingMagicAction as any).step).toBe('slot-select');
+  });
+
+  it('RESOLVE_MAGIC_SLOT_SELECTION with 0 monsters: emits ui:requestDice with monsterId=undefined', () => {
+    const card = makeForgeGambleCard('nm-slot');
+    const weapon = makeWeapon('w1', 2, 5);
+    const state = makeState({
+      handCards: [],
+      equipmentSlot1: weapon,
+      activeCards: activeRowOf(),
+      pendingMagicAction: {
+        card,
+        effect: 'repair-enrage-dice',
+        step: 'slot-select',
+        prompt: '选择一个装备栏。',
+      } as any,
+    });
+    const result = drain(state, [
+      { type: 'RESOLVE_MAGIC_SLOT_SELECTION', slotId: 'equipmentSlot1' } as GameAction,
+    ]);
+    const diceFx = result.sideEffects.find(e => e.event === 'ui:requestDice');
+    expect(diceFx).toBeDefined();
+    const payload = (diceFx as any).payload;
+    expect(payload.context.flowId).toBe('repair-enrage-dice');
+    expect(payload.context.slotId).toBe('equipmentSlot1');
+    expect(payload.context.monsterId).toBeUndefined();
+    // Card must NOT be in recycle bag yet — the dice still needs to resolve.
+    expect(result.state.permanentMagicRecycleBag.some(c => c.id === card.id)).toBe(false);
+  });
+
+  it('RESOLVE_DICE repair outcome with no monsters: durability +1 + recycle bag', () => {
+    const card = makeForgeGambleCard('nm-repair');
+    const weapon = makeWeapon('w1', 2, 5);
+    const state = makeState({
+      handCards: [],
+      equipmentSlot1: weapon,
+      activeCards: activeRowOf(),
+    });
+    const result = drain(state, [
+      {
+        type: 'RESOLVE_DICE',
+        value: 5,
+        outcomeId: 'repair',
+        context: {
+          flowId: 'repair-enrage-dice',
+          slotId: 'equipmentSlot1',
+          // monsterId intentionally omitted
+          cardId: card.id,
+          card,
+        },
+      } as GameAction,
+    ]);
+    expect((result.state.equipmentSlot1 as EquipmentItem).durability).toBe(3);
+    expect(result.state.permanentMagicRecycleBag.some(c => c.id === card.id)).toBe(true);
+  });
+
+  it('RESOLVE_DICE enrage outcome with no monsters: durability unchanged, card still recycled', () => {
+    const card = makeForgeGambleCard('nm-enrage');
+    const weapon = makeWeapon('w1', 2, 5);
+    const state = makeState({
+      handCards: [],
+      equipmentSlot1: weapon,
+      activeCards: activeRowOf(),
+    });
+    const result = drain(state, [
+      {
+        type: 'RESOLVE_DICE',
+        value: 18,
+        outcomeId: 'enrage',
+        context: {
+          flowId: 'repair-enrage-dice',
+          slotId: 'equipmentSlot1',
+          // monsterId intentionally omitted
+          cardId: card.id,
+          card,
+        },
+      } as GameAction,
+    ]);
+    // Equipment durability untouched.
+    expect((result.state.equipmentSlot1 as EquipmentItem).durability).toBe(2);
+    // Card still finalized (consumed → recycle bag).
+    expect(result.state.permanentMagicRecycleBag.some(c => c.id === card.id)).toBe(true);
+  });
+});
+
 describe('锻造赌运 — end-to-end via RESOLVE_DICE flow', () => {
   it('RESOLVE_DICE with repair outcome → durability +1 + recycle bag', () => {
     const card = makeForgeGambleCard('e2e-repair');

@@ -6,6 +6,7 @@
  */
 
 import type { GameCardData } from '@/components/GameCard';
+import { isPermRecycleEquipment } from '@/components/GameCard';
 import type {
   EquipmentSlotId,
   EquipmentItem,
@@ -20,6 +21,27 @@ import { flattenActiveRowSlots, applyAmplifyOnCreate } from '../helpers';
 import type { RngState } from '../rng';
 import { nextBool, nextInt, pickRandom } from '../rng';
 import { createBugletCard } from '../deck';
+
+// ---------------------------------------------------------------------------
+// Perm-recycle routing — equipment that is destroyed but carries a Perm flag
+// (永恒铭刻 sets `recycleDelay`, native `permEquipment: true`, etc.) must end
+// up in the permanent magic recycle bag rather than vanishing or going to the
+// graveyard. `permStripped` (set by 凡化咒) overrides everything and forces
+// non-Perm routing — kept consistent with `cards.ts:reduceDisposeEquipmentCard`
+// and `helpers.ts:getWaterfallPreviewDiscardDestination`.
+// ---------------------------------------------------------------------------
+
+export function shouldRouteEquipmentToPermRecycle(card: GameCardData): boolean {
+  if (card.permStripped) return false;
+  if (isPermRecycleEquipment(card)) return true;
+  if (
+    (card.type === 'weapon' || card.type === 'shield' || card.type === 'monster')
+    && card.recycleDelay != null && card.recycleDelay > 0
+  ) {
+    return true;
+  }
+  return false;
+}
 
 // ---------------------------------------------------------------------------
 // Shared helper — pick a random card from the graveyard, EXCLUDING a given id.
@@ -334,6 +356,7 @@ export function computeEquipmentDisplacementLastWords(
           payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场获得了「${pick.picked.name}」！` },
         });
         sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
+        sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
       } else {
         sideEffects.push({
           event: 'log:entry',
@@ -353,6 +376,7 @@ export function computeEquipmentDisplacementLastWords(
           payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场抽出 Event「${pick.picked.name}」！` },
         });
         sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
+        sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
       } else {
         sideEffects.push({
           event: 'log:entry',
@@ -616,6 +640,7 @@ export function computeEquipmentBreakEffects(
           payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场获得了「${pick.picked.name}」！` },
         });
         effects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
+        effects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
       } else {
         effects.push({
           event: 'log:entry',
@@ -635,6 +660,7 @@ export function computeEquipmentBreakEffects(
           payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场抽出 Event「${pick.picked.name}」！` },
         });
         effects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
+        effects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
       } else {
         effects.push({
           event: 'log:entry',
@@ -740,8 +766,14 @@ export function computeEquipmentBreakEffects(
     // equipped salvage amulets — every amulet independently triggers a save,
     // and each save costs one durability point). If maxDur reaches 0 the card
     // is removed from the game entirely.
+    //
+    // Perm-priority rule: equipment carrying a Perm flag (永恒铭刻 etc.) must
+    // route to the recycle bag. Salvage is SKIPPED for Perm equipment so the
+    // card is not consumed (and not capable of vanishing via maxDur underflow).
+    const isPermRecycle = shouldRouteEquipmentToPermRecycle(slotItem);
     const salvageCount = amuletEffects.equipmentSalvageCount;
-    const canSalvage = salvageCount > 0
+    const canSalvage = !isPermRecycle
+      && salvageCount > 0
       && (slotItem.type === 'weapon' || slotItem.type === 'shield');
 
     // Wraith swap (50% chance to move other slot's item to this slot) — monster-only,
@@ -792,11 +824,23 @@ export function computeEquipmentBreakEffects(
     } else {
       patch[slotId] = null as unknown as EquipmentItem;
       effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
-      // For graveyard-to-hand last words, the destroyed equipment itself should
-      // enter the graveyard *after* the picked card was moved to hand. Without
-      // salvage this is the only path that delivers Iron Shield to the graveyard
-      // post-break (the picked-from-graveyard pool was already filtered above).
-      if (triggeredGraveyardToHand) {
+      // Perm-flagged equipment (永恒铭刻 / native permEquipment) routes to the
+      // permanent magic recycle bag. This MUST take priority over the
+      // graveyard-to-hand last-words branch below — a Perm Iron Shield should
+      // come back via the recycle bag, not be sent to the graveyard.
+      // ADD_TO_RECYCLE_BAG handles its own metadata sanitization and durability
+      // normalization (see reduceAddToRecycleBag in cards.ts).
+      if (isPermRecycle) {
+        const { fromSlot: _fsp, armor: _ap, armorBonusDamaged: _abp, reviveUsed: _rup,
+          equipmentReviveUsed: _erup, wraithRebirthUsed: _wrup, ...rest } =
+          slotItem as GameCardData & Record<string, unknown>;
+        const cleaned: GameCardData = { ...(rest as GameCardData) };
+        enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: cleaned });
+      } else if (triggeredGraveyardToHand) {
+        // For graveyard-to-hand last words, the destroyed equipment itself should
+        // enter the graveyard *after* the picked card was moved to hand. Without
+        // salvage this is the only path that delivers Iron Shield to the graveyard
+        // post-break (the picked-from-graveyard pool was already filtered above).
         const { fromSlot: _fs2, armor: _a2, armorBonusDamaged: _ab2, reviveUsed: _ru2,
           equipmentReviveUsed: _eru2, wraithRebirthUsed: _wru2, ...rest } =
           slotItem as GameCardData & Record<string, unknown>;

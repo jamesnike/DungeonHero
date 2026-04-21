@@ -72,7 +72,13 @@ export type GameEventMap = {
     bossCard: import('@/components/GameCard').GameCardData;
   };
   'combat:dragonBreathFx': { monsterId: string; targetSlotId: string };
-  'combat:golemReflect': { monsterId: string; monsterName: string; damage: number };
+  'combat:golemReflect': {
+    monsterId: string;
+    monsterName: string;
+    damage: number;
+    /** When set, a shield slot absorbed the hit and the hero did not bleed. */
+    hitSlotId?: 'equipmentSlot1' | 'equipmentSlot2' | null;
+  };
   'combat:heroTurnLayerLoss': { monsterId: string };
   'combat:combatEnded': {};
   'combat:removeAndGraveyard': {

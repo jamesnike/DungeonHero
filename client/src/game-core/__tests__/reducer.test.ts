@@ -1399,6 +1399,62 @@ describe('reducer', () => {
       const result = reduce(state, { type: 'FINALIZE_MAGIC_CARD', card: card as any });
       expect(result.enqueuedActions.filter(a => a.type === 'APPLY_DAMAGE').length).toBe(0);
     });
+
+    it('anti-magic reflect routes through equipped shield armor (no APPLY_DAMAGE)', () => {
+      const monster = { id: 'm-am-shield', type: 'monster' as const, name: 'Mage', value: 5, antiMagicReflect: 3, isStunned: false };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const shield = {
+        id: 's1', type: 'shield' as const, name: '木盾', value: 3,
+        armor: 5, armorMax: 5, fromSlot: 'equipmentSlot1' as const,
+      };
+      const card = { id: 'fm-am-shield', type: 'magic' as const, name: 'Spell', value: 1 };
+      const state = makeState({ activeCards: slots, equipmentSlot1: shield as any });
+      const result = reduce(state, { type: 'FINALIZE_MAGIC_CARD', card: card as any });
+      // Shield absorbed → no APPLY_DAMAGE enqueued.
+      expect(result.enqueuedActions.filter(a => a.type === 'APPLY_DAMAGE').length).toBe(0);
+      // Armor reduced 5 → 2.
+      expect((result.state.equipmentSlot1 as any).armor).toBe(2);
+    });
+
+    it('anti-magic reflect with no shield equipped falls onto HP via APPLY_DAMAGE', () => {
+      const monster = { id: 'm-am-noshield', type: 'monster' as const, name: 'Mage', value: 5, antiMagicReflect: 3, isStunned: false };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const card = { id: 'fm-am-noshield', type: 'magic' as const, name: 'Spell', value: 1 };
+      const state = makeState({ activeCards: slots });
+      const result = reduce(state, { type: 'FINALIZE_MAGIC_CARD', card: card as any });
+      const dmg = result.enqueuedActions.find(a => a.type === 'APPLY_DAMAGE') as any;
+      expect(dmg).toBeDefined();
+      expect(dmg.amount).toBe(3);
+    });
+
+    it('multiple anti-magic reflects chain rng so each shield pick is fresh', () => {
+      // Two reflecting monsters, two shields. Both shields should receive
+      // damage when reflects are independently routed (both armors decrease).
+      const m1 = { id: 'm-am-1', type: 'monster' as const, name: 'Mage1', value: 5, antiMagicReflect: 2, isStunned: false };
+      const m2 = { id: 'm-am-2', type: 'monster' as const, name: 'Mage2', value: 5, antiMagicReflect: 2, isStunned: false };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = m1;
+      slots[1] = m2;
+      const shieldA = {
+        id: 'sA', type: 'shield' as const, name: '盾A', value: 3,
+        armor: 5, armorMax: 5, fromSlot: 'equipmentSlot1' as const,
+      };
+      const shieldB = {
+        id: 'sB', type: 'shield' as const, name: '盾B', value: 3,
+        armor: 5, armorMax: 5, fromSlot: 'equipmentSlot2' as const,
+      };
+      const card = { id: 'fm-am-multi', type: 'magic' as const, name: 'Spell', value: 1 };
+      const state = makeState({ activeCards: slots, equipmentSlot1: shieldA as any, equipmentSlot2: shieldB as any });
+      const result = reduce(state, { type: 'FINALIZE_MAGIC_CARD', card: card as any });
+      // Total armor lost across both slots must equal total reflect damage (4).
+      const newA = (result.state.equipmentSlot1 as any)?.armor ?? 0;
+      const newB = (result.state.equipmentSlot2 as any)?.armor ?? 0;
+      expect((5 - newA) + (5 - newB)).toBe(4);
+      // No APPLY_DAMAGE — both reflects absorbed by shields.
+      expect(result.enqueuedActions.filter(a => a.type === 'APPLY_DAMAGE').length).toBe(0);
+    });
   });
 
   describe('FINALIZE_POTION_CARD', () => {

@@ -37,6 +37,7 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'graveyard-discover-equip-amulet': 'graveyard-discover-relic',
   'flip-back-active': 'knight-blood-oath-scroll',
   'temp-attack-double': 'knight-temp-attack-double',
+  'stun-cap-strike': 'knight-stun-cap-strike',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -141,6 +142,7 @@ const NAME_TO_KEY: Record<string, string> = {
   破印遗物: 'graveyard-discover-relic',
   血誓回卷: 'knight-blood-oath-scroll',
   查阅动作: 'survey-action',
+  雷涌一击: 'knight-stun-cap-strike',
 };
 
 function hashName(s: string): number {

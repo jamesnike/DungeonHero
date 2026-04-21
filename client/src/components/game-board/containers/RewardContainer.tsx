@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useShallowGameState } from '@/hooks/useGameEngine';
+import { useShallowGameState, useDispatch } from '@/hooks/useGameEngine';
 import { useModalCallbacks } from '../contexts/ModalCallbacksContext';
 import { useModalUI } from '../contexts/ModalUIContext';
 import { PERSUADE_COST } from '@/game-core/constants';
@@ -10,9 +10,11 @@ import MonsterPersuadeModal, { type PersuadePhase } from '@/components/MonsterPe
 function RewardContainerInner() {
   const cb = useModalCallbacks();
   const ui = useModalUI();
+  const dispatch = useDispatch();
 
   const gs = useShallowGameState(s => ({
     activeMonsterReward: s.activeMonsterReward,
+    monsterRewardMinimized: s.monsterRewardMinimized,
     persuadeState: s.persuadeState,
     persuadeLevel: s.persuadeLevel,
     persuadeCostModifier: s.persuadeCostModifier,
@@ -43,7 +45,7 @@ function RewardContainerInner() {
     <>
       {gs.activeMonsterReward && (
         <MonsterRewardModal
-          open
+          open={!gs.monsterRewardMinimized}
           monsterName={gs.activeMonsterReward.monsterName}
           options={gs.activeMonsterReward.options.map(option => ({
             id: option.id,
@@ -52,6 +54,7 @@ function RewardContainerInner() {
             detail: option.detail,
           }))}
           onSelect={cb.onMonsterRewardSelect}
+          onMinimize={() => dispatch({ type: 'MINIMIZE_ALL_MODALS' })}
         />
       )}
 

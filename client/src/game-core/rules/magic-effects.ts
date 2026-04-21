@@ -121,6 +121,7 @@
  * │ KNIGHT recall-equipment          │ B   │ pick equipment twice          │
  * │ KNIGHT discard-rebuild           │ A   │ discover queue ×N             │
  * │ KNIGHT armor-stun-convert        │ B   │ pick slot twice               │
+ * │ KNIGHT stun-cap-strike           │ A/B │ damage ×N + draw ×N + 1 dice  │
  * │ KNIGHT temp-attack-double        │ A/B │ +atk ×N + modal re-prompt     │
  * └──────────────────────────────────┴─────┴───────────────────────────────┘
  *
@@ -165,7 +166,7 @@ import {
 } from '../cards';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import type { RngState } from '../rng';
-import { pickGraveyardCardExcluding, computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords } from './equipment-effects';
+import { pickGraveyardCardExcluding, computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
 import {
   INITIAL_HP,
   HAND_LIMIT,
@@ -728,7 +729,7 @@ export function resolveAllMagicEffects(
 
   // ------ active-row-monster-attack-debuff ------
   if (effect === 'active-row-monster-attack-debuff') {
-    const reduction = 2 * echoMultiplier;
+    const reduction = 3 * echoMultiplier;
     let modified = 0;
     const updatedCards = (state.activeCards as (GameCardData | null)[]).map(c => {
       if (c?.type === 'monster') {
@@ -2758,6 +2759,96 @@ export function resolveKnightPermanentMagic(
       return applyPatch(state, patch, sideEffects);
     }
 
+    case 'stun-cap-strike': {
+      // 雷涌一击：⌈stunCap / divisor⌉ 法伤 + 60% 击晕（受 stunCap 上限约束）+ 抽 1。
+      // divisor 由升级等级决定（lvl 0 → 4，lvl 1 → 3）；amplifyBonus 算入 base damage。
+      // Echo：伤害与抽牌都 ×N，但击晕掷骰仍只发生 1 次（与 stun-strike 同惯例）。
+      const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
+      const divisors = [4, 3];
+      const divisor = divisors[card.upgradeLevel ?? 0] ?? 3;
+      const stunCap = state.stunCap ?? 0;
+      const baseDmg = Math.ceil(stunCap / divisor);
+      const stunPct = Math.min(60, stunCap);
+      const totalDmg = getSpellDamage(baseDmg + (card.amplifyBonus ?? 0), state) * echoMultiplier;
+      const drawCount = 1 * echoMultiplier;
+      const echoTag = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+
+      if (monsters.length === 0) {
+        banner(sideEffects, `${card.name}无效（没有怪物）。`);
+        patch.lastPlayedCardCategory = getCardPlayCategory(card);
+        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
+      }
+
+      if (monsters.length === 1) {
+        const target = monsters[0];
+        enqueuedActions.push({
+          type: 'DEAL_DAMAGE_TO_MONSTER',
+          monsterId: target.id,
+          damage: totalDmg,
+          source: 'stun-cap-strike',
+          isSpellDamage: true,
+        });
+        // 抽牌（多张时使用 drawMultipleFromBackpack；1 张走单 helper 也行，统一用 multi）
+        if (drawCount > 0) {
+          const drawState = { ...state, ...patch } as GameState;
+          const drawResult = drawMultipleFromBackpack(drawState, drawCount);
+          if (drawResult.cards.length > 0) {
+            mergePatch(patch, drawResult.patch);
+            for (const d of drawResult.cards) {
+              sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
+            }
+          }
+        }
+        log(sideEffects, 'magic', `${card.name}：对 ${target.name} 造成 ${totalDmg} 点法术伤害（晕上限 ${stunCap}% / ÷${divisor}），抽 ${drawCount} 张牌。${echoTag}`);
+        // 击晕掷骰（受 stunCap 上限约束；roll 一次）
+        const threshold = Math.round((stunPct / 100) * 20);
+        if (threshold > 0 && !target.isStunned) {
+          let stunRoll: number;
+          let stunRng: RngState;
+          [stunRoll, stunRng] = nextInt(patch.rng ?? state.rng, 1, 20);
+          patch.rng = stunRng;
+          sideEffects.push({
+            event: 'ui:requestDice' as any,
+            payload: {
+              title: target.name,
+              subtitle: `${card.name} 击晕判定（${stunPct}%）`,
+              entries: [
+                { id: 'stun', range: [1, threshold], label: '击晕成功！', effect: 'none' },
+                { id: 'miss', range: [threshold + 1, 20], label: '未击晕', effect: 'none' },
+              ],
+              context: {
+                flowId: 'hero-stun',
+                sourceLabel: card.name,
+                monsterId: target.id,
+                monsterName: target.name,
+                currentHit: 1,
+                totalHits: 1,
+                stunPct,
+                magicCardId: card.id,
+              },
+              predeterminedRoll: stunRoll,
+            },
+          });
+        }
+        banner(sideEffects, `${card.name}：${totalDmg} 点法伤，${threshold > 0 ? `${stunPct}% 击晕，` : ''}抽 ${drawCount} 张。${echoTag}`);
+        patch.lastPlayedCardCategory = getCardPlayCategory(card);
+        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
+      }
+
+      patch.pendingMagicAction = {
+        card,
+        effect: 'stun-cap-strike',
+        step: 'monster-select',
+        prompt: `选择一个怪物，造成 ${totalDmg} 点法术伤害（${stunPct}% 击晕），抽 ${drawCount} 张牌。${echoTag}`,
+        echoMultiplier,
+        data: { baseDmg, stunPct },
+      } as any;
+      patch.heroSkillBanner = `${card.name}：选择一个怪物（${totalDmg} 法伤，${stunPct}% 晕）。`;
+      return applyPatch(state, patch, sideEffects);
+    }
+
     case 'stat-swap': {
       const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
       if (monsters.length === 0) {
@@ -2959,7 +3050,14 @@ export function resolveKnightPermanentMagic(
               payload: { count: breakResult.classCardDraw, source: item.name },
             });
           }
-          enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+          // Perm-flagged equipment routes to the recycle bag, not the graveyard.
+          // Mirrors DISPOSE_EQUIPMENT_CARD / monster-doom's routing decision so
+          // 永恒铭刻 装备 被弃装重铸摧毁后仍能回到回收袋。
+          if (shouldRouteEquipmentToPermRecycle(item)) {
+            enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: item });
+          } else {
+            enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+          }
           destroyedCount++;
         }
       }
@@ -3856,7 +3954,7 @@ export function resolveScalingDamage(
 // applyCryptDeathwish — trigger equipment "last words" effects
 // ---------------------------------------------------------------------------
 
-function applyCryptDeathwish(
+export function applyCryptDeathwish(
   state: GameState,
   card: GameCardData,
   slotId: EquipmentSlotId,

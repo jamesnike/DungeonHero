@@ -158,8 +158,11 @@ export function serializeGameState(state: GameState): PersistedGameState {
 
     // --- Modal states ---
     discoverModalOpen: state.discoverModalOpen,
+    discoverModalMinimized: state.discoverModalMinimized,
     discoverOptions: sanitizeCardList(state.discoverOptions),
     discoverSourceLabel: state.discoverSourceLabel,
+    graveyardDiscoverMinimized: state.graveyardDiscoverMinimized,
+    monsterRewardMinimized: state.monsterRewardMinimized,
     deleteModalOpen: state.deleteModalOpen,
     upgradeModalOpen: state.upgradeModalOpen,
     showCardDraft: state.showCardDraft,

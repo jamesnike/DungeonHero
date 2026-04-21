@@ -79,6 +79,7 @@ import {
   applyMissileRelicEffects,
   requestOrAutoHandDiscard,
   finalizeAltarDiscardDiscover,
+  applyCryptDeathwish,
 } from '../../rules/magic-effects';
 
 // ============================================================================
@@ -110,7 +111,7 @@ const activeRowDebuff: CardDefinition = {
   effects: [],
   tags: ['magic', 'debuff'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
-    const reduction = 2 * echoMultiplier;
+    const reduction = 3 * echoMultiplier;
     let modified = 0;
     const updatedCards = (state.activeCards as (GameCardData | null)[]).map(c => {
       if (c?.type === 'monster') {
@@ -779,8 +780,26 @@ const cryptDeathwish: CardDefinition = {
   effectId: 'magic:crypt-deathwish',
   effects: [],
   tags: ['magic', 'instant', 'interactive'],
-  resolver: (state, card, sideEffects, patch) => {
-    sideEffects.push({ event: 'card:magicResolved', payload: { card } });
+  resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
+    const slots = getEquippedSlots(state);
+    if (slots.length === 0) {
+      banner(sideEffects, '墓语遗愿无效（没有已装备的装备）。');
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+    if (slots.length === 1) {
+      return applyCryptDeathwish(state, card, slots[0].id, sideEffects, patch, enqueuedActions, echoMultiplier);
+    }
+    patch.pendingMagicAction = {
+      card,
+      effect: 'crypt-deathwish',
+      step: 'slot-select',
+      prompt: `选择一个装备，触发其遗言效果 ${2 * echoMultiplier} 次`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `墓语遗愿：选择一个装备触发遗言 ${2 * echoMultiplier} 次。`;
+    sideEffects.push({ event: 'card:cryptDeathwishSelect' as any, payload: { card, echoMultiplier } });
     return applyPatch(state, patch, sideEffects);
   },
 };
@@ -1932,6 +1951,13 @@ const knightArmorStunConvert: CardDefinition = {
   resolver: resolveKnightPermanentMagic,
 };
 
+const knightStunCapStrike: CardDefinition = {
+  effectId: 'knight:stun-cap-strike',
+  effects: [],
+  tags: ['knight', 'permanent', 'damage', 'stun', 'draw'],
+  resolver: resolveKnightPermanentMagic,
+};
+
 // 锋芒倍增 — Perm 1. Select an equipment slot (empty allowed); apply temp
 // attack +2, then double the resulting temp attack on that slot.
 // Example: slot at +3 → +5 → ×2 = 10. Echo doubles the additive bonus before
@@ -2200,6 +2226,7 @@ const allMagicDefinitions: CardDefinition[] = [
   knightBloodDraw,
   knightRecallEquipment,
   knightArmorStunConvert,
+  knightStunCapStrike,
   knightTempAttackDouble,
   knightDiscardRebuild,
   knightGreedCurse,

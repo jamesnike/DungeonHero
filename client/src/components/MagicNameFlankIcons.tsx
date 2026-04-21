@@ -77,6 +77,7 @@ const TINT_BY_KEY: Record<string, string> = {
   'hero-revive-blessing': 'from-emerald-400/45 to-yellow-400/40',
   'knight-honor-sweep': 'from-red-500/50 to-amber-500/45',
   'knight-armor-stun-convert': 'from-slate-400/45 to-yellow-500/45',
+  'knight-stun-cap-strike': 'from-yellow-400/50 to-violet-500/45',
   'knight-overkill-upgrade': 'from-orange-500/50 to-red-600/45',
   'knight-transform-repair': 'from-teal-400/45 to-sky-500/45',
   'knight-transform-grant': 'from-purple-400/45 to-teal-500/45',
@@ -822,6 +823,14 @@ export function CuteSticker({ k }: { k: string }) {
           <path fill="#fde047" d="M16 11l-2 5h4l-2 6 4-4h-3l2-5h-3z" />
         </g>
       );
+    case 'knight-stun-cap-strike':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fde047" d="M14 5l-6 12h5l-2 10 10-14h-6l4-8z" />
+          <circle cx="22" cy="22" r="3.5" fill="#a855f7" />
+          <path fill="none" stroke="#fef9c3" d="M22 20.5v3M20.5 22h3" strokeWidth="1.5" />
+        </g>
+      );
     case 'knight-overkill-upgrade':
       return (
         <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
@@ -1322,7 +1331,7 @@ export const ALL_STICKER_KEYS: readonly string[] = [
   'knight-blood-greed','knight-armor-strike','knight-missing-hp-smite','knight-grave-nova',
   'knight-berserk-gambit','knight-battle-spirit','knight-recycle-flare','knight-death-ward','knight-chaos-dice',
   'knight-graveyard-recall','knight-greed-curse','knight-honor-sweep',
-  'knight-armor-stun-convert','knight-overkill-upgrade','knight-transform-repair',
+  'knight-armor-stun-convert','knight-stun-cap-strike','knight-overkill-upgrade','knight-transform-repair',
   'knight-transform-grant','knight-weapon-sweep','knight-stat-swap',
   // event glyphs
   'evt-fate-crossroads','evt-vault','evt-shadow-pact','evt-resonance-forge','evt-greed-altar',
