@@ -8029,7 +8029,11 @@ export default function GameBoard() {
             left: 0,
             right: 0,
             bottom: '-12px',
-            backgroundImage: `url(${cardBackImage})`,
+            // url() 必须给路径加引号 —— dev 时 Vite 解析成 /@fs/.../My Mac
+            // (Shus-MacBook-Pro.local)/... 路径里有未转义的 ( ) 括号，
+            // 不带引号会让浏览器 CSS url() 解析失败、整层 background 被丢弃，
+            // 导致 dev 看不到 texture（prod hash 路径无特殊字符所以正常）。
+            backgroundImage: `url("${cardBackImage}")`,
             backgroundRepeat: 'repeat',
             backgroundSize: '220px 220px',
             mixBlendMode: 'overlay',

@@ -84,16 +84,10 @@ function StackLayerBack({ src, theme }: { src: string; theme: typeof variantThem
         background: theme.layerBg,
       }}
     >
-      <div
-        className="absolute inset-[2px] overflow-hidden rounded-[0.45rem]"
-        style={{
-          backgroundImage: `url(${src})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundBlendMode: 'overlay',
-          backgroundColor: 'transparent',
-        }}
-      >
+      {/* 卡背容器：历史上贴过 cardBack PNG overlay，现已移除（与新的渐变底色 +
+          类型色 emblem 视觉冲突）。保留这个 inset 容器是因为下面的钻石格纹理
+          子层靠它做相对定位。 */}
+      <div className="absolute inset-[2px] overflow-hidden rounded-[0.45rem]">
         <div
           className="absolute inset-0 pointer-events-none opacity-15 mix-blend-overlay"
           style={{
@@ -207,16 +201,10 @@ function DeckBack({
         boxShadow: `0 6px 14px ${theme.shadow}`,
       }}
     >
-      <div
-        className="absolute inset-[6px] overflow-hidden rounded-xl"
-        style={{
-          backgroundImage: `url(${src})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundBlendMode: 'overlay',
-          backgroundColor: 'transparent',
-        }}
-      >
+      {/* 卡背容器：历史上贴过 cardBack PNG overlay，现已移除（与新的渐变底色 +
+          类型色 emblem 视觉冲突）。保留这个 inset 容器是因为下面所有装饰子层
+          （钻石格 / 中央光晕 / 四角 L / cartouche）都靠它做相对定位。 */}
+      <div className="absolute inset-[6px] overflow-hidden rounded-xl">
         {/* 钻石格纹理 */}
         <div
           className="absolute inset-0 pointer-events-none opacity-20 mix-blend-overlay"

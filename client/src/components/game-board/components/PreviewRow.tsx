@@ -3,7 +3,6 @@ import GameCard from '@/components/GameCard';
 import type { CardType, GameCardData } from '@/components/GameCard';
 import { Card } from '@/components/ui/card';
 import { useGameState } from '@/hooks/useGameEngine';
-import cardBackImage from '@assets/generated_images/card_back_design.png';
 import { DUNGEON_COLUMNS } from '../constants';
 import type { GraveyardVector, WaterfallAnimationState } from '../types';
 import { getPreviewAnimationProps, getStackedCardStyle } from '../utils/animation-helpers';
@@ -227,20 +226,11 @@ export const PreviewCardBack = memo(function PreviewCardBack({ card, isStack = f
           containerType: 'inline-size',
         }}
       >
-        {/* === 层 1：卡背图案 + 缩进 6px 让外圈底色露出 ===
-            注意 `mix-blend-overlay` —— 让 PNG 本身的灰阶花纹和下面的类型色渐变融合，
-            而不是盖住它。这样花纹有了，但颜色是"该类型的色"。 */}
-        <div
-          className="absolute inset-[6px] overflow-hidden rounded-sm"
-          style={{
-            backgroundImage: `url(${cardBackImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundBlendMode: 'overlay',
-            // 把 PNG 区也叠一层类型底色，blend mode 才有色可叠
-            backgroundColor: 'transparent',
-          }}
-        >
+        {/* === 层 1：卡背容器 + 缩进 6px 让外圈底色露出 ===
+            历史上这里贴过一张 cardBackImage PNG 当卡背图案，但与新的纯渐变
+            类型底色 + 类型文字 emblem 视觉冲突，已移除。保留这个 6px inset
+            容器是因为下面的 layer 2/3/4 都靠它做相对定位。 */}
+        <div className="absolute inset-[6px] overflow-hidden rounded-sm">
           {/* === 层 2：钻石格纹理（很淡，只是印刷质感） === */}
           <div
             className="absolute inset-0 pointer-events-none opacity-20 mix-blend-overlay"
