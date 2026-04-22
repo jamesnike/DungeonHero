@@ -215,13 +215,11 @@ export class GameEngine {
       action.type !== 'TRIGGER_MONSTER_SKILL_FLOAT' &&
       action.type !== 'RELEASE_MONSTER_SKILL_FLOAT'
     ) {
+      // Deferred actions get replayed once the last RELEASE drains the
+      // float queue. The dev-mode trace previously here was removed because
+      // a single combat tick can defer dozens of actions and the resulting
+      // console.debug spam measurably degraded interaction latency in dev.
       this._deferredDuringFloat.push(action);
-      if (DEV_MODE) {
-        console.debug(
-          `[GameEngine] Action "${action.type}" deferred during awaitingSkillFloat ` +
-          `(deferred queue size = ${this._deferredDuringFloat.length}).`,
-        );
-      }
       return;
     }
 

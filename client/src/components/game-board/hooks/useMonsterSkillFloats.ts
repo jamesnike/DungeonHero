@@ -11,9 +11,26 @@
  *
  *   2. When the head changes to a new entry, capture the current monster
  *      cell rect (so the float stays anchored even if the monster card
- *      moves later in the queue) and schedule a `RELEASE_MONSTER_SKILL_FLOAT`
- *      after `SKILL_FLOAT_DURATION_MS`. The reducer pops the head; if more
- *      entries remain the queue head changes and the cycle repeats.
+ *      moves later in the queue) and schedule TWO timers:
+ *
+ *      a. RELEASE timer (`SKILL_FLOAT_RELEASE_MS`, ~500ms) — dispatches
+ *         `RELEASE_MONSTER_SKILL_FLOAT` to pop the head. This unblocks the
+ *         pipeline early so gameplay (auto-engage, monster turn, draw, etc.)
+ *         resumes well before the visual animation has fully finished.
+ *         Players reported the prior 1400ms pipeline pause felt like every
+ *         interaction was laggy; halving it solves the perceived freeze
+ *         without losing the visual cue.
+ *
+ *      b. VISUAL timer (`SKILL_FLOAT_DURATION_MS`, 1400ms) — clears the
+ *         locally rendered `active` state, matching the CSS keyframe length
+ *         in `index.css → @keyframes monster-skill-float-rise`. The float
+ *         keeps floating + fading after the pipeline has resumed.
+ *
+ *      If a new head arrives before the visual timer fires (sequential
+ *      floats, e.g. boss death → multi-passive), the previous `active`
+ *      element is replaced by the new one — its in-flight CSS animation
+ *      gets cut short, which is fine because the player already saw it
+ *      for at least RELEASE_MS.
  *
  *   3. If for some reason the monster cell has no DOM ref (e.g. the float
  *      was attributed to an equipped monster, or the row already advanced
@@ -21,11 +38,16 @@
  *      centered position so the player still sees the skill name. We never
  *      skip the release — the pipeline pause MUST clear.
  *
- * Returns the active float's render data, or `null` when nothing is queued.
+ * Returns the active float's render data, or `null` when nothing is queued
+ * AND the visual timer for the last float has expired.
  */
 import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject } from 'react';
 import { useDispatch, useGameState } from '@/hooks/useGameEngine';
-import { SKILL_FLOAT_DURATION_MS, type MonsterSkillKey } from '@/game-core/monsterSkillNames';
+import {
+  SKILL_FLOAT_DURATION_MS,
+  SKILL_FLOAT_RELEASE_MS,
+  type MonsterSkillKey,
+} from '@/game-core/monsterSkillNames';
 
 export interface ActiveMonsterSkillFloat {
   id: string;
@@ -48,15 +70,15 @@ export function useMonsterSkillFloats({
   const [active, setActive] = useState<ActiveMonsterSkillFloat | null>(null);
   const lastHeadIdRef = useRef<string | null>(null);
   const releaseTimeoutRef = useRef<number | null>(null);
+  const visualTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!head) {
+      // Queue is empty (the previous RELEASE drained the last entry).
+      // Do NOT clear `active` here — let the in-flight visual timer fade it
+      // out naturally so the player still sees the float complete its CSS
+      // animation after the pipeline has already resumed.
       lastHeadIdRef.current = null;
-      setActive(null);
-      if (releaseTimeoutRef.current != null) {
-        window.clearTimeout(releaseTimeoutRef.current);
-        releaseTimeoutRef.current = null;
-      }
       return;
     }
     if (lastHeadIdRef.current === head.id) return;
@@ -75,10 +97,22 @@ export function useMonsterSkillFloats({
     if (releaseTimeoutRef.current != null) {
       window.clearTimeout(releaseTimeoutRef.current);
     }
+    if (visualTimeoutRef.current != null) {
+      window.clearTimeout(visualTimeoutRef.current);
+    }
+
     const floatId = head.id;
+    // Pipeline release — short. Game logic resumes here.
     releaseTimeoutRef.current = window.setTimeout(() => {
       releaseTimeoutRef.current = null;
       dispatch({ type: 'RELEASE_MONSTER_SKILL_FLOAT', floatId });
+    }, SKILL_FLOAT_RELEASE_MS);
+    // Visual cleanup — long. Matches CSS keyframe duration.
+    // Guarded so a stale timer for an old float can't wipe out the currently
+    // displayed (newer) float when sequential skill floats fire fast.
+    visualTimeoutRef.current = window.setTimeout(() => {
+      visualTimeoutRef.current = null;
+      setActive(prev => (prev?.id === floatId ? null : prev));
     }, SKILL_FLOAT_DURATION_MS);
   }, [head, monsterCellRefs, dispatch]);
 
@@ -87,6 +121,10 @@ export function useMonsterSkillFloats({
       if (releaseTimeoutRef.current != null) {
         window.clearTimeout(releaseTimeoutRef.current);
         releaseTimeoutRef.current = null;
+      }
+      if (visualTimeoutRef.current != null) {
+        window.clearTimeout(visualTimeoutRef.current);
+        visualTimeoutRef.current = null;
       }
     };
   }, []);

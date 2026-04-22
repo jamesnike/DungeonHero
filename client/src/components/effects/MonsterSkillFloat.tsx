@@ -11,9 +11,11 @@
  * BLOCKING SEMANTICS:
  *   The component itself does not block — it is purely a presentation layer.
  *   The actual pipeline pause is enforced by the reducer (see
- *   `rules/skill-float.ts` + `pipeline.ts` HARD_PAUSE_PHASES). This component
- *   only needs to render for its full duration; the parent hook is responsible
- *   for dispatching `RELEASE_MONSTER_SKILL_FLOAT` after `SKILL_FLOAT_DURATION_MS`.
+ *   `rules/skill-float.ts` + `pipeline.ts` HARD_PAUSE_PHASES). The parent
+ *   hook (`useMonsterSkillFloats`) dispatches `RELEASE_MONSTER_SKILL_FLOAT`
+ *   after `SKILL_FLOAT_RELEASE_MS` (~500ms) to unblock the pipeline early
+ *   while this component keeps rendering for the full
+ *   `SKILL_FLOAT_DURATION_MS` (1400ms) CSS animation.
  */
 import { type CSSProperties } from 'react';
 import {

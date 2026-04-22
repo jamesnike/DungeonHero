@@ -34,6 +34,7 @@ import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecy
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
+import { applyEquipDestroyLastWords } from './waterfall';
 import { routeReflectDamageToHero } from './combat';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import type { RngState } from '../rng';
@@ -94,6 +95,8 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
       return reduceDisposeEquipmentCard(state, action);
     case 'DISCARD_OWNED_CARD':
       return reduceDiscardOwnedCard(state, action);
+    case 'SACRIFICE_EQUIPMENT_SLOT':
+      return reduceSacrificeEquipmentSlot(state, action);
     case 'TICK_RECYCLE_FORGE':
       return reduceTickRecycleForge(state);
     case 'RESTORE_RECYCLE_BAG':
@@ -1579,6 +1582,61 @@ function reduceDisposeEquipmentCard(
 
   if (!isDestruction) {
     enqueuedActions.push({ type: 'APPLY_DISCARD_EFFECTS', card, owner: 'player', opts: { toRecycleBag, isEquipmentDisplace: true } });
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// SACRIFICE_EQUIPMENT_SLOT — destroy active equipment in a slot as a player
+// sacrifice (event choice). Mirrors the events.ts `discardCurrentLeftForGold+15`
+// pattern: fires destroy last-words → honors revive → otherwise disposes and
+// promotes the topmost reserve item.
+//
+// Bug history: previously, `useCardOperations.ts:sacrificeEquipment` issued a
+// bare `DISPOSE_EQUIPMENT_CARD` without `isDestruction` or `triggerLastWords`,
+// which silently skipped all `onDestroyDraw / onDestroyHeal / ...` last-words
+// effects. Affected callers: 暗影契约「献出装备」, 命运十字路口「破坏下方装备」.
+// ---------------------------------------------------------------------------
+
+function reduceSacrificeEquipmentSlot(
+  state: GameState,
+  action: Extract<GameAction, { type: 'SACRIFICE_EQUIPMENT_SLOT' }>,
+): ReduceResult {
+  const { slotId } = action;
+  const slotItem = slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+  if (!slotItem) return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  const card = slotItem as GameCardData;
+
+  applyEquipDestroyLastWords(card, slotId, state, patch, sideEffects, enqueuedActions);
+
+  const isMonsterEquip = card.type === 'monster';
+  const nativeRevive = isMonsterEquip && card.hasRevive && !card.reviveUsed;
+  const equipRevive = card.hasEquipmentRevive && !card.equipmentReviveUsed;
+
+  if (nativeRevive || equipRevive) {
+    const revivedItem = nativeRevive
+      ? { ...card, durability: 1, reviveUsed: true }
+      : { ...card, durability: 1, equipmentReviveUsed: true };
+    patch[slotId] = revivedItem as EquipmentItem;
+    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 复生！以 1 耐久复活！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 复生了！` } });
+  } else {
+    enqueuedActions.push({ type: 'DISPOSE_EQUIPMENT_CARD', card: { ...card } as GameCardData, isDestruction: true });
+    const reserveKey = slotId === 'equipmentSlot1' ? 'equipmentSlot1Reserve' : 'equipmentSlot2Reserve';
+    const reserve = state[reserveKey] as EquipmentItem[];
+    if (reserve.length > 0) {
+      const promoted = reserve[reserve.length - 1];
+      patch[slotId] = promoted;
+      patch[reserveKey] = reserve.slice(0, -1) as EquipmentItem[];
+    } else {
+      patch[slotId] = null;
+    }
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);

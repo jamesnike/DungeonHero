@@ -186,5 +186,29 @@ export function getMonsterSkillKind(key: MonsterSkillKey): MonsterSkillKind {
   return getMonsterSkillEntry(key).kind;
 }
 
-/** Animation duration. Shared by reducer (queue payload) and UI (CSS). */
+/**
+ * Visual animation duration. Shared by reducer (queue payload) and UI (CSS in
+ * `index.css → @keyframes monster-skill-float-rise`). The float keeps floating
+ * up + fading for this long.
+ *
+ * NOTE: this is NOT how long the pipeline pauses anymore — see
+ * `SKILL_FLOAT_RELEASE_MS` below. The visual outlives the pipeline pause so
+ * the animation looks normal but gameplay resumes earlier (no perceived lag).
+ */
 export const SKILL_FLOAT_DURATION_MS = 1400;
+
+/**
+ * How long the UI hook waits before dispatching `RELEASE_MONSTER_SKILL_FLOAT`
+ * to unfreeze the action pipeline. Decoupled from the visual duration above
+ * so the player still sees the full skill name animation while the game
+ * continues running underneath.
+ *
+ * Tuned to be long enough that the player can read the skill name (well past
+ * the 0%→15% intro of the keyframe = ~210ms) and short enough that chained
+ * sequential skill floats (boss death → multi-passive cascades) stop feeling
+ * like a multi-second freeze. Sequential floats now overlap visually: when
+ * float #2 enters, it replaces float #1's element even though #1's CSS
+ * animation hasn't finished yet — acceptable because the player has already
+ * seen #1 long enough to read it.
+ */
+export const SKILL_FLOAT_RELEASE_MS = 500;

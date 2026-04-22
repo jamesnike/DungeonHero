@@ -582,6 +582,27 @@ export interface DiscardOwnedCardAction {
   forceRecycleBag?: boolean;
 }
 
+/**
+ * SACRIFICE_EQUIPMENT_SLOT — destroy the active equipment in the given slot
+ * as a player-initiated sacrifice (event choice / event side-effect destroy).
+ *
+ * Mirrors the events.ts `discardCurrentLeftForGold+15` pattern:
+ *   1. Fire destroy-side last-words effects (onDestroyHeal/Gold/Draw/ClassDraw/
+ *      PermanentDamage/PermanentShield/Effect, monster-specific lastWords, etc.)
+ *      via `applyEquipDestroyLastWords`.
+ *   2. Honor revive (hasRevive / hasEquipmentRevive) — revived items stay in slot
+ *      with durability=1 and the appropriate `*ReviveUsed` flag.
+ *   3. Otherwise enqueue `DISPOSE_EQUIPMENT_CARD { isDestruction: true }` to
+ *      route to graveyard / recycle bag (Perm equipment → recycle bag) and
+ *      promote the topmost reserve item into the now-empty slot.
+ *
+ * No-op if the slot is empty.
+ */
+export interface SacrificeEquipmentSlotAction {
+  type: 'SACRIFICE_EQUIPMENT_SLOT';
+  slotId: import('@/components/game-board/types').EquipmentSlotId;
+}
+
 export interface TickRecycleForgeAction {
   type: 'TICK_RECYCLE_FORGE';
 }
@@ -1914,6 +1935,7 @@ export type GameAction =
   | ApplyCardFlipAction
   | DisposeEquipmentCardAction
   | DiscardOwnedCardAction
+  | SacrificeEquipmentSlotAction
   | TickRecycleForgeAction
   | RestoreRecycleBagAction
   // Combat: weapon initiation / kill effects

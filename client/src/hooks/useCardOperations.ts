@@ -562,8 +562,10 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     (slotId: EquipmentSlotId): boolean => {
       const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
       if (!slotItem) return false;
-      dispatch({ type: 'DISPOSE_EQUIPMENT_CARD', card: slotItem });
-      clearEquipmentSlotWithPromote(slotId);
+      // Single atomic reducer action: fires destroy last-words (onDestroyDraw,
+      // onDestroyHeal, etc.), honors revive, disposes the card to graveyard /
+      // recycle bag, and promotes the topmost reserve item.
+      dispatch({ type: 'SACRIFICE_EQUIPMENT_SLOT', slotId });
       return true;
     },
     [equipmentSlot1, equipmentSlot2, dispatch],
