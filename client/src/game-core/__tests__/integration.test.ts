@@ -397,6 +397,213 @@ describe('秘藏宝库 event flip', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 药剂遗稿 — every option flips the event in-place (destination: 'stay').
+// ---------------------------------------------------------------------------
+
+describe('药剂遗稿 stay-flip', () => {
+  it('flipToPaperAsh → COMPLETE_EVENT → APPLY_CARD_FLIP replaces the event card with 纸灰药剂 in-place', () => {
+    const manuscript = makeCard({
+      id: 'evt-药剂遗稿-1',
+      type: 'event' as const,
+      name: '药剂遗稿',
+      value: 0,
+      eventChoices: [
+        { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh' },
+      ],
+      // Static placeholder so the "翻转" badge shows; the actual flipTarget is
+      // patched onto currentEventCard at choice resolution time.
+      flipTarget: {
+        toCard: { id: 'evt-药剂遗稿-1-flip-placeholder', type: 'magic' as const, name: '翻转结果由选项决定', value: 0 },
+        destination: 'stay' as const,
+      },
+    });
+
+    const state = makeState({
+      activeCards: [null, manuscript as any, null, null, null],
+      currentEventCard: manuscript as any,
+      eventModalOpen: true,
+    });
+
+    const resolveResult = reduce(state, {
+      type: 'RESOLVE_EVENT_CHOICE',
+      choiceId: '0',
+      choiceText: '翻转成「纸灰药剂」',
+      effectTokens: ['flipToPaperAsh'],
+      skipFlip: false,
+    } as any);
+
+    expect(resolveResult.enqueuedActions.some(a => a.type === 'COMPLETE_EVENT')).toBe(true);
+
+    const pipelineResult = drain(resolveResult.state, resolveResult.enqueuedActions);
+
+    // Slot 1 now holds 纸灰药剂; backpack is untouched.
+    expect(pipelineResult.state.activeCards[1]?.name).toBe('纸灰药剂');
+    expect(pipelineResult.state.activeCards[1]?.type).toBe('potion');
+    expect(pipelineResult.state.backpackItems).toHaveLength(0);
+    expect(pipelineResult.state.currentEventCard).toBeNull();
+    expect(pipelineResult.state.eventModalOpen).toBe(false);
+
+    // Stay flip → in-cell animation, NOT the legacy full-screen overlay.
+    expect(pipelineResult.sideEffects.some(e => e.event === 'card:flippedInCell')).toBe(true);
+    expect(pipelineResult.sideEffects.some(e => e.event === 'event:cardTransformed')).toBe(false);
+  });
+
+  it('external flipper (e.g. 乾坤一翻) on 药剂遗稿 with placeholder flipTarget rolls one of the visible eventChoices instead of flipping into the placeholder', () => {
+    // 药剂遗稿 sitting in the active row carries the static placeholder
+    // flipTarget (toCard.name === '翻转结果由选项决定'). External flippers like
+    // 乾坤一翻 read this directly and enqueue APPLY_CARD_FLIP. Without the
+    // random-roll interception in reduceApplyCardFlip we'd replace the slot with
+    // the placeholder card itself, which is meaningless.
+    const manuscript = makeCard({
+      id: 'evt-药剂遗稿-rolled',
+      type: 'event' as const,
+      name: '药剂遗稿',
+      value: 0,
+      // Only the 3 visible options after pruneEventChoicesToThree.
+      eventChoices: [
+        { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh' },
+        { text: '翻转成「扩容药剂」', effect: 'flipToHandLimitPotion' },
+        { text: '翻转成两张「升级卷轴」', effect: 'flipToTwoUpgradeScrolls' },
+      ],
+      flipTarget: {
+        toCard: { id: 'evt-药剂遗稿-rolled-placeholder', type: 'magic' as const, name: '翻转结果由选项决定', value: 0 },
+        destination: 'stay' as const,
+      },
+    });
+
+    const state = makeState({
+      activeCards: [null, null, null, manuscript as any, null],
+      currentEventCard: null,
+      activeCardStacks: {},
+    });
+
+    const result = reduce(state, { type: 'APPLY_CARD_FLIP', card: manuscript as any, cellIndex: 3 } as any);
+
+    // Slot now holds one of the 3 rolled outcomes — never the placeholder.
+    const placed = result.state.activeCards[3];
+    expect(placed).not.toBeNull();
+    expect(placed?.name).not.toBe('翻转结果由选项决定');
+    const rolledNames = ['纸灰药剂', '扩容药剂', '升级卷轴'];
+    expect(rolledNames).toContain(placed!.name);
+
+    // Stay flip → in-cell animation; back-flip card carries the original 药剂遗稿.
+    expect(result.sideEffects.some(e => e.event === 'card:flippedInCell')).toBe(true);
+    expect((placed as any)._flipBackCard?.name).toBe('药剂遗稿');
+
+    // RNG advanced (interception called pickRandom + nextId).
+    expect(result.state.rng).not.toEqual(state.rng);
+  });
+
+  it('external flipper rolling flipToTwoUpgradeScrolls pushes a 2nd scroll into activeCardStacks at the same slot', () => {
+    // We pin 药剂遗稿 to flipToTwoUpgradeScrolls by setting eventChoices to a
+    // single-option pool; pickRandom over a 1-element array always picks index 0.
+    const manuscript = makeCard({
+      id: 'evt-药剂遗稿-rolled-two-scrolls',
+      type: 'event' as const,
+      name: '药剂遗稿',
+      value: 0,
+      eventChoices: [
+        { text: '翻转成两张「升级卷轴」', effect: 'flipToTwoUpgradeScrolls' },
+      ],
+      flipTarget: {
+        toCard: { id: 'placeholder', type: 'magic' as const, name: '翻转结果由选项决定', value: 0 },
+        destination: 'stay' as const,
+      },
+    });
+
+    const state = makeState({
+      activeCards: [null, manuscript as any, null, null, null],
+      activeCardStacks: {},
+    });
+
+    const result = reduce(state, { type: 'APPLY_CARD_FLIP', card: manuscript as any, cellIndex: 1 } as any);
+
+    expect(result.state.activeCards[1]?.name).toBe('升级卷轴');
+    const stack = result.state.activeCardStacks[1] ?? [];
+    expect(stack).toHaveLength(1);
+    expect((stack[0] as any).name).toBe('升级卷轴');
+    expect((stack[0] as any).id).not.toBe(result.state.activeCards[1]?.id);
+  });
+
+  it('player choice path is unaffected: APPLY_CARD_FLIP carries a real (non-placeholder) toCard, so the random-roll branch is skipped', () => {
+    // Mirrors the COMPLETE_EVENT path: cardForFlip carries the realized
+    // flipTarget patched onto currentEventCard by applySimpleEffect.
+    const realToCard = { id: 'real-pa', type: 'potion' as const, name: '纸灰药剂', value: 0, potionEffect: 'perm-spell-damage-2' as any };
+    const cardForFlip = makeCard({
+      id: 'evt-药剂遗稿-player-path',
+      type: 'event' as const,
+      name: '药剂遗稿',
+      value: 0,
+      eventChoices: [
+        { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh' },
+      ],
+      flipTarget: {
+        toCard: realToCard as any,
+        destination: 'stay' as const,
+        message: '残页翻转，药香浮现…',
+      },
+    });
+
+    const state = makeState({
+      activeCards: [cardForFlip as any, null, null, null, null],
+      activeCardStacks: {},
+    });
+
+    const rngBefore = state.rng;
+    const result = reduce(state, { type: 'APPLY_CARD_FLIP', card: cardForFlip as any, cellIndex: 0 } as any);
+
+    // Identity-checked toCard placed: the rolled-flip path would have generated a fresh id via nextId.
+    expect(result.state.activeCards[0]?.id).toBe('real-pa');
+    expect(result.state.activeCards[0]?.name).toBe('纸灰药剂');
+    // No random roll → rng untouched
+    expect(result.state.rng).toEqual(rngBefore);
+  });
+
+  it('flipToTwoUpgradeScrolls leaves the top scroll in the slot and the second scroll stacked beneath', () => {
+    const manuscript = makeCard({
+      id: 'evt-药剂遗稿-two-scrolls',
+      type: 'event' as const,
+      name: '药剂遗稿',
+      value: 0,
+      eventChoices: [
+        { text: '翻转成两张「升级卷轴」', effect: 'flipToTwoUpgradeScrolls' },
+      ],
+      flipTarget: {
+        toCard: { id: 'evt-药剂遗稿-two-scrolls-placeholder', type: 'magic' as const, name: '翻转结果由选项决定', value: 0 },
+        destination: 'stay' as const,
+      },
+    });
+
+    const state = makeState({
+      activeCards: [null, null, manuscript as any, null, null],
+      currentEventCard: manuscript as any,
+      activeCardStacks: {},
+      eventModalOpen: true,
+    });
+
+    const resolveResult = reduce(state, {
+      type: 'RESOLVE_EVENT_CHOICE',
+      choiceId: '0',
+      choiceText: '翻转成两张「升级卷轴」',
+      effectTokens: ['flipToTwoUpgradeScrolls'],
+      skipFlip: false,
+    } as any);
+
+    const pipelineResult = drain(resolveResult.state, resolveResult.enqueuedActions);
+
+    // Top of slot 2 → first 升级卷轴
+    expect(pipelineResult.state.activeCards[2]?.name).toBe('升级卷轴');
+    // Second scroll waiting beneath in the active stack
+    const stack = pipelineResult.state.activeCardStacks[2] ?? [];
+    expect(stack).toHaveLength(1);
+    expect((stack[0] as any).name).toBe('升级卷轴');
+    expect((stack[0] as any).id).not.toBe(pipelineResult.state.activeCards[2]?.id);
+    // Backpack untouched
+    expect(pipelineResult.state.backpackItems).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 永恒铭刻药 (grant-perm-2 potion) interactive flow
 // ---------------------------------------------------------------------------
 

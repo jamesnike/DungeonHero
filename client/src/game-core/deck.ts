@@ -1516,12 +1516,15 @@ export function createDeck(
     },
   });
 
+  const potionManuscriptId = `event-${id++}`;
   deck.push({
-    id: `event-${id++}`,
+    id: potionManuscriptId,
     type: 'event',
     name: '药剂遗稿',
     value: 0,
     image: dedupeEventPotionManuscriptImage,
+    description: '所有选项都会让本卡翻面：翻转后留在地城原格，需自行取用。',
+    shortDescription: '所有选项都翻转；翻后留原格',
     eventChoices: [
       { text: '翻转成「回响残页」', effect: 'flipToDiscardDrawMagic', hint: '翻转为永久魔法：被弃回时，抽 2 张牌' },
       { text: '翻转成「纸灰药剂」', effect: 'flipToPaperAsh', hint: '翻转为永久法术伤害 +2、最大生命值 -5 的药剂' },
@@ -1533,8 +1536,29 @@ export function createDeck(
         effect: 'flipToClassMagicDiscoverPotion',
         hint: '翻转为药水：使用时从专属牌堆发现一张魔法牌（三选一）',
       },
-      { text: '获得两张「升级卷轴」', effect: 'grantTwoUpgradeScrolls', hint: '直接获得两张一次性升级卷轴放入背包' },
+      { text: '翻转成两张「升级卷轴」', effect: 'flipToTwoUpgradeScrolls', hint: '翻转为两张一次性升级卷轴堆叠在原格' },
     ],
+    // Static placeholder so the "翻转" badge shows on this card while it sits
+    // in the active row (`hasFlipTarget = Boolean(card.flipTarget)` in
+    // GameCard.tsx). All 7 options unconditionally flip to a different card
+    // and `destination: 'stay'`; the actual `flipTarget` is patched onto
+    // `currentEventCard` at choice resolution time (see flipTo* branch in
+    // `events.ts`), then COMPLETE_EVENT picks it up and enqueues
+    // APPLY_CARD_FLIP. The placeholder name flags this to the player from
+    // the modal preview.
+    flipTarget: {
+      toCard: {
+        id: `${potionManuscriptId}-flip-placeholder`,
+        type: 'magic',
+        name: '翻转结果由选项决定',
+        value: 0,
+        image: skillScrollImage,
+        magicType: 'instant',
+        description: '处理时根据所选选项翻转为对应卡牌，留在地城原格。',
+        shortDescription: '翻转目标取决于选项',
+      },
+      destination: 'stay',
+    },
   });
 
   const cryptId = `event-${id++}`;

@@ -2679,11 +2679,49 @@ describe('reducer', () => {
       expect(hasGuildCard).toBe(true);
     });
 
-    it('grantTwoUpgradeScrolls adds 2 scrolls to backpack', () => {
-      const state = makeState({ backpackItems: [], backpackCapacityModifier: 0 });
-      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'grantTwoUpgradeScrolls' });
-      expect(result.state.backpackItems).toHaveLength(2);
-      expect((result.state.backpackItems[0] as any).name).toBe('升级卷轴');
+    it('flipToTwoUpgradeScrolls patches event card flipTarget and pushes 2nd scroll to active stack', () => {
+      const eventCard: any = { id: 'evt-药剂遗稿-test', type: 'event', name: '药剂遗稿', value: 0 };
+      const state = makeState({
+        currentEventCard: eventCard,
+        activeCards: [eventCard, null, null, null] as any,
+        activeCardStacks: {},
+        backpackItems: [],
+        backpackCapacityModifier: 0,
+      });
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'flipToTwoUpgradeScrolls' });
+
+      // Event card now carries flipTarget pointing at scroll #1 with stay
+      const fc = result.state.currentEventCard as any;
+      expect(fc?.flipTarget?.destination).toBe('stay');
+      expect(fc?.flipTarget?.toCard?.name).toBe('升级卷轴');
+
+      // Second scroll pushed into the slot's stack (LIFO last = next to surface)
+      const stack = result.state.activeCardStacks[0] ?? [];
+      expect(stack).toHaveLength(1);
+      expect((stack[0] as any).name).toBe('升级卷轴');
+
+      // Scroll IDs are distinct
+      expect((stack[0] as any).id).not.toBe(fc.flipTarget.toCard.id);
+
+      // Backpack untouched (the flip is in-row, not into backpack)
+      expect(result.state.backpackItems).toHaveLength(0);
+    });
+
+    it('flipToPaperAsh (药剂遗稿 single-card flip) patches event card flipTarget for stay; backpack untouched', () => {
+      const eventCard: any = { id: 'evt-药剂遗稿-paper', type: 'event', name: '药剂遗稿', value: 0 };
+      const state = makeState({
+        currentEventCard: eventCard,
+        activeCards: [null, eventCard, null, null] as any,
+        activeCardStacks: {},
+        backpackItems: [],
+        backpackCapacityModifier: 0,
+      });
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'flipToPaperAsh' });
+
+      const fc = result.state.currentEventCard as any;
+      expect(fc?.flipTarget?.destination).toBe('stay');
+      expect(fc?.flipTarget?.toCard?.name).toBe('纸灰药剂');
+      expect(result.state.backpackItems).toHaveLength(0);
     });
   });
 

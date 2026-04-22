@@ -197,7 +197,6 @@ const EXACT_REDUCER_TOKENS = new Set([
   'recycleBagDiscover',
   'recycleBagMagicToHand:2',
   'recycleToBackpack',
-  'grantTwoUpgradeScrolls',
   'drawClassHeroMagic:1',
   // Phase 1C additions — misc tokens
   'flipBackToGraveyardRecall',
@@ -219,7 +218,7 @@ const EXACT_REDUCER_TOKENS = new Set([
   'flipToPaperAsh', 'flipToLeftDurabilityPotion', 'flipToMonsterAttackDebuff',
   'flipToHonorBloodMagic', 'flipToHonorSweepMagic',
   'flipToEquipSwapPotion', 'flipToHandLimitPotion', 'flipToClassMagicDiscoverPotion',
-  'flipToDiscardDrawMagic', 'flipToUpgradeScroll',
+  'flipToDiscardDrawMagic', 'flipToUpgradeScroll', 'flipToTwoUpgradeScrolls',
   'flipToRecallEquip', 'flipToUndyingBlessing', 'flipToCurseWeapon',
   'handAllToRecycleBag',
   'draw2', 'drawClass2', 'drawKnight1', 'drawKnight3', 'drawKnight4',
@@ -315,7 +314,7 @@ export interface EffectResult {
 // flipTo* card definitions
 // ---------------------------------------------------------------------------
 
-interface FlipCardDef {
+export interface FlipCardDef {
   card: GameCardData;
   rng: RngState;
   banner: string;
@@ -323,7 +322,7 @@ interface FlipCardDef {
   transformMessage: string;
 }
 
-function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | null {
+export function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | null {
   let id: string;
 
   const defs: Record<string, () => FlipCardDef> = {
@@ -340,14 +339,14 @@ function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | nu
     },
     flipToPaperAsh: () => {
       [id, rng] = nextId(rng, 'paper-ash');
-      return { card: { id, type: 'potion', name: '纸灰药剂', value: 0, image: potionSpellDamageImage, description: '使用时永久让法术伤害 +2；最大生命值 -5。', shortDescription: '永久法伤 +2；生命上限 -5', potionEffect: 'perm-spell-damage-2' }, rng, banner: '遗稿翻转成了纸灰药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「纸灰药剂」', transformMessage: '残页翻转，药香浮现…' };
+      return { card: { id, type: 'potion', name: '纸灰药剂', value: 0, image: potionSpellDamageImage, description: '使用时永久让法术伤害 +2；最大生命值 -5。', shortDescription: '永久法伤 +2；生命上限 -5', potionEffect: 'perm-spell-damage-2' }, rng, banner: '遗稿翻转成了纸灰药剂，留在地城原格。', logMessage: '事件效果：遗稿翻转成了「纸灰药剂」', transformMessage: '残页翻转，药香浮现…' };
     },
     flipToLeftDurabilityPotion: () => {
       let flipPotionId: string;
       [flipPotionId, rng] = nextId(rng, 'right-dur-potion');
       [id, rng] = nextId(rng, 'left-dur-potion');
       const card: any = { id, type: 'potion', name: '淬炼药剂', value: 0, image: potionWeaponRepairImage, description: '使用时左装备栏的装备耐久上限 +2。翻转后为右装备栏耐久上限 +2 的药剂。', shortDescription: '左栏装备耐久上限 +2', potionEffect: 'left-slot-durability-max+2', flipTarget: { toCard: { id: flipPotionId, type: 'potion', name: '淬炼药剂（右）', value: 0, image: potionWeaponRepairImage, description: '使用时右装备栏的装备耐久上限 +2。', shortDescription: '右栏装备耐久上限 +2', potionEffect: 'right-slot-durability-max+2' }, destination: 'backpack', banner: '淬炼药剂翻转，右侧淬炼之力凝结…' } };
-      return { card, rng, banner: '遗稿翻转成了淬炼药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「淬炼药剂」', transformMessage: '残页翻转，淬炼之力凝结…' };
+      return { card, rng, banner: '遗稿翻转成了淬炼药剂，留在地城原格。', logMessage: '事件效果：遗稿翻转成了「淬炼药剂」', transformMessage: '残页翻转，淬炼之力凝结…' };
     },
     flipToMonsterAttackDebuff: () => {
       [id, rng] = nextId(rng, 'monster-atk-debuff');
@@ -363,23 +362,30 @@ function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | nu
     },
     flipToEquipSwapPotion: () => {
       [id, rng] = nextId(rng, 'equip-swap-potion');
-      return { card: { id, type: 'potion', name: '置换药剂', value: 0, image: potionWeaponRepairImage, description: '使用时选择一个装备回到手牌；若另一栏有装备，则换到该位置。', shortDescription: '一件装备回手；另一栏装备换位', potionEffect: 'equip-swap' }, rng, banner: '遗稿翻转成了置换药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「置换药剂」', transformMessage: '残页翻转，置换之力凝结…' };
+      return { card: { id, type: 'potion', name: '置换药剂', value: 0, image: potionWeaponRepairImage, description: '使用时选择一个装备回到手牌；若另一栏有装备，则换到该位置。', shortDescription: '一件装备回手；另一栏装备换位', potionEffect: 'equip-swap' }, rng, banner: '遗稿翻转成了置换药剂，留在地城原格。', logMessage: '事件效果：遗稿翻转成了「置换药剂」', transformMessage: '残页翻转，置换之力凝结…' };
     },
     flipToHandLimitPotion: () => {
       [id, rng] = nextId(rng, 'hand-limit-potion');
-      return { card: { id, type: 'potion', name: '扩容药剂', value: 0, image: potionSpellDamageImage, description: '使用时永久手牌上限 +1。', shortDescription: '手牌上限 +1', potionEffect: 'hand-limit+1' }, rng, banner: '遗稿翻转成了扩容药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「扩容药剂」', transformMessage: '残页翻转，扩容之力涌现…' };
+      return { card: { id, type: 'potion', name: '扩容药剂', value: 0, image: potionSpellDamageImage, description: '使用时永久手牌上限 +1。', shortDescription: '手牌上限 +1', potionEffect: 'hand-limit+1' }, rng, banner: '遗稿翻转成了扩容药剂，留在地城原格。', logMessage: '事件效果：遗稿翻转成了「扩容药剂」', transformMessage: '残页翻转，扩容之力涌现…' };
     },
     flipToClassMagicDiscoverPotion: () => {
       [id, rng] = nextId(rng, 'class-magic-discover-potion');
-      return { card: { id, type: 'potion', name: '灵思药剂', value: 0, image: potionSpellDamageImage, description: '使用时从专属牌堆三选一发现一张魔法牌（魔法/英雄魔法）。', shortDescription: '从专属池发现 1 张魔法（3 选 1）', potionEffect: 'discover-class-magic' }, rng, banner: '遗稿翻转成了灵思药剂，已放入背包。', logMessage: '事件效果：遗稿翻转成了「灵思药剂」', transformMessage: '残页翻转，灵思渗入药剂…' };
+      return { card: { id, type: 'potion', name: '灵思药剂', value: 0, image: potionSpellDamageImage, description: '使用时从专属牌堆三选一发现一张魔法牌（魔法/英雄魔法）。', shortDescription: '从专属池发现 1 张魔法（3 选 1）', potionEffect: 'discover-class-magic' }, rng, banner: '遗稿翻转成了灵思药剂，留在地城原格。', logMessage: '事件效果：遗稿翻转成了「灵思药剂」', transformMessage: '残页翻转，灵思渗入药剂…' };
     },
     flipToDiscardDrawMagic: () => {
       [id, rng] = nextId(rng, 'discard-draw-magic');
-      return { card: { id, type: 'magic', name: '回响残页', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'on-discard-draw-2', description: '永久魔法：被弃回时，从背包抽 2 张牌。', shortDescription: '被弃回时抽 2 张', onDiscardDraw: 2, recycleDelay: 1 }, rng, banner: '遗稿翻转成了回响残页，已放入背包。', logMessage: '事件效果：遗稿翻转成了「回响残页」', transformMessage: '残页翻转，回响之力涌出…' };
+      return { card: { id, type: 'magic', name: '回响残页', value: 0, image: skillScrollImage, magicType: 'permanent', magicEffect: 'on-discard-draw-2', description: '永久魔法：被弃回时，从背包抽 2 张牌。', shortDescription: '被弃回时抽 2 张', onDiscardDraw: 2, recycleDelay: 1 }, rng, banner: '遗稿翻转成了回响残页，留在地城原格。', logMessage: '事件效果：遗稿翻转成了「回响残页」', transformMessage: '残页翻转，回响之力涌出…' };
     },
     flipToUpgradeScroll: () => {
       [id, rng] = nextId(rng, 'upgrade-scroll');
       return { card: { id, type: 'magic', name: '升级卷轴', value: 0, image: starterScrollUpgradeImage, magicType: 'instant', magicEffect: '即时魔法：升级一张牌。', description: '一次性使用，选择一张牌进行升级。', shortDescription: '升级 1 张牌' }, rng, banner: '遗稿翻转成了升级卷轴，已放入背包。', logMessage: '事件效果：遗稿翻转成了「升级卷轴」', transformMessage: '遗稿翻转为升级卷轴…' };
+    },
+    // 药剂遗稿 选项 7：翻转为两张「升级卷轴」，堆叠在原格。
+    // 此 def 只返回 *顶部* scroll；底部 scroll 由 flipTo* 分支单独构造并 push 到
+    // activeCardStacks[eventCellIdx]，以便顶部 scroll 用掉后底部自动浮现。
+    flipToTwoUpgradeScrolls: () => {
+      [id, rng] = nextId(rng, 'upgrade-scroll');
+      return { card: { id, type: 'magic', name: '升级卷轴', value: 0, image: starterScrollUpgradeImage, magicType: 'instant', magicEffect: '即时魔法：升级一张牌。', description: '一次性使用，选择一张牌进行升级。', shortDescription: '升级 1 张牌' }, rng, banner: '遗稿翻转成了两张升级卷轴，留在地城原格。', logMessage: '事件效果：遗稿翻转成了两张「升级卷轴」', transformMessage: '遗稿翻转为升级卷轴…' };
     },
     flipToRecallEquip: () => {
       [id, rng] = nextId(rng, `${STARTER_CARD_IDS.recallEquip}-pick`);
@@ -443,6 +449,86 @@ function getFlipToCardDefinition(token: string, rng: RngState): FlipCardDef | nu
 
   const factory = defs[token];
   return factory ? factory() : null;
+}
+
+// ---------------------------------------------------------------------------
+// 药剂遗稿 — random-roll helper for *external* flippers (乾坤一翻 / 万象齐转)
+// ---------------------------------------------------------------------------
+//
+// 药剂遗稿's static `flipTarget` placeholder ("翻转结果由选项决定") exists only
+// to keep the "翻转" badge visible on the dungeon card; it must NEVER be used
+// as a real flip target. The player-choice path patches `currentEventCard.flipTarget`
+// in `applySimpleEffect` before COMPLETE_EVENT enqueues APPLY_CARD_FLIP, so it
+// already supplies a real toCard. External flippers (乾坤一翻 / 万象齐转) read
+// `card.flipTarget` straight off the active-row card, though, and would otherwise
+// flip into the meaningless placeholder. This helper rolls one of the **visible**
+// eventChoices (3 of 7 after `pruneEventChoicesToThree` ran at deck construction)
+// and returns the corresponding real flipTarget + 2nd-scroll for the
+// flipToTwoUpgradeScrolls option.
+//
+// Returns null if the card isn't 药剂遗稿 with the placeholder, or the rolled
+// option isn't a known flipTo* token (defensive — should never happen).
+export interface PotionManuscriptRoll {
+  flipTarget: NonNullable<GameCardData['flipTarget']>;
+  /** Extra card to push beneath the flipped slot (only set for flipToTwoUpgradeScrolls). */
+  extraStackCard: GameCardData | null;
+  rng: RngState;
+  chosenToken: string;
+  chosenText: string;
+}
+
+export function rollPotionManuscriptFlip(
+  card: GameCardData,
+  rng: RngState,
+): PotionManuscriptRoll | null {
+  if (
+    card.name !== '药剂遗稿'
+    || !card.flipTarget
+    || card.flipTarget.toCard?.name !== '翻转结果由选项决定'
+    || !card.eventChoices
+    || card.eventChoices.length === 0
+  ) {
+    return null;
+  }
+
+  const [choice, rngAfterPick] = pickRandom(card.eventChoices, rng);
+  let curRng = rngAfterPick;
+  const token = (choice as { effect?: string }).effect;
+  if (typeof token !== 'string') return null;
+
+  const flipDef = getFlipToCardDefinition(token, curRng);
+  if (!flipDef) return null;
+  curRng = flipDef.rng;
+
+  let extraStackCard: GameCardData | null = null;
+  if (token === 'flipToTwoUpgradeScrolls') {
+    let secondScrollId: string;
+    [secondScrollId, curRng] = nextId(curRng, 'upgrade-scroll');
+    extraStackCard = {
+      id: secondScrollId,
+      type: 'magic',
+      name: '升级卷轴',
+      value: 0,
+      image: starterScrollUpgradeImage,
+      magicType: 'instant',
+      magicEffect: '即时魔法：升级一张牌。',
+      description: '一次性使用，选择一张牌进行升级。',
+      shortDescription: '升级 1 张牌',
+    };
+  }
+
+  return {
+    flipTarget: {
+      toCard: flipDef.card,
+      destination: 'stay',
+      message: flipDef.transformMessage,
+      banner: flipDef.banner,
+    },
+    extraStackCard,
+    rng: curRng,
+    chosenToken: token,
+    chosenText: (choice as { text?: string }).text ?? token,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1578,39 +1664,6 @@ export function applySimpleEffect(
     logs.push({ type: 'event', message: '获得「回收轮转」' });
     patch.heroSkillBanner = '整合完成！获得「回收轮转」，已放入背包。';
 
-  } else if (effectToken === 'grantTwoUpgradeScrolls') {
-    const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
-    const newBp = [...state.backpackItems];
-    const newRecycle = [...state.permanentMagicRecycleBag];
-    let currentRng = state.rng;
-    for (let i = 0; i < 2; i++) {
-      const [scrollId, rngAfterScrollId] = nextId(currentRng, 'upgrade-scroll');
-      currentRng = rngAfterScrollId;
-      const scroll: GameCardData = {
-        id: scrollId,
-        type: 'magic',
-        name: '升级卷轴',
-        value: 0,
-        image: starterScrollUpgradeImage,
-        magicType: 'instant',
-        magicEffect: '即时魔法：升级一张牌。',
-        description: '一次性使用，选择一张牌进行升级。',
-        shortDescription: '升级 1 张牌',
-      };
-      if (newBp.length < backpackCap) {
-        newBp.push(scroll);
-      } else {
-        newRecycle.push({ ...scroll, _recycleWaits: scroll.recycleDelay ?? 1 });
-      }
-    }
-    patch.rng = currentRng;
-    patch.backpackItems = newBp;
-    if (newRecycle.length !== state.permanentMagicRecycleBag.length) {
-      patch.permanentMagicRecycleBag = newRecycle;
-    }
-    patch.heroSkillBanner = '获得了 2 张升级卷轴，已放入背包。';
-    logs.push({ type: 'event', message: '获得了 2 张「升级卷轴」' });
-
   // --- Phase 1C: Misc tokens ---
 
   } else if (effectToken === 'flipBackToGraveyardRecall') {
@@ -1950,12 +2003,90 @@ export function applySimpleEffect(
     patch.heroSkillBanner = '获得 Lv1「魔法飞弹」（已放入背包）。';
     logs.push({ type: 'event', message: '事件效果：获得 Lv1「魔法飞弹」' });
 
+  // 药剂遗稿 (potion-manuscript) flip tokens — all 7 options unconditionally
+  // flip the event in-place: the resulting card replaces 药剂遗稿 in
+  // `activeCards[eventCellIdx]` (destination: 'stay'), and 卡面常驻"翻转" badge
+  // via the static `flipTarget` placeholder on the card definition. We patch
+  // `currentEventCard.flipTarget` here so COMPLETE_EVENT picks it up and
+  // enqueues APPLY_CARD_FLIP. `flipToTwoUpgradeScrolls` additionally pushes a
+  // second scroll into `activeCardStacks[eventCellIdx]` so that consuming the
+  // top scroll surfaces the second one. (NB: `event:cardTransformed` is NOT
+  // emitted here — APPLY_CARD_FLIP emits `card:flippedInCell` for the in-cell
+  // animation; flip-gold / persuade-on-flip / etc. are applied by
+  // `applyFlipCounters` inside `reduceApplyCardFlip`.)
   } else if (
-    effectToken === 'flipToArcaneShield' || effectToken === 'guildFlipToMagic' || effectToken === 'guildFlipToHandRecycleMagic' ||
-    effectToken === 'flipToPaperAsh' || effectToken === 'flipToLeftDurabilityPotion' || effectToken === 'flipToMonsterAttackDebuff' ||
-    effectToken === 'flipToHonorBloodMagic' || effectToken === 'flipToHonorSweepMagic' ||
+    effectToken === 'flipToPaperAsh' || effectToken === 'flipToLeftDurabilityPotion' ||
     effectToken === 'flipToEquipSwapPotion' || effectToken === 'flipToHandLimitPotion' ||
     effectToken === 'flipToClassMagicDiscoverPotion' || effectToken === 'flipToDiscardDrawMagic' ||
+    effectToken === 'flipToTwoUpgradeScrolls'
+  ) {
+    const flipDef = getFlipToCardDefinition(effectToken, state.rng);
+    const eventCard = state.currentEventCard;
+    if (flipDef && eventCard) {
+      patch.rng = flipDef.rng;
+
+      const eventCellIdx = state.activeCards.findIndex(c => c?.id === eventCard.id);
+
+      // Defensive fallback: if the event card isn't actually in the active row
+      // (shouldn't happen for 药剂遗稿 but guard anyway), drop into backpack and
+      // emit the legacy full-screen transform animation.
+      if (eventCellIdx < 0) {
+        addCardToBackpackPatch(state, patch, flipDef.card);
+        const hasFlipGold = applyFlipGoldBonus(state, patch, logs);
+        patch.heroSkillBanner = flipDef.banner;
+        logs.push({ type: 'event', message: flipDef.logMessage });
+        emitEvents.push({ event: 'event:cardTransformed', payload: { fromCard: eventCard as any, toCard: flipDef.card as any, message: flipDef.transformMessage, hasFlipGold } });
+      } else {
+        // Patch the event card's flipTarget so COMPLETE_EVENT routes through
+        // APPLY_CARD_FLIP with destination='stay'. (currentEventCard mirrors
+        // the active-row card by id; APPLY_CARD_FLIP reads card.flipTarget
+        // from the action payload built in COMPLETE_EVENT.)
+        patch.currentEventCard = {
+          ...eventCard,
+          flipTarget: {
+            toCard: flipDef.card,
+            destination: 'stay',
+            message: flipDef.transformMessage,
+            banner: flipDef.banner,
+          },
+        };
+
+        // Two-scrolls option: build the second scroll and push to the stack
+        // beneath the event card's slot. Append at the end so it surfaces
+        // first (LIFO: last element of activeCardStacks[idx] pops next).
+        if (effectToken === 'flipToTwoUpgradeScrolls') {
+          let secondScrollId: string;
+          let rngAfterSecond: RngState;
+          [secondScrollId, rngAfterSecond] = nextId(flipDef.rng, 'upgrade-scroll');
+          patch.rng = rngAfterSecond;
+          const secondScroll: GameCardData = {
+            id: secondScrollId,
+            type: 'magic',
+            name: '升级卷轴',
+            value: 0,
+            image: starterScrollUpgradeImage,
+            magicType: 'instant',
+            magicEffect: '即时魔法：升级一张牌。',
+            description: '一次性使用，选择一张牌进行升级。',
+            shortDescription: '升级 1 张牌',
+          };
+          const currentStacks = patch.activeCardStacks ?? state.activeCardStacks ?? {};
+          const existing = currentStacks[eventCellIdx] ?? [];
+          patch.activeCardStacks = {
+            ...currentStacks,
+            [eventCellIdx]: [...existing, secondScroll],
+          };
+          logs.push({ type: 'event', message: '事件效果：第二张升级卷轴堆叠在原格下方' });
+        }
+
+        logs.push({ type: 'event', message: flipDef.logMessage });
+      }
+    }
+
+  } else if (
+    effectToken === 'flipToArcaneShield' || effectToken === 'guildFlipToMagic' || effectToken === 'guildFlipToHandRecycleMagic' ||
+    effectToken === 'flipToMonsterAttackDebuff' ||
+    effectToken === 'flipToHonorBloodMagic' || effectToken === 'flipToHonorSweepMagic' ||
     effectToken === 'flipToUpgradeScroll' || effectToken === 'flipToRecallEquip' ||
     effectToken === 'flipToUndyingBlessing' || effectToken === 'flipToCurseWeapon' ||
     effectToken === 'flipToFlipPersuadeAmulet' || effectToken === 'flipToFlipMonsterDebuffMagic'

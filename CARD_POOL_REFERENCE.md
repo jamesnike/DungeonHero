@@ -578,14 +578,19 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 
 ### 9. 药剂遗稿
 
+- 描述：所有选项都会让本卡翻面。**翻转后留在地城原格**（destination: stay），需自行取用，不会自动入背包。
+- 卡面常驻「翻转」标识（基于占位 flipTarget「翻转结果由选项决定」；实际产物在选项结算时改写到 `currentEventCard.flipTarget` 上）。
 - 选项（3选2随机）：
   1. 翻转成「回响残页」 → `flipToDiscardDrawMagic`（永久魔法：被弃回时，抽 2 张牌）
   2. 翻转成「纸灰药剂」 → `flipToPaperAsh`（永久法术伤害 +2、最大生命值 -5）
-  3. 翻转成「淬炼药剂」 → `flipToLeftDurabilityPotion`（左装备栏耐久上限 +1）
+  3. 翻转成「淬炼药剂」 → `flipToLeftDurabilityPotion`（左装备栏耐久上限 +2；翻转后右装备栏耐久上限 +2）
   4. 翻转成「置换药剂」 → `flipToEquipSwapPotion`（选择一个装备回手，若另一栏有装备则换到该位置）
   5. 翻转成「扩容药剂」 → `flipToHandLimitPotion`（永久手牌上限 +1）
-  6. 翻转成「升级卷轴」 → `flipToUpgradeScroll`（即时魔法：选择一张牌进行升级）
-- 翻转：通过选项 1–6 触发
+  6. 翻转成「灵思药剂」 → `flipToClassMagicDiscoverPotion`（使用时从专属牌堆发现一张魔法牌，三选一）
+  7. 翻转成两张「升级卷轴」 → `flipToTwoUpgradeScrolls`（两张升级卷轴堆叠在原格：顶层为本次翻转产物，第二张推入 `activeCardStacks` 等取用顶层后浮上来）
+- 翻转（destination: stay，触发增幅祭坛 / 翻印之符 / 翻覆震慑等翻转 amulet 联动）：通过选项 1–7 任一触发
+- 外部翻转源（如「乾坤一翻」/「万象齐转」）命中本卡时，由 `reduceApplyCardFlip` 调用 `rollPotionManuscriptFlip`：从**当前可见的 3 个 eventChoices**（已经被 `pruneEventChoicesToThree` 在建牌时随机裁剪）里再随机抽 1 个，按该选项对应的 `flipToX` 走 stay 翻转；若抽中第 7 项 `flipToTwoUpgradeScrolls`，第 2 张升级卷轴照常 push 进 `activeCardStacks[idx]`。
+- 翻出来的卡 `_flipBackCard` 指回原「药剂遗稿」，所以再被「乾坤一翻」反向翻一次会回到「药剂遗稿」（之后可再被外部翻转，会**重新随机抽一次**——RNG 是 state.rng）
 
 ---
 

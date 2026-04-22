@@ -219,6 +219,11 @@
 
 ## 9. 药剂遗稿
 
+> 所有选项都翻转，且翻转后**留在地城原格**（destination: stay）；需玩家自行取用，不会自动入背包。
+> 卡面常驻「翻转」标识（占位 flipTarget「翻转结果由选项决定」），实际产物在 `RESOLVE_EVENT_CHOICE` 时被改写到 `currentEventCard.flipTarget` 上，由 `COMPLETE_EVENT` → `APPLY_CARD_FLIP` 完成原格替换。
+>
+> **被外部翻转源（「乾坤一翻」/「万象齐转」）命中**时，`reduceApplyCardFlip` 走 `rollPotionManuscriptFlip` 分支：从当前可见的 3 个 eventChoices 中**等概率随机**抽 1 个对应的 `flipToX`。抽中 `flipToTwoUpgradeScrolls` 时第 2 张卷轴依然会落入 `activeCardStacks[idx]`。翻出的卡 `_flipBackCard` 指回原「药剂遗稿」，下一次被「乾坤一翻」反翻会回到原卡。
+
 | # | 选项 | 效果 |
 |---|------|------|
 | 1 | 翻转成「回响残页」 | `flipToDiscardDrawMagic` |
@@ -226,18 +231,20 @@
 | 3 | 翻转成「淬炼药剂」 | `flipToLeftDurabilityPotion` |
 | 4 | 翻转成「置换药剂」 | `flipToEquipSwapPotion` |
 | 5 | 翻转成「扩容药剂」 | `flipToHandLimitPotion` |
-| 6 | 翻转成「升级卷轴」 | `flipToUpgradeScroll` |
+| 6 | 翻转成「灵思药剂」 | `flipToClassMagicDiscoverPotion` |
+| 7 | 翻转成两张「升级卷轴」 | `flipToTwoUpgradeScrolls` |
 
-**动态翻转产物（由选项效果触发，不在卡面定义 flipTarget）：**
+**动态翻转产物（由选项效果触发，写入 `currentEventCard.flipTarget`，destination: stay）：**
 
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
-| `flipToDiscardDrawMagic` | 回响残页 | 永久魔法 | 被弃回时，从背包抽 2 张牌 | 背包 |
-| `flipToPaperAsh` | 纸灰药剂 | 药水 | 使用时永久法术伤害 +2；最大生命值 -5 | 背包 |
-| `flipToLeftDurabilityPotion` | 淬炼药剂 | 药水 | 使用时左装备栏耐久上限 +1。翻转后变为「淬炼药剂（右）」：右装备栏耐久上限 +1 | 背包 |
-| `flipToEquipSwapPotion` | 置换药剂 | 药水 | 使用时选择一个装备回手牌；若另一栏有装备，则换到该位置 | 背包 |
-| `flipToHandLimitPotion` | 扩容药剂 | 药水 | 使用时永久手牌上限 +1 | 背包 |
-| `flipToUpgradeScroll` | 升级卷轴 | 即时魔法 | 一次性使用，选择一张牌进行升级 | 背包 |
+| `flipToDiscardDrawMagic` | 回响残页 | 永久魔法 | 被弃回时，从背包抽 2 张牌 | 留原格 |
+| `flipToPaperAsh` | 纸灰药剂 | 药水 | 使用时永久法术伤害 +2；最大生命值 -5 | 留原格 |
+| `flipToLeftDurabilityPotion` | 淬炼药剂 | 药水 | 使用时左装备栏耐久上限 +2。翻转后变为「淬炼药剂（右）」：右装备栏耐久上限 +2 | 留原格 |
+| `flipToEquipSwapPotion` | 置换药剂 | 药水 | 使用时选择一个装备回手牌；若另一栏有装备，则换到该位置 | 留原格 |
+| `flipToHandLimitPotion` | 扩容药剂 | 药水 | 使用时永久手牌上限 +1 | 留原格 |
+| `flipToClassMagicDiscoverPotion` | 灵思药剂 | 药水 | 使用时从专属魔法牌堆发现一张魔法牌（三选一） | 留原格 |
+| `flipToTwoUpgradeScrolls` | 升级卷轴 ×2 | 即时魔法 | 顶层 1 张「升级卷轴」替换原格事件卡，第 2 张推入 `activeCardStacks[idx]` 在顶层取用后浮上来；每张一次性使用，选择一张牌进行升级 | 留原格（堆叠 2 张） |
 
 ---
 

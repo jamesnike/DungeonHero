@@ -48,6 +48,7 @@ import { getHeroMagicDefinition } from '@/lib/heroMagic';
 import type { HeroMagicId } from '@/components/GameCard';
 import type { MirrorCopySelection, AmplifySelection } from '../types';
 import { skillScrollImage } from '../deck';
+import { rollPotionManuscriptFlip } from '../events';
 
 export function reduceCardActions(state: GameState, action: GameAction): ReduceResult | null {
   switch (action.type) {
@@ -1418,14 +1419,48 @@ function reduceApplyCardFlip(
   action: Extract<GameAction, { type: 'APPLY_CARD_FLIP' }>,
 ): ReduceResult {
   const { card, cellIndex } = action;
-  const flip = card.flipTarget;
-  if (!flip) return noChange(state);
+  if (!card.flipTarget) return noChange(state);
 
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
+
+  // 药剂遗稿 special case: when an *external* flipper (乾坤一翻 / 万象齐转) hits
+  // 药剂遗稿, its `flipTarget` is the static "翻转结果由选项决定" placeholder
+  // (the badge needs a non-null flipTarget to render). Rolling one of the visible
+  // eventChoices here ensures both external flippers — and any future ones —
+  // produce a real flip outcome instead of replacing the slot with the placeholder.
+  // The player-choice path patches `currentEventCard.flipTarget` BEFORE
+  // COMPLETE_EVENT enqueues APPLY_CARD_FLIP, so by the time we get here on that
+  // path, the flipTarget already points at a real card and `rollPotionManuscriptFlip`
+  // returns null (placeholder name no longer matches). flipToTwoUpgradeScrolls
+  // additionally pushes a 2nd scroll into `activeCardStacks[idx]` so the second
+  // scroll surfaces after the top one is consumed (LIFO).
+  let flip = card.flipTarget;
+  let manuscriptRollLog: string | null = null;
+  const manuscriptRoll = rollPotionManuscriptFlip(card, state.rng);
+  if (manuscriptRoll) {
+    flip = manuscriptRoll.flipTarget;
+    patch.rng = manuscriptRoll.rng;
+    if (manuscriptRoll.extraStackCard) {
+      const stackIdx = cellIndex ?? state.activeCards.findIndex(c => c?.id === card.id);
+      if (stackIdx >= 0) {
+        const currentStacks = state.activeCardStacks ?? {};
+        const existing = currentStacks[stackIdx] ?? [];
+        patch.activeCardStacks = {
+          ...currentStacks,
+          [stackIdx]: [...existing, manuscriptRoll.extraStackCard],
+        };
+      }
+    }
+    manuscriptRollLog = `药剂遗稿被随机翻转：${manuscriptRoll.chosenText}`;
+  }
+
   const destination = flip.destination ?? 'graveyard';
 
+  if (manuscriptRollLog) {
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: manuscriptRollLog } });
+  }
   sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `卡牌转化：${card.name} → ${flip.toCard.name}` } });
   if (flip.banner) {
     sideEffects.push({ event: 'ui:banner', payload: { text: flip.banner } });

@@ -1,3 +1,4 @@
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -32,22 +33,34 @@ interface BackpackViewerModalProps {
   onCardSelect?: (card: GameCardData) => void;
 }
 
-export default function BackpackViewerModal({
-  open,
-  onOpenChange,
-  cards,
-  capacity,
-  recycleCards = [],
-  onCardSelect,
-}: BackpackViewerModalProps) {
-  const arcaneStormDamage = useArcaneStormDamage();
-  const arcaneShieldStunGain = useArcaneShieldStunGain();
-  const displayedCards = [...cards].sort((a, b) => a.name.localeCompare(b.name)); // Backpack is unordered
-  const recycleBagCards = [...recycleCards].sort((a, b) => a.name.localeCompare(b.name));
+type RowVariant = 'default' | 'recycle';
 
-  const renderCardRow = (card: GameCardData, variant: 'default' | 'recycle' = 'default') => (
+interface BackpackRowProps {
+  card: GameCardData;
+  variant: RowVariant;
+  arcaneStormDamage: number;
+  arcaneShieldStunGain: number;
+  onCardSelect?: (card: GameCardData) => void;
+}
+
+/**
+ * Per-card row, memoised so re-renders of the modal (e.g. unrelated parent
+ * state changes after the dialog has opened) don't recreate the card DOM.
+ * Each row is ~12 DOM nodes (image + svg sticker + gradients + text); the
+ * modal opens with N rows committed in a single React batch, so memoising
+ * cuts the per-render cost dramatically once the initial mount is done.
+ */
+const BackpackRow = memo(function BackpackRow({
+  card,
+  variant,
+  arcaneStormDamage,
+  arcaneShieldStunGain,
+  onCardSelect,
+}: BackpackRowProps) {
+  const isMagic = isMagicSpellCardType(card.type);
+  const isEvent = isEventCardType(card.type);
+  return (
     <Card
-      key={card.id}
       className={`flex items-center gap-3 p-3 border-card-border border-2 ${
         variant === 'recycle' ? 'bg-muted/30' : ''
       } ${onCardSelect ? 'cursor-pointer hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : ''}`.trim()}
@@ -63,14 +76,14 @@ export default function BackpackViewerModal({
       }}
     >
       <div className="relative h-16 w-12 overflow-hidden rounded-sm bg-gradient-to-b from-muted to-card">
-        {isMagicSpellCardType(card.type) ? (
+        {isMagic ? (
           <MagicSpellPreview
             card={card}
             aspect="none"
             lazyImage
             className="absolute inset-0 h-full w-full rounded-sm"
           />
-        ) : isEventCardType(card.type) ? (
+        ) : isEvent ? (
           <EventPatternPreview
             card={card}
             aspect="none"
@@ -89,7 +102,7 @@ export default function BackpackViewerModal({
             />
           )
         )}
-        {!isMagicSpellCardType(card.type) && !isEventCardType(card.type) && (
+        {!isMagic && !isEvent && (
           <Badge className="absolute top-1 right-1 text-[10px] px-1 py-0">
             {card.value}
           </Badge>
@@ -146,10 +159,65 @@ export default function BackpackViewerModal({
       </div>
     </Card>
   );
+});
+
+export default function BackpackViewerModal({
+  open,
+  onOpenChange,
+  cards,
+  capacity,
+  recycleCards = [],
+  onCardSelect,
+}: BackpackViewerModalProps) {
+  const arcaneStormDamage = useArcaneStormDamage();
+  const arcaneShieldStunGain = useArcaneShieldStunGain();
+
+  // Sort once per cards/recycleCards change instead of on every render.
+  const displayedCards = useMemo(
+    () => [...cards].sort((a, b) => a.name.localeCompare(b.name)),
+    [cards],
+  );
+  const recycleBagCards = useMemo(
+    () => [...recycleCards].sort((a, b) => a.name.localeCompare(b.name)),
+    [recycleCards],
+  );
+
+  // Two-step mount to keep the open click responsive.
+  //
+  // The previous version committed all N rows + the dialog frame in a single
+  // React batch. With ~30 cards each producing ~12 DOM nodes (image + SVG
+  // sticker + multiple gradient overlays), the browser had to lay out and
+  // paint the entire list before the dialog became visible — this is the
+  // "open the backpack feels laggy" symptom.
+  //
+  // Now: when `open` flips true we paint the dialog frame immediately
+  // (header + scaffolding only, ~10 nodes) and defer the heavy list to the
+  // next animation frame. The modal pops in instantly, then the list
+  // streams in one frame later. Total wall-clock time is roughly the same,
+  // but perceived latency drops to ~16ms.
+  const [showContent, setShowContent] = useState(false);
+  useEffect(() => {
+    if (!open) {
+      setShowContent(false);
+      return;
+    }
+    if (typeof window === 'undefined') {
+      setShowContent(true);
+      return;
+    }
+    const id = window.requestAnimationFrame(() => setShowContent(true));
+    return () => window.cancelAnimationFrame(id);
+  }, [open]);
+
+  const isEmpty = displayedCards.length === 0 && recycleBagCards.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto" data-testid="backpack-viewer-modal">
+      <DialogContent
+        className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto"
+        contentMotion="fade"
+        data-testid="backpack-viewer-modal"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Backpack className="w-5 h-5" />
@@ -158,7 +226,9 @@ export default function BackpackViewerModal({
           <DialogDescription>背包中的卡牌为无序存放，抽牌时会随机选择</DialogDescription>
         </DialogHeader>
 
-        {displayedCards.length === 0 && recycleBagCards.length === 0 ? (
+        {!showContent ? (
+          <div className="py-8" aria-hidden />
+        ) : isEmpty ? (
           <div className="py-8 text-center text-muted-foreground text-sm">
             背包里还没有任何卡牌
           </div>
@@ -166,7 +236,16 @@ export default function BackpackViewerModal({
           <div className="space-y-3">
             {displayedCards.length > 0 && (
               <div className="space-y-3">
-                {displayedCards.map(card => renderCardRow(card))}
+                {displayedCards.map(card => (
+                  <BackpackRow
+                    key={card.id}
+                    card={card}
+                    variant="default"
+                    arcaneStormDamage={arcaneStormDamage}
+                    arcaneShieldStunGain={arcaneShieldStunGain}
+                    onCardSelect={onCardSelect}
+                  />
+                ))}
               </div>
             )}
             {recycleBagCards.length > 0 && (
@@ -177,7 +256,16 @@ export default function BackpackViewerModal({
                   </div>
                   <p>瀑流图标旁数字为剩余次数；下一次瀑流开始时结算。</p>
                 </div>
-                {recycleBagCards.map(card => renderCardRow(card, 'recycle'))}
+                {recycleBagCards.map(card => (
+                  <BackpackRow
+                    key={card.id}
+                    card={card}
+                    variant="recycle"
+                    arcaneStormDamage={arcaneStormDamage}
+                    arcaneShieldStunGain={arcaneShieldStunGain}
+                    onCardSelect={onCardSelect}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -186,4 +274,3 @@ export default function BackpackViewerModal({
     </Dialog>
   );
 }
-
