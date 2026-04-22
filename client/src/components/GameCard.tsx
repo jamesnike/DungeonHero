@@ -308,6 +308,7 @@ export interface GameCardData {
   weaponDurabilitySaveChance?: number; // % chance to not consume durability on attack
   damageReflect?: number; // Damage reflected back to attacker when blocking
   shieldPerfectBlockSaveChance?: number; // % chance to save durability on perfect block
+  shieldPerfectBlockArmorSaveChance?: number; // % chance to save armor (no armor deduction this block) on perfect block
   shieldBashStunRate?: number; // Per-armor-point stun % when shield-bashing a monster (e.g. 5 → 5% × armor)
   shieldBashUnlimited?: boolean; // Shield bash has no per-turn limit; can bash as long as durability remains
   reflectHalfDamage?: boolean; // Reflect half of incoming attack damage back to attacker

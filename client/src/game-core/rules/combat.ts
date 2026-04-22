@@ -3065,20 +3065,50 @@ function reduceResolveBlock(
         const bonusRemaining = Math.max(0, bonusTotal - existingBonusDamaged);
         const currentArmor = storedBaseArmor + bonusRemaining;
         const blocked = Math.min(remainingDamage, currentArmor);
-        const newArmor = Math.max(0, currentArmor - remainingDamage);
-        shieldArmorDepleted = newArmor <= 0 && remainingDamage > 0;
-        remainingDamage = isFullBlockShield ? 0 : Math.max(0, remainingDamage - currentArmor);
 
-        if (shieldArmorDepleted) {
-          const { armor: _clearArmor, armorBonusDamaged: _clearBonusDmg, ...resetBase } = slotItem as any;
-          workingShieldItem = resetBase;
-        } else {
-          const consumeFromBonus = Math.min(blocked, bonusRemaining);
-          const consumeFromBase = blocked - consumeFromBonus;
-          const newBaseArmor = Math.max(0, storedBaseArmor - consumeFromBase);
-          const newBonusDamaged = existingBonusDamaged + consumeFromBonus;
-          workingShieldItem = { ...slotItem, armor: newBaseArmor, armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined };
+        // 守护圣盾 — perfect-block armor save: on perfect block (attack ≤ currentArmor),
+        // roll d20; if save succeeds the shield's armor (and consequently its durability)
+        // is not consumed at all this block. Dice fires before any armor mutation so we
+        // can short-circuit the deduction entirely.
+        const wouldBePerfectBlock = isFullBlockShield || remainingDamage <= currentArmor;
+        let armorSaved = false;
+        if (wouldBePerfectBlock && !state.unbreakableNext) {
+          const armorSaveChance = (slotItem as GameCardData).shieldPerfectBlockArmorSaveChance;
+          if (armorSaveChance && armorSaveChance > 0) {
+            const armorThreshold = Math.round((armorSaveChance / 100) * 20);
+            let armorSaveRoll: number;
+            [armorSaveRoll, rng] = nextInt(rng, 1, 20);
+            sideEffects.push({
+              event: 'combat:diceRoll',
+              payload: { title: slotItem.name, subtitle: '完美格挡 — 护甲判定', roll: armorSaveRoll, threshold: armorThreshold, success: armorSaveRoll <= armorThreshold },
+            });
+            if (armorSaveRoll <= armorThreshold) {
+              armorSaved = true;
+              sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 完美格挡，幸运保住了护甲！` } });
+            }
+          }
         }
+
+        let newArmor: number;
+        if (armorSaved) {
+          newArmor = currentArmor;
+          shieldArmorDepleted = false;
+          workingShieldItem = { ...slotItem };
+        } else {
+          newArmor = Math.max(0, currentArmor - remainingDamage);
+          shieldArmorDepleted = newArmor <= 0 && remainingDamage > 0;
+          if (shieldArmorDepleted) {
+            const { armor: _clearArmor, armorBonusDamaged: _clearBonusDmg, ...resetBase } = slotItem as any;
+            workingShieldItem = resetBase;
+          } else {
+            const consumeFromBonus = Math.min(blocked, bonusRemaining);
+            const consumeFromBase = blocked - consumeFromBonus;
+            const newBaseArmor = Math.max(0, storedBaseArmor - consumeFromBase);
+            const newBonusDamaged = existingBonusDamaged + consumeFromBonus;
+            workingShieldItem = { ...slotItem, armor: newBaseArmor, armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined };
+          }
+        }
+        remainingDamage = isFullBlockShield ? 0 : Math.max(0, remainingDamage - currentArmor);
 
         if (isFullBlockShield) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newArmor}）` } });

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef } from 'react';
 import GameCard from '@/components/GameCard';
 import type { CardType, GameCardData } from '@/components/GameCard';
 import { Card } from '@/components/ui/card';
@@ -322,12 +322,37 @@ const PreviewCell = memo(function PreviewCell({
   const hasStack = stackedCards.length > 0;
   const phase = waterfallAnimation.phase;
 
+  // 防御 race condition：发牌时引擎更新 previewCards（新卡到位）和 GameBoard 本地
+  // useState 更新 waterfallAnimation.phase（→ 'dealing'）来自两套不同的更新机制
+  // （engine emitter / React useState）。在 React 18 里通常会 batch 进同一帧渲染，
+  // 但实测中存在两者错开一帧的情况——会出现「previewCards 是新卡 + phase 还停在
+  // 'discarding'/'dropping'」的瞬间，按下面的 phase 矩阵会渲染成正面 GameCard，
+  // 把秘密泄露出去（用户能看到一瞬间真容再翻成卡背）。
+  //
+  // 解决：跟踪上一帧本格 card.id；只要这一帧 id 变了（含 null→新、旧→新），就强制
+  // 本帧显示卡背，覆盖 phase / revealedEarly 的判定。下一帧 useEffect 把 ref 同步上，
+  // 之后就走正常的 phase 判定。
+  //
+  // 不影响其他路径：
+  //   - revealing 3D 翻面：card.id 不变 → 不触发 → 翻面正常播放
+  //   - dropping / discarding：card.id 不变 → 不触发 → 正面正常显示
+  //   - 乾坤一翻 (revealedEarly 翻 flag)：card.id 不变 → 不触发 → 正面正常显示
+  const lastCardIdRef = useRef<string | null>(card?.id ?? null);
+  const currentCardId = card?.id ?? null;
+  const cardJustChanged = lastCardIdRef.current !== currentCardId;
+  useEffect(() => {
+    lastCardIdRef.current = currentCardId;
+  }, [currentCardId]);
+
   // Phase → presentation:
   //   - idle / dealing  → render the card BACK (face-down)，**除非**该格被「乾坤一翻」翻过
   //   - revealing       → render 3D flipper (back → face animation)，已经被早翻的格直接显示正面
   //   - dropping / discarding → render the card FACE (already revealed, now flying out)
-  const showBack = (phase === 'idle' || phase === 'dealing') && !revealedEarly;
-  const showRevealAnimation = phase === 'revealing' && !revealedEarly;
+  //   - cardJustChanged → 强制 BACK，避免发牌瞬间的 race 泄露真容
+  const showBack = cardJustChanged
+    ? true
+    : (phase === 'idle' || phase === 'dealing') && !revealedEarly;
+  const showRevealAnimation = phase === 'revealing' && !revealedEarly && !cardJustChanged;
 
   // 「乾坤一翻」flip-active-card 选择阶段：未翻面的 preview 卡背可被选中，已翻面的不能
   const flipPickActive = pendingMagicAction?.effect === 'flip-active-card'

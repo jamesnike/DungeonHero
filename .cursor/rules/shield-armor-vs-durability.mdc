@@ -1,0 +1,75 @@
+---
+description: 护盾的"护甲值 vs 耐久"正确模型 — 不要再把 armor value 当成不变的 stat
+alwaysApply: true
+---
+
+# 护盾机制：armor 是血量，durability 是血层
+
+## 一次因为概念错乱差点改坏的事故
+
+User 让我改 `守护圣盾` 的效果："完美格挡时 50% 不消耗护甲值"。
+我的脑内模型是错的——以为护甲值（`value` / `armorMax`）是个**永远不变的常量**，只用来跟攻击力比大小决定"是否完美格挡"，每次格挡只扣 1 耐久。
+基于这个错误模型，我反复跟 user 说"游戏现在没有'消耗护甲值'这个概念，你想引入新机制吗？"——
+来回拉扯了 5、6 轮，user 几乎要放弃解释。
+最后我去读 `client/src/game-core/rules/combat.ts` `reduceResolveBlock`，才发现 user 一直是对的，**我把游戏机制搞反了**。
+
+## 正确模型（看代码：`combat.ts` line 3061-3091 非 monster 盾分支）
+
+> **`armor` 是这一层耐久内剩余的"护甲血量"；`durability` 是"护甲血层数"。**
+
+| 字段 | 角色 | 卡面位置 |
+|---|---|---|
+| `value` / `armorMax` | 护甲值上限（每个新血层刷满到这个值） | 卡牌正中大数字 |
+| `armor` | 当前血层剩余护甲（运行时态，未存档时 = `armorMax`） | —（运行时） |
+| `durability` / `maxDurability` | 还有几个血层 | 卡牌角落 X/Y |
+| `armorBonusDamaged` | 永久 / 临时护甲加成里已被打掉多少 | —（运行时） |
+
+每次格挡走的真实流程（简化）：
+
+```
+currentArmor = stored armor + (perm bonus + temp bonus - bonusDamaged)
+blocked      = min(attack, currentArmor)
+newArmor     = max(0, currentArmor - attack)            // armor 被攻击啃掉
+overflow     = max(0, attack - currentArmor)            // 溢出走 hero（非 fullBlock）
+
+if newArmor == 0 && attack > 0:
+  shieldArmorDepleted = true                            // 这一血层被打穿
+  durability -= 1                                       // 扣一个血层
+  armor 在下一次格挡时刷满到 armorMax                     // 重置
+else:
+  armor = newArmor                                      // 同一血层继续撑
+
+完美格挡（perfect block）= isFullBlockShield || overflow == 0
+                       = "本次攻击没有溢出到英雄"
+```
+
+注意几个关键事实，**别再忘**：
+
+- **armor 每次格挡都会被扣**，不是不变的 stat。
+- **durability 不是每次格挡都 -1**，只有在 armor 这一层被打穿（newArmor 归零）时才 -1。
+- **完美格挡 ≠ "armor 没动"**——攻击力正好等于 armor 也是完美格挡，但 armor 会被扣到 0、durability 也会 -1（除非有 save 机制）。
+- **完美格挡 ≠ 一定能被存档机制保住**——`shieldPerfectBlockSaveChance` 救的是 armor 打穿时的 durability；`shieldPerfectBlockArmorSaveChance` 救的是 armor 本身的扣减（守护圣盾用这个）。两条 save 机制语义不同，触发位置不同。
+- **打怪 vs 用盾**的对称性：英雄打怪溢出伤害被忽略；怪物打盾溢出伤害走英雄 hp（fullBlock 盾除外）。
+
+## 几个会被脑补错的边界
+
+| 场景 | 错误直觉 | 真实行为 |
+|---|---|---|
+| 守护圣盾 armor 3 / 耐久 2/2，怪打 2 | "完美格挡，耐久 -1，armor 不变 → 3 / 1/2" | armor: 3 → 1，耐久不变 → 实际是 1 / 2/2 |
+| 守护圣盾 armor 3 / 耐久 2/2，怪打 3 | "完美格挡，耐久 -1，armor 不变 → 3 / 1/2" | armor 打穿，耐久 -1，armor 刷满 → 3 / 1/2（结果数字一样，机制完全不同） |
+| 守护圣盾 armor 3 / 耐久 2/2，怪打 5 | "armor 吃 3，耐久 -1，hero 受 2" | 对的，但同时 armor 被打穿、armor 重置到 3、英雄受 2 溢出 |
+| 铁壁塔盾（fullBlock）armor 5 / 耐久 1/1，怪打 8 | "fullBlock，盾完全挡 8，armor 不变" | armor: 5 → 0 (打穿)、耐久 -1 (盾损毁)、英雄 0 溢出。fullBlock 仅意味着溢出永远 = 0，不意味着 armor 不被扣 |
+
+## 涉及"护盾耐久 / 护甲"逻辑修改时的强制流程
+
+1. **先读 `combat.ts` `reduceResolveBlock`**（约 line 2951 起），从 line 3061 开始的非 monster 盾分支是参考实现。**不要凭印象改护盾**——印象大概率是错的。
+2. **明确改的是哪层语义**：是改 armor 扣减规则，还是改 durability 扣减规则？两者触发位置不同（armor 在前，durability 在 `shieldArmorDepleted` 时才走）。
+3. **跟 user 沟通时使用对方的术语**：user 说"护甲值"几乎一定指 `armor` / `armorMax`（卡面那个大数字），不要假设对方搞错了术语。
+4. **monster 盾分支**（line 3023-3060）是另一套对称实现，里面 `armorBonusDamaged` 累计逻辑稍有不同——改怪物装备护盾时要看那段。
+5. **修改后必跑** `client/src/game-core/__tests__/` 下所有 `*shield*` 测试 + `magic-self-damage-shield`（自伤打盾走另一条路径但共用 `armor` 字段）。
+
+## 自检：跟 user 讨论护盾前先问自己
+
+> "我是不是又把 armor 当成不变的 stat 了？我有没有重新读过 `reduceResolveBlock`？我对'完美格挡'触发条件、armor 扣减时机、durability 扣减时机这三件事的描述能不能跟 line 3061-3091 的代码对上？"
+
+如果任意一条不确定，**回去读 combat.ts 再开口**。

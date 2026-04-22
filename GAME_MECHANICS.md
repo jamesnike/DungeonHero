@@ -262,7 +262,7 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 5. **守护护符** (`guardian`)：有盾时，溢出伤害**全部吸收**
 6. **盾牌耐久**：格挡后 -1 耐久（`unbreakableUntilWaterfall` 除外）
 7. **完美格挡**：铁壁塔盾或 `remainingDamage === 0`
-8. **完美格挡保护**：`shieldPerfectBlockSaveChance`（守护圣盾50%）→ D20 判定免耐久消耗
+8. **完美格挡保护**：`shieldPerfectBlockSaveChance` → D20 判定免耐久消耗（在 armor 已被打穿、即将扣耐久时触发）；`shieldPerfectBlockArmorSaveChance`（守护圣盾 50%）→ D20 判定本次格挡不扣护甲值（在 armor 扣减前触发；如果保住 armor，自然也不会扣耐久）
 9. 盾牌破碎 → `disposeOwnedEquipmentCard` → 预备栏顶替
 
 ### 4.10 Boss反击伤害
@@ -912,7 +912,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 |------|------|------|------|
 | 铁壁塔盾 | 5 | 1/1 | `permEquipment`，`fullBlock`（完全格挡） |
 | 棘刺反盾 | 4 | 2/2 | `reflectHalfDamage`（反弹半数伤害） |
-| 守护圣盾 | 3 | 2/2 | `shieldPerfectBlockSaveChance: 50`（完美格挡50%保护盾） |
+| 守护圣盾 | 3 | 2/2 | `shieldPerfectBlockArmorSaveChance: 50`（完美格挡 50% 概率本次不扣护甲值） |
 
 ### 13.3 护符
 
