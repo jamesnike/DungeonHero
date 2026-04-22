@@ -550,6 +550,27 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     [pendingMagicAction],
   );
 
+  // 单目标伤害 magic 打盾路径：玩家在 monster-select 阶段点击装有盾的装备槽。
+  // 与 hero-self target 同源（同样 gate 在 allowsHeroTarget 上），区别是 reducer 端
+  // 会让盾的 armor 先吃伤，溢出再走 APPLY_DAMAGE selfInflicted。
+  const handleMagicShieldSlotTarget = useCallback(
+    (slotId: 'equipmentSlot1' | 'equipmentSlot2') => {
+      if (!pendingMagicAction || pendingMagicAction.step !== 'monster-select') {
+        return;
+      }
+      const allowsHero = (pendingMagicAction as { allowsHeroTarget?: boolean }).allowsHeroTarget;
+      if (!allowsHero) return;
+      dispatch({
+        type: 'RESOLVE_MAGIC_MONSTER_SELECTION',
+        magicId: pendingMagicAction.effect,
+        monsterId: '',
+        targetType: 'shield-slot',
+        slotId,
+      });
+    },
+    [pendingMagicAction],
+  );
+
   // ---------------------------------------------------------------------------
   // handleDungeonCardSelection
   // ---------------------------------------------------------------------------
@@ -559,10 +580,22 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
       if (!pendingMagicAction || pendingMagicAction.step !== 'dungeon-select') {
         return;
       }
+      // 「乾坤一翻」可以选 Preview 行的卡背；其它 dungeon-select 仅允许 active 行。
+      // 找不到对应行时退而求其次：preview 行查找用 -1 也没关系，reducer 会自己再
+      // 用 cardId 在两行里定位（rules/hero.ts case 'flip-active-card'）。
       const activeSlotIdx = activeCards.findIndex(c => c?.id === card.id);
-      dispatch({ type: 'RESOLVE_DUNGEON_CARD_SELECTION', cardId: card.id, targetIndex: activeSlotIdx });
+      let targetIndex = activeSlotIdx;
+      if (activeSlotIdx === -1 && pendingMagicAction.effect === 'flip-active-card') {
+        const previewSlotIdx = previewCards.findIndex(c => c?.id === card.id);
+        if (previewSlotIdx !== -1) {
+          targetIndex = previewSlotIdx;
+        } else {
+          return;
+        }
+      }
+      dispatch({ type: 'RESOLVE_DUNGEON_CARD_SELECTION', cardId: card.id, targetIndex });
     },
-    [activeCards, pendingMagicAction],
+    [activeCards, previewCards, pendingMagicAction],
   );
 
   // ---------------------------------------------------------------------------
@@ -874,6 +907,7 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     handleHeroSkillMonsterSelection,
     handleMagicMonsterSelection,
     handleMagicHeroSelfTarget,
+    handleMagicShieldSlotTarget,
     handleDungeonCardSelection,
     handleBackpackReorganizeConfirm,
     handleHandDiscardSelectionConfirm,

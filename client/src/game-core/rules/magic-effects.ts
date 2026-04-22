@@ -131,6 +131,26 @@
  *
  * Hero magic (法力槽) and curses (`type: 'curse'`) are OUT OF SCOPE — Spell
  * Echo never applies to them (engine guard at engine.ts).
+ *
+ * ---------------------------------------------------------------------------
+ * 自伤目标（Self-Damage Target）AUDIT NOTE
+ * ---------------------------------------------------------------------------
+ * 单目标伤害 magic 在 setup 阶段会把 `pendingMagicAction.allowsHeroTarget = true`，
+ * 表示这个 spell 允许玩家把伤害打回自己。这个 flag 现在含义已经扩展为：
+ *   1) 玩家可以选 Hero Cell（targetType: 'hero'）→ 整额走 APPLY_DAMAGE
+ *      selfInflicted（触发 血怒战符 / 复生赐福 / self-damage-draw / totalDamageTaken）；
+ *   2) 玩家可以选**装备槽里的盾**（targetType: 'shield-slot'，见
+ *      `rules/shield-self-damage.ts` 的 `applyShieldSlotSelfDamage`）→ 盾 armor 先
+ *      吃伤，溢出再以 selfInflicted 走 APPLY_DAMAGE，并消耗 1 点 durability，但
+ *      **不**计入 `combatState.slotDurabilityUsedThisTurn` 的"格挡耐久次数上限"，
+ *      也**不**触发任何 RESOLVE_BLOCK 专属机制（reflect / dual-guard / autoEvolve /
+ *      bone-regen / bulwark passive 等）。
+ * 选盾路径目前只允许 `type === 'shield'` 且 `armor > 0` 的装备槽；`type === 'monster'`
+ * 的怪物盾不在范围内。所有 `allowsHeroTarget: true` 的卡（missile-bolt、
+ * bounty-spell-damage、blood-strike、blood-reckoning、honor-blood、armor-strike、
+ * armor-double-strike、stun-strike、overkill-upgrade、chaos-strike、berserk-gambit、
+ * fate-sight、midas-judgment、arcane-storm、repair-enrage-dice 等 ~15 张）共用同一
+ * setup → reducer → finalize 路径，不需要每张卡分别注册 self-shield 行为。
  * ===========================================================================
  */
 
@@ -233,14 +253,14 @@ export function applyMissileRelicEffects(
   target: GameCardData,
 ): void {
   if (hasEternalRelic(state.eternalRelics, 'missile-stun-20') && !target.isStunned) {
-    const stunPct = Math.min(20, state.stunCap ?? 0);
+    const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+    const stunPct = Math.min(20 + (ae.stunRateBoost ?? 0), state.stunCap ?? 0);
     if (stunPct > 0) {
       const [roll, nextRng] = nextInt(patch.rng ?? state.rng, 1, 100);
       patch.rng = nextRng;
       if (roll <= stunPct) {
         enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId: target.id, patch: { isStunned: true } });
         log(sideEffects, 'magic', `永恒护符·震荡弹幕：${target.name} 被击晕了！`);
-        const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
         if (ae.stunGoldCount > 0) {
           const sn = ae.stunGoldCount;
           enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10 * sn, source: 'amulet-stun-gold' });
@@ -1536,7 +1556,7 @@ export function resolvePermanentMagic(
     }
 
     case STARTER_CARD_IDS.discoverClassToHand: {
-      // 「专属感召」(Perm 2)：发现一张专属牌，直接进手牌。
+      // 「专属感召」(Perm 1)：发现一张专属牌，直接进手牌。
       // Spell Echo (B*) — UI-DELEGATED MODAL: discover modal cannot be
       // auto-replayed, so 2× echo only fires once and emits a banner. This
       // matches `altar-discover-class-magic` semantics.
@@ -2980,7 +3000,8 @@ export function resolveKnightPermanentMagic(
       const divisor = divisors[card.upgradeLevel ?? 0] ?? 3;
       const stunCap = state.stunCap ?? 0;
       const baseDmg = Math.ceil(stunCap / divisor);
-      const stunPct = Math.min(60, stunCap);
+      const aeStunCap = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+      const stunPct = Math.min(60 + (aeStunCap.stunRateBoost ?? 0), stunCap);
       const totalDmg = getSpellDamage(baseDmg + (card.amplifyBonus ?? 0), state) * echoMultiplier;
       const drawCount = 1 * echoMultiplier;
       const echoTag = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
@@ -3913,7 +3934,8 @@ export function resolveStunStrike(
   const stunChances = [20, 40, 60];
   const hits = 2;
   const baseDmgPerHit = (stunDmgPerHit[card.upgradeLevel ?? 0] ?? 1) + (card.amplifyBonus ?? 0);
-  const rawStunPct = stunChances[card.upgradeLevel ?? 0] ?? 10;
+  const aeStunStrike = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const rawStunPct = (stunChances[card.upgradeLevel ?? 0] ?? 10) + (aeStunStrike.stunRateBoost ?? 0);
   const stunPct = Math.min(rawStunPct, state.stunCap ?? 10);
   const hitDmg = getSpellDamage(baseDmgPerHit, state) * echoMultiplier;
   // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
@@ -4231,7 +4253,8 @@ function resolveStunWave(
   }
 
   const currentStunCap = (state.stunCap ?? 10) + 5;
-  const stunPct = Math.min(60, currentStunCap);
+  const aeStunDomain = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const stunPct = Math.min(60 + (aeStunDomain.stunRateBoost ?? 0), currentStunCap);
   const threshold = Math.round((stunPct / 100) * 20);
 
   if (threshold > 0) {

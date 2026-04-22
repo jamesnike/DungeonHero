@@ -224,6 +224,7 @@ export interface PersistedGameState {
   damageMagicPlayedThisTurn?: number;
   previewCardStacks?: Record<number, GameCardData[]>;
   activeCardStacks?: Record<number, GameCardData[]>;
+  previewRevealedEarly?: boolean[];
   waterfallDealBonus?: number;
   eternalRelics?: PersistedEternalRelic[];
 

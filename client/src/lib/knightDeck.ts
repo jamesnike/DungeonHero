@@ -49,6 +49,7 @@ import evolvingShieldImage from '@assets/generated_images/knight_evolving_shield
 import guardianLinkShieldImage from '@assets/generated_images/knight_guardian_link_shield.png';
 import salvageAmuletImage from '@assets/generated_images/knight_salvage_amulet.png';
 import bloodrageAmuletImage from '@assets/generated_images/knight_bloodrage_amulet.png';
+import knightSelfDamageDrawAmuletImage from '@assets/generated_images/knight_magic_blood_draw.png';
 import persuadeAuraAmuletImage from '@assets/generated_images/knight_persuade_aura_amulet.png';
 import monsterEquipBuffAmuletImage from '@assets/generated_images/knight_monster_equip_buff_amulet.png';
 import statSwapPotionImage from '@assets/generated_images/knight_stat_swap_potion.png';
@@ -59,6 +60,7 @@ import recallScrollImage from '@assets/generated_images/knight_recall_scroll.png
 import monsterDoomScrollImage from '@assets/generated_images/knight_monster_doom_scroll.png';
 import heavyShieldKnightBashImage from '@assets/generated_images/knight_bash_shield.png';
 import knightChainPersuadePotionImage from '@assets/generated_images/knight_potion_chain_persuade.png';
+import knightVitalityPotionImage from '@assets/generated_images/cute_potion_concentrated_heal.png';
 import knightEquipEmpowerPotionImage from '@assets/generated_images/knight_potion_equip_empower.png';
 import knightExchangeBladeImage from '@assets/generated_images/knight_weapon_exchange_blade.png';
 import knightGrowthBladeImage from '@assets/generated_images/knight_growth_blade.png';
@@ -635,6 +637,17 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     description: '每次对自己造成伤害时，所有装备栏临时攻击 +2。',
     shortDescription: '每次自伤，全栏 +2 临时攻击',
     amuletEffect: 'bloodrage-attack',
+  });
+
+  pushCard({
+    type: 'amulet',
+    name: '赎血召牌符',
+    value: 1,
+    image: knightSelfDamageDrawAmuletImage,
+    classCard: true,
+    description: '每次对自己造成伤害时，从背包随机抽 1 张牌（受手牌上限约束）。',
+    shortDescription: '每次自伤，从背包抽 1 张牌',
+    amuletEffect: 'self-damage-draw',
   });
 
   pushCard({
@@ -1271,6 +1284,17 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     description: '选择一张手牌，赋予「转型：从回收袋随机取 1 张牌加入手牌」。',
     shortDescription: '为一张手牌赋予转型：回收袋取 1 入手',
     potionEffect: 'transform-recycle-grant',
+  });
+
+  pushCard({
+    type: 'potion',
+    name: '活力秘药',
+    value: 0,
+    image: knightVitalityPotionImage,
+    classCard: true,
+    description: '恢复 12 点生命，抽 2 张牌。',
+    shortDescription: '+12 生命；抽 2 张牌',
+    potionEffect: 'heal-12-draw-2',
   });
 
   // === CLASS WEAPONS ===

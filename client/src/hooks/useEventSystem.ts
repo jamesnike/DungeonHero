@@ -318,17 +318,45 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     predeterminedRoll?: number;
   };
   const diceQueueRef = useRef(createDiceQueue<DiceConfig, EventDiceRange>(entry => {
-    dispatch({ type: 'SET_EVENT_DICE_MODAL', payload: {
-      title: entry.config.title,
-      subtitle: entry.config.subtitle,
-      entries: entry.config.entries,
-      rolledValue: null,
-      highlightedId: null,
-      flowContext: entry.config.flowContext,
-      predeterminedRoll: entry.config.predeterminedRoll ?? null,
-    } });
-    dispatch({ type: 'SET_PHASE', phase: 'awaitingDice' });
-    depsRef.current.setEventDiceRollKey(key => key + 1);
+    // The actual modal-opening dispatches. Wrapped so we can defer them when
+    // the engine is in the monster-skill-float HARD_PAUSE phase, see below.
+    const openDiceModal = () => {
+      dispatch({ type: 'SET_EVENT_DICE_MODAL', payload: {
+        title: entry.config.title,
+        subtitle: entry.config.subtitle,
+        entries: entry.config.entries,
+        rolledValue: null,
+        highlightedId: null,
+        flowContext: entry.config.flowContext,
+        predeterminedRoll: entry.config.predeterminedRoll ?? null,
+      } });
+      dispatch({ type: 'SET_PHASE', phase: 'awaitingDice' });
+      depsRef.current.setEventDiceRollKey(key => key + 1);
+    };
+
+    // 雷涌一击 / stun-strike / 任何「打怪同 tick emit ui:requestDice」的 magic
+    // bug（用户报告的击晕骰不弹）：show 回调是从 ui:requestDice 监听器里 re-
+    // entrantly 触发的，那时它的两个 dispatch 会被压进 _dispatchQueue 等候。
+    // 等到 _dispatchQueue 真正被 drain 时，pipeline 已经先把 DEAL_DAMAGE_TO_
+    // MONSTER 处理完，怪物的 boss-retaliation / dragon-breath / bleed /
+    // dragon-bleed-destroy 等被动会 enqueue 一个 TRIGGER_MONSTER_SKILL_FLOAT，
+    // 把 phase 切到 'awaitingSkillFloat'。GameEngine._processAction 上的
+    // awaitingSkillFloat 守卫此时会**丢弃**这两个 SET_*，于是 dice modal 永
+    // 远不弹。
+    //
+    // 修复：检测到 awaitingSkillFloat 时不立刻 dispatch，而是订阅 engine
+    // state，等 phase 退出 awaitingSkillFloat（即 RELEASE_MONSTER_SKILL_FLOAT
+    // 把 float 队列清空）之后再补 dispatch。这样动画播完，dice 就接着弹。
+    if (engine.getState().phase === 'awaitingSkillFloat') {
+      const unsub = engine.subscribe(() => {
+        if (engine.getState().phase !== 'awaitingSkillFloat') {
+          unsub();
+          openDiceModal();
+        }
+      });
+      return;
+    }
+    openDiceModal();
   }));
   const magicChoiceResolverRef = useRef<((optionId: string) => void) | null>(null);
   const equipmentPromptResolverRef = useRef<((slot: EquipmentSlotId | null) => void) | null>(null);

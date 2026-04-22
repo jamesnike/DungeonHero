@@ -26,7 +26,7 @@ import {
   addToRecycleBag,
   addCardToBackpackPure,
   processRecycleBag,
-  resetMonsterForGraveyard,
+  resetCardForGraveyard,
   getEffectiveHandLimit,
 } from '../cards';
 import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
@@ -41,6 +41,7 @@ import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '..
 import { cloneClassCardsWithFreshIds, sampleDistinctByName } from '../cardClone';
 import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection, ensureMonsterEngaged } from './magic-effects';
 import { resolveAllPotionEffects, resolvePendingPotion } from './potion-effects';
+import { applyFlipCounters } from './flip-counters';
 import { executeCardEffects, executeMagicCardEffects, executeOnEquip, executeOnEnterHand } from '../card-schema';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
 import type { HeroMagicId } from '@/components/GameCard';
@@ -460,7 +461,7 @@ function reduceAddToGraveyard(
   action: Extract<GameAction, { type: 'ADD_TO_GRAVEYARD' }>,
 ): ReduceResult {
   const { fromSlot: _, ...cardWithoutSlot } = action.card as GameCardData & { fromSlot?: string };
-  const sanitized = resetMonsterForGraveyard(cardWithoutSlot, state.gameMode === 'quick');
+  const sanitized = resetCardForGraveyard(cardWithoutSlot, state.gameMode === 'quick');
 
   if (state.discardedCards.some(c => c.id === sanitized.id)) {
     return noChange(state);
@@ -949,6 +950,14 @@ function reduceFinalizeMagicCard(
   for (const ac of activeCards) {
     if (ac && ac.antiMagicReflect && ac.antiMagicReflect > 0 && !ac.isStunned) {
       const reflectDmg = ac.antiMagicReflect;
+      // Trigger the skill float BEFORE the routed reflect damage so the
+      // animation pauses the pipeline, then the actual reflect resolves
+      // once the player has read the skill name.
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: ac.id,
+        skillKey: 'reflect:antiMagic',
+      });
       const route = routeReflectDamageToHero(liveState, reflectDmg, ac.name, '反魔', rng);
       armorPatch = { ...armorPatch, ...route.patch };
       liveState = { ...liveState, ...route.patch };
@@ -1428,144 +1437,12 @@ function reduceApplyCardFlip(
     enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: flip.toCard });
   }
 
-  const amuletFx = computeAmuletEffects(state.amuletSlots);
-  if (amuletFx.flipGoldCount > 0) {
-    const goldGain = FLIP_GOLD_REWARD * amuletFx.flipGoldCount;
-    patch.gold = (state.gold ?? 0) + goldGain;
-    sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。` } });
-  }
+  // Capture flip-gold count BEFORE applyFlipCounters runs (so we can pass the
+  // hint to the full-screen overlay's coin animation). applyFlipCounters reads
+  // the same state-level amulet effects, so this is the same value it'll use.
+  const amuletFxForOverlay = computeAmuletEffects(state.amuletSlots);
 
-  // 翻印之符 (persuade-on-flip): 每翻转一张牌 → 下次劝降成功率 +10%
-  // (stacks across multiple amulets; cleared after any persuade attempt
-  //  via reducePersuadeMonster's `patch.persuadeAmuletBonus = 0`).
-  const persuadeOnFlipAmulets = (state.amuletSlots as GameCardData[]).filter(
-    s => s?.amuletEffect === 'persuade-on-flip',
-  );
-  if (persuadeOnFlipAmulets.length > 0) {
-    const stackBonus = persuadeOnFlipAmulets.length * 10;
-    patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + stackBonus;
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'amulet', message: `翻印之符：卡牌翻转，下次劝降成功率 +${stackBonus}%（当前 +${patch.persuadeAmuletBonus}%）` },
-    });
-  }
-
-  // 翻覆震慑 (flip-monster-debuff buff): per active debuff buff → target monster -1 attack on every flip.
-  // Buff lifecycle: set on magic resolve; cleared on next waterfall or when target leaves active row.
-  if (state.flipDebuffMonsterId) {
-    const targetIdx = (state.activeCards as (GameCardData | null)[]).findIndex(
-      c => c?.id === state.flipDebuffMonsterId,
-    );
-    if (targetIdx >= 0) {
-      const targetCard = state.activeCards[targetIdx]!;
-      if (targetCard.type === 'monster' || targetCard.attack != null) {
-        const currentAtk = targetCard.attack ?? 0;
-        const newAtk = Math.max(0, currentAtk - 1);
-        if (newAtk !== currentAtk) {
-          const baseActive = (patch.activeCards ?? state.activeCards) as ActiveRowSlots;
-          const updated = [...baseActive] as ActiveRowSlots;
-          updated[targetIdx] = { ...targetCard, attack: newAtk };
-          patch.activeCards = updated;
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'event', message: `翻覆震慑：${targetCard.name} 攻击力 ${currentAtk} → ${newAtk}` },
-          });
-        }
-      }
-    } else {
-      // Target left active row — clear buff.
-      patch.flipDebuffMonsterId = null;
-    }
-  }
-
-  // 翻转之契 option 6 — 每翻转一次，挂有 _flipRepairBuff 的装备各恢复 1 耐久（含 reserve）
-  const flipRepairTouches: string[] = [];
-  const tryRepairEquip = (eq: GameCardData | null | undefined): GameCardData | null | undefined => {
-    if (!eq || !eq._flipRepairBuff) return eq;
-    if (typeof eq.durability !== 'number' || typeof eq.maxDurability !== 'number') return eq;
-    if (eq.durability >= eq.maxDurability) return eq;
-    const restored = repairDurabilityPure(eq, 1);
-    flipRepairTouches.push(`${eq.name} → ${restored.durability}/${restored.maxDurability}`);
-    return restored;
-  };
-  const slot1Cur = patch.equipmentSlot1 ?? state.equipmentSlot1;
-  const slot2Cur = patch.equipmentSlot2 ?? state.equipmentSlot2;
-  const repairedSlot1 = tryRepairEquip(slot1Cur);
-  const repairedSlot2 = tryRepairEquip(slot2Cur);
-  if (repairedSlot1 !== slot1Cur) patch.equipmentSlot1 = repairedSlot1 as any;
-  if (repairedSlot2 !== slot2Cur) patch.equipmentSlot2 = repairedSlot2 as any;
-  const reserve1Cur = patch.equipmentSlot1Reserve ?? state.equipmentSlot1Reserve;
-  if (Array.isArray(reserve1Cur) && reserve1Cur.length > 0) {
-    let changed = false;
-    const next = reserve1Cur.map(eq => {
-      const repaired = tryRepairEquip(eq);
-      if (repaired !== eq) changed = true;
-      return repaired as GameCardData;
-    });
-    if (changed) patch.equipmentSlot1Reserve = next as EquipmentItem[];
-  }
-  const reserve2Cur = patch.equipmentSlot2Reserve ?? state.equipmentSlot2Reserve;
-  if (Array.isArray(reserve2Cur) && reserve2Cur.length > 0) {
-    let changed = false;
-    const next = reserve2Cur.map(eq => {
-      const repaired = tryRepairEquip(eq);
-      if (repaired !== eq) changed = true;
-      return repaired as GameCardData;
-    });
-    if (changed) patch.equipmentSlot2Reserve = next as EquipmentItem[];
-  }
-  if (flipRepairTouches.length > 0) {
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `熔铸耐久：翻转触发，${flipRepairTouches.join('；')}` },
-    });
-  }
-
-  // 翻血之符 (flip-overkill-lifesteal): every 5 flips → permanentSpellLifesteal +1
-  // Each equipped amulet ticks the counter independently (N → +N per flip).
-  const flipLifestealAmulets = (state.amuletSlots as GameCardData[]).filter(
-    s => s?.amuletEffect === 'flip-overkill-lifesteal',
-  );
-  if (flipLifestealAmulets.length > 0) {
-    const flipThreshold = 5;
-    const flipProgress = (state.flipOverkillLifestealProgress ?? 0) + flipLifestealAmulets.length;
-    if (flipProgress >= flipThreshold) {
-      patch.flipOverkillLifestealProgress = 0;
-      patch.permanentSpellLifesteal = (state.permanentSpellLifesteal ?? 0) + 1;
-      sideEffects.push({
-        event: 'log:entry',
-        payload: { type: 'amulet', message: `${flipLifestealAmulets[0].name}：累计翻转 ${flipThreshold} 张牌，超杀吸血永久 +1！` },
-      });
-    } else {
-      patch.flipOverkillLifestealProgress = flipProgress;
-    }
-  }
-
-  // 弧能之符 (flip-zap): one independent random-monster zap per equipped amulet on every flip.
-  // The actual target selection / RNG / damage dispatch happens in the UI pipeline
-  // (mirroring the discard-zap pattern), so we only emit the trigger event here.
-  if (amuletFx.flipZapCount > 0) {
-    sideEffects.push({ event: 'card:flipShock', payload: { count: amuletFx.flipZapCount } });
-  }
-
-  // amplifyOnFlip (e.g. 「生长之盾」): each equipped item carrying this flag triggers
-  // a by-name +2 amplify on every flip. Multiple equipped items with the flag stack
-  // (one AMPLIFY action per slot, deduped if both slots happen to share a name).
-  const amplifyOnFlipNames: string[] = [];
-  const slot1Now = patch.equipmentSlot1 ?? state.equipmentSlot1;
-  const slot2Now = patch.equipmentSlot2 ?? state.equipmentSlot2;
-  if (slot1Now?.amplifyOnFlip) amplifyOnFlipNames.push(slot1Now.name);
-  if (slot2Now?.amplifyOnFlip && !amplifyOnFlipNames.includes(slot2Now.name)) {
-    amplifyOnFlipNames.push(slot2Now.name);
-  }
-  for (const name of amplifyOnFlipNames) {
-    enqueuedActions.push({
-      type: 'AMPLIFY_CARDS_BY_NAME',
-      cardName: name,
-      amount: 2,
-      source: `${name} 翻转增幅`,
-    });
-  }
+  applyFlipCounters(state, patch, sideEffects, enqueuedActions);
 
   // Stay flips with a real cell get the in-cell flip animation; everything else
   // (hand / backpack / graveyard, plus stay-fallback-to-hand) keeps the
@@ -1578,7 +1455,7 @@ function reduceApplyCardFlip(
   } else {
     sideEffects.push({
       event: 'event:cardTransformed',
-      payload: { fromCard: card, toCard: flip.toCard, message: flip.message ?? '', hasFlipGold: amuletFx.flipGoldCount > 0 },
+      payload: { fromCard: card, toCard: flip.toCard, message: flip.message ?? '', hasFlipGold: amuletFxForOverlay.flipGoldCount > 0 },
     });
   }
 

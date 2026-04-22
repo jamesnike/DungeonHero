@@ -121,6 +121,9 @@ export const createEmptyEquipmentBuffState = (): EquipmentBuffSnapshot => ({
 export const createEmptyActiveRow = (): ActiveRowSlots =>
   Array.from({ length: DUNGEON_COLUMN_COUNT }, () => null);
 
+export const createEmptyPreviewRevealedEarly = (): boolean[] =>
+  Array.from({ length: DUNGEON_COLUMN_COUNT }, () => false);
+
 export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   aura: { attack: 0, defense: 0, maxHp: 0 },
   healCount: 0,
@@ -137,6 +140,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   loneCardCount: 0,
   equipmentSalvageCount: 0,
   bloodrageAttackCount: 0,
+  selfDamageDrawCount: 0,
   persuadeOnTempAttackCount: 0,
   persuadeOnTempAttackBonus: 0,
   persuadeGrantRecycleFetchCount: 0,

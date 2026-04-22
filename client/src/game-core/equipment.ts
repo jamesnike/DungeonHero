@@ -232,6 +232,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'lone-card': effects.loneCardCount += 1; break;
       case 'equipment-salvage': effects.equipmentSalvageCount += 1; break;
       case 'bloodrage-attack': effects.bloodrageAttackCount += 1; break;
+      case 'self-damage-draw': effects.selfDamageDrawCount += 1; break;
       case 'persuade-on-temp-attack':
         effects.persuadeOnTempAttackCount += 1;
         effects.persuadeOnTempAttackBonus += upgradeLevel >= 1 ? 20 : 10;

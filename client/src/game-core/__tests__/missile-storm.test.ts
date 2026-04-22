@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { drain } from '../pipeline';
+import { drainAutoReleasingFloats } from './_helpers';
 import { createInitialGameState } from '../state';
 import type { GameState } from '../types';
 import { initialCombatState } from '../constants';
@@ -276,7 +277,12 @@ describe('魔弹风暴 — knightMissileStorm resolver', () => {
       combatState: { ...initialCombatState, engagedMonsterIds: ['sk1'], currentTurn: 'hero' },
     });
 
-    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: storm.id }] as any);
+    // Skeleton revival fires a 'death:revive' skill float that hard-pauses the
+    // pipeline between bolts. Real game waits for the UI to release; here we
+    // auto-release to keep the bolt cascade going.
+    const drained = drainAutoReleasingFloats(state, [
+      { type: 'PLAY_CARD', cardId: storm.id },
+    ] as any);
     const boltFx = drained.sideEffects
       .filter(s => s.event === 'combat:missileStormBolt')
       .map(s => s.payload as any);

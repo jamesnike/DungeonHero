@@ -49,6 +49,14 @@ interface EquipmentSlotProps {
   slotActionCount?: number | null;
   isUnbreakable?: boolean;
   isStunFrozen?: boolean;
+  /**
+   * 单目标伤害 magic 处于 monster-select 阶段，且 pending.allowsHeroTarget=true、
+   * 当前槽里装的是 type='shield' 且 armor>0 的盾时，由父组件传 true：
+   * 给槽位加紫色 ring + pulse（与 Hero Cell 自伤高亮同款），并把整张槽位变成可点击区域。
+   */
+  selfTargetActive?: boolean;
+  /** 紫色高亮区域被点击时调用：派发 RESOLVE_MAGIC_MONSTER_SELECTION targetType='shield-slot'。 */
+  onSelfTargetClick?: () => void;
 }
 
 export default function EquipmentSlot({
@@ -83,6 +91,8 @@ export default function EquipmentSlot({
   slotActionCount = null,
   isUnbreakable = false,
   isStunFrozen = false,
+  selfTargetActive = false,
+  onSelfTargetClick,
 }: EquipmentSlotProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
@@ -242,6 +252,13 @@ export default function EquipmentSlot({
     Math.max(rawMaxDurability, currentDurability),
   );
   const handleClick = (e: React.MouseEvent) => {
+    // 自伤打盾路径优先：当玩家在 monster-select 阶段、且这个槽位是合法盾目标时，
+    // 整张槽位的点击全部劫持给 onSelfTargetClick（盖过 onCardClick 等正常交互）。
+    if (selfTargetActive && onSelfTargetClick) {
+      e.stopPropagation();
+      onSelfTargetClick();
+      return;
+    }
     if (!onClick) return;
     e.stopPropagation();
     onClick();
@@ -253,16 +270,18 @@ export default function EquipmentSlot({
     SLOT_SCALE_MAX * Math.max(1, scaleMultiplier),
   );
 
+  const rootClickHandler = (selfTargetActive && onSelfTargetClick) || onClick ? handleClick : undefined;
+
   return (
     <div 
       ref={slotRef}
-      className="relative h-full w-full overflow-visible" // Allow card to shift left outside bounds
+      className={`relative h-full w-full overflow-visible ${selfTargetActive ? 'hero-self-target-highlight cursor-crosshair' : ''}`}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       data-testid={testId}
-      onClick={onClick ? handleClick : undefined}
+      onClick={rootClickHandler}
       style={{ '--dh-hero-instance-scale': appliedSlotScale.toString() } as CSSProperties}
     >
       {/* Drop-zone extension below the slot — extends the receive area downward
@@ -445,10 +464,10 @@ export default function EquipmentSlot({
               <GameCard
                 card={equipmentDisplayCard!}
                 equipmentStatModifier={statModifier}
-                disableInteractions={isStunFrozen}
+                disableInteractions={isStunFrozen || selfTargetActive}
                 onDragStart={(card) => wrappedOnDragStart({ ...card, fromSlot: slotId })}
                 onDragEnd={wrappedOnDragEnd}
-                onClick={onCardClick ? () => onCardClick(gameCardData!) : undefined}
+                onClick={selfTargetActive ? undefined : (onCardClick ? () => onCardClick(gameCardData!) : undefined)}
                 className="shadow-lg"
                 bleedAnimation={bleedAnimation}
                 weaponSwingAnimation={weaponSwingAnimation}
@@ -482,10 +501,10 @@ export default function EquipmentSlot({
             <GameCard 
               card={type === 'equipment' ? equipmentDisplayCard! : gameCardData!}
               equipmentStatModifier={statModifier}
-              disableInteractions={isStunFrozen}
+              disableInteractions={isStunFrozen || selfTargetActive}
               onDragStart={(card) => wrappedOnDragStart({ ...card, fromSlot: slotId })}
               onDragEnd={wrappedOnDragEnd}
-              onClick={type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData!) : undefined}
+              onClick={selfTargetActive ? undefined : (type === 'backpack' ? onClick : onCardClick ? () => onCardClick(gameCardData!) : undefined)}
               className={`${type === 'backpack' ? 'cursor-pointer' : ''} shadow-lg`}
               bleedAnimation={bleedAnimation}
               weaponSwingAnimation={weaponSwingAnimation}

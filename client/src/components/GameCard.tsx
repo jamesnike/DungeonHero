@@ -142,7 +142,8 @@ export type PotionEffectId =
   | 'grant-amulet-end-turn-draw'
   | 'perm-equip-empower'
   | 'transform-recycle-grant'
-  | 'grant-weapon-stun-chance+40';
+  | 'grant-weapon-stun-chance+40'
+  | 'heal-12-draw-2';
 
 export type AmuletEffectId =
   | 'heal'
@@ -159,6 +160,7 @@ export type AmuletEffectId =
   | 'lone-card'
   | 'equipment-salvage'
   | 'bloodrage-attack'
+  | 'self-damage-draw'
   | 'persuade-on-temp-attack'
   | 'persuade-grant-recycle-fetch'
   | 'damage-class-discover'
@@ -491,6 +493,17 @@ export function useArcaneStormDamage(): number {
 }
 
 /**
+ * 奥术护盾 (arcane-shield-stun-cap) — 预测此刻打出该卡能加的击晕上限百分比。
+ * 与 magic-effects.ts 的 resolver 保持一致：nonDamageCount = 本回合 magic 总数 − 造成伤害的 magic 数。
+ * 不含 echo 倍率（resolve 时才知道），不应用 stunCap 100% 上限（与 arcaneStormDamage 风格一致，仅显示 raw gain）。
+ */
+export function useArcaneShieldStunGain(): number {
+  const totalMagic = useGameState(s => s.magicCardsPlayedThisTurn);
+  const damageMagic = useGameState(s => s.damageMagicPlayedThisTurn);
+  return Math.max(0, totalMagic - damageMagic);
+}
+
+/**
  * 连环转律 (transformStreakStrike) — 预测此刻打出该卡造成的纯转型链伤害。
  * 不含 spell-damage 加成 / amplifyBonus / echo（与 card-schema/definitions/magic.ts
  * 的 `computePredictedTransformStreak` 保持一致的 raw streak 语义）。
@@ -637,6 +650,7 @@ function GameCardInner({
   const isCompact = gameViewport.width < 500;
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const arcaneStormDamage = useArcaneStormDamage();
+  const arcaneShieldStunGain = useArcaneShieldStunGain();
   const transformStreakPredict = useTransformStreakDamage();
   const damageMagicDisplay = useDamageMagicDisplay(card);
   const isTransformStreakStrike =
@@ -1390,6 +1404,10 @@ const amuletEffectText =
                       ) : card.magicEffect === 'arcane-storm-magic-count' ? (
                         <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
                           当下 {arcaneStormDamage + (card.amplifyBonus ?? 0)} 点
+                        </span>
+                      ) : card.magicEffect === 'arcane-shield-stun-cap' ? (
+                        <span className="block font-semibold text-cyan-950 dark:text-cyan-100">
+                          当下 击晕上限 +{arcaneShieldStunGain}%
                         </span>
                       ) : isTransformStreakStrike ? (
                         <span

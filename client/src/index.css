@@ -3312,3 +3312,106 @@ html {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Monster Skill Float — blocking 1.4s rise+fade animation that announces a
+ * monster-skill trigger above the firing monster card. Hard-paused: while the
+ * float is on screen the engine pipeline parks at `phase=awaitingSkillFloat`
+ * and refuses to advance, so the player can read every skill name.
+ *
+ * Duration must match `SKILL_FLOAT_DURATION_MS` in
+ * `client/src/game-core/monsterSkillNames.ts` — if you change one, change the
+ * other.
+ *
+ * Layered z-index (50) puts the float above all card chrome and overlay
+ * effects (combat-overlay shapes are z<=40) but below modals so the player
+ * still gets the popup gating once the float queue drains.
+ * --------------------------------------------------------------------------- */
+@keyframes monster-skill-float-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -10%) scale(0.85);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -45%) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -85%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -120%) scale(0.95);
+  }
+}
+
+.monster-skill-float {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 50;
+  pointer-events: none;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  color: #fff8d8;
+  background: linear-gradient(135deg, rgba(120, 30, 12, 0.92), rgba(220, 80, 30, 0.92));
+  border: 1.5px solid rgba(255, 220, 120, 0.85);
+  box-shadow: 0 0 12px 2px rgba(255, 180, 60, 0.55), 0 4px 14px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(255, 180, 60, 0.6);
+  animation: monster-skill-float-rise 1400ms ease-out forwards;
+  transform: translate(-50%, -10%);
+  letter-spacing: 0.04em;
+}
+
+/* Color variants by skill kind so the player can read the category at a glance.
+ * Keep these subtle — the goal is recognizability, not LED-strip carnival. */
+.monster-skill-float--enter {
+  background: linear-gradient(135deg, rgba(20, 80, 140, 0.92), rgba(70, 160, 220, 0.92));
+  border-color: rgba(180, 220, 255, 0.85);
+  box-shadow: 0 0 12px 2px rgba(120, 180, 255, 0.55), 0 4px 14px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(120, 180, 255, 0.6);
+}
+
+.monster-skill-float--death {
+  background: linear-gradient(135deg, rgba(60, 20, 80, 0.92), rgba(140, 40, 180, 0.92));
+  border-color: rgba(220, 180, 255, 0.85);
+  box-shadow: 0 0 12px 2px rgba(180, 120, 255, 0.55), 0 4px 14px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(180, 120, 255, 0.6);
+}
+
+.monster-skill-float--bleed {
+  background: linear-gradient(135deg, rgba(120, 10, 30, 0.92), rgba(200, 30, 50, 0.92));
+  border-color: rgba(255, 180, 180, 0.85);
+}
+
+.monster-skill-float--reflect {
+  background: linear-gradient(135deg, rgba(40, 90, 60, 0.92), rgba(100, 200, 130, 0.92));
+  border-color: rgba(190, 255, 200, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(120, 220, 140, 0.6);
+}
+
+.monster-skill-float--passive {
+  background: linear-gradient(135deg, rgba(80, 80, 30, 0.92), rgba(180, 160, 50, 0.92));
+  border-color: rgba(255, 230, 130, 0.85);
+}
+
+.monster-skill-float--turnEnd,
+.monster-skill-float--heroTurnEnd {
+  background: linear-gradient(135deg, rgba(40, 40, 90, 0.92), rgba(90, 100, 200, 0.92));
+  border-color: rgba(180, 200, 255, 0.85);
+}
+
+.monster-skill-float--waterfall {
+  background: linear-gradient(135deg, rgba(20, 60, 100, 0.92), rgba(40, 130, 200, 0.92));
+  border-color: rgba(170, 220, 255, 0.85);
+}
+
+.monster-skill-float--spawn {
+  background: linear-gradient(135deg, rgba(60, 100, 30, 0.92), rgba(140, 200, 60, 0.92));
+  border-color: rgba(220, 255, 170, 0.85);
+}
+

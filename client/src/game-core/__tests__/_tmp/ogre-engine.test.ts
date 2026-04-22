@@ -57,6 +57,14 @@ describe('Ogre auto-waterfall via engine + simulated React listener', () => {
       }
     });
 
+    // Simulate the React `useMonsterSkillFloats` hook: every time a float is
+    // pushed, immediately release it so the engine's HARD_PAUSE on
+    // `awaitingSkillFloat` doesn't strand subsequent dispatches (e.g. the
+    // BEGIN_COMBAT for the ogre after its `enter:auto-engage` float).
+    engine.on('ui:monsterSkillFloat', ({ floatId }) => {
+      engine.dispatch({ type: 'RELEASE_MONSTER_SKILL_FLOAT', floatId });
+    });
+
     engine.dispatch({ type: 'APPLY_WATERFALL_DROP' });
 
     console.log('engagedMonsterIds after:', engine.getState().combatState.engagedMonsterIds);

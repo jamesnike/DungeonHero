@@ -38,6 +38,22 @@ import { computeEquipmentBreakEffects, computeDurabilityLossEffects } from './eq
 import { createBugletCard, createMagicBoltCard, goblinImage, bugletImage } from '../deck';
 import { addCardToBackpackPure } from '../cards';
 import { generateMonsterRewardOptions, queueMonsterRewardPure } from '../monsters';
+import type { MonsterSkillKey } from '../monsterSkillNames';
+
+/**
+ * Map a `lastWords` effect string to its monster-skill display key.
+ * Centralised here so any future variant is forced to add a `MonsterSkillKey`
+ * (compile-time check via the exhaustive switch in monsterSkillNames.ts).
+ */
+function lastWordsSkillKey(effect: string): MonsterSkillKey {
+  if (effect === 'discard-hand-1' || effect === 'discard-hand-3') {
+    return 'death:lastWords:discardHand';
+  }
+  if (effect.startsWith('wraith-haunt-')) {
+    return 'death:lastWords:wraithHaunt';
+  }
+  return 'death:lastWords:generic';
+}
 
 export function reduceCombatActions(state: GameState, action: GameAction): ReduceResult | null {
   switch (action.type) {
@@ -177,10 +193,16 @@ function reduceBeginCombat(
       .filter(i => i !== bossCol && i >= 0 && i < state.activeCards.length);
 
     if (graveyardCopy.length > 0 && otherSlots.length > 0) {
-      // Fixed split: up to 2 monsters + up to 2 non-monsters (capped by graveyard supply and free cells).
-      const slotsAvailable = Math.min(summonCount, otherSlots.length);
-      const monsterTarget = Math.min(2, slotsAvailable);
-      const nonMonsterTarget = Math.min(2, slotsAvailable - monsterTarget);
+      // Skill design: 2 monsters (each on own cell) + 2 non-monsters (BOTH stacked on a SINGLE shared cell).
+      // So cells needed = monsterTarget + (nonMonsterTarget > 0 ? 1 : 0), NOT monsterTarget + nonMonsterTarget.
+      // summonCount (typically 4) is the total card budget. Place monsters first, then stack non-monsters
+      // on one remaining cell.
+      const monsterTarget = Math.min(2, otherSlots.length, summonCount);
+      const remainingBudget = summonCount - monsterTarget;
+      const cellsLeftForNonMonsters = otherSlots.length - monsterTarget;
+      const nonMonsterTarget = (cellsLeftForNonMonsters > 0 && remainingBudget > 0)
+        ? Math.min(2, remainingBudget)
+        : 0;
 
       const graveyardMonsters = graveyardCopy.filter(c => c.type === 'monster');
       const graveyardOthers = graveyardCopy.filter(c => c.type !== 'monster');
@@ -402,13 +424,34 @@ function reduceApplyDamage(
     patch.berserkTurnBuff = result.berserkTurnBuff;
   }
 
+  // 「赎血召牌符」(self-damage-draw) — 每件 amulet 在每次"实际生效"的自伤事件
+  // 中独立触发一次抽 1 张牌（discrete event ×N 叠加；受手牌上限约束）。
+  // 与「血怒战符」共用 selfInflicted 路径，但只在 appliedDamage > 0 时触发：
+  // 护盾完全抵消 / death-ward 救场都不算"造成了伤害"。
+  // gameOver 路径仍然触发 —— 玩家虽然倒下，但 enqueue 的 DRAW_FROM_BACKPACK
+  // 在主循环里看到 hp=0 时会被自然忽略（sanity 行为，与其它 self-damage
+  // 联动 amulet 一致：bloodrage 也不显式过滤 gameOver）。
+  const enqueuedActions: GameAction[] = [];
+  if (
+    result.appliedDamage > 0 &&
+    action.selfInflicted &&
+    amuletEffects.selfDamageDrawCount > 0
+  ) {
+    const drawCount = amuletEffects.selfDamageDrawCount;
+    enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: drawCount });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `赎血召牌符：自伤触发，从背包抽 ${drawCount} 张牌` },
+    });
+  }
+
   if (result.gameOver) {
     patch.gameOver = true;
     patch.victory = false;
     sideEffects.push({ event: 'game:over', payload: { victory: false } });
   }
 
-  return applyPatch(state, patch, sideEffects);
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------
@@ -551,6 +594,11 @@ function reduceDealDamageToMonster(
   // --- Boss retaliation ---
   if (monster.bossRetaliationDamage && monster.bossRetaliationDamage > 0 && !monster.isStunned) {
     enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: action.monsterId,
+      skillKey: 'attack:bossRetaliation',
+    });
+    enqueuedActions.push({
       type: 'APPLY_DAMAGE',
       amount: monster.bossRetaliationDamage,
       source: 'combat',
@@ -563,6 +611,11 @@ function reduceDealDamageToMonster(
 
   // --- Dragon breath retaliation (enqueued as sub-action for pipeline resolution) ---
   if (monster.dragonDamageRetaliation && monster.dragonDamageRetaliation > 0 && !monster.isStunned) {
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: action.monsterId,
+      skillKey: 'attack:dragonBreath',
+    });
     enqueuedActions.push({
       type: 'APPLY_DRAGON_BREATH_RETALIATION',
       monsterId: action.monsterId,
@@ -624,6 +677,11 @@ function reduceDealDamageToMonster(
     if (monster.bleedEffect && layersAfter < layersBefore && !monster.isStunned) {
       const newAttack = updated.attack ?? updated.value;
       const perLayer = parseInt((monster.bleedEffect ?? '').replace('attack+', ''), 10) || 0;
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: action.monsterId,
+        skillKey: 'bleed:gainAttack',
+      });
       sideEffects.push({
         event: 'log:entry',
         payload: { type: 'combat', message: `${monster.name} 触发流血：攻击力+${perLayer * (layersBefore - layersAfter)}，当前 ${newAttack}！` },
@@ -633,6 +691,11 @@ function reduceDealDamageToMonster(
 
     // Dragon bleed destroy equipment
     if (monster.dragonBleedDestroy && layersAfter < layersBefore && layersAfter > 0 && !monster.isStunned) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: action.monsterId,
+        skillKey: 'reflect:dragonBleedDestroy',
+      });
       sideEffects.push({
         event: 'combat:dragonBleedDestroy',
         payload: { monsterName: monster.name, layersRemaining: layersAfter },
@@ -769,6 +832,11 @@ function reduceMonsterDefeated(
       : { ...state.combatState, engagedMonsterIds: remaining };
 
     if (monster.lastWords) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: monster.id,
+        skillKey: lastWordsSkillKey(monster.lastWords),
+      });
       rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
     }
 
@@ -777,7 +845,7 @@ function reduceMonsterDefeated(
     sideEffects.push({ event: 'combat:bossTransform', payload: { monsterId: monster.id, originalMonster: monster, bossCard } });
 
     patch.rng = rng;
-    return applyPatch(state, patch, sideEffects);
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
   // ---- Branch B: Revive ----
@@ -786,11 +854,27 @@ function reduceMonsterDefeated(
     // revive flips the monster back to alive. Same reduce — both end up
     // committed atomically, but side-effect order drives banner / log order.
     if (monster.lastWords) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: monster.id,
+        skillKey: lastWordsSkillKey(monster.lastWords),
+      });
       rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
     }
     if (monster.skeletonLastWordsDiscard && !monster.lastWords) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: monster.id,
+        skillKey: 'death:lastWords:skeleton',
+      });
       rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, 'discard-hand-1', rng, sideEffects);
     }
+    // Revive itself
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: monster.id,
+      skillKey: 'death:revive',
+    });
 
     const fullHp = monster.maxHp ?? monster.hp ?? monster.value ?? 0;
     const activateNoLayerCost = !!monster.skeletonNoLayerCost;
@@ -814,7 +898,7 @@ function reduceMonsterDefeated(
     }
 
     patch.rng = rng;
-    return applyPatch(state, patch, sideEffects);
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
   // ---- Branch C: Actual defeat ----
@@ -833,9 +917,19 @@ function reduceMonsterDefeated(
 
   // Execute last words inline so the discard / haunt actually applies.
   if (monster.lastWords && !monster.isStunned) {
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: monster.id,
+      skillKey: lastWordsSkillKey(monster.lastWords),
+    });
     rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
   }
   if (monster.skeletonLastWordsDiscard && !monster.lastWords && !monster.isStunned) {
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: monster.id,
+      skillKey: 'death:lastWords:skeleton',
+    });
     rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, 'discard-hand-1', rng, sideEffects);
   }
 
@@ -3275,6 +3369,11 @@ function reduceResolveBlock(
     const corrodeSlotId = action.slotId;
     const corrodeItem = getSlotItem(state, corrodeSlotId);
     if (corrodeItem && (corrodeItem.durability ?? 0) > 0) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: monster.id,
+        skillKey: 'attack:swarmCorrode',
+      });
       const corrodedDur = (corrodeItem.durability ?? 1) - 1;
       if (corrodedDur <= 0) {
         const breakResult = computeEquipmentBreakEffects(state, corrodeSlotId, corrodeItem as GameCardData, ae);
@@ -3314,6 +3413,11 @@ function reduceResolveBlock(
   if (monster.onAttackEffect?.startsWith('steal-gold-')) {
     const stealTarget = parseInt(monster.onAttackEffect.replace('steal-gold-', ''), 10) || 0;
     if (stealTarget > 0) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: monster.id,
+        skillKey: 'attack:goblinSteal',
+      });
       const actualStolen = Math.min(stealTarget, state.gold ?? 0);
       patch.gold = Math.max(0, (state.gold ?? 0) - stealTarget);
       sideEffects.push({
@@ -3367,6 +3471,11 @@ function reduceResolveBlock(
     const currentHand = (patch.handCards ?? state.handCards) as GameCardData[];
     const goblinColIndex = (patch.activeCards ?? state.activeCards).findIndex(c => c?.id === monster.id);
     if (currentHand.length > 0 && goblinColIndex >= 0) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: monster.id,
+        skillKey: 'attack:goblinStealCard',
+      });
       let pickIdx: number;
       [pickIdx, rng] = nextInt(rng, 0, currentHand.length - 1);
       const stolenCard = currentHand[pickIdx];
@@ -3400,6 +3509,11 @@ function reduceResolveBlock(
       payload: { title: monster.name, subtitle: '连击判定', roll: doubleRoll, threshold: 14, success: doubleRoll <= 14 },
     });
     if (doubleRoll <= 14) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: monster.id,
+        skillKey: 'attack:eliteDoubleAttack',
+      });
       sideEffects.push({
         event: 'log:entry',
         payload: { type: 'combat', message: `${monster.name} 发动连击！再次攻击！` },
@@ -3462,6 +3576,11 @@ function reduceResolveBlock(
       payload: { title: monster.name, subtitle: '击晕判定', roll: stunRoll, threshold: 6, success: stunRoll <= 6 },
     });
     if (stunRoll <= 6) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: monster.id,
+        skillKey: 'attack:ogreStun',
+      });
       patch.heroStunned = true;
       sideEffects.push({
         event: 'log:entry',

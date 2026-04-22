@@ -23,8 +23,24 @@ import type { EquipmentBuffSnapshot } from '@/lib/gameStorage';
 import type { GameState } from './types';
 import { initialCombatState, INITIAL_HP, STRENGTH_SELF_DAMAGE } from './constants';
 import { flattenActiveRowSlots } from './helpers';
+import { isMonsterMagicImmuneByBuilding } from './buildingAura';
 import { getHeroSkillById } from '@/lib/heroSkills';
 import type { HeroSkillId } from '@/lib/heroSkills';
+import type { MonsterSkillKey } from './monsterSkillNames';
+
+/**
+ * Lightweight pair telling the call site to enqueue a
+ * `TRIGGER_MONSTER_SKILL_FLOAT` action for a given monster + skill name.
+ *
+ * The pure helpers in this file deliberately don't import the `GameAction`
+ * type (they pre-date the action layer), so the call site in `rules/turn.ts`
+ * is responsible for converting these triggers into actions in the right
+ * order — BEFORE any follow-up gameplay actions so the float plays first.
+ */
+export interface MonsterSkillFloatTrigger {
+  monsterId: string;
+  skillKey: MonsterSkillKey;
+}
 
 // ---------------------------------------------------------------------------
 // Pure computation: monster damage (overflow does NOT penetrate layers)
@@ -120,6 +136,76 @@ export function isMonsterDefeated(monster: GameCardData): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Spell-damage mitigation preview — pure mirror of `reduceDealDamageToMonster`
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of previewing the spell-damage mitigation chain a `DEAL_DAMAGE_TO_MONSTER`
+ * action with `isSpellDamage: true` would actually apply.
+ *
+ * Resolvers (e.g. 淬炼冲击 / 混沌冲击) need this BEFORE enqueueing follow-up
+ * bonus actions like `SET_UPGRADE_MODAL_OPEN` / `DRAW_FROM_BACKPACK` — those
+ * bonuses are gated on "actually overkilled", not on "tried to deal X damage".
+ *
+ * **MUST stay in lock-step with `rules/combat.ts > reduceDealDamageToMonster`.**
+ * Any new spell-damage mitigation added there must be mirrored here, otherwise
+ * resolvers will silently mispredict and trigger ghost bonuses.
+ */
+export interface SpellDamageMitigationPreview {
+  effectiveDamage: number;
+  immuneByBuilding: boolean;
+  bugletShielded: boolean;
+  spellResisted: boolean;
+}
+
+export function computeEffectiveSpellDamageOnMonster(
+  state: GameState,
+  monsterId: string,
+  rawDamage: number,
+): SpellDamageMitigationPreview {
+  const empty = (): SpellDamageMitigationPreview => ({
+    effectiveDamage: 0,
+    immuneByBuilding: false,
+    bugletShielded: false,
+    spellResisted: false,
+  });
+
+  const idx = (state.activeCards as (GameCardData | null)[]).findIndex(c => c?.id === monsterId);
+  if (idx < 0) return empty();
+  const monster = state.activeCards[idx] as GameCardData | null;
+  if (!monster || monster.type !== 'monster') return empty();
+
+  // 1. Curse stele aura — total magic immunity for the column.
+  if (isMonsterMagicImmuneByBuilding(state.activeCards as ActiveRowSlots, state.activeCardStacks ?? {}, idx)) {
+    return { effectiveDamage: 0, immuneByBuilding: true, bugletShielded: false, spellResisted: false };
+  }
+
+  // 2. Swarm buglet shield — fully blocks when any buglet is on the field.
+  if (monster.swarmBugletShield && !monster.isStunned) {
+    const hasBuglet = (state.activeCards as (GameCardData | null)[]).some(c => c && (c as { isBuglet?: boolean }).isBuglet);
+    if (hasBuglet) {
+      return { effectiveDamage: 0, immuneByBuilding: false, bugletShielded: true, spellResisted: false };
+    }
+  }
+
+  // 3. spellDamageReduction (e.g. Wraith 50%).
+  let dmg = rawDamage;
+  let resisted = false;
+  if (monster.spellDamageReduction && !monster.isStunned) {
+    dmg = Math.max(1, Math.floor(dmg * (1 - monster.spellDamageReduction)));
+    resisted = true;
+  }
+
+  // 4. maxDamagePerHit cap (Golem 岩石护体). Note `damageMonsterWithLayerOverflow`
+  // also applies this cap, so ignoring it here would over-predict overkill.
+  if (monster.maxDamagePerHit && dmg > monster.maxDamagePerHit && !monster.isStunned) {
+    dmg = monster.maxDamagePerHit;
+  }
+
+  return { effectiveDamage: dmg, immuneByBuilding: false, bugletShielded: false, spellResisted: resisted };
+}
+
+// ---------------------------------------------------------------------------
 // Begin combat
 // ---------------------------------------------------------------------------
 
@@ -205,6 +291,8 @@ export interface EndHeroTurnResult {
   gambitSlotUsed: Record<string, number>;
   weaponExtraAttackUsed: Record<string, number>;
   logs: Array<{ type: string; message: string }>;
+  /** Monster-skill triggers fired during this hero turn end (e.g. dragon regen, elite heal) */
+  skillFloats: MonsterSkillFloatTrigger[];
   rng: RngState;
 }
 
@@ -214,6 +302,7 @@ export function endHeroTurnPatch(
 ): EndHeroTurnResult {
   let rng = state.rng;
   const logs: Array<{ type: string; message: string }> = [];
+  const skillFloats: MonsterSkillFloatTrigger[] = [];
   const engagedMonsters = flattenActiveRowSlots(state.activeCards).filter(
     c => c.type === 'monster' && state.combatState.engagedMonsterIds.includes(c.id),
   );
@@ -227,6 +316,7 @@ export function endHeroTurnPatch(
       gambitSlotUsed: {},
       weaponExtraAttackUsed: {},
       logs: [{ type: 'combat', message: '战斗结束' }],
+      skillFloats,
       rng: state.rng,
     };
   }
@@ -246,6 +336,7 @@ export function endHeroTurnPatch(
           currentLayer: restoredLayer,
           hp: monster.maxHp ?? monster.hp ?? 0,
         };
+        skillFloats.push({ monsterId: monster.id, skillKey: 'heroTurnEnd:eliteRegen' });
         logs.push({ type: 'combat', message: `${monster.name} 未受到血层伤害，恢复了一个血层！当前 ${restoredLayer} 层。` });
         return;
       }
@@ -265,6 +356,7 @@ export function endHeroTurnPatch(
           currentLayer: targetLayer,
           hp: targetCard.maxHp ?? targetCard.hp ?? 0,
         };
+        skillFloats.push({ monsterId: monster.id, skillKey: 'heroTurnEnd:eliteHealOther' });
         logs.push({ type: 'combat', message: `${monster.name} 龙息庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
         return;
       }
@@ -298,6 +390,7 @@ export function endHeroTurnPatch(
         currentLayer: targetLayer,
         hp: targetCard.maxHp ?? targetCard.hp ?? 0,
       };
+      skillFloats.push({ monsterId: dragon.id, skillKey: 'heroTurnEnd:eliteHealOther' });
       logs.push({ type: 'combat', message: `${dragon.name} 龙息庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
     }
   });
@@ -328,6 +421,7 @@ export function endHeroTurnPatch(
     gambitSlotUsed: {},
     weaponExtraAttackUsed: {},
     logs,
+    skillFloats,
     rng,
   };
 }
@@ -736,6 +830,13 @@ export interface MonsterTurnEndResult {
    * apply it via `RESOLVE_DICE` after the dice modal closes.
    */
   goblinStealDice: GoblinStealDice[];
+  /**
+   * Monster-skill triggers fired during this monster turn end (wraith aura,
+   * golem spell growth, boss last stand, dragon regen, etc). Caller must
+   * enqueue a `TRIGGER_MONSTER_SKILL_FLOAT` for each entry BEFORE any
+   * follow-up actions so the float plays first.
+   */
+  skillFloats: MonsterSkillFloatTrigger[];
   rng: RngState;
 }
 
@@ -753,6 +854,7 @@ export function applyMonsterTurnEndEffects(
   let rng = rngIn;
   const logs: Array<{ type: string; message: string }> = [];
   const banners: string[] = [];
+  const skillFloats: MonsterSkillFloatTrigger[] = [];
   let changed = false;
   let wraithEnrage = false;
   let wraithDestroyAmulet = false;
@@ -782,6 +884,9 @@ export function applyMonsterTurnEndEffects(
           slotId, itemName: item.name, otherSlotId, otherItemName: otherItem.name!,
           newDurability: newDur, maxDurability: otherItem.maxDurability, success: true,
         });
+        // NOTE: dragon equipment regen is hero-side equipment behavior, not an
+        // active-row monster skill, so we deliberately don't queue a float here
+        // (the float UI renders above active-row monster cards only).
         logs.push({ type: 'equip', message: `${item.name} 龙息回复：Hero 未受伤，${otherItem.name} 恢复 1 耐久！（${newDur}/${otherItem.maxDurability}）` });
         banners.push(`${item.name} 龙息回复！${otherItem.name} +1 耐久！`);
       } else if (roll) {
@@ -820,6 +925,7 @@ export function applyMonsterTurnEndEffects(
       changed = true;
       const newAttack = (updated.attack ?? updated.value ?? 0) + boost;
       const newValue = (updated.value ?? 0) + boost;
+      skillFloats.push({ monsterId: updated.id, skillKey: 'turnEnd:wraithSelfAttack' });
       logs.push({ type: 'combat', message: `${updated.name} 怨念蓄积：攻击力 +${boost}！（当前 ${newAttack}）` });
       updated = { ...updated, attack: newAttack, value: newValue, tempAttackBoost: (updated.tempAttackBoost ?? 0) + boost };
     }
@@ -834,6 +940,7 @@ export function applyMonsterTurnEndEffects(
         newLayerReflect = newLayerReflect + growth;
         parts.push(`岩层反震系数 +${growth}（当前 ${newLayerReflect}）`);
       }
+      skillFloats.push({ monsterId: updated.id, skillKey: 'turnEnd:golemSpellGrowth' });
       logs.push({ type: 'combat', message: `${updated.name} 法力吞噬：${parts.join('，')}！` });
       updated = { ...updated, antiMagicReflect: newReflect, ...(newLayerReflect != null ? { golemLayerLossReflect: newLayerReflect } : {}) };
     }
@@ -869,6 +976,9 @@ export function applyMonsterTurnEndEffects(
     });
     changed = true;
     if (boostedNames.length > 0) {
+      // One float on the boss who emits the aura — not per-affected monster,
+      // since the aura is conceptually a single skill firing on the boss.
+      skillFloats.push({ monsterId: lastStandBoss.id, skillKey: 'turnEnd:bossLastStandAura' });
       logs.push({ type: 'combat', message: `${lastStandBoss.name} 暴走光环：激活行所有怪物攻击 +5，恢复 1 血层！（${boostedNames.join('、')}）` });
       banners.push(`${lastStandBoss.name} 暴走光环！全体怪物 +5 攻击，恢复 1 血层！`);
     }
@@ -886,6 +996,15 @@ export function applyMonsterTurnEndEffects(
     });
     changed = true;
     if (boostedNames.length > 0) {
+      // Float on each wraith that contributed to the aura (we lost track of
+      // exactly which one emitted the highest, so attribute to all wraith
+      // aura emitters in the row — sequential floats make the source clear).
+      for (const card of activeCards) {
+        if (card && card.type === 'monster' && !card.isStunned
+          && card.wraithAuraAttack && card.wraithAuraAttack > 0) {
+          skillFloats.push({ monsterId: card.id, skillKey: 'turnEnd:wraithAura' });
+        }
+      }
       logs.push({ type: 'combat', message: `怨念光环：激活行所有怪物攻击力 +${auraBoost}！（${boostedNames.join('、')}）` });
       banners.push(`怨念光环！全体怪物攻击力 +${auraBoost}！`);
     }
@@ -897,6 +1016,26 @@ export function applyMonsterTurnEndEffects(
       if (!card || card.type !== 'monster' || card.isStunned) continue;
       if (!engagedMonsterIds.includes(card.id)) {
         monstersToEngage.push({ id: card.id, name: card.name });
+      }
+    }
+    // One float per wraith with the enrage flag so the player can see which
+    // wraith was the trigger source. Suppress if no monsters were actually
+    // dragged into combat (no visible effect).
+    if (monstersToEngage.length > 0) {
+      for (const card of activeCards) {
+        if (card && card.type === 'monster' && !card.isStunned && card.wraithTurnEnrage) {
+          skillFloats.push({ monsterId: card.id, skillKey: 'turnEnd:wraithTurnEnrage' });
+        }
+      }
+    }
+  }
+
+  // Wraith destroy amulet flag — attribute float to wraiths carrying it. Side
+  // effect (actual amulet destruction) is applied by the caller.
+  if (wraithDestroyAmulet) {
+    for (const card of activeCards) {
+      if (card && card.type === 'monster' && !card.isStunned && card.wraithDestroyAmulet) {
+        skillFloats.push({ monsterId: card.id, skillKey: 'turnEnd:wraithDestroyAmulet' });
       }
     }
   }
@@ -942,6 +1081,12 @@ export function applyMonsterTurnEndEffects(
         currentLayer,
         maxLayers,
       });
+      // Only show the float when the heal actually fires; the dice modal
+      // already communicates a failed roll, no need to also stop the world
+      // for a "skill triggered" float in that case.
+      if (success) {
+        skillFloats.push({ monsterId: card.id, skillKey: 'turnEnd:goblinStackHeal' });
+      }
     }
 
     for (const card of activeCards) {
@@ -967,6 +1112,9 @@ export function applyMonsterTurnEndEffects(
         threshold,
         success,
       });
+      if (success) {
+        skillFloats.push({ monsterId: card.id, skillKey: 'turnEnd:goblinStealEquip' });
+      }
     }
   }
 
@@ -980,6 +1128,7 @@ export function applyMonsterTurnEndEffects(
     dragonRegenEffects,
     goblinStackHealDice,
     goblinStealDice,
+    skillFloats,
     rng,
   };
 }

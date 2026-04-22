@@ -24,6 +24,7 @@ import { reduceHeroActions } from './rules/hero';
 import { reduceUIStateActions } from './rules/ui-state';
 import { reduceEconomyActions } from './rules/economy';
 import { reduceWaterfallActions } from './rules/waterfall';
+import { reduceSkillFloatActions } from './rules/skill-float';
 import {
   syncBuildingSlotsPure,
   countActiveRowSlotsExcludeGhost,
@@ -187,7 +188,11 @@ function postProcessActiveCards(
       const curr = state.activeCards[col];
       if (!prev || curr) continue;
       if (prev.isBuglet) continue;
-      const hasSwarmMonster = state.activeCards.some(
+      // Find the first swarm-monster source (also used to attribute the
+      // skill-float to a specific card). When multiple swarm monsters are on
+      // the row we still emit a single float per spawn — sequential floats
+      // for one logical event would be excessive.
+      const swarmSource = state.activeCards.find(
         (c, i) =>
           c != null &&
           i !== col &&
@@ -196,7 +201,7 @@ function postProcessActiveCards(
           c.isBuglet !== true &&
           c.isStunned !== true,
       );
-      if (!hasSwarmMonster) continue;
+      if (!swarmSource) continue;
 
       const buglet = applyAmplifyOnCreate(createBugletCard(), state.amplifiedCardBonus);
       const nextActive = [...state.activeCards] as ActiveRowSlots;
@@ -222,6 +227,16 @@ function postProcessActiveCards(
           },
         ],
       };
+
+      // Float `passive:swarmSpawn` above the swarm monster that just bred.
+      // Pushed FIRST so the float queue freezes the pipeline before the
+      // CHECK_HORDE_SWARM follow-up enqueued below — that keeps the
+      // animation order: see swarm spawn → see horde rage (if any).
+      extraActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: swarmSource.id,
+        skillKey: 'passive:swarmSpawn',
+      });
 
       // Horde rage check (CHECK_HORDE_SWARM is idempotent + no-op when
       // conditions aren't met). Enqueue once per spawn so a multi-clear
@@ -491,6 +506,7 @@ export function reduce(state: GameState, action: GameAction): ReduceResult {
   // First match wins; null means "not handled by this domain".
 
   const delegates = [
+    reduceSkillFloatActions,
     reduceTurnActions,
     reduceCombatActions,
     reduceCardActions,

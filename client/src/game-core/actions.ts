@@ -828,14 +828,17 @@ export interface ResolveMagicSlotSelectionAction {
 export interface ResolveMagicMonsterSelectionAction {
   type: 'RESOLVE_MAGIC_MONSTER_SELECTION';
   magicId: string;
-  /** 当 targetType === 'hero' 时为空字符串，仅作占位。 */
+  /** 当 targetType === 'hero' 或 'shield-slot' 时为空字符串，仅作占位。 */
   monsterId: string;
   /**
-   * 单目标伤害 magic 现在允许把 Hero Cell 也作为合法目标（自伤路径）。
+   * 单目标伤害 magic 现在允许把 Hero Cell 也作为合法目标（自伤路径），
+   * 以及装有盾的装备槽（armor 吃伤 + 溢出走自伤）。
    * 缺省 'monster' 以保持向后兼容；只有在 pendingMagicAction.allowsHeroTarget === true
-   * 且玩家点击 Hero Cell 时，UI 才会派送 'hero'。
+   * 且玩家点击对应 UI 时，UI 才会派送 'hero' / 'shield-slot'。
    */
-  targetType?: 'monster' | 'hero';
+  targetType?: 'monster' | 'hero' | 'shield-slot';
+  /** 仅当 targetType === 'shield-slot' 时使用：被打的盾所在的装备槽。 */
+  slotId?: EquipmentSlotId;
 }
 
 export interface ResolveDungeonCardSelectionAction {
@@ -1579,6 +1582,33 @@ export interface NoOpAction {
   type: 'NO_OP';
 }
 
+// ---------------------------------------------------------------------------
+// Monster skill floating-text — blocking UI animation queue
+// ---------------------------------------------------------------------------
+
+/**
+ * Queue a "this monster just used <skillName>" float over the given monster
+ * card and freeze the pipeline until the UI ack arrives. Multiple TRIGGER
+ * actions in the same drain step append to `pendingSkillFloats` and the
+ * pipeline drains them one at a time.
+ */
+export interface TriggerMonsterSkillFloatAction {
+  type: 'TRIGGER_MONSTER_SKILL_FLOAT';
+  monsterId: string;
+  skillKey: import('./monsterSkillNames').MonsterSkillKey;
+}
+
+/**
+ * Sent by the UI hook after each float animation finishes. Pops the head of
+ * `pendingSkillFloats`. If the queue still has entries, emits the next
+ * `ui:monsterSkillFloat` for the hook to play. If empty, restores
+ * `phase` to `skillFloatSavedPhase` and the pipeline resumes.
+ */
+export interface ReleaseMonsterSkillFloatAction {
+  type: 'RELEASE_MONSTER_SKILL_FLOAT';
+  floatId: string;
+}
+
 /** Reset the PRNG seed (used at game start and for replay). */
 export interface SeedRngAction {
   type: 'SEED_RNG';
@@ -2076,7 +2106,10 @@ export type GameAction =
   | SelectHeroSkillAction
   // Meta
   | EnqueueActionsAction
-  | NoOpAction;
+  | NoOpAction
+  // Monster skill float (blocking UI animation queue)
+  | TriggerMonsterSkillFloatAction
+  | ReleaseMonsterSkillFloatAction;
 
 // ---------------------------------------------------------------------------
 // Action log entry (for debugging / replay)

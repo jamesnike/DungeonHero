@@ -35,9 +35,11 @@ import {
 } from '../hero';
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
 import { computeEquipmentBreakEffects, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
-import { computeAmuletEffects } from '../equipment';
+import { applyShieldSlotSelfDamage } from './shield-self-damage';
+import { computeAmuletEffects, getEquipmentInSlot } from '../equipment';
+import { applyFlipCounters } from './flip-counters';
 import { nextInt, pickRandom } from '../rng';
-import { damageMonsterWithLayerOverflow } from '../combat';
+import { damageMonsterWithLayerOverflow, computeEffectiveSpellDamageOnMonster } from '../combat';
 import { isMonsterMagicImmuneByBuilding, getEquipmentSlotsWithSuppressedTempAttack } from '../buildingAura';
 import { applyMonsterRage } from '@/lib/monsterRage';
 
@@ -1787,11 +1789,20 @@ function reduceMagicMonsterSelection(
   const pending = state.pendingMagicAction as PendingMagicAction | null;
   if (!pending || pending.step !== 'monster-select') return noChange(state);
 
-  const targetType: 'monster' | 'hero' = action.targetType ?? 'monster';
-  // 当玩家选 Hero Cell 自伤时，pending.allowsHeroTarget 必须为 true，否则忽略；
+  const targetType: 'monster' | 'hero' | 'shield-slot' = action.targetType ?? 'monster';
+  // 当玩家选 Hero Cell 自伤、或选装备槽里的盾时，pending.allowsHeroTarget 必须为 true，否则忽略；
   // 这样可以防止"非单目标伤害 magic"误走自伤路径（例如 flip-monster-debuff 这类纯 debuff 卡）。
-  if (targetType === 'hero' && !(pending as { allowsHeroTarget?: boolean }).allowsHeroTarget) {
+  if ((targetType === 'hero' || targetType === 'shield-slot')
+    && !(pending as { allowsHeroTarget?: boolean }).allowsHeroTarget) {
     return noChange(state);
+  }
+
+  // shield-slot 需要 slotId 指向 type='shield' 且 armor>0 的装备槽。
+  if (targetType === 'shield-slot') {
+    if (!action.slotId) return noChange(state);
+    const slotItem = getEquipmentInSlot(state, action.slotId);
+    if (!slotItem || slotItem.type !== 'shield') return noChange(state);
+    if ((slotItem.armor ?? slotItem.armorMax ?? slotItem.value ?? 0) <= 0) return noChange(state);
   }
 
   const monster = targetType === 'monster'
@@ -1799,13 +1810,39 @@ function reduceMagicMonsterSelection(
     : null;
   if (targetType === 'monster' && !monster) return noChange(state);
 
-  const isHeroTarget = targetType === 'hero';
-  // 用于 log/banner 的目标显示名（hero 自伤路径下统一为 "自己"）。
-  const targetName = isHeroTarget ? '自己' : (monster as GameCardData).name;
+  // 自伤分支统一走 isHeroTarget = true：所有 case 内的"打 hero / 打盾"都共用这个分支，
+  // 区别仅在于 APPLY_DAMAGE 是直接 enqueue 还是经过 applyShieldSelfDamageOrEnqueue 重定向到盾。
+  const isHeroTarget = targetType === 'hero' || targetType === 'shield-slot';
+  const isShieldSlotTarget = targetType === 'shield-slot';
+  const shieldSlotId = isShieldSlotTarget ? action.slotId! : null;
+  const shieldSlotItem = shieldSlotId ? getEquipmentInSlot(state, shieldSlotId) : null;
+  // 用于 log/banner 的目标显示名（hero 自伤路径下统一为 "自己"，盾路径用盾名）。
+  const targetName = isShieldSlotTarget && shieldSlotItem
+    ? shieldSlotItem.name
+    : (isHeroTarget ? '自己' : (monster as GameCardData).name);
 
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
+
+  // ----- self-damage routing helper -----
+  // For self-damage spells, the original "selfInflicted APPLY_DAMAGE" is now
+  // routed through `applyShieldSlotSelfDamage` when the player chose a shield
+  // slot — armor absorbs first, overflow re-enqueues APPLY_DAMAGE selfInflicted
+  // (so bloodrage / revive-blessing / self-damage-draw / totalDamageTaken still
+  // fire on the hp-loss portion). When target is the hero cell, we keep the
+  // original direct enqueue.
+  const applySelfDamage = (damage: number, source: string): void => {
+    if (damage <= 0) return;
+    if (isShieldSlotTarget && shieldSlotId) {
+      const result = applyShieldSlotSelfDamage(state, shieldSlotId, damage, source);
+      Object.assign(patch, result.patch);
+      sideEffects.push(...result.sideEffects);
+      enqueuedActions.push(...result.enqueuedActions);
+      return;
+    }
+    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: damage, source, selfInflicted: true });
+  };
 
   switch (pending.effect) {
     case 'armor-strike': {
@@ -1817,8 +1854,8 @@ function reduceMagicMonsterSelection(
       const totalDamage = computeSpellDamagePure(state, baseDamage + (pending.card.amplifyBonus ?? 0)) * echoMulAS;
       const echoTagAS = echoMulAS > 1 ? `（回响×${echoMulAS}）` : '';
       if (isHeroTarget) {
-        enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'armor-strike', selfInflicted: true });
-        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, `御甲破击对自己造成 ${totalDamage} 点伤害！${echoTagAS}`, { dealtDamage: true });
+        applySelfDamage(totalDamage, 'armor-strike');
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, `御甲破击对${targetName}造成 ${totalDamage} 点伤害！${echoTagAS}`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'armor-strike', isSpellDamage: true });
@@ -1833,12 +1870,13 @@ function reduceMagicMonsterSelection(
       if (isHeroTarget) {
         // 自伤路径：先 APPLY_DAMAGE selfInflicted（触发血怒战符），再 HEAL 等量。
         // 净 HP 变化 0，但 reduceApplyDamage 内部 appliedDamage > 0，所以 bloodrage 仍会触发。
+        // 选盾时 applySelfDamage 会先让盾 armor 吃伤，溢出才走 APPLY_DAMAGE；HEAL 仍按整额给。
         if (totalDamage > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'blood-reckoning', selfInflicted: true });
+          applySelfDamage(totalDamage, 'blood-reckoning');
           enqueuedActions.push({ type: 'HEAL', amount: totalDamage, source: 'blood-reckoning' });
         }
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `点金裁决对自己造成 ${totalDamage} 点伤害${healText}！${echoText}`, { dealtDamage: true });
+          `点金裁决对${targetName}造成 ${totalDamage} 点伤害${healText}！${echoText}`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'blood-reckoning', isSpellDamage: true });
@@ -1853,14 +1891,14 @@ function reduceMagicMonsterSelection(
       const totalDamage = computeSpellDamagePure(state, baseDmg) * echo;
       const echoText = echo > 1 ? '（回响×2）' : '';
       if (isHeroTarget) {
-        // 自伤路径仍发金币（"其他都能继续触发"），仅伤害落点改成自己。
+        // 自伤路径仍发金币（"其他都能继续触发"），仅伤害落点改成自己/盾。
         if (totalDamage > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'bounty-spell-damage', selfInflicted: true });
+          applySelfDamage(totalDamage, 'bounty-spell-damage');
         }
         enqueuedActions.push({ type: 'MODIFY_GOLD', delta: totalDamage, source: 'bounty-spell-damage' });
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `赏金裁决：对自己造成 ${totalDamage} 点法术伤害，获得 ${totalDamage} 金币` } });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `赏金裁决：对${targetName}造成 ${totalDamage} 点法术伤害，获得 ${totalDamage} 金币` } });
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `赏金裁决：自伤 ${totalDamage} 点 → ${totalDamage} 金币！${echoText}`, { dealtDamage: true });
+          `赏金裁决：${targetName} ${totalDamage} 点 → ${totalDamage} 金币！${echoText}`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'bounty-spell-damage', isSpellDamage: true });
@@ -1883,9 +1921,9 @@ function reduceMagicMonsterSelection(
       }
       const echoTagMHS = echoMulMHS > 1 ? `（回响×${echoMulMHS}）` : '';
       if (isHeroTarget) {
-        enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'missing-hp-smite', selfInflicted: true });
+        applySelfDamage(totalDamage, 'missing-hp-smite');
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `残血裁决对自己释放 ${totalDamage} 点伤害（${smitePct}%）。${echoTagMHS}`, { dealtDamage: true });
+          `残血裁决对${targetName}释放 ${totalDamage} 点伤害（${smitePct}%）。${echoTagMHS}`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'missing-hp-smite', isSpellDamage: true });
@@ -1902,12 +1940,12 @@ function reduceMagicMonsterSelection(
       // 献祭 HP 成本：无论目标是谁都先扣（与原行为一致）。
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpToLose, source: 'general', selfInflicted: true });
       if (isHeroTarget) {
-        // 选 hero 时再叠加一次法术伤害到自己（用户确认的"双扣"行为，bloodrage 可能因此被触发两次）。
+        // 选 hero/盾 时再叠加一次法术伤害到自伤路径（选盾时盾会先吃 armor，溢出再扣血）。
         if (totalDamage > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'blood-sacrifice-strike', selfInflicted: true });
+          applySelfDamage(totalDamage, 'blood-sacrifice-strike');
         }
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `血祭裁决：献祭 ${hpToLose} 点生命，再对自己造成 ${totalDamage} 点伤害！${echoTagBSS}`, { dealtDamage: true });
+          `血祭裁决：献祭 ${hpToLose} 点生命，再对${targetName}造成 ${totalDamage} 点伤害！${echoTagBSS}`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'blood-sacrifice-strike', isSpellDamage: true });
@@ -1922,11 +1960,11 @@ function reduceMagicMonsterSelection(
       const nextBase = pending.card.scalingDamage ?? strikeBase + 1;
       if (isHeroTarget) {
         if (totalDamage > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'scaling-damage', selfInflicted: true });
+          applySelfDamage(totalDamage, 'scaling-damage');
         }
         enqueuedActions.push({ type: 'ADD_PERMANENT_MAGIC_TO_RECYCLE', card: pending.card });
         patch.pendingMagicAction = null;
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对自己造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）` } });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDamage} 点（下一击叠刺 ${nextBase}）` } });
         sideEffects.push({ event: 'hero:cardRemoved', payload: { cardId: pending.card.id, animate: false } });
         patch.heroSkillBanner = `${pending.card.name} 下一击叠刺 ${nextBase}`;
         return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1948,10 +1986,10 @@ function reduceMagicMonsterSelection(
       const echoText = echo > 1 ? `（回响×${echo}）` : '';
       if (isHeroTarget) {
         if (totalDamage > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDamage, source: 'arcane-storm', selfInflicted: true });
+          applySelfDamage(totalDamage, 'arcane-storm');
         }
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `奥术风暴：对自己造成 ${totalDamage} 点伤害。${echoText}`, { dealtDamage: true });
+          `奥术风暴：对${targetName}造成 ${totalDamage} 点伤害。${echoText}`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'arcane-storm', isSpellDamage: true });
@@ -1963,20 +2001,33 @@ function reduceMagicMonsterSelection(
       const chaosDamage = computeSpellDamagePure(state, 3 + (pending.card.amplifyBonus ?? 0));
       let chaosBanner: string;
       if (isHeroTarget) {
-        // overkill 概念不适用：选 hero 时不抽牌，仅自伤。
+        // overkill 概念不适用：选 hero/盾 时不抽牌，仅自伤（盾会先吃 armor）。
         if (chaosDamage > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: chaosDamage, source: 'chaos-strike', selfInflicted: true });
+          applySelfDamage(chaosDamage, 'chaos-strike');
         }
-        chaosBanner = `混沌冲击对自己造成 ${chaosDamage} 点伤害。`;
+        chaosBanner = `混沌冲击对${targetName}造成 ${chaosDamage} 点伤害。`;
       } else {
         ensureEngaged(state, monster!, enqueuedActions);
-        const overkill = chaosDamage > (monster!.hp ?? monster!.value ?? 0);
+        // 同 overkill-upgrade：超杀抽牌奖励必须基于 reducer 真实落地的伤害。
+        const mitigation = computeEffectiveSpellDamageOnMonster(state, monster!.id, chaosDamage);
         enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: chaosDamage, source: 'chaos-strike', isSpellDamage: true });
-        if (overkill) {
-          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 2 });
-          chaosBanner = `混沌冲击对 ${monster!.name} 造成 ${chaosDamage} 伤害，超杀！抽 2 张牌。`;
+        if (mitigation.effectiveDamage <= 0) {
+          if (mitigation.immuneByBuilding) {
+            chaosBanner = `混沌冲击对 ${monster!.name} 无效（受到诅咒碑光环保护）。`;
+          } else if (mitigation.bugletShielded) {
+            chaosBanner = `混沌冲击对 ${monster!.name} 无效（虫盾共生抵挡）。`;
+          } else {
+            chaosBanner = `混沌冲击对 ${monster!.name} 没有造成伤害。`;
+          }
         } else {
-          chaosBanner = `混沌冲击对 ${monster!.name} 造成 ${chaosDamage} 点伤害。`;
+          const overkill = mitigation.effectiveDamage > (monster!.hp ?? monster!.value ?? 0);
+          if (overkill) {
+            enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 2 });
+            chaosBanner = `混沌冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 伤害，超杀！抽 2 张牌。`;
+          } else {
+            const reducedNote = mitigation.spellResisted ? `（法术抗性：${chaosDamage} → ${mitigation.effectiveDamage}）` : '';
+            chaosBanner = `混沌冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 点伤害。${reducedNote}`;
+          }
         }
       }
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: chaosBanner } });
@@ -2004,20 +2055,34 @@ function reduceMagicMonsterSelection(
       const okDamage = computeSpellDamagePure(state, 3 + (pending.card.amplifyBonus ?? 0));
       let okBanner: string;
       if (isHeroTarget) {
-        // overkill 概念不适用：选 hero 时不开升级模态，仅自伤。
+        // overkill 概念不适用：选 hero/盾 时不开升级模态，仅自伤（盾会先吃 armor）。
         if (okDamage > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: okDamage, source: 'overkill-upgrade', selfInflicted: true });
+          applySelfDamage(okDamage, 'overkill-upgrade');
         }
-        okBanner = `淬炼冲击对自己造成 ${okDamage} 点伤害。`;
+        okBanner = `淬炼冲击对${targetName}造成 ${okDamage} 点伤害。`;
       } else {
         ensureEngaged(state, monster!, enqueuedActions);
-        const overkill = okDamage > (monster!.hp ?? monster!.value ?? 0);
+        // Overkill 奖励必须基于 reducer 真实落地的伤害，否则法免 / 虫盾 / 法抗 / 岩石护体
+        // 都会触发"假超杀"（升级窗弹出但怪物没死）。helper 严格镜像 reducer 的减免链。
+        const mitigation = computeEffectiveSpellDamageOnMonster(state, monster!.id, okDamage);
         enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: okDamage, source: 'overkill-upgrade', isSpellDamage: true });
-        if (overkill) {
-          enqueuedActions.push({ type: 'SET_UPGRADE_MODAL_OPEN', open: true });
-          okBanner = `淬炼冲击对 ${monster!.name} 造成 ${okDamage} 伤害，超杀！选择一张牌升级。`;
+        if (mitigation.effectiveDamage <= 0) {
+          if (mitigation.immuneByBuilding) {
+            okBanner = `淬炼冲击对 ${monster!.name} 无效（受到诅咒碑光环保护）。`;
+          } else if (mitigation.bugletShielded) {
+            okBanner = `淬炼冲击对 ${monster!.name} 无效（虫盾共生抵挡）。`;
+          } else {
+            okBanner = `淬炼冲击对 ${monster!.name} 没有造成伤害。`;
+          }
         } else {
-          okBanner = `淬炼冲击对 ${monster!.name} 造成 ${okDamage} 点伤害。`;
+          const overkill = mitigation.effectiveDamage > (monster!.hp ?? monster!.value ?? 0);
+          if (overkill) {
+            enqueuedActions.push({ type: 'SET_UPGRADE_MODAL_OPEN', open: true });
+            okBanner = `淬炼冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 伤害，超杀！选择一张牌升级。`;
+          } else {
+            const reducedNote = mitigation.spellResisted ? `（法术抗性：${okDamage} → ${mitigation.effectiveDamage}）` : '';
+            okBanner = `淬炼冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 点伤害。${reducedNote}`;
+          }
         }
       }
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: okBanner } });
@@ -2105,9 +2170,9 @@ function reduceMagicMonsterSelection(
       const totalDmg = computeSpellDamagePure(state, 1 + (pending.card.amplifyBonus ?? 0));
       if (isHeroTarget) {
         if (totalDmg > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDmg, source: 'missile-bolt', selfInflicted: true });
+          applySelfDamage(totalDmg, 'missile-bolt');
         }
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `魔弹：对自己造成 ${totalDmg} 点法术伤害` } });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `魔弹：对${targetName}造成 ${totalDmg} 点法术伤害` } });
       } else {
         ensureEngaged(state, monster!, enqueuedActions);
         enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDmg, source: 'missile-bolt', isSpellDamage: true });
@@ -2149,13 +2214,13 @@ function reduceMagicMonsterSelection(
       const totalDmg = hitDmg * hits;
       const threshold = Math.round((stunPct / 100) * 20);
       if (isHeroTarget) {
-        // 选 hero：纯自伤；不掷击晕骰（hero 不能被击晕）。
+        // 选 hero/盾：纯自伤；不掷击晕骰（hero 不能被击晕）。
         if (totalDmg > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDmg, source: 'stun-strike', selfInflicted: true });
+          applySelfDamage(totalDmg, 'stun-strike');
         }
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `雷震击：对自己造成 ${hitDmg}×${hits} 点法术伤害` } });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `雷震击：对${targetName}造成 ${hitDmg}×${hits} 点法术伤害` } });
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `雷震击：对自己造成 ${hitDmg}×${hits} 点伤害！`, { dealtDamage: true });
+          `雷震击：对${targetName}造成 ${hitDmg}×${hits} 点伤害！`, { dealtDamage: true });
       }
       ensureEngaged(state, monster!, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDmg, source: 'stun-strike', isSpellDamage: true });
@@ -2193,9 +2258,9 @@ function reduceMagicMonsterSelection(
       const threshold = Math.round((stunPct / 100) * 20);
 
       if (isHeroTarget) {
-        // 选 hero：自伤 + 抽牌（"其他都能继续触发"）；不掷击晕骰（hero 不能被击晕）。
+        // 选 hero/盾：自伤 + 抽牌（"其他都能继续触发"）；不掷击晕骰（hero 不能被击晕）。
         if (totalDmg > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDmg, source: 'stun-cap-strike', selfInflicted: true });
+          applySelfDamage(totalDmg, 'stun-cap-strike');
         }
         if (drawCount > 0) {
           const drawState = { ...state, ...patch } as GameState;
@@ -2207,9 +2272,9 @@ function reduceMagicMonsterSelection(
             }
           }
         }
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对自己造成 ${totalDmg} 点法术伤害，抽 ${drawCount} 张牌。${echoTag}` } });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDmg} 点法术伤害，抽 ${drawCount} 张牌。${echoTag}` } });
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `${pending.card.name}：自伤 ${totalDmg}，抽 ${drawCount} 张。${echoTag}`,
+          `${pending.card.name}：${targetName} ${totalDmg}，抽 ${drawCount} 张。${echoTag}`,
           { dealtDamage: true });
       }
 
@@ -2269,11 +2334,11 @@ function reduceMagicMonsterSelection(
       const baseDmg = baseDamages[pending.card.upgradeLevel ?? 0] ?? 3;
       const peekCount = peekCounts[pending.card.upgradeLevel ?? 0] ?? 3;
       if (isHeroTarget) {
-        // 选 hero 时不走 RESOLVE_FATE_SIGHT（其逻辑强依赖 monster + 击晕）；
+        // 选 hero/盾 时不走 RESOLVE_FATE_SIGHT（其逻辑强依赖 monster + 击晕）；
         // 直接自伤 + 翻看牌堆（不掷击晕骰）。
         const totalDmg = computeSpellDamagePure(state, baseDmg + (pending.card.amplifyBonus ?? 0));
         if (totalDmg > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: totalDmg, source: 'fate-sight', selfInflicted: true });
+          applySelfDamage(totalDmg, 'fate-sight');
         }
         const deck = state.remainingDeck;
         const peekedCards = deck.slice(0, Math.min(peekCount, deck.length));
@@ -2283,7 +2348,7 @@ function reduceMagicMonsterSelection(
             peekedCards,
             monsterCount: peekedCards.filter(c => c.type === 'monster').length,
             stunChance: 0,
-            targetMonsterName: '自己',
+            targetMonsterName: targetName,
             card: pending.card,
             totalDamage: totalDmg,
             targetMonsterId: '',
@@ -2291,7 +2356,7 @@ function reduceMagicMonsterSelection(
             predeterminedRoll: 0,
           },
         });
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天眼审判：对自己造成 ${totalDmg} 点法术伤害，翻看牌堆 ${peekedCards.length} 张。` } });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天眼审判：对${targetName}造成 ${totalDmg} 点法术伤害，翻看牌堆 ${peekedCards.length} 张。` } });
         patch.pendingMagicAction = null;
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
@@ -2341,7 +2406,7 @@ function reduceMagicMonsterSelection(
       const streak = (pending as any).data?.streak ?? 0;
       if (isHeroTarget) {
         if (dmg > 0) {
-          enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: dmg, source: 'transform-streak-strike', selfInflicted: true });
+          applySelfDamage(dmg, 'transform-streak-strike');
         }
         sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：连续转型 ${streak}，对自己造成 ${dmg} 点法术伤害。` } });
         return applyFinalizeMagic(
@@ -2384,7 +2449,12 @@ function reduceDungeonCardSelection(
 
   const { cardId } = action;
   const activeCards = state.activeCards as (GameCardData | null)[];
-  const card = activeCards.find(c => c?.id === cardId);
+  let card = activeCards.find(c => c?.id === cardId);
+  // 「乾坤一翻」也能选 Preview Row 卡背 → 在 active 找不到时，用 preview 找一次。
+  if (!card && pending.effect === 'flip-active-card') {
+    const previewCardsLookup = state.previewCards as (GameCardData | null)[];
+    card = previewCardsLookup.find(c => c?.id === cardId);
+  }
   if (!card) return noChange(state);
 
   const sideEffects: SideEffect[] = [];
@@ -2572,7 +2642,41 @@ function reduceDungeonCardSelection(
           payload: { slotIdx: removedSlotIdx, card },
         });
       }
-      const newActive = activeCards.map(c => c?.id === card.id ? null : c);
+      // Stack-pop: if the selected (top) card has a stacked card below it
+      // (e.g. 幽灵建筑 pushed to stack-bottom by a previous waterfall drop),
+      // promote the stack-top into the cleared slot instead of leaving it
+      // null. Mirrors the COMPLETE_EVENT pattern in rules/events.ts and
+      // GameBoard.tsx removeCard — without this, the underlying ghost
+      // building is orphaned in activeCardStacks beneath an empty slot
+      // and effectively disappears (a fresh waterfall drop covers it).
+      const stacks = state.activeCardStacks ?? {};
+      const stackBelow = removedSlotIdx >= 0 ? (stacks[removedSlotIdx] ?? []) : [];
+      const newActive = [...activeCards] as typeof activeCards;
+      if (removedSlotIdx >= 0 && stackBelow.length > 0) {
+        const nextCard = stackBelow[stackBelow.length - 1];
+        newActive[removedSlotIdx] = nextCard;
+        const popStacks = { ...stacks };
+        const remaining = stackBelow.slice(0, -1);
+        if (remaining.length === 0) {
+          delete popStacks[removedSlotIdx];
+        } else {
+          popStacks[removedSlotIdx] = remaining;
+        }
+        patch.activeCardStacks = popStacks;
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'system', message: `堆叠揭示：「${nextCard.name}」从第 ${removedSlotIdx + 1} 列堆叠中浮现！` },
+        });
+        // Stack pop keeps the slot occupied (card→card, not card→null), so
+        // postProcessActiveCards won't detect the removal. Explicitly
+        // register the just-removed card as processed to trigger backpack
+        // auto-draw (mirrors rules/events.ts COMPLETE_EVENT).
+        if (!state.processedDungeonCardIds.includes(card.id)) {
+          enqueuedActions.push({ type: 'REGISTER_DUNGEON_CARD_PROCESSED', cardId: card.id, source: 'slot-cleared' });
+        }
+      } else if (removedSlotIdx >= 0) {
+        newActive[removedSlotIdx] = null;
+      }
       patch.activeCards = newActive as any;
       const sanitizedCard = sanitizeCardMetadata(card);
       const newDeck = [...(state.remainingDeck as GameCardData[]), sanitizedCard];
@@ -2702,25 +2806,41 @@ function reduceDungeonCardSelection(
     }
 
     case 'flip-active-card': {
-      // 乾坤一翻：将选中的可翻转 (flipTarget) 或已翻转 (_flipBackCard) 卡牌翻转。
-      // 与 flip-back-active 不同：该效果同时支持正向翻转——正向走 APPLY_CARD_FLIP
-      // 以触发护符联动 (flip-zap / flip-gold)；反向直接修改 activeCards + 派发动画。
-      const idx = activeCards.findIndex(c => c?.id === card.id);
-      if (idx === -1) {
-        patch.heroSkillBanner = '请选择当前行的卡牌。';
+      // 乾坤一翻：三种翻转路径：
+      //   (a) active-row 正向 (flipTarget) → APPLY_CARD_FLIP（reduceApplyCardFlip 内已调 applyFlipCounters）
+      //   (b) active-row 反向 (_flipBackCard) → 原地恢复 + flippedInCell 动画 + 手动调 applyFlipCounters
+      //   (c) preview-row 卡背 → 设置 previewRevealedEarly[idx]=true + 自定义事件 + 手动调 applyFlipCounters
+      // (b)(c) 不走 APPLY_CARD_FLIP（避免 flipTarget 不存在的反向翻转误触发卡牌转化），
+      // 必须在这里直接调用 applyFlipCounters 让翻转计数器（7 个消费方）依然命中。
+      const activeIdx = activeCards.findIndex(c => c?.id === card.id);
+      const previewCardsArr = state.previewCards as (GameCardData | null)[];
+      const previewIdx = previewCardsArr.findIndex(c => c?.id === card.id);
+      const revealed = state.previewRevealedEarly ?? [];
+
+      if (activeIdx === -1 && previewIdx === -1) {
+        patch.heroSkillBanner = '请选择当前行或预览行的卡牌。';
         return applyPatch(state, patch, sideEffects);
       }
-      if (!card.flipTarget && !card._flipBackCard) {
+      if (activeIdx !== -1 && !card.flipTarget && !card._flipBackCard) {
         patch.heroSkillBanner = '该卡牌没有可翻转的另一面。';
         return applyPatch(state, patch, sideEffects);
       }
+      if (previewIdx !== -1 && revealed[previewIdx]) {
+        patch.heroSkillBanner = '该预览行卡牌已被翻成正面，不能再翻回。';
+        return applyPatch(state, patch, sideEffects);
+      }
+
       const echoRemainingFAC = ((pending as any).echoRemaining ?? 1) - 1;
       const buildRepromptOrFinalize = (resultBanner: string) => {
         if (echoRemainingFAC > 0) {
-          // After this flip, look for any other flippable card still in the row.
+          // After this flip, look for ANY other flippable card still in either row
+          // (active-row flippable, or preview-row still face-down).
           const updatedActive = (patch.activeCards ?? activeCards) as (GameCardData | null)[];
-          const anyOtherFlippable = updatedActive.some(c => c && c.id !== card.id && (c.flipTarget || c._flipBackCard));
-          if (anyOtherFlippable) {
+          const updatedPreview = (patch.previewCards ?? state.previewCards) as (GameCardData | null)[];
+          const updatedRevealed = (patch.previewRevealedEarly ?? revealed);
+          const anyOtherActive = updatedActive.some(c => c && c.id !== card.id && (c.flipTarget || c._flipBackCard));
+          const anyOtherPreview = updatedPreview.some((c, i) => c && c.id !== card.id && !updatedRevealed[i]);
+          if (anyOtherActive || anyOtherPreview) {
             const totalEcho = (pending as any).echoRemaining ?? 1;
             const currentRound = totalEcho - echoRemainingFAC + 1;
             const echoLabel = `（回响：第 ${currentRound}/${totalEcho} 次）`;
@@ -2728,7 +2848,7 @@ function reduceDungeonCardSelection(
               card: pending.card,
               effect: 'flip-active-card',
               step: 'dungeon-select',
-              prompt: `选择当前行一张可翻转或已翻转的卡牌，将其翻转。${echoLabel}`,
+              prompt: `选择当前行一张可翻转/已翻转的牌，或预览行一张未翻面的卡背，将其翻转。${echoLabel}`,
               echoRemaining: echoRemainingFAC,
             } as PendingMagicAction;
             const reprompt = maybeRepromptEcho(
@@ -2742,22 +2862,40 @@ function reduceDungeonCardSelection(
         }
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, resultBanner);
       };
-      if (card.flipTarget) {
-        enqueuedActions.push({ type: 'APPLY_CARD_FLIP', card, cellIndex: idx });
+
+      // (a) Active-row forward flip — APPLY_CARD_FLIP runs reduceApplyCardFlip
+      // which already calls applyFlipCounters internally. Do NOT call it here too.
+      if (activeIdx !== -1 && card.flipTarget) {
+        enqueuedActions.push({ type: 'APPLY_CARD_FLIP', card, cellIndex: activeIdx });
         sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `乾坤一翻：${card.name} → ${card.flipTarget.toCard.name}。` } });
         return buildRepromptOrFinalize(`乾坤一翻：${card.name} → ${card.flipTarget.toCard.name}！`);
       }
-      const original = card._flipBackCard as GameCardData;
-      const restored: GameCardData = { ...original };
-      const newActive = [...activeCards] as typeof activeCards;
-      newActive[idx] = restored;
-      patch.activeCards = newActive as any;
+      // (b) Active-row back flip — restore _flipBackCard + animation + manually fire counters.
+      if (activeIdx !== -1) {
+        const original = card._flipBackCard as GameCardData;
+        const restored: GameCardData = { ...original };
+        const newActive = [...activeCards] as typeof activeCards;
+        newActive[activeIdx] = restored;
+        patch.activeCards = newActive as any;
+        sideEffects.push({
+          event: 'card:flippedInCell',
+          payload: { cellIndex: activeIdx, fromCard: card, toCard: restored, message: `${card.name} → ${restored.name}` },
+        });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `乾坤一翻：${card.name} 翻回 ${restored.name}。` } });
+        applyFlipCounters(state, patch, sideEffects, enqueuedActions);
+        return buildRepromptOrFinalize(`乾坤一翻：${card.name} → ${restored.name}！`);
+      }
+      // (c) Preview-row reveal — flip the visibility flag, fire counters, emit animation hint.
+      const nextRevealed = [...revealed];
+      nextRevealed[previewIdx] = true;
+      patch.previewRevealedEarly = nextRevealed;
       sideEffects.push({
-        event: 'card:flippedInCell',
-        payload: { cellIndex: idx, fromCard: card, toCard: restored, message: `${card.name} → ${restored.name}` },
+        event: 'card:previewRevealedEarly',
+        payload: { cellIndex: previewIdx, card },
       });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `乾坤一翻：${card.name} 翻回 ${restored.name}。` } });
-      return buildRepromptOrFinalize(`乾坤一翻：${card.name} → ${restored.name}！`);
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `乾坤一翻：揭示了预览行的 ${card.name}。` } });
+      applyFlipCounters(state, patch, sideEffects, enqueuedActions);
+      return buildRepromptOrFinalize(`乾坤一翻：揭示了预览行的 ${card.name}！`);
     }
 
     default:

@@ -62,6 +62,8 @@ import { InCellFlipOverlayLayer } from './game-board/components/InCellFlipOverla
 import { useInCellFlipAnimation } from './game-board/hooks/useInCellFlipAnimation';
 import { DimensionWarpOverlayLayer } from './game-board/components/DimensionWarpOverlayLayer';
 import { useDimensionWarpAnimation } from './game-board/hooks/useDimensionWarpAnimation';
+import { MonsterSkillFloatOverlayLayer } from './game-board/components/MonsterSkillFloatOverlayLayer';
+import { useMonsterSkillFloats } from './game-board/hooks/useMonsterSkillFloats';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
 import { useGameEngine, useShallowGameState, useDispatch, useGameEvent } from '@/hooks/useGameEngine';
 import { useCardOperations, type CardOperationsDeps } from '@/hooks/useCardOperations';
@@ -304,6 +306,9 @@ const WATERFALL_DROP_DURATION = 650;
 const WATERFALL_DISCARD_DURATION = 450;
 const WATERFALL_DEAL_DURATION = 550;
 const WATERFALL_REVEAL_DURATION = 400;
+// Extra hold AFTER the preview-row flip completes, before drop/discard/deal
+// motion begins — gives players time to read what just got revealed.
+const WATERFALL_REVEAL_HOLD_DURATION = 1000;
 
 const CLASS_FLIGHT_BASE_DURATION = 900;
 const CLASS_FLIGHT_VARIANCE = 250;
@@ -727,6 +732,7 @@ export default function GameBoard() {
     handleHeroSkillMonsterSelection,
     handleMagicMonsterSelection,
     handleMagicHeroSelfTarget,
+    handleMagicShieldSlotTarget,
     handleDungeonCardSelection,
     handleBackpackReorganizeConfirm,
     handleHandDiscardSelectionConfirm,
@@ -894,6 +900,11 @@ export default function GameBoard() {
   // and mounts a 2-card 3D-flip + position-swap overlay on top of the active
   // cell + the preview cell directly above it for ~1.15s.
   const { dimensionWarps } = useDimensionWarpAnimation(activeCellRefs, previewCellRefs);
+  // Monster-skill float queue: drains state.pendingSkillFloats one entry at a
+  // time, anchoring the floating text above the firing monster's cell. The
+  // pipeline pause + dispatch guard (see game-core/index.ts) freeze every
+  // other game action while the animation plays.
+  const activeMonsterSkillFloat = useMonsterSkillFloats({ monsterCellRefs });
   const {
     classDeckFlights, setClassDeckFlights,
     fateSwapFlights, setFateSwapFlights,
@@ -3389,6 +3400,8 @@ export default function GameBoard() {
         sourceCell = heroRowCellRefs.current[HERO_ROW_EQUIPMENT_2_INDEX];
       } else if (sourceHint === 'amulet') {
         sourceCell = heroRowCellRefs.current[HERO_ROW_AMULET_INDEX];
+      } else if (sourceHint === 'classDeck') {
+        sourceCell = classDeckCellRef.current;
       } else {
         sourceCell = heroRowCellRefs.current[HERO_ROW_BACKPACK_INDEX]
           // Narrow layout: hero-row backpack cell is unmounted; fall back to
@@ -4202,6 +4215,9 @@ export default function GameBoard() {
       defensiveStanceActive: Boolean(snapshot.defensiveStanceActive),
       previewCardStacks: snapshot.previewCardStacks ?? {},
       activeCardStacks: snapshot.activeCardStacks ?? {},
+      previewRevealedEarly: Array.isArray(snapshot.previewRevealedEarly) && snapshot.previewRevealedEarly.length === DUNGEON_COLUMN_COUNT
+        ? snapshot.previewRevealedEarly.map(Boolean)
+        : Array.from({ length: DUNGEON_COLUMN_COUNT }, () => false),
       waterfallDealBonus: snapshot.waterfallDealBonus ?? 0,
       eternalRelics: Array.isArray(snapshot.eternalRelics) ? snapshot.eternalRelics as import('@/game-core/types').EternalRelic[] : getStartingRelics(),
       undoCount: engine.getUndoCount(),
@@ -4782,7 +4798,7 @@ export default function GameBoard() {
       // game start" has been removed. Players still receive class cards from
       // hero skills (e.g. 探索之心 → initialClassCardDraw: 3) and from any
       // eternal relic that grants `initialClassCardDraw`. The opening hand
-      // 「专属感召」 perm-2 magic now provides on-demand class-card discovery
+      // 「专属感召」 perm-1 magic now provides on-demand class-card discovery
       // (see `createStarterDiscoverClassToHandCard` in `game-core/deck.ts`).
       const skillClassCards = (definition?.type === 'passive') ? 0 : (definition?.initialClassCardDraw ?? 0);
       const relicClassCards = currentRelics.reduce((sum, r) => sum + (r.initialClassCardDraw ?? 0), 0);
@@ -5150,7 +5166,11 @@ export default function GameBoard() {
         dealingSlots: [],
         sequenceId,
       });
-      queueWaterfallTimeout(proceedWithWaterfall, animSpeed(WATERFALL_REVEAL_DURATION), 'reveal-phase-complete');
+      queueWaterfallTimeout(
+        proceedWithWaterfall,
+        animSpeed(WATERFALL_REVEAL_DURATION + WATERFALL_REVEAL_HOLD_DURATION),
+        'reveal-phase-complete',
+      );
     } else {
       proceedWithWaterfall();
     }
@@ -6705,6 +6725,19 @@ export default function GameBoard() {
     magicMonsterTargeting
       && (pendingMagicAction as { allowsHeroTarget?: boolean } | null)?.allowsHeroTarget,
   );
+  // 同源条件：当 hero self-target 激活时，装有 type='shield' 且 armor>0 的装备槽
+  // 也是合法目标（armor 先吃伤、溢出走自伤）。仅 type='shield' 可选，type='monster'
+  // （怪物盾）暂不开放（armor/durability 体系太复杂）。
+  const shieldSlot1IsValidSelfTarget = Boolean(
+    heroSelfTargetingActive
+      && equipmentSlot1?.type === 'shield'
+      && (equipmentSlot1?.armor ?? equipmentSlot1?.armorMax ?? equipmentSlot1?.value ?? 0) > 0,
+  );
+  const shieldSlot2IsValidSelfTarget = Boolean(
+    heroSelfTargetingActive
+      && equipmentSlot2?.type === 'shield'
+      && (equipmentSlot2?.armor ?? equipmentSlot2?.armorMax ?? equipmentSlot2?.value ?? 0) > 0,
+  );
   const potionTargeting = Boolean(pendingPotionAction);
   const potionSlotTargeting = pendingPotionAction?.step === 'slot-select';
   const playerTargetingActive =
@@ -7614,6 +7647,12 @@ export default function GameBoard() {
                 : undefined
             }
             onCardClick={handleCardClick}
+            selfTargetActive={shieldSlot1IsValidSelfTarget && !fullBoardInteractionLocked}
+            onSelfTargetClick={
+              shieldSlot1IsValidSelfTarget && !fullBoardInteractionLocked
+                ? () => handleMagicShieldSlotTarget('equipmentSlot1')
+                : undefined
+            }
           />
           {showBlockButtons &&
             renderBlockButton('equipmentSlot1', 'Block (Left)', !canShieldBlock('equipmentSlot1') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot1 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot1 as any)?.equipBlockDurabilityBonus ?? 0) + amuletEffects.armorHalveEndureCount + ((slotBattleSpiritBonus ?? {}).equipmentSlot1 ?? 0)))}
@@ -7757,6 +7796,12 @@ export default function GameBoard() {
                 : undefined
             }
             onCardClick={handleCardClick}
+            selfTargetActive={shieldSlot2IsValidSelfTarget && !fullBoardInteractionLocked}
+            onSelfTargetClick={
+              shieldSlot2IsValidSelfTarget && !fullBoardInteractionLocked
+                ? () => handleMagicShieldSlotTarget('equipmentSlot2')
+                : undefined
+            }
           />
           {showBlockButtons &&
             renderBlockButton('equipmentSlot2', 'Block (Right)', !canShieldBlock('equipmentSlot2') || (combatState.slotDurabilityUsedThisTurn?.equipmentSlot2 ?? 0) >= (blockDurabilityPerSlot + ((equipmentSlot2 as any)?.equipBlockDurabilityBonus ?? 0) + amuletEffects.armorHalveEndureCount + ((slotBattleSpiritBonus ?? {}).equipmentSlot2 ?? 0)))}
@@ -7836,6 +7881,8 @@ export default function GameBoard() {
     handleBackpackClick, swapEquipmentToTop, getEquipmentSlotBonus,
     renderBlockButton, canShieldBlock, canCardGoToBackpack,
     isRecyclableFromHand, isPermRecycleEquipment,
+    heroSelfTargetingActive, handleMagicHeroSelfTarget,
+    shieldSlot1IsValidSelfTarget, shieldSlot2IsValidSelfTarget, handleMagicShieldSlotTarget,
   ]);
 
   const handleDeckClick = useCallback(() => {
@@ -8320,9 +8367,14 @@ export default function GameBoard() {
           />
         </div>
 
-        {/* Main game area - Flexible height */}
+        {/* Main game area - Flexible height
+            注意：top padding 主动设为 0（py-3/py-4 → pt-0），把 menu bar 与
+            Preview Row 之间那截死空间吃掉，让 grid 整体能更靠上、更高一些。
+            grid cell 高度 = 手牌卡尺寸（gridCardSize），所以 grid 拉高的同时
+            手牌卡也会同步变大一点点 —— 即「手牌区视觉空间更充足」。
+            bottom padding 保留，避免 hero-row 蓝边和 EternalRelics 撞在一起。 */}
         <div
-          className={`flex-grow min-h-0 w-full px-2 relative z-[1] ${isFlat ? 'py-0' : 'py-3 md:py-4'} md:px-4`}
+          className={`flex-grow min-h-0 w-full px-2 relative z-[1] ${isFlat ? 'py-0' : 'pt-0 pb-3 md:pb-4'} md:px-4`}
         >
           <div className={`relative flex flex-col h-full ${isFlat ? 'gap-0' : 'gap-3'}`}>
           <div
@@ -8345,6 +8397,7 @@ export default function GameBoard() {
             cellInnerClass={cellInnerClass}
             onCellRef={setPreviewCellRef}
             onCardClick={handleCardClick}
+            onDungeonCardSelection={handleDungeonCardSelection}
           />
           
           {/* Row 1, last col: ClassDeck (hidden in narrow layout) */}
@@ -8500,6 +8553,8 @@ export default function GameBoard() {
       />
 
       <InCellFlipOverlayLayer inCellFlips={inCellFlips} />
+
+      <MonsterSkillFloatOverlayLayer active={activeMonsterSkillFloat} />
 
       <DimensionWarpOverlayLayer dimensionWarps={dimensionWarps} />
 

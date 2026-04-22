@@ -122,16 +122,26 @@ function reduceEndTurn(
     }
   }
 
+  // Convert hero-turn-end skill triggers (elite regen, dragon heal-other) into
+  // TRIGGER_MONSTER_SKILL_FLOAT actions. They go FIRST so the float queue
+  // freezes the pipeline before any subsequent monster-turn advancement runs.
+  const skillFloatActions: GameAction[] = result.skillFloats.map(f => ({
+    type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+    monsterId: f.monsterId,
+    skillKey: f.skillKey,
+  }));
+
   // If combat ended (no engaged monsters), no need to advance
   if (result.combatState.engagedMonsterIds.length === 0) {
     return applyPatch(state, {
       ...patch,
       phase: 'playerInput',
-    }, sideEffects);
+    }, sideEffects, skillFloatActions.length > 0 ? skillFloatActions : undefined);
   }
 
-  // Enqueue the monster turn advancement
+  // Enqueue the monster turn advancement (after any skill float queued above)
   return applyPatch(state, patch, sideEffects, [
+    ...skillFloatActions,
     { type: 'ADVANCE_MONSTER_TURN' },
   ]);
 }
@@ -202,6 +212,20 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
 
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
+  // Convert pure-helper-collected skill floats into actions queued at the
+  // FRONT of follow-up enqueuedActions. Pushing them first guarantees the
+  // pipeline pauses on `phase=awaitingSkillFloat` BEFORE the dice modal
+  // (and any later START_TURN flow) can race ahead. The UI also has a
+  // `pendingSkillFloats.length > 0` guard on modal open as a belt-and-braces
+  // safety net for the `combat:goblinHealCheck` side-effect that fires
+  // synchronously from this same reducer step.
+  for (const f of result.skillFloats) {
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: f.monsterId,
+      skillKey: f.skillKey,
+    });
+  }
   for (const log of result.logs) {
     sideEffects.push({ event: 'log:entry', payload: { type: log.type, message: log.message } });
   }

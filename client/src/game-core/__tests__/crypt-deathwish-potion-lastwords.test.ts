@@ -17,6 +17,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { drain } from '../pipeline';
+import { drainAutoReleasingFloats } from './_helpers';
 import { createInitialGameState } from '../state';
 import type { GameState } from '../types';
 import type { GameAction } from '../actions';
@@ -221,7 +222,10 @@ describe('墓语遗愿 + monster 装备遗言（防 7e105ca 回归）', () => {
     });
     const bpBefore = state.backpackItems.length;
 
-    const r1 = drain(state, [
+    // crypt-deathwish enqueues skill-float TRIGGER + DRAW_FROM_BACKPACK actions.
+    // The TRIGGER hard-pauses the pipeline; in real play the UI dispatches
+    // RELEASE after the animation. Here we simulate that with auto-release.
+    const r1 = drainAutoReleasingFloats(state, [
       { type: 'RESOLVE_MAGIC', cardId: card.id, card } as GameAction,
     ]);
 
@@ -253,7 +257,8 @@ describe('墓语遗愿 + monster 装备遗言（防 7e105ca 回归）', () => {
     });
     const bpBefore = state.backpackItems.length;
 
-    const r1 = drain(state, [
+    // Same blocking story as discard-hand-3 above.
+    const r1 = drainAutoReleasingFloats(state, [
       { type: 'RESOLVE_MAGIC', cardId: card.id, card } as GameAction,
     ]);
 

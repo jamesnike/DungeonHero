@@ -1,5 +1,5 @@
 /**
- * Tests for the opening-hand 「专属感召」 perm-2 magic + the
+ * Tests for the opening-hand 「专属感召」 perm-1 magic + the
  * 'hand-first' delivery extension to BEGIN_DISCOVER /
  * RESOLVE_DISCOVER_SELECTION.
  *
@@ -44,7 +44,7 @@ function makeClassCard(id: string, name: string): GameCardData {
 }
 
 describe('INIT_GAME — opening hand contains 「专属感召」', () => {
-  it('places exactly one starter discover-class-to-hand perm-2 magic on hand', () => {
+  it('places exactly one starter discover-class-to-hand perm-1 magic on hand', () => {
     for (let seed = 1; seed <= 20; seed++) {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
@@ -58,7 +58,7 @@ describe('INIT_GAME — opening hand contains 「专属感召」', () => {
       );
       expect(matching.length, `seed=${seed} should have exactly 1 card`).toBe(1);
       expect(matching[0].magicType).toBe('permanent');
-      expect(matching[0].recycleDelay).toBe(2);
+      expect(matching[0].recycleDelay).toBe(1);
     }
   });
 
@@ -201,6 +201,26 @@ describe('RESOLVE_DISCOVER_SELECTION — hand-first delivery', () => {
     // Modal closed; delivery reset to default.
     expect(result.state.discoverModalOpen).toBe(false);
     expect(result.state.discoverDelivery).toBe('backpack');
+
+    // Animation: should emit `card:queueToHand` with sourceHint='classDeck'
+    // (drives the class-deck → hand flight) and `shop:classCardObtained`
+    // with destination='hand' (so the shop listener SKIPS the legacy
+    // class-deck → backpack flight).
+    const cloned = result.state.handCards[0];
+    const queueEvents = result.sideEffects.filter(e => e.event === 'card:queueToHand');
+    expect(queueEvents).toHaveLength(1);
+    expect(queueEvents[0].payload).toMatchObject({
+      card: expect.objectContaining({ id: cloned.id }),
+      sourceHint: 'classDeck',
+    });
+    const obtainedEvents = result.sideEffects.filter(e => e.event === 'shop:classCardObtained');
+    expect(obtainedEvents).toHaveLength(1);
+    expect((obtainedEvents[0].payload as { destination: string }).destination).toBe('hand');
+    // The legacy `card:drawnToHand` event must NOT be emitted on this path —
+    // otherwise the GameBoard listener would queue a second flight from the
+    // default backpack source, double-animating the same card.
+    const drawnEvents = result.sideEffects.filter(e => e.event === 'card:drawnToHand');
+    expect(drawnEvents).toHaveLength(0);
   });
 
   it('falls back to backpack when hand is full but backpack has room', () => {

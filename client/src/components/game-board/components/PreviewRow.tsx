@@ -4,7 +4,7 @@ import type { CardType, GameCardData } from '@/components/GameCard';
 import { Card } from '@/components/ui/card';
 import { useGameState } from '@/hooks/useGameEngine';
 import { DUNGEON_COLUMNS } from '../constants';
-import type { GraveyardVector, WaterfallAnimationState } from '../types';
+import type { GraveyardVector, WaterfallAnimationState, PendingMagicAction } from '../types';
 import { getPreviewAnimationProps, getStackedCardStyle } from '../utils/animation-helpers';
 
 const EMPTY_ARRAY: GameCardData[] = [];
@@ -293,6 +293,12 @@ interface PreviewCellProps {
   cellWrapperClass: string;
   cellInnerClass: string;
   onCellRef: (index: number, el: HTMLDivElement | null) => void;
+  /**
+   * 「乾坤一翻」选择阶段需要的 pending 状态。仅当 effect === 'flip-active-card'
+   * 且该 preview 格仍是卡背状态时，才允许点击和高亮。
+   */
+  pendingMagicAction: PendingMagicAction | null;
+  onDungeonCardSelection?: (card: GameCardData) => void;
 }
 
 const PreviewCell = memo(function PreviewCell({
@@ -303,9 +309,12 @@ const PreviewCell = memo(function PreviewCell({
   cellWrapperClass,
   cellInnerClass,
   onCellRef,
+  pendingMagicAction,
+  onDungeonCardSelection,
 }: PreviewCellProps) {
   const card = useGameState(s => s.previewCards[index]);
   const stackedCards = useGameState(s => s.previewCardStacks[index] ?? EMPTY_ARRAY);
+  const revealedEarly = useGameState(s => Boolean(s.previewRevealedEarly?.[index]));
 
   const { style: animStyle, className: animClass, isAnimating } =
     getPreviewAnimationProps(index, waterfallAnimation, graveyardVectors, deckReturnVectors);
@@ -314,11 +323,16 @@ const PreviewCell = memo(function PreviewCell({
   const phase = waterfallAnimation.phase;
 
   // Phase → presentation:
-  //   - idle / dealing  → render the card BACK (face-down)
-  //   - revealing       → render 3D flipper (back → face animation)
+  //   - idle / dealing  → render the card BACK (face-down)，**除非**该格被「乾坤一翻」翻过
+  //   - revealing       → render 3D flipper (back → face animation)，已经被早翻的格直接显示正面
   //   - dropping / discarding → render the card FACE (already revealed, now flying out)
-  const showBack = phase === 'idle' || phase === 'dealing';
-  const showRevealAnimation = phase === 'revealing';
+  const showBack = (phase === 'idle' || phase === 'dealing') && !revealedEarly;
+  const showRevealAnimation = phase === 'revealing' && !revealedEarly;
+
+  // 「乾坤一翻」flip-active-card 选择阶段：未翻面的 preview 卡背可被选中，已翻面的不能
+  const flipPickActive = pendingMagicAction?.effect === 'flip-active-card'
+    && pendingMagicAction.step === 'dungeon-select';
+  const previewSelectable = Boolean(flipPickActive && card && !revealedEarly);
 
   if (!card) {
     return (
@@ -331,6 +345,11 @@ const PreviewCell = memo(function PreviewCell({
       </div>
     );
   }
+
+  const handlePreviewClick = previewSelectable && onDungeonCardSelection
+    ? () => onDungeonCardSelection(card)
+    : undefined;
+  const highlightClass = previewSelectable ? 'dungeon-target-highlight animate-pulse' : '';
 
   // The cell wrapper (animation transforms attach here so drop/graveyard/deal
   // motion still composes correctly with the inner rotateY flip).
@@ -352,13 +371,28 @@ const PreviewCell = memo(function PreviewCell({
       </div>
     </div>
   ) : showBack ? (
-    <PreviewCardBack card={card} />
+    // 卡背：可在「乾坤一翻」选择阶段点击。覆一层透明可点击层而不是改 PreviewCardBack
+    // 的 onClick，是为了不污染 PreviewCardBack 的纯展示语义。
+    previewSelectable ? (
+      <div className="relative w-full h-full">
+        <PreviewCardBack card={card} />
+        <button
+          type="button"
+          aria-label={`选择该预览行卡背进行乾坤一翻`}
+          className={`absolute inset-0 z-40 cursor-pointer rounded-md ${highlightClass}`.trim()}
+          onClick={handlePreviewClick}
+        />
+      </div>
+    ) : (
+      <PreviewCardBack card={card} />
+    )
   ) : (
     <GameCard
       card={card}
-      className={hasStack ? 'relative z-[5]' : ''}
-      disableInteractions
+      className={`${hasStack ? 'relative z-[5] ' : ''}${highlightClass}`.trim()}
+      disableInteractions={!previewSelectable}
       hideEventChoices
+      onClick={handlePreviewClick}
     />
   );
 
@@ -421,6 +455,12 @@ interface PreviewRowProps {
    * disabled. Prop kept so existing GameBoard call sites compile; not invoked.
    */
   onCardClick?: (card: GameCardData) => void;
+  /**
+   * 「乾坤一翻」专用：当 pendingMagicAction.effect === 'flip-active-card' 时，
+   * 玩家可以选中预览行卡背进行翻面。GameBoard 把 useHeroActions 的
+   * `handleDungeonCardSelection` 通过这个 prop 透传过来。
+   */
+  onDungeonCardSelection?: (card: GameCardData) => void;
 }
 
 export const PreviewRow = memo(function PreviewRow({
@@ -430,7 +470,9 @@ export const PreviewRow = memo(function PreviewRow({
   cellWrapperClass,
   cellInnerClass,
   onCellRef,
+  onDungeonCardSelection,
 }: PreviewRowProps) {
+  const pendingMagicAction = useGameState(s => s.pendingMagicAction);
   return (
     <>
       {DUNGEON_COLUMNS.map((index) => (
@@ -443,6 +485,8 @@ export const PreviewRow = memo(function PreviewRow({
           cellWrapperClass={cellWrapperClass}
           cellInnerClass={cellInnerClass}
           onCellRef={onCellRef}
+          pendingMagicAction={pendingMagicAction}
+          onDungeonCardSelection={onDungeonCardSelection}
         />
       ))}
     </>

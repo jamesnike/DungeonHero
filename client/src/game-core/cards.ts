@@ -166,6 +166,54 @@ export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false
 }
 
 /**
+ * Reset a weapon/shield's transient combat state when it heads to the
+ * graveyard, so future graveyard-fetch effects (e.g. Iron Shield's
+ * `graveyard-to-hand` last words) recover a fresh, full-durability copy.
+ *
+ * Non-equipment cards pass through unchanged. Monster equipment is intentionally
+ * skipped — it goes through `resetMonsterForGraveyard`, which strips
+ * `durability`/`maxDurability` to revert it back to its monster card form.
+ *
+ * Reset rules (mirrors the salvage / perm-recycle paths):
+ *   - `durability` → `maxDurability`
+ *   - strip `armor` / `armorBonusDamaged` (re-derived on next equip from
+ *     `armorMax * durability`, matching `repairDurabilityPure`)
+ *   - strip `reviveUsed` / `equipmentReviveUsed` / `wraithRebirthUsed` so a
+ *     fresh card regains its revive
+ *   - strip `fromSlot` (slot routing metadata, never persisted off-slot)
+ */
+export function resetEquipmentForGraveyard(card: GameCardData): GameCardData {
+  if (card.type !== 'weapon' && card.type !== 'shield') return card;
+
+  const {
+    fromSlot: _fromSlot,
+    armor: _armor,
+    armorBonusDamaged: _armorBonusDamaged,
+    reviveUsed: _reviveUsed,
+    equipmentReviveUsed: _equipmentReviveUsed,
+    wraithRebirthUsed: _wraithRebirthUsed,
+    ...rest
+  } = card as GameCardData & Record<string, unknown>;
+
+  const reset: GameCardData = { ...(rest as GameCardData) };
+  if (reset.maxDurability != null) {
+    reset.durability = reset.maxDurability;
+  }
+  return reset;
+}
+
+/**
+ * Combined "card heads to graveyard" reset. Routes monsters through the
+ * monster reset and weapons/shields through the equipment reset. Other types
+ * pass through unchanged.
+ */
+export function resetCardForGraveyard(card: GameCardData, isQuickMode = false): GameCardData {
+  if (card.type === 'monster') return resetMonsterForGraveyard(card, isQuickMode);
+  if (card.type === 'weapon' || card.type === 'shield') return resetEquipmentForGraveyard(card);
+  return card;
+}
+
+/**
  * Ensure a monster card is "equipment-shaped" before it lands in hand /
  * backpack / recycle bag. Mirrors what `persuadeSuccessPatch` does for the
  * persuade flow:
@@ -200,7 +248,7 @@ export function addToGraveyardPure(
   card: GameCardData,
 ): Partial<GameState> {
   return {
-    discardedCards: [...state.discardedCards, resetMonsterForGraveyard(card, state.gameMode === 'quick')],
+    discardedCards: [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')],
   };
 }
 
@@ -219,7 +267,7 @@ export function discardAllHandCardsPure(
   const toGrave = discarded.filter(c => !isRecyclableFromHand(c));
   const patch: Partial<GameState> = {
     handCards: kept,
-    discardedCards: [...state.discardedCards, ...toGrave.map(c => resetMonsterForGraveyard(c, state.gameMode === 'quick'))],
+    discardedCards: [...state.discardedCards, ...toGrave.map(c => resetCardForGraveyard(c, state.gameMode === 'quick'))],
   };
   if (recycled.length > 0) {
     patch.permanentMagicRecycleBag = [

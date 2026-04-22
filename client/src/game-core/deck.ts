@@ -2373,10 +2373,10 @@ export function createStarterHealEchoCard(): GameCardData {
 }
 
 // ---------------------------------------------------------------------------
-// createStarterDiscoverClassToHandCard — opening-hand Perm 2 magic.
+// createStarterDiscoverClassToHandCard — opening-hand Perm 1 magic.
 // On play: open class-deck discover (3-of-N) and place the chosen card
 // directly into hand (falls back to backpack → recycle bag if hand is full).
-// recycleDelay: 2 (Perm 2). The actual discover/delivery is wired by the
+// recycleDelay: 1 (Perm 1). The actual discover/delivery is wired by the
 // `STARTER_CARD_IDS.discoverClassToHand` branch in `resolvePermanentMagic`,
 // which emits `card:discoverRequested` with `delivery: 'hand-first'`.
 // ---------------------------------------------------------------------------
@@ -2390,9 +2390,9 @@ export function createStarterDiscoverClassToHandCard(): GameCardData {
     image: discoverClassToHandImage,
     magicType: 'permanent',
     magicEffect: '永久魔法：发现一张专属牌，直接进入手牌。',
-    description: '发现一张专属牌（三选一），直接进入手牌（手牌已满则进背包，背包已满则进回收袋）。使用后回到回收袋，2 次瀑流后可再次使用。',
+    description: '发现一张专属牌（三选一），直接进入手牌（手牌已满则进背包，背包已满则进回收袋）。使用后回到回收袋，1 次瀑流后可再次使用。',
     shortDescription: '发现 1 张专属牌进手牌',
-    recycleDelay: 2,
+    recycleDelay: 1,
   };
 }
 

@@ -64,6 +64,31 @@ const INPUT_PHASES = new Set([
 ]);
 
 /**
+ * Phases that pause the pipeline UNCONDITIONALLY — even if the next queued
+ * action would normally count as an `isInputContinuation`. Used by the
+ * monster-skill float queue: while a float is on screen, NOTHING in the
+ * pipeline (combat continuations, monster turn advancement, etc.) is allowed
+ * to advance until the UI dispatches RELEASE_MONSTER_SKILL_FLOAT and pops
+ * the queue empty. RELEASE / TRIGGER themselves are explicitly allowed
+ * through (see `isInputContinuation`).
+ */
+const HARD_PAUSE_PHASES = new Set([
+  'awaitingSkillFloat',
+]);
+
+/**
+ * Actions allowed to run while in a HARD_PAUSE phase. Strictly the two
+ * skill-float queue actions — everything else (damage, heal, monster turn,
+ * card draws, etc.) MUST wait for the queue to drain.
+ */
+function isHardPauseContinuation(action: GameAction): boolean {
+  return (
+    action.type === 'RELEASE_MONSTER_SKILL_FLOAT' ||
+    action.type === 'TRIGGER_MONSTER_SKILL_FLOAT'
+  );
+}
+
+/**
  * Hard ceiling on actions drained per dispatch. Bumped from 200 to 500 after
  * a real-game report where a late-game combo (long-chain echo + amulet aura
  * cascade + on-enter-hand triggers) exceeded the old cap and silently left
@@ -113,6 +138,24 @@ export function drain(state: GameState, queue: GameAction[]): PipelineResult {
   let steps = 0;
 
   while (!isEmpty(currentQueue) && steps < MAX_STEPS) {
+    // HARD pause: monster-skill float queue. Even continuation actions are
+    // blocked here — the queue must drain to zero before any further game
+    // logic can run. Only RELEASE / TRIGGER skill-float actions are allowed
+    // through, which is what unsticks the queue.
+    if (current.phase && HARD_PAUSE_PHASES.has(current.phase)) {
+      const next = currentQueue[0];
+      if (!next || !isHardPauseContinuation(next)) {
+        return {
+          state: current,
+          queue: currentQueue,
+          sideEffects: allSideEffects,
+          stepsProcessed: steps,
+          pausedForInput: true,
+          overflowed: false,
+        };
+      }
+    }
+
     // Check if we should pause for player input BEFORE processing
     if (current.phase && INPUT_PHASES.has(current.phase)) {
       // Only pause if the queue's next action isn't a continuation trigger
@@ -136,6 +179,23 @@ export function drain(state: GameState, queue: GameAction[]): PipelineResult {
     currentQueue = stepResult.queue;
     allSideEffects.push(...stepResult.sideEffects);
     steps++;
+
+    // After processing, check hard pause again (the action we just ran may
+    // have switched to 'awaitingSkillFloat'). Same rule: only skill-float
+    // actions allowed through.
+    if (current.phase && HARD_PAUSE_PHASES.has(current.phase) && !isEmpty(currentQueue)) {
+      const next = currentQueue[0];
+      if (!next || !isHardPauseContinuation(next)) {
+        return {
+          state: current,
+          queue: currentQueue,
+          sideEffects: allSideEffects,
+          stepsProcessed: steps,
+          pausedForInput: true,
+          overflowed: false,
+        };
+      }
+    }
 
     // After processing, check if the new state requires input
     if (current.phase && INPUT_PHASES.has(current.phase) && !isEmpty(currentQueue)) {
@@ -319,6 +379,12 @@ function isInputContinuation(action: GameAction): boolean {
     // SET_CURRENT_EVENT / COMPLETE_HERO_MAGIC / PLACE_BUILDING_IN_DUNGEON /
     // EQUIP_* as a follow-up; never a player input action.
     case 'APPLY_TRANSFORM_CATEGORY':
+    // Monster skill float queue — these actions are how the game enters /
+    // exits the HARD_PAUSE state. They must always be processable so the
+    // animation queue can drain; the HARD_PAUSE check above ensures the
+    // queue is the ONLY thing that runs while a float is on screen.
+    case 'TRIGGER_MONSTER_SKILL_FLOAT':
+    case 'RELEASE_MONSTER_SKILL_FLOAT':
       return true;
     default:
       return false;

@@ -659,9 +659,16 @@ function reduceResolveDiscoverSelection(
     patch.handCards = [...state.handCards, cloned];
     sideEffects.push(
       { event: 'log:entry', payload: { type: 'skill', message: `发现专属卡：「${cloned.name}」直接进入手牌` } },
-      { event: 'shop:classCardObtained', payload: { card: cloned, source: 'discover', destination: 'backpack' } },
+      // destination='hand' tells `useShopHandlers` to SKIP the
+      // class-deck → backpack flight; the actual class-deck → hand flight is
+      // driven by the `card:queueToHand` event below (sourceHint: 'classDeck'),
+      // which routes through `triggerBackpackHandFlight` and lands at
+      // handAreaRef — the same hand-delivery pipeline used by all other
+      // queued-to-hand effects (idempotent w.r.t. `patch.handCards` already
+      // containing the card; the in-flight store hides the slot until landing).
+      { event: 'shop:classCardObtained', payload: { card: cloned, source: 'discover', destination: 'hand' } },
       { event: 'card:newCardGained', payload: { count: 1, source: 'classPool' } },
-      { event: 'card:drawnToHand', payload: { cardId: cloned.id, source: 'classPool' } },
+      { event: 'card:queueToHand', payload: { card: cloned, sourceHint: 'classDeck' } },
     );
   } else if (backpackHasRoom) {
     patch.backpackItems = [cloned, ...state.backpackItems];

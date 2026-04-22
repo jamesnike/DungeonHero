@@ -21,6 +21,7 @@ import { flattenActiveRowSlots, applyAmplifyOnCreate } from '../helpers';
 import type { RngState } from '../rng';
 import { nextBool, nextInt, pickRandom } from '../rng';
 import { createBugletCard } from '../deck';
+import { resetCardForGraveyard } from '../cards';
 
 // ---------------------------------------------------------------------------
 // Perm-recycle routing — equipment that is destroyed but carries a Perm flag
@@ -393,11 +394,21 @@ export function computeEquipmentDisplacementLastWords(
 
   if (isMonsterEquip) {
     if (slotItem.lastWords === 'discard-hand-3') {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: slotItem.id,
+        skillKey: 'death:lastWords:discardHand',
+      });
       drawFromBackpack += 3;
       sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言：抽取 3 张牌！` } });
     }
 
     if (slotItem.skeletonLastWordsDiscard) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: slotItem.id,
+        skillKey: 'death:lastWords:skeleton',
+      });
       drawFromBackpack += 1;
       sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言：抽取 1 张牌！` } });
     }
@@ -405,6 +416,11 @@ export function computeEquipmentDisplacementLastWords(
     if (slotItem.lastWords?.startsWith('wraith-haunt')) {
       const hauntAmount = parseInt(slotItem.lastWords.replace('wraith-haunt-', ''), 10) || 2;
       if (otherItem) {
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: slotItem.id,
+          skillKey: 'death:lastWords:wraithHaunt',
+        });
         const bonuses = patch.equipmentSlotBonuses
           ? { ...(patch.equipmentSlotBonuses as EquipmentSlotBonusState) }
           : { ...state.equipmentSlotBonuses };
@@ -679,12 +695,22 @@ export function computeEquipmentBreakEffects(
   if (isMonsterEquip) {
     // discard-hand-3 draw
     if (slotItem.lastWords === 'discard-hand-3') {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: slotItem.id,
+        skillKey: 'death:lastWords:discardHand',
+      });
       drawFromBackpack += 3;
       effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言：抽取 3 张牌！` } });
     }
 
     // Skeleton last words discard → draw 1
     if (slotItem.skeletonLastWordsDiscard) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: slotItem.id,
+        skillKey: 'death:lastWords:skeleton',
+      });
       drawFromBackpack += 1;
       effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言：抽取 1 张牌！` } });
     }
@@ -693,6 +719,11 @@ export function computeEquipmentBreakEffects(
     if (slotItem.lastWords?.startsWith('wraith-haunt')) {
       const hauntAmount = parseInt(slotItem.lastWords.replace('wraith-haunt-', ''), 10) || 2;
       if (otherItem) {
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: slotItem.id,
+          skillKey: 'death:lastWords:wraithHaunt',
+        });
         const bonuses = patch.equipmentSlotBonuses
           ? { ...(patch.equipmentSlotBonuses as EquipmentSlotBonusState) }
           : { ...state.equipmentSlotBonuses };
@@ -745,6 +776,16 @@ export function computeEquipmentBreakEffects(
       ? { ...slotItem, durability: 1, reviveUsed: true }
       : { ...slotItem, durability: 1, equipmentReviveUsed: true };
     patch[slotId] = reviveUpdate as EquipmentItem;
+    // Only the native (monster) revive counts as a monster-skill trigger.
+    // `hasEquipmentRevive` is an equipment property (永恒铭刻 etc) and not
+    // attributed to any monster.
+    if (nativeReviveAvailable) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: slotItem.id,
+        skillKey: 'death:revive',
+      });
+    }
     effects.push({
       event: 'log:entry',
       payload: { type: 'equip', message: `${slotItem.name} 复生！以 1 耐久复活！` },
@@ -841,10 +882,10 @@ export function computeEquipmentBreakEffects(
         // enter the graveyard *after* the picked card was moved to hand. Without
         // salvage this is the only path that delivers Iron Shield to the graveyard
         // post-break (the picked-from-graveyard pool was already filtered above).
-        const { fromSlot: _fs2, armor: _a2, armorBonusDamaged: _ab2, reviveUsed: _ru2,
-          equipmentReviveUsed: _eru2, wraithRebirthUsed: _wru2, ...rest } =
-          slotItem as GameCardData & Record<string, unknown>;
-        const cleaned: GameCardData = { ...(rest as GameCardData) };
+        // Use resetCardForGraveyard so the broken (durability=0) shield is
+        // refreshed to full durability before landing — keeps semantics
+        // consistent with reduceAddToGraveyard's own reset.
+        const cleaned = resetCardForGraveyard(slotItem, state.gameMode === 'quick');
         const currentGrave = (patch.discardedCards ?? state.discardedCards) as GameCardData[];
         patch.discardedCards = [...currentGrave, cleaned];
       }

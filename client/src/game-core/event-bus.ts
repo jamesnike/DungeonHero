@@ -157,6 +157,15 @@ export type GameEventMap = {
     toCard: import('@/components/GameCard').GameCardData;
     message?: string;
   };
+  /**
+   * 「乾坤一翻」对 Preview Row 卡背使用后发出。Preview 格 cellIndex 对应的卡牌
+   * 不再覆盖卡背，而是直接显示正面（state.previewRevealedEarly[cellIndex] = true）。
+   * 卡牌数据没有变化（不是 transform，仅是揭示）。UI 可借此触发翻面动画或闪光。
+   */
+  'card:previewRevealedEarly': {
+    cellIndex: number;
+    card: import('@/components/GameCard').GameCardData;
+  };
 
   'equipment:equipped': { slotId: string; cardId: string };
   'equipment:destroyed': { slotId: string; cardId: string };
@@ -325,6 +334,25 @@ export type GameEventMap = {
   };
   'ui:banner': { text: string };
   /**
+   * Monster skill triggered — drives the blocking floating-text animation
+   * above the triggering monster card. While this float is on screen the
+   * pipeline is hard-paused (phase 'awaitingSkillFloat'); the UI hook MUST
+   * dispatch RELEASE_MONSTER_SKILL_FLOAT after the animation finishes or the
+   * game permanently freezes.
+   *
+   * One emit per queued float entry (sequential, not batched). When multiple
+   * skills fire in the same reducer step the queue is filled at trigger time
+   * and the engine emits one event per entry as each RELEASE pops the head.
+   */
+  'ui:monsterSkillFloat': {
+    floatId: string;
+    monsterId: string;
+    skillName: string;
+    skillKey: import('./monsterSkillNames').MonsterSkillKey;
+    kind: import('./monsterSkillNames').MonsterSkillKind;
+    durationMs: number;
+  };
+  /**
    * Pipeline drain hit MAX_STEPS — some actions remain in `state.actionQueue`
    * and will (best-effort) drain on the next dispatch. UI should warn the
    * player; reducer/test code can also check `PipelineResult.overflowed`.
@@ -397,12 +425,16 @@ export type GameEventMap = {
    * Emitted when a discover selection is resolved (the player picked one of
    * the 3 candidates and it was cloned + placed into the player's pile).
    * `card` is the *cloned* card (with its fresh id) that landed in the
-   * player's backpack or recycle bag.
+   * player's hand, backpack, or recycle bag. The `'hand'` destination is used
+   * by the opening-hand 「专属感召」 perm-1 magic (delivery: 'hand-first');
+   * its flight is driven separately via `card:queueToHand` with
+   * `sourceHint: 'classDeck'`, so the listener for this event SKIPS the
+   * class-deck → backpack flight when destination is `'hand'`.
    */
   'shop:classCardObtained': {
     card: import('@/components/GameCard').GameCardData;
     source: 'discover' | 'classDraw' | 'purchase';
-    destination: 'backpack' | 'recycle-bag';
+    destination: 'hand' | 'backpack' | 'recycle-bag';
   };
   'equipment:clearSlotWithPromote': { slotId: string };
   'event:asyncEffectNeeded': { tokens: string[] };

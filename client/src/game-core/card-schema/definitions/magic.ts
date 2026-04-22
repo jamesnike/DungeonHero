@@ -42,6 +42,7 @@ import { INITIAL_HP, PERSUADE_COST, MIN_PERSUADE_COST } from '../../constants';
 import { computeAmuletEffects } from '../../equipment';
 import { chaosStrikeHasOverkill } from '../../combat';
 import { STARTER_CARD_IDS, skillScrollImage, createMagicBoltCard } from '../../deck';
+import { applyFlipCounters } from '../../rules/flip-counters';
 
 import {
   getSpellDamage,
@@ -1029,7 +1030,35 @@ const starterReshuffle: CardDefinition = {
     if (dungeonCards.length === 1 && echoMultiplier <= 1) {
       const target = dungeonCards[0];
       const slotIdx = (state.activeCards as (GameCardData | null)[]).findIndex(c => c?.id === target.id);
-      const newActive = (state.activeCards as (GameCardData | null)[]).map(c => c?.id === target.id ? null : c) as ActiveRowSlots;
+      const newActive = [...(state.activeCards as (GameCardData | null)[])] as ActiveRowSlots;
+      // Stack-pop: promote any card stacked beneath the cleared slot
+      // (e.g. 幽灵建筑 pushed to stack-bottom by a previous waterfall drop).
+      // Without this, the underlying card is orphaned in activeCardStacks
+      // and visually "vanishes" with the picked card. Mirrors the
+      // reduceDungeonCardSelection 'return-dungeon-bottom' branch.
+      const stacks = state.activeCardStacks ?? {};
+      const stackBelow = slotIdx >= 0 ? (stacks[slotIdx] ?? []) : [];
+      if (slotIdx >= 0 && stackBelow.length > 0) {
+        const nextCard = stackBelow[stackBelow.length - 1];
+        newActive[slotIdx] = nextCard;
+        const popStacks = { ...stacks };
+        const remaining = stackBelow.slice(0, -1);
+        if (remaining.length === 0) {
+          delete popStacks[slotIdx];
+        } else {
+          popStacks[slotIdx] = remaining;
+        }
+        patch.activeCardStacks = popStacks;
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'system', message: `堆叠揭示：「${nextCard.name}」从第 ${slotIdx + 1} 列堆叠中浮现！` },
+        });
+        if (!state.processedDungeonCardIds.includes(target.id)) {
+          enqueuedActions.push({ type: 'REGISTER_DUNGEON_CARD_PROCESSED', cardId: target.id, source: 'slot-cleared' });
+        }
+      } else if (slotIdx >= 0) {
+        newActive[slotIdx] = null;
+      }
       patch.activeCards = newActive;
       patch.remainingDeck = [...state.remainingDeck, sanitizeCardMetadata(target)];
       // Arc-flight to the deck pile. Listener captures the active cell rect
@@ -1106,24 +1135,48 @@ const starterDungeonSwap: CardDefinition = {
   },
 };
 
-// 乾坤一翻 — Perm 2. Flip an active-row card whose face can change.
-// Eligibility: card.flipTarget (forward-flippable) OR card._flipBackCard (already
-// flipped, can be flipped back). 0 valid → still consumed (play_full_cost_noop,
-// mirroring 血誓回卷). 1 valid → auto-resolve. 2+ → player picks via
-// pendingMagicAction (`flip-active-card` step), resolved in rules/hero.ts.
+// 乾坤一翻 — Perm 2. Flip an active-row card whose face can change, OR reveal a
+// face-down preview-row card (one-way: once revealed, can't be flipped back).
+//
+// Eligibility:
+//   - active-row: card.flipTarget (forward-flippable) OR card._flipBackCard (back-flippable)
+//   - preview-row: previewCards[i] != null AND !previewRevealedEarly[i] (still face-down)
+//
+// 0 valid → still consumed (play_full_cost_noop, mirroring 血誓回卷).
+// 1 valid → auto-resolve.
+// 2+ → player picks via pendingMagicAction (`flip-active-card` step), resolved in rules/hero.ts.
+//
+// All three flip routes (active forward / active back / preview reveal) call
+// applyFlipCounters() so 7 flip consumers (flip-gold / 翻印之符 / 翻覆震慑 /
+// 熔铸耐久 / 翻血之符 / 弧能之符 / 生长之盾) all fire identically.
 const starterActiveRowFlip: CardDefinition = {
   effectId: `starter:${STARTER_CARD_IDS.activeRowFlip}`,
   effects: [],
   tags: ['magic', 'permanent', 'interactive'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
-    const cards = state.activeCards as (GameCardData | null)[];
-    const targets = cards.filter((c): c is GameCardData =>
-      Boolean(c && (c.flipTarget || c._flipBackCard)),
-    );
+    type FlipTarget =
+      | { row: 'active'; idx: number; card: GameCardData }
+      | { row: 'preview'; idx: number; card: GameCardData };
+
+    const activeCards = state.activeCards as (GameCardData | null)[];
+    const previewCards = state.previewCards as (GameCardData | null)[];
+    const revealed = state.previewRevealedEarly ?? [];
+
+    const targets: FlipTarget[] = [];
+    activeCards.forEach((c, idx) => {
+      if (c && (c.flipTarget || c._flipBackCard)) {
+        targets.push({ row: 'active', idx, card: c });
+      }
+    });
+    previewCards.forEach((c, idx) => {
+      if (c && !revealed[idx]) {
+        targets.push({ row: 'preview', idx, card: c });
+      }
+    });
 
     if (targets.length === 0) {
-      log(sideEffects, 'magic', '乾坤一翻：当前行没有可翻转或已翻转的卡牌。');
-      banner(sideEffects, '乾坤一翻：当前行没有可翻转的卡牌。');
+      log(sideEffects, 'magic', '乾坤一翻：当前行和预览行都没有可翻转的卡牌。');
+      banner(sideEffects, '乾坤一翻：没有可翻转的卡牌。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1131,24 +1184,41 @@ const starterActiveRowFlip: CardDefinition = {
 
     if (targets.length === 1) {
       const target = targets[0];
-      const idx = cards.findIndex(c => c?.id === target.id);
-      if (target.flipTarget) {
-        // Forward flip via APPLY_CARD_FLIP — triggers flip-zap / flip-gold amulets.
-        enqueuedActions.push({ type: 'APPLY_CARD_FLIP', card: target, cellIndex: idx });
-        log(sideEffects, 'magic', `乾坤一翻：${target.name} → ${target.flipTarget.toCard.name}。`);
-        banner(sideEffects, `乾坤一翻：${target.name} → ${target.flipTarget.toCard.name}！`);
-      } else if (target._flipBackCard) {
-        // Back flip — direct patch + flippedInCell animation, mirroring 血誓回卷.
-        const restored: GameCardData = { ...target._flipBackCard };
-        const next = [...cards] as ActiveRowSlots;
-        next[idx] = restored;
-        patch.activeCards = next;
+      if (target.row === 'active') {
+        const t = target.card;
+        if (t.flipTarget) {
+          // Forward flip via APPLY_CARD_FLIP — triggers flip-counter consumers via reduceApplyCardFlip.
+          enqueuedActions.push({ type: 'APPLY_CARD_FLIP', card: t, cellIndex: target.idx });
+          log(sideEffects, 'magic', `乾坤一翻：${t.name} → ${t.flipTarget.toCard.name}。`);
+          banner(sideEffects, `乾坤一翻：${t.name} → ${t.flipTarget.toCard.name}！`);
+        } else if (t._flipBackCard) {
+          // Back flip — direct patch + flippedInCell animation, mirroring 血誓回卷.
+          const restored: GameCardData = { ...t._flipBackCard };
+          const next = [...activeCards] as ActiveRowSlots;
+          next[target.idx] = restored;
+          patch.activeCards = next;
+          sideEffects.push({
+            event: 'card:flippedInCell',
+            payload: { cellIndex: target.idx, fromCard: t, toCard: restored, message: `${t.name} → ${restored.name}` },
+          });
+          log(sideEffects, 'magic', `乾坤一翻:${t.name} 翻回 ${restored.name}。`);
+          banner(sideEffects, `乾坤一翻：${t.name} → ${restored.name}！`);
+          // Back-flip in resolver doesn't go through APPLY_CARD_FLIP, so we must
+          // fire counters here ourselves (matching rules/hero.ts case 'flip-active-card').
+          applyFlipCounters(state, patch, sideEffects, enqueuedActions);
+        }
+      } else {
+        // Preview reveal — set flag, fire counters, emit animation hint. Card data unchanged.
+        const nextRevealed = [...revealed];
+        nextRevealed[target.idx] = true;
+        patch.previewRevealedEarly = nextRevealed;
         sideEffects.push({
-          event: 'card:flippedInCell',
-          payload: { cellIndex: idx, fromCard: target, toCard: restored, message: `${target.name} → ${restored.name}` },
+          event: 'card:previewRevealedEarly',
+          payload: { cellIndex: target.idx, card: target.card },
         });
-        log(sideEffects, 'magic', `乾坤一翻:${target.name} 翻回 ${restored.name}。`);
-        banner(sideEffects, `乾坤一翻：${target.name} → ${restored.name}！`);
+        log(sideEffects, 'magic', `乾坤一翻：揭示了预览行的 ${target.card.name}。`);
+        banner(sideEffects, `乾坤一翻：揭示了预览行的 ${target.card.name}！`);
+        applyFlipCounters(state, patch, sideEffects, enqueuedActions);
       }
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -1159,10 +1229,10 @@ const starterActiveRowFlip: CardDefinition = {
       card,
       effect: 'flip-active-card',
       step: 'dungeon-select',
-      prompt: '选择当前行一张可翻转或已翻转的卡牌，将其翻转。',
+      prompt: '选择当前行一张可翻转/已翻转的牌，或预览行一张未翻面的卡背，将其翻转。',
       echoRemaining: echoMultiplier,
     } as any;
-    patch.heroSkillBanner = '乾坤一翻：选择一张要翻转的卡牌。';
+    patch.heroSkillBanner = '乾坤一翻：选择一张要翻转的卡牌（含预览行卡背）。';
     return applyPatch(state, patch, sideEffects);
   },
 };

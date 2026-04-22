@@ -132,6 +132,20 @@ export class GameEngine {
   private _actionLogEnabled = false;
 
   /**
+   * Actions that arrived during `awaitingSkillFloat` and were deferred. They
+   * are NOT dropped: once the last float is released and the phase exits
+   * `awaitingSkillFloat`, this queue is drained in FIFO order.
+   *
+   * Why we defer instead of drop: side-effect listeners (e.g. the
+   * `combat:autoEngage` listener in `useCombatActions` that dispatches
+   * BEGIN_COMBAT for each engaged monster) fire as part of the same outer
+   * dispatch that started the float. Dropping those would lose legitimate
+   * follow-up game logic. Deferring preserves the rule "player must see the
+   * animation first" without losing the action.
+   */
+  private _deferredDuringFloat: GameAction[] = [];
+
+  /**
    * Dispatch a game action through the reducer + pipeline.
    *
    * The action is reduced to produce a new state, side effects, and
@@ -157,6 +171,25 @@ export class GameEngine {
         const next = this._dispatchQueue.shift()!;
         this._processAction(next);
       }
+
+      // If we just exited `awaitingSkillFloat` (last RELEASE drained the
+      // float queue), replay any dispatches that came in during the
+      // animation. They were never dropped — only deferred — so legitimate
+      // engine-internal follow-ups (autoEngage BEGIN_COMBAT, etc.) and any
+      // user clicks the player tried during the animation now land.
+      while (
+        this._deferredDuringFloat.length > 0 &&
+        this._state.phase !== 'awaitingSkillFloat'
+      ) {
+        const next = this._deferredDuringFloat.shift()!;
+        this._processAction(next);
+        // Same drainage as above for any re-entrant dispatches the deferred
+        // action may have triggered.
+        while (this._dispatchQueue.length > 0) {
+          const reentrant = this._dispatchQueue.shift()!;
+          this._processAction(reentrant);
+        }
+      }
     } finally {
       this._dispatching = false;
     }
@@ -169,6 +202,29 @@ export class GameEngine {
   }
 
   private _processAction(action: GameAction): void {
+    // Hard pause guard: while a monster-skill float is on screen, defer any
+    // new top-level dispatch except the two float-queue actions. The
+    // pipeline already blocks the internal action queue (see pipeline.ts
+    // HARD_PAUSE_PHASES); this guard closes the equivalent hole for incoming
+    // dispatches (user clicks, side-effect listeners, re-entrant dispatches)
+    // so the player physically cannot influence the game while the float
+    // animates. The deferred actions drain in FIFO order once the last
+    // RELEASE pops the queue and the phase leaves `awaitingSkillFloat`.
+    if (
+      this._state.phase === 'awaitingSkillFloat' &&
+      action.type !== 'TRIGGER_MONSTER_SKILL_FLOAT' &&
+      action.type !== 'RELEASE_MONSTER_SKILL_FLOAT'
+    ) {
+      this._deferredDuringFloat.push(action);
+      if (DEV_MODE) {
+        console.debug(
+          `[GameEngine] Action "${action.type}" deferred during awaitingSkillFloat ` +
+          `(deferred queue size = ${this._deferredDuringFloat.length}).`,
+        );
+      }
+      return;
+    }
+
     if (this._actionLogEnabled) {
       this._state = {
         ...this._state,
@@ -430,6 +486,8 @@ export class GameEngine {
   reset(overrides?: Partial<GameState>): void {
     this._state = { ...createInitialGameState(), ...overrides };
     this._undoStack = [];
+    this._dispatchQueue = [];
+    this._deferredDuringFloat = [];
     this._notify();
     this._notifyUndoListeners();
   }
@@ -442,6 +500,8 @@ export class GameEngine {
     this._eventBus.removeAllListeners();
     this._undoListeners.clear();
     this._undoStack = [];
+    this._dispatchQueue = [];
+    this._deferredDuringFloat = [];
   }
 
   // -----------------------------------------------------------------------

@@ -79,6 +79,11 @@ function reduceMonsterEnteredRow(
 
   // Auto-engage enter effect
   if (monster.enterEffect === 'auto-engage') {
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: monster.id,
+      skillKey: 'enter:auto-engage',
+    });
     const rowMonsters = state.activeCards.filter(c => c && c.type === 'monster') as GameCardData[];
     const names = rowMonsters.map(m => m.name);
     sideEffects.push({
@@ -96,6 +101,11 @@ function reduceMonsterEnteredRow(
 
   // Ogre enter discard — discard 1 random hand card
   if (monster.ogreEnterDiscard && state.handCards.length > 0) {
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: monster.id,
+      skillKey: 'enter:ogreEnterDiscard',
+    });
     const [discardedCards, rngAfterDiscard] = pickRandomHandCardsForDiscardPreferGraveyard(state.handCards as GameCardData[], 1, patch.rng ?? state.rng);
     patch.rng = rngAfterDiscard;
     const discarded = discardedCards[0];
@@ -137,7 +147,21 @@ function reduceCheckEliteGoldBuff(state: GameState): ReduceResult {
     sideEffects.push({ event: 'ui:banner', payload: { text: banner } });
   }
 
-  return applyPatch(state, { activeCards: result.activeCards }, sideEffects);
+  // Float over each elite that actually changed (compare attack/value before/after).
+  const enqueuedActions: GameAction[] = [];
+  for (let i = 0; i < state.activeCards.length; i++) {
+    const before = state.activeCards[i];
+    const after = result.activeCards[i];
+    if (!before || !after) continue;
+    if ((before.attack ?? before.value) === (after.attack ?? after.value)) continue;
+    enqueuedActions.push({
+      type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+      monsterId: after.id,
+      skillKey: 'passive:lowGoldEliteBuff',
+    });
+  }
+
+  return applyPatch(state, { activeCards: result.activeCards }, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +207,16 @@ function reduceCheckHordeSwarm(state: GameState): ReduceResult {
     }
   }
 
-  return applyPatch(state, { activeCards: next }, sideEffects);
+  // Single skill float, attributed to the swarm card driving the buff.
+  const enqueuedActions: GameAction[] = swarmCard
+    ? [{
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: swarmCard.id,
+        skillKey: 'passive:swarmHordeRage',
+      }]
+    : [];
+
+  return applyPatch(state, { activeCards: next }, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------

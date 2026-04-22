@@ -32,7 +32,7 @@ export type CombatState = {
 
 export type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
-export type FlightSourceHint = EquipmentSlotId | 'amulet' | 'graveyard' | 'hero';
+export type FlightSourceHint = EquipmentSlotId | 'amulet' | 'graveyard' | 'hero' | 'classDeck';
 
 export type EquipmentItem = GameCardData & {
   type: 'weapon' | 'shield' | 'monster';
@@ -946,6 +946,8 @@ export type ActiveAmuletEffects = {
   loneCardCount: number;
   equipmentSalvageCount: number;
   bloodrageAttackCount: number;
+  /** 「赎血召牌符」每次对自己造成 ≥1 实际伤害，从背包随机抽 1 × N 张牌（discrete event ×N stacking, 受手牌上限约束）。 */
+  selfDamageDrawCount: number;
   persuadeOnTempAttackCount: number;
   /** Sum of each equipped 怀柔之印's bonus (10 base / 20 upgraded), per trigger. */
   persuadeOnTempAttackBonus: number;

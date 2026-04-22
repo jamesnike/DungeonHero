@@ -18,6 +18,7 @@ import {
   createEmptySlotBonusState,
   createEmptyEquipmentBuffState,
   createEmptyActiveRow,
+  createEmptyPreviewRevealedEarly,
   initialCombatState,
 } from './constants';
 
@@ -44,6 +45,7 @@ export function createInitialGameState(): GameState {
     activeCards: createEmptyActiveRow(),
     previewCardStacks: {},
     activeCardStacks: {},
+    previewRevealedEarly: createEmptyPreviewRevealedEarly(),
     waterfallDealBonus: 0,
     pendingWaterfallPlan: null,
     remainingDeck: [],
@@ -145,6 +147,8 @@ export function createInitialGameState(): GameState {
     pendingPotionAction: null,
     deathWardPrompt: null,
     pendingMonsterEndDiceQueue: [],
+    pendingSkillFloats: [],
+    skillFloatSavedPhase: null,
 
     monsterRewardQueue: [],
     activeMonsterReward: null,

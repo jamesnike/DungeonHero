@@ -46,6 +46,18 @@ const potionDefinitions: CardDefinition[] = [
     tags: ['healing'],
   },
 
+  // --- Heal 12 + draw 2 ---
+  {
+    effectId: 'potion:heal-12-draw-2',
+    effects: [
+      { type: 'log', logType: 'potion', message: '使用 ${card.name}：恢复 12 点生命，抽 2 张牌' },
+      { type: 'heal', amount: 12 },
+      { type: 'draw', count: 2, source: 'backpack' },
+      { type: 'finalize' },
+    ],
+    tags: ['healing', 'draw'],
+  },
+
   // --- Shield ---
   {
     effectId: 'potion:shield',

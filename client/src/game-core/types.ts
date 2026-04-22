@@ -191,6 +191,7 @@ export type GamePhase =
   | 'awaitingDiscoverChoice'  // discover modal — player must pick a card
   | 'awaitingUpgradeChoice'   // upgrade modal — player must pick cards
   | 'awaitingDeleteChoice'    // delete modal — player must pick a card
+  | 'awaitingSkillFloat'      // a monster-skill float is playing; pipeline hard-pauses
   | 'resolving';              // pipeline is actively processing actions
 
 // ---------------------------------------------------------------------------
@@ -239,6 +240,24 @@ export interface PersuadeModalState {
   successRate: number;
   diceValue: number | null;
   success: boolean | null;
+}
+
+/**
+ * One queued monster-skill float waiting to be played by the UI. While the
+ * queue is non-empty the pipeline hard-pauses at `phase === 'awaitingSkillFloat'`
+ * and the head entry is broadcast via `ui:monsterSkillFloat`. The hook plays
+ * the animation, then dispatches RELEASE_MONSTER_SKILL_FLOAT to pop the head.
+ *
+ * If the queue empties, `phase` is restored to `skillFloatSavedPhase` (the
+ * phase captured at the moment the first float was queued) and the pipeline
+ * resumes draining queued actions.
+ */
+export interface PendingSkillFloat {
+  id: string;
+  monsterId: string;
+  skillKey: import('./monsterSkillNames').MonsterSkillKey;
+  skillName: string;
+  kind: import('./monsterSkillNames').MonsterSkillKind;
 }
 
 /**
@@ -303,6 +322,13 @@ export interface GameState {
   activeCards: ActiveRowSlots;
   /** Cards stacked below the top card in preview row (per column index) */
   previewCardStacks: Record<number, GameCardData[]>;
+  /**
+   * 「乾坤一翻」对 Preview Row 卡背使用后，对应格子标记 true，UI 直接显示正面。
+   * waterfall 把该 preview 卡掉到 active row 时，对应 index 复位为 false（卡走了，
+   * 新进入该 preview 格的卡又是默认卡背状态）。一旦翻成正面后不能再翻回卡背。
+   * 长度 = DUNGEON_COLUMN_COUNT。
+   */
+  previewRevealedEarly: boolean[];
   /** Cards stacked below the top card in active row (per column index) */
   activeCardStacks: Record<number, GameCardData[]>;
   /** Bonus cards dealt per waterfall (from 瀑流增幅药) */
@@ -456,6 +482,21 @@ export interface GameState {
    * triggers the next dice modal or finally enqueues `START_TURN`.
    */
   pendingMonsterEndDiceQueue: PendingMonsterEndDice[];
+
+  /**
+   * FIFO queue of monster-skill floats waiting to be visualised. Drained one
+   * at a time by RELEASE_MONSTER_SKILL_FLOAT after the UI hook plays each
+   * animation. When non-empty the pipeline is locked at
+   * `phase === 'awaitingSkillFloat'`.
+   */
+  pendingSkillFloats: PendingSkillFloat[];
+
+  /**
+   * Phase captured when the first float was queued. Restored when the queue
+   * empties, returning the pipeline to whatever it was doing before the
+   * skill burst froze the game.
+   */
+  skillFloatSavedPhase: GamePhase | null;
 
   // --- Monster rewards ---
   monsterRewardQueue: MonsterRewardDrop[];

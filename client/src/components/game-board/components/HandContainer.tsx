@@ -42,7 +42,12 @@ function HandContainerInner({
   );
 
   return (
-    <div ref={handAreaRef} className={`flex-shrink-0 relative w-full px-2 md:px-6 ${isFlat ? 'pb-0' : 'pb-4'}`}>
+    // 总 padding（pb-7 = 28px / md:pb-8 = 32px）= 原 pb-4 (16px) + GameBoard 主游戏区被去掉的 pt-3/pt-4 (12/16px)。
+    // 把那段 12-16px 高度从 boardRef 那边"接回"到手牌容器这边，所以 boardRef 实际可用高度
+    // 与改动前完全一致，grid 单元格和 Preview/Active/Hero 卡尺寸都不变；
+    // 同时把这段额外空间全部放在手牌**下方**（pb 而不是 pt），所以手牌本身也跟着整体上移
+    // 12-16px，与上面的 Preview/Active/Hero 行一起向上偏移，菜单栏与手牌底部之间的多余空隙被压缩。
+    <div ref={handAreaRef} className={`flex-shrink-0 relative w-full px-2 md:px-6 ${isFlat ? 'pb-0' : 'pb-7 md:pb-8'}`}>
       <HandDisplay
         handCards={handCards}
         onPlayCard={onPlayCard}

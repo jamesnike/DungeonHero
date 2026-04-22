@@ -153,6 +153,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     damageMagicPlayedThisTurn: state.damageMagicPlayedThisTurn,
     previewCardStacks: state.previewCardStacks,
     activeCardStacks: state.activeCardStacks,
+    previewRevealedEarly: state.previewRevealedEarly,
     waterfallDealBonus: state.waterfallDealBonus,
     eternalRelics: state.eternalRelics.map(r => ({ ...r })),
 

@@ -431,6 +431,18 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
       }
     }
     if (rowMonsterIds.length > 0) {
+      // Float a `waterfall:wraithEnrage` skill name above each affected
+      // monster — the trigger source is the equipped wraith but it isn't on
+      // the active row, so we attribute the float to each enraged monster
+      // (matches what the player sees being affected). One float per monster
+      // = sequential animation.
+      for (const mId of rowMonsterIds) {
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: mId,
+          skillKey: 'waterfall:wraithEnrage',
+        });
+      }
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: '怨灵诅咒：瀑流时激活行所有怪物激怒！' } });
       sideEffects.push({ event: 'waterfall:wraithEnrage', payload: { monsterIds: rowMonsterIds } });
     }
@@ -1071,6 +1083,16 @@ function reduceApplyWaterfallDrop(state: GameState): ReduceResult {
     }
     patch.previewCardStacks = nextPreviewStacks;
 
+    // 「乾坤一翻」翻成正面的 preview 格如果跟随 drop 走了，必须复位 revealed 旗。
+    // 否则下次该 index 出现新卡背时会被错误识别成"已翻面"。
+    if (state.previewRevealedEarly?.some(Boolean)) {
+      const nextRevealed = [...state.previewRevealedEarly];
+      for (const previewIdx of plan.dropPreviewIndices) {
+        nextRevealed[previewIdx] = false;
+      }
+      patch.previewRevealedEarly = nextRevealed;
+    }
+
     // Enqueue enter effects for newly dropped monsters
     for (let i = 0; i < plan.resolvedDropCards.length; i++) {
       const card = plan.resolvedDropCards[i];
@@ -1123,6 +1145,12 @@ function reduceApplyWaterfallDeal(state: GameState): ReduceResult {
       event: 'log:entry',
       payload: { type: 'waterfall', message: `发牌：${dealCardNames} 进入预览行` },
     });
+  }
+
+  // 整个 preview 行被新卡替换 / 清空 → 所有 previewRevealedEarly 旗复位为 false。
+  // 新发的 preview 卡都是默认卡背状态。
+  if (state.previewRevealedEarly?.some(Boolean)) {
+    patch.previewRevealedEarly = state.previewRevealedEarly.map(() => false);
   }
 
   patch.remainingDeck = plan.nextRemainingDeck;

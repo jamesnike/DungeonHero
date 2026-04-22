@@ -449,10 +449,10 @@ export function reduceInitGame(
     newClassDeck = [];
   }
 
-  // --- Starting hand: every run begins with one Perm-2 「专属感召」 ---
+  // --- Starting hand: every run begins with one Perm-1 「专属感召」 ---
   // Replaces the now-removed `waterfall-discover` eternal relic. The card
   // discovers a class card (3-of-N) directly into hand on play; afterwards
-  // it cycles through the recycle bag for 2 waterfalls.
+  // it cycles through the recycle bag for 1 waterfall.
   const initialHand: GameCardData[] = [createStarterDiscoverClassToHandCard()];
 
   // --- Build full initial state ---

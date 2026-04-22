@@ -19,7 +19,16 @@ export const HeroRowSection = memo(function HeroRowSection({
   return (
     <>
       {heroRowSlots.map((slot, index) => {
-        const innerClass = `${cellInnerClass} relative z-10 ${slot.innerClassName ?? ''}`.trim();
+        // z-30 (not z-10): the hero-row inner forms a stacking context that
+        // CONTAINS the chips above each cell (临时攻击/护甲、超杀吸血、下次劝降).
+        // Those chips are pushed upward by `top: calc(-1 * --dh-grid-gap-y / 2)`
+        // and on tighter layouts (especially `isFlat`) overlap downward into the
+        // active-row cells just above. The active-row cell inner uses `relative z-20`
+        // (its own stacking context). With the old z-10 here, every hero-row chip
+        // was painted at z=10 in the root context — i.e. UNDER the active-row card
+        // at z=20. Raising this to z-30 ensures chips win over any active-row
+        // overlap. (Flight overlays / modals live at higher levels and are unaffected.)
+        const innerClass = `${cellInnerClass} relative z-30 ${slot.innerClassName ?? ''}`.trim();
         return (
           <div
             key={slot.id}

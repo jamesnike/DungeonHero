@@ -163,7 +163,7 @@ export function getEternalRelic(id: EternalRelicId): EternalRelic {
 export function getStartingRelics(): EternalRelic[] {
   // `waterfall-discover` (永恒护符·探秘) was previously included here. It
   // has been removed from the starting set in favor of the opening-hand
-  // 「专属感召」 perm-2 magic (see `createStarterDiscoverClassToHandCard`
+  // 「专属感召」 perm-1 magic (see `createStarterDiscoverClassToHandCard`
   // in `game-core/deck.ts`). The relic registry entry is intentionally
   // retained so other paths (e.g. 「护符永铸药」 converting an equipped
   // amulet, save migrations) still resolve cleanly.

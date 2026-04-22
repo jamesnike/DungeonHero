@@ -16,6 +16,13 @@ export interface ActiveRowDerivedState {
    * GameBoard 用此 flag 给 hero-row-hero slot 加高亮 + 点击监听。
    */
   heroSelfTargetingActive: boolean;
+  /**
+   * 当前 pendingMagicAction 是否允许装备槽里的盾作为合法目标（armor 吃伤 + 溢出走自伤）。
+   * 与 heroSelfTargetingActive 共享 allowsHeroTarget 这个底层 flag —— 两条路径都受控于
+   * 「单目标伤害 magic 才允许选自己」的规则。
+   * 装备槽组件用此 flag 给装有 type='shield' 且 armor>0 的槽位加高亮 + 点击监听。
+   */
+  shieldSlotTargetingActive: boolean;
 }
 
 export function useActiveRowDerivedState(): ActiveRowDerivedState {
@@ -51,6 +58,9 @@ export function useActiveRowDerivedState(): ActiveRowDerivedState {
     magicMonsterTargeting
       && (gs.pendingMagicAction as { allowsHeroTarget?: boolean } | null)?.allowsHeroTarget,
   );
+  // 同源条件：allowsHeroTarget=true 意味着这张单目标伤害 magic 也可以打装有盾的装备槽。
+  // 装备槽组件再额外 gate 槽位本身（type==='shield' && armor>0）。
+  const shieldSlotTargetingActive = heroSelfTargetingActive;
 
   const dungeonTargetingActive = Boolean(gs.pendingMagicAction?.step === 'dungeon-select');
 
@@ -82,5 +92,6 @@ export function useActiveRowDerivedState(): ActiveRowDerivedState {
     eventPendingLocked,
     curseMonumentCols,
     heroSelfTargetingActive,
+    shieldSlotTargetingActive,
   };
 }

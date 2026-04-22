@@ -7,6 +7,7 @@ import {
   isMonsterEquipmentCard,
   formatScalingSpellDamageLine,
   useArcaneStormDamage,
+  useArcaneShieldStunGain,
 } from "./GameCard";
 import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade, getUpgradeTierCount } from "@/lib/monsterRage";
 import { isUpgradeableCard, isCardAtMaxUpgrade } from "./CardUpgradeModal";
@@ -45,6 +46,7 @@ export default function CardDetailsModal({
   hideEventChoices = false,
 }: CardDetailsModalProps) {
   const arcaneStormDamage = useArcaneStormDamage();
+  const arcaneShieldStunGain = useArcaneShieldStunGain();
   if (!card) return null;
 
   const isMonsterEquipment = isMonsterEquipmentCard(card);
@@ -1299,6 +1301,15 @@ export default function CardDetailsModal({
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         伤害 = 已使用的魔法卡累计数量{(card.amplifyBonus ?? 0) > 0 ? ` + ${card.amplifyBonus} 增幅` : ''} + 永久法术伤害加成。使用后计数清零。
+                      </p>
+                    </>
+                  ) : card.magicEffect === 'arcane-shield-stun-cap' ? (
+                    <>
+                      <p className="font-semibold text-foreground">
+                        当下 击晕上限 +{arcaneShieldStunGain}%
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        +X% = 本回合已使用的非伤害魔法卡数量。
                       </p>
                     </>
                   ) : (card as GameCardData & { knightEffect?: string }).knightEffect === 'chaos-dice' ||

@@ -17,6 +17,7 @@
 import { describe, expect, it } from 'vitest';
 import { reduce } from '../reducer';
 import { drain } from '../pipeline';
+import { drainAutoReleasingFloats } from './_helpers';
 import { createInitialGameState } from '../state';
 import { initialCombatState } from '../constants';
 import type { GameState } from '../types';
@@ -73,7 +74,11 @@ describe('怨灵诅咒摧毁护符 — Perm routing', () => {
     });
 
     const r = reduce(state, { type: 'APPLY_MONSTER_TURN_END_EFFECTS' });
-    const next = drain(r.state, r.enqueuedActions ?? []).state;
+    // wraithDestroyAmulet enqueues a 'turnEnd:wraithDestroyAmulet' float that
+    // hard-pauses the pipeline before the actual destruction action runs.
+    // Auto-release the float queue so the destruction completes synchronously
+    // for the test, mimicking what the UI does after the animation plays.
+    const next = drainAutoReleasingFloats(r.state, r.enqueuedActions ?? []).state;
 
     // Amulet removed from amuletSlots
     expect(next.amuletSlots.find(a => a?.id === 'perm-amulet')).toBeUndefined();
@@ -99,7 +104,7 @@ describe('怨灵诅咒摧毁护符 — Perm routing', () => {
     });
 
     const r = reduce(state, { type: 'APPLY_MONSTER_TURN_END_EFFECTS' });
-    const next = drain(r.state, r.enqueuedActions ?? []).state;
+    const next = drainAutoReleasingFloats(r.state, r.enqueuedActions ?? []).state;
 
     // Amulet removed
     expect(next.amuletSlots.find(a => a?.id === 'plain-amulet')).toBeUndefined();
@@ -132,7 +137,7 @@ describe('怨灵诅咒摧毁护符 — Perm routing', () => {
     });
 
     const r = reduce(state, { type: 'APPLY_MONSTER_TURN_END_EFFECTS' });
-    const next = drain(r.state, r.enqueuedActions ?? []).state;
+    const next = drainAutoReleasingFloats(r.state, r.enqueuedActions ?? []).state;
 
     expect(next.amuletSlots.find(a => a?.id === 'stripped-amulet')).toBeUndefined();
     expect(next.permanentMagicRecycleBag.find(c => c.id === 'stripped-amulet')).toBeUndefined();
