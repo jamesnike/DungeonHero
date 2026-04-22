@@ -610,13 +610,14 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     const discardable = snapshot.filter(c => c.type !== 'curse');
     const kept = snapshot.filter(c => c.type === 'curse');
     if (!discardable.length) return;
+    // UI-only: kick off flight animations to graveyard / recycle bag. Routing
+    // and APPLY_DISCARD_EFFECTS are owned by the DISCARD_ALL_HAND reducer,
+    // which enqueues per-card DISCARD_OWNED_CARD internally.
     discardable.forEach(card => {
       depsRef.current.triggerDiscardFlight(card, isRecyclableFromHand(card) ? 'recycle-bag' : 'graveyard');
     });
     depsRef.current.handCardsRef.current = kept;
     dispatch({ type: 'DISCARD_ALL_HAND' });
-    const sorted = [...discardable].sort((a, b) => (a.onDiscardDraw ? 1 : 0) - (b.onDiscardDraw ? 1 : 0));
-    sorted.forEach(card => dispatch({ type: 'DISCARD_OWNED_CARD', card, owner: 'player' }));
   }, [dispatch]);
 
   // ---------------------------------------------------------------------------

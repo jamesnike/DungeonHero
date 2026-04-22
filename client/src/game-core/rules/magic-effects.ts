@@ -177,6 +177,7 @@ import {
   getEligibleHandDiscardCards,
   applyAmplifyOnCreate,
   computeSlotArmorValuePure,
+  isRecyclableFromHand,
 } from '../helpers';
 import {
   drawFromBackpackToHandPure,
@@ -190,6 +191,7 @@ import {
 } from '../cards';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import type { RngState } from '../rng';
+import { DURABILITY_CAP, clampMaxDurability } from '../constants';
 import { pickGraveyardCardExcluding, computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
 import {
   INITIAL_HP,
@@ -368,7 +370,7 @@ export function finalizeDiscardDraw(
     const discardIds = new Set(discarded.map(c => c.id));
     patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
     for (const dc of discarded) {
-      enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: dc });
+      enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player', forceRecycleBag: true });
     }
     log(sideEffects, 'magic', `汰旧迎新：移回 ${discarded.map(c => c.name).join('、')} 至回收袋`);
   }
@@ -400,7 +402,7 @@ export function finalizeAltarDiscardDiscover(
     const discardIds = new Set(discarded.map(c => c.id));
     patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
     for (const dc of discarded) {
-      enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+      enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
     }
     log(sideEffects, 'magic', `祭坛秘术：弃回 ${discarded.map(c => c.name).join('、')}`);
   }
@@ -442,7 +444,7 @@ export function finalizeClassSummon(
     const discardIds = new Set(discarded.map(c => c.id));
     patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
     for (const dc of discarded) {
-      enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+      enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
     }
     log(sideEffects, 'magic', `专属召唤：弃回 ${discarded.map(c => c.name).join('、')}`);
   }
@@ -469,17 +471,19 @@ export function finalizeEchoBag(
   enqueuedActions: GameAction[],
 ): ReduceResult {
   const actualDiscard = discarded.length;
+  let newToGraveyard = 0;
   if (actualDiscard > 0) {
     const discardIds = new Set(discarded.map(c => c.id));
     patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
     for (const dc of discarded) {
-      enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+      enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
+      if (!isRecyclableFromHand(dc)) newToGraveyard += 1;
     }
     log(sideEffects, 'magic', `回响行囊：弃回 ${discarded.map(c => c.name).join('、')}`);
   }
-  // 坟场计数：现有 + 本次刚入队的；ADD_TO_GRAVEYARD 在 drain 后才生效。
+  // 坟场计数：现有 + 本次入队的非永久卡（永久卡走回收袋，不进坟场）。
   const currentGraveyardSize = (state.discardedCards ?? []).length;
-  const graveyardSize = currentGraveyardSize + actualDiscard;
+  const graveyardSize = currentGraveyardSize + newToGraveyard;
   if (graveyardSize > 0 && discoverCount > 0) {
     sideEffects.push({
       event: 'card:echoBagDiscover',
@@ -523,7 +527,8 @@ export function finalizeDiscardEmpower(
   const dc = discarded[0];
   if (!dc) return applyPatch(state, patch, sideEffects, enqueuedActions);
   patch.handCards = (state.handCards as GameCardData[]).filter(c => c.id !== dc.id);
-  patch.discardedCards = [...(state.discardedCards as GameCardData[]), dc];
+  // 走 DISCARD_OWNED_CARD：永久卡 → 回收袋；非永久 → 坟场；并触发 onDiscard* 等弃置副作用。
+  enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
   sideEffects.push({
     event: 'log:entry',
     payload: { type: 'skill', message: `噬血砺锋：弃置「${dc.name}」` },
@@ -947,7 +952,7 @@ export function resolveInstantMagic(
         const discardIds = new Set(discarded.map(c => c.id));
         patch.handCards = state.handCards.filter(c => !discardIds.has(c.id));
         for (const dc of discarded) {
-          enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+          enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
         }
         log(sideEffects, 'magic', `专属召唤：弃回 ${discarded.map(c => c.name).join('、')}`);
       }
@@ -1834,6 +1839,10 @@ export function resolvePermanentMagic(
         banner(sideEffects, '回收余韵：回收袋为空。');
       }
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      // 「被回收时」语义：play 路径下卡自身进回收袋也算"被回收"，
+      // 显式触发 APPLY_DISCARD_EFFECTS 让 onDiscardDraw 生效。
+      // opts.toRecycleBag=true 跳过 catapult / discard-zap 这种"主动弃手牌"才该触发的护符。
+      enqueuedActions.push({ type: 'APPLY_DISCARD_EFFECTS', card, owner: 'player', opts: { toRecycleBag: true } });
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
@@ -1864,7 +1873,7 @@ export function resolvePermanentMagic(
         const discardIds = new Set(discarded.map(c => c.id));
         patch.handCards = state.handCards.filter(c => !discardIds.has(c.id));
         for (const dc of discarded) {
-          enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+          enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
         }
         log(sideEffects, 'magic', `专属召唤：弃回 ${discarded.map(c => c.name).join('、')}`);
       }
@@ -2815,8 +2824,8 @@ export function resolveKnightPermanentMagic(
 
     case 'cleanse-draw': {
       // 净册涌泉 — Perm 1. Pick 1 hand card → delete (kw='delete'); then draw
-      // N cards from the deck (N = 2/3/4 by upgrade level). Empty hand on a
-      // given iteration → skip the picker but still draw.
+      // N cards from the backpack (N = 2/3/4 by upgrade level). Empty hand on
+      // a given iteration → skip the picker but still draw.
       //
       // Echo (Category B): the hook re-opens the picker `echoMultiplier`
       // times, drawing N each time. We only emit the side-effect; the
@@ -2832,8 +2841,8 @@ export function resolveKnightPermanentMagic(
         data: { drawCount },
       } as any;
       patch.heroSkillBanner = echoMultiplier > 1
-        ? `净册涌泉：将连续选择 ${echoMultiplier} 次手牌，每次抽 ${drawCount} 张。${echoTagCD}`
-        : `净册涌泉：选择一张手牌删除，从牌堆抽 ${drawCount} 张。`;
+        ? `净册涌泉：将连续选择 ${echoMultiplier} 次手牌，每次从背包抽 ${drawCount} 张。${echoTagCD}`
+        : `净册涌泉：选择一张手牌删除，从背包抽 ${drawCount} 张。`;
       sideEffects.push({
         event: 'card:cleanseDrawRequested' as any,
         payload: { card, drawCount, echoRemaining: echoMultiplier },
@@ -3443,9 +3452,10 @@ function resolveEchoBag(
   const drawCount = 2 * echoMultiplier;
   const echoTag = isEchoTriggered ? '（回响×2）' : '';
 
-  // Step 1: randomly discard up to discardCount hand cards to graveyard
+  // Step 1: randomly discard up to discardCount hand cards
   const playable = state.handCards.filter((c: GameCardData) => c.id !== card.id);
   const actualDiscard = Math.min(playable.length, discardCount);
+  let newToGraveyard = 0;
   if (actualDiscard > 0) {
     let rng = patch.rng ?? state.rng;
     const [discarded, rngAfter] = pickRandomHandCardsForDiscardPreferGraveyard(playable, actualDiscard, rng);
@@ -3453,15 +3463,16 @@ function resolveEchoBag(
     const discardIds = new Set(discarded.map((c: GameCardData) => c.id));
     patch.handCards = state.handCards.filter((c: GameCardData) => !discardIds.has(c.id));
     for (const dc of discarded) {
-      enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc });
+      enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
+      if (!isRecyclableFromHand(dc)) newToGraveyard += 1;
     }
     log(sideEffects, 'magic', `回响行囊：弃回 ${discarded.map((c: GameCardData) => c.name).join('、')}`);
   }
 
   // Step 2: check graveyard for discover candidates
-  // Include cards being enqueued for ADD_TO_GRAVEYARD (they haven't been drained yet)
+  // 永久魔法被弃回时走回收袋，不计入坟场。
   const currentGraveyardSize = (state.discardedCards ?? []).length;
-  const graveyardSize = currentGraveyardSize + actualDiscard;
+  const graveyardSize = currentGraveyardSize + newToGraveyard;
 
   if (graveyardSize > 0 && discoverCount > 0) {
     // Interactive flow: emit side effect for hook to open graveyard discover UI
@@ -3548,8 +3559,9 @@ export function resolveSoulSwap(
     if (swapMonsters.length === 1) {
       const target = swapMonsters[0];
       const oldLayers = target.currentLayer ?? 1;
-      const newMaxDur = Math.max(slot.item.maxDurability ?? durability, oldLayers);
-      (patch as any)[slot.id] = { ...slot.item, durability: oldLayers, maxDurability: newMaxDur };
+      const newMaxDur = clampMaxDurability(Math.max(slot.item.maxDurability ?? durability, oldLayers));
+      const newDur = Math.min(oldLayers, newMaxDur);
+      (patch as any)[slot.id] = { ...slot.item, durability: newDur, maxDurability: newMaxDur };
       const newActiveCards = (state.activeCards as (GameCardData | null)[]).map(c => {
         if (c?.id !== target.id) return c;
         return {

@@ -7,7 +7,7 @@
  *     a `card:cleanseDrawRequested` side effect.
  *   - Damage / draws / hand mutation happen in the hook layer; the hook calls
  *     `requestCardAction('delete', 1, { handOnly: true })` and dispatches
- *     `DRAW_CARDS source='deck'` after each pick.
+ *     `DRAW_CARDS source='backpack'` after each pick.
  *   - drawCount = [2, 3, 4][upgradeLevel] — Perm 1 with maxUpgradeLevel = 2.
  *   - Echo (Spell Echo, Category B): the resolver writes
  *     `echoRemaining = echoMultiplier`. The hook drives the loop; this test
@@ -40,8 +40,8 @@ function makeCleanseCard(idSuffix = 'a', extras: Record<string, any> = {}): Game
     image: '',
     classCard: true,
     magicType: 'permanent' as const,
-    magicEffect: '删 1 张手牌，从牌堆抽 N 张（升 0/1/2 → 2/3/4）。',
-    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从牌堆抽 2 张牌。',
+    magicEffect: '删 1 张手牌，从背包抽 N 张（升 0/1/2 → 2/3/4）。',
+    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从背包抽 2 张牌。',
     knightEffect: 'cleanse-draw',
     recycleDelay: 1,
     maxUpgradeLevel: 2,
@@ -191,15 +191,15 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
     expect((after.state.handCards as any[]).find(c => c.id === card.id)).toBeUndefined();
   });
 
-  it('PLAY → CONFIRM_DELETE → DRAW_CARDS deck=2 → 2 cards land in hand from deck', () => {
+  it('PLAY → CONFIRM_DELETE → DRAW_CARDS backpack=2 → 2 cards land in hand from backpack', () => {
     const card = makeCleanseCard('full', { upgradeLevel: 0 });
     const target = makeFiller('hand-victim');
-    const deck1 = makeFiller('deck-1');
-    const deck2 = makeFiller('deck-2');
-    const deck3 = makeFiller('deck-3');
+    const bp1 = makeFiller('bp-1');
+    const bp2 = makeFiller('bp-2');
+    const bp3 = makeFiller('bp-3');
     const state = makeState({
       handCards: [card, target] as any,
-      remainingDeck: [deck1, deck2, deck3] as any,
+      backpackItems: [bp1, bp2, bp3] as any,
       cardActionContext: {
         mode: 'event',
         keyword: 'delete',
@@ -212,16 +212,16 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
     const after = drain(state, [
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
       { type: 'CONFIRM_DELETE_CARD', cardId: target.id, source: 'hand' } as GameAction,
-      { type: 'DRAW_CARDS', count: 2, source: 'deck' } as GameAction,
+      { type: 'DRAW_CARDS', count: 2, source: 'backpack' } as GameAction,
       { type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false } as GameAction,
     ]);
 
-    // The two deck-top cards should now be in hand.
-    expect((after.state.handCards as any[]).find(c => c.id === deck1.id)).toBeDefined();
-    expect((after.state.handCards as any[]).find(c => c.id === deck2.id)).toBeDefined();
-    // Deck should be down by 2.
-    expect((after.state.remainingDeck as any[]).length).toBe(1);
-    expect((after.state.remainingDeck as any[])[0].id).toBe(deck3.id);
+    // 2 backpack cards moved into hand (which exact 2 depends on backpack-draw
+    // ordering — assert by count, not identity, to avoid coupling to the impl).
+    const drawnInHand = (after.state.handCards as any[]).filter(c => c.id.startsWith('bp-'));
+    expect(drawnInHand.length).toBe(2);
+    // Backpack down by 2.
+    expect((after.state.backpackItems as any[]).filter(c => c.id.startsWith('bp-')).length).toBe(1);
     // Pending magic cleared, card sent to recycle bag (Perm 1).
     expect(after.state.pendingMagicAction).toBeNull();
     expect(
@@ -230,19 +230,19 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
     ).toBe(true);
   });
 
-  it('lvl 2 end-to-end: 4 cards drawn from deck after one delete', () => {
+  it('lvl 2 end-to-end: 4 cards drawn from backpack after one delete', () => {
     const card = makeCleanseCard('lvl2-e2e', { upgradeLevel: 2 });
     const target = makeFiller('hand-victim');
-    const deckCards = [
-      makeFiller('d-1'),
-      makeFiller('d-2'),
-      makeFiller('d-3'),
-      makeFiller('d-4'),
-      makeFiller('d-5'),
+    const backpackCards = [
+      makeFiller('bp-1'),
+      makeFiller('bp-2'),
+      makeFiller('bp-3'),
+      makeFiller('bp-4'),
+      makeFiller('bp-5'),
     ];
     const state = makeState({
       handCards: [card, target] as any,
-      remainingDeck: deckCards as any,
+      backpackItems: backpackCards as any,
       cardActionContext: {
         mode: 'event',
         keyword: 'delete',
@@ -255,12 +255,12 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
     const after = drain(state, [
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
       { type: 'CONFIRM_DELETE_CARD', cardId: target.id, source: 'hand' } as GameAction,
-      { type: 'DRAW_CARDS', count: 4, source: 'deck' } as GameAction,
+      { type: 'DRAW_CARDS', count: 4, source: 'backpack' } as GameAction,
       { type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false } as GameAction,
     ]);
 
-    expect((after.state.handCards as any[]).filter(c => c.id.startsWith('d-')).length).toBe(4);
-    expect((after.state.remainingDeck as any[]).length).toBe(1);
+    expect((after.state.handCards as any[]).filter(c => c.id.startsWith('bp-')).length).toBe(4);
+    expect((after.state.backpackItems as any[]).filter(c => c.id.startsWith('bp-')).length).toBe(1);
   });
 });
 
@@ -270,7 +270,7 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
 
 describe('净册涌泉 × 招灵书印 stacking', () => {
   it('CONFIRM_DELETE_CARD on a hand card while wearing 招灵书印 enqueues a separate backpack draw', () => {
-    // The cleanse-draw magic itself does NOT enqueue the 2 deck draws
+    // The cleanse-draw magic itself does NOT enqueue the 2 backpack draws
     // (the hook does). What we verify here: the existing 招灵书印 amulet
     // still fires on the kw='delete' confirm coming from cleanse-draw's
     // hand picker, on top of whatever the hook will then dispatch.

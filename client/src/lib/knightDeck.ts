@@ -951,7 +951,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 2,
   });
 
-  // 净册涌泉 (Perm 1)：选择一张手牌删除，从牌堆抽 N 张牌
+  // 净册涌泉 (Perm 1)：选择一张手牌删除，从背包抽 N 张牌
   // （N = 2 / 3 / 4，对应升级 0 / 1 / 2）。手牌为空时跳过删除，仍正常抽 N 张。
   // 触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），与「招灵书印」护符
   // (delete-draw) 能够叠加：每次删除还会额外从背包抽 2N 张。
@@ -961,10 +961,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicCleanseDrawImage,
     classCard: true,
-    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从牌堆抽 2 张牌。',
-    shortDescription: '删 1 张手牌；从牌堆抽 2 张',
+    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从背包抽 2 张牌。',
+    shortDescription: '删 1 张手牌；从背包抽 2 张',
     magicType: 'permanent',
-    magicEffect: '删 1 张手牌，从牌堆抽 N 张（升 0/1/2 → 2/3/4）。',
+    magicEffect: '删 1 张手牌，从背包抽 N 张（升 0/1/2 → 2/3/4）。',
     knightEffect: 'cleanse-draw',
     recycleDelay: 1,
     maxUpgradeLevel: 2,

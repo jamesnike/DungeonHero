@@ -86,9 +86,26 @@ export function reduceEconomyActions(
       return applyPatch(state, { handCards: state.handCards.filter(c => !removeSet.has(c.id)) });
     }
 
-    case 'DISCARD_ALL_HAND':
-      // Curses cannot be discarded — they remain in hand.
-      return applyPatch(state, { handCards: state.handCards.filter(c => c.type === 'curse') });
+    case 'DISCARD_ALL_HAND': {
+      // Curses cannot be discarded — they remain in hand. Every other hand
+      // card is routed via DISCARD_OWNED_CARD so the standard pipeline picks
+      // graveyard vs recycle-bag and fires APPLY_DISCARD_EFFECTS (onDiscardDraw,
+      // onDiscardDamage, 弹射护符 / 弃能之符 procs, 永恒护符·弃牌生金, etc.).
+      const discardable = state.handCards.filter(c => c.type !== 'curse');
+      const kept = state.handCards.filter(c => c.type === 'curse');
+      if (discardable.length === 0) return applyPatch(state, {});
+      // Sort onDiscardDraw cards last so any draws they trigger don't get
+      // interleaved with the discard chain — matches the prior hook ordering.
+      const ordered = [...discardable].sort(
+        (a, b) => (a.onDiscardDraw ? 1 : 0) - (b.onDiscardDraw ? 1 : 0),
+      );
+      const enqueuedActions: GameAction[] = ordered.map(card => ({
+        type: 'DISCARD_OWNED_CARD',
+        card,
+        owner: 'player',
+      }));
+      return applyPatch(state, { handCards: kept }, [], enqueuedActions);
+    }
 
     case 'UPDATE_HAND_CARDS':
       return applyPatch(state, { handCards: action.updater(state.handCards) });

@@ -35,7 +35,7 @@ import { hasEternalRelic } from '@/lib/eternalRelics';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { routeReflectDamageToHero } from './combat';
-import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT } from '../constants';
+import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import { cloneClassCardsWithFreshIds, sampleDistinctByName } from '../cardClone';
@@ -1207,24 +1207,40 @@ function reduceConvertAmuletsToGold(
   action: Extract<GameAction, { type: 'CONVERT_AMULETS_TO_GOLD' }>,
 ): ReduceResult {
   const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
 
   if (!state.amuletSlots.length) return noChange(state);
 
   // Aura reversal is handled centrally by `postProcessAmuletAura` in
   // reducer.ts — clearing amuletSlots is enough.
-  const payout = action.amountPer * state.amuletSlots.length;
-  patch.discardedCards = [...state.discardedCards, ...state.amuletSlots];
+  // Perm 护符（永恒铭刻 等）→ 回收袋；普通护符 → 坟场。
+  // 与 events.ts:removeAllAmulets / amuletsToGold+10 保持一致。
+  const count = state.amuletSlots.length;
+  const payout = action.amountPer * count;
+  const permAmulets: GameCardData[] = [];
+  const nonPermAmulets: GameCardData[] = [];
+  for (const a of state.amuletSlots) {
+    if (cardHasPermFlag(a as GameCardData)) permAmulets.push(a as GameCardData);
+    else nonPermAmulets.push(a as GameCardData);
+  }
+  if (nonPermAmulets.length > 0) {
+    patch.discardedCards = [...state.discardedCards, ...nonPermAmulets];
+  }
   patch.amuletSlots = [];
   patch.gold = state.gold + payout;
-  patch.heroSkillBanner = `${state.amuletSlots.length} 枚护符转化为 ${payout} 金币！`;
+  patch.heroSkillBanner = `${count} 枚护符转化为 ${payout} 金币！`;
+
+  for (const card of permAmulets) {
+    enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
+  }
 
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'amulet', message: `${state.amuletSlots.length} 枚护符转化为 ${payout} 金币` },
+    payload: { type: 'amulet', message: `${count} 枚护符转化为 ${payout} 金币` },
   });
 
-  return applyPatch(state, patch, sideEffects);
+  return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -2220,9 +2236,16 @@ function reduceResolvePermGrant(
       parts.push(`护甲 +${armorBonus}`);
     }
     if (updated.maxDurability != null) {
-      updated.maxDurability += 1;
-      updated.durability = (updated.durability ?? 0) + 1;
-      parts.push('耐久上限 +1，耐久 +1');
+      const prevMax = updated.maxDurability;
+      const newMax = clampMaxDurability(prevMax + 1);
+      updated.maxDurability = newMax;
+      const gained = newMax - prevMax;
+      updated.durability = Math.min(newMax, (updated.durability ?? 0) + Math.max(gained, 1));
+      if (gained > 0) {
+        parts.push(`耐久上限 +${gained}，耐久 +${gained}`);
+      } else {
+        parts.push(`耐久上限已达 ${DURABILITY_CAP}，仅恢复 1 点耐久`);
+      }
     }
     patch[randomSlot.id] = updated as EquipmentItem;
 

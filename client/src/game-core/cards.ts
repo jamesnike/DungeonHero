@@ -5,7 +5,7 @@
 import type { GameCardData } from '@/components/GameCard';
 import type { ActiveRowSlots } from '@/components/game-board/types';
 import type { GameState } from './types';
-import { HAND_LIMIT, BASE_BACKPACK_CAPACITY, DUNGEON_COLUMN_COUNT } from './constants';
+import { HAND_LIMIT, BASE_BACKPACK_CAPACITY, DUNGEON_COLUMN_COUNT, clampMaxDurability } from './constants';
 import { isBackpackRestrictedCard, flattenActiveRowSlots, isRecyclableFromHand } from './helpers';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import type { RngState } from './rng';
@@ -235,7 +235,8 @@ export function primeMonsterAsEquipment(
   if (card.durability != null && card.maxDurability != null) return card;
 
   const reset = resetMonsterForGraveyard(card, isQuickMode);
-  const base = reset.fury ?? reset.hpLayers ?? 1;
+  const rawBase = reset.fury ?? reset.hpLayers ?? 1;
+  const base = clampMaxDurability(rawBase);
   return { ...reset, durability: base, maxDurability: base };
 }
 

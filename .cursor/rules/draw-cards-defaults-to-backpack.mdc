@@ -1,0 +1,74 @@
+---
+description: 「抽 N 张牌」默认从背包抽，禁止从牌堆抽
+alwaysApply: true
+---
+
+# 「抽 N 张牌」= 从背包抽（DRAW_CARDS source: 'backpack'）
+
+## 游戏规则
+
+本游戏的所有「抽 N 张牌」效果——无论卡面写「抽 X 张牌」「再抽 X 张」「弃牌后抽 X 张」「击杀后抽 X 张」「使用后抽 X 张」——**默认且仅有一种语义**：
+
+> **从背包抽到手牌。**
+
+牌堆（`remainingDeck` / deck）只在以下系统层路径里被触发：
+
+- 回合开始的自动补牌（瀑流 / waterfall）
+- 起始发牌
+- 极少数明确写出「从牌堆」的特殊机制（写代码前先确认设计文档）
+
+**没有任何一张普通卡牌的「抽牌」效果是从牌堆抽的。** 历史上 净册涌泉
+（cleanse-draw）一度误用 `source: 'deck'`，导致玩家直接抽空牌堆——这是 bug，不是设计。
+
+## 强制规则
+
+### 1. 写新「抽 N 张牌」效果时
+
+**默认且唯一正确的写法**：
+
+```typescript
+enqueuedActions.push({ type: 'DRAW_CARDS', count: N, source: 'backpack' });
+
+dispatch({ type: 'DRAW_CARDS', count: N, source: 'backpack' });
+```
+
+### 2. 如果你想写 `source: 'deck'`，停下来
+
+`source: 'deck'` **只允许**用于：
+
+- `rules/turn.ts` / `rules/dungeon.ts` / `rules/waterfall.ts` 里的回合系统抽牌
+- `rules/init.ts` 起始手牌发放
+- 设计上明确写明「从牌堆」的机制（**写之前先跟用户确认**）
+
+**普通卡牌效果（potion / magic / knight / hero-magic / amulet 触发 / event 奖励 / 装备入场 / lastWords）一律不准用 `'deck'`。**
+
+### 3. 卡面文案 / banner / log 用语统一
+
+- ✅「抽 N 张牌」「从背包抽 N 张」「再抽一张」
+- ❌「从牌堆抽 N 张」「抽牌堆顶 N 张」（除非真的是系统层抽牌）
+
+卡面已经写了「抽 X 张牌」就行，不需要每张都标注「从背包」——
+玩家默认都知道是背包。但**代码里的 banner / 描述如果显式提到来源，必须写「背包」**，否则会误导。
+
+## 自检：写完一张涉及抽牌的卡，问自己
+
+> 1. 我用的是 `source: 'backpack'` 吗？
+> 2. 如果用了 `'deck'`，这是回合系统 / 起始发牌 / 用户明确确认的特殊机制吗？
+> 3. 我的 banner / 描述 / 测试是不是说成了「从牌堆抽」？要改成「从背包抽」（或不指明来源）。
+
+任意一条「不是」/「没」，回头改。
+
+## 参考实现
+
+正确范例（已审核的卡）：
+
+```typescript
+enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+
+enqueuedActions.push({ type: 'DRAW_CARDS', count: 2, source: 'backpack' });
+
+enqueuedActions.push({ type: 'DRAW_CARDS', count: lwResult.drawFromBackpack, source: 'backpack' });
+```
+
+唯一允许 `'deck'` 的地方就是回合 / 瀑流 / 起始发牌等系统层 reducer，
+不要把它带到卡牌效果里。

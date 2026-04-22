@@ -10,6 +10,7 @@
  */
 
 import type { GameCardData } from '@/components/GameCard';
+import { cardHasPermFlag } from '@/components/GameCard';
 import type {
   ActiveRowSlots,
   DungeonDropAssignment,
@@ -717,8 +718,15 @@ function reduceApplyWaterfallDiscardEffects(
       case 'destroyAllAmuletsAndDiscardHand': {
         const removedAmulets = [...state.amuletSlots] as GameCardData[];
         if (removedAmulets.length > 0) {
+          // Perm 护符（永恒铭刻 / native permEquipment / 凡化咒未剥离）→ 回收袋；
+          // 普通护符 → 坟场。镜像 events.ts:removeAllAmulets 的契约，避免 Perm 护符
+          // 因摧毁路径不同被错误送进坟场。
           for (const a of removedAmulets) {
-            enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: a });
+            if (cardHasPermFlag(a)) {
+              enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: a });
+            } else {
+              enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: a });
+            }
           }
           patch.amuletSlots = [];
           sideEffects.push({

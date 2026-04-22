@@ -8,6 +8,7 @@
 import type { OnEquipHandler } from '../on-equip';
 import { registerOnEquipAll } from '../on-equip';
 import type { EquipmentSlotId } from '@/components/game-board/types';
+import { DURABILITY_CAP, clampMaxDurability } from '../../constants';
 
 const otherSlot = (s: EquipmentSlotId): EquipmentSlotId =>
   s === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -93,12 +94,20 @@ const otherSlotDurability1: OnEquipHandler = (state, card, slotId, patch, sideEf
 const durabilityMax1: OnEquipHandler = (state, card, slotId, patch, sideEffects) => {
   const currentItem = patch[slotId] ?? (slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2);
   if (currentItem && (currentItem as any).maxDurability != null) {
-    const newMax = ((currentItem as any).maxDurability as number) + 1;
-    patch[slotId] = { ...currentItem, maxDurability: newMax } as any;
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${card.name} 入场效果：耐久度上限 +1（${(currentItem as any).maxDurability} → ${newMax}）` },
-    });
+    const prevMax = (currentItem as any).maxDurability as number;
+    const newMax = clampMaxDurability(prevMax + 1);
+    if (newMax > prevMax) {
+      patch[slotId] = { ...currentItem, maxDurability: newMax } as any;
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'equip', message: `${card.name} 入场效果：耐久度上限 +1（${prevMax} → ${newMax}）` },
+      });
+    } else {
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'equip', message: `${card.name} 入场效果：耐久度已达上限 ${DURABILITY_CAP}，无法继续提升。` },
+      });
+    }
   }
 };
 

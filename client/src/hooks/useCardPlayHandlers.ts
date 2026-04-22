@@ -694,18 +694,35 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   // 净册涌泉 (knight:cleanse-draw) — drive the hand-pick + draw loop.
   // For Spell Echo (Category B), `echoRemaining` is the number of times to
   // run the picker. Each iteration: open hand-only delete picker for 1 card,
-  // then draw `drawCount` cards from the deck. Empty hand → skip picker but
-  // still draw (per design: draw-only when empty).
+  // then draw `drawCount` cards from the backpack. Empty hand → skip picker
+  // but still draw (per design: draw-only when empty).
+  //
+  // IMPORTANT: read live `engine.getState().handCards` to decide whether to
+  // open the picker. `requestCardAction` itself relies on a React-snapshot of
+  // `handCards` for its empty-pool early-return; that snapshot is stale
+  // immediately after PLAY_CARD removes 净册涌泉 itself from hand (the side
+  // effect fires synchronously, before React re-renders). Without this live
+  // check, an empty-hand player would see an unclosable modal: pool computed
+  // as 1 (stale), modal opens, then re-render shows "当前没有手牌可以选择" with
+  // ESC + outside-click disabled and no cancel button (each-mode picker).
   useGameEvent('card:cleanseDrawRequested', async ({ card, drawCount, echoRemaining }) => {
     const iterations = Math.max(1, echoRemaining ?? 1);
     for (let i = 0; i < iterations; i++) {
       const titleSuffix = iterations > 1 ? `（${i + 1}/${iterations}）` : '';
-      await depsRef.current.requestCardAction('delete', 1, {
-        title: `净册涌泉：选择一张手牌删除${titleSuffix}`,
-        description: `删除一张手牌（手牌为空可跳过），然后从牌堆抽 ${drawCount} 张牌`,
-        handOnly: true,
-      });
-      dispatch({ type: 'DRAW_CARDS', count: drawCount, source: 'deck' });
+      const liveHandCount = (engine.getState().handCards ?? []).length;
+      if (liveHandCount > 0) {
+        await depsRef.current.requestCardAction('delete', 1, {
+          title: `净册涌泉：选择一张手牌删除${titleSuffix}`,
+          description: `删除一张手牌（手牌为空可跳过），然后从背包抽 ${drawCount} 张牌`,
+          handOnly: true,
+        });
+      } else {
+        dispatch({
+          type: 'SET_HERO_SKILL_BANNER',
+          message: `净册涌泉：手牌为空，跳过删除${titleSuffix}，直接从背包抽 ${drawCount} 张。`,
+        });
+      }
+      dispatch({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
     }
     dispatch({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
   });

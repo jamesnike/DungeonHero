@@ -14,7 +14,7 @@ import type {
   EquipmentSlotId,
 } from '@/components/game-board/types';
 import type { GameState } from './types';
-import { INITIAL_HP, FLIP_GOLD_REWARD, PERSUADE_COST, MIN_PERSUADE_COST, BASE_BACKPACK_CAPACITY, MAX_SHOP_LEVEL, MAX_PERSUADE_LEVEL, HAND_LIMIT } from './constants';
+import { INITIAL_HP, FLIP_GOLD_REWARD, PERSUADE_COST, MIN_PERSUADE_COST, BASE_BACKPACK_CAPACITY, MAX_SHOP_LEVEL, MAX_PERSUADE_LEVEL, HAND_LIMIT, DURABILITY_CAP, clampMaxDurability } from './constants';
 import { flattenActiveRowSlots, pickRandomHandCardsForDiscardPreferGraveyard, isRecyclableFromHand, applyAmplifyOnCreate } from './helpers';
 import { computeAmuletEffects } from './equipment';
 import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
@@ -771,8 +771,24 @@ export function applySimpleEffect(
         const kept = state.amuletSlots.slice(state.amuletSlots.length - next);
         patch.amuletSlots = kept;
         const overflow = state.amuletSlots.slice(0, state.amuletSlots.length - next);
-        patch.discardedCards = [...state.discardedCards, ...overflow];
-        logs.push({ type: 'event', message: `护符栏缩减，${overflow.map(a => a.name).join('、')} 被送入坟场` });
+        // Perm 护符（永恒铭刻 等）→ 回收袋；普通护符 → 坟场。
+        // 与 events.ts:removeAllAmulets 保持一致。
+        const permOverflow: GameCardData[] = [];
+        const nonPermOverflow: GameCardData[] = [];
+        for (const a of overflow) {
+          if (cardHasPermFlag(a as GameCardData)) permOverflow.push(a as GameCardData);
+          else nonPermOverflow.push(a as GameCardData);
+        }
+        if (nonPermOverflow.length > 0) {
+          patch.discardedCards = [...state.discardedCards, ...nonPermOverflow];
+        }
+        for (const card of permOverflow) {
+          allEnqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
+        }
+        const destLabels: string[] = [];
+        if (nonPermOverflow.length > 0) destLabels.push(`${nonPermOverflow.map(a => a.name).join('、')} 进坟场`);
+        if (permOverflow.length > 0) destLabels.push(`${permOverflow.map(a => a.name).join('、')} 进回收袋`);
+        logs.push({ type: 'event', message: `护符栏缩减，${destLabels.join('；')}` });
       }
     }
   } else if (effectToken === 'equipSlot1Capacity+1') {
@@ -1144,11 +1160,17 @@ export function applySimpleEffect(
     const item = slotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
     if (item && item.durability != null) {
       const maxDur = item.maxDurability ?? item.durability ?? 0;
-      const updated = { ...item, maxDurability: maxDur + 1 };
-      if (slotId === 'equipmentSlot1') patch.equipmentSlot1 = updated;
-      else patch.equipmentSlot2 = updated;
-      patch.heroSkillBanner = `${item.name} 耐久上限 +1！`;
-      logs.push({ type: 'event', message: `${item.name} 耐久上限 +1（${maxDur} → ${maxDur + 1}）` });
+      const newMax = clampMaxDurability(maxDur + 1);
+      if (newMax > maxDur) {
+        const updated = { ...item, maxDurability: newMax };
+        if (slotId === 'equipmentSlot1') patch.equipmentSlot1 = updated;
+        else patch.equipmentSlot2 = updated;
+        patch.heroSkillBanner = `${item.name} 耐久上限 +${newMax - maxDur}！`;
+        logs.push({ type: 'event', message: `${item.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）` });
+      } else {
+        patch.heroSkillBanner = `${item.name} 耐久上限已达上限 ${DURABILITY_CAP}。`;
+        logs.push({ type: 'event', message: `${item.name} 耐久上限已达上限 ${DURABILITY_CAP}，无法继续提升。` });
+      }
     } else {
       patch.heroSkillBanner = `${label}装备栏没有装备或不具有耐久属性。`;
     }
@@ -1390,12 +1412,26 @@ export function applySimpleEffect(
     if (state.amuletSlots.length > 0) {
       // Aura reversal is handled centrally by `postProcessAmuletAura` in
       // reducer.ts — clearing amuletSlots is enough.
-      const payout = 10 * state.amuletSlots.length;
-      patch.discardedCards = [...state.discardedCards, ...state.amuletSlots];
+      // Perm 护符（永恒铭刻 等）→ 回收袋；普通护符 → 坟场。
+      // 与 events.ts:removeAllAmulets 保持一致。
+      const count = state.amuletSlots.length;
+      const payout = 10 * count;
+      const permAmulets: GameCardData[] = [];
+      const nonPermAmulets: GameCardData[] = [];
+      for (const a of state.amuletSlots) {
+        if (cardHasPermFlag(a as GameCardData)) permAmulets.push(a as GameCardData);
+        else nonPermAmulets.push(a as GameCardData);
+      }
+      if (nonPermAmulets.length > 0) {
+        patch.discardedCards = [...state.discardedCards, ...nonPermAmulets];
+      }
       patch.amuletSlots = [];
       patch.gold = state.gold + payout;
-      patch.heroSkillBanner = `${state.amuletSlots.length} 枚护符转化为 ${payout} 金币！`;
-      logs.push({ type: 'amulet', message: `${state.amuletSlots.length} 枚护符转化为 ${payout} 金币` });
+      patch.heroSkillBanner = `${count} 枚护符转化为 ${payout} 金币！`;
+      logs.push({ type: 'amulet', message: `${count} 枚护符转化为 ${payout} 金币` });
+      for (const card of permAmulets) {
+        allEnqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
+      }
     } else {
       patch.heroSkillBanner = '你没有佩戴护符。';
     }

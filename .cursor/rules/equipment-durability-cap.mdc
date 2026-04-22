@@ -1,0 +1,104 @@
+---
+description: 装备耐久度上限硬封顶为 4（DURABILITY_CAP）。任何修改 maxDurability / durability 的入口都必须走 clampMaxDurability。
+alwaysApply: true
+---
+
+# 装备耐久度上限封顶 4（DURABILITY_CAP）
+
+## 背景
+
+UI 层（`EquipmentSlot.tsx` `DURABILITY_SEGMENTS = 4`、`GameCard.tsx` `MAX_DURABILITY_DOTS = 4`）的耐久点数显示永远只有 4 格。
+历史上数据层 `maxDurability` 没有上限，淬炼药剂、耐久补剂、装备入场效果、蓄能裂击、事件、升级等多条增量路径直接 `maxDur + amount`，
+结果玩家体感是「加了等于没加」——`maxDurability` 涨到 5、6，但屏幕永远显示 4。
+
+修复方案：**所有装备槽（左 / 右 / 怪物当装备）的 `maxDurability` 硬封顶 4，超出静默吸收 + banner 提示已达上限。**
+
+## 强制规则
+
+### 1. 唯一来源：`game-core/constants.ts`
+
+```typescript
+import { DURABILITY_CAP, clampMaxDurability, isMaxDurabilityAtCap } from '@/game-core/constants';
+
+DURABILITY_CAP === 4;
+clampMaxDurability(value);  // 把任意 number 夹到 [0, 4]
+isMaxDurabilityAtCap(currentMax);  // currentMax >= 4
+```
+
+**不要**写 `Math.min(4, x)`、`Math.min(maxDur + 1, 4)` 这种散落的硬编码。
+**不要**重新定义自己的常量。改 cap 时只动 `constants.ts` 一行。
+
+### 2. 所有写 `maxDurability` 的地方都必须夹
+
+写入装备 `maxDurability` 字段的入口（已知清单，新增入口必须同步加 clamp）：
+
+| 入口类型 | 文件 |
+|---|---|
+| 初始化 | `rules/cards.ts → primeMonsterAsEquipment`、`monsters.ts → persuadeSuccessPatch`、`card-schema/definitions/upgrades.ts` 硬编码值 |
+| 药剂增量 | `rules/potion-effects.ts`（左/右栏 +1/+2、perm +1/+2、`repair-choice-upgrade`、`applyDurabilityMaxIncrease`） |
+| 声明式药剂 | `card-schema/executors.ts`（`executeModifySlotDurabilityMax` / `executeModifySlotDurabilityMaxChoose`） |
+| 装备入场 | `card-schema/definitions/equipment.ts → durabilityMax1` |
+| 升级 | `card-schema/definitions/upgrades.ts → monsterDefault` / `trainingBlade` |
+| 事件 | `events.ts → slotLeftDurMax+1 / slotRightDurMax+1` |
+| 魔法 | `rules/magic-effects.ts → soul-swap / dungeon-insight`、`rules/cards.ts → equip-enchant-any` |
+| 英雄魔法 | `rules/hero.ts → durability-charge-burst / soul-swap resolver / dungeon-insight resolver` |
+
+**写法**：
+
+```typescript
+// ❌ BAD
+patch[slotId] = { ...item, maxDurability: prevMax + 1 };
+
+// ✅ GOOD
+const newMax = clampMaxDurability(prevMax + 1);
+if (newMax > prevMax) {
+  patch[slotId] = { ...item, maxDurability: newMax };
+  // banner / log 「+1」
+} else {
+  // banner / log 「已达耐久上限 4」（消耗品照常消耗——「静默吸收」）
+}
+```
+
+### 3. `durability` 不能超过 `maxDurability`
+
+任何同时改 `maxDurability` 和 `durability` 的地方，
+新 `durability` 必须用 `Math.min(newDur, newMaxDur)` 夹住，否则会出现 `dur > maxDur` 的非法状态。
+
+### 4. 触发条件 ≠「post-add equals 4」
+
+历史上 `durability-charge-burst`（蓄能裂击）的触发条件是 `afterAddDur === 4`。
+封顶后，**已经是 4/4 的装备**会出现 `Math.min(4+1, 4) === 4` 的伪触发——dur 没真正涨，却打怪。
+
+正确条件：
+
+```typescript
+// ✅ 真正涨到 cap 才触发
+if (afterAddDur === DURABILITY_CAP && afterAddDur > oldDur) { /* trigger */ }
+```
+
+任何「dur 涨到 X 触发副作用」的逻辑都要遵守这个原则——**没真正涨就不触发**。
+
+### 5. 测试不要用 `maxDurability > 4` 的初值
+
+测试 fixture 直接构造装备对象会绕过 cap 逻辑，但用 `maxDurability: 5` 这种数据本身就违反了游戏不变量，
+后续走 reducer 路径会出现奇怪行为。统一用 `≤ 4` 的初值，并加专门的 cap 用例验证：
+
+```typescript
+it('已达上限 4 时 maxDurability 不变（静默吸收）', () => {
+  const item = { ...weapon, durability: 4, maxDurability: 4 };
+  // ...resolve potion / magic / on-equip...
+  expect(result.equipmentSlot1.maxDurability).toBe(4);
+});
+```
+
+## 自检
+
+新增 / 修改任何写 `maxDurability` 的代码前，问自己：
+
+> 1. 我有没有 `import { DURABILITY_CAP, clampMaxDurability }`？
+> 2. 我对 `maxDurability` 的赋值有没有走 `clampMaxDurability`？
+> 3. 如果同时改了 `durability`，有没有用 `Math.min(newDur, newMaxDur)` 夹？
+> 4. 如果有「dur 达到 X 触发」的逻辑，有没有加「真正涨了才触发」的保护？
+> 5. 我加的测试初值是不是 `≤ 4`？
+
+任何一条「没」或「不确定」，回头补功课再改。

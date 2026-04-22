@@ -1691,11 +1691,21 @@ describe('reducer', () => {
     });
 
     it('handles left-slot-durability-max+1: increases maxDurability', () => {
-      const leftItem = { id: 'w1', type: 'weapon' as const, name: 'Sword', value: 3, durability: 3, maxDurability: 5 };
+      // 装备耐久上限封顶为 4（DURABILITY_CAP）。原测试用 maxDur=5 已不再合法，
+      // 改为 maxDur=3 起步，+1 后应为 4。
+      const leftItem = { id: 'w1', type: 'weapon' as const, name: 'Sword', value: 3, durability: 3, maxDurability: 3 };
       const card = { id: 'rp5', type: 'potion' as const, name: 'DurPot', value: 0, potionEffect: 'left-slot-durability-max+1' };
       const state = makeState({ equipmentSlot1: leftItem as any });
       const result = reduce(state, { type: 'RESOLVE_POTION', cardId: 'rp5', card: card as any });
-      expect((result.state.equipmentSlot1 as any).maxDurability).toBe(6);
+      expect((result.state.equipmentSlot1 as any).maxDurability).toBe(4);
+    });
+
+    it('handles left-slot-durability-max+1: 已达上限 4 时 maxDurability 不变（静默吸收）', () => {
+      const leftItem = { id: 'w1', type: 'weapon' as const, name: 'Sword', value: 3, durability: 4, maxDurability: 4 };
+      const card = { id: 'rp5cap', type: 'potion' as const, name: 'DurPot', value: 0, potionEffect: 'left-slot-durability-max+1' };
+      const state = makeState({ equipmentSlot1: leftItem as any });
+      const result = reduce(state, { type: 'RESOLVE_POTION', cardId: 'rp5cap', card: card as any });
+      expect((result.state.equipmentSlot1 as any).maxDurability).toBe(4);
     });
 
     it('handles left-slot-durability-max+1: no-op when no equipment', () => {

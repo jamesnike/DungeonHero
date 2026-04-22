@@ -30,6 +30,33 @@ export const MAX_AMULET_SLOTS = 2;
 export const MAX_SHOP_LEVEL = 3;
 export const FLIP_GOLD_REWARD = 4;
 
+/**
+ * 装备槽（左/右/怪物装备）的耐久上限硬上限。
+ *
+ * 任何让 maxDurability 增加的入口（药剂、魔法、入场效果、升级、事件…）
+ * 都必须通过 `clampMaxDurability` 夹住，超过 4 的部分静默吸收。
+ *
+ * 这与 UI 层的显示上限保持一致：
+ * - `EquipmentSlot.tsx` `DURABILITY_SEGMENTS = 4`
+ * - `GameCard.tsx` `MAX_DURABILITY_DOTS = 4`
+ *
+ * 如果将来要放宽此上限，必须同时更新两处 UI 常量。
+ */
+export const DURABILITY_CAP = 4;
+
+/** 把 maxDurability 夹到 [0, DURABILITY_CAP] 范围内。 */
+export const clampMaxDurability = (value: number): number => {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(DURABILITY_CAP, Math.floor(value));
+};
+
+/**
+ * 判断一次「maxDurability + delta」操作是否会被 cap 完全吸收（增量为 0）。
+ * 用于增量入口决定是否要 banner 提示「已达上限」。
+ */
+export const isMaxDurabilityAtCap = (currentMax: number): boolean =>
+  currentMax >= DURABILITY_CAP;
+
 // ---------------------------------------------------------------------------
 // Card type groups
 // ---------------------------------------------------------------------------

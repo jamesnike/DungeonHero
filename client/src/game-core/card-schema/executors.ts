@@ -13,7 +13,7 @@ import type { GameState, EternalRelic, EternalRelicId } from '../types';
 import type { GameCardData } from '@/components/GameCard';
 import type { SideEffect } from '../reducer';
 import type { EquipmentRepairTarget } from '@/components/game-board/types';
-import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY } from '../constants';
+import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import { computeAmuletEffects } from '../equipment';
 import { drawMultipleFromBackpack } from '../cards';
 import { nextInt, shuffle as rngShuffle } from '../rng';
@@ -210,9 +210,15 @@ function executeModifySlotDurabilityMax(ctx: ExecutionContext, effect: CardEffec
     return;
   }
   const maxDur = item.maxDurability ?? item.durability ?? 0;
-  (ctx.patch as any)[slotId] = { ...item, maxDurability: maxDur + effect.delta };
-  log(ctx, 'potion', `淬炼药剂：${item.name} 耐久上限 +${effect.delta}（${maxDur} → ${maxDur + effect.delta}）`);
-  banner(ctx, `${item.name} 耐久上限 +${effect.delta}！`);
+  const newMax = clampMaxDurability(maxDur + effect.delta);
+  if (newMax > maxDur) {
+    (ctx.patch as any)[slotId] = { ...item, maxDurability: newMax };
+    log(ctx, 'potion', `淬炼药剂：${item.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）`);
+    banner(ctx, `${item.name} 耐久上限 +${newMax - maxDur}！`);
+  } else {
+    log(ctx, 'potion', `淬炼药剂：${item.name} 耐久上限已达上限 ${DURABILITY_CAP}，无法继续提升。`);
+    banner(ctx, `${item.name} 耐久上限已达上限 ${DURABILITY_CAP}。`);
+  }
 }
 
 function executeSwapSlotDamageShield(ctx: ExecutionContext, _effect: CardEffect): void {
@@ -287,9 +293,15 @@ function executeModifySlotDurabilityMaxChoose(ctx: ExecutionContext, effect: Car
   if (slotsWithDurability.length === 1) {
     const slot = slotsWithDurability[0];
     const maxDur = slot.item.maxDurability ?? slot.item.durability ?? 0;
-    (ctx.patch as any)[slot.id] = { ...slot.item, maxDurability: maxDur + effect.delta };
-    log(ctx, 'potion', `耐久补剂：${slot.item.name} 耐久上限 +${effect.delta}（${maxDur} → ${maxDur + effect.delta}）`);
-    banner(ctx, `${slot.item.name} 耐久上限 +${effect.delta}！`);
+    const newMax = clampMaxDurability(maxDur + effect.delta);
+    if (newMax > maxDur) {
+      (ctx.patch as any)[slot.id] = { ...slot.item, maxDurability: newMax };
+      log(ctx, 'potion', `耐久补剂：${slot.item.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）`);
+      banner(ctx, `${slot.item.name} 耐久上限 +${newMax - maxDur}！`);
+    } else {
+      log(ctx, 'potion', `耐久补剂：${slot.item.name} 耐久上限已达上限 ${DURABILITY_CAP}，无法继续提升。`);
+      banner(ctx, `${slot.item.name} 耐久上限已达上限 ${DURABILITY_CAP}。`);
+    }
     return;
   }
 

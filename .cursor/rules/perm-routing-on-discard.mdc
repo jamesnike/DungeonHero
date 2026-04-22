@@ -1,0 +1,125 @@
+---
+description: "「弃回 / 销毁 / 转化」一类操作里 Perm 牌必须分流到回收袋——不要再无脑 ADD_TO_GRAVEYARD"
+alwaysApply: true
+---
+
+# Perm 牌弃回到坟场——路由必须按 Perm 分流
+
+## 背景：一次反复出现的 bug 模式
+
+`专属召唤` 弃回手牌时，两张 Perm 牌（`回响残页` 等）被错送进坟场。
+根因：`magic-effects.ts` 里走的是 `ADD_TO_GRAVEYARD` 分支，没区分 Perm。
+修完后才发现这个 bug 模式在游戏里到处都有——
+
+- `诅咒骰局` 摧毁所有护符 → 永恒铭刻 过的 amulet 也进坟场
+- `amuletCapacity-1` 事件溢出 → 同上
+- `amuletsToGold+10` / `CONVERT_AMULETS_TO_GOLD` 把护符换金币 → 同上
+- 装备融合消费源装备 → 永恒铭刻 装备进坟场
+
+**任何"删除 / 销毁 / 转化 / 弃回"卡的操作，只要可能涉及 Perm 牌，都必须按 Perm 分流。**
+
+## 路由契约
+
+| 卡的 Perm 状态 | 目的地 | 判定函数 |
+|---|---|---|
+| `cardHasPermFlag(card) === true` | `permanentMagicRecycleBag`（回收袋） | `cardHasPermFlag` 或 `isRecyclableFromHand` |
+| 其它（含 `permStripped: true` 的"凡化"过的卡） | `discardedCards`（坟场） | 同上的反 |
+
+`cardHasPermFlag` 命中的字段（`client/src/components/GameCard.tsx` ~L565）：
+
+- `magicType === 'permanent'`（永久魔法）
+- `permEquipment === true`（永恒装备 / 永恒铭刻 装备）
+- `isPermanentEvent === true`（永恒事件）
+- `recycleDelay > 0`（**含被 永恒铭刻 加 Perm 的 amulet** —— amulet 默认非 Perm）
+- `permStripped === true` 一票否决（凡化咒已剥离）
+
+## 强制规则
+
+1. **改、新增任何"销毁卡 / 弃回卡 / 转化卡"路径前**，先 `Grep` 这两个签名找全所有兄弟点：
+   ```
+   ADD_TO_GRAVEYARD
+   patch.discardedCards = [...
+   ```
+   尤其是直接 mutate `state.discardedCards` 的，最容易藏 Perm-leak。
+2. **新加 amulet 销毁 / 转化路径**：默认假设场上可能有 永恒铭刻 过的 Perm amulet（`recycleDelay > 0`）。不分流 = bug。
+3. **新加 equipment 销毁路径**：默认假设是 `permEquipment` 或 `recycleDelay > 0` 的 Perm 装备。参考 `hero.ts:reduceMonsterDoom` / `magic-effects.ts:reduceDestroyEquipment` 里的 `shouldRouteEquipmentToPermRecycle` 用法。
+4. **新加 hand 卡的 random/forced discard 路径**（如 `专属召唤` / `汰旧迎新`）：用 `DISCARD_OWNED_CARD`，**不要**直接 enqueue `ADD_TO_GRAVEYARD`。`reduceDiscardOwnedCard` 已经按 Perm 分流。
+
+## 两种合规实现 pattern（按需选）
+
+### Pattern A：`removeAllAmulets` style（**不**触发 onDiscard 联动）
+
+参考 `client/src/game-core/events.ts` `removeAllAmulets` (~L1112) /
+`waterfall.ts` `destroyAllAmuletsAndDiscardHand` (~L721)：
+
+```ts
+const permCards: GameCardData[] = [];
+const nonPermCards: GameCardData[] = [];
+for (const c of toRemove) {
+  if (cardHasPermFlag(c as GameCardData)) permCards.push(c as GameCardData);
+  else nonPermCards.push(c as GameCardData);
+}
+if (nonPermCards.length > 0) {
+  patch.discardedCards = [...state.discardedCards, ...nonPermCards];
+}
+for (const card of permCards) {
+  enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
+}
+```
+
+适用：被动销毁、转化为金币、容量缩减溢出——这些场景"卡被强制移除"不该触发 catapult / `onDiscardDraw` 等手牌弃置联动。
+
+### Pattern B：`DISCARD_OWNED_CARD` style（**会**触发 onDiscard 联动）
+
+参考 `client/src/game-core/rules/magic-effects.ts` `case '专属召唤'`：
+
+```ts
+for (const dc of discarded) {
+  enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
+}
+```
+
+适用：玩家"主动弃手牌"语义（`专属召唤` / `汰旧迎新` / `回响行囊` / `噬血砺锋` / `祭坛秘术`）——
+这些路径**应该**触发 `onDiscardDraw` / catapult / 等弃置联动。
+
+**不要混用**：选一种，不要既走 `DISCARD_OWNED_CARD` 又自己 push `ADD_TO_GRAVEYARD`。
+`DISCARD_OWNED_CARD` 自带 Perm 分流 + `APPLY_DISCARD_EFFECTS`，不需要再补。
+
+## What NOT to do
+
+- ❌ `enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: amulet })` 而不查 `cardHasPermFlag`。
+- ❌ `patch.discardedCards = [...state.discardedCards, ...state.amuletSlots]` 不分流——永恒铭刻 amulet 直接消失到坟场。
+- ❌ 给装备销毁路径 `ADD_TO_GRAVEYARD` 而不用 `shouldRouteEquipmentToPermRecycle` 检查。
+- ❌ 假设"amulet 不是 Perm 所以可以无脑进坟场"——`永恒铭刻` 会改变这个假设。
+- ❌ "我手上这张测试卡过了" 就收手——必须同时测 Perm + 非 Perm + permStripped 三种 fixture。
+
+## What to do
+
+- ✅ 任何 "destroy / convert / discard amulet" 的新代码都要先 `cardHasPermFlag` 分流。
+- ✅ "destroy / break equipment" 用 `shouldRouteEquipmentToPermRecycle`。
+- ✅ "discard hand card by player action" 用 `DISCARD_OWNED_CARD`，让它自己分流。
+- ✅ 写测试时永远准备 3 个 fixture：Perm（`recycleDelay: 2`）/ 普通 / `permStripped: true`。参考
+  `client/src/game-core/__tests__/amulet-perm-routing-on-destroy.test.ts` 和
+  `wraith-amulet-perm.test.ts`。
+- ✅ 跟 user 沟通时记得：amulet **默认非 Perm**，但 `永恒铭刻` 会让它带 `recycleDelay`，从这一刻起就是 Perm。
+
+## 自检
+
+每次准备 push `ADD_TO_GRAVEYARD` 或 mutate `state.discardedCards` 之前，停下来问自己：
+
+> "这里被销毁/弃回的卡集合里，有没有可能含 Perm？
+> （permanent magic / `永恒铭刻` amulet / `permEquipment` 装备 / `isPermanentEvent`）
+> 如果有，我有没有把 Perm 路由到回收袋？
+> 测试是不是覆盖了 Perm + 非 Perm 两种 fixture？"
+
+任意一条不确定，**回去 grep `cardHasPermFlag` 和 `removeAllAmulets` 看现成的分流写法**。
+
+## 跟 `discard-vs-recycle-semantics.mdc` 的关系
+
+| 关注点 | 这条规则 | discard-vs-recycle-semantics |
+|---|---|---|
+| 卡**去哪**（坟场 vs 回收袋） | ✅ 这条 | ❌ |
+| 卡进了回收袋后，**onDiscardDraw 会不会触发** | ❌ | ✅ 那条 |
+| 卡面措辞"被弃回 / 被回收"语义 | ❌ | ✅ 那条 |
+
+两条互不重叠，改 disposition 相关代码时**两条都要核对**。

@@ -17,6 +17,7 @@ import { registerOnUpgradeAll } from '../on-upgrade';
 import type { OnUpgradeHandler } from '../on-upgrade';
 import { applyMonsterUpgradeLevel } from '@/lib/monsterRage';
 import { STARTER_CARD_IDS } from '../../deck';
+import { DURABILITY_CAP, clampMaxDurability } from '../../constants';
 
 // ============================================================================
 // Monster (default — applies to all monster cards)
@@ -26,8 +27,15 @@ const monsterDefault: OnUpgradeHandler = (upgraded, newLevel) => {
   const result = applyMonsterUpgradeLevel(upgraded, newLevel);
   Object.assign(upgraded, result);
   if (upgraded.maxDurability != null) {
-    upgraded.maxDurability = upgraded.maxDurability + 1;
-    upgraded.durability = (upgraded.durability ?? 0) + 1;
+    const prevMax = upgraded.maxDurability;
+    const newMax = clampMaxDurability(prevMax + 1);
+    upgraded.maxDurability = newMax;
+    const gained = newMax - prevMax;
+    if (gained > 0) {
+      upgraded.durability = Math.min(newMax, (upgraded.durability ?? 0) + gained);
+    } else {
+      upgraded.durability = Math.min(newMax, upgraded.durability ?? 0);
+    }
   }
 };
 
@@ -85,12 +93,12 @@ const dungeonSwap: OnUpgradeHandler = (upgraded, newLevel) => {
 const trainingBlade: OnUpgradeHandler = (upgraded, newLevel) => {
   if (newLevel === 1) {
     upgraded.value = 4;
-    upgraded.durability = Math.min((upgraded.durability ?? 2) + 1, 3);
-    upgraded.maxDurability = 3;
+    upgraded.maxDurability = clampMaxDurability(3);
+    upgraded.durability = Math.min((upgraded.durability ?? 2) + 1, upgraded.maxDurability);
   } else if (newLevel === 2) {
     upgraded.value = 5;
-    upgraded.durability = Math.min((upgraded.durability ?? 3) + 1, 4);
-    upgraded.maxDurability = 4;
+    upgraded.maxDurability = clampMaxDurability(4);
+    upgraded.durability = Math.min((upgraded.durability ?? 3) + 1, upgraded.maxDurability);
   }
 };
 

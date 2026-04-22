@@ -330,6 +330,42 @@ describe('噬血砺锋 — 玩家选择弃回', () => {
     expect(pending.sourceCardId).toBeNull();
   });
 
+  it('回响残页（onDiscardDraw: 2）被噬血砺锋弃回 → 走回收袋且触发抽 2 张', () => {
+    const echoRemnant: GameCardData = {
+      id: 'echo-rem-1',
+      type: 'magic',
+      name: '回响残页',
+      value: 0,
+      image: '',
+      magicType: 'permanent',
+      magicEffect: 'on-discard-draw-2',
+      description: '永久魔法：被弃回时，从背包抽 2 张牌。',
+      onDiscardDraw: 2,
+      recycleDelay: 1,
+    } as GameCardData;
+    const eq1 = makeWeapon('eq1');
+    const bp1 = makeFiller('bp1', 'BP1');
+    const bp2 = makeFiller('bp2', 'BP2');
+    const state = makeState({
+      handCards: [echoRemnant],
+      backpackItems: [bp1, bp2] as any,
+      equipmentSlot1: eq1 as any,
+      equipmentSlot2: null,
+      selectedHeroSkill: 'discard-empower',
+    });
+    let result = drain(state, [{ type: 'USE_HERO_SKILL', skillId: 'discard-empower' } as GameAction]);
+    expect(result.state.pendingHandDiscardSelection).not.toBeNull();
+    result = drain(result.state, [
+      { type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds: ['echo-rem-1'] } as GameAction,
+    ]);
+    // 永久卡走回收袋（不是坟场）
+    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-1')).toBeDefined();
+    expect(result.state.discardedCards.find(c => c.id === 'echo-rem-1')).toBeUndefined();
+    // onDiscardDraw 触发：背包两张牌进手
+    expect(result.state.handCards.find(c => c.id === 'bp1')).toBeDefined();
+    expect(result.state.handCards.find(c => c.id === 'bp2')).toBeDefined();
+  });
+
   it('RESOLVE → 选中的牌入坟场，单装备直接挂 burst+lifesteal', () => {
     const h1 = makeFiller('h1', 'Discardable');
     const eq1 = makeWeapon('eq1');
@@ -339,13 +375,12 @@ describe('噬血砺锋 — 玩家选择弃回', () => {
       equipmentSlot2: null,
       selectedHeroSkill: 'discard-empower',
     });
-    let result = reduce(state, { type: 'USE_HERO_SKILL', skillId: 'discard-empower' } as GameAction);
+    let result = drain(state, [{ type: 'USE_HERO_SKILL', skillId: 'discard-empower' } as GameAction]);
     expect(result.state.pendingHandDiscardSelection).not.toBeNull();
 
-    result = reduce(result.state, {
-      type: 'RESOLVE_HAND_DISCARD_SELECTION',
-      cardIds: ['h1'],
-    } as GameAction);
+    result = drain(result.state, [
+      { type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds: ['h1'] } as GameAction,
+    ]);
 
     expect(result.state.pendingHandDiscardSelection).toBeNull();
     expect(result.state.handCards.find(c => c.id === 'h1')).toBeUndefined();

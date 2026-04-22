@@ -14,7 +14,7 @@ import { applyPatch, noChange } from '../reducer';
 import type { GameCardData } from '@/components/GameCard';
 import type { ActiveRowSlots, EquipmentSlotId, EquipmentItem, PendingMagicAction } from '@/components/game-board/types';
 import { computeMaxHp, checkSwapUpgrade, applyMissileRelicEffects, executeArmorDoubleStrike, requestOrAutoHandDiscard, finalizeDiscardEmpower } from './magic-effects';
-import { DUNGEON_COLUMN_COUNT, PERSUADE_COST, MIN_PERSUADE_COST, createEmptyAmuletEffects } from '../constants';
+import { DUNGEON_COLUMN_COUNT, PERSUADE_COST, MIN_PERSUADE_COST, createEmptyAmuletEffects, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import {
   flattenActiveRowSlots,
   isDamageableTarget,
@@ -1213,11 +1213,11 @@ function reduceMagicSlotSelection(
       for (let iter = 0; iter < echoMul; iter++) {
         const oldMaxDur = currentItem.maxDurability ?? currentItem.durability ?? 0;
         const oldDur = currentItem.durability ?? oldMaxDur;
-        const newMaxDur = oldMaxDur + 1;
-        const afterAddDur = oldDur + 1;
+        const newMaxDur = clampMaxDurability(oldMaxDur + 1);
+        const afterAddDur = Math.min(oldDur + 1, newMaxDur);
         currentItem = { ...currentItem, maxDurability: newMaxDur, durability: afterAddDur };
 
-        if (afterAddDur === 4) {
+        if (afterAddDur === DURABILITY_CAP && afterAddDur > oldDur) {
           triggerCount += 1;
           const monsters = flattenActiveRowSlots(
             // 用最新的 patch.activeCards（前一轮可能已更新），否则回落到 state。
@@ -1607,8 +1607,9 @@ function reduceMagicSlotSelection(
       if (swapMonsters.length === 1) {
         const target = swapMonsters[0];
         const oldLayers = target.currentLayer ?? 1;
-        const newMaxDur = Math.max((slotItem as any).maxDurability ?? durability, oldLayers);
-        patch[slotId] = { ...slotItem, durability: oldLayers, maxDurability: newMaxDur } as any;
+        const newMaxDur = clampMaxDurability(Math.max((slotItem as any).maxDurability ?? durability, oldLayers));
+        const newDur = Math.min(oldLayers, newMaxDur);
+        patch[slotId] = { ...slotItem, durability: newDur, maxDurability: newMaxDur } as any;
         const updatedCards = (state.activeCards as any[]).map(slot => {
           if (!slot || slot.id !== target.id) return slot;
           return { ...slot, currentLayer: durability, hp: slot.maxHp ?? slot.hp ?? 0, fury: Math.max(slot.fury ?? 0, durability), hpLayers: Math.max(slot.hpLayers ?? 0, durability) };
@@ -1709,13 +1710,18 @@ function reduceMagicSlotSelection(
       const eventCount = peekedCards.filter(c => c.type === 'event').length * echoMul;
       const gains: Array<{ label: string; count: number }> = [];
       if (eventCount > 0) {
-        gains.push({ label: `${slotItem.name} 耐久上限 +1 并恢复 1 点耐久`, count: eventCount });
         const oldMaxDur = (slotItem as any).maxDurability ?? slotItem.durability ?? 0;
         const curDur = slotItem.durability ?? oldMaxDur;
-        const newMaxDur = oldMaxDur + eventCount;
+        const newMaxDur = clampMaxDurability(oldMaxDur + eventCount);
+        const actualMaxGain = newMaxDur - oldMaxDur;
         const newDur = Math.min(newMaxDur, curDur + eventCount);
         patch[slotId] = { ...slotItem, maxDurability: newMaxDur, durability: newDur } as any;
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天机铸炼：翻看 ${peekCount} 张牌，${eventCount} 张事件计入 → ${slotItem.name} 耐久上限 +${eventCount}（${oldMaxDur}→${newMaxDur}），耐久恢复 ${newDur - curDur}（${curDur}→${newDur}）${echoTag}` } });
+        if (actualMaxGain > 0) {
+          gains.push({ label: `${slotItem.name} 耐久上限 +1 并恢复 1 点耐久`, count: actualMaxGain });
+          sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天机铸炼：翻看 ${peekCount} 张牌，${eventCount} 张事件计入 → ${slotItem.name} 耐久上限 +${actualMaxGain}（${oldMaxDur}→${newMaxDur}），耐久恢复 ${newDur - curDur}（${curDur}→${newDur}）${echoTag}` } });
+        } else {
+          sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天机铸炼：翻看 ${peekCount} 张牌，${eventCount} 张事件计入；${slotItem.name} 耐久上限已达 ${DURABILITY_CAP}，仅恢复 ${newDur - curDur} 点耐久（${curDur}→${newDur}）${echoTag}` } });
+        }
       } else {
         sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天机铸炼：翻看 ${peekCount} 张牌，0 张事件 → 无增益${echoTag}` } });
       }
@@ -2155,8 +2161,9 @@ function reduceMagicMonsterSelection(
       }
       const oldDurability = swapSlotItem.durability ?? 0;
       const oldMonsterLayers = m.currentLayer ?? 1;
-      const newMaxDur = Math.max((swapSlotItem as any).maxDurability ?? oldDurability, oldMonsterLayers);
-      patch[swapSlotId] = { ...swapSlotItem, durability: oldMonsterLayers, maxDurability: newMaxDur } as any;
+      const newMaxDur = clampMaxDurability(Math.max((swapSlotItem as any).maxDurability ?? oldDurability, oldMonsterLayers));
+      const newDur = Math.min(oldMonsterLayers, newMaxDur);
+      patch[swapSlotId] = { ...swapSlotItem, durability: newDur, maxDurability: newMaxDur } as any;
       const updatedCards = (state.activeCards as any[]).map(slot => {
         if (!slot || slot.id !== m.id) return slot;
         return { ...slot, currentLayer: oldDurability, hp: slot.maxHp ?? slot.hp ?? 0, fury: Math.max(slot.fury ?? 0, oldDurability), hpLayers: Math.max(slot.hpLayers ?? 0, oldDurability) };

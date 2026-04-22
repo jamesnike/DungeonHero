@@ -1,0 +1,91 @@
+---
+description: "「被弃回 / 被弃置 / 被回收」三种措辞 vs onDiscardDraw 触发路径的语义对照——不要再凭措辞脑补行为"
+alwaysApply: true
+---
+
+# 「被弃回」vs「被回收」：onDiscardDraw 的两条触发路径
+
+## 背景：一次因为措辞脑补行为的事故
+
+User 报"`回收余韵` 卡面写'**被回收时**抽 1 张牌'，但实际从来没抽过"。
+我第一反应：`onDiscardDraw` 是个统一字段，应该已经在 `APPLY_DISCARD_EFFECTS` 里处理了。
+于是说"应该没问题，要不你再试一次？"——结果 user 是对的。
+
+根因：`onDiscardDraw` 的**唯一**触发入口是 `reduceApplyDiscardEffects`
+（`client/src/game-core/rules/cards.ts` 约 line 1361），而它只被 `DISCARD_OWNED_CARD` enqueue。
+当 permanent magic 卡**被自己 play 完后**通过 `FINALIZE_MAGIC_CARD` 走
+`ADD_TO_RECYCLE_BAG` 路径进回收袋时，**完全绕过 `APPLY_DISCARD_EFFECTS`**——
+所以"卡进回收袋"这个事件本身不会触发 `onDiscardDraw`。
+
+但卡面措辞是分裂的：
+
+| 卡 | 措辞 | 设计意图 | play 路径触发？ |
+|---|---|---|---|
+| `回响残页` | "**被弃回时**" 抽 2 张 | 玩家主动弃回（如被 `专属召唤` 弃回）才触发；play 没用 | ❌ 不触发（正确）|
+| `墓语回响` | "**被弃置时**" 抽 3 张 | 同上：玩家主动弃才触发；play 走"使用时回血" | ❌ 不触发（正确）|
+| `回收余韵` | "**被回收时**" 抽 N 张 | 卡进回收袋这个事件本身就触发，包括 play 后自己进袋 | ✅ 必须触发 |
+
+## 正确语义模型
+
+```
+「被弃回 / 被弃置」≈ 玩家主动弃 → 走 DISCARD_OWNED_CARD → 自动 enqueue APPLY_DISCARD_EFFECTS
+「被回收」         ≈ 卡进回收袋（包括 play 后自动入袋）→ 不走 DISCARD_OWNED_CARD
+```
+
+## 两条触发路径（必须分别核对）
+
+| 路径 | 触发位置 | 默认是否 enqueue APPLY_DISCARD_EFFECTS |
+|---|---|---|
+| A：`DISCARD_OWNED_CARD`（被 `专属召唤` / `汰旧迎新` / `回响行囊` / `噬血砺锋` / `祭坛秘术` 弃回） | `reduceDiscardOwnedCard` | ✅ 是 |
+| B：`FINALIZE_MAGIC_CARD` → `ADD_TO_RECYCLE_BAG`（卡 play 完自己入袋） | `reduceFinalizeMagicCard` (`rules/cards.ts` ~line 991) | ❌ **否** |
+
+**新加 / 改 `onDiscardDraw`、`onDiscardDamage`、honor-blood 等 "被弃" 系字段的卡时，先确定卡面意图属于哪条路径**：
+
+- 措辞是"**被弃回 / 被弃置 / 被弃**" → 路径 A 自动覆盖，**不要**在 resolver 里手动 enqueue `APPLY_DISCARD_EFFECTS`，否则 play 时会错触发。
+- 措辞是"**被回收 / 入袋时 / 进回收袋时**" → 路径 A 自动覆盖，**还要**在 resolver 里手动 enqueue 一条
+  `APPLY_DISCARD_EFFECTS` 才能让 play 路径生效（参考 `回收余韵` 的实现）。
+
+## 路径 B 的正确写法（仅"被回收"语义的卡需要）
+
+`回收余韵` 的 resolver（`magic-effects.ts` 约 line 1842、`magic.ts` 约 line 1453）：
+
+```ts
+patch.lastPlayedCardCategory = getCardPlayCategory(card);
+// 「被回收时」语义：play 路径下卡自身进回收袋也算"被回收"，
+// 显式触发 APPLY_DISCARD_EFFECTS 让 onDiscardDraw 生效。
+// opts.toRecycleBag=true 跳过 catapult / discard-zap 这种"主动弃手牌"才该触发的护符。
+enqueuedActions.push({ type: 'APPLY_DISCARD_EFFECTS', card, owner: 'player', opts: { toRecycleBag: true } });
+enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+```
+
+`opts.toRecycleBag: true` 关键：
+
+- ✅ `onDiscardDraw` / `onDiscardDamage` / honor-blood / `discard-profit` 永恒护符 都触发（这些跟"卡去哪"无关）。
+- ✅ catapult 护符（弹射）/ discard-zap 护符（弃能）**跳过**——这两种护符的设计是 "**手牌主动弃**才生效"，不能因为卡 play 完自动入袋而错触发。
+
+## What NOT to do
+
+- ❌ 看到卡面写"被回收 / 被弃"就以为统一字段已经处理好了。先看 resolver 是不是真的 enqueue 了 `APPLY_DISCARD_EFFECTS`。
+- ❌ 给"被弃回"语义的卡（如 `回响残页`）在 resolver 里加 `APPLY_DISCARD_EFFECTS`——会导致 play 时错抽牌，破坏卡牌平衡。
+- ❌ 给"被回收"语义的卡加 `APPLY_DISCARD_EFFECTS` 时**忘了** `opts.toRecycleBag: true`——会让 catapult / discard-zap 在 play 路径错触发。
+- ❌ 测试只覆盖 path A（`DISCARD_OWNED_CARD`）就收手——必须同时覆盖 path B（`PLAY_CARD` → 卡自己入袋）。
+
+## What to do
+
+- ✅ 改这类卡之前先读 `client/src/game-core/rules/cards.ts` `reduceFinalizeMagicCard` 的 disposition 分支，确认它走的是 `ADD_TO_RECYCLE_BAG` 而不是 `DISCARD_OWNED_CARD`。
+- ✅ 新加"被回收时"语义卡：在 resolver 里 `enqueuedActions.push({ type: 'APPLY_DISCARD_EFFECTS', card, owner: 'player', opts: { toRecycleBag: true } })`，然后才 push `FINALIZE_MAGIC_CARD`。
+- ✅ 测试两条路径都覆盖：
+  - `drain(state, [{ type: 'PLAY_CARD', cardId: card.id }])` 验证 path B
+  - `drain(state, [{ type: 'DISCARD_OWNED_CARD', card, owner: 'player' }])` 验证 path A
+- ✅ 跟 user 沟通时使用对方的术语，不要把"被回收"和"被弃回"等同起来——它们在游戏语义上是两件事。
+
+## 自检
+
+每次准备改涉及 `onDiscardDraw` / `onDiscardDamage` / honor-blood / "被弃" 系效果的卡之前，停下来问自己：
+
+> "这张卡卡面写的是'被弃回 / 被弃置'还是'被回收'？
+> 对应的触发路径是 A（DISCARD_OWNED_CARD）还是 A+B 都要？
+> 我有没有读过 `reduceFinalizeMagicCard` 的 disposition 分支确认 path B 默认不走 APPLY_DISCARD_EFFECTS？
+> 测试有没有同时覆盖 PLAY_CARD 路径和 DISCARD_OWNED_CARD 路径？"
+
+任意一条不确定，**回去读 `cards.ts` 再开口**。

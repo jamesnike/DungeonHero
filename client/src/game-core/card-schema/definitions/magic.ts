@@ -1450,6 +1450,10 @@ const starterRecycleDrawMagic: CardDefinition = {
       banner(sideEffects, `回收余韵：回收袋为空。${echoTag}`);
     }
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
+    // 「被回收时」语义：play 路径下卡自身进回收袋也算"被回收"，
+    // 显式触发 APPLY_DISCARD_EFFECTS 让 onDiscardDraw 生效。
+    // opts.toRecycleBag=true 跳过 catapult / discard-zap 这种"主动弃手牌"才该触发的护符。
+    enqueuedActions.push({ type: 'APPLY_DISCARD_EFFECTS', card, owner: 'player', opts: { toRecycleBag: true } });
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   },

@@ -16,7 +16,7 @@ import type {
 import type { GameState } from './types';
 import type { RngState } from './rng';
 import { nextInt, nextBool, nextId, nextRandom } from './rng';
-import { PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, HAND_LIMIT } from './constants';
+import { PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, HAND_LIMIT, clampMaxDurability } from './constants';
 import { flattenActiveRowSlots } from './helpers';
 
 // ---------------------------------------------------------------------------
@@ -339,11 +339,14 @@ export function persuadeSuccessPatch(
   monster: GameCardData,
   targetSlotId: EquipmentSlotId,
 ): Partial<GameState> {
+  const rawMaxDur = monster.fury ?? monster.hpLayers ?? 1;
+  const cappedMax = clampMaxDurability(rawMaxDur);
+  const rawDur = monster.currentLayer ?? monster.fury ?? 1;
   const monsterEquip: GameCardData = {
     ...monster,
     type: 'monster',
-    durability: monster.currentLayer ?? monster.fury ?? 1,
-    maxDurability: monster.fury ?? monster.hpLayers ?? 1,
+    durability: Math.min(rawDur, cappedMax),
+    maxDurability: cappedMax,
   };
 
   const activeCards = state.activeCards.map(c =>

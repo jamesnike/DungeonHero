@@ -19,7 +19,7 @@ import type { EquipmentSlotId, EquipmentRepairTarget } from '@/components/game-b
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, formatRepairTargetLabel } from '../helpers';
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack, addCardToBackpackPure } from '../cards';
 import { nextInt, pickRandom, shuffle as rngShuffle, nextId } from '../rng';
-import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY } from '../constants';
+import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import { computeAmuletEffects } from '../equipment';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
 
@@ -213,9 +213,15 @@ export function resolveAllPotionEffects(
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
     const maxDur = leftSlot.maxDurability ?? leftSlot.durability ?? 0;
-    (patch as any).equipmentSlot1 = { ...leftSlot, maxDurability: maxDur + amount };
-    log(sideEffects, 'potion', `淬炼药剂：${leftSlot.name} 耐久上限 +${amount}（${maxDur} → ${maxDur + amount}）`);
-    banner(sideEffects, `${leftSlot.name} 耐久上限 +${amount}！`);
+    const newMax = clampMaxDurability(maxDur + amount);
+    if (newMax > maxDur) {
+      (patch as any).equipmentSlot1 = { ...leftSlot, maxDurability: newMax };
+      log(sideEffects, 'potion', `淬炼药剂：${leftSlot.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）`);
+      banner(sideEffects, `${leftSlot.name} 耐久上限 +${newMax - maxDur}！`);
+    } else {
+      log(sideEffects, 'potion', `淬炼药剂：${leftSlot.name} 耐久上限已达上限 ${DURABILITY_CAP}，无法继续提升。`);
+      banner(sideEffects, `${leftSlot.name} 耐久上限已达上限 ${DURABILITY_CAP}。`);
+    }
     enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
@@ -230,9 +236,15 @@ export function resolveAllPotionEffects(
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
     const maxDur = rightSlot.maxDurability ?? rightSlot.durability ?? 0;
-    (patch as any).equipmentSlot2 = { ...rightSlot, maxDurability: maxDur + amount };
-    log(sideEffects, 'potion', `淬炼药剂（右）：${rightSlot.name} 耐久上限 +${amount}（${maxDur} → ${maxDur + amount}）`);
-    banner(sideEffects, `${rightSlot.name} 耐久上限 +${amount}！`);
+    const newMax = clampMaxDurability(maxDur + amount);
+    if (newMax > maxDur) {
+      (patch as any).equipmentSlot2 = { ...rightSlot, maxDurability: newMax };
+      log(sideEffects, 'potion', `淬炼药剂（右）：${rightSlot.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）`);
+      banner(sideEffects, `${rightSlot.name} 耐久上限 +${newMax - maxDur}！`);
+    } else {
+      log(sideEffects, 'potion', `淬炼药剂（右）：${rightSlot.name} 耐久上限已达上限 ${DURABILITY_CAP}，无法继续提升。`);
+      banner(sideEffects, `${rightSlot.name} 耐久上限已达上限 ${DURABILITY_CAP}。`);
+    }
     enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
@@ -404,9 +416,15 @@ export function resolveAllPotionEffects(
       const slot = slotsWithDurability[0];
       const item = slot.item;
       const maxDur = item.maxDurability ?? item.durability ?? 0;
-      (patch as any)[slot.id] = { ...item, maxDurability: maxDur + amount };
-      log(sideEffects, 'potion', `耐久补剂：${item.name} 耐久上限 +${amount}（${maxDur} → ${maxDur + amount}）`);
-      banner(sideEffects, `${item.name} 耐久上限 +${amount}！`);
+      const newMax = clampMaxDurability(maxDur + amount);
+      if (newMax > maxDur) {
+        (patch as any)[slot.id] = { ...item, maxDurability: newMax };
+        log(sideEffects, 'potion', `耐久补剂：${item.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）`);
+        banner(sideEffects, `${item.name} 耐久上限 +${newMax - maxDur}！`);
+      } else {
+        log(sideEffects, 'potion', `耐久补剂：${item.name} 耐久上限已达上限 ${DURABILITY_CAP}，无法继续提升。`);
+        banner(sideEffects, `${item.name} 耐久上限已达上限 ${DURABILITY_CAP}。`);
+      }
       enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
@@ -810,11 +828,17 @@ export function resolvePendingPotion(
       const item = state[slotId];
       if (!item || item.durability == null) return null;
       const maxDur = item.maxDurability ?? item.durability ?? 0;
-      (patch as any)[slotId] = { ...item, maxDurability: maxDur + amount };
+      const newMax = clampMaxDurability(maxDur + amount);
       patch.pendingPotionAction = null;
       patch.heroSkillBanner = null;
-      log(sideEffects, 'potion', `耐久补剂：${item.name} 耐久上限 +${amount}（${maxDur} → ${maxDur + amount}）`);
-      banner(sideEffects, `${item.name} 耐久上限 +${amount}！`);
+      if (newMax > maxDur) {
+        (patch as any)[slotId] = { ...item, maxDurability: newMax };
+        log(sideEffects, 'potion', `耐久补剂：${item.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）`);
+        banner(sideEffects, `${item.name} 耐久上限 +${newMax - maxDur}！`);
+      } else {
+        log(sideEffects, 'potion', `耐久补剂：${item.name} 耐久上限已达上限 ${DURABILITY_CAP}，无法继续提升。`);
+        banner(sideEffects, `${item.name} 耐久上限已达上限 ${DURABILITY_CAP}。`);
+      }
       enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
@@ -918,14 +942,22 @@ export function resolvePendingPotion(
           return applyPatch(state, patch, sideEffects, enqueuedActions);
         }
         const bannerParts: string[] = [];
+        let anyUpgraded = false;
         for (const slot of equippedSlots) {
           const item = slot.item;
           const maxDur = item.maxDurability ?? item.durability ?? 0;
-          (patch as any)[slot.id] = { ...item, maxDurability: maxDur + 1 };
-          log(sideEffects, 'potion', `装备修复剂：${item.name} 耐久上限 +1（${maxDur} → ${maxDur + 1}）`);
-          bannerParts.push(`${item.name} 上限 +1`);
+          const newMax = clampMaxDurability(maxDur + 1);
+          if (newMax > maxDur) {
+            (patch as any)[slot.id] = { ...item, maxDurability: newMax };
+            log(sideEffects, 'potion', `装备修复剂：${item.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）`);
+            bannerParts.push(`${item.name} 上限 +${newMax - maxDur}`);
+            anyUpgraded = true;
+          } else {
+            log(sideEffects, 'potion', `装备修复剂：${item.name} 耐久上限已达上限 ${DURABILITY_CAP}。`);
+            bannerParts.push(`${item.name} 已达上限 ${DURABILITY_CAP}`);
+          }
         }
-        banner(sideEffects, bannerParts.join('，') + '。');
+        banner(sideEffects, anyUpgraded ? bannerParts.join('，') + '。' : `所有装备耐久上限已达 ${DURABILITY_CAP}，无法继续提升。`);
         patch.pendingPotionAction = null;
         patch.heroSkillBanner = null;
         enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
@@ -1116,9 +1148,15 @@ function applyDurabilityMaxIncrease(
   const item = state[slotId];
   if (!item) return patch;
   const maxDur = item.maxDurability ?? item.durability ?? 0;
-  (patch as any)[slotId] = { ...item, maxDurability: maxDur + amount };
-  log(sideEffects, 'potion', `淬炼：${item.name} 耐久上限 +${amount}（${maxDur} → ${maxDur + amount}）`);
-  banner(sideEffects, `${item.name} 耐久上限 +${amount}！`);
+  const newMax = clampMaxDurability(maxDur + amount);
+  if (newMax > maxDur) {
+    (patch as any)[slotId] = { ...item, maxDurability: newMax };
+    log(sideEffects, 'potion', `淬炼：${item.name} 耐久上限 +${newMax - maxDur}（${maxDur} → ${newMax}）`);
+    banner(sideEffects, `${item.name} 耐久上限 +${newMax - maxDur}！`);
+  } else {
+    log(sideEffects, 'potion', `淬炼：${item.name} 耐久上限已达上限 ${DURABILITY_CAP}，无法继续提升。`);
+    banner(sideEffects, `${item.name} 耐久上限已达上限 ${DURABILITY_CAP}。`);
+  }
   return patch;
 }
 
