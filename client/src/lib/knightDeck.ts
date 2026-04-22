@@ -1361,8 +1361,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     classCard: true,
     description: '上手：该武器增幅一次（攻击 +2，按卡名累计；所有同名「生长之刃」共享）。',
     shortDescription: '上手 +2 攻击（按卡名累计）',
-    durability: 4,
-    maxDurability: 4,
+    durability: 2,
+    maxDurability: 2,
     onEnterHandEffect: 'growth-blade-onhand',
   });
 

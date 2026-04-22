@@ -27,11 +27,27 @@ alwaysApply: true
 
 `cardHasPermFlag` 命中的字段（`client/src/components/GameCard.tsx` ~L565）：
 
-- `magicType === 'permanent'`（永久魔法）
-- `permEquipment === true`（永恒装备 / 永恒铭刻 装备）
-- `isPermanentEvent === true`（永恒事件）
-- `recycleDelay > 0`（**含被 永恒铭刻 加 Perm 的 amulet** —— amulet 默认非 Perm）
+- `magicType === 'permanent'`
+- `permEquipment === true`
+- `isPermanentEvent === true`
+- `recycleDelay > 0`
 - `permStripped === true` 一票否决（凡化咒已剥离）
+
+## 各类卡 Perm 来源速查（**最容易脑补错的部分**）
+
+| 卡类型 | 默认是否 Perm | 怎么变成 Perm |
+|---|---|---|
+| `magic` | **可能原生 Perm**（很多卡 `magicType: 'permanent'` 内置：`回响残页` / `战血之印` / `凡化咒` 等等） | 原生定义；或被 永恒铭刻 / 附魔祭坛 / 永恒铭刻药 加 `recycleDelay` |
+| `event` | **可能原生 Perm**（`isPermanentEvent: true`） | 原生定义 |
+| `amulet` | **默认非 Perm** | 几乎只能由 永恒铭刻药 / 附魔祭坛 (`amulet-perm-grant`) 加 `recycleDelay: 2` |
+| `weapon` / `shield`（普通装备） | **默认非 Perm** | 几乎只能由 永恒铭刻药 (`grant-perm-2`) / 附魔祭坛 (`equipment-enchant`) 加 `recycleDelay` |
+| `weapon` / `shield`（骑士职业卡） | **少数原生 Perm**（`铁壁塔盾` 有 `permEquipment: true`） | 原生定义 |
+| `monster`（怪物装备） | **默认非 Perm** | 永恒铭刻 加 `recycleDelay` |
+| `potion` | **默认非 Perm**（所有原生 potion 都没 `recycleDelay`） | 几乎只能由 永恒铭刻药 (`grant-perm-2`) 加 `recycleDelay` |
+| `curse` | **从不** Perm（由 `isRecyclableFromHand` 显式排除） | — |
+
+**核心要点**：amulet / equipment / potion **三者对称**，默认都是非 Perm，主要靠 永恒铭刻（含其变体附魔祭坛、永恒铭刻药）改造为 Perm。
+**绝对不要**因为"潜意识里 amulet/potion 不是永久的"就跳过 Perm 检查——只要场上跑过 永恒铭刻一次，下一次销毁/转化操作就可能扫到 Perm 牌。
 
 ## 强制规则
 
@@ -41,8 +57,8 @@ alwaysApply: true
    patch.discardedCards = [...
    ```
    尤其是直接 mutate `state.discardedCards` 的，最容易藏 Perm-leak。
-2. **新加 amulet 销毁 / 转化路径**：默认假设场上可能有 永恒铭刻 过的 Perm amulet（`recycleDelay > 0`）。不分流 = bug。
-3. **新加 equipment 销毁路径**：默认假设是 `permEquipment` 或 `recycleDelay > 0` 的 Perm 装备。参考 `hero.ts:reduceMonsterDoom` / `magic-effects.ts:reduceDestroyEquipment` 里的 `shouldRouteEquipmentToPermRecycle` 用法。
+2. **新加 amulet / potion / 普通 equipment 销毁 / 转化路径**：这三类默认非 Perm，但**只要游戏里跑过一次 永恒铭刻就可能 Perm**。不分流 = bug。
+3. **新加 equipment 销毁路径**：用 `shouldRouteEquipmentToPermRecycle`（兼顾 `铁壁塔盾` 这类原生 `permEquipment` 和 永恒铭刻 加的 `recycleDelay`）。参考 `hero.ts:reduceMonsterDoom` / `magic-effects.ts:reduceDestroyEquipment`。
 4. **新加 hand 卡的 random/forced discard 路径**（如 `专属召唤` / `汰旧迎新`）：用 `DISCARD_OWNED_CARD`，**不要**直接 enqueue `ADD_TO_GRAVEYARD`。`reduceDiscardOwnedCard` 已经按 Perm 分流。
 
 ## 两种合规实现 pattern（按需选）
@@ -90,25 +106,27 @@ for (const dc of discarded) {
 - ❌ `enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: amulet })` 而不查 `cardHasPermFlag`。
 - ❌ `patch.discardedCards = [...state.discardedCards, ...state.amuletSlots]` 不分流——永恒铭刻 amulet 直接消失到坟场。
 - ❌ 给装备销毁路径 `ADD_TO_GRAVEYARD` 而不用 `shouldRouteEquipmentToPermRecycle` 检查。
-- ❌ 假设"amulet 不是 Perm 所以可以无脑进坟场"——`永恒铭刻` 会改变这个假设。
+- ❌ 假设"amulet / potion / 普通 equipment 不是 Perm 所以可以无脑进坟场"——`永恒铭刻 / 附魔祭坛 / 永恒铭刻药` 都会让这三类带上 `recycleDelay > 0` 而成为 Perm。
 - ❌ "我手上这张测试卡过了" 就收手——必须同时测 Perm + 非 Perm + permStripped 三种 fixture。
+- ❌ 在脑子里枚举"哪些 type 才需要 Perm 检查"——任何能装备/打出/被销毁的卡都得过 `cardHasPermFlag`。
 
 ## What to do
 
-- ✅ 任何 "destroy / convert / discard amulet" 的新代码都要先 `cardHasPermFlag` 分流。
-- ✅ "destroy / break equipment" 用 `shouldRouteEquipmentToPermRecycle`。
+- ✅ 任何 "destroy / convert / discard amulet / potion / equipment / magic" 的新代码都要先 `cardHasPermFlag` 分流。
+- ✅ "destroy / break equipment" 用 `shouldRouteEquipmentToPermRecycle`（它已包含 `permEquipment` + `recycleDelay > 0` 双判断）。
 - ✅ "discard hand card by player action" 用 `DISCARD_OWNED_CARD`，让它自己分流。
 - ✅ 写测试时永远准备 3 个 fixture：Perm（`recycleDelay: 2`）/ 普通 / `permStripped: true`。参考
   `client/src/game-core/__tests__/amulet-perm-routing-on-destroy.test.ts` 和
   `wraith-amulet-perm.test.ts`。
-- ✅ 跟 user 沟通时记得：amulet **默认非 Perm**，但 `永恒铭刻` 会让它带 `recycleDelay`，从这一刻起就是 Perm。
+- ✅ 跟 user 沟通时记得："amulet / potion / 普通 equipment **默认非 Perm**" 是默认事实，但 `永恒铭刻` 系列效果一执行，从这一刻起这张卡就是 Perm。
 
 ## 自检
 
 每次准备 push `ADD_TO_GRAVEYARD` 或 mutate `state.discardedCards` 之前，停下来问自己：
 
 > "这里被销毁/弃回的卡集合里，有没有可能含 Perm？
-> （permanent magic / `永恒铭刻` amulet / `permEquipment` 装备 / `isPermanentEvent`）
+> （原生：permanent magic / `permEquipment` 装备如 铁壁塔盾 / `isPermanentEvent` 事件；
+>   后天：被 永恒铭刻 / 附魔祭坛 / 永恒铭刻药 加 `recycleDelay > 0` 的 amulet / potion / 普通 equipment / 任意手牌）
 > 如果有，我有没有把 Perm 路由到回收袋？
 > 测试是不是覆盖了 Perm + 非 Perm 两种 fixture？"
 
