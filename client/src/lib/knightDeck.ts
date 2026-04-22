@@ -36,7 +36,7 @@ import bloodCurseSealImage from '@assets/generated_images/card_curse_blood_seal.
 import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
 import thunderAmuletSigilImage from '@assets/generated_images/card_dedupe_amulet_thunder_sigil.png';
-import knightDeleteDrawAmuletImage from '@assets/generated_images/chibi_arc_seal_amulet.png';
+import knightDeleteDrawAmuletImage from '@assets/generated_images/knight_delete_draw_amulet.png';
 import thunderGoldAmuletImage from '@assets/generated_images/knight_thunder_gold_amulet.png';
 import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
 import knightAmuletStunRecycleImage from '@assets/generated_images/knight_amulet_stun_recycle.png';
@@ -49,7 +49,7 @@ import evolvingShieldImage from '@assets/generated_images/knight_evolving_shield
 import guardianLinkShieldImage from '@assets/generated_images/knight_guardian_link_shield.png';
 import salvageAmuletImage from '@assets/generated_images/knight_salvage_amulet.png';
 import bloodrageAmuletImage from '@assets/generated_images/knight_bloodrage_amulet.png';
-import knightSelfDamageDrawAmuletImage from '@assets/generated_images/knight_magic_blood_draw.png';
+import knightSelfDamageDrawAmuletImage from '@assets/generated_images/knight_self_damage_draw_amulet.png';
 import persuadeAuraAmuletImage from '@assets/generated_images/knight_persuade_aura_amulet.png';
 import monsterEquipBuffAmuletImage from '@assets/generated_images/knight_monster_equip_buff_amulet.png';
 import statSwapPotionImage from '@assets/generated_images/knight_stat_swap_potion.png';
@@ -634,8 +634,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: bloodrageAmuletImage,
     classCard: true,
-    description: '每次对自己造成伤害时，所有装备栏临时攻击 +2。',
-    shortDescription: '每次自伤，全栏 +2 临时攻击',
+    description: '每次对自己造成伤害时，所有装备栏临时攻击 +3。',
+    shortDescription: '每次自伤，全栏 +3 临时攻击',
     amuletEffect: 'bloodrage-attack',
   });
 

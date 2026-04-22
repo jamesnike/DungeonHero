@@ -127,6 +127,8 @@ import knightBashShieldImage from '@assets/generated_images/knight_bash_shield.p
 import knightCommunalDefenseShieldImage from '@assets/generated_images/knight_communal_defense_shield.png';
 import knightGrowthShieldImage from '@assets/generated_images/knight_growth_shield.png';
 import knightGrowthBladeImage from '@assets/generated_images/knight_growth_blade.png';
+import knightSelfDamageDrawAmuletImage from '@assets/generated_images/knight_self_damage_draw_amulet.png';
+import knightDeleteDrawAmuletImage from '@assets/generated_images/knight_delete_draw_amulet.png';
 
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
@@ -187,6 +189,8 @@ const ALL_IMAGES = [
   knightCommunalDefenseShieldImage,
   knightGrowthShieldImage,
   knightGrowthBladeImage,
+  knightSelfDamageDrawAmuletImage,
+  knightDeleteDrawAmuletImage,
 ];
 
 const FLAVOR_TEXTS = [

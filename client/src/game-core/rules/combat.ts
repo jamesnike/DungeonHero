@@ -420,8 +420,8 @@ function reduceApplyDamage(
     turnDamageTaken: Number.isFinite(result.turnDamageTaken) ? result.turnDamageTaken : 0,
   };
 
-  if (result.berserkTurnBuff) {
-    patch.berserkTurnBuff = result.berserkTurnBuff;
+  if (result.slotTempAttack) {
+    patch.slotTempAttack = result.slotTempAttack;
   }
 
   // 「赎血召牌符」(self-damage-draw) — 每件 amulet 在每次"实际生效"的自伤事件

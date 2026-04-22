@@ -42,7 +42,16 @@ function isSuppressTempAttackAura(card: GameCardData | null | undefined): boolea
 }
 
 /**
- * 这些装备栏上的「临时攻击」数值应视为 0（仅 slotTempAttack，不含血怒等）。
+ * 这些装备栏上的「临时攻击」数值应视为 0。
+ *
+ * 历史注释曾写「不含血怒等」——那是 bloodrage 还在写 berserkTurnBuff 时的事。
+ * 自从 bloodrage 改写到 slotTempAttack（跟卡面文案「临时攻击」对齐 + 走 waterfall
+ * 清零生命周期），它也归类成「临时攻击」，跟其它来源（力量/均衡护符、药剂等）
+ * 一起被建筑光环抑制——卡面文案已同步删除「血怒等其它加成仍生效」。
+ *
+ * 注意 berserkTurnBuff（狂血豪赌等 per-turn buff）仍然不被建筑光环抑制——
+ * 那是另一类机制，跟「临时攻击」概念无关。
+ *
  * 邻格有装备时才抑制该栏；若栏空则无需处理。
  */
 export function getEquipmentSlotsWithSuppressedTempAttack(

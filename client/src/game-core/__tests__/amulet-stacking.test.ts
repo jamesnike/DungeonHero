@@ -191,7 +191,7 @@ describe('computeAmuletEffects stacking', () => {
   });
 
   describe('combat counters', () => {
-    it('狂暴攻击 ×3 — bloodrageAttackCount = 3 (consumer adds 2 × N attack on self-damage)', () => {
+    it('狂暴攻击 ×3 — bloodrageAttackCount = 3 (consumer adds 3 × N attack on self-damage)', () => {
       const fx = computeAmuletEffects([
         makeAmulet('bloodrage-attack', 'br-1'),
         makeAmulet('bloodrage-attack', 'br-2'),

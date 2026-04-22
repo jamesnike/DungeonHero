@@ -20,6 +20,7 @@ import type {
   ActiveAmuletEffects,
 } from '@/components/game-board/types';
 import type { EquipmentBuffSnapshot } from '@/lib/gameStorage';
+import type { SlotTempArmorState } from '@/components/game-board/types';
 import type { GameState } from './types';
 import { initialCombatState, INITIAL_HP, STRENGTH_SELF_DAMAGE } from './constants';
 import { flattenActiveRowSlots } from './helpers';
@@ -595,7 +596,14 @@ export interface DamageResult {
   appliedDamage: number;
   shieldAbsorbed: number;
   gameOver: boolean;
-  berserkTurnBuff?: EquipmentBuffSnapshot;
+  /**
+   * 「血怒战符」(bloodrage-attack) 自伤命中时给所有装备栏写的临时攻击。
+   * 走 `slotTempAttack` 的生命周期（waterfall 清零、START_TURN 不动），
+   * 跟卡面文案「装备栏临时攻击 +3」对齐——而不是历史上误用的 `berserkTurnBuff`
+   * （那是 per-turn 的「狂血豪赌」buff，START_TURN 清零、waterfall 不动，
+   * 跟玩家对「临时攻击」的心智模型不一致）。
+   */
+  slotTempAttack?: SlotTempArmorState;
   needsDeathWard?: boolean;
 }
 
@@ -671,10 +679,11 @@ export function computeDamage(
   };
 
   if (appliedDamage > 0 && amuletEffects.bloodrageAttackCount > 0 && opts?.selfInflicted) {
-    const bonus = 2 * amuletEffects.bloodrageAttackCount;
-    result.berserkTurnBuff = {
-      equipmentSlot1: (state.berserkTurnBuff.equipmentSlot1 ?? 0) + bonus,
-      equipmentSlot2: (state.berserkTurnBuff.equipmentSlot2 ?? 0) + bonus,
+    const bonus = 3 * amuletEffects.bloodrageAttackCount;
+    const prev = state.slotTempAttack ?? { equipmentSlot1: 0, equipmentSlot2: 0 };
+    result.slotTempAttack = {
+      equipmentSlot1: (prev.equipmentSlot1 ?? 0) + bonus,
+      equipmentSlot2: (prev.equipmentSlot2 ?? 0) + bonus,
     };
   }
 

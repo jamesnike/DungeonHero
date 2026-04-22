@@ -1553,6 +1553,22 @@ describe('reducer', () => {
       expect(result.enqueuedActions.filter(a => a.type === 'APPLY_DAMAGE').length).toBe(0);
     });
 
+    it('skips anti-magic reflect for curse cards (Golem 反魔 ignores curses)', () => {
+      // Curse cards auto-resolve as a forced penalty — they are not spells the
+      // player chose to cast — so Golem's 反魔 must NOT punish the player for
+      // them. Both APPLY_DAMAGE and the skill float should be skipped.
+      const monster = { id: 'm-curse-skip', type: 'monster' as const, name: 'Golem', value: 5, antiMagicReflect: 2, isStunned: false };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const curse = { id: 'c1', type: 'curse' as const, name: '诅咒', value: 0 };
+      const state = makeState({ activeCards: slots });
+      const result = reduce(state, { type: 'FINALIZE_MAGIC_CARD', card: curse as any });
+      expect(result.enqueuedActions.filter(a => a.type === 'APPLY_DAMAGE').length).toBe(0);
+      expect(result.enqueuedActions.filter(a => a.type === 'TRIGGER_MONSTER_SKILL_FLOAT').length).toBe(0);
+      // Curse still routes back to backpack (existing behavior preserved).
+      expect(result.enqueuedActions.some(a => a.type === 'ADD_TO_BACKPACK')).toBe(true);
+    });
+
     it('anti-magic reflect routes through equipped shield armor (no APPLY_DAMAGE)', () => {
       const monster = { id: 'm-am-shield', type: 'monster' as const, name: 'Mage', value: 5, antiMagicReflect: 3, isStunned: false };
       const slots = Array.from({ length: 5 }, () => null) as any;

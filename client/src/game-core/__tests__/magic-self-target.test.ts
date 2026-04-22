@@ -179,7 +179,7 @@ describe('单目标伤害 magic — 自伤路径 (allowsHeroTarget)', () => {
       [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'missile-bolt', monsterId: '', targetType: 'hero' }] as any,
     );
 
-    // 血怒战符在 reduceApplyDamage 内部用 amuletEffects.bloodrageAttackCount × 2 加攻击力；
+    // 血怒战符在 reduceApplyDamage 内部用 amuletEffects.bloodrageAttackCount × 3 加攻击力；
     // 我们这里只验证"selfInflicted 路径走通了"——HP 实际下降即足够；
     // 攻击力的具体数值堆砌由 amulet-stacking.test.ts 钉。
     expect(afterHero.state.hp).toBeLessThan(30);

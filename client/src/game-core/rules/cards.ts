@@ -940,30 +940,34 @@ function reduceFinalizeMagicCard(
   // style helper: a random shield slot's armor absorbs first; if no shield is
   // equipped, the damage falls onto tempShield/HP via APPLY_DAMAGE. The rng
   // is chained across monsters so every random shield pick uses fresh entropy.
+  // Curse cards are not "spells the player chose to cast" — they auto-resolve
+  // to enforce a penalty — so they MUST NOT trigger Golem's 反魔 reflect.
   let rng = state.rng;
   let armorPatch: Partial<GameState> = {};
   // Use the running armorPatch as a snapshot so successive reflects in the
   // same loop see each other's slot changes (an armor break in one iteration
   // must be visible to the next).
   let liveState = state;
-  const activeCards = flattenActiveRowSlots(state.activeCards);
-  for (const ac of activeCards) {
-    if (ac && ac.antiMagicReflect && ac.antiMagicReflect > 0 && !ac.isStunned) {
-      const reflectDmg = ac.antiMagicReflect;
-      // Trigger the skill float BEFORE the routed reflect damage so the
-      // animation pauses the pipeline, then the actual reflect resolves
-      // once the player has read the skill name.
-      enqueuedActions.push({
-        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-        monsterId: ac.id,
-        skillKey: 'reflect:antiMagic',
-      });
-      const route = routeReflectDamageToHero(liveState, reflectDmg, ac.name, '反魔', rng);
-      armorPatch = { ...armorPatch, ...route.patch };
-      liveState = { ...liveState, ...route.patch };
-      rng = route.rng;
-      sideEffects.push(...route.sideEffects);
-      enqueuedActions.push(...route.enqueuedActions);
+  if (card.type !== 'curse') {
+    const activeCards = flattenActiveRowSlots(state.activeCards);
+    for (const ac of activeCards) {
+      if (ac && ac.antiMagicReflect && ac.antiMagicReflect > 0 && !ac.isStunned) {
+        const reflectDmg = ac.antiMagicReflect;
+        // Trigger the skill float BEFORE the routed reflect damage so the
+        // animation pauses the pipeline, then the actual reflect resolves
+        // once the player has read the skill name.
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: ac.id,
+          skillKey: 'reflect:antiMagic',
+        });
+        const route = routeReflectDamageToHero(liveState, reflectDmg, ac.name, '反魔', rng);
+        armorPatch = { ...armorPatch, ...route.patch };
+        liveState = { ...liveState, ...route.patch };
+        rng = route.rng;
+        sideEffects.push(...route.sideEffects);
+        enqueuedActions.push(...route.enqueuedActions);
+      }
     }
   }
   Object.assign(patch, armorPatch);
