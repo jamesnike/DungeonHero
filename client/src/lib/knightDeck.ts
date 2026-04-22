@@ -540,7 +540,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   pushCard({
     type: 'shield',
     name: '进化甲壁',
-    value: 5,
+    value: 3,
     image: evolvingShieldImage,
     classCard: true,
     description: '格挡 4 次后自动升级（护甲 +2、耐久 +1、耐久上限 +1）。',
@@ -548,7 +548,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     shieldBlockAutoUpgradeCount: 4,
     durability: 2,
     maxDurability: 2,
-    armorMax: 5,
+    armorMax: 3,
   });
 
   pushCard({

@@ -943,25 +943,20 @@ export function resolveInstantMagic(
       return resolvePermGrant(state, card, sideEffects, patch, enqueuedActions, echoMultiplier);
 
     case '专属召唤': {
-      const playable = state.handCards.filter(c => c.id !== card.id);
-      const discardCount = Math.min(playable.length, 2);
-      if (discardCount > 0) {
-        let rng = state.rng;
-        const [discarded, rngAfter] = pickRandomHandCardsForDiscardPreferGraveyard(playable, discardCount, rng);
-        patch.rng = rngAfter;
-        const discardIds = new Set(discarded.map(c => c.id));
-        patch.handCards = state.handCards.filter(c => !discardIds.has(c.id));
-        for (const dc of discarded) {
-          enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
-        }
-        log(sideEffects, 'magic', `专属召唤：弃回 ${discarded.map(c => c.name).join('、')}`);
+      const promptText = '选择 2 张手牌弃回（之后获得一张职业专属卡）。';
+      const result = requestOrAutoHandDiscard(state, patch, {
+        sourceCardId: card.id,
+        requiredCount: 2,
+        title: '专属召唤',
+        prompt: promptText,
+        subEffect: 'class-summon',
+        context: { kind: 'class-summon', cardSnapshot: card },
+      });
+      if (result.mode === 'modal') {
+        banner(sideEffects, promptText);
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
-      enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: 1 });
-      sideEffects.push({ event: 'card:classDrawRequested' as any, payload: { count: 1, source: '专属召唤' } });
-      banner(sideEffects, `专属召唤：弃回 ${discardCount} 张牌，获得一张职业专属卡！`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
+      return finalizeClassSummon(state, card, result.discarded, sideEffects, patch, enqueuedActions);
     }
 
     case '升级卷轴': {
@@ -1864,25 +1859,20 @@ export function resolvePermanentMagic(
       return resolveOverkillUpgrade(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
     case '专属召唤': {
-      const playable = state.handCards.filter(c => c.id !== card.id);
-      const discardCount = Math.min(playable.length, 2);
-      if (discardCount > 0) {
-        let rng = state.rng;
-        const [discarded, rngAfter] = pickRandomHandCardsForDiscardPreferGraveyard(playable, discardCount, rng);
-        patch.rng = rngAfter;
-        const discardIds = new Set(discarded.map(c => c.id));
-        patch.handCards = state.handCards.filter(c => !discardIds.has(c.id));
-        for (const dc of discarded) {
-          enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
-        }
-        log(sideEffects, 'magic', `专属召唤：弃回 ${discarded.map(c => c.name).join('、')}`);
+      const promptText = '选择 2 张手牌弃回（之后获得一张职业专属卡）。';
+      const result = requestOrAutoHandDiscard(state, patch, {
+        sourceCardId: card.id,
+        requiredCount: 2,
+        title: '专属召唤',
+        prompt: promptText,
+        subEffect: 'class-summon',
+        context: { kind: 'class-summon', cardSnapshot: card },
+      });
+      if (result.mode === 'modal') {
+        banner(sideEffects, promptText);
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
-      enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: 1 });
-      sideEffects.push({ event: 'card:classDrawRequested' as any, payload: { count: 1, source: '专属召唤' } });
-      banner(sideEffects, `专属召唤：弃回 ${discardCount} 张牌，获得一张职业专属卡！`);
-      patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
+      return finalizeClassSummon(state, card, result.discarded, sideEffects, patch, enqueuedActions);
     }
 
     case '维度扭曲': {

@@ -174,7 +174,7 @@ describe('专属召唤 → 回响残页弃回触发 onDiscardDraw', () => {
     expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'f1')).toBeUndefined();
   });
 
-  it('用户报告复现：手牌只有 专属召唤 + 两张 Perm → 两张 Perm 都应进回收袋（不是坟场）', () => {
+  it('用户报告复现：手牌只有 专属召唤 + 两张 Perm → 弹出 modal；玩家选两张后都进回收袋（不是坟场）', () => {
     const cs = makeClassSummonInstant();
     const perm1 = makeEchoRemnant('echo-rem-A');
     const perm2 = makeEchoRemnant('echo-rem-B');
@@ -182,15 +182,24 @@ describe('专属召唤 → 回响残页弃回触发 onDiscardDraw', () => {
       handCards: [cs, perm1, perm2],
       backpackItems: [] as any,
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: cs.id } as GameAction]);
+    // 2 张可弃手牌 ≥ 必须 2 张 → 弹出 modal
+    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: cs.id } as GameAction]);
+    expect(r1.state.pendingHandDiscardSelection).not.toBeNull();
+    expect(r1.state.pendingHandDiscardSelection!.subEffect).toBe('class-summon');
+    expect(r1.state.pendingHandDiscardSelection!.count).toBe(2);
 
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-A')).toBeDefined();
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-B')).toBeDefined();
-    expect(result.state.discardedCards.find(c => c.id === 'echo-rem-A')).toBeUndefined();
-    expect(result.state.discardedCards.find(c => c.id === 'echo-rem-B')).toBeUndefined();
+    // 玩家选两张 Perm 弃回 → 都进回收袋
+    const r2 = drain(r1.state, [
+      { type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds: ['echo-rem-A', 'echo-rem-B'] } as GameAction,
+    ]);
+    expect(r2.state.pendingHandDiscardSelection).toBeNull();
+    expect(r2.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-A')).toBeDefined();
+    expect(r2.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-B')).toBeDefined();
+    expect(r2.state.discardedCards.find(c => c.id === 'echo-rem-A')).toBeUndefined();
+    expect(r2.state.discardedCards.find(c => c.id === 'echo-rem-B')).toBeUndefined();
   });
 
-  it('用户报告复现 (permanent variant)：升级版专属召唤 + 两张 Perm → 两张都进回收袋', () => {
+  it('用户报告复现 (permanent variant)：升级版专属召唤 + 两张 Perm → modal 选完后都进回收袋', () => {
     const cs = makeClassSummonPermanent();
     const perm1 = makeEchoRemnant('echo-rem-A');
     const perm2 = makeEchoRemnant('echo-rem-B');
@@ -198,15 +207,20 @@ describe('专属召唤 → 回响残页弃回触发 onDiscardDraw', () => {
       handCards: [cs, perm1, perm2],
       backpackItems: [] as any,
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: cs.id } as GameAction]);
+    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: cs.id } as GameAction]);
+    expect(r1.state.pendingHandDiscardSelection).not.toBeNull();
+    expect(r1.state.pendingHandDiscardSelection!.subEffect).toBe('class-summon');
 
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-A')).toBeDefined();
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-B')).toBeDefined();
-    expect(result.state.discardedCards.find(c => c.id === 'echo-rem-A')).toBeUndefined();
-    expect(result.state.discardedCards.find(c => c.id === 'echo-rem-B')).toBeUndefined();
+    const r2 = drain(r1.state, [
+      { type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds: ['echo-rem-A', 'echo-rem-B'] } as GameAction,
+    ]);
+    expect(r2.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-A')).toBeDefined();
+    expect(r2.state.permanentMagicRecycleBag.find(c => c.id === 'echo-rem-B')).toBeDefined();
+    expect(r2.state.discardedCards.find(c => c.id === 'echo-rem-A')).toBeUndefined();
+    expect(r2.state.discardedCards.find(c => c.id === 'echo-rem-B')).toBeUndefined();
   });
 
-  it('Perm 类型覆盖：专属召唤 + 一张 perm 装备 + 一张 perm 事件 → 都进回收袋', () => {
+  it('Perm 类型覆盖：专属召唤 + 一张 perm 装备 + 一张 perm 事件 → modal 选完后都进回收袋', () => {
     const cs = makeClassSummonInstant();
     const permWeapon: GameCardData = {
       id: 'perm-w',
@@ -231,12 +245,48 @@ describe('专属召唤 → 回响残页弃回触发 onDiscardDraw', () => {
       handCards: [cs, permWeapon, permEvent],
       backpackItems: [] as any,
     });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: cs.id } as GameAction]);
+    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: cs.id } as GameAction]);
+    expect(r1.state.pendingHandDiscardSelection).not.toBeNull();
 
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'perm-w')).toBeDefined();
-    expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'perm-evt')).toBeDefined();
-    expect(result.state.discardedCards.find(c => c.id === 'perm-w')).toBeUndefined();
-    expect(result.state.discardedCards.find(c => c.id === 'perm-evt')).toBeUndefined();
+    const r2 = drain(r1.state, [
+      { type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds: ['perm-w', 'perm-evt'] } as GameAction,
+    ]);
+    expect(r2.state.permanentMagicRecycleBag.find(c => c.id === 'perm-w')).toBeDefined();
+    expect(r2.state.permanentMagicRecycleBag.find(c => c.id === 'perm-evt')).toBeDefined();
+    expect(r2.state.discardedCards.find(c => c.id === 'perm-w')).toBeUndefined();
+    expect(r2.state.discardedCards.find(c => c.id === 'perm-evt')).toBeUndefined();
+  });
+
+  it('用户报告复现：专属召唤 + 专属感召（perm-1 starter）+ 1 张普通牌 → modal 选 专属感召 后回到回收袋', () => {
+    // 专属感召: magicType='permanent', recycleDelay=1
+    const cs = makeClassSummonInstant();
+    const ganzhao: GameCardData = {
+      id: 'ganzhao-1',
+      type: 'magic',
+      name: '专属感召',
+      value: 0,
+      image: '',
+      magicType: 'permanent',
+      recycleDelay: 1,
+      magicEffect: '永久魔法：发现一张专属牌，直接进入手牌。',
+    } as GameCardData;
+    const plain = makeFiller('plain-1', 'Plain');
+    const state = makeState({
+      handCards: [cs, ganzhao, plain],
+      backpackItems: [] as any,
+    });
+    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: cs.id } as GameAction]);
+    expect(r1.state.pendingHandDiscardSelection).not.toBeNull();
+    expect(r1.state.pendingHandDiscardSelection!.subEffect).toBe('class-summon');
+
+    // 玩家选了 专属感召 + 普通牌 → 专属感召 应进回收袋（不消失到坟场）
+    const r2 = drain(r1.state, [
+      { type: 'RESOLVE_HAND_DISCARD_SELECTION', cardIds: ['ganzhao-1', 'plain-1'] } as GameAction,
+    ]);
+    expect(r2.state.permanentMagicRecycleBag.find(c => c.id === 'ganzhao-1')).toBeDefined();
+    expect(r2.state.discardedCards.find(c => c.id === 'ganzhao-1')).toBeUndefined();
+    // 普通牌 → 进坟场
+    expect(r2.state.discardedCards.find(c => c.id === 'plain-1')).toBeDefined();
   });
 });
 
