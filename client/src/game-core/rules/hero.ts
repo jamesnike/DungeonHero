@@ -491,7 +491,32 @@ function reducePersuadeMonster(
   const isSameTarget = state.lastPersuadeTargetId === action.monsterId;
   patch.consecutivePersuadeCount = isSameTarget ? state.consecutivePersuadeCount + 1 : 1;
   patch.lastPersuadeTargetId = action.monsterId;
+
+  // Clear "next persuade" temporary buffs after this attempt is launched.
+  // The dice threshold has already been snapshotted into persuadeState.threshold
+  // by openPersuadeModal(), so clearing here does NOT affect the roll outcome.
+  //
+  // Two fields contribute to "下次劝降率 +%":
+  //   - persuadeAmuletBonus       (kept across waves; reset only on persuade
+  //                                 attempt or INIT_GAME). Sources: 翻印之符,
+  //                                 怀柔之印, 劝降之刃 / 劝降之锤 (per-hit),
+  //                                 主卡组 Dagger onEquip, 劝降祝福 magic.
+  //   - persuadeDiscount.rateBonus (event 际遇轮盘 / 部分 magic). costReduction
+  //                                  on the same object is also "single-shot",
+  //                                  so we null the whole thing as before.
+  // permanentPersuadeBonus is permanent — NOT cleared.
+  const clearedAmuletBonus = state.persuadeAmuletBonus ?? 0;
+  patch.persuadeAmuletBonus = 0;
   patch.persuadeDiscount = null;
+  if (clearedAmuletBonus > 0) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: {
+        type: 'system' as const,
+        message: `「下次劝降率 +${clearedAmuletBonus}%」临时加成已消耗。`,
+      },
+    });
+  }
 
   // Transition persuade modal to rolling phase
   if (state.persuadeState) {
@@ -1125,6 +1150,150 @@ function reduceMagicSlotSelection(
       const echoText = echoMul > 1 ? '（回响×2）' : '';
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `锋芒倍增：${label} 临时攻击 +${addAmt} 后翻倍：${curTempAtk} → ${finalVal}。${echoText}`);
+    }
+
+    case 'temp-attack-armor-draw': {
+      // 攻防协律：选定装备栏 +N 临时攻击 +N 临时护甲，并抽 1 张牌。
+      // N = 2/4/6（升级 0/1/2），抽牌固定 1 张。
+      // Echo (A 类)：N 与抽牌都 ×echoMultiplier；空槽允许选择，效果保留。
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const baseAmounts = [2, 4, 6];
+      const baseAmt = baseAmounts[pending.card.upgradeLevel ?? 0] ?? 2;
+      const totalAmt = baseAmt * echoMul;
+      const drawCount = 1 * echoMul;
+      const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      const curTempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + totalAmt };
+      patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTempArm + totalAmt };
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      const drawnNames: string[] = [];
+      for (let i = 0; i < drawCount; i++) {
+        const current = { ...state, ...patch };
+        const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(current);
+        Object.assign(patch, drawPatch);
+        if (drawn) {
+          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+          drawnNames.push(drawn.name);
+        }
+      }
+      const drawMsg = drawnNames.length > 0 ? `，抽到「${drawnNames.join('、')}」` : '';
+      const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `攻防协律：${label} +${totalAmt} 临攻 +${totalAmt} 临护${drawMsg}。${echoTag}`);
+    }
+
+    case 'durability-charge-burst': {
+      // 蓄能裂击：装备 +1 上限 +1 耐久；若加完后耐久==4 则随机激活行怪物 -1 血层、装备 -2。
+      // - 拒绝：空槽 / 没有耐久概念的装备（maxDur == 0），且不消耗 magic。
+      // - Echo (A 类)：整套效果在同一栏顺序执行 echoMul 次（每轮重新读耐久 / 怪物列表）。
+      // - 怪物伤害用 enqueue DEAL_DAMAGE_TO_MONSTER（damage = 该层满 HP）。
+      //   走标准战斗管线 → 自动处理死亡 / 流血效果 / discoverHit 等。
+      //   注意：对 Golem(maxDamagePerHit=5)、buglet shield 等特殊抗性怪可能不破层
+      //   —— 这是与命运之刃同样的边缘 case，符合"按层 HP 数值打"语义。
+      // - 若没怪物可选，伤害跳过、装备耐久仍 -2（用户明确要求）。
+      if (!slotItem) {
+        patch.heroSkillBanner = '该装备栏为空。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const initialMaxDur = (slotItem as any).maxDurability ?? slotItem.durability ?? 0;
+      if (initialMaxDur === 0) {
+        patch.heroSkillBanner = '这件装备没有耐久度。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      let currentItem: any = { ...slotItem };
+      let currentRng = state.rng;
+      const summaryParts: string[] = [];
+      let triggerCount = 0;
+      let damagedMonsterCount = 0;
+
+      for (let iter = 0; iter < echoMul; iter++) {
+        const oldMaxDur = currentItem.maxDurability ?? currentItem.durability ?? 0;
+        const oldDur = currentItem.durability ?? oldMaxDur;
+        const newMaxDur = oldMaxDur + 1;
+        const afterAddDur = oldDur + 1;
+        currentItem = { ...currentItem, maxDurability: newMaxDur, durability: afterAddDur };
+
+        if (afterAddDur === 4) {
+          triggerCount += 1;
+          const monsters = flattenActiveRowSlots(
+            // 用最新的 patch.activeCards（前一轮可能已更新），否则回落到 state。
+            (patch.activeCards ?? state.activeCards) as ActiveRowSlots,
+          ).filter(isDamageableTarget);
+          let monsterMsg = '';
+          if (monsters.length > 0) {
+            const [pickedIdx, newRng] = nextInt(currentRng, 0, monsters.length - 1);
+            currentRng = newRng;
+            const target = monsters[pickedIdx];
+            ensureEngaged({ ...state, ...patch }, target, enqueuedActions);
+            const layerHp = target.hp ?? 0;
+            enqueuedActions.push({
+              type: 'DEAL_DAMAGE_TO_MONSTER',
+              monsterId: target.id,
+              damage: layerHp,
+              source: 'durability-charge-burst',
+              isSpellDamage: true,
+            });
+            damagedMonsterCount += 1;
+            monsterMsg = `→ ${target.name} 受到 1 血层伤害`;
+          } else {
+            monsterMsg = '→ 场上无怪物';
+          }
+          const afterPenalty = Math.max(0, afterAddDur - 2);
+          currentItem = { ...currentItem, durability: afterPenalty };
+          summaryParts.push(`第${iter + 1}轮：${oldDur}→${afterAddDur}（达 4，${monsterMsg}），耐久 -2 → ${afterPenalty}`);
+        } else {
+          summaryParts.push(`第${iter + 1}轮：${oldDur}→${afterAddDur}（未触发 4 耐久）`);
+        }
+      }
+
+      patch.rng = currentRng;
+      patch[slotId] = currentItem;
+      const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'magic',
+          message: `蓄能裂击（${currentItem.name}）：${summaryParts.join('；')}${echoTag}`,
+        },
+      });
+      const banner = triggerCount > 0
+        ? `蓄能裂击：${currentItem.name} 触发 ${triggerCount} 次，命中 ${damagedMonsterCount} 只敌人。${echoTag}`
+        : `蓄能裂击：${currentItem.name} 未达到 4 耐久阈值。${echoTag}`;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'temp-stats-to-draw': {
+      // 战势化符：drawCount = floor((slotTempAttack + slotTempArmor) / 3) * echo
+      // 选定栏的 临时攻击 与 临时护甲 合并为 pool 后整体除 3。
+      // - 0/1/2 总值 → 抽 0 张（仍正常结算消耗这张 magic）
+      // - 空槽允许选（pool 为 0）
+      // - 背包空 / 手牌满时由 drawFromBackpackToHandPure 自然停止
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      const curTempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+      const totalTemp = curTempAtk + curTempArm;
+      const baseDraw = Math.floor(totalTemp / 3);
+      const drawCount = baseDraw * echoMul;
+      const drawnNames: string[] = [];
+      for (let i = 0; i < drawCount; i++) {
+        const current = { ...state, ...patch };
+        const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(current);
+        Object.assign(patch, drawPatch);
+        if (drawn) {
+          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+          drawnNames.push(drawn.name);
+        } else {
+          break;
+        }
+      }
+      const drawMsg = drawnNames.length > 0 ? `，抽到「${drawnNames.join('、')}」` : '';
+      const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
+      const formulaTag = echoMul > 1 ? `${baseDraw}×${echoMul}=${drawCount}` : `${drawCount}`;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `战势化符：${label} 临攻 ${curTempAtk} + 临护 ${curTempArm} = ${totalTemp} → 抽 ${formulaTag} 张牌${drawMsg}。${echoTag}`);
     }
 
     case 'weapon-manual': {

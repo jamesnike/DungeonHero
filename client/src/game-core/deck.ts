@@ -89,6 +89,7 @@ import arcSealAmuletImage from '@assets/generated_images/knight_arc_seal_amulet.
 // ---------------------------------------------------------------------------
 import skillScrollImageImport from '@assets/generated_images/chibi_skill_scroll.png';
 import eventScrollImageImport from '@assets/generated_images/chibi_event_scroll.png';
+import discoverClassToHandImage from '@assets/generated_images/relic_waterfall_discover.png';
 import persuadeScrollCharmImage from '@assets/generated_images/card_dedupe_persuade_scroll_charm.png';
 export const skillScrollImage = skillScrollImageImport;
 export const eventScrollImage = eventScrollImageImport;
@@ -1070,9 +1071,9 @@ export function createDeck(
     value: 0,
     image: dedupeMagicStunWaveImage,
     magicType: 'instant',
-    magicEffect: '击晕上限 +10%。对激活行所有怪物 60% 击晕。',
-    description: '一次性：击晕上限 +10%。对激活行所有怪物 60% 击晕。',
-    shortDescription: '击晕上限 +10%；全场怪物 60% 击晕',
+    magicEffect: '击晕上限 +5%。对激活行所有怪物 60% 击晕。',
+    description: '一次性：击晕上限 +5%。对激活行所有怪物 60% 击晕。',
+    shortDescription: '击晕上限 +5%；全场怪物 60% 击晕',
     knightEffect: 'stun-wave',
   });
 
@@ -1667,8 +1668,8 @@ export function createDeck(
     name: '混沌骰局',
     value: 0,
     image: dedupeEventChaosDiceGameImage,
-    description: '掷骰后翻转为「混沌冲击」永久魔法。',
-    shortDescription: '掷骰后翻为「混沌冲击」永久魔法',
+    description: '掷骰后翻转为「混沌冲击」即时魔法。',
+    shortDescription: '掷骰后翻为「混沌冲击」即时魔法',
     eventChoices: [
       {
         text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗回背包并抽2张牌，并翻转为"混沌冲击"。',
@@ -1696,8 +1697,8 @@ export function createDeck(
         name: '混沌冲击',
         value: 0,
         image: dedupeMagicChaosImpactFlipImage,
-        magicType: 'permanent',
-        magicEffect: '永久魔法：对一个怪物造成 3 点伤害。超杀：抽 2 张牌。(可超手牌上限)',
+        magicType: 'instant',
+        magicEffect: '对一个怪物造成 3 点伤害。超杀：抽 2 张牌。(可超手牌上限)',
         description: '对一个怪物造成 3 点伤害。超杀：抽 2 张牌。(可超手牌上限)',
         shortDescription: '3 点伤害；超杀抽 2 张',
       },
@@ -2227,7 +2228,7 @@ export function createDeck(
       {
         text: '怀柔圣殿（劝降等级+1，获得「劝降祝福」永久魔法）',
         effect: ['persuadeLevel+1', 'grantPersuadeBoostMagic'],
-        hint: '劝降等级 +1，获得永久魔法「劝降祝福」（Perm 1）：下次劝降成功率 +15%（精英 +10%），抽 1 张牌',
+        hint: '劝降等级 +1，获得永久魔法「劝降祝福」（Perm 1）：下次劝降成功率 +15%，抽 1 张牌',
       },
       {
         text: '赏金猎场（商店等级+1，获得「赏金裁决」永久魔法）',
@@ -2318,6 +2319,7 @@ export const STARTER_CARD_IDS = {
   transformStreakStrike: 'starter-perm-transform-streak-strike',
   flankSlotTempAttack: 'starter-perm-flank-slot-temp-attack',
   deckTopSwapGold: 'starter-perm-deck-top-swap-gold',
+  discoverClassToHand: 'starter-perm-discover-class-to-hand',
 } as const;
 
 /**
@@ -2367,6 +2369,30 @@ export function createStarterHealEchoCard(): GameCardData {
     magicEffect: '永久魔法：使用时立即回复 2 点生命。',
     description: '使用时立即回复 2 点生命。使用后回到回收袋，瀑流后可再次使用。',
     shortDescription: '使用 +2 生命',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// createStarterDiscoverClassToHandCard — opening-hand Perm 2 magic.
+// On play: open class-deck discover (3-of-N) and place the chosen card
+// directly into hand (falls back to backpack → recycle bag if hand is full).
+// recycleDelay: 2 (Perm 2). The actual discover/delivery is wired by the
+// `STARTER_CARD_IDS.discoverClassToHand` branch in `resolvePermanentMagic`,
+// which emits `card:discoverRequested` with `delivery: 'hand-first'`.
+// ---------------------------------------------------------------------------
+
+export function createStarterDiscoverClassToHandCard(): GameCardData {
+  return {
+    id: STARTER_CARD_IDS.discoverClassToHand,
+    type: 'magic',
+    name: '专属感召',
+    value: 0,
+    image: discoverClassToHandImage,
+    magicType: 'permanent',
+    magicEffect: '永久魔法：发现一张专属牌，直接进入手牌。',
+    description: '发现一张专属牌（三选一），直接进入手牌（手牌已满则进背包，背包已满则进回收袋）。使用后回到回收袋，2 次瀑流后可再次使用。',
+    shortDescription: '发现 1 张专属牌进手牌',
+    recycleDelay: 2,
   };
 }
 

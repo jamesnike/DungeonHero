@@ -828,7 +828,7 @@ const weaponManual: CardDefinition = {
 const chaosStrikeDef: CardDefinition = {
   effectId: 'card:混沌冲击',
   effects: [],
-  tags: ['magic', 'permanent', 'damage'],
+  tags: ['magic', 'instant', 'damage'],
   resolver: resolveChaosStrike,
 };
 
@@ -1938,6 +1938,27 @@ const knightRecallEquipment: CardDefinition = {
   resolver: resolveKnightPermanentMagic,
 };
 
+const knightCleanseDraw: CardDefinition = {
+  effectId: 'knight:cleanse-draw',
+  effects: [],
+  tags: ['knight', 'permanent', 'interactive', 'draw'],
+  resolver: resolveKnightPermanentMagic,
+};
+
+const knightRecycleTide: CardDefinition = {
+  effectId: 'knight:recycle-tide',
+  effects: [],
+  tags: ['knight', 'permanent', 'recycle'],
+  resolver: resolveKnightPermanentMagic,
+};
+
+const knightPersuadeToTempAttack: CardDefinition = {
+  effectId: 'knight:persuade-to-temp-attack',
+  effects: [],
+  tags: ['knight', 'permanent', 'buff', 'persuade'],
+  resolver: resolveKnightPermanentMagic,
+};
+
 const knightDiscardRebuild: CardDefinition = {
   effectId: 'knight:discard-rebuild',
   effects: [],
@@ -1976,6 +1997,75 @@ const knightTempAttackDouble: CardDefinition = {
       echoMultiplier,
     } as any;
     patch.heroSkillBanner = '锋芒倍增：选择一个装备栏。';
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
+// 蓄能裂击 — Perm 2. Select an equipment with durability; +1 maxDurability +1
+// durability. If after the +1 the durability is 4, deal 1 layer of damage to a
+// random active-row monster, then -2 durability on the equipment.
+// Echo (A): repeat the entire effect echoMultiplier times sequentially.
+// Empty slots / equipment without durability are rejected (magic not consumed).
+const knightDurabilityChargeBurst: CardDefinition = {
+  effectId: 'knight:durability-charge-burst',
+  effects: [],
+  tags: ['knight', 'permanent', 'interactive', 'damage'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    patch.pendingMagicAction = {
+      card,
+      effect: 'durability-charge-burst',
+      step: 'slot-select',
+      prompt: `蓄能裂击：选择一件装备，耐久上限+1 耐久+1；若达 4 耐久则随机敌人 -1 血层、装备 -2。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `蓄能裂击：选择一件装备。${echoLabel}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
+// 战势化符 — Perm 1. Select an equipment slot (empty allowed); draw
+// floor((slotTempAttack + slotTempArmor) / 3) cards from backpack. Echo (A):
+// final draw count multiplied by echoMultiplier. Always resolves (even if 0).
+const knightTempStatsToDraw: CardDefinition = {
+  effectId: 'knight:temp-stats-to-draw',
+  effects: [],
+  tags: ['knight', 'permanent', 'interactive', 'draw'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    patch.pendingMagicAction = {
+      card,
+      effect: 'temp-stats-to-draw',
+      step: 'slot-select',
+      prompt: `战势化符：选择一个装备栏，按 (临时攻击+临时护甲)÷3 抽牌。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `战势化符：选择一个装备栏。${echoLabel}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
+// 攻防协律 — Perm 1. Select an equipment slot (empty allowed); apply +N temp
+// attack and +N temp armor (N=2/4/6 by upgrade level), then draw 1 card from
+// backpack. Echo (A): both stats and draw multiplied by echoMultiplier.
+// Always opens picker — same pattern as weapon-burst / temp-armor / temp-attack-double.
+const knightTempAttackArmorDraw: CardDefinition = {
+  effectId: 'knight:temp-attack-armor-draw',
+  effects: [],
+  tags: ['knight', 'permanent', 'interactive', 'buff', 'draw'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const amounts = [2, 4, 6];
+    const baseAmt = amounts[card.upgradeLevel ?? 0] ?? 2;
+    const totalAmt = baseAmt * echoMultiplier;
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    patch.pendingMagicAction = {
+      card,
+      effect: 'temp-attack-armor-draw',
+      step: 'slot-select',
+      prompt: `攻防协律：选择一个装备栏，+${totalAmt} 临时攻击 +${totalAmt} 临时护甲，抽 ${1 * echoMultiplier} 张牌。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `攻防协律：选择一个装备栏（+${totalAmt} 临攻 +${totalAmt} 临护，抽 ${1 * echoMultiplier} 张）。${echoLabel}`;
     return applyPatch(state, patch, sideEffects);
   },
 };
@@ -2205,9 +2295,15 @@ const allMagicDefinitions: CardDefinition[] = [
   knightBloodSacrificeStrike,
   knightBloodDraw,
   knightRecallEquipment,
+  knightCleanseDraw,
+  knightRecycleTide,
+  knightPersuadeToTempAttack,
   knightArmorStunConvert,
   knightStunCapStrike,
   knightTempAttackDouble,
+  knightTempAttackArmorDraw,
+  knightTempStatsToDraw,
+  knightDurabilityChargeBurst,
   knightDiscardRebuild,
   knightGreedCurse,
 ];

@@ -495,6 +495,14 @@ export interface GameState {
   discoverOptions: GameCardData[];
   discoverSourceLabel: string | null;
   /**
+   * Destination for the cloned card produced by RESOLVE_DISCOVER_SELECTION.
+   * Defaults to 'backpack'. When 'hand-first', the resolver tries handCards
+   * first (subject to `getEffectiveHandLimit`) before falling back to the
+   * standard backpack-or-recycle-bag path. Set by BEGIN_DISCOVER and reset to
+   * 'backpack' on selection / cancel.
+   */
+  discoverDelivery: 'backpack' | 'hand-first';
+  /**
    * Queue of class-deck discovers waiting to fire one after another.
    * Each entry triggers a fresh BEGIN_DISCOVER (re-pulled from current
    * `classDeck`) when the previous discover modal closes. Used by
@@ -541,10 +549,6 @@ export interface GameState {
 
   // --- Eternal relics ---
   eternalRelics: EternalRelic[];
-
-  // --- Init-derived UI state ---
-  /** ID of the class-deck card shown as preview after game init (RNG-picked). */
-  classCardPreviewId: string | null;
 
   // --- Game log ---
   gameLogEntries: LogEntry[];

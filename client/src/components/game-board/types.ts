@@ -32,7 +32,7 @@ export type CombatState = {
 
 export type EquipmentSlotId = 'equipmentSlot1' | 'equipmentSlot2';
 
-export type FlightSourceHint = EquipmentSlotId | 'amulet' | 'graveyard';
+export type FlightSourceHint = EquipmentSlotId | 'amulet' | 'graveyard' | 'hero';
 
 export type EquipmentItem = GameCardData & {
   type: 'weapon' | 'shield' | 'monster';
@@ -568,6 +568,33 @@ export type PendingMagicAction =
       prompt: string;
     }
   | {
+      // 攻防协律：选择装备栏，+N 临攻 / +N 临护 + 抽 1 张牌。
+      card: GameCardData;
+      effect: 'temp-attack-armor-draw';
+      step: 'slot-select';
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      prompt: string;
+    }
+  | {
+      // 战势化符：选择装备栏，按 floor((临攻+临护)/3) 抽牌。
+      card: GameCardData;
+      effect: 'temp-stats-to-draw';
+      step: 'slot-select';
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      prompt: string;
+    }
+  | {
+      // 蓄能裂击：选择装备 +1 上限/+1 耐久，达 4 耐久则随机敌人 -1 血层并装备 -2。
+      card: GameCardData;
+      effect: 'durability-charge-burst';
+      step: 'slot-select';
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      prompt: string;
+    }
+  | {
       // 连环转律：根据连续转型链长度对所选怪物造成法术伤害。
       card: GameCardData;
       effect: 'transform-streak-strike';
@@ -941,6 +968,8 @@ export type ActiveAmuletEffects = {
   lastWordsMonsterDebuffCount: number;
   stunRateBoost: number;
   stunGoldCount: number;
+  /** 「招灵书印」每删除一张牌，从背包随机抽 2 × N 张牌（linear ×N stacking）。 */
+  deleteDrawCount: number;
 };
 
 export type WaterfallPhase = 'idle' | 'revealing' | 'dropping' | 'discarding' | 'dealing';

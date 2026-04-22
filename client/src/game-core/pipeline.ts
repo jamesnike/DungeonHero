@@ -238,6 +238,7 @@ function isInputContinuation(action: GameAction): boolean {
     case 'APPLY_MONSTER_REWARD':
     case 'DEQUEUE_MONSTER_REWARD':
     case 'BEGIN_DISCOVER':
+    case 'RESOLVE_DISCOVER_SELECTION':
     // Pending-action continuations (player chose a target / dismissed modal)
     case 'SET_PENDING_MAGIC':
     case 'SET_PENDING_POTION':

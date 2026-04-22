@@ -5,7 +5,7 @@ import { createInitialGameState } from '../state';
 import { createRng, shuffle as rngShuffle } from '../rng';
 import type { GameState } from '../types';
 import type { GameAction } from '../actions';
-import { initialCombatState } from '../constants';
+import { initialCombatState, BASE_BACKPACK_CAPACITY } from '../constants';
 
 function makeState(overrides?: Partial<GameState>): GameState {
   return { ...createInitialGameState(), ...overrides };
@@ -327,8 +327,11 @@ describe('reducer', () => {
       const result = reduce(state, { type: 'PURCHASE', cardId: 'c1' });
       expect(result.state.gold).toBe(10);
       expect(result.state.backpackItems).toHaveLength(1);
-      expect(result.state.backpackItems[0].id).toBe('c1');
-      expect(result.state.classDeck).toHaveLength(1);
+      // The class pool is now an infinite template — the bought card is
+      // a clone with a fresh id whose base id derives from 'c1'.
+      expect(result.state.backpackItems[0].id.startsWith('c1')).toBe(true);
+      // Class deck is NOT consumed by purchase — stays at 2.
+      expect(result.state.classDeck).toHaveLength(2);
       expect(result.state.shopOfferings[0].sold).toBe(true);
     });
 
@@ -558,7 +561,9 @@ describe('reducer', () => {
       ];
       const state = makeState({ classDeck: cards as any, backpackItems: [], backpackCapacityModifier: 0 });
       const result = reduce(state, { type: 'GAIN_CLASS_DECK_BOTTOM_CARDS', count: 2 });
-      expect(result.state.classDeck.length).toBe(1);
+      // Class pool is an infinite template — bottom cards are cloned into the
+      // backpack and the template is preserved.
+      expect(result.state.classDeck.length).toBe(3);
       expect(result.state.backpackItems.length).toBe(2);
       expect(result.sideEffects.some(e => e.event === 'log:entry')).toBe(true);
     });
@@ -796,6 +801,80 @@ describe('reducer', () => {
       });
       const result = reduce(state, { type: 'PERSUADE_MONSTER', monsterId: 'm1' });
       expect((result.state.persuadeState as any)?.phase).toBe('rolling');
+    });
+
+    // ---------------------------------------------------------------------
+    // persuadeAmuletBonus reset — it's the "下次劝降率 +%" temporary buff
+    // accumulated by 翻印之符 / 怀柔之印 / 劝降之刃 / 劝降祝福 etc. After
+    // ANY persuade attempt is launched (gold check passes), this buff
+    // MUST clear — otherwise it accumulates forever across persuades.
+    // ---------------------------------------------------------------------
+    it('clears persuadeAmuletBonus to 0 after a successful attempt launch', () => {
+      const state = makeState({
+        gold: 100,
+        activeCards: [monster as any],
+        persuadeAmuletBonus: 35,
+      });
+      const result = reduce(state, { type: 'PERSUADE_MONSTER', monsterId: 'm1' });
+      expect(result.state.persuadeAmuletBonus).toBe(0);
+    });
+
+    it('preserves persuadeAmuletBonus when gold is insufficient (attempt aborted)', () => {
+      const state = makeState({
+        gold: 0,
+        activeCards: [monster as any],
+        persuadeAmuletBonus: 25,
+      });
+      const result = reduce(state, { type: 'PERSUADE_MONSTER', monsterId: 'm1' });
+      expect(result.state.persuadeAmuletBonus).toBe(25);
+    });
+
+    it('does NOT touch permanentPersuadeBonus', () => {
+      const state = makeState({
+        gold: 100,
+        activeCards: [monster as any],
+        persuadeAmuletBonus: 10,
+        permanentPersuadeBonus: 8,
+      });
+      const result = reduce(state, { type: 'PERSUADE_MONSTER', monsterId: 'm1' });
+      expect(result.state.persuadeAmuletBonus).toBe(0);
+      expect(result.state.permanentPersuadeBonus).toBe(8);
+    });
+
+    it('clears persuadeAmuletBonus alongside persuadeDiscount in the same attempt', () => {
+      const state = makeState({
+        gold: 100,
+        activeCards: [monster as any],
+        persuadeAmuletBonus: 12,
+        persuadeDiscount: { costReduction: 5, rateBonus: 20 },
+      });
+      const result = reduce(state, { type: 'PERSUADE_MONSTER', monsterId: 'm1' });
+      expect(result.state.persuadeAmuletBonus).toBe(0);
+      expect(result.state.persuadeDiscount).toBeNull();
+    });
+
+    it('emits a system log entry only when amulet bonus was non-zero', () => {
+      const stateWithBonus = makeState({
+        gold: 100,
+        activeCards: [monster as any],
+        persuadeAmuletBonus: 25,
+      });
+      const resultWithBonus = reduce(stateWithBonus, { type: 'PERSUADE_MONSTER', monsterId: 'm1' });
+      const hasConsumeLog = resultWithBonus.sideEffects.some(
+        e => e.event === 'log:entry' && /\+25%.*消耗/.test((e as any)?.payload?.message ?? ''),
+      );
+      expect(hasConsumeLog).toBe(true);
+
+      const stateNoBonus = makeState({
+        gold: 100,
+        activeCards: [monster as any],
+        persuadeAmuletBonus: 0,
+      });
+      const resultNoBonus = reduce(stateNoBonus, { type: 'PERSUADE_MONSTER', monsterId: 'm1' });
+      const hasNoBonusLog = resultNoBonus.sideEffects.some(
+        e => e.event === 'log:entry' && /消耗/.test((e as any)?.payload?.message ?? ''),
+      );
+      expect(hasNoBonusLog).toBe(false);
     });
   });
 
@@ -1373,11 +1452,11 @@ describe('reducer', () => {
     });
 
     it('overflows to recycle bag when backpack is full (non-restricted card)', () => {
-      const existing = Array.from({ length: 10 }, (_, i) => ({ id: `e${i}`, type: 'equipment' as const, name: `Card${i}`, value: 0 }));
+      const existing = Array.from({ length: BASE_BACKPACK_CAPACITY }, (_, i) => ({ id: `e${i}`, type: 'equipment' as const, name: `Card${i}`, value: 0 }));
       const card = { id: 'over1', type: 'equipment' as const, name: 'Overflow', value: 0 };
       const state = makeState({ backpackItems: existing as any, backpackCapacityModifier: 0 });
       const result = reduce(state, { type: 'ADD_TO_BACKPACK', card: card as any });
-      expect(result.state.backpackItems).toHaveLength(10);
+      expect(result.state.backpackItems).toHaveLength(BASE_BACKPACK_CAPACITY);
       expect(result.state.permanentMagicRecycleBag.some((c: any) => c.id === 'over1')).toBe(true);
       expect(result.sideEffects.some(e => e.event === 'log:entry')).toBe(true);
     });
@@ -2221,7 +2300,9 @@ describe('reducer', () => {
       });
       const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'equipKnight' });
       expect((result.state.equipmentSlot1 as any)?.name).toBe('Knight Sword');
-      expect(result.state.classDeck).toHaveLength(0);
+      // Class pool is an infinite template — equipKnight clones the picked
+      // equipment, the template itself is preserved.
+      expect(result.state.classDeck).toHaveLength(1);
     });
 
     it('discardCurrentLeftForGold+15 sacrifices left slot for 15 gold', () => {
@@ -2538,7 +2619,9 @@ describe('reducer', () => {
       });
       const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'drawClassToHand:2' });
       expect(result.state.handCards).toHaveLength(2);
-      expect(result.state.classDeck).toHaveLength(1);
+      // Class pool is an infinite template — drawClassToHand clones the
+      // sampled cards into hand, the template is preserved.
+      expect(result.state.classDeck).toHaveLength(3);
     });
 
     it('drawClassHeroMagic:1 draws hero-magic from class deck to backpack', () => {
@@ -2550,7 +2633,9 @@ describe('reducer', () => {
         backpackCapacityModifier: 0,
       });
       const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'drawClassHeroMagic:1' });
-      expect(result.state.classDeck).toHaveLength(1);
+      // Class pool is an infinite template — the hero-magic is cloned into
+      // the backpack, the template is preserved.
+      expect(result.state.classDeck).toHaveLength(2);
       expect(result.state.backpackItems).toHaveLength(1);
       expect((result.state.backpackItems[0] as any).type).toBe('hero-magic');
     });
@@ -2608,7 +2693,9 @@ describe('reducer', () => {
         backpackCapacityModifier: 0,
       });
       const result = reduce(state, { type: 'DRAW_CLASS_TO_BACKPACK', count: 1 });
-      expect(result.state.classDeck).toHaveLength(1);
+      // Class pool is an infinite template — DRAW_CLASS_TO_BACKPACK clones
+      // sampled cards into the backpack without consuming the template.
+      expect(result.state.classDeck).toHaveLength(2);
       expect(result.state.backpackItems).toHaveLength(1);
     });
 
@@ -2621,7 +2708,7 @@ describe('reducer', () => {
         backpackCapacityModifier: 0,
       });
       const result = reduce(state, { type: 'DRAW_CLASS_TO_BACKPACK', count: 1, filter: 'hero-magic' });
-      expect(result.state.classDeck).toHaveLength(1);
+      expect(result.state.classDeck).toHaveLength(2);
       expect((result.state.backpackItems[0] as any).type).toBe('hero-magic');
     });
 

@@ -34,7 +34,7 @@ function DiscoverContainerInner() {
         onMinimize={handleMinimizeAll}
         description={
           gs.discoverSourceLabel
-            ? `来自「${gs.discoverSourceLabel}」的效果 — 从三张候选卡中挑选一张，其余卡牌会放回 Class Deck。`
+            ? `来自「${gs.discoverSourceLabel}」的效果 — 从三张候选卡中挑选一张。专属卡池为模板池，候选卡牌不会被消耗。`
             : undefined
         }
       />

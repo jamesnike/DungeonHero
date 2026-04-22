@@ -124,6 +124,12 @@ export function reduceUIStateActions(
       if (action.sourceLabel !== undefined) {
         patch.discoverSourceLabel = action.sourceLabel;
       }
+      // Closing the modal also resets discoverDelivery so a follow-up
+      // BEGIN_DISCOVER (e.g. drained from the queue below) starts from the
+      // 'backpack' default unless it explicitly opts back into 'hand-first'.
+      if (!action.open) {
+        patch.discoverDelivery = 'backpack';
+      }
       // When closing the modal, drain one pending class-discover from the queue
       // so multi-discover effects (e.g. 弃装重铸) pop modals one at a time.
       const enqueuedActions: GameAction[] = [];

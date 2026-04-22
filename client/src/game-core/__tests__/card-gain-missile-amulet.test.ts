@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { reduce } from '../reducer';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
-import { createEmptyAmuletEffects, initialCombatState } from '../constants';
+import { createEmptyAmuletEffects, initialCombatState, BASE_BACKPACK_CAPACITY } from '../constants';
 import { computeEquipmentBreakEffects } from '../rules/equipment-effects';
 import { applyEquipDestroyLastWords } from '../rules/waterfall';
 import type { GameState, EquipmentSlotId } from '../types';
@@ -56,8 +56,9 @@ describe('card:newCardGained from DRAW_CLASS_TO_BACKPACK', () => {
   it('does NOT emit card:newCardGained when every drawn card overflows to recycle bag', () => {
     const c1: GameCardData = { id: 'c1', type: 'magic', name: 'Class1', value: 0 } as any;
     // Backpack already at the cap → all draws spill to recycle bag.
-    // BASE_BACKPACK_CAPACITY = 10; fill exactly to 10 with capacityModifier 0.
-    const fillers: GameCardData[] = Array.from({ length: 10 }, (_, i) => ({
+    // Fill exactly to BASE_BACKPACK_CAPACITY with capacityModifier 0 so the
+    // assertion stays correct regardless of future BASE_BACKPACK_CAPACITY tweaks.
+    const fillers: GameCardData[] = Array.from({ length: BASE_BACKPACK_CAPACITY }, (_, i) => ({
       id: `f${i}`, type: 'magic', name: `F${i}`, value: 0,
     } as any));
     const state = makeState({

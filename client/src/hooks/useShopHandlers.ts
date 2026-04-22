@@ -7,6 +7,7 @@ import type {
   CardActionKeyword,
   EquipmentRepairTarget,
   EquipmentSlotId,
+  FlightSourceHint,
   MonsterRewardOption,
   SlotPermanentBonus,
 } from '@/components/game-board/types';
@@ -29,7 +30,6 @@ export interface ShopHandlersDeps {
     card: GameCardData,
     options?: { toBottom?: boolean; pendingDungeonCardId?: string },
   ) => void;
-  returnCardsToClassDeck: (cards: GameCardData[]) => void;
   ensureCardInHand: (card: GameCardData) => void;
   discardCardToGraveyard: (
     card: GameCardData | null | undefined,
@@ -45,7 +45,7 @@ export interface ShopHandlersDeps {
   drawClassCardsToBackpack: (
     count: number,
     source: string,
-    opts?: { excludeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' },
+    opts?: { excludeIds?: string[]; includeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' },
   ) => void;
   drawFromBackpackToHand: () => void;
   setEquipmentSlotBonus: (
@@ -68,7 +68,7 @@ export interface ShopHandlersDeps {
   triggerDiscardFlight: (
     card: GameCardData,
     destination: 'graveyard' | 'recycle-bag',
-    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+    sourceHint?: FlightSourceHint,
   ) => Promise<void>;
   completeCurrentEvent: (options?: { skipFlip?: boolean }) => void;
   getMonsterRewardsPreview: (monster: GameCardData) => MonsterRewardOption[];
@@ -107,6 +107,15 @@ export type BeginDiscoverFlowOptions = {
   overridePool?: GameCardData[];
   /** 触发发现的来源卡牌/效果名称，显示在弹窗上 */
   sourceLabel?: string;
+  /**
+   * Where the chosen discover candidate should land at RESOLVE time.
+   *   - 'backpack' (default): backpack → recycle bag on overflow.
+   *   - 'hand-first': try handCards first (subject to handLimit), else
+   *     fall back to backpack → recycle bag.
+   * Forwarded as-is to the BEGIN_DISCOVER action; only the new starter
+   * "发现一张专属牌（直接进手牌）" card uses 'hand-first' today.
+   */
+  delivery?: 'backpack' | 'hand-first';
 };
 
 // ---------------------------------------------------------------------------
@@ -214,12 +223,14 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         return false;
       }
 
+      // Class deck is now an infinite template — discover never consumes
+      // from `classDeck`. The reducer ignores `removeFromClassDeck`.
       dispatch({
         type: 'BEGIN_DISCOVER',
         source,
         pool,
         sourceLabel: opts?.sourceLabel,
-        removeFromClassDeck: !opts?.overridePool,
+        delivery: opts?.delivery,
       });
 
       return true;
@@ -237,25 +248,12 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       depsRef.current.pushUndoSnapshot();
       if (!discoverOptions.length) return;
       const selectedCard = discoverOptions.find(card => card.id === cardId);
-      const remainingCards = discoverOptions.filter(card => card.id !== cardId);
 
-      dispatch({ type: 'SET_DISCOVER_MODAL', open: false, options: [], sourceLabel: null });
-
-      if (remainingCards.length) {
-        depsRef.current.returnCardsToClassDeck(remainingCards);
-      }
-
-      if (selectedCard) {
-        depsRef.current.addGameLog('skill', `发现专属卡：选入「${selectedCard.name}」`);
-        if (backpackItems.length >= depsRef.current.backpackCapacity) {
-          dispatch({ type: 'UPDATE_RECYCLE_BAG', updater: prev => [...prev, { ...selectedCard, _recycleWaits: selectedCard.recycleDelay ?? 1 }] });
-          depsRef.current.addGameLog('skill', `背包已满，「${selectedCard.name}」进入回收袋`);
-        } else {
-          dispatch({ type: 'UPDATE_BACKPACK_ITEMS', updater: prev => [selectedCard, ...prev] });
-          depsRef.current.triggerClassDeckFlight([selectedCard]);
-          depsRef.current.onNewCardGainedRef?.current?.(1, 'classPool');
-        }
-      }
+      // Reducer clones the chosen card with a fresh id, places it into
+      // backpack/recycle bag, closes the modal, and drains any pending
+      // class-discover queue. We listen for `shop:classCardObtained` to
+      // run the flight animation with the *cloned* card's id.
+      dispatch({ type: 'RESOLVE_DISCOVER_SELECTION', cardId });
 
       const completion = depsRef.current.discoverPotionCompletionRef.current;
       if (completion) {
@@ -266,6 +264,12 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
             : `获得专属魔法「${selectedCard.name}」！`
           : '未发现卡牌。';
         completion({ banner });
+        return;
+      }
+
+      // If the reducer enqueued another BEGIN_DISCOVER (multi-discover
+      // queue), don't finalize the event yet — let the next modal flow.
+      if (engine.getState().discoverModalOpen) {
         return;
       }
 
@@ -291,8 +295,9 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       depsRef.current.pushUndoSnapshot();
       if (!discoverOptions.length) return;
 
-      depsRef.current.returnCardsToClassDeck(discoverOptions);
-
+      // Class deck is an infinite template — nothing to return.
+      // Just close the modal; SET_DISCOVER_MODAL also drains the
+      // pending class-discover queue (e.g. 弃装重铸 multi-discover).
       dispatch({ type: 'SET_DISCOVER_MODAL', open: false, options: [], sourceLabel: null });
 
       depsRef.current.addGameLog('skill', '发现专属卡：放弃选择');
@@ -301,6 +306,12 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       if (completion) {
         depsRef.current.discoverPotionCompletionRef.current = null;
         completion({ banner: '放弃了发现专属牌。' });
+        return;
+      }
+
+      // SET_DISCOVER_MODAL { open: false } may have re-opened the modal
+      // via the pending-discover drain. Don't finalize the event yet.
+      if (engine.getState().discoverModalOpen) {
         return;
       }
 
@@ -328,9 +339,11 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       if (state.gold < offering.price) return;
       if (state.backpackItems.length >= depsRef.current.backpackCapacity) return;
 
+      // Reducer clones the bought card with a fresh id and emits both
+      // `shop:classCardObtained` (drives the class-deck flight) and
+      // `card:newCardGained` (drives missile-amulet etc.). No hook-side
+      // triggering needed.
       dispatch({ type: 'PURCHASE', cardId });
-      depsRef.current.triggerClassDeckFlight([{ ...offering.card }]);
-      depsRef.current.onNewCardGainedRef?.current?.(1, 'classPool');
     },
     [engine, dispatch],
   );
@@ -882,6 +895,16 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
   // Monster reward stat swap — log for future animation wiring
   useGameEvent('shop:monsterRewardGrantStatSwap', ({ card }) => {
     depsRef.current.addGameLog('monster', `战利品效果：属性交换（${card.name}）`);
+  });
+
+  // A class card was obtained (discover/draw/purchase). The reducer cloned
+  // the card with a fresh id and placed it into the player's pile. Drive
+  // the class-deck flight animation here using the *cloned* card so the
+  // flight overlay's id matches what's now in the backpack/recycle bag.
+  useGameEvent('shop:classCardObtained', ({ card, destination }) => {
+    if (destination === 'backpack') {
+      depsRef.current.triggerClassDeckFlight([card]);
+    }
   });
 
   // ---------------------------------------------------------------------------

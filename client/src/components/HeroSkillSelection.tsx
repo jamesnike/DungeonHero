@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFitToViewport } from '@/hooks/use-fit-to-viewport';
-import type { GameCardData } from './GameCard';
 import { heroSkills, type HeroSkillDefinition } from '@/lib/heroSkills';
 import { getEternalRelic } from '@/lib/eternalRelics';
 import type { EternalRelicId } from '@/game-core/types';
@@ -10,7 +9,6 @@ import { shuffle as rngShuffle } from '@/game-core/rng';
 interface HeroSkillSelectionProps {
   isOpen: boolean;
   onSelectSkill: (skillId: string) => void;
-  classCardPreview?: GameCardData | null;
   rng: RngState;
   onRngUpdate: (rng: RngState) => void;
 }
@@ -20,7 +18,7 @@ function sampleSkills(count: number, rng: RngState): [HeroSkillDefinition[], Rng
   return [shuffled.slice(0, count), nextRng];
 }
 
-export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPreview, rng, onRngUpdate }: HeroSkillSelectionProps) {
+export default function HeroSkillSelection({ isOpen, onSelectSkill, rng, onRngUpdate }: HeroSkillSelectionProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
   const overlayScale = useFitToViewport(modalRef);
   const [choices, setChoices] = useState<HeroSkillDefinition[]>([]);
@@ -107,21 +105,6 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill, classCardPre
         <button className="skill-draft-reroll" onClick={handleReroll}>
           换一批
         </button>
-
-        {classCardPreview && (
-          <div className="class-card-preview">
-            <div className="class-card-preview-label">即将获得的专属卡</div>
-            <div className="class-card-preview-card">
-              {classCardPreview.image && (
-                <img src={classCardPreview.image} alt={classCardPreview.name} className="class-card-preview-img" />
-              )}
-              <div className="class-card-preview-info">
-                <div className="class-card-preview-name">{classCardPreview.name}</div>
-                <div className="class-card-preview-desc">{classCardPreview.description || classCardPreview.magicEffect || ''}</div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

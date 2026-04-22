@@ -38,6 +38,7 @@ import { routeReflectDamageToHero } from './combat';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
+import { cloneClassCardsWithFreshIds, sampleDistinctByName } from '../cardClone';
 import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection, ensureMonsterEngaged } from './magic-effects';
 import { resolveAllPotionEffects, resolvePendingPotion } from './potion-effects';
 import { executeCardEffects, executeMagicCardEffects, executeOnEquip, executeOnEnterHand } from '../card-schema';
@@ -1166,7 +1167,26 @@ function reduceDeleteCard(
     payload: { card: cardToDelete, source, destination, context },
   });
 
-  return applyPatch(state, patch, sideEffects);
+  // 「招灵书印」(delete-draw): mirrors the trigger in `reduceConfirmDeleteCard`.
+  // `DELETE_CARD` is the canonical zone-removal primitive — keep the trigger
+  // wired here so any future migration of CONFIRM_DELETE_CARD to dispatch
+  // through DELETE_CARD still benefits from the amulet, and so direct test
+  // coverage of `DELETE_CARD` exercises the same path.
+  const enqueuedActions: GameAction[] = [];
+  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  if (ae.deleteDrawCount > 0) {
+    const drawCount = 2 * ae.deleteDrawCount;
+    enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: {
+        type: 'amulet',
+        message: `招灵书印：删除「${cardToDelete.name}」，从背包抽 ${drawCount} 张牌`,
+      },
+    });
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------
@@ -1211,7 +1231,14 @@ function reduceDrawClassToBackpack(
 
   if (state.classDeck.length === 0 || action.count <= 0) return noChange(state);
 
+  // Class deck is an infinite template — we sample distinct-by-name from
+  // the (filtered) pool, then clone each pick with a fresh id. The
+  // template is NOT mutated.
   let source = state.classDeck;
+  if (action.includeIds && action.includeIds.length > 0) {
+    const includeSet = new Set(action.includeIds);
+    source = source.filter(c => includeSet.has(c.id));
+  }
   if (action.excludeIds && action.excludeIds.length > 0) {
     const excludeSet = new Set(action.excludeIds);
     source = source.filter(c => !excludeSet.has(c.id));
@@ -1230,10 +1257,14 @@ function reduceDrawClassToBackpack(
     if (filtered.length > 0) source = filtered;
   }
 
+  if (source.length === 0) return noChange(state);
+
   const takeCount = Math.min(action.count, source.length);
-  const drawn = source.slice(-takeCount);
-  const drawnIds = new Set(drawn.map(c => c.id));
-  patch.classDeck = state.classDeck.filter(c => !drawnIds.has(c.id));
+  const [picks, rngAfterSample] = sampleDistinctByName(source, takeCount, state.rng, rngShuffle);
+  if (picks.length === 0) return noChange(state);
+
+  const [drawn, rngAfterClone] = cloneClassCardsWithFreshIds(picks, rngAfterSample);
+  patch.rng = rngAfterClone;
 
   const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
   const available = backpackCap - state.backpackItems.length;
@@ -1253,7 +1284,7 @@ function reduceDrawClassToBackpack(
   patch.heroSkillBanner = `从职业牌组获得 ${drawn.length} 张牌！`;
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'skill', message: `从职业牌组获得 ${takeCount} 张牌：${drawn.map(c => c.name).join('、')}` },
+    payload: { type: 'skill', message: `从职业牌组获得 ${drawn.length} 张牌：${drawn.map(c => c.name).join('、')}` },
   });
   sideEffects.push({
     event: 'cards:classDrawn',
@@ -1405,7 +1436,8 @@ function reduceApplyCardFlip(
   }
 
   // 翻印之符 (persuade-on-flip): 每翻转一张牌 → 下次劝降成功率 +10%
-  // (stacks; cleared after any persuade attempt — see existing persuadeAmuletBonus reset)
+  // (stacks across multiple amulets; cleared after any persuade attempt
+  //  via reducePersuadeMonster's `patch.persuadeAmuletBonus = 0`).
   const persuadeOnFlipAmulets = (state.amuletSlots as GameCardData[]).filter(
     s => s?.amuletEffect === 'persuade-on-flip',
   );

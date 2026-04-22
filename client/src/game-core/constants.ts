@@ -24,7 +24,7 @@ export const MAX_PERSUADE_LEVEL = 4;
 
 export const DECK_SIZE = 64;
 export const DUNGEON_COLUMN_COUNT = 4;
-export const BASE_BACKPACK_CAPACITY = 10;
+export const BASE_BACKPACK_CAPACITY = 15;
 export const HAND_LIMIT = 6;
 export const MAX_AMULET_SLOTS = 2;
 export const MAX_SHOP_LEVEL = 3;
@@ -157,6 +157,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   lastWordsMonsterDebuffCount: 0,
   stunRateBoost: 0,
   stunGoldCount: 0,
+  deleteDrawCount: 0,
 });
 
 // ---------------------------------------------------------------------------

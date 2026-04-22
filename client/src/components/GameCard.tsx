@@ -181,7 +181,8 @@ export type AmuletEffectId =
   | 'flip-overkill-lifesteal'
   | 'equip-amulet-cap'
   | 'stun-attempt-discover'
-  | 'persuade-on-flip';
+  | 'persuade-on-flip'
+  | 'delete-draw';
 
 export type AmuletAuraBonus = {
   attack?: number;

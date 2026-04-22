@@ -2326,6 +2326,7 @@ html {
   .dh-stat-sticker--spell { --stat-color-base: #a855f7; }     /* 法术伤害 紫 */
   .dh-stat-sticker--lifesteal { --stat-color-base: #f43f5e; } /* 超杀吸血 玫红 */
   .dh-stat-sticker--stun { --stat-color-base: #f59e0b; }      /* 击晕上限 橙黄 */
+  .dh-stat-sticker--persuade { --stat-color-base: #7c3aed; }  /* 下一次劝降 紫罗兰（与顶栏 sticker 同色） */
 
   /* === 永恒护符 立体贴纸（圆形 raster image 版本）===
      和 menu bar / 装备 chip 同款立体语言：白纸边 + 上高光 + 右下硬厚边 + 飘浮投影。

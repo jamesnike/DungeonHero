@@ -23,15 +23,15 @@ const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
   Ogre: { base: 1, interval: 3, minInterval: 3 },
   Wraith: { base: 1, interval: 4 },
   Swarm: { base: 2, interval: 5 },
-  Buglet: { base: 1, interval: 5 },
+  Buglet: { base: 1, interval: 6 },
   Golem: { base: 1, interval: 4 },
 };
 
 const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
   Dragon:   [
-    { waterfallLevel: 4, attackBonus: 4, hpBonus: 2, specialAbility: 'dragon-attack-no-layer-cost', specialDesc: '龙鳞护体：上回合掉过血层时，本次攻击不消耗血层' },
-    { waterfallLevel: 8, attackBonus: 7, hpBonus: 6, specialAbility: 'dragon-damage-retaliation', specialDesc: '龙鳞护体 + 龙息反击：每受到一次伤害，对玩家造成 3 点法术伤害' },
-    { waterfallLevel: 12, attackBonus: 10, hpBonus: 10, specialAbility: 'dragon-all', specialDesc: '龙鳞护体 + 龙息反击 + 流血破甲：每失去一个血层，破坏耐久度 > 剩余血层数的装备' },
+    { waterfallLevel: 4, attackBonus: 4, hpBonus: 3, specialAbility: 'dragon-attack-no-layer-cost', specialDesc: '龙鳞护体：上回合掉过血层时，本次攻击不消耗血层' },
+    { waterfallLevel: 8, attackBonus: 8, hpBonus: 8, specialAbility: 'dragon-damage-retaliation', specialDesc: '龙鳞护体 + 龙息反击：每受到一次伤害，对玩家造成 3 点法术伤害' },
+    { waterfallLevel: 12, attackBonus: 12, hpBonus: 12, specialAbility: 'dragon-all', specialDesc: '龙鳞护体 + 龙息反击 + 流血破甲：每失去一个血层，破坏耐久度 > 剩余血层数的装备' },
   ],
   Skeleton: [
     { waterfallLevel: 3, attackBonus: 5, hpBonus: 1, specialAbility: 'skeleton-no-layer-cost', specialDesc: '不朽之骨：复生后攻击不消耗血层' },
@@ -39,24 +39,24 @@ const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
     { waterfallLevel: 11, attackBonus: 15, hpBonus: 4, specialAbility: 'skeleton-re-revive', specialDesc: '不朽之骨 + 遗言 + 亡骨轮回：同行其他怪物被击败时，若本骷髅已复生过，再次获得复生' },
   ],
   Goblin:   [
-    { waterfallLevel: 3, attackBonus: 2, hpBonus: 2, specialAbility: 'goblin-steal-card', specialDesc: '窃牌贼：攻击时随机偷走一张手牌，堆叠在自身下方' },
-    { waterfallLevel: 7, attackBonus: 4, hpBonus: 5, specialAbility: 'goblin-steal-heal', specialDesc: '窃牌贼 + 贼窝疗养：回合结束时，自身下方每有1张牌，15%概率恢复1血层' },
-    { waterfallLevel: 11, attackBonus: 6, hpBonus: 8, specialAbility: 'goblin-steal-scale', specialDesc: '窃牌贼 + 贼窝疗养 + 贪婪强化：每偷到X金币，攻击力和生命值 +X' },
+    { waterfallLevel: 3, attackBonus: 3, hpBonus: 3, specialAbility: 'goblin-steal-card', specialDesc: '窃牌贼：攻击时随机偷走一张手牌，堆叠在自身下方' },
+    { waterfallLevel: 7, attackBonus: 5, hpBonus: 6, specialAbility: 'goblin-steal-heal', specialDesc: '窃牌贼 + 贼窝疗养：回合结束时，自身下方每有1张牌，15%概率恢复1血层' },
+    { waterfallLevel: 11, attackBonus: 7, hpBonus: 9, specialAbility: 'goblin-steal-scale', specialDesc: '窃牌贼 + 贼窝疗养 + 贪婪强化：每偷到X金币，攻击力和生命值 +X' },
   ],
   Ogre:     [
-    { waterfallLevel: 5, attackBonus: 3, hpBonus: 2, specialAbility: 'ogre-stun', specialDesc: '蛮力击晕：攻击时30%概率击晕玩家（装备栏和护符栏冻结一回合）' },
-    { waterfallLevel: 9, attackBonus: 5, hpBonus: 4, specialAbility: 'ogre-stun-double', specialDesc: '蛮力击晕 + 狂暴连击：攻击时70%概率再攻击一次' },
-    { waterfallLevel: 13, attackBonus: 8, hpBonus: 6, specialAbility: 'ogre-all', specialDesc: '蛮力震慑 + 蛮力击晕 + 狂暴连击' },
+    { waterfallLevel: 5, attackBonus: 3, hpBonus: 3, specialAbility: 'ogre-stun', specialDesc: '蛮力击晕：攻击时30%概率击晕玩家（装备栏和护符栏冻结一回合）' },
+    { waterfallLevel: 9, attackBonus: 6, hpBonus: 5, specialAbility: 'ogre-stun-double', specialDesc: '蛮力击晕 + 狂暴连击：攻击时70%概率再攻击一次' },
+    { waterfallLevel: 13, attackBonus: 9, hpBonus: 7, specialAbility: 'ogre-all', specialDesc: '蛮力震慑 + 蛮力击晕 + 狂暴连击' },
   ],
   Wraith:   [
-    { waterfallLevel: 4, attackBonus: 3, hpBonus: 1, specialAbility: 'wraith-aura-attack', specialDesc: '怨念光环：每个怪物回合结束时，激活行所有怪物攻击力 +2' },
-    { waterfallLevel: 8, attackBonus: 5, hpBonus: 3, specialAbility: 'wraith-death-spread', specialDesc: '怨念光环 + 怨灵遗言：死亡时同行其他怪物生命值 +4，并让随机一个激活行怪物获得此遗言' },
-    { waterfallLevel: 12, attackBonus: 7, hpBonus: 5, specialAbility: 'wraith-curse', specialDesc: '怨念光环 + 怨灵遗言 + 怨灵诅咒：每个怪物回合结束时，使激活行所有怪物激怒，并随机摧毁一个护符' },
+    { waterfallLevel: 4, attackBonus: 3, hpBonus: 2, specialAbility: 'wraith-aura-attack', specialDesc: '怨念光环：每个怪物回合结束时，激活行所有怪物攻击力 +2' },
+    { waterfallLevel: 8, attackBonus: 6, hpBonus: 5, specialAbility: 'wraith-death-spread', specialDesc: '怨念光环 + 怨灵遗言：死亡时同行其他怪物生命值 +4，并让随机一个激活行怪物获得此遗言' },
+    { waterfallLevel: 12, attackBonus: 9, hpBonus: 8, specialAbility: 'wraith-curse', specialDesc: '怨念光环 + 怨灵遗言 + 怨灵诅咒：每个怪物回合结束时，使激活行所有怪物激怒，并随机摧毁一个护符' },
   ],
   Swarm:    [
-    { waterfallLevel: 4, attackBonus: 1, hpBonus: 3, specialAbility: 'swarm-horde-rage', specialDesc: '虫群集结：当激活行怪物≥3时，所有怪物被激怒，并+3攻击+3血量' },
-    { waterfallLevel: 8, attackBonus: 2, hpBonus: 5, specialAbility: 'swarm-corrode', specialDesc: '虫群集结 + 腐蚀甲壳：攻击时，格挡护盾立刻-1耐久度（不计入格挡耐久次数）' },
-    { waterfallLevel: 12, attackBonus: 3, hpBonus: 8, specialAbility: 'swarm-buglet-shield', specialDesc: '虫群集结 + 腐蚀甲壳 + 虫盾共生：激活行有小虫子时，受到的伤害为0' },
+    { waterfallLevel: 4, attackBonus: 2, hpBonus: 3, specialAbility: 'swarm-horde-rage', specialDesc: '虫群集结：当激活行怪物≥3时，所有怪物被激怒，并+3攻击+3血量' },
+    { waterfallLevel: 8, attackBonus: 4, hpBonus: 6, specialAbility: 'swarm-corrode', specialDesc: '虫群集结 + 腐蚀甲壳：攻击时，格挡护盾立刻-1耐久度（不计入格挡耐久次数）' },
+    { waterfallLevel: 12, attackBonus: 6, hpBonus: 9, specialAbility: 'swarm-buglet-shield', specialDesc: '虫群集结 + 腐蚀甲壳 + 虫盾共生：激活行有小虫子时，受到的伤害为0' },
   ],
   Buglet:   [
     { waterfallLevel: 4, attackBonus: 2, hpBonus: 1, specialAbility: 'buglet-last-words-heal', specialDesc: '虫群遗念：死亡时，激活行其他所有小虫子恢复1血层' },
@@ -64,9 +64,9 @@ const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {
     { waterfallLevel: 12, attackBonus: 4, hpBonus: 2, specialAbility: 'buglet-last-words-heal', specialDesc: '虫群遗念：死亡时，激活行其他所有小虫子恢复1血层' },
   ],
   Golem:    [
-    { waterfallLevel: 4, attackBonus: 2, hpBonus: 2, specialAbility: 'golem-spell-resist', specialDesc: '法术抗性：受到的法术伤害减少50%' },
-    { waterfallLevel: 8, attackBonus: 4, hpBonus: 4, specialAbility: 'golem-layer-loss-reflect', specialDesc: '法术抗性 + 岩层反震：每次掉1血层，对玩家造成 3×已损失血层 点伤害' },
-    { waterfallLevel: 12, attackBonus: 7, hpBonus: 7, specialAbility: 'golem-spell-growth', specialDesc: '法术抗性 + 岩层反震 + 法力吞噬：每个怪物回合结束时，反魔伤害+1，岩层反震系数+1' },
+    { waterfallLevel: 4, attackBonus: 3, hpBonus: 3, specialAbility: 'golem-spell-resist', specialDesc: '法术抗性：受到的法术伤害减少50%' },
+    { waterfallLevel: 8, attackBonus: 5, hpBonus: 5, specialAbility: 'golem-layer-loss-reflect', specialDesc: '法术抗性 + 岩层反震：每次掉1血层，对玩家造成 3×已损失血层 点伤害' },
+    { waterfallLevel: 12, attackBonus: 8, hpBonus: 8, specialAbility: 'golem-spell-growth', specialDesc: '法术抗性 + 岩层反震 + 法力吞噬：每个怪物回合结束时，反魔伤害+1，岩层反震系数+1' },
   ],
 };
 

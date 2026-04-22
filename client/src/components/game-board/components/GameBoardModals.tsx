@@ -164,9 +164,6 @@ export type GameBoardModalsProps = {
   // --- Card draft ---
   onCardDraftComplete: (selectedCards: GameCardData[]) => void;
 
-  // --- Class card preview ---
-  classCardPreview: GameCardData | null;
-
   // --- End Hero Turn button ---
   headerHeight: number;
   endHeroTurnDisabled: boolean;
@@ -285,8 +282,6 @@ function GameBoardModalsInner({
   onSkillSelection,
 
   onCardDraftComplete,
-
-  classCardPreview,
 
   headerHeight,
   endHeroTurnDisabled,
@@ -970,7 +965,6 @@ function GameBoardModalsInner({
       <HeroSkillSelection
         isOpen={showSkillSelection}
         onSelectSkill={onSkillSelection}
-        classCardPreview={classCardPreview}
         rng={rng}
         onRngUpdate={handleRngUpdate}
       />
@@ -982,7 +976,6 @@ function GameBoardModalsInner({
           totalRounds={6}
           choicesPerRound={3}
           onComplete={onCardDraftComplete}
-          classCardPreview={classCardPreview}
           roundTypes={['potion','equipment','amulet','general','general','general']}
           rng={rng}
           onRngUpdate={handleRngUpdate}

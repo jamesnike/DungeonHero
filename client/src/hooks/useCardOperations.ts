@@ -54,7 +54,7 @@ export interface CardOperationsDeps {
   triggerDiscardFlight: (
     card: GameCardData,
     destination: 'graveyard' | 'recycle-bag',
-    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+    sourceHint?: FlightSourceHint,
   ) => Promise<void>;
   triggerDiscardShock: (count: number) => void;
   triggerFlipShock: (count: number) => void;
@@ -268,17 +268,26 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   // -- Class Deck -------------------------------------------------------------
 
   const drawClassCardsToBackpack = useCallback(
-    (count: number, _source: string, opts?: { excludeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' }): void => {
+    (
+      count: number,
+      _source: string,
+      opts?: {
+        excludeIds?: string[];
+        includeIds?: string[];
+        filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment';
+      },
+    ): void => {
       if (count <= 0) return;
-      dispatch({ type: 'DRAW_CLASS_TO_BACKPACK', count, filter: opts?.filter, excludeIds: opts?.excludeIds });
+      dispatch({
+        type: 'DRAW_CLASS_TO_BACKPACK',
+        count,
+        filter: opts?.filter,
+        excludeIds: opts?.excludeIds,
+        includeIds: opts?.includeIds,
+      });
     },
     [dispatch],
   );
-
-  const returnCardsToClassDeck = useCallback((cards: GameCardData[]) => {
-    if (!cards.length) return;
-    dispatch({ type: 'RETURN_CARDS_TO_CLASS_DECK', cards });
-  }, [dispatch]);
 
   // -- Discard side effects ---------------------------------------------------
 
@@ -651,7 +660,6 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
     // Class deck
     drawClassCardsToBackpack,
-    returnCardsToClassDeck,
 
     // Discard side effects
     applyDiscardSideEffects,

@@ -8,6 +8,7 @@ import type { GameState } from './types';
 import type { EquipmentSlotBonusState, HeroSkillId, HeroSkillDefinition } from './types';
 import type { RngState } from './rng';
 import { nextInt, shuffle as rngShuffle } from './rng';
+import { cloneClassCardWithFreshId } from './cardClone';
 import {
   SHOP_MAX_OFFERINGS,
   SHOP_REQUIRED_TYPES,
@@ -72,12 +73,18 @@ export function generateShopOfferingsPure(
 
 export interface PurchaseResult {
   gold: number;
-  classDeck: GameCardData[];
   backpackItems: GameCardData[];
   shopOfferings: ShopOffering[];
   purchasedCard: GameCardData;
+  rng: RngState;
 }
 
+/**
+ * Buy a card from the shop. The class deck is an infinite template, so
+ * the bought card is *cloned* with a fresh id and placed into the backpack;
+ * `state.classDeck` is unchanged. The shop slot is marked `sold` to prevent
+ * re-purchase of the same offering instance.
+ */
 export function purchaseFromShopPure(
   state: GameState,
   cardId: string,
@@ -87,18 +94,17 @@ export function purchaseFromShopPure(
   if (!offering || offering.sold) return null;
   if (state.gold < offering.price) return null;
 
-  const purchasedCard = { ...offering.card };
+  const [purchasedCard, nextRng] = cloneClassCardWithFreshId(offering.card, state.rng);
   const newOfferings = state.shopOfferings.map((o, i) =>
     i === offeringIndex ? { ...o, sold: true } : o,
   );
-  const newClassDeck = state.classDeck.filter(c => c.id !== cardId);
 
   return {
     gold: state.gold - offering.price,
-    classDeck: newClassDeck,
     backpackItems: [purchasedCard, ...state.backpackItems],
     shopOfferings: newOfferings,
     purchasedCard,
+    rng: nextRng,
   };
 }
 

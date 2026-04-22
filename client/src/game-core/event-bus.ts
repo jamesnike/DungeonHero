@@ -393,6 +393,17 @@ export type GameEventMap = {
   'shop:monsterRewardGrantStatSwap': {
     card: import('@/components/GameCard').GameCardData;
   };
+  /**
+   * Emitted when a discover selection is resolved (the player picked one of
+   * the 3 candidates and it was cloned + placed into the player's pile).
+   * `card` is the *cloned* card (with its fresh id) that landed in the
+   * player's backpack or recycle bag.
+   */
+  'shop:classCardObtained': {
+    card: import('@/components/GameCard').GameCardData;
+    source: 'discover' | 'classDraw' | 'purchase';
+    destination: 'backpack' | 'recycle-bag';
+  };
   'equipment:clearSlotWithPromote': { slotId: string };
   'event:asyncEffectNeeded': { tokens: string[] };
 
@@ -410,11 +421,36 @@ export type GameEventMap = {
   'card:stormVolleyTransformed': { card: import('@/components/GameCard').GameCardData };
   'card:recallEquipmentSelect': { card: import('@/components/GameCard').GameCardData; options: Array<{ id: string; label: string; description: string; slotType: string }> };
   'card:graveyardRecalled': { cards: import('@/components/GameCard').GameCardData[] };
-  'card:discoverRequested': { source: string; candidates: import('@/components/GameCard').GameCardData[]; sourceLabel?: string };
+  'card:discoverRequested': {
+    source: string;
+    candidates: import('@/components/GameCard').GameCardData[];
+    sourceLabel?: string;
+    /**
+     * Optional override for `BeginDiscoverAction.delivery`. When omitted,
+     * the discover lands in backpack (existing behavior). 'hand-first'
+     * tries hand → backpack → recycle bag — used by the starter
+     * "发现一张专属牌（直接进手牌）" perm magic.
+     */
+    delivery?: 'backpack' | 'hand-first';
+  };
   'card:cryptDeathwishSelect': { card: import('@/components/GameCard').GameCardData };
   'card:classDrawRequested': { count: number; source: string };
   'card:mirrorCopyRequested': { card: import('@/components/GameCard').GameCardData };
   'card:deckJudgeRequested': { card: import('@/components/GameCard').GameCardData };
+  /**
+   * 净册涌泉 (knight:cleanse-draw) — emitted from the magic resolver to ask
+   * the hook layer to drive the hand-card delete + draw loop.
+   *
+   * The hook iterates `echoRemaining` times: open a hand-only delete picker
+   * for 1 card, then dispatch DRAW_CARDS(count=drawCount, source='deck').
+   * Empty hand on any iteration → skip the delete picker for that iteration
+   * but still draw. After the loop, the hook dispatches FINALIZE_MAGIC_CARD.
+   */
+  'card:cleanseDrawRequested': {
+    card: import('@/components/GameCard').GameCardData;
+    drawCount: number;
+    echoRemaining: number;
+  };
   'card:graveyardDiscoverEquipAmulet': { card: import('@/components/GameCard').GameCardData };
   'card:echoBagDiscover': { card: import('@/components/GameCard').GameCardData; discoverCount: number; drawCount: number };
   'card:stunWaveDice': { card: import('@/components/GameCard').GameCardData; monsters: Array<{ id: string; name: string }>; stunPct: number };

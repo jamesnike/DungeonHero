@@ -177,6 +177,7 @@ export function createInitialGameState(): GameState {
     discoverModalMinimized: false,
     discoverOptions: [],
     discoverSourceLabel: null,
+    discoverDelivery: 'backpack',
     pendingClassDiscoverQueue: [],
     deleteModalOpen: false,
     upgradeModalOpen: false,
@@ -208,7 +209,6 @@ export function createInitialGameState(): GameState {
     heroSkillBanner: null,
 
     eternalRelics: [],
-    classCardPreviewId: null,
 
     gameLogEntries: [],
 

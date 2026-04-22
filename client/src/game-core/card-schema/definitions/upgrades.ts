@@ -323,6 +323,16 @@ const stunCapStrike: OnUpgradeHandler = (upgraded, newLevel) => {
   upgraded.magicEffect = `电涌：晕上限 1/${div} 法伤 + 60% 晕 + 抽 1。`;
 };
 
+// 攻防协律 (knight:temp-attack-armor-draw)：每升 1 级，临攻 / 临护 +2（2→4→6）。
+// 抽牌固定为 1 张。recycleDelay 固定 1。
+const tempAttackArmorDraw: OnUpgradeHandler = (upgraded, newLevel) => {
+  const amounts = [2, 4, 6];
+  const n = amounts[newLevel] ?? 6;
+  upgraded.description = `永久：选择一个装备栏，+${n} 临时攻击 +${n} 临时护甲，抽 1 张牌。`;
+  upgraded.shortDescription = `所选栏 +${n} 临攻 +${n} 临护；抽 1`;
+  upgraded.magicEffect = `永久魔法：选择一个装备栏，+${n} 临时攻击 +${n} 临时护甲，抽 1 张牌。`;
+};
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -374,4 +384,5 @@ registerOnUpgradeAll([
   { id: 'knight:grave-nova', handler: graveNova },
   { id: 'knight:armor-stun-convert', handler: armorStunConvert },
   { id: 'knight:stun-cap-strike', handler: stunCapStrike },
+  { id: 'knight:temp-attack-armor-draw', handler: tempAttackArmorDraw },
 ]);

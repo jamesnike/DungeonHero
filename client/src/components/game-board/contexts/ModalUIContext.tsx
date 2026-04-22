@@ -18,7 +18,6 @@ export interface ModalUIState {
   overlayZoom: number;
   stageScale: number;
   headerHeight: number;
-  classCardPreview: GameCardData | null;
   heroMagicInfo: HeroMagicDisplayInfo[] | undefined;
   endHeroTurnDisabled: boolean;
   fullBoardInteractionLocked: boolean;

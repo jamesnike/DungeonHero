@@ -62,7 +62,7 @@ export interface CombatActionsDeps {
   drawFromBackpackToHand: () => void;
   drawFromRecycleBagToHand: (count: number) => void;
   queueCardIntoHand: (card: GameCardData, sourceHint?: FlightSourceHint) => void;
-  drawClassCardsToBackpack: (count: number, source: string, opts?: { excludeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' }) => void;
+  drawClassCardsToBackpack: (count: number, source: string, opts?: { excludeIds?: string[]; includeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' }) => void;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   getEquipmentSlots: () => { id: EquipmentSlotId; item: EquipmentItem | null }[];
   calculateSlotArmorValue: (slotId: EquipmentSlotId) => number;
@@ -129,12 +129,12 @@ export interface CombatActionsDeps {
   triggerDiscardFlight: (
     card: GameCardData,
     destination: 'graveyard' | 'recycle-bag',
-    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+    sourceHint?: FlightSourceHint,
   ) => Promise<void>;
   triggerStealCardFlight: (card: GameCardData, targetMonsterId: string) => Promise<void>;
   triggerGraveyardStackFlight: (targetCellIndex: number, cards: GameCardData[]) => void;
   dragonBleedDestroyEquipment: (monsterName: string, remainingLayers: number) => void;
-  beginDiscoverFlow: (source: string, options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string }) => boolean;
+  beginDiscoverFlow: (source: string, options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string; delivery?: 'backpack' | 'hand-first' }) => boolean;
   requestDaggerSelfDestruct: (weaponName: string, remainingDurability: number) => Promise<boolean>;
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
 

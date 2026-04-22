@@ -34,6 +34,7 @@ import {
 import dedupeStarterMagicMissileImage from '@assets/generated_images/card_dedupe_starter_magic_missile.png';
 import type { RngState } from './rng';
 import { nextRandom, nextInt, shuffle as rngShuffle, pickRandom, nextId } from './rng';
+import { cloneClassCardWithFreshId, cloneClassCardsWithFreshIds, sampleDistinctByName } from './cardClone';
 
 // ---------------------------------------------------------------------------
 // Evaluate choice requirements
@@ -208,6 +209,8 @@ const EXACT_REDUCER_TOKENS = new Set([
   'equipBurst+4',
   'openShop',
   'discoverClass', 'discoverClassWeapon', 'discoverClassMagic', 'discoverStarterMagic',
+  'discoverStarterEquipment', 'discoverStarterPotion', 'discoverStarterAmulet',
+  'grantStarterMagicTwo',
   'graveyardDiscover', 'graveyardDiscoverMagic',
   // Phase EC-2 — animation tokens (state + side effect)
   'flipToCurse', 'addCurse',
@@ -1262,14 +1265,17 @@ export function applySimpleEffect(
   } else if (effectToken === 'equipKnight') {
     const equipmentCards = state.classDeck.filter(c => c.type === 'weapon' || c.type === 'shield');
     if (equipmentCards.length > 0) {
-      const [equipment, rngAfterPick] = pickRandom(equipmentCards, state.rng);
+      // Class deck is an infinite template — pick a random equipment, then
+      // clone it with a fresh id so the player gets a unique copy without
+      // shrinking the pool.
+      const [original, rngAfterPick] = pickRandom(equipmentCards, state.rng);
+      const [equipment, rngAfterClone] = cloneClassCardWithFreshId(original, rngAfterPick);
       if (!state.equipmentSlot1) {
         patch.equipmentSlot1 = { ...equipment } as EquipmentItem;
       } else if (!state.equipmentSlot2) {
         patch.equipmentSlot2 = { ...equipment } as EquipmentItem;
       }
-      patch.rng = rngAfterPick;
-      patch.classDeck = state.classDeck.filter(c => c.id !== equipment.id);
+      patch.rng = rngAfterClone;
       patch.heroSkillBanner = `随机装备了 ${equipment.name}！`;
       logs.push({ type: 'event', message: `随机装备 ${equipment.name}` });
     } else {
@@ -1441,45 +1447,40 @@ export function applySimpleEffect(
       patch.heroSkillBanner = '专属牌堆已空，无法抽取。';
       logs.push({ type: 'event', message: '专属牌堆已空' });
     } else {
-      const drawCount = Math.min(count, state.classDeck.length);
-      const [shuffled, rngAfterShuffle] = rngShuffle(state.classDeck, state.rng);
-      const drawn = shuffled.slice(0, drawCount);
-      const drawnIds = new Set(drawn.map(c => c.id));
-      patch.rng = rngAfterShuffle;
-      patch.classDeck = state.classDeck.filter(c => !drawnIds.has(c.id));
+      // Class deck is an infinite template; sample distinct-by-name candidates
+      // and clone them with fresh ids so the pool is not consumed.
+      const [sampled, rngAfterSample] = sampleDistinctByName(state.classDeck, count, state.rng, rngShuffle);
+      const [drawn, rngAfterClone] = cloneClassCardsWithFreshIds(sampled, rngAfterSample);
+      patch.rng = rngAfterClone;
       patch.handCards = [...state.handCards, ...drawn];
       patch.heroSkillBanner = `获得了 ${drawn.map(c => c.name).join('、')}！`;
       logs.push({ type: 'event', message: `${drawn.length} 张专属牌直接加入手牌` });
     }
 
   } else if (effectToken === 'drawClassHeroMagic:1') {
+    // Class deck is an infinite template; pick (don't remove) and clone with
+    // a fresh id so the player gets a unique copy.
     const heroMagicCards = state.classDeck.filter(c => c.type === 'hero-magic');
     const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
-    if (heroMagicCards.length > 0) {
-      const drawn = heroMagicCards[0];
-      patch.classDeck = state.classDeck.filter(c => c.id !== drawn.id);
+    const sourcePool = heroMagicCards.length > 0 ? heroMagicCards : state.classDeck;
+    if (sourcePool.length > 0) {
+      const original = sourcePool[0];
+      const [drawn, rngAfterClone] = cloneClassCardWithFreshId(original, state.rng);
+      patch.rng = rngAfterClone;
       if (state.backpackItems.length < backpackCap) {
         patch.backpackItems = [drawn, ...state.backpackItems];
       } else {
         patch.permanentMagicRecycleBag = [...state.permanentMagicRecycleBag, { ...drawn, _recycleWaits: drawn.recycleDelay ?? 1 }];
       }
-      patch.heroSkillBanner = '获得了英雄魔法卡！';
-      logs.push({ type: 'event', message: `获得 1 张英雄魔法` });
-    } else {
-      const fallbackCards = state.classDeck;
-      if (fallbackCards.length > 0) {
-        const drawn = fallbackCards[0];
-        patch.classDeck = state.classDeck.filter(c => c.id !== drawn.id);
-        if (state.backpackItems.length < backpackCap) {
-          patch.backpackItems = [drawn, ...state.backpackItems];
-        } else {
-          patch.permanentMagicRecycleBag = [...state.permanentMagicRecycleBag, { ...drawn, _recycleWaits: drawn.recycleDelay ?? 1 }];
-        }
-        patch.heroSkillBanner = '专属牌堆中没有英雄魔法卡。';
-        logs.push({ type: 'event', message: `专属牌堆没有英雄魔法，改为获得 1 张专属牌` });
+      if (heroMagicCards.length > 0) {
+        patch.heroSkillBanner = '获得了英雄魔法卡！';
+        logs.push({ type: 'event', message: `获得 1 张英雄魔法` });
       } else {
         patch.heroSkillBanner = '专属牌堆中没有英雄魔法卡。';
+        logs.push({ type: 'event', message: `专属牌堆没有英雄魔法，改为获得 1 张专属牌` });
       }
+    } else {
+      patch.heroSkillBanner = '专属牌堆中没有英雄魔法卡。';
     }
 
   } else if (effectToken === 'recycleToBackpack') {
@@ -1633,6 +1634,87 @@ export function applySimpleEffect(
     patch.rng = discoverRng;
     if (discoverTempCards.length > 0) {
       emitEvents.push({ event: 'event:requestEventInteraction', payload: { token: 'discoverStarterMagic', data: { pool: discoverTempCards } } });
+    } else {
+      patch.heroSkillBanner = '没有可用的起始魔法卡。';
+    }
+
+  } else if (
+    effectToken === 'discoverStarterEquipment'
+    || effectToken === 'discoverStarterPotion'
+    || effectToken === 'discoverStarterAmulet'
+  ) {
+    // Discover-1-of-3 from the starter pool, filtered by category. Mirrors the
+    // `discoverStarterMagic` branch above — same `-disc-1` suffix shape so
+    // `getStarterBaseId` strips back to the canonical STARTER_CARD_IDS.X
+    // routing key (see event-grant-card-id-suffix rule).
+    const isEquipment = effectToken === 'discoverStarterEquipment';
+    const isPotion = effectToken === 'discoverStarterPotion';
+    const categoryFilter = isEquipment
+      ? (c: GameCardData) => c.type === 'weapon' || c.type === 'shield'
+      : isPotion
+        ? (c: GameCardData) => c.type === 'potion'
+        : (c: GameCardData) => c.type === 'amulet';
+    const categoryLabel = isEquipment ? '装备' : isPotion ? '药水' : '护符';
+    logs.push({ type: 'event', message: `事件效果：发现起始背包的${categoryLabel}卡` });
+    const starterPool = createStarterCardPool();
+    const candidates = starterPool.filter(categoryFilter);
+    let discoverRng = state.rng;
+    let shuffled: GameCardData[];
+    [shuffled, discoverRng] = rngShuffle([...candidates], discoverRng);
+    const tempCards = shuffled.slice(0, 3).map(c => {
+      let _id: string;
+      [_id, discoverRng] = nextId(discoverRng, `${c.id}-disc-1`);
+      return { ...c, id: _id };
+    });
+    patch.rng = discoverRng;
+    if (tempCards.length > 0) {
+      emitEvents.push({ event: 'event:requestEventInteraction', payload: { token: effectToken, data: { pool: tempCards } } });
+    } else {
+      patch.heroSkillBanner = `没有可用的起始${categoryLabel}卡。`;
+    }
+
+  } else if (effectToken === 'grantStarterMagicTwo') {
+    // Grant 2 random starter-pool magic cards directly to backpack (no UI
+    // pick). Overflow goes into permanentMagicRecycleBag with the standard
+    // `_recycleWaits` shape so they re-enter via the next waterfall. Ids use
+    // the `-evt-N` suffix so `getStarterBaseId` strips them back to
+    // STARTER_CARD_IDS.X for `resolvePermanentMagic` routing.
+    logs.push({ type: 'event', message: '事件效果：获得 2 张起始背包的魔法卡' });
+    const starterPool = createStarterCardPool();
+    const starterMagicCards = starterPool.filter(c => c.type === 'magic');
+    let grantRng = state.rng;
+    let shuffledMagic: GameCardData[];
+    [shuffledMagic, grantRng] = rngShuffle([...starterMagicCards], grantRng);
+    const granted: GameCardData[] = [];
+    for (let i = 0; i < Math.min(2, shuffledMagic.length); i++) {
+      let _id: string;
+      [_id, grantRng] = nextId(grantRng, `${shuffledMagic[i].id}-evt-${i + 1}`);
+      granted.push({ ...shuffledMagic[i], id: _id });
+    }
+    patch.rng = grantRng;
+    if (granted.length > 0) {
+      const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
+      const currentBp = patch.backpackItems ?? state.backpackItems;
+      const room = Math.max(0, cap - currentBp.length);
+      const toBackpack = granted.slice(0, room);
+      const toRecycle = granted.slice(room);
+      if (toBackpack.length > 0) {
+        patch.backpackItems = [...toBackpack, ...currentBp];
+      }
+      if (toRecycle.length > 0) {
+        const recycleEntries = toRecycle.map(c => ({
+          ...c,
+          _recycleWaits: c.recycleDelay ?? 1,
+        }));
+        patch.permanentMagicRecycleBag = [
+          ...(patch.permanentMagicRecycleBag ?? state.permanentMagicRecycleBag),
+          ...recycleEntries,
+        ];
+      }
+      const names = granted.map(c => c.name).join('、');
+      patch.heroSkillBanner = toRecycle.length > 0
+        ? `获得 2 张起始魔法（${names}）。${toRecycle.length} 张因背包已满进入回收袋。`
+        : `获得 2 张起始魔法：${names}。`;
     } else {
       patch.heroSkillBanner = '没有可用的起始魔法卡。';
     }
@@ -1869,12 +1951,11 @@ export function applySimpleEffect(
         patch.heroSkillBanner = drawDef.emptyMessage ?? '专属牌堆中没有符合条件的牌。';
         logs.push({ type: 'event', message: drawDef.emptyMessage ?? '专属牌堆中没有符合条件的牌' });
       } else {
-        const [shuffled, rngAfterShuffle] = rngShuffle(filtered, state.rng);
-        const drawCount = Math.min(drawDef.count, shuffled.length);
-        const drawn = shuffled.slice(0, drawCount);
-        const drawnIds = new Set(drawn.map(c => c.id));
-        patch.rng = rngAfterShuffle;
-        patch.classDeck = state.classDeck.filter(c => !drawnIds.has(c.id));
+        // Class deck is an infinite template; sample distinct-by-name and
+        // clone with fresh ids so the pool is preserved.
+        const [sampled, rngAfterSample] = sampleDistinctByName(filtered, drawDef.count, state.rng, rngShuffle);
+        const [drawn, rngAfterClone] = cloneClassCardsWithFreshIds(sampled, rngAfterSample);
+        patch.rng = rngAfterClone;
         const currentBp = patch.backpackItems ?? state.backpackItems;
         const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
         const available = cap - currentBp.length;
@@ -2004,12 +2085,10 @@ export function applySimpleEffect(
       patch.discardedCards = [...state.discardedCards, ...equipInHand];
       const classEquip = state.classDeck.filter(c => c.type === 'weapon' || c.type === 'shield');
       if (classEquip.length > 0) {
-        const [shuffled, rngAfterShuffle] = rngShuffle(classEquip, state.rng);
-        const drawCount = Math.min(equipInHand.length, shuffled.length);
-        const drawn = shuffled.slice(0, drawCount);
-        const drawnClassIds = new Set(drawn.map(c => c.id));
-        patch.rng = rngAfterShuffle;
-        patch.classDeck = state.classDeck.filter(c => !drawnClassIds.has(c.id));
+        // Class deck is an infinite template; sample distinct-by-name and clone.
+        const [sampled, rngAfterSample] = sampleDistinctByName(classEquip, equipInHand.length, state.rng, rngShuffle);
+        const [drawn, rngAfterClone] = cloneClassCardsWithFreshIds(sampled, rngAfterSample);
+        patch.rng = rngAfterClone;
         const currentBp = patch.backpackItems ?? state.backpackItems;
         const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
         const avail = cap - currentBp.length;
@@ -2031,9 +2110,12 @@ export function applySimpleEffect(
   } else if (effectToken === 'useKnightSkill') {
     const skillCards = state.classDeck.filter(c => c.type === 'skill' && (c as any).skillType === 'instant');
     if (skillCards.length > 0) {
-      const [skill, rngAfterPick] = pickRandom(skillCards, state.rng);
-      patch.rng = rngAfterPick;
-      patch.classDeck = state.classDeck.filter(c => c.id !== skill.id);
+      // Class deck is an infinite template — pick a random instant skill and
+      // clone it with a fresh id (so any downstream copy/tracking gets a unique
+      // instance) without removing the template from the pool.
+      const [original, rngAfterPick] = pickRandom(skillCards, state.rng);
+      const [skill, rngAfterClone] = cloneClassCardWithFreshId(original, rngAfterPick);
+      patch.rng = rngAfterClone;
       logs.push({ type: 'event', message: `事件效果：打出技能 ${skill.name}` });
       emitEvents.push({ event: 'event:requestEventInteraction', payload: { token: 'useKnightSkill', data: { skill: skill as any } } });
     } else {
@@ -2085,8 +2167,8 @@ export function applySimpleEffect(
       image: skillScrollImage,
       magicType: 'permanent',
       magicEffect: 'persuade-boost-draw',
-      description: '永久魔法（Perm 1）：下次劝降成功率 +15%（精英 +10%），抽 1 张牌。',
-      shortDescription: '下次劝降率 +15%（精英 +10%）；抽 1 张',
+      description: '永久魔法（Perm 1）：下次劝降成功率 +15%，抽 1 张牌。',
+      shortDescription: '下次劝降率 +15%；抽 1 张',
       recycleDelay: 1,
     };
     const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
@@ -2177,8 +2259,10 @@ export function gainClassDeckBottomCardsPure(
     return { patch: {}, cards: [], logs };
   }
 
-  const cards = state.classDeck.slice(-takeCount);
-  const newClassDeck = state.classDeck.slice(0, state.classDeck.length - takeCount);
+  // Class deck is an infinite template — clone the bottom slice with fresh
+  // ids instead of removing them from the pool.
+  const sampled = state.classDeck.slice(-takeCount);
+  const [cards, rngAfterClone] = cloneClassCardsWithFreshIds(sampled, state.rng);
   const merged = [...cards, ...state.backpackItems];
 
   let newBackpackItems: GameCardData[];
@@ -2199,7 +2283,7 @@ export function gainClassDeckBottomCardsPure(
 
   return {
     patch: {
-      classDeck: newClassDeck,
+      rng: rngAfterClone,
       backpackItems: newBackpackItems,
       permanentMagicRecycleBag: newRecycleBag,
     },

@@ -66,7 +66,7 @@ export interface EventSystemDeps {
   drawClassCardsToBackpack: (
     count: number,
     source: string,
-    opts?: { excludeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' },
+    opts?: { excludeIds?: string[]; includeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' },
   ) => void;
   getEquipmentSlots: () => { id: EquipmentSlotId; item: EquipmentItem | null }[];
   setEquipmentSlotBonus: (
@@ -160,7 +160,7 @@ export interface EventSystemDeps {
   triggerDiscardFlight: (
     card: GameCardData,
     destination: 'graveyard' | 'recycle-bag',
-    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+    sourceHint?: FlightSourceHint,
   ) => Promise<void>;
 
   // --- Local state setters ---
@@ -952,7 +952,12 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         sourceLabel: eventCard?.name,
       });
       if (!started) depsRef.current.handleDiscoverFallback();
-    } else if (token === 'discoverStarterMagic') {
+    } else if (
+      token === 'discoverStarterMagic'
+      || token === 'discoverStarterEquipment'
+      || token === 'discoverStarterPotion'
+      || token === 'discoverStarterAmulet'
+    ) {
       const preRolledPool = (payload.data?.pool as GameCardData[] | undefined) ?? [];
       if (preRolledPool.length > 0) {
         depsRef.current.beginDiscoverFlow(token, {

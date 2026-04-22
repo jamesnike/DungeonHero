@@ -7,7 +7,6 @@ import { useModalUI } from '../contexts/ModalUIContext';
 
 import VictoryDefeatModal from '@/components/VictoryDefeatModal';
 import HeroSkillSelection from '@/components/HeroSkillSelection';
-import CardDraftModal from '@/components/CardDraftModal';
 
 import type { RngState } from '@/game-core/rng';
 
@@ -25,8 +24,6 @@ function GameFlowContainerInner() {
     totalDamageTaken: s.totalDamageTaken,
     totalHealed: s.totalHealed,
     showSkillSelection: s.showSkillSelection,
-    showCardDraft: s.showCardDraft,
-    cardDraftPool: s.cardDraftPool,
     deathWardPrompt: s.deathWardPrompt,
     rng: s.rng,
   }));
@@ -137,24 +134,9 @@ function GameFlowContainerInner() {
       <HeroSkillSelection
         isOpen={gs.showSkillSelection}
         onSelectSkill={cb.onSkillSelection}
-        classCardPreview={ui.classCardPreview}
         rng={gs.rng}
         onRngUpdate={handleRngUpdate}
       />
-
-      {gs.showCardDraft && (
-        <CardDraftModal
-          isOpen={gs.showCardDraft}
-          pool={gs.cardDraftPool}
-          totalRounds={6}
-          choicesPerRound={3}
-          onComplete={cb.onCardDraftComplete}
-          classCardPreview={ui.classCardPreview}
-          roundTypes={['potion','equipment','amulet','general','general','general']}
-          rng={gs.rng}
-          onRngUpdate={handleRngUpdate}
-        />
-      )}
     </>
   );
 }

@@ -14,7 +14,7 @@ import type { ActiveRowSlots, AmuletItem, EquipmentItem, EquipmentSlotId } from 
 import type { KnightCardData } from '@/lib/knightDeck';
 import { BASE_BACKPACK_CAPACITY } from '../constants';
 import { markSkillUsedPure } from '../hero';
-import { shuffle as rngShuffle, nextInt } from '../rng';
+import { nextInt } from '../rng';
 import { getEffectiveHandLimit, addCardToBackpackPure } from '../cards';
 import { computeAmuletEffects } from '../equipment';
 import { computeSpellDamagePure } from '../helpers';
@@ -148,12 +148,6 @@ export function reduceEconomyActions(
       return applyPatch(state, {
         amuletSlots: state.amuletSlots.filter(slot => slot?.id !== action.cardId),
       });
-
-    case 'RETURN_CARDS_TO_CLASS_DECK': {
-      const combined = [...state.classDeck, ...action.cards];
-      const [shuffled, newRng] = rngShuffle(combined, state.rng);
-      return applyPatch(state, { classDeck: shuffled, rng: newRng });
-    }
 
     // --- Card / Deck / Recycle state ---
 
@@ -735,7 +729,7 @@ function reduceResolveDice(
           },
         });
       } else {
-        const bannerText = `震慑领域：击晕上限 +10%。${stunResults.join('，')}。`;
+        const bannerText = `震慑领域：击晕上限 +5%。${stunResults.join('，')}。`;
         sideEffects.push({ event: 'ui:banner', payload: { text: bannerText } });
         if (cardD) {
           enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: cardD, dealtDamage: false } as GameAction);

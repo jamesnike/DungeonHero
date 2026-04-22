@@ -12,7 +12,6 @@ export interface CardDraftModalProps {
   totalRounds: number;
   choicesPerRound: number;
   onComplete: (picks: GameCardData[]) => void;
-  classCardPreview?: GameCardData | null;
   /** Per-round type overrides. Unspecified rounds default to 'general'. */
   roundTypes?: DraftRoundType[];
   rng: RngState;
@@ -51,7 +50,6 @@ export default function CardDraftModal({
   totalRounds,
   choicesPerRound,
   onComplete,
-  classCardPreview,
   roundTypes,
   rng,
   onRngUpdate,
@@ -172,21 +170,6 @@ export default function CardDraftModal({
             </div>
           ))}
         </div>
-
-        {classCardPreview && (
-          <div className="class-card-preview">
-            <div className="class-card-preview-label">即将获得的专属卡</div>
-            <div className="class-card-preview-card">
-              {classCardPreview.image && (
-                <img src={classCardPreview.image} alt={classCardPreview.name} className="class-card-preview-img" />
-              )}
-              <div className="class-card-preview-info">
-                <div className="class-card-preview-name">{classCardPreview.name}</div>
-                <div className="class-card-preview-desc">{classCardPreview.description || classCardPreview.magicEffect || ''}</div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

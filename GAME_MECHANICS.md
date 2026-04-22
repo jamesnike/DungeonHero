@@ -77,7 +77,7 @@
 | **预览区** | `previewCards` | 瀑流时先展示在顶行 |
 | **场上** | `activeCards` | 5列活跃卡牌行 |
 | **手牌** | `handCards` | 上限 `HAND_LIMIT(6) + handLimitBonus` |
-| **背包** | `backpackItems` | LIFO，基础容量 `BASE_BACKPACK_CAPACITY(12)` + 修正 |
+| **背包** | `backpackItems` | LIFO，基础容量 `BASE_BACKPACK_CAPACITY(15)` + 修正 |
 | **回收袋** | `permanentMagicRecycleBag` | 永久牌等待回收的区域 |
 | **坟场** | `discardedCards` | 已消耗/销毁的牌（按ID去重） |
 | **职业牌堆** | `classDeck` | 骑士职业专属卡牌 |
@@ -1165,7 +1165,7 @@ resolver:                       hero.ts reducer:
 |------|-----|---------|
 | `INITIAL_HP` | 20 | constants.ts |
 | `HAND_LIMIT` | 6 | constants.ts |
-| `BASE_BACKPACK_CAPACITY` | 12 | constants.ts |
+| `BASE_BACKPACK_CAPACITY` | 15 | constants.ts |
 | `MAX_AMULET_SLOTS` | 2 | GameBoard.tsx |
 | `BALANCE_ATTACK_BONUS` | 3 | GameBoard.tsx |
 | `BALANCE_SHIELD_BONUS` | 3 | GameBoard.tsx |

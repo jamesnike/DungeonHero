@@ -124,7 +124,7 @@ function ClassDeckComponent({
               {deckName} ({classCards.length} cards)
             </DialogTitle>
             <DialogDescription>
-              Class-specific abilities and skills
+              Class-specific template pool. Cards here can be discovered and obtained any number of times — drawing or buying never depletes the pool.
             </DialogDescription>
           </DialogHeader>
 

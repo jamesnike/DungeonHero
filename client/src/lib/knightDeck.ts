@@ -25,6 +25,9 @@ import dedupeKnightMagicRecycleFlareImage from '@assets/generated_images/card_de
 import dedupeKnightMagicChaosDiceImage from '@assets/generated_images/card_dedupe_knight_magic_chaos_dice.png';
 import dedupeKnightMagicFateSightImage from '@assets/generated_images/card_dedupe_knight_magic_fate_sight.png';
 import dedupeKnightMagicMirrorCopyImage from '@assets/generated_images/card_dedupe_knight_magic_mirror_copy.png';
+import dedupeKnightMagicCleanseDrawImage from '@assets/generated_images/card_dedupe_knight_magic_soft_waterfall.png';
+import dedupeKnightMagicRecycleTideImage from '@assets/generated_images/card_dedupe_magic_waterfall_reset.png';
+import dedupeKnightMagicPersuadeBladeImage from '@assets/generated_images/card_dedupe_magic_equivalent_exchange.png';
 import dedupeKnightMagicArmorStunConvertImage from '@assets/generated_images/card_dedupe_knight_magic_armor_stun_convert.png';
 import dedupeKnightMagicOverkillUpgradeImage from '@assets/generated_images/card_dedupe_knight_magic_overkill_upgrade.png';
 import dedupeKnightHeroReviveTomeImage from '@assets/generated_images/card_dedupe_knight_hero_magic_revive_tome.png';
@@ -33,6 +36,7 @@ import bloodCurseSealImage from '@assets/generated_images/card_curse_blood_seal.
 import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
 import thunderAmuletSigilImage from '@assets/generated_images/card_dedupe_amulet_thunder_sigil.png';
+import knightDeleteDrawAmuletImage from '@assets/generated_images/chibi_arc_seal_amulet.png';
 import thunderGoldAmuletImage from '@assets/generated_images/knight_thunder_gold_amulet.png';
 import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
 import knightAmuletStunRecycleImage from '@assets/generated_images/knight_amulet_stun_recycle.png';
@@ -712,6 +716,17 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'stun-gold',
   });
 
+  pushCard({
+    type: 'amulet',
+    name: '招灵书印',
+    value: 1,
+    image: knightDeleteDrawAmuletImage,
+    classCard: true,
+    description: '每删除一张牌，从背包随机抽 2 张牌。',
+    shortDescription: '每删除 1 张牌，背包抽 2 张',
+    amuletEffect: 'delete-draw',
+  });
+
   // === NEW POTIONS (2 cards) ===
   pushCard({
     type: 'potion',
@@ -923,6 +938,66 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 2,
   });
 
+  // 净册涌泉 (Perm 1)：选择一张手牌删除，从牌堆抽 N 张牌
+  // （N = 2 / 3 / 4，对应升级 0 / 1 / 2）。手牌为空时跳过删除，仍正常抽 N 张。
+  // 触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），与「招灵书印」护符
+  // (delete-draw) 能够叠加：每次删除还会额外从背包抽 2N 张。
+  pushCard({
+    type: 'magic',
+    name: '净册涌泉',
+    value: 0,
+    image: dedupeKnightMagicCleanseDrawImage,
+    classCard: true,
+    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从牌堆抽 2 张牌。',
+    shortDescription: '删 1 张手牌；从牌堆抽 2 张',
+    magicType: 'permanent',
+    magicEffect: '删 1 张手牌，从牌堆抽 N 张（升 0/1/2 → 2/3/4）。',
+    knightEffect: 'cleanse-draw',
+    recycleDelay: 1,
+    maxUpgradeLevel: 2,
+  });
+
+  // 洗册归川 (Perm 1)：将背包所有牌移入永久魔法回收袋；然后整袋瀑流 -1，
+  // 已就绪的（_recycleWaits ≤ 0）洗回背包。刚从背包进入的牌默认 waits=1，
+  // 经此次 -1 后立即回背包（净效果：背包圆圈往返一圈），同时把回收袋里
+  // 已有的永久魔法卡推进一步。法术回响（C 类）：连跑两次没有额外效果。
+  pushCard({
+    type: 'magic',
+    name: '洗册归川',
+    value: 0,
+    image: dedupeKnightMagicRecycleTideImage,
+    classCard: true,
+    description: '永久：将背包所有牌移入回收袋；然后回收袋瀑流 -1，已就绪的牌洗回背包。',
+    shortDescription: '背包→回收袋；回收袋瀑流 -1，就绪回背包',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：背包→回收袋；瀑流 -1，已就绪的牌回背包。',
+    knightEffect: 'recycle-tide',
+    recycleDelay: 1,
+    maxUpgradeLevel: 0,
+  });
+
+  // 辞剑相易 (Perm 1)：将「下次劝降率」转化为左右装备栏各 ⌈X/3⌉ 临时攻击。
+  //   X = persuadeAmuletBonus            (临时；护符 / 部分 magic / equipment 累积；清空)
+  //     + persuadeDiscount.rateBonus     (临时；event 际遇轮盘 / 部分 magic 给的；清 rateBonus
+  //                                       但保留 costReduction)
+  //     + permanentPersuadeBonus         (永久；保留)
+  // 法术回响（C 类）跑第二次时，临时部分已经被清，X 退化成 permanentPersuadeBonus；
+  // 若玩家有永久劝降率加成，第二次仍能转化出额外临时攻击。
+  pushCard({
+    type: 'magic',
+    name: '辞剑相易',
+    value: 0,
+    image: dedupeKnightMagicPersuadeBladeImage,
+    classCard: true,
+    description: '永久：将「下次劝降 +X%」转化为左右装备栏各 ⌈X/3⌉ 临时攻击，并清空临时劝降率（永久部分保留）。',
+    shortDescription: '下次劝降 +X% → 双栏各 ⌈X/3⌉ 临攻；清临时',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：下次劝降 +X% 转化成双栏各 ⌈X/3⌉ 临时攻击；清空临时劝降加成。',
+    knightEffect: 'persuade-to-temp-attack',
+    recycleDelay: 1,
+    maxUpgradeLevel: 0,
+  });
+
   pushCard({
     type: 'magic',
     name: '锋刃侧击',
@@ -950,6 +1025,64 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     magicEffect: '临时攻击 +2 后翻倍。',
     knightEffect: 'temp-attack-double',
     recycleDelay: 1,
+  });
+
+  // 攻防协律 (Perm 1)：选择一个装备栏，+2 临时攻击 + +2 临时护甲，并抽 1 张牌。
+  // 升级数值：Lv0 +2/+2，Lv1 +4/+4，Lv2 +6/+6（抽牌固定 1 张）。
+  // Echo (A 类)：攻防加成与抽牌都 ×echoMultiplier。
+  pushCard({
+    type: 'magic',
+    name: '攻防协律',
+    value: 0,
+    image: dedupeKnightMagicBattleSpiritImage,
+    classCard: true,
+    description: '永久：选择一个装备栏，+2 临时攻击 +2 临时护甲，抽 1 张牌。升级1：+4/+4。升级2：+6/+6。',
+    shortDescription: '所选栏 +2 临攻 +2 临护；抽 1（Lv1: +4/+4 / Lv2: +6/+6）',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：选择一个装备栏，+2 临时攻击 +2 临时护甲，抽 1 张牌。',
+    knightEffect: 'temp-attack-armor-draw',
+    recycleDelay: 1,
+    maxUpgradeLevel: 2,
+  });
+
+  // 战势化符 (Perm 1)：选择一个装备栏，按 floor((临攻+临护)/3) 抽牌。
+  // 公式：drawCount = floor((slotTempAttack + slotTempArmor) / 3) * echoMultiplier
+  // - 不分别计算（合并为 pool 再 ÷3，所以 2+2=4 → 1 张，5+1=6 → 2 张）
+  // - 0 临时值也允许结算（消耗这张 magic）；空槽也允许选
+  // - Echo (A 类)：最终抽牌数 ×echoMultiplier
+  // - 不设升级
+  pushCard({
+    type: 'magic',
+    name: '战势化符',
+    value: 0,
+    image: knightScrollBagFetchImage,
+    classCard: true,
+    description: '永久：选择一个装备栏，每有 3 点（临时攻击 + 临时护甲）抽 1 张牌。',
+    shortDescription: '所选栏 (临攻+临护)÷3 张牌',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：选择一个装备栏，按 (临时攻击+临时护甲)÷3 抽牌。',
+    knightEffect: 'temp-stats-to-draw',
+    recycleDelay: 1,
+  });
+
+  // 蓄能裂击 (Perm 2)：选择一个装备，耐久上限 +1，耐久 +1；
+  // 若 +1 后该装备的当前耐久 == 4，则从激活行随机一个怪物造成 1 血层伤害，
+  // 并立即将该装备耐久 -2（即使没怪物可打也照扣）。
+  // 触发条件用「+1 后当前耐久 == 4」，比 maxDurability == 4 更直观。
+  // Echo (A 类)：整套效果重复 echoMultiplier 次（每次重新读取耐久与怪物列表）。
+  // 空槽 / 没有耐久概念的装备 → 直接拒绝并提示，不消耗这张 magic。
+  pushCard({
+    type: 'magic',
+    name: '蓄能裂击',
+    value: 0,
+    image: knightScrollBladeStormImage,
+    classCard: true,
+    description: '永久：选择一件装备，耐久上限 +1，耐久 +1。如果加完后该装备耐久为 4，则随机一只激活行的怪物受到 1 血层伤害，并立即将该装备耐久 -2。',
+    shortDescription: '选装备 +1 上限/耐久；若至 4 耐久，敌人 -1 血层、装备 -2',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：装备 +1 上限/耐久；若达到 4 耐久则随机敌人 -1 血层、装备 -2。',
+    knightEffect: 'durability-charge-burst',
+    recycleDelay: 2,
   });
 
   pushCard({

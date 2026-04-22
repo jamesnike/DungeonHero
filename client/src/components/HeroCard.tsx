@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { Heart, AlertTriangle, Sparkles, Droplets, Zap } from 'lucide-react';
+import { Heart, AlertTriangle, Sparkles, Droplets, Zap, Handshake } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import React, { memo, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
@@ -49,6 +49,13 @@ interface HeroCardProps {
   spellDamageBonus?: number;
   spellLifesteal?: number;
   stunCap?: number;
+  /**
+   * 下一次劝降的累计成功率加成（百分点，可正可负）。
+   * 由 GameBoard 实时计算：
+   *   persuadeAmuletBonus + persuadeDiscount.rateBonus
+   *   + permanentPersuadeBonus + (persuadeLevel - 1) * 5
+   */
+  nextPersuadeBonus?: number;
   /**
    * 单目标伤害 magic 处于 monster-select 阶段，且 pending.allowsHeroTarget 为 true
    * 时由 GameBoard 传 true：给 hero 卡加紫色高亮 ring + pulse，提示玩家可以点击
@@ -122,6 +129,7 @@ function HeroCardInner({
   spellDamageBonus = 0,
   spellLifesteal = 0,
   stunCap = 10,
+  nextPersuadeBonus = 0,
   onHeroClick,
   selfTargetActive = false,
 }: HeroCardProps) {
@@ -299,20 +307,42 @@ function HeroCardInner({
       data-testid="hero-card"
       style={{ '--dh-hero-instance-scale': appliedHeroScale.toString() } as CSSProperties}
     >
+      {/* Hero stat chip — 两行布局：
+          上排：「超杀吸血」对齐在「法术伤害」正上方；
+                「下一次劝降」对齐在「击晕上限」正上方（始终显示，0 也显示）。
+          下排：法术伤害 | 击晕上限。 */}
       <div
-        className={`pointer-events-none absolute left-1/2 z-30 flex items-center whitespace-nowrap dh-hero-chip ${isFlat ? 'gap-0.5' : 'gap-1'}`}
-        style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
+        className={`pointer-events-none absolute left-1/2 z-30 grid whitespace-nowrap dh-hero-chip ${isFlat ? 'gap-x-0.5' : 'gap-x-1'}`}
+        style={{
+          top: 'calc(-1 * var(--dh-grid-gap-y) / 2)',
+          transform: 'translate(-50%, -50%)',
+          gridTemplateColumns: 'auto auto',
+          justifyItems: 'center',
+          alignItems: 'center',
+          rowGap: 0,
+        }}
       >
+        <span className="flex items-center justify-center">
+          <span className="dh-stat-sticker dh-stat-sticker--lifesteal" title="超杀吸血">
+            {!isCompact && <Droplets className="dh-stat-sticker__icon" />}
+            {spellLifesteal}
+          </span>
+        </span>
+        <span className="flex items-center justify-center">
+          <span
+            className={`dh-stat-sticker dh-stat-sticker--persuade${nextPersuadeBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}
+            title="下一次劝降成功率加成"
+          >
+            {!isCompact && <Handshake className="dh-stat-sticker__icon" />}
+            {nextPersuadeBonus >= 0 ? `+${nextPersuadeBonus}` : nextPersuadeBonus}%
+          </span>
+        </span>
         <span
           className={`dh-stat-sticker dh-stat-sticker--spell${spellDamageDisplay < 0 ? ' dh-stat-sticker--negative' : ''}`}
           title="法术伤害加成"
         >
           {!isCompact && <Sparkles className="dh-stat-sticker__icon" />}
           {spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}
-        </span>
-        <span className="dh-stat-sticker dh-stat-sticker--lifesteal" title="超杀吸血">
-          {!isCompact && <Droplets className="dh-stat-sticker__icon" />}
-          {spellLifesteal}
         </span>
         <span className="dh-stat-sticker dh-stat-sticker--stun" title="击晕上限">
           {!isCompact && <Zap className="dh-stat-sticker__icon" />}

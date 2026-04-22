@@ -26,7 +26,11 @@ import { upgradeCardPure } from '../cardUpgrade';
 import { SHOP_EQUIP_BOOST_COST, SHOP_SKILL_DISCOVER_COST, MAX_SHOP_LEVEL } from '../constants';
 import { shuffle as rngShuffle, nextId } from '../rng';
 import { applyAmplifyOnCreate } from '../helpers';
+import { computeAmuletEffects } from '../equipment';
 import { minionImage, createStarterHealEchoCard } from '../deck';
+import { cloneClassCardWithFreshId, sampleDistinctByName } from '../cardClone';
+import { BASE_BACKPACK_CAPACITY } from '../constants';
+import { getEffectiveHandLimit } from '../cards';
 import statSwapCardImage from '@assets/generated_images/knight_stat_swap_potion.png';
 
 export function reduceShopActions(state: GameState, action: GameAction): ReduceResult | null {
@@ -93,6 +97,9 @@ export function reduceShopActions(state: GameState, action: GameAction): ReduceR
     case 'BEGIN_DISCOVER':
       return reduceBeginDiscover(state, action);
 
+    case 'RESOLVE_DISCOVER_SELECTION':
+      return reduceResolveDiscoverSelection(state, action);
+
     case 'CONFIRM_DELETE_CARD':
       return reduceConfirmDeleteCard(state, action);
 
@@ -148,14 +155,16 @@ function reducePurchase(
 
   const sideEffects: SideEffect[] = [
     { event: 'shop:purchased', payload: { card: result.purchasedCard, cost } },
+    { event: 'shop:classCardObtained', payload: { card: result.purchasedCard, source: 'purchase', destination: 'backpack' } },
+    { event: 'card:newCardGained', payload: { count: 1, source: 'classPool' } },
     { event: 'log:entry', payload: { type: 'shop', message: `商店：购买「${result.purchasedCard.name}」（-${cost} 金币）` } },
   ];
 
   return applyPatch(state, {
     gold: result.gold,
-    classDeck: result.classDeck,
     backpackItems: result.backpackItems,
     shopOfferings: result.shopOfferings,
+    rng: result.rng,
   }, sideEffects);
 }
 
@@ -555,32 +564,31 @@ function reduceCacheMonsterRewardPreview(
 }
 
 // ---------------------------------------------------------------------------
-// BEGIN_DISCOVER — shuffle pool via RNG, remove from classDeck, open modal
+// BEGIN_DISCOVER — sample up to 3 distinct-by-name candidates from pool.
+// Class deck is now an infinite template: candidates are NOT removed from
+// classDeck, and the chosen card will be cloned with a fresh id at
+// RESOLVE_DISCOVER_SELECTION time.
 // ---------------------------------------------------------------------------
 
 function reduceBeginDiscover(
   state: GameState,
   action: Extract<GameAction, { type: 'BEGIN_DISCOVER' }>,
 ): ReduceResult {
-  const { source, pool, sourceLabel, removeFromClassDeck } = action;
+  const { source, pool, sourceLabel, delivery } = action;
 
   if (pool.length === 0) return noChange(state);
 
-  const available = Math.min(3, pool.length);
-  const [shuffled, nextRng] = rngShuffle(pool, state.rng);
-  const options = shuffled.slice(0, available);
-  const optionIds = new Set(options.map(c => c.id));
+  const [options, nextRng] = sampleDistinctByName(pool, 3, state.rng, rngShuffle);
+
+  if (options.length === 0) return noChange(state);
 
   const patch: Partial<GameState> = {
     rng: nextRng,
     discoverOptions: options,
     discoverModalOpen: true,
     discoverSourceLabel: sourceLabel ?? null,
+    discoverDelivery: delivery ?? 'backpack',
   };
-
-  if (removeFromClassDeck !== false) {
-    patch.classDeck = state.classDeck.filter(c => !optionIds.has(c.id));
-  }
 
   const sideEffects: SideEffect[] = [
     { event: 'shop:discoverStarted', payload: { source, pool: options, sourceLabel } },
@@ -594,6 +602,86 @@ function reduceBeginDiscover(
   ];
 
   return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_DISCOVER_SELECTION — clone the chosen discover candidate with a
+// fresh id and place into backpack (or recycle bag on overflow). Closes the
+// modal and emits side effects for animation/log/new-card-gained tracking.
+// ---------------------------------------------------------------------------
+
+function reduceResolveDiscoverSelection(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_DISCOVER_SELECTION' }>,
+): ReduceResult {
+  const { cardId } = action;
+  const original = state.discoverOptions.find(c => c.id === cardId);
+
+  // Always clear the modal even if the card isn't found (defensive). Reset
+  // discoverDelivery so the next BEGIN_DISCOVER starts from the 'backpack'
+  // default unless it explicitly opts into 'hand-first'.
+  const baseClose: Partial<GameState> = {
+    discoverModalOpen: false,
+    discoverModalMinimized: false,
+    discoverOptions: [],
+    discoverSourceLabel: null,
+    discoverDelivery: 'backpack',
+  };
+
+  if (!original) {
+    return applyPatch(state, baseClose);
+  }
+
+  const [cloned, nextRng] = cloneClassCardWithFreshId(original, state.rng);
+  const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
+  const handHasRoom = state.handCards.length < getEffectiveHandLimit(state);
+  const backpackHasRoom = state.backpackItems.length < backpackCap;
+  const wantsHandFirst = state.discoverDelivery === 'hand-first';
+
+  const patch: Partial<GameState> = { ...baseClose, rng: nextRng };
+  const sideEffects: SideEffect[] = [];
+  // Drain one pending class-discover from the queue so multi-discover
+  // effects (e.g. 弃装重铸) keep flowing — mirrors the SET_DISCOVER_MODAL
+  // close path.
+  const enqueuedActions: GameAction[] = [];
+  if (state.pendingClassDiscoverQueue.length > 0) {
+    const [nextEntry, ...rest] = state.pendingClassDiscoverQueue;
+    patch.pendingClassDiscoverQueue = rest;
+    enqueuedActions.push({
+      type: 'BEGIN_DISCOVER',
+      source: nextEntry.source,
+      pool: state.classDeck,
+      sourceLabel: nextEntry.sourceLabel ?? undefined,
+    });
+  }
+
+  if (wantsHandFirst && handHasRoom) {
+    patch.handCards = [...state.handCards, cloned];
+    sideEffects.push(
+      { event: 'log:entry', payload: { type: 'skill', message: `发现专属卡：「${cloned.name}」直接进入手牌` } },
+      { event: 'shop:classCardObtained', payload: { card: cloned, source: 'discover', destination: 'backpack' } },
+      { event: 'card:newCardGained', payload: { count: 1, source: 'classPool' } },
+      { event: 'card:drawnToHand', payload: { cardId: cloned.id, source: 'classPool' } },
+    );
+  } else if (backpackHasRoom) {
+    patch.backpackItems = [cloned, ...state.backpackItems];
+    sideEffects.push(
+      { event: 'log:entry', payload: { type: 'skill', message: `发现专属卡：选入「${cloned.name}」` } },
+      { event: 'shop:classCardObtained', payload: { card: cloned, source: 'discover', destination: 'backpack' } },
+      { event: 'card:newCardGained', payload: { count: 1, source: 'classPool' } },
+    );
+  } else {
+    patch.permanentMagicRecycleBag = [
+      ...state.permanentMagicRecycleBag,
+      { ...cloned, _recycleWaits: cloned.recycleDelay ?? 1 },
+    ];
+    sideEffects.push(
+      { event: 'log:entry', payload: { type: 'skill', message: `发现专属卡：「${cloned.name}」进入回收袋（背包已满）` } },
+      { event: 'shop:classCardObtained', payload: { card: cloned, source: 'discover', destination: 'recycle-bag' } },
+    );
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -730,6 +818,25 @@ function reduceConfirmDeleteCard(
       owner: 'player',
       opts: { toRecycleBag: destination === 'recycle-bag' },
     });
+  }
+
+  // 「招灵书印」(delete-draw): every "删除" (move-out-of-game) — shop or event —
+  // triggers 2 × N draws from backpack, where N is the number of equipped
+  // copies. Only fires for kw === 'delete'; discard/recycle/move-to do not
+  // count as 删除.
+  if (kw === 'delete') {
+    const ae = computeAmuletEffects(state.amuletSlots as import('@/components/GameCard').GameCardData[]);
+    if (ae.deleteDrawCount > 0) {
+      const drawCount = 2 * ae.deleteDrawCount;
+      enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'amulet',
+          message: `招灵书印：删除「${cardToDelete.name}」，从背包抽 ${drawCount} 张牌`,
+        },
+      });
+    }
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);

@@ -55,7 +55,7 @@ export interface CardPlayHandlersDeps {
   drawClassCardsToBackpack: (
     count: number,
     source: string,
-    opts?: { excludeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' },
+    opts?: { excludeIds?: string[]; includeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' },
   ) => void;
   getEquipmentSlots: () => { id: EquipmentSlotId; item: EquipmentItem | null }[];
   calculateSlotArmorValue: (slotId: EquipmentSlotId) => number;
@@ -121,7 +121,7 @@ export interface CardPlayHandlersDeps {
   ) => Promise<GameCardData | null>;
   beginDiscoverFlow: (
     source: string,
-    options?: { filter?: (card: GameCardData) => boolean; sourceLabel?: string; overridePool?: GameCardData[] },
+    options?: { filter?: (card: GameCardData) => boolean; sourceLabel?: string; overridePool?: GameCardData[]; delivery?: 'backpack' | 'hand-first' },
   ) => boolean;
   startShopFlow: (sourceCard: GameCardData | null) => boolean;
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
@@ -141,7 +141,7 @@ export interface CardPlayHandlersDeps {
   triggerDiscardFlight: (
     card: GameCardData,
     destination: 'graveyard' | 'recycle-bag',
-    sourceHint?: 'amulet' | 'equipmentSlot1' | 'equipmentSlot2' | 'graveyard',
+    sourceHint?: FlightSourceHint,
   ) => Promise<void>;
   triggerClassDeckFlight: (cards: GameCardData[]) => void;
   triggerGraveNova: (graveNovaCard?: GameCardData) => void;
@@ -507,7 +507,9 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
         card.recycleDelay != null && card.recycleDelay > 0
           ? 'recycle-bag'
           : 'graveyard';
-      void depsRef.current.triggerDiscardFlight(card, destination);
+      // Cards played from hand should fly from the Hero Cell (the player just
+      // "used" the card from themselves), not from the original hand slot.
+      void depsRef.current.triggerDiscardFlight(card, destination, 'hero');
     }
     depsRef.current.removePendingDungeonCard(card.id);
     depsRef.current.stagingCardsRef.current =
@@ -533,7 +535,9 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       const destination: 'graveyard' | 'recycle-bag' = goesToRecycleBag
         ? 'recycle-bag'
         : 'graveyard';
-      void d.triggerDiscardFlight(card, destination);
+      // Magic / hero-magic cards played from hand fly from the Hero Cell
+      // (player "casts" them from themselves) rather than from the hand slot.
+      void d.triggerDiscardFlight(card, destination, 'hero');
     }
     // removePendingDungeonCard already calls removeCard internally when the
     // card is pending or in the active row, so we only need a fallback call
@@ -675,8 +679,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   // Card flow event listeners — bridge reducer side effects to UI flows
   // ---------------------------------------------------------------------------
 
-  useGameEvent('card:discoverRequested', ({ source, candidates, sourceLabel }) => {
-    depsRef.current.beginDiscoverFlow(source, { overridePool: candidates, sourceLabel });
+  useGameEvent('card:discoverRequested', ({ source, candidates, sourceLabel, delivery }) => {
+    depsRef.current.beginDiscoverFlow(source, { overridePool: candidates, sourceLabel, delivery });
   });
 
   useGameEvent('card:mirrorCopyRequested', ({ card }) => {
@@ -685,6 +689,25 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
   useGameEvent('card:deckJudgeRequested', ({ card }) => {
     dispatch({ type: 'RESOLVE_DECK_JUDGE', card });
+  });
+
+  // 净册涌泉 (knight:cleanse-draw) — drive the hand-pick + draw loop.
+  // For Spell Echo (Category B), `echoRemaining` is the number of times to
+  // run the picker. Each iteration: open hand-only delete picker for 1 card,
+  // then draw `drawCount` cards from the deck. Empty hand → skip picker but
+  // still draw (per design: draw-only when empty).
+  useGameEvent('card:cleanseDrawRequested', async ({ card, drawCount, echoRemaining }) => {
+    const iterations = Math.max(1, echoRemaining ?? 1);
+    for (let i = 0; i < iterations; i++) {
+      const titleSuffix = iterations > 1 ? `（${i + 1}/${iterations}）` : '';
+      await depsRef.current.requestCardAction('delete', 1, {
+        title: `净册涌泉：选择一张手牌删除${titleSuffix}`,
+        description: `删除一张手牌（手牌为空可跳过），然后从牌堆抽 ${drawCount} 张牌`,
+        handOnly: true,
+      });
+      dispatch({ type: 'DRAW_CARDS', count: drawCount, source: 'deck' });
+    }
+    dispatch({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
   });
 
   useGameEvent('card:classDrawRequested', ({ count, source }) => {

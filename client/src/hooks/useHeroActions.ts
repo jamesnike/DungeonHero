@@ -44,7 +44,7 @@ export interface HeroActionsDeps {
   drawClassCardsToBackpack: (
     count: number,
     source: string,
-    opts?: { excludeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' },
+    opts?: { excludeIds?: string[]; includeIds?: string[]; filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment' },
   ) => void;
   getEquipmentSlots: () => { id: EquipmentSlotId; item: EquipmentItem | null }[];
   calculateSlotArmorValue: (slotId: EquipmentSlotId) => number;

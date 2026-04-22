@@ -276,17 +276,41 @@ export default function EquipmentSlot({
           zIndex: 1,
         }}
       />
-      {/* Permanent bonus header — 立体贴纸样式：每条数值一颗贴纸 */}
+      {/* Permanent bonus header — 立体贴纸样式：每条数值一颗贴纸
+          两行布局：临时值（ATK / TMP）在上排，永久值（DMG / SHD）在下排，
+          按列严格对齐：col 1 = 攻击系，col 2 = 护甲系。
+          上排在两个临时值都为 0 时整体不渲染。 */}
       {type === 'equipment' && (
         <div
-          className={`absolute left-1/2 z-30 flex items-center whitespace-nowrap dh-hero-chip ${isFlat ? 'gap-0.5 sm:gap-1' : 'gap-1 sm:gap-1.5'}`}
-          style={{ top: 'calc(-1 * var(--dh-grid-gap-y) / 2)', transform: 'translate(-50%, -50%)' }}
+          className={`absolute left-1/2 z-30 grid whitespace-nowrap dh-hero-chip ${isFlat ? 'gap-x-0.5 sm:gap-x-1' : 'gap-x-1 sm:gap-x-1.5'}`}
+          style={{
+            top: 'calc(-1 * var(--dh-grid-gap-y) / 2)',
+            transform: 'translate(-50%, -50%)',
+            gridTemplateColumns: 'auto auto',
+            justifyItems: 'center',
+            alignItems: 'center',
+            rowGap: 0,
+          }}
         >
-          {tempAttackBonus !== 0 && (
-            <span className={`dh-stat-sticker dh-stat-sticker--atk${tempAttackBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
-              {formatBonus(tempAttackBonus)}
-              {!isCompact && <span className="dh-stat-sticker__label">ATK</span>}
-            </span>
+          {(tempAttackBonus !== 0 || tempShieldBonus !== 0) && (
+            <>
+              <span className="flex items-center justify-center">
+                {tempAttackBonus !== 0 && (
+                  <span className={`dh-stat-sticker dh-stat-sticker--atk${tempAttackBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
+                    {formatBonus(tempAttackBonus)}
+                    {!isCompact && <span className="dh-stat-sticker__label">ATK</span>}
+                  </span>
+                )}
+              </span>
+              <span className="flex items-center justify-center">
+                {tempShieldBonus !== 0 && (
+                  <span className={`dh-stat-sticker dh-stat-sticker--tmp${tempShieldBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
+                    {formatBonus(tempShieldBonus)}
+                    {!isCompact && <span className="dh-stat-sticker__label">TMP</span>}
+                  </span>
+                )}
+              </span>
+            </>
           )}
           <span className={`dh-stat-sticker dh-stat-sticker--dmg${permanentDamageBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
             {formatBonus(permanentDamageBonus)}
@@ -296,12 +320,6 @@ export default function EquipmentSlot({
             {formatBonus(permanentShieldBonus)}
             {!isCompact && <span className="dh-stat-sticker__label">SHD</span>}
           </span>
-          {tempShieldBonus !== 0 && (
-            <span className={`dh-stat-sticker dh-stat-sticker--tmp${tempShieldBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}>
-              {formatBonus(tempShieldBonus)}
-              {!isCompact && <span className="dh-stat-sticker__label">TMP</span>}
-            </span>
-          )}
         </div>
       )}
 

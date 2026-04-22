@@ -614,7 +614,27 @@ export interface BeginDiscoverAction {
   source: string;
   pool: GameCardData[];
   sourceLabel?: string;
+  /**
+   * Where the chosen card should land at RESOLVE_DISCOVER_SELECTION time.
+   *   - 'backpack' (default): clone into backpack; overflow → recycle bag
+   *     (with `_recycleWaits = recycleDelay ?? 1`).
+   *   - 'hand-first': clone into hand if there's room
+   *     (handCards.length < getEffectiveHandLimit), else fall back to the
+   *     'backpack' path (backpack → recycle bag on overflow). Mirrors the
+   *     existing graveyard-discover `delivery` semantics.
+   */
+  delivery?: 'backpack' | 'hand-first';
+  /**
+   * @deprecated Class deck is now an infinite template — discover never
+   * removes cards from `classDeck`. Field is retained only for type
+   * back-compat with existing callers; the value is ignored.
+   */
   removeFromClassDeck?: boolean;
+}
+
+export interface ResolveDiscoverSelectionAction {
+  type: 'RESOLVE_DISCOVER_SELECTION';
+  cardId: string;
 }
 
 export interface ConfirmDeleteCardAction {
@@ -1093,11 +1113,6 @@ export interface RemoveAmuletAction {
   cardId: string;
 }
 
-export interface ReturnCardsToClassDeckAction {
-  type: 'RETURN_CARDS_TO_CLASS_DECK';
-  cards: GameCardData[];
-}
-
 export interface UpdateGameLogAction {
   type: 'UPDATE_GAME_LOG';
   entry: import('@/components/GameLogPanel').LogEntry;
@@ -1212,6 +1227,13 @@ export interface DrawClassToBackpackAction {
   count: number;
   filter?: 'hero-magic' | 'weapon' | 'shield' | 'equipment';
   excludeIds?: string[];
+  /**
+   * Optional allow-list of template card ids. When provided, only class-deck
+   * cards whose id appears in this list are considered as candidates. Useful
+   * for "clone this specific template card into the backpack" flows (e.g.
+   * 盾墙起手's thunder seal, the opening skill preview pick).
+   */
+  includeIds?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1869,6 +1891,7 @@ export type GameAction =
   | ApplyHeroKillEffectsAction
   // Shop: discover, delete, graveyard, ghost blade
   | BeginDiscoverAction
+  | ResolveDiscoverSelectionAction
   | ConfirmDeleteCardAction
   | RequestGraveyardSelectionAction
   | BeginGhostBladeExileAction
@@ -1939,7 +1962,6 @@ export type GameAction =
   | UpdateAmuletSlotAction
   | ModifyMaxAmuletSlotsAction
   | RemoveAmuletAction
-  | ReturnCardsToClassDeckAction
   | UpdateGameLogAction
   | SetGameFlagsAction
   | UpdateActiveCardsAction

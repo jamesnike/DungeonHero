@@ -157,6 +157,118 @@ describe('Event grants for starter permanent magics — id must strip to starter
   });
 
   // -------------------------------------------------------------------------
+  // discoverStarterEquipment / Potion / Amulet — opening fixed-row events.
+  // Same routing rule as discoverStarterMagic: the seeded discover candidates
+  // must have ids that strip back to STARTER_CARD_IDS via getStarterBaseId.
+  // Even though equipment/potion/amulet cards don't strictly depend on starter
+  // routing for their primary effects (weapons/shields equip by `type`,
+  // potions by `potionEffect`, amulets by `amuletEffect`), keeping ids
+  // strippable is the same convention and protects against future cards in
+  // the starter pool that grow starter-id-dependent behavior.
+  // -------------------------------------------------------------------------
+  describe('discoverStarterEquipment — discover candidates are weapons/shields with strippable ids', () => {
+    it('emits a 3-card discover pool of weapons or shields, each strippable', () => {
+      const state = makeState();
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'discoverStarterEquipment' });
+      const sideEffect = result.sideEffects.find(
+        (se: any) => se.event === 'event:requestEventInteraction'
+          && se.payload?.token === 'discoverStarterEquipment',
+      ) as any;
+      expect(sideEffect).toBeDefined();
+      const pool = sideEffect.payload.data.pool as GameCardData[];
+      expect(pool.length).toBe(3);
+      const validStarterIds = new Set<string>(Object.values(STARTER_CARD_IDS));
+      for (const c of pool) {
+        expect(c.type === 'weapon' || c.type === 'shield').toBe(true);
+        expect(validStarterIds.has(getStarterBaseId(c.id))).toBe(true);
+      }
+    });
+  });
+
+  describe('discoverStarterPotion — discover candidates are potions with strippable ids', () => {
+    it('emits a 3-card discover pool of potions, each strippable', () => {
+      const state = makeState();
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'discoverStarterPotion' });
+      const sideEffect = result.sideEffects.find(
+        (se: any) => se.event === 'event:requestEventInteraction'
+          && se.payload?.token === 'discoverStarterPotion',
+      ) as any;
+      expect(sideEffect).toBeDefined();
+      const pool = sideEffect.payload.data.pool as GameCardData[];
+      expect(pool.length).toBe(3);
+      const validStarterIds = new Set<string>(Object.values(STARTER_CARD_IDS));
+      for (const c of pool) {
+        expect(c.type).toBe('potion');
+        expect(validStarterIds.has(getStarterBaseId(c.id))).toBe(true);
+      }
+    });
+  });
+
+  describe('discoverStarterAmulet — discover candidates are amulets with strippable ids', () => {
+    it('emits a 3-card discover pool of amulets, each strippable', () => {
+      const state = makeState();
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'discoverStarterAmulet' });
+      const sideEffect = result.sideEffects.find(
+        (se: any) => se.event === 'event:requestEventInteraction'
+          && se.payload?.token === 'discoverStarterAmulet',
+      ) as any;
+      expect(sideEffect).toBeDefined();
+      const pool = sideEffect.payload.data.pool as GameCardData[];
+      expect(pool.length).toBe(3);
+      const validStarterIds = new Set<string>(Object.values(STARTER_CARD_IDS));
+      for (const c of pool) {
+        expect(c.type).toBe('amulet');
+        expect(validStarterIds.has(getStarterBaseId(c.id))).toBe(true);
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // grantStarterMagicTwo — used by the opening fixed-row 「魔法馈赠」 event.
+  // Grants 2 random starter magic cards directly to the backpack (no UI
+  // pick). Critical: the granted ids MUST strip back to STARTER_CARD_IDS.X
+  // because most starter magics rely on starter-id routing in
+  // resolvePermanentMagic — otherwise they're silently no-op when played.
+  // (This is the exact bug class the event-grant-card-id-suffix rule
+  // documents.)
+  // -------------------------------------------------------------------------
+  describe('grantStarterMagicTwo — grants 2 starter magics to backpack with strippable ids', () => {
+    it('puts exactly 2 magic cards in the backpack', () => {
+      const state = makeState({ backpackItems: [], handCards: [] });
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'grantStarterMagicTwo' });
+      const grantedMagics = result.state.backpackItems.filter(c => c.type === 'magic');
+      expect(grantedMagics.length).toBe(2);
+    });
+
+    it('every granted card id strips back to a STARTER_CARD_IDS value', () => {
+      const state = makeState({ backpackItems: [], handCards: [] });
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'grantStarterMagicTwo' });
+      const validStarterIds = new Set<string>(Object.values(STARTER_CARD_IDS));
+      for (const c of result.state.backpackItems) {
+        expect(validStarterIds.has(getStarterBaseId(c.id))).toBe(true);
+      }
+    });
+
+    it('overflows to the recycle bag with _recycleWaits when backpack is full', () => {
+      // Force backpack near capacity: cap = BASE (5) + modifier
+      const filler: GameCardData = { id: 'filler', type: 'magic', name: 'filler', value: 0, image: '' } as any;
+      const fullBackpack = Array.from({ length: 100 }, (_, i) => ({ ...filler, id: `filler-${i}` }));
+      const state = makeState({ backpackItems: fullBackpack, handCards: [] });
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'grantStarterMagicTwo' });
+      // None of the new starter magics should have squeezed into backpack
+      // (it was already over capacity). They should all sit in the recycle
+      // bag with _recycleWaits set to their delay (defaults to 1).
+      const recycle = result.state.permanentMagicRecycleBag;
+      expect(recycle.length).toBeGreaterThanOrEqual(2);
+      const newRecycleEntries = recycle.filter(c => c.type === 'magic' && getStarterBaseId(c.id) !== c.id);
+      expect(newRecycleEntries.length).toBe(2);
+      for (const c of newRecycleEntries) {
+        expect((c as any)._recycleWaits).toBeGreaterThanOrEqual(1);
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // flipToUndyingBlessing — sibling bug. Card has only a description-string
   // magicEffect (no knightEffect), so it relies on starter-id routing.
   // Pre-fix the id was `${id}-pick-{base36}` and the `-pick-\d+$` regex only

@@ -176,7 +176,6 @@ import type {
 // Game-core: deck creation, card images, and constants
 import {
   createDeck,
-  createStarterCardPool,
   createStarterHealEchoCard,
   createBugletCard,
   patchPersistedMainDeckWeaponImage,
@@ -363,6 +362,7 @@ export default function GameBoard() {
     extraHeroSkills, extraSkillsUsedThisWave,
     permanentSkills, permanentMaxHpBonus, permanentSpellDamageBonus,
     permanentSpellLifesteal, stunCap, heroStunned, handLimitBonus,
+    persuadeLevel, persuadeAmuletBonus, permanentPersuadeBonus, persuadeDiscount,
     heroMagicState,
     combatState,
     weaponMasterBonus, shieldMasterBonus,
@@ -405,6 +405,8 @@ export default function GameBoard() {
     permanentSpellDamageBonus: s.permanentSpellDamageBonus,
     permanentSpellLifesteal: s.permanentSpellLifesteal, stunCap: s.stunCap,
     heroStunned: s.heroStunned, handLimitBonus: s.handLimitBonus,
+    persuadeLevel: s.persuadeLevel, persuadeAmuletBonus: s.persuadeAmuletBonus,
+    permanentPersuadeBonus: s.permanentPersuadeBonus, persuadeDiscount: s.persuadeDiscount,
     heroMagicState: s.heroMagicState,
     combatState: s.combatState,
     weaponMasterBonus: s.weaponMasterBonus, shieldMasterBonus: s.shieldMasterBonus,
@@ -531,7 +533,6 @@ export default function GameBoard() {
     drawFromRecycleBagToHand,
     tickRecycleForge,
     drawClassCardsToBackpack,
-    returnCardsToClassDeck,
     applyDiscardSideEffects,
     drainPendingDiscardEffects,
     getEquipmentSlots,
@@ -1565,7 +1566,6 @@ export default function GameBoard() {
   const eternalRelicsRef = useRef(eternalRelics);
   eternalRelicsRef.current = eternalRelics;
   const cardDraftPendingSkillRef = useRef<string | null>(null);
-  const classCardPreviewIdRef = useRef<string | null>(null);
   const eventResolutionRef = useRef<{ cardId: string | null; source: 'dungeon' | 'hand' | null }>({ cardId: null, source: null });
   
   // Card Details Modal State
@@ -3555,6 +3555,8 @@ export default function GameBoard() {
         hintRect = heroRowCellRefs.current[HERO_ROW_EQUIPMENT_2_INDEX]?.getBoundingClientRect() ?? null;
       } else if (sourceHint === 'graveyard') {
         hintRect = graveyardCellRef.current?.getBoundingClientRect() ?? null;
+      } else if (sourceHint === 'hero') {
+        hintRect = heroRowCellRefs.current[HERO_ROW_HERO_INDEX]?.getBoundingClientRect() ?? null;
       }
 
       const cardEl = hintRect
@@ -3903,10 +3905,6 @@ export default function GameBoard() {
     freshGameStartRef.current = true;
 
     dispatch({ type: 'INIT_GAME', mode, totalWins: getTotalWins(), eternalRelics: getStartingRelics() });
-
-    // Read back classCardPreviewId from the new state
-    const st = engine.getState();
-    classCardPreviewIdRef.current = st.classCardPreviewId;
 
     // Reset UI-only state + refs (animations, flights, etc.)
     setBackpackHandFlights([]);
@@ -4258,16 +4256,6 @@ export default function GameBoard() {
       eventResolutionRef.current = { cardId: null, source: 'hand' };
     } else {
       eventResolutionRef.current = { cardId: null, source: null };
-    }
-
-    const restoredClassDeck = Array.isArray(snapshot.classDeck) ? snapshot.classDeck : [];
-    if (snapshot.showSkillSelection && restoredClassDeck.length > 0) {
-      let rng = engine.getState().rng;
-      const [picked, rng2] = pickRandom(restoredClassDeck, rng); rng = rng2;
-      classCardPreviewIdRef.current = picked.id;
-      dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
-    } else {
-      classCardPreviewIdRef.current = null;
     }
 
     // Reset UI-only animation states
@@ -4729,29 +4717,32 @@ export default function GameBoard() {
       }
 
       dispatch({ type: 'SET_SHOW_SKILL_SELECTION', show: false });
-      cardDraftPendingSkillRef.current = skillId;
-      dispatch({ type: 'SET_CARD_DRAFT_POOL', pool: createStarterCardPool() });
-      dispatch({ type: 'SET_SHOW_CARD_DRAFT', show: true });
     });
+
+    // The 6-round starter draft modal has been replaced by the fixed
+    // first-row events (装备发现 / 护符发现→药水发现 / 魔法馈赠→魔法发现).
+    // Run the opening class-deck draws + initial hand fill immediately
+    // after skill selection.
+    runOpeningSetup(skillId);
   };
 
-  const handleCardDraftComplete = (picks: GameCardData[]) => {
-    const skillId = cardDraftPendingSkillRef.current;
+  // Kept for ModalCallbacksContext compatibility; the CardDraftModal it used
+  // to back is no longer rendered (see GameFlowContainer). Becomes a no-op.
+  const handleCardDraftComplete = (_picks: GameCardData[]) => {
     cardDraftPendingSkillRef.current = null;
+  };
+
+  // Opening class-deck draws + relic grants + delayed initial hand fill.
+  // Extracted from the old `handleCardDraftComplete` so it can run directly
+  // after skill selection, without going through the deprecated 6-round
+  // starter draft modal.
+  const runOpeningSetup = (skillId: string) => {
     const definition = skillId ? getHeroSkillById(skillId as HeroSkillId) : null;
     const currentRelics = eternalRelicsRef.current;
 
     let classDrawn: GameCardData[] = [];
 
     engine.batch(() => {
-      dispatch({ type: 'SET_SHOW_CARD_DRAFT', show: false });
-      dispatch({ type: 'SET_CARD_DRAFT_POOL', pool: [] });
-
-      for (const pick of picks) {
-        addCardToBackpack(pick);
-      }
-      addGameLog('system', `起始卡牌选择完毕：${picks.map(c => c.name).join('、')}`);
-
       if (hasEternalRelic(currentRelics, 'summon-minion')) {
         const minionCard: GameCardData = {
           id: 'summon-minion-card',
@@ -4780,44 +4771,31 @@ export default function GameBoard() {
           c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap',
         );
         if (thunderSeal) {
-          dispatch({ type: 'UPDATE_CLASS_DECK', updater: prev => prev.filter(c => c.id !== thunderSeal.id) });
-          addCardToBackpack(thunderSeal);
-          triggerClassDeckFlight([thunderSeal]);
-        }
-        if (thunderSeal) {
-          addGameLog('skill', '雷盾心法：已从职业牌堆将「雷霆符印」放入背包。');
+          // Class deck is an infinite template — clone the seal into the
+          // backpack via the canonical reducer (no consumption of the pool).
+          drawClassCardsToBackpack(1, '雷盾心法', { includeIds: [thunderSeal.id] });
+          addGameLog('skill', '雷盾心法：从职业牌堆获得「雷霆符印」。');
         }
       }
 
-      const baseClassCards = 1;
+      // baseClassCards is now 0 — the unconditional "free 1 class card at
+      // game start" has been removed. Players still receive class cards from
+      // hero skills (e.g. 探索之心 → initialClassCardDraw: 3) and from any
+      // eternal relic that grants `initialClassCardDraw`. The opening hand
+      // 「专属感召」 perm-2 magic now provides on-demand class-card discovery
+      // (see `createStarterDiscoverClassToHandCard` in `game-core/deck.ts`).
       const skillClassCards = (definition?.type === 'passive') ? 0 : (definition?.initialClassCardDraw ?? 0);
       const relicClassCards = currentRelics.reduce((sum, r) => sum + (r.initialClassCardDraw ?? 0), 0);
-      const totalClassCards = baseClassCards + skillClassCards + relicClassCards;
+      const totalClassCards = skillClassCards + relicClassCards;
       const hasShieldWall = hasEternalRelic(currentRelics, 'shield-wall');
       const thunderSealIds = hasShieldWall
         ? classDeck.filter(c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap').map(c => c.id)
         : [];
 
-      const previewId = classCardPreviewIdRef.current;
-      const previewCard = previewId ? classDeck.find(c => c.id === previewId) : null;
-      const previewExcluded = previewCard && thunderSealIds.includes(previewCard.id);
-
-      if (previewCard && !previewExcluded) {
-        addCardToBackpack(previewCard);
-        dispatch({ type: 'UPDATE_CLASS_DECK', updater: prev => prev.filter(c => c.id !== previewCard.id) });
-        addGameLog('skill', `获得专属卡（开场）：${previewCard.name}`);
-        classDrawn.push(previewCard);
-
-        const remaining = totalClassCards - 1;
-        if (remaining > 0) {
-          const excludeIds = [previewId!, ...thunderSealIds];
-          drawClassCardsToBackpack(remaining, '开场', { excludeIds });
-        }
-      } else {
+      if (totalClassCards > 0) {
         const excludeIds = thunderSealIds.length > 0 ? thunderSealIds : undefined;
         drawClassCardsToBackpack(totalClassCards, '开场', excludeIds ? { excludeIds } : undefined);
       }
-      classCardPreviewIdRef.current = null;
     });
 
     const baseHandCards = 2;
@@ -5559,7 +5537,6 @@ export default function GameBoard() {
   shopDepsRef.current = {
     addToGraveyard,
     addCardToBackpack,
-    returnCardsToClassDeck,
     ensureCardInHand,
     discardCardToGraveyard,
     addPermanentMagicToRecycleBag,
@@ -7695,6 +7672,12 @@ export default function GameBoard() {
             spellDamageBonus={permanentSpellDamageBonus}
             spellLifesteal={permanentSpellLifesteal}
             stunCap={stunCap}
+            nextPersuadeBonus={
+              persuadeAmuletBonus +
+              (persuadeDiscount?.rateBonus ?? 0) +
+              permanentPersuadeBonus +
+              (persuadeLevel - 1) * 5
+            }
             selfTargetActive={heroSelfTargetingActive}
             onHeroClick={
               heroSelfTargetingActive && !fullBoardInteractionLocked
@@ -7829,6 +7812,7 @@ export default function GameBoard() {
     backpackItems, backpackCapacity, classDeck, handCards,
     heroVariant, heroStunned, combatState,
     permanentSpellDamageBonus, permanentSpellLifesteal, stunCap,
+    persuadeLevel, persuadeAmuletBonus, permanentPersuadeBonus, persuadeDiscount,
     slotTempArmor, slotTempAttack, berserkTurnBuff, extraAttackCharges,
     slotExtraAttacks,
     berserkerRageActive, berserkerSlotUsed, flashSlotUsed,
@@ -8020,7 +8004,6 @@ export default function GameBoard() {
     overlayZoom,
     stageScale,
     headerHeight,
-    classCardPreview: classCardPreviewIdRef.current ? (classDeck.find(c => c.id === classCardPreviewIdRef.current) ?? null) : null,
     heroMagicInfo: heroMagicUiState,
     endHeroTurnDisabled,
     fullBoardInteractionLocked,

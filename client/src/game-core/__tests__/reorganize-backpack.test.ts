@@ -23,6 +23,7 @@
 import { describe, expect, it } from 'vitest';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
+import { BASE_BACKPACK_CAPACITY } from '../constants';
 import type { GameState } from '../types';
 import type { GameAction } from '../actions';
 import type { AmuletItem, EquipmentItem } from '@/components/game-board/types';
@@ -88,7 +89,7 @@ function makeEquipment(id: string, name = `Eq-${id}`): EquipmentItem {
 describe('整顿背囊 main resolver (PLAY_CARD)', () => {
   it('+1 capacity and opens multi-select prompt with maxSelections capped by room', () => {
     const card = makeCard('open');
-    // BASE_BACKPACK_CAPACITY is 10; with modifier 0 and 1 backpack item we
+    // BASE_BACKPACK_CAPACITY is 15; with modifier 0 and 1 backpack item we
     // have plenty of room after +1 — maxSelections should hit the 3 cap.
     const state = makeState({
       handCards: [card, makeFiller('h1'), makeFiller('h2')],
@@ -106,18 +107,18 @@ describe('整顿背囊 main resolver (PLAY_CARD)', () => {
 
   it('caps maxSelections to remaining room when only 1 free slot remains', () => {
     const card = makeCard('cap');
-    // Use a negative capacity modifier to make math compact. Effective
-    // capacity = max(1, BASE + mod). With mod=-8 → cap = max(1, 10-8) = 2.
-    // After +1 → mod=-7 → newCap = max(1, 3) = 3. Fill backpack with 2 items
-    // so room = 3 - 2 = 1.
+    // Pick a negative modifier so that `newCap = max(1, BASE + mod + 1) = 3`.
+    // Then fill backpack with 2 items so room after +1 = 3 - 2 = 1, which
+    // forces maxSelections to be capped at 1 (below the regular cap of 3).
+    const modifier = 2 - BASE_BACKPACK_CAPACITY; // makes BASE + mod = 2 → newCap after +1 = 3
     const filled = [makeFiller('bp0'), makeFiller('bp1')];
     const state = makeState({
       handCards: [card],
       backpackItems: filled as any,
-      backpackCapacityModifier: -8,
+      backpackCapacityModifier: modifier,
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(result.state.backpackCapacityModifier).toBe(-7);
+    expect(result.state.backpackCapacityModifier).toBe(modifier + 1);
     const pending = result.state.pendingMagicAction as any;
     expect(pending).not.toBeNull();
     expect(pending.maxSelections).toBe(1);
@@ -125,17 +126,18 @@ describe('整顿背囊 main resolver (PLAY_CARD)', () => {
 
   it('finalizes immediately when no room exists even after +1', () => {
     const card = makeCard('full');
-    // Squeeze capacity to the minimum (max(1, ...)) so it's 1 even after +1.
-    // With backpackCapacityModifier=-15, base capacity is max(1, -5) = 1; new
-    // mod after the +1 is -14, newCap is max(1, -4) = 1. Filling backpack
-    // with 1 item leaves room = 0 → resolver should finalize immediately.
+    // Squeeze capacity to the floor: pick a modifier so that newCap after the
+    // +1 is still clamped to 1 by `max(1, ...)`. Using `-(BASE + 5)` keeps it
+    // safely below the floor regardless of BASE_BACKPACK_CAPACITY tweaks.
+    // Filling backpack with 1 item leaves room = 0 → resolver should finalize.
+    const modifier = -(BASE_BACKPACK_CAPACITY + 5);
     const state = makeState({
       handCards: [card],
       backpackItems: [makeFiller('bp0')] as any,
-      backpackCapacityModifier: -15,
+      backpackCapacityModifier: modifier,
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(result.state.backpackCapacityModifier).toBe(-14);
+    expect(result.state.backpackCapacityModifier).toBe(modifier + 1);
     expect(result.state.pendingMagicAction).toBeNull();
   });
 });

@@ -1108,7 +1108,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
     name: '混沌骰局',
     value: 0,
     image: dedupeEventChaosDiceGameImage,
-    description: '掷骰后翻转为「混沌冲击」永久魔法。',
+    description: '掷骰后翻转为「混沌冲击」即时魔法。',
     eventChoices: [
       {
         text: '20%掷出不同结果：金币+10并打开商店/背包加入一张诅咒/删除2张牌/获得2张专属卡/回收袋洗回背包并抽2张牌，并翻转为"混沌冲击"。',

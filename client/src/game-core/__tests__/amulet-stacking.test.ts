@@ -180,6 +180,14 @@ describe('computeAmuletEffects stacking', () => {
       ] as any);
       expect(fx.flipZapCount).toBe(3);
     });
+
+    it('招灵书印 ×2 — deleteDrawCount = 2 (consumer draws 2 × N cards per delete)', () => {
+      const fx = computeAmuletEffects([
+        makeAmulet('delete-draw', 'dd-1'),
+        makeAmulet('delete-draw', 'dd-2'),
+      ] as any);
+      expect(fx.deleteDrawCount).toBe(2);
+    });
   });
 
   describe('combat counters', () => {

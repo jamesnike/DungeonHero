@@ -75,6 +75,7 @@
  * │ STARTER temp-armor               │ A   │ armor ×N                      │
  * │ STARTER heal-magic               │ A   │ healAmt ×N                    │
  * │ STARTER heal-echo                │ A   │ heal ×N                       │
+ * │ STARTER discover-class-to-hand   │ B*  │ discover once + echo banner   │
  * │ STARTER reshuffle                │ B   │ existing echoRemaining        │
  * │ STARTER dungeon-swap             │ A   │ swap×N (even N = no-op)       │
  * │ STARTER active-row-flip          │ B   │ pick flip twice               │
@@ -119,6 +120,9 @@
  * │ KNIGHT blood-sacrifice-strike    │ A   │ damage ×N                     │
  * │ KNIGHT blood-draw                │ A   │ draw ×N                       │
  * │ KNIGHT recall-equipment          │ B   │ pick equipment twice          │
+ * │ KNIGHT cleanse-draw (净册涌泉)   │ B   │ pick + draw twice (hook loop) │
+ * │ KNIGHT recycle-tide (洗册归川)   │ C   │ second tick = no-op + banner  │
+ * │ KNIGHT persuade-to-temp-attack    │ C   │ run ×N; perm bonus may carry │
  * │ KNIGHT discard-rebuild           │ A   │ discover queue ×N             │
  * │ KNIGHT armor-stun-convert        │ B   │ pick slot twice               │
  * │ KNIGHT stun-cap-strike           │ A/B │ damage ×N + draw ×N + 1 dice  │
@@ -383,13 +387,14 @@ export function finalizeAltarDiscardDiscover(
   const classDeck = patch.classDeck ?? state.classDeck ?? [];
   const discoverPool = classDeck.filter((c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic');
   if (discoverPool.length > 0) {
+    // Class deck is an infinite template — sample candidates without
+    // removing from `classDeck`. The chosen card will be cloned with a
+    // fresh id at RESOLVE_DISCOVER_SELECTION time.
     let drng = patch.rng ?? state.rng;
     let shuffled: GameCardData[];
     [shuffled, drng] = rngShuffle(discoverPool, drng);
     patch.rng = drng;
     const candidates = shuffled.slice(0, Math.min(3, discoverPool.length));
-    const candidateIds = new Set(candidates.map(c => c.id));
-    patch.classDeck = classDeck.filter((c: GameCardData) => !candidateIds.has(c.id));
     sideEffects.push({
       event: 'card:discoverRequested' as any,
       payload: { source: 'altar-discard-discover', candidates, sourceLabel: card.name },
@@ -878,6 +883,9 @@ export function resolveInstantMagic(
 
   // --- Route by card name ---
   switch (card.name) {
+    case '混沌冲击':
+      return resolveChaosStrike(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
+
     case '风暴箭雨':
       return resolveStormVolley(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
@@ -1372,13 +1380,13 @@ export function resolvePermanentMagic(
       log(sideEffects, 'magic', '祭坛秘术：专属牌堆中没有魔法卡。');
       banner(sideEffects, '祭坛秘术：专属牌堆中没有魔法卡。');
     } else {
+      // Class deck is an infinite template — candidates are sampled without
+      // mutating `classDeck`; the chosen card is cloned at selection time.
       let rng = patch.rng ?? state.rng;
       let shuffled: GameCardData[];
       [shuffled, rng] = rngShuffle(pool, rng);
       patch.rng = rng;
       const candidates = shuffled.slice(0, Math.min(3, pool.length));
-      const candidateIds = new Set(candidates.map(c => c.id));
-      patch.classDeck = classDeck.filter((c: GameCardData) => !candidateIds.has(c.id));
       sideEffects.push({ event: 'card:discoverRequested' as any, payload: { source: 'altar-discover-class-magic', candidates, sourceLabel: card.name } });
       banner(sideEffects, '祭坛秘术：发现专属魔法卡…');
     }
@@ -1522,6 +1530,41 @@ export function resolvePermanentMagic(
       const healAmt = 2 * echoMultiplier;
       enqueuedActions.push({ type: 'HEAL', amount: healAmt, source: 'heal-echo' });
       banner(sideEffects, `治愈余韵生效，恢复 ${healAmt} 点生命。${echoTag}`);
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    case STARTER_CARD_IDS.discoverClassToHand: {
+      // 「专属感召」(Perm 2)：发现一张专属牌，直接进手牌。
+      // Spell Echo (B*) — UI-DELEGATED MODAL: discover modal cannot be
+      // auto-replayed, so 2× echo only fires once and emits a banner. This
+      // matches `altar-discover-class-magic` semantics.
+      const classDeck = state.classDeck ?? [];
+      if (classDeck.length === 0) {
+        banner(sideEffects, '专属感召：专属牌堆为空。');
+        log(sideEffects, 'magic', '专属感召：专属牌堆为空。');
+        patch.lastPlayedCardCategory = getCardPlayCategory(card);
+        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+        return applyPatch(state, patch, sideEffects, enqueuedActions);
+      }
+      let drng = patch.rng ?? state.rng;
+      let shuffled: GameCardData[];
+      [shuffled, drng] = rngShuffle(classDeck, drng);
+      patch.rng = drng;
+      const candidates = shuffled.slice(0, Math.min(3, classDeck.length));
+      sideEffects.push({
+        event: 'card:discoverRequested',
+        payload: {
+          source: 'starter-discover-class-to-hand',
+          candidates,
+          sourceLabel: card.name,
+          delivery: 'hand-first',
+        },
+      });
+      const echoSuffix = isEchoTriggered ? '（回响×2 在 UI 模态下不重复触发）' : '';
+      banner(sideEffects, `专属感召：发现一张专属牌，直接进入手牌。${echoSuffix}`);
+      log(sideEffects, 'magic', `专属感召：候选 ${candidates.map(c => `「${c.name}」`).join('、')}`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1788,9 +1831,6 @@ export function resolvePermanentMagic(
 
   // --- Card name based routing for permanent cards ---
   switch (card.name) {
-    case '混沌冲击':
-      return resolveChaosStrike(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
-
     case '淬炼冲击':
       return resolveOverkillUpgrade(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
@@ -2750,6 +2790,163 @@ export function resolveKnightPermanentMagic(
         event: 'card:recallEquipmentSelect' as any,
         payload: { card, options },
       });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    case 'cleanse-draw': {
+      // 净册涌泉 — Perm 1. Pick 1 hand card → delete (kw='delete'); then draw
+      // N cards from the deck (N = 2/3/4 by upgrade level). Empty hand on a
+      // given iteration → skip the picker but still draw.
+      //
+      // Echo (Category B): the hook re-opens the picker `echoMultiplier`
+      // times, drawing N each time. We only emit the side-effect; the
+      // hook owns the loop and dispatches FINALIZE_MAGIC_CARD when done.
+      const drawCounts = [2, 3, 4];
+      const drawCount = drawCounts[card.upgradeLevel ?? 0] ?? 2;
+      const echoTagCD = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+      patch.pendingMagicAction = {
+        card,
+        effect: 'cleanse-draw',
+        step: 'cleanse-draw-select',
+        echoRemaining: echoMultiplier,
+        data: { drawCount },
+      } as any;
+      patch.heroSkillBanner = echoMultiplier > 1
+        ? `净册涌泉：将连续选择 ${echoMultiplier} 次手牌，每次抽 ${drawCount} 张。${echoTagCD}`
+        : `净册涌泉：选择一张手牌删除，从牌堆抽 ${drawCount} 张。`;
+      sideEffects.push({
+        event: 'card:cleanseDrawRequested' as any,
+        payload: { card, drawCount, echoRemaining: echoMultiplier },
+      });
+      return applyPatch(state, patch, sideEffects);
+    }
+
+    case 'persuade-to-temp-attack': {
+      // 辞剑相易 — Perm 1. Convert the player's "next persuade rate" buff
+      // into temp attack on both equipment slots, then clear the temporary
+      // part (mirroring what a persuade attempt does).
+      //
+      //   X            = persuadeAmuletBonus           (temp, cleared)
+      //                + persuadeDiscount.rateBonus    (temp, cleared — same
+      //                                                  semantics as
+      //                                                  PERSUADE_MONSTER's
+      //                                                  `persuadeDiscount = null`)
+      //                + permanentPersuadeBonus        (perm, NOT cleared)
+      //   per-slot     = Math.ceil(X / 3)
+      //   slot1, slot2 each += per-slot temp attack
+      //   Cleared "临时部分":
+      //     - persuadeAmuletBonus → 0
+      //     - persuadeDiscount.rateBonus → 0 (costReduction kept; we do NOT
+      //       null the whole object so the player keeps any cost discount
+      //       a separate buff granted)
+      //
+      // Echo (Category C, structural): runs `echoMultiplier` times. After
+      // pass 1 the temp parts are 0, so pass 2's X = permanentPersuadeBonus
+      // alone — if perm > 0, pass 2 still adds another ceil(perm/3) per slot
+      // (per user spec). If X stays 0 across all passes, fizzle (still
+      // consumed; no temp attack added).
+      let totalAddedPerSlot = 0;
+      let didFire = false;
+
+      for (let pass = 0; pass < echoMultiplier; pass++) {
+        const tempBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0);
+        const permBonus = (patch.permanentPersuadeBonus ?? state.permanentPersuadeBonus ?? 0);
+        const currentDiscount = (patch.persuadeDiscount !== undefined
+          ? patch.persuadeDiscount
+          : state.persuadeDiscount) ?? null;
+        const discountRateBonus = currentDiscount?.rateBonus ?? 0;
+        const X = tempBonus + permBonus + discountRateBonus;
+        if (X <= 0) continue;
+
+        const perSlot = Math.ceil(X / 3);
+        const prevTempAttack = patch.slotTempAttack ?? state.slotTempAttack ?? {};
+        const tempAttack = { ...prevTempAttack };
+        tempAttack.equipmentSlot1 = (tempAttack.equipmentSlot1 ?? 0) + perSlot;
+        tempAttack.equipmentSlot2 = (tempAttack.equipmentSlot2 ?? 0) + perSlot;
+        patch.slotTempAttack = tempAttack;
+        patch.persuadeAmuletBonus = 0;
+        // Clear only rateBonus; keep costReduction untouched.
+        if (currentDiscount) {
+          patch.persuadeDiscount = { ...currentDiscount, rateBonus: 0 };
+        }
+
+        totalAddedPerSlot += perSlot;
+        didFire = true;
+      }
+
+      const echoSuffix = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+      if (didFire) {
+        log(
+          sideEffects,
+          'magic',
+          `辞剑相易：将下次劝降率转化为左右装备栏各 +${totalAddedPerSlot} 临时攻击${echoSuffix}。`,
+        );
+        banner(
+          sideEffects,
+          `辞剑相易：左右装备栏 +${totalAddedPerSlot} 临时攻击${echoSuffix}！`,
+        );
+      } else {
+        log(
+          sideEffects,
+          'magic',
+          `辞剑相易：当前没有「下次劝降」加成可转化${echoSuffix}。`,
+        );
+        banner(
+          sideEffects,
+          `辞剑相易：无下次劝降率加成，效果落空${echoSuffix}。`,
+        );
+      }
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    case 'recycle-tide': {
+      // 洗册归川 — Perm 1. Move all backpack cards into the permanent-magic
+      // recycle bag (tagged with `_recycleWaits = 1` so they round-trip),
+      // then tick the entire bag's `_recycleWaits` by -1: cards that hit
+      // ≤ 0 flush back to the backpack; cards with higher waits stay.
+      //
+      // Net effect:
+      //   - Backpack cards: round-trip (no permanent change).
+      //   - Existing recycle-bag cards: advance one waterfall step; those at
+      //     `_recycleWaits = 1` flush back to backpack now.
+      //
+      // Echo (Category C, structural): a second pass would tick again on a
+      // mostly-empty bag (the previous round-trip cards are already back in
+      // backpack with no waits) — no meaningful additional effect. We run
+      // the tick once and add a banner note when echoed.
+      const backpack = state.backpackItems as GameCardData[];
+      const movedCount = backpack.length;
+
+      const mergedBag: GameCardData[] = [
+        ...state.permanentMagicRecycleBag,
+        ...backpack.map(c => ({ ...sanitizeCardMetadata(c), _recycleWaits: 1 } as GameCardData & { _recycleWaits: number })),
+      ];
+
+      const tickedState: GameState = {
+        ...state,
+        ...patch,
+        backpackItems: [],
+        permanentMagicRecycleBag: mergedBag,
+      };
+      const recycleResult = processRecycleBag(tickedState);
+      mergePatch(patch, recycleResult.patch);
+
+      const echoTagRT = isEchoTriggered ? `（回响×${echoMultiplier}：二次结算无额外效果）` : '';
+      log(
+        sideEffects,
+        'magic',
+        `洗册归川：背包 ${movedCount} 张牌洗入回收袋（瀑流 -1），${recycleResult.restored.length} 张牌回到背包${echoTagRT}。`,
+      );
+      banner(
+        sideEffects,
+        echoMultiplier > 1
+          ? `洗册归川：完成（回响：二次结算无额外效果）。`
+          : `洗册归川：背包→回收袋；瀑流 -1，${recycleResult.restored.length} 张牌洗回背包。`,
+      );
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
@@ -4019,21 +4216,21 @@ function resolveStunWave(
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
 ): ReduceResult {
-  enqueuedActions.push({ type: 'MODIFY_STUN_CAP', delta: 10 } as GameAction);
-  log(sideEffects, 'magic', '震慑领域：击晕上限 +10%');
+  enqueuedActions.push({ type: 'MODIFY_STUN_CAP', delta: 5 } as GameAction);
+  log(sideEffects, 'magic', '震慑领域：击晕上限 +5%');
 
   const monsters = flattenActiveRowSlots(state.activeCards)
     .filter(c => c.type === 'monster' && !c.isStunned);
 
   if (monsters.length === 0) {
-    const newCap = Math.min(100, (state.stunCap ?? 10) + 10);
-    banner(sideEffects, `震慑领域：击晕上限 +10%（当前 ${newCap}%）。没有可击晕的怪物。`);
+    const newCap = Math.min(100, (state.stunCap ?? 10) + 5);
+    banner(sideEffects, `震慑领域：击晕上限 +5%（当前 ${newCap}%）。没有可击晕的怪物。`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  const currentStunCap = (state.stunCap ?? 10) + 10;
+  const currentStunCap = (state.stunCap ?? 10) + 5;
   const stunPct = Math.min(60, currentStunCap);
   const threshold = Math.round((stunPct / 100) * 20);
 
@@ -4064,7 +4261,7 @@ function resolveStunWave(
       },
     });
   } else {
-    banner(sideEffects, `震慑领域：击晕上限 +10%，但击晕率为 0%。`);
+    banner(sideEffects, `震慑领域：击晕上限 +5%，但击晕率为 0%。`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
   }

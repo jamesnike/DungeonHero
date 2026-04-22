@@ -10,9 +10,9 @@ import type { GameState, EternalRelic, ActiveRowSlots } from '../types';
 import type { GameCardData } from '@/components/GameCard';
 import type { ReduceResult } from '../reducer';
 import { createInitialGameState } from '../state';
-import { createDeck, pruneEventChoicesToThree } from '../deck';
+import { createDeck, pruneEventChoicesToThree, createBugletCard, eventScrollImage, createStarterDiscoverClassToHandCard } from '../deck';
 import { fillActiveRowSlots } from '../helpers';
-import { shuffle as rngShuffle, nextInt, pickRandom } from '../rng';
+import { shuffle as rngShuffle, nextInt } from '../rng';
 import { INITIAL_TURN_COUNT, FINAL_MONSTER_MARK_DESCRIPTION } from '../constants';
 import { DUNGEON_COLUMN_COUNT } from '@/components/game-board/constants';
 import { getRandomHero } from '@/lib/heroes';
@@ -348,16 +348,18 @@ export function reduceInitGame(
   // --- Preview stack: stacking removed; preview cells hold one card each. ---
   const initialPreviewStacks: Record<number, GameCardData[]> = {};
 
-  // --- Active row: deal next DUNGEON_COLUMN_COUNT cards ---
-  const { row: activeRaw } = dealRowBatch();
-  ensureRowHasMonster(activeRaw, dealQueue);
-  const initialActive = fillActiveRowSlots(activeRaw).map((card) => {
+  // --- Active row: fixed tutorial-style first row ---
+  // Always start with [1 Buglet + 3 fixed Events] in random L→R order, on
+  // top of the procedurally-generated dungeon (does NOT consume from
+  // dealQueue, so the dungeon length effectively grows by 1 row).
+  const fixedRowCards = buildFixedFirstActiveRow();
+  let fixedRowShuffled: GameCardData[];
+  [fixedRowShuffled, rng] = rngShuffle([...fixedRowCards], rng);
+  const initialActive = fillActiveRowSlots(fixedRowShuffled).map((card) => {
     if (!card) return null;
-    const raged = applyMonsterRage(card, initialTurnCount, isQuickMode);
-    if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
-      return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
-    }
-    return raged;
+    // applyMonsterRage is a no-op for non-monster types (events pass through
+    // unchanged); the lone buglet still scales with `initialTurnCount`.
+    return applyMonsterRage(card, initialTurnCount, isQuickMode);
   }) as ActiveRowSlots;
 
   // --- Active stack: stacking removed; active cells hold one card each. ---
@@ -447,12 +449,11 @@ export function reduceInitGame(
     newClassDeck = [];
   }
 
-  let classCardPreviewId: string | null = null;
-  if (newClassDeck.length > 0) {
-    const [picked, rng5] = pickRandom(newClassDeck, rng);
-    rng = rng5;
-    classCardPreviewId = picked.id;
-  }
+  // --- Starting hand: every run begins with one Perm-2 「专属感召」 ---
+  // Replaces the now-removed `waterfall-discover` eternal relic. The card
+  // discovers a class card (3-of-N) directly into hand on play; afterwards
+  // it cycles through the recycle bag for 2 waterfalls.
+  const initialHand: GameCardData[] = [createStarterDiscoverClassToHandCard()];
 
   // --- Build full initial state ---
   const newState: GameState = {
@@ -461,6 +462,7 @@ export function reduceInitGame(
     turnCount: initialTurnCount,
     heroVariant: newHero,
     heroClass: newHeroClass,
+    handCards: initialHand,
     previewCards: initialPreview,
     activeCards: initialActive,
     previewCardStacks: initialPreviewStacks,
@@ -470,7 +472,6 @@ export function reduceInitGame(
     eternalRelics,
     showSkillSelection: true,
     totalWins,
-    classCardPreviewId,
     rng,
   };
 
@@ -479,4 +480,123 @@ export function reduceInitGame(
     sideEffects: [{ event: 'game:started', payload: {} }],
     enqueuedActions: [],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Fixed opening row
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the deterministic first active row that every new game starts with:
+ * one Buglet plus three event cards that hand out a tasting-menu of starter
+ * pool rewards. The 6-round opening starter draft has been replaced by these
+ * three events — they cover Equipment / Amulet→Potion / 2×Magic→Magic.
+ *
+ * Each event uses tokens defined in `events.ts:applySimpleEffect`:
+ *   - `discoverStarterEquipment` / `discoverStarterPotion` /
+ *     `discoverStarterAmulet` — discover-1-of-3 from the starter pool.
+ *   - `discoverStarterMagic` — already exists; reused by the magic event.
+ *   - `grantStarterMagicTwo` — direct grant of 2 random starter magics
+ *     (no UI pick).
+ *
+ * Order along the row is randomized by the caller via `rngShuffle`.
+ */
+function buildFixedFirstActiveRow(): GameCardData[] {
+  const equipmentEvent: GameCardData = {
+    id: 'fixed-row-event-equipment',
+    type: 'event',
+    name: '装备发现',
+    value: 0,
+    image: eventScrollImage,
+    description: '从起始背包卡池中发现一张装备（武器或盾牌）。',
+    shortDescription: '发现一张起始装备',
+    eventChoices: [
+      {
+        text: '发现一张装备',
+        effect: 'discoverStarterEquipment',
+        hint: '从起始背包候选装备池中三选一',
+      },
+    ],
+  };
+
+  const amuletThenPotionEvent: GameCardData = {
+    id: 'fixed-row-event-amulet',
+    type: 'event',
+    name: '护符发现',
+    value: 0,
+    image: eventScrollImage,
+    description: '发现一张起始护符。完成后翻转为「药水发现」。',
+    shortDescription: '发现护符 → 翻为「药水发现」',
+    eventChoices: [
+      {
+        text: '发现一张护符',
+        effect: 'discoverStarterAmulet',
+        hint: '从起始背包候选护符池中三选一',
+      },
+    ],
+    flipTarget: {
+      toCard: {
+        id: 'fixed-row-event-amulet-flip',
+        type: 'event',
+        name: '药水发现',
+        value: 0,
+        image: eventScrollImage,
+        description: '从起始背包卡池中发现一张药水。',
+        shortDescription: '发现一张起始药水',
+        eventChoices: [
+          {
+            text: '发现一张药水',
+            effect: 'discoverStarterPotion',
+            hint: '从起始背包候选药水池中三选一',
+          },
+        ],
+      },
+      destination: 'stay',
+      message: '护符发现翻转为「药水发现」！',
+    },
+  };
+
+  const magicGrantThenDiscoverEvent: GameCardData = {
+    id: 'fixed-row-event-magic',
+    type: 'event',
+    name: '魔法馈赠',
+    value: 0,
+    image: eventScrollImage,
+    description: '获得 2 张起始背包的魔法卡。完成后翻转为「魔法发现」。',
+    shortDescription: '获得 2 张起始魔法 → 翻为「魔法发现」',
+    eventChoices: [
+      {
+        text: '获得 2 张起始魔法',
+        effect: 'grantStarterMagicTwo',
+        hint: '直接获得 2 张随机起始魔法（背包满则进入回收袋）',
+      },
+    ],
+    flipTarget: {
+      toCard: {
+        id: 'fixed-row-event-magic-flip',
+        type: 'event',
+        name: '魔法发现',
+        value: 0,
+        image: eventScrollImage,
+        description: '从起始背包卡池中发现一张魔法。',
+        shortDescription: '发现一张起始魔法',
+        eventChoices: [
+          {
+            text: '发现一张魔法',
+            effect: 'discoverStarterMagic',
+            hint: '从起始背包候选魔法池中三选一',
+          },
+        ],
+      },
+      destination: 'stay',
+      message: '魔法馈赠翻转为「魔法发现」！',
+    },
+  };
+
+  return [
+    createBugletCard(),
+    equipmentEvent,
+    amuletThenPotionEvent,
+    magicGrantThenDiscoverEvent,
+  ];
 }
