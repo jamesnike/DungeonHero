@@ -1852,8 +1852,15 @@ function reduceResolveAmplify(
   const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = { amplifyModal: null };
 
-  const sourceCard = state.pendingMagicAction?.card as GameCardData | undefined;
+  // 源卡可以是 magic（pendingMagicAction）或 potion（pendingPotionAction，knight 专属「增幅秘药」）。
+  const sourceType: 'magic' | 'potion' = modal.sourceType ?? 'magic';
+  const sourceCard = sourceType === 'potion'
+    ? (state.pendingPotionAction?.card as GameCardData | undefined)
+    : (state.pendingMagicAction?.card as GameCardData | undefined);
   if (!sourceCard) return applyPatch(state, patch);
+
+  const finalizeType: 'FINALIZE_MAGIC_CARD' | 'FINALIZE_POTION_CARD' =
+    sourceType === 'potion' ? 'FINALIZE_POTION_CARD' : 'FINALIZE_MAGIC_CARD';
 
   const { selection } = action;
   let targetCardId: string | undefined;
@@ -1862,15 +1869,24 @@ function reduceResolveAmplify(
   if (selection.kind === 'equipment') {
     const slotItem = getEquipmentInSlot(state, selection.slotId);
     if (!slotItem) {
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: '增幅：目标装备已不存在。' });
+      enqueuedActions.push({ type: finalizeType, card: sourceCard, banner: '增幅：目标装备已不存在。' });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
     targetCardId = slotItem.id;
     targetName = slotItem.name;
-  } else {
+  } else if (selection.kind === 'hand') {
     const targetCard = state.handCards.find(c => c.id === selection.cardId);
     if (!targetCard) {
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: '增幅：目标卡牌已不在手牌中。' });
+      enqueuedActions.push({ type: finalizeType, card: sourceCard, banner: '增幅：目标卡牌已不在手牌中。' });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+    targetCardId = targetCard.id;
+    targetName = targetCard.name;
+  } else {
+    // 'backpack' — 仅 wide scope（potion）允许；narrow scope 不会发出此 selection
+    const targetCard = state.backpackItems.find(c => c.id === selection.cardId);
+    if (!targetCard) {
+      enqueuedActions.push({ type: finalizeType, card: sourceCard, banner: '增幅：目标卡牌已不在背包中。' });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
     targetCardId = targetCard.id;
@@ -1890,15 +1906,15 @@ function reduceResolveAmplify(
     image: skillScrollImage,
     magicType: 'permanent',
     magicEffect: 'amplify-target',
-    description: `永久魔法（Perm 2）：对「${targetName}」进行增幅（武器攻击+2，护盾护甲+2，伤害魔法伤害+2）。`,
-    recycleDelay: 2,
+    description: `永久魔法（Perm 1）：对「${targetName}」进行增幅（武器攻击+1，护盾护甲+1，伤害魔法伤害+1）。`,
+    recycleDelay: 1,
     _amplifyTargetCardId: targetCardId,
     _amplifyTargetName: targetName,
   };
 
   enqueuedActions.push({ type: 'ADD_TO_BACKPACK', card: amplifyPermCard });
-  sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `增幅：为「${targetName}」生成永久增幅魔法（Perm 2），已放入背包。` } });
-  enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: `增幅：为「${targetName}」生成永久增幅魔法（Perm 2）！` });
+  sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `增幅：为「${targetName}」生成永久增幅魔法（Perm 1），已放入背包。` } });
+  enqueuedActions.push({ type: finalizeType, card: sourceCard, banner: `增幅：为「${targetName}」生成永久增幅魔法（Perm 1）！` });
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
@@ -2023,9 +2039,15 @@ function reduceCancelAmplify(state: GameState): ReduceResult {
   const patch: Partial<GameState> = { amplifyModal: null };
   const enqueuedActions: GameAction[] = [];
 
-  const sourceCard = state.pendingMagicAction?.card as GameCardData | undefined;
+  // 源卡可以是 magic 或 potion；按 sourceType 路由 finalize。
+  const sourceType: 'magic' | 'potion' = modal.sourceType ?? 'magic';
+  const sourceCard = sourceType === 'potion'
+    ? (state.pendingPotionAction?.card as GameCardData | undefined)
+    : (state.pendingMagicAction?.card as GameCardData | undefined);
   if (sourceCard) {
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: '取消了增幅。' });
+    const finalizeType: 'FINALIZE_MAGIC_CARD' | 'FINALIZE_POTION_CARD' =
+      sourceType === 'potion' ? 'FINALIZE_POTION_CARD' : 'FINALIZE_MAGIC_CARD';
+    enqueuedActions.push({ type: finalizeType, card: sourceCard, banner: '取消了增幅。' });
   }
 
   return applyPatch(state, patch, [], enqueuedActions);

@@ -19,6 +19,7 @@ import { drawMultipleFromBackpack } from '../cards';
 import { nextInt, shuffle as rngShuffle } from '../rng';
 import { formatRepairTargetLabel } from '../helpers';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
+import { isDamageMagic } from '../helpers';
 
 // ---------------------------------------------------------------------------
 // Logging helpers
@@ -107,6 +108,7 @@ const executorMap: Record<string, EffectExecutor> = {
   discoverClassMagic: executeDiscoverClassMagic,
   grantPerm2: executeGrantPerm2,
   transformRecycleGrant: executeTransformRecycleGrant,
+  amplifyTargetWide: executeAmplifyTargetWide,
   amuletToEternalRelic: executeAmuletToEternalRelic,
   interactive: executeInteractive,
   diceRoll: executeDiceRoll,
@@ -548,6 +550,40 @@ function executeTransformRecycleGrant(ctx: ExecutionContext, _effect: CardEffect
   }
   ctx.patch.permGrantModal = { sourceCardId: ctx.card.id, sourceType: 'transform-recycle-grant' };
   ctx.patch.pendingPotionAction = { card: ctx.card, effect: 'transform-recycle-grant', step: 'perm-grant-select' } as any;
+  ctx.halt = true;
+  ctx.enqueuedActions.length = 0;
+}
+
+/**
+ * 「增幅秘药」（knight 专属 potion）：打开 wide-scope 的 AmplifyModal，
+ * 玩家可从【装备栏 / 手牌 / 背包】中任选一张装备或伤害魔法生成 Perm 1 增幅卡。
+ *
+ * 与主牌堆「增幅」magic 共用 RESOLVE_AMPLIFY / CANCEL_AMPLIFY 流，
+ * 通过 amplifyModal.sourceType='potion' 让 reducer 知道走 FINALIZE_POTION_CARD。
+ */
+function executeAmplifyTargetWide(ctx: ExecutionContext, _effect: CardEffect): void {
+  const eligibleEquip = (slotId: 'equipmentSlot1' | 'equipmentSlot2'): boolean => {
+    const item = ctx.state[slotId] as GameCardData | null;
+    return !!item && (item.type === 'weapon' || item.type === 'shield');
+  };
+  const hasEquip1 = eligibleEquip('equipmentSlot1');
+  const hasEquip2 = eligibleEquip('equipmentSlot2');
+  const eligibleHand = ctx.state.handCards.filter(
+    c => c.id !== ctx.card.id && (c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c)),
+  );
+  const eligibleBackpack = ctx.state.backpackItems.filter(
+    c => c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c),
+  );
+
+  if (!hasEquip1 && !hasEquip2 && eligibleHand.length === 0 && eligibleBackpack.length === 0) {
+    log(ctx, 'potion', '增幅秘药：没有可增幅的目标（装备栏 / 手牌 / 背包均无装备或伤害魔法）。');
+    banner(ctx, '增幅秘药：没有可增幅的目标。');
+    return;
+  }
+
+  ctx.patch.amplifyModal = { sourceCardId: ctx.card.id, scope: 'wide', sourceType: 'potion' };
+  ctx.patch.pendingPotionAction = { card: ctx.card, effect: 'amplify-target-wide', step: 'modal-select' } as any;
+  ctx.patch.heroSkillBanner = '增幅秘药：选择一张牌进行增幅。';
   ctx.halt = true;
   ctx.enqueuedActions.length = 0;
 }

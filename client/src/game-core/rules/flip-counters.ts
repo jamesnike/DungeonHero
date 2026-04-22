@@ -15,7 +15,7 @@
  *   - 熔铸耐久 (_flipRepairBuff，含 reserve): 装备恢复 1 耐久
  *   - 翻血之符 (flip-overkill-lifesteal): 每 5 次翻转 → permanentSpellLifesteal +1
  *   - 弧能之符 (flip-zap): emit card:flipShock 让 UI 处理 zap
- *   - 生长之盾 (amplifyOnFlip): 同名卡 +2 增幅
+ *   - 生长之盾 (amplifyOnFlip): 同名卡 +1 增幅
  *
  * 单独成文件避免 `rules/cards.ts` ↔ `card-schema/definitions/magic.ts` 的循环依赖
  * （magic.ts 里的 starterActiveRowFlip resolver 需要在 resolver 内调用此函数）。
@@ -157,7 +157,7 @@ export function applyFlipCounters(
     enqueuedActions.push({
       type: 'AMPLIFY_CARDS_BY_NAME',
       cardName: name,
-      amount: 2,
+      amount: 1,
       source: `${name} 翻转增幅`,
     });
   }

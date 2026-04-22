@@ -1266,6 +1266,47 @@ function reduceMagicSlotSelection(
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
     }
 
+    case 'gear-rift-draw': {
+      // 修裂启示：drawCount = (maxDurability - durability) * 2 * echo
+      // - 空槽 / 没耐久概念的装备 → 拒绝，magic 不消耗（与 durability-charge-burst / repair-one 一致）。
+      // - 装备满耐久（缺 0）→ magic 仍消耗，0 抽，banner 提示「耐久未损」（按 user 设计）。
+      // - Echo (A 类)：最终抽牌数 ×echoMultiplier；
+      //   背包空 / 手牌满时 drawFromBackpackToHandPure 自然停止。
+      if (!slotItem) {
+        patch.heroSkillBanner = '该装备栏为空。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const grdMaxDur = (slotItem as any).maxDurability ?? slotItem.durability ?? 0;
+      if (grdMaxDur === 0) {
+        patch.heroSkillBanner = '这件装备没有耐久度。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const grdCurDur = slotItem.durability ?? grdMaxDur;
+      const missingDur = Math.max(0, grdMaxDur - grdCurDur);
+      const grdEchoMul = (pending as any).echoMultiplier ?? 1;
+      const grdBaseDraw = missingDur * 2;
+      const grdDrawCount = grdBaseDraw * grdEchoMul;
+      const grdDrawnNames: string[] = [];
+      for (let i = 0; i < grdDrawCount; i++) {
+        const current = { ...state, ...patch };
+        const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(current);
+        Object.assign(patch, drawPatch);
+        if (drawn) {
+          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+          grdDrawnNames.push(drawn.name);
+        } else {
+          break;
+        }
+      }
+      const grdDrawMsg = grdDrawnNames.length > 0 ? `，抽到「${grdDrawnNames.join('、')}」` : '';
+      const grdEchoTag = grdEchoMul > 1 ? `（回响×${grdEchoMul}）` : '';
+      const grdFormulaTag = grdEchoMul > 1 ? `${grdBaseDraw}×${grdEchoMul}=${grdDrawCount}` : `${grdDrawCount}`;
+      const grdBanner = missingDur === 0
+        ? `修裂启示：${slotItem.name} 耐久未损（缺 0），未抽到牌。${grdEchoTag}`
+        : `修裂启示：${slotItem.name} 耐久 ${grdCurDur}/${grdMaxDur}（缺 ${missingDur}）→ 抽 ${grdFormulaTag} 张牌${grdDrawMsg}。${grdEchoTag}`;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, grdBanner);
+    }
+
     case 'temp-stats-to-draw': {
       // 战势化符：drawCount = floor((slotTempAttack + slotTempArmor) / 3) * echo
       // 选定栏的 临时攻击 与 临时护甲 合并为 pool 后整体除 3。
@@ -1429,12 +1470,12 @@ function reduceMagicSlotSelection(
         patch.heroSkillBanner = '请选择一面护盾。';
         return applyPatch(state, patch, sideEffects);
       }
-      const stunPerArmors = [1, 2];
-      const stunPerArmor = stunPerArmors[pending.card.upgradeLevel ?? 0] ?? 2;
+      const stunPerArmors = [1, 1.5];
+      const stunPerArmor = stunPerArmors[pending.card.upgradeLevel ?? 0] ?? 1.5;
       const echoMul = (pending as any).echoMultiplier ?? 1;
       const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
       const armorValue = computeSlotArmorValuePure(state, slotId);
-      const totalStun = armorValue * stunPerArmor * echoMul;
+      const totalStun = Math.round(armorValue * stunPerArmor * echoMul);
       const stunGain = Math.min(totalStun, 100 - (state.stunCap ?? 0));
       if (stunGain > 0) {
         patch.stunCap = (state.stunCap ?? 0) + totalStun;
@@ -2754,9 +2795,11 @@ function reduceDungeonCardSelection(
       }
       const deck = state.remainingDeck as GameCardData[];
       if (deck.length === 0) {
+        // 「抽 1 张牌」无论是否成功交换都触发；mid-echo 命中此分支时本轮仍补 1 张。
+        enqueuedActions.push({ type: 'DRAW_CARDS', count: 1, source: 'backpack' });
         return applyFinalizeMagic(
           state, patch, sideEffects, enqueuedActions, pending.card,
-          `${pending.card.name}：牌堆已空，无法交换。`,
+          `${pending.card.name}：牌堆已空，无法交换。从背包抽 1 张牌。`,
         );
       }
       const deckTop = deck[0];
@@ -2776,12 +2819,15 @@ function reduceDungeonCardSelection(
       const sameCategory = getCardPlayCategory(card) === getCardPlayCategory(ragedDeckTop);
       const goldDelta = sameCategory ? 10 : -1;
       enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldDelta, source: 'deck-top-swap-gold' });
+      // 「抽 1 张牌」每次成功结算都触发；echo 通过 maybeRepromptEcho 多轮迭代，
+      // 这里 push 1 张即可，回响×N 自然累积成 N 张。
+      enqueuedActions.push({ type: 'DRAW_CARDS', count: 1, source: 'backpack' });
       const goldText = sameCategory
         ? `同类型 → +${goldDelta} 金币`
         : `不同类型 → ${goldDelta} 金币`;
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'magic', message: `${pending.card.name}：${card.name} ↔ ${ragedDeckTop.name}（牌堆顶）。${goldText}。` },
+        payload: { type: 'magic', message: `${pending.card.name}：${card.name} ↔ ${ragedDeckTop.name}（牌堆顶）。${goldText}。从背包抽 1 张牌。` },
       });
 
       const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
@@ -2805,7 +2851,7 @@ function reduceDungeonCardSelection(
         );
         if (reprompt) return reprompt;
       }
-      const banner = `${card.name} ↔ ${ragedDeckTop.name}（牌堆顶）！${goldText}！`;
+      const banner = `${card.name} ↔ ${ragedDeckTop.name}（牌堆顶）！${goldText}！抽 1 张牌。`;
       if (swapTrigger) {
         patch.heroSkillBanner = '流转之符：选择一张牌进行升级。';
       }
@@ -2963,8 +3009,10 @@ function reduceDiceForHero(
       }
       if (ae.stunGoldCount > 0) {
         const goldGain = 10 * ae.stunGoldCount;
+        const drawCount = 2 * ae.stunGoldCount;
         enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
-        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}` } });
+        enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}，抽 ${drawCount} 张牌` } });
       }
     } else if (currentHit < totalHits) {
       const threshold = Math.round((stunPct / 100) * 20);
@@ -2997,8 +3045,10 @@ function reduceDiceForHero(
       }
       if (ae.stunGoldCount > 0) {
         const goldGain = 10 * ae.stunGoldCount;
+        const drawCount = 2 * ae.stunGoldCount;
         enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
-        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}` } });
+        enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}，抽 ${drawCount} 张牌` } });
       }
     }
     return applyPatch(state, patch, sideEffects, enqueuedActions);

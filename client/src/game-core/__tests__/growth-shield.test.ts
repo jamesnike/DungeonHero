@@ -2,8 +2,8 @@
  * 「生长之盾」专属护盾测试
  *
  * 覆盖：
- *   1. amplifyOnFlip：装备时每次卡牌翻转触发 AMPLIFY_CARDS_BY_NAME(name, +2)，
- *      所有同名副本（含手牌/职业牌组等）累计获得 +2 护甲与护甲上限。
+ *   1. amplifyOnFlip：装备时每次卡牌翻转触发 AMPLIFY_CARDS_BY_NAME(name, +1)，
+ *      所有同名副本（含手牌/职业牌组等）累计获得 +1 护甲与护甲上限。
  *   2. amplifyOnFlip：未装备（仅在手牌/坟场）时不触发。
  *   3. amplifyOnFlip：左右两个槽位都装备同名时仅触发一次（去重）。
  *   4. graveyard-event-to-hand 遗言：从坟场随机抽出一张 Event 到手牌；
@@ -58,7 +58,7 @@ function makeFlippablePotion(id: string): GameCardData {
 // ---------------------------------------------------------------------------
 
 describe('生长之盾 — amplifyOnFlip', () => {
-  it('equipped: each forward flip enqueues AMPLIFY_CARDS_BY_NAME(+2) for the shield name', () => {
+  it('equipped: each forward flip enqueues AMPLIFY_CARDS_BY_NAME(+1) for the shield name', () => {
     const equipped = makeGrowthShield('eq');
     const fwd = makeFlippablePotion('p-flip');
     const state = makeState({
@@ -70,10 +70,10 @@ describe('生长之盾 — amplifyOnFlip', () => {
     const amplifyActions = result.enqueuedActions.filter(a => a.type === 'AMPLIFY_CARDS_BY_NAME');
     expect(amplifyActions).toHaveLength(1);
     expect((amplifyActions[0] as any).cardName).toBe('生长之盾');
-    expect((amplifyActions[0] as any).amount).toBe(2);
+    expect((amplifyActions[0] as any).amount).toBe(1);
   });
 
-  it('equipped: after pipeline drain, the shield armorMax/value have been bumped by +2 and amplifyBonus tracked', () => {
+  it('equipped: after pipeline drain, the shield armorMax/value have been bumped by +1 and amplifyBonus tracked', () => {
     const equipped = makeGrowthShield('eq2');
     const fwd = makeFlippablePotion('p-flip2');
     const state = makeState({
@@ -84,10 +84,10 @@ describe('生长之盾 — amplifyOnFlip', () => {
 
     const result = drain(state, [{ type: 'APPLY_CARD_FLIP', card: fwd, cellIndex: 0 } as GameAction]);
     const slot = result.state.equipmentSlot1 as any;
-    expect(slot.value).toBe(3);
-    expect(slot.armorMax).toBe(3);
-    expect(slot.amplifyBonus).toBe(2);
-    expect(result.state.amplifiedCardBonus['生长之盾']).toBe(2);
+    expect(slot.value).toBe(2);
+    expect(slot.armorMax).toBe(2);
+    expect(slot.amplifyBonus).toBe(1);
+    expect(result.state.amplifiedCardBonus['生长之盾']).toBe(1);
   });
 
   it('not equipped: a copy sitting only in hand does NOT trigger amplification on flip', () => {

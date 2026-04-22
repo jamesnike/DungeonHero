@@ -266,11 +266,13 @@ describe('锐意鼓舞 (flankSlotTempAttack)', () => {
 // ---------------------------------------------------------------------------
 
 describe('运势博弈 (deckTopSwapGold)', () => {
-  it('牌堆为空：消耗自身、不交换、不改变金币', () => {
+  it('牌堆为空：消耗自身、不交换、不改变金币、但仍从背包抽 1 张牌', () => {
     const card = makeDeckSwapCard(pickSuffix(9));
     const monster = makeMonster('m1');
+    const bp1 = makePotion('bp-1');
     const state = makeState({
       handCards: [card],
+      backpackItems: [bp1] as any,
       activeCards: [monster, null, null, null, null] as any,
       remainingDeck: [] as any,
       gold: 50,
@@ -279,12 +281,16 @@ describe('运势博弈 (deckTopSwapGold)', () => {
     expect(result.state.gold).toBe(50);
     expect(result.state.pendingMagicAction).toBeNull();
     expect((result.state.activeCards as any[]).find(c => c?.id === 'm1')).toBeDefined();
+    expect(result.state.handCards.some(c => c.id === 'bp-1')).toBe(true);
+    expect(result.state.backpackItems.some(c => c.id === 'bp-1')).toBe(false);
   });
 
-  it('当前行无卡牌：消耗自身、不交换、不改变金币', () => {
+  it('当前行无卡牌：消耗自身、不交换、不改变金币、但仍从背包抽 1 张牌', () => {
     const card = makeDeckSwapCard(pickSuffix(10));
+    const bp1 = makePotion('bp-1');
     const state = makeState({
       handCards: [card],
+      backpackItems: [bp1] as any,
       activeCards: [null, null, null, null, null] as any,
       remainingDeck: [makePotion('top')] as any,
       gold: 50,
@@ -293,13 +299,17 @@ describe('运势博弈 (deckTopSwapGold)', () => {
     expect(result.state.gold).toBe(50);
     expect(result.state.pendingMagicAction).toBeNull();
     expect((result.state.remainingDeck as any[])[0]?.id).toBe('top');
+    expect(result.state.handCards.some(c => c.id === 'bp-1')).toBe(true);
+    expect(result.state.backpackItems.some(c => c.id === 'bp-1')).toBe(false);
   });
 
-  it('正常出牌时打开 dungeon-select pendingMagicAction', () => {
+  it('正常出牌时打开 dungeon-select pendingMagicAction（抽牌延迟到结算阶段）', () => {
     const card = makeDeckSwapCard(pickSuffix(11));
     const monster = makeMonster('m1');
+    const bp1 = makePotion('bp-1');
     const state = makeState({
       handCards: [card],
+      backpackItems: [bp1] as any,
       activeCards: [monster, null, null, null, null] as any,
       remainingDeck: [makePotion('top')] as any,
     });
@@ -307,14 +317,18 @@ describe('运势博弈 (deckTopSwapGold)', () => {
     expect(result.state.pendingMagicAction).not.toBeNull();
     expect((result.state.pendingMagicAction as any).effect).toBe('deck-top-swap-gold');
     expect((result.state.pendingMagicAction as any).step).toBe('dungeon-select');
+    // 选择阶段还没结算，背包不应该被消耗
+    expect(result.state.backpackItems.some(c => c.id === 'bp-1')).toBe(true);
   });
 
-  it('选中 active 行卡 + 牌堆顶同类（怪物 vs 怪物）→ +10 金币 & 交换', () => {
+  it('选中 active 行卡 + 牌堆顶同类（怪物 vs 怪物）→ +10 金币 & 交换 & 抽 1 张牌', () => {
     const card = makeDeckSwapCard(pickSuffix(12));
     const m1 = makeMonster('m1', 5);
     const m2 = makeMonster('m2', 7);
+    const bp1 = makePotion('bp-1');
     const state = makeState({
       handCards: [card],
+      backpackItems: [bp1] as any,
       activeCards: [m1, null, null, null, null] as any,
       remainingDeck: [m2] as any,
       gold: 50,
@@ -329,14 +343,18 @@ describe('运势博弈 (deckTopSwapGold)', () => {
     expect(slot0?.id).toBe('m2');
     const newDeck = result.state.remainingDeck as any[];
     expect(newDeck[0]?.id).toBe('m1');
+    expect(result.state.handCards.some(c => c.id === 'bp-1')).toBe(true);
+    expect(result.state.backpackItems.some(c => c.id === 'bp-1')).toBe(false);
   });
 
-  it('选中 active 行卡 + 牌堆顶不同类（怪物 vs 药水）→ -1 金币 & 交换', () => {
+  it('选中 active 行卡 + 牌堆顶不同类（怪物 vs 药水）→ -1 金币 & 交换 & 抽 1 张牌', () => {
     const card = makeDeckSwapCard(pickSuffix(13));
     const m1 = makeMonster('m1');
     const potion = makePotion('p-top');
+    const bp1 = makePotion('bp-1');
     const state = makeState({
       handCards: [card],
+      backpackItems: [bp1] as any,
       activeCards: [m1, null, null, null, null] as any,
       remainingDeck: [potion] as any,
       gold: 50,
@@ -350,5 +368,62 @@ describe('运势博弈 (deckTopSwapGold)', () => {
     expect(slot0?.id).toBe('p-top');
     const newDeck = result.state.remainingDeck as any[];
     expect(newDeck[0]?.id).toBe('m1');
+    expect(result.state.handCards.some(c => c.id === 'bp-1')).toBe(true);
+    expect(result.state.backpackItems.some(c => c.id === 'bp-1')).toBe(false);
+  });
+
+  it('回响×2 早退（牌堆为空）：一次性从背包抽 2 张牌', () => {
+    const card = makeDeckSwapCard(pickSuffix(14));
+    const monster = makeMonster('m1');
+    const bp1 = makePotion('bp-1');
+    const bp2 = makePotion('bp-2');
+    const state = makeState({
+      handCards: [card],
+      backpackItems: [bp1, bp2] as any,
+      activeCards: [monster, null, null, null, null] as any,
+      remainingDeck: [] as any,
+      gold: 50,
+      doubleNextMagic: true,
+    } as Partial<GameState>);
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(result.state.gold).toBe(50);
+    expect(result.state.pendingMagicAction).toBeNull();
+    expect(result.state.handCards.some(c => c.id === 'bp-1')).toBe(true);
+    expect(result.state.handCards.some(c => c.id === 'bp-2')).toBe(true);
+    expect(result.state.backpackItems.length).toBe(0);
+  });
+
+  it('回响×2 成功交换两轮：累计抽 2 张 & 同类两次 +20 金币', () => {
+    const card = makeDeckSwapCard(pickSuffix(15));
+    const m1 = makeMonster('m1', 5);
+    const m2 = makeMonster('m2', 6);
+    const m3 = makeMonster('m3', 7);
+    const bp1 = makePotion('bp-1');
+    const bp2 = makePotion('bp-2');
+    const state = makeState({
+      handCards: [card],
+      backpackItems: [bp1, bp2] as any,
+      activeCards: [m1, null, null, null, null] as any,
+      remainingDeck: [m2, m3] as any,
+      gold: 50,
+      doubleNextMagic: true,
+    } as Partial<GameState>);
+    let result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect(result.state.pendingMagicAction).not.toBeNull();
+    // First echo iteration: pick m1 → swap with m2 (monster vs monster, +10), draw 1
+    result = drain(result.state, [
+      { type: 'RESOLVE_DUNGEON_CARD_SELECTION', cardId: 'm1' } as GameAction,
+    ]);
+    expect(result.state.pendingMagicAction).not.toBeNull();
+    expect((result.state.pendingMagicAction as any).echoRemaining).toBe(1);
+    // Second echo iteration: pick m2 (now in slot 0, which we just swapped in) → swap with m3 (monster vs monster, +10), draw 1
+    result = drain(result.state, [
+      { type: 'RESOLVE_DUNGEON_CARD_SELECTION', cardId: 'm2' } as GameAction,
+    ]);
+    expect(result.state.gold).toBe(70);
+    expect(result.state.pendingMagicAction).toBeNull();
+    expect(result.state.handCards.some(c => c.id === 'bp-1')).toBe(true);
+    expect(result.state.handCards.some(c => c.id === 'bp-2')).toBe(true);
+    expect(result.state.backpackItems.length).toBe(0);
   });
 });

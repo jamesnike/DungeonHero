@@ -1,0 +1,106 @@
+---
+description: 怪物进入坟场时 currentLayer 必须 reset 成 1（保留 fury / hpLayers 上限）
+alwaysApply: true
+---
+
+# 怪物进坟场：`currentLayer` 必须 reset 成 1
+
+## 不变量
+
+> **任何怪物进入 `discardedCards` 的瞬间，`currentLayer` 必须等于 1。**
+> 血层上限（`fury` / `hpLayers`）保留——它们由 `applyMonsterRage` 按 `rageTurn` 重算。
+
+意义：从坟场拉出怪物的所有路径（boss 激怒召唤、未来的复活/换牌效果、graveyard-to-hand
+等）都按"1 血层"形态回归。否则一只 4 血层的 Dragon 死后被 boss 召回还是 4 层，瞬间崩盘。
+
+## 唯一正确入口
+
+把怪物放进 `discardedCards` 之前，**必须**让它过一遍 `resetCardForGraveyard`
+（位于 `client/src/game-core/cards.ts`）。该函数对 `type === 'monster'` 的卡内部走
+`resetMonsterForGraveyard`，已经做了：
+
+- 清 `tempAttackBoost` / `tempHpBoost` / `specialAttackBoost` / `lowGoldBuffActive`
+- 清 `reviveUsed`（让 Skeleton 之类下次复活）
+- 清 `durability` / `maxDurability`（怪物装备形态字段）
+- 调 `applyMonsterRage` 重算 `attack` / `hp` / `fury` / `hpLayers`
+- **末尾把 `currentLayer` 钉死为 1**（覆盖 rage 重算出的 `rage` 值）
+
+```ts
+import { resetCardForGraveyard } from '@/game-core/cards';
+
+patch.discardedCards = [
+  ...state.discardedCards,
+  resetCardForGraveyard(monster, state.gameMode === 'quick'),
+];
+```
+
+## 强制规则
+
+1. **新加 / 修改任何"怪物进坟场"路径**，先 `Grep` 这两个签名找全所有兄弟点：
+   ```
+   discardedCards: [...
+   patch.discardedCards = [...
+   graveyard.push(
+   ```
+   尤其是直接 mutate `state.discardedCards` 或者 push 进局部 `graveyard` 数组的，最容易藏 layer-leak。
+
+2. **怪物进坟场之前，强制过 `resetCardForGraveyard`**：
+   - ✅ `resetCardForGraveyard(monster, state.gameMode === 'quick')`
+   - ❌ `{ ...monster }`（保留所有战斗中残余字段）
+   - ❌ `sanitizeCardMetadata(monster)`（只清 UI 字段，不动血层）
+
+3. **`addToGraveyardPure` / `discardAllHandCardsPure` 默认已经走** `resetCardForGraveyard`，
+   不要绕开它们去手动 push。
+
+4. **如果你想覆盖"1 血层"这个默认值**（极罕见，比如某张设计明确写"复生时满血层"的卡），
+   **先跟用户确认**，并且在 reset 之后再覆盖：
+   ```ts
+   const reset = resetCardForGraveyard(monster, isQuick);
+   const customLayer = { ...reset, currentLayer: reset.fury ?? 1 };
+   ```
+
+## 已知曾经 bypass 的路径（已修复，新增类似路径要走同样写法）
+
+| 路径 | 文件 | 原因 |
+|---|---|---|
+| `MONSTER_DEFEATED` 无奖励分支 | `rules/combat.ts` ~L1177 | 直接 `graveyard.push({ ...monster })` |
+| `APPLY_MONSTER_REWARD` 4 个分支 | `rules/shop.ts` ~L367 / L385 / L432 / L506 | `monsterCard` 直接进 `discardedCards` |
+
+`combat.ts` 建筑摧毁分支（~L2258）走的是 `type === 'building'`，
+`resetCardForGraveyard` 对非 monster/equipment passthrough，所以不需要改但也无害——
+新加建筑→坟场路径建议照样过 `resetCardForGraveyard` 留个一致性。
+
+## What NOT to do
+
+- ❌ `graveyard.push({ ...monster })` — 战斗状态全部残留，下次复活就是满血层。
+- ❌ `patch.discardedCards = [...state.discardedCards, monsterCard]` — 同样 bypass。
+- ❌ 在 `resetMonsterForGraveyard` 里**让 `applyMonsterRage` 的返回值"原样"出去** —— 它会把 `currentLayer` 写回 `rage`（多血层怪物可能 2~4），覆盖意图。
+- ❌ 自己重新实现一套 reset，绕过 `resetCardForGraveyard`/`resetMonsterForGraveyard`。
+
+## What to do
+
+- ✅ 任何"怪物进坟场"新代码都走 `resetCardForGraveyard(card, state.gameMode === 'quick')`。
+- ✅ 写测试时显式断言 `inGrave.currentLayer === 1`，并断言 `fury` / `hpLayers` 上限保留。
+  参考 `client/src/game-core/__tests__/monster-graveyard-layer-reset.test.ts`。
+- ✅ 修改 `resetMonsterForGraveyard` 的人，在 `applyMonsterRage` 之后保留 `currentLayer: 1` 覆盖。
+
+## 自检
+
+每次准备把怪物推进 `discardedCards` 之前，停下来问自己：
+
+> 1. 我有没有过 `resetCardForGraveyard`？
+> 2. 如果绕过了（比如写到内部 `graveyard.push(...)`），怪物的 `currentLayer` 还会是战斗中的残余值——下次复活/召回会以"原始血层"形态回归，这是 bug。
+> 3. 测试有没有断言 `currentLayer === 1` 且 `fury`/`hpLayers` 保留？
+
+任意一条"没"或"不确定"，回头补功课再改。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| 怪物**血层**进坟场后归 1 | ✅ 这条 | ❌ |
+| 怪物**装备/战斗状态**重置（攻击、装备耐久等） | ✅ 这条（通过 `resetCardForGraveyard`） | `equipment-durability-cap` |
+| 卡进坟场 vs 进回收袋的**路由** | ❌ | `perm-routing-on-discard` |
+| 「被弃 / 被回收」语义触发 onDiscard 联动 | ❌ | `discard-vs-recycle-semantics` |
+
+修改怪物进坟场相关代码时，这四条规则**都要核对**。

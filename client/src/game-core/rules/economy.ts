@@ -20,7 +20,8 @@ import { computeAmuletEffects } from '../equipment';
 import { computeSpellDamagePure } from '../helpers';
 import type { PendingMonsterEndDice } from '../types';
 
-// Helper: enqueue +10 gold + log when a stun is applied and 雷金护符 is equipped
+// Helper: enqueue +10 gold and 2 backpack draws (per amulet) + log
+// when a stun is applied and 雷金护符 is equipped.
 function maybeEnqueueStunGold(
   state: GameState,
   enqueuedActions: GameAction[],
@@ -30,10 +31,13 @@ function maybeEnqueueStunGold(
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
   if (ae.stunGoldCount <= 0) return;
   const n = ae.stunGoldCount;
-  enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10 * n, source: 'amulet-stun-gold' } as GameAction);
+  const goldGain = 10 * n;
+  const drawCount = 2 * n;
+  enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' } as GameAction);
+  enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' } as GameAction);
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'amulet', message: `雷金护符：${monsterName} 被击晕，金币 +${10 * n}` },
+    payload: { type: 'amulet', message: `雷金护符：${monsterName} 被击晕，金币 +${goldGain}，抽 ${drawCount} 张牌` },
   });
 }
 

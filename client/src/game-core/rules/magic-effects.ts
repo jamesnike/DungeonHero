@@ -89,7 +89,7 @@
  * │ STARTER guild-blood-gold         │ A   │ dmg/gold ×N                   │
  * │ STARTER transform-streak-strike  │ A/B │ dmg ×N + modal re-prompt      │
  * │ STARTER flank-slot-temp-attack   │ A   │ +atk ×N                       │
- * │ STARTER deck-top-swap-gold       │ B   │ pick swap twice               │
+ * │ STARTER deck-top-swap-gold       │ A/B │ pick swap twice + draw ×N     │
  * │ KNIGHT blood-greed               │ A   │ gold delta ×N (curse fixed)   │
  * │ KNIGHT berserk-gambit            │ A   │ buff stacks ×N                │
  * │ KNIGHT battle-spirit             │ B   │ pick slot twice               │
@@ -119,6 +119,9 @@
  * │ KNIGHT missing-hp-smite          │ A   │ damage ×N                     │
  * │ KNIGHT blood-sacrifice-strike    │ A   │ damage ×N                     │
  * │ KNIGHT blood-draw                │ A   │ draw ×N                       │
+ * │ KNIGHT hand-purge-redraw         │ A/C │ discard once + draw ×N        │
+ * │ KNIGHT gear-rift-draw            │ A   │ draw ×N (slot resolved hero)  │
+ * │ KNIGHT quake-stun-draw           │ A   │ HP loss ×N + draw ×N          │
  * │ KNIGHT recall-equipment          │ B   │ pick equipment twice          │
  * │ KNIGHT cleanse-draw (净册涌泉)   │ B   │ pick + draw twice (hook loop) │
  * │ KNIGHT recycle-tide (洗册归川)   │ C   │ second tick = no-op + banner  │
@@ -265,8 +268,11 @@ export function applyMissileRelicEffects(
         log(sideEffects, 'magic', `永恒护符·震荡弹幕：${target.name} 被击晕了！`);
         if (ae.stunGoldCount > 0) {
           const sn = ae.stunGoldCount;
-          enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 10 * sn, source: 'amulet-stun-gold' });
-          log(sideEffects, 'amulet', `雷金护符：${target.name} 被击晕，金币 +${10 * sn}`);
+          const goldGain = 10 * sn;
+          const drawCount = 2 * sn;
+          enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
+          enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+          log(sideEffects, 'amulet', `雷金护符：${target.name} 被击晕，金币 +${goldGain}，抽 ${drawCount} 张牌`);
         }
       }
     }
@@ -1499,7 +1505,7 @@ export function resolvePermanentMagic(
     }
 
     case STARTER_CARD_IDS.discardDraw: {
-      const discards = [1, 2, 3];
+      const discards = [1, 1, 1];
       const draws = [2, 3, 4];
       const discardCount = discards[card.upgradeLevel ?? 0] ?? 1;
       const drawCount = draws[card.upgradeLevel ?? 0] ?? 2;
@@ -1522,7 +1528,7 @@ export function resolvePermanentMagic(
     }
 
     case STARTER_CARD_IDS.tempArmor: {
-      const armorAmounts = [2, 3, 4];
+      const armorAmounts = [2, 4, 6];
       const armorAmt = armorAmounts[card.upgradeLevel ?? 0] ?? 2;
       patch.pendingMagicAction = {
         card,
@@ -2693,6 +2699,82 @@ export function resolveKnightPermanentMagic(
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
+    case 'quake-stun-draw': {
+      // 地震泉涌 (Perm 1)：失去 1 HP（自伤），从背包抽 floor(stunCap / 10) 张牌。
+      // - HP 自伤走 APPLY_DAMAGE selfInflicted（与 blood-draw 同一管线）。
+      // - Echo (A 类)：HP 损失与抽牌都 ×echoMultiplier，与 blood-draw 一致。
+      // - stunCap < 10（公式 = 0）→ 仍消耗 magic、仍掉 HP、0 抽。
+      // - 抽牌走 drawMultipleFromBackpack（受手牌上限约束）。
+      const hpCost = 1 * echoMultiplier;
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpCost, source: 'quake-stun-draw', selfInflicted: true });
+      const curStunCap = state.stunCap ?? 0;
+      const baseDraw = Math.floor(curStunCap / 10);
+      const quakeDrawCount = baseDraw * echoMultiplier;
+      let drawnCount = 0;
+      if (quakeDrawCount > 0) {
+        const drawState = { ...state, ...patch } as GameState;
+        const drawResult = drawMultipleFromBackpack(drawState, quakeDrawCount);
+        if (drawResult.cards.length > 0) {
+          mergePatch(patch, drawResult.patch);
+          for (const d of drawResult.cards) {
+            sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
+          }
+        }
+        drawnCount = drawResult.cards.length;
+      }
+      const echoTag = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+      const formulaTag = echoMultiplier > 1
+        ? `floor(${curStunCap}/10)=${baseDraw} × ${echoMultiplier} = ${quakeDrawCount}`
+        : `floor(${curStunCap}/10) = ${quakeDrawCount}`;
+      const drawnMsg = quakeDrawCount === 0
+        ? '击晕上限不足 10，未抽到牌'
+        : drawnCount === 0
+          ? '背包为空'
+          : `抽了 ${drawnCount} 张牌`;
+      log(sideEffects, 'magic', `地震泉涌：失去 ${hpCost} 生命，${formulaTag}，${drawnMsg}${echoTag}`);
+      banner(sideEffects, `地震泉涌：-${hpCost} 生命，${drawnMsg}。${echoTag}`);
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    case 'hand-purge-redraw': {
+      // 清囊重启 (Perm 1)：弃回所有可弃手牌（curse 与源卡牌排除），然后从背包
+      // 抽 N 张牌。N = [3,4,5][upgradeLevel] × echoMultiplier。
+      // 弃回走标准 DISCARD_OWNED_CARD（perm-aware 路由）：非 Perm 入坟场，
+      // Perm / 永恒铭刻过的入回收袋；同时正常触发 catapult / discard-zap /
+      // onDiscardDraw / 雷霆符印 等弃置联动。
+      // 法术回响：弃回是结构操作（C 类，二次回响时手牌已空，自动 no-op）；
+      // 抽牌是数值操作（A 类，count × echoMultiplier）。
+      const eligible = getEligibleHandDiscardCards(state.handCards as GameCardData[], card.id);
+      if (eligible.length > 0) {
+        const discardIds = new Set(eligible.map(c => c.id));
+        patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
+        for (const dc of eligible) {
+          enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
+        }
+        log(sideEffects, 'magic', `清囊重启：弃回 ${eligible.map(c => c.name).join('、')}`);
+      }
+      const baseDraw = [3, 4, 5][card.upgradeLevel ?? 0] ?? 5;
+      const drawCount = baseDraw * echoMultiplier;
+      const drawState = { ...state, ...patch } as GameState;
+      const drawResult = drawMultipleFromBackpack(drawState, drawCount);
+      if (drawResult.cards.length > 0) {
+        mergePatch(patch, drawResult.patch);
+        for (const d of drawResult.cards) {
+          sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
+        }
+      }
+      const drawnMsg = drawResult.cards.length > 0
+        ? `从背包抽了 ${drawResult.cards.length} 张牌`
+        : '背包为空（或手牌已满）';
+      const echoTagHPR = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+      banner(sideEffects, `清囊重启：弃回 ${eligible.length} 张手牌，${drawnMsg}。${echoTagHPR}`);
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
     case 'flip-back-active': {
       // 血誓回卷：失去 3 HP，选择 active row 一张「已翻转」卡（带 _flipBackCard
       // 且不是当前可翻转源即 !flipTarget）将其翻回原始形态。
@@ -2814,14 +2896,14 @@ export function resolveKnightPermanentMagic(
 
     case 'cleanse-draw': {
       // 净册涌泉 — Perm 1. Pick 1 hand card → delete (kw='delete'); then draw
-      // N cards from the backpack (N = 2/3/4 by upgrade level). Empty hand on
+      // N cards from the backpack (N = 3/4/5 by upgrade level). Empty hand on
       // a given iteration → skip the picker but still draw.
       //
       // Echo (Category B): the hook re-opens the picker `echoMultiplier`
       // times, drawing N each time. We only emit the side-effect; the
       // hook owns the loop and dispatches FINALIZE_MAGIC_CARD when done.
-      const drawCounts = [2, 3, 4];
-      const drawCount = drawCounts[card.upgradeLevel ?? 0] ?? 2;
+      const drawCounts = [3, 4, 5];
+      const drawCount = drawCounts[card.upgradeLevel ?? 0] ?? 3;
       const echoTagCD = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
       patch.pendingMagicAction = {
         card,
@@ -3771,13 +3853,13 @@ export function resolveAmplifyTarget(
 ): ReduceResult {
   const targetName = card._amplifyTargetName;
   const echoTag = isEchoTriggered ? '（回响×2）' : '';
-  const amplifyAmount = 2 * echoMultiplier;
+  const amplifyAmount = 1 * echoMultiplier;
 
   // 仅在 targetName 缺失（卡牌结构异常）时拒绝。
   // 之前会按 _amplifyTargetCardId 校验"原始那张卡是否仍在装备栏/手牌"，
   // 但实际加成本就是按 NAME（AMPLIFY_CARDS_BY_NAME）应用到 amplifiedCardBonus
   // map + 所有同名卡（手牌/装备/背包/坟场/回收袋/抽牌堆/职业牌组/地下城/护符/储备）。
-  // 用户场景：「增幅」magic 选中手牌中的「魔弹」生成 Perm 2 卡，
+  // 用户场景：「增幅」magic 选中手牌中的「魔弹」生成 Perm 1 卡，
   // 期间把那张「魔弹」打掉了；后续打出「增幅：魔弹」时按 ID 校验失败 → 整个生效被吞掉。
   // 修复：移除 ID 校验，即使全场已无同名卡也照常记入 amplifiedCardBonus map，
   // 未来生成的同名卡（如 createMagicBoltCard）会通过 applyAmplifyOnCreate 自动获得累计加成。

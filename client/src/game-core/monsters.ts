@@ -65,8 +65,55 @@ export function generateMonsterRewardOptions(
   const mkId = (): string => { const [id, next] = nextId(r, 'monster-reward'); r = next; return id; };
 
   if (monster.isBuglet) {
-    const [amount, r2] = nextInt(r, 2, 3); r = r2;
-    return [[{ id: mkId(), title: `获得 ${amount} 金币`, description: '小虫子身上掉落的零星金币。', detail: '即时奖励', effect: { type: 'gold', amount } }], r];
+    const bugletMaxHp = INITIAL_HP + state.permanentMaxHpBonus;
+    const bugletPool: MonsterRewardOption[] = [];
+
+    const [goldAmount, rGold] = nextInt(r, 2, 3); r = rGold;
+    bugletPool.push({
+      id: mkId(),
+      title: `获得 ${goldAmount} 金币`,
+      description: '小虫子身上掉落的零星金币。',
+      detail: '即时奖励',
+      effect: { type: 'gold', amount: goldAmount },
+    });
+
+    bugletPool.push({
+      id: mkId(),
+      title: '最大生命 +1',
+      description: '虫躯虽小，淬炼亦能积少成多。',
+      detail: '永久增益',
+      effect: { type: 'maxHp', amount: 1 },
+    });
+
+    if (state.hp < bugletMaxHp) {
+      const [healAmount, rHeal] = nextInt(r, 1, 2); r = rHeal;
+      bugletPool.push({
+        id: mkId(),
+        title: `回复 ${healAmount} 点生命`,
+        description: '虫液入药，缓解轻微伤口。',
+        detail: '即时治疗',
+        effect: { type: 'heal', amount: healAmount },
+      });
+    }
+
+    const bugletSelected: MonsterRewardOption[] = [];
+    while (bugletSelected.length < 2 && bugletPool.length > 0) {
+      const [roll, rPick] = nextRandom(r); r = rPick;
+      const idx = Math.min(bugletPool.length - 1, Math.floor(roll * bugletPool.length));
+      const [option] = bugletPool.splice(idx, 1);
+      if (option) bugletSelected.push(option);
+    }
+    while (bugletSelected.length < 2) {
+      const [extra, rExtra] = nextInt(r, 2, 3); r = rExtra;
+      bugletSelected.push({
+        id: mkId(),
+        title: `获得 ${extra} 金币`,
+        description: '小虫子身上掉落的零星金币。',
+        detail: '即时奖励',
+        effect: { type: 'gold', amount: extra },
+      });
+    }
+    return [bugletSelected, r];
   }
 
   const isElite = Boolean(monster.monsterSpecial);
@@ -99,7 +146,7 @@ export function generateMonsterRewardOptions(
 
   const createHealOption = (): MonsterRewardOption | null => {
     if (state.hp >= maxHp) return null;
-    const [amount, r2] = nextInt(r, 2, 4); r = r2;
+    const [amount, r2] = nextInt(r, 3, 5); r = r2;
     return { id: mkId(), title: `回复 ${amount} 点生命`, description: '抚平战斗中留下的伤痕。', detail: '即时治疗', effect: { type: 'heal', amount } };
   };
 
@@ -124,13 +171,12 @@ export function generateMonsterRewardOptions(
   };
 
   const createMaxHpOption = (): MonsterRewardOption => {
-    const [pickTwo, r2] = nextBool(r); r = r2;
-    const amount = pickTwo ? 2 : 3;
+    const [amount, r2] = nextInt(r, 2, 4); r = r2;
     return { id: mkId(), title: `最大生命 +${amount}`, description: '淬炼体魄，扩张体能上限。', detail: '永久增益', effect: { type: 'maxHp', amount } };
   };
 
   const createBackpackCapacityOption = (): MonsterRewardOption =>
-    ({ id: mkId(), title: '背包上限 +1', description: '扩展背包空间，容纳更多物资。', detail: '永久增益', effect: { type: 'backpackCapacity', amount: 1 } });
+    ({ id: mkId(), title: '背包上限 +2', description: '扩展背包空间，容纳更多物资。', detail: '永久增益', effect: { type: 'backpackCapacity', amount: 2 } });
 
   const createSpellDamageOption = (): MonsterRewardOption =>
     ({ id: mkId(), title: '法术伤害 +1', description: '聚焦奥术，让法术造成更多伤害。', detail: '永久增益', effect: { type: 'spellDamage', amount: 1 } });

@@ -775,7 +775,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 回收灵焰 | permanent | `recycle-flare` | 立即恢复回收袋中的牌，从背包抽最多2张 |
 | 混沌骰运 | permanent | `chaos-dice` | D20掷骰，5种随机效果 |
 | 天眼审判 | permanent | `fate-sight` | 造成3点伤害，翻看牌堆顶3张牌，每有1张怪物牌20%击晕目标（Perm 2，可升级） |
-| 护甲凝雷 | permanent | `armor-stun-convert` | 选择一个护盾，每1点护甲值使击晕上限+1%/+2%（可升 1 级） |
+| 护甲凝雷 | permanent | `armor-stun-convert` | 选择一个护盾，每1点护甲值使击晕上限+1%/+1.5%（最终值四舍五入；可升 1 级） |
 | 淬炼冲击 | permanent | `overkill-upgrade` | 对一个怪物造成 `getSpellDamage(3)` 伤害。超杀：升级一张牌（Perm 1） |
 | 雷涌一击 | permanent | `stun-cap-strike` | 对一个怪物造成 `getSpellDamage(⌈stunCap/4⌉)` 法伤（升级后除数变 3），`min(60%, stunCap)` 几率击晕，然后抽 1 张牌。stun 触发受 `stun-recycle` / `stun-gold` / `stun-upgrade-cap` 等护符联动。echo 让伤害 / 抽牌 ×N，但 stun 掷骰只有一次（与 `stun-strike` / 雷震击同款行为）。 |
 

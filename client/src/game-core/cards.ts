@@ -147,6 +147,11 @@ export function drawMultipleFromBackpack(
  * Reset a monster's attack / HP / fury back to its "entering active row" state
  * by clearing all combat-acquired modifiers and re-applying rage from base stats.
  * Non-monster cards pass through unchanged.
+ *
+ * Additionally pins `currentLayer` to 1 so any subsequent resurrection /
+ * graveyard-fetch (boss enrage summon, future revive effects, etc.) brings the
+ * monster back as a single-layer threat regardless of how many layers its rage
+ * tier would otherwise grant. The cap (`fury` / `hpLayers`) is preserved.
  */
 export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false): GameCardData {
   if (card.type !== 'monster') return card;
@@ -162,7 +167,8 @@ export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false
     maxDurability: undefined,
   };
 
-  return applyMonsterRage(cleaned, cleaned.rageTurn ?? 1, isQuickMode);
+  const raged = applyMonsterRage(cleaned, cleaned.rageTurn ?? 1, isQuickMode);
+  return { ...raged, currentLayer: 1 };
 }
 
 /**

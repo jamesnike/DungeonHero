@@ -4,7 +4,7 @@
  * 旧逻辑：要求被增幅的"原始那张卡"按 _amplifyTargetCardId 仍在装备栏或手牌中，
  * 否则直接拒绝（"无法增幅"）且不调用 AMPLIFY_CARDS_BY_NAME。
  *
- * 用户场景：玩家用「增幅」magic 选中手牌中的「魔弹」生成 Perm 2 卡，
+ * 用户场景：玩家用「增幅」magic 选中手牌中的「魔弹」生成 Perm 1 卡，
  * 期间把那张原始「魔弹」打掉了 → 后续打出「增幅：魔弹」时旧校验失败 → 全场所有「魔弹」
  * 仍然显示 1 点法术伤害。
  *
@@ -30,8 +30,8 @@ function makeAmplifyPermCard(targetName: string, opts: { id?: string; targetCard
     value: 0,
     magicType: 'permanent',
     magicEffect: 'amplify-target',
-    description: `永久魔法（Perm 2）：对「${targetName}」进行增幅。`,
-    recycleDelay: 2,
+    description: `永久魔法（Perm 1）：对「${targetName}」进行增幅。`,
+    recycleDelay: 1,
     _amplifyTargetCardId: opts.targetCardId,
     _amplifyTargetName: targetName,
   } as GameCardData;
@@ -50,7 +50,7 @@ function makeBolt(id: string, amplifyBonus = 0): GameCardData {
 }
 
 describe('「增幅：XX」(amplify-target) — 目标校验放宽到按 NAME', () => {
-  it('REGRESSION: 原始 _amplifyTargetCardId 不在装备/手牌时仍能 +2（坟场内同名卡也获得增幅）', () => {
+  it('REGRESSION: 原始 _amplifyTargetCardId 不在装备/手牌时仍能 +1（坟场内同名卡也获得增幅）', () => {
     const ampPerm = makeAmplifyPermCard('魔弹', { targetCardId: 'h-bolt-original' });
     const graveBolt = makeBolt('gy-bolt-1');
     const state = makeState({
@@ -62,9 +62,9 @@ describe('「增幅：XX」(amplify-target) — 目标校验放宽到按 NAME', 
       { type: 'RESOLVE_MAGIC', cardId: ampPerm.id, card: ampPerm } as GameAction,
     ]);
 
-    expect(drained.state.amplifiedCardBonus['魔弹']).toBe(2);
+    expect(drained.state.amplifiedCardBonus['魔弹']).toBe(1);
     const updatedGraveBolt = drained.state.discardedCards.find(c => c.id === 'gy-bolt-1');
-    expect(updatedGraveBolt?.amplifyBonus).toBe(2);
+    expect(updatedGraveBolt?.amplifyBonus).toBe(1);
 
     const rejectionLog = drained.sideEffects.find(
       s => s.event === 'banner:show' && (s.payload as any)?.message?.includes('无法增幅'),
@@ -72,7 +72,7 @@ describe('「增幅：XX」(amplify-target) — 目标校验放宽到按 NAME', 
     expect(rejectionLog).toBeUndefined();
   });
 
-  it('原始目标在手牌：手牌中的同名卡获得 +2', () => {
+  it('原始目标在手牌：手牌中的同名卡获得 +1', () => {
     const handBolt = makeBolt('h-bolt-1');
     const ampPerm = makeAmplifyPermCard('魔弹', { targetCardId: 'h-bolt-1' });
     const state = makeState({
@@ -83,9 +83,9 @@ describe('「增幅：XX」(amplify-target) — 目标校验放宽到按 NAME', 
       { type: 'RESOLVE_MAGIC', cardId: ampPerm.id, card: ampPerm } as GameAction,
     ]);
 
-    expect(drained.state.amplifiedCardBonus['魔弹']).toBe(2);
+    expect(drained.state.amplifiedCardBonus['魔弹']).toBe(1);
     const updatedHandBolt = drained.state.handCards.find(c => c.id === 'h-bolt-1');
-    expect(updatedHandBolt?.amplifyBonus).toBe(2);
+    expect(updatedHandBolt?.amplifyBonus).toBe(1);
   });
 
   it('全场无同名卡：仍然写入 amplifiedCardBonus map（累计），未来生成的同名卡可自动获得加成', () => {
@@ -100,24 +100,24 @@ describe('「增幅：XX」(amplify-target) — 目标校验放宽到按 NAME', 
       { type: 'RESOLVE_MAGIC', cardId: ampPerm.id, card: ampPerm } as GameAction,
     ]);
 
-    expect(drained.state.amplifiedCardBonus['魔弹']).toBe(2);
+    expect(drained.state.amplifiedCardBonus['魔弹']).toBe(1);
   });
 
-  it('已有 amplifiedCardBonus 累计：再次打出「增幅：魔弹」累加（map 4，且现存同名卡 +2 = +4 总）', () => {
-    const handBolt = makeBolt('h-bolt-1', 2);
+  it('已有 amplifiedCardBonus 累计：再次打出「增幅：魔弹」累加（map 2，且现存同名卡 +1 = +2 总）', () => {
+    const handBolt = makeBolt('h-bolt-1', 1);
     const ampPerm = makeAmplifyPermCard('魔弹');
     const state = makeState({
       handCards: [handBolt] as any,
-      amplifiedCardBonus: { 魔弹: 2 },
+      amplifiedCardBonus: { 魔弹: 1 },
     });
 
     const drained = drain(state, [
       { type: 'RESOLVE_MAGIC', cardId: ampPerm.id, card: ampPerm } as GameAction,
     ]);
 
-    expect(drained.state.amplifiedCardBonus['魔弹']).toBe(4);
+    expect(drained.state.amplifiedCardBonus['魔弹']).toBe(2);
     const updatedHandBolt = drained.state.handCards.find(c => c.id === 'h-bolt-1');
-    expect(updatedHandBolt?.amplifyBonus).toBe(4);
+    expect(updatedHandBolt?.amplifyBonus).toBe(2);
   });
 
   it('卡牌结构异常：缺少 _amplifyTargetName 时拒绝且不入队 AMPLIFY_CARDS_BY_NAME', () => {

@@ -196,20 +196,20 @@ const stunCapBonus3OnHand: OnEnterHandHandler = (state, card, patch, sideEffects
 };
 
 /**
- * 生长之刃 上手效果：每次此武器进入手牌时，按卡名累计增幅 +2
+ * 生长之刃 上手效果：每次此武器进入手牌时，按卡名累计增幅 +1
  * （等同于「增幅祭坛」一次发动），所有同名「生长之刃」与未来生成的同名卡
- * 都会同步获得 +2 攻击。
+ * 都会同步获得 +1 攻击。
  */
 const growthBladeOnHand: OnEnterHandHandler = (_state, card, _patch, sideEffects, enqueuedActions) => {
   enqueuedActions.push({
     type: 'AMPLIFY_CARDS_BY_NAME',
     cardName: card.name,
-    amount: 2,
+    amount: 1,
     source: `${card.name} 上手`,
   });
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'magic', message: `${card.name} 上手：增幅一次（+2 攻击）。` },
+    payload: { type: 'magic', message: `${card.name} 上手：增幅一次（+1 攻击）。` },
   });
   sideEffects.push({
     event: 'ui:banner',

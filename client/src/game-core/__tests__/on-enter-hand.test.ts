@@ -222,44 +222,44 @@ function makeGrowthBlade(idSuffix = 'gb') {
 }
 
 describe('growth-blade-onhand handler', () => {
-  it('drawing 生长之刃 amplifies its own value by +2 (and tracks amplifyBonus)', () => {
+  it('drawing 生长之刃 amplifies its own value by +1 (and tracks amplifyBonus)', () => {
     const card = makeGrowthBlade('draw');
     const state = makeState({ handCards: [], rng: createRng(11) });
     const result = drain(state, [{ type: 'ADD_CARD_TO_HAND', card } as GameAction]);
 
     const inHand = result.state.handCards.find(c => c.id === card.id);
     expect(inHand).toBeDefined();
-    expect(inHand!.value).toBe(3);
-    expect(inHand!.amplifyBonus).toBe(2);
-    expect(result.state.amplifiedCardBonus['生长之刃']).toBe(2);
+    expect(inHand!.value).toBe(2);
+    expect(inHand!.amplifyBonus).toBe(1);
+    expect(result.state.amplifiedCardBonus['生长之刃']).toBe(1);
   });
 
   it('amplification by name applies to other same-name copies sitting in the class deck', () => {
     // 真实玩法路径：两张同名卡一开始都在职业牌组里，第一张被抽到手时
-    // 上手触发 AMPLIFY_CARDS_BY_NAME，会同步把还在 classDeck 里的同名副本一起 +2。
+    // 上手触发 AMPLIFY_CARDS_BY_NAME，会同步把还在 classDeck 里的同名副本一起 +1。
     const a = makeGrowthBlade('a');
     const b = makeGrowthBlade('b');
     const state = makeState({ handCards: [], classDeck: [b], rng: createRng(99) });
 
     const after1 = drain(state, [{ type: 'ADD_CARD_TO_HAND', card: a } as GameAction]);
-    expect(after1.state.amplifiedCardBonus['生长之刃']).toBe(2);
+    expect(after1.state.amplifiedCardBonus['生长之刃']).toBe(1);
 
     const inHandA = after1.state.handCards.find(c => c.id === a.id)!;
     const inDeckB = after1.state.classDeck.find(c => c.id === b.id)!;
-    expect(inHandA.value).toBe(3);
-    expect(inHandA.amplifyBonus).toBe(2);
-    expect(inDeckB.value).toBe(3);
-    expect(inDeckB.amplifyBonus).toBe(2);
+    expect(inHandA.value).toBe(2);
+    expect(inHandA.amplifyBonus).toBe(1);
+    expect(inDeckB.value).toBe(2);
+    expect(inDeckB.amplifyBonus).toBe(1);
 
     const after2 = drain(after1.state, [{ type: 'ADD_CARD_TO_HAND', card: inDeckB } as GameAction]);
-    expect(after2.state.amplifiedCardBonus['生长之刃']).toBe(4);
+    expect(after2.state.amplifiedCardBonus['生长之刃']).toBe(2);
 
     const finalA = after2.state.handCards.find(c => c.id === a.id)!;
     const finalB = after2.state.handCards.find(c => c.id === b.id)!;
-    expect(finalA.value).toBe(5);
-    expect(finalA.amplifyBonus).toBe(4);
-    expect(finalB.value).toBe(5);
-    expect(finalB.amplifyBonus).toBe(4);
+    expect(finalA.value).toBe(3);
+    expect(finalA.amplifyBonus).toBe(2);
+    expect(finalB.value).toBe(3);
+    expect(finalB.amplifyBonus).toBe(2);
   });
 
   it('does NOT amplify when the card was added with _skipOnEnterHand (clones)', () => {

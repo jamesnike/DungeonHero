@@ -1085,8 +1085,8 @@ export function createDeck(
     image: skillScrollImage,
     magicType: 'instant',
     magicEffect: 'amplify-card',
-    description: '一次性魔法：选择一张装备栏或手牌中的装备/伤害魔法，生成一张永久魔法（Perm 2）对其进行增幅（武器攻击+2，护盾护甲+2，伤害魔法伤害+2）。',
-    shortDescription: '生成 Perm 2 增幅一张装备/伤害魔法',
+    description: '一次性魔法：选择一张装备栏或手牌中的装备/伤害魔法，生成一张永久魔法（Perm 1）对其进行增幅（武器攻击+1，护盾护甲+1，伤害魔法伤害+1）。',
+    shortDescription: '生成 Perm 1 增幅一张装备/伤害魔法',
   });
 
   // 兵器谱：选择一个装备栏，本回合该装备栏攻击次数 +2（独立于全局额外攻击次数；
@@ -1919,10 +1919,10 @@ export function createDeck(
         fury: 1,
         hpLayers: 1,
         currentLayer: 1,
-        hp: 8,
-        maxHp: 8,
+        hp: 5,
+        maxHp: 5,
         description:
-          '建筑（血量 8）：光环——堆叠在诅咒碑之上的怪物不受玩家魔法伤害。可被攻击摧毁。',
+          '建筑（血量 5）：光环——堆叠在诅咒碑之上的怪物不受玩家魔法伤害。可被攻击摧毁。',
         shortDescription: '光环：堆叠之上的怪物免疫法术伤害',
       },
       destination: 'stay',
@@ -3073,8 +3073,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterWorldSwapImage,
       magicType: 'permanent',
-      description: '与牌堆顶交换一张当前行卡牌；同类型奖励 +10 金币，否则 -1。',
-      shortDescription: '与牌堆顶互换 1 张当前行牌；同类 +10 金币',
+      description: '与牌堆顶交换一张当前行卡牌；同类型奖励 +10 金币，否则 -1。然后抽 1 张牌。',
+      shortDescription: '与牌堆顶互换 1 张；同类 +10 金币；抽 1 张',
       recycleDelay: 2,
       maxUpgradeLevel: 0,
     },

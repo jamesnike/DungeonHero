@@ -643,16 +643,16 @@ The Ghost mechanic (`isGhost: true` on `GameCardData`) makes a card transparent 
 
 ## Amplify Mechanic (增幅)
 
-The Amplify mechanic allows the player to permanently boost a card's stats. The main deck contains an **instant** magic「增幅」that, when played, lets the player select a target and generates a **Perm 2 permanent magic** bound to that target. Each time the generated Perm 2 card is used, it applies one amplification to the bound target.
+The Amplify mechanic allows the player to permanently boost a card's stats. The main deck contains an **instant** magic「增幅」that, when played, lets the player select a target and generates a **Perm 1 permanent magic** bound to that target. Each time the generated Perm 1 card is used, it applies one amplification to the bound target.
 
 ### Card Definition
 
 - **Instant card**: `magic`, `magicType: 'instant'`, `magicEffect: 'amplify-card'`
   - Defined in: `deck.ts` → `createDeck()` magic pool (candidate 15 of 15)
   - One-time use: consumed after selecting a target (goes to graveyard)
-- **Generated Perm 2 card**: `magic`, `magicType: 'permanent'`, `magicEffect: 'amplify-target'`, `recycleDelay: 2`
+- **Generated Perm 1 card**: `magic`, `magicType: 'permanent'`, `magicEffect: 'amplify-target'`, `recycleDelay: 1`
   - Created dynamically in `resolveAmplify()` with `_amplifyTargetCardId` and `_amplifyTargetName`
-  - Added to backpack; reusable via Perm 2 recycle cycle
+  - Added to backpack; reusable via Perm 1 recycle cycle
 
 ### Targeting
 
@@ -678,12 +678,12 @@ The helper `isDamageMagic(card)` (`helpers.ts`) identifies damage-dealing magic 
 
 | Target type | Effect |
 |-------------|--------|
-| Weapon | `value` +2 (permanent attack increase) |
-| Shield | `armorMax` +2, `value` +2 (permanent armor increase) |
-| Damage magic with `scalingDamage` | `scalingDamage` +2 (叠刺 base increment) |
-| Other damage magic | `amplifyBonus` +2 (flat damage bonus) |
+| Weapon | `value` +1 (permanent attack increase) |
+| Shield | `armorMax` +1, `value` +1 (permanent armor increase) |
+| Damage magic with `scalingDamage` | `scalingDamage` +1 (叠刺 base increment) |
+| Other damage magic | `amplifyBonus` +1 (flat damage bonus) |
 
-All targets also receive `amplifyBonus` +2 for tracking purposes.
+All targets also receive `amplifyBonus` +1 for tracking purposes.
 
 ### amplifyBonus Application Points
 

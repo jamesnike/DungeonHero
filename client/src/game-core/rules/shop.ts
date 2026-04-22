@@ -30,7 +30,7 @@ import { computeAmuletEffects } from '../equipment';
 import { minionImage, createStarterHealEchoCard } from '../deck';
 import { cloneClassCardWithFreshId, sampleDistinctByName } from '../cardClone';
 import { BASE_BACKPACK_CAPACITY } from '../constants';
-import { getEffectiveHandLimit } from '../cards';
+import { getEffectiveHandLimit, resetCardForGraveyard } from '../cards';
 import statSwapCardImage from '@assets/generated_images/knight_stat_swap_potion.png';
 
 export function reduceShopActions(state: GameState, action: GameAction): ReduceResult | null {
@@ -365,7 +365,7 @@ function reduceApplyMonsterReward(
     const card = state.activeMonsterReward.monsterCard;
     const alreadyInGraveyard = state.discardedCards.some(c => c.id === card.id);
     if (!alreadyInGraveyard) {
-      patch.discardedCards = [...state.discardedCards, card];
+      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')];
     }
   }
 
@@ -382,7 +382,7 @@ function reduceMonsterRewardDiscoverClass(state: GameState): ReduceResult {
   if (state.activeMonsterReward?.monsterCard) {
     const card = state.activeMonsterReward.monsterCard;
     if (!state.discardedCards.some(c => c.id === card.id)) {
-      patch.discardedCards = [...state.discardedCards, card];
+      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')];
     }
   }
 
@@ -429,7 +429,7 @@ function reduceMonsterRewardDiscoverGraveyard(state: GameState): ReduceResult {
   if (state.activeMonsterReward?.monsterCard) {
     const card = state.activeMonsterReward.monsterCard;
     if (!state.discardedCards.some(c => c.id === card.id)) {
-      patch.discardedCards = [...state.discardedCards, card];
+      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')];
     }
   }
 
@@ -503,7 +503,7 @@ function reduceMonsterRewardGrantStatSwap(state: GameState): ReduceResult {
   if (state.activeMonsterReward?.monsterCard) {
     const card = state.activeMonsterReward.monsterCard;
     if (!state.discardedCards.some(c => c.id === card.id)) {
-      patch.discardedCards = [...state.discardedCards, card];
+      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')];
     }
   }
 

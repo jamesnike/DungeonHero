@@ -599,7 +599,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     armorMax: 6,
   });
 
-  // 生长之盾 — 装备时每次卡牌翻转触发一次按卡名累计的 +2 增幅；
+  // 生长之盾 — 装备时每次卡牌翻转触发一次按卡名累计的 +1 增幅；
   // 遗言：从坟场随机抽出一张 Event 加入手牌（无 Event 则静默失败）。
   pushCard({
     type: 'shield',
@@ -607,12 +607,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightGrowthShieldImage,
     classCard: true,
-    description: '装备时：每发生一次卡牌翻转，该护盾增幅一次（按卡名累计 +2 护甲）。遗言：从坟场随机抽出一张 Event 加入手牌。',
-    shortDescription: '每次卡牌翻转 +2 护甲；遗言：随机入手 1 张坟场 Event',
+    description: '装备时：每发生一次卡牌翻转，该护盾增幅一次（按卡名累计 +1 护甲）。遗言：从坟场随机抽出一张 Event 加入手牌。',
+    shortDescription: '每次卡牌翻转 +1 护甲；遗言：随机入手 1 张坟场 Event',
     amplifyOnFlip: true,
     onDestroyEffect: 'graveyard-event-to-hand',
-    durability: 3,
-    maxDurability: 3,
+    durability: 4,
+    maxDurability: 4,
     armorMax: 1,
   });
 
@@ -724,8 +724,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: thunderGoldAmuletImage,
     classCard: true,
-    description: '每击晕一次怪物，金币 +10。',
-    shortDescription: '每击晕怪物 1 次，金币 +10',
+    description: '每击晕一次怪物，金币 +10，抽 2 张牌。',
+    shortDescription: '每击晕怪物 1 次，金币 +10、抽 2 张',
     amuletEffect: 'stun-gold',
   });
 
@@ -952,7 +952,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   });
 
   // 净册涌泉 (Perm 1)：选择一张手牌删除，从背包抽 N 张牌
-  // （N = 2 / 3 / 4，对应升级 0 / 1 / 2）。手牌为空时跳过删除，仍正常抽 N 张。
+  // （N = 3 / 4 / 5，对应升级 0 / 1 / 2）。手牌为空时跳过删除，仍正常抽 N 张。
   // 触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），与「招灵书印」护符
   // (delete-draw) 能够叠加：每次删除还会额外从背包抽 2N 张。
   pushCard({
@@ -961,10 +961,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicCleanseDrawImage,
     classCard: true,
-    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从背包抽 2 张牌。',
-    shortDescription: '删 1 张手牌；从背包抽 2 张',
+    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从背包抽 3 张牌。',
+    shortDescription: '删 1 张手牌；从背包抽 3 张',
     magicType: 'permanent',
-    magicEffect: '删 1 张手牌，从背包抽 N 张（升 0/1/2 → 2/3/4）。',
+    magicEffect: '删 1 张手牌，从背包抽 N 张（升 0/1/2 → 3/4/5）。',
     knightEffect: 'cleanse-draw',
     recycleDelay: 1,
     maxUpgradeLevel: 2,
@@ -1170,6 +1170,68 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 2,
   });
 
+  // 地震泉涌 (Perm 1)：失去 1 HP（自伤，触发 血怒战符 / 复生赐福 /
+  // self-damage-draw / 护甲吸血 / totalDamageTaken 等所有自伤联动），
+  // 然后从背包抽 floor(stunCap / 10) 张牌。
+  // - HP 自伤走 APPLY_DAMAGE selfInflicted（与 血契抽引 / 血祭裁决 同条管线）
+  // - 抽牌受手牌上限约束（drawMultipleFromBackpack 默认行为）
+  // - Echo (A 类，与 血契抽引 一致)：HP 损失 ×echoMultiplier、抽牌 ×echoMultiplier
+  // - 击晕上限 < 10（floor(stunCap/10) == 0）：仍消耗 magic、仍掉 HP、0 抽
+  // - 不设升级
+  pushCard({
+    type: 'magic',
+    name: '地震泉涌',
+    value: 0,
+    image: knightMagicBloodDrawImage,
+    classCard: true,
+    description: '永久：失去 1 点生命，从背包抽 (击晕上限 ÷ 10) 张牌（向下取整）。',
+    shortDescription: '失 1 HP；抽 击晕上限÷10 张',
+    magicType: 'permanent',
+    magicEffect: '失去 1 HP，从背包抽 floor(击晕上限/10) 张牌。',
+    knightEffect: 'quake-stun-draw',
+    recycleDelay: 1,
+  });
+
+  // 清囊重启 (Perm 1)：弃回所有手牌（curse 留手），从背包抽 N 张牌
+  // （N = 3 / 4 / 5，对应升级 0 / 1 / 2）。手牌为空也仍正常抽 N 张。
+  // 弃回走标准 DISCARD_OWNED_CARD：非 Perm 进坟场、Perm/被永恒铭刻过的进
+  // 回收袋；触发 catapult / discard-zap / onDiscardDraw / 雷霆符印 等弃置联动。
+  pushCard({
+    type: 'magic',
+    name: '清囊重启',
+    value: 0,
+    image: knightMagicBloodDrawImage,
+    classCard: true,
+    description: '永久：弃回所有手牌（诅咒除外），然后从背包抽 3 张牌。',
+    shortDescription: '弃回所有手牌；从背包抽 3 张',
+    magicType: 'permanent',
+    magicEffect: '弃回全部手牌，从背包抽 N 张（升 0/1/2 → 3/4/5）。',
+    knightEffect: 'hand-purge-redraw',
+    recycleDelay: 1,
+    maxUpgradeLevel: 2,
+  });
+
+  // 修裂启示 (Perm 1)：选择一件装备，每点缺失耐久（maxDur - cur）抽 2 张牌。
+  // - 公式：drawCount = (maxDurability - durability) * 2 * echoMultiplier
+  // - 空槽 / 没有耐久概念的装备 → 拒绝，magic 不消耗
+  // - 装备满耐久（缺 0）→ magic 仍消耗，0 抽，banner 提示「耐久未损」
+  // - Echo (A 类)：最终抽牌数 ×echoMultiplier
+  // - 抽牌受手牌上限约束（标准 drawFromBackpackToHandPure 行为）
+  // - 不设升级
+  pushCard({
+    type: 'magic',
+    name: '修裂启示',
+    value: 0,
+    image: knightScrollBladeStormImage,
+    classCard: true,
+    description: '永久：选择一件装备，每有 1 点缺失耐久（耐久上限 - 当前耐久）抽 2 张牌。',
+    shortDescription: '选装备；每缺 1 耐久抽 2 张',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：选择一件装备，按缺失耐久 ×2 抽牌。',
+    knightEffect: 'gear-rift-draw',
+    recycleDelay: 1,
+  });
+
   pushCard({
     type: 'magic',
     name: '锻造赌运',
@@ -1297,6 +1359,17 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     potionEffect: 'heal-12-draw-2',
   });
 
+  pushCard({
+    type: 'potion',
+    name: '增幅秘药',
+    value: 0,
+    image: knightEquipEmpowerPotionImage,
+    classCard: true,
+    description: '选择一张装备/伤害魔法（装备栏 / 手牌 / 背包均可），生成一张永久魔法（Perm 1）对其进行增幅（武器攻击+1，护盾护甲+1，伤害魔法伤害+1）。',
+    shortDescription: '生成 Perm 1 增幅一张装备/伤害魔法（含背包）',
+    potionEffect: 'amplify-target-wide',
+  });
+
   // === CLASS WEAPONS ===
   pushCard({
     type: 'weapon',
@@ -1359,10 +1432,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightGrowthBladeImage,
     classCard: true,
-    description: '上手：该武器增幅一次（攻击 +2，按卡名累计；所有同名「生长之刃」共享）。',
-    shortDescription: '上手 +2 攻击（按卡名累计）',
-    durability: 2,
-    maxDurability: 2,
+    description: '上手：该武器增幅一次（攻击 +1，按卡名累计；所有同名「生长之刃」共享）。',
+    shortDescription: '上手 +1 攻击（按卡名累计）',
+    durability: 3,
+    maxDurability: 3,
     onEnterHandEffect: 'growth-blade-onhand',
   });
 

@@ -36,7 +36,7 @@ import { getEquipmentSlotsWithSuppressedTempAttack, isMonsterMagicImmuneByBuildi
 import { flattenActiveRowSlots, isDamageableTarget, isRecyclableFromHand, applyAmplifyOnCreate } from '../helpers';
 import { computeEquipmentBreakEffects, computeDurabilityLossEffects } from './equipment-effects';
 import { createBugletCard, createMagicBoltCard, goblinImage, bugletImage } from '../deck';
-import { addCardToBackpackPure } from '../cards';
+import { addCardToBackpackPure, resetCardForGraveyard } from '../cards';
 import { generateMonsterRewardOptions, queueMonsterRewardPure } from '../monsters';
 import type { MonsterSkillKey } from '../monsterSkillNames';
 
@@ -1178,7 +1178,7 @@ function reduceMonsterDefeated(
     const sanitized = { ...monster };
     delete (sanitized as any)._counterDisplay;
     delete (sanitized as any)._flipBackCard;
-    graveyard.push(sanitized);
+    graveyard.push(resetCardForGraveyard(sanitized, state.gameMode === 'quick'));
     patch.discardedCards = graveyard;
     sideEffects.push({ event: 'combat:removeAndGraveyard', payload: { monsterId: monster.id, monster } });
   }
@@ -1926,13 +1926,15 @@ function reducePerformShieldBash(
           });
         }
 
-        // Stun gold — each amulet grants +10 gold per stun.
+        // Stun gold — each amulet grants +10 gold and 2 backpack draws per stun.
         if (ae.stunGoldCount > 0) {
           const goldGain = 10 * ae.stunGoldCount;
+          const drawCount = 2 * ae.stunGoldCount;
           enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
+          enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
           sideEffects.push({
             event: 'log:entry',
-            payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}` },
+            payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}，抽 ${drawCount} 张牌` },
           });
         }
       }
@@ -2853,13 +2855,15 @@ function reducePerformHeroAttack(
               });
             }
 
-            // Stun gold — each amulet grants +10 gold per stun.
+            // Stun gold — each amulet grants +10 gold and 2 backpack draws per stun.
             if (ae.stunGoldCount > 0) {
               const goldGain = 10 * ae.stunGoldCount;
+              const drawCount = 2 * ae.stunGoldCount;
               enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
+              enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
               sideEffects.push({
                 event: 'log:entry',
-                payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}` },
+                payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}，抽 ${drawCount} 张牌` },
               });
             }
           }

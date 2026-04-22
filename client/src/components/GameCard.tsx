@@ -142,6 +142,7 @@ export type PotionEffectId =
   | 'grant-amulet-end-turn-draw'
   | 'perm-equip-empower'
   | 'transform-recycle-grant'
+  | 'amplify-target-wide'
   | 'grant-weapon-stun-chance+40'
   | 'heal-12-draw-2';
 
@@ -360,7 +361,7 @@ export interface GameCardData {
   _potionStunBonusApplied?: boolean;
   /**
    * 「生长之盾」类装备效果：每当发生一次卡牌翻转，且此卡当前装备在主槽中时，
-   * 触发一次 AMPLIFY_CARDS_BY_NAME(cardName, +2)，所有同名副本累计共享 +2 攻击/护甲。
+   * 触发一次 AMPLIFY_CARDS_BY_NAME(cardName, +1)，所有同名副本累计共享 +1 攻击/护甲。
    * 仅在主槽（equipmentSlot1/2）触发，reserve/手牌/坟场等位置不触发。
    */
   amplifyOnFlip?: boolean;
@@ -474,7 +475,7 @@ export interface GameCardData {
   stayIfStacked?: boolean;
   /** 幽灵属性：不阻挡瀑流、不计入激活行剩余卡牌数；瀑流时垫在最下方 */
   isGhost?: boolean;
-  /** 增幅加成：每次增幅 +2，武器加攻击/护盾加护甲/伤害魔法加伤害 */
+  /** 增幅加成：每次增幅 +1，武器加攻击/护盾加护甲/伤害魔法加伤害 */
   amplifyBonus?: number;
   /** 增幅祭坛：发动时增幅目标卡牌的 ID */
   _amplifyTargetCardId?: string;

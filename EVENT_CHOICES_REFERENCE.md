@@ -386,7 +386,7 @@
 | 13-16 | 超杀吸血 -3 | `spellLifesteal-3` |
 | 17-20 | 护符栏上限 -1 | `amuletCapacity-1` |
 
-翻转 → **诅咒碑**（建筑，血量 8，destination: stay）
+翻转 → **诅咒碑**（建筑，血量 5，destination: stay）
 
 - 光环（`stacked-magic-immune`）：堆叠在诅咒碑之上的怪物不受玩家魔法伤害
 - 可被攻击摧毁（进坟场）

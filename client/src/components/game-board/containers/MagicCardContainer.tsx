@@ -26,6 +26,7 @@ function MagicCardContainerInner() {
     equipmentSlot1: s.equipmentSlot1,
     equipmentSlot2: s.equipmentSlot2,
     amuletSlots: s.amuletSlots,
+    backpackItems: s.backpackItems,
   }));
 
   // 整顿背囊：仅当 pendingMagicAction 处于 'reorganize-backpack' / 'multi-select'
@@ -64,6 +65,7 @@ function MagicCardContainerInner() {
         equipmentSlot1={gs.equipmentSlot1}
         equipmentSlot2={gs.equipmentSlot2}
         handCards={gs.handCards}
+        backpackItems={gs.amplifyModal?.scope === 'wide' ? gs.backpackItems : undefined}
         onConfirm={cb.onAmplifyConfirm}
       />
 

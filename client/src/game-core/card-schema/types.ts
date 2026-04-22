@@ -67,6 +67,7 @@ export type CardEffect =
   | { type: 'discoverClassMagic' }
   | { type: 'grantPerm2' }
   | { type: 'transformRecycleGrant' }
+  | { type: 'amplifyTargetWide' }
   | { type: 'amuletToEternalRelic' }
 
   // --- Logging ---

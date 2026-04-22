@@ -119,10 +119,11 @@ export type MirrorCopySelection =
   | { kind: 'amulet'; index: number }
   | { kind: 'hand'; cardId: string };
 
-/** 增幅：可选目标为装备栏或手牌中的装备/伤害魔法 */
+/** 增幅：可选目标为装备栏 / 手牌中的装备/伤害魔法 / 背包中的装备/伤害魔法（仅 wide scope） */
 export type AmplifySelection =
   | { kind: 'equipment'; slotId: 'equipmentSlot1' | 'equipmentSlot2' }
-  | { kind: 'hand'; cardId: string };
+  | { kind: 'hand'; cardId: string }
+  | { kind: 'backpack'; cardId: string };
 
 // ---------------------------------------------------------------------------
 // Eternal Relics — permanent passive items (like Slay the Spire relics)
@@ -560,8 +561,18 @@ export interface GameState {
   mirrorCopyModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
   permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant'; meta?: Record<string, number> } | null;
-  /** 增幅：选择装备栏或手牌中的装备/伤害魔法进行增幅 */
-  amplifyModal: { sourceCardId: string } | null;
+  /**
+   * 增幅：选择目标进行增幅。
+   * - `scope`：'narrow' = 装备栏 + 手牌（默认，主牌堆 增幅 magic 用）；
+   *           'wide'   = 装备栏 + 手牌 + 背包（knight 专属 potion 用）。
+   * - `sourceType`：'magic' = 源是即时魔法（finalize 走 FINALIZE_MAGIC_CARD）；
+   *                'potion' = 源是 potion（finalize 走 FINALIZE_POTION_CARD）。
+   */
+  amplifyModal: {
+    sourceCardId: string;
+    scope?: 'narrow' | 'wide';
+    sourceType?: 'magic' | 'potion';
+  } | null;
   /** 增幅仪式（事件）：选择手牌中的装备/伤害魔法作为增幅祭坛目标 */
   eventAmplifyHandPicker: { eventCardId: string; cellIdx: number } | null;
   graveyardDiscoverState: GameCardData[] | null;

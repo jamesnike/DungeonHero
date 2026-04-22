@@ -586,6 +586,15 @@ export type PendingMagicAction =
       prompt: string;
     }
   | {
+      // 修裂启示：选择装备，按 (maxDurability - durability) × 2 抽牌。
+      card: GameCardData;
+      effect: 'gear-rift-draw';
+      step: 'slot-select';
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      prompt: string;
+    }
+  | {
       // 蓄能裂击：选择装备 +1 上限/+1 耐久，达 4 耐久则随机敌人 -1 血层并装备 -2。
       card: GameCardData;
       effect: 'durability-charge-burst';

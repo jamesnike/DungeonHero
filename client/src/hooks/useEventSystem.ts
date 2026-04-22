@@ -1643,8 +1643,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           isGhost: true, fury: 1, hpLayers: 1, currentLayer: 1, hp: 2, maxHp: 2,
           hasReleaseCharge: true, _fateBladeLastSlot: cellIdx,
           _amplifyTargetCardId: tCardId, _amplifyTargetName: tName,
-          description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${tName}」施加一次增幅。`,
-          eventChoices: [{ text: `发动增幅祭坛（目标：${tName}）`, hint: '移除一张手牌，对增幅目标施加一次增幅', effect: 'amplify-altar-activate' }],
+          description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${tName}」施加两次增幅。`,
+          eventChoices: [{ text: `发动增幅祭坛（目标：${tName}）`, hint: '移除一张手牌，对增幅目标施加两次增幅', effect: 'amplify-altar-activate' }],
         };
         void depsRef.current.triggerEventTransform(eventCardSnapshot!, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
         dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
@@ -1704,8 +1704,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           isGhost: true, fury: 1, hpLayers: 1, currentLayer: 1, hp: 2, maxHp: 2,
           hasReleaseCharge: true, _fateBladeLastSlot: cellIdx,
           _amplifyTargetCardId: targetCard.id, _amplifyTargetName: targetCard.name,
-          description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${targetCard.name}」施加一次增幅。`,
-          eventChoices: [{ text: `发动增幅祭坛（目标：${targetCard.name}）`, hint: '移除一张手牌，对增幅目标施加一次增幅', effect: 'amplify-altar-activate' }],
+          description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${targetCard.name}」施加两次增幅。`,
+          eventChoices: [{ text: `发动增幅祭坛（目标：${targetCard.name}）`, hint: '移除一张手牌，对增幅目标施加两次增幅', effect: 'amplify-altar-activate' }],
         };
         void depsRef.current.triggerEventTransform(eventCardSnapshot!, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
         dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
@@ -1793,8 +1793,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             isGhost: true, fury: 1, hpLayers: 1, currentLayer: 1, hp: 2, maxHp: 2,
             hasReleaseCharge: true, _fateBladeLastSlot: cellIdx,
             _amplifyTargetCardId: targetCard.id, _amplifyTargetName: targetCard.name,
-            description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${targetCard.name}」施加一次增幅。`,
-            eventChoices: [{ text: `发动增幅祭坛（目标：${targetCard.name}）`, hint: '移除一张手牌，对增幅目标施加一次增幅', effect: 'amplify-altar-activate' }],
+            description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${targetCard.name}」施加两次增幅。`,
+            eventChoices: [{ text: `发动增幅祭坛（目标：${targetCard.name}）`, hint: '移除一张手牌，对增幅目标施加两次增幅', effect: 'amplify-altar-activate' }],
           };
           void depsRef.current.triggerEventTransform(eventCardSnapshot!, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
           dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
@@ -1858,8 +1858,8 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             isGhost: true, fury: 1, hpLayers: 1, currentLayer: 1, hp: 2, maxHp: 2,
             hasReleaseCharge: true, _fateBladeLastSlot: cellIdx,
             _amplifyTargetCardId: selected.id, _amplifyTargetName: selected.name,
-            description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${selected.name}」施加一次增幅。`,
-            eventChoices: [{ text: `发动增幅祭坛（目标：${selected.name}）`, hint: '移除一张手牌，对增幅目标施加一次增幅', effect: 'amplify-altar-activate' }],
+            description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${selected.name}」施加两次增幅。`,
+            eventChoices: [{ text: `发动增幅祭坛（目标：${selected.name}）`, hint: '移除一张手牌，对增幅目标施加两次增幅', effect: 'amplify-altar-activate' }],
           };
           void depsRef.current.triggerEventTransform(eventCardSnapshot!, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
           dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
@@ -1922,7 +1922,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
 
       depsRef.current.requestCardAction('delete', 1, {
         title: '增幅祭坛：移除一张手牌',
-        description: `移除一张手牌作为祭品，对所有「${targetCard.name}」施加一次增幅。`,
+        description: `移除一张手牌作为祭品，对所有「${targetCard.name}」施加两次增幅。`,
         handOnly: true,
       }).then(deleteSuccess => {
         if (deleteSuccess) {
@@ -1932,7 +1932,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             amount: 2,
             source: '增幅祭坛',
           });
-          addGameLog('event', `增幅祭坛发动：所有「${targetCard.name}」获得一次增幅（+2）！`);
+          addGameLog('event', `增幅祭坛发动：所有「${targetCard.name}」获得两次增幅（+2）！`);
           dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅祭坛：所有「${targetCard.name}」获得 +2 增幅！` });
         } else {
           addGameLog('event', '增幅祭坛：没有手牌可供移除。');

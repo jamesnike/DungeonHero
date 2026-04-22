@@ -38,6 +38,9 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'flip-back-active': 'knight-blood-oath-scroll',
   'temp-attack-double': 'knight-temp-attack-double',
   'stun-cap-strike': 'knight-stun-cap-strike',
+  'hand-purge-redraw': 'knight-hand-purge-redraw',
+  'gear-rift-draw': 'knight-gear-rift-draw',
+  'quake-stun-draw': 'knight-quake-stun-draw',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -143,6 +146,9 @@ const NAME_TO_KEY: Record<string, string> = {
   血誓回卷: 'knight-blood-oath-scroll',
   查阅动作: 'survey-action',
   雷涌一击: 'knight-stun-cap-strike',
+  清囊重启: 'knight-hand-purge-redraw',
+  修裂启示: 'knight-gear-rift-draw',
+  地震泉涌: 'knight-quake-stun-draw',
 };
 
 function hashName(s: string): number {

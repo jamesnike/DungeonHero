@@ -21,9 +21,7 @@ interface PillSpec {
   onRestore: () => void;
 }
 
-/** Vertical spacing between stacked pills, in pixels. */
-const PILL_SPACING_PX = 48;
-/** Distance from the bottom of the board to the lowest (first) pill. */
+/** Distance from the bottom of the board to the restore pill. */
 const PILL_BASE_BOTTOM_PX = 80;
 
 function FloatingPillsContainerInner({
@@ -133,29 +131,30 @@ function FloatingPillsContainerInner({
     });
   }
 
+  // 多个弹窗同时被缩小时，只显示最上层（数组最后一个）的恢复 pill。
+  const topPill = pills.length > 0 ? pills[pills.length - 1] : null;
+
+  if (!topPill) return null;
+
   return (
-    <>
-      {pills.map((pill, index) => (
-        <div
-          key={pill.key}
-          className={`absolute left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full px-5 py-2.5 shadow-lg cursor-pointer select-none transition-colors ${pill.bgClass}`}
-          style={{
-            pointerEvents: 'auto',
-            bottom: `${PILL_BASE_BOTTOM_PX + index * PILL_SPACING_PX}px`,
-          }}
-          onClick={pill.onRestore}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            pill.onRestore();
-          }}
-        >
-          {pill.icon}
-          <span className="text-white text-sm font-semibold whitespace-nowrap">
-            {pill.label}
-          </span>
-        </div>
-      ))}
-    </>
+    <div
+      key={topPill.key}
+      className={`absolute left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full px-5 py-2.5 shadow-lg cursor-pointer select-none transition-colors ${topPill.bgClass}`}
+      style={{
+        pointerEvents: 'auto',
+        bottom: `${PILL_BASE_BOTTOM_PX}px`,
+      }}
+      onClick={topPill.onRestore}
+      onTouchEnd={(e) => {
+        e.preventDefault();
+        topPill.onRestore();
+      }}
+    >
+      {topPill.icon}
+      <span className="text-white text-sm font-semibold whitespace-nowrap">
+        {topPill.label}
+      </span>
+    </div>
   );
 }
 

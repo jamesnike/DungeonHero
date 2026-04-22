@@ -61,7 +61,7 @@ const repairOne: OnUpgradeHandler = (upgraded, newLevel) => {
 };
 
 const discardDraw: OnUpgradeHandler = (upgraded, newLevel) => {
-  const discards = [1, 2, 3];
+  const discards = [1, 1, 1];
   const draws = [2, 3, 4];
   const d = discards[newLevel] ?? 1;
   const dr = draws[newLevel] ?? 1;
@@ -75,8 +75,8 @@ const reshuffle: OnUpgradeHandler = (upgraded, newLevel) => {
 };
 
 const tempArmor: OnUpgradeHandler = (upgraded, newLevel) => {
-  const taAmounts = [2, 3, 4];
-  const ta = taAmounts[newLevel] ?? 4;
+  const taAmounts = [2, 4, 6];
+  const ta = taAmounts[newLevel] ?? 6;
   upgraded.description = `选择一个装备栏，+${ta} 临时护甲。`;
   upgraded.magicEffect = `永久魔法：选择一个装备栏，+${ta} 临时护甲。`;
 };
@@ -307,6 +307,14 @@ const bloodDraw: OnUpgradeHandler = (upgraded, newLevel) => {
   upgraded.magicEffect = `失去 1 HP，抽 ${dc} 张牌。`;
 };
 
+const handPurgeRedraw: OnUpgradeHandler = (upgraded, newLevel) => {
+  const drawCounts = [3, 4, 5];
+  const dc = drawCounts[newLevel] ?? 5;
+  upgraded.description = `永久：弃回所有手牌（诅咒除外），然后从背包抽 ${dc} 张牌。`;
+  upgraded.shortDescription = `弃回所有手牌；从背包抽 ${dc} 张`;
+  upgraded.magicEffect = `弃回全部手牌，从背包抽 ${dc} 张。`;
+};
+
 const graveNova: OnUpgradeHandler = (upgraded, newLevel) => {
   const novaDmgs = [3, 6];
   const nd = novaDmgs[newLevel] ?? 6;
@@ -315,9 +323,9 @@ const graveNova: OnUpgradeHandler = (upgraded, newLevel) => {
 };
 
 const armorStunConvert: OnUpgradeHandler = (upgraded, newLevel) => {
-  const stunPerArmor = [1, 2];
-  const sp = stunPerArmor[newLevel] ?? 2;
-  upgraded.description = `永久：选择一个护盾，每 1 点护甲值使击晕上限 +${sp}%。`;
+  const stunPerArmor = [1, 1.5];
+  const sp = stunPerArmor[newLevel] ?? 1.5;
+  upgraded.description = `永久：选择一个护盾，每 1 点护甲值使击晕上限 +${sp}%（最终值四舍五入）。`;
   upgraded.shortDescription = `所选护盾每 1 护甲，击晕上限 +${sp}%`;
   upgraded.magicEffect = `护甲转化为击晕上限（每点 +${sp}%）。`;
 };
@@ -389,6 +397,7 @@ registerOnUpgradeAll([
   { id: 'knight:recycle-flare', handler: recycleFlare },
   { id: 'knight:fate-sight', handler: fateSight },
   { id: 'knight:blood-draw', handler: bloodDraw },
+  { id: 'knight:hand-purge-redraw', handler: handPurgeRedraw },
   { id: 'knight:grave-nova', handler: graveNova },
   { id: 'knight:armor-stun-convert', handler: armorStunConvert },
   { id: 'knight:stun-cap-strike', handler: stunCapStrike },

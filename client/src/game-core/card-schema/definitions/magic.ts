@@ -2005,6 +2005,20 @@ const knightBloodDraw: CardDefinition = {
   resolver: resolveKnightPermanentMagic,
 };
 
+const knightHandPurgeRedraw: CardDefinition = {
+  effectId: 'knight:hand-purge-redraw',
+  effects: [],
+  tags: ['knight', 'permanent', 'discard', 'draw'],
+  resolver: resolveKnightPermanentMagic,
+};
+
+const knightQuakeStunDraw: CardDefinition = {
+  effectId: 'knight:quake-stun-draw',
+  effects: [],
+  tags: ['knight', 'permanent', 'self-damage', 'draw'],
+  resolver: resolveKnightPermanentMagic,
+};
+
 const knightRecallEquipment: CardDefinition = {
   effectId: 'knight:recall-equipment',
   effects: [],
@@ -2119,6 +2133,30 @@ const knightTempStatsToDraw: CardDefinition = {
   },
 };
 
+// 修裂启示 — Perm 1. Select an equipment with durability; draw
+// (maxDurability - durability) × 2 cards from backpack. Echo (A): final draw
+// count multiplied by echoMultiplier.
+// - Empty slot / equipment without durability → reject (magic NOT consumed).
+// - Equipment with full durability (missing == 0) → consume magic, 0 draws,
+//   banner "耐久未损" (matches durability-charge-burst rejection vs full-cost-noop).
+const knightGearRiftDraw: CardDefinition = {
+  effectId: 'knight:gear-rift-draw',
+  effects: [],
+  tags: ['knight', 'permanent', 'interactive', 'draw'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    patch.pendingMagicAction = {
+      card,
+      effect: 'gear-rift-draw',
+      step: 'slot-select',
+      prompt: `修裂启示：选择一件装备，每点缺失耐久（上限-当前）抽 2 张牌。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `修裂启示：选择一件装备。${echoLabel}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
 // 攻防协律 — Perm 1. Select an equipment slot (empty allowed); apply +N temp
 // attack and +N temp armor (N=2/4/6 by upgrade level), then draw 1 card from
 // backpack. Echo (A): both stats and draw multiplied by echoMultiplier.
@@ -2224,18 +2262,23 @@ const starterDeckTopSwapGold: CardDefinition = {
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
     const deck = state.remainingDeck as GameCardData[];
     const activeHasCards = (state.activeCards as (GameCardData | null)[]).some(c => c != null);
+    // 「抽 1 张牌」无论是否成功交换都触发；早退分支没机会进入 hero.ts 的
+    // 每轮迭代，所以这里直接按 echoMultiplier 一次性补足总抽数。
+    const drawCountOnEarlyExit = Math.max(1, echoMultiplier);
 
     if (deck.length === 0) {
-      banner(sideEffects, `${card.name}：牌堆已空，无法交换。`);
-      log(sideEffects, 'magic', `${card.name}：牌堆已空，未发生交换。`);
+      banner(sideEffects, `${card.name}：牌堆已空，无法交换。从背包抽 ${drawCountOnEarlyExit} 张牌。`);
+      log(sideEffects, 'magic', `${card.name}：牌堆已空，未发生交换。从背包抽 ${drawCountOnEarlyExit} 张牌。`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCountOnEarlyExit, source: 'backpack' });
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
     if (!activeHasCards) {
-      banner(sideEffects, `${card.name}：当前行无卡牌，无法交换。`);
-      log(sideEffects, 'magic', `${card.name}：当前行为空，未发生交换。`);
+      banner(sideEffects, `${card.name}：当前行无卡牌，无法交换。从背包抽 ${drawCountOnEarlyExit} 张牌。`);
+      log(sideEffects, 'magic', `${card.name}：当前行为空，未发生交换。从背包抽 ${drawCountOnEarlyExit} 张牌。`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCountOnEarlyExit, source: 'backpack' });
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
@@ -2368,6 +2411,8 @@ const allMagicDefinitions: CardDefinition[] = [
   knightMissingHpSmite,
   knightBloodSacrificeStrike,
   knightBloodDraw,
+  knightHandPurgeRedraw,
+  knightQuakeStunDraw,
   knightRecallEquipment,
   knightCleanseDraw,
   knightRecycleTide,
@@ -2377,6 +2422,7 @@ const allMagicDefinitions: CardDefinition[] = [
   knightTempAttackDouble,
   knightTempAttackArmorDraw,
   knightTempStatsToDraw,
+  knightGearRiftDraw,
   knightDurabilityChargeBurst,
   knightDiscardRebuild,
   knightGreedCurse,

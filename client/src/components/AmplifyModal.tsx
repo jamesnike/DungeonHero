@@ -19,20 +19,26 @@ interface AmplifyModalProps {
   equipmentSlot1: GameCardData | null;
   equipmentSlot2: GameCardData | null;
   handCards: GameCardData[];
+  /**
+   * 可选：背包中的可增幅卡（仅 wide scope 传入，如 knight 专属「增幅秘药」）。
+   * 不传或空数组时不显示「背包」分区。
+   */
+  backpackItems?: GameCardData[];
   onConfirm: (selection: AmplifySelection) => void;
 }
 
 type SelectionState =
   | { kind: 'equipment'; slotId: EquipmentSlotId }
   | { kind: 'hand'; cardId: string }
+  | { kind: 'backpack'; cardId: string }
   | null;
 
 function getAmplifyPreview(card: GameCardData): string {
-  if (card.type === 'weapon') return `攻击力 ${card.value} → ${card.value + 2}`;
-  if (card.type === 'shield') return `护甲 ${card.armorMax ?? card.value} → ${(card.armorMax ?? card.value) + 2}`;
+  if (card.type === 'weapon') return `攻击力 ${card.value} → ${card.value + 1}`;
+  if (card.type === 'shield') return `护甲 ${card.armorMax ?? card.value} → ${(card.armorMax ?? card.value) + 1}`;
   if (card.type === 'magic') {
-    if (card.scalingDamage != null) return `叠刺基数 ${card.scalingDamage} → ${card.scalingDamage + 2}`;
-    const bonus = (card.amplifyBonus ?? 0) + 2;
+    if (card.scalingDamage != null) return `叠刺基数 ${card.scalingDamage} → ${card.scalingDamage + 1}`;
+    const bonus = (card.amplifyBonus ?? 0) + 1;
     return `伤害 +${bonus}`;
   }
   return '';
@@ -44,6 +50,7 @@ export default function AmplifyModal({
   equipmentSlot1,
   equipmentSlot2,
   handCards,
+  backpackItems,
   onConfirm,
 }: AmplifyModalProps) {
   const [selected, setSelected] = useState<SelectionState>(null);
@@ -60,11 +67,18 @@ export default function AmplifyModal({
     c => c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c),
   );
 
+  const eligibleBackpackCards = (backpackItems ?? []).filter(
+    c => c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c),
+  );
+
   const pickEquipment = (slotId: EquipmentSlotId) => {
     setSelected(prev => (prev?.kind === 'equipment' && prev.slotId === slotId ? null : { kind: 'equipment', slotId }));
   };
   const pickHand = (cardId: string) => {
     setSelected(prev => (prev?.kind === 'hand' && prev.cardId === cardId ? null : { kind: 'hand', cardId }));
+  };
+  const pickBackpack = (cardId: string) => {
+    setSelected(prev => (prev?.kind === 'backpack' && prev.cardId === cardId ? null : { kind: 'backpack', cardId }));
   };
 
   const handleConfirm = () => {
@@ -78,13 +92,14 @@ export default function AmplifyModal({
     onClose();
   };
 
-  const hasAny = equipmentEntries.length > 0 || eligibleHandCards.length > 0;
+  const hasAny = equipmentEntries.length > 0 || eligibleHandCards.length > 0 || eligibleBackpackCards.length > 0;
 
   const isSelected = (s: SelectionState): boolean => {
     if (!selected || !s) return false;
     if (selected.kind !== s.kind) return false;
     if (selected.kind === 'equipment' && s.kind === 'equipment') return selected.slotId === s.slotId;
     if (selected.kind === 'hand' && s.kind === 'hand') return selected.cardId === s.cardId;
+    if (selected.kind === 'backpack' && s.kind === 'backpack') return selected.cardId === s.cardId;
     return false;
   };
 
@@ -93,7 +108,10 @@ export default function AmplifyModal({
     if (selected.kind === 'equipment') {
       return selected.slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
     }
-    return eligibleHandCards.find(c => c.id === selected.cardId) ?? null;
+    if (selected.kind === 'hand') {
+      return eligibleHandCards.find(c => c.id === selected.cardId) ?? null;
+    }
+    return eligibleBackpackCards.find(c => c.id === selected.cardId) ?? null;
   })();
 
   return (
@@ -113,7 +131,9 @@ export default function AmplifyModal({
             增幅
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            选择装备栏中的装备或手牌中的装备/伤害魔法，对其进行增幅
+            {eligibleBackpackCards.length > 0
+              ? '选择装备栏 / 手牌 / 背包中的装备或伤害魔法，对其进行增幅'
+              : '选择装备栏中的装备或手牌中的装备/伤害魔法，对其进行增幅'}
           </DialogDescription>
         </DialogHeader>
 
@@ -150,6 +170,23 @@ export default function AmplifyModal({
                         key={card.id}
                         className={`upgrade-modal-card-slot${isSelected({ kind: 'hand', cardId: card.id }) ? ' upgrade-modal-card-slot--selected' : ''}`}
                         onClick={() => pickHand(card.id)}
+                      >
+                        <GameCard card={card} disableInteractions />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {eligibleBackpackCards.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">背包</div>
+                  <div className="upgrade-modal-card-grid">
+                    {eligibleBackpackCards.map(card => (
+                      <div
+                        key={card.id}
+                        className={`upgrade-modal-card-slot${isSelected({ kind: 'backpack', cardId: card.id }) ? ' upgrade-modal-card-slot--selected' : ''}`}
+                        onClick={() => pickBackpack(card.id)}
                       >
                         <GameCard card={card} disableInteractions />
                       </div>

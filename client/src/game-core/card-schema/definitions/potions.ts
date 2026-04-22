@@ -582,6 +582,18 @@ const potionDefinitions: CardDefinition[] = [
     tags: ['interactive', 'buff'],
   },
 
+  // --- Amplify target (wide scope: equipment + hand + backpack) ---
+  // Knight 专属「增幅秘药」：选一张装备/伤害魔法（手牌、装备栏、背包均可），
+  // 生成对应 Perm 1 增幅卡放入背包。effect 自带 halt：不在 schema 里 finalize，
+  // 由 RESOLVE_AMPLIFY / CANCEL_AMPLIFY 触发 FINALIZE_POTION_CARD。
+  {
+    effectId: 'potion:amplify-target-wide',
+    effects: [
+      { type: 'amplifyTargetWide' },
+    ],
+    tags: ['interactive', 'buff'],
+  },
+
   // --- Grant last-words slot temp buff ---
   {
     effectId: 'potion:grant-lastwords-slot-temp-buff',
