@@ -1169,6 +1169,19 @@ export function resolvePermanentMagic(
     }
     patch.backpackItems = curBackpack;
     patch.permanentMagicRecycleBag = curRecycle;
+    // 仅当净结果是「奇数次置换」（即真的有原回收袋的卡进了背包）时触发动画。
+    // 偶数次（含 echo×2 的常见情况）净结果还原，无视觉位移，不播绿环。
+    // 同步参考：rules/waterfall.ts、rules/magic-effects.ts 的 STARTER_CARD_IDS.recycleDrawMagic、
+    // card-schema/definitions/magic.ts 的 swap-backpack-recycle、rules/turn.ts 幽魂净化。
+    if (echoMultiplier % 2 === 1 && (state.permanentMagicRecycleBag?.length ?? 0) > 0) {
+      sideEffects.push({
+        event: 'waterfall:recycleRestored',
+        payload: {
+          count: state.permanentMagicRecycleBag.length,
+          cards: state.permanentMagicRecycleBag as GameCardData[],
+        },
+      });
+    }
     log(sideEffects, 'magic', `虚空置换：背包与回收袋对换（背包现 ${patch.backpackItems.length} 张，回收袋现 ${patch.permanentMagicRecycleBag.length} 张）${echoTag}${echoMultiplier > 1 && echoMultiplier % 2 === 0 ? '；回响：二次结算还原状态' : ''}。`);
     banner(sideEffects, echoMultiplier > 1
       ? `虚空置换：执行 ${echoMultiplier} 次（${echoMultiplier % 2 === 0 ? '回响：二次结算无额外效果' : '回响：累计奇数次置换'}）。`
@@ -1826,6 +1839,12 @@ export function resolvePermanentMagic(
         const overflow = readyCards.slice(available);
         if (toAdd.length > 0) {
           patch.backpackItems = [...currentBackpack, ...toAdd];
+          // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画。
+          // 同步参考：rules/waterfall.ts、card-schema/definitions/magic.ts 的 starter:recycleDrawMagic。
+          sideEffects.push({
+            event: 'waterfall:recycleRestored',
+            payload: { count: toAdd.length, cards: toAdd },
+          });
         }
         patch.permanentMagicRecycleBag = [...overflow, ...waitingCards];
         const parts: string[] = [];
@@ -3034,6 +3053,14 @@ export function resolveKnightPermanentMagic(
       const recycleResult = processRecycleBag(tickedState);
       mergePatch(patch, recycleResult.patch);
 
+      // 真有牌从回收袋洗回背包才播动画（同步参考 waterfall / 幽魂净化 / 回收余韵 / 回收灵焰）。
+      if (recycleResult.restored.length > 0) {
+        sideEffects.push({
+          event: 'waterfall:recycleRestored',
+          payload: { count: recycleResult.restored.length, cards: recycleResult.restored },
+        });
+      }
+
       const echoTagRT = isEchoTriggered ? `（回响×${echoMultiplier}：二次结算无额外效果）` : '';
       log(
         sideEffects,
@@ -3230,6 +3257,13 @@ export function resolveKnightPermanentMagic(
       if (recycled.length > 0) {
         const recycleResult = processRecycleBag({ ...state, ...patch } as GameState);
         mergePatch(patch, recycleResult.patch);
+        // 同步参考 waterfall / 幽魂净化 / 回收余韵 / 洗册归川。
+        if (recycleResult.restored.length > 0) {
+          sideEffects.push({
+            event: 'waterfall:recycleRestored',
+            payload: { count: recycleResult.restored.length, cards: recycleResult.restored },
+          });
+        }
         log(sideEffects, 'magic', `回收灵焰：${recycleResult.restored.length} 张牌洗回背包`);
       } else {
         log(sideEffects, 'magic', '回收灵焰：回收袋为空');

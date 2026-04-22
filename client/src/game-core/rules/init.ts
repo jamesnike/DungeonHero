@@ -508,13 +508,13 @@ function buildFixedFirstActiveRow(): GameCardData[] {
     name: '装备发现',
     value: 0,
     image: eventScrollImage,
-    description: '从起始背包卡池中发现一张装备（武器或盾牌）。',
-    shortDescription: '发现一张起始装备',
+    description: '从起始背包卡池中发现一张装备（武器或盾牌），直接加入手牌。',
+    shortDescription: '发现一张起始装备 → 进手牌',
     eventChoices: [
       {
         text: '发现一张装备',
         effect: 'discoverStarterEquipment',
-        hint: '从起始背包候选装备池中三选一',
+        hint: '从起始背包候选装备池中三选一，直接进入手牌（手牌满则进背包）',
       },
     ],
   };
@@ -525,13 +525,13 @@ function buildFixedFirstActiveRow(): GameCardData[] {
     name: '护符发现',
     value: 0,
     image: eventScrollImage,
-    description: '发现一张起始护符。完成后翻转为「药水发现」。',
-    shortDescription: '发现护符 → 翻为「药水发现」',
+    description: '发现一张起始护符，直接加入手牌。完成后翻转为「药水发现」。',
+    shortDescription: '发现护符 → 进手牌 → 翻为「药水发现」',
     eventChoices: [
       {
         text: '发现一张护符',
         effect: 'discoverStarterAmulet',
-        hint: '从起始背包候选护符池中三选一',
+        hint: '从起始背包候选护符池中三选一，直接进入手牌（手牌满则进背包）',
       },
     ],
     flipTarget: {

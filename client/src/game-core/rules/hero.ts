@@ -36,6 +36,7 @@ import {
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
 import { computeEquipmentBreakEffects, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
+import { tickStunAttemptDiscoverProgress } from './combat';
 import { computeAmuletEffects, getEquipmentInSlot } from '../equipment';
 import { applyFlipCounters } from './flip-counters';
 import { nextInt, pickRandom } from '../rng';
@@ -1524,6 +1525,7 @@ function reduceMagicSlotSelection(
             context: { flowId: 'flank-stun', monsterId: target.id, monsterName: target.name, magicCardId: pending.card.id },
             predeterminedRoll: flankRoll,
           } });
+          tickStunAttemptDiscoverProgress(state, patch, sideEffects);
           stunText = '（侧击：击晕判定中…）';
         }
       }
@@ -2286,6 +2288,7 @@ function reduceMagicMonsterSelection(
           context: { flowId: 'hero-stun', monsterId: monster!.id, monsterName: monster!.name, currentHit: 1, totalHits: hits, stunPct, hitDmg, magicCardId: pending.card.id },
           predeterminedRoll: hsRoll,
         } });
+        tickStunAttemptDiscoverProgress(state, patch, sideEffects);
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `雷震击：对 ${monster!.name} 造成 ${hitDmg}×${hits} 点伤害！${threshold > 0 ? '' : ' 未能击晕。'}`);
@@ -2367,6 +2370,7 @@ function reduceMagicMonsterSelection(
           },
           predeterminedRoll: hsRoll,
         } });
+        tickStunAttemptDiscoverProgress(state, patch, sideEffects);
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `${pending.card.name}：${totalDmg} 法伤${threshold > 0 ? `，${stunPct}% 晕` : ''}，抽 ${drawCount} 张。${echoTag}`,
@@ -3028,6 +3032,7 @@ function reduceDiceForHero(
         context: { ...ctx, currentHit: currentHit + 1 },
         predeterminedRoll: hsRoll,
       } });
+      tickStunAttemptDiscoverProgress(state, patch, sideEffects);
     }
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }

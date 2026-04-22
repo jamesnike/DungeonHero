@@ -109,6 +109,13 @@ function reduceEndTurn(
           event: 'ui:banner',
           payload: { text: `幽魂净化：${toRestore.length} 张牌从回收袋洗回背包！` },
         });
+        // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画。
+        // 同步参考：rules/waterfall.ts、rules/magic-effects.ts 的 STARTER_CARD_IDS.recycleDrawMagic、
+        // card-schema/definitions/magic.ts 的 starter:recycleDrawMagic、虚空置换 (void-swap)。
+        sideEffects.push({
+          event: 'waterfall:recycleRestored',
+          payload: { count: toRestore.length, cards: toRestore },
+        });
       }
       if (overflow.length > 0) {
         sideEffects.push({

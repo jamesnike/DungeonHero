@@ -928,6 +928,16 @@ html {
     100% { transform: scale(0.97); filter: grayscale(1) brightness(0.5) blur(0.4px); opacity: 0.6; }
   }
 
+  /* 「回收袋 → 背包」绿色光晕脉冲：BackpackZone 的 RecycleRestoreOverlay 用。
+     由 reducer 发出 waterfall:recycleRestored 事件后，组件 mount 一个新的 overlay
+     div，靠这个 keyframes 一次性淡入 + 维持 + 淡出，配合 spinning 环+图标完成动画。 */
+  @keyframes dh-recycle-pulse {
+    0%   { opacity: 0; transform: scale(0.92); }
+    18%  { opacity: 1; transform: scale(1);    }
+    78%  { opacity: 1; transform: scale(1.02); }
+    100% { opacity: 0; transform: scale(1.05); }
+  }
+
   .dh-card-wrapper[data-defeat="true"] {
     animation: dh-card-death 1400ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
     will-change: transform, opacity, filter;

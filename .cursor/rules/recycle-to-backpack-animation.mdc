@@ -1,0 +1,107 @@
+---
+description: "「回收袋 → 背包」的所有路径都必须 emit waterfall:recycleRestored 给 BackpackZone 播绿环动画"
+alwaysApply: true
+---
+
+# 回收袋 → 背包：必须 emit `waterfall:recycleRestored`
+
+## 背景
+
+`BackpackZone` 监听 `useGameEvent('waterfall:recycleRestored', ...)` 来播放
+"绿色 Recycle 环旋转 + glow"动画，向玩家明确传达"回收袋的卡刚刚 waterfall -1
+洗回了背包"。如果某条 reducer 路径把卡从 `permanentMagicRecycleBag` 移到
+`backpackItems` 但没 emit 这个 side effect，玩家就完全看不到反馈，体感是
+"这张卡（或这次效果）没生效"。
+
+事故模式：写新卡（如 `回收余韵`）时只调 `processRecycleBag` 改 state，忘了
+emit UI 事件，结果 user 报 "我用了 XX 卡为什么没看到动画"。
+
+## 强制规则
+
+**任何把卡从回收袋移回背包的代码路径**——无论是：
+
+- waterfall 自动 -1
+- 永恒护符触发（如 `幽魂净化`）
+- 普通 magic / hero-magic 卡效果（如 `回收余韵` / `回收灵焰`）
+- 结构性 swap（如 `虚空置换` 背包 ↔ 回收袋对换）
+- "先把背包洗入回收袋再 process" 的复合效果（如 `洗册归川`）
+- 任何调 `processRecycleBag(state)` 并 merge 其 `patch` 的 reducer
+- 任何手动 `patch.backpackItems = [...state.backpackItems, ...fromRecycle]` 的代码
+
+**都必须**在同一 reduce 步骤里 push 一条 `waterfall:recycleRestored` side effect：
+
+```typescript
+if (cardsThatActuallyMovedFromRecycleToBackpack.length > 0) {
+  sideEffects.push({
+    event: 'waterfall:recycleRestored',
+    payload: {
+      count: cardsThatActuallyMovedFromRecycleToBackpack.length,
+      cards: cardsThatActuallyMovedFromRecycleToBackpack,
+    },
+  });
+}
+```
+
+### 触发条件：必须"真有牌移动了"
+
+不要无条件 emit。`processRecycleBag` 可能 ready=0（所有卡 `_recycleWaits > 1`
+还在等），背包可能满（`availableSlots = 0`）。这两种情况 `restored.length === 0`，
+不要播动画——否则玩家会被假绿环误导成"卡刚回来了"。
+
+净结果是身份变换的也不要播：例如 `虚空置换` echo×2，背包/回收袋两次对换 = 还原，
+没有视觉位移就不该有动画。判定方式：
+
+```typescript
+if (echoMultiplier % 2 === 1 && state.permanentMagicRecycleBag.length > 0) {
+  // 真的有奇数次净置换，且原回收袋非空才 emit
+}
+```
+
+## 已经合规的路径（参考实现）
+
+| 路径 | 文件 | 关键位置 |
+|---|---|---|
+| waterfall 自动 -1 | `rules/waterfall.ts` | `processRecycleBag` 后 `restored.length > 0` |
+| 幽魂净化（永恒护符） | `rules/turn.ts` | `wraith-purification` 分支 `toRestore.length > 0` |
+| 回收余韵（recycleDrawMagic）旧实现 | `rules/magic-effects.ts` | `STARTER_CARD_IDS.recycleDrawMagic` `toAdd.length > 0` |
+| 回收余韵 schema 实现 | `card-schema/definitions/magic.ts` | `starter:recycleDrawMagic` resolver |
+| 虚空置换（swap-backpack-recycle）旧实现 | `rules/magic-effects.ts` | `echoMultiplier % 2 === 1 && state.permanentMagicRecycleBag.length > 0` |
+| 虚空置换 schema 实现 | `card-schema/definitions/magic.ts` | `state.permanentMagicRecycleBag.length > 0` |
+| 洗册归川（先洗入再 process） | `rules/magic-effects.ts` | `recycleResult.restored.length > 0` |
+| 回收灵焰（先 process 再抽） | `rules/magic-effects.ts` | `recycleResult.restored.length > 0` |
+| 通用 `RESTORE_RECYCLE_BAG` reducer（兜底） | `rules/cards.ts` | `result.restored.length === 0` 早返；非空时 emit |
+
+新加 / 修改任何这类路径时，先 `Grep waterfall:recycleRestored` 看现成的写法照抄，**不要重新设计**。
+
+## 不属于这条规则的路径
+
+- `DRAW_CARDS source: 'recycleBag'`：把回收袋卡**直接抽到手牌**，不经过背包。
+  这是另一条语义（"从回收袋抽手牌"），如果要做动画该用别的事件类型，
+  **不能**复用 `waterfall:recycleRestored`（否则会让 BackpackZone 在没接收到任何卡的
+  情况下闪绿环，误导玩家）。
+- `ADD_TO_RECYCLE_BAG`：方向相反（背包/手牌 → 回收袋），跟这条规则无关。
+
+## 自检
+
+写完任何涉及 `permanentMagicRecycleBag` 写入 `backpackItems` 的代码，问自己：
+
+> 1. 我有没有 push `waterfall:recycleRestored`？
+> 2. 触发条件是不是"**真的有卡从回收袋落到了背包**"（`restored.length > 0`、
+>    或对 swap 类的 `echoMultiplier 奇数次 && 回收袋非空`）？
+> 3. payload 的 `count` 和 `cards` 是不是跟 patch 实际写入背包的卡集合一致？
+> 4. 我有没有同时改了相同 effectId 的旧 switch 实现 + schema resolver 实现两份
+>    （参考 `shared-effect-id-impact-check.mdc`）？
+
+任意一条"没"或"不确定"，回去对照"已经合规的路径"那张表照抄。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| 回收袋 → 背包 **的 UI 通知** | ✅ 这条 | ❌ |
+| 卡进回收袋 vs 进坟场 **的路由分流** | ❌ | `perm-routing-on-discard` |
+| "被弃 / 被回收"措辞触发 onDiscardDraw 联动 | ❌ | `discard-vs-recycle-semantics` |
+| 同一 effectId 在旧 switch + schema 两处都要改 | ❌ | `shared-effect-id-impact-check` |
+| 怪物进坟场后 `currentLayer` 必须 reset | ❌ | `monster-graveyard-layer-reset` |
+
+涉及回收袋写入背包 + 多份 effect 实现时，这几条规则**都要核对**。

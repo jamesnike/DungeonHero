@@ -37,6 +37,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
   const discardedCards = useGameState(s => s.discardedCards);
   const classDeck = useGameState(s => s.classDeck);
   const backpackCount = useGameState(s => s.backpackItems.length);
+  const recycleCount = useGameState(s => s.permanentMagicRecycleBag.length);
 
   const cardH = gridCardSize?.height ?? 100;
   const stripW = Math.max(18, Math.round(cardH * 0.14));
@@ -71,6 +72,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
           compact
           compactStyle={stripStyle}
           backpackCount={backpackCount}
+          recycleCount={recycleCount}
           capacity={backpackCapacity}
           isDropTarget={backpackDropEnabled}
           onDrop={onBackpackDrop}

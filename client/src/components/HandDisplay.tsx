@@ -170,7 +170,30 @@ function HandDisplayInner({
   const visibleHeight = cardHeight * visibleFraction;
   const hiddenHeight = cardHeight - visibleHeight;
   const handZoneHeight = visibleHeight + 24;
-  const horizontalStepFactor = isCompactHand ? 0.65 : 0.82;
+
+  // Adaptive horizontal spacing: as the hand grows, cards overlap more so the
+  // total span never exceeds the available layout width. Below the comfort
+  // threshold we keep the original spacing; above it we tighten down to a
+  // floor that still leaves each card visually distinguishable.
+  // 显式的 visual span = cardWidth + (N - 1) * cardWidth * stepFactor。
+  // 想让 visual span <= maxLayoutSpan，就有
+  //   stepFactor <= (maxLayoutSpan / cardWidth - 1) / (N - 1)
+  const baseStepFactor = isCompactHand ? 0.65 : 0.82;
+  const minStepFactor = isCompactHand ? 0.32 : 0.42;
+  const HAND_CONTAINER_MAX_PX = 1024; // matches max-w-5xl on the inner wrapper
+  const HAND_LAYOUT_PADDING_PX = isCompactHand ? 24 : 48;
+  const maxLayoutSpan = Math.max(
+    cardWidth,
+    Math.min(gameViewport.width, HAND_CONTAINER_MAX_PX) - HAND_LAYOUT_PADDING_PX,
+  );
+  const handSize = handCards.length;
+  const fitStepFactor = handSize > 1 && cardWidth > 0
+    ? (maxLayoutSpan / cardWidth - 1) / (handSize - 1)
+    : baseStepFactor;
+  const horizontalStepFactor = Math.max(
+    minStepFactor,
+    Math.min(baseStepFactor, fitStepFactor),
+  );
 
   layoutRef.current.hiddenHeight = hiddenHeight;
   layoutRef.current.disableAnimations = disableAnimations;

@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
-import { Backpack as BackpackIcon } from 'lucide-react';
+import { Backpack as BackpackIcon, Recycle as RecycleIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import StackedCardPile from './StackedCardPile';
@@ -8,10 +8,107 @@ import { cn } from '@/lib/utils';
 import { GameCardData } from './GameCard';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
+import { useGameEvent } from '@/hooks/useGameEngine';
+
+/**
+ * 「回收袋洗入背包」绿色环旋转动画的持续时间（ms）。
+ * 监听 `waterfall:recycleRestored` side effect 触发；动画期间在 cell 上叠一层
+ * 半透明绿色圆环 + 旋转的 Recycle 图标。
+ */
+const RECYCLE_ANIM_DURATION_MS = 1400;
+
+/**
+ * 旋转的绿色 Recycle 环 overlay。pointer-events-none，不抢点击 / 拖拽。
+ * 不传 `nonce` / `nonce === 0` 时不渲染——靠父级条件渲染控制显示时机。
+ *
+ * `mode='ring'`：完整圆环（用于非折叠 cell 模式，空间足）。
+ * `mode='glow'`：仅旋转的 Recycle 图标 + 绿色光晕（用于 compact 折叠小条，空间窄）。
+ */
+function RecycleRestoreOverlay({
+  nonce,
+  mode,
+}: {
+  nonce: number;
+  mode: 'ring' | 'glow';
+}) {
+  if (nonce === 0) return null;
+  if (mode === 'glow') {
+    return (
+      <span
+        key={`recycle-anim-${nonce}`}
+        className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+        aria-hidden
+      >
+        <span
+          className="absolute inset-0 rounded-l-lg"
+          style={{
+            boxShadow:
+              '0 0 16px 4px rgba(34, 197, 94, 0.55), inset 0 0 12px 2px rgba(34, 197, 94, 0.35)',
+            animation: `dh-recycle-pulse ${RECYCLE_ANIM_DURATION_MS}ms ease-out forwards`,
+          }}
+        />
+        <RecycleIcon
+          className="relative h-3.5 w-3.5 text-green-300 drop-shadow-[0_0_4px_rgba(34,197,94,0.9)] animate-spin"
+          style={{ animationDuration: `${RECYCLE_ANIM_DURATION_MS}ms` }}
+        />
+      </span>
+    );
+  }
+  return (
+    <div
+      key={`recycle-anim-${nonce}`}
+      className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+      aria-hidden
+    >
+      {/* 绿色光晕背板（淡入淡出） */}
+      <div
+        className="absolute inset-0 rounded-xl"
+        style={{
+          boxShadow:
+            '0 0 24px 6px rgba(34, 197, 94, 0.55), inset 0 0 18px 3px rgba(34, 197, 94, 0.30)',
+          animation: `dh-recycle-pulse ${RECYCLE_ANIM_DURATION_MS}ms ease-out forwards`,
+        }}
+      />
+      {/* 旋转的绿色环：用 conic-gradient 切出 ~70% 圆弧，剩下透明，旋转时形成"loader 环"视觉。
+          顶部留缺口让它看起来在转，而不是单纯的纯色环。 */}
+      <div
+        className="absolute rounded-full animate-spin"
+        style={{
+          // 控制环大小：保持在 cell 内、留 6px 内边距
+          inset: '6px',
+          // conic-gradient 切环的常用技巧：用一个深绿环 + 一个透明到完全填充的渐变
+          background:
+            'conic-gradient(from 0deg, rgba(34,197,94,0) 0deg, rgba(34,197,94,0.95) 90deg, rgba(74,222,128,1) 270deg, rgba(34,197,94,0) 360deg)',
+          // mask 出一个圆环（中间挖空）
+          WebkitMask:
+            'radial-gradient(circle, transparent 0, transparent calc(50% - 5px), #000 calc(50% - 4px), #000 50%, transparent calc(50% + 1px))',
+          mask:
+            'radial-gradient(circle, transparent 0, transparent calc(50% - 5px), #000 calc(50% - 4px), #000 50%, transparent calc(50% + 1px))',
+          animationDuration: `${Math.round(RECYCLE_ANIM_DURATION_MS * 0.7)}ms`,
+          animationIterationCount: '2',
+          filter: 'drop-shadow(0 0 6px rgba(34, 197, 94, 0.7))',
+        }}
+      />
+      {/* 中央 Recycle 图标，反向慢转一下，强化"循环"语义 */}
+      <RecycleIcon
+        className="relative h-7 w-7 text-green-200 drop-shadow-[0_0_8px_rgba(34,197,94,0.9)] animate-spin"
+        style={{
+          animationDuration: `${RECYCLE_ANIM_DURATION_MS}ms`,
+          animationDirection: 'reverse',
+        }}
+      />
+    </div>
+  );
+}
 
 interface BackpackZoneProps {
   backpackCount: number;
   capacity: number;
+  /**
+   * 回收袋（permanentMagicRecycleBag）当前张数。展示在背包数下方的紫色小 chip 里，
+   * 让玩家在不打开背包详情的情况下也能看到永久魔法 / 永恒护符的循环进度。
+   */
+  recycleCount?: number;
   onDrop?: (card: GameCardData) => void;
   isDropTarget?: boolean;
   onOpenViewer?: () => void;
@@ -28,6 +125,7 @@ interface BackpackZoneProps {
 function BackpackZoneInner({
   backpackCount,
   capacity,
+  recycleCount = 0,
   onDrop,
   isDropTarget,
   onOpenViewer,
@@ -50,6 +148,23 @@ function BackpackZoneInner({
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(pointer: coarse)').matches
   );
+
+  // 「回收袋 → 背包」动画：监听 reducer 发出的 waterfall:recycleRestored side effect。
+  // 每次触发都换一个 nonce 让 React 重新挂载动画 div，从而即便短时间内连续两次
+  // 也都能各自完整播完一轮（避免靠 boolean 切换导致的"丢动画"）。
+  const [recycleAnimNonce, setRecycleAnimNonce] = useState(0);
+  const recycleAnimTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useGameEvent('waterfall:recycleRestored', () => {
+    setRecycleAnimNonce(n => n + 1);
+    if (recycleAnimTimeoutRef.current) clearTimeout(recycleAnimTimeoutRef.current);
+    recycleAnimTimeoutRef.current = setTimeout(() => {
+      setRecycleAnimNonce(0);
+      recycleAnimTimeoutRef.current = null;
+    }, RECYCLE_ANIM_DURATION_MS);
+  });
+  useEffect(() => () => {
+    if (recycleAnimTimeoutRef.current) clearTimeout(recycleAnimTimeoutRef.current);
+  }, []);
 
   useEffect(() => {
     if (!dropRef.current || !onDrop) return;
@@ -210,10 +325,25 @@ function BackpackZoneInner({
         >
           <BackpackIcon className="w-4 h-4" />
           {backpackCount > 0 && (
-            <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-amber-500/90 ring-1 ring-amber-200/70 shadow-sm">
+            <span
+              className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-amber-500/90 ring-1 ring-amber-200/70 shadow-sm"
+              title={`背包：${backpackCount} 张`}
+            >
               {backpackCount}
             </span>
           )}
+          {recycleCount > 0 && (
+            // Compact 小条只有 ~22px 宽，加 Recycle 图标会把 chip 撑得比小条还宽、
+            // 向左溢出盖住上面的黄色背包 chip。这里只保留数字，靠紫色色块跟黄色背包数字区分。
+            <span
+              className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-violet-500/90 ring-1 ring-violet-200/70 shadow-sm"
+              title={`回收袋：${recycleCount} 张`}
+              data-testid="backpack-recycle-chip-compact"
+            >
+              {recycleCount}
+            </span>
+          )}
+          <RecycleRestoreOverlay nonce={recycleAnimNonce} mode="glow" />
         </span>
       </button>
     );
@@ -241,6 +371,16 @@ function BackpackZoneInner({
         <div className="absolute inset-0 flex flex-col items-center justify-center text-white/90">
           <span className="dh-hero-small font-semibold uppercase tracking-wide">Backpack</span>
           <span className="font-mono font-bold text-lg">{backpackCount}</span>
+          {recycleCount > 0 && (
+            <span
+              className="mt-0.5 inline-flex items-center gap-[2px] rounded px-1 text-[10px] font-bold leading-none text-white bg-violet-500/90 ring-1 ring-violet-200/70 shadow-sm"
+              title={`回收袋：${recycleCount} 张`}
+              data-testid="backpack-recycle-chip-flat"
+            >
+              <RecycleIcon className="h-2.5 w-2.5" />
+              {recycleCount}
+            </span>
+          )}
         </div>
       ) : (
         <>
@@ -249,13 +389,31 @@ function BackpackZoneInner({
             className="rounded-xl"
             label="Backpack"
             variant="blue"
+            secondaryCount={recycleCount}
+            secondaryIcon={RecycleIcon}
+            secondaryTitle={recycleCount > 0 ? `回收袋：${recycleCount} 张` : undefined}
           />
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3 text-white/90">
             <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
               <span className="font-semibold">Backpack</span>
-              <Badge className="bg-black/50 text-white font-mono dh-hero-chip px-1 sm:px-2">
-                {backpackCount}
-              </Badge>
+              <div className="flex flex-col items-end gap-0.5">
+                <Badge
+                  className="bg-amber-500/90 text-white font-mono dh-hero-chip px-1 sm:px-2 ring-1 ring-amber-200/70 hover:bg-amber-500/90"
+                  title={`背包：${backpackCount} 张`}
+                >
+                  {backpackCount}
+                </Badge>
+                {recycleCount > 0 && (
+                  <Badge
+                    className="bg-violet-500/90 text-white font-mono dh-hero-chip px-1 sm:px-2 ring-1 ring-violet-200/70 inline-flex items-center gap-1 hover:bg-violet-500/90"
+                    title={`回收袋：${recycleCount} 张`}
+                    data-testid="backpack-recycle-chip"
+                  >
+                    <RecycleIcon className="h-3 w-3" />
+                    {recycleCount}
+                  </Badge>
+                )}
+              </div>
             </div>
             <div className="flex items-center justify-end dh-hero-chip font-medium">
               查看内容
@@ -263,6 +421,7 @@ function BackpackZoneInner({
           </div>
         </>
       )}
+      <RecycleRestoreOverlay nonce={recycleAnimNonce} mode="ring" />
     </Card>
   );
 }

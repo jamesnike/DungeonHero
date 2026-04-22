@@ -14,6 +14,19 @@ interface StackedCardPileProps {
   emptyLabel?: string;
   variant?: StackVariant;
   label?: string;
+  /**
+   * 可选的次级计数（目前只有 Backpack 用：把回收袋张数显示在主 count 下方）。
+   * 配合 `secondaryIcon` 一起，渲染成一个紫色小 chip。
+   */
+  secondaryCount?: number;
+  /**
+   * 次级 chip 前缀的图标（例如 lucide 的 `Recycle`）。可选。
+   */
+  secondaryIcon?: React.ComponentType<{ className?: string }>;
+  /**
+   * 次级 chip 的 hover title，可选。
+   */
+  secondaryTitle?: string;
 }
 
 /**
@@ -118,10 +131,16 @@ function DeckCartouche({
   label,
   count,
   theme,
+  secondaryCount,
+  secondaryIcon: SecondaryIcon,
+  secondaryTitle,
 }: {
   label: string;
   count: number;
   theme: typeof variantTheme[StackVariant];
+  secondaryCount?: number;
+  secondaryIcon?: React.ComponentType<{ className?: string }>;
+  secondaryTitle?: string;
 }) {
   const len = label.length;
   const sizing =
@@ -170,6 +189,23 @@ function DeckCartouche({
       >
         {count}
       </p>
+      {typeof secondaryCount === 'number' && secondaryCount > 0 && (
+        // 仅 icon + 数字，不加背景按钮 / 边框 —— 让它跟卡背中央 cartouche 的
+        // count 数字视觉风格一致（同样 serif、同样 textShadow），只是颜色用紫
+        // 调跟主 count 区分开。
+        <span
+          className="mt-0.5 inline-flex items-center gap-1 font-serif font-bold text-xs sm:text-sm tracking-widest"
+          style={{
+            color: '#ddd6fe', // violet-200，跟卡背深蓝底搭，跟主 count 的浅蓝错开
+            textShadow: '0 1px 0 rgba(0,0,0,0.5)',
+          }}
+          title={secondaryTitle}
+          data-testid="stacked-pile-secondary-chip"
+        >
+          {SecondaryIcon && <SecondaryIcon className="h-3 w-3" />}
+          {secondaryCount}
+        </span>
+      )}
     </div>
   );
 }
@@ -184,11 +220,17 @@ function DeckBack({
   count,
   src,
   theme,
+  secondaryCount,
+  secondaryIcon,
+  secondaryTitle,
 }: {
   label: string;
   count: number;
   src: string;
   theme: typeof variantTheme[StackVariant];
+  secondaryCount?: number;
+  secondaryIcon?: React.ComponentType<{ className?: string }>;
+  secondaryTitle?: string;
 }) {
   return (
     <div
@@ -244,7 +286,14 @@ function DeckBack({
         {/* 中央 cartouche + count。
             Deck cell 比 Preview Row 窄一截，且 label 可能是 "Graveyard" / "Backpack" / 中文职业名等
             长度差很大的字串。这里**根据字数动态调字距/字号**，避免 cartouche 超出 cell 宽度。 */}
-        <DeckCartouche label={label} count={count} theme={theme} />
+        <DeckCartouche
+          label={label}
+          count={count}
+          theme={theme}
+          secondaryCount={secondaryCount}
+          secondaryIcon={secondaryIcon}
+          secondaryTitle={secondaryTitle}
+        />
       </div>
       {/* 1px 内方框线 */}
       <div
@@ -263,6 +312,9 @@ function StackedCardPileInner({
   emptyLabel = 'Empty',
   variant = 'muted',
   label,
+  secondaryCount,
+  secondaryIcon,
+  secondaryTitle,
 }: StackedCardPileProps) {
   const { width: vpWidth } = useGameViewport();
   const isMobile = vpWidth > 0 && vpWidth < MOBILE_WIDTH_THRESHOLD;
@@ -324,7 +376,15 @@ function StackedCardPileInner({
               transition: 'transform 300ms ease-out',
             }}
           >
-            <DeckBack label={label || 'Deck'} count={count} src={cardBackSrc} theme={theme} />
+            <DeckBack
+              label={label || 'Deck'}
+              count={count}
+              src={cardBackSrc}
+              theme={theme}
+              secondaryCount={secondaryCount}
+              secondaryIcon={secondaryIcon}
+              secondaryTitle={secondaryTitle}
+            />
           </div>
         )}
       </div>
@@ -383,7 +443,15 @@ function StackedCardPileInner({
           animate={{ y: -layersToRender * 1.5 }}
           transition={{ type: 'spring', stiffness: 140, damping: 18 }}
         >
-          <DeckBack label={label || 'Deck'} count={count} src={cardBackSrc} theme={theme} />
+          <DeckBack
+            label={label || 'Deck'}
+            count={count}
+            src={cardBackSrc}
+            theme={theme}
+            secondaryCount={secondaryCount}
+            secondaryIcon={secondaryIcon}
+            secondaryTitle={secondaryTitle}
+          />
         </motion.div>
       )}
     </div>

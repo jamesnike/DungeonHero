@@ -57,7 +57,9 @@ import { PreviewRow } from './game-board/components/PreviewRow';
 import { ActiveRow, type ActiveRowInteractionState, type ActiveRowCallbacks } from './game-board/components/ActiveRow';
 import { HeroRowSection } from './game-board/components/HeroRowSection';
 import { NarrowSidebar } from './game-board/components/NarrowSidebar';
-import FlightOverlayLayer from './game-board/components/FlightOverlayLayer';
+import FlightOverlayContainer, {
+  type FlightOverlayHandle,
+} from './game-board/components/FlightOverlayContainer';
 import { InCellFlipOverlayLayer } from './game-board/components/InCellFlipOverlayLayer';
 import { useInCellFlipAnimation } from './game-board/hooks/useInCellFlipAnimation';
 import { DimensionWarpOverlayLayer } from './game-board/components/DimensionWarpOverlayLayer';
@@ -393,6 +395,7 @@ export default function GameBoard() {
     isHydrated, heroSkillBanner,
     activeCardStacks,
     eternalRelics,
+    permanentMagicRecycleBag,
   } = useShallowGameState(s => ({
     hp: s.hp,
     previewCards: s.previewCards, activeCards: s.activeCards,
@@ -439,6 +442,7 @@ export default function GameBoard() {
     isHydrated: s.isHydrated, heroSkillBanner: s.heroSkillBanner,
     activeCardStacks: s.activeCardStacks,
     eternalRelics: s.eternalRelics,
+    permanentMagicRecycleBag: s.permanentMagicRecycleBag,
   }));
 
   // -- State helpers -----------------------------------------------------------
@@ -906,17 +910,13 @@ export default function GameBoard() {
   // other game action while the animation plays.
   const activeMonsterSkillFloat = useMonsterSkillFloats({ monsterCellRefs });
   const {
-    classDeckFlights, setClassDeckFlights,
-    fateSwapFlights, setFateSwapFlights,
-    graveyardStackFlights, setGraveyardStackFlights,
-    backpackHandFlights, setBackpackHandFlights,
-    discardShockFlights, setDiscardShockFlights,
     discardShockInteractionLocked, setDiscardShockInteractionLocked,
-    flipShockFlights, setFlipShockFlights,
     flipShockInteractionLocked, setFlipShockInteractionLocked,
-    discardFlights, setDiscardFlights,
-    stealCardFlights, setStealCardFlights,
   } = useFlightState();
+  // The 8 flight arrays now live in <FlightOverlayContainer>; we drive them
+  // imperatively via this ref so flight setState calls don't re-render
+  // GameBoard. See FlightOverlayContainer.tsx for rationale.
+  const flightOverlayRef = useRef<FlightOverlayHandle>(null);
   const fateSwapFlightsRef = useRef<FateSwapFlight[]>([]);
   const fateSwapFlightAnimationRef = useRef<number | null>(null);
   const fateSwapFlightElementMapRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -1390,17 +1390,91 @@ export default function GameBoard() {
   const [narrowSidebarPositions, setNarrowSidebarPositions] = useState<{ row1Y: number; row2Y: number; row3Y: number } | null>(null);
 
   const gameLogIdRef = useRef<number>(loadGameLog()?.nextId ?? 0);
+  // Game log persistence is hot — every play / kill / amulet trigger / etc.
+  // calls addGameLog, often a dozen times per gesture. The previous version
+  // synchronously re-stringified the entire (unbounded) log array and wrote
+  // it to localStorage on every entry, which scaled O(N) with log length and
+  // dominated main-thread time after a long session.
+  //
+  // New strategy: dispatch is still synchronous (UI shows the entry
+  // instantly), but the localStorage write is:
+  //   1. coalesced: 500ms trailing debounce — N entries within the window
+  //      collapse into one save;
+  //   2. idle-deferred: the actual stringify + setItem runs inside
+  //      requestIdleCallback so it never blocks user gestures or animations;
+  //   3. fenced: a synchronous flush runs on `visibilitychange→hidden`
+  //      and on unmount so we don't lose recent entries if the tab is
+  //      closed mid-debounce.
+  // Worst case data loss: the last <500ms of log entries if the browser
+  // crashes outright (visibilitychange covers normal close / refresh).
+  const gameLogSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gameLogSaveIdleHandleRef = useRef<number | null>(null);
+  const GAME_LOG_SAVE_DEBOUNCE_MS = 500;
+  const performGameLogSave = useCallback(() => {
+    saveGameLog(engine.getState().gameLogEntries, gameLogIdRef.current);
+  }, [engine]);
+  const cancelPendingGameLogSave = useCallback(() => {
+    if (gameLogSaveTimerRef.current !== null) {
+      clearTimeout(gameLogSaveTimerRef.current);
+      gameLogSaveTimerRef.current = null;
+    }
+    if (gameLogSaveIdleHandleRef.current !== null) {
+      if (typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(gameLogSaveIdleHandleRef.current);
+      }
+      gameLogSaveIdleHandleRef.current = null;
+    }
+  }, []);
+  const flushGameLogSaveNow = useCallback(() => {
+    cancelPendingGameLogSave();
+    performGameLogSave();
+  }, [cancelPendingGameLogSave, performGameLogSave]);
+  const scheduleGameLogSave = useCallback(() => {
+    if (gameLogSaveTimerRef.current !== null) return;
+    gameLogSaveTimerRef.current = setTimeout(() => {
+      gameLogSaveTimerRef.current = null;
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        gameLogSaveIdleHandleRef.current = window.requestIdleCallback(
+          () => {
+            gameLogSaveIdleHandleRef.current = null;
+            performGameLogSave();
+          },
+          { timeout: 2000 },
+        );
+      } else {
+        performGameLogSave();
+      }
+    }, GAME_LOG_SAVE_DEBOUNCE_MS);
+  }, [performGameLogSave]);
   const addGameLog = useCallback((type: LogEntryType, message: string) => {
     const id = ++gameLogIdRef.current;
     const entry = { id, type, message, timestamp: Date.now() };
     dispatch({ type: 'UPDATE_GAME_LOG', entry });
-    saveGameLog(engine.getState().gameLogEntries, gameLogIdRef.current);
-  }, [engine]);
+    scheduleGameLogSave();
+  }, [dispatch, scheduleGameLogSave]);
   const clearGameLog = useCallback(() => {
+    // Cancel any pending debounced save first — otherwise it could fire
+    // after we cleared storage and resurrect the just-cleared log.
+    cancelPendingGameLogSave();
     dispatch({ type: 'SET_GAME_FLAGS', patch: { gameLogEntries: [] } });
     gameLogIdRef.current = 0;
     clearGameLogStorage();
-  }, []);
+  }, [cancelPendingGameLogSave, dispatch]);
+  // Lifecycle flush: write any pending log entries to storage when the
+  // tab is hidden (cover refresh / close / mobile background) and when
+  // GameBoard unmounts.
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'hidden') {
+        flushGameLogSaveNow();
+      }
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => {
+      document.removeEventListener('visibilitychange', handler);
+      flushGameLogSaveNow();
+    };
+  }, [flushGameLogSaveNow]);
 
   useGameEvent('log:entry', ({ type, message }) => {
     addGameLog(type as LogEntryType, message);
@@ -1714,7 +1788,7 @@ export default function GameBoard() {
         }
       }
       discardShockFlightsRef.current = [];
-      setDiscardShockFlights([]);
+      flightOverlayRef.current?.setDiscardShockFlights([]);
       discardShockElementMapRef.current.clear();
       discardShockProcQueueRef.current = [];
       discardShockSeqInFlightRef.current = false;
@@ -1729,7 +1803,7 @@ export default function GameBoard() {
         }
       }
       flipShockFlightsRef.current = [];
-      setFlipShockFlights([]);
+      flightOverlayRef.current?.setFlipShockFlights([]);
       flipShockElementMapRef.current.clear();
       flipShockProcQueueRef.current = [];
       flipShockSeqInFlightRef.current = false;
@@ -1740,15 +1814,15 @@ export default function GameBoard() {
         }
       }
       backpackHandFlightsRef.current = [];
-      setBackpackHandFlights([]);
+      flightOverlayRef.current?.setBackpackHandFlights([]);
       inFlightHandStore.clear();
 
       classDeckFlightsRef.current = [];
-      setClassDeckFlights([]);
+      flightOverlayRef.current?.setClassDeckFlights([]);
       fateSwapFlightsRef.current = [];
-      setFateSwapFlights([]);
+      flightOverlayRef.current?.setFateSwapFlights([]);
       graveyardStackFlightsRef.current = [];
-      setGraveyardStackFlights([]);
+      flightOverlayRef.current?.setGraveyardStackFlights([]);
 
       setHeroBleedActive(false);
       setMonsterBleedStates({});
@@ -2190,7 +2264,7 @@ export default function GameBoard() {
         const prevLen = flights.length;
         const remaining = flights.filter(f => f.progress < 1);
         discardShockFlightsRef.current = remaining;
-        setDiscardShockFlights(remaining);
+        flightOverlayRef.current?.setDiscardShockFlights(remaining);
         if (remaining.length < prevLen) {
           discardShockSeqInFlightRef.current = false;
           queueMicrotask(() => {
@@ -2269,7 +2343,7 @@ export default function GameBoard() {
         showBanner,
       };
       discardShockFlightsRef.current = [...discardShockFlightsRef.current, flight];
-      setDiscardShockFlights(discardShockFlightsRef.current);
+      flightOverlayRef.current?.setDiscardShockFlights(discardShockFlightsRef.current);
       startDiscardShockFlightAnimation();
       return true;
     },
@@ -2445,7 +2519,7 @@ export default function GameBoard() {
         const prevLen = flights.length;
         const remaining = flights.filter(f => f.progress < 1);
         flipShockFlightsRef.current = remaining;
-        setFlipShockFlights(remaining);
+        flightOverlayRef.current?.setFlipShockFlights(remaining);
         if (remaining.length < prevLen) {
           flipShockSeqInFlightRef.current = false;
           queueMicrotask(() => {
@@ -2462,7 +2536,7 @@ export default function GameBoard() {
         syncFlipShockInteractionLockRef.current();
       }
     },
-    [applyFlipShockHit, setFlipShockFlights],
+    [applyFlipShockHit],
   );
 
   const startFlipShockFlightAnimation = useCallback(() => {
@@ -2524,11 +2598,11 @@ export default function GameBoard() {
         showBanner,
       };
       flipShockFlightsRef.current = [...flipShockFlightsRef.current, flight];
-      setFlipShockFlights(flipShockFlightsRef.current);
+      flightOverlayRef.current?.setFlipShockFlights(flipShockFlightsRef.current);
       startFlipShockFlightAnimation();
       return true;
     },
-    [amuletSlots, setFlipShockFlights, startFlipShockFlightAnimation],
+    [amuletSlots, startFlipShockFlightAnimation],
   );
 
   const flushFlipShockQueue = useCallback(() => {
@@ -2846,7 +2920,7 @@ export default function GameBoard() {
     if (hasCompleted) {
       const remaining = flights.filter(f => f.progress < 1);
       classDeckFlightsRef.current = remaining;
-      setClassDeckFlights(remaining);
+      flightOverlayRef.current?.setClassDeckFlights(remaining);
     }
 
     if (hasActive && classDeckFlightsRef.current.length > 0) {
@@ -2898,7 +2972,7 @@ export default function GameBoard() {
     });
 
     classDeckFlightsRef.current = [...classDeckFlightsRef.current, ...newFlights];
-    setClassDeckFlights(classDeckFlightsRef.current);
+    flightOverlayRef.current?.setClassDeckFlights(classDeckFlightsRef.current);
     startClassDeckFlightAnimation();
   }, [startClassDeckFlightAnimation]);
 
@@ -2957,7 +3031,7 @@ export default function GameBoard() {
     if (hasCompleted) {
       const remaining = flights.filter(f => f.progress < 1);
       fateSwapFlightsRef.current = remaining;
-      setFateSwapFlights(remaining);
+      flightOverlayRef.current?.setFateSwapFlights(remaining);
     }
 
     if (hasActive && fateSwapFlightsRef.current.length > 0) {
@@ -3020,7 +3094,7 @@ export default function GameBoard() {
       }];
 
     fateSwapFlightsRef.current = [...fateSwapFlightsRef.current, ...flights];
-    setFateSwapFlights(fateSwapFlightsRef.current);
+    flightOverlayRef.current?.setFateSwapFlights(fateSwapFlightsRef.current);
     startFateSwapFlightAnimation();
   }, [startFateSwapFlightAnimation]);
 
@@ -3083,7 +3157,7 @@ export default function GameBoard() {
     ];
 
     fateSwapFlightsRef.current = [...fateSwapFlightsRef.current, ...flights];
-    setFateSwapFlights(fateSwapFlightsRef.current);
+    flightOverlayRef.current?.setFateSwapFlights(fateSwapFlightsRef.current);
     startFateSwapFlightAnimation();
   }, [startFateSwapFlightAnimation]);
 
@@ -3124,7 +3198,7 @@ export default function GameBoard() {
     };
 
     fateSwapFlightsRef.current = [...fateSwapFlightsRef.current, flight];
-    setFateSwapFlights(fateSwapFlightsRef.current);
+    flightOverlayRef.current?.setFateSwapFlights(fateSwapFlightsRef.current);
     startFateSwapFlightAnimation();
   }, [startFateSwapFlightAnimation]);
 
@@ -3182,7 +3256,7 @@ export default function GameBoard() {
     if (hasCompleted) {
       const remaining = flights.filter(f => f.progress < 1);
       graveyardStackFlightsRef.current = remaining;
-      setGraveyardStackFlights(remaining);
+      flightOverlayRef.current?.setGraveyardStackFlights(remaining);
     }
 
     if (hasActive && graveyardStackFlightsRef.current.length > 0) {
@@ -3240,7 +3314,7 @@ export default function GameBoard() {
     }));
 
     graveyardStackFlightsRef.current = [...graveyardStackFlightsRef.current, ...flights];
-    setGraveyardStackFlights(graveyardStackFlightsRef.current);
+    flightOverlayRef.current?.setGraveyardStackFlights(graveyardStackFlightsRef.current);
     startGraveyardStackFlightAnimation();
   }, [animSpeed, startGraveyardStackFlightAnimation]);
 
@@ -3284,7 +3358,7 @@ export default function GameBoard() {
     }));
 
     graveyardStackFlightsRef.current = [...graveyardStackFlightsRef.current, ...flights];
-    setGraveyardStackFlights(graveyardStackFlightsRef.current);
+    flightOverlayRef.current?.setGraveyardStackFlights(graveyardStackFlightsRef.current);
     startGraveyardStackFlightAnimation();
   }, [animSpeed, startGraveyardStackFlightAnimation]);
 
@@ -3365,7 +3439,7 @@ export default function GameBoard() {
     if (hasCompleted) {
       const remaining = flights.filter(f => f.progress < 1);
       backpackHandFlightsRef.current = remaining;
-      setBackpackHandFlights(remaining);
+      flightOverlayRef.current?.setBackpackHandFlights(remaining);
     }
 
     if (hasActive && backpackHandFlightsRef.current.length > 0) {
@@ -3468,7 +3542,7 @@ export default function GameBoard() {
       inFlightHandStore.add(card.id);
 
       backpackHandFlightsRef.current = [...backpackHandFlightsRef.current, flight];
-      setBackpackHandFlights(backpackHandFlightsRef.current);
+      flightOverlayRef.current?.setBackpackHandFlights(backpackHandFlightsRef.current);
       startBackpackHandFlightAnimation();
       logBackpackDraw('flight-start', {
         cardId: card.id,
@@ -3524,7 +3598,7 @@ export default function GameBoard() {
     if (hasCompleted) {
       const remaining = flights.filter(f => f.progress < 1);
       discardFlightsRef.current = remaining;
-      setDiscardFlights(remaining);
+      flightOverlayRef.current?.setDiscardFlights(remaining);
     }
     if (hasActive && discardFlightsRef.current.length > 0) {
       discardFlightAnimationRef.current = window.requestAnimationFrame(updateDiscardFlightAnimation);
@@ -3607,7 +3681,7 @@ export default function GameBoard() {
       return new Promise<void>(resolve => {
         discardFlightResolveMapRef.current.set(flight.id, resolve);
         discardFlightsRef.current = [...discardFlightsRef.current, flight];
-        setDiscardFlights(discardFlightsRef.current);
+        flightOverlayRef.current?.setDiscardFlights(discardFlightsRef.current);
         startDiscardFlightAnimation();
       });
     },
@@ -3659,7 +3733,7 @@ export default function GameBoard() {
     if (hasCompleted) {
       const remaining = flights.filter(f => f.progress < 1);
       stealCardFlightsRef.current = remaining;
-      setStealCardFlights(remaining);
+      flightOverlayRef.current?.setStealCardFlights(remaining);
     }
     if (hasActive && stealCardFlightsRef.current.length > 0) {
       stealCardFlightAnimationRef.current = window.requestAnimationFrame(updateStealCardFlightAnimation);
@@ -3718,7 +3792,7 @@ export default function GameBoard() {
       return new Promise<void>(resolve => {
         stealCardFlightResolveMapRef.current.set(flight.id, resolve);
         stealCardFlightsRef.current = [...stealCardFlightsRef.current, flight];
-        setStealCardFlights(stealCardFlightsRef.current);
+        flightOverlayRef.current?.setStealCardFlights(stealCardFlightsRef.current);
         startStealCardFlightAnimation();
       });
     },
@@ -3749,7 +3823,7 @@ export default function GameBoard() {
     };
   }, [adjustShopLevel]);
 
-  // Game-state persistence — debounced + macrotask-deferred.
+  // Game-state persistence — debounced + idle-deferred.
   //
   // Why: serializeGameState() + JSON.stringify(state) + localStorage.setItem
   // are all synchronous and block the main thread. Running them inside a
@@ -3758,16 +3832,24 @@ export default function GameBoard() {
   // jank — particularly visible during long-running flight animations
   // (classDeckFlight, waterfall) where stutter is unmistakable.
   //
-  // Strategy: the effect just *schedules* a flush via setTimeout. The flush
-  // body reads engine.getState() at flush time, so coalesced renders within
-  // the debounce window collapse into a single write of the latest state.
-  // On unmount, we synchronously flush so we don't lose the last snapshot
-  // (e.g. when the user navigates away mid-debounce).
+  // Strategy:
+  //   1. The effect just *schedules* a flush via setTimeout (250ms debounce).
+  //      The setTimeout body reads engine.getState() at flush time, so
+  //      coalesced renders within the debounce window collapse into a
+  //      single write of the latest state.
+  //   2. The actual stringify + setItem runs inside requestIdleCallback,
+  //      so the heavy IO never blocks user gestures or animations even
+  //      when the debounce fires mid-interaction.
+  //   3. On unmount we cancel both timers and synchronously flush so we
+  //      don't lose the last snapshot (e.g. user navigates away mid-debounce
+  //      or before the idle callback fires).
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistIdleHandleRef = useRef<number | null>(null);
   const PERSIST_DEBOUNCE_MS = 250;
 
-  const flushPersistedGameState = useCallback(() => {
-    persistTimerRef.current = null;
+  // Pure body: serialize + dedupe + write. Called either from rIC (idle) or
+  // synchronously from the unmount path.
+  const performPersistedGameStateSave = useCallback(() => {
     const state = engine.getState();
     if (!state.isHydrated || state.gameOver) return;
     const persistedState = serializeGameState(state);
@@ -3793,6 +3875,34 @@ export default function GameBoard() {
     saveGameState(stateToSave);
   }, [engine]);
 
+  const cancelPendingPersist = useCallback(() => {
+    if (persistTimerRef.current !== null) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    if (persistIdleHandleRef.current !== null) {
+      if (typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(persistIdleHandleRef.current);
+      }
+      persistIdleHandleRef.current = null;
+    }
+  }, []);
+
+  const flushPersistedGameState = useCallback(() => {
+    persistTimerRef.current = null;
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      persistIdleHandleRef.current = window.requestIdleCallback(
+        () => {
+          persistIdleHandleRef.current = null;
+          performPersistedGameStateSave();
+        },
+        { timeout: 1000 },
+      );
+    } else {
+      performPersistedGameStateSave();
+    }
+  }, [performPersistedGameStateSave]);
+
   useEffect(() => {
     if (!isHydrated || gameOver) return;
     if (persistTimerRef.current !== null) return;
@@ -3801,25 +3911,22 @@ export default function GameBoard() {
 
   useEffect(() => {
     return () => {
-      if (persistTimerRef.current === null) return;
-      clearTimeout(persistTimerRef.current);
-      flushPersistedGameState();
+      cancelPendingPersist();
+      // Idle callbacks don't fire during page unload — flush sync to be safe.
+      performPersistedGameStateSave();
     };
-  }, [flushPersistedGameState]);
+  }, [cancelPendingPersist, performPersistedGameStateSave]);
 
   useEffect(() => {
     if (!isHydrated || !gameOver) {
       return;
     }
-    // Cancel any pending debounced persistence so a stale write doesn't
-    // resurrect game state after we've cleared it.
-    if (persistTimerRef.current !== null) {
-      clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = null;
-    }
+    // Cancel any pending debounced persistence (timer + idle callback) so a
+    // stale write doesn't resurrect game state after we've cleared it.
+    cancelPendingPersist();
     clearGameState();
     lastPersistedStateRef.current = null;
-  }, [gameOver, isHydrated]);
+  }, [gameOver, isHydrated, cancelPendingPersist]);
 
   useEffect(() => {
     if (!gameOver) {
@@ -3828,18 +3935,18 @@ export default function GameBoard() {
     clearAllBackpackHandFallbacks();
     backpackHandFlightsRef.current = [];
     backpackFlightElementMapRef.current.clear();
-    setBackpackHandFlights([]);
+    flightOverlayRef.current?.setBackpackHandFlights([]);
     inFlightHandStore.clear();
     fateSwapFlightsRef.current = [];
     fateSwapFlightElementMapRef.current.clear();
-    setFateSwapFlights([]);
+    flightOverlayRef.current?.setFateSwapFlights([]);
     if (fateSwapFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(fateSwapFlightAnimationRef.current);
       fateSwapFlightAnimationRef.current = null;
     }
     graveyardStackFlightsRef.current = [];
     graveyardStackFlightElementMapRef.current.clear();
-    setGraveyardStackFlights([]);
+    flightOverlayRef.current?.setGraveyardStackFlights([]);
     if (graveyardStackFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(graveyardStackFlightAnimationRef.current);
       graveyardStackFlightAnimationRef.current = null;
@@ -3850,7 +3957,7 @@ export default function GameBoard() {
     }
     discardShockFlightsRef.current = [];
     discardShockElementMapRef.current.clear();
-    setDiscardShockFlights([]);
+    flightOverlayRef.current?.setDiscardShockFlights([]);
     discardShockProcQueueRef.current = [];
     discardShockSeqInFlightRef.current = false;
     if (flipShockFlightAnimationRef.current !== null) {
@@ -3859,7 +3966,7 @@ export default function GameBoard() {
     }
     flipShockFlightsRef.current = [];
     flipShockElementMapRef.current.clear();
-    setFlipShockFlights([]);
+    flightOverlayRef.current?.setFlipShockFlights([]);
     flipShockProcQueueRef.current = [];
     flipShockSeqInFlightRef.current = false;
   }, [gameOver, clearAllBackpackHandFallbacks]);
@@ -3920,7 +4027,7 @@ export default function GameBoard() {
     dispatch({ type: 'INIT_GAME', mode, totalWins: getTotalWins(), eternalRelics: getStartingRelics() });
 
     // Reset UI-only state + refs (animations, flights, etc.)
-    setBackpackHandFlights([]);
+    flightOverlayRef.current?.setBackpackHandFlights([]);
     backpackHandFlightsRef.current = [];
     backpackFlightElementMapRef.current.clear();
     inFlightHandStore.clear();
@@ -3928,21 +4035,21 @@ export default function GameBoard() {
       window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
       backpackHandFlightAnimationRef.current = null;
     }
-    setFateSwapFlights([]);
+    flightOverlayRef.current?.setFateSwapFlights([]);
     fateSwapFlightsRef.current = [];
     fateSwapFlightElementMapRef.current.clear();
     if (typeof window !== 'undefined' && fateSwapFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(fateSwapFlightAnimationRef.current);
       fateSwapFlightAnimationRef.current = null;
     }
-    setGraveyardStackFlights([]);
+    flightOverlayRef.current?.setGraveyardStackFlights([]);
     graveyardStackFlightsRef.current = [];
     graveyardStackFlightElementMapRef.current.clear();
     if (typeof window !== 'undefined' && graveyardStackFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(graveyardStackFlightAnimationRef.current);
       graveyardStackFlightAnimationRef.current = null;
     }
-    setDiscardShockFlights([]);
+    flightOverlayRef.current?.setDiscardShockFlights([]);
     discardShockFlightsRef.current = [];
     discardShockElementMapRef.current.clear();
     discardShockProcQueueRef.current = [];
@@ -3951,7 +4058,7 @@ export default function GameBoard() {
       window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
       discardShockFlightAnimationRef.current = null;
     }
-    setFlipShockFlights([]);
+    flightOverlayRef.current?.setFlipShockFlights([]);
     flipShockFlightsRef.current = [];
     flipShockElementMapRef.current.clear();
     flipShockProcQueueRef.current = [];
@@ -4323,28 +4430,28 @@ export default function GameBoard() {
     waterfallSequenceRef.current = 0;
     pendingDungeonRemovalsRef.current = 0;
     setWaterfallAnimation(initialWaterfallAnimationState);
-    setClassDeckFlights([]);
+    flightOverlayRef.current?.setClassDeckFlights([]);
     classDeckFlightsRef.current = [];
     classDeckFlightElementMapRef.current.clear();
     if (classDeckFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(classDeckFlightAnimationRef.current);
       classDeckFlightAnimationRef.current = null;
     }
-    setFateSwapFlights([]);
+    flightOverlayRef.current?.setFateSwapFlights([]);
     fateSwapFlightsRef.current = [];
     fateSwapFlightElementMapRef.current.clear();
     if (fateSwapFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(fateSwapFlightAnimationRef.current);
       fateSwapFlightAnimationRef.current = null;
     }
-    setGraveyardStackFlights([]);
+    flightOverlayRef.current?.setGraveyardStackFlights([]);
     graveyardStackFlightsRef.current = [];
     graveyardStackFlightElementMapRef.current.clear();
     if (graveyardStackFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(graveyardStackFlightAnimationRef.current);
       graveyardStackFlightAnimationRef.current = null;
     }
-    setBackpackHandFlights([]);
+    flightOverlayRef.current?.setBackpackHandFlights([]);
     backpackHandFlightsRef.current = [];
     backpackFlightElementMapRef.current.clear();
     inFlightHandStore.clear();
@@ -4352,7 +4459,7 @@ export default function GameBoard() {
       window.cancelAnimationFrame(backpackHandFlightAnimationRef.current);
       backpackHandFlightAnimationRef.current = null;
     }
-    setDiscardShockFlights([]);
+    flightOverlayRef.current?.setDiscardShockFlights([]);
     discardShockFlightsRef.current = [];
     discardShockElementMapRef.current.clear();
     discardShockProcQueueRef.current = [];
@@ -4361,7 +4468,7 @@ export default function GameBoard() {
       window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
       discardShockFlightAnimationRef.current = null;
     }
-    setFlipShockFlights([]);
+    flightOverlayRef.current?.setFlipShockFlights([]);
     flipShockFlightsRef.current = [];
     flipShockElementMapRef.current.clear();
     flipShockProcQueueRef.current = [];
@@ -4548,7 +4655,7 @@ export default function GameBoard() {
     directedCombatFxElementMapRef.current.clear();
     discardShockFlightsRef.current = [];
     discardShockElementMapRef.current.clear();
-    setDiscardShockFlights([]);
+    flightOverlayRef.current?.setDiscardShockFlights([]);
     discardShockProcQueueRef.current = [];
     discardShockSeqInFlightRef.current = false;
     setDiscardShockInteractionLocked(false);
@@ -4558,7 +4665,7 @@ export default function GameBoard() {
     }
     flipShockFlightsRef.current = [];
     flipShockElementMapRef.current.clear();
-    setFlipShockFlights([]);
+    flightOverlayRef.current?.setFlipShockFlights([]);
     flipShockProcQueueRef.current = [];
     flipShockSeqInFlightRef.current = false;
     setFlipShockInteractionLocked(false);
@@ -4841,14 +4948,42 @@ export default function GameBoard() {
     });
   };
 
-  const registerMonsterCellRef = (monsterId?: string) => (el: HTMLDivElement | null) => {
-    if (!monsterId) return;
-    if (el) {
-      monsterCellRefs.current[monsterId] = el;
-    } else {
-      delete monsterCellRefs.current[monsterId];
-    }
-  };
+  // registerMonsterCellRef returns a STABLE ref callback per monsterId.
+  // The previous curried-on-render version (`(id) => (el) => {...}`) created a
+  // brand-new ref callback every GameBoard render, which:
+  //   1. broke `activeRowCallbacks` memo (the `registerMonsterCellRef` dep
+  //      changed every render);
+  //   2. caused React to detach + reattach every monster cell ref each render
+  //      (deleting and re-setting `monsterCellRefs.current[id]` constantly);
+  //   3. cascaded re-renders into memoized `<ActiveCell>` / `<GameCard>`
+  //      whenever GameBoard re-rendered for unrelated reasons (flight state,
+  //      animation effects, etc).
+  // We cache one callback per id in a Map and lazily evict when React
+  // unmounts the cell (passes `el === null`).
+  const monsterCellRefCallbackCache = useRef<Map<string, (el: HTMLDivElement | null) => void>>(
+    new Map(),
+  );
+  const noopMonsterCellRef = useRef<(el: HTMLDivElement | null) => void>(() => {});
+  const registerMonsterCellRef = useCallback(
+    (monsterId?: string): ((el: HTMLDivElement | null) => void) => {
+      if (!monsterId) return noopMonsterCellRef.current;
+      const cache = monsterCellRefCallbackCache.current;
+      let cb = cache.get(monsterId);
+      if (!cb) {
+        cb = (el: HTMLDivElement | null) => {
+          if (el) {
+            monsterCellRefs.current[monsterId] = el;
+          } else {
+            delete monsterCellRefs.current[monsterId];
+            cache.delete(monsterId);
+          }
+        };
+        cache.set(monsterId, cb);
+      }
+      return cb;
+    },
+    [],
+  );
   const canShieldBlock = (slotId: EquipmentSlotId) => {
     const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
     return Boolean(slotItem && (slotItem.type === 'shield' || slotItem.type === 'monster'));
@@ -7815,6 +7950,7 @@ export default function GameBoard() {
       render: () => (
         <BackpackZone
           backpackCount={backpackItems.length}
+          recycleCount={permanentMagicRecycleBag.length}
           capacity={backpackCapacity}
           onDrop={(card) => {
             if (isWaterfallLocked || isDefeatAnimationPlaying || playerTargetingActive || fullBoardInteractionLocked) return;
@@ -7855,7 +7991,7 @@ export default function GameBoard() {
     equipmentSlot1Highlight, equipmentSlot2Highlight,
     equipmentSlot1DropAvailable, equipmentSlot2DropAvailable,
     equipmentSlot1MonsterTarget, equipmentSlot2MonsterTarget,
-    backpackItems, backpackCapacity, classDeck, handCards,
+    backpackItems, backpackCapacity, permanentMagicRecycleBag, classDeck, handCards,
     heroVariant, heroStunned, combatState,
     permanentSpellDamageBonus, permanentSpellLifesteal, stunCap,
     persuadeLevel, persuadeAmuletBonus, permanentPersuadeBonus, persuadeDiscount,
@@ -8452,7 +8588,7 @@ export default function GameBoard() {
                 style={heroFrameOverlayStyle}
               />
             </div>
-            {/* classDeckFlights rendering moved to FlightOverlayLayer */}
+            {/* classDeckFlights rendering moved to FlightOverlayContainer */}
             <SwordOverlay
               show={swordOverlay.showMonsterAttackIndicator}
               swordVectors={swordOverlay.swordVectors}
@@ -8531,16 +8667,9 @@ export default function GameBoard() {
         stageScale={stageScale}
       />
 
-      <FlightOverlayLayer
-        classDeckFlights={classDeckFlights}
-        discardFlights={discardFlights}
-        stealCardFlights={stealCardFlights}
-        backpackHandFlights={backpackHandFlights}
-        discardShockFlights={discardShockFlights}
-        flipShockFlights={flipShockFlights}
+      <FlightOverlayContainer
+        ref={flightOverlayRef}
         directedCombatFxFlights={directedCombatFxFlights}
-        fateSwapFlights={fateSwapFlights}
-        graveyardStackFlights={graveyardStackFlights}
         gridCardSize={gridCardSize ?? null}
         classDeckFlightElementMapRef={classDeckFlightElementMapRef}
         discardFlightElementMapRef={discardFlightElementMapRef}

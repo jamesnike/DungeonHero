@@ -192,6 +192,15 @@ export type GameEventMap = {
   'waterfall:discoverPending': {};
   'waterfall:wraithEnrage': { monsterIds: string[] };
   'waterfall:classDrawn': { cards: import('@/components/GameCard').GameCardData[] };
+  /**
+   * Fired during waterfall when one or more cards in the recycle bag have hit
+   * `_recycleWaits === 0` and have been moved back into the backpack.
+   * UI uses this to play the green "recycle ring" animation on the Backpack cell.
+   */
+  'waterfall:recycleRestored': {
+    count: number;
+    cards: import('@/components/GameCard').GameCardData[];
+  };
   'waterfall:discardEffect': {
     cardName: string;
     effectType: string;

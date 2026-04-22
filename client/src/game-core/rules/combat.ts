@@ -1665,6 +1665,44 @@ export interface ReflectRouteResult {
   hitSlotId: EquipmentSlotId | null;
 }
 
+/**
+ * Tick the 眩学之符 (`stun-attempt-discover`) progress counter exactly once
+ * per stun-attempt dice roll, regardless of outcome.
+ *
+ * N copies of the amulet each tick the counter independently per dice roll
+ * (Progress counter category — see `amulet-stacking-design.mdc`).
+ *
+ * Mutates `patch.stunAttemptDiscoverProgress` in place; pushes
+ * `combat:stunAttemptDiscoverTriggered` into `sideEffects` when the threshold
+ * is reached so the hook can open the discover flow.
+ *
+ * Call sites (every site that requests / pre-rolls a stun dice):
+ *   - combat.ts: weapon stun-chance (PERFORM_HERO_ATTACK), shield bash
+ *     (PERFORM_SHIELD_BASH)
+ *   - hero.ts: 雷震击 (stun-strike) initial dice + multi-hit re-emit in
+ *     reduceDiceForHero, 雷涌一击 (stun-cap-strike), 侧击 (flank-stun)
+ *   - cards.ts: 天眼审判 (fate-sight) RESOLVE_FATE_SIGHT (willRollStun branch)
+ */
+export function tickStunAttemptDiscoverProgress(
+  state: GameState,
+  patch: Partial<GameState>,
+  sideEffects: SideEffect[],
+): void {
+  const count = (state.amuletSlots as GameCardData[]).filter(
+    s => s?.amuletEffect === 'stun-attempt-discover',
+  ).length;
+  if (count === 0) return;
+  const threshold = 6;
+  const current = patch.stunAttemptDiscoverProgress ?? state.stunAttemptDiscoverProgress ?? 0;
+  const next = current + count;
+  if (next >= threshold) {
+    patch.stunAttemptDiscoverProgress = 0;
+    sideEffects.push({ event: 'combat:stunAttemptDiscoverTriggered', payload: { threshold } });
+  } else {
+    patch.stunAttemptDiscoverProgress = next;
+  }
+}
+
 export function routeReflectDamageToHero(
   state: GameState,
   damage: number,
@@ -1865,21 +1903,7 @@ function reducePerformShieldBash(
         },
       });
 
-      // 眩学之符 (stun-attempt-discover): N amulets each tick the counter
-      // independently per stun-attempt dice roll.
-      const stunAttemptAmuletCount = (state.amuletSlots as GameCardData[]).filter(
-        s => s?.amuletEffect === 'stun-attempt-discover',
-      ).length;
-      if (stunAttemptAmuletCount > 0) {
-        const stunAttemptThreshold = 6;
-        const stunAttemptProgress = (state.stunAttemptDiscoverProgress ?? 0) + stunAttemptAmuletCount;
-        if (stunAttemptProgress >= stunAttemptThreshold) {
-          patch.stunAttemptDiscoverProgress = 0;
-          sideEffects.push({ event: 'combat:stunAttemptDiscoverTriggered', payload: { threshold: stunAttemptThreshold } });
-        } else {
-          patch.stunAttemptDiscoverProgress = stunAttemptProgress;
-        }
-      }
+      tickStunAttemptDiscoverProgress(state, patch, sideEffects);
 
       if (diceRoll <= threshold) {
         // Stun success — update monster
@@ -2796,21 +2820,7 @@ function reducePerformHeroAttack(
             });
           }
 
-          // 眩学之符 (stun-attempt-discover): N amulets each tick the counter
-          // independently per stun-attempt dice roll.
-          const stunAttemptAmuletWeaponCount = (state.amuletSlots as GameCardData[]).filter(
-            s => s?.amuletEffect === 'stun-attempt-discover',
-          ).length;
-          if (stunAttemptAmuletWeaponCount > 0) {
-            const stunAttemptThresholdW = 6;
-            const stunAttemptProgressW = (patch.stunAttemptDiscoverProgress ?? state.stunAttemptDiscoverProgress ?? 0) + stunAttemptAmuletWeaponCount;
-            if (stunAttemptProgressW >= stunAttemptThresholdW) {
-              patch.stunAttemptDiscoverProgress = 0;
-              sideEffects.push({ event: 'combat:stunAttemptDiscoverTriggered', payload: { threshold: stunAttemptThresholdW } });
-            } else {
-              patch.stunAttemptDiscoverProgress = stunAttemptProgressW;
-            }
-          }
+          tickStunAttemptDiscoverProgress(state, patch, sideEffects);
 
           if (stunRoll <= stunThreshold) {
             const stunCards = (patch.activeCards ?? [...state.activeCards]) as ActiveRowSlots;

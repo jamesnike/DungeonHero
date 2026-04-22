@@ -35,7 +35,7 @@ import { hasEternalRelic } from '@/lib/eternalRelics';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { applyEquipDestroyLastWords } from './waterfall';
-import { routeReflectDamageToHero } from './combat';
+import { routeReflectDamageToHero, tickStunAttemptDiscoverProgress } from './combat';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
@@ -1726,6 +1726,12 @@ function reduceRestoreRecycleBag(state: GameState): ReduceResult {
       event: 'log:entry',
       payload: { type: 'deck', message: `回收袋返还 ${result.restored.length} 张牌：${result.restored.map((c: GameCardData) => c.name).join('、')}` },
     },
+    // 跟 waterfall.ts、turn.ts (幽魂净化)、magic-effects.ts (回收余韵 / 洗册归川 / 回收灵焰) 一致：
+    // 任意「回收袋 → 背包」位移都通知 BackpackZone 播绿环动画。
+    {
+      event: 'waterfall:recycleRestored',
+      payload: { count: result.restored.length, cards: result.restored },
+    },
   ];
 
   return applyPatch(state, result.patch, sideEffects);
@@ -2650,6 +2656,7 @@ function reduceResolveFateSight(
   if (willRollStun) {
     [predeterminedRoll, rng] = nextInt(rng, 1, 20);
     patch.rng = rng;
+    tickStunAttemptDiscoverProgress(state, patch, sideEffects);
   }
 
   sideEffects.push({

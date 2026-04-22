@@ -988,9 +988,15 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     ) {
       const preRolledPool = (payload.data?.pool as GameCardData[] | undefined) ?? [];
       if (preRolledPool.length > 0) {
+        // 装备发现 / 护符发现（开局第一行固定事件）：选中后直接进手牌，
+        // 让玩家第一回合就能立刻装备或激活——其余 starter discover
+        // (魔法 / 药水) 仍走默认背包路径。
+        const handFirst = token === 'discoverStarterEquipment'
+          || token === 'discoverStarterAmulet';
         depsRef.current.beginDiscoverFlow(token, {
           overridePool: preRolledPool,
           sourceLabel: eventCard?.name,
+          delivery: handFirst ? 'hand-first' : undefined,
         });
       }
     } else if (token === 'openShop') {

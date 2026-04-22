@@ -447,6 +447,17 @@ const swapBackpackRecycle: CardDefinition = {
   resolver: (state, card, sideEffects, patch, enqueuedActions) => {
     patch.backpackItems = state.permanentMagicRecycleBag.map(c => sanitizeCardMetadata(c));
     patch.permanentMagicRecycleBag = state.backpackItems.map((c: GameCardData) => sanitizeCardMetadata(c));
+    // 单次置换：原回收袋整体进入背包。如果回收袋本来就空，跳过——没有视觉位移。
+    // 同步参考：rules/magic-effects.ts swap-backpack-recycle（带 echo loop 的版本）。
+    if ((state.permanentMagicRecycleBag?.length ?? 0) > 0) {
+      sideEffects.push({
+        event: 'waterfall:recycleRestored',
+        payload: {
+          count: state.permanentMagicRecycleBag.length,
+          cards: state.permanentMagicRecycleBag as GameCardData[],
+        },
+      });
+    }
     log(sideEffects, 'magic', `虚空置换：背包与回收袋对换（背包现 ${patch.backpackItems.length} 张，回收袋现 ${patch.permanentMagicRecycleBag.length} 张）。`);
     banner(sideEffects, '虚空置换：背包与永久魔法回收袋内容已对换。');
     enqueuedActions.push({ type: 'ENFORCE_BACKPACK_CAPACITY' });
@@ -1436,6 +1447,12 @@ const starterRecycleDrawMagic: CardDefinition = {
       const overflow = readyCards.slice(available);
       if (toAdd.length > 0) {
         patch.backpackItems = [...currentBackpack, ...toAdd];
+        // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画。
+        // 同步参考：rules/waterfall.ts、rules/magic-effects.ts 的 STARTER_CARD_IDS.recycleDrawMagic。
+        sideEffects.push({
+          event: 'waterfall:recycleRestored',
+          payload: { count: toAdd.length, cards: toAdd },
+        });
       }
       patch.permanentMagicRecycleBag = [...overflow, ...waitingCards];
       const parts: string[] = [];

@@ -407,6 +407,13 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
         event: 'log:entry',
         payload: { type: 'waterfall', message: `回收袋恢复了 ${recycleResult.restored.length} 张牌到背包` },
       });
+      // 通知 UI 播放 Backpack cell 的"绿色回收环"动画。
+      // BackpackZone 通过 useGameEvent('waterfall:recycleRestored', ...) 监听并
+      // 触发本地动画状态。
+      sideEffects.push({
+        event: 'waterfall:recycleRestored',
+        payload: { count: recycleResult.restored.length, cards: recycleResult.restored },
+      });
     }
   }
 
