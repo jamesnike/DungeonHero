@@ -475,8 +475,10 @@ function reduceResolveEventChoice(
 // ---------------------------------------------------------------------------
 
 function reduceContinueEventEffects(state: GameState): ReduceResult {
-  if (state.pendingEventEffects.length === 0) {
-    return applyPatch(state, {}, [], [{ type: 'COMPLETE_EVENT', skipFlip: state.pendingEventSkipFlip }]);
-  }
+  // Always route through processEffectsInline — even with empty pending tokens —
+  // so that post-effect logic (e.g. 战血荣誉 right-side enrage) fires before
+  // COMPLETE_EVENT is enqueued. If the last token was interactive (e.g. openShop),
+  // pendingEventEffects ends up empty here; skipping processEffectsInline would
+  // bypass the post-effect block and leave the right-side monsters un-enraged.
   return processEffectsInline(state, state.pendingEventEffects, state.pendingEventSkipFlip);
 }

@@ -4314,6 +4314,7 @@ export default function GameBoard() {
     skipEventFlipRef.current = false;
     heroTurnLayerLossIdsRef.current.clear();
     pendingDefeatIdsRef.current.clear();
+    goblinStolenIdsRef.current.clear();
 
     clearWaterfallTimeouts();
     waterfallTimeoutsRef.current = [];

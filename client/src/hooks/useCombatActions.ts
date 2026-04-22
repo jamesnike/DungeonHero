@@ -258,13 +258,15 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         delete next[monsterId];
         return next;
       });
-      // If the monster is still on the board after the defeat animation,
-      // it was revived (Skeleton hasRevive, equipment revive, wraith rebirth, etc.).
-      // Clear the pending-use flag so the cell becomes interactive again.
-      const stillOnBoardAfter = engine.getState().activeCards.some(c => c?.id === monsterId);
-      if (stillOnBoardAfter) {
-        d.pendingDungeonUseRef.current.delete(monsterId);
-      }
+      // Safety net: ensure the monster id is never left in pendingDungeonUseRef
+      // after the defeat animation finishes. The normal "claim reward" path
+      // clears it via removePendingDungeonCard, and revive paths put the
+      // monster back on the board — but if any other path (goblin steal +
+      // stack-pop, exotic last-words flow, etc.) leaves the id behind, the
+      // slot's `isResolvingCard` would stay true and apply
+      // `pointer-events-none` to whatever card now occupies that slot
+      // (e.g. the stolen card popped up from the goblin's stack).
+      d.pendingDungeonUseRef.current.delete(monsterId);
     }, d.animSpeed(DEFEAT_ANIMATION_DURATION));
   });
 
