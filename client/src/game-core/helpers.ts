@@ -805,9 +805,21 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
   const heroSpell = (state as any).permanentSpellDamageBonus ?? 0;
   const heroEffectiveDmg = Math.max(1, heroWeaponDmg + heroSpell * 0.4);
 
+  // 读 liveMonster 用于 currentLayer / isStunned；mAtk / mHp 仍用传入的 monster
+  // 卡面值（每血层满血基线，避免"残血同时也被劝降率拉满"双倍奖励）。
+  const liveMonster = (state.activeCards as GameCardData[]).find(c => c?.id === monster.id);
+
   const mAtk = monster.attack ?? monster.value;
   const mHp = monster.hp ?? monster.value;
-  const mLayers = monster.hpLayers ?? monster.fury ?? 1;
+  // mLayers = **当前剩余**血层数（被打掉一层就 -1）。怪进入末层时
+  // toughness 自动按"剩 1 层"算，劝降率随之提升。
+  const mLayers = Math.max(
+    1,
+    liveMonster?.currentLayer ?? (monster as any).currentLayer ?? monster.hpLayers ?? monster.fury ?? 1,
+  );
+  // 怪物"类别"还是按最大血层数判，3+ 层精英即使剩 1 层仍属"高血层精英"，
+  // 继续吃 −15 惩罚 + bonusScale 0.5。
+  const monsterMaxLayers = monster.hpLayers ?? monster.fury ?? 1;
   const isElite = Boolean(monster.monsterSpecial || monster.bossPhase);
 
   const monsterToughness = mHp * mLayers;
@@ -820,12 +832,11 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
 
   if (isElite) rate -= 15;
 
-  const isHighLayer = mLayers >= 3;
+  const isHighLayer = monsterMaxLayers >= 3;
   if (isHighLayer) rate -= 15;
 
   const bonusScale = isHighLayer ? 0.5 : 1;
 
-  const liveMonster = (state.activeCards as GameCardData[]).find(c => c?.id === monster.id);
   if ((liveMonster ?? monster).isStunned) {
     rate += 40 * bonusScale;
   }
