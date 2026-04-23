@@ -833,9 +833,12 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   });
 
   useGameEvent('card:fortuneWheelDelete', async ({ card }) => {
-    await depsRef.current.requestCardAction('delete', 1, {
-      title: '际遇轮盘：选择一张牌删除',
-      description: '际遇轮盘效果：删除一张牌。',
+    // 至多删 1 张牌：使用 batch 模式，玩家可以选 1 张确认或点取消跳过。
+    // batch 模式 resolver 在取消时返回 0，已自动清掉 modal/phase/cardActionContext，
+    // 所以无论玩家是否真的删牌，都直接 finalize 这张「际遇轮盘」即可。
+    await depsRef.current.requestCardActionBatch('delete', 1, {
+      title: '际遇轮盘：至多删除 1 张牌',
+      description: '可选择一张牌删除，或点取消跳过此次效果。',
       handOnly: false,
     });
     if (card) {

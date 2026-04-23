@@ -1788,7 +1788,7 @@ const knightFortuneWheel: CardDefinition = {
         entries: [
           { id: 'fw-discover', range: [1, 5], label: '发现一张专属魔法卡（三选一）', effect: 'none' },
           { id: 'fw-draw', range: [6, 10], label: '从背包抽 2 张牌', effect: 'none' },
-          { id: 'fw-delete', range: [11, 15], label: '删除 1 张牌', effect: 'none' },
+          { id: 'fw-delete', range: [11, 15], label: '至多删除 1 张牌', effect: 'none' },
           { id: 'fw-persuade', range: [16, 20], label: '下次劝降概率 +20%', effect: 'none' },
         ],
         flowContext: { flowId: 'fortune-wheel', cardId: card.id },

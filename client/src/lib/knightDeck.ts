@@ -1148,7 +1148,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicFortuneWheelImage,
     classCard: true,
-    description: '永久：掷骰——25% 发现一张专属魔法卡，25% 抽 2 张牌，25% 删 1 张牌，25% 下次劝降概率 +20%。',
+    description: '永久：掷骰——25% 发现一张专属魔法卡，25% 抽 2 张牌，25% 至多删 1 张牌，25% 下次劝降概率 +20%。',
     shortDescription: '掷骰：四种随机效果之一',
     magicType: 'permanent',
     magicEffect: '掷骰触发四种随机效果之一。',
