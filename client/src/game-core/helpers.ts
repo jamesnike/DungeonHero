@@ -785,9 +785,23 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
   heroWeaponDmg += bonuses.equipmentSlot2?.damage ?? 0;
 
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
-  heroWeaponDmg += ae.aura.attack;
 
-  const heroHp = state.hp;
+  // 左右装备栏的临时攻击（潮涌铸剑等）。注意 strength/balance 光环在
+  // `amuletAuraAppliedThisWave === true` 时已被 baked 进 slotTempAttack，
+  // 此时 ae.aura.attack 不能再单独加，否则双倍计算。
+  const slotTempAttackTotal =
+    (state.slotTempAttack?.equipmentSlot1 ?? 0) +
+    (state.slotTempAttack?.equipmentSlot2 ?? 0);
+  heroWeaponDmg += slotTempAttackTotal;
+  const auraBaked = (state as any).amuletAuraAppliedThisWave ?? false;
+  if (!auraBaked) heroWeaponDmg += ae.aura.attack;
+
+  // 低血量保护：≤20 hp 一律按 20 算，避免「残血劝降」套路被概率惩罚。
+  // 之后再叠加左右装备栏的临时护甲（按 0.5 权重折算成"准血量"）。
+  const slotTempArmorTotal =
+    (state.slotTempArmor?.equipmentSlot1 ?? 0) +
+    (state.slotTempArmor?.equipmentSlot2 ?? 0);
+  const heroHp = Math.max(20, state.hp) + slotTempArmorTotal * 0.5;
   const heroSpell = (state as any).permanentSpellDamageBonus ?? 0;
   const heroEffectiveDmg = Math.max(1, heroWeaponDmg + heroSpell * 0.4);
 
@@ -813,7 +827,7 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
 
   const liveMonster = (state.activeCards as GameCardData[]).find(c => c?.id === monster.id);
   if ((liveMonster ?? monster).isStunned) {
-    rate += 10 * bonusScale;
+    rate += 40 * bonusScale;
   }
 
   const persuadeBoost = (monster as any)._persuadeBoost ?? 0;
@@ -856,7 +870,7 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
     }
   }
 
-  const maxRate = isHighLayer ? 60 : 75;
+  const maxRate = isHighLayer ? 70 : 85;
   const clamped = Math.max(5, Math.min(maxRate, rate));
   return Math.round(clamped / 5) * 5;
 }
