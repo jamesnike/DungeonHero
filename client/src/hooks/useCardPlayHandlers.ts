@@ -353,16 +353,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     dispatch({ type: 'TRIGGER_GRAVE_NOVA', card: graveNovaCard });
   }, [dispatch]);
 
-  const resolveFateSight = (card: GameCardData, target: GameCardData, baseDmg: number, peekCount: number) => {
-    dispatch({
-      type: 'RESOLVE_FATE_SIGHT',
-      card,
-      targetMonsterId: target.id,
-      baseDmg,
-      peekCount,
-    });
-  };
-
   const resolveStatSwap = (card: GameCardData, target: GameCardData, isFlank: boolean) => {
     dispatch({
       type: 'RESOLVE_STAT_SWAP',
@@ -595,39 +585,16 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   // ---------------------------------------------------------------------------
 
   useGameEvent('card:fateSightPeekReady', (payload) => {
-    const {
-      peekedCards, monsterCount, stunChance,
-      targetMonsterName, card, totalDamage,
-      targetMonsterId, targetIsStunned, predeterminedRoll,
-    } = payload as any;
+    const { peekedCards, monsterCount, persuadeBonusGranted, card } = payload;
     depsRef.current.setDeckPeekState({
       mode: 'fate-sight',
       peekedCards,
       monsterCount,
-      stunChance,
-      targetMonsterName,
+      persuadeBonusGranted,
     });
+    // 关闭 peek 弹窗后正式 dispose 卡——所有状态变更已经在 reducer 完成。
     depsRef.current.deckJudgePeekCloseRef.current = () => {
-      if (stunChance > 0 && !targetIsStunned) {
-        const threshold = Math.round((stunChance / 100) * 20);
-        void depsRef.current.requestDiceOutcome({
-          title: targetMonsterName,
-          subtitle: `击晕判定（${stunChance}%）`,
-          entries: [
-            { id: 'stun', range: [1, threshold] as [number, number], label: '击晕成功！', effect: 'none' },
-            { id: 'miss', range: [threshold + 1, 20] as [number, number], label: '未击晕', effect: 'none' },
-          ],
-          flowContext: {
-            flowId: 'fate-sight-stun',
-            targetMonsterId,
-            targetMonsterName,
-            card,
-          },
-          predeterminedRoll,
-        } as any);
-      } else {
-        dispatch({ type: 'FINALIZE_MAGIC_CARD', card });
-      }
+      dispatch({ type: 'FINALIZE_MAGIC_CARD', card });
     };
   });
 
@@ -801,13 +768,24 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     }
   });
 
-  useGameEvent('card:graveyardDiscoverEquipAmulet', async ({ card }) => {
-    const selected = await depsRef.current.requestGraveyardSelection(3, {
-      filter: (c: GameCardData) => c.type === 'weapon' || c.type === 'shield' || c.type === 'amulet',
-      delivery: 'hand-first',
-    });
-    if (selected) {
-      addGameLog('magic', `破印遗物：从坟场发现了「${selected.name}」`);
+  useGameEvent('card:graveyardDiscoverEquipAmulet', async ({ card, echoRemaining }) => {
+    // 法术回响（B）：echoRemaining 次循环，每次重新从坟场抽 3 张候选 + 选 1 张到手牌。
+    // 跟 cleanseDrawRequested 同款 hook-driven echo 模式。每次 requestGraveyardSelection
+    // 都会读 live `discardedCards`（已扣除上一轮选走的卡），所以候选池自然衰减，
+    // 直到坟场没有可选项时返回 null（玩家会看到 banner「坟场中没有可取回的卡牌。」）。
+    const iterations = Math.max(1, echoRemaining ?? 1);
+    for (let i = 0; i < iterations; i++) {
+      const selected = await depsRef.current.requestGraveyardSelection(3, {
+        filter: (c: GameCardData) => c.type === 'weapon' || c.type === 'shield' || c.type === 'amulet',
+        delivery: 'hand-first',
+      });
+      if (selected) {
+        const suffix = iterations > 1 ? `（${i + 1}/${iterations}）` : '';
+        addGameLog('magic', `破印遗物：从坟场发现了「${selected.name}」${suffix}`);
+      } else {
+        // 玩家取消或坟场已空 → 终止后续循环（不强求每次都选）。
+        break;
+      }
     }
     dispatch({ type: 'FINALIZE_MAGIC_CARD', card: card as GameCardData, dealtDamage: false });
   });
@@ -1005,7 +983,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     chaosStrikeHasOverkill,
     drawCardsFromBackpack,
     getRepairableEquipmentSlots,
-    resolveFateSight,
     resolveStatSwap,
     resolveRepairEnrageDice,
 

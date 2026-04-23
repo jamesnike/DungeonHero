@@ -1681,7 +1681,6 @@ export interface ReflectRouteResult {
  *     (PERFORM_SHIELD_BASH)
  *   - hero.ts: 雷震击 (stun-strike) initial dice + multi-hit re-emit in
  *     reduceDiceForHero, 雷涌一击 (stun-cap-strike), 侧击 (flank-stun)
- *   - cards.ts: 天眼审判 (fate-sight) RESOLVE_FATE_SIGHT (willRollStun branch)
  */
 export function tickStunAttemptDiscoverProgress(
   state: GameState,

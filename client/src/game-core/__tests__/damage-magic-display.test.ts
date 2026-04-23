@@ -3,7 +3,7 @@
  *
  * 覆盖：
  *   - Group B 固定 base + amp（魔弹 / 风暴箭雨 / 混沌冲击 / overkill-upgrade /
- *     bounty-spell-damage / 雷震击 / storm-volley-recycle / fate-sight / grave-nova）
+ *     bounty-spell-damage / 雷震击 / storm-volley-recycle / grave-nova）
  *   - Group C 状态相关 base + amp（点金裁决 / missing-hp-smite）
  *   - Group D 保留原描述、仅追加 (+N)（armor-strike / temp-attack-strike /
  *     weapon-sweep / blood-sacrifice-strike）→ suffix 模式
@@ -110,20 +110,9 @@ describe('computeDamageMagicDisplayPure — Group B (固定 base + amp)', () => 
     }
   });
 
-  it('fate-sight lvl 0: base 3, amp 1 → 4', () => {
+  it('fate-sight: 不再属于伤害 magic（劝降率加成卡，不在 display）', () => {
     const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'fate-sight', amplifyBonus: 1 }), STATE);
-    expect(r?.mode).toBe('replace');
-    if (r?.mode === 'replace') {
-      expect(r.text).toContain('造成 4 点伤害');
-    }
-  });
-
-  it('fate-sight lvl 1: base 4, amp 0 → 4', () => {
-    const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'fate-sight', upgradeLevel: 1 }), STATE);
-    expect(r?.mode).toBe('replace');
-    if (r?.mode === 'replace') {
-      expect(r.text).toContain('造成 4 点伤害');
-    }
+    expect(r).toBeNull();
   });
 });
 

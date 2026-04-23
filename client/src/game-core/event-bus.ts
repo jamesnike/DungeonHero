@@ -492,7 +492,11 @@ export type GameEventMap = {
     drawCount: number;
     echoRemaining: number;
   };
-  'card:graveyardDiscoverEquipAmulet': { card: import('@/components/GameCard').GameCardData };
+  'card:graveyardDiscoverEquipAmulet': {
+    card: import('@/components/GameCard').GameCardData;
+    /** 法术回响 B 类：弹出几次（每次抽 3 张候选 + 选 1）。普通使用 = 1，回响 ×N = N。 */
+    echoRemaining: number;
+  };
   'card:echoBagDiscover': { card: import('@/components/GameCard').GameCardData; discoverCount: number; drawCount: number };
   'card:stunWaveDice': { card: import('@/components/GameCard').GameCardData; monsters: Array<{ id: string; name: string }>; stunPct: number };
   'card:transformGrantModal': { card: import('@/components/GameCard').GameCardData };
@@ -547,7 +551,7 @@ export type GameEventMap = {
   'card:potionFinalized': { card: import('@/components/GameCard').GameCardData };
   'card:potionFlipRequested': { card: import('@/components/GameCard').GameCardData };
 
-  // Deck peek events — emitted by RESOLVE_DECK_JUDGE / RESOLVE_FATE_SIGHT
+  // Deck peek events — emitted by RESOLVE_DECK_JUDGE / 天眼审判 resolver
   'card:deckJudgePeekReady': {
     peekedCards: import('@/components/GameCard').GameCardData[];
     monsterCount: number;
@@ -555,17 +559,16 @@ export type GameEventMap = {
     gains: Array<{ label: string; count: number }>;
     card: import('@/components/GameCard').GameCardData;
   };
+  /**
+   * 天眼审判：翻看主牌堆顶 4 张牌后弹出 peek 弹窗。若 peek 区域无怪物，
+   * `persuadeBonusGranted` > 0 表示已经把对应数值加到 `state.persuadeAmuletBonus`。
+   * 弹窗关闭时 hook 负责 dispatch FINALIZE_MAGIC_CARD 让卡正式 dispose。
+   */
   'card:fateSightPeekReady': {
     peekedCards: import('@/components/GameCard').GameCardData[];
     monsterCount: number;
-    stunChance: number;
-    targetMonsterName: string;
+    persuadeBonusGranted: number;
     card: import('@/components/GameCard').GameCardData;
-    totalDamage: number;
-    targetMonsterId: string;
-    targetIsStunned: boolean;
-    /** Pre-rolled D20 from reducer's seeded RNG (only valid when stun dice will be triggered). */
-    predeterminedRoll: number;
   };
   'card:statSwapStunDice': {
     card: import('@/components/GameCard').GameCardData;

@@ -759,26 +759,6 @@ function reduceResolveDice(
       break;
     }
 
-    case 'fate-sight-stun': {
-      const mId = ctx.targetMonsterId as string;
-      const mName = ctx.targetMonsterName as string;
-      const fateCard = ctx.card as GameCardData | undefined;
-      if (action.outcomeId === 'stun') {
-        newState = {
-          ...newState,
-          activeCards: patchMonsterInActiveCards(newState.activeCards, mId, { isStunned: true }),
-        };
-        enqueuedActions.push(
-          { type: 'SET_HERO_SKILL_BANNER', message: `命运透视击晕了 ${mName}！` } as GameAction,
-        );
-        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, mName);
-      }
-      if (fateCard) {
-        enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: fateCard, dealtDamage: false } as GameAction);
-      }
-      break;
-    }
-
     case 'stat-swap-stun': {
       const mId = ctx.targetMonsterId as string;
       const mName = ctx.targetMonsterName as string;

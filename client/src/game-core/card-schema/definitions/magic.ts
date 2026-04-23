@@ -211,9 +211,11 @@ const altarDiscardDiscover: CardDefinition = {
   effectId: 'magic:altar-discard-discover',
   effects: [],
   tags: ['magic', 'instant', 'interactive', 'discard'],
-  resolver: (state, card, sideEffects, patch, enqueuedActions) => {
+  resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
     // 走「玩家选择 / 自动随机」分流。可弃手牌（去诅咒/源卡牌）≥ 2 时弹窗，
     // 不足 2 张则把全部可弃手牌随机自动弃掉（也可能 0 张），随后立刻进入发现阶段。
+    // 法术回响（B）：echoMultiplier 透传到 context；finalizeAltarDiscardDiscover
+    // 会按 (echoMultiplier - 1) 次额外打开发现模态。
     const promptText = '选择 2 张手牌弃回坟场（之后从职业魔法堆中发现 1 张）。';
     const result = requestOrAutoHandDiscard(state, patch, {
       sourceCardId: card.id,
@@ -221,13 +223,13 @@ const altarDiscardDiscover: CardDefinition = {
       title: '祭坛秘术',
       prompt: promptText,
       subEffect: 'altar-discover',
-      context: { kind: 'altar-discover', cardSnapshot: card },
+      context: { kind: 'altar-discover', cardSnapshot: card, echoMultiplier },
     });
     if (result.mode === 'modal') {
       banner(sideEffects, promptText);
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
-    return finalizeAltarDiscardDiscover(state, card, result.discarded, sideEffects, patch, enqueuedActions);
+    return finalizeAltarDiscardDiscover(state, card, result.discarded, sideEffects, patch, enqueuedActions, echoMultiplier);
   },
 };
 
@@ -374,9 +376,14 @@ const upgradeScroll: CardDefinition = {
   effectId: 'card:升级卷轴',
   effects: [],
   tags: ['magic', 'instant', 'interactive', 'upgrade'],
-  resolver: (state, card, sideEffects, patch, enqueuedActions) => {
+  resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
     patch.upgradeModalOpen = true;
-    banner(sideEffects, '升级卷轴：选择一张牌进行升级。');
+    if (echoMultiplier > 1) {
+      patch.upgradeModalMaxCount = echoMultiplier;
+    }
+    banner(sideEffects, echoMultiplier > 1
+      ? `升级卷轴：回响 ×${echoMultiplier}——可连续选择 ${echoMultiplier} 张牌升级。`
+      : '升级卷轴：选择一张牌进行升级。');
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -387,9 +394,12 @@ const arcaneRefine: CardDefinition = {
   effectId: 'card:秘法精炼',
   effects: [],
   tags: ['magic', 'instant', 'interactive', 'upgrade'],
-  resolver: (state, card, sideEffects, patch, enqueuedActions) => {
-    patch.handMagicUpgradeModal = { sourceCardId: card.id };
-    banner(sideEffects, '秘法精炼：选择至多 2 张魔法牌进行升级。');
+  resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
+    const maxSelect = 2 * Math.max(1, echoMultiplier);
+    patch.handMagicUpgradeModal = { sourceCardId: card.id, maxSelect };
+    banner(sideEffects, echoMultiplier > 1
+      ? `秘法精炼：回响 ×${echoMultiplier}——可选择至多 ${maxSelect} 张魔法牌升级。`
+      : '秘法精炼：选择至多 2 张魔法牌进行升级。');
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1874,8 +1884,8 @@ const knightGraveyardDiscoverEquipAmulet: CardDefinition = {
   effectId: 'knight:graveyard-discover-equip-amulet',
   effects: [],
   tags: ['knight', 'instant', 'interactive'],
-  resolver: (state, card, sideEffects, patch, enqueuedActions) => {
-    return resolveGraveyardDiscoverEquipAmulet(state, card, sideEffects, patch, enqueuedActions);
+  resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
+    return resolveGraveyardDiscoverEquipAmulet(state, card, sideEffects, patch, enqueuedActions, echoMultiplier);
   },
 };
 

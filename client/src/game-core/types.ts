@@ -548,16 +548,39 @@ export interface GameState {
   /**
    * Queue of class-deck discovers waiting to fire one after another.
    * Each entry triggers a fresh BEGIN_DISCOVER (re-pulled from current
-   * `classDeck`) when the previous discover modal closes. Used by
-   * effects that destroy multiple equipment in a single resolution
-   * (e.g. 弃装重铸) so the player sees one discover popup per destroyed
-   * piece.
+   * `classDeck`) when the previous discover modal closes. Used by:
+   *   - 弃装重铸 (knight) — one discover per destroyed equipment piece.
+   *   - Spell Echo (法术回响) — when a class-deck-discover magic card
+   *     (`STARTER discoverClassToHand` 「专属感召」 / `altar-discover-class-magic` /
+   *     `altar-discard-discover` 「祭坛秘术」) is echoed (`echoMultiplier > 1`),
+   *     the resolver pushes one extra entry per echo so the discover modal
+   *     re-opens after the first selection. See `spell-echo-required.mdc`.
+   *
+   * Optional fields control HOW the next BEGIN_DISCOVER is shaped:
+   *   - `delivery`: 'hand-first' for 「专属感召」 (cloned card lands in hand),
+   *     'backpack' (default) for everything else.
+   *   - `magicOnly`: when true, the queued BEGIN_DISCOVER samples from
+   *     `classDeck.filter(c => c.type === 'magic' || c.type === 'hero-magic')`
+   *     instead of the full `classDeck`. Used by both 祭坛秘术 variants
+   *     (`altar-discover-class-magic` / `altar-discard-discover`) which only
+   *     discover class-magic cards.
    */
-  pendingClassDiscoverQueue: Array<{ source: string; sourceLabel?: string | null }>;
+  pendingClassDiscoverQueue: Array<{
+    source: string;
+    sourceLabel?: string | null;
+    delivery?: 'backpack' | 'hand-first';
+    magicOnly?: boolean;
+  }>;
   deleteModalOpen: boolean;
   upgradeModalOpen: boolean;
   upgradeModalMaxCount: number | undefined;
-  handMagicUpgradeModal: { sourceCardId: string } | null;
+  /**
+   * 秘法精炼（arcane-refine）：手牌魔法升级模态。
+   *   - `sourceCardId`: 触发卡 id（在选择列表里被排除）
+   *   - `maxSelect`: 玩家本次最多可选几张卡。法术回响（B）会传入 `2 * echoMultiplier`，
+   *     普通使用走默认 = 2。`undefined` 也按 2 处理（向后兼容）。
+   */
+  handMagicUpgradeModal: { sourceCardId: string; maxSelect?: number } | null;
   /** 镜影摹形：选择复制目标 */
   mirrorCopyModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */

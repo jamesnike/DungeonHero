@@ -2379,52 +2379,6 @@ function reduceMagicMonsterSelection(
         { dealtDamage: true });
     }
 
-    case 'fate-sight': {
-      // Delegate to RESOLVE_FATE_SIGHT in rules/cards.ts which emits the full
-      // card:fateSightPeekReady payload (monsterCount/stunChance/targetMonsterName)
-      // and handles the post-peek stun dice + FINALIZE_MAGIC_CARD flow.
-      const baseDamages = [3, 4];
-      const peekCounts = [3, 4];
-      const baseDmg = baseDamages[pending.card.upgradeLevel ?? 0] ?? 3;
-      const peekCount = peekCounts[pending.card.upgradeLevel ?? 0] ?? 3;
-      if (isHeroTarget) {
-        // 选 hero/盾 时不走 RESOLVE_FATE_SIGHT（其逻辑强依赖 monster + 击晕）；
-        // 直接自伤 + 翻看牌堆（不掷击晕骰）。
-        const totalDmg = computeSpellDamagePure(state, baseDmg + (pending.card.amplifyBonus ?? 0));
-        if (totalDmg > 0) {
-          applySelfDamage(totalDmg, 'fate-sight');
-        }
-        const deck = state.remainingDeck;
-        const peekedCards = deck.slice(0, Math.min(peekCount, deck.length));
-        sideEffects.push({
-          event: 'card:fateSightPeekReady',
-          payload: {
-            peekedCards,
-            monsterCount: peekedCards.filter(c => c.type === 'monster').length,
-            stunChance: 0,
-            targetMonsterName: targetName,
-            card: pending.card,
-            totalDamage: totalDmg,
-            targetMonsterId: '',
-            targetIsStunned: true, // 阻断 useCardPlayHandlers 的击晕判定流程
-            predeterminedRoll: 0,
-          },
-        });
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `天眼审判：对${targetName}造成 ${totalDmg} 点法术伤害，翻看牌堆 ${peekedCards.length} 张。` } });
-        patch.pendingMagicAction = null;
-        return applyPatch(state, patch, sideEffects, enqueuedActions);
-      }
-      patch.pendingMagicAction = null;
-      enqueuedActions.push({
-        type: 'RESOLVE_FATE_SIGHT',
-        card: pending.card,
-        targetMonsterId: monster!.id,
-        baseDmg,
-        peekCount,
-      });
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
-
     case 'stat-swap': {
       // 此分支不设 allowsHeroTarget → 顶层守卫保证 monster 必为非空。
       const m = monster!;

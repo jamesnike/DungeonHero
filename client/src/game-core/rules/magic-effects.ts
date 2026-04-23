@@ -23,12 +23,25 @@
  *   C — STRUCTURAL: card has no useful numeric knob (e.g. cascade reset,
  *       backpack swap). When echoed, the entire effect runs twice (the second
  *       run is often a no-op) and a banner notes "回响：二次结算无额外效果".
- *   B* — UI-DELEGATED MODAL: discover/upgrade modals owned by the UI layer
- *        cannot currently be re-opened from the reducer. echoMultiplier is
- *        forwarded into the pendingMagicAction / event payload, but only the
- *        first invocation actually opens the UI. A banner notifies the player
- *        that the second pass did not retrigger. Future work: extend the UI
- *        layer to consume `echoRemaining` and re-open after each completion.
+ *   B* — UI-DELEGATED MODAL (HISTORICAL): discover/upgrade modals owned by the
+ *        UI layer used to only open once on echo. As of Phase 1 + Phase 2,
+ *        every B* card has been upgraded to a real B with one of three
+ *        mechanisms:
+ *          - `pendingClassDiscoverQueue` (Phase 1): STARTER discover-class-to-hand,
+ *            altar-discover-class-magic, altar-discard-discover. Re-prompts
+ *            the same discover modal (echoMultiplier − 1) extra times.
+ *          - `upgradeModalMaxCount` / modal `maxSelect` field (Phase 2):
+ *            升级卷轴 sets `upgradeModalMaxCount = echoMultiplier` so the
+ *            existing CardUpgradeModal stays open for N consecutive picks;
+ *            秘法精炼 sets `handMagicUpgradeModal.maxSelect = 2N` so the
+ *            HandMagicUpgradeModal accepts up to 2N selections in one shot.
+ *          - hook-driven loop on side-effect (Phase 2):
+ *            KNIGHT graveyard-discover-equip-amulet — side effect carries
+ *            `echoRemaining: N`, hook (`useCardPlayHandlers.ts`) runs the
+ *            requestGraveyardSelection loop N times. Same shape as
+ *            `card:cleanseDrawRequested`.
+ *
+ *        No B* entries remain in the table below.
  *
  * ┌──────────────────────────────────┬─────┬───────────────────────────────┐
  * │ Card / effectId                  │ Cat │ Notes                         │
@@ -37,7 +50,7 @@
  * │ active-row-monster-attack-debuff │ A   │ -atk amount ×N                │
  * │ flip-monster-debuff              │ B   │ second pick → second monster  │
  * │ amplify-card                     │ B   │ open modal twice              │
- * │ altar-discard-discover           │ B*  │ discover once + echo banner   │
+ * │ altar-discard-discover           │ B   │ queue (N-1) extra discovers   │
  * │ cascade-reset (瀑流重置)         │ C   │ second pass = no-op + banner  │
  * │ storm-volley (风暴箭雨)          │ A   │ damage ×N                     │
  * │ fountain-hand (涌泉满手)         │ A   │ heal & draw ×N                │
@@ -46,8 +59,8 @@
  * │ blood-reckoning (点金裁决)       │ A/B │ damage ×N + modal re-prompt   │
  * │ soul-swap (等价交换)             │ B   │ pick slot+monster twice       │
  * │ perm-grant (永恒铭刻)            │ B   │ pick card twice               │
- * │ upgrade-scroll                   │ B*  │ modal once + echo banner only │
- * │ arcane-refine (秘法精炼)         │ B*  │ modal once + echo banner only │
+ * │ upgrade-scroll                   │ B   │ upgradeModalMaxCount = N      │
+ * │ arcane-refine (秘法精炼)         │ B   │ modal maxSelect = 2N          │
  * │ event-fortify (天机铸炼)         │ B   │ pick slot twice (peek twice)  │
  * │ double-next-magic                │ —   │ engine guards: never echoed   │
  * │ swap-backpack-recycle            │ C   │ swap-back-and-forth = no-op   │
@@ -61,7 +74,7 @@
  * │ arcane-storm-magic-count         │ A   │ damage ×N                     │
  * │ equipment-enchant-discard        │ B   │ pick equip twice              │
  * │ amplify-target                   │ A   │ amplify amount ×N             │
- * │ altar-discover-class-magic       │ B*  │ discover once + echo banner   │
+ * │ altar-discover-class-magic       │ B   │ queue (N-1) extra discovers   │
  * │ equalize-attack-armor            │ A/B │ +2 atk ×N + modal re-prompt   │
  * │ crypt-deathwish                  │ B   │ delegated UI re-prompt        │
  * │ weapon-manual                    │ A/B │ +bonus ×N + modal re-prompt   │
@@ -75,7 +88,7 @@
  * │ STARTER temp-armor               │ A   │ armor ×N                      │
  * │ STARTER heal-magic               │ A   │ healAmt ×N                    │
  * │ STARTER heal-echo                │ A   │ heal ×N                       │
- * │ STARTER discover-class-to-hand   │ B*  │ discover once + echo banner   │
+ * │ STARTER discover-class-to-hand   │ B   │ queue (N-1) extra discovers   │
  * │ STARTER reshuffle                │ B   │ existing echoRemaining        │
  * │ STARTER dungeon-swap             │ A   │ swap×N (even N = no-op)       │
  * │ STARTER active-row-flip          │ B   │ pick flip twice               │
@@ -100,10 +113,11 @@
  * │ KNIGHT missile-bolt              │ A/B │ dmg ×N + modal re-prompt      │
  * │ KNIGHT missile-storm             │ A   │ damage ×N (bolts repeat)      │
  * │ KNIGHT death-ward                │ —   │ passive — echo no-op + banner │
+ * │ KNIGHT fate-sight (天眼审判)     │ C   │ peek+grant once + echo banner │
  * │ KNIGHT fortune-wheel             │ B   │ dice re-roll twice            │
  * │ KNIGHT chaos-dice                │ B   │ dice re-roll twice            │
  * │ KNIGHT graveyard-recall          │ A   │ recall count ×N               │
- * │ KNIGHT graveyard-discover-equip  │ B*  │ discover once + echo banner   │
+ * │ KNIGHT graveyard-discover-equip  │ B   │ hook loop: discover ×N        │
  * │ KNIGHT monster-recruit           │ A   │ recruit count ×N              │
  * │ KNIGHT monster-fusion            │ C   │ fusion not stackable; banner  │
  * │ KNIGHT mirror-copy               │ B   │ pick card twice               │
@@ -152,7 +166,7 @@
  * 的怪物盾不在范围内。所有 `allowsHeroTarget: true` 的卡（missile-bolt、
  * bounty-spell-damage、blood-strike、blood-reckoning、honor-blood、armor-strike、
  * armor-double-strike、stun-strike、overkill-upgrade、chaos-strike、berserk-gambit、
- * fate-sight、midas-judgment、arcane-storm、repair-enrage-dice 等 ~15 张）共用同一
+ * midas-judgment、arcane-storm、repair-enrage-dice 等 ~14 张）共用同一
  * setup → reducer → finalize 路径，不需要每张卡分别注册 self-shield 行为。
  * ===========================================================================
  */
@@ -402,6 +416,7 @@ export function finalizeAltarDiscardDiscover(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
 ): ReduceResult {
   const discardCount = discarded.length;
   if (discardCount > 0) {
@@ -427,7 +442,21 @@ export function finalizeAltarDiscardDiscover(
       event: 'card:discoverRequested' as any,
       payload: { source: 'altar-discard-discover', candidates, sourceLabel: card.name },
     });
-    banner(sideEffects, `祭坛秘术：弃回 ${discardCount} 张牌，发现专属魔法卡…`);
+    // Spell Echo (B) — queue (echoMultiplier - 1) extra discovers.
+    const echoExtras = Math.max(0, echoMultiplier - 1);
+    if (echoExtras > 0) {
+      const queueExtras = Array.from({ length: echoExtras }, () => ({
+        source: 'altar-discard-discover',
+        sourceLabel: card.name,
+        magicOnly: true,
+      }));
+      patch.pendingClassDiscoverQueue = [
+        ...(patch.pendingClassDiscoverQueue ?? state.pendingClassDiscoverQueue),
+        ...queueExtras,
+      ];
+    }
+    const echoSuffix = echoMultiplier > 1 ? `（回响×${echoMultiplier}：将连续发现 ${echoMultiplier} 张）` : '';
+    banner(sideEffects, `祭坛秘术：弃回 ${discardCount} 张牌，发现专属魔法卡…${echoSuffix}`);
   } else {
     log(sideEffects, 'magic', '祭坛秘术：专属牌堆中没有魔法卡。');
     banner(sideEffects, `祭坛秘术：弃回 ${discardCount} 张牌，但专属牌堆中没有魔法卡。`);
@@ -629,6 +658,7 @@ export function resolveHandDiscardSelection(
         sideEffects,
         patch,
         enqueuedActions,
+        pending.context.echoMultiplier ?? 1,
       );
     case 'class-summon':
       return finalizeClassSummon(
@@ -967,9 +997,14 @@ export function resolveInstantMagic(
 
     case '升级卷轴': {
       patch.upgradeModalOpen = true;
-      // 法术回响（B）：modal 仅 echo 一次提示，二次不实际开启（升级模态无队列字段，避免 UI 状态污染）。
+      // 法术回响（B）：用 upgradeModalMaxCount 让升级模态保持打开 N 次，
+      // 玩家连续选 N 张牌升级，模态在第 N 次升级后或玩家手动关闭时关闭。
+      // 没有回响时保持原行为（maxCount=undefined → 选 1 张后关闭）。
+      if (echoMultiplier > 1) {
+        patch.upgradeModalMaxCount = echoMultiplier;
+      }
       banner(sideEffects, echoMultiplier > 1
-        ? '升级卷轴：回响触发——升级模态当前不支持自动连开，请于关闭后再次打出该卡以达成等价效果（本次仅生效一次）。'
+        ? `升级卷轴：回响 ×${echoMultiplier}——可连续选择 ${echoMultiplier} 张牌升级。`
         : '升级卷轴：选择一张牌进行升级。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -977,9 +1012,12 @@ export function resolveInstantMagic(
     }
 
     case '秘法精炼': {
-      patch.handMagicUpgradeModal = { sourceCardId: card.id };
+      // 法术回响（B）：原行为最多选 2 张；回响 ×N 时上限改为 2N，
+      // 让玩家在同一弹窗里多选几张（不重开模态，避免 UI 状态污染）。
+      const maxSelect = 2 * Math.max(1, echoMultiplier);
+      patch.handMagicUpgradeModal = { sourceCardId: card.id, maxSelect };
       banner(sideEffects, echoMultiplier > 1
-        ? '秘法精炼：回响触发——精炼模态当前不支持自动连开，本次仅生效一次（最多 2 张）。'
+        ? `秘法精炼：回响 ×${echoMultiplier}——可选择至多 ${maxSelect} 张魔法牌升级。`
         : '秘法精炼：选择至多 2 张魔法牌进行升级。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -1114,13 +1152,13 @@ export function resolveInstantMagic(
       title: '祭坛秘术',
       prompt: promptText,
       subEffect: 'altar-discover',
-      context: { kind: 'altar-discover', cardSnapshot: card },
+      context: { kind: 'altar-discover', cardSnapshot: card, echoMultiplier },
     });
     if (result.mode === 'modal') {
       banner(sideEffects, promptText);
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
-    return finalizeAltarDiscardDiscover(state, card, result.discarded, sideEffects, patch, enqueuedActions);
+    return finalizeAltarDiscardDiscover(state, card, result.discarded, sideEffects, patch, enqueuedActions, echoMultiplier);
   }
 
   // Fallback: delegate to UI
@@ -1413,6 +1451,9 @@ export function resolvePermanentMagic(
 
   // --- altar-discover-class-magic ---
   if (effect === 'altar-discover-class-magic') {
+    // Spell Echo (B) — first discover fires immediately; (echoMultiplier - 1)
+    // additional discovers are queued via `pendingClassDiscoverQueue` and
+    // re-prompted as the player closes each modal.
     const classDeck = state.classDeck ?? [];
     const pool = classDeck.filter((c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic');
     if (pool.length === 0) {
@@ -1427,7 +1468,20 @@ export function resolvePermanentMagic(
       patch.rng = rng;
       const candidates = shuffled.slice(0, Math.min(3, pool.length));
       sideEffects.push({ event: 'card:discoverRequested' as any, payload: { source: 'altar-discover-class-magic', candidates, sourceLabel: card.name } });
-      banner(sideEffects, '祭坛秘术：发现专属魔法卡…');
+      const echoExtras = Math.max(0, echoMultiplier - 1);
+      if (echoExtras > 0) {
+        const queueExtras = Array.from({ length: echoExtras }, () => ({
+          source: 'altar-discover-class-magic',
+          sourceLabel: card.name,
+          magicOnly: true,
+        }));
+        patch.pendingClassDiscoverQueue = [
+          ...(patch.pendingClassDiscoverQueue ?? state.pendingClassDiscoverQueue),
+          ...queueExtras,
+        ];
+      }
+      const echoSuffix = isEchoTriggered ? `（回响×${echoMultiplier}：将连续发现 ${echoMultiplier} 张）` : '';
+      banner(sideEffects, `祭坛秘术：发现专属魔法卡…${echoSuffix}`);
     }
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -1576,9 +1630,11 @@ export function resolvePermanentMagic(
 
     case STARTER_CARD_IDS.discoverClassToHand: {
       // 「专属感召」(Perm 1)：发现一张专属牌，直接进手牌。
-      // Spell Echo (B*) — UI-DELEGATED MODAL: discover modal cannot be
-      // auto-replayed, so 2× echo only fires once and emits a banner. This
-      // matches `altar-discover-class-magic` semantics.
+      // Spell Echo (B) — when echoMultiplier > 1, queue (echoMultiplier - 1)
+      // additional discover prompts via `pendingClassDiscoverQueue`. The first
+      // discover fires immediately via `card:discoverRequested`; each queued
+      // entry re-opens the modal after the previous selection (handled in
+      // `reduceResolveDiscoverSelection` and `SET_DISCOVER_MODAL` close path).
       const classDeck = state.classDeck ?? [];
       if (classDeck.length === 0) {
         banner(sideEffects, '专属感召：专属牌堆为空。');
@@ -1601,7 +1657,19 @@ export function resolvePermanentMagic(
           delivery: 'hand-first',
         },
       });
-      const echoSuffix = isEchoTriggered ? '（回响×2 在 UI 模态下不重复触发）' : '';
+      const echoExtras = Math.max(0, echoMultiplier - 1);
+      if (echoExtras > 0) {
+        const queueExtras = Array.from({ length: echoExtras }, () => ({
+          source: 'starter-discover-class-to-hand',
+          sourceLabel: card.name,
+          delivery: 'hand-first' as const,
+        }));
+        patch.pendingClassDiscoverQueue = [
+          ...(patch.pendingClassDiscoverQueue ?? state.pendingClassDiscoverQueue),
+          ...queueExtras,
+        ];
+      }
+      const echoSuffix = isEchoTriggered ? `（回响×${echoMultiplier}：将连续发现 ${echoMultiplier} 张）` : '';
       banner(sideEffects, `专属感召：发现一张专属牌，直接进入手牌。${echoSuffix}`);
       log(sideEffects, 'magic', `专属感召：候选 ${candidates.map(c => `「${c.name}」`).join('、')}`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -2247,7 +2315,7 @@ export function resolveKnightInstantMagic(
       return resolveStunWave(state, card, sideEffects, patch, enqueuedActions);
 
     case 'graveyard-discover-equip-amulet':
-      return resolveGraveyardDiscoverEquipAmulet(state, card, sideEffects, patch, enqueuedActions);
+      return resolveGraveyardDiscoverEquipAmulet(state, card, sideEffects, patch, enqueuedActions, echoMultiplier);
 
     case 'monster-recruit':
       return resolveMonsterRecruit(state, card, sideEffects, patch, enqueuedActions);
@@ -3399,16 +3467,64 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'fate-sight': {
-      // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
-      patch.pendingMagicAction = {
-        card,
-        effect: 'fate-sight',
-        step: 'monster-select',
-        prompt: '选择一个目标，造成伤害并翻看牌堆。',
-        allowsHeroTarget: true,
-      } as any;
-      patch.heroSkillBanner = '天眼审判：选择目标。';
-      return applyPatch(state, patch, sideEffects);
+      // 天眼审判（Perm 1）：翻看主牌堆顶 4 张牌，若其中无怪物，则下次劝降成功率
+      // +bonus%（lvl0 = 70, lvl1 = 100）。bonus 累加到 `state.persuadeAmuletBonus`，
+      // 与翻印之符 / 怀柔之印 / 劝降之刃 等共享同一"下次劝降率"短期 buff——
+      // 在任何劝降"启动"（PERSUADE_MONSTER）时被清零，符合卡面"下次"语义。
+      //
+      // 法术回响：结构性 (C) — 第二次结算翻看的还是同一批牌堆顶，结果相同；
+      // 不重复 grant bonus，仅 banner 提示"回响：二次结算无额外效果"。
+      const peekCount = 4;
+      const persuadeBonuses = [70, 100];
+      const persuadeBonus = persuadeBonuses[card.upgradeLevel ?? 0] ?? 70;
+
+      const deck = state.remainingDeck;
+      const peekedCards = deck.slice(0, Math.min(peekCount, deck.length));
+      const monsterCount = peekedCards.filter(c => c.type === 'monster').length;
+      const noMonster = peekedCards.length > 0 && monsterCount === 0;
+
+      const echoTag = isEchoTriggered ? '（回响：二次结算无额外效果）' : '';
+
+      let grantedBonus = 0;
+      if (noMonster) {
+        grantedBonus = persuadeBonus;
+        patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + persuadeBonus;
+        sideEffects.push({
+          event: 'log:entry',
+          payload: {
+            type: 'magic',
+            message: `天眼审判：翻看牌堆顶 ${peekedCards.length} 张牌均非怪物，下次劝降成功率 +${persuadeBonus}%。${echoTag}`,
+          },
+        });
+      } else if (peekedCards.length === 0) {
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'magic', message: `天眼审判：主牌堆已空，无效果。${echoTag}` },
+        });
+      } else {
+        sideEffects.push({
+          event: 'log:entry',
+          payload: {
+            type: 'magic',
+            message: `天眼审判：翻看牌堆顶 ${peekedCards.length} 张含 ${monsterCount} 张怪物，无加成。${echoTag}`,
+          },
+        });
+      }
+
+      sideEffects.push({
+        event: 'card:fateSightPeekReady',
+        payload: {
+          peekedCards,
+          monsterCount,
+          persuadeBonusGranted: grantedBonus,
+          card,
+        },
+      });
+
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      // 注意：FINALIZE_MAGIC_CARD 由 hook 在 peek 弹窗关闭后 dispatch（卡的"使用"
+      // 时机要等玩家看完 4 张牌再正式"消费"），与原 fate-sight 流程保持一致。
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
     default:
@@ -4419,6 +4535,7 @@ export function resolveGraveyardDiscoverEquipAmulet(
   sideEffects: SideEffect[],
   patch: Partial<GameState>,
   enqueuedActions: GameAction[],
+  echoMultiplier: number = 1,
 ): ReduceResult {
   const eligible = (state.discardedCards ?? []).filter(
     (c: GameCardData) => c.type === 'weapon' || c.type === 'shield' || c.type === 'amulet',
@@ -4429,21 +4546,32 @@ export function resolveGraveyardDiscoverEquipAmulet(
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
+  // Note: candidates are pre-rolled here as legacy bookkeeping for the choice
+  // handler at `case 'graveyard-discover-equip-amulet'`. The current UI hook
+  // (`useCardPlayHandlers.ts` `card:graveyardDiscoverEquipAmulet`) re-rolls
+  // candidates on its own via `requestGraveyardSelection(3, …)`, so these
+  // pre-rolled candidates are effectively unused — kept for compatibility.
   let rng = patch.rng ?? state.rng;
   let shuffled: GameCardData[];
   [shuffled, rng] = rngShuffle(eligible, rng);
   patch.rng = rng;
   const candidates = shuffled.slice(0, Math.min(3, shuffled.length));
 
+  const echoRemaining = Math.max(1, echoMultiplier);
+
   patch.pendingMagicAction = {
     card,
     effect: 'graveyard-discover-equip-amulet',
     step: 'discover',
     data: { candidates },
+    echoRemaining,
   } as any;
+  if (echoMultiplier > 1) {
+    banner(sideEffects, `破印遗物：回响 ×${echoMultiplier}——将连续从坟场发现 ${echoMultiplier} 张装备/护符。`);
+  }
   sideEffects.push({
     event: 'card:graveyardDiscoverEquipAmulet' as any,
-    payload: { card, candidates },
+    payload: { card, candidates, echoRemaining },
   });
   return applyPatch(state, patch, sideEffects);
 }

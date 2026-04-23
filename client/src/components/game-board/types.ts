@@ -431,14 +431,6 @@ export type PendingMagicAction =
     }
   | {
       card: GameCardData;
-      effect: 'fate-sight';
-      step: 'monster-select';
-      prompt: string;
-      echoRemaining?: number;
-      allowsHeroTarget?: boolean;
-    }
-  | {
-      card: GameCardData;
       effect: 'honor-sweep';
       step: 'slot-select';
       prompt: string;
@@ -670,6 +662,8 @@ export type HandDiscardContinuation =
   | {
       kind: 'altar-discover';
       cardSnapshot: GameCardData;
+      /** 法术回响倍率（B 类：发现模态需重复打开 N 次）。默认 1。 */
+      echoMultiplier?: number;
     }
   | {
       kind: 'class-summon';
@@ -687,13 +681,13 @@ export type HandDiscardContinuation =
       skillId: string;
     };
 
-/** 天眼审判：透视 + 击晕判定（关闭弹窗后掷骰） */
+/** 天眼审判：翻看主牌堆顶 4 张，若无怪物则下次劝降率 +N% */
 export type DeckPeekModalStateFateSight = {
   mode?: 'fate-sight';
   peekedCards: GameCardData[];
   monsterCount: number;
-  stunChance: number;
-  targetMonsterName: string;
+  /** 实际授予的劝降率加成（0 表示翻到了怪物，未授予加成） */
+  persuadeBonusGranted: number;
 };
 
 /** 命数裁断：翻看主牌堆顶，依类型获得增益/惩罚 */

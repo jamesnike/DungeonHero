@@ -257,7 +257,7 @@ export interface PersistedGameState {
   graveyardDiscoverState?: GameCardData[] | null;
   graveyardDiscoverDelivery?: 'backpack' | 'hand-first';
   ghostBladeExileCards?: GameCardData[] | null;
-  handMagicUpgradeModal?: { sourceCardId: string } | null;
+  handMagicUpgradeModal?: { sourceCardId: string; maxSelect?: number } | null;
   mirrorCopyModal?: { sourceCardId: string } | null;
   permGrantModal?: { sourceCardId: string; sourceType: string; meta?: Record<string, number> } | null;
   amplifyModal?: { sourceCardId: string } | null;

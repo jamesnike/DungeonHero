@@ -124,7 +124,6 @@ export interface HeroActionsDeps {
   ) => boolean;
   chaosStrikeHasOverkill: (monster: GameCardData, damage: number) => boolean;
   drawCardsFromBackpack: (count: number, opts?: { ignoreLimit?: boolean }) => number;
-  resolveFateSight: (card: GameCardData, target: GameCardData, baseDmg: number, peekCount: number) => void;
   resolveStatSwap: (card: GameCardData, target: GameCardData, isFlank: boolean) => void;
   resolveRepairEnrageDice: (card: GameCardData, slotId: EquipmentSlotId, monster: GameCardData) => void;
 

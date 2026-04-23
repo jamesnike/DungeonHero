@@ -5,10 +5,10 @@
  * 原 bug：玩家用 雷涌一击 (`stun-cap-strike`) 时，眩学之符 计数器没有增加，
  * 因为只有 `combat.ts` 的 `PERFORM_HERO_ATTACK` / `PERFORM_SHIELD_BASH`
  * 在 push 击晕骰时 tick 了 `stunAttemptDiscoverProgress`。所有"魔法/侧击
- * 驱动"的 stun dice（雷震击 / 雷涌一击 / 侧击：击晕 / 天眼审判）都漏掉了。
+ * 驱动"的 stun dice（雷震击 / 雷涌一击 / 侧击：击晕）都漏掉了。
  *
  * 修复：在 `rules/combat.ts` 暴露统一的 `tickStunAttemptDiscoverProgress`
- * helper，每个 push `ui:requestDice` (或为 fate-sight 预滚 RNG) 的位置都调一次。
+ * helper，每个 push `ui:requestDice` 的位置都调一次。
  *
  * 本测试覆盖所有 5 个魔法驱动的击晕判定路径 + 武器/盾基线对照（确保没回归）。
  */
@@ -244,68 +244,33 @@ describe('stun-attempt-discover ticks for 侧击：击晕 (flank-stun)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4) 天眼审判 (fate-sight) — pre-rolls stun dice in RESOLVE_FATE_SIGHT
+// 4) 天眼审判 (fate-sight) — 已改为劝降率加成卡，不再触发击晕骰子，所以在
+//    stun-attempt-discover 进度链中不再出现。这里仅留一条 sanity 测试确保它
+//    确实不会 tick progress。
 // ---------------------------------------------------------------------------
 
-describe('stun-attempt-discover ticks for 天眼审判 (fate-sight)', () => {
-  it('willRollStun=true → progress increments', () => {
+describe('stun-attempt-discover does NOT tick for 天眼审判 (fate-sight)', () => {
+  it('PLAY_CARD 天眼审判 不增加 stunAttemptDiscoverProgress', () => {
     const card = {
       id: 'magic-fate', type: 'magic' as const, name: '天眼审判', value: 0,
       image: '', classCard: true,
       magicType: 'permanent' as const,
-      magicEffect: 'test',
+      magicEffect: '透视牌堆顶 4 张，无怪物则获劝降率加成。',
       knightEffect: 'fate-sight',
       recycleDelay: 1,
     };
-    const monster = makeMonster('m1');
     const monsterCard = {
       id: 'deck-m', type: 'monster' as const, name: 'Goblin',
       value: 1, hp: 1, maxHp: 1, attack: 1,
     };
     const state = makeState({
-      activeCards: activeRowOf(monster) as any,
+      hand: [card] as any,
       amuletSlots: [stunAmulet] as any,
       stunAttemptDiscoverProgress: 0,
-      remainingDeck: [monsterCard, monsterCard, monsterCard] as any,
+      remainingDeck: [monsterCard, monsterCard, monsterCard, monsterCard] as any,
       stunCap: 60,
     });
-    const result = reduce(state, {
-      type: 'RESOLVE_FATE_SIGHT',
-      card,
-      targetMonsterId: 'm1',
-      baseDmg: 3,
-      peekCount: 3,
-    } as GameAction);
-    expect(result.state.stunAttemptDiscoverProgress).toBe(1);
-  });
-
-  it('willRollStun=false (peeked 0 monsters → stunChance=0) → no tick', () => {
-    const card = {
-      id: 'magic-fate2', type: 'magic' as const, name: '天眼审判', value: 0,
-      image: '', classCard: true,
-      magicType: 'permanent' as const,
-      magicEffect: 'test',
-      knightEffect: 'fate-sight',
-      recycleDelay: 1,
-    };
-    const monster = makeMonster('m1');
-    const nonMonsterCard = {
-      id: 'deck-p', type: 'potion' as const, name: 'Potion', value: 1,
-    };
-    const state = makeState({
-      activeCards: activeRowOf(monster) as any,
-      amuletSlots: [stunAmulet] as any,
-      stunAttemptDiscoverProgress: 0,
-      remainingDeck: [nonMonsterCard, nonMonsterCard, nonMonsterCard] as any,
-      stunCap: 60,
-    });
-    const result = reduce(state, {
-      type: 'RESOLVE_FATE_SIGHT',
-      card,
-      targetMonsterId: 'm1',
-      baseDmg: 3,
-      peekCount: 3,
-    } as GameAction);
+    const result = reduce(state, { type: 'PLAY_CARD', cardId: card.id } as GameAction);
     expect(result.state.stunAttemptDiscoverProgress).toBe(0);
   });
 });

@@ -131,16 +131,23 @@ export function reduceUIStateActions(
         patch.discoverDelivery = 'backpack';
       }
       // When closing the modal, drain one pending class-discover from the queue
-      // so multi-discover effects (e.g. 弃装重铸) pop modals one at a time.
+      // so multi-discover effects (e.g. 弃装重铸 / 法术回响 echoed discovers)
+      // pop modals one at a time. The queue entry's optional `delivery` and
+      // `magicOnly` fields control how the next BEGIN_DISCOVER is shaped (see
+      // `pendingClassDiscoverQueue` JSDoc in `types.ts`).
       const enqueuedActions: GameAction[] = [];
       if (!action.open && state.pendingClassDiscoverQueue.length > 0) {
         const [nextEntry, ...rest] = state.pendingClassDiscoverQueue;
         patch.pendingClassDiscoverQueue = rest;
+        const nextPool = nextEntry.magicOnly
+          ? state.classDeck.filter(c => c.type === 'magic' || c.type === 'hero-magic')
+          : state.classDeck;
         enqueuedActions.push({
           type: 'BEGIN_DISCOVER',
           source: nextEntry.source,
-          pool: state.classDeck,
+          pool: nextPool,
           sourceLabel: nextEntry.sourceLabel ?? undefined,
+          delivery: nextEntry.delivery,
         });
       }
       return applyPatch(state, patch, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);

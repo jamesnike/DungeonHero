@@ -291,13 +291,11 @@ const recycleFlare: OnUpgradeHandler = (upgraded, newLevel) => {
 };
 
 const fateSight: OnUpgradeHandler = (upgraded, newLevel) => {
-  const baseDamages = [3, 4];
-  const peekCounts = [3, 4];
-  const dmg = baseDamages[newLevel] ?? 4;
-  const peek = peekCounts[newLevel] ?? 4;
-  upgraded.recycleDelay = newLevel >= 1 ? 1 : 2;
-  upgraded.description = `永久：造成 ${dmg} 点伤害，翻看主牌堆顶 ${peek} 张牌，每有一张怪物牌，20% 概率击晕目标。`;
-  upgraded.magicEffect = `造成 ${dmg} 点伤害并透视 ${peek} 张牌，可能击晕目标。`;
+  const persuadeBonuses = [70, 100];
+  const bonus = persuadeBonuses[newLevel] ?? 100;
+  upgraded.description = `永久：翻看主牌堆顶 4 张牌，如果其中没有怪物牌，则下次劝降成功率 +${bonus}%。`;
+  upgraded.shortDescription = `翻 4 张：无怪物 → 下次劝降率 +${bonus}%`;
+  upgraded.magicEffect = `透视牌堆顶 4 张，无怪物则下次劝降率 +${bonus}%。`;
 };
 
 const bloodDraw: OnUpgradeHandler = (upgraded, newLevel) => {

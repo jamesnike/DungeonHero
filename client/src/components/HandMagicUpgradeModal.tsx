@@ -11,7 +11,7 @@ import { ArrowBigUpDash } from 'lucide-react';
 import GameCard, { type GameCardData } from './GameCard';
 import { isUpgradeableCard, isCardAtMaxUpgrade } from './CardUpgradeModal';
 
-const MAX_SELECT = 2;
+const DEFAULT_MAX_SELECT = 2;
 
 interface HandMagicUpgradeModalProps {
   open: boolean;
@@ -19,6 +19,8 @@ interface HandMagicUpgradeModalProps {
   handCards: GameCardData[];
   sourceCardId: string | null;
   onUpgrade: (cardIds: string[]) => void;
+  /** 法术回响 B 类：上限 = 2 * echoMultiplier，未传按 2 处理（普通使用）。 */
+  maxSelect?: number;
 }
 
 export default function HandMagicUpgradeModal({
@@ -27,8 +29,11 @@ export default function HandMagicUpgradeModal({
   handCards,
   sourceCardId,
   onUpgrade,
+  maxSelect,
 }: HandMagicUpgradeModalProps) {
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+
+  const cap = Math.max(1, maxSelect ?? DEFAULT_MAX_SELECT);
 
   const upgradeableMagics = handCards.filter(
     c => c.id !== sourceCardId && c.type === 'magic' && isUpgradeableCard(c) && !isCardAtMaxUpgrade(c),
@@ -37,7 +42,7 @@ export default function HandMagicUpgradeModal({
   const toggleCard = (cardId: string) => {
     setSelectedCardIds(prev => {
       if (prev.includes(cardId)) return prev.filter(id => id !== cardId);
-      if (prev.length >= MAX_SELECT) return prev;
+      if (prev.length >= cap) return prev;
       return [...prev, cardId];
     });
   };
@@ -53,7 +58,7 @@ export default function HandMagicUpgradeModal({
     onClose();
   };
 
-  const effectiveMax = Math.min(MAX_SELECT, upgradeableMagics.length);
+  const effectiveMax = Math.min(cap, upgradeableMagics.length);
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>

@@ -647,11 +647,15 @@ function reduceResolveDiscoverSelection(
   if (state.pendingClassDiscoverQueue.length > 0) {
     const [nextEntry, ...rest] = state.pendingClassDiscoverQueue;
     patch.pendingClassDiscoverQueue = rest;
+    const nextPool = nextEntry.magicOnly
+      ? state.classDeck.filter(c => c.type === 'magic' || c.type === 'hero-magic')
+      : state.classDeck;
     enqueuedActions.push({
       type: 'BEGIN_DISCOVER',
       source: nextEntry.source,
-      pool: state.classDeck,
+      pool: nextPool,
       sourceLabel: nextEntry.sourceLabel ?? undefined,
+      delivery: nextEntry.delivery,
     });
   }
 

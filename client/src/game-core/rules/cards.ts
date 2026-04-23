@@ -138,8 +138,6 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
       };
     case 'RESOLVE_DECK_JUDGE':
       return reduceResolveDeckJudge(state, action);
-    case 'RESOLVE_FATE_SIGHT':
-      return reduceResolveFateSight(state, action);
     case 'RESOLVE_STAT_SWAP':
       return reduceResolveStatSwap(state, action);
     case 'PROCESS_HERO_MAGIC_CARD':
@@ -2643,70 +2641,6 @@ function reduceResolveDeckJudge(
   sideEffects.push({
     event: 'card:deckJudgePeekReady',
     payload: { peekedCards, monsterCount, deleteCount: monsterCount, gains, card },
-  });
-
-  return applyPatch(state, patch, sideEffects, enqueuedActions);
-}
-
-// ---------------------------------------------------------------------------
-// RESOLVE_FATE_SIGHT — deal spell damage, peek deck, compute stun chance
-// ---------------------------------------------------------------------------
-
-function reduceResolveFateSight(
-  state: GameState,
-  action: Extract<GameAction, { type: 'RESOLVE_FATE_SIGHT' }>,
-): ReduceResult {
-  const { card, targetMonsterId, baseDmg, peekCount } = action;
-  const sideEffects: SideEffect[] = [];
-  const enqueuedActions: GameAction[] = [];
-  const patch: Partial<GameState> = {};
-
-  const totalDamage = getSpellDamage(baseDmg + (card.amplifyBonus ?? 0), state);
-  const target = flattenActiveRowSlots(state.activeCards).find(c => c.id === targetMonsterId);
-  if (!target) {
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, banner: '天眼审判：目标已消失。' });
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
-
-  const isEngaged = state.combatState?.engagedMonsterIds?.includes(targetMonsterId);
-  if (!isEngaged) {
-    enqueuedActions.push({ type: 'BEGIN_COMBAT', monster: target, initiator: 'hero' });
-  }
-  enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: targetMonsterId, damage: totalDamage, source: 'fate-sight', isSpellDamage: true });
-
-  const deck = state.remainingDeck;
-  const peekedCards = deck.slice(0, Math.min(peekCount, deck.length));
-  const monsterCount = peekedCards.filter(c => c.type === 'monster').length;
-
-  const amuletFx = computeAmuletEffects(state.amuletSlots);
-  const rawStunChance = Math.min(monsterCount * 20 + (amuletFx.stunRateBoost ?? 0), 100);
-  const stunChance = state.stunCap > 0 ? Math.min(rawStunChance, state.stunCap) : rawStunChance;
-
-  // Pre-roll the stun dice from seeded RNG so the UI dice modal animates to a
-  // deterministic value. Roll only when the dice would actually be triggered
-  // by useCardPlayHandlers' fate-sight close handler (matches its gating).
-  const willRollStun = stunChance > 0 && !target.isStunned;
-  let rng = state.rng;
-  let predeterminedRoll = 0;
-  if (willRollStun) {
-    [predeterminedRoll, rng] = nextInt(rng, 1, 20);
-    patch.rng = rng;
-    tickStunAttemptDiscoverProgress(state, patch, sideEffects);
-  }
-
-  sideEffects.push({
-    event: 'card:fateSightPeekReady',
-    payload: {
-      peekedCards,
-      monsterCount,
-      stunChance,
-      targetMonsterName: target.name,
-      card,
-      totalDamage,
-      targetMonsterId,
-      targetIsStunned: !!target.isStunned,
-      predeterminedRoll,
-    },
   });
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);

@@ -766,14 +766,6 @@ export interface ResolveDeckJudgeAction {
   card: GameCardData;
 }
 
-export interface ResolveFateSightAction {
-  type: 'RESOLVE_FATE_SIGHT';
-  card: GameCardData;
-  targetMonsterId: string;
-  baseDmg: number;
-  peekCount: number;
-}
-
 export interface ResolveStatSwapAction {
   type: 'RESOLVE_STAT_SWAP';
   card: GameCardData;
@@ -1959,7 +1951,6 @@ export type GameAction =
   | EquipFromHandAction
   | EquipAmuletFromHandAction
   | ResolveDeckJudgeAction
-  | ResolveFateSightAction
   | ResolveStatSwapAction
   | ReturnEquipmentToHandAction
   | ResolvePotionRepairAction

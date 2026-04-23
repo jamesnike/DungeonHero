@@ -468,12 +468,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicFateSightImage,
     classCard: true,
-    description: '永久：造成 3 点伤害，翻看主牌堆顶 3 张牌，每有一张怪物牌，20% 概率击晕目标。',
-    shortDescription: '3 点伤害，按牌堆顶怪物数概率击晕',
+    description: '永久：翻看主牌堆顶 4 张牌，如果其中没有怪物牌，则下次劝降成功率 +70%。',
+    shortDescription: '翻 4 张：无怪物 → 下次劝降率 +70%',
     magicType: 'permanent',
-    magicEffect: '造成伤害并透视牌堆，可能击晕目标。',
+    magicEffect: '透视牌堆顶 4 张，无怪物则获劝降率加成。',
     knightEffect: 'fate-sight',
-    recycleDelay: 2,
+    recycleDelay: 1,
     maxUpgradeLevel: 1,
   });
 

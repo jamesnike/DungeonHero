@@ -47,6 +47,7 @@ function MagicCardContainerInner() {
         handCards={gs.handCards}
         sourceCardId={gs.handMagicUpgradeModal?.sourceCardId ?? null}
         onUpgrade={cb.onHandMagicUpgradeSelect}
+        maxSelect={gs.handMagicUpgradeModal?.maxSelect}
       />
 
       <MirrorCopyModal

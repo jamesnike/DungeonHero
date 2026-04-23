@@ -668,7 +668,7 @@ The helper `isDamageMagic(card)` (`helpers.ts`) identifies damage-dealing magic 
 - Cards with `scalingDamage` (叠刺 mechanic)
 - Cards with `onDiscardDamage > 0`
 - Knight class damage effects via `knightEffect`:
-  `missile-bolt`, `armor-strike`, `missing-hp-smite`, `grave-nova`, `fate-sight`, `temp-attack-strike`, `weapon-sweep`, `overkill-upgrade`
+  `missile-bolt`, `armor-strike`, `missing-hp-smite`, `grave-nova`, `temp-attack-strike`, `weapon-sweep`, `overkill-upgrade`
 - Main deck damage effects via `magicEffect`:
   `storm-volley-recycle`, `arcane-storm-magic-count`
 - Cards matched by name:
@@ -701,7 +701,6 @@ The `amplifyBonus` field on `GameCardData` is read as `(card.amplifyBonus ?? 0)`
 - 铠甲贯刺 (`armor-strike`): `getSpellDamage(scaledArmor + ampBonus)`
 - 残血终焉 (`missing-hp-smite`): `getSpellDamage(scaledDmg + ampBonus)`
 - 坟火新星 (`grave-nova`): `getSpellDamage(baseDmg + ampBonus)` — baseDmg = [3, 6][upgradeLevel], `triggerGraveNova(card)` receives the card to read its bonus
-- 天眼审判 (`fate-sight`): `getSpellDamage(baseDmg + ampBonus)` inside `resolveFateSight`
 - 锋刃侧击 (`temp-attack-strike`): `getSpellDamage(slotPermAtk + tempAtk + ampBonus)`（`slotPermAtk = getSlotBonus(state, slotId, 'damage')`）
 - 利刃风暴 (`weapon-sweep`): `computeHonorSweepWaveDamage(slotId) + ampBonus`
 - 淬炼冲击 (`overkill-upgrade`): `getSpellDamage(3 + ampBonus)`

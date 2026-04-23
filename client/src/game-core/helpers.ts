@@ -504,7 +504,6 @@ export function isDamageMagic(card: GameCardData): boolean {
     'missing-hp-smite',
     'blood-sacrifice-strike',
     'grave-nova',
-    'fate-sight',
     'temp-attack-strike',
     'weapon-sweep',
     'overkill-upgrade',
@@ -608,18 +607,6 @@ export function computeDamageMagicDisplayPure(
     return {
       mode: 'replace',
       text: `对激活行所有怪物造成 ${dmg} 点伤害，每击中一个怪物，从回收袋随机抽 1 张牌加入手牌。`,
-      amplifyBonus: amp,
-    };
-  }
-
-  if (card.knightEffect === 'fate-sight') {
-    const baseDamages = [3, 4];
-    const lvl = card.upgradeLevel ?? 0;
-    const base = baseDamages[lvl] ?? 3;
-    const dmg = base + amp;
-    return {
-      mode: 'replace',
-      text: `永久：造成 ${dmg} 点伤害，翻看主牌堆顶 3 张牌，每有一张怪物牌，20% 概率击晕目标。`,
       amplifyBonus: amp,
     };
   }

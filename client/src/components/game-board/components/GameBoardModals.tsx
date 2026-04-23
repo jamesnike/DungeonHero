@@ -1045,6 +1045,7 @@ function GameBoardModalsInner({
         handCards={handCards}
         sourceCardId={handMagicUpgradeModal?.sourceCardId ?? null}
         onUpgrade={onHandMagicUpgradeSelect}
+        maxSelect={handMagicUpgradeModal?.maxSelect}
       />
 
       <MirrorCopyModal

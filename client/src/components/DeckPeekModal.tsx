@@ -140,7 +140,8 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
     );
   }
 
-  const { peekedCards, monsterCount, stunChance, targetMonsterName } = state;
+  const { peekedCards, monsterCount, persuadeBonusGranted } = state;
+  const noMonster = peekedCards.length > 0 && monsterCount === 0;
 
   return (
     <Dialog open onOpenChange={v => { if (!v) onClose(); }}>
@@ -148,22 +149,30 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Eye className="w-5 h-5 text-indigo-400" />
-            牌堆透视
+            天眼审判
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex items-center justify-center gap-3 py-4">
-          {peekedCards.map((card, idx) => (
-            <div
-              key={card.id}
-              className={`w-[100px] h-[140px] flex-shrink-0 transition-transform duration-300 ${
-                card.type === 'monster' ? 'ring-2 ring-red-400 rounded-lg' : ''
-              }`}
-              style={{ animationDelay: `${idx * 100}ms` }}
-            >
-              <GameCard card={card} disableInteractions />
-            </div>
-          ))}
+        <p className="text-sm text-muted-foreground text-center px-1">
+          翻看主牌堆顶 4 张牌，若其中没有怪物，则下次劝降成功率获得加成。
+        </p>
+
+        <div className="flex items-center justify-center gap-3 py-4 flex-wrap">
+          {peekedCards.length === 0 ? (
+            <p className="text-sm text-muted-foreground">主牌堆已空。</p>
+          ) : (
+            peekedCards.map((card, idx) => (
+              <div
+                key={card.id}
+                className={`w-[100px] h-[140px] flex-shrink-0 transition-transform duration-300 ${
+                  card.type === 'monster' ? 'ring-2 ring-red-400 rounded-lg' : 'ring-2 ring-emerald-400 rounded-lg'
+                }`}
+                style={{ animationDelay: `${idx * 100}ms` }}
+              >
+                <GameCard card={card} disableInteractions />
+              </div>
+            ))
+          )}
         </div>
 
         <div className="space-y-2 text-center">
@@ -171,25 +180,22 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
             发现 <span className="font-bold text-red-400">{monsterCount}</span> 张怪物牌
           </p>
 
-          {monsterCount > 0 ? (
-            <>
-              <p className="text-sm">
-                击晕概率：<span className="font-bold text-amber-400">{stunChance}%</span>
-              </p>
-              <p className="text-sm text-amber-300 animate-pulse">
-                关闭后掷骰判定是否击晕 {targetMonsterName}
-              </p>
-            </>
+          {noMonster ? (
+            <p className="text-sm text-emerald-300 animate-pulse font-semibold">
+              无怪物！下次劝降成功率 +{persuadeBonusGranted}%
+            </p>
+          ) : peekedCards.length === 0 ? (
+            <p className="text-sm text-muted-foreground">无效果。</p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              未发现怪物牌，无法判定击晕。
+              翻到怪物，本次未获得劝降加成。
             </p>
           )}
         </div>
 
         <div className="flex justify-center pt-2">
           <Button variant="outline" onClick={onClose}>
-            {monsterCount > 0 ? '确认并掷骰' : '关闭'}
+            关闭
           </Button>
         </div>
       </DialogContent>
