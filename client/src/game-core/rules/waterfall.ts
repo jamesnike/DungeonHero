@@ -417,40 +417,6 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
     }
   }
 
-  // Eternal relic: waterfall-draw-2 — draw 2 cards from backpack every waterfall.
-  // 放在回收袋 tick 之后：刚被洗回背包的卡这一波就能被抽到，与 `recycle-shuffle`
-  // 起始护符天然联动。
-  // 来源固定 'backpack'：遵循 .cursor/rules/draw-cards-defaults-to-backpack.mdc。
-  // 内联 drawMultipleFromBackpack（而不是 enqueue DRAW_CARDS）的目的：拿到实际抽
-  // 到的卡的引用，把名字写进 log，跟其它「抽 N 张」效果（hero 击晕汲取等）的实
-  // 现一致。
-  if (hasEternalRelic(state.eternalRelics, 'waterfall-draw-2')) {
-    const drawState = { ...state, ...patch } as GameState;
-    const drawResult = drawMultipleFromBackpack(drawState, 2);
-    if (drawResult.cards.length > 0) {
-      Object.assign(patch, drawResult.patch);
-      for (const d of drawResult.cards) {
-        sideEffects.push({
-          event: 'card:drawnToHand',
-          payload: { cardId: d.id, source: 'backpack' },
-        });
-      }
-      const names = drawResult.cards.map(c => `「${c.name}」`).join('、');
-      sideEffects.push({
-        event: 'log:entry',
-        payload: {
-          type: 'waterfall',
-          message: `永恒护符·瀑流汲取：从背包抽 ${drawResult.cards.length} 张牌（${names}）`,
-        },
-      });
-    } else {
-      sideEffects.push({
-        event: 'log:entry',
-        payload: { type: 'waterfall', message: '永恒护符·瀑流汲取：背包无可抽卡或手牌已满' },
-      });
-    }
-  }
-
   // Wraith equipment enrage: when equipped wraith has wraithTurnEnrage,
   // engage all non-stunned monsters and grant +1 amulet slot
   let hasWraithEquipEnrage = false;
@@ -1151,6 +1117,51 @@ function reduceApplyWaterfallDrop(state: GameState): ReduceResult {
       }
     }
     enqueuedActions.push({ type: 'CHECK_ELITE_GOLD_BUFF' });
+  }
+
+  // Eternal relic: waterfall-draw-2 — draw 2 cards from backpack every waterfall.
+  //
+  // Timing: 放在「怪物落到 active row 之后」，跟刚 patch 进去的 newActive 在同
+  // 一 reduce step 里更新 handCards。理由：被抽到的卡如果带 onEnterHandEffect
+  // （例：三牌惊雷"对 active row 全体怪造成 1 法术伤害"、嗜血誓约、生长之刃 等），
+  // 触发时必须看到本波瀑流刚落下的怪物，否则 on-enter-hand 效果在 stale 的 active
+  // row 上失效。`postProcessHandEntries`（reducer.ts ~L377）会在 reduce 后自动
+  // 检测 handCards diff 并 enqueue TRIGGER_ON_ENTER_HAND，因为 patch.activeCards
+  // 和 patch.handCards 在同一步写入，触发时 state.activeCards 已是 post-drop 状态。
+  //
+  // 副作用：边界情况里 `plan.resolvedDropCards.length === 0` 时 GameBoard 不会
+  // dispatch APPLY_WATERFALL_DROP（直接走 deal/discard 分支），所以「无落怪的
+  // 瀑流」这一波 relic 不触发。这是有意取舍：无落怪 = 没有"怪物落到 active row
+  // 之后"这个时点，不强行补发；玩家在那一波损失 2 张。
+  //
+  // 来源固定 'backpack'：遵循 .cursor/rules/draw-cards-defaults-to-backpack.mdc。
+  // 内联 drawMultipleFromBackpack（而不是 enqueue DRAW_CARDS）的目的：拿到实际
+  // 抽到的卡的引用，把名字写进 log，跟其它「抽 N 张」效果实现一致。
+  if (hasEternalRelic(state.eternalRelics, 'waterfall-draw-2')) {
+    const drawState = { ...state, ...patch } as GameState;
+    const drawResult = drawMultipleFromBackpack(drawState, 2);
+    if (drawResult.cards.length > 0) {
+      Object.assign(patch, drawResult.patch);
+      for (const d of drawResult.cards) {
+        sideEffects.push({
+          event: 'card:drawnToHand',
+          payload: { cardId: d.id, source: 'backpack' },
+        });
+      }
+      const names = drawResult.cards.map(c => `「${c.name}」`).join('、');
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'waterfall',
+          message: `永恒护符·瀑流汲取：从背包抽 ${drawResult.cards.length} 张牌（${names}）`,
+        },
+      });
+    } else {
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'waterfall', message: '永恒护符·瀑流汲取：背包无可抽卡或手牌已满' },
+      });
+    }
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);

@@ -1,0 +1,147 @@
+---
+description: localStorage 持久化必须 debounce + requestIdleCallback + 生命周期 flush
+alwaysApply: true
+---
+
+# localStorage 持久化：debounce + idle defer + 生命周期 flush
+
+## 背景：一次真实事故
+
+`addGameLog` 一度在每条 log 都同步走：
+
+```ts
+dispatch({ type: 'UPDATE_GAME_LOG', entry });
+saveGameLog(engine.getState().gameLogEntries, gameLogIdRef.current);
+// ↑ 同步 JSON.stringify(整个不限长的 log 数组) + localStorage.setItem
+```
+
+一次玩牌触发 5–20 条 log，每条都把**整个累积日志**重新序列化写盘。
+长 session 下 log 攒到几千条，单次 stringify 5–15ms × 每条，主线程被持续打断——
+玩家感受是「打牌越打越卡，重启游戏就好了」。
+
+`flushPersistedGameState` 同类问题：虽然已经 250ms debounce，但 debounce 触发那一瞬还是同步
+`serializeGameState + JSON.stringify + localStorage.setItem`，state 大的时候会卡 5–20ms，
+正好打断用户手势 / 动画。
+
+## 强制规则
+
+**任何会被高频调用、且写 `localStorage` 的代码路径，必须三层保护**：
+
+### 1. Debounce（合并多次写盘）
+
+用 `setTimeout` ref 收集；同窗口内多次调用合并成 1 次。
+
+```ts
+const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const SAVE_DEBOUNCE_MS = 500; // log 类 500ms；state 类 250ms
+
+const scheduleSave = useCallback(() => {
+  if (saveTimerRef.current !== null) return; // 已排队
+  saveTimerRef.current = setTimeout(() => {
+    saveTimerRef.current = null;
+    // ... step 2 ...
+  }, SAVE_DEBOUNCE_MS);
+}, [/* deps */]);
+```
+
+### 2. `requestIdleCallback` 推到空闲（不阻塞手势/动画）
+
+debounce 触发后，把 stringify+setItem **再**包一层 rIC。带 `timeout` 兜底防饿死，
+不可用时回退直接执行。
+
+```ts
+const saveIdleHandleRef = useRef<number | null>(null);
+
+if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+  saveIdleHandleRef.current = window.requestIdleCallback(
+    () => {
+      saveIdleHandleRef.current = null;
+      performSave(); // 真正的 stringify + setItem
+    },
+    { timeout: 2000 }, // log 用 2000ms；state 用 1000ms
+  );
+} else {
+  performSave();
+}
+```
+
+### 3. 生命周期 flush（防丢失）
+
+rIC **不会在页面卸载时触发**。必须在以下三个时机同步 flush：
+
+```ts
+const flushNow = useCallback(() => {
+  cancelPendingSave(); // 清 timer + cancelIdleCallback
+  performSave();       // 同步执行
+}, [/* deps */]);
+
+useEffect(() => {
+  const onVisibilityHide = () => {
+    if (document.visibilityState === 'hidden') flushNow();
+  };
+  document.addEventListener('visibilitychange', onVisibilityHide);
+  return () => {
+    document.removeEventListener('visibilitychange', onVisibilityHide);
+    flushNow(); // unmount
+  };
+}, [flushNow]);
+```
+
+`visibilitychange→hidden` 覆盖：刷新、关页、切后台、切 tab。
+unmount cleanup 覆盖：组件被卸载（路由切换等）。
+**只剩浏览器直接 crash 才会丢数据，最坏丢 <500ms 的内容**。
+
+### 4. 清空操作必须先 cancel 待写
+
+否则 debounce/rIC 醒来后会用旧数据覆盖刚清完的 storage。
+
+```ts
+const clearLog = useCallback(() => {
+  cancelPendingSave(); // ← 先 cancel
+  dispatch({ type: 'SET_GAME_FLAGS', patch: { gameLogEntries: [] } });
+  clearGameLogStorage();
+}, [cancelPendingSave, dispatch]);
+```
+
+### 5. gameOver / 关卡结束的 clear 同样要 cancel
+
+```ts
+useEffect(() => {
+  if (!isHydrated || !gameOver) return;
+  cancelPendingPersist(); // ← 防 stale 写复活
+  clearGameState();
+  lastPersistedStateRef.current = null;
+}, [gameOver, isHydrated, cancelPendingPersist]);
+```
+
+## What NOT to do
+
+- ❌ 在每次 dispatch / log / 手势回调里**同步** `JSON.stringify(整个数组) + localStorage.setItem`。
+- ❌ 只 debounce 不 idle defer——debounce 触发那一瞬仍然 block 主线程，5–20ms 卡顿照样发生。
+- ❌ 只用 `requestIdleCallback` 不做 unmount/visibilitychange 的同步 flush——刷页会丢数据。
+- ❌ 清空 storage 时不先 cancel 待写——背景 timer 醒来覆盖回旧数据。
+- ❌ 用 `requestAnimationFrame` 替代 rIC——rAF 仍然在主线程 paint 链路上，并不空闲。
+
+## What to do
+
+- ✅ 三层保护一次写齐：debounce + rIC + 生命周期 flush。
+- ✅ `cancelPendingSave` 抽成共享函数，clear / unmount / gameOver 都复用。
+- ✅ 给 rIC 加 `timeout`（log 2000ms / state 1000ms）防饿死。
+- ✅ 跨平台兜底：`typeof window.requestIdleCallback === 'function'` 不可用时回退直接执行。
+
+## 参考实现
+
+`client/src/components/GameBoard.tsx` 的 `addGameLog` / `clearGameLog` /
+`flushPersistedGameState` / `cancelPendingPersist` 是规范实现，新加同类持久化路径直接抄。
+
+## 自检
+
+每次准备在某个回调里写 `localStorage.setItem(JSON.stringify(...))` 之前问自己：
+
+> 1. 这个回调会被高频调用吗（每条 log / 每次 dispatch / 每次 render）？
+> 2. 我有没有 debounce？
+> 3. 我有没有把真正的 stringify+setItem 包进 `requestIdleCallback`？
+> 4. 我有没有在 `visibilitychange→hidden` 和 unmount 里同步 flush？
+> 5. 对应的 `clearXxxStorage` 有没有先 cancel 待写的 timer/idle？
+
+任何一条「没」，回头补再写。

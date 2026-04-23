@@ -1,0 +1,137 @@
+---
+description: 含大量卡片列表的 Dialog 弹窗必须分两步 mount + memo'd row + useMemo sort + fade-only motion
+alwaysApply: true
+---
+
+# 含大量卡片列表的 Dialog 弹窗：4 项强制优化
+
+## 背景
+
+`BackpackViewerModal` 一度在 open 瞬间把整个弹窗连同 N 张卡（每张 ~12 DOM 节点：
+图片 + SVG sticker + 多层渐变 + 文本）一次性 commit 给浏览器。
+30 张牌 ≈ 360 DOM 节点同帧创建 + 同帧布局/绘制——
+玩家感受是「点了背包按钮，顿一下才弹出来」。
+
+`DeckViewerModal`、`GraveyardZone` 弹窗、未来任何「点开看大量卡」的弹窗都有同类问题。
+
+## 强制规则
+
+凡是「Dialog/Modal 内会渲染 ≥ 10 张 GameCard 缩略行（含 `MagicSpellPreview` /
+`EventPatternPreview` / `<img>` 之一）」的弹窗，必须同时做以下 4 件事：
+
+### 1. 两步 mount（最大收益）
+
+弹窗壳（DialogContent + Header + 标题）立即渲染；卡片列表延迟到 next animation frame。
+点击→看到弹窗的延迟从「N 张卡的全量布局」降到 ≈16ms。
+
+```tsx
+const [showContent, setShowContent] = useState(false);
+useEffect(() => {
+  if (!open) {
+    setShowContent(false);
+    return;
+  }
+  if (typeof window === 'undefined') {
+    setShowContent(true);
+    return;
+  }
+  const id = window.requestAnimationFrame(() => setShowContent(true));
+  return () => window.cancelAnimationFrame(id);
+}, [open]);
+
+return (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent contentMotion="fade" /* see rule 4 */ >
+      <DialogHeader>{/* 标题，立即渲染 */}</DialogHeader>
+      {!showContent ? (
+        <div className="py-8" aria-hidden /> /* 占位，避免高度跳变 */
+      ) : (
+        <CardList /> /* 真正的卡片列表 */
+      )}
+    </DialogContent>
+  </Dialog>
+);
+```
+
+### 2. 每张卡的 row 抽成 `memo`'d 组件
+
+不是闭包内联函数。卡片没变就完全跳过 reconciliation。
+
+```tsx
+// ❌ BAD: 内联 renderCardRow，弹窗每次 render 都全量重建子树
+const renderCardRow = (card: GameCardData) => <Card>...</Card>;
+return cards.map(renderCardRow);
+
+// ✅ GOOD
+const BackpackRow = memo(function BackpackRow({ card, variant, onCardSelect }: RowProps) {
+  return <Card>...</Card>;
+});
+
+return cards.map(card => (
+  <BackpackRow key={card.id} card={card} variant="default" onCardSelect={onCardSelect} />
+));
+```
+
+注意：传给 row 的 callback / scalar props 必须**引用稳定**（`useCallback` 包好），
+否则 `memo` 失效。
+
+### 3. `useMemo` 缓存排序 / 过滤
+
+每次 render 新建 `[...cards].sort(...)` 数组会让下游 row 拿到的引用每次都不同。
+
+```tsx
+// ❌ BAD
+const displayedCards = [...cards].sort((a, b) => a.name.localeCompare(b.name));
+
+// ✅ GOOD
+const displayedCards = useMemo(
+  () => [...cards].sort((a, b) => a.name.localeCompare(b.name)),
+  [cards],
+);
+```
+
+### 4. `contentMotion="fade"` 替代默认 zoom+slide
+
+`Dialog` 的默认动画是 `zoom-in-95` + `slide-in-from-top-[48%]`，每帧都要重排，
+配合首帧大量节点的 paint 会放大卡顿感。`client/src/components/ui/dialog.tsx` 已经
+内置 fade-only 选项，**就是为大卡列表弹窗准备的**。
+
+```tsx
+<DialogContent contentMotion="fade" /* 200ms zoom+slide → 150ms fade-only */ >
+```
+
+## What NOT to do
+
+- ❌ 弹窗 open=true 一帧内同时 mount 弹窗壳 + N 张卡片。
+- ❌ row 用闭包内联函数（`const renderRow = (c) => <Card>...</Card>` 然后 `cards.map(renderRow)`）。
+- ❌ 直接 `[...cards].sort()` / `cards.filter()` 在 render body 里裸跑。
+- ❌ 给传给 memo'd row 的 onClick / onSelect 用内联箭头函数（破坏 memo）。
+- ❌ 大卡列表弹窗用默认 zoom+slide motion。
+- ❌ 用 `requestAnimationFrame` 写 setState 时忘了 `cancelAnimationFrame` 清理（关弹窗后 setState 会泄漏到下一次打开）。
+
+## What to do
+
+- ✅ 4 项一起做，缺一项都达不到「弹窗瞬间出现」的体感。
+- ✅ row 组件用 `React.memo` + 稳定 prop 引用。
+- ✅ `useEffect` cleanup 一定要 `cancelAnimationFrame`，且 `!open` 分支要 `setShowContent(false)` 复位。
+- ✅ 占位 div 要保留与展开状态接近的高度（避免弹窗内容到位时高度跳变 → CLS）。
+
+## 参考实现
+
+`client/src/components/BackpackViewerModal.tsx` 是规范实现。其它已知**还没**优化但
+应该照同样套路改的弹窗（按优先级）：
+
+- `DeckViewerModal.tsx` — 分类网格，N 通常更多
+- `GraveyardZone.tsx` 弹窗、`CardDeletionModal.tsx`、`CardUpgradeModal.tsx`
+- 任何新加的「列出 N 张卡 / 选 1 张」弹窗
+
+## 自检
+
+新写或修改一个 Dialog 弹窗，**只要它会渲染 ≥10 张 GameCard 缩略行**，停下来问自己：
+
+> 1. open=true 那一帧我是不是只渲染了壳，没渲染卡片列表？
+> 2. 每张 row 是不是独立的 `memo`'d 组件？
+> 3. 我的 sort/filter 有没有 useMemo？
+> 4. DialogContent 是不是带了 `contentMotion="fade"`？
+
+任何一条「没」，回头补，否则用户能感知卡顿。

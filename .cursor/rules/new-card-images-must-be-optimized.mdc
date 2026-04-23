@@ -1,0 +1,104 @@
+---
+description: 新增任何卡牌 / 怪物 / 装备图片到 attached_assets/generated_images 后必须立刻跑 optimize-card-images 脚本
+alwaysApply: true
+---
+
+# 新增图片资源必须立刻压缩 + 缩放
+
+## 背景
+
+`attached_assets/generated_images/` 下的卡牌图片**全部**已经经过一次性批量优化：
+
+- 长边 ≤ 600px（卡片显示约 140–210px，3× retina 已经远超清晰度阈值）
+- PNG palette quantization（`sharp` 的 pngquant 等价压缩）
+- compressionLevel 9 / effort 9
+
+总体积从 ~56 MB 降到 ~10.76 MB（−80.7%）。配合 `BackpackViewerModal` 等弹窗的优化，
+打开「发现 / 背包 / 坟场 / 专属卡池 / 怪物奖励」等大卡列表才不卡。
+
+**只要新增哪怕 1 张未压缩的 1376×768、220KB 的原始 AI 出图，
+那张卡所在弹窗就会重新出现「打开顿一下」的体感**——
+因为浏览器要为这一张卡多解码一份 ~50× 大小的位图。
+
+## 强制规则
+
+### 1. 新加图片到 `attached_assets/generated_images/` 之后，**当次** PR / 改动里必须跑：
+
+```bash
+node scripts/optimize-card-images.mjs
+```
+
+脚本是**幂等**的：
+
+- 只对 `*.png` 生效
+- 跳过 `_backup_originals` / `_backup_originals_full` / `_backup_full_pre_optimize` 目录
+- 如果优化后体积 ≥ 原图，自动跳过（不破坏已经优化过的文件）
+
+所以放心多跑几次，只会处理「新加进来还没压过」的那几张。
+
+### 2. 不要绕过脚本「手动」放未优化的图
+
+- ❌ 直接把 AI 生成的 1376×768 原图丢进 `attached_assets/generated_images/` 就提交。
+- ❌ 用其它工具压（比如 `pngcrush` / `optipng`）然后跳过本脚本——参数不一致会让团队下次跑脚本时这些文件被「再优化一次」（无害但浪费时间）或被错误判为已优化。
+- ✅ 永远走 `scripts/optimize-card-images.mjs`，参数、目标分辨率、压缩等级是被设计成统一的。
+
+### 3. 单图试跑用 `--dry`
+
+不确定某张图压完会变成什么样，先试跑（写到 `/tmp/`，不动原图）：
+
+```bash
+node scripts/optimize-card-images.mjs --dry your-new-card.png
+# DRY RUN: .../your-new-card.png -> /tmp/optimized-your-new-card.png
+# { "skipped": false, "inputSize": 224311, "outputSize": 18540, ... }
+```
+
+OK 之后再跑批量模式实际写盘。
+
+### 4. 例外（需要 user 显式同意）
+
+以下情况**才**可以保留高分辨率原图：
+
+- 全屏背景 / 介绍页主视觉等会**全屏放大**的图（极少见，目前游戏里没有）
+- 设计上必须保留细节、且会用 `<img>` 大尺寸渲染的特殊插画
+
+任意例外**必须**：
+
+1. 在 PR / 提交说明里写明「这张图保留原分辨率，原因：……」
+2. 把它**移出** `attached_assets/generated_images/`，放到独立目录（比如
+   `attached_assets/full_resolution/`），或在脚本的 `SKIP_DIRS` 加这张图所在子目录，
+   防止下次批量优化误压。
+
+### 5. 不要从 `_backup_*` 目录 import
+
+```ts
+// ❌ BAD
+import img from '@/../../attached_assets/generated_images/_backup_full_pre_optimize/foo.png';
+
+// ✅ GOOD
+import img from '@/../../attached_assets/generated_images/foo.png';
+```
+
+`_backup_*` 是为了 `optimize` 脚本回滚保留的快照，**不是 production 资源**。
+
+## What NOT to do
+
+- ❌ 加完图片不跑脚本就交，「下次再说」——下次没人记得跑。
+- ❌ 改脚本里的 `MAX_DIM` / `PNG_QUALITY` 而不跟 user 确认（这两个值是和 `BackpackViewerModal` 等弹窗的显示尺寸 + 大列表渲染预算配套校准的）。
+- ❌ 删除 `_backup_full_pre_optimize/` 想省空间——这是回滚保险。
+
+## What to do
+
+- ✅ 工作流：放图 → 跑脚本 → 在 PR / commit 描述里贴脚本输出的 `=== Summary ===` 那段。
+- ✅ 跑完后 `git status` 确认这张新图被脚本写了一次（diff 显示二进制变化）；如果显示 `skipped`，说明你放进来的图本来就 ≤ 优化结果，OK，跳过即可。
+- ✅ 如果同时新增了非常多张图（>20），可以加 `VERBOSE=1` 看跳过原因： `VERBOSE=1 node scripts/optimize-card-images.mjs`
+
+## 自检
+
+每次 commit 之前，如果 `git status` 里出现新增 `attached_assets/generated_images/*.png`，
+停下来问自己：
+
+> 1. 我跑过 `node scripts/optimize-card-images.mjs` 了吗？
+> 2. 跑完后这张图的 size 是不是变小了（或脚本明确 SKIP 了）？
+> 3. 我有没有不小心把图丢进 `_backup_*` 目录？
+
+任意一条「没」或「不确定」，跑一遍脚本再 commit。

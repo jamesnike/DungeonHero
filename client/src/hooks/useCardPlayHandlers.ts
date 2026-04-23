@@ -759,12 +759,24 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   });
 
   useGameEvent('card:potionDiscoverClassMagic', ({ card }) => {
+    // 灵思药剂：必须在 beginDiscoverFlow 之前挂上 completion ref，
+    // 否则 handleDiscoverSelect / handleDiscoverCancel 关闭模态框时
+    // 不会触发 FINALIZE_POTION_CARD —— 药剂卡会留在 stagingCardsRef
+    // 里，玩家看到的是「药剂用完后画面卡住」。
+    depsRef.current.discoverPotionCompletionRef.current = () => {
+      depsRef.current.discoverPotionCompletionRef.current = null;
+      dispatch({ type: 'FINALIZE_POTION_CARD', card });
+    };
     const started = depsRef.current.beginDiscoverFlow('discover-class-magic', {
       filter: (c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic',
       sourceLabel: card.name,
     });
     if (!started) {
+      // pool 为空时模态框没打开 -> completion 永远不会被调用，
+      // 这里手动清掉 ref 并 finalize 药剂。
+      depsRef.current.discoverPotionCompletionRef.current = null;
       addGameLog('potion', `${card.name}：职业牌堆中没有可用的魔法卡。`);
+      dispatch({ type: 'FINALIZE_POTION_CARD', card });
     }
   });
 
