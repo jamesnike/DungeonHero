@@ -96,7 +96,7 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'recycle-shuffle': {
     id: 'recycle-shuffle',
     name: '永恒护符·回收轮转',
-    description: '战斗结束或瀑流推进时，回收袋洗回背包（所有牌剩余瀑流 -1，就绪的牌回背包）。',
+    description: '瀑流推进时，回收袋洗回背包（所有牌剩余瀑流 -1，就绪的牌回背包）。',
     image: relicRecycleShuffleImage,
   },
   'equip-empower': {
@@ -173,9 +173,14 @@ export function getStartingRelics(): EternalRelic[] {
   // in `game-core/deck.ts`). The relic registry entry is intentionally
   // retained so other paths (e.g. 「护符永铸药」 converting an equipped
   // amulet, save migrations) still resolve cleanly.
+  //
+  // `waterfall-draw-2` (永恒护符·瀑流汲取) was briefly included as a default
+  // starter while testing the new effect, but pulled out per user request to
+  // try the game without it. The registry entry stays so existing paths and
+  // saves resolve cleanly; reintroducing as a starter just needs to add the
+  // RELIC_REGISTRY['waterfall-draw-2'] line back to the array below.
   return [
     RELIC_REGISTRY['recycle-shuffle'],
-    RELIC_REGISTRY['waterfall-draw-2'],
   ];
 }
 

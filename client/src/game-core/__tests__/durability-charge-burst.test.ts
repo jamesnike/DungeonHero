@@ -182,10 +182,10 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     expect(finalEquip.durability).toBe(2);
   });
 
-  it('已在 cap 4/4 时使用：耐久上限和耐久都不变、不触发', () => {
-    // 装备已经是 4/4，maxDurability 和 durability 都被 cap 静默吸收。
-    // 由于 durability 没有真正 +1（仍为 4），不应触发裂击。
-    const card = makeCard('cap-noop');
+  it('已在 cap 4/4 时使用：耐久上限被 cap 吸收，仍触发裂击（满蓄能即放电），dur -2 = 2', () => {
+    // 装备已经是 4/4：maxDur/dur 都被 cap 静默吸收，但卡面文案「加完后耐久==4」字面命中。
+    // 满蓄能就该放电；触发后 -2 让耐久离开 cap，echo 不会形成假循环。
+    const card = makeCard('cap-trigger-at-4');
     const wp = makeWeapon({ durability: 4, maxDurability: 4 });
     const m = makeMonster('m1', 7);
     const state = makeState({
@@ -200,11 +200,42 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     ]);
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
     expect(finalEquip.maxDurability).toBe(4);
-    expect(finalEquip.durability).toBe(4); // 不变
-    // 怪物未受到伤害
-    const finalMonster = result.state.activeCards.find(c => c?.id === 'm1') as any;
-    expect(finalMonster.hp).toBe(7);
-    expect(finalMonster.currentLayer).toBe(1);
+    expect(finalEquip.durability).toBe(2); // 4 (cap) → -2
+    const finalMonster = result.state.activeCards.find(c => c?.id === 'm1');
+    expect(isAlive(finalMonster)).toBe(false); // 7 HP single layer killed
+  });
+
+  it('echoMultiplier x2 起始 4/4：第一轮触发(dur→2)，第二轮 2→3 不触发，最终 dur=3 只 1 次伤害', () => {
+    // 防御性测试：确认 4/4 echo×2 不会形成"伪触发循环"。
+    // 触发后 -2 让耐久离开 cap，第二轮 oldDur=2，afterAddDur=3，不触发。
+    const card = makeCard('echo-cap-4to2');
+    const wp = makeWeapon({ durability: 4, maxDurability: 4 });
+    const m1 = makeMonster('m1', 5);
+    const m2 = makeMonster('m2', 9);
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: wp,
+      equipmentSlot2: null,
+      activeCards: activeRowOf(m1, m2),
+      pendingMagicAction: {
+        card,
+        effect: 'durability-charge-burst',
+        step: 'slot-select',
+        prompt: '...',
+        echoMultiplier: 2,
+      } as any,
+    });
+    const result = drain(state, [
+      { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'durability-charge-burst', slotId: 'equipmentSlot1' } as GameAction,
+    ]);
+    const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
+    expect(finalEquip.maxDurability).toBe(4);
+    expect(finalEquip.durability).toBe(3); // R1: 4→4 trigger →2; R2: 2→3 no trigger
+    // 只有一只怪物会被命中（确保不会因为两轮都触发 cap 导致打两次）
+    const m1AliveAfter = result.state.activeCards.find(c => c?.id === 'm1');
+    const m2AliveAfter = result.state.activeCards.find(c => c?.id === 'm2');
+    const survivors = [m1AliveAfter, m2AliveAfter].filter(isAlive).length;
+    expect(survivors).toBe(1);
   });
 
   it('maxDur=4 / dur=3 → +1 dur 触发：maxDur 静默吸收为 4，dur 4 触发 → -2 = 2', () => {

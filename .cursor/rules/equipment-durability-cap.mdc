@@ -64,19 +64,26 @@ if (newMax > prevMax) {
 任何同时改 `maxDurability` 和 `durability` 的地方，
 新 `durability` 必须用 `Math.min(newDur, newMaxDur)` 夹住，否则会出现 `dur > maxDur` 的非法状态。
 
-### 4. 触发条件 ≠「post-add equals 4」
+### 4. 「dur 达到 X 触发」的设计：要按卡面字面意思，但**自带保护**避免假循环
 
-历史上 `durability-charge-burst`（蓄能裂击）的触发条件是 `afterAddDur === 4`。
-封顶后，**已经是 4/4 的装备**会出现 `Math.min(4+1, 4) === 4` 的伪触发——dur 没真正涨，却打怪。
-
-正确条件：
+写「dur 达到 X 触发副作用」类卡时（参考 `durability-charge-burst` 蓄能裂击），
+**触发条件应该按卡面字面文案**——「加完后耐久==X 则触发」就照字面来：
 
 ```typescript
-// ✅ 真正涨到 cap 才触发
-if (afterAddDur === DURABILITY_CAP && afterAddDur > oldDur) { /* trigger */ }
+// ✅ 按卡面字面：包括 X/X 已满蓄能装备也触发
+if (afterAddDur === DURABILITY_CAP) { /* trigger */ }
 ```
 
-任何「dur 涨到 X 触发副作用」的逻辑都要遵守这个原则——**没真正涨就不触发**。
+**关键**：触发后的副作用必须包含「让耐久离开 cap」的扣减（如蓄能裂击的 -2），
+这样 echo 第二轮的 `oldDur` 已经低于 cap，自然不会形成「假触发循环」。
+
+**反例（不要这样设计）**：触发后**不**扣耐久或只扣 1（仍在 cap 上）的卡。
+这种卡 echo×N 会无限触发——设计阶段就该规避，而不是用 `> oldDur` 守在触发点上。
+（用 `> oldDur` 守会导致 4/4 装备永远点不出该效果，玩家体感 = "卡坏了"。）
+
+历史教训：蓄能裂击曾用 `afterAddDur === 4 && afterAddDur > oldDur` 作为触发条件，
+导致 4/4 装备使用后 banner 提示「未达到 4 耐久」、伤害跳过——
+这不是"防御过度"，是"把正常用法当作 bug 防"。已修正为字面条件。
 
 ### 5. 测试不要用 `maxDurability > 4` 的初值
 
@@ -98,7 +105,7 @@ it('已达上限 4 时 maxDurability 不变（静默吸收）', () => {
 > 1. 我有没有 `import { DURABILITY_CAP, clampMaxDurability }`？
 > 2. 我对 `maxDurability` 的赋值有没有走 `clampMaxDurability`？
 > 3. 如果同时改了 `durability`，有没有用 `Math.min(newDur, newMaxDur)` 夹？
-> 4. 如果有「dur 达到 X 触发」的逻辑，有没有加「真正涨了才触发」的保护？
+> 4. 如果有「dur 达到 X 触发」的逻辑：是不是按卡面字面 `afterAddDur === X` 判？触发后的副作用是不是包含让耐久离开 cap 的扣减（自带 echo 假循环保护）？
 > 5. 我加的测试初值是不是 `≤ 4`？
 
 任何一条「没」或「不确定」，回头补功课再改。

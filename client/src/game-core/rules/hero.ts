@@ -1195,6 +1195,8 @@ function reduceMagicSlotSelection(
       //   注意：对 Golem(maxDamagePerHit=5)、buglet shield 等特殊抗性怪可能不破层
       //   —— 这是与命运之刃同样的边缘 case，符合"按层 HP 数值打"语义。
       // - 若没怪物可选，伤害跳过、装备耐久仍 -2（用户明确要求）。
+      // - 触发条件按卡面字面意思「加完后耐久==4」判定，包含 4/4 已满蓄能的装备：
+      //   触发后 -2 自带保护，echo 第二轮的 oldDur=2，不会形成假触发循环。
       if (!slotItem) {
         patch.heroSkillBanner = '该装备栏为空。';
         return applyPatch(state, patch, sideEffects);
@@ -1218,7 +1220,7 @@ function reduceMagicSlotSelection(
         const afterAddDur = Math.min(oldDur + 1, newMaxDur);
         currentItem = { ...currentItem, maxDurability: newMaxDur, durability: afterAddDur };
 
-        if (afterAddDur === DURABILITY_CAP && afterAddDur > oldDur) {
+        if (afterAddDur === DURABILITY_CAP) {
           triggerCount += 1;
           const monsters = flattenActiveRowSlots(
             // 用最新的 patch.activeCards（前一轮可能已更新），否则回落到 state。

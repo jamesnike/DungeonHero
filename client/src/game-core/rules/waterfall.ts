@@ -938,6 +938,29 @@ function reduceApplyWaterfallTurnReset(state: GameState): ReduceResult {
   // the aura and flip the flag back to true.
   patch.amuletAuraAppliedThisWave = false;
 
+  // Bug #1 (攻防协律 +N 临护被旧 armorBonusDamaged 吃掉): when slotTempArmor
+  // resets to 0, any portion of armorBonusDamaged that exceeds the slot's
+  // permanent shield bonus came from now-gone temp armor and must be discarded
+  // — otherwise the next turn's freshly-granted slotTempArmor (临时护甲 / 攻防
+  // 协律 / 守望者链接) gets silently swallowed by the stale deficit.
+  // Mid-turn block tracking is unaffected: this clamp only fires on turn
+  // boundary when temp itself was just reset.
+  for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as const) {
+    const item = state[slotId];
+    if (!item) continue;
+    if (item.type !== 'shield' && item.type !== 'monster') continue;
+    const existingDamaged = item.armorBonusDamaged ?? 0;
+    if (existingDamaged === 0) continue;
+    const permBonus = Math.max(0, state.equipmentSlotBonuses[slotId]?.shield ?? 0);
+    if (existingDamaged <= permBonus) continue;
+    patch[slotId] = (permBonus > 0
+      ? { ...item, armorBonusDamaged: permBonus }
+      : (() => {
+        const { armorBonusDamaged: _drop, ...rest } = item as GameCardData & { armorBonusDamaged?: number };
+        return rest;
+      })()) as typeof state.equipmentSlot1;
+  }
+
   // Clear monster temp boosts from active row
   const clearedNames: string[] = [];
   const newActive = state.activeCards.map(c => {

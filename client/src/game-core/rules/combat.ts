@@ -30,7 +30,7 @@ import {
   applyWraithHauntEffect,
 } from '../combat';
 import { applyMonsterRage } from '@/lib/monsterRage';
-import { createEmptyAmuletEffects, STRENGTH_SELF_DAMAGE, initialCombatState, BASE_BACKPACK_CAPACITY, INITIAL_HP, HAND_LIMIT } from '../constants';
+import { createEmptyAmuletEffects, STRENGTH_SELF_DAMAGE, initialCombatState, INITIAL_HP, HAND_LIMIT } from '../constants';
 import { computeAmuletEffects } from '../equipment';
 import { getEquipmentSlotsWithSuppressedTempAttack, isMonsterMagicImmuneByBuilding } from '../buildingAura';
 import { flattenActiveRowSlots, isDamageableTarget, isRecyclableFromHand, applyAmplifyOnCreate } from '../helpers';
@@ -1212,34 +1212,11 @@ function reduceMonsterDefeated(
     patch.gambitSlotUsed = {};
     patch.weaponExtraAttackUsed = {};
 
-    // Flush recycle bag to backpack
-    const bag = (patch.permanentMagicRecycleBag ?? state.permanentMagicRecycleBag) as (GameCardData & { _recycleWaits?: number })[];
-    if (bag.length > 0) {
-      const readyCards: GameCardData[] = [];
-      const stillWaiting: (GameCardData & { _recycleWaits?: number })[] = [];
-      for (const card of bag) {
-        const waits = (card._recycleWaits ?? 1) - 1;
-        if (waits <= 0) {
-          const { _recycleWaits, ...clean } = card;
-          readyCards.push(clean as GameCardData);
-        } else {
-          stillWaiting.push({ ...card, _recycleWaits: waits });
-        }
-      }
-      const currentBackpack = (patch.backpackItems ?? state.backpackItems) as GameCardData[];
-      const cap = Math.max(1, BASE_BACKPACK_CAPACITY + (patch.backpackCapacityModifier ?? state.backpackCapacityModifier));
-      const available = Math.max(0, cap - currentBackpack.length);
-      const toRestore = readyCards.slice(0, available);
-      const overflow = readyCards.slice(available);
-      patch.permanentMagicRecycleBag = [...overflow, ...stillWaiting] as GameCardData[];
-      if (toRestore.length > 0) {
-        patch.backpackItems = [...currentBackpack, ...toRestore];
-        sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `战斗结束，回收袋 ${toRestore.length} 张牌洗回背包：${toRestore.map(c => c.name).join('、')}` } });
-      }
-      if (overflow.length > 0) {
-        sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `回收袋 ${overflow.length} 张牌因背包已满留在回收袋：${overflow.map(c => c.name).join('、')}` } });
-      }
-    }
+    // 历史：这里曾经有一个「战斗结束 → 回收袋洗回背包」的 flush 块（与
+    // `recycle-shuffle` 永恒护符的描述对齐）。按 user 要求改成「只在瀑流推进
+    // 时洗回」（瀑流路径见 `rules/waterfall.ts` `reduceApplyWaterfallEffects`
+    // 里的 `processRecycleBag` 调用），这里的 flush 已移除。
+    // 永恒护符的描述也已同步更新成只列「瀑流推进时」。
 
     sideEffects.push({ event: 'combat:combatEnded', payload: {} });
   }
@@ -1722,46 +1699,156 @@ export function routeReflectDamageToHero(
     s => s.item && (s.item.type === 'shield' || s.item.type === 'monster'),
   ) as Array<{ slotId: EquipmentSlotId; item: GameCardData }>;
 
-  if (validShields.length > 0) {
-    let target: { slotId: EquipmentSlotId; item: GameCardData };
-    [target, rng] = pickRandom(validShields, rng);
-    const { slotId, item } = target;
-
-    const isMonsterEquip = item.type === 'monster';
-    const baseArmor = isMonsterEquip ? (item.hp ?? item.value) : (item.armorMax ?? item.value);
-    const storedArmor = Math.min(item.armor ?? baseArmor, baseArmor);
-    const newArmor = Math.max(0, storedArmor - damage);
-
-    if (newArmor <= 0) {
-      const { armor: _ca, armorBonusDamaged: _cb, ...resetBase } = item;
-      patch[slotId] = resetBase as typeof state.equipmentSlot1;
-    } else {
-      patch[slotId] = { ...item, armor: newArmor } as typeof state.equipmentSlot1;
-    }
-
-    const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
+  if (validShields.length === 0) {
+    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: damage, source: 'combat' });
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：对${slotLabel}装备 ${item.name} 造成 ${damage} 点护甲伤害（${storedArmor}→${newArmor}）` },
+      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：对玩家造成 ${damage} 点法术伤害！` },
     });
     sideEffects.push({
       event: 'ui:banner',
-      payload: { text: `${monsterName} ${reflectLabel}！${item.name} 护甲 -${Math.min(damage, storedArmor)}！` },
+      payload: { text: `${monsterName} ${reflectLabel}！受到 ${damage} 点伤害！` },
     });
+    return { patch, sideEffects, enqueuedActions, rng, hitSlotId: null };
+  }
 
+  // --- Shield-absorb path -----------------------------------------------------
+  // Mirrors `reduceResolveBlock`'s armor accounting (combat.ts ~L3027-L3133):
+  // bonus (perm + slotTempArmor + monster eliteLowGoldPower) absorbs damage
+  // BEFORE base armor; when both are gone, durability ticks and the shield
+  // routes through computeEquipmentBreakEffects on durability=0 (per
+  // equipment-break-routes-to-grave.mdc). Reflect overflow (damage exceeding
+  // currentArmor) is silently absorbed by the shield — same as the previous
+  // implementation — to preserve the "shield blocks all reflect" semantic.
+  let target: { slotId: EquipmentSlotId; item: GameCardData };
+  [target, rng] = pickRandom(validShields, rng);
+  const { slotId, item } = target;
+
+  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const isMonsterEquipShield = item.type === 'monster';
+  const slotShieldBonus = getSlotBonus(state, slotId, 'shield');
+  const permanentBonus = Math.max(0, slotShieldBonus);
+  const rawSlotTemp = state.slotTempArmor?.[slotId] ?? 0;
+  const existingBonusDamaged = item.armorBonusDamaged ?? 0;
+
+  let baseArmorMax: number;
+  let storedBaseArmor: number;
+  let bonusTotal: number;
+  if (isMonsterEquipShield) {
+    baseArmorMax = item.hp ?? item.value;
+    const eliteBonus = (item.eliteLowGoldPower && (state.gold ?? 0) >= 30) ? baseArmorMax : 0;
+    storedBaseArmor = Math.min(item.armor ?? baseArmorMax, baseArmorMax);
+    bonusTotal = eliteBonus + permanentBonus + rawSlotTemp;
+  } else {
+    baseArmorMax = item.armorMax ?? item.value;
+    storedBaseArmor = Math.min(item.armor ?? baseArmorMax, baseArmorMax);
+    bonusTotal = permanentBonus + rawSlotTemp;
+  }
+  const bonusRemaining = Math.max(0, bonusTotal - existingBonusDamaged);
+  const currentArmor = storedBaseArmor + bonusRemaining;
+  const damageDealt = Math.min(damage, currentArmor);
+  const consumeFromBonus = Math.min(damageDealt, bonusRemaining);
+  const consumeFromBase = damageDealt - consumeFromBonus;
+  const newBaseArmor = Math.max(0, storedBaseArmor - consumeFromBase);
+  const newBonusDamaged = existingBonusDamaged + consumeFromBonus;
+  const newArmor = newBaseArmor + Math.max(0, bonusTotal - newBonusDamaged);
+  const shieldArmorDepleted = damageDealt > 0 && newArmor <= 0;
+  const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
+
+  if (!shieldArmorDepleted) {
+    patch[slotId] = {
+      ...item,
+      armor: newBaseArmor,
+      armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined,
+    } as typeof state.equipmentSlot1;
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：对${slotLabel}装备 ${item.name} 造成 ${damageDealt} 点护甲伤害（${currentArmor}→${newArmor}）` },
+    });
+    sideEffects.push({
+      event: 'ui:banner',
+      payload: { text: `${monsterName} ${reflectLabel}！${item.name} 护甲 -${damageDealt}！` },
+    });
     return { patch, sideEffects, enqueuedActions, rng, hitSlotId: slotId };
   }
 
-  enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: damage, source: 'combat' });
+  // --- Shield armor depleted: tick durability + route break ------------------
+  const protectedByUnbreakable =
+    state.unbreakableNext === true ||
+    (state.unbreakableUntilWaterfall ?? {})[slotId] === true;
+
+  if (protectedByUnbreakable) {
+    const { armor: _ca, armorBonusDamaged: _cb, ...resetBase } = item as any;
+    patch[slotId] = resetBase as typeof state.equipmentSlot1;
+    if (state.unbreakableNext === true) patch.unbreakableNext = false;
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：${item.name} 护甲被打穿（${currentArmor}→0），但不破之印生效，耐久未损！` },
+    });
+    sideEffects.push({
+      event: 'ui:banner',
+      payload: { text: `${monsterName} ${reflectLabel}！${item.name} 护甲击破，但不破之印生效！` },
+    });
+    return { patch, sideEffects, enqueuedActions, rng, hitSlotId: slotId };
+  }
+
+  const shieldDurability = item.durability ?? 1;
+  if (shieldDurability <= 1) {
+    const breakResult = computeEquipmentBreakEffects(state, slotId, item, ae);
+    Object.assign(patch, breakResult.patch);
+    rng = breakResult.rng;
+    sideEffects.push(...breakResult.sideEffects);
+    enqueuedActions.push(...breakResult.enqueuedActions);
+    if (breakResult.drawFromBackpack > 0) {
+      sideEffects.push({ event: 'equipment:drawFromBackpack', payload: { count: breakResult.drawFromBackpack } });
+    }
+    if (breakResult.classCardDraw > 0) {
+      sideEffects.push({ event: 'equipment:classCardDraw', payload: { count: breakResult.classCardDraw } });
+    }
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：${item.name} 护甲被打穿（${currentArmor}→0），耐久归零销毁！` },
+    });
+    sideEffects.push({
+      event: 'ui:banner',
+      payload: { text: `${monsterName} ${reflectLabel}！${item.name} 护甲击破销毁！` },
+    });
+    return { patch, sideEffects, enqueuedActions, rng, hitSlotId: slotId };
+  }
+
+  // Durability loss but shield survives — strip armor / armorBonusDamaged so
+  // the next block re-applies the full base + bonus from a fresh layer.
+  const newDurability = shieldDurability - 1;
+  const durResult = computeDurabilityLossEffects(state, slotId, item, newDurability);
+  Object.assign(patch, durResult.patch);
+  rng = durResult.rng;
+  sideEffects.push(...durResult.sideEffects);
+  const { armor: _resetA, armorBonusDamaged: _resetB, ...durStripped } = durResult.updatedItem as any;
+  patch[slotId] = durStripped as typeof state.equipmentSlot1;
+
+  if (durResult.golemReflectDamage) {
+    enqueuedActions.push({
+      type: 'DEAL_DAMAGE_TO_MONSTER',
+      monsterId: durResult.golemReflectDamage.targetId,
+      damage: durResult.golemReflectDamage.damage,
+      source: 'golem-reflect',
+    });
+    sideEffects.push({
+      event: 'combat:shieldReflect',
+      payload: { slotId: durResult.golemReflectDamage.slotId, targetId: durResult.golemReflectDamage.targetId },
+    });
+  }
+
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：对玩家造成 ${damage} 点法术伤害！` },
+    payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：${item.name} 护甲被打穿（${currentArmor}→0），耐久 -1（${shieldDurability}→${newDurability}）！` },
   });
   sideEffects.push({
     event: 'ui:banner',
-    payload: { text: `${monsterName} ${reflectLabel}！受到 ${damage} 点伤害！` },
+    payload: { text: `${monsterName} ${reflectLabel}！${item.name} 护甲击破，耐久 -1！` },
   });
-  return { patch, sideEffects, enqueuedActions, rng, hitSlotId: null };
+
+  return { patch, sideEffects, enqueuedActions, rng, hitSlotId: slotId };
 }
 
 // ---------------------------------------------------------------------------
