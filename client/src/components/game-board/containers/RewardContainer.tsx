@@ -15,6 +15,7 @@ function RewardContainerInner() {
   const gs = useShallowGameState(s => ({
     activeMonsterReward: s.activeMonsterReward,
     monsterRewardMinimized: s.monsterRewardMinimized,
+    monsterDefeatAnimationActive: s.monsterDefeatAnimationIds.length > 0,
     persuadeState: s.persuadeState,
     persuadeLevel: s.persuadeLevel,
     persuadeCostModifier: s.persuadeCostModifier,
@@ -45,7 +46,17 @@ function RewardContainerInner() {
     <>
       {gs.activeMonsterReward && (
         <MonsterRewardModal
-          open={!gs.monsterRewardMinimized && !ui.isDefeatAnimationPlaying}
+          // Gate on the engine-side defeat-animation flag, not the React-state
+          // mirror in `ui.isDefeatAnimationPlaying`. Both fields are kept in
+          // sync (engine is the source of truth, React useState is cleared by
+          // the same setTimeout that dispatches END_MONSTER_DEFEAT_ANIMATION),
+          // but only the engine flag is updated atomically with
+          // `activeMonsterReward` in the same `useSyncExternalStore` snapshot.
+          // Reading the React mirror here re-introduced a one-frame race on
+          // mobile where `activeMonsterReward` flipped truthy in render N and
+          // the gate flag flipped in render N+1, opening the Radix Dialog
+          // for one frame and triggering the visible flash.
+          open={!gs.monsterRewardMinimized && !gs.monsterDefeatAnimationActive}
           monsterName={gs.activeMonsterReward.monsterName}
           options={gs.activeMonsterReward.options.map(option => ({
             id: option.id,

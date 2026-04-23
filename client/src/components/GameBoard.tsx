@@ -66,6 +66,8 @@ import { DimensionWarpOverlayLayer } from './game-board/components/DimensionWarp
 import { useDimensionWarpAnimation } from './game-board/hooks/useDimensionWarpAnimation';
 import { MonsterSkillFloatOverlayLayer } from './game-board/components/MonsterSkillFloatOverlayLayer';
 import { useMonsterSkillFloats } from './game-board/hooks/useMonsterSkillFloats';
+import { StunReleasedGoldOverlayLayer } from './game-board/components/StunReleasedGoldOverlayLayer';
+import { useStunReleasedGoldFx } from './game-board/hooks/useStunReleasedGoldFx';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
 import { useGameEngine, useShallowGameState, useDispatch, useGameEvent } from '@/hooks/useGameEngine';
 import { useCardOperations, type CardOperationsDeps } from '@/hooks/useCardOperations';
@@ -908,6 +910,10 @@ export default function GameBoard() {
   // pipeline pause + dispatch guard (see game-core/index.ts) freeze every
   // other game action while the animation plays.
   const activeMonsterSkillFloat = useMonsterSkillFloats({ monsterCellRefs });
+  // 雷金护符 (amulet: stun-gold) 的非阻塞视觉：每次击晕被该护符兑换成
+  // 「+10×N 金币 + 立即解除击晕」时，在该怪物卡上播放一次性金币爆发动画。
+  // 不阻塞 pipeline；多怪物同帧被击晕时多个 float 同时显示。
+  const activeStunGoldFx = useStunReleasedGoldFx({ monsterCellRefs });
   const {
     discardShockInteractionLocked, setDiscardShockInteractionLocked,
     flipShockInteractionLocked, setFlipShockInteractionLocked,
@@ -4327,6 +4333,16 @@ export default function GameBoard() {
         : Array.from({ length: DUNGEON_COLUMN_COUNT }, () => false),
       waterfallDealBonus: snapshot.waterfallDealBonus ?? 0,
       eternalRelics: Array.isArray(snapshot.eternalRelics) ? snapshot.eternalRelics as import('@/game-core/types').EternalRelic[] : getStartingRelics(),
+      // RNG 必须从 snapshot 恢复，否则刷新后会用 createInitialGameState() 的
+      // Date.now() 种子，跟撤销栈里旧 snapshot 的 RNG 不同步——会导致后续任何
+      // 走 RNG 的逻辑（包括 monster reward 缓存未命中时的现场生成）跟撤销前
+      // 不一致。
+      rng: snapshot.rng
+        ? { seed: snapshot.rng.seed, state: snapshot.rng.state }
+        : engine.getState().rng,
+      // 怪物奖励预览缓存也必须持久化恢复——这是「撤销重打拿到一样的奖励」的
+      // 唯一保证（cache HIT 路径完全跳过 RNG）。
+      monsterRewardPreviewCache: (snapshot.monsterRewardPreviewCache ?? {}) as import('@/game-core/types').GameState['monsterRewardPreviewCache'],
       undoCount: engine.getUndoCount(),
       isHydrated: true,
       totalWins: getTotalWins(),
@@ -6860,17 +6876,18 @@ export default function GameBoard() {
     magicMonsterTargeting
       && (pendingMagicAction as { allowsHeroTarget?: boolean } | null)?.allowsHeroTarget,
   );
-  // 同源条件：当 hero self-target 激活时，装有 type='shield' 且 armor>0 的装备槽
-  // 也是合法目标（armor 先吃伤、溢出走自伤）。仅 type='shield' 可选，type='monster'
-  // （怪物盾）暂不开放（armor/durability 体系太复杂）。
+  // 同源条件：当 hero self-target 激活时，装有 type='shield' 或 type='monster'
+  // （怪物装备既可当武器也可当盾）且 armor>0 的装备槽也是合法目标
+  // （armor 先吃伤、溢出走自伤）。两种装备共用 RESOLVE_BLOCK 同款 armor 公式，
+  // 自伤路径都跳过 RESOLVE_BLOCK 专属机制（含 bone-regen / 怪物盾自动恢复）。
   const shieldSlot1IsValidSelfTarget = Boolean(
     heroSelfTargetingActive
-      && equipmentSlot1?.type === 'shield'
+      && (equipmentSlot1?.type === 'shield' || equipmentSlot1?.type === 'monster')
       && (equipmentSlot1?.armor ?? equipmentSlot1?.armorMax ?? equipmentSlot1?.value ?? 0) > 0,
   );
   const shieldSlot2IsValidSelfTarget = Boolean(
     heroSelfTargetingActive
-      && equipmentSlot2?.type === 'shield'
+      && (equipmentSlot2?.type === 'shield' || equipmentSlot2?.type === 'monster')
       && (equipmentSlot2?.armor ?? equipmentSlot2?.armorMax ?? equipmentSlot2?.value ?? 0) > 0,
   );
   const potionTargeting = Boolean(pendingPotionAction);
@@ -8684,6 +8701,8 @@ export default function GameBoard() {
       <InCellFlipOverlayLayer inCellFlips={inCellFlips} />
 
       <MonsterSkillFloatOverlayLayer active={activeMonsterSkillFloat} />
+
+      <StunReleasedGoldOverlayLayer active={activeStunGoldFx} />
 
       <DimensionWarpOverlayLayer dimensionWarps={dimensionWarps} />
 

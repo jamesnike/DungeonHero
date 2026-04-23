@@ -587,7 +587,7 @@ export type PendingMagicAction =
       prompt: string;
     }
   | {
-      // 蓄能裂击：选择装备 +1 上限/+1 耐久，达 4 耐久则随机敌人 -1 血层并装备 -2。
+      // 蓄能裂击：选择装备 +1 上限/+1 耐久，达 4 耐久则随机敌人 -1 血层并装备 -3。
       card: GameCardData;
       effect: 'durability-charge-burst';
       step: 'slot-select';
@@ -972,8 +972,12 @@ export type ActiveAmuletEffects = {
   endTurnDrawCount: number;
   lastWordsMonsterDebuffCount: number;
   stunRateBoost: number;
+  /** 「雷金护符」每击晕一次怪物，金币 +10×N 并立即移除该怪物的击晕状态
+   *  （多怪物同时被击晕则按怪物数量多次触发；linear ×N stacking on gold,
+   *  un-stun is a flat boolean per stunned monster）。 */
   stunGoldCount: number;
-  /** 「招灵书印」每删除一张牌，从背包随机抽 2 × N 张牌（linear ×N stacking）。 */
+  /** 「招灵书印」每删除/销毁一张牌（含护符/装备被事件、魔法、瀑流销毁），
+   *  从背包随机抽 2 × N 张牌（linear ×N stacking）。 */
   deleteDrawCount: number;
 };
 

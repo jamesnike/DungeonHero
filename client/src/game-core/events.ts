@@ -17,6 +17,7 @@ import type { GameState } from './types';
 import { INITIAL_HP, FLIP_GOLD_REWARD, PERSUADE_COST, MIN_PERSUADE_COST, BASE_BACKPACK_CAPACITY, MAX_SHOP_LEVEL, MAX_PERSUADE_LEVEL, HAND_LIMIT, DURABILITY_CAP, clampMaxDurability } from './constants';
 import { flattenActiveRowSlots, pickRandomHandCardsForDiscardPreferGraveyard, isRecyclableFromHand, applyAmplifyOnCreate } from './helpers';
 import { computeAmuletEffects } from './equipment';
+import { maybeTriggerDeleteDrawForDestroy } from './deleteDrawTrigger';
 import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
 import { applyEquipDestroyLastWords } from './rules/waterfall';
 import type { GameAction } from './actions';
@@ -875,6 +876,14 @@ export function applySimpleEffect(
         if (nonPermOverflow.length > 0) destLabels.push(`${nonPermOverflow.map(a => a.name).join('、')} 进坟场`);
         if (permOverflow.length > 0) destLabels.push(`${permOverflow.map(a => a.name).join('、')} 进回收袋`);
         logs.push({ type: 'event', message: `护符栏缩减，${destLabels.join('；')}` });
+        // 招灵书印：护符栏缩减溢出 = 强制销毁。按 surviving 招灵书印 数算（被溢出的不算）。
+        maybeTriggerDeleteDrawForDestroy({
+          destroyedCards: overflow as GameCardData[],
+          survivingAmuletSlots: kept as GameCardData[],
+          sideEffects: allRawSideEffects,
+          enqueuedActions: allEnqueuedActions,
+          reasonLabel: '护符栏缩减溢出',
+        });
       }
     }
   } else if (effectToken === 'equipSlot1Capacity+1') {
@@ -1234,6 +1243,15 @@ export function applySimpleEffect(
       }
       patch.heroSkillBanner = '所有护符都被粉碎了。';
       logs.push({ type: 'event', message: `粉碎 ${state.amuletSlots.length} 枚护符` });
+      // 招灵书印：所有护符被摧毁后，按 surviving 招灵书印 数（=0）算 → 不触发；
+      // 但传 surviving=patch.amuletSlots（[]）保持入口一致，便于将来若有「保留某些护符」分支照常工作。
+      maybeTriggerDeleteDrawForDestroy({
+        destroyedCards: [...state.amuletSlots] as GameCardData[],
+        survivingAmuletSlots: patch.amuletSlots ?? [],
+        sideEffects: allRawSideEffects,
+        enqueuedActions: allEnqueuedActions,
+        reasonLabel: '摧毁护符',
+      });
     } else {
       patch.heroSkillBanner = '你没有佩戴护符。';
     }
@@ -1432,6 +1450,15 @@ export function applySimpleEffect(
         patch.gold = (patch.gold ?? state.gold) + 15;
         patch.heroSkillBanner = `献祭了当前${label}手装备，获得 15 金币！`;
         logs.push({ type: 'event', message: `献祭当前${label}槽装备获得 15 金币` });
+        // 招灵书印：事件「献祭当前左/右手装备」也是强制销毁。
+        // 装备销毁不影响护符栏 → surviving = state.amuletSlots。
+        maybeTriggerDeleteDrawForDestroy({
+          destroyedCards: [card],
+          survivingAmuletSlots: state.amuletSlots as GameCardData[],
+          sideEffects,
+          enqueuedActions,
+          reasonLabel: '献祭装备',
+        });
       }
 
       allEnqueuedActions.push(...enqueuedActions);
@@ -1446,6 +1473,7 @@ export function applySimpleEffect(
       const enqueuedActions: GameAction[] = [];
       let destroyedCount = 0;
       const destroyed: string[] = [];
+      const destroyedCards: GameCardData[] = [];
       const revived: string[] = [];
 
       const processItem = (card: GameCardData) => {
@@ -1462,6 +1490,7 @@ export function applySimpleEffect(
             : { ...card, durability: 1, equipmentReviveUsed: true };
         }
         destroyed.push(card.name);
+        destroyedCards.push(card);
         destroyedCount++;
         enqueuedActions.push({ type: 'DISPOSE_EQUIPMENT_CARD', card: { ...card } as GameCardData, isDestruction: true });
         return null;
@@ -1489,6 +1518,16 @@ export function applySimpleEffect(
       const reviveNote = revived.length > 0 ? `（${revived.join('、')} 复生）` : '';
       patch.heroSkillBanner = `献祭了 ${destroyedCount} 件${label}手装备，共获得 ${totalGold} 金币！${reviveNote}`;
       logs.push({ type: 'event', message: `献祭所有${label}槽装备（${destroyedCount} 件）获得 ${totalGold} 金币${reviveNote}` });
+
+      // 招灵书印：事件「献祭所有左/右手装备」也是强制销毁。
+      // 装备销毁不影响护符栏 → surviving = state.amuletSlots。
+      maybeTriggerDeleteDrawForDestroy({
+        destroyedCards,
+        survivingAmuletSlots: state.amuletSlots as GameCardData[],
+        sideEffects,
+        enqueuedActions,
+        reasonLabel: '献祭装备',
+      });
 
       allEnqueuedActions.push(...enqueuedActions);
       allRawSideEffects.push(...sideEffects);
@@ -1518,6 +1557,15 @@ export function applySimpleEffect(
       for (const card of permAmulets) {
         allEnqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
       }
+      // 招灵书印：「护符换金币」也是强制销毁；surviving 招灵书印=0 → 不触发，
+      // 但保留入口一致性。
+      maybeTriggerDeleteDrawForDestroy({
+        destroyedCards: [...state.amuletSlots] as GameCardData[],
+        survivingAmuletSlots: patch.amuletSlots ?? [],
+        sideEffects: allRawSideEffects,
+        enqueuedActions: allEnqueuedActions,
+        reasonLabel: '护符换金币',
+      });
     } else {
       patch.heroSkillBanner = '你没有佩戴护符。';
     }

@@ -192,12 +192,14 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
           typeof compactStyle?.width === 'number' ? compactStyle.width : 22;
         const stripHeight =
           typeof compactStyle?.height === 'number' ? compactStyle.height : 100;
-        // Wider invisible hit area is only useful for mouse precision. On touch
-        // devices we keep the hit area exactly at the visible strip, otherwise
-        // it would cover the right equipment slot and steal touches from it.
-        const hitExtension = isDropTarget && !isTouchDevice
+        // Always apply a small baseline so the narrow visible strip is easier
+        // to click. While a drop-eligible card is being dragged on a mouse
+        // device we widen further for drop precision.
+        const HIT_EXTENSION_BASE = 12;
+        const dragExtension = isDropTarget && !isTouchDevice
           ? Math.max(48, Math.round(stripHeight * 0.4))
           : 0;
+        const hitExtension = Math.max(HIT_EXTENSION_BASE, dragExtension);
         const outerStyle: React.CSSProperties = {
           ...compactStyle,
           width: stripWidth + hitExtension,

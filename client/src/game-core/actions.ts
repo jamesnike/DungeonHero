@@ -416,6 +416,16 @@ export interface ClearActiveMonsterRewardAction {
   type: 'CLEAR_ACTIVE_MONSTER_REWARD';
 }
 
+/**
+ * Remove a monster id from `state.monsterDefeatAnimationIds`. Dispatched by
+ * the React-side defeat-animation timer (~`DEFEAT_ANIMATION_DURATION` after
+ * the monster was defeated) so the reward modal can finally appear.
+ */
+export interface EndMonsterDefeatAnimationAction {
+  type: 'END_MONSTER_DEFEAT_ANIMATION';
+  monsterId: string;
+}
+
 export interface CacheMonsterRewardPreviewAction {
   type: 'CACHE_MONSTER_REWARD_PREVIEW';
   monster: GameCardData;
@@ -1899,6 +1909,7 @@ export type GameAction =
   | AdjustShopLevelAction
   | SetShopLevelAction
   | ClearActiveMonsterRewardAction
+  | EndMonsterDefeatAnimationAction
   | CacheMonsterRewardPreviewAction
   | SetActiveCardStacksAction
   // Events

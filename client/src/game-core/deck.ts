@@ -1116,6 +1116,7 @@ export function createDeck(
     image: dedupeEventFateCrossroadsImage,
     description: '打开时向左平移至被阻挡位置。若正下方有装备或护符，可破坏它并获得全部效果。选择任意选项后翻转为「命运挪移」。',
     shortDescription: '打开时向左平移；选项后翻为「命运挪移」',
+    specialTrigger: '打开时向左平移；正下方为装备/护符时破坏获得效果',
     eventChoices: [
       { text: '倾听命运的低语（发现2张专属卡）', effect: 'drawClass2', hint: '获得 2 张职业牌放入背包' },
       { text: '与命运商贩交谈（商店等级+1 并 打开商店）', effect: ['shopLevel+1', 'openShop'], hint: '商店等级+1 并立刻开启商店' },
@@ -1375,6 +1376,7 @@ export function createDeck(
     image: dedupeEventBattleHonorImage,
     description: '结算后，此卡右侧格子上的所有怪物将被激怒（进入交战）。',
     shortDescription: '结算后右侧所有怪物激怒',
+    specialTrigger: '左边第一格是激怒怪，结算后右侧所有怪物激怒',
     eventChoices: [
       { text: '整理呼吸（回复 8 HP，超杀吸血+1）', effect: ['heal+8', 'spellLifesteal+1'] },
       { text: '回收战利品（金币 +15，打开商店）', effect: ['gold+15', 'openShop'] },
@@ -1495,6 +1497,7 @@ export function createDeck(
         image: dedupeEventCrimsonPactAwakenedImage,
         description: '使用后进入墓地。若预览行正上方是魔法牌，触发魔法共鸣，翻转为「虚空置换」永久魔法。',
         shortDescription: '上方为魔法牌时触发共鸣翻转',
+        specialTrigger: '预览行正上方是魔法牌时触发共鸣',
         eventChoices: [
           { text: '鲜血献祭（-6 HP，发现专属）', effect: 'hp-6,discoverClass' },
           {
@@ -1570,6 +1573,7 @@ export function createDeck(
     image: dedupeEventCryptWhisperImage,
     description: '左右两侧都是怪物时，翻转为「墓语回响」；否则翻转为「墓语遗愿」。翻转后留在地城原位。',
     shortDescription: '依两侧是否为怪物翻为不同卡；翻后留原位',
+    specialTrigger: '左右两侧都是怪物',
     eventChoices: [
       {
         text: '净化杂质（删 3 张牌）',
@@ -1967,6 +1971,7 @@ export function createDeck(
     image: skillScrollImage,
     description: '翻转条件：激活行有至少 1 张装备牌时，翻转为「装备附魔」。',
     shortDescription: '激活行有装备时可翻为「装备附魔」',
+    specialTrigger: '激活行有至少 1 张装备',
     eventChoices: [
       {
         id: 'arsenal-left-dur',
@@ -2038,6 +2043,7 @@ export function createDeck(
     image: skillScrollImage,
     description: '若此牌下方有堆叠牌，处理后将消耗下方牌并驻留。可翻转为「祭坛秘术」。',
     shortDescription: '下方有堆叠时消耗它并驻留；可翻为「祭坛秘术」',
+    specialTrigger: '下方有堆叠牌时消耗它并驻留',
     stayIfStacked: true,
     eventChoices: [
       {
@@ -2108,6 +2114,7 @@ export function createDeck(
     shortDescription: '掷骰：为一张手牌赋予侧击/转型',
     eventChoices: [
       {
+        id: 'shrine-roll-dice',
         text: '掷出赋能骰：侧击劝降-1/侧击击晕+5%/转型抽2/转型回2血/侧击伤害5',
         hint: '随机赋予一张手牌新的侧击或转型效果',
         effect: 'noop',
@@ -2119,6 +2126,13 @@ export function createDeck(
           { id: 'shrine-transform-heal', range: [13, 16] as [number, number], label: '转型：恢复 2 HP', effect: 'grantTransformHeal:2' },
           { id: 'shrine-flank-damage', range: [17, 20] as [number, number], label: '侧击：对随机怪物造成 5 点伤害', effect: 'grantFlankDamage:5' },
         ],
+      },
+      {
+        text: '失去 5 生命 离开',
+        effect: 'hp-5',
+        hint: '当无手牌、无法掷骰赋能时可选',
+        requiresDisabledChoices: ['shrine-roll-dice'],
+        requiresDisabledReason: '仍可掷出赋能骰',
       },
     ],
   });
@@ -2606,9 +2620,8 @@ export function createStarterCardPool(): GameCardData[] {
       durability: 2,
       maxDurability: 2,
       persuadeBoostOnHit: 15,
-      persuadeBoostOnHitElite: 10,
-      description: '每攻击一次，下次劝降成功概率 +15%（精英 +10%）。',
-      shortDescription: '每次攻击下次劝降率 +15%（精英 +10%）',
+      description: '每攻击一次，下次劝降成功概率 +15%。',
+      shortDescription: '每次攻击下次劝降率 +15%',
     },
     {
       id: STARTER_CARD_IDS.immortalHammer,

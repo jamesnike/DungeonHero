@@ -55,7 +55,7 @@ export default function DiscoverClassModal({
               className="group rounded-xl border border-card-border/70 bg-card/40 p-1.5 sm:p-3 transition hover:border-primary hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
               onClick={() => onSelect(card.id)}
             >
-              <div className="pointer-events-none">
+              <div className="pointer-events-none aspect-[3/4.2] w-full">
                 <GameCard card={card} disableInteractions />
               </div>
               <span className="mt-1.5 sm:mt-3 block text-center text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary">

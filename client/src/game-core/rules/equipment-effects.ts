@@ -171,6 +171,51 @@ function routeBrokenSelfToGraveOrRecycle(
   }
 }
 
+// Clear an equipment slot in `patch`, promoting the topmost reserve item up
+// into the slot if any reserve exists. Mutates `patch` in place — sets
+// `patch[slotId]` to either the promoted item or null, and `patch[reserveKey]`
+// to the trimmed reserve list when a promotion happens.
+//
+// Convention: reserve is a stack and `reserve[reserve.length - 1]` is the
+// topmost / visually-uppermost item (matches `SACRIFICE_EQUIPMENT_SLOT`,
+// `events.ts` removeCard, and most other promote sites). The pure helper
+// `equipment.ts:clearSlotWithPromote` historically used reserve[0] (first)
+// but is unused; this site is the canonical promote entry for break/destroy
+// reducer paths.
+//
+// IMPORTANT: previously the break/destroy reducer paths just set
+// `patch[slotId] = null` and emitted an `equipment:clearSlotWithPromote`
+// side effect, expecting a UI-layer listener to do the promote via
+// `clearEquipmentSlotWithPromote(slotId)`. That listener was never wired up
+// in `GameBoard.tsx` (just `console.log`), so the topmost reserve card never
+// promoted up — it stayed in `equipmentSlot{1,2}Reserve` while
+// `EquipmentSlot.tsx` rendered the slot as empty (the reserve stack only
+// renders when `gameCardData` is truthy). Result: reserve appeared to vanish
+// when the main equipment broke. Per `game-core-architecture.mdc` (state
+// mutations belong in reducers, not in side-effect listeners), the promote
+// is now done here in the pure reducer patch.
+export function clearSlotAndPromoteReserve(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  patch: Partial<GameState>,
+): void {
+  const reserveKey: 'equipmentSlot1Reserve' | 'equipmentSlot2Reserve' =
+    slotId === 'equipmentSlot1' ? 'equipmentSlot1Reserve' : 'equipmentSlot2Reserve';
+  // Read the latest reserve from `patch` if a previous step already wrote it,
+  // otherwise from base state. This keeps the helper composable when the
+  // caller has already partially mutated `patch`.
+  const currentReserve =
+    (patch[reserveKey] as EquipmentItem[] | undefined) ?? (state[reserveKey] as EquipmentItem[]);
+  if (currentReserve && currentReserve.length > 0) {
+    const promoted = currentReserve[currentReserve.length - 1];
+    const rest = currentReserve.slice(0, -1);
+    patch[slotId] = promoted as EquipmentItem;
+    patch[reserveKey] = rest as EquipmentItem[];
+  } else {
+    patch[slotId] = null as unknown as EquipmentItem;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Equipment displacement — fire "last words" only (no revive, no slot mutation)
 //
@@ -853,7 +898,7 @@ export function computeEquipmentBreakEffects(
 
     if (canSalvage) {
       const newMaxDur = (slotItem.maxDurability ?? 1) - salvageCount;
-      patch[slotId] = null as unknown as EquipmentItem;
+      clearSlotAndPromoteReserve(state, slotId, patch);
       effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
       if (newMaxDur <= 0) {
         effects.push({
@@ -882,7 +927,12 @@ export function computeEquipmentBreakEffects(
       }
     } else if (wraithSwapSuccess && otherItem) {
       patch[slotId] = { ...otherItem, fromSlot: slotId } as EquipmentItem;
-      patch[otherSlotId] = null as unknown as EquipmentItem;
+      // The OTHER slot lost its main to the swap — if its reserve has cards,
+      // promote the topmost up to fill the now-empty other slot. Without this
+      // promote, a reserve under the swapped-away item silently disappeared
+      // visually (still in state, but EquipmentSlot.tsx won't render the
+      // reserve stack when main is null).
+      clearSlotAndPromoteReserve(state, otherSlotId, patch);
       wraithSwapTarget = otherSlotId;
       effects.push({
         event: 'log:entry',
@@ -896,7 +946,7 @@ export function computeEquipmentBreakEffects(
       // disappears from the game.
       routeBrokenSelfToGraveOrRecycle(state, slotItem, isPermRecycle, patch, enqueuedActions);
     } else {
-      patch[slotId] = null as unknown as EquipmentItem;
+      clearSlotAndPromoteReserve(state, slotId, patch);
       effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
       // Route the broken equipment to its final destination:
       //   - Perm-flagged (永恒铭刻 / native permEquipment) → permanent magic
@@ -985,7 +1035,7 @@ export function computeDurabilityLossEffects(
         payload: { type: 'equip', message: `${slotItem.name} 流血破甲：「${otherItem.name}」（耐久 ${otherItem.durability} > ${newDurability}）复生了！` },
       });
     } else {
-      patch[otherSlotId] = null as unknown as EquipmentItem;
+      clearSlotAndPromoteReserve(state, otherSlotId, patch);
       effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId: otherSlotId } });
       effects.push({
         event: 'equipment:destroyed',
@@ -1070,6 +1120,27 @@ export function computeDurabilityLossEffects(
       }
     }
   }
+
+  // Monster equipment armor refresh on durability tick:
+  // Each durability point represents one "armor layer". When a layer is consumed
+  // (durability ticks down via attacks, weapon strikes, or shield blocks), the
+  // next layer must start with a fresh `armor` pool — exactly the same as how
+  // `combat.ts` shield-block path strips `armor` / `armorBonusDamaged` after
+  // the layer is depleted. Doing it here (after the `!isMonsterEquip` early
+  // return above) covers all callers — weapon-attack tick, shield-block tick,
+  // shield-self-damage tick — so monster equipment behaves uniformly: after
+  // losing 1 durability the displayed armor refills to baseArmorMax + perm +
+  // temp on the next read (combat.ts:~3147 reads them live from state).
+  // Preserve `durability` on the rebuilt item — wraith-rebirth above may have
+  // refilled it to maxDurability, so we cannot blindly re-stamp `newDurability`.
+  const preservedDurability = updatedItem.durability;
+  const { armor: _strippedArmor, armorBonusDamaged: _strippedBonusDmg, ...armorStrippedItem } = updatedItem as GameCardData & {
+    armor?: number;
+    armorBonusDamaged?: number;
+  };
+  void _strippedArmor;
+  void _strippedBonusDmg;
+  updatedItem = { ...(armorStrippedItem as GameCardData), durability: preservedDurability ?? newDurability };
 
   return { updatedItem, patch, sideEffects: effects, golemReflectDamage, rng };
 }

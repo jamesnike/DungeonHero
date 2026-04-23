@@ -485,10 +485,9 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 2,
     image: persuadeHammerImage,
     classCard: true,
-    description: '每次攻击一次，下次劝降成功概率 +20%（精英 +10%）。',
-    shortDescription: '每次攻击下次劝降率 +20%（精英 +10%）',
+    description: '每次攻击一次，下次劝降成功概率 +20%。',
+    shortDescription: '每次攻击下次劝降率 +20%',
     persuadeBoostOnHit: 20,
-    persuadeBoostOnHitElite: 10,
     durability: 3,
     maxDurability: 3,
   });
@@ -724,8 +723,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: thunderGoldAmuletImage,
     classCard: true,
-    description: '每击晕一次怪物，金币 +10，抽 2 张牌。',
-    shortDescription: '每击晕怪物 1 次，金币 +10、抽 2 张',
+    description: '每击晕一次怪物，金币 +10，然后移除该怪物的击晕状态。同时击晕多个怪物，则按怪物数量多次触发。',
+    shortDescription: '每击晕怪物 1 次，金币 +10 并解除击晕',
     amuletEffect: 'stun-gold',
   });
 
@@ -735,8 +734,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightDeleteDrawAmuletImage,
     classCard: true,
-    description: '每删除一张牌，从背包随机抽 2 张牌。',
-    shortDescription: '每删除 1 张牌，背包抽 2 张',
+    description: '每删除或销毁一张牌（含护符/装备被事件、魔法、瀑流销毁），从背包随机抽 2 张牌。',
+    shortDescription: '每删除/销毁 1 张牌，背包抽 2 张',
     amuletEffect: 'delete-draw',
   });
 
@@ -1080,7 +1079,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
 
   // 蓄能裂击 (Perm 2)：选择一个装备，耐久上限 +1，耐久 +1；
   // 若 +1 后该装备的当前耐久 == 4，则从激活行随机一个怪物造成 1 血层伤害，
-  // 并立即将该装备耐久 -2（即使没怪物可打也照扣）。
+  // 并立即将该装备耐久 -3（即使没怪物可打也照扣）。
   // 触发条件用「+1 后当前耐久 == 4」，比 maxDurability == 4 更直观。
   // Echo (A 类)：整套效果重复 echoMultiplier 次（每次重新读取耐久与怪物列表）。
   // 空槽 / 没有耐久概念的装备 → 直接拒绝并提示，不消耗这张 magic。
@@ -1090,10 +1089,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
-    description: '永久：选择一件装备，耐久上限 +1，耐久 +1。如果加完后该装备耐久为 4，则随机一只激活行的怪物受到 1 血层伤害，并立即将该装备耐久 -2。',
-    shortDescription: '选装备 +1 上限/耐久；若至 4 耐久，敌人 -1 血层、装备 -2',
+    description: '永久：选择一件装备，耐久上限 +1，耐久 +1。如果加完后该装备耐久为 4，则随机一只激活行的怪物受到 1 血层伤害，并立即将该装备耐久 -3。',
+    shortDescription: '选装备 +1 上限/耐久；若至 4 耐久，敌人 -1 血层、装备 -3',
     magicType: 'permanent',
-    magicEffect: '永久魔法：装备 +1 上限/耐久；若达到 4 耐久则随机敌人 -1 血层、装备 -2。',
+    magicEffect: '永久魔法：装备 +1 上限/耐久；若达到 4 耐久则随机敌人 -1 血层、装备 -3。',
     knightEffect: 'durability-charge-burst',
     recycleDelay: 2,
   });

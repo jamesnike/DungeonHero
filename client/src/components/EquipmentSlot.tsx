@@ -391,7 +391,10 @@ export default function EquipmentSlot({
                 className={`absolute inset-0 rounded-lg border-dashed pointer-events-none transition-[border-color,border-width] duration-200 ${
                   acceptsDrop ? 'border-4 border-primary animate-pulse' : 'border-2 border-muted-foreground/25'
                 }`}
-                style={{ zIndex: 15, transform: `translateY(${28 + 10}%)` }}
+                style={{
+                  zIndex: 20 + reserveItems.length + 2,
+                  transform: `translateY(${28 + reserveItems.length * 10}%)`,
+                }}
               />
             )}
             {reserveItems.map((reserveCard, rIdx) => {
@@ -527,7 +530,7 @@ export default function EquipmentSlot({
               className={`absolute inset-0 rounded-lg border-dashed pointer-events-none transition-[border-color,border-width] duration-200 ${
                 acceptsDrop ? 'border-4 border-primary animate-pulse' : 'border-2 border-muted-foreground/25'
               }`}
-              style={{ zIndex: 5, transform: 'translateY(28%)' }}
+              style={{ zIndex: 15, transform: 'translateY(28%)' }}
             />
           )}
           <Card className={`

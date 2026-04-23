@@ -184,7 +184,10 @@ export default function AmuletSlot({
               className={`absolute inset-0 rounded-lg border-dashed pointer-events-none transition-[border-color,border-width] duration-200 ${
                 isDropTarget ? 'border-4 border-primary animate-pulse' : 'border-2 border-muted-foreground/25'
               }`}
-              style={{ zIndex: 5, transform: 'translateY(28%)' }}
+              style={{
+                zIndex: 10 + preparedAmulets.length + 1,
+                transform: `translateY(${28 + (preparedAmulets.length - 1) * 10}%)`,
+              }}
             />
           )}
           {preparedAmulets.map((card, index) => {
@@ -208,19 +211,29 @@ export default function AmuletSlot({
           })}
         </div>
       ) : (
-        <Card className={`
-          h-full w-full border-4 border-dashed overflow-hidden
-          transition-[border-color,background-color] duration-200
-          ${isDropTarget ? 'border-primary animate-pulse bg-primary/10' : 'border-muted bg-muted/20'}
-          ${isDropTarget && isOver ? 'scale-105 ring-4 ring-primary bg-primary/20' : ''}
-        `}>
-          <div className="h-full flex flex-col items-center justify-center gap-2 p-2">
-            <Sparkles className="dh-hero-icon text-muted-foreground" />
-            <span className="dh-hero-chip text-muted-foreground font-medium">
-              Amulet
-            </span>
-          </div>
-        </Card>
+        <>
+          <Card className={`
+            relative z-10 h-full w-full border-4 border-dashed overflow-hidden
+            transition-[border-color,background-color] duration-200
+            ${isDropTarget ? 'border-primary animate-pulse bg-primary/10' : 'border-muted bg-muted/20'}
+            ${isDropTarget && isOver ? 'scale-105 ring-4 ring-primary bg-primary/20' : ''}
+          `}>
+            <div className="h-full flex flex-col items-center justify-center gap-2 p-2">
+              <Sparkles className="dh-hero-icon text-muted-foreground" />
+              <span className="dh-hero-chip text-muted-foreground font-medium">
+                Amulet
+              </span>
+            </div>
+          </Card>
+          {effectiveMaxSlots > 1 && (
+            <div
+              className={`absolute inset-0 rounded-lg border-dashed pointer-events-none transition-[border-color,border-width] duration-200 ${
+                isDropTarget ? 'border-4 border-primary animate-pulse' : 'border-2 border-muted-foreground/25'
+              }`}
+              style={{ zIndex: 11, transform: 'translateY(28%)' }}
+            />
+          )}
+        </>
       )}
       {isStunFrozen && (
         <>

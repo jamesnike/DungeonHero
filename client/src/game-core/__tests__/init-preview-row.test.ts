@@ -88,7 +88,7 @@ describe('INIT_GAME preview row composition', () => {
   /**
    * Quick-mode monster layout invariants:
    *   • Every non-overlapping 4-card chunk holds at most 1 monster.
-   *   • The first 12 cards contain no elite monsters.
+   *   • The first 16 cards contain no elite monsters.
    *   • The back 18 cards contain at least 1 monster (the leftover).
    * The full deck-of-record is `[previewCards, activeCards, ...remainingDeck]`
    * because INIT_GAME has already dealt the first two rows from the head.
@@ -131,7 +131,7 @@ describe('INIT_GAME preview row composition', () => {
     expect(violations).toEqual([]);
   });
 
-  it('quick mode: first 12 cards contain no elite monsters', () => {
+  it('quick mode: first 16 cards contain no elite monsters', () => {
     const violations: Array<{ seed: number; pos: number; name: string }> = [];
     for (let seed = 1; seed <= 200; seed++) {
       const state = makeStateWithSeed(seed);
@@ -146,7 +146,7 @@ describe('INIT_GAME preview row composition', () => {
         ...result.state.activeCards,
         ...result.state.remainingDeck,
       ];
-      for (let i = 0; i < Math.min(12, fullDeck.length); i++) {
+      for (let i = 0; i < Math.min(16, fullDeck.length); i++) {
         if (fullDeck[i]?.monsterSpecial) {
           violations.push({ seed, pos: i, name: fullDeck[i]!.name });
         }

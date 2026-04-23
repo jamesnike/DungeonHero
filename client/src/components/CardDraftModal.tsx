@@ -164,7 +164,9 @@ export default function CardDraftModal({
               className="card-draft-choice"
               onClick={() => handlePick(idx)}
             >
-              <GameCard card={card} />
+              <div className="aspect-[3/4.2] w-[160px]">
+                <GameCard card={card} />
+              </div>
               <div className="card-draft-choice-name">{card.name}</div>
               <div className="card-draft-choice-desc">{card.description || card.magicEffect || ''}</div>
             </div>

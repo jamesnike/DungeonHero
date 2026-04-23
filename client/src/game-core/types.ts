@@ -516,6 +516,31 @@ export interface GameState {
   monsterRewardMinimized: boolean;
   selectedMonsterRewards: MonsterRewardOption[] | null;
   monsterRewardPreviewCache: Record<string, MonsterRewardOption[]>;
+  /**
+   * Engine-owned mirror of the React-side `monsterDefeatStates`: the set of
+   * monster IDs whose defeat animation is currently playing.
+   *
+   * Why this lives in engine state instead of (only) React useState:
+   *
+   * The reward modal's `open` prop is gated by both `activeMonsterReward`
+   * (engine state) and "is any defeat animation playing". Pre-fix the latter
+   * came from a `useState` updated inside a `useGameEvent('combat:monsterDefeated')`
+   * listener, while `activeMonsterReward` was set inside the same reducer
+   * call. On mobile (and theoretically anywhere React 18 batching is not
+   * perfectly aligned across `useSyncExternalStore` notifications + plain
+   * `setState`), the two updates could land in different renders — producing
+   * one frame where `activeMonsterReward` is truthy and the gate is still
+   * `false`, causing the Radix Dialog to flash open then closed.
+   *
+   * By mirroring the gate flag inside the engine state, both fields ship
+   * to React in the same `useSyncExternalStore` snapshot — atomic, no race.
+   *
+   * NOT persisted: timers don't survive reload, so this should always be []
+   * after hydration. The React-side `monsterDefeatStates` (used to drive the
+   * per-card visual fade) stays as-is — no race there because the card
+   * exists on the board well before the animation starts.
+   */
+  monsterDefeatAnimationIds: string[];
 
   // --- Shop ---
   shopOfferings: ShopOffering[];

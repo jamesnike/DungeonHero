@@ -162,8 +162,10 @@
  *      **不**计入 `combatState.slotDurabilityUsedThisTurn` 的"格挡耐久次数上限"，
  *      也**不**触发任何 RESOLVE_BLOCK 专属机制（reflect / dual-guard / autoEvolve /
  *      bone-regen / bulwark passive 等）。
- * 选盾路径目前只允许 `type === 'shield'` 且 `armor > 0` 的装备槽；`type === 'monster'`
- * 的怪物盾不在范围内。所有 `allowsHeroTarget: true` 的卡（missile-bolt、
+ * 选盾路径允许 `type === 'shield'` 或 `type === 'monster'`（怪物装备既可当武器也可
+ * 当盾）且 `armor > 0` 的装备槽。两种装备共用 RESOLVE_BLOCK 同款的 armor 公式；自伤
+ * 路径同样跳过所有 RESOLVE_BLOCK 专属机制（含 bone-regen / 怪物盾自动恢复）。所有
+ * `allowsHeroTarget: true` 的卡（missile-bolt、
  * bounty-spell-damage、blood-strike、blood-reckoning、honor-blood、armor-strike、
  * armor-double-strike、stun-strike、overkill-upgrade、chaos-strike、berserk-gambit、
  * midas-judgment、arcane-storm、repair-enrage-dice 等 ~14 张）共用同一
@@ -210,6 +212,7 @@ import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '..
 import type { RngState } from '../rng';
 import { DURABILITY_CAP, clampMaxDurability } from '../constants';
 import { pickGraveyardCardExcluding, computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
+import { maybeEnqueueStunGold } from './economy';
 import {
   INITIAL_HP,
   HAND_LIMIT,
@@ -220,6 +223,7 @@ import {
   createEmptyAmuletEffects,
 } from '../constants';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots } from '../equipment';
+import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { chaosStrikeHasOverkill } from '../combat';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
 import { markSkillUsedPure } from '../hero';
@@ -280,14 +284,7 @@ export function applyMissileRelicEffects(
       if (roll <= stunPct) {
         enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId: target.id, patch: { isStunned: true } });
         log(sideEffects, 'magic', `永恒护符·震荡弹幕：${target.name} 被击晕了！`);
-        if (ae.stunGoldCount > 0) {
-          const sn = ae.stunGoldCount;
-          const goldGain = 10 * sn;
-          const drawCount = 2 * sn;
-          enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
-          enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-          log(sideEffects, 'amulet', `雷金护符：${target.name} 被击晕，金币 +${goldGain}，抽 ${drawCount} 张牌`);
-        }
+        maybeEnqueueStunGold(state, enqueuedActions, sideEffects, target.id, target.name);
       }
     }
   }
@@ -483,11 +480,13 @@ export function finalizeClassSummon(
     }
     log(sideEffects, 'magic', `专属召唤：弃回 ${discarded.map(c => c.name).join('、')}`);
   }
+  // 抽 1 张职业专属卡到背包：仅 enqueue 一次。
+  // 历史 bug：曾经同时 enqueue DRAW_CLASS_TO_BACKPACK + push card:classDrawRequested
+  // side effect，而 useCardPlayHandlers 的 'card:classDrawRequested' 监听又会
+  // dispatch 一次 DRAW_CLASS_TO_BACKPACK，导致每次专属召唤实际抽 2 张职业卡。
+  // 玩家观感会随背包剩余空位变化（可见 0/1/2 张），看似"有时不获得 / 有时多 1 张"。
+  // 抽牌动画走 reduceDrawClassToBackpack 自带的 cards:classDrawn side effect。
   enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: 1 });
-  sideEffects.push({
-    event: 'card:classDrawRequested' as any,
-    payload: { count: 1, source: '专属召唤' },
-  });
   banner(sideEffects, `专属召唤：弃回 ${discardCount} 张牌，获得一张职业专属卡！`);
   patch.lastPlayedCardCategory = getCardPlayCategory(card);
   enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -3376,6 +3375,7 @@ export function resolveKnightPermanentMagic(
         equipmentSlot2: null,
       };
       let destroyedCount = 0;
+      const destroyedCards: GameCardData[] = [];
 
       const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
 
@@ -3416,11 +3416,22 @@ export function resolveKnightPermanentMagic(
             enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
           }
           destroyedCount++;
+          destroyedCards.push(item);
         }
       }
 
       patch.equipmentSlot1 = survivedSlots.equipmentSlot1;
       patch.equipmentSlot2 = survivedSlots.equipmentSlot2;
+
+      // 招灵书印：弃装重铸摧毁装备 = 强制销毁。装备销毁不影响护符栏 →
+      // surviving = state.amuletSlots。复生的装备不算 destroyed。
+      maybeTriggerDeleteDrawForDestroy({
+        destroyedCards,
+        survivingAmuletSlots: state.amuletSlots as GameCardData[],
+        sideEffects,
+        enqueuedActions,
+        reasonLabel: '弃装重铸摧毁装备',
+      });
 
       if (destroyedCount > 0) {
         // 法术回响：发现次数 = 摧毁件数 × echoMultiplier。

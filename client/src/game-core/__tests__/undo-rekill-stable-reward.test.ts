@@ -125,4 +125,51 @@ describe('Undo + re-kill: full flow with reward-selection snapshot', () => {
     expect(secondReward).toBeTruthy();
     expect(secondReward!.options.map(o => o.title)).toEqual(firstOptions.map(o => o.title));
   });
+
+  /**
+   * 跨刷新点的撤销 + 重打：
+   *
+   * 复现路径（这是用户最可能踩到的 bug）：
+   * 1. 玩家有怪物 M 在 active row（cache 已生成 options A）。
+   * 2. 玩家关掉网页 / 刷新（save 当前 state + 当前 undo stack）。
+   * 3. 重新打开网页：
+   *    - 旧 bug：hydrateGameState 用 createInitialGameState() 给 RNG 重新种子，
+   *      并且不恢复 monsterRewardPreviewCache → live state cache 空、RNG 全新；
+   *      但 undo stack 里的 snapshot **保留**了旧 RNG + 旧 cache。
+   *    - 旧 bug 行为：玩家重新攻击 M → cache 空 → 用全新 RNG 现场生成 options B。
+   *      撤销回去 → 旧 snapshot 的 options A 还在。重打 → 又拿到 A。
+   *      "撤销前后奖励变了"。
+   *
+   * 修复后：
+   *    - hydrateGameState 恢复 snapshot.rng 和 snapshot.monsterRewardPreviewCache
+   *      → 刷新前后 cache 一致，RNG 一致 → 重打永远拿到 A。
+   *
+   * 这条测试模拟「序列化 → 反序列化 hydrate」一遍 GameState（走 PersistedGameState）
+   * 看 cache 和 RNG 是不是真的活下来了。
+   */
+  it('cache + rng 必须经 PersistedGameState 持久化往返保留', async () => {
+    const { serializeGameState } = await import('../persistence');
+    const initial = createInitialGameState();
+    const monster = makeMonster('mon-B');
+    const live: GameState = {
+      ...initial,
+      activeCards: [monster, null, null, null] as (GameCardData | null)[],
+      phase: 'playerInput',
+    };
+    const stateWithCache = reduce(live, { type: 'CACHE_MONSTER_REWARD_PREVIEW', monster }).state;
+    const cachedTitles = stateWithCache.monsterRewardPreviewCache[monster.id]!.map(o => o.title);
+    const rngBefore = { seed: stateWithCache.rng.seed, state: stateWithCache.rng.state };
+
+    const persisted = serializeGameState(stateWithCache);
+    expect(persisted.monsterRewardPreviewCache).toBeDefined();
+    expect(persisted.monsterRewardPreviewCache![monster.id]).toBeDefined();
+    expect(persisted.rng).toBeDefined();
+    expect(persisted.rng).toEqual(rngBefore);
+
+    const json = JSON.stringify(persisted);
+    const parsed = JSON.parse(json) as typeof persisted;
+    expect(parsed.monsterRewardPreviewCache?.[monster.id]).toBeDefined();
+    expect((parsed.monsterRewardPreviewCache![monster.id] as any[]).map((o: any) => o.title)).toEqual(cachedTitles);
+    expect(parsed.rng).toEqual(rngBefore);
+  });
 });

@@ -33,6 +33,7 @@ import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecyclableFromHand, getCardPlayCategory, logHeroMagic, applyAmplifyToCard } from '../helpers';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
+import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { applyEquipDestroyLastWords } from './waterfall';
 import { routeReflectDamageToHero, tickStunAttemptDiscoverProgress } from './combat';
@@ -1246,6 +1247,16 @@ function reduceConvertAmuletsToGold(
     payload: { type: 'amulet', message: `${count} 枚护符转化为 ${payout} 金币` },
   });
 
+  // 招灵书印：「护符换金币」也算强制销毁。所有护符被清空 → surviving=0
+  // → 通常不触发，但保留入口一致性，与 events.ts:amuletsToGold+10 行为对齐。
+  maybeTriggerDeleteDrawForDestroy({
+    destroyedCards: [...state.amuletSlots] as GameCardData[],
+    survivingAmuletSlots: patch.amuletSlots ?? [],
+    sideEffects,
+    enqueuedActions,
+    reasonLabel: '护符换金币',
+  });
+
   return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
 }
 
@@ -1670,6 +1681,16 @@ function reduceSacrificeEquipmentSlot(
     } else {
       patch[slotId] = null;
     }
+    // 招灵书印：暗影契约「献出装备」/ 命运十字路口「破坏下方装备」=
+    // 玩家被动牺牲一件装备 = 强制销毁。装备销毁不影响护符栏 →
+    // surviving = state.amuletSlots。复生路径上面已经 return 不会到这里。
+    maybeTriggerDeleteDrawForDestroy({
+      destroyedCards: [card],
+      survivingAmuletSlots: state.amuletSlots as GameCardData[],
+      sideEffects,
+      enqueuedActions,
+      reasonLabel: '献祭装备',
+    });
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);

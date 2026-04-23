@@ -168,6 +168,14 @@ export function reduceUIStateActions(
     case 'SET_MONSTER_REWARD_MINIMIZED':
       return applyPatch(state, { monsterRewardMinimized: action.minimized });
 
+    case 'END_MONSTER_DEFEAT_ANIMATION': {
+      const ids = state.monsterDefeatAnimationIds;
+      if (!ids.includes(action.monsterId)) return applyPatch(state, {});
+      return applyPatch(state, {
+        monsterDefeatAnimationIds: ids.filter(id => id !== action.monsterId),
+      });
+    }
+
     case 'MINIMIZE_ALL_MODALS': {
       // Only mark currently-open modals as minimized. Touching closed ones
       // is harmless but pointless and would noise up state diffs.

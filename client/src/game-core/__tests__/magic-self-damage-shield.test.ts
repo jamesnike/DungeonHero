@@ -299,30 +299,31 @@ describe('单目标伤害 magic — 自伤打盾路径 (target = shield-slot)', 
     expect(newShield._shieldBlockCount ?? 1).toBe(1);
   });
 
-  it('reducer 守卫：装备槽里是 type=monster 的怪物盾 → 不可被选为目标 (noChange)', () => {
+  it('装备槽里是 type=monster 的怪物装备（既可当武器也可当盾）+ armor>0 → 可被选为目标，行为同普通盾', () => {
     const ampedBolt = { ...makeBoltCard(), amplifyBonus: 4 } as GameCardData;
-    const monsterShield = {
+    // 怪物装备：type='monster'，同时具备 armor 和 attack/value（既能挡也能打）。
+    const monsterEquip = {
       id: 'mshield',
       type: 'monster',
-      name: '怪物盾',
-      value: 4,
+      name: '怪物装备',
+      value: 4, // 当武器时的攻击力
       armor: 4,
       armorMax: 4,
       durability: 2,
+      maxDurability: 2,
     } as any;
     const state = makeState({
       hp: 30,
       maxHp: 30,
       handCards: [ampedBolt],
-      equipmentSlot1: monsterShield,
+      equipmentSlot1: monsterEquip,
       equipmentSlot2: null,
       activeCards: activeRowOf(makeMonster('m1', 50)),
       combatState: { ...initialCombatState, currentTurn: 'hero' },
     });
 
     const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: ampedBolt.id } as GameAction]);
-    const before = afterPlay.state;
-    const afterShield = drain(before, [
+    const afterShield = drain(afterPlay.state, [
       {
         type: 'RESOLVE_MAGIC_MONSTER_SELECTION',
         magicId: 'missile-bolt',
@@ -332,11 +333,51 @@ describe('单目标伤害 magic — 自伤打盾路径 (target = shield-slot)', 
       } as GameAction,
     ]);
 
-    // noChange：pendingMagicAction 仍在、hp / armor / durability 都没变。
+    // 总伤害 1 + 4 = 5；armor 4 → 溢出 1 扣 hp；armor 打空 → durability 2→1。
+    expect(afterShield.state.pendingMagicAction).toBeNull();
+    expect(afterShield.state.hp).toBe(29);
+    const slot = afterShield.state.equipmentSlot1 as any;
+    expect(slot).toBeTruthy();
+    expect(slot.durability).toBe(1);
+    // 跟普通盾一样，slotDurabilityUsedThisTurn 仍 0。
+    expect(afterShield.state.combatState.slotDurabilityUsedThisTurn?.equipmentSlot1 ?? 0).toBe(0);
+  });
+
+  it('reducer 守卫：装备槽里是 type=monster 但 armor=0 的纯武器形态 → 仍 noChange', () => {
+    const ampedBolt = { ...makeBoltCard(), amplifyBonus: 4 } as GameCardData;
+    const monsterWeaponOnly = {
+      id: 'mweapon',
+      type: 'monster',
+      name: '怪物武器形态',
+      value: 5,
+      armor: 0,
+      armorMax: 0,
+      durability: 2,
+    } as any;
+    const state = makeState({
+      hp: 30,
+      maxHp: 30,
+      handCards: [ampedBolt],
+      equipmentSlot1: monsterWeaponOnly,
+      equipmentSlot2: null,
+      activeCards: activeRowOf(makeMonster('m1', 50)),
+      combatState: { ...initialCombatState, currentTurn: 'hero' },
+    });
+
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: ampedBolt.id } as GameAction]);
+    const afterShield = drain(afterPlay.state, [
+      {
+        type: 'RESOLVE_MAGIC_MONSTER_SELECTION',
+        magicId: 'missile-bolt',
+        monsterId: '',
+        targetType: 'shield-slot',
+        slotId: 'equipmentSlot1',
+      } as GameAction,
+    ]);
+
     expect(afterShield.state.pendingMagicAction).toBeTruthy();
     expect(afterShield.state.hp).toBe(30);
     const slot = afterShield.state.equipmentSlot1 as any;
-    expect(slot.armor).toBe(4);
     expect(slot.durability).toBe(2);
   });
 

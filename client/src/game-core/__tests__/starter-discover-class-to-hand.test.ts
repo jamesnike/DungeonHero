@@ -304,9 +304,9 @@ describe('Eternal relics — starting set no longer contains waterfall-discover'
     expect(ids).toContain('recycle-shuffle');
   });
 
-  it('getStartingRelics does NOT include waterfall-draw-2 (pulled per user request; relic stays available via discover/perm-grant)', () => {
+  it('getStartingRelics includes waterfall-draw-2 (default starter)', () => {
     const starting = getStartingRelics();
     const ids = starting.map(r => r.id);
-    expect(ids).not.toContain('waterfall-draw-2');
+    expect(ids).toContain('waterfall-draw-2');
   });
 });

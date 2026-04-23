@@ -14,6 +14,7 @@ import { applyPatch, noChange } from '../reducer';
 import type { GameCardData } from '@/components/GameCard';
 import type { ActiveRowSlots, EquipmentSlotId, EquipmentItem, PendingMagicAction } from '@/components/game-board/types';
 import { computeMaxHp, checkSwapUpgrade, applyMissileRelicEffects, executeArmorDoubleStrike, requestOrAutoHandDiscard, finalizeDiscardEmpower } from './magic-effects';
+import { maybeEnqueueStunGold } from './economy';
 import { DUNGEON_COLUMN_COUNT, PERSUADE_COST, MIN_PERSUADE_COST, createEmptyAmuletEffects, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import {
   flattenActiveRowSlots,
@@ -38,6 +39,7 @@ import { computeEquipmentBreakEffects, shouldRouteEquipmentToPermRecycle } from 
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
 import { computeAmuletEffects, getEquipmentInSlot, getSlotBonus } from '../equipment';
+import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { applyFlipCounters } from './flip-counters';
 import { nextInt, pickRandom } from '../rng';
 import { damageMonsterWithLayerOverflow, computeEffectiveSpellDamageOnMonster } from '../combat';
@@ -656,6 +658,7 @@ function reduceActivateHeroMagic(
       }
 
       let destroyedCount = 0;
+      const destroyedCards: GameCardData[] = [];
       const survivedSlots: Record<EquipmentSlotId, EquipmentItem | null> = {
         equipmentSlot1: null,
         equipmentSlot2: null,
@@ -700,11 +703,22 @@ function reduceActivateHeroMagic(
             enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
           }
           destroyedCount++;
+          destroyedCards.push(item);
         }
       }
 
       patch.equipmentSlot1 = survivedSlots.equipmentSlot1;
       patch.equipmentSlot2 = survivedSlots.equipmentSlot2;
+
+      // 招灵书印：灭世裁决摧毁装备 = 强制销毁。装备销毁不影响护符栏 →
+      // surviving = state.amuletSlots。复生的装备不算 destroyed。
+      maybeTriggerDeleteDrawForDestroy({
+        destroyedCards,
+        survivingAmuletSlots: state.amuletSlots as GameCardData[],
+        sideEffects,
+        enqueuedActions,
+        reasonLabel: '灭世裁决摧毁装备',
+      });
 
       if (destroyedCount > 0) {
         const totalDebuff = destroyedCount * 2;
@@ -1187,7 +1201,7 @@ function reduceMagicSlotSelection(
     }
 
     case 'durability-charge-burst': {
-      // 蓄能裂击：装备 +1 上限 +1 耐久；若加完后耐久==4 则随机激活行怪物 -1 血层、装备 -2。
+      // 蓄能裂击：装备 +1 上限 +1 耐久；若加完后耐久==4 则随机激活行怪物 -1 血层、装备 -3。
       // - 拒绝：空槽 / 没有耐久概念的装备（maxDur == 0），且不消耗 magic。
       // - Echo (A 类)：整套效果在同一栏顺序执行 echoMul 次（每轮重新读耐久 / 怪物列表）。
       // - 怪物伤害用 enqueue DEAL_DAMAGE_TO_MONSTER（damage = 该层满 HP）。
@@ -1196,7 +1210,7 @@ function reduceMagicSlotSelection(
       //   —— 这是与命运之刃同样的边缘 case，符合"按层 HP 数值打"语义。
       // - 若没怪物可选，伤害跳过、装备耐久仍 -2（用户明确要求）。
       // - 触发条件按卡面字面意思「加完后耐久==4」判定，包含 4/4 已满蓄能的装备：
-      //   触发后 -2 自带保护，echo 第二轮的 oldDur=2，不会形成假触发循环。
+      //   触发后 -3 自带保护，echo 第二轮的 oldDur=1，不会形成假触发循环。
       if (!slotItem) {
         patch.heroSkillBanner = '该装备栏为空。';
         return applyPatch(state, patch, sideEffects);
@@ -1245,9 +1259,9 @@ function reduceMagicSlotSelection(
           } else {
             monsterMsg = '→ 场上无怪物';
           }
-          const afterPenalty = Math.max(0, afterAddDur - 2);
+          const afterPenalty = Math.max(0, afterAddDur - 3);
           currentItem = { ...currentItem, durability: afterPenalty };
-          summaryParts.push(`第${iter + 1}轮：${oldDur}→${afterAddDur}（达 4，${monsterMsg}），耐久 -2 → ${afterPenalty}`);
+          summaryParts.push(`第${iter + 1}轮：${oldDur}→${afterAddDur}（达 4，${monsterMsg}），耐久 -3 → ${afterPenalty}`);
         } else {
           summaryParts.push(`第${iter + 1}轮：${oldDur}→${afterAddDur}（未触发 4 耐久）`);
         }
@@ -1850,11 +1864,13 @@ function reduceMagicMonsterSelection(
     return noChange(state);
   }
 
-  // shield-slot 需要 slotId 指向 type='shield' 且 armor>0 的装备槽。
+  // shield-slot 需要 slotId 指向 type='shield' 或 type='monster'（怪物装备既可当武器也可当盾），
+  // 且 armor>0 的装备槽。两种装备共用 RESOLVE_BLOCK 同款的 armor / armorBonusDamaged 公式，
+  // 自伤路径下都跳过所有 RESOLVE_BLOCK 专属机制（含 bone-regen / 怪物盾自动恢复）。
   if (targetType === 'shield-slot') {
     if (!action.slotId) return noChange(state);
     const slotItem = getEquipmentInSlot(state, action.slotId);
-    if (!slotItem || slotItem.type !== 'shield') return noChange(state);
+    if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) return noChange(state);
     if ((slotItem.armor ?? slotItem.armorMax ?? slotItem.value ?? 0) <= 0) return noChange(state);
   }
 
@@ -2971,13 +2987,7 @@ function reduceDiceForHero(
         patch.stunCap = Math.min(100, (state.stunCap ?? 0) + bump);
         sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${patch.stunCap}%）` } });
       }
-      if (ae.stunGoldCount > 0) {
-        const goldGain = 10 * ae.stunGoldCount;
-        const drawCount = 2 * ae.stunGoldCount;
-        enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
-        enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}，抽 ${drawCount} 张牌` } });
-      }
+      maybeEnqueueStunGold(state, enqueuedActions, sideEffects, monsterId, monsterName);
     } else if (currentHit < totalHits) {
       const threshold = Math.round((stunPct / 100) * 20);
       const [hsRoll, hsRng] = nextInt(patch.rng ?? state.rng, 1, 20);
@@ -3008,13 +3018,7 @@ function reduceDiceForHero(
         patch.stunCap = Math.min(100, (state.stunCap ?? 0) + bump);
         sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${patch.stunCap}%）` } });
       }
-      if (ae.stunGoldCount > 0) {
-        const goldGain = 10 * ae.stunGoldCount;
-        const drawCount = 2 * ae.stunGoldCount;
-        enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
-        enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-        sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}，抽 ${drawCount} 张牌` } });
-      }
+      maybeEnqueueStunGold(state, enqueuedActions, sideEffects, monsterId, monsterName);
     }
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }

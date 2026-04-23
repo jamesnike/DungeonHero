@@ -258,6 +258,10 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         delete next[monsterId];
         return next;
       });
+      // Atomic mirror: the engine-side gate flag added to keep the reward
+      // modal from flashing must be cleared once the visual animation is
+      // done, otherwise the modal would stay hidden forever.
+      dispatch({ type: 'END_MONSTER_DEFEAT_ANIMATION', monsterId });
       // Safety net: ensure the monster id is never left in pendingDungeonUseRef
       // after the defeat animation finishes. The normal "claim reward" path
       // clears it via removePendingDungeonCard, and revive paths put the

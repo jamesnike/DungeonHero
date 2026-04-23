@@ -271,6 +271,21 @@ export interface PersistedGameState {
   rng?: { seed: number; state: number };
   /** 按卡名累计的增幅加成（增幅祭坛 / 增幅魔法）。 */
   amplifiedCardBonus?: Record<string, number>;
+  /**
+   * 怪物入场 / 玩家攻击前预生成的奖励选项缓存（按 monster.id 索引）。
+   *
+   * 必须持久化的原因：
+   * - cache 在 MONSTER_ENTERED_ROW（瀑流落地）时用当时的 `state.rng` 生成；
+   *   而 RNG 每次 `nextRandom` 都会推进，所以**生成奖励的 RNG 时机**和
+   *   **击杀时的 RNG 状态**通常不同。
+   * - 击杀走 cache HIT，不再消耗 RNG —— 这正是「撤销重打也拿到一样的奖励」的保证。
+   * - 但如果不持久化：刷新页面后 live state 的 cache 丢光，撤销栈里旧 snapshot
+   *   还有 cache —— 跨刷新点的撤销会让"刚刚看到的奖励"和"撤销后看到的奖励"不一致。
+   *
+   * 类型存成 unknown[] 以避免 PersistedGameState 反向依赖 components/game-board/types。
+   * 加载时类型断言回 MonsterRewardOption[]。
+   */
+  monsterRewardPreviewCache?: Record<string, unknown[]>;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

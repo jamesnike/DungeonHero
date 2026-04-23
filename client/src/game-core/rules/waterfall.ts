@@ -45,6 +45,7 @@ import {
   applyAmplifyOnCreate,
 } from '../helpers';
 import { computeAmuletEffects } from '../equipment';
+import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { processRecycleBag, drawMultipleFromBackpack } from '../cards';
 import { resetHeroWavePure } from '../hero';
@@ -639,6 +640,7 @@ function reduceApplyWaterfallDiscardEffects(
         // Equipment last words that require UI interaction (class deck draws, graveyard-to-hand)
         // are handled via enqueued actions.
         const destroyed: string[] = [];
+        const destroyedCards: GameCardData[] = [];
         const revived: string[] = [];
 
         for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
@@ -661,6 +663,7 @@ function reduceApplyWaterfallDiscardEffects(
               revived.push(card.name);
             } else {
               destroyed.push(slotItem.name);
+              destroyedCards.push(card);
               enqueuedActions.push({ type: 'DISPOSE_EQUIPMENT_CARD', card: { ...slotItem } as GameCardData, isDestruction: true });
               patch[slotId] = null;
             }
@@ -685,6 +688,7 @@ function reduceApplyWaterfallDiscardEffects(
                 revived.push(r.name);
               } else {
                 destroyed.push(r.name);
+                destroyedCards.push(r);
                 enqueuedActions.push({ type: 'DISPOSE_EQUIPMENT_CARD', card: { ...r }, isDestruction: true });
               }
             }
@@ -698,6 +702,15 @@ function reduceApplyWaterfallDiscardEffects(
             `${cardName} 被挤出，破坏了所有装备：${destroyed.join('、')}${revived.length > 0 ? `（${revived.join('、')} 复生）` : ''}`,
             `${cardName} 的贪婪吞噬了你的所有装备！`,
           );
+          // 招灵书印：贪婪 boss 瀑流摧毁所有装备 = 强制销毁。
+          // 装备销毁不影响护符栏 → surviving = state.amuletSlots。
+          maybeTriggerDeleteDrawForDestroy({
+            destroyedCards,
+            survivingAmuletSlots: state.amuletSlots as GameCardData[],
+            sideEffects,
+            enqueuedActions,
+            reasonLabel: '瀑流摧毁装备',
+          });
         } else {
           sideEffects.push({ event: 'log:entry', payload: { type: 'waterfall', message: `${cardName} 被挤出，但没有装备可破坏。` } });
         }
@@ -739,6 +752,15 @@ function reduceApplyWaterfallDiscardEffects(
           sideEffects.push({
             event: 'log:entry',
             payload: { type: 'waterfall', message: `${cardName} 被挤出，摧毁了 ${removedAmulets.length} 枚护符：${removedAmulets.map(a => a.name).join('、')}` },
+          });
+          // 招灵书印：诅咒骰局 强制销毁所有护符。所有护符清空 → surviving=0
+          // → 通常不触发，但保留入口一致性。
+          maybeTriggerDeleteDrawForDestroy({
+            destroyedCards: removedAmulets,
+            survivingAmuletSlots: patch.amuletSlots ?? [],
+            sideEffects,
+            enqueuedActions,
+            reasonLabel: '幽魂瀑流摧毁护符',
           });
         }
         const handSnapshot = [...state.handCards] as GameCardData[];

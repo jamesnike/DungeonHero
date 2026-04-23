@@ -21,6 +21,7 @@ import { drawFromBackpackToHandPure, drawMultipleFromBackpack, addCardToBackpack
 import { nextInt, pickRandom, shuffle as rngShuffle, nextId } from '../rng';
 import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import { computeAmuletEffects } from '../equipment';
+import { clearSlotAndPromoteReserve } from './equipment-effects';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
 
 // ---------------------------------------------------------------------------
@@ -1179,10 +1180,15 @@ function applyEquipSwap(
 
     if (otherItem) {
       (patch as any)[chosenSlotId] = { ...otherItem };
-      patch[otherSlotId] = null;
+      // The OTHER slot lost its main to the swap. Promote its topmost reserve
+      // up so a stacked card under otherItem doesn't visually disappear (the
+      // EquipmentSlot UI only renders the reserve stack when main is truthy).
+      clearSlotAndPromoteReserve(state, otherSlotId, patch);
       log(sideEffects, 'potion', `置换药剂：${otherItem.name} 换到${chosenSlotId === 'equipmentSlot1' ? '左' : '右'}槽`);
     } else {
-      patch[chosenSlotId] = null;
+      // chosenSlot lost its main and nothing came in to replace it — promote
+      // its topmost reserve so any stacked card doesn't vanish.
+      clearSlotAndPromoteReserve(state, chosenSlotId, patch);
     }
     banner(sideEffects, `${chosenItem.name} 回到手牌！`);
   } else {

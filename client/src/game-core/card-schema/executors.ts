@@ -15,6 +15,7 @@ import type { SideEffect } from '../reducer';
 import type { EquipmentRepairTarget } from '@/components/game-board/types';
 import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import { computeAmuletEffects } from '../equipment';
+import { clearSlotAndPromoteReserve } from '../rules/equipment-effects';
 import { drawMultipleFromBackpack } from '../cards';
 import { nextInt, shuffle as rngShuffle } from '../rng';
 import { formatRepairTargetLabel } from '../helpers';
@@ -749,10 +750,15 @@ function applyEquipSwapToSlot(ctx: ExecutionContext, chosenSlotId: 'equipmentSlo
     log(ctx, 'potion', `置换药剂：${chosenItem.name} 回到手牌`);
     if (otherItem) {
       (ctx.patch as any)[chosenSlotId] = { ...otherItem };
-      ctx.patch[otherSlotId] = null;
+      // The OTHER slot lost its main to the swap. Promote its topmost reserve
+      // up so a stacked card under otherItem doesn't visually disappear (the
+      // EquipmentSlot UI only renders the reserve stack when main is truthy).
+      clearSlotAndPromoteReserve(ctx.state, otherSlotId, ctx.patch);
       log(ctx, 'potion', `置换药剂：${otherItem.name} 换到${chosenSlotId === 'equipmentSlot1' ? '左' : '右'}槽`);
     } else {
-      ctx.patch[chosenSlotId] = null;
+      // chosenSlot lost its main and nothing came in to replace it — promote
+      // its topmost reserve so any stacked card doesn't vanish.
+      clearSlotAndPromoteReserve(ctx.state, chosenSlotId, ctx.patch);
     }
     banner(ctx, `${chosenItem.name} 回到手牌！`);
   } else {

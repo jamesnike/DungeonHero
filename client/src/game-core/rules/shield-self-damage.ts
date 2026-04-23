@@ -52,7 +52,11 @@ export interface ShieldSelfDamageResult {
  * Apply a "spell-damage hits one of my own shields" event to a slot.
  *
  * Caller is responsible for:
- *   1. Verifying the slot holds a `type === 'shield'` item with `armor > 0`.
+ *   1. Verifying the slot holds a `type === 'shield'` OR `type === 'monster'`
+ *      item with `armor > 0`. Monster equipment can serve as both weapon and
+ *      shield; when it has armor it is a valid self-damage target and is
+ *      treated identically to a regular shield (no bone-regen / monster-shield
+ *      auto-recovery / RESOLVE_BLOCK passive triggers).
  *   2. Wiring the result into the reducer's patch / sideEffects /
  *      enqueuedActions before returning.
  */
@@ -69,7 +73,7 @@ export function applyShieldSlotSelfDamage(
   const slotItem = getEquipmentInSlot(state, slotId);
   const damage = Math.max(0, Math.floor(Number.isFinite(rawDamage) ? rawDamage : 0));
 
-  if (!slotItem || slotItem.type !== 'shield' || damage <= 0) {
+  if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster') || damage <= 0) {
     if (damage > 0) {
       enqueuedActions.push({
         type: 'APPLY_DAMAGE',

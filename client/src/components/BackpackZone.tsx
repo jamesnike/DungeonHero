@@ -274,19 +274,18 @@ function BackpackZoneInner({
     // button a larger transparent width; the visible strip is rendered as
     // a right-aligned inner span so the look stays exactly the same.
     //
-    // The extension is ONLY applied while a drop-eligible card is being
-    // dragged — otherwise the wider invisible area would intercept clicks
-    // meant for hero/active-row cards underneath the right screen edge.
+    // A small baseline extension (`HIT_EXTENSION_BASE`) is always applied so
+    // the narrow visible strip is easier to click. While a drop-eligible card
+    // is being dragged on a mouse device we widen further for drop precision.
     const stripWidth =
       typeof compactStyle?.width === 'number' ? compactStyle.width : 22;
     const stripHeight =
       typeof compactStyle?.height === 'number' ? compactStyle.height : 100;
-    // Wider invisible hit area is only useful for mouse precision. On touch
-    // devices we keep the hit area exactly at the visible strip, otherwise it
-    // would cover the right equipment slot and steal touches meant for it.
-    const hitExtension = isDropTarget && !isTouchDevice
+    const HIT_EXTENSION_BASE = 12;
+    const dragExtension = isDropTarget && !isTouchDevice
       ? Math.max(48, Math.round(stripHeight * 0.4))
       : 0;
+    const hitExtension = Math.max(HIT_EXTENSION_BASE, dragExtension);
     const outerStyle: CSSProperties = {
       ...compactStyle,
       width: stripWidth + hitExtension,
@@ -393,23 +392,29 @@ function BackpackZoneInner({
             secondaryIcon={RecycleIcon}
             secondaryTitle={recycleCount > 0 ? `回收袋：${recycleCount} 张` : undefined}
           />
-          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3 text-white/90">
+          {/*
+            Mobile padding bump (p-1 → p-1.5) keeps the right-aligned chip column
+            from kissing the rounded cell edge — combined with the shrunken
+            badge font/padding below, the chips visibly sit inside the cell on
+            small viewports. Desktop p-3 unchanged.
+          */}
+          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1.5 sm:p-3 text-white/90">
             <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
               <span className="font-semibold">Backpack</span>
               <div className="flex flex-col items-end gap-0.5">
                 <Badge
-                  className="bg-amber-500/90 text-white font-mono dh-hero-chip px-1 sm:px-2 ring-1 ring-amber-200/70 hover:bg-amber-500/90"
+                  className="bg-amber-500/90 text-white font-mono text-[9px] leading-none sm:dh-hero-chip px-1 py-0 sm:px-2 sm:py-0.5 ring-1 ring-amber-200/70 hover:bg-amber-500/90"
                   title={`背包：${backpackCount} 张`}
                 >
                   {backpackCount}
                 </Badge>
                 {recycleCount > 0 && (
                   <Badge
-                    className="bg-violet-500/90 text-white font-mono dh-hero-chip px-1 sm:px-2 ring-1 ring-violet-200/70 inline-flex items-center gap-1 hover:bg-violet-500/90"
+                    className="bg-violet-500/90 text-white font-mono text-[9px] leading-none sm:dh-hero-chip px-1 py-0 sm:px-2 sm:py-0.5 ring-1 ring-violet-200/70 inline-flex items-center gap-0.5 sm:gap-1 hover:bg-violet-500/90"
                     title={`回收袋：${recycleCount} 张`}
                     data-testid="backpack-recycle-chip"
                   >
-                    <RecycleIcon className="h-3 w-3" />
+                    <RecycleIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                     {recycleCount}
                   </Badge>
                 )}

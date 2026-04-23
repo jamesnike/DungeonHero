@@ -76,7 +76,7 @@ export function reduceInitGame(
       //   • Leftover monsters (count > number of chunks) are placed in random
       //     empty positions within the back 18 cards.
       //   • Non-monster cards fill the remaining slots in shuffled order.
-      // Elites are pushed out of the first 12 cards by a later step.
+      // Elites are pushed out of the first 16 cards by a later step.
       const len = deckWithClassEvents.length;
       let monsters: GameCardData[];
       {
@@ -167,11 +167,11 @@ export function reduceInitGame(
         secondHalf.splice(0, secondHalf.length, ...s);
       }
 
-      // Ensure the early elite lands in positions 12–29 (not in the first 12 cards)
-      if (earlyElite && firstHalf.length > 12) {
+      // Ensure the early elite lands at index 16 or later (not in the first 16 cards)
+      if (earlyElite && firstHalf.length > 16) {
         const eliteIdx = firstHalf.indexOf(earlyElite);
-        if (eliteIdx >= 0 && eliteIdx < 12) {
-          const [swapTarget, rngSw] = nextInt(rng, 12, firstHalf.length - 1);
+        if (eliteIdx >= 0 && eliteIdx < 16) {
+          const [swapTarget, rngSw] = nextInt(rng, 16, firstHalf.length - 1);
           rng = rngSw;
           const tmp = firstHalf[eliteIdx];
           firstHalf[eliteIdx] = firstHalf[swapTarget];
@@ -247,12 +247,12 @@ export function reduceInitGame(
     }
   }
 
-  // --- Quick mode: push elites out of first 12 cards ---
+  // --- Quick mode: push elites out of first 16 cards ---
   if (isQuickMode) {
-    for (let i = 0; i < Math.min(12, deckWithClassEvents.length); i++) {
+    for (let i = 0; i < Math.min(16, deckWithClassEvents.length); i++) {
       if (deckWithClassEvents[i].monsterSpecial) {
         let swapTarget = -1;
-        for (let k = 12; k < deckWithClassEvents.length; k++) {
+        for (let k = 16; k < deckWithClassEvents.length; k++) {
           if (deckWithClassEvents[k].type === 'monster' && !deckWithClassEvents[k].monsterSpecial) {
             swapTarget = k;
             break;
@@ -512,7 +512,7 @@ function buildFixedFirstActiveRow(): GameCardData[] {
     shortDescription: '发现一张起始装备 → 进手牌',
     eventChoices: [
       {
-        text: '发现一张装备',
+        text: '发现一张起始装备',
         effect: 'discoverStarterEquipment',
         hint: '从起始背包候选装备池中三选一，直接进入手牌（手牌满则进背包）',
       },
@@ -529,7 +529,7 @@ function buildFixedFirstActiveRow(): GameCardData[] {
     shortDescription: '发现护符 → 进手牌 → 翻为「药水发现」',
     eventChoices: [
       {
-        text: '发现一张护符',
+        text: '发现一张起始护符',
         effect: 'discoverStarterAmulet',
         hint: '从起始背包候选护符池中三选一，直接进入手牌（手牌满则进背包）',
       },
@@ -582,7 +582,7 @@ function buildFixedFirstActiveRow(): GameCardData[] {
         shortDescription: '发现一张起始魔法',
         eventChoices: [
           {
-            text: '发现一张魔法',
+            text: '发现一张起始魔法',
             effect: 'discoverStarterMagic',
             hint: '从起始背包候选魔法池中三选一',
           },

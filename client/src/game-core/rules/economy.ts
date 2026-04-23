@@ -20,24 +20,32 @@ import { computeAmuletEffects } from '../equipment';
 import { computeSpellDamagePure } from '../helpers';
 import type { PendingMonsterEndDice } from '../types';
 
-// Helper: enqueue +10 gold and 2 backpack draws (per amulet) + log
-// when a stun is applied and 雷金护符 is equipped.
-function maybeEnqueueStunGold(
+// Helper: 雷金护符 effect — for each stun event on a monster, grant +10×N gold
+// (N = stun-gold amulet count) AND immediately remove that monster's stun.
+// Per-monster trigger: callers MUST invoke once per stunned monster (multi-stun
+// magics like 震慑领域 already loop per monster).
+export function maybeEnqueueStunGold(
   state: GameState,
   enqueuedActions: GameAction[],
   sideEffects: SideEffect[],
+  monsterId: string,
   monsterName: string,
 ): void {
   const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
   if (ae.stunGoldCount <= 0) return;
   const n = ae.stunGoldCount;
   const goldGain = 10 * n;
-  const drawCount = 2 * n;
   enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' } as GameAction);
-  enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' } as GameAction);
+  enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId, patch: { isStunned: false } } as GameAction);
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'amulet', message: `雷金护符：${monsterName} 被击晕，金币 +${goldGain}，抽 ${drawCount} 张牌` },
+    payload: { type: 'amulet', message: `雷金护符：${monsterName} 被击晕，金币 +${goldGain}，移除击晕状态` },
+  });
+  // Non-blocking 视觉反馈：UI hook 监听此事件后，在该怪物卡上播放一次性
+  // 「金币爆发 + 击晕释放」动画。和游戏 pipeline 完全解耦。
+  sideEffects.push({
+    event: 'combat:stunReleasedByGoldAmulet',
+    payload: { monsterId, monsterName, goldDelta: goldGain },
   });
 }
 
@@ -727,7 +735,7 @@ function reduceResolveDice(
           { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${curMonster.name} 被震慑领域击晕了！`, timestamp: Date.now() } } as GameAction,
         );
         stunResults.push(`${curMonster.name} 击晕`);
-        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, curMonster.name);
+        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, curMonster.id, curMonster.name);
       } else {
         stunResults.push(`${curMonster.name} 未击晕`);
       }
@@ -771,7 +779,7 @@ function reduceResolveDice(
         enqueuedActions.push(
           { type: 'SET_HERO_SKILL_BANNER', message: `颠倒乾坤击晕了 ${mName}！` } as GameAction,
         );
-        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, mName);
+        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, mId, mName);
       }
       if (swapCard) {
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: swapCard, dealtDamage: false } as GameAction);
@@ -796,7 +804,7 @@ function reduceResolveDice(
           { type: 'SET_HERO_SKILL_BANNER', message: `雷震击：第${hit}击击晕成功！` } as GameAction,
           { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 被雷震击晕了！`, timestamp: Date.now() } } as GameAction,
         );
-        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, mName);
+        maybeEnqueueStunGold(newState, enqueuedActions, sideEffects, mId, mName);
       } else if (hit < maxHits) {
         const [tsRoll, tsRng] = nextInt(newState.rng, 1, 20);
         newState = { ...newState, rng: tsRng };

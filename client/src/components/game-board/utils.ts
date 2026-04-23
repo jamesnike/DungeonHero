@@ -1188,6 +1188,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
     description: '掷骰子，为一张手牌赋予侧击或转型效果。',
     eventChoices: [
       {
+        id: 'shrine-roll-dice',
         text: '掷出赋能骰：侧击劝降-1/侧击击晕+5%/转型抽2/转型回2血/侧击伤害5',
         hint: '随机赋予一张手牌新的侧击或转型效果',
         effect: 'noop',
@@ -1199,6 +1200,13 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
           { id: 'shrine-transform-heal', range: [13, 16] as [number, number], label: '转型：恢复 2 HP', effect: 'grantTransformHeal:2' },
           { id: 'shrine-flank-damage', range: [17, 20] as [number, number], label: '侧击：对随机怪物造成 5 点伤害', effect: 'grantFlankDamage:5' },
         ],
+      },
+      {
+        text: '失去 5 生命 离开',
+        effect: 'hp-5',
+        hint: '当无手牌、无法掷骰赋能时可选',
+        requiresDisabledChoices: ['shrine-roll-dice'],
+        requiresDisabledReason: '仍可掷出赋能骰',
       },
     ],
   });

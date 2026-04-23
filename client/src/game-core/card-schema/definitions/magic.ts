@@ -2118,7 +2118,7 @@ const knightTempAttackDouble: CardDefinition = {
 
 // 蓄能裂击 — Perm 2. Select an equipment with durability; +1 maxDurability +1
 // durability. If after the +1 the durability is 4, deal 1 layer of damage to a
-// random active-row monster, then -2 durability on the equipment.
+// random active-row monster, then -3 durability on the equipment.
 // Echo (A): repeat the entire effect echoMultiplier times sequentially.
 // Empty slots / equipment without durability are rejected (magic not consumed).
 const knightDurabilityChargeBurst: CardDefinition = {
@@ -2131,7 +2131,7 @@ const knightDurabilityChargeBurst: CardDefinition = {
       card,
       effect: 'durability-charge-burst',
       step: 'slot-select',
-      prompt: `蓄能裂击：选择一件装备，耐久上限+1 耐久+1；若达 4 耐久则随机敌人 -1 血层、装备 -2。${echoLabel}`,
+      prompt: `蓄能裂击：选择一件装备，耐久上限+1 耐久+1；若达 4 耐久则随机敌人 -1 血层、装备 -3。${echoLabel}`,
       echoMultiplier,
     } as any;
     patch.heroSkillBanner = `蓄能裂击：选择一件装备。${echoLabel}`;

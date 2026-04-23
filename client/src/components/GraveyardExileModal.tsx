@@ -57,7 +57,7 @@ export default function GraveyardExileModal({
                 }`}
                 onClick={() => toggleCard(card.id)}
               >
-                <div className="pointer-events-none">
+                <div className="pointer-events-none aspect-[3/4.2] w-full">
                   <GameCard card={card} disableInteractions />
                 </div>
                 <span className={`mt-1.5 sm:mt-3 block text-center text-xs sm:text-sm font-semibold ${

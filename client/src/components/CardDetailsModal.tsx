@@ -253,22 +253,36 @@ export default function CardDetailsModal({
             })()}
 
             {/* Monster Equipment Stats */}
-            {isMonsterEquipment && (
-              <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
-                {card.attack != null && (
-                  <div className="flex items-center gap-2">
-                    <Sword className="w-4 h-4 text-amber-500" />
-                    <span>攻击: <span className="font-bold">{card.attack}</span></span>
-                  </div>
-                )}
-                {card.durability !== undefined && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">耐久:</span>
-                    <span className="font-bold">{card.durability}/{card.maxDurability || card.durability}</span>
-                  </div>
-                )}
-              </div>
-            )}
+            {isMonsterEquipment && (() => {
+              const armorMax = card.hp ?? card.value;
+              const showArmor = armorMax != null && armorMax > 0;
+              const curArmor = showArmor ? Math.min(card.armor ?? armorMax, armorMax) : 0;
+              return (
+                <div className="grid grid-cols-2 gap-2 bg-muted/30 p-3 rounded-md">
+                  {card.attack != null && (
+                    <div className="flex items-center gap-2">
+                      <Sword className="w-4 h-4 text-amber-500" />
+                      <span>攻击: <span className="font-bold">{card.attack}</span></span>
+                    </div>
+                  )}
+                  {card.durability !== undefined && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">耐久:</span>
+                      <span className="font-bold">{card.durability}/{card.maxDurability || card.durability}</span>
+                    </div>
+                  )}
+                  {showArmor && (
+                    <div className="col-span-2 flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-cyan-500" />
+                      <span>
+                        护甲：<span className={`font-bold ${curArmor < armorMax ? 'text-orange-500' : 'text-cyan-600'}`}>{curArmor}</span>
+                        <span className="text-muted-foreground"> / {armorMax}</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {!isMonsterEquipment && (<>
             {/* Waterfall Effect */}

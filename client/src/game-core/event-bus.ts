@@ -11,6 +11,21 @@ export type GameEventMap = {
   'combat:bossRetaliation': { damage: number };
   'combat:monsterAttack': { monsterId: string; damage: number };
   'combat:stunApplied': { monsterId: string };
+  /**
+   * 「雷金护符」(amulet: stun-gold) just consumed a stun on this monster:
+   * +`goldDelta` gold已 enqueue（未必已经入账）+ stun 标志同帧被清除。
+   * UI 监听此事件在该怪物卡上播放一次性「金币爆发 + 击晕释放」动画
+   * （非阻塞、纯视觉，与游戏逻辑流水线解耦）。
+   *
+   * 多怪物同时被击晕（震慑领域）→ 每只怪物独立 emit 一次。
+   * N 件 stun-gold 护符叠加 → 只 emit 一次，但 `goldDelta = 10 * N`，
+   * 用于动画显示「+10 / +20 / +30 G」。
+   */
+  'combat:stunReleasedByGoldAmulet': {
+    monsterId: string;
+    monsterName: string;
+    goldDelta: number;
+  };
   'combat:monsterBleed': { monsterId: string; delay: number };
   'combat:dragonBleedDestroy': { monsterName: string; layersRemaining: number };
   'combat:boneRegenCheck': {
@@ -475,7 +490,6 @@ export type GameEventMap = {
     delivery?: 'backpack' | 'hand-first';
   };
   'card:cryptDeathwishSelect': { card: import('@/components/GameCard').GameCardData };
-  'card:classDrawRequested': { count: number; source: string };
   'card:mirrorCopyRequested': { card: import('@/components/GameCard').GameCardData };
   'card:deckJudgeRequested': { card: import('@/components/GameCard').GameCardData };
   /**

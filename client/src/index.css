@@ -1650,6 +1650,154 @@ html {
     to   { transform: rotate(360deg); }
   }
 
+  /* ==========================================================================
+   * 雷金护符 — stun-released-by-gold burst animation
+   *
+   * Plays once on a monster cell when 「雷金护符」consumes a fresh stun and
+   * converts it into +N gold + immediate un-stun. Three layered visuals:
+   *
+   *   1. Two expanding gold rings (outer + inner) that burst outward,
+   *      visually "shattering" the spinning stun overlay.
+   *   2. A coin sparkle that pops + pulses at the center.
+   *   3. A "+N G" text that rises and fades.
+   *
+   * Total runtime ≈ 1400ms (matches `STUN_GOLD_FX_DURATION_MS` in the hook).
+   * Wrapper is positioned by `StunReleasedGoldOverlayLayer` (viewport fixed,
+   * anchored to monster cell center). Inner pieces use translate(-50%,-50%)
+   * to self-center on the anchor point.
+   * ========================================================================== */
+  .dh-stun-gold-float {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    z-index: 60;
+  }
+
+  .dh-stun-gold-float__ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid rgba(250, 204, 21, 0.95);
+    box-shadow:
+      0 0 18px 4px rgba(250, 204, 21, 0.55),
+      inset 0 0 12px rgba(252, 211, 77, 0.6);
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0;
+    animation: dh-stun-gold-burst 900ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  }
+
+  .dh-stun-gold-float__ring--inner {
+    width: 50px;
+    height: 50px;
+    border-color: rgba(254, 243, 199, 0.95);
+    box-shadow:
+      0 0 14px 3px rgba(254, 240, 138, 0.75),
+      inset 0 0 8px rgba(255, 255, 255, 0.7);
+    animation-delay: 80ms;
+    animation-duration: 750ms;
+  }
+
+  @keyframes dh-stun-gold-burst {
+    0% {
+      transform: translate(-50%, -50%) scale(0.2);
+      opacity: 0;
+      border-width: 4px;
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(1.65);
+      opacity: 0;
+      border-width: 1px;
+    }
+  }
+
+  .dh-stun-gold-float__coin {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 36px;
+    height: 36px;
+    transform: translate(-50%, -50%) scale(0);
+    animation: dh-stun-gold-coin-pop 1100ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.85)) drop-shadow(0 0 12px rgba(217, 119, 6, 0.55));
+  }
+
+  .dh-stun-gold-float__coin svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  @keyframes dh-stun-gold-coin-pop {
+    0% {
+      transform: translate(-50%, -50%) scale(0) rotate(-45deg);
+      opacity: 0;
+    }
+    25% {
+      transform: translate(-50%, -50%) scale(1.25) rotate(0deg);
+      opacity: 1;
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(1) rotate(15deg);
+      opacity: 1;
+    }
+    80% {
+      transform: translate(-50%, -50%) scale(1.05) rotate(-5deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(0.9) rotate(0deg);
+      opacity: 0;
+    }
+  }
+
+  .dh-stun-gold-float__text {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 18px;
+    font-weight: 900;
+    color: #fde68a;
+    text-shadow:
+      0 0 4px rgba(180, 83, 9, 0.95),
+      0 1px 0 rgba(120, 53, 15, 0.95),
+      0 2px 6px rgba(0, 0, 0, 0.55);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    opacity: 0;
+    animation: dh-stun-gold-text-rise 1400ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+    animation-delay: 150ms;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  @keyframes dh-stun-gold-text-rise {
+    0% {
+      transform: translate(-50%, -50%) scale(0.4);
+      opacity: 0;
+    }
+    20% {
+      transform: translate(-50%, -130%) scale(1.15);
+      opacity: 1;
+    }
+    60% {
+      transform: translate(-50%, -200%) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -260%) scale(0.95);
+      opacity: 0;
+    }
+  }
+
   /* Old absolute-positioned badge classes removed — badges are now inline keyword tags */
 
   /* Old onattack-badge removed — now uses keyword-tag--onattack */

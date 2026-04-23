@@ -35,6 +35,7 @@ import { computeAmuletEffects } from '../equipment';
 import { getEquipmentSlotsWithSuppressedTempAttack, isMonsterMagicImmuneByBuilding } from '../buildingAura';
 import { flattenActiveRowSlots, isDamageableTarget, isRecyclableFromHand, applyAmplifyOnCreate } from '../helpers';
 import { computeEquipmentBreakEffects, computeDurabilityLossEffects } from './equipment-effects';
+import { maybeEnqueueStunGold } from './economy';
 import { createBugletCard, createMagicBoltCard, goblinImage, bugletImage } from '../deck';
 import { addCardToBackpackPure, resetCardForGraveyard } from '../cards';
 import { generateMonsterRewardOptions, queueMonsterRewardPure } from '../monsters';
@@ -53,6 +54,34 @@ function lastWordsSkillKey(effect: string): MonsterSkillKey {
     return 'death:lastWords:wraithHaunt';
   }
   return 'death:lastWords:generic';
+}
+
+/**
+ * Atomically mark a monster id as "defeat animation in progress" inside the
+ * patch being assembled by a reducer.
+ *
+ * Callers MUST invoke this in the same patch where they push the
+ * `combat:monsterDefeated` side effect. The reward modal's `open` prop is
+ * gated by `state.monsterDefeatAnimationIds.length === 0`, so writing this
+ * field in the same `applyPatch` as `activeMonsterReward` (set via
+ * `queueMonsterRewardPure`) guarantees React sees both fields together —
+ * eliminating the mobile flash where the modal briefly opened in one render
+ * and closed in the next.
+ *
+ * Idempotent: dedupes within the patch (so multiple defeats in one reducer
+ * step don't double-add) and against the existing engine state.
+ *
+ * The id is later removed by `END_MONSTER_DEFEAT_ANIMATION`, dispatched by
+ * the React-side defeat-animation timer (~`DEFEAT_ANIMATION_DURATION`).
+ */
+function markMonsterDefeatAnimation(
+  state: GameState,
+  patch: Partial<GameState>,
+  monsterId: string,
+): void {
+  const current = patch.monsterDefeatAnimationIds ?? state.monsterDefeatAnimationIds;
+  if (current.includes(monsterId)) return;
+  patch.monsterDefeatAnimationIds = [...current, monsterId];
 }
 
 export function reduceCombatActions(state: GameState, action: GameAction): ReduceResult | null {
@@ -651,6 +680,7 @@ function reduceDealDamageToMonster(
       event: 'combat:monsterDefeated',
       payload: { monsterId: action.monsterId, monsterName: monster.name },
     });
+    markMonsterDefeatAnimation(state, patch, action.monsterId);
     enqueuedActions.push({ type: 'MONSTER_DEFEATED', monsterId: action.monsterId });
 
     if (monster.monsterSpecial === 'bone-regen' && !monster.isStunned) {
@@ -820,7 +850,9 @@ function reduceMonsterDefeated(
   if (monster.defeatProcessed) return noChange(state);
 
   // ---- Branch A: Boss transform ----
-  if (monster.isFinalMonster && !monster.bossPhase && !monster.isStunned) {
+  // 最终之敌 → Boss 的翻转**不**被晕眩取消：晕眩状态下被杀仍然变身。
+  // （晕眩仍会压制 lastWords / revive / boss retaliation，那些是独立分支。）
+  if (monster.isFinalMonster && !monster.bossPhase) {
     const bossCard = applyAmplifyOnCreate(createBossCard(monster), state.amplifiedCardBonus);
     activeCards[idx] = bossCard;
     patch.activeCards = activeCards as GameState['activeCards'];
@@ -914,6 +946,7 @@ function reduceMonsterDefeated(
 
   sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 被击败！` } });
   sideEffects.push({ event: 'combat:monsterDefeated', payload: { monsterId: monster.id, monsterName: monster.name } });
+  markMonsterDefeatAnimation(state, patch, monster.id);
 
   // Execute last words inline so the discard / haunt actually applies.
   if (monster.lastWords && !monster.isStunned) {
@@ -1429,7 +1462,6 @@ function applyLastWordsToPatch(
     }
     patch.discardedCards = graveyard;
     patch.permanentMagicRecycleBag = recycleBag;
-    patch.undoCount = 0;
 
     const names = toDiscard.map(c => c.name);
     sideEffects.push({
@@ -1909,6 +1941,7 @@ function reduceCheckDeath(
     combatState: newCombat,
     monstersDefeated: state.monstersDefeated + 1,
   };
+  markMonsterDefeatAnimation(state, patch, monster.id);
 
   return applyPatch(state, patch, sideEffects, [{ type: 'CHECK_BATTLE_END' }]);
 }
@@ -2036,17 +2069,8 @@ function reducePerformShieldBash(
           });
         }
 
-        // Stun gold — each amulet grants +10 gold and 2 backpack draws per stun.
-        if (ae.stunGoldCount > 0) {
-          const goldGain = 10 * ae.stunGoldCount;
-          const drawCount = 2 * ae.stunGoldCount;
-          enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
-          enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}，抽 ${drawCount} 张牌` },
-          });
-        }
+        // 雷金护符 — +10×N gold, then immediately remove this monster's stun.
+        maybeEnqueueStunGold(state, enqueuedActions, sideEffects, targetMonster.id, targetMonster.name);
       }
     }
   }
@@ -2376,6 +2400,7 @@ function reducePerformHeroAttack(
         monsterDefeated = true;
       } else if (targetMonster.hasRevive && !targetMonster.reviveUsed) {
         sideEffects.push({ event: 'combat:monsterDefeated', payload: { monsterId: targetMonster.id, monsterName: targetMonster.name } });
+        markMonsterDefeatAnimation(state, patch, targetMonster.id);
         workingMonster = {
           ...workingMonster,
           currentLayer: 1,
@@ -2409,6 +2434,7 @@ function reducePerformHeroAttack(
         enqueuedActions.push({ type: 'APPLY_HERO_KILL_EFFECTS', monsterHpBefore });
         enqueuedActions.push({ type: 'MONSTER_DEFEATED', monsterId: targetMonster.id });
         sideEffects.push({ event: 'combat:monsterDefeated', payload: { monsterId: targetMonster.id, monsterName: targetMonster.name } });
+        markMonsterDefeatAnimation(state, patch, targetMonster.id);
         monsterDefeated = true;
       }
     }
@@ -2466,6 +2492,7 @@ function reducePerformHeroAttack(
       enqueuedActions.push({ type: 'APPLY_HERO_KILL_EFFECTS', monsterHpBefore: workingMonster.hp ?? 0 });
       enqueuedActions.push({ type: 'MONSTER_DEFEATED', monsterId: targetMonster.id });
       sideEffects.push({ event: 'combat:monsterDefeated', payload: { monsterId: targetMonster.id, monsterName: targetMonster.name } });
+      markMonsterDefeatAnimation(state, patch, targetMonster.id);
       monsterDefeated = true;
     }
   }
@@ -2805,16 +2832,16 @@ function reducePerformHeroAttack(
   }
 
   // --- Persuade boost on hit ---
-  if (!monsterDefeated && targetMonster.type === 'monster' && (slotItem as GameCardData).persuadeBoostOnHit) {
-    const isTargetElite = Boolean(targetMonster.monsterSpecial);
-    const actualBoost = isTargetElite
-      ? ((slotItem as GameCardData).persuadeBoostOnHitElite ?? Math.floor((slotItem as GameCardData).persuadeBoostOnHit! / 2))
-      : (slotItem as GameCardData).persuadeBoostOnHit!;
+  // 卡面字面：「每攻击一次，下次劝降成功概率 +X%」。
+  // 不区分被打的是普通怪还是精英怪，也不要求怪存活——
+  // 只要这一刀打中了 monster，就累加 persuadeAmuletBonus。
+  if (targetMonster.type === 'monster' && (slotItem as GameCardData).persuadeBoostOnHit) {
+    const actualBoost = (slotItem as GameCardData).persuadeBoostOnHit!;
     const newBonus = (state.persuadeAmuletBonus ?? 0) + actualBoost;
     patch.persuadeAmuletBonus = newBonus;
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name}：下次劝降概率 +${actualBoost}%（累计 +${newBonus}%）${isTargetElite ? '（精英减半）' : ''}` },
+      payload: { type: 'equip', message: `${slotItem.name}：下次劝降概率 +${actualBoost}%（累计 +${newBonus}%）` },
     });
   }
 
@@ -2951,17 +2978,8 @@ function reducePerformHeroAttack(
               });
             }
 
-            // Stun gold — each amulet grants +10 gold and 2 backpack draws per stun.
-            if (ae.stunGoldCount > 0) {
-              const goldGain = 10 * ae.stunGoldCount;
-              const drawCount = 2 * ae.stunGoldCount;
-              enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldGain, source: 'amulet-stun-gold' });
-              enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
-              sideEffects.push({
-                event: 'log:entry',
-                payload: { type: 'amulet', message: `雷金护符：击晕成功，金币 +${goldGain}，抽 ${drawCount} 张牌` },
-              });
-            }
+            // 雷金护符 — +10×N gold, then immediately remove this monster's stun.
+            maybeEnqueueStunGold(state, enqueuedActions, sideEffects, targetMonster.id, targetMonster.name);
           }
         }
       }

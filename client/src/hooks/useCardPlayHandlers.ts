@@ -694,10 +694,6 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     dispatch({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
   });
 
-  useGameEvent('card:classDrawRequested', ({ count, source }) => {
-    depsRef.current.drawClassCardsToBackpack(count, source);
-  });
-
   useGameEvent('card:transformGrantModal', ({ card }) => {
     dispatch({
       type: 'SET_PERM_GRANT_MODAL',

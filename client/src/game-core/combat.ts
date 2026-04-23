@@ -918,18 +918,27 @@ export function applyMonsterTurnEndEffects(
   }
 
   let next = activeCards.map(card => {
-    if (!card || !engagedMonsterIds.includes(card.id)) return card;
+    if (!card) return card;
+    const isEngaged = engagedMonsterIds.includes(card.id);
     let updated = card;
 
-    if (updated.isStunned) {
+    // Stun recovery only ticks for engaged monsters (existing behaviour).
+    if (isEngaged && updated.isStunned) {
       changed = true;
       logs.push({ type: 'combat', message: `${updated.name} 从晕眩中恢复了。` });
       updated = { ...updated, isStunned: false };
       return updated;
     }
 
-    // Legacy wraith tier-2: self-only attack boost
-    if (updated.wraithTurnAttack && updated.wraithTurnAttack > 0) {
+    // If still stunned (non-engaged stunned monster), skip skill triggers — same as
+    // the wraith-aura loop above which short-circuits on `card.isStunned`.
+    if (updated.isStunned) {
+      return updated !== card ? updated : card;
+    }
+
+    // Legacy wraith tier-2 self-only attack boost: still gated by engagement
+    // (it's a "self-buff while fighting" effect, not an aura).
+    if (isEngaged && updated.wraithTurnAttack && updated.wraithTurnAttack > 0) {
       const boost = updated.wraithTurnAttack;
       changed = true;
       const newAttack = (updated.attack ?? updated.value ?? 0) + boost;
@@ -939,6 +948,10 @@ export function applyMonsterTurnEndEffects(
       updated = { ...updated, attack: newAttack, value: newValue, tempAttackBoost: (updated.tempAttackBoost ?? 0) + boost };
     }
 
+    // 法力吞噬 (golem spell growth): triggers every monster turn end regardless
+    // of whether the golem is engaged in combat. Mirrors the wraith aura model
+    // (active-row presence is enough; stunned is excluded above) so a back-row
+    // golem still ramps its anti-magic / layer-reflect coefficients.
     if (updated.golemSpellGrowth && updated.golemSpellGrowth > 0 && updated.antiMagicReflect != null) {
       const growth = updated.golemSpellGrowth;
       const newReflect = updated.antiMagicReflect + growth;
@@ -1210,6 +1223,13 @@ export function createBossCard(monster: GameCardData): GameCardData {
   const layers = monster.fury ?? monster.hpLayers ?? 2;
   return {
     ...monster,
+    // Clear ephemeral combat state from the old form — Boss is a fresh form.
+    // 与 resetMonsterForGraveyard 的清单一致（除 tempAttackBoost 外，下面会单独累加 +5）。
+    isStunned: false,
+    defeatProcessed: false,
+    specialAttackBoost: 0,
+    tempHpBoost: 0,
+    lowGoldBuffActive: false,
     bossPhase: true,
     currentLayer: layers,
     hp: fullHp,

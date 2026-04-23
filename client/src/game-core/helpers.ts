@@ -835,7 +835,25 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
   const isHighLayer = monsterMaxLayers >= 3;
   if (isHighLayer) rate -= 15;
 
-  const bonusScale = isHighLayer ? 0.5 : 1;
+  // Boss / 最终之敌（bossPhase）在 high-layer 折扣的基础上再 ×0.6，
+  // 让玩家手里那些「劝降率 +X」的临时/永久加成对 boss 的边际收益明显下降。
+  // 不影响 isElite/-15 这种结构性减分，也不影响新加的 layersLost ×10
+  // 「打掉血层」奖励（按规则范围只折『加成类』bonusScale）。
+  // 实际效果：
+  //   普通低血层非 boss → 1.0
+  //   高血层（非 boss）   → 0.5
+  //   低血层 boss（罕见） → 0.6
+  //   高血层 boss         → 0.3
+  const isBoss = Boolean(monster.bossPhase);
+  const bonusScale = (isHighLayer ? 0.5 : 1) * (isBoss ? 0.6 : 1);
+
+  // 「打掉血层」奖励：每损失一血层，劝降率额外 +10%（不吃 bonusScale，
+  // 即使是 3+ 层精英怪，打到末层也应该明显比满层好劝）。
+  // 此项独立于 toughness 的 mLayers 折扣，专门用来抵消 bleed/rage 让
+  // 「打弱了反而更难劝」的反直觉情况，确保「层数越少 → 劝降率越高」
+  // 这条直觉始终成立。
+  const layersLost = Math.max(0, monsterMaxLayers - mLayers);
+  rate += layersLost * 10;
 
   if ((liveMonster ?? monster).isStunned) {
     rate += 40 * bonusScale;

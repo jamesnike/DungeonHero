@@ -156,6 +156,7 @@ export function createInitialGameState(): GameState {
     monsterRewardMinimized: false,
     selectedMonsterRewards: null,
     monsterRewardPreviewCache: {},
+    monsterDefeatAnimationIds: [],
 
     shopOfferings: [],
     shopSourceEvent: null,

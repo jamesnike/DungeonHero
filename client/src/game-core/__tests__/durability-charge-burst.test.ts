@@ -6,7 +6,7 @@
  *   2. If new durability == 4:
  *        - pick a random damageable monster from the active row
  *        - enqueue DEAL_DAMAGE_TO_MONSTER (damage = monster.hp, isSpellDamage)
- *        - equipment.durability -= 2 (regardless of whether a monster was hit)
+ *        - equipment.durability -= 3 (regardless of whether a monster was hit)
  *
  * Empty slot or equipment without maxDurability → reject (magic NOT consumed).
  * Echo (A): repeats the entire effect echoMultiplier times in sequence.
@@ -141,9 +141,9 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('dura 3 → 4 with 1 monster on board: trigger fires, monster takes 1-layer damage, dura ends at 2', () => {
+  it('dura 3 → 4 with 1 monster on board: trigger fires, monster takes 1-layer damage, dura ends at 1', () => {
     const card = makeCard('3to4');
-    // maxDur 起始 3，触发后 clamp 到 4，dur 触发后 -2。
+    // maxDur 起始 3，触发后 clamp 到 4，dur 触发后 -3。
     const wp = makeWeapon({ durability: 3, maxDurability: 3 });
     const m = makeMonster('m1', 7); // 1 layer of 7 HP
     const state = makeState({
@@ -158,13 +158,13 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     ]);
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
     expect(finalEquip.maxDurability).toBe(4);
-    expect(finalEquip.durability).toBe(2); // 3 → 4 → -2 = 2
+    expect(finalEquip.durability).toBe(1); // 3 → 4 → -3 = 1
     // Monster lost 1 layer (single layer at 7 HP, damage 7 → defeated)
     const finalMonster = result.state.activeCards.find(c => c?.id === 'm1');
     expect(isAlive(finalMonster)).toBe(false);
   });
 
-  it('dura 3 → 4 with NO monsters on board: dura still drops to 2, no damage attempted', () => {
+  it('dura 3 → 4 with NO monsters on board: dura still drops to 1, no damage attempted', () => {
     const card = makeCard('no-mon');
     const wp = makeWeapon({ durability: 3, maxDurability: 3 });
     const state = makeState({
@@ -179,12 +179,12 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     ]);
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
     expect(finalEquip.maxDurability).toBe(4);
-    expect(finalEquip.durability).toBe(2);
+    expect(finalEquip.durability).toBe(1);
   });
 
-  it('已在 cap 4/4 时使用：耐久上限被 cap 吸收，仍触发裂击（满蓄能即放电），dur -2 = 2', () => {
+  it('已在 cap 4/4 时使用：耐久上限被 cap 吸收，仍触发裂击（满蓄能即放电），dur -3 = 1', () => {
     // 装备已经是 4/4：maxDur/dur 都被 cap 静默吸收，但卡面文案「加完后耐久==4」字面命中。
-    // 满蓄能就该放电；触发后 -2 让耐久离开 cap，echo 不会形成假循环。
+    // 满蓄能就该放电；触发后 -3 让耐久离开 cap，echo 不会形成假循环。
     const card = makeCard('cap-trigger-at-4');
     const wp = makeWeapon({ durability: 4, maxDurability: 4 });
     const m = makeMonster('m1', 7);
@@ -200,15 +200,15 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     ]);
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
     expect(finalEquip.maxDurability).toBe(4);
-    expect(finalEquip.durability).toBe(2); // 4 (cap) → -2
+    expect(finalEquip.durability).toBe(1); // 4 (cap) → -3
     const finalMonster = result.state.activeCards.find(c => c?.id === 'm1');
     expect(isAlive(finalMonster)).toBe(false); // 7 HP single layer killed
   });
 
-  it('echoMultiplier x2 起始 4/4：第一轮触发(dur→2)，第二轮 2→3 不触发，最终 dur=3 只 1 次伤害', () => {
+  it('echoMultiplier x2 起始 4/4：第一轮触发(dur→1)，第二轮 1→2 不触发，最终 dur=2 只 1 次伤害', () => {
     // 防御性测试：确认 4/4 echo×2 不会形成"伪触发循环"。
-    // 触发后 -2 让耐久离开 cap，第二轮 oldDur=2，afterAddDur=3，不触发。
-    const card = makeCard('echo-cap-4to2');
+    // 触发后 -3 让耐久离开 cap，第二轮 oldDur=1，afterAddDur=2，不触发。
+    const card = makeCard('echo-cap-4to1');
     const wp = makeWeapon({ durability: 4, maxDurability: 4 });
     const m1 = makeMonster('m1', 5);
     const m2 = makeMonster('m2', 9);
@@ -230,7 +230,7 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     ]);
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
     expect(finalEquip.maxDurability).toBe(4);
-    expect(finalEquip.durability).toBe(3); // R1: 4→4 trigger →2; R2: 2→3 no trigger
+    expect(finalEquip.durability).toBe(2); // R1: 4→4 trigger →1; R2: 1→2 no trigger
     // 只有一只怪物会被命中（确保不会因为两轮都触发 cap 导致打两次）
     const m1AliveAfter = result.state.activeCards.find(c => c?.id === 'm1');
     const m2AliveAfter = result.state.activeCards.find(c => c?.id === 'm2');
@@ -238,7 +238,7 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     expect(survivors).toBe(1);
   });
 
-  it('maxDur=4 / dur=3 → +1 dur 触发：maxDur 静默吸收为 4，dur 4 触发 → -2 = 2', () => {
+  it('maxDur=4 / dur=3 → +1 dur 触发：maxDur 静默吸收为 4，dur 4 触发 → -3 = 1', () => {
     const card = makeCard('cap-trigger');
     const wp = makeWeapon({ durability: 3, maxDurability: 4 });
     const m = makeMonster('m1', 7);
@@ -254,12 +254,12 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     ]);
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
     expect(finalEquip.maxDurability).toBe(4);
-    expect(finalEquip.durability).toBe(2);
+    expect(finalEquip.durability).toBe(1);
     const finalMonster = result.state.activeCards.find(c => c?.id === 'm1');
     expect(isAlive(finalMonster)).toBe(false);
   });
 
-  it('echoMultiplier x2: dura 2 → first +1 = 3 (no trigger) → second +1 = 4 (trigger, dura→2)', () => {
+  it('echoMultiplier x2: dura 2 → first +1 = 3 (no trigger) → second +1 = 4 (trigger, dura→1)', () => {
     const card = makeCard('echo-2to3to4');
     const wp = makeWeapon({ durability: 2, maxDurability: 3 });
     const m = makeMonster('m1', 5);
@@ -282,13 +282,13 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
     // 起始 maxDur=3，第一轮 +1 → 4（cap），第二轮 +1 但 cap 静默 → 仍为 4
     expect(finalEquip.maxDurability).toBe(4);
-    // Round 1: 2→3 (no trigger). Round 2: 3→4 (trigger), then -2 → 2
-    expect(finalEquip.durability).toBe(2);
+    // Round 1: 2→3 (no trigger). Round 2: 3→4 (trigger), then -3 → 1
+    expect(finalEquip.durability).toBe(1);
     const finalMonster = result.state.activeCards.find(c => c?.id === 'm1');
     expect(isAlive(finalMonster)).toBe(false); // 5 HP single layer killed
   });
 
-  it('echoMultiplier x2: dura 3 → first +1 = 4 (trigger, dura→2) → second +1 = 3 (no trigger)', () => {
+  it('echoMultiplier x2: dura 3 → first +1 = 4 (trigger, dura→1) → second +1 = 2 (no trigger)', () => {
     const card = makeCard('echo-3to4to3');
     const wp = makeWeapon({ durability: 3, maxDurability: 3 });
     const m = makeMonster('m1', 5);
@@ -310,13 +310,13 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     ]);
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
     expect(finalEquip.maxDurability).toBe(4);
-    // Round 1: 3→4 (trigger) → 2. Round 2: 2→3 (no trigger)
-    expect(finalEquip.durability).toBe(3);
+    // Round 1: 3→4 (trigger) → 1. Round 2: 1→2 (no trigger)
+    expect(finalEquip.durability).toBe(2);
     const finalMonster = result.state.activeCards.find(c => c?.id === 'm1');
     expect(isAlive(finalMonster)).toBe(false);
   });
 
-  it('echoMultiplier x2: dura 3 → first 4 (trigger, dura→2) → second 3 → bonus pass: dura ends 3 (only 1 trigger)', () => {
+  it('echoMultiplier x2: dura 3 → first 4 (trigger, dura→1) → second 2 → bonus pass: dura ends 2 (only 1 trigger)', () => {
     const card = makeCard('echo-1trig');
     const wp = makeWeapon({ durability: 3, maxDurability: 3 });
     const m1 = makeMonster('m1', 5);
@@ -338,7 +338,7 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'durability-charge-burst', slotId: 'equipmentSlot1' } as GameAction,
     ]);
     const finalEquip = result.state.equipmentSlot1 as EquipmentItem;
-    expect(finalEquip.durability).toBe(3); // R1: 3→4 trigger →2; R2: 2→3 no trigger
+    expect(finalEquip.durability).toBe(2); // R1: 3→4 trigger →1; R2: 1→2 no trigger
     // Exactly one of m1/m2 should be defeated (random pick — only 1 trigger fired)
     const m1AliveAfter = result.state.activeCards.find(c => c?.id === 'm1');
     const m2AliveAfter = result.state.activeCards.find(c => c?.id === 'm2');
@@ -362,7 +362,7 @@ describe('蓄能裂击 (durability-charge-burst) 主效果', () => {
     ]);
     const finalEquip = result.state.equipmentSlot2 as EquipmentItem;
     expect(finalEquip.maxDurability).toBe(4);
-    expect(finalEquip.durability).toBe(2);
+    expect(finalEquip.durability).toBe(1);
   });
 
   it('clears pendingMagicAction after resolution (success path)', () => {

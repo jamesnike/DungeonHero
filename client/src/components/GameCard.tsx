@@ -325,6 +325,12 @@ export interface GameCardData {
    * 详情弹窗（CardDetailsModal）与 hover tooltip 始终读取 `description` 完整版。
    */
   shortDescription?: string;
+  /**
+   * Event 卡专用：仅显示「特殊位置 / 状态触发条件」的简短文案。
+   * 不写翻转结果、不写选项含义——那些归 eventChoices 自己说明。
+   * 仅在 type === 'event' 时被卡面 UI 读取（CardDetailsModal / log 仍使用 description）。
+   */
+  specialTrigger?: string;
   potionEffect?: PotionEffectId;
   flipTarget?: CardFlipTarget;
   flipCondition?: string;
@@ -384,8 +390,7 @@ export interface GameCardData {
   waterfallTempArmor?: number; // On each waterfall, grant this much temporary armor to the wearing slot
   killGoldScaling?: boolean; // Weapon gives increasing gold per kill (counter starts at 1, increments each kill)
   killGoldCounter?: number; // Current gold bonus for next kill with this weapon
-  persuadeBoostOnHit?: number; // Increase target monster's persuade rate by this % on hit
-  persuadeBoostOnHitElite?: number; // Override persuade boost for elite monsters
+  persuadeBoostOnHit?: number; // On any monster hit (including kill, including elite), add this % to the global persuadeAmuletBonus ("下次劝降率" buff)
   weaponStunChance?: number; // Flat stun % from weapon (uses max of this and hero stun, then capped by stunCap)
   doubleDamageOnStunned?: boolean; // Deal double damage when attacking stunned monsters
   overkillDraw?: number; // Draw this many cards from backpack on each overkill hit
@@ -1474,9 +1479,9 @@ const amuletEffectText =
                   )}
                   {isEventCard && (
                     <div className="relative z-10 w-full flex flex-col gap-1">
-                      {(card.shortDescription || card.description) && (
-                        <div className="dh-card__event-option text-left break-words leading-snug text-violet-800/70 italic">
-                          {card.shortDescription || card.description}
+                      {card.specialTrigger && (
+                        <div className="dh-card__event-option text-left break-words leading-snug text-violet-800/80 italic">
+                          <span className="font-semibold not-italic">特殊触发：</span>{card.specialTrigger}
                         </div>
                       )}
                       {!hideEventChoices && card.eventChoices?.map((choice, idx) =>

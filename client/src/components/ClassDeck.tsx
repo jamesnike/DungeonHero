@@ -55,21 +55,40 @@ function ClassDeckComponent({
   
   return (
     <>
-      {compact ? (
-        <button
-          onClick={() => startTransition(() => setViewerOpen(true))}
-          data-testid="class-deck-compact"
-          className="relative flex flex-col items-center justify-center rounded-l-lg border border-r-0 border-indigo-400/30 bg-indigo-700/20 text-indigo-300/70 hover:bg-indigo-600/30 hover:border-indigo-400/50 transition-all duration-150"
-          style={compactStyle}
-        >
-          <Shield className="w-4 h-4" />
-          {classCards.length > 0 && (
-            <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-indigo-500/90 ring-1 ring-indigo-200/70 shadow-sm">
-              {classCards.length}
+      {compact ? (() => {
+        // Same pattern as Graveyard/Backpack compact buttons: visible strip
+        // stays narrow and flush with the screen edge (right-aligned inner
+        // span owns visuals), but the click hit-area is widened leftward via
+        // a transparent outer button so the narrow strip is easier to click.
+        const stripWidth =
+          typeof compactStyle?.width === 'number' ? compactStyle.width : 22;
+        const HIT_EXTENSION_BASE = 12;
+        const outerStyle: CSSProperties = {
+          ...compactStyle,
+          width: stripWidth + HIT_EXTENSION_BASE,
+        };
+        const innerStyle: CSSProperties = { width: stripWidth, height: '100%' };
+        return (
+          <button
+            onClick={() => startTransition(() => setViewerOpen(true))}
+            data-testid="class-deck-compact"
+            className="group relative flex items-stretch justify-end bg-transparent border-0 p-0 cursor-pointer"
+            style={outerStyle}
+          >
+            <span
+              className="flex flex-col items-center justify-center rounded-l-lg border border-r-0 border-indigo-400/30 bg-indigo-700/20 text-indigo-300/70 group-hover:bg-indigo-600/30 group-hover:border-indigo-400/50 transition-all duration-150"
+              style={innerStyle}
+            >
+              <Shield className="w-4 h-4" />
+              {classCards.length > 0 && (
+                <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-indigo-500/90 ring-1 ring-indigo-200/70 shadow-sm">
+                  {classCards.length}
+                </span>
+              )}
             </span>
-          )}
-        </button>
-      ) : (
+          </button>
+        );
+      })() : (
         <Card 
           className={cn(
             // overflow-visible：让 StackedCardPile 的"一摞牌"溢出 cell 上沿（与 Graveyard / Backpack 同款）。
