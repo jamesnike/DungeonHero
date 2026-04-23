@@ -301,8 +301,8 @@ const fateSight: OnUpgradeHandler = (upgraded, newLevel) => {
 const bloodDraw: OnUpgradeHandler = (upgraded, newLevel) => {
   const bloodDrawCounts = [3, 4, 5];
   const dc = bloodDrawCounts[newLevel] ?? 5;
-  upgraded.description = `永久：失去 1 点生命，抽 ${dc} 张牌。`;
-  upgraded.magicEffect = `失去 1 HP，抽 ${dc} 张牌。`;
+  upgraded.description = `永久：失去 3 点生命，抽 ${dc} 张牌。`;
+  upgraded.magicEffect = `失去 3 HP，抽 ${dc} 张牌。`;
 };
 
 const handPurgeRedraw: OnUpgradeHandler = (upgraded, newLevel) => {

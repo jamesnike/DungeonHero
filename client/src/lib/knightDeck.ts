@@ -1162,10 +1162,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightMagicBloodDrawImage,
     classCard: true,
-    description: '永久：失去 1 点生命，抽 3 张牌。',
-    shortDescription: '失去 1 生命，抽 3 张',
+    description: '永久：失去 3 点生命，抽 3 张牌。',
+    shortDescription: '失去 3 生命，抽 3 张',
     magicType: 'permanent',
-    magicEffect: '失去 1 HP，抽 3 张牌。',
+    magicEffect: '失去 3 HP，抽 3 张牌。',
     knightEffect: 'blood-draw',
     maxUpgradeLevel: 2,
   });

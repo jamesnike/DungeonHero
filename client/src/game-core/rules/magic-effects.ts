@@ -2770,7 +2770,7 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'blood-draw': {
-      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1 * echoMultiplier, source: 'blood-draw', selfInflicted: true });
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 3 * echoMultiplier, source: 'blood-draw', selfInflicted: true });
       const bloodDrawCount = ([3, 4, 5][card.upgradeLevel ?? 0] ?? 5) * echoMultiplier;
       const drawState = { ...state, ...patch } as GameState;
       const drawResult = drawMultipleFromBackpack(drawState, bloodDrawCount);
@@ -2783,8 +2783,8 @@ export function resolveKnightPermanentMagic(
       const drawnMsg = drawResult.cards.length > 0
         ? `抽了 ${drawResult.cards.length} 张牌`
         : '背包为空';
-      log(sideEffects, 'magic', `鲜血汲取：失去 ${1 * echoMultiplier} 生命，${drawnMsg}`);
-      banner(sideEffects, `鲜血汲取：-${1 * echoMultiplier} 生命，${drawnMsg}。${isEchoTriggered ? '（回响×2）' : ''}`);
+      log(sideEffects, 'magic', `鲜血汲取：失去 ${3 * echoMultiplier} 生命，${drawnMsg}`);
+      banner(sideEffects, `鲜血汲取：-${3 * echoMultiplier} 生命，${drawnMsg}。${isEchoTriggered ? '（回响×2）' : ''}`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
