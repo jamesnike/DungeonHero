@@ -3027,9 +3027,9 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollFateDeepImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择地城行一张牌，与牌堆顶 4 张中随机一张交换位置。如果换出来的牌是怪物，则其劝降概率 +30%（精英 +15%）。',
-      description: '深入命运：与即将到来的 4 张牌之一交换，换出怪物时提升劝降概率。',
-      shortDescription: '与牌堆顶 4 张随机一张互换；换出怪物时劝降率 +30%',
+      magicEffect: '永久魔法：选择地城行一张牌，与牌堆顶 4 张中随机一张交换位置。如果换出来的牌是怪物，则下次劝降概率 +30%。',
+      description: '深入命运：与即将到来的 4 张牌之一交换，换出怪物时提升下次劝降概率。',
+      shortDescription: '与牌堆顶 4 张随机一张互换；换出怪物时下次劝降率 +30%',
     },
     {
       id: STARTER_CARD_IDS.handLimitPotion,

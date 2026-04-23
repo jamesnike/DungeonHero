@@ -2587,10 +2587,13 @@ function reduceDungeonCardSelection(
       patch.remainingDeck = newDeck as any;
       let persuadeMsg = '';
       if (ragedDeckCard.type === 'monster') {
-        const isElite = Boolean(ragedDeckCard.monsterSpecial || ragedDeckCard.bossPhase);
-        const boost = isElite ? 15 : 30;
-        (ragedDeckCard as any)._persuadeBoost = ((ragedDeckCard as any)._persuadeBoost ?? 0) + boost;
-        persuadeMsg = ` ${ragedDeckCard.name} 劝降概率 +${boost}%${isElite ? '（精英）' : ''}`;
+        // 卡面字面：「换出来的牌是怪物，则 下次劝降概率 +30%」。
+        // 不区分普通/精英；累加到全局 persuadeAmuletBonus（与 劝降之刃 / 感化之锤 /
+        // 翻印之符 / 怀柔之印 / 劝降祝福 共用同一短期 buff，下次劝降按下时清零）。
+        const boost = 30;
+        const newBonus = ((patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus) ?? 0) + boost;
+        patch.persuadeAmuletBonus = newBonus;
+        persuadeMsg = ` 下次劝降概率 +${boost}%（累计 +${newBonus}%）`;
       }
       const newActive = [...activeCards] as typeof activeCards;
       newActive[activeSlotIdx] = ragedDeckCard;
