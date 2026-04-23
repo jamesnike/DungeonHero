@@ -338,6 +338,46 @@ describe('整顿背囊 RESOLVE_PUSH_TO_BACKPACK_TOP', () => {
     expect(bp.find(c => c.id === 'h1')).toBeUndefined();
   });
 
+  it('strips `fromSlot` from equipment / amulet cards pushed back to backpack', () => {
+    // Regression: previously the reducer pushed slot items as-is, retaining
+    // their `fromSlot: 'equipmentSlotN' | 'amulet'` metadata. After the cards
+    // travelled through backpack → hand, GameBoard.handleCardToSlot's
+    // `isCardFromEquipmentSlot(card)` guard saw the stale `fromSlot` and
+    // rejected the drop — the slot looked empty but the card could never be
+    // re-equipped (and amulets carrying `fromSlot: 'amulet'` were treated as
+    // "still in amulet slot" by other flows).
+    const card = makeCard('strip');
+    const eq1 = { ...makeEquipment('e1', 'Sword'), fromSlot: 'equipmentSlot1' as const };
+    const eq2 = { ...makeEquipment('e2', 'Shield'), fromSlot: 'equipmentSlot2' as const };
+    const am1 = { ...makeAmulet('a1'), fromSlot: 'amulet' as const };
+    const state = pendingState(card, {
+      handCards: [card],
+      equipmentSlot1: eq1 as EquipmentItem,
+      equipmentSlot2: eq2 as EquipmentItem,
+      amuletSlots: [am1] as any,
+    });
+    const result = drain(state, [
+      {
+        type: 'RESOLVE_PUSH_TO_BACKPACK_TOP',
+        selections: [
+          { source: 'equipment', id: 'equipmentSlot1' },
+          { source: 'equipment', id: 'equipmentSlot2' },
+          { source: 'amulet', id: 'a1' },
+        ],
+      } as GameAction,
+    ]);
+    const bp = result.state.backpackItems;
+    const pushedE1 = bp.find(c => c.id === 'e1') as any;
+    const pushedE2 = bp.find(c => c.id === 'e2') as any;
+    const pushedA1 = bp.find(c => c.id === 'a1') as any;
+    expect(pushedE1).toBeDefined();
+    expect(pushedE2).toBeDefined();
+    expect(pushedA1).toBeDefined();
+    expect(pushedE1.fromSlot).toBeUndefined();
+    expect(pushedE2.fromSlot).toBeUndefined();
+    expect(pushedA1.fromSlot).toBeUndefined();
+  });
+
   it('played card lands in recycle bag (Perm) after resolution finalizes', () => {
     // In real flow, PLAY_CARD removes the card from hand BEFORE the resolver
     // runs, so we mirror that by setting handCards to [] in the pending state.

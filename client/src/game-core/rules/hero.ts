@@ -3085,19 +3085,24 @@ function reducePushToBackpackTop(
       if (sel.id === playedCardId) continue;
       const card = nextHand.find(c => c.id === sel.id);
       if (!card) continue;
-      cardsToPush.push(card);
+      cardsToPush.push(sanitizeCardMetadata(card));
       nextHand = nextHand.filter(c => c.id !== sel.id);
     } else if (sel.source === 'amulet') {
       const card = (nextAmulets as GameCardData[]).find(c => c?.id === sel.id);
       if (!card) continue;
-      cardsToPush.push(card);
+      // Strip `fromSlot: 'amulet'` so it can be re-equipped to amulet/other slots later.
+      cardsToPush.push(sanitizeCardMetadata(card));
       nextAmulets = (nextAmulets as GameCardData[]).filter(c => c?.id !== sel.id) as typeof state.amuletSlots;
     } else if (sel.source === 'equipment') {
+      // Strip `fromSlot: 'equipmentSlotN'` so the card can be re-equipped after
+      // landing in the backpack. Without this, GameBoard.handleCardToSlot's
+      // `isCardFromEquipmentSlot(card)` guard rejects the drop and the slot
+      // appears permanently un-equippable for that card.
       if (sel.id === 'equipmentSlot1' && nextSlot1) {
-        cardsToPush.push(nextSlot1 as GameCardData);
+        cardsToPush.push(sanitizeCardMetadata(nextSlot1 as GameCardData));
         nextSlot1 = null;
       } else if (sel.id === 'equipmentSlot2' && nextSlot2) {
-        cardsToPush.push(nextSlot2 as GameCardData);
+        cardsToPush.push(sanitizeCardMetadata(nextSlot2 as GameCardData));
         nextSlot2 = null;
       }
     }

@@ -1,0 +1,101 @@
+---
+description: Shared damage accumulator across expiring layers must use temp-first attribution at expiry
+alwaysApply: true
+---
+
+# 共享伤害池 + 临时层过期：必须按"临时层先吃"核销
+
+## 一次真实事故
+
+Monster 装备 `armor` 是 base armor、`armorBonusDamaged` 是"perm + temp 这个共享 bonus 池被打掉多少"的累计计数。
+combat 扣减时 perm 和 temp **混在一个池里**，按一个累计 counter（`armorBonusDamaged`）记账。
+
+User 场景：base hp=5、perm=4、temp=4（bonus 池 = 8）、被打 4 → `armorBonusDamaged=4`。
+- 瀑流前：effective bonus = 8 - 4 = 4 → 显示 5+4 = **9** ✓
+- 瀑流后旧逻辑：temp 归 0、`armorBonusDamaged=4` 留着、新 effective = 4 - 4 = 0 → 显示 5+0 = **5** ✗
+
+旧 cleanup 代码只处理「`existingDamaged > permBonus` 才 clamp」（极端溢出场景）；
+忽略了 `damaged ≤ permBonus` 但**部分伤害本来就归在 temp 上**的常见场景，
+结果 temp 一消失就把"挨在 temp 上的伤害"全甩给了 perm。
+
+## 强制规则
+
+### 1. 任何"perm + temp 共享一个 damage counter"的字段，临时层过期时必须按"temp 先吃"核销
+
+`combat.ts` 写 counter 时是混合扣（perm + temp 一锅 burn）；写法是对的、性能也好。
+但 reset 时**必须**把临时层带走的那部分伤害也带走，否则永久层凭空背锅。
+
+模板（参考 `waterfall.ts:reduceApplyWaterfallTurnReset` ~L941-973 ）：
+
+```ts
+const tempBeingLost = state.<tempField>[slotId] ?? 0;
+const permCap = Math.max(0, state.<permField>[slotId] ?? 0);
+const afterTempAbsorb = Math.max(0, existingDamaged - tempBeingLost);
+const clampedDamaged = Math.min(afterTempAbsorb, permCap);
+if (clampedDamaged === existingDamaged) continue; // no change
+patch[slotId] = clampedDamaged > 0
+  ? { ...item, <damagedField>: clampedDamaged }
+  : (() => {
+      const { <damagedField>: _drop, ...rest } = item;
+      return rest;
+    })();
+```
+
+两步语义：
+1. **temp 先吃**：`existingDamaged - tempBeingLost`（负的归零）
+2. **clamp 到 perm**：再 cap 到 perm 上限（兜底，避免永久背的债超过它能背的）
+
+### 2. 不要"保守 clamp 到 permBonus"——要 temp 优先
+
+旧代码只在 `existingDamaged > permBonus` 时 clamp，是个**保守残缺**实现：
+它的归责模型隐含「伤害归 perm 优先、temp 后吃」，跟玩家直觉（"temp 是护在外面的层，挨打先消"）相反。
+
+```ts
+// ❌ BAD: 保守 clamp，遗漏 damaged≤perm 但部分挂在 temp 上的场景
+if (existingDamaged <= permBonus) continue;
+patch[slotId] = { ...item, armorBonusDamaged: permBonus };
+
+// ✅ GOOD: temp 先吃 + clamp 兜底（旧逻辑是其子集）
+const after = Math.max(0, existingDamaged - tempBeingLost);
+const clamped = Math.min(after, permBonus);
+if (clamped === existingDamaged) continue;
+patch[slotId] = { ...item, armorBonusDamaged: clamped };
+```
+
+### 3. Reset 跟 combat 扣减是两个语义层，必须一致
+
+| 时机 | 谁扣 / 谁清 | 文件 |
+|---|---|---|
+| 战斗中扣减 | 共享池一锅扣（性能 OK，bonusRemaining = perm + temp - damaged） | `combat.ts` `reduceResolveBlock` |
+| 临时层过期 | **temp 先吃**核销（这条规则） | `waterfall.ts` `reduceApplyWaterfallTurnReset` |
+
+两者**任意一边漏改**都会导致玩家体感"buff 凭空蒸发"或"perm 莫名背债"。
+
+### 4. 这个 pattern 不止 `armorBonusDamaged`
+
+任何"`xxxDamaged` / `xxxConsumed` / `xxxUsed` 累计 counter，背后是 perm+temp 两层池"
+都适用。新加这类机制时，**reset 端必须同步配 temp-first 核销**，否则就是 bug 等爆。
+
+设计阶段应优先考虑：能不能拆成两个独立 counter（`permDamaged` / `tempDamaged`）？
+拆开就不需要核销逻辑，永远不会错。如果出于性能 / 代码简洁选择共享池，那 reset 端就**必须**配 temp-first。
+
+## 自检：写涉及"perm + temp 共享池"或"过期重置"的代码时，问自己
+
+> 1. 这个 counter 背后是不是 perm + temp 两层共用一个池？
+> 2. 我有没有写「临时层过期时减去对应 damaged」的核销逻辑？
+> 3. 核销公式是不是 `max(0, existingDamaged - tempBeingLost)` 然后 clamp 到 perm cap？
+> 4. 测试 fixture 有没有覆盖：临时层>0 + damaged>0 + 过期触发 reset 这条完整链？
+> 5. 跟 `combat.ts` 扣减侧、跟 display 侧（`useCardOperations.ts` effective bonus 算法）行为对得上吗？
+
+任何一条「没」或「不确定」，回头补功课再改。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| 共享伤害池 + 临时层过期的核销公式 | ✅ 这条 | ❌ |
+| 多分支并行字段被消费方读错 / 生命周期不一致 | ❌ | `parallel-state-fields-consumer-audit` |
+| `armor` vs `durability` 概念区分 | ❌ | `shield-armor-vs-durability` |
+| 完美格挡 save / golem cap 等护甲机制 | ❌ | `shield-armor-vs-durability` |
+
+涉及 perm/temp 双层 buff 字段时，这几条规则**都要核对**。

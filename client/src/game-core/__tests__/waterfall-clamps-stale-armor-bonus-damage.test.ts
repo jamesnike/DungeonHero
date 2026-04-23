@@ -174,6 +174,113 @@ describe('waterfall reset — clamp stale armorBonusDamaged to permBonus (bug #1
   });
 });
 
+describe('temp-first attribution: bonusDamaged 应按"临护先吃"模型在瀑流时核销', () => {
+  // 用户报告场景：怪物装备 base hp=5 / 永久 perm=4 / 临时 temp=4 / damaged=4
+  //   瀑流前：bonus 池 = 4+4=8，effective = 8-4 = 4 → 显示 5+4 = 9
+  //   瀑流后（旧行为）：temp 归 0，但 damaged=4 留着，effective = 4-4 = 0 → 显示 5+0 = 5  ✗
+  //   瀑流后（新行为）：temp(4) 吸收 damaged(4)，新 damaged=0，effective = 4-0 = 4 → 显示 5+4 = 9  ✓
+  it('怪物装备：perm=4 / temp=4 / damaged=4 → 瀑流后 damaged 应清零（temp 全吃）', () => {
+    const monsterShield: GameCardData = {
+      id: 'm-shield', type: 'monster', name: 'Rock', value: 5,
+      hp: 5, maxHp: 5, attack: 0,
+      armor: 5, armorMax: 5,
+      durability: 2, maxDurability: 2,
+      armorBonusDamaged: 4,
+      image: '',
+      fromSlot: 'equipmentSlot2',
+    } as GameCardData;
+    const state = makeState({
+      equipmentSlot1: null as any,
+      equipmentSlot2: monsterShield as any,
+      slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 4 } as any,
+      equipmentSlotBonuses: {
+        equipmentSlot1: { damage: 0, shield: 0 },
+        equipmentSlot2: { damage: 0, shield: 4 },
+      } as any,
+    });
+
+    const result = reduce(state, { type: 'WATERFALL_TURN_RESET' } as any);
+
+    const updated = result.state.equipmentSlot2 as GameCardData;
+    expect(updated.armorBonusDamaged).toBeUndefined();
+    expect(updated.armor).toBe(5);
+  });
+
+  it('shield：perm=3 / temp=2 / damaged=2 → 瀑流后 damaged=0（damage 全在 temp 上）', () => {
+    const shield = makeShield({ armor: 5, armorMax: 5, armorBonusDamaged: 2 });
+    const state = makeState({
+      equipmentSlot1: null as any,
+      equipmentSlot2: shield as any,
+      slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 2 } as any,
+      equipmentSlotBonuses: {
+        equipmentSlot1: { damage: 0, shield: 0 },
+        equipmentSlot2: { damage: 0, shield: 3 },
+      } as any,
+    });
+
+    const result = reduce(state, { type: 'WATERFALL_TURN_RESET' } as any);
+
+    const updated = result.state.equipmentSlot2 as GameCardData;
+    expect(updated.armorBonusDamaged).toBeUndefined();
+  });
+
+  it('shield：perm=3 / temp=2 / damaged=4 → temp 吃 2、perm 吃 2 → 瀑流后 damaged=2', () => {
+    const shield = makeShield({ armor: 5, armorMax: 5, armorBonusDamaged: 4 });
+    const state = makeState({
+      equipmentSlot1: null as any,
+      equipmentSlot2: shield as any,
+      slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 2 } as any,
+      equipmentSlotBonuses: {
+        equipmentSlot1: { damage: 0, shield: 0 },
+        equipmentSlot2: { damage: 0, shield: 3 },
+      } as any,
+    });
+
+    const result = reduce(state, { type: 'WATERFALL_TURN_RESET' } as any);
+
+    const updated = result.state.equipmentSlot2 as GameCardData;
+    expect(updated.armorBonusDamaged).toBe(2);
+  });
+
+  it('shield：perm=2 / temp=4 / damaged=10 → temp 吸 4、剩 6 算 perm；clamp 到 perm=2', () => {
+    // 旧 Bug #1 + 新 temp-first 同时生效的场景，结果跟旧逻辑一致
+    const shield = makeShield({ armor: 5, armorMax: 5, armorBonusDamaged: 10 });
+    const state = makeState({
+      equipmentSlot1: null as any,
+      equipmentSlot2: shield as any,
+      slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 4 } as any,
+      equipmentSlotBonuses: {
+        equipmentSlot1: { damage: 0, shield: 0 },
+        equipmentSlot2: { damage: 0, shield: 2 },
+      } as any,
+    });
+
+    const result = reduce(state, { type: 'WATERFALL_TURN_RESET' } as any);
+
+    const updated = result.state.equipmentSlot2 as GameCardData;
+    expect(updated.armorBonusDamaged).toBe(2);
+  });
+
+  it('保持单调：tempLost=0 时退化为旧 clamp 行为', () => {
+    // perm=2 / temp=0 / damaged=3 → afterTempAbsorb=3 → clamp 到 perm=2
+    const shield = makeShield({ armor: 5, armorMax: 5, armorBonusDamaged: 3 });
+    const state = makeState({
+      equipmentSlot1: null as any,
+      equipmentSlot2: shield as any,
+      slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 0 } as any,
+      equipmentSlotBonuses: {
+        equipmentSlot1: { damage: 0, shield: 0 },
+        equipmentSlot2: { damage: 0, shield: 2 },
+      } as any,
+    });
+
+    const result = reduce(state, { type: 'WATERFALL_TURN_RESET' } as any);
+
+    const updated = result.state.equipmentSlot2 as GameCardData;
+    expect(updated.armorBonusDamaged).toBe(2);
+  });
+});
+
 describe('end-to-end: 攻防协律 +N 临护现在能在瀑流后正常显示', () => {
   it('repro 场景：上回合临护被打消，瀑流后再加新临护，新临护应该完整生效', () => {
     // 起始：shield armor 5/5/3，permBonus=0，没有 stale armorBonusDamaged

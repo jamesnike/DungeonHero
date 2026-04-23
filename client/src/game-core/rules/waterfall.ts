@@ -938,23 +938,35 @@ function reduceApplyWaterfallTurnReset(state: GameState): ReduceResult {
   // the aura and flip the flag back to true.
   patch.amuletAuraAppliedThisWave = false;
 
-  // Bug #1 (攻防协律 +N 临护被旧 armorBonusDamaged 吃掉): when slotTempArmor
-  // resets to 0, any portion of armorBonusDamaged that exceeds the slot's
-  // permanent shield bonus came from now-gone temp armor and must be discarded
-  // — otherwise the next turn's freshly-granted slotTempArmor (临时护甲 / 攻防
-  // 协律 / 守望者链接) gets silently swallowed by the stale deficit.
-  // Mid-turn block tracking is unaffected: this clamp only fires on turn
-  // boundary when temp itself was just reset.
+  // Temp-first damage attribution on waterfall reset.
+  //
+  // Combat consumes `armorBonusDamaged` from a single (perm + temp) pool, but
+  // when temp armor resets to 0 at waterfall, the natural game-feel model is
+  // "temp armor was the layer protecting perm — anything that hit the bonus
+  // pool was hitting temp first". Subtract the lost temp amount from the
+  // damaged tally so perm bonus is fully restored unless damage actually
+  // exceeded the temp layer.
+  //
+  // Examples (perm=4, temp=4):
+  //   damaged=4  → tempLost=4 → newDamaged=0     (all damage was on temp; perm intact)
+  //   damaged=10 → tempLost=4 → newDamaged=6→4   (clamped to perm; old Bug #1 case)
+  //   damaged=3  → tempLost=4 → newDamaged=0     (damage entirely on temp)
+  //
+  // Mid-turn block tracking is unaffected: this only fires when temp itself
+  // resets at the turn boundary.
   for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as const) {
     const item = state[slotId];
     if (!item) continue;
     if (item.type !== 'shield' && item.type !== 'monster') continue;
     const existingDamaged = item.armorBonusDamaged ?? 0;
     if (existingDamaged === 0) continue;
+    const tempArmorBeingLost = state.slotTempArmor[slotId] ?? 0;
     const permBonus = Math.max(0, state.equipmentSlotBonuses[slotId]?.shield ?? 0);
-    if (existingDamaged <= permBonus) continue;
-    patch[slotId] = (permBonus > 0
-      ? { ...item, armorBonusDamaged: permBonus }
+    const afterTempAbsorb = Math.max(0, existingDamaged - tempArmorBeingLost);
+    const clampedDamaged = Math.min(afterTempAbsorb, permBonus);
+    if (clampedDamaged === existingDamaged) continue;
+    patch[slotId] = (clampedDamaged > 0
+      ? { ...item, armorBonusDamaged: clampedDamaged }
       : (() => {
         const { armorBonusDamaged: _drop, ...rest } = item as GameCardData & { armorBonusDamaged?: number };
         return rest;
