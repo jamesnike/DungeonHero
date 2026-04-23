@@ -1432,29 +1432,54 @@ const starterRecycleDrawMagic: CardDefinition = {
   effects: [],
   tags: ['magic', 'permanent', 'recycle'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
-    const recycled = state.permanentMagicRecycleBag ?? [];
-    const echoTag = (echoMultiplier ?? 1) > 1
-      ? `（回响×${echoMultiplier}：第二次结算时回收袋已结算，无额外效果）`
-      : '';
+    // 新语义（user 确认 A 选项）：从回收袋**随机**选 N 张牌（N = 1/2/3，按 upgradeLevel），
+    // 对这 N 张牌的 _recycleWaits -= 1。减到 0 的 ready 牌进背包；剩下的留回收袋（含
+    // _recycleWaits 减为 1+ 但仍未 ready 的，以及背包已满 overflow 的）。**未被选中的牌
+    // 完全不变**（区别于旧语义"整个回收袋全部 -1"）。
+    // onDiscardDraw 固定 1（在 deck.ts / upgrades.ts handler 里），不再随升级提升。
+    // 同步参考：rules/magic-effects.ts 的 STARTER_CARD_IDS.recycleDrawMagic 旧 switch 实现。
+    const recycleCounts = [1, 2, 3];
+    const N = recycleCounts[card.upgradeLevel ?? 0] ?? 3;
+    const recycled = ((patch.permanentMagicRecycleBag ?? state.permanentMagicRecycleBag) ?? []) as GameCardData[];
+    const echoTag = (echoMultiplier ?? 1) > 1 ? `（回响×${echoMultiplier}）` : '';
+
     if (recycled.length > 0) {
-      // Decrement-first semantics: cards with _recycleWaits === 1 become 0 → ready.
-      // Matches CARD_POOL_REFERENCE.md "回收袋洗回背包" definition.
+      let rng = patch.rng ?? state.rng;
+      const pickCount = Math.min(N, recycled.length);
+      const remainingIndices = recycled.map((_, i) => i);
+      const pickedIndices = new Set<number>();
+      for (let k = 0; k < pickCount; k++) {
+        const [pos, rng2] = nextInt(rng, 0, remainingIndices.length - 1);
+        rng = rng2;
+        pickedIndices.add(remainingIndices[pos]);
+        remainingIndices.splice(pos, 1);
+      }
+      patch.rng = rng;
+
       const readyCards: GameCardData[] = [];
-      const waitingCards: GameCardData[] = [];
-      for (const c of recycled) {
-        const waits = ((c as GameCardData & { _recycleWaits?: number })._recycleWaits ?? 1) - 1;
-        if (waits <= 0) {
+      const newRecycleBag: GameCardData[] = [];
+      const pickedNames: string[] = [];
+      recycled.forEach((c, idx) => {
+        if (!pickedIndices.has(idx)) {
+          newRecycleBag.push(c as GameCardData);
+          return;
+        }
+        pickedNames.push(`「${(c as GameCardData).name}」`);
+        const newWaits = ((c as GameCardData & { _recycleWaits?: number })._recycleWaits ?? 1) - 1;
+        if (newWaits <= 0) {
           const { _recycleWaits, ...clean } = c as GameCardData & { _recycleWaits?: number };
           readyCards.push(clean as GameCardData);
         } else {
-          waitingCards.push({ ...c, _recycleWaits: waits } as GameCardData);
+          newRecycleBag.push({ ...c, _recycleWaits: newWaits } as GameCardData);
         }
-      }
+      });
+
       const cap = getEffectiveBackpackCapacity({ ...state, ...patch } as GameState);
       const currentBackpack = (patch.backpackItems ?? state.backpackItems) as GameCardData[];
       const available = Math.max(0, cap - currentBackpack.length);
       const toAdd = readyCards.slice(0, available);
       const overflow = readyCards.slice(available);
+
       if (toAdd.length > 0) {
         patch.backpackItems = [...currentBackpack, ...toAdd];
         // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画。
@@ -1464,12 +1489,13 @@ const starterRecycleDrawMagic: CardDefinition = {
           payload: { count: toAdd.length, cards: toAdd },
         });
       }
-      patch.permanentMagicRecycleBag = [...overflow, ...waitingCards];
+      patch.permanentMagicRecycleBag = [...newRecycleBag, ...overflow];
+
       const parts: string[] = [];
-      if (toAdd.length > 0) parts.push(`回收袋 ${toAdd.length} 张牌洗回背包`);
-      if (waitingCards.length > 0) parts.push(`${waitingCards.length} 张牌剩余瀑流 -1`);
-      if (overflow.length > 0) parts.push(`${overflow.length} 张因背包已满留在回收袋`);
-      const detail = parts.length > 0 ? parts.join('，') : '回收袋无变化';
+      parts.push(`随机选 ${pickCount} 张牌瀑流 -1（${pickedNames.join('、')}）`);
+      if (toAdd.length > 0) parts.push(`${toAdd.length} 张就绪进背包`);
+      if (overflow.length > 0) parts.push(`${overflow.length} 张就绪但背包已满留在回收袋`);
+      const detail = parts.join('，');
       log(sideEffects, 'magic', `回收余韵：${detail}${echoTag}`);
       banner(sideEffects, `回收余韵：${detail}！${echoTag}`);
     } else {
