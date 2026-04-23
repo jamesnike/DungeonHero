@@ -411,6 +411,15 @@ export interface GameState {
   magicCardsPlayedThisTurn: number;
   /** 本波已使用的造成伤害的 magic 卡数量（瀑流重置） */
   damageMagicPlayedThisTurn: number;
+  /**
+   * 奥术风暴专用累计计数：从上一次「使用奥术风暴」或「瀑流」起累计的非自身魔法卡数量。
+   * 与 magicCardsPlayedThisTurn 的区别：
+   *   - 不在 START_TURN / RESET_TURN_STATE 重置（跨回合累计）。
+   *   - 仅在「瀑流」和「奥术风暴使用后」重置。
+   *   - 不计入奥术风暴自身那一次出牌（resolver 读到的 X 不含本张）。
+   * 仅供 arcane-storm-magic-count 消费。
+   */
+  arcaneStormMagicCount: number;
 
   // --- Combat ---
   combatState: CombatState;

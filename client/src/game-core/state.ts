@@ -105,6 +105,7 @@ export function createInitialGameState(): GameState {
     consecutiveTransformStreak: 0,
     magicCardsPlayedThisTurn: 0,
     damageMagicPlayedThisTurn: 0,
+    arcaneStormMagicCount: 0,
 
     combatState: { ...initialCombatState },
     tempShield: 0,

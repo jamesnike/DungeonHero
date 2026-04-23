@@ -4263,6 +4263,7 @@ export default function GameBoard() {
       transformChainPrevCategory: snapshot.transformChainPrevCategory ?? null,
       consecutiveTransformStreak: snapshot.consecutiveTransformStreak ?? 0,
       magicCardsPlayedThisTurn: snapshot.magicCardsPlayedThisTurn ?? 0,
+      arcaneStormMagicCount: snapshot.arcaneStormMagicCount ?? 0,
       backpackCapacityModifier: snapshot.backpackCapacityModifier ?? 0,
       heroMagicState: sanitizeHeroMagicState(snapshot.heroMagicState),
       equipmentSlotBonuses: mapEquipmentBonuses(snapshot.equipmentSlotBonuses),

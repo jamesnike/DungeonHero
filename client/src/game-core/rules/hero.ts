@@ -2035,6 +2035,8 @@ function reduceMagicMonsterSelection(
       const echo = (pending as any).echoMultiplier ?? 1;
       const totalDamage = computeSpellDamagePure(state, stormBase) * echo;
       const echoText = echo > 1 ? `（回响×${echo}）` : '';
+      // 「使用后计数清零」契约：目标选定 → 伤害落地 → 重置 arcaneStormMagicCount。
+      patch.arcaneStormMagicCount = 0;
       if (isHeroTarget) {
         if (totalDamage > 0) {
           applySelfDamage(totalDamage, 'arcane-storm');

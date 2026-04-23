@@ -9,6 +9,10 @@ const STARTER_ID_TO_KEY: Record<string, string> = {
   'starter-perm-active-row-flip': 'active-row-flip',
   'starter-perm-heal-two': 'blessing-wind',
   'starter-perm-survey-action': 'survey-action',
+  'starter-perm-discover-class-to-hand': 'starter-class-summon-hand',
+  'starter-perm-transform-streak-strike': 'starter-streak-strike',
+  'starter-perm-flank-slot-temp-attack': 'starter-flank-rally',
+  'starter-perm-deck-top-swap-gold': 'starter-fortune-bet',
 };
 
 const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
@@ -41,6 +45,17 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'hand-purge-redraw': 'knight-hand-purge-redraw',
   'gear-rift-draw': 'knight-gear-rift-draw',
   'quake-stun-draw': 'knight-quake-stun-draw',
+  'three-card-thunder': 'knight-three-card-thunder',
+  'reorganize-backpack': 'knight-reorganize-bag',
+  'strip-perm-hand': 'knight-strip-perm',
+  'discard-rebuild': 'knight-discard-rebuild',
+  'armor-double-strike': 'knight-armor-double-strike',
+  'cleanse-draw': 'knight-cleanse-draw',
+  'recycle-tide': 'knight-recycle-tide',
+  'persuade-to-temp-attack': 'knight-persuade-blade',
+  'temp-attack-armor-draw': 'knight-attack-armor-draw',
+  'temp-stats-to-draw': 'knight-temp-stats-draw',
+  'durability-charge-burst': 'knight-charge-burst',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -149,6 +164,21 @@ const NAME_TO_KEY: Record<string, string> = {
   清囊重启: 'knight-hand-purge-redraw',
   修裂启示: 'knight-gear-rift-draw',
   地震泉涌: 'knight-quake-stun-draw',
+  专属感召: 'starter-class-summon-hand',
+  连环转律: 'starter-streak-strike',
+  锐意鼓舞: 'starter-flank-rally',
+  运势博弈: 'starter-fortune-bet',
+  三牌惊雷: 'knight-three-card-thunder',
+  整顿背囊: 'knight-reorganize-bag',
+  凡化咒: 'knight-strip-perm',
+  弃装重铸: 'knight-discard-rebuild',
+  盾影双噬: 'knight-armor-double-strike',
+  净册涌泉: 'knight-cleanse-draw',
+  洗册归川: 'knight-recycle-tide',
+  辞剑相易: 'knight-persuade-blade',
+  攻防协律: 'knight-attack-armor-draw',
+  战势化符: 'knight-temp-stats-draw',
+  蓄能裂击: 'knight-charge-burst',
 };
 
 function hashName(s: string): number {

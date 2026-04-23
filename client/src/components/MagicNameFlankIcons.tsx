@@ -136,6 +136,21 @@ const TINT_BY_KEY: Record<string, string> = {
   'magic-bolt': 'from-cyan-500/50 to-violet-400/40',
   'graveyard-discover-relic': 'from-stone-400/45 to-amber-500/45',
   'amplify-target': 'from-sky-400/45 to-amber-400/40',
+  'starter-class-summon-hand': 'from-amber-400/50 to-fuchsia-500/45',
+  'starter-streak-strike': 'from-yellow-400/50 to-orange-600/45',
+  'starter-flank-rally': 'from-rose-400/45 to-amber-500/45',
+  'starter-fortune-bet': 'from-emerald-400/45 to-yellow-500/45',
+  'knight-three-card-thunder': 'from-yellow-400/50 to-blue-700/50',
+  'knight-reorganize-bag': 'from-amber-700/45 to-teal-500/40',
+  'knight-strip-perm': 'from-slate-400/45 to-violet-700/50',
+  'knight-discard-rebuild': 'from-orange-500/50 to-slate-700/45',
+  'knight-armor-double-strike': 'from-blue-500/50 to-rose-600/45',
+  'knight-cleanse-draw': 'from-sky-300/50 to-cyan-500/45',
+  'knight-recycle-tide': 'from-teal-400/50 to-blue-600/45',
+  'knight-persuade-blade': 'from-emerald-400/45 to-red-500/45',
+  'knight-attack-armor-draw': 'from-red-500/45 to-blue-500/45',
+  'knight-temp-stats-draw': 'from-violet-400/45 to-orange-500/45',
+  'knight-charge-burst': 'from-amber-400/55 to-red-600/50',
 };
 
 export function tintForKey(k: string): string {
@@ -1310,6 +1325,142 @@ export function CuteSticker({ k }: { k: string }) {
           <circle cx="16" cy="16" r="1.5" fill="#0ea5e9" />
         </g>
       );
+    case 'starter-class-summon-hand':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fcd34d" d="M9 11l4-2 1 12-4 2z" />
+          <path fill="#fda4af" d="M14 9h4v14h-4z" />
+          <path fill="#c4b5fd" d="M19 11l4 2-1 12-4-2z" />
+          <path fill="#a855f7" d="M16 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1z" />
+        </g>
+      );
+    case 'starter-streak-strike':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path stroke="#f59e0b" strokeWidth="2.5" d="M7 23L12 10" />
+          <path stroke="#fb923c" strokeWidth="2.5" d="M14 23L19 10" />
+          <path stroke="#ea580c" strokeWidth="2.5" d="M21 23L26 10" />
+          <circle cx="12" cy="10" r="1.6" fill="#fde047" />
+          <circle cx="19" cy="10" r="1.6" fill="#fde047" />
+          <circle cx="26" cy="10" r="1.6" fill="#fde047" />
+        </g>
+      );
+    case 'starter-flank-rally':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#94a3b8" d="M14 7h4v15h-4z" />
+          <path fill="#cbd5e1" d="M12 22h8v3h-8z" />
+          <path fill="#fbbf24" stroke="#f59e0b" d="M4 14h6v-2l4 4-4 4v-2H4z" />
+          <path fill="#fbbf24" stroke="#f59e0b" d="M28 14h-6v-2l-4 4 4 4v-2h6z" />
+        </g>
+      );
+    case 'starter-fortune-bet':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <ellipse cx="10" cy="22" rx="5" ry="2" fill="#fde047" />
+          <path fill="#fbbf24" d="M5 22v-6c0-1.2 5-2 10 0v6" />
+          <ellipse cx="10" cy="16" rx="5" ry="2" fill="#fde047" />
+          <rect x="18" y="11" width="10" height="10" rx="1.2" fill="#ddd6fe" transform="rotate(8 23 16)" />
+          <circle cx="21" cy="14" r="1" fill={O} />
+          <circle cx="25" cy="18" r="1" fill={O} />
+        </g>
+      );
+    case 'knight-three-card-thunder':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="5" y="11" width="8" height="11" rx="1" fill="#bae6fd" />
+          <rect x="9" y="8" width="8" height="11" rx="1" fill="#7dd3fc" />
+          <rect x="13" y="5" width="8" height="11" rx="1" fill="#38bdf8" />
+          <path fill="#fde047" stroke="#ca8a04" d="M24 7l-3 9h3l-2 9 6-11h-3z" />
+        </g>
+      );
+    case 'knight-reorganize-bag':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#a16207" d="M10 13c0-3 2.5-5 6-5s6 2 6 5v10H10z" />
+          <path fill="none" stroke="#78350f" d="M12 11c0-2 1.5-3 4-3s4 1 4 3" />
+          <path fill="none" stroke="#14b8a6" strokeWidth="2.2" d="M13 18a3 3 0 0 1 6 0" />
+          <path fill="#14b8a6" d="M19 16l3 2-3 2z" />
+        </g>
+      );
+    case 'knight-strip-perm':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="16" cy="16" r="8" fill="#cbd5e1" />
+          <circle cx="16" cy="16" r="5" fill="#a78bfa" stroke="#6d28d9" strokeWidth="1.5" />
+          <path stroke="#dc2626" strokeWidth="3" fill="none" d="M7 24L25 8" />
+        </g>
+      );
+    case 'knight-discard-rebuild':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#475569" d="M6 18h20l-2 4H8z" />
+          <path fill="#64748b" d="M14 22h4v4h-4z" />
+          <path fill="#fb923c" d="M17 5l-3 7h3l-2 5 5-8h-3z" />
+          <circle cx="8" cy="11" r="1.4" fill="#fde047" />
+          <circle cx="25" cy="11" r="1.4" fill="#fde047" />
+        </g>
+      );
+    case 'knight-armor-double-strike':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#60a5fa" d="M16 5l9 3v8c0 5-4.5 8-9 10-4.5-2-9-5-9-10V8z" />
+          <path stroke="#dc2626" strokeWidth="2.5" fill="none" d="M11 12l4 7M21 12l-4 7" />
+        </g>
+      );
+    case 'knight-cleanse-draw':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="10" y="5" width="12" height="9" rx="1" fill="#e0f2fe" />
+          <path fill="none" stroke="#0ea5e9" d="M13 8h6M13 11h5" strokeWidth="1.8" />
+          <path fill="#38bdf8" d="M7 16c2 2 5-1 8 1s6-1 9 1l-1 9H8z" />
+          <path fill="#7dd3fc" d="M7 21c2 2 5-1 8 1s6-1 9 1l-1 4H8z" />
+        </g>
+      );
+    case 'knight-recycle-tide':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <path stroke="#0d9488" strokeWidth="2.5" d="M3 13c3-3 6 3 9 0s6-3 9 0" />
+          <path stroke="#2dd4bf" strokeWidth="2.5" d="M3 20c3-3 6 3 9 0s6-3 9 0" />
+          <path fill="#0ea5e9" stroke={O} d="M22 6l5 4-5 4v-3h-4v-2h4z" />
+          <path fill="#0ea5e9" stroke={O} d="M27 24l-5-4 5-4v3h4v2h-4z" />
+        </g>
+      );
+    case 'knight-persuade-blade':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#fcd34d" d="M5 22l9-9 4 4-9 9z" />
+          <path fill="#94a3b8" d="M22 6l-2 2 6 6 2-2z" />
+          <path fill="#cbd5e1" d="M19 9l-3 3 4 4 3-3z" />
+          <circle cx="9" cy="22" r="2" fill="#22c55e" />
+        </g>
+      );
+    case 'knight-attack-armor-draw':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#ef4444" d="M6 7h3v13H6z" />
+          <path fill="#94a3b8" d="M4 5h7v3H4z" />
+          <path fill="#3b82f6" d="M16 7l4-2 4 2v7c0 3-2 5-4 6-2-1-4-3-4-6z" />
+          <path stroke="#10b981" strokeWidth="2.5" fill="none" d="M28 24V14M24 18l4-4 4 4" />
+        </g>
+      );
+    case 'knight-temp-stats-draw':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="4" y="18" width="3" height="8" fill="#ef4444" />
+          <rect x="8" y="14" width="3" height="12" fill="#f87171" />
+          <rect x="12" y="10" width="3" height="16" fill="#3b82f6" />
+          <path fill="#fde047" d="M19 7h8l-1 18h-7z" />
+          <path fill="none" stroke="#a855f7" d="M21 12h5M21 16h4M21 20h5" strokeWidth="1.8" />
+        </g>
+      );
+    case 'knight-charge-burst':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="none" stroke="#f59e0b" d="M16 4v3M16 25v3M4 16h3M25 16h3M7 7l2 2M23 23l2 2M23 7l-2 2M7 25l2-2" strokeWidth="1.8" />
+          <path fill="#fde047" stroke="#ca8a04" d="M18 7l-6 10h4l-3 8 8-11h-4z" />
+        </g>
+      );
     default:
       return cuteFallbackSticker(hashStickerKey(k));
   }
@@ -1355,6 +1506,12 @@ export const ALL_STICKER_KEYS: readonly string[] = [
   // event-derived magic
   'spacetime-mirror','arcane-shield','echo-remnant','crypt-echo','void-swap',
   'monster-attack-debuff','recycle-fetch','magic-bolt','graveyard-discover-relic','amplify-target',
+  // starter perm magic (unique stickers)
+  'starter-class-summon-hand','starter-streak-strike','starter-flank-rally','starter-fortune-bet',
+  // knight perm/instant magic (unique stickers)
+  'knight-three-card-thunder','knight-reorganize-bag','knight-strip-perm','knight-discard-rebuild',
+  'knight-armor-double-strike','knight-cleanse-draw','knight-recycle-tide','knight-persuade-blade',
+  'knight-attack-armor-draw','knight-temp-stats-draw','knight-charge-burst',
 ];
 
 export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({

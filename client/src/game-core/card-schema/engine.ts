@@ -92,6 +92,10 @@ export function executeMagicCardEffects(
   // --- Pre-processing: Magic counter ---
   if (card.type === 'magic') {
     patch.magicCardsPlayedThisTurn = (state.magicCardsPlayedThisTurn ?? 0) + 1;
+    // arcane-storm 专用累计：不含奥术风暴自身那张（X = 此前累计的魔法卡数）。
+    if (card.magicEffect !== 'arcane-storm-magic-count') {
+      patch.arcaneStormMagicCount = (state.arcaneStormMagicCount ?? 0) + 1;
+    }
   }
 
   // --- Pre-processing: Echo ---

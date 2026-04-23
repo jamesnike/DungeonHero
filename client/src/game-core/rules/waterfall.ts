@@ -922,6 +922,7 @@ function reduceApplyWaterfallTurnReset(state: GameState): ReduceResult {
 
   patch.turnCount = state.turnCount + 1;
   patch.magicCardsPlayedThisTurn = 0;
+  patch.arcaneStormMagicCount = 0;
 
   // Reset temp attack/armor (zeroed before amulet auras re-apply in GameBoard)
   if (state.slotTempArmor.equipmentSlot1 !== 0 || state.slotTempArmor.equipmentSlot2 !== 0) {

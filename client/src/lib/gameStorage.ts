@@ -222,6 +222,7 @@ export interface PersistedGameState {
   consecutiveTransformStreak?: number;
   magicCardsPlayedThisTurn?: number;
   damageMagicPlayedThisTurn?: number;
+  arcaneStormMagicCount?: number;
   previewCardStacks?: Record<number, GameCardData[]>;
   activeCardStacks?: Record<number, GameCardData[]>;
   previewRevealedEarly?: boolean[];

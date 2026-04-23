@@ -489,7 +489,9 @@ export function formatScalingSpellDamageLine(scalingBase: number): string {
 }
 
 export function useArcaneStormDamage(): number {
-  const magicCount = useGameState(s => s.magicCardsPlayedThisTurn);
+  // 与 resolveArcaneStorm 一致：读 arcaneStormMagicCount（不含奥术风暴自身）。
+  // 该字段仅在「使用奥术风暴」与「瀑流」时清零，跨回合累计。
+  const magicCount = useGameState(s => s.arcaneStormMagicCount);
   const spellBonus = useGameState(s => s.permanentSpellDamageBonus);
   return Math.max(0, magicCount + spellBonus);
 }

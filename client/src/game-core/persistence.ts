@@ -151,6 +151,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     consecutiveTransformStreak: state.consecutiveTransformStreak,
     magicCardsPlayedThisTurn: state.magicCardsPlayedThisTurn,
     damageMagicPlayedThisTurn: state.damageMagicPlayedThisTurn,
+    arcaneStormMagicCount: state.arcaneStormMagicCount,
     previewCardStacks: state.previewCardStacks,
     activeCardStacks: state.activeCardStacks,
     previewRevealedEarly: state.previewRevealedEarly,

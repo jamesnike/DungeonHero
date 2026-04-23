@@ -767,6 +767,10 @@ export function resolveAllMagicEffects(
   // 2. Track magic cards played
   if (card.type === 'magic') {
     patch.magicCardsPlayedThisTurn = (state.magicCardsPlayedThisTurn ?? 0) + 1;
+    // arcane-storm 专用累计：不含奥术风暴自身那张（与 engine.ts 同步）。
+    if (card.magicEffect !== 'arcane-storm-magic-count') {
+      patch.arcaneStormMagicCount = (state.arcaneStormMagicCount ?? 0) + 1;
+    }
   }
 
   // 3. Echo/double-next handling
@@ -3968,13 +3972,15 @@ export function resolveArcaneStorm(
   echoMultiplier: number,
   isEchoTriggered: boolean,
 ): ReduceResult {
-  const magicCount = patch.magicCardsPlayedThisTurn ?? state.magicCardsPlayedThisTurn ?? 0;
+  const magicCount = patch.arcaneStormMagicCount ?? state.arcaneStormMagicCount ?? 0;
   const baseDmg = Math.max(0, magicCount + (card.amplifyBonus ?? 0));
   const totalDmg = getSpellDamage(baseDmg, state) * echoMultiplier;
   // 真零伤害仍 fizzle（与目标无关）。
   if (totalDmg <= 0) {
-    banner(sideEffects, `奥术风暴：本回合使用了 ${magicCount} 张魔法卡，伤害为 0。${isEchoTriggered ? '（回响×2）' : ''}`);
+    banner(sideEffects, `奥术风暴：累计 ${magicCount} 张魔法卡，伤害为 0。${isEchoTriggered ? '（回响×2）' : ''}`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
+    // 「使用后计数清零」契约：fizzle 也算使用过，重置累计。
+    patch.arcaneStormMagicCount = 0;
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
@@ -3985,10 +3991,10 @@ export function resolveArcaneStorm(
     step: 'monster-select',
     pendingDamage: baseDmg,
     echoMultiplier,
-    prompt: `奥术风暴：选择一个目标，造成 ${totalDmg} 点伤害（${magicCount} 张魔法卡）。`,
+    prompt: `奥术风暴：选择一个目标，造成 ${totalDmg} 点伤害（累计 ${magicCount} 张魔法卡）。`,
     allowsHeroTarget: true,
   } as any;
-  patch.heroSkillBanner = `奥术风暴：${magicCount} 张魔法卡，选择目标造成 ${totalDmg} 点伤害。`;
+  patch.heroSkillBanner = `奥术风暴：累计 ${magicCount} 张魔法卡，选择目标造成 ${totalDmg} 点伤害。`;
   return applyPatch(state, patch, sideEffects);
 }
 
