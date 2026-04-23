@@ -2,6 +2,10 @@ import dragonImage from '@assets/generated_images/cute_chibi_dragon_monster.png'
 import skeletonImage from '@assets/generated_images/cute_chibi_skeleton_monster.png';
 import goblinImage from '@assets/generated_images/cute_chibi_goblin_monster.png';
 import ogreImage from '@assets/generated_images/cute_chibi_ogre_monster.png';
+import eliteDragonImage from '@assets/generated_images/elite_dragon_monster.png';
+import eliteSkeletonImage from '@assets/generated_images/elite_skeleton_monster.png';
+import eliteGoblinImage from '@assets/generated_images/elite_goblin_monster.png';
+import eliteOgreImage from '@assets/generated_images/elite_ogre_monster.png';
 import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
 import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
 import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
@@ -304,7 +308,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
     },
     {
       name: 'Elder Dragon',
-      image: dragonImage,
+      image: eliteDragonImage,
       minAttack: 6,
       maxAttack: 8,
       minHp: 9,
@@ -314,7 +318,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
     },
     {
       name: 'Bone Overlord',
-      image: skeletonImage,
+      image: eliteSkeletonImage,
       minAttack: 5,
       maxAttack: 7,
       minHp: 7,
@@ -324,7 +328,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
     },
     {
       name: 'Goblin Warlock',
-      image: goblinImage,
+      image: eliteGoblinImage,
       minAttack: 4,
       maxAttack: 6,
       minHp: 5,
@@ -334,7 +338,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
     },
     {
       name: 'Ogre Juggernaut',
-      image: ogreImage,
+      image: eliteOgreImage,
       minAttack: 5,
       maxAttack: 7,
       minHp: 8,

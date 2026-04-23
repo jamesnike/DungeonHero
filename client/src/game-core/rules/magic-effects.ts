@@ -3386,74 +3386,125 @@ export function resolveKnightPermanentMagic(
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
-    // 弃装重铸 (Perm 2): destroy all equipment; for each piece destroyed
-    // (revival does NOT count as destroyed) push one class-deck discover onto
-    // the queue so the player gets one popup per destroyed equipment, in
-    // sequence. Last-words and revive trigger normally via
-    // computeEquipmentBreakEffects, mirroring monster-doom's destruction loop.
+    // 弃装重铸 (Perm 2): act on **every stacked equipment piece** in
+    // equipmentSlot1 / equipmentSlot2 — main slot AND every reserve item
+    // counts independently. Each piece:
+    //   - revive check (native monster revive OR hasEquipmentRevive)
+    //     individually. Revived pieces stay in their original stack position
+    //     at 1 durability. Non-revived pieces fire last-words, then route to
+    //     graveyard / recycle bag.
+    //   - counts as 1 discover regardless of outcome (revive / destroy /
+    //     perm-recycle). Player gets one class-deck popup per piece.
+    // After processing, the surviving items are compacted top-down so the
+    // visual stack invariant holds (reserve.length > 0 ⇒ main != null).
+    // 招灵书印 (delete-draw) hook still uses `destroyedCards` (excludes
+    // revived) — that hook is about actual destruction, not "acted on".
     case 'discard-rebuild': {
-      type SlotEntry = { id: EquipmentSlotId; item: GameCardData };
-      const slotsToDestroy: SlotEntry[] = [];
+      type StackPiece = { item: GameCardData; slotId: EquipmentSlotId; isMain: boolean };
+      // Collect per-slot stacks. `stack` is top-to-bottom (visual order):
+      //   index 0 = main, index 1 = reserve[len-1] (top of reserve), ...
+      // Reserve convention: reserve[reserve.length - 1] = topmost / next-to-promote.
+      const slotStacks: { slotId: EquipmentSlotId; stack: StackPiece[] }[] = [];
       for (const sid of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
-        const item = sid === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
-        if (item) slotsToDestroy.push({ id: sid, item });
+        const main = sid === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+        if (!main) continue;
+        const reserve = (sid === 'equipmentSlot1'
+          ? state.equipmentSlot1Reserve
+          : state.equipmentSlot2Reserve) as EquipmentItem[];
+        const stack: StackPiece[] = [{ item: main, slotId: sid, isMain: true }];
+        for (let i = reserve.length - 1; i >= 0; i--) {
+          stack.push({ item: reserve[i] as GameCardData, slotId: sid, isMain: false });
+        }
+        slotStacks.push({ slotId: sid, stack });
       }
 
-      const survivedSlots: Record<EquipmentSlotId, EquipmentItem | null> = {
-        equipmentSlot1: null,
-        equipmentSlot2: null,
-      };
+      let actedOnCount = 0;
       let destroyedCount = 0;
+      let revivedCount = 0;
       const destroyedCards: GameCardData[] = [];
 
       const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
 
-      for (const { id: sid, item } of slotsToDestroy) {
-        const isMonsterEquip = item.type === 'monster';
-        const nativeRevive = isMonsterEquip && item.hasRevive && !item.reviveUsed;
-        const equipRevive = item.hasEquipmentRevive && !item.equipmentReviveUsed;
+      for (const { slotId: sid, stack } of slotStacks) {
+        // Survivors in top-to-bottom order (matching the original stack).
+        const survivorsTopDown: GameCardData[] = [];
 
-        if (nativeRevive || equipRevive) {
-          const revived = nativeRevive
-            ? { ...item, durability: 1, reviveUsed: true }
-            : { ...item, durability: 1, equipmentReviveUsed: true };
-          survivedSlots[sid] = revived as EquipmentItem;
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `${item.name} 复生！以 1 耐久复活！` },
-          });
-        } else {
-          const breakResult = computeEquipmentBreakEffects(state, sid, item, amuletEffects);
-          sideEffects.push(...breakResult.sideEffects);
-          Object.assign(patch, breakResult.patch);
-          patch.rng = breakResult.rng;
-          if (breakResult.drawFromBackpack > 0) {
-            enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: breakResult.drawFromBackpack });
-          }
-          if (breakResult.classCardDraw > 0) {
+        for (const { item } of stack) {
+          actedOnCount++;
+          const isMonsterEquip = item.type === 'monster';
+          const nativeRevive = isMonsterEquip && item.hasRevive && !item.reviveUsed;
+          const equipRevive = item.hasEquipmentRevive && !item.equipmentReviveUsed;
+
+          if (nativeRevive || equipRevive) {
+            const revived = nativeRevive
+              ? { ...item, durability: 1, reviveUsed: true }
+              : { ...item, durability: 1, equipmentReviveUsed: true };
+            survivorsTopDown.push(revived);
             sideEffects.push({
-              event: 'equipment:classCardDraw',
-              payload: { count: breakResult.classCardDraw, source: item.name },
+              event: 'log:entry',
+              payload: { type: 'equip', message: `${item.name} 复生！以 1 耐久复活！` },
             });
-          }
-          // Perm-flagged equipment routes to the recycle bag, not the graveyard.
-          // Mirrors DISPOSE_EQUIPMENT_CARD / monster-doom's routing decision so
-          // 永恒铭刻 装备 被弃装重铸摧毁后仍能回到回收袋。
-          if (shouldRouteEquipmentToPermRecycle(item)) {
-            enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: item });
+            revivedCount++;
           } else {
-            enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+            // Trigger last-words without slot mutation (we own the slot
+            // reconstruction below). Pass current `patch` so accumulated
+            // mutations (gold, slot bonuses, etc.) compose correctly across
+            // multiple destroyed pieces in the same cast.
+            const lwResult = computeEquipmentDisplacementLastWords(
+              state,
+              sid,
+              item,
+              amuletEffects,
+              { ...patch, rng: patch.rng ?? state.rng },
+            );
+            sideEffects.push(...lwResult.sideEffects);
+            Object.assign(patch, lwResult.patch);
+            patch.rng = lwResult.rng;
+            if (lwResult.drawFromBackpack > 0) {
+              enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: lwResult.drawFromBackpack });
+            }
+            if (lwResult.classCardDraw > 0) {
+              sideEffects.push({
+                event: 'equipment:classCardDraw',
+                payload: { count: lwResult.classCardDraw, source: item.name },
+              });
+            }
+            // Perm-flagged equipment routes to the recycle bag, not the
+            // graveyard. Mirrors DISPOSE_EQUIPMENT_CARD's routing decision so
+            // 永恒铭刻 装备 被弃装重铸摧毁后仍能回到回收袋。
+            if (shouldRouteEquipmentToPermRecycle(item)) {
+              enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: item });
+            } else {
+              enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+            }
+            destroyedCount++;
+            destroyedCards.push(item);
           }
-          destroyedCount++;
-          destroyedCards.push(item);
+        }
+
+        // Rebuild slot from survivors. Compact top-down to preserve the UI
+        // invariant: reserve.length > 0 ⇒ main != null. Top survivor → main,
+        // rest → reserve in storage order (reserve[len-1] = next-to-promote =
+        // 2nd survivor from top).
+        const reserveKey: 'equipmentSlot1Reserve' | 'equipmentSlot2Reserve' =
+          sid === 'equipmentSlot1' ? 'equipmentSlot1Reserve' : 'equipmentSlot2Reserve';
+        if (survivorsTopDown.length === 0) {
+          patch[sid] = null as unknown as EquipmentItem;
+          patch[reserveKey] = [] as EquipmentItem[];
+        } else {
+          patch[sid] = survivorsTopDown[0] as EquipmentItem;
+          // survivorsTopDown.slice(1) is in top-to-bottom order; reserve
+          // storage is bottom-to-top, so reverse.
+          patch[reserveKey] = survivorsTopDown.slice(1).reverse() as EquipmentItem[];
         }
       }
 
-      patch.equipmentSlot1 = survivedSlots.equipmentSlot1;
-      patch.equipmentSlot2 = survivedSlots.equipmentSlot2;
+      // Slots that started empty stay empty (don't write null over null) —
+      // we only mutated the slots that had at least one item.
 
       // 招灵书印：弃装重铸摧毁装备 = 强制销毁。装备销毁不影响护符栏 →
-      // surviving = state.amuletSlots。复生的装备不算 destroyed。
+      // surviving = state.amuletSlots。复生的装备不算 destroyed（招灵书印只在真正
+      // 销毁时触发，跟下面的 discover 计数语义不同）。
       maybeTriggerDeleteDrawForDestroy({
         destroyedCards,
         survivingAmuletSlots: state.amuletSlots as GameCardData[],
@@ -3462,18 +3513,24 @@ export function resolveKnightPermanentMagic(
         reasonLabel: '弃装重铸摧毁装备',
       });
 
-      if (destroyedCount > 0) {
-        // 法术回响：发现次数 = 摧毁件数 × echoMultiplier。
-        const totalDiscoverCount = destroyedCount * echoMultiplier;
+      // Discover 触发条件：基于「作用了几件装备」（含主装备 + reserve 每一件）。
+      // 复生 / 进回收袋 / 进坟场所有结局都算一次 discover。
+      if (actedOnCount > 0) {
+        // 法术回响：发现次数 = 作用件数 × echoMultiplier。
+        const totalDiscoverCount = actedOnCount * echoMultiplier;
         const echoTagDR = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+        const breakdown =
+          revivedCount > 0
+            ? `（摧毁 ${destroyedCount}，复生 ${revivedCount}）`
+            : '';
         log(
           sideEffects,
           'magic',
-          `${card.name}：摧毁 ${destroyedCount} 件装备，将发现 ${totalDiscoverCount} 张专属牌！${echoTagDR}`,
+          `${card.name}：作用 ${actedOnCount} 件装备${breakdown}，将发现 ${totalDiscoverCount} 张专属牌！${echoTagDR}`,
         );
         banner(
           sideEffects,
-          `${card.name}：摧毁 ${destroyedCount} 件装备，发现 ${totalDiscoverCount} 张专属牌…${echoTagDR}`,
+          `${card.name}：作用 ${actedOnCount} 件装备${breakdown}，发现 ${totalDiscoverCount} 张专属牌…${echoTagDR}`,
         );
 
         // Trigger one discover immediately, queue the rest. Each modal close
@@ -3501,8 +3558,8 @@ export function resolveKnightPermanentMagic(
           log(sideEffects, 'magic', `${card.name}：专属牌堆已空，无法发现。`);
         }
       } else {
-        log(sideEffects, 'magic', `${card.name}：没有装备可摧毁。`);
-        banner(sideEffects, `${card.name}：没有装备可摧毁。`);
+        log(sideEffects, 'magic', `${card.name}：没有装备可作用。`);
+        banner(sideEffects, `${card.name}：没有装备可作用。`);
       }
 
       patch.lastPlayedCardCategory = getCardPlayCategory(card);

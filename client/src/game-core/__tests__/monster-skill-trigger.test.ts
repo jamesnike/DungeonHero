@@ -37,18 +37,15 @@ const ALL_KEYS: MonsterSkillKey[] = [
   'death:lastWords:generic',
   'death:revive',
   'bleed:gainAttack',
-  'bleed:swarmCorrode',
   'attack:goblinSteal',
   'attack:goblinStealCard',
   'attack:swarmCorrode',
   'attack:ogreStun',
   'attack:eliteDoubleAttack',
-  'attack:bossRetaliation',
-  'attack:dragonBreath',
-  'attack:critChain',
   'reflect:antiMagic',
-  'reflect:golemReflect',
   'reflect:dragonBleedDestroy',
+  'reflect:dragonBreath',
+  'reflect:bossRetaliation',
   'turnEnd:wraithAura',
   'turnEnd:wraithTurnEnrage',
   'turnEnd:wraithSelfAttack',
@@ -86,15 +83,15 @@ describe('TRIGGER_MONSTER_SKILL_FLOAT', () => {
     const result = reduce(state, {
       type: 'TRIGGER_MONSTER_SKILL_FLOAT',
       monsterId: 'm1',
-      skillKey: 'attack:bossRetaliation',
+      skillKey: 'reflect:bossRetaliation',
     });
 
     expect(result.state.pendingSkillFloats.length).toBe(1);
     expect(result.state.pendingSkillFloats[0].monsterId).toBe('m1');
     expect(result.state.pendingSkillFloats[0].skillKey).toBe(
-      'attack:bossRetaliation',
+      'reflect:bossRetaliation',
     );
-    expect(result.state.pendingSkillFloats[0].skillName).toBe('BOSS·反伤');
+    expect(result.state.pendingSkillFloats[0].skillName).toBe('反击·反噬');
     expect(result.state.phase).toBe('awaitingSkillFloat');
     expect(result.state.skillFloatSavedPhase).toBe(startPhase);
 
@@ -103,9 +100,9 @@ describe('TRIGGER_MONSTER_SKILL_FLOAT', () => {
         event: 'ui:monsterSkillFloat',
         payload: expect.objectContaining({
           monsterId: 'm1',
-          skillKey: 'attack:bossRetaliation',
-          skillName: 'BOSS·反伤',
-          kind: 'attack',
+          skillKey: 'reflect:bossRetaliation',
+          skillName: '反击·反噬',
+          kind: 'reflect',
         }),
       }),
     );
@@ -159,12 +156,12 @@ describe('RELEASE_MONSTER_SKILL_FLOAT', () => {
     state = reduce(state, {
       type: 'TRIGGER_MONSTER_SKILL_FLOAT',
       monsterId: 'm1',
-      skillKey: 'attack:dragonBreath',
+      skillKey: 'reflect:dragonBreath',
     }).state;
     state = reduce(state, {
       type: 'TRIGGER_MONSTER_SKILL_FLOAT',
       monsterId: 'm2',
-      skillKey: 'attack:bossRetaliation',
+      skillKey: 'reflect:bossRetaliation',
     }).state;
 
     const firstId = state.pendingSkillFloats[0].id;
@@ -174,7 +171,7 @@ describe('RELEASE_MONSTER_SKILL_FLOAT', () => {
     }).state;
 
     expect(state.pendingSkillFloats.length).toBe(1);
-    expect(state.pendingSkillFloats[0].skillKey).toBe('attack:bossRetaliation');
+    expect(state.pendingSkillFloats[0].skillKey).toBe('reflect:bossRetaliation');
     expect(state.phase).toBe('awaitingSkillFloat');
     expect(state.skillFloatSavedPhase).toBe('playerInput');
   });

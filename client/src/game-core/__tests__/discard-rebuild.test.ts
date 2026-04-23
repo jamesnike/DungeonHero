@@ -2,15 +2,19 @@
  * 弃装重铸 (knight:discard-rebuild) — Perm 2 magic.
  *
  * Behavior:
- *   - Destroys all equipment in equipmentSlot1 / equipmentSlot2.
+ *   - Acts on all equipment in equipmentSlot1 / equipmentSlot2 — tries to
+ *     destroy each piece.
  *   - Equipment with active revive (native monster revive OR
  *     `hasEquipmentRevive` from 复生秘典 / 不朽骨盾) survives at 1 durability
- *     and is NOT counted as destroyed.
- *   - Each genuinely-destroyed piece queues a class-deck discover. The first
- *     discover is dispatched immediately via BEGIN_DISCOVER; the rest sit in
+ *     instead of entering the graveyard.
+ *   - Each acted-on slot queues a class-deck discover **regardless of whether
+ *     the equipment was destroyed or revived**. The first discover is
+ *     dispatched immediately via BEGIN_DISCOVER; the rest sit in
  *     `pendingClassDiscoverQueue` and pop sequentially when the modal closes.
- *   - Last-words such as `onDestroyPermanentShield` still fire because we
- *     route through `computeEquipmentBreakEffects`.
+ *   - Last-words such as `onDestroyPermanentShield` still fire on actual
+ *     destruction because we route through `computeEquipmentBreakEffects`.
+ *   - 招灵书印 (delete-draw) hook still uses true-destruction count (excludes
+ *     revived) — that hook is about destruction semantics, not "acted on".
  */
 
 import { describe, expect, it } from 'vitest';
@@ -140,7 +144,7 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
     expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBeGreaterThanOrEqual(1);
   });
 
-  it('revival keeps equipment alive and does NOT count as destroyed', () => {
+  it('revival keeps equipment alive but STILL counts toward discover (1 acted slot → 1 discover)', () => {
     const card = makeCard('rev');
     const w = makeWeapon('w-rev', {
       hasEquipmentRevive: true,
@@ -155,13 +159,80 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
 
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-    // Equipment revived at 1 durability instead of being destroyed.
+    // Equipment revived at 1 durability instead of being destroyed (did NOT
+    // enter graveyard).
     expect(result.state.equipmentSlot1).not.toBeNull();
     expect((result.state.equipmentSlot1 as any).durability).toBe(1);
     expect((result.state.equipmentSlot1 as any).equipmentReviveUsed).toBe(true);
-    // No discover triggered (0 destroyed).
-    expect(result.state.discoverModalOpen).toBe(false);
+    expect(result.state.discardedCards.some(c => c.id === 'w-rev')).toBe(false);
+    // 1 acted-on slot → 1 discover fires immediately, queue is empty.
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.discoverOptions.length).toBeGreaterThan(0);
+    expect(result.state.discoverSourceLabel).toBe('弃装重铸');
     expect(result.state.pendingClassDiscoverQueue).toHaveLength(0);
+  });
+
+  it('mixed slot: 1 destroyed + 1 revived → 2 discovers (1 fires, 1 queued)', () => {
+    const card = makeCard('mix');
+    // Slot 1: revive equipment (survives).
+    const w = makeWeapon('w-mix', {
+      hasEquipmentRevive: true,
+      durability: 0,
+    });
+    // Slot 2: regular shield (gets destroyed).
+    const s = makeShield('s-mix');
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: w as any,
+      equipmentSlot2: s as any,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2'), makeClassCard('c3')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Slot 1 revived in place; slot 2 cleared and shield went to graveyard.
+    expect(result.state.equipmentSlot1).not.toBeNull();
+    expect((result.state.equipmentSlot1 as any).equipmentReviveUsed).toBe(true);
+    expect(result.state.equipmentSlot2).toBeNull();
+    expect(result.state.discardedCards.some(c => c.id === 's-mix')).toBe(true);
+    expect(result.state.discardedCards.some(c => c.id === 'w-mix')).toBe(false);
+    // 2 acted slots → 2 discovers total (1 fires, 1 queued).
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.discoverSourceLabel).toBe('弃装重铸');
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(1);
+    expect(result.state.pendingClassDiscoverQueue[0]).toEqual({
+      source: 'discard-rebuild',
+      sourceLabel: '弃装重铸',
+    });
+  });
+
+  it('both slots revived → 2 discovers, no graveyard entries', () => {
+    const card = makeCard('rev2');
+    const w = makeWeapon('w-rev2', {
+      hasEquipmentRevive: true,
+      durability: 0,
+    });
+    const s = makeShield('s-rev2', {
+      hasEquipmentRevive: true,
+      durability: 0,
+    });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: w as any,
+      equipmentSlot2: s as any,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2'), makeClassCard('c3')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Both equipment revived; nothing in graveyard.
+    expect(result.state.equipmentSlot1).not.toBeNull();
+    expect(result.state.equipmentSlot2).not.toBeNull();
+    expect(result.state.discardedCards.some(c => c.id === 'w-rev2')).toBe(false);
+    expect(result.state.discardedCards.some(c => c.id === 's-rev2')).toBe(false);
+    // Still 2 discovers triggered.
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(1);
   });
 
   it('no equipment → card consumed, no discover, no queue', () => {
@@ -214,5 +285,390 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
     });
     expect(after.state.discoverModalOpen).toBe(false);
     expect(after.enqueuedActions ?? []).toEqual([]);
+  });
+
+  // -------------------------------------------------------------------------
+  // Stacked equipment (reserve) tests — each piece counts independently.
+  // -------------------------------------------------------------------------
+
+  it('STACK: slot1 main + 2 reserve, all no revive → 3 pieces destroyed, 3 discovers, slot+reserve cleared', () => {
+    const card = makeCard('stack');
+    const main = makeWeapon('w-main');
+    const r1 = makeWeapon('w-r1');
+    const r2 = makeWeapon('w-r2');
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [r1, r2] as any,
+      equipmentSlot2: null,
+      equipmentSlot2Reserve: [],
+      classDeck: [
+        makeClassCard('c1'), makeClassCard('c2'), makeClassCard('c3'),
+        makeClassCard('c4'), makeClassCard('c5'),
+      ],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // All 3 pieces gone — slot null, reserve empty.
+    expect(result.state.equipmentSlot1).toBeNull();
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(0);
+    // All 3 in graveyard.
+    expect(result.state.discardedCards.some(c => c.id === 'w-main')).toBe(true);
+    expect(result.state.discardedCards.some(c => c.id === 'w-r1')).toBe(true);
+    expect(result.state.discardedCards.some(c => c.id === 'w-r2')).toBe(true);
+    // 3 discovers: 1 fires immediately, 2 queued.
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(2);
+  });
+
+  it('STACK: 1 reserve has revive → revived stays in stack at 1 dur, 3 discovers fire (1 active + 2 queued)', () => {
+    const card = makeCard('stack-rev');
+    const main = makeWeapon('w-main');
+    // Reserve middle item has revive.
+    const r1 = makeWeapon('w-r1', { hasEquipmentRevive: true, durability: 0 });
+    const r2 = makeWeapon('w-r2');
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [r1, r2] as any, // r2 is top-of-reserve, r1 below
+      equipmentSlot2: null,
+      classDeck: [
+        makeClassCard('c1'), makeClassCard('c2'), makeClassCard('c3'),
+        makeClassCard('c4'), makeClassCard('c5'),
+      ],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Stack visual order top→bottom = [main, r2, r1]. main destroyed,
+    // r2 destroyed, r1 revived → only r1 survives. After top-down compaction
+    // r1 becomes new main (only survivor).
+    expect(result.state.equipmentSlot1).not.toBeNull();
+    expect((result.state.equipmentSlot1 as any).id).toBe('w-r1');
+    expect((result.state.equipmentSlot1 as any).durability).toBe(1);
+    expect((result.state.equipmentSlot1 as any).equipmentReviveUsed).toBe(true);
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(0);
+    // Destroyed pieces in graveyard.
+    expect(result.state.discardedCards.some(c => c.id === 'w-main')).toBe(true);
+    expect(result.state.discardedCards.some(c => c.id === 'w-r2')).toBe(true);
+    // Revived piece NOT in graveyard.
+    expect(result.state.discardedCards.some(c => c.id === 'w-r1')).toBe(false);
+    // 3 acted-on pieces → 3 discovers (1 fires, 2 queued).
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(2);
+  });
+
+  it('STACK: main + reserve all have revive → all revive in original positions, 3 discovers', () => {
+    const card = makeCard('stack-all-rev');
+    const main = makeWeapon('w-main', { hasEquipmentRevive: true, durability: 0 });
+    const r1 = makeWeapon('w-r1', { hasEquipmentRevive: true, durability: 0 });
+    const r2 = makeWeapon('w-r2', { hasEquipmentRevive: true, durability: 0 });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [r1, r2] as any,
+      equipmentSlot2: null,
+      classDeck: [
+        makeClassCard('c1'), makeClassCard('c2'), makeClassCard('c3'),
+        makeClassCard('c4'), makeClassCard('c5'),
+      ],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Original stack visual order: [w-main (main), w-r2 (top reserve), w-r1 (bottom reserve)]
+    // All survive in original positions:
+    //   main = w-main, reserve = [w-r1, w-r2]  (storage order: bottom-first)
+    expect((result.state.equipmentSlot1 as any).id).toBe('w-main');
+    expect((result.state.equipmentSlot1 as any).durability).toBe(1);
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(2);
+    expect((result.state.equipmentSlot1Reserve[0] as any).id).toBe('w-r1');
+    expect((result.state.equipmentSlot1Reserve[1] as any).id).toBe('w-r2');
+    // None in graveyard.
+    expect(result.state.discardedCards.some(c => c.id === 'w-main')).toBe(false);
+    expect(result.state.discardedCards.some(c => c.id === 'w-r1')).toBe(false);
+    expect(result.state.discardedCards.some(c => c.id === 'w-r2')).toBe(false);
+    // 3 pieces acted on → 3 discovers.
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(2);
+  });
+
+  it('STACK PROMOTE: main destroyed + 1 reserve revives → reserve auto-promotes to main slot', () => {
+    // Minimal 2-piece scenario explicitly verifying the user-facing contract:
+    // when 弃装重铸 destroys the upper-layer (main) and the lower layer
+    // (reserve) has revive, the revived reserve is automatically promoted
+    // up into the main slot — it does NOT linger in reserve while main is null.
+    const card = makeCard('promote-2piece');
+    const main = makeWeapon('w-main'); // no revive → destroyed
+    const r1 = makeWeapon('w-r1', { hasEquipmentRevive: true, durability: 0 });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [r1] as any, // single reserve item
+      equipmentSlot2: null,
+      classDeck: Array.from({ length: 5 }, (_, i) => makeClassCard(`c${i}`)),
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // r1 promoted from reserve → main slot, alive at 1 dur, revive consumed.
+    expect(result.state.equipmentSlot1).not.toBeNull();
+    expect((result.state.equipmentSlot1 as any).id).toBe('w-r1');
+    expect((result.state.equipmentSlot1 as any).durability).toBe(1);
+    expect((result.state.equipmentSlot1 as any).equipmentReviveUsed).toBe(true);
+    // Reserve is now empty (no item left behind).
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(0);
+    // Old main is in the graveyard.
+    expect(result.state.discardedCards.some(c => c.id === 'w-main')).toBe(true);
+    expect(result.state.discardedCards.some(c => c.id === 'w-r1')).toBe(false);
+    // 2 acted-on pieces → 2 discovers.
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(1);
+  });
+
+  it('STACK PROMOTE: main destroyed + middle reserve destroyed + bottom reserve revives → bottom promotes to main', () => {
+    // Verify promote-up works across multiple destroyed layers, not just an
+    // adjacent one. The bottom-most surviving piece skips over a destroyed
+    // middle layer to fill the main slot.
+    const card = makeCard('promote-skip');
+    const main = makeWeapon('w-main'); // destroyed
+    const r1 = makeWeapon('w-r1', { hasEquipmentRevive: true, durability: 0 }); // bottom of reserve, revives
+    const r2 = makeWeapon('w-r2'); // top of reserve, destroyed
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [r1, r2] as any, // r2 = top, r1 = bottom
+      equipmentSlot2: null,
+      classDeck: Array.from({ length: 5 }, (_, i) => makeClassCard(`c${i}`)),
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Stack visual top→bottom = [main, r2, r1]. Only r1 survives.
+    // It compacts up past the destroyed r2 to become the new main.
+    expect((result.state.equipmentSlot1 as any).id).toBe('w-r1');
+    expect((result.state.equipmentSlot1 as any).durability).toBe(1);
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(0);
+  });
+
+  it('STACK PROMOTE: main revives + top reserve destroyed + bottom reserve revives → bottom fills the gap (main stays main)', () => {
+    // When main itself revives, it stays as main — but a destroyed middle
+    // layer is still "filled" by the surviving bottom layer compacting up.
+    const card = makeCard('promote-mid-gap');
+    const main = makeWeapon('w-main', { hasEquipmentRevive: true, durability: 0 }); // revives
+    const r1 = makeWeapon('w-r1', { hasEquipmentRevive: true, durability: 0 }); // bottom, revives
+    const r2 = makeWeapon('w-r2'); // top reserve, destroyed
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [r1, r2] as any, // r2 = top, r1 = bottom
+      equipmentSlot2: null,
+      classDeck: Array.from({ length: 5 }, (_, i) => makeClassCard(`c${i}`)),
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Stack visual top→bottom = [main(rev), r2(destroyed), r1(rev)].
+    // Survivors top-down = [main, r1]. main stays main, r1 fills the
+    // single reserve slot (was bottom-of-reserve, now sole reserve = top).
+    expect((result.state.equipmentSlot1 as any).id).toBe('w-main');
+    expect((result.state.equipmentSlot1 as any).equipmentReviveUsed).toBe(true);
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(1);
+    expect((result.state.equipmentSlot1Reserve[0] as any).id).toBe('w-r1');
+    expect(result.state.discardedCards.some(c => c.id === 'w-r2')).toBe(true);
+  });
+
+  it('STACK: both slots stacked, mixed → discover count = total piece count', () => {
+    const card = makeCard('two-slots');
+    // Slot 1: main + 1 reserve (both no revive) = 2 pieces
+    const m1 = makeWeapon('w-m1');
+    const r1 = makeWeapon('w-r1');
+    // Slot 2: main + 2 reserve (all no revive) = 3 pieces
+    const m2 = makeShield('s-m2');
+    const sr1 = makeShield('s-r1');
+    const sr2 = makeShield('s-r2');
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: m1 as any,
+      equipmentSlot1Reserve: [r1] as any,
+      equipmentSlot2: m2 as any,
+      equipmentSlot2Reserve: [sr1, sr2] as any,
+      classDeck: Array.from({ length: 10 }, (_, i) => makeClassCard(`c${i}`)),
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Both slots fully cleared.
+    expect(result.state.equipmentSlot1).toBeNull();
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(0);
+    expect(result.state.equipmentSlot2).toBeNull();
+    expect(result.state.equipmentSlot2Reserve).toHaveLength(0);
+    // All 5 in graveyard.
+    expect(result.state.discardedCards.filter(c =>
+      ['w-m1', 'w-r1', 's-m2', 's-r1', 's-r2'].includes(c.id),
+    )).toHaveLength(5);
+    // 5 acted-on pieces → 5 discovers (1 fires + 4 queued).
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(4);
+  });
+
+  // -------------------------------------------------------------------------
+  // Monster equipment (persuaded monsters) — should be treated identically.
+  // -------------------------------------------------------------------------
+
+  it('MONSTER: monster equip in main slot, no revive → destroyed, sent to graveyard with currentLayer reset to 1', () => {
+    const card = makeCard('mon');
+    const monsterEquip: GameCardData = {
+      id: 'mon-main',
+      type: 'monster',
+      name: 'Goblin-Equip',
+      value: 3,
+      image: '',
+      hp: 5,
+      maxHp: 5,
+      attack: 3,
+      durability: 2,
+      maxDurability: 2,
+      currentLayer: 2,
+      fury: 2,
+    } as GameCardData;
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: monsterEquip as any,
+      equipmentSlot2: null,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.equipmentSlot1).toBeNull();
+    const inGrave = result.state.discardedCards.find(c => c.id === 'mon-main') as any;
+    expect(inGrave).toBeDefined();
+    // Per monster-graveyard-layer-reset rule: currentLayer must be 1 in grave.
+    expect(inGrave.currentLayer).toBe(1);
+    // 1 piece acted → 1 discover.
+    expect(result.state.discoverModalOpen).toBe(true);
+  });
+
+  it('MONSTER: monster equip in main slot with native hasRevive → revives at 1 dur, marks reviveUsed', () => {
+    const card = makeCard('mon-rev');
+    const monsterEquip: GameCardData = {
+      id: 'mon-rev-main',
+      type: 'monster',
+      name: 'Phoenix-Equip',
+      value: 3,
+      image: '',
+      hp: 5,
+      maxHp: 5,
+      attack: 3,
+      durability: 2,
+      maxDurability: 2,
+      hasRevive: true,
+      reviveUsed: false,
+    } as GameCardData;
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: monsterEquip as any,
+      equipmentSlot2: null,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.equipmentSlot1).not.toBeNull();
+    const slot = result.state.equipmentSlot1 as any;
+    expect(slot.id).toBe('mon-rev-main');
+    expect(slot.durability).toBe(1);
+    expect(slot.reviveUsed).toBe(true);
+    expect(result.state.discardedCards.some(c => c.id === 'mon-rev-main')).toBe(false);
+    // 1 piece acted → 1 discover (revive still counts).
+    expect(result.state.discoverModalOpen).toBe(true);
+  });
+
+  it('MONSTER: monster equip in RESERVE → also processed (destroyed if no revive)', () => {
+    const card = makeCard('mon-res');
+    const main = makeWeapon('w-main');
+    const monsterReserve: GameCardData = {
+      id: 'mon-res-r1',
+      type: 'monster',
+      name: 'Goblin-Reserve',
+      value: 3,
+      image: '',
+      hp: 5,
+      maxHp: 5,
+      attack: 3,
+      durability: 2,
+      maxDurability: 2,
+      currentLayer: 1,
+    } as GameCardData;
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [monsterReserve] as any,
+      equipmentSlot2: null,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2'), makeClassCard('c3')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.equipmentSlot1).toBeNull();
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(0);
+    expect(result.state.discardedCards.some(c => c.id === 'w-main')).toBe(true);
+    expect(result.state.discardedCards.some(c => c.id === 'mon-res-r1')).toBe(true);
+    // 2 pieces acted → 2 discovers.
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(1);
+  });
+
+  it('MONSTER: wraith-haunt last-words on monster equip → other slot gets the haunt damage bonus', () => {
+    const card = makeCard('mon-haunt');
+    const wraith: GameCardData = {
+      id: 'mon-wraith',
+      type: 'monster',
+      name: 'Wraith-Equip',
+      value: 3,
+      image: '',
+      hp: 5,
+      maxHp: 5,
+      attack: 3,
+      durability: 2,
+      maxDurability: 2,
+      lastWords: 'wraith-haunt-3',
+    } as GameCardData;
+    const otherShield = makeShield('s-other');
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: wraith as any,
+      equipmentSlot2: otherShield as any,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2'), makeClassCard('c3')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Wraith destroyed, shield destroyed too. wraith-haunt-3 should give
+    // slot2 (other slot at time of cast) +3 damage bonus before it's cleared.
+    expect(result.state.equipmentSlotBonuses.equipmentSlot2.damage).toBeGreaterThanOrEqual(3);
+  });
+
+  it('STACK: reserve item with onDestroyPermanentDamage → its slot gets the perm-damage bonus', () => {
+    const card = makeCard('lw-reserve');
+    const main = makeWeapon('w-main');
+    // Reserve item with onDestroyPermanentDamage: 2 → slot1 perm damage +2.
+    const r1 = makeWeapon('w-r1', { onDestroyPermanentDamage: 2 });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [r1] as any,
+      equipmentSlot2: null,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.equipmentSlot1).toBeNull();
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(0);
+    // Reserve item's last-words fired: slot1 perm damage +2.
+    expect(result.state.equipmentSlotBonuses.equipmentSlot1.damage).toBeGreaterThanOrEqual(2);
   });
 });

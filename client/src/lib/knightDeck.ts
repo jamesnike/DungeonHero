@@ -226,8 +226,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: potionArcaneInfusionImage,
     classCard: true,
-    description: '掷骰：选中的永久加成翻倍（左伤害/左护甲/右伤害/右护甲/法术伤害）。',
-    shortDescription: '掷骰：随机一项永久加成翻倍',
+    description: '掷骰 D20：1-7 翻倍左装备栏的永久攻击与永久护甲；8-14 翻倍右装备栏的永久攻击与永久护甲；15-20 翻倍永久法术伤害与超杀吸血。',
+    shortDescription: '掷骰：左/右装备栏永久攻防 或 法术伤害与超杀吸血 翻倍',
     potionEffect: 'dice-arcane-infusion',
   });
 
@@ -746,8 +746,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: statSwapPotionImage,
     classCard: true,
-    description: '随机选择左或右装备栏，将其永久伤害与永久护甲数值互换。',
-    shortDescription: '随机一栏：永久伤害与永久护甲互换',
+    description: '选择一个装备栏，将其永久攻击与永久护甲互换，临时攻击与临时护甲也互换。',
+    shortDescription: '选一栏：永久&临时攻击/护甲互换',
     potionEffect: 'swap-slot-damage-shield',
   });
 
@@ -888,9 +888,9 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 1,
   });
 
-  // 弃装重铸 (Perm 2)：摧毁所有装备，每摧毁一件（不计复生/护符回收等保留）
-  // 发现一张专属牌；摧毁多个装备时依次弹出多个发现弹窗。摧毁过程仍正常触发
-  // 装备的遗言（onDestroyEffect / lastWords / 复生 / 护符存档）。
+  // 弃装重铸 (Perm 2)：对所有装备生效——左右栏的主装备 + 每一件下层 reserve
+  // 都算独立一件。每件独立判定复生：没复生就摧毁（遗言照常触发），复生的
+  // 留在原层 1 耐久。每一件（含复生）都触发一次专属发现，依次弹窗。
   pushCard({
     type: 'magic',
     name: '弃装重铸',
@@ -898,10 +898,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: dedupeKnightMagicGraveNovaImage,
     classCard: true,
     description:
-      '永久：摧毁所有装备，每摧毁一件，发现一张专属牌（依次弹窗）。装备的遗言与复生照常触发。',
-    shortDescription: '摧毁所有装备；每件发现 1 张专属牌',
+      '永久：对左右装备栏每一件装备（含下层叠加）独立生效——没复生的摧毁，复生的留在原层 1 耐久。每件装备发现一张专属牌（依次弹窗）。装备的遗言照常触发。',
+    shortDescription: '每件装备（含下层）：发现 1 张专属牌',
     magicType: 'permanent',
-    magicEffect: '摧毁全部装备，按摧毁数依次发现专属牌。',
+    magicEffect: '对所有装备（含下层 reserve）各发现一张专属牌，并尝试摧毁；复生在原层 1 耐久。',
     knightEffect: 'discard-rebuild',
     recycleDelay: 2,
     maxUpgradeLevel: 0,
@@ -1264,8 +1264,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: monsterDoomScrollImage,
     classCard: true,
-    description: '装备的怪物数量为数值条（上限 4）。释放：摧毁所有装备，每摧毁一个装备对激活行所有怪物 -2攻/-2血上限（每个血层都减）。',
-    shortDescription: '装备的怪物充能；释放摧毁全部装备并削弱全场怪物',
+    description: '装备的怪物数量为数值条（上限 2）。释放：摧毁所有装备（含下层叠加，每件独立判定复生），每摧毁一件对激活行所有怪物 -2攻/-2血上限（每个血层都减）。',
+    shortDescription: '装备怪物充能；释放摧毁全部装备（含下层）并削弱全场',
     heroMagicId: 'monster-doom',
     heroMagicEffect: '英雄魔法：解锁或触发灭世裁决。',
   });

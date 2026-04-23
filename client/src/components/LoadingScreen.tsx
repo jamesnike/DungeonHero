@@ -7,6 +7,13 @@ import goblinImage from '@assets/generated_images/cute_chibi_goblin_monster.png'
 import ogreImage from '@assets/generated_images/cute_chibi_ogre_monster.png';
 import wraithImage from '@assets/generated_images/cute_chibi_wraith_monster.png';
 import minionImage from '@assets/generated_images/chibi_minion_follower.png';
+import eliteDragonImage from '@assets/generated_images/elite_dragon_monster.png';
+import eliteSkeletonImage from '@assets/generated_images/elite_skeleton_monster.png';
+import eliteGoblinImage from '@assets/generated_images/elite_goblin_monster.png';
+import eliteOgreImage from '@assets/generated_images/elite_ogre_monster.png';
+import eliteWraithImage from '@assets/generated_images/elite_wraith_monster.png';
+import eliteSwarmImage from '@assets/generated_images/elite_swarm_monster.png';
+import eliteGolemImage from '@assets/generated_images/elite_golem_monster.png';
 import swordImage from '@assets/generated_images/cute_cartoon_medieval_sword.png';
 import axeImage from '@assets/generated_images/cute_cartoon_battle_axe.png';
 import daggerImage from '@assets/generated_images/cute_cartoon_dagger.png';
@@ -132,6 +139,8 @@ import knightDeleteDrawAmuletImage from '@assets/generated_images/knight_delete_
 
 const ALL_IMAGES = [
   dragonImage, skeletonImage, goblinImage, ogreImage, wraithImage, minionImage,
+  eliteDragonImage, eliteSkeletonImage, eliteGoblinImage, eliteOgreImage,
+  eliteWraithImage, eliteSwarmImage, eliteGolemImage,
   swordImage, axeImage, daggerImage, daggerWeaponImage, holyBladeImage, maceImage,
   woodenShieldImage, ironShieldImage, heavyShieldImage,
   potionImage, potionConcentratedHealImage, potionWeaponRepairImage,

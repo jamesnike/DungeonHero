@@ -684,32 +684,47 @@ function reduceResolveDice(
     case 'arcane-infusion': {
       const card = ctx.card as GameCardData | undefined;
       newState = { ...newState, pendingPotionAction: null };
-      const slotMap: Record<string, { slotId: string; stat: 'attack' | 'armor' }> = {
-        'ai-l-dmg': { slotId: 'equipmentSlot1', stat: 'attack' },
-        'ai-l-shd': { slotId: 'equipmentSlot1', stat: 'armor' },
-        'ai-r-dmg': { slotId: 'equipmentSlot2', stat: 'attack' },
-        'ai-r-shd': { slotId: 'equipmentSlot2', stat: 'armor' },
-      };
-      const mapping = action.outcomeId ? slotMap[action.outcomeId] : undefined;
-      if (mapping) {
-        const slotItem = newState[mapping.slotId as 'equipmentSlot1' | 'equipmentSlot2'];
-        if (slotItem) {
-          const currentVal = mapping.stat === 'attack' ? (slotItem.value ?? 0) : (slotItem.armor ?? 0);
-          const doubled = currentVal * 2;
-          const updated = mapping.stat === 'attack'
-            ? { ...slotItem, value: doubled }
-            : { ...slotItem, armor: doubled };
-          newState = { ...newState, [mapping.slotId]: updated };
+      if (action.outcomeId === 'ai-left' || action.outcomeId === 'ai-right') {
+        const slotId: EquipmentSlotId = action.outcomeId === 'ai-left' ? 'equipmentSlot1' : 'equipmentSlot2';
+        const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
+        const curBonuses = newState.equipmentSlotBonuses[slotId] ?? { damage: 0, shield: 0 };
+        const newDamage = curBonuses.damage * 2;
+        const newShield = curBonuses.shield * 2;
+        newState = {
+          ...newState,
+          equipmentSlotBonuses: {
+            ...newState.equipmentSlotBonuses,
+            [slotId]: { damage: newDamage, shield: newShield },
+          },
+        };
+        if (curBonuses.damage === 0 && curBonuses.shield === 0) {
           enqueuedActions.push(
-            { type: 'SET_HERO_SKILL_BANNER', message: `奥术灌注：${slotItem.name} 的${mapping.stat === 'attack' ? '伤害' : '护甲'}翻倍（${currentVal}→${doubled}）！` } as GameAction,
+            { type: 'SET_HERO_SKILL_BANNER', message: `奥术灌注：${slotLabel}装备栏永久加成为 0，无变化。` } as GameAction,
+          );
+        } else {
+          enqueuedActions.push(
+            { type: 'SET_HERO_SKILL_BANNER', message: `奥术灌注：${slotLabel}装备栏永久攻击 ${curBonuses.damage}→${newDamage}、永久护甲 ${curBonuses.shield}→${newShield}！` } as GameAction,
           );
         }
       } else if (action.outcomeId === 'ai-spell') {
-        const currentBonus = newState.permanentSpellDamageBonus ?? 0;
-        newState = { ...newState, permanentSpellDamageBonus: currentBonus * 2 };
-        enqueuedActions.push(
-          { type: 'SET_HERO_SKILL_BANNER', message: `奥术灌注：法术伤害加成翻倍（${currentBonus}→${currentBonus * 2}）！` } as GameAction,
-        );
+        const curSpell = newState.permanentSpellDamageBonus ?? 0;
+        const curLifesteal = newState.permanentSpellLifesteal ?? 0;
+        const newSpell = curSpell * 2;
+        const newLifesteal = curLifesteal * 2;
+        newState = {
+          ...newState,
+          permanentSpellDamageBonus: newSpell,
+          permanentSpellLifesteal: newLifesteal,
+        };
+        if (curSpell === 0 && curLifesteal === 0) {
+          enqueuedActions.push(
+            { type: 'SET_HERO_SKILL_BANNER', message: '奥术灌注：永久法术伤害与超杀吸血均为 0，无变化。' } as GameAction,
+          );
+        } else {
+          enqueuedActions.push(
+            { type: 'SET_HERO_SKILL_BANNER', message: `奥术灌注：永久法术伤害 ${curSpell}→${newSpell}、超杀吸血 ${curLifesteal}→${newLifesteal}！` } as GameAction,
+          );
+        }
       }
       if (card) {
         enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card } as GameAction);

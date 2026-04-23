@@ -2642,7 +2642,7 @@ export default function GameBoard() {
     let rng = engine.getState().rng;
     const [target, rng2] = pickRandom(monsters, rng); rng = rng2;
     dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
-    const dmg = Math.max(0, 1 + permanentSpellDamageBonus);
+    const dmg = Math.max(0, 3 + permanentSpellDamageBonus);
 
     flipShockSeqInFlightRef.current = true;
     const started = tryStartFlipShockFlight(target.id, dmg, 2, showBanner);
@@ -7083,7 +7083,8 @@ export default function GameBoard() {
     }
     if (pendingPotionAction.effect === 'perm-slot-damage+1' ||
         pendingPotionAction.effect === 'perm-slot-damage+2' ||
-        pendingPotionAction.effect === 'perm-slot-capacity+1') {
+        pendingPotionAction.effect === 'perm-slot-capacity+1' ||
+        pendingPotionAction.effect === 'swap-slot-damage-shield') {
       return true;
     }
     const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;

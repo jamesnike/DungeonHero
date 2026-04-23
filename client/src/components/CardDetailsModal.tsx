@@ -355,7 +355,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Sword className="w-4 h-4 shrink-0 text-orange-500" />
                     <span className="font-extrabold text-sm text-orange-700 dark:text-orange-300 tracking-wide">
-                      流血
+                      狂怒
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">
@@ -372,7 +372,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 shrink-0 text-amber-500" />
                     <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
-                      龙鳞护体
+                      龙鳞
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
@@ -389,7 +389,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Flame className="w-4 h-4 shrink-0 text-red-500" />
                     <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
-                      龙息反击
+                      龙息
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
@@ -406,7 +406,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Heart className="w-4 h-4 shrink-0 text-amber-500" />
                     <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
-                      龙息回复
+                      再生
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
@@ -423,7 +423,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Heart className="w-4 h-4 shrink-0 text-emerald-500" />
                     <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">
-                      龙息庇护
+                      庇护
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">
@@ -440,7 +440,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 shrink-0 text-amber-500" />
                     <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
-                      入场
+                      开战
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
@@ -459,7 +459,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Sword className="w-4 h-4 shrink-0 text-red-500" />
                     <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
-                      蛮力暴击
+                      暴击
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
@@ -476,7 +476,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Coins className="w-4 h-4 shrink-0 text-emerald-500" />
                     <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">
-                      动手
+                      {card.onAttackEffect?.startsWith('steal-gold-') ? '窃金' : '动手'}
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">
@@ -493,7 +493,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <AlertTriangle className={`w-4 h-4 shrink-0 ${card.lowGoldBuffActive ? 'text-red-500' : 'text-yellow-500'}`} />
                     <span className={`font-extrabold text-sm tracking-wide ${card.lowGoldBuffActive ? 'text-red-700 dark:text-red-300' : 'text-yellow-700 dark:text-yellow-300'}`}>
-                      贪婪强化 {card.lowGoldBuffActive ? '（已激活）' : ''}
+                      窘境 {card.lowGoldBuffActive ? '（已激活）' : ''}
                     </span>
                   </div>
                   <p className={`text-sm font-semibold pl-6 ${card.lowGoldBuffActive ? 'text-red-800 dark:text-red-200' : 'text-yellow-800 dark:text-yellow-200'}`}>
@@ -504,29 +504,34 @@ export default function CardDetailsModal({
             )}
 
             {/* Monster Last Words */}
-            {card.type === 'monster' && card.lastWords && (
-              <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30 relative overflow-hidden">
-                <div className="relative flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <Skull className="w-4 h-4 shrink-0 text-red-500" />
-                    <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
-                      遗言
-                    </span>
+            {card.type === 'monster' && card.lastWords && (() => {
+              const isDiscard = card.lastWords === 'discard-hand-3' || card.lastWords === 'discard-hand-1';
+              const isWraith = card.lastWords?.startsWith('wraith-haunt');
+              const title = isDiscard ? '撕牌' : isWraith ? '缠绕' : '散音';
+              return (
+                <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30 relative overflow-hidden">
+                  <div className="relative flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <Skull className="w-4 h-4 shrink-0 text-red-500" />
+                      <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
+                        {title}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
+                      {card.lastWords === 'discard-hand-3'
+                        ? '死亡时随机弃回玩家 3 张手牌。'
+                        : card.lastWords === 'discard-hand-1'
+                          ? '死亡时随机弃回玩家 1 张手牌。'
+                          : card.lastWords === 'wraith-haunt-2'
+                            ? '死亡时同行其他怪物攻击力 +2，同行卡牌位置随机打乱。'
+                            : card.lastWords === 'wraith-haunt-4'
+                              ? '死亡时同行其他怪物攻击力 +4，同行卡牌位置随机打乱。'
+                              : '死亡时触发特殊效果。'}
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">
-                    {card.lastWords === 'discard-hand-3'
-                      ? '死亡时随机弃回玩家 3 张手牌。'
-                      : card.lastWords === 'discard-hand-1'
-                        ? '死亡时随机弃回玩家 1 张手牌。'
-                        : card.lastWords === 'wraith-haunt-2'
-                          ? '死亡时同行其他怪物攻击力 +2，同行卡牌位置随机打乱。'
-                          : card.lastWords === 'wraith-haunt-4'
-                            ? '死亡时同行其他怪物攻击力 +4，同行卡牌位置随机打乱。'
-                            : '死亡时触发特殊效果。'}
-                  </p>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Ogre Stun */}
             {card.type === 'monster' && card.ogreStun && (
@@ -534,7 +539,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 shrink-0 text-cyan-500" />
-                    <span className="font-extrabold text-sm text-cyan-700 dark:text-cyan-300 tracking-wide">蛮力击晕</span>
+                    <span className="font-extrabold text-sm text-cyan-700 dark:text-cyan-300 tracking-wide">震晕</span>
                   </div>
                   <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200 pl-6">攻击时30%概率击晕玩家，冻结装备栏和护符栏一回合。手牌仍可使用，但无法装备/卸下装备和护符。</p>
                 </div>
@@ -547,7 +552,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 shrink-0 text-violet-500" />
-                    <span className="font-extrabold text-sm text-violet-700 dark:text-violet-300 tracking-wide">狂暴连击</span>
+                    <span className="font-extrabold text-sm text-violet-700 dark:text-violet-300 tracking-wide">连击</span>
                   </div>
                   <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">攻击时70%概率再攻击一次。</p>
                 </div>
@@ -560,7 +565,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 shrink-0 text-amber-500" />
-                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">蛮力震慑</span>
+                    <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">震慑</span>
                   </div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">入场时随机弃回玩家一张手牌。</p>
                 </div>
@@ -573,7 +578,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Sword className="w-4 h-4 shrink-0 text-orange-500" />
-                    <span className="font-extrabold text-sm text-orange-700 dark:text-orange-300 tracking-wide">流血破甲</span>
+                    <span className="font-extrabold text-sm text-orange-700 dark:text-orange-300 tracking-wide">破甲</span>
                   </div>
                   <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">每失去一个血层，破坏所有耐久度大于该怪物剩余血层数的装备。</p>
                 </div>
@@ -587,7 +592,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Skull className="w-4 h-4 shrink-0 text-gray-500" />
                     <span className="font-extrabold text-sm text-gray-700 dark:text-gray-300 tracking-wide">
-                      不朽之骨 {card.skeletonNoLayerCostActive ? '（已激活）' : ''}
+                      无尽 {card.skeletonNoLayerCostActive ? '（已激活）' : ''}
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 pl-6">复生后，攻击不再消耗血层。</p>
@@ -602,7 +607,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Skull className="w-4 h-4 shrink-0 text-red-500" />
                     <span className="font-extrabold text-sm text-red-700 dark:text-red-300 tracking-wide">
-                      遗言
+                      骸弃
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-red-800 dark:text-red-200 pl-6">死亡时随机弃回玩家 1 张手牌。</p>
@@ -617,7 +622,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Skull className="w-4 h-4 shrink-0 text-violet-500" />
                     <span className="font-extrabold text-sm text-violet-700 dark:text-violet-300 tracking-wide">
-                      亡骨轮回
+                      轮回
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">同行其他怪物被击败时，若本骷髅已复生过，再次获得复生。</p>
@@ -631,7 +636,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Sword className="w-4 h-4 shrink-0 text-purple-500" />
-                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨念蓄积</span>
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">蓄积</span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">每个怪物回合结束时攻击力 +{card.wraithTurnAttack}。</p>
                 </div>
@@ -644,7 +649,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Heart className="w-4 h-4 shrink-0 text-purple-500" />
-                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨灵祝福</span>
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">祝福</span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">死亡时同行其他怪物生命值 +{card.wraithDeathHeal}。</p>
                 </div>
@@ -657,7 +662,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Sword className="w-4 h-4 shrink-0 text-purple-500" />
-                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨念光环</span>
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">光环</span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">每个怪物回合结束时，激活行所有怪物攻击力 +{card.wraithAuraAttack}（无需激怒）。</p>
                 </div>
@@ -670,7 +675,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Heart className="w-4 h-4 shrink-0 text-purple-500" />
-                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨灵遗言</span>
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">传魂</span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">死亡时同行其他怪物生命值 +{card.wraithDeathHealSpread}，并让随机一个激活行怪物获得此遗言。</p>
                 </div>
@@ -683,7 +688,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Sword className="w-4 h-4 shrink-0 text-purple-500" />
-                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">怨灵诅咒</span>
+                    <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">诅咒</span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">每个怪物回合结束时，使激活行所有怪物激怒，并随机摧毁一个护符。</p>
                 </div>
@@ -696,7 +701,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Scroll className="w-4 h-4 shrink-0 text-emerald-500" />
-                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">窃牌贼</span>
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">窃牌</span>
                   </div>
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">攻击时随机偷走一张玩家手牌，堆叠在自身下方。击杀后被偷的牌逐张成为地城牌。</p>
                 </div>
@@ -709,7 +714,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Heart className="w-4 h-4 shrink-0 text-emerald-500" />
-                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">贼窝疗养</span>
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">疗养</span>
                   </div>
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">怪物回合结束时掷一次骰子，自身下方每有1张牌成功率 +15%（最高100%），成功则恢复 1 血层。</p>
                 </div>
@@ -735,7 +740,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Coins className="w-4 h-4 shrink-0 text-emerald-500" />
-                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">贪婪强化</span>
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">贪敛</span>
                   </div>
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">每偷到 X 金币，攻击力和生命值各 +X。</p>
                 </div>
@@ -761,7 +766,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 shrink-0 text-indigo-500" />
-                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">法术抗性</span>
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">抗性</span>
                   </div>
                   <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">受到的法术伤害减少 {Math.round(card.spellDamageReduction * 100)}%。</p>
                 </div>
@@ -774,7 +779,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 shrink-0 text-indigo-500" />
-                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">岩石护体</span>
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">护体</span>
                   </div>
                   <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每次最多受到 {card.maxDamagePerHit} 点伤害。</p>
                 </div>
@@ -787,7 +792,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />
-                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">岩层反震</span>
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">反震</span>
                   </div>
                   <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每次掉1血层，对玩家造成 {card.golemLayerLossReflect}×已损失血层 点伤害。</p>
                 </div>
@@ -800,7 +805,7 @@ export default function CardDetailsModal({
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />
-                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">法力吞噬</span>
+                    <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">吞噬</span>
                   </div>
                   <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每个怪物回合结束时，反魔伤害 +{card.golemSpellGrowth}，岩层反震系数 +{card.golemSpellGrowth}。</p>
                 </div>
@@ -857,7 +862,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 shrink-0 text-orange-500" />
                     <span className="font-extrabold text-sm text-orange-700 dark:text-orange-300 tracking-wide">
-                      暴走光环 {(card.currentLayer ?? 1) === 1 ? '（已激活）' : ''}
+                      暴走 {(card.currentLayer ?? 1) === 1 ? '（已激活）' : ''}
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">
@@ -874,7 +879,7 @@ export default function CardDetailsModal({
                   <div className="flex items-center gap-2">
                     <Skull className="w-4 h-4 shrink-0 text-purple-500" />
                     <span className="font-extrabold text-sm text-purple-700 dark:text-purple-300 tracking-wide">
-                      亡灵召唤
+                      召唤
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">
@@ -913,32 +918,32 @@ export default function CardDetailsModal({
               if (mType === 'Goblin') {
                 if (card.onAttackEffect?.startsWith('steal-gold-')) {
                   const amt = card.onAttackEffect.replace('steal-gold-', '');
-                  effects.push({ title: '动手偷钱', desc: `攻击时为 Hero 偷取 ${amt} 金币。`, color: 'emerald' });
+                  effects.push({ title: '窃金', desc: `攻击时为 Hero 偷取 ${amt} 金币。`, color: 'emerald' });
                 }
                 if (card.goblinStealCard) {
-                  effects.push({ title: '窃牌贼', desc: '攻击时随机偷走一张玩家手牌，堆叠在自身下方。', color: 'emerald' });
+                  effects.push({ title: '窃牌', desc: '攻击时随机偷走一张玩家手牌，堆叠在自身下方。', color: 'emerald' });
                 }
                 if (card.goblinStackHeal) {
-                  effects.push({ title: '哥布林劝降', desc: '攻击怪物时自动发动免费劝降，成功则怪物加入背包。', color: 'emerald' });
+                  effects.push({ title: '疗养', desc: '攻击怪物时自动发动免费劝降，成功则怪物加入背包。', color: 'emerald' });
                 }
                 if (card.eliteLowGoldPower) {
-                  effects.push({ title: '贪婪强化', desc: '当玩家金币 ≥ 30 时，该装备攻击力和护盾值翻倍。', color: 'amber' });
+                  effects.push({ title: '窘境', desc: '当玩家金币 ≥ 30 时，该装备攻击力和护盾值翻倍。', color: 'amber' });
                 }
                 if (card.goblinStealEquip) {
-                  effects.push({ title: '精英劝降', desc: '若所在装备栏为多装备且下层有装备，劝降概率 +30%。', color: 'red' });
+                  effects.push({ title: '窃宝', desc: '若所在装备栏为多装备且下层有装备，劝降概率 +30%。', color: 'red' });
                 }
                 if (card.goblinStealScale) {
-                  effects.push({ title: '贼窝疗养', desc: '若所在装备栏为多装备且下层有装备，玩家回合结束时 30% 概率恢复 1 耐久。', color: 'emerald' });
+                  effects.push({ title: '贪敛', desc: '若所在装备栏为多装备且下层有装备，玩家回合结束时 30% 概率恢复 1 耐久。', color: 'emerald' });
                 }
               } else if (mType === 'Ogre') {
                 if (card.enterEffect === 'auto-engage') {
-                  effects.push({ title: '入场激怒', desc: '装备时，战斗行的所有怪物进入激怒状态。', color: 'amber' });
+                  effects.push({ title: '开战', desc: '装备时，战斗行的所有怪物进入激怒状态。', color: 'amber' });
                 }
                 if (card.ogreEnterDiscard) {
-                  effects.push({ title: '蛮力震慑', desc: '装备时，从背包抽一张牌。', color: 'cyan' });
+                  effects.push({ title: '震慑', desc: '装备时，从背包抽一张牌。', color: 'cyan' });
                 }
                 if (card.monsterSpecial === 'ogre-crit') {
-                  effects.push({ title: '蛮力暴击', desc: '装备攻击时伤害始终翻倍。', color: 'red' });
+                  effects.push({ title: '暴击', desc: '装备攻击时伤害始终翻倍。', color: 'red' });
                 }
                 if (card.eliteDoubleAttack) {
                   effects.push({ title: '连击', desc: '攻击后 50% 概率可以再攻击一次。', color: 'violet' });
@@ -952,69 +957,69 @@ export default function CardDetailsModal({
                   });
                 }
                 if (card.skeletonLastWordsDiscard) {
-                  effects.push({ title: '遗言', desc: '装备被毁坏时，抽 1 张牌。', color: 'amber' });
+                  effects.push({ title: '骸弃', desc: '装备被毁坏时，抽 1 张牌。', color: 'amber' });
                 }
                 if (card.skeletonReRevive) {
-                  effects.push({ title: '亡骨轮回', desc: '当另一个装备栏的装备被毁坏时，若本装备没有「复生」，获得「复生」。', color: 'emerald' });
+                  effects.push({ title: '轮回', desc: '当另一个装备栏的装备被毁坏时，若本装备没有「复生」，获得「复生」。', color: 'emerald' });
                 }
                 if (card.monsterSpecial === 'bone-regen') {
-                  effects.push({ title: '虚骨再生', desc: '每次失去耐久，40% 概率恢复 1 耐久。', color: 'emerald' });
+                  effects.push({ title: '骸生', desc: '每次失去耐久，40% 概率恢复 1 耐久。', color: 'emerald' });
                 }
               } else if (mType === 'Wraith') {
                 if (card.lastWords?.startsWith('wraith-haunt')) {
                   const hauntAmt = card.lastWords.replace('wraith-haunt-', '');
-                  effects.push({ title: '遗言', desc: `另一个装备栏获得 +${hauntAmt} 临时攻击力，50% 概率左右装备互换。`, color: 'purple' });
+                  effects.push({ title: '缠绕', desc: `另一个装备栏获得 +${hauntAmt} 临时攻击力，50% 概率左右装备互换。`, color: 'purple' });
                 }
                 if (card.monsterSpecial === 'wraith-rebirth') {
                   effects.push({
-                    title: card.wraithRebirthUsed ? '幽魂重生（已触发）' : '幽魂重生',
+                    title: card.wraithRebirthUsed ? '重生（已触发）' : '重生',
                     desc: '耐久第一次降到 1 时，50% 概率耐久回满。',
                     color: card.wraithRebirthUsed ? 'gray' : 'purple',
                   });
                 }
                 if (card.wraithDeathHealSpread) {
-                  effects.push({ title: '怨灵传承', desc: '遗言：另一装备耐久 +1，并获得遗言「怨灵祝福：另一装备耐久 +1」。', color: 'purple' });
+                  effects.push({ title: '传魂', desc: '遗言：另一装备耐久 +1，并获得遗言「祝福：另一装备耐久 +1」。', color: 'purple' });
                 } else if (card.wraithDeathHeal) {
-                  effects.push({ title: '怨灵祝福', desc: '遗言：另一个装备栏的装备耐久 +1。', color: 'purple' });
+                  effects.push({ title: '祝福', desc: '遗言：另一个装备栏的装备耐久 +1。', color: 'purple' });
                 }
                 if (card.wraithTurnEnrage) {
-                  effects.push({ title: '怨灵诅咒', desc: '每次瀑流时，使激活行所有怪物激怒，护符栏上限 +1。', color: 'purple' });
+                  effects.push({ title: '诅咒', desc: '每次瀑流时，使激活行所有怪物激怒，护符栏上限 +1。', color: 'purple' });
                 }
               } else if (mType === 'Swarm') {
                 if (card.swarmCorrode) {
-                  effects.push({ title: '虫蚀', desc: '攻击时，立刻让攻击目标 -1 血层。', color: 'emerald' });
+                  effects.push({ title: '腐蚀', desc: '攻击时，立刻让攻击目标 -1 血层。', color: 'emerald' });
                 }
                 if (card.swarmBugletShield) {
-                  effects.push({ title: '虫盾共生', desc: '若另一装备栏的装备是小虫子，格挡时不掉耐久。', color: 'emerald' });
+                  effects.push({ title: '虫盾', desc: '若另一装备栏的装备是小虫子，格挡时不掉耐久。', color: 'emerald' });
                 }
                 if (card.monsterSpecial === 'swarm-elite') {
-                  effects.push({ title: '虫母孵化', desc: '每次掉耐久时，将另一装备栏的装备替换为小虫子。', color: 'red' });
+                  effects.push({ title: '虫母', desc: '每次掉耐久时，将另一装备栏的装备替换为小虫子。', color: 'red' });
                 }
               } else if (mType === 'Dragon') {
                 if (card.bleedEffect) {
-                  effects.push({ title: '流血', desc: '每失去 1 耐久，攻击力 +3。', color: 'orange' });
+                  effects.push({ title: '狂怒', desc: '每失去 1 耐久，攻击力 +3。', color: 'orange' });
                 }
                 if (card.eliteRegenHeroTurn) {
-                  effects.push({ title: '龙息回复', desc: '若怪物回合内 Hero 未掉血，50% 概率为另一装备栏的装备恢复 1 耐久。', color: 'amber' });
+                  effects.push({ title: '再生', desc: '若怪物回合内 Hero 未掉血，50% 概率为另一装备栏的装备恢复 1 耐久。', color: 'amber' });
                 }
                 if (card.eliteHealOtherMonster) {
-                  effects.push({ title: '龙息庇护', desc: 'Hero 回合未掉血层时，为激活行另一个怪物恢复 1 血层。', color: 'emerald' });
+                  effects.push({ title: '庇护', desc: 'Hero 回合未掉血层时，为激活行另一个怪物恢复 1 血层。', color: 'emerald' });
                 }
                 if (card.dragonDamageRetaliation) {
-                  effects.push({ title: '龙息反击', desc: '每格挡一次，对随机怪物造成 2 点伤害。', color: 'red' });
+                  effects.push({ title: '龙息', desc: '每格挡一次，对随机怪物造成 2 点伤害。', color: 'red' });
                 }
                 if (card.dragonBleedDestroy) {
-                  effects.push({ title: '流血破甲', desc: '每失去 1 耐久，破坏所有耐久度 > 该装备剩余耐久的装备（包括自己的）。', color: 'orange' });
+                  effects.push({ title: '破甲', desc: '每失去 1 耐久，破坏所有耐久度 > 该装备剩余耐久的装备（包括自己的）。', color: 'orange' });
                 }
               } else if (mType === 'Golem') {
                 if (card.golemLayerLossReflect && card.golemLayerLossReflect > 0) {
-                  effects.push({ title: '岩层反震', desc: `每次掉 1 耐久，对随机怪物造成 ${card.golemLayerLossReflect}×已损失耐久 的伤害。`, color: 'amber' });
+                  effects.push({ title: '反震', desc: `每次掉 1 耐久，对随机怪物造成 ${card.golemLayerLossReflect}×已损失耐久 的伤害。`, color: 'amber' });
                 }
                 if (card.golemSpellGrowth && card.golemSpellGrowth > 0) {
-                  effects.push({ title: '法力吞噬', desc: `每次瀑流时，岩层反震伤害系数 +${card.golemSpellGrowth}。`, color: 'amber' });
+                  effects.push({ title: '吞噬', desc: `每次瀑流时，反震伤害系数 +${card.golemSpellGrowth}。`, color: 'amber' });
                 }
                 if (card.maxDamagePerHit != null) {
-                  effects.push({ title: '岩石护体', desc: `作为护盾时，每次格挡最多只掉 ${card.maxDamagePerHit} 护甲。`, color: 'cyan' });
+                  effects.push({ title: '护体', desc: `作为护盾时，每次格挡最多只掉 ${card.maxDamagePerHit} 护甲。`, color: 'cyan' });
                 }
               }
 
@@ -1046,37 +1051,39 @@ export default function CardDetailsModal({
               };
 
               const effectIconMap: Record<string, typeof Sword> = {
-                '动手偷钱': Coins,
-                '窃牌贼': Scroll,
-                '哥布林劝降': Heart,
-                '贪婪强化': AlertTriangle,
-                '精英劝降': AlertTriangle,
-                '贼窝疗养': Coins,
-                '入场激怒': Zap,
-                '蛮力震慑': Zap,
-                '蛮力暴击': Sword,
+                '窃金': Coins,
+                '窃牌': Scroll,
+                '疗养': Heart,
+                '窘境': AlertTriangle,
+                '窃宝': AlertTriangle,
+                '贪敛': Coins,
+                '开战': Zap,
+                '震慑': Zap,
+                '暴击': Sword,
                 '连击': Zap,
                 '复生': Heart,
                 '复生（已触发）': Heart,
                 '遗言': Skull,
-                '亡骨轮回': Skull,
-                '虚骨再生': Sparkles,
-                '幽魂重生': Sparkles,
-                '幽魂重生（已触发）': Sparkles,
-                '怨灵传承': Heart,
-                '怨灵祝福': Heart,
-                '怨灵诅咒': Sword,
-                '虫蚀': Sword,
-                '虫盾共生': Shield,
-                '虫母孵化': Sparkles,
-                '流血': Sword,
-                '龙息回复': Heart,
-                '龙息庇护': Heart,
-                '龙息反击': Flame,
-                '流血破甲': Sword,
-                '岩层反震': Sparkles,
-                '法力吞噬': Sparkles,
-                '岩石护体': Shield,
+                '骸弃': Skull,
+                '轮回': Skull,
+                '骸生': Sparkles,
+                '重生': Sparkles,
+                '重生（已触发）': Sparkles,
+                '缠绕': Skull,
+                '传魂': Heart,
+                '祝福': Heart,
+                '诅咒': Sword,
+                '腐蚀': Sword,
+                '虫盾': Shield,
+                '虫母': Sparkles,
+                '狂怒': Sword,
+                '再生': Heart,
+                '庇护': Heart,
+                '龙息': Flame,
+                '破甲': Sword,
+                '反震': Sparkles,
+                '吞噬': Sparkles,
+                '护体': Shield,
               };
 
               return (

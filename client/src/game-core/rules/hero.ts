@@ -35,7 +35,7 @@ import {
   markSkillUsedPure,
 } from '../hero';
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
-import { computeEquipmentBreakEffects, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
+import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
 import { computeAmuletEffects, getEquipmentInSlot, getSlotBonus } from '../equipment';
@@ -650,68 +650,107 @@ function reduceActivateHeroMagic(
     }
 
     case 'monster-doom': {
-      type SlotEntry = { id: EquipmentSlotId; item: GameCardData };
-      const slotsToDestroy: SlotEntry[] = [];
+      // 灭世裁决: act on **every stacked equipment piece** (main + each
+      // reserve item) in equipmentSlot1 / equipmentSlot2. Each piece:
+      //   - revive check independently. Revived stays in original stack
+      //     position at 1 durability.
+      //   - non-revived fires last-words, then routes to graveyard / recycle.
+      // Monster debuff scales with **destroyedCount** (revived doesn't count
+      // toward the debuff — preserves original 灭世裁决 semantic).
+      // Same stacked-equipment treatment as 弃装重铸 (knight:discard-rebuild).
+      type StackPiece = { item: GameCardData; slotId: EquipmentSlotId; isMain: boolean };
+      // Collect per-slot stacks. `stack` is top-to-bottom (visual order):
+      //   index 0 = main, index 1 = reserve[len-1] (top of reserve), ...
+      const slotStacks: { slotId: EquipmentSlotId; stack: StackPiece[] }[] = [];
       for (const sid of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
-        const item = sid === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
-        if (item) slotsToDestroy.push({ id: sid, item });
+        const main = sid === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+        if (!main) continue;
+        const reserve = (sid === 'equipmentSlot1'
+          ? state.equipmentSlot1Reserve
+          : state.equipmentSlot2Reserve) as EquipmentItem[];
+        const stack: StackPiece[] = [{ item: main, slotId: sid, isMain: true }];
+        for (let i = reserve.length - 1; i >= 0; i--) {
+          stack.push({ item: reserve[i] as GameCardData, slotId: sid, isMain: false });
+        }
+        slotStacks.push({ slotId: sid, stack });
       }
 
       let destroyedCount = 0;
       const destroyedCards: GameCardData[] = [];
-      const survivedSlots: Record<EquipmentSlotId, EquipmentItem | null> = {
-        equipmentSlot1: null,
-        equipmentSlot2: null,
-      };
 
       const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
 
-      for (const { id: sid, item } of slotsToDestroy) {
-        const isMonsterEquip = item.type === 'monster';
-        const nativeRevive = isMonsterEquip && item.hasRevive && !item.reviveUsed;
-        const equipRevive = item.hasEquipmentRevive && !item.equipmentReviveUsed;
+      for (const { slotId: sid, stack } of slotStacks) {
+        const survivorsTopDown: GameCardData[] = [];
 
-        if (nativeRevive || equipRevive) {
-          const revived = nativeRevive
-            ? { ...item, durability: 1, reviveUsed: true }
-            : { ...item, durability: 1, equipmentReviveUsed: true };
-          survivedSlots[sid] = revived as EquipmentItem;
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `${item.name} 复生！以 1 耐久复活！` },
-          });
-        } else {
-          const breakResult = computeEquipmentBreakEffects(state, sid, item, amuletEffects);
-          sideEffects.push(...breakResult.sideEffects);
-          Object.assign(patch, breakResult.patch);
-          patch.rng = breakResult.rng;
-          if (breakResult.drawFromBackpack > 0) {
-            enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: breakResult.drawFromBackpack });
-          }
-          if (breakResult.classCardDraw > 0) {
+        for (const { item } of stack) {
+          const isMonsterEquip = item.type === 'monster';
+          const nativeRevive = isMonsterEquip && item.hasRevive && !item.reviveUsed;
+          const equipRevive = item.hasEquipmentRevive && !item.equipmentReviveUsed;
+
+          if (nativeRevive || equipRevive) {
+            const revived = nativeRevive
+              ? { ...item, durability: 1, reviveUsed: true }
+              : { ...item, durability: 1, equipmentReviveUsed: true };
+            survivorsTopDown.push(revived);
             sideEffects.push({
-              event: 'equipment:classCardDraw',
-              payload: { count: breakResult.classCardDraw, source: item.name },
+              event: 'log:entry',
+              payload: { type: 'equip', message: `${item.name} 复生！以 1 耐久复活！` },
             });
-          }
-          // Perm-flagged equipment routes to the recycle bag, not the graveyard.
-          // Mirrors DISPOSE_EQUIPMENT_CARD's routing decision so 永恒铭刻 装备
-          // 被怪物末日摧毁后仍能回到回收袋。
-          if (shouldRouteEquipmentToPermRecycle(item)) {
-            enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: item });
           } else {
-            enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+            // Trigger last-words without slot mutation (we own the slot
+            // reconstruction below). Pass current `patch` so accumulated
+            // mutations compose correctly across multiple destroyed pieces.
+            const lwResult = computeEquipmentDisplacementLastWords(
+              state,
+              sid,
+              item,
+              amuletEffects,
+              { ...patch, rng: patch.rng ?? state.rng },
+            );
+            sideEffects.push(...lwResult.sideEffects);
+            Object.assign(patch, lwResult.patch);
+            patch.rng = lwResult.rng;
+            if (lwResult.drawFromBackpack > 0) {
+              enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: lwResult.drawFromBackpack });
+            }
+            if (lwResult.classCardDraw > 0) {
+              sideEffects.push({
+                event: 'equipment:classCardDraw',
+                payload: { count: lwResult.classCardDraw, source: item.name },
+              });
+            }
+            // Perm-flagged equipment routes to the recycle bag, not the
+            // graveyard. Mirrors DISPOSE_EQUIPMENT_CARD's routing decision so
+            // 永恒铭刻 装备 被灭世裁决摧毁后仍能回到回收袋。
+            if (shouldRouteEquipmentToPermRecycle(item)) {
+              enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: item });
+            } else {
+              enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+            }
+            destroyedCount++;
+            destroyedCards.push(item);
           }
-          destroyedCount++;
-          destroyedCards.push(item);
+        }
+
+        // Rebuild slot from survivors. Compact top-down to preserve the UI
+        // invariant: reserve.length > 0 ⇒ main != null. Top survivor → main,
+        // rest → reserve in storage order (reserve[len-1] = next-to-promote =
+        // 2nd survivor from top).
+        const reserveKey: 'equipmentSlot1Reserve' | 'equipmentSlot2Reserve' =
+          sid === 'equipmentSlot1' ? 'equipmentSlot1Reserve' : 'equipmentSlot2Reserve';
+        if (survivorsTopDown.length === 0) {
+          patch[sid] = null as unknown as EquipmentItem;
+          patch[reserveKey] = [] as EquipmentItem[];
+        } else {
+          patch[sid] = survivorsTopDown[0] as EquipmentItem;
+          patch[reserveKey] = survivorsTopDown.slice(1).reverse() as EquipmentItem[];
         }
       }
 
-      patch.equipmentSlot1 = survivedSlots.equipmentSlot1;
-      patch.equipmentSlot2 = survivedSlots.equipmentSlot2;
-
       // 招灵书印：灭世裁决摧毁装备 = 强制销毁。装备销毁不影响护符栏 →
-      // surviving = state.amuletSlots。复生的装备不算 destroyed。
+      // surviving = state.amuletSlots。复生的装备不算 destroyed（招灵书印只在真正
+      // 销毁时触发；跟下面的怪物 debuff 计数语义一致——也是只看真正摧毁数）。
       maybeTriggerDeleteDrawForDestroy({
         destroyedCards,
         survivingAmuletSlots: state.amuletSlots as GameCardData[],

@@ -22,8 +22,16 @@ import wraithImage from '@assets/generated_images/cute_chibi_wraith_monster.png'
 import swarmImage from '@assets/generated_images/cute_chibi_swarm_monster.png';
 import golemImage from '@assets/generated_images/cute_chibi_golem_monster.png';
 import bugletImage from '@assets/generated_images/cute_chibi_buglet_token.png';
+import eliteDragonImage from '@assets/generated_images/elite_dragon_monster.png';
+import eliteSkeletonImage from '@assets/generated_images/elite_skeleton_monster.png';
+import eliteGoblinImage from '@assets/generated_images/elite_goblin_monster.png';
+import eliteOgreImage from '@assets/generated_images/elite_ogre_monster.png';
+import eliteWraithImage from '@assets/generated_images/elite_wraith_monster.png';
+import eliteSwarmImage from '@assets/generated_images/elite_swarm_monster.png';
+import eliteGolemImage from '@assets/generated_images/elite_golem_monster.png';
 export { default as minionImage } from '@assets/generated_images/chibi_minion_follower.png';
 export { bugletImage };
+export { eliteDragonImage, eliteSkeletonImage, eliteGoblinImage, eliteOgreImage, eliteWraithImage, eliteSwarmImage, eliteGolemImage };
 
 // Re-export images that are also used inline in GameBoard component body
 export { goblinImage, forgeHeartAmuletImage };
@@ -352,6 +360,7 @@ export function createDeck(
       { 
         name: 'Dragon',
         image: dragonImage,
+        eliteImage: eliteDragonImage,
         minAttack: 4, maxAttack: 6,
         minHp: 6, maxHp: 7,
         minFury: 3, maxFury: 4,
@@ -359,7 +368,8 @@ export function createDeck(
       },
       { 
         name: 'Skeleton', 
-        image: skeletonImage, 
+        image: skeletonImage,
+        eliteImage: eliteSkeletonImage,
         minAttack: 5, maxAttack: 7,
         minHp: 1, maxHp: 3,
         minFury: 2, maxFury: 4,
@@ -367,7 +377,8 @@ export function createDeck(
       },
       { 
         name: 'Goblin', 
-        image: goblinImage, 
+        image: goblinImage,
+        eliteImage: eliteGoblinImage,
         minAttack: 2, maxAttack: 3,
         minHp: 3, maxHp: 4,
         minFury: 1, maxFury: 4,
@@ -376,6 +387,7 @@ export function createDeck(
       { 
         name: 'Ogre',
         image: ogreImage,
+        eliteImage: eliteOgreImage,
         minAttack: 4, maxAttack: 5,
         minHp: 4, maxHp: 5,
         minFury: 2, maxFury: 4,
@@ -384,6 +396,7 @@ export function createDeck(
       { 
         name: 'Wraith',
         image: wraithImage,
+        eliteImage: eliteWraithImage,
         minAttack: 3, maxAttack: 5,
         minHp: 3, maxHp: 4,
         minFury: 2, maxFury: 3,
@@ -396,6 +409,7 @@ export function createDeck(
       {
         name: 'Swarm',
         image: swarmImage,
+        eliteImage: eliteSwarmImage,
         minAttack: 3, maxAttack: 4,
         minHp: 6, maxHp: 9,
         minFury: 2, maxFury: 2,
@@ -404,6 +418,7 @@ export function createDeck(
       {
         name: 'Golem',
         image: golemImage,
+        eliteImage: eliteGolemImage,
         minAttack: 3, maxAttack: 5,
         minHp: 5, maxHp: 7,
         minFury: 2, maxFury: 3,
@@ -501,6 +516,16 @@ export function createDeck(
       }
     }
 
+    const eliteImageMap: Record<string, string> = {
+      Dragon: eliteDragonImage,
+      Skeleton: eliteSkeletonImage,
+      Goblin: eliteGoblinImage,
+      Ogre: eliteOgreImage,
+      Wraith: eliteWraithImage,
+      Swarm: eliteSwarmImage,
+      Golem: eliteGolemImage,
+    };
+
     for (const [type, monsters] of Object.entries(monstersByType)) {
       if (isQuick && !eliteTypes.includes(type)) continue;
       const spec = specialMap[type];
@@ -509,6 +534,9 @@ export function createDeck(
       chosen.monsterSpecial = spec.tag;
       chosen.monsterSpecialDesc = spec.desc;
       chosen.description = spec.desc;
+      if (eliteImageMap[type]) {
+        chosen.image = eliteImageMap[type];
+      }
       if (spec.lastWords) {
         chosen.lastWords = spec.lastWords;
       }
@@ -916,8 +944,8 @@ export function createDeck(
       name: '弧能之符',
       value: 5,
       image: arcSealAmuletImage,
-      description: '每翻转一张牌，对激活行随机怪物造成 1 点法术伤害。多张可叠加。',
-      shortDescription: '每翻转 1 张牌：随机怪物 1 法伤',
+      description: '每翻转一张牌，对激活行随机怪物造成 3 点法术伤害。多张可叠加。',
+      shortDescription: '每翻转 1 张牌：随机怪物 3 法伤',
       amuletEffect: 'flip-zap',
     },
   ];

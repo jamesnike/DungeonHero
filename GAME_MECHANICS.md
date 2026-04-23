@@ -375,7 +375,7 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 | Strength Amulet | `strength` | 临时攻击+4，每次攻击自损2HP |
 | Graveyard Amulet | `persuade-graveyard-stack` | 劝降成功时，在原怪物格堆叠 2 张墓地随机牌 |
 | 雷击护符 | `stun-rate-boost` | 光环：所有击晕率 +20%（仍受击晕上限约束） |
-| 弧能之符 | `flip-zap` | 每翻转一张牌，对激活行随机怪物造成 1 点法术伤害（`max(0, 1 + permanentSpellDamageBonus)`）；多张可叠加，每张独立结算 |
+| 弧能之符 | `flip-zap` | 每翻转一张牌，对激活行随机怪物造成 3 点法术伤害（`max(0, 3 + permanentSpellDamageBonus)`）；多张可叠加，每张独立结算 |
 
 ### 6.6 骑士职业护符
 
@@ -825,7 +825,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 名称 | `potionEffect` | 效果 |
 |------|----------------|------|
-| 奥术灌注 | `dice-arcane-infusion` | D20：槽位伤害/护甲翻倍 或 法术伤害翻倍 |
+| 奥术灌注 | `dice-arcane-infusion` | D20 1-7：左装备栏永久攻击+永久护甲翻倍；8-14：右装备栏永久攻击+永久护甲翻倍；15-20：永久法术伤害+超杀吸血翻倍 |
 | 无尽背袋灵药 | `dice-backpack-expand` | 选择：护符+1 / 装备容量+1 / 背包+3 |
 
 ---
@@ -920,13 +920,13 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 |------|------|
 | 双守护圣盾 | 完美格挡时永久+1护甲到该槽位 |
 | 雷霆符印 | 弃牌时对随机怪物造成伤害（`max(0, 1 + permanentSpellDamageBonus)`） |
-| 弧能之符 | 每次卡牌翻转（`APPLY_CARD_FLIP`，含 stay/backpack/hand/graveyard 各路由）对激活行随机怪物造成法术伤害（`max(0, 1 + permanentSpellDamageBonus)`）；多张独立触发 |
+| 弧能之符 | 每次卡牌翻转（`APPLY_CARD_FLIP`，含 stay/backpack/hand/graveyard 各路由）对激活行随机怪物造成法术伤害（`max(0, 3 + permanentSpellDamageBonus)`）；多张独立触发 |
 
 ### 13.4 药水
 
 | 名称 | 效果 |
 |------|------|
-| 奥术灌注 | D20掷骰增强 |
+| 奥术灌注 | D20掷骰：左/右装备栏永久攻防 或 永久法术伤害+超杀吸血 翻倍 |
 | 无尽背袋灵药 | 选择扩容效果 |
 
 ### 13.5 英雄魔法牌
@@ -1091,7 +1091,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
    - `hand`：放入手牌
    - 默认/`graveyard`：进坟场
 3. 如果有"熔炉之心"护符 (`hasFlipGold`)：获得 `FLIP_GOLD_REWARD(4)` 金币
-4. 如果有"弧能之符"护符 (`flipZapCount > 0`)：每张独立向激活行随机怪物释放一次法术伤害（`max(0, 1 + permanentSpellDamageBonus)`），通过 `card:flipShock` 事件由 UI 管线分别动画化结算
+4. 如果有"弧能之符"护符 (`flipZapCount > 0`)：每张独立向激活行随机怪物释放一次法术伤害（`max(0, 3 + permanentSpellDamageBonus)`），通过 `card:flipShock` 事件由 UI 管线分别动画化结算
 
 ### 18.2 翻转回退 (`_flipBackCard`)
 
@@ -1186,7 +1186,7 @@ resolver:                       hero.ts reducer:
 | D20 50%阈值 | 1–10 vs 11–20 | 通用 |
 | 坟火新星基础伤害 | 3 / 6（升级后） | GameBoard.tsx |
 | 雷霆符印伤害 | `max(0, 1 + permanentSpellDamageBonus)` | GameBoard.tsx |
-| 弧能之符伤害 | `max(0, 1 + permanentSpellDamageBonus)`（每张独立结算） | GameBoard.tsx |
+| 弧能之符伤害 | `max(0, 3 + permanentSpellDamageBonus)`（每张独立结算） | GameBoard.tsx |
 | 荣誉之血弃置伤害 | `getSpellDamage(1)` | GameBoard.tsx |
 | Boss反击伤害 | 3 | GameBoard.tsx |
 | Boss末日光环攻击加成 | +5 | GameBoard.tsx |

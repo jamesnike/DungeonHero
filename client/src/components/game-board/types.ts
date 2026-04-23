@@ -765,6 +765,12 @@ export type PendingPotionAction =
     }
   | {
       card: GameCardData;
+      effect: 'swap-slot-damage-shield';
+      step: 'slot-select';
+      prompt: string;
+    }
+  | {
+      card: GameCardData;
       effect: 'grant-lastwords-slot-temp-buff';
       step: 'slot-select';
       prompt: string;

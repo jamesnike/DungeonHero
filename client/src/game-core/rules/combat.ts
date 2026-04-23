@@ -625,7 +625,7 @@ function reduceDealDamageToMonster(
     enqueuedActions.push({
       type: 'TRIGGER_MONSTER_SKILL_FLOAT',
       monsterId: action.monsterId,
-      skillKey: 'attack:bossRetaliation',
+      skillKey: 'reflect:bossRetaliation',
     });
     enqueuedActions.push({
       type: 'APPLY_DAMAGE',
@@ -643,7 +643,7 @@ function reduceDealDamageToMonster(
     enqueuedActions.push({
       type: 'TRIGGER_MONSTER_SKILL_FLOAT',
       monsterId: action.monsterId,
-      skillKey: 'attack:dragonBreath',
+      skillKey: 'reflect:dragonBreath',
     });
     enqueuedActions.push({
       type: 'APPLY_DRAGON_BREATH_RETALIATION',

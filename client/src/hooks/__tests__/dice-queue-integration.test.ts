@@ -162,7 +162,7 @@ describe('dice modal vs awaitingSkillFloat HARD_PAUSE (regression)', () => {
     engine.dispatch({
       type: 'TRIGGER_MONSTER_SKILL_FLOAT',
       monsterId: 'm1',
-      skillKey: 'attack:bossRetaliation',
+      skillKey: 'reflect:bossRetaliation',
     } as GameAction);
     expect(engine.getState().phase).toBe('awaitingSkillFloat');
 

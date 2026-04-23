@@ -37,20 +37,17 @@ export type MonsterSkillKey =
   | 'death:revive'
   // 流血时附带
   | 'bleed:gainAttack'
-  | 'bleed:swarmCorrode'
   // 攻击时附带
   | 'attack:goblinSteal'
   | 'attack:goblinStealCard'
   | 'attack:swarmCorrode'
   | 'attack:ogreStun'
   | 'attack:eliteDoubleAttack'
-  | 'attack:bossRetaliation'
-  | 'attack:dragonBreath'
-  | 'attack:critChain'
-  // 反制玩家
+  // 反击 / 受击反应
   | 'reflect:antiMagic'
-  | 'reflect:golemReflect'
   | 'reflect:dragonBleedDestroy'
+  | 'reflect:dragonBreath'
+  | 'reflect:bossRetaliation'
   // 怪物回合结束
   | 'turnEnd:wraithAura'
   | 'turnEnd:wraithTurnEnrage'
@@ -89,89 +86,83 @@ export function getMonsterSkillEntry(key: MonsterSkillKey): MonsterSkillEntry {
   switch (key) {
     // 入场
     case 'enter:auto-engage':
-      return { name: '入场·全军激怒', kind: 'enter' };
+      return { name: '入场·开战', kind: 'enter' };
     case 'enter:ogreEnterDiscard':
-      return { name: '入场·蛮力震慑', kind: 'enter' };
+      return { name: '入场·震慑', kind: 'enter' };
 
     // 死亡 / 遗言 / 复活
     case 'death:lastWords:discardHand':
-      return { name: '亡语·撕碎手牌', kind: 'death' };
+      return { name: '亡语·撕牌', kind: 'death' };
     case 'death:lastWords:wraithHaunt':
-      return { name: '亡语·怨灵缠绕', kind: 'death' };
+      return { name: '亡语·缠绕', kind: 'death' };
     case 'death:lastWords:skeleton':
-      return { name: '亡语·骸骨弃手', kind: 'death' };
+      return { name: '亡语·骸弃', kind: 'death' };
     case 'death:lastWords:generic':
-      return { name: '亡语', kind: 'death' };
+      return { name: '亡语·散音', kind: 'death' };
     case 'death:revive':
-      return { name: '不朽·复活', kind: 'death' };
+      return { name: '不朽·复生', kind: 'death' };
 
     // 流血时附带
     case 'bleed:gainAttack':
-      return { name: '负伤狂怒·攻击+', kind: 'bleed' };
-    case 'bleed:swarmCorrode':
-      return { name: '虫群腐蚀·受击附带', kind: 'bleed' };
+      return { name: '流血·狂怒', kind: 'bleed' };
 
     // 攻击时附带
     case 'attack:goblinSteal':
-      return { name: '攻击·窃宝', kind: 'attack' };
+      return { name: '攻击·窃金', kind: 'attack' };
     case 'attack:goblinStealCard':
-      return { name: '攻击·夺牌', kind: 'attack' };
+      return { name: '攻击·窃牌', kind: 'attack' };
     case 'attack:swarmCorrode':
       return { name: '攻击·腐蚀', kind: 'attack' };
     case 'attack:ogreStun':
       return { name: '攻击·震晕', kind: 'attack' };
     case 'attack:eliteDoubleAttack':
-      return { name: '攻击·双连击', kind: 'attack' };
-    case 'attack:bossRetaliation':
-      return { name: 'BOSS·反伤', kind: 'attack' };
-    case 'attack:dragonBreath':
-      return { name: '龙息', kind: 'attack' };
-    case 'attack:critChain':
-      return { name: '攻击·暴击链', kind: 'attack' };
+      return { name: '攻击·连击', kind: 'attack' };
 
-    // 反制玩家
+    // 反击 / 受击反应
     case 'reflect:antiMagic':
-      return { name: '金身·反魔', kind: 'reflect' };
-    case 'reflect:golemReflect':
-      return { name: '傀儡·法术反射', kind: 'reflect' };
+      return { name: '反击·反魔', kind: 'reflect' };
     case 'reflect:dragonBleedDestroy':
-      return { name: '龙血摧毁', kind: 'reflect' };
+      return { name: '反击·破甲', kind: 'reflect' };
+    case 'reflect:dragonBreath':
+      return { name: '反击·龙息', kind: 'reflect' };
+    case 'reflect:bossRetaliation':
+      return { name: '反击·反噬', kind: 'reflect' };
 
-    // 怪物回合结束
+    // 怪物回合结束（成长）
     case 'turnEnd:wraithAura':
-      return { name: '幽魂光环', kind: 'turnEnd' };
-    case 'turnEnd:wraithTurnEnrage':
-      return { name: '幽魂·回合激怒', kind: 'turnEnd' };
+      return { name: '成长·光环', kind: 'turnEnd' };
     case 'turnEnd:wraithSelfAttack':
-      return { name: '幽魂·怨念蓄积', kind: 'turnEnd' };
+      return { name: '成长·蓄积', kind: 'turnEnd' };
+    case 'turnEnd:wraithTurnEnrage':
+      return { name: '成长·诅咒', kind: 'turnEnd' };
     case 'turnEnd:wraithDestroyAmulet':
-      return { name: '幽魂·摧毁护符', kind: 'turnEnd' };
+      return { name: '成长·碎符', kind: 'turnEnd' };
     case 'turnEnd:goblinStackHeal':
-      return { name: '哥布林·贼窝疗养', kind: 'turnEnd' };
+      return { name: '成长·疗养', kind: 'turnEnd' };
     case 'turnEnd:goblinStealEquip':
-      return { name: '哥布林·窃宝', kind: 'turnEnd' };
+      return { name: '成长·窃宝', kind: 'turnEnd' };
     case 'turnEnd:golemSpellGrowth':
-      return { name: '傀儡·魔法成长', kind: 'turnEnd' };
+      return { name: '成长·吞噬', kind: 'turnEnd' };
     case 'turnEnd:bossLastStandAura':
-      return { name: 'BOSS·背水光环', kind: 'turnEnd' };
+      return { name: '成长·暴走', kind: 'turnEnd' };
 
-    // 英雄回合结束
+    // 英雄回合结束（增强）
     case 'heroTurnEnd:eliteRegen':
-      return { name: '精英·再生', kind: 'heroTurnEnd' };
+      return { name: '增强·再生', kind: 'heroTurnEnd' };
     case 'heroTurnEnd:eliteHealOther':
-      return { name: '精英·治疗友军', kind: 'heroTurnEnd' };
+      return { name: '增强·庇护', kind: 'heroTurnEnd' };
 
     // 被动 / 全局
     case 'passive:swarmSpawn':
-      return { name: '虫群繁殖', kind: 'passive' };
+      return { name: '被动·繁殖', kind: 'passive' };
     case 'passive:swarmHordeRage':
-      return { name: '虫群集结', kind: 'passive' };
+      return { name: '被动·集结', kind: 'passive' };
     case 'passive:lowGoldEliteBuff':
-      return { name: '精英·窘境强化', kind: 'passive' };
+      return { name: '被动·窘境', kind: 'passive' };
 
     // 瀑布
     case 'waterfall:wraithEnrage':
-      return { name: '幽魂·瀑流激怒', kind: 'waterfall' };
+      return { name: '瀑流·激怒', kind: 'waterfall' };
 
     default:
       return assertNever(key);

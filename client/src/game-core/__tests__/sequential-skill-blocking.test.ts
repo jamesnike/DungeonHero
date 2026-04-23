@@ -107,7 +107,7 @@ describe('skill-float pipeline blocking — sequential animation order', () => {
     // one specifically pairs ONE TRIGGER with ONE downstream action.
     const state = makeState({ phase: 'playerInput', hp: 10 });
     const queue: GameAction[] = [
-      { type: 'TRIGGER_MONSTER_SKILL_FLOAT', monsterId: 'm1', skillKey: 'attack:bossRetaliation' },
+      { type: 'TRIGGER_MONSTER_SKILL_FLOAT', monsterId: 'm1', skillKey: 'reflect:bossRetaliation' },
       { type: 'HEAL', amount: 5 },
     ];
 

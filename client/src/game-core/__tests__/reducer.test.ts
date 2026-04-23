@@ -1739,7 +1739,7 @@ describe('reducer', () => {
       expect(result.state.permanentMaxHpBonus).toBe(6);
     });
 
-    it('handles swap-slot-damage-shield: swaps damage and shield', () => {
+    it('handles swap-slot-damage-shield: prompts player to choose slot (slot-select pending)', () => {
       const card = { id: 'rp8', type: 'potion' as const, name: 'SwapPot', value: 0, potionEffect: 'swap-slot-damage-shield' };
       const state = makeState({
         equipmentSlotBonuses: {
@@ -1748,10 +1748,14 @@ describe('reducer', () => {
         },
       });
       const result = reduce(state, { type: 'RESOLVE_POTION', cardId: 'rp8', card: card as any });
+      // 不再立即互换；先进入 slot-select 等待玩家选择
+      expect(result.state.pendingPotionAction).not.toBeNull();
+      expect(result.state.pendingPotionAction?.effect).toBe('swap-slot-damage-shield');
+      expect((result.state.pendingPotionAction as any)?.step).toBe('slot-select');
+      // 数值未变
       const b = result.state.equipmentSlotBonuses;
-      const s1Swapped = b.equipmentSlot1.damage === 2 && b.equipmentSlot1.shield === 5;
-      const s2Swapped = b.equipmentSlot2.damage === 7 && b.equipmentSlot2.shield === 3;
-      expect(s1Swapped || s2Swapped).toBe(true);
+      expect(b.equipmentSlot1).toEqual({ damage: 5, shield: 2 });
+      expect(b.equipmentSlot2).toEqual({ damage: 3, shield: 7 });
     });
 
     it('emits ui:requestDice for dice-arcane-infusion potion', () => {

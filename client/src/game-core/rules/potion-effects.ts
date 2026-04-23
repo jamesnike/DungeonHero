@@ -250,21 +250,17 @@ export function resolveAllPotionEffects(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  // --- Swap slot damage/shield bonuses randomly ---
+  // --- Swap slot damage/shield: 玩家选择装备栏 ---
+  // 真正的互换在 resolvePendingPotion('swap-slot-damage-shield') 完成（参考 schema executor）。
   if (effect === 'swap-slot-damage-shield') {
-    const slotIds: ('equipmentSlot1' | 'equipmentSlot2')[] = ['equipmentSlot1', 'equipmentSlot2'];
-    const [slotIdx, nextRng] = nextInt(state.rng, 0, 1);
-    const chosenSlot = slotIds[slotIdx];
-    patch.rng = nextRng;
-    const slotLabel = chosenSlot === 'equipmentSlot1' ? '左' : '右';
-    const bonuses = { ...state.equipmentSlotBonuses };
-    const curDamage = bonuses[chosenSlot].damage;
-    const curShield = bonuses[chosenSlot].shield;
-    bonuses[chosenSlot] = { damage: curShield, shield: curDamage };
-    patch.equipmentSlotBonuses = bonuses;
-    log(sideEffects, 'potion', `乾坤颠倒：${slotLabel}装备栏永久伤害(${curDamage})与护甲(${curShield})互换！`);
-    banner(sideEffects, `${slotLabel}装备栏：伤害 ${curDamage}→${curShield}，护甲 ${curShield}→${curDamage}！`);
-    enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
+    const prompt = '选择一个装备栏，永久攻击与永久护甲互换，临时攻击与临时护甲也互换。';
+    patch.pendingPotionAction = {
+      card,
+      effect: 'swap-slot-damage-shield',
+      step: 'slot-select',
+      prompt,
+    } as any;
+    patch.heroSkillBanner = prompt;
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
@@ -570,11 +566,9 @@ export function resolveAllPotionEffects(
         title: card.name,
         subtitle: '掷骰决定翻倍目标',
         entries: [
-          { id: 'ai-l-dmg', range: [1, 4], label: '左装备栏伤害翻倍', effect: 'none' },
-          { id: 'ai-l-shd', range: [5, 8], label: '左装备栏护甲翻倍', effect: 'none' },
-          { id: 'ai-r-dmg', range: [9, 12], label: '右装备栏伤害翻倍', effect: 'none' },
-          { id: 'ai-r-shd', range: [13, 16], label: '右装备栏护甲翻倍', effect: 'none' },
-          { id: 'ai-spell', range: [17, 20], label: '法术伤害加成翻倍', effect: 'none' },
+          { id: 'ai-left', range: [1, 7], label: '左装备栏永久攻击与永久护甲翻倍', effect: 'none' },
+          { id: 'ai-right', range: [8, 14], label: '右装备栏永久攻击与永久护甲翻倍', effect: 'none' },
+          { id: 'ai-spell', range: [15, 20], label: '永久法术伤害与超杀吸血翻倍', effect: 'none' },
         ],
         flowContext: { flowId: 'arcane-infusion', card },
         predeterminedRoll: aiRoll,
@@ -873,6 +867,88 @@ export function resolvePendingPotion(
       const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
       log(sideEffects, 'potion', `${slotLabel}装备栏可装备上限 +1（${currentCap} → ${currentCap + 1}）`);
       banner(sideEffects, `${slotLabel}装备栏可装备上限 +1！`);
+      enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    // --- Swap slot damage/shield (player-chosen slot, perm + temp swap) ---
+    //
+    // 拆成「先减、再加」两阶段处理：
+    //   Phase A: 把选中栏的「当前永久攻击/护甲、临时攻击/护甲」全部减到 0。
+    //            护甲方向同步走 temp-first 损耗归因（参考 waterfall.ts），
+    //            把 armorBonusDamaged 按"先吃 temp、再 clamp 到新 perm（=0）"算掉，
+    //            因此 perm.shield 减到 0 的同时 armorBonusDamaged 也归 0。
+    //   Phase B: 再加上「原永久攻击 → 新永久护甲、原临时攻击 → 新临时护甲」
+    //            （以及攻击方向的对称加法）。这一步是"全新护甲"，
+    //            没有遗留的 damaged 计数啃它。
+    //
+    // 净效果：4 个数字按字面互换，且新护甲是"满的"，不被旧 damaged 拖累。
+    case 'swap-slot-damage-shield': {
+      const slotId = (action as any).slotId as EquipmentSlotId;
+      if (!slotId) return null;
+      const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
+
+      const curPermDamage = state.equipmentSlotBonuses[slotId]?.damage ?? 0;
+      const curPermShield = state.equipmentSlotBonuses[slotId]?.shield ?? 0;
+      const curTempAttack = state.slotTempAttack?.[slotId] ?? 0;
+      const curTempArmor = state.slotTempArmor?.[slotId] ?? 0;
+
+      // Phase A：减到 0（包含 temp-first 损耗归因）
+      // 护甲方向：perm.shield -= curPermShield，temp.armor -= curTempArmor
+      // 攻击方向：perm.damage -= curPermDamage，temp.attack -= curTempAttack
+      let nextPermShield = curPermShield - curPermShield;
+      let nextPermDamage = curPermDamage - curPermDamage;
+      let nextTempArmor = curTempArmor - curTempArmor;
+      let nextTempAttack = curTempAttack - curTempAttack;
+
+      // armorBonusDamaged 是 perm.shield + temp.armor 共享伤害池的累计计数。
+      // 按 shared-damage-pool-temp-first-attribution.mdc 规则：先让 temp 吃，再 clamp 到新 perm。
+      const slotItem = state[slotId];
+      let nextSlotItem: typeof slotItem | undefined;
+      if (slotItem && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
+        const existingDamaged = slotItem.armorBonusDamaged ?? 0;
+        if (existingDamaged > 0 && curTempArmor >= 0) {
+          const afterTempAbsorb = Math.max(0, existingDamaged - curTempArmor);
+          const clampedDamaged = Math.min(afterTempAbsorb, nextPermShield); // nextPermShield === 0
+          if (clampedDamaged !== existingDamaged) {
+            if (clampedDamaged > 0) {
+              nextSlotItem = { ...slotItem, armorBonusDamaged: clampedDamaged };
+            } else {
+              const { armorBonusDamaged: _drop, ...rest } = slotItem as GameCardData & { armorBonusDamaged?: number };
+              nextSlotItem = rest as typeof slotItem;
+            }
+          }
+        }
+      }
+
+      // Phase B：加新值（永久攻击/护甲互换、临时攻击/护甲互换）
+      nextPermShield += curPermDamage; // 新护甲 = 旧攻击
+      nextPermDamage += curPermShield; // 新攻击 = 旧护甲
+      nextTempArmor += curTempAttack; // 新临时护甲 = 旧临时攻击
+      nextTempAttack += curTempArmor; // 新临时攻击 = 旧临时护甲
+
+      patch.equipmentSlotBonuses = {
+        ...state.equipmentSlotBonuses,
+        [slotId]: { damage: nextPermDamage, shield: nextPermShield },
+      };
+      patch.slotTempAttack = { ...state.slotTempAttack, [slotId]: nextTempAttack };
+      patch.slotTempArmor = { ...state.slotTempArmor, [slotId]: nextTempArmor };
+      if (nextSlotItem !== undefined) {
+        (patch as any)[slotId] = nextSlotItem;
+      }
+
+      patch.pendingPotionAction = null;
+      patch.heroSkillBanner = null;
+
+      log(
+        sideEffects,
+        'potion',
+        `乾坤颠倒：${slotLabel}装备栏永久攻击(${curPermDamage})↔永久护甲(${curPermShield})、临时攻击(${curTempAttack})↔临时护甲(${curTempArmor})！`,
+      );
+      banner(
+        sideEffects,
+        `${slotLabel}装备栏：永久攻击 ${curPermDamage}↔${curPermShield}、临时攻击 ${curTempAttack}↔${curTempArmor}！`,
+      );
       enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }

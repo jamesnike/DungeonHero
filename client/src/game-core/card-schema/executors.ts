@@ -225,18 +225,18 @@ function executeModifySlotDurabilityMax(ctx: ExecutionContext, effect: CardEffec
 }
 
 function executeSwapSlotDamageShield(ctx: ExecutionContext, _effect: CardEffect): void {
-  const slotIds: ('equipmentSlot1' | 'equipmentSlot2')[] = ['equipmentSlot1', 'equipmentSlot2'];
-  const [slotIdx, nextRng] = nextInt(ctx.state.rng, 0, 1);
-  const chosenSlot = slotIds[slotIdx];
-  ctx.patch.rng = nextRng;
-  const slotLabel = chosenSlot === 'equipmentSlot1' ? '左' : '右';
-  const bonuses = { ...(ctx.patch.equipmentSlotBonuses ?? ctx.state.equipmentSlotBonuses) };
-  const curDamage = bonuses[chosenSlot].damage;
-  const curShield = bonuses[chosenSlot].shield;
-  bonuses[chosenSlot] = { damage: curShield, shield: curDamage };
-  ctx.patch.equipmentSlotBonuses = bonuses;
-  log(ctx, 'potion', `乾坤颠倒：${slotLabel}装备栏永久伤害(${curDamage})与护甲(${curShield})互换！`);
-  banner(ctx, `${slotLabel}装备栏：伤害 ${curDamage}→${curShield}，护甲 ${curShield}→${curDamage}！`);
+  // 玩家选择左/右装备栏；选中栏的「永久攻击 ↔ 永久护甲」+「临时攻击 ↔ 临时护甲」互换。
+  // 实际互换逻辑在 resolvePendingPotion('swap-slot-damage-shield') 里完成。
+  const prompt = '选择一个装备栏，永久攻击与永久护甲互换，临时攻击与临时护甲也互换。';
+  ctx.patch.pendingPotionAction = {
+    card: ctx.card,
+    effect: 'swap-slot-damage-shield',
+    step: 'slot-select',
+    prompt,
+  } as any;
+  ctx.patch.heroSkillBanner = prompt;
+  ctx.halt = true;
+  ctx.enqueuedActions.length = 0;
 }
 
 function executeRepairSlot(ctx: ExecutionContext, effect: CardEffect): void {

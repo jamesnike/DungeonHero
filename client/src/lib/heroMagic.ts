@@ -50,9 +50,9 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
   {
     id: 'monster-doom',
     name: '灭世裁决',
-    description: '装备怪物数量为数值条（上限 4）。发动效果：摧毁所有装备，每摧毁一个装备对激活行所有怪物 -2攻/-2血上限。',
+    description: '装备怪物数量为数值条（上限 2）。发动效果：摧毁所有装备（含下层叠加，每件独立判定复生），每摧毁一件对激活行所有怪物 -2攻/-2血上限。',
     cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
-    gaugeMax: 4,
+    gaugeMax: 2,
     chargeHint: '每装备一个怪物 +1 灭世值。',
     chargeSource: 'weapon-attack',
   },

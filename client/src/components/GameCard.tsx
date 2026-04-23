@@ -2021,26 +2021,29 @@ const amuletEffectText =
 
                 {isMonsterEquipmentCard(card) && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
                   <div className="dh-card__keyword-row">
-                    {card.onAttackEffect && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手偷钱：攻击时为Hero偷钱">偷钱</span>
+                    {card.onAttackEffect?.startsWith('steal-gold-') && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃金：攻击时为Hero偷钱">窃金</span>
+                    )}
+                    {card.onAttackEffect && !card.onAttackEffect.startsWith('steal-gold-') && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手：每次攻击时触发">动手</span>
                     )}
                     {card.eliteLowGoldPower && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="贪婪强化：金币≥30时攻击力和护盾翻倍">贪婪</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="窘境：金币≥30时攻击力和护盾翻倍">窘境</span>
                     )}
                     {card.goblinStealCard && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃牌贼：攻击时偷走一张手牌">窃牌</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃牌：攻击时偷走一张手牌">窃牌</span>
                     )}
                     {card.goblinStealScale && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="贼窝疗养：多装备且下层有装备时，回合结束30%恢复1耐久">疗养</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="疗养：多装备且下层有装备时，回合结束30%恢复1耐久">疗养</span>
                     )}
                     {card.goblinStackHeal && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="哥布林劝降：攻击时免费劝降怪物">劝降</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="劝降：攻击时免费劝降怪物">劝降</span>
                     )}
                     {card.goblinStealEquip && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="精英劝降：多装备且下层有装备时劝降概率+30%">精劝</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="精劝：多装备且下层有装备时劝降概率+30%">精劝</span>
                     )}
                     {card.monsterSpecial === 'ogre-crit' && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="蛮力暴击：攻击伤害始终翻倍">暴击</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="暴击：攻击伤害始终翻倍">暴击</span>
                     )}
                     {card.eliteDoubleAttack && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="连击：50%概率可以再攻击一次">连击</span>
@@ -2055,31 +2058,31 @@ const amuletEffectText =
                       );
                     })()}
                     {card.skeletonLastWordsDiscard && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：装备被毁坏时抽1张牌">遗言</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="骸弃：装备被毁坏时抽1张牌">骸弃</span>
                     )}
                     {card.skeletonReRevive && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="亡骨轮回：另一装备被毁坏时获得复生">轮回</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="轮回：另一装备被毁坏时获得复生">轮回</span>
                     )}
                     {card.monsterSpecial === 'bone-regen' && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虚骨再生：每次失去耐久40%概率恢复">再生</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="骸生：每次失去耐久40%概率恢复">骸生</span>
                     )}
                     {card.lastWords === 'discard-hand-3' && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="遗言：抽 3 张牌">遗言</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="撕牌：抽 3 张牌">撕牌</span>
                     )}
                     {card.lastWords?.startsWith('wraith-haunt') && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：另一装备获得临时攻击">遗言</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="缠绕：另一装备获得临时攻击">缠绕</span>
                     )}
                     {card.monsterSpecial === 'wraith-rebirth' && (
                       <span className={`dh-card__keyword-tag ${card.wraithRebirthUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
-                        title={card.wraithRebirthUsed ? '幽魂重生已触发' : '耐久第一次降到1时50%概率回满'}>
+                        title={card.wraithRebirthUsed ? '重生已触发' : '耐久第一次降到1时50%概率回满'}>
                         {card.wraithRebirthUsed ? '已重生' : '重生'}
                       </span>
                     )}
                     {card.wraithDeathHealSpread && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="怨灵传承：遗言+1耐久并传递遗言">传承</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="传魂：遗言+1耐久并传递遗言">传魂</span>
                     )}
                     {card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && !card.wraithDeathHealSpread && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="怨灵祝福：遗言另一装备耐久+1">祝福</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="祝福：遗言另一装备耐久+1">祝福</span>
                     )}
                     {(card.onDestroyEffect === 'slot-temp-buff-3-3' || (card.lastWordsSlotTempBuff ?? 0) > 0) && (() => {
                       const stacks = (card.lastWordsSlotTempBuff ?? 0)
@@ -2105,80 +2108,77 @@ const amuletEffectText =
                       ) : null;
                     })()}
                     {card.wraithTurnEnrage && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="怨灵诅咒：瀑流时激怒所有怪物+护符上限+1">诅咒</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="诅咒：瀑流时激怒所有怪物+护符上限+1">诅咒</span>
                     )}
                     {card.bleedEffect && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="流血：每失去1耐久攻击力+3">流血</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="狂怒：每失去1耐久攻击力+3">狂怒</span>
                     )}
                     {card.eliteRegenHeroTurn && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="龙息回复：怪物回合内未掉血则恢复1耐久">回复</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="再生：怪物回合内未掉血则恢复1耐久">再生</span>
                     )}
                     {card.dragonDamageRetaliation != null && card.dragonDamageRetaliation > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="龙息反击：每格挡一次，对随机怪物造成2点伤害">反击</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="龙息：每格挡一次，对随机怪物造成2点伤害">龙息</span>
                     )}
                     {card.dragonBleedDestroy && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="流血破甲：失去耐久时破坏所有高耐久装备">破甲</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="破甲：失去耐久时破坏所有高耐久装备">破甲</span>
                     )}
                     {card.swarmCorrode && card.durability != null && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="虫蚀：攻击时立刻让目标-1血层">虫蚀</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="腐蚀：攻击时立刻让目标-1血层">腐蚀</span>
                     )}
                     {card.swarmBugletShield && card.durability != null && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虫盾共生：另一装备是小虫子时格挡不掉耐久">虫盾</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虫盾：另一装备是小虫子时格挡不掉耐久">虫盾</span>
                     )}
                     {card.monsterSpecial === 'swarm-elite' && card.durability != null && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="虫母孵化：掉耐久时将另一装备替换为小虫子">虫母</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="虫母：掉耐久时将另一装备替换为小虫子">虫母</span>
                     )}
                     {card.antiMagicReflect != null && card.antiMagicReflect > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`反魔：玩家每使用一张法术牌，对玩家造成 ${card.antiMagicReflect} 点伤害`}>反魔</span>
                     )}
                     {card.spellDamageReduction != null && card.spellDamageReduction > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title={`法术抗性：受到的法术伤害减少 ${Math.round(card.spellDamageReduction * 100)}%`}>抗性</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title={`抗性：受到的法术伤害减少 ${Math.round(card.spellDamageReduction * 100)}%`}>抗性</span>
                     )}
                     {card.maxDamagePerHit != null && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.durability != null ? `岩石护体：格挡时每次最多掉 ${card.maxDamagePerHit} 护甲` : `岩石护体：每次最多受到 ${card.maxDamagePerHit} 点伤害`}>护体</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.durability != null ? `护体：格挡时每次最多掉 ${card.maxDamagePerHit} 护甲` : `护体：每次最多受到 ${card.maxDamagePerHit} 点伤害`}>护体</span>
                     )}
                     {card.golemLayerLossReflect != null && card.golemLayerLossReflect > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={card.durability != null ? `岩层反震：掉耐久时对随机怪物造成 ${card.golemLayerLossReflect}×已损失耐久 伤害` : `岩层反震：每次掉1血层，对玩家造成 ${card.golemLayerLossReflect}×已损失血层 点伤害`}>反震</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={card.durability != null ? `反震：掉耐久时对随机怪物造成 ${card.golemLayerLossReflect}×已损失耐久 伤害` : `反震：每次掉1血层，对玩家造成 ${card.golemLayerLossReflect}×已损失血层 点伤害`}>反震</span>
                     )}
                     {card.golemSpellGrowth != null && card.golemSpellGrowth > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={card.durability != null ? `法力吞噬：每次瀑流时反震系数 +${card.golemSpellGrowth}` : `法力吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}，反震系数 +${card.golemSpellGrowth}`}>吞噬</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={card.durability != null ? `吞噬：每次瀑流时反震系数 +${card.golemSpellGrowth}` : `吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}，反震系数 +${card.golemSpellGrowth}`}>吞噬</span>
                     )}
                     {card.bossRetaliationDamage != null && card.bossRetaliationDamage > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反噬：每次受到伤害，对英雄造成 ${card.bossRetaliationDamage} 点直接伤害（无视护盾）`}>反噬</span>
                     )}
                     {card.bossLastStandAura && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时当前血层为 1），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时当前血层为 1），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
                     )}
                   </div>
                 )}
-                {card.type === 'monster' && !isMonsterEquipmentCard(card) && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
+                {card.type === 'monster' && !isMonsterEquipmentCard(card) && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.eliteRegenHeroTurn || card.eliteLowGoldPower || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
-                    {card.monsterSpecial && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={card.description ?? '精英怪物'}>精英</span>
-                    )}
                     {card.swarmSpawn && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="虫群：每移除一张地城牌，在该位置生成小虫子">虫群</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="繁殖：每移除一张地城牌，在该位置生成小虫子">繁殖</span>
                     )}
                     {card.monsterSpecial === 'swarm-elite' && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子">虫母</span>
                     )}
                     {card.isBuglet && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="小虫子：由虫群生成的衍生怪物">衍生</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="衍生：由虫群生成的衍生怪物">衍生</span>
                     )}
                     {card.bugletLastWordsHeal && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="虫群遗念：死亡时，激活行其他所有小虫子恢复1血层">遗念</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗念：死亡时，激活行其他所有小虫子恢复1血层">遗念</span>
                     )}
                     {card.swarmHordeRage && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="虫群集结：当激活行怪物≥3时，所有怪物被激怒，并+3攻击+3血量">集结</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="集结：当激活行怪物≥3时，所有怪物被激怒，并+3攻击+3血量">集结</span>
                     )}
                     {card.swarmCorrode && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="腐蚀甲壳：攻击时，格挡护盾立刻-1耐久度（不计入格挡耐久次数）">腐蚀</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="腐蚀：攻击时，格挡护盾立刻-1耐久度（不计入格挡耐久次数）">腐蚀</span>
                     )}
                     {card.swarmBugletShield && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虫盾共生：激活行有小虫子时，受到的伤害为0">虫盾</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="虫盾：激活行有小虫子时，受到的伤害为0">虫盾</span>
                     )}
                     {(card.hasRevive || card.hasEquipmentRevive) && (() => {
                       const allUsed = (!card.hasRevive || card.reviveUsed) && (!card.hasEquipmentRevive || card.equipmentReviveUsed);
@@ -2189,74 +2189,92 @@ const amuletEffectText =
                         </span>
                       );
                     })()}
-                    {card.lastWords && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="死亡时触发遗言效果">遗言</span>
+                    {card.lastWords === 'discard-hand-3' && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="撕牌：死亡时随机弃回玩家3张手牌">撕牌</span>
+                    )}
+                    {card.lastWords?.startsWith('wraith-haunt') && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="缠绕：死亡时同行其他怪物攻击力 +X，同行卡牌位置随机打乱">缠绕</span>
+                    )}
+                    {card.lastWords && card.lastWords !== 'discard-hand-3' && !card.lastWords.startsWith('wraith-haunt') && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="散音：死亡时触发遗言效果">散音</span>
                     )}
                     {card.bleedEffect && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`流血：每失去一个血层，攻击力+${card.bleedEffect.replace('attack+', '')}`}>流血</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`狂怒：每失去一个血层，攻击力+${card.bleedEffect.replace('attack+', '')}`}>狂怒</span>
                     )}
                     {card.enterEffect && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="入场时触发效果">入场</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="开战：进入战斗行时，整行怪物自动激怒">开战</span>
                     )}
-                    {card.onAttackEffect && (
+                    {card.onAttackEffect?.startsWith('steal-gold-') && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃金：攻击时偷取金币">窃金</span>
+                    )}
+                    {card.onAttackEffect && !card.onAttackEffect.startsWith('steal-gold-') && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手：每次攻击时触发">动手</span>
                     )}
                     {card.ogreStun && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="蛮力击晕：攻击时30%概率击晕玩家（装备栏和护符栏冻结一回合）">击晕</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="震晕：攻击时30%概率击晕玩家（装备栏和护符栏冻结一回合）">震晕</span>
                     )}
                     {card.eliteDoubleAttack && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="狂暴连击：攻击时70%概率再攻击一次">连击</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="连击：攻击时70%概率再攻击一次">连击</span>
+                    )}
+                    {card.monsterSpecial === 'ogre-crit' && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="暴击：攻击伤害始终翻倍">暴击</span>
                     )}
                     {card.ogreEnterDiscard && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="蛮力震慑：入场时随机弃回一张手牌">震慑</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="震慑：入场时随机弃回一张手牌">震慑</span>
                     )}
                     {card.dragonAttackNoLayerCost && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="龙鳞护体：上回合掉过血层时，本次攻击不消耗血层">龙鳞</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="龙鳞：上回合掉过血层时，本次攻击不消耗血层">龙鳞</span>
                     )}
                     {card.dragonDamageRetaliation != null && card.dragonDamageRetaliation > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title={`龙息反击：每受到一次伤害，对玩家造成 ${card.dragonDamageRetaliation} 点法术伤害`}>反击</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title={`龙息：每受到一次伤害，对玩家造成 ${card.dragonDamageRetaliation} 点法术伤害`}>龙息</span>
                     )}
                     {card.dragonBleedDestroy && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="流血破甲：失去血层时破坏高耐久装备">破甲</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="破甲：失去血层时破坏高耐久装备">破甲</span>
                     )}
                     {card.eliteHealOtherMonster && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="龙息庇护：Hero回合未掉血层时，为激活行另一个怪物恢复1血层">庇护</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="庇护：Hero回合未掉血层时，为激活行另一个怪物恢复1血层">庇护</span>
+                    )}
+                    {card.eliteRegenHeroTurn && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="再生：Hero回合未掉血层时，自身恢复1血层">再生</span>
                     )}
                     {card.skeletonNoLayerCostActive && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="不朽之骨：攻击不消耗血层">不朽</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="无尽：攻击不消耗血层">无尽</span>
                     )}
                     {card.skeletonLastWordsDiscard && !card.lastWords && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="遗言：死亡时随机弃回玩家1张手牌">遗言</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="骸弃：死亡时随机弃回玩家1张手牌">骸弃</span>
                     )}
                     {card.skeletonReRevive && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="亡骨轮回：同行其他怪物被击败时，若已复生过，再次获得复生">轮回</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="轮回：同行其他怪物被击败时，若已复生过，再次获得复生">轮回</span>
                     )}
                     {card.wraithTurnAttack != null && card.wraithTurnAttack > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`怨念蓄积：每个怪物回合结束时攻击力 +${card.wraithTurnAttack}`}>蓄积</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`蓄积：每个怪物回合结束时攻击力 +${card.wraithTurnAttack}`}>蓄积</span>
                     )}
                     {card.wraithDeathHeal != null && card.wraithDeathHeal > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`怨灵祝福：死亡时同行怪物生命+${card.wraithDeathHeal}`}>祝福</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`祝福：死亡时同行怪物生命+${card.wraithDeathHeal}`}>祝福</span>
                     )}
                     {card.wraithAuraAttack != null && card.wraithAuraAttack > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`怨念光环：每个怪物回合结束时，激活行所有怪物攻击力 +${card.wraithAuraAttack}（无需激怒）`}>光环</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`光环：每个怪物回合结束时，激活行所有怪物攻击力 +${card.wraithAuraAttack}（无需激怒）`}>光环</span>
                     )}
                     {card.wraithDeathHealSpread != null && card.wraithDeathHealSpread > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`怨灵遗言：死亡时同行怪物生命 +${card.wraithDeathHealSpread}，并传递此遗言`}>遗言</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`传魂：死亡时同行怪物生命 +${card.wraithDeathHealSpread}，并传递此遗言`}>传魂</span>
                     )}
                     {card.wraithTurnEnrage && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="怨灵诅咒：每个怪物回合结束时，使激活行所有怪物激怒">诅咒</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="诅咒：每个怪物回合结束时，使激活行所有怪物激怒">诅咒</span>
                     )}
                     {card.wraithDestroyAmulet && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="护符破坏：每个怪物回合结束时，随机摧毁一个护符">碎符</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="碎符：每个怪物回合结束时，随机摧毁一个护符">碎符</span>
                     )}
                     {card.goblinStealCard && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃牌贼：攻击时偷走一张手牌">窃牌</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃牌：攻击时偷走一张手牌">窃牌</span>
                     )}
                     {card.goblinStealScale && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="贪婪强化：偷到金币后攻击力和生命值同步增长">贪婪</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="贪敛：偷到金币后攻击力和生命值同步增长">贪敛</span>
+                    )}
+                    {card.eliteLowGoldPower && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title="窘境：金币 ≤ 10 时攻击力和生命值翻倍">窘境</span>
                     )}
                     {card.goblinStackHeal && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="贼窝疗养：回合结束掷骰，自身下方每有1张牌成功率 +15%（最高100%），成功则恢复1血层">疗养</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="疗养：回合结束掷骰，自身下方每有1张牌成功率 +15%（最高100%），成功则恢复1血层">疗养</span>
                     )}
                     {card.goblinStealEquip && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="窃宝：回合结束掷骰，自身下方每有1张牌成功率 +25%（最高100%），成功则偷走1件装备或护符">窃宝</span>
@@ -2265,25 +2283,25 @@ const amuletEffectText =
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`反魔：玩家每使用一张法术牌，对玩家造成 ${card.antiMagicReflect} 点伤害`}>反魔</span>
                     )}
                     {card.spellDamageReduction != null && card.spellDamageReduction > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title={`法术抗性：受到的法术伤害减少 ${Math.round(card.spellDamageReduction * 100)}%`}>抗性</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title={`抗性：受到的法术伤害减少 ${Math.round(card.spellDamageReduction * 100)}%`}>抗性</span>
                     )}
                     {card.maxDamagePerHit != null && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={`岩石护体：每次最多受到 ${card.maxDamagePerHit} 点伤害`}>护体</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--elite" title={`护体：每次最多受到 ${card.maxDamagePerHit} 点伤害`}>护体</span>
                     )}
                     {card.golemLayerLossReflect != null && card.golemLayerLossReflect > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`岩层反震：每次掉1血层，对玩家造成 ${card.golemLayerLossReflect}×已损失血层 点伤害`}>反震</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反震：每次掉1血层，对玩家造成 ${card.golemLayerLossReflect}×已损失血层 点伤害`}>反震</span>
                     )}
                     {card.golemSpellGrowth != null && card.golemSpellGrowth > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`法力吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}，反震系数 +${card.golemSpellGrowth}`}>吞噬</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`吞噬：每个怪物回合结束时，反魔伤害 +${card.golemSpellGrowth}，反震系数 +${card.golemSpellGrowth}`}>吞噬</span>
                     )}
                     {card.bossRetaliationDamage != null && card.bossRetaliationDamage > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反噬：每次受到伤害，对英雄造成 ${card.bossRetaliationDamage} 点直接伤害（无视护盾）`}>反噬</span>
                     )}
                     {card.bossLastStandAura && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走光环：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
                     )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`亡灵召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时当前血层为 1），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时当前血层为 1），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
                     )}
                     {card._potionStunBonusApplied && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title={`雷震淬刃药：永久击晕率 ${card.weaponStunChance ?? 0}%`}>击晕 {card.weaponStunChance ?? 0}%</span>
