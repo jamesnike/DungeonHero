@@ -151,6 +151,7 @@ export type EternalRelicId =
   | 'missile-amplify-on-waterfall'
   | 'missile-stun-20'
   | 'missile-draw-1'
+  | 'waterfall-draw-2'
   | `amulet-eternal-${string}`;
 
 export interface EternalRelic {

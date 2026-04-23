@@ -924,8 +924,21 @@ html {
      DEFEAT_ANIMATION_DURATION in useCombatActions.ts and GameBoard.tsx. */
   @keyframes dh-card-death {
     0%   { transform: scale(1);    filter: none;                                    opacity: 1; }
-    18%  { transform: scale(1.06); filter: brightness(1.55) saturate(1.35);         opacity: 1; }
+    18%  { transform: scale(1.04); filter: brightness(1.15) saturate(1.12);         opacity: 1; }
     100% { transform: scale(0.97); filter: grayscale(1) brightness(0.5) blur(0.4px); opacity: 0.6; }
+  }
+
+  /* 怪物死亡 Lottie 爆炸 wrapper：首帧淡入避免「满屏闪一下红光」的硬弹出。
+     Lottie 第一帧本身是高亮度爆炸图层，一旦组件 mount 立刻渲染，
+     视觉上是"凭空一闪"。这条快速 fade-in 把这个硬切变成 90ms 的平滑爬升，
+     峰值不变（仍由 Lottie 内部透明度控制），但人眼的"flash"感被显著削弱。 */
+  .monster-death-lottie-wrapper {
+    animation: dh-monster-death-lottie-fade-in 90ms ease-out both;
+  }
+
+  @keyframes dh-monster-death-lottie-fade-in {
+    0%   { opacity: 0; }
+    100% { opacity: 1; }
   }
 
   /* 「回收袋 → 背包」绿色光晕脉冲：BackpackZone 的 RecycleRestoreOverlay 用。

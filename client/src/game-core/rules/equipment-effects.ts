@@ -141,6 +141,36 @@ function slotLabel(slotId: EquipmentSlotId): string {
   return slotId === 'equipmentSlot1' ? '左' : '右';
 }
 
+// Route a broken equipment to its final destination — recycle bag (Perm) or
+// graveyard (non-Perm). Mutates `patch` / `enqueuedActions` in place. Per
+// GAME_MECHANICS.md §7 "非永久装备损毁 | 弃置 | 坟场" — broken equipment
+// must not silently disappear.
+//
+// `resetCardForGraveyard` (per `monster-graveyard-layer-reset.mdc` rule)
+// refills weapon/shield durability and resets monster `currentLayer` to 1
+// before the card lands in `discardedCards`, so a future graveyard-fetch
+// (e.g. Iron Shield's `graveyard-to-hand` last-words) can recover a fresh
+// copy. The Perm path defers cleanup to `reduceAddToRecycleBag`.
+function routeBrokenSelfToGraveOrRecycle(
+  state: GameState,
+  slotItem: GameCardData,
+  isPermRecycle: boolean,
+  patch: Partial<GameState>,
+  enqueuedActions: GameAction[],
+): void {
+  if (isPermRecycle) {
+    const { fromSlot: _fsp, armor: _ap, armorBonusDamaged: _abp, reviveUsed: _rup,
+      equipmentReviveUsed: _erup, wraithRebirthUsed: _wrup, ...rest } =
+      slotItem as GameCardData & Record<string, unknown>;
+    const cleaned: GameCardData = { ...(rest as GameCardData) };
+    enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: cleaned });
+  } else {
+    const cleaned = resetCardForGraveyard(slotItem, state.gameMode === 'quick');
+    const currentGrave = (patch.discardedCards ?? state.discardedCards) as GameCardData[];
+    patch.discardedCards = [...currentGrave, cleaned];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Equipment displacement — fire "last words" only (no revive, no slot mutation)
 //
@@ -485,7 +515,6 @@ export function computeEquipmentBreakEffects(
   let rng = state.rng;
   let drawFromBackpack = 0;
   let classCardDraw = 0;
-  let triggeredGraveyardToHand = false;
 
   const hasLastWords = slotItem.onDestroyHeal || slotItem.onDestroyGold || slotItem.onDestroyDraw
     || slotItem.onDestroyClassDraw || slotItem.onDestroyPermanentDamage || slotItem.onDestroyPermanentShield
@@ -644,7 +673,6 @@ export function computeEquipmentBreakEffects(
         }
       }
     } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
-      triggeredGraveyardToHand = true;
       const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
       const pick = pickGraveyardCardExcluding(graveyard, slotItem.id, rng);
       if (pick) {
@@ -664,7 +692,6 @@ export function computeEquipmentBreakEffects(
         });
       }
     } else if (slotItem.onDestroyEffect === 'graveyard-event-to-hand') {
-      triggeredGraveyardToHand = true;
       const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
       const pick = pickGraveyardEventCardExcluding(graveyard, slotItem.id, rng);
       if (pick) {
@@ -862,33 +889,28 @@ export function computeEquipmentBreakEffects(
         payload: { type: 'equip', message: `幽魂作祟：${otherItem.name} 被移到了${slotLabel(slotId)}装备栏！` },
       });
       effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId: otherSlotId } });
+      // The destroyed wraith equipment itself still needs to be routed —
+      // its slot is now occupied by the swapped-in `otherItem`, but the
+      // dying wraith card must enter the graveyard (or recycle bag if Perm)
+      // exactly like any other broken equipment, otherwise it silently
+      // disappears from the game.
+      routeBrokenSelfToGraveOrRecycle(state, slotItem, isPermRecycle, patch, enqueuedActions);
     } else {
       patch[slotId] = null as unknown as EquipmentItem;
       effects.push({ event: 'equipment:clearSlotWithPromote', payload: { slotId } });
-      // Perm-flagged equipment (永恒铭刻 / native permEquipment) routes to the
-      // permanent magic recycle bag. This MUST take priority over the
-      // graveyard-to-hand last-words branch below — a Perm Iron Shield should
-      // come back via the recycle bag, not be sent to the graveyard.
-      // ADD_TO_RECYCLE_BAG handles its own metadata sanitization and durability
-      // normalization (see reduceAddToRecycleBag in cards.ts).
-      if (isPermRecycle) {
-        const { fromSlot: _fsp, armor: _ap, armorBonusDamaged: _abp, reviveUsed: _rup,
-          equipmentReviveUsed: _erup, wraithRebirthUsed: _wrup, ...rest } =
-          slotItem as GameCardData & Record<string, unknown>;
-        const cleaned: GameCardData = { ...(rest as GameCardData) };
-        enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: cleaned });
-      } else if (triggeredGraveyardToHand) {
-        // For graveyard-to-hand last words, the destroyed equipment itself should
-        // enter the graveyard *after* the picked card was moved to hand. Without
-        // salvage this is the only path that delivers Iron Shield to the graveyard
-        // post-break (the picked-from-graveyard pool was already filtered above).
-        // Use resetCardForGraveyard so the broken (durability=0) shield is
-        // refreshed to full durability before landing — keeps semantics
-        // consistent with reduceAddToGraveyard's own reset.
-        const cleaned = resetCardForGraveyard(slotItem, state.gameMode === 'quick');
-        const currentGrave = (patch.discardedCards ?? state.discardedCards) as GameCardData[];
-        patch.discardedCards = [...currentGrave, cleaned];
-      }
+      // Route the broken equipment to its final destination:
+      //   - Perm-flagged (永恒铭刻 / native permEquipment) → permanent magic
+      //     recycle bag. MUST take priority — a Perm Iron Shield should come
+      //     back via the recycle bag, not the graveyard. ADD_TO_RECYCLE_BAG
+      //     handles its own metadata sanitization and durability normalization
+      //     (see reduceAddToRecycleBag in cards.ts).
+      //   - Otherwise (including graveyard-to-hand last-words case where the
+      //     picked card was already moved to hand) → graveyard via
+      //     resetCardForGraveyard, so weapons/shields come back at full
+      //     durability and monster equipment resets to currentLayer = 1
+      //     (per monster-graveyard-layer-reset rule).
+      // Per GAME_MECHANICS.md §7: "非永久装备损毁 | 弃置 | 坟场".
+      routeBrokenSelfToGraveOrRecycle(state, slotItem, isPermRecycle, patch, enqueuedActions);
     }
 
     // Skeleton re-revive on other slot

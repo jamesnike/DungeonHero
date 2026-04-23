@@ -381,7 +381,7 @@ function reduceTriggerWaterfall(state: GameState): ReduceResult {
 // ---------------------------------------------------------------------------
 
 function reduceEnforceBackpackCapacity(state: GameState): ReduceResult {
-  const capacity = (state.backpackCapacityModifier ?? 0) + 8; // BASE_BACKPACK_CAPACITY = 8
+  const capacity = Math.max(1, BASE_BACKPACK_CAPACITY + (state.backpackCapacityModifier ?? 0));
   const backpack = state.backpackItems as GameCardData[];
   if (backpack.length <= capacity) return noChange(state);
 

@@ -1,0 +1,113 @@
+---
+description: "Hook 不要在 reducer 已经 self-cleanup + auto-advance 队列状态后再多 dispatch 一次 CLEAR —— 会擦掉刚晋升的下一条"
+alwaysApply: true
+---
+
+# 「active + queue」状态：reducer 自治推进，hook 禁止补 CLEAR
+
+## 一次真实事故（坟火新星 → 多虫子卡住）
+
+User 报：「用坟火新星同时打死多只小虫子，**只有一只去了坟场，其他卡住了**。」
+
+游戏里的「奖励队列」状态形如：
+
+```ts
+activeMonsterReward: MonsterRewardDrop | null;  // 当前展示的奖励
+monsterRewardQueue: MonsterRewardDrop[];        // 排队中
+```
+
+`APPLY_MONSTER_REWARD` reducer 的契约（已经做对了）：
+
+1. 应用奖励效果（金币 / 抽牌 / etc.）
+2. **`activeMonsterReward = null`**
+3. 把怪物卡放进 `discardedCards`
+4. **`enqueuedActions.push({ type: 'DEQUEUE_MONSTER_REWARD' })`** —— 让下一条自动晋升
+
+`GameEngine.dispatch` **同步**处理 enqueue 链：当 `dispatch({ type: 'APPLY_MONSTER_REWARD', ... })`
+调用返回时，`DEQUEUE_MONSTER_REWARD` 已经把 `drop_B` 晋升为新的 `activeMonsterReward`。
+
+旧代码 `handleMonsterRewardSelection`（useShopHandlers.ts）的 bug：
+
+```ts
+const resolved = applyMonsterReward(selected);  // ← 内部 dispatch 完，drop_B 已经是 active
+...
+dispatch({ type: 'CLEAR_ACTIVE_MONSTER_REWARD' });  // ← 把 drop_B 擦掉！
+```
+
+后果：`drop_B` / `drop_C` ... 永远拿不出来给玩家选，对应的怪物卡也卡在 active row（被
+标 `defeatProcessed: true` 但没移走）。
+
+## 强制规则
+
+### 1. 「reducer 自治推进队列」+「dispatch 同步」= hook 不能补 CLEAR
+
+满足以下三条的状态字段（active + queue + reducer 自动 advance）属于这条规则的管辖：
+
+- 字段形如 `active<X>: T | null` + `<x>Queue: T[]`
+- 消费 reducer（`APPLY_<X>`）自带 **set active=null + enqueue `DEQUEUE_<X>`**
+- `DEQUEUE_<X>` reducer 自带「队列非空就 promote 下一条到 active」
+
+**hook 在 dispatch `APPLY_<X>` 之后绝对不要再 dispatch `CLEAR_ACTIVE_<X>`**。
+reducer 自己已经把 active 清干净 + 队列推进完了；多余的 CLEAR 会清掉**刚晋升的
+下一条**。
+
+### 2. 异步 / 不走 reducer 的特殊路径需要**条件性** CLEAR + DEQUEUE
+
+如果某种奖励 / 操作走的是 async UI 路径（如 `repair` 走 `repairEquipmentDurability`
+直接弹装备槽选择 modal，**不**经过 `APPLY_<X>` reducer），那么这条路径**没有**自动
+clear + dequeue —— 必须显式补：
+
+```ts
+const isBypassReducer = selected.effect.type === 'repair'; // 仅举例
+
+const resolved = applyMonsterReward(selected);
+if (!resolved) return;
+
+// ...其它收尾 (UI 动画、log)...
+
+if (isBypassReducer) {
+  dispatch({ type: 'CLEAR_ACTIVE_MONSTER_REWARD' });
+  dispatch({ type: 'DEQUEUE_MONSTER_REWARD' });
+}
+```
+
+**两个 dispatch 都要发**：CLEAR 清 active、DEQUEUE 推进队列。只发 CLEAR 会让队列里的
+下一条永远等不到 promote（`reduceDequeueMonsterReward` 在 `activeMonsterReward != null`
+时是 noChange，但 active 已经是 null 了之后没人触发 dequeue 也是死循环）。
+
+### 3. 「无条件 CLEAR」是 code smell —— 看到先怀疑
+
+读到 hook 里这种 pattern 立刻警觉：
+
+```ts
+const resolved = applyXxx(selected);
+if (!resolved) return;
+// ... 一堆 UI 副作用 ...
+dispatch({ type: 'CLEAR_ACTIVE_XXX' });  // ← 无条件 CLEAR，可疑！
+```
+
+问自己：
+
+> 「`applyXxx` 内部走的 reducer 是不是已经把 active 设 null 了？是不是已经 enqueue 了
+> 推进队列的 action？如果是，这条 CLEAR 会不会擦掉刚晋升的下一条？」
+
+如果答案是「是 / 会」，CLEAR 必须改成**条件性**的（仅 bypass-reducer 路径才发）。
+
+## 自检：写涉及「active + queue + 队列自动推进」的 hook 时，问自己
+
+> 1. 我 dispatch 的这个 action（`APPLY_<X>` / 类似）reducer 内部有没有 set active=null + enqueue DEQUEUE？
+> 2. 如果有，我下面这行 `dispatch({ type: 'CLEAR_ACTIVE_<X>' })` 会不会清掉刚晋升的下一条？
+> 3. 如果有「不走 reducer」的特殊分支（异步 UI / 直接调 helper），我有没有为它**单独**补 CLEAR + DEQUEUE？
+> 4. 我的测试是不是覆盖了「队列里有多条」的场景？只测「队列里只有一条」永远抓不到这个 bug。
+
+任意一条「没」或「不确定」，回头读 reducer 实现确认契约，再改 hook。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| Hook 不能在 reducer 自治推进队列后补 CLEAR | ✅ 这条 | ❌ |
+| 多步 reducer 逻辑用 enqueuedActions 而非 hook 顺序 dispatch | ❌ | `reducer-patterns` |
+| 内部 follow-up action 必须加进 isInputContinuation 白名单 | ❌ | `pipeline-input-continuation` |
+| Hook 是 thin dispatcher，不写游戏逻辑 | ❌ | `hook-thin-dispatchers` |
+| 测试要覆盖完整 dispatch 链而非孤立 reduce | ❌ | `testing` |

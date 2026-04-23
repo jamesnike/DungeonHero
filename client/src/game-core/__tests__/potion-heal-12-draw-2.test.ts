@@ -3,7 +3,7 @@ import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
 import type { GameState } from '../types';
 import type { GameAction } from '../actions';
-import { initialCombatState } from '../constants';
+import { initialCombatState, HAND_LIMIT } from '../constants';
 // Registers `potion:heal-12-draw-2`.
 import '../card-schema';
 
@@ -61,19 +61,20 @@ describe('PLAY_CARD with 活力秘药 (heal-12-draw-2)', () => {
   });
 
   it('respects hand limit — does not draw beyond it', () => {
-    // Default HAND_LIMIT is 6. Hand already has potion + 5 fillers = 6 cards.
-    // After potion is consumed (hand → 5), we can only fit 1 more, not 2.
+    // Fill hand to limit so the potion + (limit - 1) fillers fully occupy it.
+    // After potion is consumed (hand → limit - 1), we can only fit 1 more, not 2.
     const backpack = [FILLER('bp1'), FILLER('bp2'), FILLER('bp3')];
+    const fillers = Array.from({ length: HAND_LIMIT - 1 }, (_, i) => FILLER(`h${i}`));
     const state = makeState({
       hp: 10,
-      handCards: [POTION, FILLER('h1'), FILLER('h2'), FILLER('h3'), FILLER('h4'), FILLER('h5')] as any,
+      handCards: [POTION, ...fillers] as any,
       backpackItems: backpack as any,
     });
 
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'p-vitality' } as GameAction]);
 
-    // Hand caps at 6 (5 fillers + 1 drawn).
-    expect(result.state.handCards.length).toBe(6);
+    // Hand caps at HAND_LIMIT ((HAND_LIMIT - 1) fillers + 1 drawn).
+    expect(result.state.handCards.length).toBe(HAND_LIMIT);
     expect(result.state.backpackItems.length).toBe(2);
   });
 

@@ -1,0 +1,130 @@
+---
+description: 装备耐久归零损毁时，必须把 broken self 路由到坟场（非 Perm）或回收袋（Perm）
+alwaysApply: true
+---
+
+# 装备损毁路由：broken self 必须进坟场 / 回收袋
+
+## 不变量
+
+> **任何装备耐久归零（或被效果"摧毁"）后，破损的卡本身必须落地：**
+> - 非 Perm → `discardedCards`（坟场），且过 `resetCardForGraveyard`
+> - Perm（`permEquipment` 或 `recycleDelay > 0`）→ `permanentMagicRecycleBag`（回收袋）
+>
+> **绝不允许**只清空 `equipmentSlot1/2`、把卡"丢在地上"消失。
+
+意义：`GAME_MECHANICS.md` §7「非永久装备损毁 | 弃置 | 坟场」明文规定。
+坟场是 `亡者之契` / Iron Shield `graveyard-to-hand` / 残骸回收符 等效果的卡池来源；
+broken self 不入坟场就 = 这些效果永远拿不到这张卡。
+
+## 一次真实事故
+
+`共鸣之刃`（class 武器，无 Perm）耐久 2 用完后，玩家发现"卡消失了，没进坟场"。
+根因：`computeEquipmentBreakEffects` 的默认销毁分支只写了
+`patch[slotId] = null`，**没把卡 push 进 `discardedCards`**。
+仅 `graveyard-to-hand` 这条特殊 last-words 路径（Iron Shield 系）会顺带把自己塞进坟场。
+所有其他非 Perm 装备——class 武器/盾、普通装备、怪物装备形态——破损后**全部直接消失**。
+
+## 唯一正确入口
+
+`computeEquipmentBreakEffects`（`client/src/game-core/rules/equipment-effects.ts`）
+是**所有**「装备耐久归零销毁」的唯一汇聚点。它被以下 5 条 reducer 路径调用：
+
+1. `combat.ts` 武器攻击后耐久 tick
+2. `hero.ts` `MONSTER_DOOM` 销毁装备
+3. `magic-effects.ts` discard-rebuild 销毁装备
+4. `magic-effects.ts` shield self-damage（soul-swap 等）
+5. 任何未来的「让装备耐久 -N」reducer
+
+**所有销毁逻辑都必须走 `computeEquipmentBreakEffects`，不要绕过它自己写一套。**
+该函数末尾通过 `routeBrokenSelfToGraveOrRecycle(state, slotItem, isPermRecycle, patch, enqueuedActions)`
+统一路由 broken self：
+
+```ts
+function routeBrokenSelfToGraveOrRecycle(state, slotItem, isPermRecycle, patch, enqueuedActions) {
+ if (isPermRecycle) {
+ // 剥离运行时字段（armor / armorBonusDamaged / reviveUsed / fromSlot 等），
+ // 然后 enqueue ADD_TO_RECYCLE_BAG，让 reducer 自己做 Perm 路由 + 动画。
+ enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: cleaned });
+ } else {
+ // resetCardForGraveyard：weapon/shield 耐久刷满，monster 走
+ // resetMonsterForGraveyard（currentLayer=1、清 tempAttackBoost 等）。
+ const cleaned = resetCardForGraveyard(slotItem, state.gameMode === 'quick');
+ patch.discardedCards = [...(patch.discardedCards ?? state.discardedCards), cleaned];
+ }
+}
+```
+
+`isPermRecycle = shouldRouteEquipmentToPermRecycle(slotItem)`，**不要**自己拼条件，
+现成的 helper 已经覆盖了 `permEquipment`（铁壁塔盾原生）+ `recycleDelay > 0`（永恒铭刻后天）双判断。
+
+## 强制规则
+
+### 1. 不要绕过 `computeEquipmentBreakEffects`
+
+任何让装备耐久变 0 / 摧毁装备的新 reducer，**必须**调 `computeEquipmentBreakEffects`，
+**不允许**自己写「`patch[slotId] = null` 然后完事」的简化版。
+`Grep computeEquipmentBreakEffects` 看现有 5 条调用方写法照抄。
+
+### 2. 装备销毁的 5 条优先级（已实现，新加分支按这个顺序）
+
+`computeEquipmentBreakEffects` 内部按此顺序处理（每条互斥）：
+
+| 优先级 | 条件 | 去向 |
+|---|---|---|
+| 1 | `equipmentRevive`（`hasEquipmentRevive` / 永恒铭刻 revive 等） | 不销毁，原地复活 |
+| 2 | `equipmentSalvageCount > 0`（残骸回收符） | 入手牌（maxDur -1）|
+| 3 | `wraith-haunt-N` last-words swap 成功 | 对面槽位 item 移过来；**broken self 同时进坟场/回收袋** |
+| 4 | `graveyard-to-hand` last-words | 从坟场抽一张到手牌；**broken self 同时进坟场** |
+| 5 | 默认 | broken self 进坟场/回收袋 |
+
+**关键**：3、4、5 都要调 `routeBrokenSelfToGraveOrRecycle`。
+3 容易脑补成「swap 完了原卡就消失了」——错，swap 只是把对面 item 搬过来，原卡还要落地。
+
+### 3. 不要在外部 reducer 里"补一刀"二次销毁
+
+如果你已经过了 `computeEquipmentBreakEffects`，broken self 已经被 push 进
+`patch.discardedCards`（或 enqueue 了 `ADD_TO_RECYCLE_BAG`）。**不要**再在
+caller 里 `patch.discardedCards = [..., slotItem]` —— 会导致重复入坟场。
+
+### 4. 测试必须断言"broken self 落地"
+
+写新「装备销毁」相关效果时，**必须**有断言：
+
+```ts
+expect(finalState.discardedCards.some(c => c.id === BROKEN_ID)).toBe(true);
+// 或对 Perm：
+expect(finalState.permanentMagicRecycleBag.some(c => c.id === BROKEN_ID)).toBe(true);
+```
+
+只断言 `equipmentSlot1 === null` **不够** ——这正是历史 bug 漏过测试的原因。
+
+参考测试：`client/src/game-core/__tests__/equipment-break-routes-to-graveyard.test.ts`
+覆盖 5 条调用路径 + Perm/非 Perm/wraith-swap/graveyard-to-hand/salvage 边界。
+
+## 自检
+
+写完任何「装备销毁/耐久归零」相关代码，问自己：
+
+> 1. 我有没有调 `computeEquipmentBreakEffects`，而不是自己写一套销毁逻辑？
+> 2. 如果我修改了 `computeEquipmentBreakEffects` 加新分支，新分支结尾有没有调
+> `routeBrokenSelfToGraveOrRecycle`？
+> 3. 我有没有在 caller 里"补一刀"重复入坟场？
+> 4. 测试有没有显式断言 broken self 在 `discardedCards`（或 Perm 时在
+> `permanentMagicRecycleBag`）里？
+
+任意一条「没」或「不确定」，回去对照
+`client/src/game-core/__tests__/equipment-break-routes-to-graveyard.test.ts` 照抄。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| 装备**broken self** 进坟场/回收袋 | ✅ 这条 | ❌ |
+| Perm 装备/护符**被销毁/转化**时分流到回收袋 | 部分（仅装备销毁） | `perm-routing-on-discard`（覆盖更广：amulet/potion/手牌） |
+| 怪物进坟场后 `currentLayer` reset | 间接（`resetCardForGraveyard` 内部） | `monster-graveyard-layer-reset` |
+| 装备 `maxDurability` 4 封顶 | ❌ | `equipment-durability-cap` |
+| 护盾 `armor` vs `durability` 语义 | ❌ | `shield-armor-vs-durability` |
+| 「被弃 / 被回收」措辞触发 onDiscardDraw | ❌ | `discard-vs-recycle-semantics` |
+
+涉及装备销毁路径时，**这几条规则都要核对**。

@@ -354,11 +354,29 @@ function isInputContinuation(action: GameAction): boolean {
     case 'UPDATE_MONSTER_CARD':
     case 'REGISTER_DUNGEON_CARD_PROCESSED':
     case 'SET_HERO_SKILL_BANNER':
+    // Game log append — pure state mutation enqueued by reducers (notably
+    // reduceResolveDice for stun flows like 震慑领域). NEVER an input action.
+    // Bug history: when stun-domain's last RESOLVE_DICE enqueued
+    // [UPDATE_GAME_LOG, FINALIZE_MAGIC_CARD] under phase='playerInput',
+    // drain paused on UPDATE_GAME_LOG and FINALIZE_MAGIC_CARD never ran —
+    // the card stayed in limbo (gone from hand, never reaching graveyard).
+    case 'UPDATE_GAME_LOG':
     case 'SET_COMBAT_FLAG':
     case 'SET_GAMBIT_STATE':
     case 'SET_UPGRADE_MODAL_OPEN':
     case 'CHECK_HORDE_SWARM':
     case 'CHECK_ELITE_GOLD_BUFF':
+    // Monster enter-effect dispatch — enqueued by APPLY_WATERFALL_DROP /
+    // DRAW_DUNGEON_ROW / TRIGGER_WATERFALL whenever a new monster lands on
+    // the active row. Bug history: when an Ogre (`enterEffect: 'auto-engage'`)
+    // dropped via waterfall, the MONSTER_ENTERED_ROW follow-up was stranded
+    // in the queue because phase='playerInput' and this case was missing from
+    // the continuation list. The auto-engage float + BEGIN_COMBAT then fired
+    // at the next user action (e.g. when the player attacked the ogre),
+    // making it look like the enter effect triggered on death. Same hole
+    // affected the elite ogre's `ogreEnterDiscard` (蛮力震慑) which shares
+    // this dispatch path.
+    case 'MONSTER_ENTERED_ROW':
     case 'START_TURN':
     case 'ENTER_PLAYER_INPUT':
     case 'TRIGGER_GRAVE_NOVA':

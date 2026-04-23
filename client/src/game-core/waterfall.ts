@@ -203,7 +203,6 @@ export function waterfallResetsPure(state: GameState): Partial<GameState> {
     unbreakableUntilWaterfall: {},
     slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 0 },
     slotTempAttack: { equipmentSlot1: 0, equipmentSlot2: 0 },
-    bulwarkTempArmorStacks: 0,
     waveDiscardCount: 0,
     turnDamageTaken: 0,
     heroSkillUsedThisWave: false,

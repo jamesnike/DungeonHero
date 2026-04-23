@@ -46,7 +46,7 @@ import {
 } from '../helpers';
 import { computeAmuletEffects } from '../equipment';
 import { hasEternalRelic } from '@/lib/eternalRelics';
-import { processRecycleBag } from '../cards';
+import { processRecycleBag, drawMultipleFromBackpack } from '../cards';
 import { resetHeroWavePure } from '../hero';
 import { createBugletCard } from '../deck';
 
@@ -413,6 +413,40 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
       sideEffects.push({
         event: 'waterfall:recycleRestored',
         payload: { count: recycleResult.restored.length, cards: recycleResult.restored },
+      });
+    }
+  }
+
+  // Eternal relic: waterfall-draw-2 — draw 2 cards from backpack every waterfall.
+  // 放在回收袋 tick 之后：刚被洗回背包的卡这一波就能被抽到，与 `recycle-shuffle`
+  // 起始护符天然联动。
+  // 来源固定 'backpack'：遵循 .cursor/rules/draw-cards-defaults-to-backpack.mdc。
+  // 内联 drawMultipleFromBackpack（而不是 enqueue DRAW_CARDS）的目的：拿到实际抽
+  // 到的卡的引用，把名字写进 log，跟其它「抽 N 张」效果（hero 击晕汲取等）的实
+  // 现一致。
+  if (hasEternalRelic(state.eternalRelics, 'waterfall-draw-2')) {
+    const drawState = { ...state, ...patch } as GameState;
+    const drawResult = drawMultipleFromBackpack(drawState, 2);
+    if (drawResult.cards.length > 0) {
+      Object.assign(patch, drawResult.patch);
+      for (const d of drawResult.cards) {
+        sideEffects.push({
+          event: 'card:drawnToHand',
+          payload: { cardId: d.id, source: 'backpack' },
+        });
+      }
+      const names = drawResult.cards.map(c => `「${c.name}」`).join('、');
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'waterfall',
+          message: `永恒护符·瀑流汲取：从背包抽 ${drawResult.cards.length} 张牌（${names}）`,
+        },
+      });
+    } else {
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'waterfall', message: '永恒护符·瀑流汲取：背包无可抽卡或手牌已满' },
       });
     }
   }

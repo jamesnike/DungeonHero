@@ -798,6 +798,23 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       const monsterCardSnapshot = activeMonsterReward.monsterCard ?? null;
       const doneId = activeMonsterReward.monsterInstanceId;
 
+      // Decide BEFORE dispatching: 'repair' is the only reward type whose
+      // applyMonsterReward path does NOT dispatch APPLY_MONSTER_REWARD —
+      // it kicks off an async slot-picker UI via repairEquipmentDurability.
+      // For all other reward types, the APPLY_MONSTER_REWARD reducer already
+      // (1) sets activeMonsterReward = null,
+      // (2) enqueues DEQUEUE_MONSTER_REWARD,
+      // (3) moves the monster card to the graveyard.
+      // Because GameEngine.dispatch runs its action + enqueued sub-actions
+      // synchronously, by the time `applyMonsterReward(selected)` returns,
+      // the next queued reward (if any) has ALREADY been promoted to
+      // activeMonsterReward. Firing an unconditional CLEAR_ACTIVE_MONSTER_REWARD
+      // here would wipe out that just-promoted reward — leaving subsequent
+      // monsters from a multi-kill (e.g. 坟火新星 hitting multiple buglets)
+      // permanently stuck in the queue with their cards frozen on the active
+      // row.
+      const isRepair = selected.effect.type === 'repair';
+
       const resolved = applyMonsterReward(selected);
       if (!resolved) {
         return;
@@ -821,9 +838,21 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         depsRef.current.removePendingDungeonCard(doneId);
       }
       if (monsterCardSnapshot) {
+        // ADD_TO_GRAVEYARD reducer is idempotent (no-op if id already in
+        // discardedCards), so this is safe to call even though the
+        // APPLY_MONSTER_REWARD reducer has already moved the card.
         depsRef.current.addToGraveyard(monsterCardSnapshot);
       }
-      dispatch({ type: 'CLEAR_ACTIVE_MONSTER_REWARD' });
+      // Repair runs through an async UI path that does NOT go through the
+      // APPLY_MONSTER_REWARD reducer, so it leaves activeMonsterReward
+      // pointing at the (now-finished) repair drop and never enqueues
+      // DEQUEUE_MONSTER_REWARD. Explicitly clear + advance here so the next
+      // queued reward surfaces regardless of whether the player completes
+      // or cancels the slot-picker.
+      if (isRepair) {
+        dispatch({ type: 'CLEAR_ACTIVE_MONSTER_REWARD' });
+        dispatch({ type: 'DEQUEUE_MONSTER_REWARD' });
+      }
     },
     [activeMonsterReward, applyMonsterReward, dispatch],
   );

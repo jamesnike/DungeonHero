@@ -37,7 +37,7 @@ import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
 import { computeEquipmentBreakEffects, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
-import { computeAmuletEffects, getEquipmentInSlot } from '../equipment';
+import { computeAmuletEffects, getEquipmentInSlot, getSlotBonus } from '../equipment';
 import { applyFlipCounters } from './flip-counters';
 import { nextInt, pickRandom } from '../rng';
 import { damageMonsterWithLayerOverflow, computeEffectiveSpellDamageOnMonster } from '../combat';
@@ -1488,11 +1488,13 @@ function reduceMagicSlotSelection(
 
     case 'temp-attack-strike': {
       const tempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      const permAtk = getSlotBonus(state, slotId, 'damage');
+      const baseAtk = permAtk + tempAtk;
       const echoMulTAS = (pending as any).echoMultiplier ?? 1;
-      const totalDamage = computeSpellDamagePure(state, tempAtk + (pending.card.amplifyBonus ?? 0)) * echoMulTAS;
+      const totalDamage = computeSpellDamagePure(state, baseAtk + (pending.card.amplifyBonus ?? 0)) * echoMulTAS;
       if (totalDamage <= 0) {
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          '该装备栏没有临时攻击，造成 0 点伤害。');
+          '该装备栏没有永久攻击和临时攻击，造成 0 点伤害。');
       }
       const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
       if (monsters.length === 0) {

@@ -154,6 +154,12 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
     description: '所有「魔弹」造成伤害后从背包抽 1 张牌。',
     image: relicEarlySurgeImage,
   },
+  'waterfall-draw-2': {
+    id: 'waterfall-draw-2',
+    name: '永恒护符·瀑流汲取',
+    description: '每次瀑流推进时，从背包抽 2 张牌。',
+    image: relicEarlySurgeImage,
+  },
 };
 
 export function getEternalRelic(id: EternalRelicId): EternalRelic {
@@ -167,14 +173,17 @@ export function getStartingRelics(): EternalRelic[] {
   // in `game-core/deck.ts`). The relic registry entry is intentionally
   // retained so other paths (e.g. 「护符永铸药」 converting an equipped
   // amulet, save migrations) still resolve cleanly.
-  return [RELIC_REGISTRY['recycle-shuffle']];
+  return [
+    RELIC_REGISTRY['recycle-shuffle'],
+    RELIC_REGISTRY['waterfall-draw-2'],
+  ];
 }
 
 export function hasEternalRelic(relics: EternalRelic[], id: EternalRelicId): boolean {
   return relics.some(r => r.id === id);
 }
 
-const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus', 'end-turn-draw', 'missile-amplify-on-waterfall', 'missile-stun-20', 'missile-draw-1']);
+const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus', 'end-turn-draw', 'missile-amplify-on-waterfall', 'missile-stun-20', 'missile-draw-1', 'waterfall-draw-2']);
 
 export function getSelectableRelics(exclude: EternalRelicId[]): EternalRelic[] {
   const excludeSet = new Set(exclude);

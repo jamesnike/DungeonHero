@@ -24,6 +24,7 @@ export function MonsterDeathLottie({ onComplete }: MonsterDeathLottieProps) {
   return (
     <div
       aria-hidden
+      className="monster-death-lottie-wrapper"
       style={{
         position: 'absolute',
         inset: 0,
@@ -42,9 +43,10 @@ export function MonsterDeathLottie({ onComplete }: MonsterDeathLottieProps) {
           position: 'absolute',
           top: '50%',
           left: '50%',
-          width: '160%',
-          height: '160%',
+          width: '128%',
+          height: '128%',
           transform: 'translate(-50%, -50%)',
+          opacity: 0.78,
           pointerEvents: 'none',
         }}
       />

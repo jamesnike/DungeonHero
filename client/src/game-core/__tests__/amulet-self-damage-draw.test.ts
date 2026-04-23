@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
 import type { GameState, GameCardData } from '../types';
-import { initialCombatState } from '../constants';
+import { initialCombatState, HAND_LIMIT } from '../constants';
 
 function makeState(overrides?: Partial<GameState>): GameState {
   return {
@@ -151,13 +151,9 @@ describe('赎血召牌符 (self-damage-draw)', () => {
     expect(result.state.backpackItems.length).toBe(0);
   });
 
-  it('受手牌上限约束（HAND_LIMIT 默认 6）— 已满则抽不出来', () => {
+  it('受手牌上限约束 — 已满则抽不出来', () => {
     const backpack = [FILLER('bp1'), FILLER('bp2')];
-    // 手牌已 6 张顶到上限
-    const fullHand = [
-      FILLER('h1'), FILLER('h2'), FILLER('h3'),
-      FILLER('h4'), FILLER('h5'), FILLER('h6'),
-    ];
+    const fullHand = Array.from({ length: HAND_LIMIT }, (_, i) => FILLER(`h${i}`));
     const state = makeState({
       hp: 20,
       amuletSlots: [SDD_AMULET('a1'), SDD_AMULET('a2')] as any,
@@ -170,7 +166,7 @@ describe('赎血召牌符 (self-damage-draw)', () => {
     ]);
 
     expect(result.state.hp).toBe(17);
-    expect(result.state.handCards.length).toBe(6);
+    expect(result.state.handCards.length).toBe(HAND_LIMIT);
     expect(result.state.backpackItems.length).toBe(2);
   });
 

@@ -3164,7 +3164,7 @@ export function resolveKnightPermanentMagic(
         effect: 'temp-attack-strike',
         step: 'slot-select',
         isFlank: !!isFlank,
-        prompt: '选择一个装备栏，将其临时攻击转化为伤害。',
+        prompt: '选择一个装备栏，将其永久攻击+临时攻击转化为伤害。',
         echoMultiplier,
       } as any;
       patch.heroSkillBanner = '锋刃侧击：选择一个装备栏。';

@@ -3389,9 +3389,9 @@ function reduceResolveBlock(
   }
 
   // Bulwark block temp armor
-  if (blockedWithShield && (state.bulwarkPassiveActive ?? 0) > 0 && action.slotId) {
+  if (blockedWithShield && (state.bulwarkTempArmorStacks ?? 0) > 0 && action.slotId) {
     const blockSlotId = action.slotId;
-    const tempGain = 2 * state.bulwarkPassiveActive!;
+    const tempGain = 2 * state.bulwarkTempArmorStacks!;
     patch.slotTempArmor = { ...(patch.slotTempArmor ?? state.slotTempArmor ?? {}), [blockSlotId]: ((patch.slotTempArmor ?? state.slotTempArmor ?? {})[blockSlotId] ?? 0) + tempGain };
     const label = blockSlotId === 'equipmentSlot1' ? '左' : '右';
     sideEffects.push({

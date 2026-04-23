@@ -24,7 +24,7 @@ import {
   STARTER_CARD_IDS,
   createStarterDiscoverClassToHandCard,
 } from '../deck';
-import { BASE_BACKPACK_CAPACITY } from '../constants';
+import { BASE_BACKPACK_CAPACITY, HAND_LIMIT } from '../constants';
 import { getStartingRelics } from '@/lib/eternalRelics';
 import type { GameState } from '../types';
 import type { GameCardData } from '@/components/GameCard';
@@ -225,8 +225,8 @@ describe('RESOLVE_DISCOVER_SELECTION — hand-first delivery', () => {
 
   it('falls back to backpack when hand is full but backpack has room', () => {
     const candidate = makeClassCard('cls-x', '测试卡');
-    // Fill hand to limit (default HAND_LIMIT = 6, no bonus).
-    const fullHand: GameCardData[] = Array.from({ length: 6 }, (_, i) => ({
+    // Fill hand to HAND_LIMIT (no bonus) so the candidate cannot land in hand.
+    const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
       id: `h-${i}`,
       type: 'magic',
       name: `H${i}`,
@@ -245,7 +245,7 @@ describe('RESOLVE_DISCOVER_SELECTION — hand-first delivery', () => {
       type: 'RESOLVE_DISCOVER_SELECTION',
       cardId: candidate.id,
     });
-    expect(result.state.handCards.length).toBe(6);
+    expect(result.state.handCards.length).toBe(HAND_LIMIT);
     expect(result.state.backpackItems.length).toBe(1);
     expect(result.state.backpackItems[0].name).toBe('测试卡');
     expect(result.state.permanentMagicRecycleBag.length).toBe(0);
@@ -256,7 +256,7 @@ describe('RESOLVE_DISCOVER_SELECTION — hand-first delivery', () => {
       ...makeClassCard('cls-x', '测试卡'),
       recycleDelay: 3,
     } as GameCardData;
-    const fullHand: GameCardData[] = Array.from({ length: 6 }, (_, i) => ({
+    const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
       id: `h-${i}`,
       type: 'magic',
       name: `H${i}`,
@@ -291,16 +291,22 @@ describe('RESOLVE_DISCOVER_SELECTION — hand-first delivery', () => {
     expect(
       (recycled as GameCardData & { _recycleWaits?: number })._recycleWaits,
     ).toBe(3);
-    expect(result.state.handCards.length).toBe(6);
+    expect(result.state.handCards.length).toBe(HAND_LIMIT);
     expect(result.state.backpackItems.length).toBe(BASE_BACKPACK_CAPACITY);
   });
 });
 
 describe('Eternal relics — starting set no longer contains waterfall-discover', () => {
-  it('getStartingRelics returns only [recycle-shuffle]', () => {
+  it('getStartingRelics returns recycle-shuffle (not waterfall-discover)', () => {
     const starting = getStartingRelics();
     const ids = starting.map(r => r.id);
     expect(ids).not.toContain('waterfall-discover');
     expect(ids).toContain('recycle-shuffle');
+  });
+
+  it('getStartingRelics includes waterfall-draw-2 (default starter)', () => {
+    const starting = getStartingRelics();
+    const ids = starting.map(r => r.id);
+    expect(ids).toContain('waterfall-draw-2');
   });
 });

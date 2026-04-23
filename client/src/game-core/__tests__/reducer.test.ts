@@ -5,7 +5,7 @@ import { createInitialGameState } from '../state';
 import { createRng, shuffle as rngShuffle } from '../rng';
 import type { GameState } from '../types';
 import type { GameAction } from '../actions';
-import { initialCombatState, BASE_BACKPACK_CAPACITY } from '../constants';
+import { initialCombatState, BASE_BACKPACK_CAPACITY, HAND_LIMIT } from '../constants';
 
 function makeState(overrides?: Partial<GameState>): GameState {
   return { ...createInitialGameState(), ...overrides };
@@ -222,7 +222,7 @@ describe('reducer', () => {
     });
 
     it('does nothing if hand is full', () => {
-      const cards = Array.from({ length: 6 }, (_, i) => ({
+      const cards = Array.from({ length: HAND_LIMIT }, (_, i) => ({
         id: `c${i}`, type: 'weapon' as const, name: `Sword ${i}`, value: 3,
       }));
       const backpackCard = { id: 'bp1', type: 'shield' as const, name: 'Shield', value: 2 };
@@ -232,7 +232,7 @@ describe('reducer', () => {
       });
 
       const result = reduce(state, { type: 'DRAW_CARDS', count: 1, source: 'backpack' });
-      expect(result.state.handCards.length).toBe(6);
+      expect(result.state.handCards.length).toBe(HAND_LIMIT);
       expect(result.state.backpackItems.length).toBe(1);
     });
   });
@@ -2962,15 +2962,19 @@ describe('reducer', () => {
     });
 
     it('stops at hand limit', () => {
-      const cards = Array.from({ length: 8 }, (_, i) => ({ id: `c${i}`, name: `Card${i}`, type: 'magic' as const, value: 0 }));
+      // Hand starts with HAND_LIMIT - 1 cards, backpack has 3, pending = 3 →
+      // can only draw 1 before hitting the limit.
+      const handFill = HAND_LIMIT - 1;
+      const total = handFill + 3;
+      const cards = Array.from({ length: total }, (_, i) => ({ id: `c${i}`, name: `Card${i}`, type: 'magic' as const, value: 0 }));
       const state = makeState({
         pendingAutoDrawCount: 3,
-        backpackItems: cards.slice(5) as any,
-        handCards: cards.slice(0, 5) as any,
+        backpackItems: cards.slice(handFill) as any,
+        handCards: cards.slice(0, handFill) as any,
         handLimitBonus: 0,
       });
       const result = reduce(state, { type: 'PROCESS_AUTO_DRAWS' });
-      expect(result.state.handCards).toHaveLength(6);
+      expect(result.state.handCards).toHaveLength(HAND_LIMIT);
       expect(result.state.pendingAutoDrawCount).toBe(0);
     });
 

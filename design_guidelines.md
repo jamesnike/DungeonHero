@@ -702,7 +702,7 @@ The `amplifyBonus` field on `GameCardData` is read as `(card.amplifyBonus ?? 0)`
 - 残血终焉 (`missing-hp-smite`): `getSpellDamage(scaledDmg + ampBonus)`
 - 坟火新星 (`grave-nova`): `getSpellDamage(baseDmg + ampBonus)` — baseDmg = [3, 6][upgradeLevel], `triggerGraveNova(card)` receives the card to read its bonus
 - 天眼审判 (`fate-sight`): `getSpellDamage(baseDmg + ampBonus)` inside `resolveFateSight`
-- 锋刃侧击 (`temp-attack-strike`): `getSpellDamage(tempAtk + ampBonus)`
+- 锋刃侧击 (`temp-attack-strike`): `getSpellDamage(slotPermAtk + tempAtk + ampBonus)`（`slotPermAtk = getSlotBonus(state, slotId, 'damage')`）
 - 利刃风暴 (`weapon-sweep`): `computeHonorSweepWaveDamage(slotId) + ampBonus`
 - 淬炼冲击 (`overkill-upgrade`): `getSpellDamage(3 + ampBonus)`
 - 魔力飞弹 (`missile-bolt`): `getSpellDamage(2 + ampBonus)`

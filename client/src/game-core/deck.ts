@@ -1738,8 +1738,8 @@ export function createDeck(
     name: '弹幕骰局',
     value: 0,
     image: dedupeStarterMagicMissileImage,
-    description: '掷骰决定弹幕赐福，结束后翻转为「弹幕之符」放入背包。',
-    shortDescription: '掷骰获得弹幕赐福；翻为「弹幕之符」入背包',
+    description: '掷骰决定弹幕赐福，结束后翻转为「弹幕之符」留在地城原格。',
+    shortDescription: '掷骰获得弹幕赐福；翻为「弹幕之符」留在原格',
     eventChoices: [
       {
         text: '掷出不同结果：4魔弹/瀑流增幅护符/法强超杀+1/魔弹击晕护符/魔弹抽牌护符/Lv1魔法飞弹。',
@@ -1765,8 +1765,8 @@ export function createDeck(
         description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
         shortDescription: '每次从坟场/专属池获牌：入手 1 张「魔弹」',
       },
-      destination: 'backpack',
-      message: '弹幕骰局翻转为「弹幕之符」，已放入背包！',
+      destination: 'stay',
+      message: '弹幕骰局翻转为「弹幕之符」，留在地城原格！',
     },
   });
 
@@ -3112,9 +3112,10 @@ export function createStarterCardPool(): GameCardData[] {
 let bugletCounter = 0;
 
 /** 双重燃烧（觉醒）在预览行正上方为魔法牌时额外翻转的 Perm1 魔法 */
-export function createCrimsonVoidSwapMagic(): GameCardData {
-  return {
-    id: `void-swap-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+export function createCrimsonVoidSwapMagic(rng: RngState): [GameCardData, RngState] {
+  const [id, nextRng] = nextId(rng, 'void-swap');
+  const card: GameCardData = {
+    id,
     type: 'magic',
     name: '虚空置换',
     value: 0,
@@ -3126,6 +3127,7 @@ export function createCrimsonVoidSwapMagic(): GameCardData {
     recycleDelay: 1,
     maxUpgradeLevel: 1,
   };
+  return [card, nextRng];
 }
 
 export function createBugletCard(): GameCardData {
