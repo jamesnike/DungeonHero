@@ -60,7 +60,7 @@ function makeAmulet(over?: Partial<GameCardData>): GameCardData {
   } as GameCardData;
 }
 
-describe('怨灵诅咒摧毁护符 — Perm routing', () => {
+describe('诅咒摧毁护符 — Perm routing', () => {
   it('Perm-flagged amulet (recycleDelay = 2 from 附魔祭坛) routes to recycle bag', () => {
     const wraith = makeWraith();
     const permAmulet = makeAmulet({ id: 'perm-amulet', recycleDelay: 2 });
@@ -165,7 +165,7 @@ describe('怨灵诅咒摧毁护符 — Perm routing', () => {
     expect(r.sideEffects.some(e =>
       e.event === 'log:entry' &&
       typeof (e.payload as any).message === 'string' &&
-      (e.payload as any).message.includes('怨灵诅咒'),
+      (e.payload as any).message.includes('诅咒'),
     )).toBe(true);
   });
 });

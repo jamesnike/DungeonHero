@@ -452,11 +452,11 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
           skillKey: 'waterfall:wraithEnrage',
         });
       }
-      sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: '怨灵诅咒：瀑流时激活行所有怪物激怒！' } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: '诅咒：瀑流时激活行所有怪物激怒！' } });
       sideEffects.push({ event: 'waterfall:wraithEnrage', payload: { monsterIds: rowMonsterIds } });
     }
     patch.maxAmuletSlots = (state.maxAmuletSlots ?? 3) + 1;
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: '怨灵诅咒：护符栏上限 +1！' } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: '诅咒：护符栏上限 +1！' } });
   }
 
   // Hero skill reset for new wave
@@ -1073,7 +1073,7 @@ function reduceApplyWaterfallTurnReset(state: GameState): ReduceResult {
       patch[slotId] = { ...item, golemLayerLossReflect: newCoeff } as typeof item;
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${item.name} 法力吞噬：瀑流强化，岩层反震系数 +${item.golemSpellGrowth}（当前 ${newCoeff}）` },
+        payload: { type: 'equip', message: `${item.name} 吞噬：瀑流强化，反震系数 +${item.golemSpellGrowth}（当前 ${newCoeff}）` },
       });
     }
   }

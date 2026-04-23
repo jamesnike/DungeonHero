@@ -3,7 +3,7 @@
  * concurrent dice requests from clobbering each other.
  *
  * Real bug this prevents:
- *   When 雷震击 (stun-strike) hit a 虚骨再生 (bone-regen) Skeleton, the
+ *   When 雷震击 (stun-strike) hit a 骸生 (bone-regen) Skeleton, the
  *   reducer emitted both ui:requestDice (hero-stun) and combat:boneRegenCheck
  *   in the same drain. Both listeners called requestDiceOutcome
  *   synchronously; the single-slot impl let bone-regen overwrite stun's

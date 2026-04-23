@@ -452,7 +452,7 @@ export default function CardDetailsModal({
               </div>
             )}
 
-            {/* Ogre Crit - 蛮力暴击 */}
+            {/* Ogre Crit - 暴击 */}
             {card.type === 'monster' && card.monsterSpecial === 'ogre-crit' && (
               <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30 relative overflow-hidden">
                 <div className="relative flex flex-col gap-1.5">
@@ -807,7 +807,7 @@ export default function CardDetailsModal({
                     <Sparkles className="w-4 h-4 shrink-0 text-indigo-500" />
                     <span className="font-extrabold text-sm text-indigo-700 dark:text-indigo-300 tracking-wide">吞噬</span>
                   </div>
-                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每个怪物回合结束时，反魔伤害 +{card.golemSpellGrowth}，岩层反震系数 +{card.golemSpellGrowth}。</p>
+                  <p className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 pl-6">每个怪物回合结束时，反魔伤害 +{card.golemSpellGrowth}，反震系数 +{card.golemSpellGrowth}。</p>
                 </div>
               </div>
             )}

@@ -518,14 +518,14 @@ export function computeEquipmentDisplacementLastWords(
           updatedOther = { ...updatedOther, durability: newDur };
           sideEffects.push({
             event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 怨灵祝福：${otherItem.name} 耐久 +1！` },
+            payload: { type: 'equip', message: `${slotItem.name} 祝福：${otherItem.name} 耐久 +1！` },
           });
         }
         if (slotItem.wraithDeathHealSpread && !otherItem.wraithDeathHeal) {
           updatedOther = { ...updatedOther, wraithDeathHeal: 1 };
           sideEffects.push({
             event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 怨灵传承：${otherItem.name} 获得遗言「怨灵祝福」！` },
+            payload: { type: 'equip', message: `${slotItem.name} 传魂：${otherItem.name} 获得遗言「祝福」！` },
           });
         }
         patch[otherSlotId] = updatedOther as EquipmentItem;
@@ -819,14 +819,14 @@ export function computeEquipmentBreakEffects(
           updatedOther = { ...updatedOther, durability: newDur };
           effects.push({
             event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 怨灵祝福：${otherItem.name} 耐久 +1！` },
+            payload: { type: 'equip', message: `${slotItem.name} 祝福：${otherItem.name} 耐久 +1！` },
           });
         }
         if (slotItem.wraithDeathHealSpread && !otherItem.wraithDeathHeal) {
           updatedOther = { ...updatedOther, wraithDeathHeal: 1 };
           effects.push({
             event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 怨灵传承：${otherItem.name} 获得遗言「怨灵祝福」！` },
+            payload: { type: 'equip', message: `${slotItem.name} 传魂：${otherItem.name} 获得遗言「祝福」！` },
           });
         }
         patch[otherSlotId] = updatedOther as EquipmentItem;
@@ -973,9 +973,9 @@ export function computeEquipmentBreakEffects(
       }
       effects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${otherForReRevive.name} 亡骨轮回：获得了「复生」！` },
+        payload: { type: 'equip', message: `${otherForReRevive.name} 轮回：获得了「复生」！` },
       });
-      effects.push({ event: 'ui:banner', payload: { text: `${otherForReRevive.name} 亡骨轮回！` } });
+      effects.push({ event: 'ui:banner', payload: { text: `${otherForReRevive.name} 轮回！` } });
     }
   }
 
@@ -1032,7 +1032,7 @@ export function computeDurabilityLossEffects(
       patch[otherSlotId] = revived as EquipmentItem;
       effects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 流血破甲：「${otherItem.name}」（耐久 ${otherItem.durability} > ${newDurability}）复生了！` },
+        payload: { type: 'equip', message: `${slotItem.name} 破甲：「${otherItem.name}」（耐久 ${otherItem.durability} > ${newDurability}）复生了！` },
       });
     } else {
       clearSlotAndPromoteReserve(state, otherSlotId, patch);
@@ -1043,19 +1043,19 @@ export function computeDurabilityLossEffects(
       });
       effects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 流血破甲：破坏了「${otherItem.name}」（耐久 ${otherItem.durability} > ${newDurability}）！` },
+        payload: { type: 'equip', message: `${slotItem.name} 破甲：破坏了「${otherItem.name}」（耐久 ${otherItem.durability} > ${newDurability}）！` },
       });
       // Skeleton re-revive on self when other destroyed
       if (slotItem.skeletonReRevive && (!slotItem.hasRevive || slotItem.reviveUsed)) {
         updatedItem = { ...updatedItem, hasRevive: true, reviveUsed: false };
         effects.push({
           event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 亡骨轮回：获得了「复生」！` },
+          payload: { type: 'equip', message: `${slotItem.name} 轮回：获得了「复生」！` },
         });
-        effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 亡骨轮回！` } });
+        effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 轮回！` } });
       }
     }
-    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 流血破甲！高耐久装备被破坏！` } });
+    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 破甲！高耐久装备被破坏！` } });
   }
 
   // Wraith rebirth — 50% chance to refill durability when at 1
@@ -1067,14 +1067,14 @@ export function computeDurabilityLossEffects(
       updatedItem = { ...updatedItem, durability: maxDur, wraithRebirthUsed: true };
       effects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 幽魂重生：耐久回满！（${maxDur}）` },
+        payload: { type: 'equip', message: `${slotItem.name} 重生：耐久回满！（${maxDur}）` },
       });
-      effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 幽魂重生！` } });
+      effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 重生！` } });
     } else {
       updatedItem = { ...updatedItem, wraithRebirthUsed: true };
       effects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 幽魂重生失败！（50%）` },
+        payload: { type: 'equip', message: `${slotItem.name} 重生失败！（50%）` },
       });
     }
   }
@@ -1090,9 +1090,9 @@ export function computeDurabilityLossEffects(
     patch[otherSlotId] = bugletAsEquip as EquipmentItem;
     effects.push({
       event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 虫母孵化：${otherItem.name} 被替换为小虫子！` },
+      payload: { type: 'equip', message: `${slotItem.name} 虫母：${otherItem.name} 被替换为小虫子！` },
     });
-    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 虫母孵化！` } });
+    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 虫母！` } });
   }
 
   // Golem layer loss reflect — damage random monster
@@ -1113,10 +1113,10 @@ export function computeDurabilityLossEffects(
           event: 'log:entry',
           payload: {
             type: 'equip',
-            message: `${slotItem.name} 岩层反震：${slotItem.golemLayerLossReflect}×${lostDur} = ${reflectDmg} 点伤害，命中 ${target.name}！`,
+            message: `${slotItem.name} 反震：${slotItem.golemLayerLossReflect}×${lostDur} = ${reflectDmg} 点伤害，命中 ${target.name}！`,
           },
         });
-        effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 岩层反震！${reflectDmg} 伤害！` } });
+        effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 反震！${reflectDmg} 伤害！` } });
       }
     }
   }

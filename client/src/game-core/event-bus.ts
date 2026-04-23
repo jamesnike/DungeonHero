@@ -57,7 +57,7 @@ export type GameEventMap = {
     stolenItemName: string | null;
   };
   /**
-   * Goblin "贼窝疗养" tier-2 skill: at end of monster turn, goblin rolls a
+   * Goblin "疗养" tier-2 skill: at end of monster turn, goblin rolls a
    * single D20 to heal 1 layer. Same `min(stackCount * 3, 20)` threshold as
    * 窃宝.
    */

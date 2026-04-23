@@ -269,7 +269,7 @@ export interface PendingSkillFloat {
  *
  * - `goblin-steal`: goblin "窃宝". The item to steal is pre-picked at
  *   flow-build time from the player's equipment / amulet slots.
- * - `goblin-heal`: goblin "贼窝疗养". Restores 1 layer (capped at maxLayers).
+ * - `goblin-heal`: goblin "疗养". Restores 1 layer (capped at maxLayers).
  */
 export type PendingMonsterEndDice =
   | {
@@ -486,7 +486,7 @@ export interface GameState {
   deathWardPrompt: DeathWardPromptState | null;
 
   /**
-   * Queue of pre-rolled goblin "贼窝疗养"/"窃宝" dice flows that need to be
+   * Queue of pre-rolled goblin "疗养"/"窃宝" dice flows that need to be
    * shown to the player at the end of the monster turn. While this queue is
    * non-empty the pipeline parks at `phase: 'awaitingDice'`; each
    * `RESOLVE_DICE` pops the front entry, applies its effect, then either

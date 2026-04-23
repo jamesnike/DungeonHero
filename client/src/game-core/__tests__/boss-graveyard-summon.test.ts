@@ -1,5 +1,5 @@
 /**
- * Boss 「亡灵召唤」(bossEnrageGraveyardSummon) regression test.
+ * Boss 「召唤」(bossEnrageGraveyardSummon) regression test.
  *
  * 设计契约 (per CARD_POOL_REFERENCE.md / CardDetailsModal description):
  *   被激怒时，从坟场取 4 张牌：
@@ -75,7 +75,7 @@ function makeNonMonster(id: string, name: string, type: 'potion' | 'magic' = 'po
   } as GameCardData;
 }
 
-describe('Boss 亡灵召唤 — 非怪物堆叠 contract', () => {
+describe('Boss 召唤 — 非怪物堆叠 contract', () => {
   it('从坟场召唤 2 怪物 + 2 非怪物（非怪物堆叠在 1 个格子上），共 4 张', () => {
     const boss = makeBoss();
     const m1 = makeMonster('grave-m1', '骷髅兵');

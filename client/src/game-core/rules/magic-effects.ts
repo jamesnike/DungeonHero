@@ -4466,13 +4466,13 @@ export function resolveMonsterFusion(
     Ogre: '食人魔', Wraith: '幽灵', Swarm: '虫群', Golem: '魔像',
   };
   const elitePropsMap: Record<string, Partial<GameCardData>> = {
-    Dragon: { monsterSpecial: 'ember-fury', monsterSpecialDesc: '融合精英：流血（每失去1耐久攻击+3）+ 龙息庇护。', bleedEffect: 'attack+3' as any, eliteHealOtherMonster: true },
-    Skeleton: { monsterSpecial: 'bone-regen', monsterSpecialDesc: '融合精英：虚骨再生（40%不消耗耐久）+ 复生。', hasRevive: true },
+    Dragon: { monsterSpecial: 'ember-fury', monsterSpecialDesc: '融合精英：流血（每失去1耐久攻击+3）+ 庇护。', bleedEffect: 'attack+3' as any, eliteHealOtherMonster: true },
+    Skeleton: { monsterSpecial: 'bone-regen', monsterSpecialDesc: '融合精英：骸生（40%不消耗耐久）+ 复生。', hasRevive: true },
     Goblin: { monsterSpecial: 'goblin-elite', monsterSpecialDesc: '融合精英：攻击偷取8金币 + 窃宝。', goblinStealEquip: true, onAttackEffect: 'steal-gold-8' as any },
     Ogre: { monsterSpecial: 'ogre-crit', monsterSpecialDesc: '融合精英：攻击伤害翻倍 + 50%概率额外攻击一次。', eliteDoubleAttack: true, weaponExtraAttack: 1 },
-    Wraith: { monsterSpecial: 'wraith-rebirth', monsterSpecialDesc: '融合精英：幽魂重生（耐久降至1时回满）+ 幽魂作祟遗言。', lastWords: 'wraith-haunt-4' as any },
+    Wraith: { monsterSpecial: 'wraith-rebirth', monsterSpecialDesc: '融合精英：重生（耐久降至1时回满）+ 幽魂作祟遗言。', lastWords: 'wraith-haunt-4' as any },
     Swarm: { monsterSpecial: 'swarm-elite', monsterSpecialDesc: '融合精英：虫群繁殖 + 虫母（受伤时替换地城牌为小虫子）。', swarmSpawn: true },
-    Golem: { monsterSpecial: 'golem-elite', monsterSpecialDesc: '融合精英：岩石护体（每次最多受5伤）+ 反魔。', maxDamagePerHit: 5, antiMagicReflect: 2 },
+    Golem: { monsterSpecial: 'golem-elite', monsterSpecialDesc: '融合精英：护体（每次最多受5伤）+ 反魔。', maxDamagePerHit: 5, antiMagicReflect: 2 },
   };
 
   const totalAtk = group.reduce((s, m) => s + (m.card.attack ?? m.card.value), 0);

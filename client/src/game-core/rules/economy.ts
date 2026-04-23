@@ -448,7 +448,7 @@ function reduceResolveDice(
         };
         enqueuedActions.push(
           { type: 'SET_HERO_SKILL_BANNER', message: `${mName} 恢复了 1 层血层！` } as GameAction,
-          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的虚骨再生了一层！`, timestamp: Date.now() } } as GameAction,
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的骸生了一层！`, timestamp: Date.now() } } as GameAction,
         );
       } else {
         enqueuedActions.push(
@@ -864,13 +864,13 @@ function reduceResolveDice(
             ) as typeof newState.activeCards,
           };
           enqueuedActions.push(
-            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${flow.goblinName} 贼窝疗养：恢复了 1 血层！（${flow.currentLayer} → ${newLayer}）`, timestamp: Date.now() } } as GameAction,
-            { type: 'SET_HERO_SKILL_BANNER', message: `${flow.goblinName} 贼窝疗养！恢复 1 血层！` } as GameAction,
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${flow.goblinName} 疗养：恢复了 1 血层！（${flow.currentLayer} → ${newLayer}）`, timestamp: Date.now() } } as GameAction,
+            { type: 'SET_HERO_SKILL_BANNER', message: `${flow.goblinName} 疗养！恢复 1 血层！` } as GameAction,
           );
         }
       } else if (flow.kind === 'goblin-heal') {
         enqueuedActions.push(
-          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${flow.goblinName} 贼窝疗养判定失败。`, timestamp: Date.now() } } as GameAction,
+          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${flow.goblinName} 疗养判定失败。`, timestamp: Date.now() } } as GameAction,
         );
       }
 

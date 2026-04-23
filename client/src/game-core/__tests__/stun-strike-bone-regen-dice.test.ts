@@ -1,6 +1,6 @@
 /**
  * Regression: 雷震击 (stun-strike) 打 bone-regen 精英 (Skeleton) 时，
- * 击晕掷骰子和虚骨再生掷骰子必须同时被 reducer 产出（作为两个独立 side
+ * 击晕掷骰子和骸生掷骰子必须同时被 reducer 产出（作为两个独立 side
  * effects）。修复前 hook 端的 requestDiceOutcome 单槽实现会让后到的
  * boneRegenCheck 覆盖先到的 ui:requestDice (hero-stun)，玩家只看到虚骨再
  * 生的骰子，stun 的 RESOLVE_DICE 永远不会触发，怪物也无法被击晕。

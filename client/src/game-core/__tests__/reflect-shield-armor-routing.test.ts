@@ -2,7 +2,7 @@
  * Reflect-damage routing onto shield armor — bonus-first + durability tick + break.
  *
  * Tests the rewritten `routeReflectDamageToHero` (rules/combat.ts) which is shared by
- * Golem 岩层反震 / 龙息反击 / 反魔 三条反伤路径.
+ * Golem 反震 / 龙息 / 反魔 三条反伤路径.
  *
  * Bug history:
  *   #2 反伤直接扣 base armor，无视 permanentBonus / slotTempArmor / armorBonusDamaged

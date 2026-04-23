@@ -4,9 +4,9 @@
  * layer HP, AFTER all reducer-side mitigation:
  *
  *   1. 诅咒碑光环 (`stacked-magic-immune`)        → 0 damage, no overkill bonus
- *   2. 虫盾共生 (`swarmBugletShield` + buglet)    → 0 damage, no overkill bonus
- *   3. 法术抗性 (`spellDamageReduction`)          → halved (min 1) — may cancel overkill
- *   4. 岩石护体 (`maxDamagePerHit`)               → capped — may cancel overkill
+ *   2. 虫盾 (`swarmBugletShield` + buglet)    → 0 damage, no overkill bonus
+ *   3. 抗性 (`spellDamageReduction`)          → halved (min 1) — may cancel overkill
+ *   4. 护体 (`maxDamagePerHit`)               → capped — may cancel overkill
  *
  * Bug: previously the resolvers used `rawDamage > monster.hp` to decide whether
  * to enqueue `SET_UPGRADE_MODAL_OPEN` (overkill-upgrade) / `DRAW_FROM_BACKPACK`
@@ -173,7 +173,7 @@ describe('淬炼冲击 (overkill-upgrade) overkill-bonus mitigation', () => {
     expect(findMonster(result.state, 'swarmer-1')?.hp).toBe(3);
     expect(result.state.upgradeModalOpen).toBeFalsy();
     expect(
-      result.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('虫盾共生')),
+      result.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('虫盾')),
     ).toBeDefined();
     expect(
       result.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('超杀')),
@@ -198,7 +198,7 @@ describe('淬炼冲击 (overkill-upgrade) overkill-bonus mitigation', () => {
     // Reducer logged the resistance and applied 2 dmg.
     expect(findMonster(result.state, 'wraith-1')?.hp).toBe(1);
     expect(
-      result.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('法术抗性')),
+      result.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('抗性')),
     ).toBeDefined();
     // 2 dmg ≤ 3 hp → NOT overkill; modal must stay closed.
     expect(result.state.upgradeModalOpen).toBeFalsy();
@@ -304,7 +304,7 @@ describe('混沌冲击 (chaos-strike) overkill-bonus mitigation', () => {
 
     expect(findMonster(result.state, 'swarmer-cs')?.hp).toBe(3);
     expect(
-      result.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('虫盾共生')),
+      result.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('虫盾')),
     ).toBeDefined();
     expect(
       result.sideEffects.find(s => s.event === 'log:entry' && (s.payload as any).message?.includes('超杀')),

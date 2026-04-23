@@ -467,13 +467,13 @@ export function createDeck(
       (monstersByType[mt] ??= []).push(m);
     });
     const specialMap: Record<string, { tag: string; desc: string; lastWords?: string }> = {
-      Dragon:   { tag: 'ember-fury',     desc: '精英流血：每失去一个血层，攻击力+3。\n龙息庇护：Hero回合未掉血层，为激活行另一个怪物恢复1血层。' },
-      Skeleton: { tag: 'bone-regen',     desc: '虚骨再生：每次失去血层后，40%概率恢复一层。' },
-      Wraith:   { tag: 'wraith-rebirth', desc: '幽魂重生：血层降至1时，30%概率血层全满。' },
-      Ogre:     { tag: 'ogre-crit',      desc: '蛮力暴击：攻击时50%概率双倍伤害。\n狂暴连击：70%概率攻击两次。' },
+      Dragon:   { tag: 'ember-fury',     desc: '精英流血：每失去一个血层，攻击力+3。\n庇护：Hero回合未掉血层，为激活行另一个怪物恢复1血层。' },
+      Skeleton: { tag: 'bone-regen',     desc: '骸生：每次失去血层后，40%概率恢复一层。' },
+      Wraith:   { tag: 'wraith-rebirth', desc: '重生：血层降至1时，30%概率血层全满。' },
+      Ogre:     { tag: 'ogre-crit',      desc: '暴击：攻击时50%概率双倍伤害。\n连击：70%概率攻击两次。' },
       Goblin:   { tag: 'goblin-elite',   desc: '窃宝精英：怪物回合结束掷骰，自身下方每有1张牌，成功率 +25%（最高100%），成功则偷走玩家1件装备或护符并堆叠在自身下方。' },
       Swarm:    { tag: 'swarm-elite',    desc: '虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子。' },
-      Golem:    { tag: 'golem-elite',   desc: '岩石护体：每次最多受到 5 点伤害。' },
+      Golem:    { tag: 'golem-elite',   desc: '护体：每次最多受到 5 点伤害。' },
     };
 
     // Quick mode: only 3 randomly chosen types get elites (as additional monster cards)

@@ -3,7 +3,7 @@
  *
  * Background: the dice modal in `useEventSystem.ts` is a single-slot UI
  * (`eventDiceModal` state + `eventDiceResolverRef`). When two dice requests
- * fire in the same reduce/drain tick (e.g. 雷震击 stun dice and 虚骨再生
+ * fire in the same reduce/drain tick (e.g. 雷震击 stun dice and 骸生
  * bone-regen dice on the same hit), the second one would otherwise overwrite
  * the first — the first dice's resolver is orphaned and its RESOLVE_DICE
  * never fires (so the monster never gets stunned regardless of RNG).

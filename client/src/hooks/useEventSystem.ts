@@ -306,7 +306,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
   // -- Internal refs (only used by functions in this hook) --------------------
 
   // FIFO queue for dice requests. When two dice are requested in the same
-  // reduce/drain tick (e.g. 雷震击 stun + bone-regen 虚骨再生), the earlier
+  // reduce/drain tick (e.g. 雷震击 stun + bone-regen 骸生), the earlier
   // single-slot impl had the second overwrite the first, dropping the
   // first dice's resolver entirely (so the monster never got stunned no
   // matter the RNG). The queue shows them sequentially instead.

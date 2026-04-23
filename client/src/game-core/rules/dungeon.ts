@@ -113,7 +113,7 @@ function reduceMonsterEnteredRow(
       patch.handCards = (state.handCards as GameCardData[]).filter(c => c.id !== discarded.id);
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'combat', message: `${monster.name} 蛮力震慑：随机弃回了手牌「${discarded.name}」！` },
+        payload: { type: 'combat', message: `${monster.name} 震慑：随机弃回了手牌「${discarded.name}」！` },
       });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 震慑！弃回了「${discarded.name}」！` } });
       sideEffects.push({

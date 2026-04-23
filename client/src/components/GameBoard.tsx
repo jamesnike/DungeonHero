@@ -117,6 +117,7 @@ import {
 } from '@/lib/heroMagic';
 import { getRandomHero, type HeroVariant } from '@/lib/heroes';
 import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, getTotalWins, incrementTotalWins, type PersistedGameState } from '@/lib/gameStorage';
+import { reportGameStart, summarizePrevGame } from '@/lib/telemetry';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import { getStartingRelics, hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
 import CardDetailsModal from './CardDetailsModal';
@@ -2730,18 +2731,18 @@ export default function GameBoard() {
             : { ...card, durability: 1, equipmentReviveUsed: true };
           setEquipmentSlotById(slotId, revived as EquipmentItem);
           addGameLog('equip', `${card.name} 复生！以 1 耐久复活！`);
-          addGameLog('combat', `${monsterName} 流血破甲：攻击「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}），但它复生了！`);
+          addGameLog('combat', `${monsterName} 破甲：攻击「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}），但它复生了！`);
         } else {
           dispatch({ type: 'SET_EQUIPMENT_SLOT', slotId: slotId as 'equipmentSlot1' | 'equipmentSlot2', card: null });
           disposeOwnedEquipmentCard(card, { isDestruction: true });
-          addGameLog('combat', `${monsterName} 流血破甲：破坏了「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}）！`);
+          addGameLog('combat', `${monsterName} 破甲：破坏了「${item.name}」（耐久 ${dur} > 血层 ${remainingLayers}）！`);
           const skelOtherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
           const skelOtherItem = skelOtherSlotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
           if (skelOtherItem && skelOtherItem.type === 'monster' && (skelOtherItem as GameCardData).skeletonReRevive
             && (!(skelOtherItem as GameCardData).hasRevive || (skelOtherItem as GameCardData).reviveUsed)) {
             setEquipmentSlotById(skelOtherSlotId, { ...skelOtherItem, hasRevive: true, reviveUsed: false } as EquipmentItem);
-            addGameLog('equip', `${skelOtherItem.name} 亡骨轮回：获得了「复生」！`);
-            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${skelOtherItem.name} 亡骨轮回！` });
+            addGameLog('equip', `${skelOtherItem.name} 轮回：获得了「复生」！`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${skelOtherItem.name} 轮回！` });
           }
         }
         return true;
@@ -2751,7 +2752,7 @@ export default function GameBoard() {
     const d1 = destroySlot('equipmentSlot1', equipmentSlot1);
     const d2 = destroySlot('equipmentSlot2', equipmentSlot2);
     if (d1 || d2) {
-      dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${monsterName} 流血破甲！高耐久装备被破坏！` });
+      dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${monsterName} 破甲！高耐久装备被破坏！` });
     }
   };
 
@@ -4769,6 +4770,9 @@ export default function GameBoard() {
 
   const handleGameModeSelect = (mode: 'normal' | 'quick') => {
     setShowGameModeSelect(false);
+    // Telemetry: fire-and-forget BEFORE clearGameState() so we can read the previous run.
+    // gameMode is not persisted to localStorage — must read from live engine state.
+    reportGameStart(mode, summarizePrevGame(engine.getState()));
     clearGameState();
     lastPersistedStateRef.current = null;
     clearUndoStack();

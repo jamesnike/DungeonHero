@@ -289,7 +289,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     if (!forced && (layersAfter <= 0 || layersAfter >= layersBefore)) return;
     depsRef.current.requestDiceOutcome({
       title: monsterName,
-      subtitle: '虚骨再生',
+      subtitle: '骸生',
       entries: [
         { id: 'restore', range: [1, 8] as [number, number], label: '恢复 1 层血层', effect: 'none' },
         { id: 'fail', range: [9, 20] as [number, number], label: '再生失败', effect: 'none' },
@@ -303,7 +303,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     if (layersAfter !== 1 || layersBefore <= 1) return;
     depsRef.current.requestDiceOutcome({
       title: monsterName,
-      subtitle: '幽魂重生',
+      subtitle: '重生',
       entries: [
         { id: 'rebirth', range: [1, 6] as [number, number], label: '血层全部回满！', effect: 'none' },
         { id: 'fail', range: [7, 20] as [number, number], label: '重生失败', effect: 'none' },
@@ -350,7 +350,7 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   useGameEvent('combat:goblinHealCheck', ({ monsterId, monsterName, stackCount, threshold, predeterminedRoll, currentLayer, maxLayers }) => {
     const successCap = Math.min(20, Math.max(0, threshold));
     const successPct = successCap * 5;
-    const subtitle = `贼窝疗养判定（${successPct}%）：${currentLayer}/${maxLayers} 血层`;
+    const subtitle = `疗养判定（${successPct}%）：${currentLayer}/${maxLayers} 血层`;
     const entries: Array<{ id: string; range: [number, number]; label: string; effect: 'none' }> = [];
     if (successCap >= 1) {
       entries.push({

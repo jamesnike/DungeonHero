@@ -373,7 +373,7 @@ function isInputContinuation(action: GameAction): boolean {
     // the continuation list. The auto-engage float + BEGIN_COMBAT then fired
     // at the next user action (e.g. when the player attacked the ogre),
     // making it look like the enter effect triggered on death. Same hole
-    // affected the elite ogre's `ogreEnterDiscard` (蛮力震慑) which shares
+    // affected the elite ogre's `ogreEnterDiscard` (震慑) which shares
     // this dispatch path.
     case 'MONSTER_ENTERED_ROW':
     case 'START_TURN':

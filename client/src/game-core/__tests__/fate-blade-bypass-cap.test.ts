@@ -14,7 +14,7 @@ import type { GameCardData } from '@/components/GameCard';
 //
 // Fix: damageMonsterWithLayerOverflow accepts opts.bypassMaxPerHit, and the
 // fate-dice-strike path passes it. Other damage sources (weapons, spells)
-// keep the cap so Golem's 岩石护体 identity is preserved.
+// keep the cap so Golem's 护体 identity is preserved.
 
 function makeGolem(overrides: Partial<GameCardData> = {}): GameCardData {
   return {

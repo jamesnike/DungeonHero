@@ -554,12 +554,12 @@ describe('overkill — all paths integration', () => {
 
   // ---------------------------------------------------------------------------
   // Reflect routing through equipped shield armor (dragon-breath-style).
-  // 反魔 / 岩层反震 must mirror 龙息反击: random shield slot eats armor first;
+  // 反魔 / 反震 must mirror 龙息: random shield slot eats armor first;
   // if no shield is equipped, damage falls onto tempShield/HP.
   // ---------------------------------------------------------------------------
 
   describe('reflect routing (shield armor vs HP)', () => {
-    it('岩层反震: equipped shield absorbs reflect into armor (HP unchanged, hitSlotId set)', () => {
+    it('反震: equipped shield absorbs reflect into armor (HP unchanged, hitSlotId set)', () => {
       const golem = {
         id: 'm1', type: 'monster' as const, name: 'Golem', value: 1,
         hp: 4, maxHp: 4, currentLayer: 2, fury: 2, attack: 1,
@@ -593,7 +593,7 @@ describe('overkill — all paths integration', () => {
       expect(drained.state.hp).toBe(20);
     });
 
-    it('岩层反震: no shield equipped → falls through to HP (hitSlotId null)', () => {
+    it('反震: no shield equipped → falls through to HP (hitSlotId null)', () => {
       const golem = {
         id: 'm1', type: 'monster' as const, name: 'Golem', value: 1,
         hp: 4, maxHp: 4, currentLayer: 2, fury: 2, attack: 1,

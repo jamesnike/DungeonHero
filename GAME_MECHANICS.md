@@ -620,10 +620,10 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 种族 | 精英能力 | 说明 |
 |------|---------|------|
-| Dragon | `ember-fury` | 流血效果升级为+3；龙息庇护：Hero回合未掉血层，为激活行另一个怪物恢复1血层 |
-| Skeleton | `bone-regen` | 虚骨再生：失去血层后40%概率恢复一层（D20 ≤ 8）|
-| Wraith | `wraith-rebirth` | 幽魂重生：血层降至1时50%概率全满（D20 ≤ 10） |
-| Ogre | `ogre-crit` | 蛮力暴击：攻击50%概率双倍伤害 + 狂暴连击：50%概率攻击两次 |
+| Dragon | `ember-fury` | 流血效果升级为+3；庇护：Hero回合未掉血层，为激活行另一个怪物恢复1血层 |
+| Skeleton | `bone-regen` | 骸生：失去血层后40%概率恢复一层（D20 ≤ 8）|
+| Wraith | `wraith-rebirth` | 重生：血层降至1时50%概率全满（D20 ≤ 10） |
+| Ogre | `ogre-crit` | 暴击：攻击50%概率双倍伤害 + 连击：50%概率攻击两次 |
 | Goblin | `goblin-elite` | 窃宝精英：怪物回合结束掷一次 D20，自身下方每有 1 张牌成功率 +25%（最高 100%），成功则偷走 1 件装备或护符 |
 | Swarm | `swarm-elite` | 虫母：每次受到伤害时，将激活行一张非怪物牌替换为小虫子 |
 
@@ -669,12 +669,12 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 | 种族 | Lv.1 | Lv.2 | Lv.3 |
 |------|------|------|------|
-| Dragon | WF≥4: 攻+3 血+1 + 龙鳞护体（上回合掉血层时不耗血层） | WF≥8: 攻+5 血+4 + 龙鳞护体+龙息反击 | WF≥12: 攻+8 血+7 + 龙鳞护体+龙息反击+流血破甲 |
-| Skeleton | WF≥3: 攻+3 血+1 + 不朽之骨 | WF≥7: 攻+6 血+2 + 不朽之骨+遗言弃1牌 | WF≥11: 攻+9 血+3 + 不朽之骨+遗言+亡骨轮回 |
-| Goblin | WF≥3: 攻+2 血+1 + 窃牌贼 | WF≥7: 攻+4 血+2 + 窃牌贼+贼窝疗养 | WF≥11: 攻+6 血+4 + 窃牌贼+贼窝疗养+贪婪强化 |
+| Dragon | WF≥4: 攻+3 血+1 + 龙鳞（上回合掉血层时不耗血层） | WF≥8: 攻+5 血+4 + 龙鳞+龙息 | WF≥12: 攻+8 血+7 + 龙鳞+龙息+破甲 |
+| Skeleton | WF≥3: 攻+3 血+1 + 无尽 | WF≥7: 攻+6 血+2 + 无尽+撕牌 | WF≥11: 攻+9 血+3 + 无尽+撕牌+轮回 |
+| Goblin | WF≥3: 攻+2 血+1 + 窃牌 | WF≥7: 攻+4 血+2 + 窃牌+疗养 | WF≥11: 攻+6 血+4 + 窃牌+疗养+贪敛 |
 | Ogre | WF≥5: 攻+3 血+1 + 击晕 | WF≥9: 攻+5 血+3 + 击晕+连击 | WF≥13: 攻+8 血+5 + 震慑+击晕+连击 |
-| Wraith | WF≥4: 攻+3 血+1 + 怨念光环 | WF≥8: 攻+5 血+3 + 怨念光环+怨灵遗言 | WF≥12: 攻+7 血+4 + 怨念光环+怨灵遗言+怨灵诅咒 |
-| Swarm | WF≥4: 攻+1 血+2 + 集结 | WF≥8: 攻+2 血+4 + 集结+腐蚀甲壳 | WF≥12: 攻+3 血+6 + 集结+腐蚀甲壳+虫盾共生 |
+| Wraith | WF≥4: 攻+3 血+1 + 光环 | WF≥8: 攻+5 血+3 + 光环+传魂 | WF≥12: 攻+7 血+4 + 光环+传魂+诅咒 |
+| Swarm | WF≥4: 攻+1 血+2 + 集结 | WF≥8: 攻+2 血+4 + 集结+腐蚀甲壳 | WF≥12: 攻+3 血+6 + 集结+腐蚀甲壳+虫盾 |
 | Buglet | WF≥4: 攻+2 血+1 | WF≥8: 攻+4 血+2 | WF≥12: 攻+6 血+4 |
 
 ### 9.7 最终之敌与Boss变身
@@ -709,21 +709,21 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 **被动/反应技能（被攻击时）：**
 - `bossRetaliationDamage`（反噬）不生效
 - `bleedEffect`（流血攻击加成）不生效
-- `dragonAttackNoLayerCost`（龙鳞护体）不生效
-- `dragonDamageRetaliation`（龙息反击）不生效
-- `dragonBleedDestroy`（流血破甲）不生效
-- 精英特殊能力（骨再生 `bone-regen`、幽魂重生 `wraith-rebirth`、虫母 `swarm-elite`）不触发
+- `dragonAttackNoLayerCost`（龙鳞）不生效
+- `dragonDamageRetaliation`（龙息）不生效
+- `dragonBleedDestroy`（破甲）不生效
+- 精英特殊能力（骨再生 `bone-regen`、重生 `wraith-rebirth`、虫母 `swarm-elite`）不触发
 
 **回合结束技能：**
-- `wraithTurnAttack`（怨念蓄积）不生效
-- `bossLastStandAura`（暴走光环）不生效
+- `wraithTurnAttack`（蓄积）不生效
+- `bossLastStandAura`（暴走）不生效
 - `eliteRegenHeroTurn`（未受伤恢复血层）不生效
 
 **死亡/复生技能：**
 - `hasRevive`（复生）不生效——击晕状态下击杀直接死亡
 - `lastWords`（遗言）不触发
-- `wraithDeathHeal`（怨灵祝福）不触发
-- `wraithDeathHealSpread`（怨灵遗言）不触发
+- `wraithDeathHeal`（祝福）不触发
+- `wraithDeathHealSpread`（传魂）不触发
 - `isFinalMonster`（Boss变身）不触发
 
 **场地技能：**

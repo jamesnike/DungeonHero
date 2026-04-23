@@ -2125,7 +2125,7 @@ function reduceMagicMonsterSelection(
           if (mitigation.immuneByBuilding) {
             chaosBanner = `混沌冲击对 ${monster!.name} 无效（受到诅咒碑光环保护）。`;
           } else if (mitigation.bugletShielded) {
-            chaosBanner = `混沌冲击对 ${monster!.name} 无效（虫盾共生抵挡）。`;
+            chaosBanner = `混沌冲击对 ${monster!.name} 无效（虫盾抵挡）。`;
           } else {
             chaosBanner = `混沌冲击对 ${monster!.name} 没有造成伤害。`;
           }
@@ -2135,7 +2135,7 @@ function reduceMagicMonsterSelection(
             enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 2 });
             chaosBanner = `混沌冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 伤害，超杀！抽 2 张牌。`;
           } else {
-            const reducedNote = mitigation.spellResisted ? `（法术抗性：${chaosDamage} → ${mitigation.effectiveDamage}）` : '';
+            const reducedNote = mitigation.spellResisted ? `（抗性：${chaosDamage} → ${mitigation.effectiveDamage}）` : '';
             chaosBanner = `混沌冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 点伤害。${reducedNote}`;
           }
         }
@@ -2172,7 +2172,7 @@ function reduceMagicMonsterSelection(
         okBanner = `淬炼冲击对${targetName}造成 ${okDamage} 点伤害。`;
       } else {
         ensureEngaged(state, monster!, enqueuedActions);
-        // Overkill 奖励必须基于 reducer 真实落地的伤害，否则法免 / 虫盾 / 法抗 / 岩石护体
+        // Overkill 奖励必须基于 reducer 真实落地的伤害，否则法免 / 虫盾 / 法抗 / 护体
         // 都会触发"假超杀"（升级窗弹出但怪物没死）。helper 严格镜像 reducer 的减免链。
         const mitigation = computeEffectiveSpellDamageOnMonster(state, monster!.id, okDamage);
         enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: okDamage, source: 'overkill-upgrade', isSpellDamage: true });
@@ -2180,7 +2180,7 @@ function reduceMagicMonsterSelection(
           if (mitigation.immuneByBuilding) {
             okBanner = `淬炼冲击对 ${monster!.name} 无效（受到诅咒碑光环保护）。`;
           } else if (mitigation.bugletShielded) {
-            okBanner = `淬炼冲击对 ${monster!.name} 无效（虫盾共生抵挡）。`;
+            okBanner = `淬炼冲击对 ${monster!.name} 无效（虫盾抵挡）。`;
           } else {
             okBanner = `淬炼冲击对 ${monster!.name} 没有造成伤害。`;
           }
@@ -2190,7 +2190,7 @@ function reduceMagicMonsterSelection(
             enqueuedActions.push({ type: 'SET_UPGRADE_MODAL_OPEN', open: true });
             okBanner = `淬炼冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 伤害，超杀！选择一张牌升级。`;
           } else {
-            const reducedNote = mitigation.spellResisted ? `（法术抗性：${okDamage} → ${mitigation.effectiveDamage}）` : '';
+            const reducedNote = mitigation.spellResisted ? `（抗性：${okDamage} → ${mitigation.effectiveDamage}）` : '';
             okBanner = `淬炼冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 点伤害。${reducedNote}`;
           }
         }

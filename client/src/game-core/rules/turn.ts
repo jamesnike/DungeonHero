@@ -273,9 +273,9 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
     }
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'combat', message: `怨灵诅咒：摧毁了护符「${targetAmulet.name}」！` },
+      payload: { type: 'combat', message: `诅咒：摧毁了护符「${targetAmulet.name}」！` },
     });
-    sideEffects.push({ event: 'ui:banner', payload: { text: `怨灵诅咒！护符「${targetAmulet.name}」被摧毁！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `诅咒！护符「${targetAmulet.name}」被摧毁！` } });
     sideEffects.push({ event: 'equipment:destroyed', payload: { slotId: `amulet-${targetAmulet.id}`, cardId: targetAmulet.id } });
   }
 
@@ -287,12 +287,12 @@ function reduceMonsterTurnEndEffects(state: GameState): ReduceResult {
     const names = result.monstersToEngage.map(m => m.name);
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'combat', message: `怨灵诅咒：激活行怪物被激怒！（${names.join('、')}）` },
+      payload: { type: 'combat', message: `诅咒：激活行怪物被激怒！（${names.join('、')}）` },
     });
-    sideEffects.push({ event: 'ui:banner', payload: { text: '怨灵诅咒！全体怪物激怒！' } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: '诅咒！全体怪物激怒！' } });
   }
 
-  // Build the goblin dice queue (贼窝疗养 + 窃宝). Each entry is a single D20
+  // Build the goblin dice queue (疗养 + 窃宝). Each entry is a single D20
   // roll with success threshold = `min(stackCount * 3, 20)` — the actual
   // heal / steal application is deferred to RESOLVE_DICE so the player sees a
   // dice modal for each goblin before the outcome lands.

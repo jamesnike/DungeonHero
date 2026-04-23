@@ -56,7 +56,7 @@ export function damageMonsterWithLayerOverflow(
   let effectiveDamage = damage;
   // bypassMaxPerHit is for "fixed-effect" sources (e.g. 命运之刃 fate-dice-strike)
   // that semantically "directly strip N layers" and should ignore per-hit damage
-  // caps such as Golem's 岩石护体 (maxDamagePerHit = 5). Normal weapon / spell
+  // caps such as Golem's 护体 (maxDamagePerHit = 5). Normal weapon / spell
   // damage MUST keep the cap to preserve elite Golem's defensive identity.
   if (
     monster.maxDamagePerHit &&
@@ -197,7 +197,7 @@ export function computeEffectiveSpellDamageOnMonster(
     resisted = true;
   }
 
-  // 4. maxDamagePerHit cap (Golem 岩石护体). Note `damageMonsterWithLayerOverflow`
+  // 4. maxDamagePerHit cap (Golem 护体). Note `damageMonsterWithLayerOverflow`
   // also applies this cap, so ignoring it here would over-predict overkill.
   if (monster.maxDamagePerHit && dmg > monster.maxDamagePerHit && !monster.isStunned) {
     dmg = monster.maxDamagePerHit;
@@ -358,14 +358,14 @@ export function endHeroTurnPatch(
           hp: targetCard.maxHp ?? targetCard.hp ?? 0,
         };
         skillFloats.push({ monsterId: monster.id, skillKey: 'heroTurnEnd:eliteHealOther' });
-        logs.push({ type: 'combat', message: `${monster.name} 龙息庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
+        logs.push({ type: 'combat', message: `${monster.name} 庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
         return;
       }
     }
 
   });
 
-  // Non-engaged dragons in the active row also trigger 龙息庇护:
+  // Non-engaged dragons in the active row also trigger 庇护:
   // outside of combat the dragon cannot lose layers, so the "未掉血层" condition is implicitly satisfied.
   const nonEngagedDragons = flattenActiveRowSlots(state.activeCards).filter(
     c =>
@@ -392,7 +392,7 @@ export function endHeroTurnPatch(
         hp: targetCard.maxHp ?? targetCard.hp ?? 0,
       };
       skillFloats.push({ monsterId: dragon.id, skillKey: 'heroTurnEnd:eliteHealOther' });
-      logs.push({ type: 'combat', message: `${dragon.name} 龙息庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
+      logs.push({ type: 'combat', message: `${dragon.name} 庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
     }
   });
 
@@ -784,7 +784,7 @@ export interface DragonRegenEffect {
 }
 
 /**
- * Pre-rolled dice flow for a goblin "贼窝疗养" (stack heal) check at end of
+ * Pre-rolled dice flow for a goblin "疗养" (stack heal) check at end of
  * monster turn. A single D20 is rolled with seeded RNG; success threshold is
  * `min(stackCount * 3, 20)` (so each stacked card grants +15% chance, capped
  * at 100%). The actual heal is applied later in the `RESOLVE_DICE` handler
@@ -830,7 +830,7 @@ export interface MonsterTurnEndResult {
   /** Dragon regen effects on equipment */
   dragonRegenEffects: DragonRegenEffect[];
   /**
-   * Goblin "贼窝疗养" pre-rolled dice flows. Caller must apply heal via
+   * Goblin "疗养" pre-rolled dice flows. Caller must apply heal via
    * `RESOLVE_DICE` after the dice modal closes.
    */
   goblinStackHealDice: GoblinStackHealDice[];
@@ -896,12 +896,12 @@ export function applyMonsterTurnEndEffects(
         // NOTE: dragon equipment regen is hero-side equipment behavior, not an
         // active-row monster skill, so we deliberately don't queue a float here
         // (the float UI renders above active-row monster cards only).
-        logs.push({ type: 'equip', message: `${item.name} 龙息回复：Hero 未受伤，${otherItem.name} 恢复 1 耐久！（${newDur}/${otherItem.maxDurability}）` });
-        banners.push(`${item.name} 龙息回复！${otherItem.name} +1 耐久！`);
+        logs.push({ type: 'equip', message: `${item.name} 再生：Hero 未受伤，${otherItem.name} 恢复 1 耐久！（${newDur}/${otherItem.maxDurability}）` });
+        banners.push(`${item.name} 再生！${otherItem.name} +1 耐久！`);
       } else if (roll) {
-        logs.push({ type: 'equip', message: `${item.name} 龙息回复：判定成功，但另一装备栏无可恢复的装备。` });
+        logs.push({ type: 'equip', message: `${item.name} 再生：判定成功，但另一装备栏无可恢复的装备。` });
       } else {
-        logs.push({ type: 'equip', message: `${item.name} 龙息回复：判定失败（50%）。` });
+        logs.push({ type: 'equip', message: `${item.name} 再生：判定失败（50%）。` });
       }
     }
   }
@@ -944,11 +944,11 @@ export function applyMonsterTurnEndEffects(
       const newAttack = (updated.attack ?? updated.value ?? 0) + boost;
       const newValue = (updated.value ?? 0) + boost;
       skillFloats.push({ monsterId: updated.id, skillKey: 'turnEnd:wraithSelfAttack' });
-      logs.push({ type: 'combat', message: `${updated.name} 怨念蓄积：攻击力 +${boost}！（当前 ${newAttack}）` });
+      logs.push({ type: 'combat', message: `${updated.name} 蓄积：攻击力 +${boost}！（当前 ${newAttack}）` });
       updated = { ...updated, attack: newAttack, value: newValue, tempAttackBoost: (updated.tempAttackBoost ?? 0) + boost };
     }
 
-    // 法力吞噬 (golem spell growth): triggers every monster turn end regardless
+    // 吞噬 (golem spell growth): triggers every monster turn end regardless
     // of whether the golem is engaged in combat. Mirrors the wraith aura model
     // (active-row presence is enough; stunned is excluded above) so a back-row
     // golem still ramps its anti-magic / layer-reflect coefficients.
@@ -960,10 +960,10 @@ export function applyMonsterTurnEndEffects(
       let newLayerReflect = updated.golemLayerLossReflect;
       if (newLayerReflect != null) {
         newLayerReflect = newLayerReflect + growth;
-        parts.push(`岩层反震系数 +${growth}（当前 ${newLayerReflect}）`);
+        parts.push(`反震系数 +${growth}（当前 ${newLayerReflect}）`);
       }
       skillFloats.push({ monsterId: updated.id, skillKey: 'turnEnd:golemSpellGrowth' });
-      logs.push({ type: 'combat', message: `${updated.name} 法力吞噬：${parts.join('，')}！` });
+      logs.push({ type: 'combat', message: `${updated.name} 吞噬：${parts.join('，')}！` });
       updated = { ...updated, antiMagicReflect: newReflect, ...(newLayerReflect != null ? { golemLayerLossReflect: newLayerReflect } : {}) };
     }
 
@@ -1001,8 +1001,8 @@ export function applyMonsterTurnEndEffects(
       // One float on the boss who emits the aura — not per-affected monster,
       // since the aura is conceptually a single skill firing on the boss.
       skillFloats.push({ monsterId: lastStandBoss.id, skillKey: 'turnEnd:bossLastStandAura' });
-      logs.push({ type: 'combat', message: `${lastStandBoss.name} 暴走光环：激活行所有怪物攻击 +5，恢复 1 血层！（${boostedNames.join('、')}）` });
-      banners.push(`${lastStandBoss.name} 暴走光环！全体怪物 +5 攻击，恢复 1 血层！`);
+      logs.push({ type: 'combat', message: `${lastStandBoss.name} 暴走：激活行所有怪物攻击 +5，恢复 1 血层！（${boostedNames.join('、')}）` });
+      banners.push(`${lastStandBoss.name} 暴走！全体怪物 +5 攻击，恢复 1 血层！`);
     }
   }
 
@@ -1027,8 +1027,8 @@ export function applyMonsterTurnEndEffects(
           skillFloats.push({ monsterId: card.id, skillKey: 'turnEnd:wraithAura' });
         }
       }
-      logs.push({ type: 'combat', message: `怨念光环：激活行所有怪物攻击力 +${auraBoost}！（${boostedNames.join('、')}）` });
-      banners.push(`怨念光环！全体怪物攻击力 +${auraBoost}！`);
+      logs.push({ type: 'combat', message: `光环：激活行所有怪物攻击力 +${auraBoost}！（${boostedNames.join('、')}）` });
+      banners.push(`光环！全体怪物攻击力 +${auraBoost}！`);
     }
   }
 
@@ -1062,10 +1062,10 @@ export function applyMonsterTurnEndEffects(
     }
   }
 
-  // Goblin "贼窝疗养" / "窃宝": single D20 roll per goblin where the success
+  // Goblin "疗养" / "窃宝": single D20 roll per goblin where the success
   // threshold scales with the number of cards stacked underneath.
   //
-  //   贼窝疗养: threshold = min(stackCount * 3, 20)  // +15% per card, capped 100%
+  //   疗养: threshold = min(stackCount * 3, 20)  // +15% per card, capped 100%
   //   窃宝:     threshold = min(stackCount * 5, 20)  // +25% per card, capped 100%
   //   roll <= threshold  => success (heal 1 layer / steal 1 item)
   //
@@ -1119,7 +1119,7 @@ export function applyMonsterTurnEndEffects(
       if (stacks.length === 0) continue;
 
       // 窃宝: each stacked card contributes +25% (threshold +5 on a D20),
-      // capped at 100%. Diverges from 贼窝疗养's +15% per stack.
+      // capped at 100%. Diverges from 疗养's +15% per stack.
       const threshold = Math.min(stacks.length * 5, 20);
       let predeterminedRoll: number;
       [predeterminedRoll, rng] = nextInt(rng, 1, 20);
@@ -1173,7 +1173,7 @@ export function applyLowGoldEliteBuff(
     if (isLowGold && !card.lowGoldBuffActive) {
       changed = true;
       logs.push({ type: 'combat', message: `${card.name} 感受到了贪婪的力量！攻击力与血量翻倍！` });
-      banners.push(`${card.name} 贪婪强化！攻击力与血量翻倍！`);
+      banners.push(`${card.name} 窘境！攻击力与血量翻倍！`);
       const atkBefore = card.attack ?? card.value;
       const maxHpBefore = card.maxHp ?? 0;
       return {
@@ -1190,7 +1190,7 @@ export function applyLowGoldEliteBuff(
 
     if (!isLowGold && card.lowGoldBuffActive) {
       changed = true;
-      logs.push({ type: 'combat', message: `${card.name} 的贪婪强化消退了。` });
+      logs.push({ type: 'combat', message: `${card.name} 的窘境消退了。` });
       const newAtk = Math.floor((card.attack ?? card.value) / 2);
       const newMaxHp = Math.floor((card.maxHp ?? 0) / 2);
       const prevTempAtk = Math.floor((card.tempAttackBoost ?? 0) / 2);

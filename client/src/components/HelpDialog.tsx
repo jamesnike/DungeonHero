@@ -275,7 +275,7 @@ export default function HelpDialog({ buttonClassName: _buttonClassName }: { butt
               <ul className="text-xs space-y-1.5 list-none pl-0">
                 <li className="flex items-start gap-2">
                   <span className="text-red-400 flex-shrink-0">▸</span>
-                  <span><strong>精英怪</strong>（后半程出现）拥有特殊能力：骷髅有虚骨再生、幽灵有幽魂重生、食人魔会暴击连击等。</span>
+                  <span><strong>精英怪</strong>（后半程出现）拥有特殊能力：骷髅有骸生、幽灵有重生、食人魔会暴击连击等。</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-red-400 flex-shrink-0">▸</span>

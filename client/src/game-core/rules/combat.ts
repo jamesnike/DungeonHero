@@ -255,7 +255,7 @@ function reduceBeginCombat(
       // Re-apply monster rage so summoned monsters scale to the current waterfall level.
       // Boss graveyard summon: summoned monsters enter with currentLayer = 1
       // (max hpLayers / rage cap is left at the rage value, so layer-regen mechanics
-      //  like 暴走光环 / 复生 can still restore layers up to the normal cap).
+      //  like 暴走 / 复生 can still restore layers up to the normal cap).
       const isQuick = state.gameMode === 'quick';
       const summonedMonsterCards = rawMonsters.map(c => {
         const raged = applyMonsterRage(c, state.turnCount, isQuick);
@@ -304,9 +304,9 @@ function reduceBeginCombat(
       const names = picked.map(c => `「${c.name}」`).join('、');
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'combat', message: `${monster.name} 亡灵召唤：从坟场召唤了 ${names} 到激活行！` },
+        payload: { type: 'combat', message: `${monster.name} 召唤：从坟场召唤了 ${names} 到激活行！` },
       });
-      sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 亡灵召唤！从坟场召唤了 ${picked.length} 张牌！` } });
+      sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 召唤！从坟场召唤了 ${picked.length} 张牌！` } });
       sideEffects.push({ event: 'combat:graveyardSummon', payload: { slots: chosenSlots, cards: picked } });
 
       // Force-engage every summoned monster so they enter combat immediately.
@@ -321,7 +321,7 @@ function reduceBeginCombat(
         const enrageNames = summonedMonsters.map(m => m.name).join('、');
         sideEffects.push({
           event: 'log:entry',
-          payload: { type: 'combat', message: `亡灵召唤：被召唤的怪物进入激怒状态！（${enrageNames}）` },
+          payload: { type: 'combat', message: `召唤：被召唤的怪物进入激怒状态！（${enrageNames}）` },
         });
       }
     }
@@ -531,7 +531,7 @@ function reduceDealDamageToMonster(
     effectiveDamage = Math.max(1, Math.floor(effectiveDamage * (1 - monster.spellDamageReduction)));
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'combat', message: `${monster.name} 法术抗性：法术伤害减半（${action.damage} → ${effectiveDamage}）` },
+      payload: { type: 'combat', message: `${monster.name} 抗性：法术伤害减半（${action.damage} → ${effectiveDamage}）` },
     });
   }
 
@@ -541,7 +541,7 @@ function reduceDealDamageToMonster(
     if (hasBuglet) {
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'combat', message: `${monster.name} 虫盾共生：场上有小虫子，伤害被完全抵挡！` },
+        payload: { type: 'combat', message: `${monster.name} 虫盾：场上有小虫子，伤害被完全抵挡！` },
       });
       return applyPatch(state, {}, sideEffects);
     }
@@ -576,7 +576,7 @@ function reduceDealDamageToMonster(
   if (monster.maxDamagePerHit && effectiveDamage > monster.maxDamagePerHit && !monster.isStunned) {
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'combat', message: `${monster.name} 岩石护体：伤害上限 ${monster.maxDamagePerHit}（原始 ${effectiveDamage}）！` },
+      payload: { type: 'combat', message: `${monster.name} 护体：伤害上限 ${monster.maxDamagePerHit}（原始 ${effectiveDamage}）！` },
     });
   }
 
@@ -770,7 +770,7 @@ function reduceDealDamageToMonster(
       && layersAfter < layersBefore && !monster.isStunned) {
       const totalLostLayers = (monster.fury ?? monster.hpLayers ?? 1) - layersAfter;
       const reflectDmg = monster.golemLayerLossReflect * totalLostLayers;
-      const reflectLabel = `岩层反震（${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
+      const reflectLabel = `反震（${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
       const route = routeReflectDamageToHero(state, reflectDmg, monster.name, reflectLabel, rng);
       Object.assign(patch, route.patch);
       rng = route.rng;
@@ -926,7 +926,7 @@ function reduceMonsterDefeated(
 
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 触发了复生，以 1 血层重新站了起来！` } });
     if (activateNoLayerCost) {
-      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 不朽之骨：复生后攻击不再消耗血层！` } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 无尽：复生后攻击不再消耗血层！` } });
     }
 
     patch.rng = rng;
@@ -1044,8 +1044,8 @@ function reduceMonsterDefeated(
     }) as ActiveRowSlots;
     if (buffedNames.length > 0) {
       patch.activeCards = healed as GameState['activeCards'];
-      patch.heroSkillBanner = `${monster.name} 怨灵祝福！同行怪物生命 +${healAmt}！`;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 怨灵祝福：${buffedNames.join('、')} 生命值 +${healAmt}！` } });
+      patch.heroSkillBanner = `${monster.name} 祝福！同行怪物生命 +${healAmt}！`;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 祝福：${buffedNames.join('、')} 生命值 +${healAmt}！` } });
     }
   }
 
@@ -1070,9 +1070,9 @@ function reduceMonsterDefeated(
       }) as ActiveRowSlots;
       patch.activeCards = finalCards as GameState['activeCards'];
       const names = otherMonsters.map(m => m.card.name);
-      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 怨灵遗言：${names.join('、')} 生命值 +${healAmt}！` } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 传魂：${names.join('、')} 生命值 +${healAmt}！` } });
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 的遗言传递给了 ${recipient.card.name}！` } });
-      patch.heroSkillBanner = `${monster.name} 怨灵遗言！同行怪物生命 +${healAmt}，遗言传递给 ${recipient.card.name}！`;
+      patch.heroSkillBanner = `${monster.name} 传魂！同行怪物生命 +${healAmt}，遗言传递给 ${recipient.card.name}！`;
     }
   }
 
@@ -1090,8 +1090,8 @@ function reduceMonsterDefeated(
     }) as ActiveRowSlots;
     if (healedNames.length > 0) {
       patch.activeCards = next as GameState['activeCards'];
-      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 虫群遗念：${healedNames.join('、')} 恢复了1血层！` } });
-      patch.heroSkillBanner = `${monster.name} 虫群遗念！其他小虫子恢复1血层！`;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 遗念：${healedNames.join('、')} 恢复了1血层！` } });
+      patch.heroSkillBanner = `${monster.name} 遗念！其他小虫子恢复1血层！`;
     }
   }
 
@@ -1107,14 +1107,14 @@ function reduceMonsterDefeated(
     if (!c || c.id === monster.id || c.type !== 'monster') return c;
     if (c.monsterType === 'Skeleton' && c.skeletonReRevive && c.reviveUsed && !c.isStunned) {
       anyReRevived = true;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${c.name} 亡骨轮回：同行怪物被击败，再次获得复生！` } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${c.name} 轮回：同行怪物被击败，再次获得复生！` } });
       return { ...c, reviveUsed: false, skeletonNoLayerCostActive: false };
     }
     return c;
   }) as ActiveRowSlots;
   if (anyReRevived) {
     patch.activeCards = reRevivedCards as GameState['activeCards'];
-    patch.heroSkillBanner = patch.heroSkillBanner ?? '亡骨轮回！再次获得复生！';
+    patch.heroSkillBanner = patch.heroSkillBanner ?? '轮回！再次获得复生！';
   }
 
   // Goblin trick card creation
@@ -1288,12 +1288,12 @@ function reduceDecrementFury(
   const monster = activeCards[idx]!;
 
   if (monster.skeletonNoLayerCostActive) {
-    sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 不朽之骨：攻击不消耗血层！` } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 无尽：攻击不消耗血层！` } });
     return applyPatch(state, {}, sideEffects);
   }
 
   if (monster.dragonAttackNoLayerCost && monster.dragonNoLayerCostActive && !monster.isStunned) {
-    sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 龙鳞护体：上回合已掉血层，本次攻击不消耗血层！` } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 龙鳞：上回合已掉血层，本次攻击不消耗血层！` } });
     return applyPatch(state, {}, sideEffects);
   }
 
@@ -1377,7 +1377,7 @@ function reduceDecrementFury(
     && nextLayer < currentLayer && !monster.isStunned) {
     const totalLostLayers = (monster.fury ?? monster.hpLayers ?? 1) - nextLayer;
     const reflectDmg = monster.golemLayerLossReflect * totalLostLayers;
-    const reflectLabel = `岩层反震（${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
+    const reflectLabel = `反震（${monster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
     const route = routeReflectDamageToHero(state, reflectDmg, monster.name, reflectLabel, rng);
     reflectPatch = route.patch;
     rng = route.rng;
@@ -1655,9 +1655,9 @@ function reduceApplyShieldReflect(
 // APPLY_DAMAGE so the damage falls onto tempShield/HP.
 //
 // Used by:
-//   - 龙息反击 (APPLY_DRAGON_BREATH_RETALIATION)
+//   - 龙息 (APPLY_DRAGON_BREATH_RETALIATION)
 //   - 反魔 (FINALIZE_MAGIC_CARD anti-magic loop in rules/cards.ts)
-//   - 岩层反震 (DEAL_DAMAGE_TO_MONSTER, DECREMENT_FURY, PERFORM_HERO_ATTACK)
+//   - 反震 (DEAL_DAMAGE_TO_MONSTER, DECREMENT_FURY, PERFORM_HERO_ATTACK)
 //
 // Side effects pushed: log + banner only. Caller is responsible for any
 // extra animation events (e.g. combat:dragonBreathFx, combat:golemReflect)
@@ -1894,7 +1894,7 @@ function reduceApplyDragonBreathRetaliation(
   state: GameState,
   action: Extract<GameAction, { type: 'APPLY_DRAGON_BREATH_RETALIATION' }>,
 ): ReduceResult {
-  const route = routeReflectDamageToHero(state, action.damage, action.monsterName, '龙息反击');
+  const route = routeReflectDamageToHero(state, action.damage, action.monsterName, '龙息');
   const sideEffects: SideEffect[] = [
     {
       event: 'combat:dragonBreathFx',
@@ -2236,7 +2236,7 @@ function reducePerformHeroAttack(
 
   // --- Logs ---
   if (goblinGoldPowerActive) {
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 贪婪强化：金币 ≥ 30，攻击力翻倍！` } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 窘境：金币 ≥ 30，攻击力翻倍！` } });
   }
   if (isCrit) {
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `暴击！${slotItem.name} 造成双倍伤害！` } });
@@ -2415,7 +2415,7 @@ function reducePerformHeroAttack(
           [boneRoll, rng] = nextInt(rng, 1, 20);
           sideEffects.push({
             event: 'combat:diceRoll',
-            payload: { title: targetMonster.name, subtitle: '虚骨再生', roll: boneRoll, threshold: 8, success: boneRoll <= 8 },
+            payload: { title: targetMonster.name, subtitle: '骸生', roll: boneRoll, threshold: 8, success: boneRoll <= 8 },
           });
           if (boneRoll <= 8) {
             workingMonster = {
@@ -2425,7 +2425,7 @@ function reducePerformHeroAttack(
             };
             sideEffects.push({
               event: 'log:entry',
-              payload: { type: 'combat', message: `${targetMonster.name} 的虚骨再生了一层！` },
+              payload: { type: 'combat', message: `${targetMonster.name} 的骸生了一层！` },
             });
             sideEffects.push({ event: 'ui:banner', payload: { text: `${targetMonster.name} 恢复了 1 层血层！` } });
           }
@@ -2449,7 +2449,7 @@ function reducePerformHeroAttack(
       && layerAfterHit < layerBeforeHit && !targetMonster.isStunned) {
       const totalLostLayers = (targetMonster.fury ?? targetMonster.hpLayers ?? 1) - layerAfterHit;
       const reflectDmg = targetMonster.golemLayerLossReflect * totalLostLayers;
-      const reflectLabel = `岩层反震（${targetMonster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
+      const reflectLabel = `反震（${targetMonster.golemLayerLossReflect}×${totalLostLayers} 已损失血层）`;
       const route = routeReflectDamageToHero(state, reflectDmg, targetMonster.name, reflectLabel, rng);
       Object.assign(patch, route.patch);
       rng = route.rng;
@@ -2664,7 +2664,7 @@ function reducePerformHeroAttack(
       patch.gold = (state.gold ?? 0) + stealAmount;
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 动手偷钱：获得 ${stealAmount} 金币！` },
+        payload: { type: 'equip', message: `${slotItem.name} 窃金：获得 ${stealAmount} 金币！` },
       });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 偷到了 ${stealAmount} 金币！` } });
       if ((slotItem as GameCardData).goblinStealScale) {
@@ -2709,12 +2709,12 @@ function reducePerformHeroAttack(
       [boneRoll, rng] = nextInt(rng, 1, 20);
       sideEffects.push({
         event: 'combat:diceRoll',
-        payload: { title: slotItem.name, subtitle: '虚骨再生判定', roll: boneRoll, threshold: 8, success: boneRoll <= 8 },
+        payload: { title: slotItem.name, subtitle: '骸生判定', roll: boneRoll, threshold: 8, success: boneRoll <= 8 },
       });
       if (boneRoll <= 8) {
         skipDurabilityLoss = true;
-        sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 虚骨再生：幸运保住了耐久！` } });
-        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 虚骨再生！` } });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 骸生：幸运保住了耐久！` } });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 骸生！` } });
       }
     }
 
@@ -3166,7 +3166,7 @@ function reduceResolveBlock(
         }
 
         if (golemArmorCap != null && blocked > golemArmorCap) {
-          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 岩石护体：护甲最多掉 ${golemArmorCap}！` } });
+          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 护体：护甲最多掉 ${golemArmorCap}！` } });
         }
         if (isFullBlockShield) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newArmor}）` } });
@@ -3301,9 +3301,9 @@ function reduceResolveBlock(
           enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: randomTarget.id, damage: 2, source: 'dragon-breath-reflect' });
           sideEffects.push({
             event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 龙息反击：对 ${randomTarget.name} 造成 2 点伤害！` },
+            payload: { type: 'equip', message: `${slotItem.name} 龙息：对 ${randomTarget.name} 造成 2 点伤害！` },
           });
-          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 龙息反击！` } });
+          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 龙息！` } });
         }
       }
 
@@ -3364,12 +3364,12 @@ function reduceResolveBlock(
           [boneRoll, rng] = nextInt(rng, 1, 20);
           sideEffects.push({
             event: 'combat:diceRoll',
-            payload: { title: slotItem.name, subtitle: '虚骨再生判定', roll: boneRoll, threshold: 8, success: boneRoll <= 8 },
+            payload: { title: slotItem.name, subtitle: '骸生判定', roll: boneRoll, threshold: 8, success: boneRoll <= 8 },
           });
           if (boneRoll <= 8) {
             skipShieldDurabilityLoss = true;
-            sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 虚骨再生：幸运保住了耐久！` } });
-            sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 虚骨再生！` } });
+            sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 骸生：幸运保住了耐久！` } });
+            sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 骸生！` } });
           }
         }
 
@@ -3379,8 +3379,8 @@ function reduceResolveBlock(
           const otherBugletItem = getSlotItem(state, otherBugletSlotId);
           if (otherBugletItem && otherBugletItem.type === 'monster' && (otherBugletItem as GameCardData).isBuglet) {
             skipShieldDurabilityLoss = true;
-            sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 虫盾共生：另一装备栏有小虫子，耐久不减！` } });
-            sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 虫盾共生！` } });
+            sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 虫盾：另一装备栏有小虫子，耐久不减！` } });
+            sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 虫盾！` } });
           }
         }
 
@@ -3606,7 +3606,7 @@ function reduceResolveBlock(
           if (needsStatBuff) {
             sideEffects.push({
               event: 'log:entry',
-              payload: { type: 'combat', message: `${monster.name} 贪婪强化：攻击力 +${actualStolen}，生命值 +${actualStolen}！` },
+              payload: { type: 'combat', message: `${monster.name} 贪敛：攻击力 +${actualStolen}，生命值 +${actualStolen}！` },
             });
           }
         }
@@ -3614,7 +3614,7 @@ function reduceResolveBlock(
     }
   }
 
-  // Monster steal card (Goblin 窃牌贼: pick a random hand card and stack it under self)
+  // Monster steal card (Goblin 窃牌: pick a random hand card and stack it under self)
   if (monster.goblinStealCard) {
     const currentHand = (patch.handCards ?? state.handCards) as GameCardData[];
     const goblinColIndex = (patch.activeCards ?? state.activeCards).findIndex(c => c?.id === monster.id);
@@ -3732,7 +3732,7 @@ function reduceResolveBlock(
       patch.heroStunned = true;
       sideEffects.push({
         event: 'log:entry',
-        payload: { type: 'combat', message: `${monster.name} 蛮力击晕！你的装备栏和护符栏被冻结了！` },
+        payload: { type: 'combat', message: `${monster.name} 震晕！你的装备栏和护符栏被冻结了！` },
       });
       sideEffects.push({ event: 'ui:banner', payload: { text: `被 ${monster.name} 击晕了！装备栏和护符栏冻结！` } });
     }
