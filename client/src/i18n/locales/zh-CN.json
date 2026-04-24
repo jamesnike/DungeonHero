@@ -333,6 +333,28 @@
     "noPortrait": "暂无立绘",
     "unnamedEffect": "未命名效果"
   },
+  "cardBack": {
+    "type": {
+      "monster": "怪物",
+      "event": "事件",
+      "magic": "魔法",
+      "potion": "药水",
+      "weapon": "武器",
+      "shield": "盾牌",
+      "amulet": "护符",
+      "curse": "诅咒",
+      "heroMagic": "魔法",
+      "building": "建筑",
+      "skill": "技能",
+      "coin": "金币",
+      "unknown": "?"
+    },
+    "ariaUnrevealed": "未翻开的{{label}}卡",
+    "ariaPickFlip": "选择该预览行卡背进行乾坤一翻",
+    "viewContents": "查看内容",
+    "backpackTooltip": "背包：{{count}} 张",
+    "recycleTooltip": "回收袋：{{count}} 张"
+  },
   "modal": {
     "deckPeek": {
       "title": "牌堆预览",

@@ -361,6 +361,14 @@ export interface GameCardData {
   onEnterHandEffect?: string;
   /** 内部标记：进入手牌时跳过 onEnterHandEffect 触发（用于克隆/复制/初始发牌等不应触发的来源）。 */
   _skipOnEnterHand?: boolean;
+  /**
+   * Display-only flag: 强制显示卡面右上角「翻转」徽章，即使 `flipTarget` 未设置。
+   * 用于「会通过非标准管线翻转」的卡（如「增幅仪式」通过 useEventSystem.ts 的
+   * `triggerEventTransform` 把自己变成「增幅祭坛」幽灵建筑——不走 APPLY_CARD_FLIP）。
+   * 加 `flipTarget` 占位会让 乾坤一翻 / 万象齐转 / starterActiveRowFlip 误把它当成
+   * 可翻转目标，所以用这个 display-only flag 让徽章显示但不污染翻转目标判定。
+   */
+  _showFlipBadge?: boolean;
   /** 翻转之契 option 6 — 该装备每次卡牌翻转时恢复 1 耐久。绑定在装备卡上，跟随装备进入 reserve / 主槽。 */
   _flipRepairBuff?: boolean;
   /** 「雷震淬刃药」标记：此武器被该药剂加强过；UI 在卡牌上显示「击晕 X%」keyword tag。仅作为来源标记，X 直接读 weaponStunChance 总值。 */
@@ -1006,7 +1014,7 @@ const amuletEffectText =
     }
   })();
   const cardImageHeightClass = isThemedImageCard ? 'h-[60%]' : 'h-[65%]';
-  const hasFlipTarget = Boolean(card.flipTarget);
+  const hasFlipTarget = Boolean(card.flipTarget) || Boolean(card._showFlipBadge);
   // `_flipBackCard` 字段长期挂在卡上（用于血誓回卷 / 乾坤一翻 / 万象齐转 /
   // 秘藏宝库回退 / 命运之刃回退等机制读取原卡），但这些机制都只针对 active row
   // 内的卡。一旦卡牌离开 active row（被拾取入手牌 / 装备 / 进背包 / 进墓地 /

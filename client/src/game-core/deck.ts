@@ -2176,6 +2176,14 @@ export function createDeck(
     image: dedupeEventResonanceForgeImage,
     description: '可将一张牌增幅为祭坛，或复制已增幅的卡牌。',
     shortDescription: '增幅一张牌为祭坛，或复制已增幅的牌',
+    // 4/5 选项会把事件翻转为「增幅祭坛」幽灵建筑（通过 useEventSystem.ts
+    // `triggerEventTransform`，不走标准 `flipTarget` → APPLY_CARD_FLIP 管线，
+    // 因为 amplify 目标必须在选项交互时才确定）。卡面右上角应展示「翻转」徽章
+    // 作为对玩家的预告。我们用 `_showFlipBadge: true`（display-only flag）而不是
+    // 挂占位 `flipTarget`，因为后者会让乾坤一翻 / 万象齐转 / starterActiveRowFlip
+    // 误把它当成可翻转目标 → 翻成无 `_amplifyTargetCardId` 的废弃祭坛建筑卡死槽位。
+    // 选项 5「复制已增幅牌」`skipFlip: true`，不翻转。
+    _showFlipBadge: true,
     eventChoices: [
       {
         id: 'amplify-equip',

@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import GameCard from '@/components/GameCard';
 import type { CardType, GameCardData } from '@/components/GameCard';
 import { Card } from '@/components/ui/card';
@@ -9,19 +10,22 @@ import { getPreviewAnimationProps, getStackedCardStyle } from '../utils/animatio
 
 const EMPTY_ARRAY: GameCardData[] = [];
 
-const CARD_TYPE_LABEL: Partial<Record<CardType, string>> = {
-  monster: '怪物',
-  event: '事件',
-  magic: '魔法',
-  potion: '药水',
-  weapon: '武器',
-  shield: '盾牌',
-  amulet: '护符',
-  curse: '诅咒',
-  'hero-magic': '魔法',
-  building: '建筑',
-  skill: '技能',
-  coin: '金币',
+// `CardType` → i18n key under `cardBack.type`. Two card types collapse to the
+// same display label intentionally (`hero-magic` shows as "Magic" same as
+// regular magic, since the back is supposed to leak only the broad category).
+const CARD_TYPE_I18N_KEY: Partial<Record<CardType, string>> = {
+  monster: 'monster',
+  event: 'event',
+  magic: 'magic',
+  potion: 'potion',
+  weapon: 'weapon',
+  shield: 'shield',
+  amulet: 'amulet',
+  curse: 'curse',
+  'hero-magic': 'heroMagic',
+  building: 'building',
+  skill: 'skill',
+  coin: 'coin',
 };
 
 /**
@@ -198,7 +202,9 @@ interface PreviewCardBackProps {
  * 视觉信号——和中央 pill 一起完成用户要求的「只露类型」契约。
  */
 export const PreviewCardBack = memo(function PreviewCardBack({ card, isStack = false }: PreviewCardBackProps) {
-  const label = CARD_TYPE_LABEL[card.type] ?? '?';
+  const { t } = useTranslation();
+  const labelKey = CARD_TYPE_I18N_KEY[card.type];
+  const label = labelKey ? t(`cardBack.type.${labelKey}`) : t('cardBack.type.unknown');
   const borderHex = CARD_TYPE_BORDER_HEX[card.type] ?? '#3f3f46';
   const insetBorderClass = CARD_TYPE_INSET_BORDER[card.type] ?? 'border-white/20';
   const bg = CARD_TYPE_BG[card.type] ?? DEFAULT_BG;
@@ -208,7 +214,7 @@ export const PreviewCardBack = memo(function PreviewCardBack({ card, isStack = f
     <div
       className="dh-card-wrapper w-full h-full cursor-pointer transition-[transform,opacity,filter] duration-200 ease-out"
       data-testid={`preview-back-${card.type}`}
-      aria-label={`未翻开的${label}卡`}
+      aria-label={t('cardBack.ariaUnrevealed', { label })}
     >
       <Card
         className="relative w-full h-full overflow-hidden transition-shadow duration-200 shadow-lg hover:shadow-xl"
@@ -319,6 +325,7 @@ const PreviewCell = memo(function PreviewCell({
   onDungeonCardSelection,
   onCardClick,
 }: PreviewCellProps) {
+  const { t } = useTranslation();
   const card = useGameState(s => s.previewCards[index]);
   const stackedCards = useGameState(s => s.previewCardStacks[index] ?? EMPTY_ARRAY);
   const revealedEarly = useGameState(s => Boolean(s.previewRevealedEarly?.[index]));
@@ -415,7 +422,7 @@ const PreviewCell = memo(function PreviewCell({
         <PreviewCardBack card={card} />
         <button
           type="button"
-          aria-label={`选择该预览行卡背进行乾坤一翻`}
+          aria-label={t('cardBack.ariaPickFlip')}
           className={`absolute inset-0 z-40 cursor-pointer rounded-md ${highlightClass}`.trim()}
           onClick={handlePreviewClick}
         />

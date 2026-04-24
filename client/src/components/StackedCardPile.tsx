@@ -23,7 +23,7 @@ interface StackedCardPileProps {
   /**
    * 次级 chip 前缀的图标（例如 lucide 的 `Recycle`）。可选。
    */
-  secondaryIcon?: React.ComponentType<{ className?: string }>;
+  secondaryIcon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   /**
    * 次级 chip 的 hover title，可选。
    */
@@ -83,12 +83,18 @@ function StackLayerBack({ src, theme }: { src: string; theme: typeof variantThem
 }
 
 /**
- * 适配 Deck cell 较窄宽度的 cartouche——根据 label 字符数选 size/tracking 三档：
- *   - <= 4 字（中文居多，如 "战士牌组" / "墓地"）：大字 + 宽字距
- *   - 5–8 字 ("Backpack")：中字 + 中字距
- *   - >= 9 字 ("Graveyard" / 长 deckName)：小字 + 紧字距
- * 用 label 字数粗略代理"实际渲染宽度"，对中英文都基本成立（中文 1 字 ≈ 英文 ~1.6 字宽，
- * 但中文 label 普遍很短，所以该启发就够用了）。
+ * Deck cell 中央 cartouche —— 跟 [`PreviewRow.tsx CardBackEmblem`] 一样用
+ * cqi（container query inline size）+ em 相对单位做**真正的流式缩放**：cell
+ * 越宽字越大，cell 越窄字越小。父级 `DeckBack` 的根 div 设了
+ * `containerType: 'inline-size'`，所以 `cqi` 在这里 = 1% × cell 宽度。
+ *
+ * label 字数仍然影响一档"基准字号"——长 label（"Knight Deck" / "Graveyard"）
+ * 用更小的 clamp 上限，避免在大 cell 上撑出 cartouche；短 label（"背包"
+ * "墓地"）允许长得更大。tracking 也按字数微调。
+ *
+ * 历史：以前是 `text-lg sm:text-xl` 这种**只在 640px 切一档**的离散尺寸，
+ * 玩家在不同屏幕上感知不到字真的随 cell 大小变。改成 cqi 之后从手机到大
+ * 屏 cell 字号是连续平滑的。
  */
 function DeckCartouche({
   label,
@@ -102,70 +108,97 @@ function DeckCartouche({
   count: number;
   theme: typeof variantTheme[StackVariant];
   secondaryCount?: number;
-  secondaryIcon?: React.ComponentType<{ className?: string }>;
+  secondaryIcon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   secondaryTitle?: string;
 }) {
   const len = label.length;
+  // baseSize = 整个 cartouche 的"em 锚"。下面 label / count / flourish / 间距
+  // 全部用 em 相对它，所以只要这一档随 cell 宽度变，整个 cartouche 就跟着等比缩放。
+  // clamp 三参数：min（手机迷你 cell 不至于看不清）/ ideal（cqi 流式）/ max（大屏不至于撑爆）。
   const sizing =
     len <= 4
-      ? { text: 'text-lg sm:text-xl', tracking: 'tracking-[0.4em]', px: 'px-5 py-1.5 sm:px-7 sm:py-2', flourishW: 80 }
+      ? { baseSize: 'clamp(0.7rem, 13cqi, 1.5rem)', tracking: '0.4em' }
       : len <= 8
-        ? { text: 'text-sm sm:text-base', tracking: 'tracking-[0.18em]', px: 'px-4 py-1 sm:px-5 sm:py-1.5', flourishW: 70 }
-        : { text: 'text-xs sm:text-sm', tracking: 'tracking-[0.1em]', px: 'px-3 py-1 sm:px-4 sm:py-1.5', flourishW: 60 };
-
-  const flourishLineEnd = sizing.flourishW * 0.395;
-  const flourishLineStart = sizing.flourishW - flourishLineEnd;
-  const flourishCenter = sizing.flourishW / 2;
+        ? { baseSize: 'clamp(0.55rem, 9cqi, 1.1rem)', tracking: '0.2em' }
+        : { baseSize: 'clamp(0.45rem, 7cqi, 0.9rem)', tracking: '0.12em' };
 
   return (
     <div
-      className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 select-none px-1"
-      style={{ color: theme.ink }}
+      className="absolute inset-0 flex flex-col items-center justify-center select-none px-1"
+      style={{
+        color: theme.ink,
+        fontSize: sizing.baseSize,
+        gap: '0.45em',
+      }}
     >
-      {/* 上 flourish */}
-      <svg width={sizing.flourishW} height="10" viewBox={`0 0 ${sizing.flourishW} 10`} aria-hidden className="opacity-90">
-        <line x1="0" y1="5" x2={flourishLineEnd} y2="5" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" />
-        <line x1={flourishLineStart} y1="5" x2={sizing.flourishW} y2="5" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" />
-        <path d={`M${flourishCenter} 1 L${flourishCenter + 4} 5 L${flourishCenter} 9 L${flourishCenter - 4} 5 Z`} fill="currentColor" />
+      {/* 上 flourish —— 宽度用 em 相对 baseSize，所以也跟着流式缩放 */}
+      <svg
+        viewBox="0 0 84 10"
+        aria-hidden
+        className="opacity-90"
+        style={{ width: '5.6em', height: 'auto', display: 'block' }}
+      >
+        <line x1="0" y1="5" x2="33" y2="5" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" />
+        <line x1="51" y1="5" x2="84" y2="5" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" />
+        <path d="M42 1 L46 5 L42 9 L38 5 Z" fill="currentColor" />
       </svg>
-      {/* 类型字底板（去掉了双线白边框，只保留半透明深色板提升对比） */}
+      {/* 类型字底板：padding / radius 也用 em，让底板随字号一起缩放 */}
       <div
-        className={`relative ${sizing.px} rounded-[14px] max-w-full`}
+        className="relative max-w-full"
         style={{
+          padding: '0.35em 1em',
+          borderRadius: '0.9em',
           background: 'rgba(0,0,0,0.45)',
           backdropFilter: 'blur(2px)',
         }}
       >
         <span
-          className={`font-serif font-bold ${sizing.text} ${sizing.tracking} whitespace-nowrap block`}
+          className="font-serif font-bold whitespace-nowrap block"
           style={{
+            fontSize: '1em',
+            lineHeight: 1,
+            letterSpacing: sizing.tracking,
             textShadow: `0 0 8px ${theme.glow}, 0 1px 0 rgba(0,0,0,0.6)`,
           }}
         >
           {label}
         </span>
       </div>
-      {/* count */}
+      {/* count —— 用 em 跟 label 一起缩放（约 0.95× label） */}
       <p
-        className="mt-0.5 font-serif font-bold text-sm sm:text-base tracking-widest"
-        style={{ color: theme.countColor, textShadow: `0 1px 0 rgba(0,0,0,0.5)` }}
+        className="font-serif font-bold"
+        style={{
+          fontSize: '0.95em',
+          letterSpacing: '0.1em',
+          marginTop: '0.1em',
+          color: theme.countColor,
+          textShadow: `0 1px 0 rgba(0,0,0,0.5)`,
+        }}
       >
         {count}
       </p>
       {typeof secondaryCount === 'number' && secondaryCount > 0 && (
         // 仅 icon + 数字，不加背景按钮 / 边框 —— 让它跟卡背中央 cartouche 的
         // count 数字视觉风格一致（同样 serif、同样 textShadow），只是颜色用紫
-        // 调跟主 count 区分开。
+        // 调跟主 count 区分开。字号也走 em，跟着流式缩放。
         <span
-          className="mt-0.5 inline-flex items-center gap-1 font-serif font-bold text-xs sm:text-sm tracking-widest"
+          className="inline-flex items-center font-serif font-bold"
           style={{
+            fontSize: '0.7em',
+            letterSpacing: '0.1em',
+            gap: '0.3em',
+            marginTop: '0.15em',
             color: '#ddd6fe', // violet-200，跟卡背深蓝底搭，跟主 count 的浅蓝错开
             textShadow: '0 1px 0 rgba(0,0,0,0.5)',
           }}
           title={secondaryTitle}
           data-testid="stacked-pile-secondary-chip"
         >
-          {SecondaryIcon && <SecondaryIcon className="h-3 w-3" />}
+          {SecondaryIcon && (
+            // 用 inline style + em 让 icon 跟字一起流式缩放
+            // （tailwind h-3/w-3 是死的 12px，会跟周围 em 字号脱节）
+            <SecondaryIcon style={{ width: '1em', height: '1em' }} />
+          )}
           {secondaryCount}
         </span>
       )}
@@ -192,7 +225,7 @@ function DeckBack({
   src: string;
   theme: typeof variantTheme[StackVariant];
   secondaryCount?: number;
-  secondaryIcon?: React.ComponentType<{ className?: string }>;
+  secondaryIcon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   secondaryTitle?: string;
 }) {
   return (
@@ -204,6 +237,10 @@ function DeckBack({
         borderColor: theme.borderHex,
         background: theme.bg,
         boxShadow: `0 6px 14px ${theme.shadow}`,
+        // 让 DeckCartouche 内的 cqi 单位以 cell 宽度为基准做流式缩放——跟
+        // PreviewRow.PreviewCardBack 同款 container query 模式。没有这一行
+        // cqi 会回退到视口（vi），cartouche 字号就跟 cell 宽度脱节了。
+        containerType: 'inline-size',
       }}
     >
       {/* 卡背容器：历史上贴过 cardBack PNG overlay，现已移除（与新的渐变底色 +

@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Backpack as BackpackIcon, Recycle as RecycleIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -134,6 +135,7 @@ function BackpackZoneInner({
   compactStyle,
   compactCellRef,
 }: BackpackZoneProps) {
+  const { t } = useTranslation();
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const dropRef = useRef<HTMLDivElement>(null);
@@ -337,7 +339,7 @@ function BackpackZoneInner({
           {backpackCount > 0 && (
             <span
               className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-amber-500/90 ring-1 ring-amber-200/70 shadow-sm"
-              title={`背包：${backpackCount} 张`}
+              title={t('cardBack.backpackTooltip', { count: backpackCount })}
             >
               {backpackCount}
             </span>
@@ -347,7 +349,7 @@ function BackpackZoneInner({
             // 向左溢出盖住上面的黄色背包 chip。这里只保留数字，靠紫色色块跟黄色背包数字区分。
             <span
               className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-violet-500/90 ring-1 ring-violet-200/70 shadow-sm"
-              title={`回收袋：${recycleCount} 张`}
+              title={t('cardBack.recycleTooltip', { count: recycleCount })}
               data-testid="backpack-recycle-chip-compact"
             >
               {recycleCount}
@@ -384,7 +386,7 @@ function BackpackZoneInner({
           {recycleCount > 0 && (
             <span
               className="mt-0.5 inline-flex items-center gap-[2px] rounded px-1 text-[10px] font-bold leading-none text-white bg-violet-500/90 ring-1 ring-violet-200/70 shadow-sm"
-              title={`回收袋：${recycleCount} 张`}
+              title={t('cardBack.recycleTooltip', { count: recycleCount })}
               data-testid="backpack-recycle-chip-flat"
             >
               <RecycleIcon className="h-2.5 w-2.5" />
@@ -401,7 +403,7 @@ function BackpackZoneInner({
             variant="blue"
             secondaryCount={recycleCount}
             secondaryIcon={RecycleIcon}
-            secondaryTitle={recycleCount > 0 ? `回收袋：${recycleCount} 张` : undefined}
+            secondaryTitle={recycleCount > 0 ? t('cardBack.recycleTooltip', { count: recycleCount }) : undefined}
           />
           {/*
             Mobile padding bump (p-1 → p-1.5) keeps the right-aligned chip column
@@ -415,14 +417,14 @@ function BackpackZoneInner({
               <div className="flex flex-col items-end gap-0.5">
                 <Badge
                   className="bg-amber-500/90 text-white font-mono text-[9px] leading-none sm:dh-hero-chip px-1 py-0 sm:px-2 sm:py-0.5 ring-1 ring-amber-200/70 hover:bg-amber-500/90"
-                  title={`背包：${backpackCount} 张`}
+                  title={t('cardBack.backpackTooltip', { count: backpackCount })}
                 >
                   {backpackCount}
                 </Badge>
                 {recycleCount > 0 && (
                   <Badge
                     className="bg-violet-500/90 text-white font-mono text-[9px] leading-none sm:dh-hero-chip px-1 py-0 sm:px-2 sm:py-0.5 ring-1 ring-violet-200/70 inline-flex items-center gap-0.5 sm:gap-1 hover:bg-violet-500/90"
-                    title={`回收袋：${recycleCount} 张`}
+                    title={t('cardBack.recycleTooltip', { count: recycleCount })}
                     data-testid="backpack-recycle-chip"
                   >
                     <RecycleIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
@@ -432,7 +434,7 @@ function BackpackZoneInner({
               </div>
             </div>
             <div className="flex items-center justify-end dh-hero-chip font-medium">
-              查看内容
+              {t('cardBack.viewContents')}
             </div>
           </div>
         </>

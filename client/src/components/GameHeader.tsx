@@ -156,14 +156,14 @@ function GameHeaderInner({
         </span>
       </div>
 
-      <LanguageToggle />
-
       <div className="game-header__sticker-icon game-header__sticker-icon--gold" data-testid="header-gold">
         <Coins />
         <span className="game-header__sticker-icon__num game-header__sticker-icon__num--small">
           {gold}
         </span>
       </div>
+
+      <LanguageToggle />
     </div>
   );
 }

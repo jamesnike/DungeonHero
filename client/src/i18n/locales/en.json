@@ -333,6 +333,28 @@
     "noPortrait": "No portrait",
     "unnamedEffect": "Unnamed effect"
   },
+  "cardBack": {
+    "type": {
+      "monster": "Monster",
+      "event": "Event",
+      "magic": "Magic",
+      "potion": "Potion",
+      "weapon": "Weapon",
+      "shield": "Shield",
+      "amulet": "Amulet",
+      "curse": "Curse",
+      "heroMagic": "Magic",
+      "building": "Building",
+      "skill": "Skill",
+      "coin": "Coin",
+      "unknown": "?"
+    },
+    "ariaUnrevealed": "Unrevealed {{label}} card",
+    "ariaPickFlip": "Pick this preview card to flip",
+    "viewContents": "View Contents",
+    "backpackTooltip": "Backpack: {{count}}",
+    "recycleTooltip": "Recycle Bag: {{count}}"
+  },
   "modal": {
     "deckPeek": {
       "title": "Deck Preview",
