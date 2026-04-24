@@ -357,7 +357,7 @@
 |------|------|------|------|
 | 1-7 | 锋刃祝福：所有装备栏临时攻击+4 | `allSlotTempAttack:4` | skipFlip |
 | 8-14 | 时空收缩：Waterfall 进度 -2 | `turnCount-2` | 翻转为时空镜像 |
-| 15-20 | 空间代价：背包 -2，获得法术回响 | `['backpackSize-2', 'flipToDoubleNextMagic']` | skipFlip |
+| 15-20 | 空间代价：背包 -2，获得法术回响 | `['backpackSize-2', 'flipToSpellEcho']` | skipFlip |
 | 1-10 | 时空侵蚀：商店等级 -1，劝降等级-1 | `['shopLevel-1', 'persuadeLevel-1']` | 翻转为时空镜像 |
 | 11-20 | 时空压缩：激活行怪物攻击力 -3 | `activeRowMonsterAttack-3` | skipFlip |
 
@@ -365,7 +365,7 @@
 
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
-| `flipToDoubleNextMagic` | 法术回响 | 永久魔法 | 使用后，下一张法术的效果将触发两次 | 背包 |
+| `flipToSpellEcho` | 法术回响 | 永久魔法（Perm 1） | 使用后，下一张法术的效果将触发两次 | 背包 |
 
 **事件翻转产物（仅「时空收缩」或「时空侵蚀」结果触发）：**
 

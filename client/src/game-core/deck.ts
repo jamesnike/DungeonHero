@@ -1818,7 +1818,7 @@ export function createDeck(
         diceTable: [
           { id: 'rift-burst', range: [1, 7], label: '锋刃祝福：所有装备栏临时攻击+4', effect: 'allSlotTempAttack:4', skipFlip: true },
           { id: 'rift-shrink', range: [8, 14], label: '时空收缩：Waterfall 进度 -2', effect: 'turnCount-2' },
-          { id: 'rift-cost', range: [15, 20], label: '空间代价：背包 -2，激活法术回响', effect: ['backpackSize-2', 'flipToDoubleNextMagic'], skipFlip: true },
+          { id: 'rift-cost', range: [15, 20], label: '空间代价：背包 -2，获得法术回响', effect: ['backpackSize-2', 'flipToSpellEcho'], skipFlip: true },
           { id: 'rift-shoplevel', range: [1, 10], label: '时空侵蚀：商店等级 -1，劝降等级-1', effect: ['shopLevel-1', 'persuadeLevel-1'] },
           { id: 'rift-monsteratk', range: [11, 20], label: '时空压缩：激活行怪物攻击力 -3', effect: 'activeRowMonsterAttack-3', skipFlip: true },
         ],

@@ -36,6 +36,11 @@ type SelectionState =
 function getAmplifyPreview(card: GameCardData): string {
   if (card.type === 'weapon') return `攻击力 ${card.value} → ${card.value + 1}`;
   if (card.type === 'shield') return `护甲 ${card.armorMax ?? card.value} → ${(card.armorMax ?? card.value) + 1}`;
+  if (card.type === 'monster') {
+    const atk = card.attack ?? card.value;
+    const hp = card.hp ?? card.value;
+    return `攻击 ${atk} → ${atk + 1}，生命 ${hp} → ${hp + 1}`;
+  }
   if (card.type === 'magic') {
     if (card.scalingDamage != null) return `叠刺基数 ${card.scalingDamage} → ${card.scalingDamage + 1}`;
     const bonus = (card.amplifyBonus ?? 0) + 1;
@@ -56,19 +61,19 @@ export default function AmplifyModal({
   const [selected, setSelected] = useState<SelectionState>(null);
 
   const equipmentEntries: { slotId: EquipmentSlotId; label: string; card: GameCardData }[] = [];
-  if (equipmentSlot1 && (equipmentSlot1.type === 'weapon' || equipmentSlot1.type === 'shield')) {
+  if (equipmentSlot1 && (equipmentSlot1.type === 'weapon' || equipmentSlot1.type === 'shield' || equipmentSlot1.type === 'monster')) {
     equipmentEntries.push({ slotId: 'equipmentSlot1', label: '左装备栏', card: equipmentSlot1 });
   }
-  if (equipmentSlot2 && (equipmentSlot2.type === 'weapon' || equipmentSlot2.type === 'shield')) {
+  if (equipmentSlot2 && (equipmentSlot2.type === 'weapon' || equipmentSlot2.type === 'shield' || equipmentSlot2.type === 'monster')) {
     equipmentEntries.push({ slotId: 'equipmentSlot2', label: '右装备栏', card: equipmentSlot2 });
   }
 
   const eligibleHandCards = handCards.filter(
-    c => c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c),
+    c => c.type === 'weapon' || c.type === 'shield' || c.type === 'monster' || isDamageMagic(c),
   );
 
   const eligibleBackpackCards = (backpackItems ?? []).filter(
-    c => c.type === 'weapon' || c.type === 'shield' || isDamageMagic(c),
+    c => c.type === 'weapon' || c.type === 'shield' || c.type === 'monster' || isDamageMagic(c),
   );
 
   const pickEquipment = (slotId: EquipmentSlotId) => {

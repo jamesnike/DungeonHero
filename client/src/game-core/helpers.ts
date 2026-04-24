@@ -194,8 +194,23 @@ export function syncBuildingSlotsPure(activeCards: ActiveRowSlots): ActiveRowSlo
  */
 export function applyAmplifyToCard<T extends GameCardData>(card: T, amount: number): T {
   if (!amount) return card;
-  if (card.type === 'weapon' || card.type === 'monster') {
+  if (card.type === 'weapon') {
     return { ...card, value: card.value + amount, amplifyBonus: (card.amplifyBonus ?? 0) + amount };
+  }
+  if (card.type === 'monster') {
+    // Monster amplify 同时 bump 当前值（attack/hp/maxHp）和怒气重算基线（baseAttack/baseHp），
+    // 否则下次 applyMonsterRage 会按未加成的 base 重算把 +1 抹掉。
+    // value 也同步累加，作为兼容兜底（部分老路径仍读 card.value）。
+    return {
+      ...card,
+      attack:     (card.attack     ?? card.value) + amount,
+      baseAttack: (card.baseAttack ?? card.attack ?? card.value) + amount,
+      hp:         (card.hp         ?? card.value) + amount,
+      maxHp:      (card.maxHp      ?? card.hp ?? card.value) + amount,
+      baseHp:     (card.baseHp     ?? card.maxHp ?? card.hp ?? card.value) + amount,
+      value:      card.value + amount,
+      amplifyBonus: (card.amplifyBonus ?? 0) + amount,
+    };
   }
   if (card.type === 'shield') {
     const oldArmor = card.armorMax ?? card.value;
