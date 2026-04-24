@@ -195,7 +195,7 @@ export default function HeroDetailsModal({
           <DialogTitle className="text-2xl font-serif">{heroVariant.name}</DialogTitle>
           <DialogDescription className="flex items-center gap-2">
             <span className="font-semibold text-foreground">{heroVariant.classTitle}</span>
-            <span className="text-muted-foreground text-sm">{t('hero.cardClass', { className: '' }).replace(/^\s*•\s*/, '• ').replace(/^\s*$/, '')}</span>
+            <span className="text-muted-foreground text-sm">• {t('hero.adventurerProfile')}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -211,7 +211,7 @@ export default function HeroDetailsModal({
                     draggable={false}
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-muted-foreground aspect-[3/4]">暂无立绘</div>
+                  <div className="flex h-full items-center justify-center text-muted-foreground aspect-[3/4]">{t('hero.noPortrait')}</div>
                 )}
               </div>
             </div>
@@ -232,7 +232,7 @@ export default function HeroDetailsModal({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-base font-semibold text-foreground">携带与栏位上限</h3>
+            <h3 className="text-base font-semibold text-foreground">{t('hero.capacity.title')}</h3>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {capacityItems.map(row => (
                 <div
@@ -251,11 +251,11 @@ export default function HeroDetailsModal({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-foreground">英雄技能</h3>
+              <h3 className="text-base font-semibold text-foreground">{t('hero.skill.title')}</h3>
               <Badge variant="outline">{heroSkills.length}</Badge>
             </div>
             {heroSkills.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">尚未学习任何英雄技能。</p>
+              <p className="text-sm text-muted-foreground italic">{t('hero.skill.empty')}</p>
             ) : (
               <div className="space-y-3">
                 {heroSkills.map(skill => (
@@ -264,7 +264,7 @@ export default function HeroDetailsModal({
                     className="rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm"
                   >
                     <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
-                      <span>{skill.type === 'active' ? '主动技能' : '被动技能'}</span>
+                      <span>{skill.type === 'active' ? t('hero.skill.active') : t('hero.skill.passive')}</span>
                       <Badge variant={skill.type === 'active' ? 'default' : 'secondary'}>
                         {skill.type === 'active' ? 'Active' : 'Passive'}
                       </Badge>
@@ -289,7 +289,7 @@ export default function HeroDetailsModal({
           {heroMagicInfo && heroMagicInfo.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-foreground">英雄魔法</h3>
+                <h3 className="text-base font-semibold text-foreground">{t('hero.magic.title')}</h3>
                 <Badge variant="outline">{heroMagicInfo.length}</Badge>
               </div>
               <div className="space-y-3">
@@ -305,7 +305,7 @@ export default function HeroDetailsModal({
                         <Flame className="w-4 h-4 text-amber-500" />
                         <span className="text-xl font-semibold text-foreground">{magic.name}</span>
                         <Badge variant={magic.ready ? 'default' : 'secondary'} className="ml-auto">
-                          {magic.ready ? '可释放' : magic.usedThisWave ? '已使用' : '充能中'}
+                          {magic.ready ? t('hero.magic.ready') : magic.usedThisWave ? t('hero.magic.used') : t('hero.magic.charging')}
                         </Badge>
                       </div>
                       <p className="text-sm leading-relaxed text-muted-foreground">{def.description}</p>
@@ -331,13 +331,13 @@ export default function HeroDetailsModal({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-foreground">已掌握的被动</h3>
+              <h3 className="text-base font-semibold text-foreground">{t('hero.permSkill.title')}</h3>
               <Badge variant="outline">
                 {permanentSkills.length === 0 ? '0' : permanentSkills.length.toString()}
               </Badge>
             </div>
             {permanentSkills.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">尚未学习额外的被动技能。</p>
+              <p className="text-sm text-muted-foreground italic">{t('hero.permSkill.empty')}</p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {permanentSkills.map((skill, index) => {

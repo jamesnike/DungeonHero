@@ -47,7 +47,7 @@ export type DragOrigin = 'hand' | 'dungeon' | 'backpack' | 'amulet' | EquipmentS
 
 export type ActiveRowSlots = Array<GameCardData | null>;
 
-export type HeroRowDropType = 'event' | 'magic' | 'potion' | 'hero-magic' | 'building';
+export type HeroRowDropType = 'event' | 'magic' | 'potion' | 'hero-magic' | 'building' | 'curse';
 
 export type GraveyardVector = { offsetX: number; offsetY: number };
 

@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Zap, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export type GameMode = 'normal' | 'quick';
 
@@ -10,6 +11,7 @@ interface GameModeSelectModalProps {
 }
 
 export function GameModeSelectModal({ open, onSelect, onCancel }: GameModeSelectModalProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
       {/*
@@ -23,8 +25,8 @@ export function GameModeSelectModal({ open, onSelect, onCancel }: GameModeSelect
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle className="text-xl text-center">选择游戏模式</DialogTitle>
-          <DialogDescription className="text-center">开始新的冒险之旅</DialogDescription>
+          <DialogTitle className="text-xl text-center">{t('modal.gameModeSelect.title')}</DialogTitle>
+          <DialogDescription className="text-center">{t('modal.gameModeSelect.newAdventure')}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3 pt-2">
           <button
@@ -35,9 +37,9 @@ export function GameModeSelectModal({ open, onSelect, onCancel }: GameModeSelect
               <Zap className="h-5 w-5" />
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-base font-bold text-amber-500">快速游戏</span>
+              <span className="text-base font-bold text-amber-500">{t('modal.gameModeSelect.quickMode')}</span>
               <span className="text-sm text-muted-foreground leading-relaxed">
-                36 张牌的精简牌堆，10 个怪物，3 个精英。节奏更快，适合短局体验。
+                {t('modal.gameModeSelect.quickModeDesc')}
               </span>
             </div>
           </button>
@@ -50,9 +52,9 @@ export function GameModeSelectModal({ open, onSelect, onCancel }: GameModeSelect
               <Shield className="h-5 w-5" />
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-base font-bold text-sky-500">正常游戏</span>
+              <span className="text-base font-bold text-sky-500">{t('modal.gameModeSelect.normalMode')}</span>
               <span className="text-sm text-muted-foreground leading-relaxed">
-                完整牌堆，21 个怪物，7 个精英。完整的地城冒险体验。
+                {t('modal.gameModeSelect.normalModeDesc')}
               </span>
             </div>
           </button>

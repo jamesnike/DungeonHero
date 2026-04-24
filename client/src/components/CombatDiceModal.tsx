@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import DiceRoller from './DiceRoller';
@@ -25,6 +26,7 @@ export default function CombatDiceModal({
   autoRollTrigger,
   onRollResult,
 }: CombatDiceModalProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open}>
       {/*
@@ -41,7 +43,7 @@ export default function CombatDiceModal({
       >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
-          <DialogDescription>{subtitle ?? 'Rolling the d20…'}</DialogDescription>
+          <DialogDescription>{subtitle ?? t('modal.combatDice.defaultSubtitle')}</DialogDescription>
         </DialogHeader>
 
         <div className="mt-2 grid gap-3 min-w-0">
@@ -56,8 +58,8 @@ export default function CombatDiceModal({
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-4 py-2 text-base text-muted-foreground">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">掷骰结果</span>
-              <span className="text-xs text-muted-foreground">需 ≤{threshold}</span>
+              <span className="font-semibold text-foreground">{t('modal.combatDice.rollResult')}</span>
+              <span className="text-xs text-muted-foreground">{t('modal.combatDice.thresholdHint', { threshold })}</span>
             </div>
             <Badge
               variant="secondary"
@@ -67,7 +69,7 @@ export default function CombatDiceModal({
                   : 'bg-rose-500/15 text-rose-300 border border-rose-500/40'
               }`}
             >
-              {roll} — {success ? '成功' : '失败'}
+              {roll} — {success ? t('modal.combatDice.success') : t('modal.combatDice.fail')}
             </Badge>
           </div>
         </div>

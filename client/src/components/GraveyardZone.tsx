@@ -308,11 +308,11 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
           data-testid="graveyard-viewer-modal"
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-white">
               <Skull className="w-6 h-6" />
               Graveyard ({discardedCards.length} cards)
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-white/70">
               All used, sold, and discarded cards
             </DialogDescription>
           </DialogHeader>

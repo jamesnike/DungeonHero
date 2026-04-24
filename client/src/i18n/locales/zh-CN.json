@@ -13,7 +13,27 @@
     "reroll": "换一批",
     "release": "释放",
     "passive": "被动",
-    "active": "主动"
+    "active": "主动",
+    "knownIt": "知道了",
+    "section": {
+      "hand": "手牌",
+      "backpack": "背包",
+      "equipment": "装备栏",
+      "amulet": "护符栏",
+      "recycleBag": "回收袋",
+      "graveyard": "坟场",
+      "leftEquip": "左装备栏",
+      "rightEquip": "右装备栏",
+      "leftBattle": "左备战",
+      "rightBattle": "右备战",
+      "deck": "牌堆"
+    },
+    "noCardsAvailable": "没有可选择的卡牌。",
+    "countCards": "{{count}} 张",
+    "countSelected": "已选 {{count}}",
+    "selectedCountOfMax": "已选 {{count}} / {{max}}",
+    "selectedCountOfMaxCards": "已选 {{count}} / {{max}} 张",
+    "sectionCount": "{{name}}（{{count}} 张）"
   },
   "header": {
     "newGame": "New Game",
@@ -309,6 +329,7 @@
     "passive": "Passive: {{name}}",
     "passiveUsed": "Passive: {{name}} ✓",
     "cardClass": "{{className}} • 冒险者档案",
+    "adventurerProfile": "冒险者档案",
     "noPortrait": "暂无立绘",
     "unnamedEffect": "未命名效果"
   },
@@ -322,108 +343,362 @@
       "title": "怪物融合",
       "subtitle": "选择两张同类怪物进行融合",
       "confirm": "确认融合",
-      "selected": "已选 {{count}}/2"
+      "selected": "已选 {{count}}/2",
+      "description1": "从装备栏 / 手牌 / 背包 中挑选 ",
+      "description1Bold": "2 张同种族",
+      "description2": " 怪物装备进行融合（精英怪物，Lv3）。选择 ",
+      "description2Bold": "3 张 Skeleton",
+      "description3": " 可融合为「骷髅王」。",
+      "empty": "没有可融合的同种族怪物装备（装备栏 / 手牌 / 背包 中需有同种族 ≥ 2 张）。",
+      "raceCount": "（{{race}}）— {{count}} 张"
     },
     "graveyardExile": {
       "title": "坟场移除",
       "subtitle": "选择要移除的卡牌",
-      "confirmRemove": "确认移除 {{count}} 张卡牌"
+      "confirmRemove": "确认移除 {{count}} 张卡牌",
+      "description": "从坟场中选择要移除出游戏的卡牌（可多选，也可不选）。被移除的卡牌将永久消失。",
+      "selected": "已选中 — 将被移除",
+      "clickToSelect": "点击选择",
+      "skipExile": "不移除，跳过"
     },
     "backpackReorganize": {
       "title": "整理背包",
       "subtitle": "选择要放回背包的卡牌",
       "confirmReturn": "确认放回",
-      "noSelection": "尚未选择"
+      "noSelection": "尚未选择",
+      "description": "背包上限已 +1。选择至多 {{max}} 张牌（手牌 / 护符 / 装备）放回背包顶部；可以一张都不选。",
+      "noteSmall": "装备/护符直接被取走，不会触发任何破损或转化效果；选择顺序即放回顺序，最后选择的最后放入。",
+      "selectedCount": "已选 {{count}} / {{max}} 张",
+      "skipZero": "跳过（0 张）"
     },
     "discoverClass": {
       "title": "发现一张 Class Card",
-      "subtitle": "从下方三张牌中选择一张加入你的牌库"
+      "subtitle": "从下方三张牌中选择一张加入你的牌库",
+      "description": "从三张候选卡中挑选一张，其余卡牌会放回 Class Deck。",
+      "empty": "暂无可发现的 Class Card",
+      "pickThis": "选择这张卡",
+      "cancelNoPick": "取消（不选）"
     },
     "cardDeletion": {
       "title": "选择要销毁的卡牌",
       "confirmLabel": "确认",
-      "subtitle": "选择 {{count}} 张要销毁的卡牌"
+      "subtitle": "选择 {{count}} 张要销毁的卡牌",
+      "defaultTitle": "选择要删除的卡牌",
+      "defaultDescription": "删除后该卡牌会被送入坟场，无法再回到手牌或背包。",
+      "discardRecycleHint": "可弃置进坟场的牌会排在前面；Perm 类牌仍会进入回收袋。",
+      "batchSelected": "已选 {{count}} / {{max}} 张卡牌（最多 {{max}} 张）",
+      "needMoreSelections": "还需选择 {{remaining}} / {{required}} 张卡牌",
+      "sectionCount": "{{name}}（{{count}} 张）",
+      "emptyHand": "当前没有手牌可以选择。",
+      "emptyBackpack": "背包里没有可以选择的卡牌。",
+      "emptyRecycleBag": "回收袋里没有可以选择的卡牌。",
+      "emptyEquipment": "装备栏没有可以选择的卡牌。",
+      "emptyAmulet": "护符栏没有可以选择的卡牌。",
+      "keywordDelete": "删除",
+      "keywordDiscardOnly": "弃置",
+      "keywordRecycleOnly": "回收",
+      "keywordDiscardRecycle": "弃回",
+      "keywordMoveTo": "移动"
+    },
+    "cardDetails": {
+      "monsterEquipmentTag": "怪物装备",
+      "knightClassTag": "KNIGHT CLASS",
+      "upgradeMaxed": "已满级 (Lv.{{current}}/{{max}})",
+      "upgradeAvailable": "可升级 (Lv.{{current}}/{{max}})",
+      "rewardSectionTitle": "击败奖励（二选一）",
+      "equipmentEffectsTitle": "装备效果",
+      "bossPhaseTag": "BOSS 形态",
+      "passiveEffectTitle": "Passive Effect",
+      "heroMagicTitle": "Hero Magic",
+      "spellTypeLabel": "Type: {{type}}",
+      "spellTypeInstant": "Instant Spell",
+      "spellTypePermanent": "Permanent Skill",
+      "eventChoicesTitle": "事件选项",
+      "buildingAbilitiesTitle": "建筑能力",
+      "requirementLabel": "启用条件：",
+      "directEffectLabel": "直接效果：",
+      "flipEffectTitle": "翻转效果",
+      "flipStaysHere": "翻转后留在原位",
+      "buildingDurabilityLabel": "耐久",
+      "buildingLayerLabel": "血层"
     },
     "shop": {
-      "title": "商店",
+      "title": "冒险者商店",
       "purchase": "购买",
       "soldOut": "已售出",
       "notEnoughGold": "金币不足",
-      "leaveShop": "离开商店"
+      "leaveShop": "离开商店",
+      "descriptionFromEvent": "{{name}}向你展示了他的藏品。每张卡牌都可以用金币购买。",
+      "descriptionDefault": "使用金币购买心仪的 Class 卡牌。",
+      "goldLabel": "金币：",
+      "backpackLabel": "背包：",
+      "backpackFull": "背包已满，无法再购买",
+      "extraOffers": "额外商品 +{{count}}",
+      "skillLearned": "已学习",
+      "learnSkill": "学习技能",
+      "priceLabel": "价格：",
+      "priceUnit": "金币",
+      "bought": "已购入",
+      "notEnoughGoldPeriod": "金币不足。",
+      "emptyOfferings": "今天的商店暂时没有可卖的 Class 卡牌。",
+      "deleteCardTitle": "删一张牌",
+      "perVisitOnce": "每次商店限一次",
+      "deleteCardDesc": "从手牌或背包中选择一张卡牌，将其直接送入坟场。",
+      "freeOption": "无需花费金币",
+      "deleteButton": "删牌",
+      "healTitle": "恢复生命",
+      "healDesc": "花费 {{cost}} 金币恢复 5 点生命值。",
+      "healHpStatus": "（当前 {{hp}}/{{max}}）",
+      "healUsedNote": "本次商店的回血机会已用完。",
+      "healFullNote": "生命值已满。",
+      "healButton": "回血",
+      "attackTitle": "强化攻击",
+      "attackDesc": "花费 {{cost}} 金币，所有装备栏永久攻击 +1。",
+      "attackUsedNote": "本次商店的强化攻击机会已使用。",
+      "attackButton": "强化攻击",
+      "armorTitle": "强化护甲",
+      "armorDesc": "花费 {{cost}} 金币，所有装备栏永久护甲 +1。",
+      "armorUsedNote": "本次商店的强化护甲机会已使用。",
+      "armorButton": "强化护甲",
+      "levelUpTitle": "商店升级",
+      "levelUpDesc": "花费 {{cost}} 金币提升商店等级，下次光临时享受更多商品。",
+      "levelUpUsedNote": "本次商店的升级机会已使用。",
+      "levelUpButton": "升级",
+      "discoverSkillTitle": "发现英雄技能",
+      "discoverSkillDesc": "花费 {{cost}} 金币发现一个全新的英雄技能，从 3 个技能中选择 1 个学习。",
+      "discoverSkillUsedNote": "本次商店的发现机会已使用。",
+      "discoverSkillButton": "发现技能",
+      "finishShopping": "结束购买"
     },
     "permGrant": {
       "title": "永恒铭刻",
-      "subtitle": "选择一张装备/护符/药水/魔法变为永久版"
+      "subtitle": "选择一张装备/护符/药水/魔法变为永久版",
+      "defaultTitle": "永恒铭刻",
+      "defaultDescription": "选择一张手牌赋予 Perm 3（被移除后经 3 次瀑流返回背包）",
+      "defaultEmpty": "手牌中没有可赋予永恒属性的卡牌",
+      "defaultConfirm": "铭刻",
+      "title_equipmentEnchant": "装备附魔",
+      "title_essenceExtract": "精华萃取",
+      "title_transformGrant": "蜕变赋灵",
+      "title_flankGrant": "赋予侧击",
+      "title_transformGoldGrant": "赋予转型",
+      "title_flankPersuadeGrant": "赋能神殿 · 侧击",
+      "title_flankStunGrant": "赋能神殿 · 侧击",
+      "title_flankDamageGrant": "赋能神殿 · 侧击",
+      "title_transformDrawGrant": "赋能神殿 · 转型",
+      "title_transformHealGrant": "赋能神殿 · 转型",
+      "title_transformRecycleGrant": "唤回秘药",
+      "title_amuletPermGrant": "附魔祭坛 · 护符 Perm 2",
+      "title_onHandStunCapGrant": "翻转之契 · 铭刻技艺",
+      "desc_equipmentEnchant": "选择一张手牌中的装备弃置，将其攻击/护甲值随机附魔到装备栏的一件装备上",
+      "desc_essenceExtract": "移除一张手牌（从游戏中删除）。一次性魔法→左栏攻击+1；装备→右栏攻击+1；护符→右栏护甲+1；怪物/药水→左栏护甲+1",
+      "desc_transformGrant": "选择一张手牌赋予「转型：随机获得坟场一张魔法卡」",
+      "desc_flankGrant": "选择一张手牌赋予「侧击：抽1张牌」（打出时处于手牌最左或最右位置时触发）",
+      "desc_transformGoldGrant": "选择一张手牌赋予「转型：+3金币」（打出前一张牌与本牌类型不同时触发）",
+      "desc_flankPersuadeGrant": "选择一张手牌赋予「侧击：劝降费用永久 -1」（任何类型的牌均可）",
+      "desc_flankStunGrant": "选择一张手牌赋予「侧击：击晕上限 +5%」（任何类型的牌均可）",
+      "desc_flankDamageGrant": "选择一张手牌赋予「侧击：对随机怪物造成 5 点伤害」（任何类型的牌均可）",
+      "desc_transformDrawGrant": "选择一张手牌赋予「转型：抽 2 张牌」（任何类型的牌均可）",
+      "desc_transformHealGrant": "选择一张手牌赋予「转型：恢复 2 HP」（任何类型的牌均可）",
+      "desc_transformRecycleGrant": "选择一张手牌赋予「转型：回收袋取回 1 张牌」",
+      "desc_amuletPermGrant": "选择一个已装备的护符，赋予 Perm 2（被移除后经 2 次瀑流返回背包）",
+      "desc_onHandStunCapGrant": "选择一张手牌，永久赋予「上手：击晕上限 +3%」（每次进入手牌触发，已带其它上手词条的卡不可选）",
+      "empty_equipmentEnchant": "手牌中没有可弃置的装备卡",
+      "empty_essenceExtract": "手牌中没有可移除的卡牌",
+      "empty_flankGrant": "手牌中没有可赋予侧击效果的卡牌",
+      "empty_transformGoldGrant": "手牌中没有可赋予转型效果的卡牌",
+      "empty_transformGrant": "手牌中没有可赋予转型效果的卡牌",
+      "empty_flankPersuadeGrant": "手牌中没有可赋予侧击效果的卡牌",
+      "empty_flankStunGrant": "手牌中没有可赋予侧击效果的卡牌",
+      "empty_flankDamageGrant": "手牌中没有可赋予侧击效果的卡牌",
+      "empty_transformDrawGrant": "手牌中没有可赋予转型效果的卡牌",
+      "empty_transformHealGrant": "手牌中没有可赋予转型效果的卡牌",
+      "empty_transformRecycleGrant": "手牌中没有可赋予转型效果的卡牌",
+      "empty_amuletPermGrant": "没有可赋予 Perm 2 的护符（所有护符已是 Perm 2 或更高）",
+      "empty_onHandStunCapGrant": "手牌中没有可赋予「上手：击晕上限 +3%」的卡牌",
+      "confirm_equipmentEnchant": "附魔",
+      "confirm_essenceExtract": "萃取",
+      "confirm_transformGrant": "赋灵",
+      "confirm_flankGrant": "赋予",
+      "confirm_transformGoldGrant": "赋予",
+      "confirm_flankPersuadeGrant": "赋予",
+      "confirm_flankStunGrant": "赋予",
+      "confirm_flankDamageGrant": "赋予",
+      "confirm_transformDrawGrant": "赋予",
+      "confirm_transformHealGrant": "赋予",
+      "confirm_transformRecycleGrant": "赋予",
+      "confirm_amuletPermGrant": "赋予",
+      "confirm_onHandStunCapGrant": "铭刻"
     },
     "amplify": {
       "title": "强化",
-      "subtitle": "选择一张卡牌进行强化"
+      "subtitle": "选择一张卡牌进行强化",
+      "descriptionWithBackpack": "选择装备栏 / 手牌 / 背包中的装备或伤害魔法，对其进行增幅",
+      "descriptionWithoutBackpack": "选择装备栏中的装备或手牌中的装备/伤害魔法，对其进行增幅",
+      "empty": "没有可增幅的牌",
+      "previewLabel": "增幅效果：",
+      "confirm": "确认增幅"
     },
     "cardUpgrade": {
       "title": "卡牌升级",
-      "subtitle": "选择一张卡牌升级"
+      "subtitle": "选择一张卡牌升级",
+      "subtitleWithRemaining": "选择卡牌进行升级（剩余 {{count}} 次）",
+      "subtitleSingle": "选择一张卡牌进行升级",
+      "empty": "没有可升级的卡牌",
+      "maxedTag": "已满级",
+      "upgrade": "升级"
     },
     "cardDraft": {
       "title": "选牌",
-      "subtitle": "选择一张卡牌"
+      "subtitle": "选择一张卡牌",
+      "starterTitle": "选择你的起始卡牌",
+      "roundProgress": "第 {{current}} / {{total}} 轮 — {{prompt}}",
+      "promptEquipment": "选择一张装备加入背包",
+      "promptPotion": "选择一瓶药水加入背包",
+      "promptAmulet": "选择一个护符加入背包",
+      "promptGeneral": "从下方三张卡中选择一张加入背包",
+      "pickedLabel": "已选："
     },
     "deckViewer": {
       "title": "牌库",
-      "subtitle": "剩余 {{count}} 张牌"
+      "subtitle": "剩余 {{count}} 张牌",
+      "empty": "牌库已空，胜利在望！",
+      "type": {
+        "monster": "怪物",
+        "weapon": "武器",
+        "shield": "护盾",
+        "potion": "药水",
+        "amulet": "护符",
+        "skill": "技能",
+        "magic": "魔法",
+        "heroMagic": "英雄魔法",
+        "event": "事件"
+      }
     },
     "backpackViewer": {
       "title": "背包",
-      "empty": "背包是空的"
+      "empty": "背包是空的",
+      "titleWithCount": "背包 ({{count}}{{capacity}} 张)",
+      "description": "存储区，背包内卡牌不分先后顺序，与瀑流无关。",
+      "waterfallHint": "（瀑流时<0>顶部</0>第一张牌入手）",
+      "recycleBagTag": "回收袋",
+      "heroMagicDamage": "{{name}} 法术伤害 {{damage}}",
+      "heroMagicStun": "{{name}} 击晕上限 {{cap}}",
+      "headerTitle": "背包 ({{count}} 张)",
+      "headerTitleWithCapacity": "背包 ({{count}}/{{capacity}} 张)",
+      "headerDescription": "背包中的卡牌为无序存放，抽牌时会随机选择",
+      "emptyShort": "背包里还没有任何卡牌",
+      "recycleSectionTitle": "回收袋 ({{count}} 张)",
+      "recycleSectionHint": "瀑流图标旁数字为剩余次数；下一次瀑流开始时结算。",
+      "waterfallTooltip": "{{count}} 次瀑流后回背包",
+      "heroMagicLabel": "(英雄魔法)",
+      "currentDamageHint": "当下 {{damage}} 点",
+      "currentStunCapHint": "当下 击晕上限 +{{value}}%"
     },
     "monsterReward": {
-      "title": "战利品",
-      "subtitle": "选择一项奖励"
+      "title": "战利品选择",
+      "subtitle": "选择一项奖励",
+      "subtitleAfterDefeat": "击败 {{name}} 后的奖励。"
     },
     "monsterPersuade": {
       "title": "劝降怪物",
       "subtitle": "成功率 {{rate}}%（费用 {{cost}} 金）",
       "confirm": "尝试劝降",
-      "rollDie": "掷骰判定"
+      "rollDie": "掷骰判定",
+      "levelLabel": "劝降等级",
+      "levelHint": "（可劝降 ≤{{level}} 血层怪物）",
+      "costLabel": "劝降费用",
+      "goldUnit": "{{count}} 金",
+      "rateLabel": "成功率",
+      "rollHint": "掷 d20 判定 — {{threshold}} 或更高即成功。",
+      "stunnedHint": "目标处于击晕状态，成功率略有提升。",
+      "successHint": "成功后 {{name}} 加入背包，血层转化为耐久（{{layers}} 血层 → {{layers}} 耐久）。",
+      "equipHint": "从背包装备后，怪物的能力会转化为装备效果。",
+      "rageReleaseHint": "无论成功失败，怪物都会冷静下来（怒气清除）。",
+      "confirmWithCost": "确认劝降（{{cost}} 金）",
+      "notEnoughGoldNeed": "金币不足（需要 {{cost}}）",
+      "rollResult": "掷骰",
+      "needLabel": "需要 ≥ {{threshold}}",
+      "rollSuccess": "成功！",
+      "rollFail": "失败",
+      "persuadeSuccess": "劝降成功！",
+      "joinedTarget": "{{name}} 加入了 {{target}}！（攻 {{attack}} / 防 {{hp}} / 耐 {{layers}}）",
+      "persuadeFail": "劝降失败",
+      "refused": "{{name}} 拒绝了你的提议；消耗了 {{cost}} 金币。",
+      "calmedDown": "但 {{name}} 已冷静下来（怒气清除）。",
+      "ok": "好的"
     },
     "eventChoice": {
       "title": "事件",
-      "noChoice": "暂无可选选项"
+      "noChoice": "暂无可选选项",
+      "subtitle": "审慎选择你的道路……"
     },
     "eventDice": {
       "title": "掷骰判定",
-      "rolling": "掷骰中..."
+      "rolling": "掷骰中...",
+      "defaultSubtitle": "掷 d20 决定你的命运。",
+      "rollResult": "掷骰结果"
     },
     "combatDice": {
       "title": "战斗掷骰",
-      "subtitle": "掷出 {{threshold}} 或更小为成功"
+      "subtitle": "掷出 {{threshold}} 或更小为成功",
+      "defaultSubtitle": "正在掷 d20…",
+      "rollingD20": "正在掷 d20…",
+      "rollResult": "掷骰结果",
+      "thresholdHint": "需 ≤{{threshold}}",
+      "success": "成功",
+      "fail": "失败"
     },
     "handDiscardSelection": {
       "title": "弃手牌",
       "subtitle": "选择 {{count}} 张要弃掉的手牌",
-      "confirm": "确认弃牌"
+      "confirm": "确认弃牌",
+      "remainingLabel": "还需选择",
+      "confirmDiscard": "确认弃牌"
     },
     "magicChoice": {
       "title": "选择效果"
     },
     "mirrorCopy": {
-      "title": "镜像复制",
-      "subtitle": "选择要复制的卡牌"
+      "title": "镜影摹形",
+      "subtitle": "选择要复制的卡牌",
+      "description": "从装备栏 / 护符栏 / 手牌中选一张牌——你将获得它的一份副本到手牌中。",
+      "empty": "没有可复制的卡牌（装备栏 / 护符栏 / 手牌都是空的）。",
+      "amuletIndex": "护符 {{index}}",
+      "confirmCopy": "确认复制"
     },
     "shopSkillSelect": {
       "title": "选择技能",
-      "subtitle": "从下方三个技能中选择一个"
+      "subtitle": "从下方三个技能中选择一个",
+      "discoverTitle": "发现英雄技能",
+      "discoverDesc": "从以下 3 个技能中选择 1 个学习。选择后将立即获得该技能。",
+      "helpText": "点击技能卡牌以选择"
     },
     "handMagicUpgrade": {
       "title": "魔法升级",
-      "subtitle": "选择手牌中的一张魔法升级"
+      "subtitle": "选择手牌中的一张魔法升级",
+      "description": "从手牌中选择最多 {{max}} 张魔法卡进行升级（已选 {{count}}/{{max}}）",
+      "empty": "手牌中没有可升级的魔法",
+      "upgradeWithCount": "升级（{{count}}）"
     },
     "equipmentSelect": {
       "title": "选择装备槽",
-      "subtitle": "选择装备到哪个槽位"
+      "subtitle": "选择装备到哪个槽位",
+      "leftSlot": "左槽",
+      "rightSlot": "右槽",
+      "emptySlot": "空槽位",
+      "powerLabel": "攻击 {{value}}",
+      "durabilityLabel": "耐久 {{current}}/{{max}}",
+      "cancel": "取消"
     },
     "gameModeSelect": {
       "title": "选择游戏模式",
-      "subtitle": "标准模式 / 快速模式"
+      "subtitle": "标准模式 / 快速模式",
+      "newAdventure": "开启新的冒险之旅",
+      "quickMode": "快速游戏",
+      "quickModeDesc": "36 张牌的精简牌堆，10 个怪物，3 个精英。节奏更快，适合短局体验。",
+      "normalMode": "正常游戏",
+      "normalModeDesc": "完整牌堆，21 个怪物，7 个精英。完整的地城冒险体验。"
     }
   }
 }

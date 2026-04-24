@@ -97,6 +97,7 @@ export const isHeroRowHighlightCard = (
       card.type === 'magic' ||
       card.type === 'hero-magic' ||
       card.type === 'potion' ||
+      card.type === 'curse' ||
       (card.type === 'building' && card.eventChoices)),
   );
 

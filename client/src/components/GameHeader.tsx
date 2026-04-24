@@ -93,7 +93,6 @@ function GameHeaderInner({
             {t('header.newGame')}
           </button>
           <HelpDialog buttonClassName="game-header__button game-header__button--icon" />
-          <LanguageToggle />
           <div className="game-header__sticker-icon game-header__sticker-icon--hp" data-testid="header-hp">
             <Heart />
             <span className="game-header__sticker-icon__num game-header__sticker-icon__num--small">
@@ -156,6 +155,8 @@ function GameHeaderInner({
           </span>
         </span>
       </div>
+
+      <LanguageToggle />
 
       <div className="game-header__sticker-icon game-header__sticker-icon--gold" data-testid="header-gold">
         <Coins />

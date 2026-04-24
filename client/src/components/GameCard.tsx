@@ -606,7 +606,7 @@ export function getMagicSubtypeBracketLabel(card: GameCardData): string | null {
   return card.magicType;
 }
 
-interface GameCardProps {
+export interface GameCardProps {
   card: GameCardData;
   onDragStart?: (card: GameCardData) => void;
   onDragEnd?: (event?: React.DragEvent) => void;
@@ -883,6 +883,8 @@ function GameCardInner({
         return <Wand2 className="dh-card__icon text-rose-500" />;
       case 'event':
         return <Scroll className="dh-card__icon text-violet-700" />;
+      case 'curse':
+        return <Skull className="dh-card__icon text-rose-800" />;
     }
   };
 
@@ -913,6 +915,8 @@ function GameCardInner({
         return 'border-violet-700';
       case 'building':
         return 'border-stone-600';
+      case 'curse':
+        return 'border-rose-950 shadow-rose-900/30';
       default:
         return 'border-card-border';
     }
@@ -965,19 +969,21 @@ const amuletEffectText =
   const eventPatternKey = isEventCard ? resolveEventPatternKey(card) : null;
   const cardWatermarkKey = magicPatternKey || eventPatternKey;
   const isTextOnlyCard = isEventCard || isMagicCard;
-  const isThemedImageCard = card.type === 'amulet' || card.type === 'potion';
+  const isThemedImageCard = card.type === 'amulet' || card.type === 'potion' || card.type === 'curse';
   const cornerDecoClass =
     card.type === 'amulet'
       ? 'dh-card-deco--amulet'
       : card.type === 'potion'
         ? 'dh-card-deco--potion'
-        : card.type === 'monster' || card.type === 'building'
-          ? 'dh-card-deco--monster'
-          : card.type === 'weapon'
-            ? 'dh-card-deco--weapon'
-            : card.type === 'shield'
-              ? 'dh-card-deco--shield'
-              : '';
+        : card.type === 'curse'
+          ? 'dh-card-deco--curse'
+          : card.type === 'monster' || card.type === 'building'
+            ? 'dh-card-deco--monster'
+            : card.type === 'weapon'
+              ? 'dh-card-deco--weapon'
+              : card.type === 'shield'
+                ? 'dh-card-deco--shield'
+                : '';
   const hasCornerDeco = Boolean(cornerDecoClass);
   const insetFrameBorderClass = (() => {
     if (!hasCornerDeco) return '';
@@ -993,6 +999,8 @@ const amuletEffectText =
         return 'border-emerald-500/40';
       case 'amulet':
         return 'border-violet-400/45';
+      case 'curse':
+        return 'border-rose-700/40';
       default:
         return '';
     }
@@ -1012,7 +1020,9 @@ const amuletEffectText =
 
   const cardImageBackdropClass = (() => {
     if (isThemedImageCard) {
-      return card.type === 'amulet' ? 'bg-violet-200/30' : 'bg-emerald-200/30';
+      if (card.type === 'amulet') return 'bg-violet-200/30';
+      if (card.type === 'curse') return 'bg-gradient-to-b from-rose-950/30 to-zinc-900/40';
+      return 'bg-emerald-200/30';
     }
     switch (card.type) {
       case 'monster':
@@ -1033,6 +1043,8 @@ const amuletEffectText =
         return 'bg-violet-200/30';
       case 'potion':
         return 'bg-emerald-200/30';
+      case 'curse':
+        return 'bg-gradient-to-b from-rose-950/25 to-zinc-900/30';
       case 'monster':
       case 'building':
         return 'bg-red-50/45';
@@ -1631,6 +1643,18 @@ const amuletEffectText =
                     >
                       <Infinity className="dh-icon-inline--compact shrink-0" aria-hidden />
                       <span className="tabular-nums leading-none">{permRecycleWaterfalls}</span>
+                    </span>
+                  </div>
+                )}
+                {card.type === 'curse' && (
+                  <div className="dh-card__overlay-tr z-10 pointer-events-none">
+                    <span
+                      className={`dh-card__caption flex items-center rounded-sm border border-rose-300/50 bg-rose-900/70 font-bold uppercase tracking-wide text-rose-50 shadow-sm ${
+                        isCompact ? 'gap-0 px-0.5 py-0' : 'gap-0.5 px-1 py-0.5'
+                      }`}
+                      title="诅咒：无法被回收或弃置"
+                    >
+                      <Skull className="dh-icon-inline--compact shrink-0" aria-hidden />
                     </span>
                   </div>
                 )}
@@ -2377,6 +2401,12 @@ const amuletEffectText =
                   </div>
                 )}
 
+                {card.type === 'curse' && (card.shortDescription || card.description) && (
+                  <div className={`dh-card__body-text w-full text-rose-100/95 ${isCompact ? 'px-0' : 'px-1'} leading-tight`}>
+                    {card.shortDescription || card.description}
+                  </div>
+                )}
+
                 {(card.type === 'potion' || card.type === 'amulet') && !!card.onEnterHandEffect && (() => {
                   const onHandLabel = getOnEnterHandShortLabel(card);
                   return onHandLabel ? (
@@ -2403,7 +2433,7 @@ const amuletEffectText =
   );
 }
 
-function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
+export function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
   if (prev.card !== next.card) {
     const a = prev.card;
     const b = next.card;
@@ -2481,6 +2511,20 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
       a.swarmHordeBuffed !== b.swarmHordeBuffed ||
       a.swarmCorrode !== b.swarmCorrode ||
       a.swarmBugletShield !== b.swarmBugletShield ||
+      // `defeatProcessed` flips between renders for two reasons:
+      //   (1) kill: undefined → true (post-kill card is just
+      //       `{ ...alive, defeatProcessed: true }` with no other field
+      //       changes when fury > 1 and the monster is staging),
+      //   (2) UNDO from staging state: true → undefined with NO other
+      //       field changes — undo restores the original alive ref,
+      //       which is identical except for this flag.
+      // Without comparing `defeatProcessed` here, the memo returned true,
+      // React skipped the re-render, and the `data-defeat="true"` attribute
+      // (driven by `card.defeatProcessed` in GameCard render) stayed in the
+      // DOM. The CSS `forwards` fill on `dh-card-death` then froze the
+      // card grey for the rest of its life on the row.
+      // See undo-at-staging-monster-no-gray.test.ts.
+      a.defeatProcessed !== b.defeatProcessed ||
       a.hasEquipmentRevive !== b.hasEquipmentRevive ||
       a.equipmentReviveUsed !== b.equipmentReviveUsed ||
       a.lastWordsSlotTempBuff !== b.lastWordsSlotTempBuff ||

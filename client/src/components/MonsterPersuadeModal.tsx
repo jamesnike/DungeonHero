@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
 import DiceRoller from './DiceRoller';
 import GameCard, { type GameCardData } from './GameCard';
 import { Coins, Target, Sparkles, X } from 'lucide-react';
@@ -42,6 +43,7 @@ export default function MonsterPersuadeModal({
   onDiceResult,
   onClose,
 }: MonsterPersuadeModalProps) {
+  const { t } = useTranslation();
   if (!monster) return null;
 
   const canAfford = gold >= cost;
@@ -67,7 +69,7 @@ export default function MonsterPersuadeModal({
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <Target className="w-5 h-5 text-amber-500" />
-            劝降
+            {t('modal.monsterPersuade.title')}
           </DialogTitle>
         </DialogHeader>
 
@@ -86,28 +88,28 @@ export default function MonsterPersuadeModal({
                 <div className="flex items-center justify-between rounded border border-border px-4 py-3">
                   <span className="flex items-center gap-2 text-sm font-medium">
                     <Sparkles className="w-4 h-4 text-purple-500" />
-                    劝降等级
+                    {t('modal.monsterPersuade.levelLabel')}
                   </span>
                   <Badge variant="secondary" className="text-base font-mono px-3 py-1 text-purple-600">
                     Lv.{persuadeLevel}
-                    <span className="text-xs text-muted-foreground ml-1">（可劝降 ≤{persuadeLevel} 血层）</span>
+                    <span className="text-xs text-muted-foreground ml-1">{t('modal.monsterPersuade.levelHint', { level: persuadeLevel })}</span>
                   </Badge>
                 </div>
 
                 <div className="flex items-center justify-between rounded border border-border px-4 py-3">
                   <span className="flex items-center gap-2 text-sm font-medium">
                     <Coins className="w-4 h-4 text-amber-500" />
-                    劝降费用
+                    {t('modal.monsterPersuade.costLabel')}
                   </span>
                   <Badge variant="secondary" className="text-base font-mono px-3 py-1">
-                    {cost} 金币
+                    {t('modal.monsterPersuade.goldUnit', { count: cost })}
                   </Badge>
                 </div>
 
                 <div className="flex items-center justify-between rounded border border-border px-4 py-3">
                   <span className="flex items-center gap-2 text-sm font-medium">
                     <Target className="w-4 h-4 text-sky-500" />
-                    成功概率
+                    {t('modal.monsterPersuade.rateLabel')}
                   </span>
                   <Badge
                     variant="secondary"
@@ -124,20 +126,20 @@ export default function MonsterPersuadeModal({
                 </div>
 
                 <div className="rounded border border-border/60 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-                  <p>投掷 d20 骰子，掷出 <span className="font-mono font-semibold text-foreground">{threshold}</span> 或更高即劝降成功。</p>
+                  <p>{t('modal.monsterPersuade.rollHint', { threshold })}</p>
                   {monster.isStunned && (
                     <p className="mt-1 text-yellow-600 dark:text-yellow-400 font-medium">
-                      目标处于晕眩状态，劝降成功率轻微提高。
+                      {t('modal.monsterPersuade.stunnedHint')}
                     </p>
                   )}
                   <p className="mt-1">
-                    成功后 {monster.name} 将进入背包，血层转换为耐久（{monsterHpLayers}层 → {monsterHpLayers}耐久）。
+                    {t('modal.monsterPersuade.successHint', { name: monster.name, layers: monsterHpLayers })}
                   </p>
                   <p className="mt-1 text-amber-600 dark:text-amber-400 font-medium">
-                    从背包装备后，怪物原有能力将转化为对应的装备效果。
+                    {t('modal.monsterPersuade.equipHint')}
                   </p>
                   <p className="mt-1 text-sky-600 dark:text-sky-400 font-medium">
-                    无论劝降成功或失败，怪物都将恢复平静（解除激怒状态）。
+                    {t('modal.monsterPersuade.rageReleaseHint')}
                   </p>
                 </div>
               </div>
@@ -150,10 +152,12 @@ export default function MonsterPersuadeModal({
                   disabled={!canAfford}
                 >
                   <Coins className="w-4 h-4 mr-1" />
-                  {canAfford ? `确认劝降（${cost}金币）` : `金币不足（需要${cost}）`}
+                  {canAfford
+                    ? t('modal.monsterPersuade.confirmWithCost', { cost })
+                    : t('modal.monsterPersuade.notEnoughGoldNeed', { cost })}
                 </Button>
                 <Button variant="outline" onClick={onClose}>
-                  取消
+                  {t('common.cancel')}
                 </Button>
               </div>
             </>
@@ -173,17 +177,17 @@ export default function MonsterPersuadeModal({
 
               {/* Result display */}
               <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-4 py-3 text-base text-muted-foreground">
-                <span className="font-semibold text-foreground text-lg">掷骰结果</span>
+                <span className="font-semibold text-foreground text-lg">{t('modal.monsterPersuade.rollResult')}</span>
                 <Badge variant="secondary" className="text-2xl font-mono px-4 py-2">
                   {diceValue ?? '…'}
                 </Badge>
               </div>
 
               <div className="flex items-center justify-between rounded border border-border/60 px-4 py-2 text-sm">
-                <span>需要 ≥ {threshold}</span>
+                <span>{t('modal.monsterPersuade.needLabel', { threshold })}</span>
                 {diceValue !== null && (
                   <span className={`font-semibold ${success ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {success ? '成功！' : '失败'}
+                    {success ? t('modal.monsterPersuade.rollSuccess') : t('modal.monsterPersuade.rollFail')}
                   </span>
                 )}
               </div>
@@ -198,24 +202,29 @@ export default function MonsterPersuadeModal({
                     <div className="space-y-1">
                       <p className="flex items-center justify-center gap-2 text-lg font-semibold text-emerald-600">
                         <Sparkles className="w-5 h-5" />
-                        劝降成功！
+                        {t('modal.monsterPersuade.persuadeSuccess')}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {monster.name} 已加入{targetLabel}！
-                        （{monsterAttack}攻 / {monsterHp}防 / {monsterHpLayers}耐久）
+                        {t('modal.monsterPersuade.joinedTarget', {
+                          name: monster.name,
+                          target: targetLabel,
+                          attack: monsterAttack,
+                          hp: monsterHp,
+                          layers: monsterHpLayers,
+                        })}
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-1">
                       <p className="flex items-center justify-center gap-2 text-lg font-semibold text-red-500">
                         <X className="w-5 h-5" />
-                        劝降失败
+                        {t('modal.monsterPersuade.persuadeFail')}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {monster.name} 拒绝了你的劝降，{cost} 金币已消耗。
+                        {t('modal.monsterPersuade.refused', { name: monster.name, cost })}
                       </p>
                       <p className="text-xs text-sky-500 mt-1">
-                        但 {monster.name} 已恢复平静（解除激怒）。
+                        {t('modal.monsterPersuade.calmedDown', { name: monster.name })}
                       </p>
                     </div>
                   )}
@@ -224,7 +233,7 @@ export default function MonsterPersuadeModal({
 
               {phase === 'result' && (
                 <Button className="w-full" onClick={onClose}>
-                  确定
+                  {t('modal.monsterPersuade.ok')}
                 </Button>
               )}
             </>

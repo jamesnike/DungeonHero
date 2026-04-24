@@ -6331,6 +6331,7 @@ export default function GameBoard() {
     if (card.type === 'event') return false;
     if (card.type === 'building') return false;
     if (card.type === 'monster') return false;
+    if (card.type === 'curse') return false;
     return true;
   };
   const canCardDropOnHero = (card: GameCardData | null, source?: DragOrigin | null) => {
@@ -8055,6 +8056,7 @@ export default function GameBoard() {
             !playerTargetingActive &&
             !fullBoardInteractionLocked &&
             !(draggedCardSource === 'amulet' && draggedCard && !isRecyclableFromHand(draggedCard)) &&
+            !(draggedCard?.type === 'curse') &&
             (
               (draggedCard !== null &&
               !draggedEquipment &&
@@ -8861,6 +8863,7 @@ export default function GameBoard() {
             !playerTargetingActive &&
             !fullBoardInteractionLocked &&
             !(draggedCardSource === 'amulet' && draggedCard && !isRecyclableFromHand(draggedCard)) &&
+            !(draggedCard?.type === 'curse') &&
             (
               (draggedCard !== null &&
               !draggedEquipment &&

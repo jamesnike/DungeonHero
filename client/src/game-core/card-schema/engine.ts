@@ -77,9 +77,10 @@ export function executeMagicCardEffects(
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '贪婪诅咒消耗了 3 金币。' } });
       sideEffects.push({ event: 'ui:banner', payload: { text: '贪婪诅咒消耗了 3 金币。' } });
     } else if (curseEffect === 'frenzy-curse') {
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1, source: 'frenzy-curse', selfInflicted: true });
       enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '战狂诅咒：抽 1 张牌。' } });
-      sideEffects.push({ event: 'ui:banner', payload: { text: '战狂诅咒：抽 1 张牌！' } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '战狂诅咒：失去 1 生命，抽 1 张牌。' } });
+      sideEffects.push({ event: 'ui:banner', payload: { text: '战狂诅咒：失去 1 生命，抽 1 张牌！' } });
     } else {
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 3, source: 'blood-curse', selfInflicted: true });
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '血咒吸取了 3 点生命。' } });

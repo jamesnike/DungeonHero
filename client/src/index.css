@@ -1321,7 +1321,9 @@ html {
   .dh-card-deco--potion::before,
   .dh-card-deco--potion::after,
   .dh-card-deco--amulet::before,
-  .dh-card-deco--amulet::after {
+  .dh-card-deco--amulet::after,
+  .dh-card-deco--curse::before,
+  .dh-card-deco--curse::after {
     content: '';
     position: absolute;
     width: 18px;
@@ -1423,6 +1425,19 @@ html {
     bottom: 3px; right: 3px;
     border-bottom: 2px solid rgba(196, 181, 253, 0.58);
     border-right: 2px solid rgba(196, 181, 253, 0.58);
+    border-bottom-right-radius: 4px;
+  }
+
+  .dh-card-deco--curse::before {
+    top: 3px; left: 3px;
+    border-top: 2px solid rgba(225, 29, 72, 0.55);
+    border-left: 2px solid rgba(225, 29, 72, 0.55);
+    border-top-left-radius: 4px;
+  }
+  .dh-card-deco--curse::after {
+    bottom: 3px; right: 3px;
+    border-bottom: 2px solid rgba(225, 29, 72, 0.55);
+    border-right: 2px solid rgba(225, 29, 72, 0.55);
     border-bottom-right-radius: 4px;
   }
 
@@ -2334,6 +2349,7 @@ html {
   .game-header__sticker-icon--shop { --sticker-color: #d97706; }
   .game-header__sticker-icon--persuade { --sticker-color: #7c3aed; }
   .game-header__sticker-icon--gold { --sticker-color: #eab308; }
+  .game-header__sticker-icon--language { --sticker-color: #0d9488; }
   .game-header__sticker-icon--help { --sticker-color: #111111; }
   /* 游戏指南按钮单独缩小：layout box ~75%，内部 SVG 视觉缩放也压低 */
   .game-header__sticker-icon--help {
@@ -2359,6 +2375,20 @@ html {
   }
   /* Waves 第二层白描边：利用 outline 不能，只能多层 drop-shadow 模拟 */
   .game-header__sticker-icon--waterfall > svg {
+    filter:
+      drop-shadow(0 0 0 #fff) drop-shadow(0 0 0 #fff)
+      drop-shadow(1px 1.5px 0 rgba(20, 8, 0, 0.55))
+      drop-shadow(0 3px 4px rgba(0, 0, 0, 0.55));
+  }
+
+  /* Languages 也是纯线条 icon，跟 Waves 用同一套描边方案 */
+  .game-header__sticker-icon--language > svg {
+    fill: none;
+    stroke: var(--sticker-color);
+    stroke-width: 2.6;
+    paint-order: stroke;
+  }
+  .game-header__sticker-icon--language > svg {
     filter:
       drop-shadow(0 0 0 #fff) drop-shadow(0 0 0 #fff)
       drop-shadow(1px 1.5px 0 rgba(20, 8, 0, 0.55))

@@ -1,4 +1,5 @@
 import { Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
@@ -23,6 +24,7 @@ interface MonsterRewardModalProps {
 }
 
 export default function MonsterRewardModal({ open, monsterName, options, onSelect, onMinimize }: MonsterRewardModalProps) {
+  const { t } = useTranslation();
   return (
     <Dialog
       open={open}
@@ -34,9 +36,9 @@ export default function MonsterRewardModal({ open, monsterName, options, onSelec
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-400" />
-            战利品选择
+            {t('modal.monsterReward.title')}
           </DialogTitle>
-          <DialogDescription>击败 {monsterName} 后的奖励。</DialogDescription>
+          <DialogDescription>{t('modal.monsterReward.subtitleAfterDefeat', { name: monsterName })}</DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 grid gap-3">

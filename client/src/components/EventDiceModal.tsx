@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import DiceRoller from './DiceRoller';
@@ -32,6 +33,7 @@ export default function EventDiceModal({
   onClose,
   predeterminedRoll,
 }: EventDiceModalProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={value => !value && onClose?.()}>
       {/*
@@ -47,7 +49,7 @@ export default function EventDiceModal({
       >
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
-          <DialogDescription>{subtitle ?? 'Roll the d20 to determine your fate.'}</DialogDescription>
+          <DialogDescription>{subtitle ?? t('modal.eventDice.defaultSubtitle')}</DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 grid gap-4 min-w-0">
@@ -61,7 +63,7 @@ export default function EventDiceModal({
             />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-4 py-3 text-base text-muted-foreground">
-            <span className="font-semibold text-foreground text-lg">Roll Result</span>
+            <span className="font-semibold text-foreground text-lg">{t('modal.eventDice.rollResult')}</span>
             <Badge variant="secondary" className="text-2xl font-mono px-4 py-2">
               {rolledValue ?? '…'}
             </Badge>

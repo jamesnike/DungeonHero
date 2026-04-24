@@ -13,7 +13,27 @@
     "reroll": "Reroll",
     "release": "Cast",
     "passive": "Passive",
-    "active": "Active"
+    "active": "Active",
+    "knownIt": "Got it",
+    "section": {
+      "hand": "Hand",
+      "backpack": "Backpack",
+      "equipment": "Equipment",
+      "amulet": "Amulets",
+      "recycleBag": "Recycle Bag",
+      "graveyard": "Graveyard",
+      "leftEquip": "Left Equip",
+      "rightEquip": "Right Equip",
+      "leftBattle": "Left Battle",
+      "rightBattle": "Right Battle",
+      "deck": "Deck"
+    },
+    "noCardsAvailable": "No cards available.",
+    "countCards": "{{count}}",
+    "countSelected": "{{count}} selected",
+    "selectedCountOfMax": "Selected {{count}} / {{max}}",
+    "selectedCountOfMaxCards": "Selected {{count}} / {{max}}",
+    "sectionCount": "{{name}} ({{count}})"
   },
   "header": {
     "newGame": "New Game",
@@ -309,6 +329,7 @@
     "passive": "Passive: {{name}}",
     "passiveUsed": "Passive: {{name}} ✓",
     "cardClass": "{{className}} • Adventurer Profile",
+    "adventurerProfile": "Adventurer Profile",
     "noPortrait": "No portrait",
     "unnamedEffect": "Unnamed effect"
   },
@@ -320,110 +341,358 @@
     },
     "monsterFusion": {
       "title": "Monster Fusion",
-      "subtitle": "Pick two monsters of the same kind to fuse",
+      "description1": "Pick ",
+      "description1Bold": "2 same-race",
+      "description2": " monster equipment from equipment slots / hand / backpack to fuse (Elite, Lv3). Pick ",
+      "description2Bold": "3 Skeletons",
+      "description3": " to fuse into the Skeleton King.",
+      "empty": "No same-race monster equipment available (need ≥ 2 of the same race in equipment / hand / backpack).",
+      "raceCount": "({{race}}) — {{count}}",
       "confirm": "Confirm Fusion",
       "selected": "Selected {{count}}/2"
     },
     "graveyardExile": {
-      "title": "Graveyard Exile",
-      "subtitle": "Pick the cards you want to remove",
-      "confirmRemove": "Remove {{count}} card(s)"
+      "title": "Wraith Blade — Soul Banish",
+      "description": "Pick cards in the graveyard to exile from the game (multiple OK, none OK too). Exiled cards are gone forever.",
+      "selected": "Selected — will be removed",
+      "clickToSelect": "Click to select",
+      "confirmRemove": "Remove {{count}} card(s)",
+      "skipExile": "Don't exile, skip"
     },
     "backpackReorganize": {
       "title": "Reorganize Backpack",
-      "subtitle": "Pick the cards to put back in the backpack",
-      "confirmReturn": "Confirm Return",
-      "noSelection": "Nothing selected"
+      "description": "Backpack capacity +1. Pick up to {{max}} card(s) from hand / amulets / equipment to place back at the top of the backpack; you may pick none.",
+      "noteSmall": "Equipment/amulets are taken directly, without triggering any break or transform effects; the selection order is the placement order, with the last pick going in last.",
+      "selectedCount": "Selected {{count}} / {{max}}",
+      "skipZero": "Skip (0)",
+      "confirmReturn": "Confirm Return"
     },
     "discoverClass": {
       "title": "Discover a Class Card",
-      "subtitle": "Pick one of the three cards below to add to your deck"
+      "description": "Pick one of the three candidate cards; the rest go back into the Class Deck.",
+      "empty": "No Class Cards available to discover",
+      "pickThis": "Pick this card",
+      "cancelNoPick": "Cancel (skip)"
     },
     "cardDeletion": {
       "title": "Pick cards to delete",
       "confirmLabel": "Confirm",
-      "subtitle": "Pick {{count}} card(s) to delete"
+      "subtitle": "Pick {{count}} card(s) to delete",
+      "defaultTitle": "Pick a card to delete",
+      "defaultDescription": "Deleted cards go to the graveyard and won't return to hand or backpack.",
+      "discardRecycleHint": "Cards that can be discarded to the graveyard come first; Perm cards still go to the recycle bag.",
+      "batchSelected": "Selected {{count}} / {{max}} (max {{max}})",
+      "needMoreSelections": "Need to pick {{remaining}} / {{required}} more",
+      "sectionCount": "{{name}} ({{count}})",
+      "emptyHand": "No hand cards available.",
+      "emptyBackpack": "No cards available in the backpack.",
+      "emptyRecycleBag": "No cards available in the recycle bag.",
+      "emptyEquipment": "No cards available in equipment slots.",
+      "emptyAmulet": "No cards available in amulet slots.",
+      "keywordDelete": "Delete",
+      "keywordDiscardOnly": "Discard",
+      "keywordRecycleOnly": "Recycle",
+      "keywordDiscardRecycle": "Discard / Recycle",
+      "keywordMoveTo": "Move"
+    },
+    "cardDetails": {
+      "monsterEquipmentTag": "Monster Equipment",
+      "knightClassTag": "KNIGHT CLASS",
+      "upgradeMaxed": "Max Level (Lv.{{current}}/{{max}})",
+      "upgradeAvailable": "Upgradeable (Lv.{{current}}/{{max}})",
+      "rewardSectionTitle": "Reward (pick one)",
+      "equipmentEffectsTitle": "Equipment Effects",
+      "bossPhaseTag": "BOSS PHASE",
+      "passiveEffectTitle": "Passive Effect",
+      "heroMagicTitle": "Hero Magic",
+      "spellTypeLabel": "Type: {{type}}",
+      "spellTypeInstant": "Instant Spell",
+      "spellTypePermanent": "Permanent Skill",
+      "eventChoicesTitle": "Event Choices",
+      "buildingAbilitiesTitle": "Building Abilities",
+      "requirementLabel": "Requires:",
+      "directEffectLabel": "Direct effect:",
+      "flipEffectTitle": "Flip Effect",
+      "flipStaysHere": "Stays in place after flipping",
+      "buildingDurabilityLabel": "Durability",
+      "buildingLayerLabel": "Layer"
     },
     "shop": {
-      "title": "Shop",
+      "title": "Adventurer's Shop",
+      "descriptionFromEvent": "{{name}} shows you their wares. Spend gold to buy any card.",
+      "descriptionDefault": "Spend gold to buy Class cards you fancy.",
+      "goldLabel": "Gold: ",
+      "backpackLabel": "Backpack: ",
+      "backpackFull": "Backpack full — can't buy more",
+      "extraOffers": "Extra offers +{{count}}",
+      "skillLearned": "Learned",
+      "learnSkill": "Learn Skill",
+      "priceLabel": "Price: ",
+      "priceUnit": "gold",
       "purchase": "Buy",
       "soldOut": "Sold Out",
+      "bought": "Bought",
       "notEnoughGold": "Not enough gold",
-      "leaveShop": "Leave Shop"
+      "notEnoughGoldPeriod": "Not enough gold.",
+      "emptyOfferings": "No Class cards for sale today.",
+      "deleteCardTitle": "Delete a Card",
+      "perVisitOnce": "Once per visit",
+      "deleteCardDesc": "Pick a card from hand or backpack to send straight to the graveyard.",
+      "freeOption": "Free of charge",
+      "deleteButton": "Delete",
+      "healTitle": "Restore HP",
+      "healDesc": "Spend {{cost}} gold to restore 5 HP.",
+      "healHpStatus": " (current {{hp}}/{{max}})",
+      "healUsedNote": "Heal already used this visit.",
+      "healFullNote": "HP already full.",
+      "healButton": "Heal",
+      "attackTitle": "Boost Attack",
+      "attackDesc": "Spend {{cost}} gold for permanent +1 attack on all equipment slots.",
+      "attackUsedNote": "Attack boost already used this visit.",
+      "attackButton": "Boost Attack",
+      "armorTitle": "Boost Armor",
+      "armorDesc": "Spend {{cost}} gold for permanent +1 armor on all equipment slots.",
+      "armorUsedNote": "Armor boost already used this visit.",
+      "armorButton": "Boost Armor",
+      "levelUpTitle": "Shop Upgrade",
+      "levelUpDesc": "Spend {{cost}} gold to level up the shop; next visit shows more offers.",
+      "levelUpUsedNote": "Upgrade already used this visit.",
+      "levelUpButton": "Upgrade",
+      "discoverSkillTitle": "Discover Hero Skill",
+      "discoverSkillDesc": "Spend {{cost}} gold to discover a new hero skill — pick 1 of 3 to learn.",
+      "discoverSkillUsedNote": "Discover already used this visit.",
+      "discoverSkillButton": "Discover Skill",
+      "leaveShop": "Leave Shop",
+      "finishShopping": "Finish Shopping"
     },
     "permGrant": {
       "title": "Eternal Inscription",
-      "subtitle": "Pick one equipment/amulet/potion/magic to make permanent"
+      "subtitle": "Pick one equipment/amulet/potion/magic to make permanent",
+      "defaultTitle": "Eternal Inscription",
+      "defaultDescription": "Pick a hand card to grant Perm 3 (returns to backpack after 3 waterfalls when removed)",
+      "defaultEmpty": "No hand cards eligible for the eternal trait",
+      "defaultConfirm": "Inscribe",
+      "title_equipmentEnchant": "Enchant Equipment",
+      "title_essenceExtract": "Essence Extract",
+      "title_transformGrant": "Transform Granting",
+      "title_flankGrant": "Grant Flank",
+      "title_transformGoldGrant": "Grant Transform",
+      "title_flankPersuadeGrant": "Empower Shrine · Flank",
+      "title_flankStunGrant": "Empower Shrine · Flank",
+      "title_flankDamageGrant": "Empower Shrine · Flank",
+      "title_transformDrawGrant": "Empower Shrine · Transform",
+      "title_transformHealGrant": "Empower Shrine · Transform",
+      "title_transformRecycleGrant": "Recall Elixir",
+      "title_amuletPermGrant": "Enchant Altar · Amulet Perm 2",
+      "title_onHandStunCapGrant": "Pact of Reversal · Inscribe Skill",
+      "desc_equipmentEnchant": "Discard a piece of equipment from hand and randomly enchant its attack/armor onto an equipped item",
+      "desc_essenceExtract": "Remove a hand card (delete it from the game). One-shot magic→Left attack +1; equipment→Right attack +1; amulet→Right armor +1; monster/potion→Left armor +1",
+      "desc_transformGrant": "Pick a hand card to grant 'Transform: gain a random magic card from the graveyard'",
+      "desc_flankGrant": "Pick a hand card to grant 'Flank: draw 1 card' (triggers when played from leftmost or rightmost hand position)",
+      "desc_transformGoldGrant": "Pick a hand card to grant 'Transform: +3 gold' (triggers when the previous card is a different type)",
+      "desc_flankPersuadeGrant": "Pick a hand card to grant 'Flank: persuade cost permanently -1' (any type)",
+      "desc_flankStunGrant": "Pick a hand card to grant 'Flank: stun cap +5%' (any type)",
+      "desc_flankDamageGrant": "Pick a hand card to grant 'Flank: deal 5 damage to a random monster' (any type)",
+      "desc_transformDrawGrant": "Pick a hand card to grant 'Transform: draw 2 cards' (any type)",
+      "desc_transformHealGrant": "Pick a hand card to grant 'Transform: restore 2 HP' (any type)",
+      "desc_transformRecycleGrant": "Pick a hand card to grant 'Transform: take back 1 card from the recycle bag'",
+      "desc_amuletPermGrant": "Pick an equipped amulet to grant Perm 2 (returns to backpack after 2 waterfalls when removed)",
+      "desc_onHandStunCapGrant": "Pick a hand card and permanently grant 'On-hand: stun cap +3%' (triggers each time it enters hand; cards with other on-hand traits are ineligible)",
+      "empty_equipmentEnchant": "No equipment in hand to discard",
+      "empty_essenceExtract": "No hand cards available to remove",
+      "empty_flankGrant": "No hand cards eligible for a flank effect",
+      "empty_transformGoldGrant": "No hand cards eligible for a transform effect",
+      "empty_transformGrant": "No hand cards eligible for a transform effect",
+      "empty_flankPersuadeGrant": "No hand cards eligible for a flank effect",
+      "empty_flankStunGrant": "No hand cards eligible for a flank effect",
+      "empty_flankDamageGrant": "No hand cards eligible for a flank effect",
+      "empty_transformDrawGrant": "No hand cards eligible for a transform effect",
+      "empty_transformHealGrant": "No hand cards eligible for a transform effect",
+      "empty_transformRecycleGrant": "No hand cards eligible for a transform effect",
+      "empty_amuletPermGrant": "No amulets eligible for Perm 2 (all amulets are already Perm 2 or stronger)",
+      "empty_onHandStunCapGrant": "No hand cards eligible for 'On-hand: stun cap +3%'",
+      "confirm_equipmentEnchant": "Enchant",
+      "confirm_essenceExtract": "Extract",
+      "confirm_transformGrant": "Grant",
+      "confirm_flankGrant": "Grant",
+      "confirm_transformGoldGrant": "Grant",
+      "confirm_flankPersuadeGrant": "Grant",
+      "confirm_flankStunGrant": "Grant",
+      "confirm_flankDamageGrant": "Grant",
+      "confirm_transformDrawGrant": "Grant",
+      "confirm_transformHealGrant": "Grant",
+      "confirm_transformRecycleGrant": "Grant",
+      "confirm_amuletPermGrant": "Grant",
+      "confirm_onHandStunCapGrant": "Inscribe"
     },
     "amplify": {
       "title": "Amplify",
-      "subtitle": "Pick a card to amplify"
+      "descriptionWithBackpack": "Pick equipment or damage magic from equipment slots / hand / backpack to amplify.",
+      "descriptionWithoutBackpack": "Pick equipment from your slots, or equipment / damage magic from your hand to amplify.",
+      "empty": "No cards available to amplify",
+      "previewLabel": "Amplify result: ",
+      "confirm": "Confirm Amplify"
     },
     "cardUpgrade": {
       "title": "Card Upgrade",
-      "subtitle": "Pick a card to upgrade"
+      "subtitle": "Pick a card to upgrade",
+      "subtitleWithRemaining": "Pick a card to upgrade ({{count}} remaining)",
+      "subtitleSingle": "Pick one card to upgrade",
+      "empty": "No upgradeable cards",
+      "maxedTag": "Max level",
+      "upgrade": "Upgrade"
     },
     "cardDraft": {
       "title": "Draft",
-      "subtitle": "Pick a card"
+      "subtitle": "Pick a card",
+      "starterTitle": "Choose Your Starting Cards",
+      "roundProgress": "Round {{current}} / {{total}} — {{prompt}}",
+      "promptEquipment": "Pick one piece of equipment to add to your backpack",
+      "promptPotion": "Pick one potion to add to your backpack",
+      "promptAmulet": "Pick one amulet to add to your backpack",
+      "promptGeneral": "Pick one of the three cards below to add to your backpack",
+      "pickedLabel": "Picked: "
     },
     "deckViewer": {
       "title": "Deck",
-      "subtitle": "{{count}} cards remaining"
+      "subtitle": "{{count}} cards remaining",
+      "empty": "The deck is empty. Victory is near!",
+      "type": {
+        "monster": "Monsters",
+        "weapon": "Weapons",
+        "shield": "Shields",
+        "potion": "Potions",
+        "amulet": "Amulets",
+        "skill": "Skills",
+        "magic": "Magic",
+        "heroMagic": "Hero Magic",
+        "event": "Events"
+      }
     },
     "backpackViewer": {
       "title": "Backpack",
-      "empty": "The backpack is empty"
+      "empty": "The backpack is empty",
+      "titleWithCount": "Backpack ({{count}}{{capacity}})",
+      "description": "Storage area; cards in the backpack are unordered and unaffected by waterfall.",
+      "waterfallHint": " (waterfall draws the <0>top</0> card first)",
+      "recycleBagTag": "Recycle Bag",
+      "heroMagicDamage": "{{name}} spell damage {{damage}}",
+      "heroMagicStun": "{{name}} stun cap {{cap}}",
+      "headerTitle": "Backpack ({{count}})",
+      "headerTitleWithCapacity": "Backpack ({{count}}/{{capacity}})",
+      "headerDescription": "Backpack cards are unordered; drawing picks at random",
+      "emptyShort": "No cards in the backpack yet",
+      "recycleSectionTitle": "Recycle Bag ({{count}})",
+      "recycleSectionHint": "The number next to the waterfall icon is turns remaining; resolves at the start of the next waterfall.",
+      "waterfallTooltip": "Returns to backpack after {{count}} waterfall(s)",
+      "heroMagicLabel": "(Hero Magic)",
+      "currentDamageHint": "Currently {{damage}} dmg",
+      "currentStunCapHint": "Currently Stun Cap +{{value}}%"
     },
     "monsterReward": {
       "title": "Loot",
-      "subtitle": "Pick one reward"
+      "subtitle": "Pick one reward",
+      "subtitleAfterDefeat": "Reward for defeating {{name}}."
     },
     "monsterPersuade": {
-      "title": "Persuade Monster",
+      "title": "Persuade",
       "subtitle": "Success rate {{rate}}% (cost {{cost}}g)",
       "confirm": "Try Persuade",
-      "rollDie": "Roll Dice"
+      "rollDie": "Roll Dice",
+      "levelLabel": "Persuade Level",
+      "levelHint": " (can persuade ≤{{level}} HP layers)",
+      "costLabel": "Persuade Cost",
+      "goldUnit": "{{count}} gold",
+      "rateLabel": "Success Rate",
+      "rollHint": "Roll a d20 — {{threshold}} or higher to succeed.",
+      "stunnedHint": "Target is stunned; success rate is slightly higher.",
+      "successHint": "On success {{name}} joins your backpack, HP layers convert to durability ({{layers}} layers → {{layers}} durability).",
+      "equipHint": "Once equipped from your backpack, the monster's abilities translate into equipment effects.",
+      "rageReleaseHint": "Whether you succeed or fail, the monster will calm down (rage cleared).",
+      "confirmWithCost": "Confirm Persuade ({{cost}}g)",
+      "notEnoughGoldNeed": "Not enough gold (need {{cost}})",
+      "rollResult": "Roll",
+      "needLabel": "Need ≥ {{threshold}}",
+      "rollSuccess": "Success!",
+      "rollFail": "Fail",
+      "persuadeSuccess": "Persuade succeeded!",
+      "joinedTarget": "{{name}} has joined {{target}}! ({{attack}} ATK / {{hp}} DEF / {{layers}} DUR)",
+      "persuadeFail": "Persuade failed",
+      "refused": "{{name}} refused your offer; {{cost}} gold spent.",
+      "calmedDown": "But {{name}} has calmed down (rage cleared).",
+      "ok": "OK"
     },
     "eventChoice": {
       "title": "Event",
-      "noChoice": "No choice available"
+      "noChoice": "No choice available",
+      "subtitle": "Choose your path wisely..."
     },
     "eventDice": {
       "title": "Dice Roll",
-      "rolling": "Rolling..."
+      "rolling": "Rolling...",
+      "defaultSubtitle": "Roll the d20 to determine your fate.",
+      "rollResult": "Roll Result"
     },
     "combatDice": {
       "title": "Combat Roll",
-      "subtitle": "Roll {{threshold}} or under to succeed"
+      "subtitle": "Roll {{threshold}} or under to succeed",
+      "defaultSubtitle": "Rolling the d20…",
+      "rollingD20": "Rolling the d20…",
+      "rollResult": "Roll result",
+      "thresholdHint": "Need ≤{{threshold}}",
+      "success": "Success",
+      "fail": "Failure"
     },
     "handDiscardSelection": {
       "title": "Discard Hand",
       "subtitle": "Pick {{count}} card(s) to discard",
-      "confirm": "Confirm Discard"
+      "confirm": "Confirm Discard",
+      "remainingLabel": "Need to pick",
+      "confirmDiscard": "Confirm Discard"
     },
     "magicChoice": {
       "title": "Choose Effect"
     },
     "mirrorCopy": {
-      "title": "Mirror Copy",
-      "subtitle": "Pick a card to copy"
+      "title": "Mirror Image",
+      "subtitle": "Pick a card to copy",
+      "description": "Pick a card from your equipment, amulet slots, or hand — gain a copy of it in your hand.",
+      "empty": "No cards available to copy (equipment, amulets, and hand are all empty).",
+      "amuletIndex": "Amulet {{index}}",
+      "confirmCopy": "Confirm Copy"
     },
     "shopSkillSelect": {
       "title": "Choose a Skill",
-      "subtitle": "Pick one of the three skills below"
+      "subtitle": "Pick one of the three skills below",
+      "discoverTitle": "Discover Hero Skill",
+      "discoverDesc": "Choose 1 of the 3 skills below to learn. You'll gain it immediately.",
+      "helpText": "Click a skill card to choose"
     },
     "handMagicUpgrade": {
-      "title": "Magic Upgrade",
-      "subtitle": "Pick a magic in your hand to upgrade"
+      "title": "Arcane Refinement",
+      "subtitle": "Pick a magic in your hand to upgrade",
+      "description": "Pick up to {{max}} magic card(s) in your hand to upgrade ({{count}}/{{max}} selected)",
+      "empty": "No upgradeable magic in your hand",
+      "upgradeWithCount": "Upgrade ({{count}})"
     },
     "equipmentSelect": {
       "title": "Choose Equipment Slot",
-      "subtitle": "Pick which slot to equip"
+      "subtitle": "Pick which slot to equip",
+      "leftSlot": "Left Slot",
+      "rightSlot": "Right Slot",
+      "emptySlot": "Empty slot",
+      "powerLabel": "Power {{value}}",
+      "durabilityLabel": "Durability {{current}}/{{max}}",
+      "cancel": "Cancel"
     },
     "gameModeSelect": {
       "title": "Choose Game Mode",
-      "subtitle": "Standard / Quick"
+      "subtitle": "Standard / Quick",
+      "newAdventure": "Begin a new adventure",
+      "quickMode": "Quick Game",
+      "quickModeDesc": "36-card deck, 10 monsters, 3 elites. A faster pace, ideal for short sessions.",
+      "normalMode": "Normal Game",
+      "normalModeDesc": "Full deck, 21 monsters, 7 elites. The complete dungeon adventure."
     }
   }
 }

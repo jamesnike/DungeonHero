@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Trash2 } from 'lucide-react';
 import {
   Dialog,
@@ -41,6 +42,7 @@ export default function HandDiscardSelectionModal({
   eligibleHandCards,
   onConfirm,
 }: HandDiscardSelectionModalProps) {
+  const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -94,7 +96,8 @@ export default function HandDiscardSelectionModal({
 
         <div className="mt-2 space-y-3">
           <div className="text-xs text-muted-foreground">
-            还需选择 <span className="font-semibold text-rose-500">{Math.max(0, remaining)}</span> 张
+            {t('modal.handDiscardSelection.remainingLabel')}{' '}
+            <span className="font-semibold text-rose-500">{Math.max(0, remaining)}</span>
           </div>
 
           <div className="upgrade-modal-card-grid">
@@ -125,7 +128,7 @@ export default function HandDiscardSelectionModal({
               className="bg-rose-600 hover:bg-rose-700 text-white"
             >
               <Trash2 className="w-4 h-4 mr-1" />
-              确认弃回 {selectedIds.length}/{requiredCount}
+              {t('modal.handDiscardSelection.confirmDiscard')} {selectedIds.length}/{requiredCount}
             </Button>
           </div>
         </div>

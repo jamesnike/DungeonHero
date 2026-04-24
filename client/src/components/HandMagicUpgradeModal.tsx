@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,7 @@ export default function HandMagicUpgradeModal({
   onUpgrade,
   maxSelect,
 }: HandMagicUpgradeModalProps) {
+  const { t } = useTranslation();
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
 
   const cap = Math.max(1, maxSelect ?? DEFAULT_MAX_SELECT);
@@ -74,17 +76,17 @@ export default function HandMagicUpgradeModal({
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <ArrowBigUpDash className="w-5 h-5 text-violet-500" />
-            秘法精炼
+            {t('modal.handMagicUpgrade.title')}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            选择手牌中至多 {effectiveMax} 张魔法牌进行升级（已选 {selectedCardIds.length}/{effectiveMax}）
+            {t('modal.handMagicUpgrade.description', { max: effectiveMax, count: selectedCardIds.length })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-2 space-y-4">
           {upgradeableMagics.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              手牌中没有可升级的魔法牌
+              {t('modal.handMagicUpgrade.empty')}
             </div>
           ) : (
             <div className="upgrade-modal-card-grid">
@@ -105,7 +107,7 @@ export default function HandMagicUpgradeModal({
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
             <Button variant="outline" size="sm" onClick={handleClose}>
-              {upgradeableMagics.length === 0 ? '关闭' : '取消'}
+              {upgradeableMagics.length === 0 ? t('common.close') : t('common.cancel')}
             </Button>
             {upgradeableMagics.length > 0 && (
               <Button
@@ -115,7 +117,7 @@ export default function HandMagicUpgradeModal({
                 className="bg-violet-600 hover:bg-violet-700 text-white"
               >
                 <ArrowBigUpDash className="w-4 h-4 mr-1" />
-                升级（{selectedCardIds.length}）
+                {t('modal.handMagicUpgrade.upgradeWithCount', { count: selectedCardIds.length })}
               </Button>
             )}
           </div>

@@ -33,6 +33,7 @@ import dedupeKnightMagicOverkillUpgradeImage from '@assets/generated_images/card
 import dedupeKnightHeroReviveTomeImage from '@assets/generated_images/card_dedupe_knight_hero_magic_revive_tome.png';
 import greedCurseImage from '@assets/generated_images/card_curse_greed.png';
 import bloodCurseSealImage from '@assets/generated_images/card_curse_blood_seal.png';
+import frenzyCurseImage from '@assets/generated_images/card_curse_frenzy.png';
 import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
 import thunderAmuletSigilImage from '@assets/generated_images/card_dedupe_amulet_thunder_sigil.png';
@@ -62,6 +63,7 @@ import heavyShieldKnightBashImage from '@assets/generated_images/knight_bash_shi
 import knightChainPersuadePotionImage from '@assets/generated_images/knight_potion_chain_persuade.png';
 import knightVitalityPotionImage from '@assets/generated_images/cute_potion_concentrated_heal.png';
 import knightEquipEmpowerPotionImage from '@assets/generated_images/knight_potion_equip_empower.png';
+import knightAmplifyPotionImage from '@assets/generated_images/knight_potion_amplify.png';
 import knightExchangeBladeImage from '@assets/generated_images/knight_weapon_exchange_blade.png';
 import knightGrowthBladeImage from '@assets/generated_images/knight_growth_blade.png';
 import knightRageCleaveImage from '@assets/generated_images/knight_weapon_rage_cleave.png';
@@ -1362,7 +1364,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     type: 'potion',
     name: '增幅秘药',
     value: 0,
-    image: knightEquipEmpowerPotionImage,
+    image: knightAmplifyPotionImage,
     classCard: true,
     description: '选择一张装备/伤害魔法（装备栏 / 手牌 / 背包均可），生成一张永久魔法（Perm 1）对其进行增幅（武器攻击+1，护盾护甲+1，伤害魔法伤害+1）。',
     shortDescription: '生成 Perm 1 增幅一张装备/伤害魔法（含背包）',
@@ -1483,16 +1485,17 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     shortDescription: '坟场每张「魔弹」对随机怪物 1 法伤',
   });
 
-  // 战狂诅咒 — 诅咒：使用时抽 1 张牌，使用后回到背包；上手时随机一个装备栏临时攻击 +1。
+  // 战狂诅咒 — 诅咒：使用时失去 1 生命、抽 1 张牌，使用后回到背包；
+  // 上手时随机一个装备栏临时攻击 +1。
   // 与其他诅咒一致：无法被回收或弃置，FINALIZE_MAGIC_CARD 走 curse 分支直接回袋。
   pushCard({
     type: 'curse',
     name: '战狂诅咒',
     value: 0,
-    image: bloodCurseSealImage,
+    image: frenzyCurseImage,
     classCard: true,
-    description: '诅咒：使用时抽 1 张牌，使用后回到背包；上手时随机一个装备栏 +1 临时攻击；无法被回收或弃置。',
-    shortDescription: '使用抽 1 张回背包；上手随机一栏 +1 临时攻',
+    description: '诅咒：使用时失去 1 生命，抽 1 张牌，使用后回到背包；上手时随机一个装备栏 +1 临时攻击；无法被回收或弃置。',
+    shortDescription: '使用 -1 生命抽 1 张回背包；上手随机一栏 +1 临时攻',
     curseEffect: 'frenzy-curse',
     onEnterHandEffect: 'frenzy-curse-onhand',
   });

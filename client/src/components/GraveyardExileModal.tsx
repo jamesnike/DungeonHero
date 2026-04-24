@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import GameCard, { type GameCardData } from './GameCard';
@@ -14,6 +15,7 @@ export default function GraveyardExileModal({
   cards,
   onConfirm,
 }: GraveyardExileModalProps) {
+  const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleCard = useCallback((cardId: string) => {
@@ -37,9 +39,9 @@ export default function GraveyardExileModal({
     <Dialog open={open}>
       <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto p-5 sm:p-8">
         <DialogHeader>
-          <DialogTitle>虚灵刀 — 灵魂放逐</DialogTitle>
+          <DialogTitle>{t('modal.graveyardExile.title')}</DialogTitle>
           <DialogDescription>
-            从坟场中选择要移除出游戏的卡牌（可多选，也可不选）。被移除的卡牌将永久消失。
+            {t('modal.graveyardExile.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -63,7 +65,7 @@ export default function GraveyardExileModal({
                 <span className={`mt-1.5 sm:mt-3 block text-center text-xs sm:text-sm font-semibold ${
                   isSelected ? 'text-red-400' : 'text-foreground group-hover:text-primary'
                 }`}>
-                  {isSelected ? '已选中 — 将被移除' : '点击选择'}
+                  {isSelected ? t('modal.graveyardExile.selected') : t('modal.graveyardExile.clickToSelect')}
                 </span>
               </button>
             );
@@ -76,8 +78,8 @@ export default function GraveyardExileModal({
             onClick={handleConfirm}
           >
             {selectedIds.size > 0
-              ? `确认移除 ${selectedIds.size} 张卡牌`
-              : '不移除，跳过'}
+              ? t('modal.graveyardExile.confirmRemove', { count: selectedIds.size })
+              : t('modal.graveyardExile.skipExile')}
           </Button>
         </DialogFooter>
       </DialogContent>

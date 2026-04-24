@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Backpack, Check, Hand, Shield, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,7 @@ export default function BackpackReorganizeModal({
   equipmentSlot2,
   onConfirm,
 }: BackpackReorganizeModalProps) {
+  const { t } = useTranslation();
   // selectedKeys preserves insertion order, which we use as the push order.
   const [selectedKeys, setSelectedKeys] = useState<string[]>(() => []);
 
@@ -80,10 +82,10 @@ export default function BackpackReorganizeModal({
 
   const equipmentEntries = useMemo<EquipmentSelectable[]>(() => {
     const out: EquipmentSelectable[] = [];
-    if (equipmentSlot1) out.push({ card: equipmentSlot1, slotId: 'equipmentSlot1', sectionLabel: '左装备栏' });
-    if (equipmentSlot2) out.push({ card: equipmentSlot2, slotId: 'equipmentSlot2', sectionLabel: '右装备栏' });
+    if (equipmentSlot1) out.push({ card: equipmentSlot1, slotId: 'equipmentSlot1', sectionLabel: t('common.section.leftEquip') });
+    if (equipmentSlot2) out.push({ card: equipmentSlot2, slotId: 'equipmentSlot2', sectionLabel: t('common.section.rightEquip') });
     return out;
-  }, [equipmentSlot1, equipmentSlot2]);
+  }, [equipmentSlot1, equipmentSlot2, t]);
 
   const keyOf = (source: BackpackReorganizeSource, id: string) => `${source}:${id}`;
 
@@ -127,9 +129,9 @@ export default function BackpackReorganizeModal({
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Icon className="w-4 h-4" />
-            <span>{sectionTitle}（0 张）</span>
+            <span>{sectionTitle}（{t('common.countCards', { count: 0 })}）</span>
           </div>
-          <p className="text-xs text-muted-foreground">没有可选择的卡牌。</p>
+          <p className="text-xs text-muted-foreground">{t('common.noCardsAvailable')}</p>
         </div>
       );
     }
@@ -137,7 +139,7 @@ export default function BackpackReorganizeModal({
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Icon className="w-4 h-4" />
-          <span>{sectionTitle}（{cards.length} 张）</span>
+          <span>{sectionTitle}（{t('common.countCards', { count: cards.length })}）</span>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {cards.map(card => {
@@ -228,31 +230,31 @@ export default function BackpackReorganizeModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Backpack className="w-5 h-5 text-amber-500" />
-            整顿背囊
+            {t('modal.backpackReorganize.title')}
           </DialogTitle>
           <DialogDescription>
-            背包上限已 +1。选择至多 {maxSelections} 张牌（手牌 / 护符 / 装备）放回背包顶部；可以一张都不选。
+            {t('modal.backpackReorganize.description', { max: maxSelections })}
             <br />
-            <span className="text-[11px]">装备/护符直接被取走，不会触发任何破损或转化效果；选择顺序即放回顺序，最后选择的最后放入。</span>
+            <span className="text-[11px]">{t('modal.backpackReorganize.noteSmall')}</span>
           </DialogDescription>
           <p className="text-xs text-muted-foreground">
-            已选 {selectedKeys.length} / {maxSelections} 张
+            {t('modal.backpackReorganize.selectedCount', { count: selectedKeys.length, max: maxSelections })}
           </p>
           {prompt && <p className="text-[11px] text-muted-foreground italic">{prompt}</p>}
         </DialogHeader>
 
         <div className="space-y-6 py-2">
-          {renderSection('手牌', handCards, 'hand', c => keyOf('hand', c.id))}
-          {renderSection('护符栏', amuletCards, 'amulet', c => keyOf('amulet', c.id))}
-          {renderSection('装备栏', equipmentCardsForRender, 'equipment', equipmentKeyOf, equipmentLabelOf)}
+          {renderSection(t('common.section.hand'), handCards, 'hand', c => keyOf('hand', c.id))}
+          {renderSection(t('common.section.amulet'), amuletCards, 'amulet', c => keyOf('amulet', c.id))}
+          {renderSection(t('common.section.equipment'), equipmentCardsForRender, 'equipment', equipmentKeyOf, equipmentLabelOf)}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={() => onConfirm([])}>
-            跳过（0 张）
+            {t('modal.backpackReorganize.skipZero')}
           </Button>
           <Button onClick={handleConfirm}>
-            确认放回
+            {t('modal.backpackReorganize.confirmReturn')}
             {selectedKeys.length > 0 ? `（${selectedKeys.length}）` : ''}
           </Button>
         </DialogFooter>

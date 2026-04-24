@@ -752,9 +752,10 @@ export function resolveAllMagicEffects(
       log(sideEffects, 'magic', '贪婪诅咒消耗了 3 金币。');
       banner(sideEffects, '贪婪诅咒消耗了 3 金币。');
     } else if (curseEffect === 'frenzy-curse') {
+      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1, source: 'frenzy-curse', selfInflicted: true });
       enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
-      log(sideEffects, 'magic', '战狂诅咒：抽 1 张牌。');
-      banner(sideEffects, '战狂诅咒：抽 1 张牌！');
+      log(sideEffects, 'magic', '战狂诅咒：失去 1 生命，抽 1 张牌。');
+      banner(sideEffects, '战狂诅咒：失去 1 生命，抽 1 张牌！');
     } else {
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 3, source: 'blood-curse', selfInflicted: true });
       log(sideEffects, 'magic', '血咒吸取了 3 点生命。');

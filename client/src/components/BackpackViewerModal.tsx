@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -58,6 +59,7 @@ const BackpackRow = memo(function BackpackRow({
   arcaneShieldStunGain,
   onCardSelect,
 }: BackpackRowProps) {
+  const { t } = useTranslation();
   const isMagic = isMagicSpellCardType(card.type);
   const isEvent = isEventCardType(card.type);
   return (
@@ -112,7 +114,7 @@ const BackpackRow = memo(function BackpackRow({
       {variant === 'recycle' && (
         <div
           className="flex shrink-0 flex-col items-center justify-center gap-0.5 text-muted-foreground"
-          title={`${waterfallsUntilBackpackFromRecycle(card)} 次瀑流后回背包`}
+          title={t('modal.backpackViewer.waterfallTooltip', { count: waterfallsUntilBackpackFromRecycle(card) })}
         >
           <Waves className="h-4 w-4" aria-hidden />
           <span className="text-xs font-bold tabular-nums leading-none text-foreground">
@@ -125,7 +127,7 @@ const BackpackRow = memo(function BackpackRow({
           <p className="text-sm font-semibold">{card.name}</p>
           {variant === 'recycle' && (
             <Badge variant="secondary" className="text-[10px]">
-              回收袋
+              {t('modal.backpackViewer.recycleBagTag')}
             </Badge>
           )}
         </div>
@@ -136,7 +138,7 @@ const BackpackRow = memo(function BackpackRow({
               ({getMagicSubtypeBracketLabel(card)})
             </span>
           )}
-          {card.type === 'hero-magic' && <span className="ml-1 text-muted-foreground/70">(英雄魔法)</span>}
+          {card.type === 'hero-magic' && <span className="ml-1 text-muted-foreground/70">{t('modal.backpackViewer.heroMagicLabel')}</span>}
         </p>
         {card.scalingDamage != null ? (
           <p className="text-xs text-muted-foreground line-clamp-3">
@@ -144,11 +146,11 @@ const BackpackRow = memo(function BackpackRow({
           </p>
         ) : card.magicEffect === 'arcane-storm-magic-count' ? (
           <p className="text-xs font-semibold text-muted-foreground line-clamp-3">
-            当下 {arcaneStormDamage + (card.amplifyBonus ?? 0)} 点
+            {t('modal.backpackViewer.currentDamageHint', { damage: arcaneStormDamage + (card.amplifyBonus ?? 0) })}
           </p>
         ) : card.magicEffect === 'arcane-shield-stun-cap' ? (
           <p className="text-xs font-semibold text-muted-foreground line-clamp-3">
-            当下 击晕上限 +{arcaneShieldStunGain}%
+            {t('modal.backpackViewer.currentStunCapHint', { value: arcaneShieldStunGain })}
           </p>
         ) : (
           card.description && (
@@ -170,6 +172,7 @@ export default function BackpackViewerModal({
   recycleCards = [],
   onCardSelect,
 }: BackpackViewerModalProps) {
+  const { t } = useTranslation();
   const arcaneStormDamage = useArcaneStormDamage();
   const arcaneShieldStunGain = useArcaneShieldStunGain();
 
@@ -224,18 +227,20 @@ export default function BackpackViewerModal({
         data-testid="backpack-viewer-modal"
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-white">
             <Backpack className="w-5 h-5" />
-            背包 ({cards.length}{capacity != null ? `/${capacity}` : ''} 张)
+            {capacity != null
+              ? t('modal.backpackViewer.headerTitleWithCapacity', { count: cards.length, capacity })
+              : t('modal.backpackViewer.headerTitle', { count: cards.length })}
           </DialogTitle>
-          <DialogDescription>背包中的卡牌为无序存放，抽牌时会随机选择</DialogDescription>
+          <DialogDescription className="text-white/70">{t('modal.backpackViewer.headerDescription')}</DialogDescription>
         </DialogHeader>
 
         {!showContent ? (
           <div className="py-8" aria-hidden />
         ) : isEmpty ? (
           <div className="py-8 text-center text-muted-foreground text-sm">
-            背包里还没有任何卡牌
+            {t('modal.backpackViewer.emptyShort')}
           </div>
         ) : (
           <div className="space-y-3">
@@ -257,9 +262,9 @@ export default function BackpackViewerModal({
               <div className="space-y-2 border-t border-border/40 pt-3">
                 <div className="flex flex-col gap-1 text-sm text-muted-foreground">
                   <div className="font-semibold text-foreground">
-                    回收袋 ({recycleBagCards.length} 张)
+                    {t('modal.backpackViewer.recycleSectionTitle', { count: recycleBagCards.length })}
                   </div>
-                  <p>瀑流图标旁数字为剩余次数；下一次瀑流开始时结算。</p>
+                  <p>{t('modal.backpackViewer.recycleSectionHint')}</p>
                 </div>
                 {recycleBagCards.map(card => (
                   <BackpackRow

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -37,14 +38,15 @@ export default function MirrorCopyModal({
   handCards,
   onConfirm,
 }: MirrorCopyModalProps) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<SelectionState>(null);
 
   const equipmentEntries: { slotId: 'equipmentSlot1' | 'equipmentSlot2'; label: string; card: GameCardData }[] = [];
   if (equipmentSlot1) {
-    equipmentEntries.push({ slotId: 'equipmentSlot1', label: '左装备栏', card: equipmentSlot1 });
+    equipmentEntries.push({ slotId: 'equipmentSlot1', label: t('common.section.leftEquip'), card: equipmentSlot1 });
   }
   if (equipmentSlot2) {
-    equipmentEntries.push({ slotId: 'equipmentSlot2', label: '右装备栏', card: equipmentSlot2 });
+    equipmentEntries.push({ slotId: 'equipmentSlot2', label: t('common.section.rightEquip'), card: equipmentSlot2 });
   }
 
   const pickEquipment = (slotId: 'equipmentSlot1' | 'equipmentSlot2') => {
@@ -100,21 +102,21 @@ export default function MirrorCopyModal({
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <Copy className="w-5 h-5 text-violet-500" />
-            镜影摹形
+            {t('modal.mirrorCopy.title')}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            选择左/右装备栏、护符栏或手牌中的一张牌，化身为该牌的复制加入手牌
+            {t('modal.mirrorCopy.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-2 space-y-4">
           {!hasAny ? (
-            <div className="text-center py-8 text-muted-foreground">没有可选的牌</div>
+            <div className="text-center py-8 text-muted-foreground">{t('common.noCardsAvailable')}</div>
           ) : (
             <>
               {equipmentEntries.length > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-2">装备栏</div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">{t('common.section.equipment')}</div>
                   <div className="upgrade-modal-card-grid">
                     {equipmentEntries.map(({ slotId, label, card }) => (
                       <div key={slotId} className="space-y-1">
@@ -133,12 +135,12 @@ export default function MirrorCopyModal({
 
               {amuletSlots.length > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-2">护符栏</div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">{t('common.section.amulet')}</div>
                   <div className="upgrade-modal-card-grid">
                     {amuletSlots.map((card, index) => (
                       <div key={`${card.id}-${index}`} className="space-y-1">
                         <div className="text-[10px] text-center text-muted-foreground">
-                          护符 {index + 1}
+                          {t('modal.mirrorCopy.amuletIndex', { index: index + 1 })}
                         </div>
                         <div
                           className={`upgrade-modal-card-slot${isSelected({ kind: 'amulet', index }) ? ' upgrade-modal-card-slot--selected' : ''}`}
@@ -154,7 +156,7 @@ export default function MirrorCopyModal({
 
               {handCards.length > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-2">手牌</div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">{t('common.section.hand')}</div>
                   <div className="upgrade-modal-card-grid">
                     {handCards.map(card => (
                       <div
@@ -173,7 +175,7 @@ export default function MirrorCopyModal({
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
             <Button variant="outline" size="sm" onClick={handleClose}>
-              {hasAny ? '取消' : '关闭'}
+              {hasAny ? t('common.cancel') : t('common.close')}
             </Button>
             {hasAny && (
               <Button
@@ -183,7 +185,7 @@ export default function MirrorCopyModal({
                 className="bg-violet-600 hover:bg-violet-700 text-white"
               >
                 <Copy className="w-4 h-4 mr-1" />
-                确认复制
+                {t('modal.mirrorCopy.confirmCopy')}
               </Button>
             )}
           </div>

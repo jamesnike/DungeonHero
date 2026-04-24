@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowUpCircle, Coins, Heart, Shield, ShoppingBag, Sparkles, Sword, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { GameCardData } from './GameCard';
 import {
   EventPatternPreview,
@@ -99,6 +100,7 @@ export default function ShopModal({
   onShopEquipAttackRequest,
   onShopEquipArmorRequest,
 }: ShopModalProps) {
+  const { t } = useTranslation();
   const isBackpackFull = backpackCount >= backpackCapacity;
   const deleteOptionDisabled = !canDeleteCard;
 
@@ -116,10 +118,12 @@ export default function ShopModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-amber-500" />
-            冒险者商店
+            {t('modal.shop.title')}
           </DialogTitle>
           <DialogDescription>
-            {sourceEventName ? `${sourceEventName}向你展示了他的藏品。每张卡牌都可以用金币购买。` : '使用金币购买心仪的 Class 卡牌。'}
+            {sourceEventName
+              ? t('modal.shop.descriptionFromEvent', { name: sourceEventName })
+              : t('modal.shop.descriptionDefault')}
           </DialogDescription>
         </DialogHeader>
 
@@ -127,18 +131,18 @@ export default function ShopModal({
           <div className="flex flex-wrap items-center gap-4 rounded-md border border-border/60 bg-muted/40 p-3 text-sm">
             <span className="flex items-center gap-1 font-semibold">
               <Coins className="w-4 h-4 text-yellow-500" />
-              金币：{gold}
+              {t('modal.shop.goldLabel')}{gold}
             </span>
             <span>
-              背包：{backpackCount}/{backpackCapacity}
-              {isBackpackFull && <span className="ml-2 text-destructive text-xs">背包已满，无法再购买</span>}
+              {t('modal.shop.backpackLabel')}{backpackCount}/{backpackCapacity}
+              {isBackpackFull && <span className="ml-2 text-destructive text-xs">{t('modal.shop.backpackFull')}</span>}
             </span>
             <span className="flex items-center gap-2">
               <Badge variant="secondary" className="text-[11px] uppercase tracking-wide">
                 Lv.{shopLevel}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                额外商品 +{shopLevel}
+                {t('modal.shop.extraOffers', { count: shopLevel })}
               </span>
             </span>
           </div>
@@ -166,10 +170,10 @@ export default function ShopModal({
             </div>
             <div className="flex flex-col items-end gap-2">
               <span className="text-sm text-muted-foreground">
-                价格：<span className="text-lg font-semibold text-yellow-500">{skillOffer.cost}</span> 金币
+                {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{skillOffer.cost}</span> {t('modal.shop.priceUnit')}
               </span>
               {!skillOffer.canAfford && !skillOffer.purchased && (
-                <span className="text-xs text-destructive">金币不足</span>
+                <span className="text-xs text-destructive">{t('modal.shop.notEnoughGold')}</span>
               )}
               <Button
                 disabled={
@@ -180,7 +184,7 @@ export default function ShopModal({
                 }
                 onClick={() => onBuySkill?.()}
               >
-                {skillOffer.purchased ? '已学习' : '学习技能'}
+                {skillOffer.purchased ? t('modal.shop.skillLearned') : t('modal.shop.learnSkill')}
               </Button>
             </div>
           </div>
@@ -188,7 +192,7 @@ export default function ShopModal({
 
           {offerings.length === 0 && (
             <div className="text-center text-muted-foreground py-12 text-sm">
-              今天的商店暂时没有可卖的 Class 卡牌。
+              {t('modal.shop.emptyOfferings')}
             </div>
           )}
 
@@ -224,7 +228,7 @@ export default function ShopModal({
                         <p className="text-base font-semibold">{card.name}</p>
                         {sold && (
                           <Badge variant="destructive" className="text-[10px]">
-                            已售出
+                            {t('modal.shop.soldOut')}
                           </Badge>
                         )}
                       </div>
@@ -236,11 +240,11 @@ export default function ShopModal({
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className="text-sm text-muted-foreground">
-                      价格：<span className="text-lg font-semibold text-yellow-500">{price}</span> 金币
+                      {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{price}</span> {t('modal.shop.priceUnit')}
                     </span>
-                    {!sold && !canAfford && <span className="text-xs text-destructive">金币不足</span>}
+                    {!sold && !canAfford && <span className="text-xs text-destructive">{t('modal.shop.notEnoughGold')}</span>}
                     <Button variant={sold ? 'secondary' : 'default'} disabled={!canBuy} onClick={() => onBuy(card.id)}>
-                      {sold ? '已购入' : '购买'}
+                      {sold ? t('modal.shop.bought') : t('modal.shop.purchase')}
                     </Button>
                   </div>
                 </div>
@@ -257,21 +261,21 @@ export default function ShopModal({
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-base font-semibold text-destructive">删一张牌</p>
+                      <p className="text-base font-semibold text-destructive">{t('modal.shop.deleteCardTitle')}</p>
                       <Badge variant="outline" className="text-[10px] border-destructive/50 text-destructive">
-                        每次商店限一次
+                        {t('modal.shop.perVisitOnce')}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">从手牌或背包中选择一张卡牌，将其直接送入坟场。</p>
+                    <p className="text-sm text-muted-foreground">{t('modal.shop.deleteCardDesc')}</p>
                     {!canDeleteCard && deleteDisabledReason && (
                       <p className="text-xs text-destructive">{deleteDisabledReason}</p>
                     )}
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <span className="text-xs text-muted-foreground">无需花费金币</span>
+                  <span className="text-xs text-muted-foreground">{t('modal.shop.freeOption')}</span>
                   <Button variant="destructive" disabled={deleteOptionDisabled} onClick={onDeleteRequest}>
-                    删牌
+                    {t('modal.shop.deleteButton')}
                   </Button>
                 </div>
               </div>
@@ -291,32 +295,32 @@ export default function ShopModal({
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-base font-semibold text-green-700 dark:text-green-400">恢复生命</p>
+                        <p className="text-base font-semibold text-green-700 dark:text-green-400">{t('modal.shop.healTitle')}</p>
                         <Badge variant="outline" className="text-[10px] border-green-500/50 text-green-700 dark:text-green-400">
-                          每次商店限一次
+                          {t('modal.shop.perVisitOnce')}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        花费 {healCost} 金币恢复 5 点生命值。
+                        {t('modal.shop.healDesc', { cost: healCost })}
                         {typeof hp === 'number' && typeof maxHp === 'number' && (
-                          <span className="ml-1">（当前 {hp}/{maxHp}）</span>
+                          <span className="ml-1">{t('modal.shop.healHpStatus', { hp, max: maxHp })}</span>
                         )}
                       </p>
-                      {shopHealUsed && <p className="text-xs text-green-700 dark:text-green-400">本次商店的回血机会已用完。</p>}
-                      {!shopHealUsed && isFullHp && <p className="text-xs text-muted-foreground">生命值已满。</p>}
-                      {!shopHealUsed && !isFullHp && !canAffordHeal && <p className="text-xs text-destructive">金币不足。</p>}
+                      {shopHealUsed && <p className="text-xs text-green-700 dark:text-green-400">{t('modal.shop.healUsedNote')}</p>}
+                      {!shopHealUsed && isFullHp && <p className="text-xs text-muted-foreground">{t('modal.shop.healFullNote')}</p>}
+                      {!shopHealUsed && !isFullHp && !canAffordHeal && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className="text-sm text-muted-foreground">
-                      价格：<span className="text-lg font-semibold text-yellow-500">{healCost}</span> 金币
+                      {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{healCost}</span> {t('modal.shop.priceUnit')}
                     </span>
                     <Button
                       className="bg-green-600 hover:bg-green-700 text-white"
                       disabled={healDisabled}
                       onClick={onHealRequest}
                     >
-                      回血
+                      {t('modal.shop.healButton')}
                     </Button>
                   </div>
                 </div>
@@ -339,28 +343,28 @@ export default function ShopModal({
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-red-700 dark:text-red-400">强化攻击</p>
+                          <p className="text-base font-semibold text-red-700 dark:text-red-400">{t('modal.shop.attackTitle')}</p>
                           <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-700 dark:text-red-400">
-                            每次商店限一次
+                            {t('modal.shop.perVisitOnce')}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          花费 {shopEquipBoostCost} 金币，所有装备栏永久攻击 +1。
+                          {t('modal.shop.attackDesc', { cost: shopEquipBoostCost })}
                         </p>
-                        {shopEquipAttackUsed && <p className="text-xs text-red-700 dark:text-red-400">本次商店的强化攻击机会已使用。</p>}
-                        {!shopEquipAttackUsed && !canAffordAttack && <p className="text-xs text-destructive">金币不足。</p>}
+                        {shopEquipAttackUsed && <p className="text-xs text-red-700 dark:text-red-400">{t('modal.shop.attackUsedNote')}</p>}
+                        {!shopEquipAttackUsed && !canAffordAttack && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <span className="text-sm text-muted-foreground">
-                        价格：<span className="text-lg font-semibold text-yellow-500">{shopEquipBoostCost}</span> 金币
+                        {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{shopEquipBoostCost}</span> {t('modal.shop.priceUnit')}
                       </span>
                       <Button
                         className="bg-red-600 hover:bg-red-700 text-white"
                         disabled={attackDisabled}
                         onClick={onShopEquipAttackRequest}
                       >
-                        强化攻击
+                        {t('modal.shop.attackButton')}
                       </Button>
                     </div>
                   </div>
@@ -374,28 +378,28 @@ export default function ShopModal({
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-sky-700 dark:text-sky-400">强化护甲</p>
+                          <p className="text-base font-semibold text-sky-700 dark:text-sky-400">{t('modal.shop.armorTitle')}</p>
                           <Badge variant="outline" className="text-[10px] border-sky-500/50 text-sky-700 dark:text-sky-400">
-                            每次商店限一次
+                            {t('modal.shop.perVisitOnce')}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          花费 {shopEquipBoostCost} 金币，所有装备栏永久护甲 +1。
+                          {t('modal.shop.armorDesc', { cost: shopEquipBoostCost })}
                         </p>
-                        {shopEquipArmorUsed && <p className="text-xs text-sky-700 dark:text-sky-400">本次商店的强化护甲机会已使用。</p>}
-                        {!shopEquipArmorUsed && !canAffordArmor && <p className="text-xs text-destructive">金币不足。</p>}
+                        {shopEquipArmorUsed && <p className="text-xs text-sky-700 dark:text-sky-400">{t('modal.shop.armorUsedNote')}</p>}
+                        {!shopEquipArmorUsed && !canAffordArmor && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <span className="text-sm text-muted-foreground">
-                        价格：<span className="text-lg font-semibold text-yellow-500">{shopEquipBoostCost}</span> 金币
+                        {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{shopEquipBoostCost}</span> {t('modal.shop.priceUnit')}
                       </span>
                       <Button
                         className="bg-sky-600 hover:bg-sky-700 text-white"
                         disabled={armorDisabled}
                         onClick={onShopEquipArmorRequest}
                       >
-                        强化护甲
+                        {t('modal.shop.armorButton')}
                       </Button>
                     </div>
                   </div>
@@ -416,28 +420,28 @@ export default function ShopModal({
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-base font-semibold text-amber-700 dark:text-amber-400">商店升级</p>
+                        <p className="text-base font-semibold text-amber-700 dark:text-amber-400">{t('modal.shop.levelUpTitle')}</p>
                         <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-700 dark:text-amber-400">
-                          每次商店限一次
+                          {t('modal.shop.perVisitOnce')}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        花费 {shopLevelUpCost} 金币提升商店等级，下次光临时享受更多商品。
+                        {t('modal.shop.levelUpDesc', { cost: shopLevelUpCost })}
                       </p>
-                      {shopLevelUpUsed && <p className="text-xs text-amber-700 dark:text-amber-400">本次商店的升级机会已使用。</p>}
-                      {!shopLevelUpUsed && !canAffordLevelUp && <p className="text-xs text-destructive">金币不足。</p>}
+                      {shopLevelUpUsed && <p className="text-xs text-amber-700 dark:text-amber-400">{t('modal.shop.levelUpUsedNote')}</p>}
+                      {!shopLevelUpUsed && !canAffordLevelUp && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className="text-sm text-muted-foreground">
-                      价格：<span className="text-lg font-semibold text-yellow-500">{shopLevelUpCost}</span> 金币
+                      {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{shopLevelUpCost}</span> {t('modal.shop.priceUnit')}
                     </span>
                     <Button
                       className="bg-amber-600 hover:bg-amber-700 text-white"
                       disabled={levelUpDisabled}
                       onClick={onShopLevelUpRequest}
                     >
-                      升级
+                      {t('modal.shop.levelUpButton')}
                     </Button>
                   </div>
                 </div>
@@ -457,31 +461,31 @@ export default function ShopModal({
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <p className="text-base font-semibold text-purple-700 dark:text-purple-400">发现英雄技能</p>
+                        <p className="text-base font-semibold text-purple-700 dark:text-purple-400">{t('modal.shop.discoverSkillTitle')}</p>
                         <Badge variant="outline" className="text-[10px] border-purple-500/50 text-purple-700 dark:text-purple-400">
-                          每次商店限一次
+                          {t('modal.shop.perVisitOnce')}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        花费 {shopSkillDiscoverCost} 金币发现一个全新的英雄技能，从 3 个技能中选择 1 个学习。
+                        {t('modal.shop.discoverSkillDesc', { cost: shopSkillDiscoverCost })}
                       </p>
-                      {shopSkillDiscoverUsed && <p className="text-xs text-purple-700 dark:text-purple-400">本次商店的发现机会已使用。</p>}
+                      {shopSkillDiscoverUsed && <p className="text-xs text-purple-700 dark:text-purple-400">{t('modal.shop.discoverSkillUsedNote')}</p>}
                       {!shopSkillDiscoverUsed && !canDiscoverSkill && discoverSkillDisabledReason && (
                         <p className="text-xs text-muted-foreground">{discoverSkillDisabledReason}</p>
                       )}
-                      {!shopSkillDiscoverUsed && canDiscoverSkill && !canAffordDiscover && <p className="text-xs text-destructive">金币不足。</p>}
+                      {!shopSkillDiscoverUsed && canDiscoverSkill && !canAffordDiscover && <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className="text-sm text-muted-foreground">
-                      价格：<span className="text-lg font-semibold text-yellow-500">{shopSkillDiscoverCost}</span> 金币
+                      {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{shopSkillDiscoverCost}</span> {t('modal.shop.priceUnit')}
                     </span>
                     <Button
                       className="bg-purple-600 hover:bg-purple-700 text-white"
                       disabled={discoverDisabled}
                       onClick={onShopSkillDiscoverRequest}
                     >
-                      发现技能
+                      {t('modal.shop.discoverSkillButton')}
                     </Button>
                   </div>
                 </div>
@@ -495,7 +499,7 @@ export default function ShopModal({
               className="w-full max-w-[min(22rem,calc(100vw-2rem))] sm:max-w-none sm:w-auto min-h-[clamp(2.5rem,7vmin,3.75rem)] min-w-[clamp(10.5rem,58vw,17.5rem)] sm:min-w-[clamp(11rem,36vw,17.5rem)] px-[clamp(1rem,5.5vw,2.75rem)] py-[clamp(0.45rem,2.2vmin,1.6rem)] text-[clamp(0.8125rem,2.6vmin,1.125rem)] rounded-xl font-bold text-white bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 border-0 shadow-lg shadow-amber-900/30 ring-2 ring-amber-300/80 ring-offset-[clamp(2px,0.5vmin,4px)] ring-offset-background"
               onClick={onFinish}
             >
-              结束购买
+              {t('modal.shop.finishShopping')}
             </Button>
           </div>
         </div>

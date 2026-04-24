@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 import type { GameCardData } from './GameCard';
 
 type EquipmentSlotKey = 'equipmentSlot1' | 'equipmentSlot2';
@@ -24,6 +25,7 @@ export default function EquipmentSelectModal({
   onSelect,
   onCancel,
 }: EquipmentSelectModalProps) {
+  const { t } = useTranslation();
 
   const renderSlot = (label: string, slotId: EquipmentSlotKey, item: GameCardData | null) => {
     const disabled = !item;
@@ -43,16 +45,16 @@ export default function EquipmentSelectModal({
           <>
             <span className="equipment-select__name font-semibold text-foreground">{item.name}</span>
             <span className="equipment-select__meta text-muted-foreground">
-              {capitalize(item.type)} · {item.value ?? 0} power
+              {capitalize(item.type)} · {t('modal.equipmentSelect.powerLabel', { value: item.value ?? 0 })}
             </span>
             {typeof item.durability === 'number' && typeof item.maxDurability === 'number' && (
               <span className="equipment-select__meta text-muted-foreground">
-                Durability {item.durability}/{item.maxDurability}
+                {t('modal.equipmentSelect.durabilityLabel', { current: item.durability, max: item.maxDurability })}
               </span>
             )}
           </>
         ) : (
-          <span className="equipment-select__empty text-muted-foreground">Empty slot</span>
+          <span className="equipment-select__empty text-muted-foreground">{t('modal.equipmentSelect.emptySlot')}</span>
         )}
       </Button>
     );
@@ -79,11 +81,11 @@ export default function EquipmentSelectModal({
         </DialogHeader>
         <div className="mt-4 flex flex-col gap-3">
           <div className="flex gap-3">
-            {renderSlot('Left Slot', 'equipmentSlot1', leftItem)}
-            {renderSlot('Right Slot', 'equipmentSlot2', rightItem)}
+            {renderSlot(t('modal.equipmentSelect.leftSlot'), 'equipmentSlot1', leftItem)}
+            {renderSlot(t('modal.equipmentSelect.rightSlot'), 'equipmentSlot2', rightItem)}
           </div>
           <Button variant="ghost" onClick={onCancel} className="equipment-select__cancel">
-            Cancel
+            {t('modal.equipmentSelect.cancel')}
           </Button>
         </div>
       </DialogContent>

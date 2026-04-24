@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import GameCard, { type GameCardData } from './GameCard';
 import { useFitToViewport } from '@/hooks/use-fit-to-viewport';
 import type { RngState } from '@/game-core/rng';
@@ -54,6 +55,7 @@ export default function CardDraftModal({
   rng,
   onRngUpdate,
 }: CardDraftModalProps) {
+  const { t } = useTranslation();
   const modalRef = useRef<HTMLDivElement | null>(null);
   const overlayZoom = useFitToViewport(modalRef);
   const poolsByType = useMemo(() => {
@@ -140,19 +142,26 @@ export default function CardDraftModal({
         style={{ transform: `scale(${overlayZoom})`, transformOrigin: 'center center' }}
       >
         <div className="card-draft-header">
-          <h2 className="card-draft-title">选择起始卡牌</h2>
+          <h2 className="card-draft-title">{t('modal.cardDraft.starterTitle')}</h2>
           <p className="card-draft-subtitle">
-            第 {round + 1} / {totalRounds} 轮 — {
-              currentRoundType === 'equipment' ? '从下方装备中选择一件加入背包' :
-              currentRoundType === 'potion' ? '从下方药水中选择一瓶加入背包' :
-              currentRoundType === 'amulet' ? '从下方护符中选择一枚加入背包' :
-              '从下方三张牌中选择一张加入背包'}
+            {t('modal.cardDraft.roundProgress', {
+              current: round + 1,
+              total: totalRounds,
+              prompt:
+                currentRoundType === 'equipment'
+                  ? t('modal.cardDraft.promptEquipment')
+                  : currentRoundType === 'potion'
+                  ? t('modal.cardDraft.promptPotion')
+                  : currentRoundType === 'amulet'
+                  ? t('modal.cardDraft.promptAmulet')
+                  : t('modal.cardDraft.promptGeneral'),
+            })}
           </p>
         </div>
 
         {picks.length > 0 && (
           <div className="card-draft-picked">
-            <span className="card-draft-picked-label">已选：</span>
+            <span className="card-draft-picked-label">{t('modal.cardDraft.pickedLabel')}</span>
             <span className="card-draft-picked-list">{pickedSummary}</span>
           </div>
         )}

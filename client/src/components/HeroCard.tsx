@@ -2,6 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Heart, AlertTriangle, Sparkles, Droplets, Zap, Handshake } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import React, { memo, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { RefObject } from 'react';
 import { initMobileDrop } from '../utils/mobileDragDrop';
 import type { CSSProperties } from 'react';
@@ -133,6 +134,7 @@ function HeroCardInner({
   onHeroClick,
   selfTargetActive = false,
 }: HeroCardProps) {
+  const { t } = useTranslation();
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
@@ -323,7 +325,7 @@ function HeroCardInner({
         }}
       >
         <span className="flex items-center justify-center">
-          <span className="dh-stat-sticker dh-stat-sticker--lifesteal" title="超杀吸血">
+          <span className="dh-stat-sticker dh-stat-sticker--lifesteal" title={t('hero.sticker.lifestealTooltip')}>
             {!isCompact && <Droplets className="dh-stat-sticker__icon" />}
             {spellLifesteal}
           </span>
@@ -331,7 +333,7 @@ function HeroCardInner({
         <span className="flex items-center justify-center">
           <span
             className={`dh-stat-sticker dh-stat-sticker--persuade${nextPersuadeBonus < 0 ? ' dh-stat-sticker--negative' : ''}`}
-            title="下一次劝降成功率加成"
+            title={t('hero.sticker.persuadeTooltip')}
           >
             {!isCompact && <Handshake className="dh-stat-sticker__icon" />}
             {nextPersuadeBonus >= 0 ? `+${nextPersuadeBonus}` : nextPersuadeBonus}%
@@ -339,12 +341,12 @@ function HeroCardInner({
         </span>
         <span
           className={`dh-stat-sticker dh-stat-sticker--spell${spellDamageDisplay < 0 ? ' dh-stat-sticker--negative' : ''}`}
-          title="法术伤害加成"
+          title={t('hero.sticker.spellDamageTooltip')}
         >
           {!isCompact && <Sparkles className="dh-stat-sticker__icon" />}
           {spellDamageDisplay >= 0 ? `+${spellDamageDisplay}` : spellDamageDisplay}
         </span>
-        <span className="dh-stat-sticker dh-stat-sticker--stun" title="击晕上限">
+        <span className="dh-stat-sticker dh-stat-sticker--stun" title={t('hero.sticker.stunCapTooltip')}>
           {!isCompact && <Zap className="dh-stat-sticker__icon" />}
           {stunCap}%
         </span>
@@ -569,7 +571,7 @@ function HeroCardInner({
                         onPotionCancel();
                       }}
                     >
-                      取消
+                      {t('common.cancel')}
                     </button>
                   )}
                 </div>
@@ -585,7 +587,7 @@ function HeroCardInner({
                     <div className="flex items-center justify-between dh-hero-small font-semibold">
                       <span className="text-amber-950">{magic.name}</span>
                       <span className="font-mono text-amber-800/70">
-                        {magic.unlocked ? `${magic.gauge}/${magic.gaugeMax}` : '未解锁'}
+                        {magic.unlocked ? `${magic.gauge}/${magic.gaugeMax}` : t('hero.magicNotUnlocked')}
                       </span>
                     </div>
                     <Progress
@@ -607,7 +609,7 @@ function HeroCardInner({
                         }}
                         title={magic.disabledReason}
                       >
-                        释放
+                        {t('common.release')}
                       </button>
                     </div>
                   </div>

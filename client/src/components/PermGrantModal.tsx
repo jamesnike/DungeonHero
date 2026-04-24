@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -48,6 +49,7 @@ export default function PermGrantModal({
   sourceType,
   onConfirm,
 }: PermGrantModalProps) {
+  const { t } = useTranslation();
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const isEquipEnchant = sourceType === 'equipment-enchant';
@@ -84,70 +86,34 @@ export default function PermGrantModal({
     onClose();
   };
 
-  const titleMap: Record<string, string> = {
-    'equipment-enchant': '装备附魔',
-    'essence-extract': '精华萃取',
-    'transform-grant': '蜕变赋灵',
-    'flank-grant': '赋予侧击',
-    'transform-gold-grant': '赋予转型',
-    'flank-persuade-grant': '赋能神殿 · 侧击',
-    'flank-stun-grant': '赋能神殿 · 侧击',
-    'flank-damage-grant': '赋能神殿 · 侧击',
-    'transform-draw-grant': '赋能神殿 · 转型',
-    'transform-heal-grant': '赋能神殿 · 转型',
-    'transform-recycle-grant': '唤回秘药',
-    'amulet-perm-grant': '附魔祭坛 · 护符 Perm 2',
-    'on-hand-stun-cap-grant': '翻转之契 · 铭刻技艺',
+  const sourceKeyMap: Record<string, string> = {
+    'equipment-enchant': 'equipmentEnchant',
+    'essence-extract': 'essenceExtract',
+    'transform-grant': 'transformGrant',
+    'flank-grant': 'flankGrant',
+    'transform-gold-grant': 'transformGoldGrant',
+    'flank-persuade-grant': 'flankPersuadeGrant',
+    'flank-stun-grant': 'flankStunGrant',
+    'flank-damage-grant': 'flankDamageGrant',
+    'transform-draw-grant': 'transformDrawGrant',
+    'transform-heal-grant': 'transformHealGrant',
+    'transform-recycle-grant': 'transformRecycleGrant',
+    'amulet-perm-grant': 'amuletPermGrant',
+    'on-hand-stun-cap-grant': 'onHandStunCapGrant',
   };
-  const descMap: Record<string, string> = {
-    'equipment-enchant': '选择一张手牌中的装备弃置，将其攻击/护甲值随机附魔到装备栏的一件装备上',
-    'essence-extract': '移除一张手牌（从游戏中删除）。一次性魔法→左栏攻击+1；装备→右栏攻击+1；护符→右栏护甲+1；怪物/药水→左栏护甲+1',
-    'transform-grant': '选择一张手牌赋予「转型：随机获得坟场一张魔法卡」',
-    'flank-grant': '选择一张手牌赋予「侧击：抽1张牌」（打出时处于手牌最左或最右位置时触发）',
-    'transform-gold-grant': '选择一张手牌赋予「转型：+3金币」（打出前一张牌与本牌类型不同时触发）',
-    'flank-persuade-grant': '选择一张手牌赋予「侧击：劝降费用永久 -1」（任何类型的牌均可）',
-    'flank-stun-grant': '选择一张手牌赋予「侧击：击晕上限 +5%」（任何类型的牌均可）',
-    'flank-damage-grant': '选择一张手牌赋予「侧击：对随机怪物造成 5 点伤害」（任何类型的牌均可）',
-    'transform-draw-grant': '选择一张手牌赋予「转型：抽 2 张牌」（任何类型的牌均可）',
-    'transform-heal-grant': '选择一张手牌赋予「转型：恢复 2 HP」（任何类型的牌均可）',
-    'transform-recycle-grant': '选择一张手牌赋予「转型：回收袋取回 1 张牌」',
-    'amulet-perm-grant': '选择一个已装备的护符，赋予 Perm 2（被移除后经 2 次瀑流返回背包）',
-    'on-hand-stun-cap-grant': '选择一张手牌，永久赋予「上手：击晕上限 +3%」（每次进入手牌触发，已带其它上手词条的卡不可选）',
-  };
-  const emptyMap: Record<string, string> = {
-    'equipment-enchant': '手牌中没有可弃置的装备卡',
-    'essence-extract': '手牌中没有可移除的卡牌',
-    'flank-grant': '手牌中没有可赋予侧击效果的卡牌',
-    'transform-gold-grant': '手牌中没有可赋予转型效果的卡牌',
-    'transform-grant': '手牌中没有可赋予转型效果的卡牌',
-    'flank-persuade-grant': '手牌中没有可赋予侧击效果的卡牌',
-    'flank-stun-grant': '手牌中没有可赋予侧击效果的卡牌',
-    'flank-damage-grant': '手牌中没有可赋予侧击效果的卡牌',
-    'transform-draw-grant': '手牌中没有可赋予转型效果的卡牌',
-    'transform-heal-grant': '手牌中没有可赋予转型效果的卡牌',
-    'transform-recycle-grant': '手牌中没有可赋予转型效果的卡牌',
-    'amulet-perm-grant': '没有可赋予 Perm 2 的护符（所有护符已是 Perm 2 或更高）',
-    'on-hand-stun-cap-grant': '手牌中没有可赋予「上手：击晕上限 +3%」的卡牌',
-  };
-  const confirmMap: Record<string, string> = {
-    'equipment-enchant': '附魔',
-    'essence-extract': '萃取',
-    'transform-grant': '赋灵',
-    'flank-grant': '赋予',
-    'transform-gold-grant': '赋予',
-    'flank-persuade-grant': '赋予',
-    'flank-stun-grant': '赋予',
-    'flank-damage-grant': '赋予',
-    'transform-draw-grant': '赋予',
-    'transform-heal-grant': '赋予',
-    'transform-recycle-grant': '赋予',
-    'amulet-perm-grant': '赋予',
-    'on-hand-stun-cap-grant': '铭刻',
-  };
-  const title = titleMap[sourceType] ?? '永恒铭刻';
-  const description = descMap[sourceType] ?? '选择一张手牌赋予 Perm 3（被移除后经 3 次瀑流返回背包）';
-  const emptyText = emptyMap[sourceType] ?? '手牌中没有可赋予永恒属性的卡牌';
-  const confirmText = confirmMap[sourceType] ?? '铭刻';
+  const variantKey = sourceKeyMap[sourceType];
+  const title = variantKey
+    ? t(`modal.permGrant.title_${variantKey}`)
+    : t('modal.permGrant.defaultTitle');
+  const description = variantKey
+    ? t(`modal.permGrant.desc_${variantKey}`)
+    : t('modal.permGrant.defaultDescription');
+  const emptyText = variantKey
+    ? t(`modal.permGrant.empty_${variantKey}`)
+    : t('modal.permGrant.defaultEmpty');
+  const confirmText = variantKey
+    ? t(`modal.permGrant.confirm_${variantKey}`)
+    : t('modal.permGrant.defaultConfirm');
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
@@ -195,7 +161,7 @@ export default function PermGrantModal({
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
             <Button variant="outline" size="sm" onClick={handleClose}>
-              {eligibleCards.length === 0 ? '关闭' : '取消'}
+              {eligibleCards.length === 0 ? t('common.close') : t('common.cancel')}
             </Button>
             {eligibleCards.length > 0 && (
               <Button

@@ -150,11 +150,11 @@ function ClassDeckComponent({
           data-testid="class-deck-viewer-modal"
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-white">
               <Shield className="w-6 h-6" />
               {deckName} ({classCards.length} cards)
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-white/70">
               Class-specific template pool. Cards here can be discovered and obtained any number of times — drawing or buying never depletes the pool.
             </DialogDescription>
           </DialogHeader>

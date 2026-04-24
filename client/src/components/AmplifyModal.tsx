@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -58,14 +59,15 @@ export default function AmplifyModal({
   backpackItems,
   onConfirm,
 }: AmplifyModalProps) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<SelectionState>(null);
 
   const equipmentEntries: { slotId: EquipmentSlotId; label: string; card: GameCardData }[] = [];
   if (equipmentSlot1 && (equipmentSlot1.type === 'weapon' || equipmentSlot1.type === 'shield' || equipmentSlot1.type === 'monster')) {
-    equipmentEntries.push({ slotId: 'equipmentSlot1', label: '左装备栏', card: equipmentSlot1 });
+    equipmentEntries.push({ slotId: 'equipmentSlot1', label: t('common.section.leftEquip'), card: equipmentSlot1 });
   }
   if (equipmentSlot2 && (equipmentSlot2.type === 'weapon' || equipmentSlot2.type === 'shield' || equipmentSlot2.type === 'monster')) {
-    equipmentEntries.push({ slotId: 'equipmentSlot2', label: '右装备栏', card: equipmentSlot2 });
+    equipmentEntries.push({ slotId: 'equipmentSlot2', label: t('common.section.rightEquip'), card: equipmentSlot2 });
   }
 
   const eligibleHandCards = handCards.filter(
@@ -133,23 +135,23 @@ export default function AmplifyModal({
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-amber-500" />
-            增幅
+            {t('modal.amplify.title')}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
             {eligibleBackpackCards.length > 0
-              ? '选择装备栏 / 手牌 / 背包中的装备或伤害魔法，对其进行增幅'
-              : '选择装备栏中的装备或手牌中的装备/伤害魔法，对其进行增幅'}
+              ? t('modal.amplify.descriptionWithBackpack')
+              : t('modal.amplify.descriptionWithoutBackpack')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-2 space-y-4">
           {!hasAny ? (
-            <div className="text-center py-8 text-muted-foreground">没有可增幅的牌</div>
+            <div className="text-center py-8 text-muted-foreground">{t('modal.amplify.empty')}</div>
           ) : (
             <>
               {equipmentEntries.length > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-2">装备栏</div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">{t('common.section.equipment')}</div>
                   <div className="upgrade-modal-card-grid">
                     {equipmentEntries.map(({ slotId, label, card }) => (
                       <div key={slotId} className="space-y-1">
@@ -168,7 +170,7 @@ export default function AmplifyModal({
 
               {eligibleHandCards.length > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-2">手牌</div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">{t('common.section.hand')}</div>
                   <div className="upgrade-modal-card-grid">
                     {eligibleHandCards.map(card => (
                       <div
@@ -185,7 +187,7 @@ export default function AmplifyModal({
 
               {eligibleBackpackCards.length > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-2">背包</div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">{t('common.section.backpack')}</div>
                   <div className="upgrade-modal-card-grid">
                     {eligibleBackpackCards.map(card => (
                       <div
@@ -204,13 +206,13 @@ export default function AmplifyModal({
 
           {selectedCard && (
             <div className="text-sm text-center text-amber-600 font-medium">
-              增幅效果：{getAmplifyPreview(selectedCard)}
+              {t('modal.amplify.previewLabel')}{getAmplifyPreview(selectedCard)}
             </div>
           )}
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
             <Button variant="outline" size="sm" onClick={handleClose}>
-              {hasAny ? '取消' : '关闭'}
+              {hasAny ? t('common.cancel') : t('common.close')}
             </Button>
             {hasAny && (
               <Button
@@ -220,7 +222,7 @@ export default function AmplifyModal({
                 className="bg-amber-600 hover:bg-amber-700 text-white"
               >
                 <TrendingUp className="w-4 h-4 mr-1" />
-                确认增幅
+                {t('modal.amplify.confirm')}
               </Button>
             )}
           </div>

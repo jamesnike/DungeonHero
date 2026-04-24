@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   type EventEffectExpression,
@@ -38,6 +39,7 @@ export default function CardDetailsModal({
   monsterRewards,
   isQuickMode = false,
 }: CardDetailsModalProps) {
+  const { t } = useTranslation();
   const arcaneStormDamage = useArcaneStormDamage();
   const arcaneShieldStunGain = useArcaneShieldStunGain();
   if (!card) return null;
@@ -119,19 +121,19 @@ export default function CardDetailsModal({
             <DialogTitle className="text-xl">{card.name}</DialogTitle>
           </div>
           <DialogDescription>
-            {isMonsterEquipment ? '怪物装备' : card.type.toUpperCase()} {card.classCard ? '• KNIGHT CLASS' : ''}
+            {isMonsterEquipment ? t('modal.cardDetails.monsterEquipmentTag') : card.type.toUpperCase()} {card.classCard ? `• ${t('modal.cardDetails.knightClassTag')}` : ''}
           </DialogDescription>
           {!isMonsterEquipment && isUpgradeableCard(card) && (
             <div className="flex items-center gap-2 mt-1">
               {isCardAtMaxUpgrade(card) ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-gray-500/15 px-2.5 py-0.5 text-xs font-semibold text-gray-500 dark:text-gray-400">
                   <ArrowBigUpDash className="w-3.5 h-3.5" />
-                  已满级 (Lv.{card.upgradeLevel ?? 0}/{card.maxUpgradeLevel ?? 0})
+                  {t('modal.cardDetails.upgradeMaxed', { current: card.upgradeLevel ?? 0, max: card.maxUpgradeLevel ?? 0 })}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 animate-pulse">
                   <ArrowBigUpDash className="w-3.5 h-3.5" />
-                  可升级 (Lv.{card.upgradeLevel ?? 0}/{card.maxUpgradeLevel ?? 0})
+                  {t('modal.cardDetails.upgradeAvailable', { current: card.upgradeLevel ?? 0, max: card.maxUpgradeLevel ?? 0 })}
                 </span>
               )}
             </div>
@@ -144,7 +146,7 @@ export default function CardDetailsModal({
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
                 <Sparkles className="w-4 h-4" />
-                击败奖励（二选一）
+                {t('modal.cardDetails.rewardSectionTitle')}
               </div>
               <div className="space-y-2">
                 {monsterRewards.map(option => (
@@ -825,7 +827,7 @@ export default function CardDetailsModal({
                 <div className="relative flex items-center gap-2">
                   <Skull className="w-5 h-5 shrink-0 text-red-500" />
                   <span className="font-black text-sm text-red-600 dark:text-red-300 tracking-widest uppercase">
-                    BOSS 形态
+                    {t('modal.cardDetails.bossPhaseTag')}
                   </span>
                 </div>
               </div>
@@ -1074,7 +1076,7 @@ export default function CardDetailsModal({
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
                     <Sparkles className="w-4 h-4" />
-                    装备效果
+                    {t('modal.cardDetails.equipmentEffectsTitle')}
                   </div>
                   {effects.map((eff, idx) => {
                     const c = colorMap[eff.color] ?? colorMap.gray;
@@ -1286,7 +1288,7 @@ export default function CardDetailsModal({
             {card.type === 'magic' && (
               <div className="bg-cyan-500/10 p-3 rounded-md border border-cyan-500/20">
                 <div className="mb-1 font-semibold text-cyan-700 dark:text-cyan-400">
-                  Type: {(card.magicType === 'instant' || card.permStripped) ? 'Instant Spell' : 'Permanent Skill'}
+                  {t('modal.cardDetails.spellTypeLabel', { type: (card.magicType === 'instant' || card.permStripped) ? t('modal.cardDetails.spellTypeInstant') : t('modal.cardDetails.spellTypePermanent') })}
                 </div>
                 {card.magicType === 'permanent' && !card.permStripped && (
                   <div className="mb-2 inline-flex items-center gap-1 rounded-md border border-cyan-500/45 bg-cyan-950/25 px-2 py-1 text-xs font-bold tracking-wide text-cyan-900 dark:text-cyan-100">
@@ -1354,7 +1356,7 @@ export default function CardDetailsModal({
             {card.type === 'hero-magic' && (
               <div className="bg-rose-500/10 p-3 rounded-md border border-rose-500/20">
                 <div className="mb-1 font-semibold text-rose-700 dark:text-rose-400">
-                  Hero Magic
+                  {t('modal.cardDetails.heroMagicTitle')}
                 </div>
                 <div>{card.heroMagicEffect || card.description}</div>
               </div>
@@ -1366,7 +1368,7 @@ export default function CardDetailsModal({
               return (
                 <div className="bg-purple-500/10 p-3 rounded-md border border-purple-500/20">
                   <div className="font-semibold text-purple-700 dark:text-purple-400">
-                    Passive Effect
+                    {t('modal.cardDetails.passiveEffectTitle')}
                   </div>
                   <div className="text-muted-foreground mt-1">
                     {passive.primary}
@@ -1410,7 +1412,7 @@ export default function CardDetailsModal({
             )}
             {(card.type === 'event' || card.type === 'building') && card.eventChoices && (
               <div className="space-y-2">
-                <div className="font-semibold mb-1">{card.type === 'building' ? '建筑能力' : '事件选项'}</div>
+                <div className="font-semibold mb-1">{card.type === 'building' ? t('modal.cardDetails.buildingAbilitiesTitle') : t('modal.cardDetails.eventChoicesTitle')}</div>
                 {card.eventChoices.map((choice, idx) => (
                   <div key={idx} className="rounded-md border border-border/60 bg-muted/40 p-3 space-y-1">
                     <div className="text-sm font-semibold text-foreground">{choice.text}</div>
@@ -1419,13 +1421,13 @@ export default function CardDetailsModal({
                     )}
                     {choice.requires?.length ? (
                       <div className="text-[11px] text-amber-600">
-                        <span className="font-semibold text-amber-700 dark:text-amber-400">启用条件：</span>
+                        <span className="font-semibold text-amber-700 dark:text-amber-400">{t('modal.cardDetails.requirementLabel')}</span>
                         {formatRequirementText(choice.requires)}
                       </div>
                     ) : null}
                     {choice.effect && (
                       <div className="text-[11px] text-muted-foreground">
-                        直接效果：{describeEventEffect(choice.effect)}
+                        {t('modal.cardDetails.directEffectLabel')}{describeEventEffect(choice.effect)}
                       </div>
                     )}
                     {choice.diceTable?.length ? (
@@ -1448,7 +1450,7 @@ export default function CardDetailsModal({
               <div className="space-y-2 border-t border-violet-500/30 pt-3 mt-1">
                 <div className="flex items-center gap-2 text-sm font-semibold text-violet-600 dark:text-violet-400">
                   <Scroll className="w-4 h-4 shrink-0" />
-                  翻转效果
+                  {t('modal.cardDetails.flipEffectTitle')}
                 </div>
                 <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-3 space-y-1.5">
                   <div className="text-sm font-semibold text-foreground">
@@ -1473,7 +1475,7 @@ export default function CardDetailsModal({
                     </div>
                   ))}
                   {card.flipTarget.destination === 'stay' && (
-                    <div className="text-[11px] text-violet-500/80 italic">翻转后留在原位</div>
+                    <div className="text-[11px] text-violet-500/80 italic">{t('modal.cardDetails.flipStaysHere')}</div>
                   )}
                 </div>
               </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ interface MonsterFusionModalProps {
   onConfirm: (selection: MonsterFusionSelection) => void;
 }
 
-type SourceLabel = '左装备栏' | '右装备栏' | '左备战' | '右备战' | '手牌' | '背包';
+type SourceLabel = string;
 
 interface CandidateEntry {
   card: GameCardData;
@@ -55,6 +56,7 @@ export default function MonsterFusionModal({
   backpackItems,
   onConfirm,
 }: MonsterFusionModalProps) {
+  const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // 弹窗关闭时清空已选 —— 避免下次打开继承上次的脏状态
@@ -66,25 +68,25 @@ export default function MonsterFusionModal({
   const candidates: CandidateEntry[] = useMemo(() => {
     const list: CandidateEntry[] = [];
     if (equipmentSlot1 && equipmentSlot1.type === 'monster') {
-      list.push({ card: equipmentSlot1, source: '左装备栏' });
+      list.push({ card: equipmentSlot1, source: t('common.section.leftEquip') });
     }
     for (const c of equipmentSlot1Reserve) {
-      if (c.type === 'monster') list.push({ card: c, source: '左备战' });
+      if (c.type === 'monster') list.push({ card: c, source: t('common.section.leftBattle') });
     }
     if (equipmentSlot2 && equipmentSlot2.type === 'monster') {
-      list.push({ card: equipmentSlot2, source: '右装备栏' });
+      list.push({ card: equipmentSlot2, source: t('common.section.rightEquip') });
     }
     for (const c of equipmentSlot2Reserve) {
-      if (c.type === 'monster') list.push({ card: c, source: '右备战' });
+      if (c.type === 'monster') list.push({ card: c, source: t('common.section.rightBattle') });
     }
     for (const c of handCards) {
-      if (c.type === 'monster') list.push({ card: c, source: '手牌' });
+      if (c.type === 'monster') list.push({ card: c, source: t('common.section.hand') });
     }
     for (const c of backpackItems) {
-      if (c.type === 'monster') list.push({ card: c, source: '背包' });
+      if (c.type === 'monster') list.push({ card: c, source: t('common.section.backpack') });
     }
     return list;
-  }, [equipmentSlot1, equipmentSlot2, equipmentSlot1Reserve, equipmentSlot2Reserve, handCards, backpackItems]);
+  }, [equipmentSlot1, equipmentSlot2, equipmentSlot1Reserve, equipmentSlot2Reserve, handCards, backpackItems, t]);
 
   // ----- 按种族分组 + 仅保留「该种族卡数 ≥ 2」的组（少于 2 张永远凑不齐融合） -----
   const groups = useMemo(() => {
@@ -162,18 +164,17 @@ export default function MonsterFusionModal({
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <Combine className="w-5 h-5 text-orange-500" />
-            魔物融合
+            {t('modal.monsterFusion.title')}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            从装备栏 / 手牌 / 背包 中挑选 <b>2 张同种族</b> 怪物装备进行融合（精英怪物，Lv3）。
-            选择 <b>3 张 Skeleton</b> 可融合为「骷髅王」。
+            {t('modal.monsterFusion.description1')}<b>{t('modal.monsterFusion.description1Bold')}</b>{t('modal.monsterFusion.description2')}<b>{t('modal.monsterFusion.description2Bold')}</b>{t('modal.monsterFusion.description3')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-2 space-y-4">
           {!hasAny ? (
             <div className="text-center py-8 text-muted-foreground">
-              没有可融合的同种族怪物装备（装备栏 / 手牌 / 背包 中需有同种族 ≥ 2 张）。
+              {t('modal.monsterFusion.empty')}
             </div>
           ) : (
             groups.map(({ race, entries }) => {
@@ -181,7 +182,7 @@ export default function MonsterFusionModal({
               return (
                 <div key={race}>
                   <div className="text-xs font-medium text-muted-foreground mb-2">
-                    {cn} <span className="text-[10px]">({race}) — {entries.length} 张</span>
+                    {cn} <span className="text-[10px]">{t('modal.monsterFusion.raceCount', { race, count: entries.length })}</span>
                   </div>
                   <div className="upgrade-modal-card-grid">
                     {entries.map(({ card, source }) => {
@@ -218,7 +219,7 @@ export default function MonsterFusionModal({
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
             <Button variant="outline" size="sm" onClick={handleClose}>
-              {hasAny ? '取消' : '关闭'}
+              {hasAny ? t('common.cancel') : t('common.close')}
             </Button>
             {hasAny && (
               <Button
@@ -228,7 +229,7 @@ export default function MonsterFusionModal({
                 className="bg-orange-600 hover:bg-orange-700 text-white"
               >
                 <Combine className="w-4 h-4 mr-1" />
-                确认融合
+                {t('modal.monsterFusion.confirm')}
               </Button>
             )}
           </div>

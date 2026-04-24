@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,7 @@ interface ShopSkillSelectModalProps {
 }
 
 export default function ShopSkillSelectModal({ open, options, onSelect }: ShopSkillSelectModalProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open}>
       {/*
@@ -25,10 +27,10 @@ export default function ShopSkillSelectModal({ open, options, onSelect }: ShopSk
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-purple-500" />
-            发现英雄技能
+            {t('modal.shopSkillSelect.discoverTitle')}
           </DialogTitle>
           <DialogDescription>
-            从以下 3 个技能中选择 1 个学习。选择后将立即获得该技能。
+            {t('modal.shopSkillSelect.discoverDesc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -42,7 +44,7 @@ export default function ShopSkillSelectModal({ open, options, onSelect }: ShopSk
               <div className="p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <Badge variant={skill.type === 'active' ? 'default' : 'secondary'} className="text-[10px]">
-                    {skill.type === 'active' ? '主动' : '被动'}
+                    {skill.type === 'active' ? t('common.active') : t('common.passive')}
                   </Badge>
                 </div>
                 <h3 className="text-lg font-bold font-serif">{skill.name}</h3>
@@ -56,7 +58,7 @@ export default function ShopSkillSelectModal({ open, options, onSelect }: ShopSk
         </div>
 
         <p className="text-xs text-muted-foreground text-center mt-2">
-          点击技能卡牌以选择
+          {t('modal.shopSkillSelect.helpText')}
         </p>
       </DialogContent>
     </Dialog>

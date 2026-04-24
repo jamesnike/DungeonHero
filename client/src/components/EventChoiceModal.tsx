@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, Dice1 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { EventEffectExpression, GameCardData } from './GameCard';
 
 export interface EventChoiceAvailability {
@@ -18,6 +19,7 @@ interface EventChoiceModalProps {
 }
 
 export default function EventChoiceModal({ open, eventCard, onChoice, choiceStates, onMinimize }: EventChoiceModalProps) {
+  const { t } = useTranslation();
   if (!eventCard || !eventCard.eventChoices) return null;
 
   return (
@@ -32,7 +34,7 @@ export default function EventChoiceModal({ open, eventCard, onChoice, choiceStat
             <Calendar className="w-5 h-5 text-pink-500" />
             {eventCard.name}
           </DialogTitle>
-          <DialogDescription>Choose your path wisely...</DialogDescription>
+          <DialogDescription>{t('modal.eventChoice.subtitle')}</DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 flex flex-col gap-3">

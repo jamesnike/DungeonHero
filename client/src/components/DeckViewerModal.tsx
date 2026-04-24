@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogDescription,
@@ -28,6 +29,7 @@ interface DeckViewerModalProps {
 }
 
 export default function DeckViewerModal({ open, onOpenChange, remainingCards, onCardSelect }: DeckViewerModalProps) {
+  const { t } = useTranslation();
   const cardsByType = {
     monster: remainingCards.filter(c => c.type === 'monster'),
     weapon: remainingCards.filter(c => c.type === 'weapon'),
@@ -76,10 +78,28 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
   };
 
   const getTypeLabel = (type: string) => {
-    if (type === 'hero-magic') {
-      return 'Hero Magic';
+    switch (type) {
+      case 'monster':
+        return t('modal.deckViewer.type.monster');
+      case 'weapon':
+        return t('modal.deckViewer.type.weapon');
+      case 'shield':
+        return t('modal.deckViewer.type.shield');
+      case 'potion':
+        return t('modal.deckViewer.type.potion');
+      case 'amulet':
+        return t('modal.deckViewer.type.amulet');
+      case 'skill':
+        return t('modal.deckViewer.type.skill');
+      case 'magic':
+        return t('modal.deckViewer.type.magic');
+      case 'hero-magic':
+        return t('modal.deckViewer.type.heroMagic');
+      case 'event':
+        return t('modal.deckViewer.type.event');
+      default:
+        return type.charAt(0).toUpperCase() + type.slice(1) + 's';
     }
-    return type.charAt(0).toUpperCase() + type.slice(1) + 's';
   };
 
   const originRefCallback = useDialogOriginAnchor();
@@ -95,9 +115,9 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
         data-testid="deck-viewer-modal"
       >
         <DialogHeader>
-          <DialogTitle className="font-serif text-2xl">Remaining Deck</DialogTitle>
-          <DialogDescription>
-            {remainingCards.length} cards left in the deck
+          <DialogTitle className="font-serif text-2xl text-white">{t('modal.deckViewer.title')}</DialogTitle>
+          <DialogDescription className="text-white/70">
+            {t('modal.deckViewer.subtitle', { count: remainingCards.length })}
           </DialogDescription>
         </DialogHeader>
 
@@ -179,7 +199,7 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
           
           {remainingCards.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              <p>The deck is empty. Victory is near!</p>
+              <p>{t('modal.deckViewer.empty')}</p>
             </div>
           )}
         </div>

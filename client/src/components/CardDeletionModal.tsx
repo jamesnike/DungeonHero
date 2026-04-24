@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -46,12 +47,12 @@ const sectionIconMap: Record<CardSource, typeof Backpack> = {
   amulet: Sparkles,
 };
 
-const KEYWORD_BUTTON_LABEL: Record<CardActionKeyword, string> = {
-  delete: '删除',
-  'discard-only': '弃置',
-  'recycle-only': '回收',
-  'discard-recycle': '弃回',
-  'move-to': '移动',
+const KEYWORD_LABEL_KEY: Record<CardActionKeyword, string> = {
+  delete: 'modal.cardDeletion.keywordDelete',
+  'discard-only': 'modal.cardDeletion.keywordDiscardOnly',
+  'recycle-only': 'modal.cardDeletion.keywordRecycleOnly',
+  'discard-recycle': 'modal.cardDeletion.keywordDiscardRecycle',
+  'move-to': 'modal.cardDeletion.keywordMoveTo',
 };
 
 export default function CardDeletionModal({
@@ -73,6 +74,7 @@ export default function CardDeletionModal({
   maxCount,
   onBatchConfirm,
 }: CardDeletionModalProps) {
+  const { t } = useTranslation();
   const isBatch = selectionMode === 'batch' && !!onBatchConfirm;
   const batchMax = maxCount ?? requiredCount ?? 1;
 
@@ -84,9 +86,9 @@ export default function CardDeletionModal({
     }
   }, [open]);
 
-  const headerTitle = title ?? '选择要删除的卡牌';
+  const headerTitle = title ?? t('modal.cardDeletion.defaultTitle');
   const headerDescription =
-    description ?? '删除后该卡牌会被送入坟场，无法再回到手牌或背包。';
+    description ?? t('modal.cardDeletion.defaultDescription');
 
   const filterByKeyword = (cards: GameCardData[]): GameCardData[] => {
     let next: GameCardData[];
@@ -139,21 +141,21 @@ export default function CardDeletionModal({
     const filtered = filterByKeyword(cards);
     const emptyText =
       source === 'hand'
-        ? '当前没有手牌可以选择。'
+        ? t('modal.cardDeletion.emptyHand')
         : source === 'backpack'
-          ? '背包里没有可以选择的卡牌。'
+          ? t('modal.cardDeletion.emptyBackpack')
           : source === 'recycleBag'
-            ? '回收袋里没有可以选择的卡牌。'
+            ? t('modal.cardDeletion.emptyRecycleBag')
             : source === 'equipment'
-              ? '装备栏没有可以选择的卡牌。'
-              : '护符栏没有可以选择的卡牌。';
+              ? t('modal.cardDeletion.emptyEquipment')
+              : t('modal.cardDeletion.emptyAmulet');
 
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Icon className="w-4 h-4" />
           <span>
-            {sectionTitle}（{filtered.length} 张）
+            {t('modal.cardDeletion.sectionCount', { name: sectionTitle, count: filtered.length })}
           </span>
         </div>
         {filtered.length === 0 ? (
@@ -218,7 +220,7 @@ export default function CardDeletionModal({
   const showBackpack = !handOnly && keyword === 'delete';
   const showRecycleBag = !handOnly && keyword === 'delete';
 
-  const confirmLabel = KEYWORD_BUTTON_LABEL[keyword] ?? '确认';
+  const confirmLabel = KEYWORD_LABEL_KEY[keyword] ? t(KEYWORD_LABEL_KEY[keyword]) : t('common.confirm');
 
   const handleBatchConfirm = () => {
     if (!onBatchConfirm) return;
@@ -266,29 +268,29 @@ export default function CardDeletionModal({
             {headerDescription}
             {keyword === 'discard-recycle' && (
               <span className="mt-2 block text-xs text-muted-foreground">
-                可弃置进坟场的牌会排在前面；Perm 类牌仍会进入回收袋。
+                {t('modal.cardDeletion.discardRecycleHint')}
               </span>
             )}
           </DialogDescription>
           {isBatch ? (
             <p className="text-xs text-muted-foreground">
-              已选 {selectedKeys.size} / {batchMax} 张卡牌（最多 {batchMax} 张）
+              {t('modal.cardDeletion.batchSelected', { count: selectedKeys.size, max: batchMax })}
             </p>
           ) : (
             requiredCount !== undefined && remainingCount !== undefined && requiredCount > 1 && (
               <p className="text-xs text-muted-foreground">
-                还需选择 {remainingCount} / {requiredCount} 张卡牌
+                {t('modal.cardDeletion.needMoreSelections', { remaining: remainingCount, required: requiredCount })}
               </p>
             )
           )}
         </DialogHeader>
 
         <div className="space-y-6 py-2">
-          {renderCardSection('手牌', handCards, 'hand')}
-          {showEquipment && equipmentCards.length > 0 && renderCardSection('装备栏', equipmentCards, 'equipment')}
-          {showAmulet && amuletCards.length > 0 && renderCardSection('护符栏', amuletCards, 'amulet')}
-          {showBackpack && renderCardSection('背包', backpackCards, 'backpack')}
-          {showRecycleBag && recycleBagCards.length > 0 && renderCardSection('回收袋', recycleBagCards, 'recycleBag')}
+          {renderCardSection(t('common.section.hand'), handCards, 'hand')}
+          {showEquipment && equipmentCards.length > 0 && renderCardSection(t('common.section.equipment'), equipmentCards, 'equipment')}
+          {showAmulet && amuletCards.length > 0 && renderCardSection(t('common.section.amulet'), amuletCards, 'amulet')}
+          {showBackpack && renderCardSection(t('common.section.backpack'), backpackCards, 'backpack')}
+          {showRecycleBag && recycleBagCards.length > 0 && renderCardSection(t('common.section.recycleBag'), recycleBagCards, 'recycleBag')}
         </div>
 
         {isBatch && (
@@ -297,7 +299,7 @@ export default function CardDeletionModal({
               variant="outline"
               onClick={() => onBatchConfirm?.([])}
             >
-              取消
+              {t('common.cancel')}
             </Button>
             <Button
               variant="destructive"

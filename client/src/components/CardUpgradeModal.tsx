@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -56,6 +57,7 @@ export default function CardUpgradeModal({
   onUpgrade,
   maxUpgrades,
 }: CardUpgradeModalProps) {
+  const { t } = useTranslation();
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [upgradesUsed, setUpgradesUsed] = useState(0);
 
@@ -121,7 +123,7 @@ export default function CardUpgradeModal({
                 }}
               >
                 <GameCard card={card} disableInteractions />
-                {maxed && <div className="upgrade-modal-max-tag">已满级</div>}
+                {maxed && <div className="upgrade-modal-max-tag">{t('modal.cardUpgrade.maxedTag')}</div>}
               </div>
             );
           })}
@@ -149,26 +151,26 @@ export default function CardUpgradeModal({
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <ArrowBigUpDash className="w-5 h-5 text-emerald-500" />
-            卡牌升级
+            {t('modal.cardUpgrade.title')}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
             {maxUpgrades != null
-              ? `选择卡牌进行升级（剩余 ${remainingUpgrades} 次）`
-              : '选择一张卡牌进行升级'}
+              ? t('modal.cardUpgrade.subtitleWithRemaining', { count: remainingUpgrades })
+              : t('modal.cardUpgrade.subtitleSingle')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-2 space-y-4">
           {!hasUpgradeableCards ? (
             <div className="text-center py-8 text-muted-foreground">
-              没有可升级的卡牌
+              {t('modal.cardUpgrade.empty')}
             </div>
           ) : (
             <>
-              {renderSection('手牌', upgradeableHand)}
-              {renderSection('背包', upgradeableBackpack)}
-              {renderSection('装备栏', upgradeableEquipment)}
-              {renderSection('护符栏', upgradeableAmulets)}
+              {renderSection(t('common.section.hand'), upgradeableHand)}
+              {renderSection(t('common.section.backpack'), upgradeableBackpack)}
+              {renderSection(t('common.section.equipment'), upgradeableEquipment)}
+              {renderSection(t('common.section.amulet'), upgradeableAmulets)}
             </>
           )}
 
@@ -178,7 +180,7 @@ export default function CardUpgradeModal({
               size="sm"
               onClick={() => handleClose(false)}
             >
-              取消
+              {t('common.cancel')}
             </Button>
             <Button
               size="sm"
@@ -187,7 +189,7 @@ export default function CardUpgradeModal({
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               <ArrowBigUpDash className="w-4 h-4 mr-1" />
-              升级
+              {t('modal.cardUpgrade.upgrade')}
             </Button>
           </div>
         </div>

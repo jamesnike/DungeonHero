@@ -3,11 +3,12 @@
  *
  * Covers:
  *   1. Curse play resolution (RESOLVE_MAGIC entry):
+ *      - Enqueues APPLY_DAMAGE 1 (selfInflicted) — the "失去 1 生命" cost
  *      - Enqueues DRAW_FROM_BACKPACK count 1
  *      - Enqueues FINALIZE_MAGIC_CARD (which routes curses back to backpack,
  *        not graveyard — verified separately by FINALIZE_MAGIC_CARD's curse
  *        branch in rules/cards.ts)
- *      - Does NOT lose any HP / gold (no cost)
+ *      - Loses exactly 1 HP and does NOT modify gold
  *   2. On-enter-hand handler (frenzy-curse-onhand):
  *      - Adds +1 to slotTempAttack of one randomly-chosen slot
  *      - Advances rng
@@ -50,10 +51,16 @@ function makeFrenzyCurse(idSuffix = 'fc'): GameCardData {
 // ---------------------------------------------------------------------------
 
 describe('战狂诅咒 — play resolution', () => {
-  it('enqueues DRAW_FROM_BACKPACK and FINALIZE_MAGIC_CARD when played', () => {
+  it('enqueues APPLY_DAMAGE 1 (self), DRAW_FROM_BACKPACK and FINALIZE_MAGIC_CARD when played', () => {
     const card = makeFrenzyCurse('play-1');
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: card.id, card } as GameAction);
+
+    const damageActions = result.enqueuedActions.filter(a => a.type === 'APPLY_DAMAGE');
+    expect(damageActions).toHaveLength(1);
+    expect((damageActions[0] as any).amount).toBe(1);
+    expect((damageActions[0] as any).selfInflicted).toBe(true);
+    expect((damageActions[0] as any).source).toBe('frenzy-curse');
 
     const drawActions = result.enqueuedActions.filter(a => a.type === 'DRAW_FROM_BACKPACK');
     expect(drawActions).toHaveLength(1);
@@ -63,13 +70,13 @@ describe('战狂诅咒 — play resolution', () => {
     expect(finalizeActions).toHaveLength(1);
   });
 
-  it('does not modify gold or HP on play (no cost)', () => {
-    const card = makeFrenzyCurse('play-no-cost');
+  it('loses exactly 1 HP and does not modify gold on play', () => {
+    const card = makeFrenzyCurse('play-hp-cost');
     const state = makeState({ handCards: [card], hp: 20, gold: 7 });
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC', cardId: card.id, card } as GameAction,
     ]);
-    expect(result.state.hp).toBe(20);
+    expect(result.state.hp).toBe(19);
     expect(result.state.gold).toBe(7);
   });
 });

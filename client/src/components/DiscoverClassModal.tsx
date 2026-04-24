@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import GameCard, { type GameCardData } from './GameCard';
 
@@ -25,9 +26,10 @@ export default function DiscoverClassModal({
   title,
   description,
 }: DiscoverClassModalProps) {
-  const headerTitle = title ?? '发现一张 Class Card';
+  const { t } = useTranslation();
+  const headerTitle = title ?? t('modal.discoverClass.title');
   const headerDescription =
-    description ?? '从三张候选卡中挑选一张，其余卡牌会放回 Class Deck。';
+    description ?? t('modal.discoverClass.description');
 
   return (
     <Dialog
@@ -45,7 +47,7 @@ export default function DiscoverClassModal({
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
           {cards.length === 0 && (
             <div className="col-span-full text-center text-muted-foreground text-sm">
-              暂无可发现的 Class Card
+              {t('modal.discoverClass.empty')}
             </div>
           )}
           {cards.map(card => (
@@ -59,7 +61,7 @@ export default function DiscoverClassModal({
                 <GameCard card={card} disableInteractions />
               </div>
               <span className="mt-1.5 sm:mt-3 block text-center text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary">
-                选择这张卡
+                {t('modal.discoverClass.pickThis')}
               </span>
             </button>
           ))}
@@ -72,7 +74,7 @@ export default function DiscoverClassModal({
               className="rounded-md border border-border px-5 py-2 text-sm text-muted-foreground hover:bg-muted/60 transition-colors"
               onClick={onCancel}
             >
-              取消（不选）
+              {t('modal.discoverClass.cancelNoPick')}
             </button>
           </div>
         )}

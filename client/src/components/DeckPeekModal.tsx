@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Eye, Sparkles } from 'lucide-react';
@@ -10,6 +11,7 @@ interface DeckPeekModalProps {
 }
 
 export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
+  const { t } = useTranslation();
   if (!state) return null;
 
   if (state.mode === 'dungeon-insight') {
@@ -68,7 +70,7 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
 
           <div className="flex justify-center pt-2">
             <Button variant="outline" onClick={onClose}>
-              关闭
+              {t('common.close')}
             </Button>
           </div>
         </DialogContent>
@@ -132,7 +134,7 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
 
           <div className="flex justify-center pt-2">
             <Button variant="outline" onClick={onClose}>
-              {deleteCount > 0 ? '确认' : '关闭'}
+              {deleteCount > 0 ? t('common.confirm') : t('common.close')}
             </Button>
           </div>
         </DialogContent>
@@ -195,7 +197,7 @@ export default function DeckPeekModal({ state, onClose }: DeckPeekModalProps) {
 
         <div className="flex justify-center pt-2">
           <Button variant="outline" onClick={onClose}>
-            关闭
+            {t('common.close')}
           </Button>
         </div>
       </DialogContent>
