@@ -8641,7 +8641,6 @@ export default function GameBoard() {
                 <ClassDeck
                   classCards={classDeck}
                   className="w-full h-full"
-                  deckName="Knight Deck"
                   onCardSelect={handleCardClick}
                 />
               </div>

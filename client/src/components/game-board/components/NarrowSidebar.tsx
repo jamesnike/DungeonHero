@@ -50,7 +50,6 @@ export const NarrowSidebar = memo(function NarrowSidebar({
           compact
           compactStyle={stripStyle}
           classCards={classDeck}
-          deckName="Knight Deck"
           onCardSelect={onCardSelect}
         />
       </div>

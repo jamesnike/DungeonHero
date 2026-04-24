@@ -353,7 +353,14 @@
     "ariaPickFlip": "选择该预览行卡背进行乾坤一翻",
     "viewContents": "查看内容",
     "backpackTooltip": "背包：{{count}} 张",
-    "recycleTooltip": "回收袋：{{count}} 张"
+    "recycleTooltip": "回收袋：{{count}} 张",
+    "cell": {
+      "backpack": "背包",
+      "graveyard": "坟场",
+      "knightDeck": "骑士牌库",
+      "view": "查看",
+      "browse": "浏览"
+    }
   },
   "modal": {
     "deckPeek": {

@@ -129,15 +129,30 @@ const DEFAULT_ACCENT = { ink: '#fde68a', glow: 'rgba(245, 158, 11, 0.5)', wash: 
  * 复用了 [`Preview Row` 卡背的中央内容区]，独立组件方便单测/调样式。
  */
 function CardBackEmblem({ label, accent }: { label: string; accent: { ink: string; glow: string } }) {
+  const len = label.length;
+  // 字号 / 字距 / padding 都按 label 字数动态调档：
+  // - CJK 短词（≤3 字，"怪物" / "事件"）：保留宽字距 + 大 ceiling，气场最足
+  // - 拉丁中等词（4–6 字，"Magic" / "Potion" / "Weapon"）：收紧字距 + 中 ceiling
+  // - 拉丁长词（≥7 字，"Monster" / "Building"）：再收紧 + 小 ceiling，
+  //   保证窄 cell 上仍能完整显示在 cartouche 内不溢出。
+  // 历史教训：旧版本用单档 `tracking: 0.45em` + `1.3em` 是按 CJK 2 字调的；
+  // 切到英文后 7 字 × 0.45em 字距让 label 直接撑出 cartouche 边界、看不全。
+  const sizing =
+    len <= 3
+      ? { baseSize: 'clamp(0.55rem, 11cqi, 1.4rem)', tracking: '0.45em', padX: '1.3em', labelScale: '1.3em' }
+      : len <= 6
+        ? { baseSize: 'clamp(0.5rem, 8.5cqi, 1.05rem)', tracking: '0.12em', padX: '0.85em', labelScale: '1.1em' }
+        : { baseSize: 'clamp(0.45rem, 7cqi, 0.85rem)', tracking: '0.05em', padX: '0.6em', labelScale: '1em' };
+
   return (
     <div
-      className="relative z-20 flex flex-col items-center select-none"
+      className="relative z-20 flex flex-col items-center select-none max-w-full px-1"
       style={{
         color: accent.ink,
         // 关键：用 cqi（container query inline size）随 PreviewCard 宽度流式缩放
         // 父 Card 设了 container-type: inline-size，cqi 就是 card 宽度的 1%
         // clamp 兜底：小屏不至于看不清，大屏不至于撑爆
-        fontSize: 'clamp(0.55rem, 11cqi, 1.4rem)',
+        fontSize: sizing.baseSize,
         gap: '0.45em',
       }}
     >
@@ -154,19 +169,20 @@ function CardBackEmblem({ label, accent }: { label: string; accent: { ink: strin
       </svg>
       {/* 类型字底板（去掉了双线白边框，只保留半透明深色板提升对比） */}
       <div
-        className="relative"
+        className="relative max-w-full"
         style={{
-          padding: '0.4em 1.3em',
+          padding: `0.4em ${sizing.padX}`,
           borderRadius: '1em',
           background: 'rgba(0,0,0,0.45)',
           backdropFilter: 'blur(2px)',
         }}
       >
         <span
-          className="font-serif font-bold tracking-[0.45em] pr-[-0.45em]"
+          className="font-serif font-bold whitespace-nowrap block"
           style={{
-            fontSize: '1.3em',
+            fontSize: sizing.labelScale,
             lineHeight: 1,
+            letterSpacing: sizing.tracking,
             textShadow: `0 0 8px ${accent.glow}, 0 1px 0 rgba(0,0,0,0.6)`,
           }}
         >

@@ -381,7 +381,7 @@ function BackpackZoneInner({
     >
       {isFlat ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-white/90">
-          <span className="dh-hero-small font-semibold uppercase tracking-wide">Backpack</span>
+          <span className="dh-hero-small font-semibold uppercase tracking-wide">{t('cardBack.cell.backpack')}</span>
           <span className="font-mono font-bold text-lg">{backpackCount}</span>
           {recycleCount > 0 && (
             <span
@@ -399,7 +399,7 @@ function BackpackZoneInner({
           <StackedCardPile
             count={backpackCount}
             className="rounded-xl"
-            label="Backpack"
+            label={t('cardBack.cell.backpack')}
             variant="blue"
             secondaryCount={recycleCount}
             secondaryIcon={RecycleIcon}
@@ -413,7 +413,7 @@ function BackpackZoneInner({
           */}
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1.5 sm:p-3 text-white/90">
             <div className="flex items-center justify-between dh-hero-small uppercase tracking-wide">
-              <span className="font-semibold">Backpack</span>
+              <span className="font-semibold">{t('cardBack.cell.backpack')}</span>
               <div className="flex flex-col items-end gap-0.5">
                 <Badge
                   className="bg-amber-500/90 text-white font-mono text-[9px] leading-none sm:dh-hero-chip px-1 py-0 sm:px-2 sm:py-0.5 ring-1 ring-amber-200/70 hover:bg-amber-500/90"

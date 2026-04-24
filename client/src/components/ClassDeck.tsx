@@ -1,4 +1,5 @@
 import { memo, useMemo, useState, startTransition, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Shield, Eye } from 'lucide-react';
@@ -35,11 +36,15 @@ interface ClassDeckProps {
 function ClassDeckComponent({
   classCards = [],
   className = '',
-  deckName = 'Knight Deck',
+  deckName,
   onCardSelect,
   compact = false,
   compactStyle,
 }: ClassDeckProps) {
+  const { t } = useTranslation();
+  // 默认走 i18n（"骑士牌库" / "Knight Deck"）；caller 显式传 deckName 时
+  // 覆盖（未来可能有其它职业牌库）。
+  const resolvedDeckName = deckName ?? t('cardBack.cell.knightDeck');
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -109,7 +114,7 @@ function ClassDeckComponent({
         >
           {isFlat ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-indigo-100">
-              <span className="dh-deck-label font-semibold uppercase tracking-wide">{deckName}</span>
+              <span className="dh-deck-label font-semibold uppercase tracking-wide">{resolvedDeckName}</span>
               <span className="font-mono font-bold text-lg">{classCards.length}</span>
             </div>
           ) : (
@@ -118,13 +123,13 @@ function ClassDeckComponent({
                 count={classCards.length} 
                 className="rounded-xl"
                 variant="bright"
-                label={deckName}
+                label={resolvedDeckName}
               />
               <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3">
                 <div className="flex items-center justify-between dh-deck-label uppercase tracking-wide text-indigo-100">
                   <span className="font-semibold flex items-center gap-1">
                     <Shield className="dh-icon-inline text-indigo-200" />
-                    {deckName}
+                    {resolvedDeckName}
                   </span>
                   <Badge variant="outline" className="bg-black/30 text-white font-mono dh-deck-badge px-1.5 py-0.5">
                     {classCards.length}
@@ -132,7 +137,7 @@ function ClassDeckComponent({
                 </div>
                 <div className="flex items-center justify-end gap-1 text-indigo-100">
                   <Eye className="dh-icon-inline" />
-                  <span className="dh-deck-badge font-medium">Browse</span>
+                  <span className="dh-deck-badge font-medium">{t('cardBack.cell.browse')}</span>
                 </div>
               </div>
             </>
@@ -152,7 +157,7 @@ function ClassDeckComponent({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
               <Shield className="w-6 h-6" />
-              {deckName} ({classCards.length} cards)
+              {resolvedDeckName} ({classCards.length} cards)
             </DialogTitle>
             <DialogDescription className="text-white/70">
               Class-specific template pool. Cards here can be discovered and obtained any number of times — drawing or buying never depletes the pool.

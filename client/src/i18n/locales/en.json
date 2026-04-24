@@ -353,7 +353,14 @@
     "ariaPickFlip": "Pick this preview card to flip",
     "viewContents": "View Contents",
     "backpackTooltip": "Backpack: {{count}}",
-    "recycleTooltip": "Recycle Bag: {{count}}"
+    "recycleTooltip": "Recycle Bag: {{count}}",
+    "cell": {
+      "backpack": "Backpack",
+      "graveyard": "Graveyard",
+      "knightDeck": "Knight Deck",
+      "view": "View",
+      "browse": "Browse"
+    }
   },
   "modal": {
     "deckPeek": {
