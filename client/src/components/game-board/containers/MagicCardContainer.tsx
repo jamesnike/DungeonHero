@@ -4,6 +4,7 @@ import { useModalCallbacks } from '../contexts/ModalCallbacksContext';
 
 import HandMagicUpgradeModal from '@/components/HandMagicUpgradeModal';
 import MirrorCopyModal from '@/components/MirrorCopyModal';
+import MonsterFusionModal from '@/components/MonsterFusionModal';
 import AmplifyModal from '@/components/AmplifyModal';
 import PermGrantModal from '@/components/PermGrantModal';
 import BackpackReorganizeModal from '@/components/BackpackReorganizeModal';
@@ -17,6 +18,7 @@ function MagicCardContainerInner() {
   const gs = useShallowGameState(s => ({
     handMagicUpgradeModal: s.handMagicUpgradeModal,
     mirrorCopyModal: s.mirrorCopyModal,
+    monsterFusionModal: s.monsterFusionModal,
     amplifyModal: s.amplifyModal,
     eventAmplifyHandPicker: s.eventAmplifyHandPicker,
     permGrantModal: s.permGrantModal,
@@ -25,6 +27,8 @@ function MagicCardContainerInner() {
     handCards: s.handCards,
     equipmentSlot1: s.equipmentSlot1,
     equipmentSlot2: s.equipmentSlot2,
+    equipmentSlot1Reserve: s.equipmentSlot1Reserve,
+    equipmentSlot2Reserve: s.equipmentSlot2Reserve,
     amuletSlots: s.amuletSlots,
     backpackItems: s.backpackItems,
   }));
@@ -58,6 +62,18 @@ function MagicCardContainerInner() {
         amuletSlots={gs.amuletSlots}
         handCards={gs.handCards}
         onConfirm={cb.onMirrorCopyConfirm}
+      />
+
+      <MonsterFusionModal
+        open={Boolean(gs.monsterFusionModal)}
+        onClose={cb.onMonsterFusionCancel}
+        equipmentSlot1={(gs.equipmentSlot1 as GameCardData | null) ?? null}
+        equipmentSlot2={(gs.equipmentSlot2 as GameCardData | null) ?? null}
+        equipmentSlot1Reserve={(gs.equipmentSlot1Reserve ?? []) as GameCardData[]}
+        equipmentSlot2Reserve={(gs.equipmentSlot2Reserve ?? []) as GameCardData[]}
+        handCards={gs.handCards}
+        backpackItems={gs.backpackItems as GameCardData[]}
+        onConfirm={cb.onMonsterFusionConfirm}
       />
 
       <AmplifyModal

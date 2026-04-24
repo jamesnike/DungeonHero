@@ -769,10 +769,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: fusionScrollImage,
     classCard: true,
-    description: '一次性：融合装备栏中同种族的怪物装备——2个融合为该种族的Lv3精英怪物装备（4耐久），3个Skeleton融合为「骷髅王」。融合后加入手牌。',
-    shortDescription: '融合装备栏中同种族怪物装备',
+    description: '一次性：从装备栏 / 手牌 / 背包中选择同种族的怪物装备进行融合——2个同种族融合为该种族的Lv3精英怪物装备（4耐久），3个Skeleton融合为「骷髅王」。被消耗的怪物全部进入坟场，融合产物加入手牌。',
+    shortDescription: '选择同种族怪物装备进行融合',
     magicType: 'instant',
-    magicEffect: '融合装备栏中同种族的怪物装备。',
+    magicEffect: '从装备栏 / 手牌 / 背包选择同种族怪物装备融合。',
     knightEffect: 'monster-fusion',
   });
 

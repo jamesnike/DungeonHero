@@ -9,6 +9,7 @@ import { GameCardData } from './GameCard';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 import { useGameEvent } from '@/hooks/useGameEngine';
+import { captureModalOriginFromEvent } from '@/lib/modalOriginAnchor';
 
 /**
  * 「回收袋洗入背包」绿色环旋转动画的持续时间（ms）。
@@ -267,6 +268,16 @@ function BackpackZoneInner({
     }
   };
 
+  /**
+   * Capture this cell's screen rect so the viewer modal can grow its
+   * open animation outward from here (transform-origin = cell center).
+   * See `lib/modalOriginAnchor.ts` + `hooks/use-dialog-origin-anchor.ts`.
+   */
+  const handleOpenViewerClick = (e: React.MouseEvent<HTMLElement>) => {
+    captureModalOriginFromEvent(e);
+    onOpenViewer?.();
+  };
+
   if (compact) {
     // The visible "strip" is intentionally narrow (so it sits flush against
     // the screen's right edge), but a narrow strip is hard to hit while
@@ -302,7 +313,7 @@ function BackpackZoneInner({
             (compactCellRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
           }
         }}
-        onClick={onOpenViewer}
+        onClick={handleOpenViewerClick}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -356,7 +367,7 @@ function BackpackZoneInner({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={onOpenViewer}
+      onClick={handleOpenViewerClick}
       className={cn(
         // overflow-visible：让 StackedCardPile 的"一摞牌"溢出 cell 上沿（与 Graveyard / ClassDeck 同款）。
         // 主色调：深蓝（blue 系）—— 配合 StackedCardPile variant="blue" 的深蓝卡背一起定调为"深海蓝"。

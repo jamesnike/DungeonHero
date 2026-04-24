@@ -568,7 +568,7 @@ function addCardToBackpackPatch(
   const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
   const currentBp = (patch.backpackItems ?? state.backpackItems);
   if (currentBp.length < cap) {
-    patch.backpackItems = [card, ...currentBp];
+    patch.backpackItems = [...currentBp, card];
   } else {
     const currentRecycle = (patch.permanentMagicRecycleBag ?? state.permanentMagicRecycleBag);
     patch.permanentMagicRecycleBag = [...currentRecycle, { ...card, _recycleWaits: card.recycleDelay ?? 1 }];
@@ -1585,7 +1585,7 @@ export function applySimpleEffect(
       patch.permanentMagicRecycleBag = state.permanentMagicRecycleBag.filter(c => c.id !== picked.id);
       const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
       if (state.backpackItems.length < backpackCap) {
-        patch.backpackItems = [picked, ...state.backpackItems];
+        patch.backpackItems = [...state.backpackItems, picked];
       } else {
         patch.permanentMagicRecycleBag = patch.permanentMagicRecycleBag;
       }
@@ -1638,7 +1638,7 @@ export function applySimpleEffect(
       const [drawn, rngAfterClone] = cloneClassCardWithFreshId(original, state.rng);
       patch.rng = rngAfterClone;
       if (state.backpackItems.length < backpackCap) {
-        patch.backpackItems = [drawn, ...state.backpackItems];
+        patch.backpackItems = [...state.backpackItems, drawn];
       } else {
         patch.permanentMagicRecycleBag = [...state.permanentMagicRecycleBag, { ...drawn, _recycleWaits: drawn.recycleDelay ?? 1 }];
       }
@@ -1672,7 +1672,7 @@ export function applySimpleEffect(
       const toAdd = readyCards.slice(0, Math.max(0, available));
       const overflow = readyCards.slice(Math.max(0, available));
       if (toAdd.length > 0) {
-        patch.backpackItems = [...toAdd, ...state.backpackItems];
+        patch.backpackItems = [...state.backpackItems, ...toAdd];
       }
       patch.permanentMagicRecycleBag = [...overflow, ...waitingCards];
       const parts: string[] = [];
@@ -1836,7 +1836,7 @@ export function applySimpleEffect(
       const toBackpack = granted.slice(0, room);
       const toRecycle = granted.slice(room);
       if (toBackpack.length > 0) {
-        patch.backpackItems = [...toBackpack, ...currentBp];
+        patch.backpackItems = [...currentBp, ...toBackpack];
       }
       if (toRecycle.length > 0) {
         const recycleEntries = toRecycle.map(c => ({
@@ -1932,7 +1932,7 @@ export function applySimpleEffect(
         handCards.push(bolt);
         toHand++;
       } else if (backpackItems.length < cap) {
-        backpackItems.unshift(bolt);
+        backpackItems.push(bolt);
         toBackpack++;
       } else {
         recycleBag.push({ ...bolt, _recycleWaits: bolt.recycleDelay ?? 1 });
@@ -2177,7 +2177,7 @@ export function applySimpleEffect(
         const toBackpack = drawn.slice(0, Math.max(0, available));
         const overflow = drawn.slice(Math.max(0, available));
         if (toBackpack.length > 0) {
-          patch.backpackItems = [...toBackpack, ...currentBp];
+          patch.backpackItems = [...currentBp, ...toBackpack];
         }
         if (overflow.length > 0) {
           const currentRecycle = patch.permanentMagicRecycleBag ?? state.permanentMagicRecycleBag;
@@ -2309,7 +2309,7 @@ export function applySimpleEffect(
         const avail = cap - currentBp.length;
         const toBackpack = drawn.slice(0, Math.max(0, avail));
         if (toBackpack.length > 0) {
-          patch.backpackItems = [...toBackpack, ...currentBp];
+          patch.backpackItems = [...currentBp, ...toBackpack];
         }
         patch.heroSkillBanner = `弃置了 ${equipInHand.map(c => c.name).join('、')}，获得 ${drawn.length} 张专属装备！`;
         logs.push({ type: 'event', message: `事件效果：弃置 ${equipInHand.length} 张手牌装备，获得 ${drawn.length} 张专属装备` });
@@ -2361,7 +2361,7 @@ export function applySimpleEffect(
       const card: GameCardData = { ...template, id: _id };
       const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
       if (state.backpackItems.length < cap) {
-        patch.backpackItems = [card, ...state.backpackItems];
+        patch.backpackItems = [...state.backpackItems, card];
       } else {
         patch.permanentMagicRecycleBag = [...state.permanentMagicRecycleBag, { ...card, _recycleWaits: card.recycleDelay ?? 1 }];
       }
@@ -2388,7 +2388,7 @@ export function applySimpleEffect(
     };
     const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
     if (state.backpackItems.length < cap) {
-      patch.backpackItems = [card, ...state.backpackItems];
+      patch.backpackItems = [...state.backpackItems, card];
     } else {
       patch.permanentMagicRecycleBag = [...state.permanentMagicRecycleBag, { ...card, _recycleWaits: 1 }];
     }
@@ -2414,7 +2414,7 @@ export function applySimpleEffect(
     };
     const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
     if (state.backpackItems.length < cap) {
-      patch.backpackItems = [card, ...state.backpackItems];
+      patch.backpackItems = [...state.backpackItems, card];
     } else {
       patch.permanentMagicRecycleBag = [...state.permanentMagicRecycleBag, { ...card, _recycleWaits: 1 }];
     }

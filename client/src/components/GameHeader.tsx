@@ -5,6 +5,7 @@ import { useGameViewport } from '@/contexts/GameViewportContext';
 import { useShallowGameState } from '@/hooks/useGameEngine';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 import { PERSUADE_COST } from '@/game-core/constants';
+import { captureModalOriginFromEvent } from '@/lib/modalOriginAnchor';
 
 interface GameHeaderProps {
   maxHp: number;
@@ -100,7 +101,10 @@ function GameHeaderInner({
 
       <button
         ref={deckFlyTargetRef}
-        onClick={onDeckClick}
+        onClick={(e) => {
+          captureModalOriginFromEvent(e);
+          onDeckClick?.();
+        }}
         type="button"
         className="game-header__sticker-icon game-header__sticker-icon--deck"
         data-testid="header-deck"

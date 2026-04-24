@@ -41,7 +41,7 @@ import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, F
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import { cloneClassCardsWithFreshIds, sampleDistinctByName } from '../cardClone';
-import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection, ensureMonsterEngaged } from './magic-effects';
+import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection, ensureMonsterEngaged, MONSTER_FUSION_RACE_CN, MONSTER_FUSION_ELITE_PROPS, MONSTER_FUSION_SKELETON_KING_IMAGE } from './magic-effects';
 import { resolveAllPotionEffects, resolvePendingPotion } from './potion-effects';
 import { applyFlipCounters } from './flip-counters';
 import { executeCardEffects, executeMagicCardEffects, executeOnEquip, executeOnEnterHand } from '../card-schema';
@@ -111,6 +111,10 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
       return reduceResolveMirrorCopy(state, action);
     case 'CANCEL_MIRROR_COPY':
       return reduceCancelMirrorCopy(state);
+    case 'RESOLVE_MONSTER_FUSION':
+      return reduceResolveMonsterFusion(state, action);
+    case 'CANCEL_MONSTER_FUSION':
+      return reduceCancelMonsterFusion(state);
     case 'RESOLVE_AMPLIFY':
       return reduceResolveAmplify(state, action);
     case 'CANCEL_AMPLIFY':
@@ -1315,7 +1319,7 @@ function reduceDrawClassToBackpack(
   const overflow = drawn.slice(Math.max(0, available));
 
   if (toBackpack.length > 0) {
-    patch.backpackItems = [...toBackpack, ...state.backpackItems];
+    patch.backpackItems = [...state.backpackItems, ...toBackpack];
   }
   if (overflow.length > 0) {
     patch.permanentMagicRecycleBag = [
@@ -1952,6 +1956,232 @@ function reduceCancelMirrorCopy(state: GameState): ReduceResult {
       enqueuedActions.push({ type: 'REMOVE_CLASS_CARD_FROM_HAND', cardId: sourceCard.id });
     }
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: '镜影摹形已取消。' });
+  }
+
+  return applyPatch(state, patch, [], enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_MONSTER_FUSION — consume 2 (or 3 for Skeleton) selected monster
+// equipment cards from any of: equipmentSlot1/2 (surface or reserve),
+// handCards, backpackItems. All consumed cards go to graveyard regardless of
+// permanent flags (per design: monster fusion is "all-grave"). The fused
+// product is added to hand.
+// ---------------------------------------------------------------------------
+
+function reduceResolveMonsterFusion(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_MONSTER_FUSION' }>,
+): ReduceResult {
+  const modal = state.monsterFusionModal;
+  if (!modal) return noChange(state);
+
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = { monsterFusionModal: null };
+
+  const sourceCard = state.pendingMagicAction?.card as GameCardData | undefined;
+  const finalize = (banner?: string) => {
+    if (!sourceCard) return;
+    if (sourceCard.classCard) {
+      enqueuedActions.push({ type: 'REMOVE_CLASS_CARD_FROM_HAND', cardId: sourceCard.id });
+    }
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner, dealtDamage: false });
+  };
+
+  if (!sourceCard) {
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  const selectedIds = action.selection.cardIds ?? [];
+  if (selectedIds.length !== 2 && selectedIds.length !== 3) {
+    sideEffects.push({ event: 'ui:banner', payload: { text: '魔物融合：选择无效（必须 2 张同种族 或 3 张 Skeleton）。' } });
+    finalize();
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  // ----- 收集所选卡（按 id 在 4 个来源里查找） -----
+  type ResolvedSelection = {
+    card: GameCardData;
+    source:
+      | { kind: 'equipment-surface'; slotId: EquipmentSlotId }
+      | { kind: 'equipment-reserve'; slotId: EquipmentSlotId; index: number }
+      | { kind: 'hand' }
+      | { kind: 'backpack' };
+  };
+  const resolved: ResolvedSelection[] = [];
+  for (const id of selectedIds) {
+    let found: ResolvedSelection | null = null;
+
+    for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
+      const surface = state[slotId] as GameCardData | null;
+      if (surface && surface.id === id) {
+        found = { card: surface, source: { kind: 'equipment-surface', slotId } };
+        break;
+      }
+      const reserve = (slotId === 'equipmentSlot1' ? state.equipmentSlot1Reserve : state.equipmentSlot2Reserve) ?? [];
+      const idx = reserve.findIndex(r => (r as GameCardData).id === id);
+      if (idx >= 0) {
+        found = { card: reserve[idx] as GameCardData, source: { kind: 'equipment-reserve', slotId, index: idx } };
+        break;
+      }
+    }
+    if (!found) {
+      const handCard = state.handCards.find(c => c.id === id);
+      if (handCard) found = { card: handCard, source: { kind: 'hand' } };
+    }
+    if (!found) {
+      const bpCard = state.backpackItems.find(c => c.id === id);
+      if (bpCard) found = { card: bpCard as GameCardData, source: { kind: 'backpack' } };
+    }
+    if (!found) {
+      sideEffects.push({ event: 'ui:banner', payload: { text: '魔物融合：所选卡已不存在，融合取消。' } });
+      finalize();
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+    if (found.card.type !== 'monster') {
+      sideEffects.push({ event: 'ui:banner', payload: { text: '魔物融合：所选卡不是怪物装备，融合取消。' } });
+      finalize();
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+    resolved.push(found);
+  }
+
+  // ----- 同族校验 -----
+  const races = resolved.map(r => ((r.card as any).monsterType ?? r.card.name) as string);
+  const race = races[0];
+  if (!races.every(r => r === race)) {
+    sideEffects.push({ event: 'ui:banner', payload: { text: '魔物融合：所选卡必须为同种族。' } });
+    finalize();
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+  const isSkelKing = race === 'Skeleton' && resolved.length === 3;
+  if (resolved.length === 3 && !isSkelKing) {
+    sideEffects.push({ event: 'ui:banner', payload: { text: '魔物融合：3 张融合仅适用于 Skeleton 种族。' } });
+    finalize();
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  // ----- 从各来源移除（先聚合，避免同一来源多次写 patch 互相覆盖） -----
+  const removeFromHandIds = new Set<string>();
+  const removeFromBackpackIds = new Set<string>();
+
+  // 装备栏 surface/reserve 一次处理两个 slot：
+  // 把每个 slot 的 surface + reserve 合并成一个数组，移除所选 id，再
+  // 把头部回填到 surface、剩下进 reserve（与既有的 promote 行为一致）。
+  for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
+    const surface = state[slotId] as GameCardData | null;
+    const reserveKey = slotId === 'equipmentSlot1' ? 'equipmentSlot1Reserve' : 'equipmentSlot2Reserve';
+    const reserve = ((state as any)[reserveKey] ?? []) as GameCardData[];
+    const removingIds = new Set<string>();
+    for (const r of resolved) {
+      if (r.source.kind === 'equipment-surface' && r.source.slotId === slotId) removingIds.add(r.card.id);
+      if (r.source.kind === 'equipment-reserve' && r.source.slotId === slotId) removingIds.add(r.card.id);
+    }
+    if (removingIds.size === 0) continue;
+
+    const stack = [
+      ...(surface ? [surface] : []),
+      ...reserve,
+    ].filter(c => !removingIds.has(c.id));
+
+    (patch as any)[slotId] = (stack[0] as EquipmentItem | undefined) ?? null;
+    (patch as any)[reserveKey] = stack.slice(1) as EquipmentItem[];
+  }
+
+  for (const r of resolved) {
+    if (r.source.kind === 'hand') removeFromHandIds.add(r.card.id);
+    else if (r.source.kind === 'backpack') removeFromBackpackIds.add(r.card.id);
+  }
+  if (removeFromHandIds.size > 0) {
+    patch.handCards = state.handCards.filter(c => !removeFromHandIds.has(c.id));
+  }
+  if (removeFromBackpackIds.size > 0) {
+    patch.backpackItems = state.backpackItems.filter(c => !removeFromBackpackIds.has(c.id)) as typeof state.backpackItems;
+  }
+
+  // ----- 全部进坟场（all-grave，不分流到回收袋） -----
+  // 注意：用 ADD_TO_GRAVEYARD enqueue 而不是直接写 patch.discardedCards，
+  // 因为 ADD_TO_GRAVEYARD reducer 会过 resetCardForGraveyard——尤其是怪物
+  // 必须按 monster-graveyard-layer-reset.mdc 把 currentLayer 钉死为 1。
+  for (const r of resolved) {
+    enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: r.card });
+  }
+
+  // ----- 构建融合产物 -----
+  const cnName = MONSTER_FUSION_RACE_CN[race] ?? race;
+  const eliteProps = MONSTER_FUSION_ELITE_PROPS[race] ?? {
+    monsterSpecial: 'fusion-elite',
+    monsterSpecialDesc: '融合精英：由两个同种怪物装备融合而成。',
+  };
+
+  const totalAtk = resolved.reduce((s, r) => s + ((r.card as any).attack ?? r.card.value ?? 0), 0);
+  const totalHp = resolved.reduce((s, r) => s + ((r.card as any).hp ?? r.card.value ?? 0), 0);
+  const fusedAtk = isSkelKing ? 10 : totalAtk;
+  const fusedHp = isSkelKing ? 10 : totalHp;
+  const fusedName = isSkelKing ? '骷髅王' : `精英${cnName}`;
+
+  let rng = patch.rng ?? state.rng;
+  let fuseId: string;
+  [fuseId, rng] = nextId(rng, isSkelKing ? 'fusion-skeleton-king' : 'fusion-elite-equip');
+  patch.rng = rng;
+
+  const fusedEquip: GameCardData = {
+    id: fuseId,
+    type: 'monster',
+    name: fusedName,
+    monsterType: race,
+    value: fusedAtk,
+    attack: fusedAtk,
+    hp: fusedHp,
+    maxHp: fusedHp,
+    baseAttack: fusedAtk,
+    baseHp: fusedHp,
+    durability: 4,
+    maxDurability: 4,
+    image: isSkelKing ? MONSTER_FUSION_SKELETON_KING_IMAGE : (resolved[0].card.image as string),
+    description: `融合精英怪物装备（Lv3），由${resolved.length}个${cnName}装备融合而成。`,
+    upgradeLevel: 3,
+    ...eliteProps,
+  } as GameCardData;
+
+  if (isSkelKing) {
+    fusedEquip.hasRevive = true;
+    fusedEquip.weaponExtraAttack = 4;
+    fusedEquip.equipBlockDurabilityBonus = 4;
+  }
+
+  enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: fusedEquip });
+
+  const fusionBanner = isSkelKing
+    ? `${resolved.length} 个 Skeleton 装备融合为「骷髅王」（Lv3）！已加入手牌。`
+    : `2 个 ${race} 装备融合为「精英${cnName}」（Lv3）！已加入手牌。`;
+  sideEffects.push({ event: 'ui:banner', payload: { text: fusionBanner } });
+  sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: fusionBanner } });
+  patch.lastPlayedCardCategory = getCardPlayCategory(sourceCard);
+  finalize();
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// CANCEL_MONSTER_FUSION — close modal and finalize the magic card without
+// fusing anything. The 「魔物融合」 card is still consumed (it had been played).
+// ---------------------------------------------------------------------------
+
+function reduceCancelMonsterFusion(state: GameState): ReduceResult {
+  const modal = state.monsterFusionModal;
+  if (!modal) return noChange(state);
+
+  const patch: Partial<GameState> = { monsterFusionModal: null };
+  const enqueuedActions: GameAction[] = [];
+
+  const sourceCard = state.pendingMagicAction?.card as GameCardData | undefined;
+  if (sourceCard) {
+    if (sourceCard.classCard) {
+      enqueuedActions.push({ type: 'REMOVE_CLASS_CARD_FROM_HAND', cardId: sourceCard.id });
+    }
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: '魔物融合已取消。', dealtDamage: false });
   }
 
   return applyPatch(state, patch, [], enqueuedActions);

@@ -3171,7 +3171,7 @@ function reducePushToBackpackTop(
     const names = cardsToPush.map(c => c.name).join('」、「');
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'magic', message: `整顿背囊：将「${names}」放回背包顶部（共 ${cardsToPush.length} 张）。` },
+      payload: { type: 'magic', message: `整顿背囊：将「${names}」放回背包底部（共 ${cardsToPush.length} 张）。` },
     });
   } else {
     sideEffects.push({

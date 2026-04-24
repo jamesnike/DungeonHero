@@ -38,6 +38,17 @@ const dialogContentMotionFade =
   "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0";
 
 /**
+ * 「从 cell 弹出来」动画：scale 50% → 100% + 淡入淡出，配合 useDialogOriginAnchor
+ * 把 transform-origin 设到点击的 cell 中心。slide 类被刻意去掉——slide + scale
+ * 同时用会让弹窗看起来"从对角扫过来"而不是"从 cell 长出来"，体感不对。
+ *
+ * 性能：scale 50→100% 比默认的 zoom-in-95 大，但配合两步 mount（heavy list 推到
+ * 下一帧）这一点开销忽略不计——动画期间画的是空 shell，不是 N 张卡。
+ */
+const dialogContentMotionOrigin =
+  "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-50 data-[state=open]:zoom-in-50";
+
+/**
  * Mounts a transparent click-absorber for ~350ms to swallow the synthesized
  * "ghost click" iOS/Android dispatch after the user closes a dialog. Without
  * this, that delayed click lands on whatever element is now under the touch
@@ -84,7 +95,7 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     overlayClassName?: string;
-    contentMotion?: "default" | "fade";
+    contentMotion?: "default" | "fade" | "origin";
     /** Set false to opt-out of viewport-based auto-zoom (default true). */
     autoScale?: boolean;
   }
@@ -121,7 +132,11 @@ const DialogContent = React.forwardRef<
         ref={ref}
         className={cn(
           "fixed left-[50%] top-[50%] z-50 grid w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg",
-          contentMotion === "fade" ? dialogContentMotionFade : dialogContentMotionDefault,
+          contentMotion === "fade"
+            ? dialogContentMotionFade
+            : contentMotion === "origin"
+              ? dialogContentMotionOrigin
+              : dialogContentMotionDefault,
           className
         )}
         style={mergedStyle}

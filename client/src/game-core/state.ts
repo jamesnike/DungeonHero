@@ -190,6 +190,7 @@ export function createInitialGameState(): GameState {
     upgradeModalMaxCount: undefined,
     handMagicUpgradeModal: null,
     mirrorCopyModal: null,
+    monsterFusionModal: null,
     permGrantModal: null,
     amplifyModal: null,
     eventAmplifyHandPicker: null,

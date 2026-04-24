@@ -3,11 +3,11 @@ import { Eye, Skull } from 'lucide-react';
 import React, { memo, useState, useEffect, useRef } from 'react';
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CardBackDialogContent } from "@/components/ui/CardBackDialogContent";
 import { Badge } from '@/components/ui/badge';
 import { GameCardData } from './GameCard';
 import {
@@ -21,6 +21,8 @@ import StackedCardPile from './StackedCardPile';
 import { cn } from '@/lib/utils';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
+import { captureModalOriginFromEvent } from '@/lib/modalOriginAnchor';
+import { useDialogOriginAnchor } from '@/hooks/use-dialog-origin-anchor';
 
 interface GraveyardZoneProps {
   onDrop?: (item: any) => void;
@@ -51,6 +53,13 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(pointer: coarse)').matches
   );
+  const originRefCallback = useDialogOriginAnchor();
+
+  /** Capture cell rect → modal grows from this position. */
+  const handleOpenViewer = (e: React.MouseEvent<HTMLElement>) => {
+    captureModalOriginFromEvent(e);
+    setViewerOpen(true);
+  };
   
   // Set up mobile drop support (full card)
   useEffect(() => {
@@ -209,7 +218,7 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
         return (
           <button
             ref={compactRef}
-            onClick={() => setViewerOpen(true)}
+            onClick={handleOpenViewer}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -248,7 +257,7 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => setViewerOpen(true)}
+          onClick={handleOpenViewer}
           data-testid="graveyard-zone"
           className={cn(
             // overflow-visible：让 StackedCardPile 的"一摞牌"溢出 cell 上沿，
@@ -290,7 +299,13 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
       )}
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto" data-testid="graveyard-viewer-modal">
+        <CardBackDialogContent
+          ref={originRefCallback}
+          variant="muted"
+          contentMotion="origin"
+          className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto"
+          data-testid="graveyard-viewer-modal"
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Skull className="w-6 h-6" />
@@ -367,7 +382,7 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
               ))
             )}
           </div>
-        </DialogContent>
+        </CardBackDialogContent>
       </Dialog>
     </>
   );

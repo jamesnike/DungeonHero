@@ -45,8 +45,18 @@ interface EquipmentSlotProps {
   weaponSwingVariant?: number;
   shieldBlockVariant?: number;
   isExhaustedThisTurn?: boolean;
-  /** Remaining action count to show on the slot when dragging (attacks during hero turn, block durability during monster turn). null = don't show. */
-  slotActionCount?: number | null;
+  /**
+   * Remaining attack count to show on the slot when dragging.
+   * null = don't show attack number.
+   * Both slotAttackCount and slotBlockCount can be non-null simultaneously
+   * (e.g. monster equipment in non-combat shows both).
+   */
+  slotAttackCount?: number | null;
+  /**
+   * Remaining block durability count to show on the slot when dragging.
+   * null = don't show block number.
+   */
+  slotBlockCount?: number | null;
   isUnbreakable?: boolean;
   isStunFrozen?: boolean;
   /**
@@ -88,7 +98,8 @@ export default function EquipmentSlot({
   weaponSwingVariant = 0,
   shieldBlockVariant = 0,
   isExhaustedThisTurn = false,
-  slotActionCount = null,
+  slotAttackCount = null,
+  slotBlockCount = null,
   isUnbreakable = false,
   isStunFrozen = false,
   selfTargetActive = false,
@@ -589,20 +600,35 @@ export default function EquipmentSlot({
           } ${acceptsDrop && isOver ? 'scale-[1.01]' : ''}`}
         />
       )}
-      {isCardDragging && slotActionCount != null && (
+      {isCardDragging && (slotAttackCount != null || slotBlockCount != null) && (
         <div className="pointer-events-none absolute inset-0 z-[16] flex items-center justify-center rounded-md bg-black/10">
-          {slotActionCount <= 0 ? (
+          {slotAttackCount != null && slotBlockCount != null ? (
+            <div className="flex items-center justify-center gap-1 w-4/5 h-3/5 text-red-500/60">
+              <div className="flex items-center gap-0.5">
+                <Sword className="w-1/3 h-1/3 max-w-[28%] max-h-[60%]" strokeWidth={3} />
+                <span className="font-mono font-extrabold text-[clamp(14px,4vw,28px)] leading-none">
+                  {slotAttackCount <= 0 ? '×' : slotAttackCount}
+                </span>
+              </div>
+              <div className="flex items-center gap-0.5">
+                <Shield className="w-1/3 h-1/3 max-w-[28%] max-h-[60%]" strokeWidth={3} />
+                <span className="font-mono font-extrabold text-[clamp(14px,4vw,28px)] leading-none">
+                  {slotBlockCount <= 0 ? '×' : slotBlockCount}
+                </span>
+              </div>
+            </div>
+          ) : (slotAttackCount ?? slotBlockCount ?? 0) <= 0 ? (
             <X className="w-3/5 h-3/5 text-red-500/50 stroke-[3]" />
           ) : (
             <svg className="w-3/5 h-3/5 text-red-500/50" viewBox="0 0 24 24">
               <text x="12" y="12" textAnchor="middle" dominantBaseline="central" fill="currentColor" fontSize="20" fontWeight="800">
-                {slotActionCount}
+                {slotAttackCount ?? slotBlockCount}
               </text>
             </svg>
           )}
         </div>
       )}
-      {isExhaustedThisTurn && isCardDragging && slotActionCount == null && (
+      {isExhaustedThisTurn && isCardDragging && slotAttackCount == null && slotBlockCount == null && (
         <div className="pointer-events-none absolute inset-0 z-[16] flex items-center justify-center rounded-md bg-black/10">
           <X className="w-3/5 h-3/5 text-red-500/50 stroke-[3]" />
         </div>

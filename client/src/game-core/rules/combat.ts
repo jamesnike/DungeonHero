@@ -1620,10 +1620,20 @@ function reduceApplyShieldReflect(
       if (monster.bleedEffect && !monster.isStunned) {
         const newAttack = updated.attack ?? updated.value;
         const perLayer = parseInt((monster.bleedEffect ?? '').replace('attack+', ''), 10) || 0;
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: action.monsterId,
+          skillKey: 'bleed:gainAttack',
+        });
         sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 触发流血：攻击力+${perLayer * (layersBefore - layersAfter)}，当前 ${newAttack}！` } });
         sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 流血！攻击力升至 ${newAttack}！` } });
       }
       if (monster.dragonBleedDestroy && layersAfter > 0 && !monster.isStunned) {
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: action.monsterId,
+          skillKey: 'reflect:dragonBleedDestroy',
+        });
         sideEffects.push({ event: 'combat:dragonBleedDestroy', payload: { monsterName: monster.name, layersRemaining: layersAfter } });
       }
       if (monster.monsterSpecial === 'bone-regen' && !monster.isStunned
@@ -1658,6 +1668,11 @@ function reduceApplyShieldReflect(
     // Dragon breath retaliation from reflect damage (enqueued as sub-action)
     if (monster.dragonDamageRetaliation && monster.dragonDamageRetaliation > 0 && !monster.isStunned) {
       enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: action.monsterId,
+        skillKey: 'reflect:dragonBreath',
+      });
+      enqueuedActions.push({
         type: 'APPLY_DRAGON_BREATH_RETALIATION',
         monsterId: action.monsterId,
         monsterName: monster.name,
@@ -1669,6 +1684,11 @@ function reduceApplyShieldReflect(
     // Boss retaliation check
     const retDmg = monster.bossRetaliationDamage ?? 0;
     if (retDmg > 0 && !monster.isStunned) {
+      enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: action.monsterId,
+        skillKey: 'reflect:bossRetaliation',
+      });
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: retDmg, source: 'combat' });
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 反噬：造成 ${retDmg} 点直接伤害！` } });
     }
@@ -2384,6 +2404,11 @@ function reducePerformHeroAttack(
     // Boss retaliation
     if (!isBuildingTarget && workingMonster.bossRetaliationDamage && workingMonster.bossRetaliationDamage > 0 && !workingMonster.isStunned) {
       enqueuedActions.push({
+        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+        monsterId: targetMonsterId,
+        skillKey: 'reflect:bossRetaliation',
+      });
+      enqueuedActions.push({
         type: 'APPLY_DAMAGE',
         amount: workingMonster.bossRetaliationDamage,
         source: 'combat',
@@ -2900,6 +2925,11 @@ function reducePerformHeroAttack(
       if (targetMonster.bleedEffect && layersAfterAttack < layersBeforeAttack) {
         const newAttack = workingMonster.attack ?? workingMonster.value;
         const perLayer = parseInt((targetMonster.bleedEffect ?? '').replace('attack+', ''), 10) || 0;
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: targetMonsterId,
+          skillKey: 'bleed:gainAttack',
+        });
         sideEffects.push({
           event: 'log:entry',
           payload: { type: 'combat', message: `${targetMonster.name} 触发流血：攻击力+${perLayer * (layersBeforeAttack - layersAfterAttack)}，当前 ${newAttack}！` },
@@ -2908,7 +2938,24 @@ function reducePerformHeroAttack(
       }
 
       // Dragon breath retaliation
+      // Mirrors reduceDealDamageToMonster (combat.ts:671): enqueue skill-float
+      // animation + APPLY_DRAGON_BREATH_RETALIATION (which actually deals the
+      // retaliation damage to the hero via routeReflectDamageToHero). The
+      // combat:dragonBreathRetaliation side effect is consumed by
+      // useCombatActions for the orb projectile + bleed visual only — without
+      // the enqueued APPLY action the hero takes no damage at all.
       if (targetMonster.dragonDamageRetaliation && targetMonster.dragonDamageRetaliation > 0) {
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: targetMonsterId,
+          skillKey: 'reflect:dragonBreath',
+        });
+        enqueuedActions.push({
+          type: 'APPLY_DRAGON_BREATH_RETALIATION',
+          monsterId: targetMonsterId,
+          monsterName: targetMonster.name,
+          damage: targetMonster.dragonDamageRetaliation,
+        });
         sideEffects.push({
           event: 'combat:dragonBreathRetaliation',
           payload: { monsterId: targetMonsterId, monsterName: targetMonster.name, damage: targetMonster.dragonDamageRetaliation },
@@ -2917,6 +2964,11 @@ function reducePerformHeroAttack(
 
       // Dragon bleed destroy equipment
       if (targetMonster.dragonBleedDestroy && layersAfterAttack < layersBeforeAttack && layersAfterAttack > 0) {
+        enqueuedActions.push({
+          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
+          monsterId: targetMonsterId,
+          skillKey: 'reflect:dragonBleedDestroy',
+        });
         sideEffects.push({
           event: 'combat:dragonBleedDestroy',
           payload: { monsterName: targetMonster.name, layersRemaining: layersAfterAttack },

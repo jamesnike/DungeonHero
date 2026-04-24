@@ -57,6 +57,9 @@ export function reduceUIStateActions(
     case 'SET_MIRROR_COPY_MODAL':
       return applyPatch(state, { mirrorCopyModal: action.payload });
 
+    case 'SET_MONSTER_FUSION_MODAL':
+      return applyPatch(state, { monsterFusionModal: action.payload });
+
     case 'SET_AMPLIFY_MODAL':
       return applyPatch(state, { amplifyModal: action.payload });
 

@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { CardBackDialogContent } from '@/components/ui/CardBackDialogContent';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { type GameCardData } from './GameCard';
@@ -16,6 +16,7 @@ import {
   isMagicSpellCardType,
 } from './MagicNameFlankIcons';
 import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2 } from 'lucide-react';
+import { useDialogOriginAnchor } from '@/hooks/use-dialog-origin-anchor';
 
 const DEV_MODE = process.env.NODE_ENV !== 'production';
 
@@ -81,9 +82,17 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
     return type.charAt(0).toUpperCase() + type.slice(1) + 's';
   };
 
+  const originRefCallback = useDialogOriginAnchor();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto" data-testid="deck-viewer-modal">
+      <CardBackDialogContent
+        ref={originRefCallback}
+        variant="indigo"
+        contentMotion="origin"
+        className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto"
+        data-testid="deck-viewer-modal"
+      >
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl">Remaining Deck</DialogTitle>
           <DialogDescription>
@@ -173,7 +182,7 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
             </div>
           )}
         </div>
-      </DialogContent>
+      </CardBackDialogContent>
     </Dialog>
   );
 }

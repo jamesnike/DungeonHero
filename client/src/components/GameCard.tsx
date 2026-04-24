@@ -2019,22 +2019,16 @@ const amuletEffectText =
                   </h3>
                 )}
 
-                {isMonsterEquipmentCard(card) && (card.onAttackEffect || card.eliteLowGoldPower || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.enterEffect || card.ogreEnterDiscard || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
+                {isMonsterEquipmentCard(card) && (card.onAttackEffect?.startsWith('steal-gold-') || card.eliteLowGoldPower || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect?.startsWith('steal-gold-') && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃金：攻击时为Hero偷钱">窃金</span>
                     )}
-                    {card.onAttackEffect && !card.onAttackEffect.startsWith('steal-gold-') && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="动手：每次攻击时触发">动手</span>
-                    )}
                     {card.eliteLowGoldPower && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="窘境：金币≥30时攻击力和护盾翻倍">窘境</span>
                     )}
-                    {card.goblinStealCard && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃牌：攻击时偷走一张手牌">窃牌</span>
-                    )}
                     {card.goblinStealScale && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="疗养：多装备且下层有装备时，回合结束30%恢复1耐久">疗养</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="贪敛：每次窃金时，本装备攻击力 +N、生命值 +N（N = 窃金金额）">贪敛</span>
                     )}
                     {card.goblinStackHeal && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="劝降：攻击时免费劝降怪物">劝降</span>

@@ -538,7 +538,7 @@ const guildRecycleReshuffle: CardDefinition = {
       const toAdd = readyCards.slice(0, Math.max(0, available));
       const overflow = readyCards.slice(Math.max(0, available));
       if (toAdd.length > 0) {
-        patch.backpackItems = [...toAdd, ...state.backpackItems];
+        patch.backpackItems = [...state.backpackItems, ...toAdd];
       }
       patch.permanentMagicRecycleBag = [...overflow, ...waitingCards];
       const parts: string[] = [];

@@ -3,11 +3,11 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { CardBackDialogContent } from '@/components/ui/CardBackDialogContent';
 import {
   GameCardData,
   getMagicSubtypeBracketLabel,
@@ -23,6 +23,7 @@ import {
   isMagicSpellCardType,
 } from './MagicNameFlankIcons';
 import { Backpack, Waves } from 'lucide-react';
+import { useDialogOriginAnchor } from '@/hooks/use-dialog-origin-anchor';
 
 interface BackpackViewerModalProps {
   open: boolean;
@@ -210,12 +211,15 @@ export default function BackpackViewerModal({
   }, [open]);
 
   const isEmpty = displayedCards.length === 0 && recycleBagCards.length === 0;
+  const originRefCallback = useDialogOriginAnchor();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
+      <CardBackDialogContent
+        ref={originRefCallback}
+        variant="blue"
         className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto"
-        contentMotion="fade"
+        contentMotion="origin"
         data-testid="backpack-viewer-modal"
       >
         <DialogHeader>
@@ -270,7 +274,7 @@ export default function BackpackViewerModal({
             )}
           </div>
         )}
-      </DialogContent>
+      </CardBackDialogContent>
     </Dialog>
   );
 }

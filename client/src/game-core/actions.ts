@@ -699,6 +699,15 @@ export interface CancelMirrorCopyAction {
   type: 'CANCEL_MIRROR_COPY';
 }
 
+export interface ResolveMonsterFusionAction {
+  type: 'RESOLVE_MONSTER_FUSION';
+  selection: import('./types').MonsterFusionSelection;
+}
+
+export interface CancelMonsterFusionAction {
+  type: 'CANCEL_MONSTER_FUSION';
+}
+
 export interface ResolveAmplifyAction {
   type: 'RESOLVE_AMPLIFY';
   selection: import('./types').AmplifySelection;
@@ -1314,6 +1323,11 @@ export interface SetEquipmentPromptAction {
 
 export interface SetMirrorCopyModalAction {
   type: 'SET_MIRROR_COPY_MODAL';
+  payload: { sourceCardId: string } | null;
+}
+
+export interface SetMonsterFusionModalAction {
+  type: 'SET_MONSTER_FUSION_MODAL';
   payload: { sourceCardId: string } | null;
 }
 
@@ -1953,6 +1967,8 @@ export type GameAction =
   // Card play: mirror, amplify, perm grant, transform, etc.
   | ResolveMirrorCopyAction
   | CancelMirrorCopyAction
+  | ResolveMonsterFusionAction
+  | CancelMonsterFusionAction
   | ResolveAmplifyAction
   | CancelAmplifyAction
   | AmplifyCardsByNameAction
@@ -2048,6 +2064,7 @@ export type GameAction =
   | SetPermGrantModalAction
   | SetEquipmentPromptAction
   | SetMirrorCopyModalAction
+  | SetMonsterFusionModalAction
   | SetAmplifyModalAction
   | SetEventAmplifyHandPickerAction
   | SetEventDiceModalAction

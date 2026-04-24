@@ -491,6 +491,14 @@ export type GameEventMap = {
   };
   'card:cryptDeathwishSelect': { card: import('@/components/GameCard').GameCardData };
   'card:mirrorCopyRequested': { card: import('@/components/GameCard').GameCardData };
+  /**
+   * 魔物融合（knight:monster-fusion）— resolver 检测到候选 ≥2 张同种族怪物装备时
+   * 发出，请求 hook 层打开 MonsterFusionModal 让玩家挑选 2/3 张要融合的卡。
+   *
+   * `card` 是触发的「魔物融合」magic 卡本身（用于在 RESOLVE/CANCEL 时通过
+   * `pendingMagicAction.card` 访问）。
+   */
+  'card:monsterFusionRequested': { card: import('@/components/GameCard').GameCardData };
   'card:deckJudgeRequested': { card: import('@/components/GameCard').GameCardData };
   /**
    * 净册涌泉 (knight:cleanse-draw) — emitted from the magic resolver to ask

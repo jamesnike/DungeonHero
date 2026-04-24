@@ -4,11 +4,11 @@ import { Badge } from '@/components/ui/badge';
 import { Shield, Eye } from 'lucide-react';
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CardBackDialogContent } from "@/components/ui/CardBackDialogContent";
 import { GameCardData } from './GameCard';
 import {
   EventPatternPreview,
@@ -20,6 +20,8 @@ import StackedCardPile from './StackedCardPile';
 import { cn } from '@/lib/utils';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
+import { captureModalOriginFromEvent } from '@/lib/modalOriginAnchor';
+import { useDialogOriginAnchor } from '@/hooks/use-dialog-origin-anchor';
 
 interface ClassDeckProps {
   classCards?: GameCardData[];
@@ -41,6 +43,13 @@ function ClassDeckComponent({
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
   const [viewerOpen, setViewerOpen] = useState(false);
+  const originRefCallback = useDialogOriginAnchor();
+
+  /** Capture cell rect → modal grows from this position. */
+  const handleOpenViewer = (e: React.MouseEvent<HTMLElement>) => {
+    captureModalOriginFromEvent(e);
+    startTransition(() => setViewerOpen(true));
+  };
 
   const groupedCards = useMemo(() => {
     return classCards.reduce((acc, card) => {
@@ -70,7 +79,7 @@ function ClassDeckComponent({
         const innerStyle: CSSProperties = { width: stripWidth, height: '100%' };
         return (
           <button
-            onClick={() => startTransition(() => setViewerOpen(true))}
+            onClick={handleOpenViewer}
             data-testid="class-deck-compact"
             className="group relative flex items-stretch justify-end bg-transparent border-0 p-0 cursor-pointer"
             style={outerStyle}
@@ -95,7 +104,7 @@ function ClassDeckComponent({
             'relative h-full w-full cursor-pointer overflow-visible border-2 border-card-border bg-gradient-to-br from-indigo-950/70 via-indigo-900/40 to-indigo-800/30 transition-transform duration-200 hover:scale-[1.01]',
             className
           )}
-          onClick={() => startTransition(() => setViewerOpen(true))}
+          onClick={handleOpenViewer}
           data-testid="class-deck"
         >
           {isFlat ? (
@@ -132,8 +141,10 @@ function ClassDeckComponent({
       )}
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent
-          contentMotion="fade"
+        <CardBackDialogContent
+          ref={originRefCallback}
+          variant="bright"
+          contentMotion="origin"
           className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto"
           data-testid="class-deck-viewer-modal"
         >
@@ -229,7 +240,7 @@ function ClassDeckComponent({
               ))
             )}
           </div>
-        </DialogContent>
+        </CardBackDialogContent>
       </Dialog>
     </>
   );

@@ -920,9 +920,6 @@ export default function CardDetailsModal({
                   const amt = card.onAttackEffect.replace('steal-gold-', '');
                   effects.push({ title: '窃金', desc: `攻击时为 Hero 偷取 ${amt} 金币。`, color: 'emerald' });
                 }
-                if (card.goblinStealCard) {
-                  effects.push({ title: '窃牌', desc: '攻击时随机偷走一张玩家手牌，堆叠在自身下方。', color: 'emerald' });
-                }
                 if (card.goblinStackHeal) {
                   effects.push({ title: '疗养', desc: '攻击怪物时自动发动免费劝降，成功则怪物加入背包。', color: 'emerald' });
                 }
@@ -933,15 +930,9 @@ export default function CardDetailsModal({
                   effects.push({ title: '窃宝', desc: '若所在装备栏为多装备且下层有装备，劝降概率 +30%。', color: 'red' });
                 }
                 if (card.goblinStealScale) {
-                  effects.push({ title: '贪敛', desc: '若所在装备栏为多装备且下层有装备，玩家回合结束时 30% 概率恢复 1 耐久。', color: 'emerald' });
+                  effects.push({ title: '贪敛', desc: '每次窃金攻击触发时，本装备攻击力 +N、生命值 +N（N = 窃金金额）。', color: 'emerald' });
                 }
               } else if (mType === 'Ogre') {
-                if (card.enterEffect === 'auto-engage') {
-                  effects.push({ title: '开战', desc: '装备时，战斗行的所有怪物进入激怒状态。', color: 'amber' });
-                }
-                if (card.ogreEnterDiscard) {
-                  effects.push({ title: '震慑', desc: '装备时，从背包抽一张牌。', color: 'cyan' });
-                }
                 if (card.monsterSpecial === 'ogre-crit') {
                   effects.push({ title: '暴击', desc: '装备攻击时伤害始终翻倍。', color: 'red' });
                 }

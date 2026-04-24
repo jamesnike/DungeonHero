@@ -126,6 +126,34 @@ export type AmplifySelection =
   | { kind: 'backpack'; cardId: string };
 
 // ---------------------------------------------------------------------------
+// Monster fusion (knight magic「魔物融合」)
+// ---------------------------------------------------------------------------
+
+/**
+ * 魔物融合候选卡的来源标签，用来在 reducer 端定位卡所在集合并将其移除。
+ *
+ * - `equipment-surface` / `equipment-reserve`：装备栏（surface 表层 / reserve 备战层）
+ * - `hand`：手牌
+ * - `backpack`：背包
+ */
+export type MonsterFusionSource =
+  | { kind: 'equipment-surface'; slotId: 'equipmentSlot1' | 'equipmentSlot2' }
+  | { kind: 'equipment-reserve'; slotId: 'equipmentSlot1' | 'equipmentSlot2'; index: number }
+  | { kind: 'hand' }
+  | { kind: 'backpack' };
+
+/**
+ * 魔物融合：玩家在弹窗中确认时提交的选择。
+ *
+ * - `cardIds` 长度恒为 2（普通融合）或 3（Skeleton 融合 → 骷髅王）。
+ * - reducer 会扫描装备栏 surface/reserve / 手牌 / 背包，按 id 找到并移除每张选中的卡，
+ *   全部进入坟场（无论是否「永恒铭刻」过——魔物融合明确要求 all-grave）。
+ */
+export interface MonsterFusionSelection {
+  cardIds: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Eternal Relics — permanent passive items (like Slay the Spire relics)
 // ---------------------------------------------------------------------------
 
@@ -617,6 +645,14 @@ export interface GameState {
   handMagicUpgradeModal: { sourceCardId: string; maxSelect?: number } | null;
   /** 镜影摹形：选择复制目标 */
   mirrorCopyModal: { sourceCardId: string } | null;
+  /**
+   * 魔物融合：从 装备栏 surface/reserve / 手牌 / 背包 中挑选 2~3 张同种族怪物装备。
+   *
+   * - `sourceCardId`：触发卡 id（用于关闭模态后回到 finalize 流程）。
+   * - 模态显示的候选卡通过 live state（`equipmentSlotN` / `equipmentSlotNReserve` /
+   *   `handCards` / `backpackItems`）实时计算，不需要 snapshot——同 mirrorCopyModal 模式。
+   */
+  monsterFusionModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
   permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant'; meta?: Record<string, number> } | null;
   /**

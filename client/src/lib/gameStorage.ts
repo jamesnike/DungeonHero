@@ -260,6 +260,7 @@ export interface PersistedGameState {
   ghostBladeExileCards?: GameCardData[] | null;
   handMagicUpgradeModal?: { sourceCardId: string; maxSelect?: number } | null;
   mirrorCopyModal?: { sourceCardId: string } | null;
+  monsterFusionModal?: { sourceCardId: string } | null;
   permGrantModal?: { sourceCardId: string; sourceType: string; meta?: Record<string, number> } | null;
   amplifyModal?: { sourceCardId: string } | null;
   eventAmplifyHandPicker?: { eventCardId: string; cellIdx: number } | null;

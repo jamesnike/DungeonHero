@@ -675,7 +675,7 @@ function reduceResolveDiscoverSelection(
       { event: 'card:queueToHand', payload: { card: cloned, sourceHint: 'classDeck' } },
     );
   } else if (backpackHasRoom) {
-    patch.backpackItems = [cloned, ...state.backpackItems];
+    patch.backpackItems = [...state.backpackItems, cloned];
     sideEffects.push(
       { event: 'log:entry', payload: { type: 'skill', message: `发现专属卡：选入「${cloned.name}」` } },
       { event: 'shop:classCardObtained', payload: { card: cloned, source: 'discover', destination: 'backpack' } },

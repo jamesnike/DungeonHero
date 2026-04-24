@@ -711,6 +711,8 @@ export default function GameBoard() {
     resolveRepairEnrageDice,
     resolveMirrorCopy,
     cancelMirrorCopy,
+    resolveMonsterFusion,
+    cancelMonsterFusion,
     resolvePermGrant,
     cancelPermGrant,
     resolveAmplify,
@@ -4379,6 +4381,7 @@ export default function GameBoard() {
       ghostBladeExileCards: snapshot.ghostBladeExileCards ?? null,
       handMagicUpgradeModal: snapshot.handMagicUpgradeModal ?? null,
       mirrorCopyModal: snapshot.mirrorCopyModal ?? null,
+      monsterFusionModal: snapshot.monsterFusionModal ?? null,
       permGrantModal: (snapshot.permGrantModal as import('@/game-core/types').GameState['permGrantModal']) ?? null,
       amplifyModal: snapshot.amplifyModal ?? null,
       eventAmplifyHandPicker: snapshot.eventAmplifyHandPicker ?? null,
@@ -5829,6 +5832,9 @@ export default function GameBoard() {
     openMirrorCopyModal: (sourceCardId: string) => {
       dispatch({ type: 'SET_MIRROR_COPY_MODAL', payload: { sourceCardId } });
     },
+    openMonsterFusionModal: (sourceCardId: string) => {
+      dispatch({ type: 'SET_MONSTER_FUSION_MODAL', payload: { sourceCardId } });
+    },
     discoverPotionCompletionRef,
     deckJudgePeekCloseRef,
     getAttackBonus: () => attackBonus,
@@ -7031,6 +7037,7 @@ export default function GameBoard() {
       Boolean(gs.upgradeModalOpen) ||
       Boolean(gs.handMagicUpgradeModal) ||
       Boolean(gs.mirrorCopyModal) ||
+      Boolean(gs.monsterFusionModal) ||
       Boolean(gs.permGrantModal) ||
       Boolean(gs.amplifyModal) ||
       Boolean(gs.eventAmplifyHandPicker) ||
@@ -7287,13 +7294,11 @@ export default function GameBoard() {
   const pendingBlock = combatState.pendingBlock;
   const showBlockButtons = Boolean(pendingBlock);
   const inCombat = engagedMonsters.some(m => !monsterDefeatStates[m.id]);
-  const computeSlotActionCount = (slotId: EquipmentSlotId): number | null => {
-    if (!inCombat) return null;
-    const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
-    if (!slotItem) return null;
-
-    if (combatState.currentTurn === 'hero') {
-      let count = 0;
+  // Shared attack-count formula. When `combat` is null (non-combat / preview),
+  // assumes a fresh hero turn: no slotAttacked, no *SlotUsed, hero has 1 base attack.
+  const computeSlotAttackCount = (slotId: EquipmentSlotId, slotItem: GameCardData, combat: 'hero-turn' | null): number => {
+    let count = 0;
+    if (combat === 'hero-turn') {
       const slotAttacked = combatState.heroAttacksThisTurn[slotId];
       if (!slotAttacked && combatState.heroAttacksRemaining > 0) count += 1;
       count += extraAttackCharges;
@@ -7311,18 +7316,59 @@ export default function GameBoard() {
       }
       return count;
     }
+    // Non-combat preview: assume fresh hero turn (1 base attack, all *SlotUsed = 0).
+    count = 1;
+    count += extraAttackCharges;
+    count += (slotExtraAttacks ?? {})[slotId] ?? 0;
+    if (berserkerRageActive) count += 1;
+    if (amuletEffects.flashCount > 0) count += amuletEffects.flashCount;
+    if (gambitExtraActive) count += gambitExtraPerSlot;
+    if ((slotItem as any)?.weaponExtraAttack) count += 1;
+    const battleSpiritBonus = (slotBattleSpiritBonus ?? {})[slotId] ?? 0;
+    if (battleSpiritBonus > 0) count += battleSpiritBonus;
+    return count;
+  };
+  const computeSlotBlockCount = (slotId: EquipmentSlotId, slotItem: GameCardData, combat: 'monster-turn' | null): number => {
+    const equipBonus = (slotItem as any).equipBlockDurabilityBonus ?? 0;
+    const amuletBonus = amuletEffects.armorHalveEndureCount;
+    const battleSpiritBonus = (slotBattleSpiritBonus ?? {})[slotId] ?? 0;
+    const used = combat === 'monster-turn' ? (combatState.slotDurabilityUsedThisTurn?.[slotId] ?? 0) : 0;
+    return Math.max(0, blockDurabilityPerSlot + equipBonus + amuletBonus + battleSpiritBonus - used);
+  };
+  const computeSlotCounts = (slotId: EquipmentSlotId): { attack: number | null; block: number | null } => {
+    const slotItem = slotId === 'equipmentSlot1' ? equipmentSlot1 : equipmentSlot2;
+    if (!slotItem) return { attack: null, block: null };
 
-    if (combatState.currentTurn === 'monster' && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
-      const equipBonus = (slotItem as any).equipBlockDurabilityBonus ?? 0;
-      const amuletBonus = amuletEffects.armorHalveEndureCount;
-      const battleSpiritBonus = (slotBattleSpiritBonus ?? {})[slotId] ?? 0;
-      return Math.max(0, blockDurabilityPerSlot + equipBonus + amuletBonus + battleSpiritBonus - (combatState.slotDurabilityUsedThisTurn?.[slotId] ?? 0));
+    if (inCombat) {
+      // Preserve existing combat behavior exactly:
+      // - hero turn: show attack count for ALL slot types
+      // - monster turn: show block count only for shield/monster
+      if (combatState.currentTurn === 'hero') {
+        return { attack: computeSlotAttackCount(slotId, slotItem, 'hero-turn'), block: null };
+      }
+      if (combatState.currentTurn === 'monster' && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
+        return { attack: null, block: computeSlotBlockCount(slotId, slotItem, 'monster-turn') };
+      }
+      return { attack: null, block: null };
     }
 
-    return null;
+    // Non-combat preview: branch by item type.
+    if (slotItem.type === 'weapon') {
+      return { attack: computeSlotAttackCount(slotId, slotItem, null), block: null };
+    }
+    if (slotItem.type === 'shield') {
+      return { attack: null, block: computeSlotBlockCount(slotId, slotItem, null) };
+    }
+    if (slotItem.type === 'monster') {
+      return {
+        attack: computeSlotAttackCount(slotId, slotItem, null),
+        block: computeSlotBlockCount(slotId, slotItem, null),
+      };
+    }
+    return { attack: null, block: null };
   };
-  const slotActionCount1 = computeSlotActionCount('equipmentSlot1');
-  const slotActionCount2 = computeSlotActionCount('equipmentSlot2');
+  const slotCounts1 = computeSlotCounts('equipmentSlot1');
+  const slotCounts2 = computeSlotCounts('equipmentSlot2');
   useLayoutEffect(() => {
     updateHeroFramePosition();
   }, [
@@ -7786,7 +7832,8 @@ export default function GameBoard() {
               (!gambitExtraActive || (gambitSlotUsed.equipmentSlot1 ?? 0) >= gambitExtraPerSlot) &&
               (!(equipmentSlot1 as any)?.weaponExtraAttack || Boolean(weaponExtraAttackUsed.equipmentSlot1))
             }
-            slotActionCount={slotActionCount1}
+            slotAttackCount={slotCounts1.attack}
+            slotBlockCount={slotCounts1.block}
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot1}
             isStunFrozen={heroStunned}
             onDrop={(card) => {
@@ -7935,7 +7982,8 @@ export default function GameBoard() {
               (!gambitExtraActive || (gambitSlotUsed.equipmentSlot2 ?? 0) >= gambitExtraPerSlot) &&
               (!(equipmentSlot2 as any)?.weaponExtraAttack || Boolean(weaponExtraAttackUsed.equipmentSlot2))
             }
-            slotActionCount={slotActionCount2}
+            slotAttackCount={slotCounts2.attack}
+            slotBlockCount={slotCounts2.block}
             isUnbreakable={unbreakableUntilWaterfall.equipmentSlot2}
             isStunFrozen={heroStunned}
             onDrop={(card) => {
@@ -8154,6 +8202,8 @@ export default function GameBoard() {
     onHandMagicUpgradeClose: handleHandMagicUpgradeClose,
     onMirrorCopyConfirm: resolveMirrorCopy,
     onMirrorCopyCancel: cancelMirrorCopy,
+    onMonsterFusionConfirm: resolveMonsterFusion,
+    onMonsterFusionCancel: cancelMonsterFusion,
     onAmplifyConfirm: resolveAmplify,
     onAmplifyCancel: cancelAmplify,
     onEventAmplifyHandConfirm: handleEventAmplifyHandSelect,
@@ -8192,7 +8242,7 @@ export default function GameBoard() {
     handleDeleteModalOpenChange, handleDeleteCardConfirm, handleBatchDeleteConfirm, handleDetailsModalChange,
     handleUpgradeModalChange, handleCardUpgrade,
     handleHandMagicUpgradeSelect, handleHandMagicUpgradeClose,
-    resolveMirrorCopy, cancelMirrorCopy, resolveAmplify, cancelAmplify,
+    resolveMirrorCopy, cancelMirrorCopy, resolveMonsterFusion, cancelMonsterFusion, resolveAmplify, cancelAmplify,
     handleEventAmplifyHandSelect, cancelEventAmplifyHandPicker,
     resolvePermGrant, cancelPermGrant,
     handleBackpackReorganizeConfirm,

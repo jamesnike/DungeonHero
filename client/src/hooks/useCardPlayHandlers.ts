@@ -30,7 +30,7 @@ import {
   getCardPlayCategory,
 } from '@/game-core/helpers';
 import { chaosStrikeHasOverkill } from '@/game-core/combat';
-import type { MirrorCopySelection, AmplifySelection } from '@/game-core/types';
+import type { MirrorCopySelection, AmplifySelection, MonsterFusionSelection } from '@/game-core/types';
 
 // ---------------------------------------------------------------------------
 // Deps: external dependencies injected by GameBoard
@@ -170,6 +170,7 @@ export interface CardPlayHandlersDeps {
   // --- Hand magic upgrade ---
   openHandMagicUpgradeModal: (sourceCardId: string) => void;
   openMirrorCopyModal: (sourceCardId: string) => void;
+  openMonsterFusionModal: (sourceCardId: string) => void;
 
   // --- Deck peek modal ---
   setDeckPeekState: React.Dispatch<React.SetStateAction<import('@/components/game-board/types').DeckPeekModalState | null>>;
@@ -314,6 +315,17 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
   const cancelMirrorCopy = useCallback(() => {
     dispatch({ type: 'CANCEL_MIRROR_COPY' });
+  }, [dispatch]);
+
+  const resolveMonsterFusion = useCallback(
+    (selection: MonsterFusionSelection) => {
+      dispatch({ type: 'RESOLVE_MONSTER_FUSION', selection });
+    },
+    [dispatch],
+  );
+
+  const cancelMonsterFusion = useCallback(() => {
+    dispatch({ type: 'CANCEL_MONSTER_FUSION' });
   }, [dispatch]);
 
   const resolveAmplify = useCallback(
@@ -652,6 +664,10 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
   useGameEvent('card:mirrorCopyRequested', ({ card }) => {
     depsRef.current.openMirrorCopyModal(card.id);
+  });
+
+  useGameEvent('card:monsterFusionRequested', ({ card }) => {
+    depsRef.current.openMonsterFusionModal(card.id);
   });
 
   useGameEvent('card:deckJudgeRequested', ({ card }) => {
@@ -999,6 +1015,8 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
 
     resolveMirrorCopy,
     cancelMirrorCopy,
+    resolveMonsterFusion,
+    cancelMonsterFusion,
     resolvePermGrant,
     cancelPermGrant,
     resolveAmplify,

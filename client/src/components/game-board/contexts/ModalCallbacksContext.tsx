@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { GameCardData } from '@/components/GameCard';
-import type { MirrorCopySelection, AmplifySelection } from '@/game-core/types';
+import type { MirrorCopySelection, AmplifySelection, MonsterFusionSelection } from '@/game-core/types';
 import type { EquipmentSlotId } from '../types';
 import type { CardSource } from '@/components/CardDeletionModal';
 import type { BackpackReorganizeSelection } from '@/components/BackpackReorganizeModal';
@@ -51,6 +51,8 @@ export interface ModalCallbacks {
   onHandMagicUpgradeClose: () => void;
   onMirrorCopyConfirm: (selection: MirrorCopySelection) => void;
   onMirrorCopyCancel: () => void;
+  onMonsterFusionConfirm: (selection: MonsterFusionSelection) => void;
+  onMonsterFusionCancel: () => void;
   onAmplifyConfirm: (selection: AmplifySelection) => void;
   onAmplifyCancel: () => void;
   onEventAmplifyHandConfirm: (cardId: string) => void;

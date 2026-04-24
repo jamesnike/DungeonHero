@@ -228,6 +228,7 @@ import { chaosStrikeHasOverkill } from '../combat';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
 import { markSkillUsedPure } from '../hero';
 import { STARTER_CARD_IDS, getStarterBaseId, skillScrollImage, createMagicBoltCard } from '../deck';
+import skeletonKingImage from '@assets/generated_images/skeleton_king_monster.png';
 import { createGreedCurseCard } from '@/lib/knightDeck';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
 import type { ActiveRowSlots, EquipmentSlotBonusState } from '@/components/game-board/types';
@@ -1287,7 +1288,7 @@ export function resolvePermanentMagic(
       const toAdd = readyCards.slice(0, Math.max(0, available));
       const overflow = readyCards.slice(Math.max(0, available));
       if (toAdd.length > 0) {
-        patch.backpackItems = [...toAdd, ...state.backpackItems];
+        patch.backpackItems = [...state.backpackItems, ...toAdd];
       }
       patch.permanentMagicRecycleBag = [...overflow, ...waitingCards];
       const parts: string[] = [];
@@ -4385,6 +4386,30 @@ export function applyCryptDeathwish(
 // resolveMonsterFusion — deterministic fusion of same-type monster equipment
 // ---------------------------------------------------------------------------
 
+/**
+ * 魔物融合产物模板：种族中文名 + 精英特殊属性表。
+ *
+ * 在 resolver 收集候选时不需要它们，但 reducer 在 RESOLVE_MONSTER_FUSION 时
+ * 必须基于玩家选中的卡构建融合产物——所以两个表外加 skeletonKingImage 用 export
+ * 让 cards.ts 那边的 reducer 能直接复用，避免重复维护。
+ */
+export const MONSTER_FUSION_RACE_CN: Record<string, string> = {
+  Dragon: '龙族', Skeleton: '骷髅', Goblin: '哥布林',
+  Ogre: '食人魔', Wraith: '幽灵', Swarm: '虫群', Golem: '魔像',
+};
+
+export const MONSTER_FUSION_ELITE_PROPS: Record<string, Partial<GameCardData>> = {
+  Dragon: { monsterSpecial: 'ember-fury', monsterSpecialDesc: '融合精英：流血（每失去1耐久攻击+3）+ 庇护。', bleedEffect: 'attack+3' as any, eliteHealOtherMonster: true },
+  Skeleton: { monsterSpecial: 'bone-regen', monsterSpecialDesc: '融合精英：骸生（40%不消耗耐久）+ 复生。', hasRevive: true },
+  Goblin: { monsterSpecial: 'goblin-elite', monsterSpecialDesc: '融合精英：攻击偷取8金币 + 窃宝。', goblinStealEquip: true, onAttackEffect: 'steal-gold-8' as any },
+  Ogre: { monsterSpecial: 'ogre-crit', monsterSpecialDesc: '融合精英：攻击伤害翻倍 + 50%概率额外攻击一次。', eliteDoubleAttack: true, weaponExtraAttack: 1 },
+  Wraith: { monsterSpecial: 'wraith-rebirth', monsterSpecialDesc: '融合精英：重生（耐久降至1时回满）+ 幽魂作祟遗言。', lastWords: 'wraith-haunt-4' as any },
+  Swarm: { monsterSpecial: 'swarm-elite', monsterSpecialDesc: '融合精英：虫群繁殖 + 虫母（受伤时替换地城牌为小虫子）。', swarmSpawn: true },
+  Golem: { monsterSpecial: 'golem-elite', monsterSpecialDesc: '融合精英：护体（每次最多受5伤）+ 反魔。', maxDamagePerHit: 5, antiMagicReflect: 2 },
+};
+
+export const MONSTER_FUSION_SKELETON_KING_IMAGE = skeletonKingImage;
+
 export function resolveMonsterFusion(
   state: GameState,
   card: GameCardData,
@@ -4393,139 +4418,61 @@ export function resolveMonsterFusion(
   enqueuedActions: GameAction[],
   echoMultiplier: number = 1,
 ): ReduceResult {
-  // 法术回响（结构类）：融合操作不可拆分；当 echo>1 时仅提示二次结算无效。
-  // 这里保留为单次执行，并在结尾追加回响提示。
+  // 法术回响（结构类）：融合操作不可拆分；当 echo>1 时只算一次。
   void echoMultiplier;
-  type EquippedMonsterInfo = { card: GameCardData; slotId: EquipmentSlotId; isSurface: boolean };
-  const allEquippedMonsters: EquippedMonsterInfo[] = [];
+
+  // ---------- 候选收集：装备栏 surface/reserve + 手牌 + 背包 ----------
+  // 注意：背包/手牌中的怪物已经走过 `primeMonsterAsEquipment`，
+  // 因此都是装备形态（带 durability/maxDurability + monsterType）。
+  const candidateMonsters: GameCardData[] = [];
+
   for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
     const surface = state[slotId] as GameCardData | null;
+    if (surface && surface.type === 'monster') candidateMonsters.push(surface);
     const reserve = (slotId === 'equipmentSlot1' ? state.equipmentSlot1Reserve : state.equipmentSlot2Reserve) ?? [];
-    if (surface && surface.type === 'monster') {
-      allEquippedMonsters.push({ card: surface, slotId, isSurface: true });
-    }
     for (const r of reserve) {
-      if ((r as GameCardData).type === 'monster') {
-        allEquippedMonsters.push({ card: r as GameCardData, slotId, isSurface: false });
-      }
+      if ((r as GameCardData).type === 'monster') candidateMonsters.push(r as GameCardData);
     }
   }
+  for (const c of state.handCards) {
+    if (c.type === 'monster') candidateMonsters.push(c);
+  }
+  for (const c of state.backpackItems) {
+    if (c.type === 'monster') candidateMonsters.push(c as GameCardData);
+  }
 
-  const typeGroups: Record<string, EquippedMonsterInfo[]> = {};
-  allEquippedMonsters.forEach(m => {
-    const key = (m.card as any).monsterType ?? m.card.name;
+  // ---------- 可融合性判定：必须存在某个 monsterType 的同族 ≥ 2 张 ----------
+  const typeGroups: Record<string, GameCardData[]> = {};
+  for (const m of candidateMonsters) {
+    const key = (m as any).monsterType ?? m.name;
     if (!typeGroups[key]) typeGroups[key] = [];
     typeGroups[key].push(m);
-  });
-  const fusibleGroups = Object.entries(typeGroups).filter(([, g]) => g.length >= 2);
-  if (fusibleGroups.length === 0) {
-    banner(sideEffects, '没有可融合的同种怪物装备（需要至少 2 个同种族的怪物装备）。');
-    return applyPatch(state, patch, sideEffects);
+  }
+  const hasFusibleGroup = Object.values(typeGroups).some(g => g.length >= 2);
+
+  if (!hasFusibleGroup) {
+    banner(
+      sideEffects,
+      '魔物融合：装备栏 / 手牌 / 背包 中没有同种族 ≥ 2 张的怪物装备，无法融合。',
+    );
+    patch.lastPlayedCardCategory = getCardPlayCategory(card);
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  const [groupName, group] = fusibleGroups.reduce(
-    (best, cur) => {
-      if (cur[0] === 'Skeleton' && cur[1].length >= 3) return cur;
-      if (best[0] === 'Skeleton' && best[1].length >= 3) return best;
-      return cur[1].length >= best[1].length ? cur : best;
-    },
-    fusibleGroups[0],
-  );
-
-  const fusionIds = new Set(group.map(m => m.card.id));
-  const discardedFromFusion: GameCardData[] = [];
-
-  for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
-    const surface = (patch[slotId] ?? state[slotId]) as GameCardData | null;
-    const reserveKey = slotId === 'equipmentSlot1' ? 'equipmentSlot1Reserve' : 'equipmentSlot2Reserve';
-    const reserve = ((patch as any)[reserveKey] ?? (state as any)[reserveKey] ?? []) as GameCardData[];
-    const surfaceRemoved = surface && fusionIds.has(surface.id);
-    const remainingReserve = reserve.filter(r => !fusionIds.has(r.id));
-    const removedReserve = reserve.filter(r => fusionIds.has(r.id));
-
-    if (surfaceRemoved) discardedFromFusion.push(surface);
-    removedReserve.forEach(r => discardedFromFusion.push(r));
-
-    if (surfaceRemoved) {
-      if (remainingReserve.length > 0) {
-        (patch as any)[slotId] = remainingReserve[0];
-        (patch as any)[reserveKey] = remainingReserve.slice(1);
-      } else {
-        (patch as any)[slotId] = null;
-        (patch as any)[reserveKey] = [];
-      }
-    } else if (removedReserve.length > 0) {
-      (patch as any)[reserveKey] = remainingReserve;
-    }
+  // ---------- 弹窗 → 等玩家 RESOLVE_MONSTER_FUSION / CANCEL_MONSTER_FUSION ----------
+  patch.pendingMagicAction = {
+    card,
+    effect: 'monster-fusion',
+    step: 'monster-fusion-select',
+    echoRemaining: echoMultiplier,
+  } as any;
+  patch.monsterFusionModal = { sourceCardId: card.id };
+  sideEffects.push({ event: 'card:monsterFusionRequested', payload: { card } });
+  if (echoMultiplier > 1) {
+    banner(sideEffects, '魔物融合：回响触发，但融合操作不可叠加（仅结算一次）。');
   }
-
-  for (const dc of discardedFromFusion) {
-    enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: dc } as GameAction);
-  }
-
-  const raceNameMap: Record<string, string> = {
-    Dragon: '龙族', Skeleton: '骷髅', Goblin: '哥布林',
-    Ogre: '食人魔', Wraith: '幽灵', Swarm: '虫群', Golem: '魔像',
-  };
-  const elitePropsMap: Record<string, Partial<GameCardData>> = {
-    Dragon: { monsterSpecial: 'ember-fury', monsterSpecialDesc: '融合精英：流血（每失去1耐久攻击+3）+ 庇护。', bleedEffect: 'attack+3' as any, eliteHealOtherMonster: true },
-    Skeleton: { monsterSpecial: 'bone-regen', monsterSpecialDesc: '融合精英：骸生（40%不消耗耐久）+ 复生。', hasRevive: true },
-    Goblin: { monsterSpecial: 'goblin-elite', monsterSpecialDesc: '融合精英：攻击偷取8金币 + 窃宝。', goblinStealEquip: true, onAttackEffect: 'steal-gold-8' as any },
-    Ogre: { monsterSpecial: 'ogre-crit', monsterSpecialDesc: '融合精英：攻击伤害翻倍 + 50%概率额外攻击一次。', eliteDoubleAttack: true, weaponExtraAttack: 1 },
-    Wraith: { monsterSpecial: 'wraith-rebirth', monsterSpecialDesc: '融合精英：重生（耐久降至1时回满）+ 幽魂作祟遗言。', lastWords: 'wraith-haunt-4' as any },
-    Swarm: { monsterSpecial: 'swarm-elite', monsterSpecialDesc: '融合精英：虫群繁殖 + 虫母（受伤时替换地城牌为小虫子）。', swarmSpawn: true },
-    Golem: { monsterSpecial: 'golem-elite', monsterSpecialDesc: '融合精英：护体（每次最多受5伤）+ 反魔。', maxDamagePerHit: 5, antiMagicReflect: 2 },
-  };
-
-  const totalAtk = group.reduce((s, m) => s + (m.card.attack ?? m.card.value), 0);
-  const totalHp = group.reduce((s, m) => s + (m.card.hp ?? m.card.value), 0);
-  let rng = patch.rng ?? state.rng;
-  let fuseId: string;
-  [fuseId, rng] = nextId(rng, groupName === 'Skeleton' && group.length >= 3 ? 'fusion-skeleton-king' : 'fusion-elite-equip');
-  patch.rng = rng;
-
-  const cnName = raceNameMap[groupName] ?? groupName;
-  const eliteProps = elitePropsMap[groupName] ?? { monsterSpecial: 'fusion-elite', monsterSpecialDesc: '融合精英：由两个同种怪物装备融合而成。' };
-  const isSkelKing = groupName === 'Skeleton' && group.length >= 3;
-  const fusedName = isSkelKing ? '骷髅王' : `精英${cnName}`;
-  const fusedAtk = isSkelKing ? 10 : totalAtk;
-  const fusedHp = isSkelKing ? 10 : totalHp;
-
-  const fusedEquip: GameCardData = {
-    id: fuseId,
-    type: 'monster',
-    name: fusedName,
-    monsterType: groupName,
-    value: fusedAtk,
-    attack: fusedAtk,
-    hp: fusedHp,
-    maxHp: fusedHp,
-    baseAttack: fusedAtk,
-    baseHp: fusedHp,
-    durability: 4,
-    maxDurability: 4,
-    image: group[0].card.image,
-    description: `融合精英怪物装备（Lv3），由${group.length}个${cnName}装备融合而成。`,
-    upgradeLevel: 3,
-    ...eliteProps,
-  } as GameCardData;
-
-  if (isSkelKing) {
-    fusedEquip.hasRevive = true;
-    fusedEquip.weaponExtraAttack = 4;
-    fusedEquip.equipBlockDurabilityBonus = 4;
-  }
-
-  enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: fusedEquip } as GameAction);
-  const echoTagMF = echoMultiplier > 1 ? `（回响：融合不可叠加，二次结算无额外效果）` : '';
-  const fusionBanner = isSkelKing
-    ? `${group.length} 个 Skeleton 装备融合为「骷髅王」（Lv3）！已加入手牌。${echoTagMF}`
-    : `2 个 ${groupName} 装备融合为「精英${cnName}」（Lv3）！已加入手牌。${echoTagMF}`;
-  banner(sideEffects, fusionBanner);
-  log(sideEffects, 'magic', fusionBanner);
-  patch.lastPlayedCardCategory = getCardPlayCategory(card);
-  enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
-  return applyPatch(state, patch, sideEffects, enqueuedActions);
+  return applyPatch(state, patch, sideEffects);
 }
 
 // ---------------------------------------------------------------------------

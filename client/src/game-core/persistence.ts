@@ -189,6 +189,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     ghostBladeExileCards: state.ghostBladeExileCards ? sanitizeCardList(state.ghostBladeExileCards) : null,
     handMagicUpgradeModal: state.handMagicUpgradeModal,
     mirrorCopyModal: state.mirrorCopyModal,
+    monsterFusionModal: state.monsterFusionModal,
     permGrantModal: state.permGrantModal,
     amplifyModal: state.amplifyModal,
     eventAmplifyHandPicker: state.eventAmplifyHandPicker,
