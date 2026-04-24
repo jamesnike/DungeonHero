@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -76,14 +77,6 @@ const permanentSkillHints: Record<string, string> = {
 
 const formatSignedValue = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
 
-const describePermanentSkill = (skill: string) => {
-  const normalized = skill?.trim() || '未命名效果';
-  return {
-    label: normalized,
-    description: permanentSkillHints[normalized] ?? null,
-  };
-};
-
 export default function HeroDetailsModal({
   open,
   onOpenChange,
@@ -95,58 +88,68 @@ export default function HeroDetailsModal({
   heroMagicInfo,
   capacityLimits,
 }: HeroDetailsModalProps) {
+  const { t } = useTranslation();
+
+  const describePermanentSkill = (skill: string) => {
+    const normalized = skill?.trim() || t('hero.unnamedEffect');
+    return {
+      label: normalized,
+      description: permanentSkillHints[normalized] ?? null,
+    };
+  };
+
   const statItems = [
     {
       key: 'hp',
-      label: '生命值',
+      label: t('hero.stat.hp'),
       value: `${stats.hp}/${stats.maxHp}`,
       icon: <Heart className="w-4 h-4 text-destructive" />,
     },
     {
       key: 'gold',
-      label: '金币',
+      label: t('hero.stat.gold'),
       value: stats.gold.toString(),
       icon: <Coins className="w-4 h-4 text-amber-500" />,
     },
     {
       key: 'attack',
-      label: '攻击加成',
+      label: t('hero.stat.attack'),
       value: formatSignedValue(stats.attackBonus),
       icon: <Sword className="w-4 h-4 text-amber-600" />,
     },
     {
       key: 'defense',
-      label: '防御加成',
+      label: t('hero.stat.defense'),
       value: formatSignedValue(stats.defenseBonus),
       icon: <Shield className="w-4 h-4 text-blue-500" />,
     },
     {
       key: 'spell',
-      label: '法术伤害',
+      label: t('hero.stat.spell'),
       value: formatSignedValue(stats.spellDamageBonus),
       icon: <Sparkles className="w-4 h-4 text-purple-500" />,
     },
     {
       key: 'spellLifesteal',
-      label: '超杀吸血',
+      label: t('hero.stat.spellLifesteal'),
       value: String(stats.spellLifesteal),
       icon: <Droplets className="w-4 h-4 text-rose-400" />,
     },
     {
       key: 'tempShield',
-      label: '临时护盾',
+      label: t('hero.stat.tempShield'),
       value: formatSignedValue(stats.tempShield),
       icon: <ShieldPlus className="w-4 h-4 text-cyan-500" />,
     },
     {
       key: 'permHp',
-      label: '永久生命奖励',
+      label: t('hero.stat.permHp'),
       value: formatSignedValue(stats.permanentMaxHpBonus),
       icon: <PlusCircle className="w-4 h-4 text-emerald-500" />,
     },
     {
       key: 'stunCap',
-      label: '击晕上限',
+      label: t('hero.stat.stunCap'),
       value: `${stats.stunCap}%`,
       icon: <Zap className="w-4 h-4 text-orange-500" />,
     },
@@ -155,32 +158,32 @@ export default function HeroDetailsModal({
   const capacityItems = [
     {
       key: 'hand',
-      label: '手牌上限',
-      value: `${capacityLimits.hand} 张`,
+      label: t('hero.capacity.hand'),
+      value: t('hero.capacity.cardsUnit', { count: capacityLimits.hand }),
       icon: <Hand className="w-4 h-4 text-sky-500" />,
     },
     {
       key: 'backpack',
-      label: '背包上限',
-      value: `${capacityLimits.backpack} 张`,
+      label: t('hero.capacity.backpack'),
+      value: t('hero.capacity.cardsUnit', { count: capacityLimits.backpack }),
       icon: <Backpack className="w-4 h-4 text-amber-700 dark:text-amber-500" />,
     },
     {
       key: 'amulet',
-      label: '护符栏上限',
-      value: `${capacityLimits.amuletSlots} 个`,
+      label: t('hero.capacity.amulet'),
+      value: t('hero.capacity.piecesUnit', { count: capacityLimits.amuletSlots }),
       icon: <Sparkles className="w-4 h-4 text-violet-500" />,
     },
     {
       key: 'equipL',
-      label: '左装备栏上限',
-      value: `${capacityLimits.equipmentSlotLeft} 件`,
+      label: t('hero.capacity.equipL'),
+      value: t('hero.capacity.itemsUnit', { count: capacityLimits.equipmentSlotLeft }),
       icon: <LayoutGrid className="w-4 h-4 text-blue-600" />,
     },
     {
       key: 'equipR',
-      label: '右装备栏上限',
-      value: `${capacityLimits.equipmentSlotRight} 件`,
+      label: t('hero.capacity.equipR'),
+      value: t('hero.capacity.itemsUnit', { count: capacityLimits.equipmentSlotRight }),
       icon: <LayoutGrid className="w-4 h-4 text-indigo-600" />,
     },
   ];
@@ -192,7 +195,7 @@ export default function HeroDetailsModal({
           <DialogTitle className="text-2xl font-serif">{heroVariant.name}</DialogTitle>
           <DialogDescription className="flex items-center gap-2">
             <span className="font-semibold text-foreground">{heroVariant.classTitle}</span>
-            <span className="text-muted-foreground text-sm">• 冒险者档案</span>
+            <span className="text-muted-foreground text-sm">{t('hero.cardClass', { className: '' }).replace(/^\s*•\s*/, '• ').replace(/^\s*$/, '')}</span>
           </DialogDescription>
         </DialogHeader>
 

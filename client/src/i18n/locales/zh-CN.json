@@ -1,0 +1,429 @@
+{
+  "common": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "close": "关闭",
+    "skip": "跳过",
+    "continue": "继续",
+    "back": "返回",
+    "ok": "好的",
+    "yes": "是",
+    "no": "否",
+    "minimize": "最小化",
+    "reroll": "换一批",
+    "release": "释放",
+    "passive": "被动",
+    "active": "主动"
+  },
+  "header": {
+    "newGame": "New Game",
+    "language": "语言",
+    "languageChineseLabel": "中",
+    "languageEnglishLabel": "EN",
+    "guide": "游戏指南",
+    "persuadeTooltip": "劝降等级 Lv.{{level}}（可劝降 ≤{{level}} 血层怪物）/ 费用 {{cost}} 金{{discount}}",
+    "persuadeDiscountReduce": "（临时减免 {{amount}}）",
+    "persuadeDiscountIncrease": "（临时加价 {{amount}}）"
+  },
+  "help": {
+    "title": "游戏指南",
+    "tab": {
+      "goal": "目标",
+      "cards": "卡牌",
+      "combat": "战斗",
+      "actions": "操作",
+      "tips": "攻略"
+    },
+    "goal": {
+      "objectiveTitle": "🎯 游戏目标",
+      "objectiveBody1": "你是一名深入地牢的冒险者。牌堆中有 ",
+      "objectiveCards": "64 张卡牌",
+      "objectiveBody2": "（怪物、武器、盾牌、药水、魔法、护符、事件），你要处理每一张牌，在 ",
+      "objectiveHpZero": "HP 归零之前",
+      "objectiveBody3": " 击败所有怪物并清空牌堆。",
+
+      "loopTitle": "🔄 核心循环：瀑流",
+      "loopIntro1": "游戏按 ",
+      "loopWord": "\"瀑流\"",
+      "loopIntro2": " 节奏推进，每轮的流程如下：",
+      "loopStep1Pre": "场上出现 ",
+      "loopStep1Bold": "5 张卡牌",
+      "loopStep1Post": "，上方有 5 张预览牌。",
+      "loopStep2Pre": "你需要 ",
+      "loopStep2Bold": "处理掉 4 张",
+      "loopStep2Post": "（攻击怪物、装备武器/盾牌、收取药水等）。",
+      "loopStep3Pre": "当场上只剩 ",
+      "loopStep3Bold": "1 张牌",
+      "loopStep3Post": " 时，瀑流触发 —— 这张牌被自动弃掉，预览牌落入场上，新的预览牌从牌堆翻出。",
+      "loopStep4": "循环往复，直到牌堆清空。",
+
+      "layoutTitle": "🗺️ 界面布局",
+      "layoutTopBar": "顶栏",
+      "layoutTopBarDesc": "❤️ 生命值、🪙 金币、📦 牌堆数量、🌊 瀑流次数、🏪 商店等级",
+      "layoutRow1": "第一行",
+      "layoutRow1Desc": "预览区（5 张半透明牌）＋ 🎲 骰子",
+      "layoutRow2": "第二行",
+      "layoutRow2Desc": "场上区（5 张活跃牌）＋ 💀 坟场（弃牌记录）",
+      "layoutRow3": "第三行",
+      "layoutRow3Desc": "护符槽（上限 2 个）→ 装备槽×2 → 英雄 → 背包 → 职业牌堆",
+
+      "recycleBagTitle": "♻️ 回收袋",
+      "recycleBagBodyA1": "永久魔法",
+      "recycleBagBodyA2": "使用后不会进坟场，而是进入 ",
+      "recycleBagBodyB": "回收袋",
+      "recycleBagBodyA3": "。每次瀑流时回收袋中的牌会倒计时，等待数回合后自动回到背包，可以再次使用。护符和永久装备手动拖到回收袋也能循环利用。回收袋是游戏的核心循环引擎。",
+
+      "classDeckTitle": "🃏 职业牌",
+      "classDeckIntroPre": "骑士拥有独立的 ",
+      "classDeckIntroBold": "职业牌堆",
+      "classDeckIntroPost": "（21 张），获取方式：",
+      "classDeckListItem1Pre": "事件中的 ",
+      "classDeckListItem1A": "古籍残卷",
+      "classDeckListItem1B": "暗黑祭坛",
+      "classDeckListItem1C": "宝藏",
+      "classDeckListItem1Mid": "、",
+      "classDeckListItem1Post": " 等可发现职业牌",
+      "classDeckListItem2Pre": "击败怪物后的战利品中有几率获得 ",
+      "classDeckListItem2Bold": "发现",
+      "classDeckListItem2Post": " 奖励",
+      "classDeckListItem3": "商店中可以购买职业牌"
+    },
+    "cards": {
+      "monster": {
+        "title": "怪物",
+        "desc": "有血层和攻击力。武器打掉全部血层即击杀，否则怪物会反击。精英怪有特殊能力，最终之敌会变身为 Boss。"
+      },
+      "weapon": {
+        "title": "武器",
+        "desc": "装备到左 / 右装备槽，有耐久度。拖到怪物上进行攻击。每回合每个槽只能攻击一次。"
+      },
+      "shield": {
+        "title": "盾牌",
+        "desc": "装备到装备槽，用于抵挡怪物伤害。每次格挡消耗 1 点耐久。"
+      },
+      "potion": {
+        "title": "药水",
+        "desc": "一次性消耗品——回血、修武器、从背包抽牌等。可先存进背包备用。"
+      },
+      "amulet": {
+        "title": "护符",
+        "desc": "装入护符槽（最多 2 个），提供持续被动效果。放第 3 个时，最旧的自动弃掉。手动拖到回收袋可循环利用。"
+      },
+      "magic": {
+        "title": "魔法",
+        "desc": "分即时和永久两种。即时魔法使用后进坟场；永久魔法使用后进回收袋，经过数次瀑流后会回到背包，可反复使用。"
+      },
+      "event": {
+        "title": "事件",
+        "desc": "点击后出现选项。可能是商店、宝箱、祭坛、神殿等，做出选择获取奖励或承担风险。"
+      },
+      "backpack": {
+        "title": "背包 & 手牌",
+        "desc": "存放非怪物/非事件卡（上限 12~17 张）。每处理一张场上的牌，背包会自动抽一张到手牌。手牌上限 6~8 张。"
+      }
+    },
+    "combat": {
+      "flowTitle": "战斗流程",
+      "flowIntroPre": "场上的怪物不会主动攻击你。战斗由 ",
+      "flowIntroBold": "你发起",
+      "flowIntroPost": "，有两种方式：",
+      "flowHeroFirstBold": "英雄先攻：",
+      "flowHeroFirstA": "拖动 ",
+      "flowHeroFirstWeapon": "武器",
+      "flowHeroFirstB": " 到怪物上 —— 你先打，打不死怪物才会反击。",
+      "flowMonsterFirstBold": "怪物先攻：",
+      "flowMonsterFirstA": "拖动 ",
+      "flowMonsterFirstMonster": "怪物",
+      "flowMonsterFirstB": " 到英雄身上 —— 怪物先打你，然后进入你的攻击回合。",
+
+      "heroAttackTitle": "英雄攻击",
+      "heroAttack1Pre": "每回合有 ",
+      "heroAttack1Bold": "2 次攻击机会",
+      "heroAttack1Post": "，每个装备槽每回合只能攻击 1 次。",
+      "heroAttack2": "武器伤害 = 武器数值 + 各种加成（护符、技能、职业等）。",
+      "heroAttack3Pre": "每次攻击消耗 ",
+      "heroAttack3Bold": "1 点武器耐久",
+      "heroAttack3Post": "。耐久用完武器损毁。",
+      "heroAttack4Pre": "部分武器有 ",
+      "heroAttack4Bold": "暴击",
+      "heroAttack4Post": "：掷骰成功时伤害翻倍。",
+
+      "layersTitle": "怪物血层",
+      "layersBodyA": "怪物的 HP 由多层 ",
+      "layersBodyB": "\"血层\"",
+      "layersBodyC": " 组成（显示为数字下方的叠层）。每次攻击伤害 ≥ 当前血层值时，打掉该层，溢出伤害不会穿透到下一层。所有血层归零即 ",
+      "layersBodyD": "击杀",
+      "layersBodyE": "。未击杀则怪物会反击。",
+
+      "blockTitle": "格挡伤害",
+      "block1Pre": "怪物反击时，你可以选择 ",
+      "block1A": "用盾牌格挡",
+      "block1Mid": " 或 ",
+      "block1B": "英雄硬扛",
+      "block1Post": "。",
+      "block2": "盾牌格挡吸收伤害（最多吸收 = 盾牌数值），溢出部分扣英雄 HP。格挡消耗 1 耐久。",
+      "block3": "特殊盾（如铁壁塔盾）可完全抵挡所有伤害；反射盾可将一半伤害反弹给怪物。",
+      "block4": "拖怪物到英雄身上 = 直接承受全部伤害（没有格挡）。",
+
+      "turnTitle": "⚡ 回合切换",
+      "turnBodyPre": "英雄攻击结束后（用完攻击机会或手动结束），进入 ",
+      "turnBodyBold": "怪物回合",
+      "turnBodyPost": " —— 所有交战中的怪物依次攻击你。每只怪物攻击后你都要选择格挡方式。怪物全部攻击完后，回到英雄回合，攻击次数刷新。如此交替直到怪物被击杀或你阵亡。",
+
+      "eliteTitle": "💀 精英 & Boss",
+      "elite1Pre": "",
+      "elite1Bold": "精英怪",
+      "elite1Post": "（后半程出现）拥有特殊能力：骷髅有骸生、幽灵有重生、食人魔会暴击连击等。",
+      "elite2Pre": "",
+      "elite2Bold": "最终之敌",
+      "elite2Post": " 被击败后会变身为 Boss，拥有复生、反击伤害、末路光环等强力能力。",
+      "elite3Pre": "击败怪物后可获得 ",
+      "elite3Bold": "战利品",
+      "elite3Post": "（金币、回血、装备修复、发现职业牌等）。"
+    },
+    "actions": {
+      "attackBadge": "⚔️ 攻击",
+      "attackDesc": "拖动武器到怪物上（或把怪物拖到有武器的装备槽）。伤害 ≥ 血层则击杀，否则怪物反击。",
+      "blockBadge": "🛡️ 格挡",
+      "blockDesc": "把怪物拖到有盾牌的装备槽（格挡后反击），或直接拖到英雄身上承受伤害。",
+      "equipBadge": "🎒 装备",
+      "equipDesc": "武器 / 盾牌拖到装备槽。新装备会替换旧装备（旧的进坟场）。",
+      "storeBadge": "📦 存放",
+      "storeDesc": "拖动卡牌到背包收纳。怪物和事件不能存。背包满了就存不下。",
+      "amuletBadge": "💎 护符",
+      "amuletDesc": "拖护符到护符槽佩戴。超过上限会自动弃掉最早的护符。",
+      "magicBadge": "✨ 魔法",
+      "magicDesc": "点击魔法牌，按提示选择目标释放。永久魔法用完会进回收袋，之后自动回到背包。",
+      "eventBadge": "📜 事件",
+      "eventDesc": "点击事件牌，从弹出的选项中选择一个。有些需要掷骰子碰运气。",
+      "discardBadge": "💀 弃牌",
+      "discardDesc": "拖卡牌到坟场区域（第二行最右），将其弃掉。弃掉的牌不再可用。",
+      "skillBadge": "🦸 技能",
+      "skillDesc": "点击英雄卡上的技能按钮（每次瀑流可用一次），选择对应目标施展。",
+      "diceBadge": "🎲 骰子",
+      "diceDesc": "点击右上角的 D20 掷骰子。事件中的 50/50 结果看骰子点数：≤ 10 成功，> 10 失败。",
+      "logBadge": "📋 日志",
+      "logDesc": "屏幕右侧的日志面板实时记录所有战斗、伤害、治疗、装备、魔法、事件等信息。可以拖拽调整大小、最小化或清空。遇到不清楚发生了什么时，看日志回溯。"
+    },
+    "tips": {
+      "tipsTitle": "💡 新手小贴士",
+      "tip1Bold": "合理安排瀑流弃牌：",
+      "tip1Body": "场上最后 1 张牌会被自动弃掉。尽量让不需要的牌留到最后。",
+      "tip2Bold": "善用背包：",
+      "tip2Body": "药水和好装备先存起来，需要时再从手牌打出。背包每次行动后自动抽牌，保持手牌充裕。",
+      "tip3Bold": "永久魔法是核心：",
+      "tip3Body": "用完会回到回收袋，数次瀑流后自动返回背包。循环使用是制胜关键。",
+      "tip4Bold": "注意装备耐久：",
+      "tip4Body": "武器和盾牌有耐久度，用光就坏。修复药水和\"精工修复\"魔法能续命。",
+      "tip5Bold": "金币很重要：",
+      "tip5Body": "打怪和事件获取金币。到了商店可以购买强力卡牌和额外技能。",
+      "tip6Bold": "看预览规划行动：",
+      "tip6Body": "上方预览行永远告诉你下一批来什么牌。据此规划装备更换和背包管理。",
+      "tip7Bold": "护符搭配很讲究：",
+      "tip7Body": "治愈、闪光、力量护符效果各异，搭配英雄技能可以事半功倍。",
+      "tip8Bold": "精英怪出没在后半程：",
+      "tip8Body": "牌堆前半段是普通怪，后半段才有精英怪。提前存好装备和药水应对。",
+
+      "uiTitle": "⚙️ 界面操作",
+      "uiClickDeck": "• 点击 <0>牌堆数字</0> 可查看剩余牌的构成",
+      "uiClickGrave": "• 点击 <0>坟场</0> 可查看弃牌历史",
+      "uiClickBackpack": "• 点击 <0>背包</0> 可查看储存的卡牌",
+      "uiClickClassDeck": "• 点击 <0>职业牌堆</0>（最右下角）可查看骑士专属卡牌",
+      "uiHover": "• 长按 / 悬浮任意卡牌可查看详细说明",
+      "uiLogPanel": "• <0>📋 日志面板</0>（右侧）：实时记录战斗、伤害、治疗、装备、魔法等所有事件。可拖拽调整大小和位置，支持最小化和清空",
+      "uiCombatPanel": "• <0>⚔️ 战斗面板</0>（右侧）：进入战斗后自动弹出，显示当前回合（英雄/怪物）、剩余攻击次数、各装备槽状态、待格挡信息。英雄回合可点击\"结束回合\"主动交给怪物",
+      "uiUndo": "• <0>↩️ 撤销按钮</0>（右下角）：可撤销最近的操作（如装备、存放、弃牌等）。战斗中和瀑流期间无法撤销。按钮上的数字显示可撤销的步数"
+    }
+  },
+  "victory": {
+    "victoryTitle": "Victory!",
+    "defeatTitle": "Defeat",
+    "victorySubtitle": "You have conquered the dungeon!",
+    "defeatSubtitle": "The darkness has claimed you...",
+    "gold": "金币",
+    "hpLeft": "剩余生命",
+    "defeated": "击杀",
+    "damage": "受伤",
+    "healed": "治疗",
+    "playAgain": "再来一局"
+  },
+  "hero": {
+    "stat": {
+      "hp": "生命值",
+      "gold": "金币",
+      "attack": "攻击加成",
+      "defense": "防御加成",
+      "spell": "法术伤害",
+      "spellLifesteal": "超杀吸血",
+      "tempShield": "临时护盾",
+      "permHp": "永久生命奖励",
+      "stunCap": "击晕上限"
+    },
+    "capacity": {
+      "title": "携带与栏位上限",
+      "hand": "手牌上限",
+      "backpack": "背包上限",
+      "amulet": "护符栏上限",
+      "equipL": "左装备栏上限",
+      "equipR": "右装备栏上限",
+      "cardsUnit": "{{count}} 张",
+      "piecesUnit": "{{count}} 个",
+      "itemsUnit": "{{count}} 件"
+    },
+    "tile": {
+      "lifesteal": "超杀吸血",
+      "persuade": "下一次劝降成功率加成",
+      "spellDamage": "法术伤害加成",
+      "stunCap": "击晕上限"
+    },
+    "sticker": {
+      "lifestealTooltip": "超杀吸血",
+      "persuadeTooltip": "下一次劝降成功率加成",
+      "spellDamageTooltip": "法术伤害加成",
+      "stunCapTooltip": "击晕上限"
+    },
+    "skill": {
+      "title": "英雄技能",
+      "empty": "尚未学习任何英雄技能。",
+      "active": "主动技能",
+      "passive": "被动技能"
+    },
+    "magic": {
+      "title": "英雄魔法",
+      "ready": "可释放",
+      "used": "已使用",
+      "charging": "充能中"
+    },
+    "permSkill": {
+      "title": "已掌握的被动",
+      "empty": "尚未学习额外的被动技能。"
+    },
+    "select": {
+      "title": "选择英雄技能",
+      "subtitle": "从下方三个技能中选择一个开始冒险",
+      "passiveLabel": "永恒护符",
+      "activeLabel": "主动技能"
+    },
+    "magicNotUnlocked": "未解锁",
+    "release": "释放",
+    "passive": "Passive: {{name}}",
+    "passiveUsed": "Passive: {{name}} ✓",
+    "cardClass": "{{className}} • 冒险者档案",
+    "noPortrait": "暂无立绘",
+    "unnamedEffect": "未命名效果"
+  },
+  "modal": {
+    "deckPeek": {
+      "title": "牌堆预览",
+      "subtitle": "查看牌堆顶 {{count}} 张牌",
+      "empty": "牌堆已空"
+    },
+    "monsterFusion": {
+      "title": "怪物融合",
+      "subtitle": "选择两张同类怪物进行融合",
+      "confirm": "确认融合",
+      "selected": "已选 {{count}}/2"
+    },
+    "graveyardExile": {
+      "title": "坟场移除",
+      "subtitle": "选择要移除的卡牌",
+      "confirmRemove": "确认移除 {{count}} 张卡牌"
+    },
+    "backpackReorganize": {
+      "title": "整理背包",
+      "subtitle": "选择要放回背包的卡牌",
+      "confirmReturn": "确认放回",
+      "noSelection": "尚未选择"
+    },
+    "discoverClass": {
+      "title": "发现一张 Class Card",
+      "subtitle": "从下方三张牌中选择一张加入你的牌库"
+    },
+    "cardDeletion": {
+      "title": "选择要销毁的卡牌",
+      "confirmLabel": "确认",
+      "subtitle": "选择 {{count}} 张要销毁的卡牌"
+    },
+    "shop": {
+      "title": "商店",
+      "purchase": "购买",
+      "soldOut": "已售出",
+      "notEnoughGold": "金币不足",
+      "leaveShop": "离开商店"
+    },
+    "permGrant": {
+      "title": "永恒铭刻",
+      "subtitle": "选择一张装备/护符/药水/魔法变为永久版"
+    },
+    "amplify": {
+      "title": "强化",
+      "subtitle": "选择一张卡牌进行强化"
+    },
+    "cardUpgrade": {
+      "title": "卡牌升级",
+      "subtitle": "选择一张卡牌升级"
+    },
+    "cardDraft": {
+      "title": "选牌",
+      "subtitle": "选择一张卡牌"
+    },
+    "deckViewer": {
+      "title": "牌库",
+      "subtitle": "剩余 {{count}} 张牌"
+    },
+    "backpackViewer": {
+      "title": "背包",
+      "empty": "背包是空的"
+    },
+    "monsterReward": {
+      "title": "战利品",
+      "subtitle": "选择一项奖励"
+    },
+    "monsterPersuade": {
+      "title": "劝降怪物",
+      "subtitle": "成功率 {{rate}}%（费用 {{cost}} 金）",
+      "confirm": "尝试劝降",
+      "rollDie": "掷骰判定"
+    },
+    "eventChoice": {
+      "title": "事件",
+      "noChoice": "暂无可选选项"
+    },
+    "eventDice": {
+      "title": "掷骰判定",
+      "rolling": "掷骰中..."
+    },
+    "combatDice": {
+      "title": "战斗掷骰",
+      "subtitle": "掷出 {{threshold}} 或更小为成功"
+    },
+    "handDiscardSelection": {
+      "title": "弃手牌",
+      "subtitle": "选择 {{count}} 张要弃掉的手牌",
+      "confirm": "确认弃牌"
+    },
+    "magicChoice": {
+      "title": "选择效果"
+    },
+    "mirrorCopy": {
+      "title": "镜像复制",
+      "subtitle": "选择要复制的卡牌"
+    },
+    "shopSkillSelect": {
+      "title": "选择技能",
+      "subtitle": "从下方三个技能中选择一个"
+    },
+    "handMagicUpgrade": {
+      "title": "魔法升级",
+      "subtitle": "选择手牌中的一张魔法升级"
+    },
+    "equipmentSelect": {
+      "title": "选择装备槽",
+      "subtitle": "选择装备到哪个槽位"
+    },
+    "gameModeSelect": {
+      "title": "选择游戏模式",
+      "subtitle": "标准模式 / 快速模式"
+    }
+  }
+}

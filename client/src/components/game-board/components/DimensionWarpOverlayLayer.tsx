@@ -169,7 +169,7 @@ function DimensionWarpItem({ warp }: DimensionWarpItemProps) {
         >
           <FlipFace
             front={<PreviewCardBack card={previewCard} />}
-            back={<GameCard card={previewCard} disableInteractions hideEventChoices />}
+            back={<GameCard card={previewCard} disableInteractions />}
           />
         </div>
       </div>

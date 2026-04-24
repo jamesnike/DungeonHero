@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useFitToViewport } from '@/hooks/use-fit-to-viewport';
 import { heroSkills, type HeroSkillDefinition } from '@/lib/heroSkills';
 import { getEternalRelic } from '@/lib/eternalRelics';
@@ -19,6 +20,7 @@ function sampleSkills(count: number, rng: RngState): [HeroSkillDefinition[], Rng
 }
 
 export default function HeroSkillSelection({ isOpen, onSelectSkill, rng, onRngUpdate }: HeroSkillSelectionProps) {
+  const { t } = useTranslation();
   const modalRef = useRef<HTMLDivElement | null>(null);
   const overlayScale = useFitToViewport(modalRef);
   const [choices, setChoices] = useState<HeroSkillDefinition[]>([]);
@@ -49,9 +51,9 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill, rng, onRngUp
         style={{ transform: `scale(${overlayScale})`, transformOrigin: 'center center' }}
       >
         <div className="card-draft-header">
-          <h2 className="card-draft-title">选择英雄技能</h2>
+          <h2 className="card-draft-title">{t('hero.select.title')}</h2>
           <p className="card-draft-subtitle">
-            从下方三个技能中选择一个开始冒险
+            {t('hero.select.subtitle')}
           </p>
         </div>
 
@@ -83,7 +85,7 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill, rng, onRngUp
                       {isPassive && relic ? relic.name : skill.name}
                     </div>
                     <div className={`skill-draft-type ${isPassive ? 'skill-draft-type-passive' : 'skill-draft-type-active'}`}>
-                      {isPassive ? '永恒护符' : '主动技能'}
+                      {isPassive ? t('hero.select.passiveLabel') : t('hero.select.activeLabel')}
                     </div>
                     <div className="skill-draft-divider" />
                     <div className="skill-draft-effect">
@@ -103,7 +105,7 @@ export default function HeroSkillSelection({ isOpen, onSelectSkill, rng, onRngUp
         </div>
 
         <button className="skill-draft-reroll" onClick={handleReroll}>
-          换一批
+          {t('common.reroll')}
         </button>
       </div>
     </div>

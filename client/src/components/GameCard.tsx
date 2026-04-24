@@ -626,11 +626,6 @@ interface GameCardProps {
   shieldBlockVariant?: number;
   equipmentStatModifier?: EquipmentCardStatModifier | null;
   showExhaustedOverlay?: boolean;
-  /**
-   * Hide event-card choice/dice list (preview-row context).
-   * Description text and waterfall warning are kept.
-   */
-  hideEventChoices?: boolean;
 }
 
 function GameCardInner({
@@ -653,7 +648,6 @@ function GameCardInner({
   shieldBlockVariant = 0,
   equipmentStatModifier = null,
   showExhaustedOverlay = false,
-  hideEventChoices = false,
 }: GameCardProps) {
   const gameViewport = useGameViewport();
   const isCompact = gameViewport.width < 500;
@@ -1484,7 +1478,7 @@ const amuletEffectText =
                           <span className="font-semibold not-italic">特殊触发：</span>{card.specialTrigger}
                         </div>
                       )}
-                      {!hideEventChoices && card.eventChoices?.map((choice, idx) =>
+                      {card.eventChoices?.map((choice, idx) =>
                         choice.diceTable?.length ? (
                           <div key={idx} className="flex flex-col gap-0.5">
                             <div className="dh-card__event-option text-left break-words leading-snug text-zinc-900">
@@ -2528,8 +2522,7 @@ function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean {
     prev.weaponSwingVariant === next.weaponSwingVariant &&
     prev.shieldBlockVariant === next.shieldBlockVariant &&
     prev.equipmentStatModifier === next.equipmentStatModifier &&
-    prev.showExhaustedOverlay === next.showExhaustedOverlay &&
-    prev.hideEventChoices === next.hideEventChoices
+    prev.showExhaustedOverlay === next.showExhaustedOverlay
   );
 }
 

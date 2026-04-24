@@ -34,8 +34,6 @@ function CardViewerContainerInner() {
     amuletSlots: s.amuletSlots,
     selectedMonsterRewards: s.selectedMonsterRewards,
     backpackCapacityModifier: s.backpackCapacityModifier,
-    previewCards: s.previewCards,
-    previewCardStacks: s.previewCardStacks,
   }));
 
   const currentTurn = gs.turnCount;
@@ -56,21 +54,6 @@ function CardViewerContainerInner() {
       detail: option.detail,
     }));
   }, [ui.selectedCard, gs.selectedMonsterRewards]);
-
-  /**
-   * When the details modal is opened from the preview row, hide the
-   * event-card choice list so players can't peek at the resolution
-   * before the card lands in the active row.
-   */
-  const hideEventChoicesForSelectedCard = useMemo(() => {
-    const selected = ui.selectedCard;
-    if (!selected || selected.type !== 'event') return false;
-    if (gs.previewCards.some(c => c?.id === selected.id)) return true;
-    for (const arr of Object.values(gs.previewCardStacks ?? {})) {
-      if (arr.some(c => c.id === selected.id)) return true;
-    }
-    return false;
-  }, [ui.selectedCard, gs.previewCards, gs.previewCardStacks]);
 
   return (
     <>
@@ -97,7 +80,6 @@ function CardViewerContainerInner() {
         currentTurn={currentTurn}
         monsterRewards={monsterRewardPreview}
         isQuickMode={isQuickMode}
-        hideEventChoices={hideEventChoicesForSelectedCard}
       />
 
       <CardDeletionModal

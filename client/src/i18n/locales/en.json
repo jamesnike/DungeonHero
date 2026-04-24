@@ -1,0 +1,429 @@
+{
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "close": "Close",
+    "skip": "Skip",
+    "continue": "Continue",
+    "back": "Back",
+    "ok": "OK",
+    "yes": "Yes",
+    "no": "No",
+    "minimize": "Minimize",
+    "reroll": "Reroll",
+    "release": "Cast",
+    "passive": "Passive",
+    "active": "Active"
+  },
+  "header": {
+    "newGame": "New Game",
+    "language": "Language",
+    "languageChineseLabel": "中",
+    "languageEnglishLabel": "EN",
+    "guide": "Game Guide",
+    "persuadeTooltip": "Persuade Lv.{{level}} (can persuade monsters with ≤{{level}} HP layers) / cost {{cost}}g{{discount}}",
+    "persuadeDiscountReduce": " (temp -{{amount}})",
+    "persuadeDiscountIncrease": " (temp +{{amount}})"
+  },
+  "help": {
+    "title": "Game Guide",
+    "tab": {
+      "goal": "Goal",
+      "cards": "Cards",
+      "combat": "Combat",
+      "actions": "Actions",
+      "tips": "Tips"
+    },
+    "goal": {
+      "objectiveTitle": "🎯 Objective",
+      "objectiveBody1": "You are an adventurer delving into the dungeon. The deck contains ",
+      "objectiveCards": "64 cards",
+      "objectiveBody2": " (monsters, weapons, shields, potions, spells, amulets, events). You must process every card and defeat all monsters before ",
+      "objectiveHpZero": "your HP hits zero",
+      "objectiveBody3": ", clearing the deck.",
+
+      "loopTitle": "🔄 Core Loop: Waterfall",
+      "loopIntro1": "The game flows in ",
+      "loopWord": "\"waterfall\"",
+      "loopIntro2": " beats. Each round goes:",
+      "loopStep1Pre": "The board reveals ",
+      "loopStep1Bold": "5 cards",
+      "loopStep1Post": ", with 5 preview cards above.",
+      "loopStep2Pre": "You must ",
+      "loopStep2Bold": "resolve 4 of them",
+      "loopStep2Post": " (attack monsters, equip weapons/shields, take potions, etc.).",
+      "loopStep3Pre": "When only ",
+      "loopStep3Bold": "1 card",
+      "loopStep3Post": " remains, the waterfall triggers — that card is auto-discarded, preview cards drop onto the board, and new previews are drawn from the deck.",
+      "loopStep4": "Repeat until the deck is empty.",
+
+      "layoutTitle": "🗺️ Layout",
+      "layoutTopBar": "Top bar",
+      "layoutTopBarDesc": "❤️ HP, 🪙 Gold, 📦 Deck count, 🌊 Waterfall count, 🏪 Shop level",
+      "layoutRow1": "Row 1",
+      "layoutRow1Desc": "Preview area (5 translucent cards) + 🎲 Dice",
+      "layoutRow2": "Row 2",
+      "layoutRow2Desc": "Active area (5 active cards) + 💀 Graveyard (discard pile)",
+      "layoutRow3": "Row 3",
+      "layoutRow3Desc": "Amulet slots (cap 2) → Equipment slots ×2 → Hero → Backpack → Class deck",
+
+      "recycleBagTitle": "♻️ Recycle Bag",
+      "recycleBagBodyA1": "Permanent magic",
+      "recycleBagBodyA2": " does not go to the graveyard after use; it enters the ",
+      "recycleBagBodyB": "Recycle Bag",
+      "recycleBagBodyA3": ". Each waterfall, cards in the bag tick down, and after a few turns they return to your backpack to be reused. You can also drag amulets and permanent equipment into the bag to recycle them. The Recycle Bag is the core engine of the game.",
+
+      "classDeckTitle": "🃏 Class Cards",
+      "classDeckIntroPre": "The Knight has a separate ",
+      "classDeckIntroBold": "Class Deck",
+      "classDeckIntroPost": " (21 cards). You can obtain class cards by:",
+      "classDeckListItem1Pre": "Events such as ",
+      "classDeckListItem1A": "Ancient Manuscript",
+      "classDeckListItem1B": "Dark Altar",
+      "classDeckListItem1C": "Treasure",
+      "classDeckListItem1Mid": ", ",
+      "classDeckListItem1Post": " can grant class cards",
+      "classDeckListItem2Pre": "Monster loot has a chance to grant a ",
+      "classDeckListItem2Bold": "Discover",
+      "classDeckListItem2Post": " reward",
+      "classDeckListItem3": "Class cards can be purchased in shops"
+    },
+    "cards": {
+      "monster": {
+        "title": "Monster",
+        "desc": "Has HP layers and attack. Strip all layers with weapons to kill, otherwise the monster retaliates. Elites have special abilities, and the final foe transforms into a Boss."
+      },
+      "weapon": {
+        "title": "Weapon",
+        "desc": "Equip in the left/right slot; has durability. Drag onto a monster to attack. Each slot can attack only once per turn."
+      },
+      "shield": {
+        "title": "Shield",
+        "desc": "Equip in a slot to block monster damage. Each block consumes 1 durability."
+      },
+      "potion": {
+        "title": "Potion",
+        "desc": "One-shot consumables — heal, repair, draw from backpack, etc. Can be stashed in the backpack first."
+      },
+      "amulet": {
+        "title": "Amulet",
+        "desc": "Slot into the amulet bar (max 2) for ongoing passive effects. Adding a 3rd discards the oldest. Drag into the recycle bag to reuse."
+      },
+      "magic": {
+        "title": "Magic",
+        "desc": "Two kinds: instant and permanent. Instant magic goes to the graveyard after use; permanent magic enters the Recycle Bag and returns to the backpack after a few waterfalls, reusable."
+      },
+      "event": {
+        "title": "Event",
+        "desc": "Click to reveal options. Could be a shop, chest, altar, shrine, etc. — pick one to gain rewards or take risks."
+      },
+      "backpack": {
+        "title": "Backpack & Hand",
+        "desc": "Stores non-monster, non-event cards (cap 12–17). Resolving an active card auto-draws one from backpack into hand. Hand cap is 6–8."
+      }
+    },
+    "combat": {
+      "flowTitle": "Combat Flow",
+      "flowIntroPre": "Monsters on the board never attack first. Combat is ",
+      "flowIntroBold": "initiated by you",
+      "flowIntroPost": ", in two ways:",
+      "flowHeroFirstBold": "Hero first: ",
+      "flowHeroFirstA": "drag a ",
+      "flowHeroFirstWeapon": "weapon",
+      "flowHeroFirstB": " onto a monster — you strike first; the monster only retaliates if it survives.",
+      "flowMonsterFirstBold": "Monster first: ",
+      "flowMonsterFirstA": "drag the ",
+      "flowMonsterFirstMonster": "monster",
+      "flowMonsterFirstB": " onto the hero — the monster hits you first, then you take your turn.",
+
+      "heroAttackTitle": "Hero Attack",
+      "heroAttack1Pre": "You get ",
+      "heroAttack1Bold": "2 attacks per turn",
+      "heroAttack1Post": ", and each equipment slot can only attack once.",
+      "heroAttack2": "Weapon damage = base value + bonuses (amulets, skills, class, etc.).",
+      "heroAttack3Pre": "Each attack costs ",
+      "heroAttack3Bold": "1 weapon durability",
+      "heroAttack3Post": ". When durability hits 0, the weapon breaks.",
+      "heroAttack4Pre": "Some weapons have ",
+      "heroAttack4Bold": "Critical Hit",
+      "heroAttack4Post": ": damage doubles on a successful dice roll.",
+
+      "layersTitle": "Monster HP Layers",
+      "layersBodyA": "Monster HP is composed of multiple ",
+      "layersBodyB": "\"layers\"",
+      "layersBodyC": " (shown as stacked bars below the number). When attack damage ≥ the current layer's value, that layer breaks; overflow does NOT carry to the next layer. Strip all layers to ",
+      "layersBodyD": "kill",
+      "layersBodyE": ". Otherwise the monster retaliates.",
+
+      "blockTitle": "Blocking Damage",
+      "block1Pre": "When a monster retaliates, you can ",
+      "block1A": "block with a shield",
+      "block1Mid": " or ",
+      "block1B": "take it raw",
+      "block1Post": ".",
+      "block2": "A shield absorbs damage (up to its value); overflow goes to your HP. Blocking costs 1 durability.",
+      "block3": "Special shields (e.g. Iron Tower Shield) fully block all damage; reflect shields bounce half the damage back to the monster.",
+      "block4": "Dragging a monster onto the hero = take the full damage with no block.",
+
+      "turnTitle": "⚡ Turn Switching",
+      "turnBodyPre": "After your attack phase ends (out of attacks or you end manually), the ",
+      "turnBodyBold": "monster turn",
+      "turnBodyPost": " begins — every engaged monster attacks you in order. After each, you choose how to block. Once all monsters have attacked, your turn restarts with refreshed attacks. Repeat until monsters die or you fall.",
+
+      "eliteTitle": "💀 Elites & Boss",
+      "elite1Pre": "",
+      "elite1Bold": "Elite monsters",
+      "elite1Post": " (later half of the deck) have special abilities: Skeletons revive, Ghosts respawn, Ogres crit-chain, etc.",
+      "elite2Pre": "",
+      "elite2Bold": "The final foe",
+      "elite2Post": " transforms into a Boss after defeat, gaining revival, retaliation damage, death-throes auras, etc.",
+      "elite3Pre": "Defeating a monster grants ",
+      "elite3Bold": "loot",
+      "elite3Post": " (gold, healing, repairs, discoveries, etc.)."
+    },
+    "actions": {
+      "attackBadge": "⚔️ Attack",
+      "attackDesc": "Drag a weapon onto a monster (or drag a monster onto a slot with a weapon). If damage ≥ layer, kill; otherwise the monster retaliates.",
+      "blockBadge": "🛡️ Block",
+      "blockDesc": "Drag a monster onto a slot with a shield (block then retaliate), or directly onto the hero to take the full hit.",
+      "equipBadge": "🎒 Equip",
+      "equipDesc": "Drag a weapon/shield to a slot. New gear replaces old (old goes to graveyard).",
+      "storeBadge": "📦 Stash",
+      "storeDesc": "Drag a card to the backpack. Monsters and events can't be stashed. Full backpack means no room.",
+      "amuletBadge": "💎 Amulet",
+      "amuletDesc": "Drag an amulet to a slot. Exceeding the cap auto-discards the oldest.",
+      "magicBadge": "✨ Magic",
+      "magicDesc": "Click a magic card and follow the prompts. Permanent magic returns via the Recycle Bag.",
+      "eventBadge": "📜 Event",
+      "eventDesc": "Click an event and pick one option. Some require dice rolls.",
+      "discardBadge": "💀 Discard",
+      "discardDesc": "Drag a card to the graveyard area (rightmost on row 2) to discard. Discarded cards are gone.",
+      "skillBadge": "🦸 Skill",
+      "skillDesc": "Click the skill button on the hero card (once per waterfall) and pick a target.",
+      "diceBadge": "🎲 Dice",
+      "diceDesc": "Click the D20 (top right). For 50/50 events: ≤10 succeeds, >10 fails.",
+      "logBadge": "📋 Log",
+      "logDesc": "The log panel on the right records all combat, damage, healing, equipment, magic, and event activity. Drag to resize, minimize, or clear. When in doubt, check the log."
+    },
+    "tips": {
+      "tipsTitle": "💡 Beginner Tips",
+      "tip1Bold": "Plan your waterfall discard: ",
+      "tip1Body": "the last card on the board is auto-discarded. Try to leave the cards you don't need until the end.",
+      "tip2Bold": "Use the backpack: ",
+      "tip2Body": "stash potions and good gear, then play from hand when needed. Backpack auto-draws after every action — keep your hand topped up.",
+      "tip3Bold": "Permanent magic is core: ",
+      "tip3Body": "after use it goes to the recycle bag and returns to your backpack after a few waterfalls. Cycling these is the key to victory.",
+      "tip4Bold": "Mind your durability: ",
+      "tip4Body": "weapons and shields wear out. Repair potions and the \"Master Repair\" magic keep them alive.",
+      "tip5Bold": "Gold matters: ",
+      "tip5Body": "killing monsters and events earn gold. Use shops to buy strong cards and extra skills.",
+      "tip6Bold": "Read the previews: ",
+      "tip6Body": "the row above always shows what's coming next. Plan equipment swaps and backpack space accordingly.",
+      "tip7Bold": "Amulet synergy matters: ",
+      "tip7Body": "Heal, Flash, and Power amulets all do different things. Combined with hero skills they multiply your impact.",
+      "tip8Bold": "Elites appear in the back half: ",
+      "tip8Body": "the front of the deck is mostly basic monsters. Stockpile gear and potions before elites arrive.",
+
+      "uiTitle": "⚙️ UI Tips",
+      "uiClickDeck": "• Click <0>the deck count</0> to view what's left",
+      "uiClickGrave": "• Click <0>the graveyard</0> to view discard history",
+      "uiClickBackpack": "• Click <0>the backpack</0> to view stored cards",
+      "uiClickClassDeck": "• Click <0>the class deck</0> (bottom-right) to view Knight-only cards",
+      "uiHover": "• Long-press / hover any card to see full details",
+      "uiLogPanel": "• <0>📋 Log panel</0> (right): real-time record of combat, damage, healing, equipment, magic, etc. Drag to resize/move; supports minimize and clear",
+      "uiCombatPanel": "• <0>⚔️ Combat panel</0> (right): pops in during combat, showing the current turn (hero/monster), remaining attacks, slot status, and pending blocks. On hero turn click \"End Turn\" to hand control to the monster",
+      "uiUndo": "• <0>↩️ Undo button</0> (bottom-right): undoes recent actions (equip, stash, discard, etc.). Cannot undo during combat or waterfall. The number shows undo depth"
+    }
+  },
+  "victory": {
+    "victoryTitle": "Victory!",
+    "defeatTitle": "Defeat",
+    "victorySubtitle": "You have conquered the dungeon!",
+    "defeatSubtitle": "The darkness has claimed you...",
+    "gold": "Gold",
+    "hpLeft": "HP Left",
+    "defeated": "Defeated",
+    "damage": "Damage",
+    "healed": "Healed",
+    "playAgain": "Play Again"
+  },
+  "hero": {
+    "stat": {
+      "hp": "HP",
+      "gold": "Gold",
+      "attack": "Attack Bonus",
+      "defense": "Defense Bonus",
+      "spell": "Spell Damage",
+      "spellLifesteal": "Overkill Lifesteal",
+      "tempShield": "Temp Shield",
+      "permHp": "Permanent HP Bonus",
+      "stunCap": "Stun Cap"
+    },
+    "capacity": {
+      "title": "Carry & Slot Limits",
+      "hand": "Hand Cap",
+      "backpack": "Backpack Cap",
+      "amulet": "Amulet Slot Cap",
+      "equipL": "Left Equip Cap",
+      "equipR": "Right Equip Cap",
+      "cardsUnit": "{{count}} cards",
+      "piecesUnit": "{{count}}",
+      "itemsUnit": "{{count}}"
+    },
+    "tile": {
+      "lifesteal": "Overkill Lifesteal",
+      "persuade": "Next Persuade Bonus",
+      "spellDamage": "Spell Damage Bonus",
+      "stunCap": "Stun Cap"
+    },
+    "sticker": {
+      "lifestealTooltip": "Overkill Lifesteal",
+      "persuadeTooltip": "Next persuade success bonus",
+      "spellDamageTooltip": "Spell damage bonus",
+      "stunCapTooltip": "Stun cap"
+    },
+    "skill": {
+      "title": "Hero Skills",
+      "empty": "No hero skills learned yet.",
+      "active": "Active Skill",
+      "passive": "Passive Skill"
+    },
+    "magic": {
+      "title": "Hero Magic",
+      "ready": "Ready",
+      "used": "Used",
+      "charging": "Charging"
+    },
+    "permSkill": {
+      "title": "Mastered Passives",
+      "empty": "No additional passives learned yet."
+    },
+    "select": {
+      "title": "Choose a Hero Skill",
+      "subtitle": "Pick one of the three skills below to begin your adventure",
+      "passiveLabel": "Eternal Relic",
+      "activeLabel": "Active Skill"
+    },
+    "magicNotUnlocked": "Locked",
+    "release": "Cast",
+    "passive": "Passive: {{name}}",
+    "passiveUsed": "Passive: {{name}} ✓",
+    "cardClass": "{{className}} • Adventurer Profile",
+    "noPortrait": "No portrait",
+    "unnamedEffect": "Unnamed effect"
+  },
+  "modal": {
+    "deckPeek": {
+      "title": "Deck Preview",
+      "subtitle": "View the top {{count}} cards of the deck",
+      "empty": "The deck is empty"
+    },
+    "monsterFusion": {
+      "title": "Monster Fusion",
+      "subtitle": "Pick two monsters of the same kind to fuse",
+      "confirm": "Confirm Fusion",
+      "selected": "Selected {{count}}/2"
+    },
+    "graveyardExile": {
+      "title": "Graveyard Exile",
+      "subtitle": "Pick the cards you want to remove",
+      "confirmRemove": "Remove {{count}} card(s)"
+    },
+    "backpackReorganize": {
+      "title": "Reorganize Backpack",
+      "subtitle": "Pick the cards to put back in the backpack",
+      "confirmReturn": "Confirm Return",
+      "noSelection": "Nothing selected"
+    },
+    "discoverClass": {
+      "title": "Discover a Class Card",
+      "subtitle": "Pick one of the three cards below to add to your deck"
+    },
+    "cardDeletion": {
+      "title": "Pick cards to delete",
+      "confirmLabel": "Confirm",
+      "subtitle": "Pick {{count}} card(s) to delete"
+    },
+    "shop": {
+      "title": "Shop",
+      "purchase": "Buy",
+      "soldOut": "Sold Out",
+      "notEnoughGold": "Not enough gold",
+      "leaveShop": "Leave Shop"
+    },
+    "permGrant": {
+      "title": "Eternal Inscription",
+      "subtitle": "Pick one equipment/amulet/potion/magic to make permanent"
+    },
+    "amplify": {
+      "title": "Amplify",
+      "subtitle": "Pick a card to amplify"
+    },
+    "cardUpgrade": {
+      "title": "Card Upgrade",
+      "subtitle": "Pick a card to upgrade"
+    },
+    "cardDraft": {
+      "title": "Draft",
+      "subtitle": "Pick a card"
+    },
+    "deckViewer": {
+      "title": "Deck",
+      "subtitle": "{{count}} cards remaining"
+    },
+    "backpackViewer": {
+      "title": "Backpack",
+      "empty": "The backpack is empty"
+    },
+    "monsterReward": {
+      "title": "Loot",
+      "subtitle": "Pick one reward"
+    },
+    "monsterPersuade": {
+      "title": "Persuade Monster",
+      "subtitle": "Success rate {{rate}}% (cost {{cost}}g)",
+      "confirm": "Try Persuade",
+      "rollDie": "Roll Dice"
+    },
+    "eventChoice": {
+      "title": "Event",
+      "noChoice": "No choice available"
+    },
+    "eventDice": {
+      "title": "Dice Roll",
+      "rolling": "Rolling..."
+    },
+    "combatDice": {
+      "title": "Combat Roll",
+      "subtitle": "Roll {{threshold}} or under to succeed"
+    },
+    "handDiscardSelection": {
+      "title": "Discard Hand",
+      "subtitle": "Pick {{count}} card(s) to discard",
+      "confirm": "Confirm Discard"
+    },
+    "magicChoice": {
+      "title": "Choose Effect"
+    },
+    "mirrorCopy": {
+      "title": "Mirror Copy",
+      "subtitle": "Pick a card to copy"
+    },
+    "shopSkillSelect": {
+      "title": "Choose a Skill",
+      "subtitle": "Pick one of the three skills below"
+    },
+    "handMagicUpgrade": {
+      "title": "Magic Upgrade",
+      "subtitle": "Pick a magic in your hand to upgrade"
+    },
+    "equipmentSelect": {
+      "title": "Choose Equipment Slot",
+      "subtitle": "Pick which slot to equip"
+    },
+    "gameModeSelect": {
+      "title": "Choose Game Mode",
+      "subtitle": "Standard / Quick"
+    }
+  }
+}

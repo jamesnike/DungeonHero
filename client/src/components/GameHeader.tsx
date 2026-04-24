@@ -1,5 +1,7 @@
 import { Heart, Coins, Layers, Waves, ShoppingBag, Trophy, Handshake } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import HelpDialog from './HelpDialog';
+import LanguageToggle from './LanguageToggle';
 import { memo, useEffect, useRef, useState, type CSSProperties, type Ref } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { useShallowGameState } from '@/hooks/useGameEngine';
@@ -32,6 +34,7 @@ function GameHeaderInner({
     persuadeLevel: s.persuadeLevel, persuadeCostModifier: s.persuadeCostModifier,
     totalWins: s.totalWins, remainingDeck: s.remainingDeck,
   }));
+  const { t } = useTranslation();
   const cardsRemaining = remainingDeck.length;
   const persuadeCost = Math.max(0, PERSUADE_COST + persuadeCostModifier - persuadeTempDiscount);
   const gameViewport = useGameViewport();
@@ -87,9 +90,10 @@ function GameHeaderInner({
             data-testid="button-new-game"
             className="game-header__sticker-button game-header__sticker-button--amber"
           >
-            New Game
+            {t('header.newGame')}
           </button>
           <HelpDialog buttonClassName="game-header__button game-header__button--icon" />
+          <LanguageToggle />
           <div className="game-header__sticker-icon game-header__sticker-icon--hp" data-testid="header-hp">
             <Heart />
             <span className="game-header__sticker-icon__num game-header__sticker-icon__num--small">
@@ -126,7 +130,15 @@ function GameHeaderInner({
       <div
         className="game-header__sticker-icon game-header__sticker-icon--persuade"
         data-testid="header-persuade-level"
-        title={`劝降等级 Lv.${persuadeLevel}（可劝降 ≤${persuadeLevel} 血层怪物）/ 费用 ${persuadeCost} 金${persuadeTempDiscount ? `（临时${persuadeTempDiscount > 0 ? '减免' : '加价'} ${Math.abs(persuadeTempDiscount)}）` : ''}`}
+        title={t('header.persuadeTooltip', {
+          level: persuadeLevel,
+          cost: persuadeCost,
+          discount: persuadeTempDiscount
+            ? persuadeTempDiscount > 0
+              ? t('header.persuadeDiscountReduce', { amount: Math.abs(persuadeTempDiscount) })
+              : t('header.persuadeDiscountIncrease', { amount: Math.abs(persuadeTempDiscount) })
+            : '',
+        })}
       >
         <Handshake />
         <span className="game-header__sticker-icon__num game-header__sticker-icon__num--stack">

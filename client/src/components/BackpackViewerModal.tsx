@@ -218,7 +218,8 @@ export default function BackpackViewerModal({
       <CardBackDialogContent
         ref={originRefCallback}
         variant="blue"
-        className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto"
+        className="w-[min(90vw,42rem)]"
+        bodyClassName="max-h-[85vh] overflow-y-auto"
         contentMotion="origin"
         data-testid="backpack-viewer-modal"
       >

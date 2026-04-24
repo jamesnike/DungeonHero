@@ -90,7 +90,8 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
         ref={originRefCallback}
         variant="indigo"
         contentMotion="origin"
-        className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto"
+        className="w-[min(90vw,42rem)]"
+        bodyClassName="max-h-[85vh] overflow-y-auto"
         data-testid="deck-viewer-modal"
       >
         <DialogHeader>

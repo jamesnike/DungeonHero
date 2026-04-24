@@ -5,6 +5,11 @@ import { useShallowGameState } from '@/hooks/useGameEngine';
 interface UndoButtonContainerProps {
   onUndo: () => void;
   stageScale: number;
+  /**
+   * 撤销按钮专用锁——只在「弹射 / 翻牌雷击」这种真在跑动画的硬锁下禁用，
+   * **不**因 minimized modal 而禁用。撤销是把状态往回退、不是推进游戏，
+   * 所以即使弹窗折叠也应允许玩家撤销回到弹窗出现之前。
+   */
   fullBoardInteractionLocked: boolean;
 }
 

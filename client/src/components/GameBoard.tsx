@@ -1636,6 +1636,20 @@ export default function GameBoard() {
     discardShockInteractionLocked || flipShockInteractionLocked || minimizedModalLocksBoard;
   const fullBoardInteractionLockedRef = useRef(false);
   fullBoardInteractionLockedRef.current = fullBoardInteractionLocked;
+  /**
+   * 撤销专用锁：跟 fullBoardInteractionLocked 一样响应「弹射 / 翻牌雷击」这种
+   * 真在跑动画的硬锁，但 **不**响应 minimizedModalLocksBoard。
+   *
+   * 原因：minimizedModalLocksBoard 的设计意图是「防止玩家在弹窗隐藏时继续推进游戏
+   * 导致状态错乱」——但撤销是把状态往回退到 push snapshot 那一刻（通常是弹窗
+   * 还没被 enqueue 之前），不是推进游戏，反而是修复"误开了弹窗想退回去"的
+   * 唯一手段。所有 minimized modal 的 GameState 标志都会被 undo 整体回滚，
+   * 撤销完弹窗 + pill 自然消失。
+   */
+  const undoInteractionLocked =
+    discardShockInteractionLocked || flipShockInteractionLocked;
+  const undoInteractionLockedRef = useRef(false);
+  undoInteractionLockedRef.current = undoInteractionLocked;
   const graveyardDropGuardRef = useRef<{ blocked: boolean }>({ blocked: false });
   /** Subset used only for End Hero Turn; updated later when modal/targeting flags are known */
   const endHeroTurnGuardRef = useRef(false);
@@ -4628,7 +4642,7 @@ export default function GameBoard() {
 
   const handleUndo = useCallback(() => {
     if (engine.getUndoStack().length === 0) return;
-    if (fullBoardInteractionLockedRef.current) return;
+    if (undoInteractionLockedRef.current) return;
     // popUndoCheckpoint replaces engine state in place and notifies state
     // listeners + the undo subscription (which schedules the microtask
     // localStorage rewrite). No need for an extra `saveUndoStack` here.
@@ -8726,7 +8740,7 @@ export default function GameBoard() {
       <UndoButtonContainer
         onUndo={handleUndo}
         stageScale={stageScale}
-        fullBoardInteractionLocked={fullBoardInteractionLocked}
+        fullBoardInteractionLocked={undoInteractionLocked}
       />
 
       {/* Hand Display - Dedicated space */}

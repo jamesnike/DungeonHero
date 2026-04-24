@@ -299,6 +299,12 @@ interface PreviewCellProps {
    */
   pendingMagicAction: PendingMagicAction | null;
   onDungeonCardSelection?: (card: GameCardData) => void;
+  /**
+   * 打开 CardDetailsModal。仅在卡片已被「乾坤一翻」翻成正面（`revealedEarly === true`）
+   * 且当前不在「乾坤一翻」选择阶段时挂上——卡背状态下保持不可点（玩家不应在卡未翻开时
+   * 偷看真容）。
+   */
+  onCardClick?: (card: GameCardData) => void;
 }
 
 const PreviewCell = memo(function PreviewCell({
@@ -311,6 +317,7 @@ const PreviewCell = memo(function PreviewCell({
   onCellRef,
   pendingMagicAction,
   onDungeonCardSelection,
+  onCardClick,
 }: PreviewCellProps) {
   const card = useGameState(s => s.previewCards[index]);
   const stackedCards = useGameState(s => s.previewCardStacks[index] ?? EMPTY_ARRAY);
@@ -371,9 +378,14 @@ const PreviewCell = memo(function PreviewCell({
     );
   }
 
+  // 「乾坤一翻」选择阶段：点击触发 dungeon 选择（高亮 + pulse）。
+  // 否则若卡片已被翻成正面（revealedEarly），点击打开 CardDetailsModal。
+  // 卡背状态下两者都不挂，玩家点不出任何东西——和卡未翻开时不应偷看真容的设计一致。
   const handlePreviewClick = previewSelectable && onDungeonCardSelection
     ? () => onDungeonCardSelection(card)
-    : undefined;
+    : revealedEarly && onCardClick
+      ? () => onCardClick(card)
+      : undefined;
   const highlightClass = previewSelectable ? 'dungeon-target-highlight animate-pulse' : '';
 
   // The cell wrapper (animation transforms attach here so drop/graveyard/deal
@@ -384,7 +396,7 @@ const PreviewCell = memo(function PreviewCell({
       <div className="dh-preserve-3d animate-preview-reveal absolute inset-0">
         {/* Front face — visible at rotateY(0deg) */}
         <div className="absolute inset-0 dh-backface-hidden">
-          <GameCard card={card} disableInteractions hideEventChoices />
+          <GameCard card={card} disableInteractions />
         </div>
         {/* Back face — visible at rotateY(180deg) */}
         <div
@@ -416,7 +428,6 @@ const PreviewCell = memo(function PreviewCell({
       card={card}
       className={`${hasStack ? 'relative z-[5] ' : ''}${highlightClass}`.trim()}
       disableInteractions={!previewSelectable}
-      hideEventChoices
       onClick={handlePreviewClick}
     />
   );
@@ -476,8 +487,8 @@ interface PreviewRowProps {
   cellInnerClass: string;
   onCellRef: (index: number, el: HTMLDivElement | null) => void;
   /**
-   * @deprecated Preview cards are face-down — clicks are intentionally
-   * disabled. Prop kept so existing GameBoard call sites compile; not invoked.
+   * 打开 CardDetailsModal。仅在卡片已被「乾坤一翻」翻成正面（`previewRevealedEarly[index]`）
+   * 时挂上；卡背状态下点击无响应。GameBoard 透传 `handleCardClick`。
    */
   onCardClick?: (card: GameCardData) => void;
   /**
@@ -495,6 +506,7 @@ export const PreviewRow = memo(function PreviewRow({
   cellWrapperClass,
   cellInnerClass,
   onCellRef,
+  onCardClick,
   onDungeonCardSelection,
 }: PreviewRowProps) {
   const pendingMagicAction = useGameState(s => s.pendingMagicAction);
@@ -511,6 +523,7 @@ export const PreviewRow = memo(function PreviewRow({
           cellInnerClass={cellInnerClass}
           onCellRef={onCellRef}
           pendingMagicAction={pendingMagicAction}
+          onCardClick={onCardClick}
           onDungeonCardSelection={onDungeonCardSelection}
         />
       ))}

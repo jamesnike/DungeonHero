@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Trophy, Skull, Coins, Heart, Swords, Minus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +28,7 @@ export default function VictoryDefeatModal({
   totalHealed = 0,
   scaleMultiplier = 1,
 }: VictoryDefeatModalProps) {
+  const { t } = useTranslation();
   if (!open) return null;
 
   return (
@@ -46,7 +48,7 @@ export default function VictoryDefeatModal({
           <button
             onClick={onMinimize}
             className="absolute top-2.5 right-2.5 w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            aria-label="最小化"
+            aria-label={t('common.minimize')}
           >
             <Minus className="w-4 h-4" />
           </button>
@@ -67,19 +69,19 @@ export default function VictoryDefeatModal({
 
         {/* Title */}
         <h2 className="text-center font-serif text-2xl font-bold tracking-wide">
-          {isVictory ? 'Victory!' : 'Defeat'}
+          {isVictory ? t('victory.victoryTitle') : t('victory.defeatTitle')}
         </h2>
         <p className="text-center text-sm text-muted-foreground -mt-1">
           {isVictory
-            ? 'You have conquered the dungeon!'
-            : 'The darkness has claimed you...'}
+            ? t('victory.victorySubtitle')
+            : t('victory.defeatSubtitle')}
         </p>
 
         {/* Stats grid */}
         <div className="w-full grid grid-cols-2 gap-2 pt-1">
           <div className="flex flex-col items-center gap-1 p-2 bg-muted rounded-md">
             <Coins className="w-4 h-4 text-yellow-500" />
-            <span className="text-[10px] text-muted-foreground">Gold</span>
+            <span className="text-[10px] text-muted-foreground">{t('victory.gold')}</span>
             <Badge variant="outline" className="font-mono text-base">
               {gold}
             </Badge>
@@ -88,7 +90,7 @@ export default function VictoryDefeatModal({
           {isVictory && (
             <div className="flex flex-col items-center gap-1 p-2 bg-muted rounded-md">
               <Heart className="w-4 h-4 text-destructive" />
-              <span className="text-[10px] text-muted-foreground">HP Left</span>
+              <span className="text-[10px] text-muted-foreground">{t('victory.hpLeft')}</span>
               <Badge variant="outline" className="font-mono text-base">
                 {hpRemaining}
               </Badge>
@@ -97,7 +99,7 @@ export default function VictoryDefeatModal({
 
           <div className="flex flex-col items-center gap-1 p-2 bg-muted rounded-md">
             <Skull className="w-4 h-4 text-primary" />
-            <span className="text-[10px] text-muted-foreground">Defeated</span>
+            <span className="text-[10px] text-muted-foreground">{t('victory.defeated')}</span>
             <Badge variant="outline" className="font-mono text-base">
               {monstersDefeated}
             </Badge>
@@ -105,7 +107,7 @@ export default function VictoryDefeatModal({
 
           <div className="flex flex-col items-center gap-1 p-2 bg-muted rounded-md">
             <Swords className="w-4 h-4 text-destructive" />
-            <span className="text-[10px] text-muted-foreground">Damage</span>
+            <span className="text-[10px] text-muted-foreground">{t('victory.damage')}</span>
             <Badge variant="outline" className="font-mono text-base">
               {damageTaken}
             </Badge>
@@ -113,7 +115,7 @@ export default function VictoryDefeatModal({
 
           <div className="flex flex-col items-center gap-1 p-2 bg-muted rounded-md">
             <Heart className="w-4 h-4 text-green-500" />
-            <span className="text-[10px] text-muted-foreground">Healed</span>
+            <span className="text-[10px] text-muted-foreground">{t('victory.healed')}</span>
             <Badge variant="outline" className="font-mono text-base">
               {totalHealed}
             </Badge>
@@ -127,7 +129,7 @@ export default function VictoryDefeatModal({
           size="lg"
           data-testid="button-restart"
         >
-          Play Again
+          {t('victory.playAgain')}
         </Button>
       </div>
     </div>

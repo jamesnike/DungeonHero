@@ -28,12 +28,6 @@ interface CardDetailsModalProps {
   currentTurn: number;
   monsterRewards?: MonsterRewardPreview[] | null;
   isQuickMode?: boolean;
-  /**
-   * Hide event-card choice list (preview-row context).
-   * Description / waterfall warning are still shown.
-   * Only applies to event cards (not buildings).
-   */
-  hideEventChoices?: boolean;
 }
 
 export default function CardDetailsModal({
@@ -43,7 +37,6 @@ export default function CardDetailsModal({
   currentTurn,
   monsterRewards,
   isQuickMode = false,
-  hideEventChoices = false,
 }: CardDetailsModalProps) {
   const arcaneStormDamage = useArcaneStormDamage();
   const arcaneShieldStunGain = useArcaneShieldStunGain();
@@ -1415,7 +1408,7 @@ export default function CardDetailsModal({
                 <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{card.description}</p>
               </div>
             )}
-            {(card.type === 'event' || card.type === 'building') && card.eventChoices && !(card.type === 'event' && hideEventChoices) && (
+            {(card.type === 'event' || card.type === 'building') && card.eventChoices && (
               <div className="space-y-2">
                 <div className="font-semibold mb-1">{card.type === 'building' ? '建筑能力' : '事件选项'}</div>
                 {card.eventChoices.map((choice, idx) => (

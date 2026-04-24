@@ -145,7 +145,8 @@ function ClassDeckComponent({
           ref={originRefCallback}
           variant="bright"
           contentMotion="origin"
-          className="w-[min(90vw,42rem)] max-h-[85vh] overflow-y-auto"
+          className="w-[min(90vw,42rem)]"
+          bodyClassName="max-h-[85vh] overflow-y-auto"
           data-testid="class-deck-viewer-modal"
         >
           <DialogHeader>
