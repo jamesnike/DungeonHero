@@ -88,8 +88,44 @@ const state = makeState({
 | `MONSTER_ENTERED_ROW` | Ogre `auto-engage` / 精英 Ogre `ogreEnterDiscard` 入场效果延迟到下一次 dispatch 才触发 | 本规则编写时已修 |
 | `UPDATE_GAME_LOG`（震慑领域 stun-domain） | RESOLVE_DICE 末尾 enqueue `[UPDATE_GAME_LOG, FINALIZE_MAGIC_CARD]`，drain 卡在 UPDATE_GAME_LOG → 卡牌进 limbo（手牌没了但没进坟场） | pipeline.ts 注释 |
 | `TRIGGER_ON_ENTER_HAND` | 上手关键字（生长之刃 amplify 等）卡在队列，卡永远拿不到 buff | pipeline.ts 注释 |
+| `DISCARD_OWNED_CARD` | 血咒仪式（`waterfallEffect: boostRowMonsterAttack`）被瀑流挤掉，效果触发了但**卡本身没进坟场**——`reduceApplyWaterfallDiscardEffects` 的 `sendToGraveyardUnlessFinal` enqueue 了 `DISCARD_OWNED_CARD`，drain 在 playerInput 下卡住。同样影响所有 7 条 `waterfallEffect` 分支 + no-effect 默认分支 + 所有「玩家弃手牌」magic resolver（专属召唤 / 汰旧迎新 / 回响行囊 / 噬血砺锋 / 祭坛秘术 etc.） | pipeline.ts 注释 |
+| `DISCARD_ALL_HAND` | 诅咒骰局（waterfall destroyAllAmuletsAndDiscardHand）+ 任何全手牌弃置 magic。reducer fan-out 成 N×`DISCARD_OWNED_CARD`，但 `DISCARD_ALL_HAND` 自己也会在 playerInput 下被 strand → 整个批量弃手牌不发生 | pipeline.ts 注释 |
+| `DISPOSE_EQUIPMENT_CARD` | 贪婪 boss（waterfall destroyAllEquipment）+ 装备顶替 fromSlot 路径。**装备从槽位消失但不进任何目的地**——非 Perm 应进坟场 / Perm 应进回收袋 / 残骸回收符 应回手牌，结果三个目的地都没到 | pipeline.ts 注释 |
+| `REMOVE_PREVIEW_CARD_STACKS` | 瀑流挤掉 stacked preview 列时 enqueue 的元数据更新。strand 后 `state.previewCardStacks` 仍引用已不存在的列 → 下一帧 preview 渲染错位 | pipeline.ts 注释 |
+| `ADD_CARD_TO_HAND` | 装备销毁的 `graveyard-to-hand` last-words（如某些铁剑系列：装备死亡时从坟场抽一张回手牌）。strand 后**应该到玩家手牌的卡停在队列里**，玩家以为关键字没生效 | pipeline.ts 注释 |
 
 新加 case 时**照旧的注释格式写一段 bug 历史**，让下次的人能秒懂为什么这条 case 在这。
+
+## 「Disposition router 家族」特别提醒
+
+`DISCARD_OWNED_CARD` / `DISCARD_ALL_HAND` / `DISPOSE_EQUIPMENT_CARD` / `ADD_TO_GRAVEYARD` / `ADD_TO_RECYCLE_BAG` 是「卡的去向路由」家族——它们的失败模式比一般 follow-up 更恶劣：
+
+> **strand 时玩家看到的不是「效果延迟」，而是「卡凭空消失」。**
+
+具体来说：
+
+- 一般的 follow-up（`MONSTER_ENTERED_ROW` / `TRIGGER_ON_ENTER_HAND`）strand → "效果没触发"，玩家以为卡牌设计就是这样
+- Disposition router strand → 卡从 `handCards` / `activeCards` / `equipmentSlot1/2` 消失，但**没进任何已知目的地**（`discardedCards` / `permanentMagicRecycleBag`）。玩家以为游戏 bug 把卡删了 / 数据丢了，bug 报告语气会很激烈
+
+**任何新加的 disposition router 类 action（凡是把卡从某个 collection 移到另一个 collection 的）必须 100% 进白名单。** 不要等用户报告"卡消失了"才补——这种 bug 在 console / log 里几乎不留痕迹（卡的引用真的就在内存里被 GC 了），排查极慢。
+
+## 测试 fixture 反模式：`createInitialGameState()` 默认 `phase: 'idle'`
+
+**这是这条规则的所有 bug 共同的"测试漏过"根因**。`createInitialGameState()` 默认 `phase: 'idle'`，而 `'idle'` **不在** `INPUT_PHASES` 里 → `isInputContinuation` 检查根本不触发 → 测试看到的是"完美的同步 drain"，跟真实游戏的 `'playerInput'` 行为完全脱节。
+
+**强制**：测任何涉及 enqueue follow-up action 的 reducer 链时，fixture 必须显式覆盖 `phase: 'playerInput'`。
+
+```ts
+// ❌ BAD: 用默认 phase（'idle'），isInputContinuation 不生效
+const state = createInitialGameState();
+
+// ✅ GOOD: 显式 playerInput，跟真实游戏对齐
+const state = { ...createInitialGameState(), phase: 'playerInput' };
+```
+
+历史教训：`amulet-perm-routing-on-destroy.test.ts`、`discard-all-hand.test.ts`、`equipment-break-routes-to-graveyard.test.ts` 都覆盖了 Perm 路由 / 装备销毁的正确逻辑——但**全部用了默认 `phase: 'idle'`**，所以 disposition router strand 的 5 条 bug 它们一条都抓不到。新写"卡的去向"相关测试时必须同时跑 `'idle'`（验证 reducer 内部分流逻辑）和 `'playerInput'`（验证 pipeline drain 不卡）。
+
+参考实现：`client/src/game-core/__tests__/waterfall-discard-routes-card-to-graveyard.test.ts` 同时覆盖 4 条 disposition router 路径在 `phase: 'playerInput'` 下的完整链 + 3 fixture 矩阵（普通 / Perm / `permStripped`）。
 
 ## 自检
 
@@ -97,7 +133,8 @@ const state = makeState({
 
 > 1. `'XXX'` 在 `pipeline.ts` 的 `isInputContinuation` switch 里有 case 吗？
 > 2. 如果没有，它会不会在 `phase === 'playerInput'` 下被 enqueue？（99% 情况是会）
-> 3. 我的测试 fixture 是不是用了 `phase: 'playerInput'`，而不是默认的 `'idle'`？
+> 3. `'XXX'` 是不是 disposition router 家族（把卡从一个 collection 移到另一个）？如果是，**100% 必须**进白名单——失败时玩家会看到"卡凭空消失"。
+> 4. 我的测试 fixture 是不是用了 `phase: 'playerInput'`，而不是默认的 `'idle'`？
 
 任意一条「没」或「不确定」，回头补 case + 改测试 fixture 再继续。
 

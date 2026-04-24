@@ -349,6 +349,45 @@ function isInputContinuation(action: GameAction): boolean {
     case 'ENFORCE_BACKPACK_CAPACITY':
     case 'RESTORE_RECYCLE_BAG':
     case 'REMOVE_CLASS_CARD_FROM_HAND':
+    // Card disposition router — enqueued by reducers (notably waterfall.ts
+    // `reduceApplyWaterfallDiscardEffects` `sendToGraveyardUnlessFinal`,
+    // and every "player discards a hand card" magic resolver: 专属召唤 /
+    // 汰旧迎新 / 回响行囊 / 噬血砺锋 / 祭坛秘术 / etc.) when a card needs
+    // to be routed to graveyard or recycle bag.
+    //
+    // Bug history: when 血咒仪式 (waterfallEffect: boostRowMonsterAttack)
+    // was pushed off by waterfall under phase='playerInput', the enqueued
+    // DISCARD_OWNED_CARD was stranded in the queue — the card disappeared
+    // from the preview row but never reached `discardedCards`. The same
+    // hole affects every waterfall-discard path (all 7 waterfallEffect
+    // branches + the no-effect default branch all funnel through
+    // `sendToGraveyardUnlessFinal`), plus every magic resolver that
+    // discards a hand card while the game is in playerInput.
+    case 'DISCARD_OWNED_CARD':
+    // DISCARD_ALL_HAND — enqueued by waterfall.ts `destroyAllAmuletsAndDiscardHand`
+    // (诅咒骰局 瀑流) and by hand-wide-discard magic effects. Reducer fans out
+    // into N x DISCARD_OWNED_CARD, one per non-curse hand card. Stranded under
+    // playerInput → "整个批量弃手牌不发生", no card in hand reaches the
+    // graveyard. Same root cause as DISCARD_OWNED_CARD above.
+    case 'DISCARD_ALL_HAND':
+    // DISPOSE_EQUIPMENT_CARD — enqueued by waterfall.ts `destroyAllEquipment`
+    // (贪婪 boss 瀑流) and by every equipment-displace path (新装备顶替旧装备
+    // 时 fromSlot 被 push 出去). Reducer routes the equipment to graveyard /
+    // recycle bag (Perm) / 残骸回收符 回手牌. Stranded under playerInput →
+    // 装备从槽位消失但不进任何目的地。Same root cause.
+    case 'DISPOSE_EQUIPMENT_CARD':
+    // REMOVE_PREVIEW_CARD_STACKS — enqueued by waterfall.ts when a discarded
+    // preview column had stacked cards (those stacks need their index entry
+    // removed from `state.previewCardStacks`). Pure metadata patch, doesn't
+    // route any card itself, but stranding it leaves the stacks map
+    // referencing a column that no longer exists in the preview row, which
+    // can mis-render the next preview frame.
+    case 'REMOVE_PREVIEW_CARD_STACKS':
+    // ADD_CARD_TO_HAND — enqueued by waterfall.ts equipment-destroy
+    // last-words (`graveyard-to-hand` keyword: pull a card from graveyard
+    // back to hand when this equipment dies). Stranded under playerInput
+    // → 应该到玩家手牌的那张卡停在队列里，玩家以为效果没触发。
+    case 'ADD_CARD_TO_HAND':
     case 'APPLY_DISCARD_EFFECTS':
     case 'UPDATE_MONSTER_CARD':
     case 'REGISTER_DUNGEON_CARD_PROCESSED':
