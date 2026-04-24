@@ -221,6 +221,7 @@ function reducePlayCard(
       if (monsters.length > 0) {
         const [target, nextRng] = pickRandom(monsters, state.rng);
         patch.rng = nextRng;
+        ensureMonsterEngaged(state, target, enqueuedActions);
         enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: amount, source: 'flank-damage' });
         sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害` } });
         sideEffects.push({ event: 'ui:banner', payload: { text: `侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！` } });
@@ -1385,6 +1386,7 @@ function reduceApplyDiscardEffects(
       patch.rng = rng2;
       const spellBonus = state.permanentSpellDamageBonus ?? 0;
       const dmg = card.onDiscardDamage + spellBonus;
+      ensureMonsterEngaged(state, target, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: dmg, source: `discard:${card.name}`, isSpellDamage: true });
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${card.name} 被弃：对 ${target.name} 造成 ${dmg} 点法术伤害` } });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 被弃，对 ${target.name} 造成了 ${dmg} 点伤害！` } });
@@ -2835,6 +2837,7 @@ function reduceTriggerGraveNova(
   });
 
   for (const monster of monsters) {
+    ensureMonsterEngaged(state, monster, enqueuedActions);
     enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: dmg, source: 'grave-nova', isSpellDamage: true });
   }
 

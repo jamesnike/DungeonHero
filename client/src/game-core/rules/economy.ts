@@ -20,6 +20,18 @@ import { computeAmuletEffects } from '../equipment';
 import { computeSpellDamagePure } from '../helpers';
 import type { PendingMonsterEndDice } from '../types';
 
+// 本地 ensureMonsterEngaged 副本，避免与 magic-effects.ts 形成循环依赖。
+// 行为必须跟 magic-effects.ts:ensureMonsterEngaged 和 hero.ts:ensureEngaged 一致。
+function ensureMonsterEngagedLocal(
+  state: GameState,
+  monster: GameCardData,
+  enqueuedActions: GameAction[],
+): void {
+  if (!(state.combatState?.engagedMonsterIds ?? []).includes(monster.id)) {
+    enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
+  }
+}
+
 // Helper: 雷金护符 effect — for each stun event on a monster, grant +10×N gold
 // (N = stun-gold amulet count) AND immediately remove that monster's stun.
 // Per-monster trigger: callers MUST invoke once per stunned monster (multi-stun
@@ -650,6 +662,7 @@ function reduceResolveDice(
             newState = { ...newState, rng };
             const target = monsters[idx];
             const lightningDmg = computeSpellDamagePure(newState, 3);
+            ensureMonsterEngagedLocal(newState, target, enqueuedActions);
             enqueuedActions.push(
               { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: lightningDmg, source: 'chaos-lightning', isSpellDamage: true } as GameAction,
               { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: lightningDmg, source: 'chaos-lightning-2', isSpellDamage: true } as GameAction,

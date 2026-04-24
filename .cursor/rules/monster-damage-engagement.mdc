@@ -1,0 +1,164 @@
+---
+description: 任何对怪物的伤害都必须触发激怒（BEGIN_COMBAT）；reducer 入口有安全网兜底，callsite 仍要显式 engage
+alwaysApply: true
+---
+
+# 不变量：任何怪物受伤 ⇒ 必须激怒
+
+> **任何打到 `monster.type === 'monster'` 的伤害，都必须让该怪物进入交战（`combatState.engagedMonsterIds` 包含它的 id）。**
+
+意义：玩家直觉「打了它就会跟我打」。漏 engage = 玩家对怪物造成伤害但怪物在「待机行」继续静止，下回合也不还手；多血层怪物 `currentLayer` 不会从 `fury` 推进；一系列「击杀奖励 / 鏖战护符 / 战血充能 / Ogre auto-engage」永恒护符串通通哑火。
+
+## 一次真实事故（10 条漏 engage 路径）
+
+`DEAL_DAMAGE_TO_MONSTER` reducer **历史上**自身不做 engage —— 所有「非武器攻击」路径必须**主动**在前面 enqueue `BEGIN_COMBAT`。但因为只是 helper 调用（不是自动行为），漏写一个 helper 就漏一个，长年累月攒下 10 条 bug：
+
+| 来源类型 | 漏 engage 的卡 / 效果 |
+|---|---|
+| Magic AOE | 风暴箭雨 `storm-volley` / 箭雨余韵 `storm-volley-recycle` / 殉烈爆鸣 `grave-nova` |
+| Hero Magic | 沸血冲击 `blood-strike`（单怪物 + 玩家选目标 两条分支都漏）|
+| 弃置时伤害 | `card.onDiscardDamage`（雷霆符印类）|
+| 侧击随机伤害 | `flank-damage`（`reducePlayCard` 路径 + `GameBoard` 两条 imperative 路径）|
+| 事件骰 | 混沌仪式 chaos-4 `chaos-lightning` / `chaos-lightning-2` |
+| 装备反震 | Golem 反震（4 处：武器 / 盾击穿 / 格挡 / 自伤打盾）|
+| 装备反震 | Dragon 龙息反震（盾被打到时打随机怪物 2 点）|
+| 装备附魔 | 奥术之刃 `arcane-blade-spell`（武器攻击后对随机怪追加法伤）|
+
+## 双层保护（已经实现，必须维持）
+
+### 第 1 层：reducer 入口 universal safety net（兜底，不要删）
+
+`client/src/game-core/rules/combat.ts` `reduceDealDamageToMonster` 顶部：
+
+```ts
+// --- Universal monster engagement (safety net) ---
+// 任何对怪物的伤害都自动激怒它。各路径仍然鼓励显式 enqueue BEGIN_COMBAT / 调
+// ensureMonsterEngaged 让意图显式，但这里兜底确保「漏写 helper」永远不会再
+// 出现「打了没激怒」的 bug。
+if (
+  monster.type === 'monster' &&
+  !(state.combatState?.engagedMonsterIds ?? []).includes(monster.id)
+) {
+  enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
+}
+```
+
+`reduceBeginCombat` 对 `building` 类型早返为 noop、对已 engaged 的怪物 idempotent，所以这条兜底**零副作用**。**不要删**——它是新加伤害卡的失败保险。
+
+### 第 2 层：callsite 显式 engage（推荐，让意图可读 + 控制顺序）
+
+虽然 safety net 兜底，但显式 engage 仍然是**强推荐**做法，因为：
+
+1. **顺序自然**：手动 enqueue 时 `BEGIN_COMBAT` 排在 `DEAL_DAMAGE_TO_MONSTER` **之前**，UI 看到「先进入战斗 → 后伤害命中」；只靠 safety net 时这两条 action 在同一 reducer 步骤产生，drain 顺序可能把 BEGIN_COMBAT 推到 damage 之后，display 上看起来「血掉了才进入战斗」。
+2. **意图可读**：写代码的人 / 读代码的人都能一眼看到「这条路径设计上就是要激怒目标」，不用追到 reducer 入口才发现是 safety net 帮忙兜的。
+3. **未来一旦有人改 safety net 行为**（比如想加 owner 判断、想区分 hero-source 和 reflect-source），显式 engage 路径不受影响。
+
+## 在不同文件里用什么 helper
+
+`ensureMonsterEngaged` 这个 helper 因为循环依赖问题，在不同文件**不能直接 import**。各文件的正确写法：
+
+| 文件 | Helper 来源 | 用法 |
+|---|---|---|
+| `rules/magic-effects.ts` | 自己定义并 export | `ensureMonsterEngaged(state, monster, enqueuedActions)` |
+| `rules/cards.ts` | import from `magic-effects.ts` | 同上 |
+| `rules/hero.ts` | 本地 alias `ensureEngaged` | `ensureEngaged(state, monster, enqueuedActions)` |
+| `rules/economy.ts` | 本地 `ensureMonsterEngagedLocal`（避免与 `magic-effects.ts` 循环依赖）| `ensureMonsterEngagedLocal(state, monster, enqueuedActions)` |
+| `rules/combat.ts` | 本地 `ensureMonsterEngagedLocal` | 同上 |
+| `rules/shield-self-damage.ts` | 单点 inline（无 reducer 上下文）| 见下面 inline pattern |
+| Hooks / `GameBoard.tsx` | 组件作用域内的 `beginCombat` + `isMonsterEngaged` | 见下面 hook pattern |
+
+### Reducer pattern（推荐）
+
+```ts
+// 在任何 enqueue DEAL_DAMAGE_TO_MONSTER 之前
+ensureMonsterEngaged(state, monster, enqueuedActions);
+enqueuedActions.push({
+  type: 'DEAL_DAMAGE_TO_MONSTER',
+  monsterId: monster.id,
+  damage,
+  source: '<your-source-id>',
+});
+```
+
+### Inline pattern（无 helper 时）
+
+```ts
+if (
+  reflectTarget &&
+  !(state.combatState?.engagedMonsterIds ?? []).includes(reflectTarget.id)
+) {
+  enqueuedActions.push({
+    type: 'BEGIN_COMBAT',
+    monster: reflectTarget,
+    initiator: 'hero',
+  });
+}
+enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', /* ... */ });
+```
+
+### Hook / GameBoard pattern（参考 `discard-zap` / `flip-zap`）
+
+```ts
+if (!isMonsterEngaged(target.id)) {
+  beginCombat(target, 'hero');
+  // 或者：beginCombatRef.current(target, 'hero');
+}
+dealDamageToMonster(target, amount);
+```
+
+## 已经合规的对照范例
+
+写新 magic / amulet / reflect 伤害时，**先看一个已合规的兄弟实现照抄**，不要重新设计：
+
+| 类型 | 文件 : 行 |
+|---|---|
+| Magic 单目标 | `magic-effects.ts:2546` `resolveSpellDamageHit` / `:2438` 盾影双噬 |
+| Magic AOE | `magic-effects.ts:2667` 三牌惊雷 / `cards.ts:2885` 魔弹风暴 / `cards.ts:2840` 殉烈爆鸣 |
+| Magic 风暴 | `magic-effects.ts:3658` 风暴箭雨 / `:4037` 箭雨余韵 |
+| Hero magic | `hero.ts:1123` 战血横扫 / `:1170` 利刃风暴 / `:1287` 蓄能裂击 / `:1563/1968+...` 等所有 hero magic resolver |
+| 弃置时伤害 | `cards.ts:1388` `onDiscardDamage` |
+| 侧击伤害 | `cards.ts:224` `flank-damage` reducer / `GameBoard.tsx:6055/6845` imperative |
+| 事件骰 | `economy.ts:654` `chaos-lightning` |
+| Golem 反震 | `combat.ts:1891/2787/3491` + `shield-self-damage.ts:228-241` |
+| Dragon 反震 | `combat.ts:3339` |
+| 武器附魔法伤 | `combat.ts:3070` `arcane-blade-spell` |
+| 上手伤害 | `card-schema/definitions/on-enter-hand.ts:121-122` 三牌惊雷上手 |
+| 弃牌雷击护符 | `GameBoard.tsx:2188/2400/2443/2653` `discard-zap` / `flip-zap` |
+
+## What NOT to do
+
+- ❌ 写新「打怪物」效果时，**只**写 `enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', ... })`，依赖 safety net 兜底——会让 BEGIN_COMBAT 排在 damage 之后，UI 顺序倒置，玩家看到「先掉血再进战斗」。
+- ❌ 删掉 `reduceDealDamageToMonster` 顶部的 universal safety net——它是失败保险，不是冗余代码。
+- ❌ 在 `economy.ts` / `combat.ts` 里 `import { ensureMonsterEngaged } from './magic-effects'`——会形成循环依赖。用本地 `ensureMonsterEngagedLocal` 副本。
+- ❌ 给 `DEAL_DAMAGE_TO_MONSTER` 之前的 engage 加奇怪条件（如「damage > 0 才 engage」）——伤害可以是 0 但仍然算「打到怪物」，应当激怒；除了「`monster.type === 'monster'`」+「未 engaged」这两条以外不要加其它 gate。
+- ❌ 测试 fixture 用 `createInitialGameState()` 默认 phase（`'idle'`）——`isInputContinuation` 不生效，`BEGIN_COMBAT` 通过 enqueuedActions 链跑得跟真实游戏不一样。测引入新伤害路径时 fixture 必须显式覆盖 `phase: 'playerInput'`（参考 `pipeline-input-continuation.mdc`）。
+
+## What to do
+
+- ✅ 任何「打怪物」的新代码先抄一个对照范例（见上表），保证顺序是「ensureMonsterEngaged → DEAL_DAMAGE_TO_MONSTER」。
+- ✅ 写完后断言两件事：(a) `state.combatState.engagedMonsterIds.includes(target.id) === true`；(b) `target.currentHp` / `currentLayer` 按预期变动。两条都要测，不要只测 (b)。
+- ✅ 在新加 `BEGIN_COMBAT` 的文件如果跟 `magic-effects.ts` 有 import 循环风险，定义本地 `ensureMonsterEngagedLocal` 副本，**行为必须跟 `magic-effects.ts:ensureMonsterEngaged` 完全一致**（仅 `monster.type === 'monster'` 这条 gate 的判断已经被 reducer 兜底了，本地 helper 不重复判断也没事，但要保留「未 engaged 才 enqueue」这条幂等保护）。
+
+## 自检
+
+每次准备写 `enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', ... })`（reducer）或 `dealDamageToMonster(target, ...)`（hook）前，问自己：
+
+> 1. 我有没有在它**之前**显式 engage（`ensureMonsterEngaged` / `ensureEngaged` / `ensureMonsterEngagedLocal` / inline `BEGIN_COMBAT` enqueue / `beginCombat(target, 'hero')`）？
+> 2. 如果我「没」做，我是不是在依赖 reducer 入口的 safety net？显式做一遍更可读，也保证 `BEGIN_COMBAT` 排在 damage 之前。
+> 3. 我的测试 fixture 是不是 `phase: 'playerInput'` 而不是默认的 `'idle'`？
+> 4. 我有没有断言 `engagedMonsterIds.includes(target.id)`？
+
+任意一条「没」，回头补再写。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| 任何怪物受伤都激怒（callsite + safety net）| ✅ 这条 | ❌ |
+| `DEAL_DAMAGE_TO_MONSTER` / 战斗 reducer 边界 | 部分（仅 engagement 子题）| `combat-pipeline` |
+| 内部 follow-up action 在 INPUT 相位下 drain（`BEGIN_COMBAT` 也属此类）| ❌ | `pipeline-input-continuation` |
+| 怪物进坟场后 `currentLayer` reset | ❌ | `monster-graveyard-layer-reset` |
+| Hook 是 thin dispatcher，伤害不要在 hook 里算 | ❌ | `hook-thin-dispatchers` |
+| 多步 reducer 用 `enqueuedActions` 而非 hook 顺序 dispatch | ❌ | `reducer-patterns` |
+
+写新伤害路径时，`pipeline-input-continuation` 和 `combat-pipeline` 这两条**也要核对**。

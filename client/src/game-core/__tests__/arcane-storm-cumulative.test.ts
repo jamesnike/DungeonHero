@@ -33,7 +33,7 @@ function arcaneStormCard(id = 'storm-1'): GameCardData {
     value: 0,
     magicType: 'permanent',
     magicEffect: 'arcane-storm-magic-count',
-    recycleDelay: 1,
+    recycleDelay: 2,
   } as GameCardData;
 }
 

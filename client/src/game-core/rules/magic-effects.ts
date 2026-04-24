@@ -3655,6 +3655,7 @@ export function resolveStormVolley(
   }
   const volleyDamage = getSpellDamage(3 + (card.amplifyBonus ?? 0), state) * echoMultiplier;
   for (const monster of monsters) {
+    ensureMonsterEngaged(state, monster, enqueuedActions);
     enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: volleyDamage, source: 'storm-volley', isSpellDamage: true });
   }
   if (monsters.length >= 3) {
@@ -4034,6 +4035,7 @@ export function resolveStormVolleyRecycle(
   }
   const svDamage = getSpellDamage(1 + (card.amplifyBonus ?? 0), state) * echoMultiplier;
   for (const monster of monsters) {
+    ensureMonsterEngaged(state, monster, enqueuedActions);
     enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: svDamage, source: 'storm-volley-recycle', isSpellDamage: true });
   }
   const hitCount = svDamage > 0 ? monsters.length : 0;

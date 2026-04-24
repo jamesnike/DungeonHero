@@ -687,7 +687,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
   5. 发现一张坟场的Magic卡 → `graveyardDiscoverMagic`（需坟场≥1） → 翻转为「奥术护盾」
   6. 回收袋至多2张Magic移到手上 → `recycleBagMagicToHand:2` → 翻转为「奥术护盾」
   7. 净化奥能（删除至多 2 张牌，跳过翻转） → `deleteCard:2`（需手牌或背包 ≥ 1，skipFlip）
-- 翻转为「奥术风暴」（永久魔法 Perm 1），destination: backpack
+- 翻转为「奥术风暴」（永久魔法 Perm 2），destination: backpack
   - 效果：造成 X 点伤害，X = 已使用的魔法卡累计数量。使用后计数清零，瀑流也会清零。（`arcane-storm-magic-count`）
 - 翻转为「奥术护盾」（永久魔法 Perm 2），destination: backpack
   - 效果：击晕上限 +X%，X = 本回合已使用的非伤害魔法卡数量（`arcane-shield-stun-cap`）

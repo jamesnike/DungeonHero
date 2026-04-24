@@ -6052,6 +6052,11 @@ export default function GameBoard() {
             let rng = engine.getState().rng;
             const [target, rng2] = pickRandom(monsters, rng); rng = rng2;
             dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+            // 显式激怒目标：跟 discard-zap / flip-zap 风格一致，意图明确，
+            // 不依赖 reduceDealDamageToMonster 的 universal engagement safety net。
+            if (!isMonsterEngaged(target.id)) {
+              beginCombat(target, 'hero');
+            }
             dealDamageToMonster(target, amount);
             addGameLog('event', `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害`);
             dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！` });
@@ -6842,6 +6847,11 @@ export default function GameBoard() {
               let rng = engine.getState().rng;
               const [target, rng2] = pickRandom(monsters, rng); rng = rng2;
               dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+              // 显式激怒目标：跟 discard-zap / flip-zap 风格一致，意图明确，
+              // 不依赖 reduceDealDamageToMonster 的 universal engagement safety net。
+              if (!isMonsterEngaged(target.id)) {
+                beginCombat(target, 'hero');
+              }
               dealDamageToMonster(target, amount);
               addGameLog('event', `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害`);
               dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！` });

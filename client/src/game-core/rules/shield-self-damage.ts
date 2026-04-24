@@ -226,6 +226,20 @@ export function applyShieldSlotSelfDamage(
           patch[slotId] = { ...durabilityBase, ...durStripped } as EquipmentItem;
 
           if (durResult.golemReflectDamage) {
+            const reflectTargetId = durResult.golemReflectDamage.targetId;
+            const reflectTarget = state.activeCards.find(
+              (c): c is GameCardData => !!c && c.id === reflectTargetId,
+            );
+            if (
+              reflectTarget &&
+              !(state.combatState?.engagedMonsterIds ?? []).includes(reflectTargetId)
+            ) {
+              enqueuedActions.push({
+                type: 'BEGIN_COMBAT',
+                monster: reflectTarget,
+                initiator: 'hero',
+              });
+            }
             enqueuedActions.push({
               type: 'DEAL_DAMAGE_TO_MONSTER',
               monsterId: durResult.golemReflectDamage.targetId,

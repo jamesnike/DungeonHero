@@ -163,6 +163,22 @@ export function reduceCombatActions(state: GameState, action: GameAction): Reduc
   }
 }
 
+// 本地 ensureMonsterEngaged helper：跟 magic-effects.ts:ensureMonsterEngaged
+// 和 hero.ts:ensureEngaged 行为完全一致。combat.ts 不引入对 magic-effects.ts
+// 的依赖（避免潜在循环），所以本地维护一份。reduceDealDamageToMonster 入口
+// 已有「兜底 engage」，下面的 reflect / postAttackSpellDamage 等显式调用
+// 这个 helper 让意图更明确，并保证 BEGIN_COMBAT 在 DEAL_DAMAGE_TO_MONSTER
+// 之前 enqueue（display 顺序：先「进入战斗」banner，再伤害命中）。
+function ensureMonsterEngagedLocal(
+  state: GameState,
+  monster: GameCardData,
+  enqueuedActions: GameAction[],
+): void {
+  if (!(state.combatState?.engagedMonsterIds ?? []).includes(monster.id)) {
+    enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // BEGIN_COMBAT
 // ---------------------------------------------------------------------------
@@ -487,6 +503,7 @@ function reduceApplyDamage(
 // DEAL_DAMAGE_TO_MONSTER
 //
 // Comprehensive spell/skill damage resolution. Handles:
+//   - **Universal monster engagement** (any damage to a monster auto-enrages it)
 //   - Building magic immunity (curse monument aura)
 //   - Spell damage reduction on monster
 //   - Swarm buglet shield
@@ -513,6 +530,19 @@ function reduceDealDamageToMonster(
   if (idx < 0) return noChange(state);
 
   const monster = activeCards[idx]!;
+
+  // --- Universal monster engagement (safety net) ---
+  // 任何对怪物的伤害都自动激怒它。各路径仍然鼓励显式 enqueue BEGIN_COMBAT / 调
+  // ensureMonsterEngaged 让意图显式，但这里兜底确保「漏写 helper」永远不会再
+  // 出现「打了没激怒」的 bug。building 在 reduceBeginCombat 里已早返为 noop，
+  // 重复 enqueue 也是 noop（ensureMonsterEngaged + reduceBeginCombat 都做了
+  // 「已在交战不重复处理」的判定），所以这里不需要任何额外 gating。
+  if (
+    monster.type === 'monster' &&
+    !(state.combatState?.engagedMonsterIds ?? []).includes(monster.id)
+  ) {
+    enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
+  }
 
   // --- Building magic immunity ---
   if (action.isSpellDamage && monster.type === 'monster') {
@@ -1859,6 +1889,10 @@ export function routeReflectDamageToHero(
   patch[slotId] = durStripped as typeof state.equipmentSlot1;
 
   if (durResult.golemReflectDamage) {
+    const reflectTarget = state.activeCards.find(
+      (c): c is GameCardData => !!c && c.id === durResult.golemReflectDamage!.targetId,
+    );
+    if (reflectTarget) ensureMonsterEngagedLocal(state, reflectTarget, enqueuedActions);
     enqueuedActions.push({
       type: 'DEAL_DAMAGE_TO_MONSTER',
       monsterId: durResult.golemReflectDamage.targetId,
@@ -2751,6 +2785,10 @@ function reducePerformHeroAttack(
           patch[slotId] = durResult.updatedItem as EquipmentItem;
 
           if (durResult.golemReflectDamage) {
+            const reflectTarget = state.activeCards.find(
+              (c): c is GameCardData => !!c && c.id === durResult.golemReflectDamage!.targetId,
+            );
+            if (reflectTarget) ensureMonsterEngagedLocal(state, reflectTarget, enqueuedActions);
             enqueuedActions.push({
               type: 'DEAL_DAMAGE_TO_MONSTER',
               monsterId: durResult.golemReflectDamage.targetId,
@@ -3029,6 +3067,7 @@ function reducePerformHeroAttack(
       [target, rng] = pickRandom(boardMonsters, rng);
       const spellDmg = Math.max(0, (slotItem as GameCardData).postAttackSpellDamage! + (state.permanentSpellDamageBonus ?? 0));
       sideEffects.push({ event: 'combat:arcaneBladeSpell', payload: { slotId, targetId: target.id } });
+      ensureMonsterEngagedLocal(state, target, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target.id, damage: spellDmg, source: 'arcane-blade-spell', isSpellDamage: true });
       sideEffects.push({
         event: 'log:entry',
@@ -3298,6 +3337,7 @@ function reduceResolveBlock(
           let randomTarget: GameCardData;
           [randomTarget, rng] = pickRandom(boardMonsters, rng);
           sideEffects.push({ event: 'combat:shieldReflect', payload: { slotId: blockSlotId, targetId: randomTarget.id } });
+          ensureMonsterEngagedLocal(state, randomTarget, enqueuedActions);
           enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: randomTarget.id, damage: 2, source: 'dragon-breath-reflect' });
           sideEffects.push({
             event: 'log:entry',
@@ -3451,6 +3491,10 @@ function reduceResolveBlock(
               patch[blockSlotId] = mergedItem as EquipmentItem;
 
               if (durResult.golemReflectDamage) {
+                const reflectTarget = state.activeCards.find(
+                  (c): c is GameCardData => !!c && c.id === durResult.golemReflectDamage!.targetId,
+                );
+                if (reflectTarget) ensureMonsterEngagedLocal(state, reflectTarget, enqueuedActions);
                 enqueuedActions.push({
                   type: 'DEAL_DAMAGE_TO_MONSTER',
                   monsterId: durResult.golemReflectDamage.targetId,

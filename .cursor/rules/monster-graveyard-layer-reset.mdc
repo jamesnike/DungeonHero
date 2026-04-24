@@ -100,7 +100,13 @@ patch.discardedCards = [
 |---|---|---|
 | 怪物**血层**进坟场后归 1 | ✅ 这条 | ❌ |
 | 怪物**装备/战斗状态**重置（攻击、装备耐久等） | ✅ 这条（通过 `resetCardForGraveyard`） | `equipment-durability-cap` |
+| **从坟场出来 prime 成装备**时 `durability` 反映 `currentLayer` | ❌ | `monster-prime-as-equipment-currentlayer`（**镜像规则**） |
 | 卡进坟场 vs 进回收袋的**路由** | ❌ | `perm-routing-on-discard` |
 | 「被弃 / 被回收」语义触发 onDiscard 联动 | ❌ | `discard-vs-recycle-semantics` |
 
-修改怪物进坟场相关代码时，这四条规则**都要核对**。
+**特别注意**：这条（"进"方向）和 `monster-prime-as-equipment-currentlayer`（"出"方向）
+是一对镜像规则，缺一就会发生"怪物进坟场时 currentLayer=1 设对了，但被坟场发现拉回背包时
+durability 还是 fury（满血）"的事故。修改怪物进坟场 / 出坟场任意一边的代码时，
+**两条规则都要核对**。
+
+修改怪物进坟场相关代码时，这五条规则**都要核对**。

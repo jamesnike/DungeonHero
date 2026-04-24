@@ -27,3 +27,27 @@ The following large imperative functions were **removed** because all card logic
   - `resolveDeckJudgeDelete`, `resolveRepairEnrageDice` — async UI helpers for interactive effects
   - `applyTransformAndUpdateCategory` — transform effect UI trigger
   - Utility helpers (getSpellDamage, drawCardsFromBackpack, etc.)
+
+## Known surviving imperative chains (do NOT blind-delete)
+
+`GameBoard.tsx` 仍然有两条 imperative flank effect 链没消除：
+
+| 函数 | 行 | 入口 | 处理的 flank 分支 |
+|---|---|---|---|
+| `handleCardToHero` | ~L6019-6063 | 拖卡到英雄 | `flankDraw` / `persuadeCost-` / `stunCap+` / `damage:` |
+| `handleCardToSlot` | ~L6809-6853 | 拖装备到槽位 | 同上 |
+
+**它们存在的原因**：这两条路径**不**走 `PLAY_CARD`，而是走 `RESOLVE_POTION` / `RESOLVE_MAGIC` / `EQUIP_FROM_HAND`。而**只有 `reducePlayCard` 处理 `flankDraw` / `flankEffectId`**——`RESOLVE_POTION` / `RESOLVE_MAGIC` 的 `isFlank` 参数只用在「颠倒乾坤 stat-swap」等少数卡的内部特殊分支，不处理通用 flank 效果。
+
+**所以「直接删 imperative 链」= 行为回退**：拖动出牌时玩家会看到 flank 抽牌 / 减劝降费 / 加击晕上限 / 随机伤害**全部哑火**，但点击出牌还会触发，体感完全不一致。
+
+### 如果真的要清理这两条链，必须二选一
+
+- **A. 拖动改走 PLAY_CARD**：重写 `handleCardToHero` / `handleCardToSlot`，让 potion/magic/curse 也 dispatch `PLAY_CARD`（building/event/monster 仍走专门分支，因为不在 `reducePlayCard` 范围）。注意验证 `consumeCardFromHand` / `recordHandCardConsumption` / `tickRecycleForge` / `stagingCardsRef` 的 UI 副作用是不是已经被 `PLAY_CARD` 的 side effect listener / `card:potionFinalized` / `card:magicPlayed` 等覆盖。
+- **B. 抽 helper + 新 action**：把 `reducePlayCard` 的 flank 段抽成 `applyFlankEffectsPure(state, card, isFlank): ReduceResult`，新加 `APPLY_FLANK_EFFECTS` action 调它；`reducePlayCard` 改为调 helper；`handleCardToHero` / `handleCardToSlot` 把整段 imperative 替换成单 `dispatch({ type: 'APPLY_FLANK_EFFECTS', card, isFlank })`。
+
+### 真要做之前
+
+- 先跟用户确认要走 A 还是 B（`ask-before-changing.mdc`）
+- 准备覆盖「拖动 vs 点击」两条触发路径的测试，验证四种 flank 分支都能在两条路径下生效
+- 跑 dragon-summon / 颠倒乾坤 / 锋刃侧击 等 isFlank 参数有特殊语义的卡的回归

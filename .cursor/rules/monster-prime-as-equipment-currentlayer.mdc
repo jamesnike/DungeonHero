@@ -1,0 +1,100 @@
+---
+description: 怪物从坟场被 prime 成装备形态时，durability 必须按 currentLayer 而不是 fury
+alwaysApply: true
+---
+
+# `primeMonsterAsEquipment`：durability 必须用 `currentLayer`，不是 `fury`
+
+## 不变量
+
+> **任何怪物卡通过 `primeMonsterAsEquipment` prime 成「装备形态」（带 durability/maxDurability）时：**
+> - `maxDurability` = `clampMaxDurability(fury ?? hpLayers ?? 1)`（血层上限）
+> - `durability` = `Math.min(currentLayer ?? fury, maxDurability)`（当前血层数）
+>
+> **绝不允许**用 `fury` 直接给 `durability` —— 那会丢掉 `currentLayer` 信息，把
+> "之前被击杀过的怪物"当成"满血新怪"展示。
+
+## 跟 `monster-graveyard-layer-reset.mdc` 的关系
+
+这两条是 **进坟场 vs 出坟场** 的一对镜像规则，缺一不可：
+
+| 方向 | 哪条规则 | 关键函数 | 不变量 |
+|---|---|---|---|
+| **进坟场** | `monster-graveyard-layer-reset.mdc` | `resetMonsterForGraveyard` | `currentLayer = 1` |
+| **出坟场（prime 成装备）** | 这条 | `primeMonsterAsEquipment` | `durability = currentLayer` |
+
+**只配前者会出现这次的 bug**：怪物进坟场时 `currentLayer` 正确归 1，但被坟场发现/拉回背包时 `primeMonsterAsEquipment` 用 `fury` 给 `durability`，让 4 血层 Dragon 显示成 `4/4` 装备 —— 玩家以为"满血复活"。
+
+## 一次真实事故
+
+User 报"我从坟场发现的怪物，不是 1 血层，而是满血层"。
+
+旧代码（已修）：
+
+```typescript
+// ❌ BAD: 完全无视 currentLayer
+const reset = resetMonsterForGraveyard(card, isQuickMode);
+const rawBase = reset.fury ?? reset.hpLayers ?? 1;
+const base = clampMaxDurability(rawBase);
+return { ...reset, durability: base, maxDurability: base };
+//                  ^^^^^^^^^^^^^^^^ ← 总是满层，丢掉了刚 reset 的 currentLayer=1
+```
+
+正确写法（参考 `persuadeSuccessPatch` `monsters.ts:383`）：
+
+```typescript
+// ✅ GOOD: 镜像 persuade 的算法
+const reset = resetMonsterForGraveyard(card, isQuickMode);
+const rawMax = reset.fury ?? reset.hpLayers ?? 1;
+const cappedMax = clampMaxDurability(rawMax);
+const rawDur = reset.currentLayer ?? rawMax;
+return {
+  ...reset,
+  durability: Math.min(rawDur, cappedMax), // 用 currentLayer
+  maxDurability: cappedMax,                 // 用 fury（cap）
+};
+```
+
+## 强制规则
+
+### 1. 改 `primeMonsterAsEquipment` 时禁止把 `durability` 直接绑死成 `fury`
+
+`durability` 必须读 `currentLayer`（fallback 到 `fury` 仅当 `currentLayer == null`），
+然后 `Math.min` 夹到 `cappedMax`。
+
+### 2. 写新「怪物→装备形态」路径时，确认走哪条 helper
+
+| 场景 | 用谁 | `durability` 来源 |
+|---|---|---|
+| 劝降（中途保留剩余血层） | `persuadeSuccessPatch`（`monsters.ts`） | 卡的当前 `currentLayer` |
+| 坟场发现 / discard-rebuild / 进回收袋 / 进背包 / 进手牌 | `addCardToBackpackPure` / `addCardToHand` / `addToRecycleBag`（内部都走 `primeMonsterAsEquipment`） | `currentLayer = 1`（被 `resetMonsterForGraveyard` 钉死） |
+
+**绝不要**自己手写一套 `{ ...monster, durability: monster.fury, maxDurability: monster.fury }` —— 必须走上面两条 helper 之一，否则跟 `currentLayer` 的不变量脱节。
+
+### 3. 测试要覆盖 end-to-end，不只是单元
+
+仅断言 `resetMonsterForGraveyard(monster).currentLayer === 1` 不够 —— 这是这次 bug **没被测试抓到**的根因。必须加一条端到端断言：
+
+```typescript
+it('end-to-end: RESOLVE_GRAVEYARD_SELECTION delivers killed monster to backpack as 1/N', () => {
+  let state = makeState({ discardedCards: [] });
+  state = reduce(state, { type: 'ADD_TO_GRAVEYARD', card: dragon }).state;
+  state = { ...state, graveyardDiscoverState: [dragonInGrave], graveyardDiscoverDelivery: 'backpack' };
+  const result = reduce(state, { type: 'RESOLVE_GRAVEYARD_SELECTION', cardIds: [dragon.id], context: {} });
+  const inBackpack = result.state.backpackItems.find(c => c.id === dragon.id)!;
+  expect(inBackpack.durability).toBe(1);   // ← 关键：1 不是 4
+  expect(inBackpack.maxDurability).toBe(4);
+});
+```
+
+参考 `client/src/game-core/__tests__/monster-graveyard-layer-reset.test.ts` 里 "primeMonsterAsEquipment is graveyard-recovery-style" 那段。
+
+## 自检
+
+写完任何「把怪物卡转成带 durability 的装备形态」的代码（无论是改 `primeMonsterAsEquipment` 本体，还是写新 reducer/effect 把怪物塞进背包/手牌/回收袋），问自己：
+
+> 1. 我是不是走了 `primeMonsterAsEquipment` / `persuadeSuccessPatch` 而不是手写 `{ ...m, durability: m.fury }`？
+> 2. 如果改了 `primeMonsterAsEquipment` 本体，`durability` 是不是用 `currentLayer`？
+> 3. 我有没有写一条 end-to-end 测试，把 monster → graveyard → discover → backpack 链跑完，断言 `durability === 1`？
+
+任意一条「没」或「不确定」，回头补功课再改。

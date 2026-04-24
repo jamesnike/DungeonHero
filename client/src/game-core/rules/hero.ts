@@ -250,6 +250,7 @@ function reduceUseHeroSkill(
       const spellDmg = computeSpellDamagePure(state, baseDamage);
       if (monsters.length === 1) {
         enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 2, source: 'general', selfInflicted: true });
+        ensureEngaged(state, monsters[0], enqueuedActions);
         enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monsters[0].id, damage: spellDmg, source: 'blood-strike', isSpellDamage: true });
         Object.assign(patch, markSkillUsedPure(state, skillId as any));
         patch.heroSkillBanner = `Crimson Strike dealt ${spellDmg} damage.`;
@@ -387,7 +388,11 @@ function reduceResolveHeroSkillTarget(
       if (!monsterId) return noChange(state);
       const baseDamage = (pending as any).baseDamage ?? 3;
       const spellDmg = computeSpellDamagePure(state, baseDamage);
+      const targetMonster = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).find(
+        (m): m is GameCardData => !!m && m.id === monsterId,
+      );
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 2, source: 'general', selfInflicted: true });
+      if (targetMonster) ensureEngaged(state, targetMonster, enqueuedActions);
       enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId, damage: spellDmg, source: 'blood-strike', isSpellDamage: true });
       Object.assign(patch, markSkillUsedPure(state, pending.skillId as any));
       patch.pendingHeroSkillAction = null;

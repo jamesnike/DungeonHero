@@ -1,0 +1,85 @@
+---
+description: 所有卡牌图片预热走 glob，不要手写 import 列表，加新卡只放进 generated_images 顶层即可
+alwaysApply: true
+---
+
+# 卡牌图片预热：glob 驱动，禁止手写列表
+
+## 背景：一次因为「手写预热列表 drift」造成的卡顿事故
+
+`LoadingScreen` 在游戏启动时通过 `new Image() + img.decode()` 把卡牌位图解码进
+浏览器缓存，让后续打开发现 / 草稿 / 坟场召回 / 任何 GameCard 列表时**不发生
+冷加载**。原本的实现是在 `LoadingScreen.tsx` 顶部手写 ~135 行
+`import xxx from '@assets/generated_images/yyy.png'`，再列进 `ALL_IMAGES` 数组。
+
+随着新卡不断加入，**没人记得同步 `LoadingScreen`**。审计时发现：
+
+| 来源 | 缺失 / 总数 | 缺失率 |
+|---|---|---|
+| `client/src/lib/knightDeck.ts`（骑士专属池） | 58 / 82 | **70.7%** |
+| `client/src/game-core/deck.ts`（主地牢牌堆） | 51 / 138 | 37.0% |
+| `client/src/lib/eternalRelics.ts` | 2 / 17 | — |
+
+发现窗每次抽 3 张候选卡，按 ~70% 缺失率几乎必然有 1–2 张走冷加载——
+浏览器要 fetch + decode + paint，整张图弹出来时 modal 里有一个明显的
+「白格→突然出现」过渡。这就是玩家报告的「发现界面 load 卡牌图片的时候，
+还是有些卡」。
+
+## 强制规则
+
+### 1. 预热列表的唯一来源是 glob
+
+`client/src/lib/cardImageUrls.ts` 用 `import.meta.glob` 自动枚举
+`attached_assets/generated_images/*.png`（**只**抓顶层，刻意不带 `**`，
+排除 `_backup_*` 回滚快照）。`LoadingScreen` 直接读这个常量：
+
+```ts
+import { ALL_CARD_IMAGE_URLS } from '@/lib/cardImageUrls';
+const ALL_IMAGES = ALL_CARD_IMAGE_URLS;
+```
+
+### 2. **绝对不要**往 `LoadingScreen.tsx` 加 per-card import
+
+```tsx
+// ❌ BAD: 旧模式，每张新卡都要来这里加一行——必然 drift
+import knightFooImage from '@assets/generated_images/knight_foo.png';
+const ALL_IMAGES = [..., knightFooImage];
+
+// ✅ GOOD: 新卡只要 PNG 在 generated_images 顶层就自动预热，零改动
+```
+
+`LoadingScreen.tsx` 现在唯一允许的 `from '@assets/...'` import 是
+`heroPortrait`——因为它直接渲染在 JSX 里。其它一切都走 glob。
+
+### 3. 新卡 PNG 必须放进 `attached_assets/generated_images/` 顶层
+
+不要丢进任何 `_backup_*` 子目录（那是 `optimize-card-images.mjs` 的回滚快照，
+glob 故意排除）。不要在某个不被 glob 扫到的奇怪路径下另起 import。
+
+跟 [`new-card-images-must-be-optimized.mdc`](new-card-images-must-be-optimized.mdc)
+配合：放进顶层 → 跑 `node scripts/optimize-card-images.mjs` 压一下 → glob
+自动预热。三步走完才算完整。
+
+### 4. CI / 提交前跑预热覆盖检查
+
+```bash
+npm run check:image-preload   # = node scripts/check-image-preload-coverage.mjs
+```
+
+脚本扫所有 `from '@assets/generated_images/X.png'` import，验证：
+
+- `X.png` 真在顶层（不是 typo、不是删了的旧文件）
+- 不是指进 `_backup_*` 子目录（即使文件存在，glob 也抓不到）
+
+任意一条违规 → exit 1，CI 必须 block。
+
+孤儿 PNG（在顶层但没 source 引用）只是 info，**不算失败**——glob 多预热点
+无害，且这才是「自我维护」的关键性质：未来加新卡只要扔进文件夹就完事，
+玩家先看到几次「冗余预热」也比看到「冷加载卡顿」强。
+
+## 自检：什么时候这条规则会触发
+
+- 加新卡 → PNG 必须放进 `attached_assets/generated_images/` **顶层**
+- 改 `LoadingScreen.tsx` → 不要新增 per-card import
+- 重命名 / 删 / 移动现有卡 PNG → 跑一次 `npm run check:image-preload`
+- 任何「为什么发现窗 / 草稿 / 坟场召回有点卡」的 bug 报告 → 先跑这个脚本

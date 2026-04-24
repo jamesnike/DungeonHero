@@ -221,17 +221,23 @@ export function resetCardForGraveyard(card: GameCardData, isQuickMode = false): 
 
 /**
  * Ensure a monster card is "equipment-shaped" before it lands in hand /
- * backpack / recycle bag. Mirrors what `persuadeSuccessPatch` does for the
- * persuade flow:
- *   1. Strip combat-acquired buffs/debuffs via `resetMonsterForGraveyard`
- *      (consistent with the graveyard recovery path) so the card represents
- *      its baseline equipment form.
- *   2. Seed `durability` / `maxDurability` from the monster's fury / hp
- *      layers so the UI (`CardDetailsModal.isMonsterEquipment`, `GameCard`)
- *      treats it as a monster equipment.
+ * backpack / recycle bag. This is the **graveyard-recovery-style** prime:
+ *
+ *   1. Strip combat-acquired buffs/debuffs via `resetMonsterForGraveyard`,
+ *      which also pins `currentLayer = 1` (matches the
+ *      `monster-graveyard-layer-reset.mdc` invariant).
+ *   2. Seed `maxDurability` from the monster's fury / hp layers (the cap)
+ *      and `durability` from the post-reset `currentLayer` (= 1) — so a
+ *      previously-killed dragon recovered from the graveyard appears as a
+ *      `1/4` equipment, not a fresh `4/4`.
+ *
+ * The persuade flow uses its own `persuadeSuccessPatch` helper (which honors
+ * the *pre-reset* `currentLayer`) and intentionally bypasses this function,
+ * so persuading a monster mid-fight still hands off its remaining layers
+ * (e.g. 2/4) without going through the 1-layer reset.
  *
  * Non-monster cards and monsters that already carry durability are returned
- * unchanged.
+ * unchanged (idempotent — won't double-reset).
  */
 export function primeMonsterAsEquipment(
   card: GameCardData,
@@ -241,9 +247,14 @@ export function primeMonsterAsEquipment(
   if (card.durability != null && card.maxDurability != null) return card;
 
   const reset = resetMonsterForGraveyard(card, isQuickMode);
-  const rawBase = reset.fury ?? reset.hpLayers ?? 1;
-  const base = clampMaxDurability(rawBase);
-  return { ...reset, durability: base, maxDurability: base };
+  const rawMax = reset.fury ?? reset.hpLayers ?? 1;
+  const cappedMax = clampMaxDurability(rawMax);
+  const rawDur = reset.currentLayer ?? rawMax;
+  return {
+    ...reset,
+    durability: Math.min(rawDur, cappedMax),
+    maxDurability: cappedMax,
+  };
 }
 
 // ---------------------------------------------------------------------------

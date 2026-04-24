@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameCardData } from '@/components/GameCard';
 import { reduce } from '../reducer';
 import { createInitialGameState } from '../state';
-import { resetMonsterForGraveyard, resetCardForGraveyard } from '../cards';
+import { resetMonsterForGraveyard, resetCardForGraveyard, primeMonsterAsEquipment } from '../cards';
 import type { GameState } from '../types';
 
 function makeState(overrides?: Partial<GameState>): GameState {
@@ -166,6 +166,66 @@ describe('Monster graveyard currentLayer reset', () => {
       const inGrave = result.state.discardedCards.find(c => c.id === dragon.id);
       expect(inGrave).toBeDefined();
       expect(inGrave!.currentLayer).toBe(1);
+    });
+  });
+
+  describe('primeMonsterAsEquipment is graveyard-recovery-style (1/N, not N/N)', () => {
+    it('multi-layer monster primes as 1/fury (durability=1, maxDurability=cap)', () => {
+      const dragon = makeMultiLayerDragon({ currentLayer: 4, fury: 4, hpLayers: 4 });
+      const primed = primeMonsterAsEquipment(dragon, false);
+      // resetMonsterForGraveyard inside primeMonsterAsEquipment pins
+      // currentLayer to 1, so durability follows.
+      expect(primed.maxDurability).toBe(4);
+      expect(primed.durability).toBe(1);
+    });
+
+    it('post-graveyard monster (currentLayer already 1) primes as 1/fury', () => {
+      const dragon = makeMultiLayerDragon({ currentLayer: 4 });
+      const inGrave = resetMonsterForGraveyard(dragon, false);
+      expect(inGrave.currentLayer).toBe(1);
+
+      const primed = primeMonsterAsEquipment(inGrave, false);
+      expect(primed.maxDurability).toBe(4);
+      expect(primed.durability).toBe(1);
+    });
+
+    it('skips monsters that already have durability set (idempotent)', () => {
+      const alreadyEquipped = makeMultiLayerDragon({
+        currentLayer: 4,
+        durability: 2,
+        maxDurability: 4,
+      });
+      const primed = primeMonsterAsEquipment(alreadyEquipped, false);
+      expect(primed.durability).toBe(2);
+      expect(primed.maxDurability).toBe(4);
+    });
+
+    it('end-to-end: RESOLVE_GRAVEYARD_SELECTION delivers killed monster to backpack as 1/N (regression: was N/N)', () => {
+      const dragon = makeMultiLayerDragon({ currentLayer: 4 });
+      // Step 1: dragon dies → graveyard (currentLayer pinned to 1).
+      let state = makeState({ discardedCards: [] });
+      state = reduce(state, { type: 'ADD_TO_GRAVEYARD', card: dragon }).state;
+      const inGrave = state.discardedCards.find(c => c.id === dragon.id)!;
+      expect(inGrave.currentLayer).toBe(1);
+
+      // Step 2: graveyard discover offers the dragon, player picks it →
+      // RESOLVE_GRAVEYARD_SELECTION sends it to backpack via
+      // addCardToBackpackPure → primeMonsterAsEquipment.
+      state = {
+        ...state,
+        graveyardDiscoverState: [inGrave],
+        graveyardDiscoverDelivery: 'backpack',
+      };
+      const result = reduce(state, {
+        type: 'RESOLVE_GRAVEYARD_SELECTION',
+        cardIds: [inGrave.id],
+        context: {},
+      } as any);
+      const inBackpack = result.state.backpackItems.find(c => c.id === dragon.id);
+      expect(inBackpack).toBeDefined();
+      // The user-facing fix: previously this was 4/4 (full layers), now 1/4.
+      expect(inBackpack!.maxDurability).toBe(4);
+      expect(inBackpack!.durability).toBe(1);
     });
   });
 });
