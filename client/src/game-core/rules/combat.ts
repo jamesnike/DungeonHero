@@ -2999,6 +2999,41 @@ function reducePerformHeroAttack(
         });
       }
 
+      // Bone regen / wraith rebirth — pre-roll D20 in reducer (seeded RNG) and
+      // pass the value through the side-effect payload. Mirrors the gating in
+      // reduceDealDamageToMonster (combat.ts:783-809). Without these branches
+      // the dice modal never fires when a weapon attack reduces a Skeleton /
+      // Wraith from N to N-1 layers without killing it — the entire elite
+      // ability silently no-ops on the most common combat path.
+      if (targetMonster.monsterSpecial === 'bone-regen'
+        && layersAfterAttack > 0 && layersAfterAttack < layersBeforeAttack) {
+        let regenRoll: number;
+        [regenRoll, rng] = nextInt(rng, 1, 20);
+        sideEffects.push({
+          event: 'combat:boneRegenCheck',
+          payload: {
+            monsterId: targetMonsterId, monsterName: targetMonster.name,
+            layersBefore: layersBeforeAttack, layersAfter: layersAfterAttack,
+            forced: false,
+            predeterminedRoll: regenRoll,
+          },
+        });
+      }
+      if (targetMonster.monsterSpecial === 'wraith-rebirth'
+        && layersAfterAttack === 1 && layersBeforeAttack > 1) {
+        let rebirthRoll: number;
+        [rebirthRoll, rng] = nextInt(rng, 1, 20);
+        sideEffects.push({
+          event: 'combat:wraithRebirthCheck',
+          payload: {
+            monsterId: targetMonsterId, monsterName: targetMonster.name,
+            maxLayers: targetMonster.fury ?? targetMonster.hpLayers ?? 1,
+            layersBefore: layersBeforeAttack, layersAfter: layersAfterAttack,
+            predeterminedRoll: rebirthRoll,
+          },
+        });
+      }
+
       // Swarm elite — replace a board card with buglet
       if (targetMonster.monsterSpecial === 'swarm-elite') {
         const candidates: number[] = [];

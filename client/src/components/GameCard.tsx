@@ -2266,6 +2266,9 @@ const amuletEffectText =
                     {card.skeletonReRevive && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="轮回：同行其他怪物被击败时，若已复生过，再次获得复生">轮回</span>
                     )}
+                    {card.monsterSpecial === 'bone-regen' && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="骸生：每次失去 1 血层时，40% 概率恢复 1 血层">骸生</span>
+                    )}
                     {card.wraithTurnAttack != null && card.wraithTurnAttack > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`蓄积：每个怪物回合结束时攻击力 +${card.wraithTurnAttack}`}>蓄积</span>
                     )}
@@ -2283,6 +2286,9 @@ const amuletEffectText =
                     )}
                     {card.wraithDestroyAmulet && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title="碎符：每个怪物回合结束时，随机摧毁一个护符">碎符</span>
+                    )}
+                    {card.monsterSpecial === 'wraith-rebirth' && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="重生：血层降至 1 时，30% 概率回满血层（可多次触发）">重生</span>
                     )}
                     {card.goblinStealCard && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃牌：攻击时偷走一张手牌">窃牌</span>
