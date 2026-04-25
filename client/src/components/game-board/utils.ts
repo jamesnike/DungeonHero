@@ -1015,7 +1015,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
         name: '双重燃烧（觉醒）',
         value: 0,
         image: dedupeEventCrimsonPactAwakenedImage,
-        description: '使用后进入墓地。若预览行正上方是魔法牌，触发魔法共鸣，翻转为「虚空置换」永久魔法。',
+        description: '使用后进入墓地。若预览行正上方是魔法牌，触发魔法共鸣，翻转为「虚空置换」瞬发魔法。',
         eventChoices: [
           { text: '鲜血献祭（-6 HP，发现专属）', effect: 'hp-6,discoverClass' },
           {

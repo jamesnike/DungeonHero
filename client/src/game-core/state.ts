@@ -166,6 +166,7 @@ export function createInitialGameState(): GameState {
     shopSkillDiscoverUsed: false,
     shopEquipAttackUsed: false,
     shopEquipArmorUsed: false,
+    shopRefreshUsed: false,
     shopSkillOptions: [],
 
     currentEventCard: null,

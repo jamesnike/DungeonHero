@@ -344,6 +344,25 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 0,
   });
 
+  // 永恒之器：永久（Perm 2）。失去 3 HP，生命上限永久 +3。无目标，立即结算。
+  // Echo: -HP 与 +maxHp 双双按 echoMultiplier 等比放大（与 血誓回卷 一致）。
+  // 自伤走 APPLY_DAMAGE selfInflicted（同 血誓回卷 / 血金术）：可被护盾抵消、
+  // 可被 death-ward 救场、亦可在 hp ≤ cost 时致死，跟现有自伤卡语义对齐。
+  pushCard({
+    type: 'magic',
+    name: '永恒之器',
+    value: 0,
+    image: dedupeKnightHeroReviveTomeImage,
+    classCard: true,
+    description: '永久：失去 3 生命，生命上限永久 +3。',
+    shortDescription: '失去 3 生命，生命上限永久 +3',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：失去 3 生命，生命上限永久 +3。',
+    knightEffect: 'eternal-vessel',
+    recycleDelay: 2,
+    maxUpgradeLevel: 0,
+  });
+
   pushCard({
     type: 'magic',
     name: '坟火新星',
@@ -681,8 +700,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: starterAmuletDamageDiscoverImage,
     classCard: true,
-    description: '每使用 8 张 magic 牌，发现一张专属牌。',
-    shortDescription: '每使用 8 张法术，发现 1 张专属',
+    description: '每使用 6 张瞬发魔法（Instant magic），发现一张专属牌。',
+    shortDescription: '每使用 6 张瞬发魔法，发现 1 张专属',
     amuletEffect: 'magic-class-discover',
   });
 

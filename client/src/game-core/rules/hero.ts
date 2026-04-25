@@ -1195,6 +1195,24 @@ function reduceMagicSlotSelection(
         `${label} 临时攻击力 +${burstAmount}。${echoText}`);
     }
 
+    case 'apprentice-rally': {
+      // 学徒鼓舞（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时攻击。
+      // 与 weapon-burst 同形态（A 类回响，amount × echoMultiplier），差异：
+      //   - 固定 1 点（不随 upgradeLevel 缩放，因为 maxUpgradeLevel:0）
+      //   - 用 pending.card.name 走 banner，文案显示「学徒鼓舞」而非沿用「战斗鼓舞」
+      // 允许选空槽（与 weapon-burst 一致），效果保留至该槽装备进入时仍生效。
+      const labelRally = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const echoMulRally = (pending as any).echoMultiplier ?? 1;
+      const rallyAmount = 1 * echoMulRally;
+      const curTempAtkRally = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtkRally + rallyAmount };
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      const echoTextRally = echoMulRally > 1 ? `（回响×${echoMulRally}）` : '';
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：${labelRally} +${rallyAmount} 临时攻击${echoTextRally}` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name}：${labelRally} 临时攻击力 +${rallyAmount}。${echoTextRally}`);
+    }
+
     case 'temp-attack-double': {
       // 锋芒倍增：选定装备栏的临时攻击 +2 后整体翻倍。
       // 公式：final = (curTempAtk + 2*echo) * 2
@@ -1780,6 +1798,27 @@ function reduceMagicSlotSelection(
         `${label} 获得 +${armorAmt} 临时护甲。${echoTag}`);
     }
 
+    case 'apprentice-armor': {
+      // 学徒铸甲（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时护甲。
+      // 与 temp-armor 同形态（A 类回响，amount × echoMultiplier），差异：
+      //   - 固定 1 点（不随 upgradeLevel 缩放，因为 maxUpgradeLevel:0）
+      //   - 用 pending.card.name 走 banner，文案显示「学徒铸甲」而非沿用「铸甲术」
+      // 注意 echoMultiplier 字段名：apprentice-armor resolver 用的是 echoMultiplier
+      // （与 weapon-burst 一致），不是 temp-armor 的 echoRemaining；这是因为
+      // apprentice-armor 是 single-step 一次性结算，不需要 modal-echo 的 echoRemaining
+      // 字段——直接读 echoMultiplier × 即可。
+      const labelArmor = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const echoMulArmor = (pending as any).echoMultiplier ?? 1;
+      const armorAmtAp = 1 * echoMulArmor;
+      const curTAArmor = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+      patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTAArmor + armorAmtAp };
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      const echoTagApArmor = echoMulArmor > 1 ? `（回响×${echoMulArmor}）` : '';
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：${labelArmor} +${armorAmtAp} 临时护甲${echoTagApArmor}` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name}：${labelArmor} 获得 +${armorAmtAp} 临时护甲。${echoTagApArmor}`);
+    }
+
     case 'battle-spirit': {
       const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
       const lvl = pending.card.upgradeLevel ?? 0;
@@ -2319,6 +2358,51 @@ function reduceMagicMonsterSelection(
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `魔弹：对 ${targetName} 造成 ${totalDmg} 点伤害！`);
+    }
+
+    case 'apprentice-bolt': {
+      // 学徒法弹（starter perm-1 magic, no upgrade）：
+      // 选一个目标造成 1 点法术伤害（受 amplify / spell-damage buff 影响）。
+      // 与 missile-bolt 几乎对称，差异：
+      //   - 卡名固定走 pending.card.name → log/banner 文案使用「学徒法弹」
+      //   - 不调 applyMissileRelicEffects：missile-* 永恒护符是为「魔弹」专门设计的
+      //     thematic relic（震荡弹幕 / 汲取弹幕），学徒法弹是新手卡，按用户原意只
+      //     做「1 点法术伤害」，不附带 relic 联动。
+      // 回响走 modal echo pattern（与 missile-bolt 同款），允许玩家把每发 echo 落到
+      // 不同目标，hero 始终是合法目标。
+      const totalDmg = computeSpellDamagePure(state, 1 + (pending.card.amplifyBonus ?? 0));
+      if (isHeroTarget) {
+        if (totalDmg > 0) {
+          applySelfDamage(totalDmg, 'apprentice-bolt');
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDmg} 点法术伤害` } });
+      } else {
+        ensureEngaged(state, monster!, enqueuedActions);
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDmg, source: 'apprentice-bolt', isSpellDamage: true });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDmg} 点法术伤害` } });
+      }
+      const echoRemainingApprentice = ((pending as any).echoRemaining ?? 1) - 1;
+      if (echoRemainingApprentice > 0) {
+        const totalEcho = (pending as any).echoRemaining ?? 1;
+        const echoLabel = `（回响：第 ${totalEcho - echoRemainingApprentice + 1}/${totalEcho} 次）`;
+        const next: PendingMagicAction = {
+          card: pending.card,
+          effect: 'apprentice-bolt',
+          step: 'monster-select',
+          prompt: `选择下一个目标，造成 ${totalDmg} 点法术伤害。${echoLabel}`,
+          echoRemaining: echoRemainingApprentice,
+          allowsHeroTarget: true,
+        } as PendingMagicAction;
+        const reprompt = maybeRepromptEcho(
+          state, patch, sideEffects, enqueuedActions,
+          { card: pending.card, echoRemaining: (pending as any).echoRemaining },
+          next,
+          `${pending.card.name}：对 ${targetName} 造成 ${totalDmg} 点伤害！${echoLabel}`,
+        );
+        if (reprompt) return reprompt;
+      }
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name}：对 ${targetName} 造成 ${totalDmg} 点伤害！`);
     }
 
     case 'stun-strike': {

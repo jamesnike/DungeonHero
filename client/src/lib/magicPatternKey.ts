@@ -56,6 +56,7 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'temp-attack-armor-draw': 'knight-attack-armor-draw',
   'temp-stats-to-draw': 'knight-temp-stats-draw',
   'durability-charge-burst': 'knight-charge-burst',
+  'eternal-vessel': 'knight-eternal-vessel',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -179,6 +180,7 @@ const NAME_TO_KEY: Record<string, string> = {
   攻防协律: 'knight-attack-armor-draw',
   战势化符: 'knight-temp-stats-draw',
   蓄能裂击: 'knight-charge-burst',
+  永恒之器: 'knight-eternal-vessel',
 };
 
 function hashName(s: string): number {

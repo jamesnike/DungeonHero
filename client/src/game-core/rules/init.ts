@@ -10,7 +10,16 @@ import type { GameState, EternalRelic, ActiveRowSlots } from '../types';
 import type { GameCardData } from '@/components/GameCard';
 import type { ReduceResult } from '../reducer';
 import { createInitialGameState } from '../state';
-import { createDeck, pruneEventChoicesToThree, createBugletCard, eventScrollImage, createStarterDiscoverClassToHandCard } from '../deck';
+import {
+  createDeck,
+  pruneEventChoicesToThree,
+  createBugletCard,
+  eventScrollImage,
+  createStarterDiscoverClassToHandCard,
+  createApprenticeBoltCard,
+  createApprenticeRallyCard,
+  createApprenticeArmorCard,
+} from '../deck';
 import { fillActiveRowSlots } from '../helpers';
 import { shuffle as rngShuffle, nextInt } from '../rng';
 import { INITIAL_TURN_COUNT, FINAL_MONSTER_MARK_DESCRIPTION } from '../constants';
@@ -455,6 +464,19 @@ export function reduceInitGame(
   // it cycles through the recycle bag for 1 waterfall.
   const initialHand: GameCardData[] = [createStarterDiscoverClassToHandCard()];
 
+  // --- Starting backpack: 学徒 trio (Perm-1 magics) ---
+  // Three opening Perm-1 magics seeded directly into the backpack at INIT_GAME.
+  // 学徒法弹 (1 spell damage), 学徒鼓舞 (slot +1 temp attack), 学徒铸甲 (slot +1
+  // temp armor). They are *not* part of `createStarterCardPool`, so they never
+  // appear in discover / grant events—they only ever exist as the three opening
+  // backpack cards. recycleDelay:1 means each one cycles back from the recycle
+  // bag after 1 waterfall, providing a low-floor opening kit on every run.
+  const initialBackpack: GameCardData[] = [
+    createApprenticeBoltCard(),
+    createApprenticeRallyCard(),
+    createApprenticeArmorCard(),
+  ];
+
   // --- Build full initial state ---
   const newState: GameState = {
     ...createInitialGameState(),
@@ -463,6 +485,7 @@ export function reduceInitGame(
     heroVariant: newHero,
     heroClass: newHeroClass,
     handCards: initialHand,
+    backpackItems: initialBackpack,
     previewCards: initialPreview,
     activeCards: initialActive,
     previewCardStacks: initialPreviewStacks,
@@ -470,7 +493,7 @@ export function reduceInitGame(
     remainingDeck: initialRemaining,
     classDeck: newClassDeck,
     eternalRelics,
-    showSkillSelection: true,
+    showSkillSelection: false,
     totalWins,
     rng,
   };

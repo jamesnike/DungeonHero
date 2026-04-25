@@ -1892,9 +1892,10 @@ export function resolvePermanentMagic(
     }
 
     case STARTER_CARD_IDS.recycleDrawMagic: {
-      // 新语义（user 确认 A 选项）：从回收袋**随机**选 N 张牌（N = 1/2/3，按 upgradeLevel），
+      // 语义：从回收袋**随机**选 N 张牌（N = 1/2/3，按 upgradeLevel），
       // 对这 N 张牌的 _recycleWaits -= 1。减到 0 的 ready 牌进背包；剩下的留回收袋。
-      // **未被选中的牌完全不变**。onDiscardDraw 固定 1。
+      // **未被选中的牌完全不变**。
+      // 注意：本卡不再有"被回收时抽牌"效果（曾经的 onDiscardDraw 已删除）。
       // 此 switch 是 fallback：实际生产路径走 card-schema/definitions/magic.ts
       // 的 starter:recycleDrawMagic resolver。两份必须保持同步
       // （rule: shared-effect-id-impact-check）。
@@ -1961,10 +1962,6 @@ export function resolvePermanentMagic(
         banner(sideEffects, '回收余韵：回收袋为空。');
       }
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
-      // 「被回收时」语义：play 路径下卡自身进回收袋也算"被回收"，
-      // 显式触发 APPLY_DISCARD_EFFECTS 让 onDiscardDraw 生效。
-      // opts.toRecycleBag=true 跳过 catapult / discard-zap 这种"主动弃手牌"才该触发的护符。
-      enqueuedActions.push({ type: 'APPLY_DISCARD_EFFECTS', card, owner: 'player', opts: { toRecycleBag: true } });
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
@@ -3627,6 +3624,40 @@ export function resolveKnightPermanentMagic(
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       // 注意：FINALIZE_MAGIC_CARD 由 hook 在 peek 弹窗关闭后 dispatch（卡的"使用"
       // 时机要等玩家看完 4 张牌再正式"消费"），与原 fate-sight 流程保持一致。
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    case 'eternal-vessel': {
+      // 永恒之器（Perm 2）：失去 (3 × echo) HP，permanentMaxHpBonus += (3 × echo)。
+      // 无目标、无中间步骤，立即 finalize。自伤走 APPLY_DAMAGE selfInflicted，
+      // 跟 血誓回卷 / 血金术 / 紧急回收 一致：可被 shields 抵消、可被 death-ward
+      // 救场、hp ≤ cost 时会致死（playable at any HP, may kill you 的标准约定）。
+      //
+      // Echo 行为：用户选了「全比例放大」—— echo×2 → -6 HP / +6 maxHp。
+      // 等价于「打了 2 张永恒之器」，跟 血誓回卷 (-3 × echo) 同款。
+      const hpCost = 3 * echoMultiplier;
+      const hpBoost = 3 * echoMultiplier;
+      enqueuedActions.push({
+        type: 'APPLY_DAMAGE',
+        amount: hpCost,
+        source: 'eternal-vessel',
+        selfInflicted: true,
+      });
+      patch.permanentMaxHpBonus = (state.permanentMaxHpBonus ?? 0) + hpBoost;
+
+      const echoTag = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+      log(
+        sideEffects,
+        'magic',
+        `永恒之器：失去 ${hpCost} 生命，生命上限永久 +${hpBoost}。`,
+      );
+      banner(
+        sideEffects,
+        `永恒之器：以 ${hpCost} 生命换取生命上限 +${hpBoost}！${echoTag}`,
+      );
+
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 

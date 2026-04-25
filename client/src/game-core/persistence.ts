@@ -179,6 +179,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     shopSkillDiscoverUsed: state.shopSkillDiscoverUsed,
     shopEquipAttackUsed: state.shopEquipAttackUsed,
     shopEquipArmorUsed: state.shopEquipArmorUsed,
+    shopRefreshUsed: state.shopRefreshUsed,
     shopSkillOptions: state.shopSkillOptions,
     shopSkillSelectOpen: state.shopSkillSelectOpen,
     monsterRewardQueue: state.monsterRewardQueue as any,

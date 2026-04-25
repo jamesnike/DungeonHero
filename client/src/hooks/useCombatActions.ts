@@ -413,9 +413,9 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     const amuletName = discoverAmulet?.name ?? '咒纹刻印';
     const started = depsRef.current.beginDiscoverFlow('magic-class-discover', { sourceLabel: amuletName });
     if (started) {
-      depsRef.current.addGameLog('amulet', `${amuletName}：累计 ${threshold} 张 magic 牌，发现专属牌！`);
+      depsRef.current.addGameLog('amulet', `${amuletName}：累计 ${threshold} 张瞬发魔法，发现专属牌！`);
     } else {
-      depsRef.current.addGameLog('amulet', `${amuletName}：累计 ${threshold} 张 magic 牌，但职业牌堆已空。`);
+      depsRef.current.addGameLog('amulet', `${amuletName}：累计 ${threshold} 张瞬发魔法，但职业牌堆已空。`);
     }
     updateMagicDiscoverCounter(0, threshold);
   });

@@ -1081,6 +1081,15 @@ describe('reducer', () => {
       type: 'magic' as const,
       name: 'Test Magic',
       value: 0,
+      magicType: 'instant' as const,
+      magicEffect: 'noop-test',
+    };
+    const permanentMagicCard = {
+      id: 'pmg1',
+      type: 'magic' as const,
+      name: 'Test Permanent Magic',
+      value: 0,
+      magicType: 'permanent' as const,
       magicEffect: 'noop-test',
     };
     const heroMagicCard = {
@@ -1128,17 +1137,27 @@ describe('reducer', () => {
       expect(result.sideEffects.some(e => e.event === 'combat:classMagicDiscoverTriggered')).toBe(false);
     });
 
-    it('PLAY_CARD: resets to 0 and emits classMagicDiscoverTriggered when threshold (8) is reached', () => {
+    it('PLAY_CARD: resets to 0 and emits classMagicDiscoverTriggered when threshold (6) is reached', () => {
       const state = makeState({
         handCards: [magicCard as any],
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 7,
+        classMagicDiscoverStreak: 5,
       });
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'mg1' } as GameAction]);
       expect(result.state.classMagicDiscoverStreak).toBe(0);
       const triggered = result.sideEffects.find(e => e.event === 'combat:classMagicDiscoverTriggered');
       expect(triggered).toBeDefined();
-      expect((triggered?.payload as any)?.threshold).toBe(8);
+      expect((triggered?.payload as any)?.threshold).toBe(6);
+    });
+
+    it('PLAY_CARD: does not increment when a Permanent magic card is played', () => {
+      const state = makeState({
+        handCards: [permanentMagicCard as any],
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'pmg1' } as GameAction]);
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
     });
 
     it('PLAY_CARD: does not increment when a hero-magic card is played', () => {
@@ -1167,7 +1186,7 @@ describe('reducer', () => {
     it('RESOLVE_MAGIC (drag-to-hero path): resets to 0 and emits trigger at threshold', () => {
       const state = makeState({
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 7,
+        classMagicDiscoverStreak: 5,
       });
       const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'mg1', card: magicCard } as any);
       expect(result.state.classMagicDiscoverStreak).toBe(0);
@@ -1190,6 +1209,55 @@ describe('reducer', () => {
       });
       const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'cu1', card: curseCard } as any);
       expect(result.state.classMagicDiscoverStreak).toBe(3);
+    });
+
+    it('RESOLVE_MAGIC (drag-to-hero path): does not increment for Permanent magic', () => {
+      const state = makeState({
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'pmg1', card: permanentMagicCard } as any);
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
+    });
+
+    // ---- Cross-conversion edge cases (永恒铭刻 / 凡化咒) -------------------
+    // 判定走 cardHasPermFlag — 不看字面 magicType，看「现在打出去会不会进坟场」。
+
+    it('Instant magic that has been Perm-granted (recycleDelay > 0) does NOT count', () => {
+      // 永恒铭刻 / 附魔祭坛 / 永恒铭刻药 → 给 Instant 加上 recycleDelay > 0,
+      // 卡此时进回收袋而非坟场，不应触发咒纹刻印。
+      const permGrantedInstant = {
+        ...magicCard,
+        id: 'inst-perm',
+        recycleDelay: 2,
+      };
+      const state = makeState({
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = reduce(
+        state,
+        { type: 'RESOLVE_MAGIC', cardId: 'inst-perm', card: permGrantedInstant } as any,
+      );
+      expect(result.state.classMagicDiscoverStreak).toBe(3);
+    });
+
+    it('Permanent magic that has been stripped by 凡化咒 (permStripped) DOES count', () => {
+      // 凡化咒一票否决 magicType === 'permanent' — 卡此时进坟场,应当触发咒纹刻印。
+      const strippedPermanent = {
+        ...permanentMagicCard,
+        id: 'perm-stripped',
+        permStripped: true,
+      };
+      const state = makeState({
+        amuletSlots: [discoverAmulet as any],
+        classMagicDiscoverStreak: 3,
+      });
+      const result = reduce(
+        state,
+        { type: 'RESOLVE_MAGIC', cardId: 'perm-stripped', card: strippedPermanent } as any,
+      );
+      expect(result.state.classMagicDiscoverStreak).toBe(4);
     });
 
     it('does not double-count when PLAY_CARD enqueues RESOLVE_MAGIC (single drain = +1, not +2)', () => {
@@ -1825,6 +1893,44 @@ describe('reducer', () => {
       const state = makeState({ activeCards: slots });
       const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
       expect(result.sideEffects.some(e => e.event === 'combat:golemReflect')).toBe(false);
+    });
+
+    it('preserves hp on layer cost (does not refill to maxHp)', () => {
+      const monster = { id: 'm1', type: 'monster' as const, name: 'Goblin', value: 5, hp: 3, maxHp: 10, attack: 5, currentLayer: 2, fury: 2, hpLayers: 2 };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const state = makeState({ activeCards: slots });
+      const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
+      const after = result.state.activeCards[0] as any;
+      expect(after.currentLayer).toBe(1);
+      expect(after.hp).toBe(3);
+      expect(after.maxHp).toBe(10);
+    });
+
+    it('monster at low hp dies on next attack', () => {
+      const monster = { id: 'm1', type: 'monster' as const, name: 'Goblin', value: 5, hp: 3, maxHp: 10, attack: 5, currentLayer: 2, fury: 2, hpLayers: 2 };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const state = makeState({ activeCards: slots });
+      const r1 = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
+      const after1 = r1.state.activeCards[0] as any;
+      expect(after1.currentLayer).toBe(1);
+      expect(after1.hp).toBe(3);
+      const r2 = reduce(r1.state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
+      expect(r2.enqueuedActions.some(a => a.type === 'MONSTER_DEFEATED')).toBe(true);
+    });
+
+    it('preserves hp on layer cost when bleed triggers attack boost', () => {
+      const monster = { id: 'm1', type: 'monster' as const, name: 'Bleeder', value: 5, hp: 2, maxHp: 8, attack: 5, currentLayer: 3, fury: 3, hpLayers: 3, bleedEffect: 'attack+3' };
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const state = makeState({ activeCards: slots });
+      const result = reduce(state, { type: 'DECREMENT_FURY', monsterId: 'm1' });
+      const after = result.state.activeCards[0] as any;
+      expect(after.currentLayer).toBe(2);
+      expect(after.attack).toBe(8);
+      expect(after.hp).toBe(2);
+      expect(after.maxHp).toBe(8);
     });
   });
 

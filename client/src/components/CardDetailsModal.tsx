@@ -1023,6 +1023,19 @@ export default function CardDetailsModal({
                 }
               }
 
+              {
+                const stacks = card.lastWordsMaxHpBoost ?? 0;
+                if (stacks > 0) {
+                  const amt = 4 * stacks;
+                  const stackText = stacks > 1 ? `（附魔祭坛 ×${stacks} 层）` : '';
+                  effects.push({
+                    title: stacks > 1 ? `遗言 ×${stacks}` : '遗言',
+                    desc: `装备毁坏时，永久最大生命 +${amt}。${stackText}`,
+                    color: 'amber',
+                  });
+                }
+              }
+
               if (effects.length === 0) return null;
 
               const colorMap: Record<string, { bg: string; border: string; title: string; text: string; iconColor: string }> = {
@@ -1220,6 +1233,29 @@ export default function CardDetailsModal({
                     <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
                       装备毁坏时，该装备栏 +{amt} 临时攻击 +{amt} 临时护甲。
                       {stacks > 1 ? `（遗赠淬炼药 ×${stacks} 层）` : ''}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Equipment Last Words from 附魔祭坛: maxHp+4 stacks (weapon/shield) */}
+            {(card.type === 'weapon' || card.type === 'shield') && (() => {
+              const stacks = card.lastWordsMaxHpBoost ?? 0;
+              if (stacks <= 0) return null;
+              const amt = 4 * stacks;
+              return (
+                <div className="p-3 rounded-md border bg-amber-500/15 border-amber-500/30">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <Skull className="w-4 h-4 shrink-0 text-amber-500" />
+                      <span className="font-extrabold text-sm text-amber-700 dark:text-amber-300 tracking-wide">
+                        {stacks > 1 ? `遗言 ×${stacks}` : '遗言'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 pl-6">
+                      装备毁坏时，永久最大生命 +{amt}（不回血）。
+                      {stacks > 1 ? `（附魔祭坛 ×${stacks} 层）` : ''}
                     </p>
                   </div>
                 </div>

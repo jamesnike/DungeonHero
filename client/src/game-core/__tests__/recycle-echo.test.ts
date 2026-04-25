@@ -1,24 +1,24 @@
 /**
  * 回收余韵 (Recycle Echo) — Starter Perm 1 magic tests
  *
- * New semantics (user confirmed option A):
+ * Semantics:
  *   - Use effect: randomly pick N cards from the recycle bag and decrement
  *     their `_recycleWaits` by 1. Cards reaching 0 → backpack (subject to cap).
  *     Unpicked cards remain unchanged.
  *   - N depends on upgradeLevel: 1 (Lv0) / 2 (Lv1) / 3 (Lv2).
- *   - onDiscardDraw is fixed to 1 at all upgrade levels.
+ *   - **No "被回收时抽牌" effect** (onDiscardDraw was removed by user request).
  *
  * Coverage:
  *   1. Picks 1 card at Lv0; only that card's _recycleWaits decrements.
- *   2. Picked ready (waits=1) card goes to backpack; emits recycleRestored.
+ *   2. Picked ready (waits=1) card goes strictly to backpack (NOT hand).
  *   3. Picked waiting (waits>1) card stays in bag with waits-1.
  *   4. Unpicked cards in bag are completely untouched.
  *   5. Lv1 picks 2, Lv2 picks 3.
  *   6. pickCount caps at recycle bag size when bag has fewer than N cards.
  *   7. Empty recycle bag → no-op but card still finalizes.
  *   8. Card itself enters recycle bag with recycleDelay 1 after play.
- *   9. onDiscardDraw=1 triggers on play (cards drawn from backpack).
- *  10. onDiscardDraw also triggers via DISCARD_OWNED_CARD pipeline.
+ *   9. Negative regression: play does NOT draw any card from backpack.
+ *  10. Negative regression: DISCARD_OWNED_CARD also does NOT draw.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -48,7 +48,6 @@ function makeRecycleEcho(overrides: Partial<GameCardData> = {}): GameCardData {
     magicEffect: 'test',
     description: 'test',
     recycleDelay: 1,
-    onDiscardDraw: 1,
     ...overrides,
   } as GameCardData;
 }
@@ -103,7 +102,7 @@ describe('回收余韵 使用效果 — Lv0：随机选 1 张牌瀑流 -1', () =
     expect(waitsList).toEqual([1, 2, 2]);
   });
 
-  it('被选中的 ready 牌（waits=1 → 0）进背包，并 emit waterfall:recycleRestored 副作用', () => {
+  it('被选中的 ready 牌（waits=1 → 0）进背包（不再被 onDiscardDraw 拉进手牌）', () => {
     const card = makeRecycleEcho();
     const ready = makeFiller('ready-only', 1);
     const state = makeState({
@@ -117,13 +116,11 @@ describe('回收余韵 使用效果 — Lv0：随机选 1 张牌瀑流 -1', () =
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
     ]);
 
-    // Ready card is no longer in recycle bag (went to backpack, then onDiscardDraw=1
-    // pulled it into hand).
+    // Ready card leaves recycle bag and lands in backpack — strictly backpack now,
+    // since onDiscardDraw was removed. Used to be either backpack or hand.
     expect(result.state.permanentMagicRecycleBag.some(x => x.id === 'bag-ready-only')).toBe(false);
-    const inBackpackOrHand =
-      result.state.backpackItems.some(x => x.id === 'bag-ready-only') ||
-      result.state.handCards.some(x => x.id === 'bag-ready-only');
-    expect(inBackpackOrHand).toBe(true);
+    expect(result.state.backpackItems.some(x => x.id === 'bag-ready-only')).toBe(true);
+    expect(result.state.handCards.some(x => x.id === 'bag-ready-only')).toBe(false);
   });
 
   it('未被选中的牌完全不变（_recycleWaits 不动）', () => {
@@ -267,8 +264,8 @@ describe('回收余韵 使用效果 — 边界', () => {
     expect(ownCardInRecycle).toBeDefined();
   });
 
-  it('使用效果本身不抽牌（覆盖 onDiscardDraw=0 验证）', () => {
-    const card = makeRecycleEcho({ onDiscardDraw: 0 });
+  it('使用效果本身不抽牌（背包卡纹丝不动）', () => {
+    const card = makeRecycleEcho();
     const filler: GameCardData = {
       id: 'bp-filler',
       type: 'potion',
@@ -287,15 +284,18 @@ describe('回收余韵 使用效果 — 边界', () => {
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
     ]);
 
-    // Without onDiscardDraw, the use effect itself never draws.
+    // The use effect itself never draws — backpack contents stay put.
     expect(result.state.handCards.some(c => c.id === 'bp-filler')).toBe(false);
     expect(result.state.backpackItems.some(c => c.id === 'bp-filler')).toBe(true);
   });
 });
 
-describe('回收余韵 被回收效果 — onDiscardDraw 固定 1（play 路径）', () => {
-  it('Lv0 被回收时从背包抽 1 张', () => {
-    const card = makeRecycleEcho(); // onDiscardDraw: 1
+// Negative regression tests: the "被回收时抽 1 张" effect was removed by user request.
+// These guards make sure no future change accidentally re-introduces a draw on either
+// the play path (card auto-recycles) or the DISCARD_OWNED_CARD path (e.g. 专属召唤).
+describe('回收余韵 — 被回收时不抽牌（regression guards）', () => {
+  it('PLAY 路径：卡入回收袋时不抽背包卡', () => {
+    const card = makeRecycleEcho();
     const filler: GameCardData = {
       id: 'bp-filler',
       type: 'potion',
@@ -316,15 +316,13 @@ describe('回收余韵 被回收效果 — onDiscardDraw 固定 1（play 路径�
 
     // Played card itself goes to recycle bag (recycleDelay 1).
     expect(result.state.permanentMagicRecycleBag.some(c => c.id === card.id)).toBe(true);
-    // onDiscardDraw=1 pulled bp-filler from backpack into hand.
-    expect(result.state.handCards.some(c => c.id === 'bp-filler')).toBe(true);
-    expect(result.state.backpackItems.some(c => c.id === 'bp-filler')).toBe(false);
+    // No draw happens — bp-filler stays in backpack, hand contains nothing extra.
+    expect(result.state.handCards.some(c => c.id === 'bp-filler')).toBe(false);
+    expect(result.state.backpackItems.some(c => c.id === 'bp-filler')).toBe(true);
   });
 
-  it('Lv1 / Lv2 也只从背包抽 1 张（升级不增加抽牌量）', () => {
-    // Card-schema OnUpgradeHandler sets onDiscardDraw=1 always.
-    // We simulate the upgraded state by providing onDiscardDraw=1 and upgradeLevel=2.
-    const card = makeRecycleEcho({ upgradeLevel: 2, onDiscardDraw: 1 });
+  it('PLAY 路径 (Lv2)：升级后仍然不抽（升级只影响 use 效果选牌数量）', () => {
+    const card = makeRecycleEcho({ upgradeLevel: 2 });
     const fillers: GameCardData[] = [
       { id: 'bp-1', type: 'potion', name: '袋1', value: 0, image: '' } as GameCardData,
       { id: 'bp-2', type: 'potion', name: '袋2', value: 0, image: '' } as GameCardData,
@@ -342,55 +340,12 @@ describe('回收余韵 被回收效果 — onDiscardDraw 固定 1（play 路径�
     ]);
 
     const drawnCount = result.state.handCards.filter(c => c.id.startsWith('bp-')).length;
-    expect(drawnCount).toBe(1);
-    expect(result.state.backpackItems.length).toBe(2);
+    expect(drawnCount).toBe(0);
+    expect(result.state.backpackItems.length).toBe(3);
   });
 
-  it('回收袋为空时也触发 onDiscardDraw（use 是 no-op + draw 仍触发）', () => {
-    const card = makeRecycleEcho(); // onDiscardDraw: 1
-    const filler: GameCardData = {
-      id: 'bp-only',
-      type: 'potion',
-      name: '袋',
-      value: 0,
-      image: '',
-    } as GameCardData;
-    const state = makeState({
-      handCards: [card],
-      backpackItems: [filler],
-      permanentMagicRecycleBag: [],
-      handSize: 10,
-    });
-
-    const result = drain(state, [
-      { type: 'PLAY_CARD', cardId: card.id } as GameAction,
-    ]);
-
-    expect(result.state.handCards.some(c => c.id === 'bp-only')).toBe(true);
-  });
-
-  it('play 路径不触发弹射 / 弃能护符（toRecycleBag 选项设为 true）', () => {
+  it('DISCARD_OWNED_CARD 路径：被 专属召唤 等弃回时也不抽（仍正确路由到回收袋）', () => {
     const card = makeRecycleEcho();
-    const state = makeState({
-      handCards: [card],
-      backpackItems: [{ id: 'bp', type: 'potion', name: '袋', value: 0, image: '' } as GameCardData],
-      permanentMagicRecycleBag: [],
-      handSize: 10,
-    });
-
-    const result = drain(state, [
-      { type: 'PLAY_CARD', cardId: card.id } as GameAction,
-    ]);
-
-    const logText = (result.state.gameLog ?? []).map(e => e.message ?? '').join('\n');
-    expect(logText).not.toContain('弹射护符');
-    expect(logText).not.toContain('弃能');
-  });
-});
-
-describe('回收余韵 被回收效果 — DISCARD_OWNED_CARD 路径', () => {
-  it('被 专属召唤 等机制弃回时也触发 onDiscardDraw', () => {
-    const card = makeRecycleEcho(); // onDiscardDraw: 1
     const filler: GameCardData = {
       id: 'bp-filler',
       type: 'potion',
@@ -408,10 +363,11 @@ describe('回收余韵 被回收效果 — DISCARD_OWNED_CARD 路径', () => {
       { type: 'DISCARD_OWNED_CARD', card, owner: 'player' } as GameAction,
     ]);
 
-    // Card routed to recycle bag (it's permanent), not graveyard.
+    // Perm routing still works: card lands in recycle bag, not graveyard.
     expect(result.state.permanentMagicRecycleBag.some(c => c.id === card.id)).toBe(true);
     expect(result.state.discardedCards.some(c => c.id === card.id)).toBe(false);
-    // onDiscardDraw=1 fired.
-    expect(result.state.handCards.some(c => c.id === 'bp-filler')).toBe(true);
+    // No draw happens — bp-filler stays in backpack.
+    expect(result.state.handCards.some(c => c.id === 'bp-filler')).toBe(false);
+    expect(result.state.backpackItems.some(c => c.id === 'bp-filler')).toBe(true);
   });
 });

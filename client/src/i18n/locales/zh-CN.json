@@ -497,6 +497,10 @@
       "discoverSkillDesc": "花费 {{cost}} 金币发现一个全新的英雄技能，从 3 个技能中选择 1 个学习。",
       "discoverSkillUsedNote": "本次商店的发现机会已使用。",
       "discoverSkillButton": "发现技能",
+      "refreshTitle": "刷新商店",
+      "refreshDesc": "花费 {{cost}} 金币重新生成所有商品，并恢复本次商店其他按钮（删牌 / 回血 / 强化攻击 / 强化护甲 / 商店升级 / 发现技能）的使用次数。",
+      "refreshUsedNote": "本次商店已刷新过一次。",
+      "refreshButton": "刷新",
       "finishShopping": "结束购买"
     },
     "permGrant": {
@@ -519,6 +523,7 @@
       "title_transformRecycleGrant": "唤回秘药",
       "title_amuletPermGrant": "附魔祭坛 · 护符 Perm 2",
       "title_onHandStunCapGrant": "翻转之契 · 铭刻技艺",
+      "title_onHandHealGrant": "赋能神殿 · 上手：回血",
       "desc_equipmentEnchant": "选择一张手牌中的装备弃置，将其攻击/护甲值随机附魔到装备栏的一件装备上",
       "desc_essenceExtract": "移除一张手牌（从游戏中删除）。一次性魔法→左栏攻击+1；装备→右栏攻击+1；护符→右栏护甲+1；怪物/药水→左栏护甲+1",
       "desc_transformGrant": "选择一张手牌赋予「转型：随机获得坟场一张魔法卡」",
@@ -532,6 +537,7 @@
       "desc_transformRecycleGrant": "选择一张手牌赋予「转型：回收袋取回 1 张牌」",
       "desc_amuletPermGrant": "选择一个已装备的护符，赋予 Perm 2（被移除后经 2 次瀑流返回背包）",
       "desc_onHandStunCapGrant": "选择一张手牌，永久赋予「上手：击晕上限 +3%」（每次进入手牌触发，已带其它上手词条的卡不可选）",
+      "desc_onHandHealGrant": "选择一张手牌，永久赋予「上手：恢复 1 HP」（每次进入手牌触发，已带其它上手词条的卡不可选）",
       "empty_equipmentEnchant": "手牌中没有可弃置的装备卡",
       "empty_essenceExtract": "手牌中没有可移除的卡牌",
       "empty_flankGrant": "手牌中没有可赋予侧击效果的卡牌",
@@ -545,6 +551,7 @@
       "empty_transformRecycleGrant": "手牌中没有可赋予转型效果的卡牌",
       "empty_amuletPermGrant": "没有可赋予 Perm 2 的护符（所有护符已是 Perm 2 或更高）",
       "empty_onHandStunCapGrant": "手牌中没有可赋予「上手：击晕上限 +3%」的卡牌",
+      "empty_onHandHealGrant": "手牌中没有可赋予「上手：恢复 1 HP」的卡牌",
       "confirm_equipmentEnchant": "附魔",
       "confirm_essenceExtract": "萃取",
       "confirm_transformGrant": "赋灵",
@@ -557,7 +564,8 @@
       "confirm_transformHealGrant": "赋予",
       "confirm_transformRecycleGrant": "赋予",
       "confirm_amuletPermGrant": "赋予",
-      "confirm_onHandStunCapGrant": "铭刻"
+      "confirm_onHandStunCapGrant": "铭刻",
+      "confirm_onHandHealGrant": "铭刻"
     },
     "amplify": {
       "title": "强化",

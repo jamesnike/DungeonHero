@@ -19,6 +19,7 @@ import {
   MAX_SHOP_LEVEL,
   SHOP_SKILL_DISCOVER_COST,
   SHOP_EQUIP_BOOST_COST,
+  SHOP_REFRESH_COST,
   INITIAL_HP,
 } from './constants';
 import { getShopPrice } from './helpers';
@@ -158,6 +159,28 @@ export function openShopPure(state: GameState, rng: RngState): [Partial<GameStat
     shopSkillDiscoverUsed: false,
     shopEquipAttackUsed: false,
     shopEquipArmorUsed: false,
+    shopRefreshUsed: false,
+  }, nextRng];
+}
+
+export function shopRefreshPure(
+  state: GameState,
+  rng: RngState,
+): [Partial<GameState>, RngState] | null {
+  if (state.shopRefreshUsed || state.gold < SHOP_REFRESH_COST) return null;
+  const [offerings, nextRng] = generateShopOfferingsPure(state.classDeck, state.shopLevel, rng);
+  return [{
+    gold: state.gold - SHOP_REFRESH_COST,
+    shopOfferings: offerings,
+    shopRefreshUsed: true,
+    shopDeleteUsed: false,
+    shopHealUsed: false,
+    shopLevelUpUsed: false,
+    shopSkillDiscoverUsed: false,
+    shopEquipAttackUsed: false,
+    shopEquipArmorUsed: false,
+    shopSkillOptions: [],
+    shopSkillSelectOpen: false,
   }, nextRng];
 }
 

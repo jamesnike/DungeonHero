@@ -631,6 +631,7 @@ export default function GameBoard() {
     handleShopLevelUpRequest,
     handleShopEquipAttackRequest,
     handleShopEquipArmorRequest,
+    handleShopRefreshRequest,
     handleCardUpgrade,
     handleShopSkillDiscoverRequest,
     handleShopSkillSelect,
@@ -4383,6 +4384,7 @@ export default function GameBoard() {
       shopSkillDiscoverUsed: Boolean(snapshot.shopSkillDiscoverUsed),
       shopEquipAttackUsed: Boolean(snapshot.shopEquipAttackUsed),
       shopEquipArmorUsed: Boolean(snapshot.shopEquipArmorUsed),
+      shopRefreshUsed: Boolean(snapshot.shopRefreshUsed),
       shopSkillOptions: Array.isArray(snapshot.shopSkillOptions) ? snapshot.shopSkillOptions : [],
       shopSkillSelectOpen: Boolean(snapshot.shopSkillSelectOpen),
       monsterRewardQueue: Array.isArray(snapshot.monsterRewardQueue) ? snapshot.monsterRewardQueue as import('@/game-core/types').MonsterRewardDrop[] : [],
@@ -4797,6 +4799,12 @@ export default function GameBoard() {
     setGameOverMinimized(false);
     initGame(mode);
     dispatch({ type: 'SET_HYDRATED' });
+    // Skill modal removed — player starts with no default Hero Skill. We still
+    // need the opening setup (base 2 hand draws + any eternal-relic opening
+    // hooks like 召唤随从 / 雷盾心法) to fire so the run is playable.
+    // `runOpeningSetup('')` is safe with an empty skill id: getHeroSkillById
+    // returns null and all skill-bonus branches no-op.
+    runOpeningSetup('');
   };
 
   // Handle skill selection — active skills set as hero skill, passive skills become eternal relics
@@ -4894,12 +4902,21 @@ export default function GameBoard() {
   };
 
   // Opening class-deck draws + relic grants + delayed initial hand fill.
-  // Extracted from the old `handleCardDraftComplete` so it can run directly
-  // after skill selection, without going through the deprecated 6-round
-  // starter draft modal.
+  //
+  // Originally extracted from `handleCardDraftComplete` so it could run after
+  // the legacy 3-choose-1 skill modal. The skill modal is no longer shown at
+  // game start (player begins with no default Hero Skill), so this is now
+  // invoked synchronously from `handleGameModeSelect` with `skillId === ''`.
+  //
+  // We read `eternalRelics` and `classDeck` from `engine.getState()` rather
+  // than from React-render closure, because the synchronous fresh-game path
+  // calls us BEFORE React has re-rendered with the post-INIT_GAME state — so
+  // closure-captured values would still reflect the previous run.
   const runOpeningSetup = (skillId: string) => {
     const definition = skillId ? getHeroSkillById(skillId as HeroSkillId) : null;
-    const currentRelics = eternalRelicsRef.current;
+    const liveState = engine.getState();
+    const currentRelics = liveState.eternalRelics;
+    const liveClassDeck = liveState.classDeck;
 
     let classDrawn: GameCardData[] = [];
 
@@ -4928,7 +4945,7 @@ export default function GameBoard() {
         addGameLog('skill', '愈战愈勇：开局获得永久魔法「治愈余韵」');
       }
       if (hasEternalRelic(currentRelics, 'shield-wall')) {
-        const thunderSeal = classDeck.find(
+        const thunderSeal = liveClassDeck.find(
           c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap',
         );
         if (thunderSeal) {
@@ -4950,7 +4967,7 @@ export default function GameBoard() {
       const totalClassCards = skillClassCards + relicClassCards;
       const hasShieldWall = hasEternalRelic(currentRelics, 'shield-wall');
       const thunderSealIds = hasShieldWall
-        ? classDeck.filter(c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap').map(c => c.id)
+        ? liveClassDeck.filter(c => c.type === 'amulet' && (c as GameCardData).amuletEffect === 'discard-zap').map(c => c.id)
         : [];
 
       if (totalClassCards > 0) {
@@ -8190,6 +8207,7 @@ export default function GameBoard() {
     onShopSkillDiscoverRequest: handleShopSkillDiscoverRequest,
     onShopEquipAttackRequest: handleShopEquipAttackRequest,
     onShopEquipArmorRequest: handleShopEquipArmorRequest,
+    onShopRefreshRequest: handleShopRefreshRequest,
     onShopSkillSelect: handleShopSkillSelect,
     onEventChoice: handleEventChoice,
     onEventMinimize: handleEventMinimize,
@@ -8249,6 +8267,7 @@ export default function GameBoard() {
     handleCardClick, handleShopPurchase, handleShopClose, handleShopMinimize,
     handleShopHealRequest, handleShopLevelUpRequest, handleShopDeleteRequest,
     handleShopSkillDiscoverRequest, handleShopEquipAttackRequest, handleShopEquipArmorRequest,
+    handleShopRefreshRequest,
     handleShopSkillSelect, handleEventChoice, handleEventMinimize,
     handleDiceRollResult, cancelDiceModal, handleMagicChoice,
     handleEquipmentPromptSelection, cancelEquipmentPrompt,

@@ -1536,6 +1536,10 @@ html {
     display: inline-flex;
     align-items: center;
     gap: calc(0.22rem * var(--dh-card-instance-scale, 1));
+    /* Keep the badge legible but let the underlying art / text bleed through —
+       the badge is purely informational ("this card has already flipped once")
+       and shouldn't visually compete with the card content. */
+    opacity: 0.55;
   }
 
   .dh-card__flipped-badge--compact {

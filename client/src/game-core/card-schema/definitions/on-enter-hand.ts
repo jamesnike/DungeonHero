@@ -217,6 +217,25 @@ const growthBladeOnHand: OnEnterHandHandler = (_state, card, _patch, sideEffects
   });
 };
 
+/**
+ * 赋能神殿 「上手：恢复 1 HP」: each time this card enters hand, heal 1 HP.
+ * Set on `card.onEnterHandEffect = 'on-hand-heal-1'` via the
+ * `on-hand-heal-grant` PermGrant flow. Routed through HEAL action so that
+ * standard hooks (amulet/equipmentSlotBonuses/totalHealed/healAccumulator)
+ * fire consistently. Capped at maxHp like all other heals.
+ */
+const onHandHeal1: OnEnterHandHandler = (_state, card, _patch, sideEffects, enqueuedActions) => {
+  enqueuedActions.push({ type: 'HEAL', amount: 1, source: 'on-hand-heal-1' });
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'magic', message: `${card.name} 上手：恢复 1 生命。` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${card.name} 上手：+1 生命！` },
+  });
+};
+
 registerOnEnterHandAll([
   { id: 'weapon-manual-onhand', handler: weaponManualOnHand },
   { id: 'blood-oath-scroll-onhand', handler: bloodOathScrollOnHand },
@@ -225,4 +244,5 @@ registerOnEnterHandAll([
   { id: 'stun-cap-bonus-3', handler: stunCapBonus3OnHand },
   { id: 'frenzy-curse-onhand', handler: frenzyCurseOnHand },
   { id: 'growth-blade-onhand', handler: growthBladeOnHand },
+  { id: 'on-hand-heal-1', handler: onHandHeal1 },
 ]);

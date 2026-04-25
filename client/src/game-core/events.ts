@@ -23,6 +23,7 @@ import { applyEquipDestroyLastWords } from './rules/waterfall';
 import type { GameAction } from './actions';
 import type { SideEffect } from './reducer';
 import { createGraveyardRecallCard } from '@/lib/knightDeck';
+import { resetCardForGraveyard } from './cards';
 import bloodCurseSealImage from '@assets/generated_images/card_curse_blood_seal.png';
 import sealBladeImage from '@assets/generated_images/knight_seal_blade.png';
 import flipPrintAmuletImage from '@assets/generated_images/knight_arc_seal_amulet.png';
@@ -119,6 +120,12 @@ export function evaluateChoiceRequirement(
       return {
         available: state.persuadeLevel >= req.min,
         reason: req.message ?? `劝降等级不足 ${req.min}`,
+      };
+
+    case 'recycleBag':
+      return {
+        available: state.permanentMagicRecycleBag.length >= req.min,
+        reason: req.message ?? `回收袋至少需要 ${req.min} 张牌`,
       };
 
     default:
@@ -238,6 +245,14 @@ const EXACT_REDUCER_TOKENS = new Set([
   'flipToFlipMonsterDebuffMagic',
   'grantHandStunCapBonus',
   'grantEquipFlipRepairBuff',
+  // New event tokens — see plan "Add 15 new event options"
+  'goldHalve',
+  'grantStarterDungeonSwap',
+  'grantStarterDimensionWarp',
+  'grantHandOnHandHeal:1',
+  'grantLastWordsMaxHp:4',
+  'pactCopyActiveRow',
+  'amplify-altar-from-random-class-equip-with-warp',
 ]);
 
 const PREFIX_REDUCER_TOKENS = [
@@ -246,7 +261,11 @@ const PREFIX_REDUCER_TOKENS = [
   'spellDamage+', 'spellLifesteal+', 'spellLifesteal-',
   'handLimit+', 'handLimit-',
   'backpackSize+', 'backpackSize-', 'tempShield+',
-  'stunCap+', 'persuadeLevel+', 'persuadeLevel-', 'persuadeCost-',
+  'stunCap+', 'stunCap-', 'persuadeLevel+', 'persuadeLevel-', 'persuadeCost-',
+  // New: persuadeNextRateBonus:N — mirror of persuadeNextRatePenalty:N
+  'persuadeNextRateBonus:',
+  // New: recycleBagDelete:N — randomly delete N cards from recycle bag → graveyard
+  'recycleBagDelete:',
   'slotLeftDamage+', 'slotRightDefense+', 'slotLeftDefense+', 'slotRightDamage+',
   'persuadeRaceBonus:', 'persuadeSuccessDurabilityBonus+',
   'persuadeNextCostReduction:', 'persuadeNextRatePenalty:', 'persuadeNextCostIncrease:',
@@ -611,6 +630,11 @@ export function applySimpleEffect(
     const amount = parseInt(effectToken.replace('gold-', ''), 10) || 0;
     patch = { gold: Math.max(0, state.gold - amount) };
     logs.push({ type: 'event', message: `失去 ${amount} 金币` });
+  } else if (effectToken === 'goldHalve') {
+    const before = state.gold;
+    const next = Math.floor(before / 2);
+    patch = { gold: next, heroSkillBanner: `金币减半（${before}→${next}）。` };
+    logs.push({ type: 'event', message: `金币减半（${before}→${next}）` });
   } else if (effectToken.startsWith('heal+')) {
     const amount = parseInt(effectToken.replace('heal+', ''), 10) || 0;
     const aura = computeAmuletEffects(state.amuletSlots as GameCardData[]);
@@ -754,6 +778,11 @@ export function applySimpleEffect(
     const next = Math.min(100, state.stunCap + amount);
     patch = { stunCap: next, heroSkillBanner: `击晕上限提升至 ${next}%。` };
     logs.push({ type: 'event', message: `击晕上限 +${amount}%` });
+  } else if (effectToken.startsWith('stunCap-')) {
+    const amount = parseInt(effectToken.replace('stunCap-', ''), 10) || 0;
+    const next = Math.max(0, state.stunCap - amount);
+    patch = { stunCap: next, heroSkillBanner: `击晕上限降低至 ${next}%。` };
+    logs.push({ type: 'event', message: `击晕上限 -${amount}%（当前 ${next}%）` });
 
   // --- Equipment slot bonuses ---
 
@@ -1004,6 +1033,14 @@ export function applySimpleEffect(
       heroSkillBanner: `下次劝降成功率 -${amount}%。`,
     };
     logs.push({ type: 'event', message: `下次劝降率 -${amount}%` });
+  } else if (effectToken.startsWith('persuadeNextRateBonus:')) {
+    const amount = parseInt(effectToken.replace('persuadeNextRateBonus:', ''), 10) || 0;
+    const current = state.persuadeDiscount ?? { costReduction: 0, rateBonus: 0 };
+    patch = {
+      persuadeDiscount: { ...current, rateBonus: current.rateBonus + amount },
+      heroSkillBanner: `下次劝降成功率 +${amount}%。`,
+    };
+    logs.push({ type: 'event', message: `下次劝降率 +${amount}%` });
   } else if (effectToken.startsWith('persuadeNextCostIncrease:')) {
     const amount = parseInt(effectToken.replace('persuadeNextCostIncrease:', ''), 10) || 0;
     const current = state.persuadeDiscount ?? { costReduction: 0, rateBonus: 0 };
@@ -1596,6 +1633,32 @@ export function applySimpleEffect(
       logs.push({ type: 'event', message: '回收袋为空' });
     }
 
+  } else if (effectToken.startsWith('recycleBagDelete:')) {
+    const requested = parseInt(effectToken.replace('recycleBagDelete:', ''), 10) || 0;
+    const bag = state.permanentMagicRecycleBag;
+    if (requested <= 0 || bag.length === 0) {
+      patch.heroSkillBanner = '回收袋为空。';
+      logs.push({ type: 'event', message: '回收袋为空，无可移除' });
+    } else {
+      let rng = state.rng;
+      let indices: number[];
+      [indices, rng] = rngShuffle(bag.map((_: unknown, i: number) => i), rng);
+      patch.rng = rng;
+      const take = Math.min(requested, bag.length);
+      const removedIndexSet = new Set(indices.slice(0, take));
+      const removed = indices.slice(0, take).map(i => bag[i]);
+      patch.permanentMagicRecycleBag = bag.filter((_: unknown, i: number) => !removedIndexSet.has(i));
+      // 「删除」语义：进坟场（per monster-graveyard-layer-reset.mdc 走 resetCardForGraveyard）。
+      const isQuick = state.gameMode === 'quick';
+      const cleaned = removed.map(card => {
+        const { _recycleWaits: _w, ...rest } = card as GameCardData & { _recycleWaits?: number };
+        return resetCardForGraveyard(rest as GameCardData, isQuick);
+      });
+      patch.discardedCards = [...state.discardedCards, ...cleaned];
+      patch.heroSkillBanner = `从回收袋移除了 ${cleaned.map(c => c.name).join('、')}。`;
+      logs.push({ type: 'event', message: `回收袋随机移除 ${take} 张牌至坟场（${cleaned.map(c => c.name).join('、')}）` });
+    }
+
   } else if (effectToken === 'recycleBagMagicToHand:2') {
     const recycled = state.permanentMagicRecycleBag;
     const magicInBag = recycled.filter(c => c.type === 'magic' || c.type === 'hero-magic');
@@ -1867,7 +1930,10 @@ export function applySimpleEffect(
              effectToken === 'destroyAllEquipment' || effectToken === 'vault-flipback' ||
              effectToken === 'fate-dice-strike' || effectToken.startsWith('amplify-altar-') ||
              // 翻转之契
-             effectToken === 'grantHandStunCapBonus' || effectToken === 'grantEquipFlipRepairBuff') {
+             effectToken === 'grantHandStunCapBonus' || effectToken === 'grantEquipFlipRepairBuff' ||
+             // New event tokens — see plan "Add 15 new event options"
+             effectToken === 'grantHandOnHandHeal:1' || effectToken === 'grantLastWordsMaxHp:4' ||
+             effectToken === 'pactCopyActiveRow') {
     emitEvents.push({ event: 'event:requestEventInteraction', payload: { token: effectToken, data: {} } });
 
   } else if (effectToken.startsWith('grantFlankDraw:') || effectToken.startsWith('grantTransformGold:') ||
@@ -2339,13 +2405,17 @@ export function applySimpleEffect(
 
   // --- Phase EC-1: grantStarter* / grantMagic / amplify-copy-upgraded ---
 
-  } else if (effectToken === 'grantStarterWeaponBurst' || effectToken === 'grantStarterTempArmor' || effectToken === 'grantStarterStunStrike') {
+  } else if (effectToken === 'grantStarterWeaponBurst' || effectToken === 'grantStarterTempArmor' || effectToken === 'grantStarterStunStrike' || effectToken === 'grantStarterDungeonSwap' || effectToken === 'grantStarterDimensionWarp') {
     const templateId = effectToken === 'grantStarterWeaponBurst' ? STARTER_CARD_IDS.weaponBurst
       : effectToken === 'grantStarterTempArmor' ? STARTER_CARD_IDS.tempArmor
-      : STARTER_CARD_IDS.stunStrike;
+      : effectToken === 'grantStarterStunStrike' ? STARTER_CARD_IDS.stunStrike
+      : effectToken === 'grantStarterDungeonSwap' ? STARTER_CARD_IDS.dungeonSwap
+      : STARTER_CARD_IDS.dimensionWarp;
     const displayName = effectToken === 'grantStarterWeaponBurst' ? '战斗鼓舞'
       : effectToken === 'grantStarterTempArmor' ? '铸甲术'
-      : '雷震击';
+      : effectToken === 'grantStarterStunStrike' ? '雷震击'
+      : effectToken === 'grantStarterDungeonSwap' ? '乾坤挪移'
+      : '维度扭曲';
     const pool = createStarterCardPool();
     const template = pool.find(c => c.id === templateId);
     if (template) {

@@ -453,7 +453,7 @@ const doubleNextMagic: CardDefinition = {
 const swapBackpackRecycle: CardDefinition = {
   effectId: 'magic:swap-backpack-recycle',
   effects: [],
-  tags: ['magic', 'permanent'],
+  tags: ['magic', 'instant'],
   resolver: (state, card, sideEffects, patch, enqueuedActions) => {
     patch.backpackItems = state.permanentMagicRecycleBag.map(c => sanitizeCardMetadata(c));
     patch.permanentMagicRecycleBag = state.backpackItems.map((c: GameCardData) => sanitizeCardMetadata(c));
@@ -1003,6 +1003,70 @@ const starterTempArmor: CardDefinition = {
   },
 };
 
+// ----- Apprentice opening trio -----
+// Three Perm-1 magics seeded into the starting backpack at INIT_GAME.
+// They mirror existing patterns (knight:missile-bolt / starter:weaponBurst /
+// starter:tempArmor) but with fixed numeric amounts (no upgrades) and unique
+// effect ids so banner / log text reads as the apprentice card name.
+
+const starterApprenticeBolt: CardDefinition = {
+  effectId: `starter:${STARTER_CARD_IDS.apprenticeBolt}`,
+  effects: [],
+  tags: ['magic', 'permanent', 'damage'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier, isEchoTriggered) => {
+    const echoTag = isEchoTriggered ? '（回响×2）' : '';
+    const boltDmg = getSpellDamage(1 + (card.amplifyBonus ?? 0), state);
+    patch.pendingMagicAction = {
+      card,
+      effect: 'apprentice-bolt',
+      step: 'monster-select',
+      prompt: `选择一个目标，造成 ${boltDmg} 点法术伤害。${echoTag}`,
+      echoRemaining: echoMultiplier,
+      allowsHeroTarget: true,
+    } as any;
+    patch.heroSkillBanner = `选择一个目标，造成 ${boltDmg} 点法术伤害。${echoTag}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
+const starterApprenticeRally: CardDefinition = {
+  effectId: `starter:${STARTER_CARD_IDS.apprenticeRally}`,
+  effects: [],
+  tags: ['magic', 'permanent', 'interactive', 'buff'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const rallyAmount = 1 * echoMultiplier;
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    patch.pendingMagicAction = {
+      card,
+      effect: 'apprentice-rally',
+      step: 'slot-select',
+      prompt: `选择一个装备栏，临时攻击力 +${rallyAmount}。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `选择一个装备栏，临时攻击力 +${rallyAmount}。${echoLabel}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
+const starterApprenticeArmor: CardDefinition = {
+  effectId: `starter:${STARTER_CARD_IDS.apprenticeArmor}`,
+  effects: [],
+  tags: ['magic', 'permanent', 'interactive', 'defense'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const armorAmt = 1 * echoMultiplier;
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    patch.pendingMagicAction = {
+      card,
+      effect: 'apprentice-armor',
+      step: 'slot-select',
+      prompt: `选择一个装备栏，+${armorAmt} 临时护甲。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `选择一个装备栏，+${armorAmt} 临时护甲。${echoLabel}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
 const starterHealMagic: CardDefinition = {
   effectId: `starter:${STARTER_CARD_IDS.healMagic}`,
   effects: [],
@@ -1432,11 +1496,12 @@ const starterRecycleDrawMagic: CardDefinition = {
   effects: [],
   tags: ['magic', 'permanent', 'recycle'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
-    // 新语义（user 确认 A 选项）：从回收袋**随机**选 N 张牌（N = 1/2/3，按 upgradeLevel），
+    // 语义：从回收袋**随机**选 N 张牌（N = 1/2/3，按 upgradeLevel），
     // 对这 N 张牌的 _recycleWaits -= 1。减到 0 的 ready 牌进背包；剩下的留回收袋（含
     // _recycleWaits 减为 1+ 但仍未 ready 的，以及背包已满 overflow 的）。**未被选中的牌
     // 完全不变**（区别于旧语义"整个回收袋全部 -1"）。
-    // onDiscardDraw 固定 1（在 deck.ts / upgrades.ts handler 里），不再随升级提升。
+    // 注意：本卡不再有"被回收时抽牌"效果（曾经的 onDiscardDraw 已删除），
+    // 因此不需要 enqueue APPLY_DISCARD_EFFECTS（跟 血金术 / 查阅动作 等普通 Permanent magic 一致）。
     // 同步参考：rules/magic-effects.ts 的 STARTER_CARD_IDS.recycleDrawMagic 旧 switch 实现。
     const recycleCounts = [1, 2, 3];
     const N = recycleCounts[card.upgradeLevel ?? 0] ?? 3;
@@ -1503,10 +1568,6 @@ const starterRecycleDrawMagic: CardDefinition = {
       banner(sideEffects, `回收余韵：回收袋为空。${echoTag}`);
     }
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
-    // 「被回收时」语义：play 路径下卡自身进回收袋也算"被回收"，
-    // 显式触发 APPLY_DISCARD_EFFECTS 让 onDiscardDraw 生效。
-    // opts.toRecycleBag=true 跳过 catapult / discard-zap 这种"主动弃手牌"才该触发的护符。
-    enqueuedActions.push({ type: 'APPLY_DISCARD_EFFECTS', card, owner: 'player', opts: { toRecycleBag: true } });
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   },
@@ -2147,6 +2208,13 @@ const knightTempAttackDouble: CardDefinition = {
 // random active-row monster, then -3 durability on the equipment.
 // Echo (A): repeat the entire effect echoMultiplier times sequentially.
 // Empty slots / equipment without durability are rejected (magic not consumed).
+const knightEternalVessel: CardDefinition = {
+  effectId: 'knight:eternal-vessel',
+  effects: [],
+  tags: ['knight', 'permanent', 'self-damage', 'maxhp'],
+  resolver: resolveKnightPermanentMagic,
+};
+
 const knightDurabilityChargeBurst: CardDefinition = {
   effectId: 'knight:durability-charge-burst',
   effects: [],
@@ -2416,6 +2484,9 @@ const allMagicDefinitions: CardDefinition[] = [
   starterWeaponBurst,
   starterRepairOne,
   starterTempArmor,
+  starterApprenticeBolt,
+  starterApprenticeRally,
+  starterApprenticeArmor,
   starterHealMagic,
   starterHealEcho,
   starterReshuffle,
@@ -2479,6 +2550,7 @@ const allMagicDefinitions: CardDefinition[] = [
   knightDurabilityChargeBurst,
   knightDiscardRebuild,
   knightGreedCurse,
+  knightEternalVessel,
 ];
 
 registerCards(allMagicDefinitions);

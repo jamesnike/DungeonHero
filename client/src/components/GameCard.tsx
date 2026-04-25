@@ -206,7 +206,8 @@ export type EventRequirement =
   | { type: 'leftmostIsEnraged'; message?: string }
   | { type: 'shopLevel'; min: number; message?: string }
   | { type: 'persuadeLevel'; min: number; message?: string }
-  | { type: 'handUpgraded'; min: number; message?: string };
+  | { type: 'handUpgraded'; min: number; message?: string }
+  | { type: 'recycleBag'; min: number; message?: string };
 
 export type EventEffectExpression = string | string[];
 
@@ -357,6 +358,14 @@ export interface GameCardData {
    * potion uses on the same equipment.
    */
   lastWordsSlotTempBuff?: number;
+  /**
+   * 附魔祭坛 「遗言：生命值上限+4」: number of stacks granted to this equipment.
+   * On destruction (durability → 0), fires `+4 maxhpperm × lastWordsMaxHpBoost`
+   * (each stack contributes +4 to permanent maxHp). Stacks across multiple grants
+   * on the same equipment, parallel to `lastWordsSlotTempBuff`. Does NOT heal
+   * current HP — only raises the cap.
+   */
+  lastWordsMaxHpBoost?: number;
   /** 上手关键词：当此卡进入手牌时（抽牌、坟场/回收袋/装备栏回手、卡牌翻面等）自动触发的效果 ID。 */
   onEnterHandEffect?: string;
   /** 内部标记：进入手牌时跳过 onEnterHandEffect 触发（用于克隆/复制/初始发牌等不应触发的来源）。 */
@@ -2045,7 +2054,7 @@ const amuletEffectText =
                   </h3>
                 )}
 
-                {isMonsterEquipmentCard(card) && (card.onAttackEffect?.startsWith('steal-gold-') || card.eliteLowGoldPower || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
+                {isMonsterEquipmentCard(card) && (card.onAttackEffect?.startsWith('steal-gold-') || card.eliteLowGoldPower || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.lastWordsMaxHpBoost || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect?.startsWith('steal-gold-') && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃金：攻击时为Hero偷钱">窃金</span>
@@ -2111,6 +2120,16 @@ const amuletEffectText =
                       return (
                         <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords"
                           title={`遗言：装备毁坏时该装备栏 +${amt}临时攻击 +${amt}临时护甲${stacks > 1 ? `（×${stacks} 层）` : ''}`}>
+                          {stacks > 1 ? `遗言×${stacks}` : '遗言'}
+                        </span>
+                      );
+                    })()}
+                    {(card.lastWordsMaxHpBoost ?? 0) > 0 && (() => {
+                      const stacks = card.lastWordsMaxHpBoost ?? 0;
+                      const amt = 4 * stacks;
+                      return (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords"
+                          title={`遗言：装备毁坏时永久最大生命 +${amt}${stacks > 1 ? `（×${stacks} 层）` : ''}`}>
                           {stacks > 1 ? `遗言×${stacks}` : '遗言'}
                         </span>
                       );
@@ -2338,7 +2357,7 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.lastWordsMaxHpBoost || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
                   <div className="dh-card__keyword-row">
                     {card.hasEquipmentRevive && (
                       <span className={`dh-card__keyword-tag ${card.equipmentReviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
@@ -2353,6 +2372,16 @@ const amuletEffectText =
                       return (
                         <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords"
                           title={`遗言：装备毁坏时该装备栏 +${amt}临时攻击 +${amt}临时护甲${stacks > 1 ? `（×${stacks} 层）` : ''}`}>
+                          {stacks > 1 ? `遗言×${stacks}` : '遗言'}
+                        </span>
+                      );
+                    })()}
+                    {(card.lastWordsMaxHpBoost ?? 0) > 0 && (() => {
+                      const stacks = card.lastWordsMaxHpBoost ?? 0;
+                      const amt = 4 * stacks;
+                      return (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords"
+                          title={`遗言：装备毁坏时永久最大生命 +${amt}${stacks > 1 ? `（×${stacks} 层）` : ''}`}>
                           {stacks > 1 ? `遗言×${stacks}` : '遗言'}
                         </span>
                       );
@@ -2542,6 +2571,7 @@ export function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean
       a.hasEquipmentRevive !== b.hasEquipmentRevive ||
       a.equipmentReviveUsed !== b.equipmentReviveUsed ||
       a.lastWordsSlotTempBuff !== b.lastWordsSlotTempBuff ||
+      a.lastWordsMaxHpBoost !== b.lastWordsMaxHpBoost ||
       a._shieldBlockCount !== b._shieldBlockCount ||
       a._counterDisplay !== b._counterDisplay ||
       a.magicType !== b.magicType ||

@@ -1312,6 +1312,12 @@ function reduceMonsterDefeated(
 // DECREMENT_FURY
 //
 // Monster attack layer cost: currentLayer - 1, defeat if <= 0.
+// IMPORTANT: hp is PRESERVED, NOT refilled to maxHp. A monster damaged down
+// to e.g. 3hp on its top layer that then spends a layer to attack ends up at
+// 3hp on the new layer — the next hit can finish it. This makes wounded
+// multi-layer monsters easier to close out as they keep attacking.
+// The hero->monster damage path (damageMonsterWithLayerOverflow in
+// game-core/combat.ts) keeps the OLD behavior of refilling hp on layer break.
 // Handles skeleton no-layer-cost, dragon no-layer-cost, bleed scaling,
 // and emits side effects for bone-regen/wraith-rebirth dice.
 // ---------------------------------------------------------------------------
@@ -1368,7 +1374,7 @@ function reduceDecrementFury(
     updated = {
       ...monster,
       currentLayer: nextLayer,
-      hp: monster.maxHp,
+      hp: monster.hp ?? monster.maxHp,
       attack: newAttack,
       value: newValue,
       specialAttackBoost: (monster.specialAttackBoost ?? 0) + perLayer,
@@ -1377,7 +1383,7 @@ function reduceDecrementFury(
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 触发流血：攻击力+${perLayer}，当前 ${newAttack}！` } });
     sideEffects.push({ event: 'ui:banner', payload: { text: `${monster.name} 流血！攻击力升至 ${newAttack}！` } });
   } else {
-    updated = { ...monster, currentLayer: nextLayer, hp: monster.maxHp };
+    updated = { ...monster, currentLayer: nextLayer, hp: monster.hp ?? monster.maxHp };
   }
 
   activeCards[idx] = updated;

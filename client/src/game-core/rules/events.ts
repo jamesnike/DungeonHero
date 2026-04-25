@@ -50,6 +50,8 @@ export function reduceEventActions(state: GameState, action: GameAction): Reduce
     }
     case 'RESOLVE_EVENT_GRANT_EQUIP_FLIP_REPAIR':
       return reduceResolveEventGrantEquipFlipRepair(state, action);
+    case 'RESOLVE_EVENT_GRANT_LASTWORDS_MAXHP':
+      return reduceResolveEventGrantLastWordsMaxHp(state, action);
     default:
       return null;
   }
@@ -112,6 +114,51 @@ function reduceResolveEventGrantEquipFlipRepair(
       payload: { type: 'event', message: `熔铸耐久：未找到目标装备` },
     });
   }
+
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_EVENT_GRANT_LASTWORDS_MAXHP
+// 附魔祭坛 — increment `lastWordsMaxHpBoost` on a chosen main-slot equipment.
+// Stacks: each grant adds another `amount` to the counter; on break/displacement,
+// computeEquipmentBreakEffects / computeEquipmentDisplacementLastWords fires
+// `permanentMaxHpBonus += 4 × stacks`. Only main slots (no reserve).
+// ---------------------------------------------------------------------------
+
+function reduceResolveEventGrantLastWordsMaxHp(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_EVENT_GRANT_LASTWORDS_MAXHP' }>,
+): ReduceResult {
+  const { equipmentSlotId, amount } = action;
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+
+  const slotItem = equipmentSlotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+  if (!slotItem) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: '附魔祭坛：所选装备栏为空' },
+    });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  const stacks = slotItem.lastWordsMaxHpBoost ?? 0;
+  const updated: GameCardData = { ...slotItem, lastWordsMaxHpBoost: stacks + 1 };
+  if (equipmentSlotId === 'equipmentSlot1') {
+    patch.equipmentSlot1 = updated as any;
+  } else {
+    patch.equipmentSlot2 = updated as any;
+  }
+
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'event', message: `附魔祭坛：「${slotItem.name}」获得遗言：生命值上限+${amount}（×${stacks + 1}）` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${slotItem.name} 铭刻「遗言：生命上限+${amount}」（×${stacks + 1}）` },
+  });
 
   return applyPatch(state, patch, sideEffects);
 }

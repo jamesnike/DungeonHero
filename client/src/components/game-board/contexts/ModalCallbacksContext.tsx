@@ -17,6 +17,7 @@ export interface ModalCallbacks {
   onShopSkillDiscoverRequest: () => void;
   onShopEquipAttackRequest: () => void;
   onShopEquipArmorRequest: () => void;
+  onShopRefreshRequest: () => void;
   onShopSkillSelect: (skillId: string) => void;
 
   onEventChoice: (choiceIndex: number) => void;

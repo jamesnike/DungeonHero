@@ -782,22 +782,31 @@ function reduceResolveMagic(
 }
 
 // ---------------------------------------------------------------------------
-// 咒纹刻印 (magic-class-discover)：每使用 8 张 magic 牌（仅 type === 'magic'，
-// 不计 hero-magic / curse），发现一张专属牌。计数与触发都在 RESOLVE_MAGIC 收口
-// 完成，确保所有出牌路径（PLAY_CARD enqueue、GameBoard.handleCardToHero 直发、
-// useEventSystem 的 useKnightSkill event token 等）都会增加 streak。
+// 咒纹刻印 (magic-class-discover)：每使用 6 张「当前功能上是瞬发」的 magic 牌，
+// 发现一张专属牌。判定标准是「现在打出去会进坟场」（!cardHasPermFlag），不是
+// 字面 magicType：
+//   - 原生 Instant magic 被 永恒铭刻 / 附魔祭坛 / 永恒铭刻药 加上 recycleDelay
+//     → cardHasPermFlag === true → 不计入（卡此时进回收袋而非坟场）
+//   - 原生 Permanent magic 被 凡化咒 (permStripped) → cardHasPermFlag === false
+//     → 计入（卡此时进坟场）
+// 不计 hero-magic / curse（type 已先过滤）。
+//
+// 计数与触发都在 RESOLVE_MAGIC 收口完成，确保所有出牌路径（PLAY_CARD enqueue、
+// GameBoard.handleCardToHero 直发、useEventSystem 的 useKnightSkill event
+// token 等）都会增加 streak。
 // echo / 回响在引擎内部循环，不会重复 dispatch RESOLVE_MAGIC，所以此处每次
-// dispatch 只会自增一次，与"使用一张魔法牌"的语义一致。
+// dispatch 只会自增一次，与"使用一张瞬发魔法牌"的语义一致。
 // ---------------------------------------------------------------------------
 
 function applyMagicClassDiscoverStreak(result: ReduceResult, card: GameCardData): ReduceResult {
   if (card.type !== 'magic') return result;
+  if (cardHasPermFlag(card)) return result;
   const stateAfter = result.state;
   const magicDiscoverCount = (stateAfter.amuletSlots as GameCardData[]).filter(
     s => s?.amuletEffect === 'magic-class-discover',
   ).length;
   if (magicDiscoverCount <= 0) return result;
-  const threshold = 8;
+  const threshold = 6;
   const nextStreak = (stateAfter.classMagicDiscoverStreak ?? 0) + magicDiscoverCount;
   if (nextStreak >= threshold) {
     return {
@@ -2546,6 +2555,23 @@ function reduceResolvePermGrant(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
+  if (modal.sourceType === 'on-hand-heal-grant') {
+    // 赋能神殿 「上手：恢复 1 HP」 — grant 'on-hand-heal-1' on-hand keyword to
+    // the chosen hand card and immediately enqueue a HEAL action (the card is
+    // already in hand, so without this nudge the heal would not fire until next
+    // discard / re-draw, mirroring `on-hand-stun-cap-grant`).
+    const targetCard = state.handCards.find(c => c.id === targetCardId);
+    if (!targetCard) return applyPatch(state, patch);
+    patch.handCards = state.handCards.map(c =>
+      c.id === targetCardId ? { ...c, onEnterHandEffect: 'on-hand-heal-1' } : c,
+    );
+    enqueuedActions.push({ type: 'HEAL', amount: 1, source: 'on-hand-heal-1' });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `赋能神殿：「${targetCard.name}」获得「上手：恢复 1 HP」（即时触发一次）` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得上手回血！+1 HP！` } });
+    if (isEventGrant) enqueuedActions.push({ type: 'COMPLETE_EVENT' });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
   if (modal.sourceType === 'transform-recycle-grant') {
     const targetCard = state.handCards.find(c => c.id === targetCardId);
     if (!targetCard) return applyPatch(state, patch);
@@ -2690,7 +2716,7 @@ function reduceCancelPermGrant(state: GameState): ReduceResult {
 
   const eventGrantTypes = ['flank-grant', 'transform-gold-grant', 'flank-persuade-grant',
     'flank-stun-grant', 'flank-damage-grant', 'transform-draw-grant', 'transform-heal-grant',
-    'amulet-perm-grant', 'on-hand-stun-cap-grant'];
+    'amulet-perm-grant', 'on-hand-stun-cap-grant', 'on-hand-heal-grant'];
 
   if (eventGrantTypes.includes(modal.sourceType)) {
     if (modal.sourceCardId === 'event-grant') {

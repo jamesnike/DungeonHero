@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { useShallowGameState } from '@/hooks/useGameEngine';
 import { useModalCallbacks } from '../contexts/ModalCallbacksContext';
 import { BASE_BACKPACK_CAPACITY, HAND_LIMIT, INITIAL_HP } from '@/game-core/constants';
-import { SHOP_HEAL_COST, SHOP_LEVEL_UP_COST, SHOP_SKILL_DISCOVER_COST, SHOP_EQUIP_BOOST_COST } from '@/game-core/constants';
+import { SHOP_HEAL_COST, SHOP_LEVEL_UP_COST, SHOP_SKILL_DISCOVER_COST, SHOP_EQUIP_BOOST_COST, SHOP_REFRESH_COST } from '@/game-core/constants';
 import { getHeroSkillById, heroSkills as allHeroSkills } from '@/lib/heroSkills';
 
 import ShopModal from '@/components/ShopModal';
@@ -24,6 +24,7 @@ function ShopContainerInner() {
     shopSkillDiscoverUsed: s.shopSkillDiscoverUsed,
     shopEquipAttackUsed: s.shopEquipAttackUsed,
     shopEquipArmorUsed: s.shopEquipArmorUsed,
+    shopRefreshUsed: s.shopRefreshUsed,
     shopSkillSelectOpen: s.shopSkillSelectOpen,
     shopSkillOptions: s.shopSkillOptions,
     shopDeleteUsed: s.shopDeleteUsed,
@@ -148,6 +149,9 @@ function ShopContainerInner() {
         shopEquipArmorUsed={gs.shopEquipArmorUsed}
         onShopEquipAttackRequest={cb.onShopEquipAttackRequest}
         onShopEquipArmorRequest={cb.onShopEquipArmorRequest}
+        shopRefreshCost={SHOP_REFRESH_COST}
+        shopRefreshUsed={gs.shopRefreshUsed}
+        onShopRefreshRequest={cb.onShopRefreshRequest}
       />
 
       <ShopSkillSelectModal

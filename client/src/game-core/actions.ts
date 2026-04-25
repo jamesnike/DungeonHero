@@ -379,6 +379,10 @@ export interface ShopEquipBoostAction {
   boostType: 'attack' | 'armor';
 }
 
+export interface ShopRefreshAction {
+  type: 'SHOP_REFRESH';
+}
+
 export interface ShopSkillDiscoverAction {
   type: 'SHOP_SKILL_DISCOVER';
   availableSkills: import('@/lib/heroSkills').HeroSkillDefinition[];
@@ -928,6 +932,19 @@ export interface ResolveEventInteractionAction {
 export interface ResolveEventGrantEquipFlipRepairAction {
   type: 'RESOLVE_EVENT_GRANT_EQUIP_FLIP_REPAIR';
   equipmentId: string;
+}
+
+/**
+ * 附魔祭坛 — 选择装备赋予「遗言：生命值上限+4」
+ * Increments `lastWordsMaxHpBoost` on the chosen main-slot equipment.
+ * Stacks (parallel to lastWordsSlotTempBuff): each grant adds another +4.
+ * On break / displacement, fires permanent maxHp += 4 × stacks (no current-HP heal).
+ * Only applies to equipmentSlot1 / equipmentSlot2 (no reserve).
+ */
+export interface ResolveEventGrantLastWordsMaxHpAction {
+  type: 'RESOLVE_EVENT_GRANT_LASTWORDS_MAXHP';
+  equipmentSlotId: 'equipmentSlot1' | 'equipmentSlot2';
+  amount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -1916,6 +1933,7 @@ export type GameAction =
   | ShopDeleteEquipmentAction
   | ShopDiscoverAction
   | ShopEquipBoostAction
+  | ShopRefreshAction
   | ShopSkillDiscoverAction
   | ShopSelectSkillAction
   | UpgradeCardAction
@@ -1996,6 +2014,7 @@ export type GameAction =
   // Event: interaction
   | ResolveEventInteractionAction
   | ResolveEventGrantEquipFlipRepairAction
+  | ResolveEventGrantLastWordsMaxHpAction
   | ContinueEventEffectsAction
   // Waterfall: effects
   | ApplyWaterfallEffectsAction

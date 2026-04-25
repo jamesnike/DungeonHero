@@ -491,6 +491,10 @@
       "discoverSkillDesc": "Spend {{cost}} gold to discover a new hero skill — pick 1 of 3 to learn.",
       "discoverSkillUsedNote": "Discover already used this visit.",
       "discoverSkillButton": "Discover Skill",
+      "refreshTitle": "Refresh Shop",
+      "refreshDesc": "Spend {{cost}} gold to re-roll all offerings and restore the per-visit charges of every other button (delete / heal / attack boost / armor boost / level up / discover skill).",
+      "refreshUsedNote": "Shop already refreshed this visit.",
+      "refreshButton": "Refresh",
       "leaveShop": "Leave Shop",
       "finishShopping": "Finish Shopping"
     },
@@ -514,6 +518,7 @@
       "title_transformRecycleGrant": "Recall Elixir",
       "title_amuletPermGrant": "Enchant Altar · Amulet Perm 2",
       "title_onHandStunCapGrant": "Pact of Reversal · Inscribe Skill",
+      "title_onHandHealGrant": "Empowerment Shrine · On-Hand Heal",
       "desc_equipmentEnchant": "Discard a piece of equipment from hand and randomly enchant its attack/armor onto an equipped item",
       "desc_essenceExtract": "Remove a hand card (delete it from the game). One-shot magic→Left attack +1; equipment→Right attack +1; amulet→Right armor +1; monster/potion→Left armor +1",
       "desc_transformGrant": "Pick a hand card to grant 'Transform: gain a random magic card from the graveyard'",
@@ -527,6 +532,7 @@
       "desc_transformRecycleGrant": "Pick a hand card to grant 'Transform: take back 1 card from the recycle bag'",
       "desc_amuletPermGrant": "Pick an equipped amulet to grant Perm 2 (returns to backpack after 2 waterfalls when removed)",
       "desc_onHandStunCapGrant": "Pick a hand card and permanently grant 'On-hand: stun cap +3%' (triggers each time it enters hand; cards with other on-hand traits are ineligible)",
+      "desc_onHandHealGrant": "Pick a hand card and permanently grant 'On-hand: restore 1 HP' (triggers each time it enters hand; cards with other on-hand traits are ineligible)",
       "empty_equipmentEnchant": "No equipment in hand to discard",
       "empty_essenceExtract": "No hand cards available to remove",
       "empty_flankGrant": "No hand cards eligible for a flank effect",
@@ -540,6 +546,7 @@
       "empty_transformRecycleGrant": "No hand cards eligible for a transform effect",
       "empty_amuletPermGrant": "No amulets eligible for Perm 2 (all amulets are already Perm 2 or stronger)",
       "empty_onHandStunCapGrant": "No hand cards eligible for 'On-hand: stun cap +3%'",
+      "empty_onHandHealGrant": "No hand cards eligible for 'On-hand: restore 1 HP'",
       "confirm_equipmentEnchant": "Enchant",
       "confirm_essenceExtract": "Extract",
       "confirm_transformGrant": "Grant",
@@ -552,7 +559,8 @@
       "confirm_transformHealGrant": "Grant",
       "confirm_transformRecycleGrant": "Grant",
       "confirm_amuletPermGrant": "Grant",
-      "confirm_onHandStunCapGrant": "Inscribe"
+      "confirm_onHandStunCapGrant": "Inscribe",
+      "confirm_onHandHealGrant": "Inscribe"
     },
     "amplify": {
       "title": "Amplify",

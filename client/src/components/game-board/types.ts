@@ -412,6 +412,34 @@ export type PendingMagicAction =
       allowsHeroTarget?: boolean;
     }
   | {
+      // 学徒法弹（starter perm-1 magic, no upgrade）：单目标 1 法术伤害。
+      // 与 missile-bolt 同形态，差异：固定 1 点（不缩放）、不触发 missile relics。
+      card: GameCardData;
+      effect: 'apprentice-bolt';
+      step: 'monster-select';
+      prompt: string;
+      echoRemaining?: number;
+      allowsHeroTarget?: boolean;
+    }
+  | {
+      // 学徒鼓舞（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时攻击。
+      // 与 weapon-burst 同形态（A 类回响）。
+      card: GameCardData;
+      effect: 'apprentice-rally';
+      step: 'slot-select';
+      prompt: string;
+      echoMultiplier?: number;
+    }
+  | {
+      // 学徒铸甲（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时护甲。
+      // 单步一次性结算，不需要 modal-echo 的 echoRemaining。
+      card: GameCardData;
+      effect: 'apprentice-armor';
+      step: 'slot-select';
+      prompt: string;
+      echoMultiplier?: number;
+    }
+  | {
       card: GameCardData;
       effect: 'stun-strike';
       step: 'monster-select';

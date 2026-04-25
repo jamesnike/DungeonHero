@@ -18,12 +18,13 @@ import {
   shopHealPure,
   shopLevelUpPure,
   shopEquipBoostPure,
+  shopRefreshPure,
   shopSelectSkillPure,
   applyMonsterRewardPure,
 } from '../shop';
 import { dequeueMonsterRewardPure, generateMonsterRewardOptions } from '../monsters';
 import { upgradeCardPure } from '../cardUpgrade';
-import { SHOP_EQUIP_BOOST_COST, SHOP_SKILL_DISCOVER_COST, MAX_SHOP_LEVEL } from '../constants';
+import { SHOP_EQUIP_BOOST_COST, SHOP_SKILL_DISCOVER_COST, SHOP_REFRESH_COST, MAX_SHOP_LEVEL } from '../constants';
 import { shuffle as rngShuffle, nextId } from '../rng';
 import { applyAmplifyOnCreate } from '../helpers';
 import { computeAmuletEffects } from '../equipment';
@@ -51,6 +52,8 @@ export function reduceShopActions(state: GameState, action: GameAction): ReduceR
       return reduceShopDiscover(state, action);
     case 'SHOP_EQUIP_BOOST':
       return reduceShopEquipBoost(state, action);
+    case 'SHOP_REFRESH':
+      return reduceShopRefresh(state);
     case 'SHOP_SKILL_DISCOVER':
       return reduceShopSkillDiscover(state, action);
     case 'SHOP_SELECT_SKILL':
@@ -84,6 +87,7 @@ export function reduceShopActions(state: GameState, action: GameAction): ReduceR
         shopHealUsed: false,
         shopLevelUpUsed: false,
         shopSkillDiscoverUsed: false,
+        shopRefreshUsed: false,
         deleteModalOpen: false,
         shopModalOpen: true,
         shopModalMinimized: false,
@@ -231,6 +235,18 @@ function reduceShopEquipBoost(
     { event: 'log:entry', payload: { type: 'shop', message: `商店：全装备栏永久${label} +1（-${SHOP_EQUIP_BOOST_COST} 金币）` } },
   ];
   return applyPatch(state, patch, sideEffects);
+}
+
+function reduceShopRefresh(state: GameState): ReduceResult {
+  const result = shopRefreshPure(state, state.rng);
+  if (!result) return noChange(state);
+  const [patch, nextRng] = result;
+
+  const sideEffects: SideEffect[] = [
+    { event: 'shop:opened', payload: { offerings: patch.shopOfferings ?? [] } },
+    { event: 'log:entry', payload: { type: 'shop', message: `商店：刷新商品并恢复其他按钮使用次数（-${SHOP_REFRESH_COST} 金币）` } },
+  ];
+  return applyPatch(state, { ...patch, rng: nextRng }, sideEffects);
 }
 
 function reduceShopSkillDiscover(

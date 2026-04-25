@@ -19,7 +19,8 @@ type PermGrantSourceType =
   | 'transform-draw-grant' | 'transform-heal-grant'
   | 'transform-recycle-grant'
   | 'amulet-perm-grant'
-  | 'on-hand-stun-cap-grant';
+  | 'on-hand-stun-cap-grant'
+  | 'on-hand-heal-grant';
 
 interface PermGrantModalProps {
   open: boolean;
@@ -58,6 +59,7 @@ export default function PermGrantModal({
   const isTransformType = TRANSFORM_GRANT_TYPES.has(sourceType);
   const isAmuletPermGrant = sourceType === 'amulet-perm-grant';
   const isOnHandStunCapGrant = sourceType === 'on-hand-stun-cap-grant';
+  const isOnHandHealGrant = sourceType === 'on-hand-heal-grant';
 
   // For amulet-perm-grant, the candidate pool is the currently equipped amulets
   // (filtered to those that don't already have Perm 2 or stronger).
@@ -72,6 +74,9 @@ export default function PermGrantModal({
         // 翻转之契 option 5 — exclude cards that already carry an on-enter-hand
         // effect (would otherwise clobber existing keywords like 兵器谱/血誓回卷/查阅动作)
         if (isOnHandStunCapGrant) return !c.onEnterHandEffect;
+        // 赋能神殿 「上手:回血1」: same exclusion — don't clobber existing
+        // on-enter-hand keywords.
+        if (isOnHandHealGrant) return !c.onEnterHandEffect;
         return !cardHasPermFlag(c);
       });
 
@@ -100,6 +105,7 @@ export default function PermGrantModal({
     'transform-recycle-grant': 'transformRecycleGrant',
     'amulet-perm-grant': 'amuletPermGrant',
     'on-hand-stun-cap-grant': 'onHandStunCapGrant',
+    'on-hand-heal-grant': 'onHandHealGrant',
   };
   const variantKey = sourceKeyMap[sourceType];
   const title = variantKey

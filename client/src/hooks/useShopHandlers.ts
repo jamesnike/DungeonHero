@@ -399,6 +399,11 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     dispatch({ type: 'SHOP_EQUIP_BOOST', boostType: 'armor' });
   }, [engine, shopEquipArmorUsed, dispatch]);
 
+  const handleShopRefreshRequest = useCallback(() => {
+    depsRef.current.pushUndoSnapshot();
+    dispatch({ type: 'SHOP_REFRESH' });
+  }, [dispatch]);
+
   // -- Card upgrade -----------------------------------------------------------
 
   const handleCardUpgrade = useCallback((cardId: string) => {
@@ -961,6 +966,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     handleShopLevelUpRequest,
     handleShopEquipAttackRequest,
     handleShopEquipArmorRequest,
+    handleShopRefreshRequest,
 
     // Card upgrade
     handleCardUpgrade,

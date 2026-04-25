@@ -151,10 +151,9 @@ const dungeonGoldAmulet: OnUpgradeHandler = (upgraded) => {
 const recycleDrawMagic: OnUpgradeHandler = (upgraded, newLevel) => {
   const recycleCounts = [1, 2, 3];
   const rc = recycleCounts[newLevel] ?? 3;
-  upgraded.onDiscardDraw = 1;
-  upgraded.description = `使用：随机将回收袋的 ${rc} 张牌剩余瀑流 -1（就绪的牌进背包）。被回收时，从背包抽 1 张牌。`;
-  upgraded.magicEffect = `永久魔法：使用：随机将回收袋的 ${rc} 张牌剩余瀑流 -1（就绪的牌进背包）。被回收时，从背包抽 1 张牌。`;
-  upgraded.shortDescription = `随机 ${rc} 张回收袋牌瀑流 -1；被回收抽 1 张`;
+  upgraded.description = `使用：随机将回收袋的 ${rc} 张牌剩余瀑流 -1（就绪的牌进背包）。`;
+  upgraded.magicEffect = `永久魔法：使用：随机将回收袋的 ${rc} 张牌剩余瀑流 -1（就绪的牌进背包）。`;
+  upgraded.shortDescription = `随机 ${rc} 张回收袋牌瀑流 -1`;
 };
 
 const dimensionWarp: OnUpgradeHandler = (upgraded, newLevel) => {

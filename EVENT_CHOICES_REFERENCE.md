@@ -40,6 +40,7 @@
 | 3 | 🎲 翻出药剂（掷骰决定效果） | 见骰子表 B | — |
 | 4 | 🎲 寻找怀柔之道（掷骰决定劝降优惠） | 见骰子表 C | — |
 | 5 | 🎲 激励锋芒（掷骰为装备附加临时攻击） | 见骰子表 D | — |
+| 6 | 🎲 召唤巡商（掷骰决定商店命运） | 见骰子表 E | — |
 
 **骰子表 A — 翻找黄金：**
 
@@ -72,6 +73,13 @@
 | 1-12 | 所有装备栏临时攻击力 +4 | `allSlotTempAttack:4` |
 | 13-20 | 受到 5 点伤害 | `hp-5` |
 
+**骰子表 E — 召唤巡商：**
+
+| 范围 | 结果 | 效果 |
+|------|------|------|
+| 1-12 | 商店等级 +1，打开商店 | `['shopLevel+1', 'openShop']` |
+| 13-20 | 商店等级 -1 | `shopLevel-1` |
+
 翻转 → **秘藏宝库（已开启）**（留在原位）
 
 ### 秘藏宝库（已开启）
@@ -98,20 +106,22 @@
 | 5 | 贬低商贩（商店等级 -1） | `shopLevel-1` | 商店等级 ≥ 1 | — |
 | 6 | 削弱威慑（劝降等级 -1） | `persuadeLevel-1` | 劝降等级 ≥ 2 | — |
 | 7 | 血之代价（失去 8 点生命） | `hp-8` | 选项 2/3/5/6 全部不可用 | 备用选项：当所有有条件的选项都无法选择时启用 |
+| 8 | 召唤夜市（打开商店，跳过翻转） | `openShop` | — | `skipFlip`：选此项后不会翻转为暗影之刺 |
 
-翻转 → **暗影之刺**（永久魔法，对怪物造成伤害，每使用一次叠刺 +1，放入背包。选项 4 时跳过翻转）
+翻转 → **暗影之刺**（永久魔法，对怪物造成伤害，每使用一次叠刺 +1，放入背包。选项 4/8 时跳过翻转）
 
 ---
 
 ## 4. 共鸣熔炉
 
-| # | 选项 | 效果 |
-|---|------|------|
-| 1 | 左槽淬火（左槽永久伤害 +2，恢复1耐久） | `slotLeftDamage+2, repairSlot:left:1` |
-| 2 | 右槽固化（右槽永久护甲 +2，恢复1耐久） | `slotRightDefense+2, repairSlot:right:1` |
-| 3 | 翻转轨道（左右装备互换，各恢复1耐久） | `swapEquipmentSlots, repairSlot:both:1` |
-| 4 | 左槽铸盾（左槽永久护甲 +2，恢复1耐久） | `slotLeftDefense+2, repairSlot:left:1` |
-| 5 | 右槽磨刃（右槽永久伤害 +2，恢复1耐久） | `slotRightDamage+2, repairSlot:right:1` |
+| # | 选项 | 效果 | 条件 |
+|---|------|------|------|
+| 1 | 左槽淬火（左槽永久伤害 +2，恢复1耐久） | `slotLeftDamage+2, repairSlot:left:1` | — |
+| 2 | 右槽固化（右槽永久护甲 +2，恢复1耐久） | `slotRightDefense+2, repairSlot:right:1` | — |
+| 3 | 翻转轨道（左右装备互换，各恢复1耐久） | `swapEquipmentSlots, repairSlot:both:1` | — |
+| 4 | 左槽铸盾（左槽永久护甲 +2，恢复1耐久） | `slotLeftDefense+2, repairSlot:left:1` | — |
+| 5 | 右槽磨刃（右槽永久伤害 +2，恢复1耐久） | `slotRightDamage+2, repairSlot:right:1` | — |
+| 6 | 双向加固（左右装备耐久上限各 +1） | `['slotLeftDurMax+1', 'slotRightDurMax+1']` | 至少一件装备 |
 
 翻转 → **熔炉之心**（护符，翻转获金，放入背包）
 
@@ -177,14 +187,18 @@
 | 4 | `curse-hand-shrink` | 封印牌位（手牌上限 -1） | `handLimit-1` | — |
 | 5 | `curse-atk-recall` | 血蚀锋刃（所有装备栏永久攻击 -1，翻转成「回收术」） | `allSlotDamage-1, flipToRecallEquip` | — |
 | 6 | `curse-def-blessing` | 血蚀铠甲（所有装备栏永久护甲 -1，翻转成「不灭赐福」） | `allSlotShield-1, flipToUndyingBlessing` | — |
+| 7 | `curse-blood-gold` | 血金祭典（金币减半，翻转成「血金术」） | `goldHalve, guildFlipToMagic` | — |
 
-**动态翻转产物（由选项 1/5/6 触发）：**
+**动态翻转产物（由选项 1/5/6/7 触发）：**
 
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
 | `flipToCurse` | 血咒之印 | 永久魔法（诅咒） | 使用和弃置时，都失去 3 点生命值 | 背包 |
 | `flipToRecallEquip` | 回收术 | 永久魔法 | 回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌 | 背包 |
 | `flipToUndyingBlessing` | 不灭赐福 | 永久魔法 | 选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），失去 2 点生命 | 背包 |
+| `guildFlipToMagic` | 血金术 | 永久魔法 | 使用时受到 1 点伤害，获得 2 金币 | 背包 |
+
+> `goldHalve`：金币 = `Math.floor(state.gold / 2)`。
 
 特殊：被挤出时所有怪物攻击 +5
 
@@ -199,8 +213,11 @@
 | 3 | 焚尽旧物（随机弃回 2 张手牌，法伤 +1） | `randomDiscardHand:2, spellDamage+1` | 手牌 ≥ 2 |
 | 4 | 血魂灌注（-3 血上限，超杀吸血 +1） | `maxhpperm-3, spellLifesteal+1` | — |
 | 5 | 行囊交锋（-2 背包上限，劝降等级 +1） | `backpackSize-2, persuadeLevel+1` | — |
+| 6 | 焚毁回响（随机移除回收袋 1 张牌至坟场，击晕上限 +10%） | `['recycleBagDelete:1', 'stunCap+10']` | 回收袋 ≥ 1 |
 
 翻转 → **双重燃烧（觉醒）**（留在原位）
+
+> `recycleBagDelete:N`：从 `permanentMagicRecycleBag` 随机选 N 张，经 `resetCardForGraveyard` 后移入 `discardedCards`（保证怪物 `currentLayer = 1`）。
 
 ### 双重燃烧（觉醒）
 
@@ -211,9 +228,10 @@
 | 3 | 灵魂焚烧（随机弃回 4 张手牌，法伤 +1） | `randomDiscardHand:4, spellDamage+1` | 手牌 ≥ 4 |
 | 4 | 觉醒血魂（-8 血上限，超杀吸血 +1） | `maxhpperm-8, spellLifesteal+1` | — |
 | 5 | 觉醒行囊（-5 背包上限，劝降等级 +1） | `backpackSize-5, persuadeLevel+1` | — |
+| 6 | 焚毁余烬（随机移除回收袋 2 张牌至坟场，击晕上限 +10%） | `['recycleBagDelete:2', 'stunCap+10']` | 回收袋 ≥ 2 |
 
-觉醒版使用后进入墓地。若预览行正上方是魔法牌，触发**魔法共鸣**，翻转为「虚空置换」永久魔法（留在原位）。
-虚空置换效果：将背包与永久魔法回收袋内的所有牌对换（瀑流延迟 1）。
+觉醒版使用后进入墓地。若预览行正上方是魔法牌，触发**魔法共鸣**，翻转为「虚空置换」瞬发魔法（留在原位）。
+虚空置换效果：将背包与永久魔法回收袋内的所有牌对换（一次性，使用后进入墓地）。
 
 ---
 
@@ -355,9 +373,10 @@
 
 | 范围 | 结果 | 效果 | 翻转 |
 |------|------|------|------|
-| 1-7 | 锋刃祝福：所有装备栏临时攻击+4 | `allSlotTempAttack:4` | skipFlip |
-| 8-14 | 时空收缩：Waterfall 进度 -2 | `turnCount-2` | 翻转为时空镜像 |
-| 15-20 | 空间代价：背包 -2，获得法术回响 | `['backpackSize-2', 'flipToSpellEcho']` | skipFlip |
+| 1-4 | 时空召商：金币 -10，打开商店 | `['gold-10', 'openShop']` | skipFlip |
+| 5-11 | 锋刃祝福：所有装备栏临时攻击+4 | `allSlotTempAttack:4` | skipFlip |
+| 12-16 | 时空收缩：Waterfall 进度 -2 | `turnCount-2` | 翻转为时空镜像 |
+| 17-20 | 空间代价：背包 -2，获得法术回响 | `['backpackSize-2', 'flipToSpellEcho']` | skipFlip |
 | 1-10 | 时空侵蚀：商店等级 -1，劝降等级-1 | `['shopLevel-1', 'persuadeLevel-1']` | 翻转为时空镜像 |
 | 11-20 | 时空压缩：激活行怪物攻击力 -3 | `activeRowMonsterAttack-3` | skipFlip |
 
@@ -375,6 +394,16 @@
 
 ---
 
+## 15. 奥术回廊
+
+> 此处仅记录新增选项，完整选项详见 `client/src/game-core/deck.ts` 中的 `arcaneCorridor`。
+
+| # | 选项 | 效果 | 翻转 |
+|---|------|------|------|
+| N | 召唤奥术商队（商店等级 +1，打开商店，跳过翻转） | `['shopLevel+1', 'openShop']` | skipFlip |
+
+---
+
 ## 16. 诅咒骰局
 
 - 被挤出时：摧毁所有护符，弃回所有手牌
@@ -389,9 +418,10 @@
 |------|------|------|
 | 1-4 | 所有装备栏永久攻击加成减半 | `halveSlotDamageBonus` |
 | 5-8 | 法术伤害加成减半 | `halveSpellDamageBonus` |
-| 9-12 | 所有装备栏永久护甲加成减半 | `halveSlotShieldBonus` |
-| 13-16 | 超杀吸血 -3 | `spellLifesteal-3` |
-| 17-20 | 护符栏上限 -1 | `amuletCapacity-1` |
+| 9-11 | 所有装备栏永久护甲加成减半 | `halveSlotShieldBonus` |
+| 12-14 | 超杀吸血 -3 | `spellLifesteal-3` |
+| 15-16 | 护符栏上限 -1 | `amuletCapacity-1` |
+| 17-20 | 击晕上限 -20% | `stunCap-20` |
 
 翻转 → **诅咒碑**（建筑，血量 5，destination: stay）
 
@@ -414,14 +444,75 @@
 |------|------|------|
 | 1-4 | 劝降等级 +1 | `persuadeLevel+1` |
 | 5-8 | 劝降费用永久 -2 | `persuadeCost-2` |
-| 9-12 | 连续劝降同一怪物，第二次费用减半 | `persuadeSameTargetCostHalve` |
-| 13-16 | Skeleton/Wraith 劝降率 +20% | `persuadeRaceBonus:Skeleton,Wraith:20` |
-| 17-20 | 劝降成功的怪物起始耐久 +1 | `persuadeSuccessDurabilityBonus+1` |
+| 9-11 | 连续劝降同一怪物，第二次费用减半 | `persuadeSameTargetCostHalve` |
+| 12-14 | Skeleton/Wraith 劝降率 +20% | `persuadeRaceBonus:Skeleton,Wraith:20` |
+| 15-16 | 劝降成功的怪物起始耐久 +1 | `persuadeSuccessDurabilityBonus+1` |
+| 17-20 | 下次劝降成功率 +50% | `persuadeNextRateBonus:50` |
 
 **护符升级效果：**
 
 - 怀柔之印升级：每获得一次临时攻击或临时护甲加成，下一次劝降率 +20%（原 +10%）
 - 劝降归袋符升级：每劝降一次，将两张「归袋抽引」加入手牌（原 1 张）
+
+---
+
+## 18. 附魔祭坛
+
+> 此处仅记录新增选项，完整选项详见 `client/src/game-core/deck.ts` 中的 `enchantmentAltar`。
+
+| # | 选项 | 效果 | 条件 | 翻转 |
+|---|------|------|------|------|
+| N | 选一件装备赋予「遗言：生命值上限 +4」 | `grantLastWordsMaxHp:4` | 至少一件主装备 | skipFlip |
+
+> `grantLastWordsMaxHp:4`：在选中装备上累加 `lastWordsMaxHpBoost +1`。装备销毁/换位时触发 `lastWords`，永久 `maxHp += 4 × stacks`（不立即回血，可叠加）。
+> 触发位置：`computeEquipmentBreakEffects` + `computeEquipmentDisplacementLastWords`。
+> 仅可选 `equipmentSlot1` / `equipmentSlot2`（reserve 不可选），可重复铭刻同一件装备。
+
+---
+
+## 19. 赋能神殿
+
+> 此处仅记录新增骰子结果，完整骰子表详见 `client/src/game-core/deck.ts` 中的 `empowermentShrine`。
+
+**骰子表（重平衡后）：**
+
+| 范围 | 结果 | 效果 |
+|------|------|------|
+| 1-3 | 侧击：劝降费用永久 -1 | `grantFlankPersuadeCost:1` |
+| 4-6 | 侧击：击晕上限 +5% | `grantFlankStunCap:5` |
+| 7-9 | 转型：抽 2 张牌 | `grantTransformDraw:2` |
+| 10-13 | 转型：恢复 2 HP | `grantTransformHeal:2` |
+| 14-17 | 侧击：对随机怪物造成 5 点伤害 | `grantFlankDamage:5` |
+| 18-20 | 上手：恢复 1 HP | `grantHandOnHandHeal:1` |
+
+> `grantHandOnHandHeal:1`：弹出手牌选择 modal（`PermGrantSourceType: 'on-hand-heal-grant'`），选定的手牌挂 `onEnterHandEffect: 'on-hand-heal-1'`，并立即触发一次回血 1 HP（不超过 maxHp）。已挂其他 `onEnterHandEffect` 的卡不可被选。
+
+---
+
+## 20. 增幅仪式
+
+> 此处仅记录新增选项，完整选项详见 `client/src/game-core/deck.ts` 中的 `amplificationRitual`。
+
+| # | 选项 | 效果 | 翻转 |
+|---|------|------|------|
+| N | 召唤随机专属装备增幅为祭坛，并获得「维度扭曲」 | `amplify-altar-from-random-class-equip-with-warp` | 翻转为「增幅祭坛」建筑 |
+
+> `amplify-altar-from-random-class-equip-with-warp`：
+> 1. 从专属牌池（class deck）随机抽 1 件 `weapon` / `shield`，加入背包。
+> 2. 事件卡翻转为「增幅祭坛」建筑，目标为该随机装备。
+> 3. 额外发放一张「维度扭曲」（起始永久魔法）至背包（走 `grantStarterDimensionWarp` token 路径）。
+
+---
+
+## 21. 英雄试炼
+
+> 此处仅记录新增选项，完整选项详见 `client/src/game-core/deck.ts` 中的 `heroTrial`。
+
+| # | 选项 | 效果 |
+|---|------|------|
+| N | 空间精研（生命上限 +5，获得「乾坤挪移」） | `['maxhpperm+5', 'grantStarterDungeonSwap']` |
+
+> `grantStarterDungeonSwap`：复刻 `grantStarterWeaponBurst` 的发放路径（`STARTER_CARD_IDS.dungeonSwap`，suffix `-evt-1-<base36>` 保证 `getStarterBaseId` 能正确剥离），将「乾坤挪移」放入背包。
 
 ---
 
@@ -437,6 +528,7 @@
 | 4 | 凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包） | `flipToFlipMonsterDebuffMagic` | — |
 | 5 | 铭刻技艺（赋予一张手牌：每次上手击晕上限 +3%） | `grantHandStunCapBonus` | 至少 1 张手牌 |
 | 6 | 熔铸耐久（选一件装备：每翻转一次该装备恢复 1 耐久） | `grantEquipFlipRepairBuff` | 至少一件装备（含 reserve） |
+| 7 | 镜面回响（翻转为 active row 任意另一张牌的复制） | `pactCopyActiveRow` | active row ≥ 1 张其他牌 |
 
 **衍生卡效果说明：**
 
@@ -444,8 +536,9 @@
 - **翻覆震慑（一次性 magic）** `magicEffect: 'flip-monster-debuff'`：选择一个怪物，到下次瀑流前每翻转一张牌该怪物攻击力 -1（最低 0，叠加）。怪物离场或瀑流完成后失效。
 - **铭刻技艺**：在选中手牌上挂 `onEnterHandEffect: 'stun-cap-bonus-3'`；进入手牌时 `stunCap +3%`（上限 100%）。施放时立即触发一次。已带其它 `onEnterHandEffect` 的卡不可被选。
 - **熔铸耐久**：在选中装备上挂 `_flipRepairBuff: true`。每次正向翻转触发时该装备恢复 1 耐久（不超过 maxDurability）。可选目标包含两个主装备槽与两个 reserve 列表中的所有装备；已铭刻的装备不会重复铭刻。
+- **镜面回响**：从 active row 选一张非自身的牌，深拷贝（保留 `currentLayer`/temp buffs/`flipTarget`/`recycleDelay`/`image`），分配新 ID，挂 `_skipOnEnterHand: true`，原地替换翻转之契；怪物副本不会自动 engage。
 
-翻转：仅在选项 3/4 触发，事件卡变成对应新卡放入背包；其它选项选完即消耗，事件卡不翻转。
+翻转：仅在选项 3/4/7 触发，事件卡变成对应新卡（选项 3/4 进背包；选项 7 直接替换 active row 槽位）；其它选项选完即消耗，事件卡不翻转。
 
 ---
 

@@ -376,6 +376,20 @@ export function computeEquipmentDisplacementLastWords(
     }
   }
 
+  // 附魔祭坛 「遗言：生命值上限+4」: each stack adds +4 to permanent maxHp.
+  // Stacks parallel to lastWordsSlotTempBuff. Does NOT heal current HP — only raises the cap.
+  const maxHpStacksDisp = slotItem.lastWordsMaxHpBoost ?? 0;
+  if (maxHpStacksDisp > 0) {
+    const amount = 4 * maxHpStacksDisp;
+    patch.permanentMaxHpBonus = (patch.permanentMaxHpBonus ?? state.permanentMaxHpBonus ?? 0) + amount;
+    const stackSuffix = maxHpStacksDisp > 1 ? `（×${maxHpStacksDisp}）` : '';
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `${slotItem.name} 遗言：永久最大生命 +${amount}！${stackSuffix}` },
+    });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！永久最大生命 +${amount}！${stackSuffix}` } });
+  }
+
   if (slotItem.onDestroyEffect && slotItem.onDestroyEffect !== 'slot-temp-buff-3-3') {
     if (slotItem.onDestroyEffect === 'slot-temp-armor-3') {
       const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
@@ -671,6 +685,20 @@ export function computeEquipmentBreakEffects(
         payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus * 2 * tempBuffStacks}%（临时攻击+临时护甲 ×${tempBuffStacks}）` },
       });
     }
+  }
+
+  // 附魔祭坛 「遗言：生命值上限+4」: each stack adds +4 to permanent maxHp.
+  // Stacks parallel to lastWordsSlotTempBuff. Does NOT heal current HP — only raises the cap.
+  const maxHpStacksBreak = slotItem.lastWordsMaxHpBoost ?? 0;
+  if (maxHpStacksBreak > 0) {
+    const amount = 4 * maxHpStacksBreak;
+    patch.permanentMaxHpBonus = (patch.permanentMaxHpBonus ?? state.permanentMaxHpBonus ?? 0) + amount;
+    const stackSuffix = maxHpStacksBreak > 1 ? `（×${maxHpStacksBreak}）` : '';
+    effects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `${slotItem.name} 遗言：永久最大生命 +${amount}！${stackSuffix}` },
+    });
+    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！永久最大生命 +${amount}！${stackSuffix}` } });
   }
 
   // onDestroyEffect (other variants — slot-temp-buff-3-3 handled above)

@@ -29,6 +29,7 @@ import {
   pickRandomHandCardsForDiscardPreferGraveyard,
   isDamageMagic,
 } from '@/game-core/helpers';
+import { cloneClassCardWithFreshId } from '@/game-core/cardClone';
 import { isReducerHandledEventToken } from '@/game-core/events';
 import {
   createGraveyardRecallCard,
@@ -221,6 +222,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     persuadeState,
     upgradeModalOpen,
     pendingAutoDrawCount,
+    permanentMagicRecycleBag,
   } = useShallowGameState(s => ({
     gold: s.gold,
     activeCards: s.activeCards,
@@ -232,6 +234,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     equipmentSlot2: s.equipmentSlot2,
     classDeck: s.classDeck,
     amuletSlots: s.amuletSlots,
+    permanentMagicRecycleBag: s.permanentMagicRecycleBag,
     shopLevel: s.shopLevel,
     currentEventCard: s.currentEventCard,
     resolvingDungeonCardId: s.resolvingDungeonCardId,
@@ -713,11 +716,18 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           if (upgradedCount < requirement.min) {
             return { disabled: true, reason: requirement.message ?? '手牌中没有已增幅的卡牌' };
           }
+        } else if (requirement.type === 'recycleBag') {
+          if (permanentMagicRecycleBag.length < requirement.min) {
+            return {
+              disabled: true,
+              reason: requirement.message ?? `回收袋至少需要 ${requirement.min} 张牌`,
+            };
+          }
         }
       }
       return { disabled: false };
     },
-    [activeCards, amuletSlots.length, backpackItems.length, combatState.engagedMonsterIds, discardedCards.length, equipmentSlot1, equipmentSlot2, gold, handCards, resolvingDungeonCardId, shopLevel, persuadeLevel],
+    [activeCards, amuletSlots.length, backpackItems.length, combatState.engagedMonsterIds, discardedCards.length, equipmentSlot1, equipmentSlot2, gold, handCards, resolvingDungeonCardId, shopLevel, persuadeLevel, permanentMagicRecycleBag.length],
   );
 
   // ---------------------------------------------------------------------------
@@ -1267,6 +1277,18 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType: 'on-hand-stun-cap-grant' } });
       }
 
+    // --- 赋能神殿: grant 'on-hand: 恢复 1 HP' to a chosen hand card ---
+    } else if (token === 'grantHandOnHandHeal:1' || token === 'grantHandOnHandHeal') {
+      const eligible = s.handCards.filter(c => !c.onEnterHandEffect);
+      if (eligible.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '手牌中没有可铭刻的卡牌（已带「上手」效果的卡不可选）。' });
+        addGameLog('event', '赋能神殿：没有可铭刻的手牌。');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType: 'on-hand-heal-grant' } });
+      }
+
     // --- 翻转之契 option 6: grant '_flipRepairBuff' to a chosen equipment (incl. reserves) ---
     } else if (token === 'grantEquipFlipRepairBuff') {
       type EquipOption = { id: string; label: string; description: string; cardId: string };
@@ -1324,6 +1346,150 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             flowContext: { flowId: 'flip-repair-grant' },
           }).then(choiceId => {
             const chosen = unbuffed.find(o => o.id === choiceId) ?? unbuffed[0];
+            applyChoice(chosen.cardId);
+          });
+        }
+      }
+
+    // --- 附魔祭坛: grant '遗言：生命值上限 +4' to a chosen main-slot equipment (stacks) ---
+    } else if (token === 'grantLastWordsMaxHp:4' || token === 'grantLastWordsMaxHp') {
+      type SlotOption = { id: string; label: string; description: string; slotId: 'equipmentSlot1' | 'equipmentSlot2' };
+      const options: SlotOption[] = [];
+      const fmtSlot = (slotId: 'equipmentSlot1' | 'equipmentSlot2', label: string, eq: GameCardData) => {
+        const typeLabel = eq.type === 'weapon' ? `${eq.value ?? 0}攻` : eq.type === 'shield' ? `${eq.value ?? 0}防` : `${eq.value ?? 0}`;
+        const durLabel = typeof eq.durability === 'number' && typeof eq.maxDurability === 'number'
+          ? `，耐久 ${eq.durability}/${eq.maxDurability}`
+          : '';
+        const stacks = eq.lastWordsMaxHpBoost ?? 0;
+        const stackLabel = stacks > 0 ? `（已铭刻 ×${stacks}）` : '';
+        return {
+          id: `slot:${slotId}`,
+          label: `${label} — ${eq.name}${stackLabel}`,
+          description: `${typeLabel}${durLabel}`,
+          slotId,
+        };
+      };
+      if (s.equipmentSlot1) options.push(fmtSlot('equipmentSlot1', '左装备栏', s.equipmentSlot1));
+      if (s.equipmentSlot2) options.push(fmtSlot('equipmentSlot2', '右装备栏', s.equipmentSlot2));
+      if (options.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '附魔祭坛：没有可铭刻的装备。' });
+        addGameLog('event', '附魔祭坛：没有可铭刻的装备');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        const applyChoice = (slotId: 'equipmentSlot1' | 'equipmentSlot2') => {
+          dispatch({ type: 'RESOLVE_EVENT_GRANT_LASTWORDS_MAXHP', equipmentSlotId: slotId, amount: 4 });
+          dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+          depsRef.current.eventChoiceProcessingRef.current = false;
+        };
+        if (options.length === 1) {
+          applyChoice(options[0].slotId);
+        } else {
+          requestMagicChoice({
+            title: '遗言铭刻',
+            subtitle: '选择一件装备，永久赋予「遗言：生命值上限 +4」（可叠加）',
+            options: options.map(o => ({ id: o.id, label: o.label, description: o.description })),
+            flowContext: { flowId: 'lastwords-maxhp-grant' },
+          }).then(choiceId => {
+            const chosen = options.find(o => o.id === choiceId) ?? options[0];
+            applyChoice(chosen.slotId);
+          });
+        }
+      }
+
+    // --- 翻转之契 mirror copy: replace the 翻转之契 slot with a deep clone of any other active-row card ---
+    } else if (token === 'pactCopyActiveRow') {
+      const eventCardSnapshot = eventCard;
+      const resId = depsRef.current.eventResolutionRef.current?.cardId;
+      const ac = engine.getState().activeCards;
+      const cellIdx = resId
+        ? ac.findIndex(c => c?.id === resId)
+        : ac.findIndex(c => c?.id === eventCardSnapshot?.id);
+      const selfId = eventCardSnapshot?.id ?? resId ?? null;
+
+      type CopyOption = { id: string; label: string; description: string; cardId: string };
+      const options: CopyOption[] = [];
+      ac.forEach((c, i) => {
+        if (!c) return;
+        if (c.id === selfId) return;
+        const typeLabel = c.type === 'monster' ? `怪物 ${c.attack ?? c.value ?? '?'}/${c.hp ?? '?'}`
+          : c.type === 'weapon' ? `${c.value ?? 0}攻`
+          : c.type === 'shield' ? `${c.value ?? 0}防`
+          : c.type;
+        options.push({
+          id: `copy:${c.id}`,
+          label: `第 ${i + 1} 格 — ${c.name}`,
+          description: typeLabel,
+          cardId: c.id,
+        });
+      });
+
+      if (options.length === 0 || cellIdx === -1) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '镜面回响：active row 没有可复制的卡牌。' });
+        addGameLog('event', '镜面回响：active row 没有可复制的卡牌');
+        dispatch({ type: 'SET_CURRENT_EVENT', card: null });
+        finalizeEventResolution({ removeFromDungeon: true });
+        if (eventCardSnapshot) depsRef.current.addToGraveyard(eventCardSnapshot);
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        const applyChoice = (cardId: string) => {
+          const acNow = engine.getState().activeCards;
+          const target = acNow.find(c => c?.id === cardId) as GameCardData | undefined;
+          if (!target) {
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '镜面回响：复制目标已不存在。' });
+            dispatch({ type: 'SET_CURRENT_EVENT', card: null });
+            finalizeEventResolution({ removeFromDungeon: true });
+            if (eventCardSnapshot) depsRef.current.addToGraveyard(eventCardSnapshot);
+            depsRef.current.eventChoiceProcessingRef.current = false;
+            return;
+          }
+          let rng = engine.getState().rng;
+          let copyId: string;
+          [copyId, rng] = nextId(rng, `${target.id}-pact-copy`);
+          dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+
+          const { fromSlot: _drop, ...rest } = target as GameCardData & { fromSlot?: unknown };
+          const copy: GameCardData = {
+            ...(rest as GameCardData),
+            id: copyId,
+            _skipOnEnterHand: true,
+          };
+
+          dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: false });
+          dispatch({ type: 'SET_EVENT_MODAL_MINIMIZED', minimized: false });
+          dispatch({ type: 'SET_CURRENT_EVENT', card: null });
+          finalizeEventResolution({ removeFromDungeon: false });
+
+          if (eventCardSnapshot) {
+            void depsRef.current.triggerEventTransform(eventCardSnapshot, copy, `镜面回响：翻转为${target.name}的复制…`);
+          }
+          dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
+            const next = [...prev];
+            next[cellIdx] = copy;
+            return next;
+          }});
+
+          if (depsRef.current.amuletEffects.flipGoldCount > 0) {
+            const goldGain = FLIP_GOLD_REWARD * depsRef.current.amuletEffects.flipGoldCount;
+            dispatch({ type: 'MODIFY_GOLD', delta: goldGain, source: 'flip-gold-amulet' });
+            addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。`);
+          }
+
+          addGameLog('event', `翻转之契：复制了「${target.name}」`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `镜面回响：翻转为「${target.name}」的复制！` });
+          depsRef.current.eventChoiceProcessingRef.current = false;
+        };
+
+        if (options.length === 1) {
+          applyChoice(options[0].cardId);
+        } else {
+          requestMagicChoice({
+            title: '镜面回响',
+            subtitle: '选择 active row 中要复制的卡牌（翻转之契本身除外）',
+            options: options.map(o => ({ id: o.id, label: o.label, description: o.description })),
+            flowContext: { flowId: 'pact-copy-active-row' },
+          }).then(choiceId => {
+            const chosen = options.find(o => o.id === choiceId) ?? options[0];
             applyChoice(chosen.cardId);
           });
         }
@@ -1753,6 +1919,79 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           }
           applyAmplifyHandTarget(targetCard);
         });
+      }
+
+    // --- amplify-altar-from-random-class-equip-with-warp:
+    //     Pick a random weapon/shield from the class deck → backpack;
+    //     transform event into amplify altar building targeting it;
+    //     additionally grant 维度扭曲 starter perm magic to the backpack.
+    } else if (token === 'amplify-altar-from-random-class-equip-with-warp') {
+      const eventCardSnapshot = eventCard;
+      const resId = depsRef.current.eventResolutionRef.current?.cardId;
+      const ac = engine.getState().activeCards;
+      const cellIdx = resId
+        ? ac.findIndex(c => c?.id === resId)
+        : ac.findIndex(c => c?.id === eventCardSnapshot?.id);
+
+      const stateNow = engine.getState();
+      const equipPool = stateNow.classDeck.filter(c => c.type === 'weapon' || c.type === 'shield');
+
+      if (equipPool.length === 0 || cellIdx === -1) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '专属牌堆中没有可用的装备。' });
+        addGameLog('event', '增幅仪式：专属牌堆中没有可用的装备');
+        dispatch({ type: 'SET_CURRENT_EVENT', card: null });
+        finalizeEventResolution({ removeFromDungeon: true });
+        if (eventCardSnapshot) depsRef.current.addToGraveyard(eventCardSnapshot);
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        let rng = stateNow.rng;
+        let originalEquip: GameCardData;
+        [originalEquip, rng] = pickRandom(equipPool, rng);
+        let cloned: GameCardData;
+        [cloned, rng] = cloneClassCardWithFreshId(originalEquip, rng);
+        dispatch({ type: 'SET_GAME_FLAGS', patch: { rng } });
+
+        depsRef.current.addCardToBackpack(cloned);
+
+        let altarRng = engine.getState().rng;
+        let _altarId: string;
+        [_altarId, altarRng] = nextId(altarRng, 'amplify-altar');
+        dispatch({ type: 'SET_GAME_FLAGS', patch: { rng: altarRng } });
+
+        dispatch({ type: 'SET_EVENT_MODAL_OPEN', open: false });
+        dispatch({ type: 'SET_EVENT_MODAL_MINIMIZED', minimized: false });
+        dispatch({ type: 'SET_CURRENT_EVENT', card: null });
+        finalizeEventResolution({ removeFromDungeon: false });
+
+        const altarBuilding: GameCardData = {
+          id: _altarId, type: 'building', name: '增幅祭坛', value: 0,
+          image: eventCardSnapshot?.image ?? skillScrollImage,
+          isGhost: true, fury: 1, hpLayers: 1, currentLayer: 1, hp: 2, maxHp: 2,
+          hasReleaseCharge: true, _fateBladeLastSlot: cellIdx,
+          _amplifyTargetCardId: cloned.id, _amplifyTargetName: cloned.name,
+          description: `幽灵建筑（HP 2）：入场/移位获得释放次数。拖到英雄行发动：移除一张手牌，对「${cloned.name}」施加两次增幅。`,
+          eventChoices: [{ text: `发动增幅祭坛（目标：${cloned.name}）`, hint: '移除一张手牌，对增幅目标施加两次增幅', effect: 'amplify-altar-activate' }],
+        };
+        if (eventCardSnapshot) {
+          void depsRef.current.triggerEventTransform(eventCardSnapshot, altarBuilding, '增幅仪式凝聚为增幅祭坛…');
+        }
+        dispatch({ type: 'UPDATE_ACTIVE_CARDS', updater: (prev: (GameCardData | null)[]) => {
+          const next = [...prev]; next[cellIdx] = altarBuilding; return next;
+        }});
+
+        if (depsRef.current.amuletEffects.flipGoldCount > 0) {
+          const goldGain = FLIP_GOLD_REWARD * depsRef.current.amuletEffects.flipGoldCount;
+          dispatch({ type: 'MODIFY_GOLD', delta: goldGain, source: 'flip-gold-amulet' });
+          addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。`);
+        }
+
+        // Grant 维度扭曲 starter perm magic via the existing reducer token (also
+        // routes to recycleBag if backpack is full — handled by APPLY_EVENT_EFFECT).
+        dispatch({ type: 'APPLY_EVENT_EFFECT', effectToken: 'grantStarterDimensionWarp' });
+
+        addGameLog('event', `增幅仪式翻转为增幅祭坛（目标：${cloned.name}），获得专属装备「${cloned.name}」与「维度扭曲」`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅仪式翻转为增幅祭坛！目标：${cloned.name}（并获得「维度扭曲」）` });
+        depsRef.current.eventChoiceProcessingRef.current = false;
       }
 
     // --- amplify-altar-discover-class: discover flow -> transform event to altar building ---

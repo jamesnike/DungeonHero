@@ -84,6 +84,7 @@ export const SHOP_HEAL_AMOUNT = 5;
 export const SHOP_LEVEL_UP_COST = 10;
 export const SHOP_SKILL_DISCOVER_COST = 10;
 export const SHOP_EQUIP_BOOST_COST = 10;
+export const SHOP_REFRESH_COST = 5;
 
 // ---------------------------------------------------------------------------
 // Combat balance

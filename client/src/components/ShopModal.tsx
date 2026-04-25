@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpCircle, Coins, Heart, Shield, ShoppingBag, Sparkles, Sword, Trash2 } from 'lucide-react';
+import { ArrowUpCircle, Coins, Heart, RefreshCw, Shield, ShoppingBag, Sparkles, Sword, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { GameCardData } from './GameCard';
 import {
@@ -63,6 +63,9 @@ interface ShopModalProps {
   shopEquipArmorUsed?: boolean;
   onShopEquipAttackRequest?: () => void;
   onShopEquipArmorRequest?: () => void;
+  shopRefreshCost?: number;
+  shopRefreshUsed?: boolean;
+  onShopRefreshRequest?: () => void;
 }
 
 export default function ShopModal({
@@ -99,6 +102,9 @@ export default function ShopModal({
   shopEquipArmorUsed,
   onShopEquipAttackRequest,
   onShopEquipArmorRequest,
+  shopRefreshCost = 5,
+  shopRefreshUsed,
+  onShopRefreshRequest,
 }: ShopModalProps) {
   const { t } = useTranslation();
   const isBackpackFull = backpackCount >= backpackCapacity;
@@ -189,6 +195,51 @@ export default function ShopModal({
             </div>
           </div>
         )}
+
+          {(() => {
+            const canAffordRefresh = gold >= shopRefreshCost;
+            const refreshDisabled = Boolean(shopRefreshUsed) || !canAffordRefresh;
+            return (
+              <div
+                className={`flex flex-col gap-3 rounded-md border border-cyan-500/40 bg-cyan-500/5 p-4 shadow-sm sm:flex-row sm:items-center ${refreshDisabled ? 'opacity-70' : ''}`}
+              >
+                <div className="flex gap-3 flex-1">
+                  <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-cyan-500/10 text-cyan-600 flex items-center justify-center">
+                    <RefreshCw className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-base font-semibold text-cyan-700 dark:text-cyan-400">{t('modal.shop.refreshTitle')}</p>
+                      <Badge variant="outline" className="text-[10px] border-cyan-500/50 text-cyan-700 dark:text-cyan-400">
+                        {t('modal.shop.perVisitOnce')}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {t('modal.shop.refreshDesc', { cost: shopRefreshCost })}
+                    </p>
+                    {shopRefreshUsed && (
+                      <p className="text-xs text-cyan-700 dark:text-cyan-400">{t('modal.shop.refreshUsedNote')}</p>
+                    )}
+                    {!shopRefreshUsed && !canAffordRefresh && (
+                      <p className="text-xs text-destructive">{t('modal.shop.notEnoughGoldPeriod')}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{shopRefreshCost}</span> {t('modal.shop.priceUnit')}
+                  </span>
+                  <Button
+                    className="bg-cyan-600 hover:bg-cyan-700 text-white"
+                    disabled={refreshDisabled}
+                    onClick={onShopRefreshRequest}
+                  >
+                    {t('modal.shop.refreshButton')}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
 
           {offerings.length === 0 && (
             <div className="text-center text-muted-foreground py-12 text-sm">
