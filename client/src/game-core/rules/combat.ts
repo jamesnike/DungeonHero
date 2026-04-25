@@ -314,6 +314,19 @@ function reduceBeginCombat(
         placeOnTop(stackSlot, summonedNonMonsterCards[i]);
       }
 
+      // 一次性清掉 bossEnrageGraveyardSummon：召唤是 boss「觉醒」技能，
+      // 设计上只在首次激怒成功召唤后触发一次。即使后续因为某条边缘路径
+      // 让 boss 短暂失去 engaged 状态后又被重新 engage（如复生 → 回合切换 →
+      // 再攻击），也不应该再次触发。
+      // 失败路径（坟场空 / 无空 slot / picked.length === 0）走不到这里，
+      // 所以下次条件满足仍能正常触发，不会误清。
+      const bossColAfterSummon = newActiveCards.findIndex(c => c?.id === monster.id);
+      if (bossColAfterSummon >= 0 && newActiveCards[bossColAfterSummon]) {
+        const bossInRow = newActiveCards[bossColAfterSummon]!;
+        const { bossEnrageGraveyardSummon: _summonClear, ...bossWithoutSummon } = bossInRow;
+        newActiveCards[bossColAfterSummon] = bossWithoutSummon as typeof bossInRow;
+      }
+
       patch.activeCards = newActiveCards;
       patch.activeCardStacks = newStacks;
 
@@ -2175,6 +2188,11 @@ function reducePerformHeroAttack(
   const combatState = state.combatState;
 
   // --- Extra attack eligibility ---
+  // 战意激发 + weaponExtraAttack 共同遵循 slot-bound 模型：
+  //   slot 每回合的总攻击次数 cap = 1 (base) + BS bonus + 当前武器的 weaponExtraAttack。
+  //   消耗顺序：base 优先 → BS 次之 → weaponExtra 最后。
+  //   `slotBattleSpiritUsed` / `weaponExtraAttackUsed` 是 slot-keyed，不会因装备换位重置，
+  //   所以装备从 reserve promote 上来后，新装备不能拿到 BS / weaponExtra 的"新一轮"额度。
   const slotAlreadyAttacked = combatState.heroAttacksThisTurn[slotId];
   const hasBaseAttack = combatState.heroAttacksRemaining > 0;
   const canUseBerserkerExtra = state.berserkerRageActive && slotAlreadyAttacked && !state.berserkerSlotUsed[slotId];
@@ -2182,11 +2200,14 @@ function reducePerformHeroAttack(
     && (state.flashSlotUsed[slotId] ?? 0) < ae.flashCount;
   const canUseGambitExtra = state.gambitExtraActive && slotAlreadyAttacked
     && (state.gambitSlotUsed[slotId] ?? 0) < state.gambitExtraPerSlot;
-  const canUseWeaponExtra = !!(slotItem as GameCardData).weaponExtraAttack && slotAlreadyAttacked
-    && (state.weaponExtraAttackUsed[slotId] ?? 0) < ((slotItem as GameCardData).weaponExtraAttack ?? 0);
   const battleSpiritBonus = (state.slotBattleSpiritBonus ?? {})[slotId] ?? 0;
+  const slotBSUsed = (state.slotBattleSpiritUsed ?? {})[slotId] ?? 0;
   const canUseBattleSpiritExtra = battleSpiritBonus > 0 && slotAlreadyAttacked
-    && ((state.slotBattleSpiritUsed ?? {})[slotId] ?? 0) < battleSpiritBonus;
+    && slotBSUsed < battleSpiritBonus;
+  // weaponExtra 仅在 BS 配额耗尽后才可触发（base → BS → weaponExtra 顺序）。
+  const canUseWeaponExtra = !!(slotItem as GameCardData).weaponExtraAttack && slotAlreadyAttacked
+    && (state.weaponExtraAttackUsed[slotId] ?? 0) < ((slotItem as GameCardData).weaponExtraAttack ?? 0)
+    && slotBSUsed >= battleSpiritBonus;
   // 兵器谱 上手/主效果：本回合该装备栏额外攻击次数（独立于全局 extraAttackCharges）。
   const slotExtraAvailable = ((state.slotExtraAttacks ?? {})[slotId] ?? 0) > 0;
   const canUseSlotExtra = slotExtraAvailable && slotAlreadyAttacked;
@@ -2202,11 +2223,12 @@ function reducePerformHeroAttack(
   const usingBerserkerExtra = !isBuildingNoEngaged && needsExtraCharge && canUseBerserkerExtra;
   const usingFlashExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && canUseFlashExtra;
   const usingGambitExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && canUseGambitExtra;
-  const usingWeaponExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && canUseWeaponExtra;
-  const usingBattleSpiritExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingWeaponExtra && canUseBattleSpiritExtra;
+  // BS 优先于 weaponExtra：base → BS → weaponExtra 的消耗顺序保证 slot 总攻击次数 = 1 + BS + weaponExtra。
+  const usingBattleSpiritExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && canUseBattleSpiritExtra;
+  const usingWeaponExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingBattleSpiritExtra && canUseWeaponExtra;
   // 优先消耗该栏的 slotExtraAttacks，再考虑全局 extraAttackCharges。
-  const usingSlotExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingWeaponExtra && !usingBattleSpiritExtra && canUseSlotExtra;
-  const usingExtraCharge = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingWeaponExtra && !usingBattleSpiritExtra && !usingSlotExtra && state.extraAttackCharges > 0;
+  const usingSlotExtra = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingBattleSpiritExtra && !usingWeaponExtra && canUseSlotExtra;
+  const usingExtraCharge = !isBuildingNoEngaged && needsExtraCharge && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingBattleSpiritExtra && !usingWeaponExtra && !usingSlotExtra && state.extraAttackCharges > 0;
 
   const sideEffects: SideEffect[] = [];
   const patch: Partial<GameState> = {};
@@ -2661,7 +2683,9 @@ function reducePerformHeroAttack(
   if (!isBuildingTarget && !newCombat.engagedMonsterIds.includes(targetMonsterId)) {
     newCombat.engagedMonsterIds = [...newCombat.engagedMonsterIds, targetMonsterId];
   }
-  if (!isBuildingNoEngaged && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingWeaponExtra && !usingExtraCharge) {
+  // BS / weaponExtra / 各种 extra 都不消耗 heroAttacksRemaining（这是全局 base pool，每个 slot 一次）。
+  // 只有真正的 base 攻击（slot 的第一次攻击 + 没有任何 extra flag）才扣减。
+  if (!isBuildingNoEngaged && !usingBerserkerExtra && !usingFlashExtra && !usingGambitExtra && !usingBattleSpiritExtra && !usingWeaponExtra && !usingExtraCharge) {
     newCombat.heroAttacksRemaining = newCombat.heroAttacksRemaining > 0
       ? Math.max(0, newCombat.heroAttacksRemaining - 1)
       : newCombat.heroAttacksRemaining;
@@ -3898,17 +3922,20 @@ function reduceInitiateWeaponAttack(
   }
 
   // --- Weapon attack eligibility ---
+  // Mirror PERFORM_HERO_ATTACK 里的规则：base → BS → weaponExtra 顺序，weaponExtra 需 BS 配额耗尽。
   const slotAlreadyAttacked = combat.heroAttacksThisTurn[slotId];
   const hasBaseAttack = combat.heroAttacksRemaining > 0;
   const canUseBerserkerExtra = state.berserkerRageActive && slotAlreadyAttacked && !state.berserkerSlotUsed[slotId];
   const canUseFlashExtra = ae.flashCount > 0 && slotAlreadyAttacked
     && (state.flashSlotUsed[slotId] ?? 0) < ae.flashCount;
   const canUseGambitExtra = state.gambitExtraActive && slotAlreadyAttacked && (state.gambitSlotUsed[slotId] ?? 0) < state.gambitExtraPerSlot;
-  const canUseWeaponExtra = !!(slotItem as GameCardData).weaponExtraAttack && slotAlreadyAttacked
-    && (state.weaponExtraAttackUsed[slotId] ?? 0) < ((slotItem as GameCardData).weaponExtraAttack ?? 0);
   const battleSpiritBonus2 = (state.slotBattleSpiritBonus ?? {})[slotId] ?? 0;
+  const slotBSUsed2 = (state.slotBattleSpiritUsed ?? {})[slotId] ?? 0;
   const canUseBattleSpiritExtra = battleSpiritBonus2 > 0 && slotAlreadyAttacked
-    && ((state.slotBattleSpiritUsed ?? {})[slotId] ?? 0) < battleSpiritBonus2;
+    && slotBSUsed2 < battleSpiritBonus2;
+  const canUseWeaponExtra = !!(slotItem as GameCardData).weaponExtraAttack && slotAlreadyAttacked
+    && (state.weaponExtraAttackUsed[slotId] ?? 0) < ((slotItem as GameCardData).weaponExtraAttack ?? 0)
+    && slotBSUsed2 >= battleSpiritBonus2;
   // 兵器谱：本回合该装备栏额外攻击次数 > 0 且该栏已攻击过 → 允许追加攻击。
   const canUseSlotExtra = ((state.slotExtraAttacks ?? {})[slotId] ?? 0) > 0 && slotAlreadyAttacked;
   const needsExtraCharge = slotAlreadyAttacked || !hasBaseAttack;

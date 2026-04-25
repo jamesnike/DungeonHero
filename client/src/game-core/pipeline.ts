@@ -330,6 +330,23 @@ function isInputContinuation(action: GameAction): boolean {
     case 'RESOLVE_GRAVEYARD_SELECTION':
     case 'RESOLVE_STAT_SWAP':
     case 'RESOLVE_REPAIR_ENRAGE_DICE':
+    // Hero: magic slot / monster / dungeon-card target selections
+    // (player picked a target from the modal opened by a pendingMagicAction).
+    // These are dispatched while phase='playerInput' (the pendingMagicAction's
+    // step transitions internally without changing phase), so they must be
+    // continuations or the drain loop pauses before processing them.
+    //
+    // Bug history: 战意激发 (battle-spirit) opens a slot-select modal whose
+    // resolution dispatches RESOLVE_MAGIC_SLOT_SELECTION. In tests using
+    // `drain([{type:'RESOLVE_MAGIC_SLOT_SELECTION',...}])` directly the action
+    // was stranded (drain checks isInputContinuation before processing).
+    // Real game uses engine.dispatch → _processAction → reduce() directly
+    // (which bypasses this gate for top-level actions), so user-facing impact
+    // was masked, but any future reducer that enqueues these as follow-ups
+    // would hit the same strand. Adding them defensively now.
+    case 'RESOLVE_MAGIC_SLOT_SELECTION':
+    case 'RESOLVE_MAGIC_MONSTER_SELECTION':
+    case 'RESOLVE_DUNGEON_CARD_SELECTION':
     // Internal state mutations enqueued by reducers
     case 'HEAL':
     case 'MODIFY_GOLD':

@@ -1,0 +1,145 @@
+---
+description: 卡片在槽位 / 手牌 / 背包之间移动时，必须正确维护 `fromSlot` 字段（剥离或更新到新归属）。
+alwaysApply: true
+---
+
+# 卡片移动时的 `fromSlot` 簿记 ——「换位 / 回手」类效果必读
+
+## 背景：一次真实事故（置换药剂）
+
+`置换药剂`（equip-swap）的语义：选一栏装备 → 那张卡回手牌；如果另一栏有装备 → 把它换到刚空出来的栏位。
+
+旧实现在执行交换时直接 `{ ...chosenItem }` 推回手牌、`{ ...otherItem }` 写到 chosenSlot：
+
+```ts
+// ❌ BAD（旧）
+enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: { ...chosenItem } });
+patch[chosenSlotId] = { ...otherItem };
+```
+
+两个 stale 字段同时漏修，引发 user 报告的「**交换位置后，那个空着的装备栏，装不上新装备**」：
+
+| 卡 | 移到哪 | `fromSlot` 实际值 | 应该是 |
+|---|---|---|---|
+| `chosenItem`（回手牌） | 手牌 | `'equipmentSlot1'`（旧）| **应剥离** |
+| `otherItem`（搬到对面栏） | `chosenSlotId` 槽位 | `'equipmentSlot2'`（旧）| `chosenSlotId`（新槽） |
+
+后果链：
+
+1. 玩家把回手的装备拖回空槽 → `GameBoard.handleCardToSlot` 的拖放分支开头有
+   `if (isCardFromEquipmentSlot(card)) { resetDragState(); return; }`，它读
+   `card.fromSlot`，看到 `'equipmentSlot1'` 就以为「这是装备栏到装备栏的移动」，
+   **静默 return**，玩家以为「空槽坏了」。
+2. 之后拖搬到对面的装备到背包/丢弃 → 走 stale slot id 的路由（卖出 / 弃置位置错），
+   bug 范围更隐蔽。
+
+## 不变量
+
+> **任何把卡从一个 owner 转移到另一个 owner（槽位 → 手牌 / 背包 / 回收袋 / 坟场，
+> 或槽位 ↔ 槽位）的代码，必须更新 `fromSlot`：**
+>
+> - 卡进**装备栏**（含 swap、reserve promote、装备入场）→ `fromSlot = newSlotId`
+> - 卡进**护符栏** → `fromSlot = 'amulet'`
+> - 卡进**手牌 / 背包 / 回收袋 / 坟场 / 牌堆** → **剥离 `fromSlot`**
+
+## 强制规则
+
+### 1. 进装备栏 → 用 `setEquipmentSlotById`，不要手写 patch
+
+`useCardOperations.setEquipmentSlotById` 已经统一帮你打 `fromSlot: id`。优先用它。
+
+```ts
+// ✅ GOOD（hook 路径）
+setEquipmentSlotById(equipSlot, equipCard);
+
+// ✅ GOOD（reducer 路径，必须显式打）
+patch[chosenSlotId] = { ...otherItem, fromSlot: chosenSlotId };
+
+// ❌ BAD
+patch[chosenSlotId] = { ...otherItem }; // ← 带着 otherSlotId 进了 chosenSlot
+```
+
+### 2. 进手牌 / 背包 / 回收袋 / 坟场 → 解构剥离 `fromSlot`
+
+```ts
+// ✅ GOOD
+const { fromSlot: _drop, ...rest } = chosenItem as EquipmentItem & { fromSlot?: unknown };
+enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: rest as GameCardData });
+
+// ❌ BAD
+enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: { ...chosenItem } });
+```
+
+参考已合规的实现：
+- `events.ts:reduceResolveEventInteraction`（回手事件）：`const { fromSlot: _, ...handItem } = slotItem`
+- `useEventSystem.ts` 同上
+- `potion-effects.ts:applyEquipSwap` 修复后的写法
+
+### 3. Reserve 入栈 / 出栈也算"换 owner"
+
+- **入 reserve**：reserve 跟 main 共用 `fromSlot`（同一槽位），所以从 main 推到 reserve
+  时 `fromSlot` 不需要变。
+- **Reserve promote 到 main**（`clearSlotAndPromoteReserve`）：promoted 的卡 `fromSlot`
+  仍是同一槽位 id，行为正确——但**不要假设这一直成立**。如果未来引入「跨槽 reserve
+  迁移」，promote 时必须显式重打 `fromSlot`。
+
+### 4. Swap / 换位类效果必须**两边都改**
+
+任何「A 槽 ↔ B 槽」「槽位 ↔ 手牌」的换位逻辑，**两个方向的 `fromSlot` 都要处理**——
+不要只改一边。这次事故就是只改了进手牌那一边的 effect id（之前的 bug），后来又只
+关注 effect id（这次的 bug），把 `fromSlot` 全漏了。
+
+写完后强制问：
+
+> "A 这张卡现在在哪？B 这张卡现在在哪？两张卡的 `fromSlot` 跟它们的新 owner 一致吗？"
+
+### 5. 测试要断言 `fromSlot` 字段，不只断言 id
+
+```ts
+// ❌ 不够
+expect(state.equipmentSlot1?.id).toBe('w-other');
+expect(state.handCards.some(c => c.id === 'w-chosen')).toBe(true);
+
+// ✅ 加这两条断言才能抓到 stale fromSlot 类 bug
+expect((state.equipmentSlot1 as any)?.fromSlot).toBe('equipmentSlot1');
+const returned = state.handCards.find(c => c.id === 'w-chosen');
+expect((returned as any)?.fromSlot).toBeUndefined();
+```
+
+只断言 id 跟数量的测试**永远抓不到** `fromSlot` 类 bug——
+这正是历史上 equip-swap 测试漏过这条 bug 的原因。
+
+## 已知**会读 `fromSlot`** 的消费方（写新移动代码前先查这张表）
+
+| 文件 : 函数 / 行 | 怎么用 |
+|---|---|
+| `GameBoard.tsx:isCardFromEquipmentSlot` | 拖放门：`fromSlot` 是装备槽 id 就拒收 |
+| `GameBoard.tsx:handleCardToSlot` slot-backpack 分支 | 通过 `fromSlot` 判定卡是否从某栏拖出 → 决定路由（回收袋 / 坟场） |
+| `GameBoard.tsx:handleSellEquipment` | 用 `sellItem.fromSlot` 决定从哪个槽位飞向坟场 |
+| `EquipmentSlot.tsx` 拖动起点 | `fromSlot` 决定 displaced 动画从哪个 cell 飞出 |
+| 任何 `normalizeHeroEquipmentSlotFromDrag(card.fromSlot)` 调用 | 把 `fromSlot` 转成槽位 id |
+
+每加一个新的「卡换 owner」reducer / hook，先 `Grep "fromSlot"` 看消费方有哪些；
+保证你的 patch 让上面所有消费方都看到一致的视图。
+
+## 自检：写完任何「换位 / 回手 / 转移」代码前问自己
+
+1. 我搬出去的卡，新 owner 是装备栏吗？是 → `fromSlot = newSlotId`；不是 → 剥掉 `fromSlot`。
+2. swap 类效果，**双向**都改了吗？
+3. 测试有没有显式断言 `fromSlot`？只断言 id 不算。
+4. 我有没有调 `setEquipmentSlotById` / `clearSlotAndPromoteReserve` 这些已合规的 helper，
+   而不是手写 `patch[slotId] = { ...item }`？
+
+任意一条「没」，回去补再交。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| `fromSlot` 字段在卡换 owner 时正确更新 | ✅ 这条 | ❌ |
+| 装备销毁时 broken self 路由到坟场 / 回收袋 | ❌ | `equipment-break-routes-to-grave` |
+| 装备 `maxDurability` 4 封顶 | ❌ | `equipment-durability-cap` |
+| 同 effect id 在多个消费方一致 | ❌ | `shared-effect-id-impact-check` |
+| Disposition router 必须进 pipeline 白名单 | ❌ | `pipeline-input-continuation` |
+
+写「换位 / 回手 / 转移」类效果时，这几条规则**都要核对**。
