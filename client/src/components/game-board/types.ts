@@ -791,6 +791,12 @@ export type PendingPotionAction =
       card: GameCardData;
       effect: 'amulet-to-eternal-relic';
       step: 'magic-choice';
+    }
+  | {
+      card: GameCardData;
+      effect: 'equip-swap';
+      step: 'slot-select';
+      prompt: string;
     };
 
 export type HeroSkillArrowState = {

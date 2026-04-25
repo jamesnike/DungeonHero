@@ -542,10 +542,10 @@ export function resolveAllPotionEffects(
     });
     patch.pendingPotionAction = {
       card,
-      effect: 'perm-slot-damage+1',
+      effect: 'equip-swap',
       step: 'slot-select',
       prompt: '选择一个装备回到手牌',
-    } as any;
+    };
     patch.heroSkillBanner = '选择一个装备回到手牌';
     return applyPatch(state, patch, sideEffects);
   }
@@ -868,6 +868,22 @@ export function resolvePendingPotion(
       log(sideEffects, 'potion', `${slotLabel}装备栏可装备上限 +1（${currentCap} → ${currentCap + 1}）`);
       banner(sideEffects, `${slotLabel}装备栏可装备上限 +1！`);
       enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
+    // --- Equip swap (player-chosen slot returns to hand; the OTHER slot's
+    //     equipment moves into the cleared slot) ---
+    //
+    // 修复说明：旧实现把 pendingPotionAction.effect 错写成 'perm-slot-damage+1'，
+    // 玩家选完装备栏后会被这条 case 接走，结果"+1 永久攻击"而不是置换。
+    // 现在 effect 改为 'equip-swap'，这条 case 才是真正的恢复路径。
+    case 'equip-swap': {
+      const slotId = (action as any).slotId as EquipmentSlotId;
+      if (!slotId) return null;
+      const result = applyEquipSwap(state, slotId, card, sideEffects, enqueuedActions);
+      Object.assign(patch, result);
+      patch.pendingPotionAction = null;
+      patch.heroSkillBanner = null;
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 

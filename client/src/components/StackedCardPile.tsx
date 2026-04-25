@@ -115,12 +115,21 @@ function DeckCartouche({
   // baseSize = 整个 cartouche 的"em 锚"。下面 label / count / flourish / 间距
   // 全部用 em 相对它，所以只要这一档随 cell 宽度变，整个 cartouche 就跟着等比缩放。
   // clamp 三参数：min（手机迷你 cell 不至于看不清）/ ideal（cqi 流式）/ max（大屏不至于撑爆）。
+  //
+  // 四档：
+  //   ≤2 字（"背包" / "坟场"）—— 宽字距、最大字号，cartouche 显眼
+  //   3–4 字（"骑士牌库"）—— 字距大幅收紧，否则 4 字 × 0.4em tracking 会把 cartouche 撑爆
+  //   5–7 字（备用：中文带后缀 / 短英文）—— 进一步收紧
+  //   ≥8 字（"Backpack" 8 / "Graveyard" 9 / "Knight Deck" 11）—— 最紧档，确保窄 cell 也能完整渲染
+  // padX / tracking / labelScale 三个维度一起作用，不只压字号。
   const sizing =
-    len <= 4
-      ? { baseSize: 'clamp(0.7rem, 13cqi, 1.5rem)', tracking: '0.4em' }
-      : len <= 8
-        ? { baseSize: 'clamp(0.55rem, 9cqi, 1.1rem)', tracking: '0.2em' }
-        : { baseSize: 'clamp(0.45rem, 7cqi, 0.9rem)', tracking: '0.12em' };
+    len <= 2
+      ? { baseSize: 'clamp(0.7rem, 13cqi, 1.5rem)', tracking: '0.4em', padX: '1em', labelScale: '1em' }
+      : len <= 4
+        ? { baseSize: 'clamp(0.55rem, 10cqi, 1.2rem)', tracking: '0.1em', padX: '0.65em', labelScale: '0.95em' }
+        : len <= 7
+          ? { baseSize: 'clamp(0.5rem, 9cqi, 1.05rem)', tracking: '0.08em', padX: '0.6em', labelScale: '0.92em' }
+          : { baseSize: 'clamp(0.4rem, 6.5cqi, 0.78rem)', tracking: '0.04em', padX: '0.5em', labelScale: '0.88em' };
 
   return (
     <div
@@ -146,7 +155,7 @@ function DeckCartouche({
       <div
         className="relative max-w-full"
         style={{
-          padding: '0.35em 1em',
+          padding: `0.35em ${sizing.padX}`,
           borderRadius: '0.9em',
           background: 'rgba(0,0,0,0.45)',
           backdropFilter: 'blur(2px)',
@@ -155,7 +164,7 @@ function DeckCartouche({
         <span
           className="font-serif font-bold whitespace-nowrap block"
           style={{
-            fontSize: '1em',
+            fontSize: sizing.labelScale,
             lineHeight: 1,
             letterSpacing: sizing.tracking,
             textShadow: `0 0 8px ${theme.glow}, 0 1px 0 rgba(0,0,0,0.6)`,

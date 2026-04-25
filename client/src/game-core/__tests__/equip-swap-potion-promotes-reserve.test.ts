@@ -147,6 +147,102 @@ describe('置换药剂 — single-slot path promotes reserve', () => {
     expect(finalState.handCards.some(c => c.id === 's-main')).toBe(true);
   });
 
+  // ---------------------------------------------------------------------------
+  // Two-slot path — covers the historical bug where pendingPotionAction.effect
+  // was set to 'perm-slot-damage+1' (copy-paste leftover) instead of
+  // 'equip-swap'. After the player picked a slot, RESOLVE_EQUIPMENT_CHOICE was
+  // routed to the perm-slot-damage+1 case in resolvePendingPotion, so the
+  // chosen slot got "+1 permanent attack" instead of being swapped to hand.
+  //
+  // The single-slot path above never went through pendingPotionAction (it
+  // calls applyEquipSwap directly), so it didn't catch the bug.
+  // ---------------------------------------------------------------------------
+
+  it('two slots have equipment → request slot picker; pendingPotionAction.effect must be "equip-swap" (not "perm-slot-damage+1")', () => {
+    const left: GameCardData = {
+      id: 'w-left', type: 'weapon', name: '左武器', value: 3, image: '',
+      durability: 2, maxDurability: 2,
+    };
+    const right: GameCardData = {
+      id: 'w-right', type: 'weapon', name: '右武器', value: 4, image: '',
+      durability: 3, maxDurability: 3,
+    };
+    const potion = makeEquipSwapPotion();
+    const state = makeState({
+      handCards: [potion],
+      equipmentSlot1: left as EquipmentItem,
+      equipmentSlot2: right as EquipmentItem,
+    });
+
+    const result = drain(state, [{ type: 'RESOLVE_POTION', card: potion } as GameAction]);
+    const finalState = result.state;
+
+    expect(finalState.pendingPotionAction).not.toBeNull();
+    expect(finalState.pendingPotionAction?.effect).toBe('equip-swap');
+    expect(finalState.equipmentSlot1?.id).toBe('w-left');
+    expect(finalState.equipmentSlot2?.id).toBe('w-right');
+    expect(finalState.equipmentSlotBonuses.equipmentSlot1.damage).toBe(0);
+    expect(finalState.equipmentSlotBonuses.equipmentSlot2.damage).toBe(0);
+  });
+
+  it('two slots have equipment, player picks LEFT → left returns to hand, right moves to left slot', () => {
+    const left: GameCardData = {
+      id: 'w-left', type: 'weapon', name: '左武器', value: 3, image: '',
+      durability: 2, maxDurability: 2,
+    };
+    const right: GameCardData = {
+      id: 'w-right', type: 'weapon', name: '右武器', value: 4, image: '',
+      durability: 3, maxDurability: 3,
+    };
+    const potion = makeEquipSwapPotion();
+    const state = makeState({
+      handCards: [potion],
+      equipmentSlot1: left as EquipmentItem,
+      equipmentSlot2: right as EquipmentItem,
+    });
+
+    const result = drain(state, [
+      { type: 'RESOLVE_POTION', card: potion } as GameAction,
+      { type: 'RESOLVE_EQUIPMENT_CHOICE', slotId: 'equipmentSlot1', context: { flowId: 'equip-swap' } } as GameAction,
+    ]);
+    const finalState = result.state;
+
+    expect(finalState.equipmentSlot1?.id).toBe('w-right');
+    expect(finalState.equipmentSlot2).toBeNull();
+    expect(finalState.handCards.some(c => c.id === 'w-left')).toBe(true);
+    expect(finalState.pendingPotionAction).toBeNull();
+    expect(finalState.equipmentSlotBonuses.equipmentSlot1.damage).toBe(0);
+  });
+
+  it('two slots have equipment, player picks RIGHT → right returns to hand, left moves to right slot', () => {
+    const left: GameCardData = {
+      id: 'w-left', type: 'weapon', name: '左武器', value: 3, image: '',
+      durability: 2, maxDurability: 2,
+    };
+    const right: GameCardData = {
+      id: 'w-right', type: 'weapon', name: '右武器', value: 4, image: '',
+      durability: 3, maxDurability: 3,
+    };
+    const potion = makeEquipSwapPotion();
+    const state = makeState({
+      handCards: [potion],
+      equipmentSlot1: left as EquipmentItem,
+      equipmentSlot2: right as EquipmentItem,
+    });
+
+    const result = drain(state, [
+      { type: 'RESOLVE_POTION', card: potion } as GameAction,
+      { type: 'RESOLVE_EQUIPMENT_CHOICE', slotId: 'equipmentSlot2', context: { flowId: 'equip-swap' } } as GameAction,
+    ]);
+    const finalState = result.state;
+
+    expect(finalState.equipmentSlot1).toBeNull();
+    expect(finalState.equipmentSlot2?.id).toBe('w-left');
+    expect(finalState.handCards.some(c => c.id === 'w-right')).toBe(true);
+    expect(finalState.pendingPotionAction).toBeNull();
+    expect(finalState.equipmentSlotBonuses.equipmentSlot2.damage).toBe(0);
+  });
+
   it('only one slot has equipment, NO reserve → slot becomes null (preserves baseline behavior)', () => {
     const main: GameCardData = {
       id: 'w-lonely', type: 'weapon', name: '孤独武器', value: 3, image: '',

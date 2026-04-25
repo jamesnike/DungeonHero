@@ -434,10 +434,10 @@ function executeEquipSwap(ctx: ExecutionContext, _effect: CardEffect): void {
   });
   ctx.patch.pendingPotionAction = {
     card: ctx.card,
-    effect: 'perm-slot-damage+1' as any,
+    effect: 'equip-swap',
     step: 'slot-select',
     prompt: '选择一个装备回到手牌',
-  } as any;
+  };
   ctx.patch.heroSkillBanner = '选择一个装备回到手牌';
   ctx.halt = true;
   ctx.enqueuedActions.length = 0;
