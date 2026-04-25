@@ -1266,12 +1266,21 @@ function applyEquipSwap(
   const otherItem = state[otherSlotId];
 
   if (chosenItem) {
-    const cardVersion: GameCardData = { ...chosenItem } as GameCardData;
-    enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: cardVersion });
+    // Strip `fromSlot` (and any other slot-bound runtime field) when sending
+    // back to hand. Otherwise the drag handler in GameBoard sees the card as
+    // "currently in equipmentSlotN" via `isCardFromEquipmentSlot` and silently
+    // refuses to drop it onto an equipment slot — which is exactly the symptom
+    // 「交换位置后，那个空着的装备栏，装不上新的装备」 (it actually means "I
+    // can't equip the just-returned card into the empty slot").
+    const { fromSlot: _drop, ...rest } = chosenItem as EquipmentItem & { fromSlot?: unknown };
+    enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: rest as GameCardData });
     log(sideEffects, 'potion', `置换药剂：${chosenItem.name} 回到手牌`);
 
     if (otherItem) {
-      (patch as any)[chosenSlotId] = { ...otherItem };
+      // The moved item now lives in chosenSlot — its `fromSlot` must reflect
+      // the new home, otherwise dragging it later (e.g. to the backpack) reads
+      // stale slot id and routes to the wrong place.
+      (patch as any)[chosenSlotId] = { ...otherItem, fromSlot: chosenSlotId };
       // The OTHER slot lost its main to the swap. Promote its topmost reserve
       // up so a stacked card under otherItem doesn't visually disappear (the
       // EquipmentSlot UI only renders the reserve stack when main is truthy).

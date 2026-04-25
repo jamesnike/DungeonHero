@@ -746,10 +746,18 @@ function applyEquipSwapToSlot(ctx: ExecutionContext, chosenSlotId: 'equipmentSlo
   const otherItem = getEquipmentSlot(ctx, otherSlotId);
 
   if (chosenItem) {
-    ctx.enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: { ...chosenItem } as GameCardData });
+    // Strip `fromSlot` (and any other slot-bound runtime field) when sending
+    // back to hand. See potion-effects.ts:applyEquipSwap for the full bug
+    // history — TL;DR the drag handler reads card.fromSlot via
+    // `isCardFromEquipmentSlot` and refuses to drop a card onto a slot if it
+    // already has a slot id.
+    const { fromSlot: _drop, ...rest } = chosenItem as typeof chosenItem & { fromSlot?: unknown };
+    ctx.enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: rest as GameCardData });
     log(ctx, 'potion', `置换药剂：${chosenItem.name} 回到手牌`);
     if (otherItem) {
-      (ctx.patch as any)[chosenSlotId] = { ...otherItem };
+      // The moved item now lives in chosenSlot — its `fromSlot` must reflect
+      // the new home, otherwise dragging it later reads stale slot id.
+      (ctx.patch as any)[chosenSlotId] = { ...otherItem, fromSlot: chosenSlotId };
       // The OTHER slot lost its main to the swap. Promote its topmost reserve
       // up so a stacked card under otherItem doesn't visually disappear (the
       // EquipmentSlot UI only renders the reserve stack when main is truthy).

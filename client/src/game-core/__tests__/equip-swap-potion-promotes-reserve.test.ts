@@ -243,6 +243,46 @@ describe('置换药剂 — single-slot path promotes reserve', () => {
     expect(finalState.equipmentSlotBonuses.equipmentSlot2.damage).toBe(0);
   });
 
+  it('after equip-swap, the now-empty slot must accept a new equipment via EQUIP_CARD', () => {
+    const left: GameCardData = { id: 'w-left', type: 'weapon', name: '左', value: 3, image: '', durability: 2, maxDurability: 2 };
+    const right: GameCardData = { id: 'w-right', type: 'weapon', name: '右', value: 4, image: '', durability: 3, maxDurability: 3 };
+    const newWeapon: GameCardData = { id: 'w-new', type: 'weapon', name: '新武器', value: 5, image: '', durability: 2, maxDurability: 2 };
+    const potion = makeEquipSwapPotion();
+    const state = makeState({
+      handCards: [potion, newWeapon],
+      equipmentSlot1: left as EquipmentItem,
+      equipmentSlot2: right as EquipmentItem,
+    });
+    const afterSwap = drain(state, [
+      { type: 'RESOLVE_POTION', card: potion } as GameAction,
+      { type: 'RESOLVE_EQUIPMENT_CHOICE', slotId: 'equipmentSlot1', context: { flowId: 'equip-swap' } } as GameAction,
+    ]).state;
+    expect(afterSwap.equipmentSlot2).toBeNull();
+    const afterEquip = drain(afterSwap, [
+      { type: 'EQUIP_CARD', cardId: 'w-new', slotId: 'equipmentSlot2' } as GameAction,
+    ]).state;
+    expect(afterEquip.equipmentSlot2?.id).toBe('w-new');
+  });
+
+  it('after equip-swap: returned card must NOT carry stale fromSlot (which blocks drag-to-slot re-equip)', () => {
+    const left: GameCardData = { id: 'w-left', type: 'weapon', name: '左', value: 3, image: '', durability: 2, maxDurability: 2, fromSlot: 'equipmentSlot1' as any };
+    const right: GameCardData = { id: 'w-right', type: 'weapon', name: '右', value: 4, image: '', durability: 3, maxDurability: 3, fromSlot: 'equipmentSlot2' as any };
+    const potion = makeEquipSwapPotion();
+    const state = makeState({
+      handCards: [potion],
+      equipmentSlot1: left as EquipmentItem,
+      equipmentSlot2: right as EquipmentItem,
+    });
+    const afterSwap = drain(state, [
+      { type: 'RESOLVE_POTION', card: potion } as GameAction,
+      { type: 'RESOLVE_EQUIPMENT_CHOICE', slotId: 'equipmentSlot1', context: { flowId: 'equip-swap' } } as GameAction,
+    ]).state;
+    const returnedToHand = afterSwap.handCards.find(c => c.id === 'w-left');
+    expect(returnedToHand).toBeDefined();
+    expect((returnedToHand as any)?.fromSlot).toBeUndefined();
+    expect((afterSwap.equipmentSlot1 as any)?.fromSlot).toBe('equipmentSlot1');
+  });
+
   it('only one slot has equipment, NO reserve → slot becomes null (preserves baseline behavior)', () => {
     const main: GameCardData = {
       id: 'w-lonely', type: 'weapon', name: '孤独武器', value: 3, image: '',
