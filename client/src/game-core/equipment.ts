@@ -124,13 +124,18 @@ export function getSlotCurrentArmor(
 }
 
 /**
- * Apply an immediate armor refill / clamp when the slot's permanent or
- * temporary armor bonus changes by `delta`. Call AFTER writing the new
- * perm/temp value into the patch.
+ * Apply an immediate armor refill / clamp when the slot's armor cap changes
+ * by `delta`. Call AFTER writing the cap-changing field into the patch.
  *
- *   delta > 0 (bonus added)     → armor += delta, capped at the new cap
- *   delta < 0 (bonus subtracted) → armor clamped to the new cap (never grows)
- *   delta === 0                  → no-op
+ * The cap can change for any of these reasons (helper is source-agnostic):
+ *   - Permanent shield bonus added/removed (`equipmentSlotBonuses[slotId].shield`)
+ *   - Temporary armor added/removed (`slotTempArmor[slotId]`)
+ *   - Base armor bumped via amplify (`armorMax` for shield / `hp` for monster)
+ *
+ * Behavior:
+ *   delta > 0 (cap grew)   → armor += delta, capped at the new cap
+ *   delta < 0 (cap shrunk) → armor clamped to the new cap (never grows)
+ *   delta === 0            → no-op
  *
  * If the slot is empty or holds a non-shield/non-monster, this is a no-op.
  * If `slotItem.armor` is undefined ("fresh / at full cap"), this is also a

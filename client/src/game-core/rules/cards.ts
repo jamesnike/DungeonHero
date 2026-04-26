@@ -2378,9 +2378,15 @@ function reduceAmplifyCardsByName(
   // 装备槽 / 储备
   if (state.equipmentSlot1?.name === cardName) {
     patch.equipmentSlot1 = applyAmplifyToCard(state.equipmentSlot1, amount) as EquipmentItem;
+    // Single-counter armor model: amplify bumps base armor cap (armorMax for
+    // shield / hp for monster) by `amount`. Mirror that into the live armor
+    // counter so the equipped item gets the immediate bonus (matching the
+    //装备时 / 加永久护甲 / 加临时护甲 pattern). No-op for weapons.
+    applySlotArmorBonusDelta(state, 'equipmentSlot1', amount, patch);
   }
   if (state.equipmentSlot2?.name === cardName) {
     patch.equipmentSlot2 = applyAmplifyToCard(state.equipmentSlot2, amount) as EquipmentItem;
+    applySlotArmorBonusDelta(state, 'equipmentSlot2', amount, patch);
   }
   const newReserve1 = mapList(state.equipmentSlot1Reserve);
   if (newReserve1 !== state.equipmentSlot1Reserve) patch.equipmentSlot1Reserve = newReserve1 as EquipmentItem[];
