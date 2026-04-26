@@ -223,7 +223,7 @@ import {
   createEmptyActiveRow,
   createEmptyAmuletEffects,
 } from '../constants';
-import { computeAmuletEffectsForState, getEquipmentInSlot, getEquipmentSlots, applySlotArmorBonusDelta } from '../equipment';
+import { computeAmuletEffectsForState, getEquipmentInSlot, getEquipmentSlots, applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { chaosStrikeHasOverkill } from '../combat';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
@@ -1600,10 +1600,14 @@ export function resolvePermanentMagic(
       const oldTempArm = state.slotTempArmor?.[slotId] ?? 0;
       const newTempAttack = { ...(state.slotTempAttack ?? {}), [slotId]: tempAtk };
       const newTempArmor = { ...(state.slotTempArmor ?? {}) };
+      let equalizeAddedTempAtk = false;
+      let equalizeAddedTempArm = false;
       if (tempAtk > oldTempArm) {
         newTempArmor[slotId] = tempAtk;
+        equalizeAddedTempArm = true;
       } else if (oldTempArm > tempAtk) {
         newTempAttack[slotId] = oldTempArm;
+        equalizeAddedTempAtk = true;
       }
       patch.slotTempAttack = newTempAttack;
       patch.slotTempArmor = newTempArmor;
@@ -1613,6 +1617,12 @@ export function resolvePermanentMagic(
       const finalVal = Math.max(tempAtk, oldTempArm);
       log(sideEffects, 'magic', `时空镜像：${equippedSlots[0].item.name} 临时攻防均为 ${finalVal}`);
       banner(sideEffects, `${equippedSlots[0].item.name} 临时攻击 +${atkBoost}，攻防均为 ${finalVal}。`);
+      // 怀柔之印：初始 +atkBoost 临时攻击 = 1 次"获得"；
+      // 若进入等位分支并加了对侧 delta（攻或防），再算 1 次。
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      if (equalizeAddedTempAtk || equalizeAddedTempArm) {
+        checkPersuadeOnTempAttack(state, patch, sideEffects);
+      }
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -4840,6 +4850,7 @@ export function resolvePendingMagic(
         patch.slotTempAttack = newTempAttack;
         log(sideEffects, 'magic', `武器爆发：${slotId === 'equipmentSlot1' ? '左' : '右'}装备栏临时攻击 +${burstAmount}`);
         banner(sideEffects, `武器爆发：临时攻击 +${burstAmount}！`);
+        checkPersuadeOnTempAttack(state, patch, sideEffects);
         patch.pendingMagicAction = null;
         patch.heroSkillBanner = null;
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -4855,6 +4866,7 @@ export function resolvePendingMagic(
         if (armorAmt !== 0) applySlotArmorBonusDelta(state, slotId, armorAmt, patch);
         log(sideEffects, 'magic', `临时护甲：${slotId === 'equipmentSlot1' ? '左' : '右'}装备栏 +${armorAmt}`);
         banner(sideEffects, `临时护甲 +${armorAmt}！`);
+        if (armorAmt > 0) checkPersuadeOnTempAttack(state, patch, sideEffects);
         patch.pendingMagicAction = null;
         patch.heroSkillBanner = null;
         patch.lastPlayedCardCategory = getCardPlayCategory(card);

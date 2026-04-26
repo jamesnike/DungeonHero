@@ -22,7 +22,7 @@ import type { RngState } from '../rng';
 import { nextBool, nextInt, pickRandom } from '../rng';
 import { createBugletCard } from '../deck';
 import { resetCardForGraveyard } from '../cards';
-import { applySlotArmorBonusDelta } from '../equipment';
+import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
 
 // ---------------------------------------------------------------------------
 // Perm-recycle routing — equipment that is destroyed but carries a Perm flag
@@ -401,6 +401,7 @@ function applyOneEquipmentLastWordsIteration(
         payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏 +3临时护甲！` },
       });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +3临时护甲！` } });
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
     } else if (slotItem.onDestroyEffect.startsWith('stunCap+')) {
       const amount = parseInt(slotItem.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
       if (amount > 0) {
@@ -427,6 +428,7 @@ function applyOneEquipmentLastWordsIteration(
           payload: { type: 'equip', message: `${slotItem.name} 遗言：所有装备栏 +${amount}临时护甲！` },
         });
         sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！所有装备栏 +${amount}临时护甲！` } });
+        checkPersuadeOnTempAttack(state, patch, sideEffects);
         if (amuletEffects.persuadeOnTempAttackCount > 0) {
           const pBonus = amuletEffects.persuadeOnTempAttackBonus;
           patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus;

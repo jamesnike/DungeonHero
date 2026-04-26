@@ -14,6 +14,7 @@ import { registerOnEnterHandAll } from '../on-enter-hand';
 import type { EquipmentSlotId, ActiveRowSlots } from '@/components/game-board/types';
 import { pickRandom } from '../../rng';
 import { flattenActiveRowSlots, isDamageableTarget } from '../../helpers';
+import { checkPersuadeOnTempAttack } from '../../equipment';
 
 const defaultSlotState = { equipmentSlot1: 0, equipmentSlot2: 0 };
 
@@ -44,6 +45,7 @@ const weaponManualOnHand: OnEnterHandHandler = (state, card, patch, sideEffects)
     event: 'ui:banner',
     payload: { text: `${card.name} 上手：${slotLabel} 临时攻击 +2！` },
   });
+  checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
 /**
@@ -91,6 +93,7 @@ const surveyActionOnHand: OnEnterHandHandler = (state, card, patch, sideEffects)
     event: 'ui:banner',
     payload: { text: `${card.name} 上手：${slotLabel} 临时攻击 +${bonus}！` },
   });
+  if (bonus > 0) checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
 /**
@@ -165,6 +168,7 @@ const frenzyCurseOnHand: OnEnterHandHandler = (state, card, patch, sideEffects) 
     event: 'ui:banner',
     payload: { text: `${card.name} 上手：${slotLabel} 临时攻击 +1！` },
   });
+  checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
 /**

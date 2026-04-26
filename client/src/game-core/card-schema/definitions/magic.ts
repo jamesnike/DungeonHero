@@ -39,7 +39,7 @@ import {
 } from '../../cards';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../../rng';
 import { INITIAL_HP, PERSUADE_COST, MIN_PERSUADE_COST } from '../../constants';
-import { computeAmuletEffects, applySlotArmorBonusDelta } from '../../equipment';
+import { computeAmuletEffects, applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../../equipment';
 import { chaosStrikeHasOverkill } from '../../combat';
 import { STARTER_CARD_IDS, skillScrollImage, createMagicBoltCard } from '../../deck';
 import { applyFlipCounters } from '../../rules/flip-counters';
@@ -2356,6 +2356,7 @@ const starterFlankSlotTempAttack: CardDefinition = {
     const flankSuffix = isFlank ? '（侧击触发）' : '';
     log(sideEffects, 'magic', `${card.name}：${slotLabel}装备栏 +${totalAmount} 临时攻击${flankSuffix}。`);
     banner(sideEffects, `${card.name}：${slotLabel}装备栏 +${totalAmount} 临时攻击${flankSuffix}！`);
+    if (totalAmount > 0) checkPersuadeOnTempAttack(state, patch, sideEffects);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);

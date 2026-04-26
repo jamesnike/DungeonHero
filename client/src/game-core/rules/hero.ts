@@ -38,7 +38,7 @@ import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
 import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, clearSlotAndPromoteReserve } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
-import { computeAmuletEffectsForState, getEquipmentInSlot, getSlotBonus, applySlotArmorBonusDelta, refillSlotArmorToCap } from '../equipment';
+import { computeAmuletEffectsForState, getEquipmentInSlot, getSlotBonus, applySlotArmorBonusDelta, refillSlotArmorToCap, checkPersuadeOnTempAttack as checkPersuadeOnTempAttackShared } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { applyFlipCounters } from './flip-counters';
 import { nextInt, pickRandom } from '../rng';
@@ -1039,17 +1039,18 @@ function ensureEngaged(state: GameState, monster: GameCardData, enqueuedActions:
   }
 }
 
+/**
+ * Local thin wrapper around the shared `checkPersuadeOnTempAttack` from
+ * `../equipment` — kept so all existing callsites in this file continue to
+ * compile unchanged. The shared helper is patch-aware (composes correctly
+ * across multiple calls in the same reducer step).
+ */
 function checkPersuadeOnTempAttack(
   state: GameState,
   patch: Partial<GameState>,
   sideEffects: SideEffect[],
 ): void {
-  const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
-  if (ae.persuadeOnTempAttackCount <= 0) return;
-  const pBonus = ae.persuadeOnTempAttackBonus;
-  const newBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
-  patch.persuadeAmuletBonus = newBonus;
-  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%（累计 +${newBonus}%）` } });
+  checkPersuadeOnTempAttackShared(state, patch, sideEffects);
 }
 
 // ---------------------------------------------------------------------------
@@ -1686,6 +1687,8 @@ function reduceMagicSlotSelection(
       const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
       patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + atkBoost };
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时攻击 +${atkBoost}` } });
+      // 怀柔之印：初始 +N 临时攻击 = 一次"获得"
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
       const tempAtk = curTempAtk + atkBoost;
       const tempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
       if (tempAtk === tempArm) {
@@ -1696,13 +1699,16 @@ function reduceMagicSlotSelection(
         const delta = tempAtk - tempArm;
         patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: tempArm + delta };
         if (delta !== 0) applySlotArmorBonusDelta(state, slotId, delta, patch);
-        checkPersuadeOnTempAttack(state, patch, sideEffects);
+        // 怀柔之印：等位时临时护甲 +delta = 第二次"获得"
+        if (delta > 0) checkPersuadeOnTempAttack(state, patch, sideEffects);
         sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}` } });
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
           `${slotItem.name} 临时攻击 +${atkBoost}，临时护甲 +${delta}，攻防均为 ${tempAtk}。`);
       }
       const delta = tempArm - tempAtk;
       patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + atkBoost + delta };
+      // 怀柔之印：等位时临时攻击 +delta = 第二次"获得"
+      if (delta > 0) checkPersuadeOnTempAttack(state, patch, sideEffects);
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时攻击再 +${delta}，临时攻击与临时护甲均为 ${tempArm}` } });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `${slotItem.name} 临时攻击 +${atkBoost + delta}，攻防均为 ${tempArm}。`);

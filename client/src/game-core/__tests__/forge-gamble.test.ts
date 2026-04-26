@@ -263,7 +263,7 @@ describe('锻造赌运 — RESOLVE_REPAIR_ENRAGE_DICE outcome', () => {
     expect((result.state.equipmentSlot1 as EquipmentItem).durability).toBe(2);
   });
 
-  it('enrage (last layer): just +2 attack, no negative layer', () => {
+  it('enrage (last layer): drops layer to 0 and triggers monster defeat', () => {
     const card = makeForgeGambleCard('e2');
     const weapon = makeWeapon('w1', 2, 5);
     const state = makeState({
@@ -281,8 +281,13 @@ describe('锻造赌运 — RESOLVE_REPAIR_ENRAGE_DICE outcome', () => {
       } as GameAction,
     ]);
     const monster = result.state.activeCards.find(c => c?.id === 'm1') as any;
-    expect(monster?.currentLayer).toBe(1);
-    expect(monster?.attack).toBe(5);
+    // 卡面字面 -1 血层 → 1→0 → 怪物被击败，走标准 MONSTER_DEFEATED 流程。
+    expect(monster?.currentLayer).toBe(0);
+    expect(monster?.defeatProcessed).toBe(true);
+    // +2 攻击的"激怒"在击杀分支不再叠加（怪物已死，激怒无意义）。
+    expect(monster?.attack).toBe(3);
+    // 装备耐久不变。
+    expect((result.state.equipmentSlot1 as EquipmentItem).durability).toBe(2);
   });
 
   it('after RESOLVE_REPAIR_ENRAGE_DICE: card is finalized into recycle bag (permanent magic)', () => {

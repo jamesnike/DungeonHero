@@ -31,7 +31,7 @@ import {
 } from '../combat';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import { createEmptyAmuletEffects, STRENGTH_SELF_DAMAGE, initialCombatState, INITIAL_HP, HAND_LIMIT } from '../constants';
-import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
+import { computeAmuletEffectsForState, applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
 import { getEquipmentSlotsWithSuppressedTempAttack, isMonsterMagicImmuneByBuilding } from '../buildingAura';
 import { flattenActiveRowSlots, isDamageableTarget, isRecyclableFromHand, applyAmplifyOnCreate } from '../helpers';
 import { computeEquipmentBreakEffects, computeDurabilityLossEffects } from './equipment-effects';
@@ -483,6 +483,8 @@ function reduceApplyDamage(
 
   if (result.slotTempAttack) {
     patch.slotTempAttack = result.slotTempAttack;
+    // 血怒战符在自伤造成伤害时给两个装备栏 +N 临时攻击 → 触发 怀柔之印（每次自伤算一次"获得"）
+    checkPersuadeOnTempAttack(state, patch, sideEffects);
   }
 
   // 「赎血召牌符」(self-damage-draw) — 每件 amulet 在每次"实际生效"的自伤事件
@@ -2382,6 +2384,7 @@ function reducePerformHeroAttack(
       event: 'log:entry',
       payload: { type: 'equip', message: `${slotItem.name} 共鸣：${otherLabel}装备栏临时攻击 +${atkBonus}` },
     });
+    checkPersuadeOnTempAttack(state, patch, sideEffects);
   }
   if ((slotItem as GameCardData).onAttackRepairOtherSlot) {
     const otherItem = getSlotItem(state, otherSlotId);
@@ -2731,6 +2734,7 @@ function reducePerformHeroAttack(
       event: 'log:entry',
       payload: { type: 'magic', message: `永恒护符·瀑流铸剑：${label}装备栏临时攻击 +${tempGain}` },
     });
+    checkPersuadeOnTempAttack(state, patch, sideEffects);
   }
 
   // --- Consume extra charges ---
@@ -3502,14 +3506,7 @@ function reduceResolveBlock(
           payload: { type: 'combat', message: `${slotItem.name} 守望者链接：${otherSlotLabel}装备栏临时护甲 +${grantAmount}！` },
         });
         sideEffects.push({ event: 'ui:banner', payload: { text: `守望者链接！${otherSlotLabel}装备栏临时护甲 +${grantAmount}！` } });
-        if (ae.persuadeOnTempAttackCount > 0) {
-          const pBonus = ae.persuadeOnTempAttackBonus;
-          patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
-          sideEffects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%` },
-          });
-        }
+        checkPersuadeOnTempAttack(state, patch, sideEffects);
       }
 
       // Dragon damage retaliation from shield
@@ -3731,14 +3728,7 @@ function reduceResolveBlock(
       event: 'log:entry',
       payload: { type: 'magic', message: `永恒护符·格挡铸甲：${label}装备栏临时护甲 +${tempGain}` },
     });
-    if (ae.persuadeOnTempAttackCount > 0) {
-      const pBonus = ae.persuadeOnTempAttackBonus;
-      patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus;
-      sideEffects.push({
-        event: 'log:entry',
-        payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%` },
-      });
-    }
+    checkPersuadeOnTempAttack(state, patch, sideEffects);
   }
 
   // Swarm corrode on shield

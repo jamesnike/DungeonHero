@@ -32,7 +32,7 @@ import {
 import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecyclableFromHand, getCardPlayCategory, logHeroMagic, applyAmplifyToCard } from '../helpers';
 import { hasEternalRelic, countEternalRelics } from '@/lib/eternalRelics';
-import { computeAmuletEffectsForState, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure, applySlotArmorBonusDelta, refillSlotArmorToCap } from '../equipment';
+import { computeAmuletEffectsForState, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure, applySlotArmorBonusDelta, refillSlotArmorToCap, checkPersuadeOnTempAttack } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { applyEquipDestroyLastWords } from './waterfall';
@@ -329,6 +329,7 @@ function reducePlayCard(
       applySlotArmorBonusDelta(state, targetSlot, bonus, patch);
       const stackLabel = equipEmpowerStack > 1 ? `（叠加 ×${equipEmpowerStack}）` : '';
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `铸锋药剂${stackLabel}：${card.name} 装备时，该装备栏临时攻击 +${bonus}，临时护甲 +${bonus}！` } });
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
     }
 
     // 集甲之符：从手牌出装备牌算一次"装备事件"，不论是替换、入 reserve 还是顶替。
@@ -764,6 +765,7 @@ function reduceEquipFromHand(
       event: 'log:entry',
       payload: { type: 'equip', message: `铸锋药剂${stackLabel}：${card.name} 装备时，该装备栏临时攻击 +${bonus}，临时护甲 +${bonus}！` },
     });
+    checkPersuadeOnTempAttack(state, patch, sideEffects);
   }
 
   // 集甲之符：拖拽装备到槽位也是一次"装备事件"，与 PLAY_CARD / EQUIP_CARD 路径对齐。
@@ -2946,6 +2948,7 @@ function reduceResolveDeckJudge(
       equipmentSlot2: (state.slotTempAttack?.equipmentSlot2 ?? 0) + bonus,
     };
     gains.push({ label: '左右装备栏临时攻击 +2', count: eventCount });
+    checkPersuadeOnTempAttack(state, patch, sideEffects);
   }
 
   if (equipCount > 0) {
@@ -3282,16 +3285,16 @@ function reduceResolveRepairEnrageDice(
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `锻造赌运失败：${monster.name} 失去 1 血层（${oldLayers}→${oldLayers - 1}）并激怒（攻击+2）！` } });
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, banner: `锻造赌运失败！${monster.name} -1 血层并激怒（攻击+2）！` });
     } else {
+      // 最后 1 血层 + enrage 结果：按卡面字面 -1 血层 → 怪物失去最后一层 → 击杀。
+      // 走标准 MONSTER_DEFEATED 流程（boss 变身 / 复生 / 临终遗言 / 击杀奖励等都自动处理）。
+      // +2 攻击的"激怒"在这里无意义（怪物已死），不再叠加。
       patch.activeCards = state.activeCards.map(c => {
         if (!c || c.id !== monsterId) return c;
-        return {
-          ...c,
-          attack: (c.attack ?? c.value) + 2,
-          value: (c.attack ?? c.value) + 2,
-        };
+        return { ...c, currentLayer: 0, hp: 0 };
       }) as typeof state.activeCards;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `锻造赌运失败：${monster.name} 已是最后血层，激怒（攻击+2）！` } });
-      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, banner: `锻造赌运失败！${monster.name} 激怒（攻击+2）！` });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `锻造赌运失败：${monster.name} 失去最后 1 血层，被击败！` } });
+      enqueuedActions.push({ type: 'MONSTER_DEFEATED', monsterId: monster.id });
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, banner: `锻造赌运失败！${monster.name} 失去最后 1 血层！` });
     }
   }
 

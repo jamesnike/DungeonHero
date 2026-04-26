@@ -610,16 +610,17 @@ function reduceResolveDice(
             { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'magic' as any, message: `锻造赌运失败：${mName} 失去 1 血层（${oldLayers}→${oldLayers - 1}）并激怒（攻击+2）！`, timestamp: Date.now() } } as GameAction,
           );
         } else {
+          // 最后 1 血层 + enrage：-1 血层 → 怪物被击败。走标准 MONSTER_DEFEATED 流程。
+          // 与 cards.ts:reduceResolveRepairEnrageDice 同分支保持一致。
           newState = {
             ...newState,
             activeCards: newState.activeCards.map(c =>
-              c?.id === mId
-                ? { ...c, attack: mAtk + 2, value: mAtk + 2 }
-                : c,
+              c?.id === mId ? { ...c, currentLayer: 0, hp: 0 } : c,
             ) as typeof newState.activeCards,
           };
           enqueuedActions.push(
-            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'magic' as any, message: `锻造赌运失败：${mName} 已是最后血层，激怒（攻击+2）！`, timestamp: Date.now() } } as GameAction,
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'magic' as any, message: `锻造赌运失败：${mName} 失去最后 1 血层，被击败！`, timestamp: Date.now() } } as GameAction,
+            { type: 'MONSTER_DEFEATED', monsterId: mId } as GameAction,
           );
         }
       }

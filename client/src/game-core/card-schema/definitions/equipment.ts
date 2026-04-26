@@ -9,7 +9,7 @@ import type { OnEquipHandler } from '../on-equip';
 import { registerOnEquipAll } from '../on-equip';
 import type { EquipmentSlotId } from '@/components/game-board/types';
 import { DURABILITY_CAP, clampMaxDurability } from '../../constants';
-import { applySlotArmorBonusDelta } from '../../equipment';
+import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../../equipment';
 
 const otherSlot = (s: EquipmentSlotId): EquipmentSlotId =>
   s === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -21,6 +21,7 @@ const tempAttack2: OnEquipHandler = (state, card, slotId, patch, sideEffects) =>
   base[slotId] = (base[slotId] ?? 0) + 2;
   patch.slotTempAttack = base;
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：该装备栏临时攻击 +2！` } });
+  checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
 const tempAttack3: OnEquipHandler = (state, card, slotId, patch, sideEffects) => {
@@ -28,6 +29,7 @@ const tempAttack3: OnEquipHandler = (state, card, slotId, patch, sideEffects) =>
   base[slotId] = (base[slotId] ?? 0) + 3;
   patch.slotTempAttack = base;
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：该装备栏临时攻击 +3！` } });
+  checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
 const gold6: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
@@ -41,6 +43,7 @@ const allTempAttack2: OnEquipHandler = (state, card, _slotId, patch, sideEffects
   base.equipmentSlot2 = (base.equipmentSlot2 ?? 0) + 2;
   patch.slotTempAttack = base;
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：所有装备栏临时攻击 +2！` } });
+  checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
 const tempArmor3: OnEquipHandler = (state, card, slotId, patch, sideEffects) => {
@@ -49,6 +52,7 @@ const tempArmor3: OnEquipHandler = (state, card, slotId, patch, sideEffects) => 
   patch.slotTempArmor = base;
   applySlotArmorBonusDelta(state, slotId, 3, patch);
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：该装备栏临时护甲 +3！` } });
+  checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
 const persuadeBonus10: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {

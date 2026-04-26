@@ -385,6 +385,42 @@ export function computeAmuletEffectsForState(state: GameState): ActiveAmuletEffe
 }
 
 /**
+ * 怀柔之印 (Mercy Seal) trigger helper.
+ *
+ * Card text: "每次获得一次临时攻击或临时护甲加成时，下次劝降率 +10%（强化后 +20%）"
+ *
+ * **Strict semantic**: only call this when the player **genuinely gains** a
+ * temporary attack or temporary armor bonus. Do NOT call on:
+ * - Aura re-application (Strength / Balance during waterfall — continuous, not a "gain")
+ * - Stat swap (e.g. swap-slot-damage-shield — moves existing values, no net gain)
+ * - Bonus consumption (e.g. persuade-bonus-to-temp-attack — converts the bonus, doesn't grant a new one in addition)
+ * - Decrement / clamp on temp-armor expire
+ *
+ * The helper is **patch-aware**: it reads `patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus`,
+ * so it composes correctly when called multiple times within the same reducer
+ * step (each call stacks on the running total).
+ *
+ * Idempotent for non-equipped: when 怀柔之印 is not equipped (or its derived
+ * `persuadeOnTempAttackCount === 0`), this is a noop.
+ */
+export function checkPersuadeOnTempAttack(
+  state: GameState,
+  patch: Partial<GameState>,
+  sideEffects: Array<{ event: 'log:entry'; payload: { type: 'equip'; message: string } } | any>,
+): void {
+  const ae = computeAmuletEffectsForState(state);
+  if (ae.persuadeOnTempAttackCount <= 0) return;
+  const pBonus = ae.persuadeOnTempAttackBonus;
+  const prev = patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0;
+  const next = prev + pBonus;
+  patch.persuadeAmuletBonus = next;
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%（累计 +${next}%）` },
+  });
+}
+
+/**
  * Hook-side aggregator: same merge as `computeAmuletEffectsForState` but
  * accepts `(amuletSlots, eternalRelics)` directly so React selectors can
  * subscribe to the two slices independently.
