@@ -192,3 +192,86 @@ describe('Boss 召唤 — 非怪物堆叠 contract', () => {
     expect(next.activeCards.filter(c => c?.type === 'monster').length).toBe(3);
   });
 });
+
+describe('Boss 召唤 — 召唤的怪物恢复 1 血层', () => {
+  it('多血层怪物：进场时 currentLayer = 2（而不是 1），受 fury 上限封顶', () => {
+    const boss = makeBoss();
+    // 4-fury monster：进场后 currentLayer 应该是 min(2, 4) = 2
+    const m1 = makeMonster('grave-m1', '巨龙', { fury: 4, hpLayers: 4 });
+    const m2 = makeMonster('grave-m2', '泰坦', { fury: 3, hpLayers: 3 });
+
+    const state = makeState({
+      activeCards: [boss, null, null, null] as any,
+      activeCardStacks: {},
+      discardedCards: [m1, m2],
+      combatState: { ...initialCombatState, engagedMonsterIds: [] },
+    });
+
+    const r = reduce(state, {
+      type: 'BEGIN_COMBAT',
+      monster: boss,
+      initiator: 'player',
+    } as any);
+
+    const next = r.state;
+    const summoned = next.activeCards.filter(c => c?.type === 'monster' && c.id !== boss.id);
+    expect(summoned.length).toBe(2);
+    // 两只都该是 currentLayer = 2（min(2, 4) = 2，min(2, 3) = 2）
+    for (const m of summoned) {
+      expect(m!.currentLayer).toBe(2);
+    }
+  });
+
+  it('1-fury 怪物：clamp 到 1（恢复后还是 1 层，不会越过上限）', () => {
+    const boss = makeBoss();
+    // 1-fury monster：进场时 currentLayer = min(2, 1) = 1（不变）
+    const m1 = makeMonster('grave-m1', '骷髅', { fury: 1, hpLayers: 1 });
+    const m2 = makeMonster('grave-m2', '哥布林', { fury: 1, hpLayers: 1 });
+
+    const state = makeState({
+      activeCards: [boss, null, null, null] as any,
+      activeCardStacks: {},
+      discardedCards: [m1, m2],
+      combatState: { ...initialCombatState, engagedMonsterIds: [] },
+    });
+
+    const r = reduce(state, {
+      type: 'BEGIN_COMBAT',
+      monster: boss,
+      initiator: 'player',
+    } as any);
+
+    const next = r.state;
+    const summoned = next.activeCards.filter(c => c?.type === 'monster' && c.id !== boss.id);
+    expect(summoned.length).toBe(2);
+    for (const m of summoned) {
+      expect(m!.currentLayer).toBe(1);
+    }
+  });
+
+  it('混合 fury：每只独立 clamp 到自己的 maxLayers', () => {
+    const boss = makeBoss();
+    const m1 = makeMonster('grave-m1', '骷髅', { fury: 1, hpLayers: 1 }); // -> 1
+    const m2 = makeMonster('grave-m2', '巨魔', { fury: 5, hpLayers: 5 }); // -> 2
+
+    const state = makeState({
+      activeCards: [boss, null, null, null] as any,
+      activeCardStacks: {},
+      discardedCards: [m1, m2],
+      combatState: { ...initialCombatState, engagedMonsterIds: [] },
+    });
+
+    const r = reduce(state, {
+      type: 'BEGIN_COMBAT',
+      monster: boss,
+      initiator: 'player',
+    } as any);
+
+    const next = r.state;
+    const summoned = next.activeCards.filter(c => c?.type === 'monster' && c.id !== boss.id);
+    expect(summoned.length).toBe(2);
+    const byId = Object.fromEntries(summoned.map(m => [m!.id, m]));
+    expect(byId['grave-m1']!.currentLayer).toBe(1);
+    expect(byId['grave-m2']!.currentLayer).toBe(2);
+  });
+});

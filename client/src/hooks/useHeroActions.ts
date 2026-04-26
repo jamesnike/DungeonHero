@@ -315,42 +315,6 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
   );
 
   // ---------------------------------------------------------------------------
-  // resolveHolyLightChoice
-  // ---------------------------------------------------------------------------
-
-  const resolveHolyLightChoice = useCallback(
-    (choice: 'heal' | 'purge') => {
-      if (!pendingHeroMagicAction || pendingHeroMagicAction.id !== 'holy-light') {
-        return;
-      }
-      dispatch({ type: 'RESOLVE_HERO_MAGIC_TARGET', choice });
-    },
-    [pendingHeroMagicAction],
-  );
-
-  // ---------------------------------------------------------------------------
-  // handleHolyLightMonsterCleanse
-  // ---------------------------------------------------------------------------
-
-  const handleHolyLightMonsterCleanse = useCallback(
-    (monster: GameCardData) => {
-      if (!pendingHeroMagicAction || pendingHeroMagicAction.id !== 'holy-light') {
-        return false;
-      }
-      if (pendingHeroMagicAction.step !== 'monster-select') {
-        return false;
-      }
-      if (monster.type !== 'monster') {
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '请选择一个怪物。' });
-        return false;
-      }
-      dispatch({ type: 'RESOLVE_HERO_MAGIC_TARGET', monsterId: monster.id });
-      return true;
-    },
-    [pendingHeroMagicAction],
-  );
-
-  // ---------------------------------------------------------------------------
   // cancelHeroSkillAction / cancelHeroMagicAction / cancelPotionAction
   // ---------------------------------------------------------------------------
 
@@ -760,15 +724,6 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     [startHeroMagicActivation],
   );
 
-  const handleHeroMagicChoice = useCallback(
-    (choice: 'heal' | 'purge') => {
-      if (depsRef.current.fullBoardInteractionLockedRef.current) return;
-      depsRef.current.pushUndoSnapshot();
-      resolveHolyLightChoice(choice);
-    },
-    [resolveHolyLightChoice],
-  );
-
   // ---------------------------------------------------------------------------
   // Event listeners — UI reactions to reducer side-effects
   // ---------------------------------------------------------------------------
@@ -890,8 +845,6 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     resetHeroSkillForNewWave,
     addHeroMagicGauge,
     startHeroMagicActivation,
-    resolveHolyLightChoice,
-    handleHolyLightMonsterCleanse,
     cancelHeroSkillAction,
     cancelHeroMagicAction,
     cancelPotionAction,
@@ -918,7 +871,6 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
     handleHeroSkillButtonClick,
     handleExtraHeroSkillButtonClick,
     handleHeroMagicTrigger,
-    handleHeroMagicChoice,
     honorSweepUpgradesPending,
     clearHonorSweepUpgrades: () => dispatch({ type: 'SET_GAME_FLAGS', patch: { honorSweepUpgradesPending: 0 } }),
   };

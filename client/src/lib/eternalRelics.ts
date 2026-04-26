@@ -183,6 +183,93 @@ export function hasEternalRelic(relics: EternalRelic[], id: EternalRelicId): boo
   return relics.some(r => r.id === id);
 }
 
+/**
+ * Count how many copies of a given relic id are present in `relics`.
+ *
+ * Used by stackable relics (currently `chain-persuade`, `equip-empower`,
+ * `end-turn-draw`) — each successive use of the granting potion pushes another
+ * copy into `state.eternalRelics`, and consumers multiply their magnitude by
+ * the count returned here.
+ */
+export function countEternalRelics(relics: EternalRelic[], id: EternalRelicId): number {
+  let n = 0;
+  for (const r of relics) if (r.id === id) n++;
+  return n;
+}
+
+/**
+ * Set of relic ids whose granting potions are stackable. The set is used by
+ * the bar UI to decide whether to display a `×N` stack badge and by the detail
+ * modal to append a per-stack bonus description. Granting code itself reads
+ * the `stackable` flag on the `grantEternalRelic` CardEffect — keep these two
+ * sources of truth in sync when adding a new stackable potion.
+ */
+export const STACKABLE_RELIC_IDS: ReadonlySet<EternalRelicId> = new Set<EternalRelicId>([
+  'chain-persuade',
+  'equip-empower',
+  'end-turn-draw',
+]);
+
+export function isRelicStackable(id: EternalRelicId): boolean {
+  return STACKABLE_RELIC_IDS.has(id);
+}
+
+export interface DedupedRelic {
+  relic: EternalRelic;
+  count: number;
+}
+
+/**
+ * Group `relics` by id, preserving first-occurrence order. Stackable relics
+ * (`STACKABLE_RELIC_IDS`) collapse into a single entry with `count > 1`;
+ * non-stackable relics always show count=1 even if duplicates somehow exist
+ * (defensive — the granting path normally blocks dupes for them).
+ *
+ * Used by the `EternalRelicBar` to render one icon per relic id with an
+ * optional `×N` badge instead of N visually identical icons.
+ */
+export function dedupeRelics(relics: EternalRelic[]): DedupedRelic[] {
+  const order: string[] = [];
+  const map = new Map<string, DedupedRelic>();
+  for (const r of relics) {
+    const key = r.id;
+    const existing = map.get(key);
+    if (existing) {
+      if (isRelicStackable(r.id)) existing.count += 1;
+    } else {
+      order.push(key);
+      map.set(key, { relic: r, count: 1 });
+    }
+  }
+  return order.map(k => map.get(k)!);
+}
+
+/**
+ * Render a human-readable stacked description for a relic.
+ *
+ * Returns a string suffix (NOT including the base `relic.description`) that
+ * shows the player the *current* aggregate magnitude after stacking, e.g.
+ *   - chain-persuade ×2 → "（已叠加 ×2，连续劝降每次累计 +30%）"
+ *   - equip-empower ×3 → "（已叠加 ×3，装备时该栏 +9 临时攻击 / +9 临时护甲）"
+ *   - end-turn-draw ×2 → "（已叠加 ×2，每回合结束抽 2 张）"
+ *
+ * Returns empty string when count <= 1 (or when the relic has no stack-aware
+ * description).
+ */
+export function getRelicStackedSuffix(id: EternalRelicId, count: number): string {
+  if (count <= 1) return '';
+  switch (id) {
+    case 'chain-persuade':
+      return `（已叠加 ×${count}，连续劝降每次累计 +${15 * count}%）`;
+    case 'equip-empower':
+      return `（已叠加 ×${count}，装备时该栏 +${3 * count} 临时攻击 / +${3 * count} 临时护甲）`;
+    case 'end-turn-draw':
+      return `（已叠加 ×${count}，每回合结束抽 ${count} 张）`;
+    default:
+      return `（已叠加 ×${count}）`;
+  }
+}
+
 const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus', 'end-turn-draw', 'missile-amplify-on-waterfall', 'missile-stun-20', 'missile-draw-1', 'waterfall-draw-2']);
 
 export function getSelectableRelics(exclude: EternalRelicId[]): EternalRelic[] {

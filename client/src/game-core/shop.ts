@@ -11,6 +11,7 @@ import { nextInt, shuffle as rngShuffle } from './rng';
 import { cloneClassCardWithFreshId } from './cardClone';
 import { filterAvailableClassPool, isUniqueLocked, markUniqueAcquired } from './uniqueClass';
 import { getStarterBaseId } from './deck';
+import { applySlotArmorBonusDelta } from './equipment';
 import {
   SHOP_MAX_OFFERINGS,
   SHOP_REQUIRED_TYPES,
@@ -422,11 +423,15 @@ export function applyMonsterRewardPure(
           [bonusType]: (state.equipmentSlotBonuses[slotId]?.[bonusType] ?? 0) + val,
         },
       };
+      const patch: Partial<GameState> = {
+        equipmentSlotBonuses: newBonuses as typeof state.equipmentSlotBonuses,
+        heroSkillBanner: `${slotLabel}槽永久${bonusLabel} +${val}`,
+      };
+      if (bonusType === 'shield' && val !== 0) {
+        applySlotArmorBonusDelta(state, slotId, val, patch);
+      }
       return {
-        patch: {
-          equipmentSlotBonuses: newBonuses as typeof state.equipmentSlotBonuses,
-          heroSkillBanner: `${slotLabel}槽永久${bonusLabel} +${val}`,
-        },
+        patch,
         logMessage: `战利品：${slotLabel}槽永久${bonusLabel} +${val}`,
       };
     }

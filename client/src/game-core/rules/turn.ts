@@ -26,7 +26,7 @@ import {
   BALANCE_SHIELD_PENALTY,
   BASE_BACKPACK_CAPACITY,
 } from '../constants';
-import { computeAmuletEffects } from '../equipment';
+import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import type { RngState } from '../rng';
 import { nextInt } from '../rng';
@@ -129,6 +129,36 @@ function reduceEndTurn(
     }
   }
 
+  // 「回合汲取」永恒护符（`end-turn-draw`，由 `回合汲取药` `grant-amulet-end-turn-draw`
+  // 授予；也覆盖玩家通过 `护符永铸药` 把任意 `end-turn-draw` amulet 永铸进 eternalRelics
+  // 的情况）：每次结束英雄回合时，按 N 件叠加从背包抽 N 张牌。
+  //
+  // Bug 历史：本逻辑在 1.2.2 还是 hook-side 实现（`useCombatActions.endHeroTurn`
+  // 直接调 `drawFromBackpackToHand`），后来 `endHeroTurn` 迁移成 dispatch
+  // `END_TURN` 给 reducer，旧 hook 的抽牌代码被删除但**没有**搬到 reducer 这边
+  // → 玩家体感「永铸完了护符没效果」。补一条 enqueue 让它复活。
+  //
+  // 抽牌来源：背包（默认且唯一正确语义；见 `draw-cards-defaults-to-backpack.mdc`）。
+  // 字段读取：`computeAmuletEffectsForState` 已合并 amuletSlots + eternalRelics
+  // （见 `parallel-state-fields-consumer-audit.mdc`），所以装备形态 / 永铸形态
+  // 走同一路径。
+  const endTurnDrawActions: GameAction[] = [];
+  const ae = computeAmuletEffectsForState(state);
+  if (ae.endTurnDrawCount > 0) {
+    endTurnDrawActions.push({
+      type: 'DRAW_CARDS',
+      count: ae.endTurnDrawCount,
+      source: 'backpack',
+    });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: {
+        type: 'amulet',
+        message: `回合汲取：结束英雄回合，从背包抽 ${ae.endTurnDrawCount} 张牌。`,
+      },
+    });
+  }
+
   // Convert hero-turn-end skill triggers (elite regen, dragon heal-other) into
   // TRIGGER_MONSTER_SKILL_FLOAT actions. They go FIRST so the float queue
   // freezes the pipeline before any subsequent monster-turn advancement runs.
@@ -138,16 +168,20 @@ function reduceEndTurn(
     skillKey: f.skillKey,
   }));
 
-  // If combat ended (no engaged monsters), no need to advance
+  // If combat ended (no engaged monsters), no need to advance.
+  // Order: end-turn-draw first (跟 1.2.2 hook-side 行为一致，先抽再触发 float),
+  // skill floats next (保证 awaitingSkillFloat 在任何后续 race 之前就位).
   if (result.combatState.engagedMonsterIds.length === 0) {
+    const followUps = [...endTurnDrawActions, ...skillFloatActions];
     return applyPatch(state, {
       ...patch,
       phase: 'playerInput',
-    }, sideEffects, skillFloatActions.length > 0 ? skillFloatActions : undefined);
+    }, sideEffects, followUps.length > 0 ? followUps : undefined);
   }
 
-  // Enqueue the monster turn advancement (after any skill float queued above)
+  // Enqueue the monster turn advancement (after any draw + skill float queued above)
   return applyPatch(state, patch, sideEffects, [
+    ...endTurnDrawActions,
     ...skillFloatActions,
     { type: 'ADVANCE_MONSTER_TURN' },
   ]);
@@ -477,7 +511,7 @@ function reduceStartTurn(
   // This branch only fires in edge cases where the flag is still false (e.g.
   // brand-new game before the first waterfall has touched the temp slots).
   if (!action.suppressAmuletReapply && !state.amuletAuraAppliedThisWave) {
-    const ae = computeAmuletEffects(state.amuletSlots as import('@/components/GameCard').GameCardData[]);
+    const ae = computeAmuletEffectsForState(state);
     let auraApplied = false;
     if (ae.strengthCount > 0) {
       const n = ae.strengthCount;
@@ -503,6 +537,8 @@ function reduceStartTurn(
       tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + BALANCE_SHIELD_BONUS * n;
       patch.slotTempAttack = tempAttack;
       patch.slotTempArmor = tempArmor;
+      applySlotArmorBonusDelta(state, 'equipmentSlot1', -BALANCE_SHIELD_PENALTY * n, patch);
+      applySlotArmorBonusDelta(state, 'equipmentSlot2', BALANCE_SHIELD_BONUS * n, patch);
       sideEffects.push({
         event: 'log:entry',
         payload: { type: 'amulet', message: `均衡护符：左栏临时攻击+${BALANCE_ATTACK_BONUS * n}护甲-${BALANCE_SHIELD_PENALTY * n}，右栏临时护甲+${BALANCE_SHIELD_BONUS * n}攻击-${BALANCE_ATTACK_PENALTY * n}` },

@@ -35,10 +35,10 @@ import {
   markSkillUsedPure,
 } from '../hero';
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
-import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
+import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, clearSlotAndPromoteReserve } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
-import { computeAmuletEffects, getEquipmentInSlot, getSlotBonus } from '../equipment';
+import { computeAmuletEffectsForState, getEquipmentInSlot, getSlotBonus, applySlotArmorBonusDelta, refillSlotArmorToCap } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { applyFlipCounters } from './flip-counters';
 import { nextInt, pickRandom } from '../rng';
@@ -187,6 +187,7 @@ function reduceUseHeroSkill(
         const bonuses = { ...(state.equipmentSlotBonuses ?? {}) };
         bonuses[emptySlot] = { ...(bonuses[emptySlot] ?? {}), shield: ((bonuses[emptySlot] as any)?.shield ?? 0) + 1 };
         patch.equipmentSlotBonuses = bonuses as typeof state.equipmentSlotBonuses;
+        applySlotArmorBonusDelta(state, emptySlot, 1, patch);
         const otherSlot: EquipmentSlotId = emptySlot === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
         const otherItem = otherSlot === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
         if (otherItem) {
@@ -357,6 +358,14 @@ function reduceResolveHeroSkillTarget(
         patch[otherSlot] = null as any;
         sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `虚位铸甲：「${(otherItem as GameCardData).name}」移至强化槽位` } });
       }
+      // Single-counter armor model: refill armor for the (newly-occupied) slot
+      // since both perm.shield bumped and (potentially) the item just landed.
+      // SET_EQUIPMENT_SLOT path already refills on equip; we only need to
+      // explicitly handle the perm.shield delta here when we did NOT move an
+      // item into the slot (i.e. it stays empty — no-op since slot is empty).
+      // When otherItem moved in, patch[slotId] is set BEFORE refill so the
+      // helper sees the new item and refills it to cap.
+      refillSlotArmorToCap(state, slotId, patch);
       Object.assign(patch, markSkillUsedPure(state, pending.skillId as any));
       patch.pendingHeroSkillAction = null;
       patch.heroSkillBanner = '装备槽永久护甲 +1。';
@@ -683,7 +692,7 @@ function reduceActivateHeroMagic(
       let destroyedCount = 0;
       const destroyedCards: GameCardData[] = [];
 
-      const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+      const amuletEffects = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
 
       for (const { slotId: sid, stack } of slotStacks) {
         const survivorsTopDown: GameCardData[] = [];
@@ -795,14 +804,17 @@ function reduceActivateHeroMagic(
     }
 
     case 'holy-light': {
-      patch.pendingHeroMagicAction = {
-        id: 'holy-light',
-        step: 'choice',
-        origin,
-        prompt: '选择圣光效果：回满血 或 净化一个怪物的怒气。',
-      } as any;
-      patch.heroSkillBanner = '选择圣光效果：回满血 或 净化一个怪物的怒气。';
-      return applyPatch(state, patch, sideEffects);
+      const heroMaxHp = computeMaxHp(state);
+      const healed = Math.max(0, heroMaxHp - state.hp);
+      patch.hp = heroMaxHp;
+      const banner = healed > 0 ? `圣光恢复了 ${healed} 点生命。` : '生命已满，圣光充能被清空。';
+      patch.heroSkillBanner = banner;
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'magic', message: `圣光发动（回满生命）：${banner}` },
+      });
+      enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
     case 'berserker-rage': {
@@ -854,8 +866,8 @@ function reduceCompleteHeroMagic(
   });
 
   // 英雄魔法完成时纳入 transform 链。COMPLETE_HERO_MAGIC 是所有成功完成路径
-  // （同步：monster-doom / berserker-rage / revive-blessing 单装备；交互：
-  // holy-light / revive-blessing 多装备 → APPLY_REVIVE_BLESSING）的汇聚点。
+  // （同步：holy-light / monster-doom / berserker-rage / revive-blessing 单装备；
+  // 交互：revive-blessing 多装备 → APPLY_REVIVE_BLESSING）的汇聚点。
   // 失败的早期退出（未掌握、pending、未充能、no-equipment 等）不会走到这里。
   const syntheticHeroMagicCard = {
     id: magicId,
@@ -885,56 +897,7 @@ function reduceResolveHeroMagicTarget(
   const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
 
-  if (pending.id === 'holy-light') {
-    if (action.choice === 'heal') {
-      const heroMaxHp = computeMaxHp(state);
-      const healed = Math.max(0, heroMaxHp - state.hp);
-      patch.hp = heroMaxHp;
-      const banner = healed > 0 ? `圣光恢复了 ${healed} 点生命。` : '生命已满，圣光充能被清空。';
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `圣光发动（回满生命）：${banner}` } });
-      patch.heroSkillBanner = banner;
-      patch.pendingHeroMagicAction = null;
-      enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: pending.origin ?? 'gauge' });
-    } else if (action.choice === 'purge') {
-      const monsters = (state.activeCards as (GameCardData | null)[]).filter(
-        (c): c is GameCardData => c != null && c.type === 'monster',
-      );
-      if (monsters.length === 0) {
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '圣光净化失败：场上没有怪物。' } });
-        patch.heroSkillBanner = '场上没有怪物可以净化。';
-        patch.pendingHeroMagicAction = null;
-        enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: pending.origin ?? 'gauge' });
-      } else if (monsters.length === 1) {
-        const m = monsters[0];
-        const updated = (state.activeCards as any[]).map(slot => {
-          if (!slot || slot.id !== m.id) return slot;
-          return { ...slot, fury: 0, hpLayers: 1, currentLayer: 1, hp: slot.maxHp ?? slot.hp ?? slot.value ?? 0 };
-        });
-        patch.activeCards = updated;
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `圣光发动（净化怒气）：${m.name} 的怒气被净化！` } });
-        patch.heroSkillBanner = `${m.name} 的怒气被圣光净化！`;
-        patch.pendingHeroMagicAction = null;
-        enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: pending.origin ?? 'gauge' });
-      } else {
-        patch.pendingHeroMagicAction = { ...pending, step: 'monster-select', prompt: '选择一个怪物以净化其怒气。' };
-        patch.heroSkillBanner = '选择一个怪物以净化其怒气。';
-      }
-    } else if (action.monsterId && pending.step === 'monster-select') {
-      const updated = (state.activeCards as any[]).map(slot => {
-        if (!slot || slot.id !== action.monsterId) return slot;
-        return { ...slot, fury: 0, hpLayers: 1, currentLayer: 1, hp: slot.maxHp ?? slot.hp ?? slot.value ?? 0 };
-      });
-      const target = (state.activeCards as any[]).find(c => c?.id === action.monsterId);
-      patch.activeCards = updated;
-      const name = target?.name ?? '怪物';
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `圣光发动（净化怒气）：${name} 的怒气被净化！` } });
-      patch.heroSkillBanner = `${name} 的怒气被圣光净化！`;
-      patch.pendingHeroMagicAction = null;
-      enqueuedActions.push({ type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: pending.origin ?? 'gauge' });
-    } else {
-      return noChange(state);
-    }
-  } else if (pending.id === 'revive-blessing' && action.slotId) {
+  if (pending.id === 'revive-blessing' && action.slotId) {
     enqueuedActions.push({ type: 'APPLY_REVIVE_BLESSING', slotId: action.slotId });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   } else {
@@ -1081,7 +1044,7 @@ function checkPersuadeOnTempAttack(
   patch: Partial<GameState>,
   sideEffects: SideEffect[],
 ): void {
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+  const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
   if (ae.persuadeOnTempAttackCount <= 0) return;
   const pBonus = ae.persuadeOnTempAttackBonus;
   const newBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
@@ -1195,24 +1158,6 @@ function reduceMagicSlotSelection(
         `${label} 临时攻击力 +${burstAmount}。${echoText}`);
     }
 
-    case 'apprentice-rally': {
-      // 学徒鼓舞（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时攻击。
-      // 与 weapon-burst 同形态（A 类回响，amount × echoMultiplier），差异：
-      //   - 固定 1 点（不随 upgradeLevel 缩放，因为 maxUpgradeLevel:0）
-      //   - 用 pending.card.name 走 banner，文案显示「学徒鼓舞」而非沿用「战斗鼓舞」
-      // 允许选空槽（与 weapon-burst 一致），效果保留至该槽装备进入时仍生效。
-      const labelRally = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
-      const echoMulRally = (pending as any).echoMultiplier ?? 1;
-      const rallyAmount = 1 * echoMulRally;
-      const curTempAtkRally = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
-      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtkRally + rallyAmount };
-      checkPersuadeOnTempAttack(state, patch, sideEffects);
-      const echoTextRally = echoMulRally > 1 ? `（回响×${echoMulRally}）` : '';
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：${labelRally} +${rallyAmount} 临时攻击${echoTextRally}` } });
-      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `${pending.card.name}：${labelRally} 临时攻击力 +${rallyAmount}。${echoTextRally}`);
-    }
-
     case 'temp-attack-double': {
       // 锋芒倍增：选定装备栏的临时攻击 +2 后整体翻倍。
       // 公式：final = (curTempAtk + 2*echo) * 2
@@ -1245,6 +1190,7 @@ function reduceMagicSlotSelection(
       const curTempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
       patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + totalAmt };
       patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTempArm + totalAmt };
+      if (totalAmt !== 0) applySlotArmorBonusDelta(state, slotId, totalAmt, patch);
       checkPersuadeOnTempAttack(state, patch, sideEffects);
       const drawnNames: string[] = [];
       for (let i = 0; i < drawCount; i++) {
@@ -1260,6 +1206,68 @@ function reduceMagicSlotSelection(
       const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `攻防协律：${label} +${totalAmt} 临攻 +${totalAmt} 临护${drawMsg}。${echoTag}`);
+    }
+
+    case 'amplify-equipment-shift': {
+      // 淬铸迁位：选定装备栏 → 同名增幅（按 NAME 全场累计）；若另一栏为空，
+      // 把所选装备从原栏移到空位（原栏走 clearSlotAndPromoteReserve 自动 promote）。
+      //
+      // 设计要点：
+      // - 只允许选「有装备」的栏：空槽则拒绝（banner 提示 + 不消耗 magic）。
+      //   reducer 走 applyPatch 而非 applyFinalizeMagic，pendingMagicAction 保留，
+      //   玩家可重选；与 durability-charge-burst 的拒绝写法一致。
+      // - 增幅范围按 cardName 走 AMPLIFY_CARDS_BY_NAME：影响所有同名副本（手牌 /
+      //   背包 / 装备槽 / 储备 / 坟场 / 回收袋 / 职业牌组 / 地下城行）—— 包含被选中
+      //   的这件装备本身（无论它接下来是否被搬到空位）。
+      // - Echo (A 类)：增幅 amount = 1 × echoMultiplier（多次叠加），通过单一
+      //   AMPLIFY_CARDS_BY_NAME action 一次写入即等价于 N 次 +1（因为该 reducer
+      //   按 cardName 累计 amplifiedCardBonus）；「移到空位」最多发生 1 次（不在
+      //   echo 循环内重复）。
+      // - 移动语义参考 `applyEquipSwap` (potion-effects.ts)：
+      //   1. 把所选装备的副本写到空槽（带 fromSlot 改为新槽，避免 stale fromSlot
+      //      触发 GameBoard isCardFromEquipmentSlot 路径误判）；
+      //   2. 原槽走 clearSlotAndPromoteReserve（reserve 顶上来或置 null）。
+      // - 不设升级（卡设计上无 upgradeLevel 分支）。
+      if (!slotItem) {
+        patch.heroSkillBanner = '该装备栏为空，请选择有装备的栏。';
+        return applyPatch(state, patch, sideEffects);
+      }
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const amplifyAmount = 1 * echoMul;
+      const targetName = slotItem.name;
+
+      // 1) 全场同名增幅
+      enqueuedActions.push({
+        type: 'AMPLIFY_CARDS_BY_NAME',
+        cardName: targetName,
+        amount: amplifyAmount,
+        source: '淬铸迁位',
+      });
+
+      // 2) 若另一栏为空，把所选装备搬过去；最多发生一次（echo 不重复）
+      const otherSlotId: EquipmentSlotId = slotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+      const otherItem = state[otherSlotId];
+      let movedTo: EquipmentSlotId | null = null;
+      if (!otherItem) {
+        (patch as any)[otherSlotId] = { ...slotItem, fromSlot: otherSlotId };
+        clearSlotAndPromoteReserve(state, slotId, patch);
+        movedTo = otherSlotId;
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'magic', message: `淬铸迁位：${targetName} 移到${otherSlotId === 'equipmentSlot1' ? '左' : '右'}槽。` },
+        });
+      }
+
+      const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
+      const moveMsg = movedTo
+        ? `，并换到${movedTo === 'equipmentSlot1' ? '左' : '右'}槽`
+        : '';
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'magic', message: `淬铸迁位：${targetName} 增幅 +${amplifyAmount}${moveMsg}。${echoTag}` },
+      });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `淬铸迁位：${targetName} +${amplifyAmount}${moveMsg}。${echoTag}`);
     }
 
     case 'durability-charge-burst': {
@@ -1588,7 +1596,7 @@ function reduceMagicSlotSelection(
       const isFlank = (pending as any).isFlank ?? false;
       let stunText = '';
       if (isFlank && !target.isStunned) {
-        const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+        const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
         const effectiveFlankStun = Math.min(40 + (ae.stunRateBoost ?? 0), state.stunCap ?? 0);
         const threshold = Math.round((effectiveFlankStun / 100) * 20);
         if (threshold > 0) {
@@ -1624,25 +1632,44 @@ function reduceMagicSlotSelection(
       const armorBonus = (3 + useCount) * echoMulFF;
       const curTA = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
       patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTA + armorBonus };
+      if (armorBonus !== 0) applySlotArmorBonusDelta(state, slotId, armorBonus, patch);
       checkPersuadeOnTempAttack(state, patch, sideEffects);
       const isFlank = (pending as any).isFlank ?? false;
       let flankText = '';
       if (isFlank) {
-        if (!(slotItem as any).hasEquipmentRevive || (slotItem as any).equipmentReviveUsed) {
-          patch[slotId] = { ...slotItem, hasEquipmentRevive: true, equipmentReviveUsed: false } as any;
-          flankText = ` 侧击触发：${slotItem.name} 获得复生！`;
-          sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `固壁侧守（侧击）：${slotItem.name} 获得复生能力` } });
-        } else {
-          flankText = ` 侧击触发：${slotItem.name} 已有复生，无额外效果。`;
+        const updatedSlot: any = { ...slotItem };
+        let durChanged = false;
+        if (typeof updatedSlot.durability === 'number' && updatedSlot.durability > 1) {
+          updatedSlot.durability = 1;
+          durChanged = true;
         }
+        let reviveGranted = false;
+        if (!updatedSlot.hasEquipmentRevive || updatedSlot.equipmentReviveUsed) {
+          updatedSlot.hasEquipmentRevive = true;
+          updatedSlot.equipmentReviveUsed = false;
+          reviveGranted = true;
+        }
+        patch[slotId] = updatedSlot;
+        const parts: string[] = [];
+        if (durChanged) parts.push('耐久减至 1');
+        if (reviveGranted) parts.push('获得复生');
+        flankText = parts.length > 0
+          ? ` 侧击触发：${slotItem.name} ${parts.join('，')}！`
+          : ` 侧击触发：${slotItem.name} 已为耐久 1 且已有复生，无额外变化。`;
+        sideEffects.push({ event: 'log:entry', payload: {
+          type: 'magic',
+          message: parts.length > 0
+            ? `固壁侧守（侧击）：${slotItem.name} ${parts.join('，')}`
+            : `固壁侧守（侧击）：${slotItem.name} 无额外变化（已耐久 1 且已有复生）`,
+        } });
       }
       const newUses = useCount + 1;
       const nextArmor = 3 + newUses;
       const updatedCard = {
         ...pending.card,
         _flankFortifyUses: newUses,
-        description: `永久：选择一个装备，+${nextArmor}（每次使用后数值 +1）临时护甲。侧击：赋予该装备复生。`,
-        magicEffect: `+${nextArmor}(递增) 临时护甲，侧击赋予复生。`,
+        description: `永久：选择一个装备，+${nextArmor}（每次使用后数值 +1）临时护甲。侧击：该装备耐久度减到 1，赋予该装备复生。`,
+        magicEffect: `+${nextArmor}(递增) 临时护甲，侧击：耐久减至 1+赋予复生。`,
       } as GameCardData;
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `固壁侧守：${slotItem.name} +${armorBonus} 临时护甲` } });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, updatedCard,
@@ -1668,6 +1695,7 @@ function reduceMagicSlotSelection(
       if (tempAtk > tempArm) {
         const delta = tempAtk - tempArm;
         patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: tempArm + delta };
+        if (delta !== 0) applySlotArmorBonusDelta(state, slotId, delta, patch);
         checkPersuadeOnTempAttack(state, patch, sideEffects);
         sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}` } });
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
@@ -1791,32 +1819,12 @@ function reduceMagicSlotSelection(
       const armorAmt = (armorAmounts[pending.card.upgradeLevel ?? 0] ?? 2) * Math.max(1, echoMul);
       const curTA = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
       patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTA + armorAmt };
+      if (armorAmt !== 0) applySlotArmorBonusDelta(state, slotId, armorAmt, patch);
       checkPersuadeOnTempAttack(state, patch, sideEffects);
       const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `铸甲术：${label} +${armorAmt} 临时护甲${echoTag}` } });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `${label} 获得 +${armorAmt} 临时护甲。${echoTag}`);
-    }
-
-    case 'apprentice-armor': {
-      // 学徒铸甲（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时护甲。
-      // 与 temp-armor 同形态（A 类回响，amount × echoMultiplier），差异：
-      //   - 固定 1 点（不随 upgradeLevel 缩放，因为 maxUpgradeLevel:0）
-      //   - 用 pending.card.name 走 banner，文案显示「学徒铸甲」而非沿用「铸甲术」
-      // 注意 echoMultiplier 字段名：apprentice-armor resolver 用的是 echoMultiplier
-      // （与 weapon-burst 一致），不是 temp-armor 的 echoRemaining；这是因为
-      // apprentice-armor 是 single-step 一次性结算，不需要 modal-echo 的 echoRemaining
-      // 字段——直接读 echoMultiplier × 即可。
-      const labelArmor = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
-      const echoMulArmor = (pending as any).echoMultiplier ?? 1;
-      const armorAmtAp = 1 * echoMulArmor;
-      const curTAArmor = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
-      patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTAArmor + armorAmtAp };
-      checkPersuadeOnTempAttack(state, patch, sideEffects);
-      const echoTagApArmor = echoMulArmor > 1 ? `（回响×${echoMulArmor}）` : '';
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：${labelArmor} +${armorAmtAp} 临时护甲${echoTagApArmor}` } });
-      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `${pending.card.name}：${labelArmor} 获得 +${armorAmtAp} 临时护甲。${echoTagApArmor}`);
     }
 
     case 'battle-spirit': {
@@ -1948,7 +1956,7 @@ function reduceMagicMonsterSelection(
   }
 
   // shield-slot 需要 slotId 指向 type='shield' 或 type='monster'（怪物装备既可当武器也可当盾），
-  // 且 armor>0 的装备槽。两种装备共用 RESOLVE_BLOCK 同款的 armor / armorBonusDamaged 公式，
+  // 且 armor>0 的装备槽。两种装备共用 RESOLVE_BLOCK 同款的单计数 armor 公式，
   // 自伤路径下都跳过所有 RESOLVE_BLOCK 专属机制（含 bone-regen / 怪物盾自动恢复）。
   if (targetType === 'shield-slot') {
     if (!action.slotId) return noChange(state);
@@ -2085,24 +2093,32 @@ function reduceMagicMonsterSelection(
 
     case 'blood-sacrifice-strike': {
       const hpToLose = (pending as any).hpLost ?? 0;
-      const baseDmg = (pending as any).pendingDamage ?? 0;
+      const baseDmgPerHit = (pending as any).pendingDamage ?? 0;
       const echoMulBSS = (pending as any).echoMultiplier ?? 1;
-      const totalDamage = baseDmg * echoMulBSS;
-      const echoTagBSS = echoMulBSS > 1 ? `（回响×${echoMulBSS}，仅伤害翻倍，献祭 HP 不翻倍）` : '';
-      // 献祭 HP 成本：无论目标是谁都先扣（与原行为一致）。
+      const dmgPerHit = baseDmgPerHit * echoMulBSS;
+      const totalDamage = dmgPerHit * 2;
+      const echoTagBSS = echoMulBSS > 1 ? `（回响×${echoMulBSS}，每次伤害 ×${echoMulBSS}，献祭 HP 不翻倍）` : '';
+      // 献祭 HP 成本：无论目标是谁都先扣（与原行为一致），一次性扣，不分裂。
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpToLose, source: 'general', selfInflicted: true });
       if (isHeroTarget) {
-        // 选 hero/盾 时再叠加一次法术伤害到自伤路径（选盾时盾会先吃 armor，溢出再扣血）。
+        // 自伤路径：consolidate 成一次 applySelfDamage（hero/盾 没有「两次之间结算」
+        // 的语义需求；与 stun-strike 等多段法术的自伤路径一致；盾路径如果分两次走
+        // applyShieldSlotSelfDamage 会基于同一 state 重复扣 armor，结果错误）。
         if (totalDamage > 0) {
           applySelfDamage(totalDamage, 'blood-sacrifice-strike');
         }
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `血祭裁决：献祭 ${hpToLose} 点生命，再对${targetName}造成 ${totalDamage} 点伤害！${echoTagBSS}`, { dealtDamage: true });
+          `血祭裁决：献祭 ${hpToLose} 点生命，再对${targetName}造成 ${dmgPerHit} 点伤害 ×2 次（共 ${totalDamage}）！${echoTagBSS}`, { dealtDamage: true });
       }
+      // 怪物路径：两次独立的 DEAL_DAMAGE_TO_MONSTER。pipeline 的 enqueueFront 让
+      // hit 1 enqueue 的所有 follow-up（MONSTER_DEFEATED / 掉层动画 / 怪物技能触发
+      // 等）排在 hit 2 之前结算；如果 hit 1 击杀，hit 2 通过 reduceDealDamageToMonster
+      // 入口的 `idx < 0 → noChange` 安全 no-op。
       ensureEngaged(state, monster!, enqueuedActions);
-      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: totalDamage, source: 'blood-sacrifice-strike', isSpellDamage: true });
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: dmgPerHit, source: 'blood-sacrifice-strike', isSpellDamage: true });
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster!.id, damage: dmgPerHit, source: 'blood-sacrifice-strike', isSpellDamage: true });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `血祭裁决：献祭 ${hpToLose} 点生命，对 ${monster!.name} 造成 ${totalDamage} 点伤害！${echoTagBSS}`, { dealtDamage: true });
+        `血祭裁决：献祭 ${hpToLose} 点生命，对 ${monster!.name} 造成 ${dmgPerHit} 点伤害 ×2 次（共 ${totalDamage}）！${echoTagBSS}`, { dealtDamage: true });
     }
 
     case 'scaling-damage': {
@@ -2892,6 +2908,12 @@ function reduceDungeonCardSelection(
         payload: { cellIndex: idx, fromCard: card, toCard: restored, message: `${card.name} → ${restored.name}` },
       });
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `血誓回卷：${card.name} 翻回 ${restored.name}。` } });
+      // Back-flip doesn't go through APPLY_CARD_FLIP, so we must fire the 7
+      // flip-counter consumers (flip-gold / 翻印之符 / 翻覆震慑 / 熔铸耐久 /
+      // 翻血之符 / 弧能之符 / 生长之盾) ourselves — same as 乾坤一翻 active-row
+      // back-flip in this file's `case 'flip-active-card'` and starterActiveRowFlip
+      // resolver in card-schema/definitions/magic.ts.
+      applyFlipCounters(state, patch, sideEffects, enqueuedActions);
       return applyFinalizeMagic(
         state, patch, sideEffects, enqueuedActions, pending.card,
         `血誓回卷：${card.name} → ${restored.name}！`,
@@ -3093,7 +3115,7 @@ function reduceDiceForHero(
     if (action.outcomeId === 'stun') {
       enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId, patch: { isStunned: true } });
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 被${stunLabel}击晕了！` } });
-      const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+      const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
       if (ae.stunRecycleToHandCount > 0) {
         const bag = state.permanentMagicRecycleBag as GameCardData[];
         if (bag.length > 0) {
@@ -3143,7 +3165,7 @@ function reduceDiceForHero(
     if (action.outcomeId === 'stun') {
       enqueuedActions.push({ type: 'UPDATE_MONSTER_CARD', monsterId, patch: { isStunned: true } });
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 被侧击击晕了！` } });
-      const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+      const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
       if (ae.stunUpgradeCapCount > 0) {
         const bump = 5 * ae.stunUpgradeCapCount;
         patch.stunCap = Math.min(100, (state.stunCap ?? 0) + bump);

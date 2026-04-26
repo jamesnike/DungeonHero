@@ -137,7 +137,7 @@
  * │ KNIGHT gear-rift-draw            │ A   │ draw ×N (slot resolved hero)  │
  * │ KNIGHT quake-stun-draw           │ A   │ HP loss ×N + draw ×N          │
  * │ KNIGHT recall-equipment          │ B   │ pick equipment twice          │
- * │ KNIGHT cleanse-draw (净册涌泉)   │ B   │ pick + draw twice (hook loop) │
+ * │ KNIGHT cleanse-draw (净册涌泉)   │ B   │ pick + grave discover ×N      │
  * │ KNIGHT recycle-tide (洗册归川)   │ C   │ second tick = no-op + banner  │
  * │ KNIGHT persuade-to-temp-attack    │ C   │ run ×N; perm bonus may carry │
  * │ KNIGHT discard-rebuild           │ A   │ discover queue ×N             │
@@ -212,6 +212,7 @@ import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '..
 import type { RngState } from '../rng';
 import { DURABILITY_CAP, clampMaxDurability } from '../constants';
 import { pickGraveyardCardExcluding, computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle } from './equipment-effects';
+import { applyFlipCounters } from './flip-counters';
 import { maybeEnqueueStunGold } from './economy';
 import {
   INITIAL_HP,
@@ -222,7 +223,7 @@ import {
   createEmptyActiveRow,
   createEmptyAmuletEffects,
 } from '../constants';
-import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots } from '../equipment';
+import { computeAmuletEffectsForState, getEquipmentInSlot, getEquipmentSlots, applySlotArmorBonusDelta } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { chaosStrikeHasOverkill } from '../combat';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
@@ -243,7 +244,7 @@ export function getSpellDamage(baseDamage: number, state: GameState): number {
 }
 
 export function computeMaxHp(state: GameState): number {
-  const aura = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const aura = computeAmuletEffectsForState(state);
   const ironWillBonus = state.permanentSkills.includes('Iron Will') ? 3 : 0;
   const eternalMaxHpBonus = Array.isArray(state.eternalRelics)
     ? state.eternalRelics.reduce((sum: number, r: any) => sum + (r.initialMaxHpBonus ?? 0), 0)
@@ -278,7 +279,7 @@ export function applyMissileRelicEffects(
   target: GameCardData,
 ): void {
   if (hasEternalRelic(state.eternalRelics, 'missile-stun-20') && !target.isStunned) {
-    const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+    const ae = computeAmuletEffectsForState(state);
     const stunPct = Math.min(20 + (ae.stunRateBoost ?? 0), state.stunCap ?? 0);
     if (stunPct > 0) {
       const [roll, nextRng] = nextInt(patch.rng ?? state.rng, 1, 100);
@@ -793,7 +794,7 @@ export function checkSwapUpgrade(
   sideEffects: SideEffect[],
   enqueuedActions: GameAction[],
 ): boolean {
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+  const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
   if (ae.swapUpgradeCount <= 0) return false;
   // Each equipped 流转之符 advances the shared progress counter once per swap.
   // Equivalent to N independent counters with synchronised ticks (still
@@ -1186,6 +1187,7 @@ export function resolveInstantMagic(
       const gains: Array<{ label: string; count: number }> = [];
       const bonuses = { ...state.equipmentSlotBonuses } as Record<string, { damage: number; shield: number }>;
       const slots = ['equipmentSlot1', 'equipmentSlot2'] as const;
+      const shieldDeltaBySlot: Record<string, number> = { equipmentSlot1: 0, equipmentSlot2: 0 };
 
       if (monsterCount > 0) {
         for (let i = 0; i < monsterCount; i++) {
@@ -1200,6 +1202,7 @@ export function resolveInstantMagic(
           const [slotIdx, rng2] = nextInt(rng, 0, slots.length - 1); rng = rng2;
           const sid = slots[slotIdx];
           bonuses[sid] = { ...bonuses[sid], shield: (bonuses[sid]?.shield ?? 0) + 1 };
+          shieldDeltaBySlot[sid] += 1;
         }
         gains.push({ label: '随机装备栏永久护甲 +1', count: equipCount });
       }
@@ -1218,6 +1221,11 @@ export function resolveInstantMagic(
 
       patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
       patch.rng = rng;
+      // Single-counter armor model: refill / clamp armor for shield bonus deltas.
+      for (const sid of slots) {
+        const d = shieldDeltaBySlot[sid] ?? 0;
+        if (d !== 0) applySlotArmorBonusDelta(state, sid, d, patch);
+      }
 
       const gainsSummary = gains.map(g => `${g.label}×${g.count}`).join('，');
       log(sideEffects, 'magic', `万象探知：翻看 ${peekedCards.length} 张牌 → ${gainsSummary || '无增益'}`);
@@ -1589,17 +1597,20 @@ export function resolvePermanentMagic(
       const slotId = equippedSlots[0].id;
       const atkBoost = 2 * echoMultiplier;
       const tempAtk = (state.slotTempAttack?.[slotId] ?? 0) + atkBoost;
-      const tempArm = state.slotTempArmor?.[slotId] ?? 0;
+      const oldTempArm = state.slotTempArmor?.[slotId] ?? 0;
       const newTempAttack = { ...(state.slotTempAttack ?? {}), [slotId]: tempAtk };
       const newTempArmor = { ...(state.slotTempArmor ?? {}) };
-      if (tempAtk > tempArm) {
+      if (tempAtk > oldTempArm) {
         newTempArmor[slotId] = tempAtk;
-      } else if (tempArm > tempAtk) {
-        newTempAttack[slotId] = tempArm;
+      } else if (oldTempArm > tempAtk) {
+        newTempAttack[slotId] = oldTempArm;
       }
       patch.slotTempAttack = newTempAttack;
       patch.slotTempArmor = newTempArmor;
-      const finalVal = Math.max(tempAtk, tempArm);
+      // Single-counter armor model: refill / clamp armor for temp armor delta.
+      const tempArmDelta = (newTempArmor[slotId] ?? 0) - oldTempArm;
+      if (tempArmDelta !== 0) applySlotArmorBonusDelta(state, slotId, tempArmDelta, patch);
+      const finalVal = Math.max(tempAtk, oldTempArm);
       log(sideEffects, 'magic', `时空镜像：${equippedSlots[0].item.name} 临时攻防均为 ${finalVal}`);
       banner(sideEffects, `${equippedSlots[0].item.name} 临时攻击 +${atkBoost}，攻防均为 ${finalVal}。`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -2540,7 +2551,7 @@ export function executeArmorDoubleStrike(
   // full equipment break flow (last words / revive / salvage / promote reserve).
   const curDur = slotItem.durability ?? 1;
   if (curDur <= 1) {
-    const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+    const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
     const breakResult = computeEquipmentBreakEffects(state, slotId, slotItem, ae);
     Object.assign(patch, breakResult.patch);
     sideEffects.push(...breakResult.sideEffects);
@@ -2863,20 +2874,23 @@ export function resolveKnightPermanentMagic(
         return applyPatch(state, patch, sideEffects);
       }
       // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
+      // 「失去血量的伤害 2 次」：每次伤害 = 失去血量（hpCost），共 2 次；
+      // 怪物路径上两次伤害分开结算（掉血/掉血层/技能触发 之间会先后处理）。
+      // echo 让每次伤害 ×N（与「仅伤害翻倍，献祭 HP 不翻倍」原则一致）。
       // 注意：献祭 HP 成本统一在 reducer 的 monster-selection 分支里扣，
       // 不在 setup 阶段提前 push（避免 hero 路径下双扣不可控）。
-      const totalDmg = getSpellDamage(hpCost * 2 + (card.amplifyBonus ?? 0), state);
+      const dmgPerHit = getSpellDamage(hpCost + (card.amplifyBonus ?? 0), state);
       patch.pendingMagicAction = {
         card,
         effect: 'blood-sacrifice-strike',
         step: 'monster-select',
-        pendingDamage: totalDmg,
+        pendingDamage: dmgPerHit,
         hpLost: hpCost,
-        prompt: `选择一个目标，造成 ${totalDmg} 点伤害（将先献祭 ${hpCost} HP）。`,
+        prompt: `选择一个目标，造成 ${dmgPerHit} 点伤害 ×2 次（共 ${dmgPerHit * 2} 点，将先献祭 ${hpCost} HP）。`,
         echoMultiplier,
         allowsHeroTarget: true,
       } as any;
-      patch.heroSkillBanner = `血祭裁决：选择目标（献祭 ${hpCost} HP，伤害 ${totalDmg}）。`;
+      patch.heroSkillBanner = `血祭裁决：选择目标（献祭 ${hpCost} HP，每次 ${dmgPerHit} 伤害 ×2 次）。`;
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -3011,6 +3025,11 @@ export function resolveKnightPermanentMagic(
         });
         log(sideEffects, 'magic', `血誓回卷：失去 ${hpCost} 生命，${target.name} 翻回 ${restored.name}。`);
         banner(sideEffects, `血誓回卷：${target.name} → ${restored.name}！${isEchoTriggered ? '（回响×2）' : ''}`);
+        // Back-flip doesn't go through APPLY_CARD_FLIP, so we must fire the 7
+        // flip-counter consumers (flip-gold / 翻印之符 / 翻覆震慑 / 熔铸耐久 /
+        // 翻血之符 / 弧能之符 / 生长之盾) ourselves — same as 乾坤一翻 active-row
+        // back-flip in rules/hero.ts and starterActiveRowFlip resolver.
+        applyFlipCounters(state, patch, sideEffects, enqueuedActions);
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -3097,29 +3116,26 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'cleanse-draw': {
-      // 净册涌泉 — Perm 1. Pick 1 hand card → delete (kw='delete'); then draw
-      // N cards from the backpack (N = 3/4/5 by upgrade level). Empty hand on
-      // a given iteration → skip the picker but still draw.
+      // 净册涌泉 — Perm 1. Pick 1 hand card → delete (kw='delete'); then
+      // discover 1 card from the graveyard (3-pick-1) into hand. Empty hand
+      // on a given iteration → skip the picker but still discover.
       //
       // Echo (Category B): the hook re-opens the picker `echoMultiplier`
-      // times, drawing N each time. We only emit the side-effect; the
-      // hook owns the loop and dispatches FINALIZE_MAGIC_CARD when done.
-      const drawCounts = [3, 4, 5];
-      const drawCount = drawCounts[card.upgradeLevel ?? 0] ?? 3;
+      // times, discovering once per iteration. We only emit the side-effect;
+      // the hook owns the loop and dispatches FINALIZE_MAGIC_CARD when done.
       const echoTagCD = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
       patch.pendingMagicAction = {
         card,
         effect: 'cleanse-draw',
         step: 'cleanse-draw-select',
         echoRemaining: echoMultiplier,
-        data: { drawCount },
       } as any;
       patch.heroSkillBanner = echoMultiplier > 1
-        ? `净册涌泉：将连续选择 ${echoMultiplier} 次手牌，每次从背包抽 ${drawCount} 张。${echoTagCD}`
-        : `净册涌泉：选择一张手牌删除，从背包抽 ${drawCount} 张。`;
+        ? `净册涌泉：将连续 ${echoMultiplier} 次「删 1 张手牌 + 坟场发现 1 张」。${echoTagCD}`
+        : `净册涌泉：选择一张手牌删除，从坟场发现一张牌加入手牌。`;
       sideEffects.push({
         event: 'card:cleanseDrawRequested' as any,
-        payload: { card, drawCount, echoRemaining: echoMultiplier },
+        payload: { card, echoRemaining: echoMultiplier },
       });
       return applyPatch(state, patch, sideEffects);
     }
@@ -3291,7 +3307,7 @@ export function resolveKnightPermanentMagic(
       const divisor = divisors[card.upgradeLevel ?? 0] ?? 3;
       const stunCap = state.stunCap ?? 0;
       const baseDmg = Math.ceil(stunCap / divisor);
-      const aeStunCap = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+      const aeStunCap = computeAmuletEffectsForState(state);
       const stunPct = Math.min(60 + (aeStunCap.stunRateBoost ?? 0), stunCap);
       const totalDmg = getSpellDamage(baseDmg + (card.amplifyBonus ?? 0), state) * echoMultiplier;
       const drawCount = 1 * echoMultiplier;
@@ -3506,7 +3522,7 @@ export function resolveKnightPermanentMagic(
       let revivedCount = 0;
       const destroyedCards: GameCardData[] = [];
 
-      const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]) ?? createEmptyAmuletEffects();
+      const amuletEffects = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
 
       for (const { slotId: sid, stack } of slotStacks) {
         // Survivors in top-to-bottom order (matching the original stack).
@@ -4391,7 +4407,7 @@ export function resolveStunStrike(
   const stunChances = [20, 40, 60];
   const hits = 2;
   const baseDmgPerHit = (stunDmgPerHit[card.upgradeLevel ?? 0] ?? 1) + (card.amplifyBonus ?? 0);
-  const aeStunStrike = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const aeStunStrike = computeAmuletEffectsForState(state);
   const rawStunPct = (stunChances[card.upgradeLevel ?? 0] ?? 10) + (aeStunStrike.stunRateBoost ?? 0);
   const stunPct = Math.min(rawStunPct, state.stunCap ?? 10);
   const hitDmg = getSpellDamage(baseDmgPerHit, state) * echoMultiplier;
@@ -4468,7 +4484,7 @@ export function applyCryptDeathwish(
   // skeletonLastWordsDiscard, wraithDeathHeal/Spread, etc.). Call it twice and
   // chain the patches so cumulative effects (slot bonuses, temp buffs, etc.)
   // stack correctly across the two triggers.
-  const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const amuletFx = computeAmuletEffectsForState(state);
   let totalDrawFromBackpack = 0;
   let totalClassCardDraw = 0;
   let mergedPatch: Partial<GameState> = patch;
@@ -4656,7 +4672,7 @@ function resolveStunWave(
   }
 
   const currentStunCap = (state.stunCap ?? 10) + 5;
-  const aeStunDomain = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const aeStunDomain = computeAmuletEffectsForState(state);
   const stunPct = Math.min(60 + (aeStunDomain.stunRateBoost ?? 0), currentStunCap);
   const threshold = Math.round((stunPct / 100) * 20);
 
@@ -4836,6 +4852,7 @@ export function resolvePendingMagic(
         const armorAmt = armorAmounts[card.upgradeLevel ?? 0] ?? 2;
         const newTempArmor = { ...(state.slotTempArmor ?? {}), [slotId]: ((state.slotTempArmor ?? {})[slotId] ?? 0) + armorAmt };
         patch.slotTempArmor = newTempArmor;
+        if (armorAmt !== 0) applySlotArmorBonusDelta(state, slotId, armorAmt, patch);
         log(sideEffects, 'magic', `临时护甲：${slotId === 'equipmentSlot1' ? '左' : '右'}装备栏 +${armorAmt}`);
         banner(sideEffects, `临时护甲 +${armorAmt}！`);
         patch.pendingMagicAction = null;

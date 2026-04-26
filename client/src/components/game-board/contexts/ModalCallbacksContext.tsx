@@ -64,7 +64,6 @@ export interface ModalCallbacks {
   onHandDiscardSelectionConfirm: (cardIds: string[]) => void;
 
   onCancelHeroMagicAction: () => void;
-  onHeroMagicChoice: (choice: 'heal' | 'purge') => void;
   onCancelPotionAction: () => void;
   onPotionChoiceSelection: (choice: 'repair' | 'upgrade') => void;
 

@@ -55,13 +55,14 @@ function makeCard(idSuffix = 'as', upgradeLevel?: number) {
 
 function makeIronShield(overrides: Record<string, unknown> = {}): EquipmentItem {
   // Iron Shield: value=3 base armor, armorMax=3, full durability.
+  // `armor` is left undefined so it defaults to the current cap (single-counter
+  // armor model: armor === undefined ⇒ "fresh, at full cap = baseArmorMax + perm + temp").
   return {
     id: 's1',
     type: 'shield' as const,
     name: 'Iron Shield',
     value: 3,
     armorMax: 3,
-    armor: 3,
     durability: 3,
     maxDurability: 3,
     ...overrides,

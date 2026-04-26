@@ -31,7 +31,7 @@ import {
 } from '../combat';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import { createEmptyAmuletEffects, STRENGTH_SELF_DAMAGE, initialCombatState, INITIAL_HP, HAND_LIMIT } from '../constants';
-import { computeAmuletEffects } from '../equipment';
+import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
 import { getEquipmentSlotsWithSuppressedTempAttack, isMonsterMagicImmuneByBuilding } from '../buildingAura';
 import { flattenActiveRowSlots, isDamageableTarget, isRecyclableFromHand, applyAmplifyOnCreate } from '../helpers';
 import { computeEquipmentBreakEffects, computeDurabilityLossEffects } from './equipment-effects';
@@ -269,13 +269,16 @@ function reduceBeginCombat(
       }
 
       // Re-apply monster rage so summoned monsters scale to the current waterfall level.
-      // Boss graveyard summon: summoned monsters enter with currentLayer = 1
-      // (max hpLayers / rage cap is left at the rage value, so layer-regen mechanics
-      //  like 暴走 / 复生 can still restore layers up to the normal cap).
+      // Boss graveyard summon: summoned monsters enter at base 1 layer, then gain
+      // +1 layer from the skill effect (recover 1 blood layer), so they actually
+      // arrive with currentLayer = min(2, maxLayers). 1-fury monsters cap at 1.
+      // (max hpLayers / rage cap is still left at the rage value, so layer-regen
+      //  mechanics like 复生 can still restore layers up to the normal cap.)
       const isQuick = state.gameMode === 'quick';
       const summonedMonsterCards = rawMonsters.map(c => {
         const raged = applyMonsterRage(c, state.turnCount, isQuick);
-        return { ...raged, currentLayer: 1 };
+        const maxLayers = raged.fury ?? raged.hpLayers ?? 1;
+        return { ...raged, currentLayer: Math.min(2, maxLayers) };
       });
       const summonedNonMonsterCards = rawNonMonsters; // non-monsters unchanged
       const picked = [...summonedMonsterCards, ...summonedNonMonsterCards];
@@ -402,7 +405,7 @@ function reduceHeal(
     });
   }
 
-  const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const amuletEffects = computeAmuletEffectsForState(state);
   const result = computeHeal(state, action.amount, amuletEffects);
 
   const sideEffects: SideEffect[] = [
@@ -436,7 +439,7 @@ function reduceApplyDamage(
   state: GameState,
   action: Extract<GameAction, { type: 'APPLY_DAMAGE' }>,
 ): ReduceResult {
-  const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const amuletEffects = computeAmuletEffectsForState(state);
 
   // Check for death ward cards in hand
   const hasDeathWardCard = (state.handCards as GameCardData[]).some(
@@ -702,7 +705,7 @@ function reduceDealDamageToMonster(
 
   // --- Overkill (always logged so the player can see it triggered, even when
   // no equipment/amulet effect benefits from it) ---
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const effectiveLifesteal = (state.permanentSpellLifesteal ?? 0) + (ae.lifeOverkillBonus ?? 0);
   const overkill = computeOverkill(monster, effectiveDamage);
   if (overkill > 0) {
@@ -1225,7 +1228,7 @@ function reduceMonsterDefeated(
 
   // Monster-kill-upgrade counter — each amulet ticks the kill counter
   // independently (N amulets = +N progress per kill).
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   if (ae.monsterKillUpgradeCount > 0) {
     const killProgress = (state.monsterKillUpgradeProgress ?? 0) + ae.monsterKillUpgradeCount;
     if (killProgress >= 5) {
@@ -1620,7 +1623,7 @@ function reduceApplyShieldReflect(
   sideEffects.push({ event: 'combat:classDamageHit', payload: {} });
 
   // Overkill (always logged, even when no effect benefits from it)
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const effectiveLifesteal = (state.permanentSpellLifesteal ?? 0) + (ae.lifeOverkillBonus ?? 0);
   const overkill = computeOverkill(monster, action.damage);
   if (overkill > 0) {
@@ -1842,46 +1845,37 @@ export function routeReflectDamageToHero(
   [target, rng] = pickRandom(validShields, rng);
   const { slotId, item } = target;
 
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const isMonsterEquipShield = item.type === 'monster';
   const slotShieldBonus = getSlotBonus(state, slotId, 'shield');
   const permanentBonus = Math.max(0, slotShieldBonus);
   const rawSlotTemp = state.slotTempArmor?.[slotId] ?? 0;
-  const existingBonusDamaged = item.armorBonusDamaged ?? 0;
 
-  let baseArmorMax: number;
-  let storedBaseArmor: number;
-  let bonusTotal: number;
-  if (isMonsterEquipShield) {
-    baseArmorMax = item.hp ?? item.value;
-    const eliteBonus = (item.eliteLowGoldPower && (state.gold ?? 0) >= 30) ? baseArmorMax : 0;
-    storedBaseArmor = Math.min(item.armor ?? baseArmorMax, baseArmorMax);
-    bonusTotal = eliteBonus + permanentBonus + rawSlotTemp;
-  } else {
-    baseArmorMax = item.armorMax ?? item.value;
-    storedBaseArmor = Math.min(item.armor ?? baseArmorMax, baseArmorMax);
-    bonusTotal = permanentBonus + rawSlotTemp;
-  }
-  const bonusRemaining = Math.max(0, bonusTotal - existingBonusDamaged);
-  const currentArmor = storedBaseArmor + bonusRemaining;
+  // Single-counter armor model: storedCap = baseArmorMax + perm + temp; eliteBonus is
+  // a transient combat-time virtual buffer, not persisted into stored armor.
+  const baseArmorMax = isMonsterEquipShield
+    ? (item.hp ?? item.value)
+    : (item.armorMax ?? item.value);
+  const eliteBonus = isMonsterEquipShield && item.eliteLowGoldPower && (state.gold ?? 0) >= 30
+    ? baseArmorMax
+    : 0;
+  const storedCap = baseArmorMax + permanentBonus + rawSlotTemp;
+  const storedArmor = Math.min(item.armor ?? storedCap, storedCap);
+  const currentArmor = storedArmor + eliteBonus;
   const damageDealt = Math.min(damage, currentArmor);
-  const consumeFromBonus = Math.min(damageDealt, bonusRemaining);
-  const consumeFromBase = damageDealt - consumeFromBonus;
-  const newBaseArmor = Math.max(0, storedBaseArmor - consumeFromBase);
-  const newBonusDamaged = existingBonusDamaged + consumeFromBonus;
-  const newArmor = newBaseArmor + Math.max(0, bonusTotal - newBonusDamaged);
-  const shieldArmorDepleted = damageDealt > 0 && newArmor <= 0;
+  const newCurrentArmor = Math.max(0, currentArmor - damageDealt);
+  const newStoredArmor = Math.max(0, newCurrentArmor - eliteBonus);
+  const shieldArmorDepleted = damageDealt > 0 && newCurrentArmor <= 0;
   const slotLabel = slotId === 'equipmentSlot1' ? '左' : '右';
 
   if (!shieldArmorDepleted) {
     patch[slotId] = {
       ...item,
-      armor: newBaseArmor,
-      armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined,
+      armor: newStoredArmor,
     } as typeof state.equipmentSlot1;
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：对${slotLabel}装备 ${item.name} 造成 ${damageDealt} 点护甲伤害（${currentArmor}→${newArmor}）` },
+      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：对${slotLabel}装备 ${item.name} 造成 ${damageDealt} 点护甲伤害（${currentArmor}→${newCurrentArmor}）` },
     });
     sideEffects.push({
       event: 'ui:banner',
@@ -1896,12 +1890,12 @@ export function routeReflectDamageToHero(
     (state.unbreakableUntilWaterfall ?? {})[slotId] === true;
 
   if (protectedByUnbreakable) {
-    const { armor: _ca, armorBonusDamaged: _cb, ...resetBase } = item as any;
+    const { armor: _ca, ...resetBase } = item as GameCardData & { armor?: number };
     patch[slotId] = resetBase as typeof state.equipmentSlot1;
     if (state.unbreakableNext === true) patch.unbreakableNext = false;
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：${item.name} 护甲被打穿（${currentArmor}→0），但不破之印生效，耐久未损！` },
+      payload: { type: 'combat', message: `${monsterName} ${reflectLabel}：${item.name} 护甲被打穿（${currentArmor}→${newCurrentArmor}），但不破之印生效，耐久未损！` },
     });
     sideEffects.push({
       event: 'ui:banner',
@@ -1934,14 +1928,14 @@ export function routeReflectDamageToHero(
     return { patch, sideEffects, enqueuedActions, rng, hitSlotId: slotId };
   }
 
-  // Durability loss but shield survives — strip armor / armorBonusDamaged so
-  // the next block re-applies the full base + bonus from a fresh layer.
+  // Durability loss but shield survives — strip armor so the next block re-applies
+  // the full base + bonus from a fresh layer (cap reads from baseArmorMax + perm + temp).
   const newDurability = shieldDurability - 1;
   const durResult = computeDurabilityLossEffects(state, slotId, item, newDurability);
   Object.assign(patch, durResult.patch);
   rng = durResult.rng;
   sideEffects.push(...durResult.sideEffects);
-  const { armor: _resetA, armorBonusDamaged: _resetB, ...durStripped } = durResult.updatedItem as any;
+  const { armor: _resetA, ...durStripped } = durResult.updatedItem as GameCardData & { armor?: number };
   patch[slotId] = durStripped as typeof state.equipmentSlot1;
 
   if (durResult.golemReflectDamage) {
@@ -2061,7 +2055,7 @@ function reducePerformShieldBash(
   const targetMonster = state.activeCards.find(c => c?.id === targetMonsterId);
   if (!targetMonster || targetMonster.type !== 'monster') return noChange(state);
 
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const baseArmorMax = slotItem.armorMax ?? slotItem.value ?? 0;
   const slotShieldBonus = getSlotBonus(state, slotId, 'shield');
   const permanentBonus = Math.max(0, slotShieldBonus);
@@ -2207,7 +2201,7 @@ function reducePerformHeroAttack(
   const slotItem = getSlotItem(state, slotId);
   if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) return noChange(state);
 
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const combatState = state.combatState;
 
   // --- Extra attack eligibility ---
@@ -2404,29 +2398,6 @@ function reducePerformHeroAttack(
     }
   }
 
-  // --- Amplify 魔弹 + spawn one ---
-  // 在装备的 onAttackAmplifyMissileGenerate 触发时：
-  //  1. 立刻生成一张「魔弹」（应用当前 amplifiedCardBonus map 的累计值），加入背包。
-  //     魔弹是 magic 卡，对背包容量豁免（addCardToBackpackPure → isBackpackRestrictedCard），
-  //     不会溢出到回收袋。
-  //  2. 入队一个 AMPLIFY_CARDS_BY_NAME，amount=1。drain 阶段执行时，
-  //     map 累计 +1，并对所有同名卡（含我们刚加进背包的那张）应用 +1。
-  //     最终：新生成的魔弹 amplifyBonus = oldMap + 1，与其它现存「魔弹」一致。
-  if ((slotItem as GameCardData).onAttackAmplifyMissileGenerate) {
-    const [rawBolt, nextRng] = createMagicBoltCard(rng);
-    rng = nextRng;
-    patch.rng = rng;
-    const bolt = applyAmplifyOnCreate(rawBolt, state.amplifiedCardBonus);
-    const addPatch = addCardToBackpackPure(state, bolt);
-    if (addPatch.backpackItems) patch.backpackItems = addPatch.backpackItems;
-    if (addPatch.permanentMagicRecycleBag) patch.permanentMagicRecycleBag = addPatch.permanentMagicRecycleBag;
-    sideEffects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name}：所有「魔弹」+1 增幅，并将一张「魔弹」加入背包` },
-    });
-    enqueuedActions.push({ type: 'AMPLIFY_CARDS_BY_NAME', cardName: '魔弹', amount: 1, source: slotItem.name });
-  }
-
   // --- Deal damage to monster ---
   let workingMonster = targetMonster;
   let monsterDefeated = false;
@@ -2476,7 +2447,8 @@ function reducePerformHeroAttack(
         const hasOverkillEffect = attackEffectiveLifesteal > 0
           || (slotItem as GameCardData).overkillDraw
           || (slotItem as GameCardData).overkillRecycleToHand
-          || (slotItem as GameCardData).overkillAmplifyMissile;
+          || (slotItem as GameCardData).overkillAmplifyMissile
+          || (slotItem as GameCardData).onAttackAmplifyMissileGenerate;
         if (hasOverkillEffect) overkillHitCount += 1;
       }
     }
@@ -2670,6 +2642,30 @@ function reducePerformHeroAttack(
       event: 'log:entry',
       payload: { type: 'equip', message: `${slotItem.name} 超杀：所有「魔弹」+${amplifyAmount} 增幅` },
     });
+  }
+
+  // --- Amplify 魔弹 + spawn one (魔弹连弩, overkill-gated) ---
+  // 在装备的 onAttackAmplifyMissileGenerate 命中超杀时：
+  //  1. 立刻生成一张「魔弹」（应用当前 amplifiedCardBonus map 的累计值），加入背包。
+  //     魔弹是 magic 卡，对背包容量豁免（addCardToBackpackPure → isBackpackRestrictedCard），
+  //     不会溢出到回收袋。
+  //  2. 入队一个 AMPLIFY_CARDS_BY_NAME，amount=1。drain 阶段执行时，
+  //     map 累计 +1，并对所有同名卡（含我们刚加进背包的那张）应用 +1。
+  //     最终：新生成的魔弹 amplifyBonus = oldMap + 1，与其它现存「魔弹」一致。
+  if (overkillHitCount > 0 && (slotItem as GameCardData).onAttackAmplifyMissileGenerate) {
+    const [rawBolt, nextRng] = createMagicBoltCard(rng);
+    rng = nextRng;
+    patch.rng = rng;
+    const bolt = applyAmplifyOnCreate(rawBolt, state.amplifiedCardBonus);
+    const baseStateForAdd = { ...state, ...patch } as GameState;
+    const addPatch = addCardToBackpackPure(baseStateForAdd, bolt);
+    if (addPatch.backpackItems) patch.backpackItems = addPatch.backpackItems;
+    if (addPatch.permanentMagicRecycleBag) patch.permanentMagicRecycleBag = addPatch.permanentMagicRecycleBag;
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `${slotItem.name} 超杀：所有「魔弹」+1 增幅，并将一张「魔弹」加入背包` },
+    });
+    enqueuedActions.push({ type: 'AMPLIFY_CARDS_BY_NAME', cardName: '魔弹', amount: 1, source: slotItem.name });
   }
 
   // --- Discard empower lifesteal ---
@@ -3256,7 +3252,7 @@ function reduceResolveBlock(
     return applyPatch(state, { combatState: newCombat, phase: 'monsterTurn' }, [], [{ type: 'ADVANCE_MONSTER_TURN' }]);
   }
 
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const sideEffects: SideEffect[] = [];
   const patch: Partial<GameState> = {};
   const enqueuedActions: GameAction[] = [];
@@ -3307,8 +3303,23 @@ function reduceResolveBlock(
       const slotShieldBonus = getSlotBonus(state, blockSlotId, 'shield');
       const permanentBonus = Math.max(0, slotShieldBonus);
       const rawSlotTemp = state.slotTempArmor?.[blockSlotId] ?? 0;
-      const baseArmorMax = slotItem.armorMax ?? slotItem.value;
-      const effectiveArmorMax = baseArmorMax + permanentBonus + rawSlotTemp;
+      const baseArmorMax = isMonsterEquipShield
+        ? ((slotItem as GameCardData).hp ?? slotItem.value)
+        : (slotItem.armorMax ?? slotItem.value);
+      // Single-counter armor model:
+      //   storedCap = baseArmorMax + perm + temp  (the cap for `slotItem.armor`)
+      //   eliteBonus = optional combat-time virtual buffer (gold-stealing elite goblin)
+      //   currentArmor = (slotItem.armor ?? storedCap) + eliteBonus
+      // Damage chips eliteBonus first, then storedArmor. Stored armor never persists
+      // any of the eliteBonus — it's transient, gates only on gold.
+      const storedCap = baseArmorMax + permanentBonus + rawSlotTemp;
+      const eliteBonus = isMonsterEquipShield
+        && (slotItem as GameCardData).eliteLowGoldPower
+        && (state.gold ?? 0) >= 30
+        ? baseArmorMax
+        : 0;
+      const storedArmor = Math.min(slotItem.armor ?? storedCap, storedCap);
+      const currentArmor = storedArmor + eliteBonus;
 
       let shieldArmorDepleted = false;
       let workingShieldItem = { ...slotItem };
@@ -3316,49 +3327,34 @@ function reduceResolveBlock(
       sideEffects.push({ event: 'combat:shieldBlock', payload: { slotId: blockSlotId } });
 
       if (isMonsterEquipShield) {
-        const rawBaseArmor = (slotItem as GameCardData).hp ?? slotItem.value;
-        const monsterArmorMax = rawBaseArmor;
-        const eliteBonus = ((slotItem as GameCardData).eliteLowGoldPower && (state.gold ?? 0) >= 30) ? monsterArmorMax : 0;
-        const storedMonsterArmor = Math.min(slotItem.armor ?? monsterArmorMax, monsterArmorMax);
-        const existingBonusDamaged = slotItem.armorBonusDamaged ?? 0;
-        const monsterBonusTotal = eliteBonus + permanentBonus + rawSlotTemp;
-        const monsterBonusRemaining = Math.max(0, monsterBonusTotal - existingBonusDamaged);
-        const currentArmor = storedMonsterArmor + monsterBonusRemaining;
         const blocked = Math.min(remainingDamage, currentArmor);
         const golemArmorCap = (slotItem as GameCardData).maxDamagePerHit;
         const effectiveArmorDamage = golemArmorCap != null ? Math.min(blocked, golemArmorCap) : blocked;
-        const newArmor = Math.max(0, currentArmor - effectiveArmorDamage);
-        shieldArmorDepleted = newArmor <= 0 && effectiveArmorDamage > 0;
+        const newCurrentArmor = Math.max(0, currentArmor - effectiveArmorDamage);
+        const newStoredArmor = Math.max(0, newCurrentArmor - eliteBonus);
+        shieldArmorDepleted = newCurrentArmor <= 0 && effectiveArmorDamage > 0;
         remainingDamage = isFullBlockShield ? 0 : Math.max(0, remainingDamage - currentArmor);
 
         if (shieldArmorDepleted) {
-          const { armor: _clearArmor, armorBonusDamaged: _clearBonusDmg, ...resetBase } = slotItem as any;
-          workingShieldItem = resetBase;
+          // Strip `armor` so next read defaults to current cap (refill on layer break).
+          const { armor: _clearArmor, ...resetBase } = slotItem as GameCardData & { armor?: number };
+          workingShieldItem = resetBase as typeof workingShieldItem;
         } else {
-          const consumeFromBonus = Math.min(effectiveArmorDamage, monsterBonusRemaining);
-          const consumeFromBase = effectiveArmorDamage - consumeFromBonus;
-          const newBaseArmor = Math.max(0, storedMonsterArmor - consumeFromBase);
-          const newBonusDamaged = existingBonusDamaged + consumeFromBonus;
-          workingShieldItem = { ...slotItem, armor: newBaseArmor, armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined };
+          workingShieldItem = { ...slotItem, armor: newStoredArmor };
         }
 
         if (golemArmorCap != null && blocked > golemArmorCap) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 护体：护甲最多掉 ${golemArmorCap}！` } });
         }
         if (isFullBlockShield) {
-          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newArmor}）` } });
+          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newCurrentArmor}）` } });
           sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完全格挡！` } });
         } else if (shieldArmorDepleted) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲击破！耐久 -1）` } });
         } else {
-          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲 ${currentArmor}→${newArmor}）` } });
+          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲 ${currentArmor}→${newCurrentArmor}）` } });
         }
       } else {
-        const storedBaseArmor = Math.min(slotItem.armor ?? baseArmorMax, baseArmorMax);
-        const existingBonusDamaged = slotItem.armorBonusDamaged ?? 0;
-        const bonusTotal = permanentBonus + rawSlotTemp;
-        const bonusRemaining = Math.max(0, bonusTotal - existingBonusDamaged);
-        const currentArmor = storedBaseArmor + bonusRemaining;
         const blocked = Math.min(remainingDamage, currentArmor);
 
         // 守护圣盾 — perfect-block armor save: on perfect block (attack ≤ currentArmor),
@@ -3384,34 +3380,31 @@ function reduceResolveBlock(
           }
         }
 
-        let newArmor: number;
+        let newCurrentArmor: number;
         if (armorSaved) {
-          newArmor = currentArmor;
+          newCurrentArmor = currentArmor;
           shieldArmorDepleted = false;
           workingShieldItem = { ...slotItem };
         } else {
-          newArmor = Math.max(0, currentArmor - remainingDamage);
-          shieldArmorDepleted = newArmor <= 0 && remainingDamage > 0;
+          newCurrentArmor = Math.max(0, currentArmor - remainingDamage);
+          const newStoredArmor = Math.max(0, newCurrentArmor - eliteBonus);
+          shieldArmorDepleted = newCurrentArmor <= 0 && remainingDamage > 0;
           if (shieldArmorDepleted) {
-            const { armor: _clearArmor, armorBonusDamaged: _clearBonusDmg, ...resetBase } = slotItem as any;
-            workingShieldItem = resetBase;
+            const { armor: _clearArmor, ...resetBase } = slotItem as GameCardData & { armor?: number };
+            workingShieldItem = resetBase as typeof workingShieldItem;
           } else {
-            const consumeFromBonus = Math.min(blocked, bonusRemaining);
-            const consumeFromBase = blocked - consumeFromBonus;
-            const newBaseArmor = Math.max(0, storedBaseArmor - consumeFromBase);
-            const newBonusDamaged = existingBonusDamaged + consumeFromBonus;
-            workingShieldItem = { ...slotItem, armor: newBaseArmor, armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined };
+            workingShieldItem = { ...slotItem, armor: newStoredArmor };
           }
         }
         remainingDamage = isFullBlockShield ? 0 : Math.max(0, remainingDamage - currentArmor);
 
         if (isFullBlockShield) {
-          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newArmor}）` } });
+          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newCurrentArmor}）` } });
           sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完全格挡！` } });
         } else if (shieldArmorDepleted) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲击破！耐久 -1）` } });
         } else {
-          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲 ${currentArmor}→${newArmor}）` } });
+          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲 ${currentArmor}→${newCurrentArmor}）` } });
         }
       }
 
@@ -3436,6 +3429,7 @@ function reduceResolveBlock(
         const bonuses = { ...state.equipmentSlotBonuses };
         bonuses[blockSlotId] = { ...bonuses[blockSlotId], shield: bonuses[blockSlotId].shield + armorGain };
         patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
+        applySlotArmorBonusDelta(state, blockSlotId, armorGain, patch);
         sideEffects.push({
           event: 'log:entry',
           payload: { type: 'combat', message: `完美格挡！双守护圣盾使该栏永久护甲 +${armorGain}` },
@@ -3443,13 +3437,65 @@ function reduceResolveBlock(
         sideEffects.push({ event: 'ui:banner', payload: { text: `完美格挡！该装备栏永久护甲 +${armorGain}！` } });
       }
 
+      // 砺心之盾 — perfect-block max-HP gain: on perfect block, permanently
+      // raise hero maxHp by N. Cap-only — does NOT heal current hp (mirrors
+      // 附魔祭坛「遗言：生命值上限+4」 semantics in equipment-effects.ts).
+      // Stacks every perfect block, no per-card cap.
+      const perfectBlockMaxHpGain = (slotItem as GameCardData).shieldPerfectBlockMaxHpGain ?? 0;
+      if (isPerfectBlock && perfectBlockMaxHpGain > 0) {
+        patch.permanentMaxHpBonus = (patch.permanentMaxHpBonus ?? state.permanentMaxHpBonus ?? 0) + perfectBlockMaxHpGain;
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'equip', message: `${slotItem.name} 完美格挡：永久生命值上限 +${perfectBlockMaxHpGain}！` },
+        });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完美格挡！生命值上限 +${perfectBlockMaxHpGain}！` } });
+      }
+
+      // 弹幕护盾 — perfect-block missile spawn: when this shield achieves perfect
+      // block, spawn N 魔弹 directly into hand. Hand-full overflow is silently
+      // dropped (per design). 走 createMagicBoltCard + applyAmplifyOnCreate
+      // 与魔弹连弩 / 魔法飞弹 / 弹幕之符 一致，让新魔弹继承当前 amplifiedCardBonus['魔弹']。
+      const perfectBlockSpawnCount = (slotItem as GameCardData).perfectBlockSpawnMissiles ?? 0;
+      if (isPerfectBlock && perfectBlockSpawnCount > 0) {
+        const handLimit = HAND_LIMIT + (state.handLimitBonus ?? 0);
+        const currentHand = (patch.handCards ?? state.handCards) as GameCardData[];
+        const handRoom = Math.max(0, handLimit - currentHand.length);
+        const actualCount = Math.min(perfectBlockSpawnCount, handRoom);
+        if (actualCount > 0) {
+          const bolts: GameCardData[] = [];
+          for (let i = 0; i < actualCount; i++) {
+            const [rawBolt, nextRng] = createMagicBoltCard(rng);
+            rng = nextRng;
+            bolts.push(applyAmplifyOnCreate(rawBolt, state.amplifiedCardBonus));
+          }
+          patch.rng = rng;
+          patch.handCards = [...currentHand, ...bolts];
+          sideEffects.push({
+            event: 'log:entry',
+            payload: {
+              type: 'equip',
+              message: actualCount === perfectBlockSpawnCount
+                ? `${slotItem.name} 完美格挡：获得 ${actualCount} 张「魔弹」加入手牌`
+                : `${slotItem.name} 完美格挡：获得 ${actualCount} 张「魔弹」加入手牌（手牌已满，少入 ${perfectBlockSpawnCount - actualCount} 张）`,
+            },
+          });
+          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完美格挡！获得 ${actualCount} 张「魔弹」` } });
+        } else {
+          sideEffects.push({
+            event: 'log:entry',
+            payload: { type: 'equip', message: `${slotItem.name} 完美格挡：手牌已满，「魔弹」未生成` },
+          });
+        }
+      }
+
       // Block grant temp armor to other
       if ((slotItem as GameCardData).blockGrantTempArmorToOther) {
         const otherSlot: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
         const grantAmount = isMonsterEquipShield
           ? ((slotItem as GameCardData).hp ?? slotItem.value) + permanentBonus
-          : effectiveArmorMax;
+          : storedCap;
         patch.slotTempArmor = { ...(state.slotTempArmor ?? {}), [otherSlot]: ((state.slotTempArmor ?? {})[otherSlot] ?? 0) + grantAmount };
+        applySlotArmorBonusDelta(state, otherSlot, grantAmount, patch);
         const otherSlotLabel = otherSlot === 'equipmentSlot1' ? '左' : '右';
         sideEffects.push({
           event: 'log:entry',
@@ -3492,7 +3538,7 @@ function reduceResolveBlock(
         evolveBlockCount = (((slotItem as any)._shieldBlockCount ?? 0) + 1);
         if ((evolveBlockCount ?? 0) >= (slotItem as GameCardData).shieldBlockAutoUpgradeCount!) {
           const newArmorMax = (slotItem.armorMax ?? slotItem.value) + 2;
-          const { armor: _clearA, armorBonusDamaged: _clearB, ...shieldBase } = slotItem as any;
+          const { armor: _clearA, ...shieldBase } = slotItem as GameCardData & { armor?: number };
           const upgradedShield = {
             ...shieldBase,
             value: newArmorMax,
@@ -3569,7 +3615,7 @@ function reduceResolveBlock(
           const counter = ((slotItem as any)._shieldDurabilityBlockCounter ?? 0) + 1;
           if (counter <= totalExtraBlocks) {
             skipShieldDurabilityLoss = true;
-            const { armor: _resetA, armorBonusDamaged: _resetB, ...extraBase } = slotItem as any;
+            const { armor: _resetA, ...extraBase } = slotItem as GameCardData & { armor?: number };
             const evolveCountExtra = evolveBlockCount !== undefined ? { _shieldBlockCount: evolveBlockCount } : {};
             patch[blockSlotId] = { ...extraBase, _shieldDurabilityBlockCounter: counter, ...evolveCountExtra } as EquipmentItem;
             sideEffects.push({
@@ -3610,7 +3656,7 @@ function reduceResolveBlock(
             const blockDurActuallyLost = updatedBlockDurability < shieldDurability;
             if (blockDurActuallyLost) shieldDurabilityConsumed = true;
 
-            const { armor: _resetArmor, armorBonusDamaged: _resetBonusDmg, ...durabilityBase } = workingShieldItem as any;
+            const { armor: _resetArmor, ...durabilityBase } = workingShieldItem as GameCardData & { armor?: number };
             const evolveCountDur = evolveBlockCount !== undefined ? { _shieldBlockCount: evolveBlockCount } : {};
 
             if (blockDurActuallyLost) {
@@ -3622,9 +3668,9 @@ function reduceResolveBlock(
               // durability cycle must start fresh so it picks up baseArmorMax + the full
               // permanent/temporary bonus again. computeDurabilityLossEffects rebuilds
               // updatedItem from the original slotItem, which still carries the now-stale
-              // `armor` / `armorBonusDamaged` from the previous cycle — strip them here
-              // so the bonus (incl. slotTempArmor) re-applies in full on the next block.
-              const { armor: _resetArmorAgain, armorBonusDamaged: _resetBonusAgain, ...durStripped } = durResult.updatedItem as any;
+              // `armor` from the previous cycle — strip it here so the bonus (incl.
+              // slotTempArmor) re-applies in full on the next block.
+              const { armor: _resetArmorAgain, ...durStripped } = durResult.updatedItem as GameCardData & { armor?: number };
               const mergedItem = { ...durabilityBase, ...durStripped, ...evolveCountDur, ...extraBlockCounterPatch };
               patch[blockSlotId] = mergedItem as EquipmentItem;
 
@@ -3679,6 +3725,7 @@ function reduceResolveBlock(
     const blockSlotId = action.slotId;
     const tempGain = 2 * state.bulwarkTempArmorStacks!;
     patch.slotTempArmor = { ...(patch.slotTempArmor ?? state.slotTempArmor ?? {}), [blockSlotId]: ((patch.slotTempArmor ?? state.slotTempArmor ?? {})[blockSlotId] ?? 0) + tempGain };
+    applySlotArmorBonusDelta(state, blockSlotId, tempGain, patch);
     const label = blockSlotId === 'equipmentSlot1' ? '左' : '右';
     sideEffects.push({
       event: 'log:entry',
@@ -3954,7 +4001,7 @@ function reduceInitiateWeaponAttack(
   if (!slotItem) return noChange(state);
 
   const combat = state.combatState;
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const enqueuedActions: GameAction[] = [];
   const alreadyEngaged = combat.engagedMonsterIds.includes(monsterId);
 

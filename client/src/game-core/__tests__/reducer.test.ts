@@ -3096,16 +3096,16 @@ describe('reducer', () => {
   });
 
   describe('PERFORM_HERO_ATTACK — onAttackAmplifyMissileGenerate (魔弹连弩)', () => {
-    it('amplifies all 魔弹 by 1 and adds a freshly amplified 魔弹 to backpack', () => {
+    it('on overkill: amplifies all 魔弹 by 1 and adds a freshly amplified 魔弹 to backpack', () => {
       const weapon = {
-        id: 'w-mb', type: 'weapon' as const, name: '魔弹连弩', value: 1,
+        id: 'w-mb', type: 'weapon' as const, name: '魔弹连弩', value: 20,
         durability: 3, maxDurability: 3,
         onAttackAmplifyMissileGenerate: true,
         fromSlot: 'equipmentSlot1' as const,
       };
       const monster = {
         id: 'm1', type: 'monster' as const, name: 'Goblin', value: 5,
-        hp: 10, maxHp: 10, attack: 5,
+        hp: 5, maxHp: 5, attack: 5,
       };
       const handBolt = { id: 'hb', type: 'magic' as const, name: '魔弹', value: 0 };
       const backpackBolt = { id: 'bb', type: 'magic' as const, name: '魔弹', value: 0 };
@@ -3141,18 +3141,17 @@ describe('reducer', () => {
       expect(newBolt?.knightEffect).toBe('missile-bolt');
     });
 
-    it('still adds the spawned 魔弹 to the backpack even when over base capacity (magic cards bypass cap)', () => {
+    it('on overkill: still adds the spawned 魔弹 to the backpack even when over base capacity (magic cards bypass cap)', () => {
       const weapon = {
-        id: 'w-mb', type: 'weapon' as const, name: '魔弹连弩', value: 1,
+        id: 'w-mb', type: 'weapon' as const, name: '魔弹连弩', value: 20,
         durability: 3, maxDurability: 3,
         onAttackAmplifyMissileGenerate: true,
         fromSlot: 'equipmentSlot1' as const,
       };
       const monster = {
         id: 'm1', type: 'monster' as const, name: 'Goblin', value: 5,
-        hp: 10, maxHp: 10, attack: 5,
+        hp: 5, maxHp: 5, attack: 5,
       };
-      // Backpack already over the base 10-slot capacity with magic-type fillers.
       const fullBackpack = Array.from({ length: 12 }, (_, i) => ({
         id: `bp${i}`, type: 'magic' as const, name: 'Filler', value: 0,
       }));
@@ -3173,7 +3172,6 @@ describe('reducer', () => {
         { type: 'PERFORM_HERO_ATTACK', slotId: 'equipmentSlot1', targetMonsterId: 'm1' },
       ] as any);
 
-      // 魔弹 is magic — backpack capacity is bypassed and it lands in backpack, not recycle bag.
       const recycledBolt = drained.state.permanentMagicRecycleBag.find(c => c.name === '魔弹');
       expect(recycledBolt).toBeUndefined();
 
@@ -3182,6 +3180,42 @@ describe('reducer', () => {
       expect(newBolt?.amplifyBonus).toBe(1);
 
       expect(drained.state.amplifiedCardBonus['魔弹']).toBe(1);
+    });
+
+    it('without overkill: does NOT amplify or spawn a new 魔弹', () => {
+      const weapon = {
+        id: 'w-mb', type: 'weapon' as const, name: '魔弹连弩', value: 1,
+        durability: 3, maxDurability: 3,
+        onAttackAmplifyMissileGenerate: true,
+        fromSlot: 'equipmentSlot1' as const,
+      };
+      const monster = {
+        id: 'm1', type: 'monster' as const, name: 'Goblin', value: 5,
+        hp: 10, maxHp: 10, attack: 5,
+      };
+      const backpackBolt = { id: 'bb', type: 'magic' as const, name: '魔弹', value: 0 };
+
+      const state = makeState({
+        equipmentSlot1: weapon as any,
+        activeCards: [monster, null, null, null, null] as any,
+        backpackItems: [backpackBolt] as any,
+        combatState: {
+          ...initialCombatState,
+          engagedMonsterIds: ['m1'],
+          currentTurn: 'hero',
+        },
+      });
+
+      const drained = drain(state, [
+        { type: 'PERFORM_HERO_ATTACK', slotId: 'equipmentSlot1', targetMonsterId: 'm1' },
+      ] as any);
+
+      expect(drained.state.amplifiedCardBonus['魔弹'] ?? 0).toBe(0);
+
+      const bolts = drained.state.backpackItems.filter(c => c.name === '魔弹');
+      expect(bolts).toHaveLength(1);
+      expect(bolts[0].id).toBe('bb');
+      expect(bolts[0].amplifyBonus ?? 0).toBe(0);
     });
   });
 

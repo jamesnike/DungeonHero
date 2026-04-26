@@ -1265,7 +1265,7 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType, ...(meta ? { meta } : {}) } });
       }
 
-    // --- 翻转之契 option 5: grant 'on-hand: stunCap +3%' to a chosen hand card ---
+    // --- 翻转之契 option 5: grant 'on-hand: stunCap +2%' to a chosen hand card ---
     } else if (token === 'grantHandStunCapBonus') {
       const eligible = s.handCards.filter(c => !c.onEnterHandEffect);
       if (eligible.length === 0) {
@@ -1583,9 +1583,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
               addGameLog('shop', '命运十字路口：开启商店');
               depsRef.current.startShopFlow(eventCard);
               subDeferred = true;
-            } else if (eff === 'upgradeCard') {
-              addGameLog('event', '命运十字路口：选择一张牌升级');
-              dispatch({ type: 'SET_UPGRADE_MODAL_OPEN', open: true, maxCount: undefined });
+            } else if (eff === 'upgradeCard' || eff.startsWith('upgradeCard:')) {
+              const count = eff.startsWith('upgradeCard:') ? parseInt(eff.split(':')[1], 10) || 1 : undefined;
+              addGameLog('event', count ? `命运十字路口：选择至多 ${count} 张牌升级` : '命运十字路口：选择一张牌升级');
+              dispatch({ type: 'SET_UPGRADE_MODAL_OPEN', open: true, maxCount: count });
             } else if (eff === 'drawClass2') {
               depsRef.current.drawClassCardsToBackpack(2, 'crossroads-destroy');
             } else {
@@ -1985,12 +1986,29 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
           addGameLog('gold', `熔炉之心：卡牌翻转，获得 ${goldGain} 金币。`);
         }
 
-        // Grant 维度扭曲 starter perm magic via the existing reducer token (also
-        // routes to recycleBag if backpack is full — handled by APPLY_EVENT_EFFECT).
-        dispatch({ type: 'APPLY_EVENT_EFFECT', effectToken: 'grantStarterDimensionWarp' });
+        // Grant 维度扭曲 starter perm magic directly into the player's hand.
+        // (Per design update: was previously meant to go to backpack via the
+        // `grantStarterDimensionWarp` reducer token, but that dispatch was
+        // also broken — it used the wrong field name `effectToken` instead of
+        // `token`, so the action's `token` was undefined and the warp was
+        // silently never granted. Now: build the card inline mirroring the
+        // reducer pattern (`createStarterCardPool` → clone with strippable
+        // `-evt-1-...` suffix so `getStarterBaseId` / `resolvePermanentMagic`
+        // can route it), then ADD_CARD_TO_HAND so the pipeline triggers any
+        // 上手 effects.)
+        const starterPool = createStarterCardPool();
+        const warpTemplate = starterPool.find(c => c.id === STARTER_CARD_IDS.dimensionWarp);
+        if (warpTemplate) {
+          let warpRng = engine.getState().rng;
+          let warpId: string;
+          [warpId, warpRng] = nextId(warpRng, `${warpTemplate.id}-evt-1`);
+          dispatch({ type: 'SET_GAME_FLAGS', patch: { rng: warpRng } });
+          const warpCard: GameCardData = { ...warpTemplate, id: warpId };
+          dispatch({ type: 'ADD_CARD_TO_HAND', card: warpCard });
+        }
 
-        addGameLog('event', `增幅仪式翻转为增幅祭坛（目标：${cloned.name}），获得专属装备「${cloned.name}」与「维度扭曲」`);
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅仪式翻转为增幅祭坛！目标：${cloned.name}（并获得「维度扭曲」）` });
+        addGameLog('event', `增幅仪式翻转为增幅祭坛（目标：${cloned.name}），获得专属装备「${cloned.name}」，并将「维度扭曲」加入手牌`);
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `增幅仪式翻转为增幅祭坛！目标：${cloned.name}，「维度扭曲」加入手牌` });
         depsRef.current.eventChoiceProcessingRef.current = false;
       }
 

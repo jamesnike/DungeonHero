@@ -674,11 +674,12 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
     dispatch({ type: 'RESOLVE_DECK_JUDGE', card });
   });
 
-  // 净册涌泉 (knight:cleanse-draw) — drive the hand-pick + draw loop.
+  // 净册涌泉 (knight:cleanse-draw) — drive the hand-pick + graveyard discover loop.
   // For Spell Echo (Category B), `echoRemaining` is the number of times to
-  // run the picker. Each iteration: open hand-only delete picker for 1 card,
-  // then draw `drawCount` cards from the backpack. Empty hand → skip picker
-  // but still draw (per design: draw-only when empty).
+  // run the loop. Each iteration: open hand-only delete picker for 1 card,
+  // then call requestGraveyardSelection(3, { delivery: 'hand-first' }) to
+  // discover 1 graveyard card into hand. Empty hand → skip picker but still
+  // discover (per design: discover-only when empty).
   //
   // IMPORTANT: read live `engine.getState().handCards` to decide whether to
   // open the picker. `requestCardAction` itself relies on a React-snapshot of
@@ -688,7 +689,7 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   // check, an empty-hand player would see an unclosable modal: pool computed
   // as 1 (stale), modal opens, then re-render shows "当前没有手牌可以选择" with
   // ESC + outside-click disabled and no cancel button (each-mode picker).
-  useGameEvent('card:cleanseDrawRequested', async ({ card, drawCount, echoRemaining }) => {
+  useGameEvent('card:cleanseDrawRequested', async ({ card, echoRemaining }) => {
     const iterations = Math.max(1, echoRemaining ?? 1);
     for (let i = 0; i < iterations; i++) {
       const titleSuffix = iterations > 1 ? `（${i + 1}/${iterations}）` : '';
@@ -696,16 +697,19 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
       if (liveHandCount > 0) {
         await depsRef.current.requestCardAction('delete', 1, {
           title: `净册涌泉：选择一张手牌删除${titleSuffix}`,
-          description: `删除一张手牌（手牌为空可跳过），然后从背包抽 ${drawCount} 张牌`,
+          description: '删除一张手牌（手牌为空可跳过），然后从坟场发现一张牌加入手牌',
           handOnly: true,
         });
       } else {
         dispatch({
           type: 'SET_HERO_SKILL_BANNER',
-          message: `净册涌泉：手牌为空，跳过删除${titleSuffix}，直接从背包抽 ${drawCount} 张。`,
+          message: `净册涌泉：手牌为空，跳过删除${titleSuffix}，直接从坟场发现一张牌。`,
         });
       }
-      dispatch({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+      // requestGraveyardSelection reads live `discardedCards`. Empty graveyard
+      // shows banner "坟场中没有可取回的卡牌。" and resolves to null — we just
+      // continue to the next echo iteration (or finalize).
+      await depsRef.current.requestGraveyardSelection(3, { delivery: 'hand-first' });
     }
     dispatch({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
   });

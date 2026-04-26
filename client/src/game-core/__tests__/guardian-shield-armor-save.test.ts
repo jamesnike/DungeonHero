@@ -4,7 +4,7 @@
  * 钉死的不变量：
  *   1. knightDeck 里 守护圣盾 持有 shieldPerfectBlockArmorSaveChance: 50（不再有
  *      旧的 shieldPerfectBlockSaveChance 字段；description 更新成"不消耗护甲值"）。
- *   2. 完美格挡 + save 成功 → 护甲值不扣、耐久不扣、armorBonusDamaged 不变；
+ *   2. 完美格挡 + save 成功 → 护甲值不扣、耐久不扣（single-counter armor 不变）；
  *      sideEffects 包含 combat:diceRoll(subtitle '完美格挡 — 护甲判定', success=true)
  *      和 "幸运保住了护甲" 日志；常规 "幸运保住了耐久" 日志不出现。
  *   3. 完美格挡 + save 失败 → 护甲值按攻击力扣减、耐久按现有规则处理；
@@ -134,7 +134,6 @@ describe('守护圣盾 — RESOLVE_BLOCK perfect block + save success', () => {
     const newSlot = result.state.equipmentSlot1 as any;
     expect(newSlot.armor).toBe(3);
     expect(newSlot.durability).toBe(2);
-    expect(newSlot.armorBonusDamaged ?? 0).toBe(0);
 
     const dice = findArmorSaveDice(result.sideEffects);
     expect(dice).toBeTruthy();

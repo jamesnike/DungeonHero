@@ -57,7 +57,11 @@ export type CardEffect =
   | { type: 'equipSwap' }
 
   // --- Eternal relics ---
-  | { type: 'grantEternalRelic'; relicId: EternalRelicId; logMsg: string; bannerMsg: string; dupeLogMsg: string; dupeBannerMsg: string }
+  // `stackable: true` lets the same relic id be granted multiple times. Each
+  // additional grant pushes another EternalRelic instance into
+  // `state.eternalRelics`; consumers count occurrences and scale magnitude
+  // linearly. When omitted, the second use hits dupeLogMsg/dupeBannerMsg.
+  | { type: 'grantEternalRelic'; relicId: EternalRelicId; logMsg: string; bannerMsg: string; dupeLogMsg: string; dupeBannerMsg: string; stackable?: boolean }
 
   // --- Interactive / UI ---
   | { type: 'interactive'; promptType: string; config: Record<string, unknown> }

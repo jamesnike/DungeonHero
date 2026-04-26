@@ -106,7 +106,7 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     const shield: GameCardData = {
       id: 's-iron', type: 'shield', name: 'Iron-ish Shield', value: 3, image: '',
       durability: 0, maxDurability: 3, armorMax: 4,
-      armor: 0, armorBonusDamaged: 2,
+      armor: 0,
     };
     const state = makeState({
       equipmentSlot1: shield as EquipmentItem,
@@ -126,8 +126,8 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     expect(grave[0].id).toBe('s-iron');
     expect(grave[0].durability).toBe(3);
     expect(grave[0].armorMax).toBe(4);
+    // Single-counter armor model: stripped on graveyard reset → defaults to cap on next read.
     expect((grave[0] as any).armor).toBeUndefined();
-    expect((grave[0] as any).armorBonusDamaged).toBeUndefined();
   });
 
   it('monster equipment broken → enters graveyard with currentLayer reset to 1', () => {
@@ -193,7 +193,7 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     const ironShield: GameCardData = {
       id: 'iron-1', type: 'shield', name: 'Iron Shield', value: 0, image: '',
       durability: 0, maxDurability: 3, armorMax: 2,
-      armor: 0, armorBonusDamaged: 1,
+      armor: 0,
       onDestroyEffect: 'graveyard-to-hand',
     };
     const otherGrave: GameCardData = {

@@ -168,15 +168,15 @@ const frenzyCurseOnHand: OnEnterHandHandler = (state, card, patch, sideEffects) 
 };
 
 /**
- * 翻转之契 option 5 — 「铭刻技艺」: each time this card enters hand, stunCap +3 (cap 100).
+ * 翻转之契 option 5 — 「铭刻技艺」: each time this card enters hand, stunCap +2 (cap 100).
  * The bonus follows the card permanently (set on card.onEnterHandEffect via
  * RESOLVE_EVENT_GRANT_HAND_STUN_BONUS in rules/events.ts). Repeated grants are
- * idempotent (same card → still single +3 per entry).
+ * idempotent (same card → still single +2 per entry).
  */
-const stunCapBonus3OnHand: OnEnterHandHandler = (state, card, patch, sideEffects) => {
+const stunCapBonus2OnHand: OnEnterHandHandler = (state, card, patch, sideEffects) => {
   const STUN_CAP_HARD_MAX = 100;
   const current = patch.stunCap ?? state.stunCap ?? 0;
-  const target = Math.min(STUN_CAP_HARD_MAX, current + 3);
+  const target = Math.min(STUN_CAP_HARD_MAX, current + 2);
   if (target <= current) {
     sideEffects.push({
       event: 'log:entry',
@@ -191,7 +191,7 @@ const stunCapBonus3OnHand: OnEnterHandHandler = (state, card, patch, sideEffects
   });
   sideEffects.push({
     event: 'ui:banner',
-    payload: { text: `${card.name} 上手：击晕上限 +3%！` },
+    payload: { text: `${card.name} 上手：击晕上限 +2%！` },
   });
 };
 
@@ -241,7 +241,7 @@ registerOnEnterHandAll([
   { id: 'blood-oath-scroll-onhand', handler: bloodOathScrollOnHand },
   { id: 'survey-action-onhand', handler: surveyActionOnHand },
   { id: 'three-card-thunder-onhand', handler: threeCardThunderOnHand },
-  { id: 'stun-cap-bonus-3', handler: stunCapBonus3OnHand },
+  { id: 'stun-cap-bonus-2', handler: stunCapBonus2OnHand },
   { id: 'frenzy-curse-onhand', handler: frenzyCurseOnHand },
   { id: 'growth-blade-onhand', handler: growthBladeOnHand },
   { id: 'on-hand-heal-1', handler: onHandHeal1 },

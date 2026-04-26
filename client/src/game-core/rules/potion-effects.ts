@@ -15,14 +15,14 @@ import type { GameAction } from '../actions';
 import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch, noChange } from '../reducer';
 import type { GameCardData } from '@/components/GameCard';
-import type { EquipmentSlotId, EquipmentRepairTarget } from '@/components/game-board/types';
+import type { EquipmentSlotId, EquipmentRepairTarget, EquipmentItem } from '@/components/game-board/types';
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, formatRepairTargetLabel } from '../helpers';
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack, addCardToBackpackPure } from '../cards';
 import { nextInt, pickRandom, shuffle as rngShuffle, nextId } from '../rng';
 import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY, DURABILITY_CAP, clampMaxDurability } from '../constants';
-import { computeAmuletEffects } from '../equipment';
+import { computeAmuletEffectsForState, refillSlotArmorToCap, applySlotArmorBonusDelta } from '../equipment';
 import { clearSlotAndPromoteReserve } from './equipment-effects';
-import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
+import { hasEternalRelic, getEternalRelic, countEternalRelics } from '@/lib/eternalRelics';
 
 // ---------------------------------------------------------------------------
 // Logging helpers
@@ -101,7 +101,7 @@ export function resolveAllPotionEffects(
     patch.permanentSpellDamageBonus = (state.permanentSpellDamageBonus ?? 0) + 2;
     const newMaxHpBonus = (state.permanentMaxHpBonus ?? 0) - 5;
     patch.permanentMaxHpBonus = newMaxHpBonus;
-    const aura = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+    const aura = computeAmuletEffectsForState(state);
     const maxHp = INITIAL_HP + newMaxHpBonus + (aura.aura.maxHp ?? 0);
     patch.hp = Math.min(maxHp, state.hp);
     log(sideEffects, 'potion', '药水效果：永久法术伤害 +2；最大生命值 -5');
@@ -198,6 +198,8 @@ export function resolveAllPotionEffects(
     bonuses.equipmentSlot1 = { damage: bonuses.equipmentSlot1.damage + 1, shield: bonuses.equipmentSlot1.shield + 1 };
     bonuses.equipmentSlot2 = { damage: bonuses.equipmentSlot2.damage + 1, shield: bonuses.equipmentSlot2.shield + 1 };
     patch.equipmentSlotBonuses = bonuses;
+    applySlotArmorBonusDelta(state, 'equipmentSlot1', 1, patch);
+    applySlotArmorBonusDelta(state, 'equipmentSlot2', 1, patch);
     log(sideEffects, 'potion', '双锋淬液：左右装备栏永久伤害+1，护甲+1');
     banner(sideEffects, '左右装备栏永久伤害+1，护甲+1！');
     enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
@@ -319,14 +321,16 @@ export function resolveAllPotionEffects(
 
   // --- Permanent persuade-consecutive (eternal relic) ---
   if (effect === 'perm-persuade-consecutive') {
-    if (!hasEternalRelic(state.eternalRelics ?? [], 'chain-persuade')) {
-      const relic = getEternalRelic('chain-persuade');
-      patch.eternalRelics = [...(state.eternalRelics ?? []), relic];
+    const relic = getEternalRelic('chain-persuade');
+    const had = hasEternalRelic(state.eternalRelics ?? [], 'chain-persuade');
+    patch.eternalRelics = [...(state.eternalRelics ?? []), relic];
+    if (had) {
+      const newCount = countEternalRelics(patch.eternalRelics, 'chain-persuade');
+      log(sideEffects, 'potion', `永恒护符·连劝秘药 叠加 ×${newCount}！`);
+      banner(sideEffects, `永恒护符·连劝秘药 叠加 ×${newCount}！`);
+    } else {
       log(sideEffects, 'potion', '获得永恒护符·连劝秘药：连续劝降同一个怪物时，每次累计成功率 +15%！');
       banner(sideEffects, '获得永恒护符·连劝秘药！连续劝降同一怪物，每次累计概率 +15%。');
-    } else {
-      log(sideEffects, 'potion', '永恒护符·连劝秘药：效果已存在，无法叠加。');
-      banner(sideEffects, '效果已存在，无法叠加。');
     }
     enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -334,14 +338,16 @@ export function resolveAllPotionEffects(
 
   // --- Permanent equip-empower (eternal relic) ---
   if (effect === 'perm-equip-empower') {
-    if (!hasEternalRelic(state.eternalRelics ?? [], 'equip-empower')) {
-      const relic = getEternalRelic('equip-empower');
-      patch.eternalRelics = [...(state.eternalRelics ?? []), relic];
+    const relic = getEternalRelic('equip-empower');
+    const had = hasEternalRelic(state.eternalRelics ?? [], 'equip-empower');
+    patch.eternalRelics = [...(state.eternalRelics ?? []), relic];
+    if (had) {
+      const newCount = countEternalRelics(patch.eternalRelics, 'equip-empower');
+      log(sideEffects, 'potion', `永恒护符·铸锋药剂 叠加 ×${newCount}！`);
+      banner(sideEffects, `永恒护符·铸锋药剂 叠加 ×${newCount}！`);
+    } else {
       log(sideEffects, 'potion', '获得永恒护符·铸锋药剂：装备上装备时，该装备栏获得 3 临时攻击和 3 临时护甲！');
       banner(sideEffects, '获得永恒护符·铸锋药剂！装备时获得 +3 临时攻击/+3 临时护甲。');
-    } else {
-      log(sideEffects, 'potion', '永恒护符·铸锋药剂：效果已存在，无法叠加。');
-      banner(sideEffects, '效果已存在，无法叠加。');
     }
     enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -349,12 +355,14 @@ export function resolveAllPotionEffects(
 
   // --- Grant end-turn-draw (eternal relic) ---
   if (effect === 'grant-amulet-end-turn-draw') {
-    if (hasEternalRelic(state.eternalRelics ?? [], 'end-turn-draw')) {
-      log(sideEffects, 'potion', '回合汲取药：永恒护符效果已存在，无法叠加。');
-      banner(sideEffects, '永恒护符效果已存在，无法叠加。');
+    const relic = getEternalRelic('end-turn-draw');
+    const had = hasEternalRelic(state.eternalRelics ?? [], 'end-turn-draw');
+    patch.eternalRelics = [...(state.eternalRelics ?? []), relic];
+    if (had) {
+      const newCount = countEternalRelics(patch.eternalRelics, 'end-turn-draw');
+      log(sideEffects, 'potion', `永恒护符·回合汲取 叠加 ×${newCount}！`);
+      banner(sideEffects, `永恒护符·回合汲取 叠加 ×${newCount}！`);
     } else {
-      const relic = getEternalRelic('end-turn-draw');
-      patch.eternalRelics = [...(state.eternalRelics ?? []), relic];
       log(sideEffects, 'potion', '回合汲取药：获得永恒护符「回合汲取」！结束英雄回合时抽 1 张牌。');
       banner(sideEffects, '获得永恒护符「回合汲取」！结束英雄回合时抽 1 张牌。');
     }
@@ -889,16 +897,16 @@ export function resolvePendingPotion(
 
     // --- Swap slot damage/shield (player-chosen slot, perm + temp swap) ---
     //
-    // 拆成「先减、再加」两阶段处理：
-    //   Phase A: 把选中栏的「当前永久攻击/护甲、临时攻击/护甲」全部减到 0。
-    //            护甲方向同步走 temp-first 损耗归因（参考 waterfall.ts），
-    //            把 armorBonusDamaged 按"先吃 temp、再 clamp 到新 perm（=0）"算掉，
-    //            因此 perm.shield 减到 0 的同时 armorBonusDamaged 也归 0。
-    //   Phase B: 再加上「原永久攻击 → 新永久护甲、原临时攻击 → 新临时护甲」
-    //            （以及攻击方向的对称加法）。这一步是"全新护甲"，
-    //            没有遗留的 damaged 计数啃它。
+    // 4 个数字按字面互换：
+    //   perm.damage  ↔  perm.shield
+    //   temp.attack  ↔  temp.armor
     //
-    // 净效果：4 个数字按字面互换，且新护甲是"满的"，不被旧 damaged 拖累。
+    // 单计数 armor model 下：armor cap 跟着 perm.shield + temp.armor 变。
+    // 互换后，新 armor cap = base + curPermDamage + curTempAttack。
+    // 既然这是"翻新"性质的 swap（armor 完全换成另一种），armor 直接 refill
+    // 到新 cap（如果原本是 undefined / 满则保持满；如果原本被打了，就视为
+    // "swap 后的护甲是新的、满的"——参考 user 关于"刚加上永久/临时护甲 →
+    // armor 立马增加"的语义）。
     case 'swap-slot-damage-shield': {
       const slotId = (action as any).slotId as EquipmentSlotId;
       if (!slotId) return null;
@@ -909,39 +917,10 @@ export function resolvePendingPotion(
       const curTempAttack = state.slotTempAttack?.[slotId] ?? 0;
       const curTempArmor = state.slotTempArmor?.[slotId] ?? 0;
 
-      // Phase A：减到 0（包含 temp-first 损耗归因）
-      // 护甲方向：perm.shield -= curPermShield，temp.armor -= curTempArmor
-      // 攻击方向：perm.damage -= curPermDamage，temp.attack -= curTempAttack
-      let nextPermShield = curPermShield - curPermShield;
-      let nextPermDamage = curPermDamage - curPermDamage;
-      let nextTempArmor = curTempArmor - curTempArmor;
-      let nextTempAttack = curTempAttack - curTempAttack;
-
-      // armorBonusDamaged 是 perm.shield + temp.armor 共享伤害池的累计计数。
-      // 按 shared-damage-pool-temp-first-attribution.mdc 规则：先让 temp 吃，再 clamp 到新 perm。
-      const slotItem = state[slotId];
-      let nextSlotItem: typeof slotItem | undefined;
-      if (slotItem && (slotItem.type === 'shield' || slotItem.type === 'monster')) {
-        const existingDamaged = slotItem.armorBonusDamaged ?? 0;
-        if (existingDamaged > 0 && curTempArmor >= 0) {
-          const afterTempAbsorb = Math.max(0, existingDamaged - curTempArmor);
-          const clampedDamaged = Math.min(afterTempAbsorb, nextPermShield); // nextPermShield === 0
-          if (clampedDamaged !== existingDamaged) {
-            if (clampedDamaged > 0) {
-              nextSlotItem = { ...slotItem, armorBonusDamaged: clampedDamaged };
-            } else {
-              const { armorBonusDamaged: _drop, ...rest } = slotItem as GameCardData & { armorBonusDamaged?: number };
-              nextSlotItem = rest as typeof slotItem;
-            }
-          }
-        }
-      }
-
-      // Phase B：加新值（永久攻击/护甲互换、临时攻击/护甲互换）
-      nextPermShield += curPermDamage; // 新护甲 = 旧攻击
-      nextPermDamage += curPermShield; // 新攻击 = 旧护甲
-      nextTempArmor += curTempAttack; // 新临时护甲 = 旧临时攻击
-      nextTempAttack += curTempArmor; // 新临时攻击 = 旧临时护甲
+      const nextPermShield = curPermDamage; // 新护甲 = 旧攻击
+      const nextPermDamage = curPermShield; // 新攻击 = 旧护甲
+      const nextTempArmor = curTempAttack; // 新临时护甲 = 旧临时攻击
+      const nextTempAttack = curTempArmor; // 新临时攻击 = 旧临时护甲
 
       patch.equipmentSlotBonuses = {
         ...state.equipmentSlotBonuses,
@@ -949,9 +928,10 @@ export function resolvePendingPotion(
       };
       patch.slotTempAttack = { ...state.slotTempAttack, [slotId]: nextTempAttack };
       patch.slotTempArmor = { ...state.slotTempArmor, [slotId]: nextTempArmor };
-      if (nextSlotItem !== undefined) {
-        (patch as any)[slotId] = nextSlotItem;
-      }
+
+      // Refill armor to the new cap so the swapped-in shield/monster armor is
+      // fresh & full (matches "刚加上永久/临时护甲 → armor 立马增加" semantic).
+      refillSlotArmorToCap(state, slotId, patch);
 
       patch.pendingPotionAction = null;
       patch.heroSkillBanner = null;

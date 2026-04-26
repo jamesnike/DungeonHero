@@ -3,12 +3,13 @@
  *
  * Behavior:
  *   - PLAY_CARD always sets `pendingMagicAction { effect: 'cleanse-draw',
- *     step: 'cleanse-draw-select', echoRemaining, data.drawCount }` and emits
- *     a `card:cleanseDrawRequested` side effect.
- *   - Damage / draws / hand mutation happen in the hook layer; the hook calls
- *     `requestCardAction('delete', 1, { handOnly: true })` and dispatches
- *     `DRAW_CARDS source='backpack'` after each pick.
- *   - drawCount = [3, 4, 5][upgradeLevel] — Perm 1 with maxUpgradeLevel = 2.
+ *     step: 'cleanse-draw-select', echoRemaining }` and emits a
+ *     `card:cleanseDrawRequested` side effect.
+ *   - Hand pick (delete) + graveyard discover (3-pick-1 into hand) happen in
+ *     the hook layer; the hook calls `requestCardAction('delete', 1, { handOnly: true })`
+ *     then `requestGraveyardSelection(3, { delivery: 'hand-first' })` per
+ *     iteration.
+ *   - No upgrade scaling — single-shot effect regardless of upgradeLevel.
  *   - Echo (Spell Echo, Category B): the resolver writes
  *     `echoRemaining = echoMultiplier`. The hook drives the loop; this test
  *     file covers the reducer-side state, not the hook loop itself.
@@ -40,11 +41,10 @@ function makeCleanseCard(idSuffix = 'a', extras: Record<string, any> = {}): Game
     image: '',
     classCard: true,
     magicType: 'permanent' as const,
-    magicEffect: '删 1 张手牌，从背包抽 N 张（升 0/1/2 → 3/4/5）。',
-    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从背包抽 3 张牌。',
+    magicEffect: '删 1 张手牌；坟场发现一张牌（3 选 1）加入手牌。',
+    description: '永久：选择一张手牌删除（手牌为空则跳过），从坟场发现一张牌（三选一），加入手牌。',
     knightEffect: 'cleanse-draw',
     recycleDelay: 1,
-    maxUpgradeLevel: 2,
     ...extras,
   } as any;
 }
@@ -73,65 +73,41 @@ function findCleanseEvent(sideEffects: any[]) {
 }
 
 // ---------------------------------------------------------------------------
-// PLAY_CARD — sets pendingMagicAction + emits side effect (lvl 0 / 1 / 2)
+// PLAY_CARD — sets pendingMagicAction + emits side effect
 // ---------------------------------------------------------------------------
 
 describe('净册涌泉 PLAY_CARD', () => {
-  it('lvl 0 → drawCount = 3, pending effect = cleanse-draw', () => {
-    const card = makeCleanseCard('lvl0', { upgradeLevel: 0 });
+  it('emits cleanseDrawRequested side effect with echoRemaining=1; pending step set', () => {
+    const card = makeCleanseCard('basic');
     const state = makeState({ handCards: [card] as any });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
     const pending = result.state.pendingMagicAction as any;
     expect(pending?.effect).toBe('cleanse-draw');
     expect(pending?.step).toBe('cleanse-draw-select');
-    expect(pending?.data?.drawCount).toBe(3);
     expect(pending?.echoRemaining).toBe(1);
 
     const payload = findCleanseEvent(result.sideEffects);
     expect(payload).toBeDefined();
-    expect(payload.drawCount).toBe(3);
     expect(payload.echoRemaining).toBe(1);
     expect(payload.card.id).toBe(card.id);
+    // No drawCount — graveyard discover replaces the backpack draw.
+    expect((payload as any).drawCount).toBeUndefined();
 
     expect(result.state.handCards.find((c: any) => c.id === card.id)).toBeUndefined();
   });
 
-  it('lvl 1 → drawCount = 4', () => {
-    const card = makeCleanseCard('lvl1', { upgradeLevel: 1 });
-    const state = makeState({ handCards: [card] as any });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-
-    const pending = result.state.pendingMagicAction as any;
-    expect(pending?.data?.drawCount).toBe(4);
-
-    const payload = findCleanseEvent(result.sideEffects);
-    expect(payload?.drawCount).toBe(4);
-  });
-
-  it('lvl 2 → drawCount = 5', () => {
-    const card = makeCleanseCard('lvl2', { upgradeLevel: 2 });
-    const state = makeState({ handCards: [card] as any });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-
-    const pending = result.state.pendingMagicAction as any;
-    expect(pending?.data?.drawCount).toBe(5);
-
-    const payload = findCleanseEvent(result.sideEffects);
-    expect(payload?.drawCount).toBe(5);
-  });
-
-  it('plays even with empty hand (resolver does NOT pre-check; hook handles empty-hand draw-only)', () => {
+  it('plays even with empty hand (resolver does NOT pre-check; hook handles empty-hand discover-only)', () => {
     // The card itself is in handCards as the only card. After PLAY_CARD removes
     // it, hand is empty — but the resolver still sets up cleanseDrawRequested
-    // because the hook owns the empty-hand "draw only" branch.
+    // because the hook owns the empty-hand "discover only" branch.
     const card = makeCleanseCard('emptyhand');
     const state = makeState({ handCards: [card] as any });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
     const payload = findCleanseEvent(result.sideEffects);
     expect(payload).toBeDefined();
-    expect(payload.drawCount).toBe(3);
+    expect(payload.echoRemaining).toBe(1);
   });
 });
 
@@ -141,7 +117,7 @@ describe('净册涌泉 PLAY_CARD', () => {
 
 describe('净册涌泉 法术回响 (Spell Echo, Category B)', () => {
   it('with doubleNextMagic active → echoRemaining = 2, hook will loop twice', () => {
-    const card = makeCleanseCard('echo', { upgradeLevel: 0 });
+    const card = makeCleanseCard('echo');
     const state = makeState({
       handCards: [card] as any,
       doubleNextMagic: true,
@@ -150,7 +126,6 @@ describe('净册涌泉 法术回响 (Spell Echo, Category B)', () => {
 
     const pending = result.state.pendingMagicAction as any;
     expect(pending?.echoRemaining).toBe(2);
-    expect(pending?.data?.drawCount).toBe(3);
 
     const payload = findCleanseEvent(result.sideEffects);
     expect(payload?.echoRemaining).toBe(2);
@@ -161,17 +136,17 @@ describe('净册涌泉 法术回响 (Spell Echo, Category B)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// End-to-end: simulate hook loop (CONFIRM_DELETE_CARD → DRAW_CARDS → FINALIZE)
+// End-to-end: simulate hook loop
+//   PLAY_CARD → CONFIRM_DELETE_CARD → REQUEST_GRAVEYARD_SELECTION →
+//   RESOLVE_GRAVEYARD_SELECTION (delivery: 'hand-first') → FINALIZE
 // ---------------------------------------------------------------------------
 
 describe('净册涌泉 end-to-end (simulated hook loop)', () => {
   it('PLAY → CONFIRM_DELETE_CARD removes the picked hand card', () => {
     const card = makeCleanseCard('e2e');
     const target = makeFiller('hand-victim');
-    const deckCards = [makeFiller('deck-1'), makeFiller('deck-2')];
     const state = makeState({
       handCards: [card, target] as any,
-      remainingDeck: deckCards as any,
       cardActionContext: {
         mode: 'event',
         keyword: 'delete',
@@ -191,16 +166,16 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
     expect((after.state.handCards as any[]).find(c => c.id === card.id)).toBeUndefined();
   });
 
-  it('PLAY → CONFIRM_DELETE → DRAW_CARDS backpack=3 → 3 cards land in hand from backpack', () => {
-    const card = makeCleanseCard('full', { upgradeLevel: 0 });
+  it('PLAY → CONFIRM_DELETE → graveyard discover → selected card lands in hand', () => {
+    const card = makeCleanseCard('full');
     const target = makeFiller('hand-victim');
-    const bp1 = makeFiller('bp-1');
-    const bp2 = makeFiller('bp-2');
-    const bp3 = makeFiller('bp-3');
-    const bp4 = makeFiller('bp-4');
+    // 3 cards in graveyard so requestGraveyardSelection can present 3 options.
+    const grave1 = makeFiller('grave-1');
+    const grave2 = makeFiller('grave-2');
+    const grave3 = makeFiller('grave-3');
     const state = makeState({
       handCards: [card, target] as any,
-      backpackItems: [bp1, bp2, bp3, bp4] as any,
+      discardedCards: [grave1, grave2, grave3] as any,
       cardActionContext: {
         mode: 'event',
         keyword: 'delete',
@@ -210,59 +185,82 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
       } as any,
     });
 
-    const after = drain(state, [
+    // Step 1: PLAY + CONFIRM_DELETE — emit cleanseDrawRequested.
+    const afterDelete = drain(state, [
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
       { type: 'CONFIRM_DELETE_CARD', cardId: target.id, source: 'hand' } as GameAction,
-      { type: 'DRAW_CARDS', count: 3, source: 'backpack' } as GameAction,
+    ]);
+
+    // Hook would now: requestGraveyardSelection(3, { delivery: 'hand-first' }).
+    // In the real game this is a top-level engine.dispatch — bypassing the
+    // pipeline's INPUT_PHASES gate. We mirror that by calling reduce() directly,
+    // then drain any enqueuedActions through the pipeline.
+    const requestResult = reduce(afterDelete.state, {
+      type: 'REQUEST_GRAVEYARD_SELECTION',
+      maxOptions: 3,
+      delivery: 'hand-first',
+    } as any);
+    const afterRequest = drain(requestResult.state, requestResult.enqueuedActions);
+
+    const options = afterRequest.state.graveyardDiscoverState ?? [];
+    expect(options.length).toBe(3);
+    const chosenId = options[0]!.id;
+
+    // Hook would then: user clicks one → RESOLVE_GRAVEYARD_SELECTION (hand-first)
+    const afterResolve = drain(afterRequest.state, [
+      { type: 'RESOLVE_GRAVEYARD_SELECTION', cardIds: [chosenId], context: { delivery: 'hand-first' } } as GameAction,
       { type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false } as GameAction,
     ]);
 
-    // 3 backpack cards moved into hand (which exact 3 depends on backpack-draw
-    // ordering — assert by count, not identity, to avoid coupling to the impl).
-    const drawnInHand = (after.state.handCards as any[]).filter(c => c.id.startsWith('bp-'));
-    expect(drawnInHand.length).toBe(3);
-    // Backpack down by 3.
-    expect((after.state.backpackItems as any[]).filter(c => c.id.startsWith('bp-')).length).toBe(1);
+    // Selected graveyard card landed in hand.
+    expect((afterResolve.state.handCards as any[]).some(c => c.id === chosenId)).toBe(true);
+    // Selected card removed from graveyard.
+    expect((afterResolve.state.discardedCards as any[]).some(c => c.id === chosenId)).toBe(false);
+
     // Pending magic cleared, card sent to recycle bag (Perm 1).
+    expect(afterResolve.state.pendingMagicAction).toBeNull();
+    expect(
+      (afterResolve.state.permanentMagicRecycleBag as any[] | undefined)?.some(c => c.id === card.id)
+      ?? (afterResolve.state.recycleBag as any[] | undefined)?.some(c => c.id === card.id),
+    ).toBe(true);
+  });
+
+  it('graveyard empty: REQUEST_GRAVEYARD_SELECTION sets banner and skips discover state', () => {
+    const card = makeCleanseCard('empty-grave');
+    const state = makeState({
+      handCards: [card] as any,
+      discardedCards: [] as any,
+    });
+
+    const afterPlay = drain(state, [
+      { type: 'PLAY_CARD', cardId: card.id } as GameAction,
+    ]);
+
+    // Same top-level dispatch pattern as the previous test: the hook calls
+    // requestGraveyardSelection which reduce()s top-level, bypassing the
+    // INPUT_PHASES gate. With graveyard empty the reducer takes the early
+    // `eligible.length === 0` branch and just posts a banner.
+    const requestResult = reduce(afterPlay.state, {
+      type: 'REQUEST_GRAVEYARD_SELECTION',
+      maxOptions: 3,
+      delivery: 'hand-first',
+    } as any);
+    const afterRequest = drain(requestResult.state, requestResult.enqueuedActions);
+
+    const after = drain(afterRequest.state, [
+      { type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false } as GameAction,
+    ]);
+
+    // No discover state set when graveyard is empty.
+    expect(after.state.graveyardDiscoverState ?? []).toEqual([]);
+    // Banner posted.
+    expect(after.state.heroSkillBanner ?? '').toContain('坟场');
+    // Card still cycled to recycle bag.
     expect(after.state.pendingMagicAction).toBeNull();
     expect(
       (after.state.permanentMagicRecycleBag as any[] | undefined)?.some(c => c.id === card.id)
       ?? (after.state.recycleBag as any[] | undefined)?.some(c => c.id === card.id),
     ).toBe(true);
-  });
-
-  it('lvl 2 end-to-end: 5 cards drawn from backpack after one delete', () => {
-    const card = makeCleanseCard('lvl2-e2e', { upgradeLevel: 2 });
-    const target = makeFiller('hand-victim');
-    const backpackCards = [
-      makeFiller('bp-1'),
-      makeFiller('bp-2'),
-      makeFiller('bp-3'),
-      makeFiller('bp-4'),
-      makeFiller('bp-5'),
-      makeFiller('bp-6'),
-    ];
-    const state = makeState({
-      handCards: [card, target] as any,
-      backpackItems: backpackCards as any,
-      cardActionContext: {
-        mode: 'event',
-        keyword: 'delete',
-        requiredCount: 1,
-        remainingCount: 1,
-        handOnly: true,
-      } as any,
-    });
-
-    const after = drain(state, [
-      { type: 'PLAY_CARD', cardId: card.id } as GameAction,
-      { type: 'CONFIRM_DELETE_CARD', cardId: target.id, source: 'hand' } as GameAction,
-      { type: 'DRAW_CARDS', count: 5, source: 'backpack' } as GameAction,
-      { type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false } as GameAction,
-    ]);
-
-    expect((after.state.handCards as any[]).filter(c => c.id.startsWith('bp-')).length).toBe(5);
-    expect((after.state.backpackItems as any[]).filter(c => c.id.startsWith('bp-')).length).toBe(1);
   });
 });
 
@@ -272,10 +270,11 @@ describe('净册涌泉 end-to-end (simulated hook loop)', () => {
 
 describe('净册涌泉 × 招灵书印 stacking', () => {
   it('CONFIRM_DELETE_CARD on a hand card while wearing 招灵书印 enqueues a separate backpack draw', () => {
-    // The cleanse-draw magic itself does NOT enqueue the 2 backpack draws
-    // (the hook does). What we verify here: the existing 招灵书印 amulet
-    // still fires on the kw='delete' confirm coming from cleanse-draw's
-    // hand picker, on top of whatever the hook will then dispatch.
+    // The cleanse-draw magic itself no longer dispatches a backpack draw
+    // (the new effect discovers from graveyard instead). What we verify here:
+    // the existing 招灵书印 amulet still fires on the kw='delete' confirm
+    // coming from cleanse-draw's hand picker, completely independently of
+    // the magic effect.
     const target = makeFiller('hand-victim');
     const state = makeState({
       handCards: [target] as any,

@@ -78,6 +78,7 @@ import knightScrollBagFetchImage from '@assets/generated_images/knight_scroll_ba
 import knightMagicBloodDrawImage from '@assets/generated_images/knight_magic_blood_draw.png';
 import knightWeaponResonanceBladeImage from '@assets/generated_images/knight_weapon_resonance_blade.png';
 import dedupeStarterMagicMissileImage from '@assets/generated_images/knight_magic_missile_crossbow.png';
+import knightBarrageShieldImage from '@assets/generated_images/knight_barrage_shield.png';
 import dedupeStarterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
 import knightShieldEnduranceImage from '@assets/generated_images/knight_shield_endurance.png';
 import knightGrowthShieldImage from '@assets/generated_images/knight_growth_shield.png';
@@ -253,10 +254,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: dedupeKnightHeroHolyLightImage,
     classCard: true,
     unique: true,
-    description: '第一次使用时解锁圣光；已掌握时充满数值槽，可手动发动。',
-    shortDescription: '解锁圣光；已掌握时充满数值槽',
+    description: '第一次使用时解锁圣光；已掌握时充满数值槽，可手动发动。发动效果：回满生命。',
+    shortDescription: '解锁圣光；发动回满生命',
     heroMagicId: 'holy-light',
-    heroMagicEffect: '英雄魔法：解锁或触发圣光。',
+    heroMagicEffect: '英雄魔法：解锁或触发圣光（回满生命）。',
   });
 
   pushCard({
@@ -357,6 +358,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroReviveTomeImage,
     classCard: true,
+    unique: true,
     description: '永久：失去 3 生命，生命上限永久 +3。',
     shortDescription: '失去 3 生命，生命上限永久 +3',
     magicType: 'permanent',
@@ -638,6 +640,24 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     durability: 4,
     maxDurability: 4,
     armorMax: 1,
+  });
+
+  // 弹幕护盾 — 完美格挡时直接将 2 张「魔弹」加入手牌（手牌已满则静默丢弃）。
+  // 走 createMagicBoltCard + applyAmplifyOnCreate（与魔弹连弩 / 魔法飞弹 / 弹幕之符 一致），
+  // 让新生成的「魔弹」继承当前 amplifiedCardBonus['魔弹'] 累计加成。
+  // 实现位置：rules/combat.ts 完美格挡判定块（dual-guard 之后、blockGrantTempArmorToOther 之前）。
+  pushCard({
+    type: 'shield',
+    name: '弹幕护盾',
+    value: 2,
+    image: knightBarrageShieldImage,
+    classCard: true,
+    description: '完美格挡时，将 2 张「魔弹」加入手牌（手牌已满则静默丢弃多余的）。',
+    shortDescription: '完美格挡 → 2 张「魔弹」入手牌',
+    perfectBlockSpawnMissiles: 2,
+    durability: 3,
+    maxDurability: 3,
+    armorMax: 2,
   });
 
   // === NEW AMULETS (3 cards) ===
@@ -991,23 +1011,21 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 2,
   });
 
-  // 净册涌泉 (Perm 1)：选择一张手牌删除，从背包抽 N 张牌
-  // （N = 3 / 4 / 5，对应升级 0 / 1 / 2）。手牌为空时跳过删除，仍正常抽 N 张。
-  // 触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），与「招灵书印」护符
-  // (delete-draw) 能够叠加：每次删除还会额外从背包抽 2N 张。
+  // 净册涌泉 (Perm 1)：选择一张手牌删除（手牌为空则跳过），然后从坟场发现一张牌
+  // （三选一），加入手牌。触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），
+  // 与「招灵书印」护符 (delete-draw) 能够叠加：每次删除还会额外从背包抽 2 张。
   pushCard({
     type: 'magic',
     name: '净册涌泉',
     value: 0,
     image: dedupeKnightMagicCleanseDrawImage,
     classCard: true,
-    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从背包抽 3 张牌。',
-    shortDescription: '删 1 张手牌；从背包抽 3 张',
+    description: '永久：选择一张手牌删除（手牌为空则跳过），从坟场发现一张牌（三选一），加入手牌。',
+    shortDescription: '删 1 张手牌；坟场发现 1 张（3 选 1）',
     magicType: 'permanent',
-    magicEffect: '删 1 张手牌，从背包抽 N 张（升 0/1/2 → 3/4/5）。',
+    magicEffect: '删 1 张手牌；坟场发现一张牌（3 选 1）加入手牌。',
     knightEffect: 'cleanse-draw',
     recycleDelay: 1,
-    maxUpgradeLevel: 2,
   });
 
   // 洗册归川 (Perm 1)：将背包所有牌移入永久魔法回收袋；然后整袋瀑流 -1，
@@ -1119,6 +1137,26 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     recycleDelay: 1,
   });
 
+  // 淬铸迁位 (Perm 1)：选择一个装备栏的装备进行增幅一次（同名卡按 NAME 全场 +1）；
+  // 若另一装备栏为空，把所选装备从原栏移到空位（原栏的预备位会自动晋升）。
+  // - 只能选择有装备的栏；空槽点击会被 reducer 拒绝且不消耗这张 magic（玩家可重选）。
+  // - Echo (A 类)：增幅 amount = 1 × echoMultiplier（多次叠加），「移到空位」最多发生 1 次
+  //   （第二轮时另一栏不再为空，自然不再移动）。
+  // - 不设升级。
+  pushCard({
+    type: 'magic',
+    name: '淬铸迁位',
+    value: 0,
+    image: knightAmplifyPotionImage,
+    classCard: true,
+    description: '永久：选择一个装备栏的装备进行增幅一次（同名卡 +1）。若另一装备栏为空，将其换到空位。',
+    shortDescription: '所选装备增幅 +1；空栏则换位',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：所选装备栏的装备 +1 增幅（按卡名累计），若另一栏为空则换到空位。',
+    knightEffect: 'amplify-equipment-shift',
+    recycleDelay: 1,
+  });
+
   // 蓄能裂击 (Perm 2)：选择一个装备，耐久上限 +1，耐久 +1；
   // 若 +1 后该装备的当前耐久 == 4，则从激活行随机一个怪物造成 1 血层伤害，
   // 并立即将该装备耐久 -3（即使没怪物可打也照扣）。
@@ -1131,6 +1169,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
+    unique: true,
     description: '永久：选择一件装备，耐久上限 +1，耐久 +1。如果加完后该装备耐久为 4，则随机一只激活行的怪物受到 1 血层伤害，并立即将该装备耐久 -3。',
     shortDescription: '选装备 +1 上限/耐久；若至 4 耐久，敌人 -1 血层、装备 -3',
     magicType: 'permanent',
@@ -1145,12 +1184,13 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollFortifyFlankImage,
     classCard: true,
-    description: '永久：选择一个装备，+3（每次使用后数值 +1）临时护甲。侧击：赋予该装备复生。',
-    shortDescription: '+3(递增) 临时护甲；侧击赋予复生',
+    unique: true,
+    description: '永久：选择一个装备，+3（每次使用后数值 +1）临时护甲。侧击：该装备耐久度减到 1，赋予该装备复生。',
+    shortDescription: '+3(递增) 临时护甲；侧击：耐久减至 1+复生',
     magicType: 'permanent',
-    magicEffect: '+3(递增) 临时护甲，侧击赋予复生。',
+    magicEffect: '+3(递增) 临时护甲，侧击：耐久减至 1+赋予复生。',
     knightEffect: 'flank-fortify',
-    flankEffect: '赋予该装备复生',
+    flankEffect: '该装备耐久度减到 1，赋予该装备复生',
     recycleDelay: 2,
   });
 
@@ -1160,6 +1200,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
+    unique: true,
     description:
       '永久：选择一把武器，对激活行所有怪物造成等同于该武器攻击力的法术伤害（不耗耐久），然后该武器栏临时攻击 -3。',
     shortDescription: '武器攻击力法伤全场；该栏临时攻击 -3',
@@ -1292,10 +1333,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicMissingHpSmiteImage,
     classCard: true,
-    description: '永久：选择一个怪物，失去一半剩余生命值，对该怪物造成失去血量 ×2 的伤害。',
-    shortDescription: '失去一半生命；伤害 ＝ 失去血量 ×2',
+    description: '永久：选择一个怪物，失去一半剩余生命值，对该怪物造成失去血量的伤害 2 次（先后分开结算，每次独立结算掉血/掉血层/技能触发）。',
+    shortDescription: '失去一半生命；造成失去血量伤害 2 次',
     magicType: 'permanent',
-    magicEffect: '失去半血，造成双倍伤害。',
+    magicEffect: '失去半血，造成 2 次失去血量伤害。',
     knightEffect: 'blood-sacrifice-strike',
   });
 
@@ -1462,8 +1503,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: dedupeStarterMagicMissileImage,
     classCard: true,
-    description: '每次攻击后，所有「魔弹」获得 +1 增幅，并将一张同步增幅的「魔弹」加入背包。',
-    shortDescription: '每次攻击：所有魔弹 +1 增幅；背包 +1 张魔弹',
+    description: '超杀：所有「魔弹」获得 +1 增幅，并将一张同步增幅的「魔弹」加入背包。',
+    shortDescription: '超杀：所有魔弹 +1 增幅；背包 +1 张魔弹',
     durability: 3,
     maxDurability: 3,
     onAttackAmplifyMissileGenerate: true,
@@ -1523,7 +1564,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     magicType: 'instant',
     knightEffect: 'missile-storm',
     magicEffect: '即时魔法：坟场中每张「魔弹」对随机怪物造成 1 点法术伤害（依次发射）。',
-    description: '坟场中每有一张「魔弹」，便从坟场调动一枚向随机怪物发射 1 点法术伤害，依次连射；不消耗坟场中的魔弹。',
+    description: '将坟场中所有的「魔弹」向随机怪物发射。',
     shortDescription: '坟场每张「魔弹」对随机怪物 1 法伤',
   });
 

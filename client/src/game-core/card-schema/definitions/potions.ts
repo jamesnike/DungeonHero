@@ -311,6 +311,21 @@ const potionDefinitions: CardDefinition[] = [
     tags: ['buff', 'permanent'],
   },
 
+  // --- Max HP +6 (standalone) ---
+  // 血源酿 (starter potion): cap-only —— 仅抬 permanentMaxHpBonus，
+  // 当前 hp 不变。镜像 砺心之盾 / 永恒之器 / spell-lifesteal+1-maxhp+6
+  // 的 cap-only 语义。一次性消耗。
+  {
+    effectId: 'potion:maxhp+6',
+    effects: [
+      { type: 'modifyStat', stat: 'permanentMaxHpBonus', delta: 6 },
+      { type: 'log', logType: 'potion', message: '${card.name}：生命值上限永久 +6！' },
+      { type: 'banner', text: '生命值上限 +6！' },
+      { type: 'finalize' },
+    ],
+    tags: ['buff', 'permanent'],
+  },
+
   // --- Hand limit +1 (standalone) ---
   {
     effectId: 'potion:hand-limit+1',
@@ -356,6 +371,7 @@ const potionDefinitions: CardDefinition[] = [
         bannerMsg: '获得永恒护符·连劝秘药！连续劝降同一怪物，每次累计概率 +15%。',
         dupeLogMsg: '永恒护符·连劝秘药：效果已存在，无法叠加。',
         dupeBannerMsg: '效果已存在，无法叠加。',
+        stackable: true,
       },
       { type: 'finalize' },
     ],
@@ -372,6 +388,7 @@ const potionDefinitions: CardDefinition[] = [
         bannerMsg: '获得永恒护符·铸锋药剂！装备时获得 +3 临时攻击/+3 临时护甲。',
         dupeLogMsg: '永恒护符·铸锋药剂：效果已存在，无法叠加。',
         dupeBannerMsg: '效果已存在，无法叠加。',
+        stackable: true,
       },
       { type: 'finalize' },
     ],
@@ -388,6 +405,7 @@ const potionDefinitions: CardDefinition[] = [
         bannerMsg: '获得永恒护符「回合汲取」！结束英雄回合时抽 1 张牌。',
         dupeLogMsg: '回合汲取药：永恒护符效果已存在，无法叠加。',
         dupeBannerMsg: '永恒护符效果已存在，无法叠加。',
+        stackable: true,
       },
       { type: 'finalize' },
     ],

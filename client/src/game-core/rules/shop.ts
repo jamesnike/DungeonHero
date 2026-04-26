@@ -27,7 +27,7 @@ import { upgradeCardPure } from '../cardUpgrade';
 import { SHOP_EQUIP_BOOST_COST, SHOP_SKILL_DISCOVER_COST, SHOP_REFRESH_COST, MAX_SHOP_LEVEL } from '../constants';
 import { shuffle as rngShuffle, nextId } from '../rng';
 import { applyAmplifyOnCreate } from '../helpers';
-import { computeAmuletEffects } from '../equipment';
+import { computeAmuletEffectsForState } from '../equipment';
 import { minionImage, createStarterHealEchoCard } from '../deck';
 import { cloneClassCardWithFreshId, sampleDistinctByName } from '../cardClone';
 import { BASE_BACKPACK_CAPACITY } from '../constants';
@@ -868,7 +868,7 @@ function reduceConfirmDeleteCard(
   // copies. Only fires for kw === 'delete'; discard/recycle/move-to do not
   // count as 删除.
   if (kw === 'delete') {
-    const ae = computeAmuletEffects(state.amuletSlots as import('@/components/GameCard').GameCardData[]);
+    const ae = computeAmuletEffectsForState(state);
     if (ae.deleteDrawCount > 0) {
       const drawCount = 2 * ae.deleteDrawCount;
       enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });

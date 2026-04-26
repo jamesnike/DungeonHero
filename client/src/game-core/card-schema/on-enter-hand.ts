@@ -103,8 +103,8 @@ export function getOnEnterHandShortLabel(card: GameCardData): string | null {
       return '上手：随机一栏 +1 临时攻';
     case 'growth-blade-onhand':
       return '上手：同名 +2 攻击';
-    case 'stun-cap-bonus-3':
-      return '上手：+3% 击晕上限';
+    case 'stun-cap-bonus-2':
+      return '上手：+2% 击晕上限';
     default:
       return null;
   }

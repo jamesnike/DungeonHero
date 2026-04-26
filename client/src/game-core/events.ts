@@ -16,10 +16,11 @@ import type {
 import type { GameState } from './types';
 import { INITIAL_HP, FLIP_GOLD_REWARD, PERSUADE_COST, MIN_PERSUADE_COST, BASE_BACKPACK_CAPACITY, MAX_SHOP_LEVEL, MAX_PERSUADE_LEVEL, HAND_LIMIT, DURABILITY_CAP, clampMaxDurability } from './constants';
 import { flattenActiveRowSlots, pickRandomHandCardsForDiscardPreferGraveyard, isRecyclableFromHand, applyAmplifyOnCreate } from './helpers';
-import { computeAmuletEffects } from './equipment';
+import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from './equipment';
 import { maybeTriggerDeleteDrawForDestroy } from './deleteDrawTrigger';
 import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
 import { applyEquipDestroyLastWords } from './rules/waterfall';
+import { applyFlipCounters } from './rules/flip-counters';
 import type { GameAction } from './actions';
 import type { SideEffect } from './reducer';
 import { createGraveyardRecallCard } from '@/lib/knightDeck';
@@ -600,7 +601,7 @@ function applyFlipGoldBonus(
   patch: Partial<GameState>,
   logs: Array<{ type: string; message: string }>,
 ): boolean {
-  const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const amuletFx = computeAmuletEffectsForState(state);
   if (amuletFx.flipGoldCount > 0) {
     const goldGain = FLIP_GOLD_REWARD * amuletFx.flipGoldCount;
     patch.gold = (patch.gold ?? state.gold) + goldGain;
@@ -638,13 +639,13 @@ export function applySimpleEffect(
     logs.push({ type: 'event', message: `金币减半（${before}→${next}）` });
   } else if (effectToken.startsWith('heal+')) {
     const amount = parseInt(effectToken.replace('heal+', ''), 10) || 0;
-    const aura = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+    const aura = computeAmuletEffectsForState(state);
     const maxHp = INITIAL_HP + (state.permanentMaxHpBonus || 0) + (aura.aura.maxHp || 0);
     const safeHp = Number.isFinite(state.hp) ? state.hp : 0;
     patch = { hp: Math.min(maxHp, safeHp + amount) };
     logs.push({ type: 'heal', message: `恢复 ${amount} 点生命` });
   } else if (effectToken === 'fullheal') {
-    const aura = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+    const aura = computeAmuletEffectsForState(state);
     const maxHp = INITIAL_HP + (state.permanentMaxHpBonus || 0) + (aura.aura.maxHp || 0);
     patch = { hp: maxHp };
     logs.push({ type: 'heal', message: '完全治愈' });
@@ -810,6 +811,7 @@ export function applySimpleEffect(
         },
       },
     };
+    if (amount !== 0) applySlotArmorBonusDelta(state, 'equipmentSlot2', amount, patch);
     logs.push({ type: 'event', message: `右槽永久护甲 +${amount}` });
   } else if (effectToken.startsWith('slotLeftDefense+')) {
     const amount = parseInt(effectToken.replace('slotLeftDefense+', ''), 10) || 0;
@@ -822,6 +824,7 @@ export function applySimpleEffect(
         },
       },
     };
+    if (amount !== 0) applySlotArmorBonusDelta(state, 'equipmentSlot1', amount, patch);
     logs.push({ type: 'event', message: `左槽永久护甲 +${amount}` });
   } else if (effectToken.startsWith('slotRightDamage+')) {
     const amount = parseInt(effectToken.replace('slotRightDamage+', ''), 10) || 0;
@@ -855,8 +858,10 @@ export function applySimpleEffect(
     };
     logs.push({ type: 'event', message: `法术伤害加成减半（${state.permanentSpellDamageBonus}→${next}）` });
   } else if (effectToken === 'halveSlotShieldBonus') {
-    const s1s = Math.floor(state.equipmentSlotBonuses.equipmentSlot1.shield / 2);
-    const s2s = Math.floor(state.equipmentSlotBonuses.equipmentSlot2.shield / 2);
+    const s1sOld = state.equipmentSlotBonuses.equipmentSlot1.shield;
+    const s2sOld = state.equipmentSlotBonuses.equipmentSlot2.shield;
+    const s1s = Math.floor(s1sOld / 2);
+    const s2s = Math.floor(s2sOld / 2);
     patch = {
       equipmentSlotBonuses: {
         ...state.equipmentSlotBonuses,
@@ -865,7 +870,11 @@ export function applySimpleEffect(
       },
       heroSkillBanner: '装备栏永久护甲加成减半！',
     };
-    logs.push({ type: 'event', message: `所有装备栏永久护甲加成减半（左 ${state.equipmentSlotBonuses.equipmentSlot1.shield}→${s1s}，右 ${state.equipmentSlotBonuses.equipmentSlot2.shield}→${s2s}）` });
+    const d1 = s1s - s1sOld;
+    const d2 = s2s - s2sOld;
+    if (d1 !== 0) applySlotArmorBonusDelta(state, 'equipmentSlot1', d1, patch);
+    if (d2 !== 0) applySlotArmorBonusDelta(state, 'equipmentSlot2', d2, patch);
+    logs.push({ type: 'event', message: `所有装备栏永久护甲加成减半（左 ${s1sOld}→${s1s}，右 ${s2sOld}→${s2s}）` });
 
   // --- Amulet / equipment slot capacity ---
 
@@ -992,7 +1001,7 @@ export function applySimpleEffect(
       },
       heroSkillBanner: `全装备栏临时攻击 +${amount}！`,
     };
-    const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+    const amuletFx = computeAmuletEffectsForState(state);
     if (amuletFx.persuadeOnTempAttackCount > 0) {
       const pBonus = amuletFx.persuadeOnTempAttackBonus;
       patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
@@ -1008,7 +1017,7 @@ export function applySimpleEffect(
       },
       heroSkillBanner: `全装备栏临时护甲 +${amount}！`,
     };
-    const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+    const amuletFx = computeAmuletEffectsForState(state);
     if (amuletFx.persuadeOnTempAttackCount > 0) {
       const pBonus = amuletFx.persuadeOnTempAttackBonus;
       patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
@@ -1202,6 +1211,8 @@ export function applySimpleEffect(
       },
       heroSkillBanner: '所有装备栏永久护甲 -1！',
     };
+    applySlotArmorBonusDelta(state, 'equipmentSlot1', -1, patch);
+    applySlotArmorBonusDelta(state, 'equipmentSlot2', -1, patch);
     logs.push({ type: 'event', message: '所有装备栏永久护甲 -1' });
 
   // --- Equipment swap (Phase 5A) ---
@@ -1373,11 +1384,11 @@ export function applySimpleEffect(
   } else if (effectToken === 'shieldUpgrade2') {
     if (state.equipmentSlot1?.type === 'shield') {
       const newArmorMax = (state.equipmentSlot1.armorMax ?? state.equipmentSlot1.value) + 2;
-      const { armor: _, armorBonusDamaged: _bd, ...rest } = state.equipmentSlot1;
+      const { armor: _, ...rest } = state.equipmentSlot1;
       patch.equipmentSlot1 = { ...rest, value: state.equipmentSlot1.value + 2, armorMax: newArmorMax } as typeof state.equipmentSlot1;
     } else if (state.equipmentSlot2?.type === 'shield') {
       const newArmorMax = (state.equipmentSlot2.armorMax ?? state.equipmentSlot2.value) + 2;
-      const { armor: _, armorBonusDamaged: _bd, ...rest } = state.equipmentSlot2;
+      const { armor: _, ...rest } = state.equipmentSlot2;
       patch.equipmentSlot2 = { ...rest, value: state.equipmentSlot2.value + 2, armorMax: newArmorMax } as typeof state.equipmentSlot2;
     }
     patch.heroSkillBanner = '盾牌防御力 +2！';
@@ -1387,7 +1398,7 @@ export function applySimpleEffect(
     const shields = state.discardedCards.filter(c => c.type === 'shield');
     if (shields.length > 0) {
       const shield = shields[shields.length - 1];
-      const { armor: _omitArmor, armorBonusDamaged: _omitBonusDmg, ...shieldRest } = shield;
+      const { armor: _omitArmor, ...shieldRest } = shield;
       const restoredShield: EquipmentItem = {
         ...shieldRest,
         type: 'shield',
@@ -1821,7 +1832,14 @@ export function applySimpleEffect(
   } else if (effectToken === 'discoverStarterMagic') {
     logs.push({ type: 'event', message: '事件效果：发现起始背包的魔法卡' });
     const starterPool = createStarterCardPool();
-    const starterMagicCards = starterPool.filter(c => c.type === 'magic');
+    // Exclude starter magics tagged `unique: true` that the player has already
+    // acquired this run. RESOLVE_DISCOVER_SELECTION will mark the chosen card
+    // before the next discover sees the pool, mirroring the classDeck flow.
+    const starterMagicCards = filterAvailableClassPool(
+      starterPool.filter(c => c.type === 'magic'),
+      state,
+      patch,
+    );
     let discoverRng = state.rng;
     let shuffledMagic: GameCardData[];
     [shuffledMagic, discoverRng] = rngShuffle([...starterMagicCards], discoverRng);
@@ -1888,7 +1906,15 @@ export function applySimpleEffect(
     // STARTER_CARD_IDS.X for `resolvePermanentMagic` routing.
     logs.push({ type: 'event', message: '事件效果：获得 2 张起始背包的魔法卡' });
     const starterPool = createStarterCardPool();
-    const starterMagicCards = starterPool.filter(c => c.type === 'magic');
+    // Exclude starter magics tagged `unique: true` that the player has already
+    // acquired this run. This branch grants directly to backpack/recycle bag
+    // (no RESOLVE_DISCOVER_SELECTION), so we also need to mark the granted
+    // cards below to keep the lock current for future event triggers.
+    const starterMagicCards = filterAvailableClassPool(
+      starterPool.filter(c => c.type === 'magic'),
+      state,
+      patch,
+    );
     let grantRng = state.rng;
     let shuffledMagic: GameCardData[];
     [shuffledMagic, grantRng] = rngShuffle([...starterMagicCards], grantRng);
@@ -1918,6 +1944,10 @@ export function applySimpleEffect(
           ...recycleEntries,
         ];
       }
+      // Both backpack and recycle-bag delivery count as "acquired" for the
+      // unique lock — same lifecycle policy as the rest of the unique system
+      // (see uniqueClass.ts header).
+      markManyUniqueAcquired(granted, state, patch);
       const names = granted.map(c => c.name).join('、');
       patch.heroSkillBanner = toRecycle.length > 0
         ? `获得 2 张起始魔法（${names}）。${toRecycle.length} 张因背包已满进入回收袋。`
@@ -2037,6 +2067,7 @@ export function applySimpleEffect(
     } else {
       const newActive = [...cards] as ActiveRowSlots;
       const flippedNames: string[] = [];
+      let backFlipCount = 0;
       for (const { idx, card } of cellEntries) {
         if (card.flipTarget) {
           // Forward flip via APPLY_CARD_FLIP — preserves flipGold / flipZap / etc.
@@ -2051,11 +2082,22 @@ export function applySimpleEffect(
             payload: { cellIndex: idx, fromCard: card, toCard: restored, message: `${card.name} → ${restored.name}` },
           });
           flippedNames.push(`${card.name} → ${restored.name}`);
+          backFlipCount++;
         }
       }
       patch.activeCards = newActive;
       patch.heroSkillBanner = `万象齐转：翻转 ${cellEntries.length} 张牌！`;
       logs.push({ type: 'event', message: `事件效果：翻转激活行 ${cellEntries.length} 张牌（${flippedNames.join('、')}）` });
+      // Back-flips don't go through APPLY_CARD_FLIP (forward flips do, via the
+      // enqueued APPLY_CARD_FLIP actions above which call applyFlipCounters
+      // inside reduceApplyCardFlip). For each back-flip we must manually fire
+      // the 7 flip-counter consumers (flip-gold / 翻印之符 / 翻覆震慑 / 熔铸耐久
+      // / 翻血之符 / 弧能之符 / 生长之盾) — same convention as 乾坤一翻 active-row
+      // back-flip in rules/hero.ts and starterActiveRowFlip resolver, plus
+      // 血誓回卷 single-target auto-resolve in rules/magic-effects.ts.
+      for (let i = 0; i < backFlipCount; i++) {
+        applyFlipCounters(state, patch, allRawSideEffects, allEnqueuedActions);
+      }
     }
 
   // --- 翻转之契 option 2 ---

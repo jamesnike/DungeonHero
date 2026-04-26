@@ -99,7 +99,7 @@ describe('弹幕骰局 — event token effects', () => {
 // ---------------------------------------------------------------------------
 // Regression: 魔法飞弹（starter:starter-perm-magic-missile）在 amplifiedCardBonus
 // 已经累积了「魔弹」+N 之后，新加入手牌的魔弹必须继承这个 +N。
-// 真实玩家场景：先用魔弹连弩攻击 → AMPLIFY_CARDS_BY_NAME({魔弹, 1}) 触发，
+// 真实玩家场景：先用魔弹连弩 / 魔弹冶刃 超杀怪物 → AMPLIFY_CARDS_BY_NAME({魔弹, 1}) 触发，
 // amplifiedCardBonus['魔弹'] = 1；之后打出魔法飞弹。修复前：新魔弹 amplifyBonus
 // 为 undefined，仍显示并造成 1 点伤害。修复后：amplifyBonus = 1，与其它
 // 现存魔弹一致。

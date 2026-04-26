@@ -22,6 +22,7 @@ import type { RngState } from '../rng';
 import { nextBool, nextInt, pickRandom } from '../rng';
 import { createBugletCard } from '../deck';
 import { resetCardForGraveyard } from '../cards';
+import { applySlotArmorBonusDelta } from '../equipment';
 
 // ---------------------------------------------------------------------------
 // Perm-recycle routing — equipment that is destroyed but carries a Perm flag
@@ -159,7 +160,7 @@ function routeBrokenSelfToGraveOrRecycle(
   enqueuedActions: GameAction[],
 ): void {
   if (isPermRecycle) {
-    const { fromSlot: _fsp, armor: _ap, armorBonusDamaged: _abp, reviveUsed: _rup,
+    const { fromSlot: _fsp, armor: _ap, reviveUsed: _rup,
       equipmentReviveUsed: _erup, wraithRebirthUsed: _wrup, ...rest } =
       slotItem as GameCardData & Record<string, unknown>;
     const cleaned: GameCardData = { ...(rest as GameCardData) };
@@ -335,6 +336,7 @@ function applyOneEquipmentLastWordsIteration(
     slotBonus.shield += slotItem.onDestroyPermanentShield;
     bonuses[slotId] = slotBonus;
     patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
+    applySlotArmorBonusDelta(state, slotId, slotItem.onDestroyPermanentShield, patch);
     sideEffects.push({
       event: 'log:entry',
       payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏永久护甲 +${slotItem.onDestroyPermanentShield}！` },
@@ -357,6 +359,7 @@ function applyOneEquipmentLastWordsIteration(
     tempArmor[slotId] = (tempArmor[slotId] ?? 0) + buffAmount;
     patch.slotTempAttack = tempAttack;
     patch.slotTempArmor = tempArmor;
+    applySlotArmorBonusDelta(state, slotId, buffAmount, patch);
     const stackSuffix = tempBuffStacks > 1 ? `（×${tempBuffStacks}）` : '';
     sideEffects.push({
       event: 'log:entry',
@@ -392,6 +395,7 @@ function applyOneEquipmentLastWordsIteration(
       const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
       tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
       patch.slotTempArmor = tempArmor;
+      applySlotArmorBonusDelta(state, slotId, 3, patch);
       sideEffects.push({
         event: 'log:entry',
         payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏 +3临时护甲！` },
@@ -416,6 +420,8 @@ function applyOneEquipmentLastWordsIteration(
         tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) + amount;
         tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + amount;
         patch.slotTempArmor = tempArmor;
+        applySlotArmorBonusDelta(state, 'equipmentSlot1', amount, patch);
+        applySlotArmorBonusDelta(state, 'equipmentSlot2', amount, patch);
         sideEffects.push({
           event: 'log:entry',
           payload: { type: 'equip', message: `${slotItem.name} 遗言：所有装备栏 +${amount}临时护甲！` },
@@ -739,7 +745,6 @@ export function computeEquipmentBreakEffects(
         const {
           fromSlot: _fs,
           armor: _a,
-          armorBonusDamaged: _ab,
           reviveUsed: _ru,
           equipmentReviveUsed: _eru,
           wraithRebirthUsed: _wru,
@@ -950,25 +955,19 @@ export function computeDurabilityLossEffects(
     }
   }
 
-  // Monster equipment armor refresh on durability tick:
+  // Monster/shield equipment armor refresh on durability tick (layer break):
   // Each durability point represents one "armor layer". When a layer is consumed
   // (durability ticks down via attacks, weapon strikes, or shield blocks), the
-  // next layer must start with a fresh `armor` pool — exactly the same as how
-  // `combat.ts` shield-block path strips `armor` / `armorBonusDamaged` after
-  // the layer is depleted. Doing it here (after the `!isMonsterEquip` early
-  // return above) covers all callers — weapon-attack tick, shield-block tick,
-  // shield-self-damage tick — so monster equipment behaves uniformly: after
-  // losing 1 durability the displayed armor refills to baseArmorMax + perm +
-  // temp on the next read (combat.ts:~3147 reads them live from state).
+  // next layer must start with a fresh `armor` pool — same trick as
+  // `combat.ts` shield-block path. Stripping `armor` here makes the next read
+  // default to the current cap (baseArmorMax + perm + temp).
   // Preserve `durability` on the rebuilt item — wraith-rebirth above may have
   // refilled it to maxDurability, so we cannot blindly re-stamp `newDurability`.
   const preservedDurability = updatedItem.durability;
-  const { armor: _strippedArmor, armorBonusDamaged: _strippedBonusDmg, ...armorStrippedItem } = updatedItem as GameCardData & {
+  const { armor: _strippedArmor, ...armorStrippedItem } = updatedItem as GameCardData & {
     armor?: number;
-    armorBonusDamaged?: number;
   };
   void _strippedArmor;
-  void _strippedBonusDmg;
   updatedItem = { ...(armorStrippedItem as GameCardData), durability: preservedDurability ?? newDurability };
 
   return { updatedItem, patch, sideEffects: effects, golemReflectDamage, rng };

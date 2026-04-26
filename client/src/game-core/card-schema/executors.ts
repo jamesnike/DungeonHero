@@ -14,12 +14,12 @@ import type { GameCardData } from '@/components/GameCard';
 import type { SideEffect } from '../reducer';
 import type { EquipmentRepairTarget } from '@/components/game-board/types';
 import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY, DURABILITY_CAP, clampMaxDurability } from '../constants';
-import { computeAmuletEffects } from '../equipment';
+import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
 import { clearSlotAndPromoteReserve } from '../rules/equipment-effects';
 import { drawMultipleFromBackpack } from '../cards';
 import { nextInt, shuffle as rngShuffle } from '../rng';
 import { formatRepairTargetLabel } from '../helpers';
-import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
+import { hasEternalRelic, getEternalRelic, countEternalRelics } from '@/lib/eternalRelics';
 import { isDamageMagic } from '../helpers';
 
 // ---------------------------------------------------------------------------
@@ -150,7 +150,7 @@ function executeModifyStat(ctx: ExecutionContext, effect: CardEffect): void {
 
 function executeClampHp(ctx: ExecutionContext, _effect: CardEffect): void {
   const maxHpBonus = (ctx.patch.permanentMaxHpBonus ?? ctx.state.permanentMaxHpBonus ?? 0);
-  const aura = computeAmuletEffects(ctx.state.amuletSlots as GameCardData[]);
+  const aura = computeAmuletEffectsForState(ctx.state);
   const maxHp = INITIAL_HP + (maxHpBonus || 0) + (aura.aura.maxHp ?? 0);
   const currentHp = ctx.patch.hp ?? ctx.state.hp;
   const clamped = Math.min(maxHp, Number.isFinite(currentHp) ? currentHp : 0);
@@ -201,6 +201,14 @@ function executeBoostSlotBonuses(ctx: ExecutionContext, effect: CardEffect): voi
     };
   }
   ctx.patch.equipmentSlotBonuses = bonuses;
+  // Single-counter armor model: when perm.shield is added/removed, refill /
+  // clamp the slot's current armor to track the new cap.
+  const shieldDelta = effect.shield ?? 0;
+  if (shieldDelta !== 0) {
+    for (const slotId of uniqueSlots) {
+      applySlotArmorBonusDelta(ctx.state, slotId, shieldDelta, ctx.patch);
+    }
+  }
 }
 
 function executeModifySlotDurabilityMax(ctx: ExecutionContext, effect: CardEffect): void {
@@ -445,12 +453,23 @@ function executeEquipSwap(ctx: ExecutionContext, _effect: CardEffect): void {
 
 function executeGrantEternalRelic(ctx: ExecutionContext, effect: CardEffect): void {
   if (effect.type !== 'grantEternalRelic') return;
-  if (hasEternalRelic(ctx.state.eternalRelics ?? [], effect.relicId)) {
+  const has = hasEternalRelic(ctx.state.eternalRelics ?? [], effect.relicId);
+
+  if (has && !effect.stackable) {
     log(ctx, 'potion', effect.dupeLogMsg);
     banner(ctx, effect.dupeBannerMsg);
+    return;
+  }
+
+  const relic = getEternalRelic(effect.relicId);
+  const nextRelics = [...(ctx.state.eternalRelics ?? []), relic];
+  ctx.patch.eternalRelics = nextRelics;
+
+  if (has) {
+    const newCount = countEternalRelics(nextRelics, effect.relicId);
+    log(ctx, 'potion', `永恒护符·${relic.name.replace(/^永恒护符·/, '')} 叠加 ×${newCount}！`);
+    banner(ctx, `永恒护符·${relic.name.replace(/^永恒护符·/, '')} 叠加 ×${newCount}！`);
   } else {
-    const relic = getEternalRelic(effect.relicId);
-    ctx.patch.eternalRelics = [...(ctx.state.eternalRelics ?? []), relic];
     log(ctx, 'potion', effect.logMsg);
     banner(ctx, effect.bannerMsg);
   }

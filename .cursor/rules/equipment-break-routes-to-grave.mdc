@@ -43,7 +43,7 @@ broken self 不入坟场就 = 这些效果永远拿不到这张卡。
 ```ts
 function routeBrokenSelfToGraveOrRecycle(state, slotItem, isPermRecycle, patch, enqueuedActions) {
  if (isPermRecycle) {
- // 剥离运行时字段（armor / armorBonusDamaged / reviveUsed / fromSlot 等），
+  // 剥离运行时字段（armor / reviveUsed / fromSlot 等），
  // 然后 enqueue ADD_TO_RECYCLE_BAG，让 reducer 自己做 Perm 路由 + 动画。
  enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: cleaned });
  } else {

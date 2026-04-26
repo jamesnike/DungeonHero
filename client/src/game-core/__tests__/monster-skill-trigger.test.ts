@@ -53,7 +53,6 @@ const ALL_KEYS: MonsterSkillKey[] = [
   'turnEnd:goblinStackHeal',
   'turnEnd:goblinStealEquip',
   'turnEnd:golemSpellGrowth',
-  'turnEnd:bossLastStandAura',
   'heroTurnEnd:eliteRegen',
   'heroTurnEnd:eliteHealOther',
   'passive:swarmSpawn',

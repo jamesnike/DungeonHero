@@ -13,6 +13,7 @@ const STARTER_ID_TO_KEY: Record<string, string> = {
   'starter-perm-transform-streak-strike': 'starter-streak-strike',
   'starter-perm-flank-slot-temp-attack': 'starter-flank-rally',
   'starter-perm-deck-top-swap-gold': 'starter-fortune-bet',
+  'starter-perm-apprentice-bolt': 'starter-apprentice-bolt',
 };
 
 const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
@@ -55,6 +56,7 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'persuade-to-temp-attack': 'knight-persuade-blade',
   'temp-attack-armor-draw': 'knight-attack-armor-draw',
   'temp-stats-to-draw': 'knight-temp-stats-draw',
+  'amplify-equipment-shift': 'knight-amplify-equipment-shift',
   'durability-charge-burst': 'knight-charge-burst',
   'eternal-vessel': 'knight-eternal-vessel',
 };
@@ -179,8 +181,10 @@ const NAME_TO_KEY: Record<string, string> = {
   辞剑相易: 'knight-persuade-blade',
   攻防协律: 'knight-attack-armor-draw',
   战势化符: 'knight-temp-stats-draw',
+  淬铸迁位: 'knight-amplify-equipment-shift',
   蓄能裂击: 'knight-charge-burst',
   永恒之器: 'knight-eternal-vessel',
+  学徒法弹: 'starter-apprentice-bolt',
 };
 
 function hashName(s: string): number {

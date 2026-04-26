@@ -121,6 +121,141 @@ describe('生长之盾 — amplifyOnFlip', () => {
 });
 
 // ---------------------------------------------------------------------------
+// amplifyOnFlip — reverse flips (back-flip via _flipBackCard)
+//
+// Back-flips don't go through APPLY_CARD_FLIP, so each path that performs a
+// back-flip must call applyFlipCounters explicitly. These tests cover the 3
+// known back-flip paths:
+//
+//   1. 血誓回卷 single-target auto-resolve (rules/magic-effects.ts case 'flip-back-active')
+//   2. 血誓回卷 multi-target selection (rules/hero.ts case 'flip-back-active')
+//   3. 翻转之契 flipAllActiveRow event token (events.ts)
+//
+// Regression: 生长之盾 装备时 Event 牌「被翻回去」（back-flip）原本不触发增幅。
+// ---------------------------------------------------------------------------
+
+/** Helper: a "post-flip" active-row card with `_flipBackCard` pointing at the original. */
+function makeBackFlippedCard(idSuffix: string, name: string, originalName: string): GameCardData {
+  const original: GameCardData = {
+    id: `${idSuffix}-orig`, type: 'event' as any, name: originalName, value: 0, image: '',
+  } as GameCardData;
+  return {
+    id: idSuffix, type: 'event' as any, name, value: 0, image: '',
+    _flipBackCard: original,
+  } as GameCardData;
+}
+
+function makeBloodOathScroll(idSuffix: string): GameCardData {
+  return {
+    id: `magic-${idSuffix}`,
+    type: 'magic',
+    name: '血誓回卷',
+    value: 0,
+    image: '',
+    classCard: true,
+    magicType: 'permanent',
+    magicEffect: '将一张已翻转的牌翻回去。',
+    knightEffect: 'flip-back-active',
+    onEnterHandEffect: 'blood-oath-scroll-onhand',
+    description: 'test',
+    recycleDelay: 2,
+  } as any;
+}
+
+describe('生长之盾 — amplifyOnFlip on reverse flips (back-flip)', () => {
+  it('血誓回卷 single-target auto-resolve: back-flipping an Event triggers amplify (+1)', () => {
+    const equipped = makeGrowthShield('rev1');
+    const scroll = makeBloodOathScroll('rev1');
+    const flipped = makeBackFlippedCard('flipped-1', '宝箱（已开启）', '神秘宝箱');
+    const state = makeState({
+      handCards: [scroll],
+      hp: 20,
+      activeCards: [null, null, flipped, null, null] as ActiveRowSlots,
+      equipmentSlot1: equipped,
+      rng: createRng(11),
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: scroll.id } as GameAction]);
+
+    // Sanity: back-flip happened.
+    const cell = (result.state.activeCards as (GameCardData | null)[])[2];
+    expect(cell?.id).toBe('flipped-1-orig');
+
+    // Shield amplifyBonus / armorMax bumped via the AMPLIFY_CARDS_BY_NAME pipeline.
+    const slot = result.state.equipmentSlot1 as any;
+    expect(slot.amplifyBonus).toBe(1);
+    expect(slot.armorMax).toBe(2);
+    expect(slot.value).toBe(2);
+    expect(result.state.amplifiedCardBonus['生长之盾']).toBe(1);
+  });
+
+  it('血誓回卷 multi-target selection (RESOLVE_DUNGEON_CARD_SELECTION): back-flip triggers amplify (+1)', () => {
+    const equipped = makeGrowthShield('rev2');
+    const scroll = makeBloodOathScroll('rev2');
+    const flippedA = makeBackFlippedCard('flippedA', '宝箱（已开启）', '神秘宝箱');
+    const flippedB = makeBackFlippedCard('flippedB', '骰盅（已开启）', '命运骰盅');
+    const state = makeState({
+      handCards: [scroll],
+      hp: 20,
+      activeCards: [flippedA, null, null, flippedB, null] as ActiveRowSlots,
+      equipmentSlot1: equipped,
+      rng: createRng(13),
+      pendingMagicAction: {
+        card: scroll,
+        effect: 'flip-back-active',
+        step: 'dungeon-select',
+        prompt: '选择一张已翻转卡牌。',
+      } as any,
+    });
+
+    const result = drain(state, [
+      { type: 'RESOLVE_DUNGEON_CARD_SELECTION', cardId: 'flippedB', targetIndex: 3 } as GameAction,
+    ]);
+
+    // Sanity: chosen cell back-flipped.
+    const cell = (result.state.activeCards as (GameCardData | null)[])[3];
+    expect(cell?.id).toBe('flippedB-orig');
+    expect(cell?.name).toBe('命运骰盅');
+    // Other flipped card untouched.
+    const cellA = (result.state.activeCards as (GameCardData | null)[])[0];
+    expect(cellA?.id).toBe('flippedA');
+
+    // Shield amplifyBonus bumped exactly once (one back-flip happened).
+    const slot = result.state.equipmentSlot1 as any;
+    expect(slot.amplifyBonus).toBe(1);
+    expect(slot.armorMax).toBe(2);
+    expect(result.state.amplifiedCardBonus['生长之盾']).toBe(1);
+  });
+
+  it('翻转之契 flipAllActiveRow: back-flips bump amplify once per back-flipped card', () => {
+    const equipped = makeGrowthShield('rev3');
+    const backA = makeBackFlippedCard('back-A', '宝箱（已开启）', '神秘宝箱');
+    const backB = makeBackFlippedCard('back-B', '骰盅（已开启）', '命运骰盅');
+    const state = makeState({
+      activeCards: [backA, null, backB, null, null] as ActiveRowSlots,
+      equipmentSlot1: equipped,
+      rng: createRng(17),
+    });
+
+    const result = drain(state, [
+      { type: 'APPLY_EVENT_EFFECT', token: 'flipAllActiveRow' } as GameAction,
+    ]);
+
+    // Sanity: both cells back-flipped to their originals.
+    const cells = result.state.activeCards as (GameCardData | null)[];
+    expect(cells[0]?.id).toBe('back-A-orig');
+    expect(cells[2]?.id).toBe('back-B-orig');
+
+    // Shield amplifyBonus bumped twice (two back-flips happened).
+    const slot = result.state.equipmentSlot1 as any;
+    expect(slot.amplifyBonus).toBe(2);
+    expect(slot.armorMax).toBe(3);
+    expect(slot.value).toBe(3);
+    expect(result.state.amplifiedCardBonus['生长之盾']).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // graveyard-event-to-hand last words
 // ---------------------------------------------------------------------------
 

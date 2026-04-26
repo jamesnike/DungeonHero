@@ -56,7 +56,6 @@ export type MonsterSkillKey =
   | 'turnEnd:goblinStackHeal'
   | 'turnEnd:goblinStealEquip'
   | 'turnEnd:golemSpellGrowth'
-  | 'turnEnd:bossLastStandAura'
   // 英雄回合结束（行内怪物）
   | 'heroTurnEnd:eliteRegen'
   | 'heroTurnEnd:eliteHealOther'
@@ -143,8 +142,6 @@ export function getMonsterSkillEntry(key: MonsterSkillKey): MonsterSkillEntry {
       return { name: '成长·窃宝', kind: 'turnEnd' };
     case 'turnEnd:golemSpellGrowth':
       return { name: '成长·吞噬', kind: 'turnEnd' };
-    case 'turnEnd:bossLastStandAura':
-      return { name: '成长·暴走', kind: 'turnEnd' };
 
     // 英雄回合结束（增强）
     case 'heroTurnEnd:eliteRegen':

@@ -544,8 +544,6 @@ export interface CompleteHeroMagicAction {
 
 export interface ResolveHeroMagicTargetAction {
   type: 'RESOLVE_HERO_MAGIC_TARGET';
-  choice?: 'heal' | 'purge';
-  monsterId?: string;
   slotId?: 'equipmentSlot1' | 'equipmentSlot2';
 }
 

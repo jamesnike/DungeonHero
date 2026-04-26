@@ -11,7 +11,7 @@ import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch, noChange } from '../reducer';
 import { applyLowGoldEliteBuff } from '../combat';
 import { generateMonsterRewardOptions } from '../monsters';
-import { computeAmuletEffects } from '../equipment';
+import { computeAmuletEffectsForState } from '../equipment';
 import { HAND_LIMIT, BASE_BACKPACK_CAPACITY } from '../constants';
 import { pickRandomHandCardsForDiscardPreferGraveyard, flattenActiveRowSlots, findSlotIndexByCardId } from '../helpers';
 import { DUNGEON_COLUMN_COUNT, createEmptyActiveRow } from '../constants';
@@ -460,7 +460,7 @@ function reduceRegisterDungeonCardProcessed(
     pendingAutoDrawCount: state.pendingAutoDrawCount + 1,
   };
 
-  const effects = computeAmuletEffects(state.amuletSlots);
+  const effects = computeAmuletEffectsForState(state);
   const sideEffects: SideEffect[] = [];
 
   if (effects.dungeonGoldCount > 0) {

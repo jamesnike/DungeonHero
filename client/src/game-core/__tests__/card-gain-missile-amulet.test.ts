@@ -1,17 +1,20 @@
 /**
- * 弹幕之符 (card-gain-missile) — triggers on every "from class pool / graveyard"
- * card-gain event.
+ * `card:newCardGained` event emission — contract tests.
+ *
+ * Currently consumed by 弹幕之符 (`card-gain-missile`), which by design only
+ * triggers on `source === 'graveyard'` (see GameBoard.tsx onNewCardGainedRef
+ * filter). The event itself is emitted on **both** `'classPool'` and
+ * `'graveyard'` paths so future amulets can opt into either source — these
+ * tests lock in the emission contract on every relevant call site, regardless
+ * of which sources 弹幕之符 currently filters for.
  *
  * Bug history: Heavy Shield's `onDestroyClassDraw` fired correctly (it routed
  * through `equipment:classCardDraw` → `drawClassCardsToBackpack` →
  * `DRAW_CLASS_TO_BACKPACK`), but `reduceDrawClassToBackpack` only emitted
- * `cards:classDrawn` (animation), never `card:newCardGained`. The amulet hook
- * (`useCardOperations.ts: useGameEvent('card:newCardGained', ...)`) therefore
- * never fired and no missile was generated.
- *
- * The same gap existed for `graveyard-to-hand` / `graveyard-event-to-hand`
- * last-words effects (Iron Shield, 生长之盾) and the waterfall destruction
- * path. All paths now emit `card:newCardGained` with the correct `source`.
+ * `cards:classDrawn` (animation), never `card:newCardGained`. Same gap existed
+ * for `graveyard-to-hand` / `graveyard-event-to-hand` last-words effects (Iron
+ * Shield, 生长之盾) and the waterfall destruction path. All paths now emit
+ * `card:newCardGained` with the correct `source`.
  */
 
 import { describe, expect, it } from 'vitest';

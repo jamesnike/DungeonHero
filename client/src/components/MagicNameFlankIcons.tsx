@@ -1472,6 +1472,15 @@ export function CuteSticker({ k }: { k: string }) {
           <path fill="none" stroke="#4ade80" strokeWidth="2" d="M23 7v-3M20 5l3-3 3 3" />
         </g>
       );
+    case 'starter-apprentice-bolt':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="16" cy="16" r="6" fill="#7dd3fc" />
+          <circle cx="16" cy="16" r="3.5" fill="#bae6fd" />
+          <circle cx="16" cy="16" r="1.5" fill="#f0f9ff" />
+          <path fill="none" stroke="#38bdf8" strokeWidth="1.5" d="M10 16l-4-1M22 16l4-1M16 10l1-4M16 22l-1 4M11 11l-2-3M21 11l2-3M11 21l-2 3M21 21l2 3" />
+        </g>
+      );
     default:
       return cuteFallbackSticker(hashStickerKey(k));
   }
@@ -1509,7 +1518,7 @@ export const ALL_STICKER_KEYS: readonly string[] = [
   // starter magic (new)
   'armor-craft','dimension-warp','undying-blessing','recall-equip','magic-missile',
   'gambler-ploy','recycle-echo','deep-weave','thunder-strike','essence-extract',
-  'healing-art','class-summon','upgrade-scroll',
+  'healing-art','class-summon','upgrade-scroll','starter-apprentice-bolt',
   // knight magic (new)
   'divine-eye','emergency-recall','blade-flank','wall-flank-guard','fortune-wheel',
   'blood-pact-draw','forge-gamble','blood-sacrifice','undead-pact','fate-decree',

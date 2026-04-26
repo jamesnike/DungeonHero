@@ -17,20 +17,18 @@
  *   1. eliteRegenHeroTurn               (combat.ts:endHeroTurnPatch)
  *   2. eliteHealOtherMonster - engaged  (combat.ts:endHeroTurnPatch)
  *   3. eliteHealOtherMonster - non-engaged (combat.ts:endHeroTurnPatch)
- *   4. bossLastStandAura                (combat.ts:applyMonsterTurnEndEffects)
- *   5. skeleton-restore RESOLVE_DICE    (rules/economy.ts:reduceResolveDice)
- *   6. bone-regen revival inline +1     (rules/combat.ts hero-attack revive)
- *   7. wraith-rebirth RESOLVE_DICE      (rules/economy.ts:reduceResolveDice)
- *   8. goblinStackHeal RESOLVE_DICE     (rules/economy.ts:reduceResolveDice)
- *   9. bugletLastWordsHeal              (rules/combat.ts last-words)
+ *   4. skeleton-restore RESOLVE_DICE    (rules/economy.ts:reduceResolveDice)
+ *   5. bone-regen revival inline +1     (rules/combat.ts hero-attack revive)
+ *   6. wraith-rebirth RESOLVE_DICE      (rules/economy.ts:reduceResolveDice)
+ *   7. goblinStackHeal RESOLVE_DICE     (rules/economy.ts:reduceResolveDice)
+ *   8. bugletLastWordsHeal              (rules/combat.ts last-words)
  */
 
 import { describe, expect, it } from 'vitest';
 import { reduce } from '../reducer';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
-import { endHeroTurnPatch, applyMonsterTurnEndEffects } from '../combat';
-import { createRng } from '../rng';
+import { endHeroTurnPatch } from '../combat';
 import type { GameState } from '../types';
 import type { GameAction } from '../actions';
 import type { ActiveRowSlots } from '@/components/game-board/types';
@@ -258,85 +256,7 @@ describe('eliteHealOtherMonster (non-engaged dragon) — unified layer-heal rule
 });
 
 // ---------------------------------------------------------------------------
-// 4. bossLastStandAura
-// ---------------------------------------------------------------------------
-
-describe('bossLastStandAura — unified layer-heal rule', () => {
-  function makeBoss(overrides: Partial<any> = {}): any {
-    return {
-      id: 'boss1',
-      type: 'monster' as const,
-      name: 'Boss',
-      value: 8,
-      hp: 8,
-      maxHp: 8,
-      attack: 8,
-      currentLayer: 1,
-      fury: 3,
-      hpLayers: 3,
-      bossLastStandAura: true,
-      ...overrides,
-    };
-  }
-
-  function makeMinion(overrides: Partial<any> = {}): any {
-    return {
-      id: 'minion1',
-      type: 'monster' as const,
-      name: 'Minion',
-      value: 3,
-      hp: 3,
-      maxHp: 5,
-      attack: 3,
-      currentLayer: 1,
-      fury: 2,
-      hpLayers: 2,
-      ...overrides,
-    };
-  }
-
-  function runMonsterTurnEnd(boss: any, minion: any) {
-    const cards = activeRowOf(boss, minion);
-    return applyMonsterTurnEndEffects(
-      cards,
-      [boss.id, minion.id],
-      createRng(1),
-    );
-  }
-
-  it('minion 未满层 → +5 攻 + +1 层 hp 不变', () => {
-    const boss = makeBoss({ currentLayer: 1 });
-    const minion = makeMinion({ currentLayer: 1, hp: 2, maxHp: 5, fury: 2 });
-    const result = runMonsterTurnEnd(boss, minion);
-    const afterMinion = result.activeCards[1] as any;
-    expect(afterMinion.currentLayer).toBe(2);
-    expect(afterMinion.hp).toBe(2);
-    expect(afterMinion.attack).toBe(8);
-  });
-
-  it('minion 满层 + 残血 → +5 攻 + hp 补满，不加层', () => {
-    const boss = makeBoss({ currentLayer: 1 });
-    const minion = makeMinion({ currentLayer: 2, hp: 2, maxHp: 5, fury: 2 });
-    const result = runMonsterTurnEnd(boss, minion);
-    const afterMinion = result.activeCards[1] as any;
-    expect(afterMinion.currentLayer).toBe(2);
-    expect(afterMinion.hp).toBe(5);
-    expect(afterMinion.attack).toBe(8);
-  });
-
-  it('minion 满层 + 满血 → 仅 +5 攻，不动层/血', () => {
-    const boss = makeBoss({ currentLayer: 1 });
-    const minion = makeMinion({ currentLayer: 2, hp: 5, maxHp: 5, fury: 2 });
-    const result = runMonsterTurnEnd(boss, minion);
-    const afterMinion = result.activeCards[1] as any;
-    expect(afterMinion.currentLayer).toBe(2);
-    expect(afterMinion.hp).toBe(5);
-    expect(afterMinion.attack).toBe(8);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 5. skeleton-restore RESOLVE_DICE
+// 4. skeleton-restore RESOLVE_DICE
 // ---------------------------------------------------------------------------
 
 describe('skeleton-restore RESOLVE_DICE — unified layer-heal rule', () => {

@@ -1026,63 +1026,6 @@ export function applyMonsterTurnEndEffects(
     return updated !== card ? updated : card;
   });
 
-  // Boss last-stand aura: when an engaged boss has 1 layer, ALL row monsters get +5 atk.
-  // Layer/HP heal follows the unified rule: 未满层 → +1 层 hp 不变; 满层 → 补满 hp.
-  // (+5 atk applies unconditionally to all row monsters regardless of heal branch.)
-  const lastStandBoss = activeCards.find(c =>
-    c && c.type === 'monster' && !c.isStunned && c.bossLastStandAura
-      && engagedMonsterIds.includes(c.id) && (c.currentLayer ?? 1) === 1,
-  );
-  if (lastStandBoss) {
-    const boostedNames: string[] = [];
-    next = next.map(card => {
-      if (!card || card.type !== 'monster') return card;
-      const newAttack = (card.attack ?? card.value ?? 0) + 5;
-      const newValue = (card.value ?? 0) + 5;
-      const maxLayers = card.fury ?? card.hpLayers ?? 1;
-      const currentLayer = card.currentLayer ?? 1;
-      const canHealLayer = currentLayer < maxLayers;
-      const maxHp = card.maxHp ?? card.hp ?? 0;
-      const currentHp = card.hp ?? 0;
-      boostedNames.push(card.name);
-      if (canHealLayer) {
-        // +1 层, hp 保持不变
-        return {
-          ...card,
-          attack: newAttack,
-          value: newValue,
-          currentLayer: currentLayer + 1,
-          tempAttackBoost: (card.tempAttackBoost ?? 0) + 5,
-        };
-      }
-      if (currentHp < maxHp) {
-        // 满层但残血 → 补满 hp
-        return {
-          ...card,
-          attack: newAttack,
-          value: newValue,
-          hp: maxHp,
-          tempAttackBoost: (card.tempAttackBoost ?? 0) + 5,
-        };
-      }
-      // 满层 + 满血 → 只加攻
-      return {
-        ...card,
-        attack: newAttack,
-        value: newValue,
-        tempAttackBoost: (card.tempAttackBoost ?? 0) + 5,
-      };
-    });
-    changed = true;
-    if (boostedNames.length > 0) {
-      // One float on the boss who emits the aura — not per-affected monster,
-      // since the aura is conceptually a single skill firing on the boss.
-      skillFloats.push({ monsterId: lastStandBoss.id, skillKey: 'turnEnd:bossLastStandAura' });
-      logs.push({ type: 'combat', message: `${lastStandBoss.name} 暴走：激活行所有怪物攻击 +5，并恢复血量/血层！（${boostedNames.join('、')}）` });
-      banners.push(`${lastStandBoss.name} 暴走！全体怪物 +5 攻击！`);
-    }
-  }
-
   // Wraith aura: boost ALL active row monsters
   if (auraBoost > 0) {
     const boostedNames: string[] = [];
@@ -1312,13 +1255,12 @@ export function createBossCard(monster: GameCardData): GameCardData {
     hp: fullHp,
     hasRevive: true,
     reviveUsed: false,
-    bossLastStandAura: true,
     bossEnrageGraveyardSummon: 4,
     attack: (monster.attack ?? monster.value ?? 0) + 5,
     value: (monster.value ?? 0) + 5,
     tempAttackBoost: (monster.tempAttackBoost ?? 0) + 5,
     name: `${monster.name} (Boss)`,
-    description: `Boss形态！1层时全行怪物攻+5并恢复1血层；激怒时从坟场召唤2怪物各占1格（顶层）+ 2非怪物堆叠在另一格。`,
+    description: `Boss形态！激怒时从坟场召唤2怪物各占1格（顶层，恢复1血层）+ 2非怪物堆叠在另一格。`,
   };
 }
 

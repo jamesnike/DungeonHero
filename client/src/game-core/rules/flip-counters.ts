@@ -30,7 +30,7 @@ import type { GameAction } from '../actions';
 import type { SideEffect } from '../reducer';
 import type { GameCardData } from '@/components/GameCard';
 import type { ActiveRowSlots, EquipmentItem } from '@/components/game-board/types';
-import { computeAmuletEffects, repairDurabilityPure } from '../equipment';
+import { computeAmuletEffectsForState, repairDurabilityPure } from '../equipment';
 import { FLIP_GOLD_REWARD } from '../constants';
 
 export function applyFlipCounters(
@@ -39,7 +39,7 @@ export function applyFlipCounters(
   sideEffects: SideEffect[],
   enqueuedActions: GameAction[],
 ): void {
-  const amuletFx = computeAmuletEffects(state.amuletSlots);
+  const amuletFx = computeAmuletEffectsForState(state);
 
   if (amuletFx.flipGoldCount > 0) {
     const goldGain = FLIP_GOLD_REWARD * amuletFx.flipGoldCount;

@@ -39,7 +39,7 @@ import {
 } from '../../cards';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../../rng';
 import { INITIAL_HP, PERSUADE_COST, MIN_PERSUADE_COST } from '../../constants';
-import { computeAmuletEffects } from '../../equipment';
+import { computeAmuletEffects, applySlotArmorBonusDelta } from '../../equipment';
 import { chaosStrikeHasOverkill } from '../../combat';
 import { STARTER_CARD_IDS, skillScrollImage, createMagicBoltCard } from '../../deck';
 import { applyFlipCounters } from '../../rules/flip-counters';
@@ -777,6 +777,8 @@ const equalizeAttackArmor: CardDefinition = {
       }
       patch.slotTempAttack = newTempAttack;
       patch.slotTempArmor = newTempArmor;
+      const tempArmDelta = (newTempArmor[slotId] ?? 0) - tempArm;
+      if (tempArmDelta !== 0) applySlotArmorBonusDelta(state, slotId, tempArmDelta, patch);
       const finalVal = Math.max(tempAtk, tempArm);
       log(sideEffects, 'magic', `时空镜像：${equippedSlots[0].item.name} 临时攻防均为 ${finalVal}`);
       banner(sideEffects, `${equippedSlots[0].item.name} 临时攻击 +${atkBoost}，攻防均为 ${finalVal}。`);
@@ -1003,11 +1005,10 @@ const starterTempArmor: CardDefinition = {
   },
 };
 
-// ----- Apprentice opening trio -----
-// Three Perm-1 magics seeded into the starting backpack at INIT_GAME.
-// They mirror existing patterns (knight:missile-bolt / starter:weaponBurst /
-// starter:tempArmor) but with fixed numeric amounts (no upgrades) and unique
-// effect ids so banner / log text reads as the apprentice card name.
+// ----- 学徒法弹 (apprenticeBolt) -----
+// Single Perm-1 magic seeded into the starting backpack at INIT_GAME.
+// Mirrors knight:missile-bolt but with fixed numeric amount (no upgrades) and
+// a unique effect id so banner / log text reads as the apprentice card name.
 
 const starterApprenticeBolt: CardDefinition = {
   effectId: `starter:${STARTER_CARD_IDS.apprenticeBolt}`,
@@ -1025,44 +1026,6 @@ const starterApprenticeBolt: CardDefinition = {
       allowsHeroTarget: true,
     } as any;
     patch.heroSkillBanner = `选择一个目标，造成 ${boltDmg} 点法术伤害。${echoTag}`;
-    return applyPatch(state, patch, sideEffects);
-  },
-};
-
-const starterApprenticeRally: CardDefinition = {
-  effectId: `starter:${STARTER_CARD_IDS.apprenticeRally}`,
-  effects: [],
-  tags: ['magic', 'permanent', 'interactive', 'buff'],
-  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
-    const rallyAmount = 1 * echoMultiplier;
-    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
-    patch.pendingMagicAction = {
-      card,
-      effect: 'apprentice-rally',
-      step: 'slot-select',
-      prompt: `选择一个装备栏，临时攻击力 +${rallyAmount}。${echoLabel}`,
-      echoMultiplier,
-    } as any;
-    patch.heroSkillBanner = `选择一个装备栏，临时攻击力 +${rallyAmount}。${echoLabel}`;
-    return applyPatch(state, patch, sideEffects);
-  },
-};
-
-const starterApprenticeArmor: CardDefinition = {
-  effectId: `starter:${STARTER_CARD_IDS.apprenticeArmor}`,
-  effects: [],
-  tags: ['magic', 'permanent', 'interactive', 'defense'],
-  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
-    const armorAmt = 1 * echoMultiplier;
-    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
-    patch.pendingMagicAction = {
-      card,
-      effect: 'apprentice-armor',
-      step: 'slot-select',
-      prompt: `选择一个装备栏，+${armorAmt} 临时护甲。${echoLabel}`,
-      echoMultiplier,
-    } as any;
-    patch.heroSkillBanner = `选择一个装备栏，+${armorAmt} 临时护甲。${echoLabel}`;
     return applyPatch(state, patch, sideEffects);
   },
 };
@@ -2278,6 +2241,32 @@ const knightGearRiftDraw: CardDefinition = {
   },
 };
 
+// 淬铸迁位 — Perm 1. Pick an equipment slot (must have an item — empty slots
+// rejected by reducer); enqueue AMPLIFY_CARDS_BY_NAME with amount=echoMultiplier
+// so all same-name copies (hand / backpack / graveyard / class deck / etc.) +1.
+// If the OTHER slot is empty, move the chosen item there (clearSlotAndPromoteReserve
+// on the original slot, preserving any reserve stack). Echo (A): amplify amount
+// scales × echoMultiplier; the move only happens once per resolution (the second
+// echo iteration would see otherSlot already non-empty, so no further move).
+const knightAmplifyEquipmentShift: CardDefinition = {
+  effectId: 'knight:amplify-equipment-shift',
+  effects: [],
+  tags: ['knight', 'permanent', 'interactive', 'buff'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    const ampAmt = 1 * echoMultiplier;
+    patch.pendingMagicAction = {
+      card,
+      effect: 'amplify-equipment-shift',
+      step: 'slot-select',
+      prompt: `淬铸迁位：选择一个装备栏的装备进行增幅 +${ampAmt}；若另一栏为空，将其换到空位。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `淬铸迁位：选择一个装备栏的装备进行增幅 +${ampAmt}（按卡名累计）。${echoLabel}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
 // 攻防协律 — Perm 1. Select an equipment slot (empty allowed); apply +N temp
 // attack and +N temp armor (N=2/4/6 by upgrade level), then draw 1 card from
 // backpack. Echo (A): both stats and draw multiplied by echoMultiplier.
@@ -2485,8 +2474,6 @@ const allMagicDefinitions: CardDefinition[] = [
   starterRepairOne,
   starterTempArmor,
   starterApprenticeBolt,
-  starterApprenticeRally,
-  starterApprenticeArmor,
   starterHealMagic,
   starterHealEcho,
   starterReshuffle,
@@ -2546,6 +2533,7 @@ const allMagicDefinitions: CardDefinition[] = [
   knightTempAttackDouble,
   knightTempAttackArmorDraw,
   knightTempStatsToDraw,
+  knightAmplifyEquipmentShift,
   knightGearRiftDraw,
   knightDurabilityChargeBurst,
   knightDiscardRebuild,

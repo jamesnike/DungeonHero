@@ -182,8 +182,8 @@ export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false
  *
  * Reset rules (mirrors the salvage / perm-recycle paths):
  *   - `durability` → `maxDurability`
- *   - strip `armor` / `armorBonusDamaged` (re-derived on next equip from
- *     `armorMax * durability`, matching `repairDurabilityPure`)
+ *   - strip `armor` (re-derived on next equip from cap; matches
+ *     `repairDurabilityPure`)
  *   - strip `reviveUsed` / `equipmentReviveUsed` / `wraithRebirthUsed` so a
  *     fresh card regains its revive
  *   - strip `fromSlot` (slot routing metadata, never persisted off-slot)
@@ -194,7 +194,6 @@ export function resetEquipmentForGraveyard(card: GameCardData): GameCardData {
   const {
     fromSlot: _fromSlot,
     armor: _armor,
-    armorBonusDamaged: _armorBonusDamaged,
     reviveUsed: _reviveUsed,
     equipmentReviveUsed: _equipmentReviveUsed,
     wraithRebirthUsed: _wraithRebirthUsed,

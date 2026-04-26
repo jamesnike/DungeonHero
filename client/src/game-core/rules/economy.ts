@@ -16,7 +16,7 @@ import { BASE_BACKPACK_CAPACITY } from '../constants';
 import { markSkillUsedPure } from '../hero';
 import { nextInt } from '../rng';
 import { getEffectiveHandLimit, addCardToBackpackPure } from '../cards';
-import { computeAmuletEffects } from '../equipment';
+import { computeAmuletEffectsForState, applySlotArmorBonusDelta, refillSlotArmorToCap } from '../equipment';
 import { computeSpellDamagePure } from '../helpers';
 import type { PendingMonsterEndDice } from '../types';
 
@@ -43,7 +43,7 @@ export function maybeEnqueueStunGold(
   monsterId: string,
   monsterName: string,
 ): void {
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   if (ae.stunGoldCount <= 0) return;
   const n = ae.stunGoldCount;
   const goldGain = 10 * n;
@@ -80,13 +80,20 @@ export function reduceEconomyActions(
         },
       });
 
-    case 'MODIFY_SLOT_TEMP_ARMOR':
-      return applyPatch(state, {
+    case 'MODIFY_SLOT_TEMP_ARMOR': {
+      const patch: Partial<GameState> = {
         slotTempArmor: {
           ...state.slotTempArmor,
           [action.slotId]: (state.slotTempArmor[action.slotId] ?? 0) + action.delta,
         },
-      });
+      };
+      // Single-counter armor model: when temp armor changes, the cap moves with
+      // it. On add (delta > 0) the live armor immediately bumps by delta (capped
+      // at the new cap). On subtract (delta < 0) the live armor clamps down to
+      // the new cap. Helpers no-op when slotItem.armor is undefined (at cap).
+      applySlotArmorBonusDelta(state, action.slotId, action.delta, patch);
+      return applyPatch(state, patch);
+    }
 
     case 'SET_COMBAT_FLAG':
       return applyPatch(state, { [action.flag]: action.value } as Partial<GameState>);
@@ -160,8 +167,16 @@ export function reduceEconomyActions(
         permanentMagicRecycleBag: state.permanentMagicRecycleBag.filter(c => c.id !== action.cardId),
       });
 
-    case 'SET_EQUIPMENT_SLOT':
-      return applyPatch(state, { [action.slotId]: action.card } as Partial<GameState>);
+    case 'SET_EQUIPMENT_SLOT': {
+      // Single-counter armor model: when a shield/monster-equipment enters a
+      // slot, refill its `armor` to the current cap (base + perm + temp). This
+      // matches the user's "刚装备 → armor 立马增加 (perm + temp)" semantic.
+      // We only touch this when the new card explicitly stores a numeric armor;
+      // leaving it undefined naturally defers to "at full cap" on next read.
+      const patch: Partial<GameState> = { [action.slotId]: action.card } as Partial<GameState>;
+      refillSlotArmorToCap(state, action.slotId, patch);
+      return applyPatch(state, patch);
+    }
 
     case 'MODIFY_EQUIPMENT_DURABILITY': {
       const equip = state[action.slotId];
@@ -300,7 +315,7 @@ export function reduceEconomyActions(
 
     case 'SET_EQUIPMENT_SLOT_BONUS': {
       const prev = state.equipmentSlotBonuses;
-      return applyPatch(state, {
+      const patch: Partial<GameState> = {
         equipmentSlotBonuses: {
           ...prev,
           [action.slotId]: {
@@ -308,7 +323,18 @@ export function reduceEconomyActions(
             [action.bonusType]: action.value,
           },
         },
-      });
+      };
+      // Single-counter armor model: when perm.shield changes, the cap moves
+      // with it. On add the armor immediately bumps; on subtract it clamps
+      // down. Only fires for shield/monster slots; helper no-ops otherwise.
+      if (action.bonusType === 'shield') {
+        const oldShield = prev[action.slotId]?.shield ?? 0;
+        const delta = action.value - oldShield;
+        if (delta !== 0) {
+          applySlotArmorBonusDelta(state, action.slotId, delta, patch);
+        }
+      }
+      return applyPatch(state, patch);
     }
 
     case 'SET_SLOT_ATTACK_BURST': {

@@ -38,9 +38,6 @@ interface HeroCardProps {
   heroSkillButtonRef?: RefObject<HTMLButtonElement>;
   heroMagicInfo?: HeroMagicUiState[] | null;
   onHeroMagicTrigger?: (id: HeroMagicId) => void;
-  heroMagicChoice?: HeroMagicChoicePrompt | null;
-  onHeroMagicChoice?: (choice: 'heal' | 'purge') => void;
-  onHeroMagicCancel?: () => void;
   potionChoice?: { prompt: string; options: { label: string; value: string }[] } | null;
   onPotionChoice?: (value: string) => void;
   onPotionCancel?: () => void;
@@ -92,11 +89,6 @@ interface HeroMagicUiState {
   disabledReason?: string;
 }
 
-type HeroMagicChoicePrompt = {
-  id: HeroMagicId;
-  prompt: string;
-};
-
 function HeroCardInner({ 
   hp, 
   maxHp, 
@@ -118,9 +110,6 @@ function HeroCardInner({
   heroSkillButtonRef,
   heroMagicInfo = null,
   onHeroMagicTrigger,
-  heroMagicChoice = null,
-  onHeroMagicChoice,
-  onHeroMagicCancel,
   potionChoice = null,
   onPotionChoice,
   onPotionCancel,

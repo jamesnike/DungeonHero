@@ -1,18 +1,16 @@
 /**
- * Reflect-damage routing onto shield armor — bonus-first + durability tick + break.
+ * Reflect-damage routing onto shield armor — single-counter model + durability
+ * tick + break.
  *
  * Tests the rewritten `routeReflectDamageToHero` (rules/combat.ts) which is shared by
  * Golem 反震 / 龙息 / 反魔 三条反伤路径.
  *
- * Bug history:
- *   #2 反伤直接扣 base armor，无视 permanentBonus / slotTempArmor / armorBonusDamaged
- *      → 双守护圣盾 / 攻防协律 给的 bonus 都被绕过.
- *   #3 反伤打穿护甲后只重置 armor 字段，**不**扣 durability、**不**走
- *      computeEquipmentBreakEffects → 铁壁塔盾被反魔打完护甲既不耗耐久也不进坟场.
- *
- * Fix: routeReflectDamageToHero 现在镜像 reduceResolveBlock 的护甲会计：
- *   - bonus-first 扣减（先消 permanentBonus + slotTempArmor，再扣 base）
- *   - 护甲打穿 → durability -1; durability=0 → computeEquipmentBreakEffects 路由
+ * Single-counter armor model (since the 2026 armor refactor):
+ *   - `armor` is the unified live counter — capped at baseArmorMax + perm + temp.
+ *   - Damage decrements `armor` directly. There's no separate "bonus pool" /
+ *     `armorBonusDamaged` field.
+ *   - `armor === undefined` ⇒ "fresh, at full cap"; readers default to cap.
+ *   - 护甲打穿 (newArmor=0 + damage>0) → durability -1; durability=0 → computeEquipmentBreakEffects 路由
  *   - 不破之印 (unbreakableNext / unbreakableUntilWaterfall) 仍然保耐久
  */
 
@@ -49,9 +47,12 @@ function makeShield(over?: Partial<GameCardData>): GameCardData {
   } as GameCardData;
 }
 
-describe('routeReflectDamageToHero — bonus-first armor consumption (bug #2)', () => {
-  it('反伤先扣 permanentBonus（双守护圣盾），base armor 不动', () => {
-    const shield = makeShield({ armor: 5, armorMax: 5 });
+describe('routeReflectDamageToHero — single-counter armor consumption', () => {
+  it('反伤扣减统一 armor counter（cap=base+perm；fresh shield armor=cap）', () => {
+    // Fresh shield (armor undefined) with perm +2 → cap=7, current armor reads as 7.
+    // damage 2 → armor decrements to 5; the "bonus took the hit" semantic is
+    // preserved by the single counter (visible total went 7→5).
+    const shield = makeShield({ armor: undefined as any, armorMax: 5 });
     const state = makeState({
       hp: 20,
       equipmentSlot1: null as any,
@@ -65,15 +66,15 @@ describe('routeReflectDamageToHero — bonus-first armor consumption (bug #2)', 
     const route = routeReflectDamageToHero(state, 2, 'Golem', '反魔');
 
     const updated = route.patch.equipmentSlot2 as GameCardData;
-    expect(updated.armor).toBe(5);              // base 不动
-    expect(updated.armorBonusDamaged).toBe(2);  // 2 全部从 bonus 扣
+    expect(updated.armor).toBe(5);              // 7 → 5
     expect(updated.durability).toBe(3);         // 没打穿 armor，durability 不变
     expect(route.hitSlotId).toBe('equipmentSlot2');
     expect(state.hp).toBe(20);                  // hero hp 不动
   });
 
-  it('反伤先消 slotTempArmor（攻防协律给的临护），base armor 不动', () => {
-    const shield = makeShield({ armor: 5, armorMax: 5 });
+  it('反伤扣减统一 armor counter（含 slotTempArmor 临护）', () => {
+    // Fresh shield with temp +3 → cap=8, armor=8, damage 3 → armor=5
+    const shield = makeShield({ armor: undefined as any, armorMax: 5 });
     const state = makeState({
       hp: 20,
       equipmentSlot1: null as any,
@@ -85,12 +86,13 @@ describe('routeReflectDamageToHero — bonus-first armor consumption (bug #2)', 
 
     const updated = route.patch.equipmentSlot2 as GameCardData;
     expect(updated.armor).toBe(5);
-    expect(updated.armorBonusDamaged).toBe(3);
     expect(updated.durability).toBe(3);
   });
 
-  it('bonus 不够时溢出到 base：dmg 5 > bonus 2 → bonus 全消 + base -3', () => {
-    const shield = makeShield({ armor: 5, armorMax: 5 });
+  it('damage > armor cap：armor 全消 → durability -1', () => {
+    // Fresh shield (armor undefined) with perm +2 → cap=7. damage 5 < cap=7 →
+    // armor decrements 7→2 (no break). Durability unchanged.
+    const shield = makeShield({ armor: undefined as any, armorMax: 5 });
     const state = makeState({
       equipmentSlot1: null as any,
       equipmentSlot2: shield as any,
@@ -103,14 +105,13 @@ describe('routeReflectDamageToHero — bonus-first armor consumption (bug #2)', 
     const route = routeReflectDamageToHero(state, 5, 'Golem', '反魔');
 
     const updated = route.patch.equipmentSlot2 as GameCardData;
-    expect(updated.armor).toBe(2);              // base 5 - 3 = 2
-    expect(updated.armorBonusDamaged).toBe(2);  // bonus 全消
+    expect(updated.armor).toBe(2);              // 7 → 2
+    expect(updated.durability).toBe(3);         // 没打穿
   });
 
-  it('已有 armorBonusDamaged 时，bonusRemaining = max(0, bonusTotal - existing)', () => {
-    // 上一回合用 攻防协律 +2 后被怪打了 1 → armorBonusDamaged = 1
-    // 本回合再来反伤 1 → 应该消 bonusRemaining (1) → bonus 完全 damaged，base 不动
-    const shield = makeShield({ armor: 5, armorMax: 5, armorBonusDamaged: 1 });
+  it('部分扣减保留：armor 已被打过一次后，再来 1 点反伤继续扣到 armor', () => {
+    // Shield armor=3 (damaged from cap=7), then reflect 1 → armor=2.
+    const shield = makeShield({ armor: 3, armorMax: 5 });
     const state = makeState({
       equipmentSlot1: null as any,
       equipmentSlot2: shield as any,
@@ -120,14 +121,13 @@ describe('routeReflectDamageToHero — bonus-first armor consumption (bug #2)', 
     const route = routeReflectDamageToHero(state, 1, 'Golem', '反魔');
 
     const updated = route.patch.equipmentSlot2 as GameCardData;
-    expect(updated.armor).toBe(5);
-    expect(updated.armorBonusDamaged).toBe(2);
+    expect(updated.armor).toBe(2);              // 3 → 2
     expect(updated.durability).toBe(3);
   });
 });
 
-describe('routeReflectDamageToHero — armor depleted ticks durability (bug #3)', () => {
-  it('多血层盾：armor 打穿 → durability -1，armor / armorBonusDamaged 重置', () => {
+describe('routeReflectDamageToHero — armor depleted ticks durability', () => {
+  it('多血层盾：armor 打穿 → durability -1，armor 字段重置（下次默认到 cap）', () => {
     const shield = makeShield({
       id: 's-multi', name: '多层木盾', value: 3,
       armor: 3, armorMax: 3,
@@ -143,7 +143,6 @@ describe('routeReflectDamageToHero — armor depleted ticks durability (bug #3)'
     const updated = route.patch.equipmentSlot2 as GameCardData;
     expect(updated.durability).toBe(2);                       // 血层 -1
     expect(updated.armor).toBeUndefined();                    // armor 字段已剥离 → 下次刷满
-    expect(updated.armorBonusDamaged).toBeUndefined();        // bonus 累计也清零
   });
 
   it('铁壁塔盾 (durability 1) 被反魔打穿 → durability=0 → 入坟场', () => {

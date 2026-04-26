@@ -183,6 +183,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   stunUpgradeCapCount: 0,
   recycleBackpackExpandCount: 0,
   dungeonGoldCount: 0,
+  waterfallHealCount: 0,
   armorHalveEndureCount: 0,
   monsterEquipBuffCount: 0,
   endTurnDrawCount: 0,

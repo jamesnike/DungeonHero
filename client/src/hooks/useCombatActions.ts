@@ -171,7 +171,6 @@ export interface CombatActionsDeps {
 
   // --- Pending action state from GameBoard (for handleMonsterTargetSelection) ---
   handleMagicMonsterSelection: (monster: GameCardData) => void;
-  handleHolyLightMonsterCleanse: (monster: GameCardData) => boolean;
   handleHeroSkillMonsterSelection: (monster: GameCardData) => void;
 }
 
@@ -188,7 +187,6 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     selectedHeroSkill,
     deathWardPrompt,
     pendingHeroSkillAction,
-    pendingHeroMagicAction,
     pendingMagicAction,
   } = useShallowGameState(s => ({
     permanentMaxHpBonus: s.permanentMaxHpBonus,
@@ -196,7 +194,6 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     selectedHeroSkill: s.selectedHeroSkill,
     deathWardPrompt: s.deathWardPrompt,
     pendingHeroSkillAction: s.pendingHeroSkillAction,
-    pendingHeroMagicAction: s.pendingHeroMagicAction,
     pendingMagicAction: s.pendingMagicAction,
   }));
 
@@ -1041,17 +1038,11 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
         depsRef.current.handleMagicMonsterSelection(monster);
         return;
       }
-      if (pendingHeroMagicAction?.step === 'monster-select') {
-        if (depsRef.current.handleHolyLightMonsterCleanse(monster)) {
-          return;
-        }
-      }
       if (pendingHeroSkillAction?.type === 'monster') {
         depsRef.current.handleHeroSkillMonsterSelection(monster);
       }
     },
     [
-      pendingHeroMagicAction,
       pendingHeroSkillAction,
       pendingMagicAction,
     ],

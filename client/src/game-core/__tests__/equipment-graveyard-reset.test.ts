@@ -49,14 +49,13 @@ describe('Equipment graveyard reset', () => {
       expect((reset as any).fromSlot).toBeUndefined();
     });
 
-    it('refills shield durability and clears armor + armorBonusDamaged', () => {
+    it('refills shield durability and clears armor', () => {
       const shield: GameCardData = {
         id: 's1', type: 'shield', name: 'Iron Shield', value: 0,
         durability: 0,
         maxDurability: 3,
         armor: 0,
         armorMax: 4,
-        armorBonusDamaged: 2,
         reviveUsed: true,
         wraithRebirthUsed: true,
       };
@@ -67,7 +66,6 @@ describe('Equipment graveyard reset', () => {
       expect(reset.maxDurability).toBe(3);
       expect(reset.armorMax).toBe(4);
       expect(reset.armor).toBeUndefined();
-      expect(reset.armorBonusDamaged).toBeUndefined();
       expect((reset as any).reviveUsed).toBeUndefined();
       expect((reset as any).wraithRebirthUsed).toBeUndefined();
     });
@@ -135,7 +133,7 @@ describe('Equipment graveyard reset', () => {
       const damagedShield: GameCardData = {
         id: 'shield-1', type: 'shield', name: 'Iron Shield', value: 0,
         durability: 1, maxDurability: 3,
-        armor: 1, armorMax: 4, armorBonusDamaged: 2,
+        armor: 1, armorMax: 4,
         reviveUsed: true,
       };
       const state = makeState({ discardedCards: [] });
@@ -145,7 +143,6 @@ describe('Equipment graveyard reset', () => {
       const inGrave = result.state.discardedCards[0];
       expect(inGrave.durability).toBe(3);
       expect(inGrave.armor).toBeUndefined();
-      expect(inGrave.armorBonusDamaged).toBeUndefined();
       expect((inGrave as any).reviveUsed).toBeUndefined();
       // Static template fields preserved.
       expect(inGrave.armorMax).toBe(4);
@@ -188,7 +185,6 @@ describe('Equipment graveyard reset', () => {
         armorMax: 2,
         // Combat state that should be wiped before landing in graveyard:
         armor: 0,
-        armorBonusDamaged: 1,
         equipmentReviveUsed: true,
         onDestroyEffect: 'graveyard-to-hand',
       };
@@ -221,7 +217,6 @@ describe('Equipment graveyard reset', () => {
       expect(ironInGrave!.durability).toBe(3);
       expect(ironInGrave!.maxDurability).toBe(3);
       expect((ironInGrave as any).armor).toBeUndefined();
-      expect((ironInGrave as any).armorBonusDamaged).toBeUndefined();
       expect((ironInGrave as any).equipmentReviveUsed).toBeUndefined();
 
       // Picked card landed in hand.

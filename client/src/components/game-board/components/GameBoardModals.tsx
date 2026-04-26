@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { Sword, Swords, Undo2, Wrench } from 'lucide-react';
+import { Swords, Undo2, Wrench } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
@@ -150,10 +150,6 @@ export type GameBoardModalsProps = {
   onEquipmentPromptSelect: (slotId: EquipmentSlotId) => void;
   onEquipmentPromptCancel: () => void;
 
-  // --- Hero magic choice prompt ---
-  onCancelHeroMagicAction: () => void;
-  onHeroMagicChoice: (choice: 'heal' | 'purge') => void;
-
   // --- Potion choice dialog ---
   onCancelPotionAction: () => void;
   onPotionChoiceSelection: (choice: 'repair' | 'upgrade') => void;
@@ -273,9 +269,6 @@ function GameBoardModalsInner({
   onEquipmentPromptSelect,
   onEquipmentPromptCancel,
 
-  onCancelHeroMagicAction,
-  onHeroMagicChoice,
-
   onCancelPotionAction,
   onPotionChoiceSelection,
 
@@ -357,7 +350,6 @@ function GameBoardModalsInner({
     gameMode: s.gameMode,
     combatState: s.combatState,
     backpackCapacityModifier: s.backpackCapacityModifier,
-    pendingHeroMagicAction: s.pendingHeroMagicAction,
     pendingPotionAction: s.pendingPotionAction,
     handMagicUpgradeModal: s.handMagicUpgradeModal,
     mirrorCopyModal: s.mirrorCopyModal,
@@ -403,7 +395,7 @@ function GameBoardModalsInner({
     showSkillSelection, showCardDraft, cardDraftPool, undoCount,
     monstersDefeated, totalDamageTaken, totalHealed,
     turnCount, gameMode, combatState, backpackCapacityModifier,
-    pendingHeroMagicAction, pendingPotionAction,
+    pendingPotionAction,
     handMagicUpgradeModal, mirrorCopyModal, amplifyModal, permGrantModal,
     shopDeleteUsed, equipmentSlot1Reserve, equipmentSlot2Reserve,
     persuadeCostModifier, persuadeDiscount, persuadeSameTargetCostHalve, lastPersuadeTargetId,
@@ -428,9 +420,6 @@ function GameBoardModalsInner({
   const persuadePhase: PersuadePhase = (persuadeState?.phase as PersuadePhase) ?? 'confirm';
   const persuadeDiceValue = persuadeState?.diceValue ?? null;
   const persuadeSuccess = persuadeState?.success ?? null;
-  const heroMagicChoicePrompt = pendingHeroMagicAction?.step === 'choice'
-    ? { id: pendingHeroMagicAction.id, prompt: pendingHeroMagicAction.prompt ?? '' }
-    : null;
   const potionChoiceDialogOpen = Boolean(pendingPotionAction?.step === 'choice');
   const isCombatPanelVisible = combatState.engagedMonsterIds.length > 0;
   const combatCurrentTurn = combatState.currentTurn;
@@ -879,49 +868,6 @@ function GameBoardModalsInner({
         />
       )}
       
-      {heroMagicChoicePrompt && (
-        <Dialog open onOpenChange={(open) => { if (!open) onCancelHeroMagicAction(); }}>
-          {/*
-            英雄魔法分支选择（圣光）：必须选 heal 或 purge，否则 pendingHeroMagicAction 卡住。
-            显式关闭路径：选其中一个 option / X（→ onCancelHeroMagicAction 释放 MP）。
-          */}
-          <DialogContent
-            className="sm:max-w-2xl"
-            onInteractOutside={(e) => e.preventDefault()}
-            onEscapeKeyDown={(e) => e.preventDefault()}
-          >
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Sword className="w-5 h-5 text-amber-500" />
-                圣光
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-3 pt-2">
-              <Button
-                variant="outline"
-                className="h-auto w-full justify-start p-4 text-left"
-                onClick={() => onHeroMagicChoice('heal')}
-              >
-                <div className="flex flex-col gap-1">
-                  <span className="font-semibold text-emerald-600">回满生命</span>
-                  <span className="text-xs text-muted-foreground">立即将生命值恢复至上限。</span>
-                </div>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto w-full justify-start p-4 text-left"
-                onClick={() => onHeroMagicChoice('purge')}
-              >
-                <div className="flex flex-col gap-1">
-                  <span className="font-semibold text-sky-600">净化怒气</span>
-                  <span className="text-xs text-muted-foreground">选择一个怪物，将其怒气层数清零（血层归 1，生命回满）。</span>
-                </div>
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
       {potionChoiceDialogOpen && (
         <Dialog open onOpenChange={(open) => { if (!open) onCancelPotionAction(); }}>
           {/*

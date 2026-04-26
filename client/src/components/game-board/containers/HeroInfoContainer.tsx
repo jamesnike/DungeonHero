@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { Sword, Wrench } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
@@ -34,7 +34,6 @@ function HeroInfoContainerInner() {
     permanentSpellLifesteal: s.permanentSpellLifesteal,
     stunCap: s.stunCap,
     amuletSlots: s.amuletSlots,
-    pendingHeroMagicAction: s.pendingHeroMagicAction,
     pendingPotionAction: s.pendingPotionAction,
     handLimitBonus: s.handLimitBonus,
     backpackCapacityModifier: s.backpackCapacityModifier,
@@ -131,10 +130,6 @@ function HeroInfoContainerInner() {
     equipmentSlotRight: gs.equipmentSlotCapacity.equipmentSlot2 ?? 1,
   };
 
-  const heroMagicChoicePrompt = gs.pendingHeroMagicAction?.step === 'choice'
-    ? { id: gs.pendingHeroMagicAction.id, prompt: gs.pendingHeroMagicAction.prompt ?? '' }
-    : null;
-
   const potionChoiceDialogOpen = Boolean(gs.pendingPotionAction?.step === 'choice');
 
   return (
@@ -150,49 +145,6 @@ function HeroInfoContainerInner() {
         heroMagicInfo={ui.heroMagicInfo}
         capacityLimits={capacityLimits}
       />
-
-      {heroMagicChoicePrompt && (
-        <Dialog open onOpenChange={(open) => { if (!open) cb.onCancelHeroMagicAction(); }}>
-          {/*
-            英雄魔法分支选择（圣光）：必须选 heal 或 purge，否则 pendingHeroMagicAction 卡住。
-            显式关闭路径：选其中一个 option / X（→ onCancelHeroMagicAction 释放 MP）。
-          */}
-          <DialogContent
-            className="sm:max-w-2xl"
-            onInteractOutside={(e) => e.preventDefault()}
-            onEscapeKeyDown={(e) => e.preventDefault()}
-          >
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Sword className="w-5 h-5 text-amber-500" />
-                圣光
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-3 pt-2">
-              <Button
-                variant="outline"
-                className="h-auto w-full justify-start p-4 text-left"
-                onClick={() => cb.onHeroMagicChoice('heal')}
-              >
-                <div className="flex flex-col gap-1">
-                  <span className="font-semibold text-emerald-600">回满生命</span>
-                  <span className="text-xs text-muted-foreground">立即将生命值恢复至上限。</span>
-                </div>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto w-full justify-start p-4 text-left"
-                onClick={() => cb.onHeroMagicChoice('purge')}
-              >
-                <div className="flex flex-col gap-1">
-                  <span className="font-semibold text-sky-600">净化怒气</span>
-                  <span className="text-xs text-muted-foreground">选择一个怪物，将其怒气层数清零（血层归 1，生命回满）。</span>
-                </div>
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
 
       {potionChoiceDialogOpen && (
         <Dialog open onOpenChange={(open) => { if (!open) cb.onCancelPotionAction(); }}>

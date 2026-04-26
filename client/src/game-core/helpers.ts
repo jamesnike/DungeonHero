@@ -29,7 +29,7 @@ import {
   PERSUADE_COST,
 } from './constants';
 import type { GameState, EternalRelic } from './types';
-import { computeAmuletEffects } from './equipment';
+import { computeAmuletEffectsForState } from './equipment';
 import { getEquipmentSlotsWithSuppressedTempAttack } from './buildingAura';
 
 // ---------------------------------------------------------------------------
@@ -534,6 +534,7 @@ export function isDamageMagic(card: GameCardData): boolean {
   if (card.magicEffect && damageEffects.includes(card.magicEffect)) return true;
   const damageNames = [
     '风暴箭雨', '点金裁决', '混沌冲击', '箭雨余韵', '魔弹', '雷震击', '赏金裁决',
+    '学徒法弹',
   ];
   if (damageNames.includes(card.name)) return true;
   return false;
@@ -578,6 +579,11 @@ export function computeDamageMagicDisplayPure(
   if (card.knightEffect === 'missile-bolt') {
     const dmg = 1 + amp;
     return { mode: 'replace', text: `选择一个怪物，造成 ${dmg} 点法术伤害。`, amplifyBonus: amp };
+  }
+
+  if (card.name === '学徒法弹') {
+    const dmg = 1 + amp;
+    return { mode: 'replace', text: `选择一个目标，造成 ${dmg} 点法术伤害。`, amplifyBonus: amp };
   }
 
   if (card.name === '风暴箭雨') {
@@ -709,7 +715,7 @@ export function computeHonorSweepWaveDamagePure(
     : state.equipmentSlot2) as GameCardData | null;
   if (!slotItem || (slotItem.type !== 'weapon' && slotItem.type !== 'monster')) return 0;
 
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const isMonsterEquip = slotItem.type === 'monster';
   const rawWeaponValue = isMonsterEquip ? (slotItem.attack ?? slotItem.value) : slotItem.value;
   const goblinGoldPowerActive =
@@ -746,7 +752,7 @@ export function computeSpellDamagePure(state: GameState, baseDamage: number): nu
 }
 
 export function computeDefenseBonusPure(state: GameState): number {
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   const ironSkin = ((state as any).permanentSkills ?? []).includes('Iron Skin') ? 1 : 0;
   const shieldMaster = (state as any).shieldMasterBonus ?? 0;
   const defensiveStance = (state as any).defensiveStanceActive ? 1 : 0;
@@ -766,20 +772,16 @@ export function computeSlotArmorValuePure(
   const slotShieldBonus = bonuses[slotId]?.shield ?? 0;
   const rawSlotTemp = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
   const defBonus = computeDefenseBonusPure(state);
-  const bonusDamaged = (slotItem as any).armorBonusDamaged ?? 0;
 
-  if (slotItem.type === 'monster') {
-    const baseArmor = slotItem.hp ?? slotItem.value;
-    return Math.max(0, baseArmor + defBonus + slotShieldBonus + rawSlotTemp - bonusDamaged);
-  }
-
-  const baseArmorMax = (slotItem as any).armorMax ?? slotItem.value;
+  // Single-counter armor model: storedCap = baseArmorMax + perm + temp.
+  // `slotItem.armor === undefined` ⇒ "fresh / at full cap"; readers default to cap.
+  const baseArmorMax = slotItem.type === 'monster'
+    ? (slotItem.hp ?? slotItem.value)
+    : ((slotItem as any).armorMax ?? slotItem.value);
   const permanentBonus = Math.max(0, defBonus + slotShieldBonus);
-  const storedBaseArmor = Math.min((slotItem as any).armor ?? baseArmorMax, baseArmorMax);
-  const effectiveBonus = Math.max(0, permanentBonus + rawSlotTemp - bonusDamaged);
-  const currentArmor = storedBaseArmor + effectiveBonus;
-  const effectiveArmorMax = baseArmorMax + permanentBonus + rawSlotTemp;
-  return Math.min(currentArmor, effectiveArmorMax);
+  const storedCap = Math.max(0, baseArmorMax + permanentBonus + rawSlotTemp);
+  const stored = (slotItem as any).armor;
+  return stored === undefined ? storedCap : Math.max(0, Math.min(stored, storedCap));
 }
 
 // ---------------------------------------------------------------------------
@@ -800,7 +802,7 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
   heroWeaponDmg += bonuses.equipmentSlot1?.damage ?? 0;
   heroWeaponDmg += bonuses.equipmentSlot2?.damage ?? 0;
 
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
 
   // 左右装备栏的临时攻击（潮涌铸剑等）。注意 strength/balance 光环在
   // `amuletAuraAppliedThisWave === true` 时已被 baked 进 slotTempAttack，
@@ -890,9 +892,14 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
   rate += ((state as any).permanentPersuadeBonus ?? 0) * bonusScale;
 
   const relics = (state.eternalRelics ?? []) as EternalRelic[];
-  if (relics.some(r => r.id === 'chain-persuade')) {
+  // chain-persuade is stackable: each copy adds another +15% per consecutive
+  // attempt on the same monster. See `eternalRelics.ts STACKABLE_RELIC_IDS`
+  // and `client/src/game-core/__tests__/relic-stacking.test.ts`.
+  let chainPersuadeStack = 0;
+  for (const r of relics) if (r.id === 'chain-persuade') chainPersuadeStack++;
+  if (chainPersuadeStack > 0) {
     if ((state as any).lastPersuadeTargetId && (state as any).lastPersuadeTargetId === monster.id) {
-      rate += 15 * ((state as any).consecutivePersuadeCount ?? 0);
+      rate += 15 * chainPersuadeStack * ((state as any).consecutivePersuadeCount ?? 0);
     }
   }
 

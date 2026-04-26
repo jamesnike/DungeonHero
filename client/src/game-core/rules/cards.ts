@@ -31,8 +31,8 @@ import {
 } from '../cards';
 import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecyclableFromHand, getCardPlayCategory, logHeroMagic, applyAmplifyToCard } from '../helpers';
-import { hasEternalRelic } from '@/lib/eternalRelics';
-import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
+import { hasEternalRelic, countEternalRelics } from '@/lib/eternalRelics';
+import { computeAmuletEffectsForState, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure, applySlotArmorBonusDelta, refillSlotArmorToCap } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { applyEquipDestroyLastWords } from './waterfall';
@@ -298,6 +298,11 @@ function reducePlayCard(
     }
 
     patch[targetSlot] = { ...card, fromSlot: targetSlot } as EquipmentItem;
+    // Single-counter armor model: on equip, refill armor to the current cap
+    // (baseArmorMax + slot perm shield + slot temp armor). Required for
+    // shield / monster equipment so the shield gets the "immediate bonus"
+    // matching the player intuition that 装备时 立马等于满 cap.
+    refillSlotArmorToCap(state, targetSlot, patch);
     sideEffects.push({
       event: 'log:entry',
       payload: {
@@ -311,15 +316,19 @@ function reducePlayCard(
       executeOnEquip(state, card, targetSlot, patch, sideEffects, enqueuedActions);
     }
 
-    // Eternal relic: equip-empower
-    if (hasEternalRelic(state.eternalRelics ?? [], 'equip-empower')) {
+    // Eternal relic: equip-empower (stackable — N copies → +3N attack / +3N armor)
+    const equipEmpowerStack = countEternalRelics(state.eternalRelics ?? [], 'equip-empower');
+    if (equipEmpowerStack > 0) {
+      const bonus = 3 * equipEmpowerStack;
       const tempAttack = patch.slotTempAttack ?? { ...(state.slotTempAttack ?? {}) };
       const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
-      tempAttack[targetSlot] = (tempAttack[targetSlot] ?? 0) + 3;
-      tempArmor[targetSlot] = (tempArmor[targetSlot] ?? 0) + 3;
+      tempAttack[targetSlot] = (tempAttack[targetSlot] ?? 0) + bonus;
+      tempArmor[targetSlot] = (tempArmor[targetSlot] ?? 0) + bonus;
       patch.slotTempAttack = tempAttack;
       patch.slotTempArmor = tempArmor;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `铸锋药剂：${card.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！` } });
+      applySlotArmorBonusDelta(state, targetSlot, bonus, patch);
+      const stackLabel = equipEmpowerStack > 1 ? `（叠加 ×${equipEmpowerStack}）` : '';
+      sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `铸锋药剂${stackLabel}：${card.name} 装备时，该装备栏临时攻击 +${bonus}，临时护甲 +${bonus}！` } });
     }
 
     // 集甲之符：从手牌出装备牌算一次"装备事件"，不论是替换、入 reserve 还是顶替。
@@ -693,6 +702,9 @@ function reduceEquipCard(
   }
 
   patch[slotId] = { ...card, fromSlot: slotId } as EquipmentItem;
+  // Single-counter armor model: on equip, refill armor to the current cap
+  // (baseArmorMax + slot perm shield + slot temp armor). No-op for weapons.
+  refillSlotArmorToCap(state, slotId, patch);
 
   if ((state.handCards as GameCardData[]).some(c => c.id === action.cardId)) {
     patch.handCards = (state.handCards as GameCardData[]).filter(c => c.id !== action.cardId);
@@ -737,16 +749,20 @@ function reduceEquipFromHand(
     executeOnEquip(state, card, slotId, patch, sideEffects, enqueuedActions);
   }
 
-  if (hasEternalRelic(state.eternalRelics ?? [], 'equip-empower')) {
+  const equipEmpowerStack = countEternalRelics(state.eternalRelics ?? [], 'equip-empower');
+  if (equipEmpowerStack > 0) {
+    const bonus = 3 * equipEmpowerStack;
     const tempAttack = patch.slotTempAttack ?? { ...(state.slotTempAttack ?? {}) };
     const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
-    tempAttack[slotId] = (tempAttack[slotId] ?? 0) + 3;
-    tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
+    tempAttack[slotId] = (tempAttack[slotId] ?? 0) + bonus;
+    tempArmor[slotId] = (tempArmor[slotId] ?? 0) + bonus;
     patch.slotTempAttack = tempAttack;
     patch.slotTempArmor = tempArmor;
+    applySlotArmorBonusDelta(state, slotId, bonus, patch);
+    const stackLabel = equipEmpowerStack > 1 ? `（叠加 ×${equipEmpowerStack}）` : '';
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'equip', message: `铸锋药剂：${card.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！` },
+      payload: { type: 'equip', message: `铸锋药剂${stackLabel}：${card.name} 装备时，该装备栏临时攻击 +${bonus}，临时护甲 +${bonus}！` },
     });
   }
 
@@ -1204,7 +1220,7 @@ function reduceDeleteCard(
   // through DELETE_CARD still benefits from the amulet, and so direct test
   // coverage of `DELETE_CARD` exercises the same path.
   const enqueuedActions: GameAction[] = [];
-  const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const ae = computeAmuletEffectsForState(state);
   if (ae.deleteDrawCount > 0) {
     const drawCount = 2 * ae.deleteDrawCount;
     enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
@@ -1425,7 +1441,7 @@ function reduceApplyDiscardEffects(
     sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `永恒护符·弃牌生金：弃回「${card.name}」获得 2 金币` } });
   }
 
-  const amuletFx = computeAmuletEffects(state.amuletSlots);
+  const amuletFx = computeAmuletEffectsForState(state);
   if (amuletFx.catapultCount > 0 && owner === 'player' && !opts?.toRecycleBag && !opts?.isEquipmentDisplace) {
     const drawCount = 2 * amuletFx.catapultCount;
     enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
@@ -1513,7 +1529,12 @@ function reduceApplyCardFlip(
       newActive[idx] = placedCard;
       patch.activeCards = newActive;
       inCellIdx = idx;
-    } else if (flip.toCard.type === 'event') {
+    } else {
+      // Event was used FROM HAND (not from the active row): "stay" semantically
+      // means "stay in current owner = the player's hand". The flipped result
+      // therefore goes into handCards regardless of toCard.type. Without this,
+      // any non-event toCard (magic / amulet / building / potion / monster)
+      // would silently disappear when the originating event is played from hand.
       const placedCard: GameCardData = { ...flip.toCard, _flipBackCard: { ...card } };
       patch.handCards = [...state.handCards, placedCard];
       sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `${flip.toCard.name} 加入手牌` } });
@@ -1529,12 +1550,12 @@ function reduceApplyCardFlip(
   // Capture flip-gold count BEFORE applyFlipCounters runs (so we can pass the
   // hint to the full-screen overlay's coin animation). applyFlipCounters reads
   // the same state-level amulet effects, so this is the same value it'll use.
-  const amuletFxForOverlay = computeAmuletEffects(state.amuletSlots);
+  const amuletFxForOverlay = computeAmuletEffectsForState(state);
 
   applyFlipCounters(state, patch, sideEffects, enqueuedActions);
 
   // Stay flips with a real cell get the in-cell flip animation; everything else
-  // (hand / backpack / graveyard, plus stay-fallback-to-hand) keeps the
+  // (hand / backpack / graveyard, plus stay-from-hand → hand) keeps the
   // full-screen CardFlipOverlay via event:cardTransformed.
   if (inCellIdx !== null) {
     sideEffects.push({
@@ -1564,7 +1585,7 @@ function reduceDisposeEquipmentCard(
   const enqueuedActions: GameAction[] = [];
   let patch: Partial<GameState> = {};
 
-  const amuletFx = computeAmuletEffects(state.amuletSlots);
+  const amuletFx = computeAmuletEffectsForState(state);
 
   // Displacement-style destruction (e.g. equipment B replaces A and pushes A out
   // of the slot): fire A's "last words" effects since A is conceptually destroyed.
@@ -1608,7 +1629,7 @@ function reduceDisposeEquipmentCard(
       sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 耐久上限归零，移除！` } });
       return applyPatch(state, patch, sideEffects);
     }
-    const { fromSlot: _, armor: _a, armorBonusDamaged: _b, reviveUsed: _c, equipmentReviveUsed: _d, wraithRebirthUsed: _e, ...rest } = card as any;
+    const { fromSlot: _, armor: _a, reviveUsed: _c, equipmentReviveUsed: _d, wraithRebirthUsed: _e, ...rest } = card as any;
     const salvaged: GameCardData = { ...rest, durability: 1, maxDurability: newMaxDur };
     const slotHint: string | undefined = (card as any).fromSlot;
     sideEffects.push({ event: 'card:equipmentSalvaged', payload: { card: salvaged, slotHint } });
@@ -2539,22 +2560,22 @@ function reduceResolvePermGrant(
   }
 
   if (modal.sourceType === 'on-hand-stun-cap-grant') {
-    // 翻转之契 option 5 — grant 'stun-cap-bonus-3' on-hand keyword to the chosen
+    // 翻转之契 option 5 — grant 'stun-cap-bonus-2' on-hand keyword to the chosen
     // hand card and trigger it once immediately (the card is already in hand,
     // so without this nudge the bonus would not apply until next discard / re-draw).
     const targetCard = state.handCards.find(c => c.id === targetCardId);
     if (!targetCard) return applyPatch(state, patch);
     const STUN_CAP_HARD_MAX = 100;
     const current = state.stunCap ?? 0;
-    const target = Math.min(STUN_CAP_HARD_MAX, current + 3);
+    const target = Math.min(STUN_CAP_HARD_MAX, current + 2);
     patch.handCards = state.handCards.map(c =>
-      c.id === targetCardId ? { ...c, onEnterHandEffect: 'stun-cap-bonus-3' } : c,
+      c.id === targetCardId ? { ...c, onEnterHandEffect: 'stun-cap-bonus-2' } : c,
     );
     if (target > current) patch.stunCap = target;
-    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `铭刻技艺：「${targetCard.name}」获得「上手：击晕上限 +3%」` } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `铭刻技艺：「${targetCard.name}」获得「上手：击晕上限 +2%」` } });
     if (target > current) {
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `铭刻技艺：击晕上限 ${current}% → ${target}%（即时触发一次）` } });
-      sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」铭刻技艺成功！击晕上限 +3%！` } });
+      sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」铭刻技艺成功！击晕上限 +2%！` } });
     } else {
       sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」铭刻技艺成功！击晕上限已达 ${STUN_CAP_HARD_MAX}%。` } });
     }
@@ -2999,7 +3020,7 @@ function reduceResolveStatSwap(
   });
 
   if (isFlank && !target.isStunned) {
-    const amuletFx = computeAmuletEffects(state.amuletSlots);
+    const amuletFx = computeAmuletEffectsForState(state);
     const effectiveFlankStun = Math.min(50 + (amuletFx.stunRateBoost ?? 0), state.stunCap);
     let predeterminedRoll: number;
     let nextRng: RngState;

@@ -882,23 +882,6 @@ export default function CardDetailsModal({
               </div>
             )}
 
-            {/* Boss: Last Stand Aura */}
-            {card.type === 'monster' && card.bossLastStandAura && (
-              <div className="bg-orange-500/15 p-3 rounded-md border border-orange-500/30 relative overflow-hidden">
-                <div className="relative flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-orange-500" />
-                    <span className="font-extrabold text-sm text-orange-700 dark:text-orange-300 tracking-wide">
-                      暴走 {(card.currentLayer ?? 1) === 1 ? '（已激活）' : ''}
-                    </span>
-                  </div>
-                  <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 pl-6">
-                    血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层。
-                  </p>
-                </div>
-              </div>
-            )}
-
             {/* Boss: Enrage Graveyard Summon */}
             {card.type === 'monster' && card.bossEnrageGraveyardSummon && card.bossEnrageGraveyardSummon > 0 && (
               <div className="bg-purple-500/15 p-3 rounded-md border border-purple-500/30 relative overflow-hidden">
@@ -910,7 +893,7 @@ export default function CardDetailsModal({
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 pl-6">
-                    被激怒时，从坟场取 {card.bossEnrageGraveyardSummon} 张牌：2 张怪物各占 1 个非 boss 格子（成为顶层，进场时当前血层为 1），2 张非怪物堆叠在另一个非 boss 格子上。被召唤的怪物立即激怒。
+                    被激怒时，从坟场取 {card.bossEnrageGraveyardSummon} 张牌：2 张怪物各占 1 个非 boss 格子（成为顶层，进场时恢复 1 血层，即当前血层为 2，受血层上限封顶），2 张非怪物堆叠在另一个非 boss 格子上。被召唤的怪物立即激怒。
                   </p>
                 </div>
               </div>

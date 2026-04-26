@@ -132,6 +132,7 @@ export type PotionEffectId =
   | 'perm-backpack-size+5'
   | 'swap-slot-damage-shield'
   | 'spell-lifesteal+1-maxhp+6'
+  | 'maxhp+6'
   | 'equip-swap'
   | 'hand-limit+1'
   | 'perm-waterfall-deal+1'
@@ -186,7 +187,8 @@ export type AmuletEffectId =
   | 'stun-attempt-discover'
   | 'persuade-on-flip'
   | 'delete-draw'
-  | 'last-words-extra-trigger';
+  | 'last-words-extra-trigger'
+  | 'waterfall-heal';
 
 export type AmuletAuraBonus = {
   attack?: number;
@@ -314,13 +316,14 @@ export interface GameCardData {
   // Equipment durability
   durability?: number; // Current durability for weapons/shields
   maxDurability?: number; // Maximum durability for weapons/shields
-  armor?: number; // Current armor HP for shields (like monster hp)
-  armorMax?: number; // Max armor HP per durability layer for shields (like monster maxHp)
-  armorBonusDamaged?: number; // How much of the permanent shield bonus has been consumed by damage
+  armor?: number; // Current armor HP for shields/monster equipment (single-counter live value; undefined ⇒ at full cap)
+  armorMax?: number; // Base armor HP per durability layer for shields. Cap = armorMax + perm.shield + slotTempArmor.
   weaponDurabilitySaveChance?: number; // % chance to not consume durability on attack
   damageReflect?: number; // Damage reflected back to attacker when blocking
   shieldPerfectBlockSaveChance?: number; // % chance to save durability on perfect block
   shieldPerfectBlockArmorSaveChance?: number; // % chance to save armor (no armor deduction this block) on perfect block
+  perfectBlockSpawnMissiles?: number; // 弹幕护盾: on perfect block, spawn N 魔弹 cards directly to hand (hand-full → silently skip)
+  shieldPerfectBlockMaxHpGain?: number; // 砺心之盾: on perfect block, permanently raise hero maxHp by N (cap-only, does NOT heal current hp). Stacks per perfect block.
   shieldBashStunRate?: number; // Per-armor-point stun % when shield-bashing a monster (e.g. 5 → 5% × armor)
   shieldBashUnlimited?: boolean; // Shield bash has no per-turn limit; can bash as long as durability remains
   reflectHalfDamage?: boolean; // Reflect half of incoming attack damage back to attacker
@@ -442,7 +445,6 @@ export interface GameCardData {
   isFinalMonster?: boolean; // Last monster in the deck — transforms into boss on defeat
   bossPhase?: boolean; // Monster has transformed into boss form
   bossRetaliationDamage?: number; // Direct damage to hero (ignoring shields) each time boss takes a hit
-  bossLastStandAura?: boolean; // At 1 layer: ALL row monsters +5 atk & restore 1 layer per monster turn end
   bossLayerCap?: boolean; // (deprecated) Max 1 layer loss per hero turn
   bossEnrageGraveyardSummon?: number; // Boss: on enrage, pull N cards from graveyard and stack on other slots
   // Tier-3 waterfall upgrade abilities
@@ -1164,6 +1166,20 @@ const amuletEffectText =
   })();
   const monsterHpBase = Math.max(0, (card.hp ?? card.value) - monsterHpModifier);
 
+  // Single-counter armor display for monster equipment (when slotted).
+  // Z = current armor (live counter, defaults to cap when undefined).
+  // Cap = baseHp + monsterHpModifier (lowGold buff) + equipmentShieldModifierNum (perm + temp).
+  const isMonsterEquipped = card.type === 'monster'
+    && equipmentStatModifier?.appliesTo === 'monster';
+  const monsterArmorCap = isMonsterEquipped
+    ? Math.max(0, monsterHpBase + monsterHpModifier + equipmentShieldModifierNum)
+    : 0;
+  const monsterCurrentArmor = isMonsterEquipped
+    ? (card.armor === undefined
+        ? monsterArmorCap
+        : Math.max(0, Math.min(card.armor, monsterArmorCap)))
+    : 0;
+
   return (
     <div
       ref={cardRef}
@@ -1787,7 +1803,22 @@ const amuletEffectText =
                     <div className="dh-card__overlay-tr flex flex-col items-end gap-0">
                       <div className="relative group flex items-center">
                         <div className="flex items-baseline gap-0 dh-card__icon-gap">
-                          {isCompact ? (
+                          {isMonsterEquipped ? (() => {
+                            // Single-counter armor display: Z = current armor.
+                            const baseHp = monsterHpBase + monsterHpModifier;
+                            const colorClass = monsterCurrentArmor < baseHp
+                              ? 'text-orange-500'
+                              : monsterCurrentArmor > baseHp
+                                ? 'text-emerald-600'
+                                : monsterHpModifier > 0
+                                  ? 'text-emerald-600'
+                                  : 'text-black';
+                            return (
+                              <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${colorClass}`}>
+                                {monsterCurrentArmor}
+                              </span>
+                            );
+                          })() : isCompact ? (
                             <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
                               (monsterHpModifier > 0 || equipmentShieldModifierNum !== 0) ? 'text-emerald-600' : 'text-black'
                             }`}>
@@ -1935,33 +1966,24 @@ const amuletEffectText =
                         )}
                         <div className="flex items-baseline gap-0">
                           {(card.type === 'shield' && card.armorMax != null && card.armorMax > 0) ? (() => {
+                            // Single-counter armor display: Z = current armor (live counter,
+                            // defaults to cap when undefined). Cap = baseArmorMax + permBonus.
+                            // No more X+Y split — show just one number.
                             const baseArmorMax = card.armorMax!;
-                            const curBaseArmor = Math.min(card.armor ?? baseArmorMax, baseArmorMax);
                             const permBonus = equipmentStatModifier?.permanentShieldBonus ?? 0;
-                            const bonusDamaged = card.armorBonusDamaged ?? 0;
-                            if (isCompact && permBonus > 0) {
-                              const totalArmor = curBaseArmor + permBonus;
-                              return (
-                                <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
-                                  curBaseArmor < baseArmorMax || bonusDamaged > 0 ? 'text-orange-500' : 'text-emerald-600'
-                                }`}>
-                                  {totalArmor}
-                                </span>
-                              );
-                            }
+                            const cap = baseArmorMax + permBonus;
+                            const currentArmor = card.armor === undefined
+                              ? cap
+                              : Math.max(0, Math.min(card.armor, cap));
+                            const colorClass = currentArmor < baseArmorMax
+                              ? 'text-orange-500'
+                              : currentArmor > baseArmorMax
+                                ? 'text-emerald-600'
+                                : 'text-cyan-600';
                             return (
-                              <>
-                                <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
-                                  curBaseArmor < baseArmorMax ? 'text-orange-500' : 'text-cyan-600'
-                                }`}>
-                                  {curBaseArmor}
-                                </span>
-                                {permBonus > 0 && (
-                                  <span className={`dh-card__stat font-black ${bonusDamaged > 0 ? 'text-orange-400' : 'text-emerald-600'} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}>
-                                    +{permBonus}
-                                  </span>
-                                )}
-                              </>
+                              <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${colorClass}`}>
+                                {currentArmor}
+                              </span>
                             );
                           })() : isCompact ? (
                             <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
@@ -2064,7 +2086,7 @@ const amuletEffectText =
                   </h3>
                 )}
 
-                {isMonsterEquipmentCard(card) && (card.onAttackEffect?.startsWith('steal-gold-') || card.eliteLowGoldPower || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.lastWordsMaxHpBoost || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
+                {isMonsterEquipmentCard(card) && (card.onAttackEffect?.startsWith('steal-gold-') || card.eliteLowGoldPower || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.monsterSpecial === 'ogre-crit' || card.eliteDoubleAttack || card.hasRevive || card.hasEquipmentRevive || card.monsterSpecial === 'bone-regen' || card.lastWords || card.bleedEffect || card.eliteRegenHeroTurn || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.monsterSpecial === 'wraith-rebirth' || card.wraithDeathHeal || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.swarmCorrode || card.swarmBugletShield || card.monsterSpecial === 'swarm-elite' || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.lastWordsMaxHpBoost || card.bossRetaliationDamage || card.bossEnrageGraveyardSummon || card._potionStunBonusApplied) && (
                   <div className="dh-card__keyword-row">
                     {card.onAttackEffect?.startsWith('steal-gold-') && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="窃金：攻击时为Hero偷钱">窃金</span>
@@ -2198,15 +2220,12 @@ const amuletEffectText =
                     {card.bossRetaliationDamage != null && card.bossRetaliationDamage > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反噬：每次受到伤害，对英雄造成 ${card.bossRetaliationDamage} 点直接伤害（无视护盾）`}>反噬</span>
                     )}
-                    {card.bossLastStandAura && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
-                    )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时当前血层为 1），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时恢复 1 血层，即当前血层为 2，受血层上限封顶），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
                     )}
                   </div>
                 )}
-                {card.type === 'monster' && !isMonsterEquipmentCard(card) && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.eliteRegenHeroTurn || card.eliteLowGoldPower || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
+                {card.type === 'monster' && !isMonsterEquipmentCard(card) && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.eliteRegenHeroTurn || card.eliteLowGoldPower || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
                     {card.swarmSpawn && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="繁殖：每移除一张地城牌，在该位置生成小虫子">繁殖</span>
@@ -2352,11 +2371,8 @@ const amuletEffectText =
                     {card.bossRetaliationDamage != null && card.bossRetaliationDamage > 0 && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--bleed" title={`反噬：每次受到伤害，对英雄造成 ${card.bossRetaliationDamage} 点直接伤害（无视护盾）`}>反噬</span>
                     )}
-                    {card.bossLastStandAura && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onattack" title="暴走：血层为 1 时，每个怪物回合结束，激活行所有怪物 +5 攻击并恢复 1 血层">暴走</span>
-                    )}
                     {card.bossEnrageGraveyardSummon != null && card.bossEnrageGraveyardSummon > 0 && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时当前血层为 1），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title={`召唤：被激怒时，从坟场取 ${card.bossEnrageGraveyardSummon} 张牌：2 怪物各占 1 个非 boss 格的顶层（进场时恢复 1 血层，即当前血层为 2，受血层上限封顶），2 非怪物堆叠在另一个非 boss 格上；被召唤的怪物立即激怒`}>召唤</span>
                     )}
                     {card._potionStunBonusApplied && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title={`雷震淬刃药：永久击晕率 ${card.weaponStunChance ?? 0}%`}>击晕 {card.weaponStunChance ?? 0}%</span>
@@ -2500,7 +2516,6 @@ export function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean
       a.maxDurability !== b.maxDurability ||
       a.armor !== b.armor ||
       a.armorMax !== b.armorMax ||
-      a.armorBonusDamaged !== b.armorBonusDamaged ||
       a.currentLayer !== b.currentLayer ||
       a.hpLayers !== b.hpLayers ||
       a.fury !== b.fury ||
@@ -2600,7 +2615,6 @@ export function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean
       a.weaponStunChance !== b.weaponStunChance ||
       a.bossPhase !== b.bossPhase ||
       a.bossRetaliationDamage !== b.bossRetaliationDamage ||
-      a.bossLastStandAura !== b.bossLastStandAura ||
       a.bossEnrageGraveyardSummon !== b.bossEnrageGraveyardSummon
     ) {
       return false;

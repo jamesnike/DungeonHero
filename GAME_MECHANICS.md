@@ -689,12 +689,6 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - HP全满，血层数 = 原 `fury`
 - `hasRevive: true`
 - `bossRetaliationDamage: 3`（每次被攻击反击3点）
-- `bossLastStandAura: true`
-
-**Boss末日光环** (`bossLastStandAura`)：
-- 当Boss只剩1层血时，在每个怪物回合结束：
-  - 激活行所有怪物攻击力 +5
-  - 激活行所有怪物 血层 +1（不超过最大血层），HP恢复满
 
 ### 9.8 击晕状态 (`isStunned`)
 
@@ -716,7 +710,6 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 **回合结束技能：**
 - `wraithTurnAttack`（蓄积）不生效
-- `bossLastStandAura`（暴走）不生效
 - `eliteRegenHeroTurn`（未受伤恢复血层）不生效
 
 **死亡/复生技能：**
@@ -952,7 +945,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 仪表上限 | 10 |
 | 充能来源 | 每次受到伤害 +1 |
 | 激活条件 | 仪表已满 |
-| 效果选择 | 全回复HP **或** 选择一个怪物清除所有 fury（血层归零） |
+| 效果 | 回满生命（全回复 HP） |
 | 使用限制 | 每瀑流周期只能使用一次 (`usedThisWave`) |
 
 ### 14.2 狂战士之怒 (Berserker Rage)

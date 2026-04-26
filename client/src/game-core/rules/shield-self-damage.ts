@@ -3,8 +3,8 @@
  * damage spell at their own equipped shield slot.
  *
  * Behaviour summary:
- * - The shield's effective armor (base armor + permanent shield bonus +
- *   slotTempArmor, accounting for `armorBonusDamaged`) absorbs as much
+ * - The shield's effective armor (`armor` field, defaulting to base armor +
+ *   permanent shield bonus + slotTempArmor when undefined) absorbs as much
  *   damage as it can.
  * - Any overflow is enqueued as `APPLY_DAMAGE { selfInflicted: true }` so that
  *   it flows through `reduceApplyDamage` (which drains `tempShield`, decrements
@@ -32,7 +32,7 @@ import {
   computeDurabilityLossEffects,
   computeEquipmentBreakEffects,
 } from './equipment-effects';
-import { computeAmuletEffects, getEquipmentInSlot, getSlotBonus } from '../equipment';
+import { computeAmuletEffectsForState, getEquipmentInSlot, getSlotBonus } from '../equipment';
 
 export interface ShieldSelfDamageResult {
   patch: Partial<GameState>;
@@ -93,16 +93,19 @@ export function applyShieldSlotSelfDamage(
     };
   }
 
-  const baseArmorMax = slotItem.armorMax ?? slotItem.value;
+  const isMonsterEquipShield = slotItem.type === 'monster';
+  const baseArmorMax = isMonsterEquipShield
+    ? (slotItem.hp ?? slotItem.value)
+    : (slotItem.armorMax ?? slotItem.value);
   const slotShieldBonus = getSlotBonus(state, slotId, 'shield');
   const permanentBonus = Math.max(0, slotShieldBonus);
   const rawSlotTemp = state.slotTempArmor?.[slotId] ?? 0;
 
-  const storedBaseArmor = Math.min(slotItem.armor ?? baseArmorMax, baseArmorMax);
-  const existingBonusDamaged = slotItem.armorBonusDamaged ?? 0;
-  const bonusTotal = permanentBonus + rawSlotTemp;
-  const bonusRemaining = Math.max(0, bonusTotal - existingBonusDamaged);
-  const currentArmor = storedBaseArmor + bonusRemaining;
+  // Single-counter armor model: storedCap = baseArmorMax + perm + temp.
+  // No transient eliteBonus on this self-damage path (mirrors prior behaviour;
+  // shield-self-damage doesn't honour gold-stealing elite armor doubling).
+  const storedCap = baseArmorMax + permanentBonus + rawSlotTemp;
+  const currentArmor = Math.min(slotItem.armor ?? storedCap, storedCap);
 
   const blocked = Math.min(damage, currentArmor);
   const overflow = Math.max(0, damage - currentArmor);
@@ -110,26 +113,17 @@ export function applyShieldSlotSelfDamage(
   const newArmorAfterBlock = Math.max(0, currentArmor - blocked);
 
   // Mirror the RESOLVE_BLOCK accounting: when armor isn't depleted, write back
-  // remaining base armor + how much of the bonus pool was consumed; when it is
-  // depleted, durability handling will reset to a fresh cycle.
+  // the new current armor; when it is depleted, durability handling will reset
+  // to a fresh cycle (next read defaults to cap).
   let workingShieldItem: GameCardData = { ...slotItem };
   if (!armorDepleted) {
-    const consumeFromBonus = Math.min(blocked, bonusRemaining);
-    const consumeFromBase = blocked - consumeFromBonus;
-    const newBaseArmor = Math.max(0, storedBaseArmor - consumeFromBase);
-    const newBonusDamaged = existingBonusDamaged + consumeFromBonus;
     workingShieldItem = {
       ...slotItem,
-      armor: newBaseArmor,
-      armorBonusDamaged: newBonusDamaged > 0 ? newBonusDamaged : undefined,
+      armor: newArmorAfterBlock,
     };
   } else {
-    const { armor: _clearArmor, armorBonusDamaged: _clearBonusDmg, ...resetBase } = slotItem as GameCardData & {
-      armor?: number;
-      armorBonusDamaged?: number;
-    };
+    const { armor: _clearArmor, ...resetBase } = slotItem as GameCardData & { armor?: number };
     void _clearArmor;
-    void _clearBonusDmg;
     workingShieldItem = resetBase as GameCardData;
   }
 
@@ -167,7 +161,7 @@ export function applyShieldSlotSelfDamage(
       patch[slotId] = workingShieldItem as EquipmentItem;
     } else {
       const shieldDurability = slotItem.durability ?? 1;
-      const ae = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+      const ae = computeAmuletEffectsForState(state);
 
       if (shieldDurability <= 1 && !state.unbreakableNext) {
         // Last point of durability — equipment breaks. Run last-words / revive.
@@ -202,27 +196,22 @@ export function applyShieldSlotSelfDamage(
           : nextDurability;
         const durabilityActuallyLost = updatedDurability < shieldDurability;
 
-        const { armor: _resetArmor, armorBonusDamaged: _resetBonusDmg, ...durabilityBase } = workingShieldItem as GameCardData & {
+        const { armor: _resetArmor, ...durabilityBase } = workingShieldItem as GameCardData & {
           armor?: number;
-          armorBonusDamaged?: number;
         };
         void _resetArmor;
-        void _resetBonusDmg;
 
         if (durabilityActuallyLost) {
           const durResult = computeDurabilityLossEffects(state, slotId, slotItem as GameCardData, updatedDurability);
           Object.assign(patch, durResult.patch);
           patch.rng = durResult.rng;
           sideEffects.push(...durResult.sideEffects);
-          // Strip stale armor bookkeeping from the rebuilt item so the next
-          // armor cycle picks up baseArmorMax + bonus afresh — same trick as
-          // RESOLVE_BLOCK.
-          const { armor: _resetArmorAgain, armorBonusDamaged: _resetBonusAgain, ...durStripped } = durResult.updatedItem as GameCardData & {
+          // Strip stale armor from the rebuilt item so the next armor cycle
+          // picks up baseArmorMax + bonus afresh — same trick as RESOLVE_BLOCK.
+          const { armor: _resetArmorAgain, ...durStripped } = durResult.updatedItem as GameCardData & {
             armor?: number;
-            armorBonusDamaged?: number;
           };
           void _resetArmorAgain;
-          void _resetBonusAgain;
           patch[slotId] = { ...durabilityBase, ...durStripped } as EquipmentItem;
 
           if (durResult.golemReflectDamage) {

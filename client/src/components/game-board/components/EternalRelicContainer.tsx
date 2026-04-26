@@ -6,7 +6,7 @@ import type { EternalRelic } from '@/game-core/types';
 function EternalRelicContainerInner({
   onRelicClick,
 }: {
-  onRelicClick: (relic: EternalRelic) => void;
+  onRelicClick: (relic: EternalRelic, count: number) => void;
 }) {
   const { eternalRelics } = useShallowGameState(s => ({
     eternalRelics: s.eternalRelics,

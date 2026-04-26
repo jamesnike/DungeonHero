@@ -188,18 +188,6 @@ export type HeroMagicActivationOrigin = 'gauge' | 'card' | 'event' | 'skill';
 
 export type PendingHeroMagicAction =
   | {
-      id: 'holy-light';
-      step: 'choice';
-      origin: HeroMagicActivationOrigin;
-      prompt: string;
-    }
-  | {
-      id: 'holy-light';
-      step: 'monster-select';
-      origin: HeroMagicActivationOrigin;
-      prompt: string;
-    }
-  | {
       id: 'revive-blessing';
       step: 'slot-select';
       origin: HeroMagicActivationOrigin;
@@ -422,24 +410,6 @@ export type PendingMagicAction =
       allowsHeroTarget?: boolean;
     }
   | {
-      // 学徒鼓舞（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时攻击。
-      // 与 weapon-burst 同形态（A 类回响）。
-      card: GameCardData;
-      effect: 'apprentice-rally';
-      step: 'slot-select';
-      prompt: string;
-      echoMultiplier?: number;
-    }
-  | {
-      // 学徒铸甲（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时护甲。
-      // 单步一次性结算，不需要 modal-echo 的 echoRemaining。
-      card: GameCardData;
-      effect: 'apprentice-armor';
-      step: 'slot-select';
-      prompt: string;
-      echoMultiplier?: number;
-    }
-  | {
       card: GameCardData;
       effect: 'stun-strike';
       step: 'monster-select';
@@ -600,6 +570,16 @@ export type PendingMagicAction =
       // 战势化符：选择装备栏，按 floor((临攻+临护)/3) 抽牌。
       card: GameCardData;
       effect: 'temp-stats-to-draw';
+      step: 'slot-select';
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      prompt: string;
+    }
+  | {
+      // 淬铸迁位：选择有装备的装备栏 → 同名增幅 +1（按 NAME 全场累计）；
+      // 若另一栏为空，把所选装备移到空位（原栏 promote reserve）。
+      card: GameCardData;
+      effect: 'amplify-equipment-shift';
       step: 'slot-select';
       echoMultiplier?: number;
       echoRemaining?: number;
@@ -1015,6 +995,10 @@ export type ActiveAmuletEffects = {
   stunUpgradeCapCount: number;
   recycleBackpackExpandCount: number;
   dungeonGoldCount: number;
+  /** 「潮愈之符」每次瀑流推进时，恢复 4 × N 点生命（linear ×N stacking）。
+   *  实际治疗量受 `healCount` 复合 2^N 倍乘影响（与永恒护符·潮涌回春一致）。
+   *  消费方：`rules/waterfall.ts` `reduceApplyWaterfallEffects`。 */
+  waterfallHealCount: number;
   armorHalveEndureCount: number;
   monsterEquipBuffCount: number;
   endTurnDrawCount: number;

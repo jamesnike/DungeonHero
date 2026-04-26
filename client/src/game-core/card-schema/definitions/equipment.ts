@@ -9,6 +9,7 @@ import type { OnEquipHandler } from '../on-equip';
 import { registerOnEquipAll } from '../on-equip';
 import type { EquipmentSlotId } from '@/components/game-board/types';
 import { DURABILITY_CAP, clampMaxDurability } from '../../constants';
+import { applySlotArmorBonusDelta } from '../../equipment';
 
 const otherSlot = (s: EquipmentSlotId): EquipmentSlotId =>
   s === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -46,6 +47,7 @@ const tempArmor3: OnEquipHandler = (state, card, slotId, patch, sideEffects) => 
   const base = { ...(state.slotTempArmor ?? defaultSlotState), ...(patch.slotTempArmor ?? {}) };
   base[slotId] = (base[slotId] ?? 0) + 3;
   patch.slotTempArmor = base;
+  applySlotArmorBonusDelta(state, slotId, 3, patch);
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：该装备栏临时护甲 +3！` } });
 };
 

@@ -45,7 +45,7 @@ import {
   getWaterfallPreviewDiscardDestination,
   applyAmplifyOnCreate,
 } from '../helpers';
-import { computeAmuletEffects } from '../equipment';
+import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { processRecycleBag, drawMultipleFromBackpack } from '../cards';
@@ -306,7 +306,7 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
 
-  const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+  const amuletEffects = computeAmuletEffectsForState(state);
 
   // Eternal relic: waterfall-heal. Note that the actual amount is multiplied
   // inside `applyHeal` based on `healCount` (compound 2^N rule). The display
@@ -325,6 +325,31 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
       payload: {
         type: 'skill',
         message: `永恒护符·潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${healSuffix}`,
+      },
+    });
+  }
+
+  // Starter amulet: 潮愈之符 (`waterfall-heal`). Linear ×N stacking — each equipped
+  // amulet contributes a base heal of 4, summed before being passed to `reduceHeal`,
+  // which then applies the compound 2^healCount multiplier (heal-amulet) inside
+  // `computeHeal`, mirroring the relic above. 与永恒护符·潮涌回春独立结算（玩家
+  // 可以同时持有两者，两笔治疗叠加）。
+  if (amuletEffects.waterfallHealCount > 0) {
+    const baseHeal = 4 * amuletEffects.waterfallHealCount;
+    const healMul = Math.pow(2, amuletEffects.healCount);
+    const healAmount = baseHeal * healMul;
+    const healSuffix = amuletEffects.healCount > 0
+      ? `（治疗 ×${healMul}）`
+      : '';
+    const stackSuffix = amuletEffects.waterfallHealCount > 1
+      ? `（×${amuletEffects.waterfallHealCount}）`
+      : '';
+    enqueuedActions.push({ type: 'HEAL', amount: baseHeal, source: 'waterfall-heal-amulet' });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: {
+        type: 'skill',
+        message: `潮愈之符${stackSuffix}：瀑布推进，恢复 ${healAmount} 点生命${healSuffix}`,
       },
     });
   }
@@ -376,6 +401,11 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
     }
     patch.slotTempAttack = tempAttack;
     patch.slotTempArmor = tempArmor;
+    if (amuletEffects.balanceCount > 0) {
+      const n = amuletEffects.balanceCount;
+      applySlotArmorBonusDelta(state, 'equipmentSlot1', -BALANCE_SHIELD_PENALTY * n, patch);
+      applySlotArmorBonusDelta(state, 'equipmentSlot2', BALANCE_SHIELD_BONUS * n, patch);
+    }
   }
 
   // Mark aura as applied for this wave so START_TURN's safety-net re-apply
@@ -536,6 +566,7 @@ function reduceApplyWaterfallDiscardEffects(
             patch.equipmentSlotBonuses = { ...state.equipmentSlotBonuses };
           }
           (patch.equipmentSlotBonuses as Record<EquipmentSlotId, SlotPermanentBonus>)[slotId] = newBonuses;
+          applySlotArmorBonusDelta(state, slotId, -wfx.amount, patch);
         });
         patch.permanentSpellDamageBonus = (state.permanentSpellDamageBonus ?? 0) - wfx.amount;
         logAndBanner('waterfall', `${cardName} 诅咒削弱装备/法术加成 -${wfx.amount}`, `${cardName} 的诅咒削弱了你的装备与法术加成！`);
@@ -562,7 +593,7 @@ function reduceApplyWaterfallDiscardEffects(
         const tempAttack: Record<EquipmentSlotId, number> = { equipmentSlot1: 0, equipmentSlot2: 0 };
         const tempArmor: Record<EquipmentSlotId, number> = { equipmentSlot1: 0, equipmentSlot2: 0 };
 
-        const amuletEffects = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+        const amuletEffects = computeAmuletEffectsForState(state);
         if (amuletEffects.strengthCount > 0) {
           const sn = amuletEffects.strengthCount;
           tempAttack.equipmentSlot1 += 4 * sn;
@@ -575,8 +606,11 @@ function reduceApplyWaterfallDiscardEffects(
           tempArmor.equipmentSlot1 -= BALANCE_SHIELD_PENALTY * bn;
           tempArmor.equipmentSlot2 += BALANCE_SHIELD_BONUS * bn;
         }
+        const oldTempArmor = state.slotTempArmor ?? { equipmentSlot1: 0, equipmentSlot2: 0 };
         patch.slotTempAttack = tempAttack;
         patch.slotTempArmor = tempArmor;
+        applySlotArmorBonusDelta(state, 'equipmentSlot1', tempArmor.equipmentSlot1 - (oldTempArmor.equipmentSlot1 ?? 0), patch);
+        applySlotArmorBonusDelta(state, 'equipmentSlot2', tempArmor.equipmentSlot2 - (oldTempArmor.equipmentSlot2 ?? 0), patch);
         // turnBoost performs the same reset+reapply that
         // WATERFALL_TURN_RESET + APPLY_WATERFALL_EFFECTS do, so flag stays
         // true (aura is in temps) — START_TURN must not double-apply.
@@ -887,6 +921,7 @@ export function applyEquipDestroyLastWords(
       ...cur,
       shield: cur.shield + card.onDestroyPermanentShield,
     };
+    applySlotArmorBonusDelta(state, slotId, card.onDestroyPermanentShield, patch);
     sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：该装备栏永久护甲 +${card.onDestroyPermanentShield}！` } });
   }
   if (card.onDestroyEffect === 'graveyard-to-hand') {
@@ -921,9 +956,11 @@ export function applyEquipDestroyLastWords(
       tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) + amount;
       tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + amount;
       patch.slotTempArmor = tempArmor;
+      applySlotArmorBonusDelta(state, 'equipmentSlot1', amount, patch);
+      applySlotArmorBonusDelta(state, 'equipmentSlot2', amount, patch);
       sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：所有装备栏 +${amount}临时护甲！` } });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 遗言！所有装备栏 +${amount}临时护甲！` } });
-      const amuletFx = computeAmuletEffects(state.amuletSlots as GameCardData[]);
+      const amuletFx = computeAmuletEffectsForState(state);
       if (amuletFx.persuadeOnTempAttackCount > 0) {
         const pBonus = amuletFx.persuadeOnTempAttackBonus;
         patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus;
@@ -961,39 +998,30 @@ function reduceApplyWaterfallTurnReset(state: GameState): ReduceResult {
   // the aura and flip the flag back to true.
   patch.amuletAuraAppliedThisWave = false;
 
-  // Temp-first damage attribution on waterfall reset.
+  // Single-counter armor model: when slotTempArmor expires, the cap drops by
+  // exactly the temp amount (newCap = baseArmorMax + perm). Clamp the live
+  // `armor` value down to the new cap if it exceeds it; armor never grows on
+  // temp expiry.
   //
-  // Combat consumes `armorBonusDamaged` from a single (perm + temp) pool, but
-  // when temp armor resets to 0 at waterfall, the natural game-feel model is
-  // "temp armor was the layer protecting perm — anything that hit the bonus
-  // pool was hitting temp first". Subtract the lost temp amount from the
-  // damaged tally so perm bonus is fully restored unless damage actually
-  // exceeded the temp layer.
-  //
-  // Examples (perm=4, temp=4):
-  //   damaged=4  → tempLost=4 → newDamaged=0     (all damage was on temp; perm intact)
-  //   damaged=10 → tempLost=4 → newDamaged=6→4   (clamped to perm; old Bug #1 case)
-  //   damaged=3  → tempLost=4 → newDamaged=0     (damage entirely on temp)
-  //
-  // Mid-turn block tracking is unaffected: this only fires when temp itself
-  // resets at the turn boundary.
+  // Examples (base=5, perm=4, temp=4 → oldCap=13, newCap=9):
+  //   armor=13 (full)  → clamp to 9
+  //   armor=10         → clamp to 9
+  //   armor=6          → unchanged (under new cap)
+  //   armor=undefined  → unchanged (next read defaults to newCap automatically)
   for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as const) {
     const item = state[slotId];
     if (!item) continue;
     if (item.type !== 'shield' && item.type !== 'monster') continue;
-    const existingDamaged = item.armorBonusDamaged ?? 0;
-    if (existingDamaged === 0) continue;
-    const tempArmorBeingLost = state.slotTempArmor[slotId] ?? 0;
+    const tempBeingLost = state.slotTempArmor[slotId] ?? 0;
+    if (tempBeingLost === 0) continue;
+    if (item.armor === undefined) continue; // at-cap; next read picks up newCap
+    const baseArmorMax = item.type === 'monster'
+      ? (item.hp ?? item.value ?? 0)
+      : (item.armorMax ?? item.value ?? 0);
     const permBonus = Math.max(0, state.equipmentSlotBonuses[slotId]?.shield ?? 0);
-    const afterTempAbsorb = Math.max(0, existingDamaged - tempArmorBeingLost);
-    const clampedDamaged = Math.min(afterTempAbsorb, permBonus);
-    if (clampedDamaged === existingDamaged) continue;
-    patch[slotId] = (clampedDamaged > 0
-      ? { ...item, armorBonusDamaged: clampedDamaged }
-      : (() => {
-        const { armorBonusDamaged: _drop, ...rest } = item as GameCardData & { armorBonusDamaged?: number };
-        return rest;
-      })()) as typeof state.equipmentSlot1;
+    const newCap = Math.max(0, baseArmorMax + permBonus);
+    if (item.armor <= newCap) continue;
+    patch[slotId] = { ...item, armor: newCap } as typeof state.equipmentSlot1;
   }
 
   // Clear monster temp boosts from active row
@@ -1059,6 +1087,7 @@ function reduceApplyWaterfallTurnReset(state: GameState): ReduceResult {
       const baseTempArmor: GameState['slotTempArmor'] = { ...(patch.slotTempArmor ?? fallback) };
       baseTempArmor[slotId] = (baseTempArmor[slotId] ?? 0) + item.waterfallTempArmor;
       patch.slotTempArmor = baseTempArmor;
+      applySlotArmorBonusDelta(state, slotId, item.waterfallTempArmor, patch);
       sideEffects.push({
         event: 'log:entry',
         payload: { type: 'equip', message: `${item.name} 瀑流强化：该装备栏临时护甲 +${item.waterfallTempArmor}` },

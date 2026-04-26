@@ -15,7 +15,7 @@
 | 2 | 与命运商贩交谈（商店等级+1 并 打开商店） | `shopLevel+1, openShop` | — |
 | 3 | 献祭体魄（永久 +8 生命上限） | `maxhpperm+8` | — |
 | 4 | 拓展行囊（背包上限 +5） | `backpackSize+5` | — |
-| 5 | 选择一张牌升级 | `upgradeCard` | — |
+| 5 | 选择两张牌升级 | `upgradeCard:2` | — |
 
 **运行时动态追加选项（不参与裁剪）：**
 
@@ -327,7 +327,7 @@
 | 5-8 | 商店等级 +1，劝降费用-2 | `['shopLevel+1', 'persuadeCost-2']` |
 | 9-12 | 法术伤害 +1，超杀吸血+1 | `['spellDamage+1', 'spellLifesteal+1']` |
 | 13-16 | 摧毁所有护符 | `removeAllAmulets` |
-| 17-20 | 发现两张专属卡 | `drawClass2` |
+| 17-20 | 随机获得两张专属卡（加入手牌） | `drawClassToHand:2` |
 | 1-10 | 超杀吸血 +2 | `spellLifesteal+2` |
 | 11-20 | 交换左右装备，各恢复1耐久 | `['swapEquipmentSlots', 'repairSlot:both:1']` |
 
@@ -495,12 +495,12 @@
 
 | # | 选项 | 效果 | 翻转 |
 |---|------|------|------|
-| N | 召唤随机专属装备增幅为祭坛，并获得「维度扭曲」 | `amplify-altar-from-random-class-equip-with-warp` | 翻转为「增幅祭坛」建筑 |
+| N | 召唤随机专属装备增幅为祭坛，获得「维度扭曲」并加入手牌 | `amplify-altar-from-random-class-equip-with-warp` | 翻转为「增幅祭坛」建筑 |
 
 > `amplify-altar-from-random-class-equip-with-warp`：
 > 1. 从专属牌池（class deck）随机抽 1 件 `weapon` / `shield`，加入背包。
 > 2. 事件卡翻转为「增幅祭坛」建筑，目标为该随机装备。
-> 3. 额外发放一张「维度扭曲」（起始永久魔法）至背包（走 `grantStarterDimensionWarp` token 路径）。
+> 3. 额外发放一张「维度扭曲」（起始永久魔法）**直接加入手牌**（在 hook 中 inline 创建：`createStarterCardPool` → 克隆带 `-evt-1` 可解析后缀的实例 → `ADD_CARD_TO_HAND`）。
 
 ---
 
@@ -526,7 +526,7 @@
 | 2 | 掌握技艺（获得起始背包的「乾坤一翻」放入背包） | `grantActiveRowFlip` | — |
 | 3 | 凝结翻印（翻转为护符「翻印之符」放入背包） | `flipToFlipPersuadeAmulet` | — |
 | 4 | 凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包） | `flipToFlipMonsterDebuffMagic` | — |
-| 5 | 铭刻技艺（赋予一张手牌：每次上手击晕上限 +3%） | `grantHandStunCapBonus` | 至少 1 张手牌 |
+| 5 | 铭刻技艺（赋予一张手牌：每次上手击晕上限 +2%） | `grantHandStunCapBonus` | 至少 1 张手牌 |
 | 6 | 熔铸耐久（选一件装备：每翻转一次该装备恢复 1 耐久） | `grantEquipFlipRepairBuff` | 至少一件装备（含 reserve） |
 | 7 | 镜面回响（翻转为 active row 任意另一张牌的复制） | `pactCopyActiveRow` | active row ≥ 1 张其他牌 |
 
@@ -534,7 +534,7 @@
 
 - **翻印之符（amulet）** `amuletEffect: 'persuade-on-flip'`：每次卡牌正向翻转，`persuadeAmuletBonus +10%`（多张同护符叠加），任何一次劝降尝试后清空。
 - **翻覆震慑（一次性 magic）** `magicEffect: 'flip-monster-debuff'`：选择一个怪物，到下次瀑流前每翻转一张牌该怪物攻击力 -1（最低 0，叠加）。怪物离场或瀑流完成后失效。
-- **铭刻技艺**：在选中手牌上挂 `onEnterHandEffect: 'stun-cap-bonus-3'`；进入手牌时 `stunCap +3%`（上限 100%）。施放时立即触发一次。已带其它 `onEnterHandEffect` 的卡不可被选。
+- **铭刻技艺**：在选中手牌上挂 `onEnterHandEffect: 'stun-cap-bonus-2'`；进入手牌时 `stunCap +2%`（上限 100%）。施放时立即触发一次。已带其它 `onEnterHandEffect` 的卡不可被选。
 - **熔铸耐久**：在选中装备上挂 `_flipRepairBuff: true`。每次正向翻转触发时该装备恢复 1 耐久（不超过 maxDurability）。可选目标包含两个主装备槽与两个 reserve 列表中的所有装备；已铭刻的装备不会重复铭刻。
 - **镜面回响**：从 active row 选一张非自身的牌，深拷贝（保留 `currentLayer`/temp buffs/`flipTarget`/`recycleDelay`/`image`），分配新 ID，挂 `_skipOnEnterHand: true`，原地替换翻转之契；怪物副本不会自动 engage。
 

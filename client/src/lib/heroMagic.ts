@@ -32,7 +32,7 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
   {
     id: 'holy-light',
     name: '圣光',
-    description: '第一次使用学习圣光技能；已掌握时使用充满数值槽。发动效果：回满生命，或净化一个怪物的怒气层数。',
+    description: '第一次使用学习圣光技能；已掌握时使用充满数值槽。发动效果：回满生命。',
     cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
     gaugeMax: 10,
     chargeHint: '每次受到伤害 +1 圣光值（上限 10）。',

@@ -36,6 +36,143 @@ export function getSlotBonus(state: GameState, slotId: EquipmentSlotId, bonusTyp
   return state.equipmentSlotBonuses[slotId]?.[bonusType] ?? 0;
 }
 
+// ---------------------------------------------------------------------------
+// Slot armor cap & refill helpers (single-counter armor model)
+//
+// Model:
+//   - `slotItem.armor` holds the current armor value (live, decreases on
+//     damage, increases on add-perm/add-temp, refills to cap on layer break
+//     and on equip).
+//   - The armor cap is `baseArmorMax + slotPermShieldBonus + slotTempArmor`,
+//     computed dynamically from current state. There is no separate
+//     `armorBonusDamaged` counter — damage decrements `armor` directly, and
+//     when temp/perm bonus changes the cap moves with it (with `armor` being
+//     bumped on add and clamped on subtract).
+//   - `slotItem.armor === undefined` means "fresh / at full cap" — readers
+//     should default to `cap` when they see undefined. The reduce paths that
+//     write damage always set a definite number.
+// ---------------------------------------------------------------------------
+
+function readSlotItemFromPatch(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  patch?: Partial<GameState>,
+): GameCardData | null {
+  if (patch && Object.prototype.hasOwnProperty.call(patch, slotId)) {
+    return (patch as { [k in EquipmentSlotId]?: GameCardData | null })[slotId] ?? null;
+  }
+  return getEquipmentInSlot(state, slotId);
+}
+
+function readSlotShieldBonusFromPatch(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  patch?: Partial<GameState>,
+): number {
+  if (patch?.equipmentSlotBonuses?.[slotId]) {
+    return patch.equipmentSlotBonuses[slotId]?.shield ?? 0;
+  }
+  return state.equipmentSlotBonuses[slotId]?.shield ?? 0;
+}
+
+function readSlotTempArmorFromPatch(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  patch?: Partial<GameState>,
+): number {
+  if (patch?.slotTempArmor) {
+    return patch.slotTempArmor[slotId] ?? 0;
+  }
+  return state.slotTempArmor?.[slotId] ?? 0;
+}
+
+/**
+ * Compute the armor cap (baseArmorMax + perm + temp) for a shield/monster
+ * equipped in `slotId`. Reads from `patch` first if present, otherwise state.
+ * Returns 0 if the slot is empty or holds a non-shield/non-monster.
+ */
+export function getSlotArmorCap(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  patch?: Partial<GameState>,
+): number {
+  const item = readSlotItemFromPatch(state, slotId, patch);
+  if (!item || (item.type !== 'shield' && item.type !== 'monster')) return 0;
+  const baseArmorMax = item.type === 'monster'
+    ? (item.hp ?? item.value ?? 0)
+    : (item.armorMax ?? item.value ?? 0);
+  const perm = readSlotShieldBonusFromPatch(state, slotId, patch);
+  const temp = readSlotTempArmorFromPatch(state, slotId, patch);
+  return Math.max(0, baseArmorMax + perm + temp);
+}
+
+/**
+ * Read the current effective armor of the shield/monster in `slotId`,
+ * defaulting `undefined` armor to the current cap. Returns 0 if no
+ * shield/monster.
+ */
+export function getSlotCurrentArmor(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  patch?: Partial<GameState>,
+): number {
+  const item = readSlotItemFromPatch(state, slotId, patch);
+  if (!item || (item.type !== 'shield' && item.type !== 'monster')) return 0;
+  const cap = getSlotArmorCap(state, slotId, patch);
+  if (item.armor === undefined) return cap;
+  return Math.max(0, Math.min(item.armor, cap));
+}
+
+/**
+ * Apply an immediate armor refill / clamp when the slot's permanent or
+ * temporary armor bonus changes by `delta`. Call AFTER writing the new
+ * perm/temp value into the patch.
+ *
+ *   delta > 0 (bonus added)     → armor += delta, capped at the new cap
+ *   delta < 0 (bonus subtracted) → armor clamped to the new cap (never grows)
+ *   delta === 0                  → no-op
+ *
+ * If the slot is empty or holds a non-shield/non-monster, this is a no-op.
+ * If `slotItem.armor` is undefined ("fresh / at full cap"), this is also a
+ * no-op — the next read will see the new cap automatically.
+ */
+export function applySlotArmorBonusDelta(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  delta: number,
+  patch: Partial<GameState>,
+): void {
+  if (delta === 0) return;
+  const item = readSlotItemFromPatch(state, slotId, patch);
+  if (!item || (item.type !== 'shield' && item.type !== 'monster')) return;
+  if (item.armor === undefined) return;
+
+  const newCap = getSlotArmorCap(state, slotId, patch);
+  const newArmor = delta > 0
+    ? Math.min(item.armor + delta, newCap)
+    : Math.min(item.armor, newCap);
+
+  if (newArmor === item.armor) return;
+  (patch as { [k in EquipmentSlotId]?: GameCardData | null })[slotId] = { ...item, armor: newArmor };
+}
+
+/**
+ * Refill the slot's shield/monster armor to the current cap. Call when a
+ * shield/monster enters a slot (equip), or after a layer break where the
+ * durability survived and the armor cycle should restart fresh.
+ */
+export function refillSlotArmorToCap(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  patch: Partial<GameState>,
+): void {
+  const item = readSlotItemFromPatch(state, slotId, patch);
+  if (!item || (item.type !== 'shield' && item.type !== 'monster')) return;
+  const newCap = getSlotArmorCap(state, slotId, patch);
+  if (item.armor === newCap) return;
+  (patch as { [k in EquipmentSlotId]?: GameCardData | null })[slotId] = { ...item, armor: newCap };
+}
+
 export function getSlotCapacity(state: GameState, slotId: EquipmentSlotId): number {
   return state.equipmentSlotCapacity[slotId] ?? 1;
 }
@@ -174,7 +311,6 @@ export function repairDurabilityPure(
   const result: GameCardData = { ...equipment, durability: newDurability };
   if (equipment.type === 'shield' && equipment.armorMax != null) {
     delete result.armor;
-    delete result.armorBonusDamaged;
   }
   return result;
 }
@@ -190,7 +326,6 @@ export function consumeDurabilityPure(
   const result: GameCardData = { ...equipment, durability: newDurability };
   if (equipment.type === 'shield' && equipment.armorMax != null) {
     delete result.armor;
-    delete result.armorBonusDamaged;
   }
   return { equipment: result, destroyed: false };
 }
@@ -198,6 +333,66 @@ export function consumeDurabilityPure(
 // ---------------------------------------------------------------------------
 // Amulet effects computation (pure)
 // ---------------------------------------------------------------------------
+
+/**
+ * Synthesise GameCardData stand-ins for eternal relics that carry an
+ * `amuletEffect`. This lets `computeAmuletEffects` aggregate equipped amulets
+ * and converted relics through the same switch — preserving the design
+ * invariant that 「护符永铸药」(amulet → eternal relic) keeps the original
+ * effect functioning identically. Also covers natively-granted relics like
+ * 永恒护符·回合汲取 (`end-turn-draw`) granted by 回合汲取药.
+ *
+ * Source of truth: `design_guidelines.md` §「Amulet-to-Relic Conversion」
+ * — "an amulet converted to a relic continues to function identically — its
+ * effect is included in the same `amuletEffects` object that all game logic
+ * reads."
+ */
+function relicAmuletEffectsToCards(
+  eternalRelics: ReadonlyArray<{ amuletEffect?: any; amuletAuraBonus?: any; upgradeLevel?: any }> | undefined,
+): GameCardData[] {
+  if (!eternalRelics || eternalRelics.length === 0) return [];
+  const result: GameCardData[] = [];
+  for (const r of eternalRelics) {
+    if (!r || !r.amuletEffect) continue;
+    result.push({
+      type: 'amulet',
+      amuletEffect: r.amuletEffect,
+      amuletAuraBonus: r.amuletAuraBonus,
+      upgradeLevel: r.upgradeLevel,
+    } as unknown as GameCardData);
+  }
+  return result;
+}
+
+/**
+ * Canonical reducer-side aggregator: includes both equipped amulets AND
+ * eternal relics that carry an `amuletEffect`. **Use this from any reducer
+ * that gates behavior on amulet effects** (combat, magic, waterfall, etc.)
+ * — using `computeAmuletEffects(state.amuletSlots)` directly will silently
+ * drop converted-relic effects and is a known footgun. See:
+ * `parallel-state-fields-consumer-audit.mdc`.
+ */
+export function computeAmuletEffectsForState(state: GameState): ActiveAmuletEffects {
+  return computeAmuletEffects([
+    ...(state.amuletSlots as GameCardData[]),
+    ...relicAmuletEffectsToCards(state.eternalRelics as any),
+  ]);
+}
+
+/**
+ * Hook-side aggregator: same merge as `computeAmuletEffectsForState` but
+ * accepts `(amuletSlots, eternalRelics)` directly so React selectors can
+ * subscribe to the two slices independently.
+ */
+export function computeAmuletEffectsCombined(
+  amuletSlots: GameCardData[],
+  eternalRelics: ReadonlyArray<{ amuletEffect?: any; amuletAuraBonus?: any; upgradeLevel?: any }> | undefined,
+): ActiveAmuletEffects {
+  return computeAmuletEffects([
+    ...(amuletSlots ?? []),
+    ...relicAmuletEffectsToCards(eternalRelics),
+  ]);
+}
 
 export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletEffects {
   const effects: ActiveAmuletEffects = createEmptyAmuletEffects();
@@ -251,6 +446,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'stun-upgrade-cap': effects.stunUpgradeCapCount += 1; break;
       case 'recycle-backpack-expand': effects.recycleBackpackExpandCount += 1; break;
       case 'dungeon-gold': effects.dungeonGoldCount += 1; break;
+      case 'waterfall-heal': effects.waterfallHealCount += 1; break;
       case 'armor-halve-endure': effects.armorHalveEndureCount += 1; break;
       case 'monster-equip-buff': effects.monsterEquipBuffCount += 1; break;
       case 'lastwords-monster-debuff': effects.lastWordsMonsterDebuffCount += 1; break;

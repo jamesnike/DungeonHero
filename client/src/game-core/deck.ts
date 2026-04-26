@@ -158,6 +158,8 @@ import starterAmuletSwapUpgradeImage from '@assets/generated_images/starter_amul
 import starterAmuletStunCapImage from '@assets/generated_images/starter_amulet_stun_cap.png';
 import starterAmuletRecycleExpandImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
 import starterAmuletDungeonGoldImage from '@assets/generated_images/starter_amulet_dungeon_gold.png';
+// 潮愈之符 暂复用永恒护符·潮涌回春的 PNG（视觉同主题），后续可替换。
+import starterAmuletWaterfallHealImage from '@assets/generated_images/relic_waterfall_heal.png';
 import dedupeStarterBackpackSizePotionImage from '@assets/generated_images/card_dedupe_starter_potion_backpack_size.png';
 import dedupeStarterSlotCapacityPotionImage from '@assets/generated_images/card_dedupe_potion_slot_capacity_starter.png';
 
@@ -1150,7 +1152,7 @@ export function createDeck(
       { text: '与命运商贩交谈（商店等级+1 并 打开商店）', effect: ['shopLevel+1', 'openShop'], hint: '商店等级+1 并立刻开启商店' },
       { text: '献祭体魄（永久 +8 生命上限）', effect: 'maxhpperm+8', hint: '上限提升会保留整局' },
       { text: '拓展行囊（背包上限 +5）', effect: 'backpackSize+5', hint: '背包容量永久增加 5' },
-      { text: '选择一张牌升级', effect: 'upgradeCard', hint: '从所有可升级的牌中选择一张进行升级' },
+      { text: '选择两张牌升级', effect: 'upgradeCard:2', hint: '从所有可升级的牌中选择至多 2 张进行升级' },
       {
         text: '净化杂质（删 2 张牌）',
         effect: 'deleteCard:2',
@@ -1717,14 +1719,14 @@ export function createDeck(
     shortDescription: '掷骰后翻为「命运之刃」建筑',
     eventChoices: [
       {
-        text: '掷出不同结果：金币+10并打开商店/商店等级+1并永久劝降费用-2/法术伤害+1并超杀吸血+1/摧毁所有护符/发现两张专属卡，然后翻转成"命运之刃"。',
+        text: '掷出不同结果：金币+10并打开商店/商店等级+1并永久劝降费用-2/法术伤害+1并超杀吸血+1/摧毁所有护符/随机获得两张专属卡（加入手牌），然后翻转成"命运之刃"。',
         hint: '20% 触发不同奖励或惩罚',
         diceTable: [
           { id: 'dice11-shop', range: [1, 4], label: '金币+10，打开商店', effect: ['gold+10', 'openShop'] },
           { id: 'dice11-level', range: [5, 8], label: '商店等级 +1，永久劝降费用-2', effect: ['shopLevel+1', 'persuadeCost-2'] },
           { id: 'dice11-spell', range: [9, 12], label: '法术伤害 +1，超杀吸血+1', effect: ['spellDamage+1', 'spellLifesteal+1'] },
           { id: 'dice11-amulets', range: [13, 16], label: '摧毁所有护符', effect: 'removeAllAmulets' },
-          { id: 'dice11-discover', range: [17, 20], label: '发现两张专属卡', effect: 'drawClass2' },
+          { id: 'dice11-discover', range: [17, 20], label: '随机获得两张专属卡（加入手牌）', effect: 'drawClassToHand:2' },
           { id: 'dice11-lifesteal', range: [1, 10], label: '超杀吸血 +2', effect: 'spellLifesteal+2' },
           { id: 'dice11-swapslots', range: [11, 20], label: '交换左右装备，各恢复1耐久', effect: ['swapEquipmentSlots', 'repairSlot:both:1'] },
         ],
@@ -1832,8 +1834,8 @@ export function createDeck(
         value: 0,
         image: starterAmuletMissileImage,
         amuletEffect: 'card-gain-missile',
-        description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
-        shortDescription: '每次从坟场/专属池获牌：入手 1 张「魔弹」',
+        description: '每从坟场获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
+        shortDescription: '每次从坟场获牌：入手 1 张「魔弹」',
       },
       destination: 'stay',
       message: '弹幕骰局翻转为「弹幕之符」，留在地城原格！',
@@ -2279,9 +2281,9 @@ export function createDeck(
       },
       {
         id: 'amplify-random-class-warp',
-        text: '召唤随机专属装备增幅为祭坛，并获得「维度扭曲」',
+        text: '召唤随机专属装备增幅为祭坛，获得「维度扭曲」并加入手牌',
         effect: 'amplify-altar-from-random-class-equip-with-warp',
-        hint: '随机专属装备入背包并增幅；额外获得「维度扭曲」起始永久魔法',
+        hint: '随机专属装备入背包并增幅；额外获得「维度扭曲」起始永久魔法直接加入手牌',
       },
     ],
   });
@@ -2321,9 +2323,9 @@ export function createDeck(
         hint: '翻转为新一次性魔法「翻覆震慑」：选择一个怪物，到下次瀑流前，每翻转一张牌该怪物攻击力 -1',
       },
       {
-        text: '铭刻技艺（赋予一张手牌：每次上手击晕上限 +3%）',
+        text: '铭刻技艺（赋予一张手牌：每次上手击晕上限 +2%）',
         effect: 'grantHandStunCapBonus',
-        hint: '选择一张手牌，永久赋予其上手效果：进入手牌时击晕上限 +3%（永久，跟随该卡）',
+        hint: '选择一张手牌，永久赋予其上手效果：进入手牌时击晕上限 +2%（永久，跟随该卡）',
         requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
       },
       {
@@ -2445,6 +2447,7 @@ export const STARTER_CARD_IDS = {
   handLimitPotion: 'starter-potion-hand-limit',
   backpackSizePotion: 'starter-potion-backpack-size-2',
   bothSlotsShieldPotion: 'starter-potion-both-slots-shield',
+  lifebloodBrewPotion: 'starter-potion-lifeblood-brew',
   stunStrike: 'starter-perm-stun-strike',
   attackPersuadeAmulet: 'starter-amulet-attack-persuade',
   cardGainMissileAmulet: 'starter-amulet-card-gain-missile',
@@ -2453,6 +2456,7 @@ export const STARTER_CARD_IDS = {
   stunUpgradeCapAmulet: 'starter-amulet-stun-upgrade-cap',
   recycleBackpackExpandAmulet: 'starter-amulet-recycle-backpack-expand',
   dungeonGoldAmulet: 'starter-amulet-dungeon-gold',
+  waterfallHealAmulet: 'starter-amulet-waterfall-heal',
   recycleDrawMagic: 'starter-perm-recycle-draw',
   surveyAction: 'starter-perm-survey-action',
   missileForgeBlade: 'starter-weapon-missile-forge-blade',
@@ -2460,6 +2464,7 @@ export const STARTER_CARD_IDS = {
   rushAttackBlade: 'starter-weapon-rush-attack-blade',
   legacyShield: 'starter-shield-legacy',
   spiritGuardShield: 'starter-shield-spirit-guard',
+  forteShield: 'starter-shield-forte',
   flipOverkillLifestealAmulet: 'starter-amulet-flip-overkill-lifesteal',
   equipAmuletCapAmulet: 'starter-amulet-equip-amulet-cap',
   stunAttemptDiscoverAmulet: 'starter-amulet-stun-attempt-discover',
@@ -2468,8 +2473,6 @@ export const STARTER_CARD_IDS = {
   deckTopSwapGold: 'starter-perm-deck-top-swap-gold',
   discoverClassToHand: 'starter-perm-discover-class-to-hand',
   apprenticeBolt: 'starter-perm-apprentice-bolt',
-  apprenticeRally: 'starter-perm-apprentice-rally',
-  apprenticeArmor: 'starter-perm-apprentice-armor',
 } as const;
 
 /**
@@ -2547,20 +2550,17 @@ export function createStarterDiscoverClassToHandCard(): GameCardData {
 }
 
 // ---------------------------------------------------------------------------
-// Apprentice opening trio — three Perm-1 magics seeded directly into the
-// starting backpack at INIT_GAME (not part of `createStarterCardPool`, so
-// they never appear in discover / grant events).
+// 学徒法弹 (apprenticeBolt) — opening Perm-1 magic seeded directly into the
+// starting backpack at INIT_GAME (not part of `createStarterCardPool`, so it
+// never appears in discover / grant events).
 //
-// All three reuse existing card images to avoid adding new PNG assets:
-//   - 学徒法弹 (apprenticeBolt)   → dedupeMissileBoltTokenImage
-//   - 学徒鼓舞 (apprenticeRally)  → dedupeStarterCombatRallyImage
-//   - 学徒铸甲 (apprenticeArmor)  → starterScrollArmorImage
+// Reuses an existing card image to avoid adding new PNG assets:
+//   - 学徒法弹 (apprenticeBolt) → dedupeMissileBoltTokenImage
 //
 // Behavior is wired by:
 //   - resolver entry in `card-schema/definitions/magic.ts`
-//     (`starter:starter-perm-apprentice-{bolt|rally|armor}` effectId)
-//   - reducer cases in `rules/hero.ts` (`apprentice-bolt` /
-//     `apprentice-rally` / `apprentice-armor`)
+//     (`starter:starter-perm-apprentice-bolt` effectId)
+//   - reducer case in `rules/hero.ts` (`apprentice-bolt`)
 // ---------------------------------------------------------------------------
 
 export function createApprenticeBoltCard(): GameCardData {
@@ -2573,36 +2573,6 @@ export function createApprenticeBoltCard(): GameCardData {
     magicType: 'permanent',
     description: '选择一个目标，造成 1 点法术伤害。',
     shortDescription: '1 法伤（单目标）',
-    recycleDelay: 1,
-    maxUpgradeLevel: 0,
-  };
-}
-
-export function createApprenticeRallyCard(): GameCardData {
-  return {
-    id: STARTER_CARD_IDS.apprenticeRally,
-    type: 'magic',
-    name: '学徒鼓舞',
-    value: 0,
-    image: dedupeStarterCombatRallyImage,
-    magicType: 'permanent',
-    description: '选择一个装备栏，临时攻击力 +1（瀑流后重置）。',
-    shortDescription: '所选栏 +1 临时攻',
-    recycleDelay: 1,
-    maxUpgradeLevel: 0,
-  };
-}
-
-export function createApprenticeArmorCard(): GameCardData {
-  return {
-    id: STARTER_CARD_IDS.apprenticeArmor,
-    type: 'magic',
-    name: '学徒铸甲',
-    value: 0,
-    image: starterScrollArmorImage,
-    magicType: 'permanent',
-    description: '选择一个装备栏，+1 临时护甲（瀑流后重置）。',
-    shortDescription: '所选栏 +1 临时护',
     recycleDelay: 1,
     maxUpgradeLevel: 0,
   };
@@ -2649,6 +2619,7 @@ export function createStarterCardPool(): GameCardData[] {
       name: '精工修复',
       value: 0,
       image: dedupeStarterFineRepairImage,
+      unique: true,
       magicType: 'permanent',
       magicEffect: '永久魔法：失去 2 点生命，选择一个装备恢复 1 点耐久。',
       description: '失去 2 点生命，选择一个装备恢复 1 点耐久。',
@@ -2898,6 +2869,20 @@ export function createStarterCardPool(): GameCardData[] {
       shortDescription: '每次瀑流本栏 +2 临时护',
     },
     {
+      // 砺心之盾 — 完美格挡时，永久生命值上限 +1（只抬上限，不回血）。每次完美格挡都触发，可叠加。
+      id: STARTER_CARD_IDS.forteShield,
+      type: 'shield',
+      name: '砺心之盾',
+      value: 3,
+      image: starterGuardianShieldImage,
+      durability: 2,
+      maxDurability: 2,
+      armorMax: 3,
+      shieldPerfectBlockMaxHpGain: 1,
+      description: '完美格挡时，生命值上限 +1（只抬上限，不回血）。每次完美格挡都触发，可叠加。',
+      shortDescription: '完美格挡：生命值上限 +1',
+    },
+    {
       id: STARTER_CARD_IDS.healMagic,
       type: 'magic',
       name: '治愈术',
@@ -2981,8 +2966,8 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletMissileImage,
       amuletEffect: 'card-gain-missile',
-      description: '每从坟场或专属卡池获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
-      shortDescription: '每次从坟场/专属池获牌：入手 1 张「魔弹」',
+      description: '每从坟场获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
+      shortDescription: '每次从坟场获牌：入手 1 张「魔弹」',
     },
     {
       id: STARTER_CARD_IDS.damageClassDiscoverAmulet,
@@ -3035,6 +3020,16 @@ export function createStarterCardPool(): GameCardData[] {
       shortDescription: '每处理 1 张地城牌：+1 金币',
     },
     {
+      id: STARTER_CARD_IDS.waterfallHealAmulet,
+      type: 'amulet',
+      name: '潮愈之符',
+      value: 0,
+      image: starterAmuletWaterfallHealImage,
+      amuletEffect: 'waterfall-heal',
+      description: '每次瀑流推进时，恢复 4 点生命（多个叠加：每件 +4）。',
+      shortDescription: '每次瀑流：恢复 4 点生命（叠加 +4）',
+    },
+    {
       id: STARTER_CARD_IDS.flipOverkillLifestealAmulet,
       type: 'amulet',
       name: '翻血之符',
@@ -3070,6 +3065,7 @@ export function createStarterCardPool(): GameCardData[] {
       name: '不灭赐福',
       value: 0,
       image: starterScrollReviveImage,
+      unique: true,
       magicType: 'permanent',
       magicEffect: '永久魔法：选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），然后失去 2 点生命。',
       description: '赋予装备复生能力，失去 2 点生命。已复生的装备可再次赋予。',
@@ -3083,6 +3079,7 @@ export function createStarterCardPool(): GameCardData[] {
       name: '回收术',
       value: 0,
       image: starterScrollRecallImage,
+      unique: true,
       magicType: 'permanent',
       magicEffect: '永久魔法：回手一张牌，抽 1 张牌。',
       description: '回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌。',
@@ -3119,6 +3116,7 @@ export function createStarterCardPool(): GameCardData[] {
       name: '回收余韵',
       value: 0,
       image: starterScrollRecycleEchoImage,
+      unique: true,
       magicType: 'permanent',
       magicEffect: '永久魔法：使用：随机将回收袋的 1 张牌剩余瀑流 -1（就绪的牌进背包）。',
       description: '使用：随机将回收袋的 1 张牌剩余瀑流 -1（就绪的牌进背包）。',
@@ -3233,6 +3231,19 @@ export function createStarterCardPool(): GameCardData[] {
       potionEffect: 'perm-both-slots-shield+1',
       description: '左右装备栏永久护甲 +1。',
       shortDescription: '双栏永久 +1 护甲',
+    },
+    {
+      // 血源酿 — 生命值上限永久 +6（只抬上限，不回血）。镜像 砺心之盾 / 永恒之器 /
+      // spell-lifesteal+1-maxhp+6 的 cap-only 语义：写 `permanentMaxHpBonus +=6`，
+      // 当前 `state.hp` 不变。一次性消耗（非 Perm）。
+      id: STARTER_CARD_IDS.lifebloodBrewPotion,
+      type: 'potion',
+      name: '血源酿',
+      value: 0,
+      image: potionConcentratedHealImage,
+      potionEffect: 'maxhp+6',
+      description: '生命值上限永久 +6（只抬上限，不回血）。',
+      shortDescription: '生命值上限 +6',
     },
     {
       id: STARTER_CARD_IDS.stunStrike,

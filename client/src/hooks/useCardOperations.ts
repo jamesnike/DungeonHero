@@ -25,7 +25,7 @@ import {
   FLIP_GOLD_REWARD,
   DEV_MODE,
 } from '@/game-core/constants';
-import { computeAmuletEffects } from '@/game-core/equipment';
+import { computeAmuletEffectsCombined } from '@/game-core/equipment';
 import {
   isRecyclableFromHand,
   flattenActiveRowSlots,
@@ -113,6 +113,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     shieldMasterBonus,
     handLimitBonus,
     defensiveStanceActive,
+    eternalRelics,
   } = useShallowGameState(s => ({
     hp: s.hp,
     amuletSlots: s.amuletSlots,
@@ -138,6 +139,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     shieldMasterBonus: s.shieldMasterBonus,
     handLimitBonus: s.handLimitBonus,
     defensiveStanceActive: s.defensiveStanceActive,
+    eternalRelics: s.eternalRelics,
   }));
 
   // -- Type alias for state ---------------------------------------------------
@@ -149,10 +151,13 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   // Delegate to the canonical aggregator in `game-core/equipment.ts` so that
   // every consumer sees the same set of computed effects. Historically this
   // hook duplicated the switch and silently went stale when new amulets were
-  // added — the duplicate is gone for good.
+  // added — the duplicate is gone for good. Eternal relics that carry an
+  // `amuletEffect` (e.g. 护符永铸药 conversions, 回合汲取药) are folded in so
+  // converted-relic effects continue to function identically to equipped
+  // amulets — see `parallel-state-fields-consumer-audit.mdc`.
   const amuletEffects = useMemo<ActiveAmuletEffects>(
-    () => computeAmuletEffects(amuletSlots as GameCardData[]),
-    [amuletSlots],
+    () => computeAmuletEffectsCombined(amuletSlots as GameCardData[], eternalRelics),
+    [amuletSlots, eternalRelics],
   );
 
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
@@ -325,23 +330,17 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) {
       return 0;
     }
-    if (slotItem.type === 'monster') {
-      const baseArmor = slotItem.hp ?? slotItem.value;
-      const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
-      const rawSlotTemp = slotTempArmor[slotId] ?? 0;
-      const bonusDamaged = slotItem.armorBonusDamaged ?? 0;
-      return Math.max(0, baseArmor + defenseBonus + slotShieldBonus + rawSlotTemp - bonusDamaged);
-    }
-    const baseArmorMax = slotItem.armorMax ?? slotItem.value;
+    // Single-counter armor model: storedCap = baseArmorMax + perm + temp.
+    // `slotItem.armor === undefined` ⇒ "fresh / at full cap"; readers default to cap.
+    const baseArmorMax = slotItem.type === 'monster'
+      ? (slotItem.hp ?? slotItem.value)
+      : (slotItem.armorMax ?? slotItem.value);
     const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
     const rawSlotTemp = slotTempArmor[slotId] ?? 0;
     const permanentBonus = Math.max(0, defenseBonus + slotShieldBonus);
-    const bonusDamaged = slotItem.armorBonusDamaged ?? 0;
-    const storedBaseArmor = Math.min(slotItem.armor ?? baseArmorMax, baseArmorMax);
-    const effectiveBonus = Math.max(0, permanentBonus + rawSlotTemp - bonusDamaged);
-    const currentArmor = storedBaseArmor + effectiveBonus;
-    const effectiveArmorMax = baseArmorMax + permanentBonus + rawSlotTemp;
-    return Math.min(currentArmor, effectiveArmorMax);
+    const storedCap = Math.max(0, baseArmorMax + permanentBonus + rawSlotTemp);
+    const stored = slotItem.armor;
+    return stored === undefined ? storedCap : Math.max(0, Math.min(stored, storedCap));
   };
 
   const getEquipmentSlotStatModifier = (slotId: EquipmentSlotId): EquipmentSlotStatModifier | null => {
@@ -380,9 +379,10 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     if (slotItem.type === 'shield') {
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTemp = slotTempArmor[slotId] ?? 0;
-      const rawBonus = Math.max(0, defenseBonus + slotShieldBonus) + rawSlotTemp;
-      const bonusDamaged = slotItem.armorBonusDamaged ?? 0;
-      const permanentShieldBonus = Math.max(0, rawBonus - bonusDamaged);
+      // Single-counter armor model: `permanentShieldBonus` here represents the
+      // additional cap (perm + temp + defense) above baseArmorMax. The current
+      // armor value (`slotItem.armor`) is read separately by the renderer.
+      const permanentShieldBonus = Math.max(0, defenseBonus + slotShieldBonus) + rawSlotTemp;
 
       return {
         appliesTo: 'shield',
@@ -407,9 +407,10 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTempMonster = slotTempArmor[slotId] ?? 0;
-      const monsterBonusDamaged = slotItem.armorBonusDamaged ?? 0;
-      const monsterRawBonus = Math.max(0, defenseBonus + slotShieldBonus) + rawSlotTempMonster;
-      const effectiveShieldMod = Math.max(0, monsterRawBonus - monsterBonusDamaged);
+      // Single-counter armor model: shield modifier is the additional cap
+      // (perm + temp + defense) above base hp/value. Current armor reads
+      // from `slotItem.armor` separately.
+      const effectiveShieldMod = Math.max(0, defenseBonus + slotShieldBonus) + rawSlotTempMonster;
 
       return {
         appliesTo: 'monster' as const,

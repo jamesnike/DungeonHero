@@ -502,16 +502,16 @@ export type GameEventMap = {
   'card:deckJudgeRequested': { card: import('@/components/GameCard').GameCardData };
   /**
    * 净册涌泉 (knight:cleanse-draw) — emitted from the magic resolver to ask
-   * the hook layer to drive the hand-card delete + draw loop.
+   * the hook layer to drive the hand-card delete + graveyard discover loop.
    *
    * The hook iterates `echoRemaining` times: open a hand-only delete picker
-   * for 1 card, then dispatch DRAW_CARDS(count=drawCount, source='deck').
-   * Empty hand on any iteration → skip the delete picker for that iteration
-   * but still draw. After the loop, the hook dispatches FINALIZE_MAGIC_CARD.
+   * for 1 card, then call `requestGraveyardSelection(3, { delivery: 'hand-first' })`
+   * to discover 1 graveyard card into hand. Empty hand on any iteration →
+   * skip the delete picker for that iteration but still discover. After the
+   * loop, the hook dispatches FINALIZE_MAGIC_CARD.
    */
   'card:cleanseDrawRequested': {
     card: import('@/components/GameCard').GameCardData;
-    drawCount: number;
     echoRemaining: number;
   };
   'card:graveyardDiscoverEquipAmulet': {

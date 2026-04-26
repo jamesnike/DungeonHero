@@ -48,9 +48,8 @@ export function useActiveRowDerivedState(): ActiveRowDerivedState {
   const playerTargetingActive = heroSkillTargeting || heroMagicTargeting || magicTargeting || potionTargeting;
 
   const heroSkillMonsterTargeting = gs.pendingHeroSkillAction?.type === 'monster';
-  const heroMagicMonsterTargeting = gs.pendingHeroMagicAction?.step === 'monster-select';
   const magicMonsterTargeting = gs.pendingMagicAction?.step === 'monster-select';
-  const monsterTargetingActive = heroSkillMonsterTargeting || heroMagicMonsterTargeting || Boolean(magicMonsterTargeting);
+  const monsterTargetingActive = heroSkillMonsterTargeting || Boolean(magicMonsterTargeting);
 
   // 单目标伤害 magic 在 setup 阶段会带 allowsHeroTarget: true，UI 用它决定是否高亮
   // Hero Cell 并允许点击触发自伤路径。仅在 monster-select step 下生效。

@@ -4,23 +4,16 @@
  * 玩家报告的 bug：monster 装备攻击后耐久 -1，但护甲值仍然保持上一次格挡之后
  * 被啃到的残值，没有"按新血层重置"。比如一只 7攻 7护甲 2耐久 的装备，先被
  * 用作护盾吃了一次伤害（armor 7→4），再用作武器攻击一次（durability 2→1），
- * 此时显示应该是 7攻 7护甲 1耐久（armor 回满，因为这是新血层）。旧逻辑下
- * 还显示 7攻 4护甲 1耐久，护盾下次格挡也会从 4 起算 —— 跟护盾装备的行为
- * 不一致。
+ * 此时显示应该是 7攻 7护甲 1耐久（armor 回满，因为这是新血层）。
  *
  * 修复：computeDurabilityLossEffects 在返回 updatedItem 之前，对 monster
- * 装备 strip `armor` / `armorBonusDamaged`，让下一次读取走 baseArmorMax
- * (= hp ?? value) + 永久/临时护甲加成 的回满路径。这跟 combat.ts shield-
- * block 路径里"armor 打穿后重新洗牌"的语义对齐，覆盖所有 caller：
- * - 武器攻击 durability tick (combat.ts ~L2745)
- * - 护盾格挡 durability tick (combat.ts ~L3437，原本就有外层手动 strip，
- *   现在变成 redundant 但安全)
- * - shield-self-damage (shield-self-damage.ts ~L213，同上)
+ * 装备 strip `armor`，让下一次读取走 baseArmorMax (= hp ?? value) + 永久/
+ * 临时护甲加成 的回满路径（single-counter armor model: armor === undefined
+ * ⇒ "fresh, at full cap = baseArmorMax + perm + temp"）。
  *
  * 不变量验证：
- *   1. monster 装备攻击后 durability 减 1，armor 字段被剥离 → 下次读取回满
- *   2. monster 装备攻击后 armorBonusDamaged 字段也被剥离 → perm/temp 加成
- *      的"已被消耗"账本清零，新血层重新走 perm + temp 全额
+ *   1. monster 装备攻击后 durability 减 1，armor 字段被剥离 → 下次读取回满到 cap
+ *   2. cap 包含 baseArmorMax + permanent slot bonus + temp armor
  *   3. 非 monster 类型不受影响（早返回路径已经覆盖）
  */
 
@@ -105,19 +98,25 @@ describe('computeDurabilityLossEffects — monster equip armor refresh on tick',
     expect((result.updatedItem as any).hp).toBe(7);
   });
 
-  it('also strips armorBonusDamaged so perm/temp bonus pool resets for new layer', () => {
+  it('strips chipped armor so next-layer read defaults to full cap (perm+temp included)', () => {
     const equip: GameCardData = {
       ...makeMonsterEquip(),
-      armor: 4,
-      armorBonusDamaged: 3, // 之前共享池里 perm/temp 已被啃 3
+      armor: 4, // chipped from prior layer
     } as unknown as GameCardData;
 
-    const state = makeState({ equipmentSlot1: equip as EquipmentItem });
+    const state = makeState({
+      equipmentSlot1: equip as EquipmentItem,
+      equipmentSlotBonuses: {
+        equipmentSlot1: { damage: 0, shield: 2 },
+        equipmentSlot2: { damage: 0, shield: 0 },
+      },
+      slotTempArmor: { equipmentSlot1: 1, equipmentSlot2: 0 },
+    });
 
     const result = computeDurabilityLossEffects(state, 'equipmentSlot1', equip, 1);
 
+    // armor stripped → readers see baseArmorMax (7) + perm (2) + temp (1) = 10.
     expect((result.updatedItem as any).armor).toBeUndefined();
-    expect((result.updatedItem as any).armorBonusDamaged).toBeUndefined();
   });
 
   it('non-monster type (weapon) returns updatedItem unchanged (early return)', () => {
@@ -173,17 +172,15 @@ describe('PERFORM_HERO_ATTACK e2e: monster equip 7攻 7护甲 2耐久 (chipped t
     expect(finalEquip.durability).toBe(1);
     // 关键断言：armor 字段必须被剥离，下次读取从 hp=7 起算
     expect(finalEquip.armor).toBeUndefined();
-    expect(finalEquip.armorBonusDamaged).toBeUndefined();
     // 攻击力身份字段不动
     expect(finalEquip.attack).toBe(7);
     expect(finalEquip.hp).toBe(7);
   });
 
-  it('with perm + temp armor bonus: armorBonusDamaged also stripped so bonus pool refills', () => {
+  it('with perm + temp armor bonus: armor stripped so cap re-applies on next read', () => {
     const beast = {
       ...makeMonsterEquip({ id: 'me-bonus' }),
-      armor: 2, // base armor 啃到 2
-      armorBonusDamaged: 3, // perm+temp 共享池被啃 3
+      armor: 2, // chipped current armor
     } as unknown as EquipmentItem;
     const target = makeTargetMonster('victim2', 100);
 
@@ -215,7 +212,6 @@ describe('PERFORM_HERO_ATTACK e2e: monster equip 7攻 7护甲 2耐久 (chipped t
     expect(finalEquip).not.toBeNull();
     expect(finalEquip.durability).toBe(1);
     expect(finalEquip.armor).toBeUndefined();
-    expect(finalEquip.armorBonusDamaged).toBeUndefined();
     // 永久/临时加成本身没动
     expect(finalState.equipmentSlotBonuses.equipmentSlot1.shield).toBe(2);
     expect(finalState.slotTempArmor?.equipmentSlot1).toBe(1);

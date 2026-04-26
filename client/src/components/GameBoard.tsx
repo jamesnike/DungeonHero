@@ -119,7 +119,7 @@ import { getRandomHero, type HeroVariant } from '@/lib/heroes';
 import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, getTotalWins, incrementTotalWins, type PersistedGameState } from '@/lib/gameStorage';
 import { reportGameStart, summarizePrevGame } from '@/lib/telemetry';
 import { applyMonsterRage } from '@/lib/monsterRage';
-import { getStartingRelics, hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
+import { getStartingRelics, hasEternalRelic, getEternalRelic, countEternalRelics, getRelicStackedSuffix } from '@/lib/eternalRelics';
 import CardDetailsModal from './CardDetailsModal';
 import CardUpgradeModal from './CardUpgradeModal';
 import CardDraftModal from './CardDraftModal';
@@ -229,7 +229,7 @@ import {
   createEmptyActiveRow,
   createEmptyAmuletEffects,
 } from '@/game-core/constants';
-import { computeAmuletEffects } from '@/game-core/equipment';
+import { computeAmuletEffectsCombined } from '@/game-core/equipment';
 import {
   clamp,
   easeInOutCubic,
@@ -508,24 +508,15 @@ export default function GameBoard() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  // Aggregated amulet effects. Delegates to the canonical `computeAmuletEffects`
-  // in `game-core/equipment.ts` to ensure UI-side derivations match the reducer's
-  // view exactly. Eternal relics that carry an `amuletEffect` are folded in by
-  // synthesising a one-card list so they go through the same switch.
-  const amuletEffects = useMemo<ActiveAmuletEffects>(() => {
-    const relicAsAmulets = eternalRelics
-      .filter(r => r.amuletEffect)
-      .map(r => ({
-        type: 'amulet' as const,
-        amuletEffect: r.amuletEffect,
-        amuletAuraBonus: r.amuletAuraBonus,
-        upgradeLevel: r.upgradeLevel,
-      } as unknown as GameCardData));
-    return computeAmuletEffects([
-      ...(amuletSlots as GameCardData[]),
-      ...relicAsAmulets,
-    ]);
-  }, [amuletSlots, eternalRelics]);
+  // Aggregated amulet effects. Delegates to the canonical aggregator in
+  // `game-core/equipment.ts` so UI-side derivations match the reducer's view
+  // exactly. Eternal relics that carry an `amuletEffect` are folded in via
+  // `computeAmuletEffectsCombined` — see `parallel-state-fields-consumer-audit.mdc`
+  // for why this merge must happen at every consumer (UI + reducer).
+  const amuletEffects = useMemo<ActiveAmuletEffects>(
+    () => computeAmuletEffectsCombined(amuletSlots as GameCardData[], eternalRelics),
+    [amuletSlots, eternalRelics],
+  );
 
   // Amulet counter display sync now runs automatically in reducer postProcessAmuletCounters
 
@@ -728,8 +719,6 @@ export default function GameBoard() {
     resetHeroSkillForNewWave,
     addHeroMagicGauge,
     startHeroMagicActivation,
-    resolveHolyLightChoice,
-    handleHolyLightMonsterCleanse,
     cancelHeroSkillAction,
     cancelHeroMagicAction,
     cancelPotionAction,
@@ -754,7 +743,6 @@ export default function GameBoard() {
     handleHeroSkillButtonClick,
     handleExtraHeroSkillButtonClick,
     handleHeroMagicTrigger,
-    handleHeroMagicChoice,
     applyHonorSweepMagic,
     applyWeaponSweepMagic,
     honorSweepUpgradesPending,
@@ -1683,9 +1671,11 @@ export default function GameBoard() {
 
   // Eternal Relic detail modal
   const [selectedEternalRelic, setSelectedEternalRelic] = useState<import('@/game-core/types').EternalRelic | null>(null);
+  const [selectedEternalRelicCount, setSelectedEternalRelicCount] = useState<number>(1);
   const [eternalRelicModalOpen, setEternalRelicModalOpen] = useState(false);
-  const handleEternalRelicClick = useCallback((relic: import('@/game-core/types').EternalRelic) => {
+  const handleEternalRelicClick = useCallback((relic: import('@/game-core/types').EternalRelic, count: number) => {
     setSelectedEternalRelic(relic);
+    setSelectedEternalRelicCount(count);
     setEternalRelicModalOpen(true);
   }, []);
 
@@ -4600,7 +4590,11 @@ export default function GameBoard() {
 
   // Card-gain amulet callbacks
   onNewCardGainedRef.current = (count: number, source?: 'graveyard' | 'classPool') => {
-    if (amuletEffects.cardGainMissileCount > 0 && (source === 'graveyard' || source === 'classPool')) {
+    // 弹幕之符：仅在「从坟场获得牌」时触发，专属卡池路径不触发。
+    // 历史上曾包含 classPool（Heavy Shield onDestroyClassDraw / 黄金探秘 / 商店购买 等），
+    // 现在按设计收紧到 graveyard-only。card:newCardGained 事件本身仍然在 classPool
+    // 路径下被 emit（见 rules/cards.ts / shop.ts / waterfall.ts），只是这里不再消费它。
+    if (amuletEffects.cardGainMissileCount > 0 && source === 'graveyard') {
       const boltsPerTrigger = amuletEffects.cardGainMissileCount;
       let rng = engine.getState().rng;
       const bolts: GameCardData[] = [];
@@ -5743,7 +5737,6 @@ export default function GameBoard() {
     setTakingDamage,
     selectedCard,
     handleMagicMonsterSelection,
-    handleHolyLightMonsterCleanse,
     handleHeroSkillMonsterSelection,
   };
 
@@ -6448,10 +6441,13 @@ export default function GameBoard() {
         addGameLog('combat', `劝降成功！装备 ${monster.name}（${monsterAttack}攻 / ${monsterArmor}防 / ${monsterStartDurability}/${monsterMaxDurability}耐久）`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `劝降成功！${monster.name} 已装备！` });
 
-        if (hasEternalRelic(engine.getState().eternalRelics, 'equip-empower')) {
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: equipSlot, delta: 3 });
-          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: equipSlot, delta: 3 });
-          addGameLog('equip', `铸锋药剂：${monster.name} 装备时，该装备栏临时攻击 +3，临时护甲 +3！`);
+        const equipEmpowerStack = countEternalRelics(engine.getState().eternalRelics, 'equip-empower');
+        if (equipEmpowerStack > 0) {
+          const empowerBonus = 3 * equipEmpowerStack;
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ATTACK', slotId: equipSlot, delta: empowerBonus });
+          dispatch({ type: 'MODIFY_SLOT_TEMP_ARMOR', slotId: equipSlot, delta: empowerBonus });
+          const stackLabel = equipEmpowerStack > 1 ? `（叠加 ×${equipEmpowerStack}）` : '';
+          addGameLog('equip', `铸锋药剂${stackLabel}：${monster.name} 装备时，该装备栏临时攻击 +${empowerBonus}，临时护甲 +${empowerBonus}！`);
         }
 
         if (amuletEffects.monsterEquipBuffCount > 0) {
@@ -6920,7 +6916,6 @@ export default function GameBoard() {
   const heroSkillMonsterTargeting = pendingHeroSkillAction?.type === 'monster';
   const heroMagicTargeting = Boolean(pendingHeroMagicAction);
   const heroMagicSlotTargeting = pendingHeroMagicAction?.step === 'slot-select';
-  const heroMagicMonsterTargeting = pendingHeroMagicAction?.step === 'monster-select';
   const magicTargeting = Boolean(pendingMagicAction);
   const magicSlotTargeting = pendingMagicAction?.step === 'slot-select';
   const magicMonsterTargeting = pendingMagicAction?.step === 'monster-select';
@@ -6953,7 +6948,7 @@ export default function GameBoard() {
   const slotTargetingActive =
     heroSkillSlotTargeting || Boolean(heroMagicSlotTargeting) || Boolean(magicSlotTargeting) || Boolean(potionSlotTargeting);
   const monsterTargetingActive =
-    heroSkillMonsterTargeting || heroMagicMonsterTargeting || Boolean(magicMonsterTargeting);
+    heroSkillMonsterTargeting || Boolean(magicMonsterTargeting);
   const dungeonTargetingActive = Boolean(magicDungeonTargeting);
   const heroSkillSlotLabel =
     pendingHeroSkillAction?.skillId === 'armor-pact'
@@ -7049,11 +7044,6 @@ export default function GameBoard() {
     pendingMagicAction,
     pendingPotionAction,
     waterfallActive]);
-
-  const heroMagicChoicePrompt =
-    pendingHeroMagicAction?.step === 'choice'
-      ? { id: pendingHeroMagicAction.id, prompt: pendingHeroMagicAction.prompt }
-      : null;
 
   const potionChoiceDialogOpen =
     pendingPotionAction?.effect === 'repair-choice' && pendingPotionAction.step === 'choice';
@@ -7952,9 +7942,6 @@ export default function GameBoard() {
             heroSkillButtonRef={heroSkillButtonRef}
             heroMagicInfo={heroMagicUiState}
             onHeroMagicTrigger={handleHeroMagicTrigger}
-            heroMagicChoice={null}
-            onHeroMagicChoice={undefined}
-            onHeroMagicCancel={undefined}
             potionChoice={null}
             onPotionChoice={undefined}
             onPotionCancel={undefined}
@@ -8251,7 +8238,6 @@ export default function GameBoard() {
     onBackpackReorganizeConfirm: handleBackpackReorganizeConfirm,
     onHandDiscardSelectionConfirm: handleHandDiscardSelectionConfirm,
     onCancelHeroMagicAction: cancelHeroMagicAction,
-    onHeroMagicChoice: handleHeroMagicChoice,
     onCancelPotionAction: cancelPotionAction,
     onPotionChoiceSelection: handlePotionChoiceSelection,
     onDeathWardConfirm: handleDeathWardConfirm,
@@ -8286,7 +8272,7 @@ export default function GameBoard() {
     resolvePermGrant, cancelPermGrant,
     handleBackpackReorganizeConfirm,
     handleHandDiscardSelectionConfirm,
-    cancelHeroMagicAction, handleHeroMagicChoice, cancelPotionAction, handlePotionChoiceSelection,
+    cancelHeroMagicAction, cancelPotionAction, handlePotionChoiceSelection,
     handleDeathWardConfirm, handleDeathWardDecline,
     handleDaggerSelfDestructConfirm, handleDaggerSelfDestructDecline,
     handleSkillSelection, handleCardDraftComplete, handleNewGame,
@@ -8859,11 +8845,24 @@ export default function GameBoard() {
                   alt={selectedEternalRelic.name}
                   className="w-10 h-10 rounded-full border-2 border-amber-400/60 object-cover"
                 />
-                {selectedEternalRelic.name}
+                <span className="flex items-center gap-1">
+                  {selectedEternalRelic.name}
+                  {selectedEternalRelicCount > 1 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold leading-none">
+                      ×{selectedEternalRelicCount}
+                    </span>
+                  )}
+                </span>
               </DialogTitle>
               <DialogDescription className="text-sm pt-2">
                 {selectedEternalRelic.description}
               </DialogDescription>
+              {(() => {
+                const suffix = getRelicStackedSuffix(selectedEternalRelic.id, selectedEternalRelicCount);
+                return suffix ? (
+                  <p className="text-xs text-amber-200 mt-1 font-medium">{suffix}</p>
+                ) : null;
+              })()}
             </DialogHeader>
           </DialogContent>
         </Dialog>
