@@ -37,6 +37,7 @@ import {
   createEmptyActiveRow,
 } from '../constants';
 import {
+  countActiveRowSlotsExcludeGhost,
   fillActiveRowSlots,
   flattenActiveRowSlots,
   getEmptyOrGhostColumns,
@@ -1282,5 +1283,47 @@ function reduceApplyWaterfallDeal(state: GameState): ReduceResult {
 
 function reduceCompleteWaterfall(state: GameState): ReduceResult {
   if (!state.pendingWaterfallPlan) return noChange(state);
-  return applyPatch(state, { pendingWaterfallPlan: null });
+
+  const cleared: GameState = { ...state, pendingWaterfallPlan: null };
+
+  // Soft-lock guard: when the active row is still empty after the just-completed
+  // waterfall but the preview row or remaining deck still has cards, recompute
+  // and emit a follow-up plan inline so the UI starts another animation cycle.
+  //
+  // Why this is needed: the upstream `postProcessActiveCards` step-5 trigger
+  // (reducer.ts) won't re-fire on subsequent player actions because its
+  // early-return on `activeCards === prevState.activeCards` short-circuits
+  // as long as the active row stays empty. Without this re-trigger, cards
+  // stranded in the preview after a deal phase would never cascade into the
+  // active row — the game soft-locks.
+  //
+  // Real triggers (reported by users):
+  //   • 瀑流重置 (cascadeReset): preview row was empty + deck was empty when
+  //     the player cleared the active row. The first waterfall refills the
+  //     preview from the now-populated deck, but with no preview cards to
+  //     drop into active, the active row stays empty → soft-lock.
+  //   • 迷宫回溯 (return-dungeon-bottom): same shape when the active row
+  //     held a single card and both preview & deck were empty.
+  //
+  // Termination: each re-trigger either drops cards into the active row
+  // (countActive > 0 → condition fails next time) or computeWaterfallDropPlan
+  // returns null (preview empty + deck empty + active empty → victory branch
+  // already handled by reduceApplyWaterfallDeal's `shouldDeclareVictory`).
+  if (
+    !cleared.gameOver &&
+    countActiveRowSlotsExcludeGhost(cleared.activeCards) === 0 &&
+    (cleared.previewCards.some(c => !!c) || cleared.remainingDeck.length > 0)
+  ) {
+    const plan = computeWaterfallDropPlan(cleared, false);
+    if (plan) {
+      const next: GameState = { ...cleared, pendingWaterfallPlan: plan, rng: plan.rng };
+      return {
+        state: next,
+        sideEffects: [{ event: 'waterfall:planReady', payload: { plan } }],
+        enqueuedActions: [],
+      };
+    }
+  }
+
+  return { state: cleared, sideEffects: [], enqueuedActions: [] };
 }

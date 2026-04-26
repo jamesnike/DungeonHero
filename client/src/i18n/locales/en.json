@@ -360,6 +360,10 @@
       "knightDeck": "Knight Deck",
       "view": "View",
       "browse": "Browse"
+    },
+    "unique": {
+      "label": "Unique",
+      "acquired": "Acquired"
     }
   },
   "modal": {
@@ -427,6 +431,9 @@
     "cardDetails": {
       "monsterEquipmentTag": "Monster Equipment",
       "knightClassTag": "KNIGHT CLASS",
+      "uniqueTag": "Unique",
+      "uniqueAcquired": "Unique · Acquired",
+      "uniqueTooltip": "Unique card. Once obtained this run, it will not appear again.",
       "upgradeMaxed": "Max Level (Lv.{{current}}/{{max}})",
       "upgradeAvailable": "Upgradeable (Lv.{{current}}/{{max}})",
       "rewardSectionTitle": "Reward (pick one)",
@@ -529,7 +536,7 @@
       "desc_flankDamageGrant": "Pick a hand card to grant 'Flank: deal 5 damage to a random monster' (any type)",
       "desc_transformDrawGrant": "Pick a hand card to grant 'Transform: draw 2 cards' (any type)",
       "desc_transformHealGrant": "Pick a hand card to grant 'Transform: restore 2 HP' (any type)",
-      "desc_transformRecycleGrant": "Pick a hand card to grant 'Transform: take back 1 card from the recycle bag'",
+      "desc_transformRecycleGrant": "Pick a hand card to grant 'Transform: discard 1 hand card, then take 1 random card back from the recycle bag'",
       "desc_amuletPermGrant": "Pick an equipped amulet to grant Perm 2 (returns to backpack after 2 waterfalls when removed)",
       "desc_onHandStunCapGrant": "Pick a hand card and permanently grant 'On-hand: stun cap +3%' (triggers each time it enters hand; cards with other on-hand traits are ineligible)",
       "desc_onHandHealGrant": "Pick a hand card and permanently grant 'On-hand: restore 1 HP' (triggers each time it enters hand; cards with other on-hand traits are ineligible)",

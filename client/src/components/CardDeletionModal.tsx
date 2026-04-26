@@ -254,7 +254,7 @@ export default function CardDeletionModal({
         参考 CardUpgradeModal 的同款历史 bug 注释。
       */}
       <DialogContent
-        className="max-w-2xl max-h-[95vh] overflow-y-auto"
+        className="max-w-2xl max-h-[calc(95vh/var(--dialog-zoom,1))] overflow-y-auto"
         overlayClassName="bg-black/30"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}

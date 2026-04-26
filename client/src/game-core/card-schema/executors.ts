@@ -542,11 +542,11 @@ function executeTransformRecycleGrant(ctx: ExecutionContext, _effect: CardEffect
     const target = eligible[0];
     ctx.patch.handCards = ctx.state.handCards.map(c =>
       c.id === target.id
-        ? { ...c, transformBonus: '回收袋取回 1 张牌', transformEffect: 'recycle-to-hand:1' }
+        ? { ...c, transformBonus: '弃 1 张手牌·回收袋取 1 张', transformEffect: 'discard-recycle-to-hand:1' }
         : c,
     );
     log(ctx, 'potion', `唤回秘药：「${target.name}」获得转型效果！`);
-    banner(ctx, `「${target.name}」获得转型：回收袋取回 1 张牌！`);
+    banner(ctx, `「${target.name}」获得转型：弃 1 张手牌，回收袋取回 1 张！`);
     return;
   }
   ctx.patch.permGrantModal = { sourceCardId: ctx.card.id, sourceType: 'transform-recycle-grant' };

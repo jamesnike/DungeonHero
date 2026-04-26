@@ -47,6 +47,7 @@ function ShopContainerInner() {
     handLimitBonus: s.handLimitBonus,
     maxAmuletSlots: s.maxAmuletSlots,
     equipmentSlotCapacity: s.equipmentSlotCapacity,
+    acquiredUniqueClassCardIds: s.acquiredUniqueClassCardIds,
   }));
 
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + gs.backpackCapacityModifier);
@@ -152,6 +153,7 @@ function ShopContainerInner() {
         shopRefreshCost={SHOP_REFRESH_COST}
         shopRefreshUsed={gs.shopRefreshUsed}
         onShopRefreshRequest={cb.onShopRefreshRequest}
+        acquiredUniqueClassCardIds={gs.acquiredUniqueClassCardIds}
       />
 
       <ShopSkillSelectModal

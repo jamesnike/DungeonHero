@@ -87,6 +87,7 @@ export function createInitialGameState(): GameState {
     flipDebuffMonsterId: null,
     bugletAmuletObtained: false,
     statSwapCardObtained: false,
+    acquiredUniqueClassCardIds: [],
     handLimitBonus: 0,
     heroMagicState: createInitialHeroMagicState(),
     wraithPassiveEnabled: false,

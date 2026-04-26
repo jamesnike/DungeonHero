@@ -10,6 +10,8 @@ import {
   isEventCardType,
   isMagicSpellCardType,
 } from './MagicNameFlankIcons';
+import { getStarterBaseId } from '@/game-core/deck';
+import { isUniqueLocked } from '@/game-core/uniqueClass';
 
 export interface ShopOffering {
   card: GameCardData;
@@ -66,6 +68,7 @@ interface ShopModalProps {
   shopRefreshCost?: number;
   shopRefreshUsed?: boolean;
   onShopRefreshRequest?: () => void;
+  acquiredUniqueClassCardIds?: string[];
 }
 
 export default function ShopModal({
@@ -105,10 +108,12 @@ export default function ShopModal({
   shopRefreshCost = 5,
   shopRefreshUsed,
   onShopRefreshRequest,
+  acquiredUniqueClassCardIds,
 }: ShopModalProps) {
   const { t } = useTranslation();
   const isBackpackFull = backpackCount >= backpackCapacity;
   const deleteOptionDisabled = !canDeleteCard;
+  const acquiredUniqueSet = new Set(acquiredUniqueClassCardIds ?? []);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && onMinimize) {
@@ -250,14 +255,16 @@ export default function ShopModal({
           <div className="grid grid-cols-1 gap-4">
             {offerings.map(offering => {
               const { card, price, sold } = offering;
+              const locked = isUniqueLocked(card, acquiredUniqueSet);
               const canAfford = gold >= price;
-              const canBuy = !sold && canAfford && !isBackpackFull;
+              const canBuy = !sold && !locked && canAfford && !isBackpackFull;
               const typeLabel = card.type ? card.type.toUpperCase() : 'CARD';
 
               return (
                 <div
                   key={card.id}
-                  className="flex flex-col gap-3 rounded-md border border-border/60 bg-card/70 p-4 shadow-sm sm:flex-row sm:items-center"
+                  className={`flex flex-col gap-3 rounded-md border border-border/60 bg-card/70 p-4 shadow-sm sm:flex-row sm:items-center ${locked ? 'opacity-70' : ''}`}
+                  data-testid={`shop-offering-${getStarterBaseId(card.id)}`}
                 >
                   <div className="flex gap-3 flex-1">
                     <div className="relative h-20 w-16 overflow-hidden rounded-sm bg-muted">
@@ -273,6 +280,21 @@ export default function ShopModal({
                       <Badge className="absolute top-1 right-1 text-[10px] px-1 py-0" variant="secondary">
                         {typeLabel}
                       </Badge>
+                      {card.unique && (
+                        <Badge
+                          variant="outline"
+                          className="absolute top-1 left-1 text-[10px] px-1 py-0 bg-amber-500/90 text-white border-amber-300"
+                        >
+                          唯一
+                        </Badge>
+                      )}
+                      {locked && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <Badge variant="secondary" className="text-[10px] bg-amber-200/95 text-amber-900 border-amber-400">
+                            已获得
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -282,10 +304,20 @@ export default function ShopModal({
                             {t('modal.shop.soldOut')}
                           </Badge>
                         )}
+                        {locked && !sold && (
+                          <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-900 border-amber-400">
+                            已获得 (唯一)
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground capitalize">{card.type}</p>
                       {card.description && (
                         <p className="text-sm text-muted-foreground line-clamp-2">{card.description}</p>
+                      )}
+                      {locked && !sold && (
+                        <p className="text-xs text-amber-700 dark:text-amber-400">
+                          唯一卡，本局已获得，无法购买。
+                        </p>
                       )}
                     </div>
                   </div>
@@ -293,9 +325,9 @@ export default function ShopModal({
                     <span className="text-sm text-muted-foreground">
                       {t('modal.shop.priceLabel')}<span className="text-lg font-semibold text-yellow-500">{price}</span> {t('modal.shop.priceUnit')}
                     </span>
-                    {!sold && !canAfford && <span className="text-xs text-destructive">{t('modal.shop.notEnoughGold')}</span>}
-                    <Button variant={sold ? 'secondary' : 'default'} disabled={!canBuy} onClick={() => onBuy(card.id)}>
-                      {sold ? t('modal.shop.bought') : t('modal.shop.purchase')}
+                    {!sold && !locked && !canAfford && <span className="text-xs text-destructive">{t('modal.shop.notEnoughGold')}</span>}
+                    <Button variant={sold || locked ? 'secondary' : 'default'} disabled={!canBuy} onClick={() => onBuy(card.id)}>
+                      {sold ? t('modal.shop.bought') : locked ? '已获得' : t('modal.shop.purchase')}
                     </Button>
                   </div>
                 </div>

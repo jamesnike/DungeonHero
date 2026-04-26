@@ -101,9 +101,17 @@ const DialogContent = React.forwardRef<
   }
 >(({ className, children, overlayClassName, contentMotion = "default", style, autoScale = true, onInteractOutside, ...props }, ref) => {
   const overlayScale = useOverlayScale();
+  // Expose the applied zoom factor as a CSS custom property so consumer
+  // classNames can compensate viewport-relative units (vh / vw / svh).
+  // Without this, `max-h-[95vh]` on DialogContent gets multiplied by zoom on
+  // large screens (overlayScale up to 1.5), pushing the rendered height past
+  // the viewport and clipping the top of the modal + the X close button.
+  // Use it with: `max-h-[calc(95vh/var(--dialog-zoom,1))]`.
   const mergedStyle: React.CSSProperties = {
     ...style,
-    ...(autoScale ? { zoom: overlayScale } : undefined),
+    ...(autoScale
+      ? ({ zoom: overlayScale, ['--dialog-zoom' as string]: String(overlayScale) } as React.CSSProperties)
+      : undefined),
   };
   const handleInteractOutside = React.useCallback(
     (event: Parameters<NonNullable<typeof onInteractOutside>>[0]) => {

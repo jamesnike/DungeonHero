@@ -9,6 +9,7 @@ import type { GameState } from '../types';
 import type { GameAction } from '../actions';
 import type { ReduceResult } from '../reducer';
 import { applyPatch } from '../reducer';
+import { filterAvailableClassPool } from '../uniqueClass';
 
 export function reduceUIStateActions(
   state: GameState,
@@ -142,9 +143,13 @@ export function reduceUIStateActions(
       if (!action.open && state.pendingClassDiscoverQueue.length > 0) {
         const [nextEntry, ...rest] = state.pendingClassDiscoverQueue;
         patch.pendingClassDiscoverQueue = rest;
+        // Filter out already-acquired unique class cards before the next
+        // queued discover sees the pool — same lock as `reduceBeginDiscover`
+        // call sites and the queue-drain in `reduceResolveDiscoverSelection`.
+        const filtered = filterAvailableClassPool(state.classDeck, state, patch);
         const nextPool = nextEntry.magicOnly
-          ? state.classDeck.filter(c => c.type === 'magic' || c.type === 'hero-magic')
-          : state.classDeck;
+          ? filtered.filter(c => c.type === 'magic' || c.type === 'hero-magic')
+          : filtered;
         enqueuedActions.push({
           type: 'BEGIN_DISCOVER',
           source: nextEntry.source,

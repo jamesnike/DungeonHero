@@ -1119,22 +1119,39 @@ function reduceMonsterDefeated(
     }
   }
 
-  // Buglet last-words heal — heal other buglets
+  // Buglet last-words heal — heal other buglets.
+  // Unified layer-heal rule:
+  //   - 未满层 → +1 层, hp 保持不变
+  //   - 满层 + hp 残血 → 不加层, hp 补满
+  //   - 满层 + 满血 → no-op
   if (monster.bugletLastWordsHeal && !monster.isStunned) {
     const cards = (patch.activeCards ?? activeCards) as ActiveRowSlots;
-    const healedNames: string[] = [];
+    const layerHealedNames: string[] = [];
+    const hpHealedNames: string[] = [];
     const next = cards.map(c => {
       if (!c || c.id === monster.id || !c.isBuglet || c.type !== 'monster') return c;
       const maxLayers = c.hpLayers ?? c.fury ?? 1;
       const curLayer = c.currentLayer ?? maxLayers;
-      if (curLayer >= maxLayers) return c;
-      healedNames.push(c.name);
-      return { ...c, currentLayer: curLayer + 1 };
+      const cardMaxHp = c.maxHp ?? c.hp ?? 0;
+      const cardHp = c.hp ?? 0;
+      if (curLayer < maxLayers) {
+        layerHealedNames.push(c.name);
+        return { ...c, currentLayer: curLayer + 1 };
+      }
+      if (cardHp < cardMaxHp) {
+        hpHealedNames.push(c.name);
+        return { ...c, hp: cardMaxHp };
+      }
+      return c;
     }) as ActiveRowSlots;
-    if (healedNames.length > 0) {
+    const totalHealed = layerHealedNames.length + hpHealedNames.length;
+    if (totalHealed > 0) {
       patch.activeCards = next as GameState['activeCards'];
-      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 遗念：${healedNames.join('、')} 恢复了1血层！` } });
-      patch.heroSkillBanner = `${monster.name} 遗念！其他小虫子恢复1血层！`;
+      const parts: string[] = [];
+      if (layerHealedNames.length > 0) parts.push(`${layerHealedNames.join('、')} 恢复了1血层`);
+      if (hpHealedNames.length > 0) parts.push(`${hpHealedNames.join('、')} 血量回满`);
+      sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 遗念：${parts.join('；')}！` } });
+      patch.heroSkillBanner = `${monster.name} 遗念！其他小虫子恢复！`;
     }
   }
 
@@ -2505,10 +2522,14 @@ function reducePerformHeroAttack(
             payload: { title: targetMonster.name, subtitle: '骸生', roll: boneRoll, threshold: 8, success: boneRoll <= 8 },
           });
           if (boneRoll <= 8) {
+            // Unified layer-heal rule: +1 layer, hp preserved. (Revival above
+            // already set hp = maxHp at line 2491-2497, so this branch's hp
+            // is effectively still maxHp; the previous explicit `hp: maxHp`
+            // assignment was redundant and is removed to align with the
+            // unified rule's syntax.)
             workingMonster = {
               ...workingMonster,
               currentLayer: (workingMonster.currentLayer ?? 0) + 1,
-              hp: workingMonster.maxHp ?? workingMonster.hp ?? 0,
             };
             sideEffects.push({
               event: 'log:entry',

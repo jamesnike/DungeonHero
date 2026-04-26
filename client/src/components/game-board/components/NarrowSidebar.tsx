@@ -36,6 +36,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
 }: NarrowSidebarProps) {
   const discardedCards = useGameState(s => s.discardedCards);
   const classDeck = useGameState(s => s.classDeck);
+  const acquiredUniqueClassCardIds = useGameState(s => s.acquiredUniqueClassCardIds);
   const backpackCount = useGameState(s => s.backpackItems.length);
   const recycleCount = useGameState(s => s.permanentMagicRecycleBag.length);
 
@@ -50,6 +51,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
           compact
           compactStyle={stripStyle}
           classCards={classDeck}
+          acquiredUniqueClassCardIds={acquiredUniqueClassCardIds}
           onCardSelect={onCardSelect}
         />
       </div>

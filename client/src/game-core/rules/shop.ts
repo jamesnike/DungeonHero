@@ -32,6 +32,7 @@ import { minionImage, createStarterHealEchoCard } from '../deck';
 import { cloneClassCardWithFreshId, sampleDistinctByName } from '../cardClone';
 import { BASE_BACKPACK_CAPACITY } from '../constants';
 import { getEffectiveHandLimit, resetCardForGraveyard } from '../cards';
+import { filterAvailableClassPool, markUniqueAcquired } from '../uniqueClass';
 import statSwapCardImage from '@assets/generated_images/knight_stat_swap_potion.png';
 
 export function reduceShopActions(state: GameState, action: GameAction): ReduceResult | null {
@@ -164,12 +165,16 @@ function reducePurchase(
     { event: 'log:entry', payload: { type: 'shop', message: `商店：购买「${result.purchasedCard.name}」（-${cost} 金币）` } },
   ];
 
-  return applyPatch(state, {
+  const purchasePatch: Partial<GameState> = {
     gold: result.gold,
     backpackItems: result.backpackItems,
     shopOfferings: result.shopOfferings,
     rng: result.rng,
-  }, sideEffects);
+  };
+  if (result.acquiredUniqueClassCardIds) {
+    purchasePatch.acquiredUniqueClassCardIds = result.acquiredUniqueClassCardIds;
+  }
+  return applyPatch(state, purchasePatch, sideEffects);
 }
 
 function reduceShopHeal(state: GameState): ReduceResult {
@@ -402,13 +407,14 @@ function reduceMonsterRewardDiscoverClass(state: GameState): ReduceResult {
     }
   }
 
-  // Try discover from class deck
-  if (state.classDeck.length > 0) {
+  // Try discover from class deck (filter out already-acquired unique cards)
+  const availableClassPool = filterAvailableClassPool(state.classDeck, state, patch);
+  if (availableClassPool.length > 0) {
     sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: '战利品：发现一张专属牌' } });
     enqueuedActions.push({
       type: 'BEGIN_DISCOVER',
       source: 'monster-reward',
-      pool: state.classDeck,
+      pool: availableClassPool,
       sourceLabel: '战利品',
       removeFromClassDeck: true,
     });
@@ -656,24 +662,7 @@ function reduceResolveDiscoverSelection(
 
   const patch: Partial<GameState> = { ...baseClose, rng: nextRng };
   const sideEffects: SideEffect[] = [];
-  // Drain one pending class-discover from the queue so multi-discover
-  // effects (e.g. 弃装重铸) keep flowing — mirrors the SET_DISCOVER_MODAL
-  // close path.
   const enqueuedActions: GameAction[] = [];
-  if (state.pendingClassDiscoverQueue.length > 0) {
-    const [nextEntry, ...rest] = state.pendingClassDiscoverQueue;
-    patch.pendingClassDiscoverQueue = rest;
-    const nextPool = nextEntry.magicOnly
-      ? state.classDeck.filter(c => c.type === 'magic' || c.type === 'hero-magic')
-      : state.classDeck;
-    enqueuedActions.push({
-      type: 'BEGIN_DISCOVER',
-      source: nextEntry.source,
-      pool: nextPool,
-      sourceLabel: nextEntry.sourceLabel ?? undefined,
-      delivery: nextEntry.delivery,
-    });
-  }
 
   if (wantsHandFirst && handHasRoom) {
     patch.handCards = [...state.handCards, cloned];
@@ -706,6 +695,33 @@ function reduceResolveDiscoverSelection(
       { event: 'log:entry', payload: { type: 'skill', message: `发现专属卡：「${cloned.name}」进入回收袋（背包已满）` } },
       { event: 'shop:classCardObtained', payload: { card: cloned, source: 'discover', destination: 'recycle-bag' } },
     );
+  }
+
+  // Lock the unique card BEFORE the queue-drain block below so the
+  // filtered pool that gets enqueued for the next BEGIN_DISCOVER excludes
+  // the card the player just acquired in the previous discover step.
+  markUniqueAcquired(cloned, state, patch);
+
+  // Drain one pending class-discover from the queue so multi-discover
+  // effects (e.g. 弃装重铸) keep flowing — mirrors the SET_DISCOVER_MODAL
+  // close path.
+  if (state.pendingClassDiscoverQueue.length > 0) {
+    const [nextEntry, ...rest] = state.pendingClassDiscoverQueue;
+    patch.pendingClassDiscoverQueue = rest;
+    // Filter out already-acquired unique cards (including the one we just
+    // marked in this same patch via markUniqueAcquired above) before the
+    // next discover sees the pool.
+    const filtered = filterAvailableClassPool(state.classDeck, state, patch);
+    const nextPool = nextEntry.magicOnly
+      ? filtered.filter(c => c.type === 'magic' || c.type === 'hero-magic')
+      : filtered;
+    enqueuedActions.push({
+      type: 'BEGIN_DISCOVER',
+      source: nextEntry.source,
+      pool: nextPool,
+      sourceLabel: nextEntry.sourceLabel ?? undefined,
+      delivery: nextEntry.delivery,
+    });
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);

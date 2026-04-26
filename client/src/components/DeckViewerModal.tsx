@@ -127,7 +127,7 @@ export default function DeckViewerModal({ open, onOpenChange, remainingCards, on
               <div key={type} className="space-y-3">
                 <div className="flex items-center gap-2">
                   {getIcon(type)}
-                  <h3 className="font-semibold">{getTypeLabel(type)}</h3>
+                  <h3 className="font-semibold text-white">{getTypeLabel(type)}</h3>
                   <Badge variant="outline" className="font-mono">
                     {cards.length}
                   </Badge>

@@ -37,6 +37,7 @@ import dedupeStarterMagicMissileImage from '@assets/generated_images/card_dedupe
 import type { RngState } from './rng';
 import { nextRandom, nextInt, shuffle as rngShuffle, pickRandom, nextId } from './rng';
 import { cloneClassCardWithFreshId, cloneClassCardsWithFreshIds, sampleDistinctByName } from './cardClone';
+import { filterAvailableClassPool, markUniqueAcquired, markManyUniqueAcquired } from './uniqueClass';
 
 // ---------------------------------------------------------------------------
 // Evaluate choice requirements
@@ -1426,7 +1427,8 @@ export function applySimpleEffect(
     }
 
   } else if (effectToken === 'equipKnight') {
-    const equipmentCards = state.classDeck.filter(c => c.type === 'weapon' || c.type === 'shield');
+    const availableClassPool = filterAvailableClassPool(state.classDeck, state, patch);
+    const equipmentCards = availableClassPool.filter(c => c.type === 'weapon' || c.type === 'shield');
     if (equipmentCards.length > 0) {
       // Class deck is an infinite template — pick a random equipment, then
       // clone it with a fresh id so the player gets a unique copy without
@@ -1435,8 +1437,10 @@ export function applySimpleEffect(
       const [equipment, rngAfterClone] = cloneClassCardWithFreshId(original, rngAfterPick);
       if (!state.equipmentSlot1) {
         patch.equipmentSlot1 = { ...equipment } as EquipmentItem;
+        markUniqueAcquired(equipment, state, patch);
       } else if (!state.equipmentSlot2) {
         patch.equipmentSlot2 = { ...equipment } as EquipmentItem;
+        markUniqueAcquired(equipment, state, patch);
       }
       patch.rng = rngAfterClone;
       patch.heroSkillBanner = `随机装备了 ${equipment.name}！`;
@@ -1676,16 +1680,18 @@ export function applySimpleEffect(
 
   } else if (effectToken.startsWith('drawClassToHand:')) {
     const count = parseInt(effectToken.replace('drawClassToHand:', ''), 10) || 2;
-    if (state.classDeck.length === 0) {
+    const availableClassPool = filterAvailableClassPool(state.classDeck, state, patch);
+    if (availableClassPool.length === 0) {
       patch.heroSkillBanner = '专属牌堆已空，无法抽取。';
       logs.push({ type: 'event', message: '专属牌堆已空' });
     } else {
       // Class deck is an infinite template; sample distinct-by-name candidates
       // and clone them with fresh ids so the pool is not consumed.
-      const [sampled, rngAfterSample] = sampleDistinctByName(state.classDeck, count, state.rng, rngShuffle);
+      const [sampled, rngAfterSample] = sampleDistinctByName(availableClassPool, count, state.rng, rngShuffle);
       const [drawn, rngAfterClone] = cloneClassCardsWithFreshIds(sampled, rngAfterSample);
       patch.rng = rngAfterClone;
       patch.handCards = [...state.handCards, ...drawn];
+      markManyUniqueAcquired(drawn, state, patch);
       patch.heroSkillBanner = `获得了 ${drawn.map(c => c.name).join('、')}！`;
       logs.push({ type: 'event', message: `${drawn.length} 张专属牌直接加入手牌` });
     }
@@ -1693,9 +1699,10 @@ export function applySimpleEffect(
   } else if (effectToken === 'drawClassHeroMagic:1') {
     // Class deck is an infinite template; pick (don't remove) and clone with
     // a fresh id so the player gets a unique copy.
-    const heroMagicCards = state.classDeck.filter(c => c.type === 'hero-magic');
+    const availableClassPool = filterAvailableClassPool(state.classDeck, state, patch);
+    const heroMagicCards = availableClassPool.filter(c => c.type === 'hero-magic');
     const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
-    const sourcePool = heroMagicCards.length > 0 ? heroMagicCards : state.classDeck;
+    const sourcePool = heroMagicCards.length > 0 ? heroMagicCards : availableClassPool;
     if (sourcePool.length > 0) {
       const original = sourcePool[0];
       const [drawn, rngAfterClone] = cloneClassCardWithFreshId(original, state.rng);
@@ -1705,6 +1712,7 @@ export function applySimpleEffect(
       } else {
         patch.permanentMagicRecycleBag = [...state.permanentMagicRecycleBag, { ...drawn, _recycleWaits: drawn.recycleDelay ?? 1 }];
       }
+      markUniqueAcquired(drawn, state, patch);
       if (heroMagicCards.length > 0) {
         patch.heroSkillBanner = '获得了英雄魔法卡！';
         logs.push({ type: 'event', message: `获得 1 张英雄魔法` });
@@ -1756,11 +1764,10 @@ export function applySimpleEffect(
       name: '回收轮转',
       value: 0,
       image: skillScrollImage,
-      magicType: 'permanent',
+      magicType: 'instant',
       magicEffect: 'guild-recycle-reshuffle',
-      description: '永久魔法（Perm 1）：回收袋洗回背包（所有牌剩余瀑流 -1），抽 1 张牌。',
+      description: '即时魔法：回收袋洗回背包（所有牌剩余瀑流 -1），抽 1 张牌。',
       shortDescription: '回收袋全部洗回背包；抽 1 张',
-      recycleDelay: 1,
     };
     const bpCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
     const currentBp = patch.backpackItems ?? state.backpackItems;
@@ -2223,11 +2230,12 @@ export function applySimpleEffect(
     effectToken === 'drawSkill' || effectToken === 'drawEquipment' || effectToken === 'grantRandomClassShield'
   ) {
     const drawDef = getDrawTokenDefinition(effectToken);
-    if (state.classDeck.length === 0) {
+    const availableClassPool = filterAvailableClassPool(state.classDeck, state, patch);
+    if (availableClassPool.length === 0) {
       patch.heroSkillBanner = '专属牌堆已空，无法抽取。';
       logs.push({ type: 'event', message: '专属牌堆已空' });
     } else {
-      const filtered = drawDef.filter ? state.classDeck.filter(drawDef.filter) : state.classDeck;
+      const filtered = drawDef.filter ? availableClassPool.filter(drawDef.filter) : availableClassPool;
       if (filtered.length === 0) {
         patch.heroSkillBanner = drawDef.emptyMessage ?? '专属牌堆中没有符合条件的牌。';
         logs.push({ type: 'event', message: drawDef.emptyMessage ?? '专属牌堆中没有符合条件的牌' });
@@ -2249,6 +2257,7 @@ export function applySimpleEffect(
           const currentRecycle = patch.permanentMagicRecycleBag ?? state.permanentMagicRecycleBag;
           patch.permanentMagicRecycleBag = [...currentRecycle, ...overflow.map(c => ({ ...c, _recycleWaits: c.recycleDelay ?? 1 }))];
         }
+        markManyUniqueAcquired(drawn, state, patch);
         patch.heroSkillBanner = drawn.length > 0 ? `获得了 ${drawn.map(c => c.name).join('、')}！` : drawDef.emptyMessage ?? '无牌可抽。';
         logs.push({ type: 'event', message: `事件效果：抽取 ${drawn.length} 张${drawDef.label}` });
         emitEvents.push({ event: 'event:classDeckDrawn', payload: { cards: drawn as any, source: effectToken } });
@@ -2259,7 +2268,7 @@ export function applySimpleEffect(
 
   } else if (effectToken.startsWith('classBottom+')) {
     const count = parseInt(effectToken.replace('classBottom+', ''), 10) || 2;
-    const { patch: cbPatch, cards, logs: cbLogs } = gainClassDeckBottomCardsPure(state, count);
+    const { patch: cbPatch, cards, logs: cbLogs } = gainClassDeckBottomCardsPure(state, count, patch);
     Object.assign(patch, cbPatch);
     logs.push(...cbLogs);
     if (cards.length > 0) {
@@ -2364,7 +2373,8 @@ export function applySimpleEffect(
       const discardIds = new Set(equipInHand.map(c => c.id));
       patch.handCards = state.handCards.filter(c => !discardIds.has(c.id));
       patch.discardedCards = [...state.discardedCards, ...equipInHand];
-      const classEquip = state.classDeck.filter(c => c.type === 'weapon' || c.type === 'shield');
+      const availableClassPool = filterAvailableClassPool(state.classDeck, state, patch);
+      const classEquip = availableClassPool.filter(c => c.type === 'weapon' || c.type === 'shield');
       if (classEquip.length > 0) {
         // Class deck is an infinite template; sample distinct-by-name and clone.
         const [sampled, rngAfterSample] = sampleDistinctByName(classEquip, equipInHand.length, state.rng, rngShuffle);
@@ -2377,6 +2387,7 @@ export function applySimpleEffect(
         if (toBackpack.length > 0) {
           patch.backpackItems = [...currentBp, ...toBackpack];
         }
+        markManyUniqueAcquired(toBackpack, state, patch);
         patch.heroSkillBanner = `弃置了 ${equipInHand.map(c => c.name).join('、')}，获得 ${drawn.length} 张专属装备！`;
         logs.push({ type: 'event', message: `事件效果：弃置 ${equipInHand.length} 张手牌装备，获得 ${drawn.length} 张专属装备` });
         emitEvents.push({ event: 'event:classDeckDrawn', payload: { cards: drawn as any, source: 'discardHandEquipForClassEquip' } });
@@ -2528,6 +2539,7 @@ export function applySimpleEffect(
 export function gainClassDeckBottomCardsPure(
   state: GameState,
   count: number,
+  inflightPatch?: Partial<GameState>,
 ): { patch: Partial<GameState>; cards: GameCardData[]; logs: Array<{ type: string; message: string }> } {
   const logs: Array<{ type: string; message: string }> = [];
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
@@ -2539,14 +2551,20 @@ export function gainClassDeckBottomCardsPure(
   if (availableSlots <= 0) {
     return { patch: {}, cards: [], logs };
   }
-  const takeCount = Math.min(count, availableSlots, state.classDeck.length);
+  // Filter unique-locked cards out **before** slicing so the bottom slice walks
+  // earlier into the deck instead of returning a silently-shorter slice.
+  const availableClassPool = filterAvailableClassPool(state.classDeck, state, inflightPatch);
+  if (availableClassPool.length === 0) {
+    return { patch: {}, cards: [], logs };
+  }
+  const takeCount = Math.min(count, availableSlots, availableClassPool.length);
   if (takeCount <= 0) {
     return { patch: {}, cards: [], logs };
   }
 
   // Class deck is an infinite template — clone the bottom slice with fresh
   // ids instead of removing them from the pool.
-  const sampled = state.classDeck.slice(-takeCount);
+  const sampled = availableClassPool.slice(-takeCount);
   const [cards, rngAfterClone] = cloneClassCardsWithFreshIds(sampled, state.rng);
   const merged = [...cards, ...state.backpackItems];
 
@@ -2566,12 +2584,17 @@ export function gainClassDeckBottomCardsPure(
 
   logs.push({ type: 'skill', message: `从职业牌组底部获得 ${takeCount} 张牌：${cards.map(c => c.name).join('、')}` });
 
+  const outPatch: Partial<GameState> = {
+    rng: rngAfterClone,
+    backpackItems: newBackpackItems,
+    permanentMagicRecycleBag: newRecycleBag,
+  };
+  // Mark unique-tagged cards as acquired so subsequent class-pool sampling
+  // (within the same reduce step or later in the run) excludes them.
+  markManyUniqueAcquired(cards, state, outPatch);
+
   return {
-    patch: {
-      rng: rngAfterClone,
-      backpackItems: newBackpackItems,
-      permanentMagicRecycleBag: newRecycleBag,
-    },
+    patch: outPatch,
     cards,
     logs,
   };

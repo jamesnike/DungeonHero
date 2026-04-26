@@ -260,8 +260,8 @@ export default function BackpackViewerModal({
             )}
             {recycleBagCards.length > 0 && (
               <div className="space-y-2 border-t border-border/40 pt-3">
-                <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-                  <div className="font-semibold text-foreground">
+                <div className="flex flex-col gap-1 text-sm text-white/70">
+                  <div className="font-semibold text-white">
                     {t('modal.backpackViewer.recycleSectionTitle', { count: recycleBagCards.length })}
                   </div>
                   <p>{t('modal.backpackViewer.recycleSectionHint')}</p>

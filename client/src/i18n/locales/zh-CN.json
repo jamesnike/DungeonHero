@@ -360,6 +360,10 @@
       "knightDeck": "骑士牌库",
       "view": "查看",
       "browse": "浏览"
+    },
+    "unique": {
+      "label": "唯一",
+      "acquired": "已获得"
     }
   },
   "modal": {
@@ -432,6 +436,9 @@
     "cardDetails": {
       "monsterEquipmentTag": "怪物装备",
       "knightClassTag": "KNIGHT CLASS",
+      "uniqueTag": "唯一",
+      "uniqueAcquired": "唯一 · 已获得",
+      "uniqueTooltip": "唯一卡。本局获得过一次后，将不再出现。",
       "upgradeMaxed": "已满级 (Lv.{{current}}/{{max}})",
       "upgradeAvailable": "可升级 (Lv.{{current}}/{{max}})",
       "rewardSectionTitle": "击败奖励（二选一）",
@@ -534,7 +541,7 @@
       "desc_flankDamageGrant": "选择一张手牌赋予「侧击：对随机怪物造成 5 点伤害」（任何类型的牌均可）",
       "desc_transformDrawGrant": "选择一张手牌赋予「转型：抽 2 张牌」（任何类型的牌均可）",
       "desc_transformHealGrant": "选择一张手牌赋予「转型：恢复 2 HP」（任何类型的牌均可）",
-      "desc_transformRecycleGrant": "选择一张手牌赋予「转型：回收袋取回 1 张牌」",
+      "desc_transformRecycleGrant": "选择一张手牌赋予「转型：弃 1 张手牌，从回收袋随机取 1 张到手牌」",
       "desc_amuletPermGrant": "选择一个已装备的护符，赋予 Perm 2（被移除后经 2 次瀑流返回背包）",
       "desc_onHandStunCapGrant": "选择一张手牌，永久赋予「上手：击晕上限 +3%」（每次进入手牌触发，已带其它上手词条的卡不可选）",
       "desc_onHandHealGrant": "选择一张手牌，永久赋予「上手：恢复 1 HP」（每次进入手牌触发，已带其它上手词条的卡不可选）",

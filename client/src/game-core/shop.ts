@@ -9,6 +9,8 @@ import type { EquipmentSlotBonusState, HeroSkillId, HeroSkillDefinition } from '
 import type { RngState } from './rng';
 import { nextInt, shuffle as rngShuffle } from './rng';
 import { cloneClassCardWithFreshId } from './cardClone';
+import { filterAvailableClassPool, isUniqueLocked, markUniqueAcquired } from './uniqueClass';
+import { getStarterBaseId } from './deck';
 import {
   SHOP_MAX_OFFERINGS,
   SHOP_REQUIRED_TYPES,
@@ -78,6 +80,7 @@ export interface PurchaseResult {
   shopOfferings: ShopOffering[];
   purchasedCard: GameCardData;
   rng: RngState;
+  acquiredUniqueClassCardIds?: string[];
 }
 
 /**
@@ -85,6 +88,11 @@ export interface PurchaseResult {
  * the bought card is *cloned* with a fresh id and placed into the backpack;
  * `state.classDeck` is unchanged. The shop slot is marked `sold` to prevent
  * re-purchase of the same offering instance.
+ *
+ * Unique-locked offerings (already acquired earlier this run via discover /
+ * draws / events) are non-purchasable: returns null. The offering itself is
+ * left visible so the player can see *why* it's unavailable; the UI is
+ * responsible for rendering the lock badge.
  */
 export function purchaseFromShopPure(
   state: GameState,
@@ -95,18 +103,36 @@ export function purchaseFromShopPure(
   if (!offering || offering.sold) return null;
   if (state.gold < offering.price) return null;
 
+  // Unique-lock guard: an offering whose base id was already acquired this run
+  // cannot be re-purchased even if the shop slot is still on display.
+  const acquiredSet = new Set(state.acquiredUniqueClassCardIds ?? []);
+  if (isUniqueLocked(offering.card, acquiredSet)) return null;
+
   const [purchasedCard, nextRng] = cloneClassCardWithFreshId(offering.card, state.rng);
   const newOfferings = state.shopOfferings.map((o, i) =>
     i === offeringIndex ? { ...o, sold: true } : o,
   );
 
-  return {
+  const result: PurchaseResult = {
     gold: state.gold - offering.price,
     backpackItems: [purchasedCard, ...state.backpackItems],
     shopOfferings: newOfferings,
     purchasedCard,
     rng: nextRng,
   };
+
+  // If this purchase grants a unique-tagged card, record its base id so all
+  // future class-pool sampling paths exclude it (and any other shop offerings
+  // displaying the same base id become non-purchasable).
+  if (purchasedCard.unique === true) {
+    const baseId = getStarterBaseId(purchasedCard.id);
+    const existing = state.acquiredUniqueClassCardIds ?? [];
+    if (!existing.includes(baseId)) {
+      result.acquiredUniqueClassCardIds = [...existing, baseId];
+    }
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +176,8 @@ export function shopSkillDiscoverPure(state: GameState): Partial<GameState> | nu
 // ---------------------------------------------------------------------------
 
 export function openShopPure(state: GameState, rng: RngState): [Partial<GameState>, RngState] {
-  const [offerings, nextRng] = generateShopOfferingsPure(state.classDeck, state.shopLevel, rng);
+  const availableClassPool = filterAvailableClassPool(state.classDeck, state);
+  const [offerings, nextRng] = generateShopOfferingsPure(availableClassPool, state.shopLevel, rng);
   return [{
     shopOfferings: offerings,
     shopDeleteUsed: false,
@@ -168,7 +195,8 @@ export function shopRefreshPure(
   rng: RngState,
 ): [Partial<GameState>, RngState] | null {
   if (state.shopRefreshUsed || state.gold < SHOP_REFRESH_COST) return null;
-  const [offerings, nextRng] = generateShopOfferingsPure(state.classDeck, state.shopLevel, rng);
+  const availableClassPool = filterAvailableClassPool(state.classDeck, state);
+  const [offerings, nextRng] = generateShopOfferingsPure(availableClassPool, state.shopLevel, rng);
   return [{
     gold: state.gold - SHOP_REFRESH_COST,
     shopOfferings: offerings,

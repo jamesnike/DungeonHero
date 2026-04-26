@@ -388,6 +388,7 @@ function GameBoardModalsInner({
     permanentSpellDamageBonus: s.permanentSpellDamageBonus,
     permanentSpellLifesteal: s.permanentSpellLifesteal,
     stunCap: s.stunCap,
+    acquiredUniqueClassCardIds: s.acquiredUniqueClassCardIds,
   }));
 
   const { deathWardPrompt, gameOver, victory, gold, hp, remainingDeck, backpackItems, permanentMagicRecycleBag,
@@ -412,6 +413,7 @@ function GameBoardModalsInner({
     tempShield, weaponMasterBonus, shieldMasterBonus, defensiveStanceActive,
     bulwarkPassiveActive, bulwarkTempArmorStacks, eternalRelics,
     permanentMaxHpBonus, permanentSpellDamageBonus, permanentSpellLifesteal, stunCap,
+    acquiredUniqueClassCardIds,
   } = _gs;
 
   const currentTurn = turnCount;
@@ -776,6 +778,7 @@ function GameBoardModalsInner({
         currentTurn={currentTurn}
         monsterRewards={_monsterRewardPreview ?? undefined}
         isQuickMode={isQuickMode}
+        acquiredUniqueClassCardIds={acquiredUniqueClassCardIds}
       />
 
       <HeroDetailsModal

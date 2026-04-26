@@ -367,7 +367,7 @@ export default function GameBoard() {
     equipmentSlotCapacity,
     amuletSlots, maxAmuletSlots,
     backpackItems, backpackCapacityModifier,
-    classDeck,
+    classDeck, acquiredUniqueClassCardIds,
     heroVariant, selectedHeroSkill,
     extraHeroSkills, extraSkillsUsedThisWave,
     permanentSkills, permanentMaxHpBonus, permanentSpellDamageBonus,
@@ -410,6 +410,7 @@ export default function GameBoard() {
     backpackItems: s.backpackItems,
     backpackCapacityModifier: s.backpackCapacityModifier,
     classDeck: s.classDeck,
+    acquiredUniqueClassCardIds: s.acquiredUniqueClassCardIds,
     heroVariant: s.heroVariant, selectedHeroSkill: s.selectedHeroSkill,
     extraHeroSkills: s.extraHeroSkills, extraSkillsUsedThisWave: s.extraSkillsUsedThisWave,
     permanentSkills: s.permanentSkills, permanentMaxHpBonus: s.permanentMaxHpBonus,
@@ -4226,6 +4227,9 @@ export default function GameBoard() {
       stunAttemptDiscoverProgress: snapshot.stunAttemptDiscoverProgress ?? 0,
       flipDebuffMonsterId: snapshot.flipDebuffMonsterId ?? null,
       bugletAmuletObtained: Boolean(snapshot.bugletAmuletObtained),
+      acquiredUniqueClassCardIds: Array.isArray((snapshot as any).acquiredUniqueClassCardIds)
+        ? ((snapshot as any).acquiredUniqueClassCardIds as string[])
+        : [],
       totalDamageTaken: snapshot.totalDamageTaken ?? 0,
       totalHealed: snapshot.totalHealed ?? 0,
       healAccumulator: snapshot.healAccumulator ?? 0,
@@ -8659,6 +8663,7 @@ export default function GameBoard() {
               <div className={`${cellInnerClass} bg-card-foreground/5 rounded-lg`} ref={setClassDeckCellRef}>
                 <ClassDeck
                   classCards={classDeck}
+                  acquiredUniqueClassCardIds={acquiredUniqueClassCardIds}
                   className="w-full h-full"
                   onCardSelect={handleCardClick}
                 />

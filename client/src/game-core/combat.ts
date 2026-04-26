@@ -328,37 +328,73 @@ export function endHeroTurnPatch(
     if (idx < 0) return;
 
     if (monster.eliteRegenHeroTurn && !monster.isStunned && !heroTurnLayerLossIds.has(monster.id)) {
+      // Unified layer-heal rule: layer change preserves hp; if already at max
+      // layers, fall back to refilling hp (so the skill still does something
+      // meaningful for a damaged-but-full-layer monster).
       const currentLayer = monster.currentLayer ?? monster.fury ?? 1;
       const maxLayers = monster.fury ?? monster.hpLayers ?? 1;
+      const maxHp = monster.maxHp ?? monster.hp ?? 0;
+      const currentHp = monster.hp ?? 0;
       if (currentLayer < maxLayers) {
         const restoredLayer = currentLayer + 1;
         newActiveCards[idx] = {
           ...monster,
           currentLayer: restoredLayer,
-          hp: monster.maxHp ?? monster.hp ?? 0,
+          // hp preserved on layer gain
         };
         skillFloats.push({ monsterId: monster.id, skillKey: 'heroTurnEnd:eliteRegen' });
         logs.push({ type: 'combat', message: `${monster.name} 未受到血层伤害，恢复了一个血层！当前 ${restoredLayer} 层。` });
         return;
       }
+      if (currentHp < maxHp) {
+        newActiveCards[idx] = {
+          ...monster,
+          hp: maxHp,
+        };
+        skillFloats.push({ monsterId: monster.id, skillKey: 'heroTurnEnd:eliteRegen' });
+        logs.push({ type: 'combat', message: `${monster.name} 未受到血层伤害，血量回满！` });
+        return;
+      }
+      // currentLayer >= maxLayers and hp == maxHp → no-op (skip)
     }
 
     if (monster.eliteHealOtherMonster && !monster.isStunned && !heroTurnLayerLossIds.has(monster.id)) {
+      // Unified layer-heal rule: candidates include both "未满层"（可加层 hp 不变）
+      // and "满层但残血"（不加层、改成补满 hp）. Targets at full layer + full hp
+      // are excluded since the skill would have nothing to do.
       const otherMonsters = newActiveCards
         .map((c, i) => ({ card: c, index: i }))
-        .filter(({ card }) => card && card.type === 'monster' && card.id !== monster.id && (card.currentLayer ?? card.fury ?? 1) < (card.fury ?? card.hpLayers ?? 1));
+        .filter(({ card }) => {
+          if (!card || card.type !== 'monster' || card.id === monster.id) return false;
+          const layers = card.currentLayer ?? card.fury ?? 1;
+          const maxLayers = card.fury ?? card.hpLayers ?? 1;
+          const cardMaxHp = card.maxHp ?? card.hp ?? 0;
+          const cardHp = card.hp ?? 0;
+          return layers < maxLayers || cardHp < cardMaxHp;
+        });
       if (otherMonsters.length > 0) {
         const [target, nextRng] = pickRandom(otherMonsters, rng);
         rng = nextRng;
         const targetCard = target.card!;
-        const targetLayer = (targetCard.currentLayer ?? targetCard.fury ?? 1) + 1;
-        newActiveCards[target.index] = {
-          ...targetCard,
-          currentLayer: targetLayer,
-          hp: targetCard.maxHp ?? targetCard.hp ?? 0,
-        };
+        const targetLayers = targetCard.currentLayer ?? targetCard.fury ?? 1;
+        const targetMaxLayers = targetCard.fury ?? targetCard.hpLayers ?? 1;
+        const canHealLayer = targetLayers < targetMaxLayers;
+        if (canHealLayer) {
+          const restoredLayer = targetLayers + 1;
+          newActiveCards[target.index] = {
+            ...targetCard,
+            currentLayer: restoredLayer,
+            // hp preserved on layer gain
+          };
+          logs.push({ type: 'combat', message: `${monster.name} 庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${restoredLayer} 层。` });
+        } else {
+          newActiveCards[target.index] = {
+            ...targetCard,
+            hp: targetCard.maxHp ?? targetCard.hp ?? 0,
+          };
+          logs.push({ type: 'combat', message: `${monster.name} 庇护：为 ${targetCard.name} 回满血量！` });
+        }
         skillFloats.push({ monsterId: monster.id, skillKey: 'heroTurnEnd:eliteHealOther' });
-        logs.push({ type: 'combat', message: `${monster.name} 庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
         return;
       }
     }
@@ -378,21 +414,41 @@ export function endHeroTurnPatch(
   nonEngagedDragons.forEach(dragon => {
     const idx = newActiveCards.findIndex(c => c?.id === dragon.id);
     if (idx < 0) return;
+    // Mirrors the engaged-branch unified rule: 未满层（可加层 hp 不变）or
+    // 满层残血（改成补满 hp）都是合法目标; 满层满血 跳过.
     const otherMonsters = newActiveCards
       .map((c, i) => ({ card: c, index: i }))
-      .filter(({ card }) => card && card.type === 'monster' && card.id !== dragon.id && (card.currentLayer ?? card.fury ?? 1) < (card.fury ?? card.hpLayers ?? 1));
+      .filter(({ card }) => {
+        if (!card || card.type !== 'monster' || card.id === dragon.id) return false;
+        const layers = card.currentLayer ?? card.fury ?? 1;
+        const maxLayers = card.fury ?? card.hpLayers ?? 1;
+        const cardMaxHp = card.maxHp ?? card.hp ?? 0;
+        const cardHp = card.hp ?? 0;
+        return layers < maxLayers || cardHp < cardMaxHp;
+      });
     if (otherMonsters.length > 0) {
       const [target, nextRng] = pickRandom(otherMonsters, rng);
       rng = nextRng;
       const targetCard = target.card!;
-      const targetLayer = (targetCard.currentLayer ?? targetCard.fury ?? 1) + 1;
-      newActiveCards[target.index] = {
-        ...targetCard,
-        currentLayer: targetLayer,
-        hp: targetCard.maxHp ?? targetCard.hp ?? 0,
-      };
+      const targetLayers = targetCard.currentLayer ?? targetCard.fury ?? 1;
+      const targetMaxLayers = targetCard.fury ?? targetCard.hpLayers ?? 1;
+      const canHealLayer = targetLayers < targetMaxLayers;
+      if (canHealLayer) {
+        const restoredLayer = targetLayers + 1;
+        newActiveCards[target.index] = {
+          ...targetCard,
+          currentLayer: restoredLayer,
+          // hp preserved on layer gain
+        };
+        logs.push({ type: 'combat', message: `${dragon.name} 庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${restoredLayer} 层。` });
+      } else {
+        newActiveCards[target.index] = {
+          ...targetCard,
+          hp: targetCard.maxHp ?? targetCard.hp ?? 0,
+        };
+        logs.push({ type: 'combat', message: `${dragon.name} 庇护：为 ${targetCard.name} 回满血量！` });
+      }
       skillFloats.push({ monsterId: dragon.id, skillKey: 'heroTurnEnd:eliteHealOther' });
-      logs.push({ type: 'combat', message: `${dragon.name} 庇护：为 ${targetCard.name} 恢复了一个血层！当前 ${targetLayer} 层。` });
     }
   });
 
@@ -970,7 +1026,9 @@ export function applyMonsterTurnEndEffects(
     return updated !== card ? updated : card;
   });
 
-  // Boss last-stand aura: when an engaged boss has 1 layer, ALL row monsters get +5 atk & +1 layer (heal to full HP).
+  // Boss last-stand aura: when an engaged boss has 1 layer, ALL row monsters get +5 atk.
+  // Layer/HP heal follows the unified rule: 未满层 → +1 层 hp 不变; 满层 → 补满 hp.
+  // (+5 atk applies unconditionally to all row monsters regardless of heal branch.)
   const lastStandBoss = activeCards.find(c =>
     c && c.type === 'monster' && !c.isStunned && c.bossLastStandAura
       && engagedMonsterIds.includes(c.id) && (c.currentLayer ?? 1) === 1,
@@ -984,15 +1042,34 @@ export function applyMonsterTurnEndEffects(
       const maxLayers = card.fury ?? card.hpLayers ?? 1;
       const currentLayer = card.currentLayer ?? 1;
       const canHealLayer = currentLayer < maxLayers;
-      const newLayer = canHealLayer ? currentLayer + 1 : currentLayer;
-      const fullHp = card.maxHp ?? card.hp ?? 0;
+      const maxHp = card.maxHp ?? card.hp ?? 0;
+      const currentHp = card.hp ?? 0;
       boostedNames.push(card.name);
+      if (canHealLayer) {
+        // +1 层, hp 保持不变
+        return {
+          ...card,
+          attack: newAttack,
+          value: newValue,
+          currentLayer: currentLayer + 1,
+          tempAttackBoost: (card.tempAttackBoost ?? 0) + 5,
+        };
+      }
+      if (currentHp < maxHp) {
+        // 满层但残血 → 补满 hp
+        return {
+          ...card,
+          attack: newAttack,
+          value: newValue,
+          hp: maxHp,
+          tempAttackBoost: (card.tempAttackBoost ?? 0) + 5,
+        };
+      }
+      // 满层 + 满血 → 只加攻
       return {
         ...card,
         attack: newAttack,
         value: newValue,
-        hp: fullHp,
-        currentLayer: newLayer,
         tempAttackBoost: (card.tempAttackBoost ?? 0) + 5,
       };
     });
@@ -1001,8 +1078,8 @@ export function applyMonsterTurnEndEffects(
       // One float on the boss who emits the aura — not per-affected monster,
       // since the aura is conceptually a single skill firing on the boss.
       skillFloats.push({ monsterId: lastStandBoss.id, skillKey: 'turnEnd:bossLastStandAura' });
-      logs.push({ type: 'combat', message: `${lastStandBoss.name} 暴走：激活行所有怪物攻击 +5，恢复 1 血层！（${boostedNames.join('、')}）` });
-      banners.push(`${lastStandBoss.name} 暴走！全体怪物 +5 攻击，恢复 1 血层！`);
+      logs.push({ type: 'combat', message: `${lastStandBoss.name} 暴走：激活行所有怪物攻击 +5，并恢复血量/血层！（${boostedNames.join('、')}）` });
+      banners.push(`${lastStandBoss.name} 暴走！全体怪物 +5 攻击！`);
     }
   }
 

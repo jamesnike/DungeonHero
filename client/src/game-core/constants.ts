@@ -190,6 +190,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   stunRateBoost: 0,
   stunGoldCount: 0,
   deleteDrawCount: 0,
+  lastWordsExtraTriggerCount: 0,
 });
 
 // ---------------------------------------------------------------------------

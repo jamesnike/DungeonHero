@@ -258,6 +258,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'end-turn-draw': effects.endTurnDrawCount += 1; break;
       case 'stun-gold': effects.stunGoldCount += 1; break;
       case 'delete-draw': effects.deleteDrawCount += 1; break;
+      case 'last-words-extra-trigger': effects.lastWordsExtraTriggerCount += 1; break;
       // The following amulets are checked via direct amuletSlots.find/filter(...)
       // in their reducers; no aggregated count needed. Cases are listed for
       // documentation / completeness so they are recognised registered effects.

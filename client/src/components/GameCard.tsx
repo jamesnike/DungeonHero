@@ -185,7 +185,8 @@ export type AmuletEffectId =
   | 'equip-amulet-cap'
   | 'stun-attempt-discover'
   | 'persuade-on-flip'
-  | 'delete-draw';
+  | 'delete-draw'
+  | 'last-words-extra-trigger';
 
 export type AmuletAuraBonus = {
   attack?: number;
@@ -246,6 +247,15 @@ export interface GameCardData {
   name: string;
   value: number;
   image?: string;
+  /**
+   * Marks a class-pool card as "唯一" (unique). Once a player actually obtains
+   * such a card (lands in hand / backpack / equipment / amulet / recycle bag),
+   * it is filtered from every future class-pool sampling path for the rest of
+   * the run. Per-run lock; not persisted across runs. See
+   * `client/src/game-core/uniqueClass.ts` for the lock helpers and
+   * `acquiredUniqueClassCardIds` in `GameState`.
+   */
+  unique?: true;
   effect?: 'health' | 'attack' | 'defense'; // Legacy amulet bonuses
   amuletEffect?: AmuletEffectId;
   amuletAuraBonus?: AmuletAuraBonus;

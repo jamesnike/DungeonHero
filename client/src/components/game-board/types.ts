@@ -666,7 +666,8 @@ export type HandDiscardSelectionState = {
     | 'altar-discover' // 祭坛秘术：弃 N 张到坟场 → 发现专属魔法卡
     | 'class-summon' // 专属召唤：弃 N 张到坟场 → 抽 1 张职业专属卡到背包
     | 'echo-bag' // 回响行囊：弃 N 张到坟场 → 坟场发现 → 背包补抽
-    | 'discard-empower'; // 噬血砺锋：弃 1 张到坟场 → 装备攻击 +2 / 吸血
+    | 'discard-empower' // 噬血砺锋：弃 1 张到坟场 → 装备攻击 +2 / 吸血
+    | 'transform-discard-recycle'; // 唤回秘药·转型：弃 1 张手牌 → 回收袋随机取 1 张到手牌
   /** 必须选择的张数（严格相等才允许确认）。 */
   count: number;
   /** 触发该流程的源卡牌（魔法卡 id；技能时为 null）；用于把它从候选列表中过滤掉。 */
@@ -707,6 +708,13 @@ export type HandDiscardContinuation =
   | {
       kind: 'discard-empower';
       skillId: string;
+    }
+  | {
+      kind: 'transform-discard-recycle';
+      /** 触发转型的源手牌（弃前快照），用于 banner / 防止误抽自己。 */
+      cardSnapshot: GameCardData;
+      /** 从回收袋抽到手牌的数量（默认 1）。 */
+      recycleDrawCount: number;
     };
 
 /** 天眼审判：翻看主牌堆顶 4 张，若无怪物则下次劝降率 +N% */
@@ -1019,6 +1027,13 @@ export type ActiveAmuletEffects = {
   /** 「招灵书印」每删除/销毁一张牌（含护符/装备被事件、魔法、瀑流销毁），
    *  从背包随机抽 2 × N 张牌（linear ×N stacking）。 */
   deleteDrawCount: number;
+  /** 「墓园守卫」每件装备的遗言额外多触发 1×N 次（linear ×N stacking）。
+   *  自然破损 (computeEquipmentBreakEffects) + 顶替/弃装重铸/灵魂置换 等触发遗言的路径
+   *  (computeEquipmentDisplacementLastWords) 都按 `1 + lastWordsExtraTriggerCount` 次结算。
+   *  墓语遗愿 (applyCryptDeathwish) 显式调用 `computeEquipmentDisplacementLastWords`
+   *  N 次，每次仍各自按 `1 + lastWordsExtraTriggerCount` 放大；多重 amulet 与 echo
+   *  共同放大是设计内行为，与「绝响之符」等 per-trigger 联动一致。 */
+  lastWordsExtraTriggerCount: number;
 };
 
 export type WaterfallPhase = 'idle' | 'revealing' | 'dropping' | 'discarding' | 'dealing';

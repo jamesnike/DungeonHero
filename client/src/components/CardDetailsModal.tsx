@@ -12,8 +12,9 @@ import {
 } from "./GameCard";
 import { calculateMonsterRage, getMonsterRageRule, getMonsterUpgrades, getActiveUpgrade, getUpgradeTierCount } from "@/lib/monsterRage";
 import { isUpgradeableCard, isCardAtMaxUpgrade } from "./CardUpgradeModal";
-import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins, ArrowBigUpDash, Landmark, Flame } from "lucide-react";
+import { Skull, Sword, Shield, Heart, Sparkles, Zap, Scroll, Wand2, AlertTriangle, Coins, ArrowBigUpDash, Landmark, Flame, Star } from "lucide-react";
 import { CHAOS_DICE_SPELL_DESCRIPTION } from "@/lib/knightChaosDiceCopy";
+import { getStarterBaseId } from "@/game-core/deck";
 
 type MonsterRewardPreview = {
   id: string;
@@ -29,6 +30,13 @@ interface CardDetailsModalProps {
   currentTurn: number;
   monsterRewards?: MonsterRewardPreview[] | null;
   isQuickMode?: boolean;
+  /**
+   * Base IDs of unique class cards the player already acquired this run.
+   * When the displayed card is `unique: true` and its base ID is in this
+   * list, the modal renders a "唯一 · 已获得" indicator so the player
+   * knows the card cannot be obtained again.
+   */
+  acquiredUniqueClassCardIds?: readonly string[];
 }
 
 export default function CardDetailsModal({
@@ -38,6 +46,7 @@ export default function CardDetailsModal({
   currentTurn,
   monsterRewards,
   isQuickMode = false,
+  acquiredUniqueClassCardIds,
 }: CardDetailsModalProps) {
   const { t } = useTranslation();
   const arcaneStormDamage = useArcaneStormDamage();
@@ -45,6 +54,11 @@ export default function CardDetailsModal({
   if (!card) return null;
 
   const isMonsterEquipment = isMonsterEquipmentCard(card);
+  const isUnique = card.unique === true;
+  const isUniqueAcquired =
+    isUnique &&
+    !!acquiredUniqueClassCardIds &&
+    acquiredUniqueClassCardIds.includes(getStarterBaseId(card.id));
 
   const rageRule = card.type === 'monster' ? getMonsterRageRule(card.name) : null;
   const rageTurn = card.type === 'monster' ? (card.rageTurn ?? currentTurn) : null;
@@ -121,8 +135,26 @@ export default function CardDetailsModal({
             <DialogTitle className="text-xl">{card.name}</DialogTitle>
           </div>
           <DialogDescription>
-            {isMonsterEquipment ? t('modal.cardDetails.monsterEquipmentTag') : card.type.toUpperCase()} {card.classCard ? `• ${t('modal.cardDetails.knightClassTag')}` : ''}
+            {isMonsterEquipment ? t('modal.cardDetails.monsterEquipmentTag') : card.type.toUpperCase()} {card.classCard ? `• ${t('modal.cardDetails.knightClassTag')}` : ''}{isUnique ? ` • ${t('modal.cardDetails.uniqueTag', '唯一')}` : ''}
           </DialogDescription>
+          {isUnique && (
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className={
+                  isUniqueAcquired
+                    ? 'inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300 line-through opacity-80'
+                    : 'inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300'
+                }
+                title={t('modal.cardDetails.uniqueTooltip', '唯一卡。本局获得过一次后，将不再出现。')}
+                data-testid="card-details-unique-pill"
+              >
+                <Star className="w-3.5 h-3.5" />
+                {isUniqueAcquired
+                  ? t('modal.cardDetails.uniqueAcquired', '唯一 · 已获得')
+                  : t('modal.cardDetails.uniqueTag', '唯一')}
+              </span>
+            </div>
+          )}
           {!isMonsterEquipment && isUpgradeableCard(card) && (
             <div className="flex items-center gap-2 mt-1">
               {isCardAtMaxUpgrade(card) ? (

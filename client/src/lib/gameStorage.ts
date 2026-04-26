@@ -207,6 +207,7 @@ export interface PersistedGameState {
   flipDebuffMonsterId?: string | null;
   bugletAmuletObtained?: boolean;
   statSwapCardObtained?: boolean;
+  acquiredUniqueClassCardIds?: string[];
   persuadeLevel?: number;
   persuadeCostModifier?: number;
   lastPersuadeTargetId?: string | null;

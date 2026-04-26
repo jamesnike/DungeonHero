@@ -450,18 +450,49 @@ function reduceResolveDice(
       const mId = ctx.monsterId as string;
       const mName = ctx.monsterName as string;
       if (action.outcomeId === 'restore') {
-        newState = {
-          ...newState,
-          activeCards: newState.activeCards.map(c =>
-            c?.id === mId
-              ? { ...c, currentLayer: (c.currentLayer ?? 0) + 1, hp: c.maxHp ?? c.hp ?? 0 }
-              : c,
-          ) as typeof newState.activeCards,
-        };
-        enqueuedActions.push(
-          { type: 'SET_HERO_SKILL_BANNER', message: `${mName} 恢复了 1 层血层！` } as GameAction,
-          { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的骸生了一层！`, timestamp: Date.now() } } as GameAction,
-        );
+        // Three-way unified-rule branching:
+        // 1. Revive special case (hp == 0 OR currentLayer == 0): the monster
+        //    was just killed and bone-regen is bringing it back. We MUST
+        //    refill hp to maxHp here, otherwise the revived skeleton would
+        //    have hp=0 and immediately die again. This is the documented
+        //    exception to the "hp preserved on layer gain" rule.
+        // 2. Normal layer gain (currentLayer < maxLayers): +1 layer, hp unchanged.
+        // 3. Already at max layers (currentLayer == maxLayers but hp < maxHp):
+        //    no layer change, refill hp to maxHp.
+        // 4. Full layer + full hp: no-op (visually still shows "restore").
+        const target = newState.activeCards.find(c => c?.id === mId);
+        if (target) {
+          const currentLayer = target.currentLayer ?? 0;
+          const maxLayers = target.fury ?? target.hpLayers ?? 1;
+          const maxHp = target.maxHp ?? target.hp ?? 0;
+          const currentHp = target.hp ?? 0;
+          const isDeadRevive = currentHp === 0 || currentLayer === 0;
+          let logMessage: string;
+          newState = {
+            ...newState,
+            activeCards: newState.activeCards.map(c => {
+              if (c?.id !== mId) return c;
+              if (isDeadRevive) {
+                logMessage = `${mName} 的骸骨复生了一层！`;
+                return { ...c, currentLayer: currentLayer + 1, hp: maxHp };
+              }
+              if (currentLayer < maxLayers) {
+                logMessage = `${mName} 的骸生了一层！`;
+                return { ...c, currentLayer: currentLayer + 1 };
+              }
+              if (currentHp < maxHp) {
+                logMessage = `${mName} 的骸生回满了血量！`;
+                return { ...c, hp: maxHp };
+              }
+              logMessage = `${mName} 的骸生未触发（已满血层满血量）。`;
+              return c;
+            }) as typeof newState.activeCards,
+          };
+          enqueuedActions.push(
+            { type: 'SET_HERO_SKILL_BANNER', message: `${mName} 恢复了 1 层血层！` } as GameAction,
+            { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: logMessage!, timestamp: Date.now() } } as GameAction,
+          );
+        }
       } else {
         enqueuedActions.push(
           { type: 'UPDATE_GAME_LOG', entry: { id: Date.now(), type: 'combat' as any, message: `${mName} 的再生尝试失败。`, timestamp: Date.now() } } as GameAction,
@@ -475,11 +506,17 @@ function reduceResolveDice(
       const mName = ctx.monsterName as string;
       const mFury = ctx.monsterFury as number;
       if (action.outcomeId === 'rebirth') {
+        // Unified layer-heal rule: blood layers refill all the way to max,
+        // but hp itself is preserved (per the "+1 layer = hp unchanged"
+        // semantic — wraith rebirth is conceptually "+N layers" so still
+        // hp-unchanged). Banner messaging stays "血层全部回满" since the
+        // layer count truly does refill, even though the current layer's hp
+        // doesn't.
         newState = {
           ...newState,
           activeCards: newState.activeCards.map(c =>
             c?.id === mId
-              ? { ...c, currentLayer: mFury, hp: c.maxHp ?? c.hp ?? 0 }
+              ? { ...c, currentLayer: mFury }
               : c,
           ) as typeof newState.activeCards,
         };
@@ -868,11 +905,14 @@ function reduceResolveDice(
       if (flow.kind === 'goblin-heal' && flow.success) {
         const newLayer = Math.min(flow.maxLayers, flow.currentLayer + 1);
         if (newLayer > flow.currentLayer) {
+          // Unified layer-heal rule: +1 layer, hp preserved. Pre-roll gating in
+          // combat.ts skips dice when currentLayer >= maxLayers, so the
+          // "max layer + low hp → refill hp" branch is not reachable here.
           newState = {
             ...newState,
             activeCards: newState.activeCards.map(c =>
               c?.id === flow.goblinId
-                ? { ...c, currentLayer: newLayer, hp: c.maxHp ?? c.hp ?? 0 }
+                ? { ...c, currentLayer: newLayer }
                 : c,
             ) as typeof newState.activeCards,
           };

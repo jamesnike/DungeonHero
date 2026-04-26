@@ -23,6 +23,7 @@ import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 import { captureModalOriginFromEvent } from '@/lib/modalOriginAnchor';
 import { useDialogOriginAnchor } from '@/hooks/use-dialog-origin-anchor';
+import { getStarterBaseId } from '@/game-core/deck';
 
 interface ClassDeckProps {
   classCards?: GameCardData[];
@@ -31,6 +32,13 @@ interface ClassDeckProps {
   onCardSelect?: (card: GameCardData) => void;
   compact?: boolean;
   compactStyle?: CSSProperties;
+  /**
+   * Base IDs of unique class cards already acquired this run. Used to
+   * render a "已获得" overlay on the corresponding thumbnail in the viewer.
+   * Optional so callers that don't care about the acquired state (e.g.
+   * compact strip) can omit it.
+   */
+  acquiredUniqueClassCardIds?: readonly string[];
 }
 
 function ClassDeckComponent({
@@ -40,8 +48,13 @@ function ClassDeckComponent({
   onCardSelect,
   compact = false,
   compactStyle,
+  acquiredUniqueClassCardIds,
 }: ClassDeckProps) {
   const { t } = useTranslation();
+  const acquiredUniqueSet = useMemo(
+    () => new Set(acquiredUniqueClassCardIds ?? []),
+    [acquiredUniqueClassCardIds],
+  );
   // 默认走 i18n（"骑士牌库" / "Knight Deck"）；caller 显式传 deckName 时
   // 覆盖（未来可能有其它职业牌库）。
   const resolvedDeckName = deckName ?? t('cardBack.cell.knightDeck');
@@ -182,65 +195,90 @@ function ClassDeckComponent({
                     </Badge>
                   </h3>
                   <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-                    {cards.map((card, idx) => (
-                      <Card 
-                        key={`${card.id}-${idx}`}
-                        className={`p-2 border-2 border-card-border overflow-hidden ${onCardSelect ? 'cursor-pointer hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : ''}`.trim()}
-                        onClick={() => onCardSelect?.(card)}
-                        role={onCardSelect ? 'button' : undefined}
-                        tabIndex={onCardSelect ? 0 : undefined}
-                        onKeyDown={event => {
-                          if (!onCardSelect) return;
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            onCardSelect(card);
-                          }
-                        }}
-                      >
-                        <div className="relative aspect-square bg-gradient-to-b from-primary/10 to-primary/5 overflow-hidden rounded-sm mb-1 [content-visibility:auto]">
-                          {isMagicSpellCardType(card.type) ? (
-                            <MagicSpellPreview
-                              card={card}
-                              aspect="none"
-                              lazyImage
-                              className="absolute inset-0 h-full w-full rounded-sm"
-                            />
-                          ) : isEventCardType(card.type) ? (
-                            <EventPatternPreview
-                              card={card}
-                              aspect="none"
-                              lazyImage
-                              className="absolute inset-0 h-full w-full rounded-sm"
-                            />
-                          ) : (
-                            card.image && (
-                              <img
-                                src={card.image}
-                                alt={card.name}
-                                loading="lazy"
-                                decoding="async"
-                                fetchPriority="low"
-                                className="h-full w-full object-cover"
+                    {cards.map((card, idx) => {
+                      const isUnique = card.unique === true;
+                      const isAcquired = isUnique && acquiredUniqueSet.has(getStarterBaseId(card.id));
+                      return (
+                        <Card
+                          key={`${card.id}-${idx}`}
+                          className={`p-2 border-2 border-card-border overflow-hidden ${onCardSelect ? 'cursor-pointer hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none' : ''}`.trim()}
+                          onClick={() => onCardSelect?.(card)}
+                          role={onCardSelect ? 'button' : undefined}
+                          tabIndex={onCardSelect ? 0 : undefined}
+                          onKeyDown={event => {
+                            if (!onCardSelect) return;
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              onCardSelect(card);
+                            }
+                          }}
+                          data-testid={isUnique ? `class-deck-card-unique-${card.name}` : undefined}
+                        >
+                          <div className="relative aspect-square bg-gradient-to-b from-primary/10 to-primary/5 overflow-hidden rounded-sm mb-1 [content-visibility:auto]">
+                            {isMagicSpellCardType(card.type) ? (
+                              <MagicSpellPreview
+                                card={card}
+                                aspect="none"
+                                lazyImage
+                                className="absolute inset-0 h-full w-full rounded-sm"
                               />
-                            )
+                            ) : isEventCardType(card.type) ? (
+                              <EventPatternPreview
+                                card={card}
+                                aspect="none"
+                                lazyImage
+                                className="absolute inset-0 h-full w-full rounded-sm"
+                              />
+                            ) : (
+                              card.image && (
+                                <img
+                                  src={card.image}
+                                  alt={card.name}
+                                  loading="lazy"
+                                  decoding="async"
+                                  fetchPriority="low"
+                                  className="h-full w-full object-cover"
+                                />
+                              )
+                            )}
+                            {card.skillType && (
+                              <Badge
+                                variant="outline"
+                                className="absolute top-0 left-0 text-xs px-1 py-0"
+                              >
+                                {card.skillType}
+                              </Badge>
+                            )}
+                            {isUnique && (
+                              <Badge
+                                variant="outline"
+                                className="absolute top-0 right-0 text-[10px] px-1 py-0 bg-amber-500/90 text-white border-amber-300 font-semibold"
+                                data-testid="unique-badge"
+                              >
+                                {t('cardBack.unique.label', '唯一')}
+                              </Badge>
+                            )}
+                            {isAcquired && (
+                              <>
+                                <div className="absolute inset-0 bg-black/55" aria-hidden />
+                                <span
+                                  className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold tracking-wider drop-shadow"
+                                  data-testid="unique-acquired-overlay"
+                                >
+                                  {t('cardBack.unique.acquired', '已获得')}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <p className="text-xs text-center font-medium truncate">{card.name}</p>
+                          {card.skillEffect && (
+                            <p className="text-xs text-center text-muted-foreground truncate">
+                              {card.skillEffect}
+                            </p>
                           )}
-                          {card.skillType && (
-                            <Badge 
-                              variant="outline" 
-                              className="absolute top-0 left-0 text-xs px-1 py-0"
-                            >
-                              {card.skillType}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-center font-medium truncate">{card.name}</p>
-                        {card.skillEffect && (
-                          <p className="text-xs text-center text-muted-foreground truncate">
-                            {card.skillEffect}
-                          </p>
-                        )}
-                      </Card>
-                    ))}
+                        </Card>
+                      );
+                    })}
                   </div>
                 </div>
               ))

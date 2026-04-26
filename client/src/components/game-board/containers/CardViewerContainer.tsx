@@ -34,6 +34,7 @@ function CardViewerContainerInner() {
     amuletSlots: s.amuletSlots,
     selectedMonsterRewards: s.selectedMonsterRewards,
     backpackCapacityModifier: s.backpackCapacityModifier,
+    acquiredUniqueClassCardIds: s.acquiredUniqueClassCardIds,
   }));
 
   const currentTurn = gs.turnCount;
@@ -80,6 +81,7 @@ function CardViewerContainerInner() {
         currentTurn={currentTurn}
         monsterRewards={monsterRewardPreview}
         isQuickMode={isQuickMode}
+        acquiredUniqueClassCardIds={gs.acquiredUniqueClassCardIds}
       />
 
       <CardDeletionModal

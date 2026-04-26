@@ -518,7 +518,7 @@ const guildHandRecycle: CardDefinition = {
 const guildRecycleReshuffle: CardDefinition = {
   effectId: 'magic:guild-recycle-reshuffle',
   effects: [],
-  tags: ['magic', 'permanent', 'draw'],
+  tags: ['magic', 'instant', 'draw'],
   resolver: (state, card, sideEffects, patch, enqueuedActions) => {
     const recycled = state.permanentMagicRecycleBag;
     if (recycled.length > 0) {

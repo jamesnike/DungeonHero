@@ -228,6 +228,7 @@ import { chaosStrikeHasOverkill } from '../combat';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
 import { markSkillUsedPure } from '../hero';
 import { STARTER_CARD_IDS, getStarterBaseId, skillScrollImage, createMagicBoltCard } from '../deck';
+import { filterAvailableClassPool, markUniqueAcquired } from '../uniqueClass';
 import skeletonKingImage from '@assets/generated_images/skeleton_king_monster.png';
 import { createGreedCurseCard } from '@/lib/knightDeck';
 import { getHeroMagicDefinition } from '@/lib/heroMagic';
@@ -426,7 +427,8 @@ export function finalizeAltarDiscardDiscover(
     log(sideEffects, 'magic', `祭坛秘术：弃回 ${discarded.map(c => c.name).join('、')}`);
   }
   const classDeck = patch.classDeck ?? state.classDeck ?? [];
-  const discoverPool = classDeck.filter((c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic');
+  const availableClassPool = filterAvailableClassPool(classDeck, state, patch);
+  const discoverPool = availableClassPool.filter((c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic');
   if (discoverPool.length > 0) {
     // Class deck is an infinite template — sample candidates without
     // removing from `classDeck`. The chosen card will be cloned with a
@@ -599,6 +601,76 @@ export function finalizeDiscardEmpower(
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
+/**
+ * 唤回秘药·转型（discard-recycle-to-hand:N）的弃回后续：
+ *
+ * 1. 把玩家选中的 1 张手牌（discarded[0]）通过 DISCARD_OWNED_CARD 弃回
+ *    （Perm 进回收袋、非 Perm 进坟场，并触发 onDiscardDraw / catapult 等弃置联动）。
+ *    若 discarded 为空（auto-skip 路径：手牌没有可弃的牌），则跳过弃回步骤。
+ * 2. 从 permanentMagicRecycleBag 随机取 N 张到手牌（排除转型源卡 id 防御性自我过滤）。
+ *    若回收袋为空，仅记录「回收袋为空」banner，**仍允许步骤 1 的弃回完成**
+ *    （用户已确认：discard_anyway）。
+ *
+ * 与 reduceApplyTransformCategory 的 'recycle-to-hand:' 旧分支一致地不 enqueue
+ * FINALIZE_MAGIC_CARD —— 转型源卡（持有 transformEffect 的那张牌）已经在它自己
+ * 的 PLAY_CARD/RESOLVE_MAGIC 链里 finalize 过了，APPLY_TRANSFORM_CATEGORY 只是
+ * 它的 follow-up，不需要再 finalize。
+ */
+export function finalizeTransformDiscardRecycle(
+  state: GameState,
+  transformCard: GameCardData,
+  discarded: GameCardData[],
+  recycleDrawCount: number,
+  sideEffects: SideEffect[],
+  patch: Partial<GameState>,
+  enqueuedActions: GameAction[],
+): ReduceResult {
+  let discardName: string | null = null;
+  if (discarded.length > 0) {
+    const discardIds = new Set(discarded.map(c => c.id));
+    patch.handCards = (state.handCards as GameCardData[]).filter(c => !discardIds.has(c.id));
+    for (const dc of discarded) {
+      enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
+    }
+    discardName = discarded.map(c => `「${c.name}」`).join('、');
+    log(sideEffects, 'magic', `转型触发：弃回${discardName}`);
+  }
+
+  const excludeIds = new Set<string>([transformCard.id, ...discarded.map(c => c.id)]);
+  const bag = state.permanentMagicRecycleBag.filter(c => !excludeIds.has(c.id));
+  let rng = patch.rng ?? state.rng;
+  const handAfterDiscard = patch.handCards ?? state.handCards;
+
+  if (bag.length > 0 && recycleDrawCount > 0) {
+    const [shuffled, rng2] = rngShuffle(bag, rng);
+    rng = rng2;
+    patch.rng = rng;
+    const picks = shuffled.slice(0, Math.min(recycleDrawCount, bag.length));
+    const pickIds = new Set(picks.map(p => p.id));
+    patch.permanentMagicRecycleBag = state.permanentMagicRecycleBag.filter(c => !pickIds.has(c.id));
+    patch.handCards = [...handAfterDiscard, ...picks];
+    for (const pick of picks) {
+      sideEffects.push({ event: 'card:queueToHand', payload: { card: pick } });
+    }
+    const names = picks.map(p => `「${p.name}」`).join('、');
+    log(sideEffects, 'magic', `转型触发：从回收袋取回${names}！`);
+    if (discardName) {
+      banner(sideEffects, `转型触发！弃回${discardName}，从回收袋取回${names}！`);
+    } else {
+      banner(sideEffects, `转型触发！手牌无可弃，从回收袋取回${names}！`);
+    }
+  } else {
+    log(sideEffects, 'magic', '转型触发：回收袋为空。');
+    if (discardName) {
+      banner(sideEffects, `转型触发！弃回${discardName}，但回收袋为空。`);
+    } else {
+      banner(sideEffects, '转型触发！但手牌无可弃且回收袋为空。');
+    }
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
 // ---------------------------------------------------------------------------
 // RESOLVE_HAND_DISCARD_SELECTION — 玩家在 HandDiscardSelectionModal 点击「确认弃回」
 // 后由该 reducer 接力。负责：校验选择、清空 pendingHandDiscardSelection、按
@@ -686,6 +758,16 @@ export function resolveHandDiscardSelection(
         state,
         discarded,
         pending.context.skillId,
+        sideEffects,
+        patch,
+        enqueuedActions,
+      );
+    case 'transform-discard-recycle':
+      return finalizeTransformDiscardRecycle(
+        state,
+        pending.context.cardSnapshot,
+        discarded,
+        pending.context.recycleDrawCount,
         sideEffects,
         patch,
         enqueuedActions,
@@ -1460,7 +1542,8 @@ export function resolvePermanentMagic(
     // additional discovers are queued via `pendingClassDiscoverQueue` and
     // re-prompted as the player closes each modal.
     const classDeck = state.classDeck ?? [];
-    const pool = classDeck.filter((c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic');
+    const availableClassPool = filterAvailableClassPool(classDeck, state, patch);
+    const pool = availableClassPool.filter((c: GameCardData) => c.type === 'magic' || c.type === 'hero-magic');
     if (pool.length === 0) {
       log(sideEffects, 'magic', '祭坛秘术：专属牌堆中没有魔法卡。');
       banner(sideEffects, '祭坛秘术：专属牌堆中没有魔法卡。');
@@ -1641,7 +1724,8 @@ export function resolvePermanentMagic(
       // entry re-opens the modal after the previous selection (handled in
       // `reduceResolveDiscoverSelection` and `SET_DISCOVER_MODAL` close path).
       const classDeck = state.classDeck ?? [];
-      if (classDeck.length === 0) {
+      const availableClassPool = filterAvailableClassPool(classDeck, state, patch);
+      if (availableClassPool.length === 0) {
         banner(sideEffects, '专属感召：专属牌堆为空。');
         log(sideEffects, 'magic', '专属感召：专属牌堆为空。');
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -1650,9 +1734,9 @@ export function resolvePermanentMagic(
       }
       let drng = patch.rng ?? state.rng;
       let shuffled: GameCardData[];
-      [shuffled, drng] = rngShuffle(classDeck, drng);
+      [shuffled, drng] = rngShuffle(availableClassPool, drng);
       patch.rng = drng;
-      const candidates = shuffled.slice(0, Math.min(3, classDeck.length));
+      const candidates = shuffled.slice(0, Math.min(3, availableClassPool.length));
       sideEffects.push({
         event: 'card:discoverRequested',
         payload: {
@@ -3535,11 +3619,12 @@ export function resolveKnightPermanentMagic(
         // Trigger one discover immediately, queue the rest. Each modal close
         // will dequeue the next one via SET_DISCOVER_MODAL { open: false }.
         const classDeck = state.classDeck ?? [];
-        if (classDeck.length > 0) {
+        const availableClassPool = filterAvailableClassPool(classDeck, state, patch);
+        if (availableClassPool.length > 0) {
           enqueuedActions.push({
             type: 'BEGIN_DISCOVER',
             source: 'discard-rebuild',
-            pool: classDeck,
+            pool: availableClassPool,
             sourceLabel: card.name,
           });
           if (totalDiscoverCount > 1) {

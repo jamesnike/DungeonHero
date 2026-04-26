@@ -37,6 +37,7 @@ import frenzyCurseImage from '@assets/generated_images/card_curse_frenzy.png';
 import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
 import thunderAmuletSigilImage from '@assets/generated_images/card_dedupe_amulet_thunder_sigil.png';
+import graveyardGuardianAmuletImage from '@assets/generated_images/knight_graveyard_guardian_amulet.png';
 import knightDeleteDrawAmuletImage from '@assets/generated_images/knight_delete_draw_amulet.png';
 import thunderGoldAmuletImage from '@assets/generated_images/knight_thunder_gold_amulet.png';
 import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
@@ -251,6 +252,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroHolyLightImage,
     classCard: true,
+    unique: true,
     description: '第一次使用时解锁圣光；已掌握时充满数值槽，可手动发动。',
     shortDescription: '解锁圣光；已掌握时充满数值槽',
     heroMagicId: 'holy-light',
@@ -263,6 +265,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroBerserkerImage,
     classCard: true,
+    unique: true,
     description: '第一次使用时解锁狂战；已掌握时充满数值槽，可手动发动。',
     shortDescription: '解锁狂战；已掌握时充满数值槽',
     heroMagicId: 'berserker-rage',
@@ -462,6 +465,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicRecycleFlareImage,
     classCard: true,
+    unique: true,
     description: '永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 2 张牌。(可超手牌上限)',
     shortDescription: '回收袋剩余瀑流 -1；抽 2 张',
     magicType: 'permanent',
@@ -760,6 +764,21 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'delete-draw',
   });
 
+  // 墓园守卫：装备的遗言额外多触发 1 次（含自然破损与顶替/弃装重铸/灵魂置换 等）。
+  // 多个本护符线性叠加：N 个 → 每次基础触发都会再多触发 N 次（共 1 + N 次）。
+  // 与「墓语遗愿」等已经按次叠加的机制兼容（每次基础触发都按 1 + N 放大）。
+  pushCard({
+    type: 'amulet',
+    name: '墓园守卫',
+    value: 1,
+    image: graveyardGuardianAmuletImage,
+    classCard: true,
+    unique: true,
+    description: '装备的遗言每次触发时，额外多触发 1 次（多张本护符线性叠加）。',
+    shortDescription: '装备遗言每次多触发 1 次',
+    amuletEffect: 'last-words-extra-trigger',
+  });
+
   // === NEW POTIONS (2 cards) ===
   pushCard({
     type: 'potion',
@@ -963,6 +982,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: recallScrollImage,
     classCard: true,
+    unique: true,
     description: '永久：失去 2 点生命，回手一张牌，抽 1 张牌。',
     shortDescription: '失去 2 生命，回手 1 张，抽 1 张',
     magicType: 'permanent',
@@ -1000,6 +1020,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicRecycleTideImage,
     classCard: true,
+    unique: true,
     description: '永久：将背包所有牌移入回收袋；然后回收袋瀑流 -1，已就绪的牌洗回背包。',
     shortDescription: '背包→回收袋；回收袋瀑流 -1，就绪回背包',
     magicType: 'permanent',
@@ -1130,7 +1151,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     magicEffect: '+3(递增) 临时护甲，侧击赋予复生。',
     knightEffect: 'flank-fortify',
     flankEffect: '赋予该装备复生',
-    recycleDelay: 1,
+    recycleDelay: 2,
   });
 
   pushCard({
@@ -1285,6 +1306,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: monsterDoomScrollImage,
     classCard: true,
+    unique: true,
     description: '装备的怪物数量为数值条（上限 2）。释放：摧毁所有装备（含下层叠加，每件独立判定复生），每摧毁一件对激活行所有怪物 -2攻/-2血上限（每个血层都减）。',
     shortDescription: '装备怪物充能；释放摧毁全部装备（含下层）并削弱全场',
     heroMagicId: 'monster-doom',
@@ -1297,6 +1319,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroReviveTomeImage,
     classCard: true,
+    unique: true,
     description: '每对自己造成 3 次伤害充满数值条。释放：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
     shortDescription: '自伤 3 次充能；释放赋予一件装备复生',
     heroMagicId: 'revive-blessing',
@@ -1363,8 +1386,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightPotionRecycleGrantImage,
     classCard: true,
-    description: '选择一张手牌，赋予「转型：从回收袋随机取 1 张牌加入手牌」。',
-    shortDescription: '为一张手牌赋予转型：回收袋取 1 入手',
+    description: '选择一张手牌，赋予「转型：选择一张手牌弃回，从回收袋随机取 1 张牌加入手牌」。',
+    shortDescription: '为一张手牌赋予转型：弃 1 张·回收袋取 1 张',
     potionEffect: 'transform-recycle-grant',
   });
 
@@ -1513,6 +1536,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: frenzyCurseImage,
     classCard: true,
+    unique: true,
     description: '诅咒：使用时失去 1 生命，抽 1 张牌，使用后回到背包；上手时随机一个装备栏 +1 临时攻击；无法被回收或弃置。',
     shortDescription: '使用 -1 生命抽 1 张回背包；上手随机一栏 +1 临时攻',
     curseEffect: 'frenzy-curse',

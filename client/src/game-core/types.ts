@@ -408,6 +408,15 @@ export interface GameState {
   flipDebuffMonsterId: string | null;
   bugletAmuletObtained: boolean;
   statSwapCardObtained: boolean;
+  /**
+   * Per-run "唯一" class card lock list: starter base IDs (e.g. `knight-3`) of
+   * cards tagged `unique: true` that the player has actually obtained this
+   * run. Once a base ID is in this list, that card is filtered from every
+   * future class-pool sampling path (discover / draws / events / shop refresh)
+   * and shop offerings already on display become non-purchasable. Reset on
+   * INIT_GAME, persisted mid-run. See `game-core/uniqueClass.ts` for helpers.
+   */
+  acquiredUniqueClassCardIds: string[];
   handLimitBonus: number;
   heroMagicState: HeroMagicState;
   wraithPassiveEnabled: boolean;

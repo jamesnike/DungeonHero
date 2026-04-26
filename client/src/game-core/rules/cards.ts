@@ -41,7 +41,8 @@ import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, F
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import { cloneClassCardsWithFreshIds, sampleDistinctByName } from '../cardClone';
-import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection, ensureMonsterEngaged, MONSTER_FUSION_RACE_CN, MONSTER_FUSION_ELITE_PROPS, MONSTER_FUSION_SKELETON_KING_IMAGE } from './magic-effects';
+import { filterAvailableClassPool, markManyUniqueAcquired } from '../uniqueClass';
+import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection, ensureMonsterEngaged, requestOrAutoHandDiscard, finalizeTransformDiscardRecycle, MONSTER_FUSION_RACE_CN, MONSTER_FUSION_ELITE_PROPS, MONSTER_FUSION_SKELETON_KING_IMAGE } from './magic-effects';
 import { resolveAllPotionEffects, resolvePendingPotion } from './potion-effects';
 import { applyFlipCounters } from './flip-counters';
 import { executeCardEffects, executeMagicCardEffects, executeOnEquip, executeOnEnterHand } from '../card-schema';
@@ -1289,8 +1290,9 @@ function reduceDrawClassToBackpack(
 
   // Class deck is an infinite template — we sample distinct-by-name from
   // the (filtered) pool, then clone each pick with a fresh id. The
-  // template is NOT mutated.
-  let source = state.classDeck;
+  // template is NOT mutated. Filter out already-acquired unique cards first
+  // so subsequent draws never re-roll a locked card.
+  let source: GameCardData[] = filterAvailableClassPool(state.classDeck, state, patch);
   if (action.includeIds && action.includeIds.length > 0) {
     const includeSet = new Set(action.includeIds);
     source = source.filter(c => includeSet.has(c.id));
@@ -1336,6 +1338,11 @@ function reduceDrawClassToBackpack(
       ...overflow.map(c => ({ ...c, _recycleWaits: c.recycleDelay ?? 1 })),
     ];
   }
+
+  // Lock unique cards as acquired (covers both backpack and recycle-bag
+  // landings — the recycle-bag overflow still counts as "obtained for the
+  // run" per the unique-class-card design).
+  markManyUniqueAcquired(drawn, state, patch);
 
   patch.heroSkillBanner = `从职业牌组获得 ${drawn.length} 张牌！`;
   sideEffects.push({
@@ -2576,12 +2583,14 @@ function reduceResolvePermGrant(
     const targetCard = state.handCards.find(c => c.id === targetCardId);
     if (!targetCard) return applyPatch(state, patch);
     patch.handCards = state.handCards.map(c =>
-      c.id === targetCardId ? { ...c, transformBonus: '回收袋取回 1 张牌', transformEffect: 'recycle-to-hand:1' } : c,
+      c.id === targetCardId
+        ? { ...c, transformBonus: '弃 1 张手牌·回收袋取 1 张', transformEffect: 'discard-recycle-to-hand:1' }
+        : c,
     );
     sideEffects.push({ event: 'log:entry', payload: { type: 'potion', message: `唤回秘药：「${targetCard.name}」获得转型效果！` } });
     const src = state.pendingPotionAction?.card as GameCardData | undefined;
     if (src) {
-      enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card: src, banner: `「${targetCard.name}」获得转型：回收袋取回 1 张牌！` });
+      enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card: src, banner: `「${targetCard.name}」获得转型：弃 1 张手牌，回收袋取回 1 张！` });
     }
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
@@ -2825,7 +2834,32 @@ function reduceApplyTransformCategory(
     enqueuedActions.push({ type: 'HEAL', amount: healAmount, source: 'transform' });
     sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `转型触发：恢复 ${healAmount} HP！` } });
     sideEffects.push({ event: 'ui:banner', payload: { text: `转型触发！恢复了 ${healAmount} HP！` } });
+  } else if (card.transformEffect?.startsWith('discard-recycle-to-hand:')) {
+    // 新版唤回秘药：弃 1 张手牌 → 回收袋随机取 N 张到手牌（互动式）。
+    // - 手牌没有可弃牌：自动跳过弃回，仍尝试从回收袋抽。
+    // - 回收袋为空：仍要求玩家弃 1 张（discard_anyway 设计决定）。
+    // - 弃回走 DISCARD_OWNED_CARD：触发 onDiscardDraw / catapult 等弃置联动。
+    const count = parseInt(card.transformEffect.replace('discard-recycle-to-hand:', ''), 10) || 1;
+    const result = requestOrAutoHandDiscard(state, patch, {
+      sourceCardId: card.id,
+      requiredCount: 1,
+      title: '唤回秘药 · 转型',
+      prompt: `选择 1 张手牌弃回，从回收袋随机取 ${count} 张到手牌`,
+      subEffect: 'transform-discard-recycle',
+      context: {
+        kind: 'transform-discard-recycle',
+        cardSnapshot: card,
+        recycleDrawCount: count,
+      },
+    });
+    if (result.mode === 'modal') {
+      // 模态框已设置，等玩家确认后由 RESOLVE_HAND_DISCARD_SELECTION 接力。
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+    // auto 路径：手牌没有可弃牌（result.discarded 为空），跳过弃回，直接尝试抽回收袋。
+    return finalizeTransformDiscardRecycle(state, card, result.discarded, count, sideEffects, patch, enqueuedActions);
   } else if (card.transformEffect?.startsWith('recycle-to-hand:')) {
+    // 旧版唤回秘药 transform（保留以兼容存档）：直接从回收袋抽 N 张到手牌，不弃手牌。
     const count = parseInt(card.transformEffect.replace('recycle-to-hand:', ''), 10) || 1;
     const bag = state.permanentMagicRecycleBag.filter(c => c.id !== card.id);
     if (bag.length > 0) {

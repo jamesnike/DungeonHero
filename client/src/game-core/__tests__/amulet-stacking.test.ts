@@ -188,6 +188,15 @@ describe('computeAmuletEffects stacking', () => {
       ] as any);
       expect(fx.deleteDrawCount).toBe(2);
     });
+
+    it('墓园守卫 ×3 — lastWordsExtraTriggerCount = 3 (consumer fires lastWords 1 + N times per base trigger)', () => {
+      const fx = computeAmuletEffects([
+        makeAmulet('last-words-extra-trigger', 'lwx-1'),
+        makeAmulet('last-words-extra-trigger', 'lwx-2'),
+        makeAmulet('last-words-extra-trigger', 'lwx-3'),
+      ] as any);
+      expect(fx.lastWordsExtraTriggerCount).toBe(3);
+    });
   });
 
   describe('combat counters', () => {
@@ -253,6 +262,7 @@ describe('computeAmuletEffects stacking', () => {
       expect(fx.lifeOverkillBonus).toBe(0);
       expect(fx.stunRateBoost).toBe(0);
       expect(fx.persuadeOnTempAttackBonus).toBe(0);
+      expect(fx.lastWordsExtraTriggerCount).toBe(0);
     });
   });
 });

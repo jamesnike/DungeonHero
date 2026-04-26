@@ -217,52 +217,52 @@ export function clearSlotAndPromoteReserve(
 }
 
 // ---------------------------------------------------------------------------
-// Equipment displacement — fire "last words" only (no revive, no slot mutation)
+// Internal helper — runs ONE iteration of the equipment "last words" trigger
+// block (logs, monster debuff, gold/heal/draw/perm bonuses, slot temp buffs,
+// maxHp grants, onDestroyEffect variants, monster-specific lastWords like
+// wraithHaunt / wraithDeathHeal). Mutates `patch`, `sideEffects`, and
+// `enqueuedActions` in place.
 //
-// Used when equipment A is displaced from a slot by equipment B (slot capacity
-// exceeded). Conceptually treated as A being destroyed, so its last-words
-// effects fire — but the slot is NOT cleared (B is already there) and revive
-// effects are intentionally skipped.
+// Reads cumulative state via `patch.X ?? state.X` so it's safe to call multiple
+// times — each iteration sees previous iterations' accumulations and adds on top.
+//
+// Shared by `computeEquipmentDisplacementLastWords` (顶替/弃装重铸/灵魂置换 等)
+// and `computeEquipmentBreakEffects` (装备耐久归零自然销毁) — both wrap this
+// helper in a `1 + amuletEffects.lastWordsExtraTriggerCount` loop so the
+// 「墓园守卫」amulet uniformly amplifies any equipment lastWords resolution.
+//
+// Per-trigger amulet effects (e.g. 「绝响之符」`lastwords-monster-debuff` reducing
+// active row monster attack, 「怀柔之印」`persuade-on-temp-attack` boosting
+// persuade rate) re-fire on every iteration, matching how those amulets stack
+// with manually-amplified lastWords (e.g. 墓语遗愿 already calls displacement
+// 2× and the per-trigger effects already fire 2×).
 // ---------------------------------------------------------------------------
 
-export interface DisplacementLastWordsResult {
-  patch: Partial<GameState>;
-  sideEffects: SideEffect[];
-  enqueuedActions: GameAction[];
+interface OneLastWordsIterationResult {
+  rng: RngState;
   drawFromBackpack: number;
   classCardDraw: number;
-  rng: RngState;
 }
 
-/**
- * Compute the "last words" effects for a displaced equipment without applying
- * revive or modifying the source slot.
- *
- * - Triggers: onDestroyHeal/Gold/Draw/ClassDraw/PermanentDamage/PermanentShield/onDestroyEffect,
- *   monster-specific lastWords (wraith-haunt, wraithDeathHeal/Spread, skeletonLastWordsDiscard,
- *   discard-hand-3 draw).
- * - Does NOT: revive, swap slots, clear/promote any slot, or mutate the destroyed
- *   item's own slot (the displacing item B is already there).
- * - The "other slot" effects (wraith-haunt/wraithDeathHeal targeting the opposite
- *   equipment) still apply normally.
- */
-export function computeEquipmentDisplacementLastWords(
+function applyOneEquipmentLastWordsIteration(
   state: GameState,
   slotId: EquipmentSlotId,
   slotItem: GameCardData,
   amuletEffects: ActiveAmuletEffects,
-  initialPatch: Partial<GameState> = {},
-): DisplacementLastWordsResult {
+  patch: Partial<GameState>,
+  sideEffects: SideEffect[],
+  enqueuedActions: GameAction[],
+  rngIn: RngState,
+): OneLastWordsIterationResult {
   const isMonsterEquip = slotItem.type === 'monster';
   const otherSlotId = otherSlot(slotId);
-  const otherItem = (initialPatch[otherSlotId] ?? getSlotItem(state, otherSlotId)) as GameCardData | null;
-  const sideEffects: SideEffect[] = [];
-  const enqueuedActions: GameAction[] = [];
-  const patch: Partial<GameState> = { ...initialPatch };
-  let rng = (initialPatch.rng ?? state.rng) as RngState;
+  // Read otherItem from patch so a previous iteration's wraithDeathHeal /
+  // wraithDeathHealSpread mutation (writes to patch[otherSlotId]) is visible
+  // to subsequent iterations.
+  const otherItem = (patch[otherSlotId] ?? getSlotItem(state, otherSlotId)) as GameCardData | null;
+  let rng = rngIn;
   let drawFromBackpack = 0;
   let classCardDraw = 0;
-  let triggeredGraveyardToHand = false;
 
   const hasLastWords = slotItem.onDestroyHeal || slotItem.onDestroyGold || slotItem.onDestroyDraw
     || slotItem.onDestroyClassDraw || slotItem.onDestroyPermanentDamage || slotItem.onDestroyPermanentShield
@@ -364,9 +364,6 @@ export function computeEquipmentDisplacementLastWords(
     });
     sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +${buffAmount}临时攻击 +${buffAmount}临时护甲！${stackSuffix}` } });
     if (amuletEffects.persuadeOnTempAttackCount > 0) {
-      // `persuadeOnTempAttackBonus` is already the per-trigger sum across all
-      // equipped 怀柔之印 (each amulet contributes its own 10 / 20 by upgrade).
-      // The buff applies twice (temp attack AND temp armor), times the stack count.
       const pBonus = amuletEffects.persuadeOnTempAttackBonus;
       patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus * 2 * tempBuffStacks;
       sideEffects.push({
@@ -376,13 +373,13 @@ export function computeEquipmentDisplacementLastWords(
     }
   }
 
-  // 附魔祭坛 「遗言：生命值上限+4」: each stack adds +4 to permanent maxHp.
+  // 附魔祭坛「遗言：生命值上限+4」: each stack adds +4 to permanent maxHp.
   // Stacks parallel to lastWordsSlotTempBuff. Does NOT heal current HP — only raises the cap.
-  const maxHpStacksDisp = slotItem.lastWordsMaxHpBoost ?? 0;
-  if (maxHpStacksDisp > 0) {
-    const amount = 4 * maxHpStacksDisp;
+  const maxHpStacks = slotItem.lastWordsMaxHpBoost ?? 0;
+  if (maxHpStacks > 0) {
+    const amount = 4 * maxHpStacks;
     patch.permanentMaxHpBonus = (patch.permanentMaxHpBonus ?? state.permanentMaxHpBonus ?? 0) + amount;
-    const stackSuffix = maxHpStacksDisp > 1 ? `（×${maxHpStacksDisp}）` : '';
+    const stackSuffix = maxHpStacks > 1 ? `（×${maxHpStacks}）` : '';
     sideEffects.push({
       event: 'log:entry',
       payload: { type: 'equip', message: `${slotItem.name} 遗言：永久最大生命 +${amount}！${stackSuffix}` },
@@ -434,7 +431,6 @@ export function computeEquipmentDisplacementLastWords(
         }
       }
     } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
-      triggeredGraveyardToHand = true;
       const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
       const pick = pickGraveyardCardExcluding(graveyard, slotItem.id, rng);
       if (pick) {
@@ -454,7 +450,6 @@ export function computeEquipmentDisplacementLastWords(
         });
       }
     } else if (slotItem.onDestroyEffect === 'graveyard-event-to-hand') {
-      triggeredGraveyardToHand = true;
       const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
       const pick = pickGraveyardEventCardExcluding(graveyard, slotItem.id, rng);
       if (pick) {
@@ -547,13 +542,78 @@ export function computeEquipmentDisplacementLastWords(
     }
   }
 
-  // Suppress lint warning — flag is captured for future extension if needed.
-  void triggeredGraveyardToHand;
+  return { rng, drawFromBackpack, classCardDraw };
+}
+
+// ---------------------------------------------------------------------------
+// Equipment displacement — fire "last words" only (no revive, no slot mutation)
+//
+// Used when equipment A is displaced from a slot by equipment B (slot capacity
+// exceeded). Conceptually treated as A being destroyed, so its last-words
+// effects fire — but the slot is NOT cleared (B is already there) and revive
+// effects are intentionally skipped.
+// ---------------------------------------------------------------------------
+
+export interface DisplacementLastWordsResult {
+  patch: Partial<GameState>;
+  sideEffects: SideEffect[];
+  enqueuedActions: GameAction[];
+  drawFromBackpack: number;
+  classCardDraw: number;
+  rng: RngState;
+}
+
+/**
+ * Compute the "last words" effects for a displaced equipment without applying
+ * revive or modifying the source slot.
+ *
+ * - Triggers: onDestroyHeal/Gold/Draw/ClassDraw/PermanentDamage/PermanentShield/onDestroyEffect,
+ *   monster-specific lastWords (wraith-haunt, wraithDeathHeal/Spread, skeletonLastWordsDiscard,
+ *   discard-hand-3 draw).
+ * - Does NOT: revive, swap slots, clear/promote any slot, or mutate the destroyed
+ *   item's own slot (the displacing item B is already there).
+ * - The "other slot" effects (wraith-haunt/wraithDeathHeal targeting the opposite
+ *   equipment) still apply normally.
+ */
+export function computeEquipmentDisplacementLastWords(
+  state: GameState,
+  slotId: EquipmentSlotId,
+  slotItem: GameCardData,
+  amuletEffects: ActiveAmuletEffects,
+  initialPatch: Partial<GameState> = {},
+): DisplacementLastWordsResult {
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = { ...initialPatch };
+  let rng = (initialPatch.rng ?? state.rng) as RngState;
+  let drawFromBackpack = 0;
+  let classCardDraw = 0;
+
+  // 「墓园守卫」装备遗言多触发：base 1 次 + amuletEffects.lastWordsExtraTriggerCount 次。
+  // 每次迭代都通过 helper 在 patch 上累加（read-then-write `patch.X ?? state.X`），
+  // 与 per-trigger amulet effects（绝响之符 / 怀柔之印）一起天然按次叠加。
+  const totalTriggers = 1 + amuletEffects.lastWordsExtraTriggerCount;
+  for (let iter = 0; iter < totalTriggers; iter += 1) {
+    const iterResult = applyOneEquipmentLastWordsIteration(
+      state,
+      slotId,
+      slotItem,
+      amuletEffects,
+      patch,
+      sideEffects,
+      enqueuedActions,
+      rng,
+    );
+    rng = iterResult.rng;
+    drawFromBackpack += iterResult.drawFromBackpack;
+    classCardDraw += iterResult.classCardDraw;
+  }
 
   patch.rng = rng;
 
   return { patch, sideEffects, enqueuedActions, drawFromBackpack, classCardDraw, rng };
 }
+
 
 // ---------------------------------------------------------------------------
 // Equipment break (durability reaches 0) — "last words" / revive / destroy
@@ -575,292 +635,33 @@ export function computeEquipmentBreakEffects(
   let drawFromBackpack = 0;
   let classCardDraw = 0;
 
-  const hasLastWords = slotItem.onDestroyHeal || slotItem.onDestroyGold || slotItem.onDestroyDraw
-    || slotItem.onDestroyClassDraw || slotItem.onDestroyPermanentDamage || slotItem.onDestroyPermanentShield
-    || slotItem.onDestroyEffect || slotItem.lastWordsSlotTempBuff
-    || (isMonsterEquip && (slotItem.lastWords || slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread
-      || slotItem.skeletonLastWordsDiscard));
-
-  if (hasLastWords) {
-    effects.push({ event: 'log:entry', payload: { type: 'equip', message: `${slotItem.name} 遗言触发！` } });
+  // 「墓园守卫」装备遗言多触发：base 1 次 + amuletEffects.lastWordsExtraTriggerCount 次。
+  // 每次迭代通过 helper 在 patch 上累加（read-then-write `patch.X ?? state.X`），
+  // 与 per-trigger amulet effects（绝响之符 / 怀柔之印）一起天然按次叠加。
+  const totalTriggers = 1 + amuletEffects.lastWordsExtraTriggerCount;
+  for (let iter = 0; iter < totalTriggers; iter += 1) {
+    const iterResult = applyOneEquipmentLastWordsIteration(
+      state,
+      slotId,
+      slotItem,
+      amuletEffects,
+      patch,
+      effects,
+      enqueuedActions,
+      rng,
+    );
+    rng = iterResult.rng;
+    drawFromBackpack += iterResult.drawFromBackpack;
+    classCardDraw += iterResult.classCardDraw;
   }
 
-  if (hasLastWords && amuletEffects.lastWordsMonsterDebuffCount > 0) {
-    const debuffPerTrigger = amuletEffects.lastWordsMonsterDebuffCount;
-    const debuffedActive = state.activeCards.map(c => {
-      if (!c || c.type !== 'monster') return c;
-      const curAtk = c.attack ?? c.value;
-      return { ...c, attack: Math.max(0, curAtk - debuffPerTrigger) };
-    }) as ActiveRowSlots;
-    patch.activeCards = debuffedActive;
-    effects.push({
-      event: 'log:entry',
-      payload: { type: 'amulet', message: `绝响之符：${slotItem.name} 遗言触发，激活行所有怪物攻击力 -${debuffPerTrigger}！` },
-    });
-  }
+  // After the loop, refresh `otherItem` to reflect any wraithDeathHeal /
+  // wraithDeathHealSpread / wraith-haunt mutations the helper applied to
+  // patch[otherSlotId]. Downstream destroy/wraith-swap logic uses this updated
+  // view so the swapped item carries the durability/buff updates.
+  const otherItemAfterLastWords = (patch[otherSlotId] ?? getSlotItem(state, otherSlotId)) as GameCardData | null;
+  void otherItemAfterLastWords; // available for downstream extension; not used yet
 
-  // onDestroyHeal
-  if (slotItem.onDestroyHeal) {
-    effects.push({
-      event: 'equipment:lastWordsHeal',
-      payload: { amount: slotItem.onDestroyHeal, itemName: slotItem.name },
-    });
-  }
-
-  // onDestroyGold
-  if (slotItem.onDestroyGold) {
-    patch.gold = (state.gold ?? 0) + slotItem.onDestroyGold;
-    effects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 遗言：获得了 ${slotItem.onDestroyGold} 金币` },
-    });
-  }
-
-  // onDestroyDraw
-  if (slotItem.onDestroyDraw) {
-    drawFromBackpack += slotItem.onDestroyDraw;
-  }
-
-  // onDestroyClassDraw
-  if (slotItem.onDestroyClassDraw) {
-    classCardDraw += slotItem.onDestroyClassDraw;
-  }
-
-  // onDestroyPermanentDamage
-  if (slotItem.onDestroyPermanentDamage) {
-    const bonuses = { ...state.equipmentSlotBonuses };
-    const slotBonus = { ...bonuses[slotId] };
-    slotBonus.damage += slotItem.onDestroyPermanentDamage;
-    bonuses[slotId] = slotBonus;
-    patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
-    effects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏永久伤害 +${slotItem.onDestroyPermanentDamage}！` },
-    });
-    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！永久伤害 +${slotItem.onDestroyPermanentDamage}！` } });
-  }
-
-  // onDestroyPermanentShield
-  if (slotItem.onDestroyPermanentShield) {
-    const bonuses = patch.equipmentSlotBonuses
-      ? { ...(patch.equipmentSlotBonuses as EquipmentSlotBonusState) }
-      : { ...state.equipmentSlotBonuses };
-    const slotBonus = { ...bonuses[slotId] };
-    slotBonus.shield += slotItem.onDestroyPermanentShield;
-    bonuses[slotId] = slotBonus;
-    patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
-    effects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏永久护甲 +${slotItem.onDestroyPermanentShield}！` },
-    });
-    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！永久护甲 +${slotItem.onDestroyPermanentShield}！` } });
-  }
-
-  // 遗赠淬炼药 — slot-temp-buff-3-3 stacks on top of any onDestroyEffect via the
-  // separate `lastWordsSlotTempBuff` counter, so it must fire independently and
-  // multiply by the number of times the potion was applied. Legacy save-game
-  // compat: equipment whose `onDestroyEffect` is literally 'slot-temp-buff-3-3'
-  // (set by the old overwriting potion code) also counts as 1 stack.
-  const tempBuffStacks = (slotItem.lastWordsSlotTempBuff ?? 0)
-    + (slotItem.onDestroyEffect === 'slot-temp-buff-3-3' ? 1 : 0);
-  if (tempBuffStacks > 0) {
-    const buffAmount = 3 * tempBuffStacks;
-    const tempAttack = { ...(state.slotTempAttack ?? {}) };
-    const tempArmor = { ...(state.slotTempArmor ?? {}) };
-    tempAttack[slotId] = (tempAttack[slotId] ?? 0) + buffAmount;
-    tempArmor[slotId] = (tempArmor[slotId] ?? 0) + buffAmount;
-    patch.slotTempAttack = tempAttack;
-    patch.slotTempArmor = tempArmor;
-    const stackSuffix = tempBuffStacks > 1 ? `（×${tempBuffStacks}）` : '';
-    effects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏 +${buffAmount}临时攻击 +${buffAmount}临时护甲！${stackSuffix}` },
-    });
-    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +${buffAmount}临时攻击 +${buffAmount}临时护甲！${stackSuffix}` } });
-    if (amuletEffects.persuadeOnTempAttackCount > 0) {
-      const pBonus = amuletEffects.persuadeOnTempAttackBonus;
-      patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus * 2 * tempBuffStacks;
-      effects.push({
-        event: 'log:entry',
-        payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus * 2 * tempBuffStacks}%（临时攻击+临时护甲 ×${tempBuffStacks}）` },
-      });
-    }
-  }
-
-  // 附魔祭坛 「遗言：生命值上限+4」: each stack adds +4 to permanent maxHp.
-  // Stacks parallel to lastWordsSlotTempBuff. Does NOT heal current HP — only raises the cap.
-  const maxHpStacksBreak = slotItem.lastWordsMaxHpBoost ?? 0;
-  if (maxHpStacksBreak > 0) {
-    const amount = 4 * maxHpStacksBreak;
-    patch.permanentMaxHpBonus = (patch.permanentMaxHpBonus ?? state.permanentMaxHpBonus ?? 0) + amount;
-    const stackSuffix = maxHpStacksBreak > 1 ? `（×${maxHpStacksBreak}）` : '';
-    effects.push({
-      event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 遗言：永久最大生命 +${amount}！${stackSuffix}` },
-    });
-    effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！永久最大生命 +${amount}！${stackSuffix}` } });
-  }
-
-  // onDestroyEffect (other variants — slot-temp-buff-3-3 handled above)
-  if (slotItem.onDestroyEffect && slotItem.onDestroyEffect !== 'slot-temp-buff-3-3') {
-    if (slotItem.onDestroyEffect === 'slot-temp-armor-3') {
-      const tempArmor = { ...(state.slotTempArmor ?? {}) };
-      tempArmor[slotId] = (tempArmor[slotId] ?? 0) + 3;
-      patch.slotTempArmor = tempArmor;
-      effects.push({
-        event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 遗言：该装备栏 +3临时护甲！` },
-      });
-      effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +3临时护甲！` } });
-    } else if (slotItem.onDestroyEffect.startsWith('stunCap+')) {
-      const amount = parseInt(slotItem.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
-      if (amount > 0) {
-        const current = patch.stunCap ?? state.stunCap ?? 0;
-        const next = Math.min(100, current + amount);
-        if (next > current) patch.stunCap = next;
-        effects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：击晕上限 +${amount}%（当前 ${next}%）。` },
-        });
-        effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！击晕上限 +${amount}%！` } });
-      }
-    } else if (slotItem.onDestroyEffect.startsWith('allSlotTempArmor:')) {
-      const amount = parseInt(slotItem.onDestroyEffect.replace('allSlotTempArmor:', ''), 10) || 0;
-      if (amount > 0) {
-        const tempArmor = { ...(state.slotTempArmor ?? {}) };
-        tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) + amount;
-        tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + amount;
-        patch.slotTempArmor = tempArmor;
-        effects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：所有装备栏 +${amount}临时护甲！` },
-        });
-        effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！所有装备栏 +${amount}临时护甲！` } });
-        if (amuletEffects.persuadeOnTempAttackCount > 0) {
-          const pBonus = amuletEffects.persuadeOnTempAttackBonus;
-          patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + pBonus;
-          effects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%` },
-          });
-        }
-      }
-    } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
-      const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
-      const pick = pickGraveyardCardExcluding(graveyard, slotItem.id, rng);
-      if (pick) {
-        rng = pick.rng;
-        patch.discardedCards = graveyard.filter((_, i) => i !== pick.idx);
-        patch.handCards = [...(patch.handCards ?? state.handCards), pick.picked];
-        effects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场获得了「${pick.picked.name}」！` },
-        });
-        effects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
-        effects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
-      } else {
-        effects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：坟场没有可用的牌。` },
-        });
-      }
-    } else if (slotItem.onDestroyEffect === 'graveyard-event-to-hand') {
-      const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
-      const pick = pickGraveyardEventCardExcluding(graveyard, slotItem.id, rng);
-      if (pick) {
-        rng = pick.rng;
-        patch.discardedCards = graveyard.filter((_, i) => i !== pick.idx);
-        patch.handCards = [...(patch.handCards ?? state.handCards), pick.picked];
-        effects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场抽出 Event「${pick.picked.name}」！` },
-        });
-        effects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
-        effects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
-      } else {
-        effects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：坟场没有可用的 Event 牌。` },
-        });
-      }
-    } else {
-      effects.push({
-        event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 遗言：${slotItem.onDestroyEffect}` },
-      });
-    }
-  }
-
-  // Monster-specific last words
-  if (isMonsterEquip) {
-    // discard-hand-3 draw
-    if (slotItem.lastWords === 'discard-hand-3') {
-      enqueuedActions.push({
-        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-        monsterId: slotItem.id,
-        skillKey: 'death:lastWords:discardHand',
-      });
-      drawFromBackpack += 3;
-      effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言：抽取 3 张牌！` } });
-    }
-
-    // Skeleton last words discard → draw 1
-    if (slotItem.skeletonLastWordsDiscard) {
-      enqueuedActions.push({
-        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-        monsterId: slotItem.id,
-        skillKey: 'death:lastWords:skeleton',
-      });
-      drawFromBackpack += 1;
-      effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言：抽取 1 张牌！` } });
-    }
-
-    // Wraith haunt — damage bonus to other slot
-    if (slotItem.lastWords?.startsWith('wraith-haunt')) {
-      const hauntAmount = parseInt(slotItem.lastWords.replace('wraith-haunt-', ''), 10) || 2;
-      if (otherItem) {
-        enqueuedActions.push({
-          type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-          monsterId: slotItem.id,
-          skillKey: 'death:lastWords:wraithHaunt',
-        });
-        const bonuses = patch.equipmentSlotBonuses
-          ? { ...(patch.equipmentSlotBonuses as EquipmentSlotBonusState) }
-          : { ...state.equipmentSlotBonuses };
-        const ob = { ...bonuses[otherSlotId] };
-        ob.damage += hauntAmount;
-        bonuses[otherSlotId] = ob;
-        patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
-        effects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：${otherItem.name} 获得临时攻击力 +${hauntAmount}！` },
-        });
-      }
-    }
-
-    // Wraith death heal — other slot durability +1 and optional spread
-    if (slotItem.wraithDeathHeal || slotItem.wraithDeathHealSpread) {
-      if (otherItem && otherItem.durability != null && otherItem.maxDurability != null) {
-        const newDur = Math.min(otherItem.maxDurability, otherItem.durability + 1);
-        let updatedOther = { ...otherItem } as EquipmentItem;
-        if (newDur > otherItem.durability) {
-          updatedOther = { ...updatedOther, durability: newDur };
-          effects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 祝福：${otherItem.name} 耐久 +1！` },
-          });
-        }
-        if (slotItem.wraithDeathHealSpread && !otherItem.wraithDeathHeal) {
-          updatedOther = { ...updatedOther, wraithDeathHeal: 1 };
-          effects.push({
-            event: 'log:entry',
-            payload: { type: 'equip', message: `${slotItem.name} 传魂：${otherItem.name} 获得遗言「祝福」！` },
-          });
-        }
-        patch[otherSlotId] = updatedOther as EquipmentItem;
-      }
-    }
-  }
 
   // --- Revive check ---
   const nativeReviveAvailable = isMonsterEquip && slotItem.hasRevive && !slotItem.reviveUsed;

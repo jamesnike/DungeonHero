@@ -1461,6 +1461,17 @@ export function CuteSticker({ k }: { k: string }) {
           <path fill="#fde047" stroke="#ca8a04" d="M18 7l-6 10h4l-3 8 8-11h-4z" />
         </g>
       );
+    case 'knight-eternal-vessel':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#c084fc" d="M12 8h8l2 4v6c0 3-2.5 5-6 6-3.5-1-6-3-6-6v-6z" />
+          <path fill="#a855f7" d="M10 12h12v2H10z" />
+          <ellipse cx="16" cy="8" rx="5" ry="1.5" fill="#d8b4fe" />
+          <path fill="#ef4444" d="M16 16l-1.5 3h3z" />
+          <path fill="#ef4444" d="M16 19v3" strokeWidth="1.5" stroke="#ef4444" />
+          <path fill="none" stroke="#4ade80" strokeWidth="2" d="M23 7v-3M20 5l3-3 3 3" />
+        </g>
+      );
     default:
       return cuteFallbackSticker(hashStickerKey(k));
   }
@@ -1502,7 +1513,7 @@ export const ALL_STICKER_KEYS: readonly string[] = [
   // knight magic (new)
   'divine-eye','emergency-recall','blade-flank','wall-flank-guard','fortune-wheel',
   'blood-pact-draw','forge-gamble','blood-sacrifice','undead-pact','fate-decree',
-  'monster-fusion','mirror-copy','amulet-expand','eternal-inscription',
+  'monster-fusion','mirror-copy','amulet-expand','eternal-inscription','knight-eternal-vessel',
   // event-derived magic
   'spacetime-mirror','arcane-shield','echo-remnant','crypt-echo','void-swap',
   'monster-attack-debuff','recycle-fetch','magic-bolt','graveyard-discover-relic','amplify-target',

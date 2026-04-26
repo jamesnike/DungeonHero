@@ -136,6 +136,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     flipDebuffMonsterId: state.flipDebuffMonsterId,
     bugletAmuletObtained: state.bugletAmuletObtained,
     statSwapCardObtained: state.statSwapCardObtained,
+    acquiredUniqueClassCardIds: [...(state.acquiredUniqueClassCardIds ?? [])],
     persuadeLevel: state.persuadeLevel,
     persuadeCostModifier: state.persuadeCostModifier,
     lastPersuadeTargetId: state.lastPersuadeTargetId,

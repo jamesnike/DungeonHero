@@ -144,7 +144,7 @@ export default function CardUpgradeModal({
         阻断 outside-click 与 ESC 路径。
       */}
       <DialogContent
-        className="sm:max-w-lg max-h-[95vh] overflow-y-auto"
+        className="sm:max-w-lg max-h-[calc(95vh/var(--dialog-zoom,1))] overflow-y-auto"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
