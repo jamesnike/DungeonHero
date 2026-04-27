@@ -37,9 +37,15 @@ export function generateShopOfferingsPure(
   rng: RngState,
 ): [ShopOffering[], RngState] {
   const offerings: ShopOffering[] = [];
-  const availableCards = [...classDeck];
+  // Shuffle the class deck so the "required-types" pass below picks a *random*
+  // representative of each guaranteed type, not the first matching card in
+  // deterministic deck order. Without this, every shop visit (and every
+  // refresh) showed the same first weapon / shield / magic / amulet because
+  // `findIndex` is RNG-free and `classDeck` is an immutable infinite template
+  // whose order never changes across visits.
+  const [availableCards, rngAfterShuffle] = rngShuffle(classDeck, rng);
   const maxSlots = SHOP_MAX_OFFERINGS + shopLevel;
-  let r = rng;
+  let r = rngAfterShuffle;
 
   for (const requiredTypes of SHOP_REQUIRED_TYPES) {
     if (offerings.length >= maxSlots) break;

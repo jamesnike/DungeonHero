@@ -3,6 +3,7 @@ import { reduce, noChange, applyPatch } from '../reducer';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
 import { createRng, shuffle as rngShuffle } from '../rng';
+import { generateShopOfferingsPure } from '../shop';
 import type { GameState } from '../types';
 import type { GameAction } from '../actions';
 import { initialCombatState, BASE_BACKPACK_CAPACITY, HAND_LIMIT } from '../constants';
@@ -283,6 +284,58 @@ describe('reducer', () => {
       expect(result.state.eventModalOpen).toBe(false);
       expect(result.state.shopEquipAttackUsed).toBe(false);
       expect(result.state.shopEquipArmorUsed).toBe(false);
+    });
+
+    // Regression: shop offerings (especially the guaranteed weapon / shield /
+    // magic / amulet|potion slots) must reroll with a different RNG state.
+    // Pre-fix bug: `generateShopOfferingsPure` did `availableCards = [...classDeck]`
+    // and then used `findIndex` (RNG-free) to pick required types — so the first
+    // weapon / shield / magic / amulet in classDeck order was returned every visit
+    // and every refresh, leaving the first 4 slots completely static.
+    it('generateShopOfferingsPure rerolls offerings with different rng state', () => {
+      const classDeck = [
+        { id: 'w-a', type: 'weapon' as const, name: 'Sword A', value: 3 },
+        { id: 'w-b', type: 'weapon' as const, name: 'Sword B', value: 4 },
+        { id: 'w-c', type: 'weapon' as const, name: 'Sword C', value: 5 },
+        { id: 's-a', type: 'shield' as const, name: 'Shield A', value: 2 },
+        { id: 's-b', type: 'shield' as const, name: 'Shield B', value: 3 },
+        { id: 's-c', type: 'shield' as const, name: 'Shield C', value: 4 },
+        { id: 'm-a', type: 'magic' as const, name: 'Spell A', value: 0 },
+        { id: 'm-b', type: 'magic' as const, name: 'Spell B', value: 0 },
+        { id: 'm-c', type: 'magic' as const, name: 'Spell C', value: 0 },
+        { id: 'a-a', type: 'amulet' as const, name: 'Amulet A', value: 0 },
+        { id: 'a-b', type: 'amulet' as const, name: 'Amulet B', value: 0 },
+        { id: 'p-a', type: 'potion' as const, name: 'Potion A', value: 0 },
+      ] as any[];
+
+      const seeds = [1, 2, 3, 7, 13, 42, 99, 256];
+      const idSets = seeds.map(seed => {
+        const [offerings] = generateShopOfferingsPure(classDeck, /* shopLevel */ 0, createRng(seed));
+        return offerings.map(o => o.card.id).join(',');
+      });
+
+      const uniqueLayouts = new Set(idSets);
+      expect(uniqueLayouts.size).toBeGreaterThan(1);
+    });
+
+    it('generateShopOfferingsPure still guarantees one of each required type', () => {
+      const classDeck = [
+        { id: 'w-a', type: 'weapon' as const, name: 'Sword', value: 3 },
+        { id: 'w-b', type: 'weapon' as const, name: 'Axe', value: 4 },
+        { id: 's-a', type: 'shield' as const, name: 'Shield', value: 2 },
+        { id: 'm-a', type: 'magic' as const, name: 'Spell', value: 0 },
+        { id: 'a-a', type: 'amulet' as const, name: 'Amulet', value: 0 },
+        { id: 'p-a', type: 'potion' as const, name: 'Potion', value: 0 },
+      ] as any[];
+
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        const [offerings] = generateShopOfferingsPure(classDeck, 0, createRng(seed));
+        const types = new Set(offerings.map(o => o.card.type));
+        expect(types.has('weapon')).toBe(true);
+        expect(types.has('shield')).toBe(true);
+        expect(types.has('magic')).toBe(true);
+        expect(types.has('amulet') || types.has('potion')).toBe(true);
+      }
     });
 
     it('CLOSE_SHOP clears offerings and modal state', () => {
