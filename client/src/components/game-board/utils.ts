@@ -578,7 +578,7 @@ export function createDeck(rng: RngState): [GameCardData[], RngState] {
       name: 'Life Amulet',
       value: 5,
       image: lifeAmuletImage,
-      description: '超杀吸血+4。',
+      description: '超杀吸血+3。',
       amuletEffect: 'life',
     },
     {

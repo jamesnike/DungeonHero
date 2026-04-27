@@ -80,7 +80,7 @@ export interface EventSystemDeps {
   getEquipmentReserve: (id: EquipmentSlotId) => EquipmentItem[];
   setEquipmentReserve: (id: EquipmentSlotId, items: EquipmentItem[]) => void;
   disposeOwnedEquipmentCard: (card: GameCardData, options?: { isDestruction?: boolean; triggerLastWords?: boolean; fromSlotId?: EquipmentSlotId }) => void;
-  addPermanentMagicToRecycleBag: (card: GameCardData) => void;
+  addPermanentMagicToRecycleBag: (card: GameCardData, options?: { waitsOverride?: number }) => void;
   amuletEffects: ActiveAmuletEffects;
   addToGraveyard: (card: GameCardData) => void;
   addCardToBackpack: (card: GameCardData, options?: { toBottom?: boolean; pendingDungeonCardId?: string }) => void;
@@ -1237,10 +1237,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
       }
 
     // --- Grant perm effects ---
-    } else if (token.startsWith('grantFlankDraw:') || token.startsWith('grantTransformGold:') ||
+    } else if (token.startsWith('grantFlankDraw:') || token.startsWith('grantFlankGold:') ||
                token.startsWith('grantFlankPersuadeCost:') || token.startsWith('grantFlankStunCap:') ||
                token.startsWith('grantFlankDamage:') || token.startsWith('grantTransformDraw:') ||
-               token.startsWith('grantTransformHeal:')) {
+               token.startsWith('grantFlankHeal:')) {
       // These tokens open perm grant modals. The exact modal type is determined by the token prefix.
       const eligible = s.handCards.filter(c => {
         if (token.startsWith('grantFlank')) return !c.flankEffect;
@@ -1256,12 +1256,12 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         let sourceType: PermGrantSourceType;
         let meta: Record<string, number> | undefined;
         if (token.startsWith('grantFlankDraw:')) { sourceType = 'flank-grant'; }
-        else if (token.startsWith('grantTransformGold:')) { sourceType = 'transform-gold-grant'; }
+        else if (token.startsWith('grantFlankGold:')) { sourceType = 'flank-gold-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 3 }; }
         else if (token.startsWith('grantFlankPersuadeCost:')) { sourceType = 'flank-persuade-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 1 }; }
         else if (token.startsWith('grantFlankStunCap:')) { sourceType = 'flank-stun-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 5 }; }
         else if (token.startsWith('grantFlankDamage:')) { sourceType = 'flank-damage-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 5 }; }
         else if (token.startsWith('grantTransformDraw:')) { sourceType = 'transform-draw-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 2 }; }
-        else { sourceType = 'transform-heal-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 2 }; }
+        else { sourceType = 'flank-heal-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 2 }; }
         dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType, ...(meta ? { meta } : {}) } });
       }
 

@@ -41,13 +41,18 @@ export interface CardPlayHandlersDeps {
   addToGraveyard: (card: GameCardData) => void;
   discardCardToGraveyard: (
     card: GameCardData | null | undefined,
-    options?: { owner?: 'player' | 'dungeon'; forceGraveyard?: boolean; forceRecycleBag?: boolean },
+    options?: {
+      owner?: 'player' | 'dungeon';
+      forceGraveyard?: boolean;
+      forceRecycleBag?: boolean;
+      waitsOverride?: number;
+    },
   ) => void;
   addCardToBackpack: (
     card: GameCardData,
     options?: { toBottom?: boolean; pendingDungeonCardId?: string },
   ) => void;
-  addPermanentMagicToRecycleBag: (card: GameCardData) => void;
+  addPermanentMagicToRecycleBag: (card: GameCardData, options?: { waitsOverride?: number }) => void;
   restorePermanentMagicFromRecycleBag: () => void;
   ensureCardInHand: (card: GameCardData) => void;
   drawFromBackpackToHand: () => void;
@@ -439,11 +444,13 @@ export function useCardPlayHandlers(depsRef: React.MutableRefObject<CardPlayHand
   );
 
   const completeHeroMagicActivation = useCallback(
-    (id: HeroMagicId, origin: 'gauge' | 'card') => {
+    (id: HeroMagicId, _origin: 'gauge' | 'card') => {
       resetHeroMagicGauge(id);
-      if (origin === 'gauge') setHeroMagicUsedThisWave(id, true);
+      // 不再设置 usedThisWave —— hero magic 取消了"每波只能用一次"限制，
+      // 仪表满即可再次发动。仪表已由 reducer 在 COMPLETE_HERO_MAGIC 重置；
+      // 此处的 resetHeroMagicGauge 是冗余但无害的兜底（保留以防 reducer 路径漏触发）。
     },
-    [resetHeroMagicGauge, setHeroMagicUsedThisWave],
+    [resetHeroMagicGauge],
   );
 
   // -- Equipment repair helper ------------------------------------------------

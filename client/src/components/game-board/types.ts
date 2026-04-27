@@ -68,11 +68,17 @@ export type SlotPermanentBonus = {
   shield: number;
 };
 
-export type DeathWardPromptState = {
-  card: GameCardData;
-  source: 'hand' | 'backpack';
-  pendingDamage: number;
-  sourceType: 'combat' | 'general';
+/**
+ * 不灭守护 (death-ward) 触发后的通知 modal 状态。
+ *
+ * 旧设计弹出「抵消 / 放弃」二选一 prompt，现已改为**全自动**：reducer 在
+ * 检测致死伤害时直接消耗手牌里的 不灭守护 → 入坟场 → 阻挡伤害，并写入
+ * 这个字段让 UI 弹出单按钮（「知道了」）通知。dismiss 后 reducer 把
+ * `phase` 从 `'awaitingDeathWardNotice'` 推回 `'playerInput'` 继续游戏。
+ */
+export type DeathWardNoticeState = {
+  cardName: string;
+  blockedDamage: number;
 };
 
 export type EquipmentSlotStatModifier = EquipmentCardStatModifier;
@@ -283,7 +289,7 @@ export type PendingMagicAction =
       effect: 'transform-repair';
       step: 'slot-select';
       prompt: string;
-      transformTriggered: boolean;
+      flankTriggered: boolean;
       echoMultiplier?: number;
     }
   | {
@@ -647,7 +653,7 @@ export type HandDiscardSelectionState = {
     | 'class-summon' // 专属召唤：弃 N 张到坟场 → 抽 1 张职业专属卡到背包
     | 'echo-bag' // 回响行囊：弃 N 张到坟场 → 坟场发现 → 背包补抽
     | 'discard-empower' // 噬血砺锋：弃 1 张到坟场 → 装备攻击 +2 / 吸血
-    | 'transform-discard-recycle'; // 唤回秘药·转型：弃 1 张手牌 → 回收袋随机取 1 张到手牌
+    | 'transform-discard-recycle'; // 唤回秘药·侧击：弃 1 张手牌 → 回收袋随机取 1 张到手牌（subEffect 名沿用历史 'transform-' 前缀，描述流程形状而非触发条件）
   /** 必须选择的张数（严格相等才允许确认）。 */
   count: number;
   /** 触发该流程的源卡牌（魔法卡 id；技能时为 null）；用于把它从候选列表中过滤掉。 */
@@ -993,6 +999,8 @@ export type ActiveAmuletEffects = {
   cardGainMissileCount: number;
   swapUpgradeCount: number;
   stunUpgradeCapCount: number;
+  /** Sum of each equipped 震慑之符's per-stun cap bonus (8 base / 12 upgraded), per trigger. */
+  stunUpgradeCapBonus: number;
   recycleBackpackExpandCount: number;
   dungeonGoldCount: number;
   /** 「潮愈之符」每次瀑流推进时，恢复 4 × N 点生命（linear ×N stacking）。

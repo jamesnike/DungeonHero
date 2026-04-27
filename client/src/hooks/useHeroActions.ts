@@ -59,7 +59,7 @@ export interface HeroActionsDeps {
   getEquipmentReserve: (id: EquipmentSlotId) => EquipmentItem[];
   setEquipmentReserve: (id: EquipmentSlotId, items: EquipmentItem[]) => void;
   disposeOwnedEquipmentCard: (card: GameCardData, options?: { isDestruction?: boolean; triggerLastWords?: boolean; fromSlotId?: EquipmentSlotId }) => void;
-  addPermanentMagicToRecycleBag: (card: GameCardData) => void;
+  addPermanentMagicToRecycleBag: (card: GameCardData, options?: { waitsOverride?: number }) => void;
   amuletEffects: ActiveAmuletEffects;
   eternalRelicsRef: React.MutableRefObject<import('@/game-core/types').EternalRelic[]>;
 

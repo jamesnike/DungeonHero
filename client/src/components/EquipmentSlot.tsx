@@ -314,7 +314,7 @@ export default function EquipmentSlot({
         <div
           className={`absolute left-1/2 z-30 grid whitespace-nowrap dh-hero-chip ${isFlat ? 'gap-x-0.5 sm:gap-x-1' : 'gap-x-1 sm:gap-x-1.5'}`}
           style={{
-            top: 'calc(-1 * var(--dh-grid-gap-y) / 2)',
+            top: 'calc(-1 * var(--dh-grid-gap-y) / 2 - 0.9rem)',
             transform: 'translate(-50%, -50%)',
             gridTemplateColumns: 'auto auto',
             justifyItems: 'center',

@@ -46,6 +46,24 @@ const allTempAttack2: OnEquipHandler = (state, card, _slotId, patch, sideEffects
   checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
+const allTempAttack4: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {
+  const base = { ...(state.slotTempAttack ?? defaultSlotState), ...(patch.slotTempAttack ?? {}) };
+  base.equipmentSlot1 = (base.equipmentSlot1 ?? 0) + 4;
+  base.equipmentSlot2 = (base.equipmentSlot2 ?? 0) + 4;
+  patch.slotTempAttack = base;
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：所有装备栏临时攻击 +4！` } });
+  checkPersuadeOnTempAttack(state, patch, sideEffects);
+};
+
+const allTempAttack6: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {
+  const base = { ...(state.slotTempAttack ?? defaultSlotState), ...(patch.slotTempAttack ?? {}) };
+  base.equipmentSlot1 = (base.equipmentSlot1 ?? 0) + 6;
+  base.equipmentSlot2 = (base.equipmentSlot2 ?? 0) + 6;
+  patch.slotTempAttack = base;
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：所有装备栏临时攻击 +6！` } });
+  checkPersuadeOnTempAttack(state, patch, sideEffects);
+};
+
 const tempArmor3: OnEquipHandler = (state, card, slotId, patch, sideEffects) => {
   const base = { ...(state.slotTempArmor ?? defaultSlotState), ...(patch.slotTempArmor ?? {}) };
   base[slotId] = (base[slotId] ?? 0) + 3;
@@ -70,6 +88,11 @@ const stunCap5: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：击晕上限 +5%！` } });
 };
 
+const stunCap10: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {
+  patch.stunCap = Math.min(100, (patch.stunCap ?? state.stunCap) + 10);
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：击晕上限 +10%！` } });
+};
+
 const permSlotDamage1: OnEquipHandler = (state, card, slotId, patch, sideEffects) => {
   const bonuses = { ...state.equipmentSlotBonuses };
   bonuses[slotId] = { ...bonuses[slotId], damage: bonuses[slotId].damage + 1 };
@@ -77,9 +100,26 @@ const permSlotDamage1: OnEquipHandler = (state, card, slotId, patch, sideEffects
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：该装备栏永久攻击 +1！` } });
 };
 
+const permSlotDamage2: OnEquipHandler = (state, card, slotId, patch, sideEffects) => {
+  const bonuses = { ...state.equipmentSlotBonuses };
+  bonuses[slotId] = { ...bonuses[slotId], damage: bonuses[slotId].damage + 2 };
+  patch.equipmentSlotBonuses = bonuses;
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：该装备栏永久攻击 +2！` } });
+};
+
 const heal3: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
   enqueuedActions.push({ type: 'HEAL', amount: 3, source: 'on-equip' });
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：恢复了 3 点生命！` } });
+};
+
+const heal4: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
+  enqueuedActions.push({ type: 'HEAL', amount: 4, source: 'on-equip' });
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：恢复了 4 点生命！` } });
+};
+
+const heal5: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
+  enqueuedActions.push({ type: 'HEAL', amount: 5, source: 'on-equip' });
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：恢复了 5 点生命！` } });
 };
 
 const otherSlotDurability1: OnEquipHandler = (state, card, slotId, patch, sideEffects) => {
@@ -121,13 +161,19 @@ registerOnEquipAll([
   { id: 'temp-attack-2', handler: tempAttack2 },
   { id: 'temp-attack-3', handler: tempAttack3 },
   { id: 'all-temp-attack-2', handler: allTempAttack2 },
+  { id: 'all-temp-attack-4', handler: allTempAttack4 },
+  { id: 'all-temp-attack-6', handler: allTempAttack6 },
   { id: 'temp-armor-3', handler: tempArmor3 },
   { id: 'gold+6', handler: gold6 },
   { id: 'persuade-bonus-10', handler: persuadeBonus10 },
   { id: 'spell-lifesteal+1', handler: spellLifesteal1 },
   { id: 'stunCap+5', handler: stunCap5 },
+  { id: 'stunCap+10', handler: stunCap10 },
   { id: 'perm-slot-damage+1', handler: permSlotDamage1 },
+  { id: 'perm-slot-damage+2', handler: permSlotDamage2 },
   { id: 'heal-3', handler: heal3 },
+  { id: 'heal-4', handler: heal4 },
+  { id: 'heal-5', handler: heal5 },
   { id: 'other-slot-durability+1', handler: otherSlotDurability1 },
   { id: 'durability-max+1', handler: durabilityMax1 },
 ]);

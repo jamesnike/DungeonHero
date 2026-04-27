@@ -49,11 +49,11 @@ Add a JSDoc comment explaining the stacking convention if it's non-obvious (comp
 ```typescript
 // ❌ BAD — doesn't stack
 case 'dual-guard': effects.hasDualGuard = true; break;
-case 'life': effects.lifeOverkillBonus = 4; break;
+case 'life': effects.lifeOverkillBonus = 3; break;
 
 // ✅ GOOD — stacks linearly
 case 'dual-guard': effects.dualGuardCount += 1; break;
-case 'life': effects.lifeOverkillBonus += 4; break;
+case 'life': effects.lifeOverkillBonus += 3; break;
 ```
 
 ### e. Consume by count, not by boolean

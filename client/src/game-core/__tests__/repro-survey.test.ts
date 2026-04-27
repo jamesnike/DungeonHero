@@ -20,7 +20,7 @@ describe('REPRO: 查阅动作 上手 in playerInput phase', () => {
       value: 0,
       image: '',
       magicType: 'permanent',
-      magicEffect: '永久魔法：从背包抽 2 张牌。',
+      magicEffect: '永久魔法：从背包抽 1 张牌。',
       onEnterHandEffect: 'survey-action-onhand',
     };
     const state = makeState({

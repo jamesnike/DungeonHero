@@ -28,7 +28,6 @@ The reducer emits `combat:*` side effects. The hook subscribes via `useGameEvent
 
 - `combat:monsterBleed` → bleed animation
 - `combat:monsterDefeated` → defeat animation + card removal
-- `combat:bossTransform` → transform animation
 - `combat:lastWordsDiscard` → discard flight
 - `combat:boneRegenCheck` / `combat:wraithRebirthCheck` → dice flows
 - `combat:dragonBreathFx` → FX

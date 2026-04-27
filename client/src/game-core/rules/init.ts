@@ -27,6 +27,29 @@ import { generateKnightDeck, createKnightDiscoveryEvents } from '@/lib/knightDec
 import { applyMonsterRage } from '@/lib/monsterRage';
 import type { RngState } from '../rng';
 
+/**
+ * Mark the chosen final monster as Boss directly at deck-init time.
+ *
+ * Boss = native monster + 亡灵召唤 (`bossEnrageGraveyardSummon: 4`) + 复生
+ * (`hasRevive: true, reviveUsed: false`) + `bossPhase` flag + `(Boss)` name suffix
+ * + `isFinalMonster` flag (preserves the waterfall deck-return protection).
+ *
+ * No `bossRetaliationDamage`, no +5 attack, no full-HP refill — those used to be
+ * applied by the now-deleted `createBossCard` transform.
+ */
+function bakeFinalBoss(card: GameCardData): GameCardData {
+  return {
+    ...card,
+    isFinalMonster: true,
+    bossPhase: true,
+    bossEnrageGraveyardSummon: 4,
+    hasRevive: true,
+    reviveUsed: false,
+    name: `${card.name} (Boss)`,
+    description: FINAL_MONSTER_MARK_DESCRIPTION,
+  };
+}
+
 export function reduceInitGame(
   state: GameState,
   mode: 'normal' | 'quick',
@@ -347,7 +370,7 @@ export function reduceInitGame(
     if (!card) return null;
     const raged = applyMonsterRage(card, initialTurnCount + 1, isQuickMode);
     if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
-      return { ...raged, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
+      return bakeFinalBoss(raged);
     }
     return raged;
   }) as ActiveRowSlots;
@@ -438,7 +461,7 @@ export function reduceInitGame(
   const initialRemaining = dealQueue.map((card) => {
     const origIdx = deckWithClassEvents.indexOf(card);
     if (origIdx === lastMonsterDeckIndex && card.type === 'monster') {
-      return { ...card, isFinalMonster: true, description: FINAL_MONSTER_MARK_DESCRIPTION };
+      return bakeFinalBoss(card);
     }
     return card;
   });

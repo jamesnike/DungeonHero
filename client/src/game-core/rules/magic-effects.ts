@@ -603,19 +603,23 @@ export function finalizeDiscardEmpower(
 }
 
 /**
- * 唤回秘药·转型（discard-recycle-to-hand:N）的弃回后续：
+ * 唤回秘药·侧击（discard-recycle-to-hand:N）的弃回后续：
  *
  * 1. 把玩家选中的 1 张手牌（discarded[0]）通过 DISCARD_OWNED_CARD 弃回
  *    （Perm 进回收袋、非 Perm 进坟场，并触发 onDiscardDraw / catapult 等弃置联动）。
  *    若 discarded 为空（auto-skip 路径：手牌没有可弃的牌），则跳过弃回步骤。
- * 2. 从 permanentMagicRecycleBag 随机取 N 张到手牌（排除转型源卡 id 防御性自我过滤）。
+ * 2. 从 permanentMagicRecycleBag 随机取 N 张到手牌（排除源卡 id 防御性自我过滤）。
  *    若回收袋为空，仅记录「回收袋为空」banner，**仍允许步骤 1 的弃回完成**
  *    （用户已确认：discard_anyway）。
  *
- * 与 reduceApplyTransformCategory 的 'recycle-to-hand:' 旧分支一致地不 enqueue
- * FINALIZE_MAGIC_CARD —— 转型源卡（持有 transformEffect 的那张牌）已经在它自己
- * 的 PLAY_CARD/RESOLVE_MAGIC 链里 finalize 过了，APPLY_TRANSFORM_CATEGORY 只是
- * 它的 follow-up，不需要再 finalize。
+ * 不 enqueue FINALIZE_MAGIC_CARD —— 源卡（持有 flankEffectId 的那张牌）已经在它
+ * 自己的 PLAY_CARD/RESOLVE_MAGIC 链里 finalize 过了，TRIGGER_FLANK_DISCARD_RECYCLE
+ * 只是它的 follow-up，不需要再 finalize。
+ *
+ * NOTE: 历史命名沿用 `transformCard` / `Transform` 是因为这套流程曾经由「转型」
+ * 触发；现在触发条件已改成「侧击」（reducePlayCard 的 flank 分支 + 新动作
+ * TRIGGER_FLANK_DISCARD_RECYCLE）。函数名 / 参数名 / context.kind 仅描述「弃 N
+ * 抽回收袋 M」的流程形状，与触发条件无关。
  */
 export function finalizeTransformDiscardRecycle(
   state: GameState,
@@ -634,7 +638,7 @@ export function finalizeTransformDiscardRecycle(
       enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: dc, owner: 'player' });
     }
     discardName = discarded.map(c => `「${c.name}」`).join('、');
-    log(sideEffects, 'magic', `转型触发：弃回${discardName}`);
+    log(sideEffects, 'magic', `侧击触发：弃回${discardName}`);
   }
 
   const excludeIds = new Set<string>([transformCard.id, ...discarded.map(c => c.id)]);
@@ -654,18 +658,18 @@ export function finalizeTransformDiscardRecycle(
       sideEffects.push({ event: 'card:queueToHand', payload: { card: pick } });
     }
     const names = picks.map(p => `「${p.name}」`).join('、');
-    log(sideEffects, 'magic', `转型触发：从回收袋取回${names}！`);
+    log(sideEffects, 'magic', `侧击触发：从回收袋取回${names}！`);
     if (discardName) {
-      banner(sideEffects, `转型触发！弃回${discardName}，从回收袋取回${names}！`);
+      banner(sideEffects, `侧击触发！弃回${discardName}，从回收袋取回${names}！`);
     } else {
-      banner(sideEffects, `转型触发！手牌无可弃，从回收袋取回${names}！`);
+      banner(sideEffects, `侧击触发！手牌无可弃，从回收袋取回${names}！`);
     }
   } else {
-    log(sideEffects, 'magic', '转型触发：回收袋为空。');
+    log(sideEffects, 'magic', '侧击触发：回收袋为空。');
     if (discardName) {
-      banner(sideEffects, `转型触发！弃回${discardName}，但回收袋为空。`);
+      banner(sideEffects, `侧击触发！弃回${discardName}，但回收袋为空。`);
     } else {
-      banner(sideEffects, '转型触发！但手牌无可弃且回收袋为空。');
+      banner(sideEffects, '侧击触发！但手牌无可弃且回收袋为空。');
     }
   }
 
@@ -1045,7 +1049,7 @@ export function resolveInstantMagic(
       return resolveEmberEcho(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
     case '治愈术': {
-      const healAmounts = [5, 3, 5];
+      const healAmounts = [5, 10, 3];
       const healBase = healAmounts[card.upgradeLevel ?? 0] ?? 5;
       const healAmt = healBase * echoMultiplier;
       const echoTagH = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
@@ -1659,9 +1663,9 @@ export function resolvePermanentMagic(
       return resolveRepairOne(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
     case STARTER_CARD_IDS.surveyAction: {
-      // 查阅动作：从背包抽 2 张牌（受回响倍率影响）。
+      // 查阅动作：从背包抽 1 张牌（受回响倍率影响）。
       // 主效果不随 upgradeLevel 缩放——升级仅影响「上手」buff 的强度。
-      const drawCount = 2 * echoMultiplier;
+      const drawCount = 1 * echoMultiplier;
       const drawState = { ...state, ...patch } as GameState;
       const drawResult = drawMultipleFromBackpack(drawState, drawCount);
       if (drawResult.cards.length > 0) {
@@ -1717,7 +1721,7 @@ export function resolvePermanentMagic(
     }
 
     case STARTER_CARD_IDS.healMagic: {
-      const healAmounts = [5, 3, 5];
+      const healAmounts = [5, 10, 3];
       const healAmt = healAmounts[card.upgradeLevel ?? 0] ?? 5;
       enqueuedActions.push({ type: 'HEAL', amount: healAmt, source: 'heal-magic' });
       log(sideEffects, 'magic', `治愈术：恢复 ${healAmt} 点生命`);
@@ -1972,8 +1976,8 @@ export function resolvePermanentMagic(
       return resolveStunStrike(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
     case STARTER_CARD_IDS.gamblerGambit: {
-      const goldAmounts = [1, 2, 3];
-      const drawAmounts = [1, 2, 3];
+      const goldAmounts = [1, 2, 4];
+      const drawAmounts = [1, 1, 1];
       const goldAmt = goldAmounts[card.upgradeLevel ?? 0] ?? 1;
       const drawAmt = drawAmounts[card.upgradeLevel ?? 0] ?? 1;
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 1, source: 'gambler-gambit', selfInflicted: true });
@@ -2258,23 +2262,20 @@ export function resolveKnightInstantMagic(
     }
 
     case 'berserk-gambit': {
+      // 狂血豪赌：HP→1 + 每武器栏多攻击 N 次。
+      // 升级表（extraPerSlotAmounts）：L0 → 1 次；L1 → 2 次。
+      // 旧设计的 +4/+8 装备伤害 buff 已删除；旧存档若 upgradeLevel >= 1 一律按 L1 处理。
       const hpLoss = Math.max(0, state.hp - 1);
       if (hpLoss > 0) {
         enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpLoss, source: 'berserk-gambit', selfInflicted: true });
       }
-      const lvl = card.upgradeLevel ?? 0;
-      const buffAmounts = [0, 4, 8, 8];
-      const extraPerSlot = lvl >= 3 ? 2 : 1;
-      const buffAmt = buffAmounts[lvl] ?? 8;
-      if (buffAmt > 0) {
-        enqueuedActions.push({ type: 'ADD_BERSERK_BUFF', amount: buffAmt });
-      }
+      const extraPerSlotAmounts = [1, 2];
+      const lvl = Math.min(card.upgradeLevel ?? 0, extraPerSlotAmounts.length - 1);
+      const extraPerSlot = extraPerSlotAmounts[lvl];
       enqueuedActions.push({ type: 'SET_COMBAT_FLAG', flag: 'gambitExtraActive', value: true });
       enqueuedActions.push({ type: 'SET_GAMBIT_STATE', extraPerSlot });
-      const parts: string[] = [];
-      if (buffAmt > 0) parts.push(`本回合装备 +${buffAmt} 伤害`);
-      parts.push(extraPerSlot > 1 ? `每个武器栏可多攻击 ${extraPerSlot} 次` : '每个武器栏可多攻击一次');
-      banner(sideEffects, `狂血豪赌发动：${parts.join('，')}。`);
+      const extraText = extraPerSlot > 1 ? `每个武器栏可多攻击 ${extraPerSlot} 次` : '每个武器栏可多攻击一次';
+      banner(sideEffects, `狂血豪赌发动：${extraText}。`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -2521,22 +2522,30 @@ export function executeArmorDoubleStrike(
   }
 
   // Damage = armorPct% of the slot's full armor value (base + permanent + temp).
-  const armorPcts = [50, 75];
-  const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? 75;
+  // 升级表（与 upgrades.ts:armorDoubleStrike handler 同步，改一边记得改另一边）：
+  //   L0 → 50%, 2 个目标
+  //   L1 → 75%, 2 个目标
+  //   L2 → 75%, 3 个目标
+  const armorPcts = [50, 75, 75];
+  const targetCounts = [2, 2, 3];
+  const upLevel = card.upgradeLevel ?? 0;
+  const armorPct = armorPcts[upLevel] ?? armorPcts[armorPcts.length - 1];
+  const targetCount = targetCounts[upLevel] ?? targetCounts[targetCounts.length - 1];
   const rawArmor = computeSlotArmorValuePure(state, slotId);
   const scaledArmor = Math.floor(rawArmor * armorPct / 100);
   const ampBonus = card.amplifyBonus ?? 0;
   const perTargetDamage = getSpellDamage(scaledArmor + ampBonus, state) * echoMultiplier;
   const echoTagADS = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
 
-  // Pick up to 2 random monsters; if only 1 exists, hit it once (no doubling).
+  // Pick up to `targetCount` random monsters; if fewer exist, hit those that
+  // do exist once each (no doubling).
   const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
   let dealtDamage = false;
   if (monsters.length > 0 && perTargetDamage > 0) {
     let rng = state.rng;
     const [shuffled, rng2] = rngShuffle(monsters, rng);
     rng = rng2;
-    const targets = shuffled.slice(0, 2);
+    const targets = shuffled.slice(0, targetCount);
     patch.rng = rng;
     for (const target of targets) {
       ensureMonsterEngaged(state, target, enqueuedActions);
@@ -2688,8 +2697,8 @@ export function resolveKnightPermanentMagic(
         // 单目标伤害 magic：始终弹出 monster picker（包含 hero 自伤路径）。
         // 不再因为没有怪物 / 只有一个怪物就 fizzle / 自动选。
         const slotId = shieldSlots[0].id;
-        const armorPcts = [100, 150];
-        const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? 150;
+        const armorPcts = [100, 125, 150];
+        const armorPct = armorPcts[card.upgradeLevel ?? 0] ?? armorPcts[armorPcts.length - 1];
         const rawArmor = computeSlotArmorValuePure(state, slotId);
         const scaledArmor = Math.floor(rawArmor * armorPct / 100);
         patch.pendingMagicAction = {
@@ -2730,11 +2739,17 @@ export function resolveKnightPermanentMagic(
       if (shieldSlots.length === 1) {
         return executeArmorDoubleStrike(state, card, shieldSlots[0].id, sideEffects, patch, enqueuedActions, echoMultiplier);
       }
+      // Prompt 比例 / 目标数随升级浮动（与 executeArmorDoubleStrike 同表）。
+      const ads2Pcts = [50, 75, 75];
+      const ads2Counts = [2, 2, 3];
+      const ads2Level = card.upgradeLevel ?? 0;
+      const ads2Pct = ads2Pcts[ads2Level] ?? ads2Pcts[ads2Pcts.length - 1];
+      const ads2Count = ads2Counts[ads2Level] ?? ads2Counts[ads2Counts.length - 1];
       patch.pendingMagicAction = {
         card,
         effect: 'armor-double-strike',
         step: 'slot-select',
-        prompt: '选择一面护盾，对随机 2 个怪物各造成 50% 护甲值伤害（耐久 -1）。',
+        prompt: `选择一面护盾，对随机 ${ads2Count} 个怪物各造成 ${ads2Pct}% 护甲值伤害（耐久 -1）。`,
         echoMultiplier,
       } as PendingMagicAction;
       patch.heroSkillBanner = '盾影双噬：选择一面护盾。';
@@ -2784,12 +2799,19 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'reorganize-backpack': {
-      // 整顿背囊 (Perm 2): permanently +1 backpack capacity, then prompt the
+      // 整顿背囊 (Perm 2): permanently +N backpack capacity, then prompt the
       // player to pick up to 3 cards from hand / amulets / equipment slots and
       // push them onto the top of the backpack. Selection cap is further
       // bounded by the new backpack's free room (so we never overflow).
+      //
+      // 升级 capacity bonus（与 upgrades.ts:reorganizeBackpack handler 同步）：
+      //   L0 → +1, L1 → +2
+      // MAX_PICK_REQUESTED 始终基于 3，不随升级浮动；echo 才让基础值 ×N。
+      const capacityBonuses = [1, 2];
+      const baseCapacityBonus = capacityBonuses[card.upgradeLevel ?? 0]
+        ?? capacityBonuses[capacityBonuses.length - 1];
       const MAX_PICK_REQUESTED = 3 * echoMultiplier;
-      const capacityBonus = 1 * echoMultiplier;
+      const capacityBonus = baseCapacityBonus * echoMultiplier;
       const newCapacityModifier = state.backpackCapacityModifier + capacityBonus;
       const newCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + newCapacityModifier);
       const currentCount = (state.backpackItems ?? []).length;
@@ -3100,7 +3122,14 @@ export function resolveKnightPermanentMagic(
           (patch as any).amuletSlots = amuletSlots.slice(0, -1);
           patch.handCards = [...state.handCards, sanitizeCardMetadata(topAmulet)];
         }
-        enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+        // 抽牌门控（recall-equipment 共享 effect，3 张卡共用此 resolver）：
+        //   - 起始/curse-flip 回收术（无 classCard，无 upgrade）→ 不抽牌
+        //   - 起始 回收术 升级 1（upgradeLevel >= 1）→ 抽 1
+        //   - 骑士专属 紧急回收（classCard:true）→ 始终抽 1
+        const recallShouldDraw = card.classCard === true || (card.upgradeLevel ?? 0) >= 1;
+        if (recallShouldDraw) {
+          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+        }
         const itemName = options[0].label.split(' — ')[1] ?? '装备';
         banner(sideEffects, `紧急回收：失去 ${hpCost} HP，${itemName} 已回到手牌！`);
         log(sideEffects, 'magic', `紧急回收：失去 ${hpCost} HP，${itemName} 回到手牌`);
@@ -3408,19 +3437,14 @@ export function resolveKnightPermanentMagic(
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
-      // 转型判定必须在此刻完成：本卡的 RESOLVE_MAGIC 末尾会 enqueue
-      // APPLY_TRANSFORM_CATEGORY，待玩家选择槽位后 hero.ts 再读时 lastPlayedCardCategory
-      // 已被覆盖为本卡自身类别，故必须把 transformTriggered 与 echoMultiplier
-      // 写入 pendingMagicAction 一并传递。
-      const prevCategory = state.lastPlayedCardCategory;
-      const curCategory = getCardPlayCategory(card);
-      const transformTriggered = prevCategory != null && prevCategory !== curCategory;
+      // 触发条件由"转型"迁移为"侧击"：直接读 reducePlayCard 传入的 isFlank。
+      // 写进 pendingMagicAction，等玩家选完槽位后由 hero.ts 读取。
       patch.pendingMagicAction = {
         card,
         effect: 'transform-repair',
         step: 'slot-select',
         prompt: '选择一个装备，恢复 1 耐久。',
-        transformTriggered,
+        flankTriggered: !!isFlank,
         echoMultiplier,
       } as any;
       patch.heroSkillBanner = '蜕变修复：选择一个装备。';
@@ -3448,14 +3472,14 @@ export function resolveKnightPermanentMagic(
     case 'essence-extract': {
       const eligibleHand = state.handCards.filter(c => c.id !== card.id);
       if (eligibleHand.length === 0) {
-        banner(sideEffects, '手牌中没有可移除的卡牌。');
+        banner(sideEffects, '手牌中没有可删除的卡牌。');
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
       patch.permGrantModal = { sourceCardId: card.id, sourceType: 'essence-extract' as const };
       patch.pendingMagicAction = { card, effect: 'essence-extract', step: 'perm-grant-select' } as any;
-      patch.heroSkillBanner = '精华萃取：选择一张手牌移除。';
+      patch.heroSkillBanner = '精华萃取：选择一张手牌删除。';
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -3739,15 +3763,21 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'eternal-vessel': {
-      // 永恒之器（Perm 2）：失去 (3 × echo) HP，permanentMaxHpBonus += (3 × echo)。
+      // 永恒之器（Perm 2）：失去 (3 × echo) HP，permanentMaxHpBonus += (boost × echo)。
       // 无目标、无中间步骤，立即 finalize。自伤走 APPLY_DAMAGE selfInflicted，
       // 跟 血誓回卷 / 血金术 / 紧急回收 一致：可被 shields 抵消、可被 death-ward
       // 救场、hp ≤ cost 时会致死（playable at any HP, may kill you 的标准约定）。
       //
-      // Echo 行为：用户选了「全比例放大」—— echo×2 → -6 HP / +6 maxHp。
+      // 升级：仅影响 maxHp 加成，HP 损失（cost）固定 3。
+      //   L0 → +3, L1 → +4, L2 → +5（对应 hpBoosts 表）
+      // 跟 upgrades.ts:eternalVessel handler 同步；改一边记得改另一边。
+      //
+      // Echo 行为：用户选了「全比例放大」—— echo×2 → -6 HP / +(2*boost) maxHp。
       // 等价于「打了 2 张永恒之器」，跟 血誓回卷 (-3 × echo) 同款。
+      const hpBoosts = [3, 4, 5];
+      const baseBoost = hpBoosts[card.upgradeLevel ?? 0] ?? hpBoosts[hpBoosts.length - 1];
       const hpCost = 3 * echoMultiplier;
-      const hpBoost = 3 * echoMultiplier;
+      const hpBoost = baseBoost * echoMultiplier;
       enqueuedActions.push({
         type: 'APPLY_DAMAGE',
         amount: hpCost,
@@ -4314,19 +4344,29 @@ export function resolveOverkillUpgrade(
 ): ReduceResult {
   // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
   // 选 hero 时不存在 overkill 概念（hero.ts 分支会跳过升级模态）。
-  const okBase = 3 + (card.amplifyBonus ?? 0);
+  // 升级表（与 hero.ts case 'overkill-upgrade' / helpers.computeDamageMagicDisplayPure 保持一致）：
+  //   L0：3 dmg，超杀升级 1 张牌
+  //   L1：5 dmg，超杀升级 1 张牌
+  //   L2：5 dmg，超杀升级 2 张牌
+  const okLvl = card.upgradeLevel ?? 0;
+  const okBaseDmgs = [3, 5, 5];
+  const okUpgradeCounts = [1, 1, 2];
+  const okBaseDmg = okBaseDmgs[okLvl] ?? okBaseDmgs[okBaseDmgs.length - 1];
+  const okUpgradeCount = okUpgradeCounts[okLvl] ?? okUpgradeCounts[okUpgradeCounts.length - 1];
+  const okBase = okBaseDmg + (card.amplifyBonus ?? 0);
   const okDamage = getSpellDamage(okBase, state);
+  const okCountText = okUpgradeCount === 1 ? '一张牌' : `${okUpgradeCount} 张牌`;
   const echoLabel = echoMultiplier > 1 ? `（回响：第 1/${echoMultiplier} 次）` : '';
   patch.pendingMagicAction = {
     card,
     effect: 'overkill-upgrade',
     step: 'monster-select',
-    prompt: `选择一个目标，对其造成 ${okDamage} 点伤害。超杀：升级一张牌。${echoLabel}`,
+    prompt: `选择一个目标，对其造成 ${okDamage} 点伤害。超杀：升级${okCountText}。${echoLabel}`,
     data: {},
     echoRemaining: echoMultiplier,
     allowsHeroTarget: true,
   } as any;
-  patch.heroSkillBanner = `选择一个目标，造成 3 点伤害。超杀：升级一张牌。${echoLabel}`;
+  patch.heroSkillBanner = `选择一个目标，造成 ${okBaseDmg} 点伤害。超杀：升级${okCountText}。${echoLabel}`;
   return applyPatch(state, patch, sideEffects);
 }
 
@@ -4341,10 +4381,10 @@ export function resolveRepairOne(
 ): ReduceResult {
   const repairUpgLvl = card.upgradeLevel ?? 0;
   const repairHpCosts = [2, 1, 1];
-  const repairAmounts = [1, 2, 2];
+  const repairAmounts = [1, 1, 2];
   const repairHpCost = repairHpCosts[repairUpgLvl] ?? 1;
   const repairBaseAmt = repairAmounts[repairUpgLvl] ?? 2;
-  const repairDrawCard = repairUpgLvl >= 2;
+  const repairDrawCard = repairUpgLvl >= 1;
 
   if (repairHpCost > 0) {
     enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: repairHpCost, source: 'repair-one', selfInflicted: true });
@@ -4630,9 +4670,12 @@ export function resolveTransformGrant(
   enqueuedActions: GameAction[],
   echoMultiplier: number = 1,
 ): ReduceResult {
-  const eligible = state.handCards.filter(c => c.id !== card.id && !(c as any).transformBonus);
+  // 蜕变赋灵：触发条件已从「转型」迁移为「侧击」。modal sourceType 仍沿用历史名
+  // 'transform-grant'（沿用 i18n key / event name），但 eligibility 必须按
+  // flankEffect 过滤——避免一张卡同时被赋予多个互相覆盖的侧击效果。
+  const eligible = state.handCards.filter(c => c.id !== card.id && !(c as any).flankEffect);
   if (eligible.length === 0) {
-    banner(sideEffects, '蜕变赋灵：手牌中没有可赋予转型的卡牌。');
+    banner(sideEffects, '蜕变赋灵：手牌中没有可赋予侧击的卡牌。');
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -4641,11 +4684,11 @@ export function resolveTransformGrant(
     const target = eligible[0];
     patch.handCards = state.handCards.map(c =>
       c.id === target.id
-        ? { ...c, transformBonus: '失去 3 点生命，随机获得坟场一张魔法卡', transformEffect: 'graveyard-random-magic' } as GameCardData
+        ? { ...c, flankEffect: '失去 3 点生命·获得坟场一张魔法卡', flankEffectId: 'graveyard-random-magic' } as GameCardData
         : c,
     );
-    log(sideEffects, 'magic', `蜕变赋灵：「${target.name}」获得转型效果！`);
-    banner(sideEffects, `「${target.name}」获得转型：失去 3 点生命，随机获得坟场一张魔法卡！`);
+    log(sideEffects, 'magic', `蜕变赋灵：「${target.name}」获得侧击效果！`);
+    banner(sideEffects, `「${target.name}」获得侧击：失去 3 点生命，随机获得坟场一张魔法卡！`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -4772,8 +4815,9 @@ export function resolveGraveyardDiscoverEquipAmulet(
 }
 
 // ---------------------------------------------------------------------------
-// resolveMonsterRecruit — randomly take up to 2 monster cards from graveyard
-// into hand (no player choice, no replacement)
+// resolveMonsterRecruit — randomly take up to N monster cards from graveyard
+// into hand (no player choice, no replacement). N scales with upgradeLevel.
+// 升级表（recruitCounts）：L0 → 2 张；L1 → 3 张
 // ---------------------------------------------------------------------------
 
 export function resolveMonsterRecruit(
@@ -4796,7 +4840,9 @@ export function resolveMonsterRecruit(
   [shuffled, rng] = rngShuffle(monsters, rng);
   patch.rng = rng;
 
-  const taken = shuffled.slice(0, Math.min(2, shuffled.length));
+  const recruitCounts = [2, 3];
+  const recruitCount = recruitCounts[card.upgradeLevel ?? 0] ?? recruitCounts[recruitCounts.length - 1];
+  const taken = shuffled.slice(0, Math.min(recruitCount, shuffled.length));
   const takenIds = new Set(taken.map(c => c.id));
 
   patch.discardedCards = (state.discardedCards ?? []).filter((c: GameCardData) => !takenIds.has(c.id));
@@ -4972,7 +5018,11 @@ export function resolvePendingMagic(
             patch.handCards = [...state.handCards, sanitizeCardMetadata(topAmulet)];
           }
         }
-        enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+        // 抽牌门控（同上：classCard / upgradeLevel>=1 任一即抽 1）。
+        const recallShouldDraw = card.classCard === true || (card.upgradeLevel ?? 0) >= 1;
+        if (recallShouldDraw) {
+          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+        }
         const itemName = chosen.label?.split(' — ')[1] ?? '装备';
         banner(sideEffects, `紧急回收：失去 ${hpCost} HP，${itemName} 已回到手牌！`);
         log(sideEffects, 'magic', `紧急回收：失去 ${hpCost} HP，${itemName} 回到手牌`);

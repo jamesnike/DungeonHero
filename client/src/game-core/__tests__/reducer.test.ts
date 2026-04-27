@@ -1291,20 +1291,7 @@ describe('reducer', () => {
       ...overrides,
     });
 
-    it('transforms final monster into boss (branch A)', () => {
-      const monster = makeMonster({ isFinalMonster: true, hp: 0, currentLayer: 0 });
-      const slots = Array.from({ length: 5 }, () => null) as any;
-      slots[0] = monster;
-      const state = makeState({ activeCards: slots });
-      const result = reduce(state, { type: 'MONSTER_DEFEATED', monsterId: 'm1' });
-      const bossCard = result.state.activeCards[0] as any;
-      expect(bossCard.bossPhase).toBe(true);
-      expect(bossCard.bossRetaliationDamage).toBe(3);
-      expect(bossCard.hasRevive).toBe(true);
-      expect(bossCard.currentLayer).toBe(2);
-    });
-
-    it('revives monster when hasRevive (branch B)', () => {
+    it('revives monster when hasRevive (branch A)', () => {
       const monster = makeMonster({ hasRevive: true, reviveUsed: false, hp: 0, currentLayer: 0 });
       const slots = Array.from({ length: 5 }, () => null) as any;
       slots[0] = monster;
@@ -1316,7 +1303,7 @@ describe('reducer', () => {
       expect(revived.reviveUsed).toBe(true);
     });
 
-    it('increments monstersDefeated on actual defeat (branch C)', () => {
+    it('increments monstersDefeated on actual defeat (branch B)', () => {
       const monster = makeMonster();
       const slots = Array.from({ length: 5 }, () => null) as any;
       slots[0] = monster;
@@ -2091,7 +2078,7 @@ describe('reducer', () => {
   });
 
   describe('COMPLETE_HERO_MAGIC', () => {
-    it('marks magic as used and resets gauge for gauge origin', () => {
+    it('resets gauge for gauge origin (no usedThisWave gating — unlimited use)', () => {
       const state = makeState({
         heroMagicState: {
           'revive-blessing': { unlocked: true, gauge: 100, usedThisWave: false },
@@ -2099,9 +2086,36 @@ describe('reducer', () => {
         pendingHeroMagicAction: { id: 'revive-blessing' } as any,
       });
       const result = reduce(state, { type: 'COMPLETE_HERO_MAGIC', magicId: 'revive-blessing', origin: 'gauge' });
-      expect((result.state.heroMagicState as any)['revive-blessing'].usedThisWave).toBe(true);
       expect((result.state.heroMagicState as any)['revive-blessing'].gauge).toBe(0);
+      expect((result.state.heroMagicState as any)['revive-blessing'].usedThisWave).toBe(false);
       expect(result.state.pendingHeroMagicAction).toBeNull();
+    });
+
+    it('hero magic can be re-activated immediately when gauge refills (no per-wave cap)', () => {
+      const state = makeState({
+        heroMagicState: {
+          'holy-light': { unlocked: true, gauge: 10, usedThisWave: false },
+        } as any,
+        pendingHeroMagicAction: null,
+        hp: 5,
+      });
+      const first = reduce(state, { type: 'ACTIVATE_HERO_MAGIC', magicId: 'holy-light', origin: 'gauge' });
+      expect(first.enqueuedActions.some(a => a.type === 'COMPLETE_HERO_MAGIC')).toBe(true);
+      const completed = reduce(first.state, { type: 'COMPLETE_HERO_MAGIC', magicId: 'holy-light', origin: 'gauge' });
+      expect((completed.state.heroMagicState as any)['holy-light'].usedThisWave).toBe(false);
+      expect((completed.state.heroMagicState as any)['holy-light'].gauge).toBe(0);
+
+      const refilled = {
+        ...completed.state,
+        heroMagicState: {
+          ...completed.state.heroMagicState,
+          'holy-light': { ...completed.state.heroMagicState['holy-light'], gauge: 10 },
+        } as any,
+        hp: 5,
+      };
+      const second = reduce(refilled, { type: 'ACTIVATE_HERO_MAGIC', magicId: 'holy-light', origin: 'gauge' });
+      expect(second.enqueuedActions.some(a => a.type === 'COMPLETE_HERO_MAGIC')).toBe(true);
+      expect(second.sideEffects.some(e => e.event === 'ui:banner' && (e.payload as any)?.text?.includes('已在本波使用'))).toBe(false);
     });
   });
 
@@ -2939,12 +2953,22 @@ describe('reducer', () => {
     });
   });
 
-  describe('SET_DEATH_WARD_PROMPT', () => {
-    it('sets deathWardPrompt', () => {
-      const state = makeState({ deathWardPrompt: null });
-      const payload = { slotId: 'equipmentSlot1' as const, damage: 5 };
-      const result = reduce(state, { type: 'SET_DEATH_WARD_PROMPT', payload: payload as any });
-      expect(result.state.deathWardPrompt).toEqual(payload);
+  describe('DISMISS_DEATH_WARD_NOTICE', () => {
+    it('clears deathWardNotice and reverts phase to playerInput', () => {
+      const state = makeState({
+        deathWardNotice: { cardName: '不灭守护', blockedDamage: 5 },
+        phase: 'awaitingDeathWardNotice',
+      } as any);
+      const result = reduce(state, { type: 'DISMISS_DEATH_WARD_NOTICE' });
+      expect(result.state.deathWardNotice).toBeNull();
+      expect(result.state.phase).toBe('playerInput');
+    });
+
+    it('clearing without an active notice is a no-op', () => {
+      const state = makeState({ deathWardNotice: null, phase: 'playerInput' } as any);
+      const result = reduce(state, { type: 'DISMISS_DEATH_WARD_NOTICE' });
+      expect(result.state.deathWardNotice).toBeNull();
+      expect(result.state.phase).toBe('playerInput');
     });
   });
 
@@ -3180,6 +3204,50 @@ describe('reducer', () => {
       expect(newBolt?.amplifyBonus).toBe(1);
 
       expect(drained.state.amplifiedCardBonus['魔弹']).toBe(1);
+    });
+
+    it('on overkill with onAttackAmplifyMissileGenerateCount=2 (魔弹连弩 L2): spawns 2 bolts (each amplified), single +1 amplify', () => {
+      const weapon = {
+        id: 'w-mb', type: 'weapon' as const, name: '魔弹连弩', value: 20,
+        durability: 3, maxDurability: 3,
+        onAttackAmplifyMissileGenerate: true,
+        onAttackAmplifyMissileGenerateCount: 2,
+        fromSlot: 'equipmentSlot1' as const,
+      };
+      const monster = {
+        id: 'm1', type: 'monster' as const, name: 'Goblin', value: 5,
+        hp: 5, maxHp: 5, attack: 5,
+      };
+      const backpackBolt = { id: 'bb', type: 'magic' as const, name: '魔弹', value: 0 };
+
+      const state = makeState({
+        equipmentSlot1: weapon as any,
+        activeCards: [monster, null, null, null, null] as any,
+        backpackItems: [backpackBolt] as any,
+        combatState: {
+          ...initialCombatState,
+          engagedMonsterIds: ['m1'],
+          currentTurn: 'hero',
+        },
+      });
+
+      const drained = drain(state, [
+        { type: 'PERFORM_HERO_ATTACK', slotId: 'equipmentSlot1', targetMonsterId: 'm1' },
+      ] as any);
+
+      expect(drained.state.amplifiedCardBonus['魔弹']).toBe(1);
+
+      const bolts = drained.state.backpackItems.filter(c => c.name === '魔弹');
+      expect(bolts).toHaveLength(3);
+
+      const updatedExisting = bolts.find(c => c.id === 'bb');
+      expect(updatedExisting?.amplifyBonus).toBe(1);
+
+      const newBolts = bolts.filter(c => c.id !== 'bb');
+      expect(newBolts).toHaveLength(2);
+      for (const newBolt of newBolts) {
+        expect(newBolt.amplifyBonus).toBe(1);
+      }
     });
 
     it('without overkill: does NOT amplify or spawn a new 魔弹', () => {

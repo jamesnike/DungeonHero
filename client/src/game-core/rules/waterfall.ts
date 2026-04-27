@@ -519,9 +519,12 @@ function reduceApplyWaterfallDiscardEffects(
     sideEffects.push({ event: 'ui:banner', payload: { text: bannerMsg } });
   };
 
-  // Helper: return final monster precursor to deck instead of graveyard
+  // Helper: return final monster (Boss-from-start) to deck instead of graveyard.
+  // The chosen final monster is born as a Boss at deck-init time (see
+  // `bakeFinalBoss` in `init.ts`), so `isFinalMonster: true` AND
+  // `bossPhase: true` co-exist; gate on `isFinalMonster` only.
   const isFinalMonsterPrecursor =
-    discardCard.type === 'monster' && discardCard.isFinalMonster && !discardCard.bossPhase;
+    discardCard.type === 'monster' && discardCard.isFinalMonster;
 
   // Handle the card itself going to graveyard or back to deck
   const sendToGraveyardUnlessFinal = () => {
@@ -568,8 +571,8 @@ function reduceApplyWaterfallDiscardEffects(
           (patch.equipmentSlotBonuses as Record<EquipmentSlotId, SlotPermanentBonus>)[slotId] = newBonuses;
           applySlotArmorBonusDelta(state, slotId, -wfx.amount, patch);
         });
-        patch.permanentSpellDamageBonus = (state.permanentSpellDamageBonus ?? 0) - wfx.amount;
-        logAndBanner('waterfall', `${cardName} 诅咒削弱装备/法术加成 -${wfx.amount}`, `${cardName} 的诅咒削弱了你的装备与法术加成！`);
+        patch.permanentSpellLifesteal = (state.permanentSpellLifesteal ?? 0) - wfx.amount;
+        logAndBanner('waterfall', `${cardName} 诅咒削弱装备伤害/护甲与超杀吸血 -${wfx.amount}`, `${cardName} 的诅咒削弱了你的装备与超杀吸血！`);
         sendToGraveyardUnlessFinal();
         break;
       }
@@ -1018,7 +1021,7 @@ function reduceApplyWaterfallTurnReset(state: GameState): ReduceResult {
     const baseArmorMax = item.type === 'monster'
       ? (item.hp ?? item.value ?? 0)
       : (item.armorMax ?? item.value ?? 0);
-    const permBonus = Math.max(0, state.equipmentSlotBonuses[slotId]?.shield ?? 0);
+    const permBonus = state.equipmentSlotBonuses[slotId]?.shield ?? 0;
     const newCap = Math.max(0, baseArmorMax + permBonus);
     if (item.armor <= newCap) continue;
     patch[slotId] = { ...item, armor: newCap } as typeof state.equipmentSlot1;

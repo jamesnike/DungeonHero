@@ -49,18 +49,24 @@ const weaponManualOnHand: OnEnterHandHandler = (state, card, patch, sideEffects)
 };
 
 /**
- * 血誓回卷 上手效果：恢复 1 HP（受 maxHp 上限限制，走标准 HEAL action
+ * 血誓回卷 上手效果：恢复 N HP（受 maxHp 上限限制，走标准 HEAL action
  * 以兼顾 amulet/equipmentSlotBonuses/totalHealed/healAccumulator 等所有钩子）。
+ *
+ * 升级 N 表（与 upgrades.ts:flipBackActive handler 同步，改一边记得改另一边）：
+ *   L0 → +1, L1 → +2, L2 → +3
+ * 升级仅影响上手 heal 量，主效果（失去 3 HP + 翻回一张已翻转卡）不变。
  */
 const bloodOathScrollOnHand: OnEnterHandHandler = (state, card, patch, sideEffects, enqueuedActions) => {
-  enqueuedActions.push({ type: 'HEAL', amount: 1, source: 'blood-oath-scroll-onhand' });
+  const healAmounts = [1, 2, 3];
+  const heal = healAmounts[card.upgradeLevel ?? 0] ?? healAmounts[healAmounts.length - 1];
+  enqueuedActions.push({ type: 'HEAL', amount: heal, source: 'blood-oath-scroll-onhand' });
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'magic', message: `${card.name} 上手：恢复 1 生命。` },
+    payload: { type: 'magic', message: `${card.name} 上手：恢复 ${heal} 生命。` },
   });
   sideEffects.push({
     event: 'ui:banner',
-    payload: { text: `${card.name} 上手：+1 生命！` },
+    payload: { text: `${card.name} 上手：+${heal} 生命！` },
   });
 };
 
@@ -97,15 +103,19 @@ const surveyActionOnHand: OnEnterHandHandler = (state, card, patch, sideEffects)
 };
 
 /**
- * 三牌惊雷 上手效果：每次此牌进入手牌时，对当前激活行所有怪物各造成 1 点法术伤害。
+ * 三牌惊雷 上手效果：每次此牌进入手牌时，对当前激活行所有怪物各造成 N 点法术伤害。
  *
  * Damage routes through DEAL_DAMAGE_TO_MONSTER so it benefits from the standard
  * damage pipeline (engagement, last-words, kill effects, missile relics, …)
  * and is consistent with other knight spell-damage cards.
  *
  * Spell damage bonus from `state.permanentSpellDamageBonus` is applied at the
- * reducer side via the standard pipeline; we pass the base damage of 1 plus
- * any amplifyBonus carried on the card.
+ * reducer side via the standard pipeline; we pass the base damage (level-based)
+ * plus any amplifyBonus carried on the card.
+ *
+ * 升级 N 表（与 upgrades.ts:threeCardThunder handler 同步，改一边记得改另一边）：
+ *   L0 → 1, L1 → 2, L2 → 3
+ * 升级仅影响上手伤害，主效果（背包恰 3 张时全场 9 法伤）不变。
  */
 const threeCardThunderOnHand: OnEnterHandHandler = (state, card, patch, sideEffects, enqueuedActions) => {
   const monsters = flattenActiveRowSlots(state.activeCards as ActiveRowSlots).filter(isDamageableTarget);
@@ -117,7 +127,9 @@ const threeCardThunderOnHand: OnEnterHandHandler = (state, card, patch, sideEffe
     return;
   }
 
-  const baseDamage = 1 + (card.amplifyBonus ?? 0);
+  const onHandDamages = [1, 2, 3];
+  const baseDmgValue = onHandDamages[card.upgradeLevel ?? 0] ?? onHandDamages[onHandDamages.length - 1];
+  const baseDamage = baseDmgValue + (card.amplifyBonus ?? 0);
   const totalDamage = Math.max(0, baseDamage + (state.permanentSpellDamageBonus ?? 0));
 
   for (const target of monsters) {
@@ -222,6 +234,27 @@ const growthBladeOnHand: OnEnterHandHandler = (_state, card, _patch, sideEffects
 };
 
 /**
+ * 生长之刃 升级 2 上手效果：每次此武器进入手牌时，按卡名累计增幅两次（+2 攻击）。
+ * 所有同名「生长之刃」共享。L1 升 L2 时切换 `onEnterHandEffect` 到本 id。
+ */
+const growthBladeOnHandX2: OnEnterHandHandler = (_state, card, _patch, sideEffects, enqueuedActions) => {
+  enqueuedActions.push({
+    type: 'AMPLIFY_CARDS_BY_NAME',
+    cardName: card.name,
+    amount: 2,
+    source: `${card.name} 上手`,
+  });
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'magic', message: `${card.name} 上手：增幅两次（+2 攻击）。` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${card.name} 上手：增幅两次！` },
+  });
+};
+
+/**
  * 赋能神殿 「上手：恢复 1 HP」: each time this card enters hand, heal 1 HP.
  * Set on `card.onEnterHandEffect = 'on-hand-heal-1'` via the
  * `on-hand-heal-grant` PermGrant flow. Routed through HEAL action so that
@@ -248,5 +281,6 @@ registerOnEnterHandAll([
   { id: 'stun-cap-bonus-2', handler: stunCapBonus2OnHand },
   { id: 'frenzy-curse-onhand', handler: frenzyCurseOnHand },
   { id: 'growth-blade-onhand', handler: growthBladeOnHand },
+  { id: 'growth-blade-onhand-x2', handler: growthBladeOnHandX2 },
   { id: 'on-hand-heal-1', handler: onHandHeal1 },
 ]);

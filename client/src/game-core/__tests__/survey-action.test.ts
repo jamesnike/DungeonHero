@@ -2,7 +2,7 @@
  * 查阅动作 (Survey Action) — Starter Perm 1 magic tests
  *
  * Covers:
- *   1. Main effect: draws 2 cards from backpack on PLAY_CARD.
+ *   1. Main effect: draws 1 card from backpack on PLAY_CARD.
  *   2. Echo (doubleNextMagic) doubles the draw count.
  *   3. Empty backpack → no draws but card still finalizes.
  *   4. 上手: random slot gains slotTempAttack +1 (default level).
@@ -39,7 +39,7 @@ function makeSurveyAction(_idSuffix = 'survey', overrides: Partial<GameCardData>
     value: 0,
     image: '',
     magicType: 'permanent',
-    magicEffect: '永久魔法：从背包抽 2 张牌。',
+    magicEffect: '永久魔法：从背包抽 1 张牌。',
     description: 'test',
     recycleDelay: 1,
     onEnterHandEffect: 'survey-action-onhand',
@@ -61,8 +61,8 @@ function makeBackpackFiller(idSuffix: string): GameCardData {
 // 主效果：抽牌
 // ---------------------------------------------------------------------------
 
-describe('查阅动作 主效果 (从背包抽 2 张)', () => {
-  it('draws exactly 2 cards from backpack to hand on PLAY_CARD', () => {
+describe('查阅动作 主效果 (从背包抽 1 张)', () => {
+  it('draws exactly 1 card from backpack to hand on PLAY_CARD', () => {
     const card = makeSurveyAction('main-1');
     const fillers = [makeBackpackFiller('a'), makeBackpackFiller('b'), makeBackpackFiller('c')];
     const state = makeState({
@@ -74,8 +74,8 @@ describe('查阅动作 主效果 (从背包抽 2 张)', () => {
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
     ]);
     const drawnInHand = result.state.handCards.filter(c => c.id.startsWith('bp-')).length;
-    expect(drawnInHand).toBe(2);
-    expect(result.state.backpackItems.length).toBe(1);
+    expect(drawnInHand).toBe(1);
+    expect(result.state.backpackItems.length).toBe(2);
     expect(result.state.handCards.some(c => c.id === card.id)).toBe(false);
   });
 
@@ -92,7 +92,7 @@ describe('查阅动作 主效果 (从背包抽 2 张)', () => {
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('echo (doubleNextMagic) doubles draws (2 → 4)', () => {
+  it('echo (doubleNextMagic) doubles draws (1 → 2)', () => {
     const card = makeSurveyAction('echo');
     const fillers = Array.from({ length: 5 }, (_, i) => makeBackpackFiller(`e${i}`));
     const state = makeState({
@@ -105,7 +105,7 @@ describe('查阅动作 主效果 (从背包抽 2 张)', () => {
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
     ]);
     const drawnInHand = result.state.handCards.filter(c => c.id.startsWith('bp-')).length;
-    expect(drawnInHand).toBe(4);
+    expect(drawnInHand).toBe(2);
   });
 
   it('does NOT scale the draw count with upgradeLevel (only on-hand buff scales)', () => {
@@ -120,7 +120,7 @@ describe('查阅动作 主效果 (从背包抽 2 张)', () => {
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
     ]);
     const drawnInHand = result.state.handCards.filter(c => c.id.startsWith('bp-')).length;
-    expect(drawnInHand).toBe(2);
+    expect(drawnInHand).toBe(1);
   });
 });
 

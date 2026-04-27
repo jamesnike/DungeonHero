@@ -37,22 +37,39 @@ export function registerOnUpgradeAll(entries: Array<{ id: string; handler: OnUpg
  * Map a card's identity to a canonical upgrade effect id.
  *
  * Priority order:
- *   1. card.type === 'monster'  → 'monster:default'
- *   2. starter base id          → 'starter:{id}'
- *   3. amuletEffect             → 'amulet:{ae}'
- *   4. knightEffect             → 'knight:{ke}'
+ *   1. card.type === 'monster'                              → 'monster:default'
+ *   2. starter base id (only if a handler is registered)    → 'starter:{id}'
+ *   3. knightEffect                                         → 'knight:{ke}'
+ *   4. amuletEffect                                         → 'amulet:{ae}'
+ *
+ * Important: starter takes precedence ONLY when a handler is actually
+ * registered for that starter id. This is because `getStarterBaseId`
+ * always returns a non-empty string (e.g. `'knight-3'` for a knight card
+ * passes through unchanged), so without the registry check, the starter
+ * branch would short-circuit unconditionally and every `knight:*` /
+ * `amulet:*` handler would become dead code. The registry check lets
+ * non-starter cards (knight class cards, runtime-upgraded amulets, etc.)
+ * fall through to their own routing branch.
+ *
+ * Why "starter preferred over amulet" matters: many starter cards are
+ * themselves amulets and carry both a starter base id AND an `amuletEffect`
+ * (e.g. lone-card-amulet, attack-persuade-amulet). Their upgrade handlers
+ * are registered under `starter:{id}`, NOT under `amulet:{ae}`. Routing
+ * starter first preserves their existing behavior.
  */
 export function resolveUpgradeEffectId(card: GameCardData): string | null {
   if (card.type === 'monster') return 'monster:default';
 
   const starterId = getStarterBaseId(card.id);
-  if (starterId) return `starter:${starterId}`;
-
-  const ae = (card as any).amuletEffect as string | undefined;
-  if (ae) return `amulet:${ae}`;
+  if (starterId && registry.has(`starter:${starterId}`)) {
+    return `starter:${starterId}`;
+  }
 
   const ke = (card as any).knightEffect as string | undefined;
   if (ke) return `knight:${ke}`;
+
+  const ae = (card as any).amuletEffect as string | undefined;
+  if (ae) return `amulet:${ae}`;
 
   return null;
 }

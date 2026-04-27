@@ -30,7 +30,7 @@ describe('转型触发：使用 Event 后再使用带 transform 的 magic 卡', 
       value: 0,
       image: '',
       magicType: 'permanent',
-      magicEffect: '永久魔法：从背包抽 2 张牌。',
+      magicEffect: '永久魔法：从背包抽 1 张牌。',
       transformBonus: '+3 金币',
       transformEffect: 'gold:3',
     } as GameCardData;

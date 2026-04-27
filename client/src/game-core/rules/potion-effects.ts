@@ -686,11 +686,14 @@ export function resolveAllPotionEffects(
   }
 
   // --- Transform-recycle-grant ---
+  // 历史命名沿用 'transform-recycle-grant'（potionEffect id），但触发条件已经
+  // 改成「侧击」。grant 的字段从 transformBonus / transformEffect 切到
+  // flankEffect / flankEffectId，触发由 reducePlayCard 的 flank 分支接管。
   if (effect === 'transform-recycle-grant') {
-    const eligible = state.handCards.filter(c => c.id !== card.id && !c.transformBonus);
+    const eligible = state.handCards.filter(c => c.id !== card.id && !c.flankEffect);
     if (eligible.length === 0) {
-      log(sideEffects, 'potion', '唤回秘药：手牌中没有可赋予转型效果的卡牌。');
-      banner(sideEffects, '手牌中没有可赋予转型效果的卡牌。');
+      log(sideEffects, 'potion', '唤回秘药：手牌中没有可赋予侧击效果的卡牌。');
+      banner(sideEffects, '手牌中没有可赋予侧击效果的卡牌。');
       enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
@@ -698,11 +701,11 @@ export function resolveAllPotionEffects(
       const target = eligible[0];
       patch.handCards = state.handCards.map(c =>
         c.id === target.id
-          ? { ...c, transformBonus: '弃 1 张手牌·回收袋取 1 张', transformEffect: 'discard-recycle-to-hand:1' }
+          ? { ...c, flankEffect: '弃 1 张手牌·回收袋取 1 张', flankEffectId: 'discard-recycle-to-hand:1' }
           : c,
       );
-      log(sideEffects, 'potion', `唤回秘药：「${target.name}」获得转型效果！`);
-      banner(sideEffects, `「${target.name}」获得转型：弃 1 张手牌，回收袋取回 1 张！`);
+      log(sideEffects, 'potion', `唤回秘药：「${target.name}」获得侧击效果！`);
+      banner(sideEffects, `「${target.name}」获得侧击：弃 1 张手牌，回收袋取回 1 张！`);
       enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }

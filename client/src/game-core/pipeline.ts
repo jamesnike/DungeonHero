@@ -56,7 +56,7 @@ const INPUT_PHASES = new Set([
   'awaitingRewardChoice',
   'awaitingPotionTarget',
   'awaitingMagicTarget',
-  'awaitingDeathWard',
+  'awaitingDeathWardNotice',
   'awaitingEquipmentPrompt',
   'awaitingDiscoverChoice',
   'awaitingUpgradeChoice',
@@ -304,7 +304,7 @@ function isInputContinuation(action: GameAction): boolean {
     case 'SET_PENDING_POTION':
     case 'SET_PENDING_HERO_SKILL':
     case 'SET_PENDING_HERO_MAGIC':
-    case 'SET_DEATH_WARD_PROMPT':
+    case 'DISMISS_DEATH_WARD_NOTICE':
     case 'SET_EQUIPMENT_PROMPT':
     // Card resolution — player responses & continuations
     case 'RESOLVE_POTION':
@@ -452,6 +452,15 @@ function isInputContinuation(action: GameAction): boolean {
     // SET_CURRENT_EVENT / COMPLETE_HERO_MAGIC / PLACE_BUILDING_IN_DUNGEON /
     // EQUIP_* as a follow-up; never a player input action.
     case 'APPLY_TRANSFORM_CATEGORY':
+    // 唤回秘药·侧击 触发的弃回·抽回收袋互动流——由 reducePlayCard 的 flank
+    // 分支在 phase='playerInput' 下 enqueue，必须能在同一个 drain 里把
+    // pendingHandDiscardSelection 写进 patch（弹窗）/ 直接 finalize（auto 路径）。
+    // 不在白名单里的话玩家会看到「侧击触发但没弹窗」类 strand bug。
+    case 'TRIGGER_FLANK_DISCARD_RECYCLE':
+    // 蜕变赋灵·侧击 触发的"失去 3 点生命+坟场抽魔法"效果——由 reducePlayCard 的 flank
+    // 分支在 phase='playerInput' 下 enqueue。同步效果，但仍要进白名单确保 drain 不被
+    // strand（不进白名单 → 玩家看到"侧击触发但没掉血/没拿到卡"假静默 bug）。
+    case 'TRIGGER_FLANK_GRAVEYARD_MAGIC':
     // Monster skill float queue — these actions are how the game enters /
     // exits the HARD_PAUSE state. They must always be processable so the
     // animation queue can drain; the HARD_PAUSE check above ensures the

@@ -147,7 +147,7 @@ export function createInitialGameState(): GameState {
     pendingMagicAction: null,
     pendingHandDiscardSelection: null,
     pendingPotionAction: null,
-    deathWardPrompt: null,
+    deathWardNotice: null,
     pendingMonsterEndDiceQueue: [],
     pendingSkillFloats: [],
     skillFloatSavedPhase: null,

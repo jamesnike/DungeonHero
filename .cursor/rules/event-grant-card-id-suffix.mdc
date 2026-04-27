@@ -19,7 +19,7 @@ A card relies on starter-id routing (and therefore needs strippable id) when it 
 - `knightEffect` — registered knight effect (e.g. `'recall-equipment'`)
 - A `magicEffect` value that is itself a **registered effect id** (e.g. `'honor-blood'`, `'guild-hand-recycle'`)
 
-If `magicEffect` is set to a **description string** like `'永久魔法：选择一个装备...'` (very common for starter cards), routing **falls through to starter-id**. Some cards (`transformStreakStrike`, `flankSlotTempAttack`, `deckTopSwapGold`) explicitly omit `magicEffect` to force starter-id routing.
+If `magicEffect` is set to a **description string** like `'永久魔法：选择一个装备...'` (very common for starter cards), routing **falls through to starter-id**. Some cards (`flankSlotTempAttack`, `deckTopSwapGold`) explicitly omit `magicEffect` to force starter-id routing.
 
 ## The strip rule (`getStarterBaseId`)
 

@@ -323,3 +323,160 @@ describe('生长之盾 — graveyard-event-to-hand 遗言', () => {
     expect(breakResult.patch.discardedCards!.some(c => c.id === mob.id)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Upgrade-driven amplifyOnFlipAmount: L1+ shields trigger AMPLIFY_CARDS_BY_NAME
+// with amount=2 instead of 1.
+// ---------------------------------------------------------------------------
+
+describe('生长之盾 — amplifyOnFlipAmount (升级 1/2)', () => {
+  it('equipped with amplifyOnFlipAmount=2: each forward flip enqueues AMPLIFY_CARDS_BY_NAME(amount=2)', () => {
+    const equipped = makeGrowthShield('eq-l1', { amplifyOnFlipAmount: 2 } as any);
+    const fwd = makeFlippablePotion('p-flip-l1');
+    const state = makeState({
+      activeCards: [fwd, null, null, null, null] as ActiveRowSlots,
+      equipmentSlot1: equipped,
+    });
+
+    const result = reduce(state, { type: 'APPLY_CARD_FLIP', card: fwd, cellIndex: 0 } as GameAction);
+    const amplifyActions = result.enqueuedActions.filter(a => a.type === 'AMPLIFY_CARDS_BY_NAME');
+    expect(amplifyActions).toHaveLength(1);
+    expect((amplifyActions[0] as any).cardName).toBe('生长之盾');
+    expect((amplifyActions[0] as any).amount).toBe(2);
+  });
+
+  it('equipped with amplifyOnFlipAmount=2 + drain: shield value/armorMax/amplifyBonus jump by +2 per flip', () => {
+    const equipped = makeGrowthShield('eq-l1b', { amplifyOnFlipAmount: 2 } as any);
+    const fwd = makeFlippablePotion('p-flip-l1b');
+    const state = makeState({
+      activeCards: [fwd, null, null, null, null] as ActiveRowSlots,
+      equipmentSlot1: equipped,
+      rng: createRng(11),
+    });
+
+    const result = drain(state, [{ type: 'APPLY_CARD_FLIP', card: fwd, cellIndex: 0 } as GameAction]);
+    const slot = result.state.equipmentSlot1 as any;
+    expect(slot.amplifyBonus).toBe(2);
+    expect(slot.value).toBe(3);
+    expect(slot.armorMax).toBe(3);
+    expect(result.state.amplifiedCardBonus['生长之盾']).toBe(2);
+  });
+
+  it('mixed slots (L0 in slot1, L2 amplifyOnFlipAmount=2 in slot2): dedup picks max amount → +2', () => {
+    const lowSlot = makeGrowthShield('mixed-low');
+    const highSlot = makeGrowthShield('mixed-high', { amplifyOnFlipAmount: 2 } as any);
+    const fwd = makeFlippablePotion('p-mix');
+    const state = makeState({
+      activeCards: [fwd, null, null, null, null] as ActiveRowSlots,
+      equipmentSlot1: lowSlot,
+      equipmentSlot2: highSlot,
+    });
+
+    const result = reduce(state, { type: 'APPLY_CARD_FLIP', card: fwd, cellIndex: 0 } as GameAction);
+    const amplifyActions = result.enqueuedActions.filter(a => a.type === 'AMPLIFY_CARDS_BY_NAME');
+    expect(amplifyActions).toHaveLength(1);
+    expect((amplifyActions[0] as any).cardName).toBe('生长之盾');
+    expect((amplifyActions[0] as any).amount).toBe(2);
+  });
+
+  it('amplifyOnFlipAmount missing or 1 keeps legacy behavior (amount=1)', () => {
+    const equipped = makeGrowthShield('legacy');
+    const fwd = makeFlippablePotion('p-legacy');
+    const state = makeState({
+      activeCards: [fwd, null, null, null, null] as ActiveRowSlots,
+      equipmentSlot1: equipped,
+    });
+
+    const result = reduce(state, { type: 'APPLY_CARD_FLIP', card: fwd, cellIndex: 0 } as GameAction);
+    const amplifyActions = result.enqueuedActions.filter(a => a.type === 'AMPLIFY_CARDS_BY_NAME');
+    expect(amplifyActions).toHaveLength(1);
+    expect((amplifyActions[0] as any).amount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Upgrade-driven onDestroyEventCount: L2 shield pulls 3 events on destroy
+// instead of 1.
+// ---------------------------------------------------------------------------
+
+describe('生长之盾 — onDestroyEventCount (升级 2)', () => {
+  it('on destroy with onDestroyEventCount=3: 3 distinct Event cards move from graveyard to hand', () => {
+    const e1 = makeEvent('e1', '事件A');
+    const e2 = makeEvent('e2', '事件B');
+    const e3 = makeEvent('e3', '事件C');
+    const e4 = makeEvent('e4', '事件D');
+    const mob: GameCardData = { id: 'mob-l2', type: 'monster', name: 'mob', value: 0, hp: 0, maxHp: 5, attack: 2, image: '' } as GameCardData;
+    const shield = makeGrowthShield('br-l2', {
+      durability: 1,
+      maxDurability: 1,
+      onDestroyEventCount: 3,
+    } as any);
+    const state = makeState({
+      rng: createRng(99),
+      equipmentSlot1: shield,
+      discardedCards: [e1, e2, e3, e4, mob],
+    });
+    const ae = computeAmuletEffects(state.amuletSlots);
+
+    const breakResult = computeEquipmentBreakEffects(state, 'equipmentSlot1', shield as GameCardData, ae);
+
+    const hand = breakResult.patch.handCards ?? [];
+    const grave = breakResult.patch.discardedCards ?? [];
+    const eventIdsInHand = hand.filter(c => c.type === 'event').map(c => c.id);
+    expect(eventIdsInHand.length).toBe(3);
+    // All picked ids must be distinct (no duplicates).
+    expect(new Set(eventIdsInHand).size).toBe(3);
+    // Each picked event is removed from graveyard.
+    for (const id of eventIdsInHand) {
+      expect(grave.some(c => c.id === id)).toBe(false);
+    }
+    // Mob still in graveyard; 4th event remained.
+    expect(grave.some(c => c.id === mob.id)).toBe(true);
+    expect(grave.filter(c => c.type === 'event').length).toBe(1);
+  });
+
+  it('on destroy with onDestroyEventCount=3 but only 1 Event in graveyard: silently truncates to that 1 (no error)', () => {
+    const evt = makeEvent('e-only', '唯一事件');
+    const mob: GameCardData = { id: 'mob-l2b', type: 'monster', name: 'mob', value: 0, hp: 0, maxHp: 5, attack: 2, image: '' } as GameCardData;
+    const shield = makeGrowthShield('br-l2b', {
+      durability: 1,
+      maxDurability: 1,
+      onDestroyEventCount: 3,
+    } as any);
+    const state = makeState({
+      rng: createRng(101),
+      equipmentSlot1: shield,
+      discardedCards: [evt, mob],
+    });
+    const ae = computeAmuletEffects(state.amuletSlots);
+
+    const breakResult = computeEquipmentBreakEffects(state, 'equipmentSlot1', shield as GameCardData, ae);
+
+    expect(breakResult.patch.handCards!.some(c => c.id === evt.id)).toBe(true);
+    // Only 1 event entered hand; no duplicate or crash.
+    expect(breakResult.patch.handCards!.filter(c => c.type === 'event').length).toBe(1);
+    expect(breakResult.patch.discardedCards!.some(c => c.id === mob.id)).toBe(true);
+    expect(breakResult.patch.discardedCards!.some(c => c.id === evt.id)).toBe(false);
+  });
+
+  it('on destroy with onDestroyEventCount=3 but no Event in graveyard: hand untouched, last-words silent (parity with base)', () => {
+    const mob: GameCardData = { id: 'mob-l2c', type: 'monster', name: 'mob', value: 0, hp: 0, maxHp: 5, attack: 2, image: '' } as GameCardData;
+    const shield = makeGrowthShield('br-l2c', {
+      durability: 1,
+      maxDurability: 1,
+      onDestroyEventCount: 3,
+    } as any);
+    const state = makeState({
+      rng: createRng(103),
+      equipmentSlot1: shield,
+      discardedCards: [mob],
+    });
+    const ae = computeAmuletEffects(state.amuletSlots);
+
+    const breakResult = computeEquipmentBreakEffects(state, 'equipmentSlot1', shield as GameCardData, ae);
+
+    expect(breakResult.patch.handCards).toBeUndefined();
+    expect(breakResult.patch.discardedCards!.some(c => c.id === mob.id)).toBe(true);
+    expect(breakResult.patch.discardedCards!.some(c => c.id === shield.id)).toBe(true);
+  });
+});

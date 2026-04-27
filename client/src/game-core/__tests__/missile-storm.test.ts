@@ -22,7 +22,12 @@ function makeBoltGraveyardCard(idSuffix: string, amplifyBonus = 0) {
   };
 }
 
-function makeStormCard(id = 'card-storm') {
+// 魔弹风暴 数值：
+//   L0 (base)：调动坟场一半（向上取整）的「魔弹」
+//   L1 (upgraded)：调动坟场全部「魔弹」
+// 老测试均在 "fire all bolts" 语义下编写——保留这些测试作为 L1 行为的回归覆盖；
+// 新增 describe 块单独覆盖 L0 一半语义。
+function makeStormCard(id = 'card-storm', upgradeLevel = 1) {
   return {
     id,
     type: 'magic' as const,
@@ -31,6 +36,8 @@ function makeStormCard(id = 'card-storm') {
     classCard: true,
     magicType: 'instant',
     knightEffect: 'missile-storm',
+    upgradeLevel,
+    maxUpgradeLevel: 1,
   };
 }
 
@@ -294,5 +301,91 @@ describe('魔弹风暴 — knightMissileStorm resolver', () => {
       s => s.event === 'combat:monsterDamaged' && (s.payload as any).monsterId === 'sk1',
     );
     expect(damageEvents.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('魔弹风暴 — L0 base: half bolts (ceil)', () => {
+  it.each([
+    [1, 1],
+    [2, 1],
+    [3, 2],
+    [4, 2],
+    [5, 3],
+    [6, 3],
+    [7, 4],
+    [10, 5],
+  ])('坟场 %i 张「魔弹」→ 发射 %i 枚 (ceil(N/2))', (totalBolts, expected) => {
+    const storm = makeStormCard('card-storm-L0', 0);
+    const monster = makeMonster('m1', 'Goblin', 1000);
+    const bolts = Array.from({ length: totalBolts }, (_, i) => makeBoltGraveyardCard(`b${i}`));
+    const state = makeState({
+      activeCards: [monster, null, null, null, null] as any,
+      handCards: [storm] as any,
+      discardedCards: bolts as any,
+      combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' },
+    });
+
+    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: storm.id }] as any);
+    const boltFx = drained.sideEffects.filter(s => s.event === 'combat:missileStormBolt');
+    expect(boltFx).toHaveLength(expected);
+    boltFx.forEach((fx, i) => {
+      const payload = fx.payload as any;
+      expect(payload.boltIndex).toBe(i);
+      expect(payload.totalBolts).toBe(expected);
+    });
+  });
+
+  it('L0 banner 提示「调动一半」，L1 banner 不提示', () => {
+    const monster = makeMonster('m1', 'Goblin', 1000);
+    const bolts = [makeBoltGraveyardCard('a'), makeBoltGraveyardCard('b'), makeBoltGraveyardCard('c'), makeBoltGraveyardCard('d')];
+
+    const stormL0 = makeStormCard('card-L0', 0);
+    const stateL0 = makeState({
+      activeCards: [monster, null, null, null, null] as any,
+      handCards: [stormL0] as any,
+      discardedCards: bolts as any,
+      combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' },
+    });
+    const drainedL0 = drain(stateL0, [{ type: 'PLAY_CARD', cardId: stormL0.id }] as any);
+    const bannerL0 = drainedL0.sideEffects.find(s => s.event === 'ui:banner');
+    expect((bannerL0?.payload as any)?.text).toContain('调动一半');
+
+    const stormL1 = makeStormCard('card-L1', 1);
+    const stateL1 = makeState({
+      activeCards: [{ ...monster }, null, null, null, null] as any,
+      handCards: [stormL1] as any,
+      discardedCards: bolts as any,
+      combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' },
+    });
+    const drainedL1 = drain(stateL1, [{ type: 'PLAY_CARD', cardId: stormL1.id }] as any);
+    const bannerL1 = drainedL1.sideEffects.find(s => s.event === 'ui:banner');
+    expect((bannerL1?.payload as any)?.text).not.toContain('调动一半');
+  });
+
+  it('L0 选择前 N/2 张坟场顺序，保留各自的 amplifyBonus', () => {
+    // 4 张「魔弹」按 amplifyBonus=[0, 5, 0, 0] 顺序入坟场。
+    // L0 ceil(4/2) = 2 → 取前 2 张（amp 0, amp 5）；
+    // L1 取全部 4 张。验证 L0 的第 2 发伤害高于第 1 发（来自 amp=5 的 bolt）。
+    const storm = makeStormCard('card-amp', 0);
+    const monster = makeMonster('m1', 'Goblin', 1000);
+    const state = makeState({
+      activeCards: [monster, null, null, null, null] as any,
+      handCards: [storm] as any,
+      discardedCards: [
+        makeBoltGraveyardCard('a', 0),
+        makeBoltGraveyardCard('b', 5),
+        makeBoltGraveyardCard('c', 0),
+        makeBoltGraveyardCard('d', 0),
+      ] as any,
+      combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' },
+    });
+
+    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: storm.id }] as any);
+    const boltFx = drained.sideEffects
+      .filter(s => s.event === 'combat:missileStormBolt')
+      .map(s => s.payload as any);
+    expect(boltFx).toHaveLength(2);
+    expect(boltFx[0].damage).toBe(1);
+    expect(boltFx[1].damage).toBe(6);
   });
 });

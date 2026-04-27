@@ -4,10 +4,17 @@
  * Registers all per-card upgrade behaviors for the UPGRADE_CARD action.
  *
  * Resolution priority (see `resolveUpgradeEffectId`):
- *   monster → 'monster:default'
- *   starter → 'starter:{starterBaseId}'
- *   amulet  → 'amulet:{amuletEffect}'
- *   knight  → 'knight:{knightEffect}'
+ *   monster                      → 'monster:default'
+ *   starter (only if registered) → 'starter:{starterBaseId}'
+ *   knight                       → 'knight:{knightEffect}'
+ *   amulet                       → 'amulet:{amuletEffect}'
+ *
+ * Starter is checked first to preserve precedence for cards that have
+ * BOTH a starter base id and an `amuletEffect` (e.g. starter perm
+ * amulets). The registry-membership check ensures that non-starter cards
+ * (whose `getStarterBaseId(id)` returns the id unchanged) fall through
+ * to the knight/amulet branches instead of being absorbed by a missing
+ * `starter:{id}` lookup.
  *
  * Handlers receive a mutable `upgraded` copy whose `upgradeLevel` is
  * already set to `newLevel`; mutate fields in place.
@@ -15,9 +22,104 @@
 
 import { registerOnUpgradeAll } from '../on-upgrade';
 import type { OnUpgradeHandler } from '../on-upgrade';
+import type { GameCardData } from '@/components/GameCard';
 import { applyMonsterUpgradeLevel } from '@/lib/monsterRage';
 import { STARTER_CARD_IDS } from '../../deck';
-import { DURABILITY_CAP, clampMaxDurability } from '../../constants';
+import { clampMaxDurability } from '../../constants';
+
+// ============================================================================
+// Delta-based upgrade helpers
+// ============================================================================
+//
+// 「升级=增强」的不变量：升级永远在当前值上叠加 per-level delta，绝不
+// overwrite。这样 mid-game 的 amp / potion / 战斗扣损状态都被保留并在其
+// 上加 delta。
+//
+// 例：护盾 armor 表 [2, 4]。L0→L1 delta = +2。
+//   - base 值 (value=2) 升级 → value = 2 + 2 = 4（与旧 overwrite 行为相同）。
+//   - 增幅过 (value=3) 升级 → value = 3 + 2 = 5（保留 +1 amp）。
+//
+// 范围（仅以下 5 个 mid-game-modifiable 字段走 delta）：
+//   value / armorMax / maxDurability / durability / armor
+// 其它效果描述符（healOnAttack、shieldBashStunRate、onEquipEffect、…）由
+// handler 直接覆盖即可——这些字段不会被其它机制 mid-game 修改。
+
+/**
+ * 给护盾的 armor cap（value + armorMax）+ 当前 armor 应用 delta。
+ *
+ * - value / armorMax：current + delta（保留 mid-game 增幅）。
+ * - armor（当前护甲血量）：preserve+delta，保留战斗扣损状态。
+ *   `armor === undefined` 表示「at cap」（fresh shield）—— 不 set 字段，
+ *   下次读取自动按新 cap = old cap + delta 刷满。
+ *
+ * 返回实际应用的 delta（可能是 0）。
+ */
+function applyShieldArmorDelta(
+  upgraded: GameCardData,
+  table: number[],
+  newLevel: number,
+): number {
+  const prev = table[newLevel - 1] ?? table[0] ?? 0;
+  const next = table[newLevel] ?? table[table.length - 1];
+  const delta = next - prev;
+  if (delta === 0) return 0;
+  upgraded.value = (upgraded.value ?? prev) + delta;
+  upgraded.armorMax = ((upgraded as any).armorMax ?? prev) + delta;
+  if ((upgraded as any).armor !== undefined) {
+    const cap = upgraded.armorMax!;
+    (upgraded as any).armor = Math.max(
+      0,
+      Math.min(cap, ((upgraded as any).armor as number) + delta),
+    );
+  }
+  return delta;
+}
+
+/**
+ * 给装备的 maxDurability + 当前 durability 应用 delta。
+ *
+ * - maxDurability：current + intendedDelta，clamp 到 DURABILITY_CAP。
+ * - durability（当前耐久）：增量同 realDelta（preserve broken amount，与旧
+ *   "preserve broken amount" 语义一致），clamp 到新 maxDurability。
+ *
+ * 返回 realDelta（可能因 cap clamp 比 intendedDelta 小，甚至为 0）。
+ */
+function applyMaxDurabilityDelta(
+  upgraded: GameCardData,
+  table: number[],
+  newLevel: number,
+): number {
+  if (upgraded.maxDurability == null) return 0;
+  const prev = table[newLevel - 1] ?? table[0] ?? 0;
+  const next = table[newLevel] ?? table[table.length - 1];
+  const intendedDelta = next - prev;
+  if (intendedDelta === 0) return 0;
+  const oldMax = upgraded.maxDurability;
+  const newMax = clampMaxDurability(oldMax + intendedDelta);
+  const realDelta = newMax - oldMax;
+  upgraded.maxDurability = newMax;
+  if (realDelta > 0) {
+    upgraded.durability = Math.min(newMax, (upgraded.durability ?? 0) + realDelta);
+  } else if (realDelta < 0) {
+    upgraded.durability = Math.min(newMax, upgraded.durability ?? 0);
+  }
+  return realDelta;
+}
+
+/**
+ * 给武器的 value 应用 delta（保留 mid-game amp）。
+ */
+function applyValueDelta(
+  upgraded: GameCardData,
+  table: number[],
+  newLevel: number,
+): number {
+  const prev = table[newLevel - 1] ?? table[0] ?? 0;
+  const next = table[newLevel] ?? table[table.length - 1];
+  const delta = next - prev;
+  if (delta !== 0) upgraded.value = (upgraded.value ?? prev) + delta;
+  return delta;
+}
 
 // ============================================================================
 // Monster (default — applies to all monster cards)
@@ -42,309 +144,499 @@ const monsterDefault: OnUpgradeHandler = (upgraded, newLevel) => {
 // ============================================================================
 // Starter cards
 // ============================================================================
+//
+// Most starter on-upgrade handlers exist purely to keep `resolveUpgradeEffectId`
+// routing the card to `starter:{id}` (the registry `has` check). Their
+// description / magicEffect / shortDescription strings are produced by the
+// per-id formatter in `definitions/card-text.ts` and applied in
+// `applyUpgrade`. Handlers that also need to mutate engine fields
+// (recycleDelay, magicType, onEquipEffect, …) keep just those mutations.
 
-const weaponBurst: OnUpgradeHandler = (upgraded, newLevel) => {
-  const burstVal = 2 + 2 * newLevel;
-  upgraded.description = `选择一个装备栏，临时攻击力 +${burstVal}（瀑流后重置）。`;
-  upgraded.magicEffect = `永久魔法：选择一个装备栏，临时攻击力 +${burstVal}。`;
-};
+const noopUpgrade: OnUpgradeHandler = () => {};
 
-const repairOne: OnUpgradeHandler = (upgraded, newLevel) => {
-  const hpCosts = [2, 1, 1];
-  const repairAmounts = [1, 2, 2];
-  const hpCost = hpCosts[newLevel] ?? 1;
-  const repair = repairAmounts[newLevel] ?? 2;
-  const hpPart = hpCost > 0 ? `失去 ${hpCost} 点生命，` : '';
-  const drawPart = newLevel >= 2 ? '，抽 1 张牌' : '';
-  upgraded.description = `${hpPart}选择一个装备恢复 ${repair} 点耐久${drawPart}。`;
-  upgraded.magicEffect = `永久魔法：${hpPart}选择一个装备恢复 ${repair} 点耐久${drawPart}。`;
-};
-
-const discardDraw: OnUpgradeHandler = (upgraded, newLevel) => {
-  const discards = [1, 1, 1];
-  const draws = [2, 3, 4];
-  const d = discards[newLevel] ?? 1;
-  const dr = draws[newLevel] ?? 1;
-  upgraded.description = `将 ${d} 张手牌移到回收袋，从背包抽取 ${dr} 张新牌。`;
-  upgraded.magicEffect = `永久魔法：将 ${d} 张手牌移到回收袋，从背包抽 ${dr} 张牌。`;
-};
+const weaponBurst: OnUpgradeHandler = noopUpgrade;
+const repairOne: OnUpgradeHandler = noopUpgrade;
+const discardDraw: OnUpgradeHandler = noopUpgrade;
 
 const reshuffle: OnUpgradeHandler = (upgraded, newLevel) => {
   const delays = [3, 2, 1];
   upgraded.recycleDelay = delays[newLevel] ?? 1;
 };
 
-const tempArmor: OnUpgradeHandler = (upgraded, newLevel) => {
-  const taAmounts = [2, 4, 6];
-  const ta = taAmounts[newLevel] ?? 6;
-  upgraded.description = `选择一个装备栏，+${ta} 临时护甲。`;
-  upgraded.magicEffect = `永久魔法：选择一个装备栏，+${ta} 临时护甲。`;
-};
+const tempArmor: OnUpgradeHandler = noopUpgrade;
+const activeRowFlip: OnUpgradeHandler = noopUpgrade;
+const recallEquip: OnUpgradeHandler = noopUpgrade;
+
+// 乾坤一翻 (`activeRowFlip`) and 回收术 (`recallEquip`) descriptions live in
+// the formatter; routing-only registration above.
 
 const dungeonSwap: OnUpgradeHandler = (upgraded, newLevel) => {
   if (newLevel === 1) {
     upgraded.recycleDelay = 1;
-  } else if (newLevel === 2) {
-    upgraded.description = '选择地城行的一张卡牌，与最左边的卡牌互换位置。';
-    upgraded.magicEffect = '永久魔法：选择地城行的一张卡牌，与最左边的卡牌互换位置。';
   }
 };
 
+// 训练之刃 (starter:trainingBlade)：
+//   value design [3, 4, 5]（每级 +1 delta，preserve+delta amp 保留）。
+//   maxDurability design [2, 3, 4]（每级 +1 delta，preserve broken amount，clamp 到 DURABILITY_CAP）。
 const trainingBlade: OnUpgradeHandler = (upgraded, newLevel) => {
-  if (newLevel === 1) {
-    upgraded.value = 4;
-    upgraded.maxDurability = clampMaxDurability(3);
-    upgraded.durability = Math.min((upgraded.durability ?? 2) + 1, upgraded.maxDurability);
-  } else if (newLevel === 2) {
-    upgraded.value = 5;
-    upgraded.maxDurability = clampMaxDurability(4);
-    upgraded.durability = Math.min((upgraded.durability ?? 3) + 1, upgraded.maxDurability);
-  }
+  const values = [3, 4, 5];
+  const maxes = [2, 3, 4];
+  applyValueDelta(upgraded, values, newLevel);
+  applyMaxDurabilityDelta(upgraded, maxes, newLevel);
 };
 
-const stunStrike: OnUpgradeHandler = (upgraded, newLevel) => {
-  const damages = [2, 4, 6];
-  const stuns = [10, 20, 30];
-  const dmg = damages[newLevel] ?? 6;
-  const stun = stuns[newLevel] ?? 30;
-  upgraded.description = `对一个怪物造成 ${dmg} 点法术伤害，有 ${stun}% 概率击晕目标。`;
-  upgraded.magicEffect = `永久魔法：对一个怪物造成 ${dmg} 点伤害，${stun}% 击晕。`;
-};
+const stunStrike: OnUpgradeHandler = noopUpgrade;
+const magicMissile: OnUpgradeHandler = noopUpgrade;
+const loneCardAmulet: OnUpgradeHandler = noopUpgrade;
+const attackPersuadeAmulet: OnUpgradeHandler = noopUpgrade;
+const cardGainMissileAmulet: OnUpgradeHandler = noopUpgrade;
 
-const magicMissile: OnUpgradeHandler = (upgraded, newLevel) => {
-  const boltCounts = [2, 3, 4];
-  const bc = boltCounts[newLevel] ?? 4;
-  upgraded.description = `加入 ${bc} 张一次性「魔弹」到手牌（每张可对一个怪物造成 1 点法术伤害）。`;
-  upgraded.magicEffect = `永久魔法：手上加入 ${bc} 张一次性「魔弹」。`;
-};
-
-const loneCardAmulet: OnUpgradeHandler = (upgraded) => {
-  upgraded.description = '每次瀑流时（回收前），若背包卡牌数量为 1 或 2，获得一张职业专属牌。';
-};
-
-const attackPersuadeAmulet: OnUpgradeHandler = (upgraded) => {
-  upgraded.description = '每攻击一次，下次劝降费用 -5（可叠加）。';
-};
-
-const cardGainMissileAmulet: OnUpgradeHandler = (upgraded) => {
-  upgraded.description = '每从坟场获得一次牌（同时获得多张算一次），将两张「魔弹」加入手牌。';
-};
-
+// `_counterDisplay` is a live state-derived field (counter / 3, /6) that the
+// formatter does not own; the handler keeps the assignment.
 const damageClassDiscoverAmulet: OnUpgradeHandler = (upgraded, _newLevel, state) => {
-  upgraded.description = '每造成 3 次伤害（武器、护符、法术等任意来源），发现一张专属牌。';
   upgraded._counterDisplay = `${state.classDamageDiscoverStreak ?? 0}/3`;
 };
 
-const stunUpgradeCapAmulet: OnUpgradeHandler = (upgraded) => {
-  upgraded.description = '每击晕一次怪物，击晕上限 +10%。';
-};
+const stunUpgradeCapAmulet: OnUpgradeHandler = noopUpgrade;
 
 const recycleBackpackExpandAmulet: OnUpgradeHandler = (upgraded, _newLevel, state) => {
-  upgraded.description = '每回收 6 张牌，背包上限 +3。';
   upgraded._counterDisplay = `${state.recycleBackpackProgress ?? 0}/6`;
 };
 
-const dungeonGoldAmulet: OnUpgradeHandler = (upgraded) => {
-  upgraded.description = '每处理 1 张地城牌，金币 +2。';
-};
-
-const recycleDrawMagic: OnUpgradeHandler = (upgraded, newLevel) => {
-  const recycleCounts = [1, 2, 3];
-  const rc = recycleCounts[newLevel] ?? 3;
-  upgraded.description = `使用：随机将回收袋的 ${rc} 张牌剩余瀑流 -1（就绪的牌进背包）。`;
-  upgraded.magicEffect = `永久魔法：使用：随机将回收袋的 ${rc} 张牌剩余瀑流 -1（就绪的牌进背包）。`;
-  upgraded.shortDescription = `随机 ${rc} 张回收袋牌瀑流 -1`;
-};
+const dungeonGoldAmulet: OnUpgradeHandler = noopUpgrade;
+const recycleDrawMagic: OnUpgradeHandler = noopUpgrade;
 
 const dimensionWarp: OnUpgradeHandler = (upgraded, newLevel) => {
   const delays = [2, 1, 1];
   upgraded.recycleDelay = delays[newLevel] ?? 1;
-  if (newLevel >= 2) {
-    upgraded.description = '将地城行的一张牌和它正上方预览行的牌互换，然后抽 1 张牌。';
-    upgraded.magicEffect = '永久魔法：选择一张地城行卡牌，与正上方预览行卡牌互换位置，然后抽 1 张牌。';
-  }
 };
 
-const undyingBlessing: OnUpgradeHandler = (upgraded) => {
-  upgraded.description = '赋予装备复生能力，失去 2 点生命，然后抽 1 张牌。';
-  upgraded.magicEffect = '永久魔法：选择一个装备，赋予其复生，失去 2 点生命，然后抽 1 张牌。';
-};
-
-const gamblerGambit: OnUpgradeHandler = (upgraded, newLevel) => {
-  const golds = [1, 2, 3];
-  const draws = [1, 2, 3];
-  const g = golds[newLevel] ?? 3;
-  const d = draws[newLevel] ?? 3;
-  upgraded.description = `失去 1 点生命，获得 ${g} 金币，从背包抽 ${d} 张牌。`;
-  upgraded.magicEffect = `永久魔法：失去 1 点生命，获得 ${g} 金币，从背包抽 ${d} 张牌。`;
-};
+const undyingBlessing: OnUpgradeHandler = noopUpgrade;
+const gamblerGambit: OnUpgradeHandler = noopUpgrade;
+const deckTopSwapGold: OnUpgradeHandler = noopUpgrade;
 
 const healMagic: OnUpgradeHandler = (upgraded, newLevel) => {
-  const heals = [5, 3, 5];
-  const delays = [0, 2, 1];
-  const h = heals[newLevel] ?? 5;
-  upgraded.magicType = 'permanent';
-  upgraded.recycleDelay = delays[newLevel] ?? 1;
-  upgraded.description = `回复 ${h} 点生命。`;
-  upgraded.magicEffect = `永久魔法：回复 ${h} 点生命。`;
+  if (newLevel === 1) {
+    // L1：保持 instant 一次性，治疗量 5 → 10。
+    upgraded.magicType = 'instant';
+    upgraded.recycleDelay = 0;
+  } else if (newLevel === 2) {
+    // L2：转为 Perm 2 永久魔法，治疗量 3。
+    upgraded.magicType = 'permanent';
+    upgraded.recycleDelay = 2;
+  }
 };
 
 const classSummon: OnUpgradeHandler = (upgraded) => {
   upgraded.magicType = 'permanent';
   upgraded.recycleDelay = 2;
-  upgraded.description = '弃回 2 张牌，获得一张职业专属卡。';
-  upgraded.magicEffect = '永久魔法：弃回 2 张牌，获得一张职业专属卡。';
 };
 
 // ============================================================================
 // Amulet effects
 // ============================================================================
 
-const persuadeOnTempAttack: OnUpgradeHandler = (upgraded) => {
-  upgraded.description = '（已升级）每获得一次临时攻击或临时护甲加成，下一次劝降率 +20%。';
-};
-
-const persuadeGrantRecycleFetch: OnUpgradeHandler = (upgraded) => {
-  upgraded.description = '（已升级）每劝降一次，将两张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。';
-};
+const persuadeOnTempAttack: OnUpgradeHandler = noopUpgrade;
+const persuadeGrantRecycleFetch: OnUpgradeHandler = noopUpgrade;
 
 // ============================================================================
 // Knight effects
 // ============================================================================
+//
+// As with the starter handlers above, knight handlers retain only the field
+// mutations the engine reads at runtime (onEquipEffect, flankEffect,
+// magicType, recycleDelay, etc.). Description / magicEffect / shortDescription
+// are produced by the corresponding formatter in `definitions/card-text.ts`.
 
-const graveyardRecall: OnUpgradeHandler = (upgraded, newLevel) => {
-  const recallCounts = [3, 4, 5, 6];
-  const cnt = recallCounts[newLevel] ?? 6;
-  upgraded.description = `一次性：从坟场随机取回至多 ${cnt} 张牌加入背包（不能取回自己）。`;
-  upgraded.magicEffect = `坟场随机取回 ${cnt} 张牌。`;
+const graveyardRecall: OnUpgradeHandler = noopUpgrade;
+const monsterRecruit: OnUpgradeHandler = noopUpgrade;
+const bloodGreed: OnUpgradeHandler = noopUpgrade;
+const armorStrike: OnUpgradeHandler = noopUpgrade;
+const armorDoubleStrike: OnUpgradeHandler = noopUpgrade;
+const battleSpirit: OnUpgradeHandler = noopUpgrade;
+const berserkGambit: OnUpgradeHandler = noopUpgrade;
+const missingHpSmite: OnUpgradeHandler = noopUpgrade;
+const recycleFlare: OnUpgradeHandler = noopUpgrade;
+const fateSight: OnUpgradeHandler = noopUpgrade;
+const bloodDraw: OnUpgradeHandler = noopUpgrade;
+const handPurgeRedraw: OnUpgradeHandler = noopUpgrade;
+const missileStorm: OnUpgradeHandler = noopUpgrade;
+const graveNova: OnUpgradeHandler = noopUpgrade;
+const overkillUpgrade: OnUpgradeHandler = noopUpgrade;
+
+// 锋刃侧击 (knight:temp-attack-strike)：handler keeps `flankEffect` (consumed
+// by the side-strike resolver) in sync with level; text comes from formatter.
+const tempAttackStrike: OnUpgradeHandler = (upgraded, newLevel) => {
+  const stunPcts = [20, 40, 60];
+  const pct = stunPcts[newLevel] ?? stunPcts[stunPcts.length - 1];
+  upgraded.flankEffect = `${pct}% 概率击晕目标`;
 };
 
-const bloodGreed: OnUpgradeHandler = (upgraded, newLevel) => {
-  if (newLevel >= 1) {
-    upgraded.description = '一次性：获得等同当前已损失生命的金币，将"贪婪诅咒"放入背包，并开启商店。';
-    upgraded.magicEffect = '获得金币，生成贪婪诅咒，并开启商店。';
-  }
+const eternalVessel: OnUpgradeHandler = noopUpgrade;
+const flipBackActive: OnUpgradeHandler = noopUpgrade;
+const threeCardThunder: OnUpgradeHandler = noopUpgrade;
+const reorganizeBackpack: OnUpgradeHandler = noopUpgrade;
+const armorStunConvert: OnUpgradeHandler = noopUpgrade;
+const stunCapStrike: OnUpgradeHandler = noopUpgrade;
+const tempAttackArmorDraw: OnUpgradeHandler = noopUpgrade;
+const tempAttackDouble: OnUpgradeHandler = noopUpgrade;
+const amplifyEquipmentShift: OnUpgradeHandler = noopUpgrade;
+const essenceExtract: OnUpgradeHandler = noopUpgrade;
+
+// 圣光之刃 (knight:holy-blade)：handler keeps onEquipEffect (heal-N) and
+// healOnAttack in sync with level; text comes from formatter.
+const holyBlade: OnUpgradeHandler = (upgraded, newLevel) => {
+  const onEquipHeals = [3, 4, 5];
+  const healPerAttacks = [2, 3, 4];
+  const onEquipHeal = onEquipHeals[newLevel] ?? 5;
+  const healPerAttack = healPerAttacks[newLevel] ?? 4;
+  (upgraded as any).onEquipEffect = `heal-${onEquipHeal}`;
+  (upgraded as any).healOnAttack = healPerAttack;
 };
 
-const armorStrike: OnUpgradeHandler = (upgraded, newLevel) => {
-  const pcts = [100, 150];
-  const pct = pcts[newLevel] ?? 150;
-  upgraded.description = `永久：选择一件护甲装备，对目标怪物造成等同护甲值 ${pct}% 的伤害。`;
-  upgraded.shortDescription = `一件护甲值 ${pct}% 转化为伤害`;
-  upgraded.magicEffect = `护甲值 ${pct}% 转化为伤害。`;
-};
-
-const armorDoubleStrike: OnUpgradeHandler = (upgraded, newLevel) => {
-  const pcts = [50, 75];
-  const pct = pcts[newLevel] ?? 75;
-  upgraded.description = `永久：选择一面护盾，对随机 2 个怪物各造成 ${pct}% 护甲值的法术伤害，然后该护盾耐久 -1。`;
-  upgraded.shortDescription = `${pct}% 护甲法伤随机 2 怪；该盾耐久 -1`;
-  upgraded.magicEffect = `护甲值 ${pct}% 伤害随机两怪，盾耐久 -1。`;
-};
-
-const battleSpirit: OnUpgradeHandler = (upgraded, newLevel) => {
-  const amounts = [1, 2];
-  const amt = amounts[newLevel] ?? 2;
-  upgraded.description = `一次性：选择一个装备栏，本回合（持续到下次瀑流）该栏每英雄回合可多攻击 ${amt} 次，且每怪物回合格挡耐久上限 +${amt}。`;
-  upgraded.magicEffect = '选定装备栏激发战意。';
-};
-
-const berserkGambit: OnUpgradeHandler = (upgraded, newLevel) => {
-  if (newLevel === 1) {
-    upgraded.description = '一次性：生命降至 1，本回合所有装备 +4 伤害，每个武器栏可多攻击一次。';
-    upgraded.magicEffect = '降血换取爆发与每栏额外攻击。';
-  } else if (newLevel === 2) {
-    upgraded.description = '一次性：生命降至 1，本回合所有装备 +8 伤害，每个武器栏可多攻击一次。';
-    upgraded.magicEffect = '降血换取强力爆发与每栏额外攻击。';
-  } else if (newLevel === 3) {
-    upgraded.description = '一次性：生命降至 1，本回合所有装备 +8 伤害，每个武器栏可多攻击 2 次。';
-    upgraded.magicEffect = '降血换取强力爆发与每栏多次额外攻击。';
-  }
-};
-
-const missingHpSmite: OnUpgradeHandler = (upgraded, newLevel) => {
-  const smitePcts = [50, 100, 150];
-  const sp = smitePcts[newLevel] ?? 150;
-  upgraded.description = `永久：对一名怪物造成等同当前已损失生命值 ${sp}% 的伤害。`;
-  upgraded.magicEffect = `以失去生命 ${sp}% 为伤害。`;
-};
-
-const deathWard: OnUpgradeHandler = (upgraded, newLevel) => {
-  if (newLevel === 1) {
-    upgraded.magicType = 'permanent' as any;
-    upgraded.recycleDelay = 2;
-    upgraded.description = '永久：只能在受到致命伤害时触发，抵消该次伤害。每 2 回合可用。';
-    upgraded.magicEffect = '濒死时抵消致死伤害（永久，2 回合冷却）。';
-  } else if (newLevel === 2) {
-    upgraded.magicType = 'permanent' as any;
-    upgraded.recycleDelay = 1;
-    upgraded.description = '永久：只能在受到致命伤害时触发，抵消该次伤害。每回合可用。';
-    upgraded.magicEffect = '濒死时抵消致死伤害（永久，1 回合冷却）。';
-  }
-};
-
-const recycleFlare: OnUpgradeHandler = (upgraded, newLevel) => {
-  const drawCounts = [2, 3, 4];
-  const dc = drawCounts[newLevel] ?? 4;
-  upgraded.description = `永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 ${dc} 张牌。(可超手牌上限)`;
-  upgraded.magicEffect = `回收袋归位并抽 ${dc} 张牌。`;
-};
-
-const fateSight: OnUpgradeHandler = (upgraded, newLevel) => {
-  const persuadeBonuses = [70, 100];
-  const bonus = persuadeBonuses[newLevel] ?? 100;
-  upgraded.description = `永久：翻看主牌堆顶 4 张牌，如果其中没有怪物牌，则下次劝降成功率 +${bonus}%。`;
-  upgraded.shortDescription = `翻 4 张：无怪物 → 下次劝降率 +${bonus}%`;
-  upgraded.magicEffect = `透视牌堆顶 4 张，无怪物则下次劝降率 +${bonus}%。`;
-};
-
-const bloodDraw: OnUpgradeHandler = (upgraded, newLevel) => {
-  const bloodDrawCounts = [3, 4, 5];
-  const dc = bloodDrawCounts[newLevel] ?? 5;
-  upgraded.description = `永久：失去 3 点生命，抽 ${dc} 张牌。`;
-  upgraded.magicEffect = `失去 3 HP，抽 ${dc} 张牌。`;
-};
-
-const handPurgeRedraw: OnUpgradeHandler = (upgraded, newLevel) => {
-  const drawCounts = [3, 4, 5];
-  const dc = drawCounts[newLevel] ?? 5;
-  upgraded.description = `永久：弃回所有手牌（诅咒除外），然后从背包抽 ${dc} 张牌。`;
-  upgraded.shortDescription = `弃回所有手牌；从背包抽 ${dc} 张`;
-  upgraded.magicEffect = `弃回全部手牌，从背包抽 ${dc} 张。`;
-};
-
-const graveNova: OnUpgradeHandler = (upgraded, newLevel) => {
-  const novaDmgs = [3, 6];
-  const nd = novaDmgs[newLevel] ?? 6;
-  upgraded.description = `永久：当此牌被弃置时，对当前行所有怪物造成 ${nd} 点伤害。`;
-  upgraded.magicEffect = `被弃置时造成 ${nd} 点爆炸伤害。`;
-};
-
-const armorStunConvert: OnUpgradeHandler = (upgraded, newLevel) => {
-  const stunPerArmor = [1, 1.5];
-  const sp = stunPerArmor[newLevel] ?? 1.5;
-  upgraded.description = `永久：选择一个护盾，每 1 点护甲值使击晕上限 +${sp}%（最终值四舍五入）。`;
-  upgraded.shortDescription = `所选护盾每 1 护甲，击晕上限 +${sp}%`;
-  upgraded.magicEffect = `护甲转化为击晕上限（每点 +${sp}%）。`;
-};
-
-// 雷涌一击 (knight:stun-cap-strike)：升 1 把除数从 4 调到 3（伤害更高，stun 率不变）。
-const stunCapStrike: OnUpgradeHandler = (upgraded, newLevel) => {
-  const divisors = [4, 3];
-  const div = divisors[newLevel] ?? 3;
-  upgraded.description = `永久：对一个怪物造成 ⌈击晕上限/${div}⌉ 点法术伤害，60% 击晕（受击晕上限约束），然后抽 1 张牌。`;
-  upgraded.shortDescription = `⌈晕上限/${div}⌉ 法伤；60% 晕；抽 1`;
-  upgraded.magicEffect = `电涌：晕上限 1/${div} 法伤 + 60% 晕 + 抽 1。`;
-};
-
-// 攻防协律 (knight:temp-attack-armor-draw)：每升 1 级，临攻 / 临护 +2（2→4→6）。
-// 抽牌固定为 1 张。recycleDelay 固定 1。
-const tempAttackArmorDraw: OnUpgradeHandler = (upgraded, newLevel) => {
+// 疾风短剑 (knight:swift-dagger)：基础全栏 +2 临攻，每升 1 级 +2（L0: 2 → L1: 4 → L2: 6）。
+// onEquipEffect 在 all-temp-attack-2 / -4 / -6 三个 handler 之间切换。
+// `restoreDurabilityOnKill: true` 不变（卡面文案"杀怪回满耐久"在每个等级都保留）。
+const swiftDagger: OnUpgradeHandler = (upgraded, newLevel) => {
   const amounts = [2, 4, 6];
   const n = amounts[newLevel] ?? 6;
-  upgraded.description = `永久：选择一个装备栏，+${n} 临时攻击 +${n} 临时护甲，抽 1 张牌。`;
-  upgraded.shortDescription = `所选栏 +${n} 临攻 +${n} 临护；抽 1`;
-  upgraded.magicEffect = `永久魔法：选择一个装备栏，+${n} 临时攻击 +${n} 临时护甲，抽 1 张牌。`;
+  (upgraded as any).onEquipEffect = `all-temp-attack-${n}`;
+};
+
+// 进化甲壁 (knight:evolving-shield)：
+//   每个手动升级级别 = 一次「auto-evolve 周期」（与 combat.ts 的自动升级效果完全一致）：
+//     value/armorMax design [3, 5, 7]（每级 +2 delta，preserve+delta amp 保留）、
+//     maxDurability design [2, 3, 4]（每级 +1 delta，preserve broken amount，
+//     受 DURABILITY_CAP 约束）、_shieldBlockCount 归 0。
+//   armor 字段走 preserve+delta（与其它 shield handler 一致；旧实现 delete armor
+//   是为了让下次读取按新 cap 刷满，但与"升级保留战斗扣损状态"的不变量冲突，已改）。
+//   注意：combat.ts 的 auto-evolve 路径仍是 strip armor → refill to new cap
+//   （独立路径，不走 OnUpgradeHandler），保留旧行为以方便对比。
+//   shieldBlockAutoUpgradeCount 字段保留，所以升级后仍可继续 auto-evolve。
+//   maxUpgradeLevel 2 = 撞 durability cap 的自然停点（base 2/2 → L1 3/3 → L2 4/4）。
+const evolvingShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const armors = [3, 5, 7];
+  const maxDurs = [2, 3, 4];
+
+  applyShieldArmorDelta(upgraded, armors, newLevel);
+  applyMaxDurabilityDelta(upgraded, maxDurs, newLevel);
+
+  (upgraded as any)._shieldBlockCount = 0;
+};
+
+// 雷震守护盾 (knight:thunder-guard-shield)：
+//   L0 -> L1: armor / durability 不变（8 / 1/1）。
+//             onDestroyEffect 'stunCap+8' → 'stunCap+10'（遗言击晕上限 +10%）。
+//   L1 -> L2: armor / durability / onDestroyEffect 不变。
+//             hasEquipmentRevive 设为 true（首次摧毁恢复 1 耐久；第二次才触发遗言）。
+//   description / shortDescription 同步描述。
+//   stunCap+N 由 rules/equipment-effects.ts 与 rules/waterfall.ts 两条遗言路径以及
+//   GameCard.tsx / CardDetailsModal.tsx 两处 UI 显式 parseInt 解析，无需改消费方。
+//   hasEquipmentRevive 由 computeEquipmentBreakEffects 的 equipReviveAvailable 分支处理，
+//   首次摧毁时 reviveUpdate 把 durability 写回 1 并设 equipmentReviveUsed=true。
+const thunderGuardShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const stunAmounts = [8, 10, 10];
+  const reviveFlags = [false, false, true];
+
+  const stunAmount = stunAmounts[newLevel] ?? stunAmounts[stunAmounts.length - 1];
+  upgraded.onDestroyEffect = `stunCap+${stunAmount}`;
+
+  const revive = reviveFlags[newLevel] ?? reviveFlags[reviveFlags.length - 1];
+  if (revive) {
+    (upgraded as any).hasEquipmentRevive = true;
+  } else {
+    delete (upgraded as any).hasEquipmentRevive;
+    delete (upgraded as any).equipmentReviveUsed;
+  }
+};
+
+// 共御圣盾 (knight:communal-defense-shield)：
+//   L0 -> L1: value/armorMax design [6, 8]（delta +2，preserve+delta，amp 保留）。
+//             durability 不变（1/1）。hasEquipmentRevive 保留（true）。
+//             onDestroyEffect 不变（allSlotTempArmor:5）。
+//   L1 -> L2: value/armorMax 不变（8）。durability 不变（1/1）。
+//             hasEquipmentRevive 保留（true）。
+//             onDestroyEffect allSlotTempArmor:5 → allSlotTempArmor:7（全栏 +7 临时护甲）。
+//   description / shortDescription 动态更新临时护甲数字。
+//   allSlotTempArmor:N 由 rules/equipment-effects.ts 与 rules/waterfall.ts 两条遗言路径
+//   解析（startsWith 'allSlotTempArmor:' + parseInt 取数字），无需改消费方。
+const communalDefenseShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const armors = [6, 8, 8];
+  const tempArmorAmounts = [5, 5, 7];
+
+  applyShieldArmorDelta(upgraded, armors, newLevel);
+
+  const tempArmorAmount = tempArmorAmounts[newLevel] ?? tempArmorAmounts[tempArmorAmounts.length - 1];
+  upgraded.onDestroyEffect = `allSlotTempArmor:${tempArmorAmount}`;
+};
+
+// 弹幕护盾 (knight:barrage-shield)：
+//   L0 -> L1: value/armorMax design table [2, 4]，delta +2（preserve+delta：
+//             current value + 2，amp 保留；当前 armor 同 +2 clamp 到新 cap）。
+//             durability 3/3 不变。perfectBlockSpawnMissiles 不变（2）。
+//   L1 -> L2: value/armorMax 不变。durability 3/3 不变。
+//             perfectBlockSpawnMissiles 2 → 3（完美格挡生成 3 张魔弹）。
+//   description / shortDescription 动态更新魔弹张数。
+const barrageShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const armors = [2, 4, 4];
+  const missileCounts = [2, 2, 3];
+
+  applyShieldArmorDelta(upgraded, armors, newLevel);
+
+  const missileCount = missileCounts[newLevel] ?? missileCounts[missileCounts.length - 1];
+  (upgraded as any).perfectBlockSpawnMissiles = missileCount;
+};
+
+// 生长之盾 (knight:growth-shield)：
+//   L0 -> L1: armor / durability 不变（1 / 4）。amplifyOnFlipAmount 1 → 2
+//             （每次卡牌翻转，该盾按卡名累计 +2 护甲与护甲上限）。
+//             onDestroyEventCount 不变（1）。description 同步更新数字。
+//   L1 -> L2: amplifyOnFlipAmount 仍 2。onDestroyEventCount 1 → 3
+//             （遗言改为从坟场随机抽出 3 张 Event 加入手牌）。
+// `amplifyOnFlip: true` 与 `onDestroyEffect: 'graveyard-event-to-hand'` 三级都不变 —
+// 升级仅调整两个新数字字段。
+const growthShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const flipAmounts = [1, 2, 2];
+  const eventCounts = [1, 1, 3];
+
+  const flipAmount = flipAmounts[newLevel] ?? flipAmounts[flipAmounts.length - 1];
+  const eventCount = eventCounts[newLevel] ?? eventCounts[eventCounts.length - 1];
+
+  if (flipAmount > 1) {
+    (upgraded as any).amplifyOnFlipAmount = flipAmount;
+  } else {
+    delete (upgraded as any).amplifyOnFlipAmount;
+  }
+  if (eventCount > 1) {
+    (upgraded as any).onDestroyEventCount = eventCount;
+  } else {
+    delete (upgraded as any).onDestroyEventCount;
+  }
+};
+
+// 坚韧磐盾 (knight:endurance-shield)：
+//   L0 -> L1: armor design table [3, 5]，delta +2（preserve+delta，amp 保留）。
+//             耐久不变，效果不变。
+//   L1 -> L2: armor 不变，耐久不变，equipBlockDurabilityBonus 1 -> 2
+//             （怪物回合最多消耗从 2 → 3 耐久；shieldRefillOnMonsterDeath 保留）。
+//   description / shortDescription 动态更新数字。
+const enduranceShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const armors = [3, 5, 5];
+  const blockBonuses = [1, 1, 2];
+
+  applyShieldArmorDelta(upgraded, armors, newLevel);
+
+  const blockBonus = blockBonuses[newLevel] ?? blockBonuses[blockBonuses.length - 1];
+  (upgraded as any).equipBlockDurabilityBonus = blockBonus;
+};
+
+// 猛击之盾 (knight:shield-bash)：
+//   L0 -> L1: shieldBashStunRate 5 -> 7（armor/durability 不变；5%×armor → 7%×armor）。
+//   L1 -> L2: shieldBashStunRate 7 -> 10（10%×armor）。
+//   description / shortDescription 动态更新百分比文案。
+const shieldBash: OnUpgradeHandler = (upgraded, newLevel) => {
+  const rates = [5, 7, 10];
+  const rate = rates[newLevel] ?? rates[rates.length - 1];
+  (upgraded as any).shieldBashStunRate = rate;
+};
+
+// 守望者之盾 (knight:guardian-link-shield)：
+//   L0 -> L1: value/armorMax design [4, 5]（delta +1）、maxDur design [2, 3]（delta +1）、效果不变。
+//   L1 -> L2: value/armorMax design [5, 8]（delta +3）、maxDur 不变（3）、效果不变。
+//   `blockGrantTempArmorToOther` 的 grant amount 直接读 storedCap（base+perm+temp），
+//   armor 涨了 grant 自动跟着涨，所以效果文案"等同此盾护甲值"不需要改。
+const guardianLinkShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const armors = [4, 5, 8];
+  const maxDurs = [2, 3, 3];
+
+  applyShieldArmorDelta(upgraded, armors, newLevel);
+  applyMaxDurabilityDelta(upgraded, maxDurs, newLevel);
+};
+
+// 不朽骨盾 (knight:revive-bone-shield)：
+//   L0 -> L1: armor 不变（3）、durability 不变（2/2）、复生不变。
+//             onDestroyPermanentDamage 1 → 2（遗言改为该装备栏永久伤害 +2）。
+const reviveBoneShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const damages = [1, 2];
+  const damage = damages[newLevel] ?? 2;
+  (upgraded as any).onDestroyPermanentDamage = damage;
+};
+
+// 守护圣盾 (knight:guardian-shield)：
+//   L0 -> L1: armor design [3, 4]（delta +1），preserve+delta（amp 保留）。
+//             durability design [2, 3]（delta +1，preserve broken amount）。
+//             shieldPerfectBlockArmorSaveChance 不变（50）。
+//   L1 -> L2: armor / durability 不变（4 / 3）。
+//             shieldPerfectBlockArmorSaveChance 50 → 60。
+const guardianShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const armors = [3, 4, 4];
+  const maxDurs = [2, 3, 3];
+  const saveChances = [50, 50, 60];
+
+  applyShieldArmorDelta(upgraded, armors, newLevel);
+  applyMaxDurabilityDelta(upgraded, maxDurs, newLevel);
+
+  const chance = saveChances[newLevel] ?? 60;
+  (upgraded as any).shieldPerfectBlockArmorSaveChance = chance;
+};
+
+// 棘刺反盾 (knight:thorned-shield)：
+//   L0 -> L1: 护甲不变（4），耐久 design [2, 3]（delta +1，preserve broken amount）。
+//             效果不变（reflectHalfDamage 反弹一半 + 永久攻击 + 临时攻击）。
+//   L1 -> L2: 护甲不变（4），耐久不变（3）。
+//             reflectHalfDamage → reflectFullDamage（反弹全部攻击伤害 + 永久攻击 + 临时攻击）。
+const thornedShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const maxDurs = [2, 3, 3];
+  applyMaxDurabilityDelta(upgraded, maxDurs, newLevel);
+
+  if (newLevel >= 2) {
+    delete (upgraded as any).reflectHalfDamage;
+    (upgraded as any).reflectFullDamage = true;
+  } else {
+    (upgraded as any).reflectHalfDamage = true;
+    delete (upgraded as any).reflectFullDamage;
+  }
+};
+
+// 铁壁塔盾 (knight:fullBlock)：
+//   L0 -> L1: armor design [5, 8]（delta +3，preserve+delta，amp 保留）。
+//             durability 不变（1/1）。effect 不变。
+//   L1 -> L2: armor 不变（8）。durability 不变（1/1）。
+//             加 shieldExtraBlocksPerDurability: 1（共可格挡 2 次再损毁）。
+const fullBlockShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const armors = [5, 8, 8];
+  const extraBlocks = [0, 0, 1];
+
+  applyShieldArmorDelta(upgraded, armors, newLevel);
+
+  const extra = extraBlocks[newLevel] ?? 1;
+  if (extra > 0) {
+    (upgraded as any).shieldExtraBlocksPerDurability = extra;
+    (upgraded as any)._shieldDurabilityBlockCounter = 0;
+  } else {
+    delete (upgraded as any).shieldExtraBlocksPerDurability;
+    delete (upgraded as any)._shieldDurabilityBlockCounter;
+  }
+};
+
+// 魔弹连弩 (knight:magic-missile-crossbow)：
+//   L0 -> L1: value design [1, 3]（delta +2，preserve+delta amp 保留）。
+//             durability 不变（3/3）。bolt count 不变（1）。
+//   L1 -> L2: value 不变（3）。durability 不变（3/3）。
+//             onAttackAmplifyMissileGenerateCount 1 → 2（超杀生成 2 张魔弹）。
+const magicMissileCrossbow: OnUpgradeHandler = (upgraded, newLevel) => {
+  const values = [1, 3, 3];
+  const boltCounts = [1, 1, 2];
+
+  applyValueDelta(upgraded, values, newLevel);
+
+  const boltCount = boltCounts[newLevel] ?? 2;
+  if (boltCount > 1) {
+    (upgraded as any).onAttackAmplifyMissileGenerateCount = boltCount;
+  } else {
+    delete (upgraded as any).onAttackAmplifyMissileGenerateCount;
+  }
+};
+
+// 生长之刃 (knight:growth-blade)：
+//   L0 -> L1: value 不变（1），maxDurability design [3, 4]（delta +1，preserve broken amount）。
+//             effect 不变（仍 +1 增幅 per 上手）。
+//   L1 -> L2: value/durability 不再变（1 / 4），onEnterHandEffect 从 'growth-blade-onhand'
+//             切到 'growth-blade-onhand-x2'，每次上手增幅两次（+2 攻击）。
+const growthBlade: OnUpgradeHandler = (upgraded, newLevel) => {
+  const maxes = [3, 4, 4];
+  const onHandEffects = ['growth-blade-onhand', 'growth-blade-onhand', 'growth-blade-onhand-x2'];
+
+  applyMaxDurabilityDelta(upgraded, maxes, newLevel);
+
+  (upgraded as any).onEnterHandEffect = onHandEffects[newLevel] ?? 'growth-blade-onhand-x2';
+};
+
+// 共鸣之刃 (knight:resonance-blade)：
+//   L0 -> L1: value 不变（4），maxDurability design [2, 3]（delta +1，preserve broken amount）。
+//             effects 不变（仍 +2 临攻 / +1 修复）。
+//   L1 -> L2: value/durability 不再变（4 / 3），onAttackBuffOtherSlotTempAttack 2 → 4。
+// `onAttackRepairOtherSlot: 1` 三级都不变。
+const resonanceBlade: OnUpgradeHandler = (upgraded, newLevel) => {
+  const maxes = [2, 3, 3];
+  const tempAttacks = [2, 2, 4];
+
+  applyMaxDurabilityDelta(upgraded, maxes, newLevel);
+
+  const tempAttack = tempAttacks[newLevel] ?? 4;
+  (upgraded as any).onAttackBuffOtherSlotTempAttack = tempAttack;
+};
+
+// 怒斩之刃 (knight:rage-cleave)：
+//   L0 -> L1: weaponExtraAttack 不变（1 = 每回合 2 攻），onAttackDebuffAllMonsterAttack 2 → 3。
+//   L1 -> L2: weaponExtraAttack 1 → 2（每回合 3 攻），onAttackDebuffAllMonsterAttack 仍 3。
+// `value` / `durability` / `maxDurability` 三级都不变（4 攻 / 3 耐久）。
+const rageCleave: OnUpgradeHandler = (upgraded, newLevel) => {
+  const extraAttacks = [1, 1, 2];
+  const debuffs = [2, 3, 3];
+  const extra = extraAttacks[newLevel] ?? 2;
+  const debuff = debuffs[newLevel] ?? 3;
+  (upgraded as any).weaponExtraAttack = extra;
+  (upgraded as any).onAttackDebuffAllMonsterAttack = debuff;
+};
+
+// 汰换之刃 (knight:exchange-blade)：
+//   L0 -> L1: onEquipEffect 不变（'perm-slot-damage+1'），onDestroyPermanentShield 1 → 2。
+//   L1 -> L2: onEquipEffect → 'perm-slot-damage+2'，onDestroyPermanentShield 仍 2。
+// `value` / `durability` / `maxDurability` 三级都不变（2 攻 / 3 耐久）。
+const exchangeBlade: OnUpgradeHandler = (upgraded, newLevel) => {
+  const equipDmgs = [1, 1, 2];
+  const destroyShields = [1, 2, 2];
+  const equipDmg = equipDmgs[newLevel] ?? 2;
+  const destroyShield = destroyShields[newLevel] ?? 2;
+  (upgraded as any).onEquipEffect = `perm-slot-damage+${equipDmg}`;
+  (upgraded as any).onDestroyPermanentShield = destroyShield;
+};
+
+// 噬魂猎刃 (knight:soul-hunter-blade)：
+//   L0 -> L1: value 不变（5），maxDurability design [2, 3]（delta +1）。
+//   L1 -> L2: value design [5, 6]（delta +1，preserve+delta amp 保留），maxDurability design [3, 4]（delta +1）。
+// `overkillRecycleToHand: 2` / 描述 / shortDescription 三级都不变（"超杀回收袋 2 张牌"效果未变）。
+const soulHunterBlade: OnUpgradeHandler = (upgraded, newLevel) => {
+  const values = [5, 5, 6];
+  const maxes = [2, 3, 4];
+
+  applyValueDelta(upgraded, values, newLevel);
+  applyMaxDurabilityDelta(upgraded, maxes, newLevel);
+};
+
+// 雷击碎骨锤 (knight:thunder-stun-hammer)：
+//   L0 -> L1: value design [3, 4]（delta +1，preserve+delta），maxDurability design [2, 3]（delta +1），
+//             effects 不变（仍 stunCap+5）。
+//   L1 -> L2: value/durability 不再变（保持 4 / 3），onEquipEffect 升到 'stunCap+10'。
+// `weaponStunChance: 60` / `doubleDamageOnStunned: true` 三级都不变。
+const thunderStunHammer: OnUpgradeHandler = (upgraded, newLevel) => {
+  const values = [3, 4, 4];
+  const maxes = [2, 3, 3];
+  const stunCaps = [5, 5, 10];
+
+  applyValueDelta(upgraded, values, newLevel);
+  applyMaxDurabilityDelta(upgraded, maxes, newLevel);
+
+  const stunCap = stunCaps[newLevel] ?? 10;
+  (upgraded as any).onEquipEffect = `stunCap+${stunCap}`;
+};
+
+// 感化之锤 (knight:persuade-hammer)：仅 1 级。
+// L0 -> L1: persuadeBoostOnHit 20 → 30。其它字段（攻击力、耐久、武器消耗逻辑）不变。
+const persuadeHammer: OnUpgradeHandler = (upgraded, newLevel) => {
+  const boosts = [20, 30];
+  const n = boosts[newLevel] ?? 30;
+  (upgraded as any).persuadeBoostOnHit = n;
+};
+
+// 碎雷战锤 (knight:thunder-hammer)：攻击力 / 永久 +1 伤害效果不变；
+// 仅 maxDurability 随升级提升 design [1, 2, 3]（每级 +1 delta，preserve broken amount）。
+// 描述 / shortDescription 不动 —— 卡面文案在三级都一样。
+const thunderHammer: OnUpgradeHandler = (upgraded, newLevel) => {
+  const maxes = [1, 2, 3];
+  applyMaxDurabilityDelta(upgraded, maxes, newLevel);
 };
 
 // ============================================================================
@@ -362,6 +654,8 @@ registerOnUpgradeAll([
   { id: `starter:${STARTER_CARD_IDS.reshuffle}`, handler: reshuffle },
   { id: `starter:${STARTER_CARD_IDS.tempArmor}`, handler: tempArmor },
   { id: `starter:${STARTER_CARD_IDS.dungeonSwap}`, handler: dungeonSwap },
+  { id: `starter:${STARTER_CARD_IDS.activeRowFlip}`, handler: activeRowFlip },
+  { id: `starter:${STARTER_CARD_IDS.recallEquip}`, handler: recallEquip },
   { id: `starter:${STARTER_CARD_IDS.trainingBlade}`, handler: trainingBlade },
   { id: `starter:${STARTER_CARD_IDS.stunStrike}`, handler: stunStrike },
   { id: `starter:${STARTER_CARD_IDS.magicMissile}`, handler: magicMissile },
@@ -376,6 +670,7 @@ registerOnUpgradeAll([
   { id: `starter:${STARTER_CARD_IDS.dimensionWarp}`, handler: dimensionWarp },
   { id: `starter:${STARTER_CARD_IDS.undyingBlessing}`, handler: undyingBlessing },
   { id: `starter:${STARTER_CARD_IDS.gamblerGambit}`, handler: gamblerGambit },
+  { id: `starter:${STARTER_CARD_IDS.deckTopSwapGold}`, handler: deckTopSwapGold },
   { id: `starter:${STARTER_CARD_IDS.healMagic}`, handler: healMagic },
   { id: `starter:${STARTER_CARD_IDS.classSummon}`, handler: classSummon },
 
@@ -385,19 +680,52 @@ registerOnUpgradeAll([
 
   // Knight effects
   { id: 'knight:graveyard-recall', handler: graveyardRecall },
+  { id: 'knight:monster-recruit', handler: monsterRecruit },
   { id: 'knight:blood-greed', handler: bloodGreed },
   { id: 'knight:armor-strike', handler: armorStrike },
   { id: 'knight:armor-double-strike', handler: armorDoubleStrike },
   { id: 'knight:battle-spirit', handler: battleSpirit },
   { id: 'knight:berserk-gambit', handler: berserkGambit },
   { id: 'knight:missing-hp-smite', handler: missingHpSmite },
-  { id: 'knight:death-ward', handler: deathWard },
   { id: 'knight:recycle-flare', handler: recycleFlare },
   { id: 'knight:fate-sight', handler: fateSight },
   { id: 'knight:blood-draw', handler: bloodDraw },
   { id: 'knight:hand-purge-redraw', handler: handPurgeRedraw },
+  { id: 'knight:missile-storm', handler: missileStorm },
   { id: 'knight:grave-nova', handler: graveNova },
+  { id: 'knight:overkill-upgrade', handler: overkillUpgrade },
+  { id: 'knight:temp-attack-strike', handler: tempAttackStrike },
+  { id: 'knight:eternal-vessel', handler: eternalVessel },
+  { id: 'knight:flip-back-active', handler: flipBackActive },
+  { id: 'knight:three-card-thunder', handler: threeCardThunder },
+  { id: 'knight:reorganize-backpack', handler: reorganizeBackpack },
   { id: 'knight:armor-stun-convert', handler: armorStunConvert },
   { id: 'knight:stun-cap-strike', handler: stunCapStrike },
   { id: 'knight:temp-attack-armor-draw', handler: tempAttackArmorDraw },
+  { id: 'knight:temp-attack-double', handler: tempAttackDouble },
+  { id: 'knight:amplify-equipment-shift', handler: amplifyEquipmentShift },
+  { id: 'knight:essence-extract', handler: essenceExtract },
+  { id: 'knight:holy-blade', handler: holyBlade },
+  { id: 'knight:swift-dagger', handler: swiftDagger },
+  { id: 'knight:thunder-hammer', handler: thunderHammer },
+  { id: 'knight:persuade-hammer', handler: persuadeHammer },
+  { id: 'knight:thunder-stun-hammer', handler: thunderStunHammer },
+  { id: 'knight:soul-hunter-blade', handler: soulHunterBlade },
+  { id: 'knight:exchange-blade', handler: exchangeBlade },
+  { id: 'knight:rage-cleave', handler: rageCleave },
+  { id: 'knight:resonance-blade', handler: resonanceBlade },
+  { id: 'knight:growth-blade', handler: growthBlade },
+  { id: 'knight:magic-missile-crossbow', handler: magicMissileCrossbow },
+  { id: 'knight:fullBlock', handler: fullBlockShield },
+  { id: 'knight:thorned-shield', handler: thornedShield },
+  { id: 'knight:guardian-shield', handler: guardianShield },
+  { id: 'knight:revive-bone-shield', handler: reviveBoneShield },
+  { id: 'knight:evolving-shield', handler: evolvingShield },
+  { id: 'knight:guardian-link-shield', handler: guardianLinkShield },
+  { id: 'knight:shield-bash', handler: shieldBash },
+  { id: 'knight:endurance-shield', handler: enduranceShield },
+  { id: 'knight:growth-shield', handler: growthShield },
+  { id: 'knight:barrage-shield', handler: barrageShield },
+  { id: 'knight:thunder-guard-shield', handler: thunderGuardShield },
+  { id: 'knight:communal-defense-shield', handler: communalDefenseShield },
 ]);

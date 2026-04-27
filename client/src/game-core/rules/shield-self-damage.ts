@@ -98,13 +98,13 @@ export function applyShieldSlotSelfDamage(
     ? (slotItem.hp ?? slotItem.value)
     : (slotItem.armorMax ?? slotItem.value);
   const slotShieldBonus = getSlotBonus(state, slotId, 'shield');
-  const permanentBonus = Math.max(0, slotShieldBonus);
   const rawSlotTemp = state.slotTempArmor?.[slotId] ?? 0;
 
-  // Single-counter armor model: storedCap = baseArmorMax + perm + temp.
+  // Single-counter armor model: storedCap = max(0, baseArmorMax + perm + temp).
+  // Floor on FINAL sum so negative perm/temp reduce cap instead of being dropped.
   // No transient eliteBonus on this self-damage path (mirrors prior behaviour;
   // shield-self-damage doesn't honour gold-stealing elite armor doubling).
-  const storedCap = baseArmorMax + permanentBonus + rawSlotTemp;
+  const storedCap = Math.max(0, baseArmorMax + slotShieldBonus + rawSlotTemp);
   const currentArmor = Math.min(slotItem.armor ?? storedCap, storedCap);
 
   const blocked = Math.min(damage, currentArmor);

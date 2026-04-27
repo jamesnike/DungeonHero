@@ -458,18 +458,37 @@ function applyOneEquipmentLastWordsIteration(
         });
       }
     } else if (slotItem.onDestroyEffect === 'graveyard-event-to-hand') {
-      const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
-      const pick = pickGraveyardEventCardExcluding(graveyard, slotItem.id, rng);
-      if (pick) {
-        rng = pick.rng;
-        patch.discardedCards = graveyard.filter((_, i) => i !== pick.idx);
-        patch.handCards = [...(patch.handCards ?? state.handCards), pick.picked];
+      // `onDestroyEventCount` 缺省 1（与基础卡 / Iron-Shield-style 单张抽取一致）；
+      // 「生长之盾」L2 升级把此值提升为 3，循环抽取至坟场再无 Event 时停。
+      const requested = Math.max(
+        1,
+        (slotItem as { onDestroyEventCount?: number }).onDestroyEventCount ?? 1,
+      );
+      const picked: GameCardData[] = [];
+      for (let i = 0; i < requested; i++) {
+        const graveyardSnapshot =
+          (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
+        const result = pickGraveyardEventCardExcluding(graveyardSnapshot, slotItem.id, rng);
+        if (!result) break;
+        rng = result.rng;
+        patch.discardedCards = graveyardSnapshot.filter((_, idx) => idx !== result.idx);
+        patch.handCards = [...(patch.handCards ?? state.handCards), result.picked];
+        picked.push(result.picked);
+      }
+      if (picked.length > 0) {
+        const names = picked.map(c => `「${c.name}」`).join('、');
         sideEffects.push({
           event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场抽出 Event「${pick.picked.name}」！` },
+          payload: {
+            type: 'equip',
+            message:
+              picked.length === 1
+                ? `${slotItem.name} 遗言：从坟场抽出 Event ${names}！`
+                : `${slotItem.name} 遗言：从坟场抽出 ${picked.length} 张 Event ${names}！`,
+          },
         });
         sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
-        sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
+        sideEffects.push({ event: 'card:newCardGained', payload: { count: picked.length, source: 'graveyard' } });
       } else {
         sideEffects.push({
           event: 'log:entry',

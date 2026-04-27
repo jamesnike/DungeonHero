@@ -171,3 +171,70 @@ describe('雷震守护盾 last-words: waterfall applyEquipDestroyLastWords path'
     expect(enqueuedActions).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 4) Upgraded shields: L1 grants +10%, L2 revives first then grants +10%
+// ---------------------------------------------------------------------------
+
+describe('雷震守护盾 upgraded — L1 stunCap+10 last-words', () => {
+  it('L1 (stunCap+10): grants +10 stunCap when destroyed (under cap)', () => {
+    const shield = makeShield({ onDestroyEffect: 'stunCap+10' });
+    const state = makeState({ equipmentSlot1: shield as any, stunCap: 50 });
+    const { patch, sideEffects } = computeEquipmentBreakEffects(
+      state,
+      'equipmentSlot1',
+      shield as any,
+      createEmptyAmuletEffects(),
+    );
+    expect(patch.stunCap).toBe(60);
+    expect(sideEffects.some(e =>
+      e.event === 'log:entry' && (e.payload as any)?.message?.includes('击晕上限 +10%'),
+    )).toBe(true);
+  });
+});
+
+describe('雷震守护盾 upgraded — L2 revive then last-words', () => {
+  it('L2 first destruction: revive (durability restored, equipmentReviveUsed=true) AND fires stunCap+10 last-words', () => {
+    // canonical computeEquipmentBreakEffects 顺序：先 fire onDestroyEffect（stunCap+10），
+    // 再做 revive 检查。所以即使 revive 接住了 broken self，stunCap 也已经 +10。
+    const shield = makeShield({
+      onDestroyEffect: 'stunCap+10',
+      hasEquipmentRevive: true,
+      durability: 0,
+      maxDurability: 1,
+    });
+    const state = makeState({ equipmentSlot1: shield as any, stunCap: 30 });
+    const { patch } = computeEquipmentBreakEffects(
+      state,
+      'equipmentSlot1',
+      shield as any,
+      createEmptyAmuletEffects(),
+    );
+    const revivedItem = (patch as any).equipmentSlot1 as any;
+    expect(revivedItem).toBeTruthy();
+    expect(revivedItem.equipmentReviveUsed).toBe(true);
+    expect(revivedItem.durability).toBeGreaterThan(0);
+    expect(patch.stunCap).toBe(40);
+  });
+
+  it('L2 second destruction (after revive used): grants +10 stunCap', () => {
+    const shield = makeShield({
+      onDestroyEffect: 'stunCap+10',
+      hasEquipmentRevive: true,
+      equipmentReviveUsed: true,
+      durability: 0,
+      maxDurability: 1,
+    });
+    const state = makeState({ equipmentSlot1: shield as any, stunCap: 30 });
+    const { patch, sideEffects } = computeEquipmentBreakEffects(
+      state,
+      'equipmentSlot1',
+      shield as any,
+      createEmptyAmuletEffects(),
+    );
+    expect(patch.stunCap).toBe(40);
+    expect(sideEffects.some(e =>
+      e.event === 'log:entry' && (e.payload as any)?.message?.includes('击晕上限 +10%'),
+    )).toBe(true);
+  });
+});

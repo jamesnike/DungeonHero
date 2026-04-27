@@ -81,11 +81,6 @@ export type GameEventMap = {
     monsterName: string;
   };
   'combat:executeLastWords': { monster: import('@/components/GameCard').GameCardData };
-  'combat:bossTransform': {
-    monsterId: string;
-    originalMonster: import('@/components/GameCard').GameCardData;
-    bossCard: import('@/components/GameCard').GameCardData;
-  };
   'combat:dragonBreathFx': { monsterId: string; targetSlotId: string };
   'combat:golemReflect': {
     monsterId: string;
@@ -118,7 +113,17 @@ export type GameEventMap = {
     title: string; subtitle: string;
     roll: number; threshold: number; success: boolean;
   };
-  'combat:deathWardPrompt': { damage: number; source: string };
+  /**
+   * 不灭守护 自动触发：reducer 在 reduceApplyDamage 检测到致死伤害时已经把
+   * 卡片从手牌移到坟场、把伤害归零，并设置 deathWardNotice + phase=
+   * 'awaitingDeathWardNotice'。这条事件仅用于 UI 通用反馈（log / 音效 / 浮字），
+   * modal 弹窗本身由 deathWardNotice 状态字段驱动。
+   */
+  'combat:deathWardActivated': {
+    cardName: string;
+    blockedDamage: number;
+    source: string;
+  };
   'combat:dragonBreathRetaliation': {
     monsterId: string; monsterName: string; damage: number;
   };

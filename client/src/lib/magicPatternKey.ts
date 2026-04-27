@@ -10,7 +10,6 @@ const STARTER_ID_TO_KEY: Record<string, string> = {
   'starter-perm-heal-two': 'blessing-wind',
   'starter-perm-survey-action': 'survey-action',
   'starter-perm-discover-class-to-hand': 'starter-class-summon-hand',
-  'starter-perm-transform-streak-strike': 'starter-streak-strike',
   'starter-perm-flank-slot-temp-attack': 'starter-flank-rally',
   'starter-perm-deck-top-swap-gold': 'starter-fortune-bet',
   'starter-perm-apprentice-bolt': 'starter-apprentice-bolt',
@@ -59,6 +58,7 @@ const KNIGHT_EFFECT_TO_KEY: Record<string, string> = {
   'amplify-equipment-shift': 'knight-amplify-equipment-shift',
   'durability-charge-burst': 'knight-charge-burst',
   'eternal-vessel': 'knight-eternal-vessel',
+  'transform-streak-strike': 'knight-streak-strike',
 };
 
 const NAME_TO_KEY: Record<string, string> = {
@@ -168,7 +168,7 @@ const NAME_TO_KEY: Record<string, string> = {
   修裂启示: 'knight-gear-rift-draw',
   地震泉涌: 'knight-quake-stun-draw',
   专属感召: 'starter-class-summon-hand',
-  连环转律: 'starter-streak-strike',
+  连环转律: 'knight-streak-strike',
   锐意鼓舞: 'starter-flank-rally',
   运势博弈: 'starter-fortune-bet',
   三牌惊雷: 'knight-three-card-thunder',

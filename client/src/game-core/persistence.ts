@@ -199,7 +199,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     persuadeState: state.persuadeState as any,
     magicChoiceModal: state.magicChoiceModal as any,
     eventDiceModal: state.eventDiceModal as any,
-    deathWardPrompt: state.deathWardPrompt as any,
+    deathWardNotice: state.deathWardNotice,
     rng: state.rng ? { seed: state.rng.seed, state: state.rng.state } : undefined,
     amplifiedCardBonus: { ...state.amplifiedCardBonus },
     // 持久化是为了：刷新页面后撤销跨刷新点时，旧 cache 仍可命中、奖励不变。

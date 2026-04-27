@@ -9,7 +9,6 @@ import type {
   CardActionKeyword,
   CombatInitiator,
   CombatState,
-  DeathWardPromptState,
   EquipmentItem,
   EquipmentSlotBonusState,
   EquipmentSlotId,
@@ -122,7 +121,6 @@ export interface CombatActionsDeps {
   clearUndoStack: () => void;
   clearUndoStorage: () => void;
   isMonsterEngaged: (monsterId: string) => boolean;
-  findDeathWardCard: () => { card: GameCardData; source: 'hand' | 'backpack' } | null;
   consumeCardFromHand: (card: GameCardData) => void;
   consumeClassCardFromHand: (cardId: string) => void;
   finalizeMagicCard: (card: GameCardData, opts?: { banner?: string; dealtDamage?: boolean }) => void;
@@ -150,7 +148,6 @@ export interface CombatActionsDeps {
   fullBoardInteractionLockedRef: React.MutableRefObject<boolean>;
   handLockedForMonsterPhaseRef: React.MutableRefObject<boolean>;
   heroStunnedRef: React.MutableRefObject<boolean>;
-  suppressDeathWardRef: React.MutableRefObject<boolean>;
   selectedHeroSkillRef: React.MutableRefObject<string | null>;
   eternalRelicsRef: React.MutableRefObject<import('@/game-core/types').EternalRelic[]>;
   handCardsRef: React.MutableRefObject<GameCardData[]>;
@@ -185,14 +182,12 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     permanentMaxHpBonus,
     permanentSkills,
     selectedHeroSkill,
-    deathWardPrompt,
     pendingHeroSkillAction,
     pendingMagicAction,
   } = useShallowGameState(s => ({
     permanentMaxHpBonus: s.permanentMaxHpBonus,
     permanentSkills: s.permanentSkills,
     selectedHeroSkill: s.selectedHeroSkill,
-    deathWardPrompt: s.deathWardPrompt,
     pendingHeroSkillAction: s.pendingHeroSkillAction,
     pendingMagicAction: s.pendingMagicAction,
   }));
@@ -269,10 +264,6 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
       // (e.g. the stolen card popped up from the goblin's stack).
       d.pendingDungeonUseRef.current.delete(monsterId);
     }, d.animSpeed(DEFEAT_ANIMATION_DURATION));
-  });
-
-  useGameEvent('combat:bossTransform', ({ originalMonster, bossCard }) => {
-    depsRef.current.triggerEventTransform(originalMonster as GameCardData, bossCard as GameCardData, 'Boss 降临！');
   });
 
   useGameEvent('combat:lastWordsDiscard', ({ cards }) => {
@@ -583,8 +574,14 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
 
   // --- Combat UI flow event listeners (drive modals, refs, and async flows) ---
 
-  useGameEvent('combat:deathWardPrompt', () => {
-    // State-driven via deathWardPrompt field — UI reacts to state change automatically
+  useGameEvent('combat:deathWardActivated', ({ cardName, blockedDamage }) => {
+    // 反馈事件：reducer 已经在状态层完成了「卡 → 坟场 + deathWardNotice 设值
+    // + phase=awaitingDeathWardNotice」。这里只追加日志，UI 弹窗由 deathWardNotice
+    // 状态驱动渲染（GameFlowContainer / GameBoardModals）。
+    depsRef.current.addGameLog(
+      'magic',
+      `${cardName} 自动触发，抵消了 ${blockedDamage} 点致命伤害（已进入坟场）`,
+    );
   });
 
   useGameEvent('combat:executeLastWords', ({ monster }) => {
@@ -987,48 +984,15 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     dispatch({ type: 'ADVANCE_MONSTER_TURN' });
   }, [dispatch]);
 
-  // -- handleDeathWardConfirm / Decline ---------------------------------------
+  // -- handleDismissDeathWardNotice ------------------------------------------
+  // 不灭守护现在是「自动触发」：reduceApplyDamage 已经把卡从手牌移到坟场、
+  // 设了 deathWardNotice、把 phase 切到 awaitingDeathWardNotice。
+  // 玩家点「知道了」后只需 dispatch DISMISS_DEATH_WARD_NOTICE，让 ui-state reducer
+  // 把 deathWardNotice 清空、phase 切回 playerInput，pipeline 继续 drain。
 
-  const handleDeathWardConfirm = useCallback(() => {
-    depsRef.current.pushUndoSnapshot();
-    if (!deathWardPrompt) {
-      return;
-    }
-    const { card, source } = deathWardPrompt;
-    if (source === 'hand') {
-      depsRef.current.consumeCardFromHand(card);
-      depsRef.current.consumeClassCardFromHand(card.id);
-    } else {
-      dispatch({ type: 'UPDATE_BACKPACK_ITEMS', updater: prev => prev.filter(item => item.id !== card.id) });
-    }
-    const isPermanent = (card.upgradeLevel ?? 0) >= 1;
-    if (isPermanent) {
-      dispatch({ type: 'UPDATE_RECYCLE_BAG', updater: prev => [...prev, { ...card, _recycleWaits: card.recycleDelay ?? 2 }] });
-      depsRef.current.finalizeMagicCard(card, { banner: '不灭守护发动，抵消了致命伤害！（将在回收袋中冷却）' });
-    } else {
-      depsRef.current.finalizeMagicCard(card, { banner: '命悬一线发动，抵消了致命伤害。' });
-    }
-    dispatch({ type: "SET_HERO_SKILL_BANNER", message: '命悬一线护佑了你。' });
-    dispatch({ type: "SET_DEATH_WARD_PROMPT", payload: null });
-  }, [
-    deathWardPrompt,
-    dispatch,
-  ]);
-
-  const handleDeathWardDecline = useCallback(() => {
-    depsRef.current.pushUndoSnapshot();
-    if (!deathWardPrompt) {
-      return;
-    }
-    const { pendingDamage, sourceType } = deathWardPrompt;
-    dispatch({ type: "SET_DEATH_WARD_PROMPT", payload: null });
-    depsRef.current.suppressDeathWardRef.current = true;
-    try {
-      applyDamage(pendingDamage, sourceType);
-    } finally {
-      depsRef.current.suppressDeathWardRef.current = false;
-    }
-  }, [applyDamage, deathWardPrompt, dispatch]);
+  const handleDismissDeathWardNotice = useCallback(() => {
+    dispatch({ type: 'DISMISS_DEATH_WARD_NOTICE' });
+  }, [dispatch]);
 
   // -- handleMonsterTargetSelection -------------------------------------------
 
@@ -1115,9 +1079,8 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     resolveBlockChoice,
     advanceMonsterTurn,
 
-    // Death ward
-    handleDeathWardConfirm,
-    handleDeathWardDecline,
+    // Death ward (auto-trigger notice dismissal)
+    handleDismissDeathWardNotice,
 
     // Monster target / weapon to monster
     handleMonsterTargetSelection,

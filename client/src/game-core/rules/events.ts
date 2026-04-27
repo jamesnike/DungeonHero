@@ -272,7 +272,23 @@ function reduceCompleteEvent(
   if (shouldRemoveFromDungeon && eventCellIdx >= 0) {
     const newActiveCards = [...state.activeCards];
     const stackAtIdx = stacks[eventCellIdx] ?? [];
-    if (stackAtIdx.length > 0) {
+    // Swarm passive: if a Swarm monster is present elsewhere on the row,
+    // the player intent (per CARD_POOL_REFERENCE.md "每移除一张地城牌，在该
+    // 位置生成一只小虫子") is that ANY dungeon-card removal triggers swarm
+    // spawn — including when the slot would otherwise stack-pop. Force the
+    // slot-clear branch in that case so postProcessActiveCards step 3 spawns
+    // a Buglet at the cleared slot. The stacked card stays intact at the
+    // top of `activeCardStacks` and naturally pops up after the Buglet is
+    // later defeated. Mirrors `removeCard` in GameBoard.tsx.
+    const hasSwarmSourcePresent = state.activeCards.some((c, i) =>
+      c != null
+      && i !== eventCellIdx
+      && c.type === 'monster'
+      && (c as GameCardData).swarmSpawn === true
+      && (c as GameCardData).isBuglet !== true
+      && (c as GameCardData).isStunned !== true,
+    );
+    if (stackAtIdx.length > 0 && !hasSwarmSourcePresent) {
       const nextCard = stackAtIdx[stackAtIdx.length - 1];
       newActiveCards[eventCellIdx] = nextCard;
       const popStacks = { ...stacks };

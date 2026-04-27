@@ -55,13 +55,13 @@ describe('computeAmuletEffects stacking', () => {
       expect(fx.balanceCount).toBe(2);
     });
 
-    it('生命 ×3 — lifeOverkillBonus = 4 × N', () => {
+    it('生命 ×3 — lifeOverkillBonus = 3 × N', () => {
       const fx = computeAmuletEffects([
         makeAmulet('life', 'l-1'),
         makeAmulet('life', 'l-2'),
         makeAmulet('life', 'l-3'),
       ] as any);
-      expect(fx.lifeOverkillBonus).toBe(12);
+      expect(fx.lifeOverkillBonus).toBe(9);
     });
 
     it('击晕金币 ×3 — stunGoldCount = 3 (consumer multiplies +10 per amulet)', () => {

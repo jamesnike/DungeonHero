@@ -33,9 +33,14 @@ export interface ShopHandlersDeps {
   ensureCardInHand: (card: GameCardData) => void;
   discardCardToGraveyard: (
     card: GameCardData | null | undefined,
-    options?: { owner?: 'player' | 'dungeon'; forceGraveyard?: boolean; forceRecycleBag?: boolean },
+    options?: {
+      owner?: 'player' | 'dungeon';
+      forceGraveyard?: boolean;
+      forceRecycleBag?: boolean;
+      waitsOverride?: number;
+    },
   ) => void;
-  addPermanentMagicToRecycleBag: (card: GameCardData) => void;
+  addPermanentMagicToRecycleBag: (card: GameCardData, options?: { waitsOverride?: number }) => void;
   applyDiscardSideEffects: (
     card: GameCardData,
     owner: 'player' | 'dungeon',

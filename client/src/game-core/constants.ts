@@ -101,7 +101,7 @@ export const STRENGTH_SELF_DAMAGE = 2;
 // ---------------------------------------------------------------------------
 
 export const FINAL_MONSTER_MARK_DESCRIPTION =
-  '最终之敌：击败后将变身为 Boss；被瀑流从预览挤出时不进坟场，置于牌堆底（不打乱牌序）。';
+  '最终之敌（Boss）：自带 亡灵召唤 + 复生；被瀑流从预览挤出时不进坟场，置于牌堆底（不打乱牌序）。';
 
 export const ELITE_MONSTER_NAMES = ['Elder Dragon', 'Bone Overlord', 'Goblin Warlock', 'Ogre Juggernaut'] as const;
 export const ELITE_MONSTER_NAME_SET = new Set<string>(ELITE_MONSTER_NAMES);
@@ -181,6 +181,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   cardGainMissileCount: 0,
   swapUpgradeCount: 0,
   stunUpgradeCapCount: 0,
+  stunUpgradeCapBonus: 0,
   recycleBackpackExpandCount: 0,
   dungeonGoldCount: 0,
   waterfallHealCount: 0,

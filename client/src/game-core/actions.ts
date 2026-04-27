@@ -215,6 +215,12 @@ export interface AddToGraveyardAction {
 export interface AddToRecycleBagAction {
   type: 'ADD_TO_RECYCLE_BAG';
   card: import('@/components/GameCard').GameCardData;
+  /**
+   * 强制覆盖 `_recycleWaits`（绕过卡牌自身的 `recycleDelay`）。
+   * 玩家手动把卡拖入回收袋（slot-backpack）时设为 1，让 Perm 卡也只等 1 次瀑流。
+   * 系统层路径（出牌自回收 / 装备销毁 / 护符销毁 / 瀑流溢出 / 其它效果）一律不传。
+   */
+  waitsOverride?: number;
 }
 
 export interface AddToBackpackAction {
@@ -592,6 +598,11 @@ export interface DiscardOwnedCardAction {
   owner: 'player' | 'dungeon';
   forceGraveyard?: boolean;
   forceRecycleBag?: boolean;
+  /**
+   * 透传给后续 `ADD_TO_RECYCLE_BAG` —— 玩家手动把手牌拖入回收袋时设为 1，
+   * 让 Perm 手牌也只等 1 次瀑流。系统层弃手牌路径（专属召唤 / 汰旧迎新 等）不传。
+   */
+  waitsOverride?: number;
 }
 
 /**
@@ -743,6 +754,39 @@ export interface ApplyTransformCategoryAction {
 }
 
 /**
+ * 「唤回秘药 · 侧击」触发的弃 1 张手牌·从回收袋随机取 N 张到手牌的互动流。
+ *
+ * 由 reducePlayCard 的 flank 分支（或 GameBoard 的 imperative drag 路径）在
+ * card.flankEffectId 形如 `discard-recycle-to-hand:N` 时 enqueue。
+ * Reducer 调 requestOrAutoHandDiscard 决定走 modal 路径（设置
+ * pendingHandDiscardSelection）还是 auto 路径（手牌无可弃 → 直接尝试抽回收袋）。
+ *
+ * NOTE: 字段名仍叫 `transform-discard-recycle`（subEffect / context.kind）是因为
+ * 它描述的是 "弃 N 张抽回收袋 M 张" 的**流程形状**，不是触发条件。触发条件已经
+ * 改成侧击，但流程本身可被未来其它触发条件复用。
+ */
+export interface TriggerFlankDiscardRecycleAction {
+  type: 'TRIGGER_FLANK_DISCARD_RECYCLE';
+  card: GameCardData;
+  count: number;
+}
+
+/**
+ * 「蜕变赋灵 · 侧击」触发的"失去 3 点生命，从坟场随机获得一张魔法卡"效果。
+ *
+ * 由 reducePlayCard 的 flank 分支（或 GameBoard 的 imperative drag 路径）在
+ * card.flankEffectId === 'graveyard-random-magic' 时 enqueue / dispatch。
+ * Reducer 同步处理：从 discardedCards 选一张 magic 卡 → 加进手牌 → 玩家自伤 3。
+ *
+ * 走单独 action 而非 inline 是为了让 reducer 路径和 imperative drag 路径共享同一份
+ * 实现（避免双轨漂移），并且测试可以孤立断言这个 action 的行为。
+ */
+export interface TriggerFlankGraveyardMagicAction {
+  type: 'TRIGGER_FLANK_GRAVEYARD_MAGIC';
+  card: GameCardData;
+}
+
+/**
  * 把一张 building 牌（含命运之刃 / 增幅祭坛等）从手牌或背包放进地城列。
  * Reducer 自己负责：随机选空 slot、放置到 activeCards 或 discardedCards、emit 日志、
  * 处理命运之刃自伤、末尾 enqueue APPLY_TRANSFORM_CATEGORY。
@@ -813,6 +857,15 @@ export interface ApplyBerserkerRageAction {
 export interface TriggerGraveNovaAction {
   type: 'TRIGGER_GRAVE_NOVA';
   card?: GameCardData;
+  /**
+   * 第几次结算（1 或 2）。
+   * L2 升级版「3 点伤害 ×2 次」通过 reducer 自递归实现：第一次 reducer
+   * 跑完后会再 enqueue 一条 hitNumber=2 的 TRIGGER_GRAVE_NOVA，从而让
+   * MONSTER_DEFEATED / 入场 / 技能 follow-up 等动作在两次结算之间穿插，
+   * 每次伤害独立结算掉血/掉血层/技能触发。
+   * 未指定 = 1（兼容旧路径，base 与 L1 不需要重复入队）。
+   */
+  hitNumber?: 1 | 2;
 }
 
 /**
@@ -1310,9 +1363,12 @@ export interface SetPendingHeroMagicActionAction {
   payload: import('./types').PendingHeroMagicAction | null;
 }
 
-export interface SetDeathWardPromptAction {
-  type: 'SET_DEATH_WARD_PROMPT';
-  payload: import('./types').DeathWardPromptState | null;
+/**
+ * 不灭守护自动触发后，由 reduceApplyDamage 内部直接 patch 该字段（不通过 action）。
+ * 这条 action 仅作为玩家点击「知道了」按钮时的清空入口。
+ */
+export interface DismissDeathWardNoticeAction {
+  type: 'DISMISS_DEATH_WARD_NOTICE';
 }
 
 export interface SetCardActionContextAction {
@@ -1990,6 +2046,8 @@ export type GameAction =
   | AmplifyCardsByNameAction
   | ResolvePermGrantAction
   | ApplyTransformCategoryAction
+  | TriggerFlankDiscardRecycleAction
+  | TriggerFlankGraveyardMagicAction
   | PlaceBuildingInDungeonAction
   | EquipFromHandAction
   | EquipAmuletFromHandAction
@@ -2075,7 +2133,7 @@ export type GameAction =
   | SetPendingPotionAction
   | SetPendingHeroSkillAction
   | SetPendingHeroMagicActionAction
-  | SetDeathWardPromptAction
+  | DismissDeathWardNoticeAction
   | SetCardActionContextAction
   | SetGraveyardDiscoverStateAction
   | SetPermGrantModalAction

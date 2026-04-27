@@ -2,8 +2,10 @@ import type { GameCardData } from '@/components/GameCard';
 import type { EquipmentItem, AmuletItem } from '@/components/game-board/types';
 import type { GameState } from './types';
 import { executeOnUpgrade } from './card-schema/on-upgrade';
-// Side-effect import: registers all upgrade handlers in the on-upgrade registry.
+import { computeCardText } from './card-schema/card-text';
+// Side-effect imports: register all upgrade handlers and text formatters.
 import './card-schema/definitions/upgrades';
+import './card-schema/definitions/card-text';
 
 export interface UpgradeCardResult {
   patch: Partial<GameState>;
@@ -18,6 +20,18 @@ function applyUpgrade(card: GameCardData, state: GameState): { card: GameCardDat
 
   const upgraded: GameCardData = { ...card, upgradeLevel: newLevel };
   executeOnUpgrade(upgraded, newLevel, state);
+
+  // Derived display layer: any formatter registered for this card overrides
+  // whatever description fields the handler imperatively set. Cards with no
+  // handler at all (e.g. 怀柔令, knight-class 紧急回收, 查阅动作, 锐意鼓舞)
+  // pick up their upgraded text from this step alone — the handler-less gap
+  // that previously left UI text frozen at level 0.
+  const text = computeCardText(upgraded, state);
+  if (text) {
+    if (text.description !== undefined) upgraded.description = text.description;
+    if (text.shortDescription !== undefined) upgraded.shortDescription = text.shortDescription;
+    if (text.magicEffect !== undefined) upgraded.magicEffect = text.magicEffect;
+  }
 
   return { card: upgraded, name: upgraded.name };
 }

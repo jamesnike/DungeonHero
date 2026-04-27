@@ -146,7 +146,6 @@ import type {
   CombatInitiator,
   CombatState,
   DiscardFlight,
-  DeathWardPromptState,
   DragOrigin,
   DungeonDropAssignment,
   EquipmentItem,
@@ -595,8 +594,6 @@ export default function GameBoard() {
     endHeroTurn,
     resolveBlockChoice,
     advanceMonsterTurn,
-    handleDeathWardConfirm,
-    handleDeathWardDecline,
     handleMonsterTargetSelection,
     handleWeaponToMonster,
     recordClassDamageDiscoverHit,
@@ -662,6 +659,12 @@ export default function GameBoard() {
     setDaggerSelfDestructPrompt(null);
     daggerSelfDestructResolverRef.current?.(false);
     daggerSelfDestructResolverRef.current = null;
+  }, []);
+
+  // 不灭守护自动触发后，玩家点「知道了」按钮 → 清空 notice 状态 + 把 phase
+  // 推回 playerInput 让 pipeline 继续 drain（reducer 内部完成所有清理）。
+  const handleDismissDeathWardNotice = useCallback(() => {
+    dispatch({ type: 'DISMISS_DEATH_WARD_NOTICE' });
   }, []);
 
   const handleUpgradeModalChange = useCallback((open: boolean) => {
@@ -1657,7 +1660,6 @@ export default function GameBoard() {
   const ghostBladeExileResolverRef = useRef<(() => void) | null>(null);
   const daggerSelfDestructResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [daggerSelfDestructPrompt, setDaggerSelfDestructPrompt] = useState<{ weaponName: string; remainingDurability: number } | null>(null);
-  const suppressDeathWardRef = useRef(false);
   const selectedHeroSkillRef = useRef<string | null>(selectedHeroSkill);
   selectedHeroSkillRef.current = selectedHeroSkill;
   const eternalRelicsRef = useRef(eternalRelics);
@@ -1976,26 +1978,6 @@ export default function GameBoard() {
     const card = engine.getState().handCards.find(c => c.id === cardId);
     if (card) queueCardIntoHand(card);
   });
-
-  const findDeathWardCard = useCallback(
-    (): { card: GameCardData; source: 'hand' | 'backpack' } | null => {
-      const s = engine.getState();
-      const fromHand = s.handCards.find(
-        candidate => (candidate as KnightCardData | undefined)?.knightEffect === 'death-ward',
-      );
-      if (fromHand) {
-        return { card: fromHand, source: 'hand' };
-      }
-      const fromBackpack = s.backpackItems.find(
-        candidate => (candidate as KnightCardData | undefined)?.knightEffect === 'death-ward',
-      );
-      if (fromBackpack) {
-        return { card: fromBackpack, source: 'backpack' };
-      }
-      return null;
-    },
-    [engine],
-  );
 
   // DEQUEUE_MONSTER_REWARD is now triggered by the reducer pipeline:
   // - MONSTER_DEFEATED enqueues it after queueing rewards
@@ -4396,7 +4378,7 @@ export default function GameBoard() {
       amplifyModal: snapshot.amplifyModal ?? null,
       eventAmplifyHandPicker: snapshot.eventAmplifyHandPicker ?? null,
       persuadeState: (snapshot.persuadeState as import('@/game-core/types').PersuadeModalState | null) ?? null,
-      deathWardPrompt: (snapshot.deathWardPrompt as import('@/game-core/types').DeathWardPromptState | null) ?? null,
+      deathWardNotice: (snapshot.deathWardNotice as import('@/game-core/types').DeathWardNoticeState | null) ?? null,
       gameLogEntries: (loadGameLog()?.entries ?? []) as import('@/components/GameLogPanel').LogEntry[],
       amplifiedCardBonus: snapshot.amplifiedCardBonus ?? {},
     });
@@ -5420,18 +5402,31 @@ export default function GameBoard() {
 
         const updated = [...prev];
 
+        // Swarm passive: if a Swarm monster is present elsewhere on the row
+        // and the card being removed is not itself a Buglet, force the
+        // slot-clear branch (skip stack-pop). The reducer's
+        // postProcessActiveCards step 3 will then spawn a Buglet at the
+        // cleared slot, leaving any stacked card intact at the top of
+        // `activeCardStacks` — it pops up naturally after the Buglet is
+        // later defeated. This matches the design intent (per
+        // CARD_POOL_REFERENCE.md "每移除一张地城牌，在该位置生成一只小虫子")
+        // that ANY dungeon-card removal triggers swarm spawn, including
+        // stack-pop. Mirrors `reduceCompleteEvent` in rules/events.ts.
+        const removedCard = prev[index];
+        const swarmSourcePresent = !removedCard?.isBuglet && prev.some((c, i) =>
+          c != null
+          && i !== index
+          && c.type === 'monster'
+          && c.swarmSpawn === true
+          && c.isBuglet !== true
+          && c.isStunned !== true,
+        );
+
         // Stack pop: if there are stacked cards below, promote the top one.
         // Read from engine state to avoid stale closure (e.g. Graveyard Amulet
         // adds stacks after removeCard is called).
-        //
-        // Stack-pop wins over swarm spawn — see SWARM_SPAWN_EXEMPT_ACTIONS in
-        // reducer.ts. If a stack pops, `curr` is non-null and the reducer's
-        // postProcessActiveCards swarm-spawn branch (step 3) is skipped.
-        // Otherwise the slot becomes null and postProcess will react: spawn a
-        // Buglet if a Swarm monster is present, else leave it empty and
-        // enqueue REGISTER_DUNGEON_CARD_PROCESSED.
         const stack = engine.getState().activeCardStacks[index];
-        if (stack && stack.length > 0) {
+        if (stack && stack.length > 0 && !swarmSourcePresent) {
           const nextCard = stack[stack.length - 1];
           updated[index] = nextCard;
           unregisterProcessedCardId(nextCard.id);
@@ -5700,7 +5695,6 @@ export default function GameBoard() {
     clearUndoStack,
     clearUndoStorage,
     isMonsterEngaged,
-    findDeathWardCard,
     consumeCardFromHand,
     consumeClassCardFromHand,
     finalizeMagicCard,
@@ -5722,7 +5716,6 @@ export default function GameBoard() {
     fullBoardInteractionLockedRef,
     handLockedForMonsterPhaseRef,
     heroStunnedRef,
-    suppressDeathWardRef,
     selectedHeroSkillRef,
     eternalRelicsRef,
     handCardsRef,
@@ -6098,6 +6091,27 @@ export default function GameBoard() {
             addGameLog('event', `侧击效果：${card.name} 没有可攻击的怪物`);
             dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！但没有可攻击的怪物。` });
           }
+        } else if (card.flankEffectId.startsWith('discard-recycle-to-hand:')) {
+          // 唤回秘药·侧击：弃 1 张手牌·从回收袋随机取 N 张到手牌（互动式）。
+          // 派单到 reducer 处理 modal/auto 分流，避免在 hook 里复制 reducer 逻辑。
+          const count = parseInt(card.flankEffectId.replace('discard-recycle-to-hand:', ''), 10) || 1;
+          dispatch({ type: 'TRIGGER_FLANK_DISCARD_RECYCLE', card, count });
+        } else if (card.flankEffectId === 'graveyard-random-magic') {
+          // 蜕变赋灵·侧击：失去 3 点生命，从坟场随机获得一张魔法卡。
+          // 派单到 reducer，跟 reducePlayCard flank 分支共享同一份实现。
+          dispatch({ type: 'TRIGGER_FLANK_GRAVEYARD_MAGIC', card });
+        } else if (card.flankEffectId.startsWith('gold:')) {
+          // 附魔祭坛·侧击：+N 金币。跟 reducePlayCard flank 分支保持一致。
+          const amount = parseInt(card.flankEffectId.replace('gold:', ''), 10) || 3;
+          dispatch({ type: 'MODIFY_GOLD', delta: amount, source: 'flank-gold' });
+          addGameLog('gold', `侧击效果：${card.name} 获得 ${amount} 金币`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 获得 ${amount} 金币！` });
+        } else if (card.flankEffectId.startsWith('heal:')) {
+          // 赋能神殿·侧击：恢复 N HP。跟 reducePlayCard flank 分支保持一致。
+          const amount = parseInt(card.flankEffectId.replace('heal:', ''), 10) || 2;
+          dispatch({ type: 'HEAL', amount, source: 'flank-heal' });
+          addGameLog('event', `侧击效果：${card.name} 恢复 ${amount} HP`);
+          dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 恢复 ${amount} HP！` });
         }
       }
 
@@ -6640,7 +6654,7 @@ export default function GameBoard() {
             (card as GameCardData & { fromSlot?: string }).fromSlot ?? null,
           );
           if (slotId2) clearEquipmentSlotWithPromote(slotId2);
-          addPermanentMagicToRecycleBag(card);
+          addPermanentMagicToRecycleBag(card, { waitsOverride: 1 });
           applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
           addGameLog('equip', `回收永久装备「${card.name}」至回收袋。`);
           dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 已回收至回收袋。` });
@@ -6662,7 +6676,7 @@ export default function GameBoard() {
         }
         addGameLog('magic', `回收「${card.name}」至回收袋。`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 已回收至回收袋。` });
-        discardCardToGraveyard(card, { owner: 'player', forceRecycleBag: true });
+        discardCardToGraveyard(card, { owner: 'player', forceRecycleBag: true, waitsOverride: 1 });
         tickRecycleForge();
         resetDragState();
         return;
@@ -6679,7 +6693,7 @@ export default function GameBoard() {
         // Aura reversal for the recycled amulet is handled by the reducer's
         // postProcessAmuletAura middleware (triggered by REMOVE_AMULET).
         dispatch({ type: 'REMOVE_AMULET', cardId: card.id });
-        addPermanentMagicToRecycleBag(card);
+        addPermanentMagicToRecycleBag(card, { waitsOverride: 1 });
         applyDiscardSideEffects(card, 'player', { toRecycleBag: true });
         addGameLog('magic', `回收护符「${card.name}」至回收袋。`);
         dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${card.name} 已回收至回收袋。` });
@@ -6897,6 +6911,27 @@ export default function GameBoard() {
               addGameLog('event', `侧击效果：${card.name} 没有可攻击的怪物`);
               dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！但没有可攻击的怪物。` });
             }
+          } else if (card.flankEffectId.startsWith('discard-recycle-to-hand:')) {
+            // 唤回秘药·侧击：弃 1 张手牌·从回收袋随机取 N 张到手牌（互动式）。
+            // 派单到 reducer 处理 modal/auto 分流。
+            const count = parseInt(card.flankEffectId.replace('discard-recycle-to-hand:', ''), 10) || 1;
+            dispatch({ type: 'TRIGGER_FLANK_DISCARD_RECYCLE', card, count });
+          } else if (card.flankEffectId === 'graveyard-random-magic') {
+            // 蜕变赋灵·侧击：失去 3 点生命，从坟场随机获得一张魔法卡。
+            // 派单到 reducer，跟 reducePlayCard flank 分支共享同一份实现。
+            dispatch({ type: 'TRIGGER_FLANK_GRAVEYARD_MAGIC', card });
+          } else if (card.flankEffectId.startsWith('gold:')) {
+            // 附魔祭坛·侧击：+N 金币。跟 reducePlayCard flank 分支保持一致。
+            const amount = parseInt(card.flankEffectId.replace('gold:', ''), 10) || 3;
+            dispatch({ type: 'MODIFY_GOLD', delta: amount, source: 'flank-gold' });
+            addGameLog('gold', `侧击效果：${card.name} 获得 ${amount} 金币`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 获得 ${amount} 金币！` });
+          } else if (card.flankEffectId.startsWith('heal:')) {
+            // 赋能神殿·侧击：恢复 N HP。跟 reducePlayCard flank 分支保持一致。
+            const amount = parseInt(card.flankEffectId.replace('heal:', ''), 10) || 2;
+            dispatch({ type: 'HEAL', amount, source: 'flank-heal' });
+            addGameLog('event', `侧击效果：${card.name} 恢复 ${amount} HP`);
+            dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `侧击！${card.name} 恢复 ${amount} HP！` });
           }
         }
       } else {
@@ -7005,7 +7040,6 @@ export default function GameBoard() {
         status.unlocked && status.gauge < definition.gaugeMax
           ? `需要 ${definition.gaugeMax} 能量`
           : undefined;
-      const usedReason = status.usedThisWave ? '本波已使用' : undefined;
       const waterfallReason = waterfallActive ? '等待瀑布动画结束' : undefined;
       const busyReason =
         pendingHeroMagicAction ||
@@ -7017,14 +7051,13 @@ export default function GameBoard() {
       const ready =
         status.unlocked &&
         status.gauge >= definition.gaugeMax &&
-        !status.usedThisWave &&
         !waterfallActive &&
         !pendingHeroMagicAction &&
         !pendingHeroSkillAction &&
         !pendingMagicAction &&
         !pendingPotionAction;
       const disabledReason =
-        lockedReason ?? insufficientCharge ?? usedReason ?? waterfallReason ?? busyReason;
+        lockedReason ?? insufficientCharge ?? waterfallReason ?? busyReason;
       return {
         id,
         name: definition.name,
@@ -7032,7 +7065,6 @@ export default function GameBoard() {
         gaugeMax: definition.gaugeMax,
         unlocked: status.unlocked,
         ready,
-        usedThisWave: status.usedThisWave,
         chargeHint: definition.chargeHint,
         disabledReason,
       };
@@ -7071,7 +7103,7 @@ export default function GameBoard() {
       Boolean(gs.magicChoiceModal) ||
       Boolean(gs.equipmentPrompt) ||
       Boolean(gs.eventTransformState) ||
-      Boolean(gs.deathWardPrompt);
+      Boolean(gs.deathWardNotice);
   })();
 
   const endHeroTurnDisabled =
@@ -8240,8 +8272,7 @@ export default function GameBoard() {
     onCancelHeroMagicAction: cancelHeroMagicAction,
     onCancelPotionAction: cancelPotionAction,
     onPotionChoiceSelection: handlePotionChoiceSelection,
-    onDeathWardConfirm: handleDeathWardConfirm,
-    onDeathWardDecline: handleDeathWardDecline,
+    onDismissDeathWardNotice: handleDismissDeathWardNotice,
     onDaggerSelfDestructConfirm: handleDaggerSelfDestructConfirm,
     onDaggerSelfDestructDecline: handleDaggerSelfDestructDecline,
     onSkillSelection: handleSkillSelection,
@@ -8273,7 +8304,7 @@ export default function GameBoard() {
     handleBackpackReorganizeConfirm,
     handleHandDiscardSelectionConfirm,
     cancelHeroMagicAction, cancelPotionAction, handlePotionChoiceSelection,
-    handleDeathWardConfirm, handleDeathWardDecline,
+    handleDismissDeathWardNotice,
     handleDaggerSelfDestructConfirm, handleDaggerSelfDestructDecline,
     handleSkillSelection, handleCardDraftComplete, handleNewGame,
     endHeroTurn, handleUndo, handleGameOverMinimize,

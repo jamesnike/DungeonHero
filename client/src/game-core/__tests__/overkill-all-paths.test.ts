@@ -60,7 +60,7 @@ describe('overkill — all paths integration', () => {
         combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' } as any,
       });
       const drained = drain(state, [heroAttackAction('equipmentSlot1', 'm1')]);
-      expect(drained.state.hp).toBe(14);
+      expect(drained.state.hp).toBe(13);
     });
 
     it('overkill lifesteal stacks with permanentSpellLifesteal', () => {
@@ -77,7 +77,7 @@ describe('overkill — all paths integration', () => {
         combatState: { ...initialCombatState, engagedMonsterIds: ['m1'], currentTurn: 'hero' } as any,
       });
       const drained = drain(state, [heroAttackAction('equipmentSlot1', 'm1')]);
-      expect(drained.state.hp).toBe(17);
+      expect(drained.state.hp).toBe(16);
     });
 
     it('NO lifesteal when damage does not overkill', () => {
@@ -191,7 +191,7 @@ describe('overkill — all paths integration', () => {
       const drained = drain(state, [
         { type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 10, source: 'spell', isSpellDamage: true },
       ] as any);
-      expect(drained.state.hp).toBe(14);
+      expect(drained.state.hp).toBe(13);
     });
 
     it('NO lifesteal when spell damage does not exceed hp', () => {
@@ -228,7 +228,7 @@ describe('overkill — all paths integration', () => {
       const drained = drain(state, [
         { type: 'INITIATE_WEAPON_ATTACK', slotId: 'equipmentSlot1', monsterId: 'm1' } as any,
       ]);
-      expect(drained.state.hp).toBe(14);
+      expect(drained.state.hp).toBe(13);
     });
 
     it('multi-layer monster: overkill on layer break, life amulet heals', () => {
@@ -251,7 +251,7 @@ describe('overkill — all paths integration', () => {
       const drained = drain(state, [
         { type: 'INITIATE_WEAPON_ATTACK', slotId: 'equipmentSlot1', monsterId: 'm1' } as any,
       ]);
-      expect(drained.state.hp).toBe(14);
+      expect(drained.state.hp).toBe(13);
       // Tank should still be alive on layer 1, full hp restored.
       const tankAfter = (drained.state.activeCards as any[]).find(c => c?.id === 'm1');
       expect(tankAfter).toBeDefined();
@@ -278,8 +278,8 @@ describe('overkill — all paths integration', () => {
       const drained = drain(state, [
         { type: 'INITIATE_WEAPON_ATTACK', slotId: 'equipmentSlot1', monsterId: 'm1' } as any,
       ]);
-      // Damage 6 vs hp 2 → overkill 4 (>0). Heals: healOnAttack +2, overkill-lifesteal +4 = +6.
-      expect(drained.state.hp).toBe(11);
+      // Damage 6 vs hp 2 → overkill 4 (>0). Heals: healOnAttack +2, overkill-lifesteal +3 = +5.
+      expect(drained.state.hp).toBe(10);
     });
 
     it('Holy Light Blade at FULL HP: NO visible heal (capped to maxHp) — common confusion case', () => {
@@ -321,8 +321,8 @@ describe('overkill — all paths integration', () => {
       const drained = drain(state, [
         { type: 'INITIATE_WEAPON_ATTACK', slotId: 'equipmentSlot1', monsterId: 'm1' } as any,
       ]);
-      // healOnAttack +2 first heals 19→20 (only 1 absorbed), then overkill +4 caps at 20.
-      // Visible result: hp 20 (a +1 net change, even though +6 was queued).
+      // healOnAttack +2 first heals 19→20 (only 1 absorbed), then overkill +3 caps at 20.
+      // Visible result: hp 20 (a +1 net change, even though +5 was queued).
       expect(drained.state.hp).toBe(20);
     });
 
@@ -433,7 +433,7 @@ describe('overkill — all paths integration', () => {
       const drained = drain(state, [
         { type: 'APPLY_SHIELD_REFLECT', monsterId: 'm1', damage: 10, sourceName: '反甲' },
       ] as any);
-      expect(drained.state.hp).toBe(14);
+      expect(drained.state.hp).toBe(13);
     });
   });
 

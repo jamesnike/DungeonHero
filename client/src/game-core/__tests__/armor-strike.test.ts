@@ -16,7 +16,7 @@
  *   - global defense bonus (`computeDefenseBonusPure` — amulets, Iron Skin, etc.)
  *   - temporary slot armor (`slotTempArmor`)
  *
- * Upgrade level: 0 → 100%, 1 → 150%.
+ * Upgrade level: 0 → 100%, 1 → 125%, 2 → 150%.
  *
  * Regression: previously the "1 shield + 1 monster" branch in `magic-effects.ts`
  * used raw `shieldSlots[0].item.value`, ignoring permanent slot bonuses. The tests
@@ -144,8 +144,9 @@ describe('铠甲贯刺 (armor-strike) 1-shield path — picker uses computeSlotA
     expect(m?.hp).toBe(97);
   });
 
-  it('1 shield + 1 monster, upgrade level 1: 150% × current armor', () => {
-    const card = makeCard('upg', 1);
+  it('1 shield + 1 monster, upgrade level 1: 125% × current armor', () => {
+    // armor = 3 (base) + 4 (slot bonus) = 7; floor(7 × 125 / 100) = 8
+    const card = makeCard('upg-l1', 1);
     const shield = makeIronShield();
     const monster = makeMonster('m1', 100);
     const state = makeState({
@@ -156,6 +157,29 @@ describe('铠甲贯刺 (armor-strike) 1-shield path — picker uses computeSlotA
       ...withSlot1ShieldBonus(4),
     });
     const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect((afterPlay.state.pendingMagicAction as any)?.pendingDamage).toBe(8);
+    const result = drain(
+      afterPlay.state,
+      [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'armor-strike', monsterId: 'm1' } as GameAction],
+    );
+    const m = result.state.activeCards.find(c => c?.id === 'm1') as { hp: number } | undefined;
+    expect(m?.hp).toBe(92);
+  });
+
+  it('1 shield + 1 monster, upgrade level 2: 150% × current armor', () => {
+    // armor = 3 (base) + 4 (slot bonus) = 7; floor(7 × 150 / 100) = 10
+    const card = makeCard('upg-l2', 2);
+    const shield = makeIronShield();
+    const monster = makeMonster('m1', 100);
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: shield,
+      equipmentSlot2: null,
+      activeCards: activeRowOf(monster),
+      ...withSlot1ShieldBonus(4),
+    });
+    const afterPlay = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    expect((afterPlay.state.pendingMagicAction as any)?.pendingDamage).toBe(10);
     const result = drain(
       afterPlay.state,
       [{ type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'armor-strike', monsterId: 'm1' } as GameAction],

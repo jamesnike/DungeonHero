@@ -24,7 +24,7 @@ function GameFlowContainerInner() {
     totalDamageTaken: s.totalDamageTaken,
     totalHealed: s.totalHealed,
     showSkillSelection: s.showSkillSelection,
-    deathWardPrompt: s.deathWardPrompt,
+    deathWardNotice: s.deathWardNotice,
     rng: s.rng,
   }));
 
@@ -34,28 +34,28 @@ function GameFlowContainerInner() {
 
   return (
     <>
-      {gs.deathWardPrompt && (
+      {/* 不灭守护：reducer 自动消耗手牌里的卡片 → 进坟场 → 阻挡致死伤害；
+          这里只展示「已抵消多少伤害 / 哪张牌触发」的单按钮通知。
+          phase=awaitingDeathWardNotice 让 pipeline 暂停直到玩家点「知道了」。 */}
+      {gs.deathWardNotice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" style={{ pointerEvents: 'auto' }}>
           <div className="w-full max-w-2xl space-y-6 rounded-lg bg-card p-10 text-center shadow-2xl max-h-[95vh] overflow-y-auto" style={{ zoom: ui.overlayZoom }}>
-            <div className="space-y-1">
-              <p className="text-lg font-semibold">命悬一线</p>
-              <p className="text-sm text-muted-foreground">
-                正在受到 {gs.deathWardPrompt.pendingDamage} 点致命伤害，是否打出{' '}
-                {gs.deathWardPrompt.card.name}？
+            <div className="space-y-2">
+              <p className="text-2xl font-serif font-bold text-amber-300">{gs.deathWardNotice.cardName}</p>
+              <p className="text-base text-muted-foreground">
+                自动触发，抵消了
+                <span className="mx-1 font-bold text-rose-300">{gs.deathWardNotice.blockedDamage}</span>
+                点致命伤害
               </p>
+              <p className="text-xs text-muted-foreground/80">该牌已从手牌进入坟场。</p>
             </div>
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center">
               <button
-                className="rounded-md bg-primary px-4 py-2 text-primary-foreground"
-                onClick={cb.onDeathWardConfirm}
+                className="rounded-md bg-primary px-6 py-2 text-primary-foreground hover:opacity-90 transition"
+                onClick={cb.onDismissDeathWardNotice}
+                autoFocus
               >
-                抵消伤害
-              </button>
-              <button
-                className="rounded-md border border-border px-4 py-2"
-                onClick={cb.onDeathWardDecline}
-              >
-                放弃
+                知道了
               </button>
             </div>
           </div>

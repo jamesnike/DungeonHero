@@ -289,9 +289,9 @@ const PREFIX_REDUCER_TOKENS = [
   'deleteCard',
   'destroyEquipment:',
   'returnToHand:',
-  'grantFlankDraw:', 'grantTransformGold:', 'grantFlankPersuadeCost:',
+  'grantFlankDraw:', 'grantFlankGold:', 'grantFlankPersuadeCost:',
   'grantFlankStunCap:', 'grantFlankDamage:',
-  'grantTransformDraw:', 'grantTransformHeal:',
+  'grantTransformDraw:', 'grantFlankHeal:',
   'upgradeCard',
   'crypt-all-effects',
   'crossroads-destroy-below',
@@ -411,7 +411,7 @@ export function getFlipToCardDefinition(token: string, rng: RngState): FlipCardD
     },
     flipToRecallEquip: () => {
       [id, rng] = nextId(rng, `${STARTER_CARD_IDS.recallEquip}-pick`);
-      return { card: { id, type: 'magic', name: '回收术', value: 0, image: starterScrollRecallImage, magicType: 'permanent', magicEffect: '永久魔法：回手一张牌，抽 1 张牌。', description: '回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌。', shortDescription: '回手 1 张装备/护符；抽 1 张', knightEffect: 'recall-equipment' }, rng, banner: '血咒仪式翻转成了回收术，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「回收术」', transformMessage: '血咒仪式翻转为回收术…' };
+      return { card: { id, type: 'magic', name: '回收术', value: 0, image: starterScrollRecallImage, magicType: 'permanent', magicEffect: '永久魔法：回手一张牌。', description: '回手一张牌（从装备栏或护符栏选择）。', shortDescription: '回手 1 张装备/护符', knightEffect: 'recall-equipment', maxUpgradeLevel: 1 }, rng, banner: '血咒仪式翻转成了回收术，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「回收术」', transformMessage: '血咒仪式翻转为回收术…' };
     },
     flipToUndyingBlessing: () => {
       // Suffix MUST match `getStarterBaseId`'s strip pattern so the played
@@ -1851,8 +1851,8 @@ export function applySimpleEffect(
       // shape pairs with the relaxed `-disc-\d+(-[a-z0-9]+)?$` strip
       // pattern (see deck.ts:getStarterBaseId). Previously `-disc` (no
       // digits) silently broke every starter magic delivered through this
-      // discover flow — including 连环转律 / 锐意鼓舞 / 运势博弈 (which
-      // explicitly omit `magicEffect` to rely on starter-id routing).
+      // discover flow — including 锐意鼓舞 / 运势博弈 (which explicitly
+      // omit `magicEffect` to rely on starter-id routing).
       [_id, discoverRng] = nextId(discoverRng, `${c.id}-disc-1`);
       return { ...c, id: _id };
     });
@@ -1973,10 +1973,10 @@ export function applySimpleEffect(
              effectToken === 'pactCopyActiveRow') {
     emitEvents.push({ event: 'event:requestEventInteraction', payload: { token: effectToken, data: {} } });
 
-  } else if (effectToken.startsWith('grantFlankDraw:') || effectToken.startsWith('grantTransformGold:') ||
+  } else if (effectToken.startsWith('grantFlankDraw:') || effectToken.startsWith('grantFlankGold:') ||
              effectToken.startsWith('grantFlankPersuadeCost:') || effectToken.startsWith('grantFlankStunCap:') ||
              effectToken.startsWith('grantFlankDamage:') || effectToken.startsWith('grantTransformDraw:') ||
-             effectToken.startsWith('grantTransformHeal:')) {
+             effectToken.startsWith('grantFlankHeal:')) {
     emitEvents.push({ event: 'event:requestEventInteraction', payload: { token: effectToken, data: {} } });
 
   // --- Phase EC-2: flipTo* tokens (event card transforms) ---

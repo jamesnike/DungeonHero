@@ -128,6 +128,10 @@ export function reduceCardActions(state: GameState, action: GameAction): ReduceR
       return reduceCancelPermGrant(state);
     case 'APPLY_TRANSFORM_CATEGORY':
       return reduceApplyTransformCategory(state, action);
+    case 'TRIGGER_FLANK_DISCARD_RECYCLE':
+      return reduceTriggerFlankDiscardRecycle(state, action);
+    case 'TRIGGER_FLANK_GRAVEYARD_MAGIC':
+      return reduceTriggerFlankGraveyardMagic(state, action);
     case 'PLACE_BUILDING_IN_DUNGEON':
       return reducePlaceBuildingInDungeon(state, action);
     case 'EQUIP_FROM_HAND':
@@ -182,6 +186,15 @@ function reducePlayCard(
   const card = (state.handCards as GameCardData[]).find(c => c.id === action.cardId);
   if (!card) return noChange(state);
 
+  // 不灭守护是纯被动卡——只在 reduceApplyDamage 检测到致死伤害时由 reducer
+  // 自动触发并直接路由到坟场。手牌里的它不应该被玩家点出来 / 拖出来。
+  // GameBoard 的 isPlayable 已经把它隐藏出牌按钮，但仍补一个 reducer 兜底
+  // 防止历史存档 / 未来 UI 路径误派单 PLAY_CARD 把卡白白消耗掉。
+  const knightEff = (card as { knightEffect?: string }).knightEffect;
+  if ((card.magicEffect === 'death-ward' || knightEff === 'death-ward')) {
+    return noChange(state);
+  }
+
   const sideEffects: SideEffect[] = [];
   const patch: Partial<GameState> = {};
   const enqueuedActions: GameAction[] = [];
@@ -231,6 +244,31 @@ function reducePlayCard(
         sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `侧击效果：${card.name} 对 ${target.name} 造成 ${amount} 点伤害` } });
         sideEffects.push({ event: 'ui:banner', payload: { text: `侧击！${card.name} 对 ${target.name} 造成了 ${amount} 点伤害！` } });
       }
+    } else if (card.flankEffectId.startsWith('discard-recycle-to-hand:')) {
+      // 唤回秘药·侧击：弃 1 张手牌·从回收袋随机取 N 张到手牌（互动式）。
+      // 走 TRIGGER_FLANK_DISCARD_RECYCLE 派单——后者在自己的 reduce 步骤里
+      // 调 requestOrAutoHandDiscard 决定弹窗 / auto。pipeline.ts 已经把
+      // TRIGGER_FLANK_DISCARD_RECYCLE 列为 isInputContinuation，确保在
+      // phase='playerInput' 下能继续 drain。
+      const count = parseInt(card.flankEffectId.replace('discard-recycle-to-hand:', ''), 10) || 1;
+      enqueuedActions.push({ type: 'TRIGGER_FLANK_DISCARD_RECYCLE', card, count });
+    } else if (card.flankEffectId === 'graveyard-random-magic') {
+      // 蜕变赋灵·侧击：失去 3 点生命，随机获得坟场一张魔法卡。
+      // 走 TRIGGER_FLANK_GRAVEYARD_MAGIC 派单——后者在自己的 reduce 步骤里
+      // 同步处理（无需交互），跟 GameBoard.tsx 拖放 imperative 路径共享逻辑。
+      enqueuedActions.push({ type: 'TRIGGER_FLANK_GRAVEYARD_MAGIC', card });
+    } else if (card.flankEffectId.startsWith('gold:')) {
+      // 附魔祭坛·侧击：+N 金币（默认 3）。
+      const amount = parseInt(card.flankEffectId.replace('gold:', ''), 10) || 3;
+      patch.gold = (patch.gold ?? state.gold) + amount;
+      sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `侧击效果：${card.name} 获得 ${amount} 金币` } });
+      sideEffects.push({ event: 'ui:banner', payload: { text: `侧击！${card.name} 获得 ${amount} 金币！` } });
+    } else if (card.flankEffectId.startsWith('heal:')) {
+      // 赋能神殿·侧击：恢复 N HP（默认 2）。
+      const amount = parseInt(card.flankEffectId.replace('heal:', ''), 10) || 2;
+      enqueuedActions.push({ type: 'HEAL', amount, source: 'flank-heal' });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `侧击效果：${card.name} 恢复 ${amount} HP` } });
+      sideEffects.push({ event: 'ui:banner', payload: { text: `侧击！${card.name} 恢复 ${amount} HP！` } });
     }
   }
 
@@ -519,7 +557,10 @@ function reduceAddToRecycleBag(
     payload = { ...payload, durability: 1 };
   }
 
-  const withWaits: GameCardData = { ...payload, _recycleWaits: payload.recycleDelay ?? 1 };
+  const withWaits: GameCardData = {
+    ...payload,
+    _recycleWaits: action.waitsOverride ?? payload.recycleDelay ?? 1,
+  };
 
   const filtered = state.permanentMagicRecycleBag.filter(c => c.id !== withWaits.id);
   patch.permanentMagicRecycleBag = [...filtered, withWaits];
@@ -1749,7 +1790,7 @@ function reduceDiscardOwnedCard(
   state: GameState,
   action: Extract<GameAction, { type: 'DISCARD_OWNED_CARD' }>,
 ): ReduceResult {
-  const { card, owner, forceRecycleBag } = action;
+  const { card, owner, forceRecycleBag, waitsOverride } = action;
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
 
@@ -1760,10 +1801,10 @@ function reduceDiscardOwnedCard(
 
   if (owner === 'player' && isGraveNova) {
     sideEffects.push({ event: 'card:graveNova', payload: { card } });
-    enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
+    enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card, waitsOverride });
     toRecycleBag = true;
   } else if (forceRecycleBag || isPerm) {
-    enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card });
+    enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card, waitsOverride });
     toRecycleBag = true;
   } else {
     enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card });
@@ -2490,14 +2531,15 @@ function reduceResolvePermGrant(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  if (modal.sourceType === 'transform-gold-grant') {
+  if (modal.sourceType === 'flank-gold-grant') {
     const targetCard = state.handCards.find(c => c.id === targetCardId);
     if (!targetCard) return applyPatch(state, patch);
+    const amount = modal.meta?.amount ?? 3;
     patch.handCards = state.handCards.map(c =>
-      c.id === targetCardId ? { ...c, transformBonus: '+3 金币', transformEffect: 'gold:3' } : c,
+      c.id === targetCardId ? { ...c, flankEffect: `+${amount} 金币`, flankEffectId: `gold:${amount}` } : c,
     );
-    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `附魔祭坛：「${targetCard.name}」获得转型效果！` } });
-    sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得转型：+3 金币！` } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `附魔祭坛：「${targetCard.name}」获得侧击效果！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得侧击：+${amount} 金币！` } });
     if (isEventGrant) enqueuedActions.push({ type: 'COMPLETE_EVENT' });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
@@ -2554,15 +2596,15 @@ function reduceResolvePermGrant(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  if (modal.sourceType === 'transform-heal-grant') {
+  if (modal.sourceType === 'flank-heal-grant') {
     const targetCard = state.handCards.find(c => c.id === targetCardId);
     if (!targetCard) return applyPatch(state, patch);
     const amount = modal.meta?.amount ?? 2;
     patch.handCards = state.handCards.map(c =>
-      c.id === targetCardId ? { ...c, transformBonus: `恢复 ${amount} HP`, transformEffect: `heal:${amount}` } : c,
+      c.id === targetCardId ? { ...c, flankEffect: `恢复 ${amount} HP`, flankEffectId: `heal:${amount}` } : c,
     );
-    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `赋能神殿：「${targetCard.name}」获得转型效果！` } });
-    sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得转型：恢复 ${amount} HP！` } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `赋能神殿：「${targetCard.name}」获得侧击效果！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `「${targetCard.name}」获得侧击：恢复 ${amount} HP！` } });
     if (isEventGrant) enqueuedActions.push({ type: 'COMPLETE_EVENT' });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
@@ -2613,13 +2655,13 @@ function reduceResolvePermGrant(
     if (!targetCard) return applyPatch(state, patch);
     patch.handCards = state.handCards.map(c =>
       c.id === targetCardId
-        ? { ...c, transformBonus: '弃 1 张手牌·回收袋取 1 张', transformEffect: 'discard-recycle-to-hand:1' }
+        ? { ...c, flankEffect: '弃 1 张手牌·回收袋取 1 张', flankEffectId: 'discard-recycle-to-hand:1' }
         : c,
     );
-    sideEffects.push({ event: 'log:entry', payload: { type: 'potion', message: `唤回秘药：「${targetCard.name}」获得转型效果！` } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'potion', message: `唤回秘药：「${targetCard.name}」获得侧击效果！` } });
     const src = state.pendingPotionAction?.card as GameCardData | undefined;
     if (src) {
-      enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card: src, banner: `「${targetCard.name}」获得转型：弃 1 张手牌，回收袋取回 1 张！` });
+      enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card: src, banner: `「${targetCard.name}」获得侧击：弃 1 张手牌，回收袋取回 1 张！` });
     }
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
@@ -2632,13 +2674,15 @@ function reduceResolvePermGrant(
 
   if (modal.sourceType === 'transform-grant') {
     patch.handCards = state.handCards.map(c =>
-      c.id === targetCardId ? { ...c, transformBonus: '失去 3 点生命，随机获得坟场一张魔法卡', transformEffect: 'graveyard-random-magic' } : c,
+      c.id === targetCardId
+        ? { ...c, flankEffect: '失去 3 点生命·获得坟场一张魔法卡', flankEffectId: 'graveyard-random-magic' }
+        : c,
     );
-    sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `蜕变赋灵：「${targetCard.name}」获得转型效果！` } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `蜕变赋灵：「${targetCard.name}」获得侧击效果！` } });
     if (sourceCard.classCard) {
       enqueuedActions.push({ type: 'REMOVE_CLASS_CARD_FROM_HAND', cardId: sourceCard.id });
     }
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: `「${targetCard.name}」获得转型：失去 3 点生命，随机获得坟场一张魔法卡！` });
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: `「${targetCard.name}」获得侧击：失去 3 点生命，随机获得坟场一张魔法卡！` });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
@@ -2696,7 +2740,21 @@ function reduceResolvePermGrant(
   }
 
   if (modal.sourceType === 'essence-extract') {
-    patch.handCards = state.handCards.filter(c => c.id !== targetCardId);
+    // 强行送入坟场（无视 Perm 路由 / 不触发 onDiscardDraw 等弃牌联动）：
+    // 措辞使用「删除」与 净册涌泉 (cleanse-draw) 一致，行为也与
+    // CONFIRM_DELETE_CARD kw='delete' 一致（卡进 discardedCards，不走
+    // recycle-bag、不 enqueue APPLY_DISCARD_EFFECTS）。
+    //
+    // 升级表（按 sourceCard.upgradeLevel）：
+    //   damageBonusByLevel = [1, 1, 2]（攻击路径：magic / equipment）
+    //   shieldBonusByLevel = [1, 2, 2]（护甲路径：amulet / monster / potion）
+    // L0：所有分支 +1
+    // L1：amulet/monster/potion → +2；magic/equipment → +1（不变）
+    // L2：所有分支 +2
+    // 与 upgrades.ts:essenceExtract handler 同表。
+    const newHand = state.handCards.filter(c => c.id !== targetCardId);
+    Object.assign(patch, addToGraveyardPure(state, targetCard));
+    patch.handCards = newHand;
 
     const isInstantMagic = targetCard.type === 'magic' && targetCard.magicType === 'instant';
     const isEquipment = targetCard.type === 'weapon' || targetCard.type === 'shield';
@@ -2709,12 +2767,19 @@ function reduceResolvePermGrant(
     else if (isAmulet) { slotId = 'equipmentSlot2'; bonusType = 'shield'; }
     else { slotId = 'equipmentSlot1'; bonusType = 'shield'; }
 
-    Object.assign(patch, setSlotBonusPure(state, slotId, bonusType, v => v + 1));
+    const damageBonusByLevel = [1, 1, 2];
+    const shieldBonusByLevel = [1, 2, 2];
+    const upLevel = sourceCard.upgradeLevel ?? 0;
+    const bonusAmount = bonusType === 'damage'
+      ? (damageBonusByLevel[upLevel] ?? damageBonusByLevel[damageBonusByLevel.length - 1])
+      : (shieldBonusByLevel[upLevel] ?? shieldBonusByLevel[shieldBonusByLevel.length - 1]);
+
+    Object.assign(patch, setSlotBonusPure(state, slotId, bonusType, v => v + bonusAmount));
 
     const slotLabel = slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏';
     const bonusLabel = bonusType === 'damage' ? '攻击' : '护甲';
-    sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `精华萃取：移除「${targetCard.name}」，${slotLabel}永久${bonusLabel} +1` } });
-    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: `精华萃取：移除「${targetCard.name}」→ ${slotLabel}永久${bonusLabel} +1！` });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `精华萃取：删除「${targetCard.name}」，${slotLabel}永久${bonusLabel} +${bonusAmount}` } });
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: `精华萃取：删除「${targetCard.name}」→ ${slotLabel}永久${bonusLabel} +${bonusAmount}！` });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
@@ -2752,8 +2817,8 @@ function reduceCancelPermGrant(state: GameState): ReduceResult {
   const patch: Partial<GameState> = { permGrantModal: null };
   const enqueuedActions: GameAction[] = [];
 
-  const eventGrantTypes = ['flank-grant', 'transform-gold-grant', 'flank-persuade-grant',
-    'flank-stun-grant', 'flank-damage-grant', 'transform-draw-grant', 'transform-heal-grant',
+  const eventGrantTypes = ['flank-grant', 'flank-gold-grant', 'flank-persuade-grant',
+    'flank-stun-grant', 'flank-damage-grant', 'transform-draw-grant', 'flank-heal-grant',
     'amulet-perm-grant', 'on-hand-stun-cap-grant', 'on-hand-heal-grant'];
 
   if (eventGrantTypes.includes(modal.sourceType)) {
@@ -2830,23 +2895,12 @@ function reduceApplyTransformCategory(
   const prevCat = chainPrevCat;
   if (prevCat == null || prevCat === curCat) return applyPatch(state, patch);
 
-  if (card.transformEffect === 'graveyard-random-magic') {
-    const magicCards = state.discardedCards.filter(c => c.type === 'magic');
-    if (magicCards.length > 0) {
-      const [picked, rng2] = pickRandom(magicCards, rng);
-      rng = rng2;
-      patch.rng = rng;
-      patch.discardedCards = state.discardedCards.filter(c => c.id !== picked.id);
-      patch.handCards = [...state.handCards, picked];
-      enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 3, source: 'general', selfInflicted: true });
-      sideEffects.push({ event: 'card:queueToHand', payload: { card: picked } });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `转型触发：失去 3 点生命，从坟场获得「${picked.name}」！` } });
-      sideEffects.push({ event: 'ui:banner', payload: { text: `转型触发！失去 3 点生命，从坟场获得「${picked.name}」！` } });
-    } else {
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '转型触发：坟场没有魔法卡牌。' } });
-      sideEffects.push({ event: 'ui:banner', payload: { text: '转型触发！但坟场没有魔法卡牌。' } });
-    }
-  } else if (card.transformEffect?.startsWith('gold:')) {
+  // 注：原 'graveyard-random-magic' 分支（蜕变赋灵 赋予的转型效果）已迁移为侧击触发，
+  // 由 reducePlayCard 的 flank 分支直接处理（card.flankEffectId === 'graveyard-random-magic'）。
+  // 这里不再保留该分支——旧存档里如果还有 transformEffect: 'graveyard-random-magic' 的卡，
+  // 该效果将不再触发（用户明确选择 remove-old）。
+
+  if (card.transformEffect?.startsWith('gold:')) {
     const goldAmount = parseInt(card.transformEffect.replace('gold:', ''), 10) || 3;
     patch.gold = state.gold + goldAmount;
     sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `转型触发：获得 ${goldAmount} 金币！` } });
@@ -2863,30 +2917,6 @@ function reduceApplyTransformCategory(
     enqueuedActions.push({ type: 'HEAL', amount: healAmount, source: 'transform' });
     sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `转型触发：恢复 ${healAmount} HP！` } });
     sideEffects.push({ event: 'ui:banner', payload: { text: `转型触发！恢复了 ${healAmount} HP！` } });
-  } else if (card.transformEffect?.startsWith('discard-recycle-to-hand:')) {
-    // 新版唤回秘药：弃 1 张手牌 → 回收袋随机取 N 张到手牌（互动式）。
-    // - 手牌没有可弃牌：自动跳过弃回，仍尝试从回收袋抽。
-    // - 回收袋为空：仍要求玩家弃 1 张（discard_anyway 设计决定）。
-    // - 弃回走 DISCARD_OWNED_CARD：触发 onDiscardDraw / catapult 等弃置联动。
-    const count = parseInt(card.transformEffect.replace('discard-recycle-to-hand:', ''), 10) || 1;
-    const result = requestOrAutoHandDiscard(state, patch, {
-      sourceCardId: card.id,
-      requiredCount: 1,
-      title: '唤回秘药 · 转型',
-      prompt: `选择 1 张手牌弃回，从回收袋随机取 ${count} 张到手牌`,
-      subEffect: 'transform-discard-recycle',
-      context: {
-        kind: 'transform-discard-recycle',
-        cardSnapshot: card,
-        recycleDrawCount: count,
-      },
-    });
-    if (result.mode === 'modal') {
-      // 模态框已设置，等玩家确认后由 RESOLVE_HAND_DISCARD_SELECTION 接力。
-      return applyPatch(state, patch, sideEffects, enqueuedActions);
-    }
-    // auto 路径：手牌没有可弃牌（result.discarded 为空），跳过弃回，直接尝试抽回收袋。
-    return finalizeTransformDiscardRecycle(state, card, result.discarded, count, sideEffects, patch, enqueuedActions);
   } else if (card.transformEffect?.startsWith('recycle-to-hand:')) {
     // 旧版唤回秘药 transform（保留以兼容存档）：直接从回收袋抽 N 张到手牌，不弃手牌。
     const count = parseInt(card.transformEffect.replace('recycle-to-hand:', ''), 10) || 1;
@@ -2909,6 +2939,87 @@ function reduceApplyTransformCategory(
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: '转型触发：回收袋为空。' } });
       sideEffects.push({ event: 'ui:banner', payload: { text: '转型触发！但回收袋为空。' } });
     }
+  }
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// TRIGGER_FLANK_DISCARD_RECYCLE — 唤回秘药·侧击 触发的弃 1 抽回收袋 N 互动流。
+//
+// 由 reducePlayCard 的 flank 分支（或 GameBoard 的 imperative drag 路径）在
+// card.flankEffectId === 'discard-recycle-to-hand:N' 时 enqueue。
+// 走 requestOrAutoHandDiscard：
+//   - 手牌可弃牌足够 → 设置 pendingHandDiscardSelection（弹窗），由
+//     RESOLVE_HAND_DISCARD_SELECTION 接力到 finalizeTransformDiscardRecycle。
+//   - 不足 → 自动弃尽（可能 0 张），直接调 finalizeTransformDiscardRecycle
+//     完成「从回收袋抽 N 张」尾巴。
+//
+// 与历史 transform 分支共用 finalizeTransformDiscardRecycle / subEffect /
+// context.kind 命名（'transform-discard-recycle'）。这些标识符现在只描述
+// "弃 N 抽回收袋 M" 的流程形状，与触发条件无关。
+// ---------------------------------------------------------------------------
+
+function reduceTriggerFlankDiscardRecycle(
+  state: GameState,
+  action: Extract<GameAction, { type: 'TRIGGER_FLANK_DISCARD_RECYCLE' }>,
+): ReduceResult {
+  const { card, count } = action;
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  const result = requestOrAutoHandDiscard(state, patch, {
+    sourceCardId: card.id,
+    requiredCount: 1,
+    title: '唤回秘药 · 侧击',
+    prompt: `选择 1 张手牌弃回，从回收袋随机取 ${count} 张到手牌`,
+    subEffect: 'transform-discard-recycle',
+    context: {
+      kind: 'transform-discard-recycle',
+      cardSnapshot: card,
+      recycleDrawCount: count,
+    },
+  });
+  if (result.mode === 'modal') {
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+  return finalizeTransformDiscardRecycle(state, card, result.discarded, count, sideEffects, patch, enqueuedActions);
+}
+
+// ---------------------------------------------------------------------------
+// TRIGGER_FLANK_GRAVEYARD_MAGIC — 蜕变赋灵·侧击 触发的"失去 3 点生命+坟场抽魔法"。
+//
+// 由 reducePlayCard 的 flank 分支（或 GameBoard 的 imperative drag 路径）在
+// card.flankEffectId === 'graveyard-random-magic' 时 enqueue / dispatch。
+// 同步效果：从 state.discardedCards 选一张 magic 卡 → 加进手牌 → APPLY_DAMAGE 自伤 3。
+//
+// 走单独 action（而非 inline 在 reducePlayCard）是为了让 reducer 路径和
+// GameBoard.tsx 拖放 imperative 路径共享同一份实现，避免双轨漂移。
+// ---------------------------------------------------------------------------
+
+function reduceTriggerFlankGraveyardMagic(
+  state: GameState,
+  action: Extract<GameAction, { type: 'TRIGGER_FLANK_GRAVEYARD_MAGIC' }>,
+): ReduceResult {
+  const { card } = action;
+  const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
+
+  const magicCards = state.discardedCards.filter(c => c.type === 'magic');
+  if (magicCards.length > 0) {
+    const [picked, nextRng] = pickRandom(magicCards, state.rng);
+    patch.rng = nextRng;
+    patch.discardedCards = state.discardedCards.filter(c => c.id !== picked.id);
+    patch.handCards = [...state.handCards, picked];
+    enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: 3, source: 'general', selfInflicted: true });
+    sideEffects.push({ event: 'card:queueToHand', payload: { card: picked } });
+    sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${card.name}：侧击触发！失去 3 点生命，从坟场获得「${picked.name}」！` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `侧击触发！失去 3 点生命，从坟场获得「${picked.name}」！` } });
+  } else {
+    sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${card.name}：侧击触发！但坟场没有魔法卡牌。` } });
+    sideEffects.push({ event: 'ui:banner', payload: { text: '侧击触发！但坟场没有魔法卡牌。' } });
   }
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -3117,7 +3228,6 @@ function reduceApplyBerserkerRage(
     newState[magicId] = {
       ...current,
       gauge: 0,
-      usedThisWave: origin === 'gauge' ? true : current.usedThisWave,
     };
     patch.heroMagicState = newState;
   }
@@ -3137,23 +3247,35 @@ function reduceTriggerGraveNova(
   action: Extract<GameAction, { type: 'TRIGGER_GRAVE_NOVA' }>,
 ): ReduceResult {
   const graveNovaCard = action.card;
+  const hitNumber = action.hitNumber ?? 1;
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
 
   const monsters = flattenActiveRowSlots(state.activeCards).filter(isDamageableTarget);
   if (!monsters.length) {
+    // 没有目标：base/L1 直接退出；L2 第一击没目标就跳过第二击（不再追 enqueue）。
     patch.heroSkillBanner = '殉烈爆鸣没有目标。';
     return applyPatch(state, patch, sideEffects);
   }
 
-  const baseDamages = [3, 6];
-  const baseDmg = baseDamages[graveNovaCard?.upgradeLevel ?? 0] ?? 6;
+  // 升级表：
+  //   L0：3 dmg ×1（base）
+  //   L1：5 dmg ×1
+  //   L2：3 dmg ×2 次（每次独立结算掉血/掉血层/技能触发）
+  // L2 由 reducer 在第一次结算末尾再 enqueue 一条 hitNumber=2 的 TRIGGER_GRAVE_NOVA
+  // 实现，保证 MONSTER_DEFEATED / 入场 / 技能 follow-up 在两次伤害之间穿插。
+  const upgradeLevel = graveNovaCard?.upgradeLevel ?? 0;
+  const baseDamages = [3, 5, 3];
+  const baseDmg = baseDamages[upgradeLevel] ?? baseDamages[baseDamages.length - 1];
   const dmg = getSpellDamage(baseDmg + (graveNovaCard?.amplifyBonus ?? 0), state);
+
+  const isMultiHit = upgradeLevel >= 2;
+  const hitTag = isMultiHit ? `（第 ${hitNumber}/2 次）` : '';
 
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'combat', message: `殉烈爆鸣：对 ${monsters.map(m => m.name).join('、')} 各造成 ${dmg} 点法术伤害` },
+    payload: { type: 'combat', message: `殉烈爆鸣${hitTag}：对 ${monsters.map(m => m.name).join('、')} 各造成 ${dmg} 点法术伤害` },
   });
 
   for (const monster of monsters) {
@@ -3161,7 +3283,15 @@ function reduceTriggerGraveNova(
     enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: dmg, source: 'grave-nova', isSpellDamage: true });
   }
 
-  patch.heroSkillBanner = `殉烈爆鸣释放，对所有怪物造成 ${dmg} 点伤害！`;
+  // L2：第 1 次结算完毕后再 enqueue 第 2 次（必须在所有 hit-1 damage actions 之后，
+  // 这样 MONSTER_DEFEATED / 入场关键字 / 击杀 follow-up 都能在 hit-2 之前 drain）。
+  if (isMultiHit && hitNumber === 1) {
+    enqueuedActions.push({ type: 'TRIGGER_GRAVE_NOVA', card: graveNovaCard, hitNumber: 2 });
+  }
+
+  patch.heroSkillBanner = isMultiHit
+    ? `殉烈爆鸣${hitTag}释放，对所有怪物造成 ${dmg} 点伤害！`
+    : `殉烈爆鸣释放，对所有怪物造成 ${dmg} 点伤害！`;
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }

@@ -355,7 +355,7 @@ export function getWaterfallPreviewDiscardDestination(
   card: GameCardData | null | undefined,
 ): WaterfallDiscardDestination {
   if (!card) return 'graveyard';
-  if (card.type === 'monster' && card.isFinalMonster && !card.bossPhase) return 'deck';
+  if (card.type === 'monster' && card.isFinalMonster) return 'deck';
   const wfx = card.waterfallEffect;
   if (wfx && (card.type === 'monster' || card.type === 'event') && wfx.type === 'returnToDeck') {
     return 'deck';
@@ -597,12 +597,29 @@ export function computeDamageMagicDisplayPure(
   }
 
   if (card.knightEffect === 'overkill-upgrade') {
-    const dmg = 3 + amp;
-    return { mode: 'replace', text: `永久：对一个怪物造成 ${dmg} 点伤害。超杀：升级一张牌。`, amplifyBonus: amp };
+    const lvl = card.upgradeLevel ?? 0;
+    const baseDmgs = [3, 5, 5];
+    const upgradeCounts = [1, 1, 2];
+    const baseDmg = baseDmgs[lvl] ?? baseDmgs[baseDmgs.length - 1];
+    const cnt = upgradeCounts[lvl] ?? upgradeCounts[upgradeCounts.length - 1];
+    const dmg = baseDmg + amp;
+    const cntText = cnt === 1 ? '一张牌' : `${cnt} 张牌`;
+    return { mode: 'replace', text: `永久：对一个怪物造成 ${dmg} 点伤害。超杀：升级${cntText}。`, amplifyBonus: amp };
   }
 
   if (card.knightEffect === 'grave-nova') {
-    const dmg = 3 + amp;
+    const lvl = card.upgradeLevel ?? 0;
+    if (lvl >= 2) {
+      const dmg = 3 + amp;
+      return {
+        mode: 'replace',
+        text: `永久：当此牌被弃置时，对当前行所有怪物造成 ${dmg} 点伤害 ×2 次（每次独立结算）。`,
+        amplifyBonus: amp,
+      };
+    }
+    const baseDmgs = [3, 5];
+    const baseDmg = baseDmgs[lvl] ?? baseDmgs[baseDmgs.length - 1];
+    const dmg = baseDmg + amp;
     return { mode: 'replace', text: `永久：当此牌被弃置时，对当前行所有怪物造成 ${dmg} 点伤害。`, amplifyBonus: amp };
   }
 
@@ -659,9 +676,9 @@ export function computeDamageMagicDisplayPure(
   }
 
   if (card.knightEffect === 'missing-hp-smite') {
-    const smitePcts = [50, 100, 150];
+    const smitePcts = [50, 75, 100];
     const lvl = card.upgradeLevel ?? 0;
-    const pct = smitePcts[lvl] ?? 50;
+    const pct = smitePcts[lvl] ?? smitePcts[smitePcts.length - 1];
     const missingHp = Math.max(0, state.maxHp - state.hp);
     const scaledDmg = Math.floor(missingHp * pct / 100);
     const dmg = scaledDmg + amp;
@@ -773,13 +790,14 @@ export function computeSlotArmorValuePure(
   const rawSlotTemp = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
   const defBonus = computeDefenseBonusPure(state);
 
-  // Single-counter armor model: storedCap = baseArmorMax + perm + temp.
-  // `slotItem.armor === undefined` ⇒ "fresh / at full cap"; readers default to cap.
+  // Single-counter armor model: storedCap = max(0, baseArmorMax + perm + temp + defense).
+  // Floor on FINAL sum so negative perm/temp reduce the cap (rather than being dropped
+  // individually). `slotItem.armor === undefined` ⇒ "fresh / at full cap"; readers
+  // default to cap.
   const baseArmorMax = slotItem.type === 'monster'
     ? (slotItem.hp ?? slotItem.value)
     : ((slotItem as any).armorMax ?? slotItem.value);
-  const permanentBonus = Math.max(0, defBonus + slotShieldBonus);
-  const storedCap = Math.max(0, baseArmorMax + permanentBonus + rawSlotTemp);
+  const storedCap = Math.max(0, baseArmorMax + defBonus + slotShieldBonus + rawSlotTemp);
   const stored = (slotItem as any).armor;
   return stored === undefined ? storedCap : Math.max(0, Math.min(stored, storedCap));
 }

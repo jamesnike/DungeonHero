@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { ScrollText, Minimize2, Maximize2, Trash2, Copy, Check } from 'lucide-react';
+import { ScrollText, Maximize2, Trash2, Copy, Check, Pin, PinOff } from 'lucide-react';
 import { memo, useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 
@@ -86,6 +86,7 @@ function GameLogPanelInner({
 }: GameLogPanelProps) {
   const gameViewport = useGameViewport();
   const [minimized, setMinimized] = useState(true);
+  const [pinned, setPinned] = useState(false);
   const [panelScale, setPanelScale] = useState(1);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
@@ -109,7 +110,7 @@ function GameLogPanelInner({
   const prevEntryCountRef = useRef(entries.length);
 
   useEffect(() => {
-    if (minimized || typeof window === 'undefined') return;
+    if (minimized || pinned || typeof window === 'undefined') return;
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setMinimized(true);
@@ -117,7 +118,7 @@ function GameLogPanelInner({
     };
     window.addEventListener('pointerdown', handleClickOutside, true);
     return () => window.removeEventListener('pointerdown', handleClickOutside, true);
-  }, [minimized]);
+  }, [minimized, pinned]);
 
   useEffect(() => {
     if (entries.length > prevEntryCountRef.current && scrollRef.current) {
@@ -389,11 +390,18 @@ function GameLogPanelInner({
               )}
               <button
                 type="button"
-                className="rounded-md p-1 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
-                onClick={() => setMinimized(true)}
-                title="Minimize log panel"
+                className={`rounded-md p-1 hover:bg-muted/50 transition-colors ${
+                  pinned
+                    ? 'text-amber-300 hover:text-amber-200'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setPinned(prev => !prev)}
+                title={pinned ? 'Unpin log panel (allow auto-collapse)' : 'Pin log panel (prevent auto-collapse)'}
+                aria-pressed={pinned}
               >
-                <Minimize2 className="combat-panel__icon" />
+                {pinned
+                  ? <PinOff className="combat-panel__icon" />
+                  : <Pin className="combat-panel__icon" />}
               </button>
             </div>
           </div>

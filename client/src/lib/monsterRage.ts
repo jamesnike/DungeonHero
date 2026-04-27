@@ -6,6 +6,17 @@ export type MonsterRageRule = {
   base: number;
   interval: number;
   minInterval?: number;
+  /**
+   * Delays the first threshold by this many turns. Default 0.
+   *
+   * Without offset: rage = base + floor(turn / interval)
+   *   thresholds at turn = interval, 2*interval, 3*interval, ...
+   * With offset N: rage = base + floor(max(0, turn - N) / interval)
+   *   thresholds at turn = interval + N, 2*interval + N, ...
+   *
+   * Used by Ogre to push the rage cadence from 3/6/9 → 4/7/10.
+   */
+  thresholdOffset?: number;
 };
 
 export type MonsterUpgrade = {
@@ -20,7 +31,7 @@ const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
   Dragon: { base: 2, interval: 5 },
   Skeleton: { base: 1, interval: 4 },
   Goblin: { base: 1, interval: 4 },
-  Ogre: { base: 1, interval: 3, minInterval: 3 },
+  Ogre: { base: 1, interval: 3, minInterval: 3, thresholdOffset: 1 },
   Wraith: { base: 1, interval: 4 },
   Swarm: { base: 2, interval: 5 },
   Buglet: { base: 1, interval: 6 },
@@ -80,7 +91,8 @@ const normalizeTurn = (turn: number): number => {
 const calculateFromRule = (rule: MonsterRageRule, turn: number, isQuickMode = false): number => {
   const normalizedTurn = normalizeTurn(turn);
   const effectiveInterval = isQuickMode ? Math.max(rule.minInterval ?? 1, rule.interval - 1) : rule.interval;
-  const rawValue = rule.base + Math.floor(normalizedTurn / effectiveInterval);
+  const adjustedTurn = Math.max(0, normalizedTurn - (rule.thresholdOffset ?? 0));
+  const rawValue = rule.base + Math.floor(adjustedTurn / effectiveInterval);
   return Math.min(MAX_RAGE_LAYERS, rawValue);
 };
 

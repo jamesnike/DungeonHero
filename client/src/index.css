@@ -2465,11 +2465,20 @@ html {
     gap: 0.15em;
     font-family: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, sans-serif;
     font-weight: 700;
-    /* 显式放大：覆盖容器（dh-hero-chip）的小字号 */
+    /* 显式放大：覆盖容器（dh-hero-chip）的小字号。
+       Hero Cell / 装备栏 顶部的 stat 贴纸跑两次缩放：
+         font-scale       (≤1024 → 1.0；>1024 → 1.05)
+       × instance-scale   (HeroCard / EquipmentSlot 测量自己 cell 宽，cap 1.3)
+       在大屏 desktop 上两个因子同时拉满 → 1.05 × 1.3 ≈ 1.37，
+       贴纸字号会从参考的 2.26rem 飙到 3.28rem (+45%)，把顶部 chip 撑得过大。
+       这里把复合因子封顶在 1.1（参考点 + 5% 微长大），≤1024 的小屏完全不受
+       影响（它们的因子乘积本来就 < 1），>1024 的大屏停止疯涨。 */
     font-size: calc(
       2.4rem *
-      var(--dh-hero-font-scale, 1) *
-      var(--dh-hero-instance-scale, 1)
+      min(
+        var(--dh-hero-font-scale, 1) * var(--dh-hero-instance-scale, 1),
+        1.1
+      )
     );
     line-height: 1;
     letter-spacing: -0.01em;

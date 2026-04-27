@@ -334,7 +334,7 @@ const healSpell: CardDefinition = {
   effects: [],
   tags: ['magic', 'instant', 'heal'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
-    const healAmounts = [5, 3, 5];
+    const healAmounts = [5, 10, 3];
     const healBase = healAmounts[card.upgradeLevel ?? 0] ?? 5;
     const healAmt = healBase * echoMultiplier;
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
@@ -1035,7 +1035,7 @@ const starterHealMagic: CardDefinition = {
   effects: [],
   tags: ['magic', 'instant', 'heal'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
-    const healAmounts = [5, 3, 5];
+    const healAmounts = [5, 10, 3];
     const healBase = healAmounts[card.upgradeLevel ?? 0] ?? 5;
     const healAmt = healBase * echoMultiplier;
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
@@ -1222,9 +1222,25 @@ const starterActiveRowFlip: CardDefinition = {
       }
     });
 
+    // 升级 1 抽牌：每翻一张 → 抽 1；0 目标时也抽（卡被消耗即抽）。多目标分支
+    // 走 hero.ts buildRepromptOrFinalize 内同款逻辑（每次 reprompt 抽 1）。
+    const drawOnPlay = (card.upgradeLevel ?? 0) >= 1;
+    const drawAndAppend = (msgPrefix: string) => {
+      if (!drawOnPlay) return '';
+      const drawState = { ...state, ...patch } as GameState;
+      const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(drawState);
+      if (drawn) {
+        mergePatch(patch, drawPatch);
+        sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+        return ` ${msgPrefix}抽到「${drawn.name}」。`;
+      }
+      return '';
+    };
+
     if (targets.length === 0) {
-      log(sideEffects, 'magic', '乾坤一翻：当前行和预览行都没有可翻转的卡牌。');
-      banner(sideEffects, '乾坤一翻：没有可翻转的卡牌。');
+      const drawMsg = drawAndAppend('');
+      log(sideEffects, 'magic', `乾坤一翻：当前行和预览行都没有可翻转的卡牌。${drawMsg}`);
+      banner(sideEffects, `乾坤一翻：没有可翻转的卡牌。${drawMsg}`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1237,8 +1253,9 @@ const starterActiveRowFlip: CardDefinition = {
         if (t.flipTarget) {
           // Forward flip via APPLY_CARD_FLIP — triggers flip-counter consumers via reduceApplyCardFlip.
           enqueuedActions.push({ type: 'APPLY_CARD_FLIP', card: t, cellIndex: target.idx });
-          log(sideEffects, 'magic', `乾坤一翻：${t.name} → ${t.flipTarget.toCard.name}。`);
-          banner(sideEffects, `乾坤一翻：${t.name} → ${t.flipTarget.toCard.name}！`);
+          const drawMsg = drawAndAppend('');
+          log(sideEffects, 'magic', `乾坤一翻：${t.name} → ${t.flipTarget.toCard.name}。${drawMsg}`);
+          banner(sideEffects, `乾坤一翻：${t.name} → ${t.flipTarget.toCard.name}！${drawMsg}`);
         } else if (t._flipBackCard) {
           // Back flip — direct patch + flippedInCell animation, mirroring 血誓回卷.
           const restored: GameCardData = { ...t._flipBackCard };
@@ -1249,11 +1266,12 @@ const starterActiveRowFlip: CardDefinition = {
             event: 'card:flippedInCell',
             payload: { cellIndex: target.idx, fromCard: t, toCard: restored, message: `${t.name} → ${restored.name}` },
           });
-          log(sideEffects, 'magic', `乾坤一翻:${t.name} 翻回 ${restored.name}。`);
-          banner(sideEffects, `乾坤一翻：${t.name} → ${restored.name}！`);
           // Back-flip in resolver doesn't go through APPLY_CARD_FLIP, so we must
           // fire counters here ourselves (matching rules/hero.ts case 'flip-active-card').
           applyFlipCounters(state, patch, sideEffects, enqueuedActions);
+          const drawMsg = drawAndAppend('');
+          log(sideEffects, 'magic', `乾坤一翻:${t.name} 翻回 ${restored.name}。${drawMsg}`);
+          banner(sideEffects, `乾坤一翻：${t.name} → ${restored.name}！${drawMsg}`);
         }
       } else {
         // Preview reveal — set flag, fire counters, emit animation hint. Card data unchanged.
@@ -1264,9 +1282,10 @@ const starterActiveRowFlip: CardDefinition = {
           event: 'card:previewRevealedEarly',
           payload: { cellIndex: target.idx, card: target.card },
         });
-        log(sideEffects, 'magic', `乾坤一翻：揭示了预览行的 ${target.card.name}。`);
-        banner(sideEffects, `乾坤一翻：揭示了预览行的 ${target.card.name}！`);
         applyFlipCounters(state, patch, sideEffects, enqueuedActions);
+        const drawMsg = drawAndAppend('');
+        log(sideEffects, 'magic', `乾坤一翻：揭示了预览行的 ${target.card.name}。${drawMsg}`);
+        banner(sideEffects, `乾坤一翻：揭示了预览行的 ${target.card.name}！${drawMsg}`);
       }
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -1427,8 +1446,8 @@ const starterGamblerGambit: CardDefinition = {
   effects: [],
   tags: ['magic', 'permanent', 'self-damage', 'gold', 'draw'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
-    const goldAmounts = [1, 2, 3];
-    const drawAmounts = [1, 2, 3];
+    const goldAmounts = [1, 2, 4];
+    const drawAmounts = [1, 1, 1];
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
     const goldAmt = (goldAmounts[card.upgradeLevel ?? 0] ?? 1) * echoMultiplier;
     const drawAmt = (drawAmounts[card.upgradeLevel ?? 0] ?? 1) * echoMultiplier;
@@ -1596,27 +1615,25 @@ const knightBloodGreed: CardDefinition = {
 const knightBerserkGambit: CardDefinition = {
   effectId: 'knight:berserk-gambit',
   effects: [],
-  tags: ['knight', 'instant', 'buff', 'self-damage'],
+  tags: ['knight', 'instant', 'self-damage'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
+    // 狂血豪赌：HP→1 + 每武器栏多攻击 N 次。
+    // 升级表（extraPerSlotAmounts）：L0 → 1 次；L1 → 2 次。
+    // 旧设计的 +4/+8 装备伤害 buff 已删除；旧存档若 upgradeLevel >= 1 一律按 L1 处理。
+    // echo×N 仅放大每栏攻击次数（base × echo）；HP→1 是单次效应不重叠。
     const hpLoss = Math.max(0, state.hp - 1);
     if (hpLoss > 0) {
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpLoss, source: 'berserk-gambit', selfInflicted: true });
     }
-    const lvl = card.upgradeLevel ?? 0;
-    const buffAmounts = [0, 4, 8, 8];
-    const baseExtraPerSlot = lvl >= 3 ? 2 : 1;
+    const extraPerSlotAmounts = [1, 2];
+    const lvl = Math.min(card.upgradeLevel ?? 0, extraPerSlotAmounts.length - 1);
+    const baseExtraPerSlot = extraPerSlotAmounts[lvl];
     const extraPerSlot = baseExtraPerSlot * echoMultiplier;
-    const buffAmt = (buffAmounts[lvl] ?? 8) * echoMultiplier;
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
-    if (buffAmt > 0) {
-      enqueuedActions.push({ type: 'ADD_BERSERK_BUFF', amount: buffAmt });
-    }
     enqueuedActions.push({ type: 'SET_COMBAT_FLAG', flag: 'gambitExtraActive', value: true });
     enqueuedActions.push({ type: 'SET_GAMBIT_STATE', extraPerSlot });
-    const parts: string[] = [];
-    if (buffAmt > 0) parts.push(`本回合装备 +${buffAmt} 伤害`);
-    parts.push(extraPerSlot > 1 ? `每个武器栏可多攻击 ${extraPerSlot} 次` : '每个武器栏可多攻击一次');
-    banner(sideEffects, `狂血豪赌发动：${parts.join('，')}。${echoTag}`);
+    const extraText = extraPerSlot > 1 ? `每个武器栏可多攻击 ${extraPerSlot} 次` : '每个武器栏可多攻击一次';
+    banner(sideEffects, `狂血豪赌发动：${extraText}。${echoTag}`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1784,14 +1801,22 @@ const knightMissileStorm: CardDefinition = {
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
+    // 数值：L0 调动坟场一半（向上取整）的「魔弹」；L1 调动全部。
+    // 取「前 N 张」保留 graveyard 顺序与各自 amplifyBonus 的对应关系——与既有
+    // "bolts fired in graveyard order" 的语义一致。
+    const lvl = card.upgradeLevel ?? 0;
+    const totalAvailable = graveyardBolts.length;
+    const totalBolts = lvl >= 1
+      ? totalAvailable
+      : Math.ceil(totalAvailable / 2);
+    const selectedBolts = graveyardBolts.slice(0, totalBolts);
     // 每一发魔弹的伤害在 resolver 阶段固化（保留每发 amplifyBonus 差异），
     // 但目标在 FIRE_MISSILE_STORM_BOLT 真正发射时才挑选——这样:
     //   - 前一发若击杀怪物，下一发会重新挑一个仍存活的怪物（不再浪费在尸体上）；
     //   - 若怪物触发复生（MONSTER_DEFEATED Branch B 在两发之间运行），后续魔弹仍可命中；
     //   - 若全场已无怪物，剩余魔弹熄灭并打日志。
-    const totalBolts = graveyardBolts.length;
     for (let i = 0; i < totalBolts; i++) {
-      const bolt = graveyardBolts[i];
+      const bolt = selectedBolts[i];
       const boltDmg = getSpellDamage(1 + (bolt.amplifyBonus ?? 0), state);
       enqueuedActions.push({
         type: 'FIRE_MISSILE_STORM_BOLT',
@@ -1800,7 +1825,8 @@ const knightMissileStorm: CardDefinition = {
         totalBolts,
       });
     }
-    banner(sideEffects, `魔弹风暴：从坟场调动 ${totalBolts} 枚「魔弹」连射！`);
+    const upgradedTag = lvl >= 1 ? '' : `（坟场 ${totalAvailable} 中调动一半）`;
+    banner(sideEffects, `魔弹风暴：从坟场调动 ${totalBolts} 枚「魔弹」连射！${upgradedTag}`);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: true });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -2146,19 +2172,24 @@ const knightStunCapStrike: CardDefinition = {
 };
 
 // 锋芒倍增 — Perm 1. Select an equipment slot (empty allowed); apply temp
-// attack +2, then double the resulting temp attack on that slot.
-// Example: slot at +3 → +5 → ×2 = 10. Echo doubles the additive bonus before
+// attack +N (升级表 [2, 3]: L0 +2 / L1 +3), then double the resulting temp attack
+// on that slot.
+// Example (L0): slot at +3 → +5 → ×2 = 10. Echo doubles the additive bonus before
 // the multiplicative step (matches 时空镜像 pattern).
+// Prompt 数值随 upgradeLevel 浮动（与 hero.ts:case 'temp-attack-double' 同表）。
 const knightTempAttackDouble: CardDefinition = {
   effectId: 'knight:temp-attack-double',
   effects: [],
   tags: ['knight', 'permanent', 'interactive', 'buff'],
   resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const tadAmounts = [2, 3];
+    const tadBaseAmt = tadAmounts[card.upgradeLevel ?? 0] ?? tadAmounts[tadAmounts.length - 1];
+    const tadDisplayAmt = tadBaseAmt * echoMultiplier;
     patch.pendingMagicAction = {
       card,
       effect: 'temp-attack-double',
       step: 'slot-select',
-      prompt: '锋芒倍增：选择一个装备栏，临时攻击 +2 后翻倍。',
+      prompt: `锋芒倍增：选择一个装备栏，临时攻击 +${tadDisplayAmt} 后翻倍。`,
       echoMultiplier,
     } as any;
     patch.heroSkillBanner = '锋芒倍增：选择一个装备栏。';
@@ -2254,7 +2285,10 @@ const knightAmplifyEquipmentShift: CardDefinition = {
   tags: ['knight', 'permanent', 'interactive', 'buff'],
   resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
     const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
-    const ampAmt = 1 * echoMultiplier;
+    // Prompt 数值随 upgradeLevel 浮动（与 hero.ts:case 'amplify-equipment-shift' 同表）。
+    const aesAmounts = [1, 2];
+    const aesBaseAmt = aesAmounts[card.upgradeLevel ?? 0] ?? aesAmounts[aesAmounts.length - 1];
+    const ampAmt = aesBaseAmt * echoMultiplier;
     patch.pendingMagicAction = {
       card,
       effect: 'amplify-equipment-shift',
@@ -2305,8 +2339,8 @@ function computePredictedTransformStreak(state: GameState, card: GameCardData): 
   return prevStreak + 1;
 }
 
-const starterTransformStreakStrike: CardDefinition = {
-  effectId: `starter:${STARTER_CARD_IDS.transformStreakStrike}`,
+const knightTransformStreakStrike: CardDefinition = {
+  effectId: 'knight:transform-streak-strike',
   effects: [],
   tags: ['magic', 'permanent', 'damage'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
@@ -2488,7 +2522,7 @@ const allMagicDefinitions: CardDefinition[] = [
   starterGamblerGambit,
   starterRecycleDrawMagic,
   starterGuildBloodGold,
-  starterTransformStreakStrike,
+  knightTransformStreakStrike,
   starterFlankSlotTempAttack,
   starterDeckTopSwapGold,
   // Knight instant

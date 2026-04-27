@@ -20,6 +20,8 @@ function makeBoltCard(id = 'card-bolt') {
   };
 }
 
+// 魔弹风暴 数值：L0 调动坟场一半（向上取整）；L1 调动全部。
+// 本测试聚焦"被命中的怪物会被激怒"——用 L1（all bolts）以保证 6 发都打出去。
 function makeStormCard(id = 'card-storm') {
   return {
     id,
@@ -29,6 +31,8 @@ function makeStormCard(id = 'card-storm') {
     classCard: true,
     magicType: 'instant' as const,
     knightEffect: 'missile-storm',
+    upgradeLevel: 1,
+    maxUpgradeLevel: 1,
   };
 }
 

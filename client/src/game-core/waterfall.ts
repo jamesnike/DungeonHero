@@ -140,8 +140,7 @@ export function applyWaterfallEffect(
     case 'bonusDecay': {
       const decay = effect.amount;
       return {
-        permanentMaxHpBonus: Math.max(0, state.permanentMaxHpBonus - decay),
-        permanentSpellDamageBonus: state.permanentSpellDamageBonus - decay,
+        permanentSpellLifesteal: state.permanentSpellLifesteal - decay,
         equipmentSlotBonuses: {
           equipmentSlot1: {
             damage: Math.max(0, state.equipmentSlotBonuses.equipmentSlot1.damage - decay),

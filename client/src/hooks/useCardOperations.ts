@@ -238,8 +238,8 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   // -- Recycle Bag ------------------------------------------------------------
 
   const addPermanentMagicToRecycleBag = useCallback(
-    (card: GameCardData) => {
-      dispatch({ type: 'ADD_TO_RECYCLE_BAG', card });
+    (card: GameCardData, options?: { waitsOverride?: number }) => {
+      dispatch({ type: 'ADD_TO_RECYCLE_BAG', card, waitsOverride: options?.waitsOverride });
     },
     [dispatch],
   );
@@ -330,15 +330,16 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
     if (!slotItem || (slotItem.type !== 'shield' && slotItem.type !== 'monster')) {
       return 0;
     }
-    // Single-counter armor model: storedCap = baseArmorMax + perm + temp.
-    // `slotItem.armor === undefined` ⇒ "fresh / at full cap"; readers default to cap.
+    // Single-counter armor model: storedCap = max(0, baseArmorMax + perm + temp + defense).
+    // Floor on FINAL sum so negative perm/temp reduce the cap (rather than being
+    // dropped individually). `slotItem.armor === undefined` ⇒ "fresh / at full cap";
+    // readers default to cap.
     const baseArmorMax = slotItem.type === 'monster'
       ? (slotItem.hp ?? slotItem.value)
       : (slotItem.armorMax ?? slotItem.value);
     const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
     const rawSlotTemp = slotTempArmor[slotId] ?? 0;
-    const permanentBonus = Math.max(0, defenseBonus + slotShieldBonus);
-    const storedCap = Math.max(0, baseArmorMax + permanentBonus + rawSlotTemp);
+    const storedCap = Math.max(0, baseArmorMax + defenseBonus + slotShieldBonus + rawSlotTemp);
     const stored = slotItem.armor;
     return stored === undefined ? storedCap : Math.max(0, Math.min(stored, storedCap));
   };
@@ -380,9 +381,10 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTemp = slotTempArmor[slotId] ?? 0;
       // Single-counter armor model: `permanentShieldBonus` here represents the
-      // additional cap (perm + temp + defense) above baseArmorMax. The current
-      // armor value (`slotItem.armor`) is read separately by the renderer.
-      const permanentShieldBonus = Math.max(0, defenseBonus + slotShieldBonus) + rawSlotTemp;
+      // additional cap (perm + temp + defense) above baseArmorMax. Sum is raw
+      // (no individual floor) so negative perm/temp reduce the cap; renderer
+      // clamps the final `baseArmorMax + permanentShieldBonus` at 0.
+      const permanentShieldBonus = defenseBonus + slotShieldBonus + rawSlotTemp;
 
       return {
         appliesTo: 'shield',
@@ -408,9 +410,10 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
       const slotShieldBonus = getEquipmentSlotBonus(slotId, 'shield');
       const rawSlotTempMonster = slotTempArmor[slotId] ?? 0;
       // Single-counter armor model: shield modifier is the additional cap
-      // (perm + temp + defense) above base hp/value. Current armor reads
-      // from `slotItem.armor` separately.
-      const effectiveShieldMod = Math.max(0, defenseBonus + slotShieldBonus) + rawSlotTempMonster;
+      // (perm + temp + defense) above base hp/value. Sum is raw (no individual
+      // floor) so negative perm/temp reduce the cap; renderer clamps the final
+      // `baseHp + effectiveShieldMod` at 0.
+      const effectiveShieldMod = defenseBonus + slotShieldBonus + rawSlotTempMonster;
 
       return {
         appliesTo: 'monster' as const,
@@ -500,7 +503,15 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
   }
 
   const discardCardToGraveyard = useCallback(
-    (card: GameCardData | null | undefined, options?: { owner?: 'player' | 'dungeon'; forceGraveyard?: boolean; forceRecycleBag?: boolean }) => {
+    (
+      card: GameCardData | null | undefined,
+      options?: {
+        owner?: 'player' | 'dungeon';
+        forceGraveyard?: boolean;
+        forceRecycleBag?: boolean;
+        waitsOverride?: number;
+      },
+    ) => {
       if (!card) return;
       dispatch({
         type: 'DISCARD_OWNED_CARD',
@@ -508,6 +519,7 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
         owner: options?.owner ?? 'dungeon',
         forceGraveyard: options?.forceGraveyard,
         forceRecycleBag: options?.forceRecycleBag,
+        waitsOverride: options?.waitsOverride,
       });
     },
     [dispatch],

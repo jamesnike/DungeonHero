@@ -59,11 +59,9 @@ export interface PersistedEventDiceModal {
   highlightedId: string | null;
 }
 
-export interface PersistedDeathWardPrompt {
-  card: GameCardData;
-  source: 'hand' | 'backpack';
-  pendingDamage: number;
-  sourceType: 'combat' | 'general';
+export interface PersistedDeathWardNotice {
+  cardName: string;
+  blockedDamage: number;
 }
 
 export const GAME_STATE_STORAGE_KEY = 'dungeonhero:game-state:v1';
@@ -270,7 +268,7 @@ export interface PersistedGameState {
   persuadeState?: PersistedPersuadeState | null;
   magicChoiceModal?: PersistedMagicChoiceModal | null;
   eventDiceModal?: PersistedEventDiceModal | null;
-  deathWardPrompt?: PersistedDeathWardPrompt | null;
+  deathWardNotice?: PersistedDeathWardNotice | null;
   rng?: { seed: number; state: number };
   /** 按卡名累计的增幅加成（增幅祭坛 / 增幅魔法）。 */
   amplifiedCardBonus?: Record<string, number>;

@@ -41,7 +41,7 @@ function makeShield(over?: Partial<GameCardData>): GameCardData {
 // ---------------------------------------------------------------------------
 
 describe('knight class deck: 共御圣盾 entry', () => {
-  it('appears in generateKnightDeck with 6 armor / 1 durability / revive / allSlotTempArmor:5 last-words', () => {
+  it('appears in generateKnightDeck with 6 armor / 1 durability / revive / allSlotTempArmor:5 last-words / upgrade routing', () => {
     const [deck] = generateKnightDeck(createRng(42));
     const card = deck.find(c => c.name === '共御圣盾');
     expect(card).toBeTruthy();
@@ -53,6 +53,8 @@ describe('knight class deck: 共御圣盾 entry', () => {
     expect(card?.hasEquipmentRevive).toBe(true);
     expect(card?.onDestroyEffect).toBe('allSlotTempArmor:5');
     expect(card?.classCard).toBe(true);
+    expect((card as any)?.knightEffect).toBe('communal-defense-shield');
+    expect((card as any)?.maxUpgradeLevel).toBe(2);
   });
 });
 

@@ -48,9 +48,9 @@ type CardDeletionSource = CardSource;
 export type GameBoardModalsProps = {
   overlayZoom: number;
 
-  // --- Death Ward ---
-  onDeathWardConfirm: () => void;
-  onDeathWardDecline: () => void;
+  // --- Death Ward (auto-trigger notice) ---
+  /** 不灭守护自动触发后玩家点「知道了」的关闭回调；旧的 confirm/decline 已移除。 */
+  onDismissDeathWardNotice: () => void;
 
   // --- Dagger Self-Destruct ---
   daggerSelfDestructPrompt: { weaponName: string; remainingDurability: number } | null;
@@ -189,8 +189,7 @@ export type GameBoardModalsProps = {
 function GameBoardModalsInner({
   overlayZoom,
 
-  onDeathWardConfirm,
-  onDeathWardDecline,
+  onDismissDeathWardNotice,
   daggerSelfDestructPrompt,
   onDaggerSelfDestructConfirm,
   onDaggerSelfDestructDecline,
@@ -294,7 +293,7 @@ function GameBoardModalsInner({
 }: GameBoardModalsProps) {
   const _dispatch = useDispatch();
   const _gs = useShallowGameState(s => ({
-    deathWardPrompt: s.deathWardPrompt,
+    deathWardNotice: s.deathWardNotice,
     gameOver: s.gameOver,
     victory: s.victory,
     gold: s.gold,
@@ -383,7 +382,7 @@ function GameBoardModalsInner({
     acquiredUniqueClassCardIds: s.acquiredUniqueClassCardIds,
   }));
 
-  const { deathWardPrompt, gameOver, victory, gold, hp, remainingDeck, backpackItems, permanentMagicRecycleBag,
+  const { deathWardNotice, gameOver, victory, gold, hp, remainingDeck, backpackItems, permanentMagicRecycleBag,
     discoverModalOpen, discoverOptions, discoverSourceLabel, graveyardDiscoverState, ghostBladeExileCards,
     shopModalOpen, shopModalMinimized, shopOfferings, shopLevel, shopSourceEvent: shopSourceEventCard,
     shopHealUsed, shopLevelUpUsed, shopSkillDiscoverUsed, shopEquipAttackUsed, shopEquipArmorUsed,
@@ -558,28 +557,27 @@ function GameBoardModalsInner({
 
   return (
     <>
-      {deathWardPrompt && (
+      {/* 不灭守护 自动触发后的单按钮通知（注：active 渲染走 GameFlowContainer.tsx；
+          此处保留是因为 GameBoardModals 仍被 props 流引用，行为对齐避免 dead UI drift）。 */}
+      {deathWardNotice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" style={{ pointerEvents: 'auto' }}>
           <div className="w-full max-w-2xl space-y-6 rounded-lg bg-card p-10 text-center shadow-2xl max-h-[95vh] overflow-y-auto" style={{ zoom: overlayZoom }}>
-            <div className="space-y-1">
-              <p className="text-lg font-semibold">命悬一线</p>
-              <p className="text-sm text-muted-foreground">
-                正在受到 {deathWardPrompt.pendingDamage} 点致命伤害，是否打出{' '}
-                {deathWardPrompt.card.name}？
+            <div className="space-y-2">
+              <p className="text-2xl font-serif font-bold text-amber-300">{deathWardNotice.cardName}</p>
+              <p className="text-base text-muted-foreground">
+                自动触发，抵消了
+                <span className="mx-1 font-bold text-rose-300">{deathWardNotice.blockedDamage}</span>
+                点致命伤害
               </p>
+              <p className="text-xs text-muted-foreground/80">该牌已从手牌进入坟场。</p>
             </div>
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center">
               <button
-                className="rounded-md bg-primary px-4 py-2 text-primary-foreground"
-                onClick={onDeathWardConfirm}
+                className="rounded-md bg-primary px-6 py-2 text-primary-foreground hover:opacity-90 transition"
+                onClick={onDismissDeathWardNotice}
+                autoFocus
               >
-                抵消伤害
-              </button>
-              <button
-                className="rounded-md border border-border px-4 py-2"
-                onClick={onDeathWardDecline}
-              >
-                放弃
+                知道了
               </button>
             </div>
           </div>

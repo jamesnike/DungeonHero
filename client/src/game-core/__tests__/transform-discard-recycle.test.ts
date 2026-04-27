@@ -1,11 +1,15 @@
 /**
- * 唤回秘药 · 转型 (`discard-recycle-to-hand:N`) 弃回 → 回收袋取回 流程测试
+ * 唤回秘药 · 侧击 (`discard-recycle-to-hand:N`) 弃回 → 回收袋取回 流程测试
  *
- * 该转型效果由 `唤回秘药` (`transform-recycle-grant`) potion 赋给手牌：
- *   "选择一张手牌，赋予「转型：选择一张手牌弃回，从回收袋随机取 1 张牌加入手牌」"
+ * 该侧击效果由 `唤回秘药` (`transform-recycle-grant`) potion 赋给手牌：
+ *   "选择一张手牌，赋予「侧击：选择一张手牌弃回，从回收袋随机取 1 张牌加入手牌」"
  *
- * 与旧版 `recycle-to-hand:N`（直接从回收袋抽牌、不弃手牌）不同，新版要求
- * 互动式弃回 1 张手牌，再从回收袋随机抽 1 张到手牌。
+ * 历史背景：早期实现挂在「转型」上（同一交互流程曾用 transformEffect 字段触发），
+ * 现已迁移为「侧击」触发——放在手牌最左 / 最右位置打出时生效。卡面 / 文案 / 触发
+ * 条件全部统一到 flankEffect / flankEffectId 系统。
+ *
+ * 内部 subEffect / context.kind 仍保留 `'transform-discard-recycle'` 名字——它描述
+ * 的是「弃回·回收袋取」这条互动流程的 *形状*，跟当前触发条件无关。
  *
  * 三条边界条件（玩家已确认设计意图）：
  *   1. **手牌没有可弃牌**（仅源卡 + 诅咒）→ 跳过弃回，**仍**尝试从回收袋抽。
@@ -72,20 +76,19 @@ function makeCurse(id: string): GameCardData {
 }
 
 /**
- * 转型源卡：一张 `magic` (perm-magic) 牌，带有 transform 字段。
- * APPLY_TRANSFORM_CATEGORY 比较的是 transformChainPrevCategory（由前一张牌设定）
- * 与当前牌的类别。我们让 prev='event'、cur='perm-magic'，类别不同 → 转型触发。
+ * 侧击源卡：一张普通 magic 牌，带 flankEffect / flankEffectId。
+ * 触发条件：放在手牌**最左**（index 0）或**最右**（最后一位）打出。
+ * 测试中我们把它放在 index 0 → 走 PLAY_CARD 时 isFlank=true。
  */
-function makeTransformSource(id = 'src'): GameCardData {
+function makeFlankSource(id = 'src'): GameCardData {
   return {
     id,
     type: 'magic' as const,
-    name: '转型源卡',
+    name: '侧击源卡',
     value: 0,
     image: '',
-    magicType: 'permanent',
-    transformBonus: '弃 1 张手牌·回收袋取 1 张',
-    transformEffect: 'discard-recycle-to-hand:1',
+    flankEffect: '弃 1 张手牌·回收袋取 1 张',
+    flankEffectId: 'discard-recycle-to-hand:1',
   } as GameCardData;
 }
 
@@ -99,19 +102,19 @@ function makeRecycleBagCard(id: string, name = `Bag-${id}`): GameCardData {
   } as GameCardData;
 }
 
-describe('唤回秘药·转型: discard-recycle-to-hand', () => {
+describe('唤回秘药·侧击: discard-recycle-to-hand', () => {
   it('手牌有可弃牌 + 回收袋有牌 → 弹出弃回弹窗，确认后玩家选的卡进坟场，回收袋牌进手牌', () => {
-    const src = makeTransformSource();
+    const src = makeFlankSource();
     const h1 = makeFiller('h1', 'Alpha');
     const h2 = makeFiller('h2', 'Beta');
     const bag1 = makeRecycleBagCard('bag1', 'BagAlpha');
+    // src 在 index 0（最左）→ 出牌时 isFlank=true
     const state = makeState({
       handCards: [src, h1, h2],
       permanentMagicRecycleBag: [bag1] as GameCardData[],
-      transformChainPrevCategory: 'event',
     });
 
-    const after = processAction(state, { type: 'APPLY_TRANSFORM_CATEGORY', card: src } as GameAction);
+    const after = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
 
     expect(after.state.pendingHandDiscardSelection).not.toBeNull();
     const pending = after.state.pendingHandDiscardSelection!;
@@ -119,6 +122,8 @@ describe('唤回秘药·转型: discard-recycle-to-hand', () => {
     expect(pending.count).toBe(1);
     expect(pending.sourceCardId).toBe(src.id);
     expect(pending.context.kind).toBe('transform-discard-recycle');
+    // 源卡已经被 PLAY_CARD 移出手牌
+    expect(after.state.handCards.find(c => c.id === src.id)).toBeUndefined();
     expect(after.state.handCards.find(c => c.id === 'h1')).toBeDefined();
     expect(after.state.handCards.find(c => c.id === 'h2')).toBeDefined();
     expect(after.state.permanentMagicRecycleBag.length).toBe(1);
@@ -136,16 +141,16 @@ describe('唤回秘药·转型: discard-recycle-to-hand', () => {
   });
 
   it('手牌没有可弃牌（仅源卡 + 诅咒）→ 跳过弃回，仍从回收袋抽 1 张到手', () => {
-    const src = makeTransformSource();
+    const src = makeFlankSource();
     const curse = makeCurse('curse-1');
     const bag1 = makeRecycleBagCard('bag1', 'BagAlpha');
+    // src 在 index 0（最左）→ flank
     const state = makeState({
       handCards: [src, curse],
       permanentMagicRecycleBag: [bag1] as GameCardData[],
-      transformChainPrevCategory: 'event',
     });
 
-    const after = processAction(state, { type: 'APPLY_TRANSFORM_CATEGORY', card: src } as GameAction);
+    const after = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
 
     expect(after.state.pendingHandDiscardSelection).toBeNull();
     expect(after.state.handCards.find(c => c.id === 'curse-1')).toBeDefined();
@@ -154,15 +159,14 @@ describe('唤回秘药·转型: discard-recycle-to-hand', () => {
   });
 
   it('回收袋为空但手牌有可弃牌 → 仍弹窗，玩家弃 1 张，无牌可抽（discard_anyway）', () => {
-    const src = makeTransformSource();
+    const src = makeFlankSource();
     const h1 = makeFiller('h1', 'Alpha');
     const state = makeState({
       handCards: [src, h1],
       permanentMagicRecycleBag: [] as GameCardData[],
-      transformChainPrevCategory: 'event',
     });
 
-    const after = processAction(state, { type: 'APPLY_TRANSFORM_CATEGORY', card: src } as GameAction);
+    const after = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
 
     expect(after.state.pendingHandDiscardSelection).not.toBeNull();
     const handBeforeResolve = after.state.handCards.length;
@@ -182,54 +186,71 @@ describe('唤回秘药·转型: discard-recycle-to-hand', () => {
     )).toBe(true);
   });
 
-  it('手牌无可弃 + 回收袋为空 → 不弹窗、不抽牌，仅 banner 提示（src 仍在手中，因未走 PLAY_CARD）', () => {
-    const src = makeTransformSource();
+  it('手牌无可弃 + 回收袋为空 → 不弹窗、不抽牌，仅 banner 提示', () => {
+    const src = makeFlankSource();
     const curse = makeCurse('curse-1');
     const state = makeState({
       handCards: [src, curse],
       permanentMagicRecycleBag: [] as GameCardData[],
-      transformChainPrevCategory: 'event',
     });
 
-    const after = processAction(state, { type: 'APPLY_TRANSFORM_CATEGORY', card: src } as GameAction);
+    const after = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
 
     expect(after.state.pendingHandDiscardSelection).toBeNull();
     expect(after.state.handCards.find(c => c.id === 'curse-1')).toBeDefined();
-    expect(after.state.handCards.find(c => c.id === 'src')).toBeDefined();
     expect(after.state.permanentMagicRecycleBag.length).toBe(0);
     expect(after.sideEffects.some(
-      e => e.event === 'ui:banner' && (e.payload as any)?.text?.includes('转型触发'),
+      e => e.event === 'ui:banner' && (e.payload as any)?.text?.includes('侧击触发'),
     )).toBe(true);
   });
 
-  it('类别相同（prev=perm-magic, cur=perm-magic）→ 转型不触发，无弹窗', () => {
-    const src = makeTransformSource();
+  it('源卡不在最左/最右（中间位置）→ 不是 flank，不触发弃回·回收袋取效果', () => {
+    const src = makeFlankSource();
     const h1 = makeFiller('h1');
+    const h2 = makeFiller('h2');
     const bag1 = makeRecycleBagCard('bag1');
+    // src 在 index 1（中间）→ isFlank=false
     const state = makeState({
-      handCards: [src, h1],
+      handCards: [h1, src, h2],
       permanentMagicRecycleBag: [bag1] as GameCardData[],
-      transformChainPrevCategory: 'perm-magic',
     });
 
-    const after = processAction(state, { type: 'APPLY_TRANSFORM_CATEGORY', card: src } as GameAction);
+    const after = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
 
     expect(after.state.pendingHandDiscardSelection).toBeNull();
     expect(after.state.handCards.find(c => c.id === 'h1')).toBeDefined();
+    expect(after.state.handCards.find(c => c.id === 'h2')).toBeDefined();
+    // 回收袋牌仍在袋里（侧击未触发，没人去取）
     expect(after.state.permanentMagicRecycleBag.find(c => c.id === 'bag1')).toBeDefined();
+    expect(after.state.handCards.find(c => c.id === 'bag1')).toBeUndefined();
+  });
+
+  it('源卡在最右位置（rightmost flank）→ 同样触发弃回·回收袋取流程', () => {
+    const src = makeFlankSource();
+    const h1 = makeFiller('h1');
+    const h2 = makeFiller('h2');
+    const bag1 = makeRecycleBagCard('bag1');
+    // src 在最后一位（最右）→ isFlank=true
+    const state = makeState({
+      handCards: [h1, h2, src],
+      permanentMagicRecycleBag: [bag1] as GameCardData[],
+    });
+
+    const after = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
+
+    expect(after.state.pendingHandDiscardSelection).not.toBeNull();
   });
 
   it('弃回经 DISCARD_OWNED_CARD 路由：非永久卡进坟场（owned_discard 语义）', () => {
-    const src = makeTransformSource();
+    const src = makeFlankSource();
     const h1 = makeFiller('h1', 'NormalCard');
     const bag1 = makeRecycleBagCard('bag1');
     const state = makeState({
       handCards: [src, h1],
       permanentMagicRecycleBag: [bag1] as GameCardData[],
-      transformChainPrevCategory: 'event',
     });
 
-    let result = processAction(state, { type: 'APPLY_TRANSFORM_CATEGORY', card: src } as GameAction);
+    let result = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
     result = processAction(result.state, {
       type: 'RESOLVE_HAND_DISCARD_SELECTION',
       cardIds: ['h1'],
@@ -240,7 +261,7 @@ describe('唤回秘药·转型: discard-recycle-to-hand', () => {
   });
 
   it('弃回经 DISCARD_OWNED_CARD 路由：Perm 卡（recycleDelay > 0）进回收袋', () => {
-    const src = makeTransformSource();
+    const src = makeFlankSource();
     const permCard: GameCardData = {
       ...makeFiller('h1', 'PermCard'),
       magicType: 'permanent',
@@ -250,10 +271,9 @@ describe('唤回秘药·转型: discard-recycle-to-hand', () => {
     const state = makeState({
       handCards: [src, permCard],
       permanentMagicRecycleBag: [bag1] as GameCardData[],
-      transformChainPrevCategory: 'event',
     });
 
-    let result = processAction(state, { type: 'APPLY_TRANSFORM_CATEGORY', card: src } as GameAction);
+    let result = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
     result = processAction(result.state, {
       type: 'RESOLVE_HAND_DISCARD_SELECTION',
       cardIds: ['h1'],
@@ -265,17 +285,16 @@ describe('唤回秘药·转型: discard-recycle-to-hand', () => {
   });
 
   it('选择数量 != count → reducer 拒绝（modal 仍开着、手牌不变）', () => {
-    const src = makeTransformSource();
+    const src = makeFlankSource();
     const h1 = makeFiller('h1');
     const h2 = makeFiller('h2');
     const bag1 = makeRecycleBagCard('bag1');
     const state = makeState({
       handCards: [src, h1, h2],
       permanentMagicRecycleBag: [bag1] as GameCardData[],
-      transformChainPrevCategory: 'event',
     });
 
-    const after = processAction(state, { type: 'APPLY_TRANSFORM_CATEGORY', card: src } as GameAction);
+    const after = processAction(state, { type: 'PLAY_CARD', cardId: src.id } as GameAction);
     expect(after.state.pendingHandDiscardSelection).not.toBeNull();
 
     const before = after.state;

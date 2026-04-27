@@ -146,18 +146,25 @@ export function applyFlipCounters(
     sideEffects.push({ event: 'card:flipShock', payload: { count: amuletFx.flipZapCount } });
   }
 
-  const amplifyOnFlipNames: string[] = [];
-  const slot1Now = patch.equipmentSlot1 ?? state.equipmentSlot1;
-  const slot2Now = patch.equipmentSlot2 ?? state.equipmentSlot2;
-  if (slot1Now?.amplifyOnFlip) amplifyOnFlipNames.push(slot1Now.name);
-  if (slot2Now?.amplifyOnFlip && !amplifyOnFlipNames.includes(slot2Now.name)) {
-    amplifyOnFlipNames.push(slot2Now.name);
-  }
-  for (const name of amplifyOnFlipNames) {
+  // 「生长之盾」amplifyOnFlip：每次翻转给同名卡 +N 增幅。
+  // 默认 amount=1（基础卡行为）；升级后通过 `amplifyOnFlipAmount` 字段覆盖（L1/L2 → 2）。
+  // 同名两槽都装备时按 name 去重，amount 取较大值 —— 一槽 L0、一槽 L2 时按 +2 触发。
+  const amplifyOnFlipMap = new Map<string, number>();
+  const accumulate = (item: EquipmentItem | null | undefined): void => {
+    if (!item?.amplifyOnFlip) return;
+    const amount = (item as { amplifyOnFlipAmount?: number }).amplifyOnFlipAmount ?? 1;
+    const existing = amplifyOnFlipMap.get(item.name);
+    if (existing === undefined || amount > existing) {
+      amplifyOnFlipMap.set(item.name, amount);
+    }
+  };
+  accumulate(patch.equipmentSlot1 ?? state.equipmentSlot1);
+  accumulate(patch.equipmentSlot2 ?? state.equipmentSlot2);
+  for (const [name, amount] of amplifyOnFlipMap) {
     enqueuedActions.push({
       type: 'AMPLIFY_CARDS_BY_NAME',
       cardName: name,
-      amount: 1,
+      amount,
       source: `${name} 翻转增幅`,
     });
   }

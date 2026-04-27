@@ -1,8 +1,10 @@
 /**
- * 起始背包：三张永久魔法新卡
- *   1. 连环转律 (transformStreakStrike)
- *   2. 锐意鼓舞 (flankSlotTempAttack)
- *   3. 运势博弈 (deckTopSwapGold)
+ * 起始背包：永久魔法新卡
+ *   1. 锐意鼓舞 (flankSlotTempAttack)
+ *   2. 运势博弈 (deckTopSwapGold)
+ *
+ * 注：连环转律 已迁移到专属卡池（knightEffect: 'transform-streak-strike'，唯一）。
+ * 它的测试在 `knight-transform-streak-strike.test.ts`。
  *
  * 通过 PLAY_CARD → drain 走完整反应器/分发管线，并检验 pendingMagicAction、
  * slotTempAttack、gold、handCards 等关键状态。
@@ -32,20 +34,6 @@ function makeState(overrides?: Partial<GameState>): GameState {
 // 后缀必须形如 `-pick-N` 或 `-evt-N-xxxx`，否则 getStarterBaseId 不会剥离它。
 function pickSuffix(n: number): string {
   return `-pick-${n}`;
-}
-
-function makeTransformStreakCard(suffix = ''): GameCardData {
-  return {
-    id: `${STARTER_CARD_IDS.transformStreakStrike}${suffix}`,
-    type: 'magic',
-    name: '连环转律',
-    value: 0,
-    image: '',
-    magicType: 'permanent',
-    description: 'test',
-    recycleDelay: 2,
-    maxUpgradeLevel: 0,
-  } as GameCardData;
 }
 
 function makeFlankBuffCard(suffix = '', upgradeLevel = 0): GameCardData {
@@ -102,104 +90,7 @@ function makePotion(id: string): GameCardData {
 }
 
 // ---------------------------------------------------------------------------
-// 1) 连环转律
-// ---------------------------------------------------------------------------
-
-describe('连环转律 (transformStreakStrike)', () => {
-  it('先前没有出过牌（链空）→ X=1（含本牌） → 1 点伤害', () => {
-    const card = makeTransformStreakCard(pickSuffix(1));
-    const monster = makeMonster('m1', 10);
-    const state = makeState({
-      handCards: [card],
-      activeCards: [monster, null, null, null, null] as any,
-      lastPlayedCardCategory: null,
-      transformChainPrevCategory: null,
-      consecutiveTransformStreak: 0,
-    });
-    // 单目标伤害 magic 现在统一弹 picker（即便只有 1 只怪），需要显式选目标
-    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(r1.state.pendingMagicAction).toBeTruthy();
-    const result = drain({ ...r1.state, phase: 'idle' } as any, [
-      { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'transform-streak-strike', monsterId: 'm1' } as GameAction,
-    ]);
-    const targetAfter = (result.state.activeCards as any[]).find(c => c?.id === 'm1');
-    expect(targetAfter?.hp).toBe(9);
-  });
-
-  it('上张牌为 potion（streak=1），本张为 perm-magic → X=2 → 2 点伤害', () => {
-    const card = makeTransformStreakCard(pickSuffix(2));
-    const monster = makeMonster('m1', 10);
-    const state = makeState({
-      handCards: [card],
-      activeCards: [monster, null, null, null, null] as any,
-      lastPlayedCardCategory: 'potion',
-      transformChainPrevCategory: 'potion',
-      consecutiveTransformStreak: 1,
-    });
-    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(r1.state.pendingMagicAction).toBeTruthy();
-    const result = drain({ ...r1.state, phase: 'idle' } as any, [
-      { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'transform-streak-strike', monsterId: 'm1' } as GameAction,
-    ]);
-    const targetAfter = (result.state.activeCards as any[]).find(c => c?.id === 'm1');
-    expect(targetAfter?.hp).toBe(8);
-  });
-
-  it('连续转型 streak=3 → X=4 → 4 点伤害', () => {
-    const card = makeTransformStreakCard(pickSuffix(3));
-    const monster = makeMonster('m1', 20);
-    const state = makeState({
-      handCards: [card],
-      activeCards: [monster, null, null, null, null] as any,
-      lastPlayedCardCategory: 'event',
-      transformChainPrevCategory: 'event',
-      consecutiveTransformStreak: 3,
-    });
-    const r1 = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(r1.state.pendingMagicAction).toBeTruthy();
-    const result = drain({ ...r1.state, phase: 'idle' } as any, [
-      { type: 'RESOLVE_MAGIC_MONSTER_SELECTION', magicId: 'transform-streak-strike', monsterId: 'm1' } as GameAction,
-    ]);
-    const targetAfter = (result.state.activeCards as any[]).find(c => c?.id === 'm1');
-    expect(targetAfter?.hp).toBe(16);
-  });
-
-  it('多怪存在时打开 monster-select 弹窗（pendingMagicAction）', () => {
-    const card = makeTransformStreakCard(pickSuffix(4));
-    const m1 = makeMonster('m1', 10);
-    const m2 = makeMonster('m2', 10);
-    const state = makeState({
-      handCards: [card],
-      activeCards: [m1, m2, null, null, null] as any,
-      lastPlayedCardCategory: 'event',
-      transformChainPrevCategory: 'event',
-      consecutiveTransformStreak: 2,
-    });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(result.state.pendingMagicAction).not.toBeNull();
-    expect((result.state.pendingMagicAction as any).effect).toBe('transform-streak-strike');
-    expect((result.state.pendingMagicAction as any).step).toBe('monster-select');
-    expect((result.state.pendingMagicAction as any).data?.streak).toBe(3);
-  });
-
-  it('上一张同为 perm-magic（连环转律自身）→ 同类型断链 → 0 伤害', () => {
-    const card = makeTransformStreakCard(pickSuffix(5));
-    const monster = makeMonster('m1', 10);
-    const state = makeState({
-      handCards: [card],
-      activeCards: [monster, null, null, null, null] as any,
-      lastPlayedCardCategory: 'perm-magic',
-      transformChainPrevCategory: 'perm-magic',
-      consecutiveTransformStreak: 5,
-    });
-    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    const targetAfter = (result.state.activeCards as any[]).find(c => c?.id === 'm1');
-    expect(targetAfter?.hp).toBe(10);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 2) 锐意鼓舞 — flank slot temp attack
+// 1) 锐意鼓舞 — flank slot temp attack
 // ---------------------------------------------------------------------------
 
 describe('锐意鼓舞 (flankSlotTempAttack)', () => {
@@ -262,7 +153,7 @@ describe('锐意鼓舞 (flankSlotTempAttack)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3) 运势博弈 — deck-top swap with gold reward
+// 2) 运势博弈 — deck-top swap with gold reward
 // ---------------------------------------------------------------------------
 
 describe('运势博弈 (deckTopSwapGold)', () => {

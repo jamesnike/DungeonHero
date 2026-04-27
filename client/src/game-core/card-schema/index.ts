@@ -15,6 +15,8 @@ export { executeOnUpgrade, registerOnUpgrade, registerOnUpgradeAll, resolveUpgra
 export type { OnUpgradeHandler } from './on-upgrade';
 export { executeOnEnterHand, registerOnEnterHand, registerOnEnterHandAll, getOnEnterHandRegistrySize } from './on-enter-hand';
 export type { OnEnterHandHandler } from './on-enter-hand';
+export { computeCardText, applyDerivedCardText, registerCardText, registerCardTextAll, resolveCardTextId, getCardTextRegistrySize } from './card-text';
+export type { CardText, CardTextFormatter } from './card-text';
 
 // Import definitions to trigger auto-registration
 import './definitions/potions';
@@ -22,4 +24,5 @@ import './definitions/magic';
 import './definitions/equipment';
 import './definitions/upgrades';
 import './definitions/on-enter-hand';
+import './definitions/card-text';
 import './custom-handlers';

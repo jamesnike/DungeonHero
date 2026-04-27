@@ -30,8 +30,18 @@ export function reduceUIStateActions(
     case 'SET_PENDING_HERO_MAGIC':
       return applyPatch(state, { pendingHeroMagicAction: action.payload });
 
-    case 'SET_DEATH_WARD_PROMPT':
-      return applyPatch(state, { deathWardPrompt: action.payload });
+    case 'DISMISS_DEATH_WARD_NOTICE': {
+      // 玩家点了「知道了」：清空通知，把 phase 推回 playerInput 让 pipeline 继续。
+      // reduceApplyDamage 在自动触发时已经把卡片移到了坟场，这里只做 modal 收尾。
+      if (!state.deathWardNotice && state.phase !== 'awaitingDeathWardNotice') {
+        return null;
+      }
+      const patch: Partial<GameState> = { deathWardNotice: null };
+      if (state.phase === 'awaitingDeathWardNotice') {
+        patch.phase = 'playerInput';
+      }
+      return applyPatch(state, patch);
+    }
 
     case 'SET_CARD_ACTION_CONTEXT':
       return applyPatch(state, { cardActionContext: action.payload });

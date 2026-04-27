@@ -24,7 +24,6 @@ import {
   computeMaxHp,
   computeDamage,
   computeOverkill,
-  createBossCard,
   damageMonsterWithLayerOverflow,
   isMonsterDefeated,
   applyWraithHauntEffect,
@@ -441,10 +440,13 @@ function reduceApplyDamage(
 ): ReduceResult {
   const amuletEffects = computeAmuletEffectsForState(state);
 
-  // Check for death ward cards in hand
-  const hasDeathWardCard = (state.handCards as GameCardData[]).some(
-    c => c.magicEffect === 'death-ward' || (c as any).knightEffect === 'death-ward',
+  // 不灭守护：只在手牌里寻找——一旦放在背包里玩家也不期待它自动救场。
+  // 多张时按手牌顺序消耗第一张（玩家无需选择，符合"全自动"语义）。
+  const handArr = state.handCards as GameCardData[];
+  const deathWardCard = handArr.find(
+    c => c.magicEffect === 'death-ward' || (c as { knightEffect?: string }).knightEffect === 'death-ward',
   );
+  const hasDeathWardCard = !!deathWardCard;
 
   const result = computeDamage(state, action.amount, amuletEffects, hasDeathWardCard, {
     selfInflicted: action.selfInflicted,
@@ -464,13 +466,33 @@ function reduceApplyDamage(
     }
   }
 
-  // Death ward triggered — pause for player decision
-  if (result.needsDeathWard) {
+  // 不灭守护自动触发：消耗手牌里的卡片 → 进坟场 → 阻挡致死伤害 → 弹通知 modal。
+  // pipeline.phase=awaitingDeathWardNotice 让 drain 暂停，玩家点「知道了」
+  // 后 dispatch DISMISS_DEATH_WARD_NOTICE 把 phase 推回 playerInput 继续。
+  if (result.needsDeathWard && deathWardCard) {
+    const blockedDamage = action.amount;
+    const cardName = deathWardCard.name;
+    const newHand = handArr.filter(c => c.id !== deathWardCard.id);
+    const cleansed = resetCardForGraveyard(deathWardCard, state.gameMode === 'quick');
+    const patch: Partial<GameState> = {
+      handCards: newHand as GameCardData[],
+      discardedCards: [...state.discardedCards, cleansed],
+      deathWardNotice: { cardName, blockedDamage },
+      phase: 'awaitingDeathWardNotice' as GameState['phase'],
+    };
     sideEffects.push({
-      event: 'combat:deathWardPrompt',
-      payload: { damage: action.amount, source: action.source },
+      event: 'combat:deathWardActivated',
+      payload: { cardName, blockedDamage, source: action.source },
     });
-    return applyPatch(state, { phase: 'awaitingDeathWard' as GameState['phase'] }, sideEffects);
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'magic', message: `${cardName} 自动触发，抵消了 ${blockedDamage} 点致死伤害` },
+    });
+    sideEffects.push({
+      event: 'ui:banner',
+      payload: { text: `${cardName}：抵消致死伤害！` },
+    });
+    return applyPatch(state, patch, sideEffects);
   }
 
   const safeHp = Number.isFinite(result.hp) ? result.hp : state.hp;
@@ -869,10 +891,14 @@ function reduceDealDamageToMonster(
 // MONSTER_DEFEATED
 //
 // Comprehensive monster defeat resolution. Handles all rule outcomes that were
-// previously gated behind setTimeout in the hook. Three branches:
-//   A) Boss transform (isFinalMonster && !bossPhase) — replaces card with boss
-//   B) Revive (hasRevive && !reviveUsed) — restores to 1 layer
-//   C) Actual defeat — full cleanup, rewards, combat state, minion buff, etc.
+// previously gated behind setTimeout in the hook. Two branches:
+//   A) Revive (hasRevive && !reviveUsed) — restores to 1 layer
+//   B) Actual defeat — full cleanup, rewards, combat state, minion buff, etc.
+//
+// Note: There used to be a third branch that transformed `isFinalMonster` cards
+// into a boss form on first defeat. That has been removed — the chosen final
+// monster is now born as a Boss at deck-init time (see `bakeFinalBoss` in
+// `init.ts`), so the transform-on-defeat path is gone.
 // ---------------------------------------------------------------------------
 
 function reduceMonsterDefeated(
@@ -893,42 +919,11 @@ function reduceMonsterDefeated(
   // Re-entry guard: the monster card stays in activeCards for ~950ms while the
   // defeat animation plays. If two enqueue sites (e.g. a combo that both
   // drains a layer and deals damage in one play) both queue MONSTER_DEFEATED
-  // for the same id, the second one would re-run Branch C and queue a second
+  // for the same id, the second one would re-run Branch B and queue a second
   // reward drop with freshly-generated options. Skip the re-entry here.
   if (monster.defeatProcessed) return noChange(state);
 
-  // ---- Branch A: Boss transform ----
-  // 最终之敌 → Boss 的翻转**不**被晕眩取消：晕眩状态下被杀仍然变身。
-  // （晕眩仍会压制 lastWords / revive / boss retaliation，那些是独立分支。）
-  if (monster.isFinalMonster && !monster.bossPhase) {
-    const bossCard = applyAmplifyOnCreate(createBossCard(monster), state.amplifiedCardBonus);
-    activeCards[idx] = bossCard;
-    patch.activeCards = activeCards as GameState['activeCards'];
-
-    // Remove from engaged (boss re-engages separately)
-    const remaining = state.combatState.engagedMonsterIds.filter(id => id !== monster.id);
-    patch.combatState = remaining.length === 0
-      ? { ...initialCombatState }
-      : { ...state.combatState, engagedMonsterIds: remaining };
-
-    if (monster.lastWords) {
-      enqueuedActions.push({
-        type: 'TRIGGER_MONSTER_SKILL_FLOAT',
-        monsterId: monster.id,
-        skillKey: lastWordsSkillKey(monster.lastWords),
-      });
-      rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
-    }
-
-    patch.heroSkillBanner = `${monster.name} 暴走变身！`;
-    sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 变身为 Boss！` } });
-    sideEffects.push({ event: 'combat:bossTransform', payload: { monsterId: monster.id, originalMonster: monster, bossCard } });
-
-    patch.rng = rng;
-    return applyPatch(state, patch, sideEffects, enqueuedActions);
-  }
-
-  // ---- Branch B: Revive ----
+  // ---- Branch A: Revive ----
   if (monster.hasRevive && !monster.reviveUsed && !monster.isStunned) {
     // Run last words FIRST so the discard (and its banner) resolves before the
     // revive flips the monster back to alive. Same reduce — both end up
@@ -981,7 +976,7 @@ function reduceMonsterDefeated(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  // ---- Branch C: Actual defeat ----
+  // ---- Branch B: Actual defeat ----
   // Mark defeat-processed BEFORE any state mutation in this branch so the
   // re-entry guard above bails on any subsequent MONSTER_DEFEATED for this
   // monster while the card is still in `activeCards` waiting for the defeat
@@ -1850,18 +1845,19 @@ export function routeReflectDamageToHero(
   const ae = computeAmuletEffectsForState(state);
   const isMonsterEquipShield = item.type === 'monster';
   const slotShieldBonus = getSlotBonus(state, slotId, 'shield');
-  const permanentBonus = Math.max(0, slotShieldBonus);
   const rawSlotTemp = state.slotTempArmor?.[slotId] ?? 0;
 
-  // Single-counter armor model: storedCap = baseArmorMax + perm + temp; eliteBonus is
-  // a transient combat-time virtual buffer, not persisted into stored armor.
+  // Single-counter armor model: storedCap = max(0, baseArmorMax + perm + temp);
+  // floor is applied to the FINAL sum so negative perm/temp reduce the cap
+  // (rather than being dropped individually). eliteBonus is a transient
+  // combat-time virtual buffer, not persisted into stored armor.
   const baseArmorMax = isMonsterEquipShield
     ? (item.hp ?? item.value)
     : (item.armorMax ?? item.value);
   const eliteBonus = isMonsterEquipShield && item.eliteLowGoldPower && (state.gold ?? 0) >= 30
     ? baseArmorMax
     : 0;
-  const storedCap = baseArmorMax + permanentBonus + rawSlotTemp;
+  const storedCap = Math.max(0, baseArmorMax + slotShieldBonus + rawSlotTemp);
   const storedArmor = Math.min(item.armor ?? storedCap, storedCap);
   const currentArmor = storedArmor + eliteBonus;
   const damageDealt = Math.min(damage, currentArmor);
@@ -2060,9 +2056,10 @@ function reducePerformShieldBash(
   const ae = computeAmuletEffectsForState(state);
   const baseArmorMax = slotItem.armorMax ?? slotItem.value ?? 0;
   const slotShieldBonus = getSlotBonus(state, slotId, 'shield');
-  const permanentBonus = Math.max(0, slotShieldBonus);
   const rawSlotTemp = state.slotTempArmor?.[slotId] ?? 0;
-  const armorValue = baseArmorMax + permanentBonus + rawSlotTemp;
+  // Single-counter armor model: armorValue = max(0, base + perm + temp);
+  // negative perm/temp reduce armor value (and thus stun chance).
+  const armorValue = Math.max(0, baseArmorMax + slotShieldBonus + rawSlotTemp);
   const bashStunChance = slotItem.shieldBashStunRate * armorValue + (ae.stunRateBoost ?? 0);
   const effectiveBashStun = state.stunCap > 0 ? Math.min(bashStunChance, state.stunCap) : bashStunChance;
 
@@ -2144,9 +2141,9 @@ function reducePerformShieldBash(
           });
         }
 
-        // Stun upgrade cap — each amulet bumps cap by 5.
+        // Stun upgrade cap — each amulet contributes 8% (L0) or 12% (L1) per trigger.
         if (ae.stunUpgradeCapCount > 0) {
-          const bump = 5 * ae.stunUpgradeCapCount;
+          const bump = ae.stunUpgradeCapBonus;
           const nextCap = Math.min(100, state.stunCap + bump);
           patch.stunCap = nextCap;
           sideEffects.push({
@@ -2647,26 +2644,37 @@ function reducePerformHeroAttack(
     });
   }
 
-  // --- Amplify 魔弹 + spawn one (魔弹连弩, overkill-gated) ---
+  // --- Amplify 魔弹 + spawn N bolts (魔弹连弩, overkill-gated) ---
   // 在装备的 onAttackAmplifyMissileGenerate 命中超杀时：
-  //  1. 立刻生成一张「魔弹」（应用当前 amplifiedCardBonus map 的累计值），加入背包。
+  //  1. 立刻生成 N 张「魔弹」（N = onAttackAmplifyMissileGenerateCount ?? 1，
+  //     L2 升级把 N 提到 2）。每张应用当前 amplifiedCardBonus map 的累计值后加入背包。
   //     魔弹是 magic 卡，对背包容量豁免（addCardToBackpackPure → isBackpackRestrictedCard），
   //     不会溢出到回收袋。
-  //  2. 入队一个 AMPLIFY_CARDS_BY_NAME，amount=1。drain 阶段执行时，
-  //     map 累计 +1，并对所有同名卡（含我们刚加进背包的那张）应用 +1。
-  //     最终：新生成的魔弹 amplifyBonus = oldMap + 1，与其它现存「魔弹」一致。
+  //  2. 入队一个 AMPLIFY_CARDS_BY_NAME，amount=1（N 张共享同一次 +1 增幅）。
+  //     drain 阶段执行时，map 累计 +1，并对所有同名卡（含我们刚加进背包的 N 张）应用 +1。
+  //     最终：每张新魔弹 amplifyBonus = oldMap + 1，与其它现存「魔弹」一致。
   if (overkillHitCount > 0 && (slotItem as GameCardData).onAttackAmplifyMissileGenerate) {
-    const [rawBolt, nextRng] = createMagicBoltCard(rng);
-    rng = nextRng;
-    patch.rng = rng;
-    const bolt = applyAmplifyOnCreate(rawBolt, state.amplifiedCardBonus);
-    const baseStateForAdd = { ...state, ...patch } as GameState;
-    const addPatch = addCardToBackpackPure(baseStateForAdd, bolt);
-    if (addPatch.backpackItems) patch.backpackItems = addPatch.backpackItems;
-    if (addPatch.permanentMagicRecycleBag) patch.permanentMagicRecycleBag = addPatch.permanentMagicRecycleBag;
+    const spawnCount = Math.max(1, (slotItem as GameCardData).onAttackAmplifyMissileGenerateCount ?? 1);
+    let baseForAdd = { ...state, ...patch } as GameState;
+    for (let i = 0; i < spawnCount; i += 1) {
+      const [rawBolt, nextRng] = createMagicBoltCard(rng);
+      rng = nextRng;
+      patch.rng = rng;
+      const bolt = applyAmplifyOnCreate(rawBolt, state.amplifiedCardBonus);
+      const addPatch = addCardToBackpackPure(baseForAdd, bolt);
+      if (addPatch.backpackItems) {
+        patch.backpackItems = addPatch.backpackItems;
+        baseForAdd = { ...baseForAdd, backpackItems: addPatch.backpackItems };
+      }
+      if (addPatch.permanentMagicRecycleBag) {
+        patch.permanentMagicRecycleBag = addPatch.permanentMagicRecycleBag;
+        baseForAdd = { ...baseForAdd, permanentMagicRecycleBag: addPatch.permanentMagicRecycleBag };
+      }
+    }
+    const boltCountText = spawnCount === 1 ? '一张' : spawnCount === 2 ? '两张' : `${spawnCount} 张`;
     sideEffects.push({
       event: 'log:entry',
-      payload: { type: 'equip', message: `${slotItem.name} 超杀：所有「魔弹」+1 增幅，并将一张「魔弹」加入背包` },
+      payload: { type: 'equip', message: `${slotItem.name} 超杀：所有「魔弹」+1 增幅，并将${boltCountText}「魔弹」加入背包` },
     });
     enqueuedActions.push({ type: 'AMPLIFY_CARDS_BY_NAME', cardName: '魔弹', amount: 1, source: slotItem.name });
   }
@@ -3143,9 +3151,9 @@ function reducePerformHeroAttack(
               });
             }
 
-            // Stun upgrade cap — each amulet bumps cap by 5.
+            // Stun upgrade cap — each amulet contributes 8% (L0) or 12% (L1) per trigger.
             if (ae.stunUpgradeCapCount > 0) {
-              const bump = 5 * ae.stunUpgradeCapCount;
+              const bump = ae.stunUpgradeCapBonus;
               const nextCap = Math.min(100, (patch.stunCap ?? state.stunCap) + bump);
               patch.stunCap = nextCap;
               sideEffects.push({
@@ -3305,18 +3313,19 @@ function reduceResolveBlock(
       const isMonsterEquipShield = slotItem.type === 'monster';
 
       const slotShieldBonus = getSlotBonus(state, blockSlotId, 'shield');
-      const permanentBonus = Math.max(0, slotShieldBonus);
       const rawSlotTemp = state.slotTempArmor?.[blockSlotId] ?? 0;
       const baseArmorMax = isMonsterEquipShield
         ? ((slotItem as GameCardData).hp ?? slotItem.value)
         : (slotItem.armorMax ?? slotItem.value);
       // Single-counter armor model:
-      //   storedCap = baseArmorMax + perm + temp  (the cap for `slotItem.armor`)
+      //   storedCap = max(0, baseArmorMax + perm + temp)  (cap for `slotItem.armor`)
       //   eliteBonus = optional combat-time virtual buffer (gold-stealing elite goblin)
       //   currentArmor = (slotItem.armor ?? storedCap) + eliteBonus
       // Damage chips eliteBonus first, then storedArmor. Stored armor never persists
-      // any of the eliteBonus — it's transient, gates only on gold.
-      const storedCap = baseArmorMax + permanentBonus + rawSlotTemp;
+      // any of the eliteBonus — it's transient, gates only on gold. Floor applied
+      // to the FINAL sum so negative perm/temp (e.g. bonusDecay, capacity-shrink
+      // events) reduce the cap rather than being dropped individually.
+      const storedCap = Math.max(0, baseArmorMax + slotShieldBonus + rawSlotTemp);
       const eliteBonus = isMonsterEquipShield
         && (slotItem as GameCardData).eliteLowGoldPower
         && (state.gold ?? 0) >= 30
@@ -3413,7 +3422,13 @@ function reduceResolveBlock(
       }
 
       // Reflect damage
-      if ((slotItem as GameCardData).reflectHalfDamage) {
+      if ((slotItem as GameCardData).reflectFullDamage) {
+        const slotPermDmg = getSlotBonus(state, blockSlotId, 'damage');
+        const slotTempAtk = state.slotTempAttack?.[blockSlotId] ?? 0;
+        reflectDmg = pendingBlock.attackValue + slotPermDmg + slotTempAtk;
+        reflectSourceName = slotItem.name;
+        reflectBlockSlotId = blockSlotId;
+      } else if ((slotItem as GameCardData).reflectHalfDamage) {
         const slotPermDmg = getSlotBonus(state, blockSlotId, 'damage');
         const slotTempAtk = state.slotTempAttack?.[blockSlotId] ?? 0;
         reflectDmg = Math.ceil(pendingBlock.attackValue / 2) + slotPermDmg + slotTempAtk;
@@ -3495,8 +3510,12 @@ function reduceResolveBlock(
       // Block grant temp armor to other
       if ((slotItem as GameCardData).blockGrantTempArmorToOther) {
         const otherSlot: EquipmentSlotId = blockSlotId === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
+        // Single-counter armor model: monster equip grants its non-temp cap
+        // (base hp + perm), shield grants its full cap (base + perm + temp).
+        // Floor on FINAL sum so negative perm reduces grant rather than being
+        // dropped individually (consistent with the rest of the model).
         const grantAmount = isMonsterEquipShield
-          ? ((slotItem as GameCardData).hp ?? slotItem.value) + permanentBonus
+          ? Math.max(0, ((slotItem as GameCardData).hp ?? slotItem.value) + slotShieldBonus)
           : storedCap;
         patch.slotTempArmor = { ...(state.slotTempArmor ?? {}), [otherSlot]: ((state.slotTempArmor ?? {})[otherSlot] ?? 0) + grantAmount };
         applySlotArmorBonusDelta(state, otherSlot, grantAmount, patch);

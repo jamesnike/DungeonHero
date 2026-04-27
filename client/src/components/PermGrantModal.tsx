@@ -14,9 +14,9 @@ import GameCard, { type GameCardData, cardHasPermFlag } from './GameCard';
 type PermGrantSourceType =
   | 'potion' | 'magic'
   | 'transform-grant' | 'equipment-enchant' | 'essence-extract'
-  | 'flank-grant' | 'transform-gold-grant'
+  | 'flank-grant' | 'flank-gold-grant'
   | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant'
-  | 'transform-draw-grant' | 'transform-heal-grant'
+  | 'transform-draw-grant' | 'flank-heal-grant'
   | 'transform-recycle-grant'
   | 'amulet-perm-grant'
   | 'on-hand-stun-cap-grant'
@@ -35,10 +35,19 @@ interface PermGrantModalProps {
 
 const FLANK_GRANT_TYPES = new Set<string>([
   'flank-grant', 'flank-persuade-grant', 'flank-stun-grant', 'flank-damage-grant',
+  // 唤回秘药·侧击（历史 sourceType 名 'transform-recycle-grant' 沿用，但触发条件
+  // 已经改成侧击，eligibility 必须按 flankEffect 过滤）。
+  'transform-recycle-grant',
+  // 蜕变赋灵·侧击（历史 sourceType 名 'transform-grant' 沿用——保留 i18n key /
+  // pending-magic-action effect / event 名兼容性——但触发条件已经改成侧击，
+  // eligibility 必须按 flankEffect 过滤）。
+  'transform-grant',
+  // 附魔祭坛·侧击 +3 金币 / 赋能神殿·侧击 恢复 N HP（触发条件已从转型迁移为侧击；
+  // 保留 transform-draw-grant 不动 = 还是转型）。
+  'flank-gold-grant', 'flank-heal-grant',
 ]);
 const TRANSFORM_GRANT_TYPES = new Set<string>([
-  'transform-grant', 'transform-gold-grant', 'transform-draw-grant', 'transform-heal-grant',
-  'transform-recycle-grant',
+  'transform-draw-grant',
 ]);
 
 export default function PermGrantModal({
@@ -96,12 +105,12 @@ export default function PermGrantModal({
     'essence-extract': 'essenceExtract',
     'transform-grant': 'transformGrant',
     'flank-grant': 'flankGrant',
-    'transform-gold-grant': 'transformGoldGrant',
+    'flank-gold-grant': 'flankGoldGrant',
     'flank-persuade-grant': 'flankPersuadeGrant',
     'flank-stun-grant': 'flankStunGrant',
     'flank-damage-grant': 'flankDamageGrant',
     'transform-draw-grant': 'transformDrawGrant',
-    'transform-heal-grant': 'transformHealGrant',
+    'flank-heal-grant': 'flankHealGrant',
     'transform-recycle-grant': 'transformRecycleGrant',
     'amulet-perm-grant': 'amuletPermGrant',
     'on-hand-stun-cap-grant': 'onHandStunCapGrant',

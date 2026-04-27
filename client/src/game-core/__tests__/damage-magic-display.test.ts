@@ -135,8 +135,17 @@ describe('computeDamageMagicDisplayPure — Group C (状态相关 base + amp)', 
     }
   });
 
-  it('missing-hp-smite lvl 1 (100%): missing 10 HP → base 10 + amp 0 → 10', () => {
+  it('missing-hp-smite lvl 1 (75%): missing 10 HP → base 7 + amp 0 → 7', () => {
     const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'missing-hp-smite', upgradeLevel: 1 }), STATE);
+    expect(r?.mode).toBe('replace');
+    if (r?.mode === 'replace') {
+      expect(r.text).toContain('造成 7 点伤害');
+      expect(r.text).toContain('已损失生命 75%');
+    }
+  });
+
+  it('missing-hp-smite lvl 2 (100%): missing 10 HP → base 10 + amp 0 → 10', () => {
+    const r = computeDamageMagicDisplayPure(magic({ knightEffect: 'missing-hp-smite', upgradeLevel: 2 }), STATE);
     expect(r?.mode).toBe('replace');
     if (r?.mode === 'replace') {
       expect(r.text).toContain('造成 10 点伤害');

@@ -479,6 +479,23 @@ export default function CardDetailsModal({
               </div>
             )}
 
+            {/* Swarm Race Default - 繁殖 */}
+            {card.type === 'monster' && card.swarmSpawn && (
+              <div className="bg-emerald-500/15 p-3 rounded-md border border-emerald-500/30 relative overflow-hidden">
+                <div className="relative flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 shrink-0 text-emerald-500" />
+                    <span className="font-extrabold text-sm text-emerald-700 dark:text-emerald-300 tracking-wide">
+                      繁殖
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 pl-6">
+                    场上有虫群怪物时，每移除一张地城牌，在该位置生成一只小虫子。
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Ogre Crit - 暴击 */}
             {card.type === 'monster' && card.monsterSpecial === 'ogre-crit' && (
               <div className="bg-red-500/15 p-3 rounded-md border border-red-500/30 relative overflow-hidden">
@@ -899,25 +916,6 @@ export default function CardDetailsModal({
               </div>
             )}
 
-            {/* Boss: Final Monster (pre-transform) */}
-            {card.type === 'monster' && card.isFinalMonster && !card.bossPhase && (
-              <div className="bg-red-500/10 p-3 rounded-md border border-red-500/20 relative overflow-hidden">
-                <div className="relative flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <Skull className="w-4 h-4 shrink-0 text-red-400" />
-                    <span className="font-extrabold text-sm text-red-600 dark:text-red-400 tracking-wide">
-                      最终之敌
-                    </span>
-                  </div>
-                  <p className="text-sm font-semibold text-red-700 dark:text-red-300 pl-6">
-                    击败后将变身为 Boss。
-                  </p>
-                  <p className="text-sm text-red-600/90 dark:text-red-300/90 pl-6">
-                    被瀑流从预览区挤出时不进入坟场，置于剩余牌堆底（不打乱其余牌序）。
-                  </p>
-                </div>
-              </div>
-            )}
             </>)}
 
             {/* Monster Equipment Effects */}
@@ -1606,7 +1604,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'flipToUpgradeScroll') return '翻转为「升级卷轴」即时魔法：选择一张牌进行升级';
       if (token === 'allSlotDamage-1') return '所有装备栏永久攻击 -1';
       if (token === 'allSlotShield-1') return '所有装备栏永久护甲 -1';
-      if (token === 'flipToRecallEquip') return '翻转为「回收术」永久魔法：回手一张牌，抽 1 张牌';
+      if (token === 'flipToRecallEquip') return '翻转为「回收术」永久魔法：回手一张牌（从装备栏或护符栏选择）';
       if (token === 'flipToUndyingBlessing') return '翻转为「不灭赐福」永久魔法：赋予装备复生能力，失去 2 点生命';
       if (token === 'flipToHonorBloodMagic') {
         return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时将激活行所有怪物攻击力 -2';

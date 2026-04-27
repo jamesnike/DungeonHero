@@ -29,7 +29,6 @@ import {
 import {
   resetHeroWavePure,
   addMagicGauge,
-  setMagicUsedThisWave,
   resetMagicGauge,
   isMagicGaugeFull,
   markSkillUsedPure,
@@ -622,10 +621,7 @@ function reduceActivateHeroMagic(
       sideEffects.push({ event: 'ui:banner', payload: { text: '魔法仍在充能中。' } });
       return applyPatch(state, patch, sideEffects);
     }
-    if ((status as any).usedThisWave) {
-      sideEffects.push({ event: 'ui:banner', payload: { text: '该魔法已在本波使用。' } });
-      return applyPatch(state, patch, sideEffects);
-    }
+    // 仪表满即可发动，没有"每波只能用一次"限制——发动后仪表清零，需重新充能。
   }
 
   switch (magicId) {
@@ -853,7 +849,6 @@ function reduceCompleteHeroMagic(
   let magicState = state.heroMagicState;
 
   if (origin === 'gauge') {
-    magicState = setMagicUsedThisWave(magicState, magicId as any);
     magicState = resetMagicGauge(magicState, magicId as any);
   }
 
@@ -1160,13 +1155,18 @@ function reduceMagicSlotSelection(
     }
 
     case 'temp-attack-double': {
-      // 锋芒倍增：选定装备栏的临时攻击 +2 后整体翻倍。
-      // 公式：final = (curTempAtk + 2*echo) * 2
+      // 锋芒倍增：选定装备栏的临时攻击 +N 后整体翻倍。
+      // 升级表（addAmounts）：L0 +2 / L1 +3
+      // 公式：final = (curTempAtk + N*echo) * 2
       // 允许选择空槽（与 weapon-burst / weapon-manual 一致），效果保留至该槽
       // 装备进入时仍生效。
+      // 实际加成在 magic.ts:knightTempAttackDouble 处再读一次同样的 upgradeLevel
+      // 表（addAmounts），handler 本身只更新卡面文案。
       const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
       const echoMul = (pending as any).echoMultiplier ?? 1;
-      const addAmt = 2 * echoMul;
+      const addAmounts = [2, 3];
+      const baseAdd = addAmounts[pending.card.upgradeLevel ?? 0] ?? addAmounts[addAmounts.length - 1];
+      const addAmt = baseAdd * echoMul;
       const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
       const afterAdd = curTempAtk + addAmt;
       const finalVal = afterAdd * 2;
@@ -1220,7 +1220,7 @@ function reduceMagicSlotSelection(
       // - 增幅范围按 cardName 走 AMPLIFY_CARDS_BY_NAME：影响所有同名副本（手牌 /
       //   背包 / 装备槽 / 储备 / 坟场 / 回收袋 / 职业牌组 / 地下城行）—— 包含被选中
       //   的这件装备本身（无论它接下来是否被搬到空位）。
-      // - Echo (A 类)：增幅 amount = 1 × echoMultiplier（多次叠加），通过单一
+      // - Echo (A 类)：增幅 amount = N × echoMultiplier（多次叠加），通过单一
       //   AMPLIFY_CARDS_BY_NAME action 一次写入即等价于 N 次 +1（因为该 reducer
       //   按 cardName 累计 amplifiedCardBonus）；「移到空位」最多发生 1 次（不在
       //   echo 循环内重复）。
@@ -1228,13 +1228,17 @@ function reduceMagicSlotSelection(
       //   1. 把所选装备的副本写到空槽（带 fromSlot 改为新槽，避免 stale fromSlot
       //      触发 GameBoard isCardFromEquipmentSlot 路径误判）；
       //   2. 原槽走 clearSlotAndPromoteReserve（reserve 顶上来或置 null）。
-      // - 不设升级（卡设计上无 upgradeLevel 分支）。
+      // - 升级表（amplifyAmounts）：L0 +1 / L1 +2。实际数值在 magic.ts:
+      //   knightAmplifyEquipmentShift 处再读一次同样的 upgradeLevel 表。
       if (!slotItem) {
         patch.heroSkillBanner = '该装备栏为空，请选择有装备的栏。';
         return applyPatch(state, patch, sideEffects);
       }
       const echoMul = (pending as any).echoMultiplier ?? 1;
-      const amplifyAmount = 1 * echoMul;
+      const amplifyAmounts = [1, 2];
+      const baseAmplify = amplifyAmounts[pending.card.upgradeLevel ?? 0]
+        ?? amplifyAmounts[amplifyAmounts.length - 1];
+      const amplifyAmount = baseAmplify * echoMul;
       const targetName = slotItem.name;
 
       // 1) 全场同名增幅
@@ -1460,11 +1464,11 @@ function reduceMagicSlotSelection(
         return applyPatch(state, patch, sideEffects);
       }
       const repairUpgLvl = pending.card.upgradeLevel ?? 0;
-      const repairBaseAmounts = [1, 2, 2];
+      const repairBaseAmounts = [1, 1, 2];
       const repairAmount = (repairBaseAmounts[repairUpgLvl] ?? 2) * ((pending as any).echoMultiplier ?? 1);
       patch[slotId] = { ...slotItem, durability: Math.min(maxDur, curDur + repairAmount) } as any;
       let drawMsg = '';
-      if (repairUpgLvl >= 2) {
+      if (repairUpgLvl >= 1) {
         let current = { ...state, ...patch };
         const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(current);
         Object.assign(patch, drawPatch);
@@ -1489,8 +1493,8 @@ function reduceMagicSlotSelection(
       const curDur = slotItem.durability ?? maxDur;
       const echoMul = (pending as any).echoMultiplier ?? 1;
       const repairAmt = 1 * echoMul;
-      const triggerCount = (pending.card as any)._transformRepairTriggers ?? 0;
-      const transformAtkBase = 3 + triggerCount;
+      const triggerCount = (pending.card as any)._flankRepairTriggers ?? 0;
+      const flankAtkBase = 3 + triggerCount;
       const parts: string[] = [];
       if (maxDur > 0 && curDur < maxDur) {
         patch[slotId] = { ...slotItem, durability: Math.min(maxDur, curDur + repairAmt) } as any;
@@ -1499,18 +1503,18 @@ function reduceMagicSlotSelection(
         parts.push(`${slotItem.name} 已满耐久`);
       }
       let updatedCard = pending.card;
-      if ((pending as any).transformTriggered) {
-        const tempAtkBonus = transformAtkBase * echoMul;
+      if ((pending as any).flankTriggered) {
+        const tempAtkBonus = flankAtkBase * echoMul;
         const curTA = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
         patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTA + tempAtkBonus };
-        parts.push(`转型：临时攻击 +${tempAtkBonus}`);
+        parts.push(`侧击：临时攻击 +${tempAtkBonus}`);
         checkPersuadeOnTempAttack(state, patch, sideEffects);
         const newTriggers = triggerCount + 1;
         const nextAtk = 3 + newTriggers;
         updatedCard = {
           ...pending.card,
-          _transformRepairTriggers: newTriggers,
-          transformBonus: `给该装备栏 +${nextAtk} 临时攻击（每次触发后数值 +1）`,
+          _flankRepairTriggers: newTriggers,
+          flankEffect: `给该装备栏 +${nextAtk} 临时攻击（每次触发后数值 +1）`,
         } as GameCardData;
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, updatedCard, parts.join('。') + '。');
@@ -1522,8 +1526,8 @@ function reduceMagicSlotSelection(
         return applyPatch(state, patch, sideEffects);
       }
       const rawArmor = computeSlotArmorValuePure(state, slotId);
-      const armorPcts = [100, 150];
-      const armorPct = armorPcts[pending.card.upgradeLevel ?? 0] ?? 150;
+      const armorPcts = [100, 125, 150];
+      const armorPct = armorPcts[pending.card.upgradeLevel ?? 0] ?? armorPcts[armorPcts.length - 1];
       const scaledArmor = Math.floor(rawArmor * armorPct / 100);
       if (scaledArmor <= 0) {
         patch.heroSkillBanner = '该盾牌目前没有可用的护甲。';
@@ -1597,8 +1601,16 @@ function reduceMagicSlotSelection(
       const isFlank = (pending as any).isFlank ?? false;
       let stunText = '';
       if (isFlank && !target.isStunned) {
+        // 锋刃侧击击晕率随升级等级提升：
+        //   L0：20%（base，2026-04 redesign 起从 40 调降以给升级留空间）
+        //   L1：40%
+        //   L2：60%
+        // 与 knightDeck.ts 卡面 + upgrades.ts tempAttackStrike handler 保持一致。
+        const tasLvl = (pending.card as any).upgradeLevel ?? 0;
+        const tasStunPcts = [20, 40, 60];
+        const baseStunPct = tasStunPcts[tasLvl] ?? tasStunPcts[tasStunPcts.length - 1];
         const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
-        const effectiveFlankStun = Math.min(40 + (ae.stunRateBoost ?? 0), state.stunCap ?? 0);
+        const effectiveFlankStun = Math.min(baseStunPct + (ae.stunRateBoost ?? 0), state.stunCap ?? 0);
         const threshold = Math.round((effectiveFlankStun / 100) * 20);
         if (threshold > 0) {
           let flankRoll: number;
@@ -2075,8 +2087,8 @@ function reduceMagicMonsterSelection(
     }
 
     case 'missing-hp-smite': {
-      const smitePcts = [50, 100, 150];
-      const smitePct = smitePcts[pending.card.upgradeLevel ?? 0] ?? 150;
+      const smitePcts = [50, 75, 100];
+      const smitePct = smitePcts[pending.card.upgradeLevel ?? 0] ?? smitePcts[smitePcts.length - 1];
       const heroMaxHp = computeMaxHp(state);
       const missingHp = Math.max(0, heroMaxHp - state.hp);
       const scaledDmg = Math.floor(missingHp * smitePct / 100);
@@ -2228,7 +2240,17 @@ function reduceMagicMonsterSelection(
     }
 
     case 'overkill-upgrade': {
-      const okDamage = computeSpellDamagePure(state, 3 + (pending.card.amplifyBonus ?? 0));
+      // 升级表（与 magic-effects.resolveOverkillUpgrade / helpers.computeDamageMagicDisplayPure 保持一致）：
+      //   L0：3 dmg，超杀升级 1 张牌
+      //   L1：5 dmg，超杀升级 1 张牌
+      //   L2：5 dmg，超杀升级 2 张牌（CardUpgradeModal maxCount=2）
+      const okLvl = (pending.card as any).upgradeLevel ?? 0;
+      const okBaseDmgs = [3, 5, 5];
+      const okUpgradeCounts = [1, 1, 2];
+      const okBaseDmg = okBaseDmgs[okLvl] ?? okBaseDmgs[okBaseDmgs.length - 1];
+      const okUpgradeCount = okUpgradeCounts[okLvl] ?? okUpgradeCounts[okUpgradeCounts.length - 1];
+      const okCountText = okUpgradeCount === 1 ? '一张牌' : `${okUpgradeCount} 张牌`;
+      const okDamage = computeSpellDamagePure(state, okBaseDmg + (pending.card.amplifyBonus ?? 0));
       let okBanner: string;
       if (isHeroTarget) {
         // overkill 概念不适用：选 hero/盾 时不开升级模态，仅自伤（盾会先吃 armor）。
@@ -2253,8 +2275,14 @@ function reduceMagicMonsterSelection(
         } else {
           const overkill = mitigation.effectiveDamage > (monster!.hp ?? monster!.value ?? 0);
           if (overkill) {
-            enqueuedActions.push({ type: 'SET_UPGRADE_MODAL_OPEN', open: true });
-            okBanner = `淬炼冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 伤害，超杀！选择一张牌升级。`;
+            // L2：maxCount=2 让升级模态保持打开，玩家连续选 2 张牌升级；
+            // L0/L1 不指定（=undefined → 选 1 张就关闭）。
+            enqueuedActions.push({
+              type: 'SET_UPGRADE_MODAL_OPEN',
+              open: true,
+              maxCount: okUpgradeCount > 1 ? okUpgradeCount : undefined,
+            });
+            okBanner = `淬炼冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 伤害，超杀！选择${okCountText}升级。`;
           } else {
             const reducedNote = mitigation.spellResisted ? `（抗性：${okDamage} → ${mitigation.effectiveDamage}）` : '';
             okBanner = `淬炼冲击对 ${monster!.name} 造成 ${mitigation.effectiveDamage} 点伤害。${reducedNote}`;
@@ -2956,7 +2984,11 @@ function reduceDungeonCardSelection(
       });
 
       const sameCategory = getCardPlayCategory(card) === getCardPlayCategory(ragedDeckTop);
-      const goldDelta = sameCategory ? 10 : -1;
+      // 同类型奖励：L0 +10，L1 +15。不同类型固定 -1，不随升级变化。
+      const dtsgUpgLvl = pending.card.upgradeLevel ?? 0;
+      const sameCategoryBonuses = [10, 15];
+      const sameCategoryBonus = sameCategoryBonuses[dtsgUpgLvl] ?? 15;
+      const goldDelta = sameCategory ? sameCategoryBonus : -1;
       enqueuedActions.push({ type: 'MODIFY_GOLD', delta: goldDelta, source: 'deck-top-swap-gold' });
       // 「抽 1 张牌」每次成功结算都触发；echo 通过 maybeRepromptEcho 多轮迭代，
       // 这里 push 1 张即可，回响×N 自然累积成 N 张。
@@ -3023,7 +3055,20 @@ function reduceDungeonCardSelection(
       }
 
       const echoRemainingFAC = ((pending as any).echoRemaining ?? 1) - 1;
+      // 升级 1：每翻一张 → 抽 1 张牌（在 reprompt 之前结算，所以每个 echo 回合都
+      // 会抽一次；最后一次 reprompt 没目标时不会再调本函数 → 不会重复抽）。
       const buildRepromptOrFinalize = (resultBanner: string) => {
+        let drawSuffix = '';
+        if ((pending.card.upgradeLevel ?? 0) >= 1) {
+          const current = { ...state, ...patch } as GameState;
+          const { card: drawn, patch: drawPatch } = drawFromBackpackToHandPure(current);
+          if (drawn) {
+            Object.assign(patch, drawPatch);
+            sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+            drawSuffix = ` 抽到「${drawn.name}」。`;
+          }
+        }
+        const finalBanner = drawSuffix ? `${resultBanner}${drawSuffix}` : resultBanner;
         if (echoRemainingFAC > 0) {
           // After this flip, look for ANY other flippable card still in either row
           // (active-row flippable, or preview-row still face-down).
@@ -3047,12 +3092,12 @@ function reduceDungeonCardSelection(
               state, patch, sideEffects, enqueuedActions,
               { card: pending.card, echoRemaining: (pending as any).echoRemaining },
               next,
-              `${resultBanner} ${echoLabel}`,
+              `${finalBanner} ${echoLabel}`,
             );
             if (reprompt) return reprompt;
           }
         }
-        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, resultBanner);
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, finalBanner);
       };
 
       // (a) Active-row forward flip — APPLY_CARD_FLIP runs reduceApplyCardFlip
@@ -3142,7 +3187,7 @@ function reduceDiceForHero(
         }
       }
       if (ae.stunUpgradeCapCount > 0) {
-        const bump = 5 * ae.stunUpgradeCapCount;
+        const bump = ae.stunUpgradeCapBonus;
         patch.stunCap = Math.min(100, (state.stunCap ?? 0) + bump);
         sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${patch.stunCap}%）` } });
       }
@@ -3173,7 +3218,7 @@ function reduceDiceForHero(
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monsterName} 被侧击击晕了！` } });
       const ae = computeAmuletEffectsForState(state) ?? createEmptyAmuletEffects();
       if (ae.stunUpgradeCapCount > 0) {
-        const bump = 5 * ae.stunUpgradeCapCount;
+        const bump = ae.stunUpgradeCapBonus;
         patch.stunCap = Math.min(100, (state.stunCap ?? 0) + bump);
         sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: `震慑之符：击晕成功，击晕上限 +${bump}%（当前 ${patch.stunCap}%）` } });
       }

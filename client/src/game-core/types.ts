@@ -40,7 +40,7 @@ export type {
   MonsterRewardEffect,
   MonsterRewardOption,
   MonsterRewardDrop,
-  DeathWardPromptState,
+  DeathWardNoticeState,
   PendingHeroSkillAction,
   PendingHeroMagicAction,
   HeroMagicActivationOrigin,
@@ -216,7 +216,7 @@ export type GamePhase =
   | 'awaitingRewardChoice'    // monster reward selection
   | 'awaitingPotionTarget'    // potion requires target selection
   | 'awaitingMagicTarget'     // magic requires target selection
-  | 'awaitingDeathWard'       // death ward triggered — player must decide
+  | 'awaitingDeathWardNotice' // death ward auto-fired — single-button modal until player dismisses
   | 'awaitingEquipmentPrompt' // equipment prompt (slot choice, etc.)
   | 'awaitingDiscoverChoice'  // discover modal — player must pick a card
   | 'awaitingUpgradeChoice'   // upgrade modal — player must pick cards
@@ -235,7 +235,7 @@ import type {
   EquipmentSlotId,
   EquipmentSlotBonusState,
   SlotTempArmorState,
-  DeathWardPromptState,
+  DeathWardNoticeState,
   PendingHeroSkillAction,
   PendingHeroMagicAction,
   PendingMagicAction,
@@ -520,7 +520,14 @@ export interface GameState {
   /** 手牌「玩家自选」弃回多选状态；非 null 时 UI 弹出 HandDiscardSelectionModal。 */
   pendingHandDiscardSelection: HandDiscardSelectionState | null;
   pendingPotionAction: PendingPotionAction | null;
-  deathWardPrompt: DeathWardPromptState | null;
+  /**
+   * 不灭守护自动触发后，UI 需要弹出的「单按钮通知」状态。reducer 在
+   * `reduceApplyDamage` 检测到致死伤害时直接消耗手牌里的不灭守护并写入此字段；
+   * 玩家点「知道了」后 dispatch `DISMISS_DEATH_WARD_NOTICE` 把它清空。
+   * `phase === 'awaitingDeathWardNotice'` 期间 pipeline hard-pause，避免后续怪物
+   * 攻击 / 玩家输入抢在通知之前触发。
+   */
+  deathWardNotice: DeathWardNoticeState | null;
 
   /**
    * Queue of pre-rolled goblin "疗养"/"窃宝" dice flows that need to be
@@ -664,7 +671,7 @@ export interface GameState {
    */
   monsterFusionModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
-  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'transform-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'transform-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant'; meta?: Record<string, number> } | null;
+  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'flank-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'flank-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant'; meta?: Record<string, number> } | null;
   /**
    * 增幅：选择目标进行增幅。
    * - `scope`：'narrow' = 装备栏 + 手牌（默认，主牌堆 增幅 magic 用）；

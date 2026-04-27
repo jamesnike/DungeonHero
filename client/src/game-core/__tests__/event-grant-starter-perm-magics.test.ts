@@ -310,8 +310,8 @@ describe('Event grants for starter permanent magics — id must strip to starter
         .toBe(STARTER_CARD_IDS.stunStrike);
     });
     it('strips `-disc-{digits}-{base36}` (newly added)', () => {
-      expect(getStarterBaseId(`${STARTER_CARD_IDS.transformStreakStrike}-disc-1-xyz`))
-        .toBe(STARTER_CARD_IDS.transformStreakStrike);
+      expect(getStarterBaseId(`${STARTER_CARD_IDS.flankSlotTempAttack}-disc-1-xyz`))
+        .toBe(STARTER_CARD_IDS.flankSlotTempAttack);
     });
     it('does NOT strip ids without a leading digit segment (false-positive guard)', () => {
       // Pre-fix `flipToUndyingBlessing` produced this shape and it should

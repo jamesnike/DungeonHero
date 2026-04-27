@@ -251,3 +251,69 @@ describe('弹幕护盾 — spawned 魔弹 inherits amplifiedCardBonus', () => {
     expect(bolts.every(c => !(c as any).amplifyBonus)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6) Upgraded shields scale missile count from perfectBlockSpawnMissiles
+// ---------------------------------------------------------------------------
+
+describe('弹幕护盾 — upgraded missile count scales perfectBlockSpawnMissiles', () => {
+  it('L1 shield (armor 4, missiles 2): perfect block spawns 2 「魔弹」', () => {
+    const monster = makeMonster({ id: 'goblin', attack: 4 });
+    const shield = makeBarrageShield({
+      armor: 4,
+      armorMax: 4,
+      value: 4,
+      perfectBlockSpawnMissiles: 2,
+    } as any);
+    const state = setupBlockState(monster, shield);
+
+    const result = reduce(state, { type: 'RESOLVE_BLOCK', choice: 'shield', slotId: 'equipmentSlot1' });
+
+    const bolts = result.state.handCards.filter(c => c.name === '魔弹');
+    expect(bolts).toHaveLength(2);
+  });
+
+  it('L2 shield (armor 4, missiles 3): perfect block spawns 3 「魔弹」', () => {
+    const monster = makeMonster({ id: 'goblin', attack: 4 });
+    const shield = makeBarrageShield({
+      armor: 4,
+      armorMax: 4,
+      value: 4,
+      perfectBlockSpawnMissiles: 3,
+    } as any);
+    const state = setupBlockState(monster, shield);
+
+    const result = reduce(state, { type: 'RESOLVE_BLOCK', choice: 'shield', slotId: 'equipmentSlot1' });
+
+    const bolts = result.state.handCards.filter(c => c.name === '魔弹');
+    expect(bolts).toHaveLength(3);
+    expect(result.sideEffects.some(e =>
+      e.event === 'log:entry' && (e.payload as any)?.message?.includes('完美格挡：获得 3 张「魔弹」'),
+    )).toBe(true);
+  });
+
+  it('L2 shield with hand room = 2: only 2 「魔弹」 added (silent overflow drop), log mentions 少入 1 张', () => {
+    const monster = makeMonster({ id: 'goblin', attack: 4 });
+    const shield = makeBarrageShield({
+      armor: 4,
+      armorMax: 4,
+      value: 4,
+      perfectBlockSpawnMissiles: 3,
+    } as any);
+    const handLimit = HAND_LIMIT;
+    const state = setupBlockState(monster, shield, {
+      handCards: fillerCards(handLimit - 2),
+    });
+
+    const result = reduce(state, { type: 'RESOLVE_BLOCK', choice: 'shield', slotId: 'equipmentSlot1' });
+
+    const bolts = result.state.handCards.filter(c => c.name === '魔弹');
+    expect(bolts).toHaveLength(2);
+    expect(result.state.handCards).toHaveLength(handLimit);
+    expect(result.sideEffects.some(e =>
+      e.event === 'log:entry'
+        && (e.payload as any)?.message?.includes('完美格挡：获得 2 张「魔弹」')
+        && (e.payload as any)?.message?.includes('少入 1 张'),
+    )).toBe(true);
+  });
+});

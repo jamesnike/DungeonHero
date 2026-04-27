@@ -116,7 +116,7 @@
 - 1只精英怪出现在牌堆**前半段**（第13–30张），其余精英怪在**后半段**
 - 每6张牌中至少有1张怪物，至多2张怪物
 - 牌堆最后3张中必有1张怪物
-- 牌堆中最后一只怪物标记为"最终之敌"(`isFinalMonster: true`)
+- 牌堆中最后一只怪物在 init 时直接被烘焙为 Boss（`isFinalMonster: true` + `bossPhase: true` + `(Boss)` 名字后缀，自带 `亡灵召唤` + `复生`），详见 §9.7 最终之敌（Boss）
 
 ---
 
@@ -134,7 +134,7 @@
 
 ### 3.2 预览挤出规则
 
-- **最终之敌（Boss变身前）**：不会被挤出；如果无空位则放回**牌堆顶**
+- **最终之敌（Boss）**：不会进坟场；从预览被挤出时放回**牌堆底**（不打乱其余牌序）
 - 怪物的 `waterfallEffect.type === 'returnToDeck'`：放回牌堆（不进坟场）
 - 其他情况：弃回（Perm→回收袋，非Perm→坟场），并执行 `waterfallEffect`（如有）
 
@@ -143,7 +143,7 @@
 | 类型 | 效果 |
 |------|------|
 | `returnToDeck` | 随机插入牌堆或放底 |
-| `bonusDecay` | 所有永久伤害/护甲/法术加成 -N |
+| `bonusDecay` | 所有装备栏永久伤害/护甲 -N，超杀吸血 -N |
 | `gold` | 获得金币 |
 | `damage` | 对英雄造成伤害 |
 | `turnBoost` | `turnCount` +N |
@@ -265,11 +265,6 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 8. **完美格挡保护**：`shieldPerfectBlockSaveChance` → D20 判定免耐久消耗（在 armor 已被打穿、即将扣耐久时触发）；`shieldPerfectBlockArmorSaveChance`（守护圣盾 50%）→ D20 判定本次格挡不扣护甲值（在 armor 扣减前触发；如果保住 armor，自然也不会扣耐久）
 9. 盾牌破碎 → `disposeOwnedEquipmentCard` → 预备栏顶替
 
-### 4.10 Boss反击伤害
-
-- `bossRetaliationDamage: 3`
-- 英雄每次攻击Boss，Boss反击造成 3 点伤害
-
 ---
 
 ## 5. 装备系统 (武器与盾牌)
@@ -369,7 +364,7 @@ finalDamage = hasFlash ? floor(baseDamage / 2) : baseDamage
 |------|----------------|------|
 | Heal Amulet | `heal` | 所有回血效果翻倍 |
 | Balance Amulet | `balance` | 左栏临时攻击+3临时护甲-1，右栏临时护甲+3临时攻击-1 |
-| Life Amulet | `life` | 超杀吸血+4 |
+| Life Amulet | `life` | 超杀吸血+3 |
 | Catapult Amulet | `catapult` | 每弃置1张牌，抽2张牌 |
 | Flash Amulet | `flash` | 攻击力减半，攻击次数+1 |
 | Strength Amulet | `strength` | 临时攻击+4，每次攻击自损2HP |
@@ -654,7 +649,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - Lv.1+ `skeletonNoLayerCost`：复生后攻击不消耗血层
 - Lv.2+ `skeletonLastWordsDiscard`：遗言效果，死亡时随机弃回玩家1张手牌
 - Lv.3 `skeletonReRevive`：同行其他怪物被击败时，若已复生过，再次获得复生
-- Boss变身后也有 `hasRevive`
+- 最终之敌（Boss）开局即自带 `hasRevive: true`
 
 ### 9.6 怪物强化等级
 
@@ -677,18 +672,20 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | Swarm | WF≥4: 攻+1 血+2 + 集结 | WF≥8: 攻+2 血+4 + 集结+腐蚀甲壳 | WF≥12: 攻+3 血+6 + 集结+腐蚀甲壳+虫盾 |
 | Buglet | WF≥4: 攻+2 血+1 | WF≥8: 攻+4 血+2 | WF≥12: 攻+6 血+4 |
 
-### 9.7 最终之敌与Boss变身
+### 9.7 最终之敌（Boss）
 
-**最终之敌**：牌堆中最后一只怪物，标记 `isFinalMonster: true`
+**最终之敌**：牌堆洗牌后最后一只怪物，在 `INIT_GAME` 阶段直接被烘焙成 Boss 形态（`bakeFinalBoss` 助手函数），开局即携带：
+
+- `isFinalMonster: true`：保留瀑流挤出回牌堆底的保护
+- `bossPhase: true`：Boss 形态标记
+- `bossEnrageGraveyardSummon: 4`：自带 **亡灵召唤**（激怒时从坟场召唤 2 怪物各占 1 格 + 2 非怪物堆叠在另一格）
+- `hasRevive: true, reviveUsed: false`：自带 **复生**
+- `(Boss)` 名字后缀
+
+> **注意**：早期版本的"首次击败时变身为 Boss"流程已经移除。现在最终怪物从牌堆显示就是 Boss 形态——它**保留自己原本的种族/精英技能**（如 Skeleton 的 `skeletonNoLayerCost`、Ogre 的 `ogreStun` 等），不会获得 `bossRetaliationDamage`、攻击 +5、HP 全满等旧变身额外加成。
 
 **特殊规则：**
-- 被瀑流从预览区挤出时**不进坟场**，放回牌堆底（不打乱牌序）
-- 首次击败时触发变身（不离场）
-
-**Boss变身** (`bossPhase: true`)：
-- HP全满，血层数 = 原 `fury`
-- `hasRevive: true`
-- `bossRetaliationDamage: 3`（每次被攻击反击3点）
+- 被瀑流从预览区挤出时**不进坟场**，放回牌堆底（不打乱牌序，保留 `isFinalMonster` 检查）
 
 ### 9.8 击晕状态 (`isStunned`)
 
@@ -701,7 +698,6 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - `ogreStun`（击晕玩家）不触发
 
 **被动/反应技能（被攻击时）：**
-- `bossRetaliationDamage`（反噬）不生效
 - `bleedEffect`（流血攻击加成）不生效
 - `dragonAttackNoLayerCost`（龙鳞）不生效
 - `dragonDamageRetaliation`（龙息）不生效
@@ -717,7 +713,6 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 - `lastWords`（遗言）不触发
 - `wraithDeathHeal`（祝福）不触发
 - `wraithDeathHealSpread`（传魂）不触发
-- `isFinalMonster`（Boss变身）不触发
 
 **场地技能：**
 - `swarmSpawn`（虫群被动生成小虫子）不生效
@@ -749,7 +744,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 潮涌铸甲 | instant | 2选1获得永恒护符：A)瀑流铸剑—每次攻击该装备栏临时攻击+2；B)格挡铸甲—每次格挡该装备栏临时护甲+2。可叠加 |
 | 点金裁决 | instant | 伤害 = `getSpellDamage(gold) × echo`，回复等量HP |
 | 涌泉满手 | instant | 恢复 8 点生命，手牌补充到上限（从背包抽牌，计算差值时不算自身） |
-| 不灭守护 | instant | 濒死时自动抵消致死伤害（无需主动打出） |
+| 不灭守护 | instant | **被动一次性**：手牌中持有时，受到致死伤害自动触发，完全抵消该次伤害，弹出「知道了」单按钮通知；触发后从手牌进入坟场。无升级版本，不可手动打出 |
 | 冥途拾遗 | instant | 从坟场随机取回至多 3 张牌加入背包（不能取回自己） |
 | 怀柔令 | instant | 劝降费用永久降低 2 金币，下次劝降成功率 +10% |
 | 秘法精炼 | instant | 升级手牌中至多 2 张可升级的魔法牌 |
@@ -946,7 +941,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 充能来源 | 每次受到伤害 +1 |
 | 激活条件 | 仪表已满 |
 | 效果 | 回满生命（全回复 HP） |
-| 使用限制 | 每瀑流周期只能使用一次 (`usedThisWave`) |
+| 使用限制 | 无；仪表满即可发动，发动后清零，需重新充能 |
 
 ### 14.2 狂战士之怒 (Berserker Rage)
 
@@ -965,7 +960,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 充能来源 | 每次对自己造成伤害 +1（仅自伤，不含怪物伤害） |
 | 激活条件 | 仪表已满 |
 | 效果 | 失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活） |
-| 使用限制 | 每瀑流周期只能使用一次 (`usedThisWave`) |
+| 使用限制 | 无；仪表满即可发动，发动后清零，需重新充能 |
 
 ### 14.4 解锁与充能
 

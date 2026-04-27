@@ -29,7 +29,6 @@ import {
 import { resolveMagicPatternKey } from '@/lib/magicPatternKey';
 import { resolveEventPatternKey } from '@/lib/eventPatternKey';
 import { getOnEnterHandShortLabel } from '@/game-core/card-schema/on-enter-hand';
-import { STARTER_CARD_IDS, getStarterBaseId } from '@/game-core/deck';
 import { computeDamageMagicDisplayPure, type DamageMagicDisplay } from '@/game-core/helpers';
 import { computeMaxHp } from '@/game-core/rules/magic-effects';
 
@@ -327,6 +326,7 @@ export interface GameCardData {
   shieldBashStunRate?: number; // Per-armor-point stun % when shield-bashing a monster (e.g. 5 → 5% × armor)
   shieldBashUnlimited?: boolean; // Shield bash has no per-turn limit; can bash as long as durability remains
   reflectHalfDamage?: boolean; // Reflect half of incoming attack damage back to attacker
+  reflectFullDamage?: boolean; // Reflect full incoming attack damage back to attacker (takes precedence over reflectHalfDamage; e.g. 棘刺反盾 L2)
   // Class card properties
   classCard?: boolean; // Marks as a class card
   knightEffect?: string; // Effect dispatch key (used by class cards and some main-deck magic)
@@ -401,6 +401,19 @@ export interface GameCardData {
    * 仅在主槽（equipmentSlot1/2）触发，reserve/手牌/坟场等位置不触发。
    */
   amplifyOnFlip?: boolean;
+  /**
+   * 配合 `amplifyOnFlip`：每次翻转触发 AMPLIFY_CARDS_BY_NAME 时使用的 amount。
+   * 缺省视为 1（与 `amplifyOnFlip: true` 的历史行为一致）。
+   * 「生长之盾」L1/L2 升级把此值提升为 2，每次翻转 +2 护甲与护甲上限。
+   * 同名两槽都装备时，按 max(amount) 去重 —— 高升级覆盖低升级。
+   */
+  amplifyOnFlipAmount?: number;
+  /**
+   * 配合 `onDestroyEffect: 'graveyard-event-to-hand'`：损毁时从坟场抽出的 Event 张数。
+   * 缺省为 1（与基础卡行为一致）。「生长之盾」L2 升级把此值提升为 3。
+   * 抽取按"无放回"循环：每张抽完后从剩余坟场再随机；坟场 Event 不足时静默截断。
+   */
+  onDestroyEventCount?: number;
   onDiscardDamage?: number; // Base spell damage dealt to random monster when discarded
   onDiscardDraw?: number; // Draw this many cards from backpack when discarded
   critChance?: number; // % chance to deal double damage on attack
@@ -410,6 +423,7 @@ export interface GameCardData {
   onAttackRepairOtherSlot?: number; // Restore N durability to the OTHER equipment slot on each attack
   onAttackDebuffAllMonsterAttack?: number; // Reduce ALL active row monsters' attack by N on each attack
   onAttackAmplifyMissileGenerate?: boolean; // After each attack: amplify '魔弹' +1 globally and add a (newly amplified) bolt to backpack (overflow → recycle bag)
+  onAttackAmplifyMissileGenerateCount?: number; // Override # of bolts spawned per overkill (default 1; e.g. 魔弹连弩 L2 sets to 2)
   daggerSelfDestructDiscover?: boolean; // 匕首: after attack, optionally destroy weapon to discover class cards (1 per remaining durability)
   ghostBladeExile?: boolean; // 虚灵刀: after each attack, offer to exile cards from graveyard
   postAttackHandRecycle?: boolean; // After each attack, optionally move a hand card to recycle bag and draw one
@@ -523,11 +537,12 @@ export function formatScalingSpellDamageLine(scalingBase: number): string {
 }
 
 export function useArcaneStormDamage(): number {
-  // 与 resolveArcaneStorm 一致：读 arcaneStormMagicCount（不含奥术风暴自身）。
-  // 该字段仅在「使用奥术风暴」与「瀑流」时清零，跨回合累计。
+  // 与 formatScalingSpellDamageLine 同款风格：仅显示 raw gain（累计魔法卡数 + amplifyBonus
+  // 在 callsite 加），**不含**永久法术加成 / 法术回响 / stunCap 上限。
+  // 读 arcaneStormMagicCount（不含奥术风暴自身），该字段仅在「使用奥术风暴」与「瀑流」时
+  // 清零，跨回合累计。
   const magicCount = useGameState(s => s.arcaneStormMagicCount);
-  const spellBonus = useGameState(s => s.permanentSpellDamageBonus);
-  return Math.max(0, magicCount + spellBonus);
+  return Math.max(0, magicCount);
 }
 
 /**
@@ -542,9 +557,10 @@ export function useArcaneShieldStunGain(): number {
 }
 
 /**
- * 连环转律 (transformStreakStrike) — 预测此刻打出该卡造成的纯转型链伤害。
- * 不含 spell-damage 加成 / amplifyBonus / echo（与 card-schema/definitions/magic.ts
- * 的 `computePredictedTransformStreak` 保持一致的 raw streak 语义）。
+ * 连环转律 (knightEffect: transform-streak-strike) — 预测此刻打出该卡造成的
+ * 纯转型链伤害。不含 spell-damage 加成 / amplifyBonus / echo（与
+ * card-schema/definitions/magic.ts 的 `computePredictedTransformStreak`
+ * 保持一致的 raw streak 语义）。
  *
  *   prevChainCat == null            → { damage: 1, broken: false }（链空，本牌起头）
  *   prevChainCat === 'perm-magic'   → { damage: 0, broken: true }（同类型断链）
@@ -687,7 +703,7 @@ function GameCardInner({
   const damageMagicDisplay = useDamageMagicDisplay(card);
   const isTransformStreakStrike =
     card.type === 'magic'
-    && getStarterBaseId(card.id) === STARTER_CARD_IDS.transformStreakStrike;
+    && (card as any).knightEffect === 'transform-streak-strike';
   const [isDragging, setIsDragging] = useState(false);
   const [cardScale, setCardScale] = useState(1);
   const [cardWidthPx, setCardWidthPx] = useState(BASE_CARD_WIDTH);
@@ -1967,11 +1983,13 @@ const amuletEffectText =
                         <div className="flex items-baseline gap-0">
                           {(card.type === 'shield' && card.armorMax != null && card.armorMax > 0) ? (() => {
                             // Single-counter armor display: Z = current armor (live counter,
-                            // defaults to cap when undefined). Cap = baseArmorMax + permBonus.
+                            // defaults to cap when undefined). Cap = max(0, baseArmorMax + permBonus).
+                            // permBonus may be negative (e.g. bonusDecay or amuletCapacity-1
+                            // events make slot perm shield go negative); clamp final cap at 0.
                             // No more X+Y split — show just one number.
                             const baseArmorMax = card.armorMax!;
                             const permBonus = equipmentStatModifier?.permanentShieldBonus ?? 0;
-                            const cap = baseArmorMax + permBonus;
+                            const cap = Math.max(0, baseArmorMax + permBonus);
                             const currentArmor = card.armor === undefined
                               ? cap
                               : Math.max(0, Math.min(card.armor, cap));

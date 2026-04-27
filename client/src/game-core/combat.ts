@@ -708,7 +708,12 @@ export function computeDamage(
     };
   }
 
-  if (remaining >= safeHp && hasDeathWardCard && !state.deathWardPrompt) {
+  // 不灭守护：致死伤害命中时由 reduceApplyDamage 自动消耗手牌里的卡片，
+  // 把伤害归零并弹出单按钮通知。computeDamage 自身是纯函数，只负责标记
+  // `needsDeathWard`，由 reducer 决定要不要触发。
+  // 注：旧实现用 `!state.deathWardPrompt` 防止重入；现在 reducer 直接把卡从
+  // 手牌移走，重入条件靠「手牌里还有卡」自动满足，computeDamage 无需自己 gate。
+  if (remaining >= safeHp && hasDeathWardCard) {
     return {
       hp: safeHp,
       tempShield,
@@ -1232,36 +1237,6 @@ export function applyLowGoldEliteBuff(
 
   if (!changed) return null;
   return { activeCards: next as ActiveRowSlots, logs, banners };
-}
-
-// ---------------------------------------------------------------------------
-// Boss transformation
-// ---------------------------------------------------------------------------
-
-export function createBossCard(monster: GameCardData): GameCardData {
-  const fullHp = monster.maxHp ?? monster.hp ?? monster.value ?? 0;
-  const layers = monster.fury ?? monster.hpLayers ?? 2;
-  return {
-    ...monster,
-    // Clear ephemeral combat state from the old form — Boss is a fresh form.
-    // 与 resetMonsterForGraveyard 的清单一致（除 tempAttackBoost 外，下面会单独累加 +5）。
-    isStunned: false,
-    defeatProcessed: false,
-    specialAttackBoost: 0,
-    tempHpBoost: 0,
-    lowGoldBuffActive: false,
-    bossPhase: true,
-    currentLayer: layers,
-    hp: fullHp,
-    hasRevive: true,
-    reviveUsed: false,
-    bossEnrageGraveyardSummon: 4,
-    attack: (monster.attack ?? monster.value ?? 0) + 5,
-    value: (monster.value ?? 0) + 5,
-    tempAttackBoost: (monster.tempAttackBoost ?? 0) + 5,
-    name: `${monster.name} (Boss)`,
-    description: `Boss形态！激怒时从坟场召唤2怪物各占1格（顶层，恢复1血层）+ 2非怪物堆叠在另一格。`,
-  };
 }
 
 // ---------------------------------------------------------------------------

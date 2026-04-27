@@ -29,7 +29,6 @@ export interface HeroMagicDisplayInfo {
   gaugeMax: number;
   unlocked: boolean;
   ready: boolean;
-  usedThisWave: boolean;
   chargeHint: string;
   disabledReason?: string;
 }
@@ -305,7 +304,7 @@ export default function HeroDetailsModal({
                         <Flame className="w-4 h-4 text-amber-500" />
                         <span className="text-xl font-semibold text-foreground">{magic.name}</span>
                         <Badge variant={magic.ready ? 'default' : 'secondary'} className="ml-auto">
-                          {magic.ready ? t('hero.magic.ready') : magic.usedThisWave ? t('hero.magic.used') : t('hero.magic.charging')}
+                          {magic.ready ? t('hero.magic.ready') : t('hero.magic.charging')}
                         </Badge>
                       </div>
                       <p className="text-sm leading-relaxed text-muted-foreground">{def.description}</p>

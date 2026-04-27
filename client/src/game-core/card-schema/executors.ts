@@ -551,21 +551,23 @@ function executeGrantPerm2(ctx: ExecutionContext, _effect: CardEffect): void {
 }
 
 function executeTransformRecycleGrant(ctx: ExecutionContext, _effect: CardEffect): void {
-  const eligible = ctx.state.handCards.filter(c => c.id !== ctx.card.id && !c.transformBonus);
+  // 历史命名沿用 'transform-recycle-grant'（effectId），但触发条件已经改成「侧击」。
+  // grant 的字段从 transformBonus / transformEffect 切到 flankEffect / flankEffectId。
+  const eligible = ctx.state.handCards.filter(c => c.id !== ctx.card.id && !c.flankEffect);
   if (eligible.length === 0) {
-    log(ctx, 'potion', '唤回秘药：手牌中没有可赋予转型效果的卡牌。');
-    banner(ctx, '手牌中没有可赋予转型效果的卡牌。');
+    log(ctx, 'potion', '唤回秘药：手牌中没有可赋予侧击效果的卡牌。');
+    banner(ctx, '手牌中没有可赋予侧击效果的卡牌。');
     return;
   }
   if (eligible.length === 1) {
     const target = eligible[0];
     ctx.patch.handCards = ctx.state.handCards.map(c =>
       c.id === target.id
-        ? { ...c, transformBonus: '弃 1 张手牌·回收袋取 1 张', transformEffect: 'discard-recycle-to-hand:1' }
+        ? { ...c, flankEffect: '弃 1 张手牌·回收袋取 1 张', flankEffectId: 'discard-recycle-to-hand:1' }
         : c,
     );
-    log(ctx, 'potion', `唤回秘药：「${target.name}」获得转型效果！`);
-    banner(ctx, `「${target.name}」获得转型：弃 1 张手牌，回收袋取回 1 张！`);
+    log(ctx, 'potion', `唤回秘药：「${target.name}」获得侧击效果！`);
+    banner(ctx, `「${target.name}」获得侧击：弃 1 张手牌，回收袋取回 1 张！`);
     return;
   }
   ctx.patch.permGrantModal = { sourceCardId: ctx.card.id, sourceType: 'transform-recycle-grant' };

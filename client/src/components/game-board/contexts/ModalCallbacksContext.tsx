@@ -67,8 +67,8 @@ export interface ModalCallbacks {
   onCancelPotionAction: () => void;
   onPotionChoiceSelection: (choice: 'repair' | 'upgrade') => void;
 
-  onDeathWardConfirm: () => void;
-  onDeathWardDecline: () => void;
+  /** 不灭守护自动触发后，玩家点「知道了」按钮的关闭回调（无选项）。 */
+  onDismissDeathWardNotice: () => void;
   onDaggerSelfDestructConfirm: () => void;
   onDaggerSelfDestructDecline: () => void;
   onSkillSelection: (skillId: string) => void;

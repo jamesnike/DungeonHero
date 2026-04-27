@@ -10,6 +10,15 @@ import { FLIP_GOLD_REWARD } from './constants';
 import { getUpgradeTierCount } from '@/lib/monsterRage';
 import type { RngState } from './rng';
 import { nextInt, nextBool, shuffle as rngShuffle, pickRandom, nextId } from './rng';
+import { applyDerivedCardText } from './card-schema/card-text';
+// NB: formatter registrations live in `./card-schema/definitions/card-text`,
+// but importing it here would create a circular dep
+// (`definitions/card-text` reads `STARTER_CARD_IDS` from this file).
+// `cardUpgrade.ts` imports the definitions at module load, and is reached via
+// the reducer chain (shop.ts → cardUpgrade) before any `INIT_GAME` runs, so
+// the registry is populated by the time `createDeck` / `createStarterCardPool`
+// run in app code. Tests that exercise `applyDerivedCardText` already import
+// `cardUpgrade` (directly or via the reducer) and inherit the same guarantee.
 
 // ---------------------------------------------------------------------------
 // Monster images
@@ -393,7 +402,7 @@ export function createDeck(
         minAttack: 4, maxAttack: 5,
         minHp: 4, maxHp: 5,
         minFury: 2, maxFury: 4,
-        waterfallEffect: { type: 'bonusDecay' as const, amount: 1, description: '被挤出时：所有永久伤害/护甲/法术加成 -1' },
+        waterfallEffect: { type: 'bonusDecay' as const, amount: 1, description: '被挤出时：所有装备栏永久伤害/护甲 -1，超杀吸血 -1' },
       },
       { 
         name: 'Wraith',
@@ -549,7 +558,7 @@ export function createDeck(
       }
       if (type === 'Ogre') {
         chosen.eliteDoubleAttack = true;
-        chosen.waterfallEffect = { type: 'bonusDecay', amount: 3, description: '被挤出时：所有永久伤害/护甲/法术加成 -3' };
+        chosen.waterfallEffect = { type: 'bonusDecay', amount: 3, description: '被挤出时：所有装备栏永久伤害/护甲 -3，超杀吸血 -3' };
       }
       if (type === 'Wraith') {
         chosen.lastWords = 'wraith-haunt-4';
@@ -892,8 +901,8 @@ export function createDeck(
       name: 'Life Amulet',
       value: 5,
       image: lifestealAmuletImage,
-      description: '超杀吸血+4。',
-      shortDescription: '超杀吸血 +4',
+      description: '超杀吸血+3。',
+      shortDescription: '超杀吸血 +3',
       amuletEffect: 'life',
     },
     {
@@ -1037,8 +1046,6 @@ export function createDeck(
     value: 0,
     image: dedupeMagicUnderworldRelicImage,
     magicType: 'instant',
-    magicEffect: '坟场随机取回 3 张牌。',
-    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。',
     shortDescription: '坟场随机取至多 3 张入背包',
     knightEffect: 'graveyard-recall',
     maxUpgradeLevel: 3,
@@ -1051,9 +1058,6 @@ export function createDeck(
     value: 0,
     image: persuadeScrollCharmImage,
     magicType: 'instant',
-    magicEffect: '劝降费用永久 -2，下次成功率 +10%。',
-    description: '一次性：劝降费用永久降低 2 金币，下次劝降成功率 +10%。',
-    shortDescription: '劝降费用永久 -2；下次成功率 +10%',
     knightEffect: 'persuade-discount',
     maxUpgradeLevel: 2,
   });
@@ -2149,9 +2153,9 @@ export function createDeck(
       },
       {
         id: 'altar-transform-gold',
-        text: '选择手牌赋予「转型：+3金币」',
-        effect: 'grantTransformGold:3',
-        hint: '选择一张手牌，赋予转型效果（打出前一张牌类型不同时获得 3 金币）',
+        text: '选择手牌赋予「侧击：+3金币」',
+        effect: 'grantFlankGold:3',
+        hint: '选择一张手牌，赋予侧击效果（打出时位于手牌最左/最右侧时触发，获得 3 金币）',
         requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
         skipFlip: true,
       },
@@ -2208,8 +2212,8 @@ export function createDeck(
         diceTable: [
           { id: 'shrine-flank-persuade', range: [1, 3] as [number, number], label: '侧击：劝降费用永久 -1', effect: 'grantFlankPersuadeCost:1' },
           { id: 'shrine-flank-stun', range: [4, 6] as [number, number], label: '侧击：击晕上限 +5%', effect: 'grantFlankStunCap:5' },
-          { id: 'shrine-transform-draw', range: [7, 9] as [number, number], label: '转型：抽 2 张牌', effect: 'grantTransformDraw:2' },
-          { id: 'shrine-transform-heal', range: [10, 13] as [number, number], label: '转型：恢复 2 HP', effect: 'grantTransformHeal:2' },
+          { id: 'shrine-transform-draw', range: [7, 9] as [number, number], label: '转型：抽 1 张牌', effect: 'grantTransformDraw:1' },
+          { id: 'shrine-transform-heal', range: [10, 13] as [number, number], label: '侧击：恢复 2 HP', effect: 'grantFlankHeal:2' },
           { id: 'shrine-flank-damage', range: [14, 17] as [number, number], label: '侧击：对随机怪物造成 5 点伤害', effect: 'grantFlankDamage:5' },
           { id: 'shrine-onhand-heal', range: [18, 20] as [number, number], label: '上手：恢复 1 HP', effect: 'grantHandOnHandHeal:1' },
         ],
@@ -2401,7 +2405,12 @@ export function createDeck(
     }
   }
 
-  return [randShuffle(deck), cur];
+  // Apply formatter-derived text at level 0 to every card in the deck. This
+  // makes the formatter the single source of truth for `description` /
+  // `shortDescription` / `magicEffect` on initial deal — mirroring the
+  // overwrite that `applyUpgrade` performs after each upgrade.
+  const finalDeck = randShuffle(deck).map(c => applyDerivedCardText(c));
+  return [finalDeck, cur];
 }
 
 // ---------------------------------------------------------------------------
@@ -2468,7 +2477,6 @@ export const STARTER_CARD_IDS = {
   flipOverkillLifestealAmulet: 'starter-amulet-flip-overkill-lifesteal',
   equipAmuletCapAmulet: 'starter-amulet-equip-amulet-cap',
   stunAttemptDiscoverAmulet: 'starter-amulet-stun-attempt-discover',
-  transformStreakStrike: 'starter-perm-transform-streak-strike',
   flankSlotTempAttack: 'starter-perm-flank-slot-temp-attack',
   deckTopSwapGold: 'starter-perm-deck-top-swap-gold',
   discoverClassToHand: 'starter-perm-discover-class-to-hand',
@@ -2608,8 +2616,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterCombatRallyImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备栏，临时攻击力 +2。',
-      description: '选择一个装备栏，临时攻击力 +2（瀑流后重置）。',
       shortDescription: '所选栏 +2 临时攻',
       maxUpgradeLevel: 2,
     },
@@ -2621,8 +2627,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: dedupeStarterFineRepairImage,
       unique: true,
       magicType: 'permanent',
-      magicEffect: '永久魔法：失去 2 点生命，选择一个装备恢复 1 点耐久。',
-      description: '失去 2 点生命，选择一个装备恢复 1 点耐久。',
       shortDescription: '失去 2 生命；一件装备 +1 耐久',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
@@ -2634,8 +2638,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterDiscardDrawImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：将 1 张手牌移到回收袋，从背包抽 2 张牌。',
-      description: '将 1 张手牌移到回收袋，从背包抽取 2 张新牌。',
       shortDescription: '弃 1 张手牌入回收袋；抽 2 张',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
@@ -2682,7 +2684,7 @@ export function createStarterCardPool(): GameCardData[] {
       description: '选择当前行一张可翻转或已翻转的卡牌，将其翻转到另一面。',
       shortDescription: '翻转激活行一张可翻牌',
       recycleDelay: 2,
-      maxUpgradeLevel: 0,
+      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.trainingBlade,
@@ -2701,8 +2703,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollArmorImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备栏，+2 临时护甲。升级1：+4。升级2：+6。',
-      description: '选择一个装备栏，+2 临时护甲。升级1：+4。升级2：+6。',
       shortDescription: '所选栏 +2 临时护（Lv1: +4 / Lv2: +6）',
       maxUpgradeLevel: 2,
     },
@@ -2921,8 +2921,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollSummonImage,
       magicType: 'instant',
-      magicEffect: '即时魔法：弃回至多 2 张牌，获得一张职业专属卡。',
-      description: '弃回至多 2 张手牌，获得一张职业专属卡。手牌不足 2 张时仍可使用。',
       shortDescription: '弃回至多 2 张手牌，获得 1 张职业牌',
       maxUpgradeLevel: 1,
     },
@@ -2946,7 +2944,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterAmuletLoneImage,
       amuletEffect: 'lone-card',
-      description: '每次瀑流时（回收前），若背包卡牌数量为 1，获得一张职业专属牌。',
       shortDescription: '瀑流时若背包仅 1 张：获得 1 张职业牌',
     },
     {
@@ -2956,7 +2953,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletPersuadeDiscountImage,
       amuletEffect: 'attack-persuade-discount',
-      description: '每攻击一次，下次劝降费用 -3（可叠加）。',
       shortDescription: '每次攻击下次劝降费用 -3（可叠加）',
     },
     {
@@ -2966,7 +2962,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletMissileImage,
       amuletEffect: 'card-gain-missile',
-      description: '每从坟场获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
       shortDescription: '每次从坟场获牌：入手 1 张「魔弹」',
     },
     {
@@ -2976,7 +2971,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletDamageDiscoverImage,
       amuletEffect: 'damage-class-discover',
-      description: '每造成 8 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
       shortDescription: '每造成 8 次伤害：发现 1 张专属',
     },
     {
@@ -2996,8 +2990,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletStunCapImage,
       amuletEffect: 'stun-upgrade-cap',
-      description: '每击晕一次怪物，击晕上限 +5%。',
-      shortDescription: '每击晕怪物 1 次：击晕上限 +5%',
     },
     {
       id: STARTER_CARD_IDS.recycleBackpackExpandAmulet,
@@ -3006,7 +2998,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletRecycleExpandImage,
       amuletEffect: 'recycle-backpack-expand',
-      description: '每回收 8 张牌，背包上限 +3。',
       shortDescription: '每回收 8 张牌：背包上限 +3',
     },
     {
@@ -3016,7 +3007,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterAmuletDungeonGoldImage,
       amuletEffect: 'dungeon-gold',
-      description: '每处理 1 张地城牌，金币 +1。',
       shortDescription: '每处理 1 张地城牌：+1 金币',
     },
     {
@@ -3067,8 +3057,6 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterScrollReviveImage,
       unique: true,
       magicType: 'permanent',
-      magicEffect: '永久魔法：选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），然后失去 2 点生命。',
-      description: '赋予装备复生能力，失去 2 点生命。已复生的装备可再次赋予。',
       shortDescription: '一件装备获得复生；失去 2 生命',
       recycleDelay: 2,
       maxUpgradeLevel: 1,
@@ -3081,10 +3069,11 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterScrollRecallImage,
       unique: true,
       magicType: 'permanent',
-      magicEffect: '永久魔法：回手一张牌，抽 1 张牌。',
-      description: '回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌。',
-      shortDescription: '回手 1 张装备/护符；抽 1 张',
+      magicEffect: '永久魔法：回手一张牌。',
+      description: '回手一张牌（从装备栏或护符栏选择）。',
+      shortDescription: '回手 1 张装备/护符',
       knightEffect: 'recall-equipment',
+      maxUpgradeLevel: 1,
     },
     {
       id: STARTER_CARD_IDS.magicMissile,
@@ -3093,8 +3082,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterMagicMissileImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：手上加入 2 张一次性「魔弹」。',
-      description: '加入 2 张一次性「魔弹」到手牌（每张可对一个怪物造成 1 点法术伤害）。',
       shortDescription: '手上加入 2 张「魔弹」',
       maxUpgradeLevel: 2,
     },
@@ -3105,8 +3092,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollGamblerImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：失去 1 点生命，获得 1 金币，从背包抽 1 张牌。',
-      description: '失去 1 点生命，获得 1 金币，从背包抽 1 张牌。',
       shortDescription: '-1 生命；+1 金币；抽 1 张',
       maxUpgradeLevel: 2,
     },
@@ -3118,14 +3103,11 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterScrollRecycleEchoImage,
       unique: true,
       magicType: 'permanent',
-      magicEffect: '永久魔法：使用：随机将回收袋的 1 张牌剩余瀑流 -1（就绪的牌进背包）。',
-      description: '使用：随机将回收袋的 1 张牌剩余瀑流 -1（就绪的牌进背包）。',
-      shortDescription: '随机 1 张回收袋牌瀑流 -1',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
     },
     {
-      // 查阅动作 (Survey Action) — 起始背包 Perm 1：从背包抽 2 张牌。
+      // 查阅动作 (Survey Action) — 起始背包 Perm 1：从背包抽 1 张牌。
       // 上手：随机一个装备栏 临时攻击 +1（升级后 +2）。
       id: STARTER_CARD_IDS.surveyAction,
       type: 'magic',
@@ -3133,9 +3115,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterDiscardDrawImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：从背包抽 2 张牌。',
-      description: '从背包抽 2 张牌。\n上手：随机一个装备栏 临时攻击 +1。',
-      shortDescription: '抽 2 张；上手随机一栏 +1 临时攻',
       recycleDelay: 1,
       onEnterHandEffect: 'survey-action-onhand',
       maxUpgradeLevel: 1,
@@ -3252,8 +3231,6 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterThunderStrikeImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：对一个怪物造成 1 点伤害 2 次，每次 20% 击晕。',
-      description: '对一个怪物造成 1 点法术伤害 2 次，每次有 20% 概率击晕目标。',
       shortDescription: '1 法伤 ×2；每次 20% 击晕',
       recycleDelay: 1,
       maxUpgradeLevel: 2,
@@ -3261,28 +3238,13 @@ export function createStarterCardPool(): GameCardData[] {
     {
       // 不设 `magicEffect`：避免被 `resolveEffectId` 短路到 `magic:<long-text>`。
       // 走 starter-id 路径，由 card-schema/definitions/magic.ts 的
-      // `starter:starter-perm-transform-streak-strike` resolver 处理。
-      id: STARTER_CARD_IDS.transformStreakStrike,
-      type: 'magic',
-      name: '连环转律',
-      value: 0,
-      image: dedupeStarterCombatRallyImage,
-      magicType: 'permanent',
-      description: '造成 X 点法术伤害，X 为此前连续转型的次数（含本牌）。同类型连出会断链。',
-      shortDescription: '伤害 ＝ 连续转型次数',
-      recycleDelay: 2,
-      maxUpgradeLevel: 0,
-    },
-    {
-      // 同上：不设 `magicEffect`，走 starter-id 路径。
+      // `starter:starter-perm-flank-slot-temp-attack` resolver 处理。
       id: STARTER_CARD_IDS.flankSlotTempAttack,
       type: 'magic',
       name: '锐意鼓舞',
       value: 0,
       image: dedupeStarterCombatRallyImage,
       magicType: 'permanent',
-      description: '左装备栏 +3 临时攻击；侧击则改为右装备栏 +3。升级 1：+5。',
-      shortDescription: '左栏 +3 临时攻；侧击改右栏 +3',
       recycleDelay: 1,
       maxUpgradeLevel: 1,
     },
@@ -3294,12 +3256,10 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterWorldSwapImage,
       magicType: 'permanent',
-      description: '与牌堆顶交换一张当前行卡牌；同类型奖励 +10 金币，否则 -1。然后抽 1 张牌。',
-      shortDescription: '与牌堆顶互换 1 张；同类 +10 金币；抽 1 张',
       recycleDelay: 2,
-      maxUpgradeLevel: 0,
+      maxUpgradeLevel: 1,
     },
-  ];
+  ].map(c => applyDerivedCardText(c as GameCardData));
 }
 
 // ---------------------------------------------------------------------------

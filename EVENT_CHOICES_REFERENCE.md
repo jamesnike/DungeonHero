@@ -194,7 +194,7 @@
 | 效果 | 产物名 | 类型 | 描述 | 去向 |
 |------|--------|------|------|------|
 | `flipToCurse` | 血咒之印 | 永久魔法（诅咒） | 使用和弃置时，都失去 3 点生命值 | 背包 |
-| `flipToRecallEquip` | 回收术 | 永久魔法 | 回手一张牌（从装备栏或护符栏选择），然后抽 1 张牌 | 背包 |
+| `flipToRecallEquip` | 回收术 | 永久魔法 | 失去 2 点生命，回手一张牌（从装备栏或护符栏选择） | 背包 |
 | `flipToUndyingBlessing` | 不灭赐福 | 永久魔法 | 选择一个装备，赋予其复生（首次毁坏时以 1 耐久复生），失去 2 点生命 | 背包 |
 | `guildFlipToMagic` | 血金术 | 永久魔法 | 使用时受到 1 点伤害，获得 2 金币 | 背包 |
 
@@ -480,8 +480,8 @@
 |------|------|------|
 | 1-3 | 侧击：劝降费用永久 -1 | `grantFlankPersuadeCost:1` |
 | 4-6 | 侧击：击晕上限 +5% | `grantFlankStunCap:5` |
-| 7-9 | 转型：抽 2 张牌 | `grantTransformDraw:2` |
-| 10-13 | 转型：恢复 2 HP | `grantTransformHeal:2` |
+| 7-9 | 转型：抽 1 张牌 | `grantTransformDraw:1` |
+| 10-13 | 侧击：恢复 2 HP | `grantFlankHeal:2` |
 | 14-17 | 侧击：对随机怪物造成 5 点伤害 | `grantFlankDamage:5` |
 | 18-20 | 上手：恢复 1 HP | `grantHandOnHandHeal:1` |
 

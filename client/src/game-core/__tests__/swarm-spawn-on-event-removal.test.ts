@@ -15,8 +15,13 @@
  * which fires whenever ANY action clears a non-Buglet card from a dungeon
  * slot and leaves it empty (event resolution, magic, combat, manual remove).
  *
- * Stack-pop wins: if a slot is repopulated from a stacked card, postProcess
- * sees `curr` non-null and skips the spawn.
+ * Swarm wins over stack-pop (updated): the player intent (per
+ * CARD_POOL_REFERENCE.md "每移除一张地城牌，在该位置生成一只小虫子") is that
+ * ANY dungeon-card removal triggers swarm spawn — including stack-pop.
+ * Both `reduceCompleteEvent` (events.ts) and `removeCard` (GameBoard.tsx)
+ * detect Swarm presence and force a slot-clear when present, leaving the
+ * stacked card untouched at the top of `activeCardStacks` so it pops up
+ * naturally after the spawned Buglet is later defeated.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -135,7 +140,11 @@ describe('Swarm passive — buglet spawn on COMPLETE_EVENT slot clear', () => {
     expect(result.state.activeCards[0]).toBeNull();
   });
 
-  it('skips swarm spawn if a stacked card pops into the cleared slot first', () => {
+  it('spawns a buglet AT the slot when a stacked card is below, leaving the stacked card on top of activeCardStacks', () => {
+    // Swarm wins over stack-pop: per design, every dungeon-card removal
+    // triggers swarm spawn — including when the slot would have stack-popped.
+    // The buglet appears at the slot, and the stacked card stays in the
+    // stack (ready to pop after the buglet is later defeated).
     const eventCard = makeEventCard();
     const swarm = makeSwarmMonster();
     const stackedCard: GameCardData = {
@@ -160,8 +169,23 @@ describe('Swarm passive — buglet spawn on COMPLETE_EVENT slot clear', () => {
     const result = reduce(state, { type: 'COMPLETE_EVENT', skipFlip: true });
 
     const slotAfter = result.state.activeCards[0];
-    expect(slotAfter?.id).toBe(stackedCard.id);
-    expect(slotAfter?.isBuglet).toBeUndefined();
+    expect(slotAfter).not.toBeNull();
+    expect(slotAfter?.isBuglet).toBe(true);
+    expect(slotAfter?.id).not.toBe(stackedCard.id);
+
+    expect(result.state.activeCardStacks[0]).toBeDefined();
+    expect(result.state.activeCardStacks[0]).toHaveLength(1);
+    expect(result.state.activeCardStacks[0]?.[0]?.id).toBe(stackedCard.id);
+
+    expect(
+      result.sideEffects.some(
+        e =>
+          e.event === 'combat:autoEngage' &&
+          (e.payload as { monsterId: string }).monsterId === slotAfter?.id,
+      ),
+    ).toBe(true);
+
+    expect(result.state.processedDungeonCardIds).not.toContain(eventCard.id);
   });
 
   it('does NOT spawn when the only Swarm monster is stunned', () => {
@@ -179,6 +203,61 @@ describe('Swarm passive — buglet spawn on COMPLETE_EVENT slot clear', () => {
     const result = reduce(state, { type: 'COMPLETE_EVENT', skipFlip: true });
 
     expect(result.state.activeCards[0]).toBeNull();
+  });
+
+  it('GameBoard removeCard path: swarm spawn replaces stack-pop, stacked card stays in activeCardStacks', () => {
+    // Mirrors what `removeCard` in GameBoard.tsx now dispatches when a
+    // Swarm monster is present on the row: UPDATE_ACTIVE_CARDS with
+    // slot[col] = null, NO SET_ACTIVE_CARD_STACKS (stacks unchanged),
+    // NO REGISTER_DUNGEON_CARD_PROCESSED (postProcess step 3 will skip
+    // step 4 register because curr=buglet after spawn). Asserts the
+    // reducer-side contract the hook fix relies on.
+    const topMonster: GameCardData = {
+      id: 'top-monster',
+      type: 'monster',
+      name: 'Top',
+      value: 4,
+      hp: 4,
+      maxHp: 4,
+      attack: 2,
+    } as GameCardData;
+    const stackedMonster: GameCardData = {
+      id: 'stacked-monster',
+      type: 'monster',
+      name: 'Stacked',
+      value: 3,
+      hp: 3,
+      maxHp: 3,
+      attack: 2,
+    } as GameCardData;
+    const swarm = makeSwarmMonster();
+    const slots = Array.from({ length: 5 }, () => null) as any;
+    slots[0] = topMonster;
+    slots[1] = swarm;
+
+    const state = makeState({
+      activeCards: slots,
+      activeCardStacks: { 0: [stackedMonster] },
+    });
+
+    const result = reduce(state, {
+      type: 'UPDATE_ACTIVE_CARDS',
+      updater: (prev: any) => {
+        const next = [...prev];
+        next[0] = null;
+        return next;
+      },
+    } as any);
+
+    const slotAfter = result.state.activeCards[0];
+    expect(slotAfter).not.toBeNull();
+    expect(slotAfter?.isBuglet).toBe(true);
+
+    expect(result.state.activeCardStacks[0]).toBeDefined();
+    expect(result.state.activeCardStacks[0]).toHaveLength(1);
+    expect(result.state.activeCardStacks[0]?.[0]?.id).toBe(stackedMonster.id);
+
+    expect(result.state.processedDungeonCardIds).not.toContain(topMonster.id);
   });
 
   it('does NOT count the buglet as a "processed dungeon card" for auto-draw / dungeon-gold amulet', () => {

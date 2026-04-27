@@ -456,7 +456,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
     switch (amulet.amuletEffect) {
       case 'heal': effects.healCount += 1; break;
       case 'balance': effects.balanceCount += 1; break;
-      case 'life': effects.lifeOverkillBonus += 4; break;
+      case 'life': effects.lifeOverkillBonus += 3; break;
       case 'catapult': effects.catapultCount += 1; break;
       case 'flash': effects.flashCount += 1; break;
       case 'strength': effects.strengthCount += 1; break;
@@ -484,7 +484,10 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'attack-persuade-discount': effects.attackPersuadeDiscountCount += 1; break;
       case 'card-gain-missile': effects.cardGainMissileCount += 1; break;
       case 'swap-upgrade': effects.swapUpgradeCount += 1; break;
-      case 'stun-upgrade-cap': effects.stunUpgradeCapCount += 1; break;
+      case 'stun-upgrade-cap':
+        effects.stunUpgradeCapCount += 1;
+        effects.stunUpgradeCapBonus += upgradeLevel >= 1 ? 12 : 8;
+        break;
       case 'recycle-backpack-expand': effects.recycleBackpackExpandCount += 1; break;
       case 'dungeon-gold': effects.dungeonGoldCount += 1; break;
       case 'waterfall-heal': effects.waterfallHealCount += 1; break;

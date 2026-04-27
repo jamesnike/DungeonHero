@@ -84,7 +84,6 @@ interface HeroMagicUiState {
   gaugeMax: number;
   unlocked: boolean;
   ready: boolean;
-  usedThisWave: boolean;
   chargeHint: string;
   disabledReason?: string;
 }
@@ -305,7 +304,7 @@ function HeroCardInner({
       <div
         className={`pointer-events-none absolute left-1/2 z-30 grid whitespace-nowrap dh-hero-chip ${isFlat ? 'gap-x-0.5' : 'gap-x-1'}`}
         style={{
-          top: 'calc(-1 * var(--dh-grid-gap-y) / 2)',
+          top: 'calc(-1 * var(--dh-grid-gap-y) / 2 - 0.9rem)',
           transform: 'translate(-50%, -50%)',
           gridTemplateColumns: 'auto auto',
           justifyItems: 'center',

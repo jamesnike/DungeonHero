@@ -174,9 +174,14 @@ function postProcessActiveCards(
   //    the design intent that 「每移除一张地城牌」 should spawn a buglet,
   //    regardless of code path.
   //
-  //    Stack-pop wins over swarm spawn: if a slot was repopulated from a
-  //    stacked card before postProcess runs (events.ts COMPLETE_EVENT,
-  //    removeCard hook), `curr` is non-null and we skip the spawn.
+  //    Swarm wins over stack-pop: when a Swarm monster is present, both
+  //    `removeCard` (GameBoard.tsx) and `reduceCompleteEvent` (events.ts)
+  //    detect the presence and force the slot to null INSTEAD of popping
+  //    the stack. The stacked card stays at the top of `activeCardStacks`
+  //    untouched, ready to pop up after the spawned Buglet is later
+  //    defeated. So when this branch sees `prev && !curr`, the stacked
+  //    card (if any) is preserved — we only set `activeCards[col] = buglet`
+  //    here, never touch `activeCardStacks`.
   //
   //    NOTE: Runs BEFORE step 4 (REGISTER_DUNGEON_CARD_PROCESSED) so that
   //    swarm-replaced slots don't get counted as "processed" — preserves the
