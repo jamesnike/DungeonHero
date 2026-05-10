@@ -295,7 +295,7 @@ export type PendingMagicAction =
       effect: 'transform-repair';
       step: 'slot-select';
       prompt: string;
-      transformTriggered: boolean;
+      flankTriggered: boolean;
       echoMultiplier?: number;
     }
   | {

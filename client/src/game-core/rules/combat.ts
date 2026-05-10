@@ -1222,7 +1222,7 @@ function reduceMonsterDefeated(
       value: 0,
       image: bugletImage,
       amuletEffect: 'monster-kill-upgrade',
-      description: '每击杀 5 个怪物，选择一张牌升级。',
+      description: '每击杀 3 个怪物，选择一张牌升级。',
     };
     patch.backpackItems = [...(patch.backpackItems ?? state.backpackItems) as GameCardData[], bugletAmulet];
     sideEffects.push({ event: 'combat:bugletAmuletDrop', payload: { monster, card: bugletAmulet } });
@@ -1235,18 +1235,18 @@ function reduceMonsterDefeated(
   const ae = computeAmuletEffectsForState(state);
   if (ae.monsterKillUpgradeCount > 0) {
     const killProgress = (state.monsterKillUpgradeProgress ?? 0) + ae.monsterKillUpgradeCount;
-    if (killProgress >= 5) {
+    if (killProgress >= 3) {
       patch.monsterKillUpgradeProgress = 0;
       patch.upgradeModalOpen = true;
       patch.amuletSlots = (state.amuletSlots as GameCardData[]).map(slot =>
-        slot?.amuletEffect === 'monster-kill-upgrade' ? { ...slot, _counterDisplay: '0/5' } : slot,
+        slot?.amuletEffect === 'monster-kill-upgrade' ? { ...slot, _counterDisplay: '0/3' } : slot,
       ) as AmuletItem[];
-      sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: '虫蜕之冠：击杀 5 个怪物，可升级 1 张牌！' } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'amulet', message: '虫蜕之冠：击杀 3 个怪物，可升级 1 张牌！' } });
       patch.heroSkillBanner = '虫蜕之冠发动：选择一张牌升级！';
     } else {
       patch.monsterKillUpgradeProgress = killProgress;
       patch.amuletSlots = (state.amuletSlots as GameCardData[]).map(slot =>
-        slot?.amuletEffect === 'monster-kill-upgrade' ? { ...slot, _counterDisplay: `${killProgress}/5` } : slot,
+        slot?.amuletEffect === 'monster-kill-upgrade' ? { ...slot, _counterDisplay: `${killProgress}/3` } : slot,
       ) as AmuletItem[];
     }
   }

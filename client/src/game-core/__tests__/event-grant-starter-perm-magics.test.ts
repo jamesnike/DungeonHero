@@ -157,14 +157,19 @@ describe('Event grants for starter permanent magics — id must strip to starter
   });
 
   // -------------------------------------------------------------------------
-  // discoverStarterEquipment / Potion / Amulet — opening fixed-row events.
+  // discoverStarterEquipment / Potion — opening fixed-row events.
   // Same routing rule as discoverStarterMagic: the seeded discover candidates
   // must have ids that strip back to STARTER_CARD_IDS via getStarterBaseId.
-  // Even though equipment/potion/amulet cards don't strictly depend on starter
+  // Even though equipment/potion cards don't strictly depend on starter
   // routing for their primary effects (weapons/shields equip by `type`,
-  // potions by `potionEffect`, amulets by `amuletEffect`), keeping ids
-  // strippable is the same convention and protects against future cards in
-  // the starter pool that grow starter-id-dependent behavior.
+  // potions by `potionEffect`), keeping ids strippable is the same convention
+  // and protects against future cards in the starter pool that grow
+  // starter-id-dependent behavior.
+  //
+  // Note: amulet discover for the first row was migrated from
+  // `discoverStarterAmulet` (starter pool) to `discoverClassAmulet` (class
+  // deck). The starter pool no longer contains any amulets. See
+  // `init.ts:buildFixedFirstActiveRow` for the renamed 「专属护符发现」 event.
   // -------------------------------------------------------------------------
   describe('discoverStarterEquipment — discover candidates are weapons/shields with strippable ids', () => {
     it('emits a 3-card discover pool of weapons or shields, each strippable', () => {
@@ -204,22 +209,30 @@ describe('Event grants for starter permanent magics — id must strip to starter
     });
   });
 
-  describe('discoverStarterAmulet — discover candidates are amulets with strippable ids', () => {
-    it('emits a 3-card discover pool of amulets, each strippable', () => {
+  // -------------------------------------------------------------------------
+  // discoverClassAmulet — first-row 「专属护符发现」 event. Replaced the legacy
+  // `discoverStarterAmulet` token after starter-pool amulets were migrated
+  // into the class deck.
+  //
+  // Behavior contract:
+  //   - Reducer treats the token as a UI pass-through (no pre-rolled pool).
+  //     `useEventSystem.ts` calls `beginDiscoverFlow` with `filter: amulet`
+  //     and `delivery: 'hand-first'`. The class deck is the source of truth.
+  //   - The reducer side just emits `event:requestEventInteraction` with an
+  //     empty `data` object (mirrors `discoverClassWeapon` / `discoverClassMagic`).
+  // -------------------------------------------------------------------------
+  describe('discoverClassAmulet — opening 「专属护符发现」 routes to class-deck discover', () => {
+    it('emits an event:requestEventInteraction with the discoverClassAmulet token', () => {
       const state = makeState();
-      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'discoverStarterAmulet' });
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'discoverClassAmulet' });
       const sideEffect = result.sideEffects.find(
         (se: any) => se.event === 'event:requestEventInteraction'
-          && se.payload?.token === 'discoverStarterAmulet',
+          && se.payload?.token === 'discoverClassAmulet',
       ) as any;
       expect(sideEffect).toBeDefined();
-      const pool = sideEffect.payload.data.pool as GameCardData[];
-      expect(pool.length).toBe(3);
-      const validStarterIds = new Set<string>(Object.values(STARTER_CARD_IDS));
-      for (const c of pool) {
-        expect(c.type).toBe('amulet');
-        expect(validStarterIds.has(getStarterBaseId(c.id))).toBe(true);
-      }
+      // Unlike `discoverStarterAmulet`, the reducer does NOT pre-roll a pool.
+      // The hook reads the live class deck and filters for amulets.
+      expect(sideEffect.payload.data).toEqual({});
     });
   });
 

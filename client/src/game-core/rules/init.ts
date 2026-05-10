@@ -534,8 +534,10 @@ export function reduceInitGame(
  * three events — they cover Equipment / Amulet→Potion / 2×Magic→Magic.
  *
  * Each event uses tokens defined in `events.ts:applySimpleEffect`:
- *   - `discoverStarterEquipment` / `discoverStarterPotion` /
- *     `discoverStarterAmulet` — discover-1-of-3 from the starter pool.
+ *   - `discoverStarterEquipment` / `discoverStarterPotion` —
+ *     discover-1-of-3 from the starter pool.
+ *   - `discoverClassAmulet` — discover-1-of-3 amulet from the class
+ *     deck (starter pool no longer contains amulets).
  *   - `discoverStarterMagic` — already exists; reused by the magic event.
  *   - `grantStarterMagicTwo` — direct grant of 2 random starter magics
  *     (no UI pick).
@@ -563,16 +565,16 @@ function buildFixedFirstActiveRow(): GameCardData[] {
   const amuletThenPotionEvent: GameCardData = {
     id: 'fixed-row-event-amulet',
     type: 'event',
-    name: '护符发现',
+    name: '专属护符发现',
     value: 0,
     image: eventScrollImage,
-    description: '发现一张起始护符，直接加入手牌。完成后翻转为「药水发现」。',
-    shortDescription: '发现护符 → 进手牌 → 翻为「药水发现」',
+    description: '从专属牌堆中发现一张护符，直接加入手牌。完成后翻转为「药水发现」。',
+    shortDescription: '发现一张专属护符 → 进手牌 → 翻为「药水发现」',
     eventChoices: [
       {
-        text: '发现一张起始护符',
-        effect: 'discoverStarterAmulet',
-        hint: '从起始背包候选护符池中三选一，直接进入手牌（手牌满则进背包）',
+        text: '发现一张专属护符',
+        effect: 'discoverClassAmulet',
+        hint: '从专属候选护符池中三选一，直接进入手牌（手牌满则进背包）',
       },
     ],
     flipTarget: {
@@ -593,7 +595,7 @@ function buildFixedFirstActiveRow(): GameCardData[] {
         ],
       },
       destination: 'stay',
-      message: '护符发现翻转为「药水发现」！',
+      message: '专属护符发现翻转为「药水发现」！',
     },
   };
 

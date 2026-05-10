@@ -320,7 +320,7 @@ describe('Outcome 4 — grantOnEquipSpawnMine:N (装备入场 → 地雷)', () =
   });
 
   it('skips equipment that already has an onEquipEffect (defensive)', () => {
-    const sword: GameCardData = makeWeapon('w-pre', { onEquipEffect: 'gold+6' } as any);
+    const sword: GameCardData = makeWeapon('w-pre', { onEquipEffect: 'gold+4' } as any);
     const state = makeState({ equipmentSlot1: sword as EquipmentItem });
     const r = reduce(state, {
       type: 'RESOLVE_EVENT_GRANT_ONEQUIP_SPAWN_MINE',
@@ -328,7 +328,7 @@ describe('Outcome 4 — grantOnEquipSpawnMine:N (装备入场 → 地雷)', () =
       amount: 1,
     });
     // Original effect must remain untouched.
-    expect((r.state.equipmentSlot1 as any)?.onEquipEffect).toBe('gold+6');
+    expect((r.state.equipmentSlot1 as any)?.onEquipEffect).toBe('gold+4');
   });
 
   it('no-ops on empty slot', () => {

@@ -86,6 +86,7 @@ export interface CombatActionsDeps {
   triggerMonsterHealAnimation: (monsterId: string, delay?: number) => void;
   triggerWeaponSwingAnimation: (slotId: EquipmentSlotId, delay?: number, opts?: { echoes?: number }) => void;
   triggerShieldBlockAnimation: (slotId: EquipmentSlotId) => void;
+  triggerMineExplosionAnimation: (slotIdx: number, delay?: number) => void;
   tryStartShieldReflectDirectedFx: (slotId: EquipmentSlotId, monsterId: string) => void;
   tryStartBossRetaliationDirectedFx: (monsterId: string) => void;
   tryStartGolemLayerReflectFx: (monsterId: string) => void;
@@ -539,6 +540,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     if (damage > 0) {
       depsRef.current.triggerMonsterBleedAnimation(monsterId);
     }
+  });
+
+  // 地雷爆炸：怪物落到地雷格子时触发。视觉上是一个 in-place burst
+  // （flash + shockwave ring + 8 道闪电）渲染在 active row 的对应 cell。
+  // monster bleed 由后续 'combat:monsterDamaged' 自然触发，与本动画并行播放。
+  useGameEvent('combat:mineTriggered', ({ slotIdx }) => {
+    depsRef.current.triggerMineExplosionAnimation(slotIdx);
   });
 
   useGameEvent('combat:stunApplied', ({ monsterId }) => {

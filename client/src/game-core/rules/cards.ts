@@ -842,7 +842,7 @@ function reduceEquipCard(
 // 注意：reducePlayCard 的 weapon/shield 分支已经自带相同的 on-equip /
 // equip-empower 逻辑，所以"点击出牌"的玩法不会经过这里——这条路径只服务
 // 于"拖到指定槽"的玩法，避免 drag 路径漏触发 on-equip（曾经的 bug：
-// 赏金之剑 / 足锡冲锋 拖到槽位时 gold+6 / temp-attack-3 没有效果）。
+// 赏金之剑 / 足锡冲锋 拖到槽位时 gold+4 / temp-attack-3 没有效果）。
 // ---------------------------------------------------------------------------
 
 function reduceEquipFromHand(

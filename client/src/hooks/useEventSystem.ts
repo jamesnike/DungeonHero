@@ -990,19 +990,27 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         sourceLabel: eventCard?.name,
       });
       if (!started) depsRef.current.handleDiscoverFallback();
+    } else if (token === 'discoverClassAmulet') {
+      // 「专属护符发现」（开局第一行固定事件）：从专属牌堆中过滤出 amulet，
+      // 选中后直接进手牌（手牌满则进背包），让玩家首回合就能立刻装备。
+      addGameLog('event', '事件效果：发现专属护符');
+      const started = depsRef.current.beginDiscoverFlow(token, {
+        filter: (c: GameCardData) => c.type === 'amulet',
+        sourceLabel: eventCard?.name,
+        delivery: 'hand-first',
+      });
+      if (!started) depsRef.current.handleDiscoverFallback();
     } else if (
       token === 'discoverStarterMagic'
       || token === 'discoverStarterEquipment'
       || token === 'discoverStarterPotion'
-      || token === 'discoverStarterAmulet'
     ) {
       const preRolledPool = (payload.data?.pool as GameCardData[] | undefined) ?? [];
       if (preRolledPool.length > 0) {
-        // 装备发现 / 护符发现（开局第一行固定事件）：选中后直接进手牌，
-        // 让玩家第一回合就能立刻装备或激活——其余 starter discover
+        // 装备发现（开局第一行固定事件）：选中后直接进手牌，
+        // 让玩家第一回合就能立刻装备——其余 starter discover
         // (魔法 / 药水) 仍走默认背包路径。
-        const handFirst = token === 'discoverStarterEquipment'
-          || token === 'discoverStarterAmulet';
+        const handFirst = token === 'discoverStarterEquipment';
         depsRef.current.beginDiscoverFlow(token, {
           overridePool: preRolledPool,
           sourceLabel: eventCard?.name,

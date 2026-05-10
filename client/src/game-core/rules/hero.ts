@@ -1549,7 +1549,7 @@ function reduceMagicSlotSelection(
       const echoMul = (pending as any).echoMultiplier ?? 1;
       const repairAmt = 1 * echoMul;
       const triggerCount = (pending.card as any)._flankRepairTriggers ?? 0;
-      const flankAtkBase = 3 + triggerCount;
+      const flankAtkBase = 1 + triggerCount;
       const parts: string[] = [];
       if (maxDur > 0 && curDur < maxDur) {
         patch[slotId] = { ...slotItem, durability: Math.min(maxDur, curDur + repairAmt) } as any;
@@ -1565,7 +1565,7 @@ function reduceMagicSlotSelection(
         parts.push(`侧击：临时攻击 +${tempAtkBonus}`);
         checkPersuadeOnTempAttack(state, patch, sideEffects);
         const newTriggers = triggerCount + 1;
-        const nextAtk = 3 + newTriggers;
+        const nextAtk = 1 + newTriggers;
         updatedCard = {
           ...pending.card,
           _flankRepairTriggers: newTriggers,
@@ -1697,7 +1697,7 @@ function reduceMagicSlotSelection(
       }
       const useCount = (pending.card as any)._flankFortifyUses ?? 0;
       const echoMulFF = (pending as any).echoMultiplier ?? 1;
-      const armorBonus = (3 + useCount) * echoMulFF;
+      const armorBonus = (1 + useCount) * echoMulFF;
       const curTA = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
       patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTA + armorBonus };
       if (armorBonus !== 0) applySlotArmorBonusDelta(state, slotId, armorBonus, patch);
@@ -1732,7 +1732,7 @@ function reduceMagicSlotSelection(
         } });
       }
       const newUses = useCount + 1;
-      const nextArmor = 3 + newUses;
+      const nextArmor = 1 + newUses;
       const updatedCard = {
         ...pending.card,
         _flankFortifyUses: newUses,

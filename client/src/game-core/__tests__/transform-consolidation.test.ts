@@ -338,16 +338,16 @@ describe('EQUIP_FROM_HAND', () => {
     expect(out.state.transformChainPrevCategory).toBe('weapon');
   });
 
-  it('runs onEquipEffect via the registry (gold+6 grants gold)', () => {
+  it('runs onEquipEffect via the registry (gold+4 grants gold)', () => {
     const weapon: GameCardData = {
       id: 'w3', type: 'weapon', name: '赏金之剑', value: 2, image: '',
-      durability: 2, maxDurability: 2, onEquipEffect: 'gold+6',
+      durability: 2, maxDurability: 2, onEquipEffect: 'gold+4',
     } as GameCardData;
     const baseState = makeState({ gold: 10 });
     const out = dispatchFull(baseState, {
       type: 'EQUIP_FROM_HAND', card: weapon, slotId: 'equipmentSlot1',
     } as GameAction);
-    expect(out.state.gold).toBe(16);
+    expect(out.state.gold).toBe(14);
   });
 
   it('runs onEquipEffect via the registry (temp-attack-3 boosts target slot)', () => {

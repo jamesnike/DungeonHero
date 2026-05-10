@@ -1,0 +1,148 @@
+---
+description: Never mix "add new feature" with "clean up dead fields" in one commit. The 1.2.7 mega-commit deleted 12 cards' `unique` flags, 5 GameCardData fields, and `STARTER_CARD_IDS.transformStreakStrike` while adding 11 new cards + 13 new tests — the cleanup damage hid in the noise of the feature add. Cleanup must be its own commit with grep evidence.
+alwaysApply: true
+---
+
+# 不要把「加新功能」和「清理旧字段」塞进同一个 commit
+
+## 背景：1.2.7 巨型 commit 的真实事故
+
+`5091261 ea version 1.2.7` 一次提交：
+
+- 80 个文件、10,605 行新增、969 行删除
+- commit message 只有 "ea version 1.2.7"，没有任何描述
+- **加了 11 张新卡** + 13 个 `__tests__/*.test.ts` + 一整套"骑士雷电 / 地雷"系统
+- **同时**做了"清理"动作：
+ - 把 `unique?: true` 字段从 `GameCardData` 上挪到 `KnightCardData`
+ - 删除 `perfectBlockSpawnMissiles` / `shieldPerfectBlockMaxHpGain` / `reflectFullDamage` / `onAttackAmplifyMissileGenerateCount` 4 个字段
+ - 删除 `STARTER_CARD_IDS.transformStreakStrike`
+ - 删除 3 张卡（弹幕护盾 / 墓园守卫 / 连环转律）
+ - **顺手拿掉了 12 张其它卡的 `unique: true` 标记**（认为"字段都没了，标记肯定也没用了"）
+ - 部分回滚了护甲重构（`armorBonusDamaged` 注释回到旧版本）
+
+后果：
+
+1. 「专属卡牌列表」/「卡牌详情」**13 张唯一卡的"唯一"角标全部消失**（玩家直接看到的回归）
+2. `combat.ts` 里有 4 个 dead-reference 永远 TS 报错（被卷进字段清理但消费端没改）
+3. `GameCard.tsx:763` 有 1 个 dead-reference TS 报错（同款）
+4. 类型层面破洞被 50+ pre-existing TS 错误的"红灯背景"完全淹没，没人发现
+
+事后修复需要：恢复 5 个字段、加回 1 个常量、加回 12 张卡的 unique 标记、恢复 3 张被删的卡 + 它们的图片 import + 描述字段。**单次 review 没法发现，bisect 也定位不到具体哪一行 —— 因为根因藏在 80 文件 diff 里**。
+
+## 强制规则
+
+### 1. 一个 commit 只做一件事
+
+下面三类**必须分别 commit**，禁止合并：
+
+| 类型 | 范围 | 例子 |
+|---|---|---|
+| **A. 加新功能** | 新卡 / 新机制 / 新效果 / 新规则 | "add 殒雷符 + mine system + tests" |
+| **B. 清理 dead 代码** | 删字段 / 删常量 / 删未使用的 effect id / 删卡 | "remove unused `armorBonusDamaged` field (verified by grep, 0 readers)" |
+| **C. 重构 / 类型挪位** | 字段从一个 interface 搬到另一个 / 把 enum 改成 union | "move `unique` from KnightCardData to GameCardData (consumers in ClassDeck/CardDetailsModal already read it as GameCardData)" |
+
+**不可以**在 A 类 commit 里"顺手"做 B 或 C，**也不可以**在 B 类 commit 里"顺手"加新卡。
+
+### 2. 「清理 dead 代码」commit 必须附 grep 证据
+
+任何"删字段 / 删常量 / 删 effect id"的 commit body 必须包含：
+
+```
+Verified dead via:
+  $ rg "perfectBlockSpawnMissiles" client/src
+  (0 readers)
+  $ rg "STARTER_CARD_IDS.transformStreakStrike" client/src
+  (0 readers)
+```
+
+**没贴 grep 输出 = 不是 dead 代码 cleanup，是赌博**。1.2.7 的事故就是因为没 grep —— `combat.ts` 里有 4 处读取者，`GameCard.tsx:763` 有 1 处读取者，全都活生生留下来了。
+
+### 3. 「字段挪位」类重构必须**两步走**，不许并轨
+
+把字段从父类型 → 子类型（或反过来）时：
+
+**❌ BAD（1.2.7 的反面教材）**：
+
+```typescript
+// 一个 commit 里同时干这两件事
+- // GameCardData
+- unique?: true;   ← 删除
+
++ // KnightCardData (extends GameCardData)
++ unique?: boolean; ← 新加
+```
+
+后果：所有按 `GameCardData` 类型读取 `card.unique` 的代码（`ClassDeck.tsx:199`、`CardDetailsModal.tsx:57`）瞬间编译报错，且作者会被 TS 报错误导成"这字段没人用"，进一步删卡上的 `unique: true` 标记。
+
+**✅ GOOD（两步走）**：
+
+```typescript
+// Commit 1: 在子类型上加新字段（不动父）
++ // KnightCardData
++ unique?: boolean;
+
+// 让代码继续 build；如果 GameCardData 上原本就有同名字段，这一步不影响。
+
+// Commit 2: 删父类型的字段 —— 但前提是 grep 证明所有消费方都按子类型读
+- // GameCardData
+- unique?: true;
+```
+
+**或者**承认"消费方按 `GameCardData` 读"，把字段留在父类型上。1.2.7 选了一个"既挪走、又不修消费方"的中间态，必然炸。
+
+### 4. 「删卡」时必须连同检查"标记字段"是否还该保留
+
+删一张带 `unique: true` 的卡时，问自己：
+
+> "这个 `unique: true` 标记的语义是不是『**这张卡**是唯一』？还是『**所有用了这个 trait 的卡**是唯一』？"
+
+绝大多数情况是前者（per-card flag）—— 删卡 = 这一行 `unique: true` 也该删，**但其它卡上的 `unique: true` 跟你没关系，不要顺手清**。1.2.7 的事故是**把 12 张无关卡上的标记也清了**。
+
+## 常见反模式（看到立刻警觉）
+
+### 反模式 1：超大 commit + 只有版本号的 message
+
+```
+$ git log -1
+commit 5091261...
+Author: ...
+Date:   ...
+
+    ea version 1.2.7
+```
+
+**80 文件、10K 行、message 没有任何信息** —— 这种 commit 必然把多个意图混在一起。Review 时直接拒绝，要求拆成多个 commit + 写清楚意图。
+
+### 反模式 2：「我在 GameCardData 上看到一个字段，TS 报错说没人用，那应该是 dead code」
+
+TS 报错可能是消费方**类型注解错了**（应该用 narrower type 但写了 GameCardData），不一定是字段死了。**先 `rg` 字段名搜全文**：如果有 runtime 读取（`card.field`、`item.field`、`?.field`），就不是 dead，先修类型注解，再决定是搬字段还是保留。
+
+### 反模式 3：删一张卡 → "其它同类型卡上的旧字段也清一下"
+
+每张卡的字段是独立的。删 A 卡不蕴含 B / C / D 卡的同名字段也该删。**一次只做 A 卡的 cleanup**。
+
+### 反模式 4：「测试都过了 = 没问题」
+
+1.2.7 加了 13 个新测试文件，测试都过了。但**没有任何测试断言**「圣光秘术 / 狂战秘典 / 永恒之器 / ... 这 12 张卡仍然是 unique」—— 测试覆盖了 unique 机制的 logic，没覆盖 unique 标记的 data。
+
+## 自检：commit 之前问自己
+
+> 1. 我这个 commit 的 message 写得清楚吗？还是只有 "ea version X" / "fix" / "update"？
+> 2. 我同时在做"加东西"和"删东西"吗？如果是，能不能拆成两个 commit？
+> 3. 我删的字段 / 常量 / 标记，**全文 grep** 过没有读取方吗？grep 输出贴到 commit body 了吗？
+> 4. 我看到一个 TS 错误说"字段不在类型上"，我有没有先 `rg` 该字段的运行时读取，再决定是改类型注解还是删字段？
+> 5. 这次 cleanup 影响的卡 / 字段超过 5 个吗？如果是，**真的**每一处都人肉 review 过了吗？
+
+任意一条「没」或「不确定」，**回去拆 commit 再提交**。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| 一个 commit 只做一件事 + grep 证据 | ✅ 这条 | ❌ |
+| 共享 effect id 改动前列出所有卡 + 消费方 | ❌ | `shared-effect-id-impact-check` |
+| 牌库数据 ↔ UI 标记字段必须有端到端测试 | ❌ | `card-data-to-ui-tag-coverage` |
+| 改卡之前问 user 确认意图 | ❌ | `ask-before-changing` |
+| 测试要用真实 dispatch 链 | ❌ | `testing` |
+
+涉及"删字段 / 删卡 / 类型挪位"时，这几条规则**都要核对**。

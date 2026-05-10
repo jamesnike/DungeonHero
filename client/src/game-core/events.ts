@@ -245,8 +245,8 @@ const EXACT_REDUCER_TOKENS = new Set([
   // Phase EC-3 — interactive tokens (emit side effects for UI interaction)
   'equipBurst+4',
   'openShop',
-  'discoverClass', 'discoverClassWeapon', 'discoverClassMagic', 'discoverStarterMagic',
-  'discoverStarterEquipment', 'discoverStarterPotion', 'discoverStarterAmulet',
+  'discoverClass', 'discoverClassWeapon', 'discoverClassMagic', 'discoverClassAmulet', 'discoverStarterMagic',
+  'discoverStarterEquipment', 'discoverStarterPotion',
   'grantStarterMagicTwo',
   'graveyardDiscover', 'graveyardDiscoverMagic',
   // Phase EC-2 — animation tokens (state + side effect)
@@ -1993,20 +1993,20 @@ export function applySimpleEffect(
   } else if (
     effectToken === 'discoverStarterEquipment'
     || effectToken === 'discoverStarterPotion'
-    || effectToken === 'discoverStarterAmulet'
   ) {
     // Discover-1-of-3 from the starter pool, filtered by category. Mirrors the
     // `discoverStarterMagic` branch above — same `-disc-1` suffix shape so
     // `getStarterBaseId` strips back to the canonical STARTER_CARD_IDS.X
     // routing key (see event-grant-card-id-suffix rule).
+    //
+    // 护符 (amulet) intentionally not handled here: starter pool no longer
+    // contains amulets. The first-row 「专属护符发现」 event uses
+    // `discoverClassAmulet` instead, which filters the class deck.
     const isEquipment = effectToken === 'discoverStarterEquipment';
-    const isPotion = effectToken === 'discoverStarterPotion';
     const categoryFilter = isEquipment
       ? (c: GameCardData) => c.type === 'weapon' || c.type === 'shield'
-      : isPotion
-        ? (c: GameCardData) => c.type === 'potion'
-        : (c: GameCardData) => c.type === 'amulet';
-    const categoryLabel = isEquipment ? '装备' : isPotion ? '药水' : '护符';
+      : (c: GameCardData) => c.type === 'potion';
+    const categoryLabel = isEquipment ? '装备' : '药水';
     logs.push({ type: 'event', message: `事件效果：发现起始背包的${categoryLabel}卡` });
     const starterPool = createStarterCardPool();
     const candidates = starterPool.filter(categoryFilter);
@@ -2089,7 +2089,7 @@ export function applySimpleEffect(
              effectToken.startsWith('destroyEquipment:') || effectToken.startsWith('returnToHand:') ||
              effectToken.startsWith('upgradeCard') ||
              effectToken === 'discoverClass' || effectToken === 'discoverClassWeapon' ||
-             effectToken === 'discoverClassMagic' ||
+             effectToken === 'discoverClassMagic' || effectToken === 'discoverClassAmulet' ||
              effectToken === 'crypt-all-effects' || effectToken === 'crossroads-destroy-below' ||
              effectToken === 'destroyAllEquipment' || effectToken === 'vault-flipback' ||
              effectToken === 'fate-dice-strike' || effectToken.startsWith('amplify-altar-') ||

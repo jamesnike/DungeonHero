@@ -331,11 +331,21 @@ export interface GameCardData {
   damageReflect?: number; // Damage reflected back to attacker when blocking
   shieldPerfectBlockSaveChance?: number; // % chance to save durability on perfect block
   shieldPerfectBlockArmorSaveChance?: number; // % chance to save armor (no armor deduction this block) on perfect block
+  perfectBlockSpawnMissiles?: number; // 弹幕护盾: on perfect block, spawn N 魔弹 cards directly to hand (hand-full → silently skip)
+  shieldPerfectBlockMaxHpGain?: number; // 砺心之盾: on perfect block, permanently raise hero maxHp by N (cap-only, does NOT heal current hp). Stacks per perfect block.
   shieldBashStunRate?: number; // Per-armor-point stun % when shield-bashing a monster (e.g. 5 → 5% × armor)
   shieldBashUnlimited?: boolean; // Shield bash has no per-turn limit; can bash as long as durability remains
   reflectHalfDamage?: boolean; // Reflect half of incoming attack damage back to attacker
+  reflectFullDamage?: boolean; // Reflect full incoming attack damage back to attacker (takes precedence over reflectHalfDamage; e.g. 棘刺反盾 L2)
   // Class card properties
   classCard?: boolean; // Marks as a class card
+  /**
+   * 「唯一」标记：本局已有同 baseId 实例时，后续 sampling（discover / draw /
+   *  shop refresh / event grant）全部过滤掉。语义见 `game-core/uniqueClass.ts`。
+   *  目前只有 class deck 卡用，但字段提升到 `GameCardData` 上，让消费方
+   *  （ClassDeck / CardDetailsModal 等）能在不窄化类型的前提下读取。
+   */
+  unique?: boolean;
   knightEffect?: string; // Effect dispatch key (used by class cards and some main-deck magic)
   /** 损毁或强制弃置时进入回收袋，经 recycleDelay 次瀑流回背包（与永久法术共用回收区） */
   permEquipment?: boolean;
@@ -450,6 +460,7 @@ export interface GameCardData {
   onAttackRepairOtherSlot?: number; // Restore N durability to the OTHER equipment slot on each attack
   onAttackDebuffAllMonsterAttack?: number; // Reduce ALL active row monsters' attack by N on each attack
   onAttackAmplifyMissileGenerate?: boolean; // After each attack: amplify '魔弹' +1 globally and add a (newly amplified) bolt to backpack (overflow → recycle bag)
+  onAttackAmplifyMissileGenerateCount?: number; // Override # of bolts spawned per overkill (default 1; e.g. 魔弹连弩 L2 sets to 2)
   daggerSelfDestructDiscover?: boolean; // 匕首: after attack, optionally destroy weapon to discover class cards (1 per remaining durability)
   ghostBladeExile?: boolean; // 虚灵刀: after each attack, offer to exile cards from graveyard
   postAttackHandRecycle?: boolean; // After each attack, optionally move a hand card to recycle bag and draw one
@@ -1573,6 +1584,9 @@ const amuletEffectText =
                           <span className="dh-card__keyword-tag dh-card__keyword-tag--onhand inline-block mt-0.5" title="上手：此牌进入手牌时自动触发效果">{onHandLabel}</span>
                         ) : null;
                       })()}
+                      {card.topOnRecycleRestore && (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--top inline-block mt-0.5" title="置顶：从回收袋洗回时直接进入背包顶（第 1 格）">置顶</span>
+                      )}
                     </div>
                   )}
                   {!isMagicLikeCard && card.transformBonus && (
@@ -2442,7 +2456,7 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.lastWordsMaxHpBoost || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.lastWordsMaxHpBoost || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || card.topOnRecycleRestore || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
                   <div className="dh-card__keyword-row">
                     {card.hasEquipmentRevive && (
                       <span className={`dh-card__keyword-tag ${card.equipmentReviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
@@ -2498,6 +2512,9 @@ const amuletEffectText =
                         <span className="dh-card__keyword-tag dh-card__keyword-tag--onhand" title="上手：此牌进入手牌时自动触发效果">{onHandLabel}</span>
                       ) : null;
                     })()}
+                    {card.topOnRecycleRestore && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--top" title="置顶：从回收袋洗回时直接进入背包顶（第 1 格）">置顶</span>
+                    )}
                     {card.type === 'weapon' && card._potionStunBonusApplied && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title={`雷震淬刃药：永久击晕率 ${card.weaponStunChance ?? 0}%`}>击晕 {card.weaponStunChance ?? 0}%</span>
                     )}
@@ -2535,13 +2552,19 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'potion' || card.type === 'amulet') && !!card.onEnterHandEffect && (() => {
+                {(card.type === 'potion' || card.type === 'amulet') && (!!card.onEnterHandEffect || !!card.topOnRecycleRestore) && (() => {
                   const onHandLabel = getOnEnterHandShortLabel(card);
-                  return onHandLabel ? (
+                  if (!onHandLabel && !card.topOnRecycleRestore) return null;
+                  return (
                     <div className="dh-card__keyword-row">
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--onhand" title="上手：此牌进入手牌时自动触发效果">{onHandLabel}</span>
+                      {onHandLabel && (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--onhand" title="上手：此牌进入手牌时自动触发效果">{onHandLabel}</span>
+                      )}
+                      {card.topOnRecycleRestore && (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--top" title="置顶：从回收袋洗回时直接进入背包顶（第 1 格）">置顶</span>
+                      )}
                     </div>
-                  ) : null;
+                  );
                 })()}
 
                 <div className="absolute bottom-1 right-1 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
@@ -2668,6 +2691,7 @@ export function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean
       a.amuletEffect !== b.amuletEffect ||
       a.onDestroyEffect !== b.onDestroyEffect ||
       a.onEnterHandEffect !== b.onEnterHandEffect ||
+      a.topOnRecycleRestore !== b.topOnRecycleRestore ||
       a._flipRepairBuff !== b._flipRepairBuff ||
       a._potionStunBonusApplied !== b._potionStunBonusApplied ||
       a.weaponStunChance !== b.weaponStunChance ||

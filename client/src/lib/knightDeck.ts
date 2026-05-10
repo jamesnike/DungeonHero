@@ -2,6 +2,8 @@ import { type GameCardData } from '@/components/GameCard';
 import { CHAOS_DICE_SPELL_DESCRIPTION, CHAOS_DICE_SPELL_MAGIC_EFFECT } from '@/lib/knightChaosDiceCopy';
 import type { RngState } from '@/game-core/rng';
 import { shuffle as rngShuffle, nextId } from '@/game-core/rng';
+import { STARTER_CARD_IDS } from '@/game-core/deck';
+import { applyDerivedCardText } from '@/game-core/card-schema/card-text';
 
 // Import images for Knight cards
 import holyBladeImage from '@assets/generated_images/holy_light_blade.png';
@@ -88,6 +90,33 @@ import dedupeMagicArcaneRefineImage from '@assets/generated_images/card_dedupe_m
 import starterScrollEternalInscribeImage from '@assets/generated_images/starter_scroll_eternal_inscribe.png';
 import thunderstrikeBastionShieldImage from '@assets/generated_images/knight_thunderstrike_bastion_shield.png';
 import communalDefenseShieldImage from '@assets/generated_images/knight_communal_defense_shield.png';
+import knightManualRecycleAmuletImage from '@assets/generated_images/knight_manual_recycle_amulet.png';
+import knightMineBuildingImage from '@assets/generated_images/knight_mine_building.png';
+import knightKillMineAmuletImage from '@assets/generated_images/knight_kill_mine_amulet.png';
+import knightThunderArrayBladeImage from '@assets/generated_images/knight_thunder_array_blade.png';
+import knightBarrageShieldImage from '@assets/generated_images/knight_barrage_shield.png';
+import graveyardGuardianAmuletImage from '@assets/generated_images/knight_graveyard_guardian_amulet.png';
+import dedupeStarterCombatRallyImage from '@assets/generated_images/card_dedupe_starter_combat_rally.png';
+
+// Migrated starter-pool amulets (originally part of `createStarterCardPool`,
+// now sourced from the class deck via 「专属护符发现」). These keep their
+// original `STARTER_CARD_IDS.X` ids so:
+//   - The starter:{id} on-upgrade handlers (in
+//     `card-schema/definitions/upgrades.ts`) continue to route correctly.
+//   - `STARTER_CARD_IDS` exports stay valid for downstream tests.
+//   - `getStarterBaseId()` strips cloned ids back to the canonical key.
+import dedupeStarterAmuletLoneImage from '@assets/generated_images/card_dedupe_starter_amulet_lone.png';
+import starterAmuletPersuadeDiscountImage from '@assets/generated_images/starter_amulet_persuade_discount.png';
+import starterAmuletMissileImage from '@assets/generated_images/starter_amulet_missile.png';
+import starterAmuletSwapUpgradeImage from '@assets/generated_images/starter_amulet_swap_upgrade.png';
+import starterAmuletStunCapImage from '@assets/generated_images/starter_amulet_stun_cap.png';
+import starterAmuletRecycleExpandImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
+import starterAmuletDungeonGoldImage from '@assets/generated_images/starter_amulet_dungeon_gold.png';
+// 潮愈之符 复用永恒护符·潮涌回春的 PNG（视觉同主题）。
+import starterAmuletWaterfallHealImage from '@assets/generated_images/relic_waterfall_heal.png';
+import flipLifestealAmuletImage from '@assets/generated_images/knight_flip_lifesteal_amulet.png';
+import equipAmuletCapImage from '@assets/generated_images/knight_equip_amulet_cap_amulet.png';
+import stunDiscoverAmuletImage from '@assets/generated_images/knight_stun_discover_amulet.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -99,9 +128,9 @@ export interface KnightCardData extends GameCardData {
   damageReflect?: number;
   permanentBuff?: string;
   tempBuff?: string;
-  /** 「唯一」标记：本局已有同 baseId 实例时，后续 sampling（discover / draw /
-   *  shop refresh / event grant）全部过滤掉。语义见 `uniqueClass.ts`。 */
-  unique?: boolean;
+  // NB: `unique?: boolean` is declared on the parent `GameCardData` (in
+  // `@/components/GameCard`) so consumers like `ClassDeck.tsx` and
+  // `CardDetailsModal.tsx` can read `card.unique` without narrowing.
 }
 
 export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] {
@@ -246,7 +275,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     type: 'amulet',
     name: '殒雷符',
     value: 1,
-    image: thunderAmuletSigilImage,
+    image: knightKillMineAmuletImage,
     classCard: true,
     unique: true,
     description: '每击杀一只怪物，立刻在该位置生成一个「地雷」（5 点纯伤，受「引雷阵锋」加成；该位置已有卡时堆叠在上）。',
@@ -284,6 +313,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroHolyLightImage,
     classCard: true,
+    unique: true,
     description: '第一次使用时解锁圣光；已掌握时充满数值槽，可手动发动。',
     shortDescription: '解锁圣光；已掌握时充满数值槽',
     heroMagicId: 'holy-light',
@@ -296,6 +326,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroBerserkerImage,
     classCard: true,
+    unique: true,
     description: '第一次使用时解锁狂战；已掌握时充满数值槽，可手动发动。',
     shortDescription: '解锁狂战；已掌握时充满数值槽',
     heroMagicId: 'berserker-rage',
@@ -387,6 +418,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroReviveTomeImage,
     classCard: true,
+    unique: true,
     description: '永久：失去 3 生命，生命上限永久 +3。',
     shortDescription: '失去 3 生命，生命上限永久 +3',
     magicType: 'permanent',
@@ -495,8 +527,9 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicRecycleFlareImage,
     classCard: true,
-    description: '永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 2 张牌。(可超手牌上限)',
-    shortDescription: '回收袋剩余瀑流 -1；抽 2 张',
+    unique: true,
+    description: '永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 1 张牌。(可超手牌上限)',
+    shortDescription: '回收袋剩余瀑流 -1；抽 1 张',
     magicType: 'permanent',
     magicEffect: '回收袋归位并抽牌。',
     knightEffect: 'recycle-flare',
@@ -593,7 +626,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     type: 'weapon',
     name: '引雷阵锋',
     value: 3,
-    image: thunderHammerImage,
+    image: knightThunderArrayBladeImage,
     classCard: true,
     description: '每消耗 1 点耐久，全场地雷伤害永久 +2（不撤销）。',
     shortDescription: '耐久 -1：全场地雷伤害永久 +2',
@@ -708,6 +741,28 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxDurability: 4,
     armorMax: 1,
     knightEffect: 'growth-shield',
+    maxUpgradeLevel: 2,
+  });
+
+  // 弹幕护盾 — 完美格挡时直接将 2 张「魔弹」加入手牌（手牌已满则静默丢弃）。
+  // 走 createMagicBoltCard + applyAmplifyOnCreate（与魔弹连弩 / 魔法飞弹 / 弹幕之符 一致），
+  // 让新生成的「魔弹」继承当前 amplifiedCardBonus['魔弹'] 累计加成。
+  // 实现位置：rules/combat.ts 完美格挡判定块（dual-guard 之后、blockGrantTempArmorToOther 之前）。
+  // 升级：L1 护甲 2→4（耐久不变，效果不变）；L2 perfectBlockSpawnMissiles 2→3（护甲/耐久不变）。
+  pushCard({
+    type: 'shield',
+    name: '弹幕护盾',
+    value: 2,
+    image: knightBarrageShieldImage,
+    classCard: true,
+    unique: true,
+    description: '完美格挡时，将 2 张「魔弹」直接加入手牌（手牌已满则静默丢弃），新生成的魔弹会继承全局魔弹增幅。',
+    shortDescription: '完美格挡 → 入手 2 张魔弹',
+    perfectBlockSpawnMissiles: 2,
+    durability: 3,
+    maxDurability: 3,
+    armorMax: 2,
+    knightEffect: 'barrage-shield',
     maxUpgradeLevel: 2,
   });
 
@@ -835,6 +890,21 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'delete-draw',
   });
 
+  // 墓园守卫：装备的遗言额外多触发 1 次（含自然破损与顶替/弃装重铸/灵魂置换 等）。
+  // 多个本护符线性叠加：N 个 → 每次基础触发都会再多触发 N 次（共 1 + N 次）。
+  // 与「墓语遗愿」等已经按次叠加的机制兼容（每次基础触发都按 1 + N 放大）。
+  pushCard({
+    type: 'amulet',
+    name: '墓园守卫',
+    value: 1,
+    image: graveyardGuardianAmuletImage,
+    classCard: true,
+    unique: true,
+    description: '装备的遗言每次触发时，额外多触发 1 次（多张本护符线性叠加）。',
+    shortDescription: '装备遗言每次多触发 1 次',
+    amuletEffect: 'last-words-extra-trigger',
+  });
+
   // 循手之符 — 每"手动"拖卡到回收袋累计：3 张抽 1。
   // 仅手动事件（waitsOverride === 1 标记）触发：
   //   - 装备栏 / 护符栏 → 回收袋（拖动）
@@ -850,11 +920,175 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     type: 'amulet',
     name: '循手之符',
     value: 1,
-    image: dedupeKnightMagicRecycleTideImage,
+    image: knightManualRecycleAmuletImage,
     classCard: true,
     description: '每手动拖动 3 张牌到回收袋，从背包抽 1 张牌。仅"手动拖动"触发，出牌自回收 / 装备销毁 / 瀑流溢出等系统路径不算。',
     shortDescription: '每手动拖 3 张到回收袋，背包抽 1 张',
     amuletEffect: 'manual-recycle-draw',
+  });
+
+  // === MIGRATED STARTER AMULETS (12 cards) ===
+  //
+  // These were previously in `createStarterCardPool` (game-core/deck.ts) and
+  // available via the first-row 「护符发现」 event tied to `discoverStarterAmulet`.
+  // They have been moved into the class deck so the first-row event now
+  // discovers a class amulet (「专属护符发现」 → `discoverClassAmulet`).
+  //
+  // ID-stability contract:
+  //   - We push these directly into `deck` (bypassing `pushCard`) so the
+  //     existing `STARTER_CARD_IDS.X` ids are preserved verbatim.
+  //   - On-upgrade handlers in `card-schema/definitions/upgrades.ts` are
+  //     registered under `starter:${STARTER_CARD_IDS.X}`. Because
+  //     `getStarterBaseId(card.id)` strips clone suffixes back to the
+  //     starter id, those handlers continue to fire correctly even after
+  //     `cloneClassCardWithFreshId` rewrites the id.
+  //   - `unique` flag stays `undefined` (none of these are unique).
+  //
+  // Each amulet is run through `applyDerivedCardText` so that
+  // `description` / `shortDescription` / `magicEffect` come from the
+  // registered formatter (mirroring what `createStarterCardPool` does for
+  // the starter pool, since these cards' formatters are keyed under
+  // `starter:${STARTER_CARD_IDS.X}`).
+  //
+  // Behavior is unchanged — the cards still resolve via the same
+  // `amuletEffect: '<id>'` registry entries in `equipment.ts`.
+  const pushAmulet = (card: GameCardData) => {
+    deck.push(applyDerivedCardText(card) as KnightCardData);
+  };
+  pushAmulet({
+    id: STARTER_CARD_IDS.loneCardAmulet,
+    type: 'amulet',
+    name: '孤注之符',
+    value: 0,
+    image: dedupeStarterAmuletLoneImage,
+    classCard: true,
+    amuletEffect: 'lone-card',
+    shortDescription: '瀑流时若背包仅 1 张：获得 1 张职业牌',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.attackPersuadeAmulet,
+    type: 'amulet',
+    name: '降服之符',
+    value: 0,
+    image: starterAmuletPersuadeDiscountImage,
+    classCard: true,
+    amuletEffect: 'attack-persuade-discount',
+    shortDescription: '每次攻击下次劝降费用 -3（可叠加）',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.cardGainMissileAmulet,
+    type: 'amulet',
+    name: '弹幕之符',
+    value: 0,
+    image: starterAmuletMissileImage,
+    classCard: true,
+    amuletEffect: 'card-gain-missile',
+    shortDescription: '每次从坟场获牌：入手 2 张「魔弹」',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.damageClassDiscoverAmulet,
+    type: 'amulet',
+    name: '战痕之符',
+    value: 0,
+    image: starterAmuletDamageDiscoverImage,
+    classCard: true,
+    amuletEffect: 'damage-class-discover',
+    shortDescription: '每造成 8 次伤害：发现 1 张专属',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.swapUpgradeAmulet,
+    type: 'amulet',
+    name: '流转之符',
+    value: 0,
+    image: starterAmuletSwapUpgradeImage,
+    classCard: true,
+    amuletEffect: 'swap-upgrade',
+    description: '每交换 3 次位置，升级 1 张牌。',
+    shortDescription: '每交换 3 次位置：升级 1 张牌',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.stunUpgradeCapAmulet,
+    type: 'amulet',
+    name: '震慑之符',
+    value: 0,
+    image: starterAmuletStunCapImage,
+    classCard: true,
+    amuletEffect: 'stun-upgrade-cap',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.recycleBackpackExpandAmulet,
+    type: 'amulet',
+    name: '积蓄之符',
+    value: 0,
+    image: starterAmuletRecycleExpandImage,
+    classCard: true,
+    amuletEffect: 'recycle-backpack-expand',
+    shortDescription: '每回收 8 张牌：背包上限 +3',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.dungeonGoldAmulet,
+    type: 'amulet',
+    name: '拾荒之符',
+    value: 0,
+    image: starterAmuletDungeonGoldImage,
+    classCard: true,
+    amuletEffect: 'dungeon-gold',
+    shortDescription: '每处理 1 张地城牌：+1 金币',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.waterfallHealAmulet,
+    type: 'amulet',
+    name: '潮愈之符',
+    value: 0,
+    image: starterAmuletWaterfallHealImage,
+    classCard: true,
+    amuletEffect: 'waterfall-heal',
+    description: '每次瀑流推进时，恢复 4 点生命（多个叠加：每件 +4）。',
+    shortDescription: '每次瀑流：恢复 4 点生命（叠加 +4）',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.flipOverkillLifestealAmulet,
+    type: 'amulet',
+    name: '翻血之符',
+    value: 0,
+    image: flipLifestealAmuletImage,
+    classCard: true,
+    amuletEffect: 'flip-overkill-lifesteal',
+    description: '每翻转 5 张牌，超杀吸血永久 +1。',
+    shortDescription: '每翻转 5 张牌：超杀吸血永久 +1',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.equipAmuletCapAmulet,
+    type: 'amulet',
+    name: '集甲之符',
+    value: 0,
+    image: equipAmuletCapImage,
+    classCard: true,
+    amuletEffect: 'equip-amulet-cap',
+    description: '每装备 6 个装备，护符栏上限 +1。',
+    shortDescription: '每装备 6 件装备：护符栏上限 +1',
+  });
+
+  pushAmulet({
+    id: STARTER_CARD_IDS.stunAttemptDiscoverAmulet,
+    type: 'amulet',
+    name: '眩学之符',
+    value: 0,
+    image: stunDiscoverAmuletImage,
+    classCard: true,
+    amuletEffect: 'stun-attempt-discover',
+    description: '每尝试击晕 6 次，发现一张专属牌。',
+    shortDescription: '每尝试击晕 6 次：发现 1 张专属',
   });
 
   // === NEW POTIONS (2 cards) ===
@@ -1040,6 +1274,25 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 1,
   });
 
+  // 连环转律 (唯一)：造成 X 点法术伤害，X 为此前连续转型的次数（含本牌）。
+  // 同类型连出会断链 → 0 伤害。resolver 在 card-schema/definitions/magic.ts 的
+  // `knight:transform-streak-strike` 处理（按 knightEffect 路由，跳过 magicEffect）。
+  pushCard({
+    type: 'magic',
+    name: '连环转律',
+    value: 0,
+    image: dedupeStarterCombatRallyImage,
+    classCard: true,
+    unique: true,
+    description: '造成 X 点法术伤害，X 为此前连续转型的次数（含本牌）。同类型连出会断链。',
+    shortDescription: '伤害 ＝ 连续转型次数',
+    magicType: 'permanent',
+    magicEffect: '伤害 = 连续转型链长度，同类型断链。',
+    knightEffect: 'transform-streak-strike',
+    recycleDelay: 2,
+    maxUpgradeLevel: 0,
+  });
+
   pushCard({
     type: 'magic',
     name: '淬炼冲击',
@@ -1060,6 +1313,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: recallScrollImage,
     classCard: true,
+    unique: true,
     description: '永久：失去 2 点生命，回手一张牌，抽 1 张牌。',
     shortDescription: '失去 2 生命，回手 1 张，抽 1 张',
     magicType: 'permanent',
@@ -1097,6 +1351,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicRecycleTideImage,
     classCard: true,
+    unique: true,
     description: '永久：将背包所有牌移入回收袋；然后回收袋瀑流 -1，已就绪的牌洗回背包。',
     shortDescription: '背包→回收袋；回收袋瀑流 -1，就绪回背包',
     magicType: 'permanent',
@@ -1373,6 +1628,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
+    unique: true,
     description: '永久：选择一件装备，耐久上限 +1，耐久 +1。如果加完后该装备耐久为 4，则随机一只激活行的怪物受到 1 血层伤害，并立即将该装备耐久 -3。',
     shortDescription: '选装备 +1 上限/耐久；若至 4 耐久，敌人 -1 血层、装备 -3',
     magicType: 'permanent',
@@ -1387,10 +1643,11 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollFortifyFlankImage,
     classCard: true,
-    description: '永久：选择一个装备，+3（每次使用后数值 +1）临时护甲。侧击：赋予该装备复生。',
-    shortDescription: '+3(递增) 临时护甲；侧击赋予复生',
+    unique: true,
+    description: '永久：选择一个装备，+1（每次使用后数值 +1）临时护甲。侧击：赋予该装备复生。',
+    shortDescription: '+1(递增) 临时护甲；侧击赋予复生',
     magicType: 'permanent',
-    magicEffect: '+3(递增) 临时护甲，侧击赋予复生。',
+    magicEffect: '+1(递增) 临时护甲，侧击赋予复生。',
     knightEffect: 'flank-fortify',
     flankEffect: '赋予该装备复生',
     recycleDelay: 2,
@@ -1402,6 +1659,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
+    unique: true,
     description:
       '永久：选择一把武器，对激活行所有怪物造成等同于该武器攻击力的法术伤害（不耗耐久），然后该武器栏临时攻击 -3。',
     shortDescription: '武器攻击力法伤全场；该栏临时攻击 -3',
@@ -1417,12 +1675,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollTransformRepairImage,
     classCard: true,
-    description: '永久：选择一个装备，恢复 1 耐久。转型：给该装备栏 +3 临时攻击（每次触发后数值 +1）。',
-    shortDescription: '装备 +1 耐久；转型 +3(递增) 临时攻击',
+    description: '永久：选择一个装备，恢复 1 耐久。侧击：给该装备栏 +1 临时攻击（每次触发后数值 +1）。',
+    shortDescription: '装备 +1 耐久；侧击 +1(递增) 临时攻击',
     magicType: 'permanent',
-    magicEffect: '修复 1 耐久，转型 +3(递增) 临时攻击。',
+    magicEffect: '修复 1 耐久，侧击 +1(递增) 临时攻击。',
     knightEffect: 'transform-repair',
-    transformBonus: '给该装备栏 +3 临时攻击（每次触发后数值 +1）',
+    flankEffect: '给该装备栏 +1 临时攻击（每次触发后数值 +1）',
   });
 
   pushCard({
@@ -1581,6 +1839,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: monsterDoomScrollImage,
     classCard: true,
+    unique: true,
     description: '装备的怪物数量为数值条（上限 2）。释放：摧毁所有装备（含下层叠加，每件独立判定复生），每摧毁一件对激活行所有怪物 -2攻/-2血上限（每个血层都减）。',
     shortDescription: '装备怪物充能；释放摧毁全部装备（含下层）并削弱全场',
     heroMagicId: 'monster-doom',
@@ -1593,6 +1852,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroReviveTomeImage,
     classCard: true,
+    unique: true,
     description: '每对自己造成 3 次伤害充满数值条。释放：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
     shortDescription: '自伤 3 次充能；释放赋予一件装备复生',
     heroMagicId: 'revive-blessing',
@@ -1823,6 +2083,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: frenzyCurseImage,
     classCard: true,
+    unique: true,
     description: '诅咒：使用时失去 1 生命，抽 1 张牌，使用后回到背包；上手时随机一个装备栏 +1 临时攻击；无法被回收或弃置。',
     shortDescription: '使用 -1 生命抽 1 张回背包；上手随机一栏 +1 临时攻',
     curseEffect: 'frenzy-curse',
@@ -1903,7 +2164,7 @@ export const createGreedCurseCard = (rng: RngState): [KnightCardData, RngState] 
  *   - `hp: 1` / `maxHp: 1`：跟现有 ghost building (增幅祭坛/诅咒碑) 同款占位
  *     字段，避免 UI 渲染时缺字段崩溃。地雷不能被英雄主动攻击（活跃行 building
  *     攻击路径需要怪物 attack 字段，此处保留但不会被使用）。
- *   - 图片复用 `dedupeKnightMagicGraveNovaImage`（殉烈爆鸣 同款"爆裂"主题）。
+ *   - 图片使用专属 `knightMineBuildingImage`（地雷建筑独有）。
  */
 export const createMineBuilding = (rng: RngState): [GameCardData, RngState] => {
   const [id, nextRng] = nextId(rng, 'mine');
@@ -1912,7 +2173,7 @@ export const createMineBuilding = (rng: RngState): [GameCardData, RngState] => {
     type: 'building',
     name: '地雷',
     value: 0,
-    image: dedupeKnightMagicGraveNovaImage,
+    image: knightMineBuildingImage,
     classCard: true,
     isGhost: true,
     mineDamage: 5,

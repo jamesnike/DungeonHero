@@ -1,0 +1,152 @@
+---
+description: Deck data ↔ UI flag rendering must have an end-to-end snapshot test. Whenever a card-data flag (`unique`, `classCard`, `permEquipment`, `isPermanentEvent`, `magicType`, etc.) is consumed by a renderer to draw a badge / pill / overlay, there must be a test that asserts the EXPECTED set of cards in the deck carry that flag. Without this test, anyone deleting a single `unique: true,` line silently breaks the UI badge for that card with no signal.
+alwaysApply: true
+---
+
+# 牌库数据 ↔ UI 标记字段：必须有端到端 snapshot 测试
+
+## 背景：1.2.7 的真实事故
+
+`ClassDeck.tsx:199` 和 `CardDetailsModal.tsx:57` 都按下面 pattern 渲染「唯一」角标：
+
+```tsx
+const isUnique = card.unique === true;
+{isUnique && <Badge>唯一</Badge>}
+```
+
+数据来源是 `client/src/lib/knightDeck.ts`，每张唯一卡靠一行 `unique: true,` 标记。
+
+`5091261 ea version 1.2.7` 一次性把 12 张卡的 `unique: true,` 行删掉了：
+
+| 卡 | 标记是否还在 |
+|---|---|
+| 圣光秘术 / 狂战秘典 / 永恒之器 / 回收灵焰 / 紧急回收 / 洗册归川 / 蓄能裂击 / 固壁侧守 / 利刃风暴 / 灭世裁决 / 复生秘典 / 战狂诅咒 | ❌ 全被删 |
+
+**13 个新测试文件**全过；`unique-class-card-lock.test.ts` 也过 —— 因为它们测的是「unique 锁机制本身」（filterAvailableClassPool / markUniqueAcquired 的逻辑），**没有任何测试断言「牌库里这 12 张特定的卡仍然带 unique 标记」**。
+
+只有玩家打开「专属卡牌列表」、看到「唯一」角标全部消失，bug 才被发现。
+
+## 不变量
+
+> **任何"渲染端按 `card.<flag> === true` / `card.<flag> != null` 决定 UI 装饰"的字段，
+> 都必须有一条 snapshot 测试断言: 牌库中具备该 flag 的卡集合 == 预期集合。**
+
+意义：
+
+1. 误删 / 漏写一行 `<flag>: true,` 立刻被 CI 抓住，不会等到玩家报 bug
+2. 加新卡时**强制**作者更新 snapshot —— 让「这张卡是不是要 unique / classCard / Perm」成为显式决定，而不是隐式
+3. 把"数据"和"UI"两端串起来 —— 即使 UI 渲染条件改了，snapshot 也保证数据这一端不退化
+
+## 已知需要这种 snapshot 测试的字段
+
+凡是渲染端有 `card.<flag>` 条件分支决定 badge / pill / overlay / 颜色 / 角标的字段，都属于此规则。已知列表（每加一条新规则要补这张表）：
+
+| 字段 | 渲染端 | 数据来源 | snapshot 测试 |
+|---|---|---|---|
+| `unique` | `ClassDeck.tsx`「唯一」badge / `CardDetailsModal.tsx`「唯一」pill | `knightDeck.ts` | `unique-class-card-deck-snapshot.test.ts` |
+| `classCard` | `CardDetailsModal.tsx`「KNIGHT CLASS」标签 | `knightDeck.ts`（全部）| —（全部 knight 卡都有，trivially 满足）|
+| `permEquipment` | `GameCard.tsx` Perm 装备紫色边框 | `knightDeck.ts`（铁壁塔盾等） | TODO（未来加）|
+| `isPermanentEvent` | `GameCard.tsx` Perm 事件特殊渲染 | `deck.ts` event 分支 | TODO |
+| `magicType: 'permanent'` | `GameCard.tsx` Perm 法术绿色装饰 | `deck.ts` / `knightDeck.ts` | TODO |
+| `recycleDelay > 0` | `GameCard.tsx` 回收袋路由 + Perm-grant modal | 数据 + 永恒铭刻 / 附魔祭坛 加成 | TODO |
+
+## snapshot 测试的标准写法
+
+放在 `client/src/game-core/__tests__/<flag>-deck-snapshot.test.ts`，模板：
+
+```typescript
+import { describe, expect, it } from 'vitest';
+import { generateKnightDeck } from '@/lib/knightDeck';
+import { createRng } from '@/game-core/rng';
+
+describe('Knight deck unique-card snapshot', () => {
+ it('exact set of unique class cards', () => {
+ const [deck] = generateKnightDeck(createRng(0));
+ const uniqueNames = deck
+ .filter(c => c.unique === true)
+ .map(c => c.name)
+ .sort();
+
+ // ⚠️ 改这条数组前停下：删一个名字 = 接受"这张卡不再是 unique"
+ // 加一个名字 = 接受"这张新卡是 unique"。
+ // 任何修改都要在 PR 描述里 justify。
+ expect(uniqueNames).toEqual([
+ '圣光秘术',
+ '回收灵焰',
+ '墓园守卫',
+ '复生秘典',
+ '弹幕护盾',
+ '战狂诅咒',
+ '殒雷符',
+ '永恒之器',
+ '洗册归川',
+ '灭世裁决',
+ '狂战秘典',
+ '紧急回收',
+ '蓄能裂击',
+ '连环转律',
+ '利刃风暴',
+ '固壁侧守',
+ ].sort());
+ });
+
+ it('every unique card is also a class card', () => {
+ const [deck] = generateKnightDeck(createRng(0));
+ for (const c of deck.filter(c => c.unique === true)) {
+ expect(c.classCard).toBe(true); // unique 必须 implies classCard
+ }
+ });
+});
+```
+
+### 关键点
+
+1. **断言 exact 集合**（`toEqual`），不是 `toContain` —— 这样**多一张少一张都会 fail**
+2. **数组是排好序的**（`.sort()`） —— 不依赖牌库 push 顺序，重排卡序不会让测试 fail
+3. **加上业务不变量**（如 "unique implies classCard"） —— 防止字段被错误组合
+4. **测试名字明确说"snapshot"** —— 让看到 fail 的人立刻知道：这是数据快照，需要 justify 改动
+
+### 对应的"加新卡 / 删卡"workflow
+
+- 加一张新唯一卡 → 测试 fail → 在 snapshot 数组里加上新名字 + PR 描述写"新增唯一卡 X"
+- 删一张唯一卡 → 测试 fail → 在 snapshot 数组里删名字 + PR 描述写"删除唯一卡 X，原因 Y"
+- 改一张卡的 `unique: true` → `false` → 测试 fail → snapshot 删名字 + PR 描述写"X 不再 unique，允许多份"
+
+**fail 是 feature，不是 noise**。
+
+## What NOT to do
+
+- ❌ 写一条只断言 `count > 0` 或 `length === 16` 的"模糊测试"。这种测试容易在重构里被绕过 —— 比如"我删一张又加一张总数不变"，或"我把 X 卡改成 unique，把 Y 卡改成不 unique，count 还是一样"。**必须用 exact 名字集合**。
+- ❌ 把 snapshot 维护在测试外的 fixture 文件里（`__fixtures__/unique-cards.json`）—— 把 expected 和测试代码分开，让作者更容易"图省事"自动同步 fixture，跳过 review。snapshot 直接写在 test 体内，强制每次改动经过 review。
+- ❌ 用 `vitest` 的 `toMatchSnapshot()`/`toMatchInlineSnapshot()`。这两个 API 默认行为是「fail 时自动更新 snapshot」，作者跑 `npm test -u` 就能无脑 unblock，跟"防止误删"的目标冲突。**用普通 `toEqual`**。
+- ❌ 只对一个字段写 snapshot，忽略其它"数据 ↔ UI 标记"字段。看到下次有人加 `permEquipment` / `isPermanentEvent` 类似 binary flag 的渲染条件，立刻补这条规则的"已知字段表" + 对应测试。
+
+## What to do
+
+- ✅ 加新「数据 ↔ UI 标记字段」时，**同一 PR**里就建立 snapshot 测试。
+- ✅ snapshot 数组按字母排序写，避免 git 冲突。
+- ✅ 配套写一条业务不变量断言（`unique implies classCard`、`permEquipment implies recycleDelay > 0` 等）。
+- ✅ 测试名字明确说 "deck snapshot" / "exact set" —— 让 reviewer 一眼看到这是不容易改的"红线测试"。
+
+## 自检
+
+每次改"卡牌数据 + UI 渲染"相关代码前，问自己：
+
+> 1. 我这次改动**是否动了**哪张卡的某个 binary flag（`unique` / `classCard` / `permEquipment` / `isPermanentEvent` / `magicType: 'permanent'` / `recycleDelay`）？
+> 2. 这个 flag 在渲染端被读吗？（`Grep` 确认有 `card.<flag>` 形式的读取）
+> 3. 如果 1 和 2 都是 yes：是不是有 snapshot 测试覆盖？跑了之后是不是确实 fail 了，提示我在 snapshot 数组里同步修改了？
+> 4. 如果没 snapshot：能不能**这一次顺手加上**？至少覆盖你刚改过的字段。
+
+任意一条「没」或「不确定」，**回头补 snapshot 再交**。
+
+## 跟其它规则的关系
+
+| 关注点 | 这条规则 | 其它规则 |
+|---|---|---|
+| 牌库数据 → UI 标记字段端到端 snapshot | ✅ 这条 | ❌ |
+| 不要把"加新卡"和"清理字段"塞同一个 commit | ❌ | `no-mixed-feature-and-cleanup-commits` |
+| 共享 effect id 改动前列消费方 | ❌ | `shared-effect-id-impact-check` |
+| 加新卡的完整流程 | ❌ | `adding-a-new-card` |
+| 测试覆盖 dispatch 完整链 | ❌ | `testing` |
+
+涉及"卡牌数据 ↔ UI 标记"时，这几条规则**都要核对**。

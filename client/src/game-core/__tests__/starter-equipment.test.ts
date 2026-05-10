@@ -84,18 +84,18 @@ describe('starter weapon: 魔弹冶刃 (overkillAmplifyMissile)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2) 赏金之剑 — onEquipEffect 'gold+6'
+// 2) 赏金之剑 — onEquipEffect 'gold+4'
 // ---------------------------------------------------------------------------
 
-describe('starter weapon: 赏金之剑 (gold+6 on equip)', () => {
-  it('grants +6 gold when played from hand', () => {
+describe('starter weapon: 赏金之剑 (gold+4 on equip)', () => {
+  it('grants +4 gold when played from hand', () => {
     const weapon = {
       id: 'w-bgb', type: 'weapon' as const, name: '赏金之剑', value: 2, image: '',
-      durability: 2, maxDurability: 2, onEquipEffect: 'gold+6',
+      durability: 2, maxDurability: 2, onEquipEffect: 'gold+4',
     };
     const state = makeState({ handCards: [weapon] as any, equipmentSlot1: null, gold: 10 });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'w-bgb' } as GameAction]);
-    expect(result.state.gold).toBe(16);
+    expect(result.state.gold).toBe(14);
     expect(result.state.equipmentSlot1?.id).toBe('w-bgb');
   });
 });

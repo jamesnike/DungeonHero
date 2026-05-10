@@ -232,7 +232,7 @@ describe('「右翼回响」 eligibility requirements', () => {
 
   it('equippedForOnEquipGrant — false when ALL main slots have equipment with onEquipEffect', () => {
     const state = makeState({
-      equipmentSlot1: weapon('w-1', { onEquipEffect: 'gold+6' as any }) as any,
+      equipmentSlot1: weapon('w-1', { onEquipEffect: 'gold+4' as any }) as any,
       equipmentSlot2: shield('s-1', { onEquipEffect: 'persuade-bonus-10' as any }) as any,
     });
     const result = evaluateChoiceRequirement(state, { type: 'equippedForOnEquipGrant' });

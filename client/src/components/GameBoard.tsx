@@ -811,6 +811,7 @@ export default function GameBoard() {
     monsterBleedStates, setMonsterBleedStates,
     monsterHealStates, setMonsterHealStates,
     monsterDefeatStates, setMonsterDefeatStates,
+    mineExplodeStates, setMineExplodeStates,
     weaponSwingStates, setWeaponSwingStates,
     shieldBlockStates, setShieldBlockStates,
     weaponSwingVariant, setWeaponSwingVariant,
@@ -829,6 +830,7 @@ export default function GameBoard() {
     setShieldBlockStates,
     setWeaponSwingVariant,
     setShieldBlockVariant,
+    setMineExplodeStates,
   }, animSpeed);
   const {
     triggerHeroBleedAnimation,
@@ -836,12 +838,14 @@ export default function GameBoard() {
     triggerMonsterHealAnimation,
     triggerWeaponSwingAnimation,
     triggerShieldBlockAnimation,
+    triggerMineExplosionAnimation,
     animationDelayTimeoutsRef,
     heroBleedTimeoutRef,
     monsterBleedTimeoutsRef,
     monsterHealTimeoutsRef,
     weaponSwingTimeoutsRef,
     shieldBlockTimeoutsRef,
+    mineExplodeTimeoutsRef,
   } = combatAnims;
   const heroCellRef = useRef<HTMLDivElement>(null);
   const heroRowCellRefs = useRef<Array<HTMLDivElement | null>>(Array(6).fill(null));
@@ -1760,6 +1764,11 @@ export default function GameBoard() {
         timeouts.forEach(id => clearTimeout(id));
       }
       shieldBlockTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+
+      for (const timeouts of Object.values(mineExplodeTimeoutsRef.current)) {
+        timeouts.forEach(id => clearTimeout(id));
+      }
+      mineExplodeTimeoutsRef.current = {};
 
       if (directedCombatFxFlightAnimationRef.current !== null) {
         cancelAnimationFrame(directedCombatFxFlightAnimationRef.current);
@@ -4148,7 +4157,7 @@ export default function GameBoard() {
       }
       if (slot?.amuletEffect === 'monster-kill-upgrade') {
         const killProgress = snapshot.monsterKillUpgradeProgress ?? 0;
-        return { ...slot, _counterDisplay: `${killProgress}/5` };
+        return { ...slot, _counterDisplay: `${killProgress}/3` };
       }
       if (slot?.amuletEffect === 'swap-upgrade') {
         const swapProg = snapshot.swapUpgradeProgress ?? 0;
@@ -4422,11 +4431,16 @@ export default function GameBoard() {
       timeouts.forEach(id => clearTimeout(id));
     }
     shieldBlockTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+    for (const timeouts of Object.values(mineExplodeTimeoutsRef.current)) {
+      timeouts.forEach(id => clearTimeout(id));
+    }
+    mineExplodeTimeoutsRef.current = {};
 
     setHeroBleedActive(false);
     setMonsterBleedStates({});
     setWeaponSwingStates({ equipmentSlot1: 0, equipmentSlot2: 0 });
     setShieldBlockStates({ equipmentSlot1: 0, equipmentSlot2: 0 });
+    setMineExplodeStates({});
     setRemovingCards(new Set());
     setMonsterDefeatStates({});
 
@@ -4582,7 +4596,7 @@ export default function GameBoard() {
     // 现在按设计收紧到 graveyard-only。card:newCardGained 事件本身仍然在 classPool
     // 路径下被 emit（见 rules/cards.ts / shop.ts / waterfall.ts），只是这里不再消费它。
     if (amuletEffects.cardGainMissileCount > 0 && source === 'graveyard') {
-      const boltsPerTrigger = amuletEffects.cardGainMissileCount;
+      const boltsPerTrigger = amuletEffects.cardGainMissileCount * 2;
       let rng = engine.getState().rng;
       const bolts: GameCardData[] = [];
       const bonusMap = engine.getState().amplifiedCardBonus;
@@ -4662,6 +4676,11 @@ export default function GameBoard() {
       timeouts.forEach(id => clearTimeout(id));
     }
     shieldBlockTimeoutsRef.current = { equipmentSlot1: [], equipmentSlot2: [] };
+    for (const timeouts of Object.values(mineExplodeTimeoutsRef.current)) {
+      timeouts.forEach(id => clearTimeout(id));
+    }
+    mineExplodeTimeoutsRef.current = {};
+    setMineExplodeStates({});
 
     if (discardShockFlightAnimationRef.current !== null) {
       window.cancelAnimationFrame(discardShockFlightAnimationRef.current);
@@ -5681,6 +5700,7 @@ export default function GameBoard() {
     triggerMonsterHealAnimation,
     triggerWeaponSwingAnimation,
     triggerShieldBlockAnimation,
+    triggerMineExplosionAnimation,
     tryStartShieldReflectDirectedFx,
     tryStartBossRetaliationDirectedFx,
     tryStartGolemLayerReflectFx,
@@ -6821,7 +6841,7 @@ export default function GameBoard() {
       }
       setEquipmentSlotById(equipSlot, equipCard);
 
-      // onEquipEffect（gold+6 / temp-attack-2|3 / temp-armor-3 / heal-3 / …）
+      // onEquipEffect（gold+4 / temp-attack-2|3 / temp-armor-3 / heal-3 / …）
       // 与 equip-empower 永恒护符的处理已下沉到 EQUIP_FROM_HAND reducer。
       // 见 game-core/rules/cards.ts → reduceEquipFromHand。
 
@@ -8198,6 +8218,7 @@ export default function GameBoard() {
     monsterBleedStates,
     monsterHealStates,
     monsterDefeatStates,
+    mineExplodeStates,
     removingCards,
     pendingDungeonUseRef,
   }), [
@@ -8205,6 +8226,7 @@ export default function GameBoard() {
     fullBoardInteractionLocked, draggedEquipment, rageStripWidth, isCompactViewport,
     cellWrapperClass, cellInnerClass,
     monsterBleedStates, monsterHealStates, monsterDefeatStates,
+    mineExplodeStates,
     removingCards, pendingDungeonUseRef,
   ]);
 

@@ -204,11 +204,11 @@ function reduceEndTurn(
 }
 
 // ---------------------------------------------------------------------------
-// FORCE_END_HERO_TURN — auto-end on 60s timer expiry
+// FORCE_END_HERO_TURN — auto-end on 40s timer expiry
 // ---------------------------------------------------------------------------
 
 /**
- * 60s 倒计时归零时的强制收尾。
+ * 40s 倒计时归零时的强制收尾。
  *
  * 1. 清空所有引擎侧 modal / pending interaction 字段（不调 setter，直接 patch
  *    一次性归零，避免 N 条单独 dispatch 在管线里被 INPUT_PHASES gating 卡住）。

@@ -22,6 +22,11 @@ export interface ActiveRowInteractionState {
   monsterBleedStates: Record<string, number>;
   monsterHealStates: Record<string, number>;
   monsterDefeatStates: Record<string, boolean>;
+  /** Mine explosion overlay counter, keyed by active-row slot index. Slot is
+   *  considered "exploding" when value > 0; useCombatAnimationTriggers manages
+   *  the lifecycle (increment on combat:mineTriggered, decrement after
+   *  MINE_EXPLODE_DURATION). */
+  mineExplodeStates: Record<number, number>;
   removingCards: Set<string>;
   pendingDungeonUseRef: React.MutableRefObject<Set<string>>;
 }
@@ -69,9 +74,11 @@ const ActiveCell = memo(function ActiveCell({
     monsterBleedStates,
     monsterHealStates,
     monsterDefeatStates,
+    mineExplodeStates,
     removingCards,
     pendingDungeonUseRef,
   } = interaction;
+  const isMineExploding = (mineExplodeStates[index] ?? 0) > 0;
 
   const {
     monsterTargetingActive,
@@ -122,9 +129,11 @@ const ActiveCell = memo(function ActiveCell({
     return (
       <div
         key={`active-empty-${index}`}
-        className={cellWrapperClass}
+        className={`${cellWrapperClass} relative`}
         ref={el => callbacks.setActiveCellRef(index, el)}
-      />
+      >
+        {isMineExploding && <MineExplosionOverlay />}
+      </div>
     );
   }
 
@@ -287,7 +296,37 @@ const ActiveCell = memo(function ActiveCell({
             </div>
           </div>
         )}
+        {isMineExploding && <MineExplosionOverlay />}
       </div>
+    </div>
+  );
+});
+
+// Mine explosion overlay — slot-positioned thunder burst.
+//
+// Renders three concurrent CSS animations:
+//   - flash: bright yellow/white core disc (impact)
+//   - shock: expanding ring (concussion)
+//   - 8 bolts: radiating diagonal sparks (electric, N/NE/E/SE/S/SW/W/NW)
+//
+// `pointer-events: none` via `.mine-explode-overlay` so the burst never
+// blocks click/drag interactions on the underlying card. Mounted/unmounted
+// by the `isMineExploding` parent flag; the keyframes on each child run to
+// completion within MINE_EXPLODE_DURATION (800ms) so unmount tears them
+// down cleanly.
+const MineExplosionOverlay = memo(function MineExplosionOverlay() {
+  return (
+    <div className="mine-explode-overlay" aria-hidden>
+      <div className="mine-explode-overlay__flash" />
+      <div className="mine-explode-overlay__shock" />
+      <div className="mine-explode-overlay__bolt mine-explode-overlay__bolt--n" />
+      <div className="mine-explode-overlay__bolt mine-explode-overlay__bolt--ne" />
+      <div className="mine-explode-overlay__bolt mine-explode-overlay__bolt--e" />
+      <div className="mine-explode-overlay__bolt mine-explode-overlay__bolt--se" />
+      <div className="mine-explode-overlay__bolt mine-explode-overlay__bolt--s" />
+      <div className="mine-explode-overlay__bolt mine-explode-overlay__bolt--sw" />
+      <div className="mine-explode-overlay__bolt mine-explode-overlay__bolt--w" />
+      <div className="mine-explode-overlay__bolt mine-explode-overlay__bolt--nw" />
     </div>
   );
 });

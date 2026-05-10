@@ -3,8 +3,8 @@ import { Hourglass } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallowGameState } from '@/hooks/useGameEngine';
 
-/** 英雄回合 60 秒 wall-clock 倒计时窗口。 */
-const HERO_TURN_DURATION_MS = 60_000;
+/** 英雄回合 40 秒 wall-clock 倒计时窗口。 */
+const HERO_TURN_DURATION_MS = 40_000;
 
 /** 倒计时进入「警告」态（红色脉冲）的剩余阈值。 */
 const LOW_TIME_WARNING_MS = 10_000;
@@ -26,7 +26,7 @@ interface HeroTurnTimerProps {
 }
 
 /**
- * 英雄回合 60 秒 wall-clock 倒计时显示。
+ * 英雄回合 40 秒 wall-clock 倒计时显示。
  *
  * 显示规则：仅在「战斗中且为英雄回合」可见——可见性匹配 `BoardOverlayButtons`
  * 里的 End Hero Turn 按钮，由 `state.playerTurnStartedAt` 直接驱动（START_TURN

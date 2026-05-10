@@ -3658,19 +3658,17 @@ export function resolveKnightPermanentMagic(
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
-      // 转型判定必须在此刻完成：本卡的 RESOLVE_MAGIC 末尾会 enqueue
-      // APPLY_TRANSFORM_CATEGORY，待玩家选择槽位后 hero.ts 再读时 lastPlayedCardCategory
-      // 已被覆盖为本卡自身类别，故必须把 transformTriggered 与 echoMultiplier
-      // 写入 pendingMagicAction 一并传递。
-      const prevCategory = state.lastPlayedCardCategory;
-      const curCategory = getCardPlayCategory(card);
-      const transformTriggered = prevCategory != null && prevCategory !== curCategory;
+      // 触发条件已经从「转型」迁移为「侧击」——卡在手牌最左 / 最右位置打出时触发。
+      // isFlank 由 reducePlayCard 计算并经 RESOLVE_MAGIC.isFlank →
+      // resolveKnightPermanentMagic.isFlank 透传进来；此处把 flankTriggered 写入
+      // pendingMagicAction，待玩家选完槽位后由 hero.ts RESOLVE_MAGIC_SLOT_SELECTION
+      // 读取并应用 +3(递增) 临时攻击。
       patch.pendingMagicAction = {
         card,
         effect: 'transform-repair',
         step: 'slot-select',
         prompt: '选择一个装备，恢复 1 耐久。',
-        transformTriggered,
+        flankTriggered: !!isFlank,
         echoMultiplier,
       } as any;
       patch.heroSkillBanner = '蜕变修复：选择一个装备。';
@@ -3710,8 +3708,8 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'recycle-flare': {
-      const drawCounts = [2, 3, 4];
-      const drawCount = drawCounts[card.upgradeLevel ?? 0] ?? 2;
+      const drawCounts = [1, 2, 3];
+      const drawCount = drawCounts[card.upgradeLevel ?? 0] ?? 1;
       const recycled = state.permanentMagicRecycleBag;
       if (recycled.length > 0) {
         const recycleResult = processRecycleBag({ ...state, ...patch } as GameState);

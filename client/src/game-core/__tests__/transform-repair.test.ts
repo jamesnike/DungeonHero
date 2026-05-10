@@ -41,9 +41,9 @@ function makeTransformRepairCard(suffix = ''): GameCardData {
     image: '',
     classCard: true,
     magicType: 'permanent',
-    magicEffect: '修复 1 耐久，侧击 +3(递增) 临时攻击。',
+    magicEffect: '修复 1 耐久，侧击 +1(递增) 临时攻击。',
     knightEffect: 'transform-repair',
-    flankEffect: '给该装备栏 +3 临时攻击（每次触发后数值 +1）',
+    flankEffect: '给该装备栏 +1 临时攻击（每次触发后数值 +1）',
   } as GameCardData;
 }
 
@@ -70,7 +70,7 @@ function makeWeapon(id: string, durability = 2, maxDurability = 4): EquipmentIte
 }
 
 describe('蜕变修复 (transform-repair) — 侧击触发', () => {
-  it('源卡在最左（leftmost flank）→ 侧击触发，装备栏 +3 临时攻击 + 修耐久', () => {
+  it('源卡在最左（leftmost flank）→ 侧击触发，装备栏 +1 临时攻击 + 修耐久', () => {
     const card = makeTransformRepairCard('-1');
     const filler1 = makeFiller('f1');
     const filler2 = makeFiller('f2');
@@ -92,12 +92,12 @@ describe('蜕变修复 (transform-repair) — 侧击触发', () => {
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', slotId: 'equipmentSlot1' } as GameAction,
     ]);
 
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(3);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(1);
     expect(result.state.equipmentSlot1?.durability).toBe(3);
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('源卡在最右（rightmost flank）→ 侧击触发，装备栏 +3 临时攻击 + 修耐久', () => {
+  it('源卡在最右（rightmost flank）→ 侧击触发，装备栏 +1 临时攻击 + 修耐久', () => {
     const card = makeTransformRepairCard('-1b');
     const filler1 = makeFiller('f1');
     const filler2 = makeFiller('f2');
@@ -116,7 +116,7 @@ describe('蜕变修复 (transform-repair) — 侧击触发', () => {
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', slotId: 'equipmentSlot1' } as GameAction,
     ]);
 
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(3);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(1);
     expect(result.state.equipmentSlot1?.durability).toBe(3);
   });
 
@@ -143,7 +143,7 @@ describe('蜕变修复 (transform-repair) — 侧击触发', () => {
     expect(result.state.equipmentSlot1?.durability).toBe(3);
   });
 
-  it('回响×2 时侧击触发：耐久 +2 且临时攻击 +6', () => {
+  it('回响×2 时侧击触发：耐久 +2 且临时攻击 +2', () => {
     const card = makeTransformRepairCard('-4');
     const filler = makeFiller('f1');
     const weapon = makeWeapon('w4', 1, 5);
@@ -164,7 +164,7 @@ describe('蜕变修复 (transform-repair) — 侧击触发', () => {
     ]);
 
     expect(result.state.equipmentSlot1?.durability).toBe(3);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(6);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(2);
   });
 
   it('多次触发：_flankRepairTriggers 累加，下次基础值 +1', () => {
@@ -182,6 +182,6 @@ describe('蜕变修复 (transform-repair) — 侧击触发', () => {
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', slotId: 'equipmentSlot1' } as GameAction,
     ]);
 
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(5);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(3);
   });
 });

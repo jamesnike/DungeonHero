@@ -35,9 +35,9 @@ const tempAttack3: OnEquipHandler = (state, card, slotId, patch, sideEffects) =>
   checkPersuadeOnTempAttack(state, patch, sideEffects);
 };
 
-const gold6: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
-  enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 6, source: 'on-equip' });
-  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：金币 +6！` } });
+const gold4: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
+  enqueuedActions.push({ type: 'MODIFY_GOLD', delta: 4, source: 'on-equip' });
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：金币 +4！` } });
 };
 
 const allTempAttack2: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {
@@ -223,7 +223,7 @@ registerOnEquipAll([
   { id: 'all-temp-attack-4', handler: allTempAttack4 },
   { id: 'all-temp-attack-6', handler: allTempAttack6 },
   { id: 'temp-armor-3', handler: tempArmor3 },
-  { id: 'gold+6', handler: gold6 },
+  { id: 'gold+4', handler: gold4 },
   { id: 'persuade-bonus-10', handler: persuadeBonus10 },
   { id: 'persuade-bonus-20', handler: persuadeBonus20 },
   { id: 'spell-lifesteal+1', handler: spellLifesteal1 },

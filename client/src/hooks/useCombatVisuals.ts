@@ -24,6 +24,13 @@ export function useCombatVisuals() {
   const [monsterBleedStates, setMonsterBleedStates] = useState<Record<string, number>>({});
   const [monsterHealStates, setMonsterHealStates] = useState<Record<string, number>>({});
   const [monsterDefeatStates, setMonsterDefeatStates] = useState<Record<string, boolean>>({});
+  // mineExplodeStates: keyed by active-row slot index (0..DUNGEON_COLUMN_COUNT-1).
+  // Counter increments when 'combat:mineTriggered' fires for that slot, decrements
+  // when the animation completes. Rendered in `ActiveRow.tsx` as a slot-indexed
+  // overlay so the burst stays at the cell where the mine was, even though by
+  // the time the animation runs the slot already contains the monster that
+  // landed on the mine.
+  const [mineExplodeStates, setMineExplodeStates] = useState<Record<number, number>>({});
   const [weaponSwingStates, setWeaponSwingStates] = useState<Record<EquipmentSlotId, number>>(INITIAL_SLOT_COUNTERS);
   const [shieldBlockStates, setShieldBlockStates] = useState<Record<EquipmentSlotId, number>>(INITIAL_SLOT_COUNTERS);
   const [weaponSwingVariant, setWeaponSwingVariant] = useState<Record<EquipmentSlotId, 0 | 1>>(INITIAL_SLOT_VARIANTS);
@@ -37,6 +44,7 @@ export function useCombatVisuals() {
     monsterBleedStates, setMonsterBleedStates,
     monsterHealStates, setMonsterHealStates,
     monsterDefeatStates, setMonsterDefeatStates,
+    mineExplodeStates, setMineExplodeStates,
     weaponSwingStates, setWeaponSwingStates,
     shieldBlockStates, setShieldBlockStates,
     weaponSwingVariant, setWeaponSwingVariant,

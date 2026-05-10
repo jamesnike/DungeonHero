@@ -76,9 +76,6 @@ const potionWeaponRepairImage = potionWeaponRepairImageImport;
 export { potionWeaponRepairImage };
 import potionEquipmentRepairImage from '@assets/generated_images/cute_potion_equipment_repair.png';
 import potionShieldFortifyImage from '@assets/generated_images/knight_potion_shield_fortify.png';
-import flipLifestealAmuletImage from '@assets/generated_images/knight_flip_lifesteal_amulet.png';
-import equipAmuletCapImage from '@assets/generated_images/knight_equip_amulet_cap_amulet.png';
-import stunDiscoverAmuletImage from '@assets/generated_images/knight_stun_discover_amulet.png';
 import potionBackpackAwakenImage from '@assets/generated_images/card_dedupe_potion_backpack_awaken.png';
 import potionInsightClassImage from '@assets/generated_images/card_dedupe_potion_insight.png';
 import potionEternalInscribeImage from '@assets/generated_images/card_dedupe_potion_eternal_perm.png';
@@ -160,16 +157,8 @@ import dedupeMissileBoltTokenImage from '@assets/generated_images/card_dedupe_mi
 import dedupeStarterMagicMissileImage from '@assets/generated_images/card_dedupe_starter_magic_missile.png';
 import dedupeKnightMagicGraveNovaImage from '@assets/generated_images/card_dedupe_knight_magic_grave_nova.png';
 import dedupeStarterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
-import dedupeStarterAmuletLoneImage from '@assets/generated_images/card_dedupe_starter_amulet_lone.png';
-import starterAmuletPersuadeDiscountImage from '@assets/generated_images/starter_amulet_persuade_discount.png';
+// 「弹幕骰局」翻转出的 amulet（card-gain-missile）仍然引用此图，所以保留 import。
 import starterAmuletMissileImage from '@assets/generated_images/starter_amulet_missile.png';
-import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
-import starterAmuletSwapUpgradeImage from '@assets/generated_images/starter_amulet_swap_upgrade.png';
-import starterAmuletStunCapImage from '@assets/generated_images/starter_amulet_stun_cap.png';
-import starterAmuletRecycleExpandImage from '@assets/generated_images/starter_amulet_recycle_expand.png';
-import starterAmuletDungeonGoldImage from '@assets/generated_images/starter_amulet_dungeon_gold.png';
-// 潮愈之符 暂复用永恒护符·潮涌回春的 PNG（视觉同主题），后续可替换。
-import starterAmuletWaterfallHealImage from '@assets/generated_images/relic_waterfall_heal.png';
 import dedupeStarterBackpackSizePotionImage from '@assets/generated_images/card_dedupe_starter_potion_backpack_size.png';
 import dedupeStarterSlotCapacityPotionImage from '@assets/generated_images/card_dedupe_potion_slot_capacity_starter.png';
 
@@ -183,6 +172,13 @@ import starterGhostBladeImage from '@assets/generated_images/starter_ghost_blade
 import starterLuckyDaggerImage from '@assets/generated_images/starter_lucky_dagger.png';
 import starterWaterfallSwordImage from '@assets/generated_images/starter_waterfall_sword.png';
 import starterPersuadeBladeImage from '@assets/generated_images/starter_persuade_blade.png';
+import starterMissileForgeBladeImage from '@assets/generated_images/starter_missile_forge_blade.png';
+import starterRushAttackBladeImage from '@assets/generated_images/starter_rush_attack_blade.png';
+import starterLinkShieldNewImage from '@assets/generated_images/starter_link_shield_new.png';
+import starterLegacyShieldImage from '@assets/generated_images/starter_legacy_shield.png';
+import starterSpiritGuardShieldImage from '@assets/generated_images/starter_spirit_guard_shield.png';
+import starterForteShieldImage from '@assets/generated_images/starter_forte_shield.png';
+import starterMineLegacyShieldImage from '@assets/generated_images/starter_mine_legacy_shield.png';
 import starterGuardianShieldImage from '@assets/generated_images/starter_guardian_shield.png';
 import starterLinkShieldImage from '@assets/generated_images/starter_link_shield.png';
 import starterScrollArmorImage from '@assets/generated_images/starter_scroll_armor.png';
@@ -438,7 +434,7 @@ export function createDeck(
       },
     ];
 
-    const monsterCount = isQuick ? 7 : 21;
+    const monsterCount = isQuick ? 6 : 21;
     for (let i = 0; i < monsterCount; i++) {
       const monsterType = monsterTypes[i % monsterTypes.length];
       const attack = randInt(monsterType.minAttack, monsterType.maxAttack);
@@ -1915,8 +1911,8 @@ export function createDeck(
         value: 0,
         image: starterAmuletMissileImage,
         amuletEffect: 'card-gain-missile',
-        description: '每从坟场获得一次牌（同时获得多张算一次），将一张「魔弹」加入手牌。手牌已满时不生成。',
-        shortDescription: '每次从坟场获牌：入手 1 张「魔弹」',
+        description: '每从坟场获得一次牌（同时获得多张算一次），将两张「魔弹」加入手牌。手牌已满时不生成。',
+        shortDescription: '每次从坟场获牌：入手 2 张「魔弹」',
       },
       destination: 'stay',
       message: '弹幕骰局翻转为「弹幕之符」，留在地城原格！',
@@ -2587,7 +2583,7 @@ export function createDeck(
   });
 
   const deckLimits: Partial<Record<GameCardData['type'], number>> = isQuick
-    ? { magic: 4, amulet: 4, potion: 4, shield: 3, weapon: 4, event: 11 }
+    ? { magic: 4, amulet: 3, potion: 4, shield: 3, weapon: 3, event: 10 }
     : { magic: 7, amulet: 5, potion: 6, shield: 5, weapon: 6 };
 
   for (const [type, limit] of Object.entries(deckLimits) as [GameCardData['type'], number][]) {
@@ -2673,6 +2669,7 @@ export const STARTER_CARD_IDS = {
   flipOverkillLifestealAmulet: 'starter-amulet-flip-overkill-lifesteal',
   equipAmuletCapAmulet: 'starter-amulet-equip-amulet-cap',
   stunAttemptDiscoverAmulet: 'starter-amulet-stun-attempt-discover',
+  transformStreakStrike: 'starter-perm-transform-streak-strike',
   flankSlotTempAttack: 'starter-perm-flank-slot-temp-attack',
   deckTopSwapGold: 'starter-perm-deck-top-swap-gold',
   discoverClassToHand: 'starter-perm-discover-class-to-hand',
@@ -2748,7 +2745,7 @@ export function createStarterDiscoverClassToHandCard(): GameCardData {
     magicType: 'permanent',
     magicEffect: '永久魔法：发现一张专属牌，直接进入手牌。',
     description: '发现一张专属牌（三选一），直接进入手牌（手牌已满则进背包，背包已满则进回收袋）。使用后回到回收袋，1 次瀑流后从回收袋洗回时触发「置顶」——直接放到背包顶（第 1 格）。',
-    shortDescription: '发现 1 张专属牌进手牌｜置顶',
+    shortDescription: '发现 1 张专属牌进手牌',
     recycleDelay: 1,
     topOnRecycleRestore: true,
   };
@@ -2996,7 +2993,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'shield',
       name: '连携之盾',
       value: 1,
-      image: starterLinkShieldImage,
+      image: starterLinkShieldNewImage,
       durability: 3,
       maxDurability: 3,
       onEquipEffect: 'other-slot-durability+1',
@@ -3008,7 +3005,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'weapon',
       name: '魔弹冶刃',
       value: 2,
-      image: starterPersuadeBladeImage,
+      image: starterMissileForgeBladeImage,
       durability: 2,
       maxDurability: 2,
       overkillAmplifyMissile: 1,
@@ -3023,16 +3020,16 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterBountyBladeImage,
       durability: 2,
       maxDurability: 2,
-      onEquipEffect: 'gold+6',
-      description: '入场：金币 +6。',
-      shortDescription: '入场 +6 金币',
+      onEquipEffect: 'gold+4',
+      description: '入场：金币 +4。',
+      shortDescription: '入场 +4 金币',
     },
     {
       id: STARTER_CARD_IDS.rushAttackBlade,
       type: 'weapon',
       name: '足锡冲锋',
       value: 1,
-      image: starterNoviceSwordImage,
+      image: starterRushAttackBladeImage,
       durability: 2,
       maxDurability: 2,
       onEquipEffect: 'temp-attack-3',
@@ -3044,7 +3041,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'shield',
       name: '遗愿重盾',
       value: 3,
-      image: starterGuardianShieldImage,
+      image: starterLegacyShieldImage,
       durability: 2,
       maxDurability: 2,
       armorMax: 3,
@@ -3057,7 +3054,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'shield',
       name: '灵潢守盾',
       value: 2,
-      image: starterLinkShieldImage,
+      image: starterSpiritGuardShieldImage,
       durability: 3,
       maxDurability: 3,
       armorMax: 2,
@@ -3071,7 +3068,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'shield',
       name: '砺心之盾',
       value: 3,
-      image: starterGuardianShieldImage,
+      image: starterForteShieldImage,
       durability: 2,
       maxDurability: 2,
       armorMax: 3,
@@ -3088,7 +3085,7 @@ export function createStarterCardPool(): GameCardData[] {
       type: 'shield',
       name: '殉雷遗盾',
       value: 3,
-      image: starterGuardianShieldImage,
+      image: starterMineLegacyShieldImage,
       durability: 2,
       maxDurability: 2,
       armorMax: 3,
@@ -3150,118 +3147,6 @@ export function createStarterCardPool(): GameCardData[] {
       shortDescription: '一张地城牌与正上方预览牌互换',
       recycleDelay: 2,
       maxUpgradeLevel: 2,
-    },
-    {
-      id: STARTER_CARD_IDS.loneCardAmulet,
-      type: 'amulet',
-      name: '孤注之符',
-      value: 0,
-      image: dedupeStarterAmuletLoneImage,
-      amuletEffect: 'lone-card',
-      shortDescription: '瀑流时若背包仅 1 张：获得 1 张职业牌',
-    },
-    {
-      id: STARTER_CARD_IDS.attackPersuadeAmulet,
-      type: 'amulet',
-      name: '降服之符',
-      value: 0,
-      image: starterAmuletPersuadeDiscountImage,
-      amuletEffect: 'attack-persuade-discount',
-      shortDescription: '每次攻击下次劝降费用 -3（可叠加）',
-    },
-    {
-      id: STARTER_CARD_IDS.cardGainMissileAmulet,
-      type: 'amulet',
-      name: '弹幕之符',
-      value: 0,
-      image: starterAmuletMissileImage,
-      amuletEffect: 'card-gain-missile',
-      shortDescription: '每次从坟场获牌：入手 1 张「魔弹」',
-    },
-    {
-      id: STARTER_CARD_IDS.damageClassDiscoverAmulet,
-      type: 'amulet',
-      name: '战痕之符',
-      value: 0,
-      image: starterAmuletDamageDiscoverImage,
-      amuletEffect: 'damage-class-discover',
-      shortDescription: '每造成 8 次伤害：发现 1 张专属',
-    },
-    {
-      id: STARTER_CARD_IDS.swapUpgradeAmulet,
-      type: 'amulet',
-      name: '流转之符',
-      value: 0,
-      image: starterAmuletSwapUpgradeImage,
-      amuletEffect: 'swap-upgrade',
-      description: '每交换 3 次位置，升级 1 张牌。',
-      shortDescription: '每交换 3 次位置：升级 1 张牌',
-    },
-    {
-      id: STARTER_CARD_IDS.stunUpgradeCapAmulet,
-      type: 'amulet',
-      name: '震慑之符',
-      value: 0,
-      image: starterAmuletStunCapImage,
-      amuletEffect: 'stun-upgrade-cap',
-    },
-    {
-      id: STARTER_CARD_IDS.recycleBackpackExpandAmulet,
-      type: 'amulet',
-      name: '积蓄之符',
-      value: 0,
-      image: starterAmuletRecycleExpandImage,
-      amuletEffect: 'recycle-backpack-expand',
-      shortDescription: '每回收 8 张牌：背包上限 +3',
-    },
-    {
-      id: STARTER_CARD_IDS.dungeonGoldAmulet,
-      type: 'amulet',
-      name: '拾荒之符',
-      value: 0,
-      image: starterAmuletDungeonGoldImage,
-      amuletEffect: 'dungeon-gold',
-      shortDescription: '每处理 1 张地城牌：+1 金币',
-    },
-    {
-      id: STARTER_CARD_IDS.waterfallHealAmulet,
-      type: 'amulet',
-      name: '潮愈之符',
-      value: 0,
-      image: starterAmuletWaterfallHealImage,
-      amuletEffect: 'waterfall-heal',
-      description: '每次瀑流推进时，恢复 4 点生命（多个叠加：每件 +4）。',
-      shortDescription: '每次瀑流：恢复 4 点生命（叠加 +4）',
-    },
-    {
-      id: STARTER_CARD_IDS.flipOverkillLifestealAmulet,
-      type: 'amulet',
-      name: '翻血之符',
-      value: 0,
-      image: flipLifestealAmuletImage,
-      amuletEffect: 'flip-overkill-lifesteal',
-      description: '每翻转 5 张牌，超杀吸血永久 +1。',
-      shortDescription: '每翻转 5 张牌：超杀吸血永久 +1',
-    },
-    {
-      id: STARTER_CARD_IDS.equipAmuletCapAmulet,
-      type: 'amulet',
-      name: '集甲之符',
-      value: 0,
-      image: equipAmuletCapImage,
-      amuletEffect: 'equip-amulet-cap',
-      description: '每装备 6 个装备，护符栏上限 +1。',
-      shortDescription: '每装备 6 件装备：护符栏上限 +1',
-    },
-    {
-      id: STARTER_CARD_IDS.stunAttemptDiscoverAmulet,
-      type: 'amulet',
-      name: '眩学之符',
-      value: 0,
-      image: stunDiscoverAmuletImage,
-      amuletEffect: 'stun-attempt-discover',
-      description: '每尝试击晕 6 次，发现一张专属牌。',
-      shortDescription: '每尝试击晕 6 次：发现 1 张专属',
     },
     {
       id: STARTER_CARD_IDS.undyingBlessing,

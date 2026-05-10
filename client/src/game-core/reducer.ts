@@ -414,7 +414,7 @@ function computeAmuletCounterDisplay(
     case 'magic-class-discover':
       return `${state.classMagicDiscoverStreak ?? 0}/8`;
     case 'monster-kill-upgrade':
-      return `${state.monsterKillUpgradeProgress ?? 0}/5`;
+      return `${state.monsterKillUpgradeProgress ?? 0}/3`;
     case 'swap-upgrade':
       return `${state.swapUpgradeProgress ?? 0}/3`;
     case 'recycle-backpack-expand': {

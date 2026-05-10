@@ -437,8 +437,8 @@ const missingHpSmite: CardTextFormatter = (card) => {
 
 const recycleFlare: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const drawCounts = [2, 3, 4];
-  const dc = drawCounts[level] ?? 4;
+  const drawCounts = [1, 2, 3];
+  const dc = drawCounts[level] ?? 3;
   return {
     description: `永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 ${dc} 张牌。(可超手牌上限)`,
     magicEffect: `回收袋归位并抽 ${dc} 张牌。`,
