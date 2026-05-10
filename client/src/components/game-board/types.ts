@@ -651,8 +651,11 @@ export type PendingMagicAction =
       prompt: string;
     }
   | {
-      // 池中坚意：选择装备栏（允许空槽），按 floor(回收袋数 / divisor) 加临时护甲。
+      // 池中坚意：选择装备栏（允许空槽），按 floor(回收袋数 / divisor) 加**永久**护甲
+      // （写入 equipmentSlotBonuses[slotId].shield，跟 event-armor-etch 同口径）。
       // divisor = 4 (Lv0) / 3 (Lv1)。
+      // 注：effect id `recycle-temp-armor` 是历史命名，语义已改为永久护甲；
+      // 不重命名以减少跨文件改动面。
       card: GameCardData;
       effect: 'recycle-temp-armor';
       step: 'slot-select';
@@ -1052,7 +1055,7 @@ export type ActiveAmuletEffects = {
   loneCardCount: number;
   equipmentSalvageCount: number;
   bloodrageAttackCount: number;
-  /** 「赎血召牌符」每次对自己造成 ≥1 实际伤害，从背包随机抽 1 × N 张牌（discrete event ×N stacking, 受手牌上限约束）。 */
+  /** 「赎血召牌符」每次对自己造成 ≥1 实际伤害，从背包随机抽 2 × N 张牌（discrete event ×N stacking, 每件抽 2 张; 受手牌上限约束）。 */
   selfDamageDrawCount: number;
   persuadeOnTempAttackCount: number;
   /** Sum of each equipped 怀柔之印's bonus (10 base / 20 upgraded), per trigger. */
@@ -1097,7 +1100,7 @@ export type ActiveAmuletEffects = {
    *  跟「布雷术」生成的地雷在数据上完全等价。 */
   killCellMineCount: number;
   /** 「循手之符」每"手动"拖卡到回收袋（waitsOverride === 1 标记）累计 +N（每件 +1）。
-   *  累计达 3 张 → 从背包抽 1 张牌；进度归 0。仅手动路径触发——出牌自回收 / 装备销毁 /
+   *  累计达 2 张 → 从背包抽 1 张牌；进度归 0。仅手动路径触发——出牌自回收 / 装备销毁 /
    *  护符销毁 / 瀑流溢出 等系统路径不算（与 积蓄之符 区别）。多件叠加跨阈值仍只抽 1 张
    *  （单触发模式，与 积蓄之符 一致）。 */
   manualRecycleDrawCount: number;

@@ -108,6 +108,31 @@ pushRecycleRestoreSideEffects(sideEffects, recycleResult);
 > 再次消失"。已迁移到 `backpackItems[0]` 语义。事件名 `card:promotedToDeckTop`
 > 因为没有任何 listener 暂未改名（修改它的代价大于收益）。
 
+### 抽牌优先级（重要）
+
+`drawFromBackpackToHandPure` / `drawMultipleFromBackpack`（`game-core/cards.ts`）
+在抽 1 张前**先**检查 `backpackItems[0]?.topOnRecycleRestore === true`：
+
+- 是 → **跳过 RNG，确定性抽出这张置顶卡**
+- 否 → 走原本的 `nextInt(rng, 0, pool.length - 1)` 随机抽
+
+多张抽时按数组顺序「逐张剥」：抽 N 张时，前 K 张是确定性的置顶卡（K = 当前 backpack
+头部连续的置顶卡数量），剩下 N-K 张随机。
+
+**这条优先级覆盖所有走 `DRAW_CARDS source: 'backpack'` / `DRAW_FROM_BACKPACK` 的路径**：
+战狂诅咒 / 回收灵焰 / 汰旧迎新 / 专属感召发现回手 / 装备遗言抽 / 武器超杀抽 /
+瀑流回合开始抽 / ogre `enterDiscard` / flank `flankDraw` / 等等——一律自动尊重置顶。
+
+历史 bug：早期「置顶」只覆盖「卡进 `backpackItems[0]`」（位置语义），但抽背包路径
+仍是纯随机选择，所以「卡刚回到背包顶，下一次抽必抽到」的玩家直觉完全失效。
+User 报告："为啥抽的牌都不是背包里 置顶 的牌呢？"——已修。
+
+新写涉及「从背包抽 N 张牌」的卡时无需特别关心置顶——只要走标准抽牌入口
+（`DRAW_CARDS source: 'backpack'` / `DRAW_FROM_BACKPACK` / `drawFromBackpackToHandPure` /
+`drawMultipleFromBackpack`），自动尊重置顶语义。
+
+### 容量与视觉
+
 容量语义：置顶卡仍然占 backpack 容量配额。背包满时所有 ready 卡（包括置顶卡）
 都落不下来 = 全部留在回收袋下次再算。
 
@@ -133,6 +158,10 @@ pushRecycleRestoreSideEffects(sideEffects, recycleResult);
 > 3. payload 的 `count` 和 `cards` 是不是跟 patch 实际写入背包的卡集合一致？
 > 4. 我有没有同时改了相同 effectId 的旧 switch 实现 + schema resolver 实现两份
 >    （参考 `shared-effect-id-impact-check.mdc`）？
+> 5. 如果新写的是「从背包抽 N 张」效果，我是不是走的标准入口
+>    （`DRAW_CARDS source: 'backpack'` / `DRAW_FROM_BACKPACK` / `drawFromBackpackToHandPure` /
+>    `drawMultipleFromBackpack`）？这些入口已经自动尊重「置顶」优先级，**绝对不要**
+>    自己用 `nextInt + state.backpackItems[index]` 写一套"伪随机抽"——会绕过置顶优先。
 
 任意一条"没"或"不确定"，回去对照"已经合规的路径"那张表照抄。
 

@@ -280,11 +280,18 @@ function reduceBeginCombat(
       // arrive with currentLayer = min(2, maxLayers). 1-fury monsters cap at 1.
       // (max hpLayers / rage cap is still left at the rage value, so layer-regen
       //  mechanics like 复生 can still restore layers up to the normal cap.)
+      // `skipNextMonsterTurn: true` ⇒ they are auto-engaged below (so they show up
+      // as live combat targets) but skip the very next monster turn — the flag is
+      // stripped by `endHeroTurnPatch` so they fight normally from the turn after.
       const isQuick = state.gameMode === 'quick';
       const summonedMonsterCards = rawMonsters.map(c => {
         const raged = applyMonsterRage(c, state.turnCount, isQuick);
         const maxLayers = raged.fury ?? raged.hpLayers ?? 1;
-        return { ...raged, currentLayer: Math.min(2, maxLayers) };
+        return {
+          ...raged,
+          currentLayer: Math.min(2, maxLayers),
+          skipNextMonsterTurn: true,
+        };
       });
       const summonedNonMonsterCards = rawNonMonsters; // non-monsters unchanged
       const picked = [...summonedMonsterCards, ...summonedNonMonsterCards];
@@ -518,7 +525,8 @@ function reduceApplyDamage(
   }
 
   // 「赎血召牌符」(self-damage-draw) — 每件 amulet 在每次"实际生效"的自伤事件
-  // 中独立触发一次抽 1 张牌（discrete event ×N 叠加；受手牌上限约束）。
+  // 中独立触发抽 2 张牌（discrete event ×N 叠加，每件抽 2 张 → N 件抽 2N 张；
+  // 受手牌上限约束）。
   // 与「血怒战符」共用 selfInflicted 路径，但只在 appliedDamage > 0 时触发：
   // 护盾完全抵消 / death-ward 救场都不算"造成了伤害"。
   // gameOver 路径仍然触发 —— 玩家虽然倒下，但 enqueue 的 DRAW_FROM_BACKPACK
@@ -530,7 +538,7 @@ function reduceApplyDamage(
     action.selfInflicted &&
     amuletEffects.selfDamageDrawCount > 0
   ) {
-    const drawCount = amuletEffects.selfDamageDrawCount;
+    const drawCount = amuletEffects.selfDamageDrawCount * 2;
     enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: drawCount });
     sideEffects.push({
       event: 'log:entry',
@@ -668,7 +676,7 @@ function reduceDealDamageToMonster(
   if (discoverAmulets.length > 0) {
     const streak = (state.classDamageDiscoverStreak ?? 0) + discoverAmulets.length;
     const maxUpgradeLevel = Math.max(...discoverAmulets.map(a => a.upgradeLevel ?? 0));
-    const threshold = maxUpgradeLevel >= 1 ? 3 : 8;
+    const threshold = maxUpgradeLevel >= 1 ? 4 : 6;
     if (streak >= threshold) {
       patch.classDamageDiscoverStreak = 0;
       sideEffects.push({ event: 'combat:classDamageDiscoverTriggered', payload: { threshold } });
@@ -1329,6 +1337,27 @@ function reduceMonsterDefeated(
     enqueuedActions.push({ type: 'CHECK_WRAITH_PURIFICATION' });
   }
 
+  // Bug fix (Sun May 10 2026 — "monster attacks first, hero turn timer 0s"):
+  // When the LAST engaged monster is defeated DURING a monster turn (e.g.,
+  // layered monster's currentLayer hits 0 from DECREMENT_FURY after attacking,
+  // or thorn-shield kills the attacker), `combatEnded === true` resets
+  // combatState to initialCombatState (currentTurn defaults to 'hero').
+  // Then the subsequent ADVANCE_MONSTER_TURN reducer's branch
+  //   `if (newCombat.currentTurn === 'hero' && state.combatState.currentTurn === 'monster')`
+  // fails — state.combatState.currentTurn is already 'hero' — so the chain
+  // APPLY_MONSTER_TURN_END_EFFECTS → START_TURN never fires. Result:
+  // phase stays 'monsterTurn', playerTurnStartedAt stays null, the hero
+  // turn timer never starts (or worse, shows 0s and force-ends the turn
+  // immediately via HeroTurnTimer's elapsed-since-null fallback).
+  //
+  // Fix: when combat ends mid-monster-turn, enqueue
+  // APPLY_MONSTER_TURN_END_EFFECTS ourselves so the chain reaches START_TURN.
+  // Both actions are in pipeline.ts isInputContinuation whitelist so they
+  // drain through the playerInput-phase gate.
+  if (combatEnded && state.combatState.currentTurn === 'monster') {
+    enqueuedActions.push({ type: 'APPLY_MONSTER_TURN_END_EFFECTS' });
+  }
+
   patch.rng = rng;
   return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
@@ -1802,7 +1831,7 @@ export function tickStunAttemptDiscoverProgress(
     s => s?.amuletEffect === 'stun-attempt-discover',
   ).length;
   if (count === 0) return;
-  const threshold = 6;
+  const threshold = 4;
   const current = patch.stunAttemptDiscoverProgress ?? state.stunAttemptDiscoverProgress ?? 0;
   const next = current + count;
   if (next >= threshold) {
@@ -3803,7 +3832,18 @@ function reduceResolveBlock(
   // Swarm corrode on shield
   if (blockedWithShield && action.slotId && monster.swarmCorrode && !monster.isStunned) {
     const corrodeSlotId = action.slotId;
-    const corrodeItem = getSlotItem(state, corrodeSlotId);
+    // Read post-block snapshot from `patch`, falling back to `state`. The block path
+    // above may have already mutated patch[corrodeSlotId] with `_shieldBlockCount`
+    // increment (auto-evolve counter for 进化甲壁), `_shieldDurabilityBlockCounter`
+    // increment (extra blocks for 铁壁塔盾 L2), `_fullBlockUsed` flag, partial
+    // `armor` reduction, or block-induced `durability` decrement (when the block
+    // depleted armor). Reading from `state` and writing back to patch would clobber
+    // all of those — losing the user-visible block count / armor / fullBlock flag.
+    // Auto-evolve / break/revive paths in the block code may also have replaced
+    // the slot entirely; if patch already cleared it (`null`), corrode no-ops.
+    const corrodeItem: EquipmentItem | null = patch[corrodeSlotId] !== undefined
+      ? (patch[corrodeSlotId] as EquipmentItem | null)
+      : getSlotItem(state, corrodeSlotId);
     if (corrodeItem && (corrodeItem.durability ?? 0) > 0) {
       enqueuedActions.push({
         type: 'TRIGGER_MONSTER_SKILL_FLOAT',

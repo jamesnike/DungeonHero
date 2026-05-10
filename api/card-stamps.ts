@@ -130,17 +130,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (stampId === 'freeform') {
       // Freeform messages can repeat; plain insert.
-      await supabase.from('card_stamps').insert(insertRow);
+      const { error } = await supabase.from('card_stamps').insert(insertRow);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('[card-stamps] freeform insert failed', error.code, error.message);
+      }
     } else {
-      // Preset stamps: dedupe by partial unique index. ignoreDuplicates lets us
-      // silently swallow a player re-clicking the same preset.
-      await supabase.from('card_stamps').upsert(insertRow, {
-        onConflict: 'client_id,row_signature,target_card_name,stamp_id',
-        ignoreDuplicates: true,
-      });
+      // Preset stamps: dedupe is enforced by the partial unique index
+      //   (client_id, row_signature, target_card_name, stamp_id) WHERE stamp_id <> 'freeform'.
+      //
+      // We can't use `.upsert(..., { onConflict: 'cols' })` here because PostgREST
+      // translates that to `INSERT ... ON CONFLICT (cols) DO ...`, and PostgreSQL
+      // refuses to use a partial unique index for `ON CONFLICT` inference unless
+      // the matching `WHERE` predicate is also specified — which supabase-js
+      // doesn't expose. Result: every preset insert silently failed with
+      //   "there is no unique or exclusion constraint matching the ON CONFLICT specification"
+      // and the player saw no emoji stamps even though writes "succeeded" client-side.
+      //
+      // Plain insert + swallowing 23505 (unique violation) gives identical
+      // semantics: re-stamping the same preset is a no-op.
+      const { error } = await supabase.from('card_stamps').insert(insertRow);
+      if (error && error.code !== '23505') {
+        // eslint-disable-next-line no-console
+        console.error('[card-stamps] preset insert failed', error.code, error.message);
+      }
     }
-  } catch {
-    // Swallow — telemetry-style fire-and-forget. Never break the player UX.
+  } catch (err) {
+    // Network / unexpected error — log so dev sees it; never break player UX.
+    // eslint-disable-next-line no-console
+    console.error('[card-stamps] insert threw', err);
   }
 
   return res.status(204).end();

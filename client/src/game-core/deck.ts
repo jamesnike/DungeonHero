@@ -436,8 +436,14 @@ export function createDeck(
     ];
 
     const monsterCount = isQuick ? 6 : 21;
+    // Quick mode: 6 张怪物从 7 个候选类型里**随机**选 6 种（每种 1 张），
+    // 每局随机省略 1 种——而不是固定按数组顺序取前 6 种（那样 Golem 永远缺席）。
+    // Normal mode: 21 张走 i % 7 循环，每种正好 3 张，保持原行为不变。
+    const usableMonsterTypes = isQuick
+      ? randShuffle(monsterTypes).slice(0, monsterCount)
+      : monsterTypes;
     for (let i = 0; i < monsterCount; i++) {
-      const monsterType = monsterTypes[i % monsterTypes.length];
+      const monsterType = usableMonsterTypes[i % usableMonsterTypes.length];
       const attack = randInt(monsterType.minAttack, monsterType.maxAttack);
       const hp = randInt(monsterType.minHp, monsterType.maxHp);
       const fury = randInt(monsterType.minFury, monsterType.maxFury);
@@ -2079,8 +2085,8 @@ export function createDeck(
         image: dedupeMagicTimeMirrorFlipImage,
         magicType: 'permanent',
         magicEffect: 'equalize-temp-attack-armor',
-        description: '永久魔法（Perm 2）：选择一个装备栏，临时攻击 +2，然后使得临时攻击和临时护甲相等（增加较低的一方）。',
-        shortDescription: '该栏临时攻 +2；临时攻/护拉平',
+        description: '永久魔法（Perm 2）：选择一个装备栏，临时攻击 +2，然后使得 (临时攻击+永久攻击) 与 (临时护甲+永久护甲) 相等（增加较低的一方的临时攻击或临时护甲）。',
+        shortDescription: '该栏临时攻 +2；临时+永久攻防总和拉平',
         recycleDelay: 2,
       },
       destination: 'stay',

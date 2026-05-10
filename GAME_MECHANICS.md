@@ -455,6 +455,12 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 - 触发路径：所有 7+ 条 recycle→backpack 路径都会触发——瀑流自动 -1 / 幽魂净化（永恒护符）/ 回收余韵 / 回收灵焰 / 虚空置换 / 洗册归川 / 通用 RESTORE_RECYCLE_BAG。
 - 容量语义：置顶卡仍然占背包容量配额。背包满时所有就绪卡都落不下来 = 全部留在回收袋下次再算（包括置顶卡）。
+- **抽牌优先级（核心）**：当 `backpackItems[0]` 是置顶卡时，**所有从背包抽牌的效果都会优先抽到它**——不消耗 RNG，确定性抽出。覆盖所有抽背包入口：
+  - 战狂诅咒（`DRAW_FROM_BACKPACK count: 1`）
+  - 回收灵焰 / 汰旧迎新（`drawMultipleFromBackpack`）
+  - 装备遗言抽（`onDestroyDraw`） / 武器超杀抽 / 瀑流回合开始抽
+  - Ogre `enterDiscard` / flank `flankDraw` / 任何走 `DRAW_CARDS source: 'backpack'` 的路径
+  - 多张置顶按 backpack 顺序「逐张剥」：抽 N 张时前 K 张是确定性的置顶卡（K = 当前置顶卡数量），剩下 N-K 张随机
 - 视觉反馈：
   1. 第一阶段：BackpackZone 播放绿色 Recycle 环动画（玩家看到"卡从回收袋飞回背包"）。
   2. 第二阶段：banner / log 提示「置顶」+ 卡名（例：「专属感召」触发置顶，已置于背包顶）。

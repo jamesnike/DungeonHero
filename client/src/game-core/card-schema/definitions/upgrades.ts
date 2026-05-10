@@ -192,10 +192,11 @@ const loneCardAmulet: OnUpgradeHandler = noopUpgrade;
 const attackPersuadeAmulet: OnUpgradeHandler = noopUpgrade;
 const cardGainMissileAmulet: OnUpgradeHandler = noopUpgrade;
 
-// `_counterDisplay` is a live state-derived field (counter / 3, /6) that the
-// formatter does not own; the handler keeps the assignment.
+// `_counterDisplay` is a live state-derived field that the formatter does not
+// own; the handler keeps the assignment. Threshold on upgrade is 4 (matches
+// combat.ts / economy.ts trigger logic).
 const damageClassDiscoverAmulet: OnUpgradeHandler = (upgraded, _newLevel, state) => {
-  upgraded._counterDisplay = `${state.classDamageDiscoverStreak ?? 0}/3`;
+  upgraded._counterDisplay = `${state.classDamageDiscoverStreak ?? 0}/4`;
 };
 
 const stunUpgradeCapAmulet: OnUpgradeHandler = noopUpgrade;
@@ -283,6 +284,7 @@ const stunCapStrike: OnUpgradeHandler = noopUpgrade;
 const backpackBolt: OnUpgradeHandler = noopUpgrade;
 const recycleBolt: OnUpgradeHandler = noopUpgrade;
 const backpackCapStun: OnUpgradeHandler = noopUpgrade;
+const backpackCapHeal: OnUpgradeHandler = noopUpgrade;
 // 布雷术：升级后 recycleDelay 2 → 1（PERM 2 → PERM 1）。
 // 卡牌效果（5 点纯陷阱伤害 / 随机空格生成 1 个地雷）不变，仅缩短回充周期。
 const layMine: OnUpgradeHandler = (upgraded, newLevel) => {
@@ -731,6 +733,7 @@ registerOnUpgradeAll([
   { id: 'knight:backpack-bolt', handler: backpackBolt },
   { id: 'knight:recycle-bolt', handler: recycleBolt },
   { id: 'knight:backpack-cap-stun', handler: backpackCapStun },
+  { id: 'knight:backpack-cap-heal', handler: backpackCapHeal },
   { id: 'knight:lay-mine', handler: layMine },
   { id: 'knight:thunder-array-blade', handler: thunderArrayBlade },
   { id: 'knight:temp-attack-armor-draw', handler: tempAttackArmorDraw },

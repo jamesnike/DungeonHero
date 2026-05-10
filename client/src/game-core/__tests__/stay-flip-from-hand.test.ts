@@ -15,8 +15,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { reduce } from '../reducer';
+import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
 import type { GameState } from '../types';
+import type { GameAction } from '../actions';
 import type { GameCardData } from '@/components/GameCard';
 
 function makeState(overrides?: Partial<GameState>): GameState {
@@ -244,5 +246,69 @@ describe('APPLY_CARD_FLIP: stay-flip on event used from hand', () => {
 
     expect(result.sideEffects.some(e => e.event === 'card:flippedInCell')).toBe(true);
     expect(result.sideEffects.some(e => e.event === 'event:cardTransformed')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End-to-end: 混沌骰局 played from hand → COMPLETE_EVENT → APPLY_CARD_FLIP
+// drain chain delivers 混沌冲击 magic into hand.
+//
+// This is the exact user-reported bug ("手里发动的 混沌骰局 没有获得翻转的牌").
+// The hook layer (handleCardToHero) removes the source event from hand and
+// sends it to the graveyard BEFORE the modal opens. After the player rolls
+// the dice and confirms, COMPLETE_EVENT fires with `currentEventCard` set
+// but the source NOT in active row → eventCellIdx === -1 → APPLY_CARD_FLIP
+// gets cellIndex=-1 and must put the magic into hand.
+// ---------------------------------------------------------------------------
+
+describe('end-to-end: 混沌骰局 from hand delivers 混沌冲击 to hand via drain', () => {
+  it('COMPLETE_EVENT chain places the flipped magic into handCards', () => {
+    const chaosDice: GameCardData = {
+      id: 'evt-chaos-dice',
+      type: 'event',
+      name: '混沌骰局',
+      value: 0,
+      image: '',
+      description: '掷骰后翻转为「混沌冲击」即时魔法。',
+      eventChoices: [
+        { id: 'choice', text: 'roll', effect: 'gold+10' } as any,
+      ],
+      flipTarget: {
+        toCard: {
+          id: 'evt-chaos-dice-flip',
+          type: 'magic',
+          name: '混沌冲击',
+          value: 0,
+          image: '',
+          magicType: 'instant',
+          magicEffect: '对一个怪物造成 3 点伤害。超杀：抽 2 张牌。',
+        } as GameCardData,
+        destination: 'stay',
+        message: '混沌骰局翻转为混沌冲击！',
+      },
+    } as unknown as GameCardData;
+
+    // Mirror real flow: hook has already consumed the source from hand and
+    // placed it in `currentEventCard` (handCards = [], activeCards = empty).
+    const state = makeState({
+      handCards: [],
+      activeCards: [null, null, null, null, null] as any,
+      currentEventCard: chaosDice,
+      phase: 'playerInput',
+    });
+
+    const result = drain(state, [
+      { type: 'COMPLETE_EVENT' } as GameAction,
+    ]);
+
+    const flipped = result.state.handCards.find(c => c.name === '混沌冲击');
+    expect(flipped).toBeDefined();
+    expect(flipped?.type).toBe('magic');
+    expect((flipped as any)?.magicType).toBe('instant');
+    expect((flipped as any)?._flipBackCard?.name).toBe('混沌骰局');
+
+    expect(result.state.currentEventCard).toBeNull();
+
+    expect(result.state.activeCards.every(c => c == null)).toBe(true);
   });
 });

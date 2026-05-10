@@ -4151,11 +4151,11 @@ export default function GameBoard() {
         };
       }
       if (slot?.amuletEffect === 'damage-class-discover') {
-        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 3 : 10;
+        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 4 : 6;
         return { ...slot, _counterDisplay: `${savedDamageStreak}/${threshold}` };
       }
       if (slot?.amuletEffect === 'magic-class-discover') {
-        return { ...slot, _counterDisplay: `${savedMagicStreak}/8` };
+        return { ...slot, _counterDisplay: `${savedMagicStreak}/5` };
       }
       if (slot?.amuletEffect === 'monster-kill-upgrade') {
         const killProgress = snapshot.monsterKillUpgradeProgress ?? 0;
@@ -6611,7 +6611,7 @@ export default function GameBoard() {
       }
       if (card.amuletEffect === 'damage-class-discover') {
         const streak = engine.getState().classDamageDiscoverStreak ?? 0;
-        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 3 : 10;
+        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 4 : 6;
         updateDamageDiscoverCounter(streak, threshold);
       }
       if (card.amuletEffect === 'magic-class-discover') {
@@ -8249,13 +8249,15 @@ export default function GameBoard() {
   ]);
 
   /**
-   * 60s 倒计时归零时调用：先关掉所有组件本地的 useState modal（这些不在引擎
+   * 40s 倒计时归零时调用：先关掉所有组件本地的 useState modal（这些不在引擎
    * state 里，FORCE_END_HERO_TURN reducer 看不见），然后 dispatch 一条
    * `FORCE_END_HERO_TURN` 让引擎清掉所有 modal/pending interaction +
    * enqueue END_TURN。
    *
    * 跟普通 endHeroTurn 的区别：跳过 `endHeroTurnGuardRef` 检查（玩家可能正在
    * 拖拽 / modal 折叠 / 动画中——超时强制结束不能被这些状态阻挡）。
+   *
+   * 不可撤销：跟手动 endHeroTurn 一样清空 undo 栈，让超时也是硬性 commit 点。
    */
   const handleAutoEndHeroTurn = useCallback(() => {
     // 1. 关掉所有组件本地 modal（引擎 reducer 看不见这些 useState）
@@ -8271,13 +8273,16 @@ export default function GameBoard() {
     heroTurnLayerLossIdsRef.current.clear();
     heroTookDamageThisMonsterTurnRef.current = false;
 
-    // 3. 让引擎统一收尾：清 pendingInteraction / 所有 modal state /
+    // 3. 不可撤销：跟手动 endHeroTurn 一样清空 undo 栈。
+    clearUndoStack();
+
+    // 4. 让引擎统一收尾：清 pendingInteraction / 所有 modal state /
     //    phase → playerInput，再 enqueue END_TURN。
     dispatch({
       type: 'FORCE_END_HERO_TURN',
       heroTurnLayerLossIds,
     });
-  }, [dispatch]);
+  }, [dispatch, clearUndoStack]);
 
   const modalCallbacks = useMemo<ModalCallbacks>(() => ({
     onCardSelect: handleCardClick,

@@ -988,7 +988,9 @@ export function resolveHonorBlood(
     echoMultiplier,
   } as any;
   patch.heroSkillBanner = `战血之印失去 1 点生命，请选择一件装备恢复 ${1 * echoMultiplier} 点耐久。${isEchoTriggered ? '（回响×2）' : ''}`;
-  return applyPatch(state, patch, sideEffects);
+  // NOTE: 必须传 enqueuedActions —— 跟 resolveRepairOne 是同一个 bug 模式。
+  // 上面 push 了 APPLY_DAMAGE (selfInflicted: true)，丢掉的话玩家不会失血。
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------
@@ -1601,6 +1603,9 @@ export function resolvePermanentMagic(
   }
 
   // --- equalize-temp-attack-armor ---
+  // NOTE: 此 block 是 legacy fallback。LIVE 路径已经迁到
+  // `card-schema/definitions/magic.ts` 的 `equalizeAttackArmor`。
+  // 保持两边逻辑同步以防将来 schema 命中失败时回退到这里行为不一致。
   if (effect === 'equalize-temp-attack-armor') {
     const equippedSlots = getEquippedSlots(state);
     if (equippedSlots.length === 0) {
@@ -1612,20 +1617,25 @@ export function resolvePermanentMagic(
     if (equippedSlots.length === 1) {
       const slotId = equippedSlots[0].id;
       const atkBoost = 2 * echoMultiplier;
-      const tempAtk = (state.slotTempAttack?.[slotId] ?? 0) + atkBoost;
-      const tempArm = state.slotTempArmor?.[slotId] ?? 0;
-      const newTempAttack = { ...(state.slotTempAttack ?? {}), [slotId]: tempAtk };
-      const newTempArmor = { ...(state.slotTempArmor ?? {}) };
-      if (tempAtk > tempArm) {
-        newTempArmor[slotId] = tempAtk;
-      } else if (tempArm > tempAtk) {
-        newTempAttack[slotId] = tempArm;
+      const curTempAtk = state.slotTempAttack?.[slotId] ?? 0;
+      const curTempArm = state.slotTempArmor?.[slotId] ?? 0;
+      const permAtk = state.equipmentSlotBonuses?.[slotId]?.damage ?? 0;
+      const permArm = state.equipmentSlotBonuses?.[slotId]?.shield ?? 0;
+      const newTempAtkBase = curTempAtk + atkBoost;
+      const totalAtkAfterBoost = newTempAtkBase + permAtk;
+      const totalArm = curTempArm + permArm;
+      let finalTempAtk = newTempAtkBase;
+      let finalTempArm = curTempArm;
+      if (totalAtkAfterBoost > totalArm) {
+        finalTempArm = curTempArm + (totalAtkAfterBoost - totalArm);
+      } else if (totalArm > totalAtkAfterBoost) {
+        finalTempAtk = newTempAtkBase + (totalArm - totalAtkAfterBoost);
       }
-      patch.slotTempAttack = newTempAttack;
-      patch.slotTempArmor = newTempArmor;
-      const finalVal = Math.max(tempAtk, tempArm);
-      log(sideEffects, 'magic', `时空镜像：${equippedSlots[0].item.name} 临时攻防均为 ${finalVal}`);
-      banner(sideEffects, `${equippedSlots[0].item.name} 临时攻击 +${atkBoost}，攻防均为 ${finalVal}。`);
+      patch.slotTempAttack = { ...(state.slotTempAttack ?? {}), [slotId]: finalTempAtk };
+      patch.slotTempArmor = { ...(state.slotTempArmor ?? {}), [slotId]: finalTempArm };
+      const finalTotal = Math.max(totalAtkAfterBoost, totalArm);
+      log(sideEffects, 'magic', `时空镜像：${equippedSlots[0].item.name} 攻防总和均为 ${finalTotal}`);
+      banner(sideEffects, `${equippedSlots[0].item.name} 临时攻击 +${atkBoost}，攻防总和均为 ${finalTotal}。`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -1634,7 +1644,7 @@ export function resolvePermanentMagic(
       card,
       effect: 'equalize-temp-attack-armor',
       step: 'slot-select',
-      prompt: '选择一个装备栏，临时攻击+2，然后使临时攻击与临时护甲相等。',
+      prompt: '选择一个装备栏，临时攻击+2，然后使 (临时攻击+永久攻击) 与 (临时护甲+永久护甲) 相等。',
     } as any;
     patch.heroSkillBanner = '时空镜像：选择一个装备栏。';
     return applyPatch(state, patch, sideEffects);
@@ -1662,9 +1672,9 @@ export function resolvePermanentMagic(
       return resolveRepairOne(state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered);
 
     case STARTER_CARD_IDS.surveyAction: {
-      // 查阅动作：从背包抽 2 张牌（受回响倍率影响）。
+      // 查阅动作：从背包抽 1 张牌（受回响倍率影响 → 回响下抽 2 张）。
       // 主效果不随 upgradeLevel 缩放——升级仅影响「上手」buff 的强度。
-      const drawCount = 2 * echoMultiplier;
+      const drawCount = 1 * echoMultiplier;
       const drawState = { ...state, ...patch } as GameState;
       const drawResult = drawMultipleFromBackpack(drawState, drawCount);
       if (drawResult.cards.length > 0) {
@@ -3455,6 +3465,41 @@ export function resolveKnightPermanentMagic(
       return applyPatch(state, patch, sideEffects);
     }
 
+    case 'backpack-cap-heal': {
+      // 囊中生机：恢复 floor(背包上限 / divisor) 点生命。
+      // - divisor = [4, 3][upgradeLevel] ?? 3。背包上限 12 时：Lv0 +3 / Lv1 +4。
+      // - 「背包上限」= getEffectiveBackpackCapacity(state) = max(1, BASE (12) +
+      //   modifier)，**不是** state.backpackItems.length（跟 囊量震慑 同口径）。
+      // - HEAL action 内部把 hp clamp 到 maxHp，溢出静默吸收（满血时仍照常消耗
+      //   这张 magic 卡，跟 治愈术 一致）。
+      // - Echo (A 类)：×echoMultiplier 单次结算。本卡是 hand→recycleBag，背包
+      //   上限在本次 reduce 步骤内不变，A/C 等价；用 A 类（与 backpack-cap-stun
+      //   同 pattern）。
+      const divisors = [4, 3];
+      const lvl = card.upgradeLevel ?? 0;
+      const divisor = divisors[lvl] ?? divisors[divisors.length - 1];
+      const capacity = getEffectiveBackpackCapacity(state);
+      const perTrigger = Math.floor(capacity / divisor);
+      const totalHeal = perTrigger * echoMultiplier;
+      const echoTag = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+
+      if (totalHeal > 0) {
+        enqueuedActions.push({ type: 'HEAL', amount: totalHeal, source: 'backpack-cap-heal' });
+      }
+      log(
+        sideEffects,
+        'magic',
+        `囊中生机：背包上限 ${capacity} ÷ ${divisor} = +${perTrigger}${echoMultiplier > 1 ? ` ×${echoMultiplier} = +${totalHeal}` : ''} 生命`,
+      );
+      banner(
+        sideEffects,
+        `囊中生机：恢复 ${totalHeal} 点生命。${echoTag}`,
+      );
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
+    }
+
     case 'backpack-cap-stun': {
       // 囊量震慑：击晕上限 +floor(背包上限 / divisor) 个百分点。
       // - divisor = [4, 3][upgradeLevel] ?? 3。背包上限 12 时：Lv0 +3 / Lv1 +4。
@@ -4653,7 +4698,12 @@ export function resolveRepairOne(
     echoMultiplier,
   } as any;
   patch.heroSkillBanner = `${hpCostBanner}选择一件装备恢复 ${repairBaseAmt * echoMultiplier} 点耐久。`;
-  return applyPatch(state, patch, sideEffects);
+  // NOTE: 必须把 enqueuedActions 传给 applyPatch —— 上面已经 push 了 APPLY_DAMAGE
+  // (selfInflicted)，如果丢掉就会在 2+ 个可修复槽位时玩家不掉血。0/1 槽位分支已经
+  // 正确传 enqueuedActions；这里曾经漏传，导致最常见的 "双装备" 场景不掉血。
+  // APPLY_DAMAGE 在 pipeline.ts isInputContinuation 白名单里，会在 awaitingMagicTarget
+  // 相位下正常 drain。
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 export function resolveStunStrike(

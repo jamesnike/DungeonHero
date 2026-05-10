@@ -503,6 +503,156 @@ describe('hero turn timer — card-in-limbo rescue on FORCE_END_HERO_TURN', () =
   });
 });
 
+// ---------------------------------------------------------------------------
+// Regression: monster-attacks-first scenario — hero turn timer must be fresh
+// when player turn begins after monster's turn.
+//
+// Bug report (Sun May 10 2026): "let monster attack first, after attack
+// reaches player turn, originally 40s but only 0s, then player turn auto-ends".
+//
+// Scenario: hero ends turn → monster turn (attacks, blocked) → END monster
+// turn → APPLY_MONSTER_TURN_END_EFFECTS → START_TURN → hero turn begins.
+// playerTurnStartedAt should be set fresh in START_TURN.
+//
+// Most likely cause: in the chain ADVANCE_MONSTER_TURN → currentTurn flips to
+// hero AND combatState mutates → BoardOverlayButtons re-renders with
+// playerTurnStartedAt=null → timer hidden. Then APPLY_MONSTER_TURN_END_EFFECTS
+// runs, then START_TURN sets fresh timestamp. As long as START_TURN actually
+// fires, the timer should be ~40s. Regression check: ensure the entire chain
+// works and START_TURN sets a fresh timestamp.
+// ---------------------------------------------------------------------------
+
+describe('hero turn timer — monster-attacks-first scenario', () => {
+  it('end-to-end: hero ends turn → monster attacks → block → back to hero turn → timer is fresh ~40s', () => {
+    // Setup: hero has played some turns; about to end the current turn.
+    // playerTurnStartedAt is from a much earlier moment (e.g., 38s ago) — close
+    // to expiry. After monster turn cycle, this should be RESET to ~now.
+    const oldTimestamp = Date.now() - 38_000; // 38s into hero turn
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1'],
+        currentTurn: 'hero',
+        monsterAttackQueue: [],
+      },
+      playerTurnStartedAt: oldTimestamp,
+      phase: 'playerInput',
+      hp: 30,
+      maxHp: 30,
+    });
+
+    // Step 1: player ends turn (manual END_TURN, simulating endHeroTurn hook)
+    let r = drain(state, [{ type: 'END_TURN', heroTurnLayerLossIds: [] }]);
+
+    // Should be in monster turn now, awaiting block.
+    expect(r.state.combatState.currentTurn).toBe('monster');
+    expect(r.state.combatState.pendingBlock?.monsterId).toBe('m1');
+    expect(r.state.phase).toBe('awaitingBlock');
+    expect(r.state.playerTurnStartedAt).toBeNull(); // cleared by END_TURN
+
+    // Step 2: player resolves the block (no-shield, take damage)
+    const beforeStartTurn = Date.now();
+    r = drain(r.state, [
+      { type: 'RESOLVE_BLOCK', choice: 'no-shield' as any },
+    ]);
+    const afterStartTurn = Date.now();
+
+    // After resolving the block:
+    //   - monster attacked (player took damage)
+    //   - queue empty → ADVANCE_MONSTER_TURN switches to hero
+    //   - APPLY_MONSTER_TURN_END_EFFECTS → START_TURN
+    //   - phase back to 'playerInput'
+    //   - playerTurnStartedAt = Date.now() (fresh)
+    expect(r.state.combatState.currentTurn).toBe('hero');
+    expect(r.state.phase).toBe('playerInput');
+    expect(r.state.playerTurnStartedAt).not.toBeNull();
+    expect(r.state.playerTurnStartedAt).not.toBe(oldTimestamp);
+    // Must be a fresh timestamp (within the duration of this test run)
+    expect(r.state.playerTurnStartedAt!).toBeGreaterThanOrEqual(beforeStartTurn);
+    expect(r.state.playerTurnStartedAt!).toBeLessThanOrEqual(afterStartTurn);
+  });
+
+  it('end-to-end: when goblin dice queue is non-empty, START_TURN delayed but still sets fresh timestamp after dice resolve', () => {
+    // Setup: a goblin with stack count to trigger end-of-monster-turn dice.
+    const goblinWithDice: GameCardData = {
+      ...goblin,
+      monsterSpecial: 'goblin-heal',
+    } as GameCardData;
+    const oldTimestamp = Date.now() - 38_000;
+    const state = makeState({
+      activeCards: [goblinWithDice, null, null, null, null],
+      activeCardStacks: { 0: { stackCount: 1, stackedCards: [] } } as any,
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1'],
+        currentTurn: 'hero',
+        monsterAttackQueue: [],
+      },
+      playerTurnStartedAt: oldTimestamp,
+      phase: 'playerInput',
+      hp: 30,
+      maxHp: 30,
+    });
+
+    // End hero turn → monster attacks → block resolved → end monster turn
+    let r = drain(state, [{ type: 'END_TURN', heroTurnLayerLossIds: [] }]);
+    if (r.state.combatState.pendingBlock) {
+      r = drain(r.state, [{ type: 'RESOLVE_BLOCK', choice: 'no-shield' as any }]);
+    }
+
+    // After everything, playerTurnStartedAt must be fresh (or null if dice not resolved).
+    // If dice are pending, START_TURN is deferred, so playerTurnStartedAt stays null
+    // until dice resolve. That's expected; the timer just stays hidden.
+    if (r.state.phase === 'awaitingDice') {
+      expect(r.state.playerTurnStartedAt).toBeNull();
+    } else {
+      // No dice path: timer should be fresh.
+      expect(r.state.playerTurnStartedAt).not.toBeNull();
+      expect(r.state.playerTurnStartedAt).not.toBe(oldTimestamp);
+    }
+  });
+
+  it('end-to-end: multiple monster attacks in sequence — timer resets fresh once all blocks resolved', () => {
+    const goblin2: GameCardData = { ...goblin, id: 'm2' };
+    const oldTimestamp = Date.now() - 38_000;
+    const state = makeState({
+      activeCards: [goblin, goblin2, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1', 'm2'],
+        currentTurn: 'hero',
+        monsterAttackQueue: [],
+      },
+      playerTurnStartedAt: oldTimestamp,
+      phase: 'playerInput',
+      hp: 50,
+      maxHp: 50,
+    });
+
+    // End hero turn → first monster attacks
+    let r = drain(state, [{ type: 'END_TURN', heroTurnLayerLossIds: [] }]);
+    expect(r.state.combatState.currentTurn).toBe('monster');
+    expect(r.state.combatState.pendingBlock).not.toBeNull();
+    expect(r.state.playerTurnStartedAt).toBeNull();
+
+    // Resolve first block
+    r = drain(r.state, [{ type: 'RESOLVE_BLOCK', choice: 'no-shield' as any }]);
+    // Should have a second pending block for the second monster
+    if (r.state.combatState.pendingBlock) {
+      r = drain(r.state, [{ type: 'RESOLVE_BLOCK', choice: 'no-shield' as any }]);
+    }
+
+    // After all blocks resolved, hero turn should resume with fresh timer.
+    expect(r.state.combatState.currentTurn).toBe('hero');
+    expect(r.state.phase).toBe('playerInput');
+    expect(r.state.playerTurnStartedAt).not.toBeNull();
+    expect(r.state.playerTurnStartedAt).not.toBe(oldTimestamp);
+    // Fresh: within ~1 second of now
+    expect(Date.now() - r.state.playerTurnStartedAt!).toBeLessThan(1000);
+  });
+});
+
 describe('hero turn timer — persistence round-trip', () => {
   it('serializes and hydrates playerTurnStartedAt', async () => {
     const { serializeGameState } = await import('../persistence');

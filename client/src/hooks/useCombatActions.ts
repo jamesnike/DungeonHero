@@ -964,7 +964,13 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
   // -- endHeroTurn ------------------------------------------------------------
   const endHeroTurn = () => {
     if (depsRef.current.endHeroTurnGuardRef.current) return;
-    depsRef.current.pushUndoSnapshot();
+    // 结束回合不可撤销：一旦点了「End Hero Turn」，怪物即将开始攻击 / 玩家
+    // 即将面对格挡选择，不允许 Undo 退回到回合中（防止玩家看到怪物攻击决策
+    // 后撤销重做、或撤销自动结束回合后改主意）。
+    // 不 push snapshot，并清空整个 undo 栈，让此刻成为硬性 commit 点：
+    // 之前的所有 undo checkpoint 也一并失效，避免玩家越过 END_TURN 跳回
+    // 更早的状态变相重玩这一回合。
+    depsRef.current.clearUndoStack();
     depsRef.current.heroTookDamageThisMonsterTurnRef.current = false;
 
     const heroTurnLayerLossIds = Array.from(depsRef.current.heroTurnLayerLossIdsRef.current);

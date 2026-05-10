@@ -458,13 +458,41 @@ export function endHeroTurnPatch(
     return idxA - idxB;
   });
 
+  // 「召唤回合保护」：被 Boss 亡灵召唤等效果在本 hero turn 内临时拉进激活行的怪物
+  // 必须跳过紧接着的这一次 monster 回合 —— 它们仍然 engaged（玩家可以正常攻击它们），
+  // 只是不进 attack queue。处理完后剥离 `skipNextMonsterTurn` 标记，让它们下一回合
+  // 起按正常节奏参战。读最新的 newActiveCards（不是原 monster ref，因为前面的
+  // eliteRegen / eliteHealOther 分支可能改写过 activeCards 副本上的 layer/hp）。
+  const skippedSummonedNames: string[] = [];
+  const monstersForQueue = sortedMonsters.filter(m => {
+    const live = newActiveCards.find(c => c?.id === m.id);
+    if (live?.skipNextMonsterTurn) {
+      skippedSummonedNames.push(live.name);
+      return false;
+    }
+    return true;
+  });
+  if (skippedSummonedNames.length > 0) {
+    for (let i = 0; i < newActiveCards.length; i++) {
+      const c = newActiveCards[i];
+      if (c && c.skipNextMonsterTurn) {
+        const { skipNextMonsterTurn: _drop, ...rest } = c;
+        newActiveCards[i] = rest as typeof c;
+      }
+    }
+    logs.push({
+      type: 'combat',
+      message: `刚被召唤的怪物本回合不攻击：${skippedSummonedNames.join('、')}`,
+    });
+  }
+
   const newCombatState: CombatState = {
     ...state.combatState,
     currentTurn: 'monster',
     heroAttacksThisTurn: { equipmentSlot1: false, equipmentSlot2: false },
     heroAttacksRemaining: 2,
     heroDamageThisTurn: {},
-    monsterAttackQueue: sortedMonsters.map(m => m.id),
+    monsterAttackQueue: monstersForQueue.map(m => m.id),
     pendingBlock: null,
     slotBlocksThisTurn: { equipmentSlot1: false, equipmentSlot2: false },
     slotDurabilityUsedThisTurn: { equipmentSlot1: 0, equipmentSlot2: 0 },

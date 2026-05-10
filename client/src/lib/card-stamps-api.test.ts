@@ -14,7 +14,7 @@
  *   - 405 on non-POST
  *   - 400 on missing/invalid clientId, gameMode, targetCardName, rowSignature, sourceRow, stampId
  *   - 400 on freeform without messageText / empty / oversize
- *   - Preset insert path uses upsert with ignoreDuplicates
+ *   - Preset insert path uses plain insert (partial unique index handles dedupe via 23505)
  *   - Freeform insert path uses plain insert
  *   - 429 on freeform rate-limit overflow
  *   - Lookup endpoint: 400 on bad shape, empty `{}` on empty input, dedupes signatures
@@ -326,7 +326,7 @@ describe('/api/card-stamps POST handler', () => {
     expect((harness.payload as any).error).toBe('oversize_messageText');
   });
 
-  it('returns 204 and uses upsert with ignoreDuplicates for valid preset stamp', async () => {
+  it('returns 204 and uses plain insert for valid preset stamp (dedupe via partial unique index 23505)', async () => {
     const harness = makeRes();
     await handler(
       makeReq({
@@ -342,16 +342,19 @@ describe('/api/card-stamps POST handler', () => {
       harness.res,
     );
     expect(harness.statusCode).toBe(204);
-    const upserts = activeHarness.ops.filter(o => o.kind === 'upsert');
-    expect(upserts.length).toBe(1);
-    const op = upserts[0] as any;
+    const inserts = activeHarness.ops.filter(o => o.kind === 'insert');
+    expect(inserts.length).toBe(1);
+    const op = inserts[0] as any;
     expect(op.payload.client_id).toBe('c1');
     expect(op.payload.target_card_name).toBe('Dragon');
     expect(op.payload.row_signature).toBe('A|B|C|D');
     expect(op.payload.stamp_id).toBe('recommend');
     expect(op.payload.message_text).toBeNull();
-    expect(op.opts.onConflict).toBe('client_id,row_signature,target_card_name,stamp_id');
-    expect(op.opts.ignoreDuplicates).toBe(true);
+    // No upserts should happen — that path is what was silently dropping
+    // every preset stamp before, because supabase-js's onConflict can't
+    // hint the partial unique index's WHERE predicate.
+    const upserts = activeHarness.ops.filter(o => o.kind === 'upsert');
+    expect(upserts.length).toBe(0);
   });
 
   it('returns 204 and uses plain insert for valid freeform stamp (after rate-limit check)', async () => {
@@ -418,8 +421,8 @@ describe('/api/card-stamps POST handler', () => {
       harness.res,
     );
     expect(harness.statusCode).toBe(204);
-    const upserts = activeHarness.ops.filter(o => o.kind === 'upsert');
-    expect((upserts[0] as any).payload.message_text).toBeNull();
+    const inserts = activeHarness.ops.filter(o => o.kind === 'insert');
+    expect((inserts[0] as any).payload.message_text).toBeNull();
   });
 });
 

@@ -53,7 +53,7 @@ const FILLER = (id: string): GameCardData => ({
 const SDD_RELIC = (id: string) => ({
   id: `amulet-eternal-${id}` as any,
   name: '永恒·赎血召牌符',
-  description: '永久生效：每次自伤抽 1 张牌',
+  description: '永久生效：每次自伤抽 2 张牌',
   image: '',
   amuletEffect: 'self-damage-draw' as const,
 });
@@ -101,7 +101,7 @@ describe('永恒护符携带 amuletEffect — 效果必须继续生效', () => {
   });
 
   describe('e2e: relic 上的 self-damage-draw 通过 APPLY_DAMAGE 实际触发', () => {
-    it('赎血召牌符（已永铸 → 在 eternalRelics）→ 自伤 3 点抽 1 张牌', () => {
+    it('赎血召牌符（已永铸 → 在 eternalRelics）→ 自伤 3 点抽 2 张牌', () => {
       const backpack = [FILLER('bp1'), FILLER('bp2'), FILLER('bp3')];
       const state = makeState({
         hp: 20,
@@ -116,11 +116,11 @@ describe('永恒护符携带 amuletEffect — 效果必须继续生效', () => {
       ]);
 
       expect(result.state.hp).toBe(17);
-      expect(result.state.handCards.length).toBe(1);
-      expect(result.state.backpackItems.length).toBe(2);
+      expect(result.state.handCards.length).toBe(2);
+      expect(result.state.backpackItems.length).toBe(1);
     });
 
-    it('叠加 ×2（两件都在 eternalRelics）→ 一次自伤抽 2 张', () => {
+    it('叠加 ×2（两件都在 eternalRelics）→ 一次自伤抽 4 张', () => {
       const backpack = [FILLER('bp1'), FILLER('bp2'), FILLER('bp3'), FILLER('bp4')];
       const state = makeState({
         hp: 20,
@@ -135,12 +135,12 @@ describe('永恒护符携带 amuletEffect — 效果必须继续生效', () => {
       ]);
 
       expect(result.state.hp).toBe(18);
-      expect(result.state.handCards.length).toBe(2);
-      expect(result.state.backpackItems.length).toBe(2);
+      expect(result.state.handCards.length).toBe(4);
+      expect(result.state.backpackItems.length).toBe(0);
     });
 
-    it('混合（1 件在 amuletSlots + 1 件在 eternalRelics）→ 一次自伤抽 2 张', () => {
-      const backpack = [FILLER('bp1'), FILLER('bp2'), FILLER('bp3')];
+    it('混合（1 件在 amuletSlots + 1 件在 eternalRelics）→ 一次自伤抽 4 张', () => {
+      const backpack = [FILLER('bp1'), FILLER('bp2'), FILLER('bp3'), FILLER('bp4')];
       const state = makeState({
         hp: 20,
         amuletSlots: [{
@@ -161,8 +161,8 @@ describe('永恒护符携带 amuletEffect — 效果必须继续生效', () => {
       ]);
 
       expect(result.state.hp).toBe(18);
-      expect(result.state.handCards.length).toBe(2);
-      expect(result.state.backpackItems.length).toBe(1);
+      expect(result.state.handCards.length).toBe(4);
+      expect(result.state.backpackItems.length).toBe(0);
     });
 
     it('护盾完全抵消时不触发（appliedDamage = 0）— relic 路径同样满足', () => {
@@ -230,7 +230,7 @@ describe('永恒护符携带 amuletEffect — 效果必须继续生效', () => {
     it('转换前 amuletSlots 有效 → 转换后 eternalRelics 同样有效（行为一致）', () => {
       const backpack = [FILLER('bp1'), FILLER('bp2'), FILLER('bp3'), FILLER('bp4')];
 
-      // 阶段 1：amulet 还在 amuletSlots 里 — 自伤抽 1 张
+      // 阶段 1：amulet 还在 amuletSlots 里 — 自伤抽 2 张
       const beforeState = makeState({
         hp: 20,
         amuletSlots: [{
@@ -248,7 +248,7 @@ describe('永恒护符携带 amuletEffect — 效果必须继续生效', () => {
       const beforeResult = drain(beforeState, [
         { type: 'APPLY_DAMAGE', amount: 2, source: 'test', selfInflicted: true } as any,
       ]);
-      expect(beforeResult.state.handCards.length).toBe(1);
+      expect(beforeResult.state.handCards.length).toBe(2);
 
       // 阶段 2：模拟「护符永铸药」转换 — amulet 从 slots 移到 eternalRelics
       const afterConvertState = makeState({

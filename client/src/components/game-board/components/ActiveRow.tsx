@@ -8,7 +8,7 @@ import { DUNGEON_COLUMNS, MONSTER_RAGE_BASE_TRANSLATE_PX, MONSTER_RAGE_TRANSLATE
 import { getActiveStackedCardStyle } from '../utils/animation-helpers';
 import { useActiveRowDerivedState, type ActiveRowDerivedState } from '../hooks/useActiveRowDerivedState';
 import { useCardStampsContext } from '../contexts/CardStampsContext';
-import { CardStampBubble } from '@/components/CardStampBubble';
+import { CardStampFloater } from '@/components/CardStampFloater';
 
 const EMPTY_ARRAY: GameCardData[] = [];
 
@@ -64,7 +64,7 @@ const ActiveCell = memo(function ActiveCell({
   const pendingMagicAction = useGameState(s => s.pendingMagicAction);
   const dispatch = useDispatch();
   const cardStamps = useCardStampsContext();
-  const stampEntry = card ? cardStamps.getStampsForCard(card, 'active') : null;
+  const pendingFloat = card ? cardStamps.getPendingFloat(card, 'active') : null;
 
   const {
     isWaterfallLocked,
@@ -273,7 +273,12 @@ const ActiveCell = memo(function ActiveCell({
             cardStamps.openPicker(card, 'active', target);
           }}
         />
-        {stampEntry && <CardStampBubble entry={stampEntry} />}
+        {pendingFloat && (
+          <CardStampFloater
+            entry={pendingFloat.entry}
+            onComplete={() => cardStamps.markAnimated(pendingFloat.rowSignature, card.name)}
+          />
+        )}
         {hasActiveStack && (
           <div className="absolute top-[-4px] right-[-4px] z-40 bg-amber-500 text-white rounded-full w-5 h-5 flex items-center justify-center border-2 border-background shadow-md font-bold text-xs pointer-events-none">
             {stackedCards.length + 1}

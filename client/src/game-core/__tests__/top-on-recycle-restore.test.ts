@@ -24,7 +24,7 @@ import { describe, expect, it } from 'vitest';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
 import { createStarterDiscoverClassToHandCard, STARTER_CARD_IDS } from '../deck';
-import { processRecycleBag } from '../cards';
+import { processRecycleBag, drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
 import type { GameState } from '../types';
 import type { GameAction } from '../actions';
 import type { GameCardData } from '@/components/GameCard';
@@ -508,5 +508,252 @@ describe('「专属感召」专项 — topOnRecycleRestore: true', () => {
     expect((result.state.remainingDeck as GameCardData[]).map(c => c.id)).toEqual(['c5', 'c6', 'c7', 'c8']);
     // Preview 应该是 plan.nextPreviewCards = [c1, c2, c3, c4]（不被 ganzhao 影响）。
     expect(result.state.previewCards.filter(Boolean).map(c => c!.id)).toEqual(['c1', 'c2', 'c3', 'c4']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Draw priority — 「置顶」卡在抽背包路径下被优先抽出
+// ---------------------------------------------------------------------------
+//
+// 历史 bug：「置顶」语义早期只覆盖「卡进 backpackItems[0]」（位置语义），但所有抽
+// 背包路径（`drawFromBackpackToHandPure` / `drawMultipleFromBackpack`）走纯随机
+// 选择，所以 战狂诅咒 / 回收灵焰 / 汰旧迎新 等抽 N 张牌的效果根本不会优先抽到
+// 置顶卡——玩家直觉「卡刚回到背包顶，下一次抽必抽到」完全失效。
+//
+// 现已修正：上述两个 helper 在 `backpackItems[0]?.topOnRecycleRestore === true` 时
+// 跳过 RNG 直接抽前置卡，剩下随机。所有抽背包路径自动尊重置顶。
+
+describe('drawFromBackpackToHandPure — 置顶优先', () => {
+  it('backpackItems[0] 是置顶卡 → 优先抽出（不消耗 RNG）', () => {
+    const top = makeTopPerm('top-1');
+    const plain1 = makePermMagic('plain-1');
+    const plain2 = makePermMagic('plain-2');
+    const state = makeState({
+      backpackItems: [top, plain1, plain2],
+      handCards: [],
+    });
+    const rngBefore = state.rng;
+
+    const result = drawFromBackpackToHandPure(state);
+
+    expect(result.card?.id).toBe('top-1');
+    expect(result.patch.handCards?.[0]?.id).toBe('top-1');
+    expect(result.patch.backpackItems?.map(c => c.id)).toEqual(['plain-1', 'plain-2']);
+    // 关键：RNG 不应被消耗（确定性抽 = 不消耗熵）
+    expect(result.patch.rng).toBe(rngBefore);
+  });
+
+  it('backpackItems[0] 不是置顶卡 → 走随机（行为同旧实现，会消耗 RNG）', () => {
+    const plain1 = makePermMagic('plain-1');
+    const plain2 = makePermMagic('plain-2');
+    const state = makeState({
+      backpackItems: [plain1, plain2],
+      handCards: [],
+    });
+    const rngBefore = state.rng;
+
+    const result = drawFromBackpackToHandPure(state);
+
+    expect(result.card).toBeDefined();
+    expect(['plain-1', 'plain-2']).toContain(result.card?.id);
+    // RNG 应被消耗
+    expect(result.patch.rng).not.toBe(rngBefore);
+  });
+
+  it('avoidCardIds 软兜底：背包仅含置顶卡且在 avoid 集 → 仍能抽出（fallback）', () => {
+    const top = makeTopPerm('top-1');
+    const state = makeState({
+      backpackItems: [top],
+      handCards: [],
+    });
+
+    // filtered 为空 → soft fallback 用原 pool；pool[0] 仍是置顶卡 → 直接抽出
+    const result = drawFromBackpackToHandPure(state, { avoidCardIds: ['top-1'] });
+    expect(result.card?.id).toBe('top-1');
+  });
+
+  it('avoidCardIds 排除置顶卡时 → 走随机抽其它牌', () => {
+    const top = makeTopPerm('top-1');
+    const plain1 = makePermMagic('plain-1');
+    const state = makeState({
+      backpackItems: [top, plain1],
+      handCards: [],
+    });
+
+    const result = drawFromBackpackToHandPure(state, { avoidCardIds: ['top-1'] });
+    expect(result.card?.id).toBe('plain-1');
+    // 背包剩下还包含置顶卡（没动它）
+    expect(result.patch.backpackItems?.map(c => c.id)).toEqual(['top-1']);
+  });
+
+  it('手牌满 / 背包空：仍按旧实现返回 null（与置顶无关）', () => {
+    const top = makeTopPerm('top-1');
+    const stateBackpackEmpty = makeState({ backpackItems: [], handCards: [] });
+    expect(drawFromBackpackToHandPure(stateBackpackEmpty).card).toBeNull();
+
+    const stateHandFull = makeState({
+      backpackItems: [top],
+      handCards: Array.from({ length: 32 }, (_, i) => makeMonster(`h-${i}`)),
+    });
+    expect(drawFromBackpackToHandPure(stateHandFull).card).toBeNull();
+  });
+});
+
+describe('drawMultipleFromBackpack — 置顶优先', () => {
+  it('多张置顶 prepend 在前 → 按顺序逐张剥出（不消耗 RNG）', () => {
+    const topA = makeTopPerm('top-A');
+    const topB = makeTopPerm('top-B');
+    const plain1 = makePermMagic('plain-1');
+    const plain2 = makePermMagic('plain-2');
+    const state = makeState({
+      backpackItems: [topA, topB, plain1, plain2],
+      handCards: [],
+    });
+    const rngBefore = state.rng;
+
+    const result = drawMultipleFromBackpack(state, 2);
+
+    // 关键：前 2 张必须按 [topA, topB] 顺序抽出
+    expect(result.cards.map(c => c.id)).toEqual(['top-A', 'top-B']);
+    expect(result.patch.backpackItems?.map(c => c.id)).toEqual(['plain-1', 'plain-2']);
+    // 完全不消耗 RNG（两张都是确定性剥）
+    expect(result.patch.rng).toBe(rngBefore);
+  });
+
+  it('混合：前 1 置顶 + 抽 3 张 → 第 1 张是置顶（确定），第 2-3 张随机', () => {
+    const top = makeTopPerm('top-1');
+    const plain1 = makePermMagic('plain-1');
+    const plain2 = makePermMagic('plain-2');
+    const plain3 = makePermMagic('plain-3');
+    const state = makeState({
+      backpackItems: [top, plain1, plain2, plain3],
+      handCards: [],
+    });
+    const rngBefore = state.rng;
+
+    const result = drawMultipleFromBackpack(state, 3);
+
+    expect(result.cards.length).toBe(3);
+    expect(result.cards[0]?.id).toBe('top-1');
+    expect(['plain-1', 'plain-2', 'plain-3']).toContain(result.cards[1]?.id);
+    expect(['plain-1', 'plain-2', 'plain-3']).toContain(result.cards[2]?.id);
+    // RNG 应被消耗（两次随机抽）
+    expect(result.patch.rng).not.toBe(rngBefore);
+  });
+
+  it('全置顶 + 全抽完：完全确定性，0 RNG 消耗', () => {
+    const topA = makeTopPerm('top-A');
+    const topB = makeTopPerm('top-B');
+    const topC = makeTopPerm('top-C');
+    const state = makeState({
+      backpackItems: [topA, topB, topC],
+      handCards: [],
+    });
+    const rngBefore = state.rng;
+
+    const result = drawMultipleFromBackpack(state, 3);
+
+    expect(result.cards.map(c => c.id)).toEqual(['top-A', 'top-B', 'top-C']);
+    expect(result.patch.backpackItems?.length).toBe(0);
+    expect(result.patch.rng).toBe(rngBefore);
+  });
+
+  it('回归：无置顶卡 → 跟旧实现完全一致（纯随机，消耗 RNG）', () => {
+    const plains = Array.from({ length: 5 }, (_, i) => makePermMagic(`plain-${i}`));
+    const state = makeState({
+      backpackItems: plains,
+      handCards: [],
+    });
+    const rngBefore = state.rng;
+
+    const result = drawMultipleFromBackpack(state, 3);
+
+    expect(result.cards.length).toBe(3);
+    // 抽出的应该是 5 张 plain 的某个 3 元素子集（顺序由 RNG 决定）
+    for (const c of result.cards) {
+      expect(c.id).toMatch(/^plain-/);
+    }
+    expect(result.patch.rng).not.toBe(rngBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. 端到端：消费方在真实抽牌路径下也尊重「置顶」
+// ---------------------------------------------------------------------------
+//
+// User report: "test 时候发现一个现象，回收灵焰、战狂诅咒 等等，为啥抽的牌都不是
+// 背包里 置顶 的牌呢？" —— 验证修复：所有走 drawFromBackpackToHandPure /
+// drawMultipleFromBackpack 的路径都会自动尊重置顶语义。
+
+describe('端到端：DRAW_FROM_BACKPACK action 尊重置顶（战狂诅咒同款入口）', () => {
+  it('战狂诅咒同款 dispatch（DRAW_FROM_BACKPACK count: 1）→ 抽到背包顶的置顶卡', () => {
+    const top = makeTopPerm('top-1');
+    const plain1 = makePermMagic('plain-1');
+    const plain2 = makePermMagic('plain-2');
+    const state = makeIdleState({
+      backpackItems: [top, plain1, plain2],
+      handCards: [],
+    });
+
+    const result = drain(state, [{ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction]);
+
+    expect(result.state.handCards.find(c => c.id === 'top-1')).toBeDefined();
+    expect(result.state.backpackItems.find(c => c.id === 'top-1')).toBeUndefined();
+    expect(result.state.backpackItems.length).toBe(2);
+  });
+
+  it('DRAW_FROM_BACKPACK count: 2 → 第一张置顶 + 一张随机', () => {
+    const top = makeTopPerm('top-1');
+    const plain1 = makePermMagic('plain-1');
+    const plain2 = makePermMagic('plain-2');
+    const state = makeIdleState({
+      backpackItems: [top, plain1, plain2],
+      handCards: [],
+    });
+
+    const result = drain(state, [{ type: 'DRAW_FROM_BACKPACK', count: 2 } as GameAction]);
+
+    expect(result.state.handCards.find(c => c.id === 'top-1')).toBeDefined();
+    expect(result.state.handCards.length).toBe(2);
+    expect(result.state.backpackItems.length).toBe(1);
+  });
+});
+
+describe('端到端：DRAW_CARDS source: backpack 尊重置顶（回收灵焰同款入口）', () => {
+  it('DRAW_CARDS count:1 source:backpack → 抽到置顶卡', () => {
+    const top = makeTopPerm('top-1');
+    const plain = makePermMagic('plain-1');
+    const state = makeIdleState({
+      backpackItems: [top, plain],
+      handCards: [],
+    });
+
+    const result = drain(state, [
+      { type: 'DRAW_CARDS', count: 1, source: 'backpack' } as GameAction,
+    ]);
+
+    expect(result.state.handCards.find(c => c.id === 'top-1')).toBeDefined();
+    expect(result.state.backpackItems.find(c => c.id === 'top-1')).toBeUndefined();
+  });
+
+  it('DRAW_CARDS count:3 source:backpack：2 张置顶在前 → 前两张确定，第 3 张随机', () => {
+    const topA = makeTopPerm('top-A');
+    const topB = makeTopPerm('top-B');
+    const plain1 = makePermMagic('plain-1');
+    const plain2 = makePermMagic('plain-2');
+    const state = makeIdleState({
+      backpackItems: [topA, topB, plain1, plain2],
+      handCards: [],
+    });
+
+    const result = drain(state, [
+      { type: 'DRAW_CARDS', count: 3, source: 'backpack' } as GameAction,
+    ]);
+
+    // 前两张被剥的应该是 topA / topB；第 3 张是 plain-1 / plain-2 之一
+    const handIds = result.state.handCards.map(c => c.id);
+    expect(handIds).toContain('top-A');
+    expect(handIds).toContain('top-B');
+    expect(handIds.length).toBe(3);
   });
 });

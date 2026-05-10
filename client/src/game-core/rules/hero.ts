@@ -1408,27 +1408,37 @@ function reduceMagicSlotSelection(
     case 'recycle-temp-armor': {
       // 池中坚意：buff = floor(state.permanentMagicRecycleBag.length / divisor) * echo
       // - divisor = 4 (Lv0) / 3 (Lv1)
-      // - 空槽允许选（与 backpack-temp-attack / temp-attack-double / temp-attack-armor-draw
-      //   一致）：buff 写到 slotTempArmor[slotId]，等装备进入时仍生效。
+      // - 空槽允许选（与 backpack-temp-attack / event-armor-etch 一致）：
+      //   buff 写到 equipmentSlotBonuses[slotId].shield（永久护甲加成绑定槽位 id，
+      //   不在装备上），等装备进入时仍生效，且**跨瀑流 / 跨回合不清零**。
       // - Echo (A 类，与 C 类等价 — 这张卡 setup 时仍在 hand，未进 recycleBag)：
       //   单次乘 ×echoMultiplier，与 backpack-temp-attack 同 pattern。
-      // - 修改 slotTempArmor 后必须调 applySlotArmorBonusDelta 让 armor cap 立刻刷新
-      //   （shield-armor-vs-durability.mdc）。
-      // - 触发 怀柔之印（persuade-on-temp-attack）：调 checkPersuadeOnTempAttack。
+      // - 修改 equipmentSlotBonuses[slotId].shield 后必须调 applySlotArmorBonusDelta
+      //   让该栏 armor 立刻刷到新 cap（shield-armor-vs-durability.mdc）。
+      // - 注意：effect id 历史命名 `recycle-temp-armor` 保留不动，但语义已经从
+      //   "临时护甲" 改成 "永久护甲"——跟 装甲铸蚀 (event-armor-etch) 同口径。
+      // - 不调 checkPersuadeOnTempAttack：怀柔之印 只对临时攻击 / 临时护甲 gain
+      //   触发，永久护甲不算（参考 装甲铸蚀 实现）。
       const echoMul = (pending as any).echoMultiplier ?? 1;
       const divisor = (pending.card.upgradeLevel ?? 0) >= 1 ? 3 : 4;
       const recycleLen = state.permanentMagicRecycleBag.length;
       const baseBuff = Math.floor(recycleLen / divisor);
       const buff = baseBuff * echoMul;
       const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
-      const curTempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
-      patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTempArm + buff };
-      if (buff !== 0) applySlotArmorBonusDelta(state, slotId, buff, patch);
-      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      if (buff !== 0) {
+        patch.equipmentSlotBonuses = {
+          ...state.equipmentSlotBonuses,
+          [slotId]: {
+            ...state.equipmentSlotBonuses[slotId],
+            shield: state.equipmentSlotBonuses[slotId].shield + buff,
+          },
+        };
+        applySlotArmorBonusDelta(state, slotId, buff, patch);
+      }
       const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
       const formulaTag = echoMul > 1 ? `${baseBuff}×${echoMul}=${buff}` : `${buff}`;
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `池中坚意：${label} 临时护甲 +${formulaTag}（回收袋 ${recycleLen} 张 ÷ ${divisor}）。${echoTag}`);
+        `池中坚意：${label} 永久护甲 +${formulaTag}（回收袋 ${recycleLen} 张 ÷ ${divisor}）。${echoTag}`);
     }
 
     case 'backpack-temp-attack': {
@@ -1752,33 +1762,39 @@ function reduceMagicSlotSelection(
       const echoMul = (pending as any).echoMultiplier ?? 1;
       const atkBoost = 2 * echoMul;
       const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      const curTempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+      const permAtk = state.equipmentSlotBonuses?.[slotId]?.damage ?? 0;
+      const permArm = state.equipmentSlotBonuses?.[slotId]?.shield ?? 0;
+      // Step 1: 临时攻击先 +atkBoost。
       patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + atkBoost };
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时攻击 +${atkBoost}` } });
       // 怀柔之印：初始 +N 临时攻击 = 一次"获得"
       checkPersuadeOnTempAttack(state, patch, sideEffects);
-      const tempAtk = curTempAtk + atkBoost;
-      const tempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
-      if (tempAtk === tempArm) {
+      // Step 2: 比较 (临时攻击+永久攻击) vs (临时护甲+永久护甲)，
+      // 拉平较低一方（永远只增不减，加在「临时」侧）。
+      const totalAtkAfterBoost = (curTempAtk + atkBoost) + permAtk;
+      const totalArm = curTempArm + permArm;
+      if (totalAtkAfterBoost === totalArm) {
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `${slotItem.name} 临时攻击 +${atkBoost}，攻防已相等（${tempAtk}）。`);
+          `${slotItem.name} 临时攻击 +${atkBoost}，攻防总和已相等（${totalAtkAfterBoost}）。`);
       }
-      if (tempAtk > tempArm) {
-        const delta = tempAtk - tempArm;
-        patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: tempArm + delta };
+      if (totalAtkAfterBoost > totalArm) {
+        const delta = totalAtkAfterBoost - totalArm;
+        patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTempArm + delta };
         if (delta !== 0) applySlotArmorBonusDelta(state, slotId, delta, patch);
-        // 怀柔之印：等位时临时护甲 +delta = 第二次"获得"
+        // 怀柔之印：拉平时临时护甲 +delta = 第二次"获得"
         if (delta > 0) checkPersuadeOnTempAttack(state, patch, sideEffects);
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时护甲 +${delta}，临时攻击与临时护甲均为 ${tempAtk}` } });
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时护甲 +${delta}，攻防总和均为 ${totalAtkAfterBoost}` } });
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `${slotItem.name} 临时攻击 +${atkBoost}，临时护甲 +${delta}，攻防均为 ${tempAtk}。`);
+          `${slotItem.name} 临时攻击 +${atkBoost}，临时护甲 +${delta}，攻防总和均为 ${totalAtkAfterBoost}。`);
       }
-      const delta = tempArm - tempAtk;
+      const delta = totalArm - totalAtkAfterBoost;
       patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + atkBoost + delta };
-      // 怀柔之印：等位时临时攻击 +delta = 第二次"获得"
+      // 怀柔之印：拉平时临时攻击 +delta = 第二次"获得"
       if (delta > 0) checkPersuadeOnTempAttack(state, patch, sideEffects);
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时攻击再 +${delta}，临时攻击与临时护甲均为 ${tempArm}` } });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `时空镜像：${slotItem.name} 临时攻击再 +${delta}，攻防总和均为 ${totalArm}` } });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `${slotItem.name} 临时攻击 +${atkBoost + delta}，攻防均为 ${tempArm}。`);
+        `${slotItem.name} 临时攻击 +${atkBoost + delta}，攻防总和均为 ${totalArm}。`);
     }
 
     case 'eternal-repair': {

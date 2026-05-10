@@ -61,10 +61,24 @@ export interface UseCardStampsResult {
   isOnline: boolean;
   /**
    * Returns the stamp data for `card` if it is currently visible in
-   * `sourceRow` AND its name appears in that row's snapshot signature.
-   * Otherwise returns `null`.
+   * `sourceRow`, its name appears in that row's snapshot signature, AND
+   * the float-out animation hasn't already played for this
+   * `(rowSignature, cardName)` pair this session. Returns `null` otherwise
+   * — including after `markAnimated` has been called for the same key.
+   *
+   * `rowSignature` is included in the result so the consumer can call
+   * `markAnimated` without having to re-derive it.
    */
-  getStampsForCard: (card: GameCardData, sourceRow: RowSourceId) => CardStampEntry | null;
+  getPendingFloat: (
+    card: GameCardData,
+    sourceRow: RowSourceId,
+  ) => { entry: CardStampEntry; rowSignature: string } | null;
+  /**
+   * Marks the float-out animation as completed for `(rowSignature, cardName)`.
+   * After this call, `getPendingFloat` will return `null` for that key for
+   * the rest of the session (or until `game:started` resets the set).
+   */
+  markAnimated: (rowSignature: string, cardName: string) => void;
   /**
    * Submits a stamp. No-op when offline. For freeform messages, validates
    * length client-side before firing the network call.
@@ -230,6 +244,9 @@ export function useCardStamps(): UseCardStampsResult {
     // Clear cache: the new game's row signatures are unrelated.
     cacheRef.current.clear();
     pendingFetchSignaturesRef.current.clear();
+    // Reset float-out memory so a deterministic seed (= same first row)
+    // animates fresh in the new game.
+    animatedKeysRef.current = new Set();
   });
 
   // Derive signatures from the snapshots.
@@ -332,6 +349,13 @@ export function useCardStamps(): UseCardStampsResult {
     }
   }, [isOnline, activeSignature, previewSignature, scheduleLookup, refreshTick]);
 
+  // ---- float-out animation memory ----
+
+  // Tracks `(rowSignature, cardName)` keys whose float-out animation has
+  // already played in this session. Reset on `game:started`. Read by
+  // `getPendingFloat` to gate the floater UI.
+  const animatedKeysRef = useRef<Set<string>>(new Set());
+
   // ---- "is this card visible in this row" lookup ----
 
   const visibleCardIdsByRow = useMemo(() => {
@@ -359,9 +383,12 @@ export function useCardStamps(): UseCardStampsResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshotVersion]);
 
-  const getStampsForCard = useCallback(
-    (card: GameCardData, sourceRow: RowSourceId): CardStampEntry | null => {
-      // (1) Card must be currently visible in the row (kills hide bubble).
+  const getPendingFloat = useCallback(
+    (
+      card: GameCardData,
+      sourceRow: RowSourceId,
+    ): { entry: CardStampEntry; rowSignature: string } | null => {
+      // (1) Card must be currently visible in the row (kills hide the float).
       const visibleSet = sourceRow === 'active'
         ? visibleCardIdsByRow.active
         : visibleCardIdsByRow.preview;
@@ -382,19 +409,32 @@ export function useCardStamps(): UseCardStampsResult {
       const hasPreset = Object.keys(entry.stampCounts).length > 0;
       const hasFreeform = entry.freeform.length > 0;
       if (!hasPreset && !hasFreeform) return null;
-      return entry;
+
+      // (4) "once on appear" gate: if we've already animated this key in
+      //     this session, don't return data — the cell will render nothing.
+      if (animatedKeysRef.current.has(`${sig}::${card.name}`)) return null;
+
+      return { entry, rowSignature: sig };
     },
     [
       visibleCardIdsByRow,
       snapshotNamesByRow,
       activeSignature,
       previewSignature,
-      // refreshTick triggers re-renders when cache mutates; not part of the
-      // closure but keeps the function ref logically up-to-date.
+      // refreshTick triggers re-renders when cache mutates OR when
+      // markAnimated bumps the tick; not part of the closure but keeps the
+      // function ref logically up-to-date.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       refreshTick,
     ],
   );
+
+  const markAnimated = useCallback((rowSignature: string, cardName: string) => {
+    const key = `${rowSignature}::${cardName}`;
+    if (animatedKeysRef.current.has(key)) return;
+    animatedKeysRef.current.add(key);
+    setRefreshTick(t => t + 1);
+  }, []);
 
   // ---- submit ----
 
@@ -483,7 +523,8 @@ export function useCardStamps(): UseCardStampsResult {
 
   return {
     isOnline,
-    getStampsForCard,
+    getPendingFloat,
+    markAnimated,
     submitStamp,
     pickerState,
     openPicker,

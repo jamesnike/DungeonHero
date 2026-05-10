@@ -41,7 +41,7 @@ import { routeReflectDamageToHero, tickStunAttemptDiscoverProgress } from './com
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import type { RngState } from '../rng';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
-import { cloneClassCardsWithFreshIds, sampleDistinctByName } from '../cardClone';
+import { cloneClassCardWithFreshId, cloneClassCardsWithFreshIds, sampleDistinctByName } from '../cardClone';
 import { resolveAllMagicEffects, resolvePendingMagic, getSpellDamage, computeMaxHp, applyMissileRelicEffects, resolveHandDiscardSelection, ensureMonsterEngaged, requestOrAutoHandDiscard, finalizeTransformDiscardRecycle, MONSTER_FUSION_RACE_CN, MONSTER_FUSION_ELITE_PROPS, MONSTER_FUSION_SKELETON_KING_IMAGE } from './magic-effects';
 import { resolveAllPotionEffects, resolvePendingPotion } from './potion-effects';
 import { applyFlipCounters } from './flip-counters';
@@ -52,6 +52,7 @@ import type { MirrorCopySelection, AmplifySelection } from '../types';
 import { skillScrollImage } from '../deck';
 import { rollPotionManuscriptFlip, applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
 import { createMineBuilding } from '@/lib/knightDeck';
+import { filterAvailableClassPool, markManyUniqueAcquired } from '../uniqueClass';
 
 export function reduceCardActions(state: GameState, action: GameAction): ReduceResult | null {
   switch (action.type) {
@@ -600,14 +601,14 @@ function reduceAddToRecycleBag(
 
   // 循手之符 amulet: manual-recycle-draw progress
   // 仅"手动拖卡到回收袋"才计数（waitsOverride 是手动标记）。每件等装备独立 +1。
-  // 累计达 3 张 → 从背包抽 1 张牌；进度归 0（surplus 不滚存，与 积蓄之符 一致）。
+  // 累计达 2 张 → 从背包抽 1 张牌；进度归 0（surplus 不滚存，与 积蓄之符 一致）。
   // 多件叠加跨过阈值仍只抽 1 张（单触发模式）。
   if (isManualDrag) {
     const manualDrawAmulets = (state.amuletSlots as GameCardData[]).filter(
       s => s?.amuletEffect === 'manual-recycle-draw',
     );
     if (manualDrawAmulets.length > 0) {
-      const manualThreshold = 3;
+      const manualThreshold = 2;
       const newProgress = (state.manualRecycleProgress ?? 0) + manualDrawAmulets.length;
       if (newProgress >= manualThreshold) {
         patch.manualRecycleProgress = 0;
@@ -904,7 +905,7 @@ function reduceResolveMagic(
 }
 
 // ---------------------------------------------------------------------------
-// 咒纹刻印 (magic-class-discover)：每使用 6 张「当前功能上是瞬发」的 magic 牌，
+// 咒纹刻印 (magic-class-discover)：每使用 5 张「当前功能上是瞬发」的 magic 牌，
 // 发现一张专属牌。判定标准是「现在打出去会进坟场」（!cardHasPermFlag），不是
 // 字面 magicType：
 //   - 原生 Instant magic 被 永恒铭刻 / 附魔祭坛 / 永恒铭刻药 加上 recycleDelay
@@ -928,7 +929,7 @@ function applyMagicClassDiscoverStreak(result: ReduceResult, card: GameCardData)
     s => s?.amuletEffect === 'magic-class-discover',
   ).length;
   if (magicDiscoverCount <= 0) return result;
-  const threshold = 6;
+  const threshold = 5;
   const nextStreak = (stateAfter.classMagicDiscoverStreak ?? 0) + magicDiscoverCount;
   if (nextStreak >= threshold) {
     return {
@@ -1412,7 +1413,14 @@ function reduceDrawClassToBackpack(
   // Class deck is an infinite template — we sample distinct-by-name from
   // the (filtered) pool, then clone each pick with a fresh id. The
   // template is NOT mutated.
-  let source = state.classDeck;
+  //
+  // Universal unique-lock safety net: filter out unique cards the player
+  // has already acquired this run BEFORE any other narrowing. This mirrors
+  // the safety net in `reduceBeginDiscover` so all class-deck sampling
+  // paths (curse 战狂诅咒 / hero-magic 利刃风暴 / waterfall relic class draws /
+  // potion 灵思药剂 fallback / event class draws / executors / discover-fallback)
+  // respect the unique lock without each callsite having to remember.
+  let source = filterAvailableClassPool(state.classDeck, state);
   if (action.includeIds && action.includeIds.length > 0) {
     const includeSet = new Set(action.includeIds);
     source = source.filter(c => includeSet.has(c.id));
@@ -1443,6 +1451,12 @@ function reduceDrawClassToBackpack(
 
   const [drawn, rngAfterClone] = cloneClassCardsWithFreshIds(picks, rngAfterSample);
   patch.rng = rngAfterClone;
+
+  // Lock every unique card we drew (idempotent — no-op for non-unique cards
+  // and for uniques whose base id is already locked). Done BEFORE
+  // `patch.backpackItems` / `patch.permanentMagicRecycleBag` are written so
+  // future actions in the same drain step see the updated lock.
+  markManyUniqueAcquired(drawn, state, patch);
 
   const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
   const available = backpackCap - state.backpackItems.length;
@@ -1628,7 +1642,14 @@ function reduceApplyCardFlip(
       newActive[idx] = placedCard;
       patch.activeCards = newActive;
       inCellIdx = idx;
-    } else if (flip.toCard.type === 'event') {
+    } else {
+      // Source not in active row → it was used from hand (e.g. 混沌骰局 / 弹幕骰局 /
+      // 命运骰盅 / 双重燃烧（觉醒） / 奥能裂变 played from hand). Semantically
+      // "stay" means "stay in current owner"; current owner = hand. Add the
+      // flipped card to hand for ALL toCard types (magic / amulet / building /
+      // potion / event). Historically only `event` was handled here, which
+      // silently dropped 混沌冲击 / 弹幕之符 / 命运之刃 / etc. — see
+      // `stay-flip-from-hand.test.ts`.
       const placedCard: GameCardData = { ...flip.toCard, _flipBackCard: { ...card } };
       patch.handCards = [...state.handCards, placedCard];
       sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `${flip.toCard.name} 加入手牌` } });
@@ -2050,14 +2071,18 @@ function reduceResolveMirrorCopy(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
-  let rng = state.rng;
-  const [cloneId, rng2] = nextId(rng, 'mirror');
-  rng = rng2;
-  patch.rng = rng;
+  // Clone with `cloneClassCardWithFreshId` so the new id strips back to the
+  // same starter base id via `getStarterBaseId`. Critical for starter-routed
+  // permanent magic cards (e.g. 魔法飞弹 / 战斗鼓舞 / 铸甲术 / 雷震击 etc.)
+  // whose effect dispatch falls through to starter-id when no `magicEffect` /
+  // `knightEffect` is set — otherwise the cloned card silently no-ops when
+  // played. See: .cursor/rules/event-grant-card-id-suffix.mdc
+  const sanitized = sanitizeCardMetadata(template);
+  const [clonedBase, rng2] = cloneClassCardWithFreshId(sanitized, state.rng);
+  patch.rng = rng2;
 
   const cloned: GameCardData = {
-    ...sanitizeCardMetadata(template),
-    id: cloneId,
+    ...clonedBase,
     _skipOnEnterHand: true,
   };
 

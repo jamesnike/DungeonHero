@@ -408,11 +408,11 @@ function computeAmuletCounterDisplay(
 ): string | undefined {
   switch (slot.amuletEffect) {
     case 'damage-class-discover': {
-      const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 3 : 8;
+      const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 4 : 6;
       return `${state.classDamageDiscoverStreak ?? 0}/${threshold}`;
     }
     case 'magic-class-discover':
-      return `${state.classMagicDiscoverStreak ?? 0}/8`;
+      return `${state.classMagicDiscoverStreak ?? 0}/5`;
     case 'monster-kill-upgrade':
       return `${state.monsterKillUpgradeProgress ?? 0}/3`;
     case 'swap-upgrade':
@@ -422,13 +422,13 @@ function computeAmuletCounterDisplay(
       return `${state.recycleBackpackProgress ?? 0}/${threshold}`;
     }
     case 'manual-recycle-draw':
-      return `${state.manualRecycleProgress ?? 0}/3`;
+      return `${state.manualRecycleProgress ?? 0}/2`;
     case 'flip-overkill-lifesteal':
       return `${state.flipOverkillLifestealProgress ?? 0}/5`;
     case 'equip-amulet-cap':
       return `${state.equipAmuletCapProgress ?? 0}/6`;
     case 'stun-attempt-discover':
-      return `${state.stunAttemptDiscoverProgress ?? 0}/6`;
+      return `${state.stunAttemptDiscoverProgress ?? 0}/4`;
     default:
       return undefined;
   }

@@ -71,7 +71,18 @@ export function removeCardFromBackpack(state: GameState, cardId: string): Partia
 }
 
 /**
- * Draw a random card from backpack to hand. Returns the drawn card and state patch.
+ * Draw a card from backpack to hand. Returns the drawn card and state patch.
+ *
+ * 「置顶」(`topOnRecycleRestore: true`) 语义：当 `state.backpackItems[0]` 是
+ * 置顶卡时，**优先**抽出它（不消耗 RNG），让玩家直觉对齐——「卡刚回到背包顶，
+ * 下一次抽必抽到」。其余情况随机。
+ *
+ * 这条优先级覆盖**所有**走 `DRAW_CARDS source: 'backpack'` / `DRAW_FROM_BACKPACK`
+ * 的路径：战狂诅咒、回收灵焰、汰旧迎新、专属感召发现回手、装备遗言抽、武器
+ * 超杀抽、瀑流回合开始抽、ogre 入场弃抽、flank 抽……一律自动尊重置顶。
+ *
+ * 配合 `processRecycleBag` 把置顶卡 prepend 到 `backpackItems[0]`：
+ *   restored→backpackTop[0] = 下一次 backpack draw 的目标。
  */
 export function drawFromBackpackToHandPure(
   state: GameState,
@@ -89,6 +100,18 @@ export function drawFromBackpackToHandPure(
     if (filtered.length > 0) pool = filtered;
   }
 
+  const top = pool[0] as (GameCardData & { topOnRecycleRestore?: boolean }) | undefined;
+  if (top && top.topOnRecycleRestore === true) {
+    return {
+      card: top,
+      patch: {
+        handCards: [...state.handCards, top],
+        backpackItems: state.backpackItems.filter(c => c.id !== top.id),
+        rng: state.rng,
+      },
+    };
+  }
+
   const [index, rng] = nextInt(state.rng, 0, pool.length - 1);
   const card = pool[index];
 
@@ -104,6 +127,11 @@ export function drawFromBackpackToHandPure(
 
 /**
  * Draw multiple cards from backpack to hand.
+ *
+ * 「置顶」语义跟 `drawFromBackpackToHandPure` 一致，但**逐张迭代**：每次抽之前先看
+ * `currentBackpack[0]`，是置顶卡就剥它（不消耗 RNG），否则随机。多张置顶卡时按
+ * 数组顺序依次剥下来 —— 这跟 `processRecycleBag` 把多张置顶 prepend 到 backpack
+ * 头部的顺序一致，保证「先回到背包顶的卡先被抽到」。
  */
 export function drawMultipleFromBackpack(
   state: GameState,
@@ -118,12 +146,19 @@ export function drawMultipleFromBackpack(
 
   for (let i = 0; i < count; i++) {
     if (currentHand.length >= limit || currentBackpack.length === 0) break;
-    const [index, nextRng] = nextInt(rng, 0, currentBackpack.length - 1);
-    rng = nextRng;
-    const card = currentBackpack[index];
+    const top = currentBackpack[0] as (GameCardData & { topOnRecycleRestore?: boolean }) | undefined;
+    let card: GameCardData;
+    if (top && top.topOnRecycleRestore === true) {
+      card = top;
+      currentBackpack = currentBackpack.slice(1);
+    } else {
+      const [index, nextRng] = nextInt(rng, 0, currentBackpack.length - 1);
+      rng = nextRng;
+      card = currentBackpack[index];
+      currentBackpack = currentBackpack.filter((_, j) => j !== index);
+    }
     cards.push(card);
     currentHand.push(card);
-    currentBackpack = currentBackpack.filter((_, j) => j !== index);
   }
 
   if (cards.length === 0) {
@@ -166,6 +201,9 @@ export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false
     reviveUsed: false,
     durability: undefined,
     maxDurability: undefined,
+    // 「召唤回合保护」是一次性 hero-turn-bound 的临时状态，不应该跟着卡进坟场 ——
+    // 否则下一次被召唤 / 复生 / persuade 拉回场上时还残留。
+    skipNextMonsterTurn: undefined,
   };
 
   const raged = applyMonsterRage(cleaned, cleaned.rageTurn ?? 1, isQuickMode);

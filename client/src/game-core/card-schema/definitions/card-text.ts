@@ -159,9 +159,16 @@ const cardGainMissileAmulet: CardTextFormatter = () => ({
 
 // `_counterDisplay` is a separate field (current counter state, not text)
 // and stays in the on-upgrade handler.
-const damageClassDiscoverAmulet: CardTextFormatter = () => ({
-  description: '每造成 3 次伤害（武器、护符、法术等任意来源），发现一张专属牌。',
-});
+// Single source of truth: thresholds here MUST match `combat.ts` /
+// `economy.ts` / `reducer.ts:computeAmuletCounterDisplay` / `GameBoard.tsx`
+// counter-display branches (Lv 0 = 6, Lv 1+ = 4).
+const damageClassDiscoverAmulet: CardTextFormatter = (card) => {
+  const threshold = (card.upgradeLevel ?? 0) >= 1 ? 4 : 6;
+  return {
+    description: `每造成 ${threshold} 次伤害（武器、护符、法术等任意来源），发现一张专属牌。`,
+    shortDescription: `每造成 ${threshold} 次伤害：发现 1 张专属`,
+  };
+};
 
 const stunUpgradeCapAmulet: CardTextFormatter = () => ({
   description: '每击晕一次怪物，击晕上限 +12%。',
@@ -650,6 +657,19 @@ const backpackCapStun: CardTextFormatter = (card) => {
   };
 };
 
+// 囊中生机：升级表 [4, 3]（divisor）。Lv0 ÷4，Lv1 ÷3。
+// 跟 囊量震慑 同语义——「背包上限」= BASE (12) + modifier，不是当前剩余数。
+const backpackCapHeal: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const divisors = [4, 3];
+  const div = pick(divisors, level);
+  return {
+    description: `永久：恢复 floor(背包上限 / ${div}) 点生命。`,
+    shortDescription: `恢复 背包上限÷${div} 生命`,
+    magicEffect: `永久魔法：恢复 背包上限÷${div} 点生命。`,
+  };
+};
+
 const layMine: CardTextFormatter = (card) => {
   // 布雷术：lvl 0 PERM 2、lvl 1 PERM 1。卡面文案不随升级变化（机制相同），
   // 但 description 不主动写"PERM N"，让 GameCard 渲染层根据 recycleDelay 自动
@@ -698,14 +718,15 @@ const backpackTempAttack: CardTextFormatter = (card) => {
 };
 
 // 池中坚意：升级表 [4, 3]（divisor）。Lv0 每 4 张牌 +1，Lv1 每 3 张牌 +1。
+// 注：effect id `knight:recycle-temp-armor` 是历史命名，语义已改为永久护甲。
 const recycleTempArmor: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
   const divisors = [4, 3];
   const div = pick(divisors, level);
   return {
-    description: `永久：选择一个装备栏，回收袋每 ${div} 张牌 +1 临时护甲。`,
-    shortDescription: `所选栏 +回收袋数÷${div} 临时护甲`,
-    magicEffect: `永久魔法：选择一个装备栏，回收袋每 ${div} 张牌 +1 临时护甲。`,
+    description: `永久：选择一个装备栏，回收袋每 ${div} 张牌 +1 永久护甲。`,
+    shortDescription: `所选栏 +回收袋数÷${div} 永久护甲`,
+    magicEffect: `永久魔法：选择一个装备栏，回收袋每 ${div} 张牌 +1 永久护甲。`,
   };
 };
 
@@ -1056,6 +1077,7 @@ const entries: Array<{ id: string; fn: CardTextFormatter }> = [
   { id: 'knight:backpack-bolt', fn: backpackBolt },
   { id: 'knight:recycle-bolt', fn: recycleBolt },
   { id: 'knight:backpack-cap-stun', fn: backpackCapStun },
+  { id: 'knight:backpack-cap-heal', fn: backpackCapHeal },
   { id: 'knight:lay-mine', fn: layMine },
   { id: 'knight:temp-attack-armor-draw', fn: tempAttackArmorDraw },
   { id: 'knight:temp-attack-double', fn: tempAttackDouble },

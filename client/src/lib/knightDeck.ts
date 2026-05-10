@@ -796,8 +796,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightSelfDamageDrawAmuletImage,
     classCard: true,
-    description: '每次对自己造成伤害时，从背包随机抽 1 张牌（受手牌上限约束）。',
-    shortDescription: '每次自伤，从背包抽 1 张牌',
+    description: '每次对自己造成伤害时，从背包随机抽 2 张牌（受手牌上限约束）。',
+    shortDescription: '每次自伤，从背包抽 2 张牌',
     amuletEffect: 'self-damage-draw',
   });
 
@@ -831,8 +831,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightSpellRuneInscriptionAmuletImage,
     classCard: true,
-    description: '每使用 6 张瞬发魔法（Instant magic），发现一张专属牌。',
-    shortDescription: '每使用 6 张瞬发魔法，发现 1 张专属',
+    description: '每使用 5 张瞬发魔法（Instant magic），发现一张专属牌。',
+    shortDescription: '每使用 5 张瞬发魔法，发现 1 张专属',
     amuletEffect: 'magic-class-discover',
   });
 
@@ -906,7 +906,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'last-words-extra-trigger',
   });
 
-  // 循手之符 — 每"手动"拖卡到回收袋累计：3 张抽 1。
+  // 循手之符 — 每"手动"拖卡到回收袋累计：2 张抽 1。
   // 仅手动事件（waitsOverride === 1 标记）触发：
   //   - 装备栏 / 护符栏 → 回收袋（拖动）
   //   - 手牌 → 回收袋（拖动）
@@ -923,8 +923,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightManualRecycleAmuletImage,
     classCard: true,
-    description: '每手动拖动 3 张牌到回收袋，从背包抽 1 张牌。仅"手动拖动"触发，出牌自回收 / 装备销毁 / 瀑流溢出等系统路径不算。',
-    shortDescription: '每手动拖 3 张到回收袋，背包抽 1 张',
+    description: '每手动拖动 2 张牌到回收袋，从背包抽 1 张牌。仅"手动拖动"触发，出牌自回收 / 装备销毁 / 瀑流溢出等系统路径不算。',
+    shortDescription: '每手动拖 2 张到回收袋，背包抽 1 张',
     amuletEffect: 'manual-recycle-draw',
   });
 
@@ -997,7 +997,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: starterAmuletDamageDiscoverImage,
     classCard: true,
     amuletEffect: 'damage-class-discover',
-    shortDescription: '每造成 8 次伤害：发现 1 张专属',
+    shortDescription: '每造成 6 次伤害：发现 1 张专属',
   });
 
   pushAmulet({
@@ -1088,8 +1088,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: stunDiscoverAmuletImage,
     classCard: true,
     amuletEffect: 'stun-attempt-discover',
-    description: '每尝试击晕 6 次，发现一张专属牌。',
-    shortDescription: '每尝试击晕 6 次：发现 1 张专属',
+    description: '每尝试击晕 4 次，发现一张专属牌。',
+    shortDescription: '每尝试击晕 4 次：发现 1 张专属',
   });
 
   // === NEW POTIONS (2 cards) ===
@@ -1412,7 +1412,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     recycleDelay: 1,
   });
 
-  // 池中坚意 (Perm 1)：选择一个装备栏（允许空槽），按 floor(回收袋牌数 / divisor) 加临时护甲。
+  // 池中坚意 (Perm 1)：选择一个装备栏（允许空槽），按 floor(回收袋牌数 / divisor) 加永久护甲。
   // - divisor = 4 (Lv0) / 3 (Lv1)
   // - 这张卡从手牌打出 → 进回收袋（recycleDelay: 1）；slot-select 结算时本卡仍在
   //   pendingMagicAction（不在 recycleBag），所以读到的回收袋数不含本卡——与
@@ -1420,19 +1420,23 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   // - Echo C 类（重读 state）和 A 类（× echoMultiplier）此处数值等价（slot-select
   //   结算之间 recycleBag 不变）。实现走 A 类单次乘 × echoMultiplier，与 囊中锋意
   //   / temp-attack-double 同 pattern。
-  // - 与 囊中锋意（backpack-temp-attack）成对照：前者背包数 → 临攻，本卡回收袋数 → 临护。
-  // - 修改 slotTempArmor 后必须调 applySlotArmorBonusDelta 让 armor 立即刷到新 cap
-  //   （详见 shield-armor-vs-durability.mdc）。
+  // - 跟 装甲铸蚀（event-armor-etch）同口径：buff 写到 equipmentSlotBonuses[slotId]
+  //   .shield（永久护甲槽位加成），跨瀑流 / 跨回合不清零，空槽选了之后该栏永久
+  //   保留这份加成，未来装备进来仍生效。
+  // - 修改 equipmentSlotBonuses[slotId].shield 后必须调 applySlotArmorBonusDelta
+  //   让 armor 立即刷到新 cap（详见 shield-armor-vs-durability.mdc）。
+  // - knightEffect id `recycle-temp-armor` 是历史命名，语义已改为永久护甲；
+  //   不重命名以减少跨文件改动面（types union / 测试 / formatter / upgrades）。
   pushCard({
     type: 'magic',
     name: '池中坚意',
     value: 0,
     image: knightScrollFortifyFlankImage,
     classCard: true,
-    description: '永久：选择一个装备栏，回收袋每 4 张牌 +1 临时护甲。',
-    shortDescription: '所选栏 +回收袋数÷4 临时护甲',
+    description: '永久：选择一个装备栏，回收袋每 4 张牌 +1 永久护甲。',
+    shortDescription: '所选栏 +回收袋数÷4 永久护甲',
     magicType: 'permanent',
-    magicEffect: '永久魔法：选择一个装备栏，回收袋每 4 张牌 +1 临时护甲。',
+    magicEffect: '永久魔法：选择一个装备栏，回收袋每 4 张牌 +1 永久护甲。',
     knightEffect: 'recycle-temp-armor',
     recycleDelay: 1,
     maxUpgradeLevel: 1,
@@ -1570,6 +1574,29 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     magicType: 'permanent',
     magicEffect: '永久魔法：击晕上限 +背包上限÷4 %。',
     knightEffect: 'backpack-cap-stun',
+    recycleDelay: 1,
+    maxUpgradeLevel: 1,
+  });
+
+  // 囊中生机 (Perm 1)：恢复 floor(背包上限 / divisor) 点生命。
+  // - divisor = 4 (Lv0) / 3 (Lv1)。背包上限 12 时：Lv0 +3 / Lv1 +4。
+  // - 「背包上限」= max(1, BASE_BACKPACK_CAPACITY (12) + backpackCapacityModifier)，
+  //   不是当前 backpackItems.length——跟 囊量震慑 (backpack-cap-stun) 同口径。
+  // - HEAL action 自带 clamp 到 maxHp，溢出静默吸收（满血时本卡照常消耗）。
+  // - Echo (A 类)：×echoMultiplier 单次结算；背包上限在本次 reduce 步骤内不变，
+  //   A/C 等价。
+  // - 与 囊量震慑（buff/控制）成对照：本卡走治疗路径。
+  pushCard({
+    type: 'magic',
+    name: '囊中生机',
+    value: 0,
+    image: knightScrollBagFetchImage,
+    classCard: true,
+    description: '永久：恢复 floor(背包上限 / 4) 点生命。',
+    shortDescription: '恢复 背包上限÷4 生命',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：恢复 背包上限÷4 点生命。',
+    knightEffect: 'backpack-cap-heal',
     recycleDelay: 1,
     maxUpgradeLevel: 1,
   });

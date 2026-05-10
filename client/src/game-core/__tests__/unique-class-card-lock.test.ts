@@ -505,3 +505,158 @@ describe('markUniqueAcquired is idempotent', () => {
     expect(patch.acquiredUniqueClassCardIds).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scenario 10 — BEGIN_DISCOVER reducer-level safety net
+//
+// Historically, several discover entry points (the hook
+// `beginDiscoverFlow`, plus magic resolvers like `discard-rebuild`,
+// `altar-discard-discover`, `altar-discover-class-magic`, and 「专属感召」)
+// passed raw `state.classDeck` straight into BEGIN_DISCOVER without going
+// through `filterAvailableClassPool` — letting already-acquired unique
+// cards re-appear as candidates. To prevent this class of bug, the
+// `reduceBeginDiscover` reducer applies the unique-lock filter as a
+// universal safety net at the entry point. These tests verify that
+// behavior so future callers don't silently drift back into the bug.
+// ---------------------------------------------------------------------------
+
+describe('BEGIN_DISCOVER reducer filters acquired uniques as a safety net', () => {
+  it('drops a unique card whose base id is already acquired (raw classDeck pool)', () => {
+    const lockedA = makeUniqueMagic('knight-1', 'LockedA');
+    const free = makeUniqueMagic('knight-2', 'Free');
+    const state: GameState = {
+      ...createInitialGameState(),
+      rng: createRng(501),
+      classDeck: [lockedA, free],
+      acquiredUniqueClassCardIds: ['knight-1'],
+    };
+
+    // Mimics what `useShopHandlers.beginDiscoverFlow` and
+    // `magic-effects.ts` discard-rebuild used to do — raw `state.classDeck`
+    // straight into BEGIN_DISCOVER.
+    const result = reduce(state, {
+      type: 'BEGIN_DISCOVER',
+      source: 'unit-test',
+      pool: state.classDeck,
+      sourceLabel: 'unit-test',
+    });
+
+    expect(result.state.discoverModalOpen).toBe(true);
+    const baseIds = result.state.discoverOptions.map(c => getStarterBaseId(c.id));
+    expect(baseIds).not.toContain('knight-1');
+    expect(baseIds).toContain('knight-2');
+  });
+
+  it('opens no modal when every pool card is unique-locked', () => {
+    const lockedA = makeUniqueMagic('knight-1', 'A');
+    const lockedB = makeUniqueMagic('knight-2', 'B');
+    const state: GameState = {
+      ...createInitialGameState(),
+      rng: createRng(502),
+      classDeck: [lockedA, lockedB],
+      acquiredUniqueClassCardIds: ['knight-1', 'knight-2'],
+    };
+
+    const result = reduce(state, {
+      type: 'BEGIN_DISCOVER',
+      source: 'unit-test',
+      pool: state.classDeck,
+      sourceLabel: 'unit-test',
+    });
+
+    expect(result.state.discoverModalOpen).toBe(false);
+    expect(result.state.discoverOptions).toEqual([]);
+  });
+
+  it('non-unique cards are never affected by the safety net', () => {
+    const lockedUnique = makeUniqueMagic('knight-1', 'LockedUnique');
+    const plain = makeMagic('knight-2', 'Plain');
+    const state: GameState = {
+      ...createInitialGameState(),
+      rng: createRng(503),
+      classDeck: [lockedUnique, plain],
+      acquiredUniqueClassCardIds: ['knight-1'],
+    };
+
+    const result = reduce(state, {
+      type: 'BEGIN_DISCOVER',
+      source: 'unit-test',
+      pool: state.classDeck,
+      sourceLabel: 'unit-test',
+    });
+
+    const baseIds = result.state.discoverOptions.map(c => getStarterBaseId(c.id));
+    expect(baseIds).toContain('knight-2');
+    expect(baseIds).not.toContain('knight-1');
+  });
+
+  it('overridePool (e.g. card:discoverRequested candidates) is also filtered', () => {
+    // Simulates the hook `beginDiscoverFlow({ overridePool })` path — used
+    // by `altar-discard-discover` / `altar-discover-class-magic` / 「专属感召」 /
+    // 际遇轮盘 / 混沌骰 etc. The reducer must filter regardless of where
+    // the candidates came from.
+    const lockedA = makeUniqueMagic('knight-1', 'LockedA');
+    const free = makeUniqueMagic('knight-2', 'Free');
+    const state: GameState = {
+      ...createInitialGameState(),
+      rng: createRng(504),
+      acquiredUniqueClassCardIds: ['knight-1'],
+    };
+
+    const result = reduce(state, {
+      type: 'BEGIN_DISCOVER',
+      source: 'altar-discover-class-magic',
+      pool: [lockedA, free],
+      sourceLabel: '祭坛秘术',
+    });
+
+    const baseIds = result.state.discoverOptions.map(c => getStarterBaseId(c.id));
+    expect(baseIds).not.toContain('knight-1');
+    expect(baseIds).toContain('knight-2');
+  });
+
+  it('full discover → resolve → re-discover loop never offers the just-acquired unique again', () => {
+    // End-to-end: simulate the bug scenario the user reported.
+    //   1. Player gets a unique card A (BEGIN_DISCOVER → RESOLVE_DISCOVER_SELECTION)
+    //   2. A second discover trigger fires (e.g. eternal-relic-waterfall,
+    //      战痕之符, or any of the 10+ paths through `beginDiscoverFlow`)
+    //   3. The second discover candidate list must NOT contain A.
+    const a = makeUniqueMagic('knight-1', 'UniqueA');
+    const b = makeUniqueMagic('knight-2', 'UniqueB');
+    const c = makeUniqueMagic('knight-3', 'UniqueC');
+    const initialState: GameState = {
+      ...createInitialGameState(),
+      rng: createRng(505),
+      classDeck: [a, b, c],
+    };
+
+    // 1) First BEGIN_DISCOVER — pool contains all three uniques.
+    const afterBegin1 = reduce(initialState, {
+      type: 'BEGIN_DISCOVER',
+      source: 'first-trigger',
+      pool: initialState.classDeck,
+      sourceLabel: 'first-trigger',
+    });
+    expect(afterBegin1.state.discoverModalOpen).toBe(true);
+
+    // 2) Player picks the first option — assume it's `a` for the test.
+    const firstOption = afterBegin1.state.discoverOptions[0];
+    const firstBaseId = getStarterBaseId(firstOption.id);
+    const afterResolve = drain(afterBegin1.state, [
+      { type: 'RESOLVE_DISCOVER_SELECTION', cardId: firstOption.id },
+    ]);
+    expect(afterResolve.state.acquiredUniqueClassCardIds).toContain(firstBaseId);
+
+    // 3) Second BEGIN_DISCOVER — passing the same raw classDeck (the bug
+    //    scenario). The reducer-level safety net must filter the just-
+    //    acquired unique out of the candidate list.
+    const afterBegin2 = reduce(afterResolve.state, {
+      type: 'BEGIN_DISCOVER',
+      source: 'second-trigger',
+      pool: afterResolve.state.classDeck,
+      sourceLabel: 'second-trigger',
+    });
+    const baseIds = afterBegin2.state.discoverOptions.map(c => getStarterBaseId(c.id));
+    expect(baseIds).not.toContain(firstBaseId);
+  });
+});

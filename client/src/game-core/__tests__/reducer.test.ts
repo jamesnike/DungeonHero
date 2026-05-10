@@ -1101,13 +1101,15 @@ describe('reducer', () => {
       const discoverAmulet = { id: 'a1', type: 'amulet' as const, name: 'Discover', value: 0, amuletEffect: 'damage-class-discover' };
       const state = makeState({
         activeCards: slots,
-        classDamageDiscoverStreak: 5,
+        classDamageDiscoverStreak: 3,
         amuletSlots: [discoverAmulet as any],
       });
       const result = reduce(state, {
         type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 2, source: 'spell',
       });
-      expect(result.state.classDamageDiscoverStreak).toBe(6);
+      // Threshold (unupgraded) = 6; streak 3 → 4 should NOT trigger.
+      expect(result.state.classDamageDiscoverStreak).toBe(4);
+      expect(result.sideEffects.some(e => e.event === 'combat:classDamageDiscoverTriggered')).toBe(false);
     });
 
     it('resets classDamageDiscoverStreak and emits trigger when threshold reached', () => {
@@ -1117,12 +1119,13 @@ describe('reducer', () => {
       const discoverAmulet = { id: 'a1', type: 'amulet' as const, name: 'Discover', value: 0, amuletEffect: 'damage-class-discover' };
       const state = makeState({
         activeCards: slots,
-        classDamageDiscoverStreak: 7,
+        classDamageDiscoverStreak: 5,
         amuletSlots: [discoverAmulet as any],
       });
       const result = reduce(state, {
         type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 2, source: 'spell',
       });
+      // Threshold (unupgraded) = 6; streak 5 → 6 should trigger and reset.
       expect(result.state.classDamageDiscoverStreak).toBe(0);
       expect(result.sideEffects.some(e => e.event === 'combat:classDamageDiscoverTriggered')).toBe(true);
     });
@@ -1171,10 +1174,10 @@ describe('reducer', () => {
     it('PLAY_CARD: does nothing when amulet is not equipped', () => {
       const state = makeState({
         handCards: [magicCard as any],
-        classMagicDiscoverStreak: 5,
+        classMagicDiscoverStreak: 4,
       });
       const result = reduce(state, { type: 'PLAY_CARD', cardId: 'mg1' });
-      expect(result.state.classMagicDiscoverStreak).toBe(5);
+      expect(result.state.classMagicDiscoverStreak).toBe(4);
     });
 
     it('PLAY_CARD: increments classMagicDiscoverStreak when amulet is equipped and a magic card is played', () => {
@@ -1190,17 +1193,18 @@ describe('reducer', () => {
       expect(result.sideEffects.some(e => e.event === 'combat:classMagicDiscoverTriggered')).toBe(false);
     });
 
-    it('PLAY_CARD: resets to 0 and emits classMagicDiscoverTriggered when threshold (6) is reached', () => {
+    it('PLAY_CARD: resets to 0 and emits classMagicDiscoverTriggered when threshold (5) is reached', () => {
       const state = makeState({
         handCards: [magicCard as any],
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 5,
+        classMagicDiscoverStreak: 4,
       });
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: 'mg1' } as GameAction]);
+      // Threshold = 5; streak 4 → 5 should trigger and reset.
       expect(result.state.classMagicDiscoverStreak).toBe(0);
       const triggered = result.sideEffects.find(e => e.event === 'combat:classMagicDiscoverTriggered');
       expect(triggered).toBeDefined();
-      expect((triggered?.payload as any)?.threshold).toBe(6);
+      expect((triggered?.payload as any)?.threshold).toBe(5);
     });
 
     it('PLAY_CARD: does not increment when a Permanent magic card is played', () => {
@@ -1239,9 +1243,10 @@ describe('reducer', () => {
     it('RESOLVE_MAGIC (drag-to-hero path): resets to 0 and emits trigger at threshold', () => {
       const state = makeState({
         amuletSlots: [discoverAmulet as any],
-        classMagicDiscoverStreak: 5,
+        classMagicDiscoverStreak: 4,
       });
       const result = reduce(state, { type: 'RESOLVE_MAGIC', cardId: 'mg1', card: magicCard } as any);
+      // Threshold = 5; streak 4 → 5 should trigger and reset.
       expect(result.state.classMagicDiscoverStreak).toBe(0);
       expect(result.sideEffects.some(e => e.event === 'combat:classMagicDiscoverTriggered')).toBe(true);
     });

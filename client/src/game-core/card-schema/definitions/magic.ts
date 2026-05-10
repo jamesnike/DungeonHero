@@ -816,22 +816,30 @@ const equalizeAttackArmor: CardDefinition = {
     if (equippedSlots.length === 1) {
       const slotId = equippedSlots[0].id;
       const atkBoost = 2 * echoMultiplier;
-      const tempAtk = (state.slotTempAttack?.[slotId] ?? 0) + atkBoost;
-      const tempArm = state.slotTempArmor?.[slotId] ?? 0;
-      const newTempAttack = { ...(state.slotTempAttack ?? {}), [slotId]: tempAtk };
-      const newTempArmor = { ...(state.slotTempArmor ?? {}) };
-      if (tempAtk > tempArm) {
-        newTempArmor[slotId] = tempAtk;
-      } else if (tempArm > tempAtk) {
-        newTempAttack[slotId] = tempArm;
+      const curTempAtk = state.slotTempAttack?.[slotId] ?? 0;
+      const curTempArm = state.slotTempArmor?.[slotId] ?? 0;
+      const permAtk = state.equipmentSlotBonuses?.[slotId]?.damage ?? 0;
+      const permArm = state.equipmentSlotBonuses?.[slotId]?.shield ?? 0;
+      // Step 1: 临时攻击先 +atkBoost。
+      const newTempAtkBase = curTempAtk + atkBoost;
+      // Step 2: 比较 (临时攻击+永久攻击) vs (临时护甲+永久护甲)，
+      // 增加较低一方的临时值把总和拉平（永远只增不减）。
+      const totalAtkAfterBoost = newTempAtkBase + permAtk;
+      const totalArm = curTempArm + permArm;
+      let finalTempAtk = newTempAtkBase;
+      let finalTempArm = curTempArm;
+      if (totalAtkAfterBoost > totalArm) {
+        finalTempArm = curTempArm + (totalAtkAfterBoost - totalArm);
+      } else if (totalArm > totalAtkAfterBoost) {
+        finalTempAtk = newTempAtkBase + (totalArm - totalAtkAfterBoost);
       }
-      patch.slotTempAttack = newTempAttack;
-      patch.slotTempArmor = newTempArmor;
-      const tempArmDelta = (newTempArmor[slotId] ?? 0) - tempArm;
+      patch.slotTempAttack = { ...(state.slotTempAttack ?? {}), [slotId]: finalTempAtk };
+      patch.slotTempArmor = { ...(state.slotTempArmor ?? {}), [slotId]: finalTempArm };
+      const tempArmDelta = finalTempArm - curTempArm;
       if (tempArmDelta !== 0) applySlotArmorBonusDelta(state, slotId, tempArmDelta, patch);
-      const finalVal = Math.max(tempAtk, tempArm);
-      log(sideEffects, 'magic', `时空镜像：${equippedSlots[0].item.name} 临时攻防均为 ${finalVal}`);
-      banner(sideEffects, `${equippedSlots[0].item.name} 临时攻击 +${atkBoost}，攻防均为 ${finalVal}。`);
+      const finalTotal = Math.max(totalAtkAfterBoost, totalArm);
+      log(sideEffects, 'magic', `时空镜像：${equippedSlots[0].item.name} 攻防总和均为 ${finalTotal}`);
+      banner(sideEffects, `${equippedSlots[0].item.name} 临时攻击 +${atkBoost}，攻防总和均为 ${finalTotal}。`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -840,7 +848,7 @@ const equalizeAttackArmor: CardDefinition = {
       card,
       effect: 'equalize-temp-attack-armor',
       step: 'slot-select',
-      prompt: '选择一个装备栏，临时攻击+2，然后使临时攻击与临时护甲相等。',
+      prompt: '选择一个装备栏，临时攻击+2，然后使 (临时攻击+永久攻击) 与 (临时护甲+永久护甲) 相等。',
       echoMultiplier,
     } as any;
     patch.heroSkillBanner = '时空镜像：选择一个装备栏。';
@@ -2288,6 +2296,19 @@ const knightBackpackCapStun: CardDefinition = {
   resolver: resolveKnightPermanentMagic,
 };
 
+// 囊中生机 — Perm 1. Non-interactive: heals floor(backpackCapacity / divisor) HP.
+// divisor = [4, 3][upgradeLevel]. Backpack capacity 12 → Lv0 +3 / Lv1 +4.
+// "Backpack capacity" = max(1, BASE (12) + backpackCapacityModifier), NOT
+// state.backpackItems.length (mirror of 囊量震慑 / backpack-cap-stun semantic).
+// HEAL action clamps hp to maxHp; over-heal is silently absorbed.
+// Echo (A): single resolve × echoMultiplier (same pattern as backpack-cap-stun).
+const knightBackpackCapHeal: CardDefinition = {
+  effectId: 'knight:backpack-cap-heal',
+  effects: [],
+  tags: ['knight', 'permanent', 'healing'],
+  resolver: resolveKnightPermanentMagic,
+};
+
 // 布雷术 — Perm 2 → upgrade Perm 1. Spawn ghost-building 地雷 (mineDamage: 5)
 // at a random empty active row slot. Trigger logic lives in waterfall reducer
 // (rules/waterfall.ts:reduceApplyWaterfallDrop) — when a monster waterfalls onto
@@ -2432,18 +2453,25 @@ const knightAmplifyEquipmentShift: CardDefinition = {
   },
 };
 
-// 池中坚意 — Perm 1. Mirror of 囊中锋意 but reads recycle bag for temp armor.
+// 池中坚意 — Perm 1. Reads recycle bag size for **permanent** armor bonus.
 // Select an equipment slot (empty allowed); add
-// floor(state.permanentMagicRecycleBag.length / divisor) temp armor to the chosen slot.
-// - divisor = 4 (L0) / 3 (L1) — slightly slower scaling than 囊中锋意 (3 / 2)
-//   because temp armor + recycle bag tend to grow larger than backpack.
-// - Empty slots are allowed (buff persists on the slot for future equipment).
+// floor(state.permanentMagicRecycleBag.length / divisor) PERMANENT armor to the
+// chosen slot via equipmentSlotBonuses[slotId].shield (same field as 装甲铸蚀
+// / event-armor-etch).
+// - divisor = 4 (L0) / 3 (L1).
+// - Empty slots are allowed (bonus binds to the slot id, not the equipment, so
+//   it carries over to whatever装备 the player swaps in later — mirror of
+//   event-armor-etch).
 // - Echo: card is played from hand → routes to recycle bag (recycleDelay: 1)
 //   AFTER slot-select resolves; setup-time read of recycleBag does NOT include
 //   this card (same as 池中惊雷 / recycle-bolt). RecycleBag length is constant
 //   during slot-select handler resolution → A-class (× echoMultiplier) ≡
-//   C-class (re-read) numerically. Implementation uses single-multiply A-class
-//   for parity with 囊中锋意 / temp-attack-double.
+//   C-class (re-read) numerically.
+// - Effect id `knight:recycle-temp-armor` is preserved historic naming; the
+//   semantics ("temp" → "perm") changed. Renaming would touch many files
+//   (card data knightEffect, upgrades handler key, types union, tests file
+//   name, formatter id). Keep id stable; rely on the comment + banner text
+//   for the user-visible truth.
 // Prompt previews the bonus using the *current* recycle bag length so the
 // player knows what they're committing to.
 const knightRecycleTempArmor: CardDefinition = {
@@ -2458,10 +2486,10 @@ const knightRecycleTempArmor: CardDefinition = {
       card,
       effect: 'recycle-temp-armor',
       step: 'slot-select',
-      prompt: `池中坚意：选择一个装备栏，回收袋每 ${divisor} 张牌 +1 临时护甲（当前 +${previewBuff}）。${echoLabel}`,
+      prompt: `池中坚意：选择一个装备栏，回收袋每 ${divisor} 张牌 +1 永久护甲（当前 +${previewBuff}）。${echoLabel}`,
       echoMultiplier,
     } as any;
-    patch.heroSkillBanner = `池中坚意：选择一个装备栏（当前 +${previewBuff} 临时护甲）。${echoLabel}`;
+    patch.heroSkillBanner = `池中坚意：选择一个装备栏（当前 +${previewBuff} 永久护甲）。${echoLabel}`;
     return applyPatch(state, patch, sideEffects);
   },
 };
@@ -2767,6 +2795,7 @@ const allMagicDefinitions: CardDefinition[] = [
   knightBackpackBolt,
   knightRecycleBolt,
   knightBackpackCapStun,
+  knightBackpackCapHeal,
   knightLayMine,
   knightTempAttackDouble,
   knightTempAttackArmorDraw,

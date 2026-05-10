@@ -101,14 +101,14 @@ describe('stun-attempt-discover ticks for 雷涌一击 (stun-cap-strike)', () =>
     expect(after.state.stunAttemptDiscoverProgress).toBe(3);
   });
 
-  it('crossing threshold 6 → progress resets to 0 + emits combat:stunAttemptDiscoverTriggered', () => {
+  it('crossing threshold 4 → progress resets to 0 + emits combat:stunAttemptDiscoverTriggered', () => {
     const card = makeStunCapCard('cross');
     const state = makeState({
       handCards: [card],
       stunCap: 40,
       activeCards: activeRowOf(makeMonster('m1')),
       amuletSlots: [stunAmulet] as any,
-      stunAttemptDiscoverProgress: 5,
+      stunAttemptDiscoverProgress: 3,
     });
     const after = drain(state, [
       { type: 'PLAY_CARD', cardId: card.id } as GameAction,
@@ -325,7 +325,7 @@ describe('stun-attempt-discover baseline (weapon / shield bash) still works', ()
       equipmentSlot1: shield as any,
       activeCards: [monster, null, null, null, null] as any,
       amuletSlots: [stunAmulet] as any,
-      stunAttemptDiscoverProgress: 5,
+      stunAttemptDiscoverProgress: 3,
       combatState: {
         ...initialCombatState,
         engagedMonsterIds: ['m-stun'],

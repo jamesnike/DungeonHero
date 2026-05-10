@@ -1,7 +1,7 @@
 /**
  * 「循手之符」(amulet: `manual-recycle-draw`)
  *
- * 玩家每"手动"拖卡到回收袋累计 +1（每件等装备独立 +1）。累计达 3 张 →
+ * 玩家每"手动"拖卡到回收袋累计 +1（每件等装备独立 +1）。累计达 2 张 →
  * 从背包抽 1 张牌；进度归 0（surplus 不滚存，与 积蓄之符 一致）。
  *
  * 仅"手动事件"触发：
@@ -103,8 +103,8 @@ function makeWeapon(id: string): GameCardData {
 }
 
 describe('循手之符 (amulet: manual-recycle-draw)', () => {
-  describe('单件 amulet：每 3 张手动拖入触发抽 1', () => {
-    it('第 1、2 次手动拖入只累计进度，不抽牌', () => {
+  describe('单件 amulet：每 2 张手动拖入触发抽 1', () => {
+    it('第 1 次手动拖入只累计进度，不抽牌', () => {
       const card = makePermMagic('m1');
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET] as any,
@@ -117,23 +117,15 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
         waitsOverride: 1,
       } as GameAction);
 
+      // Threshold = 2; tick 1 → progress=1 (below threshold, no draw).
       expect(r1.state.manualRecycleProgress).toBe(1);
       expect(r1.state.handCards.length).toBe(0);
-
-      const r2 = processAction(r1.state, {
-        type: 'ADD_TO_RECYCLE_BAG',
-        card: makePermMagic('m2'),
-        waitsOverride: 1,
-      } as GameAction);
-
-      expect(r2.state.manualRecycleProgress).toBe(2);
-      expect(r2.state.handCards.length).toBe(0);
     });
 
-    it('第 3 次手动拖入触发：从背包抽 1 张牌，进度归 0', () => {
+    it('第 2 次手动拖入触发：从背包抽 1 张牌，进度归 0', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET] as any,
-        manualRecycleProgress: 2,
+        manualRecycleProgress: 1,
         backpackItems: [makeBackpackCard('bp-1')] as any,
       });
 
@@ -143,6 +135,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
         waitsOverride: 1,
       } as GameAction);
 
+      // Threshold = 2; progress 1 → 2 should trigger and reset.
       expect(result.state.manualRecycleProgress).toBe(0);
       expect(result.state.handCards.length).toBe(1);
       expect(result.state.handCards[0].id).toBe('bp-1');
@@ -152,7 +145,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
     it('触发时发出 amulet log', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET] as any,
-        manualRecycleProgress: 2,
+        manualRecycleProgress: 1,
         backpackItems: [makeBackpackCard('bp-1')] as any,
       });
 
@@ -186,7 +179,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
       const slot = r1.state.amuletSlots.find(
         s => s?.amuletEffect === 'manual-recycle-draw',
       ) as any;
-      expect(slot?._counterDisplay).toBe('1/3');
+      expect(slot?._counterDisplay).toBe('1/2');
     });
   });
 
@@ -194,7 +187,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
     it('不传 waitsOverride（出牌自动入袋）→ 进度不变', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET] as any,
-        manualRecycleProgress: 2,
+        manualRecycleProgress: 1,
         backpackItems: [makeBackpackCard('bp-1')] as any,
       });
 
@@ -203,7 +196,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
         card: makePermMagic('m1'),
       } as GameAction);
 
-      expect(result.state.manualRecycleProgress).toBe(2);
+      expect(result.state.manualRecycleProgress).toBe(1);
       expect(result.state.handCards.length).toBe(0);
     });
 
@@ -227,7 +220,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
   });
 
   describe('多件叠加（每件 +1，跨阈值仍只抽 1）', () => {
-    it('2 件装备一次拖入 → 进度 +2', () => {
+    it('2 件装备一次拖入 → +2 = 阈值，立即触发（抽 1 张，进度归 0）', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET, MANUAL_DRAW_AMULET_2] as any,
         backpackItems: [makeBackpackCard('bp-1')] as any,
@@ -239,8 +232,10 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
         waitsOverride: 1,
       } as GameAction);
 
-      expect(result.state.manualRecycleProgress).toBe(2);
-      expect(result.state.handCards.length).toBe(0);
+      // Threshold = 2; 2 amulets → +2 in one event triggers immediately.
+      expect(result.state.manualRecycleProgress).toBe(0);
+      expect(result.state.handCards.length).toBe(1);
+      expect(result.state.backpackItems.length).toBe(0);
     });
 
     it('3 件装备一次拖入 → 立即触发，进度归 0，抽 1 张', () => {
@@ -255,15 +250,16 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
         waitsOverride: 1,
       } as GameAction);
 
+      // Threshold = 2; 3 amulets → +3 ≥ 2 still triggers exactly once (single-fire).
       expect(result.state.manualRecycleProgress).toBe(0);
       expect(result.state.handCards.length).toBe(1);
       expect(result.state.backpackItems.length).toBe(1);
     });
 
-    it('2 件装备：进度 = 2 时再 +2 → 跨阈值，仍只抽 1 张（surplus 不滚存）', () => {
+    it('2 件装备：进度 = 1 时再 +2 → 跨阈值，仍只抽 1 张（surplus 不滚存）', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET, MANUAL_DRAW_AMULET_2] as any,
-        manualRecycleProgress: 2,
+        manualRecycleProgress: 1,
         backpackItems: [makeBackpackCard('bp-1'), makeBackpackCard('bp-2')] as any,
       });
 
@@ -273,6 +269,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
         waitsOverride: 1,
       } as GameAction);
 
+      // Threshold = 2; 1 + 2 = 3 (1 over threshold). Resets to 0, NOT to 1 (surplus discarded).
       expect(result.state.manualRecycleProgress).toBe(0);
       expect(result.state.handCards.length).toBe(1);
       expect(result.state.backpackItems.length).toBe(1);
@@ -285,7 +282,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET] as any,
         handCards: [card] as any,
-        manualRecycleProgress: 2,
+        manualRecycleProgress: 1,
         backpackItems: [makeBackpackCard('bp-1')] as any,
       });
 
@@ -297,6 +294,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
         waitsOverride: 1,
       } as GameAction);
 
+      // Threshold = 2; progress 1 → 2 triggers.
       expect(result.state.manualRecycleProgress).toBe(0);
       expect(result.state.handCards.find(c => c.id === 'bp-1')).toBeDefined();
       expect(result.state.permanentMagicRecycleBag.find(c => c.id === 'h1')).toBeDefined();
@@ -307,7 +305,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET] as any,
         handCards: [card] as any,
-        manualRecycleProgress: 2,
+        manualRecycleProgress: 1,
         backpackItems: [makeBackpackCard('bp-1')] as any,
       });
 
@@ -318,8 +316,8 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
         forceRecycleBag: true,
       } as GameAction);
 
-      // 进度不变（仍是 2），背包卡未被抽到手牌（手牌只剩原来的 h1，没新增 bp-1）
-      expect(result.state.manualRecycleProgress).toBe(2);
+      // 进度不变（仍是 1），背包卡未被抽到手牌（手牌只剩原来的 h1，没新增 bp-1）
+      expect(result.state.manualRecycleProgress).toBe(1);
       expect(result.state.handCards.find(c => c.id === 'bp-1')).toBeUndefined();
       expect(result.state.backpackItems.length).toBe(1);
     });
@@ -356,7 +354,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
       const expandSlot = result.state.amuletSlots.find(
         s => s?.amuletEffect === 'recycle-backpack-expand',
       ) as any;
-      expect(manualSlot?._counterDisplay).toBe('1/3');
+      expect(manualSlot?._counterDisplay).toBe('1/2');
       expect(expandSlot?._counterDisplay).toBe('1/8');
     });
   });
@@ -383,7 +381,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
     it('背包为空，触发抽牌时不报错，进度仍归 0', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET] as any,
-        manualRecycleProgress: 2,
+        manualRecycleProgress: 1,
         backpackItems: [] as any,
       });
 
@@ -404,7 +402,7 @@ describe('循手之符 (amulet: manual-recycle-draw)', () => {
       const state = makeState({
         amuletSlots: [MANUAL_DRAW_AMULET] as any,
         equipmentSlot1: { ...weapon, fromSlot: 'equipmentSlot1' } as any,
-        manualRecycleProgress: 2,
+        manualRecycleProgress: 1,
         backpackItems: [makeBackpackCard('bp-1')] as any,
       });
 

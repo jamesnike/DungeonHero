@@ -543,6 +543,13 @@ export interface GameCardData {
   wraithRebirthUsed?: boolean; // Wraith equipment: durability refill has been consumed
   /** 击晕状态：被击晕的怪物所有技能完全无效（攻击、被动、反应、遗言、复生、场地效果全部禁用），持续一个怪物回合后自动恢复 */
   isStunned?: boolean;
+  /**
+   * 召唤回合保护：被 Boss「亡灵召唤」(`bossEnrageGraveyardSummon`) 临时召唤进激活
+   * 行的怪物必须跳过紧接着的那一次 monster 回合（玩家 END_TURN 后构造 attack queue
+   * 时把它们排除掉）。`endHeroTurnPatch` 在排除后会自动剥离这个标记，所以下一次
+   * 玩家结束回合时，这些怪物会正常参战。被击晕（`isStunned`）相互独立。
+   */
+  skipNextMonsterTurn?: boolean;
   /** 建筑光环 id：在场时生效，建筑被毁坏后消失 */
   buildingAura?: 'suppress-adjacent-temp-attack' | 'stacked-magic-immune';
   // Permanent event properties
@@ -1990,29 +1997,25 @@ const amuletEffectText =
                     <div className="dh-card__overlay-tr flex flex-col items-end gap-0">
                       <div className="relative group flex items-center">
                         <div className="flex items-baseline gap-0 dh-card__icon-gap">
-                          {isCompact ? (
-                            <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
-                              (monsterHpModifier > 0 || equipmentShieldModifierNum !== 0) ? 'text-emerald-600' : 'text-black'
-                            }`}>
-                              {monsterHpBase + monsterHpModifier + equipmentShieldModifierNum}
-                            </span>
-                          ) : (
-                            <>
-                              <span className="dh-card__stat font-black text-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">
-                                {monsterHpBase}
+                          {(() => {
+                            // Single-counter armor model for monster equipment: render
+                            // one number Z = max(0, baseHp + lowGoldBuff + slotBonus).
+                            // `equipmentShieldModifierNum` aggregates perm + temp +
+                            // defense (see useCardOperations.ts).
+                            const totalHp = Math.max(
+                              0,
+                              monsterHpBase + monsterHpModifier + equipmentShieldModifierNum,
+                            );
+                            const isBoosted =
+                              monsterHpModifier > 0 || equipmentShieldModifierNum !== 0;
+                            return (
+                              <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
+                                isBoosted ? 'text-emerald-600' : 'text-black'
+                              }`}>
+                                {totalHp}
                               </span>
-                              {monsterHpModifier > 0 && (
-                                <span className="dh-card__stat font-black text-emerald-600 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]">
-                                  +{monsterHpModifier}
-                                </span>
-                              )}
-                              {equipmentShieldModifierText && (
-                                <span className={`dh-card__stat font-black ${equipmentStatModifierColor} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]`}>
-                                  {equipmentShieldModifierText}
-                                </span>
-                              )}
-                            </>
-                          )}
+                            );
+                          })()}
                         </div>
                         {!isCompact && (
                           <div>
@@ -2138,33 +2141,26 @@ const amuletEffectText =
                         )}
                         <div className="flex items-baseline gap-0">
                           {(card.type === 'shield' && card.armorMax != null && card.armorMax > 0) ? (() => {
+                            // Single-counter armor model: render one number Z = clamp(armor, cap)
+                            // where cap = max(0, baseArmorMax + perm + temp). `permBonus` here
+                            // already aggregates perm + temp + defense (see useCardOperations).
                             const baseArmorMax = card.armorMax!;
-                            const curBaseArmor = Math.min(card.armor ?? baseArmorMax, baseArmorMax);
                             const permBonus = equipmentStatModifier?.permanentShieldBonus ?? 0;
-                            const bonusDamaged = card.armorBonusDamaged ?? 0;
-                            if (isCompact && permBonus > 0) {
-                              const totalArmor = curBaseArmor + permBonus;
-                              return (
-                                <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
-                                  curBaseArmor < baseArmorMax || bonusDamaged > 0 ? 'text-orange-500' : 'text-emerald-600'
-                                }`}>
-                                  {totalArmor}
-                                </span>
-                              );
-                            }
+                            const cap = Math.max(0, baseArmorMax + permBonus);
+                            const currentArmor = card.armor === undefined
+                              ? cap
+                              : Math.max(0, Math.min(card.armor, cap));
+                            const isDamaged = currentArmor < cap;
+                            const isBoosted = permBonus > 0;
+                            const colorClass = isDamaged
+                              ? 'text-orange-500'
+                              : isBoosted
+                                ? 'text-emerald-600'
+                                : 'text-cyan-600';
                             return (
-                              <>
-                                <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
-                                  curBaseArmor < baseArmorMax ? 'text-orange-500' : 'text-cyan-600'
-                                }`}>
-                                  {curBaseArmor}
-                                </span>
-                                {permBonus > 0 && (
-                                  <span className={`dh-card__stat font-black ${bonusDamaged > 0 ? 'text-orange-400' : 'text-emerald-600'} drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] text-lg`}>
-                                    +{permBonus}
-                                  </span>
-                                )}
-                              </>
+                              <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${colorClass}`}>
+                                {currentArmor}
+                              </span>
                             );
                           })() : isCompact ? (
                             <span className={`dh-card__stat font-black drop-shadow-[0_0_6px_rgba(255,255,255,0.9)] ${
@@ -2409,7 +2405,7 @@ const amuletEffectText =
                     )}
                   </div>
                 )}
-                {card.type === 'monster' && !isMonsterEquipmentCard(card) && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.eliteRegenHeroTurn || card.eliteLowGoldPower || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
+                {card.type === 'monster' && !isMonsterEquipmentCard(card) && (card.monsterSpecial || card.hasRevive || card.hasEquipmentRevive || card.lastWords || card.bleedEffect || card.enterEffect || card.onAttackEffect || card.ogreStun || card.eliteDoubleAttack || card.ogreEnterDiscard || card.dragonAttackNoLayerCost || card.dragonDamageRetaliation || card.dragonBleedDestroy || card.eliteHealOtherMonster || card.eliteRegenHeroTurn || card.eliteLowGoldPower || card.skeletonNoLayerCost || card.skeletonNoLayerCostActive || card.skeletonLastWordsDiscard || card.skeletonReRevive || card.wraithTurnAttack || card.wraithDeathHeal || card.wraithAuraAttack || card.wraithDeathHealSpread || card.wraithTurnEnrage || card.wraithDestroyAmulet || card.goblinStealCard || card.goblinStealScale || card.goblinStackHeal || card.goblinStealEquip || card.isStunned || card.swarmSpawn || card.isBuglet || card.bugletLastWordsHeal || card.swarmHordeRage || card.swarmCorrode || card.swarmBugletShield || card.antiMagicReflect || card.spellDamageReduction || card.maxDamagePerHit || card.golemLayerLossReflect || card.golemSpellGrowth || card.bossRetaliationDamage || card.bossLastStandAura || card.bossEnrageGraveyardSummon) && (
                   <div className="dh-card__keyword-row">
                     {card.swarmSpawn && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--enter" title="繁殖：每移除一张地城牌，在该位置生成小虫子">繁殖</span>
@@ -2489,8 +2485,12 @@ const amuletEffectText =
                     {card.eliteRegenHeroTurn && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="再生：Hero回合未掉血层时，自身恢复1血层">再生</span>
                     )}
-                    {card.skeletonNoLayerCostActive && (
-                      <span className="dh-card__keyword-tag dh-card__keyword-tag--revive" title="无尽：攻击不消耗血层">无尽</span>
+                    {(card.skeletonNoLayerCost || card.skeletonNoLayerCostActive) && (
+                      <span
+                        className={`dh-card__keyword-tag ${card.skeletonNoLayerCostActive ? 'dh-card__keyword-tag--revive' : 'dh-card__keyword-tag--revive-used'}`}
+                        title={card.skeletonNoLayerCostActive ? '无尽（已激活）：攻击不消耗血层' : '无尽：复生后，攻击不再消耗血层'}>
+                        无尽
+                      </span>
                     )}
                     {card.skeletonLastWordsDiscard && !card.lastWords && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--lastwords" title="骸弃：死亡时随机弃回玩家1张手牌">骸弃</span>
@@ -2745,6 +2745,7 @@ export function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean
       a.dragonDamageRetaliation !== b.dragonDamageRetaliation ||
       a.dragonBleedDestroy !== b.dragonBleedDestroy ||
       a.eliteHealOtherMonster !== b.eliteHealOtherMonster ||
+      a.skeletonNoLayerCost !== b.skeletonNoLayerCost ||
       a.skeletonNoLayerCostActive !== b.skeletonNoLayerCostActive ||
       a.skeletonLastWordsDiscard !== b.skeletonLastWordsDiscard ||
       a.skeletonReRevive !== b.skeletonReRevive ||

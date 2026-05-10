@@ -12,7 +12,7 @@ import { Calendar, ShieldOff } from 'lucide-react';
 import type { ActiveRowSlots, CombatState, PendingMagicAction, EquipmentSlotId } from '../types';
 import { DUNGEON_COLUMNS, MONSTER_RAGE_BASE_TRANSLATE_PX, MONSTER_RAGE_TRANSLATE_ADJUST_PX } from '../constants';
 import { getColumnsWithCurseMonumentAura } from '@/game-core/buildingAura';
-import { CardStampBubble } from '@/components/CardStampBubble';
+import { CardStampFloater } from '@/components/CardStampFloater';
 import { useCardStampsContext } from '../contexts/CardStampsContext';
 
 export interface DungeonRowProps {
@@ -307,9 +307,14 @@ function DungeonRowInner({
                   }}
                 />
                 {(() => {
-                  const stampEntry = cardStamps.getStampsForCard(card, 'active');
-                  if (!stampEntry) return null;
-                  return <CardStampBubble entry={stampEntry} />;
+                  const pending = cardStamps.getPendingFloat(card, 'active');
+                  if (!pending) return null;
+                  return (
+                    <CardStampFloater
+                      entry={pending.entry}
+                      onComplete={() => cardStamps.markAnimated(pending.rowSignature, card.name)}
+                    />
+                  );
                 })()}
               </div>
               {hasStack && (

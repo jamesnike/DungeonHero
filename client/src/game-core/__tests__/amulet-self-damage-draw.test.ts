@@ -3,7 +3,7 @@
  *
  * Trigger contract:
  *   - 当 APPLY_DAMAGE { selfInflicted: true } 实际造成 ≥1 点 HP 损失时，
- *     按装备数量 N 从背包随机抽 N 张牌（独立 ×N 叠加），受手牌上限约束。
+ *     按装备数量 N 从背包随机抽 2N 张牌（每件抽 2 张，独立 ×N 叠加），受手牌上限约束。
  *   - 与「血怒战符」共用 `selfInflicted` 路径；非自伤（怪物攻击）不触发。
  *   - 护盾完全抵消时不触发（appliedDamage = 0）。
  *
@@ -42,7 +42,7 @@ const FILLER = (id: string): GameCardData => ({
 } as any);
 
 describe('赎血召牌符 (self-damage-draw)', () => {
-  it('selfInflicted 伤害实际生效 → 抽 1 张牌（单件）', () => {
+  it('selfInflicted 伤害实际生效 → 抽 2 张牌（单件）', () => {
     const backpack = [FILLER('bp1'), FILLER('bp2'), FILLER('bp3')];
     const state = makeState({
       hp: 20,
@@ -56,11 +56,11 @@ describe('赎血召牌符 (self-damage-draw)', () => {
     ]);
 
     expect(result.state.hp).toBe(17);
-    expect(result.state.handCards.length).toBe(1);
-    expect(result.state.backpackItems.length).toBe(2);
+    expect(result.state.handCards.length).toBe(2);
+    expect(result.state.backpackItems.length).toBe(1);
   });
 
-  it('叠加 ×2 → 一次自伤抽 2 张牌', () => {
+  it('叠加 ×2 → 一次自伤抽 4 张牌', () => {
     const backpack = [FILLER('bp1'), FILLER('bp2'), FILLER('bp3'), FILLER('bp4')];
     const state = makeState({
       hp: 20,
@@ -74,8 +74,8 @@ describe('赎血召牌符 (self-damage-draw)', () => {
     ]);
 
     expect(result.state.hp).toBe(18);
-    expect(result.state.handCards.length).toBe(2);
-    expect(result.state.backpackItems.length).toBe(2);
+    expect(result.state.handCards.length).toBe(4);
+    expect(result.state.backpackItems.length).toBe(0);
   });
 
   it('非 selfInflicted（怪物攻击）不触发', () => {

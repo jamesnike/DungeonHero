@@ -341,7 +341,7 @@ export interface GameState {
   recycleForgePlayCount: number;
   /** 战伤刻印：0–9，累计 10 次造成伤害触发发现专属牌后归零 */
   classDamageDiscoverStreak: number;
-  /** 咒纹刻印：0–5，累计 6 次使用「当前功能上是瞬发」的 magic 牌（type === 'magic' 且 !cardHasPermFlag — 即原生 Instant 未被永恒铭刻、或 Permanent 已被凡化咒剥离）触发发现专属牌后归零 */
+  /** 咒纹刻印：0–4，累计 5 次使用「当前功能上是瞬发」的 magic 牌（type === 'magic' 且 !cardHasPermFlag — 即原生 Instant 未被永恒铭刻、或 Permanent 已被凡化咒剥离）触发发现专属牌后归零 */
   classMagicDiscoverStreak: number;
   waveDiscardCount: number;
   totalWins: number;
@@ -413,7 +413,7 @@ export interface GameState {
   monsterKillUpgradeProgress: number;
   recycleBackpackProgress: number;
   /** 「循手之符」amulet：累计"手动"拖卡到回收袋的张数。每件等装备 +1 / 每次手动事件。
-   *  达 3 张 → 从背包抽 1 张牌 + 进度归 0（surplus 不滚存，与 recycleBackpackProgress 一致）。
+   *  达 2 张 → 从背包抽 1 张牌 + 进度归 0（surplus 不滚存，与 recycleBackpackProgress 一致）。
    *  仅 reduceAddToRecycleBag 中 `action.waitsOverride != null` 时才递增。 */
   manualRecycleProgress: number;
   swapUpgradeProgress: number;

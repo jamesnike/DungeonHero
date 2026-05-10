@@ -3802,3 +3802,78 @@ html {
   border-color: rgba(220, 255, 170, 0.85);
 }
 
+/* =========================================================================
+ * Card-stamp social feature: float-out animation
+ * =========================================================================
+ * Plays once per `(rowSignature, cardName)` per session when the card
+ * becomes visible in active / preview row. See `CardStampFloater.tsx` and
+ * `useCardStamps.ts` (`getPendingFloat` / `markAnimated`).
+ *
+ * The wrapper covers the card cell with `pointer-events: none` so it never
+ * intercepts clicks / drags / long-press; only the visual elements drift.
+ * Each item ALSO has `pointer-events: none` because the wrapper's value is
+ * inherited only by `auto`, not by the default — be explicit.
+ * ========================================================================= */
+.card-stamp-floater {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 35;
+}
+
+.card-stamp-floater__item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+  white-space: nowrap;
+  transform-origin: center center;
+  animation: card-stamp-float 1800ms cubic-bezier(0.18, 0.7, 0.35, 1) forwards;
+  /* Hidden until animation reaches first opacity keyframe — prevents a
+     1-frame "static" glyph on slow devices before the keyframes apply. */
+  opacity: 0;
+  font-weight: 700;
+  text-shadow:
+    0 1.5px 0 rgba(0, 0, 0, 0.55),
+    0 0 6px rgba(0, 0, 0, 0.45);
+}
+
+.card-stamp-floater__item--emoji {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.card-stamp-floater__item--freeform {
+  font-size: 0.78rem;
+  max-width: 140px;
+  white-space: normal;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  /* Light tinted ring to make the bubble pop on busy backgrounds. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 2px 6px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes card-stamp-float {
+  0% {
+    transform: translate(-50%, 6px) scale(0.45);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(-50%, -6px) scale(1.08);
+    opacity: 1;
+  }
+  72% {
+    transform: translate(-50%, -52px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -76px) scale(0.92);
+    opacity: 0;
+  }
+}
+

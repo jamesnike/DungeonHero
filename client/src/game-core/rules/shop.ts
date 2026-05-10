@@ -600,7 +600,22 @@ function reduceBeginDiscover(
 
   if (pool.length === 0) return noChange(state);
 
-  const [options, nextRng] = sampleDistinctByName(pool, 3, state.rng, rngShuffle);
+  // Universal unique-lock safety net: any caller-provided pool is filtered
+  // through `filterAvailableClassPool` so cards the player has already
+  // acquired this run never appear as discover candidates. This is the
+  // single source of truth for the unique lock — callers (hook
+  // `beginDiscoverFlow`, magic resolvers like `discard-rebuild` /
+  // `altar-discard-discover` / `altar-discover-class-magic` / `专属感召`,
+  // and any future caller) can pass raw `state.classDeck` and the lock
+  // still applies. Pre-filtered call sites (shop offerings, monster reward
+  // discover, queue-drained next BEGIN_DISCOVER) are idempotent under this
+  // re-filter — they pass a subset of `state.classDeck` and the filter is
+  // a no-op on already-filtered pools.
+  const filteredPool = filterAvailableClassPool(pool, state);
+
+  if (filteredPool.length === 0) return noChange(state);
+
+  const [options, nextRng] = sampleDistinctByName(filteredPool, 3, state.rng, rngShuffle);
 
   if (options.length === 0) return noChange(state);
 

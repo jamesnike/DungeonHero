@@ -367,7 +367,7 @@ describe('starter amulet: 集甲之符 (equip-amulet-cap)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3) 眩学之符 (stun-attempt-discover): every 6 stun attempts → discover trigger
+// 3) 眩学之符 (stun-attempt-discover): every 4 stun attempts → discover trigger
 // ---------------------------------------------------------------------------
 
 describe('starter amulet: 眩学之符 (stun-attempt-discover)', () => {
@@ -420,7 +420,7 @@ describe('starter amulet: 眩学之符 (stun-attempt-discover)', () => {
       equipmentSlot1: shield as any,
       activeCards: [monster, null, null, null, null] as any,
       amuletSlots: [stunAmulet] as any,
-      stunAttemptDiscoverProgress: 5,
+      stunAttemptDiscoverProgress: 3,
       combatState: {
         ...initialCombatState,
         engagedMonsterIds: ['m-stun'],
@@ -434,6 +434,7 @@ describe('starter amulet: 眩学之符 (stun-attempt-discover)', () => {
       targetMonsterId: 'm-stun',
       diceRoll: 20, // force a fail so we don't get tangled in stun-success branches
     });
+    // Threshold = 4; progress 3 → 4 should trigger and reset.
     expect(result.state.stunAttemptDiscoverProgress).toBe(0);
     expect(
       result.sideEffects.some(e => e.event === 'combat:stunAttemptDiscoverTriggered'),

@@ -7,7 +7,7 @@ import { useGameState } from '@/hooks/useGameEngine';
 import { DUNGEON_COLUMNS } from '../constants';
 import type { GraveyardVector, WaterfallAnimationState, PendingMagicAction } from '../types';
 import { getPreviewAnimationProps, getStackedCardStyle } from '../utils/animation-helpers';
-import { CardStampBubble } from '@/components/CardStampBubble';
+import { CardStampFloater } from '@/components/CardStampFloater';
 import { useCardStampsContext } from '../contexts/CardStampsContext';
 
 const EMPTY_ARRAY: GameCardData[] = [];
@@ -312,8 +312,9 @@ export const PreviewCardBack = memo(function PreviewCardBack({ card, isStack = f
 /**
  * The face-up render of a preview cell. Wraps `<GameCard />` with the
  * card-stamp social hooks: right-click / long-press opens the picker for
- * the `'preview'` row, and a `<CardStampBubble />` overlays the cell when
- * other players have left stamps for the same row signature.
+ * the `'preview'` row, and a `<CardStampFloater />` overlays the cell when
+ * other players have left stamps for the same row signature — the floater
+ * plays a one-shot drift-up animation and unmounts.
  *
  * Card backs DO NOT get stamp affordances — players shouldn't stamp a card
  * they can't see. The stamp UI only attaches once the cell is showing its
@@ -331,7 +332,7 @@ const PreviewFaceCard = memo(function PreviewFaceCard({
   onPreviewClick?: () => void;
 }) {
   const cardStamps = useCardStampsContext();
-  const stampEntry = cardStamps.getStampsForCard(card, 'preview');
+  const pendingFloat = cardStamps.getPendingFloat(card, 'preview');
   return (
     <div className="relative w-full h-full">
       <GameCard
@@ -346,7 +347,12 @@ const PreviewFaceCard = memo(function PreviewFaceCard({
           cardStamps.openPicker(card, 'preview', target);
         }}
       />
-      {stampEntry && <CardStampBubble entry={stampEntry} />}
+      {pendingFloat && (
+        <CardStampFloater
+          entry={pendingFloat.entry}
+          onComplete={() => cardStamps.markAnimated(pendingFloat.rowSignature, card.name)}
+        />
+      )}
     </div>
   );
 });

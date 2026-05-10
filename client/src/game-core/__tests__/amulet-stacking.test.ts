@@ -209,7 +209,7 @@ describe('computeAmuletEffects stacking', () => {
       expect(fx.bloodrageAttackCount).toBe(3);
     });
 
-    it('赎血召牌符 ×3 — selfDamageDrawCount = 3 (consumer draws N cards per self-damage event)', () => {
+    it('赎血召牌符 ×3 — selfDamageDrawCount = 3 (consumer draws 2N cards per self-damage event)', () => {
       const fx = computeAmuletEffects([
         makeAmulet('self-damage-draw', 'sdd-1'),
         makeAmulet('self-damage-draw', 'sdd-2'),
