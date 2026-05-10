@@ -92,6 +92,8 @@ import { DiscoverContainer } from './game-board/containers/DiscoverContainer';
 import { CardViewerContainer } from './game-board/containers/CardViewerContainer';
 import { RewardContainer } from './game-board/containers/RewardContainer';
 import { GameFlowContainer } from './game-board/containers/GameFlowContainer';
+import { CardStampsContainer } from './game-board/containers/CardStampsContainer';
+import { CardStampsProvider } from './game-board/contexts/CardStampsContext';
 import { MagicCardContainer } from './game-board/containers/MagicCardContainer';
 import { BoardOverlayButtons } from './game-board/containers/BoardOverlayButtons';
 import { UndoButtonContainer } from './game-board/containers/UndoButtonContainer';
@@ -8398,6 +8400,8 @@ export default function GameBoard() {
   ]);
 
   return (
+    <CardStampsProvider>
+    <>
     <div ref={gameSurfaceRef} className="h-full w-full bg-background flex flex-col relative overflow-hidden" style={{ ...gridStyleVars, ...((minimizedModalLocksBoard || gameOver) ? { pointerEvents: 'none' } : {}) } as React.CSSProperties}>
       {/* === 桌布区域：覆盖 menu bar + 主游戏区，从屏幕顶到 hero row 蓝边下沿 === */}
       {/* wrapper 本身只负责布局（不带任何视觉），保持原大小 */}
@@ -9002,5 +9006,8 @@ export default function GameBoard() {
         />
       )}
     </div>
+    <CardStampsContainer />
+    </>
+    </CardStampsProvider>
   );
 }

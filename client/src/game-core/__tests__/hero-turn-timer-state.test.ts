@@ -193,8 +193,15 @@ describe('hero turn timer — FORCE_END_HERO_TURN reducer', () => {
     expect(result.state.eventModalOpen).toBe(false);
     // Phase pushed back to playerInput so END_TURN can drain
     expect(result.state.phase).toBe('playerInput');
-    // END_TURN enqueued with the same heroTurnLayerLossIds
+    // The fixture has a magic card in pendingMagicAction, so the rescue path
+    // enqueues FINALIZE_MAGIC_CARD BEFORE END_TURN so the card is routed to
+    // its proper disposition (graveyard/recycle bag) instead of vanishing.
     expect(result.enqueuedActions).toEqual([
+      expect.objectContaining({
+        type: 'FINALIZE_MAGIC_CARD',
+        card: expect.objectContaining({ id: 'magic-1' }),
+        dealtDamage: false,
+      }),
       { type: 'END_TURN', heroTurnLayerLossIds: ['m1'] },
     ]);
     // Side effects include log + banner
@@ -245,6 +252,254 @@ describe('hero turn timer — FORCE_END_HERO_TURN reducer', () => {
     // END_TURN); hero turn hasn't restarted yet (player must resolve the
     // block first), so it stays null.
     expect(drained.state.playerTurnStartedAt).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: card-in-limbo rescue on FORCE_END_HERO_TURN
+//
+// Bug: 净册涌泉 / 装备灵附 / 镜影摹形 etc. (interactive magic) put the source
+// card into `pendingMagicAction.card` and remove it from handCards. If the
+// 40s timer expired before the player resolved the modal, the old reducer
+// cleared `pendingMagicAction = null` without routing the card → 卡凭空消失
+// (违反 disposition router 不变量, per pipeline-input-continuation.mdc 的
+// "disposition router strand" 警告).
+//
+// Fix: enqueue FINALIZE_MAGIC_CARD / FINALIZE_POTION_CARD before END_TURN so
+// the card走正常 disposition route (Perm → recycle bag, 否则 → graveyard).
+// ---------------------------------------------------------------------------
+
+describe('hero turn timer — card-in-limbo rescue on FORCE_END_HERO_TURN', () => {
+  // 净册涌泉: knight-class permanent magic with `magicType: 'permanent'` and
+  // `recycleDelay`, so it should route to permanentMagicRecycleBag (not graveyard).
+  function makePermMagic(over: Partial<GameCardData> = {}): GameCardData {
+    return {
+      id: 'magic-cleanse',
+      type: 'magic',
+      name: '净册涌泉',
+      value: 0,
+      image: '',
+      magicType: 'permanent',
+      classCard: true,
+      knightEffect: 'cleanse-draw',
+      recycleDelay: 1,
+      ...over,
+    } as GameCardData;
+  }
+
+  // A standard non-Perm potion (e.g., 淬炼药剂). Routes to graveyard.
+  function makeInstantPotion(over: Partial<GameCardData> = {}): GameCardData {
+    return {
+      id: 'potion-test',
+      type: 'potion',
+      name: '淬炼药剂',
+      value: 6,
+      image: '',
+      potionEffect: 'perm-equipment-durability-max+1' as any,
+      ...over,
+    } as GameCardData;
+  }
+
+  it('Perm magic in pendingMagicAction is rescued to recycle bag (not vanished)', () => {
+    const card = makePermMagic();
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1'],
+        currentTurn: 'hero',
+      },
+      playerTurnStartedAt: Date.now() - 40_000,
+      phase: 'playerInput',
+      handCards: [], // card already removed from hand when played
+      permanentMagicRecycleBag: [],
+      discardedCards: [],
+      pendingMagicAction: {
+        card,
+        effect: 'cleanse-draw',
+        step: 'cleanse-draw-select',
+        echoRemaining: 1,
+        data: { drawCount: 3 },
+      } as any,
+    });
+
+    const drained = drain(state, [
+      { type: 'FORCE_END_HERO_TURN', heroTurnLayerLossIds: [] },
+    ]);
+
+    // Card must NOT have vanished — it should be in the recycle bag.
+    const inRecycle = drained.state.permanentMagicRecycleBag.find(c => c.id === 'magic-cleanse');
+    expect(inRecycle).toBeDefined();
+    expect(inRecycle?.name).toBe('净册涌泉');
+    // Pending state cleared.
+    expect(drained.state.pendingMagicAction).toBeNull();
+  });
+
+  it('non-Perm magic in pendingMagicAction is rescued to graveyard (not vanished)', () => {
+    const card: GameCardData = {
+      id: 'magic-instant',
+      type: 'magic',
+      name: '一次性魔法',
+      value: 0,
+      image: '',
+      magicType: 'instant',
+    } as GameCardData;
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1'],
+        currentTurn: 'hero',
+      },
+      playerTurnStartedAt: Date.now() - 40_000,
+      phase: 'playerInput',
+      handCards: [],
+      discardedCards: [],
+      pendingMagicAction: {
+        card,
+        effect: 'armor-strike',
+        step: 'slot-select',
+        prompt: '',
+      } as any,
+    });
+
+    const drained = drain(state, [
+      { type: 'FORCE_END_HERO_TURN', heroTurnLayerLossIds: [] },
+    ]);
+
+    const inGrave = drained.state.discardedCards.find(c => c.id === 'magic-instant');
+    expect(inGrave).toBeDefined();
+    expect(drained.state.pendingMagicAction).toBeNull();
+  });
+
+  it('non-Perm potion in pendingPotionAction is rescued to graveyard (not vanished)', () => {
+    const card = makeInstantPotion();
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1'],
+        currentTurn: 'hero',
+      },
+      playerTurnStartedAt: Date.now() - 40_000,
+      phase: 'playerInput',
+      handCards: [],
+      discardedCards: [],
+      pendingPotionAction: {
+        card,
+        effect: 'perm-equipment-durability-max+1',
+        step: 'slot-select',
+        prompt: '',
+      } as any,
+    });
+
+    const drained = drain(state, [
+      { type: 'FORCE_END_HERO_TURN', heroTurnLayerLossIds: [] },
+    ]);
+
+    const inGrave = drained.state.discardedCards.find(c => c.id === 'potion-test');
+    expect(inGrave).toBeDefined();
+    expect(drained.state.pendingPotionAction).toBeNull();
+  });
+
+  it('Perm potion (永恒铭刻药 后的) in pendingPotionAction is rescued to recycle bag', () => {
+    // 永恒铭刻药 grants recycleDelay to a hand card. If a Perm-granted potion
+    // sits in pendingPotionAction when the timer expires, it should still
+    // route to recycle bag (not graveyard).
+    const card = makeInstantPotion({ id: 'potion-perm', recycleDelay: 2 });
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1'],
+        currentTurn: 'hero',
+      },
+      playerTurnStartedAt: Date.now() - 40_000,
+      phase: 'playerInput',
+      handCards: [],
+      permanentMagicRecycleBag: [],
+      discardedCards: [],
+      pendingPotionAction: {
+        card,
+        effect: 'perm-equipment-durability-max+1',
+        step: 'slot-select',
+        prompt: '',
+      } as any,
+    });
+
+    const drained = drain(state, [
+      { type: 'FORCE_END_HERO_TURN', heroTurnLayerLossIds: [] },
+    ]);
+
+    const inRecycle = drained.state.permanentMagicRecycleBag.find(c => c.id === 'potion-perm');
+    expect(inRecycle).toBeDefined();
+    expect(drained.state.pendingPotionAction).toBeNull();
+    // Did NOT also leak into graveyard.
+    expect(drained.state.discardedCards.some(c => c.id === 'potion-perm')).toBe(false);
+  });
+
+  it('both magic AND potion stuck simultaneously: both are rescued', () => {
+    // Edge case — should never happen in real play (one pending at a time),
+    // but defensive: if both somehow co-exist, both must be rescued.
+    const magic = makePermMagic();
+    const potion = makeInstantPotion();
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1'],
+        currentTurn: 'hero',
+      },
+      playerTurnStartedAt: Date.now() - 40_000,
+      phase: 'playerInput',
+      handCards: [],
+      permanentMagicRecycleBag: [],
+      discardedCards: [],
+      pendingMagicAction: { card: magic, effect: 'cleanse-draw', step: 'cleanse-draw-select', data: { drawCount: 3 } } as any,
+      pendingPotionAction: { card: potion, effect: 'perm-equipment-durability-max+1', step: 'slot-select', prompt: '' } as any,
+    });
+
+    const drained = drain(state, [
+      { type: 'FORCE_END_HERO_TURN', heroTurnLayerLossIds: [] },
+    ]);
+
+    expect(drained.state.permanentMagicRecycleBag.find(c => c.id === 'magic-cleanse')).toBeDefined();
+    expect(drained.state.discardedCards.find(c => c.id === 'potion-test')).toBeDefined();
+    expect(drained.state.pendingMagicAction).toBeNull();
+    expect(drained.state.pendingPotionAction).toBeNull();
+  });
+
+  it('no card in limbo (timer expires while player just thinking): END_TURN proceeds normally', () => {
+    // Sanity: the rescue path is conditional. If pending* are null,
+    // FORCE_END_HERO_TURN should NOT enqueue spurious FINALIZE actions and
+    // should still END_TURN cleanly.
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        engagedMonsterIds: ['m1'],
+        currentTurn: 'hero',
+        monsterAttackQueue: [],
+      },
+      playerTurnStartedAt: Date.now() - 40_000,
+      phase: 'playerInput',
+      handCards: [],
+      discardedCards: [],
+      permanentMagicRecycleBag: [],
+      pendingMagicAction: null,
+      pendingPotionAction: null,
+    });
+
+    const drained = drain(state, [
+      { type: 'FORCE_END_HERO_TURN', heroTurnLayerLossIds: [] },
+    ]);
+
+    // No phantom cards leaked anywhere.
+    expect(drained.state.discardedCards).toHaveLength(0);
+    expect(drained.state.permanentMagicRecycleBag).toHaveLength(0);
+    // Standard turn-end behavior (monster turn started, awaitingBlock).
+    expect(drained.state.combatState.currentTurn).toBe('monster');
+    expect(drained.state.phase).toBe('awaitingBlock');
   });
 });
 

@@ -772,5 +772,31 @@
       "normalMode": "Normal Game",
       "normalModeDesc": "Full deck, 21 monsters, 7 elites. The complete dungeon adventure."
     }
+  },
+  "cardStamps": {
+    "presets": {
+      "recommend": "Recommend",
+      "deadly": "Deadly",
+      "safe": "Safe pick",
+      "strong": "Strong",
+      "died": "RIP",
+      "howto": "How to?"
+    },
+    "freeformPlaceholder": "Or write a message...",
+    "send": "Send",
+    "offlineBanner": "📡 Offline — comments unavailable",
+    "bubble": {
+      "aria": "View card comments"
+    },
+    "breakdown": {
+      "presetsHeader": "Reactions",
+      "messagesHeader": "Comments"
+    },
+    "relTime": {
+      "justNow": "just now",
+      "minutes": "{{n}}m ago",
+      "hours": "{{n}}h ago",
+      "days": "{{n}}d ago"
+    }
   }
 }

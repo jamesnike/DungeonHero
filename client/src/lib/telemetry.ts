@@ -7,7 +7,7 @@
  * - All errors are silently swallowed — telemetry must NEVER affect game start latency or UX.
  */
 
-const CLIENT_ID_KEY = 'dh_client_id';
+import { getOrCreateClientId } from './clientId';
 
 export interface PrevGameSummary {
   gameMode: 'quick' | 'normal';
@@ -45,22 +45,6 @@ export function summarizePrevGame(prev: PrevGameStateLike | null | undefined): P
     turnCount,
     outcome,
   };
-}
-
-function getOrCreateClientId(): string {
-  try {
-    let id = localStorage.getItem(CLIENT_ID_KEY);
-    if (!id) {
-      id =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `anon-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      localStorage.setItem(CLIENT_ID_KEY, id);
-    }
-    return id;
-  } catch {
-    return 'anon';
-  }
 }
 
 export function reportGameStart(

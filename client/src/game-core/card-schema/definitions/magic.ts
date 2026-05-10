@@ -40,7 +40,8 @@ import {
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../../rng';
 import { INITIAL_HP, PERSUADE_COST, MIN_PERSUADE_COST } from '../../constants';
 import { computeAmuletEffects, applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../../equipment';
-import { chaosStrikeHasOverkill } from '../../combat';
+import { chaosStrikeHasOverkill, detectMineCollisionsAfterShuffle } from '../../combat';
+import { processMineCollisions, clearTriggeredMineSlots } from '../../rules/equipment-effects';
 import { STARTER_CARD_IDS, skillScrollImage, createMagicBoltCard } from '../../deck';
 import { applyFlipCounters } from '../../rules/flip-counters';
 
@@ -634,13 +635,16 @@ const crossroadsLeftSwap: CardDefinition = {
     }
     const leftCard = cards[leftIdx]!;
     const rightCard = cards[rightIdx]!;
+    const prevActive = cards as ActiveRowSlots;
     const next = [...cards] as ActiveRowSlots;
     for (let swapI = 0; swapI < echoMultiplier; swapI++) {
       const tmp = next[leftIdx];
       next[leftIdx] = next[rightIdx];
       next[rightIdx] = tmp;
     }
-    patch.activeCards = next;
+    const collisions = detectMineCollisionsAfterShuffle(prevActive, next);
+    processMineCollisions(collisions, state, sideEffects, enqueuedActions);
+    patch.activeCards = clearTriggeredMineSlots(next, collisions);
     // Animation hint — emit ONCE regardless of echoMultiplier. For even
     // multipliers the cards visually return to their original slots (no-op
     // state-wise) but the banner says (回响×N) so the player understands.
@@ -1200,13 +1204,16 @@ const starterDungeonSwap: CardDefinition = {
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
+    const prevActive = cards as ActiveRowSlots;
     const next = [...cards] as ActiveRowSlots;
     for (let swapI = 0; swapI < echoMultiplier; swapI++) {
       const tmp = next[firstIdx];
       next[firstIdx] = next[secondIdx];
       next[secondIdx] = tmp;
     }
-    patch.activeCards = next;
+    const collisions = detectMineCollisionsAfterShuffle(prevActive, next);
+    processMineCollisions(collisions, state, sideEffects, enqueuedActions);
+    patch.activeCards = clearTriggeredMineSlots(next, collisions);
     const firstCard = cards[firstIdx]!;
     const secondCard = cards[secondIdx]!;
     // Animation hint — only emit when net state actually changed (odd echo).

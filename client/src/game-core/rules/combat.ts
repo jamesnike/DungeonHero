@@ -27,13 +27,14 @@ import {
   damageMonsterWithLayerOverflow,
   isMonsterDefeated,
   applyWraithHauntEffect,
+  detectMineCollisionsAfterShuffle,
 } from '../combat';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import { createEmptyAmuletEffects, STRENGTH_SELF_DAMAGE, initialCombatState, INITIAL_HP, HAND_LIMIT } from '../constants';
 import { computeAmuletEffectsForState, applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
 import { getEquipmentSlotsWithSuppressedTempAttack, isMonsterMagicImmuneByBuilding } from '../buildingAura';
 import { flattenActiveRowSlots, isDamageableTarget, isRecyclableFromHand, applyAmplifyOnCreate } from '../helpers';
-import { computeEquipmentBreakEffects, computeDurabilityLossEffects } from './equipment-effects';
+import { computeEquipmentBreakEffects, computeDurabilityLossEffects, processMineCollisions, clearTriggeredMineSlots } from './equipment-effects';
 import { maybeEnqueueStunGold } from './economy';
 import { createBugletCard, createMagicBoltCard, goblinImage, bugletImage } from '../deck';
 import { addCardToBackpackPure, resetCardForGraveyard } from '../cards';
@@ -941,7 +942,7 @@ function reduceMonsterDefeated(
         monsterId: monster.id,
         skillKey: lastWordsSkillKey(monster.lastWords),
       });
-      rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
+      rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects, enqueuedActions);
     }
     if (monster.skeletonLastWordsDiscard && !monster.lastWords) {
       enqueuedActions.push({
@@ -949,7 +950,7 @@ function reduceMonsterDefeated(
         monsterId: monster.id,
         skillKey: 'death:lastWords:skeleton',
       });
-      rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, 'discard-hand-1', rng, sideEffects);
+      rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, 'discard-hand-1', rng, sideEffects, enqueuedActions);
     }
     // Revive itself
     enqueuedActions.push({
@@ -1005,7 +1006,7 @@ function reduceMonsterDefeated(
       monsterId: monster.id,
       skillKey: lastWordsSkillKey(monster.lastWords),
     });
-    rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects);
+    rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, monster.lastWords, rng, sideEffects, enqueuedActions);
   }
   if (monster.skeletonLastWordsDiscard && !monster.lastWords && !monster.isStunned) {
     enqueuedActions.push({
@@ -1013,7 +1014,7 @@ function reduceMonsterDefeated(
       monsterId: monster.id,
       skillKey: 'death:lastWords:skeleton',
     });
-    rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, 'discard-hand-1', rng, sideEffects);
+    rng = applyLastWordsToPatch(state, patch, monster.id, monster.name, 'discard-hand-1', rng, sideEffects, enqueuedActions);
   }
 
   // Minion buff — search all zones for isMinionCard, apply +1/+1
@@ -1501,6 +1502,7 @@ function applyLastWordsToPatch(
   effect: string,
   rng: RngState,
   sideEffects: SideEffect[],
+  enqueuedActions: GameAction[],
 ): RngState {
   if (effect === 'discard-hand-3' || effect === 'discard-hand-1') {
     const maxDiscard = effect === 'discard-hand-1' ? 1 : 3;
@@ -1550,7 +1552,12 @@ function applyLastWordsToPatch(
     const atkBoost = parseInt(effect.replace('wraith-haunt-', ''), 10) || 2;
     const baseCards = (patch.activeCards ?? state.activeCards) as ActiveRowSlots;
     const [shuffled, nextRng] = applyWraithHauntEffect(baseCards, monsterId, atkBoost, rng);
-    patch.activeCards = shuffled as GameState['activeCards'];
+    // 地雷碰撞：shuffle 让某只怪物落到了原本是地雷的格子 → 跟瀑流落地一样
+    // 触发地雷。地雷被 ADD_TO_GRAVEYARD 路由进坟场，所以同时把它从 shuffled
+    // active row 里清掉（地雷被 shuffle 去到了别的格子，但已经消耗）。
+    const collisions = detectMineCollisionsAfterShuffle(baseCards, shuffled);
+    processMineCollisions(collisions, state, sideEffects, enqueuedActions);
+    patch.activeCards = clearTriggeredMineSlots(shuffled, collisions) as GameState['activeCards'];
 
     const otherMonsters = baseCards.filter(c => c && c.id !== monsterId && c.type === 'monster');
     const parts: string[] = [];
@@ -1569,6 +1576,7 @@ function reduceExecuteLastWords(
   action: Extract<GameAction, { type: 'EXECUTE_LAST_WORDS' }>,
 ): ReduceResult {
   const sideEffects: SideEffect[] = [];
+  const enqueuedActions: GameAction[] = [];
   const patch: Partial<GameState> = {};
   const monster = state.activeCards.find(c => c?.id === action.monsterId);
   const monsterName = monster?.name ?? 'Unknown';
@@ -1581,10 +1589,11 @@ function reduceExecuteLastWords(
     action.lastWords,
     state.rng,
     sideEffects,
+    enqueuedActions,
   );
 
   patch.rng = rng;
-  return applyPatch(state, patch, sideEffects);
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------
@@ -3315,8 +3324,19 @@ function reduceResolveBlock(
 
     if (slotItem && (slotItem.type === 'shield' || slotItem.type === 'monster') && !durabilityLimitReached) {
       blockedWithShield = true;
-      const knightShield = slotItem as GameCardData & { knightEffect?: string };
+      const knightShield = slotItem as GameCardData & { knightEffect?: string; _fullBlockUsed?: boolean };
       const isFullBlockShield = knightShield.knightEffect === 'fullBlock';
+      // 铁壁塔盾「完全格挡」一次性使用语义：
+      //   - 触发条件：`isFullBlockShield && !_fullBlockUsed && remainingDamage > currentArmor`
+      //     （只有当攻击力 > 当前护甲值时才算「触发」并消耗一次性使用名额；
+      //      attack ≤ armor 走普通 block 流程，不消耗、特效保留给下次。）
+      //   - 触发后果：armor 视为打穿，按正常流程扣耐久（L0/L1 1/1 立即损毁；
+      //     L2 有 extraBlock 救一次）。同时把 `_fullBlockUsed: true` 写到 in-slot
+      //     item 上，下次再受 attack > armor 时不会再次触发，溢出正常打到英雄。
+      //   - 「每次装备上刷新」由 SET_EQUIPMENT_SLOT / clearSlotAndPromoteReserve
+      //     里的 strip 实现 —— 蓄好的"一次"在装备入槽瞬间归零，跟 `_shieldDurabilityBlockCounter`
+      //     的语义一致。详见 `iron-tower-fullblock-one-time` 测试。
+      const fullBlockAlreadyUsed = !!knightShield._fullBlockUsed;
       const isMonsterEquipShield = slotItem.type === 'monster';
 
       const slotShieldBonus = getSlotBonus(state, blockSlotId, 'shield');
@@ -3341,6 +3361,10 @@ function reduceResolveBlock(
       const storedArmor = Math.min(slotItem.armor ?? storedCap, storedCap);
       const currentArmor = storedArmor + eliteBonus;
 
+      // 一次性 fullBlock 触发条件：fullBlock 类型 + 还没用过 + 当前攻击溢出当前护甲值
+      // attack ≤ armor 时不触发（走普通 block 流程，特效保留给下次）。
+      const fullBlockTriggers = isFullBlockShield && !fullBlockAlreadyUsed && remainingDamage > currentArmor;
+
       let shieldArmorDepleted = false;
       let workingShieldItem = { ...slotItem };
 
@@ -3353,7 +3377,7 @@ function reduceResolveBlock(
         const newCurrentArmor = Math.max(0, currentArmor - effectiveArmorDamage);
         const newStoredArmor = Math.max(0, newCurrentArmor - eliteBonus);
         shieldArmorDepleted = newCurrentArmor <= 0 && effectiveArmorDamage > 0;
-        remainingDamage = isFullBlockShield ? 0 : Math.max(0, remainingDamage - currentArmor);
+        remainingDamage = fullBlockTriggers ? 0 : Math.max(0, remainingDamage - currentArmor);
 
         if (shieldArmorDepleted) {
           // Strip `armor` so next read defaults to current cap (refill on layer break).
@@ -3362,13 +3386,16 @@ function reduceResolveBlock(
         } else {
           workingShieldItem = { ...slotItem, armor: newStoredArmor };
         }
+        if (fullBlockTriggers) {
+          workingShieldItem = { ...workingShieldItem, _fullBlockUsed: true } as typeof workingShieldItem;
+        }
 
         if (golemArmorCap != null && blocked > golemArmorCap) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 护体：护甲最多掉 ${golemArmorCap}！` } });
         }
-        if (isFullBlockShield) {
-          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newCurrentArmor}）` } });
-          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完全格挡！` } });
+        if (fullBlockTriggers) {
+          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${pendingBlock.attackValue} 点伤害！（一次性效果用尽）` } });
+          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完全格挡！（一次性效果用尽）` } });
         } else if (shieldArmorDepleted) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲击破！耐久 -1）` } });
         } else {
@@ -3377,11 +3404,11 @@ function reduceResolveBlock(
       } else {
         const blocked = Math.min(remainingDamage, currentArmor);
 
-        // 守护圣盾 — perfect-block armor save: on perfect block (attack ≤ currentArmor),
-        // roll d20; if save succeeds the shield's armor (and consequently its durability)
-        // is not consumed at all this block. Dice fires before any armor mutation so we
-        // can short-circuit the deduction entirely.
-        const wouldBePerfectBlock = isFullBlockShield || remainingDamage <= currentArmor;
+        // 守护圣盾 — perfect-block armor save: on perfect block (attack ≤ currentArmor
+        // OR fullBlock 一次性触发将其转换为完美格挡), roll d20; if save succeeds the shield's
+        // armor (and consequently its durability) is not consumed at all this block.
+        // Dice fires before any armor mutation so we can short-circuit the deduction entirely.
+        const wouldBePerfectBlock = fullBlockTriggers || remainingDamage <= currentArmor;
         let armorSaved = false;
         if (wouldBePerfectBlock && !state.unbreakableNext) {
           const armorSaveChance = (slotItem as GameCardData).shieldPerfectBlockArmorSaveChance;
@@ -3416,11 +3443,14 @@ function reduceResolveBlock(
             workingShieldItem = { ...slotItem, armor: newStoredArmor };
           }
         }
-        remainingDamage = isFullBlockShield ? 0 : Math.max(0, remainingDamage - currentArmor);
+        if (fullBlockTriggers) {
+          workingShieldItem = { ...workingShieldItem, _fullBlockUsed: true } as typeof workingShieldItem;
+        }
+        remainingDamage = fullBlockTriggers ? 0 : Math.max(0, remainingDamage - currentArmor);
 
-        if (isFullBlockShield) {
-          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${blocked} 点伤害！（护甲 ${currentArmor}→${newCurrentArmor}）` } });
-          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完全格挡！` } });
+        if (fullBlockTriggers) {
+          sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 完全格挡了 ${pendingBlock.attackValue} 点伤害！（一次性效果用尽）` } });
+          sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完全格挡！（一次性效果用尽）` } });
         } else if (shieldArmorDepleted) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${slotItem.name} 格挡了 ${blocked} 点伤害（护甲击破！耐久 -1）` } });
         } else {
@@ -3447,7 +3477,15 @@ function reduceResolveBlock(
         reflectBlockSlotId = blockSlotId;
       }
 
-      const isPerfectBlock = isFullBlockShield || remainingDamage === 0;
+      // Perfect block = no damage overflowed to hero. After the
+      // `remainingDamage = fullBlockTriggers ? 0 : ...` assignment above,
+      // a perfect block is exactly `remainingDamage === 0`. Pre-existing
+      // code OR'd on `isFullBlockShield` to short-circuit, but with the
+      // new one-time-use semantics that condition would treat a SPENT
+      // fullBlock shield (special already used + attack > armor) as a
+      // perfect block, which is wrong — overflow IS hitting hero in that
+      // case. The `=== 0` form is correct for both fresh and spent state.
+      const isPerfectBlock = remainingDamage === 0;
 
       // Dual guard: perfect block bonus — N amulets each grant +1 permanent armor.
       if (isPerfectBlock && ae.dualGuardCount > 0) {
@@ -3640,7 +3678,12 @@ function reduceResolveBlock(
             skipShieldDurabilityLoss = true;
             const { armor: _resetA, ...extraBase } = slotItem as GameCardData & { armor?: number };
             const evolveCountExtra = evolveBlockCount !== undefined ? { _shieldBlockCount: evolveBlockCount } : {};
-            patch[blockSlotId] = { ...extraBase, _shieldDurabilityBlockCounter: counter, ...evolveCountExtra } as EquipmentItem;
+            // 一次性 fullBlock 触发后，shield 留在槽位（被 extraBlock 救），
+            // 必须把 `_fullBlockUsed: true` 注入回 patch[slot]，否则 spread of
+            // slotItem (which doesn't have the flag set) 会把它丢掉，下一次
+            // attack > armor 又会再次触发 fullBlock。
+            const fullBlockMark = fullBlockTriggers ? { _fullBlockUsed: true } : {};
+            patch[blockSlotId] = { ...extraBase, _shieldDurabilityBlockCounter: counter, ...evolveCountExtra, ...fullBlockMark } as EquipmentItem;
             sideEffects.push({
               event: 'log:entry',
               payload: { type: 'equip', message: `${slotItem.name} 额外格挡（${counter}/${totalExtraBlocks}），耐久未消耗！` },

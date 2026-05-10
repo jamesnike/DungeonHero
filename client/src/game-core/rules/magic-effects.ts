@@ -137,7 +137,7 @@
  * │ KNIGHT gear-rift-draw            │ A   │ draw ×N (slot resolved hero)  │
  * │ KNIGHT quake-stun-draw           │ A   │ HP loss ×N + draw ×N          │
  * │ KNIGHT recall-equipment          │ B   │ pick equipment twice          │
- * │ KNIGHT cleanse-draw (净册涌泉)   │ B   │ pick + draw twice (hook loop) │
+ * │ KNIGHT cleanse-draw (净册涌泉)   │ B   │ pick + grave discover ×N      │
  * │ KNIGHT recycle-tide (洗册归川)   │ C   │ second tick = no-op + banner  │
  * │ KNIGHT persuade-to-temp-attack    │ C   │ run ×N; perm bonus may carry │
  * │ KNIGHT discard-rebuild           │ A   │ discover queue ×N             │
@@ -216,7 +216,7 @@ import {
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import type { RngState } from '../rng';
 import { DURABILITY_CAP, clampMaxDurability } from '../constants';
-import { pickGraveyardCardExcluding, computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, accumulateMineDamageBoost } from './equipment-effects';
+import { pickGraveyardCardExcluding, computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, accumulateMineDamageBoost, processMineCollisions, clearTriggeredMineSlots } from './equipment-effects';
 import { maybeEnqueueStunGold } from './economy';
 import {
   INITIAL_HP,
@@ -229,7 +229,7 @@ import {
 } from '../constants';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
-import { chaosStrikeHasOverkill } from '../combat';
+import { chaosStrikeHasOverkill, detectMineCollisionsAfterShuffle } from '../combat';
 import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
 import { markSkillUsedPure } from '../hero';
 import { STARTER_CARD_IDS, getStarterBaseId, skillScrollImage, createMagicBoltCard } from '../deck';
@@ -1440,13 +1440,16 @@ export function resolvePermanentMagic(
     }
     const leftCard = cards[leftIdx]!;
     const rightCard = cards[rightIdx]!;
+    const prevActive = cards as ActiveRowSlots;
     const next = [...cards] as ActiveRowSlots;
     for (let swapI = 0; swapI < echoMultiplier; swapI++) {
       const tmp = next[leftIdx];
       next[leftIdx] = next[rightIdx];
       next[rightIdx] = tmp;
     }
-    patch.activeCards = next;
+    const collisions = detectMineCollisionsAfterShuffle(prevActive, next);
+    processMineCollisions(collisions, state, sideEffects, enqueuedActions);
+    patch.activeCards = clearTriggeredMineSlots(next, collisions);
     if (echoMultiplier % 2 === 1) {
       sideEffects.push({
         event: 'magic:activeRowSwap',
@@ -1838,13 +1841,16 @@ export function resolvePermanentMagic(
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
+      const prevActive = cards as ActiveRowSlots;
       const next = [...cards] as ActiveRowSlots;
       for (let swapI = 0; swapI < echoMultiplier; swapI++) {
         const tmp = next[firstIdx];
         next[firstIdx] = next[secondIdx];
         next[secondIdx] = tmp;
       }
-      patch.activeCards = next;
+      const collisions = detectMineCollisionsAfterShuffle(prevActive, next);
+      processMineCollisions(collisions, state, sideEffects, enqueuedActions);
+      patch.activeCards = clearTriggeredMineSlots(next, collisions);
       const firstCard = cards[firstIdx]!;
       const secondCard = cards[secondIdx]!;
       if (echoMultiplier % 2 === 1) {
@@ -3218,29 +3224,27 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'cleanse-draw': {
-      // 净册涌泉 — Perm 1. Pick 1 hand card → delete (kw='delete'); then draw
-      // N cards from the backpack (N = 3/4/5 by upgrade level). Empty hand on
-      // a given iteration → skip the picker but still draw.
+      // 净册涌泉 — Perm 1. Pick 1 hand card → delete (kw='delete'); then
+      // discover 1 card from the graveyard (3-pick-1) into hand. Empty hand
+      // on a given iteration → skip the picker but still discover. No
+      // upgrade scaling.
       //
       // Echo (Category B): the hook re-opens the picker `echoMultiplier`
-      // times, drawing N each time. We only emit the side-effect; the
-      // hook owns the loop and dispatches FINALIZE_MAGIC_CARD when done.
-      const drawCounts = [3, 4, 5];
-      const drawCount = drawCounts[card.upgradeLevel ?? 0] ?? 3;
+      // times, discovering once per iteration. We only emit the side-effect;
+      // the hook owns the loop and dispatches FINALIZE_MAGIC_CARD when done.
       const echoTagCD = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
       patch.pendingMagicAction = {
         card,
         effect: 'cleanse-draw',
         step: 'cleanse-draw-select',
         echoRemaining: echoMultiplier,
-        data: { drawCount },
       } as any;
       patch.heroSkillBanner = echoMultiplier > 1
-        ? `净册涌泉：将连续选择 ${echoMultiplier} 次手牌，每次从背包抽 ${drawCount} 张。${echoTagCD}`
-        : `净册涌泉：选择一张手牌删除，从背包抽 ${drawCount} 张。`;
+        ? `净册涌泉：将连续 ${echoMultiplier} 次「删 1 张手牌 + 坟场发现 1 张」。${echoTagCD}`
+        : `净册涌泉：选择一张手牌删除，从坟场发现一张牌加入手牌。`;
       sideEffects.push({
         event: 'card:cleanseDrawRequested' as any,
-        payload: { card, drawCount, echoRemaining: echoMultiplier },
+        payload: { card, echoRemaining: echoMultiplier },
       });
       return applyPatch(state, patch, sideEffects);
     }

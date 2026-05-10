@@ -1288,3 +1288,53 @@ export function applyWraithHauntEffect(
 
   return [next, rng];
 }
+
+// ---------------------------------------------------------------------------
+// Mine collisions on swap / shuffle
+// ---------------------------------------------------------------------------
+//
+// 任何让 active row 卡牌交换位置的效果（乾坤挪移、维度扭曲、命运挪移、
+// fate-swap、Wraith haunt 等）一旦让一个怪物落到了原本是「地雷」的格子，
+// 跟普通瀑流落地一样：地雷应该触发，给怪物造成 mineDamage + globalMineDamageBonus
+// 的纯伤，地雷进坟场，怪物被激怒。
+//
+// 该函数是纯函数：仅比对前后两个 active row 快照，返回触发的碰撞列表。
+// 调用方负责：
+//   - 把 BEGIN_COMBAT + DEAL_DAMAGE_TO_MONSTER + ADD_TO_GRAVEYARD 入队
+//     + emit 'combat:mineTriggered'（用 rules/equipment-effects.ts 的
+//     `processMineCollisions`）。
+//   - 把被排挤到别处的地雷从其 post-shuffle 位置清除：
+//     · active↔active swap → 地雷在 nextActive 里某个 slot
+//     · active↔preview swap → 地雷在 preview row 某个 slot
+//     · active↔deck swap → 地雷在 deck 里
+//   只有调用方知道完整的拓扑，因此清理职责在调用方。
+//
+// 触发条件：
+//   1. `prevActive[i]` 是地雷（`isGhost === true && (mineDamage ?? 0) > 0`）
+//   2. `nextActive[i]` 是怪物（`type === 'monster'`）
+//   3. 不是同一张卡（id 不同）—— 防止「卡未实际移动」时误触发
+export interface MineCollision {
+  /** prev active row 中地雷所在 / next active row 中怪物所在的 slot index. */
+  slotIdx: number;
+  /** 触发的地雷卡（用于 damage 计算 + ADD_TO_GRAVEYARD）。*/
+  mine: GameCardData;
+  /** 落到地雷格的怪物。*/
+  monster: GameCardData;
+}
+
+export function detectMineCollisionsAfterShuffle(
+  prevActive: ActiveRowSlots,
+  nextActive: ActiveRowSlots,
+): MineCollision[] {
+  const collisions: MineCollision[] = [];
+  const len = Math.min(prevActive.length, nextActive.length);
+  for (let i = 0; i < len; i++) {
+    const prevCard = prevActive[i];
+    if (!prevCard || !prevCard.isGhost || (prevCard.mineDamage ?? 0) <= 0) continue;
+    const nextCard = nextActive[i];
+    if (!nextCard || nextCard.type !== 'monster') continue;
+    if (nextCard.id === prevCard.id) continue;
+    collisions.push({ slotIdx: i, mine: prevCard, monster: nextCard });
+  }
+  return collisions;
+}

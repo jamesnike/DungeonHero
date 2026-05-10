@@ -778,5 +778,31 @@
       "normalMode": "正常游戏",
       "normalModeDesc": "完整牌堆，21 个怪物，7 个精英。完整的地城冒险体验。"
     }
+  },
+  "cardStamps": {
+    "presets": {
+      "recommend": "推荐",
+      "deadly": "危险",
+      "safe": "这个稳",
+      "strong": "强卡",
+      "died": "翻车了",
+      "howto": "怎么打"
+    },
+    "freeformPlaceholder": "或者输入留言...",
+    "send": "发送",
+    "offlineBanner": "📡 当前离线，留言功能暂不可用",
+    "bubble": {
+      "aria": "查看卡牌留言"
+    },
+    "breakdown": {
+      "presetsHeader": "玩家评价",
+      "messagesHeader": "玩家留言"
+    },
+    "relTime": {
+      "justNow": "刚刚",
+      "minutes": "{{n}}分钟前",
+      "hours": "{{n}}小时前",
+      "days": "{{n}}天前"
+    }
   }
 }

@@ -1,16 +1,22 @@
 /**
- * 铁壁塔盾 升级 2 — 完全格挡两次攻击的全部伤害
+ * 铁壁塔盾 升级 2 — 一次性 fullBlock + extraBlock 救耐久
  *
- * Combat-level invariants 验证：
+ * 当前 fullBlock 语义（见 `iron-tower-fullblock-one-time.test.ts` 全面覆盖）：
+ *   - 触发条件：`isFullBlockShield && !_fullBlockUsed && attack > currentArmor`。
+ *     attack ≤ armor 走普通 block，特效不消耗、保留给下次。
+ *   - 触发后果：armor 视为打穿、走正常耐久流程；同时 `_fullBlockUsed: true`
+ *     钉到槽位 item 上，下次再受 attack > armor 时不再触发，溢出正常打到英雄。
+ *
+ * Combat-level invariants 验证（L2 升级后）：
  *   1. L2 升级后 shield 持有 shieldExtraBlocksPerDurability: 1。
- *   2. 第 1 次格挡（任意攻击力）→ 完全吸收溢出（fullBlock）+ 不消耗耐久
- *      （走 extra-block counter 路径，counter: 0 → 1）+ armor 字段被剥离
- *      让下次按 cap (8) 重新刷满。
- *   3. 第 2 次格挡（任意攻击力）→ 完全吸收溢出 + 耐久 -1 → durability 1 → 0
- *      → 走 break 路径 → 因 permEquipment=true 进入 permanentMagicRecycleBag
- *      （而不是 discardedCards）。
- *   4. 验证 combat:shieldBlock + combat:diceRoll? + log "完全格挡了 X 点伤害"
- *      side effects 都正常发出。
+ *   2. 第 1 次格挡（attack > armor）→ 触发 fullBlock，吸收溢出 + extraBlock 救耐久
+ *      （counter: 0 → 1）+ armor 字段被剥离让下次按 cap (8) 重新刷满 +
+ *      `_fullBlockUsed = true` 钉到槽位 item 上。
+ *   3. 第 2 次格挡（attack > armor，`_fullBlockUsed: true` 已置位）→ fullBlock
+ *      不再触发 → armor 被打穿 + 溢出打到英雄 + 耐久 -1 → durability 1 → 0 →
+ *      走 break 路径 → 因 permEquipment=true 进入 permanentMagicRecycleBag。
+ *   4. 验证 combat:shieldBlock + 「完全格挡了 X 点伤害（一次性效果用尽）」 log
+ *      在第 1 次触发时发出。
  *   5. （routing fix 后）knight:fullBlock upgrade handler 实际运行。
  */
 
@@ -75,7 +81,7 @@ function setupBlockState(
 ): GameState {
   return makeState({
     rng: createRng(seed),
-    heroHp: 30,
+    hp: 30,
     activeCards: [monster, null, null, null, null] as ActiveRowSlots,
     equipmentSlot1: shield,
     combatState: {
@@ -91,8 +97,8 @@ function setupBlockState(
   });
 }
 
-describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
-  it('attack 12 vs L2 shield (8 armor, 1/1, +1 extra block): block 1 absorbs all damage and saves durability', () => {
+describe('铁壁塔盾 L2 — 一次性 fullBlock + extraBlock 救耐久', () => {
+  it('attack 12 vs L2 shield (8 armor, 1/1, +1 extra block): block 1 triggers fullBlock + saves durability + sets _fullBlockUsed', () => {
     const monster = makeMonster({ attack: 12 });
     const shield = makeIronTowerL2();
     const state = setupBlockState(monster, shield);
@@ -103,11 +109,13 @@ describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
       slotId: 'equipmentSlot1',
     });
 
-    expect(result.state.heroHp).toBe(30);
+    expect(result.state.hp).toBe(30);
     const equippedShield = result.state.equipmentSlot1 as any;
     expect(equippedShield).toBeTruthy();
     expect(equippedShield.durability).toBe(1);
     expect(equippedShield._shieldDurabilityBlockCounter).toBe(1);
+    // 一次性 fullBlock 已使用 — 必须钉到 in-slot item 上
+    expect(equippedShield._fullBlockUsed).toBe(true);
     expect(equippedShield.armor).toBeUndefined();
     expect(result.state.permanentMagicRecycleBag.find((c: any) => c.name === '铁壁塔盾')).toBeFalsy();
     expect(result.state.discardedCards.find((c: any) => c.name === '铁壁塔盾')).toBeFalsy();
@@ -124,7 +132,7 @@ describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
     expect(extraBlockLog).toBeTruthy();
   });
 
-  it('attack 100 vs L2 shield: attack of any size absorbed without breaking shield (block 1)', () => {
+  it('attack 100 vs L2 shield: attack of any size absorbed in block 1 (fresh special)', () => {
     const monster = makeMonster({ attack: 100 });
     const shield = makeIronTowerL2();
     const state = setupBlockState(monster, shield, 100);
@@ -135,16 +143,18 @@ describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
       slotId: 'equipmentSlot1',
     });
 
-    expect(result.state.heroHp).toBe(30);
+    expect(result.state.hp).toBe(30);
     const equippedShield = result.state.equipmentSlot1 as any;
     expect(equippedShield).toBeTruthy();
     expect(equippedShield.durability).toBe(1);
     expect(equippedShield._shieldDurabilityBlockCounter).toBe(1);
+    expect(equippedShield._fullBlockUsed).toBe(true);
   });
 
-  it('block 2 (after counter=1): durability ticks to 0 → shield breaks → enters permanentMagicRecycleBag (Perm)', () => {
+  it('block 2 (counter=1, _fullBlockUsed=true): special spent → attack 12 overflows hero by 4 + shield breaks → recycleBag (Perm)', () => {
     const monster = makeMonster({ attack: 12 });
-    const shield = makeIronTowerL2({ _shieldDurabilityBlockCounter: 1 });
+    // Mirrors real chain: block 1 used counter+special → block 2 fixture has both set.
+    const shield = makeIronTowerL2({ _shieldDurabilityBlockCounter: 1, _fullBlockUsed: true } as any);
     const state = setupBlockState(monster, shield);
 
     const drained = drain(state, [
@@ -155,7 +165,8 @@ describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
       } as any,
     ]);
 
-    expect(drained.state.heroHp).toBe(30);
+    // fullBlock 特效已用尽：attack 12 vs armor 8 → 溢出 4 打到英雄
+    expect(drained.state.hp).toBe(26);
     expect(drained.state.equipmentSlot1).toBeNull();
     expect(
       drained.state.permanentMagicRecycleBag.find((c: any) => c.name === '铁壁塔盾'),
@@ -165,7 +176,7 @@ describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
     ).toBeFalsy();
   });
 
-  it('chained two-block scenario via drain: block 1 saves, block 2 breaks to recycle bag', () => {
+  it('chained two-block scenario via drain: block 1 fullBlocks (no hero damage), block 2 spent → overflow + break', () => {
     const monster1 = makeMonster({ id: 'm1', attack: 15 });
     const monster2 = makeMonster({ id: 'm2', attack: 20 });
     const shield = makeIronTowerL2();
@@ -175,11 +186,13 @@ describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
       { type: 'RESOLVE_BLOCK', choice: 'shield', slotId: 'equipmentSlot1' } as any,
     ]).state;
 
-    expect(state.heroHp).toBe(30);
+    expect(state.hp).toBe(30);
     let equipped = state.equipmentSlot1 as any;
     expect(equipped).toBeTruthy();
     expect(equipped.durability).toBe(1);
     expect(equipped._shieldDurabilityBlockCounter).toBe(1);
+    // Block 1 触发 fullBlock，flag 钉死
+    expect(equipped._fullBlockUsed).toBe(true);
 
     state = {
       ...state,
@@ -201,13 +214,14 @@ describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
       { type: 'RESOLVE_BLOCK', choice: 'shield', slotId: 'equipmentSlot1' } as any,
     ]).state;
 
-    expect(state.heroHp).toBe(30);
+    // Block 2: attack 20 vs armor 8（refilled），溢出 12 → 英雄 30 → 18
+    expect(state.hp).toBe(18);
     expect(state.equipmentSlot1).toBeNull();
     expect(state.permanentMagicRecycleBag.find((c: any) => c.name === '铁壁塔盾')).toBeTruthy();
     expect(state.discardedCards.find((c: any) => c.name === '铁壁塔盾')).toBeFalsy();
   });
 
-  it('L0/L1 (no shieldExtraBlocksPerDurability): single block consumes durability and breaks', () => {
+  it('L0/L1 (no shieldExtraBlocksPerDurability): block 1 triggers fullBlock + immediately breaks (1/1)', () => {
     const monster = makeMonster({ attack: 12 });
     const shield: EquipmentItem = { ...makeIronTowerL2() } as any;
     delete (shield as any).shieldExtraBlocksPerDurability;
@@ -218,7 +232,8 @@ describe('铁壁塔盾 L2 — 完全格挡两次攻击的全部伤害', () => {
       { type: 'RESOLVE_BLOCK', choice: 'shield', slotId: 'equipmentSlot1' } as any,
     ]);
 
-    expect(drained.state.heroHp).toBe(30);
+    // L0/L1: 一次性 fullBlock 触发，hero 0 伤害；但 1/1 立即损毁进 recycleBag
+    expect(drained.state.hp).toBe(30);
     expect(drained.state.equipmentSlot1).toBeNull();
     expect(
       drained.state.permanentMagicRecycleBag.find((c: any) => c.name === '铁壁塔盾'),

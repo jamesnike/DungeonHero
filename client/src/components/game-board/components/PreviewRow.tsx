@@ -7,6 +7,8 @@ import { useGameState } from '@/hooks/useGameEngine';
 import { DUNGEON_COLUMNS } from '../constants';
 import type { GraveyardVector, WaterfallAnimationState, PendingMagicAction } from '../types';
 import { getPreviewAnimationProps, getStackedCardStyle } from '../utils/animation-helpers';
+import { CardStampBubble } from '@/components/CardStampBubble';
+import { useCardStampsContext } from '../contexts/CardStampsContext';
 
 const EMPTY_ARRAY: GameCardData[] = [];
 
@@ -307,6 +309,48 @@ export const PreviewCardBack = memo(function PreviewCardBack({ card, isStack = f
   );
 });
 
+/**
+ * The face-up render of a preview cell. Wraps `<GameCard />` with the
+ * card-stamp social hooks: right-click / long-press opens the picker for
+ * the `'preview'` row, and a `<CardStampBubble />` overlays the cell when
+ * other players have left stamps for the same row signature.
+ *
+ * Card backs DO NOT get stamp affordances — players shouldn't stamp a card
+ * they can't see. The stamp UI only attaches once the cell is showing its
+ * face (e.g. after `revealedEarly = true`).
+ */
+const PreviewFaceCard = memo(function PreviewFaceCard({
+  card,
+  className,
+  previewSelectable,
+  onPreviewClick,
+}: {
+  card: GameCardData;
+  className: string;
+  previewSelectable: boolean;
+  onPreviewClick?: () => void;
+}) {
+  const cardStamps = useCardStampsContext();
+  const stampEntry = cardStamps.getStampsForCard(card, 'preview');
+  return (
+    <div className="relative w-full h-full">
+      <GameCard
+        card={card}
+        className={className}
+        disableInteractions={!previewSelectable}
+        onClick={onPreviewClick}
+        onContextMenu={(e) => {
+          cardStamps.openPicker(card, 'preview', e.currentTarget);
+        }}
+        onLongPress={({ target }) => {
+          cardStamps.openPicker(card, 'preview', target);
+        }}
+      />
+      {stampEntry && <CardStampBubble entry={stampEntry} />}
+    </div>
+  );
+});
+
 interface PreviewCellProps {
   index: number;
   waterfallAnimation: WaterfallAnimationState;
@@ -447,11 +491,11 @@ const PreviewCell = memo(function PreviewCell({
       <PreviewCardBack card={card} />
     )
   ) : (
-    <GameCard
+    <PreviewFaceCard
       card={card}
       className={`${hasStack ? 'relative z-[5] ' : ''}${highlightClass}`.trim()}
-      disableInteractions={!previewSelectable}
-      onClick={handlePreviewClick}
+      previewSelectable={previewSelectable}
+      onPreviewClick={handlePreviewClick}
     />
   );
 

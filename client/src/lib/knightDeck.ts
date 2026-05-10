@@ -1323,23 +1323,22 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 2,
   });
 
-  // 净册涌泉 (Perm 1)：选择一张手牌删除，从背包抽 N 张牌
-  // （N = 3 / 4 / 5，对应升级 0 / 1 / 2）。手牌为空时跳过删除，仍正常抽 N 张。
-  // 触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），与「招灵书印」护符
-  // (delete-draw) 能够叠加：每次删除还会额外从背包抽 2N 张。
+  // 净册涌泉 (Perm 1)：选择一张手牌删除（手牌为空则跳过），然后从坟场发现一张牌
+  // （三选一），加入手牌。触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），
+  // 与「招灵书印」护符 (delete-draw) 能够叠加：每次删除还会额外从背包抽 2 张。
+  // 法术回响（B 类）：连续触发 N 次「删 1 + 坟场发现 1」。
   pushCard({
     type: 'magic',
     name: '净册涌泉',
     value: 0,
     image: dedupeKnightMagicCleanseDrawImage,
     classCard: true,
-    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从背包抽 3 张牌。',
-    shortDescription: '删 1 张手牌；从背包抽 3 张',
+    description: '永久：选择一张手牌删除（手牌为空则跳过），从坟场发现一张牌（三选一），加入手牌。',
+    shortDescription: '删 1 张手牌；坟场发现 1 张（3 选 1）',
     magicType: 'permanent',
-    magicEffect: '删 1 张手牌，从背包抽 N 张（升 0/1/2 → 3/4/5）。',
+    magicEffect: '删 1 张手牌；坟场发现一张牌（3 选 1）加入手牌。',
     knightEffect: 'cleanse-draw',
     recycleDelay: 1,
-    maxUpgradeLevel: 2,
   });
 
   // 洗册归川 (Perm 1)：将背包所有牌移入永久魔法回收袋；然后整袋瀑流 -1，
@@ -2093,7 +2092,21 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
 
   let shuffledDeck: KnightCardData[];
   [shuffledDeck, currentRng] = rngShuffle(deck, currentRng) as [KnightCardData[], RngState];
-  return [shuffledDeck, currentRng];
+  // Run every card through `applyDerivedCardText` (mirrors what `createDeck`
+  // and `createStarterCardPool` do at the end of their builders). Without
+  // this final pass, knight cards whose source omits `description` /
+  // `shortDescription` / `magicEffect` literals (e.g. 淬铸迁位) ship with
+  // those fields `undefined` and the card-details modal renders blank;
+  // cards whose source has stale literals diverge from the formatter's
+  // current output (caught by `card-text-deck-parity.test.ts`).
+  // Routing safety: every knight card here has either a `knightEffect` or
+  // an `amuletEffect` (or a starter id), which take priority over
+  // `magicEffect` in `resolveEffectId`, so a formatter-injected
+  // `magicEffect` cannot short-circuit dispatch. `applyDerivedCardText` is
+  // idempotent, so the early `pushAmulet` call above (which already runs
+  // it) is safe to re-process here.
+  const finalDeck = shuffledDeck.map(c => applyDerivedCardText(c) as KnightCardData);
+  return [finalDeck, currentRng];
 }
 
 // Class card discovery events for the main deck

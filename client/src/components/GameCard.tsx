@@ -485,6 +485,11 @@ export interface GameCardData {
   equipBlockDurabilityBonus?: number; // Per-equipment bonus to blockDurabilityPerSlot (how many durability can be consumed per monster turn)
   shieldRefillOnMonsterDeath?: boolean; // Restore 1 durability when the attacking monster dies after its attack (e.g. layer drop to 0)
   _shieldDurabilityBlockCounter?: number; // Runtime counter for extra-block durability tracking
+  // 铁壁塔盾 fullBlock effect — one-time use per equip. Set to `true` after the
+  // first attack > current armor triggers the "convert overflow to 0" behavior.
+  // Stripped on equip (SET_EQUIPMENT_SLOT) so each fresh equip restores the
+  // one use. See `combat.ts:reduceResolveBlock` and the `iron-tower-fullblock-one-time` test.
+  _fullBlockUsed?: boolean;
   _counterDisplay?: string; // Dynamic counter text shown on card (e.g. "2/5")
   blockGrantTempArmorToOther?: boolean; // On block, grant temp armor equal to shield value to other slot
   onDestroyDraw?: number; // Draw this many cards from backpack when this equipment is destroyed
@@ -720,6 +725,18 @@ export interface GameCardProps {
   isWeaponDropTarget?: boolean;
   className?: string;
   onClick?: () => void;
+  /**
+   * Right-click handler (desktop). Used by the card-stamp social feature on
+   * cells in the active / preview row. The handler should call
+   * `event.preventDefault()` to suppress the browser context menu.
+   */
+  onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
+  /**
+   * Long-press handler (mobile). Fires after ~500ms of pointer-down on the
+   * card without significant movement and without a drag start. Used by the
+   * card-stamp social feature on cells in the active / preview row.
+   */
+  onLongPress?: (event: { clientX: number; clientY: number; target: Element }) => void;
   disableInteractions?: boolean;
   amuletDescriptionVariant?: 'default' | 'topThird';
   bleedAnimation?: boolean;
@@ -742,6 +759,8 @@ function GameCardInner({
   isWeaponDropTarget,
   className = '',
   onClick,
+  onContextMenu,
+  onLongPress,
   disableInteractions = false,
   amuletDescriptionVariant = 'default',
   bleedAnimation = false,
@@ -899,6 +918,7 @@ function GameCardInner({
 
   const handleDragStart = (e: React.DragEvent) => {
     if (disableInteractions) return;
+    cancelLongPress();
     setIsDragging(true);
     e.dataTransfer.effectAllowed = 'move';
     const cardPayload = JSON.stringify(card);
@@ -944,6 +964,85 @@ function GameCardInner({
         onWeaponDrop?.(weapon);
       }
     }
+  };
+
+  // ----- Long-press detection (mobile) for `onLongPress` callback -----
+  // Used by the card-stamp social feature on the active / preview row. Fires
+  // after `LONG_PRESS_MS` of pointer-down without significant movement and
+  // without a drag-start. Cancelled by pointer-up / move > 8px / drag start.
+  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_MOVE_TOLERANCE = 8;
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressOriginRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressOriginRef.current = null;
+  };
+
+  // Cleanup on unmount.
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current !== null) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!onLongPress) return;
+    if (disableInteractions) return;
+    // Only primary button (mouse left or touch / pen).
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // Skip mouse on desktop — desktop uses contextmenu (right click) instead.
+    if (e.pointerType === 'mouse') return;
+
+    const target = e.currentTarget;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    longPressOriginRef.current = { x: clientX, y: clientY, pointerId: e.pointerId };
+    cancelLongPress();
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
+      const origin = longPressOriginRef.current;
+      longPressOriginRef.current = null;
+      if (!origin) return;
+      onLongPress({ clientX: origin.x, clientY: origin.y, target });
+    }, LONG_PRESS_MS);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const origin = longPressOriginRef.current;
+    if (!origin || origin.pointerId !== e.pointerId) return;
+    const dx = e.clientX - origin.x;
+    const dy = e.clientY - origin.y;
+    if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE) {
+      cancelLongPress();
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const origin = longPressOriginRef.current;
+    if (origin && origin.pointerId === e.pointerId) {
+      cancelLongPress();
+    }
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    handlePointerUp(e);
+  };
+
+  // Right-click context menu (desktop) → forward to caller and suppress
+  // browser's native menu.
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onContextMenu) return;
+    if (disableInteractions) return;
+    e.preventDefault();
+    onContextMenu(e);
   };
 
   // Handle double tap for mobile devices
@@ -1259,6 +1358,11 @@ const amuletEffectText =
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onClick={onClick}
+      onContextMenu={onContextMenu ? handleContextMenu : undefined}
+      onPointerDown={onLongPress ? handlePointerDown : undefined}
+      onPointerMove={onLongPress ? handlePointerMove : undefined}
+      onPointerUp={onLongPress ? handlePointerUp : undefined}
+      onPointerCancel={onLongPress ? handlePointerCancel : undefined}
       onTouchEnd={handleTouchEnd}
       className={`
         dh-card-wrapper

@@ -25,6 +25,7 @@ import { resetCardForGraveyard } from '../cards';
 import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
 import { createMineBuilding } from '@/lib/knightDeck';
 import { applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
+import type { MineCollision } from '../combat';
 
 // ---------------------------------------------------------------------------
 // Perm-recycle routing — equipment that is destroyed but carries a Perm flag
@@ -85,6 +86,73 @@ export function accumulateMineDamageBoost(
     event: 'ui:banner',
     payload: { text: `${slotItem.name}：地雷伤害 +${inc}（累计 +${next}）` },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Mine collisions — process triggers + clear displaced mines
+// ---------------------------------------------------------------------------
+//
+// 给定 `detectMineCollisionsAfterShuffle` 返回的碰撞列表，统一处理副作用：
+//   - 入队 BEGIN_COMBAT（保证怪物激怒，跟 monster-damage-engagement.mdc 一致）
+//   - 入队 DEAL_DAMAGE_TO_MONSTER（source: 'mine-trap'，伤害 = mineDamage +
+//     globalMineDamageBonus，跟 waterfall 路径一致）
+//   - 入队 ADD_TO_GRAVEYARD（地雷送进坟场）
+//   - emit 'combat:mineTriggered'（触发 cell flash + 闪电爆炸动画）
+//
+// 镜像 rules/waterfall.ts 里的瀑流地雷触发逻辑（line ~1190）。所有走这条
+// helper 的入口（每条 swap/shuffle 调用方）都得到统一行为，避免漏写动画 /
+// 漏写 engagement / 漏算 globalMineDamageBonus。
+export function processMineCollisions(
+  collisions: MineCollision[],
+  state: GameState,
+  sideEffects: SideEffect[],
+  enqueuedActions: GameAction[],
+): void {
+  if (collisions.length === 0) return;
+  const globalBonus = state.globalMineDamageBonus ?? 0;
+  for (const { slotIdx, mine, monster } of collisions) {
+    const damage = (mine.mineDamage ?? 0) + globalBonus;
+    enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
+    enqueuedActions.push({
+      type: 'DEAL_DAMAGE_TO_MONSTER',
+      monsterId: monster.id,
+      damage,
+      source: 'mine-trap',
+    });
+    enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: mine });
+    sideEffects.push({
+      event: 'combat:mineTriggered',
+      payload: {
+        slotIdx,
+        monsterId: monster.id,
+        damage,
+        mineId: mine.id,
+      },
+    });
+  }
+}
+
+/**
+ * 把已经触发过的地雷从 active row 里清掉（设为 null）—— 它已经被
+ * `ADD_TO_GRAVEYARD` 路由进坟场了，不能继续留在场上。
+ *
+ * 仅适用于 active↔active swap 场景：地雷被 swap 到了 active row 别的格子。
+ * active↔preview swap、active↔deck swap 等地雷被排挤到非 active 区域的
+ * 情况，调用方需要自己清理对应区域（`previewCards` / `remainingDeck` 等）。
+ */
+export function clearTriggeredMineSlots(
+  activeRow: ActiveRowSlots,
+  collisions: MineCollision[],
+): ActiveRowSlots {
+  if (collisions.length === 0) return activeRow;
+  const result = [...activeRow] as ActiveRowSlots;
+  for (const { mine } of collisions) {
+    const idx = result.findIndex(c => c?.id === mine.id);
+    if (idx !== -1) {
+      result[idx] = null;
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +318,16 @@ export function clearSlotAndPromoteReserve(
   const currentReserve =
     (patch[reserveKey] as EquipmentItem[] | undefined) ?? (state[reserveKey] as EquipmentItem[]);
   if (currentReserve && currentReserve.length > 0) {
-    const promoted = currentReserve[currentReserve.length - 1];
+    let promoted = currentReserve[currentReserve.length - 1];
+    // 铁壁塔盾「完全格挡」一次性使用 — reserve → main promotion 算「重新装备」，
+    // strip `_fullBlockUsed` 让 promoted 盾的特效刷新。Mirror SET_EQUIPMENT_SLOT.
+    // Defensive：reserve item 通常不该有 _fullBlockUsed=true（reserve 不参战），
+    // 但任何"main → reserve → main"链路都覆盖到。
+    if ((promoted as GameCardData).knightEffect === 'fullBlock'
+        && (promoted as GameCardData & { _fullBlockUsed?: boolean })._fullBlockUsed) {
+      const { _fullBlockUsed: _drop, ...rest } = promoted as GameCardData & { _fullBlockUsed?: boolean };
+      promoted = rest as EquipmentItem;
+    }
     const rest = currentReserve.slice(0, -1);
     patch[slotId] = promoted as EquipmentItem;
     patch[reserveKey] = rest as EquipmentItem[];

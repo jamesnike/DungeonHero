@@ -2003,7 +2003,16 @@ export function createDeck(
       },
       {
         toCard: {
-          id: `${arcaneFissionId}-flip-magic-missile`,
+          // Id MUST strip back to STARTER_CARD_IDS.magicMissile via getStarterBaseId
+          // so that resolvePermanentMagic's starter switch routes to the
+          // 魔法飞弹 case (spawns the 3 「魔弹」 bolts). The card's `magicEffect`
+          // is a description string, not a registered effect id, so routing
+          // falls through to starter-id — the id must therefore be strippable.
+          // Old id `${arcaneFissionId}-flip-magic-missile` did NOT strip, so the
+          // flipped card was a silent no-op when played (and upgrades were
+          // also broken because the on-upgrade handler is keyed by starter id).
+          // See `.cursor/rules/event-grant-card-id-suffix.mdc`.
+          id: `${STARTER_CARD_IDS.magicMissile}-evt-1`,
           type: 'magic',
           name: '魔法飞弹',
           value: 0,

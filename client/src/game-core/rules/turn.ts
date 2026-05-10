@@ -210,16 +210,25 @@ function reduceEndTurn(
 /**
  * 40s 倒计时归零时的强制收尾。
  *
- * 1. 清空所有引擎侧 modal / pending interaction 字段（不调 setter，直接 patch
+ * 1. 救援「卡在 modal 里的卡」(magic / potion)：interactive 卡（如 净册涌泉、
+ *    淬炼药剂）打出后唯一的引用就在 `pendingMagicAction.card` /
+ *    `pendingPotionAction.card`，已经从 `handCards` 移除。如果直接清空字段，
+ *    卡会凭空消失（不进坟场、不进回收袋）—— 这违反 disposition router 不变量。
+ *    解法：先 enqueue `FINALIZE_MAGIC_CARD` / `FINALIZE_POTION_CARD`，让卡走
+ *    正常的「按 Perm 分流到坟场 / 回收袋」路径（效果不应用，只路由——这就是
+ *    超时的惩罚）。
+ * 2. 清空所有引擎侧 modal / pending interaction 字段（不调 setter，直接 patch
  *    一次性归零，避免 N 条单独 dispatch 在管线里被 INPUT_PHASES gating 卡住）。
- * 2. 把 phase 推回 `playerInput`，保证后续 enqueue 的 `END_TURN` 能在
+ *    `pendingMagicAction` / `pendingPotionAction` 也被 FINALIZE reducer 清，这里
+ *    保留它们在 patch 里是 idempotent 防御（无 card 在限的情况也清干净）。
+ * 3. 把 phase 推回 `playerInput`，保证后续 enqueue 的 `END_TURN` 能在
  *    pipeline drain 中走到。
- * 3. Enqueue 一条 `END_TURN` —— 由后续的 `reduceEndTurn` 完成正常的
+ * 4. Enqueue 一条 `END_TURN` —— 由后续的 `reduceEndTurn` 完成正常的
  *    hero-turn 收尾（清 `playerTurnStartedAt`、推 monsterTurn 等）。
  *
  * 组件本地 useState 形式的 modal（`backpackViewerOpen` /
- * `heroSkillTargeting` / `magicTargeting` / `pendingPotionAction` 等）由
- * `useAutoEndHeroTurn` 在 dispatch 之前 close。
+ * `heroSkillTargeting` / `magicTargeting` 等）由 `useAutoEndHeroTurn` 在
+ * dispatch 之前 close。
  */
 function reduceForceEndHeroTurn(
   state: GameState,
@@ -268,8 +277,8 @@ function reduceForceEndHeroTurn(
     monsterRewardMinimized: false,
     // --- Phase ---
     // INPUT_PHASES gating: pipeline 只在 playerInput 等 INPUT 相位下 drain
-    // 'isInputContinuation' 列表里的 action（END_TURN 在白名单里）。强制把
-    // phase 推回 playerInput 让 enqueue 的 END_TURN 立刻被处理。
+    // 'isInputContinuation' 列表里的 action（END_TURN / FINALIZE_xxx 在白名单里）。
+    // 强制把 phase 推回 playerInput 让 enqueue 的 action 立刻被处理。
     phase: 'playerInput',
     // 防御性清空：END_TURN reducer 也会清，但这里直接清能让 FORCE_END
     // 单独 reduce 时也保证字段归零，不依赖后续 END_TURN drain。
@@ -287,9 +296,38 @@ function reduceForceEndHeroTurn(
     },
   ];
 
-  return applyPatch(state, patch, sideEffects, [
-    { type: 'END_TURN', heroTurnLayerLossIds: action.heroTurnLayerLossIds },
-  ]);
+  // 救援卡在 pending modal 里的 magic / potion 卡：把它们路由到正常的 dispostion
+  // (graveyard / recycle bag)。enqueue 顺序：先 FINALIZE 卡 → 再 END_TURN，
+  // 这样卡的 disposition 在回合结束之前完成。
+  const enqueuedActions: GameAction[] = [];
+  const limboMagicCard = state.pendingMagicAction?.card;
+  if (limboMagicCard) {
+    enqueuedActions.push({
+      type: 'FINALIZE_MAGIC_CARD',
+      card: limboMagicCard,
+      dealtDamage: false,
+      banner: '时间到：未完成的法术中止，卡牌按正常规则归位。',
+    });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'turn', message: `时间到：未完成的「${limboMagicCard.name}」中止，卡牌归位。` },
+    });
+  }
+  const limboPotionCard = state.pendingPotionAction?.card;
+  if (limboPotionCard) {
+    enqueuedActions.push({
+      type: 'FINALIZE_POTION_CARD',
+      card: limboPotionCard,
+      banner: '时间到：未完成的药剂中止，卡牌按正常规则归位。',
+    });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'turn', message: `时间到：未完成的「${limboPotionCard.name}」中止，卡牌归位。` },
+    });
+  }
+  enqueuedActions.push({ type: 'END_TURN', heroTurnLayerLossIds: action.heroTurnLayerLossIds });
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions);
 }
 
 // ---------------------------------------------------------------------------

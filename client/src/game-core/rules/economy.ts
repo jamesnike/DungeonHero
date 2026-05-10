@@ -174,7 +174,19 @@ export function reduceEconomyActions(
       // matches the user's "刚装备 → armor 立马增加 (perm + temp)" semantic.
       // We only touch this when the new card explicitly stores a numeric armor;
       // leaving it undefined naturally defers to "at full cap" on next read.
-      const patch: Partial<GameState> = { [action.slotId]: action.card } as Partial<GameState>;
+      //
+      // 铁壁塔盾「完全格挡」一次性使用归零：whenever a fullBlock shield enters
+      // a slot, strip `_fullBlockUsed` so the new equip restores the one-time
+      // use. Mirrors the user-facing semantics 「每次装备上，刷新次数限制」。
+      // Critical for the recycle-bag round trip: shield breaks → recycle bag →
+      // backpack → re-equip → fresh special available.
+      let entering = action.card;
+      if (entering && (entering as GameCardData).knightEffect === 'fullBlock'
+          && (entering as GameCardData & { _fullBlockUsed?: boolean })._fullBlockUsed) {
+        const { _fullBlockUsed: _drop, ...rest } = entering as GameCardData & { _fullBlockUsed?: boolean };
+        entering = rest as typeof entering;
+      }
+      const patch: Partial<GameState> = { [action.slotId]: entering } as Partial<GameState>;
       refillSlotArmorToCap(state, action.slotId, patch);
       return applyPatch(state, patch);
     }

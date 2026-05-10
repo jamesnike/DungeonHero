@@ -41,7 +41,7 @@ import { createInitialGameState } from '../state';
 import { initialCombatState, createEmptyAmuletEffects } from '../constants';
 import { createRng } from '../rng';
 import { computeEquipmentBreakEffects } from '../rules/equipment-effects';
-import { createDeck } from '../deck';
+import { createDeck, getStarterBaseId, STARTER_CARD_IDS } from '../deck';
 import type { GameState } from '../types';
 import type { GameCardData } from '@/components/GameCard';
 import type { ActiveRowSlots, EquipmentItem } from '@/components/game-board/types';
@@ -128,6 +128,139 @@ describe('「奥能裂变」event — authoring sanity', () => {
     for (const cand of fission!.flipTargetCandidates!) {
       expect((cand.toCard as any).classCard).toBe(true);
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression: 魔法飞弹 flip target must have a strippable id.
+  //
+  // 真实 bug：奥能裂变 翻转出的 「魔法飞弹」 卡 id 形如
+  //   `event-{N}-flip-magic-missile`
+  // 这个 id 不匹配 getStarterBaseId 的任何 strip 后缀 (`-pick-N` / `-evt-N`
+  // / `-disc-N`)，所以剥不回 STARTER_CARD_IDS.magicMissile，
+  // resolvePermanentMagic 的 starter switch 全部 fall-through，卡变 no-op。
+  // 玩家拖到激活行 / 打出后什么都不发生（也不弹 picker、不加魔弹）。
+  // 修复：id 改为 `${STARTER_CARD_IDS.magicMissile}-evt-1` —— 能 strip。
+  // 参考: .cursor/rules/event-grant-card-id-suffix.mdc
+  // -------------------------------------------------------------------------
+  it('魔法飞弹 flip card id strips back to STARTER_CARD_IDS.magicMissile', () => {
+    const missileCand = fission!.flipTargetCandidates!
+      .find(c => c.toCard.name === '魔法飞弹')!;
+    expect(getStarterBaseId(missileCand.toCard.id)).toBe(STARTER_CARD_IDS.magicMissile);
+  });
+
+  it('布雷术 flip card uses knightEffect routing (no starter-id dependency)', () => {
+    // Sanity: 布雷术 is routed via `knightEffect: 'lay-mine'` (higher priority
+    // than starter-id), so its id doesn't need to be strippable. This test
+    // just locks in that contract so future refactors don't quietly break
+    // the routing model.
+    const layMineCand = fission!.flipTargetCandidates!
+      .find(c => c.toCard.name === '布雷术')!;
+    expect((layMineCand.toCard as any).knightEffect).toBe('lay-mine');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: PLAY_CARD on the flipped 魔法飞弹 must spawn 3 「魔弹」 (Lv1).
+//
+// strip-only assertion above is necessary but not sufficient — also verify the
+// end-to-end resolver actually fires (per the regression-test contract in
+// `.cursor/rules/event-grant-card-id-suffix.mdc`).
+// ---------------------------------------------------------------------------
+
+describe('「奥能裂变」flipped 魔法飞弹 — playable end-to-end', () => {
+  it('PLAY_CARD on flipped 魔法飞弹 (Lv1) adds 3 「魔弹」 to hand', () => {
+    const [deck] = createDeck('normal', createRng(42));
+    const fission = deck.find(c => c.name === '奥能裂变')!;
+    const missileCand = fission.flipTargetCandidates!
+      .find(c => c.toCard.name === '魔法飞弹')!;
+    const flippedCard = missileCand.toCard as GameCardData;
+
+    // Place the flipped magic-missile in hand with no existing 「魔弹」 cards.
+    const state = makeState({
+      handCards: [flippedCard] as any,
+      backpackItems: [],
+      permanentMagicRecycleBag: [],
+    });
+
+    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: flippedCard.id }] as any);
+
+    // Lv1 produces 3 bolts (boltCounts = [2, 3, 4] indexed by upgradeLevel,
+    // and the flip target is authored at upgradeLevel: 1).
+    const allCards = [
+      ...drained.state.handCards,
+      ...drained.state.backpackItems,
+      ...drained.state.permanentMagicRecycleBag,
+    ];
+    const bolts = allCards.filter(c => c.name === '魔弹');
+    expect(bolts.length).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: UPGRADE_CARD on the flipped 魔法飞弹 must refresh display text.
+//
+// 跟「能不能打出来」是同一个 id-strip bug 的兄弟症状：
+//   - OnUpgradeHandler 通过 `starter:${getStarterBaseId(card.id)}` 查表 →
+//     id 剥不出 starter id → 找不到 handler → magicMissile 的 handler
+//     恰好是 noop，所以数值字段不变；但是
+//   - description / shortDescription / magicEffect 由 `magicMissileCardText`
+//     formatter 重算（cardUpgrade.ts 的 `applyUpgrade` 升级后调
+//     `computeCardText`），formatter 同样按 starter id 查 → 也找不到 →
+//     UI 文本永远停在 Lv1 的「3 张魔弹」。
+//   - resolver 自己直接读 `card.upgradeLevel` 算 boltCounts，所以
+//     Lv2 实际产出 4 张魔弹，**UI 跟实际行为脱节**。
+//
+// 修了 id（前面那条规则）后，formatter 路由也一并恢复 —— 这条断言锁住
+// 这个性质，防止未来有人把 id 又改回不可 strip 的形式。
+// ---------------------------------------------------------------------------
+
+describe('「奥能裂变」flipped 魔法飞弹 — upgrade refreshes display text', () => {
+  function getFlippedMissile(): GameCardData {
+    const [deck] = createDeck('normal', createRng(42));
+    const fission = deck.find(c => c.name === '奥能裂变')!;
+    const missileCand = fission.flipTargetCandidates!
+      .find(c => c.toCard.name === '魔法飞弹')!;
+    return missileCand.toCard as GameCardData;
+  }
+
+  it('Lv1 (after flip) description / shortDescription / magicEffect mention 3 张「魔弹」', () => {
+    const card = getFlippedMissile();
+    expect(card.upgradeLevel).toBe(1);
+    expect(card.description).toContain('3 张');
+    expect(card.shortDescription).toContain('3 张');
+    expect(card.magicEffect).toContain('3 张');
+  });
+
+  it('UPGRADE_CARD Lv1 → Lv2 refreshes description to 4 张「魔弹」 (formatter routes via strippable id)', () => {
+    const card = getFlippedMissile();
+    const state = makeState({ handCards: [card] as any });
+    const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
+    const upgraded = result.state.handCards[0] as any;
+
+    expect(upgraded.upgradeLevel).toBe(2);
+    // boltCounts[2] = 4 — formatter must rewrite text or this fails.
+    expect(upgraded.description).toContain('4 张');
+    expect(upgraded.description).not.toContain('3 张');
+    expect(upgraded.shortDescription).toContain('4 张');
+    expect(upgraded.magicEffect).toContain('4 张');
+  });
+
+  it('PLAY_CARD on upgraded Lv2 魔法飞弹 produces 4 「魔弹」 (UI text matches actual behavior)', () => {
+    const card = getFlippedMissile();
+    const upgraded: GameCardData = { ...card, upgradeLevel: 2 } as any;
+    const state = makeState({
+      handCards: [upgraded] as any,
+      backpackItems: [],
+      permanentMagicRecycleBag: [],
+    });
+    const drained = drain(state, [{ type: 'PLAY_CARD', cardId: upgraded.id }] as any);
+    const allCards = [
+      ...drained.state.handCards,
+      ...drained.state.backpackItems,
+      ...drained.state.permanentMagicRecycleBag,
+    ];
+    const bolts = allCards.filter(c => c.name === '魔弹');
+    expect(bolts.length).toBe(4);
   });
 });
 

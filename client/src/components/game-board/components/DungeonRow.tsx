@@ -12,6 +12,8 @@ import { Calendar, ShieldOff } from 'lucide-react';
 import type { ActiveRowSlots, CombatState, PendingMagicAction, EquipmentSlotId } from '../types';
 import { DUNGEON_COLUMNS, MONSTER_RAGE_BASE_TRANSLATE_PX, MONSTER_RAGE_TRANSLATE_ADJUST_PX } from '../constants';
 import { getColumnsWithCurseMonumentAura } from '@/game-core/buildingAura';
+import { CardStampBubble } from '@/components/CardStampBubble';
+import { useCardStampsContext } from '../contexts/CardStampsContext';
 
 export interface DungeonRowProps {
   activeCards: ActiveRowSlots;
@@ -106,6 +108,9 @@ function DungeonRowInner({
     () => getColumnsWithCurseMonumentAura(activeCards, activeCardStacks),
     [activeCards, activeCardStacks],
   );
+
+  // Card-stamp social feature (purely UI overlay, no game state).
+  const cardStamps = useCardStampsContext();
 
   return (
     <>
@@ -294,7 +299,18 @@ function DungeonRowInner({
                     if (isMonsterTurnLock || isResolvingCard) return;
                     onCardClick(card);
                   }}
+                  onContextMenu={(e) => {
+                    cardStamps.openPicker(card, 'active', e.currentTarget);
+                  }}
+                  onLongPress={({ target }) => {
+                    cardStamps.openPicker(card, 'active', target);
+                  }}
                 />
+                {(() => {
+                  const stampEntry = cardStamps.getStampsForCard(card, 'active');
+                  if (!stampEntry) return null;
+                  return <CardStampBubble entry={stampEntry} />;
+                })()}
               </div>
               {hasStack && (
                 <div className="absolute top-[-8px] right-[-8px] z-40 bg-amber-500 text-white rounded-full w-6 h-6 flex items-center justify-center border-2 border-background shadow-md font-bold text-xs">

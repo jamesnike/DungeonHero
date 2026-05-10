@@ -34,14 +34,14 @@ import {
   markSkillUsedPure,
 } from '../hero';
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
-import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, clearSlotAndPromoteReserve, accumulateMineDamageBoost } from './equipment-effects';
+import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, clearSlotAndPromoteReserve, accumulateMineDamageBoost, processMineCollisions, clearTriggeredMineSlots } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
 import { computeAmuletEffectsForState, getEquipmentInSlot, getSlotBonus, applySlotArmorBonusDelta, refillSlotArmorToCap, checkPersuadeOnTempAttack as checkPersuadeOnTempAttackShared } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { applyFlipCounters } from './flip-counters';
 import { nextInt, pickRandom } from '../rng';
-import { damageMonsterWithLayerOverflow, computeEffectiveSpellDamageOnMonster } from '../combat';
+import { damageMonsterWithLayerOverflow, computeEffectiveSpellDamageOnMonster, detectMineCollisionsAfterShuffle } from '../combat';
 import { isMonsterMagicImmuneByBuilding, getEquipmentSlotsWithSuppressedTempAttack } from '../buildingAura';
 import { applyMonsterRage } from '@/lib/monsterRage';
 
@@ -2866,7 +2866,6 @@ function reduceDungeonCardSelection(
 
       const newActive = [...activeCards] as typeof activeCards;
       newActive[activeSlotIdx] = previewCard;
-      patch.activeCards = newActive as any;
       const newPreview = [...previewCards] as typeof previewCards;
       // Strip _fateBladeLastSlot so release-charge buildings (命运之刃 / 增幅祭坛)
       // count this as a position change: when the card later returns to the
@@ -2874,6 +2873,17 @@ function reduceDungeonCardSelection(
       // hasReleaseCharge so it's immediately usable again.
       const { _fateBladeLastSlot: _stripped, ...cardWithoutSlotMemo } = card;
       newPreview[activeSlotIdx] = cardWithoutSlotMemo as GameCardData;
+      // 地雷碰撞：如果原 active[i] 是地雷、preview[i] 是 monster，swap 后
+      // monster 落在 active 地雷格上 → 触发地雷。被触发的地雷会被
+      // ADD_TO_GRAVEYARD 路由到坟场，所以它不能保留在 preview row 里 ——
+      // 把对应 preview slot 也清掉。
+      const previewCollisions = detectMineCollisionsAfterShuffle(activeCards, newActive);
+      processMineCollisions(previewCollisions, state, sideEffects, enqueuedActions);
+      for (const col of previewCollisions) {
+        const previewIdx = newPreview.findIndex(c => c?.id === col.mine.id);
+        if (previewIdx !== -1) newPreview[previewIdx] = null;
+      }
+      patch.activeCards = newActive as any;
       patch.previewCards = newPreview as any;
       let drawMsg = '';
       if ((pending.card.upgradeLevel ?? 0) >= 2) {
@@ -2936,7 +2946,6 @@ function reduceDungeonCardSelection(
       sideEffects.push({ event: 'hero:fateSwapFlight', payload: { activeSlotIdx, oldCard: card, newCard: ragedDeckCard } });
       const newDeck = [...deck];
       newDeck[swapIdx] = sanitizeCardMetadata(card);
-      patch.remainingDeck = newDeck as any;
       let persuadeMsg = '';
       if (ragedDeckCard.type === 'monster') {
         // 卡面字面：「换出来的牌是怪物，则 下次劝降概率 +30%」。
@@ -2949,7 +2958,17 @@ function reduceDungeonCardSelection(
       }
       const newActive = [...activeCards] as typeof activeCards;
       newActive[activeSlotIdx] = ragedDeckCard;
+      // 地雷碰撞：如果 active[activeSlotIdx] 原本是地雷、deck 抽到 monster，
+      // swap 后 monster 落在地雷格 → 触发地雷。被触发的地雷不能跟着进牌堆 ——
+      // 从 newDeck 里把它清掉，让它走 ADD_TO_GRAVEYARD 进坟场即可。
+      const fateCollisions = detectMineCollisionsAfterShuffle(activeCards, newActive);
+      processMineCollisions(fateCollisions, state, sideEffects, enqueuedActions);
+      for (const col of fateCollisions) {
+        const deckIdx = newDeck.findIndex(c => c?.id === col.mine.id);
+        if (deckIdx !== -1) newDeck.splice(deckIdx, 1);
+      }
       patch.activeCards = newActive as any;
+      patch.remainingDeck = newDeck as any;
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：${card.name} 与牌堆第 ${swapIdx + 1} 张 ${deckCard.name} 交换${persuadeMsg}` } });
       const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
       const echoRemainingFS = ((pending as any).echoRemaining ?? 1) - 1;
@@ -2996,7 +3015,9 @@ function reduceDungeonCardSelection(
       const tmp = newActive[swapLeftIdx];
       newActive[swapLeftIdx] = newActive[selIdx];
       newActive[selIdx] = tmp;
-      patch.activeCards = newActive as any;
+      const swapCollisions = detectMineCollisionsAfterShuffle(activeCards, newActive);
+      processMineCollisions(swapCollisions, state, sideEffects, enqueuedActions);
+      patch.activeCards = clearTriggeredMineSlots(newActive, swapCollisions) as any;
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `乾坤挪移：${card.name} 与 ${leftC.name} 互换位置。` } });
       const swapTrigger = checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
       const banner = `${card.name} ↔ ${leftC.name} 位置互换！`;
