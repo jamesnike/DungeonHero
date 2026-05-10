@@ -42,6 +42,7 @@ import thunderAmuletSigilImage from '@assets/generated_images/card_dedupe_amulet
 import knightDeleteDrawAmuletImage from '@assets/generated_images/knight_delete_draw_amulet.png';
 import thunderGoldAmuletImage from '@assets/generated_images/knight_thunder_gold_amulet.png';
 import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
+import knightSpellRuneInscriptionAmuletImage from '@assets/generated_images/knight_spell_rune_inscription_amulet.png';
 import knightAmuletStunRecycleImage from '@assets/generated_images/knight_amulet_stun_recycle.png';
 import potionArcaneInfusionImage from '@assets/generated_images/cute_potion_arcane_infusion.png';
 import potionBackpackExpandImage from '@assets/generated_images/cute_potion_backpack_expand.png';
@@ -828,7 +829,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     type: 'amulet',
     name: '咒纹刻印',
     value: 1,
-    image: starterAmuletDamageDiscoverImage,
+    image: knightSpellRuneInscriptionAmuletImage,
     classCard: true,
     description: '每使用 6 张瞬发魔法（Instant magic），发现一张专属牌。',
     shortDescription: '每使用 6 张瞬发魔法，发现 1 张专属',
