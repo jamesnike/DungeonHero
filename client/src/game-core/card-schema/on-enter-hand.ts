@@ -29,6 +29,13 @@ export type OnEnterHandHandler = (
 
 const registry = new Map<string, OnEnterHandHandler>();
 
+/**
+ * Prefix registry for parameterized on-enter-hand effect ids (e.g. `add-bolt-bp:N`).
+ * Keys are the literal prefix INCLUDING trailing colon (e.g. `'add-bolt-bp:'`).
+ * Looked up after exact-match fails. Mirrors `on-equip.ts:prefixRegistry`.
+ */
+const prefixRegistry = new Map<string, OnEnterHandHandler>();
+
 export function registerOnEnterHand(id: string, handler: OnEnterHandHandler): void {
   registry.set(id, handler);
 }
@@ -40,7 +47,16 @@ export function registerOnEnterHandAll(entries: Array<{ id: string; handler: OnE
 }
 
 /**
+ * Register a handler keyed by id prefix (e.g. `'add-bolt-bp:'`). The effect id
+ * `'add-bolt-bp:N'` will dispatch here when no exact-match handler exists.
+ */
+export function registerOnEnterHandPrefix(prefix: string, handler: OnEnterHandHandler): void {
+  prefixRegistry.set(prefix, handler);
+}
+
+/**
  * Look up and execute an on-enter-hand effect. Returns true if a handler was found.
+ * Resolution order: exact match → prefix match.
  */
 export function executeOnEnterHand(
   state: GameState,
@@ -52,7 +68,14 @@ export function executeOnEnterHand(
   const effectId = card.onEnterHandEffect;
   if (!effectId) return false;
 
-  const handler = registry.get(effectId);
+  let handler = registry.get(effectId);
+  if (!handler) {
+    prefixRegistry.forEach((prefixHandler, prefix) => {
+      if (!handler && effectId.startsWith(prefix)) {
+        handler = prefixHandler;
+      }
+    });
+  }
   if (!handler) {
     console.warn('[on-enter-hand] no handler registered for', effectId, 'on card', card.id);
     return false;
@@ -105,7 +128,16 @@ export function getOnEnterHandShortLabel(card: GameCardData): string | null {
       return '上手：同名 +2 攻击';
     case 'stun-cap-bonus-2':
       return '上手：+2% 击晕上限';
+    case 'on-hand-heal-1':
+      return '上手：+1 生命';
+    case 'event-grant-onhand-temp-armor-1':
+      return '上手：随机一栏 +1 临护甲';
     default:
+      // 「奥能裂变」outcome 3 — `add-bolt-bp:N` parameterized prefix label.
+      if (effectId.startsWith('add-bolt-bp:')) {
+        const n = parseInt(effectId.replace('add-bolt-bp:', ''), 10) || 1;
+        return `上手：背包 +${n} 「魔弹」`;
+      }
       return null;
   }
 }

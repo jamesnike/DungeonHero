@@ -136,7 +136,7 @@ export interface EventSystemDeps {
   startShopFlow: (card: GameCardData | null) => boolean;
   beginDiscoverFlow: (
     effect: string,
-    options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string },
+    options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string; delivery?: 'backpack' | 'hand-first'; postInjectTopOnRecycleRestore?: boolean },
   ) => boolean;
   handleDiscoverFallback: () => void;
   handleCardUpgrade: (cardId: string) => void;
@@ -1240,7 +1240,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
     } else if (token.startsWith('grantFlankDraw:') || token.startsWith('grantFlankGold:') ||
                token.startsWith('grantFlankPersuadeCost:') || token.startsWith('grantFlankStunCap:') ||
                token.startsWith('grantFlankDamage:') || token.startsWith('grantTransformDraw:') ||
-               token.startsWith('grantFlankHeal:')) {
+               token.startsWith('grantFlankHeal:') ||
+               // 「奥能裂变」outcomes 2/5/6/7：复用同样的 PermGrantModal 路由分支。
+               token.startsWith('grantFlankGainBolt:') || token.startsWith('grantFlankSpawnMine:') ||
+               token.startsWith('grantTransformBoostMineDmg:') || token.startsWith('grantTransformAmplifyBolt:')) {
       // These tokens open perm grant modals. The exact modal type is determined by the token prefix.
       const eligible = s.handCards.filter(c => {
         if (token.startsWith('grantFlank')) return !c.flankEffect;
@@ -1261,6 +1264,10 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         else if (token.startsWith('grantFlankStunCap:')) { sourceType = 'flank-stun-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 5 }; }
         else if (token.startsWith('grantFlankDamage:')) { sourceType = 'flank-damage-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 5 }; }
         else if (token.startsWith('grantTransformDraw:')) { sourceType = 'transform-draw-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 2 }; }
+        else if (token.startsWith('grantFlankGainBolt:')) { sourceType = 'flank-gain-bolt-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 1 }; }
+        else if (token.startsWith('grantFlankSpawnMine:')) { sourceType = 'flank-spawn-mine-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 1 }; }
+        else if (token.startsWith('grantTransformBoostMineDmg:')) { sourceType = 'transform-mine-damage-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 2 }; }
+        else if (token.startsWith('grantTransformAmplifyBolt:')) { sourceType = 'transform-amplify-bolt-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 2 }; }
         else { sourceType = 'flank-heal-grant'; meta = { amount: parseInt(token.split(':')[1], 10) || 2 }; }
         dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType, ...(meta ? { meta } : {}) } });
       }
@@ -1287,6 +1294,116 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
         depsRef.current.eventChoiceProcessingRef.current = false;
       } else {
         dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType: 'on-hand-heal-grant' } });
+      }
+
+    // --- 「奥能裂变」outcome 3: grant 'on-hand: 背包 +1 张「魔弹」' to a chosen hand card ---
+    } else if (token.startsWith('grantHandOnHandAddBoltBackpack:')) {
+      const eligible = s.handCards.filter(c => !c.onEnterHandEffect);
+      if (eligible.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '手牌中没有可铭刻的卡牌（已带「上手」效果的卡不可选）。' });
+        addGameLog('event', '奥能裂变：没有可铭刻的手牌。');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        const amount = parseInt(token.split(':')[1], 10) || 1;
+        dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType: 'on-hand-add-bolt-bp-grant', meta: { amount } } });
+      }
+
+    // --- 「右翼回响」option 1: grant 'topOnRecycleRestore' to a chosen hand card ---
+    } else if (token === 'grantHandTopOnRecycleRestore') {
+      const eligible = s.handCards.filter(c => !c.topOnRecycleRestore);
+      if (eligible.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '手牌中没有可铭刻「置顶」的卡牌。' });
+        addGameLog('event', '右翼回响：没有可铭刻置顶的手牌。');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType: 'on-hand-top-grant' } });
+      }
+
+    // --- 「右翼回响」option 4: grant 'on-hand: random slot temp armor +1' to a chosen hand card ---
+    } else if (token === 'grantHandOnHandTempArmor:1' || token === 'grantHandOnHandTempArmor') {
+      const eligible = s.handCards.filter(c => !c.onEnterHandEffect);
+      if (eligible.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '手牌中没有可铭刻的卡牌（已带「上手」效果的卡不可选）。' });
+        addGameLog('event', '右翼回响：没有可铭刻上手效果的手牌。');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        dispatch({ type: 'SET_PERM_GRANT_MODAL', payload: { sourceCardId: 'event-grant', sourceType: 'on-hand-temp-armor-grant' } });
+      }
+
+    // --- 「右翼回响」option 2: discover a class card, inject `topOnRecycleRestore: true`, then to hand ---
+    } else if (token === 'grantDiscoverClassTopToHand') {
+      // Reuse the existing class-discover→hand flow (same path as the starter
+      // 「专属感召」/ STARTER discoverClassToHand). The chosen card is cloned
+      // with `topOnRecycleRestore: true` injected by the reducer before it
+      // lands in hand (see `reduceResolveDiscoverSelection` in
+      // `rules/shop.ts`, which reads `state.discoverPostInjectTopOnRecycleRestore`).
+      //
+      // The discover flow is async (modal → user picks → reducer adds card to
+      // hand → CONTINUE_EVENT_EFFECTS / COMPLETE_EVENT in handleDiscoverSelect).
+      // We just kick it off here and let the existing event-resolution
+      // pipeline take over.
+      const started = depsRef.current.beginDiscoverFlow('event-grant-discover-class-topped-to-hand', {
+        sourceLabel: '右翼回响 · 召感置顶',
+        delivery: 'hand-first',
+        postInjectTopOnRecycleRestore: true,
+      });
+      if (!started) {
+        // Empty class deck (extremely rare; defensive) — fall through to
+        // the next event token so the event doesn't deadlock.
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '右翼回响：当前没有可发现的专属牌。' });
+        addGameLog('event', '右翼回响：当前没有可发现的专属牌');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      }
+
+    // --- 「右翼回响」option 6: grant 'persuade-bonus-20' on-equip to a chosen main-slot equipment ---
+    } else if (token === 'grantEquipOnEquipPersuadeBonus20') {
+      type SlotOption = { id: string; label: string; description: string; slotId: 'equipmentSlot1' | 'equipmentSlot2' };
+      const options: SlotOption[] = [];
+      const fmtSlot = (slotId: 'equipmentSlot1' | 'equipmentSlot2', label: string, eq: GameCardData) => {
+        const typeLabel = eq.type === 'weapon' ? `${eq.value ?? 0}攻` : eq.type === 'shield' ? `${eq.value ?? 0}防` : `${eq.value ?? 0}`;
+        const durLabel = typeof eq.durability === 'number' && typeof eq.maxDurability === 'number'
+          ? `，耐久 ${eq.durability}/${eq.maxDurability}`
+          : '';
+        const buffLabel = eq.onEquipEffect ? '（已带入场效果·不可选）' : '';
+        return {
+          id: `slot:${slotId}`,
+          label: `${label} — ${eq.name}${buffLabel}`,
+          description: `${typeLabel}${durLabel}`,
+          slotId,
+        };
+      };
+      // Only main slots (no reserves), and only those WITHOUT an existing onEquipEffect.
+      // Eligibility filter mirrors `equippedForOnEquipGrant` requirement.
+      if (s.equipmentSlot1 && !s.equipmentSlot1.onEquipEffect) options.push(fmtSlot('equipmentSlot1', '左装备栏', s.equipmentSlot1));
+      if (s.equipmentSlot2 && !s.equipmentSlot2.onEquipEffect) options.push(fmtSlot('equipmentSlot2', '右装备栏', s.equipmentSlot2));
+      if (options.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '右翼回响：没有可铭刻入场效果的装备。' });
+        addGameLog('event', '右翼回响：没有可铭刻入场效果的装备');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        const applyChoice = (slotId: 'equipmentSlot1' | 'equipmentSlot2') => {
+          dispatch({ type: 'RESOLVE_EVENT_GRANT_EQUIP_PERSUADE_BONUS', equipmentSlotId: slotId });
+          dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+          depsRef.current.eventChoiceProcessingRef.current = false;
+        };
+        if (options.length === 1) {
+          applyChoice(options[0].slotId);
+        } else {
+          requestMagicChoice({
+            title: '右翼回响 · 入场铭刻',
+            subtitle: '选择一件装备，永久赋予「入场：下次劝降成功率 +20%」（每次入场触发）',
+            options: options.map(o => ({ id: o.id, label: o.label, description: o.description })),
+            flowContext: { flowId: 'right-wing-echo-equip-persuade-bonus-grant' },
+          }).then(choiceId => {
+            const chosen = options.find(o => o.id === choiceId) ?? options[0];
+            applyChoice(chosen.slotId);
+          });
+        }
       }
 
     // --- 翻转之契 option 6: grant '_flipRepairBuff' to a chosen equipment (incl. reserves) ---
@@ -1390,6 +1507,105 @@ export function useEventSystem(depsRef: React.MutableRefObject<EventSystemDeps>)
             subtitle: '选择一件装备，永久赋予「遗言：生命值上限 +4」（可叠加）',
             options: options.map(o => ({ id: o.id, label: o.label, description: o.description })),
             flowContext: { flowId: 'lastwords-maxhp-grant' },
+          }).then(choiceId => {
+            const chosen = options.find(o => o.id === choiceId) ?? options[0];
+            applyChoice(chosen.slotId);
+          });
+        }
+      }
+
+    // --- 「奥能裂变」outcome 1: grant 'lastWords: 手牌 +N 张「魔弹」' to a chosen main-slot equipment ---
+    // 行为类似 grantLastWordsMaxHp，但累加 lastWordsGainBolt 字段而不是 lastWordsMaxHpBoost。
+    // 与其它 onDestroyEffect / lastWordsSlotTempBuff / lastWordsMaxHpBoost 并存（不互斥）。
+    } else if (token.startsWith('grantLastWordsGainBolt:')) {
+      const amount = parseInt(token.split(':')[1], 10) || 2;
+      type SlotOption = { id: string; label: string; description: string; slotId: 'equipmentSlot1' | 'equipmentSlot2' };
+      const options: SlotOption[] = [];
+      const fmtSlot = (slotId: 'equipmentSlot1' | 'equipmentSlot2', label: string, eq: GameCardData) => {
+        const typeLabel = eq.type === 'weapon' ? `${eq.value ?? 0}攻` : eq.type === 'shield' ? `${eq.value ?? 0}防` : `${eq.value ?? 0}`;
+        const durLabel = typeof eq.durability === 'number' && typeof eq.maxDurability === 'number'
+          ? `，耐久 ${eq.durability}/${eq.maxDurability}`
+          : '';
+        const stacks = eq.lastWordsGainBolt ?? 0;
+        const stackLabel = stacks > 0 ? `（已铭刻 ×${stacks}）` : '';
+        return {
+          id: `slot:${slotId}`,
+          label: `${label} — ${eq.name}${stackLabel}`,
+          description: `${typeLabel}${durLabel}`,
+          slotId,
+        };
+      };
+      if (s.equipmentSlot1) options.push(fmtSlot('equipmentSlot1', '左装备栏', s.equipmentSlot1));
+      if (s.equipmentSlot2) options.push(fmtSlot('equipmentSlot2', '右装备栏', s.equipmentSlot2));
+      if (options.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '奥能裂变：没有可铭刻的装备。' });
+        addGameLog('event', '奥能裂变：没有可铭刻的装备');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        const applyChoice = (slotId: 'equipmentSlot1' | 'equipmentSlot2') => {
+          dispatch({ type: 'RESOLVE_EVENT_GRANT_LASTWORDS_GAIN_BOLT', equipmentSlotId: slotId, amount });
+          dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+          depsRef.current.eventChoiceProcessingRef.current = false;
+        };
+        if (options.length === 1) {
+          applyChoice(options[0].slotId);
+        } else {
+          requestMagicChoice({
+            title: '遗言铭刻',
+            subtitle: `选择一件装备，永久赋予「遗言：销毁时手牌 +${amount} 张「魔弹」」（可叠加）`,
+            options: options.map(o => ({ id: o.id, label: o.label, description: o.description })),
+            flowContext: { flowId: 'lastwords-gain-bolt-grant' },
+          }).then(choiceId => {
+            const chosen = options.find(o => o.id === choiceId) ?? options[0];
+            applyChoice(chosen.slotId);
+          });
+        }
+      }
+
+    // --- 「奥能裂变」outcome 4: grant 'on-equip: 激活行随机空位生成「地雷」' to a chosen main-slot equipment ---
+    // 行为类似 grantEquipOnEquipPersuadeBonus20：选择一件没有 onEquipEffect 的主槽
+    // 装备，把 onEquipEffect 设为 'spawn-mine:N'。装备入场（PLAY_CARD / 拖到槽位）
+    // 时由 equipment.ts on-equip 注册表触发。
+    } else if (token.startsWith('grantOnEquipSpawnMine:')) {
+      const amount = parseInt(token.split(':')[1], 10) || 1;
+      type SlotOption = { id: string; label: string; description: string; slotId: 'equipmentSlot1' | 'equipmentSlot2' };
+      const options: SlotOption[] = [];
+      const fmtSlot = (slotId: 'equipmentSlot1' | 'equipmentSlot2', label: string, eq: GameCardData) => {
+        const typeLabel = eq.type === 'weapon' ? `${eq.value ?? 0}攻` : eq.type === 'shield' ? `${eq.value ?? 0}防` : `${eq.value ?? 0}`;
+        const durLabel = typeof eq.durability === 'number' && typeof eq.maxDurability === 'number'
+          ? `，耐久 ${eq.durability}/${eq.maxDurability}`
+          : '';
+        const buffLabel = eq.onEquipEffect ? '（已带入场效果·不可选）' : '';
+        return {
+          id: `slot:${slotId}`,
+          label: `${label} — ${eq.name}${buffLabel}`,
+          description: `${typeLabel}${durLabel}`,
+          slotId,
+        };
+      };
+      // Only main slots (no reserves), and only those WITHOUT an existing onEquipEffect.
+      if (s.equipmentSlot1 && !s.equipmentSlot1.onEquipEffect) options.push(fmtSlot('equipmentSlot1', '左装备栏', s.equipmentSlot1));
+      if (s.equipmentSlot2 && !s.equipmentSlot2.onEquipEffect) options.push(fmtSlot('equipmentSlot2', '右装备栏', s.equipmentSlot2));
+      if (options.length === 0) {
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '奥能裂变：没有可铭刻入场效果的装备。' });
+        addGameLog('event', '奥能裂变：没有可铭刻入场效果的装备');
+        dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+        depsRef.current.eventChoiceProcessingRef.current = false;
+      } else {
+        const applyChoice = (slotId: 'equipmentSlot1' | 'equipmentSlot2') => {
+          dispatch({ type: 'RESOLVE_EVENT_GRANT_ONEQUIP_SPAWN_MINE', equipmentSlotId: slotId, amount });
+          dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+          depsRef.current.eventChoiceProcessingRef.current = false;
+        };
+        if (options.length === 1) {
+          applyChoice(options[0].slotId);
+        } else {
+          requestMagicChoice({
+            title: '入场铭刻',
+            subtitle: `选择一件装备，永久赋予「入场：激活行随机空位生成 ${amount} 个「地雷」」`,
+            options: options.map(o => ({ id: o.id, label: o.label, description: o.description })),
+            flowContext: { flowId: 'on-equip-spawn-mine-grant' },
           }).then(choiceId => {
             const chosen = options.find(o => o.id === choiceId) ?? options[0];
             applyChoice(chosen.slotId);

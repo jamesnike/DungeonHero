@@ -17,7 +17,7 @@ import {
   isEventCardType,
   isMagicSpellCardType,
 } from './MagicNameFlankIcons';
-import { initMobileDrop, type DragData } from '../utils/mobileDragDrop';
+import { initMobileDrop, readHtml5DragData, type DragData } from '../utils/mobileDragDrop';
 import StackedCardPile from './StackedCardPile';
 import { cn } from '@/lib/utils';
 import { useGameViewport } from '@/contexts/GameViewportContext';
@@ -157,9 +157,9 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragDepth(0);
-    const cardData = e.dataTransfer.getData('card');
-    const equipmentData = e.dataTransfer.getData('equipment');
-    
+    const cardData = readHtml5DragData(e, 'card');
+    const equipmentData = readHtml5DragData(e, 'equipment');
+
     if (cardData) {
       onDrop?.(JSON.parse(cardData));
     } else if (equipmentData) {

@@ -2,6 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Hand } from 'lucide-react';
 import GameCard, { type GameCardData } from './GameCard';
 import { HAND_LIMIT } from './game-board/constants';
+import { readHtml5DragData } from '../utils/mobileDragDrop';
 
 interface HandAreaProps {
   handCards: GameCardData[];
@@ -28,7 +29,7 @@ export default function HandArea({
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const cardData = e.dataTransfer.getData('card');
+    const cardData = readHtml5DragData(e, 'card');
     if (cardData && handCards.length < maxHandSize) {
       const card = JSON.parse(cardData);
       onDropToHand?.(card);

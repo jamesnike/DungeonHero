@@ -158,6 +158,7 @@ import dedupeStarterMazeRewindImage from '@assets/generated_images/card_dedupe_s
 import dedupeStarterWorldSwapImage from '@assets/generated_images/card_dedupe_starter_world_swap.png';
 import dedupeMissileBoltTokenImage from '@assets/generated_images/card_dedupe_missile_bolt_token.png';
 import dedupeStarterMagicMissileImage from '@assets/generated_images/card_dedupe_starter_magic_missile.png';
+import dedupeKnightMagicGraveNovaImage from '@assets/generated_images/card_dedupe_knight_magic_grave_nova.png';
 import dedupeStarterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
 import dedupeStarterAmuletLoneImage from '@assets/generated_images/card_dedupe_starter_amulet_lone.png';
 import starterAmuletPersuadeDiscountImage from '@assets/generated_images/starter_amulet_persuade_discount.png';
@@ -1172,8 +1173,8 @@ export function createDeck(
         image: skillScrollImage,
         magicType: 'instant',
         magicEffect: 'crossroads-left-swap',
-        description: '一次性：将地城行最左边的两张牌交换位置。',
-        shortDescription: '地城行最左 2 张互换',
+        description: '一次性：将地城行最左和最右的卡牌对换位置。',
+        shortDescription: '地城行最左与最右互换',
       },
       destination: 'stay',
       banner: '命运十字路口翻转为「命运挪移」！',
@@ -1419,6 +1420,82 @@ export function createDeck(
       destination: 'stay',
       message: '破坏祭坛翻转为「破印遗物」！',
       banner: '破坏祭坛翻转为「破印遗物」！',
+    },
+  });
+
+  // 「右翼回响」 — 6-option event with stay-flip to 「装甲铸蚀」 one-time magic.
+  // Right-neighbor monster check is hardcoded in `processEffectsInline`
+  // (rules/events.ts) by event name (mirrors 战血荣誉 right-side enrage
+  // pattern). When the immediate right neighbor in the active row is a
+  // monster, post-effect block grants `persuadeNextFree`.
+  // Image: reusing dedupe assets — user will provide dedicated art later.
+  const rightWingEchoEventId = `event-${id++}`;
+  deck.push({
+    id: rightWingEchoEventId,
+    type: 'event',
+    name: '右翼回响',
+    value: 0,
+    image: dedupeEventBattleHonorImage,
+    description: '右邻是怪物时，本次结算后下次劝降免费。结算后翻为「装甲铸蚀」。',
+    shortDescription: '右邻怪物 → 下次劝降免费；翻为「装甲铸蚀」',
+    specialTrigger: '右邻是怪物时下次劝降免费；选项后翻转为一次性魔法',
+    eventChoices: [
+      {
+        id: 'rwe-hand-top',
+        text: '召感置顶（手牌：选 1 张赋予「置顶」关键词）',
+        effect: 'grantHandTopOnRecycleRestore',
+        hint: '该卡若由回收袋洗回，会被放到背包顶（第 1 格）',
+        requires: [{ type: 'handForKeywordGrant', keyword: 'topOnRecycleRestore', message: '没有可铭刻「置顶」的手牌（已带「置顶」的卡不可选）' }],
+      },
+      {
+        id: 'rwe-discover-class-top',
+        text: '召唤铭印（发现专属牌：附带「置顶」加入手牌）',
+        effect: 'grantDiscoverClassTopToHand',
+        hint: '从专属牌池发现 1 张，自带「置顶」直接进入手牌',
+      },
+      {
+        id: 'rwe-persuade-cost-2',
+        text: '永誓低吟（劝降费用永久 -2）',
+        effect: 'persuadeCost-2',
+        hint: '本局劝降费用永久 -2 金币',
+      },
+      {
+        id: 'rwe-hand-onhand-temparmor',
+        text: '触手生甲（手牌：选 1 张获得「上手」效果——随机装备栏 +1 临时护甲）',
+        effect: 'grantHandOnHandTempArmor:1',
+        hint: '该卡每次进入手牌时，左右装备栏之一 +1 临时护甲（直至下次瀑流）。即时铭刻时立即触发一次',
+        requires: [{ type: 'handForKeywordGrant', keyword: 'onEnterHandEffect', message: '没有可铭刻「上手」的手牌（已带「上手」效果的卡不可选）' }],
+      },
+      {
+        id: 'rwe-hand-flank-gold',
+        text: '侧拨黄金（手牌：选 1 张获得「侧击」效果——金币 +2）',
+        effect: 'grantFlankGold:2',
+        hint: '该卡作为侧击使用时额外获得 2 金币',
+        requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
+      },
+      {
+        id: 'rwe-equip-onequip-persuade',
+        text: '入场威风（装备：选 1 件获得「入场」效果——下次劝降成功率 +20%）',
+        effect: 'grantEquipOnEquipPersuadeBonus20',
+        hint: '该装备每次入场（含交换 / 复装）触发：下次劝降成功率 +20%',
+        requires: [{ type: 'equippedForOnEquipGrant', message: '没有可铭刻「入场」的装备（已带入场效果的装备不可选）' }],
+      },
+    ],
+    flipTarget: {
+      toCard: {
+        id: `${rightWingEchoEventId}-flip`,
+        type: 'magic',
+        name: '装甲铸蚀',
+        value: 0,
+        image: dedupeMagicEventFortifyImage,
+        magicType: 'instant',
+        magicEffect: '选择一个装备栏，永久护甲加成 +2。',
+        description: '一次性：选择一个装备栏（含空槽），该栏永久护甲加成 +2。',
+        shortDescription: '选 1 个装备栏：永久护甲 +2',
+      },
+      destination: 'stay',
+      message: '右翼回响翻转为「装甲铸蚀」！',
+      banner: '右翼回响翻转为「装甲铸蚀」！',
     },
   });
 
@@ -1843,6 +1920,124 @@ export function createDeck(
       },
       destination: 'stay',
       message: '弹幕骰局翻转为「弹幕之符」，留在地城原格！',
+    },
+  });
+
+  // ---------------------------------------------------------------------------
+  // 「奥能裂变」(Arcane Fission) — 7 个 outcome 的赋能型 event。
+  //
+  // 主题：把魔弹 / 地雷 关键词拓展到任意装备 / 手牌身上 —— 装备和普通卡都能"长"
+  // 出魔弹生成或地雷布置的关键字。
+  //
+  // 数据流：author 7 个 dice rows，`pruneEventChoicesToThree` 在游戏开局时随机
+  // 抽 3 个并按 [1,7] / [8,14] / [15,20] 三档分配（35% / 35% / 30%），所以每局
+  // 出现的 3 个赋能词条不同。
+  //
+  // 翻转：50/50 随机翻转为 「布雷术」 或 「魔法飞弹」，由 `reduceCompleteEvent`
+  // 通过新加的 `flipTargetCandidates` 字段在 RNG 下随机挑选（见
+  // rules/events.ts 的 randomPickedFlipTarget 块）。两个目的卡都保留
+  // `classCard: true`（目前只有 Knight 一个职业）。
+  //
+  // 7 个 token 的实现入口：
+  //   - grantLastWordsGainBolt:N → useEventSystem 走 requestMagicChoice 选装备 →
+  //     RESOLVE_EVENT_GRANT_LASTWORDS_GAIN_BOLT 给装备打 lastWordsGainBolt 字段
+  //     → 装备销毁时 equipment-effects.ts:applyOneEquipmentLastWordsIteration 触发
+  //   - grantOnEquipSpawnMine:N → useEventSystem 走 requestMagicChoice 选装备 →
+  //     RESOLVE_EVENT_GRANT_ONEQUIP_SPAWN_MINE 把 onEquipEffect: 'spawn-mine:N'
+  //     打到装备 → reducePlayCard 装备入场链触发
+  //   - grantFlankGainBolt:N / grantFlankSpawnMine:N → SET_PERM_GRANT_MODAL
+  //     (flank-gain-bolt-grant / flank-spawn-mine-grant) → 给手牌打 flankEffectId
+  //   - grantHandOnHandAddBoltBackpack:N → SET_PERM_GRANT_MODAL
+  //     (on-hand-add-bolt-bp-grant) → 给手牌打 onEnterHandEffect:
+  //     'add-bolt-to-backpack:N'
+  //   - grantTransformBoostMineDmg:N → SET_PERM_GRANT_MODAL
+  //     (transform-mine-damage-grant) → 给手牌打 transformEffect:
+  //     'mine-damage-bonus:N'，转型触发时累加 globalMineDamageBonus
+  //   - grantTransformAmplifyBolt:N → SET_PERM_GRANT_MODAL
+  //     (transform-amplify-bolt-grant) → 给手牌打 transformEffect:
+  //     'amplify-bolt:N'，转型触发时 enqueue N 次
+  //     AMPLIFY_CARDS_BY_NAME(魔弹, 1)
+  // ---------------------------------------------------------------------------
+  const arcaneFissionId = `event-${id++}`;
+  deck.push({
+    id: arcaneFissionId,
+    type: 'event',
+    name: '奥能裂变',
+    value: 0,
+    image: dedupeStarterMagicMissileImage,
+    description: '掷骰决定一个魔弹/地雷赐福：装备/手牌将获得「遗言/侧击/上手/入场/转型」之一的关键字效果，结束后 50% 翻转为「布雷术」或「魔法飞弹」（永久魔法）。',
+    shortDescription: '掷骰获关键字赐福；50%翻为布雷术或魔法飞弹',
+    eventChoices: [
+      {
+        text: '掷骰获得装备 / 手牌的魔弹 / 地雷关键字赐福。',
+        hint: '7 选 3：开局随机抽 3 个 outcome',
+        diceTable: [
+          { id: 'arcane-fission-lw-bolt', range: [1, 3], label: '装备遗言：销毁时手牌 +2 张「魔弹」', effect: 'grantLastWordsGainBolt:2' },
+          { id: 'arcane-fission-flank-bolt', range: [4, 6], label: '手牌侧击：打出时手牌 +1 张「魔弹」', effect: 'grantFlankGainBolt:1' },
+          { id: 'arcane-fission-onhand-bolt', range: [7, 9], label: '手牌上手：每次进入手牌时背包 +1 张「魔弹」', effect: 'grantHandOnHandAddBoltBackpack:1' },
+          { id: 'arcane-fission-equip-mine', range: [10, 12], label: '装备入场：装备入场时激活行随机空位生成「地雷」', effect: 'grantOnEquipSpawnMine:1' },
+          { id: 'arcane-fission-flank-mine', range: [13, 15], label: '手牌侧击：打出时激活行随机空位生成「地雷」', effect: 'grantFlankSpawnMine:1' },
+          { id: 'arcane-fission-transform-mine', range: [16, 18], label: '手牌转型：触发时全场地雷伤害 +2（永久叠加）', effect: 'grantTransformBoostMineDmg:2' },
+          { id: 'arcane-fission-transform-amplify', range: [19, 20], label: '手牌转型：触发时所有「魔弹」+2 增幅', effect: 'grantTransformAmplifyBolt:2' },
+        ],
+      },
+    ],
+    // 50/50 随机翻转：reduceCompleteEvent 检测到 flipTargetCandidates 后用
+    // pickRandom(state.rng) 选一个写到 patch 的 flipTarget。两个候选都保留
+    // classCard: true（目前游戏里只有 Knight 一个职业）。
+    flipTargetCandidates: [
+      {
+        toCard: {
+          id: `${arcaneFissionId}-flip-lay-mine`,
+          type: 'magic',
+          name: '布雷术',
+          value: 0,
+          image: dedupeKnightMagicGraveNovaImage,
+          classCard: true,
+          magicType: 'permanent',
+          magicEffect: '永久魔法：随机空格生成地雷，怪物落入受 5 点纯伤。',
+          knightEffect: 'lay-mine',
+          recycleDelay: 2,
+          description: '永久：在激活行的随机空格生成一个「地雷」（幽灵建筑）。当怪物落到该格时，地雷对该怪物造成 5 点纯伤害后进坟场。',
+          shortDescription: '随机空格生成地雷：怪物落入受 5 点纯伤',
+          maxUpgradeLevel: 1,
+        },
+        destination: 'stay',
+        message: '奥能裂变翻转为「布雷术」，留在地城原格！',
+      },
+      {
+        toCard: {
+          id: `${arcaneFissionId}-flip-magic-missile`,
+          type: 'magic',
+          name: '魔法飞弹',
+          value: 0,
+          image: dedupeStarterMagicMissileImage,
+          classCard: true,
+          magicType: 'permanent',
+          magicEffect: '永久魔法：手上加入 3 张一次性「魔弹」。',
+          description: '加入 3 张一次性「魔弹」到手牌（每张可对一个怪物造成 1 点法术伤害）。',
+          shortDescription: '手上加入 3 张「魔弹」',
+          upgradeLevel: 1,
+          maxUpgradeLevel: 2,
+        },
+        destination: 'stay',
+        message: '奥能裂变翻转为「魔法飞弹」，留在地城原格！',
+      },
+    ],
+    // Display-only placeholder so the "翻转" badge shows; effective flip is
+    // chosen at COMPLETE_EVENT time from `flipTargetCandidates`.
+    flipTarget: {
+      toCard: {
+        id: `${arcaneFissionId}-flip-placeholder`,
+        type: 'magic',
+        name: '布雷术 / 魔法飞弹',
+        value: 0,
+        image: dedupeStarterMagicMissileImage,
+        magicType: 'permanent',
+        description: '50% 概率翻转为「布雷术」或「魔法飞弹」。',
+        shortDescription: '50/50 翻转',
+      },
+      destination: 'stay',
     },
   });
 
@@ -2474,6 +2669,7 @@ export const STARTER_CARD_IDS = {
   legacyShield: 'starter-shield-legacy',
   spiritGuardShield: 'starter-shield-spirit-guard',
   forteShield: 'starter-shield-forte',
+  mineLegacyShield: 'starter-shield-mine-legacy',
   flipOverkillLifestealAmulet: 'starter-amulet-flip-overkill-lifesteal',
   equipAmuletCapAmulet: 'starter-amulet-equip-amulet-cap',
   stunAttemptDiscoverAmulet: 'starter-amulet-stun-attempt-discover',
@@ -2551,9 +2747,10 @@ export function createStarterDiscoverClassToHandCard(): GameCardData {
     image: discoverClassToHandImage,
     magicType: 'permanent',
     magicEffect: '永久魔法：发现一张专属牌，直接进入手牌。',
-    description: '发现一张专属牌（三选一），直接进入手牌（手牌已满则进背包，背包已满则进回收袋）。使用后回到回收袋，1 次瀑流后可再次使用。',
-    shortDescription: '发现 1 张专属牌进手牌',
+    description: '发现一张专属牌（三选一），直接进入手牌（手牌已满则进背包，背包已满则进回收袋）。使用后回到回收袋，1 次瀑流后从回收袋洗回时触发「置顶」——直接放到背包顶（第 1 格）。',
+    shortDescription: '发现 1 张专属牌进手牌｜置顶',
     recycleDelay: 1,
+    topOnRecycleRestore: true,
   };
 }
 
@@ -2662,9 +2859,9 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: dedupeStarterWorldSwapImage,
       magicType: 'permanent',
-      magicEffect: '永久魔法：将地城行最左和最右的卡牌对换位置。',
-      description: '扭转地城秩序，将最左与最右的卡牌互换。',
-      shortDescription: '地城行最左与最右互换',
+      magicEffect: '永久魔法：将地城行最左边的两张牌交换位置。',
+      description: '扭转地城秩序，将最左边的两张牌互换。',
+      shortDescription: '地城行最左 2 张互换',
       recycleDelay: 2,
       maxUpgradeLevel: 2,
     },
@@ -2881,6 +3078,23 @@ export function createStarterCardPool(): GameCardData[] {
       shieldPerfectBlockMaxHpGain: 1,
       description: '完美格挡时，生命值上限 +1（只抬上限，不回血）。每次完美格挡都触发，可叠加。',
       shortDescription: '完美格挡：生命值上限 +1',
+    },
+    {
+      // 殉雷遗盾 — 装备遗言：在 active row 的随机空 cell 生成一个「地雷」幽灵建筑。
+      // 地雷复用 createMineBuilding（5 点纯伤、ghost、踩到即触发 + 进坟场，受
+      // 「引雷阵锋」globalMineDamageBonus 加成）。无空位时 fizzle + banner 提示。
+      // 跟「墓园守卫」amulet 协同：N+1 次触发，每次都尝试生成 1 个地雷（无空位即跳过）。
+      id: STARTER_CARD_IDS.mineLegacyShield,
+      type: 'shield',
+      name: '殉雷遗盾',
+      value: 3,
+      image: starterGuardianShieldImage,
+      durability: 2,
+      maxDurability: 2,
+      armorMax: 3,
+      onDestroyEffect: 'spawn-mine-empty',
+      description: '遗言：在激活行的随机空位置生成一个「地雷」（5 点纯伤，受「引雷阵锋」加成）。',
+      shortDescription: '遗言：随机空位生成地雷',
     },
     {
       id: STARTER_CARD_IDS.healMagic,

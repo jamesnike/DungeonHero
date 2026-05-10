@@ -596,7 +596,7 @@ function reduceBeginDiscover(
   state: GameState,
   action: Extract<GameAction, { type: 'BEGIN_DISCOVER' }>,
 ): ReduceResult {
-  const { source, pool, sourceLabel, delivery } = action;
+  const { source, pool, sourceLabel, delivery, postInjectTopOnRecycleRestore } = action;
 
   if (pool.length === 0) return noChange(state);
 
@@ -610,6 +610,7 @@ function reduceBeginDiscover(
     discoverModalOpen: true,
     discoverSourceLabel: sourceLabel ?? null,
     discoverDelivery: delivery ?? 'backpack',
+    discoverPostInjectTopOnRecycleRestore: postInjectTopOnRecycleRestore ?? false,
   };
 
   const sideEffects: SideEffect[] = [
@@ -648,13 +649,22 @@ function reduceResolveDiscoverSelection(
     discoverOptions: [],
     discoverSourceLabel: null,
     discoverDelivery: 'backpack',
+    discoverPostInjectTopOnRecycleRestore: false,
   };
 
   if (!original) {
     return applyPatch(state, baseClose);
   }
 
-  const [cloned, nextRng] = cloneClassCardWithFreshId(original, state.rng);
+  const [clonedRaw, nextRng] = cloneClassCardWithFreshId(original, state.rng);
+  // 「右翼回响」option 2 / future "discover + 置顶" effects: if BEGIN_DISCOVER
+  // requested it, inject `topOnRecycleRestore: true` onto the cloned card so
+  // when it later gets recycled (回收袋 → waterfall), it lands on top of the
+  // deck instead of going back to the backpack. Same keyword as 「专属感召」
+  // starter cards.
+  const cloned: import('@/components/GameCard').GameCardData = state.discoverPostInjectTopOnRecycleRestore
+    ? { ...clonedRaw, topOnRecycleRestore: true }
+    : clonedRaw;
   const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
   const handHasRoom = state.handCards.length < getEffectiveHandLimit(state);
   const backpackHasRoom = state.backpackItems.length < backpackCap;

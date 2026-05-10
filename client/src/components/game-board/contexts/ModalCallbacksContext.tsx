@@ -75,6 +75,11 @@ export interface ModalCallbacks {
   onCardDraftComplete: (selectedCards: GameCardData[]) => void;
   onRestart: () => void;
   onEndHeroTurn: () => void;
+  /**
+   * 60s 倒计时归零时由 `HeroTurnTimer` 调用。负责强制关闭所有 modal +
+   * dispatch FORCE_END_HERO_TURN（绕过 endHeroTurnGuardRef）。
+   */
+  onAutoEndHeroTurn: () => void;
   onUndo: () => void;
   onGameOverMinimize: () => void;
   onWraithPassiveUnlockChange: (open: boolean) => void;

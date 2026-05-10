@@ -26,6 +26,7 @@ import {
   BALANCE_SHIELD_PENALTY,
   BASE_BACKPACK_CAPACITY,
 } from '../constants';
+import { pushRecycleRestoreSideEffects } from '../cards';
 import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import type { RngState } from '../rng';
@@ -38,6 +39,8 @@ export function reduceTurnActions(state: GameState, action: GameAction): ReduceR
   switch (action.type) {
     case 'END_TURN':
       return reduceEndTurn(state, action);
+    case 'FORCE_END_HERO_TURN':
+      return reduceForceEndHeroTurn(state, action);
     case 'ADVANCE_MONSTER_TURN':
       return reduceAdvanceMonsterTurn(state);
     case 'APPLY_MONSTER_TURN_END_EFFECTS':
@@ -78,6 +81,8 @@ function reduceEndTurn(
     weaponExtraAttackUsed: result.weaponExtraAttackUsed,
     rng: result.rng,
     phase: 'monsterTurn',
+    // 英雄回合结束 ⇒ 清空 60s 倒计时；下一次 START_TURN 会重新设置。
+    playerTurnStartedAt: null,
   };
 
   // Eternal relic·幽魂净化 — at every hero turn end, flush the recycle bag
@@ -95,7 +100,17 @@ function reduceEndTurn(
       const available = Math.max(0, capacity - currentBackpack.length);
       const toRestore = cleaned.slice(0, available);
       const overflow = cleaned.slice(available);
-      patch.backpackItems = [...currentBackpack, ...toRestore];
+      // 「置顶」关键词分流：toRestore 切两半，置顶 → backpackItems[0]（prepend），
+      // 其余 → backpackItems 末尾（append）。两组都进背包，**不再**走 remainingDeck。
+      // 这条路径不走 processRecycleBag（幽魂净化是「即时洗回，不递减 _recycleWaits」的特殊
+      // 路径），所以手动复刻 cards.ts processRecycleBag 的分流逻辑。
+      const restoredToBackpackTop: GameCardData[] = [];
+      const restoredToBackpack: GameCardData[] = [];
+      for (const c of toRestore) {
+        if (c.topOnRecycleRestore) restoredToBackpackTop.push(c);
+        else restoredToBackpack.push(c);
+      }
+      patch.backpackItems = [...restoredToBackpackTop, ...currentBackpack, ...restoredToBackpack];
       patch.permanentMagicRecycleBag = overflow as GameCardData[];
       if (toRestore.length > 0) {
         sideEffects.push({
@@ -109,12 +124,13 @@ function reduceEndTurn(
           event: 'ui:banner',
           payload: { text: `幽魂净化：${toRestore.length} 张牌从回收袋洗回背包！` },
         });
-        // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画。
-        // 同步参考：rules/waterfall.ts、rules/magic-effects.ts 的 STARTER_CARD_IDS.recycleDrawMagic、
-        // card-schema/definitions/magic.ts 的 starter:recycleDrawMagic、虚空置换 (void-swap)。
-        sideEffects.push({
-          event: 'waterfall:recycleRestored',
-          payload: { count: toRestore.length, cards: toRestore },
+        // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画 +
+        // 「置顶」卡的二段反馈。同步参考：rules/waterfall.ts、rules/magic-effects.ts 的
+        // STARTER_CARD_IDS.recycleDrawMagic、card-schema/definitions/magic.ts 的
+        // starter:recycleDrawMagic、虚空置换 (void-swap)。
+        pushRecycleRestoreSideEffects(sideEffects, {
+          restored: toRestore,
+          restoredToBackpackTop,
         });
       }
       if (overflow.length > 0) {
@@ -184,6 +200,95 @@ function reduceEndTurn(
     ...endTurnDrawActions,
     ...skillFloatActions,
     { type: 'ADVANCE_MONSTER_TURN' },
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// FORCE_END_HERO_TURN — auto-end on 60s timer expiry
+// ---------------------------------------------------------------------------
+
+/**
+ * 60s 倒计时归零时的强制收尾。
+ *
+ * 1. 清空所有引擎侧 modal / pending interaction 字段（不调 setter，直接 patch
+ *    一次性归零，避免 N 条单独 dispatch 在管线里被 INPUT_PHASES gating 卡住）。
+ * 2. 把 phase 推回 `playerInput`，保证后续 enqueue 的 `END_TURN` 能在
+ *    pipeline drain 中走到。
+ * 3. Enqueue 一条 `END_TURN` —— 由后续的 `reduceEndTurn` 完成正常的
+ *    hero-turn 收尾（清 `playerTurnStartedAt`、推 monsterTurn 等）。
+ *
+ * 组件本地 useState 形式的 modal（`backpackViewerOpen` /
+ * `heroSkillTargeting` / `magicTargeting` / `pendingPotionAction` 等）由
+ * `useAutoEndHeroTurn` 在 dispatch 之前 close。
+ */
+function reduceForceEndHeroTurn(
+  state: GameState,
+  action: Extract<GameAction, { type: 'FORCE_END_HERO_TURN' }>,
+): ReduceResult {
+  const patch: Partial<GameState> = {
+    // --- Pending interaction state machines ---
+    pendingMagicAction: null,
+    pendingPotionAction: null,
+    pendingHeroSkillAction: null,
+    pendingHeroMagicAction: null,
+    pendingHandDiscardSelection: null,
+    deathWardNotice: null,
+    cardActionContext: null,
+    equipmentPrompt: null,
+    persuadeState: null,
+    eventTransformState: null,
+    // --- Modal state ---
+    eventModalOpen: false,
+    eventModalMinimized: false,
+    eventDiceModal: null,
+    magicChoiceModal: null,
+    discoverModalOpen: false,
+    discoverModalMinimized: false,
+    discoverOptions: [],
+    discoverSourceLabel: null,
+    discoverDelivery: 'backpack',
+    discoverPostInjectTopOnRecycleRestore: false,
+    pendingClassDiscoverQueue: [],
+    deleteModalOpen: false,
+    upgradeModalOpen: false,
+    upgradeModalMaxCount: undefined,
+    handMagicUpgradeModal: null,
+    mirrorCopyModal: null,
+    monsterFusionModal: null,
+    permGrantModal: null,
+    amplifyModal: null,
+    eventAmplifyHandPicker: null,
+    graveyardDiscoverState: null,
+    graveyardDiscoverMinimized: false,
+    graveyardDiscoverDelivery: 'backpack',
+    ghostBladeExileCards: null,
+    shopModalOpen: false,
+    shopModalMinimized: false,
+    shopSkillSelectOpen: false,
+    monsterRewardMinimized: false,
+    // --- Phase ---
+    // INPUT_PHASES gating: pipeline 只在 playerInput 等 INPUT 相位下 drain
+    // 'isInputContinuation' 列表里的 action（END_TURN 在白名单里）。强制把
+    // phase 推回 playerInput 让 enqueue 的 END_TURN 立刻被处理。
+    phase: 'playerInput',
+    // 防御性清空：END_TURN reducer 也会清，但这里直接清能让 FORCE_END
+    // 单独 reduce 时也保证字段归零，不依赖后续 END_TURN drain。
+    playerTurnStartedAt: null,
+  };
+
+  const sideEffects: SideEffect[] = [
+    {
+      event: 'log:entry',
+      payload: { type: 'turn', message: '时间到，玩家回合已自动结束。' },
+    },
+    {
+      event: 'ui:banner',
+      payload: { text: '时间到，玩家回合已自动结束' },
+    },
+  ];
+
+  return applyPatch(state, patch, sideEffects, [
+    { type: 'END_TURN', heroTurnLayerLossIds: action.heroTurnLayerLossIds },
   ]);
 }
 
@@ -499,6 +604,9 @@ function reduceStartTurn(
     magicCardsPlayedThisTurn: 0,
     damageMagicPlayedThisTurn: 0,
     phase: 'playerInput',
+    // 战斗回合中刷新 60s 倒计时（HeroTurnTimer）。START_TURN 仅在 reduceEndTurn
+    // 检测到「还有 engaged monster」时才会被 enqueue，所以这里必然处于战斗中。
+    playerTurnStartedAt: Date.now(),
   };
 
   // Apply strength/balance amulet temp bonuses at turn start.

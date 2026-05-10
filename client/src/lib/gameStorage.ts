@@ -148,6 +148,8 @@ export interface PersistedGameState {
   permanentMaxHpBonus: number;
   permanentSpellDamageBonus: number;
   permanentSpellLifesteal: number;
+  /** 「引雷阵锋」累计：本局所有「地雷」实际伤害 = mineDamage + 此值（永久不撤销） */
+  globalMineDamageBonus?: number;
   backpackCapacityModifier: number;
   heroMagicState: HeroMagicState;
   turnDamageTaken: number;
@@ -198,6 +200,7 @@ export interface PersistedGameState {
   heroStunned?: boolean;
   monsterKillUpgradeProgress?: number;
   recycleBackpackProgress?: number;
+  manualRecycleProgress?: number;
   swapUpgradeProgress?: number;
   flipOverkillLifestealProgress?: number;
   equipAmuletCapProgress?: number;
@@ -287,6 +290,15 @@ export interface PersistedGameState {
    * 加载时类型断言回 MonsterRewardOption[]。
    */
   monsterRewardPreviewCache?: Record<string, unknown[]>;
+
+  /**
+   * Wall-clock timestamp (epoch ms) marking when the current hero combat turn
+   * started. Used by `HeroTurnTimer` to render a 60-second countdown that
+   * survives page refresh. `null`/missing when not in a hero combat turn.
+   *
+   * See `GameState.playerTurnStartedAt` JSDoc for full lifecycle.
+   */
+  playerTurnStartedAt?: number | null;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

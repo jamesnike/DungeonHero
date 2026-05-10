@@ -34,7 +34,7 @@ import {
   markSkillUsedPure,
 } from '../hero';
 import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
-import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, clearSlotAndPromoteReserve } from './equipment-effects';
+import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, clearSlotAndPromoteReserve, accumulateMineDamageBoost } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
 import { computeAmuletEffectsForState, getEquipmentInSlot, getSlotBonus, applySlotArmorBonusDelta, refillSlotArmorToCap, checkPersuadeOnTempAttack as checkPersuadeOnTempAttackShared } from '../equipment';
@@ -1335,6 +1335,12 @@ function reduceMagicSlotSelection(
             monsterMsg = '→ 场上无怪物';
           }
           const afterPenalty = Math.max(0, afterAddDur - 3);
+          // Mine-damage-boost：蓄能裂击的 -3 / -2 / -1 都算耐久减少。
+          // afterAddDur (+1 后的状态) → afterPenalty 的 delta 才是「耐久减少」净值。
+          const durLostThisIter = Math.max(0, afterAddDur - afterPenalty);
+          if (durLostThisIter > 0) {
+            accumulateMineDamageBoost(state, currentItem as GameCardData, durLostThisIter, patch, sideEffects);
+          }
           currentItem = { ...currentItem, durability: afterPenalty };
           summaryParts.push(`第${iter + 1}轮：${oldDur}→${afterAddDur}（达 4，${monsterMsg}），耐久 -3 → ${afterPenalty}`);
         } else {
@@ -1397,6 +1403,55 @@ function reduceMagicSlotSelection(
         ? `修裂启示：${slotItem.name} 耐久未损（缺 0），未抽到牌。${grdEchoTag}`
         : `修裂启示：${slotItem.name} 耐久 ${grdCurDur}/${grdMaxDur}（缺 ${missingDur}）→ 抽 ${grdFormulaTag} 张牌${grdDrawMsg}。${grdEchoTag}`;
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, grdBanner);
+    }
+
+    case 'recycle-temp-armor': {
+      // 池中坚意：buff = floor(state.permanentMagicRecycleBag.length / divisor) * echo
+      // - divisor = 4 (Lv0) / 3 (Lv1)
+      // - 空槽允许选（与 backpack-temp-attack / temp-attack-double / temp-attack-armor-draw
+      //   一致）：buff 写到 slotTempArmor[slotId]，等装备进入时仍生效。
+      // - Echo (A 类，与 C 类等价 — 这张卡 setup 时仍在 hand，未进 recycleBag)：
+      //   单次乘 ×echoMultiplier，与 backpack-temp-attack 同 pattern。
+      // - 修改 slotTempArmor 后必须调 applySlotArmorBonusDelta 让 armor cap 立刻刷新
+      //   （shield-armor-vs-durability.mdc）。
+      // - 触发 怀柔之印（persuade-on-temp-attack）：调 checkPersuadeOnTempAttack。
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const divisor = (pending.card.upgradeLevel ?? 0) >= 1 ? 3 : 4;
+      const recycleLen = state.permanentMagicRecycleBag.length;
+      const baseBuff = Math.floor(recycleLen / divisor);
+      const buff = baseBuff * echoMul;
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const curTempArm = ((state as any).slotTempArmor ?? {})[slotId] ?? 0;
+      patch.slotTempArmor = { ...((state as any).slotTempArmor ?? {}), [slotId]: curTempArm + buff };
+      if (buff !== 0) applySlotArmorBonusDelta(state, slotId, buff, patch);
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
+      const formulaTag = echoMul > 1 ? `${baseBuff}×${echoMul}=${buff}` : `${buff}`;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `池中坚意：${label} 临时护甲 +${formulaTag}（回收袋 ${recycleLen} 张 ÷ ${divisor}）。${echoTag}`);
+    }
+
+    case 'backpack-temp-attack': {
+      // 囊中锋意：buff = floor(state.backpackItems.length / divisor) * echo
+      // - divisor = 3 (Lv0) / 2 (Lv1)
+      // - 空槽允许选（与 temp-attack-double / temp-attack-armor-draw / temp-stats-to-draw
+      //   一致）：buff 写到 slotTempAttack[slotId]，等装备进入时仍生效。
+      // - Echo (A 类，与 C 类等价 — 这张卡进回收袋而非背包)：
+      //   单次乘 ×echoMultiplier，与 temp-attack-double 同 pattern。
+      // - 触发 怀柔之印（persuade-on-temp-attack）：调 checkPersuadeOnTempAttack。
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const divisor = (pending.card.upgradeLevel ?? 0) >= 1 ? 2 : 3;
+      const backpackLen = state.backpackItems.length;
+      const baseBuff = Math.floor(backpackLen / divisor);
+      const buff = baseBuff * echoMul;
+      const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
+      const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
+      patch.slotTempAttack = { ...((state as any).slotTempAttack ?? {}), [slotId]: curTempAtk + buff };
+      checkPersuadeOnTempAttack(state, patch, sideEffects);
+      const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
+      const formulaTag = echoMul > 1 ? `${baseBuff}×${echoMul}=${buff}` : `${buff}`;
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `囊中锋意：${label} 临时攻击 +${formulaTag}（背包 ${backpackLen} 张 ÷ ${divisor}）。${echoTag}`);
     }
 
     case 'temp-stats-to-draw': {
@@ -1778,6 +1833,11 @@ function reduceMagicSlotSelection(
         const oldLayers = target.currentLayer ?? 1;
         const newMaxDur = clampMaxDurability(Math.max((slotItem as any).maxDurability ?? durability, oldLayers));
         const newDur = Math.min(oldLayers, newMaxDur);
+        // Mine-damage-boost：等价交换可能让武器耐久下降（newDur < durability）。
+        const soulSwapDurLost = Math.max(0, durability - newDur);
+        if (soulSwapDurLost > 0) {
+          accumulateMineDamageBoost(state, slotItem as GameCardData, soulSwapDurLost, patch, sideEffects);
+        }
         patch[slotId] = { ...slotItem, durability: newDur, maxDurability: newMaxDur } as any;
         const updatedCards = (state.activeCards as any[]).map(slot => {
           if (!slot || slot.id !== target.id) return slot;
@@ -1902,6 +1962,40 @@ function reduceMagicSlotSelection(
         ? `天机铸炼翻看 ${peekCount} 张牌：${eventCount} 张事件，${eventCount > 0 ? `${slotItem.name} 耐久上限 +${eventCount}，恢复 ${eventCount} 点耐久。` : '无增益。'}${echoTag}`
         : `天机铸炼：主牌堆已空，无效果。${echoTag}`;
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card, banner);
+    }
+
+    case 'event-armor-etch': {
+      // 装甲铸蚀 — 「右翼回响」 stay-flip target. Permanently grants
+      // `equipmentSlotBonuses[slotId].shield += 2` to the chosen slot
+      // (mirrors the `slotLeftDefense+` / `slotRightDefense+` event tokens).
+      // Empty slots are valid targets — the bonus is bound to the slot id,
+      // not the equipment, so it carries over to whatever装备 the player
+      // swaps in later. Echo (A 类): bonus = 2 × echoMultiplier.
+      const echoMul = (pending as any).echoMultiplier ?? 1;
+      const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
+      const bonusAmount = 2 * echoMul;
+      patch.equipmentSlotBonuses = {
+        ...state.equipmentSlotBonuses,
+        [slotId]: {
+          ...state.equipmentSlotBonuses[slotId],
+          shield: state.equipmentSlotBonuses[slotId].shield + bonusAmount,
+        },
+      };
+      // applySlotArmorBonusDelta refills the equipped shield/monster's
+      // current `armor` to the new cap (the helper is a no-op for empty
+      // slots and for weapon items — it only acts on shield/monster).
+      applySlotArmorBonusDelta(state, slotId, bonusAmount, patch);
+      const slotLabel = slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏';
+      const equipName = slotItem ? `（${slotItem.name}）` : '（空槽）';
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'magic',
+          message: `装甲铸蚀：${slotLabel}${equipName} 永久护甲 +${bonusAmount}。${echoTag}`,
+        },
+      });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `装甲铸蚀：${slotLabel} 永久护甲 +${bonusAmount}！${echoTag}`);
     }
 
     case 'grant-revive': {
@@ -2408,6 +2502,86 @@ function reduceMagicMonsterSelection(
       }
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
         `魔弹：对 ${targetName} 造成 ${totalDmg} 点伤害！`);
+    }
+
+    case 'backpack-bolt': {
+      // 囊中惊雷 manual monster-select. Mirrors setup in
+      // resolveKnightPermanentMagic / 'backpack-bolt':
+      //   damage = floor(backpackItems.length * pct / 100)
+      //   pct = [50, 75, 100][upgradeLevel]
+      //   totalDmg = computeSpellDamagePure(state, base + amp) * echoMultiplier
+      // 自伤路径（hero / 盾）走 applySelfDamage，与其它 allowsHeroTarget 单目标
+      // 伤害 magic（missile-bolt / apprentice-bolt / stun-cap-strike）一致。
+      const echoMulBB = (pending as any).echoMultiplier ?? 1;
+      // 重新读 state.backpackItems.length：从 setup 到 resolve 之间不会变化
+      // （pendingMagicAction 期间没有其它消耗背包的 action 跑），但用 data 字段
+      // 锁住 setup 时的快照 base 更稳，避免被任何中间路径改背包后数值漂移。
+      const baseDmgBB = (pending as any).data?.baseDmg ?? 0;
+      const pctBB = (pending as any).data?.pct ?? 100;
+      const totalDmgBB = computeSpellDamagePure(state, baseDmgBB + (pending.card.amplifyBonus ?? 0)) * echoMulBB;
+      const echoTagBB = echoMulBB > 1 ? `（回响×${echoMulBB}）` : '';
+
+      if (isHeroTarget) {
+        if (totalDmgBB > 0) {
+          applySelfDamage(totalDmgBB, 'backpack-bolt');
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDmgBB} 点法术伤害（${pctBB}%）` } });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `${pending.card.name}：${targetName} ${totalDmgBB} 点法术伤害。${echoTagBB}`,
+          { dealtDamage: true });
+      }
+
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({
+        type: 'DEAL_DAMAGE_TO_MONSTER',
+        monsterId: monster!.id,
+        damage: totalDmgBB,
+        source: 'backpack-bolt',
+        isSpellDamage: true,
+      });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDmgBB} 点法术伤害（${pctBB}%）` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name}：${totalDmgBB} 点法术伤害。${echoTagBB}`,
+        { dealtDamage: true });
+    }
+
+    case 'recycle-bolt': {
+      // 池中惊雷 manual monster-select. Mirrors setup in
+      // resolveKnightPermanentMagic / 'recycle-bolt':
+      //   damage = floor(permanentMagicRecycleBag.length * pct / 100)
+      //   pct = [50, 75, 100][upgradeLevel]
+      //   totalDmg = computeSpellDamagePure(state, base + amp) * echoMultiplier
+      // 自伤路径（hero / 盾）走 applySelfDamage，与 backpack-bolt 同款。
+      const echoMulRB = (pending as any).echoMultiplier ?? 1;
+      // 用 setup 时锁住的 baseDmg 快照，避免 recycleBag 在 setup→resolve 之间被
+      // 改动（理论上 pendingMagicAction 期间不会有其它路径改 recycleBag，但保险一些）。
+      const baseDmgRB = (pending as any).data?.baseDmg ?? 0;
+      const pctRB = (pending as any).data?.pct ?? 100;
+      const totalDmgRB = computeSpellDamagePure(state, baseDmgRB + (pending.card.amplifyBonus ?? 0)) * echoMulRB;
+      const echoTagRB = echoMulRB > 1 ? `（回响×${echoMulRB}）` : '';
+
+      if (isHeroTarget) {
+        if (totalDmgRB > 0) {
+          applySelfDamage(totalDmgRB, 'recycle-bolt');
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDmgRB} 点法术伤害（${pctRB}%）` } });
+        return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+          `${pending.card.name}：${targetName} ${totalDmgRB} 点法术伤害。${echoTagRB}`,
+          { dealtDamage: true });
+      }
+
+      ensureEngaged(state, monster!, enqueuedActions);
+      enqueuedActions.push({
+        type: 'DEAL_DAMAGE_TO_MONSTER',
+        monsterId: monster!.id,
+        damage: totalDmgRB,
+        source: 'recycle-bolt',
+        isSpellDamage: true,
+      });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDmgRB} 点法术伤害（${pctRB}%）` } });
+      return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
+        `${pending.card.name}：${totalDmgRB} 点法术伤害。${echoTagRB}`,
+        { dealtDamage: true });
     }
 
     case 'apprentice-bolt': {

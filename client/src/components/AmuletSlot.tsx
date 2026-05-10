@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Sparkles } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { initMobileDrop } from '../utils/mobileDragDrop';
+import { initMobileDrop, readHtml5DragData } from '../utils/mobileDragDrop';
 import GameCard, { GameCardData } from './GameCard';
 
 const BASE_AMULET_WIDTH = 220;
@@ -94,7 +94,7 @@ export default function AmuletSlot({
     e.preventDefault();
     setDragDepth(0);
     if (isStunFrozen) return;
-    const cardData = e.dataTransfer.getData('card');
+    const cardData = readHtml5DragData(e, 'card');
     if (cardData) {
       const card = JSON.parse(cardData);
       if (card.type === 'amulet') {

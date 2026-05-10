@@ -214,6 +214,12 @@ function reduceBeginCombat(
     patch.flashSlotUsed = {};
     patch.gambitSlotUsed = {};
     patch.weaponExtraAttackUsed = {};
+    // 第一次进入战斗且 hero 直接获得行动权（player initiated）⇒ 启动 60s 倒计时。
+    // initiator='monster' 路径会把 currentTurn 设成 'monster' 并挂 pendingBlock，
+    // 此时还没轮到 hero 自由行动，留给后续 START_TURN 来启动倒计时。
+    if (newCombat.currentTurn === 'hero') {
+      patch.playerTurnStartedAt = Date.now();
+    }
   }
 
   sideEffects.push({
@@ -371,7 +377,8 @@ function reduceFinishCombat(state: GameState): ReduceResult {
   const sideEffects: SideEffect[] = [
     { event: 'combat:finished', payload: { monsterIds: state.combatState.engagedMonsterIds } },
   ];
-  return applyPatch(state, { ...patch, phase: 'playerInput' }, sideEffects);
+  // 战斗结束（最后一只怪物被击杀 / 全军撤退）⇒ 清掉 60s 倒计时。
+  return applyPatch(state, { ...patch, phase: 'playerInput', playerTurnStartedAt: null }, sideEffects);
 }
 
 // ---------------------------------------------------------------------------

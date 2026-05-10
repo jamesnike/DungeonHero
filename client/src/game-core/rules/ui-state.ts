@@ -141,8 +141,10 @@ export function reduceUIStateActions(
       // Closing the modal also resets discoverDelivery so a follow-up
       // BEGIN_DISCOVER (e.g. drained from the queue below) starts from the
       // 'backpack' default unless it explicitly opts back into 'hand-first'.
+      // Same reset applies to the 「右翼回响」 / "discover + 置顶" inject flag.
       if (!action.open) {
         patch.discoverDelivery = 'backpack';
+        patch.discoverPostInjectTopOnRecycleRestore = false;
       }
       // When closing the modal, drain one pending class-discover from the queue
       // so multi-discover effects (e.g. 弃装重铸 / 法术回响 echoed discovers)

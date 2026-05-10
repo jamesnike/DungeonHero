@@ -261,6 +261,11 @@ function isInputContinuation(action: GameAction): boolean {
     case 'PERFORM_HERO_ATTACK':
     case 'PERFORM_SHIELD_BASH':
     case 'END_TURN':
+    // 60s 倒计时归零的强制结束。本身一般是 hook 在 top-level dispatch 的
+    // （走 engine._processAction 直接 reduce，不过 pipeline gate），但加进
+    // 白名单是防御性措施：将来如果有 reducer enqueue 这个 action（如 monster
+    // 触发的「跳过玩家回合」效果），它必须能在 INPUT_PHASES 下被 drain。
+    case 'FORCE_END_HERO_TURN':
     // Combat — internal follow-ups
     case 'DEAL_DAMAGE_TO_MONSTER':
     case 'MONSTER_DEFEATED':

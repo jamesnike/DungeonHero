@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Swords } from 'lucide-react';
 import { useShallowGameState } from '@/hooks/useGameEngine';
+import { HeroTurnTimer } from '@/components/HeroTurnTimer';
 import { useModalCallbacks } from '../contexts/ModalCallbacksContext';
 import { useModalUI } from '../contexts/ModalUIContext';
 
@@ -23,7 +24,7 @@ function BoardOverlayButtonsInner() {
 
   return (
     <div
-      className="absolute right-4 z-[9999]"
+      className="absolute right-4 z-[9999] flex flex-col items-end gap-2"
       style={{
         top: `${ui.headerHeight + 8}px`,
         pointerEvents: 'none',
@@ -45,6 +46,11 @@ function BoardOverlayButtonsInner() {
         <Swords className="w-5 h-5" />
         <span className="text-sm">End Hero Turn</span>
       </button>
+      {/* 60s wall-clock 倒计时——可见性 / 重置由组件内部根据 playerTurnStartedAt
+          自动判定，跟 End Hero Turn 按钮共享同一个「战斗中且 hero turn」窗口。
+          归零时 onTimeout 走 onAutoEndHeroTurn：force close 所有 modal +
+          dispatch FORCE_END_HERO_TURN（绕过 endHeroTurnGuardRef）。 */}
+      <HeroTurnTimer onTimeout={cb.onAutoEndHeroTurn} />
     </div>
   );
 }

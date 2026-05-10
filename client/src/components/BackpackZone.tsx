@@ -4,7 +4,7 @@ import { Backpack as BackpackIcon, Recycle as RecycleIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import StackedCardPile from './StackedCardPile';
-import { initMobileDrop, type DragData } from '../utils/mobileDragDrop';
+import { initMobileDrop, readHtml5DragData, type DragData } from '../utils/mobileDragDrop';
 import { cn } from '@/lib/utils';
 import { GameCardData } from './GameCard';
 import { useGameViewport } from '@/contexts/GameViewportContext';
@@ -264,7 +264,7 @@ function BackpackZoneInner({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragDepth(0);
-    const cardData = e.dataTransfer.getData('card');
+    const cardData = readHtml5DragData(e, 'card');
     if (cardData) {
       onDrop?.(JSON.parse(cardData));
     }

@@ -396,10 +396,26 @@ export interface GameState {
   permanentMaxHpBonus: number;
   permanentSpellDamageBonus: number;
   permanentSpellLifesteal: number;
+  /**
+   * 「引雷阵锋」类武器（`mineDamageBoostPerDur > 0`）每损失 1 点耐久就给这个全局
+   * 累加器加 N。所有「地雷」(`isGhost && mineDamage > 0`) 在被怪物瀑流触发时，
+   * 实际伤害 = `mineDamage + globalMineDamageBonus`。
+   *
+   * 不变量：
+   * - 一旦累加，**永久不撤销**（修复武器耐久不会扣回 bonus，武器损毁也保留）。
+   * - 全局共享：所有地雷读同一个值，包括已经在场上但还没被触发的。
+   * - 只能由「武器耐久减少」事件累加；进坟场 / 被销毁 / 卖出本身不直接累加（耐久
+   *   减少的部分会被对应路径累加到这里）。
+   */
+  globalMineDamageBonus: number;
   stunCap: number;
   heroStunned: boolean;
   monsterKillUpgradeProgress: number;
   recycleBackpackProgress: number;
+  /** 「循手之符」amulet：累计"手动"拖卡到回收袋的张数。每件等装备 +1 / 每次手动事件。
+   *  达 3 张 → 从背包抽 1 张牌 + 进度归 0（surplus 不滚存，与 recycleBackpackProgress 一致）。
+   *  仅 reduceAddToRecycleBag 中 `action.waitsOverride != null` 时才递增。 */
+  manualRecycleProgress: number;
   swapUpgradeProgress: number;
   flipOverkillLifestealProgress: number;
   equipAmuletCapProgress: number;
@@ -625,6 +641,14 @@ export interface GameState {
    */
   discoverDelivery: 'backpack' | 'hand-first';
   /**
+   * 「右翼回响」option 2 / future "discover + 置顶" effects: when true,
+   * `RESOLVE_DISCOVER_SELECTION` injects `topOnRecycleRestore: true` onto the
+   * cloned card before placing it in hand/backpack/recycle bag. Set by
+   * BEGIN_DISCOVER (`postInjectTopOnRecycleRestore: true`) and reset to
+   * `false` on selection / cancel.
+   */
+  discoverPostInjectTopOnRecycleRestore: boolean;
+  /**
    * Queue of class-deck discovers waiting to fire one after another.
    * Each entry triggers a fresh BEGIN_DISCOVER (re-pulled from current
    * `classDeck`) when the previous discover modal closes. Used by:
@@ -671,7 +695,7 @@ export interface GameState {
    */
   monsterFusionModal: { sourceCardId: string } | null;
   /** 永恒铭刻 / 蜕变赋灵：选择手牌赋予属性 */
-  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'flank-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'flank-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant'; meta?: Record<string, number> } | null;
+  permGrantModal: { sourceCardId: string; sourceType: 'potion' | 'magic' | 'transform-grant' | 'equipment-enchant' | 'essence-extract' | 'flank-grant' | 'flank-gold-grant' | 'flank-persuade-grant' | 'flank-stun-grant' | 'flank-damage-grant' | 'transform-draw-grant' | 'flank-heal-grant' | 'transform-recycle-grant' | 'amulet-perm-grant' | 'on-hand-stun-cap-grant' | 'on-hand-heal-grant' | 'on-hand-top-grant' | 'on-hand-temp-armor-grant' | 'flank-gain-bolt-grant' | 'on-hand-add-bolt-bp-grant' | 'flank-spawn-mine-grant' | 'transform-mine-damage-grant' | 'transform-amplify-bolt-grant'; meta?: Record<string, number> } | null;
   /**
    * 增幅：选择目标进行增幅。
    * - `scope`：'narrow' = 装备栏 + 手牌（默认，主牌堆 增幅 magic 用）；
@@ -738,6 +762,24 @@ export interface GameState {
   actionQueue: GameAction[];
   /** Current phase of the game turn / resolution flow. */
   phase: GamePhase;
+
+  /**
+   * Wall-clock timestamp (epoch ms, `Date.now()`) marking when the current hero
+   * combat turn started. Used by `HeroTurnTimer` to render a 60-second countdown
+   * that survives page refresh.
+   *
+   * Lifecycle:
+   * - Set to `Date.now()` whenever the hero gets a fresh combat turn (start of
+   *   `BEGIN_COMBAT` landing on hero, or `START_TURN` after monsters finished).
+   * - Cleared to `null` on `END_TURN` (manual or auto), `FINISH_COMBAT`, or any
+   *   other transition out of the hero combat-turn state.
+   * - Persisted in `PersistedGameState` so refresh keeps the same start time;
+   *   timer keeps counting down as if no refresh happened.
+   *
+   * `null` whenever it is not the hero's combat turn (no engaged monsters, or
+   * `combatState.currentTurn !== 'hero'`).
+   */
+  playerTurnStartedAt: number | null;
   /** Action history for debugging / replay (only populated when enabled). */
   actionLog: Array<{ action: GameAction; timestamp: number }>;
 

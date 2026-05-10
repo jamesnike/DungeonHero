@@ -23,6 +23,14 @@ export type OnEquipHandler = (
 
 const registry = new Map<string, OnEquipHandler>();
 
+/**
+ * Prefix registry for parameterized on-equip effect ids (e.g. `spawn-mine:N`).
+ * Keys are the literal prefix INCLUDING trailing colon (e.g. `'spawn-mine:'`).
+ * Looked up after exact-match fails. This allows `card.onEquipEffect = 'spawn-mine:1'`
+ * to dispatch to a single handler that parses its own parameter.
+ */
+const prefixRegistry = new Map<string, OnEquipHandler>();
+
 export function registerOnEquip(id: string, handler: OnEquipHandler): void {
   registry.set(id, handler);
 }
@@ -34,7 +42,16 @@ export function registerOnEquipAll(entries: Array<{ id: string; handler: OnEquip
 }
 
 /**
+ * Register a handler keyed by id prefix (e.g. `'spawn-mine:'`). The effect id
+ * `'spawn-mine:N'` will dispatch here when no exact-match handler exists.
+ */
+export function registerOnEquipPrefix(prefix: string, handler: OnEquipHandler): void {
+  prefixRegistry.set(prefix, handler);
+}
+
+/**
  * Look up and execute an on-equip effect. Returns true if a handler was found.
+ * Resolution order: exact match → prefix match.
  */
 export function executeOnEquip(
   state: GameState,
@@ -48,12 +65,25 @@ export function executeOnEquip(
   if (!effectId) return false;
 
   const handler = registry.get(effectId);
-  if (!handler) return false;
+  if (handler) {
+    handler(state, card, slotId, patch, sideEffects, enqueuedActions);
+    return true;
+  }
 
-  handler(state, card, slotId, patch, sideEffects, enqueuedActions);
-  return true;
+  let matchedPrefixHandler: OnEquipHandler | undefined;
+  prefixRegistry.forEach((prefixHandler, prefix) => {
+    if (!matchedPrefixHandler && effectId.startsWith(prefix)) {
+      matchedPrefixHandler = prefixHandler;
+    }
+  });
+  if (matchedPrefixHandler) {
+    matchedPrefixHandler(state, card, slotId, patch, sideEffects, enqueuedActions);
+    return true;
+  }
+
+  return false;
 }
 
 export function getOnEquipRegistrySize(): number {
-  return registry.size;
+  return registry.size + prefixRegistry.size;
 }

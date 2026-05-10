@@ -10,11 +10,12 @@
  */
 
 import type { OnEnterHandHandler } from '../on-enter-hand';
-import { registerOnEnterHandAll } from '../on-enter-hand';
+import { registerOnEnterHandAll, registerOnEnterHandPrefix } from '../on-enter-hand';
 import type { EquipmentSlotId, ActiveRowSlots } from '@/components/game-board/types';
 import { pickRandom } from '../../rng';
 import { flattenActiveRowSlots, isDamageableTarget } from '../../helpers';
-import { checkPersuadeOnTempAttack } from '../../equipment';
+import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../../equipment';
+import { applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../../events';
 
 const defaultSlotState = { equipmentSlot1: 0, equipmentSlot2: 0 };
 
@@ -273,6 +274,81 @@ const onHandHeal1: OnEnterHandHandler = (_state, card, _patch, sideEffects, enqu
   });
 };
 
+/**
+ * 「右翼回响」option 4 上手：随机一个装备栏 +1 临时护甲。
+ * Set on `card.onEnterHandEffect = 'event-grant-onhand-temp-armor-1'` via the
+ * `on-hand-temp-armor-grant` PermGrant flow. Picks uniformly from {slot1,
+ * slot2} regardless of whether the slot is filled — the bonus is bound to the
+ * slot and applies to whatever equipment occupies it (mirrors
+ * `weaponManualOnHand` semantics).
+ *
+ * Uses `applySlotArmorBonusDelta` so the slot's `armor` value re-syncs to the
+ * new cap immediately (per single-counter armor model in equipment.ts).
+ */
+const eventGrantOnHandTempArmor1: OnEnterHandHandler = (state, card, patch, sideEffects) => {
+  const slots: EquipmentSlotId[] = ['equipmentSlot1', 'equipmentSlot2'];
+  const rng = patch.rng ?? state.rng;
+  const [slotId, nextRng] = pickRandom(slots, rng);
+  patch.rng = nextRng;
+
+  const baseTemp = { ...(state.slotTempArmor ?? defaultSlotState), ...(patch.slotTempArmor ?? {}) };
+  baseTemp[slotId] = (baseTemp[slotId] ?? 0) + 1;
+  patch.slotTempArmor = baseTemp;
+  applySlotArmorBonusDelta(state, slotId, 1, patch);
+
+  const slotLabel = slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏';
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'magic', message: `${card.name} 上手：${slotLabel} 临时护甲 +1。` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${card.name} 上手：${slotLabel} 临时护甲 +1！` },
+  });
+};
+
+/**
+ * 「奥能裂变」outcome 3 — `add-bolt-bp:N` parameterized handler.
+ * Granted to a chosen hand card via `RESOLVE_PERM_GRANT` /
+ * `on-hand-add-bolt-bp-grant`. Each time the card enters hand, gain N 「魔弹」
+ * with backpack-first overflow ordering (背包 → 手牌 → 回收袋).
+ *
+ * Reuses the shared `applyGainMagicBolts` helper. Reads any prior in-flight
+ * patch state so multiple on-enter triggers in the same step don't clobber
+ * each other (matches `growthBladeOnHand` pattern of letting downstream
+ * AMPLIFY_CARDS_BY_NAME accumulate).
+ */
+const addBoltBackpack: OnEnterHandHandler = (state, card, patch, sideEffects, _enqueuedActions) => {
+  const effectId = card.onEnterHandEffect ?? '';
+  const amount = parseInt(effectId.replace('add-bolt-bp:', ''), 10) || 1;
+  // Build effective state including any prior patch fragments so applyGainMagicBolts
+  // sees the post-trigger collections (handCards / backpackItems / recycleBag / rng).
+  const effectiveState = {
+    ...state,
+    handCards: (patch.handCards as typeof state.handCards | undefined) ?? state.handCards,
+    backpackItems: (patch.backpackItems as typeof state.backpackItems | undefined) ?? state.backpackItems,
+    permanentMagicRecycleBag:
+      (patch.permanentMagicRecycleBag as typeof state.permanentMagicRecycleBag | undefined) ?? state.permanentMagicRecycleBag,
+    rng: patch.rng ?? state.rng,
+  };
+  const result = applyGainMagicBolts(effectiveState, amount, { firstTarget: 'backpack' });
+  if (result.patch.handCards) patch.handCards = result.patch.handCards;
+  if (result.patch.backpackItems) patch.backpackItems = result.patch.backpackItems;
+  if (result.patch.permanentMagicRecycleBag) patch.permanentMagicRecycleBag = result.patch.permanentMagicRecycleBag;
+  if (result.patch.rng) patch.rng = result.patch.rng;
+  const dist = formatGainMagicBoltsDistribution(result);
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'magic', message: `${card.name} 上手：背包 +${amount} 张「魔弹」（${dist}）` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${card.name} 上手：+${amount} 「魔弹」（${dist}）！` },
+  });
+};
+
+registerOnEnterHandPrefix('add-bolt-bp:', addBoltBackpack);
+
 registerOnEnterHandAll([
   { id: 'weapon-manual-onhand', handler: weaponManualOnHand },
   { id: 'blood-oath-scroll-onhand', handler: bloodOathScrollOnHand },
@@ -283,4 +359,5 @@ registerOnEnterHandAll([
   { id: 'growth-blade-onhand', handler: growthBladeOnHand },
   { id: 'growth-blade-onhand-x2', handler: growthBladeOnHandX2 },
   { id: 'on-hand-heal-1', handler: onHandHeal1 },
+  { id: 'event-grant-onhand-temp-armor-1', handler: eventGrantOnHandTempArmor1 },
 ]);

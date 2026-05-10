@@ -151,6 +151,9 @@ const TINT_BY_KEY: Record<string, string> = {
   'knight-attack-armor-draw': 'from-red-500/45 to-blue-500/45',
   'knight-temp-stats-draw': 'from-violet-400/45 to-orange-500/45',
   'knight-charge-burst': 'from-amber-400/55 to-red-600/50',
+  'knight-backpack-bolt': 'from-amber-500/50 to-violet-500/45',
+  'knight-recycle-bolt': 'from-emerald-500/50 to-violet-500/45',
+  'knight-lay-mine': 'from-stone-500/55 to-orange-600/45',
 };
 
 export function tintForKey(k: string): string {
@@ -1481,6 +1484,39 @@ export function CuteSticker({ k }: { k: string }) {
           <path fill="none" stroke="#38bdf8" strokeWidth="1.5" d="M10 16l-4-1M22 16l4-1M16 10l1-4M16 22l-1 4M11 11l-2-3M21 11l2-3M11 21l-2 3M21 21l2 3" />
         </g>
       );
+    case 'knight-backpack-bolt':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#a16207" d="M9 12h14v14c0 1-1 2-2 2H11c-1 0-2-1-2-2z" />
+          <path fill="#ca8a04" d="M11 10c0-2 2-3 5-3s5 1 5 3v2h-10z" />
+          <path fill="#fde047" d="M17 14l-4 7h3l-2 6 7-9h-3l3-4z" stroke="#854d0e" />
+        </g>
+      );
+    case 'knight-recycle-bolt':
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="17" cy="20" r="9" fill="#065f46" />
+          <circle cx="17" cy="20" r="6.5" fill="#10b981" />
+          <path fill="none" stroke="#bbf7d0" strokeWidth={1.4} d="M12 18 a5 5 0 0 1 9 -1" />
+          <path fill="#bbf7d0" stroke="#bbf7d0" d="M21 16 l1.5 1.5 -2.7 0.6 z" />
+          <path fill="none" stroke="#bbf7d0" strokeWidth={1.4} d="M22 22 a5 5 0 0 1 -9 1" />
+          <path fill="#bbf7d0" stroke="#bbf7d0" d="M13 24 l-1.5 -1.5 2.7 -0.6 z" />
+          <path fill="#fde047" d="M17 13l-3 6h2l-1.5 5 5-7h-2l2-4z" stroke="#854d0e" />
+        </g>
+      );
+    case 'knight-lay-mine':
+      // 地雷 + 引线：球形地雷主体 + 顶部引信火花 + 周围爆炸辐射线（提示陷阱触发瞬间）
+      return (
+        <g stroke={O} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+          <path fill="#f59e0b" d="M9 12 l2 -3 M25 12 l-2 -3 M9 28 l2 3 M25 28 l-2 3 M5 20 l3 0 M29 20 l-3 0" />
+          <circle cx="17" cy="20" r="7" fill="#1c1917" stroke="#451a03" />
+          <circle cx="17" cy="20" r="4.5" fill="#292524" />
+          <path fill="none" stroke="#78350f" strokeWidth={1.2} d="M17 13 q-2 -2 -1 -4 q1 -1 2 -1 q1 1 0 3" />
+          <circle cx="18" cy="9" r="1.6" fill="#fbbf24" stroke="#b45309" />
+          <circle cx="18" cy="9" r="0.8" fill="#fef3c7" stroke="none" />
+          <path fill="#a16207" d="M14 18 l1 1 1 -1 -1 -1 z M19 22 l1 1 1 -1 -1 -1 z" stroke="none" />
+        </g>
+      );
     default:
       return cuteFallbackSticker(hashStickerKey(k));
   }
@@ -1532,6 +1568,7 @@ export const ALL_STICKER_KEYS: readonly string[] = [
   'knight-three-card-thunder','knight-reorganize-bag','knight-strip-perm','knight-discard-rebuild',
   'knight-armor-double-strike','knight-cleanse-draw','knight-recycle-tide','knight-persuade-blade',
   'knight-attack-armor-draw','knight-temp-stats-draw','knight-charge-burst',
+  'knight-backpack-bolt','knight-recycle-bolt','knight-lay-mine',
 ];
 
 export const MagicNameFlankIcons = memo(function MagicNameFlankIcons({

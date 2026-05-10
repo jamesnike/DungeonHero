@@ -2,15 +2,6 @@ import { type GameCardData } from '@/components/GameCard';
 import { CHAOS_DICE_SPELL_DESCRIPTION, CHAOS_DICE_SPELL_MAGIC_EFFECT } from '@/lib/knightChaosDiceCopy';
 import type { RngState } from '@/game-core/rng';
 import { shuffle as rngShuffle, nextId } from '@/game-core/rng';
-import { applyDerivedCardText } from '@/game-core/card-schema/card-text';
-// NB: formatter registrations live in
-// `@/game-core/card-schema/definitions/card-text`, which reads
-// `STARTER_CARD_IDS` from `@/game-core/deck`. Importing the definitions here
-// would create a circular dep (knightDeck → definitions/card-text → deck →
-// knightDeck via knight image / type re-exports). `cardUpgrade.ts` imports
-// the definitions at module load and is reached via the reducer chain before
-// any deck construction runs, so the registry is populated when these
-// factories execute in app code.
 
 // Import images for Knight cards
 import holyBladeImage from '@assets/generated_images/holy_light_blade.png';
@@ -46,7 +37,6 @@ import frenzyCurseImage from '@assets/generated_images/card_curse_frenzy.png';
 import dedupeMagicUnderworldRelicImage from '@assets/generated_images/card_dedupe_magic_underworld_relic.png';
 import dualguardAmuletImage from '@assets/generated_images/chibi_dualguard_amulet.png';
 import thunderAmuletSigilImage from '@assets/generated_images/card_dedupe_amulet_thunder_sigil.png';
-import graveyardGuardianAmuletImage from '@assets/generated_images/knight_graveyard_guardian_amulet.png';
 import knightDeleteDrawAmuletImage from '@assets/generated_images/knight_delete_draw_amulet.png';
 import thunderGoldAmuletImage from '@assets/generated_images/knight_thunder_gold_amulet.png';
 import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
@@ -87,7 +77,6 @@ import knightScrollBagFetchImage from '@assets/generated_images/knight_scroll_ba
 import knightMagicBloodDrawImage from '@assets/generated_images/knight_magic_blood_draw.png';
 import knightWeaponResonanceBladeImage from '@assets/generated_images/knight_weapon_resonance_blade.png';
 import dedupeStarterMagicMissileImage from '@assets/generated_images/knight_magic_missile_crossbow.png';
-import knightBarrageShieldImage from '@assets/generated_images/knight_barrage_shield.png';
 import dedupeStarterThunderStrikeImage from '@assets/generated_images/card_dedupe_starter_thunder_strike.png';
 import knightShieldEnduranceImage from '@assets/generated_images/knight_shield_endurance.png';
 import knightGrowthShieldImage from '@assets/generated_images/knight_growth_shield.png';
@@ -99,7 +88,6 @@ import dedupeMagicArcaneRefineImage from '@assets/generated_images/card_dedupe_m
 import starterScrollEternalInscribeImage from '@assets/generated_images/starter_scroll_eternal_inscribe.png';
 import thunderstrikeBastionShieldImage from '@assets/generated_images/knight_thunderstrike_bastion_shield.png';
 import communalDefenseShieldImage from '@assets/generated_images/knight_communal_defense_shield.png';
-import dedupeStarterCombatRallyImage from '@assets/generated_images/card_dedupe_starter_combat_rally.png';
 
 export interface KnightCardData extends GameCardData {
   classCard: true;
@@ -111,6 +99,9 @@ export interface KnightCardData extends GameCardData {
   damageReflect?: number;
   permanentBuff?: string;
   tempBuff?: string;
+  /** 「唯一」标记：本局已有同 baseId 实例时，后续 sampling（discover / draw /
+   *  shop refresh / event grant）全部过滤掉。语义见 `uniqueClass.ts`。 */
+  unique?: boolean;
 }
 
 export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] {
@@ -130,6 +121,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 6,
     image: holyBladeImage,
     classCard: true,
+    description: '入场：恢复 3 点生命。每次攻击时恢复 2 点生命。',
+    shortDescription: '入场+3生命；攻击+2生命',
     onEquipEffect: 'heal-3',
     healOnAttack: 2,
     durability: 2,
@@ -144,6 +137,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 3,
     image: swiftDaggerKnightImage,
     classCard: true,
+    description: '入场：所有装备栏临时攻击 +2。用此武器杀死怪物时耐久度回满。',
+    shortDescription: '入场全栏 +2 临时攻；杀怪回满耐久',
     onEquipEffect: 'all-temp-attack-2',
     durability: 2,
     maxDurability: 2,
@@ -174,6 +169,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 5,
     image: ironTowerShieldImage,
     classCard: true,
+    description: '完全格挡一次攻击的全部伤害，无论攻击力多高。损毁后进入回收袋。',
+    shortDescription: '完全格挡一次攻击的全部伤害',
     durability: 1,
     maxDurability: 1,
     armorMax: 5,
@@ -188,6 +185,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 4,
     image: thornedShieldImage,
     classCard: true,
+    description: '格挡时反弹一半的攻击伤害给攻击者（向上取整），并加上该装备栏的永久攻击和临时攻击。',
+    shortDescription: '格挡时反弹一半伤害+本栏攻击',
     reflectHalfDamage: true,
     durability: 2,
     maxDurability: 2,
@@ -202,6 +201,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 3,
     image: guardianShieldImage,
     classCard: true,
+    description: '完美格挡时（攻击≤护甲值），50% 概率本次格挡不消耗护甲值（掷骰判定）。',
+    shortDescription: '完美格挡时 50% 不耗护甲值',
     shieldPerfectBlockArmorSaveChance: 50,
     durability: 2,
     maxDurability: 2,
@@ -234,6 +235,25 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'discard-zap',
   });
 
+  // 殒雷符（unique）：每击杀一只怪物，立刻在该 cell 生成一个「地雷」幽灵建筑。
+  // 跟「布雷术」生成的同款（5 点纯伤、ghost、踩到即触发 + 进坟场，受「引雷阵锋」
+  // globalMineDamageBonus 加成）。任何来源击杀都触发（武器 / magic / 反震 /
+  // 遗言伤害 / 地雷自己），cell 已被占（stack-pop / swarm-buglet / 瀑流后续）
+  // 时地雷堆叠在上面。
+  // 触发实现：reducer.ts postProcessActiveCards step 3.5 检测
+  // `prev?.defeatProcessed === true && curr !== prev`，与 swarm spawn 同 pattern。
+  pushCard({
+    type: 'amulet',
+    name: '殒雷符',
+    value: 1,
+    image: thunderAmuletSigilImage,
+    classCard: true,
+    unique: true,
+    description: '每击杀一只怪物，立刻在该位置生成一个「地雷」（5 点纯伤，受「引雷阵锋」加成；该位置已有卡时堆叠在上）。',
+    shortDescription: '击杀怪物 → 该位置生成地雷',
+    amuletEffect: 'kill-cell-mine',
+  });
+
   // === POTIONS (2 cards) ===
   pushCard({
     type: 'potion',
@@ -264,11 +284,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroHolyLightImage,
     classCard: true,
-    unique: true,
-    description: '第一次使用时解锁圣光；已掌握时充满数值槽，可手动发动。发动效果：回满生命。',
-    shortDescription: '解锁圣光；发动回满生命',
+    description: '第一次使用时解锁圣光；已掌握时充满数值槽，可手动发动。',
+    shortDescription: '解锁圣光；已掌握时充满数值槽',
     heroMagicId: 'holy-light',
-    heroMagicEffect: '英雄魔法：解锁或触发圣光（回满生命）。',
+    heroMagicEffect: '英雄魔法：解锁或触发圣光。',
   });
 
   pushCard({
@@ -277,7 +296,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroBerserkerImage,
     classCard: true,
-    unique: true,
     description: '第一次使用时解锁狂战；已掌握时充满数值槽，可手动发动。',
     shortDescription: '解锁狂战；已掌握时充满数值槽',
     heroMagicId: 'berserker-rage',
@@ -305,9 +323,11 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicDeadPactImage,
     classCard: true,
+    description: '一次性：从坟场随机获得两张怪物牌，加入手牌。',
+    shortDescription: '从坟场随机获得 2 张怪物牌',
     magicType: 'instant',
+    magicEffect: '从坟场随机获得两张怪物牌。',
     knightEffect: 'monster-recruit',
-    maxUpgradeLevel: 1,
   });
 
   pushCard({
@@ -316,9 +336,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicArmorPierceImage,
     classCard: true,
+    description: '永久：选择一件护甲装备，对目标怪物造成等同护甲值 100% 的伤害。',
+    shortDescription: '一件护甲值 100% 转化为伤害',
     magicType: 'permanent',
+    magicEffect: '护甲值 100% 转化为伤害。',
     knightEffect: 'armor-strike',
-    maxUpgradeLevel: 2,
+    maxUpgradeLevel: 1,
   });
 
   pushCard({
@@ -327,8 +350,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicMissingHpSmiteImage,
     classCard: true,
+    description: '永久：对一名怪物造成等同当前已损失生命值 50% 的伤害。',
     shortDescription: '伤害 ＝ 已损失生命 50%',
     magicType: 'permanent',
+    magicEffect: '以失去生命 50% 为伤害。',
     knightEffect: 'missing-hp-smite',
     maxUpgradeLevel: 2,
   });
@@ -342,11 +367,14 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroReviveTomeImage,
     classCard: true,
+    description: '永久：失去 3 生命，选择当前行一张「已翻转」卡牌，将其翻回原始形态。\n上手：恢复 1 生命。',
+    shortDescription: '失去 3 生命，翻回 1 张已翻转卡；上手 +1 生命',
     magicType: 'permanent',
+    magicEffect: '将一张已翻转的牌翻回去。',
     knightEffect: 'flip-back-active',
     onEnterHandEffect: 'blood-oath-scroll-onhand',
     recycleDelay: 2,
-    maxUpgradeLevel: 2,
+    maxUpgradeLevel: 0,
   });
 
   // 永恒之器：永久（Perm 2）。失去 3 HP，生命上限永久 +3。无目标，立即结算。
@@ -359,11 +387,13 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroReviveTomeImage,
     classCard: true,
-    unique: true,
+    description: '永久：失去 3 生命，生命上限永久 +3。',
+    shortDescription: '失去 3 生命，生命上限永久 +3',
     magicType: 'permanent',
+    magicEffect: '永久魔法：失去 3 生命，生命上限永久 +3。',
     knightEffect: 'eternal-vessel',
     recycleDelay: 2,
-    maxUpgradeLevel: 2,
+    maxUpgradeLevel: 0,
   });
 
   pushCard({
@@ -372,9 +402,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicGraveNovaImage,
     classCard: true,
+    description: '永久：当此牌被弃置时，对当前行所有怪物造成 3 点伤害。',
+    shortDescription: '弃置时对当前行所有怪物 3 伤',
     magicType: 'permanent',
+    magicEffect: '被弃置时爆炸伤害。',
     knightEffect: 'grave-nova',
-    maxUpgradeLevel: 2,
+    maxUpgradeLevel: 1,
   });
 
   // 三牌惊雷 (Perm 2)：若打出时背包正好有 3 张牌，对所有怪物造成 9 点法术伤害；
@@ -386,11 +419,14 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicGraveNovaImage,
     classCard: true,
+    description: '永久：若背包正好有 3 张牌，对所有怪物造成 9 点法术伤害。\n上手：对所有怪物各造成 1 点法术伤害。',
+    shortDescription: '背包恰 3 张时全场 9 法伤；上手全场 1 法伤',
     magicType: 'permanent',
+    magicEffect: '背包恰好 3 张时全场 9 点法伤；上手全场 1 点法伤。',
     knightEffect: 'three-card-thunder',
     onEnterHandEffect: 'three-card-thunder-onhand',
     recycleDelay: 2,
-    maxUpgradeLevel: 2,
+    maxUpgradeLevel: 0,
   });
 
   // 整顿背囊 (Perm 2)：背包上限永久 +1，然后从手牌/护符栏/装备栏中至多
@@ -402,10 +438,13 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: potionBackpackExpandImage,
     classCard: true,
+    description: '永久：背包上限 +1，然后从手牌、护符栏或装备栏中选择至多 3 张牌放回背包顶部。装备/护符不会触发任何破损或转化效果。',
+    shortDescription: '背包+1；至多 3 张牌放回背包顶部',
     magicType: 'permanent',
+    magicEffect: '背包上限 +1；选至多 3 张牌放回背包顶部。',
     knightEffect: 'reorganize-backpack',
     recycleDelay: 2,
-    maxUpgradeLevel: 1,
+    maxUpgradeLevel: 0,
   });
 
   pushCard({
@@ -414,9 +453,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicBerserkGambitImage,
     classCard: true,
+    description: '一次性：生命降至 1，每个武器栏可多攻击一次。',
+    shortDescription: '生命降至 1；每个武器栏多攻击一次',
     magicType: 'instant',
+    magicEffect: '降血换取每栏额外攻击。',
     knightEffect: 'berserk-gambit',
-    maxUpgradeLevel: 1,
+    maxUpgradeLevel: 3,
   });
 
   pushCard({
@@ -425,8 +467,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicBattleSpiritImage,
     classCard: true,
+    description: '一次性：选择一个装备栏，本回合（持续到下次瀑流）该栏每英雄回合可多攻击 1 次，且每怪物回合格挡耐久上限 +1。',
     shortDescription: '本回合：所选装备栏多攻击 1 次、格挡耐久 +1',
     magicType: 'instant',
+    magicEffect: '选定装备栏激发战意。',
     knightEffect: 'battle-spirit',
     maxUpgradeLevel: 1,
   });
@@ -451,9 +495,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicRecycleFlareImage,
     classCard: true,
-    unique: true,
+    description: '永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 2 张牌。(可超手牌上限)',
     shortDescription: '回收袋剩余瀑流 -1；抽 2 张',
     magicType: 'permanent',
+    magicEffect: '回收袋归位并抽牌。',
     knightEffect: 'recycle-flare',
     maxUpgradeLevel: 2,
   });
@@ -477,7 +522,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicFateSightImage,
     classCard: true,
+    description: '永久：翻看主牌堆顶 4 张牌，如果其中没有怪物牌，则下次劝降成功率 +70%。',
+    shortDescription: '翻 4 张：无怪物 → 下次劝降率 +70%',
     magicType: 'permanent',
+    magicEffect: '透视牌堆顶 4 张，无怪物则获劝降率加成。',
     knightEffect: 'fate-sight',
     recycleDelay: 1,
     maxUpgradeLevel: 1,
@@ -491,6 +539,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 2,
     image: persuadeHammerImage,
     classCard: true,
+    description: '每次攻击一次，下次劝降成功概率 +20%。',
+    shortDescription: '每次攻击下次劝降率 +20%',
     persuadeBoostOnHit: 20,
     durability: 3,
     maxDurability: 3,
@@ -504,6 +554,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 3,
     image: thunderStunHammerImage,
     classCard: true,
+    description: '入场：击晕上限 +5%。击晕率60%。攻击击晕的怪物时造成双倍伤害（先判定击晕，本次击晕也会触发翻倍）。',
+    shortDescription: '入场击晕上限 +5%；击晕率 60%；击晕怪物伤害翻倍（含本次击晕）',
     weaponStunChance: 60,
     doubleDamageOnStunned: true,
     onEquipEffect: 'stunCap+5',
@@ -528,6 +580,30 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 2,
   });
 
+  // 引雷阵锋：每消耗 1 点耐久，将「全场地雷伤害 +N」累加到 globalMineDamageBonus
+  // —— 永久不撤销（修复耐久不撤销 bonus、武器损毁也保留）。配合「布雷术」/
+  // 「地雷」（card_dedupe_knight_magic_grave_nova）使用：玩家用本武器攻击 → 耐久
+  // 减少 → 全场已存在 + 之后生成的所有地雷被怪物触发时伤害都按新 bonus 算。
+  // - 升级缩放：lvl 0 → 2，lvl 1 → 2，lvl 2 → 3。
+  // - 升级幅度：lvl 0 (3 攻 / 2 耐) → lvl 1 (3 攻 / 3 耐) → lvl 2 (3 攻 / 3 耐 +
+  //   bonus 2 → 3)。
+  // - 触发覆盖路径：computeDurabilityLossEffects（武器攻击 tick / 盾自伤）+
+  //   蓄能裂击 + 等价交换 + MODIFY_EQUIPMENT_DURABILITY（负 delta）。
+  pushCard({
+    type: 'weapon',
+    name: '引雷阵锋',
+    value: 3,
+    image: thunderHammerImage,
+    classCard: true,
+    description: '每消耗 1 点耐久，全场地雷伤害永久 +2（不撤销）。',
+    shortDescription: '耐久 -1：全场地雷伤害永久 +2',
+    knightEffect: 'thunder-array-blade',
+    mineDamageBoostPerDur: 2,
+    durability: 2,
+    maxDurability: 2,
+    maxUpgradeLevel: 2,
+  });
+
   // === NEW SHIELDS (3 cards) ===
   pushCard({
     type: 'shield',
@@ -535,6 +611,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 3,
     image: reviveBoneShieldImage,
     classCard: true,
+    description: '复生（首次摧毁恢复 1 耐久）。遗言：该装备栏永久伤害 +1。',
+    shortDescription: '复生 1 次；遗言：本栏永久 +1 伤害',
     hasEquipmentRevive: true,
     onDestroyPermanentDamage: 1,
     durability: 2,
@@ -578,14 +656,14 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
 
   // 雷震守护盾 — 高护甲、低耐久；摧毁时永久击晕上限 +8%（封顶 100%）。\
   // 复用既有 stunCap+N 解析约定：onDestroyEffect: 'stunCap+8' 由四条遗言路径统一识别。\
-  // 升级：L1 stunCap+8 → stunCap+10（护甲/耐久不变）；L2 在 L1 基础上加 hasEquipmentRevive
-  //（首次摧毁恢复 1 耐久，第二次才触发遗言）。
   pushCard({
     type: 'shield',
     name: '雷震守护盾',
     value: 8,
     image: thunderstrikeBastionShieldImage,
     classCard: true,
+    description: '遗言：击晕上限 +8%（封顶 100%）。',
+    shortDescription: '遗言：击晕上限 +8%',
     onDestroyEffect: 'stunCap+8',
     durability: 1,
     maxDurability: 1,
@@ -597,14 +675,14 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   // 共御圣盾 — 复生 + 双段遗言：1 耐久、复生一次后才进入遗言；\
   // 摧毁时所有装备栏 +5 临时护甲。复用既有 allSlotTempArmor:N 事件令牌约定，\
   // 在四条遗言摧毁路径中统一解析。\
-  // 升级（knight:communal-defense-shield）：L1 armor 6→8（耐久/复生/遗言保留），
-  // L2 armor 8 保留 + 遗言 allSlotTempArmor:5 → :7（复生 + 全栏 +7 临时护甲）。
   pushCard({
     type: 'shield',
     name: '共御圣盾',
     value: 6,
     image: communalDefenseShieldImage,
     classCard: true,
+    description: '复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +5 临时护甲。',
+    shortDescription: '复生 1 次；遗言：全栏 +5 临时护甲',
     hasEquipmentRevive: true,
     onDestroyEffect: 'allSlotTempArmor:5',
     durability: 1,
@@ -616,38 +694,20 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
 
   // 生长之盾 — 装备时每次卡牌翻转触发一次按卡名累计的 +1 增幅；
   // 遗言：从坟场随机抽出一张 Event 加入手牌（无 Event 则静默失败）。
-  // 升级：L1 每次翻转改为 +2 增幅；L2 在 L1 基础上将遗言抽取张数从 1 提升到 3。
   pushCard({
     type: 'shield',
     name: '生长之盾',
     value: 1,
     image: knightGrowthShieldImage,
     classCard: true,
+    description: '装备时：每发生一次卡牌翻转，该护盾增幅一次（按卡名累计 +1 护甲）。遗言：从坟场随机抽出一张 Event 加入手牌。',
+    shortDescription: '每次卡牌翻转 +1 护甲；遗言：随机入手 1 张坟场 Event',
     amplifyOnFlip: true,
     onDestroyEffect: 'graveyard-event-to-hand',
     durability: 4,
     maxDurability: 4,
     armorMax: 1,
     knightEffect: 'growth-shield',
-    maxUpgradeLevel: 2,
-  });
-
-  // 弹幕护盾 — 完美格挡时直接将 2 张「魔弹」加入手牌（手牌已满则静默丢弃）。
-  // 走 createMagicBoltCard + applyAmplifyOnCreate（与魔弹连弩 / 魔法飞弹 / 弹幕之符 一致），
-  // 让新生成的「魔弹」继承当前 amplifiedCardBonus['魔弹'] 累计加成。
-  // 实现位置：rules/combat.ts 完美格挡判定块（dual-guard 之后、blockGrantTempArmorToOther 之前）。
-  // 升级：L1 护甲 2→4（耐久不变，效果不变）；L2 perfectBlockSpawnMissiles 2→3（护甲/耐久不变）。
-  pushCard({
-    type: 'shield',
-    name: '弹幕护盾',
-    value: 2,
-    image: knightBarrageShieldImage,
-    classCard: true,
-    perfectBlockSpawnMissiles: 2,
-    durability: 3,
-    maxDurability: 3,
-    armorMax: 2,
-    knightEffect: 'barrage-shield',
     maxUpgradeLevel: 2,
   });
 
@@ -691,6 +751,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: persuadeAuraAmuletImage,
     classCard: true,
+    description: '每获得一次临时攻击或临时护甲加成，下一次劝降率 +10%。',
+    shortDescription: '每次获得临时攻/护，下次劝降率 +10%',
     amuletEffect: 'persuade-on-temp-attack',
     maxUpgradeLevel: 1,
   });
@@ -701,6 +763,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: persuadeScrollAmuletDedupeImage,
     classCard: true,
+    description: '每劝降一次，将一张「归袋抽引」加入手牌（一次性：从回收袋随机 1 张牌加入手牌）。',
+    shortDescription: '每次劝降，入手 1 张「归袋抽引」',
     amuletEffect: 'persuade-grant-recycle-fetch',
     maxUpgradeLevel: 1,
   });
@@ -771,19 +835,26 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'delete-draw',
   });
 
-  // 墓园守卫：装备的遗言额外多触发 1 次（含自然破损与顶替/弃装重铸/灵魂置换 等）。
-  // 多个本护符线性叠加：N 个 → 每次基础触发都会再多触发 N 次（共 1 + N 次）。
-  // 与「墓语遗愿」等已经按次叠加的机制兼容（每次基础触发都按 1 + N 放大）。
+  // 循手之符 — 每"手动"拖卡到回收袋累计：3 张抽 1。
+  // 仅手动事件（waitsOverride === 1 标记）触发：
+  //   - 装备栏 / 护符栏 → 回收袋（拖动）
+  //   - 手牌 → 回收袋（拖动）
+  // 不算的事件（系统层路径）：
+  //   - 出 Perm 卡后自动入袋（如 净册涌泉 / 凡化咒 / 战血之印 等）
+  //   - 装备耐久归零进回收袋（永恒铭刻装备）
+  //   - 护符被事件 / 容量缩减销毁进回收袋
+  //   - 瀑流溢出
+  //   - 「专属召唤」/「汰旧迎新」/「洗册待回」等 magic 卡的"系统层弃手牌"
+  // 多件叠加跨阈值仍只抽 1 张（与 积蓄之符 一致），无升级。
   pushCard({
     type: 'amulet',
-    name: '墓园守卫',
+    name: '循手之符',
     value: 1,
-    image: graveyardGuardianAmuletImage,
+    image: dedupeKnightMagicRecycleTideImage,
     classCard: true,
-    unique: true,
-    description: '装备的遗言每次触发时，额外多触发 1 次（多张本护符线性叠加）。',
-    shortDescription: '装备遗言每次多触发 1 次',
-    amuletEffect: 'last-words-extra-trigger',
+    description: '每手动拖动 3 张牌到回收袋，从背包抽 1 张牌。仅"手动拖动"触发，出牌自回收 / 装备销毁 / 瀑流溢出等系统路径不算。',
+    shortDescription: '每手动拖 3 张到回收袋，背包抽 1 张',
+    amuletEffect: 'manual-recycle-draw',
   });
 
   // === NEW POTIONS (2 cards) ===
@@ -842,10 +913,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollTransformGrantImage,
     classCard: true,
-    description: '一次性：选择一张手牌，赋予「侧击：失去 3 点生命，随机获得坟场一张魔法卡」。',
-    shortDescription: '为一张手牌赋予侧击效果',
+    description: '一次性：选择一张手牌，赋予「转型：失去 3 点生命，随机获得坟场一张魔法卡」。',
+    shortDescription: '为一张手牌赋予转型效果',
     magicType: 'instant',
-    magicEffect: '选择一张手牌赋予侧击效果。',
+    magicEffect: '选择一张手牌赋予转型效果。',
     knightEffect: 'transform-grant',
   });
 
@@ -868,11 +939,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeMagicUndeathGuardImage,
     classCard: true,
-    description: '受到致死伤害时自动触发，抵消该次伤害；触发后从手牌进入坟场。',
-    shortDescription: '致死伤害时自动抵消',
+    description: '一次性：只能在受到致命伤害时打出，抵消该次伤害。',
+    shortDescription: '濒死时抵消该次致命伤害',
     magicType: 'instant',
-    magicEffect: '致死伤害时自动抵消。',
+    magicEffect: '濒死时抵消致死伤害。',
     knightEffect: 'death-ward',
+    maxUpgradeLevel: 2,
   });
 
   pushCard({
@@ -908,7 +980,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicArmorStunConvertImage,
     classCard: true,
+    description: '永久：选择一个护盾，每 1 点护甲值使击晕上限 +1%。',
+    shortDescription: '所选护盾每 1 护甲，击晕上限 +1%',
     magicType: 'permanent',
+    magicEffect: '护甲转化为击晕上限。',
     knightEffect: 'armor-stun-convert',
     maxUpgradeLevel: 1,
   });
@@ -922,7 +997,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeStarterThunderStrikeImage,
     classCard: true,
+    description: '永久：对一个怪物造成 ⌈击晕上限/4⌉ 点法术伤害，60% 击晕（受击晕上限约束），然后抽 1 张牌。',
+    shortDescription: '⌈晕上限/4⌉ 法伤；60% 晕；抽 1',
     magicType: 'permanent',
+    magicEffect: '电涌：晕上限 1/4 法伤 + 60% 晕 + 抽 1。',
     knightEffect: 'stun-cap-strike',
     recycleDelay: 1,
     maxUpgradeLevel: 1,
@@ -953,29 +1031,13 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicArmorPierceImage,
     classCard: true,
+    description: '永久：选择一面护盾，对随机 2 个怪物各造成 50% 护甲值的法术伤害，然后该护盾耐久 -1。',
+    shortDescription: '50% 护甲法伤随机 2 怪；该盾耐久 -1',
     magicType: 'permanent',
+    magicEffect: '护甲值 50% 伤害随机两怪，盾耐久 -1。',
     knightEffect: 'armor-double-strike',
     recycleDelay: 1,
-    maxUpgradeLevel: 2,
-  });
-
-  // 连环转律 (唯一)：造成 X 点法术伤害，X 为此前连续转型的次数（含本牌）。
-  // 同类型连出会断链 → 0 伤害。resolver 在 card-schema/definitions/magic.ts 的
-  // `knight:transform-streak-strike` 处理（按 knightEffect 路由，跳过 magicEffect）。
-  pushCard({
-    type: 'magic',
-    name: '连环转律',
-    value: 0,
-    image: dedupeStarterCombatRallyImage,
-    classCard: true,
-    unique: true,
-    description: '造成 X 点法术伤害，X 为此前连续转型的次数（含本牌）。同类型连出会断链。',
-    shortDescription: '伤害 ＝ 连续转型次数',
-    magicType: 'permanent',
-    magicEffect: '伤害 = 连续转型链长度，同类型断链。',
-    knightEffect: 'transform-streak-strike',
-    recycleDelay: 2,
-    maxUpgradeLevel: 0,
+    maxUpgradeLevel: 1,
   });
 
   pushCard({
@@ -984,10 +1046,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicOverkillUpgradeImage,
     classCard: true,
+    description: '永久：对一个怪物造成 3 点伤害。超杀：升级一张牌。',
+    shortDescription: '3 点伤害；超杀升级 1 张牌',
     magicType: 'permanent',
+    magicEffect: '造成 3 点伤害，超杀升级一张牌。',
     knightEffect: 'overkill-upgrade',
     recycleDelay: 1,
-    maxUpgradeLevel: 2,
   });
 
   pushCard({
@@ -996,27 +1060,31 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: recallScrollImage,
     classCard: true,
-    unique: true,
+    description: '永久：失去 2 点生命，回手一张牌，抽 1 张牌。',
+    shortDescription: '失去 2 生命，回手 1 张，抽 1 张',
     magicType: 'permanent',
+    magicEffect: '失去 2 HP，回手一张牌，抽 1 张牌。',
     knightEffect: 'recall-equipment',
     maxUpgradeLevel: 2,
   });
 
-  // 净册涌泉 (Perm 1)：选择一张手牌删除（手牌为空则跳过），然后从坟场发现一张牌
-  // （三选一），加入手牌。触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），
-  // 与「招灵书印」护符 (delete-draw) 能够叠加：每次删除还会额外从背包抽 2 张。
+  // 净册涌泉 (Perm 1)：选择一张手牌删除，从背包抽 N 张牌
+  // （N = 3 / 4 / 5，对应升级 0 / 1 / 2）。手牌为空时跳过删除，仍正常抽 N 张。
+  // 触发的删除走 CONFIRM_DELETE_CARD（kw='delete'），与「招灵书印」护符
+  // (delete-draw) 能够叠加：每次删除还会额外从背包抽 2N 张。
   pushCard({
     type: 'magic',
     name: '净册涌泉',
     value: 0,
     image: dedupeKnightMagicCleanseDrawImage,
     classCard: true,
-    description: '永久：选择一张手牌删除（手牌为空则跳过），从坟场发现一张牌（三选一），加入手牌。',
-    shortDescription: '删 1 张手牌；坟场发现 1 张（3 选 1）',
+    description: '永久：选择一张手牌删除（手牌为空则跳过），然后从背包抽 3 张牌。',
+    shortDescription: '删 1 张手牌；从背包抽 3 张',
     magicType: 'permanent',
-    magicEffect: '删 1 张手牌；坟场发现一张牌（3 选 1）加入手牌。',
+    magicEffect: '删 1 张手牌，从背包抽 N 张（升 0/1/2 → 3/4/5）。',
     knightEffect: 'cleanse-draw',
     recycleDelay: 1,
+    maxUpgradeLevel: 2,
   });
 
   // 洗册归川 (Perm 1)：将背包所有牌移入永久魔法回收袋；然后整袋瀑流 -1，
@@ -1029,7 +1097,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicRecycleTideImage,
     classCard: true,
-    unique: true,
     description: '永久：将背包所有牌移入回收袋；然后回收袋瀑流 -1，已就绪的牌洗回背包。',
     shortDescription: '背包→回收袋；回收袋瀑流 -1，就绪回背包',
     magicType: 'permanent',
@@ -1067,11 +1134,13 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeFlankImage,
     classCard: true,
+    description: '永久：选择一个装备栏，对一个随机怪物造成（该装备栏永久攻击 + 临时攻击）的伤害。侧击：40% 击晕。',
+    shortDescription: '该栏永久攻击+临时攻击作伤害；侧击 40% 击晕',
     magicType: 'permanent',
+    magicEffect: '永久攻击+临时攻击转化为伤害，侧击击晕。',
     knightEffect: 'temp-attack-strike',
-    flankEffect: '20% 概率击晕目标',
+    flankEffect: '40% 概率击晕目标',
     recycleDelay: 1,
-    maxUpgradeLevel: 2,
   });
 
   pushCard({
@@ -1080,8 +1149,58 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeFlankImage,
     classCard: true,
+    description: '永久：选择一个装备栏，临时攻击 +2，然后该栏临时攻击翻倍。',
+    shortDescription: '该栏临时攻击 +2 后翻倍',
     magicType: 'permanent',
+    magicEffect: '临时攻击 +2 后翻倍。',
     knightEffect: 'temp-attack-double',
+    recycleDelay: 1,
+  });
+
+  // 池中坚意 (Perm 1)：选择一个装备栏（允许空槽），按 floor(回收袋牌数 / divisor) 加临时护甲。
+  // - divisor = 4 (Lv0) / 3 (Lv1)
+  // - 这张卡从手牌打出 → 进回收袋（recycleDelay: 1）；slot-select 结算时本卡仍在
+  //   pendingMagicAction（不在 recycleBag），所以读到的回收袋数不含本卡——与
+  //   「池中惊雷」(recycle-bolt) 同语义。
+  // - Echo C 类（重读 state）和 A 类（× echoMultiplier）此处数值等价（slot-select
+  //   结算之间 recycleBag 不变）。实现走 A 类单次乘 × echoMultiplier，与 囊中锋意
+  //   / temp-attack-double 同 pattern。
+  // - 与 囊中锋意（backpack-temp-attack）成对照：前者背包数 → 临攻，本卡回收袋数 → 临护。
+  // - 修改 slotTempArmor 后必须调 applySlotArmorBonusDelta 让 armor 立即刷到新 cap
+  //   （详见 shield-armor-vs-durability.mdc）。
+  pushCard({
+    type: 'magic',
+    name: '池中坚意',
+    value: 0,
+    image: knightScrollFortifyFlankImage,
+    classCard: true,
+    description: '永久：选择一个装备栏，回收袋每 4 张牌 +1 临时护甲。',
+    shortDescription: '所选栏 +回收袋数÷4 临时护甲',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：选择一个装备栏，回收袋每 4 张牌 +1 临时护甲。',
+    knightEffect: 'recycle-temp-armor',
+    recycleDelay: 1,
+    maxUpgradeLevel: 1,
+  });
+
+  // 囊中锋意 (Perm 1)：选择一个装备栏（允许空槽），按 floor(背包牌数 / divisor) 加临时攻击。
+  // - divisor = 3 (Lv0) / 2 (Lv1)
+  // - 这张卡从手牌打出 → 进回收袋（recycleDelay: 1），不经背包，
+  //   所以 setup → resolve 中间 backpackItems.length 不会变化；
+  //   Echo C 类（重读 state）和 A 类（× echoMultiplier）此处数值等价。
+  //   实现走 A 类单次乘 × echoMultiplier，与现有 slot-select pattern 对齐。
+  // - 与「囊中惊雷」(backpack-bolt) 配套——前者把背包数转伤害，本卡转临时攻击。
+  pushCard({
+    type: 'magic',
+    name: '囊中锋意',
+    value: 0,
+    image: knightScrollBladeStormImage,
+    classCard: true,
+    description: '永久：选择一个装备栏，背包每 3 张牌 +1 临时攻击。',
+    shortDescription: '所选栏 +背包数÷3 临时攻击',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：选择一个装备栏，背包每 3 张牌 +1 临时攻击。',
+    knightEffect: 'backpack-temp-attack',
     recycleDelay: 1,
     maxUpgradeLevel: 1,
   });
@@ -1095,7 +1214,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicBattleSpiritImage,
     classCard: true,
+    description: '永久：选择一个装备栏，+2 临时攻击 +2 临时护甲，抽 1 张牌。升级1：+4/+4。升级2：+6/+6。',
+    shortDescription: '所选栏 +2 临攻 +2 临护；抽 1（Lv1: +4/+4 / Lv2: +6/+6）',
     magicType: 'permanent',
+    magicEffect: '永久魔法：选择一个装备栏，+2 临时攻击 +2 临时护甲，抽 1 张牌。',
     knightEffect: 'temp-attack-armor-draw',
     recycleDelay: 1,
     maxUpgradeLevel: 2,
@@ -1119,6 +1241,106 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     magicEffect: '永久魔法：选择一个装备栏，按 (临时攻击+临时护甲)÷3 抽牌。',
     knightEffect: 'temp-stats-to-draw',
     recycleDelay: 1,
+  });
+
+  // 囊中惊雷 (Perm 1)：选择一个目标，造成 floor(背包剩余卡牌数 × pct%) 法术伤害。
+  // pct 由升级等级决定（lvl 0 → 50%，lvl 1 → 75%，lvl 2 → 100%）。
+  // - 单目标伤害 magic，遵循 missing-hp-smite / stun-cap-strike 同款 pattern：
+  //   始终弹出 monster picker，玩家可选 hero / 盾自伤（allowsHeroTarget: true）。
+  // - 算式：base = floor(state.backpackItems.length * pct / 100)；
+  //   totalDmg = computeSpellDamagePure(state, base + amplifyBonus) * echoMultiplier。
+  // - Echo (A 类)：单次结算，伤害 ×echoMultiplier。
+  // - 与 missile-bolt / apprentice-bolt / stun-cap-strike 共用 monster-select 路径
+  //   （hero.ts:reduceMagicMonsterSelection）；isSpellDamage=true。
+  pushCard({
+    type: 'magic',
+    name: '囊中惊雷',
+    value: 0,
+    image: knightScrollBagFetchImage,
+    classCard: true,
+    description: '永久：对一个目标造成等同于背包剩余卡牌数 50% 的法术伤害（向下取整）。',
+    shortDescription: '背包数 × 50% 法伤',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：选择一个目标，造成背包数 × 50% 法伤。',
+    knightEffect: 'backpack-bolt',
+    recycleDelay: 1,
+    maxUpgradeLevel: 2,
+  });
+
+  // 池中惊雷 (Perm 1)：选择一个目标，造成 floor(回收袋卡牌数 × pct%) 法术伤害。
+  // 与 囊中惊雷（backpack-bolt）成对照——前者数背包，本卡数回收袋。
+  // pct 由升级等级决定（lvl 0 → 50%，lvl 1 → 75%，lvl 2 → 100%）。
+  // - 单目标伤害 magic，allowsHeroTarget: true（玩家可选 hero / 盾自伤）。
+  // - 算式：base = floor(state.permanentMagicRecycleBag.length * pct / 100)；
+  //   totalDmg = computeSpellDamagePure(state, base + amplifyBonus) * echoMultiplier。
+  // - Echo (A 类)：单次结算，伤害 ×echoMultiplier。
+  // - 注意：本卡自己被打出后会进回收袋（recycleDelay: 1）；setup 时本卡仍在 hand
+  //   还没进 recycleBag，因此当下读到的 recycleBag 不含本卡——这跟 囊中惊雷 算
+  //   背包时不含本卡是同样的语义。
+  pushCard({
+    type: 'magic',
+    name: '池中惊雷',
+    value: 0,
+    image: dedupeKnightMagicRecycleTideImage,
+    classCard: true,
+    description: '永久：对一个目标造成等同于回收袋卡牌数 50% 的法术伤害（向下取整）。',
+    shortDescription: '回收袋数 × 50% 法伤',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：选择一个目标，造成回收袋数 × 50% 法伤。',
+    knightEffect: 'recycle-bolt',
+    recycleDelay: 1,
+    maxUpgradeLevel: 2,
+  });
+
+  // 囊量震慑 (Perm 1)：击晕上限 +floor(背包上限 / divisor) 个百分点。
+  // - 「背包上限」= getEffectiveBackpackCapacity(state) = BASE_BACKPACK_CAPACITY (12)
+  //   + state.backpackCapacityModifier。**不是**当前背包剩余卡数。
+  // - divisor 由升级等级决定：lvl 0 → 4；lvl 1 → 3。
+  //   背包上限 12 时：Lv0 → +3%，Lv1 → +4%。背包上限 24 时：Lv0 → +6%，Lv1 → +8%。
+  // - stunCap 全局封顶 100%（与「眩晕药剂」/「奥术护盾」一致），溢出静默吸收。
+  // - 非交互：直接 patch.stunCap，不弹窗、不选目标。
+  // - Echo (A 类)：本卡是 hand-card → recycleBag（recycleDelay: 1），背包上限不会
+  //   在本次 reduce 步骤里变化，所以 A 类（×echoMultiplier 单次结算）和 C 类
+  //   （重读 state 多次结算）数值等价；用 A 类。
+  // - 与 雷涌一击 (stun-cap-strike) 的区别：那张是「读 stunCap 转法伤」，本卡反向
+  //   「写 stunCap」——一来一回构成完整的击晕上限循环。
+  pushCard({
+    type: 'magic',
+    name: '囊量震慑',
+    value: 0,
+    image: knightScrollBladeStormImage,
+    classCard: true,
+    description: '永久：击晕上限增加 floor(背包上限 / 4)%。',
+    shortDescription: '击晕上限 +背包上限÷4 %',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：击晕上限 +背包上限÷4 %。',
+    knightEffect: 'backpack-cap-stun',
+    recycleDelay: 1,
+    maxUpgradeLevel: 1,
+  });
+
+  // 布雷术 (Perm 2 → 升级 Perm 1)：在 active row 的随机空 slot 生成一个「地雷」
+  // 幽灵建筑。当怪物瀑流落到该 slot 时，地雷从下层触发，对该怪物造成 5 点纯陷阱
+  // 伤害（不受 amplify / 法伤加成），随后地雷进坟场（怪物正常占据 slot）。
+  // - 选位规则：仅空 slot；全满则 fizzle（卡照常进回收袋，banner 提示「无可用位置」）。
+  // - Echo (A 类)：生成 echoMultiplier 个地雷，分别落在不同的随机空 slot；空位不
+  //   够时多余的丢弃。
+  // - 非怪物（event / 其它 building）落到地雷 slot 时不触发，按普通 ghost
+  //   building 同款被推到下层堆叠（mine 不消耗）。
+  // - 升级：lvl 0 recycleDelay = 2；lvl 1 recycleDelay = 1（PERM 2 ↔ PERM 1）。
+  pushCard({
+    type: 'magic',
+    name: '布雷术',
+    value: 0,
+    image: dedupeKnightMagicGraveNovaImage,
+    classCard: true,
+    description: '永久：在激活行的随机空格生成一个「地雷」（幽灵建筑）。当怪物落到该格时，地雷对该怪物造成 5 点纯伤害后进坟场。',
+    shortDescription: '随机空格生成地雷：怪物落入受 5 点纯伤',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：随机空格生成地雷，怪物落入受 5 点纯伤。',
+    knightEffect: 'lay-mine',
+    recycleDelay: 2,
+    maxUpgradeLevel: 1,
   });
 
   // 淬铸迁位 (Perm 1)：选择一个装备栏的装备进行增幅一次（同名卡按 NAME 全场 +1）；
@@ -1151,7 +1373,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
-    unique: true,
     description: '永久：选择一件装备，耐久上限 +1，耐久 +1。如果加完后该装备耐久为 4，则随机一只激活行的怪物受到 1 血层伤害，并立即将该装备耐久 -3。',
     shortDescription: '选装备 +1 上限/耐久；若至 4 耐久，敌人 -1 血层、装备 -3',
     magicType: 'permanent',
@@ -1166,13 +1387,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollFortifyFlankImage,
     classCard: true,
-    unique: true,
-    description: '永久：选择一个装备，+3（每次使用后数值 +1）临时护甲。侧击：该装备耐久度减到 1，赋予该装备复生。',
-    shortDescription: '+3(递增) 临时护甲；侧击：耐久减至 1+复生',
+    description: '永久：选择一个装备，+3（每次使用后数值 +1）临时护甲。侧击：赋予该装备复生。',
+    shortDescription: '+3(递增) 临时护甲；侧击赋予复生',
     magicType: 'permanent',
-    magicEffect: '+3(递增) 临时护甲，侧击：耐久减至 1+赋予复生。',
+    magicEffect: '+3(递增) 临时护甲，侧击赋予复生。',
     knightEffect: 'flank-fortify',
-    flankEffect: '该装备耐久度减到 1，赋予该装备复生',
+    flankEffect: '赋予该装备复生',
     recycleDelay: 2,
   });
 
@@ -1182,7 +1402,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
-    unique: true,
     description:
       '永久：选择一把武器，对激活行所有怪物造成等同于该武器攻击力的法术伤害（不耗耐久），然后该武器栏临时攻击 -3。',
     shortDescription: '武器攻击力法伤全场；该栏临时攻击 -3',
@@ -1198,12 +1417,12 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollTransformRepairImage,
     classCard: true,
-    description: '永久：选择一个装备，恢复 1 耐久。侧击：给该装备栏 +3 临时攻击（每次触发后数值 +1）。',
-    shortDescription: '装备 +1 耐久；侧击 +3(递增) 临时攻击',
+    description: '永久：选择一个装备，恢复 1 耐久。转型：给该装备栏 +3 临时攻击（每次触发后数值 +1）。',
+    shortDescription: '装备 +1 耐久；转型 +3(递增) 临时攻击',
     magicType: 'permanent',
-    magicEffect: '修复 1 耐久，侧击 +3(递增) 临时攻击。',
+    magicEffect: '修复 1 耐久，转型 +3(递增) 临时攻击。',
     knightEffect: 'transform-repair',
-    flankEffect: '给该装备栏 +3 临时攻击（每次触发后数值 +1）',
+    transformBonus: '给该装备栏 +3 临时攻击（每次触发后数值 +1）',
   });
 
   pushCard({
@@ -1226,8 +1445,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightMagicBloodDrawImage,
     classCard: true,
+    description: '永久：失去 3 点生命，抽 3 张牌。',
     shortDescription: '失去 3 生命，抽 3 张',
     magicType: 'permanent',
+    magicEffect: '失去 3 HP，抽 3 张牌。',
     knightEffect: 'blood-draw',
     maxUpgradeLevel: 2,
   });
@@ -1264,10 +1485,46 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightMagicBloodDrawImage,
     classCard: true,
+    description: '永久：弃回所有手牌（诅咒除外），然后从背包抽 3 张牌。',
+    shortDescription: '弃回所有手牌；从背包抽 3 张',
     magicType: 'permanent',
+    magicEffect: '弃回全部手牌，从背包抽 N 张（升 0/1/2 → 3/4/5）。',
     knightEffect: 'hand-purge-redraw',
     recycleDelay: 1,
     maxUpgradeLevel: 2,
+  });
+
+  // 洗册待回 (Perm 1)：把所有可回收手牌（curse 除外）洗入回收袋；从背包抽 X+N 张牌
+  // （X = 入回收袋的张数；N = 1 / 2 by upgrade level）。
+  // - 与「清囊重启」(hand-purge-redraw) 对照：那张走 DISCARD_OWNED_CARD（非 Perm 进
+  //   坟场、Perm 进回收袋）；本卡**强制**所有可回收手牌进回收袋（让它们以后还能
+  //   通过 waterfall 回到背包），故意绕过 onDiscardDraw / catapult / discard-zap
+  //   等"主动弃手牌"语义——这是"洗"不是"弃"。
+  // - 抽牌量动态：X+N。X=0（手牌空）时仍抽 N 张。
+  // - 升级：N 由 [1, 2][upgradeLevel] 决定。
+  // - 法术回响（C 类雪球）：每次迭代重读 hand
+  //     iter 1: 移走 X1 → 抽 X1+N → 手牌现 X1+N
+  //     iter 2: 移走 X1+N → 抽 X1+2N → 手牌现 X1+2N
+  //   resolver 内手动循环 echoMultiplier 次，模拟 hand/backpack/rng 演化。
+  // - 抽牌路由：默认 background → 走 backpack（per draw-cards-defaults-to-backpack.mdc）。
+  //   resolver 直接调 drawMultipleFromBackpack 并 emit card:drawnToHand 事件。
+  // - 与「奇术轮转」(magic:guild-hand-recycle)、「虚空置换」(swap-backpack-recycle) 区别：
+  //   * 奇术轮转：手牌→回收袋后从「回收袋」抽 2 张（数量固定）
+  //   * 虚空置换：背包/回收袋整体对换
+  //   * 本卡：手牌→回收袋后从「背包」抽 X+N 张（动态量）
+  pushCard({
+    type: 'magic',
+    name: '洗册待回',
+    value: 0,
+    image: dedupeKnightMagicRecycleTideImage,
+    classCard: true,
+    description: '永久：将所有手牌（诅咒除外，共 X 张）洗入回收袋，然后从背包抽 X+1 张牌。',
+    shortDescription: '手牌入回收袋；从背包抽 X+1',
+    magicType: 'permanent',
+    magicEffect: '永久魔法：手牌洗入回收袋（共 X 张），从背包抽 X+N 张（升 0/1 → 1/2）。',
+    knightEffect: 'hand-recycle-redraw',
+    recycleDelay: 1,
+    maxUpgradeLevel: 1,
   });
 
   // 修裂启示 (Perm 1)：选择一件装备，每点缺失耐久（maxDur - cur）抽 2 张牌。
@@ -1310,10 +1567,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicMissingHpSmiteImage,
     classCard: true,
-    description: '永久：选择一个怪物，失去一半剩余生命值，对该怪物造成失去血量的伤害 2 次（先后分开结算，每次独立结算掉血/掉血层/技能触发）。',
-    shortDescription: '失去一半生命；造成失去血量伤害 2 次',
+    description: '永久：选择一个怪物，失去一半剩余生命值，对该怪物造成失去血量 ×2 的伤害。',
+    shortDescription: '失去一半生命；伤害 ＝ 失去血量 ×2',
     magicType: 'permanent',
-    magicEffect: '失去半血，造成 2 次失去血量伤害。',
+    magicEffect: '失去半血，造成双倍伤害。',
     knightEffect: 'blood-sacrifice-strike',
   });
 
@@ -1324,7 +1581,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: monsterDoomScrollImage,
     classCard: true,
-    unique: true,
     description: '装备的怪物数量为数值条（上限 2）。释放：摧毁所有装备（含下层叠加，每件独立判定复生），每摧毁一件对激活行所有怪物 -2攻/-2血上限（每个血层都减）。',
     shortDescription: '装备怪物充能；释放摧毁全部装备（含下层）并削弱全场',
     heroMagicId: 'monster-doom',
@@ -1337,7 +1593,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightHeroReviveTomeImage,
     classCard: true,
-    unique: true,
     description: '每对自己造成 3 次伤害充满数值条。释放：失去 3 点生命，选择一个装备赋予复生（首次毁坏时以 1 耐久复活）。',
     shortDescription: '自伤 3 次充能；释放赋予一件装备复生',
     heroMagicId: 'revive-blessing',
@@ -1351,6 +1606,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 2,
     image: heavyShieldKnightBashImage,
     classCard: true,
+    description: '可拖动到怪物上猛击（不造成伤害），5%×护甲值 概率击晕。每回合不限次数，有耐久即可使用。',
+    shortDescription: '猛击：5%×护甲 概率击晕；每回合不限次数',
     durability: 4,
     maxDurability: 4,
     armorMax: 2,
@@ -1366,6 +1623,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 3,
     image: knightShieldEnduranceImage,
     classCard: true,
+    description: '该护盾每回合可消耗的耐久上限 +1（怪物回合最多消耗 2 耐久）。怪物攻击该护盾后死亡时，耐久度恢复 1。',
+    shortDescription: '每回合格挡耐久上限 +1；怪物死亡时回 1 耐久',
     equipBlockDurabilityBonus: 1,
     shieldRefillOnMonsterDeath: true,
     durability: 3,
@@ -1404,8 +1663,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightPotionRecycleGrantImage,
     classCard: true,
-    description: '选择一张手牌，赋予「侧击：选择一张手牌弃回，从回收袋随机取 1 张牌加入手牌」。',
-    shortDescription: '为一张手牌赋予侧击：弃 1 张·回收袋取 1 张',
+    description: '选择一张手牌，赋予「转型：选择一张手牌弃回，从回收袋随机取 1 张牌加入手牌」。',
+    shortDescription: '为一张手牌赋予转型：弃 1 张·回收袋取 1 张',
     potionEffect: 'transform-recycle-grant',
   });
 
@@ -1438,6 +1697,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 2,
     image: knightExchangeBladeImage,
     classCard: true,
+    description: '入场：该装备栏永久攻击 +1。遗言：该装备栏永久护甲 +1。',
+    shortDescription: '入场本栏永久 +1 攻；遗言本栏永久 +1 护',
     durability: 3,
     maxDurability: 3,
     onEquipEffect: 'perm-slot-damage+1',
@@ -1452,6 +1713,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 4,
     image: knightRageCleaveImage,
     classCard: true,
+    description: '该武器每回合可攻击 2 次（攻击次数 +1）。每次攻击时，所有怪物攻击力 -2。',
+    shortDescription: '每回合攻击 2 次；每次攻击全场怪物 -2 攻',
     durability: 3,
     maxDurability: 3,
     weaponExtraAttack: 1,
@@ -1466,6 +1729,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 4,
     image: knightWeaponResonanceBladeImage,
     classCard: true,
+    description: '每次攻击时，给另一个装备栏 +2 临时攻击，并恢复其装备 1 点耐久。',
+    shortDescription: '每次攻击：另一栏 +2 临时攻 +1 耐久',
     onAttackBuffOtherSlotTempAttack: 2,
     onAttackRepairOtherSlot: 1,
     durability: 2,
@@ -1480,6 +1745,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: dedupeStarterMagicMissileImage,
     classCard: true,
+    description: '每次攻击后，所有「魔弹」获得 +1 增幅，并将一张同步增幅的「魔弹」加入背包。',
+    shortDescription: '每次攻击：所有魔弹 +1 增幅；背包 +1 张魔弹',
     durability: 3,
     maxDurability: 3,
     onAttackAmplifyMissileGenerate: true,
@@ -1493,6 +1760,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 1,
     image: knightGrowthBladeImage,
     classCard: true,
+    description: '上手：该武器增幅一次（攻击 +1，按卡名累计；所有同名「生长之刃」共享）。',
+    shortDescription: '上手 +1 攻击（按卡名累计）',
     durability: 3,
     maxDurability: 3,
     onEnterHandEffect: 'growth-blade-onhand',
@@ -1507,9 +1776,11 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: dedupeMagicArcaneRefineImage,
     classCard: true,
     magicType: 'permanent',
+    magicEffect: '永久魔法：移除一张手牌（从游戏中删除），根据移除的牌类型获得装备栏永久加成。',
+    description: '移除一张手牌。一次性魔法→左栏攻击+1；装备→右栏攻击+1；护符→右栏护甲+1；怪物/药水→左栏护甲+1。',
+    shortDescription: '移除一张手牌，按类型获得装备栏永久加成',
     knightEffect: 'essence-extract',
     recycleDelay: 2,
-    maxUpgradeLevel: 2,
   });
 
   // Lv1 魔法飞弹（专属池版本）— 复用 starter 的 dispatch（getStarterBaseId 会把 -pick-\d+ 后缀剥离回 starter-perm-magic-missile）。
@@ -1521,12 +1792,14 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: dedupeStarterMagicMissileImage,
     classCard: true,
     magicType: 'permanent',
+    magicEffect: '永久魔法：手上加入 3 张一次性「魔弹」。',
+    description: '加入 3 张一次性「魔弹」到手牌（每张可对一个怪物造成 1 点法术伤害）。',
+    shortDescription: '手上加入 3 张「魔弹」',
     upgradeLevel: 1,
     maxUpgradeLevel: 2,
   });
 
-  // 魔弹风暴 — 即时魔法：从坟场调动「魔弹」逐一发射（每枚随机攻击激活行一个怪物）。
-  // L0：调动一半（向上取整）；L1：调动全部。
+  // 魔弹风暴 — 即时魔法：将坟场所有「魔弹」逐一发射，每枚随机攻击激活行一个怪物
   deck.push({
     id: 'knight-instant-missile-storm-pick-902',
     type: 'magic',
@@ -1536,7 +1809,9 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     classCard: true,
     magicType: 'instant',
     knightEffect: 'missile-storm',
-    maxUpgradeLevel: 1,
+    magicEffect: '即时魔法：坟场中每张「魔弹」对随机怪物造成 1 点法术伤害（依次发射）。',
+    description: '坟场中每有一张「魔弹」，便从坟场调动一枚向随机怪物发射 1 点法术伤害，依次连射；不消耗坟场中的魔弹。',
+    shortDescription: '坟场每张「魔弹」对随机怪物 1 法伤',
   });
 
   // 战狂诅咒 — 诅咒：使用时失去 1 生命、抽 1 张牌，使用后回到背包；
@@ -1548,7 +1823,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: frenzyCurseImage,
     classCard: true,
-    unique: true,
     description: '诅咒：使用时失去 1 生命，抽 1 张牌，使用后回到背包；上手时随机一个装备栏 +1 临时攻击；无法被回收或弃置。',
     shortDescription: '使用 -1 生命抽 1 张回背包；上手随机一栏 +1 临时攻',
     curseEffect: 'frenzy-curse',
@@ -1557,11 +1831,6 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
 
   let shuffledDeck: KnightCardData[];
   [shuffledDeck, currentRng] = rngShuffle(deck, currentRng) as [KnightCardData[], RngState];
-  // Apply formatter-derived text at level 0. See `applyDerivedCardText` in
-  // card-text.ts — formatter is the single source of truth, the literal
-  // `description` / `shortDescription` here is overwritten when a formatter
-  // is registered for this card's effect id.
-  shuffledDeck = shuffledDeck.map(c => applyDerivedCardText(c) as KnightCardData);
   return [shuffledDeck, currentRng];
 }
 
@@ -1592,18 +1861,19 @@ export const createPersuadeRecycleFetchMagicCard = (rng: RngState): [KnightCardD
 
 export const createGraveyardRecallCard = (rng: RngState): [GameCardData, RngState] => {
   const [id, nextRng] = nextId(rng, 'graveyard-recall');
-  const card: GameCardData = {
+  return [{
     id,
     type: 'magic',
     name: '冥途拾遗',
     value: 0,
     image: dedupeMagicUnderworldRelicImage,
+    description: '一次性：从坟场随机取回至多 3 张牌加入背包（不能取回自己）。',
     shortDescription: '坟场随机取至多 3 张入背包',
     magicType: 'instant',
+    magicEffect: '坟场随机取回 3 张牌。',
     knightEffect: 'graveyard-recall',
     maxUpgradeLevel: 3,
-  };
-  return [applyDerivedCardText(card), nextRng];
+  }, nextRng];
 };
 
 export const createGreedCurseCard = (rng: RngState): [KnightCardData, RngState] => {
@@ -1619,4 +1889,36 @@ export const createGreedCurseCard = (rng: RngState): [KnightCardData, RngState] 
     shortDescription: '使用失去 3 金币后回背包',
     curseEffect: 'greed-curse',
   }, nextRng];
+};
+
+/**
+ * 地雷建筑（布雷术 spawn 出来的 ghost building）。
+ *
+ * 字段语义：
+ *   - `type: 'building'` + `isGhost: true`：标准 ghost building，瀑流时会被怪物
+ *     压到下层 stack；waterfall reducer 在「displaced ghost 有 mineDamage」时
+ *     会改走「触发伤害 + 进坟场」分支，不会塞回 activeCardStacks。
+ *   - `mineDamage: 5`：从下层触发对刚落下的怪物造成 5 点纯伤害（不走 amplify
+ *     / spell-damage bonus）。
+ *   - `hp: 1` / `maxHp: 1`：跟现有 ghost building (增幅祭坛/诅咒碑) 同款占位
+ *     字段，避免 UI 渲染时缺字段崩溃。地雷不能被英雄主动攻击（活跃行 building
+ *     攻击路径需要怪物 attack 字段，此处保留但不会被使用）。
+ *   - 图片复用 `dedupeKnightMagicGraveNovaImage`（殉烈爆鸣 同款"爆裂"主题）。
+ */
+export const createMineBuilding = (rng: RngState): [GameCardData, RngState] => {
+  const [id, nextRng] = nextId(rng, 'mine');
+  return [{
+    id,
+    type: 'building',
+    name: '地雷',
+    value: 0,
+    image: dedupeKnightMagicGraveNovaImage,
+    classCard: true,
+    isGhost: true,
+    mineDamage: 5,
+    hp: 1,
+    maxHp: 1,
+    description: '幽灵建筑：当怪物瀑流落到本格时，对该怪物造成 5 点纯伤害，地雷进入坟场。',
+    shortDescription: '怪物落入：5 点纯伤后进坟场',
+  } as GameCardData, nextRng];
 };

@@ -66,6 +66,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     permanentMaxHpBonus: state.permanentMaxHpBonus,
     permanentSpellDamageBonus: state.permanentSpellDamageBonus,
     permanentSpellLifesteal: state.permanentSpellLifesteal,
+    globalMineDamageBonus: state.globalMineDamageBonus,
     backpackCapacityModifier: state.backpackCapacityModifier,
     heroMagicState: sanitizeHeroMagicState(state.heroMagicState),
     turnDamageTaken: state.turnDamageTaken,
@@ -129,6 +130,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     heroStunned: state.heroStunned,
     monsterKillUpgradeProgress: state.monsterKillUpgradeProgress,
     recycleBackpackProgress: state.recycleBackpackProgress,
+    manualRecycleProgress: state.manualRecycleProgress,
     swapUpgradeProgress: state.swapUpgradeProgress,
     flipOverkillLifestealProgress: state.flipOverkillLifestealProgress,
     equipAmuletCapProgress: state.equipAmuletCapProgress,
@@ -205,6 +207,10 @@ export function serializeGameState(state: GameState): PersistedGameState {
     // 持久化是为了：刷新页面后撤销跨刷新点时，旧 cache 仍可命中、奖励不变。
     // 见 PersistedGameState.monsterRewardPreviewCache 的 JSDoc。
     monsterRewardPreviewCache: { ...state.monsterRewardPreviewCache },
+    // 60s hero turn 倒计时起始时间戳。null 表示当前不在 hero combat turn。
+    // 刷新页面后由 hydrateGameState 还原，让 HeroTurnTimer 继续从 wall-clock
+    // 计算剩余时间——超时仍会自动结束玩家回合。
+    playerTurnStartedAt: state.playerTurnStartedAt ?? null,
   };
 }
 

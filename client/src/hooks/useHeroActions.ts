@@ -687,7 +687,11 @@ export function useHeroActions(depsRef: React.MutableRefObject<HeroActionsDeps>)
 
   const handlePersuadeConfirm = () => {
     if (!persuadeState) return;
-    depsRef.current.pushUndoSnapshot();
+    // 劝降不可撤销：付钱 + 摇骰之后不允许 Undo 退回（防止失败后撤销重摇）。
+    // 不 push snapshot，并清空整个 undo 栈，让此刻成为硬性 commit 点：
+    // 之前的所有 undo checkpoint 也一并失效，避免玩家越过 PERSUADE_MONSTER
+    // 跳回到更早的状态来变相重摇。
+    depsRef.current.clearUndoStack();
     dispatch({ type: 'PERSUADE_MONSTER', monsterId: persuadeState.monster.id });
     depsRef.current.setPersuadeTempDiscount(0);
     depsRef.current.setPersuadeRollKey(prev => prev + 1);

@@ -130,6 +130,34 @@ export function evaluateChoiceRequirement(
         reason: req.message ?? `回收袋至少需要 ${req.min} 张牌`,
       };
 
+    case 'handForKeywordGrant': {
+      // 「右翼回响」option 1 / 4 — disabled when no hand card lacks the target keyword.
+      // option 1: keyword === 'topOnRecycleRestore' → eligible = !card.topOnRecycleRestore
+      // option 4: keyword === 'onEnterHandEffect'   → eligible = !card.onEnterHandEffect
+      const eligible = state.handCards.filter(c => {
+        if (req.keyword === 'topOnRecycleRestore') return !c.topOnRecycleRestore;
+        return !c.onEnterHandEffect;
+      });
+      const fallback = req.keyword === 'topOnRecycleRestore'
+        ? '没有可铭刻「置顶」的手牌（已带「置顶」的卡不可选）'
+        : '没有可铭刻「上手」的手牌（已带「上手」效果的卡不可选）';
+      return {
+        available: eligible.length > 0,
+        reason: req.message ?? fallback,
+      };
+    }
+
+    case 'equippedForOnEquipGrant': {
+      // 「右翼回响」option 6 — disabled when no equipped item (slot1 / slot2) lacks
+      // an `onEquipEffect`. Reserves are intentionally excluded.
+      const slots = [state.equipmentSlot1, state.equipmentSlot2].filter(Boolean) as GameCardData[];
+      const eligible = slots.filter(eq => !eq.onEquipEffect);
+      return {
+        available: eligible.length > 0,
+        reason: req.message ?? '没有可铭刻「入场」的装备（已带入场效果的装备不可选）',
+      };
+    }
+
     default:
       return { available: true };
   }
@@ -255,6 +283,14 @@ const EXACT_REDUCER_TOKENS = new Set([
   'grantLastWordsMaxHp:4',
   'pactCopyActiveRow',
   'amplify-altar-from-random-class-equip-with-warp',
+  // 「右翼回响」event tokens (4 of 6 options resolve via interactive grants;
+  // option 3 reuses persuadeCost-2, option 5 reuses grantFlankGold:2).
+  // Right-neighbor monster check is hardcoded in processEffectsInline by
+  // event name (mirrors 战血荣誉) — no token needed.
+  'grantHandTopOnRecycleRestore',
+  'grantDiscoverClassTopToHand',
+  'grantHandOnHandTempArmor:1',
+  'grantEquipOnEquipPersuadeBonus20',
 ]);
 
 const PREFIX_REDUCER_TOKENS = [
@@ -317,6 +353,97 @@ export function isReducerHandledEventToken(token: string): boolean {
     if (token.startsWith(prefix)) return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// applyGainMagicBolts — shared "give N 「魔弹」 cards" helper.
+// ---------------------------------------------------------------------------
+//
+// Used by:
+// - `gainBolts:N` event token (弹幕骰局)
+// - `lastWordsGainBolt` (奥能裂变 outcome 1: equipment lastWords)
+// - `flankEffectId === 'gainBolt:N'` (奥能裂变 outcome 2: hand-card flank)
+// - `onEnterHandEffect === 'add-bolt-bp:N'` (奥能裂变 outcome 3: hand-card on-hand,
+//   背包 first overflow ordering)
+//
+// Overflow ordering (default `firstTarget: 'hand'`): hand → backpack → recycle bag.
+// When `firstTarget: 'backpack'` is used (outcome 3), the order becomes:
+// backpack → hand → recycle bag. In all cases the 「魔弹」 inherits any global
+// `state.amplifiedCardBonus['魔弹']` accumulated from prior amplify effects.
+//
+// Returns the partial patch + per-bucket counts so the caller can merge into its
+// own `patch` and emit appropriate banners / log lines. Does NOT mutate input
+// state and does NOT itself emit side effects (caller's responsibility).
+//
+export interface GainMagicBoltsResult {
+  patch: Partial<GameState>;
+  toHand: number;
+  toBackpack: number;
+  toRecycle: number;
+  total: number;
+}
+
+export function applyGainMagicBolts(
+  state: GameState,
+  count: number,
+  options: { firstTarget?: 'hand' | 'backpack' } = {},
+): GainMagicBoltsResult {
+  const patch: Partial<GameState> = {};
+  if (count <= 0) {
+    return { patch, toHand: 0, toBackpack: 0, toRecycle: 0, total: 0 };
+  }
+  const firstTarget = options.firstTarget ?? 'hand';
+  let rng = state.rng;
+  const handLimit = HAND_LIMIT + (state.handLimitBonus ?? 0);
+  const handCards = [...state.handCards];
+  const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
+  const backpackItems = [...state.backpackItems];
+  const recycleBag = [...state.permanentMagicRecycleBag];
+  let toHand = 0;
+  let toBackpack = 0;
+  let toRecycle = 0;
+  for (let i = 0; i < count; i++) {
+    let bolt: GameCardData;
+    [bolt, rng] = createMagicBoltCard(rng);
+    bolt = applyAmplifyOnCreate(bolt, state.amplifiedCardBonus);
+    if (firstTarget === 'backpack') {
+      if (backpackItems.length < cap) {
+        backpackItems.push(bolt);
+        toBackpack++;
+      } else if (handCards.length < handLimit) {
+        handCards.push(bolt);
+        toHand++;
+      } else {
+        recycleBag.push({ ...bolt, _recycleWaits: bolt.recycleDelay ?? 1 });
+        toRecycle++;
+      }
+    } else {
+      if (handCards.length < handLimit) {
+        handCards.push(bolt);
+        toHand++;
+      } else if (backpackItems.length < cap) {
+        backpackItems.push(bolt);
+        toBackpack++;
+      } else {
+        recycleBag.push({ ...bolt, _recycleWaits: bolt.recycleDelay ?? 1 });
+        toRecycle++;
+      }
+    }
+  }
+  patch.rng = rng;
+  patch.handCards = handCards;
+  patch.backpackItems = backpackItems;
+  patch.permanentMagicRecycleBag = recycleBag;
+  return { patch, toHand, toBackpack, toRecycle, total: toHand + toBackpack + toRecycle };
+}
+
+/** Format the per-bucket overflow distribution as a banner-friendly string. */
+export function formatGainMagicBoltsDistribution(r: GainMagicBoltsResult): string {
+  const parts: string[] = [];
+  if (r.toHand > 0) parts.push(`手牌+${r.toHand}`);
+  if (r.toBackpack > 0) parts.push(`背包+${r.toBackpack}`);
+  if (r.toRecycle > 0) parts.push(`回收袋+${r.toRecycle}`);
+  return parts.join('，');
 }
 
 // ---------------------------------------------------------------------------
@@ -1970,13 +2097,27 @@ export function applySimpleEffect(
              effectToken === 'grantHandStunCapBonus' || effectToken === 'grantEquipFlipRepairBuff' ||
              // New event tokens — see plan "Add 15 new event options"
              effectToken === 'grantHandOnHandHeal:1' || effectToken === 'grantLastWordsMaxHp:4' ||
-             effectToken === 'pactCopyActiveRow') {
+             effectToken === 'pactCopyActiveRow' ||
+             // 「右翼回响」 grants — interactive (open modal in useEventSystem)
+             effectToken === 'grantHandTopOnRecycleRestore' ||
+             effectToken === 'grantDiscoverClassTopToHand' ||
+             effectToken === 'grantHandOnHandTempArmor:1' ||
+             effectToken === 'grantEquipOnEquipPersuadeBonus20') {
     emitEvents.push({ event: 'event:requestEventInteraction', payload: { token: effectToken, data: {} } });
 
   } else if (effectToken.startsWith('grantFlankDraw:') || effectToken.startsWith('grantFlankGold:') ||
              effectToken.startsWith('grantFlankPersuadeCost:') || effectToken.startsWith('grantFlankStunCap:') ||
              effectToken.startsWith('grantFlankDamage:') || effectToken.startsWith('grantTransformDraw:') ||
-             effectToken.startsWith('grantFlankHeal:')) {
+             effectToken.startsWith('grantFlankHeal:') ||
+             // 「奥能裂变」事件的 7 个 grant token：每个都开 modal（5 个 PermGrantModal +
+             // 2 个 requestMagicChoice 装备槽选择），都走 event:requestEventInteraction。
+             effectToken.startsWith('grantLastWordsGainBolt:') ||
+             effectToken.startsWith('grantFlankGainBolt:') ||
+             effectToken.startsWith('grantHandOnHandAddBoltBackpack:') ||
+             effectToken.startsWith('grantOnEquipSpawnMine:') ||
+             effectToken.startsWith('grantFlankSpawnMine:') ||
+             effectToken.startsWith('grantTransformBoostMineDmg:') ||
+             effectToken.startsWith('grantTransformAmplifyBolt:')) {
     emitEvents.push({ event: 'event:requestEventInteraction', payload: { token: effectToken, data: {} } });
 
   // --- Phase EC-2: flipTo* tokens (event card transforms) ---
@@ -2018,39 +2159,9 @@ export function applySimpleEffect(
 
   } else if (effectToken.startsWith('gainBolts:')) {
     const count = parseInt(effectToken.replace('gainBolts:', ''), 10) || 0;
-    let rng = state.rng;
-    const handLimit = HAND_LIMIT + (state.handLimitBonus ?? 0);
-    const handCards = [...state.handCards];
-    const cap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
-    const backpackItems = [...state.backpackItems];
-    let toHand = 0;
-    let toBackpack = 0;
-    let toRecycle = 0;
-    const recycleBag = [...state.permanentMagicRecycleBag];
-    for (let i = 0; i < count; i++) {
-      let bolt: GameCardData;
-      [bolt, rng] = createMagicBoltCard(rng);
-      bolt = applyAmplifyOnCreate(bolt, state.amplifiedCardBonus);
-      if (handCards.length < handLimit) {
-        handCards.push(bolt);
-        toHand++;
-      } else if (backpackItems.length < cap) {
-        backpackItems.push(bolt);
-        toBackpack++;
-      } else {
-        recycleBag.push({ ...bolt, _recycleWaits: bolt.recycleDelay ?? 1 });
-        toRecycle++;
-      }
-    }
-    patch.rng = rng;
-    patch.handCards = handCards;
-    patch.backpackItems = backpackItems;
-    patch.permanentMagicRecycleBag = recycleBag;
-    const parts: string[] = [];
-    if (toHand > 0) parts.push(`手牌+${toHand}`);
-    if (toBackpack > 0) parts.push(`背包+${toBackpack}`);
-    if (toRecycle > 0) parts.push(`回收袋+${toRecycle}`);
-    patch.heroSkillBanner = `获得 ${count} 张「魔弹」（${parts.join('，')}）。`;
+    const result = applyGainMagicBolts(state, count);
+    Object.assign(patch, result.patch);
+    patch.heroSkillBanner = `获得 ${count} 张「魔弹」（${formatGainMagicBoltsDistribution(result)}）。`;
     logs.push({ type: 'event', message: `获得 ${count} 张「魔弹」` });
 
   // --- 翻转之契 option 1 ---

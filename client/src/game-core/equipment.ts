@@ -481,6 +481,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'persuade-graveyard-stack': effects.persuadeGraveyardStackCount += 1; break;
       case 'stun-recycle-to-hand': effects.stunRecycleToHandCount += 1; break;
       case 'monster-kill-upgrade': effects.monsterKillUpgradeCount += 1; break;
+      case 'kill-cell-mine': effects.killCellMineCount += 1; break;
       case 'attack-persuade-discount': effects.attackPersuadeDiscountCount += 1; break;
       case 'card-gain-missile': effects.cardGainMissileCount += 1; break;
       case 'swap-upgrade': effects.swapUpgradeCount += 1; break;
@@ -499,6 +500,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'stun-gold': effects.stunGoldCount += 1; break;
       case 'delete-draw': effects.deleteDrawCount += 1; break;
       case 'last-words-extra-trigger': effects.lastWordsExtraTriggerCount += 1; break;
+      case 'manual-recycle-draw': effects.manualRecycleDrawCount += 1; break;
       // The following amulets are checked via direct amuletSlots.find/filter(...)
       // in their reducers; no aggregated count needed. Cases are listed for
       // documentation / completeness so they are recognised registered effects.

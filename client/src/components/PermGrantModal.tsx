@@ -20,7 +20,15 @@ type PermGrantSourceType =
   | 'transform-recycle-grant'
   | 'amulet-perm-grant'
   | 'on-hand-stun-cap-grant'
-  | 'on-hand-heal-grant';
+  | 'on-hand-heal-grant'
+  | 'on-hand-top-grant'
+  | 'on-hand-temp-armor-grant'
+  // 「奥能裂变」事件 outcomes 2 / 3 / 5 / 6 / 7 — 5 个新的 hand-card-targeting 赋能类型。
+  | 'flank-gain-bolt-grant'
+  | 'on-hand-add-bolt-bp-grant'
+  | 'flank-spawn-mine-grant'
+  | 'transform-mine-damage-grant'
+  | 'transform-amplify-bolt-grant';
 
 interface PermGrantModalProps {
   open: boolean;
@@ -45,9 +53,13 @@ const FLANK_GRANT_TYPES = new Set<string>([
   // 附魔祭坛·侧击 +3 金币 / 赋能神殿·侧击 恢复 N HP（触发条件已从转型迁移为侧击；
   // 保留 transform-draw-grant 不动 = 还是转型）。
   'flank-gold-grant', 'flank-heal-grant',
+  // 「奥能裂变」outcomes 2 / 5 — 新的两条侧击赋能（手牌 +1 魔弹 / 激活行生成地雷）。
+  'flank-gain-bolt-grant', 'flank-spawn-mine-grant',
 ]);
 const TRANSFORM_GRANT_TYPES = new Set<string>([
   'transform-draw-grant',
+  // 「奥能裂变」outcomes 6 / 7 — 全场地雷伤害+2 / 魔弹增幅2次。
+  'transform-mine-damage-grant', 'transform-amplify-bolt-grant',
 ]);
 
 export default function PermGrantModal({
@@ -69,6 +81,12 @@ export default function PermGrantModal({
   const isAmuletPermGrant = sourceType === 'amulet-perm-grant';
   const isOnHandStunCapGrant = sourceType === 'on-hand-stun-cap-grant';
   const isOnHandHealGrant = sourceType === 'on-hand-heal-grant';
+  // 「右翼回响」option 1 — grant 'topOnRecycleRestore' keyword.
+  const isOnHandTopGrant = sourceType === 'on-hand-top-grant';
+  // 「右翼回响」option 4 — grant 'on-enter-hand: random slot temp armor +1'.
+  const isOnHandTempArmorGrant = sourceType === 'on-hand-temp-armor-grant';
+  // 「奥能裂变」outcome 3 — grant 'on-enter-hand: 背包 +1 张「魔弹」'.
+  const isOnHandAddBoltBackpackGrant = sourceType === 'on-hand-add-bolt-bp-grant';
 
   // For amulet-perm-grant, the candidate pool is the currently equipped amulets
   // (filtered to those that don't already have Perm 2 or stronger).
@@ -86,6 +104,14 @@ export default function PermGrantModal({
         // 赋能神殿 「上手:回血1」: same exclusion — don't clobber existing
         // on-enter-hand keywords.
         if (isOnHandHealGrant) return !c.onEnterHandEffect;
+        // 「右翼回响」option 1 — exclude cards that already have 'topOnRecycleRestore'.
+        if (isOnHandTopGrant) return !c.topOnRecycleRestore;
+        // 「右翼回响」option 4 — exclude cards that already carry an on-enter-hand
+        // effect (mirrors stun-cap / heal grant exclusion).
+        if (isOnHandTempArmorGrant) return !c.onEnterHandEffect;
+        // 「奥能裂变」outcome 3 — exclude cards that already carry an on-enter-hand
+        // effect (mirrors stun-cap / heal / temp-armor grant exclusion).
+        if (isOnHandAddBoltBackpackGrant) return !c.onEnterHandEffect;
         return !cardHasPermFlag(c);
       });
 
@@ -115,6 +141,14 @@ export default function PermGrantModal({
     'amulet-perm-grant': 'amuletPermGrant',
     'on-hand-stun-cap-grant': 'onHandStunCapGrant',
     'on-hand-heal-grant': 'onHandHealGrant',
+    'on-hand-top-grant': 'onHandTopGrant',
+    'on-hand-temp-armor-grant': 'onHandTempArmorGrant',
+    // 「奥能裂变」outcomes 2 / 3 / 5 / 6 / 7
+    'flank-gain-bolt-grant': 'flankGainBoltGrant',
+    'on-hand-add-bolt-bp-grant': 'onHandAddBoltBackpackGrant',
+    'flank-spawn-mine-grant': 'flankSpawnMineGrant',
+    'transform-mine-damage-grant': 'transformMineDamageGrant',
+    'transform-amplify-bolt-grant': 'transformAmplifyBoltGrant',
   };
   const variantKey = sourceKeyMap[sourceType];
   const title = variantKey

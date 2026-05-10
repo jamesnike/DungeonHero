@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Shield, Sword, Backpack, Package, X } from 'lucide-react';
 import React, { useCallback, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { initMobileDrop } from '../utils/mobileDragDrop';
+import { initMobileDrop, readHtml5DragData } from '../utils/mobileDragDrop';
 import GameCard, { type GameCardData, type EquipmentCardStatModifier } from './GameCard';
 import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
@@ -213,7 +213,7 @@ export default function EquipmentSlot({
     e.preventDefault();
     setDragDepth(0);
     if (isStunFrozen) return;
-    const cardData = e.dataTransfer.getData('card');
+    const cardData = readHtml5DragData(e, 'card');
     if (cardData) {
       onDrop?.(JSON.parse(cardData));
     }

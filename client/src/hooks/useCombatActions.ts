@@ -132,7 +132,7 @@ export interface CombatActionsDeps {
   triggerStealCardFlight: (card: GameCardData, targetMonsterId: string) => Promise<void>;
   triggerGraveyardStackFlight: (targetCellIndex: number, cards: GameCardData[]) => void;
   dragonBleedDestroyEquipment: (monsterName: string, remainingLayers: number) => void;
-  beginDiscoverFlow: (source: string, options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string; delivery?: 'backpack' | 'hand-first' }) => boolean;
+  beginDiscoverFlow: (source: string, options?: { filter?: (card: GameCardData) => boolean; overridePool?: GameCardData[]; sourceLabel?: string; delivery?: 'backpack' | 'hand-first'; postInjectTopOnRecycleRestore?: boolean }) => boolean;
   requestDaggerSelfDestruct: (weaponName: string, remainingDurability: number) => Promise<boolean>;
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;
 

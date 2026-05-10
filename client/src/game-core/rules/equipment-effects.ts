@@ -23,6 +23,8 @@ import { nextBool, nextInt, pickRandom } from '../rng';
 import { createBugletCard } from '../deck';
 import { resetCardForGraveyard } from '../cards';
 import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
+import { createMineBuilding } from '@/lib/knightDeck';
+import { applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
 
 // ---------------------------------------------------------------------------
 // Perm-recycle routing — equipment that is destroyed but carries a Perm flag
@@ -43,6 +45,46 @@ export function shouldRouteEquipmentToPermRecycle(card: GameCardData): boolean {
     return true;
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Mine damage boost — 「引雷阵锋」类武器累计耐久损失到 globalMineDamageBonus。
+//
+// 调用点：所有让装备 `durability` 下降的 reducer 路径（武器攻击 tick / 蓄能裂击 /
+// 腐蚀甲壳 / 等价交换 等）。`computeDurabilityLossEffects` 已包好；其它直接
+// 写 `patch[slotId].durability = newDur` 的路径手动调本 helper。
+//
+// 不变量：
+// - `slotItem.mineDamageBoostPerDur` 未设 / 为 0 → no-op。
+// - `durLost <= 0`（修复或 newDur > prevDur）→ no-op。
+// - 已累加的 bonus 永久保留（修复武器耐久不会扣回）。
+// - 同一 reduce 步骤里多次调用，会顺序累加到 `patch.globalMineDamageBonus`。
+// ---------------------------------------------------------------------------
+
+export function accumulateMineDamageBoost(
+  state: GameState,
+  slotItem: GameCardData,
+  durLost: number,
+  patch: Partial<GameState>,
+  sideEffects: SideEffect[],
+): void {
+  const perDur = slotItem.mineDamageBoostPerDur ?? 0;
+  if (perDur <= 0 || durLost <= 0) return;
+  const inc = perDur * durLost;
+  const prev = patch.globalMineDamageBonus ?? state.globalMineDamageBonus ?? 0;
+  const next = prev + inc;
+  patch.globalMineDamageBonus = next;
+  sideEffects.push({
+    event: 'log:entry',
+    payload: {
+      type: 'equip',
+      message: `${slotItem.name} 雷震共鸣：耐久 -${durLost} → 全场地雷伤害 +${inc}（累计 +${next}）`,
+    },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${slotItem.name}：地雷伤害 +${inc}（累计 +${next}）` },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -390,6 +432,40 @@ function applyOneEquipmentLastWordsIteration(
     sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！永久最大生命 +${amount}！${stackSuffix}` } });
   }
 
+  // 「奥能裂变」outcome 1: 装备销毁时手牌 +N 张「魔弹」。每个 stack 累加 N。
+  // 通过 applyGainMagicBolts 共享 helper（hand → backpack → recycle 溢出）。
+  // 与 lastWordsSlotTempBuff / lastWordsMaxHpBoost 并存，跟其它 onDestroyEffect 也并存。
+  const boltStacks = slotItem.lastWordsGainBolt ?? 0;
+  if (boltStacks > 0) {
+    // Build an effective state that includes any prior patches applied earlier
+    // in this iteration (especially if the patch already modified handCards /
+    // backpackItems / permanentMagicRecycleBag / rng — unlikely for last-words
+    // but defensive). applyGainMagicBolts reads from state.handCards etc.
+    const effectiveState: GameState = {
+      ...state,
+      handCards: (patch.handCards as GameCardData[] | undefined) ?? state.handCards,
+      backpackItems: (patch.backpackItems as GameCardData[] | undefined) ?? state.backpackItems,
+      permanentMagicRecycleBag:
+        (patch.permanentMagicRecycleBag as GameCardData[] | undefined) ?? state.permanentMagicRecycleBag,
+      rng: (patch.rng ?? rng ?? state.rng) as RngState,
+    };
+    const result = applyGainMagicBolts(effectiveState, boltStacks);
+    if (result.patch.handCards) patch.handCards = result.patch.handCards;
+    if (result.patch.backpackItems) patch.backpackItems = result.patch.backpackItems;
+    if (result.patch.permanentMagicRecycleBag) patch.permanentMagicRecycleBag = result.patch.permanentMagicRecycleBag;
+    if (result.patch.rng) {
+      patch.rng = result.patch.rng;
+      rng = result.patch.rng;
+    }
+    const dist = formatGainMagicBoltsDistribution(result);
+    const stackSuffix = boltStacks > 1 ? `（×${boltStacks}）` : '';
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'equip', message: `${slotItem.name} 遗言：获得 ${boltStacks} 张「魔弹」（${dist}）！${stackSuffix}` },
+    });
+    sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！+${boltStacks} 「魔弹」（${dist}）！` } });
+  }
+
   if (slotItem.onDestroyEffect && slotItem.onDestroyEffect !== 'slot-temp-buff-3-3') {
     if (slotItem.onDestroyEffect === 'slot-temp-armor-3') {
       const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
@@ -402,6 +478,41 @@ function applyOneEquipmentLastWordsIteration(
       });
       sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +3临时护甲！` } });
       checkPersuadeOnTempAttack(state, patch, sideEffects);
+    } else if (slotItem.onDestroyEffect === 'spawn-mine-empty') {
+      // 殉雷遗盾 — 装备遗言：在 active row 的随机空 cell 生成一个「地雷」幽灵建筑。
+      //
+      // - 地雷复用 createMineBuilding（5 点纯伤、ghost、踩到即触发 + 进坟场）。受
+      //   「引雷阵锋」globalMineDamageBonus 加成（在 waterfall 的地雷触发分支处算）。
+      // - 选位：仅"完全空"的 slot（activeCards[i] === null）。已被 ghost building
+      //   或其它卡占着的 slot 不算可用。
+      // - 全无空位 → fizzle + banner 提示「无可用位置」（用户已确认 fizzle 语义）。
+      // - 跟「墓园守卫」amulet（lastWordsExtraTriggerCount）协同：每次迭代独立尝试，
+      //   每次成功生成 1 个，无空位时该次跳过（用户已确认每次触发都生成 1 个）。
+      const baseActive = (patch.activeCards ?? state.activeCards) as ActiveRowSlots;
+      const emptyIdxs: number[] = [];
+      for (let i = 0; i < baseActive.length; i++) {
+        if (baseActive[i] === null) emptyIdxs.push(i);
+      }
+      if (emptyIdxs.length === 0) {
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'equip', message: `${slotItem.name} 遗言：激活行已满，地雷未能放置。` },
+        });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言：无可用位置！` } });
+      } else {
+        const [pickIdxIdx, rngAfterPick] = nextInt(rng, 0, emptyIdxs.length - 1);
+        const slotIdx = emptyIdxs[pickIdxIdx];
+        const [mine, rngAfterMine] = createMineBuilding(rngAfterPick);
+        rng = rngAfterMine;
+        const newActive = [...baseActive] as ActiveRowSlots;
+        newActive[slotIdx] = mine;
+        patch.activeCards = newActive as GameState['activeCards'];
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'equip', message: `${slotItem.name} 遗言：在第 ${slotIdx + 1} 列布下了地雷！` },
+        });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！布下地雷！` } });
+      }
     } else if (slotItem.onDestroyEffect.startsWith('stunCap+')) {
       const amount = parseInt(slotItem.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
       if (amount > 0) {
@@ -730,6 +841,14 @@ export function computeEquipmentBreakEffects(
       payload: { slotId, cardId: slotItem.id },
     });
 
+    // 引雷阵锋 / 雷震共鸣家族（mineDamageBoostPerDur > 0）：装备破坏时，
+    // 把"被消耗的最后剩余耐久"也计入 globalMineDamageBonus。
+    // 不在 revive 分支调用 —— revive 不算"耐久消耗"（数值 1 → 1）。
+    const finalDurLost = Math.max(0, slotItem.durability ?? 0);
+    if (finalDurLost > 0) {
+      accumulateMineDamageBoost(state, slotItem, finalDurLost, patch, effects);
+    }
+
     // 残骸回收符 (equipment-salvage amulet): for weapons/shields, return the broken
     // card to hand with maxDurability-N instead of being lost (N = number of
     // equipped salvage amulets — every amulet independently triggers a save,
@@ -854,6 +973,15 @@ export function computeDurabilityLossEffects(
   const patch: Partial<GameState> = {};
   let rng = state.rng;
   let updatedItem = { ...slotItem, durability: newDurability };
+
+  // 「引雷阵锋」类武器：耐久减少 → 累加 globalMineDamageBonus（永久不撤销）。
+  // 放在最早处理，确保所有路径（monster equip 走下面的 bleed/dragon/wraith 分支
+  // 后 return；非 monster 直接 return）都不会漏触发。
+  const prevDur = slotItem.durability ?? newDurability;
+  const durLost = Math.max(0, prevDur - newDurability);
+  if (durLost > 0) {
+    accumulateMineDamageBoost(state, slotItem, durLost, patch, effects);
+  }
 
   if (!isMonsterEquip) {
     return { updatedItem, patch, sideEffects: effects, rng };

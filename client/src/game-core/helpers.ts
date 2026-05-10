@@ -524,6 +524,8 @@ export function isDamageMagic(card: GameCardData): boolean {
     'weapon-sweep',
     'overkill-upgrade',
     'stun-cap-strike',
+    'backpack-bolt',
+    'recycle-bolt',
   ];
   if (card.knightEffect && damageKnightEffects.includes(card.knightEffect)) return true;
   const damageEffects = [
@@ -565,6 +567,12 @@ export interface DamageMagicDisplayState {
   // 雷涌一击 (knight:stun-cap-strike) 用：base = ceil(stunCap / divisor)。
   // 旧 caller 不传时按 0 处理（界面会显示 0 法伤，符合"晕上限 0% 时无威胁"语义）。
   stunCap?: number;
+  // 囊中惊雷 (knight:backpack-bolt) 用：base = floor(backpackCount * pct / 100)。
+  // 旧 caller 不传时按 0 处理（背包空时显示 0 法伤）。
+  backpackCount?: number;
+  // 池中惊雷 (knight:recycle-bolt) 用：base = floor(recycleBagCount * pct / 100)。
+  // 旧 caller 不传时按 0 处理（回收袋空时显示 0 法伤）。
+  recycleBagCount?: number;
 }
 
 export function computeDamageMagicDisplayPure(
@@ -651,6 +659,38 @@ export function computeDamageMagicDisplayPure(
   }
 
   // ---------- Group C：状态相关 base + amp ----------
+
+  // 囊中惊雷：base = floor(backpackCount × pct/100)；pct = [50, 75, 100][upgradeLevel]。
+  // backpackCount 来自 caller 传入的 state.backpackItems.length；旧 caller 没传按 0。
+  if (card.knightEffect === 'backpack-bolt') {
+    const pcts = [50, 75, 100];
+    const lvl = card.upgradeLevel ?? 0;
+    const pct = pcts[lvl] ?? pcts[pcts.length - 1];
+    const backpackCount = state.backpackCount ?? 0;
+    const base = Math.floor((backpackCount * pct) / 100);
+    const dmg = base + amp;
+    return {
+      mode: 'replace',
+      text: `永久：对一个目标造成 ${dmg} 点法术伤害（背包 ${backpackCount} 张 × ${pct}%）。`,
+      amplifyBonus: amp,
+    };
+  }
+
+  // 池中惊雷：base = floor(recycleBagCount × pct/100)；pct = [50, 75, 100][upgradeLevel]。
+  // recycleBagCount 来自 caller 传入的 state.permanentMagicRecycleBag.length；旧 caller 没传按 0。
+  if (card.knightEffect === 'recycle-bolt') {
+    const pcts = [50, 75, 100];
+    const lvl = card.upgradeLevel ?? 0;
+    const pct = pcts[lvl] ?? pcts[pcts.length - 1];
+    const recycleBagCount = state.recycleBagCount ?? 0;
+    const base = Math.floor((recycleBagCount * pct) / 100);
+    const dmg = base + amp;
+    return {
+      mode: 'replace',
+      text: `永久：对一个目标造成 ${dmg} 点法术伤害（回收袋 ${recycleBagCount} 张 × ${pct}%）。`,
+      amplifyBonus: amp,
+    };
+  }
 
   // 雷涌一击：base = ⌈stunCap / divisor⌉；divisor 由升级等级决定（lvl0=4, lvl1=3）。
   // 显示的 stun 概率 = min(60, stunCap)，与 reducer 实际行为一致。

@@ -68,17 +68,11 @@ export type SlotPermanentBonus = {
   shield: number;
 };
 
-/**
- * 不灭守护 (death-ward) 触发后的通知 modal 状态。
- *
- * 旧设计弹出「抵消 / 放弃」二选一 prompt，现已改为**全自动**：reducer 在
- * 检测致死伤害时直接消耗手牌里的 不灭守护 → 入坟场 → 阻挡伤害，并写入
- * 这个字段让 UI 弹出单按钮（「知道了」）通知。dismiss 后 reducer 把
- * `phase` 从 `'awaitingDeathWardNotice'` 推回 `'playerInput'` 继续游戏。
- */
-export type DeathWardNoticeState = {
-  cardName: string;
-  blockedDamage: number;
+export type DeathWardPromptState = {
+  card: GameCardData;
+  source: 'hand' | 'backpack';
+  pendingDamage: number;
+  sourceType: 'combat' | 'general';
 };
 
 export type EquipmentSlotStatModifier = EquipmentCardStatModifier;
@@ -194,6 +188,18 @@ export type HeroMagicActivationOrigin = 'gauge' | 'card' | 'event' | 'skill';
 
 export type PendingHeroMagicAction =
   | {
+      id: 'holy-light';
+      step: 'choice';
+      origin: HeroMagicActivationOrigin;
+      prompt: string;
+    }
+  | {
+      id: 'holy-light';
+      step: 'monster-select';
+      origin: HeroMagicActivationOrigin;
+      prompt: string;
+    }
+  | {
       id: 'revive-blessing';
       step: 'slot-select';
       origin: HeroMagicActivationOrigin;
@@ -289,7 +295,7 @@ export type PendingMagicAction =
       effect: 'transform-repair';
       step: 'slot-select';
       prompt: string;
-      flankTriggered: boolean;
+      transformTriggered: boolean;
       echoMultiplier?: number;
     }
   | {
@@ -416,6 +422,24 @@ export type PendingMagicAction =
       allowsHeroTarget?: boolean;
     }
   | {
+      // 学徒鼓舞（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时攻击。
+      // 与 weapon-burst 同形态（A 类回响）。
+      card: GameCardData;
+      effect: 'apprentice-rally';
+      step: 'slot-select';
+      prompt: string;
+      echoMultiplier?: number;
+    }
+  | {
+      // 学徒铸甲（starter perm-1 magic, no upgrade）：所选装备栏 +1 临时护甲。
+      // 单步一次性结算，不需要 modal-echo 的 echoRemaining。
+      card: GameCardData;
+      effect: 'apprentice-armor';
+      step: 'slot-select';
+      prompt: string;
+      echoMultiplier?: number;
+    }
+  | {
       card: GameCardData;
       effect: 'stun-strike';
       step: 'monster-select';
@@ -467,6 +491,31 @@ export type PendingMagicAction =
       allowsHeroTarget?: boolean;
     }
   | {
+      // 囊中惊雷：对一个目标造成 floor(背包剩余卡牌数 × pct%) 法术伤害。
+      // pct 由升级等级决定（lvl 0 → 50, lvl 1 → 75, lvl 2 → 100）。
+      // 单目标伤害 magic，允许打 hero / 盾自伤；echo (A) 单次结算，伤害 ×N。
+      card: GameCardData;
+      effect: 'backpack-bolt';
+      step: 'monster-select';
+      prompt: string;
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      data?: { baseDmg: number; pct: number; backpackCount: number };
+      allowsHeroTarget?: boolean;
+    }
+  | {
+      // 池中惊雷：对一个目标造成 floor(回收袋卡牌数 × pct%) 法术伤害。
+      // 与 backpack-bolt 同款 pattern，区别仅是数 permanentMagicRecycleBag 而不是 backpackItems。
+      card: GameCardData;
+      effect: 'recycle-bolt';
+      step: 'monster-select';
+      prompt: string;
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      data?: { baseDmg: number; pct: number; recycleCount: number };
+      allowsHeroTarget?: boolean;
+    }
+  | {
       card: GameCardData;
       effect: 'overkill-upgrade';
       step: 'monster-select';
@@ -481,6 +530,16 @@ export type PendingMagicAction =
       step: 'slot-select';
       prompt: string;
       echoRemaining?: number;
+    }
+  | {
+      // 装甲铸蚀 — 「右翼回响」 stay-flip target. Slot-select on either装备栏
+      // (含空槽，see resolver in card-schema/definitions/magic.ts), then
+      // permanently grants `equipmentSlotBonuses[slotId].shield += 2 × echo`.
+      card: GameCardData;
+      effect: 'event-armor-etch';
+      step: 'slot-select';
+      prompt: string;
+      echoMultiplier?: number;
     }
   | {
       card: GameCardData;
@@ -582,10 +641,20 @@ export type PendingMagicAction =
       prompt: string;
     }
   | {
-      // 淬铸迁位：选择有装备的装备栏 → 同名增幅 +1（按 NAME 全场累计）；
-      // 若另一栏为空，把所选装备移到空位（原栏 promote reserve）。
+      // 囊中锋意：选择装备栏（允许空槽），按 floor(背包数 / divisor) 加临时攻击。
+      // divisor = 3 (Lv0) / 2 (Lv1)。
       card: GameCardData;
-      effect: 'amplify-equipment-shift';
+      effect: 'backpack-temp-attack';
+      step: 'slot-select';
+      echoMultiplier?: number;
+      echoRemaining?: number;
+      prompt: string;
+    }
+  | {
+      // 池中坚意：选择装备栏（允许空槽），按 floor(回收袋数 / divisor) 加临时护甲。
+      // divisor = 4 (Lv0) / 3 (Lv1)。
+      card: GameCardData;
+      effect: 'recycle-temp-armor';
       step: 'slot-select';
       echoMultiplier?: number;
       echoRemaining?: number;
@@ -653,7 +722,7 @@ export type HandDiscardSelectionState = {
     | 'class-summon' // 专属召唤：弃 N 张到坟场 → 抽 1 张职业专属卡到背包
     | 'echo-bag' // 回响行囊：弃 N 张到坟场 → 坟场发现 → 背包补抽
     | 'discard-empower' // 噬血砺锋：弃 1 张到坟场 → 装备攻击 +2 / 吸血
-    | 'transform-discard-recycle'; // 唤回秘药·侧击：弃 1 张手牌 → 回收袋随机取 1 张到手牌（subEffect 名沿用历史 'transform-' 前缀，描述流程形状而非触发条件）
+    | 'transform-discard-recycle'; // 唤回秘药·转型：弃 1 张手牌 → 回收袋随机取 1 张到手牌
   /** 必须选择的张数（严格相等才允许确认）。 */
   count: number;
   /** 触发该流程的源卡牌（魔法卡 id；技能时为 null）；用于把它从候选列表中过滤掉。 */
@@ -999,14 +1068,8 @@ export type ActiveAmuletEffects = {
   cardGainMissileCount: number;
   swapUpgradeCount: number;
   stunUpgradeCapCount: number;
-  /** Sum of each equipped 震慑之符's per-stun cap bonus (8 base / 12 upgraded), per trigger. */
-  stunUpgradeCapBonus: number;
   recycleBackpackExpandCount: number;
   dungeonGoldCount: number;
-  /** 「潮愈之符」每次瀑流推进时，恢复 4 × N 点生命（linear ×N stacking）。
-   *  实际治疗量受 `healCount` 复合 2^N 倍乘影响（与永恒护符·潮涌回春一致）。
-   *  消费方：`rules/waterfall.ts` `reduceApplyWaterfallEffects`。 */
-  waterfallHealCount: number;
   armorHalveEndureCount: number;
   monsterEquipBuffCount: number;
   endTurnDrawCount: number;
@@ -1026,6 +1089,18 @@ export type ActiveAmuletEffects = {
    *  N 次，每次仍各自按 `1 + lastWordsExtraTriggerCount` 放大；多重 amulet 与 echo
    *  共同放大是设计内行为，与「绝响之符」等 per-trigger 联动一致。 */
   lastWordsExtraTriggerCount: number;
+  /** 「殒雷符」（unique）每击杀一只怪物，立即在该 cell 生成一个「地雷」幽灵建筑。
+   *  Cell 在 mine 落下时已有卡（stack-pop / swarm-buglet / 瀑流后续）→ mine 堆叠在其上。
+   *  目标卡是怪物即可触发（任何来源：武器 / magic / 地雷 / 反震 / 弃牌伤害 / 遗言伤害）。
+   *  unique=true → 同时最多 1 张，count 实际只会是 0/1。
+   *  生成的地雷复用 `createMineBuilding`，受「引雷阵锋」globalMineDamageBonus 加成，
+   *  跟「布雷术」生成的地雷在数据上完全等价。 */
+  killCellMineCount: number;
+  /** 「循手之符」每"手动"拖卡到回收袋（waitsOverride === 1 标记）累计 +N（每件 +1）。
+   *  累计达 3 张 → 从背包抽 1 张牌；进度归 0。仅手动路径触发——出牌自回收 / 装备销毁 /
+   *  护符销毁 / 瀑流溢出 等系统路径不算（与 积蓄之符 区别）。多件叠加跨阈值仍只抽 1 张
+   *  （单触发模式，与 积蓄之符 一致）。 */
+  manualRecycleDrawCount: number;
 };
 
 export type WaterfallPhase = 'idle' | 'revealing' | 'dropping' | 'discarding' | 'dealing';

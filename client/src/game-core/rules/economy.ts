@@ -17,6 +17,7 @@ import { markSkillUsedPure } from '../hero';
 import { nextInt } from '../rng';
 import { getEffectiveHandLimit, addCardToBackpackPure } from '../cards';
 import { computeAmuletEffectsForState, applySlotArmorBonusDelta, refillSlotArmorToCap } from '../equipment';
+import { accumulateMineDamageBoost } from './equipment-effects';
 import { computeSpellDamagePure } from '../helpers';
 import type { PendingMonsterEndDice } from '../types';
 
@@ -181,12 +182,20 @@ export function reduceEconomyActions(
     case 'MODIFY_EQUIPMENT_DURABILITY': {
       const equip = state[action.slotId];
       if (!equip) return applyPatch(state, {});
-      return applyPatch(state, {
-        [action.slotId]: {
-          ...equip,
-          durability: (equip.durability ?? 0) + action.delta,
-        },
-      } as Partial<GameState>);
+      const prevDur = equip.durability ?? 0;
+      const newDur = prevDur + action.delta;
+      const patch: Partial<GameState> = {
+        [action.slotId]: { ...equip, durability: newDur },
+      };
+      const sideEffects: SideEffect[] = [];
+      // Mine-damage-boost：MODIFY_EQUIPMENT_DURABILITY 当前在 useCombatActions.ts
+      // 仅以 delta:1 调用（修复），但 action 本身允许负 delta。负值意味着耐久减少
+      // → 累加 globalMineDamageBonus（永久不撤销）。修复（delta>0）不触发。
+      const durLost = Math.max(0, prevDur - newDur);
+      if (durLost > 0) {
+        accumulateMineDamageBoost(state, equip as GameCardData, durLost, patch, sideEffects);
+      }
+      return applyPatch(state, patch, sideEffects);
     }
 
     case 'UPDATE_AMULET_SLOT': {

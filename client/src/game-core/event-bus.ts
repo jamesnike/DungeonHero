@@ -221,6 +221,22 @@ export type GameEventMap = {
     count: number;
     cards: import('@/components/GameCard').GameCardData[];
   };
+  /**
+   * 「置顶」关键词触发：从回收袋洗回背包的卡里有 N 张带 `topOnRecycleRestore: true`，
+   * 在同一 reducer 步骤里被 prepend 到 `backpackItems[0]`（背包第 1 格），让玩家立刻
+   * 能在背包最显眼位置看到它。
+   *
+   * 这条 side effect 跟 `waterfall:recycleRestored` 配对发出 —— 第一阶段绿环动画在
+   * BackpackZone 仍然播放（payload.cards 含全部 restored 包括置顶卡），第二阶段由本
+   * event 驱动 banner / log。
+   *
+   * 注意事件名 `promotedToDeckTop` 是历史命名（最初置顶语义是「牌堆顶」），现已迁移
+   * 到「背包顶」语义，但事件名因为没有任何 listener 暂未改名。
+   */
+  'card:promotedToDeckTop': {
+    count: number;
+    cards: import('@/components/GameCard').GameCardData[];
+  };
   'waterfall:discardEffect': {
     cardName: string;
     effectType: string;
@@ -315,6 +331,31 @@ export type GameEventMap = {
   'magic:returnToDeck': {
     slotIdx: number;
     card: import('@/components/GameCard').GameCardData;
+  };
+  /**
+   * 布雷术：在激活行随机空 slot 放下地雷（hellow ghost building，mineDamage: 5）。
+   * payload.slots: 实际成功放置的地雷条目（idx + mineId）。
+   * payload.droppedCount: 因空位不足而丢失的地雷数量（echo 时可能 > 0）。
+   * 触发逻辑（怪物落到地雷格 → 5 点纯伤 + 地雷进坟场）由 reduceApplyWaterfallDrop
+   * 处理，触发时另发 'combat:mineTriggered' 事件，跟本事件分开。
+   */
+  'magic:layMine': {
+    slots: Array<{ idx: number; mineId: string }>;
+    droppedCount: number;
+  };
+  /**
+   * 地雷触发：怪物瀑流落到地雷 slot 时，地雷从下层触发对该怪物造成 mineDamage
+   * 点纯伤害，随后地雷进坟场。
+   * payload.slotIdx: 地雷所在 slot index。
+   * payload.monsterId: 落到 slot 的怪物 id。
+   * payload.damage: 实际造成的伤害（= 地雷的 mineDamage 字段）。
+   * payload.mineId: 触发的地雷卡 id（用于动画 / 飞向坟场）。
+   */
+  'combat:mineTriggered': {
+    slotIdx: number;
+    monsterId: string;
+    damage: number;
+    mineId: string;
   };
   'hero:cardRemoved': { cardId: string; animate: boolean };
 

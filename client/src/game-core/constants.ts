@@ -193,6 +193,8 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   stunGoldCount: 0,
   deleteDrawCount: 0,
   lastWordsExtraTriggerCount: 0,
+  killCellMineCount: 0,
+  manualRecycleDrawCount: 0,
 });
 
 // ---------------------------------------------------------------------------

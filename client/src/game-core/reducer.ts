@@ -32,6 +32,8 @@ import {
   applyAmplifyOnCreate,
 } from './helpers';
 import { createBugletCard } from './deck';
+import { createMineBuilding } from '@/lib/knightDeck';
+import { computeAmuletEffectsForState } from './equipment';
 import {
   BALANCE_ATTACK_BONUS,
   BALANCE_ATTACK_PENALTY,
@@ -250,6 +252,87 @@ function postProcessActiveCards(
     }
   }
 
+  // 3.5. Kill-cell mine spawn (殒雷符 amulet, unique).
+  //      When a defeated monster (`prev?.defeatProcessed === true`) leaves a
+  //      slot — whether the slot becomes null OR another card now occupies it
+  //      (stack-pop, swarm-buglet from step 3, future card promote) — spawn a
+  //      mine. If the slot is already occupied (curr !== null), the mine is
+  //      placed ON TOP and the existing card is pushed to `activeCardStacks`
+  //      (per user spec "堆叠在上面").
+  //
+  //      Detection key: `prev?.defeatProcessed === true && curr !== prev`.
+  //      `defeatProcessed: true` is set ONLY in `combat.ts:reduceMonsterDefeated`
+  //      branch B (actual defeat), so this never fires for revives, building
+  //      removals, event flips, or other slot mutations.
+  //
+  //      Trigger source: ANY kill (per user spec — weapon attack / magic /
+  //      mine itself / reflect / discard damage / last-words damage all count).
+  //      Self-mine kills DO retrigger (chains of mines on the same cell are
+  //      allowed by design — unique amulet caps at 1 instance, so each kill
+  //      adds exactly 1 mine).
+  //
+  //      Routing the mine spawn through `extraActions` (a new SPAWN_KILL_CELL_MINE
+  //      enqueue) would be cleaner architecturally but creates an
+  //      `isInputContinuation` whitelist obligation; keeping it inline here
+  //      mirrors the existing swarm-spawn pattern (step 3) which also writes
+  //      `state.activeCards` directly.
+  {
+    const ae = computeAmuletEffectsForState(state);
+    if (ae.killCellMineCount > 0) {
+      const nextActiveCards: ActiveRowSlots = [...state.activeCards] as ActiveRowSlots;
+      const nextStacks: typeof state.activeCardStacks = { ...state.activeCardStacks };
+      let mineRng = state.rng;
+      let mineMutated = false;
+
+      for (let col = 0; col < DUNGEON_COLUMN_COUNT; col++) {
+        const prev = prevState.activeCards[col];
+        const curr = state.activeCards[col];
+        // Only fire when a defeated monster has just left this column.
+        if (!prev || prev.type !== 'monster' || !prev.defeatProcessed) continue;
+        if (curr === prev) continue; // monster still in slot, animation phase
+
+        const [mine, nextRng] = createMineBuilding(mineRng);
+        mineRng = nextRng;
+
+        if (curr) {
+          // Stack-pop / swarm-buglet / waterfall-drop already filled the slot.
+          // Mine goes on top; push current card to the bottom of the stack
+          // (visible card is replaced; old occupant pops up next).
+          const existingStack = nextStacks[col] ?? [];
+          nextStacks[col] = [...existingStack, curr];
+          nextActiveCards[col] = mine;
+        } else {
+          // Slot is empty — drop mine straight in.
+          nextActiveCards[col] = mine;
+        }
+        mineMutated = true;
+
+        result = {
+          ...result,
+          sideEffects: [
+            ...result.sideEffects,
+            {
+              event: 'log:entry',
+              payload: {
+                type: 'amulet',
+                message: `殒雷符：第 ${col + 1} 列击杀触发，生成地雷${curr ? '（堆叠在 '+ curr.name +' 上）' : ''}！`,
+              },
+            },
+            {
+              event: 'ui:banner',
+              payload: { text: `殒雷符发动：第 ${col + 1} 列布下地雷！` },
+            },
+          ],
+        };
+      }
+
+      if (mineMutated) {
+        state = { ...state, activeCards: nextActiveCards, activeCardStacks: nextStacks, rng: mineRng };
+        mutated = true;
+      }
+    }
+  }
+
   // 4. Detect cards removed from dungeon slots → enqueue REGISTER_DUNGEON_CARD_PROCESSED.
   //    Uses post-step-3 `state.activeCards` so swarm-replaced slots (now holding a
   //    buglet) are NOT detected here, mirroring the legacy `removeCard` hook
@@ -338,6 +421,8 @@ function computeAmuletCounterDisplay(
       const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 8;
       return `${state.recycleBackpackProgress ?? 0}/${threshold}`;
     }
+    case 'manual-recycle-draw':
+      return `${state.manualRecycleProgress ?? 0}/3`;
     case 'flip-overkill-lifesteal':
       return `${state.flipOverkillLifestealProgress ?? 0}/5`;
     case 'equip-amulet-cap':

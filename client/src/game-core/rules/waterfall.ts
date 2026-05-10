@@ -48,7 +48,7 @@ import {
 import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { hasEternalRelic } from '@/lib/eternalRelics';
-import { processRecycleBag, drawMultipleFromBackpack } from '../cards';
+import { processRecycleBag, drawMultipleFromBackpack, pushRecycleRestoreSideEffects } from '../cards';
 import { resetHeroWavePure } from '../hero';
 import { createBugletCard } from '../deck';
 
@@ -432,20 +432,21 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
   // even when nothing is ready to restore — so the decrement is not lost.
   if (state.permanentMagicRecycleBag.length > 0) {
     const recycleResult = processRecycleBag(state);
-    patch.permanentMagicRecycleBag = recycleResult.remaining;
+    // Merge processRecycleBag patch (permanentMagicRecycleBag + backpackItems).
+    // 「置顶」(`topOnRecycleRestore`) 卡也走 backpackItems —— 被 prepend 到
+    // backpackItems[0]，所以 patch 里的 backpackItems 已经包含置顶卡。不要再
+    // 手写 `patch.backpackItems = [...state.backpackItems, ...recycleResult.restored]`，
+    // 那样会丢掉「置顶 → 第 1 格」的 prepend 顺序。
+    Object.assign(patch, recycleResult.patch);
     if (recycleResult.restored.length > 0) {
-      patch.backpackItems = [...state.backpackItems, ...recycleResult.restored];
       sideEffects.push({
         event: 'log:entry',
         payload: { type: 'waterfall', message: `回收袋恢复了 ${recycleResult.restored.length} 张牌到背包` },
       });
-      // 通知 UI 播放 Backpack cell 的"绿色回收环"动画。
+      // 通知 UI 播放 Backpack cell 的"绿色回收环"动画 + 「置顶」卡的二段反馈。
       // BackpackZone 通过 useGameEvent('waterfall:recycleRestored', ...) 监听并
       // 触发本地动画状态。
-      sideEffects.push({
-        event: 'waterfall:recycleRestored',
-        payload: { count: recycleResult.restored.length, cards: recycleResult.restored },
-      });
+      pushRecycleRestoreSideEffects(sideEffects, recycleResult);
     }
   }
 
@@ -1149,18 +1150,66 @@ function reduceApplyWaterfallDrop(state: GameState): ReduceResult {
   if (plan.dropTargetSlots.length > 0) {
     const newActive = [...state.activeCards] as ActiveRowSlots;
     const ghostsDisplaced: Array<{ slotIndex: number; ghost: GameCardData }> = [];
+    // 「布雷术」地雷触发：当怪物落到带 mineDamage 的 ghost building 上时，
+    // 不走普通的 ghost-stack-bottom 路径，而是 (a) 对落下的怪物造成纯陷阱伤害，
+    // (b) 让怪物激怒，(c) 把地雷送进坟场（不塞回 activeCardStacks）。
+    // 非怪物（事件 / 其它建筑）落到地雷上时不触发，按普通 ghost 同款被推到下层
+    // —— 跟用户确认过的语义一致（"踏踩"不是怪物不计数）。
+    const minesTriggered: Array<{
+      slotIndex: number;
+      mine: GameCardData;
+      monster: GameCardData;
+    }> = [];
 
     plan.dropTargetSlots.forEach((slotIndex, idx) => {
       const card = plan.resolvedDropCards[idx];
       if (typeof slotIndex === 'number') {
         const existing = newActive[slotIndex];
         if (existing?.isGhost) {
-          ghostsDisplaced.push({ slotIndex, ghost: existing });
+          // 地雷分支：ghost 带 mineDamage > 0 + 落下的是 monster → 触发
+          const mineDamage = (existing as GameCardData).mineDamage ?? 0;
+          if (mineDamage > 0 && card && card.type === 'monster') {
+            minesTriggered.push({ slotIndex, mine: existing, monster: card });
+            // 不 push 进 ghostsDisplaced —— 地雷不入 stack，会进坟场
+          } else {
+            ghostsDisplaced.push({ slotIndex, ghost: existing });
+          }
         }
         newActive[slotIndex] = card ?? null;
       }
     });
     patch.activeCards = newActive;
+
+    // 地雷触发：先 BEGIN_COMBAT 让怪物进交战（满足 monster-damage-engagement
+    // 不变量；reducer 入口 universal safety net 也兜底，但显式 enqueue 保证
+    // BEGIN_COMBAT 排在 DEAL_DAMAGE_TO_MONSTER 之前，UI 顺序自然），再造成纯
+    // 陷阱伤害（不带 isSpellDamage flag → 不走 amplify / 法伤加成），最后把地雷
+    // 送进坟场（resetCardForGraveyard 由 reduceAddToGraveyard 内部处理）。
+    //
+    // 实际伤害 = mine.mineDamage + state.globalMineDamageBonus（「引雷阵锋」类
+    // 武器累加的全场加成；持久化字段，详见 types.ts:GameState）。
+    const mineGlobalBonus = state.globalMineDamageBonus ?? 0;
+    for (const { slotIndex, mine, monster } of minesTriggered) {
+      const mineBaseDamage = mine.mineDamage ?? 0;
+      const totalMineDamage = mineBaseDamage + mineGlobalBonus;
+      enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
+      enqueuedActions.push({
+        type: 'DEAL_DAMAGE_TO_MONSTER',
+        monsterId: monster.id,
+        damage: totalMineDamage,
+        source: 'mine-trap',
+      });
+      enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: mine });
+      sideEffects.push({
+        event: 'combat:mineTriggered',
+        payload: {
+          slotIdx: slotIndex,
+          monsterId: monster.id,
+          damage: totalMineDamage,
+          mineId: mine.id,
+        },
+      });
+    }
 
     // Transfer preview stacks to active stacks; ghosts go to stack bottom
     const nextActiveStacks = { ...state.activeCardStacks };

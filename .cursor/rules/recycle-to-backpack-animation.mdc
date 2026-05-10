@@ -73,6 +73,48 @@ if (echoMultiplier % 2 === 1 && state.permanentMagicRecycleBag.length > 0) {
 
 新加 / 修改任何这类路径时，先 `Grep waterfall:recycleRestored` 看现成的写法照抄，**不要重新设计**。
 
+## 推荐用法：`pushRecycleRestoreSideEffects` helper
+
+为避免 9+ 处 caller 复制粘贴漏写 side effect（尤其是 `card:promotedToDeckTop`
+"置顶"事件），统一使用 `client/src/game-core/cards.ts` 导出的 helper：
+
+```typescript
+import { processRecycleBag, pushRecycleRestoreSideEffects } from '@/game-core/cards';
+
+const recycleResult = processRecycleBag(state);
+Object.assign(patch, recycleResult.patch); // 自动 merge backpackItems + permanentMagicRecycleBag
+pushRecycleRestoreSideEffects(sideEffects, recycleResult);
+// ↑ 一次性 emit waterfall:recycleRestored（绿环动画，含全部 restored 卡）
+//   + card:promotedToDeckTop（置顶 banner，只含 restoredToBackpackTop 卡；
+//     事件名是历史命名，当前语义已改为「背包顶」）
+```
+
+**绝对不要**手写 `patch.backpackItems = [...state.backpackItems, ...recycleResult.restored]`——
+这会丢掉「置顶 → backpackItems[0]（背包第 1 格）」的 prepend 顺序，让带
+`topOnRecycleRestore: true` 的卡（如 `专属感召`）落到背包末尾而不是顶部。
+
+非 `processRecycleBag` 流（如 `幽魂净化` 走"立即洗回，跳过 `_recycleWaits` 倒计时"路径）
+需要手动分流，但仍要调 `pushRecycleRestoreSideEffects`。参考 `rules/turn.ts` `wraith-purification` 分支。
+
+## 「置顶」(`topOnRecycleRestore`) 关键词
+
+带 `topOnRecycleRestore: true` 的卡从回收袋洗回背包时，`processRecycleBag` 自动
+**prepend 到 `backpackItems[0]`（背包第 1 格）**，让玩家立刻能在背包最显眼位置看到它。
+普通卡仍然 append 到背包末尾。**caller 无需特判**——只要正确使用 `recycleResult.patch`
+（或 helper），所有 7+ 条 recycle→backpack 路径统一生效。
+
+> 历史注：这个关键词早期实现是"放到 `remainingDeck[0]`（牌堆顶）"，后来发现玩家
+> 的直觉是"放到背包顶（第 1 格）让我能马上看到卡回来了"——而不是"塞进牌堆顶让卡
+> 再次消失"。已迁移到 `backpackItems[0]` 语义。事件名 `card:promotedToDeckTop`
+> 因为没有任何 listener 暂未改名（修改它的代价大于收益）。
+
+容量语义：置顶卡仍然占 backpack 容量配额。背包满时所有 ready 卡（包括置顶卡）
+都落不下来 = 全部留在回收袋下次再算。
+
+视觉两阶段：
+1. 第一阶段：`waterfall:recycleRestored`（已有绿环动画，BackpackZone 监听）—— 玩家看到"卡从回收袋飞回背包"。
+2. 第二阶段：`card:promotedToDeckTop`（事件名是历史命名，语义=「置顶到背包顶」）—— banner / log 用，目前没有 UI listener。
+
 ## 不属于这条规则的路径
 
 - `DRAW_CARDS source: 'recycleBag'`：把回收袋卡**直接抽到手牌**，不经过背包。

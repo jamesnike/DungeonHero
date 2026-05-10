@@ -126,7 +126,7 @@ export interface CardPlayHandlersDeps {
   ) => Promise<GameCardData | null>;
   beginDiscoverFlow: (
     source: string,
-    options?: { filter?: (card: GameCardData) => boolean; sourceLabel?: string; overridePool?: GameCardData[]; delivery?: 'backpack' | 'hand-first' },
+    options?: { filter?: (card: GameCardData) => boolean; sourceLabel?: string; overridePool?: GameCardData[]; delivery?: 'backpack' | 'hand-first'; postInjectTopOnRecycleRestore?: boolean },
   ) => boolean;
   startShopFlow: (sourceCard: GameCardData | null) => boolean;
   discoverPotionCompletionRef: React.MutableRefObject<((payload: { banner: string }) => void) | null>;

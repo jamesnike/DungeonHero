@@ -261,6 +261,7 @@ const recycleFlare: OnUpgradeHandler = noopUpgrade;
 const fateSight: OnUpgradeHandler = noopUpgrade;
 const bloodDraw: OnUpgradeHandler = noopUpgrade;
 const handPurgeRedraw: OnUpgradeHandler = noopUpgrade;
+const handRecycleRedraw: OnUpgradeHandler = noopUpgrade;
 const missileStorm: OnUpgradeHandler = noopUpgrade;
 const graveNova: OnUpgradeHandler = noopUpgrade;
 const overkillUpgrade: OnUpgradeHandler = noopUpgrade;
@@ -279,8 +280,33 @@ const threeCardThunder: OnUpgradeHandler = noopUpgrade;
 const reorganizeBackpack: OnUpgradeHandler = noopUpgrade;
 const armorStunConvert: OnUpgradeHandler = noopUpgrade;
 const stunCapStrike: OnUpgradeHandler = noopUpgrade;
+const backpackBolt: OnUpgradeHandler = noopUpgrade;
+const recycleBolt: OnUpgradeHandler = noopUpgrade;
+const backpackCapStun: OnUpgradeHandler = noopUpgrade;
+// 布雷术：升级后 recycleDelay 2 → 1（PERM 2 → PERM 1）。
+// 卡牌效果（5 点纯陷阱伤害 / 随机空格生成 1 个地雷）不变，仅缩短回充周期。
+const layMine: OnUpgradeHandler = (upgraded, newLevel) => {
+  if (newLevel === 1) {
+    upgraded.recycleDelay = 1;
+  }
+};
+// 引雷阵锋 (knight:thunder-array-blade)：
+//   L0: value=3 / dur=2/2 / mineDamageBoostPerDur=2
+//   L1: value=3 / dur=3/3 / mineDamageBoostPerDur=2  （仅耐久 +1）
+//   L2: value=3 / dur=3/3 / mineDamageBoostPerDur=3  （仅 boost +1）
+// `applyMaxDurabilityDelta` 的 preserve+delta 语义 + clampMaxDurability 兜底已经
+// 处理了「玩家中途用过 → 当前 dur < max」的情况；mid-game 增幅的 dur/maxDur
+// 会按 delta 一起涨。
+const thunderArrayBlade: OnUpgradeHandler = (upgraded, newLevel) => {
+  const maxDurs = [2, 3, 3];
+  const boosts = [2, 2, 3];
+  applyMaxDurabilityDelta(upgraded, maxDurs, newLevel);
+  upgraded.mineDamageBoostPerDur = boosts[newLevel] ?? boosts[boosts.length - 1];
+};
 const tempAttackArmorDraw: OnUpgradeHandler = noopUpgrade;
 const tempAttackDouble: OnUpgradeHandler = noopUpgrade;
+const backpackTempAttack: OnUpgradeHandler = noopUpgrade;
+const recycleTempArmor: OnUpgradeHandler = noopUpgrade;
 const amplifyEquipmentShift: OnUpgradeHandler = noopUpgrade;
 const essenceExtract: OnUpgradeHandler = noopUpgrade;
 
@@ -691,6 +717,7 @@ registerOnUpgradeAll([
   { id: 'knight:fate-sight', handler: fateSight },
   { id: 'knight:blood-draw', handler: bloodDraw },
   { id: 'knight:hand-purge-redraw', handler: handPurgeRedraw },
+  { id: 'knight:hand-recycle-redraw', handler: handRecycleRedraw },
   { id: 'knight:missile-storm', handler: missileStorm },
   { id: 'knight:grave-nova', handler: graveNova },
   { id: 'knight:overkill-upgrade', handler: overkillUpgrade },
@@ -701,8 +728,15 @@ registerOnUpgradeAll([
   { id: 'knight:reorganize-backpack', handler: reorganizeBackpack },
   { id: 'knight:armor-stun-convert', handler: armorStunConvert },
   { id: 'knight:stun-cap-strike', handler: stunCapStrike },
+  { id: 'knight:backpack-bolt', handler: backpackBolt },
+  { id: 'knight:recycle-bolt', handler: recycleBolt },
+  { id: 'knight:backpack-cap-stun', handler: backpackCapStun },
+  { id: 'knight:lay-mine', handler: layMine },
+  { id: 'knight:thunder-array-blade', handler: thunderArrayBlade },
   { id: 'knight:temp-attack-armor-draw', handler: tempAttackArmorDraw },
   { id: 'knight:temp-attack-double', handler: tempAttackDouble },
+  { id: 'knight:backpack-temp-attack', handler: backpackTempAttack },
+  { id: 'knight:recycle-temp-armor', handler: recycleTempArmor },
   { id: 'knight:amplify-equipment-shift', handler: amplifyEquipmentShift },
   { id: 'knight:essence-extract', handler: essenceExtract },
   { id: 'knight:holy-blade', handler: holyBlade },

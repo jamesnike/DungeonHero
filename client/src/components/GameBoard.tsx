@@ -4247,6 +4247,7 @@ export default function GameBoard() {
       permanentMaxHpBonus: snapshot.permanentMaxHpBonus ?? 0,
       permanentSpellDamageBonus: snapshot.permanentSpellDamageBonus ?? 0,
       permanentSpellLifesteal: snapshot.permanentSpellLifesteal ?? 0,
+      globalMineDamageBonus: (snapshot as any).globalMineDamageBonus ?? 0,
       stunCap: snapshot.stunCap ?? 10,
       heroStunned: snapshot.heroStunned ?? false,
       persuadeLevel: snapshot.persuadeLevel ?? 1,
@@ -4381,6 +4382,10 @@ export default function GameBoard() {
       deathWardNotice: (snapshot.deathWardNotice as import('@/game-core/types').DeathWardNoticeState | null) ?? null,
       gameLogEntries: (loadGameLog()?.entries ?? []) as import('@/components/GameLogPanel').LogEntry[],
       amplifiedCardBonus: snapshot.amplifiedCardBonus ?? {},
+      // 60s hero turn 倒计时起始时间戳。null 表示当前不在 hero combat turn。
+      // 还原后 HeroTurnTimer 仍能从 wall-clock 计算剩余时间——已经超时的回合
+      // 在第一个 tick 就会自动结束。
+      playerTurnStartedAt: snapshot.playerTurnStartedAt ?? null,
     });
 
     // Stacking state (previewCardStacks, activeCardStacks) is hydrated via engine state
@@ -8219,6 +8224,37 @@ export default function GameBoard() {
     handleCardClick, getMonsterRageOverlayStyle, registerMonsterCellRef,
   ]);
 
+  /**
+   * 60s 倒计时归零时调用：先关掉所有组件本地的 useState modal（这些不在引擎
+   * state 里，FORCE_END_HERO_TURN reducer 看不见），然后 dispatch 一条
+   * `FORCE_END_HERO_TURN` 让引擎清掉所有 modal/pending interaction +
+   * enqueue END_TURN。
+   *
+   * 跟普通 endHeroTurn 的区别：跳过 `endHeroTurnGuardRef` 检查（玩家可能正在
+   * 拖拽 / modal 折叠 / 动画中——超时强制结束不能被这些状态阻挡）。
+   */
+  const handleAutoEndHeroTurn = useCallback(() => {
+    // 1. 关掉所有组件本地 modal（引擎 reducer 看不见这些 useState）
+    setBackpackViewerOpen(false);
+    setDeckViewerOpen(false);
+    setDeckPeekState(null);
+    setDetailsModalOpen(false);
+    setHeroDetailsOpen(false);
+    setGameOverMinimized(false);
+
+    // 2. 跟 endHeroTurn 一致地处理 layer-loss tracking（用于精英 regen 等逻辑）
+    const heroTurnLayerLossIds = Array.from(heroTurnLayerLossIdsRef.current);
+    heroTurnLayerLossIdsRef.current.clear();
+    heroTookDamageThisMonsterTurnRef.current = false;
+
+    // 3. 让引擎统一收尾：清 pendingInteraction / 所有 modal state /
+    //    phase → playerInput，再 enqueue END_TURN。
+    dispatch({
+      type: 'FORCE_END_HERO_TURN',
+      heroTurnLayerLossIds,
+    });
+  }, [dispatch]);
+
   const modalCallbacks = useMemo<ModalCallbacks>(() => ({
     onCardSelect: handleCardClick,
     onShopPurchase: handleShopPurchase,
@@ -8279,6 +8315,7 @@ export default function GameBoard() {
     onCardDraftComplete: handleCardDraftComplete,
     onRestart: handleNewGame,
     onEndHeroTurn: endHeroTurn,
+    onAutoEndHeroTurn: handleAutoEndHeroTurn,
     onUndo: handleUndo,
     onGameOverMinimize: handleGameOverMinimize,
     onWraithPassiveUnlockChange: setWraithPassiveUnlockPopup,
@@ -8307,7 +8344,7 @@ export default function GameBoard() {
     handleDismissDeathWardNotice,
     handleDaggerSelfDestructConfirm, handleDaggerSelfDestructDecline,
     handleSkillSelection, handleCardDraftComplete, handleNewGame,
-    endHeroTurn, handleUndo, handleGameOverMinimize,
+    endHeroTurn, handleAutoEndHeroTurn, handleUndo, handleGameOverMinimize,
   ]);
 
   const modalUI = useMemo<ModalUIState>(() => ({

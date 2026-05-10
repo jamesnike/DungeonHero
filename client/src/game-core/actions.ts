@@ -35,6 +35,22 @@ export interface EnterPlayerInputAction {
   type: 'ENTER_PLAYER_INPUT';
 }
 
+/**
+ * Hero turn 60s 倒计时归零时由 `useAutoEndHeroTurn` dispatch。
+ *
+ * 引擎侧 reducer 强制重置所有 modal / pending interaction 字段，把 phase 推回
+ * `playerInput`，然后 enqueue 一条 `END_TURN` 让 hero turn 自动结束。
+ *
+ * 组件本地 useState 形式的 modal（`backpackViewerOpen` / `heroSkillTargeting` 等）
+ * 由 `useAutoEndHeroTurn` 在 dispatch 之前一并 close，参考
+ * `client/src/hooks/useAutoEndHeroTurn.ts`。
+ */
+export interface ForceEndHeroTurnAction {
+  type: 'FORCE_END_HERO_TURN';
+  /** Same payload shape as END_TURN — caller fills from existing ref. */
+  heroTurnLayerLossIds: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Monster turn
 // ---------------------------------------------------------------------------
@@ -674,6 +690,14 @@ export interface BeginDiscoverAction {
    * back-compat with existing callers; the value is ignored.
    */
   removeFromClassDeck?: boolean;
+  /**
+   * 「右翼回响」option 2 (and similar future "discover + 置顶" effects):
+   * when true, RESOLVE_DISCOVER_SELECTION injects `topOnRecycleRestore: true`
+   * onto the cloned card before placing it in hand/backpack/recycle bag.
+   * The flag is stored in `state.discoverPostInjectTopOnRecycleRestore` for
+   * the duration of the modal and reset to `false` on selection / cancel.
+   */
+  postInjectTopOnRecycleRestore?: boolean;
 }
 
 export interface ResolveDiscoverSelectionAction {
@@ -994,6 +1018,47 @@ export interface ResolveEventGrantEquipFlipRepairAction {
  */
 export interface ResolveEventGrantLastWordsMaxHpAction {
   type: 'RESOLVE_EVENT_GRANT_LASTWORDS_MAXHP';
+  equipmentSlotId: 'equipmentSlot1' | 'equipmentSlot2';
+  amount: number;
+}
+
+/**
+ * 「右翼回响」 option 6 — 选择装备赋予「入场：下次劝降成功率 +20%」
+ * Sets `onEquipEffect = 'persuade-bonus-20'` on the chosen main-slot equipment.
+ * Idempotent: equipment that already has any `onEquipEffect` is filtered out
+ * by the choice eligibility check (see `equippedForOnEquipGrant` requirement),
+ * so the resolver only ever sees an eligible target.
+ * Only applies to equipmentSlot1 / equipmentSlot2 (no reserve).
+ */
+export interface ResolveEventGrantEquipPersuadeBonusAction {
+  type: 'RESOLVE_EVENT_GRANT_EQUIP_PERSUADE_BONUS';
+  equipmentSlotId: 'equipmentSlot1' | 'equipmentSlot2';
+}
+
+/**
+ * 「奥能裂变」 outcome 1 — 选择装备赋予「遗言：销毁时手牌 +N 张「魔弹」」
+ * Increments `lastWordsGainBolt` on the chosen main-slot equipment by `amount`.
+ * Stacks with itself across multiple grants (parallel to lastWordsMaxHpBoost /
+ * lastWordsSlotTempBuff). On equipment break / displacement,
+ * applyOneEquipmentLastWordsIteration spawns N bolts (overflow → backpack →
+ * recycle bag, mirroring the `gainBolts:N` event token).
+ * Only applies to equipmentSlot1 / equipmentSlot2 (no reserve).
+ */
+export interface ResolveEventGrantLastWordsGainBoltAction {
+  type: 'RESOLVE_EVENT_GRANT_LASTWORDS_GAIN_BOLT';
+  equipmentSlotId: 'equipmentSlot1' | 'equipmentSlot2';
+  amount: number;
+}
+
+/**
+ * 「奥能裂变」 outcome 4 — 选择装备赋予「入场：active row 随机空位生成 N 个「地雷」」
+ * Sets `onEquipEffect = 'spawn-mine:N'` on the chosen main-slot equipment.
+ * Idempotent: equipment that already has any `onEquipEffect` is filtered out
+ * upstream (mirrors RESOLVE_EVENT_GRANT_EQUIP_PERSUADE_BONUS pattern).
+ * Only applies to equipmentSlot1 / equipmentSlot2 (no reserve).
+ */
+export interface ResolveEventGrantOnEquipSpawnMineAction {
+  type: 'RESOLVE_EVENT_GRANT_ONEQUIP_SPAWN_MINE';
   equipmentSlotId: 'equipmentSlot1' | 'equipmentSlot2';
   amount: number;
 }
@@ -1925,6 +1990,7 @@ export type GameAction =
   | StartTurnAction
   | EndTurnAction
   | EnterPlayerInputAction
+  | ForceEndHeroTurnAction
   // Monster turn
   | AdvanceMonsterTurnAction
   | ApplyMonsterTurnEndEffectsAction
@@ -2071,6 +2137,9 @@ export type GameAction =
   | ResolveEventInteractionAction
   | ResolveEventGrantEquipFlipRepairAction
   | ResolveEventGrantLastWordsMaxHpAction
+  | ResolveEventGrantEquipPersuadeBonusAction
+  | ResolveEventGrantLastWordsGainBoltAction
+  | ResolveEventGrantOnEquipSpawnMineAction
   | ContinueEventEffectsAction
   // Waterfall: effects
   | ApplyWaterfallEffectsAction

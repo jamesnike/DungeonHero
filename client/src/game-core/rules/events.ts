@@ -16,6 +16,7 @@ import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch, noChange } from '../reducer';
 import { gainClassDeckBottomCardsPure, applySimpleEffect } from '../events';
 import { createCrimsonVoidSwapMagic } from '../deck';
+import { pickRandom } from '../rng';
 
 export function reduceEventActions(state: GameState, action: GameAction): ReduceResult | null {
   switch (action.type) {
@@ -52,6 +53,12 @@ export function reduceEventActions(state: GameState, action: GameAction): Reduce
       return reduceResolveEventGrantEquipFlipRepair(state, action);
     case 'RESOLVE_EVENT_GRANT_LASTWORDS_MAXHP':
       return reduceResolveEventGrantLastWordsMaxHp(state, action);
+    case 'RESOLVE_EVENT_GRANT_EQUIP_PERSUADE_BONUS':
+      return reduceResolveEventGrantEquipPersuadeBonus(state, action);
+    case 'RESOLVE_EVENT_GRANT_LASTWORDS_GAIN_BOLT':
+      return reduceResolveEventGrantLastWordsGainBolt(state, action);
+    case 'RESOLVE_EVENT_GRANT_ONEQUIP_SPAWN_MINE':
+      return reduceResolveEventGrantOnEquipSpawnMine(state, action);
     default:
       return null;
   }
@@ -164,6 +171,162 @@ function reduceResolveEventGrantLastWordsMaxHp(
 }
 
 // ---------------------------------------------------------------------------
+// RESOLVE_EVENT_GRANT_EQUIP_PERSUADE_BONUS
+// 「右翼回响」 option 6 — set `onEquipEffect = 'persuade-bonus-20'` on a chosen
+// main-slot equipment. The on-equip handler fires every time the equipment
+// enters a slot (mirrors the existing 'persuade-bonus-10' on the dagger).
+// Idempotent: equipment that already has any onEquipEffect is filtered out
+// upstream by the `equippedForOnEquipGrant` requirement.
+// ---------------------------------------------------------------------------
+
+function reduceResolveEventGrantEquipPersuadeBonus(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_EVENT_GRANT_EQUIP_PERSUADE_BONUS' }>,
+): ReduceResult {
+  const { equipmentSlotId } = action;
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+
+  const slotItem = equipmentSlotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+  if (!slotItem) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: '右翼回响：所选装备栏为空' },
+    });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  if (slotItem.onEquipEffect) {
+    // Defensive: should never happen because eligibility filter excludes these.
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: `右翼回响：「${slotItem.name}」已带入场效果，跳过` },
+    });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  const updated: GameCardData = { ...slotItem, onEquipEffect: 'persuade-bonus-20' };
+  if (equipmentSlotId === 'equipmentSlot1') {
+    patch.equipmentSlot1 = updated as any;
+  } else {
+    patch.equipmentSlot2 = updated as any;
+  }
+
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'event', message: `右翼回响：「${slotItem.name}」获得「入场：下次劝降成功率 +20%」` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${slotItem.name} 铭刻「入场：下次劝降成功率 +20%」` },
+  });
+
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_EVENT_GRANT_LASTWORDS_GAIN_BOLT
+// 「奥能裂变」outcome 1 — increment `lastWordsGainBolt` on a chosen main-slot
+// equipment by `amount`. Stacks with itself (parallel to lastWordsMaxHpBoost /
+// lastWordsSlotTempBuff). On equipment break / displacement,
+// applyOneEquipmentLastWordsIteration in equipment-effects.ts spawns N bolts
+// (overflow → backpack → recycle bag, mirroring `gainBolts:N` event token).
+// Only main slots (no reserve).
+// ---------------------------------------------------------------------------
+
+function reduceResolveEventGrantLastWordsGainBolt(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_EVENT_GRANT_LASTWORDS_GAIN_BOLT' }>,
+): ReduceResult {
+  const { equipmentSlotId, amount } = action;
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+
+  const slotItem = equipmentSlotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+  if (!slotItem) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: '奥能裂变：所选装备栏为空' },
+    });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  const prevStacks = slotItem.lastWordsGainBolt ?? 0;
+  const nextStacks = prevStacks + amount;
+  const updated: GameCardData = { ...slotItem, lastWordsGainBolt: nextStacks };
+  if (equipmentSlotId === 'equipmentSlot1') {
+    patch.equipmentSlot1 = updated as any;
+  } else {
+    patch.equipmentSlot2 = updated as any;
+  }
+
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'event', message: `奥能裂变：「${slotItem.name}」获得遗言：销毁时手牌 +${amount} 张「魔弹」（累计 ×${nextStacks}）` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${slotItem.name} 铭刻「遗言：手牌 +${amount} 魔弹」（×${nextStacks}）` },
+  });
+
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
+// RESOLVE_EVENT_GRANT_ONEQUIP_SPAWN_MINE
+// 「奥能裂变」outcome 4 — set `onEquipEffect = 'spawn-mine:N'` on a chosen
+// main-slot equipment. Eligibility (no existing onEquipEffect) is enforced
+// upstream by `useEventSystem.handleEventInteraction` filter, so the resolver
+// only ever sees a clean target. Mirrors RESOLVE_EVENT_GRANT_EQUIP_PERSUADE_BONUS.
+// Only main slots (no reserve).
+// ---------------------------------------------------------------------------
+
+function reduceResolveEventGrantOnEquipSpawnMine(
+  state: GameState,
+  action: Extract<GameAction, { type: 'RESOLVE_EVENT_GRANT_ONEQUIP_SPAWN_MINE' }>,
+): ReduceResult {
+  const { equipmentSlotId, amount } = action;
+  const sideEffects: SideEffect[] = [];
+  const patch: Partial<GameState> = {};
+
+  const slotItem = equipmentSlotId === 'equipmentSlot1' ? state.equipmentSlot1 : state.equipmentSlot2;
+  if (!slotItem) {
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: '奥能裂变：所选装备栏为空' },
+    });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  if (slotItem.onEquipEffect) {
+    // Defensive: should never happen because eligibility filter excludes these.
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'event', message: `奥能裂变：「${slotItem.name}」已带入场效果，跳过` },
+    });
+    return applyPatch(state, patch, sideEffects);
+  }
+
+  const updated: GameCardData = { ...slotItem, onEquipEffect: `spawn-mine:${amount}` };
+  if (equipmentSlotId === 'equipmentSlot1') {
+    patch.equipmentSlot1 = updated as any;
+  } else {
+    patch.equipmentSlot2 = updated as any;
+  }
+
+  sideEffects.push({
+    event: 'log:entry',
+    payload: { type: 'event', message: `奥能裂变：「${slotItem.name}」获得「入场：激活行随机空位生成 ${amount} 个「地雷」」` },
+  });
+  sideEffects.push({
+    event: 'ui:banner',
+    payload: { text: `${slotItem.name} 铭刻「入场：生成 ${amount} 个地雷」` },
+  });
+
+  return applyPatch(state, patch, sideEffects);
+}
+
+// ---------------------------------------------------------------------------
 // START_EVENT
 // ---------------------------------------------------------------------------
 
@@ -232,6 +395,23 @@ function reduceCompleteEvent(
     }
   }
 
+  // 「奥能裂变」类事件：随机翻转（flipTargetCandidates）。
+  // 当卡牌带 `flipTargetCandidates` 时，按 RNG 从候选池随机挑一个作为最终 flipTarget。
+  // 优先级：仅当未 skipFlip 且静态 flipTarget 缺失（或我们想覆盖）时生效。
+  // 设计：本字段非空则**完全覆盖** `cardToComplete.flipTarget`，让 author 不必同时
+  // 维护一个"默认" flipTarget；若 `shouldSkipFlip` 已经决定不翻转则直接跳过。
+  // crimsonFlipTarget（双重燃烧（觉醒））有更高优先级 —— 它走 magic resonance 特判。
+  let randomPickedFlipTarget: GameCardData['flipTarget'] | null = null;
+  if (
+    !shouldSkipFlip
+    && Array.isArray(cardToComplete.flipTargetCandidates)
+    && cardToComplete.flipTargetCandidates.length > 0
+  ) {
+    const [picked, nextRng] = pickRandom(cardToComplete.flipTargetCandidates, state.rng);
+    patch.rng = nextRng;
+    randomPickedFlipTarget = picked;
+  }
+
   // Crimson magic resonance (双重燃烧（觉醒）)
   let crimsonFlipTarget: GameCardData['flipTarget'] | null = null;
   if (cardToComplete.name === '双重燃烧（觉醒）' && !shouldSkipFlip) {
@@ -251,7 +431,8 @@ function reduceCompleteEvent(
     }
   }
 
-  const effectiveFlipTarget = crimsonFlipTarget ?? cardToComplete.flipTarget;
+  // Priority: crimson special-case > random-picked > static flipTarget.
+  const effectiveFlipTarget = crimsonFlipTarget ?? randomPickedFlipTarget ?? cardToComplete.flipTarget;
   const hasFlip = !!effectiveFlipTarget && !shouldSkipFlip;
   const flipDest = hasFlip ? (effectiveFlipTarget!.destination ?? 'graveyard') : 'graveyard';
   const isStayFlip = hasFlip && flipDest === 'stay';
@@ -496,6 +677,33 @@ function processEffectsInline(
         const names = rightMonsters.map(m => m.name).join('、');
         sideEffects.push({ event: 'log:entry', payload: { type: 'event', message: `战血荣誉激怒了右侧的怪物：${names}` } });
         enqueuedActions.push({ type: 'SET_HERO_SKILL_BANNER', message: `战血荣誉激怒了 ${names}！` });
+      }
+    }
+  }
+
+  // 「右翼回响」 post-effect logic: if the IMMEDIATE right neighbor in the
+  // active row is a monster, grant `persuadeNextFree` (下次劝降免费). Triggers
+  // regardless of which event option (1–6) the player picked. Edge cases:
+  //   - Event in rightmost cell (no right neighbor) → no trigger.
+  //   - Right neighbor is event/building/empty → no trigger.
+  // Mirrors 战血荣誉 right-side pattern, but applies the persuadeDiscount
+  // patch directly (cleaner than re-running the persuadeNextFree token,
+  // which would re-emit the persuadeDiscountUpdate side effect anyway).
+  if (currentState.currentEventCard?.name === '右翼回响' && currentState.resolvingDungeonCardId) {
+    const cellIdx = currentState.activeCards.findIndex(c => c?.id === currentState.resolvingDungeonCardId);
+    if (cellIdx !== -1 && cellIdx < currentState.activeCards.length - 1) {
+      const rightNeighbor = currentState.activeCards[cellIdx + 1];
+      if (rightNeighbor && rightNeighbor.type === 'monster') {
+        mergedPatch.persuadeDiscount = { costReduction: 999, rateBonus: 0 };
+        sideEffects.push({
+          event: 'log:entry',
+          payload: { type: 'event', message: `右翼回响：右侧的「${rightNeighbor.name}」在场，下次劝降免费！` },
+        });
+        sideEffects.push({
+          event: 'combat:persuadeDiscountUpdate',
+          payload: { newReduction: 999 },
+        });
+        enqueuedActions.push({ type: 'SET_HERO_SKILL_BANNER', message: `右翼回响：下次劝降免费！` });
       }
     }
   }

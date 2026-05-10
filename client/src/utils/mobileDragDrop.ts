@@ -10,6 +10,53 @@ let dragElement: HTMLElement | null = null;
 let dragPreview: HTMLElement | null = null;
 let touchTarget: HTMLElement | null = null;
 
+// ---------------------------------------------------------------------------
+// HTML5 native drag fallback (Samsung Internet on DeX compat)
+// ---------------------------------------------------------------------------
+// Some browsers (most notably Samsung Internet running in Samsung DeX desktop
+// mode) silently drop *custom* `dataTransfer` MIME types between `dragstart`
+// and `drop`. `setData('card', ...)` looks like it succeeds, but `getData('card')`
+// at the drop site returns an empty string — so every drop handler falls into
+// `if (cardData) { ... }` with nothing and the user sees "拖了能松，但松手没生效".
+//
+// To stay cross-browser compatible without changing behavior on browsers that
+// already work correctly, we mirror the same payload into a tiny module-level
+// store on `dragstart` and read from it as a fallback when `dataTransfer`
+// returns empty. Touch / mobile drag uses a separate `mobile-drop` event path
+// (see initMobileDrag/initMobileDrop) and is unaffected.
+// ---------------------------------------------------------------------------
+type Html5DragKey = 'card' | 'equipment';
+const html5FallbackPayload: Partial<Record<Html5DragKey, string>> = {};
+
+export const setHtml5DragFallback = (key: Html5DragKey, value: string): void => {
+  html5FallbackPayload[key] = value;
+};
+
+export const getHtml5DragFallback = (key: Html5DragKey): string => {
+  return html5FallbackPayload[key] ?? '';
+};
+
+export const clearHtml5DragFallback = (): void => {
+  delete html5FallbackPayload.card;
+  delete html5FallbackPayload.equipment;
+};
+
+/**
+ * Read drag data from a React DragEvent's `dataTransfer`, falling back to the
+ * module-level mirror if `dataTransfer.getData(key)` returns an empty string
+ * (Samsung Internet on DeX behavior). Always prefer the live `dataTransfer`
+ * value when present so cross-tab / external drops still work normally.
+ */
+export const readHtml5DragData = (
+  e: { dataTransfer: DataTransfer | null } | DragEvent,
+  key: Html5DragKey,
+): string => {
+  const dt = (e as { dataTransfer: DataTransfer | null }).dataTransfer;
+  const fromDt = dt ? dt.getData(key) : '';
+  if (fromDt) return fromDt;
+  return getHtml5DragFallback(key);
+};
+
 const DRAG_THRESHOLD = 5;
 const HIT_TEST_INTERVAL = 5;
 

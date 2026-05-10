@@ -5,6 +5,7 @@
 import type { GameCardData } from '@/components/GameCard';
 import type { ActiveRowSlots } from '@/components/game-board/types';
 import type { GameState } from './types';
+import type { SideEffect } from './reducer';
 import { HAND_LIMIT, BASE_BACKPACK_CAPACITY, DUNGEON_COLUMN_COUNT, clampMaxDurability } from './constants';
 import { isBackpackRestrictedCard, flattenActiveRowSlots, isRecyclableFromHand } from './helpers';
 import { applyMonsterRage } from '@/lib/monsterRage';
@@ -370,7 +371,23 @@ export function addToRecycleBag(
 
 export function processRecycleBag(
   state: GameState,
-): { restored: GameCardData[]; remaining: GameCardData[]; patch: Partial<GameState> } {
+): {
+  /** 全部从回收袋返回的卡（含置顶 + 普通），caller 用来驱动 `waterfall:recycleRestored` 绿环动画。 */
+  restored: GameCardData[];
+  /** 普通分支：未带 `topOnRecycleRestore`，append 到 backpack 末尾。 */
+  restoredToBackpack: GameCardData[];
+  /**
+   * 「置顶」关键词分支：带 `topOnRecycleRestore: true`，**prepend 到 `backpackItems[0]`**
+   * （第 1 格），不是 `remainingDeck`。caller 可以额外 push `card:promotedToDeckTop`
+   * side effect 做二段视觉反馈（事件名沿用历史命名，但语义已改为「背包顶」）。
+   *
+   * 容量语义：置顶卡仍占 backpack 容量配额——背包满时跟普通卡一样无法洗回，
+   * 自然也不出现在 `restoredToBackpackTop`，留在 `remaining` 里下次瀑流再算。
+   */
+  restoredToBackpackTop: GameCardData[];
+  remaining: GameCardData[];
+  patch: Partial<GameState>;
+} {
   const ready: GameCardData[] = [];
   const stillWaiting: GameCardData[] = [];
 
@@ -392,14 +409,68 @@ export function processRecycleBag(
   const toRestore = ready.slice(0, availableSlots);
   const overflow = ready.slice(availableSlots);
 
+  // 「置顶」关键词分流：toRestore 切两半，置顶 → backpackItems[0]（prepend），
+  // 其余 → backpackItems 末尾（append）。两组都进背包，**不再**走 remainingDeck。
+  // 容量已经在上面按 backpack 计算过了；置顶卡仍占容量（背包满时根本进不来 toRestore）。
+  const restoredToBackpackTop: GameCardData[] = [];
+  const restoredToBackpack: GameCardData[] = [];
+  for (const card of toRestore) {
+    if (card.topOnRecycleRestore) {
+      restoredToBackpackTop.push(card);
+    } else {
+      restoredToBackpack.push(card);
+    }
+  }
+
+  const patch: Partial<GameState> = {
+    permanentMagicRecycleBag: [...overflow, ...stillWaiting],
+    // 顺序：置顶卡（prepend）→ 原 backpack → 普通 restored 卡（append 末尾）
+    backpackItems: [...restoredToBackpackTop, ...state.backpackItems, ...restoredToBackpack],
+  };
+
   return {
     restored: toRestore,
+    restoredToBackpack,
+    restoredToBackpackTop,
     remaining: [...overflow, ...stillWaiting],
-    patch: {
-      permanentMagicRecycleBag: [...overflow, ...stillWaiting],
-      backpackItems: [...state.backpackItems, ...toRestore],
-    },
+    patch,
   };
+}
+
+/**
+ * 集中 helper：所有「回收袋 → 背包」路径都应该用这个 helper push 标准 side effects，
+ * 避免 9 处复制粘贴漏写。会按需 push：
+ *   1. `waterfall:recycleRestored` —— 全部 restored 卡（含置顶），驱动 BackpackZone
+ *      绿环动画。参考 `recycle-to-backpack-animation.mdc`。
+ *   2. `card:promotedToDeckTop` —— 仅当 `restoredToBackpackTop.length > 0` 时 push，
+ *      给 banner / log 用。**注意事件名是历史命名（`DeckTop`），但当前语义已改为
+ *      「背包顶」（背包第 1 格）**，事件名暂未改动以避免大面积重命名。
+ *
+ * caller 负责把 `recycleResult.patch` merge 进自己的 patch（用 `Object.assign(patch,
+ * result.patch)` 或等价 spread），patch 里已经包含 backpackItems +
+ * permanentMagicRecycleBag 两个字段的最终值（置顶卡已 prepend 到 backpackItems[0]）。
+ * **不要**手写 `patch.backpackItems = [...state.backpackItems, ...result.restored]`，
+ * 那样会丢掉「置顶 → 第 1 格」的 prepend 顺序。
+ */
+export function pushRecycleRestoreSideEffects(
+  sideEffects: SideEffect[],
+  recycleResult: { restored: GameCardData[]; restoredToBackpackTop: GameCardData[] },
+): void {
+  if (recycleResult.restored.length > 0) {
+    sideEffects.push({
+      event: 'waterfall:recycleRestored',
+      payload: { count: recycleResult.restored.length, cards: recycleResult.restored },
+    });
+  }
+  if (recycleResult.restoredToBackpackTop.length > 0) {
+    sideEffects.push({
+      event: 'card:promotedToDeckTop',
+      payload: {
+        count: recycleResult.restoredToBackpackTop.length,
+        cards: recycleResult.restoredToBackpackTop,
+      },
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

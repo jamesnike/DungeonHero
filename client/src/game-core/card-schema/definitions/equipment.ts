@@ -6,10 +6,13 @@
  */
 
 import type { OnEquipHandler } from '../on-equip';
-import { registerOnEquipAll } from '../on-equip';
-import type { EquipmentSlotId } from '@/components/game-board/types';
+import { registerOnEquipAll, registerOnEquipPrefix } from '../on-equip';
+import type { EquipmentSlotId, ActiveRowSlots } from '@/components/game-board/types';
 import { DURABILITY_CAP, clampMaxDurability } from '../../constants';
 import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../../equipment';
+import type { GameCardData } from '@/components/GameCard';
+import { nextInt } from '../../rng';
+import { createMineBuilding } from '@/lib/knightDeck';
 
 const otherSlot = (s: EquipmentSlotId): EquipmentSlotId =>
   s === 'equipmentSlot1' ? 'equipmentSlot2' : 'equipmentSlot1';
@@ -76,6 +79,15 @@ const tempArmor3: OnEquipHandler = (state, card, slotId, patch, sideEffects) => 
 const persuadeBonus10: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {
   patch.persuadeAmuletBonus = (state.persuadeAmuletBonus ?? 0) + 10;
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：下次劝降成功率 +10%` } });
+};
+
+// 「右翼回响」option 6 — granted to a chosen equipment via
+// `RESOLVE_EVENT_GRANT_EQUIP_PERSUADE_BONUS`. Mirrors `persuade-bonus-10` at +20.
+// Reads the **current** patch value first so multiple +20 grants stack with
+// concurrent +10 / +20 entries in the same equip step (matches +10 contract).
+const persuadeBonus20: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {
+  patch.persuadeAmuletBonus = ((patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus) ?? 0) + 20;
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：下次劝降成功率 +20%` } });
 };
 
 const spellLifesteal1: OnEquipHandler = (state, card, _slotId, patch, sideEffects) => {
@@ -157,6 +169,53 @@ const durabilityMax1: OnEquipHandler = (state, card, slotId, patch, sideEffects)
   }
 };
 
+// 「奥能裂变」outcome 4 — `spawn-mine:N` parameterized handler. Granted to a
+// chosen main-slot equipment via `RESOLVE_EVENT_GRANT_ONEQUIP_SPAWN_MINE`.
+// Triggers on every equip (PLAY_CARD / EQUIP_FROM_HAND / drag-to-slot — any
+// path that runs `executeOnEquip`). Spawns N mines into random empty active-row
+// slots, fizzling overflow when not enough empty slots exist (mirrors the
+// `spawn-mine-empty` lastWords semantics in equipment-effects.ts and the
+// `lay-mine` magic resolver in magic-effects.ts).
+const spawnMine: OnEquipHandler = (state, card, _slotId, patch, sideEffects, _enqueuedActions) => {
+  const effectId = (card as any).onEquipEffect as string;
+  const amount = parseInt(effectId.replace('spawn-mine:', ''), 10) || 1;
+  const baseActive = (patch.activeCards ?? state.activeCards) as (GameCardData | null)[];
+  const emptyIdxs: number[] = [];
+  for (let i = 0; i < baseActive.length; i++) {
+    if (baseActive[i] === null) emptyIdxs.push(i);
+  }
+  if (emptyIdxs.length === 0) {
+    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：激活行已满，地雷未能放置。` } });
+    return;
+  }
+  const placeCount = Math.min(amount, emptyIdxs.length);
+  let rng = patch.rng ?? state.rng;
+  const remaining = [...emptyIdxs];
+  const chosenIdxs: number[] = [];
+  for (let k = 0; k < placeCount; k++) {
+    const [pickIdx, nextRng] = nextInt(rng, 0, remaining.length - 1);
+    rng = nextRng;
+    chosenIdxs.push(remaining[pickIdx]);
+    remaining.splice(pickIdx, 1);
+  }
+  const newActive = [...baseActive];
+  const placedMines: { idx: number; mineId: string }[] = [];
+  for (const slotIdx of chosenIdxs) {
+    const [mine, nextRng] = createMineBuilding(rng);
+    rng = nextRng;
+    newActive[slotIdx] = mine;
+    placedMines.push({ idx: slotIdx, mineId: mine.id });
+  }
+  patch.activeCards = newActive as ActiveRowSlots;
+  patch.rng = rng;
+  const droppedCount = amount - placeCount;
+  const droppedTag = droppedCount > 0 ? `；${droppedCount} 个因空位不足丢失` : '';
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：在 ${placeCount} 个随机位置布下地雷${droppedTag}` } });
+  sideEffects.push({ event: 'magic:layMine', payload: { slots: placedMines, droppedCount } });
+};
+
+registerOnEquipPrefix('spawn-mine:', spawnMine);
+
 registerOnEquipAll([
   { id: 'temp-attack-2', handler: tempAttack2 },
   { id: 'temp-attack-3', handler: tempAttack3 },
@@ -166,6 +225,7 @@ registerOnEquipAll([
   { id: 'temp-armor-3', handler: tempArmor3 },
   { id: 'gold+6', handler: gold6 },
   { id: 'persuade-bonus-10', handler: persuadeBonus10 },
+  { id: 'persuade-bonus-20', handler: persuadeBonus20 },
   { id: 'spell-lifesteal+1', handler: spellLifesteal1 },
   { id: 'stunCap+5', handler: stunCap5 },
   { id: 'stunCap+10', handler: stunCap10 },

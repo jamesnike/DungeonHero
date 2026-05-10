@@ -121,6 +121,13 @@ export type BeginDiscoverFlowOptions = {
    * "发现一张专属牌（直接进手牌）" card uses 'hand-first' today.
    */
   delivery?: 'backpack' | 'hand-first';
+  /**
+   * 「右翼回响」option 2 / future "discover + 置顶" effects: when true, the
+   * discovered card is cloned with `topOnRecycleRestore: true` injected
+   * before being placed in hand/backpack/recycle bag. Forwarded as-is to
+   * BEGIN_DISCOVER (`postInjectTopOnRecycleRestore`).
+   */
+  postInjectTopOnRecycleRestore?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -236,6 +243,7 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
         pool,
         sourceLabel: opts?.sourceLabel,
         delivery: opts?.delivery,
+        postInjectTopOnRecycleRestore: opts?.postInjectTopOnRecycleRestore,
       });
 
       return true;

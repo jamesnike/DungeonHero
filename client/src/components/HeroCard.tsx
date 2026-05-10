@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import React, { memo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RefObject } from 'react';
-import { initMobileDrop } from '../utils/mobileDragDrop';
+import { initMobileDrop, readHtml5DragData } from '../utils/mobileDragDrop';
 import type { CSSProperties } from 'react';
 import type { HeroMagicId } from '@/components/GameCard';
 import { useGameViewport } from '@/contexts/GameViewportContext';
@@ -208,7 +208,7 @@ function HeroCardInner({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragDepth(0);
-    const cardData = e.dataTransfer.getData('card');
+    const cardData = readHtml5DragData(e, 'card');
     if (cardData) {
       onDrop?.(JSON.parse(cardData));
     }

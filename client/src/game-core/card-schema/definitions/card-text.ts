@@ -213,11 +213,31 @@ const gamblerGambit: CardTextFormatter = (card) => {
   };
 };
 
-const deckTopSwapGold: CardTextFormatter = () => ({
-  description: '与牌堆顶交换一张当前行卡牌；同类型奖励 +15 金币，否则 -1 金币。然后抽 1 张牌。',
-  magicEffect: '永久魔法：与牌堆顶交换一张当前行卡牌；同类型奖励 +15 金币，否则 -1 金币。然后抽 1 张牌。',
-  shortDescription: '与牌堆顶互换 1 张；同类 +15 金币；抽 1 张',
-});
+// 同类型奖励 L0 +10 / L1 +15。必须跟 hero.ts case 'deck-top-swap-gold' 里
+// `sameCategoryBonuses = [10, 15]` 保持一致 —— 历史上文案被硬编码成 "+15"，
+// L0 卡面显示 "+15" 但实际只 +10，玩家会觉得"金币给少了"。
+//
+// 关键：**绝对不要**在这里 return `magicEffect`。运势博弈的 deck.ts 条目
+// (`STARTER_CARD_IDS.deckTopSwapGold`) 故意不设 `magicEffect`，让
+// `resolveEffectId` 走 `starter:starter-perm-deck-top-swap-gold` → 命中
+// card-schema/definitions/magic.ts 里的 `starterDeckTopSwapGold` resolver。
+// 如果这里 return `magicEffect: '永久魔法：…'`，`applyDerivedCardText` 会把
+// 这个长字符串塞进 `card.magicEffect`，让 `resolveEffectId` 短路到
+// `magic:永久魔法：…` —— 那个 effectId 没注册过，schema 引擎返回 null，回退
+// 到 `resolveAllMagicEffects`；而 deckTopSwapGold 在 legacy 那里也没 case，
+// 一路掉到 `resolvePermanentMagic` 末尾的 "Fallback: generic permanent magic"
+// 分支，**整张卡变成 no-op**：不交换、不抽牌、不给金币。同样的「不能写 magicEffect」
+// 约束适用于 `flankSlotTempAttack`（锐意鼓舞）等所有走 starter-id 路径的 starter
+// Perm 卡 —— 见 deck.ts 对应条目的注释。
+const deckTopSwapGold: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const sameCategoryBonuses = [10, 15];
+  const bonus = sameCategoryBonuses[level] ?? sameCategoryBonuses[sameCategoryBonuses.length - 1];
+  return {
+    description: `与牌堆顶交换一张当前行卡牌；同类型奖励 +${bonus} 金币，否则 -1 金币。然后抽 1 张牌。`,
+    shortDescription: `与牌堆顶互换 1 张；同类 +${bonus} 金币；抽 1 张`,
+  };
+};
 
 const healMagic: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
@@ -457,6 +477,17 @@ const handPurgeRedraw: CardTextFormatter = (card) => {
   };
 };
 
+const handRecycleRedraw: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const ns = [1, 2];
+  const n = pick(ns, level);
+  return {
+    description: `永久：将所有手牌（诅咒除外，共 X 张）洗入回收袋，然后从背包抽 X+${n} 张牌。`,
+    shortDescription: `手牌入回收袋；从背包抽 X+${n}`,
+    magicEffect: `永久魔法：手牌洗入回收袋（共 X 张），从背包抽 X+${n} 张。`,
+  };
+};
+
 const missileStorm: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
   if (level >= 1) {
@@ -584,6 +615,54 @@ const stunCapStrike: CardTextFormatter = (card) => {
   };
 };
 
+const backpackBolt: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const pcts = [50, 75, 100];
+  const pct = pcts[level] ?? pcts[pcts.length - 1];
+  return {
+    description: `永久：对一个目标造成等同于背包剩余卡牌数 ${pct}% 的法术伤害（向下取整）。`,
+    shortDescription: `背包数 × ${pct}% 法伤`,
+    magicEffect: `永久魔法：选择一个目标，造成背包数 × ${pct}% 法伤。`,
+  };
+};
+
+const recycleBolt: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const pcts = [50, 75, 100];
+  const pct = pcts[level] ?? pcts[pcts.length - 1];
+  return {
+    description: `永久：对一个目标造成等同于回收袋卡牌数 ${pct}% 的法术伤害（向下取整）。`,
+    shortDescription: `回收袋数 × ${pct}% 法伤`,
+    magicEffect: `永久魔法：选择一个目标，造成回收袋数 × ${pct}% 法伤。`,
+  };
+};
+
+// 囊量震慑：升级表 [4, 3]（divisor）。Lv0 ÷4，Lv1 ÷3。
+// 卡面写"背包上限 / X"——上限是 BASE (12) + modifier，玩家肉眼可见的就是背包格子数。
+const backpackCapStun: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const divisors = [4, 3];
+  const div = pick(divisors, level);
+  return {
+    description: `永久：击晕上限增加 floor(背包上限 / ${div})%。`,
+    shortDescription: `击晕上限 +背包上限÷${div} %`,
+    magicEffect: `永久魔法：击晕上限 +背包上限÷${div} %。`,
+  };
+};
+
+const layMine: CardTextFormatter = (card) => {
+  // 布雷术：lvl 0 PERM 2、lvl 1 PERM 1。卡面文案不随升级变化（机制相同），
+  // 但 description 不主动写"PERM N"，让 GameCard 渲染层根据 recycleDelay 自动
+  // 显示永久标识；这里只描述效果。
+  const level = card.upgradeLevel ?? 0;
+  void level; // 仅保留 signature，效果文本不随等级变化
+  return {
+    description: '永久：在激活行的随机空格生成一个「地雷」（幽灵建筑）。当怪物落到该格时，地雷对该怪物造成 5 点纯伤害后进坟场。',
+    shortDescription: '随机空格生成地雷：怪物落入受 5 点纯伤',
+    magicEffect: '永久魔法：随机空格生成地雷，怪物落入受 5 点纯伤。',
+  };
+};
+
 const tempAttackArmorDraw: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
   const amounts = [2, 4, 6];
@@ -603,6 +682,30 @@ const tempAttackDouble: CardTextFormatter = (card) => {
     description: `永久：选择一个装备栏，临时攻击 +${n}，然后该栏临时攻击翻倍。`,
     shortDescription: `该栏临时攻击 +${n} 后翻倍`,
     magicEffect: `临时攻击 +${n} 后翻倍。`,
+  };
+};
+
+// 囊中锋意：升级表 [3, 2]（divisor）。Lv0 每 3 张牌 +1，Lv1 每 2 张牌 +1。
+const backpackTempAttack: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const divisors = [3, 2];
+  const div = pick(divisors, level);
+  return {
+    description: `永久：选择一个装备栏，背包每 ${div} 张牌 +1 临时攻击。`,
+    shortDescription: `所选栏 +背包数÷${div} 临时攻击`,
+    magicEffect: `永久魔法：选择一个装备栏，背包每 ${div} 张牌 +1 临时攻击。`,
+  };
+};
+
+// 池中坚意：升级表 [4, 3]（divisor）。Lv0 每 4 张牌 +1，Lv1 每 3 张牌 +1。
+const recycleTempArmor: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const divisors = [4, 3];
+  const div = pick(divisors, level);
+  return {
+    description: `永久：选择一个装备栏，回收袋每 ${div} 张牌 +1 临时护甲。`,
+    shortDescription: `所选栏 +回收袋数÷${div} 临时护甲`,
+    magicEffect: `永久魔法：选择一个装备栏，回收袋每 ${div} 张牌 +1 临时护甲。`,
   };
 };
 
@@ -656,6 +759,19 @@ const swiftDagger: CardTextFormatter = (card) => {
   return {
     description: `入场：所有装备栏临时攻击 +${n}。用此武器杀死怪物时耐久度回满。`,
     shortDescription: `入场全栏 +${n} 临时攻；杀怪回满耐久`,
+  };
+};
+
+// 引雷阵锋 (knight:thunder-array-blade)：
+//   description / shortDescription 描述「每耐久 +N 全场地雷伤害」中的 N。
+//   handler 已经把 mineDamageBoostPerDur / maxDurability / durability 同步好。
+const thunderArrayBlade: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const boosts = [2, 2, 3];
+  const n = boosts[level] ?? boosts[boosts.length - 1];
+  return {
+    description: `每消耗 1 点耐久，全场地雷伤害永久 +${n}（不撤销）。`,
+    shortDescription: `耐久 -1：全场地雷伤害永久 +${n}`,
   };
 };
 
@@ -926,6 +1042,7 @@ const entries: Array<{ id: string; fn: CardTextFormatter }> = [
   { id: 'knight:fate-sight', fn: fateSight },
   { id: 'knight:blood-draw', fn: bloodDraw },
   { id: 'knight:hand-purge-redraw', fn: handPurgeRedraw },
+  { id: 'knight:hand-recycle-redraw', fn: handRecycleRedraw },
   { id: 'knight:missile-storm', fn: missileStorm },
   { id: 'knight:grave-nova', fn: graveNova },
   { id: 'knight:overkill-upgrade', fn: overkillUpgrade },
@@ -936,14 +1053,21 @@ const entries: Array<{ id: string; fn: CardTextFormatter }> = [
   { id: 'knight:reorganize-backpack', fn: reorganizeBackpack },
   { id: 'knight:armor-stun-convert', fn: armorStunConvert },
   { id: 'knight:stun-cap-strike', fn: stunCapStrike },
+  { id: 'knight:backpack-bolt', fn: backpackBolt },
+  { id: 'knight:recycle-bolt', fn: recycleBolt },
+  { id: 'knight:backpack-cap-stun', fn: backpackCapStun },
+  { id: 'knight:lay-mine', fn: layMine },
   { id: 'knight:temp-attack-armor-draw', fn: tempAttackArmorDraw },
   { id: 'knight:temp-attack-double', fn: tempAttackDouble },
+  { id: 'knight:backpack-temp-attack', fn: backpackTempAttack },
+  { id: 'knight:recycle-temp-armor', fn: recycleTempArmor },
   { id: 'knight:amplify-equipment-shift', fn: amplifyEquipmentShift },
   { id: 'knight:essence-extract', fn: essenceExtract },
 
   // Knight equipment
   { id: 'knight:holy-blade', fn: holyBlade },
   { id: 'knight:swift-dagger', fn: swiftDagger },
+  { id: 'knight:thunder-array-blade', fn: thunderArrayBlade },
   { id: 'knight:thunder-guard-shield', fn: thunderGuardShield },
   { id: 'knight:communal-defense-shield', fn: communalDefenseShield },
   { id: 'knight:barrage-shield', fn: barrageShield },

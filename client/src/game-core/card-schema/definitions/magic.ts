@@ -432,6 +432,37 @@ const eventFortify: CardDefinition = {
   },
 };
 
+// 装甲铸蚀 — 「右翼回响」 stay-flip target. One-time magic that opens the
+// slot-select modal (left/right装备栏，**含空槽**), then permanently grants
+// `equipmentSlotBonuses[slotId].shield += 2` to the chosen slot. The bonus
+// stays bound to the slot, so it carries over to whatever equipment the
+// player swaps in later.
+//
+// Slot-select reducer branch: `case 'event-armor-etch'` in
+// `rules/hero.ts:reduceMagicSlotSelection` (mirrors `slotLeftDefense+` /
+// `slotRightDefense+` event token logic, but routed through the magic-card
+// pipeline so 法术回响 / 凡化咒 / counter-magic can interact normally).
+const armorEtchMagic: CardDefinition = {
+  effectId: 'card:装甲铸蚀',
+  effects: [],
+  tags: ['magic', 'instant', 'interactive', 'equipment'],
+  resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
+    // Allow selecting empty slots — the perm armor bonus is bound to the
+    // slot id (via `equipmentSlotBonuses[slotId].shield`), not the equipment
+    // currently in it. So even an empty slot is a valid target; the bonus
+    // applies to whatever装备 lands there next.
+    patch.pendingMagicAction = {
+      card,
+      effect: 'event-armor-etch',
+      step: 'slot-select',
+      prompt: '装甲铸蚀：选择一个装备栏，永久护甲加成 +2。',
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = '装甲铸蚀：选择一个装备栏。';
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
 // ============================================================================
 // Permanent Magic Effects (by magicEffect)
 // ============================================================================
@@ -455,10 +486,19 @@ const swapBackpackRecycle: CardDefinition = {
   effects: [],
   tags: ['magic', 'instant'],
   resolver: (state, card, sideEffects, patch, enqueuedActions) => {
-    patch.backpackItems = state.permanentMagicRecycleBag.map(c => sanitizeCardMetadata(c));
+    // 「置顶」关键词：原回收袋里的置顶卡进背包时 prepend 到 backpackItems[0]（第 1 格），
+    // 其余 append 到背包末尾。两组都进背包，**不再**走 remainingDeck。
+    // 同步参考：rules/magic-effects.ts swap-backpack-recycle（带 echo loop 的版本）。
+    const oldRecycle = state.permanentMagicRecycleBag.map(c => sanitizeCardMetadata(c));
+    const restoredToBackpackTop: GameCardData[] = [];
+    const restoredToBackpack: GameCardData[] = [];
+    for (const c of oldRecycle) {
+      if (c.topOnRecycleRestore) restoredToBackpackTop.push(c);
+      else restoredToBackpack.push(c);
+    }
+    patch.backpackItems = [...restoredToBackpackTop, ...restoredToBackpack];
     patch.permanentMagicRecycleBag = state.backpackItems.map((c: GameCardData) => sanitizeCardMetadata(c));
     // 单次置换：原回收袋整体进入背包。如果回收袋本来就空，跳过——没有视觉位移。
-    // 同步参考：rules/magic-effects.ts swap-backpack-recycle（带 echo loop 的版本）。
     if ((state.permanentMagicRecycleBag?.length ?? 0) > 0) {
       sideEffects.push({
         event: 'waterfall:recycleRestored',
@@ -467,6 +507,12 @@ const swapBackpackRecycle: CardDefinition = {
           cards: state.permanentMagicRecycleBag as GameCardData[],
         },
       });
+      if (restoredToBackpackTop.length > 0) {
+        sideEffects.push({
+          event: 'card:promotedToDeckTop',
+          payload: { count: restoredToBackpackTop.length, cards: restoredToBackpackTop },
+        });
+      }
     }
     log(sideEffects, 'magic', `虚空置换：背包与回收袋对换（背包现 ${patch.backpackItems.length} 张，回收袋现 ${patch.permanentMagicRecycleBag.length} 张）。`);
     banner(sideEffects, '虚空置换：背包与永久魔法回收袋内容已对换。');
@@ -571,28 +617,28 @@ const crossroadsLeftSwap: CardDefinition = {
   tags: ['magic', 'instant'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
     const cards = state.activeCards as (GameCardData | null)[];
-    let firstIdx = -1;
-    let secondIdx = -1;
+    let leftIdx = -1;
+    let rightIdx = -1;
     for (let i = 0; i < cards.length; i++) {
       if (cards[i] != null) {
-        if (firstIdx === -1) firstIdx = i;
-        else if (secondIdx === -1) { secondIdx = i; break; }
+        if (leftIdx === -1) leftIdx = i;
+        rightIdx = i;
       }
     }
-    if (firstIdx === -1 || secondIdx === -1) {
+    if (leftIdx === -1 || leftIdx === rightIdx) {
       log(sideEffects, 'magic', '命运挪移无效（地城行剩余卡牌不足 2 张）。');
       banner(sideEffects, '命运挪移无效（地城行剩余卡牌不足 2 张）。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
-    const firstCard = cards[firstIdx]!;
-    const secondCard = cards[secondIdx]!;
+    const leftCard = cards[leftIdx]!;
+    const rightCard = cards[rightIdx]!;
     const next = [...cards] as ActiveRowSlots;
     for (let swapI = 0; swapI < echoMultiplier; swapI++) {
-      const tmp = next[firstIdx];
-      next[firstIdx] = next[secondIdx];
-      next[secondIdx] = tmp;
+      const tmp = next[leftIdx];
+      next[leftIdx] = next[rightIdx];
+      next[rightIdx] = tmp;
     }
     patch.activeCards = next;
     // Animation hint — emit ONCE regardless of echoMultiplier. For even
@@ -601,14 +647,14 @@ const crossroadsLeftSwap: CardDefinition = {
     if (echoMultiplier % 2 === 1) {
       sideEffects.push({
         event: 'magic:activeRowSwap',
-        payload: { leftSlotIdx: firstIdx, rightSlotIdx: secondIdx, leftCard: firstCard, rightCard: secondCard },
+        payload: { leftSlotIdx: leftIdx, rightSlotIdx: rightIdx, leftCard, rightCard },
       });
     }
     const echoTag = isEchoTriggered ? '（回响×2）' : '';
     const bannerText = echoMultiplier > 1
-      ? `命运挪移 ×${echoMultiplier}：${firstCard.name} ↔ ${secondCard.name}（回响）`
-      : `命运挪移：${firstCard.name} ↔ ${secondCard.name} 位置互换！`;
-    log(sideEffects, 'magic', `命运挪移：${firstCard.name} 与 ${secondCard.name} 互换 ${echoMultiplier} 次。`);
+      ? `命运挪移 ×${echoMultiplier}：${leftCard.name} ↔ ${rightCard.name}（回响）`
+      : `命运挪移：${leftCard.name} ↔ ${rightCard.name} 位置互换！`;
+    log(sideEffects, 'magic', `命运挪移：${leftCard.name} 与 ${rightCard.name} 互换 ${echoMultiplier} 次。`);
     banner(sideEffects, bannerText);
     checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -1140,15 +1186,15 @@ const starterDungeonSwap: CardDefinition = {
   tags: ['magic', 'permanent'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
     const cards = state.activeCards as (GameCardData | null)[];
-    let leftIdx = -1;
-    let rightIdx = -1;
+    let firstIdx = -1;
+    let secondIdx = -1;
     for (let i = 0; i < cards.length; i++) {
       if (cards[i] != null) {
-        if (leftIdx === -1) leftIdx = i;
-        rightIdx = i;
+        if (firstIdx === -1) firstIdx = i;
+        else if (secondIdx === -1) { secondIdx = i; break; }
       }
     }
-    if (leftIdx === -1 || leftIdx === rightIdx) {
+    if (firstIdx === -1 || secondIdx === -1) {
       banner(sideEffects, '乾坤挪移无效（地城行剩余卡牌不足 2 张）。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -1156,25 +1202,25 @@ const starterDungeonSwap: CardDefinition = {
     }
     const next = [...cards] as ActiveRowSlots;
     for (let swapI = 0; swapI < echoMultiplier; swapI++) {
-      const tmp = next[leftIdx];
-      next[leftIdx] = next[rightIdx];
-      next[rightIdx] = tmp;
+      const tmp = next[firstIdx];
+      next[firstIdx] = next[secondIdx];
+      next[secondIdx] = tmp;
     }
     patch.activeCards = next;
-    const leftCard = cards[leftIdx]!;
-    const rightCard = cards[rightIdx]!;
+    const firstCard = cards[firstIdx]!;
+    const secondCard = cards[secondIdx]!;
     // Animation hint — only emit when net state actually changed (odd echo).
     // Even echo = swap-then-swap-back = no-op, animating it would be confusing.
     if (echoMultiplier % 2 === 1) {
       sideEffects.push({
         event: 'magic:activeRowSwap',
-        payload: { leftSlotIdx: leftIdx, rightSlotIdx: rightIdx, leftCard, rightCard },
+        payload: { leftSlotIdx: firstIdx, rightSlotIdx: secondIdx, leftCard: firstCard, rightCard: secondCard },
       });
     }
     const bnr = echoMultiplier > 1
-      ? `乾坤挪移 ×${echoMultiplier}：${leftCard.name} ↔ ${rightCard.name}（回响）`
-      : `${leftCard.name} ↔ ${rightCard.name} 位置互换！`;
-    log(sideEffects, 'magic', `乾坤挪移：${leftCard.name} 与 ${rightCard.name} 互换 ${echoMultiplier} 次。`);
+      ? `乾坤挪移 ×${echoMultiplier}：${firstCard.name} ↔ ${secondCard.name}（回响）`
+      : `${firstCard.name} ↔ ${secondCard.name} 位置互换！`;
+    log(sideEffects, 'magic', `乾坤挪移：${firstCard.name} 与 ${secondCard.name} 互换 ${echoMultiplier} 次。`);
     banner(sideEffects, bnr);
     checkSwapUpgrade(state, patch, sideEffects, enqueuedActions);
     patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -1528,13 +1574,30 @@ const starterRecycleDrawMagic: CardDefinition = {
       const overflow = readyCards.slice(available);
 
       if (toAdd.length > 0) {
-        patch.backpackItems = [...currentBackpack, ...toAdd];
-        // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画。
-        // 同步参考：rules/waterfall.ts、rules/magic-effects.ts 的 STARTER_CARD_IDS.recycleDrawMagic。
+        // 「置顶」关键词：toAdd 切两半，置顶 → backpackItems[0]（prepend），
+        // 其余 → backpackItems 末尾（append）。两组都进背包，**不再**走 remainingDeck。
+        // 这条路径不走 processRecycleBag（自己手写了 _recycleWaits 递减 + 容量切片），
+        // 所以手动复刻 cards.ts processRecycleBag 的分流逻辑。
+        const restoredToBackpackTop: GameCardData[] = [];
+        const restoredToBackpack: GameCardData[] = [];
+        for (const c of toAdd) {
+          if (c.topOnRecycleRestore) restoredToBackpackTop.push(c);
+          else restoredToBackpack.push(c);
+        }
+        patch.backpackItems = [...restoredToBackpackTop, ...currentBackpack, ...restoredToBackpack];
+        // 跟 waterfall 路径保持同样的 UI 通知：触发 BackpackZone 的绿色回收环动画 +
+        // 「置顶」卡的二段反馈。同步参考：rules/waterfall.ts、rules/magic-effects.ts
+        // 的 STARTER_CARD_IDS.recycleDrawMagic。
         sideEffects.push({
           event: 'waterfall:recycleRestored',
           payload: { count: toAdd.length, cards: toAdd },
         });
+        if (restoredToBackpackTop.length > 0) {
+          sideEffects.push({
+            event: 'card:promotedToDeckTop',
+            payload: { count: restoredToBackpackTop.length, cards: restoredToBackpackTop },
+          });
+        }
       }
       patch.permanentMagicRecycleBag = [...newRecycleBag, ...overflow];
 
@@ -2115,6 +2178,21 @@ const knightHandPurgeRedraw: CardDefinition = {
   resolver: resolveKnightPermanentMagic,
 };
 
+// 洗册待回 — Perm 1. Mirror of 清囊重启 but routes hand → recycle bag (not graveyard).
+// X = eligible hand cards (curses excluded). Move all eligible to recycle bag,
+// then draw X+N from backpack. N = [1, 2][upgradeLevel].
+// Echo (C-class snowball): each iter re-reads hand:
+//   iter 1 moves X1, draws X1+N → hand has X1+N
+//   iter 2 moves X1+N, draws (X1+N)+N → hand has X1+2N ...
+// Resolver simulates state evolution within a single reduce step (enqueues
+// ADD_TO_RECYCLE_BAG per moved card; updates patch.handCards/backpackItems/rng).
+const knightHandRecycleRedraw: CardDefinition = {
+  effectId: 'knight:hand-recycle-redraw',
+  effects: [],
+  tags: ['knight', 'permanent', 'recycle', 'draw'],
+  resolver: resolveKnightPermanentMagic,
+};
+
 const knightQuakeStunDraw: CardDefinition = {
   effectId: 'knight:quake-stun-draw',
   effects: [],
@@ -2168,6 +2246,52 @@ const knightStunCapStrike: CardDefinition = {
   effectId: 'knight:stun-cap-strike',
   effects: [],
   tags: ['knight', 'permanent', 'damage', 'stun', 'draw'],
+  resolver: resolveKnightPermanentMagic,
+};
+
+// 囊中惊雷 — Perm 1. Single-target spell damage scaling on backpack count.
+// damage = floor(backpackItems.length * pct/100); pct = [50, 75, 100][upgradeLevel].
+// Echo (A): damage ×N (single flight, no modal re-prompt). 自伤路径同 missing-hp-smite。
+const knightBackpackBolt: CardDefinition = {
+  effectId: 'knight:backpack-bolt',
+  effects: [],
+  tags: ['knight', 'permanent', 'damage'],
+  resolver: resolveKnightPermanentMagic,
+};
+
+// 池中惊雷 — Perm 1. Mirror of 囊中惊雷 but counts permanentMagicRecycleBag instead.
+// damage = floor(permanentMagicRecycleBag.length * pct/100); pct = [50, 75, 100][upgradeLevel].
+// Echo (A): damage ×N (single flight, no modal re-prompt). 自伤路径同 backpack-bolt。
+const knightRecycleBolt: CardDefinition = {
+  effectId: 'knight:recycle-bolt',
+  effects: [],
+  tags: ['knight', 'permanent', 'damage'],
+  resolver: resolveKnightPermanentMagic,
+};
+
+// 囊量震慑 — Perm 1. Non-interactive: bumps stunCap by floor(backpackCapacity / divisor)%.
+// divisor = [4, 3][upgradeLevel]. Backpack capacity 12 → Lv0 +3% / Lv1 +4%.
+// stunCap globally capped at 100% (Math.min consistent with 眩晕药剂 / 奥术护盾).
+// Echo (A): single resolve × echoMultiplier. Backpack capacity doesn't change
+// inside one reduce step, so A/C are numerically equivalent here.
+const knightBackpackCapStun: CardDefinition = {
+  effectId: 'knight:backpack-cap-stun',
+  effects: [],
+  tags: ['knight', 'permanent', 'buff'],
+  resolver: resolveKnightPermanentMagic,
+};
+
+// 布雷术 — Perm 2 → upgrade Perm 1. Spawn ghost-building 地雷 (mineDamage: 5)
+// at a random empty active row slot. Trigger logic lives in waterfall reducer
+// (rules/waterfall.ts:reduceApplyWaterfallDrop) — when a monster waterfalls onto
+// a slot containing a ghost with mineDamage, we deal 5 pure trap damage to the
+// monster, engage it, and route the mine to graveyard (instead of stack).
+// Echo (A): spawn echoMultiplier mines at distinct random empty slots; extras
+// dropped if there aren't enough free slots.
+const knightLayMine: CardDefinition = {
+  effectId: 'knight:lay-mine',
+  effects: [],
+  tags: ['knight', 'permanent', 'control'],
   resolver: resolveKnightPermanentMagic,
 };
 
@@ -2297,6 +2421,72 @@ const knightAmplifyEquipmentShift: CardDefinition = {
       echoMultiplier,
     } as any;
     patch.heroSkillBanner = `淬铸迁位：选择一个装备栏的装备进行增幅 +${ampAmt}（按卡名累计）。${echoLabel}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
+// 池中坚意 — Perm 1. Mirror of 囊中锋意 but reads recycle bag for temp armor.
+// Select an equipment slot (empty allowed); add
+// floor(state.permanentMagicRecycleBag.length / divisor) temp armor to the chosen slot.
+// - divisor = 4 (L0) / 3 (L1) — slightly slower scaling than 囊中锋意 (3 / 2)
+//   because temp armor + recycle bag tend to grow larger than backpack.
+// - Empty slots are allowed (buff persists on the slot for future equipment).
+// - Echo: card is played from hand → routes to recycle bag (recycleDelay: 1)
+//   AFTER slot-select resolves; setup-time read of recycleBag does NOT include
+//   this card (same as 池中惊雷 / recycle-bolt). RecycleBag length is constant
+//   during slot-select handler resolution → A-class (× echoMultiplier) ≡
+//   C-class (re-read) numerically. Implementation uses single-multiply A-class
+//   for parity with 囊中锋意 / temp-attack-double.
+// Prompt previews the bonus using the *current* recycle bag length so the
+// player knows what they're committing to.
+const knightRecycleTempArmor: CardDefinition = {
+  effectId: 'knight:recycle-temp-armor',
+  effects: [],
+  tags: ['knight', 'permanent', 'interactive', 'buff'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    const divisor = (card.upgradeLevel ?? 0) >= 1 ? 3 : 4;
+    const previewBuff = Math.floor(state.permanentMagicRecycleBag.length / divisor) * echoMultiplier;
+    patch.pendingMagicAction = {
+      card,
+      effect: 'recycle-temp-armor',
+      step: 'slot-select',
+      prompt: `池中坚意：选择一个装备栏，回收袋每 ${divisor} 张牌 +1 临时护甲（当前 +${previewBuff}）。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `池中坚意：选择一个装备栏（当前 +${previewBuff} 临时护甲）。${echoLabel}`;
+    return applyPatch(state, patch, sideEffects);
+  },
+};
+
+// 囊中锋意 — Perm 1. Select an equipment slot (empty allowed); add
+// floor(state.backpackItems.length / divisor) temp attack to the chosen slot.
+// - divisor = 3 (L0) / 2 (L1)
+// - Empty slots are allowed (buff persists on the slot for future equipment).
+// - Echo: card is played from hand → routes to recycle bag (recycleDelay: 1),
+//   never visiting backpack; so backpackItems.length stays constant between
+//   echo iterations. Echo C-class (re-read state) ≡ A-class (× echoMultiplier)
+//   numerically here. Implementation uses single-multiply A-class for parity
+//   with existing slot-select handlers (temp-attack-double / temp-stats-to-draw).
+// Prompt previews the bonus using the *current* backpack length so the player
+// knows what they're committing to (the actual computation re-reads in the
+// slot-select handler — same value because backpack doesn't change in between).
+const knightBackpackTempAttack: CardDefinition = {
+  effectId: 'knight:backpack-temp-attack',
+  effects: [],
+  tags: ['knight', 'permanent', 'interactive', 'buff'],
+  resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
+    const echoLabel = echoMultiplier > 1 ? `（回响×${echoMultiplier}）` : '';
+    const divisor = (card.upgradeLevel ?? 0) >= 1 ? 2 : 3;
+    const previewBuff = Math.floor(state.backpackItems.length / divisor) * echoMultiplier;
+    patch.pendingMagicAction = {
+      card,
+      effect: 'backpack-temp-attack',
+      step: 'slot-select',
+      prompt: `囊中锋意：选择一个装备栏，背包每 ${divisor} 张牌 +1 临时攻击（当前 +${previewBuff}）。${echoLabel}`,
+      echoMultiplier,
+    } as any;
+    patch.heroSkillBanner = `囊中锋意：选择一个装备栏（当前 +${previewBuff} 临时攻击）。${echoLabel}`;
     return applyPatch(state, patch, sideEffects);
   },
 };
@@ -2480,6 +2670,7 @@ const allMagicDefinitions: CardDefinition[] = [
   upgradeScroll,
   arcaneRefine,
   eventFortify,
+  armorEtchMagic,
   // Permanent magicEffect
   doubleNextMagic,
   swapBackpackRecycle,
@@ -2558,6 +2749,7 @@ const allMagicDefinitions: CardDefinition[] = [
   knightBloodSacrificeStrike,
   knightBloodDraw,
   knightHandPurgeRedraw,
+  knightHandRecycleRedraw,
   knightQuakeStunDraw,
   knightRecallEquipment,
   knightCleanseDraw,
@@ -2565,8 +2757,14 @@ const allMagicDefinitions: CardDefinition[] = [
   knightPersuadeToTempAttack,
   knightArmorStunConvert,
   knightStunCapStrike,
+  knightBackpackBolt,
+  knightRecycleBolt,
+  knightBackpackCapStun,
+  knightLayMine,
   knightTempAttackDouble,
   knightTempAttackArmorDraw,
+  knightBackpackTempAttack,
+  knightRecycleTempArmor,
   knightTempStatsToDraw,
   knightAmplifyEquipmentShift,
   knightGearRiftDraw,

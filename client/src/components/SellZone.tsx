@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Coins, TrendingUp } from 'lucide-react';
 import { type CardType } from './GameCard';
+import { readHtml5DragData } from '../utils/mobileDragDrop';
 
 export const SELLABLE_TYPES: CardType[] = ['weapon', 'shield', 'potion', 'coin'];
 
@@ -17,9 +18,9 @@ export default function SellZone({ onDrop, isDropTarget }: SellZoneProps) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     // Try to get card data first, then equipment data
-    const cardData = e.dataTransfer.getData('card');
-    const equipmentData = e.dataTransfer.getData('equipment');
-    
+    const cardData = readHtml5DragData(e, 'card');
+    const equipmentData = readHtml5DragData(e, 'equipment');
+
     if (cardData) {
       onDrop?.(JSON.parse(cardData));
     } else if (equipmentData) {
