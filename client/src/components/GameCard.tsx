@@ -878,6 +878,8 @@ function GameCardInner({
   onDragStartRef.current = onDragStart;
   const onDragEndRef = useRef(onDragEnd);
   onDragEndRef.current = onDragEnd;
+  const onLongPressRef = useRef(onLongPress);
+  onLongPressRef.current = onLongPress;
 
   useEffect(() => {
     if (disableInteractions || !cardRef.current || (card.type === 'building' && !card.eventChoices)) return;
@@ -892,7 +894,15 @@ function GameCardInner({
       () => {
         setIsDragging(false);
         onDragEndRef.current?.();
-      }
+      },
+      // Long-press: opens the card-stamp picker on mobile. The desktop path
+      // is React's `onContextMenu`; touch can't fire pointerdown reliably
+      // because the drag init calls `e.preventDefault()` on touchstart, so
+      // the long-press timer must live alongside the touch listeners
+      // themselves. Always pass a wrapper that reads `onLongPressRef.current`
+      // at fire time so a card transitioning from no-longpress to longpress
+      // (or vice versa) doesn't need the touch listeners to re-mount.
+      evt => onLongPressRef.current?.(evt),
     );
     
     return cleanup;

@@ -59,14 +59,35 @@ export const readHtml5DragData = (
 
 const DRAG_THRESHOLD = 5;
 const HIT_TEST_INTERVAL = 5;
+// Long-press detection — must live alongside the drag init because
+// `handleTouchStart` calls `e.preventDefault()`, which prevents the browser
+// from synthesizing pointerdown / mousedown events that would otherwise feed
+// React's `onPointerDown` (where the desktop / pen long-press lives).
+// See `card-stamp` social feature: this is the mobile entry point for the
+// stamp picker.
+const LONG_PRESS_MS = 500;
 
 const reusableMoveDetail: DragData = { type: 'card', data: null, clientX: 0, clientY: 0 };
+
+export interface LongPressEvent {
+  clientX: number;
+  clientY: number;
+  target: Element;
+}
 
 export const initMobileDrag = (
   element: HTMLElement,
   data: DragData | (() => DragData),
   onDragStart?: () => void,
-  onDragEnd?: () => void
+  onDragEnd?: () => void,
+  /**
+   * Fires after `LONG_PRESS_MS` of stationary touch if the user has neither
+   * lifted their finger nor moved past `DRAG_THRESHOLD`. When it fires we
+   * also suppress the upcoming `touchend` "tap" emulation so the click that
+   * normally dismisses popovers / advances modals doesn't immediately undo
+   * whatever the long-press just opened.
+   */
+  onLongPress?: (event: LongPressEvent) => void,
 ) => {
   let startX = 0;
   let startY = 0;
@@ -80,6 +101,15 @@ export const initMobileDrag = (
   let originCenterY = 0;
   let dragCellEl: HTMLElement | null = null;
   let cachedRect: DOMRect | null = null;
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let longPressFired = false;
+
+  const cancelLongPressTimer = () => {
+    if (longPressTimer !== null) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  };
 
   const resolveData = (): DragData => typeof data === 'function' ? data() : data;
 
@@ -119,11 +149,31 @@ export const initMobileDrag = (
     hasLastTouch = true;
     dragStarted = false;
     hitTestCounter = 0;
+    longPressFired = false;
 
     cachedRect = element.getBoundingClientRect();
 
     element.style.transition = 'transform 80ms ease-out';
     element.style.transform = 'scale(1.03)';
+
+    // Schedule long-press fire if user holds without moving past DRAG_THRESHOLD.
+    // Cancelled by touchmove >threshold or touchend below.
+    if (onLongPress) {
+      cancelLongPressTimer();
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        // Defensive: only fire if drag hasn't started — the move handler
+        // already cancels this timer once it crosses the drag threshold,
+        // so this is belt-and-suspenders.
+        if (dragStarted) return;
+        longPressFired = true;
+        // Restore the pre-press scale so the card doesn't sit "pressed"
+        // while the picker is open (visually weird).
+        element.style.transition = 'transform 80ms ease-out';
+        element.style.transform = '';
+        onLongPress({ clientX: startX, clientY: startY, target: element });
+      }, LONG_PRESS_MS);
+    }
   };
 
   let pendingTouchX = 0;
@@ -163,6 +213,10 @@ export const initMobileDrag = (
   const handleTouchMove = (e: TouchEvent) => {
     e.preventDefault();
 
+    // Long-press already fired — swallow further movement so we don't slide
+    // into drag mode under the picker.
+    if (longPressFired) return;
+
     const touch = e.touches[0];
     const tx = touch.clientX;
     const ty = touch.clientY;
@@ -173,6 +227,8 @@ export const initMobileDrag = (
       if (dx * dx + dy * dy < DRAG_THRESHOLD * DRAG_THRESHOLD) {
         return;
       }
+      // Crossed drag threshold — definitely not a long-press.
+      cancelLongPressTimer();
       beginDrag(tx, ty);
     }
 
@@ -203,6 +259,19 @@ export const initMobileDrag = (
 
   const handleTouchEnd = (e: TouchEvent) => {
     e.preventDefault();
+
+    // Always clear the timer on release.
+    cancelLongPressTimer();
+
+    // Long-press fired during this gesture — suppress the tap-emulating
+    // click so we don't immediately dismiss the picker we just opened.
+    if (longPressFired) {
+      longPressFired = false;
+      hasLastTouch = false;
+      element.style.transition = '';
+      element.style.transform = '';
+      return;
+    }
 
     if (!dragStarted) {
       hasLastTouch = false;
