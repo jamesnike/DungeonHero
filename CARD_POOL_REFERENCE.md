@@ -1121,7 +1121,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 | 9 | 生长之盾 | 1 | 4/4 | 装备时：每发生一次卡牌翻转，该护盾增幅一次（按卡名累计 +1 护甲与护甲上限；所有同名「生长之盾」共享）。遗言：从坟场随机抽出一张 Event 加入手牌（无 Event 则静默失败）。升级1：`amplifyOnFlipAmount` 1 → 2（每次翻转 +2 护甲与护甲上限；护甲/耐久/遗言张数不变）。升级2：`onDestroyEventCount` 1 → 3（遗言改为随机抽出 3 张 Event；增幅量保持 2 / 翻；护甲/耐久不变）。`knightEffect: 'growth-shield'` 最高 2 级 |
 | 10 | 弹幕护盾 | 2 | 3/3 | 完美格挡时，将 2 张「魔弹」加入手牌（手牌已满则静默丢弃多余的）。升级1：4 护甲，3/3 耐久（效果不变；`perfectBlockSpawnMissiles` 仍为 2）。升级2：4 护甲，3/3 耐久，`perfectBlockSpawnMissiles` 2 → 3（完美格挡生成 3 张「魔弹」）。`knightEffect: 'barrage-shield'` 最高 2 级 |
 | 11 | 雷震守护盾 | 8 | 1/1 | 遗言：击晕上限 +8%（封顶 100%）。升级1：`onDestroyEffect` `stunCap+8` → `stunCap+10`（护甲/耐久不变）。升级2：在 L1 基础上添加 `hasEquipmentRevive: true`（首次摧毁恢复 1 耐久，第二次摧毁才触发遗言）。`knightEffect: 'thunder-guard-shield'` 最高 2 级 |
-| 12 | 共御圣盾 | 6 | 1/1 | 复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +5 临时护甲。 |
+| 12 | 共御圣盾 | 6 | 1/1 | 复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +4 临时护甲。 |
 
 ---
 

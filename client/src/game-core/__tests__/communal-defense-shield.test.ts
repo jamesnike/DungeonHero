@@ -31,7 +31,7 @@ function makeShield(over?: Partial<GameCardData>): GameCardData {
     maxDurability: 1,
     armorMax: 6,
     hasEquipmentRevive: true,
-    onDestroyEffect: 'allSlotTempArmor:5',
+    onDestroyEffect: 'allSlotTempArmor:4',
     ...(over ?? {}),
   } as GameCardData;
 }
@@ -41,7 +41,7 @@ function makeShield(over?: Partial<GameCardData>): GameCardData {
 // ---------------------------------------------------------------------------
 
 describe('knight class deck: 共御圣盾 entry', () => {
-  it('appears in generateKnightDeck with 6 armor / 1 durability / revive / allSlotTempArmor:5 last-words / upgrade routing', () => {
+  it('appears in generateKnightDeck with 6 armor / 1 durability / revive / allSlotTempArmor:4 last-words / upgrade routing', () => {
     const [deck] = generateKnightDeck(createRng(42));
     const card = deck.find(c => c.name === '共御圣盾');
     expect(card).toBeTruthy();
@@ -51,7 +51,7 @@ describe('knight class deck: 共御圣盾 entry', () => {
     expect(card?.durability).toBe(1);
     expect(card?.maxDurability).toBe(1);
     expect(card?.hasEquipmentRevive).toBe(true);
-    expect(card?.onDestroyEffect).toBe('allSlotTempArmor:5');
+    expect(card?.onDestroyEffect).toBe('allSlotTempArmor:4');
     expect(card?.classCard).toBe(true);
     expect((card as any)?.knightEffect).toBe('communal-defense-shield');
     expect((card as any)?.maxUpgradeLevel).toBe(2);
@@ -63,7 +63,7 @@ describe('knight class deck: 共御圣盾 entry', () => {
 // ---------------------------------------------------------------------------
 
 describe('共御圣盾 last-words: computeEquipmentBreakEffects path', () => {
-  it('grants +5 temp armor to BOTH slots when destroyed', () => {
+  it('grants +4 temp armor to BOTH slots when destroyed', () => {
     const shield = makeShield();
     const state = makeState({
       equipmentSlot1: shield as any,
@@ -75,13 +75,13 @@ describe('共御圣盾 last-words: computeEquipmentBreakEffects path', () => {
       shield as any,
       createEmptyAmuletEffects(),
     );
-    expect(patch.slotTempArmor?.equipmentSlot1).toBe(5);
-    expect(patch.slotTempArmor?.equipmentSlot2).toBe(5);
+    expect(patch.slotTempArmor?.equipmentSlot1).toBe(4);
+    expect(patch.slotTempArmor?.equipmentSlot2).toBe(4);
     expect(sideEffects.some(e =>
-      e.event === 'log:entry' && (e.payload as any)?.message?.includes('所有装备栏 +5临时护甲'),
+      e.event === 'log:entry' && (e.payload as any)?.message?.includes('所有装备栏 +4临时护甲'),
     )).toBe(true);
     expect(sideEffects.some(e =>
-      e.event === 'ui:banner' && (e.payload as any)?.text?.includes('所有装备栏 +5临时护甲'),
+      e.event === 'ui:banner' && (e.payload as any)?.text?.includes('所有装备栏 +4临时护甲'),
     )).toBe(true);
   });
 
@@ -97,8 +97,8 @@ describe('共御圣盾 last-words: computeEquipmentBreakEffects path', () => {
       shield as any,
       createEmptyAmuletEffects(),
     );
-    expect(patch.slotTempArmor?.equipmentSlot1).toBe(7);
-    expect(patch.slotTempArmor?.equipmentSlot2).toBe(12);
+    expect(patch.slotTempArmor?.equipmentSlot1).toBe(6);
+    expect(patch.slotTempArmor?.equipmentSlot2).toBe(11);
   });
 
   it('triggers 怀柔之印 persuade bonus once per destroy', () => {
@@ -131,7 +131,7 @@ describe('共御圣盾 last-words: computeEquipmentBreakEffects path', () => {
 // ---------------------------------------------------------------------------
 
 describe('共御圣盾 last-words: waterfall applyEquipDestroyLastWords path', () => {
-  it('grants +5 temp armor to BOTH slots when destroyed during waterfall', () => {
+  it('grants +4 temp armor to BOTH slots when destroyed during waterfall', () => {
     const shield = makeShield();
     const state = makeState({
       slotTempArmor: { equipmentSlot1: 1, equipmentSlot2: 3 } as any,
@@ -147,11 +147,11 @@ describe('共御圣盾 last-words: waterfall applyEquipDestroyLastWords path', (
       sideEffects,
       enqueuedActions,
     );
-    expect(patch.slotTempArmor?.equipmentSlot1).toBe(6);
-    expect(patch.slotTempArmor?.equipmentSlot2).toBe(8);
+    expect(patch.slotTempArmor?.equipmentSlot1).toBe(5);
+    expect(patch.slotTempArmor?.equipmentSlot2).toBe(7);
     expect(enqueuedActions).toHaveLength(0);
     expect(sideEffects.some(e =>
-      e.event === 'log:entry' && (e.payload as any)?.message?.includes('所有装备栏 +5临时护甲'),
+      e.event === 'log:entry' && (e.payload as any)?.message?.includes('所有装备栏 +4临时护甲'),
     )).toBe(true);
   });
 

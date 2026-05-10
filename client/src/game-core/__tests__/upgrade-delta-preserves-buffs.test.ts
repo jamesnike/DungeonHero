@@ -66,7 +66,7 @@ describe('upgrade: pre-amplified shield preserves +1 amp on top of delta', () =>
       durability: 1,
       maxDurability: 1,
       hasEquipmentRevive: true,
-      onDestroyEffect: 'allSlotTempArmor:5',
+      onDestroyEffect: 'allSlotTempArmor:4',
       knightEffect: 'communal-defense-shield',
       maxUpgradeLevel: 2,
       upgradeLevel: 0,
@@ -79,7 +79,7 @@ describe('upgrade: pre-amplified shield preserves +1 amp on top of delta', () =>
     expect(upgraded.maxDurability).toBe(1);
     expect(upgraded.durability).toBe(1);
     expect((upgraded as any).hasEquipmentRevive).toBe(true);
-    expect(upgraded.onDestroyEffect).toBe('allSlotTempArmor:5');
+    expect(upgraded.onDestroyEffect).toBe('allSlotTempArmor:4');
   });
 });
 

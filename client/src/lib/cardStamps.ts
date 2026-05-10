@@ -152,7 +152,7 @@ export function postStamp(params: PostStampParams): void {
 }
 
 /**
- * POST `/api/card-stamps/lookup` to fetch aggregated counts + freeform
+ * POST `/api/card-stamps-lookup` to fetch aggregated counts + freeform
  * messages for the given signatures.
  *
  * Returns an empty `{}` on any error (network / parse / server) so the caller
@@ -163,7 +163,7 @@ export async function lookupStamps(signatures: ReadonlyArray<string>): Promise<L
   if (unique.length === 0) return {};
 
   try {
-    const response = await fetch('/api/card-stamps/lookup', {
+    const response = await fetch('/api/card-stamps-lookup', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ signatures: unique }),

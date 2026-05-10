@@ -380,16 +380,16 @@ const thunderGuardShield: OnUpgradeHandler = (upgraded, newLevel) => {
 // 共御圣盾 (knight:communal-defense-shield)：
 //   L0 -> L1: value/armorMax design [6, 8]（delta +2，preserve+delta，amp 保留）。
 //             durability 不变（1/1）。hasEquipmentRevive 保留（true）。
-//             onDestroyEffect 不变（allSlotTempArmor:5）。
+//             onDestroyEffect 不变（allSlotTempArmor:4）。
 //   L1 -> L2: value/armorMax 不变（8）。durability 不变（1/1）。
 //             hasEquipmentRevive 保留（true）。
-//             onDestroyEffect allSlotTempArmor:5 → allSlotTempArmor:7（全栏 +7 临时护甲）。
+//             onDestroyEffect allSlotTempArmor:4 → allSlotTempArmor:7（全栏 +7 临时护甲）。
 //   description / shortDescription 动态更新临时护甲数字。
 //   allSlotTempArmor:N 由 rules/equipment-effects.ts 与 rules/waterfall.ts 两条遗言路径
 //   解析（startsWith 'allSlotTempArmor:' + parseInt 取数字），无需改消费方。
 const communalDefenseShield: OnUpgradeHandler = (upgraded, newLevel) => {
   const armors = [6, 8, 8];
-  const tempArmorAmounts = [5, 5, 7];
+  const tempArmorAmounts = [4, 4, 7];
 
   applyShieldArmorDelta(upgraded, armors, newLevel);
 

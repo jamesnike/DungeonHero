@@ -707,7 +707,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   });
 
   // 共御圣盾 — 复生 + 双段遗言：1 耐久、复生一次后才进入遗言；\
-  // 摧毁时所有装备栏 +5 临时护甲。复用既有 allSlotTempArmor:N 事件令牌约定，\
+  // 摧毁时所有装备栏 +4 临时护甲。复用既有 allSlotTempArmor:N 事件令牌约定，\
   // 在四条遗言摧毁路径中统一解析。\
   pushCard({
     type: 'shield',
@@ -715,10 +715,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 6,
     image: communalDefenseShieldImage,
     classCard: true,
-    description: '复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +5 临时护甲。',
-    shortDescription: '复生 1 次；遗言：全栏 +5 临时护甲',
+    description: '复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +4 临时护甲。',
+    shortDescription: '复生 1 次；遗言：全栏 +4 临时护甲',
     hasEquipmentRevive: true,
-    onDestroyEffect: 'allSlotTempArmor:5',
+    onDestroyEffect: 'allSlotTempArmor:4',
     durability: 1,
     maxDurability: 1,
     armorMax: 6,

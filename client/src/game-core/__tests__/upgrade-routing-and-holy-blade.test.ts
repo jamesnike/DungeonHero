@@ -1962,10 +1962,10 @@ describe('Communal Defense Shield (共御圣盾) upgrade handler', () => {
       value: 6,
       image: '',
       classCard: true,
-      description: '复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +5 临时护甲。',
-      shortDescription: '复生 1 次；遗言：全栏 +5 临时护甲',
+      description: '复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +4 临时护甲。',
+      shortDescription: '复生 1 次；遗言：全栏 +4 临时护甲',
       hasEquipmentRevive: true,
-      onDestroyEffect: 'allSlotTempArmor:5',
+      onDestroyEffect: 'allSlotTempArmor:4',
       durability: 1,
       maxDurability: 1,
       armorMax: 6,
@@ -1980,7 +1980,7 @@ describe('Communal Defense Shield (共御圣盾) upgrade handler', () => {
     expect(resolveUpgradeEffectId(communalDefenseShieldL0())).toBe('knight:communal-defense-shield');
   });
 
-  it('L0 → L1: value/armorMax 6 → 8; durability/revive/last-words preserved at +5', () => {
+  it('L0 → L1: value/armorMax 6 → 8; durability/revive/last-words preserved at +4', () => {
     const card = communalDefenseShieldL0();
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
@@ -1991,20 +1991,20 @@ describe('Communal Defense Shield (共御圣盾) upgrade handler', () => {
     expect(upgraded.durability).toBe(1);
     expect(upgraded.maxDurability).toBe(1);
     expect(upgraded.hasEquipmentRevive).toBe(true);
-    expect(upgraded.onDestroyEffect).toBe('allSlotTempArmor:5');
-    expect(upgraded.description).toContain('+5 临时护甲');
+    expect(upgraded.onDestroyEffect).toBe('allSlotTempArmor:4');
+    expect(upgraded.description).toContain('+4 临时护甲');
     expect(upgraded.description).toContain('复生');
-    expect(upgraded.shortDescription).toContain('+5 临时护甲');
+    expect(upgraded.shortDescription).toContain('+4 临时护甲');
     expect(upgraded.shortDescription).toContain('复生');
   });
 
-  it('L1 → L2: value/armorMax 8 unchanged; last-words allSlotTempArmor:5 → :7; revive preserved', () => {
+  it('L1 → L2: value/armorMax 8 unchanged; last-words allSlotTempArmor:4 → :7; revive preserved', () => {
     const card = communalDefenseShieldL0({
       upgradeLevel: 1,
       value: 8,
       armorMax: 8,
-      description: '复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +5 临时护甲。',
-      shortDescription: '复生 1 次；遗言：全栏 +5 临时护甲',
+      description: '复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +4 临时护甲。',
+      shortDescription: '复生 1 次；遗言：全栏 +4 临时护甲',
     } as any);
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });

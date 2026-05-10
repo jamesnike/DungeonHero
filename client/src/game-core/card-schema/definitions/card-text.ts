@@ -797,7 +797,7 @@ const thunderGuardShield: CardTextFormatter = (card) => {
 // Handler still sets `onDestroyEffect`.
 const communalDefenseShield: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const tempArmorAmounts = [5, 5, 7];
+  const tempArmorAmounts = [4, 4, 7];
   const tempArmorAmount = pick(tempArmorAmounts, level);
   return {
     description: `复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +${tempArmorAmount} 临时护甲。`,

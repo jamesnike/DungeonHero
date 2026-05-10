@@ -144,6 +144,7 @@ import dedupeEventCryptWhisperImage from '@assets/generated_images/card_dedupe_e
 import dedupeEventArcaneGuildImage from '@assets/generated_images/card_dedupe_event_arcane_guild.png';
 import dedupeEventFateDiceCupImage from '@assets/generated_images/card_dedupe_event_fate_dice_cup.png';
 import dedupeEventBladeOfFateBuildingImage from '@assets/generated_images/card_dedupe_event_blade_of_fate_building.png';
+import buildingFateBladeImage from '@assets/generated_images/building_fate_blade.png';
 import dedupeEventChaosDiceGameImage from '@assets/generated_images/card_dedupe_event_chaos_dice_game.png';
 import dedupeEventTimeRiftImage from '@assets/generated_images/card_dedupe_event_time_rift.png';
 import dedupeEventCursedDiceImage from '@assets/generated_images/card_dedupe_knight_magic_fortune_wheel.png';
@@ -1815,7 +1816,7 @@ export function createDeck(
         type: 'building',
         name: '命运之刃',
         value: 0,
-        image: dedupeEventBladeOfFateBuildingImage,
+        image: buildingFateBladeImage,
         isGhost: true,
         fury: 1,
         hpLayers: 1,
