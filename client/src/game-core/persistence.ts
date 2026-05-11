@@ -222,6 +222,13 @@ export function serializeGameState(state: GameState): PersistedGameState {
     multiplayerSession: state.multiplayerSession
       ? { ...state.multiplayerSession }
       : null,
+    // pendingTransferOut + companion delta MUST be persisted so a tab
+    // refresh during the POST in-flight window doesn't silently drop the
+    // staged cards. On hydrate, useMultiplayerSync re-POSTs this batch.
+    pendingTransferOut: state.pendingTransferOut
+      ? state.pendingTransferOut.map(c => ({ ...c }))
+      : null,
+    pendingTransferOutSharedConsumed: state.pendingTransferOutSharedConsumed ?? null,
     sharedDeckConsumed: state.sharedDeckConsumed ?? 0,
     bossEncounterAlertShown: Boolean(state.bossEncounterAlertShown),
   };

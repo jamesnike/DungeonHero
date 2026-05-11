@@ -33,8 +33,8 @@ export function GameModeSelectModal({ open, onSelect, onLocalRolePick, onCancel 
         onInteractOutside 比 onPointerDownOutside 多覆盖 focus-outside 路径。
 
         两个模式共用同一套底层 deck 规则（36 张 / 1 monster/chunk）：
-        - single        — 单人，行为与旧 'quick' 完全一致
-        - multiplayer   — 双人异步，落地后会跳到 MultiplayerLobby（阶段 5）
+        - single        — 单人模式
+        - multiplayer   — 双人异步，落地后会跳到 MultiplayerLobby
       */}
       <DialogContent
         className="sm:max-w-lg"

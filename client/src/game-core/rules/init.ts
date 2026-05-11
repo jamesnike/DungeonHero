@@ -20,7 +20,7 @@ import {
 } from '../deck';
 import { fillActiveRowSlots } from '../helpers';
 import { shuffle as rngShuffle, nextInt } from '../rng';
-import { INITIAL_TURN_COUNT, FINAL_MONSTER_MARK_DESCRIPTION } from '../constants';
+import { FINAL_MONSTER_MARK_DESCRIPTION } from '../constants';
 import { DUNGEON_COLUMN_COUNT } from '@/components/game-board/constants';
 import { getRandomHero } from '@/lib/heroes';
 import { generateKnightDeck, createKnightDiscoveryEvents } from '@/lib/knightDeck';
@@ -57,10 +57,9 @@ export function reduceInitGame(
   eternalRelics: EternalRelic[],
 ): ReduceResult {
   let rng: RngState = state.rng;
-  // Both 'single' and 'multiplayer' use the underlying "quick" deck rules
-  // (36-card deck / 1 monster per chunk / `initialTurnCount = 1`).
-  const isQuickMode = true;
-  const initialTurnCount = isQuickMode ? 1 : INITIAL_TURN_COUNT;
+  // Single & multiplayer use the same deck rules:
+  // 36-card deck, 1 monster per 4-card chunk, `initialTurnCount = 1`.
+  const initialTurnCount = 1;
 
   // --- Hero variant (first pick, used only for the SET_GAME_FLAGS patch in the old code) ---
   const [, rng1] = getRandomHero(rng);
@@ -95,239 +94,89 @@ export function reduceInitGame(
     deckWithClassEvents.push(...shuffled);
   }
 
-  // --- Balance monster distribution: 1 elite in first half, rest in second half ---
+  // --- Monster distribution layout ---
+  //   • Each non-overlapping 4-card chunk holds EXACTLY one monster.
+  //   • Leftover monsters (count > number of chunks) are placed in random
+  //     empty positions within the back 18 cards.
+  //   • Non-monster cards fill the remaining slots in shuffled order.
+  // Elites are pushed out of the first 16 cards by a later step.
   {
-    const halfSize = Math.floor(deckWithClassEvents.length / 2);
     const eliteMonsters = deckWithClassEvents.filter(c => c.monsterSpecial);
     const nonEliteMonsters = deckWithClassEvents.filter(c => c.type === 'monster' && !c.monsterSpecial);
     const nonMonsters = deckWithClassEvents.filter(c => c.type !== 'monster');
-
-    if (isQuickMode) {
-      // Quick-mode monster layout:
-      //   • Each non-overlapping 4-card chunk holds EXACTLY one monster.
-      //   • Leftover monsters (count > number of chunks) are placed in random
-      //     empty positions within the back 18 cards.
-      //   • Non-monster cards fill the remaining slots in shuffled order.
-      // Elites are pushed out of the first 16 cards by a later step.
-      const len = deckWithClassEvents.length;
-      let monsters: GameCardData[];
-      {
-        const [s, r] = rngShuffle([...eliteMonsters, ...nonEliteMonsters], rng);
-        rng = r;
-        monsters = s;
-      }
-      let nonMonstersShuffled: GameCardData[];
-      {
-        const [s, r] = rngShuffle(nonMonsters, rng);
-        rng = r;
-        nonMonstersShuffled = s;
-      }
-
-      const result: (GameCardData | null)[] = new Array(len).fill(null);
-      const numChunks = Math.floor(len / 4);
-      let monsterIdx = 0;
-
-      for (let chunkIdx = 0; chunkIdx < numChunks && monsterIdx < monsters.length; chunkIdx++) {
-        const start = chunkIdx * 4;
-        const [slotOff, rngS] = nextInt(rng, 0, 3);
-        rng = rngS;
-        result[start + slotOff] = monsters[monsterIdx++];
-      }
-
-      // Snap back18Start to the next chunk boundary so leftover monsters can't
-      // straddle the boundary into an "early" chunk (e.g. for a 36-card deck
-      // back18Start = 18 sits inside chunk 4 [16-19]; without snapping, the
-      // leftover landing at pos 18 or 19 would give chunk 4 two monsters).
-      // Positions past `numChunks * 4` are outside any chunk and always safe.
-      const rawBack18Start = Math.max(0, len - 18);
-      const back18Start = Math.max(rawBack18Start, Math.ceil(rawBack18Start / 4) * 4);
-      while (monsterIdx < monsters.length) {
-        const emptySlots: number[] = [];
-        for (let i = back18Start; i < len; i++) {
-          if (result[i] === null) emptySlots.push(i);
-        }
-        if (emptySlots.length === 0) break;
-        const [pickIdx, rngP] = nextInt(rng, 0, emptySlots.length - 1);
-        rng = rngP;
-        result[emptySlots[pickIdx]] = monsters[monsterIdx++];
-      }
-      while (monsterIdx < monsters.length) {
-        const idx = result.findIndex(c => c === null);
-        if (idx < 0) break;
-        result[idx] = monsters[monsterIdx++];
-      }
-
-      let nmIdx = 0;
-      for (let i = 0; i < len; i++) {
-        if (result[i] === null) {
-          result[i] = nonMonstersShuffled[nmIdx++] ?? null;
-        }
-      }
-
-      deckWithClassEvents.splice(0, deckWithClassEvents.length, ...(result as GameCardData[]));
-    } else {
-      let earlyElite: typeof eliteMonsters[0] | null = null;
-      const remainingElites = [...eliteMonsters];
-      if (remainingElites.length > 0) {
-        const [idx, rngE] = nextInt(rng, 0, remainingElites.length - 1);
-        rng = rngE;
-        earlyElite = remainingElites.splice(idx, 1)[0];
-      }
-
-      const totalMonsters = eliteMonsters.length + nonEliteMonsters.length;
-      const firstHalfMonsterCount = Math.min(Math.floor(totalMonsters / 2), nonEliteMonsters.length);
-
-      const firstHalf = [
-        ...nonEliteMonsters.slice(0, firstHalfMonsterCount),
-        ...nonMonsters.slice(0, halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
-        ...(earlyElite ? [earlyElite] : []),
-      ];
-      const secondHalf = [
-        ...nonEliteMonsters.slice(firstHalfMonsterCount),
-        ...remainingElites,
-        ...nonMonsters.slice(halfSize - firstHalfMonsterCount - (earlyElite ? 1 : 0)),
-      ];
-
-      {
-        const [s, r] = rngShuffle(firstHalf, rng);
-        rng = r;
-        firstHalf.splice(0, firstHalf.length, ...s);
-      }
-      {
-        const [s, r] = rngShuffle(secondHalf, rng);
-        rng = r;
-        secondHalf.splice(0, secondHalf.length, ...s);
-      }
-
-      // Ensure the early elite lands at index 16 or later (not in the first 16 cards)
-      if (earlyElite && firstHalf.length > 16) {
-        const eliteIdx = firstHalf.indexOf(earlyElite);
-        if (eliteIdx >= 0 && eliteIdx < 16) {
-          const [swapTarget, rngSw] = nextInt(rng, 16, firstHalf.length - 1);
-          rng = rngSw;
-          const tmp = firstHalf[eliteIdx];
-          firstHalf[eliteIdx] = firstHalf[swapTarget];
-          firstHalf[swapTarget] = tmp;
-        }
-      }
-
-      deckWithClassEvents.splice(0, deckWithClassEvents.length, ...firstHalf, ...secondHalf);
-    }
-  }
-
-  // --- Balance monster density per chunk (normal mode only) ---
-  // 1-2 monsters per non-overlapping chunk. CHUNK must equal `dealRowBatch`'s
-  // batch size (DUNGEON_COLUMN_COUNT) so the first batch lines up with one
-  // chunk and per-row monster invariants are preserved as the deck is
-  // consumed.
-  // Quick mode skips this pass — its bespoke placement above (1 monster per
-  // chunk + 1 leftover in back-18) is already optimal and any rebalance here
-  // would either move the leftover out of the back-18 zone or push an extra
-  // monster into the early chunks.
-  if (!isQuickMode) {
-    const MIN_MONSTERS = 1;
-    const MAX_MONSTERS = 2;
-    const CHUNK = DUNGEON_COLUMN_COUNT;
-    for (let start = 0; start + CHUNK <= deckWithClassEvents.length; start += CHUNK) {
-      const chunkEnd = start + CHUNK;
-      const monsterIndices: number[] = [];
-      const nonMonsterIndices: number[] = [];
-      for (let j = start; j < chunkEnd; j++) {
-        if (deckWithClassEvents[j].type === 'monster') monsterIndices.push(j);
-        else nonMonsterIndices.push(j);
-      }
-      while (monsterIndices.length > MAX_MONSTERS) {
-        const excessIdx = monsterIndices.pop()!;
-        let swapTarget = -1;
-        for (let k = chunkEnd; k < deckWithClassEvents.length; k++) {
-          if (deckWithClassEvents[k].type !== 'monster') { swapTarget = k; break; }
-        }
-        if (swapTarget === -1) {
-          for (let k = start - 1; k >= 0; k--) {
-            if (deckWithClassEvents[k].type !== 'monster') { swapTarget = k; break; }
-          }
-        }
-        if (swapTarget >= 0) {
-          const tmp = deckWithClassEvents[excessIdx];
-          deckWithClassEvents[excessIdx] = deckWithClassEvents[swapTarget];
-          deckWithClassEvents[swapTarget] = tmp;
-        } else {
-          break;
-        }
-      }
-      while (monsterIndices.length < MIN_MONSTERS) {
-        const fillIdx = nonMonsterIndices.pop()!;
-        if (fillIdx === undefined) break;
-        let swapTarget = -1;
-        for (let k = chunkEnd; k < deckWithClassEvents.length; k++) {
-          if (deckWithClassEvents[k].type === 'monster') { swapTarget = k; break; }
-        }
-        if (swapTarget === -1) {
-          for (let k = start - 1; k >= 0; k--) {
-            if (deckWithClassEvents[k].type === 'monster') { swapTarget = k; break; }
-          }
-        }
-        if (swapTarget >= 0) {
-          const tmp = deckWithClassEvents[fillIdx];
-          deckWithClassEvents[fillIdx] = deckWithClassEvents[swapTarget];
-          deckWithClassEvents[swapTarget] = tmp;
-          monsterIndices.push(fillIdx);
-        } else {
-          break;
-        }
-      }
-    }
-  }
-
-  // --- Quick mode: push elites out of first 16 cards ---
-  if (isQuickMode) {
-    for (let i = 0; i < Math.min(16, deckWithClassEvents.length); i++) {
-      if (deckWithClassEvents[i].monsterSpecial) {
-        let swapTarget = -1;
-        for (let k = 16; k < deckWithClassEvents.length; k++) {
-          if (deckWithClassEvents[k].type === 'monster' && !deckWithClassEvents[k].monsterSpecial) {
-            swapTarget = k;
-            break;
-          }
-        }
-        if (swapTarget >= 0) {
-          const tmp = deckWithClassEvents[i];
-          deckWithClassEvents[i] = deckWithClassEvents[swapTarget];
-          deckWithClassEvents[swapTarget] = tmp;
-        }
-      }
-    }
-  }
-
-  // --- Guarantee at least one monster in the back half of the deck ---
-  // Normal mode only — the front half is already monster-balanced by the chunk
-  // pass above; we only need to make sure the deck doesn't run dry of monsters
-  // near the end so the final waterfall(s) can still field a monster row.
-  // Quick mode handles its own back-18 placement in the layout step above.
-  if (!isQuickMode) {
     const len = deckWithClassEvents.length;
-    if (len >= 2) {
-      const halfStart = Math.floor(len / 2);
-      const hasMonsterInBackHalf = deckWithClassEvents
-        .slice(halfStart)
-        .some(c => c.type === 'monster');
-      if (!hasMonsterInBackHalf) {
-        let swapMonsterIdx = -1;
-        for (let i = halfStart - 1; i >= 0; i--) {
-          if (deckWithClassEvents[i].type === 'monster') {
-            swapMonsterIdx = i;
-            break;
-          }
+
+    let monsters: GameCardData[];
+    {
+      const [s, r] = rngShuffle([...eliteMonsters, ...nonEliteMonsters], rng);
+      rng = r;
+      monsters = s;
+    }
+    let nonMonstersShuffled: GameCardData[];
+    {
+      const [s, r] = rngShuffle(nonMonsters, rng);
+      rng = r;
+      nonMonstersShuffled = s;
+    }
+
+    const result: (GameCardData | null)[] = new Array(len).fill(null);
+    const numChunks = Math.floor(len / 4);
+    let monsterIdx = 0;
+
+    for (let chunkIdx = 0; chunkIdx < numChunks && monsterIdx < monsters.length; chunkIdx++) {
+      const start = chunkIdx * 4;
+      const [slotOff, rngS] = nextInt(rng, 0, 3);
+      rng = rngS;
+      result[start + slotOff] = monsters[monsterIdx++];
+    }
+
+    // Snap back18Start to the next chunk boundary so leftover monsters can't
+    // straddle the boundary into an "early" chunk (e.g. for a 36-card deck
+    // back18Start = 18 sits inside chunk 4 [16-19]; without snapping, the
+    // leftover landing at pos 18 or 19 would give chunk 4 two monsters).
+    // Positions past `numChunks * 4` are outside any chunk and always safe.
+    const rawBack18Start = Math.max(0, len - 18);
+    const back18Start = Math.max(rawBack18Start, Math.ceil(rawBack18Start / 4) * 4);
+    while (monsterIdx < monsters.length) {
+      const emptySlots: number[] = [];
+      for (let i = back18Start; i < len; i++) {
+        if (result[i] === null) emptySlots.push(i);
+      }
+      if (emptySlots.length === 0) break;
+      const [pickIdx, rngP] = nextInt(rng, 0, emptySlots.length - 1);
+      rng = rngP;
+      result[emptySlots[pickIdx]] = monsters[monsterIdx++];
+    }
+    while (monsterIdx < monsters.length) {
+      const idx = result.findIndex(c => c === null);
+      if (idx < 0) break;
+      result[idx] = monsters[monsterIdx++];
+    }
+
+    let nmIdx = 0;
+    for (let i = 0; i < len; i++) {
+      if (result[i] === null) {
+        result[i] = nonMonstersShuffled[nmIdx++] ?? null;
+      }
+    }
+
+    deckWithClassEvents.splice(0, deckWithClassEvents.length, ...(result as GameCardData[]));
+  }
+
+  // --- Push elites out of first 16 cards ---
+  for (let i = 0; i < Math.min(16, deckWithClassEvents.length); i++) {
+    if (deckWithClassEvents[i].monsterSpecial) {
+      let swapTarget = -1;
+      for (let k = 16; k < deckWithClassEvents.length; k++) {
+        if (deckWithClassEvents[k].type === 'monster' && !deckWithClassEvents[k].monsterSpecial) {
+          swapTarget = k;
+          break;
         }
-        if (swapMonsterIdx >= 0) {
-          const backRange = len - halfStart;
-          const [targetOff, rngT] = nextInt(rng, 0, backRange - 1);
-          rng = rngT;
-          const targetIdx = halfStart + targetOff;
-          const tmp = deckWithClassEvents[swapMonsterIdx];
-          deckWithClassEvents[swapMonsterIdx] = deckWithClassEvents[targetIdx];
-          deckWithClassEvents[targetIdx] = tmp;
-        }
+      }
+      if (swapTarget >= 0) {
+        const tmp = deckWithClassEvents[i];
+        deckWithClassEvents[i] = deckWithClassEvents[swapTarget];
+        deckWithClassEvents[swapTarget] = tmp;
       }
     }
   }
@@ -357,9 +206,8 @@ export function reduceInitGame(
 
   // Deal a single row as one DUNGEON_COLUMN_COUNT-card batch from dealQueue.
   // Stacking has been removed, so the entire batch becomes the row's base
-  // cards. Aligns each row with one CHUNK (=DUNGEON_COLUMN_COUNT), so the
-  // monster-density balancing carries over to per-row composition
-  // (≥1 and ≤2 monsters per row).
+  // cards. Aligns each row with one CHUNK (=DUNGEON_COLUMN_COUNT) so per-row
+  // monster composition mirrors the init-time layout (0–1 monsters per row).
   const dealRowBatch = (): { row: GameCardData[] } => {
     const batch = dealQueue.splice(0, DUNGEON_COLUMN_COUNT);
     return { row: batch };
@@ -397,67 +245,9 @@ export function reduceInitGame(
   // --- Active stack: stacking removed; active cells hold one card each. ---
   const initialActiveStacks: Record<number, GameCardData[]> = {};
 
-  // --- Re-balance monster density in dealQueue after initial dealing ---
-  // Normal mode: 1-2 monsters per chunk. CHUNK must match `dealRowBatch` batch
-  // size (DUNGEON_COLUMN_COUNT) so each future waterfall preview row satisfies
-  // the invariant.
-  // Quick mode skips this pass for the same reason as the init-time chunk
-  // pass: the bespoke placement is already optimal and rebalancing would
-  // disturb the back-18 leftover monster.
-  if (!isQuickMode) {
-    const MIN_MONSTERS = 1;
-    const MAX_MONSTERS = 2;
-    const CHUNK = DUNGEON_COLUMN_COUNT;
-    for (let start = 0; start + CHUNK <= dealQueue.length; start += CHUNK) {
-      const chunkEnd = start + CHUNK;
-      const monsterIndices: number[] = [];
-      const nonMonsterIndices: number[] = [];
-      for (let j = start; j < chunkEnd; j++) {
-        if (dealQueue[j].type === 'monster') monsterIndices.push(j);
-        else nonMonsterIndices.push(j);
-      }
-      while (monsterIndices.length > MAX_MONSTERS) {
-        const excessIdx = monsterIndices.pop()!;
-        let swapTarget = -1;
-        for (let k = chunkEnd; k < dealQueue.length; k++) {
-          if (dealQueue[k].type !== 'monster') { swapTarget = k; break; }
-        }
-        if (swapTarget === -1) {
-          for (let k = start - 1; k >= 0; k--) {
-            if (dealQueue[k].type !== 'monster') { swapTarget = k; break; }
-          }
-        }
-        if (swapTarget >= 0) {
-          const tmp = dealQueue[excessIdx];
-          dealQueue[excessIdx] = dealQueue[swapTarget];
-          dealQueue[swapTarget] = tmp;
-        } else {
-          break;
-        }
-      }
-      while (monsterIndices.length < MIN_MONSTERS) {
-        const fillIdx = nonMonsterIndices.pop()!;
-        if (fillIdx === undefined) break;
-        let swapTarget = -1;
-        for (let k = chunkEnd; k < dealQueue.length; k++) {
-          if (dealQueue[k].type === 'monster') { swapTarget = k; break; }
-        }
-        if (swapTarget === -1) {
-          for (let k = start - 1; k >= 0; k--) {
-            if (dealQueue[k].type === 'monster') { swapTarget = k; break; }
-          }
-        }
-        if (swapTarget >= 0) {
-          const tmp = dealQueue[fillIdx];
-          dealQueue[fillIdx] = dealQueue[swapTarget];
-          dealQueue[swapTarget] = tmp;
-          monsterIndices.push(fillIdx);
-        } else {
-          break;
-        }
-      }
-    }
-  }
+  // (The init-time monster layout above already places at most 1 monster per
+  // 4-card chunk plus a leftover monster in the back-18 zone, so no further
+  // chunk re-balance is needed here — the upstream layout is optimal.)
 
   // --- Mark final monster in remaining deck ---
   const initialRemaining = dealQueue.map((card) => {
@@ -686,9 +476,8 @@ export function reduceInitMultiplayerGame(
     return { state, sideEffects: [], enqueuedActions: [] };
   }
 
-  // Quick mode rules apply to both single & multiplayer.
-  const isQuickMode = true;
-  const initialTurnCount = isQuickMode ? 1 : INITIAL_TURN_COUNT;
+  // Same deck rules as single-player (`reduceInitGame`).
+  const initialTurnCount = 1;
 
   let rng: RngState = state.rng;
 
@@ -761,6 +550,7 @@ export function reduceInitMultiplayerGame(
       lastAppliedSeq: 0,
     },
     pendingTransferOut: null,
+    pendingTransferOutSharedConsumed: null,
     sharedDeckConsumed: 0,
     bossEncounterAlertShown: false,
   };

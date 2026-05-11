@@ -17,7 +17,7 @@ function makeStateWithSeed(seed: number): GameState {
 }
 
 describe('INIT_GAME preview row composition', () => {
-  it('preview row has at most 2 monsters across many seeds (normal mode)', () => {
+  it('preview row has at most 2 monsters across many seeds', () => {
     const violations: Array<{ seed: number; count: number; names: string[] }> = [];
     for (let seed = 1; seed <= 200; seed++) {
       const state = makeStateWithSeed(seed);
@@ -41,31 +41,7 @@ describe('INIT_GAME preview row composition', () => {
     expect(violations).toEqual([]);
   });
 
-  it('preview row has at most 2 monsters across many seeds (quick mode)', () => {
-    const violations: Array<{ seed: number; count: number; names: string[] }> = [];
-    for (let seed = 1; seed <= 200; seed++) {
-      const state = makeStateWithSeed(seed);
-      const result = reduce(state, {
-        type: 'INIT_GAME',
-        mode: 'single',
-        totalWins: 0,
-        eternalRelics: [],
-      });
-      const previewMonsters = result.state.previewCards.filter(
-        c => c?.type === 'monster',
-      );
-      if (previewMonsters.length > 2) {
-        violations.push({
-          seed,
-          count: previewMonsters.length,
-          names: previewMonsters.map(m => m!.name),
-        });
-      }
-    }
-    expect(violations).toEqual([]);
-  });
-
-  it('active row has at most 2 monsters across many seeds (normal mode)', () => {
+  it('active row has at most 2 monsters across many seeds', () => {
     const violations: Array<{ seed: number; count: number }> = [];
     for (let seed = 1; seed <= 200; seed++) {
       const state = makeStateWithSeed(seed);
@@ -86,14 +62,14 @@ describe('INIT_GAME preview row composition', () => {
   });
 
   /**
-   * Quick-mode monster layout invariants:
+   * Monster-layout invariants (single & multiplayer share these rules):
    *   • Every non-overlapping 4-card chunk holds at most 1 monster.
    *   • The first 16 cards contain no elite monsters.
    *   • The back 18 cards contain at least 1 monster (the leftover).
    * The full deck-of-record is `[previewCards, activeCards, ...remainingDeck]`
    * because INIT_GAME has already dealt the first two rows from the head.
    */
-  it('quick mode: each 4-card chunk has at most 1 monster', () => {
+  it('each 4-card chunk has at most 1 monster', () => {
     const violations: Array<{ seed: number; chunkIdx: number; count: number }> = [];
     for (let seed = 1; seed <= 200; seed++) {
       const state = makeStateWithSeed(seed);
@@ -131,7 +107,7 @@ describe('INIT_GAME preview row composition', () => {
     expect(violations).toEqual([]);
   });
 
-  it('quick mode: first 16 cards contain no elite monsters', () => {
+  it('first 16 cards contain no elite monsters', () => {
     const violations: Array<{ seed: number; pos: number; name: string }> = [];
     for (let seed = 1; seed <= 200; seed++) {
       const state = makeStateWithSeed(seed);
@@ -155,7 +131,7 @@ describe('INIT_GAME preview row composition', () => {
     expect(violations).toEqual([]);
   });
 
-  it('quick mode: back 18 cards contain at least 1 monster when total monsters > chunk count', () => {
+  it('back 18 cards contain at least 1 monster when total monsters > chunk count', () => {
     const violations: Array<{ seed: number; deckLen: number; monsterTotal: number }> = [];
     for (let seed = 1; seed <= 200; seed++) {
       const state = makeStateWithSeed(seed);

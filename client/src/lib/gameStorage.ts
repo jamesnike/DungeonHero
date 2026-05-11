@@ -319,6 +319,21 @@ export interface PersistedGameState {
     peerId: string;
     lastAppliedSeq: number;
   } | null;
+  /**
+   * Cards staged for shipping to the peer that haven't been ack'd by the
+   * server yet. Persisted so a tab refresh between waterfall completion
+   * and POST ack doesn't silently drop the cards (the hook re-POSTs on
+   * hydrate when this is non-empty).
+   *
+   * Mirrors `GameState.pendingTransferOut`.
+   */
+  pendingTransferOut?: import('@/components/GameCard').GameCardData[] | null;
+  /**
+   * Per-batch sharedConsumed delta paired with `pendingTransferOut`.
+   * Persisted alongside it so the resend uses the correct delta.
+   * Mirrors `GameState.pendingTransferOutSharedConsumed`.
+   */
+  pendingTransferOutSharedConsumed?: number | null;
   /** How many cards we've consumed from the shared deck so far (mirrors
    * `GameState.sharedDeckConsumed`). Sent to the server with each transfer
    * so the room's running counter stays in sync. */

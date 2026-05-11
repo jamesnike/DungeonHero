@@ -226,6 +226,7 @@ export function createInitialGameState(): GameState {
     // on tab reload (phase 6).
     multiplayerSession: null,
     pendingTransferOut: null,
+    pendingTransferOutSharedConsumed: null,
     sharedDeckConsumed: 0,
     bossEncounterAlertShown: false,
 

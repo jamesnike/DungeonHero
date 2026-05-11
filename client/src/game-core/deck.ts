@@ -315,11 +315,8 @@ export function createDeck(
 ): [GameCardData[], RngState] {
   const deck: GameCardData[] = [];
   let id = 0;
-  // Both 'single' and 'multiplayer' use the same underlying deck rules
-  // (formerly "quick rules": 36-card deck / 1 monster per chunk). The
-  // legacy `'normal'` mode (full 84-card deck) was removed in the
-  // multiplayer-mode rollout.
-  const isQuick = true;
+  // Single & multiplayer share the same 36-card deck rules: 1 monster per
+  // 4-card chunk, 6 base monsters from 6 random types (out of 7), 3 elites.
   void mode;
 
   // Seeded RNG threading. If no rng is passed (legacy call sites), fall back to
@@ -440,13 +437,10 @@ export function createDeck(
       },
     ];
 
-    const monsterCount = isQuick ? 6 : 21;
-    // Quick mode: 6 张怪物从 7 个候选类型里**随机**选 6 种（每种 1 张），
-    // 每局随机省略 1 种——而不是固定按数组顺序取前 6 种（那样 Golem 永远缺席）。
-    // Normal mode: 21 张走 i % 7 循环，每种正好 3 张，保持原行为不变。
-    const usableMonsterTypes = isQuick
-      ? randShuffle(monsterTypes).slice(0, monsterCount)
-      : monsterTypes;
+    // 6 张怪物从 7 个候选类型里**随机**选 6 种（每种 1 张），每局随机省略 1 种——
+    // 而不是固定按数组顺序取前 6 种（那样 Golem 永远缺席）。
+    const monsterCount = 6;
+    const usableMonsterTypes = randShuffle(monsterTypes).slice(0, monsterCount);
     for (let i = 0; i < monsterCount; i++) {
       const monsterType = usableMonsterTypes[i % usableMonsterTypes.length];
       const attack = randInt(monsterType.minAttack, monsterType.maxAttack);
@@ -496,44 +490,41 @@ export function createDeck(
       Golem:    { tag: 'golem-elite',   desc: '护体：每次最多受到 5 点伤害。' },
     };
 
-    // Quick mode: only 3 randomly chosen types get elites (as additional monster cards)
-    let eliteTypes = Object.keys(monstersByType);
-    if (isQuick) {
-      eliteTypes = randShuffle(eliteTypes).slice(0, 3);
-      for (const type of eliteTypes) {
-        const monsterType = monsterTypes.find(mt => mt.name === type)!;
-        const attack = randInt(monsterType.minAttack, monsterType.maxAttack);
-        const hp = randInt(monsterType.minHp, monsterType.maxHp);
-        const fury = randInt(monsterType.minFury, monsterType.maxFury);
-        const eliteCard: GameCardData = {
-          id: `monster-${id++}`,
-          type: 'monster',
-          name: pickPrefix(monsterType.name),
-          monsterType: monsterType.name,
-          value: attack,
-          attack: attack,
-          hp: hp,
-          maxHp: hp,
-          baseAttack: attack,
-          baseHp: hp,
-          fury: fury,
-          hpLayers: fury,
-          currentLayer: fury,
-          image: monsterType.image,
-          waterfallEffect: monsterType.waterfallEffect,
-          upgradeLevel: 0,
-          maxUpgradeLevel: getUpgradeTierCount(monsterType.name),
-          ...(monsterType.name === 'Skeleton' ? { hasRevive: true } : {}),
-          ...(monsterType.name === 'Dragon' ? { bleedEffect: 'attack+2' } : {}),
-          ...(monsterType.name === 'Ogre' ? { enterEffect: 'auto-engage' } : {}),
-          ...(monsterType.name === 'Wraith' ? { lastWords: 'wraith-haunt-2' } : {}),
-          ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-5' } : {}),
-          ...(monsterType.name === 'Swarm' ? { swarmSpawn: true, description: '虫群：场上有虫群怪物时，每移除一张地城牌，在该位置生成一只小虫子。' } : {}),
-          ...(monsterType.name === 'Golem' ? { antiMagicReflect: 2, description: '反魔：玩家每使用一张法术牌，对玩家造成 2 点伤害。' } : {}),
-        };
-        deck.push(eliteCard);
-        (monstersByType[type] ??= []).push(eliteCard);
-      }
+    // Pick 3 random types to also receive an elite (as additional monster cards).
+    const eliteTypes = randShuffle(Object.keys(monstersByType)).slice(0, 3);
+    for (const type of eliteTypes) {
+      const monsterType = monsterTypes.find(mt => mt.name === type)!;
+      const attack = randInt(monsterType.minAttack, monsterType.maxAttack);
+      const hp = randInt(monsterType.minHp, monsterType.maxHp);
+      const fury = randInt(monsterType.minFury, monsterType.maxFury);
+      const eliteCard: GameCardData = {
+        id: `monster-${id++}`,
+        type: 'monster',
+        name: pickPrefix(monsterType.name),
+        monsterType: monsterType.name,
+        value: attack,
+        attack: attack,
+        hp: hp,
+        maxHp: hp,
+        baseAttack: attack,
+        baseHp: hp,
+        fury: fury,
+        hpLayers: fury,
+        currentLayer: fury,
+        image: monsterType.image,
+        waterfallEffect: monsterType.waterfallEffect,
+        upgradeLevel: 0,
+        maxUpgradeLevel: getUpgradeTierCount(monsterType.name),
+        ...(monsterType.name === 'Skeleton' ? { hasRevive: true } : {}),
+        ...(monsterType.name === 'Dragon' ? { bleedEffect: 'attack+2' } : {}),
+        ...(monsterType.name === 'Ogre' ? { enterEffect: 'auto-engage' } : {}),
+        ...(monsterType.name === 'Wraith' ? { lastWords: 'wraith-haunt-2' } : {}),
+        ...(monsterType.name === 'Goblin' ? { onAttackEffect: 'steal-gold-5' } : {}),
+        ...(monsterType.name === 'Swarm' ? { swarmSpawn: true, description: '虫群：场上有虫群怪物时，每移除一张地城牌，在该位置生成一只小虫子。' } : {}),
+        ...(monsterType.name === 'Golem' ? { antiMagicReflect: 2, description: '反魔：玩家每使用一张法术牌，对玩家造成 2 点伤害。' } : {}),
+      };
+      deck.push(eliteCard);
+      (monstersByType[type] ??= []).push(eliteCard);
     }
 
     const eliteImageMap: Record<string, string> = {
@@ -547,7 +538,7 @@ export function createDeck(
     };
 
     for (const [type, monsters] of Object.entries(monstersByType)) {
-      if (isQuick && !eliteTypes.includes(type)) continue;
+      if (!eliteTypes.includes(type)) continue;
       const spec = specialMap[type];
       if (!spec || !monsters.length) continue;
       const chosen = randPick(monsters);
@@ -592,7 +583,7 @@ export function createDeck(
     const goblinsForTrick = deck.filter(
       (c): c is GameCardData => c.type === 'monster' && c.monsterType === 'Goblin',
     );
-    if (goblinsForTrick.length > 0 && (!isQuick || randBool(0.5))) {
+    if (goblinsForTrick.length > 0 && randBool(0.5)) {
       const trickCarrier = randPick(goblinsForTrick);
       trickCarrier.goblinTrickCarrier = true;
     }
@@ -2603,9 +2594,14 @@ export function createDeck(
     ],
   });
 
-  const deckLimits: Partial<Record<GameCardData['type'], number>> = isQuick
-    ? { magic: 4, amulet: 3, potion: 4, shield: 3, weapon: 3, event: 10 }
-    : { magic: 7, amulet: 5, potion: 6, shield: 5, weapon: 6 };
+  const deckLimits: Partial<Record<GameCardData['type'], number>> = {
+    magic: 4,
+    amulet: 3,
+    potion: 4,
+    shield: 3,
+    weapon: 3,
+    event: 10,
+  };
 
   for (const [type, limit] of Object.entries(deckLimits) as [GameCardData['type'], number][]) {
     const indices = deck.reduce<number[]>((acc, c, i) => { if (c.type === type) acc.push(i); return acc; }, []);

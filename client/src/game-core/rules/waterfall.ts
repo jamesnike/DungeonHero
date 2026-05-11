@@ -92,6 +92,27 @@ export interface WaterfallDropPlan {
   newPreviewStacks: Record<number, GameCardData[]>;
   shouldDeclareVictory: boolean;
   stuckFinalMonsters: GameCardData[];
+  /**
+   * Multiplayer-only: preview cards squeezed out beyond the primary
+   * `discardCard` that need to also run their `waterfallEffect` locally
+   * AND ship to the peer's deck top via `pendingTransferOut`.
+   *
+   * Always `[]` (or `undefined`) in single-player. In MP mode the trigger
+   * threshold drops to `<= 2` active-row cards (vs. `<= 1` solo), which
+   * leaves the preview row with multiple leftover cards after `dropAssignments`
+   * — historically only the first leftover (the rightmost non-final-monster)
+   * became `discardCard` and the rest were silently dropped. In MP we collect
+   * those silently-dropped cards here so the network layer can transfer them.
+   *
+   * Each entry pairs with `extraDiscardPreviewIndices[i]`; the GameBoard
+   * `handleWaterfallDiscardComplete` loop dispatches one
+   * `APPLY_WATERFALL_DISCARD_EFFECTS` per entry, in order, after the primary
+   * dispatch. Each invocation refreshes `nextRemainingDeck` from the live
+   * `pendingWaterfallPlan` so chained mutations (e.g. `returnToDeck` inserting
+   * back) compose correctly.
+   */
+  extraDiscardCards?: GameCardData[];
+  extraDiscardPreviewIndices?: number[];
   rng: RngState;
 }
 
@@ -211,6 +232,34 @@ export function computeWaterfallDropPlan(
     }
   }
 
+  // Multiplayer-only: any preview card still in `unusedPreview` after
+  // - drop assignment, - rightmost-non-final discardCard pick,
+  // - force-drop of final monsters, - stuck-final-monster removal,
+  // is a card that would have been silently dropped in single-player but
+  // must be shipped to the peer in MP. The loop in GameBoard's
+  // `handleWaterfallDiscardComplete` dispatches one APPLY_WATERFALL_DISCARD_EFFECTS
+  // per entry so each card's waterfallEffect (damage, gold loss, etc.) fires
+  // locally first and the card itself gets staged to `pendingTransferOut`.
+  // (See user-confirmed semantic: "本地先触发效果，然后 2 张全部传给对手")
+  //
+  // Sorted ascending by previewIndex so the transfer order is deterministic
+  // (left-to-right) — matters for reproducibility / replay.
+  const extraDiscardCards: GameCardData[] = [];
+  const extraDiscardPreviewIndices: number[] = [];
+  if (state.multiplayerSession !== null && unusedPreview.size > 0) {
+    const remaining = Array.from(unusedPreview).sort((a, b) => a - b);
+    for (const idx of remaining) {
+      const c = previewCards[idx];
+      if (!c) continue;
+      // Final monsters were already either force-dropped or marked stuck —
+      // they should never reach here. Belt-and-suspenders skip in case the
+      // logic above changes.
+      if (c.isFinalMonster) continue;
+      extraDiscardCards.push(c);
+      extraDiscardPreviewIndices.push(idx);
+    }
+  }
+
   // Build next preview from deck (stuck finals go to deck top first)
   const effectiveDeck = [...stuckFinalMonsters, ...remainingDeck];
   const baseDealCount = Math.min(DUNGEON_COLUMN_COUNT, effectiveDeck.length);
@@ -223,19 +272,14 @@ export function computeWaterfallDropPlan(
   void waterfallDealBonus;
 
   // Runtime guarantee: every freshly dealt preview row must satisfy the
-  // per-mode monster invariant. Init-time chunk balancing handles this for the
-  // static deck, but card-effect deck reordering / stacking-deletion can
-  // disturb that invariant — this is the safety net.
-  //   • Normal mode: 1–2 monsters per row.
-  //   • Quick  mode: 0–1 monsters per row (each 4-card row holds at most 1
-  //                  monster; rows with 0 monsters are allowed because the
-  //                  init layout intentionally leaves a leftover monster in
-  //                  the back 18 cards).
+  // monster invariant of 0–1 monsters per 4-card row. Init-time chunk
+  // balancing handles this for the static deck, but card-effect deck
+  // reordering / stacking-deletion can disturb that invariant — this is the
+  // safety net. Rows with 0 monsters are allowed because the init layout
+  // intentionally leaves a leftover monster in the back 18 cards.
   {
-    // Both modes use quick rules now (0–1 monsters per 4-card row).
-    const isQuickMode = true;
-    const MIN_MONSTERS_PER_ROW = isQuickMode ? 0 : 1;
-    const MAX_MONSTERS_PER_ROW = isQuickMode ? 1 : 2;
+    const MIN_MONSTERS_PER_ROW = 0;
+    const MAX_MONSTERS_PER_ROW = 1;
     const previewMonsterIndices: number[] = [];
     const previewNonMonsterIndices: number[] = [];
     for (let i = 0; i < nextPreviewCards.length; i++) {
@@ -294,6 +338,8 @@ export function computeWaterfallDropPlan(
     newPreviewStacks,
     shouldDeclareVictory,
     stuckFinalMonsters,
+    extraDiscardCards,
+    extraDiscardPreviewIndices,
     rng,
   };
 }
@@ -1486,6 +1532,12 @@ function reduceApplyWaterfallDeal(state: GameState): ReduceResult {
       // Bump the monotonic shared-consumed counter; resume / replay logic
       // (phase 6) reconciles by comparing local vs server-side seq.
       patch.sharedDeckConsumed = (state.sharedDeckConsumed ?? 0) + sharedConsumed;
+      // Accumulate delta into the staged batch's tracker. The hook reads
+      // this when (re-)POSTing to the server. Persisted across reload so a
+      // tab refresh mid-flight can resend with the correct sharedConsumed.
+      // Cleared by MULTIPLAYER_CLEAR_PENDING_TRANSFER on POST ack.
+      patch.pendingTransferOutSharedConsumed =
+        (state.pendingTransferOutSharedConsumed ?? 0) + sharedConsumed;
       sideEffects.push({
         event: 'multiplayer:transferOut',
         payload: {

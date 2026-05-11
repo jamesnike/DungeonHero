@@ -33,7 +33,7 @@ User 报"我从坟场发现的怪物，不是 1 血层，而是满血层"。
 
 ```typescript
 // ❌ BAD: 完全无视 currentLayer
-const reset = resetMonsterForGraveyard(card, isQuickMode);
+const reset = resetMonsterForGraveyard(card);
 const rawBase = reset.fury ?? reset.hpLayers ?? 1;
 const base = clampMaxDurability(rawBase);
 return { ...reset, durability: base, maxDurability: base };
@@ -44,7 +44,7 @@ return { ...reset, durability: base, maxDurability: base };
 
 ```typescript
 // ✅ GOOD: 镜像 persuade 的算法
-const reset = resetMonsterForGraveyard(card, isQuickMode);
+const reset = resetMonsterForGraveyard(card);
 const rawMax = reset.fury ?? reset.hpLayers ?? 1;
 const cappedMax = clampMaxDurability(rawMax);
 const rawDur = reset.currentLayer ?? rawMax;

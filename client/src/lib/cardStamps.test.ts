@@ -103,7 +103,7 @@ describe('postStamp (client-side validation)', () => {
 
   it('fires for a valid preset stamp', () => {
     postStamp({
-      gameMode: 'normal',
+      gameMode: 'single',
       targetCardName: 'Dragon',
       rowSignature: 'A|B|C|D',
       sourceRow: 'active',
@@ -117,13 +117,27 @@ describe('postStamp (client-side validation)', () => {
     expect(body.stampId).toBe('recommend');
     expect(body.targetCardName).toBe('Dragon');
     expect(body.rowSignature).toBe('A|B|C|D');
-    expect(body.gameMode).toBe('normal');
+    // Internal modes 'single' / 'multiplayer' both map to legacy wire 'quick'
+    // (server DB CHECK constraint still uses the legacy enum).
+    expect(body.gameMode).toBe('quick');
     expect(body.messageText).toBeUndefined();
+  });
+
+  it('multiplayer mode also maps to wire "quick"', () => {
+    postStamp({
+      gameMode: 'multiplayer',
+      targetCardName: 'Dragon',
+      rowSignature: 'A|B|C|D',
+      sourceRow: 'active',
+      stampId: 'recommend',
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.gameMode).toBe('quick');
   });
 
   it('fires for a valid freeform stamp and trims whitespace before send', () => {
     postStamp({
-      gameMode: 'quick',
+      gameMode: 'single',
       targetCardName: 'Dragon',
       rowSignature: 'A|B|C|D',
       sourceRow: 'preview',
@@ -138,7 +152,7 @@ describe('postStamp (client-side validation)', () => {
 
   it('drops empty / whitespace-only freeform without firing fetch', () => {
     postStamp({
-      gameMode: 'normal',
+      gameMode: 'single',
       targetCardName: 'Dragon',
       rowSignature: 'A|B|C|D',
       sourceRow: 'active',
@@ -151,7 +165,7 @@ describe('postStamp (client-side validation)', () => {
   it('drops over-length freeform without firing fetch (length > MAX_FREEFORM_LEN after trim)', () => {
     const oversize = 'x'.repeat(MAX_FREEFORM_LEN + 1);
     postStamp({
-      gameMode: 'normal',
+      gameMode: 'single',
       targetCardName: 'Dragon',
       rowSignature: 'A|B|C|D',
       sourceRow: 'active',
@@ -163,7 +177,7 @@ describe('postStamp (client-side validation)', () => {
 
   it('drops freeform when messageText is undefined', () => {
     postStamp({
-      gameMode: 'normal',
+      gameMode: 'single',
       targetCardName: 'Dragon',
       rowSignature: 'A|B|C|D',
       sourceRow: 'active',
@@ -176,7 +190,7 @@ describe('postStamp (client-side validation)', () => {
     fetchMock.mockRejectedValueOnce(new Error('boom'));
     expect(() =>
       postStamp({
-        gameMode: 'normal',
+        gameMode: 'single',
         targetCardName: 'Dragon',
         rowSignature: 'A|B|C|D',
         sourceRow: 'active',

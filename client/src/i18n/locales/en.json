@@ -799,6 +799,21 @@
       "title": "Boss fight is solo for now",
       "description": "This Boss fight will resolve as a solo encounter. You and your partner each finish your own Boss — card transfers keep flowing as usual.",
       "ok": "Got it"
+    },
+    "multiplayerConnection": {
+      "phaseConnecting": "Connecting…",
+      "phaseConnected": "In sync",
+      "phaseSyncing": "Syncing…",
+      "phaseSyncFailed": "Sync failed",
+      "phaseDisconnected": "Disconnected",
+      "retryAttempt": "(retry {{attempt}}/{{total}})",
+      "errorDetail": "Error: {{detail}}",
+      "freezeTitle": "Disconnected",
+      "freezeTitleSyncFailed": "Sync failed",
+      "freezeDescDisconnected": "Can't reach the server or your room. Waiting to reconnect — actions are paused. You can also start a new single-player game.",
+      "freezeDescSyncFailed": "We tried sending your last waterfall cards several times but the server didn't respond. Try again or start a new single-player game.",
+      "retryNow": "Retry now",
+      "newSingleGame": "Start new single-player game"
     }
   },
   "cardStamps": {

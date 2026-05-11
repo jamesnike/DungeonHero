@@ -121,9 +121,15 @@ function reduceSharedShrink(
 function reduceClearPendingTransfer(state: GameState): ReduceResult {
   // Always safe — even if pendingTransferOut is already null, this just
   // re-asserts the invariant.
-  if (state.pendingTransferOut === null) return noChange(state);
+  if (
+    state.pendingTransferOut === null &&
+    state.pendingTransferOutSharedConsumed === null
+  ) {
+    return noChange(state);
+  }
   return applyPatch(state, {
     pendingTransferOut: null,
+    pendingTransferOutSharedConsumed: null,
   });
 }
 
@@ -139,6 +145,7 @@ function reduceSetMultiplayerSession(
     return applyPatch(state, {
       multiplayerSession: null,
       pendingTransferOut: null,
+      pendingTransferOutSharedConsumed: null,
       sharedDeckConsumed: 0,
       bossEncounterAlertShown: false,
     });

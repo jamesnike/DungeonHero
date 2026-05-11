@@ -30,7 +30,7 @@ import { resetCardForGraveyard } from '@/game-core/cards';
 
 patch.discardedCards = [
   ...state.discardedCards,
-  resetCardForGraveyard(monster, state.gameMode === 'quick'),
+  resetCardForGraveyard(monster),
 ];
 ```
 
@@ -45,7 +45,7 @@ patch.discardedCards = [
    尤其是直接 mutate `state.discardedCards` 或者 push 进局部 `graveyard` 数组的，最容易藏 layer-leak。
 
 2. **怪物进坟场之前，强制过 `resetCardForGraveyard`**：
-   - ✅ `resetCardForGraveyard(monster, state.gameMode === 'quick')`
+   - ✅ `resetCardForGraveyard(monster)`
    - ❌ `{ ...monster }`（保留所有战斗中残余字段）
    - ❌ `sanitizeCardMetadata(monster)`（只清 UI 字段，不动血层）
 
@@ -55,7 +55,7 @@ patch.discardedCards = [
 4. **如果你想覆盖"1 血层"这个默认值**（极罕见，比如某张设计明确写"复生时满血层"的卡），
    **先跟用户确认**，并且在 reset 之后再覆盖：
    ```ts
-   const reset = resetCardForGraveyard(monster, isQuick);
+   const reset = resetCardForGraveyard(monster);
    const customLayer = { ...reset, currentLayer: reset.fury ?? 1 };
    ```
 
@@ -79,7 +79,7 @@ patch.discardedCards = [
 
 ## What to do
 
-- ✅ 任何"怪物进坟场"新代码都走 `resetCardForGraveyard(card, state.gameMode === 'quick')`。
+- ✅ 任何"怪物进坟场"新代码都走 `resetCardForGraveyard(card)`。
 - ✅ 写测试时显式断言 `inGrave.currentLayer === 1`，并断言 `fury` / `hpLayers` 上限保留。
   参考 `client/src/game-core/__tests__/monster-graveyard-layer-reset.test.ts`。
 - ✅ 修改 `resetMonsterForGraveyard` 的人，在 `applyMonsterRage` 之后保留 `currentLayer: 1` 覆盖。

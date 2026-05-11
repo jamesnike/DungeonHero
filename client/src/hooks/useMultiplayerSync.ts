@@ -1,51 +1,65 @@
 /**
- * useMultiplayerSync — phase 4 transport: Supabase Realtime (with a
- * BroadcastChannel fallback for the dev-only "local-test" room).
+ * useMultiplayerSync — multiplayer transport + connection state machine.
  *
- * Design (per `.cursor/plans/2-player_multiplayer_mode_*.plan.md`):
+ * Two transport paths:
  *
- *   1. Subscribe to the engine's `multiplayer:transferOut` side effect.
- *      When emitted:
- *        - For local-test rooms (peerId starts with "local-"): broadcast
- *          the payload over a same-browser BroadcastChannel keyed by
- *          roomId. Phase 3 dev path; no server, no auth.
- *        - For Supabase rooms: POST `/api/mp/transfer` with the cards
- *          and shared-consumed count. The server allocates the seq and
- *          inserts a `transfers` row, which Realtime delivers to the
- *          peer's subscribed channel.
+ *   1. **Local-test** (peerId starts with "local-" or roomId === "local-test"):
+ *      BroadcastChannel keyed by roomId. Same-browser two-tab dev mode.
+ *      No server, no auth, no retry, no connection state — always
+ *      reports `connected`.
  *
- *   2. Listen for incoming events:
- *        - Local-test: BroadcastChannel `message` listener.
- *        - Supabase: `postgres_changes` INSERT subscription on the
- *          `transfers` table, filtered to `to_player=eq.<myRole>`.
- *      In both cases, dispatch:
- *        - MULTIPLAYER_RECEIVE_TRANSFER (peer pushed cards onto our deck)
- *        - MULTIPLAYER_SHARED_SHRINK (mirror peer's shared-pool consume)
- *      Then, for Supabase only, POST `/api/mp/ack-transfer` so the row's
- *      `applied=true` for resume bookkeeping.
+ *   2. **Supabase Realtime** (production): WebSocket subscription on
+ *      `transfers` filtered to `to_player=<myRole>`. Outbound goes via
+ *      POST `/api/mp/transfer`. Resume backfill via POST `/api/mp/resume`.
  *
- *   3. Sequence number conventions:
- *        - The wire-protocol seq is server-allocated and monotonic per
- *          (room, ALL participants combined). Each transfer row gets a
- *          unique seq.
- *        - The reducer's `lastAppliedSeq` guard expects strictly-monotonic
- *          per-action seqs. Each wire-seq emits TWO actions
- *          (RECEIVE + SHRINK), so we use baseSeq=wireSeq*2 and
- *          baseSeq+1 to keep them ordered.
- *        - The server seq starts at 1 and only increments for INSERTs,
- *          so wire-seq * 2 is guaranteed to be greater than the previous
- *          wire-seq * 2 + 1 → reducer guard holds.
+ * Outbound state machine (Supabase only):
  *
- * Resume / dedup (phase 6 will extend this):
- *   - On (re)mount we bump our local outbound seq counter from
- *     session.lastAppliedSeq, so a tab restart doesn't replay old
- *     transfers as new.
- *   - The reducer drops any incoming action whose seq <= lastAppliedSeq.
+ *   Trigger sources:
+ *     • Fresh waterfall → reducer sets `pendingTransferOut` + emits
+ *       `multiplayer:transferOut` side effect.
+ *     • Hydrate after refresh → restored `pendingTransferOut` from
+ *       persistence (no side effect fires).
+ *     • Manual retry from UI ("重试同步" button).
+ *
+ *   Algorithm: useEffect watches (pendingTransferOut, pendingDelta).
+ *   Whenever the staged batch changes (fresh waterfall) OR is non-empty
+ *   on mount (hydrate replay), kick off `doPostWithRetry`.
+ *
+ *   Retry: 3 attempts with backoff [500ms, 2s, 8s]. Each attempt updates
+ *   the connection phase to `syncing`. After all attempts fail → phase
+ *   becomes `sync_failed`; the cards stay in `pendingTransferOut` so a
+ *   manual retry or page refresh can try again.
+ *
+ *   Success: dispatch `MULTIPLAYER_CLEAR_PENDING_TRANSFER` (clears both
+ *   the cards and the companion delta), phase returns to `connected`.
+ *
+ * Inbound:
+ *   On (re)mount: backfill via `resumeRoom` BEFORE subscribing live.
+ *   Realtime delivers `transfers` row INSERTs filtered to our role; we
+ *   dispatch RECEIVE + SHRINK actions and best-effort ack.
+ *
+ * Connection phase:
+ *   • `idle` — not in MP mode (single-player or not yet configured)
+ *   • `connecting` — initial subscribe + resume backfill in progress
+ *   • `connected` — Realtime subscribed AND no in-flight POST
+ *   • `syncing` — POST in flight (or waiting for next retry)
+ *   • `sync_failed` — exhausted retries; user must retry or refresh
+ *   • `disconnected` — Realtime channel CHANNEL_ERROR/TIMED_OUT
+ *                     OR navigator.onLine === false
+ *
+ *   GameBoard freezes the panel when phase ∈ {disconnected, sync_failed}.
+ *
+ * Sequence number conventions:
+ *   • Wire-protocol seq: server-allocated, monotonic per (room, all
+ *     participants combined). One row per transfer.
+ *   • Reducer's `lastAppliedSeq` expects strictly-monotonic per-action
+ *     seqs. Each wire-seq emits TWO actions (RECEIVE + SHRINK), so we
+ *     use baseSeq=wireSeq*2 and baseSeq+1 to keep them ordered.
  */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { useGameEngine, useGameEvent, useGameState } from './useGameEngine';
+import { useGameEngine, useGameEvent, useShallowGameState } from './useGameEngine';
 import type { GameAction } from '@/game-core/actions';
 import type { GameCardData } from '@/components/GameCard';
 import {
@@ -57,7 +71,37 @@ import {
 import { ensureAnonymousSession, getSupabaseClient } from '@/lib/supabaseClient';
 
 // ---------------------------------------------------------------------------
-// Wire format (BroadcastChannel local mode)
+// Public API: connection state machine
+// ---------------------------------------------------------------------------
+
+export type MultiplayerConnectionPhase =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'syncing'
+  | 'sync_failed'
+  | 'disconnected';
+
+export interface MultiplayerConnectionState {
+  /** Current connection phase. */
+  phase: MultiplayerConnectionPhase;
+  /** How many POST attempts have been made for the current staged batch. */
+  retryAttempt: number;
+  /** Human-readable last error (used in toasts / overlay subtitle). */
+  errorMessage: string | null;
+  /** Force a retry attempt (resets attempt counter). UI button binds to this. */
+  retryNow: () => void;
+}
+
+const IDLE_STATE: MultiplayerConnectionState = {
+  phase: 'idle',
+  retryAttempt: 0,
+  errorMessage: null,
+  retryNow: () => {},
+};
+
+// ---------------------------------------------------------------------------
+// Wire formats
 // ---------------------------------------------------------------------------
 
 interface TransferOutMessage {
@@ -69,10 +113,6 @@ interface TransferOutMessage {
 }
 
 type IncomingMessage = TransferOutMessage;
-
-// ---------------------------------------------------------------------------
-// Wire format (Supabase `transfers` row INSERT)
-// ---------------------------------------------------------------------------
 
 interface TransferRow {
   id: string;
@@ -101,6 +141,9 @@ function broadcastChannelNameFor(roomId: string): string {
   return `dh-mp-${roomId}`;
 }
 
+/** ms backoff for retry attempt N (0-indexed). 500ms, 2s, 8s, then giveup. */
+const RETRY_BACKOFF_MS = [500, 2000, 8000];
+
 function applyTransferLocal(
   engine: ReturnType<typeof useGameEngine>,
   cards: GameCardData[],
@@ -123,13 +166,38 @@ function applyTransferLocal(
   for (const a of actions) engine.dispatch(a);
 }
 
+/**
+ * Stable identity for a staged batch — used to dedup useEffect firings.
+ * We need this because useEffect runs on every render where deps change,
+ * and the same array ref might be replayed (e.g. hydrate restores the
+ * same array, then resume backfill arrives, then a fresh waterfall ships
+ * new cards — we don't want to double-POST the same batch).
+ */
+function batchKey(cards: GameCardData[] | null, delta: number | null): string | null {
+  if (!cards || cards.length === 0) return null;
+  return `${cards.length}|${delta ?? 0}|${cards.map(c => c.id).join(',')}`;
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useMultiplayerSync(): void {
+export function useMultiplayerSync(): MultiplayerConnectionState {
   const engine = useGameEngine();
-  const session = useGameState(s => s.multiplayerSession);
+  const session = useShallowGameState(s => ({
+    role: s.multiplayerSession?.role ?? null,
+    roomId: s.multiplayerSession?.roomId ?? null,
+    peerId: s.multiplayerSession?.peerId ?? null,
+    lastAppliedSeq: s.multiplayerSession?.lastAppliedSeq ?? 0,
+  }));
+
+  // Watch the staged batch as a shallow-stable selector so the outbound
+  // useEffect only re-fires when the batch actually changes (and not on
+  // every unrelated state change).
+  const stagedBatch = useShallowGameState(s => ({
+    cards: s.pendingTransferOut,
+    delta: s.pendingTransferOutSharedConsumed,
+  }));
 
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -137,85 +205,210 @@ export function useMultiplayerSync(): void {
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
 
-  // Per-(room, sender) outbound seq counter for local-test mode. For
-  // Supabase mode the server allocates seq, so we don't use this.
+  // Per-(room, sender) outbound seq counter for local-test mode only.
   const localOutboundSeqRef = useRef<number>(0);
   const localLastBroadcastSeqRef = useRef<number>(-1);
 
-  // Track which incoming Supabase transfer rows we've already applied
-  // (deduped by row id). Realtime guarantees at-least-once delivery in
-  // theory; in practice we also catch dupes via the reducer's
-  // lastAppliedSeq guard, but a per-row set saves redundant ack POSTs.
+  // Track which incoming Supabase transfer rows we've already applied.
   const appliedRowIdsRef = useRef<Set<string>>(new Set());
 
-  const roomId = session?.roomId ?? null;
-  const role = session?.role ?? null;
-  const isLocal = isLocalTestSession(session);
+  // ---- Connection state machine ----
+  // Internal sub-states; we derive the public `phase` from these.
+  const [realtimeStatus, setRealtimeStatus] = useState<
+    'idle' | 'connecting' | 'subscribed' | 'errored'
+  >('idle');
+  const [browserOnline, setBrowserOnline] = useState<boolean>(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine,
+  );
+  const [outboundStatus, setOutboundStatus] = useState<
+    'idle' | 'syncing' | 'failed'
+  >('idle');
+  const [retryAttempt, setRetryAttempt] = useState<number>(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Bumping this triggers the outbound effect to re-attempt even if the
+  // staged batch hasn't changed (used by retryNow).
+  const [retryEpoch, setRetryEpoch] = useState<number>(0);
 
-  // ---- Outbound: engine's transferOut → wire ----
+  // batch-key of the most recent batch we successfully POSTed (or are
+  // currently POSTing). Stays in ref so the outbound useEffect can
+  // dedup without contributing to React state churn.
+  const inFlightBatchKeyRef = useRef<string | null>(null);
+
+  // Cancel handle for any pending retry timer (so reset + cleanup work).
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelPendingRetry = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  const roomId = session.roomId;
+  const role = session.role;
+  const isLocal = isLocalTestSession(session.roomId !== null && session.peerId !== null
+    ? { roomId: session.roomId, peerId: session.peerId }
+    : null);
+
+  // ---- Browser online / offline listener ----
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onOnline = () => setBrowserOnline(true);
+    const onOffline = () => setBrowserOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  // ---- Outbound: Local-test BroadcastChannel ----
+  // Keep useGameEvent for local-test mode only — it's fire-and-forget,
+  // no retry, no state machine. Supabase mode is driven by the
+  // useEffect below (which handles both fresh + hydrate-replay paths).
   useGameEvent('multiplayer:transferOut', payload => {
     const sess = sessionRef.current;
-    if (sess === null) return;
+    if (sess.roomId === null || sess.role === null || sess.peerId === null) return;
+    if (!isLocalTestSession({ roomId: sess.roomId, peerId: sess.peerId })) return;
 
-    if (isLocalTestSession(sess)) {
-      // BroadcastChannel path.
-      const channel = broadcastChannelRef.current;
-      if (channel === null) return;
+    const channel = broadcastChannelRef.current;
+    if (channel === null) return;
 
-      localOutboundSeqRef.current = Math.max(
-        localOutboundSeqRef.current,
-        payload.seq,
-      );
-      if (localLastBroadcastSeqRef.current === localOutboundSeqRef.current) return;
-      localLastBroadcastSeqRef.current = localOutboundSeqRef.current;
+    localOutboundSeqRef.current = Math.max(
+      localOutboundSeqRef.current,
+      payload.seq,
+    );
+    if (localLastBroadcastSeqRef.current === localOutboundSeqRef.current) return;
+    localLastBroadcastSeqRef.current = localOutboundSeqRef.current;
 
-      const msg: TransferOutMessage = {
-        kind: 'transferOut',
-        fromRole: sess.role,
-        seq: localOutboundSeqRef.current,
-        cards: payload.cards,
-        sharedConsumed: payload.sharedConsumed,
-      };
+    const msg: TransferOutMessage = {
+      kind: 'transferOut',
+      fromRole: sess.role,
+      seq: localOutboundSeqRef.current,
+      cards: payload.cards,
+      sharedConsumed: payload.sharedConsumed,
+    };
 
-      try {
-        channel.postMessage(msg);
-      } catch (err) {
-        console.error('[useMultiplayerSync] broadcast failed', err);
-        return;
-      }
-
-      // Local mode is fire-and-forget; clear pending immediately.
-      engine.dispatch({ type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' });
+    try {
+      channel.postMessage(msg);
+    } catch (err) {
+      console.error('[useMultiplayerSync] broadcast failed', err);
       return;
     }
 
-    // Supabase path: POST to server. Server assigns seq.
-    void postTransfer({
-      roomId: sess.roomId,
-      fromRole: sess.role,
-      cards: payload.cards,
-      sharedConsumed: payload.sharedConsumed,
-    })
-      .then(() => {
-        // Server accepted and persisted. Clear the pending stage so the
-        // next waterfall doesn't re-ship the same cards.
-        engine.dispatch({ type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' });
-      })
-      .catch((err: unknown) => {
-        // Non-2xx or network error. We DO NOT clear pending — phase 6
-        // will add a resend/retry path. For now, log loudly so the dev
-        // sees it. The cards stay staged in pendingTransferOut.
-        if (err instanceof MultiplayerApiError) {
-          console.error(
-            `[useMultiplayerSync] /api/mp/transfer failed: ${err.status} ${err.code}`,
-          );
-        } else {
-          console.error('[useMultiplayerSync] /api/mp/transfer failed', err);
-        }
-      });
+    engine.dispatch({ type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' });
   });
 
-  // ---- Inbound: wire → engine dispatch ----
+  // ---- Outbound: Supabase POST with retry ----
+  //
+  // Fires for both fresh waterfalls (state changed reactively) and
+  // hydrate-replay (state was restored from persistence with non-null
+  // pendingTransferOut). Dedup by batch-key so we don't double-POST
+  // the same cards if React re-renders for unrelated reasons.
+  useEffect(() => {
+    if (roomId === null || role === null) return;
+    if (isLocal) return; // local-test mode handled by useGameEvent above
+    if (!stagedBatch.cards || stagedBatch.cards.length === 0) return;
+
+    const key = batchKey(stagedBatch.cards, stagedBatch.delta);
+    if (key === null) return;
+
+    // If the same batch is already in-flight (or just acked), don't
+    // start another POST. Once `MULTIPLAYER_CLEAR_PENDING_TRANSFER` runs,
+    // stagedBatch.cards becomes null and the useEffect won't re-enter.
+    if (inFlightBatchKeyRef.current === key && retryEpoch === 0) return;
+
+    let cancelled = false;
+    inFlightBatchKeyRef.current = key;
+    cancelPendingRetry();
+
+    const cardsSnapshot = stagedBatch.cards;
+    const deltaSnapshot = stagedBatch.delta ?? 0;
+
+    const attemptPost = async (attempt: number): Promise<void> => {
+      if (cancelled) return;
+
+      setOutboundStatus('syncing');
+      setRetryAttempt(attempt);
+
+      try {
+        await postTransfer({
+          roomId,
+          fromRole: role,
+          cards: cardsSnapshot,
+          sharedConsumed: deltaSnapshot,
+        });
+        if (cancelled) return;
+
+        // Success: clear staged batch, reset state machine.
+        engine.dispatch({ type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' });
+        setOutboundStatus('idle');
+        setRetryAttempt(0);
+        setErrorMessage(null);
+        // inFlightBatchKeyRef stays set — next useEffect run sees
+        // stagedBatch.cards === null and bails before the dedup check.
+      } catch (err) {
+        if (cancelled) return;
+
+        const message =
+          err instanceof MultiplayerApiError
+            ? `${err.status} ${err.code}`
+            : err instanceof Error
+              ? err.message
+              : 'unknown error';
+
+        if (attempt + 1 >= RETRY_BACKOFF_MS.length) {
+          // Exhausted retries: park in sync_failed; user must retryNow
+          // (or refresh, which also triggers replay via persistence).
+          console.error(
+            `[useMultiplayerSync] /api/mp/transfer failed after ${attempt + 1} attempts: ${message}`,
+          );
+          setOutboundStatus('failed');
+          setErrorMessage(message);
+          // KEEP inFlightBatchKeyRef so the next stagedBatch change
+          // (or a manual retryNow) is the only way to retry.
+        } else {
+          console.warn(
+            `[useMultiplayerSync] /api/mp/transfer attempt ${attempt + 1} failed (${message}); retrying in ${RETRY_BACKOFF_MS[attempt + 1]}ms`,
+          );
+          setErrorMessage(message);
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            void attemptPost(attempt + 1);
+          }, RETRY_BACKOFF_MS[attempt + 1]);
+        }
+      }
+    };
+
+    void attemptPost(0);
+
+    return () => {
+      cancelled = true;
+      cancelPendingRetry();
+    };
+  }, [
+    engine,
+    roomId,
+    role,
+    isLocal,
+    stagedBatch.cards,
+    stagedBatch.delta,
+    retryEpoch,
+    cancelPendingRetry,
+  ]);
+
+  // ---- Manual retry exposed to UI ----
+  const retryNow = useCallback(() => {
+    cancelPendingRetry();
+    inFlightBatchKeyRef.current = null;
+    setOutboundStatus('idle');
+    setRetryAttempt(0);
+    setErrorMessage(null);
+    setRetryEpoch(e => e + 1);
+  }, [cancelPendingRetry]);
+
+  // ---- Inbound: subscribe + resume backfill ----
   useEffect(() => {
     if (roomId === null || role === null) {
       // Tear down everything.
@@ -229,6 +422,7 @@ export function useMultiplayerSync(): void {
         realtimeChannelRef.current = null;
       }
       appliedRowIdsRef.current.clear();
+      setRealtimeStatus('idle');
       return;
     }
 
@@ -238,15 +432,18 @@ export function useMultiplayerSync(): void {
         console.warn(
           '[useMultiplayerSync] BroadcastChannel unavailable; local 2P sync disabled.',
         );
+        setRealtimeStatus('errored');
         return;
       }
       const channel = new BroadcastChannel(broadcastChannelNameFor(roomId));
       broadcastChannelRef.current = channel;
+      // Local mode: always treat as "subscribed" (no real network).
+      setRealtimeStatus('subscribed');
 
       const onMessage = (ev: MessageEvent<IncomingMessage>) => {
         const msg = ev.data;
         if (!msg || msg.kind !== 'transferOut') return;
-        if (msg.fromRole === role) return; // drop our own echo
+        if (msg.fromRole === role) return;
         applyTransferLocal(engine, msg.cards, msg.sharedConsumed, msg.seq);
       };
 
@@ -257,6 +454,7 @@ export function useMultiplayerSync(): void {
         if (broadcastChannelRef.current === channel) {
           broadcastChannelRef.current = null;
         }
+        setRealtimeStatus('idle');
       };
     }
 
@@ -266,30 +464,29 @@ export function useMultiplayerSync(): void {
       console.warn(
         '[useMultiplayerSync] Supabase env missing; multiplayer sync disabled.',
       );
+      setRealtimeStatus('errored');
       return;
     }
 
     let cancelled = false;
     let channel: RealtimeChannel | null = null;
+    setRealtimeStatus('connecting');
 
     void (async () => {
-      // Ensure we have a session JWT before subscribing — Realtime needs
-      // an authenticated client to evaluate RLS on `transfers`.
       const sess = await ensureAnonymousSession();
       if (cancelled) return;
       if (!sess) {
         console.error(
           '[useMultiplayerSync] anonymous auth failed; cannot subscribe to Realtime',
         );
+        setRealtimeStatus('errored');
         return;
       }
 
-      // Phase 6 resume: backfill any transfers that arrived while we were
-      // offline (tab closed, refresh, etc.) BEFORE we subscribe to live
-      // Realtime updates. Order matters — if we subscribe first, a stale
-      // backfill could later overwrite a fresh live INSERT.
+      // Resume backfill BEFORE subscribing live so a stale row doesn't
+      // overwrite a fresh INSERT.
       const sessionAtMount = sessionRef.current;
-      if (sessionAtMount) {
+      if (sessionAtMount.roomId !== null) {
         try {
           const res = await resumeRoom({
             roomId,
@@ -305,15 +502,9 @@ export function useMultiplayerSync(): void {
               typeof row.sharedConsumed === 'number' ? row.sharedConsumed : 0,
               row.seq,
             );
-            // Mark applied on the server so future resume calls skip it.
-            void ackTransfer({ transferId: row.id }).catch(() => {
-              /* best-effort; resume math will reconcile on next reload */
-            });
+            void ackTransfer({ transferId: row.id }).catch(() => {});
           }
         } catch (err) {
-          // Resume failure is non-fatal — Realtime live updates will still
-          // work for transfers from this point forward. Log loudly so the
-          // dev sees it.
           if (err instanceof MultiplayerApiError) {
             console.warn(
               `[useMultiplayerSync] resume failed: ${err.status} ${err.code}`,
@@ -321,12 +512,12 @@ export function useMultiplayerSync(): void {
           } else {
             console.warn('[useMultiplayerSync] resume failed', err);
           }
+          // Resume failure is non-fatal for live forward progress; we
+          // still subscribe below. The phase stays in 'connecting' until
+          // the subscribe callback fires.
         }
       }
 
-      // Channel name is purely client-side bookkeeping for supabase-js;
-      // the server doesn't care about it. We tag with roomId so DevTools
-      // shows clean separation when multiple sessions exist.
       channel = supa
         .channel(`mp:room:${roomId}:to:${role}`)
         .on(
@@ -340,8 +531,8 @@ export function useMultiplayerSync(): void {
           payload => {
             const row = payload.new as TransferRow | undefined;
             if (!row) return;
-            if (row.to_player !== role) return; // not for us
-            if (appliedRowIdsRef.current.has(row.id)) return; // dedup
+            if (row.to_player !== role) return;
+            if (appliedRowIdsRef.current.has(row.id)) return;
 
             appliedRowIdsRef.current.add(row.id);
             applyTransferLocal(
@@ -351,8 +542,6 @@ export function useMultiplayerSync(): void {
               row.seq,
             );
 
-            // Best-effort ack (RPC fire-and-forget; resume code will
-            // backfill missed transfers anyway).
             void ackTransfer({ transferId: row.id }).catch((err: unknown) => {
               if (err instanceof MultiplayerApiError) {
                 console.warn(
@@ -365,8 +554,15 @@ export function useMultiplayerSync(): void {
           },
         )
         .subscribe(status => {
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (cancelled) return;
+          if (status === 'SUBSCRIBED') {
+            setRealtimeStatus('subscribed');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             console.error(`[useMultiplayerSync] Realtime channel ${status}`);
+            setRealtimeStatus('errored');
+            // supabase-js auto-retries, but we surface the gap to the user.
+            // When the underlying socket reconnects, the subscribe callback
+            // fires again with 'SUBSCRIBED' and we flip back.
           }
         });
 
@@ -382,6 +578,42 @@ export function useMultiplayerSync(): void {
         realtimeChannelRef.current = null;
       }
       appliedRowIdsRef.current.clear();
+      setRealtimeStatus('idle');
     };
   }, [engine, roomId, role, isLocal]);
+
+  // ---- Cleanup retry timer on unmount ----
+  useEffect(() => {
+    return () => {
+      cancelPendingRetry();
+    };
+  }, [cancelPendingRetry]);
+
+  // ---- Derive public phase ----
+  // Priority order matters:
+  //   1. No session → idle (don't render UI)
+  //   2. Browser is offline → disconnected (overrides everything)
+  //   3. Realtime errored → disconnected
+  //   4. Outbound exhausted retries → sync_failed (manual retry needed)
+  //   5. Outbound in flight → syncing (transient, ~ms to a few seconds)
+  //   6. Realtime not yet subscribed → connecting
+  //   7. Otherwise → connected
+  const phase: MultiplayerConnectionPhase = useMemo(() => {
+    if (roomId === null || role === null) return 'idle';
+    if (!browserOnline) return 'disconnected';
+    if (realtimeStatus === 'errored') return 'disconnected';
+    if (outboundStatus === 'failed') return 'sync_failed';
+    if (outboundStatus === 'syncing') return 'syncing';
+    if (realtimeStatus !== 'subscribed') return 'connecting';
+    return 'connected';
+  }, [roomId, role, browserOnline, realtimeStatus, outboundStatus]);
+
+  if (roomId === null || role === null) return IDLE_STATE;
+
+  return {
+    phase,
+    retryAttempt,
+    errorMessage,
+    retryNow,
+  };
 }

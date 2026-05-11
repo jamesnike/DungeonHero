@@ -18,9 +18,9 @@
  *      per-player so they're explicitly NOT included here).
  *   2. Pruning event choices to 3 (matches single-player behavior).
  *   3. Shuffling with the seeded RNG.
- *   4. Quick-mode monster-balancing: 1 monster per non-overlapping 4-card
- *      chunk + leftover monsters in the back-18 zone. Mirrors the
- *      `reduceInitGame` quick-mode placement to keep gameplay parity.
+ *   4. Monster placement: 1 monster per non-overlapping 4-card chunk +
+ *      leftover monsters in the back-18 zone. Mirrors the `reduceInitGame`
+ *      placement to keep gameplay parity.
  *   5. Boss-marking the last monster (so both players see the same final
  *      boss when the dungeon empties).
  *
@@ -98,11 +98,11 @@ export function buildSharedDeck(seed?: number): {
     shuffled = s;
   }
 
-  // 4. Quick-mode monster placement. Verbatim port of the `isQuickMode`
-  //    branch in `reduceInitGame` (init.ts ~L105–167). We don't share the
-  //    code because the reducer's version is wrapped in a long function
-  //    that consumes a partial state; copying a focused 60-line block is
-  //    less risky than refactoring the reducer.
+  // 4. Monster placement. Verbatim port of the layout block in
+  //    `reduceInitGame` (init.ts). We don't share the code because the
+  //    reducer's version is wrapped in a long function that consumes a
+  //    partial state; copying a focused 60-line block is less risky than
+  //    refactoring the reducer.
   const len = shuffled.length;
   const eliteMonsters = shuffled.filter(c => c.monsterSpecial);
   const nonEliteMonsters = shuffled.filter(
@@ -165,7 +165,7 @@ export function buildSharedDeck(seed?: number): {
 
   let arranged = result as GameCardData[];
 
-  // 5. Push elites out of the first 16 cards (quick-mode rule).
+  // 5. Push elites out of the first 16 cards.
   for (let i = 0; i < Math.min(16, arranged.length); i++) {
     if (arranged[i].monsterSpecial) {
       let swapTarget = -1;

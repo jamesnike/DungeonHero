@@ -62,19 +62,6 @@ describe('INIT_GAME — opening hand contains 「专属感召」', () => {
     }
   });
 
-  it('also works in quick mode', () => {
-    const state = makeStateWithSeed(42);
-    const result = reduce(state, {
-      type: 'INIT_GAME',
-      mode: 'single',
-      totalWins: 0,
-      eternalRelics: [],
-    });
-    const matching = result.state.handCards.filter(
-      c => c.id === STARTER_CARD_IDS.discoverClassToHand,
-    );
-    expect(matching.length).toBe(1);
-  });
 });
 
 describe('PLAY_CARD on 「专属感召」 — emits card:discoverRequested with delivery=hand-first', () => {

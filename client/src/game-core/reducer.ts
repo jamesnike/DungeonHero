@@ -375,10 +375,21 @@ function postProcessActiveCards(
     mutated = true;
   }
 
-  // 5. Waterfall trigger check — compute plan and store in state when ≤1 non-ghost card remains.
-  //    The UI layer will animate the plan in phases and dispatch APPLY_WATERFALL_DROP / DEAL / COMPLETE.
+  // 5. Waterfall trigger check — compute plan and store in state when the
+  //    active row drops below the per-mode threshold.
+  //    • Single-player: ≤ 1 non-ghost card remains (unchanged historic
+  //      behavior — player squeezes 3 monsters before each waterfall).
+  //    • Multiplayer: ≤ 2 non-ghost cards remain. The shared 36-card deck
+  //      is split between two players, so each waterfall lands fewer cards
+  //      per side (2 instead of 3). The remaining preview row cards beyond
+  //      the primary discard get shipped to the peer's deck top — see
+  //      `extraDiscardCards` in `computeWaterfallDropPlan` and the
+  //      handleWaterfallDiscardComplete loop in GameBoard.tsx.
+  //    The UI layer animates the plan in phases and dispatches
+  //    APPLY_WATERFALL_DROP / DEAL / COMPLETE.
   if (!state.gameOver && !WATERFALL_EXEMPT_ACTIONS.has(action.type) && !state.pendingWaterfallPlan) {
-    if (countActiveRowSlotsExcludeGhost(state.activeCards) <= 1) {
+    const waterfallTriggerThreshold = state.multiplayerSession !== null ? 2 : 1;
+    if (countActiveRowSlotsExcludeGhost(state.activeCards) <= waterfallTriggerThreshold) {
       const plan = computeWaterfallDropPlan(state, false);
       if (plan) {
         state = { ...state, pendingWaterfallPlan: plan, rng: plan.rng };

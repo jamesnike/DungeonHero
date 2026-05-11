@@ -731,15 +731,13 @@ export interface GameState {
 
   // --- Game flow ---
   /**
-   * Game mode (post-multiplayer-refactor):
-   *   'single'        — solo run (formerly 'quick'; the only solo mode now)
+   * Active game mode.
+   *
+   *   'single'        — solo run
    *   'multiplayer'   — 2-player async run (shared deck, transferred cards)
    *
-   * Both modes use the same underlying deck rules (formerly "quick rules":
-   * 36-card deck / 1 monster per chunk / `INITIAL_TURN_COUNT = 1`). The
-   * legacy `'normal'` mode (full 84-card deck, 21 monsters, 7 elites) was
-   * removed in the multiplayer-mode rollout — search history for `'normal'`
-   * if you need to resurrect it.
+   * Both modes share the same deck rules: 36-card deck, 1 monster per
+   * 4-card chunk, `INITIAL_TURN_COUNT = 1`.
    */
   gameMode: 'single' | 'multiplayer';
   gameOver: boolean;
@@ -792,6 +790,26 @@ export interface GameState {
    * even if the user reloaded the tab between waterfall and ack.
    */
   pendingTransferOut: GameCardData[] | null;
+  /**
+   * Companion to `pendingTransferOut`: the **delta** (per-iteration shared
+   * pool consumption) accumulated for the cards currently staged. The
+   * `useMultiplayerSync` hook needs this when it POSTs `/api/mp/transfer`
+   * because the server stores the delta verbatim (the receiving peer
+   * applies a `MULTIPLAYER_SHARED_SHRINK` of exactly this count).
+   *
+   * Why a separate field instead of recomputing from `sharedDeckConsumed`:
+   * `sharedDeckConsumed` is the **cumulative** counter across the whole
+   * game; it has no notion of "the delta for the un-shipped batch". When
+   * the user reloads mid-flight (waterfall finished, POST in progress),
+   * we need to know exactly which delta to send on retry — recomputing
+   * that from scratch is impossible.
+   *
+   * Lifecycle: accumulates with `pendingTransferOut` across multiple
+   * waterfall iterations (rare — only happens if the network is slow and
+   * the player triggers a second waterfall before the first POST acks).
+   * Cleared to `null` when `MULTIPLAYER_CLEAR_PENDING_TRANSFER` fires.
+   */
+  pendingTransferOutSharedConsumed: number | null;
   /**
    * Counter incremented every time the local waterfall consumed a card from
    * the **shared** portion of the deck (i.e. a card that did NOT carry

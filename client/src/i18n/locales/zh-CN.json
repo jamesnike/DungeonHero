@@ -805,6 +805,21 @@
       "title": "Boss 战暂未支持双人",
       "description": "本场 Boss 战将以单人模式结算。你和搭档之后还是各自打完自己的 Boss——传牌不会停。",
       "ok": "知道了"
+    },
+    "multiplayerConnection": {
+      "phaseConnecting": "正在连接…",
+      "phaseConnected": "已同步",
+      "phaseSyncing": "同步中…",
+      "phaseSyncFailed": "同步失败",
+      "phaseDisconnected": "已断线",
+      "retryAttempt": "（重试 {{attempt}}/{{total}}）",
+      "errorDetail": "错误：{{detail}}",
+      "freezeTitle": "已断线",
+      "freezeTitleSyncFailed": "同步失败",
+      "freezeDescDisconnected": "无法连接到服务器或对手房间。等待重连即可继续；如果想结束本场，可以点击下方按钮开始新的单人游戏。",
+      "freezeDescSyncFailed": "已多次重试发送你刚刚瀑流推出的牌，但服务器没有应答。点击「立即重试」再试一次，或开始新的单人游戏。",
+      "retryNow": "立即重试",
+      "newSingleGame": "开始新的单人游戏"
     }
   },
   "cardStamps": {

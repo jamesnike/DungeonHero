@@ -101,6 +101,8 @@ import { UndoButtonContainer } from './game-board/containers/UndoButtonContainer
 import { GameModeSelectModal } from './game-board/components/GameModeSelectModal';
 import { MultiplayerLobby } from './game-board/components/MultiplayerLobby';
 import { MultiplayerBossAlert } from './game-board/components/MultiplayerBossAlert';
+import { MultiplayerConnectionBadge } from './game-board/components/MultiplayerConnectionBadge';
+import { MultiplayerOfflineOverlay } from './game-board/components/MultiplayerOfflineOverlay';
 import DeckPeekModal from '@/components/DeckPeekModal';
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
@@ -937,7 +939,9 @@ export default function GameBoard() {
   // it to peer tab; conversely receives peer broadcasts and dispatches
   // RECEIVE_TRANSFER + SHARED_SHRINK. Phase 4+ swaps the underlying
   // transport for Supabase Realtime — this hook's API stays stable.
-  useMultiplayerSync();
+  // Returns the connection state machine which drives the badge + freeze
+  // overlay (no-op / IDLE_STATE in single-player).
+  const multiplayerConnection = useMultiplayerSync();
   // The 8 flight arrays now live in <FlightOverlayContainer>; we drive them
   // imperatively via this ref so flight setState calls don't re-render
   // GameBoard. See FlightOverlayContainer.tsx for rationale.
@@ -4432,6 +4436,16 @@ export default function GameBoard() {
       // transfers using `multiplayerSession.lastAppliedSeq`.
       // ---------------------------------------------------------------------
       multiplayerSession: snapshot.multiplayerSession ?? null,
+      // Restoring pendingTransferOut + companion delta gives the
+      // useMultiplayerSync hook everything it needs to re-POST any cards
+      // that were staged but not ack'd by the server before the tab closed.
+      pendingTransferOut: Array.isArray(snapshot.pendingTransferOut)
+        ? snapshot.pendingTransferOut.map(c => patchPersistedMainDeckWeaponImage(c as GameCardData))
+        : null,
+      pendingTransferOutSharedConsumed:
+        typeof snapshot.pendingTransferOutSharedConsumed === 'number'
+          ? snapshot.pendingTransferOutSharedConsumed
+          : null,
       sharedDeckConsumed: snapshot.sharedDeckConsumed ?? 0,
       bossEncounterAlertShown: Boolean(snapshot.bossEncounterAlertShown),
     });
@@ -5343,8 +5357,37 @@ export default function GameBoard() {
       });
     }
 
+    // Multiplayer-only: process any extra preview cards squeezed out beyond
+    // the primary `discardCard`. Each runs its own waterfallEffect locally
+    // (per user-confirmed semantic A: "本地先触发效果，然后 2 张全部传给对手")
+    // and gets staged to `pendingTransferOut` for shipping to the peer via the
+    // `multiplayer:transferOut` side effect emitted at the end of
+    // APPLY_WATERFALL_DEAL.
+    //
+    // We pull `nextRemainingDeck` from the LIVE `pendingWaterfallPlan` for
+    // each iteration (not from `plan.nextRemainingDeck` snapshot) because
+    // the previous APPLY_WATERFALL_DISCARD_EFFECTS may have mutated the deck
+    // (e.g. `returnToDeck` inserting the card back, `swarmInfest` prepending
+    // bugs) and `reduceApplyWaterfallDiscardEffects` syncs those changes via
+    // `patch.pendingWaterfallPlan = { ...plan, nextRemainingDeck }`.
+    //
+    // Single-player branch: plan.extraDiscardCards is `undefined` (or `[]`),
+    // so the loop body never runs — zero overhead.
+    const extras = plan.extraDiscardCards ?? [];
+    const extraIndices = plan.extraDiscardPreviewIndices ?? [];
+    for (let i = 0; i < extras.length; i++) {
+      const live = engine.getState().pendingWaterfallPlan;
+      dispatch({
+        type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
+        discardCard: extras[i],
+        nextRemainingDeck: live?.nextRemainingDeck ?? plan.nextRemainingDeck,
+        discardPreviewIndex: extraIndices[i] ?? null,
+      });
+    }
+
     logWaterfall('discard-complete', {
       discardedCardId: plan.discardCard?.id ?? null,
+      extraDiscardedCount: extras.length,
     });
 
     setWaterfallAnimation(prev => ({
@@ -9062,6 +9105,28 @@ export default function GameBoard() {
       <MultiplayerBossAlert
         open={showMultiplayerBossAlert}
         onAcknowledge={() => setShowMultiplayerBossAlert(false)}
+      />
+
+      {/* Connection status badge — top-right, multiplayer only. Pure
+          informational; doesn't gate input. */}
+      {multiplayerConnection.phase !== 'idle' && (
+        <div className="pointer-events-none fixed top-2 right-2 z-[60]">
+          <MultiplayerConnectionBadge
+            phase={multiplayerConnection.phase}
+            retryAttempt={multiplayerConnection.retryAttempt}
+          />
+        </div>
+      )}
+
+      {/* Freeze overlay — fires when MP connection is disconnected or
+          POST retries are exhausted. Captures all input behind it.
+          Per spec: no auto-timeout — player either waits for reconnect
+          or bails to single-player via the CTA. */}
+      <MultiplayerOfflineOverlay
+        phase={multiplayerConnection.phase}
+        errorMessage={multiplayerConnection.errorMessage}
+        onRetryNow={multiplayerConnection.retryNow}
+        onStartNewSingleGame={() => handleGameModeSelect('single')}
       />
 
       <ModalCallbacksProvider value={modalCallbacks}>

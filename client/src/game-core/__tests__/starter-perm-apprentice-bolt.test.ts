@@ -83,18 +83,6 @@ describe('INIT_GAME — opening backpack contains 学徒法弹', () => {
     }
   });
 
-  it('also works in quick mode', () => {
-    const state = makeStateWithSeed(42);
-    const result = reduce(state, {
-      type: 'INIT_GAME',
-      mode: 'single',
-      totalWins: 0,
-      eternalRelics: [],
-    });
-    expect(
-      result.state.backpackItems.filter(c => c.id === STARTER_CARD_IDS.apprenticeBolt).length,
-    ).toBe(1);
-  });
 });
 
 // ---------------------------------------------------------------------------
