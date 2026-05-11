@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { computeEquipmentBreakEffects } from '../rules/equipment-effects';
-import { applyEquipDestroyLastWords } from '../rules/waterfall';
+import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords } from '../rules/equipment-effects';
 import { createInitialGameState } from '../state';
 import { createEmptyAmuletEffects, initialCombatState } from '../constants';
 import { generateKnightDeck } from '@/lib/knightDeck';
 import { createRng } from '../rng';
 import type { GameState, EquipmentSlotId } from '../types';
-import type { GameAction } from '../actions';
 import type { GameCardData } from '@/components/GameCard';
-import type { SideEffect } from '../reducer';
 import '../card-schema';
 
 function makeState(overrides?: Partial<GameState>): GameState {
@@ -113,62 +110,51 @@ describe('雷震守护盾 last-words: computeEquipmentBreakEffects path', () => 
 });
 
 // ---------------------------------------------------------------------------
-// 3) Waterfall destroy path (applyEquipDestroyLastWords in rules/waterfall.ts)
+// 3) Displacement / sacrifice destroy path (computeEquipmentDisplacementLastWords)
+//    — same canonical helper now used by waterfall destroyAllEquipment,
+//    SACRIFICE_EQUIPMENT_SLOT (命运十字路口 / 暗影契约), 贪婪祭坛 sacrifice tokens.
+//    Previously this section tested the now-deleted applyEquipDestroyLastWords
+//    parallel implementation.
 // ---------------------------------------------------------------------------
 
-describe('雷震守护盾 last-words: waterfall applyEquipDestroyLastWords path', () => {
-  it('grants +8 stunCap when destroyed during waterfall', () => {
+describe('雷震守护盾 last-words: computeEquipmentDisplacementLastWords path', () => {
+  it('grants +8 stunCap when destroyed via displacement / sacrifice', () => {
     const shield = makeShield();
     const state = makeState({ stunCap: 30 });
-    const patch: Partial<GameState> = {};
-    const sideEffects: SideEffect[] = [];
-    const enqueuedActions: GameAction[] = [];
-    applyEquipDestroyLastWords(
-      shield as any,
-      'equipmentSlot1' as EquipmentSlotId,
+    const result = computeEquipmentDisplacementLastWords(
       state,
-      patch,
-      sideEffects,
-      enqueuedActions,
+      'equipmentSlot1' as EquipmentSlotId,
+      shield as any,
+      createEmptyAmuletEffects(),
     );
-    expect(patch.stunCap).toBe(38);
-    expect(sideEffects.some(e =>
+    expect(result.patch.stunCap).toBe(38);
+    expect(result.sideEffects.some(e =>
       e.event === 'log:entry' && (e.payload as any)?.message?.includes('击晕上限 +8%'),
     )).toBe(true);
   });
 
-  it('caps at 100% in waterfall path too', () => {
+  it('caps at 100% in displacement path too', () => {
     const shield = makeShield();
     const state = makeState({ stunCap: 95 });
-    const patch: Partial<GameState> = {};
-    const sideEffects: SideEffect[] = [];
-    const enqueuedActions: GameAction[] = [];
-    applyEquipDestroyLastWords(
-      shield as any,
-      'equipmentSlot1' as EquipmentSlotId,
+    const result = computeEquipmentDisplacementLastWords(
       state,
-      patch,
-      sideEffects,
-      enqueuedActions,
+      'equipmentSlot1' as EquipmentSlotId,
+      shield as any,
+      createEmptyAmuletEffects(),
     );
-    expect(patch.stunCap).toBe(100);
+    expect(result.patch.stunCap).toBe(100);
   });
 
   it('does not enqueue any extra action (last-words is purely a stunCap mutation)', () => {
     const shield = makeShield();
     const state = makeState({ stunCap: 0 });
-    const patch: Partial<GameState> = {};
-    const sideEffects: SideEffect[] = [];
-    const enqueuedActions: GameAction[] = [];
-    applyEquipDestroyLastWords(
-      shield as any,
-      'equipmentSlot1' as EquipmentSlotId,
+    const result = computeEquipmentDisplacementLastWords(
       state,
-      patch,
-      sideEffects,
-      enqueuedActions,
+      'equipmentSlot1' as EquipmentSlotId,
+      shield as any,
+      createEmptyAmuletEffects(),
     );
-    expect(enqueuedActions).toHaveLength(0);
+    expect(result.enqueuedActions).toHaveLength(0);
   });
 });
 

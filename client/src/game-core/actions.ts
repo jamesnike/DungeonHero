@@ -625,10 +625,17 @@ export interface DiscardOwnedCardAction {
  * SACRIFICE_EQUIPMENT_SLOT — destroy the active equipment in the given slot
  * as a player-initiated sacrifice (event choice / event side-effect destroy).
  *
- * Mirrors the events.ts `discardCurrentLeftForGold+15` pattern:
- *   1. Fire destroy-side last-words effects (onDestroyHeal/Gold/Draw/ClassDraw/
- *      PermanentDamage/PermanentShield/Effect, monster-specific lastWords, etc.)
- *      via `applyEquipDestroyLastWords`.
+ * Callers: 命运十字路口 (crossroads-destroy-below), 暗影契约 (destroyEquipment:any),
+ *          and any future event tokens that pick a slot to destroy.
+ *
+ * Reducer contract:
+ *   1. Fire destroy-side last-words effects (ALL onDestroyEffect variants
+ *      including spawn-mine-empty / slot-temp-armor-3 / graveyard-event-to-hand
+ *      / lastWordsSlotTempBuff / lastWordsMaxHpBoost / lastWordsGainBolt 多层
+ *      / 怪物 lastWords (wraith-haunt / wraithDeathHeal / skeleton / discard-3)
+ *      / 「墓园守卫」amulet 多次触发 / 「绝响之符」per-trigger debuff
+ *      / 「装备超频」额外触发 / 「怀柔之印」persuade boost)
+ *      via the canonical `computeEquipmentDisplacementLastWords` helper.
  *   2. Honor revive (hasRevive / hasEquipmentRevive) — revived items stay in slot
  *      with durability=1 and the appropriate `*ReviveUsed` flag.
  *   3. Otherwise enqueue `DISPOSE_EQUIPMENT_CARD { isDestruction: true }` to

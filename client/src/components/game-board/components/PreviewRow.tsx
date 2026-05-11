@@ -394,7 +394,20 @@ const PreviewCell = memo(function PreviewCell({
   const { t } = useTranslation();
   const card = useGameState(s => s.previewCards[index]);
   const stackedCards = useGameState(s => s.previewCardStacks[index] ?? EMPTY_ARRAY);
-  const revealedEarly = useGameState(s => Boolean(s.previewRevealedEarly?.[index]));
+  const revealedEarlyFlag = useGameState(s => Boolean(s.previewRevealedEarly?.[index]));
+
+  // 「幽魂净化」契约：Wraith 是地牢里唯一一种「被挤出时回牌堆而不进坟场」的怪物，
+  // 也是 `wraith-purification` 永恒护符的核心 gate。玩家如果不知道 Wraith 在
+  // preview 行里，就完全无法预判应该用什么手段去清掉它（射程 / 法术 / 装备耐久
+  // 分配等都依赖于「下回合会上来什么怪」）。为了让 Wraith 始终可见，preview
+  // 行里只要是 Wraith（不论非精英 / 精英）都强制视为「已揭示」—— 跟玩家用
+  // 「乾坤一翻」翻开一张卡背后的 `previewRevealedEarly[i] = true` 走完全同一条
+  // 渲染路径，连同 3D 翻面动画跳过、点击打开 CardDetailsModal、`flip-active-card`
+  // 不再视它为可选目标 等一整套语义统一处理。
+  const isWraithRevealed = Boolean(
+    card && card.type === 'monster' && card.monsterType === 'Wraith',
+  );
+  const revealedEarly = revealedEarlyFlag || isWraithRevealed;
 
   const { style: animStyle, className: animClass, isAnimating } =
     getPreviewAnimationProps(index, waterfallAnimation, graveyardVectors, deckReturnVectors);
@@ -429,10 +442,21 @@ const PreviewCell = memo(function PreviewCell({
   //   - revealing       → render 3D flipper (back → face animation)，已经被早翻的格直接显示正面
   //   - dropping / discarding → render the card FACE (already revealed, now flying out)
   //   - cardJustChanged → 强制 BACK，避免发牌瞬间的 race 泄露真容
-  const showBack = cardJustChanged
-    ? true
-    : (phase === 'idle' || phase === 'dealing') && !revealedEarly;
-  const showRevealAnimation = phase === 'revealing' && !revealedEarly && !cardJustChanged;
+  //
+  // Wraith 短路：preview 行里的 Wraith 永远正面朝上，绕过两条特殊路径：
+  //   (a) cardJustChanged 的 race-protection 强制 BACK → 对 Wraith 不适用，因为
+  //       "race 期间瞬间显示正面"对 Wraith 不是泄露，是设计本身；
+  //   (b) revealing 阶段的 3D 翻面动画 → 跳过，Wraith 没有"被揭示"这一刻，
+  //       它从落入 preview 那一帧起就是面朝上。
+  const showBack = isWraithRevealed
+    ? false
+    : cardJustChanged
+      ? true
+      : (phase === 'idle' || phase === 'dealing') && !revealedEarly;
+  const showRevealAnimation = !isWraithRevealed
+    && phase === 'revealing'
+    && !revealedEarly
+    && !cardJustChanged;
 
   // 「乾坤一翻」flip-active-card 选择阶段：未翻面的 preview 卡背可被选中，已翻面的不能
   const flipPickActive = pendingMagicAction?.effect === 'flip-active-card'

@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { computeEquipmentBreakEffects } from '../rules/equipment-effects';
-import { applyEquipDestroyLastWords } from '../rules/waterfall';
+import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords } from '../rules/equipment-effects';
 import { createInitialGameState } from '../state';
 import { createEmptyAmuletEffects, initialCombatState } from '../constants';
 import { generateKnightDeck } from '@/lib/knightDeck';
 import { createRng } from '../rng';
 import type { GameState, EquipmentSlotId } from '../types';
-import type { GameAction } from '../actions';
 import type { GameCardData } from '@/components/GameCard';
-import type { SideEffect } from '../reducer';
 import '../card-schema';
 
 function makeState(overrides?: Partial<GameState>): GameState {
@@ -127,30 +124,28 @@ describe('共御圣盾 last-words: computeEquipmentBreakEffects path', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3) Waterfall destroy path (applyEquipDestroyLastWords in rules/waterfall.ts)
+// 3) Displacement / sacrifice destroy path (computeEquipmentDisplacementLastWords)
+//    — same canonical helper used by waterfall destroyAllEquipment,
+//    SACRIFICE_EQUIPMENT_SLOT, 贪婪祭坛 sacrifice tokens. Previously this
+//    section tested the now-deleted applyEquipDestroyLastWords parallel.
 // ---------------------------------------------------------------------------
 
-describe('共御圣盾 last-words: waterfall applyEquipDestroyLastWords path', () => {
-  it('grants +4 temp armor to BOTH slots when destroyed during waterfall', () => {
+describe('共御圣盾 last-words: computeEquipmentDisplacementLastWords path', () => {
+  it('grants +4 temp armor to BOTH slots when destroyed via displacement / sacrifice', () => {
     const shield = makeShield();
     const state = makeState({
       slotTempArmor: { equipmentSlot1: 1, equipmentSlot2: 3 } as any,
     });
-    const patch: Partial<GameState> = {};
-    const sideEffects: SideEffect[] = [];
-    const enqueuedActions: GameAction[] = [];
-    applyEquipDestroyLastWords(
-      shield as any,
-      'equipmentSlot1' as EquipmentSlotId,
+    const result = computeEquipmentDisplacementLastWords(
       state,
-      patch,
-      sideEffects,
-      enqueuedActions,
+      'equipmentSlot1' as EquipmentSlotId,
+      shield as any,
+      createEmptyAmuletEffects(),
     );
-    expect(patch.slotTempArmor?.equipmentSlot1).toBe(5);
-    expect(patch.slotTempArmor?.equipmentSlot2).toBe(7);
-    expect(enqueuedActions).toHaveLength(0);
-    expect(sideEffects.some(e =>
+    expect(result.patch.slotTempArmor?.equipmentSlot1).toBe(5);
+    expect(result.patch.slotTempArmor?.equipmentSlot2).toBe(7);
+    expect(result.enqueuedActions).toHaveLength(0);
+    expect(result.sideEffects.some(e =>
       e.event === 'log:entry' && (e.payload as any)?.message?.includes('所有装备栏 +4临时护甲'),
     )).toBe(true);
   });
@@ -158,18 +153,13 @@ describe('共御圣盾 last-words: waterfall applyEquipDestroyLastWords path', (
   it('does not produce stunCap-related side effects', () => {
     const shield = makeShield();
     const state = makeState({ stunCap: 50 });
-    const patch: Partial<GameState> = {};
-    const sideEffects: SideEffect[] = [];
-    const enqueuedActions: GameAction[] = [];
-    applyEquipDestroyLastWords(
-      shield as any,
-      'equipmentSlot1' as EquipmentSlotId,
+    const result = computeEquipmentDisplacementLastWords(
       state,
-      patch,
-      sideEffects,
-      enqueuedActions,
+      'equipmentSlot1' as EquipmentSlotId,
+      shield as any,
+      createEmptyAmuletEffects(),
     );
-    expect(patch.stunCap).toBeUndefined();
+    expect(result.patch.stunCap).toBeUndefined();
   });
 });
 

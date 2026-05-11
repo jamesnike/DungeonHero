@@ -17,6 +17,7 @@ import { pickRandomHandCardsForDiscardPreferGraveyard, flattenActiveRowSlots, fi
 import { DUNGEON_COLUMN_COUNT, createEmptyActiveRow } from '../constants';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
+import { applyMirrorCopySummonProgress } from '../cards';
 import {
   planWaterfall,
   applyWaterfallDrop,
@@ -506,5 +507,16 @@ function reduceProcessAutoDraws(state: GameState): ReduceResult {
   s = { ...s, pendingAutoDrawCount: 0 };
 
   if (s === state && drawn === 0) return applyPatch(state, { pendingAutoDrawCount: 0 });
-  return { state: s, sideEffects, enqueuedActions: [] };
+
+  // 影摹召引符：自动抽牌也算入计数。在 patch 上累积 streak 进度 / RNG 消耗，
+  // 必要时 enqueue ADD_CARDS_TO_HAND 发出「镜影摹形」。
+  const patch: Partial<GameState> = {
+    handCards: s.handCards,
+    backpackItems: s.backpackItems,
+    pendingAutoDrawCount: 0,
+  };
+  const enqueuedActions: GameAction[] = [];
+  applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawn);
+
+  return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
 }

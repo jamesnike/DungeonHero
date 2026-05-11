@@ -22,12 +22,10 @@ import { reduce } from '../reducer';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
 import { createEmptyAmuletEffects, initialCombatState, BASE_BACKPACK_CAPACITY } from '../constants';
-import { computeEquipmentBreakEffects } from '../rules/equipment-effects';
-import { applyEquipDestroyLastWords } from '../rules/waterfall';
+import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords } from '../rules/equipment-effects';
 import type { GameState, EquipmentSlotId } from '../types';
 import type { GameAction } from '../actions';
 import type { GameCardData } from '@/components/GameCard';
-import type { SideEffect } from '../reducer';
 import '../card-schema';
 
 function makeState(overrides?: Partial<GameState>): GameState {
@@ -179,7 +177,7 @@ describe('graveyard-to-hand → card:newCardGained chain', () => {
     expect(gained).toHaveLength(0);
   });
 
-  it('also emits the event via the waterfall destruction path (applyEquipDestroyLastWords)', () => {
+  it('also emits the event via the displacement / sacrifice destroy path (computeEquipmentDisplacementLastWords)', () => {
     const ironShield: GameCardData = {
       id: 'is', type: 'shield', name: 'Iron Shield', value: 3, image: '',
       durability: 0, maxDurability: 1, armorMax: 3,
@@ -188,19 +186,14 @@ describe('graveyard-to-hand → card:newCardGained chain', () => {
     const grave1: GameCardData = { id: 'g1', type: 'magic', name: 'Spell', value: 0 } as any;
     const state = makeState({ discardedCards: [grave1] as any });
 
-    const patch: Partial<GameState> = {};
-    const sideEffects: SideEffect[] = [];
-    const enqueuedActions: GameAction[] = [];
-    applyEquipDestroyLastWords(
-      ironShield,
-      'equipmentSlot1' as EquipmentSlotId,
+    const result = computeEquipmentDisplacementLastWords(
       state,
-      patch,
-      sideEffects,
-      enqueuedActions,
+      'equipmentSlot1' as EquipmentSlotId,
+      ironShield,
+      createEmptyAmuletEffects(),
     );
 
-    const gained = sideEffects.filter(e => e.event === 'card:newCardGained');
+    const gained = result.sideEffects.filter(e => e.event === 'card:newCardGained');
     expect(gained).toHaveLength(1);
     expect((gained[0].payload as any).source).toBe('graveyard');
   });

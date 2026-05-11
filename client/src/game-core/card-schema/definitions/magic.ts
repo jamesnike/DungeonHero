@@ -36,6 +36,7 @@ import {
   addCardToBackpackPure,
   getEffectiveHandLimit,
   getEffectiveBackpackCapacity,
+  applyMirrorCopySummonProgress,
 } from '../../cards';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../../rng';
 import { INITIAL_HP, PERSUADE_COST, MIN_PERSUADE_COST } from '../../constants';
@@ -602,6 +603,7 @@ const guildRecycleReshuffle: CardDefinition = {
     if (drawn) {
       mergePatch(patch, drawPatch);
       sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
     }
     const bnr = recycled.length > 0
       ? '回收轮转：回收袋洗回背包，抽 1 张牌！'
@@ -684,6 +686,7 @@ const persuadeBoostDraw: CardDefinition = {
       for (const d of drawResult.cards) {
         sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
       }
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
     }
     const drawText = drawResult.cards.length > 0 ? `，抽了 ${drawResult.cards.length} 张牌` : '';
     banner(sideEffects, `劝降祝福：劝降成功率 +${normalBoost}%${drawText}。${echoTag}`);
@@ -1251,6 +1254,11 @@ const starterDungeonSwap: CardDefinition = {
 // Eligibility:
 //   - active-row: card.flipTarget (forward-flippable) OR card._flipBackCard (back-flippable)
 //   - preview-row: previewCards[i] != null AND !previewRevealedEarly[i] (still face-down)
+//                  AND not a Wraith (Wraiths render face-up by design per the
+//                  PreviewRow renderer; if the only "face-down" target is
+//                  actually a Wraith displayed face-up, picking it would fire
+//                  flip counters without any visible flip and confuse the
+//                  player — see PreviewRow.tsx `isWraithRevealed`).
 //
 // 0 valid → still consumed (play_full_cost_noop, mirroring 血誓回卷).
 // 1 valid → auto-resolve.
@@ -1279,9 +1287,11 @@ const starterActiveRowFlip: CardDefinition = {
       }
     });
     previewCards.forEach((c, idx) => {
-      if (c && !revealed[idx]) {
-        targets.push({ row: 'preview', idx, card: c });
-      }
+      if (!c || revealed[idx]) return;
+      // Wraith renders face-up in preview by design — exclude from target list
+      // so 乾坤一翻 doesn't waste itself on a visually-already-face-up card.
+      if (c.type === 'monster' && c.monsterType === 'Wraith') return;
+      targets.push({ row: 'preview', idx, card: c });
     });
 
     // 升级 1 抽牌：每翻一张 → 抽 1；0 目标时也抽（卡被消耗即抽）。多目标分支
@@ -1294,6 +1304,7 @@ const starterActiveRowFlip: CardDefinition = {
       if (drawn) {
         mergePatch(patch, drawPatch);
         sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
         return ` ${msgPrefix}抽到「${drawn.name}」。`;
       }
       return '';
@@ -1444,6 +1455,7 @@ const starterUndyingBlessing: CardDefinition = {
         if (drawn) {
           mergePatch(patch, drawPatch);
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+          applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
           drawMsg = ` 抽到「${drawn.name}」。`;
         }
       }
@@ -1523,6 +1535,7 @@ const starterGamblerGambit: CardDefinition = {
       for (const d of drawResult.cards) {
         sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
       }
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
     }
     const drawnMsg = drawResult.cards.length > 0
       ? `，抽到${drawResult.cards.map(c => `「${c.name}」`).join('、')}`

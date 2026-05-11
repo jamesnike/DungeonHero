@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { reduce } from '../reducer';
 import { createInitialGameState } from '../state';
+import { createRng } from '../rng';
 import type { GameState } from '../types';
 import { initialCombatState, BASE_BACKPACK_CAPACITY } from '../constants';
 import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
@@ -303,5 +304,114 @@ describe('END_TURN with wraith-purification relic', () => {
         e => e.event === 'ui:banner' && /幽魂净化/.test((e.payload as { text: string }).text),
       ),
     ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// INIT_GAME — auto-grant wraith-purification when the deck contains no Wraith
+// ---------------------------------------------------------------------------
+
+describe('INIT_GAME → auto-grant wraith-purification when no Wraith in deck', () => {
+  function makeStateWithSeed(seed: number): GameState {
+    return { ...createInitialGameState(), rng: createRng(seed) };
+  }
+
+  function deckHasWraith(s: GameState): boolean {
+    const all = [...s.previewCards, ...s.activeCards, ...s.remainingDeck];
+    return all.some(
+      c => !!c && c.type === 'monster' && c.monsterType === 'Wraith',
+    );
+  }
+
+  it('relic-presence and wraithPassiveEnabled exactly mirror "deck has no Wraith" across many seeds', () => {
+    const mismatches: Array<{
+      seed: number;
+      deckHasWraith: boolean;
+      hasRelic: boolean;
+      passiveFlag: boolean;
+    }> = [];
+
+    for (let seed = 1; seed <= 200; seed++) {
+      const state = makeStateWithSeed(seed);
+      const result = reduce(state, {
+        type: 'INIT_GAME',
+        mode: 'single',
+        totalWins: 0,
+        eternalRelics: [],
+      });
+      const wraithInDeck = deckHasWraith(result.state);
+      const hasRelic = hasEternalRelic(
+        result.state.eternalRelics ?? [],
+        'wraith-purification',
+      );
+      const passiveFlag = result.state.wraithPassiveEnabled === true;
+
+      const expectedGrant = !wraithInDeck;
+      if (hasRelic !== expectedGrant || passiveFlag !== expectedGrant) {
+        mismatches.push({
+          seed,
+          deckHasWraith: wraithInDeck,
+          hasRelic,
+          passiveFlag,
+        });
+      }
+    }
+
+    expect(mismatches).toEqual([]);
+  });
+
+  it('does not duplicate the relic if the caller-supplied eternalRelics already contains it', () => {
+    // Find a seed whose generated deck contains no Wraith so the grant path
+    // would normally fire. The first 5 seeds are virtually guaranteed to
+    // include at least one wraith-less run (6 monster types chosen from 7).
+    let noWraithSeed = -1;
+    for (let seed = 1; seed <= 50; seed++) {
+      const state = makeStateWithSeed(seed);
+      const result = reduce(state, {
+        type: 'INIT_GAME',
+        mode: 'single',
+        totalWins: 0,
+        eternalRelics: [],
+      });
+      if (!deckHasWraith(result.state)) {
+        noWraithSeed = seed;
+        break;
+      }
+    }
+    expect(noWraithSeed).toBeGreaterThan(0);
+
+    const state = makeStateWithSeed(noWraithSeed);
+    const result = reduce(state, {
+      type: 'INIT_GAME',
+      mode: 'single',
+      totalWins: 0,
+      // Caller already supplies wraith-purification (e.g. resume from save) —
+      // the init path must not double-add.
+      eternalRelics: [getEternalRelic('wraith-purification')],
+    });
+
+    const wraithRelics = (result.state.eternalRelics ?? []).filter(
+      r => r.id === 'wraith-purification',
+    );
+    expect(wraithRelics).toHaveLength(1);
+    expect(result.state.wraithPassiveEnabled).toBe(true);
+  });
+
+  it('does not emit the celebration popup side effect at game start', () => {
+    // Even on a wraith-less seed, INIT_GAME should not fire `combat:wraithPurified`
+    // (that event triggers the "永恒护符·幽魂净化已解锁！" popup designed for the
+    // mid-game grant after killing the last wraith).
+    for (let seed = 1; seed <= 50; seed++) {
+      const state = makeStateWithSeed(seed);
+      const result = reduce(state, {
+        type: 'INIT_GAME',
+        mode: 'single',
+        totalWins: 0,
+        eternalRelics: [],
+      });
+      expect(
+        result.sideEffects.some(e => e.event === 'combat:wraithPurified'),
+      ).toBe(false);
+    }
   });
 });

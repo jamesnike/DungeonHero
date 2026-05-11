@@ -3013,6 +3013,7 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterLinkShieldNewImage,
       durability: 3,
       maxDurability: 3,
+      armorMax: 1,
       onEquipEffect: 'other-slot-durability+1',
       description: '入场：另一个装备栏的装备 +1 耐久。',
       shortDescription: '入场：另一栏装备 +1 耐久',

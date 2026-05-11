@@ -13,12 +13,17 @@
  * 用户实际报告：`暗影契约 → 献出装备 → 守护之盾(onDestroyDraw:2)` 没有抽 2 张牌。
  *
  * 修复契约：新增 `SACRIFICE_EQUIPMENT_SLOT` action，单一 reducer 内：
- *   - 调 `applyEquipDestroyLastWords` 触发所有遗言效果；
+ *   - 调 `computeEquipmentDisplacementLastWords` 触发所有遗言效果
+ *     （canonical helper，覆盖 spawn-mine-empty / lastWordsSlotTempBuff /
+ *     lastWordsMaxHpBoost / lastWordsGainBolt / graveyard-event-to-hand /
+ *     怪物 lastWords / 「墓园守卫」多次触发 / 「绝响之符」per-trigger debuff /
+ *     「装备超频」额外触发 / 「怀柔之印」persuade boost 等全部）；
  *   - 检查 hasRevive / hasEquipmentRevive，命中则保留装备并消耗复生次数；
  *   - 否则 enqueue `DISPOSE_EQUIPMENT_CARD { isDestruction: true }`（Perm → 回收袋；
  *     普通 → 坟场），并把后备装备 promote 到主槽。
  *
- * 跟参考实现 `events.ts:discardCurrentLeftForGold+15` 行为对齐。
+ * 跟参考实现 `events.ts:discardCurrentLeftForGold+15` 行为对齐
+ * （后者也已迁移到 `computeEquipmentDisplacementLastWords`）。
  */
 
 import { describe, expect, it } from 'vitest';
@@ -88,7 +93,13 @@ describe('SACRIFICE_EQUIPMENT_SLOT — 触发 destroy 遗言效果', () => {
     expect(result.state.discardedCards.find(c => c.id === 'guardian')).toBeDefined();
   });
 
-  it('onDestroyHeal 触发回血', () => {
+  it('onDestroyHeal 触发回血（emit equipment:lastWordsHeal 副作用）', () => {
+    // 注：canonical computeEquipmentDisplacementLastWords 对 onDestroyHeal 不直接
+    // patch state.hp / enqueue HEAL，而是 emit `equipment:lastWordsHeal` 副作用。
+    // 真实游戏里 GameBoard.tsx 的 useGameEvent('equipment:lastWordsHeal') 监听器
+    // 会调 healHero(amount) → dispatch HEAL，state.hp 在那一步才变。
+    // 这跟 computeEquipmentBreakEffects（自然耐久归零）保持完全一致，避免历史上
+    // applyEquipDestroyLastWords 直接 enqueue HEAL 造成的两份实现 drift。
     const healer = makeShield('healer', { name: '治疗之盾', onDestroyHeal: 5 });
     const state = makeState({
       equipmentSlot1: healer as EquipmentItem,
@@ -101,7 +112,12 @@ describe('SACRIFICE_EQUIPMENT_SLOT — 触发 destroy 遗言效果', () => {
     ]);
 
     expect(result.state.equipmentSlot1).toBeNull();
-    expect(result.state.hp).toBe(15);
+    const healSe = result.sideEffects.find(
+      se => se.event === 'equipment:lastWordsHeal'
+        && (se.payload as { itemName?: string }).itemName === '治疗之盾',
+    );
+    expect(healSe).toBeDefined();
+    expect((healSe!.payload as { amount: number }).amount).toBe(5);
   });
 
   it('onDestroyGold 触发金币奖励', () => {
@@ -279,5 +295,133 @@ describe('SACRIFICE_EQUIPMENT_SLOT — 边界', () => {
     expect(result.state.handCards).toHaveLength(0);
     expect(result.state.gold).toBe(10);
     expect(result.state.hp).toBe(20);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 回归 (bug history)：殉雷遗盾被命运十字路口破坏时遗言不触发
+//
+// 历史 bug：reduceSacrificeEquipmentSlot 之前调的是 waterfall.ts 里的残缺
+// applyEquipDestroyLastWords，只支持 9 个 onDestroyEffect 分支
+// (onDestroyHeal/Gold/Draw/ClassDraw/PermanentDamage/PermanentShield +
+//  graveyard-to-hand / stunCap+N / allSlotTempArmor:N)。
+//
+// spawn-mine-empty / slot-temp-armor-3 / graveyard-event-to-hand /
+// lastWordsSlotTempBuff (遗赠淬炼药多层) / lastWordsMaxHpBoost (附魔祭坛多层) /
+// lastWordsGainBolt (奥能裂变多层) / 怪物 lastWords (wraith-haunt / wraithDeathHeal /
+// skeleton / discard-hand-3) / 「墓园守卫」N+1 次触发 / 「绝响之符」per-trigger
+// 全部 fizzle 到 log entry。
+//
+// 修复：迁移到 canonical computeEquipmentDisplacementLastWords helper，跟
+// computeEquipmentBreakEffects 共用同一 applyOneEquipmentLastWordsIteration 内核。
+// ---------------------------------------------------------------------------
+
+describe('SACRIFICE_EQUIPMENT_SLOT — onDestroyEffect 完整覆盖（回归）', () => {
+  it('殉雷遗盾 (onDestroyEffect: spawn-mine-empty) 被破坏 → active row 空位生成「地雷」', () => {
+    const monster = {
+      id: 'm-1', type: 'monster', name: 'M', value: 1, image: '',
+      hp: 1, maxHp: 1, attack: 1, fury: 1, currentLayer: 1, hpLayers: 1,
+    } as GameCardData;
+    const shield = makeShield('s-mine', {
+      name: '殉雷遗盾',
+      onDestroyEffect: 'spawn-mine-empty',
+      durability: 1,
+      maxDurability: 2,
+      armorMax: 3,
+    });
+    const state = makeState({
+      equipmentSlot1: shield as EquipmentItem,
+      activeCards: [monster, null, null, null, null] as any,
+      phase: 'playerInput' as any,
+    });
+
+    const result = drain(state, [
+      { type: 'SACRIFICE_EQUIPMENT_SLOT', slotId: 'equipmentSlot1' } as GameAction,
+    ]);
+
+    // 装备已经销毁
+    expect(result.state.equipmentSlot1).toBeNull();
+    expect(result.state.discardedCards.find(c => c.id === 's-mine')).toBeDefined();
+
+    // 关键断言：active row 某个空位被生成了地雷（type=building / mineDamage=5）
+    const activeAfter = result.state.activeCards as readonly (GameCardData | null)[];
+    const mineCount = activeAfter.filter(c =>
+      c?.type === 'building' && c.name === '地雷' && (c as any).mineDamage === 5,
+    ).length;
+    expect(mineCount).toBe(1);
+
+    // slot 0 上的怪物没被覆盖
+    expect(activeAfter[0]?.id).toBe('m-1');
+  });
+
+  it('onDestroyEffect: slot-temp-armor-3 → 该装备栏 +3 临时护甲（历史 bug 也漏过）', () => {
+    const shield = makeShield('s-legacy', {
+      name: '遗愿重盾',
+      onDestroyEffect: 'slot-temp-armor-3',
+    });
+    const state = makeState({
+      equipmentSlot1: shield as EquipmentItem,
+      slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 0 } as any,
+    });
+
+    const result = drain(state, [
+      { type: 'SACRIFICE_EQUIPMENT_SLOT', slotId: 'equipmentSlot1' } as GameAction,
+    ]);
+
+    expect(result.state.slotTempArmor.equipmentSlot1).toBe(3);
+  });
+
+  it('lastWordsSlotTempBuff (遗赠淬炼药 2 层) → 该装备栏 +6 临时攻击 +6 临时护甲', () => {
+    const shield = makeShield('s-buff', {
+      name: 'BuffShield',
+      lastWordsSlotTempBuff: 2,
+    });
+    const state = makeState({
+      equipmentSlot1: shield as EquipmentItem,
+      slotTempAttack: { equipmentSlot1: 0, equipmentSlot2: 0 } as any,
+      slotTempArmor: { equipmentSlot1: 0, equipmentSlot2: 0 } as any,
+    });
+
+    const result = drain(state, [
+      { type: 'SACRIFICE_EQUIPMENT_SLOT', slotId: 'equipmentSlot1' } as GameAction,
+    ]);
+
+    expect(result.state.slotTempAttack.equipmentSlot1).toBe(6);
+    expect(result.state.slotTempArmor.equipmentSlot1).toBe(6);
+  });
+
+  it('「墓园守卫」amulet (lastWordsExtraTriggerCount=1) → 遗言触发 2 次', () => {
+    // 用 onDestroyDraw 验证多次触发（每次抽 1 张 → 总共 2 张）
+    const shield = makeShield('s-extra', {
+      name: 'ExtraShield',
+      onDestroyDraw: 1,
+    });
+    const tomb1 = makeShield('bp-1');
+    const tomb2 = makeShield('bp-2');
+    // 「墓园守卫」amulet
+    const graveGuard = {
+      id: 'a-grave-guard',
+      type: 'amulet',
+      name: '墓园守卫',
+      value: 0,
+      image: '',
+      amuletEffect: 'last-words-extra-trigger',
+    } as GameCardData;
+
+    const state = makeState({
+      equipmentSlot1: shield as EquipmentItem,
+      amuletSlots: [graveGuard] as any,
+      handCards: [],
+      backpackItems: [tomb1, tomb2] as GameCardData[],
+      handLimit: 5,
+      maxHandSize: 5,
+    });
+
+    const result = drain(state, [
+      { type: 'SACRIFICE_EQUIPMENT_SLOT', slotId: 'equipmentSlot1' } as GameAction,
+    ]);
+
+    // 1 base trigger + 1 extra = 2 次，抽了 2 张
+    expect(result.state.handCards).toHaveLength(2);
   });
 });

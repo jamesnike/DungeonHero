@@ -17,7 +17,12 @@ import { applyPatch, noChange } from '../reducer';
 import type { GameCardData } from '@/components/GameCard';
 import type { EquipmentSlotId, EquipmentRepairTarget, EquipmentItem } from '@/components/game-board/types';
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, formatRepairTargetLabel } from '../helpers';
-import { drawFromBackpackToHandPure, drawMultipleFromBackpack, addCardToBackpackPure } from '../cards';
+import {
+  drawFromBackpackToHandPure,
+  drawMultipleFromBackpack,
+  addCardToBackpackPure,
+  applyMirrorCopySummonProgress,
+} from '../cards';
 import { nextInt, pickRandom, shuffle as rngShuffle, nextId } from '../rng';
 import { INITIAL_HP, HAND_LIMIT, BASE_BACKPACK_CAPACITY, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import { computeAmuletEffectsForState, refillSlotArmorToCap, applySlotArmorBonusDelta } from '../equipment';
@@ -302,6 +307,7 @@ export function resolveAllPotionEffects(
         for (const d of drawn) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
         }
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawn.length);
         const parts: string[] = [];
         parts.push(`从背包抽出${drawn.length}张牌`);
         parts.push('背包上限 +1', '手牌上限 +1');

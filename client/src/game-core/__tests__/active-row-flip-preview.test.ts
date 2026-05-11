@@ -393,3 +393,113 @@ describe('乾坤一翻 — 已翻面的 preview 不可重选', () => {
     expect(result.state.gold).toBe(100);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 8) Wraith 在 preview 行始终视为「已正面朝上」，不进 flip-active-card 目标池
+//    (UI 侧的「Wraith 永远面朝上」对应的游戏逻辑一致性)
+// ---------------------------------------------------------------------------
+
+function makePreviewWraith(id: string, opts: { elite?: boolean } = {}): GameCardData {
+  return {
+    id,
+    type: 'monster',
+    name: opts.elite ? '幽魂·精英' : '幽魂',
+    monsterType: 'Wraith',
+    value: 3,
+    hp: 3,
+    maxHp: 3,
+    attack: 3,
+    fury: 2,
+    currentLayer: 2,
+    ...(opts.elite ? { monsterSpecial: 'wraith-rebirth' } : {}),
+  } as GameCardData;
+}
+
+describe('乾坤一翻 — Wraith 在 preview 行不算可翻目标', () => {
+  it('唯一的 preview 候选是 Wraith → 0 有效目标，consumed + banner', () => {
+    const card = makePactCard();
+    const wraith = makePreviewWraith('w-only');
+    const state = makeState({
+      handCards: [card] as any,
+      activeCards: EMPTY_ROW,
+      previewCards: [wraith, null, null, null, null] as any,
+      // 注意：`previewRevealedEarly` 全是 false——以前的语义本来会让 Wraith
+      // 成为唯一目标。这次改完后它必须被排除。
+      previewRevealedEarly: [false, false, false, false, false],
+      gold: 100,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Wraith 不进目标池 → 完全没目标 → consumed + 0 翻面
+    expect(result.state.pendingMagicAction).toBeNull();
+    expect(result.state.previewRevealedEarly?.[0]).toBe(false);
+    // Banner 走「没有可翻转的卡牌」路径
+    expect(
+      result.sideEffects.some(
+        e =>
+          e.event === 'ui:banner' &&
+          /没有可翻转的卡牌/.test((e.payload as { text: string }).text),
+      ),
+    ).toBe(true);
+  });
+
+  it('精英 Wraith 同样被排除（monsterType === "Wraith" 是唯一判定）', () => {
+    const card = makePactCard();
+    const eliteWraith = makePreviewWraith('w-elite', { elite: true });
+    const state = makeState({
+      handCards: [card] as any,
+      activeCards: EMPTY_ROW,
+      previewCards: [eliteWraith, null, null, null, null] as any,
+      previewRevealedEarly: [false, false, false, false, false],
+      gold: 100,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.pendingMagicAction).toBeNull();
+    expect(result.state.previewRevealedEarly?.[0]).toBe(false);
+  });
+
+  it('混合：1 Wraith + 1 非 Wraith preview → 唯一有效目标是非 Wraith，自动翻它', () => {
+    const card = makePactCard();
+    const wraith = makePreviewWraith('w-mix');
+    const goblin = makePreviewCard('g-mix');
+    const state = makeState({
+      handCards: [card] as any,
+      activeCards: EMPTY_ROW,
+      previewCards: [wraith, goblin, null, null, null] as any,
+      previewRevealedEarly: [false, false, false, false, false],
+      gold: 100,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    expect(result.state.previewRevealedEarly?.[0]).toBe(false); // Wraith 没被翻
+    expect(result.state.previewRevealedEarly?.[1]).toBe(true); // 非 Wraith 被翻
+    expect(result.state.pendingMagicAction).toBeNull();
+  });
+
+  it('Echo ×2：1 active + 1 Wraith preview → echo 第二轮 anyOtherPreview 必须为 false，pending 清空', () => {
+    // 没有这条断言的话，echo reprompt 路径会把 Wraith 算成「还有 preview 可翻」
+    // 继续弹第二次选择 —— UI 侧 Wraith 显示成正面、玩家无法点 → 卡住。
+    const card = makePactCard();
+    const wraith = makePreviewWraith('w-echo');
+    const flippableActive = makeFlippablePotion('act-flip');
+    const activeSlots: ActiveRowSlots = [flippableActive, null, null, null, null];
+    const state = makeState({
+      handCards: [card] as any,
+      activeCards: activeSlots,
+      previewCards: [wraith, null, null, null, null] as any,
+      previewRevealedEarly: [false, false, false, false, false],
+      doubleNextMagic: true,
+      gold: 100,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // 只有 active 那张能翻；Wraith 不算，所以 echo 第二轮没目标 → pending 清空
+    expect(result.state.pendingMagicAction).toBeNull();
+    expect(result.state.previewRevealedEarly?.[0]).toBe(false); // Wraith 没被翻
+  });
+});

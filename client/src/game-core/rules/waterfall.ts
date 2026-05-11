@@ -25,7 +25,7 @@ import type { ReduceResult, SideEffect } from '../reducer';
 import { applyPatch, noChange } from '../reducer';
 import type { RngState } from '../rng';
 import { nextInt } from '../rng';
-import { pickGraveyardCardExcluding } from './equipment-effects';
+import { computeEquipmentDisplacementLastWords } from './equipment-effects';
 import { applyMonsterRage } from '@/lib/monsterRage';
 import {
   DUNGEON_COLUMN_COUNT,
@@ -48,7 +48,7 @@ import {
 import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { hasEternalRelic } from '@/lib/eternalRelics';
-import { processRecycleBag, drawMultipleFromBackpack, pushRecycleRestoreSideEffects } from '../cards';
+import { processRecycleBag, drawMultipleFromBackpack, pushRecycleRestoreSideEffects, applyMirrorCopySummonProgress } from '../cards';
 import { resetHeroWavePure } from '../hero';
 import { createBugletCard } from '../deck';
 
@@ -877,20 +877,42 @@ function reduceApplyWaterfallDiscardEffects(
         break;
       }
       case 'destroyAllEquipment': {
-        // This is complex — equipment destruction with last words.
-        // We handle the state mutation parts and emit side effects for UI.
-        // Equipment last words that require UI interaction (class deck draws, graveyard-to-hand)
-        // are handled via enqueued actions.
+        // 贪婪 boss 瀑流摧毁所有装备 —— 走 canonical 的
+        // computeEquipmentDisplacementLastWords helper（同 reduceDisposeEquipmentCard /
+        // reduceSacrificeEquipmentSlot）。覆盖全部 onDestroyEffect 变体
+        // （spawn-mine-empty 殉雷遗盾 / slot-temp-armor-3 / graveyard-event-to-hand /
+        // lastWordsSlotTempBuff / lastWordsMaxHpBoost / lastWordsGainBolt 等多层叠加）
+        // + 怪物 lastWords + 「墓园守卫」多次触发 + 「绝响之符」per-trigger debuff
+        // + 「装备超频」额外触发 + 「怀柔之印」persuade boost。
+        //
+        // 替代了已删除的残缺手写 applyEquipDestroyLastWords（仅支持 9 个分支，
+        // 其它都 fizzle 到 log entry，参见 shared-effect-id-impact-check 规则）。
         const destroyed: string[] = [];
         const destroyedCards: GameCardData[] = [];
         const revived: string[] = [];
+
+        const amuletFxForDestroy = computeAmuletEffectsForState(state);
+
+        const fireLastWords = (card: GameCardData, slotId: EquipmentSlotId): void => {
+          const lwResult = computeEquipmentDisplacementLastWords(state, slotId, card, amuletFxForDestroy, patch);
+          // computeEquipmentDisplacementLastWords 返回 patch.rng 等累积写入；
+          // 直接合并到当前 patch（已经在 enclosing reducer 里逐字段拼装）。
+          Object.assign(patch, lwResult.patch);
+          sideEffects.push(...lwResult.sideEffects);
+          enqueuedActions.push(...lwResult.enqueuedActions);
+          if (lwResult.drawFromBackpack > 0) {
+            enqueuedActions.push({ type: 'DRAW_CARDS', count: lwResult.drawFromBackpack, source: 'backpack' });
+          }
+          if (lwResult.classCardDraw > 0) {
+            enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: lwResult.classCardDraw });
+          }
+        };
 
         for (const slotId of ['equipmentSlot1', 'equipmentSlot2'] as EquipmentSlotId[]) {
           const slotItem = state[slotId];
           if (slotItem) {
             const card = slotItem as GameCardData;
-            // Process last words effects
-            applyEquipDestroyLastWords(card, slotId, state, patch, sideEffects, enqueuedActions);
+            fireLastWords(card, slotId);
 
             const isMonsterEquip = card.type === 'monster';
             const nativeRevive = isMonsterEquip && card.hasRevive && !card.reviveUsed;
@@ -917,7 +939,7 @@ function reduceApplyWaterfallDiscardEffects(
           if (reserve && reserve.length > 0) {
             const survivedReserve: GameCardData[] = [];
             for (const r of reserve) {
-              applyEquipDestroyLastWords(r, slotId, state, patch, sideEffects, enqueuedActions);
+              fireLastWords(r, slotId);
               const isMonsterR = r.type === 'monster';
               const nativeR = isMonsterR && r.hasRevive && !r.reviveUsed;
               const equipR = r.hasEquipmentRevive && !r.equipmentReviveUsed;
@@ -1086,107 +1108,6 @@ function reduceApplyWaterfallDiscardEffects(
   });
 
   return applyPatch(state, patch, sideEffects, enqueuedActions);
-}
-
-// ---------------------------------------------------------------------------
-// Helper: apply equipment destroy last-words effects within the reducer
-// ---------------------------------------------------------------------------
-
-export function applyEquipDestroyLastWords(
-  card: GameCardData,
-  slotId: EquipmentSlotId,
-  state: GameState,
-  patch: Partial<GameState>,
-  sideEffects: SideEffect[],
-  enqueuedActions: GameAction[],
-): void {
-  if (card.onDestroyHeal) {
-    enqueuedActions.push({ type: 'HEAL', amount: card.onDestroyHeal, source: 'equip-destroy-heal' });
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：恢复了 ${card.onDestroyHeal} 点生命` } });
-  }
-  if (card.onDestroyGold) {
-    enqueuedActions.push({ type: 'MODIFY_GOLD', delta: card.onDestroyGold, source: 'equipment-destroy-gold' });
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：获得了 ${card.onDestroyGold} 金币` } });
-  }
-  if (card.onDestroyDraw) {
-    enqueuedActions.push({ type: 'DRAW_CARDS', count: card.onDestroyDraw, source: 'backpack' });
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：抽取了 ${card.onDestroyDraw} 张牌` } });
-  }
-  if (card.onDestroyClassDraw) {
-    enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: card.onDestroyClassDraw });
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：获得专属卡` } });
-  }
-  if (card.onDestroyPermanentDamage) {
-    const bonuses = (patch.equipmentSlotBonuses ?? state.equipmentSlotBonuses) as Record<EquipmentSlotId, SlotPermanentBonus>;
-    if (!patch.equipmentSlotBonuses) {
-      patch.equipmentSlotBonuses = { ...state.equipmentSlotBonuses };
-    }
-    const cur = bonuses[slotId];
-    (patch.equipmentSlotBonuses as Record<EquipmentSlotId, SlotPermanentBonus>)[slotId] = {
-      ...cur,
-      damage: cur.damage + card.onDestroyPermanentDamage,
-    };
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：该装备栏永久伤害 +${card.onDestroyPermanentDamage}！` } });
-  }
-  if (card.onDestroyPermanentShield) {
-    const bonuses = (patch.equipmentSlotBonuses ?? state.equipmentSlotBonuses) as Record<EquipmentSlotId, SlotPermanentBonus>;
-    if (!patch.equipmentSlotBonuses) {
-      patch.equipmentSlotBonuses = { ...state.equipmentSlotBonuses };
-    }
-    const cur = bonuses[slotId];
-    (patch.equipmentSlotBonuses as Record<EquipmentSlotId, SlotPermanentBonus>)[slotId] = {
-      ...cur,
-      shield: cur.shield + card.onDestroyPermanentShield,
-    };
-    applySlotArmorBonusDelta(state, slotId, card.onDestroyPermanentShield, patch);
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：该装备栏永久护甲 +${card.onDestroyPermanentShield}！` } });
-  }
-  if (card.onDestroyEffect === 'graveyard-to-hand') {
-    // Use the latest patch.discardedCards if a previous iteration in the same
-    // reduce already removed a picked card; defensively exclude `card` itself
-    // so destroyed equipment can never re-pick its own staged copy.
-    const pool = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
-    const curRng = (patch.rng ?? state.rng) as RngState;
-    const pick = pickGraveyardCardExcluding(pool, card.id, curRng);
-    if (pick) {
-      patch.rng = pick.rng;
-      patch.discardedCards = pool.filter((_, i) => i !== pick.idx);
-      enqueuedActions.push({ type: 'ADD_CARD_TO_HAND', card: pick.picked });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：从坟场获得了「${pick.picked.name}」！` } });
-      sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
-    } else {
-      sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：坟场没有可用的牌。` } });
-    }
-  } else if (card.onDestroyEffect?.startsWith('stunCap+')) {
-    const amount = parseInt(card.onDestroyEffect.replace('stunCap+', ''), 10) || 0;
-    if (amount > 0) {
-      const current = patch.stunCap ?? state.stunCap ?? 0;
-      const next = Math.min(100, current + amount);
-      if (next > current) patch.stunCap = next;
-      sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：击晕上限 +${amount}%（当前 ${next}%）。` } });
-      sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 遗言！击晕上限 +${amount}%！` } });
-    }
-  } else if (card.onDestroyEffect?.startsWith('allSlotTempArmor:')) {
-    const amount = parseInt(card.onDestroyEffect.replace('allSlotTempArmor:', ''), 10) || 0;
-    if (amount > 0) {
-      const tempArmor = patch.slotTempArmor ?? { ...(state.slotTempArmor ?? {}) };
-      tempArmor.equipmentSlot1 = (tempArmor.equipmentSlot1 ?? 0) + amount;
-      tempArmor.equipmentSlot2 = (tempArmor.equipmentSlot2 ?? 0) + amount;
-      patch.slotTempArmor = tempArmor;
-      applySlotArmorBonusDelta(state, 'equipmentSlot1', amount, patch);
-      applySlotArmorBonusDelta(state, 'equipmentSlot2', amount, patch);
-      sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：所有装备栏 +${amount}临时护甲！` } });
-      sideEffects.push({ event: 'ui:banner', payload: { text: `${card.name} 遗言！所有装备栏 +${amount}临时护甲！` } });
-      const amuletFx = computeAmuletEffectsForState(state);
-      if (amuletFx.persuadeOnTempAttackCount > 0) {
-        const pBonus = amuletFx.persuadeOnTempAttackBonus;
-        patch.persuadeAmuletBonus = (patch.persuadeAmuletBonus ?? state.persuadeAmuletBonus ?? 0) + pBonus;
-        sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `怀柔之印：下次劝降率 +${pBonus}%` } });
-      }
-    }
-  } else if (card.onDestroyEffect) {
-    sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 遗言：${card.onDestroyEffect}` } });
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1570,6 +1491,7 @@ function reduceApplyWaterfallDrop(state: GameState): ReduceResult {
           message: `永恒护符·瀑流汲取：从背包抽 ${drawResult.cards.length} 张牌（${names}）`,
         },
       });
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
     } else {
       sideEffects.push({
         event: 'log:entry',

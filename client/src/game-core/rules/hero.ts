@@ -33,7 +33,7 @@ import {
   isMagicGaugeFull,
   markSkillUsedPure,
 } from '../hero';
-import { drawFromBackpackToHandPure, drawMultipleFromBackpack } from '../cards';
+import { drawFromBackpackToHandPure, drawMultipleFromBackpack, applyMirrorCopySummonProgress } from '../cards';
 import { computeEquipmentBreakEffects, computeEquipmentDisplacementLastWords, shouldRouteEquipmentToPermRecycle, clearSlotAndPromoteReserve, accumulateMineDamageBoost, processMineCollisions, clearTriggeredMineSlots } from './equipment-effects';
 import { applyShieldSlotSelfDamage } from './shield-self-damage';
 import { tickStunAttemptDiscoverProgress } from './combat';
@@ -117,6 +117,7 @@ function reduceUseHeroSkill(
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: card.id, source: 'backpack' } });
         }
       }
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawnNames.length);
       Object.assign(patch, markSkillUsedPure(state, skillId as any));
       if (drawnNames.length > 0) {
         patch.heroSkillBanner = `失去 3 生命，抽到「${drawnNames.join('」「')}」！`;
@@ -1203,6 +1204,7 @@ function reduceMagicSlotSelection(
           drawnNames.push(drawn.name);
         }
       }
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawnNames.length);
       const drawMsg = drawnNames.length > 0 ? `，抽到「${drawnNames.join('、')}」` : '';
       const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
@@ -1396,6 +1398,7 @@ function reduceMagicSlotSelection(
           break;
         }
       }
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, grdDrawnNames.length);
       const grdDrawMsg = grdDrawnNames.length > 0 ? `，抽到「${grdDrawnNames.join('、')}」` : '';
       const grdEchoTag = grdEchoMul > 1 ? `（回响×${grdEchoMul}）` : '';
       const grdFormulaTag = grdEchoMul > 1 ? `${grdBaseDraw}×${grdEchoMul}=${grdDrawCount}` : `${grdDrawCount}`;
@@ -1489,6 +1492,7 @@ function reduceMagicSlotSelection(
           break;
         }
       }
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawnNames.length);
       const drawMsg = drawnNames.length > 0 ? `，抽到「${drawnNames.join('、')}」` : '';
       const echoTag = echoMul > 1 ? `（回响×${echoMul}）` : '';
       const formulaTag = echoMul > 1 ? `${baseDraw}×${echoMul}=${drawCount}` : `${drawCount}`;
@@ -1539,6 +1543,7 @@ function reduceMagicSlotSelection(
         Object.assign(patch, drawPatch);
         if (drawn) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+          applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
         }
         drawMsg = drawn ? `，抽到「${drawn.name}」` : '';
       }
@@ -2027,6 +2032,7 @@ function reduceMagicSlotSelection(
         Object.assign(patch, drawPatch);
         if (drawn) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+          applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
         }
         drawMsg = drawn ? ` 抽到「${drawn.name}」。` : '';
       }
@@ -2711,6 +2717,7 @@ function reduceMagicMonsterSelection(
             for (const d of drawResult.cards) {
               sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
             }
+            applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
           }
         }
         sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDmg} 点法术伤害，抽 ${drawCount} 张牌。${echoTag}` } });
@@ -2735,6 +2742,7 @@ function reduceMagicMonsterSelection(
           for (const d of drawResult.cards) {
             sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
           }
+          applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
         }
       }
       sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDmg} 点法术伤害，抽 ${drawCount} 张牌。${echoTag}` } });
@@ -2908,6 +2916,7 @@ function reduceDungeonCardSelection(
         Object.assign(patch, drawPatch);
         if (drawn) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+          applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
         }
         drawMsg = drawn ? ` 抽到「${drawn.name}」。` : '';
       }
@@ -3276,18 +3285,27 @@ function reduceDungeonCardSelection(
           if (drawn) {
             Object.assign(patch, drawPatch);
             sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+            applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
             drawSuffix = ` 抽到「${drawn.name}」。`;
           }
         }
         const finalBanner = drawSuffix ? `${resultBanner}${drawSuffix}` : resultBanner;
         if (echoRemainingFAC > 0) {
           // After this flip, look for ANY other flippable card still in either row
-          // (active-row flippable, or preview-row still face-down).
+          // (active-row flippable, or preview-row still face-down). Wraiths are
+          // excluded from preview eligibility — they render face-up by design
+          // (see PreviewRow.tsx `isWraithRevealed`) and the initial-target
+          // enumeration in `magic.ts:starterActiveRowFlip` already filters them
+          // out; the echo-reprompt path must agree.
           const updatedActive = (patch.activeCards ?? activeCards) as (GameCardData | null)[];
           const updatedPreview = (patch.previewCards ?? state.previewCards) as (GameCardData | null)[];
           const updatedRevealed = (patch.previewRevealedEarly ?? revealed);
           const anyOtherActive = updatedActive.some(c => c && c.id !== card.id && (c.flipTarget || c._flipBackCard));
-          const anyOtherPreview = updatedPreview.some((c, i) => c && c.id !== card.id && !updatedRevealed[i]);
+          const anyOtherPreview = updatedPreview.some((c, i) => {
+            if (!c || c.id === card.id || updatedRevealed[i]) return false;
+            if (c.type === 'monster' && c.monsterType === 'Wraith') return false;
+            return true;
+          });
           if (anyOtherActive || anyOtherPreview) {
             const totalEcho = (pending as any).echoRemaining ?? 1;
             const currentRound = totalEcho - echoRemainingFAC + 1;

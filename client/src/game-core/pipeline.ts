@@ -398,6 +398,17 @@ function isInputContinuation(action: GameAction): boolean {
     // recycle bag (Perm) / 残骸回收符 回手牌. Stranded under playerInput →
     // 装备从槽位消失但不进任何目的地。Same root cause.
     case 'DISPOSE_EQUIPMENT_CARD':
+    // SACRIFICE_EQUIPMENT_SLOT — atomic "player sacrifices equipment" action.
+    // Dispatched at top-level from `useCardOperations.sacrificeEquipment`
+    // (暗影契约「献出装备」/ 命运十字路口「破坏下方装备」), so in real game
+    // it bypasses this gate via _processAction. Listed defensively so any
+    // future reducer that enqueues it as a follow-up (e.g. multi-stage event
+    // chains that destroy equipment as a side effect) can drain under
+    // playerInput — same pattern as FORCE_END_HERO_TURN /
+    // RESOLVE_MAGIC_SLOT_SELECTION above. The follow-ups it enqueues
+    // (DISPOSE_EQUIPMENT_CARD, DRAW_CARDS, HEAL via side effect→hook, etc.)
+    // are already whitelisted.
+    case 'SACRIFICE_EQUIPMENT_SLOT':
     // REMOVE_PREVIEW_CARD_STACKS — enqueued by waterfall.ts when a discarded
     // preview column had stacked cards (those stacks need their index entry
     // removed from `state.previewCardStacks`). Pure metadata patch, doesn't

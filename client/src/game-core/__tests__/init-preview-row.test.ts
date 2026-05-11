@@ -11,6 +11,7 @@ import { reduce } from '../reducer';
 import { createInitialGameState } from '../state';
 import { createRng } from '../rng';
 import type { GameState } from '../types';
+import { buildSharedDeck } from '@/lib/multiplayerSharedDeck';
 
 function makeStateWithSeed(seed: number): GameState {
   return { ...createInitialGameState(), rng: createRng(seed) };
@@ -107,7 +108,12 @@ describe('INIT_GAME preview row composition', () => {
     expect(violations).toEqual([]);
   });
 
-  it('first 16 cards contain no elite monsters', () => {
+  it('first 16 cards contain no elite monsters (Wraith is the explicit exception)', () => {
+    // Elite Wraith is allowed in [0,16) — the Wraith-pull step in
+    // `rules/init.ts` deliberately overrides the elite-push rule for Wraith
+    // so the player encounters Wraith early enough for the 幽魂净化 clearance
+    // loop to engage. All other elite monster types must still be pushed
+    // back.
     const violations: Array<{ seed: number; pos: number; name: string }> = [];
     for (let seed = 1; seed <= 200; seed++) {
       const state = makeStateWithSeed(seed);
@@ -123,12 +129,99 @@ describe('INIT_GAME preview row composition', () => {
         ...result.state.remainingDeck,
       ];
       for (let i = 0; i < Math.min(16, fullDeck.length); i++) {
-        if (fullDeck[i]?.monsterSpecial) {
-          violations.push({ seed, pos: i, name: fullDeck[i]!.name });
+        const card = fullDeck[i];
+        if (card?.monsterSpecial && card.monsterType !== 'Wraith') {
+          violations.push({ seed, pos: i, name: card.name });
         }
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it('all Wraiths land in the first 12 cards of deckWithClassEvents (= preview + remainingDeck[0..8))', () => {
+    // `deckWithClassEvents[0..12)` in init.ts coordinates corresponds to the
+    // procedural-dungeon flat sequence preview ∪ remainingDeck[0..8) — the
+    // active row is the fixed Buglet+Events tutorial row and is NOT part of
+    // deckWithClassEvents. Both non-elite and elite Wraiths must land in
+    // this 12-card prefix.
+    const violations: Array<{
+      seed: number;
+      pos: number;
+      name: string;
+      special: boolean;
+    }> = [];
+    let runsWithAnyWraith = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const state = makeStateWithSeed(seed);
+      const result = reduce(state, {
+        type: 'INIT_GAME',
+        mode: 'single',
+        totalWins: 0,
+        eternalRelics: [],
+      });
+      // Reconstruct deckWithClassEvents = preview + remainingDeck.
+      const deckWithClassEvents = [
+        ...result.state.previewCards,
+        ...result.state.remainingDeck,
+      ];
+      let foundWraithInRun = false;
+      for (let i = 0; i < deckWithClassEvents.length; i++) {
+        const c = deckWithClassEvents[i];
+        if (c?.type === 'monster' && c.monsterType === 'Wraith') {
+          foundWraithInRun = true;
+          if (i >= 12) {
+            violations.push({
+              seed,
+              pos: i,
+              name: c.name,
+              special: !!c.monsterSpecial,
+            });
+          }
+        }
+      }
+      if (foundWraithInRun) runsWithAnyWraith++;
+    }
+    expect(violations).toEqual([]);
+    // Sanity: across 200 seeds with 6-of-7 monster types chosen per run,
+    // ~6/7 ≈ 86% of runs should contain at least one Wraith. If we suddenly
+    // had zero wraith-bearing runs, the invariant would be vacuously
+    // satisfied and the test useless — so guard against that.
+    expect(runsWithAnyWraith).toBeGreaterThan(100);
+  });
+
+  it('multiplayer shared deck mirrors the Wraith-pull invariant', () => {
+    // The multiplayer shared-deck builder uses an independent verbatim port
+    // of the layout block, so we need a separate assertion to keep both
+    // paths in sync. Same coordinate system: the full shared deck is the
+    // analogue of `deckWithClassEvents`, so all Wraiths must land in [0,12).
+    const violations: Array<{
+      seed: number;
+      pos: number;
+      name: string;
+      special: boolean;
+    }> = [];
+    let runsWithAnyWraith = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const { deck } = buildSharedDeck(seed);
+      let foundWraithInRun = false;
+      for (let i = 0; i < deck.length; i++) {
+        const c = deck[i];
+        if (c?.type === 'monster' && c.monsterType === 'Wraith') {
+          foundWraithInRun = true;
+          if (i >= 12) {
+            violations.push({
+              seed,
+              pos: i,
+              name: c.name,
+              special: !!c.monsterSpecial,
+            });
+          }
+        }
+      }
+      if (foundWraithInRun) runsWithAnyWraith++;
+    }
+    expect(violations).toEqual([]);
+    expect(runsWithAnyWraith).toBeGreaterThan(100);
   });
 
   it('back 18 cards contain at least 1 monster when total monsters > chunk count', () => {

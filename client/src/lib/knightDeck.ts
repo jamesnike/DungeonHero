@@ -46,7 +46,7 @@ import knightSpellRuneInscriptionAmuletImage from '@assets/generated_images/knig
 import knightAmuletStunRecycleImage from '@assets/generated_images/knight_amulet_stun_recycle.png';
 // TODO(art): replace with dedicated `knight_mirror_copy_summon_amulet.png` once
 // artwork lands (the granted 「镜影摹形」 still reuses `dedupeKnightMagicMirrorCopyImage`).
-const mirrorCopySummonAmuletImage = dedupeKnightMagicMirrorCopyImage;
+import knightMirrorCopySummonAmuletImage from '@assets/generated_images/knight_mirror_copy_summon_amulet.png';
 import potionArcaneInfusionImage from '@assets/generated_images/cute_potion_arcane_infusion.png';
 import potionBackpackExpandImage from '@assets/generated_images/cute_potion_backpack_expand.png';
 import persuadeHammerImage from '@assets/generated_images/knight_persuade_hammer.png';
@@ -69,9 +69,9 @@ import heavyShieldKnightBashImage from '@assets/generated_images/knight_bash_shi
 import knightChainPersuadePotionImage from '@assets/generated_images/knight_potion_chain_persuade.png';
 import knightVitalityPotionImage from '@assets/generated_images/cute_potion_concentrated_heal.png';
 import knightEquipEmpowerPotionImage from '@assets/generated_images/knight_potion_equip_empower.png';
-// TODO(art): replace with a dedicated illustration for 装备超频药.
-import knightEquipOverclockPotionImage from '@assets/generated_images/knight_potion_equip_empower.png';
+import knightEquipOverclockPotionImage from '@assets/generated_images/knight_potion_equip_overclock.png';
 import knightAmplifyPotionImage from '@assets/generated_images/knight_potion_amplify.png';
+import knightPotionFrenzyDiscoverImage from '@assets/generated_images/knight_potion_frenzy_discover.png';
 import knightExchangeBladeImage from '@assets/generated_images/knight_weapon_exchange_blade.png';
 import knightGrowthBladeImage from '@assets/generated_images/knight_growth_blade.png';
 import knightRageCleaveImage from '@assets/generated_images/knight_weapon_rage_cleave.png';
@@ -933,19 +933,20 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'manual-recycle-draw',
   });
 
-  // 影摹召引符 (unique) — 每抽 8 张「标准抽牌」(DRAW_CARDS / DRAW_FROM_BACKPACK)
-  // 入手一张「镜影摹形」。streak 字段：state.mirrorCopySummonStreak（达 8 后 %= 8）。
+  // 影摹召引符 (unique) — 每抽 12 张「背包 → 手牌」抽牌（含 standard draw +
+  // PROCESS_AUTO_DRAWS + waterfall-draw-2 + 各 resolver 直调）入手一张
+  // 「镜影摹形」。streak 字段：state.mirrorCopySummonStreak（达 12 后 %= 12）。
   // 入手卡走 createMirrorCopySummonCard(rng) 生成，knightEffect: 'mirror-copy' 既有 resolver 处理交互流程。
   // 多份叠加：每次抽牌 +N（progress counter ×N stacking），unique=true 限制牌库内 1 张。
   pushCard({
     type: 'amulet',
     name: '影摹召引符',
     value: 1,
-    image: mirrorCopySummonAmuletImage,
+    image: knightMirrorCopySummonAmuletImage,
     classCard: true,
     unique: true,
-    description: '每抽 8 张牌，将一张「镜影摹形」加入手牌。',
-    shortDescription: '每抽 8 张，入手 1 张「镜影摹形」',
+    description: '每抽 12 张牌，将一张「镜影摹形」加入手牌。',
+    shortDescription: '每抽 12 张，入手 1 张「镜影摹形」',
     amuletEffect: 'mirror-copy-summon',
   });
 
@@ -2010,23 +2011,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     type: 'potion',
     name: '狂热发现',
     value: 0,
-    image: knightEquipOverclockPotionImage,
-    classCard: true,
-    description: '获得永恒护符「狂热发现」。光环（可叠加）：每持有一份，使用「专属感召」时若背包牌数 > 10，则额外多触发 1 次发现；牌数 ≤ 10 立即失效。',
-    shortDescription: '获得永恒护符「狂热发现」',
-    potionEffect: 'grant-eternal-relic-summon-frenzy',
-  });
-
-  // 狂热发现 (class potion, stackable, not unique): 获得永恒护符·狂热发现。
-  // 光环（可叠加）：每持有一份，使用「专属感召」(STARTER_CARD_IDS.discoverClassToHand)
-  // 时若 backpackItems.length > 10，则额外触发 1 次发现。栏数 ≤ 10 时光环失效。
-  // 镜像「装备超频药」的 threshold-gated aura + per-stack 模式（详见
-  // perm-routing-on-discard / equip-overclock 实现）。
-  pushCard({
-    type: 'potion',
-    name: '狂热发现',
-    value: 0,
-    image: knightEquipOverclockPotionImage,
+    image: knightPotionFrenzyDiscoverImage,
     classCard: true,
     description: '获得永恒护符「狂热发现」。光环（可叠加）：每持有一份，使用「专属感召」时若背包牌数 > 10，则额外多触发 1 次发现；牌数 ≤ 10 立即失效。',
     shortDescription: '获得永恒护符「狂热发现」',

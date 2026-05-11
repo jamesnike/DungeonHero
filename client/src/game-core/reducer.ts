@@ -443,7 +443,7 @@ function computeAmuletCounterDisplay(
     case 'stun-attempt-discover':
       return `${state.stunAttemptDiscoverProgress ?? 0}/4`;
     case 'mirror-copy-summon':
-      return `${state.mirrorCopySummonStreak ?? 0}/8`;
+      return `${state.mirrorCopySummonStreak ?? 0}/12`;
     default:
       return undefined;
   }

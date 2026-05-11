@@ -9,7 +9,7 @@ import type { ExecutionContext } from './types';
 import type { GameCardData } from '@/components/GameCard';
 import type { EquipmentRepairTarget } from '@/components/game-board/types';
 import { HAND_LIMIT } from '../constants';
-import { drawMultipleFromBackpack } from '../cards';
+import { drawMultipleFromBackpack, applyMirrorCopySummonProgress } from '../cards';
 import type { GameState } from '../types';
 import { formatRepairTargetLabel } from '../helpers';
 
@@ -61,6 +61,7 @@ registerCustomHandler('potion:draw-backpack-4', (ctx) => {
       for (const d of drawn) {
         ctx.sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
       }
+      applyMirrorCopySummonProgress(ctx.state, ctx.patch, ctx.sideEffects, ctx.enqueuedActions, drawn.length);
       const parts: string[] = [];
       parts.push(`从背包抽出${drawn.length}张牌`);
       parts.push('背包上限 +1', '手牌上限 +1');

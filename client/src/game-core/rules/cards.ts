@@ -29,6 +29,7 @@ import {
   pushRecycleRestoreSideEffects,
   resetCardForGraveyard,
   getEffectiveHandLimit,
+  applyMirrorCopySummonProgress,
 } from '../cards';
 import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecyclableFromHand, getCardPlayCategory, logHeroMagic, applyAmplifyToCard } from '../helpers';
@@ -36,7 +37,6 @@ import { hasEternalRelic } from '@/lib/eternalRelics';
 import { applySlotArmorBonusDelta, computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
-import { applyEquipDestroyLastWords } from './waterfall';
 import { routeReflectDamageToHero, tickStunAttemptDiscoverProgress } from './combat';
 import { PERSUADE_COST, MIN_PERSUADE_COST, INITIAL_HP, BASE_BACKPACK_CAPACITY, FLIP_GOLD_REWARD, HAND_LIMIT, DUNGEON_COLUMN_COUNT, DURABILITY_CAP, clampMaxDurability } from '../constants';
 import type { RngState } from '../rng';
@@ -51,7 +51,7 @@ import type { HeroMagicId } from '@/components/GameCard';
 import type { MirrorCopySelection, AmplifySelection } from '../types';
 import { skillScrollImage } from '../deck';
 import { rollPotionManuscriptFlip, applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
-import { createMineBuilding, createMirrorCopySummonCard } from '@/lib/knightDeck';
+import { createMineBuilding } from '@/lib/knightDeck';
 import { filterAvailableClassPool, markManyUniqueAcquired } from '../uniqueClass';
 
 export function reduceCardActions(state: GameState, action: GameAction): ReduceResult | null {
@@ -427,7 +427,10 @@ function reduceDrawCards(
       const sideEffects: SideEffect[] = [
         { event: 'card:drawnToHand', payload: { cardId: result.card.id, source: 'backpack' } },
       ];
-      return applyMirrorCopySummonStreak(applyPatch(state, result.patch, sideEffects), 1);
+      const enqueuedActions: GameAction[] = [];
+      const patch: Partial<GameState> = { ...result.patch };
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
+      return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
     }
 
     const result = drawMultipleFromBackpack(state, action.count);
@@ -437,7 +440,10 @@ function reduceDrawCards(
       event: 'card:drawnToHand' as const,
       payload: { cardId: card.id, source: 'backpack' },
     }));
-    return applyMirrorCopySummonStreak(applyPatch(state, result.patch, sideEffects), result.cards.length);
+    const enqueuedActions: GameAction[] = [];
+    const patch: Partial<GameState> = { ...result.patch };
+    applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, result.cards.length);
+    return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
   }
 
   if (action.source === 'deck') {
@@ -453,7 +459,9 @@ function reduceDrawCards(
       currentState = { ...currentState, ...allPatches };
       allSideEffects.push({ event: 'card:drawnToHand', payload: { cardId: card.id, source: 'deck' } });
     }
-    return applyMirrorCopySummonStreak(applyPatch(state, allPatches, allSideEffects), drawn.length);
+    const enqueuedActions: GameAction[] = [];
+    applyMirrorCopySummonProgress(state, allPatches, allSideEffects, enqueuedActions, drawn.length);
+    return applyPatch(state, allPatches, allSideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
   }
 
   if (action.source === 'recycleBag') {
@@ -706,7 +714,7 @@ function reduceDrawFromBackpack(
   state: GameState,
   action: Extract<GameAction, { type: 'DRAW_FROM_BACKPACK' }>,
 ): ReduceResult {
-  const { cards, patch } = drawMultipleFromBackpack(state, action.count, { ignoreLimit: action.ignoreLimit });
+  const { cards, patch: drawPatch } = drawMultipleFromBackpack(state, action.count, { ignoreLimit: action.ignoreLimit });
   if (cards.length === 0) return noChange(state);
 
   const sideEffects: SideEffect[] = [
@@ -715,8 +723,11 @@ function reduceDrawFromBackpack(
       payload: { cards, count: cards.length },
     },
   ];
+  const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = { ...drawPatch };
+  applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, cards.length);
 
-  return applyMirrorCopySummonStreak(applyPatch(state, patch, sideEffects), cards.length);
+  return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -947,59 +958,12 @@ function applyMagicClassDiscoverStreak(result: ReduceResult, card: GameCardData)
   };
 }
 
-// ---------------------------------------------------------------------------
-// 影摹召引符 (mirror-copy-summon)：每抽 8 张「标准抽牌」(DRAW_CARDS source:
-// backpack|deck 或 DRAW_FROM_BACKPACK) → 入手一张「镜影摹形」。
-//
-// 设计：streak 累加 `cardsDrawn × amuletCount`；`Math.floor(newStreak / 8)`
-// 次触发，remainder 保留——保证「一次抽 ≥ 8 张」时触发次数正确，「2 个护符叠加」
-// 时 4 次抽牌即触发（progress counter ×N stacking, per amulet-stacking-design）。
-//
-// 仅在 `reduceDrawCards` 的 source=backpack|deck + `reduceDrawFromBackpack`
-// 调用 —— recycleBag 分支不算（那是从回收袋整理到背包，不是抽到手牌）。waterfall
-// 内 `drawMultipleFromBackpack` 直调 / 晕锤归袋符直 patch handCards 等特殊路径
-// 不算「标准抽牌」（per user 设计选择 scope_standard_draws_only）。
-// ---------------------------------------------------------------------------
-
-function applyMirrorCopySummonStreak(result: ReduceResult, cardsDrawn: number): ReduceResult {
-  if (cardsDrawn <= 0) return result;
-  const stateAfter = result.state;
-  const count = (stateAfter.amuletSlots as GameCardData[]).filter(
-    s => s?.amuletEffect === 'mirror-copy-summon',
-  ).length;
-  if (count <= 0) return result;
-  const threshold = 8;
-  const prevStreak = stateAfter.mirrorCopySummonStreak ?? 0;
-  const nextStreak = prevStreak + cardsDrawn * count;
-  const triggers = Math.floor(nextStreak / threshold);
-  if (triggers <= 0) {
-    return { ...result, state: { ...stateAfter, mirrorCopySummonStreak: nextStreak } };
-  }
-
-  let rng = stateAfter.rng;
-  const grantedCards: GameCardData[] = [];
-  for (let i = 0; i < triggers; i++) {
-    const [card, nextRng] = createMirrorCopySummonCard(rng);
-    grantedCards.push(card as GameCardData);
-    rng = nextRng;
-  }
-  return {
-    ...result,
-    state: {
-      ...stateAfter,
-      rng,
-      mirrorCopySummonStreak: nextStreak % threshold,
-    },
-    sideEffects: [
-      ...result.sideEffects,
-      { event: 'combat:mirrorCopySummonTriggered', payload: { count: triggers, threshold } },
-    ],
-    enqueuedActions: [
-      ...(result.enqueuedActions ?? []),
-      { type: 'ADD_CARDS_TO_HAND', cards: grantedCards },
-    ],
-  };
-}
+// 影摹召引符 (mirror-copy-summon) 的 streak 逻辑现已迁移到
+// `game-core/cards.ts` 的 `applyMirrorCopySummonProgress` —— 一个**所有
+// 「背包 → 手牌」抽牌路径**（包括 `reduceProcessAutoDraws` 自动抽牌、
+// `waterfall-draw-2` 永恒护符、各 magic / hero-magic resolver 里直调
+// drawMultipleFromBackpack / drawFromBackpackToHandPure 的路径）都
+// 必须调用的中心化 helper。详见该 helper 头部的设计注释。
 
 // ---------------------------------------------------------------------------
 // appendTransformEnqueue — helper to push APPLY_TRANSFORM_CATEGORY at the
@@ -1865,11 +1829,30 @@ function reduceSacrificeEquipmentSlot(
 
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
-  const patch: Partial<GameState> = {};
+  let patch: Partial<GameState> = {};
 
   const card = slotItem as GameCardData;
 
-  applyEquipDestroyLastWords(card, slotId, state, patch, sideEffects, enqueuedActions);
+  // 用 computeEquipmentDisplacementLastWords —— canonical 实现，覆盖所有
+  // onDestroyEffect 变体（spawn-mine-empty / slot-temp-armor-3 / graveyard-event-to-hand /
+  // 等）+ lastWordsSlotTempBuff / lastWordsMaxHpBoost / lastWordsGainBolt 多层叠加
+  // + 怪物 lastWords（wraith-haunt / wraithDeathHeal / discard-hand-3 / skeleton）
+  // + 「墓园守卫」lastWordsExtraTriggerCount 多次触发 + 「绝响之符」per-trigger debuff
+  // + 「装备超频」额外触发 + 「怀柔之印」per-trigger persuade boost。
+  //
+  // 替代了已删除的 applyEquipDestroyLastWords 残缺手写版（只支持 9 个分支，
+  // 其它都 fizzle 成 log entry，参见 shared-effect-id-impact-check 规则）。
+  const amuletFxForLastWords = computeAmuletEffects(state.amuletSlots);
+  const lwResult = computeEquipmentDisplacementLastWords(state, slotId, card, amuletFxForLastWords, patch);
+  patch = lwResult.patch;
+  sideEffects.push(...lwResult.sideEffects);
+  enqueuedActions.push(...lwResult.enqueuedActions);
+  if (lwResult.drawFromBackpack > 0) {
+    enqueuedActions.push({ type: 'DRAW_CARDS', count: lwResult.drawFromBackpack, source: 'backpack' });
+  }
+  if (lwResult.classCardDraw > 0) {
+    enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: lwResult.classCardDraw });
+  }
 
   const isMonsterEquip = card.type === 'monster';
   const nativeRevive = isMonsterEquip && card.hasRevive && !card.reviveUsed;

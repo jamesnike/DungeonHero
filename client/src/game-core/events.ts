@@ -16,10 +16,10 @@ import type {
 import type { GameState } from './types';
 import { INITIAL_HP, FLIP_GOLD_REWARD, PERSUADE_COST, MIN_PERSUADE_COST, BASE_BACKPACK_CAPACITY, MAX_SHOP_LEVEL, MAX_PERSUADE_LEVEL, HAND_LIMIT, DURABILITY_CAP, clampMaxDurability } from './constants';
 import { flattenActiveRowSlots, pickRandomHandCardsForDiscardPreferGraveyard, isRecyclableFromHand, applyAmplifyOnCreate } from './helpers';
-import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from './equipment';
+import { computeAmuletEffects, computeAmuletEffectsForState, applySlotArmorBonusDelta } from './equipment';
 import { maybeTriggerDeleteDrawForDestroy } from './deleteDrawTrigger';
 import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
-import { applyEquipDestroyLastWords } from './rules/waterfall';
+import { computeEquipmentDisplacementLastWords } from './rules/equipment-effects';
 import { applyFlipCounters } from './rules/flip-counters';
 import type { GameAction } from './actions';
 import type { SideEffect } from './reducer';
@@ -1595,7 +1595,20 @@ export function applySimpleEffect(
       const sideEffects: SideEffect[] = [];
       const enqueuedActions: GameAction[] = [];
 
-      applyEquipDestroyLastWords(card, slotId, state, patch, sideEffects, enqueuedActions);
+      // 贪婪祭坛 「献祭当前左/右手装备」—— 走 canonical lastWords helper
+      // 覆盖 spawn-mine-empty / lastWordsSlotTempBuff / lastWordsMaxHpBoost /
+      // lastWordsGainBolt / 怪物 lastWords / 「墓园守卫」多次触发等所有效果。
+      const amuletFxLW = computeAmuletEffects(state.amuletSlots);
+      const lwResult = computeEquipmentDisplacementLastWords(state, slotId, card, amuletFxLW, patch);
+      Object.assign(patch, lwResult.patch);
+      sideEffects.push(...lwResult.sideEffects);
+      enqueuedActions.push(...lwResult.enqueuedActions);
+      if (lwResult.drawFromBackpack > 0) {
+        enqueuedActions.push({ type: 'DRAW_CARDS', count: lwResult.drawFromBackpack, source: 'backpack' });
+      }
+      if (lwResult.classCardDraw > 0) {
+        enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: lwResult.classCardDraw });
+      }
 
       const isMonsterEquip = card.type === 'monster';
       const nativeRevive = isMonsterEquip && card.hasRevive && !card.reviveUsed;
@@ -1655,8 +1668,20 @@ export function applySimpleEffect(
       const destroyedCards: GameCardData[] = [];
       const revived: string[] = [];
 
+      // 贪婪祭坛 「献祭所有左/右手装备」—— 走 canonical lastWords helper
+      const amuletFxLW = computeAmuletEffects(state.amuletSlots);
+
       const processItem = (card: GameCardData) => {
-        applyEquipDestroyLastWords(card, slotId, state, patch, sideEffects, enqueuedActions);
+        const lwResult = computeEquipmentDisplacementLastWords(state, slotId, card, amuletFxLW, patch);
+        Object.assign(patch, lwResult.patch);
+        sideEffects.push(...lwResult.sideEffects);
+        enqueuedActions.push(...lwResult.enqueuedActions);
+        if (lwResult.drawFromBackpack > 0) {
+          enqueuedActions.push({ type: 'DRAW_CARDS', count: lwResult.drawFromBackpack, source: 'backpack' });
+        }
+        if (lwResult.classCardDraw > 0) {
+          enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: lwResult.classCardDraw });
+        }
         const isMonsterEquip = card.type === 'monster';
         const nativeRevive = isMonsterEquip && card.hasRevive && !card.reviveUsed;
         const equipRevive = card.hasEquipmentRevive && !card.equipmentReviveUsed;

@@ -5,10 +5,12 @@
 import type { GameCardData } from '@/components/GameCard';
 import type { ActiveRowSlots } from '@/components/game-board/types';
 import type { GameState } from './types';
+import type { GameAction } from './actions';
 import type { SideEffect } from './reducer';
 import { HAND_LIMIT, BASE_BACKPACK_CAPACITY, DUNGEON_COLUMN_COUNT, clampMaxDurability } from './constants';
 import { isBackpackRestrictedCard, flattenActiveRowSlots, isRecyclableFromHand } from './helpers';
 import { applyMonsterRage } from '@/lib/monsterRage';
+import { createMirrorCopySummonCard } from '@/lib/knightDeck';
 import type { RngState } from './rng';
 import { nextInt, shuffle as rngShuffle } from './rng';
 
@@ -173,6 +175,75 @@ export function drawMultipleFromBackpack(
       rng,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// 影摹召引符 (mirror-copy-summon) — universal progress helper.
+//
+// 设计：每件影摹召引符让 streak 累加 `cardsDrawn × amuletCount`；
+// `Math.floor(newStreak / 12)` 次触发，remainder 保留——保证「一次抽 ≥ 12 张」
+// 触发次数正确，「2 个护符叠加」时 6 次抽牌即触发
+// (progress counter ×N stacking, per amulet-stacking-design)。
+//
+// 适用范围：**任何把卡从 backpack 真正交付到 hand** 的路径——不止
+// `DRAW_CARDS source: 'backpack'` / `DRAW_FROM_BACKPACK`，还包括：
+//   - `reduceProcessAutoDraws` (dungeon.ts) — 处理 active row 卡后的自动抽牌
+//   - `waterfall-draw-2` (waterfall.ts) — 永恒护符·瀑流汲取
+//   - 各 magic / hero-magic / potion / executor / custom-handler resolver
+//     里**直调** `drawMultipleFromBackpack` / `drawFromBackpackToHandPure`
+//     的路径
+// `recycleBag → backpack` 分支不算（那是整理回背包，不是抽到手牌）。
+//
+// 历史注：早期实现 (`scope_standard_draws_only`) 只覆盖前两条 reducer 入口，
+// 导致玩家最常见的「自动抽牌」（每处理一张地城卡触发一次）完全不计入计数 —
+// 用户报告「影摹召引符 自动抽牌 不增加 计数」就是这个 bug。已迁移到「所有
+// 背包抽到手牌」语义。
+//
+// Mutates: patch.mirrorCopySummonStreak, patch.rng（消耗 RNG 生成镜影摹形）,
+//          sideEffects (combat:mirrorCopySummonTriggered),
+//          enqueuedActions (ADD_CARDS_TO_HAND with granted 镜影摹形 cards).
+// ---------------------------------------------------------------------------
+
+const MIRROR_COPY_SUMMON_THRESHOLD = 12;
+
+export function applyMirrorCopySummonProgress(
+  state: GameState,
+  patch: Partial<GameState>,
+  sideEffects: SideEffect[],
+  enqueuedActions: GameAction[],
+  cardsDrawn: number,
+): void {
+  if (cardsDrawn <= 0) return;
+
+  const slots = (patch.amuletSlots ?? state.amuletSlots) as
+    | (GameCardData & { amuletEffect?: string })[]
+    | undefined;
+  const count = (slots ?? []).filter(s => s?.amuletEffect === 'mirror-copy-summon').length;
+  if (count <= 0) return;
+
+  const prevStreak = patch.mirrorCopySummonStreak ?? state.mirrorCopySummonStreak ?? 0;
+  const nextStreak = prevStreak + cardsDrawn * count;
+  const triggers = Math.floor(nextStreak / MIRROR_COPY_SUMMON_THRESHOLD);
+
+  if (triggers <= 0) {
+    patch.mirrorCopySummonStreak = nextStreak;
+    return;
+  }
+
+  let rng = patch.rng ?? state.rng;
+  const grantedCards: GameCardData[] = [];
+  for (let i = 0; i < triggers; i++) {
+    const [card, nextRng] = createMirrorCopySummonCard(rng);
+    grantedCards.push(card as GameCardData);
+    rng = nextRng;
+  }
+  patch.rng = rng;
+  patch.mirrorCopySummonStreak = nextStreak % MIRROR_COPY_SUMMON_THRESHOLD;
+  sideEffects.push({
+    event: 'combat:mirrorCopySummonTriggered',
+    payload: { count: triggers, threshold: MIRROR_COPY_SUMMON_THRESHOLD },
+  });
+  enqueuedActions.push({ type: 'ADD_CARDS_TO_HAND', cards: grantedCards });
 }
 
 // ---------------------------------------------------------------------------

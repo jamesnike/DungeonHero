@@ -213,6 +213,7 @@ import {
   pushRecycleRestoreSideEffects,
   getEffectiveHandLimit,
   getEffectiveBackpackCapacity,
+  applyMirrorCopySummonProgress,
 } from '../cards';
 import { nextInt, pickRandom, nextBool, shuffle as rngShuffle, nextId } from '../rng';
 import type { RngState } from '../rng';
@@ -405,6 +406,7 @@ export function finalizeDiscardDraw(
     for (const d of drawResult.cards) {
       sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
     }
+    applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
   }
   const drawMsg = drawResult.cards.length > 0 ? `抽了 ${drawResult.cards.length} 张牌` : '背包为空';
   banner(sideEffects, `汰旧迎新：移回 ${discarded.length} 张牌，${drawMsg}。${echoTag}`);
@@ -543,6 +545,7 @@ export function finalizeEchoBag(
     for (const d of drawResult.cards) {
       sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
     }
+    applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
   }
   const drawMsg = drawResult.cards.length > 0 ? `抽了 ${drawResult.cards.length} 张牌` : '背包为空';
   banner(sideEffects, `回响行囊：弃回 ${actualDiscard} 张牌，坟场为空，${drawMsg}。${echoTag}`);
@@ -1413,6 +1416,7 @@ export function resolvePermanentMagic(
     if (drawn) {
       mergePatch(patch, drawPatch);
       sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
     }
     const bnr = recycled.length > 0
       ? '回收轮转：回收袋洗回背包，抽 1 张牌！'
@@ -1482,6 +1486,7 @@ export function resolvePermanentMagic(
       for (const d of drawResult.cards) {
         sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
       }
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
     }
     const drawText = drawResult.cards.length > 0 ? `，抽了 ${drawResult.cards.length} 张牌` : '';
     banner(sideEffects, `劝降祝福：劝降成功率 +${normalBoost}%${drawText}。${echoTag}`);
@@ -1683,6 +1688,7 @@ export function resolvePermanentMagic(
         for (const d of drawResult.cards) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
         }
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
       }
       const drawMsg = drawResult.cards.length > 0
         ? `抽了 ${drawResult.cards.length} 张牌`
@@ -1959,6 +1965,7 @@ export function resolvePermanentMagic(
           if (drawn) {
             mergePatch(patch, drawPatch);
             sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+            applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
             drawMsg = ` 抽到「${drawn.name}」。`;
           }
         }
@@ -2017,6 +2024,7 @@ export function resolvePermanentMagic(
         for (const d of drawResult.cards) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
         }
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
       }
       const drawnMsg = drawResult.cards.length > 0
         ? `，抽到${drawResult.cards.map(c => `「${c.name}」`).join('、')}`
@@ -3051,6 +3059,7 @@ export function resolveKnightPermanentMagic(
         for (const d of drawResult.cards) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
         }
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
       }
       const drawnMsg = drawResult.cards.length > 0
         ? `抽了 ${drawResult.cards.length} 张牌`
@@ -3082,6 +3091,7 @@ export function resolveKnightPermanentMagic(
           for (const d of drawResult.cards) {
             sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
           }
+          applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
         }
         drawnCount = drawResult.cards.length;
       }
@@ -3127,6 +3137,7 @@ export function resolveKnightPermanentMagic(
         for (const d of drawResult.cards) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
         }
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
       }
       const drawnMsg = drawResult.cards.length > 0
         ? `从背包抽了 ${drawResult.cards.length} 张牌`
@@ -3206,6 +3217,7 @@ export function resolveKnightPermanentMagic(
       patch.handCards = simulatedHand;
       patch.backpackItems = simulatedBackpack;
       patch.rng = simulatedRng;
+      applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, totalDrawn);
 
       const movedSummary = allMovedNames.length > 0 ? allMovedNames.join('、') : '无';
       log(sideEffects, 'magic', `洗册待回：${totalMoved} 张手牌洗入回收袋（${movedSummary}），从背包抽 ${totalDrawn} 张。`);
@@ -3894,6 +3906,7 @@ export function resolveKnightPermanentMagic(
         for (const d of drawResult.cards) {
           sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
         }
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
       }
       const recycleMsg = recycled.length > 0 ? '回收袋洗回背包，' : '';
       const drawMsg = drawResult.cards.length > 0
@@ -4274,6 +4287,7 @@ export function resolveFountainHand(
     for (const d of drawResult.cards) {
       sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
     }
+    applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
   }
   log(sideEffects, 'magic', `涌泉满手：恢复 ${healAmount} 点生命，从背包抽取 ${drawResult.cards.length} 张牌补充手牌。`);
   banner(sideEffects, `涌泉满手：恢复 ${healAmount} 点生命，从背包抽了 ${drawResult.cards.length} 张牌。${echoTag}`);
@@ -4299,6 +4313,7 @@ export function resolveEmberEcho(
     for (const d of drawResult.cards) {
       sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
     }
+    applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
   }
   const parts: string[] = [`法术伤害永久 +${echoMultiplier}。`];
   if (drawResult.cards.length > 0) {
@@ -4371,6 +4386,7 @@ function resolveEchoBag(
     for (const d of drawResult.cards) {
       sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: d.id, source: 'backpack' } });
     }
+    applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, drawResult.cards.length);
   }
   const drawMsg = drawResult.cards.length > 0
     ? `抽了 ${drawResult.cards.length} 张牌`
@@ -4774,6 +4790,7 @@ export function resolveRepairOne(
       if (drawn) {
         mergePatch(patch, drawPatch);
         sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
       }
       const drawnMsg = drawn ? `抽到「${drawn.name}」` : '背包为空';
       banner(sideEffects, `${hpCostBanner}所有装备满耐久。${drawnMsg}。`);
@@ -4798,6 +4815,7 @@ export function resolveRepairOne(
       if (drawn) {
         mergePatch(patch, drawPatch);
         sideEffects.push({ event: 'card:drawnToHand', payload: { cardId: drawn.id, source: 'backpack' } });
+        applyMirrorCopySummonProgress(state, patch, sideEffects, enqueuedActions, 1);
         drawMsg = `，抽到「${drawn.name}」`;
       }
     }

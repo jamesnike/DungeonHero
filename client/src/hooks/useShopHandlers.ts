@@ -365,8 +365,23 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
     depsRef.current.pushUndoSnapshot();
     dispatch({ type: 'CLOSE_SHOP' });
     depsRef.current.cardActionResolverRef.current = null;
+
+    // `openShop` 是 interactive event token —— `processEffectsInline` 遇到它会
+    // 把事件「停车」：写入 `pendingEventSkipFlip` 到 state，不 enqueue COMPLETE_EVENT。
+    // 关商店时如果事件还停着（`currentEventCard != null`），必须走
+    // CONTINUE_EVENT_EFFECTS 让 reducer 用 state.pendingEventSkipFlip 收尾，
+    // 否则 completeCurrentEvent 读 skipEventFlipRef（永远 false），
+    // 「跳过翻转」会失效（例：暗影契约「召唤夜市」）。同时 CONTINUE_EVENT_EFFECTS
+    // 会执行 processEffectsInline 末尾的 post-effect 块（战血荣誉/右翼回响），
+    // 也避免漏触发（参考 events.ts:749-754 注释）。镜像 handleDiscoverSelect/Cancel。
+    // 非事件来源（如混沌骰）currentEventCard 为 null，沿用 completeCurrentEvent
+    // 早返路径，行为不变。
+    if (engine.getState().currentEventCard) {
+      dispatch({ type: 'CONTINUE_EVENT_EFFECTS' });
+      return;
+    }
     depsRef.current.completeCurrentEvent();
-  }, [dispatch]);
+  }, [engine, dispatch]);
 
   // -- Shop services ----------------------------------------------------------
 

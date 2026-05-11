@@ -17,6 +17,8 @@ import {
   eventScrollImage,
   createStarterDiscoverClassToHandCard,
   createApprenticeBoltCard,
+  createStarterCardPool,
+  STARTER_CARD_IDS,
 } from '../deck';
 import { fillActiveRowSlots } from '../helpers';
 import { shuffle as rngShuffle, nextInt } from '../rng';
@@ -25,7 +27,45 @@ import { DUNGEON_COLUMN_COUNT } from '@/components/game-board/constants';
 import { getRandomHero } from '@/lib/heroes';
 import { generateKnightDeck, createKnightDiscoveryEvents } from '@/lib/knightDeck';
 import { applyMonsterRage } from '@/lib/monsterRage';
+import { getEternalRelic, hasEternalRelic } from '@/lib/eternalRelics';
 import type { RngState } from '../rng';
+
+/**
+ * Grant 永恒护符·幽魂净化 at game start when the run contains no Wraith at all.
+ *
+ * Rationale: 幽魂净化 is normally awarded by `CHECK_WRAITH_PURIFICATION` after
+ * the player clears the last Wraith. When the procedurally-generated deck
+ * happens to omit Wraith from the 6 chosen monster types, that trigger never
+ * fires — the player essentially "earned" the relic immediately by virtue of
+ * the deck composition, so we grant it at INIT_GAME instead.
+ *
+ * Silent grant (no `combat:wraithPurified` side effect / banner) — the relic
+ * just shows up in the relic bar from turn 1. We still set
+ * `wraithPassiveEnabled: true` to mirror the mid-game grant path
+ * (`rules/dungeon.ts reduceCheckWraithPurification`) so save/load and any
+ * future consumers of that flag see a consistent shape.
+ *
+ * Idempotent: if the caller-supplied `eternalRelics` already contains
+ * 幽魂净化 (e.g. resume from a save), we don't add a duplicate.
+ */
+function grantWraithPurificationIfNoWraith(
+  baseRelics: EternalRelic[],
+  ...cardSources: ReadonlyArray<ReadonlyArray<GameCardData | null | undefined>>
+): { eternalRelics: EternalRelic[]; wraithPassiveEnabled: boolean } {
+  const hasWraith = cardSources.some(src =>
+    src.some(c => !!c && c.type === 'monster' && c.monsterType === 'Wraith'),
+  );
+  if (hasWraith) {
+    return { eternalRelics: baseRelics, wraithPassiveEnabled: false };
+  }
+  if (hasEternalRelic(baseRelics, 'wraith-purification')) {
+    return { eternalRelics: baseRelics, wraithPassiveEnabled: true };
+  }
+  return {
+    eternalRelics: [...baseRelics, getEternalRelic('wraith-purification')],
+    wraithPassiveEnabled: true,
+  };
+}
 
 /**
  * Mark the chosen final monster as Boss directly at deck-init time.
@@ -181,6 +221,42 @@ export function reduceInitGame(
     }
   }
 
+  // --- Pull all Wraiths into the first 12 cards (= first 3 chunks) ---
+  // Wraith's defining trait is its `returnToDeck` waterfall — it cycles back
+  // into the deck instead of going to the graveyard, which makes it the key
+  // gate for the 幽魂净化 eternal relic clearance loop. Guaranteeing Wraith(s)
+  // land in the first 3 chunks (= preview row + remainingDeck[0..8)) ensures
+  // the player encounters them early enough for the mechanic to engage.
+  //
+  // Both non-elite AND elite Wraiths are pulled here — Wraith is the EXPLICIT
+  // exception to the "elites stay out of first 16" rule above. Each chunk
+  // holds at most one monster, so at most 3 Wraiths can fit in [0,12) — but
+  // the deck contains at most 2 Wraiths (1 non-elite + optionally 1 elite),
+  // so the swap target search always succeeds.
+  //
+  // Runs AFTER elite-push so any elite-Wraith just relocated to ≥16 is
+  // immediately pulled back; runs BEFORE the last-monster boss-bake so
+  // `lastMonsterDeckIndex` reflects the post-swap arrangement (Boss may
+  // therefore become a non-Wraith monster that was displaced backward).
+  const WRAITH_RESERVED_LIMIT = 12;
+  for (let i = WRAITH_RESERVED_LIMIT; i < deckWithClassEvents.length; i++) {
+    const c = deckWithClassEvents[i];
+    if (c.type !== 'monster' || c.monsterType !== 'Wraith') continue;
+    let swapTarget = -1;
+    for (let k = 0; k < WRAITH_RESERVED_LIMIT; k++) {
+      const cand = deckWithClassEvents[k];
+      if (cand.type === 'monster' && cand.monsterType !== 'Wraith') {
+        swapTarget = k;
+        break;
+      }
+    }
+    if (swapTarget >= 0) {
+      const tmp = deckWithClassEvents[i];
+      deckWithClassEvents[i] = deckWithClassEvents[swapTarget];
+      deckWithClassEvents[swapTarget] = tmp;
+    }
+  }
+
   // --- Find last monster index for final-monster marking ---
   let lastMonsterDeckIndex = -1;
   for (let mi = deckWithClassEvents.length - 1; mi >= 0; mi -= 1) {
@@ -287,6 +363,18 @@ export function reduceInitGame(
     createApprenticeBoltCard(),
   ];
 
+  // --- Wraith-free run → grant 幽魂净化 immediately ---
+  // The fixed first active row contains no monsters, so only preview +
+  // remainingDeck can carry a Wraith at this point. We still scan all three
+  // for robustness in case `buildFixedFirstActiveRow` ever changes.
+  const { eternalRelics: finalEternalRelics, wraithPassiveEnabled } =
+    grantWraithPurificationIfNoWraith(
+      eternalRelics,
+      initialActive,
+      initialPreview,
+      initialRemaining,
+    );
+
   // --- Build full initial state ---
   const newState: GameState = {
     ...createInitialGameState(),
@@ -302,7 +390,8 @@ export function reduceInitGame(
     activeCardStacks: initialActiveStacks,
     remainingDeck: initialRemaining,
     classDeck: newClassDeck,
-    eternalRelics,
+    eternalRelics: finalEternalRelics,
+    wraithPassiveEnabled,
     showSkillSelection: false,
     totalWins,
     rng,
@@ -521,9 +610,28 @@ export function reduceInitMultiplayerGame(
     newClassDeck = [];
   }
 
-  // --- Starting hand + backpack (mirrors single-player init) ---
+  // --- Starting hand + backpack (mirrors single-player init, plus 维度扭曲) ---
+  // Multiplayer-only: seed an additional 维度扭曲 (`dimensionWarp`) into the
+  // backpack. It's a permanent magic that swaps a dungeon-row card with its
+  // preview-row counterpart — useful in MP for shaping which card goes to the
+  // active row vs. gets squeezed-out by waterfall (and thus teleported to the
+  // peer). Card definition lives in `createStarterCardPool` (single source of
+  // truth); we extract by id and deep-clone so the player can mutate locally.
   const initialHand: GameCardData[] = [createStarterDiscoverClassToHandCard()];
   const initialBackpack: GameCardData[] = [createApprenticeBoltCard()];
+  const dimensionWarpTemplate = createStarterCardPool().find(
+    c => c.id === STARTER_CARD_IDS.dimensionWarp,
+  );
+  if (dimensionWarpTemplate) {
+    initialBackpack.push({ ...dimensionWarpTemplate });
+  }
+
+  // --- Wraith-free run → grant 幽魂净化 immediately ---
+  // Scan the full `sharedDeck` (not the per-role slice) so both players' clients
+  // reach the same decision regardless of slicing — Wraith presence is a
+  // property of the shared deck composition, not of the per-role preview.
+  const { eternalRelics: finalEternalRelics, wraithPassiveEnabled } =
+    grantWraithPurificationIfNoWraith(eternalRelics, sharedDeck);
 
   const newState: GameState = {
     ...createInitialGameState(),
@@ -539,7 +647,8 @@ export function reduceInitMultiplayerGame(
     activeCardStacks: {},
     remainingDeck: initialRemaining,
     classDeck: newClassDeck,
-    eternalRelics,
+    eternalRelics: finalEternalRelics,
+    wraithPassiveEnabled,
     showSkillSelection: false,
     totalWins,
     rng,

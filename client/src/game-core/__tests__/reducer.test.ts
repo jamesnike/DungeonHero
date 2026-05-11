@@ -2562,6 +2562,12 @@ describe('reducer', () => {
     });
 
     it('discardAllLeftForGold+10 triggers last words and revive', () => {
+      // 注：迁移到 canonical computeEquipmentDisplacementLastWords 后，
+      // - onDestroyHeal 通过 `equipment:lastWordsHeal` 副作用传给 hook（GameBoard
+      //   useGameEvent 监听 → healHero → dispatch HEAL），不再直接 enqueue HEAL
+      // - onDestroyGold 直接 patch state.gold（不再 enqueue MODIFY_GOLD）
+      // 这跟 computeEquipmentBreakEffects（自然耐久归零）的行为对齐，
+      // 替代了已删除的两份实现 drift 中的 applyEquipDestroyLastWords。
       const weapon = {
         id: 'w1', name: 'HealSword', type: 'weapon' as const, value: 5,
         onDestroyHeal: 3, onDestroyGold: 5,
@@ -2577,22 +2583,21 @@ describe('reducer', () => {
         discardedCards: [],
       });
       const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'discardAllLeftForGold+10' });
-      // Weapon destroyed (no revive) → +10 gold from altar, last words: +5 gold via MODIFY_GOLD, heal 3 via HEAL
+      // Weapon destroyed (no revive) → +10 gold from altar (direct patch),
+      // last words: +5 gold direct patch, heal 3 via equipment:lastWordsHeal side effect
       const disposeActions = result.enqueuedActions.filter(a => a.type === 'DISPOSE_EQUIPMENT_CARD');
       expect(disposeActions).toHaveLength(1);
-      const healActions = result.enqueuedActions.filter(a => a.type === 'HEAL');
-      expect(healActions).toHaveLength(1);
-      expect((healActions[0] as any).amount).toBe(3);
-      const goldActions = result.enqueuedActions.filter(a => a.type === 'MODIFY_GOLD');
-      expect(goldActions).toHaveLength(1);
-      expect((goldActions[0] as any).delta).toBe(5);
+      const healSideEffects = result.sideEffects.filter(se => se.event === 'equipment:lastWordsHeal');
+      expect(healSideEffects).toHaveLength(1);
+      expect((healSideEffects[0].payload as { amount: number }).amount).toBe(3);
       // Monster survived via revive → stays in slot, no gold for it
       expect(result.state.equipmentSlot1).not.toBeNull();
       expect((result.state.equipmentSlot1 as any).id).toBe('m1');
       expect((result.state.equipmentSlot1 as any).durability).toBe(1);
       expect((result.state.equipmentSlot1 as any).reviveUsed).toBe(true);
-      // Only 1 item destroyed (weapon) → +10 gold from altar
-      expect(result.state.gold).toBe(10);
+      // 1 item destroyed (weapon) → +10 from altar; onDestroyGold:5 direct patch.
+      // Total = 0 (initial) + 5 (onDestroyGold) + 10 (altar) = 15.
+      expect(result.state.gold).toBe(15);
     });
 
     it('amuletsToGold+10 converts all amulets to gold', () => {

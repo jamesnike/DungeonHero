@@ -186,6 +186,31 @@ export function buildSharedDeck(seed?: number): {
     }
   }
 
+  // 5b. Pull all Wraiths into the first 12 cards (= first 3 chunks).
+  // Mirror of the Wraith-pull block in `rules/init.ts`. Keep both copies in
+  // sync — if you change one, update the other. Wraith is the explicit
+  // exception to step 5 (elites pushed back); see init.ts for the full
+  // rationale (preview row + remainingDeck[0..8) makes the 幽魂净化 clearance
+  // loop accessible early).
+  const WRAITH_RESERVED_LIMIT = 12;
+  for (let i = WRAITH_RESERVED_LIMIT; i < arranged.length; i++) {
+    const c = arranged[i];
+    if (c.type !== 'monster' || c.monsterType !== 'Wraith') continue;
+    let swapTarget = -1;
+    for (let k = 0; k < WRAITH_RESERVED_LIMIT; k++) {
+      const cand = arranged[k];
+      if (cand.type === 'monster' && cand.monsterType !== 'Wraith') {
+        swapTarget = k;
+        break;
+      }
+    }
+    if (swapTarget >= 0) {
+      const tmp = arranged[i];
+      arranged[i] = arranged[swapTarget];
+      arranged[swapTarget] = tmp;
+    }
+  }
+
   // 6. Boss-mark the last monster (stable across A and B because the deck
   //    sequence is identical). Both players' INIT_MULTIPLAYER_GAME reducers
   //    will see the same boss when the deck empties.
