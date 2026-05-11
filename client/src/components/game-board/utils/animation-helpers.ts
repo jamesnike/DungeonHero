@@ -21,25 +21,39 @@ export function getPreviewAnimationProps(
   const isDealingPreview = waterfallAnimation.dealingSlots.includes(index);
   const isDeckReturnDiscard =
     isDiscardingPreview && waterfallAnimation.discardDestination === 'deck';
+  // Portal teleport: 双人模式下被挤掉的卡飞向「传送门」(坟场位置)。
+  // primary 通过 (discardSlot, destination='portal') 表示；
+  // extras 通过 portalSlots 列表表示。两者都用同一套 graveyard 向量 + portal 动画。
+  const isPrimaryPortal =
+    isDiscardingPreview && waterfallAnimation.discardDestination === 'portal';
+  const isExtraPortal = waterfallAnimation.portalSlots.includes(index);
+  const isPortalingPreview = isPrimaryPortal || isExtraPortal;
+  // 当卡走 portal 路径时，传统 graveyard / deck-return 动画都不应触发。
+  const isLegacyDiscarding =
+    isDiscardingPreview && !isPrimaryPortal;
 
-  const flyVector = isDeckReturnDiscard
-    ? (deckReturnVectors[index] ?? DECK_RETURN_VECTOR_DEFAULT)
-    : (graveyardVectors[index] ?? GRAVEYARD_VECTOR_DEFAULT);
+  const flyVector = isPortalingPreview
+    ? (graveyardVectors[index] ?? GRAVEYARD_VECTOR_DEFAULT)
+    : isDeckReturnDiscard
+      ? (deckReturnVectors[index] ?? DECK_RETURN_VECTOR_DEFAULT)
+      : (graveyardVectors[index] ?? GRAVEYARD_VECTOR_DEFAULT);
 
-  const style: CSSProperties & Record<`--${string}`, string> = isDeckReturnDiscard
-    ? {
-        '--deck-return-offset-x': `${flyVector.offsetX}px`,
-        '--deck-return-offset-y': `${flyVector.offsetY}px`,
-      }
-    : {
-        '--graveyard-offset-x': `${flyVector.offsetX}px`,
-        '--graveyard-offset-y': `${flyVector.offsetY}px`,
-      };
+  const style: CSSProperties & Record<`--${string}`, string> =
+    isDeckReturnDiscard && !isPortalingPreview
+      ? {
+          '--deck-return-offset-x': `${flyVector.offsetX}px`,
+          '--deck-return-offset-y': `${flyVector.offsetY}px`,
+        }
+      : {
+          '--graveyard-offset-x': `${flyVector.offsetX}px`,
+          '--graveyard-offset-y': `${flyVector.offsetY}px`,
+        };
 
   const className = [
     isDroppingPreview ? 'animate-preview-drop' : '',
-    isDiscardingPreview && !isDeckReturnDiscard ? 'animate-preview-graveyard' : '',
-    isDiscardingPreview && isDeckReturnDiscard ? 'animate-preview-deck-return' : '',
+    isPortalingPreview ? 'animate-preview-portal' : '',
+    isLegacyDiscarding && !isDeckReturnDiscard ? 'animate-preview-graveyard' : '',
+    isLegacyDiscarding && isDeckReturnDiscard ? 'animate-preview-deck-return' : '',
     isDealingPreview ? 'animate-preview-deal' : '',
   ]
     .filter(Boolean)
@@ -48,7 +62,8 @@ export function getPreviewAnimationProps(
   return {
     style,
     className,
-    isAnimating: isDroppingPreview || isDiscardingPreview || isDealingPreview,
+    isAnimating:
+      isDroppingPreview || isDiscardingPreview || isPortalingPreview || isDealingPreview,
   };
 }
 

@@ -1115,8 +1115,18 @@ export type ActiveAmuletEffects = {
 
 export type WaterfallPhase = 'idle' | 'revealing' | 'dropping' | 'discarding' | 'dealing';
 
-/** 预览区被挤掉的卡：弃置→坟场 / 回收→回收袋 / 回主牌堆（动画目标不同） */
-export type WaterfallDiscardDestination = 'graveyard' | 'recycle-bag' | 'deck';
+/**
+ * 预览区被挤掉的卡：弃置→坟场 / 回收→回收袋 / 回主牌堆（动画目标不同）
+ *
+ * `'portal'` 是双人模式专属：被挤掉的卡飞向「传送门」(图案叠在坟场位置上)，
+ * 视觉上被吸进传送门 (shrink + fade)，逻辑上不进入坟场而是 teleport 给对手。
+ * 详见 `MultiplayerPortalOverlay` 组件 + `animate-preview-portal` keyframe。
+ */
+export type WaterfallDiscardDestination =
+  | 'graveyard'
+  | 'recycle-bag'
+  | 'deck'
+  | 'portal';
 
 export type WaterfallAnimationState = {
   phase: WaterfallPhase;
@@ -1124,8 +1134,16 @@ export type WaterfallAnimationState = {
   droppingSlots: number[];
   landingSlots: number[];
   discardSlot: number | null;
-  /** 与 `discardSlot` 同时有效；决定飞向坟场还是牌库按钮 */
+  /** 与 `discardSlot` 同时有效；决定飞向坟场还是牌库按钮还是传送门 */
   discardDestination: WaterfallDiscardDestination;
+  /**
+   * 双人模式专属：被挤掉的"额外"卡 (extras) 也要飞向传送门。
+   * `discardSlot` 本身就是 primary teleport 卡，`portalSlots` 收集 extras。
+   * 当 `discardDestination === 'portal'` 且 `discardSlot != null` 时，
+   * primary 也走 portal 动画；`portalSlots` 里的每个 index 都额外渲染同款动画。
+   * 单人模式始终为空数组。
+   */
+  portalSlots: number[];
   dealingSlots: number[];
   sequenceId: number | null;
 };

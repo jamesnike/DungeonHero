@@ -607,6 +607,81 @@ function reduceApplyWaterfallDiscardEffects(
   const isFinalMonsterPrecursor =
     discardCard.type === 'monster' && discardCard.isFinalMonster;
 
+  // -----------------------------------------------------------------------
+  // Multiplayer "portal teleport" short-circuit
+  // -----------------------------------------------------------------------
+  // In MP mode, the squeezed-out preview card is being TELEPORTED to the
+  // peer's deck top via the portal animation rather than locally discarded.
+  // Per design (user-confirmed):
+  //   "因为是被传送，所以卡牌的'被挤掉'的效果都不触发，因为被传送了"
+  //
+  // Bypass ALL of:
+  //   - waterfallEffect (returnToDeck / swarmInfest / damage / goldLoss /
+  //     bonusDecay / turnBoost / boostRowMonsterAttack / destroyAllEquipment /
+  //     spellDecay / destroyAllAmuletsAndDiscardHand)
+  //   - DISCARD_OWNED_CARD enqueue (the card does NOT enter local
+  //     discardedCards → onDiscardDamage / onDiscardDraw / amulet
+  //     catapult / discard-zap linkages do NOT fire)
+  //   - stacked preview cards at this slot are also teleported (not
+  //     discarded), so we ship them too
+  //
+  // EXCEPTION: Boss precursor (`isFinalMonster: true`) still gets buried
+  // at the bottom of local deck — synchronous co-op Boss is out of scope
+  // and we don't want both players' Bosses to ping-pong via teleport.
+  if (state.multiplayerSession !== null && !isFinalMonsterPrecursor) {
+    const stripFields = (c: GameCardData): GameCardData => {
+      const { fromSlot: _fs, _recycleWaits: _rw, _excludedFromShared: _ex, ...clean } =
+        c as GameCardData & { fromSlot?: unknown };
+      void _fs; void _rw; void _ex;
+      return clean as GameCardData;
+    };
+    const teleportBuffer: GameCardData[] = [
+      ...(state.pendingWaterfallPlan?._shippedCardsBuffer ?? []),
+      stripFields(discardCard),
+    ];
+
+    sideEffects.push({
+      event: 'log:entry',
+      payload: {
+        type: 'waterfall',
+        message: `传送门吸走「${cardName}」(送往对手牌堆顶 · 被挤掉效果不触发)`,
+      },
+    });
+
+    if (discardPreviewIndex != null) {
+      const stacks = state.previewCardStacks[discardPreviewIndex];
+      if (stacks && stacks.length > 0) {
+        for (const stackCard of stacks) {
+          teleportBuffer.push(stripFields(stackCard));
+          sideEffects.push({
+            event: 'log:entry',
+            payload: { type: 'waterfall', message: `传送门一并吸走堆叠：「${stackCard.name}」` },
+          });
+        }
+        enqueuedActions.push({ type: 'REMOVE_PREVIEW_CARD_STACKS', indices: [discardPreviewIndex] });
+      }
+    }
+
+    if (state.pendingWaterfallPlan) {
+      patch.pendingWaterfallPlan = {
+        ...state.pendingWaterfallPlan,
+        nextRemainingDeck,
+        _shippedCardsBuffer: teleportBuffer,
+      };
+    }
+
+    sideEffects.push({
+      event: 'waterfall:discardEffect',
+      payload: {
+        cardName,
+        effectType: 'mp-teleport',
+        updatedRemainingDeck: nextRemainingDeck,
+      },
+    });
+
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
   // Multiplayer helper: any card we insert back into the LOCAL remainingDeck
   // (final-monster bottom-burial / returnToDeck / swarmInfest bug spawns)
   // must be tagged `_excludedFromShared: true` so the next waterfall's

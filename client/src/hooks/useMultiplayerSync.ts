@@ -99,6 +99,14 @@ export interface MultiplayerConnectionState {
   errorMessage: string | null;
   /** Force a retry attempt (resets attempt counter). UI button binds to this. */
   retryNow: () => void;
+  /**
+   * Opaque user id of the other player in the current multiplayer
+   * session, or `null` in single-player. Mirrors
+   * `state.multiplayerSession?.peerId` — exposed here so consumers like
+   * the connection badge can resolve a display name without a separate
+   * selector hop.
+   */
+  peerId: string | null;
 }
 
 const IDLE_STATE: MultiplayerConnectionState = {
@@ -106,6 +114,7 @@ const IDLE_STATE: MultiplayerConnectionState = {
   retryAttempt: 0,
   errorMessage: null,
   retryNow: () => {},
+  peerId: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -634,5 +643,6 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
     retryAttempt,
     errorMessage,
     retryNow,
+    peerId: session.peerId,
   };
 }

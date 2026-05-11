@@ -1,14 +1,20 @@
 /**
- * MultiplayerConnectionBadge — small status indicator (dot + text) shown
- * in the top-right of the game board while in multiplayer mode.
+ * MultiplayerConnectionBadge — top-right indicator while in multiplayer.
  *
- * Phases:
- *   • connecting / syncing → yellow pulsing dot
+ * Layout: [colored dot] [peer display name]
+ *
+ * The dot color encodes the connection phase:
  *   • connected            → green steady dot
+ *   • connecting / syncing → amber pulsing dot
  *   • sync_failed          → orange dot
  *   • disconnected         → red dot
  *
  * `idle` (single-player) → renders nothing.
+ *
+ * The text label is the *peer's* display name (resolved via
+ * `useMultiplayerPeerName` in the parent) so the player always sees who
+ * they're connected to. Fallback string is shown when the name hasn't
+ * been resolved yet (first-frame race) or the peer has no profile name.
  *
  * The badge is purely informational. The freeze overlay
  * (`MultiplayerOfflineOverlay`) is the one that gates input — this badge
@@ -23,14 +29,17 @@ import type { MultiplayerConnectionPhase } from '@/hooks/useMultiplayerSync';
 
 interface MultiplayerConnectionBadgeProps {
   phase: MultiplayerConnectionPhase;
-  retryAttempt: number;
+  /**
+   * Peer's display name resolved from `player_profiles`. Pass `null`
+   * when not yet loaded / unavailable; the badge will substitute a
+   * neutral fallback.
+   */
+  peerName: string | null;
 }
-
-const RETRY_TOTAL = 3;
 
 export function MultiplayerConnectionBadge({
   phase,
-  retryAttempt,
+  peerName,
 }: MultiplayerConnectionBadgeProps) {
   const { t } = useTranslation();
   if (phase === 'idle') return null;
@@ -44,18 +53,11 @@ export function MultiplayerConnectionBadge({
           ? 'bg-orange-500'
           : 'bg-red-500'; // disconnected
 
-  const labelKey =
-    phase === 'connected'
-      ? 'gameBoard.multiplayerConnection.phaseConnected'
-      : phase === 'connecting'
-        ? 'gameBoard.multiplayerConnection.phaseConnecting'
-        : phase === 'syncing'
-          ? 'gameBoard.multiplayerConnection.phaseSyncing'
-          : phase === 'sync_failed'
-            ? 'gameBoard.multiplayerConnection.phaseSyncFailed'
-            : 'gameBoard.multiplayerConnection.phaseDisconnected';
-
-  const showRetry = phase === 'syncing' && retryAttempt > 0;
+  const trimmed = peerName?.trim() ?? '';
+  const label =
+    trimmed.length > 0
+      ? trimmed
+      : t('gameBoard.multiplayerConnection.peerFallback');
 
   return (
     <div
@@ -65,19 +67,11 @@ export function MultiplayerConnectionBadge({
         'pointer-events-none flex items-center gap-1.5 rounded-full',
         'bg-black/55 backdrop-blur-sm px-2.5 py-1',
         'text-[11px] leading-none font-medium text-white shadow-sm',
-        'select-none',
+        'select-none max-w-[180px]',
       )}
     >
-      <span className={cn('h-2 w-2 rounded-full', dotColor)} />
-      <span>{t(labelKey)}</span>
-      {showRetry && (
-        <span className="text-amber-200">
-          {t('gameBoard.multiplayerConnection.retryAttempt', {
-            attempt: retryAttempt + 1,
-            total: RETRY_TOTAL,
-          })}
-        </span>
-      )}
+      <span className={cn('h-2 w-2 rounded-full shrink-0', dotColor)} />
+      <span className="truncate">{label}</span>
     </div>
   );
 }

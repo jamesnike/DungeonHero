@@ -39,6 +39,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
   const acquiredUniqueClassCardIds = useGameState(s => s.acquiredUniqueClassCardIds);
   const backpackCount = useGameState(s => s.backpackItems.length);
   const recycleCount = useGameState(s => s.permanentMagicRecycleBag.length);
+  const multiplayerActive = useGameState(s => s.multiplayerSession !== null);
 
   const cardH = gridCardSize?.height ?? 100;
   const stripW = Math.max(18, Math.round(cardH * 0.14));
@@ -65,6 +66,7 @@ export const NarrowSidebar = memo(function NarrowSidebar({
           shouldHighlight={shouldHighlightGraveyard}
           discardedCards={discardedCards}
           onCardSelect={onCardSelect}
+          multiplayerActive={multiplayerActive}
         />
       </div>
 

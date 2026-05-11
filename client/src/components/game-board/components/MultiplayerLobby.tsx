@@ -60,10 +60,46 @@ interface CreateState {
   myUserId: string;
 }
 
+// Persist the player's chosen display name across sessions on the same device.
+// Cleared by the user manually (clearing browser data) — we don't expose a
+// "forget me" button yet because the name is low-stakes and they can just
+// overwrite it next time they open the lobby.
+const DISPLAY_NAME_STORAGE_KEY = 'dh-mp-display-name';
+const MAX_DISPLAY_NAME_LENGTH = 32;
+
+function loadStoredDisplayName(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = window.localStorage.getItem(DISPLAY_NAME_STORAGE_KEY);
+    if (raw == null) return '';
+    return raw.slice(0, MAX_DISPLAY_NAME_LENGTH);
+  } catch {
+    return '';
+  }
+}
+
+function saveStoredDisplayName(name: string): void {
+  if (typeof window === 'undefined') return;
+  const trimmed = name.trim().slice(0, MAX_DISPLAY_NAME_LENGTH);
+  if (trimmed.length === 0) return;
+  try {
+    window.localStorage.setItem(DISPLAY_NAME_STORAGE_KEY, trimmed);
+  } catch {
+    // localStorage may be disabled (private mode / quota). Failing silently
+    // means the user just has to retype their name next session — non-fatal.
+  }
+}
+
 export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyProps) {
   const { t } = useTranslation();
   const [view, setView] = useState<LobbyView>('menu');
-  const [displayName, setDisplayName] = useState('');
+  // Lazy init from localStorage so reopening the lobby (or refreshing the
+  // page) auto-fills the user's last confirmed name. We only persist after a
+  // successful create/join, not on every keystroke, so half-typed names don't
+  // get remembered.
+  const [displayName, setDisplayName] = useState<string>(() =>
+    loadStoredDisplayName(),
+  );
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,17 +151,24 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
     });
   };
 
+  const trimmedDisplayName = displayName.trim();
+  const hasDisplayName = trimmedDisplayName.length > 0;
+
   const handleCreateRoom = async () => {
     setError(null);
+    if (!hasDisplayName) return;
     setBusy(true);
     try {
       const { deck, seed } = buildSharedDeck();
       const res = await createRoom({
         sharedDeck: deck,
         sharedDeckSeed: seed,
-        displayName: displayName.trim() || undefined,
+        displayName: trimmedDisplayName,
       });
       if (!mountedRef.current) return;
+      // Only persist after the server accepted the request — guarantees the
+      // user actually committed to this name (vs. just typed it and bailed).
+      saveStoredDisplayName(trimmedDisplayName);
       setCreateState({
         roomId: res.roomId,
         code: res.code,
@@ -143,6 +186,7 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
 
   const handleJoinRoom = async () => {
     setError(null);
+    if (!hasDisplayName) return;
     const code = joinCode.trim().toUpperCase();
     if (!/^[A-Z0-9]{6}$/.test(code)) {
       setError(t('modal.multiplayerLobby.errorInvalidCode'));
@@ -152,9 +196,10 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
     try {
       const res = await joinRoom({
         code,
-        displayName: displayName.trim() || undefined,
+        displayName: trimmedDisplayName,
       });
       if (!mountedRef.current) return;
+      saveStoredDisplayName(trimmedDisplayName);
       // Fire onReady with the deck the server returned. The peer (player A)
       // will receive a Realtime update on `rooms` and proceed
       // simultaneously.
@@ -256,13 +301,18 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
                 placeholder={t('modal.multiplayerLobby.displayNamePlaceholder')}
-                maxLength={32}
+                maxLength={MAX_DISPLAY_NAME_LENGTH}
+                autoComplete="off"
               />
+              <p className="text-xs text-muted-foreground">
+                {t('modal.multiplayerLobby.displayNameHint')}
+              </p>
             </div>
             <Button
               variant="default"
               size="lg"
               className="gap-2"
+              disabled={!hasDisplayName}
               onClick={() => setView('create')}
             >
               <Plus className="h-4 w-4" />
@@ -272,6 +322,7 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
               variant="outline"
               size="lg"
               className="gap-2"
+              disabled={!hasDisplayName}
               onClick={() => setView('join')}
             >
               <Users className="h-4 w-4" />
@@ -286,6 +337,13 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
         {/* CREATE confirmation view */}
         {view === 'create' && (
           <div className="flex flex-col gap-3 pt-2">
+            {hasDisplayName && (
+              <p className="text-xs text-muted-foreground">
+                {t('modal.multiplayerLobby.displayNameAs', {
+                  name: trimmedDisplayName,
+                })}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               {t('modal.gameModeSelect.multiplayerModeDesc')}
             </p>
@@ -293,7 +351,7 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
               variant="default"
               size="lg"
               className="gap-2"
-              disabled={busy}
+              disabled={busy || !hasDisplayName}
               onClick={handleCreateRoom}
             >
               {busy ? (
@@ -322,6 +380,13 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
         {/* JOIN view */}
         {view === 'join' && (
           <div className="flex flex-col gap-3 pt-2">
+            {hasDisplayName && (
+              <p className="text-xs text-muted-foreground">
+                {t('modal.multiplayerLobby.displayNameAs', {
+                  name: trimmedDisplayName,
+                })}
+              </p>
+            )}
             <div className="flex flex-col gap-2">
               <Label htmlFor="mp-code" className="text-sm">
                 {t('modal.multiplayerLobby.codeLabel')}
@@ -340,7 +405,7 @@ export function MultiplayerLobby({ open, onCancel, onReady }: MultiplayerLobbyPr
             <Button
               variant="default"
               size="lg"
-              disabled={busy || joinCode.length !== 6}
+              disabled={busy || joinCode.length !== 6 || !hasDisplayName}
               className="gap-2"
               onClick={handleJoinRoom}
             >

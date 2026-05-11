@@ -71,6 +71,7 @@ import { useStunReleasedGoldFx } from './game-board/hooks/useStunReleasedGoldFx'
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
 import { useGameEngine, useShallowGameState, useDispatch, useGameEvent } from '@/hooks/useGameEngine';
 import { useMultiplayerSync } from '@/hooks/useMultiplayerSync';
+import { useMultiplayerPeerName } from '@/hooks/useMultiplayerPeerName';
 import { useCardOperations, type CardOperationsDeps } from '@/hooks/useCardOperations';
 import { useCombatActions, type CombatActionsDeps } from '@/hooks/useCombatActions';
 import { useCombatVisuals } from '@/hooks/useCombatVisuals';
@@ -943,6 +944,11 @@ export default function GameBoard() {
   // Returns the connection state machine which drives the badge + freeze
   // overlay (no-op / IDLE_STATE in single-player).
   const multiplayerConnection = useMultiplayerSync();
+  // Resolve the peer's display name from `player_profiles` (RLS allows
+  // reading the row of any player you currently share a `rooms` row
+  // with). The badge in the top-right corner shows this name; dot color
+  // still conveys connection phase.
+  const multiplayerPeerName = useMultiplayerPeerName(multiplayerConnection.peerId);
   // The 8 flight arrays now live in <FlightOverlayContainer>; we drive them
   // imperatively via this ref so flight setState calls don't re-render
   // GameBoard. See FlightOverlayContainer.tsx for rationale.
@@ -1284,6 +1290,7 @@ export default function GameBoard() {
       landingSlots: waterfallAnimation.landingSlots,
       discardSlot: waterfallAnimation.discardSlot,
       discardDestination: waterfallAnimation.discardDestination,
+      portalSlots: waterfallAnimation.portalSlots,
       dealingSlots: waterfallAnimation.dealingSlots,
       sequenceId: waterfallAnimation.sequenceId,
     });
@@ -1343,6 +1350,9 @@ export default function GameBoard() {
     if (waterfallAnimation.discardDestination === 'deck') {
       updatePreviewToDeckVector(slot);
     } else {
+      // 'graveyard' | 'recycle-bag' | 'portal' all fly toward graveyard cell;
+      // the difference is only the end-state animation (graveyard land vs.
+      // portal shrink-fade).
       updatePreviewToGraveyardVector(slot);
     }
   }, [
@@ -1350,6 +1360,15 @@ export default function GameBoard() {
     waterfallAnimation.discardDestination,
     updatePreviewToDeckVector,
     updatePreviewToGraveyardVector]);
+
+  // MP portal teleport: each `portalSlots` index needs its own graveyard
+  // vector pre-computed so the `animate-preview-portal` animation has the
+  // right `--graveyard-offset-x/y` to fly toward.
+  useLayoutEffect(() => {
+    for (const slot of waterfallAnimation.portalSlots) {
+      updatePreviewToGraveyardVector(slot);
+    }
+  }, [waterfallAnimation.portalSlots, updatePreviewToGraveyardVector]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -5372,18 +5391,15 @@ export default function GameBoard() {
     }
 
     // Multiplayer-only: process any extra preview cards squeezed out beyond
-    // the primary `discardCard`. Each runs its own waterfallEffect locally
-    // (per user-confirmed semantic A: "本地先触发效果，然后 2 张全部传给对手")
-    // and gets staged to `pendingTransferOut` for shipping to the peer via the
-    // `multiplayer:transferOut` side effect emitted at the end of
-    // APPLY_WATERFALL_DEAL.
+    // the primary `discardCard`. In MP mode the reducer routes BOTH primary
+    // and extras into `pendingTransferOut` via the teleport short-circuit
+    // (waterfallEffect / onDiscardDraw / amulet linkage all bypassed). Each
+    // call here just stages one more card into `_shippedCardsBuffer`.
     //
     // We pull `nextRemainingDeck` from the LIVE `pendingWaterfallPlan` for
-    // each iteration (not from `plan.nextRemainingDeck` snapshot) because
-    // the previous APPLY_WATERFALL_DISCARD_EFFECTS may have mutated the deck
-    // (e.g. `returnToDeck` inserting the card back, `swarmInfest` prepending
-    // bugs) and `reduceApplyWaterfallDiscardEffects` syncs those changes via
-    // `patch.pendingWaterfallPlan = { ...plan, nextRemainingDeck }`.
+    // each iteration (not from `plan.nextRemainingDeck` snapshot) because the
+    // previous dispatch may have mutated the buffer; passing the live deck
+    // keeps the chain consistent.
     //
     // Single-player branch: plan.extraDiscardCards is `undefined` (or `[]`),
     // so the loop body never runs — zero overhead.
@@ -5408,6 +5424,7 @@ export default function GameBoard() {
       ...prev,
       discardSlot: null,
       discardDestination: 'graveyard',
+      portalSlots: [],
       isActive: true,
       sequenceId: prev.sequenceId,
     }));
@@ -5434,6 +5451,19 @@ export default function GameBoard() {
     // Delegate all state mutations (activeCards, stacks, preview clear) to the reducer
     dispatch({ type: 'APPLY_WATERFALL_DROP' });
 
+    // Multiplayer: 被挤掉的 primary discardCard + 所有 extraDiscardCards
+    // 都要 teleport 到对手 (而非进本地坟场)。视觉上飞向「传送门」(坟场位置叠加
+    // 的发光环), shrink + fade。`discardDestination='portal'` 让 primary 走
+    // portal 动画；`portalSlots = extraIndices` 让 extras 也走同款动画。
+    // 注意 Boss precursor 例外不参与 teleport (reducer 仍把它埋到牌堆底);
+    // 这种情况 plan.discardCard.isFinalMonster === true, 用普通 graveyard 动画
+    // 看着也不违和 (因为 Boss precursor 也不会出 extraDiscardCards)。
+    const isMpActive = engine.getState().multiplayerSession !== null;
+    const isBossPrecursor =
+      plan.discardCard?.type === 'monster' && plan.discardCard?.isFinalMonster === true;
+    const useMpPortal = isMpActive && plan.discardCard !== null && !isBossPrecursor;
+    const extraIndices = plan.extraDiscardPreviewIndices ?? [];
+
     setWaterfallAnimation(prev => ({
       ...prev,
       phase: plan.discardCard ? 'discarding' : 'dealing',
@@ -5441,7 +5471,8 @@ export default function GameBoard() {
       droppingSlots: [],
       landingSlots: plan.dropTargetSlots,
       discardSlot: plan.discardCard ? plan.discardPreviewIndex : null,
-      discardDestination: plan.discardDestination,
+      discardDestination: useMpPortal ? 'portal' : plan.discardDestination,
+      portalSlots: useMpPortal ? extraIndices : [],
       sequenceId: prev.sequenceId,
     }));
 
@@ -5516,13 +5547,23 @@ export default function GameBoard() {
     // face-up so the player can see what's about to happen. The reveal is
     // purely visual — `previewCards` state is unchanged.
     const proceedWithWaterfall = () => {
+      // MP portal teleport: when dropping straight to discard (no drops first),
+      // override discard destination and stage extras for portal animation.
+      // Boss precursor (`isFinalMonster`) excluded — see handleWaterfallDropComplete.
+      const isMpActive = engine.getState().multiplayerSession !== null;
+      const isBossPrecursor =
+        plan.discardCard?.type === 'monster' && plan.discardCard?.isFinalMonster === true;
+      const useMpPortal =
+        isMpActive && plan.discardCard !== null && !isBossPrecursor && plan.resolvedDropCards.length === 0;
+      const extraIndices = plan.extraDiscardPreviewIndices ?? [];
       setWaterfallAnimation({
         phase: plan.resolvedDropCards.length > 0 ? 'dropping' : plan.discardCard ? 'discarding' : 'dealing',
         isActive: true,
         droppingSlots: plan.resolvedDropCards.length > 0 ? plan.dropPreviewIndices : [],
         landingSlots: [],
         discardSlot: plan.resolvedDropCards.length === 0 ? plan.discardPreviewIndex : null,
-        discardDestination: plan.discardDestination,
+        discardDestination: useMpPortal ? 'portal' : plan.discardDestination,
+        portalSlots: useMpPortal ? extraIndices : [],
         dealingSlots: [],
         sequenceId,
       });
@@ -5545,6 +5586,7 @@ export default function GameBoard() {
         landingSlots: [],
         discardSlot: null,
         discardDestination: 'graveyard',
+        portalSlots: [],
         dealingSlots: [],
         sequenceId,
       });
@@ -8958,6 +9000,7 @@ export default function GameBoard() {
                   shouldHighlight={shouldHighlightGraveyard}
                   discardedCards={discardedCards}
                   onCardSelect={handleCardClick}
+                  multiplayerActive={multiplayerConnection.phase !== 'idle'}
                 />
               </div>
             </div>
@@ -9121,13 +9164,14 @@ export default function GameBoard() {
         onAcknowledge={() => setShowMultiplayerBossAlert(false)}
       />
 
-      {/* Connection status badge — top-right, multiplayer only. Pure
+      {/* Connection status badge — top-right, multiplayer only. Shows the
+          peer's display name; dot color encodes connection phase. Pure
           informational; doesn't gate input. */}
       {multiplayerConnection.phase !== 'idle' && (
         <div className="pointer-events-none fixed top-2 right-2 z-[60]">
           <MultiplayerConnectionBadge
             phase={multiplayerConnection.phase}
-            retryAttempt={multiplayerConnection.retryAttempt}
+            peerName={multiplayerPeerName}
           />
         </div>
       )}

@@ -24,6 +24,7 @@ import { useGameViewport } from '@/contexts/GameViewportContext';
 import { FLAT_ASPECT_RATIO } from './game-board/constants';
 import { captureModalOriginFromEvent } from '@/lib/modalOriginAnchor';
 import { useDialogOriginAnchor } from '@/hooks/use-dialog-origin-anchor';
+import { MultiplayerPortalOverlay } from './game-board/components/MultiplayerPortalOverlay';
 
 interface GraveyardZoneProps {
   onDrop?: (item: any) => void;
@@ -33,9 +34,15 @@ interface GraveyardZoneProps {
   onCardSelect?: (card: GameCardData) => void;
   compact?: boolean;
   compactStyle?: React.CSSProperties;
+  /**
+   * Multiplayer mode flag. When true, render the teleport portal overlay
+   * over the graveyard pile to signal "squeezed-out cards in waterfall
+   * are teleported to your opponent here, NOT discarded locally".
+   */
+  multiplayerActive?: boolean;
 }
 
-function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect, compact = false, compactStyle }: GraveyardZoneProps) {
+function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighlight = false, onCardSelect, compact = false, compactStyle, multiplayerActive = false }: GraveyardZoneProps) {
   const { t } = useTranslation();
   const gameViewport = useGameViewport();
   const isFlat = gameViewport.width / gameViewport.height > FLAT_ASPECT_RATIO;
@@ -231,7 +238,7 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
           >
             <span
               className={cn(
-                'flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
+                'relative flex flex-col items-center justify-center rounded-l-lg border border-r-0 transition-all duration-150',
                 // Mirror the BackpackZone compact button's drag-feedback rules
                 // (no extra `shouldHighlight` gate) so the slight scale-up on
                 // hover fires under the same droppable condition.
@@ -243,9 +250,10 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
               )}
               style={innerStyle}
             >
-              <Skull className="w-4 h-4" />
+              {multiplayerActive && <MultiplayerPortalOverlay compact />}
+              <Skull className="w-4 h-4 relative z-30" />
               {discardedCards.length > 0 && (
-                <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-slate-500/90 ring-1 ring-slate-200/70 shadow-sm">
+                <span className="mt-0.5 px-1 rounded text-[10px] font-bold leading-none text-white bg-slate-500/90 ring-1 ring-slate-200/70 shadow-sm relative z-30">
                   {discardedCards.length}
                 </span>
               )}
@@ -272,8 +280,9 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
         >
           {isFlat ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-200">
-              <span className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wide">{t('cardBack.cell.graveyard')}</span>
-              <span className="font-mono font-bold text-lg">{discardedCards.length}</span>
+              {multiplayerActive && <MultiplayerPortalOverlay />}
+              <span className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wide relative z-30">{t('cardBack.cell.graveyard')}</span>
+              <span className="font-mono font-bold text-lg relative z-30">{discardedCards.length}</span>
             </div>
           ) : (
             <>
@@ -283,7 +292,10 @@ function GraveyardZoneInner({ onDrop, isDropTarget, discardedCards, shouldHighli
                 variant="muted"
                 label={t('cardBack.cell.graveyard')}
               />
-              <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3">
+              {multiplayerActive && <MultiplayerPortalOverlay />}
+              {/* 角标/「View」文字必须高于传送门 overlay (z-20) 才能保持可读。
+                  使用 z-30。 */}
+              <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-1 sm:p-3 z-30">
                 <div className="flex items-center justify-between text-[8px] sm:text-[10px] uppercase tracking-wide text-slate-200">
                   <span className="font-semibold">{t('cardBack.cell.graveyard')}</span>
                   <Badge variant="outline" className="bg-black/40 text-white font-mono text-[9px] sm:text-sm px-1 sm:px-2 py-0 sm:py-0.5">

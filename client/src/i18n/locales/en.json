@@ -775,8 +775,10 @@
     "multiplayerLobby": {
       "title": "Multiplayer Lobby",
       "subtitle": "Create a room or join your friend's",
-      "displayNameLabel": "Display name (optional)",
+      "displayNameLabel": "Display name",
       "displayNamePlaceholder": "Your name…",
+      "displayNameHint": "Saved on this device for next time",
+      "displayNameAs": "Playing as \u201c{{name}}\u201d",
       "createButton": "Create room",
       "joinButton": "Join room",
       "codeLabel": "Room code",
@@ -801,6 +803,7 @@
       "ok": "Got it"
     },
     "multiplayerConnection": {
+      "peerFallback": "Peer",
       "phaseConnecting": "Connecting…",
       "phaseConnected": "In sync",
       "phaseSyncing": "Syncing…",

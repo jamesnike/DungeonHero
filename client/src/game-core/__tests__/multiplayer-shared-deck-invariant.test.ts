@@ -243,10 +243,11 @@ describe('Multiplayer shared-portion invariant', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 2. returnToDeck: discard re-enters local deck, NOT removed from peer
+  // 2. MP teleport bypass: returnToDeck waterfallEffect does NOT fire on
+  //    sender; wraith just teleports to peer.
   // -------------------------------------------------------------------------
 
-  it('returnToDeck discard re-inserts locally tagged _excludedFromShared; B shared portion unaffected', () => {
+  it('MP teleport bypass: returnToDeck waterfallEffect does NOT trigger; wraith teleports to peer', () => {
     const sharedDeck = [
       makeShared('s1'),
       makeShared('s2'),
@@ -275,8 +276,8 @@ describe('Multiplayer shared-portion invariant', () => {
       waterfallEffect: { type: 'returnToDeck' },
     } as unknown as GameCardData;
 
-    // A deals s1 to preview (1 card), leaving [s2, s3]. The wraith returns
-    // to A's deck somewhere via returnToDeck (local-only insertion).
+    // A deals s1 to preview (1 card), leaving [s2, s3]. The wraith is
+    // teleported to peer — no local re-insertion.
     stateA = {
       ...stateA,
       pendingWaterfallPlan: makePlanForDeck(
@@ -294,14 +295,12 @@ describe('Multiplayer shared-portion invariant', () => {
     ]);
     stateA = discardResult.state;
 
-    // returnToDeck → wraith NOT in pendingTransferOut.
-    expect(stateA.pendingTransferOut).toBeNull();
-
-    // pendingWaterfallPlan.nextRemainingDeck has the re-inserted wraith.
-    const updatedDeckTop =
-      stateA.pendingWaterfallPlan?.nextRemainingDeck ?? [];
-    expect(updatedDeckTop.find(c => c.id === 'w1')).toBeDefined();
-    expect(updatedDeckTop.find(c => c.id === 'w1')!._excludedFromShared).toBe(true);
+    // Teleport bypass: wraith is staged for transfer, NOT re-inserted locally.
+    const updatedDeck = stateA.pendingWaterfallPlan?.nextRemainingDeck ?? [];
+    expect(updatedDeck.find(c => c.id === 'w1')).toBeUndefined();
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['w1']);
+    // _excludedFromShared is stripped before teleport (peer re-tags on RECEIVE).
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer![0]._excludedFromShared).toBeUndefined();
 
     const dealResult = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' });
     stateA = dealResult.state;
@@ -317,29 +316,34 @@ describe('Multiplayer shared-portion invariant', () => {
       previewDealt: GameCardData[];
       seq: number;
     };
-    expect(payload.cards).toHaveLength(0);
+    expect(payload.cards.map(c => c.id)).toEqual(['w1']);
     expect(payload.previewDealt.map(c => c.id)).toEqual(['s1']);
 
     const bResult = drain(stateB, [
       {
         type: 'MULTIPLAYER_RECEIVE_TRANSFER',
-        cards: [],
+        cards: payload.cards,
         previewDealt: payload.previewDealt,
         seq: 1,
       },
     ]);
     stateB = bResult.state;
 
-    // B's shared portion = [s2, s3]. A's deck has wraith mixed in (excluded).
-    expect(sharedIds(stateB.remainingDeck)).toEqual(['s2', 's3']);
+    // B's deck = [w1 (excluded, teleported in)] ++ [s2, s3].
+    expect(stateB.remainingDeck.map(c => c.id)).toEqual(['w1', 's2', 's3']);
+    expect(stateB.remainingDeck[0]._excludedFromShared).toBe(true);
+
+    // Shared portion stays aligned.
     expect(sharedIds(stateA.remainingDeck)).toEqual(['s2', 's3']);
+    expect(sharedIds(stateB.remainingDeck)).toEqual(['s2', 's3']);
   });
 
   // -------------------------------------------------------------------------
-  // 3. swarmInfest: bugs prepend with _excludedFromShared
+  // 3. MP teleport bypass: swarmInfest waterfallEffect does NOT fire — no
+  //    bugs spawned locally; SwarmHost just teleports.
   // -------------------------------------------------------------------------
 
-  it('swarmInfest bugs prepend to A deck tagged _excludedFromShared; B shared portion stays in lockstep', () => {
+  it('MP teleport bypass: swarmInfest waterfallEffect does NOT trigger; no bugs spawned, host teleports', () => {
     const sharedDeck = [makeShared('s1'), makeShared('s2'), makeShared('s3'), makeShared('s4')];
     let stateA = makeMpState('A', {
       remainingDeck: [...sharedDeck.map(c => ({ ...c }))],
@@ -378,21 +382,16 @@ describe('Multiplayer shared-portion invariant', () => {
       } as GameAction,
     ]).state;
 
-    // SwarmHost itself goes to graveyard → also staged for transfer
-    // (on the plan's _shippedCardsBuffer, not yet on state.pendingTransferOut).
-    expect(stateA.pendingTransferOut).toBeNull();
+    // SwarmHost staged for teleport. NO bugs spawned locally (waterfallEffect
+    // bypassed).
     expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['sw1']);
-
-    // Plan: [bug, bug, s2, s3, s4] with bugs tagged excluded.
     const planDeck = stateA.pendingWaterfallPlan?.nextRemainingDeck ?? [];
-    expect(planDeck.length).toBe(5);
-    expect(planDeck[0]._excludedFromShared).toBe(true);
-    expect(planDeck[1]._excludedFromShared).toBe(true);
+    expect(planDeck.map(c => c.id)).toEqual(['s2', 's3', 's4']); // unchanged, no bugs
+    expect(planDeck.every(c => !c._excludedFromShared)).toBe(true);
 
     const dealResult = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' });
     stateA = dealResult.state;
 
-    // After DEAL: atomic commit promotes buffer → state.pendingTransferOut.
     expect(stateA.pendingTransferOut!.map(c => c.id)).toEqual(['sw1']);
 
     const payload = (dealResult.sideEffects ?? []).find(
@@ -420,6 +419,227 @@ describe('Multiplayer shared-portion invariant', () => {
 
     expect(sharedIds(stateA.remainingDeck)).toEqual(sharedIds(stateB.remainingDeck));
     expect(sharedIds(stateA.remainingDeck)).toEqual(['s2', 's3', 's4']);
+  });
+
+  // -------------------------------------------------------------------------
+  // 3b. MP teleport bypass: damage waterfallEffect does NOT enqueue
+  //     APPLY_DAMAGE; goldLoss does NOT decrement gold.
+  // -------------------------------------------------------------------------
+
+  it('MP teleport bypass: damage waterfallEffect does NOT enqueue APPLY_DAMAGE', () => {
+    let stateA = makeMpState('A', {
+      remainingDeck: [makeShared('s1')],
+      activeCards: emptyRow(),
+      previewCards: emptyRow(),
+      hp: 30,
+      pendingWaterfallPlan: makePlanForDeck([makeShared('s1')], []),
+    });
+
+    const damageDiscard = {
+      id: 'dmg',
+      type: 'monster',
+      name: 'KamikazeBat',
+      hp: 1,
+      attack: 1,
+      value: 0,
+      waterfallEffect: { type: 'damage', amount: 5 },
+    } as unknown as GameCardData;
+
+    const result = drain(stateA, [
+      {
+        type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
+        discardCard: damageDiscard,
+        nextRemainingDeck: [makeShared('s1')],
+      } as GameAction,
+    ]);
+    stateA = result.state;
+
+    // No damage applied — bypassed.
+    expect(stateA.hp).toBe(30);
+    // Card teleported instead.
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['dmg']);
+  });
+
+  it('MP teleport bypass: goldLoss waterfallEffect does NOT decrement gold', () => {
+    let stateA = makeMpState('A', {
+      remainingDeck: [makeShared('s1')],
+      activeCards: emptyRow(),
+      previewCards: emptyRow(),
+      gold: 50,
+      pendingWaterfallPlan: makePlanForDeck([makeShared('s1')], []),
+    });
+
+    const goldLossDiscard = {
+      id: 'gl',
+      type: 'monster',
+      name: 'GoldThief',
+      hp: 1,
+      attack: 1,
+      value: 0,
+      waterfallEffect: { type: 'goldLoss', amount: 10 },
+    } as unknown as GameCardData;
+
+    const result = drain(stateA, [
+      {
+        type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
+        discardCard: goldLossDiscard,
+        nextRemainingDeck: [makeShared('s1')],
+      } as GameAction,
+    ]);
+    stateA = result.state;
+
+    expect(stateA.gold).toBe(50);
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['gl']);
+  });
+
+  // -------------------------------------------------------------------------
+  // 3c. MP teleport bypass: onDiscardDamage / onDiscardDraw must NOT trigger
+  //     (cards do NOT enter local discardedCards — they teleport)
+  // -------------------------------------------------------------------------
+
+  it('MP teleport bypass: onDiscardDamage on the squeezed card does NOT fire (card never enters local graveyard)', () => {
+    let stateA = makeMpState('A', {
+      remainingDeck: [makeShared('s1')],
+      activeCards: emptyRow(),
+      previewCards: emptyRow(),
+      hp: 30,
+      discardedCards: [],
+      pendingWaterfallPlan: makePlanForDeck([makeShared('s1')], []),
+    });
+
+    // onDiscardDamage = "when this card is discarded, deal X damage to hero".
+    // In MP, since the card teleports rather than going to graveyard, this
+    // must NOT fire on sender's side.
+    const onDiscardDamageCard = {
+      id: 'odd',
+      type: 'magic',
+      name: 'CursedSpark',
+      value: 0,
+      onDiscardDamage: 7,
+    } as unknown as GameCardData;
+
+    const result = drain(stateA, [
+      {
+        type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
+        discardCard: onDiscardDamageCard,
+        nextRemainingDeck: [makeShared('s1')],
+      } as GameAction,
+    ]);
+    stateA = result.state;
+
+    expect(stateA.hp).toBe(30);
+    expect(stateA.discardedCards.find(c => c.id === 'odd')).toBeUndefined();
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['odd']);
+  });
+
+  it('MP teleport bypass: onDiscardDraw on the squeezed card does NOT fire (no extra hand cards)', () => {
+    let stateA = makeMpState('A', {
+      remainingDeck: [makeShared('s1')],
+      activeCards: emptyRow(),
+      previewCards: emptyRow(),
+      handCards: [],
+      backpackItems: [makeShared('b1'), makeShared('b2'), makeShared('b3')],
+      discardedCards: [],
+      pendingWaterfallPlan: makePlanForDeck([makeShared('s1')], []),
+    });
+
+    const onDiscardDrawCard = {
+      id: 'odr',
+      type: 'magic',
+      name: 'EchoFragment',
+      value: 0,
+      onDiscardDraw: 2,
+    } as unknown as GameCardData;
+
+    const result = drain(stateA, [
+      {
+        type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
+        discardCard: onDiscardDrawCard,
+        nextRemainingDeck: [makeShared('s1')],
+      } as GameAction,
+    ]);
+    stateA = result.state;
+
+    expect(stateA.handCards).toHaveLength(0);
+    expect(stateA.discardedCards.find(c => c.id === 'odr')).toBeUndefined();
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['odr']);
+  });
+
+  // -------------------------------------------------------------------------
+  // 3d. MP teleport: stacked preview cards at the squeezed slot also teleport
+  // -------------------------------------------------------------------------
+
+  it('MP teleport: stacked preview cards at the squeezed slot teleport along with primary', () => {
+    const stackedA = { id: 'st1', type: 'event', name: 'Stack-1', value: 0 } as unknown as GameCardData;
+    const stackedB = { id: 'st2', type: 'event', name: 'Stack-2', value: 0 } as unknown as GameCardData;
+    const primary = { id: 'pr', type: 'event', name: 'Primary', value: 0 } as unknown as GameCardData;
+
+    let stateA = makeMpState('A', {
+      remainingDeck: [makeShared('s1')],
+      activeCards: emptyRow(),
+      previewCards: emptyRow(),
+      previewCardStacks: { 2: [stackedA, stackedB] },
+      pendingWaterfallPlan: makePlanForDeck([makeShared('s1')], []),
+    });
+
+    const result = drain(stateA, [
+      {
+        type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
+        discardCard: primary,
+        discardPreviewIndex: 2,
+        nextRemainingDeck: [makeShared('s1')],
+      } as GameAction,
+    ]);
+    stateA = result.state;
+
+    // All three (primary + 2 stacked) should be in the teleport buffer.
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual([
+      'pr',
+      'st1',
+      'st2',
+    ]);
+    // Stacks at index 2 cleared.
+    expect(stateA.previewCardStacks[2] ?? []).toHaveLength(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // 3e. MP teleport EXCEPTION: Boss precursor (isFinalMonster) must NOT
+  //     teleport — gets buried at the bottom of local deck instead.
+  // -------------------------------------------------------------------------
+
+  it('MP exception: Boss precursor (isFinalMonster) does NOT teleport — buried at bottom of local deck', () => {
+    let stateA = makeMpState('A', {
+      remainingDeck: [makeShared('s1'), makeShared('s2')],
+      activeCards: emptyRow(),
+      previewCards: emptyRow(),
+      pendingWaterfallPlan: makePlanForDeck([makeShared('s1'), makeShared('s2')], []),
+    });
+
+    const bossPrecursor = {
+      id: 'boss-prec',
+      type: 'monster',
+      name: 'BossHerald',
+      isFinalMonster: true,
+      bossPhase: true,
+      hp: 30,
+      attack: 10,
+      value: 0,
+    } as unknown as GameCardData;
+
+    const result = drain(stateA, [
+      {
+        type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
+        discardCard: bossPrecursor,
+        nextRemainingDeck: [makeShared('s1'), makeShared('s2')],
+      } as GameAction,
+    ]);
+    stateA = result.state;
+
+    // Boss NOT staged for transfer.
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer ?? []).toHaveLength(0);
+    // Boss buried at bottom of local deck (not teleported).
+    const updatedDeck = stateA.pendingWaterfallPlan!.nextRemainingDeck;
+    expect(updatedDeck[updatedDeck.length - 1]?.id).toBe('boss-prec');
   });
 
   // -------------------------------------------------------------------------
