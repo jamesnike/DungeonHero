@@ -791,25 +791,29 @@ export interface GameState {
    */
   pendingTransferOut: GameCardData[] | null;
   /**
-   * Companion to `pendingTransferOut`: the **delta** (per-iteration shared
-   * pool consumption) accumulated for the cards currently staged. The
-   * `useMultiplayerSync` hook needs this when it POSTs `/api/mp/transfer`
-   * because the server stores the delta verbatim (the receiving peer
-   * applies a `MULTIPLAYER_SHARED_SHRINK` of exactly this count).
+   * Companion to `pendingTransferOut`: the cards the local waterfall just
+   * dealt from `remainingDeck` to its own `previewCards` row. The peer
+   * needs these to keep its deck in sync — when it receives this transfer,
+   * it removes any card whose id matches one in `pendingTransferOutPreviewDealt`
+   * from its own `remainingDeck` (silently skipping cards it doesn't have,
+   * e.g. cards previously transferred FROM the peer).
    *
-   * Why a separate field instead of recomputing from `sharedDeckConsumed`:
-   * `sharedDeckConsumed` is the **cumulative** counter across the whole
-   * game; it has no notion of "the delta for the un-shipped batch". When
-   * the user reloads mid-flight (waterfall finished, POST in progress),
-   * we need to know exactly which delta to send on retry — recomputing
-   * that from scratch is impossible.
+   * Why this field exists alongside `pendingTransferOut`:
+   *   - `pendingTransferOut` is "cards going to the peer's deck top"
+   *     (squeezed-out preview cards transferred over).
+   *   - `pendingTransferOutPreviewDealt` is "cards leaving the peer's
+   *     deck" (the local view's new preview pulled from deck top).
+   *   - Both ship together in one POST `/api/mp/transfer` request.
    *
-   * Lifecycle: accumulates with `pendingTransferOut` across multiple
-   * waterfall iterations (rare — only happens if the network is slow and
-   * the player triggers a second waterfall before the first POST acks).
-   * Cleared to `null` when `MULTIPLAYER_CLEAR_PENDING_TRANSFER` fires.
+   * Persisted across reload so a tab refresh mid-flight (waterfall
+   * resolved but POST not yet acked) can resend the same payload.
+   *
+   * Lifecycle: accumulates across multiple waterfall iterations (rare —
+   * only happens if the network is slow and a second waterfall fires
+   * before the first POST acks). Cleared to `null` when
+   * `MULTIPLAYER_CLEAR_PENDING_TRANSFER` fires.
    */
-  pendingTransferOutSharedConsumed: number | null;
+  pendingTransferOutPreviewDealt: GameCardData[] | null;
   /**
    * Counter incremented every time the local waterfall consumed a card from
    * the **shared** portion of the deck (i.e. a card that did NOT carry

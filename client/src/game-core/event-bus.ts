@@ -665,9 +665,12 @@ export type GameEventMap = {
    *     the peer's deck top (already stripped of owner-specific runtime
    *     fields; safe to JSON-serialize). May be empty if everything was
    *     a final monster / non-transferable.
-   *   - `sharedConsumed` — how many cards from the **shared** suffix
-   *     this waterfall consumed locally (peer must mirror via
-   *     MULTIPLAYER_SHARED_SHRINK to stay aligned).
+   *   - `previewDealt` — the cards we just dealt from our `remainingDeck`
+   *     top to our own preview row this waterfall iteration. The peer
+   *     uses these to **remove the same cards from their own deck by id**,
+   *     keeping the shared suffix in sync. Cards in `previewDealt` that
+   *     the peer doesn't have (e.g. cards previously transferred from
+   *     the peer back to us) are silently skipped on the receiver side.
    *   - `seq` — local monotonic counter used by the network layer to
    *     dedupe / order; the server stamps its own seq on the persisted
    *     row, this is just a client-side ordering hint.
@@ -678,7 +681,7 @@ export type GameEventMap = {
    */
   'multiplayer:transferOut': {
     cards: import('@/components/GameCard').GameCardData[];
-    sharedConsumed: number;
+    previewDealt: import('@/components/GameCard').GameCardData[];
     seq: number;
   };
   /**

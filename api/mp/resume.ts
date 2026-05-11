@@ -23,7 +23,7 @@
  *       fromPlayer: 'A' | 'B',
  *       toPlayer: 'A' | 'B',
  *       cards: GameCardData[],
- *       sharedConsumed: number,
+ *       previewDealt: GameCardData[],
  *     }>,
  *     sharedDeckConsumed: number,  // server's running counter for deck
  *   }
@@ -98,22 +98,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   else if (room.player_b === user.id) myRole = 'B';
   else return forbidden(res, 'not_a_participant');
 
-  // Pull transfers addressed to us with seq > lastAppliedSeq.
-  // We use the wire-protocol seq (= raw `transfers.seq`), NOT the
-  // doubled-action seq (`seq*2` / `seq*2+1`) the reducer's
-  // `lastAppliedSeq` tracks. The client converts back when dispatching.
-  //
-  // Convention: the persisted client `lastAppliedSeq` is the
-  // *highest reducer-action seq* it has applied (= `wireSeq*2 + 1`).
-  // To filter rows, divide by 2 (integer floor) to get the wire seq:
-  const minWireSeq = Math.floor(lastAppliedSeq / 2);
-
+  // Pull transfers addressed to us with seq > lastAppliedSeq. With the
+  // id-based protocol each wire-row maps to exactly ONE reducer action
+  // (RECEIVE_TRANSFER), so the client `lastAppliedSeq` IS the wire seq —
+  // no doubling math needed.
   const { data: transfers, error: transfersErr } = await supabase
     .from('transfers')
-    .select('id, seq, from_player, to_player, cards, shared_consumed')
+    .select('id, seq, from_player, to_player, cards, preview_dealt')
     .eq('room_id', roomId)
     .eq('to_player', myRole)
-    .gt('seq', minWireSeq)
+    .gt('seq', lastAppliedSeq)
     .order('seq', { ascending: true })
     .limit(MAX_BACKFILL_ROWS);
 
@@ -131,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fromPlayer: t.from_player,
       toPlayer: t.to_player,
       cards: t.cards,
-      sharedConsumed: t.shared_consumed,
+      previewDealt: Array.isArray(t.preview_dealt) ? t.preview_dealt : [],
     })),
     sharedDeckConsumed: room.shared_deck_consumed,
   });

@@ -113,6 +113,33 @@ export interface WaterfallDropPlan {
    */
   extraDiscardCards?: GameCardData[];
   extraDiscardPreviewIndices?: number[];
+  /**
+   * Multiplayer-only: cards that `reduceApplyWaterfallDiscardEffects` has
+   * staged to ship to the peer. Accumulates as the discard reducer runs
+   * once per discardCard (primary + each extra). The DEAL reducer reads
+   * this buffer at the END of the waterfall and writes it atomically
+   * alongside `pendingTransferOutPreviewDealt` to `state.pendingTransferOut`.
+   *
+   * Why this buffer exists:
+   *   The hook (`useMultiplayerSync`) watches `state.pendingTransferOut`
+   *   and `state.pendingTransferOutPreviewDealt` to decide when to POST a
+   *   transfer batch to the server. There's a ~150ms gap between the
+   *   discard-phase dispatches (which previously wrote to
+   *   `state.pendingTransferOut` directly) and the deal-phase dispatch
+   *   (which writes `state.pendingTransferOutPreviewDealt`). Without this
+   *   buffer, the hook would observe an intermediate "cards staged but no
+   *   previewDealt" state, fire a POST with `previewDealt=[]`, then fire
+   *   AGAIN after deal completes — creating duplicate server rows that
+   *   prepend the same cards to the peer's deck twice (deck corruption).
+   *
+   *   By keeping the staged cards on the (pure-state) plan instead of
+   *   `state.pendingTransferOut`, the hook only ever sees the final
+   *   atomic commit at the end of `reduceApplyWaterfallDeal`. One POST
+   *   per waterfall, no duplicates.
+   *
+   * Single-player: always undefined / never read.
+   */
+  _shippedCardsBuffer?: GameCardData[];
   rng: RngState;
 }
 
@@ -596,7 +623,22 @@ function reduceApplyWaterfallDiscardEffects(
   // per discardCard regardless of how many switch branches funnel through
   // sendToGraveyardUnlessFinal, but `routedToTransferOut` guards against
   // double-tap if a future branch accidentally calls the helper twice.
+  //
+  // IMPORTANT: cards are staged to `plan._shippedCardsBuffer`, NOT to
+  // `state.pendingTransferOut`. The DEAL reducer (run ~150ms later by
+  // GameBoard's `queueWaterfallTimeout`) reads the buffer and atomically
+  // commits it alongside `pendingTransferOutPreviewDealt`. This prevents
+  // the hook from observing an intermediate "cards but no previewDealt"
+  // state and double-POSTing. See `_shippedCardsBuffer` doc on
+  // `WaterfallDropPlan` for the full rationale.
   let routedToTransferOut = false;
+  // Local accumulator that mirrors what we'll merge into the plan's
+  // `_shippedCardsBuffer` at the end. Starts from whatever the previous
+  // discard dispatch left there (since each call to this reducer is one
+  // dispatch in a chain — see GameBoard's primary + extras loop).
+  let bufferAccum: GameCardData[] = [
+    ...(state.pendingWaterfallPlan?._shippedCardsBuffer ?? []),
+  ];
   const stageTransferOutIfMultiplayer = () => {
     if (routedToTransferOut) return;
     if (state.multiplayerSession === null) return;
@@ -607,11 +649,7 @@ function reduceApplyWaterfallDiscardEffects(
     const { fromSlot: _fs, _recycleWaits: _rw, _excludedFromShared: _ex, ...clean } =
       discardCard as GameCardData & { fromSlot?: unknown };
     void _fs; void _rw; void _ex;
-    patch.pendingTransferOut = [
-      ...(state.pendingTransferOut ?? []),
-      ...((patch.pendingTransferOut ?? []) as GameCardData[]),
-      clean as GameCardData,
-    ];
+    bufferAccum = [...bufferAccum, clean as GameCardData];
   };
 
   // Handle the card itself going to graveyard or back to deck
@@ -948,10 +986,18 @@ function reduceApplyWaterfallDiscardEffects(
     patch.rng = rng;
   }
 
-  // Sync the updated remaining deck back into the pending plan so APPLY_WATERFALL_DEAL
-  // uses the version that includes returnToDeck / swarmInfest modifications.
+  // Sync the updated remaining deck AND the multiplayer ship buffer back
+  // into the pending plan so APPLY_WATERFALL_DEAL uses both the version
+  // that includes returnToDeck / swarmInfest modifications AND any cards
+  // staged for the peer this iteration. The buffer accumulates across
+  // chained discard dispatches (primary + extras); deal commits it
+  // atomically with previewDealt at the end.
   if (state.pendingWaterfallPlan) {
-    patch.pendingWaterfallPlan = { ...state.pendingWaterfallPlan, nextRemainingDeck };
+    patch.pendingWaterfallPlan = {
+      ...state.pendingWaterfallPlan,
+      nextRemainingDeck,
+      _shippedCardsBuffer: bufferAccum,
+    };
   }
 
   // Emit side effect with the updated remaining deck (legacy listeners)
@@ -1511,50 +1557,74 @@ function reduceApplyWaterfallDeal(state: GameState): ReduceResult {
   // This is the LAST step of one waterfall iteration; by now `nextRemainingDeck`
   // already reflects all returnToDeck/swarmInfest re-insertions (each tagged
   // `_excludedFromShared: true` by `tagLocalIfMultiplayer` in the discard phase).
-  // Compute the SHARED-pool delta by counting only cards WITHOUT
-  // `_excludedFromShared`. Drop count = how many shared cards left our local
-  // view this iteration; the peer must mirror the same count via
-  // MULTIPLAYER_SHARED_SHRINK to keep their shared suffix aligned.
+  //
+  // Two payload arrays go to the peer:
+  //   - `cards` (from state.pendingTransferOut) — squeezed-out preview cards
+  //     to PREPEND on peer's deck top.
+  //   - `previewDealt` (= plan.nextPreviewCards) — cards we just dealt from
+  //     our deck top to our preview row; peer REMOVES these from their deck
+  //     by id (silently skipping cards they don't have).
+  //
+  // We also bump `sharedDeckConsumed` — the cumulative count of shared
+  // cards consumed locally — for stats / debugging only. The protocol no
+  // longer uses this counter for sync logic.
   if (state.multiplayerSession !== null) {
-    const countShared = (deck: GameCardData[]) =>
-      deck.reduce((acc, c) => acc + (c._excludedFromShared ? 0 : 1), 0);
-    const oldShared = countShared(state.remainingDeck);
-    const newShared = countShared(plan.nextRemainingDeck);
-    const sharedConsumed = Math.max(0, oldShared - newShared);
+    // Read ship cards from the plan's buffer (accumulated by chained
+    // APPLY_WATERFALL_DISCARD_EFFECTS dispatches earlier in this waterfall
+    // iteration). NOT from `state.pendingTransferOut` — that field is the
+    // hook's "pending POST" inbox and may already contain stale cards from
+    // a previous waterfall whose POST hasn't acked yet. We want to APPEND
+    // this iteration's batch to it, not double-read it.
+    const cardsToShip: GameCardData[] = [...(plan._shippedCardsBuffer ?? [])];
+    // Strip per-iteration runtime fields from previewDealt so the wire
+    // payload is JSON-clean. We send the cards' identity (id, type, name,
+    // etc.) — the peer only needs ids to do removal, but keeping more
+    // fields makes wire payloads self-describing for debugging.
+    const previewDealtToShip: GameCardData[] = plan.nextPreviewCards.map(c => ({
+      ...c,
+    }));
 
-    // Cards staged by reduceApplyWaterfallDiscardEffects this iteration are
-    // already in state.pendingTransferOut (the discard reducer's patch wrote
-    // them before APPLY_WATERFALL_DEAL ran). Combine them into the side-effect
-    // payload so the network layer (phase 3+) can ship them to the peer.
-    const cardsToShip: GameCardData[] = [...(state.pendingTransferOut ?? [])];
+    if (cardsToShip.length > 0 || previewDealtToShip.length > 0) {
+      // Stats counter — count only "originally shared" cards (no
+      // `_excludedFromShared` tag). Useful for resume math even though
+      // not part of the active sync protocol.
+      const newlyConsumedShared = previewDealtToShip.reduce(
+        (acc, c) => acc + (c._excludedFromShared ? 0 : 1),
+        0,
+      );
+      patch.sharedDeckConsumed = (state.sharedDeckConsumed ?? 0) + newlyConsumedShared;
 
-    if (cardsToShip.length > 0 || sharedConsumed > 0) {
-      // Bump the monotonic shared-consumed counter; resume / replay logic
-      // (phase 6) reconciles by comparing local vs server-side seq.
-      patch.sharedDeckConsumed = (state.sharedDeckConsumed ?? 0) + sharedConsumed;
-      // Accumulate delta into the staged batch's tracker. The hook reads
-      // this when (re-)POSTing to the server. Persisted across reload so a
-      // tab refresh mid-flight can resend with the correct sharedConsumed.
-      // Cleared by MULTIPLAYER_CLEAR_PENDING_TRANSFER on POST ack.
-      patch.pendingTransferOutSharedConsumed =
-        (state.pendingTransferOutSharedConsumed ?? 0) + sharedConsumed;
+      // ATOMIC COMMIT: write `pendingTransferOut` and
+      // `pendingTransferOutPreviewDealt` together in one reducer step so
+      // the hook never observes a half-committed staged batch. (Previously,
+      // `reduceApplyWaterfallDiscardEffects` wrote `pendingTransferOut`
+      // directly, which created a ~150ms intermediate state where the hook
+      // would POST cards-only and then POST cards+preview, generating
+      // duplicate server rows. Buffer-on-plan + atomic commit fixes this.)
+      patch.pendingTransferOut = [
+        ...(state.pendingTransferOut ?? []),
+        ...cardsToShip,
+      ];
+      patch.pendingTransferOutPreviewDealt = [
+        ...(state.pendingTransferOutPreviewDealt ?? []),
+        ...previewDealtToShip,
+      ];
+
       sideEffects.push({
         event: 'multiplayer:transferOut',
         payload: {
           cards: cardsToShip,
-          sharedConsumed,
+          previewDealt: previewDealtToShip,
           // Local hint seq — the network layer / server stamps the authoritative
           // seq when it persists the row. Using sharedDeckConsumed as a coarse
           // local ordering hint is OK for phase 3 BroadcastChannel; phase 4
           // upgrades to server-assigned seq.
-          seq: (state.sharedDeckConsumed ?? 0) + sharedConsumed,
+          seq: (state.sharedDeckConsumed ?? 0) + newlyConsumedShared,
         },
       });
-      // Note: `pendingTransferOut` is NOT cleared here. The hook (phase 3+) is
-      // responsible for dispatching MULTIPLAYER_CLEAR_PENDING_TRANSFER after
-      // the network layer acks. Phase 2 (no hook yet) leaves it as-is, which
-      // is fine because no second waterfall reads it for ordering — it's
-      // additive within an iteration and only the side effect cares about it.
+      // Note: `pendingTransferOut` is NOT cleared here. The hook is
+      // responsible for dispatching MULTIPLAYER_CLEAR_PENDING_TRANSFER
+      // after the network layer acks.
     }
 
     // ----- Phase 6.2 boss alert -----

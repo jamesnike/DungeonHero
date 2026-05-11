@@ -12,16 +12,26 @@
  *      `transfers` filtered to `to_player=<myRole>`. Outbound goes via
  *      POST `/api/mp/transfer`. Resume backfill via POST `/api/mp/resume`.
  *
+ * Wire payload shape (both transports):
+ *   {
+ *     cards: GameCardData[]         — squeezed-out cards going to peer's deck top
+ *     previewDealt: GameCardData[]  — cards we just dealt to our preview;
+ *                                     peer removes them from its deck by id
+ *     seq: number                   — server-assigned (Supabase) or
+ *                                     local-monotonic (BroadcastChannel)
+ *   }
+ *
  * Outbound state machine (Supabase only):
  *
  *   Trigger sources:
- *     • Fresh waterfall → reducer sets `pendingTransferOut` + emits
- *       `multiplayer:transferOut` side effect.
- *     • Hydrate after refresh → restored `pendingTransferOut` from
- *       persistence (no side effect fires).
- *     • Manual retry from UI ("重试同步" button).
+ *     • Fresh waterfall → reducer sets `pendingTransferOut` +
+ *       `pendingTransferOutPreviewDealt` and emits `multiplayer:transferOut`
+ *       side effect.
+ *     • Hydrate after refresh → restored both fields from persistence
+ *       (no side effect fires).
+ *     • Manual retry from UI ("retry sync" button).
  *
- *   Algorithm: useEffect watches (pendingTransferOut, pendingDelta).
+ *   Algorithm: useEffect watches (pendingTransferOut, pendingPreviewDealt).
  *   Whenever the staged batch changes (fresh waterfall) OR is non-empty
  *   on mount (hydrate replay), kick off `doPostWithRetry`.
  *
@@ -31,12 +41,12 @@
  *   manual retry or page refresh can try again.
  *
  *   Success: dispatch `MULTIPLAYER_CLEAR_PENDING_TRANSFER` (clears both
- *   the cards and the companion delta), phase returns to `connected`.
+ *   the cards and the companion previewDealt), phase returns to `connected`.
  *
  * Inbound:
  *   On (re)mount: backfill via `resumeRoom` BEFORE subscribing live.
  *   Realtime delivers `transfers` row INSERTs filtered to our role; we
- *   dispatch RECEIVE + SHRINK actions and best-effort ack.
+ *   dispatch RECEIVE and best-effort ack.
  *
  * Connection phase:
  *   • `idle` — not in MP mode (single-player or not yet configured)
@@ -51,16 +61,14 @@
  *
  * Sequence number conventions:
  *   • Wire-protocol seq: server-allocated, monotonic per (room, all
- *     participants combined). One row per transfer.
- *   • Reducer's `lastAppliedSeq` expects strictly-monotonic per-action
- *     seqs. Each wire-seq emits TWO actions (RECEIVE + SHRINK), so we
- *     use baseSeq=wireSeq*2 and baseSeq+1 to keep them ordered.
+ *     participants combined). One row per transfer = one reducer action.
+ *   • Reducer's `lastAppliedSeq` IS the wire seq directly (no doubling
+ *     since RECEIVE_TRANSFER is the only per-row action).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useGameEngine, useGameEvent, useShallowGameState } from './useGameEngine';
-import type { GameAction } from '@/game-core/actions';
 import type { GameCardData } from '@/components/GameCard';
 import {
   ackTransfer,
@@ -109,7 +117,7 @@ interface TransferOutMessage {
   fromRole: 'A' | 'B';
   seq: number;
   cards: GameCardData[];
-  sharedConsumed: number;
+  previewDealt: GameCardData[];
 }
 
 type IncomingMessage = TransferOutMessage;
@@ -121,7 +129,7 @@ interface TransferRow {
   from_player: 'A' | 'B';
   to_player: 'A' | 'B';
   cards: GameCardData[];
-  shared_consumed: number;
+  preview_dealt: GameCardData[];
   applied: boolean;
 }
 
@@ -147,23 +155,18 @@ const RETRY_BACKOFF_MS = [500, 2000, 8000];
 function applyTransferLocal(
   engine: ReturnType<typeof useGameEngine>,
   cards: GameCardData[],
-  sharedConsumed: number,
+  previewDealt: GameCardData[],
   wireSeq: number,
 ): void {
-  const baseSeq = wireSeq * 2;
-  const actions: GameAction[] = [
-    {
-      type: 'MULTIPLAYER_RECEIVE_TRANSFER',
-      cards,
-      seq: baseSeq,
-    },
-    {
-      type: 'MULTIPLAYER_SHARED_SHRINK',
-      count: sharedConsumed,
-      seq: baseSeq + 1,
-    },
-  ];
-  for (const a of actions) engine.dispatch(a);
+  // One reducer action per wire row — `lastAppliedSeq` tracks wire seq
+  // directly. The reducer handles both prepend (cards) and remove-by-id
+  // (previewDealt) atomically.
+  engine.dispatch({
+    type: 'MULTIPLAYER_RECEIVE_TRANSFER',
+    cards,
+    previewDealt,
+    seq: wireSeq,
+  });
 }
 
 /**
@@ -173,9 +176,16 @@ function applyTransferLocal(
  * same array, then resume backfill arrives, then a fresh waterfall ships
  * new cards — we don't want to double-POST the same batch).
  */
-function batchKey(cards: GameCardData[] | null, delta: number | null): string | null {
-  if (!cards || cards.length === 0) return null;
-  return `${cards.length}|${delta ?? 0}|${cards.map(c => c.id).join(',')}`;
+function batchKey(
+  cards: GameCardData[] | null,
+  previewDealt: GameCardData[] | null,
+): string | null {
+  const hasCards = cards && cards.length > 0;
+  const hasPreview = previewDealt && previewDealt.length > 0;
+  if (!hasCards && !hasPreview) return null;
+  const cardIds = (cards ?? []).map(c => c.id).join(',');
+  const previewIds = (previewDealt ?? []).map(c => c.id).join(',');
+  return `c:${cardIds}|p:${previewIds}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +206,7 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
   // every unrelated state change).
   const stagedBatch = useShallowGameState(s => ({
     cards: s.pendingTransferOut,
-    delta: s.pendingTransferOutSharedConsumed,
+    previewDealt: s.pendingTransferOutPreviewDealt,
   }));
 
   const sessionRef = useRef(session);
@@ -287,13 +297,13 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
       fromRole: sess.role,
       seq: localOutboundSeqRef.current,
       cards: payload.cards,
-      sharedConsumed: payload.sharedConsumed,
+      previewDealt: payload.previewDealt,
     };
 
     try {
       channel.postMessage(msg);
     } catch (err) {
-      console.error('[useMultiplayerSync] broadcast failed', err);
+      console.error('[useMultiplayerSync] BroadcastChannel postMessage failed', err);
       return;
     }
 
@@ -309,22 +319,25 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
   useEffect(() => {
     if (roomId === null || role === null) return;
     if (isLocal) return; // local-test mode handled by useGameEvent above
-    if (!stagedBatch.cards || stagedBatch.cards.length === 0) return;
 
-    const key = batchKey(stagedBatch.cards, stagedBatch.delta);
+    const hasCards = stagedBatch.cards !== null && stagedBatch.cards.length > 0;
+    const hasPreview = stagedBatch.previewDealt !== null && stagedBatch.previewDealt.length > 0;
+    if (!hasCards && !hasPreview) return;
+
+    const key = batchKey(stagedBatch.cards, stagedBatch.previewDealt);
     if (key === null) return;
 
     // If the same batch is already in-flight (or just acked), don't
     // start another POST. Once `MULTIPLAYER_CLEAR_PENDING_TRANSFER` runs,
-    // stagedBatch.cards becomes null and the useEffect won't re-enter.
+    // both staged fields become null and the useEffect won't re-enter.
     if (inFlightBatchKeyRef.current === key && retryEpoch === 0) return;
 
     let cancelled = false;
     inFlightBatchKeyRef.current = key;
     cancelPendingRetry();
 
-    const cardsSnapshot = stagedBatch.cards;
-    const deltaSnapshot = stagedBatch.delta ?? 0;
+    const cardsSnapshot = stagedBatch.cards ?? [];
+    const previewDealtSnapshot = stagedBatch.previewDealt ?? [];
 
     const attemptPost = async (attempt: number): Promise<void> => {
       if (cancelled) return;
@@ -337,7 +350,7 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
           roomId,
           fromRole: role,
           cards: cardsSnapshot,
-          sharedConsumed: deltaSnapshot,
+          previewDealt: previewDealtSnapshot,
         });
         if (cancelled) return;
 
@@ -347,7 +360,7 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
         setRetryAttempt(0);
         setErrorMessage(null);
         // inFlightBatchKeyRef stays set — next useEffect run sees
-        // stagedBatch.cards === null and bails before the dedup check.
+        // staged fields === null and bails before the dedup check.
       } catch (err) {
         if (cancelled) return;
 
@@ -393,7 +406,7 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
     role,
     isLocal,
     stagedBatch.cards,
-    stagedBatch.delta,
+    stagedBatch.previewDealt,
     retryEpoch,
     cancelPendingRetry,
   ]);
@@ -435,7 +448,8 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
         setRealtimeStatus('errored');
         return;
       }
-      const channel = new BroadcastChannel(broadcastChannelNameFor(roomId));
+      const channelName = broadcastChannelNameFor(roomId);
+      const channel = new BroadcastChannel(channelName);
       broadcastChannelRef.current = channel;
       // Local mode: always treat as "subscribed" (no real network).
       setRealtimeStatus('subscribed');
@@ -443,8 +457,13 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
       const onMessage = (ev: MessageEvent<IncomingMessage>) => {
         const msg = ev.data;
         if (!msg || msg.kind !== 'transferOut') return;
-        if (msg.fromRole === role) return;
-        applyTransferLocal(engine, msg.cards, msg.sharedConsumed, msg.seq);
+        if (msg.fromRole === role) return; // defensive: ignore echo of own send
+        applyTransferLocal(
+          engine,
+          msg.cards,
+          Array.isArray(msg.previewDealt) ? msg.previewDealt : [],
+          msg.seq,
+        );
       };
 
       channel.addEventListener('message', onMessage);
@@ -499,7 +518,7 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
             applyTransferLocal(
               engine,
               Array.isArray(row.cards) ? row.cards : [],
-              typeof row.sharedConsumed === 'number' ? row.sharedConsumed : 0,
+              Array.isArray(row.previewDealt) ? row.previewDealt : [],
               row.seq,
             );
             void ackTransfer({ transferId: row.id }).catch(() => {});
@@ -538,7 +557,7 @@ export function useMultiplayerSync(): MultiplayerConnectionState {
             applyTransferLocal(
               engine,
               Array.isArray(row.cards) ? row.cards : [],
-              typeof row.shared_consumed === 'number' ? row.shared_consumed : 0,
+              Array.isArray(row.preview_dealt) ? row.preview_dealt : [],
               row.seq,
             );
 

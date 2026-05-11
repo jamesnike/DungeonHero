@@ -8,8 +8,13 @@
  *      JS doesn't expose explicit transactions easily; instead we use
  *      a `select max(seq) + insert` pattern with the unique constraint
  *      as the safety net. On collision (rare) the client retries.)
- *   3. Inserts a `transfers` row.
- *   4. Updates `rooms.shared_deck_consumed += sharedConsumed`.
+ *   3. Inserts a `transfers` row with `cards` (push-to-peer) and
+ *      `preview_dealt` (cards the sender just dealt to its own preview;
+ *      receiver removes them from its deck by id).
+ *   4. Bumps `rooms.shared_deck_consumed` by the count of "originally
+ *      shared" cards in `previewDealt` (cards without
+ *      `_excludedFromShared: true`). Counter is informational only — the
+ *      protocol uses id-based removal, not counts.
  *   5. Realtime propagates the INSERT to the receiver.
  *
  * Request body:
@@ -17,7 +22,7 @@
  *     roomId: uuid,
  *     fromRole: 'A' | 'B',
  *     cards: GameCardData[],
- *     sharedConsumed: number,
+ *     previewDealt: GameCardData[],
  *   }
  *
  * Response 200:
@@ -50,7 +55,7 @@ import {
 } from './_shared.js';
 
 const MAX_TRANSFER_CARDS = 10; // sanity cap; real waterfalls push 0–4
-const MAX_SHARED_CONSUMED = 36; // can't consume more than full deck per turn
+const MAX_PREVIEW_DEALT = 12; // sanity cap; real waterfalls deal 0–4 per iter, allow some headroom
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return methodNotAllowed(res, 'POST');
@@ -61,11 +66,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await getUserFromBearer(req);
   if (!user) return unauthorized(res);
 
-  const { roomId, fromRole, cards, sharedConsumed } = (req.body ?? {}) as {
+  const { roomId, fromRole, cards, previewDealt } = (req.body ?? {}) as {
     roomId?: unknown;
     fromRole?: unknown;
     cards?: unknown;
-    sharedConsumed?: unknown;
+    previewDealt?: unknown;
   };
 
   if (!isValidUuid(roomId)) return badRequest(res, 'invalid_roomId');
@@ -73,14 +78,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!Array.isArray(cards) || cards.length > MAX_TRANSFER_CARDS) {
     return badRequest(res, 'invalid_cards');
   }
-  if (
-    typeof sharedConsumed !== 'number' ||
-    !Number.isFinite(sharedConsumed) ||
-    sharedConsumed < 0 ||
-    sharedConsumed > MAX_SHARED_CONSUMED
-  ) {
-    return badRequest(res, 'invalid_sharedConsumed');
+  if (!Array.isArray(previewDealt) || previewDealt.length > MAX_PREVIEW_DEALT) {
+    return badRequest(res, 'invalid_previewDealt');
   }
+
+  // Count "originally shared" cards in previewDealt for the cumulative
+  // counter (cards without `_excludedFromShared: true` — those originated
+  // from the shared deck rather than from the peer's transfers). This is
+  // informational only; the sync protocol uses id-based removal.
+  const sharedConsumed = (previewDealt as Array<{ _excludedFromShared?: boolean }>)
+    .reduce((acc, c) => acc + (c?._excludedFromShared === true ? 0 : 1), 0);
 
   // Verify caller is the claimed `fromRole` of this room.
   const { data: room, error: lookupErr } = await supabase
@@ -129,7 +136,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         from_player: fromRole,
         to_player: toRole,
         cards,
-        shared_consumed: Math.floor(sharedConsumed),
+        preview_dealt: previewDealt,
+        shared_consumed: sharedConsumed, // legacy column, populated for back-compat
       })
       .select('id, seq')
       .single();
@@ -158,7 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await supabase
       .from('rooms')
       .update({
-        shared_deck_consumed: room.shared_deck_consumed + Math.floor(sharedConsumed),
+        shared_deck_consumed: room.shared_deck_consumed + sharedConsumed,
         updated_at: new Date().toISOString(),
       })
       .eq('id', roomId);

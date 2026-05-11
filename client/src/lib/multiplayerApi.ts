@@ -116,7 +116,7 @@ export function postTransfer(params: {
   roomId: string;
   fromRole: 'A' | 'B';
   cards: GameCardData[];
-  sharedConsumed: number;
+  previewDealt: GameCardData[];
 }): Promise<TransferResponse> {
   return authedPost<TransferResponse>('/api/mp/transfer', params);
 }
@@ -139,7 +139,7 @@ export interface ResumeRoomResponse {
     fromPlayer: 'A' | 'B';
     toPlayer: 'A' | 'B';
     cards: GameCardData[];
-    sharedConsumed: number;
+    previewDealt: GameCardData[];
   }>;
   sharedDeckConsumed: number;
 }

@@ -4,24 +4,35 @@
  *
  * Data model (per `.cursor/plans/2-player_multiplayer_mode_*.plan.md`):
  *
- *   remainingDeck = [transferred-from-peer (top → bottom)] ++ [shared suffix]
- *                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^
+ *   remainingDeck = [transferred-from-peer (top → bottom)] ++ [shared portion]
+ *                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^
  *                    cards carry _excludedFromShared: true   no flag
- *                    (LIFO; latest peer waterfall is at [0]) (identical for A & B)
+ *                    (LIFO; latest peer waterfall is at [0])
  *
- * Three actions live here:
+ * Note: the "shared portion" was historically called "shared suffix" and
+ * presumed to be byte-aligned across A and B. With the id-based protocol
+ * (current) it's just "the same set of cards", possibly in different
+ * orderings (because of the monster top-up/cap swap inside
+ * `computeWaterfallDropPlan`).
  *
- *   1. `MULTIPLAYER_RECEIVE_TRANSFER` — peer pushed `cards` onto our top.
- *      We prepend, auto-tag `_excludedFromShared: true`, and bump
- *      `lastAppliedSeq`.
- *   2. `MULTIPLAYER_SHARED_SHRINK` — peer drew `count` from their shared
- *      suffix; we mirror by removing the leading `count` shared cards in
- *      our `remainingDeck` (skipping over any transferred prefix).
- *   3. `MULTIPLAYER_CLEAR_PENDING_TRANSFER` — clears `pendingTransferOut`
- *      after the network layer has confirmed delivery.
+ * Actions:
  *
- * All three are guarded against `multiplayerSession === null`: in
- * single-player, they no-op (defensive — should never be dispatched).
+ *   1. `MULTIPLAYER_RECEIVE_TRANSFER` — peer pushed `cards` onto our top
+ *      AND consumed `previewDealt` from THEIR own deck top. We:
+ *        - prepend `cards` (auto-tagged `_excludedFromShared: true`)
+ *        - remove cards in `previewDealt` from our `remainingDeck` by id
+ *          (silently skip ones we don't have)
+ *        - bump `lastAppliedSeq`
+ *      The id-based removal is robust to drift: if the peer consumed a
+ *      card that we previously transferred to them (so we don't have it),
+ *      we skip cleanly without corrupting our deck.
+ *   2. `MULTIPLAYER_CLEAR_PENDING_TRANSFER` — clears `pendingTransferOut`
+ *      + `pendingTransferOutPreviewDealt` after the network layer has
+ *      confirmed delivery.
+ *   3. `SET_MULTIPLAYER_SESSION` — set/clear session metadata.
+ *
+ * All are guarded against `multiplayerSession === null`: in single-player,
+ * they no-op (defensive — should never be dispatched).
  */
 
 import type { GameAction } from '../actions';
@@ -36,8 +47,6 @@ export function reduceMultiplayerActions(
   switch (action.type) {
     case 'MULTIPLAYER_RECEIVE_TRANSFER':
       return reduceReceiveTransfer(state, action);
-    case 'MULTIPLAYER_SHARED_SHRINK':
-      return reduceSharedShrink(state, action);
     case 'MULTIPLAYER_CLEAR_PENDING_TRANSFER':
       return reduceClearPendingTransfer(state);
     case 'SET_MULTIPLAYER_SESSION':
@@ -62,55 +71,27 @@ function reduceReceiveTransfer(
   // means we drop anything at-or-below `lastAppliedSeq` silently.
   if (action.seq <= state.multiplayerSession.lastAppliedSeq) return noChange(state);
 
-  // Tag every received card as transferred-from-peer so subsequent
-  // shared-shrink calls correctly skip them.
+  // Tag every received card as transferred-from-peer so future debugging
+  // can tell at a glance "this came from the peer". The protocol no longer
+  // uses this flag for sync logic (id-based removal is the source of
+  // truth), but it's still useful for visual debugging / log inspection.
   const tagged: GameCardData[] = action.cards.map(c => ({
     ...c,
     _excludedFromShared: true,
   }));
 
-  return applyPatch(state, {
-    remainingDeck: [...tagged, ...state.remainingDeck],
-    multiplayerSession: {
-      ...state.multiplayerSession,
-      lastAppliedSeq: action.seq,
-    },
-  });
-}
-
-function reduceSharedShrink(
-  state: GameState,
-  action: Extract<GameAction, { type: 'MULTIPLAYER_SHARED_SHRINK' }>,
-): ReduceResult {
-  if (state.multiplayerSession === null) return noChange(state);
-  if (action.seq <= state.multiplayerSession.lastAppliedSeq) return noChange(state);
-  if (action.count <= 0) {
-    // Still bump seq so resume math stays correct even for "0 shared
-    // consumed" transfers (e.g. peer waterfalled but everything was
-    // _excludedFromShared on their side).
-    return applyPatch(state, {
-      multiplayerSession: {
-        ...state.multiplayerSession,
-        lastAppliedSeq: action.seq,
-      },
-    });
-  }
-
-  // Walk the deck top→bottom; drop the first `count` cards that aren't
-  // marked `_excludedFromShared`. Stop early if we run out of shared cards
-  // (defensive: indicates desync — phase 6 resume reconciles via seq).
-  let shrinkRemaining = action.count;
-  const next: GameCardData[] = [];
-  for (const card of state.remainingDeck) {
-    if (shrinkRemaining > 0 && !card._excludedFromShared) {
-      shrinkRemaining -= 1;
-      continue; // drop this card from our local view
-    }
-    next.push(card);
+  // Build a Set of ids we should remove from our remainingDeck. The peer
+  // dealt these cards from their deck top to their preview row, and our
+  // deck (modulo previously-transferred cards we don't have) has the same
+  // shared content — so we should remove them too.
+  let nextRemainingDeck = state.remainingDeck;
+  if (action.previewDealt.length > 0) {
+    const idsToRemove = new Set(action.previewDealt.map(c => c.id));
+    nextRemainingDeck = state.remainingDeck.filter(c => !idsToRemove.has(c.id));
   }
 
   return applyPatch(state, {
-    remainingDeck: next,
+    remainingDeck: [...tagged, ...nextRemainingDeck],
     multiplayerSession: {
       ...state.multiplayerSession,
       lastAppliedSeq: action.seq,
@@ -123,13 +104,13 @@ function reduceClearPendingTransfer(state: GameState): ReduceResult {
   // re-asserts the invariant.
   if (
     state.pendingTransferOut === null &&
-    state.pendingTransferOutSharedConsumed === null
+    state.pendingTransferOutPreviewDealt === null
   ) {
     return noChange(state);
   }
   return applyPatch(state, {
     pendingTransferOut: null,
-    pendingTransferOutSharedConsumed: null,
+    pendingTransferOutPreviewDealt: null,
   });
 }
 
@@ -145,7 +126,7 @@ function reduceSetMultiplayerSession(
     return applyPatch(state, {
       multiplayerSession: null,
       pendingTransferOut: null,
-      pendingTransferOutSharedConsumed: null,
+      pendingTransferOutPreviewDealt: null,
       sharedDeckConsumed: 0,
       bossEncounterAlertShown: false,
     });

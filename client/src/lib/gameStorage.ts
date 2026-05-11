@@ -329,11 +329,12 @@ export interface PersistedGameState {
    */
   pendingTransferOut?: import('@/components/GameCard').GameCardData[] | null;
   /**
-   * Per-batch sharedConsumed delta paired with `pendingTransferOut`.
-   * Persisted alongside it so the resend uses the correct delta.
-   * Mirrors `GameState.pendingTransferOutSharedConsumed`.
+   * Per-batch previewDealt cards paired with `pendingTransferOut`.
+   * Persisted alongside it so the resend ships the same payload, allowing
+   * the peer to remove the same cards from its deck (id-based sync).
+   * Mirrors `GameState.pendingTransferOutPreviewDealt`.
    */
-  pendingTransferOutSharedConsumed?: number | null;
+  pendingTransferOutPreviewDealt?: import('@/components/GameCard').GameCardData[] | null;
   /** How many cards we've consumed from the shared deck so far (mirrors
    * `GameState.sharedDeckConsumed`). Sent to the server with each transfer
    * so the room's running counter stays in sync. */

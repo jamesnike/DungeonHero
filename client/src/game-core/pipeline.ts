@@ -483,7 +483,6 @@ function isInputContinuation(action: GameAction): boolean {
     // `parallel-state-fields-consumer-audit` for why "deck-routing"
     // family actions absolutely cannot strand.
     case 'MULTIPLAYER_RECEIVE_TRANSFER':
-    case 'MULTIPLAYER_SHARED_SHRINK':
     case 'MULTIPLAYER_CLEAR_PENDING_TRANSFER':
     // SET_MULTIPLAYER_SESSION is dispatched by GameBoard's lobby flow / dev
     // helper / phase-6 resume to switch the session pointer. It must drain

@@ -103,6 +103,7 @@ import { MultiplayerLobby } from './game-board/components/MultiplayerLobby';
 import { MultiplayerBossAlert } from './game-board/components/MultiplayerBossAlert';
 import { MultiplayerConnectionBadge } from './game-board/components/MultiplayerConnectionBadge';
 import { MultiplayerOfflineOverlay } from './game-board/components/MultiplayerOfflineOverlay';
+import { buildSharedDeck } from '@/lib/multiplayerSharedDeck';
 import DeckPeekModal from '@/components/DeckPeekModal';
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
@@ -4442,10 +4443,9 @@ export default function GameBoard() {
       pendingTransferOut: Array.isArray(snapshot.pendingTransferOut)
         ? snapshot.pendingTransferOut.map(c => patchPersistedMainDeckWeaponImage(c as GameCardData))
         : null,
-      pendingTransferOutSharedConsumed:
-        typeof snapshot.pendingTransferOutSharedConsumed === 'number'
-          ? snapshot.pendingTransferOutSharedConsumed
-          : null,
+      pendingTransferOutPreviewDealt: Array.isArray(snapshot.pendingTransferOutPreviewDealt)
+        ? snapshot.pendingTransferOutPreviewDealt.map(c => patchPersistedMainDeckWeaponImage(c as GameCardData))
+        : null,
       sharedDeckConsumed: snapshot.sharedDeckConsumed ?? 0,
       bossEncounterAlertShown: Boolean(snapshot.bossEncounterAlertShown),
     });
@@ -4912,13 +4912,29 @@ export default function GameBoard() {
   };
 
   /**
-   * Phase-3 dev-only entry point: open a multiplayer-mode game with a fixed
+   * Dev-only entry point: open a multiplayer-mode game with a fixed
    * "local-test" room id and the picked role. The matching tab (other role)
-   * connects to the same BroadcastChannel and they exchange transferOut
-   * events. NO server, NO persistence, NO authentication — just the local
-   * mechanic verified end-to-end. Replaced by the real lobby in phase 5.
+   * connects to the same BroadcastChannel keyed by `dh-mp-local-test` and
+   * they exchange transferOut events. NO server, NO persistence, NO
+   * authentication — just the local mechanic verified end-to-end.
+   *
+   * To keep both tabs' decks IDENTICAL (so the transfer mechanics can be
+   * verified visually), we use the same `INIT_MULTIPLAYER_GAME` reducer the
+   * real Supabase lobby uses, with a deterministic `LOCAL_TEST_DECK_SEED`.
+   * Both tabs build the same 36-card sharedDeck → A's preview =
+   * sharedDeck[0..3], B's preview = sharedDeck[4..7], both share remainingDeck
+   * = sharedDeck[8..35] (28 cards). Per-player content (hero, knight class
+   * deck, eternal relics) is still rolled with each tab's own RNG, so those
+   * differ — that's OK because they're never synced in MP.
+   *
+   * `LOCAL_TEST_DECK_SEED` is fixed (not Date.now()) so two tabs opened at
+   * different moments still match. Refresh both tabs to start a "new" game
+   * with the same 36 cards. If you want to test a different shuffle, change
+   * the constant inline.
    */
   const handleLocalRolePick = (role: 'local-A' | 'local-B') => {
+    const LOCAL_TEST_DECK_SEED = 0xDEADBEEF; // any fixed integer; both tabs use this
+
     setShowGameModeSelect(false);
     const myRole: 'A' | 'B' = role === 'local-A' ? 'A' : 'B';
     const peerRole: 'A' | 'B' = myRole === 'A' ? 'B' : 'A';
@@ -4929,22 +4945,20 @@ export default function GameBoard() {
     clearUndoStack();
     clearGameLog();
     setGameOverMinimized(false);
-    initGame('multiplayer');
 
-    // Set the multiplayer session AFTER initGame so initGame's deck dealing
-    // (single-player path for phase 3) runs first. Phase 5 will introduce
-    // INIT_MULTIPLAYER_GAME so the deck is server-supplied and identical
-    // across roles — for phase 3 prototype, A and B will have DIFFERENT
-    // local decks (since they each ran createDeck with their own RNG), but
-    // the transferOut/receive plumbing is exercised either way.
+    // Build the same 36-card shared deck on both sides via the deterministic
+    // seed. Mirrors `MultiplayerLobby.createRoom` → server-supplied path,
+    // but skips the network round-trip.
+    const { deck: sharedDeck } = buildSharedDeck(LOCAL_TEST_DECK_SEED);
+
     dispatch({
-      type: 'SET_MULTIPLAYER_SESSION',
-      session: {
-        role: myRole,
-        roomId: 'local-test',
-        peerId: `local-${peerRole}`,
-        lastAppliedSeq: 0,
-      },
+      type: 'INIT_MULTIPLAYER_GAME',
+      sharedDeck,
+      role: myRole,
+      roomId: 'local-test',
+      peerId: `local-${peerRole}`,
+      totalWins: engine.getState().totalWins ?? 0,
+      eternalRelics: engine.getState().eternalRelics ?? [],
     });
 
     dispatch({ type: 'SET_HYDRATED' });

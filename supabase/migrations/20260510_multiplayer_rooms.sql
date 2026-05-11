@@ -160,8 +160,17 @@ create table if not exists public.transfers (
   cards jsonb not null default '[]'::jsonb,
 
   -- How many cards the sender consumed from the shared suffix this turn.
-  -- Receiver must apply MULTIPLAYER_SHARED_SHRINK with this count.
+  -- DEPRECATED — kept for backward compat with rows from the count-based
+  -- protocol. Current protocol uses `preview_dealt` (id-based) instead.
   shared_consumed integer not null default 0 check (shared_consumed >= 0),
+
+  -- Cards the sender dealt from its remainingDeck top to its own preview
+  -- row during this waterfall. The receiver removes these cards from its
+  -- own remainingDeck by id (only the ones it actually has are removed;
+  -- cards that were previously transferred from the receiver are silently
+  -- skipped). Carries enough info to keep the shared suffix in sync without
+  -- relying on the count-based `shared_consumed` field.
+  preview_dealt jsonb not null default '[]'::jsonb,
 
   -- Set to `true` after the receiving client successfully dispatched
   -- both RECEIVE_TRANSFER + SHARED_SHRINK. Used by `/api/mp/resume` to

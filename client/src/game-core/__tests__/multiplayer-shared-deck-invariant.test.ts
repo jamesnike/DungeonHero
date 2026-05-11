@@ -1,32 +1,45 @@
 /**
- * Multiplayer phase-2 invariant: after A and B exchange `transferOut` +
- * `sharedShrink` actions, both players' "shared suffix" of `remainingDeck`
- * (cards WITHOUT `_excludedFromShared: true`) MUST remain identical, and
- * the order of shared cards must be preserved.
+ * Multiplayer phase-2 invariant: after A and B exchange `transferOut` events,
+ * both players' "shared portion" of `remainingDeck` (cards WITHOUT
+ * `_excludedFromShared: true`) MUST remain identical (modulo positional
+ * reordering caused by monster top-up/cap inside `computeWaterfallDropPlan`).
  *
- * This is the foundational data-model test for the shared-suffix model
- * described in
- *   `.cursor/plans/2-player_multiplayer_mode_*.plan.md` (阶段 2).
+ * The id-based sync protocol:
+ *   On waterfall, A emits { cards, previewDealt, seq } where:
+ *     - `cards`        = squeezed-out preview cards going to B's deck top
+ *     - `previewDealt` = cards A just dealt from its deck top to its preview
  *
- * Coverage:
- *   1. A waterfall consumes 2 shared cards + pushes 1 card → B mirrors via
- *      MULTIPLAYER_RECEIVE_TRANSFER + MULTIPLAYER_SHARED_SHRINK.
- *      Assert shared portions match after each step.
- *   2. A waterfall whose discard hits `returnToDeck` → A's local deck gets
- *      a `_excludedFromShared: true` card inserted; B's shared portion is
- *      unaffected (because returnToDeck doesn't generate a transferOut).
- *   3. A waterfall whose discard hits `swarmInfest` → bugs prepended to
- *      A's deck top with `_excludedFromShared: true`; B's shared portion
- *      still matches.
- *   4. Two waterfalls in alternating order (A → B → A) keep shared
- *      portions aligned.
- *   5. Idempotency: re-applying the same RECEIVE_TRANSFER seq twice is a
- *      no-op (already covered in MULTIPLAYER_RECEIVE_TRANSFER reducer but
- *      asserted end-to-end here for safety).
+ *   B's reducer:
+ *     - prepends `cards` (auto-tagged `_excludedFromShared: true`)
+ *     - removes any card whose id matches one in `previewDealt` from its
+ *       own `remainingDeck` (silently skipping ids it doesn't have, e.g.
+ *       cards previously transferred from B back to A)
  *
- * Single-player guard: when `multiplayerSession === null`, the waterfall
- * MUST NOT emit `multiplayer:transferOut` and MUST NOT mutate
- * `sharedDeckConsumed` / `pendingTransferOut`. Asserted explicitly.
+ * This file's coverage:
+ *   1. A waterfall deals 2 shared + pushes 1 → B receives, removes 2
+ *      shared by id, prepends 1 push card. Shared portions stay aligned.
+ *   2. returnToDeck discard: A re-inserts wraith locally (tagged
+ *      `_excludedFromShared`); B's shared portion unchanged (the
+ *      re-inserted card isn't in `previewDealt` — it goes back to deck
+ *      AFTER deal computes previewDealt).
+ *   3. swarmInfest: bugs prepend with `_excludedFromShared`; B's shared
+ *      portion still matches.
+ *   4. Three alternating waterfalls (A → B → A) keep shared portions
+ *      aligned.
+ *   5. Idempotency: re-dispatching the same RECEIVE_TRANSFER seq is no-op.
+ *   6. Pipeline whitelist: RECEIVE_TRANSFER + CLEAR drain under
+ *      phase=playerInput.
+ *   7. Single-player guard: NO transferOut emitted, MP fields untouched.
+ *   8. Boss alert fires once when boss surfaces (MP only).
+ *   9. MP threshold (≤2 active triggers waterfall vs ≤1 in solo).
+ *   10. extraDiscardCards exists in MP, not in SP.
+ *   11. Full pipeline: 2 discards staged → side effect carries both cards
+ *       and previewDealt.
+ *   12. Companion previewDealt accumulates across multi-iteration waterfalls.
+ *   13. Persistence round-trip includes both pendingTransferOut and
+ *       pendingTransferOutPreviewDealt.
+ *   14. Drift handling: previewDealt cards that B doesn't have are
+ *       silently skipped.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -55,13 +68,14 @@ function makeMpState(role: 'A' | 'B', overrides?: Partial<GameState>): GameState
       lastAppliedSeq: 0,
     },
     pendingTransferOut: null,
+    pendingTransferOutPreviewDealt: null,
     sharedDeckConsumed: 0,
     // NB: we keep phase='idle' (default) for the waterfall internals here.
     // In real game, APPLY_WATERFALL_DISCARD_EFFECTS / APPLY_WATERFALL_DEAL
     // are top-level dispatches (engine._processAction skips the input gate).
-    // For MULTIPLAYER_RECEIVE_TRANSFER / SHARED_SHRINK we DO need to test
-    // the whitelist behavior under playerInput — a separate test in this
-    // file flips phase explicitly for that case.
+    // For MULTIPLAYER_RECEIVE_TRANSFER we DO need to test the whitelist
+    // behavior under playerInput — a separate test in this file flips
+    // phase explicitly for that case.
     ...overrides,
   };
 }
@@ -80,12 +94,15 @@ function emptyRow(): ActiveRowSlots {
 }
 
 /**
- * Build a minimal `pendingWaterfallPlan`. The plan's `nextRemainingDeck`
- * represents what the deck should become after dealing `dealCount` cards
- * from the deck top into preview. We start the test by pre-applying that
- * deck-top consumption logic ourselves so the assertions are easy to read.
+ * Build a minimal `pendingWaterfallPlan`. Both `nextRemainingDeck`
+ * (the deck after deal) and `nextPreviewCards` (the cards dealt from
+ * deck top to the new preview row) are required for the MP id-based
+ * protocol — `nextPreviewCards` becomes the `previewDealt` payload.
  */
-function makePlanForDeck(remaining: GameCardData[]) {
+function makePlanForDeck(
+  remaining: GameCardData[],
+  previewDealt: GameCardData[] = [],
+) {
   return {
     dropAssignments: [],
     resolvedDropCards: [],
@@ -94,7 +111,7 @@ function makePlanForDeck(remaining: GameCardData[]) {
     discardCard: null,
     discardPreviewIndex: null,
     discardDestination: 'graveyard' as const,
-    nextPreviewCards: [],
+    nextPreviewCards: previewDealt,
     nextRemainingDeck: remaining,
     newPreviewStacks: {},
     shouldDeclareVictory: false,
@@ -113,12 +130,18 @@ function sharedIds(deck: GameCardData[]): string[] {
   return sharedPortion(deck).map(c => c.id);
 }
 
+/** Compare just the SET of IDs (order-independent) — useful when monster
+ *  top-up/cap reorders A and B differently. */
+function sharedIdSet(deck: GameCardData[]): Set<string> {
+  return new Set(sharedPortion(deck).map(c => c.id));
+}
+
 // ---------------------------------------------------------------------------
-// 1. Single waterfall: A consumes shared + pushes 1 → B mirrors
+// 1. Single waterfall: A deals 2 shared + pushes 1 → B receives
 // ---------------------------------------------------------------------------
 
-describe('Multiplayer shared-suffix invariant', () => {
-  it('A waterfall consumes 2 shared, pushes 1 discard → B receives + shrinks → shared portions stay aligned', () => {
+describe('Multiplayer shared-portion invariant', () => {
+  it('A waterfall deals 2 shared + pushes 1 → B mirrors via RECEIVE_TRANSFER → shared portions stay aligned', () => {
     const sharedDeck = [
       makeShared('s1'),
       makeShared('s2'),
@@ -127,7 +150,6 @@ describe('Multiplayer shared-suffix invariant', () => {
       makeShared('s5'),
       makeShared('s6'),
     ];
-    // Both players start with identical shared deck.
     let stateA = makeMpState('A', {
       remainingDeck: [...sharedDeck.map(c => ({ ...c }))],
       activeCards: emptyRow(),
@@ -139,12 +161,8 @@ describe('Multiplayer shared-suffix invariant', () => {
       previewCards: emptyRow(),
     });
 
-    // Sanity: shared portions identical at start.
     expect(sharedIds(stateA.remainingDeck)).toEqual(sharedIds(stateB.remainingDeck));
 
-    // Simulate: A's waterfall pushes one card out. The discardCard is a
-    // generic event (no waterfallEffect) → falls into the "no-effect" branch
-    // → enqueues DISCARD_OWNED_CARD + stages transferOut.
     const discardCard = {
       id: 'd1',
       type: 'event',
@@ -152,24 +170,13 @@ describe('Multiplayer shared-suffix invariant', () => {
       value: 0,
     } as unknown as GameCardData;
 
-    // A's deck after waterfall consumed s1+s2 (deal 2 to preview, plus
-    // pushed-out) — for this isolated unit we just assert on
-    // (a) what reduceApplyWaterfallDiscardEffects stages into
-    //     pendingTransferOut, and
-    // (b) what reduceApplyWaterfallDeal computes as sharedConsumed.
-    //
-    // We give APPLY_WATERFALL_DISCARD_EFFECTS the post-deal deck (s3..s6)
-    // as `nextRemainingDeck`, then APPLY_WATERFALL_DEAL writes that to
-    // state.remainingDeck and computes shared delta vs state.remainingDeck
-    // (which is still the pre-deal s1..s6).
+    // A deals s1+s2 to preview, leaving [s3..s6] in deck.
     stateA = {
       ...stateA,
-      pendingWaterfallPlan: makePlanForDeck([
-        sharedDeck[2],
-        sharedDeck[3],
-        sharedDeck[4],
-        sharedDeck[5],
-      ]),
+      pendingWaterfallPlan: makePlanForDeck(
+        [sharedDeck[2], sharedDeck[3], sharedDeck[4], sharedDeck[5]],
+        [sharedDeck[0], sharedDeck[1]], // previewDealt
+      ),
     };
 
     const discardResult = drain(stateA, [
@@ -181,18 +188,24 @@ describe('Multiplayer shared-suffix invariant', () => {
     ]);
     stateA = discardResult.state;
 
-    // After discard: pendingTransferOut should hold the pushed-out card.
+    // After DISCARD: cards are staged on the plan's `_shippedCardsBuffer`,
+    // NOT on `state.pendingTransferOut`. The hook (useMultiplayerSync) does
+    // not see them yet — by design, to prevent it from POSTing intermediate
+    // states. The DEAL reducer commits the buffer atomically below.
+    expect(stateA.pendingTransferOut).toBeNull();
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer).toBeDefined();
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['d1']);
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer![0]._excludedFromShared).toBeUndefined();
+
+    const dealResult = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' });
+    stateA = dealResult.state;
+
+    // After DEAL: atomically committed to `pendingTransferOut` +
+    // `pendingTransferOutPreviewDealt`. Hook fires once with the full batch.
     expect(stateA.pendingTransferOut).not.toBeNull();
     expect(stateA.pendingTransferOut!.length).toBe(1);
     expect(stateA.pendingTransferOut![0].id).toBe('d1');
-    // The clean copy must NOT carry _excludedFromShared (it's the peer's
-    // job to tag it on RECEIVE).
     expect(stateA.pendingTransferOut![0]._excludedFromShared).toBeUndefined();
-
-    // Now run APPLY_WATERFALL_DEAL — it commits remainingDeck and emits
-    // multiplayer:transferOut.
-    const dealResult = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' });
-    stateA = dealResult.state;
 
     expect(stateA.sharedDeckConsumed).toBe(2);
     expect(stateA.remainingDeck.map(c => c.id)).toEqual(['s3', 's4', 's5', 's6']);
@@ -203,34 +216,37 @@ describe('Multiplayer shared-suffix invariant', () => {
     expect(transferOutEvents).toHaveLength(1);
     const payload = transferOutEvents[0].payload as {
       cards: GameCardData[];
-      sharedConsumed: number;
+      previewDealt: GameCardData[];
       seq: number;
     };
-    expect(payload.sharedConsumed).toBe(2);
     expect(payload.cards.map(c => c.id)).toEqual(['d1']);
+    expect(payload.previewDealt.map(c => c.id)).toEqual(['s1', 's2']);
     expect(payload.seq).toBe(2);
 
-    // Now mirror on B's side: receive d1 + shrink shared by 2.
+    // Mirror on B: single RECEIVE_TRANSFER does both prepend + remove-by-id.
     const bResult = drain(stateB, [
-      { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: payload.cards, seq: 1 },
-      { type: 'MULTIPLAYER_SHARED_SHRINK', count: payload.sharedConsumed, seq: 2 },
+      {
+        type: 'MULTIPLAYER_RECEIVE_TRANSFER',
+        cards: payload.cards,
+        previewDealt: payload.previewDealt,
+        seq: 1,
+      },
     ]);
     stateB = bResult.state;
 
-    // B's deck top should now be: [d1 (excluded)] ++ [s3..s6 (shared)]
+    // B's deck = [d1 (excluded)] ++ [s3, s4, s5, s6 (shared)].
     expect(stateB.remainingDeck.map(c => c.id)).toEqual(['d1', 's3', 's4', 's5', 's6']);
     expect(stateB.remainingDeck[0]._excludedFromShared).toBe(true);
 
-    // Invariant check: shared portions of A and B must match.
     expect(sharedIds(stateA.remainingDeck)).toEqual(sharedIds(stateB.remainingDeck));
     expect(sharedIds(stateA.remainingDeck)).toEqual(['s3', 's4', 's5', 's6']);
   });
 
   // -------------------------------------------------------------------------
-  // 2. returnToDeck: discard re-enters local deck, NOT transferred to peer
+  // 2. returnToDeck: discard re-enters local deck, NOT removed from peer
   // -------------------------------------------------------------------------
 
-  it('returnToDeck discard re-inserts locally tagged _excludedFromShared; no transferOut card; B shared portion unaffected', () => {
+  it('returnToDeck discard re-inserts locally tagged _excludedFromShared; B shared portion unaffected', () => {
     const sharedDeck = [
       makeShared('s1'),
       makeShared('s2'),
@@ -240,7 +256,6 @@ describe('Multiplayer shared-suffix invariant', () => {
       remainingDeck: [...sharedDeck.map(c => ({ ...c }))],
       activeCards: emptyRow(),
       previewCards: emptyRow(),
-      // Set rng deterministically so returnToDeck insertion is predictable.
       rng: createRng(123),
     });
     let stateB = makeMpState('B', {
@@ -260,11 +275,14 @@ describe('Multiplayer shared-suffix invariant', () => {
       waterfallEffect: { type: 'returnToDeck' },
     } as unknown as GameCardData;
 
-    // A's waterfall: consume 1 shared (s1), push out the wraith via
-    // returnToDeck (re-inserts into deck).
+    // A deals s1 to preview (1 card), leaving [s2, s3]. The wraith returns
+    // to A's deck somewhere via returnToDeck (local-only insertion).
     stateA = {
       ...stateA,
-      pendingWaterfallPlan: makePlanForDeck([sharedDeck[1], sharedDeck[2]]),
+      pendingWaterfallPlan: makePlanForDeck(
+        [sharedDeck[1], sharedDeck[2]],
+        [sharedDeck[0]], // previewDealt = s1
+      ),
     };
 
     const discardResult = drain(stateA, [
@@ -276,17 +294,15 @@ describe('Multiplayer shared-suffix invariant', () => {
     ]);
     stateA = discardResult.state;
 
-    // returnToDeck path → NOT staged for transfer.
+    // returnToDeck → wraith NOT in pendingTransferOut.
     expect(stateA.pendingTransferOut).toBeNull();
 
-    // pendingWaterfallPlan.nextRemainingDeck has been updated with the
-    // re-inserted wraith.
+    // pendingWaterfallPlan.nextRemainingDeck has the re-inserted wraith.
     const updatedDeckTop =
       stateA.pendingWaterfallPlan?.nextRemainingDeck ?? [];
     expect(updatedDeckTop.find(c => c.id === 'w1')).toBeDefined();
     expect(updatedDeckTop.find(c => c.id === 'w1')!._excludedFromShared).toBe(true);
 
-    // Commit deal → emit transferOut with cards: [], sharedConsumed: 1.
     const dealResult = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' });
     stateA = dealResult.state;
 
@@ -298,26 +314,29 @@ describe('Multiplayer shared-suffix invariant', () => {
     expect(transferOutEvents).toHaveLength(1);
     const payload = transferOutEvents[0].payload as {
       cards: GameCardData[];
-      sharedConsumed: number;
+      previewDealt: GameCardData[];
       seq: number;
     };
     expect(payload.cards).toHaveLength(0);
-    expect(payload.sharedConsumed).toBe(1);
+    expect(payload.previewDealt.map(c => c.id)).toEqual(['s1']);
 
-    // Mirror on B: empty cards + shrink 1.
     const bResult = drain(stateB, [
-      { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: [], seq: 1 },
-      { type: 'MULTIPLAYER_SHARED_SHRINK', count: 1, seq: 2 },
+      {
+        type: 'MULTIPLAYER_RECEIVE_TRANSFER',
+        cards: [],
+        previewDealt: payload.previewDealt,
+        seq: 1,
+      },
     ]);
     stateB = bResult.state;
 
-    // B's deck = s2, s3. A's deck has wraith mixed in (excluded).
+    // B's shared portion = [s2, s3]. A's deck has wraith mixed in (excluded).
     expect(sharedIds(stateB.remainingDeck)).toEqual(['s2', 's3']);
     expect(sharedIds(stateA.remainingDeck)).toEqual(['s2', 's3']);
   });
 
   // -------------------------------------------------------------------------
-  // 3. swarmInfest: bugs prepend with _excludedFromShared; B shared unchanged
+  // 3. swarmInfest: bugs prepend with _excludedFromShared
   // -------------------------------------------------------------------------
 
   it('swarmInfest bugs prepend to A deck tagged _excludedFromShared; B shared portion stays in lockstep', () => {
@@ -345,7 +364,10 @@ describe('Multiplayer shared-suffix invariant', () => {
 
     stateA = {
       ...stateA,
-      pendingWaterfallPlan: makePlanForDeck([sharedDeck[1], sharedDeck[2], sharedDeck[3]]),
+      pendingWaterfallPlan: makePlanForDeck(
+        [sharedDeck[1], sharedDeck[2], sharedDeck[3]],
+        [sharedDeck[0]], // previewDealt = s1
+      ),
     };
 
     stateA = drain(stateA, [
@@ -356,49 +378,55 @@ describe('Multiplayer shared-suffix invariant', () => {
       } as GameAction,
     ]).state;
 
-    // SwarmHost itself goes to graveyard → also staged for transfer.
-    expect(stateA.pendingTransferOut).not.toBeNull();
-    expect(stateA.pendingTransferOut!.map(c => c.id)).toEqual(['sw1']);
+    // SwarmHost itself goes to graveyard → also staged for transfer
+    // (on the plan's _shippedCardsBuffer, not yet on state.pendingTransferOut).
+    expect(stateA.pendingTransferOut).toBeNull();
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['sw1']);
 
-    // Plan now has: [bug, bug, s2, s3, s4] with bugs tagged excluded.
+    // Plan: [bug, bug, s2, s3, s4] with bugs tagged excluded.
     const planDeck = stateA.pendingWaterfallPlan?.nextRemainingDeck ?? [];
-    expect(planDeck.length).toBe(5); // 2 bugs + 3 shared
+    expect(planDeck.length).toBe(5);
     expect(planDeck[0]._excludedFromShared).toBe(true);
     expect(planDeck[1]._excludedFromShared).toBe(true);
 
     const dealResult = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' });
     stateA = dealResult.state;
 
+    // After DEAL: atomic commit promotes buffer → state.pendingTransferOut.
+    expect(stateA.pendingTransferOut!.map(c => c.id)).toEqual(['sw1']);
+
     const payload = (dealResult.sideEffects ?? []).find(
       e => e.event === 'multiplayer:transferOut',
     )?.payload as {
       cards: GameCardData[];
-      sharedConsumed: number;
+      previewDealt: GameCardData[];
       seq: number;
     };
     expect(payload).toBeDefined();
     expect(payload.cards.map(c => c.id)).toEqual(['sw1']);
-    expect(payload.sharedConsumed).toBe(1);
+    expect(payload.previewDealt.map(c => c.id)).toEqual(['s1']);
 
     stateB = drain(stateB, [
-      { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: payload.cards, seq: 1 },
-      { type: 'MULTIPLAYER_SHARED_SHRINK', count: payload.sharedConsumed, seq: 2 },
+      {
+        type: 'MULTIPLAYER_RECEIVE_TRANSFER',
+        cards: payload.cards,
+        previewDealt: payload.previewDealt,
+        seq: 1,
+      },
     ]).state;
 
-    // B sees [sw1 (excluded)] ++ [s2, s3, s4 (shared)].
     expect(stateB.remainingDeck.map(c => c.id)).toEqual(['sw1', 's2', 's3', 's4']);
     expect(stateB.remainingDeck[0]._excludedFromShared).toBe(true);
 
-    // Shared invariant.
     expect(sharedIds(stateA.remainingDeck)).toEqual(sharedIds(stateB.remainingDeck));
     expect(sharedIds(stateA.remainingDeck)).toEqual(['s2', 's3', 's4']);
   });
 
   // -------------------------------------------------------------------------
-  // 4. Alternating waterfalls (A → B → A) keep shared portions aligned
+  // 4. Three alternating waterfalls (A → B → A) keep shared portions aligned
   // -------------------------------------------------------------------------
 
-  it('three alternating waterfalls (A → B → A) keep shared portions identical', () => {
+  it('three alternating waterfalls (A → B → A) keep shared portions identical (id-based)', () => {
     const sharedDeck = [
       makeShared('s1'),
       makeShared('s2'),
@@ -431,14 +459,22 @@ describe('Multiplayer shared-suffix invariant', () => {
     const runWaterfall = (
       self: GameState,
       peer: GameState,
-      sharedConsumeCount: number,
+      previewDealtCardIds: string[],
       discardId: string,
     ): { self: GameState; peer: GameState } => {
-      // Build plan with N fewer cards from top.
-      const newDeck = self.remainingDeck.slice(sharedConsumeCount);
+      // The cards in `previewDealtCardIds` get consumed from self's deck top.
+      // We slice them off (preserving the transferred prefix).
+      const transferredPrefix = self.remainingDeck.filter(c => c._excludedFromShared);
+      const sharedTail = self.remainingDeck.filter(c => !c._excludedFromShared);
+      const previewDealt = sharedTail
+        .filter(c => previewDealtCardIds.includes(c.id))
+        .map(c => ({ ...c }));
+      const remainingShared = sharedTail.filter(c => !previewDealtCardIds.includes(c.id));
+      const newDeck = [...transferredPrefix, ...remainingShared];
+
       let s = {
         ...self,
-        pendingWaterfallPlan: makePlanForDeck(newDeck),
+        pendingWaterfallPlan: makePlanForDeck(newDeck, previewDealt),
       };
       s = drain(s, [
         {
@@ -456,116 +492,46 @@ describe('Multiplayer shared-suffix invariant', () => {
       expect(transferEvent).toBeDefined();
       const payload = transferEvent!.payload as {
         cards: GameCardData[];
-        sharedConsumed: number;
+        previewDealt: GameCardData[];
         seq: number;
       };
 
-      // Peer applies. Use a unique seq based on peer's lastAppliedSeq+1 so we
-      // never collide with previous transfers.
+      // Peer applies via single RECEIVE_TRANSFER (no SHRINK).
       const baseSeq = (peer.multiplayerSession?.lastAppliedSeq ?? 0) + 1;
       const newPeer = drain(peer, [
-        { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: payload.cards, seq: baseSeq },
-        { type: 'MULTIPLAYER_SHARED_SHRINK', count: payload.sharedConsumed, seq: baseSeq + 1 },
+        {
+          type: 'MULTIPLAYER_RECEIVE_TRANSFER',
+          cards: payload.cards,
+          previewDealt: payload.previewDealt,
+          seq: baseSeq,
+        },
       ]).state;
 
-      // Clear self's pendingTransferOut (simulating ack).
       const cleared = drain(s, [{ type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' }]).state;
       return { self: cleared, peer: newPeer };
     };
 
-    // Round 1: A waterfall, consumes 2 shared, pushes d1.
-    let r = runWaterfall(stateA, stateB, 2, 'd1');
+    // Round 1: A deals s1+s2, pushes d1.
+    let r = runWaterfall(stateA, stateB, ['s1', 's2'], 'd1');
     stateA = r.self;
     stateB = r.peer;
-    expect(sharedIds(stateA.remainingDeck)).toEqual(sharedIds(stateB.remainingDeck));
-    expect(sharedIds(stateA.remainingDeck)).toEqual(['s3', 's4', 's5', 's6', 's7', 's8']);
+    expect(sharedIdSet(stateA.remainingDeck)).toEqual(sharedIdSet(stateB.remainingDeck));
+    expect(sharedIds(stateA.remainingDeck).sort()).toEqual(['s3', 's4', 's5', 's6', 's7', 's8']);
 
-    // Round 2: B waterfall, consumes 3 shared, pushes d2. Note: B's deck top
-    // has the d1 transferred prefix from round 1 — but `runWaterfall` slices
-    // from the top (which would slice off d1 if sharedConsumeCount > 0).
-    // For this test we model B's waterfall as consuming SHARED cards only,
-    // so we need to manually skip the transferred prefix. Simulate by
-    // building B's post-deal deck = [d1 (kept)] ++ [s6, s7, s8]:
-    {
-      const transferredPrefix = stateB.remainingDeck.filter(c => c._excludedFromShared);
-      const sharedTail = stateB.remainingDeck.filter(c => !c._excludedFromShared);
-      const newSharedTail = sharedTail.slice(3); // consume 3 shared
-      const newDeck = [...transferredPrefix, ...newSharedTail];
-      let bs = {
-        ...stateB,
-        pendingWaterfallPlan: makePlanForDeck(newDeck),
-      };
-      bs = drain(bs, [
-        {
-          type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
-          discardCard: mkDiscard('d2'),
-          nextRemainingDeck: newDeck,
-        } as GameAction,
-      ]).state;
-      const dealResult = reduce(bs, { type: 'APPLY_WATERFALL_DEAL' });
-      bs = dealResult.state;
-      const payload = (dealResult.sideEffects ?? []).find(
-        e => e.event === 'multiplayer:transferOut',
-      )!.payload as {
-        cards: GameCardData[];
-        sharedConsumed: number;
-        seq: number;
-      };
-      // Peer (A) applies.
-      const baseSeq = (stateA.multiplayerSession?.lastAppliedSeq ?? 0) + 1;
-      stateA = drain(stateA, [
-        { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: payload.cards, seq: baseSeq },
-        { type: 'MULTIPLAYER_SHARED_SHRINK', count: payload.sharedConsumed, seq: baseSeq + 1 },
-      ]).state;
-      stateB = drain(bs, [{ type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' }]).state;
-    }
+    // Round 2: B waterfall, deals s3+s4+s5, pushes d2. (B doesn't have s1/s2
+    // because A consumed them; B's deck now has [d1(excluded), s3..s8].)
+    r = runWaterfall(stateB, stateA, ['s3', 's4', 's5'], 'd2');
+    stateB = r.self;
+    stateA = r.peer;
+    expect(sharedIdSet(stateA.remainingDeck)).toEqual(sharedIdSet(stateB.remainingDeck));
+    expect(sharedIds(stateA.remainingDeck).sort()).toEqual(['s6', 's7', 's8']);
 
-    // After round 2:
-    //   A: [d2 (peer), s6, s7, s8]   (peer pushed d2 to top, A had no
-    //                                  transferred prefix yet, shrunk 3
-    //                                  shared from s3..s5)
-    //   B: [d1 (peer-from-r1), s6, s7, s8]
-    expect(sharedIds(stateA.remainingDeck)).toEqual(['s6', 's7', 's8']);
-    expect(sharedIds(stateB.remainingDeck)).toEqual(['s6', 's7', 's8']);
-    expect(sharedIds(stateA.remainingDeck)).toEqual(sharedIds(stateB.remainingDeck));
-
-    // Round 3: A waterfall again, consumes 1 shared, pushes d3.
-    {
-      const transferredPrefix = stateA.remainingDeck.filter(c => c._excludedFromShared);
-      const sharedTail = stateA.remainingDeck.filter(c => !c._excludedFromShared);
-      const newSharedTail = sharedTail.slice(1);
-      const newDeck = [...transferredPrefix, ...newSharedTail];
-      let as = {
-        ...stateA,
-        pendingWaterfallPlan: makePlanForDeck(newDeck),
-      };
-      as = drain(as, [
-        {
-          type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
-          discardCard: mkDiscard('d3'),
-          nextRemainingDeck: newDeck,
-        } as GameAction,
-      ]).state;
-      const dealResult = reduce(as, { type: 'APPLY_WATERFALL_DEAL' });
-      as = dealResult.state;
-      const payload = (dealResult.sideEffects ?? []).find(
-        e => e.event === 'multiplayer:transferOut',
-      )!.payload as {
-        cards: GameCardData[];
-        sharedConsumed: number;
-        seq: number;
-      };
-      const baseSeq = (stateB.multiplayerSession?.lastAppliedSeq ?? 0) + 1;
-      stateB = drain(stateB, [
-        { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: payload.cards, seq: baseSeq },
-        { type: 'MULTIPLAYER_SHARED_SHRINK', count: payload.sharedConsumed, seq: baseSeq + 1 },
-      ]).state;
-      stateA = drain(as, [{ type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' }]).state;
-    }
-
-    expect(sharedIds(stateA.remainingDeck)).toEqual(['s7', 's8']);
-    expect(sharedIds(stateB.remainingDeck)).toEqual(['s7', 's8']);
-    expect(sharedIds(stateA.remainingDeck)).toEqual(sharedIds(stateB.remainingDeck));
+    // Round 3: A waterfall again, deals s6, pushes d3.
+    r = runWaterfall(stateA, stateB, ['s6'], 'd3');
+    stateA = r.self;
+    stateB = r.peer;
+    expect(sharedIdSet(stateA.remainingDeck)).toEqual(sharedIdSet(stateB.remainingDeck));
+    expect(sharedIds(stateA.remainingDeck).sort()).toEqual(['s7', 's8']);
   });
 
   // -------------------------------------------------------------------------
@@ -582,34 +548,23 @@ describe('Multiplayer shared-suffix invariant', () => {
     const card = { id: 'd1', type: 'event', name: 'Push', value: 0 } as unknown as GameCardData;
 
     stateB = drain(stateB, [
-      { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: [card], seq: 1 },
+      { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: [card], previewDealt: [], seq: 1 },
     ]).state;
     expect(stateB.remainingDeck.map(c => c.id)).toEqual(['d1', 's1', 's2']);
     expect(stateB.multiplayerSession?.lastAppliedSeq).toBe(1);
 
-    // Re-apply the same seq → must be no-op.
     stateB = drain(stateB, [
-      { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: [card], seq: 1 },
+      { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: [card], previewDealt: [], seq: 1 },
     ]).state;
     expect(stateB.remainingDeck.map(c => c.id)).toEqual(['d1', 's1', 's2']);
     expect(stateB.multiplayerSession?.lastAppliedSeq).toBe(1);
   });
 
   // -------------------------------------------------------------------------
-  // 6. Single-player guard: NO transferOut emitted, no MP fields touched
+  // 6. Pipeline whitelist: MULTIPLAYER_* drains under playerInput
   // -------------------------------------------------------------------------
 
-  // -------------------------------------------------------------------------
-  // 7. Pipeline whitelist: MULTIPLAYER_* drains under playerInput
-  // -------------------------------------------------------------------------
-
-  it('MULTIPLAYER_RECEIVE_TRANSFER + SHARED_SHRINK + CLEAR_PENDING_TRANSFER all drain under phase=playerInput', () => {
-    // This is the critical pipeline-whitelist invariant: in real game, the
-    // hook (phase 3+) dispatches these actions while the player is sitting
-    // at a normal `phase: 'playerInput'` UI state. If they're stranded
-    // here, the player's deck view diverges from the peer's — see
-    // `pipeline-input-continuation.mdc` "disposition router family"
-    // discussion for why this is the most painful failure mode.
+  it('MULTIPLAYER_RECEIVE_TRANSFER + CLEAR_PENDING_TRANSFER all drain under phase=playerInput', () => {
     const stateB = makeMpState('B', {
       remainingDeck: [makeShared('s1'), makeShared('s2'), makeShared('s3')],
       activeCards: emptyRow(),
@@ -621,17 +576,26 @@ describe('Multiplayer shared-suffix invariant', () => {
     const card = { id: 'd1', type: 'event', name: 'Push', value: 0 } as unknown as GameCardData;
 
     const result = drain(stateB, [
-      { type: 'MULTIPLAYER_RECEIVE_TRANSFER', cards: [card], seq: 1 },
-      { type: 'MULTIPLAYER_SHARED_SHRINK', count: 1, seq: 2 },
+      {
+        type: 'MULTIPLAYER_RECEIVE_TRANSFER',
+        cards: [card],
+        previewDealt: [makeShared('s1')],
+        seq: 1,
+      },
       { type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' },
     ]);
 
     expect(result.pausedForInput).toBe(false);
     expect(result.queue).toHaveLength(0);
+    // [d1 (prepended)] ++ [s2, s3] (s1 removed by id).
     expect(result.state.remainingDeck.map(c => c.id)).toEqual(['d1', 's2', 's3']);
     expect(result.state.pendingTransferOut).toBeNull();
-    expect(result.state.multiplayerSession?.lastAppliedSeq).toBe(2);
+    expect(result.state.multiplayerSession?.lastAppliedSeq).toBe(1);
   });
+
+  // -------------------------------------------------------------------------
+  // 7. Single-player guard
+  // -------------------------------------------------------------------------
 
   it('single-player: waterfall does NOT emit multiplayer:transferOut and does NOT touch sharedDeckConsumed', () => {
     const sharedDeck = [makeShared('s1'), makeShared('s2'), makeShared('s3')];
@@ -640,7 +604,6 @@ describe('Multiplayer shared-suffix invariant', () => {
       remainingDeck: [...sharedDeck.map(c => ({ ...c }))],
       activeCards: emptyRow(),
       previewCards: emptyRow(),
-      // multiplayerSession is null by default in createInitialGameState.
     };
 
     const discardCard = {
@@ -652,7 +615,10 @@ describe('Multiplayer shared-suffix invariant', () => {
 
     state = {
       ...state,
-      pendingWaterfallPlan: makePlanForDeck([sharedDeck[1], sharedDeck[2]]),
+      pendingWaterfallPlan: makePlanForDeck(
+        [sharedDeck[1], sharedDeck[2]],
+        [sharedDeck[0]],
+      ),
     };
 
     state = drain(state, [
@@ -663,13 +629,11 @@ describe('Multiplayer shared-suffix invariant', () => {
       } as GameAction,
     ]).state;
 
-    // SP: pendingTransferOut never set.
     expect(state.pendingTransferOut).toBeNull();
 
     const dealResult = reduce(state, { type: 'APPLY_WATERFALL_DEAL' });
     state = dealResult.state;
 
-    // SP: counter unchanged, no event emitted.
     expect(state.sharedDeckConsumed).toBe(0);
     expect(
       (dealResult.sideEffects ?? []).filter(e => e.event === 'multiplayer:transferOut'),
@@ -677,14 +641,13 @@ describe('Multiplayer shared-suffix invariant', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 8. Phase 6.2 boss alert: fires once when final monster surfaces in MP
+  // 8. Boss alert fires once when boss surfaces (MP only)
   // -------------------------------------------------------------------------
 
   it('multiplayer: emits multiplayer:bossEncountered exactly once when isFinalMonster lands in preview', () => {
     const sharedDeck = [
       makeShared('s1'),
       makeShared('s2'),
-      // Final monster appears mid-deck → after one waterfall it lands in preview.
       {
         id: 'boss',
         type: 'monster',
@@ -706,14 +669,10 @@ describe('Multiplayer shared-suffix invariant', () => {
       }),
     };
 
-    // Run waterfall deal directly with a plan that promotes boss into preview.
     state = {
       ...state,
       pendingWaterfallPlan: {
-        ...makePlanForDeck([sharedDeck[3], sharedDeck[4]]),
-        // The plan pushes boss into preview directly (skip discard step here;
-        // we just want to verify the boss-detection branch in
-        // reduceApplyWaterfallDeal fires).
+        ...makePlanForDeck([sharedDeck[3], sharedDeck[4]], [sharedDeck[2]]),
         nextPreviewCards: [sharedDeck[2]] as GameCardData[],
       },
     };
@@ -726,15 +685,12 @@ describe('Multiplayer shared-suffix invariant', () => {
     expect((bossEvents[0].payload as { monsterId: string }).monsterId).toBe('boss');
     expect(result.state.bossEncounterAlertShown).toBe(true);
 
-    // Re-running the same deal must NOT re-emit (gated on
-    // bossEncounterAlertShown).
     const state2 = result.state;
     const result2 = reduce(
       {
         ...state2,
-        // Reset the plan so the deal can run again with same preview pieces.
         pendingWaterfallPlan: {
-          ...makePlanForDeck([sharedDeck[3], sharedDeck[4]]),
+          ...makePlanForDeck([sharedDeck[3], sharedDeck[4]], [sharedDeck[2]]),
           nextPreviewCards: [sharedDeck[2]] as GameCardData[],
         },
       },
@@ -746,20 +702,10 @@ describe('Multiplayer shared-suffix invariant', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 9. MP waterfall threshold + multi-card transfer
-  //    User-confirmed semantics:
-  //    • Trigger when active row has ≤ 2 non-ghost cards (vs ≤ 1 in solo).
-  //    • Drop 2 preview cards into the 2 empty active slots.
-  //    • The remaining 2 preview cards: their waterfallEffect fires locally
-  //      AND each card gets shipped to the peer's deck top.
+  // 9. MP threshold: ≤2 active triggers waterfall (vs ≤1 in solo)
   // -------------------------------------------------------------------------
 
   it('MP: waterfall trigger fires when active row drops to 2 (vs 1 in solo)', () => {
-    // Trigger the post-processing waterfall check by mutating activeCards
-    // (the post-process step only runs when activeCards reference changes).
-    // We start with 3 monsters and use UPDATE_ACTIVE_CARDS to remove one,
-    // leaving exactly 2 — which crosses the MP threshold (≤2) but not the
-    // solo threshold (≤1).
     const monster = (id: string): GameCardData =>
       ({
         id,
@@ -796,9 +742,6 @@ describe('Multiplayer shared-suffix invariant', () => {
 
     expect(baseState.pendingWaterfallPlan).toBeNull();
 
-    // Remove m3 from the active row. UPDATE_ACTIVE_CARDS forces a new
-    // activeCards reference so postProcessActiveCards runs and exercises
-    // the waterfall-threshold branch.
     const result = reduce(baseState, {
       type: 'UPDATE_ACTIVE_CARDS',
       updater: cards => {
@@ -808,17 +751,14 @@ describe('Multiplayer shared-suffix invariant', () => {
       },
     });
 
-    // Active row drops to 2 → in MP mode this MUST trigger waterfall.
     expect(result.state.pendingWaterfallPlan).not.toBeNull();
     const plan = result.state.pendingWaterfallPlan!;
-    // 2 empty slots → 2 preview cards drop, 2 remain (1 → discardCard, 1 → extras).
     expect(plan.dropAssignments.length).toBe(2);
     expect(plan.discardCard).not.toBeNull();
     expect(plan.extraDiscardCards ?? []).toHaveLength(1);
   });
 
   it('SP: same active=2 state does NOT trigger waterfall (threshold stays at <=1)', () => {
-    // Mirror of the MP test above, but with multiplayerSession=null.
     const monster = (id: string): GameCardData =>
       ({
         id,
@@ -848,7 +788,6 @@ describe('Multiplayer shared-suffix invariant', () => {
       hp: 30,
       maxHp: 40,
       phase: 'playerInput',
-      // multiplayerSession defaults to null — solo mode.
     };
 
     const result = reduce(baseState, {
@@ -860,9 +799,12 @@ describe('Multiplayer shared-suffix invariant', () => {
       },
     });
 
-    // Solo threshold is <=1 — active row drops to 2 → no plan.
     expect(result.state.pendingWaterfallPlan).toBeNull();
   });
+
+  // -------------------------------------------------------------------------
+  // 10. extraDiscardCards exists in MP, not in SP
+  // -------------------------------------------------------------------------
 
   it('MP: computeWaterfallDropPlan with 2 active + 4 preview returns extraDiscardCards.length === 1', () => {
     const state = makeMpState('A', {
@@ -888,15 +830,11 @@ describe('Multiplayer shared-suffix invariant', () => {
 
     const plan = computeWaterfallDropPlan(state, false);
     expect(plan).not.toBeNull();
-    // 2 empty active slots → 2 drops.
     expect(plan!.dropAssignments).toHaveLength(2);
-    // 1 of the 2 leftovers becomes the primary discardCard.
     expect(plan!.discardCard).not.toBeNull();
-    // The OTHER leftover is in extraDiscardCards (MP-only).
     expect(plan!.extraDiscardCards).toBeDefined();
     expect(plan!.extraDiscardCards!).toHaveLength(1);
     expect(plan!.extraDiscardPreviewIndices!).toHaveLength(1);
-    // Extra index must NOT collide with the primary discard index.
     expect(plan!.extraDiscardPreviewIndices![0]).not.toBe(plan!.discardPreviewIndex);
   });
 
@@ -920,15 +858,14 @@ describe('Multiplayer shared-suffix invariant', () => {
 
     const plan = computeWaterfallDropPlan(state, false);
     expect(plan).not.toBeNull();
-    // SP: extras should be empty regardless of how many leftovers exist.
     expect(plan!.extraDiscardCards ?? []).toHaveLength(0);
   });
 
-  it('MP: full pipeline (2 discards) — both cards staged to pendingTransferOut, multiplayer:transferOut emitted with 2 cards + sharedConsumed=4', () => {
-    // End-to-end: simulate the full MP waterfall flow that the GameBoard
-    // would execute. We hand-build a plan with 2 leftover preview cards
-    // (1 discardCard + 1 extra) and dispatch the same sequence of actions
-    // as `handleWaterfallDiscardComplete` does.
+  // -------------------------------------------------------------------------
+  // 11. Full pipeline: 2 discards staged → side effect carries both arrays
+  // -------------------------------------------------------------------------
+
+  it('MP: full pipeline (2 discards) — both cards staged, transferOut emits cards=[pd,ed] + previewDealt=[s1,s2]', () => {
     const sharedDeck = [
       makeShared('d1'),
       makeShared('d2'),
@@ -952,13 +889,14 @@ describe('Multiplayer shared-suffix invariant', () => {
     } as unknown as GameCardData;
 
     let stateA = makeMpState('A', {
-      // Simulate the post-drop deck (4 shared cards left after 2 dealt).
       remainingDeck: [...sharedDeck.map(c => ({ ...c }))],
       activeCards: emptyRow(),
       previewCards: emptyRow(),
       pendingWaterfallPlan: {
-        ...makePlanForDeck([sharedDeck[2], sharedDeck[3], sharedDeck[4], sharedDeck[5]]),
-        // Plan claims a primary discard at preview index 2 and an extra at 3.
+        ...makePlanForDeck(
+          [sharedDeck[2], sharedDeck[3], sharedDeck[4], sharedDeck[5]],
+          [sharedDeck[0], sharedDeck[1]], // previewDealt = [d1, d2]
+        ),
         discardCard: primaryDiscard,
         discardPreviewIndex: 2,
         extraDiscardCards: [extraDiscard],
@@ -966,8 +904,6 @@ describe('Multiplayer shared-suffix invariant', () => {
       },
     });
 
-    // GameBoard's handleWaterfallDiscardComplete dispatches the primary first,
-    // then iterates over extras pulling latest plan.nextRemainingDeck each loop.
     const r1 = drain(stateA, [
       {
         type: 'APPLY_WATERFALL_DISCARD_EFFECTS',
@@ -978,12 +914,10 @@ describe('Multiplayer shared-suffix invariant', () => {
     ]);
     stateA = r1.state;
 
-    // After primary discard: 1 card staged.
-    expect(stateA.pendingTransferOut).not.toBeNull();
-    expect(stateA.pendingTransferOut!).toHaveLength(1);
-    expect(stateA.pendingTransferOut![0].id).toBe('pd');
+    // Cards staged on plan buffer, not yet on state.pendingTransferOut.
+    expect(stateA.pendingTransferOut).toBeNull();
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['pd']);
 
-    // Now the extra (mirrors GameBoard's loop: re-read plan.nextRemainingDeck).
     const liveDeck = stateA.pendingWaterfallPlan!.nextRemainingDeck;
     const r2 = drain(stateA, [
       {
@@ -995,20 +929,17 @@ describe('Multiplayer shared-suffix invariant', () => {
     ]);
     stateA = r2.state;
 
-    // After extra discard: 2 cards staged.
-    expect(stateA.pendingTransferOut!).toHaveLength(2);
-    expect(stateA.pendingTransferOut!.map(c => c.id)).toEqual(['pd', 'ed']);
+    // Buffer accumulates across the chained discard dispatches.
+    expect(stateA.pendingTransferOut).toBeNull();
+    expect(stateA.pendingWaterfallPlan!._shippedCardsBuffer!.map(c => c.id)).toEqual(['pd', 'ed']);
 
-    // Final deal commits the deck and emits transferOut.
     const dealResult = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' });
     stateA = dealResult.state;
 
-    // Shared consumed = 6 (initial pre-deal) - 4 (post-deal) = 2.
-    // Wait — the pre-deal state.remainingDeck is the FIXTURE state (6 cards),
-    // and plan.nextRemainingDeck is the post-deal (4 cards). Both are pure
-    // shared (no _excludedFromShared tags here), so countShared diff = 6 - 4 = 2.
-    // (Matches the sharedConsumed field's documented semantic — count of
-    // shared-deck cards that left this iteration.)
+    // After DEAL: atomic commit — buffer + previewDealt land together.
+    expect(stateA.pendingTransferOut!.map(c => c.id)).toEqual(['pd', 'ed']);
+
+    // 2 shared cards consumed (d1, d2) → cumulative counter = 2.
     expect(stateA.sharedDeckConsumed).toBe(2);
     expect(stateA.remainingDeck.map(c => c.id)).toEqual(['d3', 'd4', 'd5', 'd6']);
 
@@ -1018,12 +949,11 @@ describe('Multiplayer shared-suffix invariant', () => {
     expect(transferOutEvents).toHaveLength(1);
     const payload = transferOutEvents[0].payload as {
       cards: GameCardData[];
-      sharedConsumed: number;
+      previewDealt: GameCardData[];
       seq: number;
     };
-    expect(payload.cards).toHaveLength(2);
     expect(payload.cards.map(c => c.id)).toEqual(['pd', 'ed']);
-    expect(payload.sharedConsumed).toBe(2);
+    expect(payload.previewDealt.map(c => c.id)).toEqual(['d1', 'd2']);
   });
 
   it('single-player: never emits multiplayer:bossEncountered even when boss surfaces', () => {
@@ -1042,13 +972,12 @@ describe('Multiplayer shared-suffix invariant', () => {
       remainingDeck: [makeShared('s1'), boss],
       activeCards: emptyRow(),
       previewCards: emptyRow(),
-      // multiplayerSession is null → SP path.
     };
 
     state = {
       ...state,
       pendingWaterfallPlan: {
-        ...makePlanForDeck([]),
+        ...makePlanForDeck([], [boss]),
         nextPreviewCards: [boss],
       },
     };
@@ -1061,11 +990,10 @@ describe('Multiplayer shared-suffix invariant', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 10. pendingTransferOut + companion delta lifecycle
-  //     (the persistence + replay-on-hydrate fix)
+  // 12. pendingTransferOutPreviewDealt lifecycle
   // -------------------------------------------------------------------------
 
-  it('MP waterfall sets pendingTransferOutSharedConsumed alongside cards (delta tracker for hydrate replay)', () => {
+  it('MP waterfall sets pendingTransferOutPreviewDealt alongside cards', () => {
     const sharedDeck = [
       makeShared('s1'),
       makeShared('s2'),
@@ -1081,19 +1009,15 @@ describe('Multiplayer shared-suffix invariant', () => {
     });
 
     expect(stateA.pendingTransferOut).toBeNull();
-    expect(stateA.pendingTransferOutSharedConsumed).toBeNull();
+    expect(stateA.pendingTransferOutPreviewDealt).toBeNull();
 
-    // Stage a discard then run DEAL — same flow as test #1 but assert the
-    // companion delta field too.
     const discardCard = sharedDeck[0];
     stateA = {
       ...stateA,
-      pendingWaterfallPlan: makePlanForDeck([
-        sharedDeck[2],
-        sharedDeck[3],
-        sharedDeck[4],
-        sharedDeck[5],
-      ]),
+      pendingWaterfallPlan: makePlanForDeck(
+        [sharedDeck[2], sharedDeck[3], sharedDeck[4], sharedDeck[5]],
+        [sharedDeck[0], sharedDeck[1]], // previewDealt = [s1, s2]
+      ),
     };
     stateA = drain(stateA, [
       {
@@ -1104,28 +1028,24 @@ describe('Multiplayer shared-suffix invariant', () => {
     ]).state;
     stateA = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' }).state;
 
-    // After the iteration: companion field equals the per-batch delta.
     expect(stateA.pendingTransferOut).not.toBeNull();
     expect(stateA.pendingTransferOut!).toHaveLength(1);
-    expect(stateA.pendingTransferOutSharedConsumed).toBe(2);
-    // Cumulative counter is the same here because there was just 1 iteration.
+    expect(stateA.pendingTransferOutPreviewDealt).not.toBeNull();
+    expect(stateA.pendingTransferOutPreviewDealt!.map(c => c.id)).toEqual(['s1', 's2']);
     expect(stateA.sharedDeckConsumed).toBe(2);
   });
 
-  it('MULTIPLAYER_CLEAR_PENDING_TRANSFER clears BOTH cards and companion delta', () => {
+  it('MULTIPLAYER_CLEAR_PENDING_TRANSFER clears BOTH cards and previewDealt', () => {
     let state = makeMpState('A', {
       pendingTransferOut: [makeShared('staged')],
-      pendingTransferOutSharedConsumed: 3,
+      pendingTransferOutPreviewDealt: [makeShared('preview-1'), makeShared('preview-2')],
     });
     state = reduce(state, { type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER' }).state;
     expect(state.pendingTransferOut).toBeNull();
-    expect(state.pendingTransferOutSharedConsumed).toBeNull();
+    expect(state.pendingTransferOutPreviewDealt).toBeNull();
   });
 
-  it('Companion delta accumulates across multiple waterfalls before clear (network-slow case)', () => {
-    // First waterfall stages 1 card (delta=2). Hook hasn't ack'd yet
-    // (network hangs). Second waterfall stages 1 more (delta=2). The
-    // companion field should hold the SUM (4), not just the latest delta.
+  it('Companion previewDealt accumulates across multiple waterfalls before clear (network-slow case)', () => {
     const sharedDeck = [
       makeShared('s1'),
       makeShared('s2'),
@@ -1142,18 +1062,14 @@ describe('Multiplayer shared-suffix invariant', () => {
       previewCards: emptyRow(),
     });
 
-    // ----- waterfall 1 -----
+    // ----- waterfall 1: deals s1+s2, pushes s3 -----
     const discard1 = sharedDeck[0];
     stateA = {
       ...stateA,
-      pendingWaterfallPlan: makePlanForDeck([
-        sharedDeck[2],
-        sharedDeck[3],
-        sharedDeck[4],
-        sharedDeck[5],
-        sharedDeck[6],
-        sharedDeck[7],
-      ]),
+      pendingWaterfallPlan: makePlanForDeck(
+        [sharedDeck[2], sharedDeck[3], sharedDeck[4], sharedDeck[5], sharedDeck[6], sharedDeck[7]],
+        [sharedDeck[0], sharedDeck[1]],
+      ),
     };
     stateA = drain(stateA, [
       {
@@ -1170,20 +1086,17 @@ describe('Multiplayer shared-suffix invariant', () => {
       } as GameAction,
     ]).state;
     stateA = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' }).state;
-    expect(stateA.pendingTransferOutSharedConsumed).toBe(2);
+    expect(stateA.pendingTransferOutPreviewDealt!.map(c => c.id)).toEqual(['s1', 's2']);
     expect(stateA.pendingTransferOut!).toHaveLength(1);
 
-    // Simulate "hook hasn't cleared yet" — leave both fields populated.
-    // Now waterfall 2 from the new deck head.
+    // Hook hasn't ack'd. Run waterfall 2 from the new deck head (deals s3+s4).
     const discard2 = sharedDeck[2];
     stateA = {
       ...stateA,
-      pendingWaterfallPlan: makePlanForDeck([
-        sharedDeck[4],
-        sharedDeck[5],
-        sharedDeck[6],
-        sharedDeck[7],
-      ]),
+      pendingWaterfallPlan: makePlanForDeck(
+        [sharedDeck[4], sharedDeck[5], sharedDeck[6], sharedDeck[7]],
+        [sharedDeck[2], sharedDeck[3]],
+      ),
     };
     stateA = drain(stateA, [
       {
@@ -1194,20 +1107,22 @@ describe('Multiplayer shared-suffix invariant', () => {
     ]).state;
     stateA = reduce(stateA, { type: 'APPLY_WATERFALL_DEAL' }).state;
 
-    // Both cards staged together, delta accumulated to 4 (2+2).
     expect(stateA.pendingTransferOut!).toHaveLength(2);
-    expect(stateA.pendingTransferOutSharedConsumed).toBe(4);
+    // Accumulated previewDealt across 2 waterfalls = [s1,s2,s3,s4].
+    expect(stateA.pendingTransferOutPreviewDealt!.map(c => c.id)).toEqual([
+      's1', 's2', 's3', 's4',
+    ]);
   });
 
-  it('Persistence round-trip: serializeGameState ↔ snapshot includes both pendingTransferOut and companion delta', async () => {
-    // We don't have a direct "deserialize back into GameState" helper that
-    // doesn't drag in the rest of the engine, so we just verify that the
-    // serializer puts the fields on the snapshot. The hydrate path in
-    // GameBoard.tsx reads them via the same field names.
+  // -------------------------------------------------------------------------
+  // 13. Persistence round-trip
+  // -------------------------------------------------------------------------
+
+  it('Persistence round-trip: serializeGameState includes both pendingTransferOut and pendingTransferOutPreviewDealt', async () => {
     const { serializeGameState } = await import('../persistence');
     const stateA = makeMpState('A', {
       pendingTransferOut: [makeShared('staged-1'), makeShared('staged-2')],
-      pendingTransferOutSharedConsumed: 3,
+      pendingTransferOutPreviewDealt: [makeShared('preview-1'), makeShared('preview-2'), makeShared('preview-3')],
     });
     const snap = serializeGameState(stateA);
 
@@ -1217,16 +1132,48 @@ describe('Multiplayer shared-suffix invariant', () => {
       'staged-1',
       'staged-2',
     ]);
-    expect(snap.pendingTransferOutSharedConsumed).toBe(3);
+    expect(snap.pendingTransferOutPreviewDealt).toBeDefined();
+    expect(snap.pendingTransferOutPreviewDealt!.map((c: GameCardData) => c.id)).toEqual([
+      'preview-1',
+      'preview-2',
+      'preview-3',
+    ]);
 
-    // Single-player snapshot should write null/null for these fields.
     const stateSP: GameState = {
       ...createInitialGameState(),
       pendingTransferOut: null,
-      pendingTransferOutSharedConsumed: null,
+      pendingTransferOutPreviewDealt: null,
     };
     const snapSP = serializeGameState(stateSP);
     expect(snapSP.pendingTransferOut).toBeNull();
-    expect(snapSP.pendingTransferOutSharedConsumed).toBeNull();
+    expect(snapSP.pendingTransferOutPreviewDealt).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // 14. Drift handling: previewDealt cards B doesn't have are skipped
+  // -------------------------------------------------------------------------
+
+  it('RECEIVE_TRANSFER silently skips previewDealt ids that are not in our deck (drift tolerance)', () => {
+    // B's deck = [s2, s3]. A claims to have dealt [s1, s2] (but s1 isn't in
+    // B's deck — could be a card that was previously transferred from B to A
+    // and is now being consumed back by A's preview). B should silently
+    // remove only s2 and skip s1.
+    let stateB = makeMpState('B', {
+      remainingDeck: [makeShared('s2'), makeShared('s3')],
+      activeCards: emptyRow(),
+      previewCards: emptyRow(),
+    });
+
+    stateB = drain(stateB, [
+      {
+        type: 'MULTIPLAYER_RECEIVE_TRANSFER',
+        cards: [],
+        previewDealt: [makeShared('s1'), makeShared('s2')],
+        seq: 1,
+      },
+    ]).state;
+
+    // Only s2 was removed; s1 silently skipped.
+    expect(stateB.remainingDeck.map(c => c.id)).toEqual(['s3']);
   });
 });

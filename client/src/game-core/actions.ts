@@ -1831,36 +1831,30 @@ export interface InitMultiplayerGameAction {
 // ---------------------------------------------------------------------------
 
 /**
- * The peer pushed `cards` onto our deck top. Cards are prepended in their
- * given order (the topmost card is at index 0 of `cards` and ends up at
- * `remainingDeck[0]`). All received cards are auto-tagged
- * `_excludedFromShared: true` (they belong to the local "transferred"
- * prefix, not the shared suffix).
+ * The peer just resolved a waterfall and is shipping us the result.
+ *
+ * Two payload arrays:
+ *   - `cards` — squeezed-out preview cards the peer pushed onto our
+ *     deck top. We prepend them in given order and auto-tag each with
+ *     `_excludedFromShared: true` (they're in the transferred prefix,
+ *     not the shared suffix).
+ *   - `previewDealt` — the cards the peer just dealt from THEIR deck top
+ *     to THEIR own preview row. To keep our deck in sync, we remove any
+ *     card whose id matches one of these from our own `remainingDeck`.
+ *     Cards in `previewDealt` that we don't have (e.g. cards previously
+ *     transferred from us back to the peer) are silently skipped.
+ *
+ * Together these two arrays let us reconstruct the shared-suffix
+ * invariant after the peer's waterfall: prepend their squeezed cards,
+ * remove cards they consumed from their deck top.
  *
  * Idempotency: caller (the network layer) is responsible for de-duplicating
- * by `transfers.seq`; reducer applies blindly.
+ * by `transfers.seq`; reducer applies blindly when `seq > lastAppliedSeq`.
  */
 export interface MultiplayerReceiveTransferAction {
   type: 'MULTIPLAYER_RECEIVE_TRANSFER';
   cards: import('@/components/GameCard').GameCardData[];
-  /** Server-assigned monotonic seq, used to update `lastAppliedSeq`. */
-  seq: number;
-}
-
-/**
- * The peer consumed `count` cards from the shared portion of their deck
- * (i.e. the leading `count` cards in their pre-shrink shared suffix). To
- * keep our shared suffix aligned, drop the leading `count` cards in our
- * `remainingDeck` that do NOT carry `_excludedFromShared: true`. Cards in
- * the transferred prefix are skipped over.
- *
- * If `count` exceeds the available shared cards (e.g. our local view has
- * been desynced for any reason), we drop everything we can and silently
- * stop — the resume flow (phase 6) will reconcile via `lastAppliedSeq`.
- */
-export interface MultiplayerSharedShrinkAction {
-  type: 'MULTIPLAYER_SHARED_SHRINK';
-  count: number;
+  previewDealt: import('@/components/GameCard').GameCardData[];
   /** Server-assigned monotonic seq, used to update `lastAppliedSeq`. */
   seq: number;
 }
@@ -2394,7 +2388,6 @@ export type GameAction =
   | ReleaseMonsterSkillFloatAction
   // Multiplayer (phase 2+)
   | MultiplayerReceiveTransferAction
-  | MultiplayerSharedShrinkAction
   | MultiplayerClearPendingTransferAction
   | SetMultiplayerSessionAction;
 

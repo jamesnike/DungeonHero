@@ -550,7 +550,7 @@ export function reduceInitMultiplayerGame(
       lastAppliedSeq: 0,
     },
     pendingTransferOut: null,
-    pendingTransferOutSharedConsumed: null,
+    pendingTransferOutPreviewDealt: null,
     sharedDeckConsumed: 0,
     bossEncounterAlertShown: false,
   };
