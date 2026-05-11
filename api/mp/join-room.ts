@@ -47,7 +47,7 @@ import {
   ok,
   serviceUnavailable,
   unauthorized,
-} from './_shared';
+} from './_shared.js';
 
 const MAX_DISPLAY_NAME = 32;
 

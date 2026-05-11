@@ -266,8 +266,6 @@ function reduceDrawDungeonRow(state: GameState): ReduceResult {
 
   const nextSlots = createEmptyActiveRow();
   const drawSpawnTurn = state.turnCount;
-  // Both 'single' and 'multiplayer' use quick rules.
-  const isQuick = true;
 
   if (carriedSlot) {
     const targetIndex = carriedSlot.index >= 0 ? carriedSlot.index : 0;
@@ -278,7 +276,7 @@ function reduceDrawDungeonRow(state: GameState): ReduceResult {
   const enteredMonsterActions: GameAction[] = [];
   for (let col = 0; col < DUNGEON_COLUMN_COUNT; col++) {
     if (!nextSlots[col] && insertIndex < newCards.length) {
-      const card = applyMonsterRage(newCards[insertIndex++], drawSpawnTurn, isQuick);
+      const card = applyMonsterRage(newCards[insertIndex++], drawSpawnTurn);
       nextSlots[col] = card;
       if (card.type === 'monster' && (card.enterEffect || card.ogreEnterDiscard)) {
         enteredMonsterActions.push({ type: 'MONSTER_ENTERED_ROW', monsterId: card.id, column: col });

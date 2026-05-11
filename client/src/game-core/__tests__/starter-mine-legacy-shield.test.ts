@@ -1,14 +1,18 @@
 /**
  * 殉雷遗盾 (mineLegacyShield) — starter shield with last words: spawn a mine
- * at a random empty cell in the active row.
+ * at a random empty cell or ghost-occupied cell in the active row.
  *
  * Behavior:
- *   - 装备遗言：在 active row 的随机空 cell 生成一个「地雷」幽灵建筑。
+ *   - 装备遗言：在 active row 的随机「空位 OR 含 ghost building 的格子」生成
+ *     一个「地雷」幽灵建筑。
  *   - 地雷复用 createMineBuilding（5 点纯伤、ghost、踩到即触发 + 进坟场）。
  *   - 受「引雷阵锋」globalMineDamageBonus 加成（在 waterfall 触发分支处算）。
- *   - 选位：仅完全空 slot；已被 ghost / 怪物 / 建筑 占的不算。
- *   - 全无空位 → fizzle + banner 提示，不生成。
- *   - 跟「墓园守卫」amulet 协同：N+1 次触发，每次都尝试生成 1 个，无空位即跳过。
+ *   - 选位（uniform pool）：空位 + ghost 格 合并随机抽；怪物 / 事件 / 非 ghost
+ *     建筑占用的格不算可用。
+ *   - 落到 ghost 格时：原 ghost 沉到 activeCardStacks[col] 末尾（next-to-pop
+ *     位），新地雷成为顶层。
+ *   - 全无可用位置 → fizzle + banner 提示，不生成。
+ *   - 跟「墓园守卫」amulet 协同：N+1 次触发，每次都尝试生成 1 个，无可用位置即跳过。
  *
  * 触发路径：
  *   - computeEquipmentBreakEffects（耐久归零自然销毁）
@@ -165,6 +169,33 @@ describe('殉雷遗盾 — 耐久归零销毁', () => {
     expect(banners.some(b => (b.payload as any).text?.includes('无可用位置'))).toBe(true);
   });
 
+  it('全场是 怪物 + 非 ghost 建筑（无空位 / 无 ghost）→ fizzle', () => {
+    const shield = makeShield();
+    const nonGhostBuilding: GameCardData = {
+      id: 'wall',
+      type: 'building',
+      name: 'NonGhostWall',
+      value: 0,
+      image: '',
+      isGhost: false, // 关键：非 ghost
+      hp: 1,
+      maxHp: 1,
+    };
+    const state = makeState({
+      equipmentSlot1: shield as any,
+      activeCards: activeRowOf(
+        nonGhostBuilding,
+        makeMonster('m-1'), makeMonster('m-2'), makeMonster('m-3'), makeMonster('m-4'),
+      ),
+    });
+
+    const result = computeEquipmentBreakEffects(state, 'equipmentSlot1', shield, createEmptyAmuletEffects());
+    const nextActive = (result.patch.activeCards ?? state.activeCards) as any[];
+    expect(nextActive.filter(isMine).length).toBe(0);
+    const banners = result.sideEffects.filter(s => s.event === 'ui:banner');
+    expect(banners.some(b => (b.payload as any).text?.includes('无可用位置'))).toBe(true);
+  });
+
   it('生成的地雷具备完整的 mine 属性（5 点 mineDamage、ghost、type=building）', () => {
     const shield = makeShield();
     const state = makeState({
@@ -182,7 +213,7 @@ describe('殉雷遗盾 — 耐久归零销毁', () => {
     expect(mine?.name).toBe('地雷');
   });
 
-  it('ghost building 占用的 slot 不算"空"，跳过', () => {
+  it('含 ghost building 的 slot 也算可选（uniform pool）→ 地雷可能落在 ghost 上面（stack-on-top）', () => {
     const shield = makeShield();
     const ghostBuilding: GameCardData = {
       id: 'g-1',
@@ -196,17 +227,57 @@ describe('殉雷遗盾 — 耐久归零销毁', () => {
     };
     const state = makeState({
       equipmentSlot1: shield as any,
+      // 候选池 = [0(ghost), 1, 2, 3, 4]
       activeCards: activeRowOf(ghostBuilding, null, null, null, null),
     });
 
     const result = computeEquipmentBreakEffects(state, 'equipmentSlot1', shield, createEmptyAmuletEffects());
     const nextActive = (result.patch.activeCards ?? state.activeCards) as any[];
 
-    // ghost 没被覆盖
-    expect(nextActive[0]?.id).toBe('g-1');
-    // 地雷出现在 slot 1-4 之一
-    const mineCount = nextActive.filter(isMine).length;
-    expect(mineCount).toBe(1);
+    // 总共 1 个地雷（顶层）
+    expect(nextActive.filter(isMine).length).toBe(1);
+    // 找到地雷所在 slot
+    const mineIdx = nextActive.findIndex(isMine);
+    expect([0, 1, 2, 3, 4]).toContain(mineIdx);
+    if (mineIdx === 0) {
+      // 落在 ghost 上：原 ghost 应被推到 activeCardStacks[0] 下层
+      const stacks = (result.patch.activeCardStacks ?? state.activeCardStacks) as Record<number, GameCardData[]>;
+      expect(stacks[0]?.[stacks[0].length - 1]?.id).toBe('g-1');
+    } else {
+      // 落在其它真空 slot：ghost 仍在原位，stack 没变
+      expect(nextActive[0]?.id).toBe('g-1');
+    }
+  });
+
+  it('全场只有 ghost building（无空位）→ 地雷必落在 ghost 格上，原 ghost 进 stack', () => {
+    const shield = makeShield();
+    const ghostBuilding: GameCardData = {
+      id: 'g-only',
+      type: 'building',
+      name: 'Some Ghost',
+      value: 0,
+      image: '',
+      isGhost: true,
+      hp: 1,
+      maxHp: 1,
+    };
+    const state = makeState({
+      equipmentSlot1: shield as any,
+      // 候选池只剩 slot 0
+      activeCards: activeRowOf(
+        ghostBuilding,
+        makeMonster('m-1'), makeMonster('m-2'), makeMonster('m-3'), makeMonster('m-4'),
+      ),
+    });
+
+    const result = computeEquipmentBreakEffects(state, 'equipmentSlot1', shield, createEmptyAmuletEffects());
+    const nextActive = (result.patch.activeCards ?? state.activeCards) as any[];
+
+    // 地雷必在 slot 0
+    expect(isMine(nextActive[0])).toBe(true);
+    // ghost 沉到下层 stack
+    const stacks = (result.patch.activeCardStacks ?? state.activeCardStacks) as Record<number, GameCardData[]>;
+    expect(stacks[0]?.[stacks[0].length - 1]?.id).toBe('g-only');
   });
 });
 
@@ -253,7 +324,7 @@ describe('殉雷遗盾 — 跟「墓园守卫」amulet 协同', () => {
     expect(nextActive.filter(isMine).length).toBe(2);
   });
 
-  it('lastWordsExtraTriggerCount=2 → 触发 3 次：3 个空位时全部生成；其中一次空位不够时跳过', () => {
+  it('lastWordsExtraTriggerCount=2 → 触发 3 次：起始 2 个空位也能堆出 3 枚地雷（前一次的地雷自身是 ghost，第三次可堆叠）', () => {
     const shield = makeShield();
     // 只剩 2 个空位
     const state = makeState({
@@ -271,13 +342,43 @@ describe('殉雷遗盾 — 跟「墓园守卫」amulet 协同', () => {
     const result = computeEquipmentBreakEffects(state, 'equipmentSlot1', shield, aeWithStack);
 
     const nextActive = (result.patch.activeCards ?? state.activeCards) as any[];
-    // 2 次有空位生成，第 3 次无空位 fizzle → 总共 2 个地雷
-    expect(nextActive.filter(isMine).length).toBe(2);
+    const stacks = (result.patch.activeCardStacks ?? state.activeCardStacks) as Record<number, GameCardData[]>;
 
-    // 应该有 1 条「无可用位置」banner（第 3 次触发时）
+    // 总数 = 顶层地雷 + stack 中堆叠的地雷 = 3（每次触发都成功，allow_same_cell-like）
+    const visibleMines = nextActive.filter(isMine).length;
+    let stackedMines = 0;
+    for (const s of Object.values(stacks)) {
+      stackedMines += s.filter(isMine).length;
+    }
+    expect(visibleMines + stackedMines).toBe(3);
+
+    // 每次都有可用位置，不应有「无可用位置」banner
     const banners = result.sideEffects.filter(s => s.event === 'ui:banner');
     const fizzleBanners = banners.filter(b => (b.payload as any).text?.includes('无可用位置'));
-    expect(fizzleBanners.length).toBe(1);
+    expect(fizzleBanners.length).toBe(0);
+  });
+
+  it('lastWordsExtraTriggerCount=3 + 全场怪物（无空位 / 无 ghost）→ 4 次都 fizzle', () => {
+    const shield = makeShield();
+    const state = makeState({
+      equipmentSlot1: shield as any,
+      activeCards: activeRowOf(
+        makeMonster('m-1'),
+        makeMonster('m-2'),
+        makeMonster('m-3'),
+        makeMonster('m-4'),
+        makeMonster('m-5'),
+      ),
+    });
+
+    const aeWithStack = { ...createEmptyAmuletEffects(), lastWordsExtraTriggerCount: 3 };
+    const result = computeEquipmentBreakEffects(state, 'equipmentSlot1', shield, aeWithStack);
+
+    const nextActive = (result.patch.activeCards ?? state.activeCards) as any[];
+    expect(nextActive.filter(isMine).length).toBe(0);
+    const banners = result.sideEffects.filter(s => s.event === 'ui:banner');
+    const fizzleBanners = banners.filter(b => (b.payload as any).text?.includes('无可用位置'));
+    expect(fizzleBanners.length).toBe(4); // 4 = 1 base + 3 extra
   });
 });
 

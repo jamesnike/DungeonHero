@@ -370,7 +370,7 @@ export function reduceInitGame(
   ensureRowHasMonster(previewRaw, dealQueue);
   const initialPreview = fillActiveRowSlots(previewRaw).map((card) => {
     if (!card) return null;
-    const raged = applyMonsterRage(card, initialTurnCount + 1, isQuickMode);
+    const raged = applyMonsterRage(card, initialTurnCount + 1);
     if (deckWithClassEvents.indexOf(card) === lastMonsterDeckIndex && raged.type === 'monster') {
       return bakeFinalBoss(raged);
     }
@@ -391,7 +391,7 @@ export function reduceInitGame(
     if (!card) return null;
     // applyMonsterRage is a no-op for non-monster types (events pass through
     // unchanged); the lone buglet still scales with `initialTurnCount`.
-    return applyMonsterRage(card, initialTurnCount, isQuickMode);
+    return applyMonsterRage(card, initialTurnCount);
   }) as ActiveRowSlots;
 
   // --- Active stack: stacking removed; active cells hold one card each. ---
@@ -704,7 +704,7 @@ export function reduceInitMultiplayerGame(
   // Apply rage scaling (mirrors the single-player init's preview-row treatment).
   const initialPreview = fillActiveRowSlots(myPreviewRaw).map(card => {
     if (!card) return null;
-    return applyMonsterRage(card, initialTurnCount + 1, isQuickMode);
+    return applyMonsterRage(card, initialTurnCount + 1);
   }) as ActiveRowSlots;
 
   // remainingDeck = the shared tail (identical for A and B).
@@ -716,7 +716,7 @@ export function reduceInitMultiplayerGame(
   [fixedRowShuffled, rng] = rngShuffle([...fixedRowCards], rng);
   const initialActive = fillActiveRowSlots(fixedRowShuffled).map(card => {
     if (!card) return null;
-    return applyMonsterRage(card, initialTurnCount, isQuickMode);
+    return applyMonsterRage(card, initialTurnCount);
   }) as ActiveRowSlots;
 
   // --- Hero + class deck (per-player, NOT shared) ---

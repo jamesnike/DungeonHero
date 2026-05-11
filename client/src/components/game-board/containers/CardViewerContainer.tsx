@@ -37,8 +37,6 @@ function CardViewerContainerInner() {
   }));
 
   const currentTurn = gs.turnCount;
-  // Both 'single' and 'multiplayer' modes use the quick ruleset.
-  const isQuickMode = true;
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + gs.backpackCapacityModifier);
 
   const flatEquipmentCards: GameCardData[] = (
@@ -80,7 +78,6 @@ function CardViewerContainerInner() {
         onOpenChange={cb.onDetailsModalChange}
         currentTurn={currentTurn}
         monsterRewards={monsterRewardPreview}
-        isQuickMode={isQuickMode}
         acquiredUniqueClassCardIds={gs.acquiredUniqueClassCardIds}
       />
 

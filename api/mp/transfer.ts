@@ -47,7 +47,7 @@ import {
   ok,
   serviceUnavailable,
   unauthorized,
-} from './_shared';
+} from './_shared.js';
 
 const MAX_TRANSFER_CARDS = 10; // sanity cap; real waterfalls push 0–4
 const MAX_SHARED_CONSUMED = 36; // can't consume more than full deck per turn

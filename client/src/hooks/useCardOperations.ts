@@ -206,9 +206,8 @@ export function useCardOperations(depsRef: React.MutableRefObject<CardOperations
 
   const sanitizeCardForGraveyard = (card: GameCardData): GameCardData => {
     const { fromSlot, ...rest } = card as GameCardData & { fromSlot?: string };
-    // Both 'single' and 'multiplayer' use quick rules.
     void engine;
-    return resetMonsterForGraveyard({ ...rest }, true);
+    return resetMonsterForGraveyard({ ...rest });
   };
 
   // -- Functions --------------------------------------------------------------

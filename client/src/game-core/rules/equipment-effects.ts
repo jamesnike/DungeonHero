@@ -277,7 +277,7 @@ function routeBrokenSelfToGraveOrRecycle(
     const cleaned: GameCardData = { ...(rest as GameCardData) };
     enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: cleaned });
   } else {
-    const cleaned = resetCardForGraveyard(slotItem, true);
+    const cleaned = resetCardForGraveyard(slotItem);
     const currentGrave = (patch.discardedCards ?? state.discardedCards) as GameCardData[];
     patch.discardedCards = [...currentGrave, cleaned];
   }
@@ -557,37 +557,52 @@ function applyOneEquipmentLastWordsIteration(
       sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！该装备栏 +3临时护甲！` } });
       checkPersuadeOnTempAttack(state, patch, sideEffects);
     } else if (slotItem.onDestroyEffect === 'spawn-mine-empty') {
-      // 殉雷遗盾 — 装备遗言：在 active row 的随机空 cell 生成一个「地雷」幽灵建筑。
+      // 殉雷遗盾 — 装备遗言：在 active row 的随机「空位 OR 含 ghost building 的
+      // 格子」生成一个「地雷」幽灵建筑。
       //
-      // - 地雷复用 createMineBuilding（5 点纯伤、ghost、踩到即触发 + 进坟场）。受
-      //   「引雷阵锋」globalMineDamageBonus 加成（在 waterfall 的地雷触发分支处算）。
-      // - 选位：仅"完全空"的 slot（activeCards[i] === null）。已被 ghost building
-      //   或其它卡占着的 slot 不算可用。
-      // - 全无空位 → fizzle + banner 提示「无可用位置」（用户已确认 fizzle 语义）。
-      // - 跟「墓园守卫」amulet（lastWordsExtraTriggerCount）协同：每次迭代独立尝试，
-      //   每次成功生成 1 个，无空位时该次跳过（用户已确认每次触发都生成 1 个）。
+      // - 地雷复用 createMineBuilding（5 点纯伤、ghost、踩到即触发 + 进坟场）。
+      //   受「引雷阵锋」globalMineDamageBonus 加成（在 waterfall 的地雷触发分支处算）。
+      // - 选位（uniform pool）：activeCards[i] === null 或 isGhost === true 的格
+      //   都可选；二者合并成一个池子均匀随机抽。怪物 / 事件 / 非 ghost 建筑占
+      //   用的格不算可用。
+      // - 落到 ghost 格时：原 ghost 沉到 activeCardStacks[col] 末尾（next-to-pop
+      //   位，跟殒雷符 reducer.ts:303-304 同款 stack-on-top 写法）。
+      // - 全无可用位置 → fizzle + banner 提示「无可用位置」。
+      // - 跟「墓园守卫」amulet（lastWordsExtraTriggerCount）协同：每次迭代独立
+      //   尝试，每次成功生成 1 个；候选池每次重新计算（上一次推下去的 ghost 现在
+      //   已不在顶层；上一次新地雷自身仍是 ghost，因此该 cell 仍可被选 + 再堆一层）。
       const baseActive = (patch.activeCards ?? state.activeCards) as ActiveRowSlots;
-      const emptyIdxs: number[] = [];
+      const baseStacks = (patch.activeCardStacks ?? state.activeCardStacks) as Record<number, GameCardData[]>;
+      const candidateIdxs: number[] = [];
       for (let i = 0; i < baseActive.length; i++) {
-        if (baseActive[i] === null) emptyIdxs.push(i);
+        const c = baseActive[i];
+        if (c === null || c.isGhost === true) candidateIdxs.push(i);
       }
-      if (emptyIdxs.length === 0) {
+      if (candidateIdxs.length === 0) {
         sideEffects.push({
           event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：激活行已满，地雷未能放置。` },
+          payload: { type: 'equip', message: `${slotItem.name} 遗言：激活行无可用位置，地雷未能放置。` },
         });
         sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言：无可用位置！` } });
       } else {
-        const [pickIdxIdx, rngAfterPick] = nextInt(rng, 0, emptyIdxs.length - 1);
-        const slotIdx = emptyIdxs[pickIdxIdx];
+        const [pickIdxIdx, rngAfterPick] = nextInt(rng, 0, candidateIdxs.length - 1);
+        const slotIdx = candidateIdxs[pickIdxIdx];
         const [mine, rngAfterMine] = createMineBuilding(rngAfterPick);
         rng = rngAfterMine;
         const newActive = [...baseActive] as ActiveRowSlots;
+        const existing = newActive[slotIdx];
+        let stackedNote = '';
+        if (existing) {
+          // 候选池保证 existing 必为 ghost building；推到 stack 末尾 = next-to-pop。
+          const newStacks = { ...baseStacks, [slotIdx]: [...(baseStacks[slotIdx] ?? []), existing] };
+          patch.activeCardStacks = newStacks;
+          stackedNote = `（堆于 ${existing.name} 上）`;
+        }
         newActive[slotIdx] = mine;
         patch.activeCards = newActive as GameState['activeCards'];
         sideEffects.push({
           event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：在第 ${slotIdx + 1} 列布下了地雷！` },
+          payload: { type: 'equip', message: `${slotItem.name} 遗言：在第 ${slotIdx + 1} 列布下了地雷！${stackedNote}` },
         });
         sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 遗言！布下地雷！` } });
       }

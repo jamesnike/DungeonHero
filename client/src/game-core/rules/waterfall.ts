@@ -169,9 +169,8 @@ export function computeWaterfallDropPlan(
   const dropPreviewIndices = dropAssignments.map(pair => pair.previewIndex);
   const dropTargetSlots = dropAssignments.map(pair => pair.slotIndex);
   const spawnTurn = turnCount + 1;
-  // Both 'single' and 'multiplayer' use the underlying "quick" rules → always pass true.
   const resolvedDropCards = dropAssignments.map(pair =>
-    applyMonsterRage(pair.card, spawnTurn, true),
+    applyMonsterRage(pair.card, spawnTurn),
   );
 
   // Discard selection: pick the rightmost blocked preview card that isn't a final monster
@@ -1197,31 +1196,72 @@ function reduceApplyWaterfallDrop(state: GameState): ReduceResult {
   if (plan.dropTargetSlots.length > 0) {
     const newActive = [...state.activeCards] as ActiveRowSlots;
     const ghostsDisplaced: Array<{ slotIndex: number; ghost: GameCardData }> = [];
-    // 「布雷术」地雷触发：当怪物落到带 mineDamage 的 ghost building 上时，
-    // 不走普通的 ghost-stack-bottom 路径，而是 (a) 对落下的怪物造成纯陷阱伤害，
-    // (b) 让怪物激怒，(c) 把地雷送进坟场（不塞回 activeCardStacks）。
+    // 「布雷术」/「殉雷遗盾」/「殒雷符」地雷触发：当怪物落到带 mineDamage 的
+    // ghost building 上时，不走普通的 ghost-stack-bottom 路径，而是
+    // (a) 对落下的怪物造成纯陷阱伤害，
+    // (b) 让怪物激怒，
+    // (c) 把地雷送进坟场（不塞回 activeCardStacks）。
+    //
+    // **同 cell 堆叠地雷连环引爆**（user-confirmed 语义）：当怪物落到的 cell
+    // 同时存在多枚地雷（顶层 + activeCardStacks 任意位置），所有地雷依次爆炸、
+    // 依次结算伤害，全部进坟场。Non-mine ghost / 普通卡 在 stack 中的位置保留
+    // 不变（仅过滤掉触发了的地雷）。
+    //
+    // 触发顺序：顶层 → stack[len-1]（next-to-pop）→ ... → stack[0]（bottom）
+    // 这样跟玩家直觉「从上往下连环引爆」一致，怪物先承受顶层伤害，然后一路
+    // 往下结算（DEAL_DAMAGE_TO_MONSTER 入队顺序保证依次 reduce）。
+    //
     // 非怪物（事件 / 其它建筑）落到地雷上时不触发，按普通 ghost 同款被推到下层
-    // —— 跟用户确认过的语义一致（"踏踩"不是怪物不计数）。
+    // —— 跟用户确认过的语义一致（"踏踩"不是怪物不计数）。stack 中其它地雷也
+    // 不触发（因为踩在它们头上的不是怪物）。
+    const isMineCard = (c: GameCardData | null | undefined): boolean =>
+      !!c && c.isGhost === true && (c.mineDamage ?? 0) > 0;
+
     const minesTriggered: Array<{
       slotIndex: number;
       mine: GameCardData;
       monster: GameCardData;
     }> = [];
+    // 记录每个 slot 中"被触发"的 stack 地雷 id 集合，用于后续从 stack 中过滤
+    const stackMinesByslot: Map<number, Set<string>> = new Map();
 
     plan.dropTargetSlots.forEach((slotIndex, idx) => {
       const card = plan.resolvedDropCards[idx];
       if (typeof slotIndex === 'number') {
         const existing = newActive[slotIndex];
-        if (existing?.isGhost) {
-          // 地雷分支：ghost 带 mineDamage > 0 + 落下的是 monster → 触发
-          const mineDamage = (existing as GameCardData).mineDamage ?? 0;
-          if (mineDamage > 0 && card && card.type === 'monster') {
-            minesTriggered.push({ slotIndex, mine: existing, monster: card });
+
+        if (card && card.type === 'monster') {
+          // 怪物落地 → 同 cell 所有地雷连环触发（顶层 + stack 任意位置）。
+          // 顶层先 fire
+          if (isMineCard(existing)) {
+            minesTriggered.push({ slotIndex, mine: existing!, monster: card });
             // 不 push 进 ghostsDisplaced —— 地雷不入 stack，会进坟场
-          } else {
+          } else if (existing?.isGhost) {
+            ghostsDisplaced.push({ slotIndex, ghost: existing });
+          }
+
+          // Stack 中地雷依次 fire（next-to-pop → bottom）
+          const stackForSlot = state.activeCardStacks[slotIndex] ?? [];
+          if (stackForSlot.length > 0) {
+            const triggeredStackIds = new Set<string>();
+            for (let i = stackForSlot.length - 1; i >= 0; i--) {
+              const c = stackForSlot[i];
+              if (isMineCard(c)) {
+                minesTriggered.push({ slotIndex, mine: c, monster: card });
+                triggeredStackIds.add(c.id);
+              }
+            }
+            if (triggeredStackIds.size > 0) {
+              stackMinesByslot.set(slotIndex, triggeredStackIds);
+            }
+          }
+        } else {
+          // 非怪物落地：维持原行为（顶层 ghost 推下去，stack 内地雷不动）
+          if (existing?.isGhost) {
             ghostsDisplaced.push({ slotIndex, ghost: existing });
           }
         }
+
         newActive[slotIndex] = card ?? null;
       }
     });
@@ -1235,11 +1275,20 @@ function reduceApplyWaterfallDrop(state: GameState): ReduceResult {
     //
     // 实际伤害 = mine.mineDamage + state.globalMineDamageBonus（「引雷阵锋」类
     // 武器累加的全场加成；持久化字段，详见 types.ts:GameState）。
+    //
+    // 同 monster 多枚地雷连环触发时：BEGIN_COMBAT 仅 enqueue 一次（reducer 对
+    // 已 engaged 的怪物 idempotent，但仍避免冗余）；DEAL_DAMAGE_TO_MONSTER /
+    // ADD_TO_GRAVEYARD / combat:mineTriggered 按地雷数量逐枚 enqueue —— drain
+    // 顺序保证伤害「依次结算」。
     const mineGlobalBonus = state.globalMineDamageBonus ?? 0;
+    const monstersBegun = new Set<string>();
     for (const { slotIndex, mine, monster } of minesTriggered) {
+      if (!monstersBegun.has(monster.id)) {
+        enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
+        monstersBegun.add(monster.id);
+      }
       const mineBaseDamage = mine.mineDamage ?? 0;
       const totalMineDamage = mineBaseDamage + mineGlobalBonus;
-      enqueuedActions.push({ type: 'BEGIN_COMBAT', monster, initiator: 'hero' });
       enqueuedActions.push({
         type: 'DEAL_DAMAGE_TO_MONSTER',
         monsterId: monster.id,
@@ -1260,6 +1309,17 @@ function reduceApplyWaterfallDrop(state: GameState): ReduceResult {
 
     // Transfer preview stacks to active stacks; ghosts go to stack bottom
     const nextActiveStacks = { ...state.activeCardStacks };
+    // 先把已触发的 stack 地雷从原 stack 中过滤掉（同 cell 多枚连环引爆后，
+    // stack 里只剩 non-mine 卡牌，按原顺序保留）
+    for (const [slotIndex, triggeredIds] of stackMinesByslot) {
+      const prev = nextActiveStacks[slotIndex] ?? [];
+      const filtered = prev.filter(c => !triggeredIds.has(c.id));
+      if (filtered.length > 0) {
+        nextActiveStacks[slotIndex] = filtered;
+      } else {
+        delete nextActiveStacks[slotIndex];
+      }
+    }
     for (const { slotIndex, ghost } of ghostsDisplaced) {
       nextActiveStacks[slotIndex] = [ghost, ...(nextActiveStacks[slotIndex] ?? [])];
     }
@@ -1377,9 +1437,8 @@ function reduceApplyWaterfallDeal(state: GameState): ReduceResult {
     }
   } else {
     const spawnTurn = state.turnCount;
-    // Both modes use quick rules → always pass true.
     patch.previewCards = fillActiveRowSlots(
-      plan.nextPreviewCards.map(c => applyMonsterRage(c, spawnTurn, true)),
+      plan.nextPreviewCards.map(c => applyMonsterRage(c, spawnTurn)),
     );
 
     // Apply preview stacks from the plan

@@ -284,10 +284,8 @@ function reduceBeginCombat(
       // `skipNextMonsterTurn: true` ⇒ they are auto-engaged below (so they show up
       // as live combat targets) but skip the very next monster turn — the flag is
       // stripped by `endHeroTurnPatch` so they fight normally from the turn after.
-      // Both modes use quick rules.
-      const isQuick = true;
       const summonedMonsterCards = rawMonsters.map(c => {
-        const raged = applyMonsterRage(c, state.turnCount, isQuick);
+        const raged = applyMonsterRage(c, state.turnCount);
         const maxLayers = raged.fury ?? raged.hpLayers ?? 1;
         return {
           ...raged,
@@ -490,7 +488,7 @@ function reduceApplyDamage(
     const blockedDamage = action.amount;
     const cardName = deathWardCard.name;
     const newHand = handArr.filter(c => c.id !== deathWardCard.id);
-    const cleansed = resetCardForGraveyard(deathWardCard, true);
+    const cleansed = resetCardForGraveyard(deathWardCard);
     const patch: Partial<GameState> = {
       handCards: newHand as GameCardData[],
       discardedCards: [...state.discardedCards, cleansed],
@@ -1289,7 +1287,7 @@ function reduceMonsterDefeated(
     const sanitized = { ...monster };
     delete (sanitized as any)._counterDisplay;
     delete (sanitized as any)._flipBackCard;
-    graveyard.push(resetCardForGraveyard(sanitized, true));
+    graveyard.push(resetCardForGraveyard(sanitized));
     patch.discardedCards = graveyard;
     sideEffects.push({ event: 'combat:removeAndGraveyard', payload: { monsterId: monster.id, monster } });
   }

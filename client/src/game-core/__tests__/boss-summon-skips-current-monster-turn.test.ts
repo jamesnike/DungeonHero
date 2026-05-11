@@ -266,7 +266,7 @@ describe('boss summon — flag is transient combat state, never persists into gr
       reviveUsed: true,
     });
 
-    const cleaned = resetMonsterForGraveyard(summoned, /* isQuickMode */ false);
+    const cleaned = resetMonsterForGraveyard(summoned);
 
     expect(cleaned.skipNextMonsterTurn).toBeUndefined();
     // Sanity: other transient combat fields also cleared (existing contract).

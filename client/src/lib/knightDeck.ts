@@ -1655,12 +1655,15 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 1,
   });
 
-  // 布雷术 (Perm 2 → 升级 Perm 1)：在 active row 的随机空 slot 生成一个「地雷」
-  // 幽灵建筑。当怪物瀑流落到该 slot 时，地雷从下层触发，对该怪物造成 5 点纯陷阱
-  // 伤害（不受 amplify / 法伤加成），随后地雷进坟场（怪物正常占据 slot）。
-  // - 选位规则：仅空 slot；全满则 fizzle（卡照常进回收袋，banner 提示「无可用位置」）。
-  // - Echo (A 类)：生成 echoMultiplier 个地雷，分别落在不同的随机空 slot；空位不
-  //   够时多余的丢弃。
+  // 布雷术 (Perm 2 → 升级 Perm 1)：在 active row 的随机「空位 OR 含 ghost 建筑
+  // 的格子」生成一个「地雷」幽灵建筑。当怪物瀑流落到该 slot 时，地雷从下层触
+  // 发，对该怪物造成 5 点纯陷阱伤害（不受 amplify / 法伤加成），随后地雷进坟场
+  // （怪物正常占据 slot）。
+  // - 选位规则：空位 + ghost 格 合并随机抽（uniform pool）；落到 ghost 格时
+  //   原 ghost 沉到 activeCardStacks[col] 末尾、新地雷成为顶层。
+  // - 全无可用位置（怪物 / 事件 / 非 ghost 建筑占满）→ fizzle，卡照常进回收袋。
+  // - Echo (A 类，allow_same_cell)：生成 echoMultiplier 个地雷；候选池不剔除已选
+  //   slot，所以多枚 echo 可堆在同一 cell（每多一层就把上一层地雷推到 stack 下层）。
   // - 非怪物（event / 其它 building）落到地雷 slot 时不触发，按普通 ghost
   //   building 同款被推到下层堆叠（mine 不消耗）。
   // - 升级：lvl 0 recycleDelay = 2；lvl 1 recycleDelay = 1（PERM 2 ↔ PERM 1）。
@@ -1670,10 +1673,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicGraveNovaImage,
     classCard: true,
-    description: '永久：在激活行的随机空格生成一个「地雷」（幽灵建筑）。当怪物落到该格时，地雷对该怪物造成 5 点纯伤害后进坟场。',
-    shortDescription: '随机空格生成地雷：怪物落入受 5 点纯伤',
+    description: '永久：在激活行的随机空位或含幽灵建筑的格子生成一个「地雷」（幽灵建筑）。落到幽灵建筑上时原建筑被堆到下层。当怪物落到地雷格时，对该怪物造成 5 点纯伤害后地雷进坟场。',
+    shortDescription: '空位/幽灵格生成地雷：怪物落入受 5 点纯伤',
     magicType: 'permanent',
-    magicEffect: '永久魔法：随机空格生成地雷，怪物落入受 5 点纯伤。',
+    magicEffect: '永久魔法：随机空位或幽灵格生成地雷，怪物落入受 5 点纯伤。',
     knightEffect: 'lay-mine',
     recycleDelay: 2,
     maxUpgradeLevel: 1,

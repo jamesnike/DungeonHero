@@ -5,16 +5,19 @@ const MAX_RAGE_LAYERS = 4;
 export type MonsterRageRule = {
   base: number;
   interval: number;
-  minInterval?: number;
   /**
-   * Delays the first threshold by this many turns. Default 0.
+   * Shifts the rage thresholds by this many turns. Default 0.
    *
    * Without offset: rage = base + floor(turn / interval)
    *   thresholds at turn = interval, 2*interval, 3*interval, ...
-   * With offset N: rage = base + floor(max(0, turn - N) / interval)
-   *   thresholds at turn = interval + N, 2*interval + N, ...
+   * With offset N (any sign): rage = base + floor(max(0, turn - N) / interval)
+   *   - Positive N delays:  thresholds at turn = interval + N, 2*interval + N, ...
+   *   - Negative N advances: thresholds at turn = interval + N, 2*interval + N, ...
+   *     (with N < 0 they fire earlier; turn=1 may already include extra layers
+   *     when |N| ≥ 1.)
    *
-   * Used by Ogre to push the rage cadence from 3/6/9 → 4/7/10.
+   * Currently used by Ogre with N = -1 to make him rage one turn ahead of
+   * other base-1/interval-4 monsters.
    */
   thresholdOffset?: number;
 };
@@ -31,7 +34,7 @@ const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
   Dragon: { base: 2, interval: 4 },
   Skeleton: { base: 1, interval: 3 },
   Goblin: { base: 1, interval: 3 },
-  Ogre: { base: 1, interval: 3, minInterval: 3, thresholdOffset: 1 },
+  Ogre: { base: 1, interval: 4, thresholdOffset: -1 },
   Wraith: { base: 1, interval: 3 },
   Swarm: { base: 2, interval: 4 },
   Buglet: { base: 1, interval: 5 },
@@ -88,11 +91,10 @@ const normalizeTurn = (turn: number): number => {
   return Math.max(1, Math.floor(turn));
 };
 
-const calculateFromRule = (rule: MonsterRageRule, turn: number, isQuickMode = false): number => {
+const calculateFromRule = (rule: MonsterRageRule, turn: number): number => {
   const normalizedTurn = normalizeTurn(turn);
-  const effectiveInterval = isQuickMode ? Math.max(rule.minInterval ?? 1, rule.interval - 1) : rule.interval;
   const adjustedTurn = Math.max(0, normalizedTurn - (rule.thresholdOffset ?? 0));
-  const rawValue = rule.base + Math.floor(adjustedTurn / effectiveInterval);
+  const rawValue = rule.base + Math.floor(adjustedTurn / rule.interval);
   return Math.min(MAX_RAGE_LAYERS, rawValue);
 };
 
@@ -136,12 +138,12 @@ export const getWaterfallUpgradeLevel = (monsterType: string, waterfall: number)
   return level;
 };
 
-export const calculateMonsterRage = (monsterName: string, turn: number, isQuickMode = false): number | null => {
+export const calculateMonsterRage = (monsterName: string, turn: number): number | null => {
   const rule = getMonsterRageRule(monsterName);
   if (!rule) {
     return null;
   }
-  return calculateFromRule(rule, turn, isQuickMode);
+  return calculateFromRule(rule, turn);
 };
 
 const applySpecialAbility = (result: GameCardData, ability: string): void => {
@@ -240,7 +242,7 @@ const applySpecialAbility = (result: GameCardData, ability: string): void => {
   }
 };
 
-export const applyMonsterRage = (card: GameCardData, turn: number, isQuickMode = false): GameCardData => {
+export const applyMonsterRage = (card: GameCardData, turn: number): GameCardData => {
   if (card.type !== 'monster') {
     return card;
   }
@@ -250,7 +252,7 @@ export const applyMonsterRage = (card: GameCardData, turn: number, isQuickMode =
     return card;
   }
   const normalizedTurn = normalizeTurn(turn);
-  const rage = calculateFromRule(rule, normalizedTurn, isQuickMode);
+  const rage = calculateFromRule(rule, normalizedTurn);
 
   const baseAtk = card.baseAttack ?? card.attack ?? card.value ?? 0;
   const baseHp = card.baseHp ?? card.maxHp ?? card.hp ?? card.value ?? 0;

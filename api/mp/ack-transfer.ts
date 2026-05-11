@@ -38,7 +38,7 @@ import {
   ok,
   serviceUnavailable,
   unauthorized,
-} from './_shared';
+} from './_shared.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return methodNotAllowed(res, 'POST');

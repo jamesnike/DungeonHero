@@ -29,7 +29,6 @@ interface CardDetailsModalProps {
   onOpenChange: (open: boolean) => void;
   currentTurn: number;
   monsterRewards?: MonsterRewardPreview[] | null;
-  isQuickMode?: boolean;
   /**
    * Base IDs of unique class cards the player already acquired this run.
    * When the displayed card is `unique: true` and its base ID is in this
@@ -45,7 +44,6 @@ export default function CardDetailsModal({
   onOpenChange,
   currentTurn,
   monsterRewards,
-  isQuickMode = false,
   acquiredUniqueClassCardIds,
 }: CardDetailsModalProps) {
   const { t } = useTranslation();
@@ -64,7 +62,7 @@ export default function CardDetailsModal({
   const rageTurn = card.type === 'monster' ? (card.rageTurn ?? currentTurn) : null;
   const computedRage =
     card.type === 'monster' && rageRule && rageTurn
-      ? calculateMonsterRage(card.name, rageTurn, isQuickMode) ?? null
+      ? calculateMonsterRage(card.name, rageTurn) ?? null
       : null;
   const rageDisplayValue =
     card.type === 'monster'
@@ -1604,7 +1602,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'flipToUpgradeScroll') return '翻转为「升级卷轴」即时魔法：选择一张牌进行升级';
       if (token === 'allSlotDamage-1') return '所有装备栏永久攻击 -1';
       if (token === 'allSlotShield-1') return '所有装备栏永久护甲 -1';
-      if (token === 'flipToRecallEquip') return '翻转为「回收术」永久魔法：回手一张牌（从装备栏或护符栏选择）';
+      if (token === 'flipToRecallEquip') return '翻转为「回收术」永久魔法：失去 2 点生命，回手一张牌（从装备栏或护符栏选择）';
       if (token === 'flipToUndyingBlessing') return '翻转为「不灭赐福」永久魔法：赋予装备复生能力，失去 2 点生命';
       if (token === 'flipToHonorBloodMagic') {
         return '事件卡翻为「战血之印」永久法术并收入背包：打出 -1 生命并选一装备 +1 耐久（回响 +2）；被弃时将激活行所有怪物攻击力 -2';

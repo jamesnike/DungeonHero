@@ -29,8 +29,7 @@ export function addCardToHand(state: GameState, card: GameCardData): Partial<Gam
   if (state.handCards.length >= limit) {
     return {};
   }
-  // Both 'single' and 'multiplayer' use quick rules (always pass true).
-  const primed = primeMonsterAsEquipment(card, true);
+  const primed = primeMonsterAsEquipment(card);
   return { handCards: [...state.handCards, primed] };
 }
 
@@ -52,7 +51,7 @@ export function addCardToBackpackPure(
   state: GameState,
   card: GameCardData,
 ): Partial<GameState> {
-  const primed = primeMonsterAsEquipment(card, true);
+  const primed = primeMonsterAsEquipment(card);
   if (isBackpackRestrictedCard(primed)) {
     return { backpackItems: [...state.backpackItems, primed] };
   }
@@ -190,7 +189,7 @@ export function drawMultipleFromBackpack(
  * monster back as a single-layer threat regardless of how many layers its rage
  * tier would otherwise grant. The cap (`fury` / `hpLayers`) is preserved.
  */
-export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false): GameCardData {
+export function resetMonsterForGraveyard(card: GameCardData): GameCardData {
   if (card.type !== 'monster') return card;
 
   const cleaned: GameCardData = {
@@ -207,7 +206,7 @@ export function resetMonsterForGraveyard(card: GameCardData, isQuickMode = false
     skipNextMonsterTurn: undefined,
   };
 
-  const raged = applyMonsterRage(cleaned, cleaned.rageTurn ?? 1, isQuickMode);
+  const raged = applyMonsterRage(cleaned, cleaned.rageTurn ?? 1);
   return { ...raged, currentLayer: 1 };
 }
 
@@ -252,8 +251,8 @@ export function resetEquipmentForGraveyard(card: GameCardData): GameCardData {
  * monster reset and weapons/shields through the equipment reset. Other types
  * pass through unchanged.
  */
-export function resetCardForGraveyard(card: GameCardData, isQuickMode = false): GameCardData {
-  if (card.type === 'monster') return resetMonsterForGraveyard(card, isQuickMode);
+export function resetCardForGraveyard(card: GameCardData): GameCardData {
+  if (card.type === 'monster') return resetMonsterForGraveyard(card);
   if (card.type === 'weapon' || card.type === 'shield') return resetEquipmentForGraveyard(card);
   return card;
 }
@@ -278,14 +277,11 @@ export function resetCardForGraveyard(card: GameCardData, isQuickMode = false): 
  * Non-monster cards and monsters that already carry durability are returned
  * unchanged (idempotent — won't double-reset).
  */
-export function primeMonsterAsEquipment(
-  card: GameCardData,
-  isQuickMode = false,
-): GameCardData {
+export function primeMonsterAsEquipment(card: GameCardData): GameCardData {
   if (card.type !== 'monster') return card;
   if (card.durability != null && card.maxDurability != null) return card;
 
-  const reset = resetMonsterForGraveyard(card, isQuickMode);
+  const reset = resetMonsterForGraveyard(card);
   const rawMax = reset.fury ?? reset.hpLayers ?? 1;
   const cappedMax = clampMaxDurability(rawMax);
   const rawDur = reset.currentLayer ?? rawMax;
@@ -305,7 +301,7 @@ export function addToGraveyardPure(
   card: GameCardData,
 ): Partial<GameState> {
   return {
-    discardedCards: [...state.discardedCards, resetCardForGraveyard(card, true)],
+    discardedCards: [...state.discardedCards, resetCardForGraveyard(card)],
   };
 }
 
@@ -324,13 +320,13 @@ export function discardAllHandCardsPure(
   const toGrave = discarded.filter(c => !isRecyclableFromHand(c));
   const patch: Partial<GameState> = {
     handCards: kept,
-    discardedCards: [...state.discardedCards, ...toGrave.map(c => resetCardForGraveyard(c, true))],
+    discardedCards: [...state.discardedCards, ...toGrave.map(c => resetCardForGraveyard(c))],
   };
   if (recycled.length > 0) {
     patch.permanentMagicRecycleBag = [
       ...state.permanentMagicRecycleBag,
       ...recycled.map(c => {
-        const primed = primeMonsterAsEquipment(c, true);
+        const primed = primeMonsterAsEquipment(c);
         return { ...primed, _recycleWaits: primed.recycleDelay ?? 2 } as GameCardData;
       }),
     ];
@@ -402,7 +398,7 @@ export function addToRecycleBag(
   state: GameState,
   card: GameCardData,
 ): Partial<GameState> {
-  const primed = primeMonsterAsEquipment(card, true);
+  const primed = primeMonsterAsEquipment(card);
   return {
     permanentMagicRecycleBag: [...state.permanentMagicRecycleBag, primed],
   };

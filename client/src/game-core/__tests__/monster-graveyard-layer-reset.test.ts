@@ -50,7 +50,7 @@ describe('Monster graveyard currentLayer reset', () => {
   describe('resetMonsterForGraveyard helper', () => {
     it('pins currentLayer to 1 even when rage tier grants multiple layers', () => {
       const dragon = makeMultiLayerDragon({ currentLayer: 3 });
-      const reset = resetMonsterForGraveyard(dragon, false);
+      const reset = resetMonsterForGraveyard(dragon);
       expect(reset.currentLayer).toBe(1);
       // Cap preserved (rage recomputes fury / hpLayers from rule).
       expect(reset.fury).toBeGreaterThanOrEqual(1);
@@ -58,9 +58,9 @@ describe('Monster graveyard currentLayer reset', () => {
     });
 
     it('preserves the layer cap (fury / hpLayers) from rage rule', () => {
-      // Dragon rule: base 2, interval 5 → at rageTurn 10, fury = 2 + 2 = 4.
+      // Dragon rule: base 2, interval 4 → at rageTurn 10, fury = min(4, 2 + floor(10/4)) = 4.
       const dragon = makeMultiLayerDragon({ currentLayer: 1, rageTurn: 10 });
-      const reset = resetMonsterForGraveyard(dragon, false);
+      const reset = resetMonsterForGraveyard(dragon);
       expect(reset.currentLayer).toBe(1);
       expect(reset.fury).toBe(4);
       expect(reset.hpLayers).toBe(4);
@@ -74,7 +74,7 @@ describe('Monster graveyard currentLayer reset', () => {
         tempHpBoost: 5,
         specialAttackBoost: 3,
       });
-      const reset = resetMonsterForGraveyard(monster, false);
+      const reset = resetMonsterForGraveyard(monster);
       expect(reset.currentLayer).toBe(1);
       expect(reset.reviveUsed).toBe(false);
       expect(reset.tempAttackBoost).toBe(0);
@@ -84,14 +84,14 @@ describe('Monster graveyard currentLayer reset', () => {
 
     it('passes non-monster cards through unchanged', () => {
       const potion: GameCardData = { id: 'p1', type: 'potion', name: 'Heal', value: 5 };
-      expect(resetMonsterForGraveyard(potion, false)).toBe(potion);
+      expect(resetMonsterForGraveyard(potion)).toBe(potion);
     });
   });
 
   describe('resetCardForGraveyard dispatcher', () => {
     it('routes monster through the layer-reset path', () => {
       const monster = makeMultiLayerDragon({ currentLayer: 4 });
-      const reset = resetCardForGraveyard(monster, false);
+      const reset = resetCardForGraveyard(monster);
       expect(reset.currentLayer).toBe(1);
     });
   });
@@ -172,7 +172,7 @@ describe('Monster graveyard currentLayer reset', () => {
   describe('primeMonsterAsEquipment is graveyard-recovery-style (1/N, not N/N)', () => {
     it('multi-layer monster primes as 1/fury (durability=1, maxDurability=cap)', () => {
       const dragon = makeMultiLayerDragon({ currentLayer: 4, fury: 4, hpLayers: 4 });
-      const primed = primeMonsterAsEquipment(dragon, false);
+      const primed = primeMonsterAsEquipment(dragon);
       // resetMonsterForGraveyard inside primeMonsterAsEquipment pins
       // currentLayer to 1, so durability follows.
       expect(primed.maxDurability).toBe(4);
@@ -181,10 +181,10 @@ describe('Monster graveyard currentLayer reset', () => {
 
     it('post-graveyard monster (currentLayer already 1) primes as 1/fury', () => {
       const dragon = makeMultiLayerDragon({ currentLayer: 4 });
-      const inGrave = resetMonsterForGraveyard(dragon, false);
+      const inGrave = resetMonsterForGraveyard(dragon);
       expect(inGrave.currentLayer).toBe(1);
 
-      const primed = primeMonsterAsEquipment(inGrave, false);
+      const primed = primeMonsterAsEquipment(inGrave);
       expect(primed.maxDurability).toBe(4);
       expect(primed.durability).toBe(1);
     });
@@ -195,7 +195,7 @@ describe('Monster graveyard currentLayer reset', () => {
         durability: 2,
         maxDurability: 4,
       });
-      const primed = primeMonsterAsEquipment(alreadyEquipped, false);
+      const primed = primeMonsterAsEquipment(alreadyEquipped);
       expect(primed.durability).toBe(2);
       expect(primed.maxDurability).toBe(4);
     });

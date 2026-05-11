@@ -108,9 +108,9 @@ const activeRowFlip: CardTextFormatter = (card) => {
 const recallEquip: CardTextFormatter = (card) => {
   if ((card.upgradeLevel ?? 0) < 1) return null;
   return {
-    description: '回手一张牌（从装备栏或护符栏选择），抽 1 张牌。',
-    magicEffect: '永久魔法：回手一张牌，抽 1 张牌。',
-    shortDescription: '回手 1 张装备/护符；抽 1 张',
+    description: '失去 2 点生命，回手一张牌（从装备栏或护符栏选择），抽 1 张牌。',
+    magicEffect: '永久魔法：失去 2 HP，回手一张牌，抽 1 张牌。',
+    shortDescription: '失去 2 生命，回手 1 张装备/护符；抽 1 张',
   };
 };
 

@@ -2003,11 +2003,11 @@ export function createDeck(
           image: dedupeKnightMagicGraveNovaImage,
           classCard: true,
           magicType: 'permanent',
-          magicEffect: '永久魔法：随机空格生成地雷，怪物落入受 5 点纯伤。',
+          magicEffect: '永久魔法：随机空位或幽灵格生成地雷，怪物落入受 5 点纯伤。',
           knightEffect: 'lay-mine',
           recycleDelay: 2,
-          description: '永久：在激活行的随机空格生成一个「地雷」（幽灵建筑）。当怪物落到该格时，地雷对该怪物造成 5 点纯伤害后进坟场。',
-          shortDescription: '随机空格生成地雷：怪物落入受 5 点纯伤',
+          description: '永久：在激活行的随机空位或含幽灵建筑的格子生成一个「地雷」（幽灵建筑）。落到幽灵建筑上时原建筑被堆到下层。当怪物落到地雷格时，对该怪物造成 5 点纯伤害后地雷进坟场。',
+          shortDescription: '空位/幽灵格生成地雷：怪物落入受 5 点纯伤',
           maxUpgradeLevel: 1,
         },
         destination: 'stay',
@@ -3098,10 +3098,12 @@ export function createStarterCardPool(): GameCardData[] {
       shortDescription: '完美格挡：生命值上限 +1',
     },
     {
-      // 殉雷遗盾 — 装备遗言：在 active row 的随机空 cell 生成一个「地雷」幽灵建筑。
-      // 地雷复用 createMineBuilding（5 点纯伤、ghost、踩到即触发 + 进坟场，受
-      // 「引雷阵锋」globalMineDamageBonus 加成）。无空位时 fizzle + banner 提示。
-      // 跟「墓园守卫」amulet 协同：N+1 次触发，每次都尝试生成 1 个地雷（无空位即跳过）。
+      // 殉雷遗盾 — 装备遗言：在 active row 的随机「空位 OR 含 ghost building 的
+      // 格子」生成一个「地雷」幽灵建筑。地雷复用 createMineBuilding（5 点纯伤、
+      // ghost、踩到即触发 + 进坟场，受「引雷阵锋」globalMineDamageBonus 加成）。
+      // 落到 ghost 格时原 ghost 沉到 stack 下层；全无可用位置时 fizzle + banner。
+      // 跟「墓园守卫」amulet 协同：N+1 次触发，每次都尝试生成 1 个地雷（无可用位
+      // 置即跳过）。
       id: STARTER_CARD_IDS.mineLegacyShield,
       type: 'shield',
       name: '殉雷遗盾',
@@ -3111,8 +3113,8 @@ export function createStarterCardPool(): GameCardData[] {
       maxDurability: 2,
       armorMax: 3,
       onDestroyEffect: 'spawn-mine-empty',
-      description: '遗言：在激活行的随机空位置生成一个「地雷」（5 点纯伤，受「引雷阵锋」加成）。',
-      shortDescription: '遗言：随机空位生成地雷',
+      description: '遗言：在激活行的随机空位或含幽灵建筑的格子生成一个「地雷」（5 点纯伤，受「引雷阵锋」加成）。落到幽灵建筑上时原建筑被堆到下层。',
+      shortDescription: '遗言：空位/幽灵格生成地雷',
     },
     {
       id: STARTER_CARD_IDS.healMagic,
@@ -3189,9 +3191,9 @@ export function createStarterCardPool(): GameCardData[] {
       image: starterScrollRecallImage,
       unique: true,
       magicType: 'permanent',
-      magicEffect: '永久魔法：回手一张牌。',
-      description: '回手一张牌（从装备栏或护符栏选择）。',
-      shortDescription: '回手 1 张装备/护符',
+      magicEffect: '永久魔法：失去 2 HP，回手一张牌。',
+      description: '失去 2 点生命，回手一张牌（从装备栏或护符栏选择）。',
+      shortDescription: '失去 2 生命，回手 1 张装备/护符',
       knightEffect: 'recall-equipment',
       maxUpgradeLevel: 1,
     },

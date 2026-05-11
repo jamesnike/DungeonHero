@@ -541,7 +541,7 @@ function reduceAddToGraveyard(
   action: Extract<GameAction, { type: 'ADD_TO_GRAVEYARD' }>,
 ): ReduceResult {
   const { fromSlot: _, ...cardWithoutSlot } = action.card as GameCardData & { fromSlot?: string };
-  const sanitized = resetCardForGraveyard(cardWithoutSlot, true);
+  const sanitized = resetCardForGraveyard(cardWithoutSlot);
 
   if (state.discardedCards.some(c => c.id === sanitized.id)) {
     return noChange(state);

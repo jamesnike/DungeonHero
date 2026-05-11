@@ -538,7 +538,7 @@ export function getFlipToCardDefinition(token: string, rng: RngState): FlipCardD
     },
     flipToRecallEquip: () => {
       [id, rng] = nextId(rng, `${STARTER_CARD_IDS.recallEquip}-pick`);
-      return { card: { id, type: 'magic', name: '回收术', value: 0, image: starterScrollRecallImage, magicType: 'permanent', magicEffect: '永久魔法：回手一张牌。', description: '回手一张牌（从装备栏或护符栏选择）。', shortDescription: '回手 1 张装备/护符', knightEffect: 'recall-equipment', maxUpgradeLevel: 1 }, rng, banner: '血咒仪式翻转成了回收术，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「回收术」', transformMessage: '血咒仪式翻转为回收术…' };
+      return { card: { id, type: 'magic', name: '回收术', value: 0, image: starterScrollRecallImage, magicType: 'permanent', magicEffect: '永久魔法：失去 2 HP，回手一张牌。', description: '失去 2 点生命，回手一张牌（从装备栏或护符栏选择）。', shortDescription: '失去 2 生命，回手 1 张装备/护符', knightEffect: 'recall-equipment', maxUpgradeLevel: 1 }, rng, banner: '血咒仪式翻转成了回收术，已放入背包。', logMessage: '事件效果：血咒仪式翻转成了「回收术」', transformMessage: '血咒仪式翻转为回收术…' };
     },
     flipToUndyingBlessing: () => {
       // Suffix MUST match `getStarterBaseId`'s strip pattern so the played
@@ -1791,10 +1791,9 @@ export function applySimpleEffect(
       const removed = indices.slice(0, take).map(i => bag[i]);
       patch.permanentMagicRecycleBag = bag.filter((_: unknown, i: number) => !removedIndexSet.has(i));
       // 「删除」语义：进坟场（per monster-graveyard-layer-reset.mdc 走 resetCardForGraveyard）。
-      const isQuick = true;
       const cleaned = removed.map(card => {
         const { _recycleWaits: _w, ...rest } = card as GameCardData & { _recycleWaits?: number };
-        return resetCardForGraveyard(rest as GameCardData, isQuick);
+        return resetCardForGraveyard(rest as GameCardData);
       });
       patch.discardedCards = [...state.discardedCards, ...cleaned];
       patch.heroSkillBanner = `从回收袋移除了 ${cleaned.map(c => c.name).join('、')}。`;

@@ -53,7 +53,7 @@ import {
   ok,
   serviceUnavailable,
   unauthorized,
-} from './_shared';
+} from './_shared.js';
 
 const MAX_BACKFILL_ROWS = 200; // sane cap; >200 = something's very wrong
 

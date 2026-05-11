@@ -3645,69 +3645,78 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'lay-mine': {
-      // 布雷术：在 active row 的随机空 slot 生成 echoMultiplier 个「地雷」幽灵建筑。
-      // 触发逻辑（怪物落到地雷 slot → 5 点纯陷阱伤害 + 地雷进坟场）由
-      // rules/waterfall.ts:reduceApplyWaterfallDrop 处理（识别 displaced ghost
-      // 的 mineDamage 字段后改走伤害分支，而不是塞回 activeCardStacks）。
+      // 布雷术：在 active row 的随机「空位 OR 含 ghost building 的格子」生成
+      // echoMultiplier 个「地雷」幽灵建筑。触发逻辑（怪物落到地雷 slot → 5 点
+      // 纯陷阱伤害 + 地雷进坟场）由 rules/waterfall.ts:reduceApplyWaterfallDrop
+      // 处理（识别 displaced ghost 的 mineDamage 字段后改走伤害分支）。
       //
-      // - 选位：仅"完全空"的 slot（activeCards[i] === null）。已经被 ghost
-      //   building（含本卡之前布的地雷）占着的 slot 不算可用——避免一格摞两个
-      //   ghost 引发 stack 顺序歧义。
-      // - 全没空位 / 没足够位置时：剩下的地雷直接 fizzle 掉，banner 提示，magic
-      //   本体仍照常进回收袋（用户已确认这条 fizzle 语义）。
-      // - Echo (A 类)：放 echoMultiplier 个地雷在 echoMultiplier 个不同 slot；
-      //   一次性挑选完毕，单次结算（不走 modal re-prompt）。
+      // - 选位（uniform pool）：activeCards[i] === null 或 isGhost === true 的格
+      //   都可选；二者合并成一个池子均匀随机抽。怪物 / 事件 / 非 ghost 建筑占
+      //   用的格不算可用。
+      // - 落到 ghost 格时：原 ghost 沉到 activeCardStacks[col] 末尾（next-to-pop
+      //   位，跟殒雷符 reducer.ts:303-304 同款 stack-on-top 写法）；新地雷成为
+      //   activeCards[col] 顶层。后续怪物瀑流落下时地雷照常触发并进坟场，原
+      //   ghost 在该 slot 空出后按 LIFO 自然 surface 回来。
+      // - 全无可用位置（怪物 / 事件 / 非 ghost 建筑占满）→ fizzle + banner，
+      //   magic 本体仍照常进回收袋（PERM 语义）。
+      // - Echo (A 类，allow_same_cell)：放 echoMultiplier 个地雷；候选池不剔
+      //   除已选 slot，所以多枚 echo 可堆在同一 cell（每多一层就把上一层地雷
+      //   推到 stack 下层）。
       const wantCount = Math.max(1, echoMultiplier);
 
-      // 收集所有空 slot index
+      // 候选池 = 空位 ∪ ghost building 格
       const activeSlots = state.activeCards as (GameCardData | null)[];
-      const emptyIdxs: number[] = [];
+      const candidateIdxs: number[] = [];
       for (let i = 0; i < activeSlots.length; i++) {
-        if (activeSlots[i] === null) emptyIdxs.push(i);
+        const c = activeSlots[i];
+        if (c === null || c.isGhost === true) candidateIdxs.push(i);
       }
 
-      if (emptyIdxs.length === 0) {
-        banner(sideEffects, `${card.name}：激活行已满，无可用位置。`);
-        log(sideEffects, 'magic', `${card.name}：激活行已满，地雷未能放置。`);
+      if (candidateIdxs.length === 0) {
+        banner(sideEffects, `${card.name}：激活行无可用位置（既无空位也无幽灵建筑可堆叠）。`);
+        log(sideEffects, 'magic', `${card.name}：激活行无可用位置，地雷未能放置。`);
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
       }
 
-      // 从可用空位里随机抽 min(wantCount, emptyIdxs.length) 个不重复 slot
       let rng = patch.rng ?? state.rng;
-      const placeCount = Math.min(wantCount, emptyIdxs.length);
-      const remaining = [...emptyIdxs];
-      const chosenIdxs: number[] = [];
-      for (let k = 0; k < placeCount; k++) {
-        const [pickIdx, nextRng] = nextInt(rng, 0, remaining.length - 1);
-        rng = nextRng;
-        chosenIdxs.push(remaining[pickIdx]);
-        remaining.splice(pickIdx, 1);
-      }
-
-      // 在选中的 slot 放地雷
       const newActive = [...activeSlots];
+      const newStacks: Record<number, GameCardData[]> = { ...state.activeCardStacks };
       const placedMines: { idx: number; mineId: string }[] = [];
-      for (const slotIdx of chosenIdxs) {
-        const [mine, nextRng] = createMineBuilding(rng);
-        rng = nextRng;
+      const slotNotes: string[] = [];
+
+      for (let k = 0; k < wantCount; k++) {
+        const [pickIdx, rngAfterPick] = nextInt(rng, 0, candidateIdxs.length - 1);
+        rng = rngAfterPick;
+        const slotIdx = candidateIdxs[pickIdx];
+
+        const [mine, rngAfterMine] = createMineBuilding(rng);
+        rng = rngAfterMine;
+
+        const existing = newActive[slotIdx];
+        if (existing) {
+          // 候选池保证 existing 必为 ghost building；推到 stack 末尾 = next-to-pop。
+          newStacks[slotIdx] = [...(newStacks[slotIdx] ?? []), existing];
+          slotNotes.push(`${slotIdx + 1}（堆于 ${existing.name} 上）`);
+        } else {
+          slotNotes.push(`${slotIdx + 1}`);
+        }
         newActive[slotIdx] = mine;
         placedMines.push({ idx: slotIdx, mineId: mine.id });
       }
+
       patch.activeCards = newActive as ActiveRowSlots;
+      patch.activeCardStacks = newStacks;
       patch.rng = rng;
 
       const echoTag = isEchoTriggered && wantCount > 1 ? `（回响×${wantCount}）` : '';
-      const droppedCount = wantCount - placeCount;
-      const droppedTag = droppedCount > 0 ? `；${droppedCount} 个地雷因空位不足丢失` : '';
-
-      banner(sideEffects, `${card.name}：在 ${placeCount} 个随机位置布下地雷。${echoTag}${droppedTag}`);
-      log(sideEffects, 'magic', `${card.name}：${placeCount} 个地雷布于槽 ${chosenIdxs.map(i => i + 1).join('、')}${droppedTag}`);
+      banner(sideEffects, `${card.name}：在 ${wantCount} 个位置布下地雷。${echoTag}`);
+      log(sideEffects, 'magic', `${card.name}：${wantCount} 个地雷布于槽 ${slotNotes.join('、')}`);
 
       sideEffects.push({
         event: 'magic:layMine',
-        payload: { slots: placedMines, droppedCount },
+        payload: { slots: placedMines, droppedCount: 0 },
       });
 
       patch.lastPlayedCardCategory = getCardPlayCategory(card);

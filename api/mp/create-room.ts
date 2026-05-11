@@ -50,7 +50,7 @@ import {
   ok,
   serviceUnavailable,
   unauthorized,
-} from './_shared';
+} from './_shared.js';
 
 const EXPECTED_DECK_SIZE = 36;
 const MAX_DISPLAY_NAME = 32;

@@ -2958,7 +2958,7 @@ function reduceDungeonCardSelection(
       patch.rng = rng;
       const deckCard = deck[swapIdx];
       const turnCount = (state as any).turnCount ?? 0;
-      const ragedDeckCard = applyMonsterRage(deckCard, turnCount, true);
+      const ragedDeckCard = applyMonsterRage(deckCard, turnCount);
       sideEffects.push({ event: 'hero:fateSwapFlight', payload: { activeSlotIdx, oldCard: card, newCard: ragedDeckCard } });
       const newDeck = [...deck];
       newDeck[swapIdx] = sanitizeCardMetadata(card);
@@ -3182,7 +3182,7 @@ function reduceDungeonCardSelection(
       }
       const deckTop = deck[0];
       const turnCount = (state as any).turnCount ?? 0;
-      const ragedDeckTop = applyMonsterRage(deckTop, turnCount, true);
+      const ragedDeckTop = applyMonsterRage(deckTop, turnCount);
 
       const newActive = [...activeCards] as typeof activeCards;
       newActive[idx] = ragedDeckTop;

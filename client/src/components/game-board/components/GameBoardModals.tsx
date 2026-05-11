@@ -408,9 +408,7 @@ function GameBoardModalsInner({
   } = _gs;
 
   const currentTurn = turnCount;
-  // Both 'single' and 'multiplayer' modes use quick rules.
   void gameMode;
-  const isQuickMode = true;
   const shopSourceEvent = shopSourceEventCard?.name ?? undefined;
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + backpackCapacityModifier);
   const persuadeOpen = Boolean(persuadeState);
@@ -766,7 +764,6 @@ function GameBoardModalsInner({
         onOpenChange={onDetailsModalChange}
         currentTurn={currentTurn}
         monsterRewards={_monsterRewardPreview ?? undefined}
-        isQuickMode={isQuickMode}
         acquiredUniqueClassCardIds={acquiredUniqueClassCardIds}
       />
 
