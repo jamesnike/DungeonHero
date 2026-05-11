@@ -771,12 +771,40 @@
     },
     "gameModeSelect": {
       "title": "选择游戏模式",
-      "subtitle": "标准模式 / 快速模式",
+      "subtitle": "单人 / 双人",
       "newAdventure": "开启新的冒险之旅",
-      "quickMode": "快速游戏",
-      "quickModeDesc": "36 张牌的精简牌堆，10 个怪物，3 个精英。节奏更快，适合短局体验。",
-      "normalMode": "正常游戏",
-      "normalModeDesc": "完整牌堆，21 个怪物，7 个精英。完整的地城冒险体验。"
+      "singleMode": "单人游戏",
+      "singleModeDesc": "36 张牌的精简牌堆，10 个怪物，3 个精英。完整的地城冒险体验。",
+      "multiplayerMode": "双人游戏",
+      "multiplayerModeDesc": "两人共用一副 36 张主牌堆，瀑流挤掉的牌互相传送。除最终决战外都可异步进行。"
+    },
+    "multiplayerLobby": {
+      "title": "双人游戏房间",
+      "subtitle": "创建房间或加入好友的房间",
+      "displayNameLabel": "显示名（可选）",
+      "displayNamePlaceholder": "你的名字…",
+      "createButton": "创建房间",
+      "joinButton": "加入房间",
+      "codeLabel": "房间码",
+      "codePlaceholder": "6 位房间码",
+      "creating": "正在创建…",
+      "joining": "正在加入…",
+      "waitingForPeer": "房间码：{{code}}",
+      "waitingForPeerHint": "把房间码发给好友，等他/她加入。",
+      "ready": "玩家 B 已加入！正在开始游戏…",
+      "errorAuthFailed": "匿名认证失败，请刷新重试。",
+      "errorServiceUnavailable": "服务器未配置，无法使用双人模式。",
+      "errorRoomNotFound": "房间不存在或已结束。",
+      "errorRoomFull": "房间已满。",
+      "errorInvalidCode": "请输入 6 位房间码。",
+      "errorUnknown": "出错了：{{detail}}",
+      "back": "返回",
+      "cancel": "取消"
+    },
+    "multiplayerBossAlert": {
+      "title": "Boss 战暂未支持双人",
+      "description": "本场 Boss 战将以单人模式结算。你和搭档之后还是各自打完自己的 Boss——传牌不会停。",
+      "ok": "知道了"
     }
   },
   "cardStamps": {

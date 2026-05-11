@@ -383,7 +383,7 @@ describe('INIT_GAME resets acquiredUniqueClassCardIds', () => {
 
     const result = reduce(previous, {
       type: 'INIT_GAME',
-      mode: 'normal',
+      mode: 'single',
       totalWins: 0,
       eternalRelics: [],
     });

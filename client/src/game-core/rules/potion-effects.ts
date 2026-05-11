@@ -370,6 +370,23 @@ export function resolveAllPotionEffects(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 
+  // --- Grant equip-overclock (eternal relic, stackable) ---
+  if (effect === 'grant-eternal-relic-equip-overclock') {
+    const relic = getEternalRelic('equip-overclock');
+    const had = hasEternalRelic(state.eternalRelics ?? [], 'equip-overclock');
+    patch.eternalRelics = [...(state.eternalRelics ?? []), relic];
+    if (had) {
+      const newCount = countEternalRelics(patch.eternalRelics, 'equip-overclock');
+      log(sideEffects, 'potion', `永恒护符·装备超频 叠加 ×${newCount}！每层在回收袋牌数 > 15 时，装备效果额外多触发 1 次。`);
+      banner(sideEffects, `永恒护符·装备超频 叠加 ×${newCount}！`);
+    } else {
+      log(sideEffects, 'potion', '装备超频药：获得永恒护符「装备超频」！回收袋牌数 > 15 时，装备效果额外触发一次（可叠加）。');
+      banner(sideEffects, '获得永恒护符「装备超频」！');
+    }
+    enqueuedActions.push({ type: 'FINALIZE_POTION_CARD', card });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
   // --- Discover class 3 ---
   if (effect === 'discover-class-3') {
     if (state.classDeck.length > 0) {

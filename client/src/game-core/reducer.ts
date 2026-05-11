@@ -25,6 +25,7 @@ import { reduceUIStateActions } from './rules/ui-state';
 import { reduceEconomyActions } from './rules/economy';
 import { reduceWaterfallActions } from './rules/waterfall';
 import { reduceSkillFloatActions } from './rules/skill-float';
+import { reduceMultiplayerActions } from './rules/multiplayer';
 import {
   syncBuildingSlotsPure,
   countActiveRowSlotsExcludeGhost,
@@ -43,7 +44,7 @@ import {
 import { computeWaterfallDropPlan } from './rules/waterfall';
 import { createRng } from './rng';
 import { pruneStaleEngagedIds } from './combat';
-import { reduceInitGame } from './rules/init';
+import { reduceInitGame, reduceInitMultiplayerGame } from './rules/init';
 
 // ---------------------------------------------------------------------------
 // ReduceResult — what the reducer returns
@@ -123,6 +124,7 @@ const CARD_PROCESSING_EXEMPT_ACTIONS = new Set<GameAction['type']>([
 // postProcessActiveCards and let the swarm passive react.
 const SWARM_SPAWN_EXEMPT_ACTIONS = new Set<GameAction['type']>([
   'INIT_GAME',
+  'INIT_MULTIPLAYER_GAME',
   'TRIGGER_WATERFALL',
   'DRAW_DUNGEON_ROW',
   'MONSTER_ENTERED_ROW',
@@ -429,6 +431,8 @@ function computeAmuletCounterDisplay(
       return `${state.equipAmuletCapProgress ?? 0}/6`;
     case 'stun-attempt-discover':
       return `${state.stunAttemptDiscoverProgress ?? 0}/4`;
+    case 'mirror-copy-summon':
+      return `${state.mirrorCopySummonStreak ?? 0}/8`;
     default:
       return undefined;
   }
@@ -461,6 +465,7 @@ function postProcessAmuletCounters(result: ReduceResult): ReduceResult {
  */
 const ON_ENTER_HAND_EXEMPT_ACTIONS = new Set<GameAction['type']>([
   'INIT_GAME',
+  'INIT_MULTIPLAYER_GAME',
   'TRIGGER_ON_ENTER_HAND',
 ]);
 
@@ -590,6 +595,17 @@ export function reduce(state: GameState, action: GameAction): ReduceResult {
     case 'INIT_GAME':
       return reduceInitGame(state, action.mode, action.totalWins, action.eternalRelics);
 
+    case 'INIT_MULTIPLAYER_GAME':
+      return reduceInitMultiplayerGame(
+        state,
+        action.sharedDeck,
+        action.role,
+        action.roomId,
+        action.peerId,
+        action.totalWins,
+        action.eternalRelics,
+      );
+
   }
 
   // Delegate to domain reducers. Each returns ReduceResult | null.
@@ -607,6 +623,7 @@ export function reduce(state: GameState, action: GameAction): ReduceResult {
     reduceHeroActions,
     reduceUIStateActions,
     reduceEconomyActions,
+    reduceMultiplayerActions,
   ];
 
   for (const delegate of delegates) {

@@ -70,7 +70,7 @@ describe('INIT_GAME — opening backpack contains 学徒法弹', () => {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
         type: 'INIT_GAME',
-        mode: 'normal',
+        mode: 'single',
         totalWins: 0,
         eternalRelics: [],
       });
@@ -87,7 +87,7 @@ describe('INIT_GAME — opening backpack contains 学徒法弹', () => {
     const state = makeStateWithSeed(42);
     const result = reduce(state, {
       type: 'INIT_GAME',
-      mode: 'quick',
+      mode: 'single',
       totalWins: 0,
       eternalRelics: [],
     });

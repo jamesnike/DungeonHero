@@ -146,6 +146,8 @@ export type PotionEffectId =
   | 'grant-lastwords-slot-temp-buff'
   | 'amulet-to-eternal-relic'
   | 'grant-amulet-end-turn-draw'
+  | 'grant-eternal-relic-equip-overclock'
+  | 'grant-eternal-relic-summon-frenzy'
   | 'perm-equip-empower'
   | 'transform-recycle-grant'
   | 'amplify-target-wide'
@@ -194,7 +196,8 @@ export type AmuletEffectId =
   | 'delete-draw'
   | 'last-words-extra-trigger'
   | 'kill-cell-mine'
-  | 'manual-recycle-draw';
+  | 'manual-recycle-draw'
+  | 'mirror-copy-summon';
 
 export type AmuletAuraBonus = {
   attack?: number;
@@ -401,6 +404,26 @@ export interface GameCardData {
    */
   permStripped?: boolean;
   _recycleWaits?: number; // Internal: remaining waterfalls before this card leaves the recycle bag
+  /**
+   * Multiplayer-only marker: this card is **not** part of the synchronized
+   * shared-suffix portion of `remainingDeck`. Set on:
+   *
+   *   1. Cards that arrived via `MULTIPLAYER_RECEIVE_TRANSFER` (the peer's
+   *      waterfall pushed them onto our deck top).
+   *   2. Waterfall discards that re-enter the deck (e.g. `returnToDeck` /
+   *      `swarmInfest`) — they originated locally, so they must be marked
+   *      excluded so the next peer-sync pass doesn't accidentally pretend
+   *      they were drawn from the shared pool.
+   *
+   * Cards without this flag are part of the shared deck suffix and must be
+   * counted toward shared-consume / shared-shrink invariants. Single-player
+   * mode never sets this; safe to read as `false` everywhere outside the
+   * multiplayer reducer paths.
+   *
+   * See `.cursor/plans/2-player_multiplayer_mode_*.plan.md` (Phase 2) for the
+   * shared-suffix data model.
+   */
+  _excludedFromShared?: boolean;
   onDestroyHeal?: number; // Heal this amount when equipment is destroyed
   onDestroyGold?: number; // Gain this much gold when equipment is destroyed
   onEquipEffect?: string; // Trigger effect when this equipment is first equipped (入场)

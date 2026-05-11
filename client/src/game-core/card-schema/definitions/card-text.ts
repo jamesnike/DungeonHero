@@ -422,7 +422,7 @@ const battleSpirit: CardTextFormatter = (card) => {
 
 const berserkGambit: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const extraPerSlotAmounts = [1, 2];
+  const extraPerSlotAmounts = [2, 3];
   const n = pick(extraPerSlotAmounts, level);
   const timesText = n === 1 ? '一次' : `${n} 次`;
   return {

@@ -765,12 +765,40 @@
     },
     "gameModeSelect": {
       "title": "Choose Game Mode",
-      "subtitle": "Standard / Quick",
+      "subtitle": "Single / Multiplayer",
       "newAdventure": "Begin a new adventure",
-      "quickMode": "Quick Game",
-      "quickModeDesc": "36-card deck, 10 monsters, 3 elites. A faster pace, ideal for short sessions.",
-      "normalMode": "Normal Game",
-      "normalModeDesc": "Full deck, 21 monsters, 7 elites. The complete dungeon adventure."
+      "singleMode": "Single Game",
+      "singleModeDesc": "36-card deck, 10 monsters, 3 elites. The complete solo dungeon adventure.",
+      "multiplayerMode": "2-Player Game",
+      "multiplayerModeDesc": "Two players share one 36-card deck. Cards pushed out by waterfall transfer to each other. Async play except for the final boss."
+    },
+    "multiplayerLobby": {
+      "title": "Multiplayer Lobby",
+      "subtitle": "Create a room or join your friend's",
+      "displayNameLabel": "Display name (optional)",
+      "displayNamePlaceholder": "Your name…",
+      "createButton": "Create room",
+      "joinButton": "Join room",
+      "codeLabel": "Room code",
+      "codePlaceholder": "6-char code",
+      "creating": "Creating…",
+      "joining": "Joining…",
+      "waitingForPeer": "Room code: {{code}}",
+      "waitingForPeerHint": "Share the code with your friend and wait for them to join.",
+      "ready": "Player B joined! Starting game…",
+      "errorAuthFailed": "Anonymous sign-in failed. Please refresh and try again.",
+      "errorServiceUnavailable": "Server not configured. Multiplayer is unavailable.",
+      "errorRoomNotFound": "Room not found or already ended.",
+      "errorRoomFull": "Room is full.",
+      "errorInvalidCode": "Please enter a 6-character room code.",
+      "errorUnknown": "Something went wrong: {{detail}}",
+      "back": "Back",
+      "cancel": "Cancel"
+    },
+    "multiplayerBossAlert": {
+      "title": "Boss fight is solo for now",
+      "description": "This Boss fight will resolve as a solo encounter. You and your partner each finish your own Boss — card transfers keep flowing as usual.",
+      "ok": "Got it"
     }
   },
   "cardStamps": {

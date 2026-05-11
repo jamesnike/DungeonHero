@@ -29,7 +29,8 @@ export function addCardToHand(state: GameState, card: GameCardData): Partial<Gam
   if (state.handCards.length >= limit) {
     return {};
   }
-  const primed = primeMonsterAsEquipment(card, state.gameMode === 'quick');
+  // Both 'single' and 'multiplayer' use quick rules (always pass true).
+  const primed = primeMonsterAsEquipment(card, true);
   return { handCards: [...state.handCards, primed] };
 }
 
@@ -51,7 +52,7 @@ export function addCardToBackpackPure(
   state: GameState,
   card: GameCardData,
 ): Partial<GameState> {
-  const primed = primeMonsterAsEquipment(card, state.gameMode === 'quick');
+  const primed = primeMonsterAsEquipment(card, true);
   if (isBackpackRestrictedCard(primed)) {
     return { backpackItems: [...state.backpackItems, primed] };
   }
@@ -304,7 +305,7 @@ export function addToGraveyardPure(
   card: GameCardData,
 ): Partial<GameState> {
   return {
-    discardedCards: [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')],
+    discardedCards: [...state.discardedCards, resetCardForGraveyard(card, true)],
   };
 }
 
@@ -323,13 +324,13 @@ export function discardAllHandCardsPure(
   const toGrave = discarded.filter(c => !isRecyclableFromHand(c));
   const patch: Partial<GameState> = {
     handCards: kept,
-    discardedCards: [...state.discardedCards, ...toGrave.map(c => resetCardForGraveyard(c, state.gameMode === 'quick'))],
+    discardedCards: [...state.discardedCards, ...toGrave.map(c => resetCardForGraveyard(c, true))],
   };
   if (recycled.length > 0) {
     patch.permanentMagicRecycleBag = [
       ...state.permanentMagicRecycleBag,
       ...recycled.map(c => {
-        const primed = primeMonsterAsEquipment(c, state.gameMode === 'quick');
+        const primed = primeMonsterAsEquipment(c, true);
         return { ...primed, _recycleWaits: primed.recycleDelay ?? 2 } as GameCardData;
       }),
     ];
@@ -401,7 +402,7 @@ export function addToRecycleBag(
   state: GameState,
   card: GameCardData,
 ): Partial<GameState> {
-  const primed = primeMonsterAsEquipment(card, state.gameMode === 'quick');
+  const primed = primeMonsterAsEquipment(card, true);
   return {
     permanentMagicRecycleBag: [...state.permanentMagicRecycleBag, primed],
   };

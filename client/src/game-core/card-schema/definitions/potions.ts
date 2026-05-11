@@ -412,6 +412,40 @@ const potionDefinitions: CardDefinition[] = [
     tags: ['relic', 'permanent'],
   },
 
+  {
+    effectId: 'potion:grant-eternal-relic-equip-overclock',
+    effects: [
+      {
+        type: 'grantEternalRelic',
+        relicId: 'equip-overclock' as any,
+        logMsg: '装备超频药：获得永恒护符「装备超频」！回收袋牌数 > 15 时，装备效果额外触发一次（可叠加）。',
+        bannerMsg: '获得永恒护符「装备超频」！',
+        dupeLogMsg: '',
+        dupeBannerMsg: '',
+        stackable: true,
+      },
+      { type: 'finalize' },
+    ],
+    tags: ['relic', 'permanent'],
+  },
+
+  {
+    effectId: 'potion:grant-eternal-relic-summon-frenzy',
+    effects: [
+      {
+        type: 'grantEternalRelic',
+        relicId: 'summon-frenzy' as any,
+        logMsg: '狂热发现：获得永恒护符「狂热发现」！背包牌数 > 10 时，使用「专属感召」额外触发 1 次发现（可叠加）。',
+        bannerMsg: '获得永恒护符「狂热发现」！',
+        dupeLogMsg: '',
+        dupeBannerMsg: '',
+        stackable: true,
+      },
+      { type: 'finalize' },
+    ],
+    tags: ['relic', 'permanent'],
+  },
+
   // =========================================================================
   // Interactive potions
   // =========================================================================

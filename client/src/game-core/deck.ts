@@ -310,12 +310,17 @@ export function pruneEventChoicesToThree(
 // ---------------------------------------------------------------------------
 
 export function createDeck(
-  mode: 'normal' | 'quick' = 'normal',
+  mode: 'single' | 'multiplayer' = 'single',
   rng?: RngState,
 ): [GameCardData[], RngState] {
   const deck: GameCardData[] = [];
   let id = 0;
-  const isQuick = mode === 'quick';
+  // Both 'single' and 'multiplayer' use the same underlying deck rules
+  // (formerly "quick rules": 36-card deck / 1 monster per chunk). The
+  // legacy `'normal'` mode (full 84-card deck) was removed in the
+  // multiplayer-mode rollout.
+  const isQuick = true;
+  void mode;
 
   // Seeded RNG threading. If no rng is passed (legacy call sites), fall back to
   // a fresh seed based on the time so we still don't crash but get a deterministic

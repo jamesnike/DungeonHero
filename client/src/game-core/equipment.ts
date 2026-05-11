@@ -501,6 +501,7 @@ export function computeAmuletEffects(amuletSlots: GameCardData[]): ActiveAmuletE
       case 'delete-draw': effects.deleteDrawCount += 1; break;
       case 'last-words-extra-trigger': effects.lastWordsExtraTriggerCount += 1; break;
       case 'manual-recycle-draw': effects.manualRecycleDrawCount += 1; break;
+      case 'mirror-copy-summon': effects.mirrorCopySummonCount += 1; break;
       // The following amulets are checked via direct amuletSlots.find/filter(...)
       // in their reducers; no aggregated count needed. Cases are listed for
       // documentation / completeness so they are recognised registered effects.

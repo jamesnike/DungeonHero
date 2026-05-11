@@ -51,7 +51,7 @@ import type { HeroMagicId } from '@/components/GameCard';
 import type { MirrorCopySelection, AmplifySelection } from '../types';
 import { skillScrollImage } from '../deck';
 import { rollPotionManuscriptFlip, applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
-import { createMineBuilding } from '@/lib/knightDeck';
+import { createMineBuilding, createMirrorCopySummonCard } from '@/lib/knightDeck';
 import { filterAvailableClassPool, markManyUniqueAcquired } from '../uniqueClass';
 
 export function reduceCardActions(state: GameState, action: GameAction): ReduceResult | null {
@@ -427,7 +427,7 @@ function reduceDrawCards(
       const sideEffects: SideEffect[] = [
         { event: 'card:drawnToHand', payload: { cardId: result.card.id, source: 'backpack' } },
       ];
-      return applyPatch(state, result.patch, sideEffects);
+      return applyMirrorCopySummonStreak(applyPatch(state, result.patch, sideEffects), 1);
     }
 
     const result = drawMultipleFromBackpack(state, action.count);
@@ -437,7 +437,7 @@ function reduceDrawCards(
       event: 'card:drawnToHand' as const,
       payload: { cardId: card.id, source: 'backpack' },
     }));
-    return applyPatch(state, result.patch, sideEffects);
+    return applyMirrorCopySummonStreak(applyPatch(state, result.patch, sideEffects), result.cards.length);
   }
 
   if (action.source === 'deck') {
@@ -453,7 +453,7 @@ function reduceDrawCards(
       currentState = { ...currentState, ...allPatches };
       allSideEffects.push({ event: 'card:drawnToHand', payload: { cardId: card.id, source: 'deck' } });
     }
-    return applyPatch(state, allPatches, allSideEffects);
+    return applyMirrorCopySummonStreak(applyPatch(state, allPatches, allSideEffects), drawn.length);
   }
 
   if (action.source === 'recycleBag') {
@@ -541,7 +541,7 @@ function reduceAddToGraveyard(
   action: Extract<GameAction, { type: 'ADD_TO_GRAVEYARD' }>,
 ): ReduceResult {
   const { fromSlot: _, ...cardWithoutSlot } = action.card as GameCardData & { fromSlot?: string };
-  const sanitized = resetCardForGraveyard(cardWithoutSlot, state.gameMode === 'quick');
+  const sanitized = resetCardForGraveyard(cardWithoutSlot, true);
 
   if (state.discardedCards.some(c => c.id === sanitized.id)) {
     return noChange(state);
@@ -716,7 +716,7 @@ function reduceDrawFromBackpack(
     },
   ];
 
-  return applyPatch(state, patch, sideEffects);
+  return applyMirrorCopySummonStreak(applyPatch(state, patch, sideEffects), cards.length);
 }
 
 // ---------------------------------------------------------------------------
@@ -944,6 +944,60 @@ function applyMagicClassDiscoverStreak(result: ReduceResult, card: GameCardData)
   return {
     ...result,
     state: { ...stateAfter, classMagicDiscoverStreak: nextStreak },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 影摹召引符 (mirror-copy-summon)：每抽 8 张「标准抽牌」(DRAW_CARDS source:
+// backpack|deck 或 DRAW_FROM_BACKPACK) → 入手一张「镜影摹形」。
+//
+// 设计：streak 累加 `cardsDrawn × amuletCount`；`Math.floor(newStreak / 8)`
+// 次触发，remainder 保留——保证「一次抽 ≥ 8 张」时触发次数正确，「2 个护符叠加」
+// 时 4 次抽牌即触发（progress counter ×N stacking, per amulet-stacking-design）。
+//
+// 仅在 `reduceDrawCards` 的 source=backpack|deck + `reduceDrawFromBackpack`
+// 调用 —— recycleBag 分支不算（那是从回收袋整理到背包，不是抽到手牌）。waterfall
+// 内 `drawMultipleFromBackpack` 直调 / 晕锤归袋符直 patch handCards 等特殊路径
+// 不算「标准抽牌」（per user 设计选择 scope_standard_draws_only）。
+// ---------------------------------------------------------------------------
+
+function applyMirrorCopySummonStreak(result: ReduceResult, cardsDrawn: number): ReduceResult {
+  if (cardsDrawn <= 0) return result;
+  const stateAfter = result.state;
+  const count = (stateAfter.amuletSlots as GameCardData[]).filter(
+    s => s?.amuletEffect === 'mirror-copy-summon',
+  ).length;
+  if (count <= 0) return result;
+  const threshold = 8;
+  const prevStreak = stateAfter.mirrorCopySummonStreak ?? 0;
+  const nextStreak = prevStreak + cardsDrawn * count;
+  const triggers = Math.floor(nextStreak / threshold);
+  if (triggers <= 0) {
+    return { ...result, state: { ...stateAfter, mirrorCopySummonStreak: nextStreak } };
+  }
+
+  let rng = stateAfter.rng;
+  const grantedCards: GameCardData[] = [];
+  for (let i = 0; i < triggers; i++) {
+    const [card, nextRng] = createMirrorCopySummonCard(rng);
+    grantedCards.push(card as GameCardData);
+    rng = nextRng;
+  }
+  return {
+    ...result,
+    state: {
+      ...stateAfter,
+      rng,
+      mirrorCopySummonStreak: nextStreak % threshold,
+    },
+    sideEffects: [
+      ...result.sideEffects,
+      { event: 'combat:mirrorCopySummonTriggered', payload: { count: triggers, threshold } },
+    ],
+    enqueuedActions: [
+      ...(result.enqueuedActions ?? []),
+      { type: 'ADD_CARDS_TO_HAND', cards: grantedCards },
+    ],
   };
 }
 

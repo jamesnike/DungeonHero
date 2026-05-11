@@ -11,6 +11,7 @@ import type { GameAction } from '../actions';
 import type { SideEffect } from '../reducer';
 import type { GameCardData } from '@/components/GameCard';
 import type { EquipmentSlotId } from '@/components/game-board/types';
+import { equipOverclockExtraTriggers } from '../rules/equipment-overclock';
 
 export type OnEquipHandler = (
   state: GameState,
@@ -67,6 +68,20 @@ export function executeOnEquip(
   const handler = registry.get(effectId);
   if (handler) {
     handler(state, card, slotId, patch, sideEffects, enqueuedActions);
+    // 永恒护符·装备超频 aura (stackable): fire onEquip handler N extra times
+    // where N = count of `equip-overclock` relics held, when recycle bag > 15.
+    // Reuses the same patch / sideEffects / enqueuedActions accumulators so
+    // all derived side-effects multiply by (1 + N).
+    const extra = equipOverclockExtraTriggers(state);
+    for (let i = 0; i < extra; i++) {
+      handler(state, card, slotId, patch, sideEffects, enqueuedActions);
+    }
+    if (extra > 0) {
+      sideEffects.push({
+        event: 'combat:equipOverclockTriggered',
+        payload: { surface: 'onEquip', count: extra },
+      });
+    }
     return true;
   }
 
@@ -78,6 +93,16 @@ export function executeOnEquip(
   });
   if (matchedPrefixHandler) {
     matchedPrefixHandler(state, card, slotId, patch, sideEffects, enqueuedActions);
+    const extra = equipOverclockExtraTriggers(state);
+    for (let i = 0; i < extra; i++) {
+      matchedPrefixHandler(state, card, slotId, patch, sideEffects, enqueuedActions);
+    }
+    if (extra > 0) {
+      sideEffects.push({
+        event: 'combat:equipOverclockTriggered',
+        payload: { surface: 'onEquip', count: extra },
+      });
+    }
     return true;
   }
 

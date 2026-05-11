@@ -21,7 +21,6 @@ function CardViewerContainerInner() {
     backpackItems: s.backpackItems,
     permanentMagicRecycleBag: s.permanentMagicRecycleBag,
     turnCount: s.turnCount,
-    gameMode: s.gameMode,
     deleteModalOpen: s.deleteModalOpen,
     cardActionContext: s.cardActionContext,
     handCards: s.handCards,
@@ -38,7 +37,8 @@ function CardViewerContainerInner() {
   }));
 
   const currentTurn = gs.turnCount;
-  const isQuickMode = gs.gameMode === 'quick';
+  // Both 'single' and 'multiplayer' modes use the quick ruleset.
+  const isQuickMode = true;
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + gs.backpackCapacityModifier);
 
   const flatEquipmentCards: GameCardData[] = (

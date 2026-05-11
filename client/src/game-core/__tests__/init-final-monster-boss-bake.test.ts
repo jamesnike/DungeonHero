@@ -31,7 +31,7 @@ function findFinalMonster(state: GameState): GameCardData | null {
 }
 
 describe('INIT_GAME bakes final monster as Boss', () => {
-  it.each(['normal', 'quick'] as const)(
+  it.each(['single', 'multiplayer'] as const)(
     '%s mode: final monster carries Boss properties from start (across many seeds)',
     (mode) => {
       const violations: Array<{ seed: number; reason: string }> = [];
@@ -79,7 +79,7 @@ describe('INIT_GAME bakes final monster as Boss', () => {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
         type: 'INIT_GAME',
-        mode: 'normal',
+        mode: 'single',
         totalWins: 0,
         eternalRelics: [],
       });

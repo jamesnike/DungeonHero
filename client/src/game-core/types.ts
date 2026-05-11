@@ -180,6 +180,8 @@ export type EternalRelicId =
   | 'missile-stun-20'
   | 'missile-draw-1'
   | 'waterfall-draw-2'
+  | 'equip-overclock'
+  | 'summon-frenzy'
   | `amulet-eternal-${string}`;
 
 export interface EternalRelic {
@@ -343,6 +345,10 @@ export interface GameState {
   classDamageDiscoverStreak: number;
   /** 咒纹刻印：0–4，累计 5 次使用「当前功能上是瞬发」的 magic 牌（type === 'magic' 且 !cardHasPermFlag — 即原生 Instant 未被永恒铭刻、或 Permanent 已被凡化咒剥离）触发发现专属牌后归零 */
   classMagicDiscoverStreak: number;
+  /** 影摹召引符：每抽 8 张「标准抽牌」（DRAW_CARDS source: backpack|deck 或
+   *  DRAW_FROM_BACKPACK）触发，产出 1 张「镜影摹形」入手；触发后 streak %= 8 保留 remainder。
+   *  N 个护符每次抽牌 +N（progress counter ×N stacking）。 */
+  mirrorCopySummonStreak: number;
   waveDiscardCount: number;
   totalWins: number;
   undoCount: number;
@@ -724,7 +730,18 @@ export interface GameState {
   shopSkillSelectOpen: boolean;
 
   // --- Game flow ---
-  gameMode: 'normal' | 'quick';
+  /**
+   * Game mode (post-multiplayer-refactor):
+   *   'single'        — solo run (formerly 'quick'; the only solo mode now)
+   *   'multiplayer'   — 2-player async run (shared deck, transferred cards)
+   *
+   * Both modes use the same underlying deck rules (formerly "quick rules":
+   * 36-card deck / 1 monster per chunk / `INITIAL_TURN_COUNT = 1`). The
+   * legacy `'normal'` mode (full 84-card deck, 21 monsters, 7 elites) was
+   * removed in the multiplayer-mode rollout — search history for `'normal'`
+   * if you need to resurrect it.
+   */
+  gameMode: 'single' | 'multiplayer';
   gameOver: boolean;
   victory: boolean;
   showSkillSelection: boolean;
@@ -733,6 +750,71 @@ export interface GameState {
   drawPending: boolean;
   isHydrated: boolean;
   heroSkillBanner: string | null;
+
+  // --- Multiplayer session (null = single-player) ---
+  /**
+   * Per-player view of an active 2-player room. `null` in single-player
+   * (default). When non-null:
+   *
+   *   - `role`     — which side this client is playing.
+   *   - `roomId`   — opaque server-side id (uuid in phase 4; arbitrary
+   *                  channel name in the phase 3 BroadcastChannel prototype).
+   *   - `peerId`   — opaque server identity for the other client (used by
+   *                  realtime filter and resume logic).
+   *   - `lastAppliedSeq` — the highest `transfers.seq` we've already
+   *                       processed (set to `0` on fresh start). Resume logic
+   *                       uses this to fetch only missed transfers.
+   *
+   * The deck split itself lives in `remainingDeck` directly:
+   *   `remainingDeck = [transferred-from-peer (LIFO top)] ++ [shared suffix]`
+   * Cards in the transferred prefix carry `_excludedFromShared: true`; cards
+   * in the shared suffix do not. The shared suffix is identical between A
+   * and B at all times (the data invariant for phase-2 tests).
+   */
+  multiplayerSession: {
+    role: 'A' | 'B';
+    roomId: string;
+    peerId: string;
+    lastAppliedSeq: number;
+  } | null;
+  /**
+   * Phase-2 staging area: the cards a just-resolved local waterfall pushed
+   * out (i.e. cards that should be transferred to the peer's deck top).
+   *
+   * The waterfall reducer sets this to a non-null array (possibly empty if
+   * everything was a final-monster / non-transferable). The
+   * `useMultiplayerSync` hook (phase 3+) listens for the
+   * `multiplayer:transferOut` side effect, calls the network layer, and
+   * then dispatches `MULTIPLAYER_CLEAR_PENDING_TRANSFER` to drain this.
+   *
+   * Keeping the data on state (instead of only emitting it as a side effect
+   * payload) lets the resume / persistence path replay an in-flight transfer
+   * even if the user reloaded the tab between waterfall and ack.
+   */
+  pendingTransferOut: GameCardData[] | null;
+  /**
+   * Counter incremented every time the local waterfall consumed a card from
+   * the **shared** portion of the deck (i.e. a card that did NOT carry
+   * `_excludedFromShared: true`). The peer learns this number via
+   * `multiplayer:transferOut` payload and applies the same number of
+   * shared-shrink steps locally so both sides stay aligned. We keep the
+   * monotonic counter so resume / replay can distinguish "already
+   * processed" from "missed".
+   */
+  sharedDeckConsumed: number;
+
+  /**
+   * Phase 6.2: one-shot guard for the "Boss 战暂未支持双人" alert. Set
+   * `true` the first time a final-monster (Boss) appears in a multiplayer
+   * game's preview row or active row. The reducer emits the
+   * `multiplayer:bossEncountered` side effect ONCE (gated on this flag),
+   * the UI shows a single dialog, and the underlying combat continues to
+   * reduce as solo (peer is unaffected; this is purely a UX advisory).
+   *
+   * Persisted via `gameStorage.ts` so reloads don't re-show the alert.
+   * Reset to `false` when `multiplayerSession` is cleared.
+   */
+  bossEncounterAlertShown: boolean;
 
   // --- Eternal relics ---
   eternalRelics: EternalRelic[];

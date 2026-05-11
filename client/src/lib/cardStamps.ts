@@ -103,14 +103,27 @@ export function canonicalRowSignature(snapshotSlots: ReadonlyArray<GameCardData 
 // Network
 // ---------------------------------------------------------------------------
 
+/**
+ * Wire-format game mode (legacy enum kept for server / DB CHECK constraint
+ * compatibility). Internally the game uses `'single' | 'multiplayer'`; both
+ * map to `'quick'` on the wire today.
+ */
+export type WireStampGameMode = 'quick' | 'normal';
+
 export interface PostStampParams {
-  gameMode: 'quick' | 'normal';
+  /** Internal game mode; mapped to legacy wire enum before being sent. */
+  gameMode: 'single' | 'multiplayer' | 'quick' | 'normal';
   targetCardName: string;
   rowSignature: string;
   sourceRow: RowSourceId;
   stampId: StampId;
   /** Required when `stampId === 'freeform'`, ignored otherwise. */
   messageText?: string;
+}
+
+function toWireStampMode(mode: PostStampParams['gameMode']): WireStampGameMode {
+  if (mode === 'normal') return 'normal';
+  return 'quick';
 }
 
 /**
@@ -131,7 +144,7 @@ export function postStamp(params: PostStampParams): void {
   try {
     const body = JSON.stringify({
       clientId: getOrCreateClientId(),
-      gameMode: params.gameMode,
+      gameMode: toWireStampMode(params.gameMode),
       targetCardName: params.targetCardName,
       rowSignature: params.rowSignature,
       sourceRow: params.sourceRow,

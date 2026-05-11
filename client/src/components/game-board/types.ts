@@ -1104,6 +1104,13 @@ export type ActiveAmuletEffects = {
    *  护符销毁 / 瀑流溢出 等系统路径不算（与 积蓄之符 区别）。多件叠加跨阈值仍只抽 1 张
    *  （单触发模式，与 积蓄之符 一致）。 */
   manualRecycleDrawCount: number;
+  /** 「影摹召引符」(unique) 每"标准抽牌"(DRAW_CARDS source: backpack|deck 或
+   *  DRAW_FROM_BACKPACK) 累计 cardsDrawn × N (每件 +1 per draw) 到 `mirrorCopySummonStreak`，
+   *  达 8 即触发：产出 1 张「镜影摹形」加入手牌（streak %= 8 保留 remainder）。
+   *  N 个护符 ⇒ 4 张抽牌即触发；一次抽 N (N ≥ 8) 张产出 Math.floor(N/8) 张。
+   *  uniqe=true → 牌库内最多 1 张，但 eternal relic 可挂第二份 effectId，
+   *  按 progress counter ×N stacking 处理。 */
+  mirrorCopySummonCount: number;
 };
 
 export type WaterfallPhase = 'idle' | 'revealing' | 'dropping' | 'discarding' | 'dealing';

@@ -344,17 +344,19 @@ describe('永恒护符叠加 — end-turn-draw 回合结束抽牌线性放大（
 // 5) Display layer — dedupeRelics + getRelicStackedSuffix + STACKABLE_RELIC_IDS
 // ---------------------------------------------------------------------------
 describe('永恒护符叠加 — 显示层 helpers', () => {
-  it('STACKABLE_RELIC_IDS 严格等于这三件 relic（卡面 + 行为同步源）', () => {
-    expect(STACKABLE_RELIC_IDS.size).toBe(3);
+  it('STACKABLE_RELIC_IDS 严格等于这四件 relic（卡面 + 行为同步源）', () => {
+    expect(STACKABLE_RELIC_IDS.size).toBe(4);
     expect(STACKABLE_RELIC_IDS.has('chain-persuade')).toBe(true);
     expect(STACKABLE_RELIC_IDS.has('equip-empower')).toBe(true);
     expect(STACKABLE_RELIC_IDS.has('end-turn-draw')).toBe(true);
+    expect(STACKABLE_RELIC_IDS.has('equip-overclock')).toBe(true);
   });
 
   it('isRelicStackable 反映 STACKABLE_RELIC_IDS', () => {
     expect(isRelicStackable('chain-persuade')).toBe(true);
     expect(isRelicStackable('equip-empower')).toBe(true);
     expect(isRelicStackable('end-turn-draw')).toBe(true);
+    expect(isRelicStackable('equip-overclock')).toBe(true);
     expect(isRelicStackable('vitality-well')).toBe(false);
     expect(isRelicStackable('waterfall-draw-2')).toBe(false);
   });

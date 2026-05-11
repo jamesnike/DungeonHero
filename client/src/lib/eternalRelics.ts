@@ -19,6 +19,8 @@ import relicWraithPurificationImage from '@assets/generated_images/cute_chibi_wr
 import relicPersuadeSameHalveImage from '@assets/generated_images/relic_persuade_same_halve.png';
 import relicPersuadeRaceBonusImage from '@assets/generated_images/relic_persuade_race_bonus.png';
 import relicPersuadeDurabilityImage from '@assets/generated_images/relic_persuade_durability.png';
+// TODO(art): replace with a dedicated icon for 永恒护符·装备超频.
+import relicEquipOverclockImage from '@assets/generated_images/knight_potion_equip_empower.png';
 
 const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'waterfall-discover': {
@@ -160,6 +162,18 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
     description: '每次瀑流推进时，从背包抽 2 张牌。',
     image: relicEarlySurgeImage,
   },
+  'equip-overclock': {
+    id: 'equip-overclock',
+    name: '永恒护符·装备超频',
+    description: '光环（可叠加）：每持有一份「装备超频」，回收袋牌数 > 15 时装备效果额外多触发 1 次（不重复挥击/格挡本身）；牌数 ≤ 15 立即失效。',
+    image: relicEquipOverclockImage,
+  },
+  'summon-frenzy': {
+    id: 'summon-frenzy',
+    name: '永恒护符·狂热发现',
+    description: '光环（可叠加）：每持有一份「狂热发现」，使用「专属感召」时若背包牌数 > 10，则额外多触发 1 次发现；牌数 ≤ 10 立即失效。',
+    image: relicWaterfallDiscoverImage,
+  },
 };
 
 export function getEternalRelic(id: EternalRelicId): EternalRelic {
@@ -208,6 +222,8 @@ export const STACKABLE_RELIC_IDS: ReadonlySet<EternalRelicId> = new Set<EternalR
   'chain-persuade',
   'equip-empower',
   'end-turn-draw',
+  'equip-overclock',
+  'summon-frenzy',
 ]);
 
 export function isRelicStackable(id: EternalRelicId): boolean {
@@ -265,12 +281,16 @@ export function getRelicStackedSuffix(id: EternalRelicId, count: number): string
       return `（已叠加 ×${count}，装备时该栏 +${3 * count} 临时攻击 / +${3 * count} 临时护甲）`;
     case 'end-turn-draw':
       return `（已叠加 ×${count}，每回合结束抽 ${count} 张）`;
+    case 'equip-overclock':
+      return `（已叠加 ×${count}，回收袋牌数 > 15 时装备效果额外触发 ${count} 次）`;
+    case 'summon-frenzy':
+      return `（已叠加 ×${count}，背包牌数 > 10 时「专属感召」额外触发 ${count} 次）`;
     default:
       return `（已叠加 ×${count}）`;
   }
 }
 
-const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus', 'end-turn-draw', 'missile-amplify-on-waterfall', 'missile-stun-20', 'missile-draw-1', 'waterfall-draw-2']);
+const CARD_ONLY_RELICS = new Set<EternalRelicId>(['bulwark-attack', 'bulwark-armor', 'chain-persuade', 'recycle-shuffle', 'equip-empower', 'wraith-purification', 'persuade-same-halve', 'persuade-race-bonus', 'persuade-durability-bonus', 'end-turn-draw', 'missile-amplify-on-waterfall', 'missile-stun-20', 'missile-draw-1', 'waterfall-draw-2', 'equip-overclock', 'summon-frenzy']);
 
 export function getSelectableRelics(exclude: EternalRelicId[]): EternalRelic[] {
   const excludeSet = new Set(exclude);

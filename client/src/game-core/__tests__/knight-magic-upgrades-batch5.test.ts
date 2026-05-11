@@ -19,7 +19,7 @@
  *
  * 参数表：
  *   - monster-recruit:    recruitCounts = [2, 3]            (maxUpgradeLevel = 1)
- *   - berserk-gambit:     extraPerSlotAmounts = [1, 2]      (maxUpgradeLevel = 1)
+ *   - berserk-gambit:     extraPerSlotAmounts = [2, 3]      (maxUpgradeLevel = 1)
  */
 
 import { describe, expect, it } from 'vitest';
@@ -254,8 +254,8 @@ describe('孤注一掷 (berserk-gambit) — handler description updates', () => 
       value: 0,
       classCard: true,
       magicType: 'instant' as any,
-      description: '一次性：生命降至 1，每个武器栏可多攻击一次。',
-      shortDescription: '生命降至 1；每个武器栏多攻击一次',
+      description: '一次性：生命降至 1，每个武器栏可多攻击2 次。',
+      shortDescription: '生命降至 1；每个武器栏多攻击2 次',
       magicEffect: '降血换取每栏额外攻击。',
       knightEffect: 'berserk-gambit',
       maxUpgradeLevel: 1,
@@ -263,15 +263,15 @@ describe('孤注一掷 (berserk-gambit) — handler description updates', () => 
     } as any;
   }
 
-  it('L0 → L1: 多攻击次数从「一次」改为「2 次」', () => {
+  it('L0 → L1: 多攻击次数从「2 次」改为「3 次」', () => {
     const card = bgL0();
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
     const upgraded = result.state.handCards[0] as any;
     expect(upgraded.upgradeLevel).toBe(1);
-    expect(upgraded.description).toContain('多攻击2 次');
-    // 不再含「多攻击一次」（注意「一次性：」前缀仍保留）
-    expect(upgraded.description).not.toContain('多攻击一次');
+    expect(upgraded.description).toContain('多攻击3 次');
+    // 不再含「多攻击2 次」（L0 已变成 2，L1 必须升到 3）
+    expect(upgraded.description).not.toContain('多攻击2 次');
     // 旧的 +4/+8 装备伤害已彻底删除
     expect(upgraded.description).not.toContain('+4');
     expect(upgraded.description).not.toContain('+8');
@@ -296,7 +296,7 @@ describe('孤注一掷 (berserk-gambit) — resolver scaling (HP→1 + extraPerS
     } as any;
   }
 
-  it('L0: HP→1, extraPerSlot=1, gambitExtraActive=true', () => {
+  it('L0: HP→1, extraPerSlot=2, gambitExtraActive=true', () => {
     const card = bgCard(0);
     const state = makeState({
       handCards: [card],
@@ -309,10 +309,10 @@ describe('孤注一掷 (berserk-gambit) — resolver scaling (HP→1 + extraPerS
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     expect(result.state.hp).toBe(1);
     expect(result.state.gambitExtraActive).toBe(true);
-    expect(result.state.gambitExtraPerSlot).toBe(1);
+    expect(result.state.gambitExtraPerSlot).toBe(2);
   });
 
-  it('L1: HP→1, extraPerSlot=2', () => {
+  it('L1: HP→1, extraPerSlot=3', () => {
     const card = bgCard(1);
     const state = makeState({
       handCards: [card],
@@ -325,7 +325,7 @@ describe('孤注一掷 (berserk-gambit) — resolver scaling (HP→1 + extraPerS
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     expect(result.state.hp).toBe(1);
     expect(result.state.gambitExtraActive).toBe(true);
-    expect(result.state.gambitExtraPerSlot).toBe(2);
+    expect(result.state.gambitExtraPerSlot).toBe(3);
   });
 
   it('L1: 不再写 berserkTurnBuff（旧的 +4/+8 已删除）', () => {
@@ -356,10 +356,10 @@ describe('孤注一掷 (berserk-gambit) — resolver scaling (HP→1 + extraPerS
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     expect(result.state.hp).toBe(1);
     expect(result.state.gambitExtraActive).toBe(true);
-    expect(result.state.gambitExtraPerSlot).toBe(2);
+    expect(result.state.gambitExtraPerSlot).toBe(3);
   });
 
-  it('向后兼容：旧存档 upgradeLevel=2/3 一律按 L1 处理（extraPerSlot=2）', () => {
+  it('向后兼容：旧存档 upgradeLevel=2/3 一律按 L1 处理（extraPerSlot=3）', () => {
     // 旧存档可能存有 upgradeLevel=2 或 3 的孤注一掷卡。
     // 修改后 maxUpgradeLevel=1，但运行时 resolver 必须不抛错且映射成 L1。
     for (const lvl of [2, 3, 5, 99]) {
@@ -372,7 +372,7 @@ describe('孤注一掷 (berserk-gambit) — resolver scaling (HP→1 + extraPerS
       });
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
       expect(result.state.hp, `lvl=${lvl}`).toBe(1);
-      expect(result.state.gambitExtraPerSlot, `lvl=${lvl}`).toBe(2);
+      expect(result.state.gambitExtraPerSlot, `lvl=${lvl}`).toBe(3);
     }
   });
 

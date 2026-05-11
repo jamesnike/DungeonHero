@@ -26,6 +26,7 @@ import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipmen
 import { createMineBuilding } from '@/lib/knightDeck';
 import { applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
 import type { MineCollision } from '../combat';
+import { equipOverclockExtraTriggers } from './equipment-overclock';
 
 // ---------------------------------------------------------------------------
 // Perm-recycle routing — equipment that is destroyed but carries a Perm flag
@@ -276,7 +277,7 @@ function routeBrokenSelfToGraveOrRecycle(
     const cleaned: GameCardData = { ...(rest as GameCardData) };
     enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: cleaned });
   } else {
-    const cleaned = resetCardForGraveyard(slotItem, state.gameMode === 'quick');
+    const cleaned = resetCardForGraveyard(slotItem, true);
     const currentGrave = (patch.discardedCards ?? state.discardedCards) as GameCardData[];
     patch.discardedCards = [...currentGrave, cleaned];
   }
@@ -805,9 +806,11 @@ export function computeEquipmentDisplacementLastWords(
   let classCardDraw = 0;
 
   // 「墓园守卫」装备遗言多触发：base 1 次 + amuletEffects.lastWordsExtraTriggerCount 次。
+  // 「装备超频」aura active 时 +1（与墓园守卫加法叠加）。
   // 每次迭代都通过 helper 在 patch 上累加（read-then-write `patch.X ?? state.X`），
   // 与 per-trigger amulet effects（绝响之符 / 怀柔之印）一起天然按次叠加。
-  const totalTriggers = 1 + amuletEffects.lastWordsExtraTriggerCount;
+  const overclockExtra = equipOverclockExtraTriggers(state);
+  const totalTriggers = 1 + amuletEffects.lastWordsExtraTriggerCount + overclockExtra;
   for (let iter = 0; iter < totalTriggers; iter += 1) {
     const iterResult = applyOneEquipmentLastWordsIteration(
       state,
@@ -822,6 +825,12 @@ export function computeEquipmentDisplacementLastWords(
     rng = iterResult.rng;
     drawFromBackpack += iterResult.drawFromBackpack;
     classCardDraw += iterResult.classCardDraw;
+  }
+  if (overclockExtra > 0) {
+    sideEffects.push({
+      event: 'combat:equipOverclockTriggered',
+      payload: { surface: 'lastWords', count: overclockExtra },
+    });
   }
 
   patch.rng = rng;
@@ -851,9 +860,11 @@ export function computeEquipmentBreakEffects(
   let classCardDraw = 0;
 
   // 「墓园守卫」装备遗言多触发：base 1 次 + amuletEffects.lastWordsExtraTriggerCount 次。
+  // 「装备超频」aura active 时 +1（与墓园守卫加法叠加）。
   // 每次迭代通过 helper 在 patch 上累加（read-then-write `patch.X ?? state.X`），
   // 与 per-trigger amulet effects（绝响之符 / 怀柔之印）一起天然按次叠加。
-  const totalTriggers = 1 + amuletEffects.lastWordsExtraTriggerCount;
+  const overclockExtraBreak = equipOverclockExtraTriggers(state);
+  const totalTriggers = 1 + amuletEffects.lastWordsExtraTriggerCount + overclockExtraBreak;
   for (let iter = 0; iter < totalTriggers; iter += 1) {
     const iterResult = applyOneEquipmentLastWordsIteration(
       state,
@@ -868,6 +879,12 @@ export function computeEquipmentBreakEffects(
     rng = iterResult.rng;
     drawFromBackpack += iterResult.drawFromBackpack;
     classCardDraw += iterResult.classCardDraw;
+  }
+  if (overclockExtraBreak > 0) {
+    effects.push({
+      event: 'combat:equipOverclockTriggered',
+      payload: { surface: 'lastWords', count: overclockExtraBreak },
+    });
   }
 
   // After the loop, refresh `otherItem` to reflect any wraithDeathHeal /
@@ -1051,6 +1068,13 @@ export function computeDurabilityLossEffects(
   let rng = state.rng;
   let updatedItem = { ...slotItem, durability: newDurability };
 
+  // 永恒护符·装备超频 aura (stackable): bag > 15 时耐久损耗的衍生效果额外触发 N 次
+  // （N = count of equip-overclock relics held）。仅复制衍生效果
+  // （mine boost / bleed / dragonBleedDestroy / wraith-rebirth / swarm-elite /
+  // golemLayerLossReflect），不复制 durability -N 本身。
+  const overclockExtra = equipOverclockExtraTriggers(state);
+  let overclockFiredHere = false;
+
   // 「引雷阵锋」类武器：耐久减少 → 累加 globalMineDamageBonus（永久不撤销）。
   // 放在最早处理，确保所有路径（monster equip 走下面的 bleed/dragon/wraith 分支
   // 后 return；非 monster 直接 return）都不会漏触发。
@@ -1058,15 +1082,28 @@ export function computeDurabilityLossEffects(
   const durLost = Math.max(0, prevDur - newDurability);
   if (durLost > 0) {
     accumulateMineDamageBoost(state, slotItem, durLost, patch, effects);
+    if (overclockExtra > 0 && (slotItem.mineDamageBoostPerDur ?? 0) > 0) {
+      // 装备超频 ×N：地雷加成再触发 N 次（相当于 durLost ×(1+N) 效果）。
+      for (let i = 0; i < overclockExtra; i++) {
+        accumulateMineDamageBoost(state, slotItem, durLost, patch, effects);
+      }
+      overclockFiredHere = true;
+    }
   }
 
   if (!isMonsterEquip) {
+    if (overclockFiredHere) {
+      effects.push({
+        event: 'combat:equipOverclockTriggered',
+        payload: { surface: 'durability', count: overclockExtra },
+      });
+    }
     return { updatedItem, patch, sideEffects: effects, rng };
   }
 
   // Bleed effect: +3 attack on durability loss
   if (slotItem.bleedEffect) {
-    const bleedBonus = 3;
+    const bleedBonus = 3 * (1 + overclockExtra);
     updatedItem = {
       ...updatedItem,
       attack: (updatedItem.attack ?? updatedItem.value) + bleedBonus,
@@ -1077,6 +1114,7 @@ export function computeDurabilityLossEffects(
       event: 'log:entry',
       payload: { type: 'equip', message: `${slotItem.name} 流血：攻击力 +${bleedBonus}！（当前 ${updatedItem.attack}）` },
     });
+    if (overclockExtra > 0) overclockFiredHere = true;
   }
 
   // Dragon bleed destroy — destroy other slot if its durability > this item's remaining
@@ -1120,21 +1158,43 @@ export function computeDurabilityLossEffects(
 
   // Wraith rebirth — 50% chance to refill durability when at 1
   if (slotItem.monsterSpecial === 'wraith-rebirth' && newDurability === 1 && !slotItem.wraithRebirthUsed) {
-    const [rebirthSuccess, rng2] = nextBool(rng);
-    rng = rng2;
+    // First roll: base 50%
+    let [rebirthSuccess, nextRng] = nextBool(rng);
+    rng = nextRng;
+    let rescuedByOverclock = false;
+    // 装备超频 ×N：每层在主 roll 失败时再额外摇一次。N 层 → 概率 1 - 0.5^(1+N)。
+    if (overclockExtra > 0 && !rebirthSuccess) {
+      for (let i = 0; i < overclockExtra && !rebirthSuccess; i++) {
+        const [tryAgain, rng3] = nextBool(rng);
+        rng = rng3;
+        if (tryAgain) {
+          rebirthSuccess = true;
+          rescuedByOverclock = true;
+        }
+      }
+      if (rescuedByOverclock) overclockFiredHere = true;
+    }
     if (rebirthSuccess) {
       const maxDur = slotItem.maxDurability ?? (slotItem.durability ?? 1);
       updatedItem = { ...updatedItem, durability: maxDur, wraithRebirthUsed: true };
       effects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 重生：耐久回满！（${maxDur}）` },
+        payload: {
+          type: 'equip',
+          message: `${slotItem.name} 重生：耐久回满！（${maxDur}）${rescuedByOverclock ? ' — 装备超频补救' : ''}`,
+        },
       });
       effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 重生！` } });
     } else {
       updatedItem = { ...updatedItem, wraithRebirthUsed: true };
       effects.push({
         event: 'log:entry',
-        payload: { type: 'equip', message: `${slotItem.name} 重生失败！（50%）` },
+        payload: {
+          type: 'equip',
+          message: overclockExtra > 0
+            ? `${slotItem.name} 重生失败！（装备超频×${overclockExtra} 补救也未触发）`
+            : `${slotItem.name} 重生失败！（50%）`,
+        },
       });
     }
   }
@@ -1161,7 +1221,9 @@ export function computeDurabilityLossEffects(
     const maxDur = slotItem.maxDurability ?? (slotItem.durability ?? 1);
     const lostDur = maxDur - newDurability;
     if (lostDur > 0) {
-      const reflectDmg = slotItem.golemLayerLossReflect * lostDur;
+      const baseReflectDmg = slotItem.golemLayerLossReflect * lostDur;
+      const reflectDmg = baseReflectDmg * (1 + overclockExtra);
+      if (overclockExtra > 0) overclockFiredHere = true;
       const monsterTargets = flattenActiveRowSlots(state.activeCards).filter(
         (c): c is GameCardData => Boolean(c && c.type === 'monster'),
       );
@@ -1173,7 +1235,7 @@ export function computeDurabilityLossEffects(
           event: 'log:entry',
           payload: {
             type: 'equip',
-            message: `${slotItem.name} 反震：${slotItem.golemLayerLossReflect}×${lostDur} = ${reflectDmg} 点伤害，命中 ${target.name}！`,
+            message: `${slotItem.name} 反震：${slotItem.golemLayerLossReflect}×${lostDur}${overclockExtra > 0 ? `×${1 + overclockExtra}` : ''} = ${reflectDmg} 点伤害，命中 ${target.name}！`,
           },
         });
         effects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 反震！${reflectDmg} 伤害！` } });
@@ -1195,6 +1257,13 @@ export function computeDurabilityLossEffects(
   };
   void _strippedArmor;
   updatedItem = { ...(armorStrippedItem as GameCardData), durability: preservedDurability ?? newDurability };
+
+  if (overclockFiredHere) {
+    effects.push({
+      event: 'combat:equipOverclockTriggered',
+      payload: { surface: 'durability', count: overclockExtra },
+    });
+  }
 
   return { updatedItem, patch, sideEffects: effects, golemReflectDamage, rng };
 }

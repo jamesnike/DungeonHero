@@ -116,6 +116,8 @@ export interface PersistedGameState {
   classDamageDiscoverStreak?: number;
   /** 咒纹刻印：已使用「功能上瞬发」的 magic 牌次数 streak 0–5（!cardHasPermFlag） */
   classMagicDiscoverStreak?: number;
+  /** 影摹召引符：累计标准抽牌数 streak 0–7（达 8 触发产出镜影摹形后 %= 8） */
+  mirrorCopySummonStreak?: number;
   totalDamageTaken: number;
   totalHealed: number;
   healAccumulator: number;
@@ -299,6 +301,32 @@ export interface PersistedGameState {
    * See `GameState.playerTurnStartedAt` JSDoc for full lifecycle.
    */
   playerTurnStartedAt?: number | null;
+
+  // -------------------------------------------------------------------------
+  // Multiplayer (phase 6)
+  // -------------------------------------------------------------------------
+  /**
+   * Active multiplayer room session. Persisted so a tab refresh can resume
+   * mid-game: on hydrate the client calls `/api/mp/resume?roomId=...&afterSeq=N`
+   * to backfill any transfers from the peer that arrived while we were
+   * offline. `null` for single-player runs.
+   *
+   * Mirrors `GameState.multiplayerSession`.
+   */
+  multiplayerSession?: {
+    role: 'A' | 'B';
+    roomId: string;
+    peerId: string;
+    lastAppliedSeq: number;
+  } | null;
+  /** How many cards we've consumed from the shared deck so far (mirrors
+   * `GameState.sharedDeckConsumed`). Sent to the server with each transfer
+   * so the room's running counter stays in sync. */
+  sharedDeckConsumed?: number;
+  /** One-shot guard for the "Boss 战暂未支持双人" alert. Mirrors
+   * `GameState.bossEncounterAlertShown`. Persisting it here means a tab
+   * reload mid-game won't re-show the dialog. */
+  bossEncounterAlertShown?: boolean;
 }
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

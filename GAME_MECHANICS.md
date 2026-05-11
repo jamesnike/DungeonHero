@@ -775,7 +775,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | 铠甲贯刺 | permanent | `armor-strike` | 选择装备槽的护甲值 → 对怪物造成 `getSpellDamage(armor)` |
 | 残血终焉 | permanent | `missing-hp-smite` | 伤害 = `getSpellDamage(maxHp - hp)` |
 | 坟火新星 | permanent | `grave-nova` | 永久：被弃置时对所有怪物造成 `getSpellDamage(3/6)` 伤害（可升 1 级） |
-| 孤注一掷 | instant | `berserk-gambit` | HP降至1，本回合武器+4，每个武器栏可多攻击一次（与狂战叠加） |
+| 孤注一掷 | instant | `berserk-gambit` | HP降至1，本回合武器+4，每个武器栏可多攻击 2 次（与狂战叠加） |
 | 战意激发 | instant | `battle-spirit` | 选择一个装备栏：每英雄回合多攻击 +1（升级 +2），且每怪物回合格挡耐久上限 +1（升级 +2）；持续到下次瀑流 |
 | 回收灵焰 | permanent | `recycle-flare` | 立即恢复回收袋中的牌，从背包抽最多 1 张（升 1：2 张；升 2：3 张） |
 | 混沌骰运 | permanent | `chaos-dice` | D20掷骰，5种随机效果 |
@@ -1011,7 +1011,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 
 ### 15.2 额外技能
 
-- 商店花费 `SHOP_SKILL_DISCOVER_COST(10)` 金发现
+- 商店花费 `SHOP_SKILL_DISCOVER_COST(5)` 金发现
 - 事件也可能赋予随机被动技能（"Iron Skin"或"Weapon Master"）
 
 ### 15.3 被动战斗加成
@@ -1037,7 +1037,7 @@ Perm 卡牌 = 使用后不进坟场，进入回收袋等待回收的牌。
 | `SHOP_HEAL_AMOUNT` | 5 |
 | `SHOP_LEVEL_UP_COST` | 10 |
 | `MAX_SHOP_LEVEL` | 3 |
-| `SHOP_SKILL_DISCOVER_COST` | 10 |
+| `SHOP_SKILL_DISCOVER_COST` | 5 |
 | `INITIAL_GOLD` | 10 |
 
 ### 16.2 卡牌价格
@@ -1185,7 +1185,7 @@ resolver:                       hero.ts reducer:
 | `SHOP_HEAL_AMOUNT` | 5 | GameBoard.tsx |
 | `SHOP_LEVEL_UP_COST` | 10 | GameBoard.tsx |
 | `MAX_SHOP_LEVEL` | 3 | GameBoard.tsx |
-| `SHOP_SKILL_DISCOVER_COST` | 10 | GameBoard.tsx |
+| `SHOP_SKILL_DISCOVER_COST` | 5 | GameBoard.tsx |
 | `INITIAL_GOLD` | 10 | constants.ts |
 | `DECK_SIZE` | 64 | GameBoard.tsx |
 | D20 50%阈值 | 1–10 vs 11–20 | 通用 |

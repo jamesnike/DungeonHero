@@ -28,14 +28,14 @@ export type MonsterUpgrade = {
 };
 
 const MONSTER_RAGE_RULES: Record<string, MonsterRageRule> = {
-  Dragon: { base: 2, interval: 5 },
-  Skeleton: { base: 1, interval: 4 },
-  Goblin: { base: 1, interval: 4 },
+  Dragon: { base: 2, interval: 4 },
+  Skeleton: { base: 1, interval: 3 },
+  Goblin: { base: 1, interval: 3 },
   Ogre: { base: 1, interval: 3, minInterval: 3, thresholdOffset: 1 },
-  Wraith: { base: 1, interval: 4 },
-  Swarm: { base: 2, interval: 5 },
-  Buglet: { base: 1, interval: 6 },
-  Golem: { base: 1, interval: 4 },
+  Wraith: { base: 1, interval: 3 },
+  Swarm: { base: 2, interval: 4 },
+  Buglet: { base: 1, interval: 5 },
+  Golem: { base: 1, interval: 3 },
 };
 
 const MONSTER_UPGRADES: Record<string, MonsterUpgrade[]> = {

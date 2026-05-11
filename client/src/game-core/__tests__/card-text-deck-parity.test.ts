@@ -54,7 +54,7 @@ function collectCards(): ParityCase[] {
   const cases: ParityCase[] = [];
   let rng = createRng(123);
 
-  const [deck, rngAfterDeck] = createDeck('normal', rng);
+  const [deck, rngAfterDeck] = createDeck('single', rng);
   rng = rngAfterDeck;
   for (const card of deck) cases.push({ source: 'createDeck', card });
 

@@ -73,6 +73,7 @@ import {
   resolveScalingDamage,
   // Routing resolvers for knight effects
   resolveKnightPermanentMagic,
+  resolveKnightInstantMagic,
   resolveMonsterFusion,
   resolveTransformGrant,
   resolveGraveyardDiscoverEquipAmulet,
@@ -1696,14 +1697,14 @@ const knightBerserkGambit: CardDefinition = {
   tags: ['knight', 'instant', 'self-damage'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
     // 狂血豪赌：HP→1 + 每武器栏多攻击 N 次。
-    // 升级表（extraPerSlotAmounts）：L0 → 1 次；L1 → 2 次。
+    // 升级表（extraPerSlotAmounts）：L0 → 2 次；L1 → 3 次。
     // 旧设计的 +4/+8 装备伤害 buff 已删除；旧存档若 upgradeLevel >= 1 一律按 L1 处理。
     // echo×N 仅放大每栏攻击次数（base × echo）；HP→1 是单次效应不重叠。
     const hpLoss = Math.max(0, state.hp - 1);
     if (hpLoss > 0) {
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: hpLoss, source: 'berserk-gambit', selfInflicted: true });
     }
-    const extraPerSlotAmounts = [1, 2];
+    const extraPerSlotAmounts = [2, 3];
     const lvl = Math.min(card.upgradeLevel ?? 0, extraPerSlotAmounts.length - 1);
     const baseExtraPerSlot = extraPerSlotAmounts[lvl];
     const extraPerSlot = baseExtraPerSlot * echoMultiplier;
@@ -2096,6 +2097,26 @@ const knightDeckJudgeDelete: CardDefinition = {
   resolver: (state, card, sideEffects, patch) => {
     sideEffects.push({ event: 'card:deckJudgeRequested' as any, payload: { card } });
     return applyPatch(state, patch, sideEffects);
+  },
+};
+
+// knight:forge-reborn (回炉重造) — Unique Instant.
+//   1) Lose floor(hp/2) HP (selfInflicted, can be lethal).
+//   2) Delete every hand card (curses + Perm 牌 included) via DELETE_CARD
+//      destination: 'graveyard' — force-grave route, bypasses perm-routing
+//      recycle-bag dispatch (matches Shop kw='delete' semantics).
+//   3) Chain N class-card discoveries where N = number of cards deleted
+//      (BEGIN_DISCOVER + pendingClassDiscoverQueue, mirrors discard-rebuild).
+// Echo: NOT participating. `echoMultiplier` ignored; isEchoTriggered just
+// adds a banner note. `doubleNextMagic` is still consumed by the engine.
+const knightForgeReborn: CardDefinition = {
+  effectId: 'knight:forge-reborn',
+  effects: [],
+  tags: ['knight', 'instant', 'destroy', 'discover', 'self-damage', 'interactive'],
+  resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered) => {
+    return resolveKnightInstantMagic(
+      state, card, sideEffects, patch, enqueuedActions, echoMultiplier, isEchoTriggered,
+    )!;
   },
 };
 
@@ -2770,6 +2791,7 @@ const allMagicDefinitions: CardDefinition[] = [
   knightMonsterFusion,
   knightMirrorCopy,
   knightDeckJudgeDelete,
+  knightForgeReborn,
   knightTransformGrant,
   knightStripPermHand,
   // knightStunWave — excluded; falls through to legacy resolveStunWave

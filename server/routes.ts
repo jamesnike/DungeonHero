@@ -11,6 +11,16 @@ import { storage } from "./storage";
 // via a small type cast — no logic duplication, single source of truth.
 import cardStampsHandler from "../api/card-stamps";
 import cardStampsLookupHandler from "../api/card-stamps-lookup";
+// Multiplayer (phase-4 / phase-6) Vercel-style handlers. Same bridge pattern
+// as card-stamps above: dev parity with prod's serverless runtime so the
+// lobby, transfer, ack, and resume flows can round-trip Supabase locally.
+// Without these mounts, /api/mp/* would fall through to the SPA catchall and
+// the multiplayer client would receive HTML instead of JSON.
+import mpCreateRoomHandler from "../api/mp/create-room";
+import mpJoinRoomHandler from "../api/mp/join-room";
+import mpTransferHandler from "../api/mp/transfer";
+import mpAckTransferHandler from "../api/mp/ack-transfer";
+import mpResumeHandler from "../api/mp/resume";
 
 type BackpackLogEntry = {
   id: string;
@@ -65,6 +75,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // dev experience identical to production.
   app.post("/api/card-stamps", vercelBridge(cardStampsHandler));
   app.post("/api/card-stamps-lookup", vercelBridge(cardStampsLookupHandler));
+
+  // -------------------------------------------------------------------------
+  // Multiplayer endpoints (phase 4 + 6). Each mirrors `api/mp/*.ts` 1:1 in
+  // dev. All five handlers share the same `vercelBridge` so:
+  //   - JSON body parsing is already done by the upstream `express.json()`
+  //     middleware, which means `req.body` is populated identically to how
+  //     Vercel's runtime delivers it.
+  //   - Authorization headers are forwarded as-is, so the JWT-validation
+  //     code in `api/mp/_shared.ts:getUserFromBearer` works without changes.
+  //   - Thrown errors are caught & returned as 500 instead of crashing the
+  //     dev server.
+  // Anonymous-auth JWTs are validated by the handlers themselves (each
+  // calls `getUserFromBearer` which hits Supabase `/auth/v1/user`), so the
+  // dev server stays stateless and matches prod behavior.
+  // -------------------------------------------------------------------------
+  app.post("/api/mp/create-room", vercelBridge(mpCreateRoomHandler));
+  app.post("/api/mp/join-room", vercelBridge(mpJoinRoomHandler));
+  app.post("/api/mp/transfer", vercelBridge(mpTransferHandler));
+  app.post("/api/mp/ack-transfer", vercelBridge(mpAckTransferHandler));
+  app.post("/api/mp/resume", vercelBridge(mpResumeHandler));
 
   app.post("/api/backpack-logs", (req, res) => {
     const { tag, payload } = req.body ?? {};

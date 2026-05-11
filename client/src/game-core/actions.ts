@@ -1791,9 +1791,105 @@ export interface SeedRngAction {
 /** Initialize a fresh game (deck construction, hero selection, row dealing). */
 export interface InitGameAction {
   type: 'INIT_GAME';
-  mode: 'normal' | 'quick';
+  mode: 'single' | 'multiplayer';
   totalWins: number;
   eternalRelics: import('./types').EternalRelic[];
+}
+
+/**
+ * INIT_MULTIPLAYER_GAME — initialize a multiplayer game with a server-supplied
+ * shared deck. Both players (A and B) dispatch this with the SAME `sharedDeck`
+ * (already pruned / monster-balanced / boss-marked on the room creator's side
+ * and forwarded via Supabase). The reducer:
+ *
+ *   1. Resets state to the multiplayer baseline (clears single-player run
+ *      data, sets `multiplayerSession`, sets `gameMode: 'multiplayer'`).
+ *   2. Slices `sharedDeck` into:
+ *        - Preview row: cards [0..3] for role A, [4..7] for role B
+ *        - remainingDeck: cards [8..N-1] (identical for both players)
+ *   3. Builds the fixed first active row (1 buglet + 3 events; doesn't
+ *      consume sharedDeck).
+ *   4. Generates the player's own hero and class deck locally — these are
+ *      NOT shared between players.
+ *
+ * The `sharedDeck` MUST be exactly DUNGEON_COLUMN_COUNT * 2 cards or more,
+ * otherwise reducer rejects with no-op + console error.
+ */
+export interface InitMultiplayerGameAction {
+  type: 'INIT_MULTIPLAYER_GAME';
+  sharedDeck: import('@/components/GameCard').GameCardData[];
+  role: 'A' | 'B';
+  roomId: string;
+  peerId: string;
+  totalWins: number;
+  eternalRelics: import('./types').EternalRelic[];
+}
+
+// ---------------------------------------------------------------------------
+// Multiplayer (phase 2+ — see plan
+// `.cursor/plans/2-player_multiplayer_mode_*.plan.md`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The peer pushed `cards` onto our deck top. Cards are prepended in their
+ * given order (the topmost card is at index 0 of `cards` and ends up at
+ * `remainingDeck[0]`). All received cards are auto-tagged
+ * `_excludedFromShared: true` (they belong to the local "transferred"
+ * prefix, not the shared suffix).
+ *
+ * Idempotency: caller (the network layer) is responsible for de-duplicating
+ * by `transfers.seq`; reducer applies blindly.
+ */
+export interface MultiplayerReceiveTransferAction {
+  type: 'MULTIPLAYER_RECEIVE_TRANSFER';
+  cards: import('@/components/GameCard').GameCardData[];
+  /** Server-assigned monotonic seq, used to update `lastAppliedSeq`. */
+  seq: number;
+}
+
+/**
+ * The peer consumed `count` cards from the shared portion of their deck
+ * (i.e. the leading `count` cards in their pre-shrink shared suffix). To
+ * keep our shared suffix aligned, drop the leading `count` cards in our
+ * `remainingDeck` that do NOT carry `_excludedFromShared: true`. Cards in
+ * the transferred prefix are skipped over.
+ *
+ * If `count` exceeds the available shared cards (e.g. our local view has
+ * been desynced for any reason), we drop everything we can and silently
+ * stop — the resume flow (phase 6) will reconcile via `lastAppliedSeq`.
+ */
+export interface MultiplayerSharedShrinkAction {
+  type: 'MULTIPLAYER_SHARED_SHRINK';
+  count: number;
+  /** Server-assigned monotonic seq, used to update `lastAppliedSeq`. */
+  seq: number;
+}
+
+/**
+ * Drain `pendingTransferOut` after the network layer has acked.
+ * Always safe — clears even if no transfer was pending.
+ */
+export interface MultiplayerClearPendingTransferAction {
+  type: 'MULTIPLAYER_CLEAR_PENDING_TRANSFER';
+}
+
+/**
+ * Set / clear the multiplayer session in one shot. Used by:
+ *
+ *   - Phase 3 (`handleLocalRolePick` in `GameBoard.tsx`) to bootstrap the
+ *     dev-only BroadcastChannel prototype after `INIT_GAME`.
+ *   - Phase 5 (`MultiplayerLobby` flow) to write the session AFTER
+ *     `INIT_MULTIPLAYER_GAME` populates the deck.
+ *   - Phase 6 (resume / persistence) to restore the session on tab reload.
+ *
+ * Payload `null` ⇒ end the multiplayer session (e.g. peer disconnected,
+ * or user abandoned mid-game). Reducer ALSO clears `pendingTransferOut`
+ * and resets `sharedDeckConsumed` to 0 in that case so leftover state
+ * doesn't bleed into the next single-player run.
+ */
+export interface SetMultiplayerSessionAction {
+  type: 'SET_MULTIPLAYER_SESSION';
+  session: import('./types').GameState['multiplayerSession'];
 }
 
 // ---------------------------------------------------------------------------
@@ -2251,6 +2347,7 @@ export type GameAction =
   | SeedRngAction
   // Game init
   | InitGameAction
+  | InitMultiplayerGameAction
   // Combat / Hero / Shop / Game state
   | ResetBerserkerSlotAction
   | SetGambitStateAction
@@ -2294,7 +2391,12 @@ export type GameAction =
   | NoOpAction
   // Monster skill float (blocking UI animation queue)
   | TriggerMonsterSkillFloatAction
-  | ReleaseMonsterSkillFloatAction;
+  | ReleaseMonsterSkillFloatAction
+  // Multiplayer (phase 2+)
+  | MultiplayerReceiveTransferAction
+  | MultiplayerSharedShrinkAction
+  | MultiplayerClearPendingTransferAction
+  | SetMultiplayerSessionAction;
 
 // ---------------------------------------------------------------------------
 // Action log entry (for debugging / replay)

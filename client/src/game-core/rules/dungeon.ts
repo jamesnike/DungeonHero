@@ -266,7 +266,8 @@ function reduceDrawDungeonRow(state: GameState): ReduceResult {
 
   const nextSlots = createEmptyActiveRow();
   const drawSpawnTurn = state.turnCount;
-  const isQuick = state.gameMode === 'quick';
+  // Both 'single' and 'multiplayer' use quick rules.
+  const isQuick = true;
 
   if (carriedSlot) {
     const targetIndex = carriedSlot.index >= 0 ? carriedSlot.index : 0;

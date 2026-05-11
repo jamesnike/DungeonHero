@@ -52,12 +52,14 @@ function bakeFinalBoss(card: GameCardData): GameCardData {
 
 export function reduceInitGame(
   state: GameState,
-  mode: 'normal' | 'quick',
+  mode: 'single' | 'multiplayer',
   totalWins: number,
   eternalRelics: EternalRelic[],
 ): ReduceResult {
   let rng: RngState = state.rng;
-  const isQuickMode = mode === 'quick';
+  // Both 'single' and 'multiplayer' use the underlying "quick" deck rules
+  // (36-card deck / 1 monster per chunk / `initialTurnCount = 1`).
+  const isQuickMode = true;
   const initialTurnCount = isQuickMode ? 1 : INITIAL_TURN_COUNT;
 
   // --- Hero variant (first pick, used only for the SET_GAME_FLAGS patch in the old code) ---
@@ -642,4 +644,130 @@ function buildFixedFirstActiveRow(): GameCardData[] {
     amuletThenPotionEvent,
     magicGrantThenDiscoverEvent,
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Multiplayer init
+// ---------------------------------------------------------------------------
+
+/**
+ * INIT_MULTIPLAYER_GAME — initialize a multiplayer game using a server-supplied
+ * shared deck. Both players run this with the SAME `sharedDeck` (already
+ * pruned / monster-balanced / boss-marked by the room creator's `createDeck`
+ * pass — see `/api/mp/create-room` and `MultiplayerLobby`).
+ *
+ * Slicing rule (per the plan doc):
+ *   - Player A's preview = sharedDeck[0..3]
+ *   - Player B's preview = sharedDeck[4..7]
+ *   - Both players' remainingDeck = sharedDeck[8..N-1] (identical)
+ *
+ * Hero, class deck, eternal relics, and the fixed first active row are
+ * generated locally by each player — they're NOT shared.
+ *
+ * The `multiplayerSession` is set in this same reducer step so that
+ * `useMultiplayerSync` picks it up immediately.
+ */
+export function reduceInitMultiplayerGame(
+  state: GameState,
+  sharedDeck: GameCardData[],
+  role: 'A' | 'B',
+  roomId: string,
+  peerId: string,
+  totalWins: number,
+  eternalRelics: EternalRelic[],
+): ReduceResult {
+  const PREVIEW_SIZE = DUNGEON_COLUMN_COUNT; // 4
+  const REQUIRED_MIN_DECK = PREVIEW_SIZE * 2; // 8 — A preview + B preview
+
+  if (sharedDeck.length < REQUIRED_MIN_DECK) {
+    console.error(
+      `[reduceInitMultiplayerGame] sharedDeck too short: ${sharedDeck.length} < ${REQUIRED_MIN_DECK}`,
+    );
+    return { state, sideEffects: [], enqueuedActions: [] };
+  }
+
+  // Quick mode rules apply to both single & multiplayer.
+  const isQuickMode = true;
+  const initialTurnCount = isQuickMode ? 1 : INITIAL_TURN_COUNT;
+
+  let rng: RngState = state.rng;
+
+  // --- Slice shared deck into preview + remainingDeck ---
+  // Both players see the SAME 36-card sharedDeck. Each player carves their
+  // own preview out of the first 8 cards and shares the rest.
+  const aPreviewRaw = sharedDeck.slice(0, PREVIEW_SIZE);
+  const bPreviewRaw = sharedDeck.slice(PREVIEW_SIZE, PREVIEW_SIZE * 2);
+  const sharedTail = sharedDeck.slice(PREVIEW_SIZE * 2);
+
+  const myPreviewRaw = role === 'A' ? aPreviewRaw : bPreviewRaw;
+
+  // Apply rage scaling (mirrors the single-player init's preview-row treatment).
+  const initialPreview = fillActiveRowSlots(myPreviewRaw).map(card => {
+    if (!card) return null;
+    return applyMonsterRage(card, initialTurnCount + 1, isQuickMode);
+  }) as ActiveRowSlots;
+
+  // remainingDeck = the shared tail (identical for A and B).
+  const initialRemaining = sharedTail;
+
+  // --- Fixed first active row (same logic as single-player) ---
+  const fixedRowCards = buildFixedFirstActiveRow();
+  let fixedRowShuffled: GameCardData[];
+  [fixedRowShuffled, rng] = rngShuffle([...fixedRowCards], rng);
+  const initialActive = fillActiveRowSlots(fixedRowShuffled).map(card => {
+    if (!card) return null;
+    return applyMonsterRage(card, initialTurnCount, isQuickMode);
+  }) as ActiveRowSlots;
+
+  // --- Hero + class deck (per-player, NOT shared) ---
+  const [newHero, rng3] = getRandomHero(rng);
+  rng = rng3;
+  const newHeroClass = (newHero.classTitle ?? '').toLowerCase();
+  let newClassDeck: GameCardData[];
+  if (newHeroClass === 'knight') {
+    const [deck, rng4] = generateKnightDeck(rng);
+    rng = rng4;
+    newClassDeck = deck;
+  } else {
+    newClassDeck = [];
+  }
+
+  // --- Starting hand + backpack (mirrors single-player init) ---
+  const initialHand: GameCardData[] = [createStarterDiscoverClassToHandCard()];
+  const initialBackpack: GameCardData[] = [createApprenticeBoltCard()];
+
+  const newState: GameState = {
+    ...createInitialGameState(),
+    gameMode: 'multiplayer',
+    turnCount: initialTurnCount,
+    heroVariant: newHero,
+    heroClass: newHeroClass,
+    handCards: initialHand,
+    backpackItems: initialBackpack,
+    previewCards: initialPreview,
+    activeCards: initialActive,
+    previewCardStacks: {},
+    activeCardStacks: {},
+    remainingDeck: initialRemaining,
+    classDeck: newClassDeck,
+    eternalRelics,
+    showSkillSelection: false,
+    totalWins,
+    rng,
+    multiplayerSession: {
+      role,
+      roomId,
+      peerId,
+      lastAppliedSeq: 0,
+    },
+    pendingTransferOut: null,
+    sharedDeckConsumed: 0,
+    bossEncounterAlertShown: false,
+  };
+
+  return {
+    state: newState,
+    sideEffects: [{ event: 'game:started', payload: {} }],
+    enqueuedActions: [],
+  };
 }

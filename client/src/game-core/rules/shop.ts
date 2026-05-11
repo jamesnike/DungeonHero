@@ -386,7 +386,7 @@ function reduceApplyMonsterReward(
     const card = state.activeMonsterReward.monsterCard;
     const alreadyInGraveyard = state.discardedCards.some(c => c.id === card.id);
     if (!alreadyInGraveyard) {
-      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')];
+      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, true)];
     }
   }
 
@@ -403,7 +403,7 @@ function reduceMonsterRewardDiscoverClass(state: GameState): ReduceResult {
   if (state.activeMonsterReward?.monsterCard) {
     const card = state.activeMonsterReward.monsterCard;
     if (!state.discardedCards.some(c => c.id === card.id)) {
-      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')];
+      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, true)];
     }
   }
 
@@ -451,7 +451,7 @@ function reduceMonsterRewardDiscoverGraveyard(state: GameState): ReduceResult {
   if (state.activeMonsterReward?.monsterCard) {
     const card = state.activeMonsterReward.monsterCard;
     if (!state.discardedCards.some(c => c.id === card.id)) {
-      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')];
+      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, true)];
     }
   }
 
@@ -525,7 +525,7 @@ function reduceMonsterRewardGrantStatSwap(state: GameState): ReduceResult {
   if (state.activeMonsterReward?.monsterCard) {
     const card = state.activeMonsterReward.monsterCard;
     if (!state.discardedCards.some(c => c.id === card.id)) {
-      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, state.gameMode === 'quick')];
+      patch.discardedCards = [...state.discardedCards, resetCardForGraveyard(card, true)];
     }
   }
 

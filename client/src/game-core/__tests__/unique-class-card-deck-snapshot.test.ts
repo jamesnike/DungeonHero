@@ -46,10 +46,12 @@ import { createRng } from '../rng';
 const EXPECTED_UNIQUE_NAMES = [
   '利刃风暴',
   '回收灵焰',
+  '回炉重造',
   '固壁侧守',
   '圣光秘术',
   '复生秘典',
   '墓园守卫',
+  '影摹召引符',
   '弹幕护盾',
   '战狂诅咒',
   '永恒之器',
@@ -59,6 +61,7 @@ const EXPECTED_UNIQUE_NAMES = [
   '狂战秘典',
   '紧急回收',
   '蓄能裂击',
+  '装备超频药',
   '连环转律',
 ].sort();
 

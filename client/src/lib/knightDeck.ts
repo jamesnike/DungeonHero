@@ -44,6 +44,9 @@ import thunderGoldAmuletImage from '@assets/generated_images/knight_thunder_gold
 import starterAmuletDamageDiscoverImage from '@assets/generated_images/starter_amulet_damage_discover.png';
 import knightSpellRuneInscriptionAmuletImage from '@assets/generated_images/knight_spell_rune_inscription_amulet.png';
 import knightAmuletStunRecycleImage from '@assets/generated_images/knight_amulet_stun_recycle.png';
+// TODO(art): replace with dedicated `knight_mirror_copy_summon_amulet.png` once
+// artwork lands (the granted 「镜影摹形」 still reuses `dedupeKnightMagicMirrorCopyImage`).
+const mirrorCopySummonAmuletImage = dedupeKnightMagicMirrorCopyImage;
 import potionArcaneInfusionImage from '@assets/generated_images/cute_potion_arcane_infusion.png';
 import potionBackpackExpandImage from '@assets/generated_images/cute_potion_backpack_expand.png';
 import persuadeHammerImage from '@assets/generated_images/knight_persuade_hammer.png';
@@ -66,6 +69,8 @@ import heavyShieldKnightBashImage from '@assets/generated_images/knight_bash_shi
 import knightChainPersuadePotionImage from '@assets/generated_images/knight_potion_chain_persuade.png';
 import knightVitalityPotionImage from '@assets/generated_images/cute_potion_concentrated_heal.png';
 import knightEquipEmpowerPotionImage from '@assets/generated_images/knight_potion_equip_empower.png';
+// TODO(art): replace with a dedicated illustration for 装备超频药.
+import knightEquipOverclockPotionImage from '@assets/generated_images/knight_potion_equip_empower.png';
 import knightAmplifyPotionImage from '@assets/generated_images/knight_potion_amplify.png';
 import knightExchangeBladeImage from '@assets/generated_images/knight_weapon_exchange_blade.png';
 import knightGrowthBladeImage from '@assets/generated_images/knight_growth_blade.png';
@@ -486,8 +491,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicBerserkGambitImage,
     classCard: true,
-    description: '一次性：生命降至 1，每个武器栏可多攻击一次。',
-    shortDescription: '生命降至 1；每个武器栏多攻击一次',
+    description: '一次性：生命降至 1，每个武器栏可多攻击2 次。',
+    shortDescription: '生命降至 1；每个武器栏多攻击2 次',
     magicType: 'instant',
     magicEffect: '降血换取每栏额外攻击。',
     knightEffect: 'berserk-gambit',
@@ -928,6 +933,22 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     amuletEffect: 'manual-recycle-draw',
   });
 
+  // 影摹召引符 (unique) — 每抽 8 张「标准抽牌」(DRAW_CARDS / DRAW_FROM_BACKPACK)
+  // 入手一张「镜影摹形」。streak 字段：state.mirrorCopySummonStreak（达 8 后 %= 8）。
+  // 入手卡走 createMirrorCopySummonCard(rng) 生成，knightEffect: 'mirror-copy' 既有 resolver 处理交互流程。
+  // 多份叠加：每次抽牌 +N（progress counter ×N stacking），unique=true 限制牌库内 1 张。
+  pushCard({
+    type: 'amulet',
+    name: '影摹召引符',
+    value: 1,
+    image: mirrorCopySummonAmuletImage,
+    classCard: true,
+    unique: true,
+    description: '每抽 8 张牌，将一张「镜影摹形」加入手牌。',
+    shortDescription: '每抽 8 张，入手 1 张「镜影摹形」',
+    amuletEffect: 'mirror-copy-summon',
+  });
+
   // === MIGRATED STARTER AMULETS (12 cards) ===
   //
   // These were previously in `createStarterCardPool` (game-core/deck.ts) and
@@ -1052,8 +1073,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: starterAmuletWaterfallHealImage,
     classCard: true,
     amuletEffect: 'waterfall-heal',
-    description: '每次瀑流推进时，恢复 4 点生命（多个叠加：每件 +4）。',
-    shortDescription: '每次瀑流：恢复 4 点生命（叠加 +4）',
+    description: '每次瀑流推进时，恢复 ⌊回收袋张数 ÷ 4⌋ 点生命（多个叠加：每件独立计算）。计算发生在牌洗回背包之前。',
+    shortDescription: '每次瀑流：恢复 ⌊回收袋÷4⌋ 生命（叠加）',
   });
 
   pushAmulet({
@@ -1115,6 +1136,18 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     potionEffect: 'spell-lifesteal+1-maxhp+6',
   });
 
+  pushCard({
+    type: 'potion',
+    name: '装备超频药',
+    value: 1,
+    image: knightEquipOverclockPotionImage,
+    classCard: true,
+    unique: true,
+    description: '一次性：获得永恒护符「装备超频」。光环：当回收袋牌数 > 15 时，装备槽中的装备效果额外触发 1 次；牌数 ≤ 15 立即失效。',
+    shortDescription: '获得永恒护符「装备超频」',
+    potionEffect: 'grant-eternal-relic-equip-overclock',
+  });
+
   // === NEW INSTANT MAGIC ===
   pushCard({
     type: 'magic',
@@ -1140,6 +1173,27 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     magicType: 'instant',
     magicEffect: '选择一张牌，成为该牌的复制。',
     knightEffect: 'mirror-copy',
+  });
+
+  // 回炉重造 (unique Instant magic): 失去 ⌊hp/2⌋ HP，强制将所有手牌（含诅咒、
+  // 含 Perm 牌）经 DELETE_CARD（destination: 'graveyard'）送入坟场——和 Shop
+  // 「删除」(`kw='delete'`) 语义一致：绕过 perm-routing-on-discard 的回收袋分流，
+  // 自然触发「招灵书印」(delete-draw amulet)、不触发 APPLY_DISCARD_EFFECTS。
+  // 然后按 N = 被删张数 链式发现等量专属牌（BEGIN_DISCOVER + pendingClassDiscoverQueue）。
+  // 不参与法术回响（resolver 忽略 echoMultiplier；isEchoTriggered 时 banner 提示
+  // 「本卡不参与回响」，doubleNextMagic 仍被引擎前置消费）。
+  pushCard({
+    type: 'magic',
+    name: '回炉重造',
+    value: 0,
+    image: dedupeKnightMagicCleanseDrawImage,
+    classCard: true,
+    unique: true,
+    description: '一次性：失去 ⌊当前生命 ÷ 2⌋ 点生命，删除所有手牌（含诅咒，强制送入坟场），然后发现等量的专属牌。',
+    shortDescription: '失去半血；删除全部手牌；发现等量专属牌',
+    magicType: 'instant',
+    magicEffect: '即时魔法：失去半血，删除手牌，发现等量专属牌。',
+    knightEffect: 'forge-reborn',
   });
 
   pushCard({
@@ -1944,6 +1998,38 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     potionEffect: 'perm-equip-empower',
   });
 
+  // 狂热发现 (class potion, stackable):
+  // 获得永恒护符·狂热发现。每持有一份，使用「专属感召」时若 backpack.length > 10
+  // 则 +1 额外发现（per-stack 累加；额外发现走与 echo 同一条 pendingClassDiscoverQueue
+  // 路径，叠加而非互斥）。该 Potion 不加 unique → 牌池可多份 → 喝多瓶 = 多份护符
+  // (stackable: true 在 schema/executors.ts 处理；ui badge 走 STACKABLE_RELIC_IDS)。
+  pushCard({
+    type: 'potion',
+    name: '狂热发现',
+    value: 0,
+    image: knightEquipOverclockPotionImage,
+    classCard: true,
+    description: '获得永恒护符「狂热发现」。光环（可叠加）：每持有一份，使用「专属感召」时若背包牌数 > 10，则额外多触发 1 次发现；牌数 ≤ 10 立即失效。',
+    shortDescription: '获得永恒护符「狂热发现」',
+    potionEffect: 'grant-eternal-relic-summon-frenzy',
+  });
+
+  // 狂热发现 (class potion, stackable, not unique): 获得永恒护符·狂热发现。
+  // 光环（可叠加）：每持有一份，使用「专属感召」(STARTER_CARD_IDS.discoverClassToHand)
+  // 时若 backpackItems.length > 10，则额外触发 1 次发现。栏数 ≤ 10 时光环失效。
+  // 镜像「装备超频药」的 threshold-gated aura + per-stack 模式（详见
+  // perm-routing-on-discard / equip-overclock 实现）。
+  pushCard({
+    type: 'potion',
+    name: '狂热发现',
+    value: 0,
+    image: knightEquipOverclockPotionImage,
+    classCard: true,
+    description: '获得永恒护符「狂热发现」。光环（可叠加）：每持有一份，使用「专属感召」时若背包牌数 > 10，则额外多触发 1 次发现；牌数 ≤ 10 立即失效。',
+    shortDescription: '获得永恒护符「狂热发现」',
+    potionEffect: 'grant-eternal-relic-summon-frenzy',
+  });
+
   pushCard({
     type: 'potion',
     name: '唤回秘药',
@@ -2158,6 +2244,33 @@ export const createPersuadeRecycleFetchMagicCard = (rng: RngState): [KnightCardD
     magicType: 'instant',
     magicEffect: '从回收袋随机 1 张牌加入手牌。',
     knightEffect: 'recycle-random-to-hand',
+  }, nextRng];
+};
+
+/**
+ * 影摹召引符：每抽 8 张牌时产出的「镜影摹形」一次性魔法卡。
+ *
+ * 与 1132–1143 那张牌库内的「镜影摹形」字段保持一致，仅 id 走 runtime nextId 生成。
+ * `knightEffect: 'mirror-copy'` 已注册于 card-schema/definitions/magic.ts（interactive flow），
+ * 玩家拖到英雄 / 出牌时自动走 mirror-copy 选择 modal → 复制选中卡入手。
+ *
+ * id 前缀 `mirror-copy-summon` 不依赖 `getStarterBaseId` strip（卡走 knightEffect
+ * 优先级路由，不走 starter-id），因此不需要 `-pick-N` / `-evt-N` / `-disc-N` 后缀。
+ */
+export const createMirrorCopySummonCard = (rng: RngState): [KnightCardData, RngState] => {
+  const [id, nextRng] = nextId(rng, 'mirror-copy-summon');
+  return [{
+    id,
+    type: 'magic',
+    name: '镜影摹形',
+    value: 0,
+    image: dedupeKnightMagicMirrorCopyImage,
+    classCard: true,
+    description: '一次性：选择左/右装备栏、护符栏或手牌中的一张牌，化身为该牌的复制并加入手牌。',
+    shortDescription: '化身为所选牌的复制入手',
+    magicType: 'instant',
+    magicEffect: '选择一张牌，成为该牌的复制。',
+    knightEffect: 'mirror-copy',
   }, nextRng];
 };
 

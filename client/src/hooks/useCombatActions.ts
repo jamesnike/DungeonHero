@@ -409,6 +409,40 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     updateMagicDiscoverCounter(0, threshold);
   });
 
+  useGameEvent('combat:mirrorCopySummonTriggered', ({ count, threshold }) => {
+    const st = engine.getState();
+    const amulet = (st.amuletSlots as GameCardData[]).find(s => s?.amuletEffect === 'mirror-copy-summon');
+    const amuletName = amulet?.name ?? '影摹召引符';
+    const grantText = count === 1
+      ? `获得 1 张「镜影摹形」`
+      : `获得 ${count} 张「镜影摹形」`;
+    depsRef.current.addGameLog(
+      'amulet',
+      `${amuletName}：累计抽够 ${threshold} 张牌，${grantText}！`,
+    );
+  });
+
+  // 永恒护符·装备超频：每次 attack / block / onEquip / lastWords / durability /
+  // shieldReflect 触发额外效果时（节流到一条 log per surface per dispatch），
+  // 在游戏日志写一条提示。reducer 已经把多次触发合并成最多 1 个 side effect/surface，
+  // 这里不再做额外去重。
+  useGameEvent('combat:equipOverclockTriggered', ({ surface, count }) => {
+    const surfaceLabel: Record<typeof surface, string> = {
+      onEquip: '装备入场',
+      lastWords: '装备遗言',
+      attack: '攻击衍生',
+      block: '格挡衍生',
+      durability: '耐久损耗衍生',
+      shieldReflect: '盾反弹',
+    };
+    const extra = Math.max(1, count ?? 1);
+    const suffix = extra > 1 ? ` ×${extra}` : '';
+    depsRef.current.addGameLog(
+      'amulet',
+      `永恒护符·装备超频：${surfaceLabel[surface]}效果额外触发${suffix}！`,
+    );
+  });
+
   useGameEvent('combat:stunAttemptDiscoverTriggered', ({ threshold }) => {
     const st = engine.getState();
     const discoverAmulet = (st.amuletSlots as GameCardData[]).find(s => s?.amuletEffect === 'stun-attempt-discover');

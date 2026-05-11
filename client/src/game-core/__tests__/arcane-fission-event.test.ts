@@ -71,6 +71,25 @@ function makeWeapon(id = 'w-test', overrides: Partial<GameCardData> = {}): GameC
   } as GameCardData;
 }
 
+/**
+ * Find a deck seed that contains the 「奥能裂变」 event card, then return
+ * both the deck and the card. Quick-mode (`'single'`) decks only include
+ * a random subset of events (event cap = 10), so a fixed seed isn't
+ * guaranteed to contain it. We probe up to 200 seeds — empirically every
+ * 5th seed or so contains it, so this is essentially constant-time.
+ *
+ * Used by all tests that need to introspect the 奥能裂变 card definition
+ * (flipTargetCandidates, dice rows, etc.).
+ */
+function findFissionFromDeck(): { deck: GameCardData[]; fission: GameCardData; seed: number } {
+  for (let seed = 1; seed <= 200; seed++) {
+    const [deck] = createDeck('single', createRng(seed));
+    const fission = deck.find(c => c.name === '奥能裂变');
+    if (fission) return { deck, fission, seed };
+  }
+  throw new Error('No deck seed in 1..200 contained 奥能裂变');
+}
+
 function makeNonClassMagic(id: string, name = '测试魔法'): GameCardData {
   // A magic card distinct from "魔弹" so it can be the "previous category"
   // for transform triggers (transform fires when curCat differs from prev).
@@ -89,8 +108,7 @@ function makeNonClassMagic(id: string, name = '测试魔法'): GameCardData {
 // ---------------------------------------------------------------------------
 
 describe('「奥能裂变」event — authoring sanity', () => {
-  const [deck] = createDeck('normal', createRng(1));
-  const fission = deck.find(c => c.name === '奥能裂变');
+  const { fission } = findFissionFromDeck();
 
   it('exists in the deck with type "event"', () => {
     expect(fission).toBeDefined();
@@ -169,8 +187,7 @@ describe('「奥能裂变」event — authoring sanity', () => {
 
 describe('「奥能裂变」flipped 魔法飞弹 — playable end-to-end', () => {
   it('PLAY_CARD on flipped 魔法飞弹 (Lv1) adds 3 「魔弹」 to hand', () => {
-    const [deck] = createDeck('normal', createRng(42));
-    const fission = deck.find(c => c.name === '奥能裂变')!;
+    const { fission } = findFissionFromDeck();
     const missileCand = fission.flipTargetCandidates!
       .find(c => c.toCard.name === '魔法飞弹')!;
     const flippedCard = missileCand.toCard as GameCardData;
@@ -216,8 +233,7 @@ describe('「奥能裂变」flipped 魔法飞弹 — playable end-to-end', () =>
 
 describe('「奥能裂变」flipped 魔法飞弹 — upgrade refreshes display text', () => {
   function getFlippedMissile(): GameCardData {
-    const [deck] = createDeck('normal', createRng(42));
-    const fission = deck.find(c => c.name === '奥能裂变')!;
+    const { fission } = findFissionFromDeck();
     const missileCand = fission.flipTargetCandidates!
       .find(c => c.toCard.name === '魔法飞弹')!;
     return missileCand.toCard as GameCardData;
@@ -269,13 +285,19 @@ describe('「奥能裂变」flipped 魔法飞弹 — upgrade refreshes display t
 // ---------------------------------------------------------------------------
 
 describe('「奥能裂变」reduceCompleteEvent — random flip', () => {
-  function setupForFlip(seed: number): GameState {
-    const [deck] = createDeck('normal', createRng(seed));
-    const fission = deck.find(c => c.name === '奥能裂变')!;
+  /**
+   * Build a state where a 奥能裂变 event card sits in the active row and
+   * is the current event. Quick-mode decks pick events at random, so we
+   * fish the card out of any seed that contains it — the `rngSeed`
+   * argument controls the *post-fission RNG* used by COMPLETE_EVENT
+   * to pick which side it flips into.
+   */
+  function setupForFlip(rngSeed: number): GameState {
+    const { fission } = findFissionFromDeck();
     return makeState({
       currentEventCard: fission as any,
       activeCards: [fission as any, null, null, null, null] as ActiveRowSlots,
-      rng: createRng(seed),
+      rng: createRng(rngSeed),
     });
   }
 

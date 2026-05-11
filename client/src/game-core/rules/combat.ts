@@ -40,6 +40,7 @@ import { createBugletCard, createMagicBoltCard, goblinImage, bugletImage } from 
 import { addCardToBackpackPure, resetCardForGraveyard } from '../cards';
 import { generateMonsterRewardOptions, queueMonsterRewardPure } from '../monsters';
 import type { MonsterSkillKey } from '../monsterSkillNames';
+import { equipOverclockExtraTriggers } from './equipment-overclock';
 
 /**
  * Map a `lastWords` effect string to its monster-skill display key.
@@ -283,7 +284,8 @@ function reduceBeginCombat(
       // `skipNextMonsterTurn: true` ⇒ they are auto-engaged below (so they show up
       // as live combat targets) but skip the very next monster turn — the flag is
       // stripped by `endHeroTurnPatch` so they fight normally from the turn after.
-      const isQuick = state.gameMode === 'quick';
+      // Both modes use quick rules.
+      const isQuick = true;
       const summonedMonsterCards = rawMonsters.map(c => {
         const raged = applyMonsterRage(c, state.turnCount, isQuick);
         const maxLayers = raged.fury ?? raged.hpLayers ?? 1;
@@ -488,7 +490,7 @@ function reduceApplyDamage(
     const blockedDamage = action.amount;
     const cardName = deathWardCard.name;
     const newHand = handArr.filter(c => c.id !== deathWardCard.id);
-    const cleansed = resetCardForGraveyard(deathWardCard, state.gameMode === 'quick');
+    const cleansed = resetCardForGraveyard(deathWardCard, true);
     const patch: Partial<GameState> = {
       handCards: newHand as GameCardData[],
       discardedCards: [...state.discardedCards, cleansed],
@@ -1287,7 +1289,7 @@ function reduceMonsterDefeated(
     const sanitized = { ...monster };
     delete (sanitized as any)._counterDisplay;
     delete (sanitized as any)._flipBackCard;
-    graveyard.push(resetCardForGraveyard(sanitized, state.gameMode === 'quick'));
+    graveyard.push(resetCardForGraveyard(sanitized, true));
     patch.discardedCards = graveyard;
     sideEffects.push({ event: 'combat:removeAndGraveyard', payload: { monsterId: monster.id, monster } });
   }
@@ -1643,6 +1645,11 @@ function reduceApplyShieldReflect(
   const enqueuedActions: GameAction[] = [];
   let rng = state.rng;
 
+  // 永恒护符·装备超频 aura (stackable)：盾反弹路径里的衍生效果（dragon retaliation /
+  // boss retaliation）每层多触发一次；反弹伤害本身也乘 (1 + N)。
+  const overclockExtraReflect = equipOverclockExtraTriggers(state);
+  let overclockFiredHere = false;
+
   const activeCards = [...state.activeCards] as ActiveRowSlots;
   const idx = activeCards.findIndex(c => c?.id === action.monsterId);
   if (idx < 0) return noChange(state);
@@ -1651,14 +1658,19 @@ function reduceApplyShieldReflect(
   if (isMonsterDefeated(monster)) return noChange(state);
 
   const layersBefore = monster.currentLayer ?? monster.fury ?? 1;
-  const updated = damageMonsterWithLayerOverflow(monster, action.damage);
+  // 装备超频：盾反弹伤害本身也额外打 N 次（这是「反弹」这条衍生 → DEAL_DAMAGE
+  // 链路的第二轮触发，不是「再格挡一次」）。最终走 damageMonsterWithLayerOverflow
+  // 把 reflect 输出汇总即可。
+  const damageTotal = action.damage * (1 + overclockExtraReflect);
+  if (overclockExtraReflect > 0) overclockFiredHere = true;
+  const updated = damageMonsterWithLayerOverflow(monster, damageTotal);
   activeCards[idx] = updated;
   const layersAfter = updated.currentLayer ?? 0;
 
   sideEffects.push({ event: 'combat:monsterBleed', payload: { monsterId: action.monsterId, delay: 0 } });
   sideEffects.push({
     event: 'log:entry',
-    payload: { type: 'combat', message: `${action.sourceName} 反弹了 ${action.damage} 点伤害给 ${monster.name}` },
+    payload: { type: 'combat', message: `${action.sourceName} 反弹了 ${damageTotal} 点伤害给 ${monster.name}${overclockExtraReflect > 0 ? `（装备超频×${1 + overclockExtraReflect}）` : ''}` },
   });
 
   // Class damage discover hit
@@ -1667,7 +1679,7 @@ function reduceApplyShieldReflect(
   // Overkill (always logged, even when no effect benefits from it)
   const ae = computeAmuletEffectsForState(state);
   const effectiveLifesteal = (state.permanentSpellLifesteal ?? 0) + (ae.lifeOverkillBonus ?? 0);
-  const overkill = computeOverkill(monster, action.damage);
+  const overkill = computeOverkill(monster, damageTotal);
   if (overkill > 0) {
     sideEffects.push({
       event: 'log:entry',
@@ -1760,6 +1772,15 @@ function reduceApplyShieldReflect(
         damage: monster.dragonDamageRetaliation,
       });
       sideEffects.push({ event: 'combat:dragonBreathRetaliation', payload: { monsterId: action.monsterId, monsterName: monster.name, damage: monster.dragonDamageRetaliation } });
+      for (let i = 0; i < overclockExtraReflect; i++) {
+        enqueuedActions.push({
+          type: 'APPLY_DRAGON_BREATH_RETALIATION',
+          monsterId: action.monsterId,
+          monsterName: monster.name,
+          damage: monster.dragonDamageRetaliation,
+        });
+      }
+      if (overclockExtraReflect > 0) overclockFiredHere = true;
     }
 
     // Boss retaliation check
@@ -1772,7 +1793,18 @@ function reduceApplyShieldReflect(
       });
       enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: retDmg, source: 'combat' });
       sideEffects.push({ event: 'log:entry', payload: { type: 'combat', message: `${monster.name} 反噬：造成 ${retDmg} 点直接伤害！` } });
+      for (let i = 0; i < overclockExtraReflect; i++) {
+        enqueuedActions.push({ type: 'APPLY_DAMAGE', amount: retDmg, source: 'combat' });
+      }
+      if (overclockExtraReflect > 0) overclockFiredHere = true;
     }
+  }
+
+  if (overclockFiredHere) {
+    sideEffects.push({
+      event: 'combat:equipOverclockTriggered',
+      payload: { surface: 'shieldReflect', count: overclockExtraReflect },
+    });
   }
 
   return applyPatch(state, { activeCards: activeCards as GameState['activeCards'], rng }, sideEffects, enqueuedActions);
@@ -2298,6 +2330,15 @@ function reducePerformHeroAttack(
   const isMonsterEquip = slotItem.type === 'monster';
   const isMinionAttack = isMonsterEquip && !!(slotItem as GameCardData).isMinionCard;
 
+  // 永恒护符·装备超频 aura：bag > 15 时装备衍生效果额外触发 1 次。
+  // 仅复制衍生效果（heal-on-attack / overkill / killGold / healOnKill / dragon
+  // retaliation / postAttackSpellDamage 等），不复制武器挥击本身（damage calc
+  // / durability tick）。每次 attack 命中至少一条衍生效果时 push 一条
+  // `combat:equipOverclockTriggered` side effect 让 hook 写 log（节流）。
+  // Stackable: N = countEternalRelics('equip-overclock')；每层让衍生效果多触发 1 次。
+  const overclockExtra = equipOverclockExtraTriggers(state);
+  let overclockFiredThisAttack = false;
+
   // --- Damage calculation ---
   const goblinGoldPowerActive = isMonsterEquip && (slotItem as GameCardData).eliteLowGoldPower && (state.gold ?? 0) >= 30;
   const rawWeaponValue = isMonsterEquip ? ((slotItem as GameCardData).attack ?? slotItem.value) : slotItem.value;
@@ -2399,6 +2440,10 @@ function reducePerformHeroAttack(
       event: 'log:entry',
       payload: { type: 'heal', message: `${slotItem.name} 攻击恢复了 ${(slotItem as GameCardData).healOnAttack} 点生命` },
     });
+    for (let i = 0; i < overclockExtra; i++) {
+      enqueuedActions.push({ type: 'HEAL', amount: (slotItem as GameCardData).healOnAttack!, source: 'heal-on-attack' });
+    }
+    if (overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Debuff all monster attack ---
@@ -2478,6 +2523,14 @@ function reducePerformHeroAttack(
         event: 'log:entry',
         payload: { type: 'combat', message: `${targetMonster.name} 反噬：造成 ${workingMonster.bossRetaliationDamage} 点直接伤害！` },
       });
+      for (let i = 0; i < overclockExtra; i++) {
+        enqueuedActions.push({
+          type: 'APPLY_DAMAGE',
+          amount: workingMonster.bossRetaliationDamage,
+          source: 'combat',
+        });
+      }
+      if (overclockExtra > 0) overclockFiredThisAttack = true;
     }
 
     // Overkill — compute first, log unconditionally so the player can see it
@@ -2626,10 +2679,18 @@ function reducePerformHeroAttack(
   if (overkillHitCount > 0 && attackEffectiveLifesteal > 0) {
     enqueuedActions.push({ type: 'HEAL', amount: attackEffectiveLifesteal * overkillHitCount, source: 'overkill-lifesteal' });
     sideEffects.push({ event: 'log:entry', payload: { type: 'heal', message: `超杀吸血：恢复 ${attackEffectiveLifesteal * overkillHitCount} 生命` } });
+    for (let i = 0; i < overclockExtra; i++) {
+      enqueuedActions.push({ type: 'HEAL', amount: attackEffectiveLifesteal * overkillHitCount, source: 'overkill-lifesteal' });
+    }
+    if (overclockExtra > 0) overclockFiredThisAttack = true;
   }
   if (overkillHitCount > 0 && (slotItem as GameCardData).overkillDraw) {
     const drawCount = (slotItem as GameCardData).overkillDraw! * overkillHitCount;
     sideEffects.push({ event: 'equipment:drawFromBackpack', payload: { count: drawCount, source: 'overkill' } });
+    for (let i = 0; i < overclockExtra; i++) {
+      sideEffects.push({ event: 'equipment:drawFromBackpack', payload: { count: drawCount, source: 'overkill' } });
+    }
+    if (overclockExtra > 0) overclockFiredThisAttack = true;
   }
   if (overkillHitCount > 0 && (slotItem as GameCardData).overkillRecycleToHand) {
     const recycleCount = (slotItem as GameCardData).overkillRecycleToHand! * overkillHitCount;
@@ -2687,6 +2748,10 @@ function reducePerformHeroAttack(
       event: 'log:entry',
       payload: { type: 'equip', message: `${slotItem.name} 超杀：所有「魔弹」+${amplifyAmount} 增幅` },
     });
+    for (let i = 0; i < overclockExtra; i++) {
+      enqueuedActions.push({ type: 'AMPLIFY_CARDS_BY_NAME', cardName: '魔弹', amount: amplifyAmount, source: slotItem.name });
+    }
+    if (overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Amplify 魔弹 + spawn N bolts (魔弹连弩, overkill-gated) ---
@@ -2959,6 +3024,10 @@ function reducePerformHeroAttack(
       event: 'log:entry',
       payload: { type: 'heal', message: `${slotItem.name} 击杀回复 ${knightSlotItem.healOnKill} 点生命` },
     });
+    for (let i = 0; i < overclockExtra; i++) {
+      enqueuedActions.push({ type: 'HEAL', amount: knightSlotItem.healOnKill, source: 'heal-on-kill' });
+    }
+    if (overclockExtra > 0) overclockFiredThisAttack = true;
   }
   if (monsterDefeated && (slotItem as GameCardData).restoreDurabilityOnKill && slotItem.maxDurability) {
     patch[slotId] = { ...(patch[slotId] ?? slotItem), durability: slotItem.maxDurability } as EquipmentItem;
@@ -2981,6 +3050,10 @@ function reducePerformHeroAttack(
         ...currentItem,
         killGoldCounter: goldAmount + 1,
       } as EquipmentItem;
+    }
+    if (overclockExtra > 0) {
+      patch.gold = (patch.gold ?? state.gold ?? 0) + goldAmount * overclockExtra;
+      overclockFiredThisAttack = true;
     }
   }
 
@@ -3064,6 +3137,15 @@ function reducePerformHeroAttack(
           event: 'combat:dragonBreathRetaliation',
           payload: { monsterId: targetMonsterId, monsterName: targetMonster.name, damage: targetMonster.dragonDamageRetaliation },
         });
+        for (let i = 0; i < overclockExtra; i++) {
+          enqueuedActions.push({
+            type: 'APPLY_DRAGON_BREATH_RETALIATION',
+            monsterId: targetMonsterId,
+            monsterName: targetMonster.name,
+            damage: targetMonster.dragonDamageRetaliation,
+          });
+        }
+        if (overclockExtra > 0) overclockFiredThisAttack = true;
       }
 
       // Dragon bleed destroy equipment
@@ -3246,6 +3328,10 @@ function reducePerformHeroAttack(
   // --- Post-attack hand recycle ---
   if ((slotItem as GameCardData).postAttackHandRecycle) {
     sideEffects.push({ event: 'combat:postAttackHandRecycle', payload: { itemName: slotItem.name } });
+    for (let i = 0; i < overclockExtra; i++) {
+      sideEffects.push({ event: 'combat:postAttackHandRecycle', payload: { itemName: slotItem.name } });
+    }
+    if (overclockExtra > 0) overclockFiredThisAttack = true;
   }
 
   // --- Post-attack spell damage ---
@@ -3264,6 +3350,19 @@ function reducePerformHeroAttack(
         event: 'log:entry',
         payload: { type: 'combat', message: `${slotItem.name} 附魔：对 ${target.name} 造成 ${spellDmg} 点法术伤害` },
       });
+      for (let i = 0; i < overclockExtra; i++) {
+        // 装备超频 ×N：对**当前**随机目标再触发一次法术伤害（每层独立挑目标，
+        // 若先前目标早死则在池子里换一只存活的）。
+        let target2: GameCardData = target;
+        const survivors = flattenActiveRowSlots((patch.activeCards ?? state.activeCards) as ActiveRowSlots)
+          .filter((c): c is GameCardData => isDamageableTarget(c) && c.id !== target.id);
+        if (survivors.length > 0 && (target.currentLayer ?? target.fury ?? 1) <= 0) {
+          [target2, rng] = pickRandom(survivors, rng);
+        }
+        ensureMonsterEngagedLocal(state, target2, enqueuedActions);
+        enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: target2.id, damage: spellDmg, source: 'arcane-blade-spell', isSpellDamage: true });
+      }
+      if (overclockExtra > 0) overclockFiredThisAttack = true;
     }
   }
 
@@ -3287,6 +3386,13 @@ function reducePerformHeroAttack(
 
   // Add magic gauge for berserker
   sideEffects.push({ event: 'combat:addMagicGauge', payload: { gaugeType: 'berserker-rage', amount: 1 } });
+
+  if (overclockFiredThisAttack) {
+    sideEffects.push({
+      event: 'combat:equipOverclockTriggered',
+      payload: { surface: 'attack', count: overclockExtra },
+    });
+  }
 
   patch.rng = rng;
   return applyPatch(state, patch, sideEffects, enqueuedActions.length > 0 ? enqueuedActions : undefined);
@@ -3314,6 +3420,13 @@ function reduceResolveBlock(
   const patch: Partial<GameState> = {};
   const enqueuedActions: GameAction[] = [];
   let rng = state.rng;
+
+  // 永恒护符·装备超频 aura: bag > 15 时盾的衍生效果额外触发 1 次。
+  // 仅复制衍生效果（reflect / dragonDamageRetaliation / perfectBlock 奖励等），
+  // 不复制格挡判定本身（armor 计算 / durability tick）。
+  // Stackable: N = countEternalRelics('equip-overclock')。每层让衍生效果多一倍。
+  const overclockExtraBlock = equipOverclockExtraTriggers(state);
+  let overclockFiredThisBlock = false;
 
   // Ogre crit
   let remainingDamage = pendingBlock.attackValue;
@@ -3519,15 +3632,18 @@ function reduceResolveBlock(
       // Dual guard: perfect block bonus — N amulets each grant +1 permanent armor.
       if (isPerfectBlock && ae.dualGuardCount > 0) {
         const armorGain = ae.dualGuardCount;
+        const overclockBonus = armorGain * overclockExtraBlock;
+        const totalArmorGain = armorGain + overclockBonus;
         const bonuses = { ...state.equipmentSlotBonuses };
-        bonuses[blockSlotId] = { ...bonuses[blockSlotId], shield: bonuses[blockSlotId].shield + armorGain };
+        bonuses[blockSlotId] = { ...bonuses[blockSlotId], shield: bonuses[blockSlotId].shield + totalArmorGain };
         patch.equipmentSlotBonuses = bonuses as EquipmentSlotBonusState;
-        applySlotArmorBonusDelta(state, blockSlotId, armorGain, patch);
+        applySlotArmorBonusDelta(state, blockSlotId, totalArmorGain, patch);
         sideEffects.push({
           event: 'log:entry',
-          payload: { type: 'combat', message: `完美格挡！双守护圣盾使该栏永久护甲 +${armorGain}` },
+          payload: { type: 'combat', message: `完美格挡！双守护圣盾使该栏永久护甲 +${totalArmorGain}` },
         });
-        sideEffects.push({ event: 'ui:banner', payload: { text: `完美格挡！该装备栏永久护甲 +${armorGain}！` } });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `完美格挡！该装备栏永久护甲 +${totalArmorGain}！` } });
+        if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
       }
 
       // 砺心之盾 — perfect-block max-HP gain: on perfect block, permanently
@@ -3536,20 +3652,26 @@ function reduceResolveBlock(
       // Stacks every perfect block, no per-card cap.
       const perfectBlockMaxHpGain = (slotItem as GameCardData).shieldPerfectBlockMaxHpGain ?? 0;
       if (isPerfectBlock && perfectBlockMaxHpGain > 0) {
-        patch.permanentMaxHpBonus = (patch.permanentMaxHpBonus ?? state.permanentMaxHpBonus ?? 0) + perfectBlockMaxHpGain;
+        const totalGain = perfectBlockMaxHpGain * (1 + overclockExtraBlock);
+        patch.permanentMaxHpBonus = (patch.permanentMaxHpBonus ?? state.permanentMaxHpBonus ?? 0) + totalGain;
         sideEffects.push({
           event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 完美格挡：永久生命值上限 +${perfectBlockMaxHpGain}！` },
+          payload: { type: 'equip', message: `${slotItem.name} 完美格挡：永久生命值上限 +${totalGain}！` },
         });
-        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完美格挡！生命值上限 +${perfectBlockMaxHpGain}！` } });
+        sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 完美格挡！生命值上限 +${totalGain}！` } });
+        if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
       }
 
       // 弹幕护盾 — perfect-block missile spawn: when this shield achieves perfect
       // block, spawn N 魔弹 directly into hand. Hand-full overflow is silently
       // dropped (per design). 走 createMagicBoltCard + applyAmplifyOnCreate
       // 与魔弹连弩 / 魔法飞弹 / 弹幕之符 一致，让新魔弹继承当前 amplifiedCardBonus['魔弹']。
-      const perfectBlockSpawnCount = (slotItem as GameCardData).perfectBlockSpawnMissiles ?? 0;
+      const perfectBlockSpawnBase = (slotItem as GameCardData).perfectBlockSpawnMissiles ?? 0;
+      const perfectBlockSpawnCount = perfectBlockSpawnBase > 0
+        ? perfectBlockSpawnBase * (1 + overclockExtraBlock)
+        : perfectBlockSpawnBase;
       if (isPerfectBlock && perfectBlockSpawnCount > 0) {
+        if (overclockExtraBlock > 0 && perfectBlockSpawnBase > 0) overclockFiredThisBlock = true;
         const handLimit = HAND_LIMIT + (state.handLimitBonus ?? 0);
         const currentHand = (patch.handCards ?? state.handCards) as GameCardData[];
         const handRoom = Math.max(0, handLimit - currentHand.length);
@@ -3588,9 +3710,10 @@ function reduceResolveBlock(
         // (base hp + perm), shield grants its full cap (base + perm + temp).
         // Floor on FINAL sum so negative perm reduces grant rather than being
         // dropped individually (consistent with the rest of the model).
-        const grantAmount = isMonsterEquipShield
+        const grantBase = isMonsterEquipShield
           ? Math.max(0, ((slotItem as GameCardData).hp ?? slotItem.value) + slotShieldBonus)
           : storedCap;
+        const grantAmount = grantBase * (1 + overclockExtraBlock);
         patch.slotTempArmor = { ...(state.slotTempArmor ?? {}), [otherSlot]: ((state.slotTempArmor ?? {})[otherSlot] ?? 0) + grantAmount };
         applySlotArmorBonusDelta(state, otherSlot, grantAmount, patch);
         const otherSlotLabel = otherSlot === 'equipmentSlot1' ? '左' : '右';
@@ -3600,6 +3723,7 @@ function reduceResolveBlock(
         });
         sideEffects.push({ event: 'ui:banner', payload: { text: `守望者链接！${otherSlotLabel}装备栏临时护甲 +${grantAmount}！` } });
         checkPersuadeOnTempAttack(state, patch, sideEffects);
+        if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
       }
 
       // Dragon damage retaliation from shield
@@ -3618,6 +3742,11 @@ function reduceResolveBlock(
             payload: { type: 'equip', message: `${slotItem.name} 龙息：对 ${randomTarget.name} 造成 2 点伤害！` },
           });
           sideEffects.push({ event: 'ui:banner', payload: { text: `${slotItem.name} 龙息！` } });
+          for (let i = 0; i < overclockExtraBlock; i++) {
+            // 装备超频 ×N：龙息每层多触发一次（每次都对同一目标）。
+            enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: randomTarget.id, damage: 2, source: 'dragon-breath-reflect' });
+          }
+          if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
         }
       }
 
@@ -4004,6 +4133,10 @@ function reduceResolveBlock(
           event: 'log:entry',
           payload: { type: 'combat', message: `${reflectSourceName} 反射了 ${reflectDmg} 点伤害！` },
         });
+        for (let i = 0; i < overclockExtraBlock; i++) {
+          enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: reflectDmg, source: 'shield-reflect' });
+        }
+        if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
       }
 
       // Set follow-up pending block
@@ -4041,6 +4174,11 @@ function reduceResolveBlock(
       event: 'log:entry',
       payload: { type: 'combat', message: `${reflectSourceName} 反射了 ${reflectDmg} 点伤害！` },
     });
+    for (let i = 0; i < overclockExtraBlock; i++) {
+      // 装备超频 ×N：盾反射伤害每层多触发一次。
+      enqueuedActions.push({ type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: monster.id, damage: reflectDmg, source: 'shield-reflect' });
+    }
+    if (overclockExtraBlock > 0) overclockFiredThisBlock = true;
   }
 
   // Ogre stun
@@ -4075,6 +4213,13 @@ function reduceResolveBlock(
   patch.phase = 'monsterTurn';
 
   enqueuedActions.push({ type: 'ADVANCE_MONSTER_TURN' });
+
+  if (overclockFiredThisBlock) {
+    sideEffects.push({
+      event: 'combat:equipOverclockTriggered',
+      payload: { surface: 'block', count: overclockExtraBlock },
+    });
+  }
 
   patch.rng = rng;
   return applyPatch(state, patch, sideEffects, enqueuedActions);

@@ -106,7 +106,7 @@ export function computeWaterfallDropPlan(
   state: GameState,
   forceCascade: boolean,
 ): WaterfallDropPlan | null {
-  const { activeCards, previewCards, remainingDeck, turnCount, gameMode, waterfallDealBonus } = state;
+  const { activeCards, previewCards, remainingDeck, turnCount, waterfallDealBonus } = state;
   let rng = state.rng;
 
   const baseEmptyColumns = getEmptyOrGhostColumns(activeCards);
@@ -169,8 +169,9 @@ export function computeWaterfallDropPlan(
   const dropPreviewIndices = dropAssignments.map(pair => pair.previewIndex);
   const dropTargetSlots = dropAssignments.map(pair => pair.slotIndex);
   const spawnTurn = turnCount + 1;
+  // Both 'single' and 'multiplayer' use the underlying "quick" rules → always pass true.
   const resolvedDropCards = dropAssignments.map(pair =>
-    applyMonsterRage(pair.card, spawnTurn, gameMode === 'quick'),
+    applyMonsterRage(pair.card, spawnTurn, true),
   );
 
   // Discard selection: pick the rightmost blocked preview card that isn't a final monster
@@ -232,7 +233,8 @@ export function computeWaterfallDropPlan(
   //                  init layout intentionally leaves a leftover monster in
   //                  the back 18 cards).
   {
-    const isQuickMode = state.gameMode === 'quick';
+    // Both modes use quick rules now (0–1 monsters per 4-card row).
+    const isQuickMode = true;
     const MIN_MONSTERS_PER_ROW = isQuickMode ? 0 : 1;
     const MAX_MONSTERS_PER_ROW = isQuickMode ? 1 : 2;
     const previewMonsterIndices: number[] = [];
@@ -329,29 +331,35 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
     });
   }
 
-  // Starter amulet: 潮愈之符 (`waterfall-heal`). Linear ×N stacking — each equipped
-  // amulet contributes a base heal of 4, summed before being passed to `reduceHeal`,
-  // which then applies the compound 2^healCount multiplier (heal-amulet) inside
-  // `computeHeal`, mirroring the relic above. 与永恒护符·潮涌回春独立结算（玩家
-  // 可以同时持有两者，两笔治疗叠加）。
+  // Starter amulet: 潮愈之符 (`waterfall-heal`). 每件每次瀑流贡献 ⌊回收袋张数/4⌋ 点
+  // 治疗（线性 ×N 叠加），合并后传给 `reduceHeal`，再由其内部 `computeHeal` 套
+  // 治疗护符 (`heal`) 的 `2^healCount` 复合倍乘。与永恒护符·潮涌回春独立结算。
+  //
+  // 计算时点：必须在 `processRecycleBag` 之前读 `state.permanentMagicRecycleBag.length`，
+  // 否则刚被洗回背包的卡缩水 → 玩家看到「回收袋里 4 张本该 +1，结果 +0」的语义错位。
+  // 本块运行在下面 processRecycleBag 调用之前，state 是 input 快照 → 自然就是「洗回前」。
   if (amuletEffects.waterfallHealCount > 0) {
-    const baseHeal = 4 * amuletEffects.waterfallHealCount;
-    const healMul = Math.pow(2, amuletEffects.healCount);
-    const healAmount = baseHeal * healMul;
-    const healSuffix = amuletEffects.healCount > 0
-      ? `（治疗 ×${healMul}）`
-      : '';
-    const stackSuffix = amuletEffects.waterfallHealCount > 1
-      ? `（×${amuletEffects.waterfallHealCount}）`
-      : '';
-    enqueuedActions.push({ type: 'HEAL', amount: baseHeal, source: 'waterfall-heal-amulet' });
-    sideEffects.push({
-      event: 'log:entry',
-      payload: {
-        type: 'skill',
-        message: `潮愈之符${stackSuffix}：瀑布推进，恢复 ${healAmount} 点生命${healSuffix}`,
-      },
-    });
+    const recycleBagSize = state.permanentMagicRecycleBag.length;
+    const perAmuletHeal = Math.floor(recycleBagSize / 4);
+    const baseHeal = perAmuletHeal * amuletEffects.waterfallHealCount;
+    if (baseHeal > 0) {
+      const healMul = Math.pow(2, amuletEffects.healCount);
+      const healAmount = baseHeal * healMul;
+      const healSuffix = amuletEffects.healCount > 0
+        ? `（治疗 ×${healMul}）`
+        : '';
+      const stackSuffix = amuletEffects.waterfallHealCount > 1
+        ? `（×${amuletEffects.waterfallHealCount}）`
+        : '';
+      enqueuedActions.push({ type: 'HEAL', amount: baseHeal, source: 'waterfall-heal-amulet' });
+      sideEffects.push({
+        event: 'log:entry',
+        payload: {
+          type: 'skill',
+          message: `潮愈之符${stackSuffix}：回收袋 ${recycleBagSize} 张，恢复 ${healAmount} 点生命${healSuffix}`,
+        },
+      });
+    }
   }
 
   // Eternal relic: waterfall-discover
@@ -527,14 +535,51 @@ function reduceApplyWaterfallDiscardEffects(
   const isFinalMonsterPrecursor =
     discardCard.type === 'monster' && discardCard.isFinalMonster;
 
+  // Multiplayer helper: any card we insert back into the LOCAL remainingDeck
+  // (final-monster bottom-burial / returnToDeck / swarmInfest bug spawns)
+  // must be tagged `_excludedFromShared: true` so the next waterfall's
+  // shared-consume counter doesn't double-count them as belonging to the
+  // shared pool. Single-player passthrough.
+  const tagLocalIfMultiplayer = <T extends GameCardData>(c: T): T => {
+    if (state.multiplayerSession === null) return c;
+    return { ...c, _excludedFromShared: true } as T;
+  };
+
+  // Multiplayer-only: cards that take the "graveyard" path (i.e. truly
+  // leave the local deck/board, not returnToDeck/swarmInfest variants)
+  // should ALSO be queued to ship to the peer's deck top. We append once
+  // per discardCard regardless of how many switch branches funnel through
+  // sendToGraveyardUnlessFinal, but `routedToTransferOut` guards against
+  // double-tap if a future branch accidentally calls the helper twice.
+  let routedToTransferOut = false;
+  const stageTransferOutIfMultiplayer = () => {
+    if (routedToTransferOut) return;
+    if (state.multiplayerSession === null) return;
+    routedToTransferOut = true;
+    // Strip per-instance runtime fields that don't make sense across the
+    // network (fromSlot, _recycleWaits, etc.). The peer's reducer will
+    // re-tag with `_excludedFromShared: true` on RECEIVE.
+    const { fromSlot: _fs, _recycleWaits: _rw, _excludedFromShared: _ex, ...clean } =
+      discardCard as GameCardData & { fromSlot?: unknown };
+    void _fs; void _rw; void _ex;
+    patch.pendingTransferOut = [
+      ...(state.pendingTransferOut ?? []),
+      ...((patch.pendingTransferOut ?? []) as GameCardData[]),
+      clean as GameCardData,
+    ];
+  };
+
   // Handle the card itself going to graveyard or back to deck
   const sendToGraveyardUnlessFinal = () => {
     if (isFinalMonsterPrecursor) {
       sideEffects.push({ event: 'log:entry', payload: { type: 'waterfall', message: `${cardName}（最终之敌）被挤出，置于牌堆底以待决战` } });
-      nextRemainingDeck = [...nextRemainingDeck, discardCard];
+      nextRemainingDeck = [...nextRemainingDeck, tagLocalIfMultiplayer(discardCard)];
       sideEffects.push({ event: 'ui:banner', payload: { text: `${cardName} 隐入牌堆……终局之战尚未到来。` } });
     } else {
       enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: discardCard, owner: 'dungeon' });
+      // In multiplayer, this card also gets shipped to the peer's deck top.
+      // (single-player: no-op.)
+      stageTransferOutIfMultiplayer();
     }
   };
 
@@ -551,7 +596,7 @@ function reduceApplyWaterfallDiscardEffects(
         const insertion = computeReturnToDeckInsertion(nextRemainingDeck.length, isWraith, rng);
         rng = insertion.rng;
         nextRemainingDeck = [...nextRemainingDeck];
-        nextRemainingDeck.splice(insertion.insertIndex, 0, discardCard);
+        nextRemainingDeck.splice(insertion.insertIndex, 0, tagLocalIfMultiplayer(discardCard));
         if (isWraith) {
           logAndBanner('waterfall', `${cardName} 化为幽影，随机回到剩余牌堆某处`, `${cardName} 化为幽影，消散在牌堆深处……`);
         } else {
@@ -760,7 +805,7 @@ function reduceApplyWaterfallDiscardEffects(
         const bugCount = wfx.amount;
         const bugs: GameCardData[] = [];
         for (let bi = 0; bi < bugCount; bi++) {
-          bugs.push(applyAmplifyOnCreate(createBugletCard(), state.amplifiedCardBonus));
+          bugs.push(tagLocalIfMultiplayer(applyAmplifyOnCreate(createBugletCard(), state.amplifiedCardBonus)));
         }
         nextRemainingDeck = [...bugs, ...nextRemainingDeck];
         logAndBanner('waterfall', `${cardName} 被挤出，${bugCount} 只小虫子涌入了牌堆顶！`, `${cardName} 被挤出！${bugCount} 只小虫子混入了牌堆！`);
@@ -818,10 +863,11 @@ function reduceApplyWaterfallDiscardEffects(
       default:
         if (isFinalMonsterPrecursor) {
           sideEffects.push({ event: 'log:entry', payload: { type: 'waterfall', message: `${cardName}（最终之敌）被挤出，置于牌堆底以待决战` } });
-          nextRemainingDeck = [...nextRemainingDeck, discardCard];
+          nextRemainingDeck = [...nextRemainingDeck, tagLocalIfMultiplayer(discardCard)];
           sideEffects.push({ event: 'ui:banner', payload: { text: `${cardName} 隐入牌堆……终局之战尚未到来。` } });
         } else {
           enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: discardCard, owner: 'dungeon' });
+          stageTransferOutIfMultiplayer();
         }
         break;
     }
@@ -829,10 +875,11 @@ function reduceApplyWaterfallDiscardEffects(
     // No waterfall effect — just discard or return final monster
     if (isFinalMonsterPrecursor) {
       sideEffects.push({ event: 'log:entry', payload: { type: 'waterfall', message: `${cardName}（最终之敌）被挤出，置于牌堆底以待决战` } });
-      nextRemainingDeck = [...nextRemainingDeck, discardCard];
+      nextRemainingDeck = [...nextRemainingDeck, tagLocalIfMultiplayer(discardCard)];
       sideEffects.push({ event: 'ui:banner', payload: { text: `${cardName} 隐入牌堆……终局之战尚未到来。` } });
     } else {
       enqueuedActions.push({ type: 'DISCARD_OWNED_CARD', card: discardCard, owner: 'dungeon' });
+      stageTransferOutIfMultiplayer();
     }
   }
 
@@ -1330,9 +1377,9 @@ function reduceApplyWaterfallDeal(state: GameState): ReduceResult {
     }
   } else {
     const spawnTurn = state.turnCount;
-    const isQuick = state.gameMode === 'quick';
+    // Both modes use quick rules → always pass true.
     patch.previewCards = fillActiveRowSlots(
-      plan.nextPreviewCards.map(c => applyMonsterRage(c, spawnTurn, isQuick)),
+      plan.nextPreviewCards.map(c => applyMonsterRage(c, spawnTurn, true)),
     );
 
     // Apply preview stacks from the plan
@@ -1354,6 +1401,75 @@ function reduceApplyWaterfallDeal(state: GameState): ReduceResult {
   }
 
   patch.remainingDeck = plan.nextRemainingDeck;
+
+  // ---- Multiplayer: emit transferOut side effect ----
+  // This is the LAST step of one waterfall iteration; by now `nextRemainingDeck`
+  // already reflects all returnToDeck/swarmInfest re-insertions (each tagged
+  // `_excludedFromShared: true` by `tagLocalIfMultiplayer` in the discard phase).
+  // Compute the SHARED-pool delta by counting only cards WITHOUT
+  // `_excludedFromShared`. Drop count = how many shared cards left our local
+  // view this iteration; the peer must mirror the same count via
+  // MULTIPLAYER_SHARED_SHRINK to keep their shared suffix aligned.
+  if (state.multiplayerSession !== null) {
+    const countShared = (deck: GameCardData[]) =>
+      deck.reduce((acc, c) => acc + (c._excludedFromShared ? 0 : 1), 0);
+    const oldShared = countShared(state.remainingDeck);
+    const newShared = countShared(plan.nextRemainingDeck);
+    const sharedConsumed = Math.max(0, oldShared - newShared);
+
+    // Cards staged by reduceApplyWaterfallDiscardEffects this iteration are
+    // already in state.pendingTransferOut (the discard reducer's patch wrote
+    // them before APPLY_WATERFALL_DEAL ran). Combine them into the side-effect
+    // payload so the network layer (phase 3+) can ship them to the peer.
+    const cardsToShip: GameCardData[] = [...(state.pendingTransferOut ?? [])];
+
+    if (cardsToShip.length > 0 || sharedConsumed > 0) {
+      // Bump the monotonic shared-consumed counter; resume / replay logic
+      // (phase 6) reconciles by comparing local vs server-side seq.
+      patch.sharedDeckConsumed = (state.sharedDeckConsumed ?? 0) + sharedConsumed;
+      sideEffects.push({
+        event: 'multiplayer:transferOut',
+        payload: {
+          cards: cardsToShip,
+          sharedConsumed,
+          // Local hint seq — the network layer / server stamps the authoritative
+          // seq when it persists the row. Using sharedDeckConsumed as a coarse
+          // local ordering hint is OK for phase 3 BroadcastChannel; phase 4
+          // upgrades to server-assigned seq.
+          seq: (state.sharedDeckConsumed ?? 0) + sharedConsumed,
+        },
+      });
+      // Note: `pendingTransferOut` is NOT cleared here. The hook (phase 3+) is
+      // responsible for dispatching MULTIPLAYER_CLEAR_PENDING_TRANSFER after
+      // the network layer acks. Phase 2 (no hook yet) leaves it as-is, which
+      // is fine because no second waterfall reads it for ordering — it's
+      // additive within an iteration and only the side effect cares about it.
+    }
+
+    // ----- Phase 6.2 boss alert -----
+    // If a Boss (final monster) just landed in the active row OR became
+    // visible in the preview row, fire a one-shot advisory side effect so
+    // the UI can show "Boss 战暂未支持双人，本场以单人结算". The underlying
+    // combat continues to reduce as solo — this is a UX-only hint.
+    //
+    // Gated on `bossEncounterAlertShown` so we never re-fire (e.g. when
+    // the boss is killed and another final-monster precursor surfaces, or
+    // across multiple waterfalls that each redraw the same boss into preview).
+    if (!state.bossEncounterAlertShown) {
+      const newActiveRow = patch.activeCards ?? state.activeCards;
+      const newPreviewRow = patch.previewCards ?? state.previewCards;
+      const bossInRow = (
+        [...newActiveRow, ...newPreviewRow] as Array<GameCardData | null>
+      ).find(c => c?.isFinalMonster === true);
+      if (bossInRow) {
+        patch.bossEncounterAlertShown = true;
+        sideEffects.push({
+          event: 'multiplayer:bossEncountered',
+          payload: { monsterId: bossInRow.id },
+        });
+      }
+    }
+  }
 
   return applyPatch(state, patch, sideEffects);
 }

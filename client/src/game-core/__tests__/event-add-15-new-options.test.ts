@@ -270,7 +270,7 @@ describe('recycleBagDelete:N token (双重燃烧)', () => {
     const state = makeState({
       permanentMagicRecycleBag: [dragon as any],
       discardedCards: [],
-      gameMode: 'standard',
+      gameMode: 'single',
     });
     const r = reduce(state, {
       type: 'APPLY_EVENT_EFFECT',

@@ -27,6 +27,7 @@ export function serializeGameState(state: GameState): PersistedGameState {
     recycleForgePlayCount: state.recycleForgePlayCount,
     classDamageDiscoverStreak: state.classDamageDiscoverStreak,
     classMagicDiscoverStreak: state.classMagicDiscoverStreak,
+    mirrorCopySummonStreak: state.mirrorCopySummonStreak,
     totalDamageTaken: state.totalDamageTaken,
     totalHealed: state.totalHealed,
     healAccumulator: state.healAccumulator,
@@ -211,6 +212,18 @@ export function serializeGameState(state: GameState): PersistedGameState {
     // 刷新页面后由 hydrateGameState 还原，让 HeroTurnTimer 继续从 wall-clock
     // 计算剩余时间——超时仍会自动结束玩家回合。
     playerTurnStartedAt: state.playerTurnStartedAt ?? null,
+    // -----------------------------------------------------------------------
+    // Multiplayer (phase 6)
+    // -----------------------------------------------------------------------
+    // multiplayerSession is the only "I am in a 2-player room" marker on
+    // disk. On hydrate, GameBoard reads it and (a) re-attaches the
+    // Realtime channel and (b) calls /api/mp/resume to backfill any
+    // peer transfers that arrived while we were offline.
+    multiplayerSession: state.multiplayerSession
+      ? { ...state.multiplayerSession }
+      : null,
+    sharedDeckConsumed: state.sharedDeckConsumed ?? 0,
+    bossEncounterAlertShown: Boolean(state.bossEncounterAlertShown),
   };
 }
 

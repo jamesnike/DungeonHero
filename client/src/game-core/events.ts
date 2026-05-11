@@ -1791,7 +1791,7 @@ export function applySimpleEffect(
       const removed = indices.slice(0, take).map(i => bag[i]);
       patch.permanentMagicRecycleBag = bag.filter((_: unknown, i: number) => !removedIndexSet.has(i));
       // 「删除」语义：进坟场（per monster-graveyard-layer-reset.mdc 走 resetCardForGraveyard）。
-      const isQuick = state.gameMode === 'quick';
+      const isQuick = true;
       const cleaned = removed.map(card => {
         const { _recycleWaits: _w, ...rest } = card as GameCardData & { _recycleWaits?: number };
         return resetCardForGraveyard(rest as GameCardData, isQuick);

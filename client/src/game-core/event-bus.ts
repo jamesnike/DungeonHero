@@ -74,6 +74,11 @@ export type GameEventMap = {
   'combat:classDamageHit': {};
   'combat:classDamageDiscoverTriggered': { threshold: number };
   'combat:classMagicDiscoverTriggered': { threshold: number };
+  'combat:mirrorCopySummonTriggered': { count: number; threshold: number };
+  'combat:equipOverclockTriggered': {
+    surface: 'onEquip' | 'lastWords' | 'attack' | 'block' | 'durability' | 'shieldReflect';
+    count?: number; // ×N stacks fired this surface (default 1)
+  };
   'combat:stunAttemptDiscoverTriggered': { threshold: number };
   'combat:buildingDestroyed': { buildingId: string };
   'combat:lastWordsDiscard': {
@@ -649,6 +654,49 @@ export type GameEventMap = {
   'card:repairEnrageDiceReady': {
     card: import('@/components/GameCard').GameCardData;
     slotId: string;
+    monsterId: string;
+  };
+  /**
+   * Multiplayer (phase 2+): the local waterfall finished computing its
+   * post-discard payload; ship this to the peer via the network layer.
+   *
+   * Payload shape:
+   *   - `cards` — the cards pushed out by waterfall that should land on
+   *     the peer's deck top (already stripped of owner-specific runtime
+   *     fields; safe to JSON-serialize). May be empty if everything was
+   *     a final monster / non-transferable.
+   *   - `sharedConsumed` — how many cards from the **shared** suffix
+   *     this waterfall consumed locally (peer must mirror via
+   *     MULTIPLAYER_SHARED_SHRINK to stay aligned).
+   *   - `seq` — local monotonic counter used by the network layer to
+   *     dedupe / order; the server stamps its own seq on the persisted
+   *     row, this is just a client-side ordering hint.
+   *
+   * Listeners (the `useMultiplayerSync` hook in phase 3) are responsible
+   * for: (a) calling the network layer; (b) on success, dispatching
+   * MULTIPLAYER_CLEAR_PENDING_TRANSFER. Failure → retry / queue locally.
+   */
+  'multiplayer:transferOut': {
+    cards: import('@/components/GameCard').GameCardData[];
+    sharedConsumed: number;
+    seq: number;
+  };
+  /**
+   * `multiplayer:bossEncountered` — the final monster (Boss) just
+   * appeared in a multiplayer game's active row or preview row. Phase 6
+   * does NOT support synchronous co-op boss fights, so the UI shows a
+   * one-time alert ("Boss 战暂未支持双人，本场以单人结算") and the
+   * underlying engine continues to reduce the encounter as solo. The
+   * peer is unaffected — they finish their own deck independently.
+   *
+   * Payload:
+   *   - `monsterId` — the boss card's id; useful for the alert copy if
+   *     we ever want to show its name.
+   *
+   * Idempotent: the reducer fires this only once per game (gated on
+   * `state.bossEncounterAlertShown` — set true after the first emission).
+   */
+  'multiplayer:bossEncountered': {
     monsterId: string;
   };
 };

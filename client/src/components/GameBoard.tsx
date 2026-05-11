@@ -70,6 +70,7 @@ import { StunReleasedGoldOverlayLayer } from './game-board/components/StunReleas
 import { useStunReleasedGoldFx } from './game-board/hooks/useStunReleasedGoldFx';
 import { useOverlayScale } from '@/hooks/use-overlay-scale';
 import { useGameEngine, useShallowGameState, useDispatch, useGameEvent } from '@/hooks/useGameEngine';
+import { useMultiplayerSync } from '@/hooks/useMultiplayerSync';
 import { useCardOperations, type CardOperationsDeps } from '@/hooks/useCardOperations';
 import { useCombatActions, type CombatActionsDeps } from '@/hooks/useCombatActions';
 import { useCombatVisuals } from '@/hooks/useCombatVisuals';
@@ -98,6 +99,8 @@ import { MagicCardContainer } from './game-board/containers/MagicCardContainer';
 import { BoardOverlayButtons } from './game-board/containers/BoardOverlayButtons';
 import { UndoButtonContainer } from './game-board/containers/UndoButtonContainer';
 import { GameModeSelectModal } from './game-board/components/GameModeSelectModal';
+import { MultiplayerLobby } from './game-board/components/MultiplayerLobby';
+import { MultiplayerBossAlert } from './game-board/components/MultiplayerBossAlert';
 import DeckPeekModal from '@/components/DeckPeekModal';
 import { HAND_LIMIT, FLAT_ASPECT_RATIO } from './game-board/constants';
 import {
@@ -800,6 +803,14 @@ export default function GameBoard() {
   const pendingDiscardEffectsQueueRef = useRef<import('@/hooks/useCardOperations').PendingDiscardEffect[]>([]);
   const [gameOverMinimized, setGameOverMinimized] = useState(false);
   const [showGameModeSelect, setShowGameModeSelect] = useState(false);
+  // Phase 5 lobby: opens after the user picks "multiplayer" in the mode
+  // select modal. Mediates between the user and the Supabase create-/join-
+  // room API. On success, dispatches INIT_MULTIPLAYER_GAME and closes.
+  const [showMultiplayerLobby, setShowMultiplayerLobby] = useState(false);
+  // Phase 6.2 boss alert: open when the waterfall reducer emits
+  // `multiplayer:bossEncountered` (one-shot per game, gated server-side
+  // by `state.bossEncounterAlertShown`). Purely advisory.
+  const [showMultiplayerBossAlert, setShowMultiplayerBossAlert] = useState(false);
   const [draggedCard, setDraggedCard] = useState<GameCardData | null>(null);
   const [draggedCardSource, setDraggedCardSource] = useState<DragOrigin | null>(null);
   const [heroRowDropState, setHeroRowDropState] = useState<HeroRowDropType | null>(null);
@@ -920,6 +931,13 @@ export default function GameBoard() {
     discardShockInteractionLocked, setDiscardShockInteractionLocked,
     flipShockInteractionLocked, setFlipShockInteractionLocked,
   } = useFlightState();
+  // Phase 3: BroadcastChannel-backed multiplayer sync. No-op when
+  // `multiplayerSession === null` (single-player). When active, listens
+  // for the engine's `multiplayer:transferOut` side effect and forwards
+  // it to peer tab; conversely receives peer broadcasts and dispatches
+  // RECEIVE_TRANSFER + SHARED_SHRINK. Phase 4+ swaps the underlying
+  // transport for Supabase Realtime — this hook's API stays stable.
+  useMultiplayerSync();
   // The 8 flight arrays now live in <FlightOverlayContainer>; we drive them
   // imperatively via this ref so flight setState calls don't re-render
   // GameBoard. See FlightOverlayContainer.tsx for rationale.
@@ -1573,6 +1591,15 @@ export default function GameBoard() {
 
   useGameEvent('game:over', ({ victory }) => {
     console.log('[game:over]', { victory });
+  });
+
+  // Phase 6.2: one-shot boss-encounter advisory. The reducer guarantees
+  // this fires at most once per multiplayer game (gated on
+  // `state.bossEncounterAlertShown`), so we just open the dialog. Closing
+  // the dialog does NOT reset the flag — the reducer already set it to
+  // `true` before the side effect was emitted. Solo games never see this.
+  useGameEvent('multiplayer:bossEncountered', () => {
+    setShowMultiplayerBossAlert(true);
   });
 
   // --- Additional combat event listeners ---
@@ -4023,7 +4050,7 @@ export default function GameBoard() {
 
   // [gold] elite buff effect DELETED — handled by CHECK_ELITE_GOLD_BUFF reducer in game-core/rules/dungeon.ts
 
-  const initGame = (mode: 'normal' | 'quick' = 'normal') => {
+  const initGame = (mode: 'single' | 'multiplayer' = 'single') => {
     combatAsyncEpochRef.current += 1;
     clearAllHandDeliveryGuards();
     processedDungeonCardIdsRef.current.clear();
@@ -4202,6 +4229,7 @@ export default function GameBoard() {
       recycleForgePlayCount: savedForgeCount,
       classDamageDiscoverStreak: snapshot.classDamageDiscoverStreak ?? 0,
       classMagicDiscoverStreak: snapshot.classMagicDiscoverStreak ?? 0,
+      mirrorCopySummonStreak: snapshot.mirrorCopySummonStreak ?? 0,
       recycleBackpackProgress: snapshot.recycleBackpackProgress ?? 0,
       swapUpgradeProgress: snapshot.swapUpgradeProgress ?? 0,
       monsterKillUpgradeProgress: snapshot.monsterKillUpgradeProgress ?? 0,
@@ -4397,6 +4425,15 @@ export default function GameBoard() {
       // 还原后 HeroTurnTimer 仍能从 wall-clock 计算剩余时间——已经超时的回合
       // 在第一个 tick 就会自动结束。
       playerTurnStartedAt: snapshot.playerTurnStartedAt ?? null,
+      // ---------------------------------------------------------------------
+      // Multiplayer (phase 6): restore session pointer so useMultiplayerSync
+      // re-attaches the Realtime channel. The transfer-resume backfill below
+      // (in a follow-up effect after this dispatch) will replay any missed
+      // transfers using `multiplayerSession.lastAppliedSeq`.
+      // ---------------------------------------------------------------------
+      multiplayerSession: snapshot.multiplayerSession ?? null,
+      sharedDeckConsumed: snapshot.sharedDeckConsumed ?? 0,
+      bossEncounterAlertShown: Boolean(snapshot.bossEncounterAlertShown),
     });
 
     // Stacking state (previewCardStacks, activeCardStacks) is hydrated via engine state
@@ -4793,8 +4830,15 @@ export default function GameBoard() {
     setShowGameModeSelect(true);
   };
 
-  const handleGameModeSelect = (mode: 'normal' | 'quick') => {
+  const handleGameModeSelect = (mode: 'single' | 'multiplayer') => {
     setShowGameModeSelect(false);
+    if (mode === 'multiplayer') {
+      // Phase 5: open the lobby. We do NOT yet clear state / dispatch INIT —
+      // those happen in `handleMultiplayerLobbyReady` once both players are
+      // matched. Cancelling the lobby returns the user to the mode select.
+      setShowMultiplayerLobby(true);
+      return;
+    }
     // Telemetry: fire-and-forget BEFORE clearGameState() so we can read the previous run.
     // gameMode is not persisted to localStorage — must read from live engine state.
     reportGameStart(mode, summarizePrevGame(engine.getState()));
@@ -4804,6 +4848,91 @@ export default function GameBoard() {
     clearGameLog();
     setGameOverMinimized(false);
     initGame(mode);
+    dispatch({ type: 'SET_HYDRATED' });
+    // Skill modal removed — player starts with no default Hero Skill. We still
+    // need the opening setup (base 2 hand draws + any eternal-relic opening
+    // hooks like 召唤随从 / 雷盾心法) to fire so the run is playable.
+    // `runOpeningSetup('')` is safe with an empty skill id: getHeroSkillById
+    // returns null and all skill-bonus branches no-op.
+    runOpeningSetup('');
+  };
+
+  /**
+   * Phase 5: called by `MultiplayerLobby` after both players are matched
+   * (either the room creator's Realtime subscription saw `status='playing'`
+   * or the joiner finished `joinRoom()`).
+   *
+   * Bootstraps the multiplayer game in one shot:
+   *   1. Reset persistence / undo / log (mirrors single-player init).
+   *   2. Dispatch `INIT_MULTIPLAYER_GAME` with the server-supplied shared
+   *      deck. Reducer slices preview from sharedDeck[role*4..role*4+3],
+   *      sets remainingDeck to sharedDeck[8..N-1], generates per-player
+   *      hero/class deck, and writes `multiplayerSession` so the
+   *      Realtime/transfer hook picks up immediately.
+   *   3. Mark hydrated + run opening setup so the UI shows the dealt hand.
+   */
+  const handleMultiplayerLobbyReady = (params: {
+    sharedDeck: GameCardData[];
+    role: 'A' | 'B';
+    roomId: string;
+    peerId: string;
+  }) => {
+    setShowMultiplayerLobby(false);
+    reportGameStart('multiplayer', summarizePrevGame(engine.getState()));
+    clearGameState();
+    lastPersistedStateRef.current = null;
+    clearUndoStack();
+    clearGameLog();
+    setGameOverMinimized(false);
+    dispatch({
+      type: 'INIT_MULTIPLAYER_GAME',
+      sharedDeck: params.sharedDeck,
+      role: params.role,
+      roomId: params.roomId,
+      peerId: params.peerId,
+      totalWins: engine.getState().totalWins ?? 0,
+      eternalRelics: engine.getState().eternalRelics ?? [],
+    });
+    dispatch({ type: 'SET_HYDRATED' });
+    runOpeningSetup('');
+  };
+
+  /**
+   * Phase-3 dev-only entry point: open a multiplayer-mode game with a fixed
+   * "local-test" room id and the picked role. The matching tab (other role)
+   * connects to the same BroadcastChannel and they exchange transferOut
+   * events. NO server, NO persistence, NO authentication — just the local
+   * mechanic verified end-to-end. Replaced by the real lobby in phase 5.
+   */
+  const handleLocalRolePick = (role: 'local-A' | 'local-B') => {
+    setShowGameModeSelect(false);
+    const myRole: 'A' | 'B' = role === 'local-A' ? 'A' : 'B';
+    const peerRole: 'A' | 'B' = myRole === 'A' ? 'B' : 'A';
+
+    reportGameStart('multiplayer', summarizePrevGame(engine.getState()));
+    clearGameState();
+    lastPersistedStateRef.current = null;
+    clearUndoStack();
+    clearGameLog();
+    setGameOverMinimized(false);
+    initGame('multiplayer');
+
+    // Set the multiplayer session AFTER initGame so initGame's deck dealing
+    // (single-player path for phase 3) runs first. Phase 5 will introduce
+    // INIT_MULTIPLAYER_GAME so the deck is server-supplied and identical
+    // across roles — for phase 3 prototype, A and B will have DIFFERENT
+    // local decks (since they each ran createDeck with their own RNG), but
+    // the transferOut/receive plumbing is exercised either way.
+    dispatch({
+      type: 'SET_MULTIPLAYER_SESSION',
+      session: {
+        role: myRole,
+        roomId: 'local-test',
+        peerId: `local-${peerRole}`,
+        lastAppliedSeq: 0,
+      },
+    });
+
     dispatch({ type: 'SET_HYDRATED' });
     // Skill modal removed — player starts with no default Hero Skill. We still
     // need the opening setup (base 2 hand draws + any eternal-relic opening
@@ -8915,7 +9044,24 @@ export default function GameBoard() {
       <GameModeSelectModal
         open={showGameModeSelect}
         onSelect={handleGameModeSelect}
+        onLocalRolePick={import.meta.env.DEV ? handleLocalRolePick : undefined}
         onCancel={() => setShowGameModeSelect(false)}
+      />
+
+      <MultiplayerLobby
+        open={showMultiplayerLobby}
+        onCancel={() => {
+          // Cancelling drops the user back to the mode select screen so
+          // they can pick single instead.
+          setShowMultiplayerLobby(false);
+          setShowGameModeSelect(true);
+        }}
+        onReady={handleMultiplayerLobbyReady}
+      />
+
+      <MultiplayerBossAlert
+        open={showMultiplayerBossAlert}
+        onAcknowledge={() => setShowMultiplayerBossAlert(false)}
       />
 
       <ModalCallbacksProvider value={modalCallbacks}>

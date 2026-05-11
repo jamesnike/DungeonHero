@@ -121,6 +121,7 @@
  * │ KNIGHT monster-recruit           │ A   │ recruit count ×N              │
  * │ KNIGHT monster-fusion            │ C   │ fusion not stackable; banner  │
  * │ KNIGHT mirror-copy               │ B   │ pick card twice               │
+ * │ KNIGHT forge-reborn (回炉重造)   │ —   │ no-echo + banner; HP/del once │
  * │ KNIGHT deck-judge-delete         │ B   │ pick delete twice             │
  * │ KNIGHT transform-grant           │ B   │ transform pick twice          │
  * │ KNIGHT strip-perm-hand           │ C   │ strips all; echo banner only  │
@@ -230,7 +231,7 @@ import {
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { chaosStrikeHasOverkill, detectMineCollisionsAfterShuffle } from '../combat';
-import { hasEternalRelic, getEternalRelic } from '@/lib/eternalRelics';
+import { hasEternalRelic, countEternalRelics, getEternalRelic } from '@/lib/eternalRelics';
 import { markSkillUsedPure } from '../hero';
 import { STARTER_CARD_IDS, getStarterBaseId, skillScrollImage, createMagicBoltCard } from '../deck';
 import skeletonKingImage from '@assets/generated_images/skeleton_king_monster.png';
@@ -1757,6 +1758,12 @@ export function resolvePermanentMagic(
       // discover fires immediately via `card:discoverRequested`; each queued
       // entry re-opens the modal after the previous selection (handled in
       // `reduceResolveDiscoverSelection` and `SET_DISCOVER_MODAL` close path).
+      //
+      // 永恒护符·狂热发现 (summon-frenzy): per-stack +1 extra discover when
+      // `state.backpackItems.length > 10`. Mirrors equip-overclock's
+      // threshold-gated aura pattern (threshold hard-coded per relic; relic
+      // is dormant when backpack ≤ 10). Frenzy extras are added to the SAME
+      // pendingClassDiscoverQueue as echo extras (additive, not multiplicative).
       const classDeck = state.classDeck ?? [];
       if (classDeck.length === 0) {
         banner(sideEffects, '专属感召：专属牌堆为空。');
@@ -1780,8 +1787,11 @@ export function resolvePermanentMagic(
         },
       });
       const echoExtras = Math.max(0, echoMultiplier - 1);
-      if (echoExtras > 0) {
-        const queueExtras = Array.from({ length: echoExtras }, () => ({
+      const frenzyCount = countEternalRelics(state.eternalRelics ?? [], 'summon-frenzy');
+      const frenzyExtras = state.backpackItems.length > 10 ? frenzyCount : 0;
+      const totalExtras = echoExtras + frenzyExtras;
+      if (totalExtras > 0) {
+        const queueExtras = Array.from({ length: totalExtras }, () => ({
           source: 'starter-discover-class-to-hand',
           sourceLabel: card.name,
           delivery: 'hand-first' as const,
@@ -1791,8 +1801,15 @@ export function resolvePermanentMagic(
           ...queueExtras,
         ];
       }
-      const echoSuffix = isEchoTriggered ? `（回响×${echoMultiplier}：将连续发现 ${echoMultiplier} 张）` : '';
-      banner(sideEffects, `专属感召：发现一张专属牌，直接进入手牌。${echoSuffix}`);
+      const echoSuffix = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+      const frenzySuffix = frenzyExtras > 0
+        ? `（狂热发现×${frenzyCount}：背包 ${state.backpackItems.length} 张 > 10，额外触发 ${frenzyExtras} 次）`
+        : '';
+      const totalModals = 1 + totalExtras;
+      banner(
+        sideEffects,
+        `专属感召：发现 ${totalModals} 张专属牌进入手牌。${echoSuffix}${frenzySuffix}`,
+      );
       log(sideEffects, 'magic', `专属感召：候选 ${candidates.map(c => `「${c.name}」`).join('、')}`);
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
@@ -2296,7 +2313,7 @@ export function resolveKnightInstantMagic(
       }
       const lvl = card.upgradeLevel ?? 0;
       const buffAmounts = [0, 4, 8, 8];
-      const extraPerSlot = lvl >= 3 ? 2 : 1;
+      const extraPerSlot = lvl >= 1 ? 3 : 2;
       const buffAmt = buffAmounts[lvl] ?? 8;
       if (buffAmt > 0) {
         enqueuedActions.push({ type: 'ADD_BERSERK_BUFF', amount: buffAmt });
@@ -2510,6 +2527,97 @@ export function resolveKnightInstantMagic(
       sideEffects.push({ event: 'card:deckJudgeRequested' as any, payload: { card, echoRemaining: echoMultiplier } });
       if (echoMultiplier > 1) banner(sideEffects, `判牌：回响触发，将连续删除 ${echoMultiplier} 张牌。`);
       return applyPatch(state, patch, sideEffects);
+    }
+
+    case 'forge-reborn': {
+      // 回炉重造（唯一 Instant）:
+      //   1) 失去 ⌊hp/2⌋ HP（selfInflicted，同 blood-sacrifice-strike 等可致死）;
+      //   2) 删除所有手牌（含诅咒、含 Perm 牌）→ destination: 'graveyard'，
+      //      强制送入坟场，绕过 perm-routing 的回收袋分流（同 Shop kw='delete'）。
+      //      DELETE_CARD reducer 自带 招灵书印 (delete-draw amulet) 触发，且不
+      //      走 APPLY_DISCARD_EFFECTS（kw='delete' 语义，与 onDiscardDraw / catapult
+      //      / discard-zap 解耦）。
+      //   3) 链式发现 N 张专属牌（N = 被删张数）—— 复用 discard-rebuild 的
+      //      BEGIN_DISCOVER + pendingClassDiscoverQueue 模式。
+      //
+      // 法术回响：本卡 **不参与** 回响（结构性 + 永久副作用强，二次结算无可叠加
+      // 的语义）。resolver 忽略 echoMultiplier；isEchoTriggered 时 banner 提示
+      // 「回响：本卡不参与回响，无额外效果」。`doubleNextMagic` 仍被引擎前置消费
+      // ——与 fate-sight / monster-fusion 等 C 类卡 UX 一致。
+      const toDelete = (state.handCards as GameCardData[]).filter(c => c.id !== card.id);
+      const deleteCount = toDelete.length;
+      const hpCost = Math.floor(state.hp / 2);
+
+      if (hpCost > 0) {
+        enqueuedActions.push({
+          type: 'APPLY_DAMAGE',
+          amount: hpCost,
+          source: 'forge-reborn',
+          selfInflicted: true,
+        });
+      }
+
+      for (const c of toDelete) {
+        enqueuedActions.push({
+          type: 'DELETE_CARD',
+          cardId: c.id,
+          source: 'hand',
+          destination: 'graveyard',
+          context: 'general',
+          contextLabel: '回炉重造',
+        });
+      }
+
+      if (deleteCount > 0) {
+        const classDeck = state.classDeck ?? [];
+        if (classDeck.length > 0) {
+          enqueuedActions.push({
+            type: 'BEGIN_DISCOVER',
+            source: 'forge-reborn',
+            pool: classDeck,
+            sourceLabel: card.name,
+          });
+          if (deleteCount > 1) {
+            const queueAddition = Array.from({ length: deleteCount - 1 }, () => ({
+              source: 'forge-reborn' as const,
+              sourceLabel: card.name,
+            }));
+            patch.pendingClassDiscoverQueue = [
+              ...state.pendingClassDiscoverQueue,
+              ...queueAddition,
+            ];
+          }
+        } else {
+          log(sideEffects, 'magic', `${card.name}：专属牌堆已空，无法发现。`);
+        }
+      }
+
+      const echoTag = isEchoTriggered ? '（回响：本卡不参与回响，无额外效果）' : '';
+      if (deleteCount > 0) {
+        banner(
+          sideEffects,
+          `${card.name}：失去 ${hpCost} 生命，删除 ${deleteCount} 张手牌，将发现 ${deleteCount} 张专属牌！${echoTag}`,
+        );
+        log(
+          sideEffects,
+          'magic',
+          `${card.name}：失去 ${hpCost} HP，删除 ${deleteCount} 张手牌，开始发现 ${deleteCount} 张专属牌。${echoTag}`,
+        );
+      } else {
+        banner(
+          sideEffects,
+          `${card.name}：失去 ${hpCost} 生命，但无手牌可删除。${echoTag}`,
+        );
+        log(
+          sideEffects,
+          'magic',
+          `${card.name}：失去 ${hpCost} HP，无手牌可删除。${echoTag}`,
+        );
+      }
+
+      patch.lastPlayedCardCategory = getCardPlayCategory(card);
+      enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
+      return applyPatch(state, patch, sideEffects, enqueuedActions);
     }
 
     default:

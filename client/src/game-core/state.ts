@@ -37,6 +37,7 @@ export function createInitialGameState(): GameState {
     recycleForgePlayCount: 0,
     classDamageDiscoverStreak: 0,
     classMagicDiscoverStreak: 0,
+    mirrorCopySummonStreak: 0,
     waveDiscardCount: 0,
     totalWins: 0,
     undoCount: 0,
@@ -210,7 +211,7 @@ export function createInitialGameState(): GameState {
     shopModalMinimized: false,
     shopSkillSelectOpen: false,
 
-    gameMode: 'normal',
+    gameMode: 'single',
     gameOver: false,
     victory: false,
     showSkillSelection: false,
@@ -219,6 +220,14 @@ export function createInitialGameState(): GameState {
     drawPending: false,
     isHydrated: false,
     heroSkillBanner: null,
+
+    // Multiplayer session — null in single-player. Populated by
+    // INIT_MULTIPLAYER_GAME (phase 5) or restored from persisted storage
+    // on tab reload (phase 6).
+    multiplayerSession: null,
+    pendingTransferOut: null,
+    sharedDeckConsumed: 0,
+    bossEncounterAlertShown: false,
 
     eternalRelics: [],
 

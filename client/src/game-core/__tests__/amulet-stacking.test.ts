@@ -197,6 +197,14 @@ describe('computeAmuletEffects stacking', () => {
       ] as any);
       expect(fx.lastWordsExtraTriggerCount).toBe(3);
     });
+
+    it('影摹召引符 ×2 — mirrorCopySummonCount = 2 (consumer adds N to streak per drawn card, 4 draws ⇒ 1 trigger)', () => {
+      const fx = computeAmuletEffects([
+        makeAmulet('mirror-copy-summon', 'mcs-1'),
+        makeAmulet('mirror-copy-summon', 'mcs-2'),
+      ] as any);
+      expect(fx.mirrorCopySummonCount).toBe(2);
+    });
   });
 
   describe('combat counters', () => {

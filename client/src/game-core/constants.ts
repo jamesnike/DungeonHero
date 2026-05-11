@@ -82,8 +82,8 @@ export const SHOP_TYPE_PRICES: Partial<Record<CardType, number>> = {
 export const SHOP_HEAL_COST = 5;
 export const SHOP_HEAL_AMOUNT = 5;
 export const SHOP_LEVEL_UP_COST = 10;
-export const SHOP_SKILL_DISCOVER_COST = 10;
-export const SHOP_EQUIP_BOOST_COST = 10;
+export const SHOP_SKILL_DISCOVER_COST = 5;
+export const SHOP_EQUIP_BOOST_COST = 8;
 export const SHOP_REFRESH_COST = 5;
 
 // ---------------------------------------------------------------------------
@@ -195,6 +195,7 @@ export const createEmptyAmuletEffects = (): ActiveAmuletEffects => ({
   lastWordsExtraTriggerCount: 0,
   killCellMineCount: 0,
   manualRecycleDrawCount: 0,
+  mirrorCopySummonCount: 0,
 });
 
 // ---------------------------------------------------------------------------

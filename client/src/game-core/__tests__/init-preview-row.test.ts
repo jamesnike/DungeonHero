@@ -23,7 +23,7 @@ describe('INIT_GAME preview row composition', () => {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
         type: 'INIT_GAME',
-        mode: 'normal',
+        mode: 'single',
         totalWins: 0,
         eternalRelics: [],
       });
@@ -47,7 +47,7 @@ describe('INIT_GAME preview row composition', () => {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
         type: 'INIT_GAME',
-        mode: 'quick',
+        mode: 'single',
         totalWins: 0,
         eternalRelics: [],
       });
@@ -71,7 +71,7 @@ describe('INIT_GAME preview row composition', () => {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
         type: 'INIT_GAME',
-        mode: 'normal',
+        mode: 'single',
         totalWins: 0,
         eternalRelics: [],
       });
@@ -99,7 +99,7 @@ describe('INIT_GAME preview row composition', () => {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
         type: 'INIT_GAME',
-        mode: 'quick',
+        mode: 'single',
         totalWins: 0,
         eternalRelics: [],
       });
@@ -137,7 +137,7 @@ describe('INIT_GAME preview row composition', () => {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
         type: 'INIT_GAME',
-        mode: 'quick',
+        mode: 'single',
         totalWins: 0,
         eternalRelics: [],
       });
@@ -161,7 +161,7 @@ describe('INIT_GAME preview row composition', () => {
       const state = makeStateWithSeed(seed);
       const result = reduce(state, {
         type: 'INIT_GAME',
-        mode: 'quick',
+        mode: 'single',
         totalWins: 0,
         eternalRelics: [],
       });

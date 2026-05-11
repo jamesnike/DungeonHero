@@ -472,6 +472,34 @@ function isInputContinuation(action: GameAction): boolean {
     // queue is the ONLY thing that runs while a float is on screen.
     case 'TRIGGER_MONSTER_SKILL_FLOAT':
     case 'RELEASE_MONSTER_SKILL_FLOAT':
+    // Multiplayer (phase 2+) — all three are network-driven follow-ups
+    // that mutate `remainingDeck` / `multiplayerSession` / `pendingTransferOut`.
+    // They originate either from the network layer (`useMultiplayerSync`
+    // hook reacting to a Realtime payload) or from the local waterfall
+    // reducer (clearing pendingTransferOut after ack). All can be enqueued
+    // while phase='playerInput', so they MUST drain or the deck view will
+    // diverge from the peer's view (most painful failure mode: player
+    // never sees the cards the peer pushed). See
+    // `parallel-state-fields-consumer-audit` for why "deck-routing"
+    // family actions absolutely cannot strand.
+    case 'MULTIPLAYER_RECEIVE_TRANSFER':
+    case 'MULTIPLAYER_SHARED_SHRINK':
+    case 'MULTIPLAYER_CLEAR_PENDING_TRANSFER':
+    // SET_MULTIPLAYER_SESSION is dispatched by GameBoard's lobby flow / dev
+    // helper / phase-6 resume to switch the session pointer. It must drain
+    // under playerInput because it's typically dispatched right after
+    // INIT_GAME (which leaves us at playerInput) — otherwise the hook
+    // reading `multiplayerSession` to wire up the BroadcastChannel never
+    // sees the session and silently does nothing.
+    case 'SET_MULTIPLAYER_SESSION':
+    // INIT_MULTIPLAYER_GAME is the multiplayer counterpart to INIT_GAME. It
+    // resets state to a fresh multiplayer baseline (preview from server-
+    // supplied sharedDeck, multiplayerSession set in one step). Currently
+    // dispatched only from `MultiplayerLobby` after a successful create-
+    // /join-room round-trip, so it's typically a top-level dispatch (which
+    // bypasses this gate via _processAction). Listed here defensively so
+    // any future enqueue path also works.
+    case 'INIT_MULTIPLAYER_GAME':
       return true;
     default:
       return false;
