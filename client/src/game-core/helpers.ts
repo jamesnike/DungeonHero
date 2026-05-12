@@ -982,7 +982,7 @@ export function computePersuadeSuccessRatePure(state: GameState, monster: GameCa
     }
   }
 
-  const maxRate = isHighLayer ? 70 : 85;
+  const maxRate = isHighLayer ? 80 : 95;
   const clamped = Math.max(5, Math.min(maxRate, rate));
   return Math.round(clamped / 5) * 5;
 }

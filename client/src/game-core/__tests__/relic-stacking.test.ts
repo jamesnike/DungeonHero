@@ -231,11 +231,11 @@ describe('永恒护符叠加 — chain-persuade 劝降率线性放大', () => {
     const { state: s2 } = buildPersuadeFixture(2, 2);
     const r0 = computePersuadeSuccessRatePure(s0, monster);
     const r2 = computePersuadeSuccessRatePure(s2, monster);
-    // ×2 relics × consecutive=2 × 15 = +60. Rate is clamped to maxRate (70 or
-    // 85) so we just assert the diff is bounded by clamp, never < 0, and
+    // ×2 relics × consecutive=2 × 15 = +60. Rate is clamped to maxRate (80 or
+    // 95) so we just assert the diff is bounded by clamp, never < 0, and
     // strictly larger than the 0-stack baseline.
     expect(r2).toBeGreaterThan(r0);
-    expect(r2).toBeLessThanOrEqual(85);
+    expect(r2).toBeLessThanOrEqual(95);
   });
 });
 
