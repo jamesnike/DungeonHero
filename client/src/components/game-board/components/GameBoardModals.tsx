@@ -702,6 +702,8 @@ function GameBoardModalsInner({
         gold={gold}
         backpackCount={backpackItems.length}
         backpackCapacity={backpackCapacity}
+        handCount={handCards.length}
+        effectiveHandLimit={HAND_LIMIT + handLimitBonus}
         shopLevel={shopLevel}
         canDeleteCard={_canDeleteCardInShop}
         deleteDisabledReason={_shopDeleteDisabledReason}

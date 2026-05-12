@@ -536,6 +536,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: dedupeKnightMagicRecycleFlareImage,
     classCard: true,
     unique: true,
+    nonCopyable: true,
     description: '永久：回收袋洗回背包（所有牌剩余瀑流 -1），然后抽 1 张牌。(可超手牌上限)',
     shortDescription: '回收袋剩余瀑流 -1；抽 1 张',
     magicType: 'permanent',
@@ -973,6 +974,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: knightMirrorCopySummonAmuletImage,
     classCard: true,
     unique: true,
+    nonCopyable: true,
     description: '每抽 12 张牌，将一张「镜影摹形」加入手牌。',
     shortDescription: '每抽 12 张，入手 1 张「镜影摹形」',
     amuletEffect: 'mirror-copy-summon',
@@ -1435,6 +1437,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: dedupeKnightMagicRecycleTideImage,
     classCard: true,
     unique: true,
+    nonCopyable: true,
     description: '永久：将背包所有牌移入回收袋；然后回收袋瀑流 -1，已就绪的牌洗回背包。',
     shortDescription: '背包→回收袋；回收袋瀑流 -1，就绪回背包',
     magicType: 'permanent',
@@ -1591,10 +1594,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   //   始终弹出 monster picker，玩家可选 hero / 盾自伤（allowsHeroTarget: true）。
   // - 算式：base = floor(state.backpackItems.length * pct / 100)；
   //   totalDmg = computeSpellDamagePure(state, base + amplifyBonus) * echoMultiplier。
-  // - 附加：每造成 4 点法伤额外抽 1 张牌（floor(totalDmg / 4)）。
+  // - 附加：每造成 3 点法伤额外抽 1 张牌（floor(totalDmg / 3)）。
   //   按计算总伤算（溢杀也算）；hero / 盾自伤也触发抽牌；
   //   Echo (A 类) 后 totalDmg 已含 ×N，抽牌自然按 ×N 后总伤计算。
-  //   阈值固定 4，不随升级变化。抽牌走 backpack（draw-cards-defaults-to-backpack.mdc）。
+  //   阈值固定 3，不随升级变化。抽牌走 backpack（draw-cards-defaults-to-backpack.mdc）。
   // - Echo (A 类)：单次结算，伤害 ×echoMultiplier。
   // - 与 missile-bolt / apprentice-bolt / stun-cap-strike 共用 monster-select 路径
   //   （hero.ts:reduceMagicMonsterSelection）；isSpellDamage=true。
@@ -1604,10 +1607,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBagFetchImage,
     classCard: true,
-    description: '永久：对一个目标造成等同于背包剩余卡牌数 50% 的法术伤害（向下取整）。每造成 4 点伤害额外抽 1 张牌。',
-    shortDescription: '背包数 × 50% 法伤；每 4 伤害抽 1',
+    description: '永久：对一个目标造成等同于背包剩余卡牌数 50% 的法术伤害（向下取整）。每造成 3 点伤害额外抽 1 张牌。',
+    shortDescription: '背包数 × 50% 法伤；每 3 伤害抽 1',
     magicType: 'permanent',
-    magicEffect: '永久魔法：选择一个目标，造成背包数 × 50% 法伤；每 4 伤害抽 1 张牌。',
+    magicEffect: '永久魔法：选择一个目标，造成背包数 × 50% 法伤；每 3 伤害抽 1 张牌。',
     knightEffect: 'backpack-bolt',
     recycleDelay: 1,
     maxUpgradeLevel: 2,

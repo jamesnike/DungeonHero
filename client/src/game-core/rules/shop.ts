@@ -157,16 +157,33 @@ function reducePurchase(
 
   const offering = state.shopOfferings.find(o => o.card.id === action.cardId);
   const cost = offering?.price ?? 0;
+  const wentToHand = result.destination === 'hand';
+  const destinationLabel = wentToHand ? '手牌' : '背包';
 
   const sideEffects: SideEffect[] = [
     { event: 'shop:purchased', payload: { card: result.purchasedCard, cost } },
-    { event: 'shop:classCardObtained', payload: { card: result.purchasedCard, source: 'purchase', destination: 'backpack' } },
+    // destination tells the `shop:classCardObtained` listener in
+    // useShopHandlers whether to fire the legacy class-deck → backpack
+    // flight (destination='backpack') or skip it (destination='hand'); the
+    // class-deck → hand flight for the hand path is driven separately by
+    // the `card:queueToHand` event below — the same hand-delivery pipeline
+    // used by the discover hand-first path (sourceHint: 'classDeck' →
+    // triggerBackpackHandFlight → handAreaRef).
+    { event: 'shop:classCardObtained', payload: { card: result.purchasedCard, source: 'purchase', destination: result.destination } },
     { event: 'card:newCardGained', payload: { count: 1, source: 'classPool' } },
-    { event: 'log:entry', payload: { type: 'shop', message: `商店：购买「${result.purchasedCard.name}」（-${cost} 金币）` } },
+    { event: 'log:entry', payload: { type: 'shop', message: `商店：购买「${result.purchasedCard.name}」（-${cost} 金币，进入${destinationLabel}）` } },
   ];
+
+  if (wentToHand) {
+    sideEffects.push({
+      event: 'card:queueToHand',
+      payload: { card: result.purchasedCard, sourceHint: 'classDeck' },
+    });
+  }
 
   const purchasePatch: Partial<GameState> = {
     gold: result.gold,
+    handCards: result.handCards,
     backpackItems: result.backpackItems,
     shopOfferings: result.shopOfferings,
     rng: result.rng,

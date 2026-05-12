@@ -49,7 +49,7 @@ import { computeAmuletEffectsForState, applySlotArmorBonusDelta } from '../equip
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { hasEternalRelic } from '@/lib/eternalRelics';
 import { processRecycleBag, drawMultipleFromBackpack, pushRecycleRestoreSideEffects, applyMirrorCopySummonProgress } from '../cards';
-import { resetHeroWavePure } from '../hero';
+import { resetHeroWavePure, hasPassiveSkillOrRelic } from '../hero';
 import { createBugletCard } from '../deck';
 
 // ---------------------------------------------------------------------------
@@ -382,23 +382,27 @@ function reduceApplyWaterfallEffects(state: GameState): ReduceResult {
 
   const amuletEffects = computeAmuletEffectsForState(state);
 
-  // Eternal relic: waterfall-heal. Note that the actual amount is multiplied
-  // inside `applyHeal` based on `healCount` (compound 2^N rule). The display
-  // string mirrors that math so the log tells the player the post-multiplier
-  // amount that will actually land.
-  if (hasEternalRelic(state.eternalRelics, 'waterfall-heal')) {
+  // 潮涌回春 (`waterfall-heal`): 3 条平行获得路径都触发——永恒护符、开局选的英雄技能、
+  // shop 三选一买的英雄技能。OR 语义（不叠加）。详见 `hero.ts:hasPassiveSkillOrRelic`。
+  // 历史 bug：此处长年只查 `hasEternalRelic` → shop 买的 / 开局选的潮涌回春完全哑火。
+  // 实际治疗量在 `applyHeal` 内按 `healCount` 复合 2^N 倍乘；log 文案镜像该计算把
+  // 倍乘后的最终量告诉玩家。
+  if (hasPassiveSkillOrRelic(state, 'waterfall-heal')) {
     const baseHeal = 4;
     const healMul = Math.pow(2, amuletEffects.healCount);
     const healAmount = baseHeal * healMul;
     const healSuffix = amuletEffects.healCount > 0
       ? `（治疗 ×${healMul}）`
       : '';
+    const sourcePrefix = hasEternalRelic(state.eternalRelics, 'waterfall-heal')
+      ? '永恒护符·潮涌回春'
+      : '潮涌回春';
     enqueuedActions.push({ type: 'HEAL', amount: baseHeal, source: 'waterfall-heal-relic' });
     sideEffects.push({
       event: 'log:entry',
       payload: {
         type: 'skill',
-        message: `永恒护符·潮涌回春：瀑布推进，恢复 ${healAmount} 点生命${healSuffix}`,
+        message: `${sourcePrefix}：瀑布推进，恢复 ${healAmount} 点生命${healSuffix}`,
       },
     });
   }

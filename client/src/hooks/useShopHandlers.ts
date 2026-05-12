@@ -350,7 +350,13 @@ export function useShopHandlers(depsRef: React.MutableRefObject<ShopHandlersDeps
       const offering = state.shopOfferings.find(o => o.card.id === cardId);
       if (!offering || offering.sold) return;
       if (state.gold < offering.price) return;
-      if (state.backpackItems.length >= depsRef.current.backpackCapacity) return;
+      // Hand-first delivery: only block when BOTH hand and backpack are full.
+      // The reducer (`purchaseFromShopPure`) chooses hand vs backpack based on
+      // available room and emits `shop:classCardObtained` with the right
+      // destination + (for the hand path) a `card:queueToHand` flight event.
+      const handFull = state.handCards.length >= depsRef.current.effectiveHandLimit;
+      const backpackFull = state.backpackItems.length >= depsRef.current.backpackCapacity;
+      if (handFull && backpackFull) return;
 
       // Reducer clones the bought card with a fresh id and emits both
       // `shop:classCardObtained` (drives the class-deck flight) and

@@ -136,6 +136,37 @@ export function markSkillUsedPure(
   };
 }
 
+/**
+ * Shared-ID 触发判定：英雄技能 ID 与永恒护符 ID 在 `waterfall-heal`、
+ * `discard-profit`、`heal-to-damage`、`summon-minion`、`vitality-well`、
+ * `early-surge`、`shield-wall` 这几个 ID 上故意同名（同 ID 表达「同一个被动效果」），
+ * 玩家可以通过 3 条独立路径拥有同一个 passive：
+ *
+ *   1. 开局选 (`state.selectedHeroSkill === id`)
+ *   2. Shop 三选一买 (`state.extraHeroSkills.includes(id)`)
+ *   3. 跨存档永恒护符 (`state.eternalRelics.some(r => r.id === id)`)
+ *
+ * **任何运行时 passive 触发判定**（瀑流回血、弃牌生金、随从成长、治疗→伤害）
+ * 都必须用这条 helper，不能只查 `eternalRelics` 或只查 `selectedHeroSkill` ——
+ * 否则 shop 买的 / 开局选的 那条路径会哑火。
+ *
+ * OR 语义：任意一个来源命中即返回 true。**不**叠加（多路径不会让 4 HP 变 8 HP）；
+ * 若未来要叠加请改用按来源各自计数的写法。
+ *
+ * 历史 bug：`waterfall-heal` 和 `discard-profit` 长年只查 eternal relic，shop
+ * 买的英雄技能完全不工作；`summon-minion` 和 `heal-to-damage` 查了
+ * `selectedHeroSkill` + `eternalRelics` 但漏了 `extraHeroSkills`。
+ */
+export function hasPassiveSkillOrRelic(
+  state: GameState,
+  id: HeroSkillId,
+): boolean {
+  if (state.selectedHeroSkill === id) return true;
+  if (state.extraHeroSkills.includes(id)) return true;
+  if (state.eternalRelics?.some(r => r.id === id)) return true;
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Pending action setters
 // ---------------------------------------------------------------------------

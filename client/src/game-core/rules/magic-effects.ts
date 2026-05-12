@@ -145,7 +145,7 @@
  * │ KNIGHT discard-rebuild           │ A   │ discover queue ×N             │
  * │ KNIGHT armor-stun-convert        │ B   │ pick slot twice               │
  * │ KNIGHT stun-cap-strike           │ A/B │ damage ×N + draw ×N + 1 dice  │
- * │ KNIGHT backpack-bolt             │ A   │ dmg ×N + draw floor(dmg/4)    │
+ * │ KNIGHT backpack-bolt             │ A   │ dmg ×N + draw floor(dmg/3)    │
  * │ KNIGHT recycle-bolt              │ A   │ damage ×N (single-target)     │
  * │ KNIGHT lay-mine                  │ A   │ spawn N mines (distinct slots)│
  * │ KNIGHT temp-attack-double        │ A/B │ +atk ×N + modal re-prompt     │
@@ -2557,11 +2557,17 @@ export function resolveKnightInstantMagic(
 
     // Modal-dependent effects — emit specific events for UI
     case 'mirror-copy': {
-      const hasEquip = Boolean(state.equipmentSlot1) || Boolean(state.equipmentSlot2);
-      const hasAmulets = (state.amuletSlots ?? []).length > 0;
-      const hasHand = state.handCards.length > 0;
-      if (!hasEquip && !hasAmulets && !hasHand) {
-        banner(sideEffects, '镜影摹形：没有可选的牌（装备栏、护符栏与手牌皆空）。');
+      // 排除 `nonCopyable` 卡：弹窗端 (`MirrorCopyModal`) 也按同样规则过滤；
+      // 这里先做 reducer 层兜底，避免「全场只有 nonCopyable 卡」时弹窗开了但
+      // 里面是空的——直接 fizzle 才是预期 UX。
+      // 卡列表：回收灵焰 / 专属感召 / 影摹召引符 / 洗册归川 / 回收余韵
+      //（参见 `non-copyable-deck-snapshot.test.ts` 锁定的 exact set）。
+      const slot1Copyable = Boolean(state.equipmentSlot1) && !state.equipmentSlot1?.nonCopyable;
+      const slot2Copyable = Boolean(state.equipmentSlot2) && !state.equipmentSlot2?.nonCopyable;
+      const copyableAmulets = (state.amuletSlots ?? []).filter(a => !a?.nonCopyable).length;
+      const copyableHand = state.handCards.filter(c => !c.nonCopyable).length;
+      if (!slot1Copyable && !slot2Copyable && copyableAmulets === 0 && copyableHand === 0) {
+        banner(sideEffects, '镜影摹形：没有可复制的目标（装备栏、护符栏与手牌中无可复制的牌）。');
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -3588,14 +3594,14 @@ export function resolveKnightPermanentMagic(
       // amplifyBonus 算入 base damage（与其它单目标伤害 magic 一致）。
       // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
       // Echo (A 类)：伤害单次结算 ×echoMultiplier，无模态重弹。
-      // 附加：每造成 4 点法伤额外抽 1 张牌（floor(totalDmg / 4)，echo 后总伤一并算）。
+      // 附加：每造成 3 点法伤额外抽 1 张牌（floor(totalDmg / 3)，echo 后总伤一并算）。
       // 实际抽牌在 hero.ts:reduceMagicMonsterSelection 'backpack-bolt' 分支处理。
       const pcts = [50, 75, 100];
       const pct = pcts[card.upgradeLevel ?? 0] ?? pcts[pcts.length - 1];
       const backpackCount = state.backpackItems.length;
       const baseDmg = Math.floor((backpackCount * pct) / 100);
       const totalDmg = getSpellDamage(baseDmg + (card.amplifyBonus ?? 0), state) * echoMultiplier;
-      const drawCount = Math.floor(totalDmg / 4);
+      const drawCount = Math.floor(totalDmg / 3);
       const echoTag = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
       const drawTag = drawCount > 0 ? `，抽 ${drawCount} 张牌` : '';
 
@@ -5343,12 +5349,16 @@ export function resolvePendingMagic(
 
     switch (effect) {
       case 'bulwark-choice': {
+        // Invariant: `bulwarkPassiveActive` / `bulwarkTempArmorStacks` 是 combat.ts 真正
+        // 消费的层数字段；`eternalRelics` 数组里 `bulwark-attack` / `bulwark-armor` 的份数
+        // 是「平行镜像」——纯粹用来驱动护符栏 ×N badge 显示
+        // （见 lib/eternalRelics.ts 的 STACKABLE_RELIC_IDS）。两者在这里——唯一的写入点
+        // ——一起累加，正常玩家路径下不会漂移。任何未来改动如果动了其中一边，必须同时动另一边；
+        // 参考 parallel-state-fields-consumer-audit.mdc。
         if (choiceId === 'waterfall-armor') {
           const newStacks = (state.bulwarkPassiveActive ?? 0) + 1;
           patch.bulwarkPassiveActive = newStacks;
-          if (!hasEternalRelic(state.eternalRelics ?? [], 'bulwark-attack')) {
-            patch.eternalRelics = [...(state.eternalRelics ?? []), getEternalRelic('bulwark-attack')];
-          }
+          patch.eternalRelics = [...(state.eternalRelics ?? []), getEternalRelic('bulwark-attack')];
           const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
           const tempGain = 2 * newStacks;
           log(sideEffects, 'magic', `获得永恒护符·瀑流铸剑${stackLabel}：之后每次攻击，该装备栏临时攻击 +${tempGain}`);
@@ -5356,9 +5366,7 @@ export function resolvePendingMagic(
         } else {
           const newStacks = (state.bulwarkTempArmorStacks ?? 0) + 1;
           patch.bulwarkTempArmorStacks = newStacks;
-          if (!hasEternalRelic(state.eternalRelics ?? [], 'bulwark-armor')) {
-            patch.eternalRelics = [...(state.eternalRelics ?? []), getEternalRelic('bulwark-armor')];
-          }
+          patch.eternalRelics = [...(state.eternalRelics ?? []), getEternalRelic('bulwark-armor')];
           const stackLabel = newStacks > 1 ? `（×${newStacks}层）` : '';
           const tempGain = 2 * newStacks;
           log(sideEffects, 'magic', `获得永恒护符·格挡铸甲${stackLabel}：之后每次格挡，该装备栏临时护甲 +${tempGain}`);

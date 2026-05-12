@@ -627,9 +627,9 @@ const backpackBolt: CardTextFormatter = (card) => {
   const pcts = [50, 75, 100];
   const pct = pcts[level] ?? pcts[pcts.length - 1];
   return {
-    description: `永久：对一个目标造成等同于背包剩余卡牌数 ${pct}% 的法术伤害（向下取整）。每造成 4 点伤害额外抽 1 张牌。`,
-    shortDescription: `背包数 × ${pct}% 法伤；每 4 伤害抽 1`,
-    magicEffect: `永久魔法：选择一个目标，造成背包数 × ${pct}% 法伤；每 4 伤害抽 1 张牌。`,
+    description: `永久：对一个目标造成等同于背包剩余卡牌数 ${pct}% 的法术伤害（向下取整）。每造成 3 点伤害额外抽 1 张牌。`,
+    shortDescription: `背包数 × ${pct}% 法伤；每 3 伤害抽 1`,
+    magicEffect: `永久魔法：选择一个目标，造成背包数 × ${pct}% 法伤；每 3 伤害抽 1 张牌。`,
   };
 };
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Dialog,
@@ -60,6 +60,25 @@ export default function CardUpgradeModal({
   const { t } = useTranslation();
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [upgradesUsed, setUpgradesUsed] = useState(0);
+
+  // 历史 bug：单次升级路径（'upgradeCard' 战利品 / 流转之符 / 虫蜕之冠 / 淬炼冲击 L0/L1
+  // / `upgradeCardPure` 在 `state.upgradeModalMaxCount == null` 时直接 patch
+  // `upgradeModalOpen=false`）会从 reducer 外部把模态关掉——**不**走 Dialog 的
+  // `onOpenChange` → `handleClose`，因此本地 `upgradesUsed` / `selectedCardId` 不会被重置。
+  //
+  // 之后命运十字路口「选择两张牌升级」(`upgradeCard:2`) 重新打开模态时，
+  // `maxUpgrades=2` 但 `upgradesUsed` 还是上一次单升级遗留的 1：
+  //   remainingUpgrades = 2 - 1 = 1 → 描述显示「剩余 1 次」
+  //   玩家点 1 张 → `upgradesUsed = 2 >= 2` → 模态立刻关掉，玩家少升级 1 张。
+  //
+  // 修法：每次 `open` 翻成 true 都强制重置一遍内部计数。无论上次是怎么关的（外部 patch /
+  // 用户取消 / 完成升级），新的一次开模一定从 0 开始。
+  useEffect(() => {
+    if (open) {
+      setUpgradesUsed(0);
+      setSelectedCardId(null);
+    }
+  }, [open]);
 
   const remainingUpgrades = maxUpgrades != null ? maxUpgrades - upgradesUsed : Infinity;
 

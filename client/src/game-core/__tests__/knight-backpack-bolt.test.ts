@@ -346,20 +346,20 @@ describe('囊中惊雷 — hero target self-damage path', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6) 抽牌：每造成 4 点伤害额外抽 1 张牌（floor(totalDmg / 4)）
+// 6) 抽牌：每造成 3 点伤害额外抽 1 张牌（floor(totalDmg / 3)）
 //    - 按计算总伤算（溢杀也算）
 //    - hero / 盾自伤也触发抽牌
-//    - 阈值固定 4，不随升级变化
-//    - Echo (A 类)：totalDmg ×N 后整体除 4
+//    - 阈值固定 3，不随升级变化
+//    - Echo (A 类)：totalDmg ×N 后整体除 3
 // ---------------------------------------------------------------------------
 
-describe('囊中惊雷 — 每 4 点伤害抽 1 张牌', () => {
+describe('囊中惊雷 — 每 3 点伤害抽 1 张牌', () => {
   it('lvl 0 backpack 8 → totalDmg 4 → 抽 1 张', () => {
     const card = makeCard('draw1');
     // 背包里第 1 张是 card 本身（其实 card 在 handCards），下面构造 9 张 filler
     // → setup 时 backpack 9 张？不对：setup 之前 PLAY_CARD 会把 card 从 handCards
     // 移走，但不会动 backpackItems。我们让 backpack 8 张 filler。
-    // base = floor(8*50/100) = 4 → totalDmg 4 → drawCount 1
+    // base = floor(8*50/100) = 4 → totalDmg 4 → drawCount = floor(4/3) = 1
     const state = makeState({
       handCards: [card],
       backpackItems: makeBackpack(8),
@@ -376,36 +376,36 @@ describe('囊中惊雷 — 每 4 点伤害抽 1 张牌', () => {
     expect(result.state.backpackItems.length).toBe(beforeBackpack - 1);
   });
 
-  it('lvl 0 backpack 6 → totalDmg 3 → 抽 0 张（不足 4）', () => {
+  it('lvl 0 backpack 4 → totalDmg 2 → 抽 0 张（不足 3）', () => {
     const card = makeCard('draw0');
     const state = makeState({
       handCards: [card],
-      backpackItems: makeBackpack(6),
+      backpackItems: makeBackpack(4),
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
     const result = playAndPick(state, card.id, 'm1');
-    // base = floor(6*50/100) = 3 → drawCount = floor(3/4) = 0
-    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(47);
+    // base = floor(4*50/100) = 2 → drawCount = floor(2/3) = 0
+    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(48);
     // 没抽牌：hand 出牌后回到 0
     expect(result.state.handCards.length).toBe(0);
-    expect(result.state.backpackItems.length).toBe(6);
+    expect(result.state.backpackItems.length).toBe(4);
   });
 
-  it('lvl 2 backpack 12 → totalDmg 12 → 抽 3 张', () => {
-    const card = makeCard('draw3', { upgradeLevel: 2 });
+  it('lvl 2 backpack 12 → totalDmg 12 → 抽 4 张', () => {
+    const card = makeCard('draw4', { upgradeLevel: 2 });
     const state = makeState({
       handCards: [card],
       backpackItems: makeBackpack(12),
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
     const result = playAndPick(state, card.id, 'm1');
-    // base = 12*100/100 = 12 → totalDmg 12 → drawCount = 3
+    // base = 12*100/100 = 12 → totalDmg 12 → drawCount = floor(12/3) = 4
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(38);
-    expect(result.state.handCards.length).toBe(3);
-    expect(result.state.backpackItems.length).toBe(12 - 3);
+    expect(result.state.handCards.length).toBe(4);
+    expect(result.state.backpackItems.length).toBe(12 - 4);
   });
 
-  it('溢杀也算：totalDmg 12 打 5 HP 怪 → 仍抽 3 张', () => {
+  it('溢杀也算：totalDmg 12 打 5 HP 怪 → 仍抽 4 张', () => {
     const card = makeCard('overkill', { upgradeLevel: 2 });
     const state = makeState({
       handCards: [card],
@@ -417,9 +417,9 @@ describe('囊中惊雷 — 每 4 点伤害抽 1 张牌', () => {
     // 只验证「抽牌按计算总伤算，溢杀部分不被截断」。
     const m1 = result.state.activeCards.find(c => c?.id === 'm1');
     expect(m1?.hp ?? 0).toBeLessThanOrEqual(0);
-    // 抽牌按计算总伤 12 算：drawCount = 3
-    expect(result.state.handCards.length).toBe(3);
-    expect(result.state.backpackItems.length).toBe(12 - 3);
+    // 抽牌按计算总伤 12 算：drawCount = floor(12/3) = 4
+    expect(result.state.handCards.length).toBe(4);
+    expect(result.state.backpackItems.length).toBe(12 - 4);
   });
 
   it('hero target 自伤也抽牌', () => {
@@ -441,7 +441,7 @@ describe('囊中惊雷 — 每 4 点伤害抽 1 张牌', () => {
         } as GameAction,
       ],
     );
-    // base = floor(8*50/100) = 4 → 自伤 4 → 抽 1 张
+    // base = floor(8*50/100) = 4 → 自伤 4 → 抽 floor(4/3) = 1 张
     expect(result.state.hp).toBe(26);
     expect(result.state.handCards.length).toBe(1);
     expect(result.state.backpackItems.length).toBe(8 - 1);
@@ -468,31 +468,32 @@ describe('囊中惊雷 — 每 4 点伤害抽 1 张牌', () => {
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
     const result = playAndPick(state, card.id, 'm1');
-    // base = floor(8*50/100) = 4; totalDmg = 4 + 4 = 8 → drawCount = 2
+    // base = floor(8*50/100) = 4; totalDmg = 4 + 4 = 8 → drawCount = floor(8/3) = 2
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(42);
     expect(result.state.handCards.length).toBe(2);
     expect(result.state.backpackItems.length).toBe(8 - 2);
   });
 
-  it('display: dmg 8 → 文案始终展示抽牌规则「每 4 伤害抽 1 张牌」', () => {
+  it('display: dmg 8 → 文案始终展示抽牌规则「每 3 伤害抽 1 张牌」', () => {
     const r = computeDamageMagicDisplayPure(
       makeCard('disp', { upgradeLevel: 2 }),
       { hp: 20, maxHp: 30, gold: 0, backpackCount: 8 },
     );
     if (r?.mode === 'replace') {
       expect(r.text).toContain('造成 8 点法术伤害');
-      expect(r.text).toContain('每 4 伤害抽 1 张牌');
+      expect(r.text).toContain('每 3 伤害抽 1 张牌');
     }
   });
 
-  it('display: dmg 3 → 文案仍要展示抽牌规则（即使当下不触发抽牌）', () => {
+  it('display: dmg 2 → 文案仍要展示抽牌规则（即使当下不触发抽牌）', () => {
     const r = computeDamageMagicDisplayPure(
       makeCard('disp0'),
-      { hp: 20, maxHp: 30, gold: 0, backpackCount: 7 },
+      { hp: 20, maxHp: 30, gold: 0, backpackCount: 5 },
     );
     if (r?.mode === 'replace') {
-      expect(r.text).toContain('造成 3 点法术伤害');
-      expect(r.text).toContain('每 4 伤害抽 1 张牌');
+      // base = floor(5*50/100) = 2 → drawCount = floor(2/3) = 0
+      expect(r.text).toContain('造成 2 点法术伤害');
+      expect(r.text).toContain('每 3 伤害抽 1 张牌');
     }
   });
 
@@ -507,7 +508,7 @@ describe('囊中惊雷 — 每 4 点伤害抽 1 张牌', () => {
     const result = playAndPick(state, card.id, 'm1');
     // base = floor(8*50/100) = 4; totalDmg = 4 × 2 = 8
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(42);
-    // drawCount = floor(8/4) = 2（自然按 ×N 后总伤算）
+    // drawCount = floor(8/3) = 2（自然按 ×N 后总伤算）
     expect(result.state.handCards.length).toBe(2);
     expect(result.state.backpackItems.length).toBe(8 - 2);
     // doubleNextMagic 应被引擎消耗

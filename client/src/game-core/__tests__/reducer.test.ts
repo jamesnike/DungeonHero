@@ -369,23 +369,85 @@ describe('reducer', () => {
       expect(result.state.gold).toBe(20);
     });
 
-    it('PURCHASE by cardId deducts gold and adds to backpack', () => {
+    it('PURCHASE by cardId deducts gold and adds the cloned card to hand (hand-first delivery)', () => {
       const card = { id: 'c1', type: 'weapon' as const, name: 'Sword', value: 3 };
       const state = makeState({
         gold: 20,
         shopOfferings: [{ card, price: 10, sold: false }],
         classDeck: [card, { id: 'c2', type: 'shield' as const, name: 'Shield', value: 2 }],
+        handCards: [],
         backpackItems: [],
       });
       const result = reduce(state, { type: 'PURCHASE', cardId: 'c1' });
       expect(result.state.gold).toBe(10);
-      expect(result.state.backpackItems).toHaveLength(1);
+      // Hand-first: hand has room → bought card lands in hand, backpack stays empty.
+      expect(result.state.handCards).toHaveLength(1);
+      expect(result.state.backpackItems).toHaveLength(0);
       // The class pool is now an infinite template — the bought card is
       // a clone with a fresh id whose base id derives from 'c1'.
-      expect(result.state.backpackItems[0].id.startsWith('c1')).toBe(true);
+      expect(result.state.handCards[0].id.startsWith('c1')).toBe(true);
       // Class deck is NOT consumed by purchase — stays at 2.
       expect(result.state.classDeck).toHaveLength(2);
       expect(result.state.shopOfferings[0].sold).toBe(true);
+
+      // Side effects: shop:classCardObtained carries destination='hand', and
+      // a card:queueToHand event drives the class-deck → hand flight.
+      const obtained = result.sideEffects.find(e => e.event === 'shop:classCardObtained');
+      expect(obtained?.payload).toMatchObject({ source: 'purchase', destination: 'hand' });
+      const queueToHand = result.sideEffects.find(e => e.event === 'card:queueToHand');
+      expect(queueToHand?.payload).toMatchObject({ sourceHint: 'classDeck' });
+    });
+
+    it('PURCHASE falls back to backpack when hand is full', () => {
+      const card = { id: 'c1', type: 'weapon' as const, name: 'Sword', value: 3 };
+      // Fill the hand to the effective limit so the purchase must overflow.
+      const handFiller = Array.from({ length: HAND_LIMIT }, (_, i) => ({
+        id: `h${i}`, type: 'magic' as const, name: `Filler ${i}`, value: 0,
+      }));
+      const state = makeState({
+        gold: 20,
+        shopOfferings: [{ card, price: 10, sold: false }],
+        classDeck: [card],
+        handCards: handFiller,
+        backpackItems: [],
+      });
+      const result = reduce(state, { type: 'PURCHASE', cardId: 'c1' });
+      expect(result.state.gold).toBe(10);
+      // Hand stays at limit; bought card lands in backpack instead.
+      expect(result.state.handCards).toHaveLength(HAND_LIMIT);
+      expect(result.state.backpackItems).toHaveLength(1);
+      expect(result.state.backpackItems[0].id.startsWith('c1')).toBe(true);
+
+      // shop:classCardObtained destination should be 'backpack', and there
+      // should be NO card:queueToHand event for the backpack path.
+      const obtained = result.sideEffects.find(e => e.event === 'shop:classCardObtained');
+      expect(obtained?.payload).toMatchObject({ source: 'purchase', destination: 'backpack' });
+      const queueToHand = result.sideEffects.find(e => e.event === 'card:queueToHand');
+      expect(queueToHand).toBeUndefined();
+    });
+
+    it('PURCHASE fails (no-op) when both hand AND backpack are full', () => {
+      const card = { id: 'c1', type: 'weapon' as const, name: 'Sword', value: 3 };
+      const handFiller = Array.from({ length: HAND_LIMIT }, (_, i) => ({
+        id: `h${i}`, type: 'magic' as const, name: `Filler ${i}`, value: 0,
+      }));
+      const backpackFiller = Array.from({ length: BASE_BACKPACK_CAPACITY }, (_, i) => ({
+        id: `b${i}`, type: 'magic' as const, name: `B Filler ${i}`, value: 0,
+      }));
+      const state = makeState({
+        gold: 20,
+        shopOfferings: [{ card, price: 10, sold: false }],
+        classDeck: [card],
+        handCards: handFiller,
+        backpackItems: backpackFiller,
+      });
+      const result = reduce(state, { type: 'PURCHASE', cardId: 'c1' });
+      // Nothing changed: gold not deducted, hand and backpack untouched,
+      // offering not flipped to sold.
+      expect(result.state.gold).toBe(20);
+      expect(result.state.handCards).toHaveLength(HAND_LIMIT);
+      expect(result.state.backpackItems).toHaveLength(BASE_BACKPACK_CAPACITY);
+      expect(result.state.shopOfferings[0].sold).toBe(false);
     });
 
     it('PURCHASE fails when not enough gold', () => {
@@ -394,10 +456,12 @@ describe('reducer', () => {
         gold: 5,
         shopOfferings: [{ card, price: 10, sold: false }],
         classDeck: [card],
+        handCards: [],
         backpackItems: [],
       });
       const result = reduce(state, { type: 'PURCHASE', cardId: 'c1' });
       expect(result.state.gold).toBe(5);
+      expect(result.state.handCards).toHaveLength(0);
       expect(result.state.backpackItems).toHaveLength(0);
     });
 

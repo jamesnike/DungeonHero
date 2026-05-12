@@ -51,6 +51,7 @@ function ShopContainerInner() {
   }));
 
   const backpackCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + gs.backpackCapacityModifier);
+  const effectiveHandLimit = HAND_LIMIT + gs.handLimitBonus;
   const shopSourceEvent = gs.shopSourceEvent?.name ?? undefined;
 
   const flatEquipmentCards: GameCardData[] = (
@@ -124,6 +125,8 @@ function ShopContainerInner() {
         gold={gs.gold}
         backpackCount={gs.backpackItems.length}
         backpackCapacity={backpackCapacity}
+        handCount={gs.handCards.length}
+        effectiveHandLimit={effectiveHandLimit}
         shopLevel={gs.shopLevel}
         canDeleteCard={canDeleteCardInShop}
         deleteDisabledReason={shopDeleteDisabledReason}

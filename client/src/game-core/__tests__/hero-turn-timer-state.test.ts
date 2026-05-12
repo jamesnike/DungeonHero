@@ -653,6 +653,134 @@ describe('hero turn timer — monster-attacks-first scenario', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Regression: monster-initiates-combat-during-active-hero-turn scenario.
+//
+// Bug report (Tue May 12 2026): "Sometimes after monster attacks, hero turn
+// timer is 0s and ends immediately."
+//
+// Root cause: When hero has been in an active turn for a long time WITHOUT
+// any engaged monsters (timer hidden), `playerTurnStartedAt` holds the OLD
+// START_TURN timestamp (e.g. 38s ago). If hero then triggers
+// BEGIN_COMBAT(initiator='monster') — via Ogre auto-engage, dragging a
+// monster card, wraith enrage, etc. — `reduceBeginCombat` previously LEFT
+// `playerTurnStartedAt` UNCHANGED. After block resolves and
+// `APPLY_MONSTER_TURN_END_EFFECTS` pauses on `awaitingDice` or
+// `awaitingSkillFloat` (before `START_TURN` runs to refresh), the timer
+// becomes visible with stale T0 → remainingMs=0 → force-ends hero turn.
+//
+// Fix: explicitly null out `playerTurnStartedAt` in the `initiator='monster'`
+// branch when starting fresh combat (prevLiveIds=[]). Subsequent START_TURN
+// sets it fresh when hero actually gets control.
+// ---------------------------------------------------------------------------
+
+describe('hero turn timer — monster-initiates-combat-while-hero-turn-active', () => {
+  it('clears stale playerTurnStartedAt when monster initiates a fresh combat', () => {
+    // Setup: hero has been acting for 38s with no monsters engaged. Then a
+    // monster initiates combat (e.g. via Ogre equip auto-engage / dragging
+    // a monster card / wraith enrage triggering on hero action).
+    const staleTimestamp = Date.now() - 38_000;
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: { ...initialCombatState }, // no engaged monsters
+      playerTurnStartedAt: staleTimestamp,
+      phase: 'playerInput',
+    });
+
+    const result = reduce(state, {
+      type: 'BEGIN_COMBAT',
+      monster: goblin,
+      initiator: 'monster',
+    });
+
+    expect(result.state.combatState.currentTurn).toBe('monster');
+    expect(result.state.combatState.pendingBlock?.monsterId).toBe('m1');
+    // CRITICAL: stale timestamp must be cleared so timer doesn't fire
+    // prematurely during the post-block awaitingDice / awaitingSkillFloat pause.
+    expect(result.state.playerTurnStartedAt).toBeNull();
+  });
+
+  it('end-to-end: stale-then-monster-initiates → block → goblin dice pause → no premature 0s', () => {
+    // The bug scenario in full: stale timestamp, monster initiates, block,
+    // dice queue pauses drain BEFORE START_TURN. Verify that during the
+    // dice pause, playerTurnStartedAt is null (timer hidden, no premature
+    // force-end).
+    const goblinWithDice: GameCardData = {
+      ...goblin,
+      monsterSpecial: 'goblin-heal',
+    } as GameCardData;
+    const staleTimestamp = Date.now() - 38_000;
+    const state = makeState({
+      activeCards: [goblinWithDice, null, null, null, null],
+      activeCardStacks: { 0: { stackCount: 1, stackedCards: [] } } as any,
+      combatState: { ...initialCombatState }, // no engaged monsters initially
+      playerTurnStartedAt: staleTimestamp,
+      phase: 'playerInput',
+      hp: 30,
+      maxHp: 30,
+    });
+
+    // Monster initiates combat (e.g. auto-engage trigger)
+    let r = drain(state, [{
+      type: 'BEGIN_COMBAT',
+      monster: goblinWithDice,
+      initiator: 'monster',
+    }]);
+
+    // Should be in monster turn awaiting block, with stale timestamp cleared.
+    expect(r.state.combatState.currentTurn).toBe('monster');
+    expect(r.state.phase).toBe('awaitingBlock');
+    expect(r.state.playerTurnStartedAt).toBeNull();
+
+    // Resolve the block — chain through monster turn end → APPLY_MONSTER_TURN_END_EFFECTS.
+    r = drain(r.state, [{ type: 'RESOLVE_BLOCK', choice: 'no-shield' as any }]);
+
+    // After resolving block, either:
+    //   (a) Chain reached START_TURN → playerTurnStartedAt is fresh.
+    //   (b) Chain paused on awaitingDice → playerTurnStartedAt stays null.
+    // In NEITHER case should playerTurnStartedAt be the stale T0.
+    expect(r.state.playerTurnStartedAt).not.toBe(staleTimestamp);
+    if (r.state.phase === 'awaitingDice') {
+      // Paused before START_TURN: timer hidden (null).
+      expect(r.state.playerTurnStartedAt).toBeNull();
+    } else {
+      // Chain completed: fresh timestamp.
+      expect(r.state.playerTurnStartedAt).not.toBeNull();
+      expect(Date.now() - r.state.playerTurnStartedAt!).toBeLessThan(1000);
+    }
+  });
+
+  it('preserves the stale->null clear behavior even when prevLiveIds is empty but currentTurn was already hero', () => {
+    // Edge case: state has currentTurn='hero' but no engaged monsters,
+    // playerTurnStartedAt was stale. initiator='hero' path should set it
+    // fresh (not null). Validates the hero-init branch isn't accidentally
+    // affected by the fix.
+    const staleTimestamp = Date.now() - 38_000;
+    const state = makeState({
+      activeCards: [goblin, null, null, null, null],
+      combatState: {
+        ...initialCombatState,
+        currentTurn: 'hero',
+        engagedMonsterIds: [],
+      },
+      playerTurnStartedAt: staleTimestamp,
+      phase: 'playerInput',
+    });
+
+    const before = Date.now();
+    const result = reduce(state, {
+      type: 'BEGIN_COMBAT',
+      monster: goblin,
+      initiator: 'hero',
+    });
+
+    expect(result.state.combatState.currentTurn).toBe('hero');
+    expect(result.state.playerTurnStartedAt).not.toBeNull();
+    expect(result.state.playerTurnStartedAt).not.toBe(staleTimestamp);
+    expect(result.state.playerTurnStartedAt!).toBeGreaterThanOrEqual(before);
+  });
+});
+
 describe('hero turn timer — persistence round-trip', () => {
   it('serializes and hydrates playerTurnStartedAt', async () => {
     const { serializeGameState } = await import('../persistence');

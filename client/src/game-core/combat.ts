@@ -27,6 +27,7 @@ import { flattenActiveRowSlots } from './helpers';
 import { isMonsterMagicImmuneByBuilding } from './buildingAura';
 import { getHeroSkillById } from '@/lib/heroSkills';
 import type { HeroSkillId } from '@/lib/heroSkills';
+import { hasPassiveSkillOrRelic } from './hero';
 import type { MonsterSkillKey } from './monsterSkillNames';
 
 /**
@@ -642,9 +643,10 @@ export function computeHeal(
     actualHeal,
   };
 
-  const hasHealToDamage =
-    state.selectedHeroSkill === 'heal-to-damage' ||
-    state.eternalRelics.some(r => r.id === 'heal-to-damage');
+  // 愈战愈勇 (`heal-to-damage`)：见 `hero.ts:hasPassiveSkillOrRelic` —— 3 条获得路径
+  // 都生效（开局选 / shop 三选一买 / 永恒护符）。历史 bug：此处长年只查
+  // `selectedHeroSkill + eternalRelics` → shop 买的愈战愈勇治疗后不加伤害。
+  const hasHealToDamage = hasPassiveSkillOrRelic(state, 'heal-to-damage');
 
   if (actualHeal > 0 && hasHealToDamage) {
     const prevAccum = safeHealAccum;

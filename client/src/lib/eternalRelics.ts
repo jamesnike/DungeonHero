@@ -212,6 +212,35 @@ export function countEternalRelics(relics: EternalRelic[], id: EternalRelicId): 
 }
 
 /**
+ * Legacy-save migration: 早期版本里 `潮涌铸甲` 只把 `bulwark-attack` / `bulwark-armor`
+ * 在第一次获得时 push 到 `eternalRelics` 数组（用 `hasEternalRelic` 守卫），后续叠加
+ * 只增加 `state.bulwarkPassiveActive` / `state.bulwarkTempArmorStacks` 字段。结果：
+ * 即便玩家叠了 N 次，护符栏图标也只显示 1 个、没有 ×N badge。
+ *
+ * 修复后 resolver 每次都 push 一份镜像副本（见 magic-effects.ts `case 'bulwark-choice'`
+ * 的 invariant 注释）。但旧存档已经只有 1 份了——加载时这里 top-up 到跟字段数字一致，
+ * 让玩家继续游戏时能看到正确的 ×N。
+ *
+ * 幂等：如果数组里已经有 N 份（新存档的正常路径），返回不变。
+ */
+export function topUpBulwarkRelicsForLegacySave(
+  relics: EternalRelic[],
+  passiveActive: number,
+  tempArmorStacks: number,
+): EternalRelic[] {
+  const attackNeeded = Math.max(0, passiveActive);
+  const armorNeeded = Math.max(0, tempArmorStacks);
+  const attackHave = countEternalRelics(relics, 'bulwark-attack');
+  const armorHave = countEternalRelics(relics, 'bulwark-armor');
+  if (attackHave >= attackNeeded && armorHave >= armorNeeded) return relics;
+
+  const out = [...relics];
+  for (let i = attackHave; i < attackNeeded; i++) out.push(getEternalRelic('bulwark-attack'));
+  for (let i = armorHave; i < armorNeeded; i++) out.push(getEternalRelic('bulwark-armor'));
+  return out;
+}
+
+/**
  * Set of relic ids whose granting potions are stackable. The set is used by
  * the bar UI to decide whether to display a `×N` stack badge and by the detail
  * modal to append a per-stack bonus description. Granting code itself reads
@@ -224,6 +253,12 @@ export const STACKABLE_RELIC_IDS: ReadonlySet<EternalRelicId> = new Set<EternalR
   'end-turn-draw',
   'equip-overclock',
   'summon-frenzy',
+  // 潮涌铸甲 2-choose-1：玩家可以重复打出该 magic，多次选同一个分支会让对应永恒护符叠加。
+  // 数值层数另存在 `state.bulwarkPassiveActive` / `state.bulwarkTempArmorStacks`（combat.ts
+  // 读它们计算 temp 攻击/护甲），这里相关 relic 在数组里的份数是平行镜像，仅供 dedupeRelics
+  // 显示 ×N badge 用。详见 rules/magic-effects.ts `case 'bulwark-choice'` 的 invariant 注释。
+  'bulwark-attack',
+  'bulwark-armor',
 ]);
 
 export function isRelicStackable(id: EternalRelicId): boolean {
@@ -285,6 +320,10 @@ export function getRelicStackedSuffix(id: EternalRelicId, count: number): string
       return `（已叠加 ×${count}，回收袋牌数 > 15 时装备效果额外触发 ${count} 次）`;
     case 'summon-frenzy':
       return `（已叠加 ×${count}，背包牌数 > 10 时「专属感召」额外触发 ${count} 次）`;
+    case 'bulwark-attack':
+      return `（已叠加 ×${count}，每次攻击该装备栏临时攻击 +${2 * count}）`;
+    case 'bulwark-armor':
+      return `（已叠加 ×${count}，每次格挡该装备栏获得 ${2 * count} 点临时护甲）`;
     default:
       return `（已叠加 ×${count}）`;
   }

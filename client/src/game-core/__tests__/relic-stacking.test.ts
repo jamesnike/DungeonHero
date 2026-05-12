@@ -45,6 +45,7 @@ import {
   hasEternalRelic,
   isRelicStackable,
   STACKABLE_RELIC_IDS,
+  topUpBulwarkRelicsForLegacySave,
 } from '@/lib/eternalRelics';
 import { computePersuadeSuccessRatePure } from '../helpers';
 import { initialCombatState } from '../constants';
@@ -344,12 +345,15 @@ describe('永恒护符叠加 — end-turn-draw 回合结束抽牌线性放大（
 // 5) Display layer — dedupeRelics + getRelicStackedSuffix + STACKABLE_RELIC_IDS
 // ---------------------------------------------------------------------------
 describe('永恒护符叠加 — 显示层 helpers', () => {
-  it('STACKABLE_RELIC_IDS 严格等于这四件 relic（卡面 + 行为同步源）', () => {
-    expect(STACKABLE_RELIC_IDS.size).toBe(4);
+  it('STACKABLE_RELIC_IDS 严格等于这 7 件 relic（卡面 + 行为同步源）', () => {
+    expect(STACKABLE_RELIC_IDS.size).toBe(7);
     expect(STACKABLE_RELIC_IDS.has('chain-persuade')).toBe(true);
     expect(STACKABLE_RELIC_IDS.has('equip-empower')).toBe(true);
     expect(STACKABLE_RELIC_IDS.has('end-turn-draw')).toBe(true);
     expect(STACKABLE_RELIC_IDS.has('equip-overclock')).toBe(true);
+    expect(STACKABLE_RELIC_IDS.has('summon-frenzy')).toBe(true);
+    expect(STACKABLE_RELIC_IDS.has('bulwark-attack')).toBe(true);
+    expect(STACKABLE_RELIC_IDS.has('bulwark-armor')).toBe(true);
   });
 
   it('isRelicStackable 反映 STACKABLE_RELIC_IDS', () => {
@@ -357,6 +361,9 @@ describe('永恒护符叠加 — 显示层 helpers', () => {
     expect(isRelicStackable('equip-empower')).toBe(true);
     expect(isRelicStackable('end-turn-draw')).toBe(true);
     expect(isRelicStackable('equip-overclock')).toBe(true);
+    expect(isRelicStackable('summon-frenzy')).toBe(true);
+    expect(isRelicStackable('bulwark-attack')).toBe(true);
+    expect(isRelicStackable('bulwark-armor')).toBe(true);
     expect(isRelicStackable('vitality-well')).toBe(false);
     expect(isRelicStackable('waterfall-draw-2')).toBe(false);
   });
@@ -415,5 +422,155 @@ describe('永恒护符叠加 — 显示层 helpers', () => {
   it('getRelicStackedSuffix: 非 stackable relic 即使被强行传 count>1 也只返回通用文案', () => {
     const s = getRelicStackedSuffix('vitality-well', 2);
     expect(s).toBe('（已叠加 ×2）');
+  });
+
+  it('getRelicStackedSuffix: bulwark-attack ×3 → 含 "×3" 和 "+6"', () => {
+    const s = getRelicStackedSuffix('bulwark-attack', 3);
+    expect(s).toContain('×3');
+    expect(s).toContain('+6');
+  });
+
+  it('getRelicStackedSuffix: bulwark-armor ×2 → 含 "×2" 和 "4 点"', () => {
+    const s = getRelicStackedSuffix('bulwark-armor', 2);
+    expect(s).toContain('×2');
+    expect(s).toContain('4');
+  });
+
+  it('dedupeRelics: 2 份 bulwark-attack → 1 entry, count=2 (×N badge 可显示)', () => {
+    const r = getEternalRelic('bulwark-attack');
+    const out = dedupeRelics([r, r]);
+    expect(out.length).toBe(1);
+    expect(out[0].count).toBe(2);
+    expect(out[0].relic.id).toBe('bulwark-attack');
+  });
+
+  it('dedupeRelics: bulwark-attack 和 bulwark-armor 是不同 entry（不会合并）', () => {
+    const a = getEternalRelic('bulwark-attack');
+    const b = getEternalRelic('bulwark-armor');
+    const out = dedupeRelics([a, a, b, b, b]);
+    expect(out.length).toBe(2);
+    expect(out.find(d => d.relic.id === 'bulwark-attack')!.count).toBe(2);
+    expect(out.find(d => d.relic.id === 'bulwark-armor')!.count).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6) 潮涌铸甲 (bulwark-choice) — multiple casts push duplicate relics
+//
+// 真实 bug：早期版本 resolver 用 `if (!hasEternalRelic) { push }` 守卫，第二次开始
+// 不再 push，护符栏只看到 1 个图标没有 ×N badge——尽管 `bulwarkPassiveActive` /
+// `bulwarkTempArmorStacks` 字段确实在涨。新实现移除守卫，每次都 push 一份镜像副本。
+// ---------------------------------------------------------------------------
+describe('潮涌铸甲 — bulwark-choice 叠加路径', () => {
+  function makeBulwarkCard(id = 'bw-1'): GameCardData {
+    return {
+      id,
+      type: 'magic',
+      name: '潮涌铸甲',
+      value: 0,
+      image: '',
+      magicType: 'instant',
+      magicEffect: '2选1获得永恒护符...',
+    } as any;
+  }
+
+  function castOnce(state: GameState, choiceId: 'waterfall-armor' | 'block-temp-armor', cardId = 'bw-cast') {
+    const card = makeBulwarkCard(cardId);
+    const s1 = { ...state, handCards: [card] };
+    const r1 = drain(s1, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+    const r2 = drain(r1.state, [
+      { type: 'RESOLVE_MAGIC_CHOICE', choiceId, context: {} } as GameAction,
+    ]);
+    return r2.state;
+  }
+
+  it('选 2 次「瀑流铸剑」(waterfall-armor) → eternalRelics 含 2 份 bulwark-attack + 字段 = 2', () => {
+    let state = makeState({ hp: 30, eternalRelics: [] });
+    state = castOnce(state, 'waterfall-armor', 'bw-1');
+    state = castOnce(state, 'waterfall-armor', 'bw-2');
+    expect(countEternalRelics(state.eternalRelics ?? [], 'bulwark-attack')).toBe(2);
+    expect(state.bulwarkPassiveActive).toBe(2);
+    expect(countEternalRelics(state.eternalRelics ?? [], 'bulwark-armor')).toBe(0);
+    expect(state.bulwarkTempArmorStacks).toBe(0);
+
+    // 显示层：×2 badge + 描述文案带 +4
+    const deduped = dedupeRelics(state.eternalRelics ?? []);
+    const entry = deduped.find(d => d.relic.id === 'bulwark-attack');
+    expect(entry?.count).toBe(2);
+    expect(getRelicStackedSuffix('bulwark-attack', entry!.count)).toContain('+4');
+  });
+
+  it('选 2 次「格挡铸甲」(block-temp-armor) → eternalRelics 含 2 份 bulwark-armor + 字段 = 2', () => {
+    let state = makeState({ hp: 30, eternalRelics: [] });
+    state = castOnce(state, 'block-temp-armor', 'bw-1');
+    state = castOnce(state, 'block-temp-armor', 'bw-2');
+    expect(countEternalRelics(state.eternalRelics ?? [], 'bulwark-armor')).toBe(2);
+    expect(state.bulwarkTempArmorStacks).toBe(2);
+    expect(countEternalRelics(state.eternalRelics ?? [], 'bulwark-attack')).toBe(0);
+    expect(state.bulwarkPassiveActive).toBe(0);
+  });
+
+  it('混合选 1 次「瀑流」+ 1 次「格挡」→ 两种不同 relic 各 1 份（依然按不同 entry 显示）', () => {
+    let state = makeState({ hp: 30, eternalRelics: [] });
+    state = castOnce(state, 'waterfall-armor', 'bw-1');
+    state = castOnce(state, 'block-temp-armor', 'bw-2');
+    expect(countEternalRelics(state.eternalRelics ?? [], 'bulwark-attack')).toBe(1);
+    expect(countEternalRelics(state.eternalRelics ?? [], 'bulwark-armor')).toBe(1);
+    expect(state.bulwarkPassiveActive).toBe(1);
+    expect(state.bulwarkTempArmorStacks).toBe(1);
+
+    const deduped = dedupeRelics(state.eternalRelics ?? []);
+    expect(deduped.filter(d => d.relic.id === 'bulwark-attack').length).toBe(1);
+    expect(deduped.filter(d => d.relic.id === 'bulwark-armor').length).toBe(1);
+  });
+
+  it('Invariant：字段数 与 数组里对应 relic 数量保持一致（resolver 是唯一写入点）', () => {
+    let state = makeState({ hp: 30, eternalRelics: [] });
+    for (let i = 0; i < 3; i++) state = castOnce(state, 'waterfall-armor', `atk-${i}`);
+    for (let i = 0; i < 2; i++) state = castOnce(state, 'block-temp-armor', `arm-${i}`);
+    expect(state.bulwarkPassiveActive).toBe(countEternalRelics(state.eternalRelics ?? [], 'bulwark-attack'));
+    expect(state.bulwarkTempArmorStacks).toBe(countEternalRelics(state.eternalRelics ?? [], 'bulwark-armor'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7) Legacy save migration —  topUpBulwarkRelicsForLegacySave
+//
+// 旧版本 resolver 只 push 1 份，多次叠加后数组依然只有 1 份，字段却是 N。加载存档
+// 时这里 top-up 补齐数组，让 ×N badge 显示正确。
+// ---------------------------------------------------------------------------
+describe('topUpBulwarkRelicsForLegacySave — 旧存档兼容', () => {
+  it('数组里只有 1 份 bulwark-attack 但字段 = 3 → top-up 到 3 份', () => {
+    const base = [getEternalRelic('bulwark-attack')];
+    const out = topUpBulwarkRelicsForLegacySave(base, 3, 0);
+    expect(countEternalRelics(out, 'bulwark-attack')).toBe(3);
+    expect(countEternalRelics(out, 'bulwark-armor')).toBe(0);
+  });
+
+  it('数组里没有 bulwark-armor 但字段 = 2 → top-up 到 2 份', () => {
+    const base = [getEternalRelic('vitality-well')];
+    const out = topUpBulwarkRelicsForLegacySave(base, 0, 2);
+    expect(countEternalRelics(out, 'bulwark-armor')).toBe(2);
+    expect(out[0].id).toBe('vitality-well');
+  });
+
+  it('幂等：数组里已经有 N 份 → 不变（不会再加）', () => {
+    const a = getEternalRelic('bulwark-attack');
+    const base = [a, a, a]; // 3 份
+    const out = topUpBulwarkRelicsForLegacySave(base, 3, 0);
+    expect(out.length).toBe(3);
+    expect(countEternalRelics(out, 'bulwark-attack')).toBe(3);
+  });
+
+  it('字段 = 0 → 数组不动（不会负向移除）', () => {
+    const base = [getEternalRelic('bulwark-attack'), getEternalRelic('bulwark-attack')];
+    const out = topUpBulwarkRelicsForLegacySave(base, 0, 0);
+    expect(out).toEqual(base);
+  });
+
+  it('两个字段都需要 top-up → 同时补齐两种 relic', () => {
+    const out = topUpBulwarkRelicsForLegacySave([], 2, 1);
+    expect(countEternalRelics(out, 'bulwark-attack')).toBe(2);
+    expect(countEternalRelics(out, 'bulwark-armor')).toBe(1);
   });
 });

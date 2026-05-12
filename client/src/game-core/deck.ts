@@ -408,7 +408,7 @@ export function createDeck(
         name: 'Wraith',
         image: wraithImage,
         eliteImage: eliteWraithImage,
-        minAttack: 3, maxAttack: 5,
+        minAttack: 5, maxAttack: 7,
         minHp: 3, maxHp: 4,
         minFury: 2, maxFury: 3,
         waterfallEffect: {
@@ -2772,6 +2772,7 @@ export function createStarterDiscoverClassToHandCard(): GameCardData {
     shortDescription: '发现 1 张专属牌进手牌',
     recycleDelay: 1,
     topOnRecycleRestore: true,
+    nonCopyable: true,
   };
 }
 
@@ -3228,6 +3229,7 @@ export function createStarterCardPool(): GameCardData[] {
       value: 0,
       image: starterScrollRecycleEchoImage,
       unique: true,
+      nonCopyable: true,
       magicType: 'permanent',
       recycleDelay: 1,
       maxUpgradeLevel: 2,

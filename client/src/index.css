@@ -1994,6 +1994,14 @@ html {
     text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
   }
 
+  /* 「不可复制」: 镜影摹形 (mirror-copy) 弹窗里完全不显示带此标记的卡 */
+  .dh-card__keyword-tag--nocopy {
+    background: linear-gradient(135deg, #475569, #94a3b8);
+    box-shadow: 0 0 0 1px rgba(71, 85, 105, 0.6), 0 1px 3px rgba(0, 0, 0, 0.25);
+    color: #fff;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  }
+
   @keyframes dh-stun-tag-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }

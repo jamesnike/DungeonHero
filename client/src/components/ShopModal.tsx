@@ -37,6 +37,14 @@ interface ShopModalProps {
   gold: number;
   backpackCount: number;
   backpackCapacity: number;
+  /**
+   * Current hand size + effective hand limit. Drives the hand-first delivery
+   * gating: a purchase is blocked only when BOTH hand and backpack are full
+   * (mirrors `purchaseFromShopPure` in `game-core/shop.ts`). When backpack is
+   * full but hand has room, purchases still succeed and land in hand.
+   */
+  handCount: number;
+  effectiveHandLimit: number;
   shopLevel: number;
   canDeleteCard: boolean;
   deleteDisabledReason?: string;
@@ -77,6 +85,8 @@ export default function ShopModal({
   gold,
   backpackCount,
   backpackCapacity,
+  handCount,
+  effectiveHandLimit,
   shopLevel,
   canDeleteCard,
   deleteDisabledReason,
@@ -112,6 +122,10 @@ export default function ShopModal({
 }: ShopModalProps) {
   const { t } = useTranslation();
   const isBackpackFull = backpackCount >= backpackCapacity;
+  const isHandFull = handCount >= effectiveHandLimit;
+  // Hand-first delivery (purchaseFromShopPure): only block buy when both
+  // hand AND backpack are full.
+  const noStorageRoom = isBackpackFull && isHandFull;
   const deleteOptionDisabled = !canDeleteCard;
   const acquiredUniqueSet = new Set(acquiredUniqueClassCardIds ?? []);
 
@@ -150,8 +164,15 @@ export default function ShopModal({
               {t('modal.shop.goldLabel')}{gold}
             </span>
             <span>
+              {t('modal.shop.handLabel')}{handCount}/{effectiveHandLimit}
+            </span>
+            <span>
               {t('modal.shop.backpackLabel')}{backpackCount}/{backpackCapacity}
-              {isBackpackFull && <span className="ml-2 text-destructive text-xs">{t('modal.shop.backpackFull')}</span>}
+              {noStorageRoom ? (
+                <span className="ml-2 text-destructive text-xs">{t('modal.shop.noStorageRoom')}</span>
+              ) : isBackpackFull ? (
+                <span className="ml-2 text-amber-600 dark:text-amber-400 text-xs">{t('modal.shop.backpackFull')}</span>
+              ) : null}
             </span>
             <span className="flex items-center gap-2">
               <Badge variant="secondary" className="text-[11px] uppercase tracking-wide">
@@ -262,7 +283,7 @@ export default function ShopModal({
               const { card, price, sold } = offering;
               const locked = isUniqueLocked(card, acquiredUniqueSet);
               const canAfford = gold >= price;
-              const canBuy = !sold && !locked && canAfford && !isBackpackFull;
+              const canBuy = !sold && !locked && canAfford && !noStorageRoom;
               const typeLabel = card.type ? card.type.toUpperCase() : 'CARD';
 
               return (

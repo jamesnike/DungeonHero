@@ -349,6 +349,22 @@ export interface GameCardData {
    *  （ClassDeck / CardDetailsModal 等）能在不窄化类型的前提下读取。
    */
   unique?: boolean;
+  /**
+   * 「不可复制」标记：`镜影摹形` (knight:mirror-copy) 弹窗不会把带此标记的
+   * 卡列为候选。设计上挡住会导致「无限堆雪球」的卡：
+   *   - 影摹召引符（amulet）：复制后两份累加 streak，每抽 6/4 张又产新「镜影摹形」
+   *   - 专属感召（starter perm magic）：复制后能再发现一张专属卡进手牌
+   *   - 回收灵焰（knight perm magic）：每复制一份，下一次回收/抽牌量翻倍
+   *   - 洗册归川（knight perm magic）：背包→回收袋的结构性副作用复制一份会乱状态
+   *   - 回收余韵（starter perm magic）：复制后回收袋洗回背包 + 抽牌量翻倍，
+   *     跟回收灵焰同款雪球
+   *
+   * 渲染：`GameCard.tsx` 在 magic / equipment / potion / amulet 三个 keyword
+   * 槽位画 `dh-card__keyword-tag--nocopy`「不可复制」标签（与「置顶」位置等同）。
+   * 数据来源：`game-core/__tests__/non-copyable-deck-snapshot.test.ts` 锁住
+   * exact set，新增 / 误删时 CI 立刻 fail。
+   */
+  nonCopyable?: boolean;
   knightEffect?: string; // Effect dispatch key (used by class cards and some main-deck magic)
   /** 损毁或强制弃置时进入回收袋，经 recycleDelay 次瀑流回背包（与永久法术共用回收区） */
   permEquipment?: boolean;
@@ -1732,6 +1748,9 @@ const amuletEffectText =
                       {card.topOnRecycleRestore && (
                         <span className="dh-card__keyword-tag dh-card__keyword-tag--top inline-block mt-0.5" title="置顶：从回收袋洗回时直接进入背包顶（第 1 格）">置顶</span>
                       )}
+                      {card.nonCopyable && (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--nocopy inline-block mt-0.5" title="不可复制：「镜影摹形」无法选此卡为复制目标">不可复制</span>
+                      )}
                     </div>
                   )}
                   {!isMagicLikeCard && card.transformBonus && (
@@ -2594,7 +2613,7 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.lastWordsMaxHpBoost || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || card.topOnRecycleRestore || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
+                {(card.type === 'weapon' || card.type === 'shield') && (card.hasEquipmentRevive || card.onDestroyEffect || card.lastWordsSlotTempBuff || card.lastWordsMaxHpBoost || card.flankEffect || card.transformBonus || card._flipRepairBuff || !!card.onEnterHandEffect || card.topOnRecycleRestore || card.nonCopyable || (card.type === 'weapon' && card._potionStunBonusApplied)) && (
                   <div className="dh-card__keyword-row">
                     {card.hasEquipmentRevive && (
                       <span className={`dh-card__keyword-tag ${card.equipmentReviveUsed ? 'dh-card__keyword-tag--revive-used' : 'dh-card__keyword-tag--revive'}`}
@@ -2653,6 +2672,9 @@ const amuletEffectText =
                     {card.topOnRecycleRestore && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--top" title="置顶：从回收袋洗回时直接进入背包顶（第 1 格）">置顶</span>
                     )}
+                    {card.nonCopyable && (
+                      <span className="dh-card__keyword-tag dh-card__keyword-tag--nocopy" title="不可复制：「镜影摹形」无法选此卡为复制目标">不可复制</span>
+                    )}
                     {card.type === 'weapon' && card._potionStunBonusApplied && (
                       <span className="dh-card__keyword-tag dh-card__keyword-tag--stun" title={`雷震淬刃药：永久击晕率 ${card.weaponStunChance ?? 0}%`}>击晕 {card.weaponStunChance ?? 0}%</span>
                     )}
@@ -2690,9 +2712,9 @@ const amuletEffectText =
                   </div>
                 )}
 
-                {(card.type === 'potion' || card.type === 'amulet') && (!!card.onEnterHandEffect || !!card.topOnRecycleRestore) && (() => {
+                {(card.type === 'potion' || card.type === 'amulet') && (!!card.onEnterHandEffect || !!card.topOnRecycleRestore || !!card.nonCopyable) && (() => {
                   const onHandLabel = getOnEnterHandShortLabel(card);
-                  if (!onHandLabel && !card.topOnRecycleRestore) return null;
+                  if (!onHandLabel && !card.topOnRecycleRestore && !card.nonCopyable) return null;
                   return (
                     <div className="dh-card__keyword-row">
                       {onHandLabel && (
@@ -2700,6 +2722,9 @@ const amuletEffectText =
                       )}
                       {card.topOnRecycleRestore && (
                         <span className="dh-card__keyword-tag dh-card__keyword-tag--top" title="置顶：从回收袋洗回时直接进入背包顶（第 1 格）">置顶</span>
+                      )}
+                      {card.nonCopyable && (
+                        <span className="dh-card__keyword-tag dh-card__keyword-tag--nocopy" title="不可复制：「镜影摹形」无法选此卡为复制目标">不可复制</span>
                       )}
                     </div>
                   );
@@ -2831,6 +2856,7 @@ export function arePropsEqual(prev: GameCardProps, next: GameCardProps): boolean
       a.onDestroyEffect !== b.onDestroyEffect ||
       a.onEnterHandEffect !== b.onEnterHandEffect ||
       a.topOnRecycleRestore !== b.topOnRecycleRestore ||
+      a.nonCopyable !== b.nonCopyable ||
       a._flipRepairBuff !== b._flipRepairBuff ||
       a._potionStunBonusApplied !== b._potionStunBonusApplied ||
       a.weaponStunChance !== b.weaponStunChance ||

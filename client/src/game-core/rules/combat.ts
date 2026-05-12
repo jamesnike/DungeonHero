@@ -39,6 +39,7 @@ import { maybeEnqueueStunGold } from './economy';
 import { createBugletCard, createMagicBoltCard, goblinImage, bugletImage } from '../deck';
 import { addCardToBackpackPure, resetCardForGraveyard } from '../cards';
 import { generateMonsterRewardOptions, queueMonsterRewardPure } from '../monsters';
+import { hasPassiveSkillOrRelic } from '../hero';
 import type { MonsterSkillKey } from '../monsterSkillNames';
 import { equipOverclockExtraTriggers } from './equipment-overclock';
 
@@ -254,8 +255,20 @@ function reduceBeginCombat(
     // 第一次进入战斗且 hero 直接获得行动权（player initiated）⇒ 启动 60s 倒计时。
     // initiator='monster' 路径会把 currentTurn 设成 'monster' 并挂 pendingBlock，
     // 此时还没轮到 hero 自由行动，留给后续 START_TURN 来启动倒计时。
+    //
+    // **关键**：initiator='monster' 分支必须把 `playerTurnStartedAt` 显式清成 null。
+    // 不能保留旧值——因为 hero 可能已经在「空场无怪物」状态下行动了 38s+，
+    // 旧的 playerTurnStartedAt 是从那个 START_TURN 留下来的。
+    // 如果不清，monster 攻击 → block 解决 → ADVANCE_MONSTER_TURN 把 currentTurn
+    // 翻回 'hero' → APPLY_MONSTER_TURN_END_EFFECTS 如果遇到 dice(awaitingDice)
+    // 或 skill-float(awaitingSkillFloat) 暂停 drain，此时 START_TURN 还没跑、
+    // playerTurnStartedAt 仍是旧的 T0、currentTurn='hero'、有 engaged monsters
+    // ⇒ HeroTurnTimer 一渲染就 remainingMs=0，立刻 onTimeout 强制结束 hero 回合。
+    // 这就是 user 反复报的「monster 攻击完轮到玩家，结果时间 0 秒」bug 的根因。
     if (newCombat.currentTurn === 'hero') {
       patch.playerTurnStartedAt = Date.now();
+    } else {
+      patch.playerTurnStartedAt = null;
     }
   }
 
@@ -1102,9 +1115,13 @@ function reduceMonsterDefeated(
 
   // Minion buff — search all zones for isMinionCard, apply +1/+1
   if (action.killedByMinion) {
+    // 随从召唤 (`summon-minion`): 3 条平行获得路径都触发——永恒护符、开局选的英雄技能、
+    // shop 三选一买的英雄技能。OR 语义。详见 `hero.ts:hasPassiveSkillOrRelic`。
+    // 历史 bug：此处长年只查 `selectedHeroSkill + eternalRelics` → shop 买的随从召唤
+    // 击杀怪物后小随从不长大。`permanentSkills.includes('summon-minion')` 是兜底（目前
+    // 没有任何代码会把 'summon-minion' 写进 permanentSkills，但历史上保留以防回归）。
     const hasMinionSkill = state.permanentSkills.includes('summon-minion')
-      || state.selectedHeroSkill === 'summon-minion'
-      || state.eternalRelics.some(r => r.id === 'summon-minion');
+      || hasPassiveSkillOrRelic(state, 'summon-minion');
 
     if (hasMinionSkill) {
       const buffMinion = (card: GameCardData): GameCardData => ({
@@ -3176,8 +3193,10 @@ function reducePerformHeroAttack(
   }
 
   // --- Minion growth ---
+  // 随从召唤 (`summon-minion`)：见 `hero.ts:hasPassiveSkillOrRelic` —— 3 条获得路径
+  // 都生效（包括 shop 买的）。
   if (isMinionAttack && monsterDefeated && !weaponDestroyed
-    && (state.eternalRelics?.some((r: any) => r.id === 'summon-minion') || state.selectedHeroSkill === 'summon-minion')) {
+    && hasPassiveSkillOrRelic(state, 'summon-minion')) {
     const currentItem = (patch[slotId] ?? slotItem) as GameCardData;
     patch[slotId] = {
       ...currentItem,

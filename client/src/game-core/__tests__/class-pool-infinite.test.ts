@@ -169,7 +169,7 @@ describe('DRAW_CLASS_TO_BACKPACK — infinite template semantics', () => {
 // ---------------------------------------------------------------------------
 
 describe('PURCHASE — infinite template semantics', () => {
-  it('classDeck is preserved and the bought card is a fresh clone', () => {
+  it('classDeck is preserved and the bought card is a fresh clone (lands in hand by default)', () => {
     const c1 = { id: 'c1', type: 'weapon' as const, name: 'Sword', value: 3 };
     const c2 = { id: 'c2', type: 'shield' as const, name: 'Shield', value: 2 };
     const state = makeState({
@@ -181,9 +181,12 @@ describe('PURCHASE — infinite template semantics', () => {
 
     const result = reduce(state, { type: 'PURCHASE', cardId: 'c1' });
     expect(result.state.classDeck).toHaveLength(2);
-    expect(result.state.backpackItems).toHaveLength(1);
-    expect(result.state.backpackItems[0].id).not.toBe('c1');
-    expect(getStarterBaseId(result.state.backpackItems[0].id)).toBe(getStarterBaseId('c1'));
+    // Hand-first delivery: bought card lands in hand (default initial state
+    // has empty handCards, well under HAND_LIMIT).
+    expect(result.state.handCards).toHaveLength(1);
+    expect(result.state.backpackItems).toHaveLength(0);
+    expect(result.state.handCards[0].id).not.toBe('c1');
+    expect(getStarterBaseId(result.state.handCards[0].id)).toBe(getStarterBaseId('c1'));
   });
 });
 

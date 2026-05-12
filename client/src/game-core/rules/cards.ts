@@ -34,6 +34,7 @@ import {
 import { isPermRecycleEquipment, cardHasPermFlag } from '@/components/GameCard';
 import { flattenActiveRowSlots, isDamageableTarget, sanitizeCardMetadata, isRecyclableFromHand, getCardPlayCategory, logHeroMagic, applyAmplifyToCard } from '../helpers';
 import { hasEternalRelic } from '@/lib/eternalRelics';
+import { hasPassiveSkillOrRelic } from '../hero';
 import { applySlotArmorBonusDelta, computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots, getReserve, setSlotBonusPure, repairDurabilityPure } from '../equipment';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { computeEquipmentDisplacementLastWords } from './equipment-effects';
@@ -1665,9 +1666,15 @@ function reduceApplyDiscardEffects(
     sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${card.name} 被弃：抽取 ${card.onDiscardDraw} 张牌` } });
   }
 
-  if (owner === 'player' && hasEternalRelic(state.eternalRelics ?? [], 'discard-profit')) {
+  // 弃牌生金 (`discard-profit`): 3 条平行获得路径都触发——永恒护符、开局选的英雄技能、
+  // shop 三选一买的英雄技能。OR 语义。详见 `hero.ts:hasPassiveSkillOrRelic`。
+  // 历史 bug：此处长年只查 `hasEternalRelic` → shop 买的 / 开局选的弃牌生金完全哑火。
+  if (owner === 'player' && hasPassiveSkillOrRelic(state, 'discard-profit')) {
     patch.gold = (state.gold ?? 0) + 2;
-    sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `永恒护符·弃牌生金：弃回「${card.name}」获得 2 金币` } });
+    const sourcePrefix = hasEternalRelic(state.eternalRelics ?? [], 'discard-profit')
+      ? '永恒护符·弃牌生金'
+      : '弃牌生金';
+    sideEffects.push({ event: 'log:entry', payload: { type: 'gold', message: `${sourcePrefix}：弃回「${card.name}」获得 2 金币` } });
   }
 
   const amuletFx = computeAmuletEffects(state.amuletSlots);
@@ -2203,6 +2210,18 @@ function reduceResolveMirrorCopy(
       enqueuedActions.push({ type: 'REMOVE_CLASS_CARD_FROM_HAND', cardId: sourceCard.id });
     }
     enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: '镜影摹形：目标已不存在。' });
+    return applyPatch(state, patch, sideEffects, enqueuedActions);
+  }
+
+  // Defense-in-depth：modal 端 `MirrorCopyModal` 已经过滤 `nonCopyable` 卡，
+  // 但如果有 caller 绕过 modal 直接 dispatch RESOLVE_MIRROR_COPY 指向一张
+  // nonCopyable 卡（例如测试 / 未来的远程同步路径），这里再挡一道。
+  // nonCopyable 名单见 `non-copyable-deck-snapshot.test.ts`。
+  if ((template as any).nonCopyable) {
+    if (sourceCard.classCard) {
+      enqueuedActions.push({ type: 'REMOVE_CLASS_CARD_FROM_HAND', cardId: sourceCard.id });
+    }
+    enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card: sourceCard, banner: `镜影摹形：「${template.name}」无法被复制。` });
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
 

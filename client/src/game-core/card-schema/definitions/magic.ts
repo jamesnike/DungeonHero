@@ -2080,11 +2080,15 @@ const knightMirrorCopy: CardDefinition = {
   effects: [],
   tags: ['knight', 'instant', 'interactive'],
   resolver: (state, card, sideEffects, patch, enqueuedActions, echoMultiplier) => {
-    const hasEquip = Boolean(state.equipmentSlot1) || Boolean(state.equipmentSlot2);
-    const hasAmulets = (state.amuletSlots ?? []).length > 0;
-    const hasHand = state.handCards.length > 0;
-    if (!hasEquip && !hasAmulets && !hasHand) {
-      banner(sideEffects, '镜影摹形：没有可选的牌（装备栏、护符栏与手牌皆空）。');
+    // 镜影摹形不能复制带 `nonCopyable` 标记的卡（回收灵焰 / 专属感召 /
+    // 影摹召引符 / 洗册归川 / 回收余韵）。弹窗端 `MirrorCopyModal` 也按
+    // 同样规则过滤。全场只有 nonCopyable 卡时直接 fizzle，避免弹出空弹窗。
+    const slot1Copyable = Boolean(state.equipmentSlot1) && !state.equipmentSlot1?.nonCopyable;
+    const slot2Copyable = Boolean(state.equipmentSlot2) && !state.equipmentSlot2?.nonCopyable;
+    const copyableAmulets = (state.amuletSlots ?? []).filter(a => !a?.nonCopyable).length;
+    const copyableHand = state.handCards.filter(c => !c.nonCopyable).length;
+    if (!slot1Copyable && !slot2Copyable && copyableAmulets === 0 && copyableHand === 0) {
+      banner(sideEffects, '镜影摹形：没有可复制的目标（装备栏、护符栏与手牌中无可复制的牌）。');
       patch.lastPlayedCardCategory = getCardPlayCategory(card);
       enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
       return applyPatch(state, patch, sideEffects, enqueuedActions);

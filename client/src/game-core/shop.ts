@@ -12,6 +12,7 @@ import { cloneClassCardWithFreshId } from './cardClone';
 import { filterAvailableClassPool, isUniqueLocked, markUniqueAcquired } from './uniqueClass';
 import { getStarterBaseId } from './deck';
 import { applySlotArmorBonusDelta } from './equipment';
+import { getEffectiveHandLimit } from './cards';
 import {
   SHOP_MAX_OFFERINGS,
   SHOP_REQUIRED_TYPES,
@@ -24,6 +25,7 @@ import {
   SHOP_EQUIP_BOOST_COST,
   SHOP_REFRESH_COST,
   INITIAL_HP,
+  BASE_BACKPACK_CAPACITY,
 } from './constants';
 import { getShopPrice } from './helpers';
 
@@ -83,6 +85,15 @@ export function generateShopOfferingsPure(
 
 export interface PurchaseResult {
   gold: number;
+  /**
+   * Where the bought card landed. `'hand'` when there is room under the
+   * effective hand limit; otherwise `'backpack'` when there is room under the
+   * backpack capacity. (If both are full, `purchaseFromShopPure` returns
+   * `null` — the gate in `useShopHandlers.handleShopPurchase` and the
+   * `canBuy` check in `ShopModal` make this unreachable in normal flow.)
+   */
+  destination: 'hand' | 'backpack';
+  handCards: GameCardData[];
   backpackItems: GameCardData[];
   shopOfferings: ShopOffering[];
   purchasedCard: GameCardData;
@@ -92,9 +103,14 @@ export interface PurchaseResult {
 
 /**
  * Buy a card from the shop. The class deck is an infinite template, so
- * the bought card is *cloned* with a fresh id and placed into the backpack;
- * `state.classDeck` is unchanged. The shop slot is marked `sold` to prevent
- * re-purchase of the same offering instance.
+ * the bought card is *cloned* with a fresh id and placed into the player's
+ * pile; `state.classDeck` is unchanged. The shop slot is marked `sold` to
+ * prevent re-purchase of the same offering instance.
+ *
+ * Destination routing: the cloned card lands in **hand first** (subject to
+ * `getEffectiveHandLimit`) and falls back to the **backpack** when the hand
+ * is full. If both are full, returns `null` (purchase blocked) — mirrors the
+ * existing 'hand-first' delivery used by `RESOLVE_DISCOVER_SELECTION`.
  *
  * Unique-locked offerings (already acquired earlier this run via discover /
  * draws / events) are non-purchasable: returns null. The offering itself is
@@ -115,14 +131,26 @@ export function purchaseFromShopPure(
   const acquiredSet = new Set(state.acquiredUniqueClassCardIds ?? []);
   if (isUniqueLocked(offering.card, acquiredSet)) return null;
 
+  const handHasRoom = state.handCards.length < getEffectiveHandLimit(state);
+  const backpackCap = Math.max(1, BASE_BACKPACK_CAPACITY + state.backpackCapacityModifier);
+  const backpackHasRoom = state.backpackItems.length < backpackCap;
+  if (!handHasRoom && !backpackHasRoom) return null;
+
   const [purchasedCard, nextRng] = cloneClassCardWithFreshId(offering.card, state.rng);
   const newOfferings = state.shopOfferings.map((o, i) =>
     i === offeringIndex ? { ...o, sold: true } : o,
   );
 
+  const destination: 'hand' | 'backpack' = handHasRoom ? 'hand' : 'backpack';
   const result: PurchaseResult = {
     gold: state.gold - offering.price,
-    backpackItems: [purchasedCard, ...state.backpackItems],
+    destination,
+    handCards: destination === 'hand'
+      ? [...state.handCards, purchasedCard]
+      : state.handCards,
+    backpackItems: destination === 'backpack'
+      ? [purchasedCard, ...state.backpackItems]
+      : state.backpackItems,
     shopOfferings: newOfferings,
     purchasedCard,
     rng: nextRng,

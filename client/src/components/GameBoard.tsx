@@ -128,7 +128,7 @@ import { getRandomHero, type HeroVariant } from '@/lib/heroes';
 import { clearGameState, loadGameState, saveGameState, saveUndoStack, loadUndoStack, clearUndoStorage, saveGameLog, loadGameLog, clearGameLogStorage, getTotalWins, incrementTotalWins, type PersistedGameState } from '@/lib/gameStorage';
 import { reportGameStart, summarizePrevGame } from '@/lib/telemetry';
 import { applyMonsterRage } from '@/lib/monsterRage';
-import { getStartingRelics, hasEternalRelic, getEternalRelic, countEternalRelics, getRelicStackedSuffix } from '@/lib/eternalRelics';
+import { getStartingRelics, hasEternalRelic, getEternalRelic, countEternalRelics, getRelicStackedSuffix, topUpBulwarkRelicsForLegacySave } from '@/lib/eternalRelics';
 import CardDetailsModal from './CardDetailsModal';
 import CardUpgradeModal from './CardUpgradeModal';
 import CardDraftModal from './CardDraftModal';
@@ -4390,7 +4390,11 @@ export default function GameBoard() {
         ? snapshot.previewRevealedEarly.map(Boolean)
         : Array.from({ length: DUNGEON_COLUMN_COUNT }, () => false),
       waterfallDealBonus: snapshot.waterfallDealBonus ?? 0,
-      eternalRelics: Array.isArray(snapshot.eternalRelics) ? snapshot.eternalRelics as import('@/game-core/types').EternalRelic[] : getStartingRelics(),
+      eternalRelics: topUpBulwarkRelicsForLegacySave(
+        Array.isArray(snapshot.eternalRelics) ? snapshot.eternalRelics as import('@/game-core/types').EternalRelic[] : getStartingRelics(),
+        Number(snapshot.bulwarkPassiveActive) || 0,
+        Number(snapshot.bulwarkTempArmorStacks) || 0,
+      ),
       // RNG 必须从 snapshot 恢复，否则刷新后会用 createInitialGameState() 的
       // Date.now() 种子，跟撤销栈里旧 snapshot 的 RNG 不同步——会导致后续任何
       // 走 RNG 的逻辑（包括 monster reward 缓存未命中时的现场生成）跟撤销前

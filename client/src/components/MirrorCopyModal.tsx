@@ -41,13 +41,23 @@ export default function MirrorCopyModal({
   const { t } = useTranslation();
   const [selected, setSelected] = useState<SelectionState>(null);
 
+  // `nonCopyable` 卡（回收灵焰 / 专属感召 / 影摹召引符 / 洗册归川 / 回收余韵
+  // 等）一律不出现在弹窗中。这些卡被复制后会形成无限堆雪球，设计上挡掉。
+  // 数据来源：`game-core/__tests__/non-copyable-deck-snapshot.test.ts`。
+  // 同步过滤需要在 resolver 端的 empty-target check（`magic-effects.ts` /
+  // `card-schema/definitions/magic.ts` 的 `mirror-copy` 分支）也排除 nonCopyable，
+  // 否则全场只有 nonCopyable 卡时弹窗会开但里面是空的。
   const equipmentEntries: { slotId: 'equipmentSlot1' | 'equipmentSlot2'; label: string; card: GameCardData }[] = [];
-  if (equipmentSlot1) {
+  if (equipmentSlot1 && !equipmentSlot1.nonCopyable) {
     equipmentEntries.push({ slotId: 'equipmentSlot1', label: t('common.section.leftEquip'), card: equipmentSlot1 });
   }
-  if (equipmentSlot2) {
+  if (equipmentSlot2 && !equipmentSlot2.nonCopyable) {
     equipmentEntries.push({ slotId: 'equipmentSlot2', label: t('common.section.rightEquip'), card: equipmentSlot2 });
   }
+  const visibleAmuletSlots: { card: GameCardData; index: number }[] = amuletSlots
+    .map((card, index) => ({ card, index }))
+    .filter(({ card }) => !card.nonCopyable);
+  const visibleHandCards = handCards.filter(card => !card.nonCopyable);
 
   const pickEquipment = (slotId: 'equipmentSlot1' | 'equipmentSlot2') => {
     setSelected(prev => (prev?.kind === 'equipment' && prev.slotId === slotId ? null : { kind: 'equipment', slotId }));
@@ -77,7 +87,7 @@ export default function MirrorCopyModal({
   };
 
   const hasAny =
-    equipmentEntries.length > 0 || amuletSlots.length > 0 || handCards.length > 0;
+    equipmentEntries.length > 0 || visibleAmuletSlots.length > 0 || visibleHandCards.length > 0;
 
   const isSelected = (s: SelectionState): boolean => {
     if (!selected || !s) return false;
@@ -136,11 +146,11 @@ export default function MirrorCopyModal({
                 </div>
               )}
 
-              {amuletSlots.length > 0 && (
+              {visibleAmuletSlots.length > 0 && (
                 <div>
                   <div className="text-xs font-medium text-muted-foreground mb-2">{t('common.section.amulet')}</div>
                   <div className="upgrade-modal-card-grid">
-                    {amuletSlots.map((card, index) => (
+                    {visibleAmuletSlots.map(({ card, index }) => (
                       <div key={`${card.id}-${index}`} className="space-y-1">
                         <div className="text-[10px] text-center text-muted-foreground">
                           {t('modal.mirrorCopy.amuletIndex', { index: index + 1 })}
@@ -157,11 +167,11 @@ export default function MirrorCopyModal({
                 </div>
               )}
 
-              {handCards.length > 0 && (
+              {visibleHandCards.length > 0 && (
                 <div>
                   <div className="text-xs font-medium text-muted-foreground mb-2">{t('common.section.hand')}</div>
                   <div className="upgrade-modal-card-grid">
-                    {handCards.map(card => (
+                    {visibleHandCards.map(card => (
                       <div
                         key={card.id}
                         className={`upgrade-modal-card-slot${isSelected({ kind: 'hand', cardId: card.id }) ? ' upgrade-modal-card-slot--selected' : ''}`}

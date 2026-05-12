@@ -2581,12 +2581,12 @@ function reduceMagicMonsterSelection(
       // 自伤路径（hero / 盾）走 applySelfDamage，与其它 allowsHeroTarget 单目标
       // 伤害 magic（missile-bolt / apprentice-bolt / stun-cap-strike）一致。
       //
-      // 附加：每造成 4 点伤害额外抽 1 张牌（floor(totalDmg / 4)）。
+      // 附加：每造成 3 点伤害额外抽 1 张牌（floor(totalDmg / 3)）。
       // - 按「计算出的总法伤」算，不被怪物 HP 截断（溢杀也算，玩家明确确认）。
       // - hero / 盾自伤也算（玩家明确确认）。
-      // - 阈值固定 4，不随升级变化（玩家明确确认）。
-      // - Echo (A 类)：totalDmg 已含 ×N，floor(totalDmg/4) 自然按 ×N 后的总伤
-      //   计算抽牌；echoMul=2、单次 dmg=8 → totalDmg=16 → 抽 4 张（玩家确认）。
+      // - 阈值固定 3，不随升级变化（玩家明确确认）。
+      // - Echo (A 类)：totalDmg 已含 ×N，floor(totalDmg/3) 自然按 ×N 后的总伤
+      //   计算抽牌；echoMul=2、单次 dmg=8 → totalDmg=16 → 抽 5 张（玩家确认）。
       // - 抽牌走 DRAW_CARDS source: 'backpack'（默认入口，自动尊重置顶语义；
       //   见 draw-cards-defaults-to-backpack.mdc）。
       const echoMulBB = (pending as any).echoMultiplier ?? 1;
@@ -2596,7 +2596,7 @@ function reduceMagicMonsterSelection(
       const baseDmgBB = (pending as any).data?.baseDmg ?? 0;
       const pctBB = (pending as any).data?.pct ?? 100;
       const totalDmgBB = computeSpellDamagePure(state, baseDmgBB + (pending.card.amplifyBonus ?? 0)) * echoMulBB;
-      const drawCountBB = Math.floor(totalDmgBB / 4);
+      const drawCountBB = Math.floor(totalDmgBB / 3);
       const echoTagBB = echoMulBB > 1 ? `（回响×${echoMulBB}）` : '';
       const drawTagBB = drawCountBB > 0 ? `，抽 ${drawCountBB} 张牌` : '';
 
