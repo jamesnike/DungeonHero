@@ -1454,9 +1454,9 @@ export function createDeck(
       },
       {
         id: 'rwe-persuade-cost-2',
-        text: '永誓低吟（劝降费用永久 -2）',
-        effect: 'persuadeCost-2',
-        hint: '本局劝降费用永久 -2 金币',
+        text: '永誓低吟（劝降等级+1，劝降费用永久 -2）',
+        effect: ['persuadeLevel+1', 'persuadeCost-2'],
+        hint: '劝降等级 +1，本局劝降费用永久 -2 金币',
       },
       {
         id: 'rwe-hand-onhand-temparmor',
@@ -2510,29 +2510,29 @@ export function createDeck(
     shortDescription: '命运反转，万物皆可翻面',
     eventChoices: [
       {
-        text: '万象齐转（翻转激活行所有可翻转/已翻转的牌）',
-        effect: 'flipAllActiveRow',
-        hint: '从左到右依次翻转激活行所有右上角带「翻转/已翻转」图标的牌',
+        text: '万象齐转（翻转激活行所有可翻转/已翻转的牌；金币 +12）',
+        effect: ['flipAllActiveRow', 'gold+12'],
+        hint: '从左到右依次翻转激活行所有右上角带「翻转/已翻转」图标的牌；额外获得 12 金币',
       },
       {
-        text: '掌握技艺（获得起始背包的「乾坤一翻」放入背包）',
-        effect: 'grantActiveRowFlip',
-        hint: '获得 1 张起始永久魔法「乾坤一翻」（选择当前行一张可翻转或已翻转的卡牌，将其翻转）',
+        text: '掌握技艺（获得起始背包的「乾坤一翻」放入背包；商店等级 +1）',
+        effect: ['grantActiveRowFlip', 'shopLevel+1'],
+        hint: '获得 1 张起始永久魔法「乾坤一翻」（选择当前行一张可翻转或已翻转的卡牌，将其翻转）；商店等级 +1',
       },
       {
-        text: '凝结翻印（翻转为护符「翻印之符」放入背包）',
-        effect: 'flipToFlipPersuadeAmulet',
-        hint: '翻转为新护符「翻印之符」：每翻转一张牌，下一次劝降成功率 +10%（叠加，劝降一次后清空）',
+        text: '凝结翻印（翻转为护符「翻印之符」放入背包；左右装备栏 永久攻击+1）',
+        effect: ['flipToFlipPersuadeAmulet', 'allSlotDamage+1'],
+        hint: '翻转为新护符「翻印之符」：每翻转一张牌，下一次劝降成功率 +10%（叠加，劝降一次后清空）；左右装备栏永久攻击 +1',
       },
       {
-        text: '凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包）',
-        effect: 'flipToFlipMonsterDebuffMagic',
-        hint: '翻转为新一次性魔法「翻覆震慑」：选择一个怪物，到下次瀑流前，每翻转一张牌该怪物攻击力 -1',
+        text: '凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包；劝降等级 +1）',
+        effect: ['flipToFlipMonsterDebuffMagic', 'persuadeLevel+1'],
+        hint: '翻转为新一次性魔法「翻覆震慑」：选择一个怪物，到下次瀑流前，每翻转一张牌该怪物攻击力 -1；劝降等级 +1',
       },
       {
-        text: '铭刻技艺（赋予一张手牌：每次上手击晕上限 +2%）',
-        effect: 'grantHandStunCapBonus',
-        hint: '选择一张手牌，永久赋予其上手效果：进入手牌时击晕上限 +2%（永久，跟随该卡）',
+        text: '铭刻技艺（赋予一张手牌：每次上手击晕上限 +2%；击晕上限 +10%）',
+        effect: ['grantHandStunCapBonus', 'stunCap+10'],
+        hint: '选择一张手牌，永久赋予其上手效果：进入手牌时击晕上限 +2%（永久，跟随该卡）；击晕上限再 +10%',
         requires: [{ type: 'hand', min: 1, message: '需要至少 1 张手牌' }],
       },
       {

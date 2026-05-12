@@ -17,10 +17,10 @@ import {
  * 整顿背囊 (Knight Perm 2 magic) — multi-select modal.
  *
  * UI for the 'reorganize-backpack' / 'multi-select' pending magic action.
- * The reducer has already applied the +1 backpack capacity by the time this
+ * The reducer has already applied the +2 backpack capacity by the time this
  * modal opens; the player now picks up to `maxSelections` cards from
  * 手牌 / 护符栏 / 装备栏 and confirms. Confirming with 0 selections is allowed
- * (the player keeps just the +1 capacity).
+ * (the player keeps just the +2 capacity).
  *
  * Closing the dialog (X / outside click) is treated as confirming with the
  * current selections — never as cancel — to avoid leaving the game stuck on a
@@ -221,7 +221,7 @@ export default function BackpackReorganizeModal({
       open={open}
       onOpenChange={next => {
         // Closing via X / outside click is treated as confirming with the
-        // current selection (the +1 capacity is already applied; we must not
+        // current selection (the +2 capacity is already applied; we must not
         // leave a permanent pendingMagicAction stuck on the state).
         if (!next) handleConfirm();
       }}

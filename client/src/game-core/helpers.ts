@@ -671,11 +671,9 @@ export function computeDamageMagicDisplayPure(
     const backpackCount = state.backpackCount ?? 0;
     const base = Math.floor((backpackCount * pct) / 100);
     const dmg = base + amp;
-    const drawCount = Math.floor(dmg / 4);
-    const drawTag = drawCount > 0 ? `，抽 ${drawCount} 张牌` : '';
     return {
       mode: 'replace',
-      text: `永久：对一个目标造成 ${dmg} 点法术伤害（背包 ${backpackCount} 张 × ${pct}%）${drawTag}。`,
+      text: `永久：对一个目标造成 ${dmg} 点法术伤害（背包 ${backpackCount} 张 × ${pct}%）。每 4 伤害抽 1 张牌。`,
       amplifyBonus: amp,
     };
   }

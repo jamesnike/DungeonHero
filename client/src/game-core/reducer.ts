@@ -572,6 +572,100 @@ function postProcessAmuletAura(
 }
 
 // ---------------------------------------------------------------------------
+// Post-processing: pause / resume the hero-turn countdown when a monster in
+// the active row enters / leaves the stunned state.
+//
+// Design (per user spec):
+// - While the hero turn timer is running (`playerTurnStartedAt !== null`)
+//   AND any monster in `activeCards` has `isStunned === true`, the timer
+//   is "paused": `playerTurnPausedAt` is set to `Date.now()` at the moment
+//   the stun appeared, and the UI freezes the displayed remaining time at
+//   `duration - (playerTurnPausedAt - playerTurnStartedAt)` until all stuns
+//   clear.
+// - When the last stunned monster un-stuns / dies / leaves the row, the
+//   timer **resets to its full duration** (40s normal / 100s boss): we
+//   shift `playerTurnStartedAt = Date.now()` and clear `playerTurnPausedAt`.
+//   This was an explicit design choice — un-stunning gives the player a
+//   fresh window, not a resume from where the pause began.
+// - Whenever `playerTurnStartedAt` becomes `null` (END_TURN /
+//   FORCE_END_HERO_TURN / FINISH_COMBAT), `playerTurnPausedAt` is also
+//   cleared — the timer is no longer active so the pause field is moot.
+//
+// "stunned monster in active row" is read literally: ANY cell in
+// `activeCards` holding a monster (`type === 'monster'`) with
+// `isStunned === true`. Engagement status is not considered — non-engaged
+// stunned monsters also pause the timer (per user spec).
+//
+// Why post-process rather than per-reducer wiring: `isStunned` is set/
+// cleared from many code paths (UPDATE_MONSTER_CARD, direct activeCards
+// patches in combat reducers, processMonsterTurn auto-recovery, monster
+// kill/removal). Centralising the transition detection here means new code
+// paths that mutate stun state automatically participate in the pause
+// behaviour without each one needing to remember the bookkeeping.
+// ---------------------------------------------------------------------------
+
+function activeRowHasStunnedMonster(state: GameState): boolean {
+  for (const c of state.activeCards) {
+    if (c && c.type === 'monster' && c.isStunned === true) return true;
+  }
+  return false;
+}
+
+function postProcessTurnTimerPause(
+  prevState: GameState,
+  result: ReduceResult,
+): ReduceResult {
+  // Cheap short-circuit: if neither activeCards nor playerTurnStartedAt
+  // changed, no transition is possible. Skip the work.
+  if (
+    result.state.activeCards === prevState.activeCards &&
+    result.state.playerTurnStartedAt === prevState.playerTurnStartedAt
+  ) {
+    return result;
+  }
+
+  const { state } = result;
+
+  // Timer not active → ensure paused field is cleared too. This covers
+  // END_TURN / FORCE_END_HERO_TURN / FINISH_COMBAT and any other path that
+  // nulls out playerTurnStartedAt; they shouldn't have to know about the
+  // pause field.
+  if (state.playerTurnStartedAt === null) {
+    if (state.playerTurnPausedAt === null) return result;
+    return { ...result, state: { ...state, playerTurnPausedAt: null } };
+  }
+
+  const hasStunNow = activeRowHasStunnedMonster(state);
+  const isPaused = state.playerTurnPausedAt !== null;
+
+  // Transition: no stun → stun. Freeze the timer at the current moment;
+  // UI will display `duration - (now - playerTurnStartedAt)` going forward.
+  if (hasStunNow && !isPaused) {
+    return {
+      ...result,
+      state: { ...state, playerTurnPausedAt: Date.now() },
+    };
+  }
+
+  // Transition: stun → no stun. Reset the timer to full duration by shifting
+  // playerTurnStartedAt forward; clear the pause field. Per user spec, this
+  // is a full reset (not a resume from the pause moment) so each un-stun
+  // gives the player a fresh countdown window.
+  if (!hasStunNow && isPaused) {
+    return {
+      ...result,
+      state: {
+        ...state,
+        playerTurnStartedAt: Date.now(),
+        playerTurnPausedAt: null,
+      },
+    };
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Combined post-processing
 // ---------------------------------------------------------------------------
 
@@ -580,6 +674,7 @@ function postProcess(prevState: GameState, result: ReduceResult, action: GameAct
   r = postProcessAmuletAura(prevState, r);
   r = postProcessAmuletCounters(r);
   r = postProcessHandEntries(prevState, r, action);
+  r = postProcessTurnTimerPause(prevState, r);
   return r;
 }
 

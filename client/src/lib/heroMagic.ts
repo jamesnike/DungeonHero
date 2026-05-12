@@ -34,8 +34,8 @@ export const heroMagicDefinitions: HeroMagicDefinition[] = [
     name: '圣光',
     description: '第一次使用学习圣光技能；已掌握时使用充满数值槽。发动效果：回满生命。',
     cardEffect: '未掌握时解锁技能；已掌握时充满数值槽。',
-    gaugeMax: 10,
-    chargeHint: '每次受到伤害 +1 圣光值（上限 10）。',
+    gaugeMax: 12,
+    chargeHint: '每次受到伤害 +1 圣光值（上限 12）。',
     chargeSource: 'damage-taken',
   },
   {

@@ -4449,6 +4449,9 @@ export default function GameBoard() {
       // 还原后 HeroTurnTimer 仍能从 wall-clock 计算剩余时间——已经超时的回合
       // 在第一个 tick 就会自动结束。
       playerTurnStartedAt: snapshot.playerTurnStartedAt ?? null,
+      // 击晕暂停 timestamp（非 null = 计时器被 active row 击晕怪物冻结）。
+      // 关闭浏览器/刷新页面之后还原它，让玩家看到关掉那一刻被冻结的剩余值。
+      playerTurnPausedAt: snapshot.playerTurnPausedAt ?? null,
       // ---------------------------------------------------------------------
       // Multiplayer (phase 6): restore session pointer so useMultiplayerSync
       // re-attaches the Realtime channel. The transfer-resume backfill below

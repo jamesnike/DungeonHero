@@ -336,6 +336,7 @@
   "turnTimer": {
     "seconds": "{{seconds}}s",
     "ariaLabel": "Hero turn time remaining: {{seconds}} seconds",
+    "pausedAriaLabel": "Hero turn timer paused (a stunned monster is on the active row); {{seconds}} seconds remaining",
     "expiredBanner": "Time up — hero turn auto-ended",
     "expiredLog": "Time up. Hero turn auto-ended."
   },

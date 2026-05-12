@@ -215,7 +215,7 @@ const EXACT_REDUCER_TOKENS = new Set([
   'persuadeSameTargetCostHalve', 'persuadeNextFree',
   // Phase 5A additions
   'amuletCapacity-1', 'discardHandAll',
-  'allSlotDamage-1', 'allSlotShield-1',
+  'allSlotDamage-1', 'allSlotDamage+1', 'allSlotShield-1',
   'swapEquipmentSlots',
   'repairAll', 'repairAllDurability+1',
   'removeAllAmulets',
@@ -1329,6 +1329,16 @@ export function applySimpleEffect(
       heroSkillBanner: '所有装备栏永久攻击 -1！',
     };
     logs.push({ type: 'event', message: '所有装备栏永久攻击 -1' });
+  } else if (effectToken === 'allSlotDamage+1') {
+    patch = {
+      equipmentSlotBonuses: {
+        ...state.equipmentSlotBonuses,
+        equipmentSlot1: { ...state.equipmentSlotBonuses.equipmentSlot1, damage: state.equipmentSlotBonuses.equipmentSlot1.damage + 1 },
+        equipmentSlot2: { ...state.equipmentSlotBonuses.equipmentSlot2, damage: state.equipmentSlotBonuses.equipmentSlot2.damage + 1 },
+      },
+      heroSkillBanner: '所有装备栏永久攻击 +1！',
+    };
+    logs.push({ type: 'event', message: '所有装备栏永久攻击 +1' });
   } else if (effectToken === 'allSlotShield-1') {
     patch = {
       equipmentSlotBonuses: {

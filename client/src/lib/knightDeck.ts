@@ -469,7 +469,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 0,
   });
 
-  // 整顿背囊 (Perm 2)：背包上限永久 +1，然后从手牌/护符栏/装备栏中至多
+  // 整顿背囊 (Perm 2)：背包上限永久 +2，然后从手牌/护符栏/装备栏中至多
   // 选 3 张牌放回背包顶部（受新背包剩余空间约束，可以一张都不选）。
   // 装备/护符直接被取走，不触发 lastWords / 转金币 / 任何破损流程。
   pushCard({
@@ -478,10 +478,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: potionBackpackExpandImage,
     classCard: true,
-    description: '永久：背包上限 +1，然后从手牌、护符栏或装备栏中选择至多 3 张牌放回背包顶部。装备/护符不会触发任何破损或转化效果。',
-    shortDescription: '背包+1；至多 3 张牌放回背包顶部',
+    description: '永久：背包上限 +2，然后从手牌、护符栏或装备栏中选择至多 3 张牌放回背包顶部。装备/护符不会触发任何破损或转化效果。',
+    shortDescription: '背包+2；至多 3 张牌放回背包顶部',
     magicType: 'permanent',
-    magicEffect: '背包上限 +1；选至多 3 张牌放回背包顶部。',
+    magicEffect: '背包上限 +2；选至多 3 张牌放回背包顶部。',
     knightEffect: 'reorganize-backpack',
     recycleDelay: 2,
     maxUpgradeLevel: 0,

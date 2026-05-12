@@ -2939,12 +2939,12 @@ export function resolveKnightPermanentMagic(
     }
 
     case 'reorganize-backpack': {
-      // 整顿背囊 (Perm 2): permanently +1 backpack capacity, then prompt the
+      // 整顿背囊 (Perm 2): permanently +2 backpack capacity, then prompt the
       // player to pick up to 3 cards from hand / amulets / equipment slots and
       // push them onto the top of the backpack. Selection cap is further
       // bounded by the new backpack's free room (so we never overflow).
       const MAX_PICK_REQUESTED = 3 * echoMultiplier;
-      const capacityBonus = 1 * echoMultiplier;
+      const capacityBonus = 2 * echoMultiplier;
       const newCapacityModifier = state.backpackCapacityModifier + capacityBonus;
       const newCapacity = Math.max(1, BASE_BACKPACK_CAPACITY + newCapacityModifier);
       const currentCount = (state.backpackItems ?? []).length;
@@ -4299,7 +4299,12 @@ export function resolveFountainHand(
     return applyPatch(state, patch, sideEffects, enqueuedActions);
   }
   const drawCount = Math.min(desiredDraw, baseDeficit, state.backpackItems.length);
-  const drawResult = drawMultipleFromBackpack(state, drawCount);
+  // `state.handCards` still contains 涌泉满手 itself (FINALIZE strips it later).
+  // baseDeficit/drawCount were computed against the post-play hand size (excluding
+  // self), so we must bypass `drawMultipleFromBackpack`'s built-in hand-limit gate
+  // — otherwise it short-circuits one card early because it sees the spell still
+  // occupying a slot. Net hand size after FINALIZE is bounded by drawCount itself.
+  const drawResult = drawMultipleFromBackpack(state, drawCount, { ignoreLimit: true });
   if (drawResult.cards.length > 0) {
     mergePatch(patch, drawResult.patch);
     for (const d of drawResult.cards) {

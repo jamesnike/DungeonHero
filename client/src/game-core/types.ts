@@ -891,6 +891,33 @@ export interface GameState {
    * `combatState.currentTurn !== 'hero'`).
    */
   playerTurnStartedAt: number | null;
+  /**
+   * Wall-clock timestamp (epoch ms, `Date.now()`) marking when the hero turn
+   * timer was paused because a monster in the active row entered the stunned
+   * state (`isStunned: true`). When non-null, `HeroTurnTimer` freezes the
+   * displayed remaining time at the value computed for this moment
+   * (`duration - (playerTurnPausedAt - playerTurnStartedAt)`) — the timer
+   * does not tick down while any active-row monster is stunned.
+   *
+   * Lifecycle (managed by `postProcessTurnTimerPause` in `reducer.ts`):
+   * - Set to `Date.now()` whenever the active row transitions from "no
+   *   stunned monster" → "≥1 stunned monster" while `playerTurnStartedAt
+   *   !== null` (timer is active and previously running).
+   * - On the inverse transition ("≥1 stunned monster" → "no stunned monster"),
+   *   `playerTurnStartedAt` is reset to a fresh `Date.now()` (giving the
+   *   player a full new countdown window) and this field is cleared to
+   *   `null`. Per the design, un-stunning **resets** the timer to its full
+   *   duration rather than resuming from where it was paused.
+   * - Cleared to `null` whenever `playerTurnStartedAt` becomes `null`
+   *   (END_TURN / FORCE_END_HERO_TURN / FINISH_COMBAT) — the timer is no
+   *   longer active so the pause field is meaningless.
+   * - Persisted in `PersistedGameState` so a page refresh during a stunned
+   *   pause keeps the timer frozen at the same value it was showing before
+   *   the refresh.
+   *
+   * `null` whenever the timer is running normally OR the timer is not active.
+   */
+  playerTurnPausedAt: number | null;
   /** Action history for debugging / replay (only populated when enabled). */
   actionLog: Array<{ action: GameAction; timestamp: number }>;
 

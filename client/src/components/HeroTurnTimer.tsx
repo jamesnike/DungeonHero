@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { Hourglass } from 'lucide-react';
+import { Hourglass, Pause } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallowGameState } from '@/hooks/useGameEngine';
 
@@ -42,9 +42,13 @@ interface HeroTurnTimerProps {
  *
  * 行为：
  * - Wall-clock：用 `Date.now()` 与 `playerTurnStartedAt` 算剩余时间，永不暂停
- *   （包括 modal / 动画 / awaiting* 阶段）。
- * - 持久化：通过 `playerTurnStartedAt` 持久化到 localStorage，刷新页面后从
- *   原时间戳继续倒数（可能直接归零并触发 `onTimeout`）。
+ *   （包括 modal / 动画 / awaiting* 阶段）。**例外**：当 active row 有怪物
+ *   处于击晕状态（`isStunned: true`）时，倒计时被 `playerTurnPausedAt` 冻结
+ *   在击晕开始那一刻的剩余值；所有击晕解除后，`playerTurnStartedAt` 被
+ *   reducer 重置为新的 `Date.now()`，倒计时回满（40 秒 / 100 秒）重新开始。
+ * - 持久化：通过 `playerTurnStartedAt` + `playerTurnPausedAt` 持久化到
+ *   localStorage，刷新页面后从原时间戳继续倒数；如果是在击晕暂停期间刷新，
+ *   暂停时间戳也被还原，玩家看到的剩余时间跟刷新前一致。
  * - Boss 状态动态：boss 在回合中途出现 / 死亡时，剩余时间会重新按新时长
  *   计算。出现 boss → 时间立即拉长（可能数字变大）；boss 死亡 → 时间缩短。
  *   这是有意为之：玩家进入 boss 战自动获得宽限，离开 boss 战也立即正常化。
@@ -55,6 +59,7 @@ function HeroTurnTimerInner({ onTimeout }: HeroTurnTimerProps) {
   const { t } = useTranslation();
   const gs = useShallowGameState(s => ({
     playerTurnStartedAt: s.playerTurnStartedAt,
+    playerTurnPausedAt: s.playerTurnPausedAt,
     combatState: s.combatState,
     gameOver: s.gameOver,
     showSkillSelection: s.showSkillSelection,
@@ -83,46 +88,68 @@ function HeroTurnTimerInner({ onTimeout }: HeroTurnTimerProps) {
   const onTimeoutRef = useRef(onTimeout);
   onTimeoutRef.current = onTimeout;
 
+  const isPaused = gs.playerTurnPausedAt !== null;
+
   useEffect(() => {
     if (!isVisible) return;
+    // 暂停期间没必要每 250ms 重算（remaining 是常数，state 已经冻结）。
+    // 一旦 `playerTurnPausedAt` 切回 null（解除击晕、reducer reset
+    // playerTurnStartedAt），useEffect 重新挂 interval。
+    if (isPaused) return;
     const id = window.setInterval(() => setTick(t => t + 1), TICK_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [isVisible]);
+  }, [isVisible, isPaused]);
 
   if (!isVisible || gs.playerTurnStartedAt === null) return null;
 
   const durationMs = gs.hasBossInActiveRow ? BOSS_HERO_TURN_DURATION_MS : HERO_TURN_DURATION_MS;
+  // 暂停时用 playerTurnPausedAt 当作「现在」，让显示冻结在击晕开始那一刻。
+  // 非暂停时用 wall-clock now，保持原来的连续 tick 行为。
+  const referenceNow = gs.playerTurnPausedAt ?? Date.now();
   const remainingMs = Math.max(
     0,
-    durationMs - (Date.now() - gs.playerTurnStartedAt),
+    durationMs - (referenceNow - gs.playerTurnStartedAt),
   );
 
-  // 触发条件：剩余 0 + 当前 hero turn 还没触发过。
-  if (remainingMs === 0 && firedForStartedAtRef.current !== gs.playerTurnStartedAt) {
+  // 触发条件：剩余 0 + 当前 hero turn 还没触发过 + 不在击晕暂停（暂停期间禁止
+  // 超时强制结束回合，否则就违反了「击晕给玩家时间」的设计意图）。
+  if (
+    !isPaused &&
+    remainingMs === 0 &&
+    firedForStartedAtRef.current !== gs.playerTurnStartedAt
+  ) {
     firedForStartedAtRef.current = gs.playerTurnStartedAt;
     // setTimeout 把回调推到下一帧，避免 render 中 dispatch（react warns）。
     window.setTimeout(() => onTimeoutRef.current(), 0);
   }
 
   const remainingSeconds = Math.ceil(remainingMs / 1000);
-  const isLow = remainingMs <= LOW_TIME_WARNING_MS;
-  const isCritical = remainingMs <= CRITICAL_TIME_WARNING_MS;
+  const isLow = !isPaused && remainingMs <= LOW_TIME_WARNING_MS;
+  const isCritical = !isPaused && remainingMs <= CRITICAL_TIME_WARNING_MS;
 
-  // 配色：常态琥珀（跟 End Hero Turn 按钮主色一致），警告 → 红，危急 → 更亮 + pulse。
-  const colorClass = isCritical
-    ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-300'
-    : isLow
-      ? 'bg-red-500 text-white animate-pulse'
-      : 'bg-amber-500 text-white';
+  // 配色：暂停态显示蓝灰色（跟「击晕怪物」的视觉区分开），常态琥珀，警告 → 红，
+  // 危急 → 更亮 + pulse。暂停态不进入 low / critical（remainingMs 已被冻结）。
+  const colorClass = isPaused
+    ? 'bg-sky-600 text-white ring-2 ring-sky-300'
+    : isCritical
+      ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-300'
+      : isLow
+        ? 'bg-red-500 text-white animate-pulse'
+        : 'bg-amber-500 text-white';
 
   return (
     <div
       className={`hero-turn-timer flex items-center gap-1.5 rounded-full px-3 py-1.5 shadow-lg select-none font-bold text-sm ${colorClass}`}
       style={{ pointerEvents: 'none' }}
       data-testid="hero-turn-timer"
-      aria-label={t('turnTimer.ariaLabel', { seconds: remainingSeconds })}
+      data-paused={isPaused ? 'true' : 'false'}
+      aria-label={
+        isPaused
+          ? t('turnTimer.pausedAriaLabel', { seconds: remainingSeconds })
+          : t('turnTimer.ariaLabel', { seconds: remainingSeconds })
+      }
     >
-      <Hourglass className="w-4 h-4" />
+      {isPaused ? <Pause className="w-4 h-4" /> : <Hourglass className="w-4 h-4" />}
       <span className="font-mono tabular-nums">
         {t('turnTimer.seconds', { seconds: remainingSeconds })}
       </span>

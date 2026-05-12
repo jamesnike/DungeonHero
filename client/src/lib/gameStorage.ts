@@ -302,6 +302,20 @@ export interface PersistedGameState {
    */
   playerTurnStartedAt?: number | null;
 
+  /**
+   * Wall-clock timestamp (epoch ms) marking when the hero turn timer was
+   * paused due to a stunned monster appearing in the active row. When
+   * non-null, the UI freezes the timer at the value computed for this
+   * moment. `null`/missing when the timer is running normally or inactive.
+   *
+   * Persisted so that closing the browser mid-pause and reopening shows
+   * the same frozen value (rather than letting wall-clock advance erase
+   * the pause).
+   *
+   * See `GameState.playerTurnPausedAt` JSDoc for full lifecycle.
+   */
+  playerTurnPausedAt?: number | null;
+
   // -------------------------------------------------------------------------
   // Multiplayer (phase 6)
   // -------------------------------------------------------------------------

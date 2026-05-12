@@ -96,14 +96,14 @@ describe('「右翼回响」 right-neighbor persuadeNextFree', () => {
   it('right neighbor is monster → after non-interactive choice, persuadeDiscount.costReduction = 999', () => {
     const monster = monsterCard();
     const { state } = makeFixture(monster);
-    // 用 option 3 (persuadeCost-2)：唯一的非 interactive 选项，drain 必然走完
-    // post-effect block 一次。
+    // 用 option 3 (persuadeLevel+1 + persuadeCost-2)：唯一的非 interactive 选项，
+    // drain 必然走完 post-effect block 一次。
     const final = drain(state, [
       {
         type: 'RESOLVE_EVENT_CHOICE',
         choiceId: 'rwe-persuade-cost-2',
         choiceText: '永誓低吟',
-        effectTokens: ['persuadeCost-2'],
+        effectTokens: ['persuadeLevel+1', 'persuadeCost-2'],
         skipFlip: false,
       } as any,
     ]);
@@ -119,7 +119,7 @@ describe('「右翼回响」 right-neighbor persuadeNextFree', () => {
         type: 'RESOLVE_EVENT_CHOICE',
         choiceId: 'rwe-persuade-cost-2',
         choiceText: '永誓低吟',
-        effectTokens: ['persuadeCost-2'],
+        effectTokens: ['persuadeLevel+1', 'persuadeCost-2'],
         skipFlip: false,
       } as any,
     ]);
@@ -134,7 +134,7 @@ describe('「右翼回响」 right-neighbor persuadeNextFree', () => {
         type: 'RESOLVE_EVENT_CHOICE',
         choiceId: 'rwe-persuade-cost-2',
         choiceText: '永誓低吟',
-        effectTokens: ['persuadeCost-2'],
+        effectTokens: ['persuadeLevel+1', 'persuadeCost-2'],
         skipFlip: false,
       } as any,
     ]);
@@ -157,7 +157,7 @@ describe('「右翼回响」 right-neighbor persuadeNextFree', () => {
         type: 'RESOLVE_EVENT_CHOICE',
         choiceId: 'rwe-persuade-cost-2',
         choiceText: '永誓低吟',
-        effectTokens: ['persuadeCost-2'],
+        effectTokens: ['persuadeLevel+1', 'persuadeCost-2'],
         skipFlip: false,
       } as any,
     ]);
@@ -255,8 +255,8 @@ describe('「右翼回响」 eligibility requirements', () => {
 // Option 3 (persuadeCost-2) — non-interactive happy path
 // ---------------------------------------------------------------------------
 
-describe('「右翼回响」 option 3 — permanent persuade cost -2', () => {
-  it('drain → persuadeCostModifier decreases by 2 (or by remaining-to-floor)', () => {
+describe('「右翼回响」 option 3 — persuadeLevel +1 & permanent persuade cost -2', () => {
+  it('drain → persuadeCostModifier -2 AND persuadeLevel +1', () => {
     const ec = eventCard();
     const state = makeState({
       activeCards: [ec, null, null, null, null] as any,
@@ -264,20 +264,23 @@ describe('「右翼回响」 option 3 — permanent persuade cost -2', () => {
       resolvingDungeonCardId: ec.id,
       persuadeCostModifier: 0,
     });
-    const before = state.persuadeCostModifier ?? 0;
+    const beforeCost = state.persuadeCostModifier ?? 0;
+    const beforeLevel = state.persuadeLevel ?? 0;
     const final = drain(state, [
       {
         type: 'RESOLVE_EVENT_CHOICE',
         choiceId: 'rwe-persuade-cost-2',
         choiceText: '永誓低吟',
-        effectTokens: ['persuadeCost-2'],
+        effectTokens: ['persuadeLevel+1', 'persuadeCost-2'],
         skipFlip: false,
       } as any,
     ]);
     // persuadeCost-2 reduces persuasion cost via persuadeCostModifier (clamped
     // to MIN_PERSUADE_COST). Default state starts well above floor, so we
     // expect a -2 delta.
-    expect((final.state.persuadeCostModifier ?? 0) - before).toBe(-2);
+    expect((final.state.persuadeCostModifier ?? 0) - beforeCost).toBe(-2);
+    // persuadeLevel+1 increments persuadeLevel directly.
+    expect((final.state.persuadeLevel ?? 0) - beforeLevel).toBe(1);
   });
 });
 
@@ -304,7 +307,7 @@ describe('「右翼回响」 stay-flip → 装甲铸蚀 magic', () => {
       name: '右翼回响',
       value: 0,
       eventChoices: [
-        { text: '永誓低吟', effect: 'persuadeCost-2' },
+        { text: '永誓低吟', effect: ['persuadeLevel+1', 'persuadeCost-2'] },
       ],
       flipTarget: {
         toCard: armorEtch as any,
@@ -322,7 +325,7 @@ describe('「右翼回响」 stay-flip → 装甲铸蚀 magic', () => {
         type: 'RESOLVE_EVENT_CHOICE',
         choiceId: '0',
         choiceText: '永誓低吟',
-        effectTokens: ['persuadeCost-2'],
+        effectTokens: ['persuadeLevel+1', 'persuadeCost-2'],
         skipFlip: false,
       } as any,
     ]);

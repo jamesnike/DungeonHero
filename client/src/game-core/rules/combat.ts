@@ -2314,7 +2314,13 @@ function reducePerformShieldBash(
       sideEffects.push({ event: 'equipment:classCardDraw', payload: { count: breakResult.classCardDraw } });
     }
   } else {
-    patch[slotId] = { ...slotItem, durability: weaponDurability - 1 } as EquipmentItem;
+    // Mirror reduceResolveBlock's "refill on layer break" semantics: bashing
+    // consumes a durability layer, so strip `armor` to let the next read default
+    // back to the current cap (base + perm + temp). Otherwise a previously
+    // damaged shield (e.g. armor=1 after taking a hit) would leak that depleted
+    // armor into the next durability layer.
+    const { armor: _strip, ...rest } = slotItem as GameCardData & { armor?: number };
+    patch[slotId] = { ...rest, durability: weaponDurability - 1 } as EquipmentItem;
   }
 
   patch.rng = rng;

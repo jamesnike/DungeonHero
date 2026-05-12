@@ -336,6 +336,7 @@
   "turnTimer": {
     "seconds": "{{seconds}} 秒",
     "ariaLabel": "玩家回合剩余时间：{{seconds}} 秒",
+    "pausedAriaLabel": "玩家回合倒计时已暂停（场上有击晕怪物），剩余 {{seconds}} 秒",
     "expiredBanner": "时间到，玩家回合已自动结束",
     "expiredLog": "时间到，玩家回合已自动结束。"
   },

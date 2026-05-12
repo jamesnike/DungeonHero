@@ -474,27 +474,25 @@ describe('囊中惊雷 — 每 4 点伤害抽 1 张牌', () => {
     expect(result.state.backpackItems.length).toBe(8 - 2);
   });
 
-  it('display: dmg 8 → 文案应包含「抽 2 张牌」', () => {
+  it('display: dmg 8 → 文案始终展示抽牌规则「每 4 伤害抽 1 张牌」', () => {
     const r = computeDamageMagicDisplayPure(
       makeCard('disp', { upgradeLevel: 2 }),
       { hp: 20, maxHp: 30, gold: 0, backpackCount: 8 },
     );
     if (r?.mode === 'replace') {
-      // base = 8*100/100 = 8 → drawCount = 2
       expect(r.text).toContain('造成 8 点法术伤害');
-      expect(r.text).toContain('抽 2 张牌');
+      expect(r.text).toContain('每 4 伤害抽 1 张牌');
     }
   });
 
-  it('display: dmg 3 → 文案不显示抽牌（drawCount = 0）', () => {
+  it('display: dmg 3 → 文案仍要展示抽牌规则（即使当下不触发抽牌）', () => {
     const r = computeDamageMagicDisplayPure(
       makeCard('disp0'),
       { hp: 20, maxHp: 30, gold: 0, backpackCount: 7 },
     );
     if (r?.mode === 'replace') {
-      // base = floor(7*50/100) = 3 → drawCount = 0
       expect(r.text).toContain('造成 3 点法术伤害');
-      expect(r.text).not.toContain('抽');
+      expect(r.text).toContain('每 4 伤害抽 1 张牌');
     }
   });
 

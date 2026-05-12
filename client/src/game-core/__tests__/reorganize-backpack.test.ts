@@ -2,10 +2,10 @@
  * 整顿背囊 (knight:reorganize-backpack) — Perm 2 magic.
  *
  * Main effect (PLAY_CARD):
- *   - Permanently +1 to backpackCapacityModifier.
+ *   - Permanently +2 to backpackCapacityModifier.
  *   - Opens a 'reorganize-backpack' / 'multi-select' pendingMagicAction with
  *     `maxSelections = min(3, newCapacity - currentBackpackCount)`.
- *   - If maxSelections === 0 (backpack still has no room after +1) → finalize
+ *   - If maxSelections === 0 (backpack still has no room after +2) → finalize
  *     immediately, no selection prompt.
  *
  * RESOLVE_PUSH_TO_BACKPACK_TOP:
@@ -44,7 +44,7 @@ function makeCard(idSuffix = 'rb') {
     image: '',
     classCard: true,
     magicType: 'permanent' as const,
-    magicEffect: '背包上限 +1；选至多 3 张牌放回背包顶部。',
+    magicEffect: '背包上限 +2；选至多 3 张牌放回背包顶部。',
     description: 'test',
     knightEffect: 'reorganize-backpack',
     recycleDelay: 2,
@@ -87,17 +87,17 @@ function makeEquipment(id: string, name = `Eq-${id}`): EquipmentItem {
 // ---------------------------------------------------------------------------
 
 describe('整顿背囊 main resolver (PLAY_CARD)', () => {
-  it('+1 capacity and opens multi-select prompt with maxSelections capped by room', () => {
+  it('+2 capacity and opens multi-select prompt with maxSelections capped by room', () => {
     const card = makeCard('open');
     // BASE_BACKPACK_CAPACITY is 15; with modifier 0 and 1 backpack item we
-    // have plenty of room after +1 — maxSelections should hit the 3 cap.
+    // have plenty of room after +2 — maxSelections should hit the 3 cap.
     const state = makeState({
       handCards: [card, makeFiller('h1'), makeFiller('h2')],
       backpackItems: [makeFiller('bp1')] as any,
       backpackCapacityModifier: 0,
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(result.state.backpackCapacityModifier).toBe(1);
+    expect(result.state.backpackCapacityModifier).toBe(2);
     expect(result.state.pendingMagicAction).not.toBeNull();
     const pending = result.state.pendingMagicAction as any;
     expect(pending.effect).toBe('reorganize-backpack');
@@ -107,10 +107,10 @@ describe('整顿背囊 main resolver (PLAY_CARD)', () => {
 
   it('caps maxSelections to remaining room when only 1 free slot remains', () => {
     const card = makeCard('cap');
-    // Pick a negative modifier so that `newCap = max(1, BASE + mod + 1) = 3`.
-    // Then fill backpack with 2 items so room after +1 = 3 - 2 = 1, which
+    // Pick a negative modifier so that `newCap = max(1, BASE + mod + 2) = 3`.
+    // Then fill backpack with 2 items so room after +2 = 3 - 2 = 1, which
     // forces maxSelections to be capped at 1 (below the regular cap of 3).
-    const modifier = 2 - BASE_BACKPACK_CAPACITY; // makes BASE + mod = 2 → newCap after +1 = 3
+    const modifier = 1 - BASE_BACKPACK_CAPACITY; // makes BASE + mod = 1 → newCap after +2 = 3
     const filled = [makeFiller('bp0'), makeFiller('bp1')];
     const state = makeState({
       handCards: [card],
@@ -118,16 +118,16 @@ describe('整顿背囊 main resolver (PLAY_CARD)', () => {
       backpackCapacityModifier: modifier,
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(result.state.backpackCapacityModifier).toBe(modifier + 1);
+    expect(result.state.backpackCapacityModifier).toBe(modifier + 2);
     const pending = result.state.pendingMagicAction as any;
     expect(pending).not.toBeNull();
     expect(pending.maxSelections).toBe(1);
   });
 
-  it('finalizes immediately when no room exists even after +1', () => {
+  it('finalizes immediately when no room exists even after +2', () => {
     const card = makeCard('full');
     // Squeeze capacity to the floor: pick a modifier so that newCap after the
-    // +1 is still clamped to 1 by `max(1, ...)`. Using `-(BASE + 5)` keeps it
+    // +2 is still clamped to 1 by `max(1, ...)`. Using `-(BASE + 5)` keeps it
     // safely below the floor regardless of BASE_BACKPACK_CAPACITY tweaks.
     // Filling backpack with 1 item leaves room = 0 → resolver should finalize.
     const modifier = -(BASE_BACKPACK_CAPACITY + 5);
@@ -137,7 +137,7 @@ describe('整顿背囊 main resolver (PLAY_CARD)', () => {
       backpackCapacityModifier: modifier,
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(result.state.backpackCapacityModifier).toBe(modifier + 1);
+    expect(result.state.backpackCapacityModifier).toBe(modifier + 2);
     expect(result.state.pendingMagicAction).toBeNull();
   });
 });
@@ -283,20 +283,20 @@ describe('整顿背囊 RESOLVE_PUSH_TO_BACKPACK_TOP', () => {
     expect(bp.find(c => c.id === 'h1')).toBeDefined();
   });
 
-  it('empty selection array: no cards moved, pending cleared, +1 capacity stays', () => {
+  it('empty selection array: no cards moved, pending cleared, +2 capacity stays', () => {
     const card = makeCard('skip');
     const state = pendingState(card, {
       handCards: [card, makeFiller('h1')],
       // Simulate that the resolver already incremented the modifier, since
       // this reducer is called *after* the resolver's patch is applied.
-      backpackCapacityModifier: 1,
+      backpackCapacityModifier: 2,
     });
     const result = drain(state, [
       { type: 'RESOLVE_PUSH_TO_BACKPACK_TOP', selections: [] } as GameAction,
     ]);
     expect(result.state.handCards.find(c => c.id === 'h1')).toBeDefined();
     expect(result.state.pendingMagicAction).toBeNull();
-    expect(result.state.backpackCapacityModifier).toBe(1);
+    expect(result.state.backpackCapacityModifier).toBe(2);
   });
 
   it('duplicate selections of the same id+source are deduped', () => {

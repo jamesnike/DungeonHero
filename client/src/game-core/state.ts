@@ -245,6 +245,7 @@ export function createInitialGameState(): GameState {
     phase: 'idle',
     actionLog: [],
     playerTurnStartedAt: null,
+    playerTurnPausedAt: null,
 
     rng: createRng(Date.now()),
     lastFlowDiceRoll: null,

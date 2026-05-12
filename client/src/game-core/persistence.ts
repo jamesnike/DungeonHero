@@ -212,6 +212,12 @@ export function serializeGameState(state: GameState): PersistedGameState {
     // 刷新页面后由 hydrateGameState 还原，让 HeroTurnTimer 继续从 wall-clock
     // 计算剩余时间——超时仍会自动结束玩家回合。
     playerTurnStartedAt: state.playerTurnStartedAt ?? null,
+    // 击晕暂停 timestamp。非 null 时 HeroTurnTimer 把显示「冻结」在
+    // playerTurnPausedAt - playerTurnStartedAt 计算出来的剩余值，直到
+    // 全部 active row 怪物的击晕状态解除。持久化是为了：玩家在击晕暂停
+    // 期间关闭浏览器、5 分钟后回来，仍然看到当时被冻结的剩余时间，
+    // 而不是被那 5 分钟 wall-clock 推过去。
+    playerTurnPausedAt: state.playerTurnPausedAt ?? null,
     // -----------------------------------------------------------------------
     // Multiplayer (phase 6)
     // -----------------------------------------------------------------------

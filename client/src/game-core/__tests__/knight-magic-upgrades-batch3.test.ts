@@ -563,7 +563,7 @@ describe('整顿背囊 (reorganize-backpack) — resolver capacity bonus scales'
     return { id, type: 'magic' as const, name: 'Filler', value: 0, image: '' };
   }
 
-  it('L0: backpackCapacityModifier += 1', () => {
+  it('L0: backpackCapacityModifier += 2', () => {
     const card = makeRbCard(0);
     const state = makeState({
       handCards: [card],
@@ -571,7 +571,7 @@ describe('整顿背囊 (reorganize-backpack) — resolver capacity bonus scales'
       backpackCapacityModifier: 0,
     });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
-    expect(result.state.backpackCapacityModifier).toBe(1);
+    expect(result.state.backpackCapacityModifier).toBe(2);
   });
 
   it('L1: backpackCapacityModifier += 2', () => {

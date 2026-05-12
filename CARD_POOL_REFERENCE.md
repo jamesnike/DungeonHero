@@ -845,11 +845,11 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 
 - 描述：命运反转，万物皆可翻面。本身右上角无翻转图标 —— 选项 3/4 通过 `flipTo*` 让事件卡变成新卡放入背包，其它选项选完即消耗。
 - 选项（玩家 6 选 1，最多裁剪到 2 个）：
-  1. 万象齐转（翻转激活行所有可翻转/已翻转的牌） → `flipAllActiveRow`
-  2. 掌握技艺（获得起始背包的「乾坤一翻」放入背包） → `grantActiveRowFlip`
-  3. 凝结翻印（翻转为护符「翻印之符」放入背包） → `flipToFlipPersuadeAmulet`
-  4. 凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包） → `flipToFlipMonsterDebuffMagic`
-  5. 铭刻技艺（赋予一张手牌：每次上手击晕上限 +2%） → `grantHandStunCapBonus`
+  1. 万象齐转（翻转激活行所有可翻转/已翻转的牌；金币 +12） → `['flipAllActiveRow', 'gold+12']`
+  2. 掌握技艺（获得起始背包的「乾坤一翻」放入背包；商店等级 +1） → `['grantActiveRowFlip', 'shopLevel+1']`
+  3. 凝结翻印（翻转为护符「翻印之符」放入背包；左右装备栏 永久攻击+1） → `['flipToFlipPersuadeAmulet', 'allSlotDamage+1']`
+  4. 凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包；劝降等级 +1） → `['flipToFlipMonsterDebuffMagic', 'persuadeLevel+1']`
+  5. 铭刻技艺（赋予一张手牌：每次上手击晕上限 +2%；击晕上限 +10%） → `['grantHandStunCapBonus', 'stunCap+10']`
   6. 熔铸耐久（选一件装备：每翻转一次该装备恢复 1 耐久） → `grantEquipFlipRepairBuff`
   7. 镜面回响（翻转为 active row 任意另一张牌的复制） → `pactCopyActiveRow`
 - 衍生卡：
@@ -872,7 +872,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
   2. 召唤铭印（发现专属牌：附带「置顶」加入手牌） → `grantDiscoverClassTopToHand`
      - 调 `beginDiscoverFlow('right-wing-echo-class-top', { delivery: 'hand-first', postInjectTopOnRecycleRestore: true })`，从专属牌池发现 1 张，自带「置顶」直接进入手牌。
      - `postInjectTopOnRecycleRestore` 通过 `BeginDiscoverAction` → `state.discoverPostInjectTopOnRecycleRestore` → `reduceResolveDiscoverSelection` 注入到克隆卡上。
-  3. 永誓低吟（劝降费用永久 -2） → `persuadeCost-2`
+  3. 永誓低吟（劝降等级+1，劝降费用永久 -2） → `['persuadeLevel+1', 'persuadeCost-2']`
   4. 触手生甲（手牌：选 1 张获得「上手」效果——随机装备栏 +1 临时护甲） → `grantHandOnHandTempArmor:1`
      - 通过 `permGrantModal.sourceType: 'on-hand-temp-armor-grant'` 注入 `onEnterHandEffect: 'event-grant-onhand-temp-armor-1'`，并立即触发一次（左/右栏中随机一个 +1 临时护甲，无视该栏是否有装备 —— `applySlotArmorBonusDelta` 会让临时护甲在装备入场时立刻生效）。
      - **要求**：`handForKeywordGrant: { keyword: 'onEnterHandEffect' }`——手牌中至少 1 张未带「上手」效果的卡，否则置灰。
@@ -1209,7 +1209,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 | 22 | 永恒之器 | 2 | 失去 3 点生命（自伤：走 APPLY_DAMAGE selfInflicted，可被护盾抵消、可被 death-ward 救场、hp ≤ 3 时会致死，跟 血誓回卷 / 血金术 一致），永久 maxHp +3。无目标，立即结算。回响×N → -3N HP / +3N maxHp（与 血誓回卷 同款比例放大）。`knightEffect: 'eternal-vessel'` | 最高 2 级（升 1：maxHp +4；升 2：maxHp +5；HP 损失始终为 3） |
 | 23 | 血誓回卷 | 2 | 失去 3 点生命，选择当前行一张「已翻转」卡牌，将其翻回原始形态。**上手**：恢复 1 点生命。`knightEffect: 'flip-back-active'` | 最高 2 级（升 1：上手 +2 HP；升 2：上手 +3 HP；主效果不变） |
 | 24 | 三牌惊雷 | 2 | 永久：若背包正好有 3 张牌，对所有怪物造成 9 点法术伤害。**上手**：对所有怪物各造成 1 点法术伤害。`knightEffect: 'three-card-thunder'` | 最高 2 级（升 1：上手全场各 2 法伤；升 2：上手全场各 3 法伤；主效果不变） |
-| 25 | 整顿背囊 | 2 | 背包上限永久 +1，然后从手牌、护符栏或装备栏中至多选 3 张牌放回背包顶部。装备/护符不会触发任何破损或转化效果。`knightEffect: 'reorganize-backpack'` | 最高 1 级（升级后背包上限 +2；放回数量上限保持 3） |
+| 25 | 整顿背囊 | 2 | 背包上限永久 +2，然后从手牌、护符栏或装备栏中至多选 3 张牌放回背包顶部。装备/护符不会触发任何破损或转化效果。`knightEffect: 'reorganize-backpack'` | 最高 1 级（升级后背包上限 +2；放回数量上限保持 3） |
 | 26 | 盾影双噬 | 1 | 选择一面护盾，对随机 2 个怪物各造成 50% 护甲值的法术伤害，然后该护盾耐久 -1。`knightEffect: 'armor-double-strike'` | 最高 2 级（升 1：75% 护甲法伤随机 2 怪；升 2：75% 护甲法伤随机 3 怪） |
 | 27 | 净册涌泉 | 1 | 选择一张手牌删除（手牌为空则跳过），然后从坟场发现一张牌（三选一）加入手牌。`knightEffect: 'cleanse-draw'` | — |
 | 28 | 洗册归川 | 1 | 将背包所有牌移入回收袋；然后回收袋瀑流 -1，已就绪的牌洗回背包。`knightEffect: 'recycle-tide'`（unique，每局只出现 1 张） | — |

@@ -522,11 +522,11 @@
 
 | # | 选项 | 效果 | 条件 |
 |---|------|------|------|
-| 1 | 万象齐转（翻转激活行所有可翻转/已翻转的牌） | `flipAllActiveRow` | — |
-| 2 | 掌握技艺（获得起始背包的「乾坤一翻」放入背包） | `grantActiveRowFlip` | — |
-| 3 | 凝结翻印（翻转为护符「翻印之符」放入背包） | `flipToFlipPersuadeAmulet` | — |
-| 4 | 凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包） | `flipToFlipMonsterDebuffMagic` | — |
-| 5 | 铭刻技艺（赋予一张手牌：每次上手击晕上限 +2%） | `grantHandStunCapBonus` | 至少 1 张手牌 |
+| 1 | 万象齐转（翻转激活行所有可翻转/已翻转的牌；金币 +12） | `['flipAllActiveRow', 'gold+12']` | — |
+| 2 | 掌握技艺（获得起始背包的「乾坤一翻」放入背包；商店等级 +1） | `['grantActiveRowFlip', 'shopLevel+1']` | — |
+| 3 | 凝结翻印（翻转为护符「翻印之符」放入背包；左右装备栏 永久攻击+1） | `['flipToFlipPersuadeAmulet', 'allSlotDamage+1']` | — |
+| 4 | 凝结震慑（翻转为一次性魔法「翻覆震慑」放入背包；劝降等级 +1） | `['flipToFlipMonsterDebuffMagic', 'persuadeLevel+1']` | — |
+| 5 | 铭刻技艺（赋予一张手牌：每次上手击晕上限 +2%；击晕上限 +10%） | `['grantHandStunCapBonus', 'stunCap+10']` | 至少 1 张手牌 |
 | 6 | 熔铸耐久（选一件装备：每翻转一次该装备恢复 1 耐久） | `grantEquipFlipRepairBuff` | 至少一件装备（含 reserve） |
 | 7 | 镜面回响（翻转为 active row 任意另一张牌的复制） | `pactCopyActiveRow` | active row ≥ 1 张其他牌 |
 

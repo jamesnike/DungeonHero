@@ -1601,6 +1601,7 @@ function describeEventEffect(effect: EventEffectExpression): string {
       if (token === 'upgradeCard') return '选择一张牌进行升级';
       if (token === 'flipToUpgradeScroll') return '翻转为「升级卷轴」即时魔法：选择一张牌进行升级';
       if (token === 'allSlotDamage-1') return '所有装备栏永久攻击 -1';
+      if (token === 'allSlotDamage+1') return '所有装备栏永久攻击 +1';
       if (token === 'allSlotShield-1') return '所有装备栏永久护甲 -1';
       if (token === 'flipToRecallEquip') return '翻转为「回收术」永久魔法：失去 2 点生命，回手一张牌（从装备栏或护符栏选择）';
       if (token === 'flipToUndyingBlessing') return '翻转为「不灭赐福」永久魔法：赋予装备复生能力，失去 2 点生命';

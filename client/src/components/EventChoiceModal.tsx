@@ -149,6 +149,7 @@ function formatEffect(effect?: EventEffectExpression): string | null {
       if (token === 'upgradeCard') return 'Choose a card to upgrade';
       if (token === 'flipToUpgradeScroll') return 'Flip into Upgrade Scroll (instant magic)';
       if (token === 'allSlotDamage-1') return 'All equipment slots: permanent damage -1';
+      if (token === 'allSlotDamage+1') return 'All equipment slots: permanent damage +1';
       if (token === 'allSlotShield-1') return 'All equipment slots: permanent armor -1';
       if (token === 'flipToRecallEquip') return 'Flip into Recall (permanent magic)';
       if (token === 'flipToUndyingBlessing') return 'Flip into Undying Blessing (permanent magic)';

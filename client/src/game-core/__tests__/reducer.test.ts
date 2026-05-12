@@ -2211,7 +2211,7 @@ describe('reducer', () => {
     it('hero magic can be re-activated immediately when gauge refills (no per-wave cap)', () => {
       const state = makeState({
         heroMagicState: {
-          'holy-light': { unlocked: true, gauge: 10, usedThisWave: false },
+          'holy-light': { unlocked: true, gauge: 12, usedThisWave: false },
         } as any,
         pendingHeroMagicAction: null,
         hp: 5,
@@ -2226,7 +2226,7 @@ describe('reducer', () => {
         ...completed.state,
         heroMagicState: {
           ...completed.state.heroMagicState,
-          'holy-light': { ...completed.state.heroMagicState['holy-light'], gauge: 10 },
+          'holy-light': { ...completed.state.heroMagicState['holy-light'], gauge: 12 },
         } as any,
         hp: 5,
       };
@@ -2286,6 +2286,21 @@ describe('reducer', () => {
       const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'allSlotDamage-1' });
       expect(result.state.equipmentSlotBonuses.equipmentSlot1.damage).toBe(2);
       expect(result.state.equipmentSlotBonuses.equipmentSlot2.damage).toBe(1);
+    });
+
+    it('allSlotDamage+1 increases both slot damage bonuses', () => {
+      const state = makeState({
+        equipmentSlotBonuses: {
+          equipmentSlot1: { damage: 3, shield: 0 },
+          equipmentSlot2: { damage: 2, shield: 1 },
+        },
+      });
+      const result = reduce(state, { type: 'APPLY_EVENT_EFFECT', token: 'allSlotDamage+1' });
+      expect(result.state.equipmentSlotBonuses.equipmentSlot1.damage).toBe(4);
+      expect(result.state.equipmentSlotBonuses.equipmentSlot2.damage).toBe(3);
+      // Shield bonuses should NOT be affected
+      expect(result.state.equipmentSlotBonuses.equipmentSlot1.shield).toBe(0);
+      expect(result.state.equipmentSlotBonuses.equipmentSlot2.shield).toBe(1);
     });
 
     it('allSlotShield-1 decreases both slot shield bonuses', () => {

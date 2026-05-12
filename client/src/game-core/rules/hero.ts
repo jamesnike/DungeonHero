@@ -3591,7 +3591,7 @@ function reducePushToBackpackTop(
     pending.card,
     cardsToPush.length > 0
       ? `整顿背囊：放回 ${cardsToPush.length} 张牌到背包顶部。`
-      : '整顿背囊：背包上限 +1（未选择任何牌）。',
+      : '整顿背囊：背包上限 +2（未选择任何牌）。',
   );
 }
 

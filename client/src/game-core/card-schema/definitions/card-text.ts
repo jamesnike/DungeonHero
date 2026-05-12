@@ -591,7 +591,7 @@ const threeCardThunder: CardTextFormatter = (card) => {
 
 const reorganizeBackpack: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const capacityBonuses = [1, 2];
+  const capacityBonuses = [2, 2];
   const cap = pick(capacityBonuses, level);
   return {
     description: `永久：背包上限 +${cap}，然后从手牌、护符栏或装备栏中选择至多 3 张牌放回背包顶部。装备/护符不会触发任何破损或转化效果。`,
