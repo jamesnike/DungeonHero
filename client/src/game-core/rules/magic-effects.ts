@@ -4041,6 +4041,19 @@ export function resolveKnightPermanentMagic(
             // reconstruction below). Pass current `patch` so accumulated
             // mutations (gold, slot bonuses, etc.) compose correctly across
             // multiple destroyed pieces in the same cast.
+            //
+            // Note: `applyOneEquipmentLastWordsIteration` (called by this
+            // helper) already triggers all `onDestroyEffect` variants
+            // including `graveyard-to-hand` (Iron Shield-style), wraith-haunt-N
+            // (+temp damage to other slot), wraithDeathHeal/Spread,
+            // discard-hand-3, skeletonLastWordsDiscard, etc.
+            //
+            // Intentionally NOT triggered: the 50% wraith-swap (physical
+            // re-positioning of the OTHER slot's main item to this slot).
+            // 弃装重铸 destroys both slots wholesale — any swap target is
+            // also doomed in the same cast, so the swap is meaningless.
+            // wraith-haunt's +damage bonus still fires; only the physical
+            // swap is skipped.
             const lwResult = computeEquipmentDisplacementLastWords(
               state,
               sid,
@@ -4060,16 +4073,77 @@ export function resolveKnightPermanentMagic(
                 payload: { count: lwResult.classCardDraw, source: item.name },
               });
             }
-            // Perm-flagged equipment routes to the recycle bag, not the
-            // graveyard. Mirrors DISPOSE_EQUIPMENT_CARD's routing decision so
-            // 永恒铭刻 装备 被弃装重铸摧毁后仍能回到回收袋。
-            if (shouldRouteEquipmentToPermRecycle(item)) {
+
+            // 引雷阵锋 / 雷震共鸣家族（mineDamageBoostPerDur > 0）：装备破坏时，
+            // 把"被消耗的最后剩余耐久"也计入 globalMineDamageBonus。
+            // 镜像 `computeEquipmentBreakEffects` 行为，无论后续 salvage 是否
+            // 救回都该累加（卡的"原始耐久"已经被消耗，salvage 救回的卡是
+            // durability=1 / maxDur-N 的"新生命"）。
+            const finalDurLost = Math.max(0, item.durability ?? 0);
+            if (finalDurLost > 0) {
+              accumulateMineDamageBoost(state, item, finalDurLost, patch, sideEffects);
+            }
+
+            // 残骸回收符 (equipment-salvage amulet): for weapons/shields,
+            // return the broken card to hand with maxDurability-N instead
+            // of being lost (N = number of equipped salvage amulets).
+            // Each piece in the discard-rebuild stack is judged independently
+            // (matches user-confirmed design — main + every reserve piece
+            // gets its own salvage check).
+            //
+            // Perm-priority rule: equipment carrying a Perm flag (永恒铭刻 etc.)
+            // routes to the recycle bag, salvage SKIPPED so the card is not
+            // consumed (and not capable of vanishing via maxDur underflow).
+            // Mirrors `computeEquipmentBreakEffects` salvage routing.
+            const isPermRecycle = shouldRouteEquipmentToPermRecycle(item);
+            const salvageCount = amuletEffects.equipmentSalvageCount;
+            const canSalvage = !isPermRecycle
+              && salvageCount > 0
+              && (item.type === 'weapon' || item.type === 'shield');
+
+            if (canSalvage) {
+              const newMaxDur = (item.maxDurability ?? 1) - salvageCount;
+              if (newMaxDur <= 0) {
+                sideEffects.push({
+                  event: 'log:entry',
+                  payload: { type: 'equip', message: `残骸回收符：${item.name} 耐久上限归零，从游戏中移除！` },
+                });
+                sideEffects.push({ event: 'ui:banner', payload: { text: `${item.name} 耐久上限归零，移除！` } });
+              } else {
+                const {
+                  fromSlot: _fs,
+                  armor: _a,
+                  reviveUsed: _ru,
+                  equipmentReviveUsed: _eru,
+                  wraithRebirthUsed: _wru,
+                  ...rest
+                } = item as GameCardData & Record<string, unknown>;
+                const salvaged: GameCardData = { ...(rest as GameCardData), durability: 1, maxDurability: newMaxDur };
+                patch.handCards = [...(patch.handCards ?? state.handCards), salvaged];
+                sideEffects.push({ event: 'card:equipmentSalvaged', payload: { card: salvaged, slotHint: sid } });
+                sideEffects.push({
+                  event: 'log:entry',
+                  payload: { type: 'equip', message: `残骸回收符：${item.name} 回到手牌（耐久 1/${newMaxDur}）！` },
+                });
+                sideEffects.push({ event: 'ui:banner', payload: { text: `残骸回收！${item.name} 回到手牌！` } });
+              }
+              // Salvaged equipment is NOT pushed to destroyedCards — the card
+              // returned to hand (or was removed entirely), neither outcome
+              // counts as "destroyed" for 招灵书印 (delete-draw) trigger.
+              // BUT it still counts as "acted on" for discover purposes
+              // (per design: card text says 「每件装备发现 1 张专属牌」).
+            } else if (isPermRecycle) {
+              // Perm-flagged equipment routes to the recycle bag, not the
+              // graveyard. Mirrors DISPOSE_EQUIPMENT_CARD's routing decision so
+              // 永恒铭刻 装备 被弃装重铸摧毁后仍能回到回收袋。
               enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: item });
+              destroyedCount++;
+              destroyedCards.push(item);
             } else {
               enqueuedActions.push({ type: 'ADD_TO_GRAVEYARD', card: item });
+              destroyedCount++;
+              destroyedCards.push(item);
             }
-            destroyedCount++;
-            destroyedCards.push(item);
           }
         }
 

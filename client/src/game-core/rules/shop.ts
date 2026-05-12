@@ -307,7 +307,13 @@ function reduceShopSelectSkill(
     { event: 'log:entry', payload: { type: 'shop', message: `商店：习得英雄技能「${patch.heroSkillBanner?.replace(/^学习了「|」！$/g, '') ?? action.skillId}」` } },
   ];
 
-  // Handle card-creating async ops inline in the reducer
+  // Handle async ops inline in the reducer.
+  //
+  // 历史 bug：早期 `classDraw` / `handDraw` 仅以 `shop:skillSelected` side
+  // effect 形式发出，但唯一 listener (`useShopHandlers.ts:925`) 只 log 不处理
+  // → shop 买的 `early-surge`（initialClassCardDraw: 3）和 `vanguard-swap`
+  // （initialHandDraw: 2）「开局抽牌」效果**完全失效**。
+  // 现统一在 reducer 内处理（参考 addCard pattern），不再依赖外部 listener。
   const remainingAsyncOps = asyncOps.filter(op => {
     if (op.kind === 'addCard' && op.cardKey === 'summon-minion') {
       let minionId: string;
@@ -337,8 +343,90 @@ function reduceShopSelectSkill(
       sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: '愈战愈勇：获得永久魔法「治愈余韵」' } });
       return false;
     }
+    if (op.kind === 'classDraw' && (op.count ?? 0) > 0) {
+      enqueuedActions.push({ type: 'DRAW_CLASS_TO_BACKPACK', count: op.count! });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `技能加成：从职业牌堆抽 ${op.count} 张专属牌` } });
+      return false;
+    }
+    if (op.kind === 'handDraw' && (op.count ?? 0) > 0) {
+      // 「抽 N 张牌」默认从背包抽（draw-cards-defaults-to-backpack 规则）。
+      enqueuedActions.push({ type: 'DRAW_CARDS', count: op.count!, source: 'backpack' });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: `技能加成：从背包抽 ${op.count} 张牌` } });
+      return false;
+    }
     return true;
   });
+
+  // Shield-wall (雷盾心法) shop-buy: give thunder seal + clear weapons.
+  //
+  // 历史 bug：shop 买 shield-wall 时既不发雷霆符印（runOpeningSetup 只检查
+  // eternalRelics），「不能装备武器」的限制也只挡 drag 路径
+  // (GameBoard.tsx:7024) 且只查 eternalRelics —— shop 买后玩家仍可装备武器。
+  // 用户选择 enforce-and-clear：买的瞬间把现有武器卸到背包/手牌/回收袋，
+  // 后续的 equip 拦截见 GameBoard.tsx 同步改动。
+  if (action.skillId === 'shield-wall') {
+    // Find thunder seal (`discard-zap` amulet) in the class deck and clone
+    // one into the backpack via DRAW_CLASS_TO_BACKPACK with includeIds.
+    const thunderSeal = state.classDeck.find(
+      c => c.type === 'amulet' && (c as any).amuletEffect === 'discard-zap',
+    );
+    if (thunderSeal) {
+      enqueuedActions.push({
+        type: 'DRAW_CLASS_TO_BACKPACK',
+        count: 1,
+        includeIds: [thunderSeal.id],
+      });
+      sideEffects.push({ event: 'log:entry', payload: { type: 'skill', message: '雷盾心法：从职业牌堆获得「雷霆符印」' } });
+    }
+
+    // Clear all weapons from both equipment slots (main + reserve).
+    // Move them to backpack; overflow → recycle bag.
+    const removedWeapons: import('@/components/GameCard').GameCardData[] = [];
+    const isWeapon = (c: any): boolean => c?.type === 'weapon';
+
+    const slot1Main = state.equipmentSlot1 as any;
+    const slot1Reserve = (state.equipmentSlot1Reserve ?? []) as any[];
+    const slot2Main = state.equipmentSlot2 as any;
+    const slot2Reserve = (state.equipmentSlot2Reserve ?? []) as any[];
+
+    const cleanupSlot = (
+      mainItem: any,
+      reserveItems: any[],
+      slotKey: 'equipmentSlot1' | 'equipmentSlot2',
+      reserveKey: 'equipmentSlot1Reserve' | 'equipmentSlot2Reserve',
+    ): void => {
+      // Concatenate main + reserve, partition weapons vs keepers.
+      const all = [mainItem, ...reserveItems].filter(Boolean);
+      const keepers: any[] = [];
+      for (const item of all) {
+        if (isWeapon(item)) {
+          // Strip fromSlot before re-homing (per card-fromslot-bookkeeping rule).
+          const { fromSlot: _drop, ...rest } = item;
+          removedWeapons.push(rest);
+        } else {
+          keepers.push(item);
+        }
+      }
+      // First keeper becomes main, rest stay in reserve.
+      patch[slotKey] = (keepers[0] ?? null) as any;
+      patch[reserveKey] = keepers.slice(1) as any;
+    };
+
+    cleanupSlot(slot1Main, slot1Reserve, 'equipmentSlot1', 'equipmentSlot1Reserve');
+    cleanupSlot(slot2Main, slot2Reserve, 'equipmentSlot2', 'equipmentSlot2Reserve');
+
+    if (removedWeapons.length > 0) {
+      // Route each removed weapon to backpack via the canonical reducer
+      // (handles backpack-cap overflow → recycle bag automatically).
+      for (const w of removedWeapons) {
+        enqueuedActions.push({ type: 'ADD_TO_BACKPACK', card: w });
+      }
+      sideEffects.push({
+        event: 'log:entry',
+        payload: { type: 'equip', message: `雷盾心法：卸下 ${removedWeapons.length} 件武器（${removedWeapons.map(w => w.name).join('、')}）→ 背包` },
+      });
+    }
+  }
 
   patch.rng = rng;
 

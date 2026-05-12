@@ -1337,7 +1337,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     classCard: true,
     description:
       '永久：对左右装备栏每一件装备（含下层叠加）独立生效——没复生的摧毁，复生的留在原层 1 耐久。每件装备发现一张专属牌（依次弹窗）。装备的遗言照常触发。',
-    shortDescription: '每件装备（含下层）：发现 1 张专属牌',
+    shortDescription: '摧毁所有装备，每件装备（含下层）：发现 1 张专属牌',
     magicType: 'permanent',
     magicEffect: '对所有装备（含下层 reserve）各发现一张专属牌，并尝试摧毁；复生在原层 1 耐久。',
     knightEffect: 'discard-rebuild',

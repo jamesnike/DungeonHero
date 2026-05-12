@@ -671,4 +671,326 @@ describe('弃装重铸 (knight:discard-rebuild)', () => {
     // Reserve item's last-words fired: slot1 perm damage +2.
     expect(result.state.equipmentSlotBonuses.equipmentSlot1.damage).toBeGreaterThanOrEqual(2);
   });
+
+  // -------------------------------------------------------------------------
+  // 残骸回收符 (equipment-salvage amulet) — every destroyed weapon/shield is
+  // independently rescued back to hand with maxDur-N. Mirrors standard
+  // `computeEquipmentBreakEffects` salvage semantics.
+  // -------------------------------------------------------------------------
+
+  function makeSalvageAmulet(idSuffix = '1'): GameCardData {
+    return {
+      id: `a-salvage-${idSuffix}`,
+      type: 'amulet',
+      name: '残骸回收符',
+      value: 0,
+      image: '',
+      amuletEffect: 'equipment-salvage',
+    } as GameCardData;
+  }
+
+  it('SALVAGE: 1 amulet + 1 weapon (maxDur 2) → returns to hand with maxDur 1, NOT in graveyard, discover STILL fires', () => {
+    const card = makeCard('salvage-1');
+    const w = makeWeapon('w-salv', { durability: 2, maxDurability: 2 });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: w as any,
+      equipmentSlot2: null,
+      amuletSlots: [makeSalvageAmulet()] as any,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Slot cleared.
+    expect(result.state.equipmentSlot1).toBeNull();
+    // Card NOT in graveyard — salvage rescued it.
+    expect(result.state.discardedCards.some(c => c.id === 'w-salv')).toBe(false);
+    // Card IS in hand with durability 1 / maxDurability 1 (= 2 - 1 salvage amulet).
+    const salvaged = result.state.handCards.find(c => c.id === 'w-salv');
+    expect(salvaged).toBeDefined();
+    expect((salvaged as any).durability).toBe(1);
+    expect((salvaged as any).maxDurability).toBe(1);
+    // Discover STILL triggered (per design: card text 「每件装备发现 1 张专属牌」).
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.discoverSourceLabel).toBe('弃装重铸');
+  });
+
+  it('SALVAGE: 2 amulets + weapon maxDur 3 → maxDur drops to 1 (3-2)', () => {
+    const card = makeCard('salvage-2x');
+    const w = makeWeapon('w-2x', { durability: 3, maxDurability: 3 });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: w as any,
+      equipmentSlot2: null,
+      amuletSlots: [makeSalvageAmulet('a'), makeSalvageAmulet('b')] as any,
+      classDeck: [makeClassCard('c1')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    const salvaged = result.state.handCards.find(c => c.id === 'w-2x');
+    expect(salvaged).toBeDefined();
+    expect((salvaged as any).durability).toBe(1);
+    expect((salvaged as any).maxDurability).toBe(1);
+  });
+
+  it('SALVAGE UNDERFLOW: maxDur 1 + 1 amulet → newMaxDur=0 → REMOVED entirely (not in hand, not in graveyard)', () => {
+    const card = makeCard('salvage-underflow');
+    const w = makeWeapon('w-uf', { durability: 1, maxDurability: 1 });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: w as any,
+      equipmentSlot2: null,
+      amuletSlots: [makeSalvageAmulet()] as any,
+      classDeck: [makeClassCard('c1')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Slot cleared.
+    expect(result.state.equipmentSlot1).toBeNull();
+    // Card removed entirely — neither in hand nor graveyard.
+    expect(result.state.handCards.some(c => c.id === 'w-uf')).toBe(false);
+    expect(result.state.discardedCards.some(c => c.id === 'w-uf')).toBe(false);
+    // Discover STILL fires.
+    expect(result.state.discoverModalOpen).toBe(true);
+  });
+
+  it('SALVAGE: monster equipment is NOT salvageable (only weapon/shield)', () => {
+    const card = makeCard('salvage-mon');
+    const monsterEquip: GameCardData = {
+      id: 'mon-no-salv',
+      type: 'monster',
+      name: 'Goblin-Equip',
+      value: 3,
+      image: '',
+      hp: 5,
+      maxHp: 5,
+      attack: 3,
+      durability: 2,
+      maxDurability: 2,
+      currentLayer: 1,
+    } as GameCardData;
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: monsterEquip as any,
+      equipmentSlot2: null,
+      amuletSlots: [makeSalvageAmulet()] as any,
+      classDeck: [makeClassCard('c1')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Monster equipment was destroyed normally (graveyard), salvage skipped.
+    expect(result.state.discardedCards.some(c => c.id === 'mon-no-salv')).toBe(true);
+    expect(result.state.handCards.some(c => c.id === 'mon-no-salv')).toBe(false);
+  });
+
+  it('SALVAGE + Perm equipment: salvage SKIPPED, Perm routes to recycle bag (Perm priority)', () => {
+    const card = makeCard('salvage-perm');
+    // Perm-flagged weapon (recycleDelay > 0 simulates 永恒铭刻 effect).
+    const permWeapon = makeWeapon('w-perm', {
+      durability: 1,
+      maxDurability: 1,
+      recycleDelay: 2,
+    });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: permWeapon as any,
+      equipmentSlot2: null,
+      amuletSlots: [makeSalvageAmulet()] as any,
+      classDeck: [makeClassCard('c1')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Slot cleared.
+    expect(result.state.equipmentSlot1).toBeNull();
+    // Perm-priority: card went to recycle bag, NOT consumed by salvage.
+    expect(result.state.permanentMagicRecycleBag.some(c => c.id === 'w-perm')).toBe(true);
+    // NOT in hand (salvage skipped) and NOT in graveyard (Perm routing).
+    expect(result.state.handCards.some(c => c.id === 'w-perm')).toBe(false);
+    expect(result.state.discardedCards.some(c => c.id === 'w-perm')).toBe(false);
+  });
+
+  it('SALVAGE STACK: main + 2 reserve all weapons + 1 salvage amulet → all 3 returned to hand independently', () => {
+    const card = makeCard('salvage-stack');
+    const main = makeWeapon('w-sm', { durability: 2, maxDurability: 2 });
+    const r1 = makeWeapon('w-sr1', { durability: 2, maxDurability: 2 });
+    const r2 = makeWeapon('w-sr2', { durability: 2, maxDurability: 2 });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: main as any,
+      equipmentSlot1Reserve: [r1, r2] as any,
+      equipmentSlot2: null,
+      amuletSlots: [makeSalvageAmulet()] as any,
+      classDeck: Array.from({ length: 5 }, (_, i) => makeClassCard(`c${i}`)),
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Slot fully cleared.
+    expect(result.state.equipmentSlot1).toBeNull();
+    expect(result.state.equipmentSlot1Reserve).toHaveLength(0);
+    // All 3 pieces independently salvaged — none in graveyard, all in hand with maxDur 1.
+    expect(result.state.discardedCards.some(c => ['w-sm', 'w-sr1', 'w-sr2'].includes(c.id))).toBe(false);
+    for (const id of ['w-sm', 'w-sr1', 'w-sr2']) {
+      const salvaged = result.state.handCards.find(c => c.id === id);
+      expect(salvaged, `${id} should be in hand`).toBeDefined();
+      expect((salvaged as any).durability).toBe(1);
+      expect((salvaged as any).maxDurability).toBe(1);
+    }
+    // 3 acted-on pieces → 3 discovers (1 fires + 2 queued).
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(2);
+  });
+
+  it('SALVAGE + revive: revived piece stays in slot, separate destroyed piece gets salvaged', () => {
+    const card = makeCard('salvage-mix');
+    const w = makeWeapon('w-rev-here', { hasEquipmentRevive: true, durability: 0 });
+    const s = makeShield('s-salv-here', { durability: 2, maxDurability: 2 });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: w as any,
+      equipmentSlot2: s as any,
+      amuletSlots: [makeSalvageAmulet()] as any,
+      classDeck: [makeClassCard('c1'), makeClassCard('c2'), makeClassCard('c3')],
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Slot 1: revived in place at 1 dur.
+    expect((result.state.equipmentSlot1 as any)?.id).toBe('w-rev-here');
+    expect((result.state.equipmentSlot1 as any)?.durability).toBe(1);
+    // Slot 2: destroyed AND salvaged → not in slot, in hand at maxDur 1.
+    expect(result.state.equipmentSlot2).toBeNull();
+    const salvaged = result.state.handCards.find(c => c.id === 's-salv-here');
+    expect(salvaged).toBeDefined();
+    expect((salvaged as any).maxDurability).toBe(1);
+    expect(result.state.discardedCards.some(c => c.id === 's-salv-here')).toBe(false);
+    // 2 acted-on pieces → 2 discovers (1 fires + 1 queued).
+    expect(result.state.discoverModalOpen).toBe(true);
+    expect(result.state.pendingClassDiscoverQueue).toHaveLength(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // 引雷阵锋 (mineDamageBoostPerDur > 0) — destroyed weapon's remaining
+  // durability accumulates into globalMineDamageBonus. Mirrors standard
+  // `computeEquipmentBreakEffects` mine-boost behavior.
+  // -------------------------------------------------------------------------
+
+  it('MINE BOOST: weapon with mineDamageBoostPerDur=2, durability=2 destroyed → globalMineDamageBonus +=4', () => {
+    const card = makeCard('mine-1');
+    const blade = makeWeapon('w-blade', {
+      durability: 2,
+      maxDurability: 2,
+      mineDamageBoostPerDur: 2,
+    });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: blade as any,
+      equipmentSlot2: null,
+      classDeck: [makeClassCard('c1')],
+      globalMineDamageBonus: 5, // pre-existing bonus
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // 5 (existing) + 2 dur × 2 boost = 9.
+    expect(result.state.globalMineDamageBonus).toBe(9);
+    expect(result.state.discardedCards.some(c => c.id === 'w-blade')).toBe(true);
+  });
+
+  it('MINE BOOST + SALVAGE: bonus accumulates BEFORE salvage rescues card (full original dur counted)', () => {
+    const card = makeCard('mine-salv');
+    const blade = makeWeapon('w-blade-salv', {
+      durability: 2,
+      maxDurability: 3,
+      mineDamageBoostPerDur: 2,
+    });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: blade as any,
+      equipmentSlot2: null,
+      amuletSlots: [makeSalvageAmulet()] as any,
+      classDeck: [makeClassCard('c1')],
+      globalMineDamageBonus: 0,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // 0 + 2 dur × 2 boost = 4. Mine boost runs even when salvage rescues.
+    expect(result.state.globalMineDamageBonus).toBe(4);
+    // Salvaged to hand with maxDur 2 (3 - 1 salvage amulet), durability 1.
+    const salvaged = result.state.handCards.find(c => c.id === 'w-blade-salv');
+    expect(salvaged).toBeDefined();
+    expect((salvaged as any).maxDurability).toBe(2);
+    expect((salvaged as any).durability).toBe(1);
+  });
+
+  it('MINE BOOST + REVIVE: revived equipment does NOT trigger mine boost (no durability consumed)', () => {
+    const card = makeCard('mine-rev');
+    const blade = makeWeapon('w-blade-rev', {
+      durability: 0,
+      maxDurability: 2,
+      mineDamageBoostPerDur: 3,
+      hasEquipmentRevive: true,
+    });
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: blade as any,
+      equipmentSlot2: null,
+      classDeck: [makeClassCard('c1')],
+      globalMineDamageBonus: 10,
+    });
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Equipment revived (NOT destroyed) → mine boost does NOT trigger.
+    expect(result.state.globalMineDamageBonus).toBe(10);
+    expect(result.state.equipmentSlot1).not.toBeNull();
+    expect((result.state.equipmentSlot1 as any).equipmentReviveUsed).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // 招灵书印 (delete-draw) interaction — salvaged equipment is NOT counted
+  // as "destroyed" because the card was rescued, not removed. Matches the
+  // standard `computeEquipmentBreakEffects` semantics.
+  // -------------------------------------------------------------------------
+
+  it('SALVAGE excludes 招灵书印 trigger (salvaged piece NOT counted as destroyed)', () => {
+    const card = makeCard('salvage-no-deletedraw');
+    const w = makeWeapon('w-no-dd', { durability: 2, maxDurability: 2 });
+    const deleteDrawAmulet: GameCardData = {
+      id: 'a-delete-draw',
+      type: 'amulet',
+      name: '招灵书印',
+      value: 0,
+      image: '',
+      amuletEffect: 'delete-draw',
+    } as GameCardData;
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: w as any,
+      equipmentSlot2: null,
+      amuletSlots: [makeSalvageAmulet(), deleteDrawAmulet] as any,
+      classDeck: [makeClassCard('c1')],
+      backpackItems: [
+        makeWeapon('bp-1'),
+        makeWeapon('bp-2'),
+        makeWeapon('bp-3'),
+        makeWeapon('bp-4'),
+      ] as any,
+    });
+    const handBefore = state.handCards.length;
+
+    const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
+
+    // Salvage rescued the weapon → only +1 to hand (the salvaged weapon),
+    // NO 招灵书印 draw (would otherwise add 2 backpack cards to hand).
+    // After: -1 (弃装重铸 leaves hand) + 1 (salvaged weapon) = handBefore.
+    expect(result.state.handCards.length).toBe(handBefore);
+    expect(result.state.handCards.some(c => c.id === 'w-no-dd')).toBe(true);
+  });
 });

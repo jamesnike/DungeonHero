@@ -199,35 +199,18 @@ export default function HeroDetailsModal({
         </DialogHeader>
 
         <div className="space-y-6 py-2 overflow-y-auto flex-1 min-h-0 pr-1">
-          <div className="flex flex-col gap-4 lg:flex-row">
-            <div className="overflow-hidden rounded-2xl border bg-muted/40 max-h-[30vh] lg:max-h-none lg:w-1/3">
-              <div className="relative h-full w-full bg-gradient-to-b from-background via-background/70 to-muted flex items-center justify-center">
-                {heroVariant.image ? (
-                  <img
-                    src={heroVariant.image}
-                    alt={heroVariant.name}
-                    className="max-h-full max-w-full object-contain"
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-muted-foreground aspect-[3/4]">{t('hero.noPortrait')}</div>
-                )}
-              </div>
-            </div>
-
-            <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
-              {statItems.map(stat => (
-                <div key={stat.key} className="rounded-xl border border-border/60 bg-card/40 p-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {stat.label}
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    {stat.icon}
-                    <span className="text-lg font-semibold">{stat.value}</span>
-                  </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {statItems.map(stat => (
+              <div key={stat.key} className="rounded-xl border border-border/60 bg-card/40 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {stat.label}
                 </div>
-              ))}
-            </div>
+                <div className="mt-2 flex items-center gap-2">
+                  {stat.icon}
+                  <span className="text-lg font-semibold">{stat.value}</span>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="space-y-3">

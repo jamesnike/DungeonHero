@@ -13,6 +13,7 @@ import { filterAvailableClassPool, isUniqueLocked, markUniqueAcquired } from './
 import { getStarterBaseId } from './deck';
 import { applySlotArmorBonusDelta } from './equipment';
 import { getEffectiveHandLimit } from './cards';
+import { applyDerivedCardText } from './card-schema/card-text';
 import {
   SHOP_MAX_OFFERINGS,
   SHOP_REQUIRED_TYPES,
@@ -32,6 +33,32 @@ import { getShopPrice } from './helpers';
 // ---------------------------------------------------------------------------
 // Generate shop offerings
 // ---------------------------------------------------------------------------
+
+/**
+ * Re-derive a shop offering's display text from its registered formatter so
+ * `description` / `shortDescription` / `magicEffect` always match the card's
+ * current `upgradeLevel`. Acts as a defensive guard:
+ *
+ *   - Lv0 cards in classDeck (the vast majority) — formatter outputs the base
+ *     text, identical to what `applyDerivedCardText` already produced at deck
+ *     construction. No-op.
+ *   - Pre-upgraded templates in classDeck (currently only knight-deck Lv1
+ *     魔法飞弹 with `upgradeLevel: 1`) — formatter outputs the Lv1 text,
+ *     matching what the player will actually receive on purchase.
+ *   - Any future "pre-upgraded" classDeck entry — same pattern; no shop-side
+ *     special-casing or hardcoded ids required.
+ *
+ * If a classDeck card's `description` ever drifts from its `upgradeLevel`
+ * (stale data, partial mutation), this normalization step fixes the shop
+ * display without changing the underlying classDeck template.
+ *
+ * Cards without a registered formatter (`computeCardText` → null) are returned
+ * unchanged — for those, whatever literal description was authored in the
+ * deck file stands.
+ */
+function normalizeOfferingCard(card: GameCardData): GameCardData {
+  return applyDerivedCardText(card);
+}
 
 export function generateShopOfferingsPure(
   classDeck: GameCardData[],
@@ -58,7 +85,7 @@ export function generateShopOfferingsPure(
     if (matchIndex >= 0) {
       const card = availableCards.splice(matchIndex, 1)[0];
       offerings.push({
-        card,
+        card: normalizeOfferingCard(card),
         price: getShopPrice(card),
         sold: false,
       });
@@ -70,7 +97,7 @@ export function generateShopOfferingsPure(
     r = r1;
     const card = availableCards.splice(idx, 1)[0];
     offerings.push({
-      card,
+      card: normalizeOfferingCard(card),
       price: getShopPrice(card),
       sold: false,
     });

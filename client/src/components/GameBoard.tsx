@@ -271,6 +271,7 @@ import { getEquipmentSlotsWithSuppressedTempAttack } from '@/game-core/buildingA
 import type { RngState } from '@/game-core/rng';
 import { nextRandom, nextInt, nextBool, shuffle as rngShuffle, pickRandom, nextId } from '@/game-core/rng';
 import { pickGraveyardCardExcluding } from '@/game-core/rules/equipment-effects';
+import { hasPassiveSkillOrRelic } from '@/game-core/hero';
 
 // ---------------------------------------------------------------------------
 // UI-only constants (layout, animation timing, CSS classes)
@@ -7021,8 +7022,14 @@ export default function GameBoard() {
         return;
       }
 
-      if (hasEternalRelic(eternalRelicsRef.current, 'shield-wall') && card.type === 'weapon') {
-        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: '永恒护符·雷盾心法：不能装备武器！' });
+      // 雷盾心法 (`shield-wall`)：3 路径都拦截 —— 永恒护符、开局选的英雄技能、
+      // shop 三选一买的英雄技能。OR 语义。详见 `hero.ts:hasPassiveSkillOrRelic`。
+      // 历史 bug：此处长年只查 `eternalRelics` → shop 买的雷盾心法仍可装备武器。
+      if (hasPassiveSkillOrRelic(engine.getState(), 'shield-wall') && card.type === 'weapon') {
+        const sourcePrefix = hasEternalRelic(eternalRelicsRef.current, 'shield-wall')
+          ? '永恒护符·雷盾心法'
+          : '雷盾心法';
+        dispatch({ type: 'SET_HERO_SKILL_BANNER', message: `${sourcePrefix}：不能装备武器！` });
         resetDragState();
         return;
       }
