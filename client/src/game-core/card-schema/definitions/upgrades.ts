@@ -491,6 +491,34 @@ const reviveBoneShield: OnUpgradeHandler = (upgraded, newLevel) => {
   (upgraded as any).onDestroyPermanentDamage = damage;
 };
 
+// 智者圣盾 (knight:scholar-shield)：
+//   L0 -> L1: armor / durability 不变（4 / 2/2）。
+//             onEquipEffect 'draw-2' → 'draw-3'（入场抽 3 张）；
+//             onDestroyDraw 2 → 3（遗言抽 3 张）。
+// 入场抽牌走 equipment.ts 注册的 'draw-N' OnEquipHandler；遗言抽牌走
+// equipment-effects.ts 既有 onDestroyDraw 累加路径。两者都 enqueue
+// `DRAW_CARDS source: 'backpack'`（draw-cards-defaults-to-backpack 规则）。
+const scholarShield: OnUpgradeHandler = (upgraded, newLevel) => {
+  const drawCounts = [2, 3];
+  const draw = drawCounts[newLevel] ?? 3;
+  (upgraded as any).onEquipEffect = `draw-${draw}`;
+  (upgraded as any).onDestroyDraw = draw;
+};
+
+// 智者之刃 (knight:scholar-blade)：
+//   L0 -> L1: maxDurability/durability 3/3 → 4/4（applyMaxDurabilityDelta 走 preserve+delta，
+//             保留 mid-game amp / 战斗中残存的破损量）。value (4 攻) / drawOnAttack (1) 不变。
+//   L1 -> L2: maxDurability/durability 不变（4/4，table delta = 0）。
+//             drawOnAttack 1 → 2（每次攻击从背包抽 2 张牌）。
+// drawOnAttack 由 combat.ts:reducePerformHeroAttack 的 drawOnAttack 触发分支消费
+// （mirror healOnAttack 的 fork + overclock 语义）；走标准 DRAW_CARDS source: 'backpack'。
+const scholarBlade: OnUpgradeHandler = (upgraded, newLevel) => {
+  const maxDurs = [3, 4, 4];
+  const drawCounts = [1, 1, 2];
+  applyMaxDurabilityDelta(upgraded, maxDurs, newLevel);
+  (upgraded as any).drawOnAttack = drawCounts[newLevel] ?? drawCounts[drawCounts.length - 1];
+};
+
 // 守护圣盾 (knight:guardian-shield)：
 //   L0 -> L1: armor design [3, 4]（delta +1），preserve+delta（amp 保留）。
 //             durability design [2, 3]（delta +1，preserve broken amount）。
@@ -765,4 +793,6 @@ registerOnUpgradeAll([
   { id: 'knight:barrage-shield', handler: barrageShield },
   { id: 'knight:thunder-guard-shield', handler: thunderGuardShield },
   { id: 'knight:communal-defense-shield', handler: communalDefenseShield },
+  { id: 'knight:scholar-shield', handler: scholarShield },
+  { id: 'knight:scholar-blade', handler: scholarBlade },
 ]);

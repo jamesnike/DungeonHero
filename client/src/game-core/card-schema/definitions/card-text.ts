@@ -627,15 +627,15 @@ const backpackBolt: CardTextFormatter = (card) => {
   const pcts = [50, 75, 100];
   const pct = pcts[level] ?? pcts[pcts.length - 1];
   return {
-    description: `永久：对一个目标造成等同于背包剩余卡牌数 ${pct}% 的法术伤害（向下取整）。`,
-    shortDescription: `背包数 × ${pct}% 法伤`,
-    magicEffect: `永久魔法：选择一个目标，造成背包数 × ${pct}% 法伤。`,
+    description: `永久：对一个目标造成等同于背包剩余卡牌数 ${pct}% 的法术伤害（向下取整）。每造成 4 点伤害额外抽 1 张牌。`,
+    shortDescription: `背包数 × ${pct}% 法伤；每 4 伤害抽 1`,
+    magicEffect: `永久魔法：选择一个目标，造成背包数 × ${pct}% 法伤；每 4 伤害抽 1 张牌。`,
   };
 };
 
 const recycleBolt: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const pcts = [50, 75, 100];
+  const pcts = [100, 125, 150];
   const pct = pcts[level] ?? pcts[pcts.length - 1];
   return {
     description: `永久：对一个目标造成等同于回收袋卡牌数 ${pct}% 的法术伤害（向下取整）。`,
@@ -644,11 +644,11 @@ const recycleBolt: CardTextFormatter = (card) => {
   };
 };
 
-// 囊量震慑：升级表 [4, 3]（divisor）。Lv0 ÷4，Lv1 ÷3。
+// 囊量震慑：升级表 [3, 2]（divisor）。Lv0 ÷3，Lv1 ÷2。
 // 卡面写"背包上限 / X"——上限是 BASE (12) + modifier，玩家肉眼可见的就是背包格子数。
 const backpackCapStun: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const divisors = [4, 3];
+  const divisors = [3, 2];
   const div = pick(divisors, level);
   return {
     description: `永久：击晕上限增加 floor(背包上限 / ${div})%。`,
@@ -696,7 +696,7 @@ const tempAttackArmorDraw: CardTextFormatter = (card) => {
 
 const tempAttackDouble: CardTextFormatter = (card) => {
   const level = card.upgradeLevel ?? 0;
-  const addAmounts = [2, 3];
+  const addAmounts = [1, 2];
   const n = pick(addAmounts, level);
   return {
     description: `永久：选择一个装备栏，临时攻击 +${n}，然后该栏临时攻击翻倍。`,
@@ -823,6 +823,29 @@ const communalDefenseShield: CardTextFormatter = (card) => {
   return {
     description: `复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +${tempArmorAmount} 临时护甲。`,
     shortDescription: `复生 1 次；遗言：全栏 +${tempArmorAmount} 临时护甲`,
+  };
+};
+
+// Handler still sets `onEquipEffect` ('draw-N') and `onDestroyDraw`.
+const scholarShield: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const drawCounts = [2, 3];
+  const draw = pick(drawCounts, level);
+  return {
+    description: `入场：从背包抽 ${draw} 张牌。遗言：从背包抽 ${draw} 张牌。`,
+    shortDescription: `入场抽 ${draw} 张；遗言抽 ${draw} 张`,
+  };
+};
+
+// Handler still sets `drawOnAttack` (and applyMaxDurabilityDelta on durability).
+// L0/L1 抽 1，L2 抽 2；耐久 L0:3 → L1:4 → L2:4 由 handler 处理，描述里不重复打数字。
+const scholarBlade: CardTextFormatter = (card) => {
+  const level = card.upgradeLevel ?? 0;
+  const drawCounts = [1, 1, 2];
+  const draw = pick(drawCounts, level);
+  return {
+    description: `每次攻击：从背包抽 ${draw} 张牌。`,
+    shortDescription: `每次攻击抽 ${draw} 张`,
   };
 };
 
@@ -1092,6 +1115,8 @@ const entries: Array<{ id: string; fn: CardTextFormatter }> = [
   { id: 'knight:thunder-array-blade', fn: thunderArrayBlade },
   { id: 'knight:thunder-guard-shield', fn: thunderGuardShield },
   { id: 'knight:communal-defense-shield', fn: communalDefenseShield },
+  { id: 'knight:scholar-shield', fn: scholarShield },
+  { id: 'knight:scholar-blade', fn: scholarBlade },
   { id: 'knight:barrage-shield', fn: barrageShield },
   { id: 'knight:growth-shield', fn: growthShield },
   { id: 'knight:endurance-shield', fn: enduranceShield },

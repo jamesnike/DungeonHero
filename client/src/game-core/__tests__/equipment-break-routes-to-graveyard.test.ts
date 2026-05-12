@@ -32,7 +32,7 @@ import { describe, expect, it } from 'vitest';
 import { reduce } from '../reducer';
 import { drain } from '../pipeline';
 import { createInitialGameState } from '../state';
-import { initialCombatState, createEmptyAmuletEffects } from '../constants';
+import { initialCombatState, createEmptyAmuletEffects, HAND_LIMIT } from '../constants';
 import { computeEquipmentBreakEffects } from '../rules/equipment-effects';
 import { createRng } from '../rng';
 import type { GameState } from '../types';
@@ -223,6 +223,202 @@ describe('computeEquipmentBreakEffects — non-Perm equipment routes to graveyar
     expect(grave.find(c => c.id === 'iron-1')).toBeDefined();
     expect(grave.find(c => c.id === 'iron-1')?.durability).toBe(3);
     expect(grave.find(c => c.id === 'pickable')).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // graveyard-to-hand (Iron Shield) — hand-full overflow routes the picked
+  // card into the recycle bag (via enqueued ADD_TO_RECYCLE_BAG). Matches
+  // the RETURN_EQUIPMENT_TO_HAND 「装备回手（满则回收袋）」precedent in
+  // rules/cards.ts:2046-2059.
+  // ---------------------------------------------------------------------------
+
+  it('graveyard-to-hand last-words + hand FULL: picked card routes to recycle bag, not hand', () => {
+    const ironShield: GameCardData = {
+      id: 'iron-1', type: 'shield', name: 'Iron Shield', value: 0, image: '',
+      durability: 0, maxDurability: 3, armorMax: 2,
+      armor: 0,
+      onDestroyEffect: 'graveyard-to-hand',
+    };
+    const otherGrave: GameCardData = {
+      id: 'pickable', type: 'magic', name: 'Some Spell', value: 0, image: '',
+    } as GameCardData;
+    const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
+      id: `h${i}`, type: 'magic', name: `Filler${i}`, value: 0, image: '',
+    }) as GameCardData);
+    const state = makeState({
+      equipmentSlot1: ironShield as EquipmentItem,
+      discardedCards: [otherGrave],
+      handCards: fullHand,
+    });
+
+    const result = computeEquipmentBreakEffects(
+      state,
+      'equipmentSlot1',
+      ironShield,
+      createEmptyAmuletEffects(),
+    );
+
+    // Hand untouched (still HAND_LIMIT, picked card NOT added)
+    expect(result.patch.handCards).toBeUndefined();
+
+    // Picked card was removed from graveyard
+    const grave = result.patch.discardedCards as GameCardData[];
+    expect(grave.find(c => c.id === 'pickable')).toBeUndefined();
+    // Broken Iron Shield itself still lands in graveyard
+    expect(grave.find(c => c.id === 'iron-1')).toBeDefined();
+
+    // Picked card was enqueued to recycle bag
+    const addToRecycle = result.enqueuedActions.find(
+      a => a.type === 'ADD_TO_RECYCLE_BAG' && (a as any).card.id === 'pickable',
+    );
+    expect(addToRecycle).toBeDefined();
+
+    // card:newCardGained NOT emitted (consistent with DRAW_CLASS_TO_BACKPACK
+    // overflow → 弹幕之符 doesn't trigger when card lands in recycle bag)
+    expect(result.sideEffects.some(e => e.event === 'card:newCardGained')).toBe(false);
+
+    // Some log:entry message must mention 「手牌已满」 (there are multiple
+    // log:entry events for this break, e.g. the generic 「遗言触发」 banner;
+    // we just need to find at least one mentioning the recycle-bag fallback).
+    const handFullLog = result.sideEffects.find(
+      e => e.event === 'log:entry' && (e.payload as any)?.message?.includes('手牌已满'),
+    );
+    expect(handFullLog).toBeDefined();
+  });
+
+  it('graveyard-to-hand e2e drain: ADD_TO_RECYCLE_BAG fires under phase=playerInput', () => {
+    // Per pipeline-input-continuation.mdc: ADD_TO_RECYCLE_BAG must drain even
+    // when phase='playerInput' (it is whitelisted in pipeline.ts isInputContinuation).
+    // This guards against a future regression where the action gets stranded.
+    const ironShield: GameCardData = {
+      id: 'iron-2', type: 'shield', name: 'Iron Shield', value: 0, image: '',
+      durability: 0, maxDurability: 3, armorMax: 2,
+      armor: 0,
+      onDestroyEffect: 'graveyard-to-hand',
+    };
+    const otherGrave: GameCardData = {
+      id: 'pickable-2', type: 'magic', name: 'Some Spell', value: 0, image: '',
+    } as GameCardData;
+    const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
+      id: `h${i}`, type: 'magic', name: `Filler${i}`, value: 0, image: '',
+    }) as GameCardData);
+    const state = makeState({
+      equipmentSlot1: ironShield as EquipmentItem,
+      discardedCards: [otherGrave],
+      handCards: fullHand,
+      phase: 'playerInput',
+    });
+
+    const breakResult = computeEquipmentBreakEffects(
+      state,
+      'equipmentSlot1',
+      ironShield,
+      createEmptyAmuletEffects(),
+    );
+
+    // Apply patch + drain enqueued actions through the pipeline
+    const patched: GameState = { ...state, ...breakResult.patch };
+    const drained = drain(patched, breakResult.enqueuedActions ?? []);
+
+    // Picked card actually landed in the recycle bag (not stranded in queue)
+    expect(drained.state.permanentMagicRecycleBag.some(c => c.id === 'pickable-2')).toBe(true);
+    // Hand untouched
+    expect(drained.state.handCards.length).toBe(HAND_LIMIT);
+    expect(drained.state.handCards.some(c => c.id === 'pickable-2')).toBe(false);
+  });
+
+  // ---------------------------------------------------------------------------
+  // graveyard-event-to-hand (生长之盾) — per-card overflow distribution.
+  // Hand fills up first, remaining picks go to recycle bag.
+  // ---------------------------------------------------------------------------
+
+  it('graveyard-event-to-hand + hand FULL: all picked events route to recycle bag', () => {
+    const growthShield: GameCardData = {
+      id: 'gs-1', type: 'shield', name: '生长之盾', value: 2, image: '',
+      durability: 0, maxDurability: 3, armorMax: 2,
+      onDestroyEffect: 'graveyard-event-to-hand',
+      onDestroyEventCount: 3,
+    } as any;
+    const ev1: GameCardData = { id: 'e1', type: 'event', name: 'Ev1', value: 0, image: '' } as any;
+    const ev2: GameCardData = { id: 'e2', type: 'event', name: 'Ev2', value: 0, image: '' } as any;
+    const ev3: GameCardData = { id: 'e3', type: 'event', name: 'Ev3', value: 0, image: '' } as any;
+    const fullHand: GameCardData[] = Array.from({ length: HAND_LIMIT }, (_, i) => ({
+      id: `h${i}`, type: 'magic', name: `Filler${i}`, value: 0, image: '',
+    }) as GameCardData);
+    const state = makeState({
+      equipmentSlot1: growthShield as EquipmentItem,
+      discardedCards: [ev1, ev2, ev3],
+      handCards: fullHand,
+    });
+
+    const result = computeEquipmentBreakEffects(
+      state,
+      'equipmentSlot1',
+      growthShield,
+      createEmptyAmuletEffects(),
+    );
+
+    // None of the events landed in hand
+    expect(result.patch.handCards).toBeUndefined();
+
+    // All 3 events removed from graveyard
+    const grave = result.patch.discardedCards as GameCardData[];
+    expect(grave.find(c => c.id === 'e1')).toBeUndefined();
+    expect(grave.find(c => c.id === 'e2')).toBeUndefined();
+    expect(grave.find(c => c.id === 'e3')).toBeUndefined();
+
+    // All 3 enqueued to recycle bag
+    const recycleEnqueues = result.enqueuedActions.filter(a => a.type === 'ADD_TO_RECYCLE_BAG');
+    expect(recycleEnqueues).toHaveLength(3);
+    const recycledIds = recycleEnqueues.map(a => (a as any).card.id).sort();
+    expect(recycledIds).toEqual(['e1', 'e2', 'e3']);
+
+    // No card:newCardGained when nothing landed in hand
+    expect(result.sideEffects.some(e => e.event === 'card:newCardGained')).toBe(false);
+  });
+
+  it('graveyard-event-to-hand + 1 hand slot left, picks 3: 1 to hand, 2 to recycle bag', () => {
+    const growthShield: GameCardData = {
+      id: 'gs-2', type: 'shield', name: '生长之盾', value: 2, image: '',
+      durability: 0, maxDurability: 3, armorMax: 2,
+      onDestroyEffect: 'graveyard-event-to-hand',
+      onDestroyEventCount: 3,
+    } as any;
+    const ev1: GameCardData = { id: 'e1', type: 'event', name: 'Ev1', value: 0, image: '' } as any;
+    const ev2: GameCardData = { id: 'e2', type: 'event', name: 'Ev2', value: 0, image: '' } as any;
+    const ev3: GameCardData = { id: 'e3', type: 'event', name: 'Ev3', value: 0, image: '' } as any;
+    // HAND_LIMIT - 1 fillers → exactly 1 free slot.
+    const nearFullHand: GameCardData[] = Array.from({ length: HAND_LIMIT - 1 }, (_, i) => ({
+      id: `h${i}`, type: 'magic', name: `Filler${i}`, value: 0, image: '',
+    }) as GameCardData);
+    const state = makeState({
+      equipmentSlot1: growthShield as EquipmentItem,
+      discardedCards: [ev1, ev2, ev3],
+      handCards: nearFullHand,
+    });
+
+    const result = computeEquipmentBreakEffects(
+      state,
+      'equipmentSlot1',
+      growthShield,
+      createEmptyAmuletEffects(),
+    );
+
+    // Exactly 1 event landed in hand (filling it to HAND_LIMIT)
+    const handAfter = result.patch.handCards as GameCardData[];
+    expect(handAfter.length).toBe(HAND_LIMIT);
+    const eventsInHand = handAfter.filter(c => c.id.startsWith('e'));
+    expect(eventsInHand).toHaveLength(1);
+
+    // The other 2 went to recycle bag
+    const recycleEnqueues = result.enqueuedActions.filter(a => a.type === 'ADD_TO_RECYCLE_BAG');
+    expect(recycleEnqueues).toHaveLength(2);
+
+    // card:newCardGained emitted with count=1 (only the in-hand pickup counts)
+    const gained = result.sideEffects.filter(e => e.event === 'card:newCardGained');
+    expect(gained).toHaveLength(1);
+    expect((gained[0].payload as any).count).toBe(1);
+    expect((gained[0].payload as any).source).toBe('graveyard');
   });
 
   it('wraith-haunt monster: when swap succeeds, dying wraith STILL enters graveyard', () => {

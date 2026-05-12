@@ -1157,7 +1157,7 @@ function reduceMagicSlotSelection(
 
     case 'temp-attack-double': {
       // 锋芒倍增：选定装备栏的临时攻击 +N 后整体翻倍。
-      // 升级表（addAmounts）：L0 +2 / L1 +3
+      // 升级表（addAmounts）：L0 +1 / L1 +2
       // 公式：final = (curTempAtk + N*echo) * 2
       // 允许选择空槽（与 weapon-burst / weapon-manual 一致），效果保留至该槽
       // 装备进入时仍生效。
@@ -1165,7 +1165,7 @@ function reduceMagicSlotSelection(
       // 表（addAmounts），handler 本身只更新卡面文案。
       const label = slotItem ? slotItem.name : (slotId === 'equipmentSlot1' ? '左装备栏' : '右装备栏');
       const echoMul = (pending as any).echoMultiplier ?? 1;
-      const addAmounts = [2, 3];
+      const addAmounts = [1, 2];
       const baseAdd = addAmounts[pending.card.upgradeLevel ?? 0] ?? addAmounts[addAmounts.length - 1];
       const addAmt = baseAdd * echoMul;
       const curTempAtk = ((state as any).slotTempAttack ?? {})[slotId] ?? 0;
@@ -2534,6 +2534,15 @@ function reduceMagicMonsterSelection(
       //   totalDmg = computeSpellDamagePure(state, base + amp) * echoMultiplier
       // 自伤路径（hero / 盾）走 applySelfDamage，与其它 allowsHeroTarget 单目标
       // 伤害 magic（missile-bolt / apprentice-bolt / stun-cap-strike）一致。
+      //
+      // 附加：每造成 4 点伤害额外抽 1 张牌（floor(totalDmg / 4)）。
+      // - 按「计算出的总法伤」算，不被怪物 HP 截断（溢杀也算，玩家明确确认）。
+      // - hero / 盾自伤也算（玩家明确确认）。
+      // - 阈值固定 4，不随升级变化（玩家明确确认）。
+      // - Echo (A 类)：totalDmg 已含 ×N，floor(totalDmg/4) 自然按 ×N 后的总伤
+      //   计算抽牌；echoMul=2、单次 dmg=8 → totalDmg=16 → 抽 4 张（玩家确认）。
+      // - 抽牌走 DRAW_CARDS source: 'backpack'（默认入口，自动尊重置顶语义；
+      //   见 draw-cards-defaults-to-backpack.mdc）。
       const echoMulBB = (pending as any).echoMultiplier ?? 1;
       // 重新读 state.backpackItems.length：从 setup 到 resolve 之间不会变化
       // （pendingMagicAction 期间没有其它消耗背包的 action 跑），但用 data 字段
@@ -2541,15 +2550,20 @@ function reduceMagicMonsterSelection(
       const baseDmgBB = (pending as any).data?.baseDmg ?? 0;
       const pctBB = (pending as any).data?.pct ?? 100;
       const totalDmgBB = computeSpellDamagePure(state, baseDmgBB + (pending.card.amplifyBonus ?? 0)) * echoMulBB;
+      const drawCountBB = Math.floor(totalDmgBB / 4);
       const echoTagBB = echoMulBB > 1 ? `（回响×${echoMulBB}）` : '';
+      const drawTagBB = drawCountBB > 0 ? `，抽 ${drawCountBB} 张牌` : '';
 
       if (isHeroTarget) {
         if (totalDmgBB > 0) {
           applySelfDamage(totalDmgBB, 'backpack-bolt');
         }
-        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDmgBB} 点法术伤害（${pctBB}%）` } });
+        if (drawCountBB > 0) {
+          enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCountBB, source: 'backpack' });
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对${targetName}造成 ${totalDmgBB} 点法术伤害（${pctBB}%）${drawTagBB}` } });
         return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-          `${pending.card.name}：${targetName} ${totalDmgBB} 点法术伤害。${echoTagBB}`,
+          `${pending.card.name}：${targetName} ${totalDmgBB} 点法术伤害${drawTagBB}。${echoTagBB}`,
           { dealtDamage: true });
       }
 
@@ -2561,9 +2575,12 @@ function reduceMagicMonsterSelection(
         source: 'backpack-bolt',
         isSpellDamage: true,
       });
-      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDmgBB} 点法术伤害（${pctBB}%）` } });
+      if (drawCountBB > 0) {
+        enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCountBB, source: 'backpack' });
+      }
+      sideEffects.push({ event: 'log:entry', payload: { type: 'magic', message: `${pending.card.name}：对 ${monster!.name} 造成 ${totalDmgBB} 点法术伤害（${pctBB}%）${drawTagBB}` } });
       return applyFinalizeMagic(state, patch, sideEffects, enqueuedActions, pending.card,
-        `${pending.card.name}：${totalDmgBB} 点法术伤害。${echoTagBB}`,
+        `${pending.card.name}：${totalDmgBB} 点法术伤害${drawTagBB}。${echoTagBB}`,
         { dealtDamage: true });
     }
 
@@ -2571,14 +2588,14 @@ function reduceMagicMonsterSelection(
       // 池中惊雷 manual monster-select. Mirrors setup in
       // resolveKnightPermanentMagic / 'recycle-bolt':
       //   damage = floor(permanentMagicRecycleBag.length * pct / 100)
-      //   pct = [50, 75, 100][upgradeLevel]
+      //   pct = [100, 125, 150][upgradeLevel]
       //   totalDmg = computeSpellDamagePure(state, base + amp) * echoMultiplier
       // 自伤路径（hero / 盾）走 applySelfDamage，与 backpack-bolt 同款。
       const echoMulRB = (pending as any).echoMultiplier ?? 1;
       // 用 setup 时锁住的 baseDmg 快照，避免 recycleBag 在 setup→resolve 之间被
       // 改动（理论上 pendingMagicAction 期间不会有其它路径改 recycleBag，但保险一些）。
       const baseDmgRB = (pending as any).data?.baseDmg ?? 0;
-      const pctRB = (pending as any).data?.pct ?? 100;
+      const pctRB = (pending as any).data?.pct ?? 150;
       const totalDmgRB = computeSpellDamagePure(state, baseDmgRB + (pending.card.amplifyBonus ?? 0)) * echoMulRB;
       const echoTagRB = echoMulRB > 1 ? `（回响×${echoMulRB}）` : '';
 

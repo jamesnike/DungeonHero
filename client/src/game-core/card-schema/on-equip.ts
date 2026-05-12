@@ -69,7 +69,7 @@ export function executeOnEquip(
   if (handler) {
     handler(state, card, slotId, patch, sideEffects, enqueuedActions);
     // 永恒护符·装备超频 aura (stackable): fire onEquip handler N extra times
-    // where N = count of `equip-overclock` relics held, when recycle bag > 15.
+    // where N = count of `equip-overclock` relics held, when recycle bag > 10.
     // Reuses the same patch / sideEffects / enqueuedActions accumulators so
     // all derived side-effects multiply by (1 + N).
     const extra = equipOverclockExtraTriggers(state);

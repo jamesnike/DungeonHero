@@ -13,6 +13,8 @@ import thunderHammerImage from '@assets/generated_images/thunder_warhammer.png';
 import ironTowerShieldImage from '@assets/generated_images/iron_tower_shield.png';
 import thornedShieldImage from '@assets/generated_images/thorned_reflect_shield.png';
 import guardianShieldImage from '@assets/generated_images/guardian_holy_shield.png';
+import knightScholarShieldImage from '@assets/generated_images/knight_scholar_shield.png';
+import knightScholarBladeImage from '@assets/generated_images/knight_scholar_blade.png';
 import dedupeKnightHeroHolyLightImage from '@assets/generated_images/card_dedupe_knight_hero_magic_holy_light.png';
 import dedupeKnightHeroBerserkerImage from '@assets/generated_images/card_dedupe_knight_hero_magic_berserker.png';
 import dedupeKnightMagicBloodGreedImage from '@assets/generated_images/card_dedupe_knight_magic_blood_greed.png';
@@ -772,6 +774,32 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxUpgradeLevel: 2,
   });
 
+  // 智者圣盾 — 4 护甲 / 2 耐久。入场：从背包抽 2 张牌（onEquipEffect: 'draw-2'）。
+  // 遗言：从背包抽 2 张牌（onDestroyDraw: 2）。两条都走标准
+  // 「DRAW_CARDS source: 'backpack'」入口：
+  //   - 入场：equipment.ts 注册的 'draw-2' 处理器（PLAY_CARD / EQUIP_FROM_HAND
+  //     / 拖动入栏 三条路径都走 executeOnEquip，自动尊重背包「置顶」优先级）。
+  //   - 遗言：equipment-effects.ts:428 既有 onDestroyDraw 累加路径，cards.ts:1734 /
+  //     1850 enqueue DRAW_CARDS。同 starter「守护之盾」(STARTER_CARD_IDS.guardianShield)
+  //     的成熟基建。
+  // 升级：L1 onEquipEffect 'draw-2' → 'draw-3'，onDestroyDraw 2 → 3（护甲 / 耐久不变）。
+  pushCard({
+    type: 'shield',
+    name: '智者圣盾',
+    value: 4,
+    image: knightScholarShieldImage,
+    classCard: true,
+    description: '入场：从背包抽 2 张牌。遗言：从背包抽 2 张牌。',
+    shortDescription: '入场抽 2 张；遗言抽 2 张',
+    onEquipEffect: 'draw-2',
+    onDestroyDraw: 2,
+    durability: 2,
+    maxDurability: 2,
+    armorMax: 4,
+    knightEffect: 'scholar-shield',
+    maxUpgradeLevel: 1,
+  });
+
   // === NEW AMULETS (3 cards) ===
   pushCard({
     type: 'amulet',
@@ -1144,7 +1172,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: knightEquipOverclockPotionImage,
     classCard: true,
     unique: true,
-    description: '一次性：获得永恒护符「装备超频」。光环：当回收袋牌数 > 15 时，装备槽中的装备效果额外触发 1 次；牌数 ≤ 15 立即失效。',
+    description: '一次性：获得永恒护符「装备超频」。光环：当回收袋牌数 > 10 时，装备槽中的装备效果额外触发 1 次；牌数 ≤ 10 立即失效。',
     shortDescription: '获得永恒护符「装备超频」',
     potionEffect: 'grant-eternal-relic-equip-overclock',
   });
@@ -1459,10 +1487,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeFlankImage,
     classCard: true,
-    description: '永久：选择一个装备栏，临时攻击 +2，然后该栏临时攻击翻倍。',
-    shortDescription: '该栏临时攻击 +2 后翻倍',
+    description: '永久：选择一个装备栏，临时攻击 +1，然后该栏临时攻击翻倍。',
+    shortDescription: '该栏临时攻击 +1 后翻倍',
     magicType: 'permanent',
-    magicEffect: '临时攻击 +2 后翻倍。',
+    magicEffect: '临时攻击 +1 后翻倍。',
     knightEffect: 'temp-attack-double',
     recycleDelay: 1,
   });
@@ -1563,6 +1591,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   //   始终弹出 monster picker，玩家可选 hero / 盾自伤（allowsHeroTarget: true）。
   // - 算式：base = floor(state.backpackItems.length * pct / 100)；
   //   totalDmg = computeSpellDamagePure(state, base + amplifyBonus) * echoMultiplier。
+  // - 附加：每造成 4 点法伤额外抽 1 张牌（floor(totalDmg / 4)）。
+  //   按计算总伤算（溢杀也算）；hero / 盾自伤也触发抽牌；
+  //   Echo (A 类) 后 totalDmg 已含 ×N，抽牌自然按 ×N 后总伤计算。
+  //   阈值固定 4，不随升级变化。抽牌走 backpack（draw-cards-defaults-to-backpack.mdc）。
   // - Echo (A 类)：单次结算，伤害 ×echoMultiplier。
   // - 与 missile-bolt / apprentice-bolt / stun-cap-strike 共用 monster-select 路径
   //   （hero.ts:reduceMagicMonsterSelection）；isSpellDamage=true。
@@ -1572,10 +1604,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBagFetchImage,
     classCard: true,
-    description: '永久：对一个目标造成等同于背包剩余卡牌数 50% 的法术伤害（向下取整）。',
-    shortDescription: '背包数 × 50% 法伤',
+    description: '永久：对一个目标造成等同于背包剩余卡牌数 50% 的法术伤害（向下取整）。每造成 4 点伤害额外抽 1 张牌。',
+    shortDescription: '背包数 × 50% 法伤；每 4 伤害抽 1',
     magicType: 'permanent',
-    magicEffect: '永久魔法：选择一个目标，造成背包数 × 50% 法伤。',
+    magicEffect: '永久魔法：选择一个目标，造成背包数 × 50% 法伤；每 4 伤害抽 1 张牌。',
     knightEffect: 'backpack-bolt',
     recycleDelay: 1,
     maxUpgradeLevel: 2,
@@ -1583,7 +1615,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
 
   // 池中惊雷 (Perm 1)：选择一个目标，造成 floor(回收袋卡牌数 × pct%) 法术伤害。
   // 与 囊中惊雷（backpack-bolt）成对照——前者数背包，本卡数回收袋。
-  // pct 由升级等级决定（lvl 0 → 50%，lvl 1 → 75%，lvl 2 → 100%）。
+  // pct 由升级等级决定（lvl 0 → 100%，lvl 1 → 125%，lvl 2 → 150%）。
   // - 单目标伤害 magic，allowsHeroTarget: true（玩家可选 hero / 盾自伤）。
   // - 算式：base = floor(state.permanentMagicRecycleBag.length * pct / 100)；
   //   totalDmg = computeSpellDamagePure(state, base + amplifyBonus) * echoMultiplier。
@@ -1597,10 +1629,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: dedupeKnightMagicRecycleTideImage,
     classCard: true,
-    description: '永久：对一个目标造成等同于回收袋卡牌数 50% 的法术伤害（向下取整）。',
-    shortDescription: '回收袋数 × 50% 法伤',
+    description: '永久：对一个目标造成等同于回收袋卡牌数 100% 的法术伤害（向下取整）。',
+    shortDescription: '回收袋数 × 100% 法伤',
     magicType: 'permanent',
-    magicEffect: '永久魔法：选择一个目标，造成回收袋数 × 50% 法伤。',
+    magicEffect: '永久魔法：选择一个目标，造成回收袋数 × 100% 法伤。',
     knightEffect: 'recycle-bolt',
     recycleDelay: 1,
     maxUpgradeLevel: 2,
@@ -1609,8 +1641,8 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   // 囊量震慑 (Perm 1)：击晕上限 +floor(背包上限 / divisor) 个百分点。
   // - 「背包上限」= getEffectiveBackpackCapacity(state) = BASE_BACKPACK_CAPACITY (12)
   //   + state.backpackCapacityModifier。**不是**当前背包剩余卡数。
-  // - divisor 由升级等级决定：lvl 0 → 4；lvl 1 → 3。
-  //   背包上限 12 时：Lv0 → +3%，Lv1 → +4%。背包上限 24 时：Lv0 → +6%，Lv1 → +8%。
+  // - divisor 由升级等级决定：lvl 0 → 3；lvl 1 → 2。
+  //   背包上限 12 时：Lv0 → +4%，Lv1 → +6%。背包上限 24 时：Lv0 → +8%，Lv1 → +12%。
   // - stunCap 全局封顶 100%（与「眩晕药剂」/「奥术护盾」一致），溢出静默吸收。
   // - 非交互：直接 patch.stunCap，不弹窗、不选目标。
   // - Echo (A 类)：本卡是 hand-card → recycleBag（recycleDelay: 1），背包上限不会
@@ -1624,10 +1656,10 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     value: 0,
     image: knightScrollBladeStormImage,
     classCard: true,
-    description: '永久：击晕上限增加 floor(背包上限 / 4)%。',
-    shortDescription: '击晕上限 +背包上限÷4 %',
+    description: '永久：击晕上限增加 floor(背包上限 / 3)%。',
+    shortDescription: '击晕上限 +背包上限÷3 %',
     magicType: 'permanent',
-    magicEffect: '永久魔法：击晕上限 +背包上限÷4 %。',
+    magicEffect: '永久魔法：击晕上限 +背包上限÷3 %。',
     knightEffect: 'backpack-cap-stun',
     recycleDelay: 1,
     maxUpgradeLevel: 1,
@@ -2127,6 +2159,28 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     maxDurability: 3,
     onEnterHandEffect: 'growth-blade-onhand',
     knightEffect: 'growth-blade',
+    maxUpgradeLevel: 2,
+  });
+
+  // 智者之刃 — 4 攻 / 3 耐久。每次攻击从背包抽 1 张牌（drawOnAttack: 1）。
+  // 由 combat.ts:reducePerformHeroAttack 的 drawOnAttack 触发分支消费，与 healOnAttack
+  // 同语义：fork 攻击（每次 PERFORM_HERO_ATTACK 都触发）+ 装备超频（overclockExtra 复用）。
+  // 走标准 DRAW_CARDS source: 'backpack'（draw-cards-defaults-to-backpack 规则），
+  // 自动尊重背包置顶优先级。
+  // 升级：L1 4攻 / 4 耐久（drawOnAttack 不变）；L2 4攻 / 4 耐久 / drawOnAttack 1 → 2。
+  // 图片复用 圣光之刃 的 holy_light_blade.png（光明长刃同主题，零新图片包袱）。
+  pushCard({
+    type: 'weapon',
+    name: '智者之刃',
+    value: 4,
+    image: knightScholarBladeImage,
+    classCard: true,
+    description: '每次攻击：从背包抽 1 张牌。',
+    shortDescription: '每次攻击抽 1 张',
+    drawOnAttack: 1,
+    durability: 3,
+    maxDurability: 3,
+    knightEffect: 'scholar-blade',
     maxUpgradeLevel: 2,
   });
 

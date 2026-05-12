@@ -6,7 +6,7 @@
  *
  * Aura active iff:
  *   - hero holds at least one `equip-overclock` relic, AND
- *   - `state.permanentMagicRecycleBag.length > 15` (i.e. 16+ cards).
+ *   - `state.permanentMagicRecycleBag.length > 10` (i.e. 11+ cards).
  *
  * When active, equipment-slot derived effects fire **(1 + N) times** where
  *   `N = countEternalRelics(state.eternalRelics, 'equip-overclock')`.
@@ -107,46 +107,46 @@ describe('isEquipOverclockActive + equipOverclockExtraTriggers — stackable mat
     expect(equipOverclockExtraTriggers(s)).toBe(0);
   });
 
-  it('×1 relic + bag=15 → not active, extra = 0 (strict > 15)', () => {
+  it('×1 relic + bag=10 → not active, extra = 0 (strict > 10)', () => {
     const s = makeState({
       eternalRelics: makeOverclockRelics(1),
-      permanentMagicRecycleBag: makeRecycleBag(15),
+      permanentMagicRecycleBag: makeRecycleBag(10),
     });
     expect(isEquipOverclockActive(s)).toBe(false);
     expect(equipOverclockExtraTriggers(s)).toBe(0);
   });
 
-  it('×1 relic + bag=16 → active, extra = 1', () => {
+  it('×1 relic + bag=11 → active, extra = 1', () => {
     const s = makeState({
       eternalRelics: makeOverclockRelics(1),
-      permanentMagicRecycleBag: makeRecycleBag(16),
+      permanentMagicRecycleBag: makeRecycleBag(11),
     });
     expect(isEquipOverclockActive(s)).toBe(true);
     expect(equipOverclockExtraTriggers(s)).toBe(1);
   });
 
-  it('×2 relics + bag=16 → active, extra = 2', () => {
+  it('×2 relics + bag=11 → active, extra = 2', () => {
     const s = makeState({
       eternalRelics: makeOverclockRelics(2),
-      permanentMagicRecycleBag: makeRecycleBag(16),
+      permanentMagicRecycleBag: makeRecycleBag(11),
     });
     expect(isEquipOverclockActive(s)).toBe(true);
     expect(equipOverclockExtraTriggers(s)).toBe(2);
   });
 
-  it('×3 relics + bag=16 → active, extra = 3', () => {
+  it('×3 relics + bag=11 → active, extra = 3', () => {
     const s = makeState({
       eternalRelics: makeOverclockRelics(3),
-      permanentMagicRecycleBag: makeRecycleBag(16),
+      permanentMagicRecycleBag: makeRecycleBag(11),
     });
     expect(isEquipOverclockActive(s)).toBe(true);
     expect(equipOverclockExtraTriggers(s)).toBe(3);
   });
 
-  it('×3 relics + bag=15 → aura off → extra = 0 (stack count irrelevant)', () => {
+  it('×3 relics + bag=10 → aura off → extra = 0 (stack count irrelevant)', () => {
     const s = makeState({
       eternalRelics: makeOverclockRelics(3),
-      permanentMagicRecycleBag: makeRecycleBag(15),
+      permanentMagicRecycleBag: makeRecycleBag(10),
     });
     expect(isEquipOverclockActive(s)).toBe(false);
     expect(equipOverclockExtraTriggers(s)).toBe(0);
@@ -218,7 +218,7 @@ describe('lastWords — additive stacking: relic count + 墓园守卫', () => {
   it('relic ×1 (active), no 墓园守卫 → gold +10 (2 triggers)', () => {
     const state = makeState({
       eternalRelics: makeOverclockRelics(1),
-      permanentMagicRecycleBag: makeRecycleBag(16),
+      permanentMagicRecycleBag: makeRecycleBag(11),
     });
     const r = runBreak(state, 0);
     expect(r.patch.gold).toBe(110);
@@ -230,7 +230,7 @@ describe('lastWords — additive stacking: relic count + 墓园守卫', () => {
   it('relic ×1 + 墓园守卫 ×1 → gold +15 (3 triggers, additive)', () => {
     const state = makeState({
       eternalRelics: makeOverclockRelics(1),
-      permanentMagicRecycleBag: makeRecycleBag(16),
+      permanentMagicRecycleBag: makeRecycleBag(11),
     });
     const r = runBreak(state, 1);
     expect(r.patch.gold).toBe(115);
@@ -239,7 +239,7 @@ describe('lastWords — additive stacking: relic count + 墓园守卫', () => {
   it('relic ×2 + 墓园守卫 ×1 → gold +20 (4 triggers, 1 + 1 + 2)', () => {
     const state = makeState({
       eternalRelics: makeOverclockRelics(2),
-      permanentMagicRecycleBag: makeRecycleBag(16),
+      permanentMagicRecycleBag: makeRecycleBag(11),
     });
     const r = runBreak(state, 1);
     expect(r.patch.gold).toBe(120);
@@ -251,7 +251,7 @@ describe('lastWords — additive stacking: relic count + 墓园守卫', () => {
   it('relic ×3 (active), no 墓园守卫 → gold +20 (4 triggers)', () => {
     const state = makeState({
       eternalRelics: makeOverclockRelics(3),
-      permanentMagicRecycleBag: makeRecycleBag(16),
+      permanentMagicRecycleBag: makeRecycleBag(11),
     });
     const r = runBreak(state, 0);
     expect(r.patch.gold).toBe(120);
@@ -259,10 +259,10 @@ describe('lastWords — additive stacking: relic count + 墓园守卫', () => {
     expect((triggered as any).payload).toMatchObject({ surface: 'lastWords', count: 3 });
   });
 
-  it('relic ×3 + bag=15 (aura off) → gold +5 (relic stack irrelevant)', () => {
+  it('relic ×3 + bag=10 (aura off) → gold +5 (relic stack irrelevant)', () => {
     const state = makeState({
       eternalRelics: makeOverclockRelics(3),
-      permanentMagicRecycleBag: makeRecycleBag(15),
+      permanentMagicRecycleBag: makeRecycleBag(10),
     });
     const r = runBreak(state, 0);
     expect(r.patch.gold).toBe(105);
@@ -323,12 +323,12 @@ describe('hero attack — vampiric heal scales with relic stacks', () => {
   }
 
   it('×0 relics: heal +2 (1 trigger)', () => {
-    const r = runAttack({ relics: 0, bag: 16, startingHp: 10 });
+    const r = runAttack({ relics: 0, bag: 11, startingHp: 10 });
     expect(r.state.hp).toBe(12);
   });
 
-  it('×1 relic + bag=16: heal +4 (2 triggers)', () => {
-    const r = runAttack({ relics: 1, bag: 16, startingHp: 10 });
+  it('×1 relic + bag=11: heal +4 (2 triggers)', () => {
+    const r = runAttack({ relics: 1, bag: 11, startingHp: 10 });
     expect(r.state.hp).toBe(14);
     expect(r.sideEffects.some(e =>
       e.event === 'combat:equipOverclockTriggered'
@@ -337,8 +337,8 @@ describe('hero attack — vampiric heal scales with relic stacks', () => {
     )).toBe(true);
   });
 
-  it('×2 relics + bag=16: heal +6 (3 triggers)', () => {
-    const r = runAttack({ relics: 2, bag: 16, startingHp: 10 });
+  it('×2 relics + bag=11: heal +6 (3 triggers)', () => {
+    const r = runAttack({ relics: 2, bag: 11, startingHp: 10 });
     expect(r.state.hp).toBe(16);
     expect(r.sideEffects.some(e =>
       e.event === 'combat:equipOverclockTriggered'
@@ -347,8 +347,8 @@ describe('hero attack — vampiric heal scales with relic stacks', () => {
     )).toBe(true);
   });
 
-  it('×1 relic + bag=15 (aura off): heal +2 (1 trigger)', () => {
-    const r = runAttack({ relics: 1, bag: 15, startingHp: 10 });
+  it('×1 relic + bag=10 (aura off): heal +2 (1 trigger)', () => {
+    const r = runAttack({ relics: 1, bag: 10, startingHp: 10 });
     expect(r.state.hp).toBe(12);
   });
 });
@@ -409,44 +409,44 @@ describe('killGoldScaling scales with relic stacks', () => {
   }
 
   it('×0 relics: +3 gold', () => {
-    const r = runKill({ relics: 0, bag: 16 });
+    const r = runKill({ relics: 0, bag: 11 });
     expect(r.state.gold).toBe(103);
   });
 
-  it('×1 relic + bag=16: +6 gold (2 triggers)', () => {
-    const r = runKill({ relics: 1, bag: 16 });
+  it('×1 relic + bag=11: +6 gold (2 triggers)', () => {
+    const r = runKill({ relics: 1, bag: 11 });
     expect(r.state.gold).toBe(106);
   });
 
-  it('×3 relics + bag=16: +12 gold (4 triggers)', () => {
-    const r = runKill({ relics: 3, bag: 16 });
+  it('×3 relics + bag=11: +12 gold (4 triggers)', () => {
+    const r = runKill({ relics: 3, bag: 11 });
     expect(r.state.gold).toBe(112);
   });
 
-  it('×3 relics + bag=15 (aura off): +3 gold', () => {
-    const r = runKill({ relics: 3, bag: 15 });
+  it('×3 relics + bag=10 (aura off): +3 gold', () => {
+    const r = runKill({ relics: 3, bag: 10 });
     expect(r.state.gold).toBe(103);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Section 6: aura deactivates immediately when bag drops to ≤15
+// Section 6: aura deactivates immediately when bag drops to ≤10
 // ---------------------------------------------------------------------------
 
-describe('aura deactivates immediately when bag drops to ≤15', () => {
+describe('aura deactivates immediately when bag drops to ≤10', () => {
   it('toggling bag size flips active-state synchronously (live aura check)', () => {
     const baseState = makeState({
       eternalRelics: makeOverclockRelics(2),
-      permanentMagicRecycleBag: makeRecycleBag(16),
+      permanentMagicRecycleBag: makeRecycleBag(11),
     });
     expect(isEquipOverclockActive(baseState)).toBe(true);
     expect(equipOverclockExtraTriggers(baseState)).toBe(2);
 
-    const dropped = { ...baseState, permanentMagicRecycleBag: makeRecycleBag(15) };
+    const dropped = { ...baseState, permanentMagicRecycleBag: makeRecycleBag(10) };
     expect(isEquipOverclockActive(dropped)).toBe(false);
     expect(equipOverclockExtraTriggers(dropped)).toBe(0);
 
-    const refilled = { ...dropped, permanentMagicRecycleBag: makeRecycleBag(17) };
+    const refilled = { ...dropped, permanentMagicRecycleBag: makeRecycleBag(12) };
     expect(isEquipOverclockActive(refilled)).toBe(true);
     expect(equipOverclockExtraTriggers(refilled)).toBe(2);
 
@@ -462,12 +462,12 @@ describe('aura deactivates immediately when bag drops to ≤15', () => {
     } as GameCardData;
     const ae = createEmptyAmuletEffects();
 
-    // bag=16, relic ×2: 3 triggers → 15 gold
+    // bag=11, relic ×2: 3 triggers → 15 gold
     const onState = { ...baseState, equipmentSlot1: weapon as any, gold: 0 };
     const onResult = computeEquipmentBreakEffects(onState, 'equipmentSlot1', weapon, ae);
     expect(onResult.patch.gold).toBe(15);
 
-    // bag=15, relic ×2: aura off, 1 trigger → 5 gold
+    // bag=10, relic ×2: aura off, 1 trigger → 5 gold
     const offState = { ...dropped, equipmentSlot1: weapon as any, gold: 0 };
     const offResult = computeEquipmentBreakEffects(offState, 'equipmentSlot1', weapon, ae);
     expect(offResult.patch.gold).toBe(5);

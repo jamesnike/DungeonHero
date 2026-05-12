@@ -70,9 +70,9 @@ describe('锋芒倍增 (temp-attack-double) — handler description updates', ()
       value: 0,
       classCard: true,
       magicType: 'permanent' as any,
-      description: '永久：选择一个装备栏，临时攻击 +2，然后该栏临时攻击翻倍。',
-      shortDescription: '该栏临时攻击 +2 后翻倍',
-      magicEffect: '临时攻击 +2 后翻倍。',
+      description: '永久：选择一个装备栏，临时攻击 +1，然后该栏临时攻击翻倍。',
+      shortDescription: '该栏临时攻击 +1 后翻倍',
+      magicEffect: '临时攻击 +1 后翻倍。',
       knightEffect: 'temp-attack-double',
       recycleDelay: 1,
       maxUpgradeLevel: 1,
@@ -80,17 +80,17 @@ describe('锋芒倍增 (temp-attack-double) — handler description updates', ()
     } as any;
   }
 
-  it('L0 → L1: 加值 +2 → +3，翻倍步骤不变', () => {
+  it('L0 → L1: 加值 +1 → +2，翻倍步骤不变', () => {
     const card = tadL0();
     const state = makeState({ handCards: [card] });
     const result = reduce(state, { type: 'UPGRADE_CARD', cardId: card.id });
     const upgraded = result.state.handCards[0] as any;
     expect(upgraded.upgradeLevel).toBe(1);
-    expect(upgraded.description).toContain('+3');
-    expect(upgraded.description).not.toContain('+2');
+    expect(upgraded.description).toContain('+2');
+    expect(upgraded.description).not.toContain('+1');
     expect(upgraded.description).toContain('翻倍');
-    expect(upgraded.shortDescription).toContain('+3');
-    expect(upgraded.magicEffect).toContain('+3');
+    expect(upgraded.shortDescription).toContain('+2');
+    expect(upgraded.magicEffect).toContain('+2');
   });
 
   it('cannot upgrade past maxUpgradeLevel (1)', () => {
@@ -117,8 +117,27 @@ describe('锋芒倍增 (temp-attack-double) — resolver applies +N then doubles
     } as any;
   }
 
-  it('L0: empty slot at +0 → (+2) → ×2 = 4', () => {
+  it('L0: empty slot at +0 → (+1) → ×2 = 2', () => {
     const card = makeTadCard(0);
+    const state = makeState({
+      handCards: [card],
+      equipmentSlot1: null,
+      equipmentSlot2: null,
+      pendingMagicAction: {
+        card,
+        effect: 'temp-attack-double',
+        step: 'slot-select',
+        prompt: '...',
+      } as any,
+    });
+    const result = drain(state, [
+      { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'temp-attack-double', slotId: 'equipmentSlot1' } as GameAction,
+    ]);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(2);
+  });
+
+  it('L1: empty slot at +0 → (+2) → ×2 = 4', () => {
+    const card = makeTadCard(1);
     const state = makeState({
       handCards: [card],
       equipmentSlot1: null,
@@ -136,26 +155,7 @@ describe('锋芒倍增 (temp-attack-double) — resolver applies +N then doubles
     expect(result.state.slotTempAttack?.equipmentSlot1).toBe(4);
   });
 
-  it('L1: empty slot at +0 → (+3) → ×2 = 6', () => {
-    const card = makeTadCard(1);
-    const state = makeState({
-      handCards: [card],
-      equipmentSlot1: null,
-      equipmentSlot2: null,
-      pendingMagicAction: {
-        card,
-        effect: 'temp-attack-double',
-        step: 'slot-select',
-        prompt: '...',
-      } as any,
-    });
-    const result = drain(state, [
-      { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'temp-attack-double', slotId: 'equipmentSlot1' } as GameAction,
-    ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(6);
-  });
-
-  it('L1 starting at +3: (3 + 3) × 2 = 12', () => {
+  it('L1 starting at +3: (3 + 2) × 2 = 10', () => {
     const card = makeTadCard(1);
     const state = makeState({
       handCards: [card],
@@ -170,10 +170,10 @@ describe('锋芒倍增 (temp-attack-double) — resolver applies +N then doubles
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'temp-attack-double', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(12);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(10);
   });
 
-  it('L1 + Echo ×2: (1 + 3*2) × 2 = 14 (additive scales by echo, ×2 stays)', () => {
+  it('L1 + Echo ×2: (1 + 2*2) × 2 = 10 (additive scales by echo, ×2 stays)', () => {
     const card = makeTadCard(1);
     const state = makeState({
       handCards: [card],
@@ -189,7 +189,7 @@ describe('锋芒倍增 (temp-attack-double) — resolver applies +N then doubles
     const result = drain(state, [
       { type: 'RESOLVE_MAGIC_SLOT_SELECTION', magicId: 'temp-attack-double', slotId: 'equipmentSlot1' } as GameAction,
     ]);
-    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(14);
+    expect(result.state.slotTempAttack?.equipmentSlot1).toBe(10);
   });
 });
 
@@ -208,20 +208,20 @@ describe('锋芒倍增 (temp-attack-double) — prompt reflects upgradeLevel', (
     } as any;
   }
 
-  it('L0 prompt mentions +2', () => {
+  it('L0 prompt mentions +1', () => {
     const card = makeTadCard(0);
     const state = makeState({ handCards: [card], phase: 'playerInput' });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     const pending = result.state.pendingMagicAction as any;
-    expect(pending?.prompt).toContain('+2');
+    expect(pending?.prompt).toContain('+1');
   });
 
-  it('L1 prompt mentions +3', () => {
+  it('L1 prompt mentions +2', () => {
     const card = makeTadCard(1);
     const state = makeState({ handCards: [card], phase: 'playerInput' });
     const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
     const pending = result.state.pendingMagicAction as any;
-    expect(pending?.prompt).toContain('+3');
+    expect(pending?.prompt).toContain('+2');
   });
 });
 

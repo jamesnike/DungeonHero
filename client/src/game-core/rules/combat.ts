@@ -2328,7 +2328,7 @@ function reducePerformHeroAttack(
   const isMonsterEquip = slotItem.type === 'monster';
   const isMinionAttack = isMonsterEquip && !!(slotItem as GameCardData).isMinionCard;
 
-  // 永恒护符·装备超频 aura：bag > 15 时装备衍生效果额外触发 1 次。
+  // 永恒护符·装备超频 aura：bag > 10 时装备衍生效果额外触发 1 次。
   // 仅复制衍生效果（heal-on-attack / overkill / killGold / healOnKill / dragon
   // retaliation / postAttackSpellDamage 等），不复制武器挥击本身（damage calc
   // / durability tick）。每次 attack 命中至少一条衍生效果时 push 一条
@@ -2440,6 +2440,26 @@ function reducePerformHeroAttack(
     });
     for (let i = 0; i < overclockExtra; i++) {
       enqueuedActions.push({ type: 'HEAL', amount: (slotItem as GameCardData).healOnAttack!, source: 'heal-on-attack' });
+    }
+    if (overclockExtra > 0) overclockFiredThisAttack = true;
+  }
+
+  // --- Draw on attack ---
+  // 「智者之刃」家族：每次攻击从背包抽 N 张牌。与 healOnAttack 完全同语义：
+  //   - 走标准 DRAW_CARDS source: 'backpack' 入口（draw-cards-defaults-to-backpack 规则）
+  //     → 自动尊重背包置顶优先级、共用所有抽牌副作用（card:drawnToHand 等）。
+  //   - Fork 攻击：每次 PERFORM_HERO_ATTACK 都重新跑这一段，自动 chain re-trigger。
+  //   - 装备超频：overclockExtra 复用同一计数，与 healOnAttack 共享同一个
+  //     overclockFiredThisAttack 计费标记。
+  if ((slotItem as GameCardData).drawOnAttack) {
+    const drawCount = (slotItem as GameCardData).drawOnAttack!;
+    enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
+    sideEffects.push({
+      event: 'log:entry',
+      payload: { type: 'magic', message: `${slotItem.name} 攻击：从背包抽 ${drawCount} 张牌！` },
+    });
+    for (let i = 0; i < overclockExtra; i++) {
+      enqueuedActions.push({ type: 'DRAW_CARDS', count: drawCount, source: 'backpack' });
     }
     if (overclockExtra > 0) overclockFiredThisAttack = true;
   }
@@ -3419,7 +3439,7 @@ function reduceResolveBlock(
   const enqueuedActions: GameAction[] = [];
   let rng = state.rng;
 
-  // 永恒护符·装备超频 aura: bag > 15 时盾的衍生效果额外触发 1 次。
+  // 永恒护符·装备超频 aura: bag > 10 时盾的衍生效果额外触发 1 次。
   // 仅复制衍生效果（reflect / dragonDamageRetaliation / perfectBlock 奖励等），
   // 不复制格挡判定本身（armor 计算 / durability tick）。
   // Stackable: N = countEternalRelics('equip-overclock')。每层让衍生效果多一倍。

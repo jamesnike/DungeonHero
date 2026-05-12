@@ -6,7 +6,7 @@ import { countEternalRelics, hasEternalRelic } from '@/lib/eternalRelics';
  *
  * Active iff:
  *   1. The hero holds at least one `equip-overclock` relic.
- *   2. `state.permanentMagicRecycleBag.length > 15` (i.e. 16+ cards in recycle).
+ *   2. `state.permanentMagicRecycleBag.length > 10` (i.e. 11+ cards in recycle).
  *
  * When active, equipment-slot derived effects fire **N extra times** where
  * `N = countEternalRelics(state.eternalRelics, 'equip-overclock')`. Drinking
@@ -34,7 +34,7 @@ import { countEternalRelics, hasEternalRelic } from '@/lib/eternalRelics';
 export function isEquipOverclockActive(state: GameState): boolean {
   return (
     hasEternalRelic(state.eternalRelics, 'equip-overclock') &&
-    state.permanentMagicRecycleBag.length > 15
+    state.permanentMagicRecycleBag.length > 10
   );
 }
 
@@ -44,7 +44,7 @@ export function isEquipOverclockActive(state: GameState): boolean {
  *   lastWords: `1 + lastWordsExtraTriggerCount + equipOverclockExtraTriggers(state)`
  *
  * Stacks linearly: each `equip-overclock` relic copy adds 1 extra trigger
- * while the aura is active (recycle bag > 15 cards).
+ * while the aura is active (recycle bag > 10 cards).
  */
 export function equipOverclockExtraTriggers(state: GameState): number {
   if (!isEquipOverclockActive(state)) return 0;

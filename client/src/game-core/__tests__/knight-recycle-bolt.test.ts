@@ -6,7 +6,7 @@
  *   - PLAY_CARD always opens monster-select picker (allowsHeroTarget: true).
  *   - Damage = floor(state.permanentMagicRecycleBag.length * pct / 100) + amplifyBonus
  *     → spell damage formula (×echoMultiplier on resolve).
- *   - pct 由升级等级决定: lvl 0 → 50, lvl 1 → 75, lvl 2 → 100.
+ *   - pct 由升级等级决定: lvl 0 → 100, lvl 1 → 125, lvl 2 → 150.
  *   - Echo (A 类): damage ×N (single flight, no modal re-prompt).
  *   - 不变量: 任何对怪物的伤害都必须激怒目标
  *     (monster-damage-engagement.mdc).
@@ -106,38 +106,38 @@ describe('池中惊雷 — recognized as damage magic', () => {
     expect(isDamageMagic(makeCard())).toBe(true);
   });
 
-  it('display: lvl 0, recycleBag 7 → floor(7*50/100)=3 法伤', () => {
+  it('display: lvl 0, recycleBag 7 → floor(7*100/100)=7 法伤', () => {
     const r = computeDamageMagicDisplayPure(
       makeCard(),
       { hp: 20, maxHp: 30, gold: 0, recycleBagCount: 7 },
     );
     expect(r?.mode).toBe('replace');
     if (r?.mode === 'replace') {
-      expect(r.text).toContain('造成 3 点法术伤害');
-      expect(r.text).toContain('回收袋 7 张 × 50%');
+      expect(r.text).toContain('造成 7 点法术伤害');
+      expect(r.text).toContain('回收袋 7 张 × 100%');
       expect(r.amplifyBonus).toBe(0);
     }
   });
 
-  it('display: lvl 1, recycleBag 7 → floor(7*75/100)=5', () => {
+  it('display: lvl 1, recycleBag 7 → floor(7*125/100)=8', () => {
     const r = computeDamageMagicDisplayPure(
       makeCard('d', { upgradeLevel: 1 }),
       { hp: 20, maxHp: 30, gold: 0, recycleBagCount: 7 },
     );
     if (r?.mode === 'replace') {
-      expect(r.text).toContain('造成 5 点法术伤害');
-      expect(r.text).toContain('× 75%');
+      expect(r.text).toContain('造成 8 点法术伤害');
+      expect(r.text).toContain('× 125%');
     }
   });
 
-  it('display: lvl 2, recycleBag 7 → 7*100/100=7', () => {
+  it('display: lvl 2, recycleBag 7 → floor(7*150/100)=10', () => {
     const r = computeDamageMagicDisplayPure(
       makeCard('d', { upgradeLevel: 2 }),
       { hp: 20, maxHp: 30, gold: 0, recycleBagCount: 7 },
     );
     if (r?.mode === 'replace') {
-      expect(r.text).toContain('造成 7 点法术伤害');
-      expect(r.text).toContain('× 100%');
+      expect(r.text).toContain('造成 10 点法术伤害');
+      expect(r.text).toContain('× 150%');
     }
   });
 
@@ -147,8 +147,8 @@ describe('池中惊雷 — recognized as damage magic', () => {
       { hp: 20, maxHp: 30, gold: 0, recycleBagCount: 10 },
     );
     if (r?.mode === 'replace') {
-      // base = floor(10*50/100) = 5; 5 + 2 = 7
-      expect(r.text).toContain('造成 7 点法术伤害');
+      // base = floor(10*100/100) = 10; 10 + 2 = 12
+      expect(r.text).toContain('造成 12 点法术伤害');
     }
   });
 
@@ -182,8 +182,8 @@ describe('池中惊雷 PLAY_CARD — opens monster-select picker', () => {
     expect(pending?.allowsHeroTarget).toBe(true);
     // setup 时本卡还没进 recycle bag（recycle bag 还是 4），与 backpack-bolt 同理
     expect(pending?.data?.recycleCount).toBe(4);
-    expect(pending?.data?.pct).toBe(50);
-    expect(pending?.data?.baseDmg).toBe(2); // floor(4*50/100)
+    expect(pending?.data?.pct).toBe(100);
+    expect(pending?.data?.baseDmg).toBe(4); // floor(4*100/100)
   });
 
   it('zero monsters: picker still opens (hero 是唯一合法目标)', () => {
@@ -218,7 +218,7 @@ describe('池中惊雷 PLAY_CARD — opens monster-select picker', () => {
 // ---------------------------------------------------------------------------
 
 describe('池中惊雷 RESOLVE — damage formula', () => {
-  it('lvl 0: recycleBag 8 → floor(8*50/100)=4 damage on monster', () => {
+  it('lvl 0: recycleBag 8 → floor(8*100/100)=8 damage on monster', () => {
     const card = makeCard('lvl0');
     const state = makeState({
       handCards: [card],
@@ -226,13 +226,13 @@ describe('池中惊雷 RESOLVE — damage formula', () => {
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
     const result = playAndPick(state, card.id, 'm1');
-    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(46);
+    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(42);
     // 不变量：怪物受伤 → 必须激怒
     expect(result.state.combatState.engagedMonsterIds).toContain('m1');
     expect(result.state.pendingMagicAction).toBeNull();
   });
 
-  it('lvl 1: recycleBag 8 → floor(8*75/100)=6 damage', () => {
+  it('lvl 1: recycleBag 8 → floor(8*125/100)=10 damage', () => {
     const card = makeCard('lvl1', { upgradeLevel: 1 });
     const state = makeState({
       handCards: [card],
@@ -240,10 +240,10 @@ describe('池中惊雷 RESOLVE — damage formula', () => {
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
     const result = playAndPick(state, card.id, 'm1');
-    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(44);
+    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(40);
   });
 
-  it('lvl 2: recycleBag 8 → 8*100/100=8 damage', () => {
+  it('lvl 2: recycleBag 8 → floor(8*150/100)=12 damage', () => {
     const card = makeCard('lvl2', { upgradeLevel: 2 });
     const state = makeState({
       handCards: [card],
@@ -251,18 +251,18 @@ describe('池中惊雷 RESOLVE — damage formula', () => {
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
     const result = playAndPick(state, card.id, 'm1');
-    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(42);
+    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(38);
   });
 
-  it('floor rounding: lvl 0, recycleBag 7 → floor(3.5)=3 damage', () => {
-    const card = makeCard('floor');
+  it('floor rounding: lvl 1, recycleBag 7 → floor(7*125/100)=floor(8.75)=8 damage', () => {
+    const card = makeCard('floor', { upgradeLevel: 1 });
     const state = makeState({
       handCards: [card],
       permanentMagicRecycleBag: makeRecycleBag(7),
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
     const result = playAndPick(state, card.id, 'm1');
-    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(47);
+    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(42);
   });
 
   it('empty recycleBag: 0 damage; spell still consumed; monster still engaged', () => {
@@ -288,9 +288,9 @@ describe('池中惊雷 RESOLVE — damage formula', () => {
       permanentSpellDamageBonus: 2,
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
-    // base = floor(8*50/100) = 4; total = (4 + 3) + spell bonus 2 = 9
+    // base = floor(8*100/100) = 8; total = (8 + 3) + spell bonus 2 = 13
     const result = playAndPick(state, card.id, 'm1');
-    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(41);
+    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(37);
   });
 });
 
@@ -308,7 +308,7 @@ describe('池中惊雷 — selecting one monster only damages that one', () => {
     });
     const result = playAndPick(state, card.id, 'm2');
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(50);
-    expect(result.state.activeCards.find(c => c?.id === 'm2')?.hp).toBe(46);
+    expect(result.state.activeCards.find(c => c?.id === 'm2')?.hp).toBe(42);
     expect(result.state.combatState.engagedMonsterIds).toContain('m2');
     expect(result.state.combatState.engagedMonsterIds).not.toContain('m1');
   });
@@ -338,8 +338,8 @@ describe('池中惊雷 — hero target self-damage path', () => {
         } as GameAction,
       ],
     );
-    // base = floor(8*50/100) = 4
-    expect(result.state.hp).toBe(26);
+    // base = floor(8*100/100) = 8
+    expect(result.state.hp).toBe(22);
     expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(50);
     expect(result.state.pendingMagicAction).toBeNull();
   });
@@ -350,7 +350,7 @@ describe('池中惊雷 — hero target self-damage path', () => {
 // ---------------------------------------------------------------------------
 
 describe('池中惊雷 — only counts recycle bag, not backpack', () => {
-  it('backpack 100 张但回收袋只有 4 → 仍是 floor(4*50/100)=2 伤害', () => {
+  it('backpack 100 张但回收袋只有 4 → 仍是 floor(4*100/100)=4 伤害', () => {
     const card = makeCard('iso');
     const state = makeState({
       handCards: [card],
@@ -359,6 +359,6 @@ describe('池中惊雷 — only counts recycle bag, not backpack', () => {
       activeCards: activeRowOf(makeMonster('m1', 50)),
     });
     const result = playAndPick(state, card.id, 'm1');
-    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(48);
+    expect(result.state.activeCards.find(c => c?.id === 'm1')?.hp).toBe(46);
   });
 });

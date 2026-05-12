@@ -21,7 +21,7 @@ import { flattenActiveRowSlots, applyAmplifyOnCreate } from '../helpers';
 import type { RngState } from '../rng';
 import { nextBool, nextInt, pickRandom } from '../rng';
 import { createBugletCard } from '../deck';
-import { resetCardForGraveyard } from '../cards';
+import { resetCardForGraveyard, getEffectiveHandLimit } from '../cards';
 import { applySlotArmorBonusDelta, checkPersuadeOnTempAttack } from '../equipment';
 import { createMineBuilding } from '@/lib/knightDeck';
 import { applyGainMagicBolts, formatGainMagicBoltsDistribution } from '../events';
@@ -643,18 +643,34 @@ function applyOneEquipmentLastWordsIteration(
         }
       }
     } else if (slotItem.onDestroyEffect === 'graveyard-to-hand') {
+      // Iron Shield: 遗言从坟场随机抽 1 张牌进手牌。手牌满时改路由到回收袋
+      // （比照 RETURN_EQUIPMENT_TO_HAND 「装备回手（满则回收袋）」约定，
+      //  rules/cards.ts:2046-2059）。回收袋路径不 emit `card:newCardGained`
+      // —— 跟 DRAW_CLASS_TO_BACKPACK overflow 行为一致（card-gain-missile
+      // 弹幕之符 不在「卡进回收袋」时触发）。
       const graveyard = (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
       const pick = pickGraveyardCardExcluding(graveyard, slotItem.id, rng);
       if (pick) {
         rng = pick.rng;
         patch.discardedCards = graveyard.filter((_, i) => i !== pick.idx);
-        patch.handCards = [...(patch.handCards ?? state.handCards), pick.picked];
-        sideEffects.push({
-          event: 'log:entry',
-          payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场获得了「${pick.picked.name}」！` },
-        });
-        sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
-        sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
+        const currentHand = (patch.handCards ?? state.handCards) as readonly GameCardData[];
+        const handLimit = getEffectiveHandLimit(state);
+        if (currentHand.length < handLimit) {
+          patch.handCards = [...currentHand, pick.picked];
+          sideEffects.push({
+            event: 'log:entry',
+            payload: { type: 'equip', message: `${slotItem.name} 遗言：从坟场获得了「${pick.picked.name}」！` },
+          });
+          sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
+          sideEffects.push({ event: 'card:newCardGained', payload: { count: 1, source: 'graveyard' } });
+        } else {
+          enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: pick.picked });
+          sideEffects.push({
+            event: 'log:entry',
+            payload: { type: 'equip', message: `${slotItem.name} 遗言：手牌已满，「${pick.picked.name}」进入回收袋！` },
+          });
+          sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
+        }
       } else {
         sideEffects.push({
           event: 'log:entry',
@@ -664,11 +680,15 @@ function applyOneEquipmentLastWordsIteration(
     } else if (slotItem.onDestroyEffect === 'graveyard-event-to-hand') {
       // `onDestroyEventCount` 缺省 1（与基础卡 / Iron-Shield-style 单张抽取一致）；
       // 「生长之盾」L2 升级把此值提升为 3，循环抽取至坟场再无 Event 时停。
+      // 手牌满时按可用空间逐张分流：先填满手牌，剩余的进入回收袋
+      // （比照 graveyard-to-hand 的「手牌满则回收袋」约定）。
       const requested = Math.max(
         1,
         (slotItem as { onDestroyEventCount?: number }).onDestroyEventCount ?? 1,
       );
-      const picked: GameCardData[] = [];
+      const handLimit = getEffectiveHandLimit(state);
+      const pickedToHand: GameCardData[] = [];
+      const pickedToRecycle: GameCardData[] = [];
       for (let i = 0; i < requested; i++) {
         const graveyardSnapshot =
           (patch.discardedCards ?? state.discardedCards) as readonly GameCardData[];
@@ -676,23 +696,35 @@ function applyOneEquipmentLastWordsIteration(
         if (!result) break;
         rng = result.rng;
         patch.discardedCards = graveyardSnapshot.filter((_, idx) => idx !== result.idx);
-        patch.handCards = [...(patch.handCards ?? state.handCards), result.picked];
-        picked.push(result.picked);
+        const currentHand = (patch.handCards ?? state.handCards) as readonly GameCardData[];
+        if (currentHand.length < handLimit) {
+          patch.handCards = [...currentHand, result.picked];
+          pickedToHand.push(result.picked);
+        } else {
+          enqueuedActions.push({ type: 'ADD_TO_RECYCLE_BAG', card: result.picked });
+          pickedToRecycle.push(result.picked);
+        }
       }
-      if (picked.length > 0) {
-        const names = picked.map(c => `「${c.name}」`).join('、');
-        sideEffects.push({
-          event: 'log:entry',
-          payload: {
-            type: 'equip',
-            message:
-              picked.length === 1
-                ? `${slotItem.name} 遗言：从坟场抽出 Event ${names}！`
-                : `${slotItem.name} 遗言：从坟场抽出 ${picked.length} 张 Event ${names}！`,
-          },
-        });
+      const totalPicked = pickedToHand.length + pickedToRecycle.length;
+      if (totalPicked > 0) {
+        const handNames = pickedToHand.map(c => `「${c.name}」`).join('、');
+        const recycleNames = pickedToRecycle.map(c => `「${c.name}」`).join('、');
+        let message: string;
+        if (pickedToRecycle.length === 0) {
+          message =
+            pickedToHand.length === 1
+              ? `${slotItem.name} 遗言：从坟场抽出 Event ${handNames}！`
+              : `${slotItem.name} 遗言：从坟场抽出 ${pickedToHand.length} 张 Event ${handNames}！`;
+        } else if (pickedToHand.length === 0) {
+          message = `${slotItem.name} 遗言：手牌已满，${pickedToRecycle.length} 张 Event ${recycleNames} 进入回收袋！`;
+        } else {
+          message = `${slotItem.name} 遗言：${pickedToHand.length} 张 ${handNames} 入手牌，${pickedToRecycle.length} 张 ${recycleNames} 进入回收袋！`;
+        }
+        sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message } });
         sideEffects.push({ event: 'equipment:graveyardToHand', payload: { itemName: slotItem.name } });
-        sideEffects.push({ event: 'card:newCardGained', payload: { count: picked.length, source: 'graveyard' } });
+        if (pickedToHand.length > 0) {
+          sideEffects.push({ event: 'card:newCardGained', payload: { count: pickedToHand.length, source: 'graveyard' } });
+        }
       } else {
         sideEffects.push({
           event: 'log:entry',
@@ -1083,7 +1115,7 @@ export function computeDurabilityLossEffects(
   let rng = state.rng;
   let updatedItem = { ...slotItem, durability: newDurability };
 
-  // 永恒护符·装备超频 aura (stackable): bag > 15 时耐久损耗的衍生效果额外触发 N 次
+  // 永恒护符·装备超频 aura (stackable): bag > 10 时耐久损耗的衍生效果额外触发 N 次
   // （N = count of equip-overclock relics held）。仅复制衍生效果
   // （mine boost / bleed / dragonBleedDestroy / wraith-rebirth / swarm-elite /
   // golemLayerLossReflect），不复制 durability -N 本身。

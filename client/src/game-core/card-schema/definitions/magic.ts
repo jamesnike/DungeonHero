@@ -2309,7 +2309,7 @@ const knightBackpackBolt: CardDefinition = {
 };
 
 // 池中惊雷 — Perm 1. Mirror of 囊中惊雷 but counts permanentMagicRecycleBag instead.
-// damage = floor(permanentMagicRecycleBag.length * pct/100); pct = [50, 75, 100][upgradeLevel].
+// damage = floor(permanentMagicRecycleBag.length * pct/100); pct = [100, 125, 150][upgradeLevel].
 // Echo (A): damage ×N (single flight, no modal re-prompt). 自伤路径同 backpack-bolt。
 const knightRecycleBolt: CardDefinition = {
   effectId: 'knight:recycle-bolt',
@@ -2319,7 +2319,7 @@ const knightRecycleBolt: CardDefinition = {
 };
 
 // 囊量震慑 — Perm 1. Non-interactive: bumps stunCap by floor(backpackCapacity / divisor)%.
-// divisor = [4, 3][upgradeLevel]. Backpack capacity 12 → Lv0 +3% / Lv1 +4%.
+// divisor = [3, 2][upgradeLevel]. Backpack capacity 12 → Lv0 +4% / Lv1 +6%.
 // stunCap globally capped at 100% (Math.min consistent with 眩晕药剂 / 奥术护盾).
 // Echo (A): single resolve × echoMultiplier. Backpack capacity doesn't change
 // inside one reduce step, so A/C are numerically equivalent here.
@@ -2358,9 +2358,9 @@ const knightLayMine: CardDefinition = {
 };
 
 // 锋芒倍增 — Perm 1. Select an equipment slot (empty allowed); apply temp
-// attack +N (升级表 [2, 3]: L0 +2 / L1 +3), then double the resulting temp attack
+// attack +N (升级表 [1, 2]: L0 +1 / L1 +2), then double the resulting temp attack
 // on that slot.
-// Example (L0): slot at +3 → +5 → ×2 = 10. Echo doubles the additive bonus before
+// Example (L0): slot at +3 → +4 → ×2 = 8. Echo doubles the additive bonus before
 // the multiplicative step (matches 时空镜像 pattern).
 // Prompt 数值随 upgradeLevel 浮动（与 hero.ts:case 'temp-attack-double' 同表）。
 const knightTempAttackDouble: CardDefinition = {
@@ -2368,7 +2368,7 @@ const knightTempAttackDouble: CardDefinition = {
   effects: [],
   tags: ['knight', 'permanent', 'interactive', 'buff'],
   resolver: (state, card, sideEffects, patch, _enqueuedActions, echoMultiplier) => {
-    const tadAmounts = [2, 3];
+    const tadAmounts = [1, 2];
     const tadBaseAmt = tadAmounts[card.upgradeLevel ?? 0] ?? tadAmounts[tadAmounts.length - 1];
     const tadDisplayAmt = tadBaseAmt * echoMultiplier;
     patch.pendingMagicAction = {

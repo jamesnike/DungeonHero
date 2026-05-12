@@ -479,6 +479,7 @@ export interface GameCardData {
   critChance?: number; // % chance to deal double damage on attack
   restoreDurabilityOnKill?: boolean; // Restore full durability when killing a monster
   healOnAttack?: number; // Heal this amount each time this weapon attacks
+  drawOnAttack?: number; // Draw N cards from backpack each time this weapon attacks (mirrors healOnAttack semantics — fork attacks chain re-trigger; equip-overclock multiplies)
   onAttackBuffOtherSlotTempAttack?: number; // Give the OTHER equipment slot +N temp attack on each attack
   onAttackRepairOtherSlot?: number; // Restore N durability to the OTHER equipment slot on each attack
   onAttackDebuffAllMonsterAttack?: number; // Reduce ALL active row monsters' attack by N on each attack

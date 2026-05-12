@@ -125,6 +125,73 @@ describe('PLAY_CARD on 「专属感召」 — emits card:discoverRequested with 
     const banners = allSideEffects.filter(e => e.event === 'ui:banner');
     expect(banners.some(b => (b.payload as { text: string }).text.includes('专属感召'))).toBe(true);
   });
+
+  // Regression — user reported "sometimes the 专属感召 discover modal only
+  // shows 2 cards instead of 3". Root cause: the resolver pre-sampled 3
+  // cards from the *raw* classDeck (including already-acquired unique
+  // cards), then `reduceBeginDiscover` ran the unique-lock filter and
+  // shrunk the pool below 3.
+  //
+  // Fix: filter the classDeck through `filterAvailableClassPool` BEFORE
+  // pre-sampling. End-to-end test below replays the full chain
+  // (PLAY_CARD → resolver emits side effect → BEGIN_DISCOVER on the
+  // emitted candidates) and asserts the discover modal opens with
+  // exactly 3 options even when several unique cards in the pool are
+  // already acquired.
+  it('regression: with unique-locked cards in classDeck, modal still opens with 3 distinct candidates', () => {
+    const card = createStarterDiscoverClassToHandCard();
+    const lockedA: GameCardData = { ...makeClassCard('knight-1', 'LockedA'), unique: true } as GameCardData;
+    const lockedB: GameCardData = { ...makeClassCard('knight-2', 'LockedB'), unique: true } as GameCardData;
+    const lockedC: GameCardData = { ...makeClassCard('knight-3', 'LockedC'), unique: true } as GameCardData;
+    const free1 = makeClassCard('cls-f1', 'Free1');
+    const free2 = makeClassCard('cls-f2', 'Free2');
+    const free3 = makeClassCard('cls-f3', 'Free3');
+    const free4 = makeClassCard('cls-f4', 'Free4');
+
+    // Try across many seeds — without the fix, there exists at least one
+    // seed where the pre-sample picks a locked card and the modal shrinks.
+    for (let seed = 1; seed <= 50; seed++) {
+      const state: GameState = {
+        ...createInitialGameState(),
+        rng: createRng(seed),
+        handCards: [card],
+        // Pool is dominated by locked cards so a naive pre-sample is very
+        // likely to pick at least one.
+        classDeck: [lockedA, lockedB, lockedC, free1, free2, free3, free4],
+        acquiredUniqueClassCardIds: ['knight-1', 'knight-2', 'knight-3'],
+      };
+
+      const initial = reduce(state, { type: 'PLAY_CARD', cardId: card.id });
+      const drained = drain(initial.state, initial.enqueuedActions ?? []);
+      const allSideEffects = [...initial.sideEffects, ...drained.sideEffects];
+
+      const discoverEvent = allSideEffects.find(
+        e => e.event === 'card:discoverRequested',
+      );
+      expect(discoverEvent, `seed=${seed} must emit discover side effect`).toBeTruthy();
+      const candidates = (discoverEvent!.payload as { candidates: GameCardData[] }).candidates;
+
+      // Replay the hook step: BEGIN_DISCOVER on the emitted candidates.
+      const afterBegin = reduce(drained.state, {
+        type: 'BEGIN_DISCOVER',
+        source: 'starter-discover-class-to-hand',
+        pool: candidates,
+        sourceLabel: '专属感召',
+        delivery: 'hand-first',
+      });
+
+      expect(afterBegin.state.discoverModalOpen, `seed=${seed} modal should open`).toBe(true);
+      expect(
+        afterBegin.state.discoverOptions.length,
+        `seed=${seed} modal should have exactly 3 options`,
+      ).toBe(3);
+      // No locked card may slip into the final options either.
+      const optionIds = afterBegin.state.discoverOptions.map(c => c.id);
+      expect(optionIds, `seed=${seed} no locked card in options`).not.toContain('knight-1');
+      expect(optionIds).not.toContain('knight-2');
+      expect(optionIds).not.toContain('knight-3');
+    }
+  });
 });
 
 describe('BEGIN_DISCOVER — stores delivery on state', () => {

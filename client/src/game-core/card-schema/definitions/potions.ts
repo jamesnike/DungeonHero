@@ -418,7 +418,7 @@ const potionDefinitions: CardDefinition[] = [
       {
         type: 'grantEternalRelic',
         relicId: 'equip-overclock' as any,
-        logMsg: '装备超频药：获得永恒护符「装备超频」！回收袋牌数 > 15 时，装备效果额外触发一次（可叠加）。',
+        logMsg: '装备超频药：获得永恒护符「装备超频」！回收袋牌数 > 10 时，装备效果额外触发一次（可叠加）。',
         bannerMsg: '获得永恒护符「装备超频」！',
         dupeLogMsg: '',
         dupeBannerMsg: '',

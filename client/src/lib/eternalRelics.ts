@@ -165,7 +165,7 @@ const RELIC_REGISTRY: Record<EternalRelicId, EternalRelic> = {
   'equip-overclock': {
     id: 'equip-overclock',
     name: '永恒护符·装备超频',
-    description: '光环（可叠加）：每持有一份「装备超频」，回收袋牌数 > 15 时装备效果额外多触发 1 次（不重复挥击/格挡本身）；牌数 ≤ 15 立即失效。',
+    description: '光环（可叠加）：每持有一份「装备超频」，回收袋牌数 > 10 时装备效果额外多触发 1 次（不重复挥击/格挡本身）；牌数 ≤ 10 立即失效。',
     image: relicEquipOverclockImage,
   },
   'summon-frenzy': {

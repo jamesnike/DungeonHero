@@ -144,7 +144,7 @@
  * │ KNIGHT discard-rebuild           │ A   │ discover queue ×N             │
  * │ KNIGHT armor-stun-convert        │ B   │ pick slot twice               │
  * │ KNIGHT stun-cap-strike           │ A/B │ damage ×N + draw ×N + 1 dice  │
- * │ KNIGHT backpack-bolt             │ A   │ damage ×N (single-target)     │
+ * │ KNIGHT backpack-bolt             │ A   │ dmg ×N + draw floor(dmg/4)    │
  * │ KNIGHT recycle-bolt              │ A   │ damage ×N (single-target)     │
  * │ KNIGHT lay-mine                  │ A   │ spawn N mines (distinct slots)│
  * │ KNIGHT temp-attack-double        │ A/B │ +atk ×N + modal re-prompt     │
@@ -230,6 +230,7 @@ import {
   createEmptyAmuletEffects,
 } from '../constants';
 import { computeAmuletEffects, getEquipmentInSlot, getEquipmentSlots } from '../equipment';
+import { filterAvailableClassPool } from '../uniqueClass';
 import { maybeTriggerDeleteDrawForDestroy } from '../deleteDrawTrigger';
 import { chaosStrikeHasOverkill, detectMineCollisionsAfterShuffle } from '../combat';
 import { hasEternalRelic, countEternalRelics, getEternalRelic } from '@/lib/eternalRelics';
@@ -1771,7 +1772,13 @@ export function resolvePermanentMagic(
       // is dormant when backpack ≤ 10). Frenzy extras are added to the SAME
       // pendingClassDiscoverQueue as echo extras (additive, not multiplicative).
       const classDeck = state.classDeck ?? [];
-      if (classDeck.length === 0) {
+      // Apply the unique-lock filter BEFORE pre-sampling. Without this, the
+      // 3 pre-sampled candidates may include unique cards the player has
+      // already acquired this run; `reduceBeginDiscover` then strips them
+      // via `filterAvailableClassPool` → modal shows fewer than 3
+      // (user-reported bug: "sometimes only 2 cards in 专属感召 modal").
+      const availablePool = filterAvailableClassPool(classDeck, state, patch);
+      if (availablePool.length === 0) {
         banner(sideEffects, '专属感召：专属牌堆为空。');
         log(sideEffects, 'magic', '专属感召：专属牌堆为空。');
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
@@ -1780,9 +1787,9 @@ export function resolvePermanentMagic(
       }
       let drng = patch.rng ?? state.rng;
       let shuffled: GameCardData[];
-      [shuffled, drng] = rngShuffle(classDeck, drng);
+      [shuffled, drng] = rngShuffle(availablePool, drng);
       patch.rng = drng;
-      const candidates = shuffled.slice(0, Math.min(3, classDeck.length));
+      const candidates = shuffled.slice(0, Math.min(3, availablePool.length));
       sideEffects.push({
         event: 'card:discoverRequested',
         payload: {
@@ -3314,6 +3321,10 @@ export function resolveKnightPermanentMagic(
         options.push({ id: 'amulet', label: `护符栏 — ${topAmulet.name}`, description: '最上层护符', slotType: 'amulet' });
       }
 
+      // 「抽 1 张牌」是 knight 班级版 (`紧急回收`, `classCard: true`) 独占的奖励；
+      // starter 版 (`回收术`) 卡面只写「失去 2 HP，回手一张牌」，不抽牌。
+      const drawsExtra = card.classCard === true;
+
       if (options.length === 1) {
         const chosen = options[0];
         if (chosen.slotType === 'equipment') {
@@ -3328,10 +3339,13 @@ export function resolveKnightPermanentMagic(
           (patch as any).amuletSlots = amuletSlots.slice(0, -1);
           patch.handCards = [...state.handCards, sanitizeCardMetadata(topAmulet)];
         }
-        enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+        if (drawsExtra) {
+          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+        }
         const itemName = options[0].label.split(' — ')[1] ?? '装备';
-        banner(sideEffects, `紧急回收：失去 ${hpCost} HP，${itemName} 已回到手牌！`);
-        log(sideEffects, 'magic', `紧急回收：失去 ${hpCost} HP，${itemName} 回到手牌`);
+        const drawSuffix = drawsExtra ? '，抽 1 张牌' : '';
+        banner(sideEffects, `${card.name}：失去 ${hpCost} HP，${itemName} 已回到手牌${drawSuffix}！`);
+        log(sideEffects, 'magic', `${card.name}：失去 ${hpCost} HP，${itemName} 回到手牌${drawSuffix}`);
         patch.lastPlayedCardCategory = getCardPlayCategory(card);
         enqueuedActions.push({ type: 'FINALIZE_MAGIC_CARD', card, dealtDamage: false });
         return applyPatch(state, patch, sideEffects, enqueuedActions);
@@ -3345,7 +3359,7 @@ export function resolveKnightPermanentMagic(
         data: { options, hpCost },
         echoRemaining: echoMultiplier,
       } as any;
-      patch.heroSkillBanner = '紧急回收：选择一个位置回手。';
+      patch.heroSkillBanner = `${card.name}：选择一个位置回手。`;
       sideEffects.push({
         event: 'card:recallEquipmentSelect' as any,
         payload: { card, options },
@@ -3539,23 +3553,27 @@ export function resolveKnightPermanentMagic(
       // amplifyBonus 算入 base damage（与其它单目标伤害 magic 一致）。
       // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
       // Echo (A 类)：伤害单次结算 ×echoMultiplier，无模态重弹。
+      // 附加：每造成 4 点法伤额外抽 1 张牌（floor(totalDmg / 4)，echo 后总伤一并算）。
+      // 实际抽牌在 hero.ts:reduceMagicMonsterSelection 'backpack-bolt' 分支处理。
       const pcts = [50, 75, 100];
       const pct = pcts[card.upgradeLevel ?? 0] ?? pcts[pcts.length - 1];
       const backpackCount = state.backpackItems.length;
       const baseDmg = Math.floor((backpackCount * pct) / 100);
       const totalDmg = getSpellDamage(baseDmg + (card.amplifyBonus ?? 0), state) * echoMultiplier;
+      const drawCount = Math.floor(totalDmg / 4);
       const echoTag = isEchoTriggered ? `（回响×${echoMultiplier}）` : '';
+      const drawTag = drawCount > 0 ? `，抽 ${drawCount} 张牌` : '';
 
       patch.pendingMagicAction = {
         card,
         effect: 'backpack-bolt',
         step: 'monster-select',
-        prompt: `选择一个目标，造成 ${totalDmg} 点法术伤害（背包 ${backpackCount} 张 × ${pct}%）。${echoTag}`,
+        prompt: `选择一个目标，造成 ${totalDmg} 点法术伤害（背包 ${backpackCount} 张 × ${pct}%）${drawTag}。${echoTag}`,
         echoMultiplier,
         data: { baseDmg, pct, backpackCount },
         allowsHeroTarget: true,
       } as any;
-      patch.heroSkillBanner = `${card.name}：选择一个目标（${totalDmg} 法伤）。`;
+      patch.heroSkillBanner = `${card.name}：选择一个目标（${totalDmg} 法伤${drawTag}）。`;
       return applyPatch(state, patch, sideEffects);
     }
 
@@ -3565,7 +3583,7 @@ export function resolveKnightPermanentMagic(
       // state.backpackItems。amplifyBonus 算入 base damage。
       // 单目标伤害 magic：始终弹出 picker（包含 hero 自伤路径）。
       // Echo (A 类)：伤害单次结算 ×echoMultiplier，无模态重弹。
-      const pcts = [50, 75, 100];
+      const pcts = [100, 125, 150];
       const pct = pcts[card.upgradeLevel ?? 0] ?? pcts[pcts.length - 1];
       const recycleCount = state.permanentMagicRecycleBag.length;
       const baseDmg = Math.floor((recycleCount * pct) / 100);
@@ -3622,13 +3640,13 @@ export function resolveKnightPermanentMagic(
 
     case 'backpack-cap-stun': {
       // 囊量震慑：击晕上限 +floor(背包上限 / divisor) 个百分点。
-      // - divisor = [4, 3][upgradeLevel] ?? 3。背包上限 12 时：Lv0 +3 / Lv1 +4。
+      // - divisor = [3, 2][upgradeLevel] ?? 2。背包上限 12 时：Lv0 +4 / Lv1 +6。
       // - 「背包上限」= getEffectiveBackpackCapacity(state) = BASE (12) + modifier，
       //   不是当前 backpackItems.length。
       // - 全局 stunCap 100% cap，溢出静默吸收（与 眩晕药剂 / 奥术护盾 一致）。
       // - Echo (A 类)：×echoMultiplier 单次结算。本卡是 hand→recycleBag，背包上限
       //   在本次 reduce 步骤内不变，A/C 等价；用 A 类。
-      const divisors = [4, 3];
+      const divisors = [3, 2];
       const lvl = card.upgradeLevel ?? 0;
       const divisor = divisors[lvl] ?? divisors[divisors.length - 1];
       const capacity = getEffectiveBackpackCapacity(state);
@@ -5406,10 +5424,16 @@ export function resolvePendingMagic(
             patch.handCards = [...state.handCards, sanitizeCardMetadata(topAmulet)];
           }
         }
-        enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+        // 「抽 1 张牌」是 knight 班级版 (`紧急回收`, `classCard: true`) 独占的奖励；
+        // starter 版 (`回收术`) 卡面只写「失去 2 HP，回手一张牌」，不抽牌。
+        const drawsExtra = card.classCard === true;
+        if (drawsExtra) {
+          enqueuedActions.push({ type: 'DRAW_FROM_BACKPACK', count: 1 } as GameAction);
+        }
         const itemName = chosen.label?.split(' — ')[1] ?? '装备';
-        banner(sideEffects, `紧急回收：失去 ${hpCost} HP，${itemName} 已回到手牌！`);
-        log(sideEffects, 'magic', `紧急回收：失去 ${hpCost} HP，${itemName} 回到手牌`);
+        const drawSuffix = drawsExtra ? '，抽 1 张牌' : '';
+        banner(sideEffects, `${card.name}：失去 ${hpCost} HP，${itemName} 已回到手牌${drawSuffix}！`);
+        log(sideEffects, 'magic', `${card.name}：失去 ${hpCost} HP，${itemName} 回到手牌${drawSuffix}`);
         patch.pendingMagicAction = null;
         patch.heroSkillBanner = null;
         patch.lastPlayedCardCategory = getCardPlayCategory(card);

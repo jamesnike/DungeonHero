@@ -662,6 +662,8 @@ export function computeDamageMagicDisplayPure(
 
   // 囊中惊雷：base = floor(backpackCount × pct/100)；pct = [50, 75, 100][upgradeLevel]。
   // backpackCount 来自 caller 传入的 state.backpackItems.length；旧 caller 没传按 0。
+  // 附加：每造成 4 点法伤额外抽 1 张牌（floor((base+amp) / 4)）。display 跟 reducer 口径
+  // 保持一致——这里展示的是「不含 spellDamageBonus / 回响」的底子伤害对应的抽牌数。
   if (card.knightEffect === 'backpack-bolt') {
     const pcts = [50, 75, 100];
     const lvl = card.upgradeLevel ?? 0;
@@ -669,17 +671,19 @@ export function computeDamageMagicDisplayPure(
     const backpackCount = state.backpackCount ?? 0;
     const base = Math.floor((backpackCount * pct) / 100);
     const dmg = base + amp;
+    const drawCount = Math.floor(dmg / 4);
+    const drawTag = drawCount > 0 ? `，抽 ${drawCount} 张牌` : '';
     return {
       mode: 'replace',
-      text: `永久：对一个目标造成 ${dmg} 点法术伤害（背包 ${backpackCount} 张 × ${pct}%）。`,
+      text: `永久：对一个目标造成 ${dmg} 点法术伤害（背包 ${backpackCount} 张 × ${pct}%）${drawTag}。`,
       amplifyBonus: amp,
     };
   }
 
-  // 池中惊雷：base = floor(recycleBagCount × pct/100)；pct = [50, 75, 100][upgradeLevel]。
+  // 池中惊雷：base = floor(recycleBagCount × pct/100)；pct = [100, 125, 150][upgradeLevel]。
   // recycleBagCount 来自 caller 传入的 state.permanentMagicRecycleBag.length；旧 caller 没传按 0。
   if (card.knightEffect === 'recycle-bolt') {
-    const pcts = [50, 75, 100];
+    const pcts = [100, 125, 150];
     const lvl = card.upgradeLevel ?? 0;
     const pct = pcts[lvl] ?? pcts[pcts.length - 1];
     const recycleBagCount = state.recycleBagCount ?? 0;

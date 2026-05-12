@@ -119,6 +119,19 @@ const permSlotDamage2: OnEquipHandler = (state, card, slotId, patch, sideEffects
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：该装备栏永久攻击 +2！` } });
 };
 
+// `draw-N` family — on-equip: 从背包抽 N 张牌。
+// 走标准 `DRAW_CARDS source: 'backpack'` 入口（draw-cards-defaults-to-backpack 规则），
+// 自动尊重「置顶」优先级、自动 emit `card:drawnToHand` 等下游事件。
+const draw2: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
+  enqueuedActions.push({ type: 'DRAW_CARDS', count: 2, source: 'backpack' });
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：从背包抽 2 张牌！` } });
+};
+
+const draw3: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
+  enqueuedActions.push({ type: 'DRAW_CARDS', count: 3, source: 'backpack' });
+  sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：从背包抽 3 张牌！` } });
+};
+
 const heal3: OnEquipHandler = (_state, card, _slotId, _patch, sideEffects, enqueuedActions) => {
   enqueuedActions.push({ type: 'HEAL', amount: 3, source: 'on-equip' });
   sideEffects.push({ event: 'log:entry', payload: { type: 'equip', message: `${card.name} 入场效果：恢复了 3 点生命！` } });
@@ -234,6 +247,8 @@ registerOnEquipAll([
   { id: 'heal-3', handler: heal3 },
   { id: 'heal-4', handler: heal4 },
   { id: 'heal-5', handler: heal5 },
+  { id: 'draw-2', handler: draw2 },
+  { id: 'draw-3', handler: draw3 },
   { id: 'other-slot-durability+1', handler: otherSlotDurability1 },
   { id: 'durability-max+1', handler: durabilityMax1 },
 ]);

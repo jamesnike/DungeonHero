@@ -4,7 +4,7 @@
  * Behavior:
  *   - PLAY_CARD: non-interactive. Computes delta = floor(backpackCapacity / divisor),
  *     applies stunCap += delta (× echoMultiplier on echo), capped at 100.
- *   - divisor by upgradeLevel: Lv0 → 4, Lv1 → 3.
+ *   - divisor by upgradeLevel: Lv0 → 3, Lv1 → 2.
  *   - "背包上限" = BASE_BACKPACK_CAPACITY (12) + state.backpackCapacityModifier.
  *     **NOT** state.backpackItems.length.
  *   - stunCap globally capped at 100; surplus silently absorbed (consistent with
@@ -49,8 +49,8 @@ function makeCard(idSuffix = 'bc', extras: Record<string, any> = {}): GameCardDa
 }
 
 describe('囊量震慑 (knight:backpack-cap-stun)', () => {
-  describe('Lv 0 (divisor 4)', () => {
-    it('default backpack capacity 12 → +floor(12/4) = +3 stun cap', () => {
+  describe('Lv 0 (divisor 3)', () => {
+    it('default backpack capacity 12 → +floor(12/3) = +4 stun cap', () => {
       const card = makeCard();
       const state = makeState({
         handCards: [card] as any,
@@ -60,10 +60,10 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      expect(result.state.stunCap).toBe(13);
+      expect(result.state.stunCap).toBe(14);
     });
 
-    it('expanded capacity 18 → +floor(18/4) = +4 stun cap', () => {
+    it('expanded capacity 18 → +floor(18/3) = +6 stun cap', () => {
       const card = makeCard();
       const state = makeState({
         handCards: [card] as any,
@@ -73,25 +73,25 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      expect(result.state.stunCap).toBe(4);
+      expect(result.state.stunCap).toBe(6);
     });
 
-    it('capacity rounds DOWN (floor): 15 / 4 = 3', () => {
+    it('capacity rounds DOWN (floor): 14 / 3 = 4', () => {
       const card = makeCard();
       const state = makeState({
         handCards: [card] as any,
         stunCap: 0,
-        backpackCapacityModifier: 3,
+        backpackCapacityModifier: 2,
       });
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      expect(result.state.stunCap).toBe(3);
+      expect(result.state.stunCap).toBe(4);
     });
   });
 
-  describe('Lv 1 (divisor 3)', () => {
-    it('default capacity 12 → +floor(12/3) = +4 stun cap', () => {
+  describe('Lv 1 (divisor 2)', () => {
+    it('default capacity 12 → +floor(12/2) = +6 stun cap', () => {
       const card = makeCard('bc1', { upgradeLevel: 1 });
       const state = makeState({
         handCards: [card] as any,
@@ -101,10 +101,10 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      expect(result.state.stunCap).toBe(9);
+      expect(result.state.stunCap).toBe(11);
     });
 
-    it('expanded capacity 24 → +floor(24/3) = +8 stun cap', () => {
+    it('expanded capacity 24 → +floor(24/2) = +12 stun cap', () => {
       const card = makeCard('bc1', { upgradeLevel: 1 });
       const state = makeState({
         handCards: [card] as any,
@@ -114,12 +114,12 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      expect(result.state.stunCap).toBe(18);
+      expect(result.state.stunCap).toBe(22);
     });
   });
 
   describe('100% cap', () => {
-    it('stunCap already 99 + delta 4 → clamped at 100', () => {
+    it('stunCap already 99 + delta 5 → clamped at 100', () => {
       const card = makeCard();
       const state = makeState({
         handCards: [card] as any,
@@ -129,7 +129,7 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      // capacity = 16, floor(16/4) = 4, but clamped: 99 + 4 → min(100, 103) = 100
+      // capacity = 16, floor(16/3) = 5, but clamped: 99 + 5 → min(100, 104) = 100
       expect(result.state.stunCap).toBe(100);
     });
 
@@ -148,7 +148,7 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
   });
 
   describe('uses 背包上限, not 背包剩余卡数', () => {
-    it('backpack ITEMS empty but capacity 12 → still +3', () => {
+    it('backpack ITEMS empty but capacity 12 → still +4', () => {
       const card = makeCard();
       const state = makeState({
         handCards: [card] as any,
@@ -159,10 +159,10 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      expect(result.state.stunCap).toBe(3); // floor(12 / 4)
+      expect(result.state.stunCap).toBe(4); // floor(12 / 3)
     });
 
-    it('backpack ITEMS full (12 items) but capacity 12 → still +3 (not based on items)', () => {
+    it('backpack ITEMS full (12 items) but capacity 12 → still +4 (not based on items)', () => {
       const card = makeCard();
       const fillers: GameCardData[] = [];
       for (let i = 0; i < BASE_BACKPACK_CAPACITY; i++) {
@@ -177,12 +177,12 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      expect(result.state.stunCap).toBe(3);
+      expect(result.state.stunCap).toBe(4);
     });
   });
 
   describe('Echo (A 类) ×N (state.doubleNextMagic = true)', () => {
-    it('echoMultiplier=2: capacity 12 / 4 = 3, ×2 = +6', () => {
+    it('echoMultiplier=2: capacity 12 / 3 = 4, ×2 = +8', () => {
       const card = makeCard();
       const state = makeState({
         handCards: [card] as any,
@@ -193,12 +193,12 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      expect(result.state.stunCap).toBe(16);
+      expect(result.state.stunCap).toBe(18);
       // doubleNextMagic 在消耗后应被清零
       expect(result.state.doubleNextMagic).toBe(false);
     });
 
-    it('echo ×2 + already-high cap: 95 + 6 → clamped at 100', () => {
+    it('echo ×2 + already-high cap: 95 + 8 → clamped at 100', () => {
       const card = makeCard();
       const state = makeState({
         handCards: [card] as any,
@@ -277,7 +277,7 @@ describe('囊量震慑 (knight:backpack-cap-stun)', () => {
 
       const result = drain(state, [{ type: 'PLAY_CARD', cardId: card.id } as GameAction]);
 
-      // floor(0 / 4) = 0, no change
+      // floor(0 / 3) = 0, no change
       expect(result.state.stunCap).toBe(50);
     });
   });
