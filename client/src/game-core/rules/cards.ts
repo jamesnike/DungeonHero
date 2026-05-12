@@ -866,6 +866,23 @@ function reduceEquipFromHand(
   const patch: Partial<GameState> = {};
   const enqueuedActions: GameAction[] = [];
 
+  // Stage the card out of hand FIRST so any follow-up actions enqueued by
+  // on-equip handlers (e.g. DRAW_CARDS from `draw-N` on 智者圣盾) compute
+  // hand-limit / hand-size checks against the post-equip hand. Without this,
+  // the card being equipped still occupies a hand slot when DRAW_CARDS drains,
+  // and `drawMultipleFromBackpack` caps the draw count by counting "self" —
+  // a card-at-limit scholar shield would draw 0 of 2.
+  //
+  // Mirrors `reducePlayCard`'s hand-removal-first pattern so PLAY_CARD (click)
+  // and EQUIP_FROM_HAND (drag) behave identically. The hook layer's later
+  // `consumeCardFromHand` becomes idempotent (filter sees the card already
+  // gone from engine state, but still runs side-effect cleanup like clearing
+  // drag state / cancelling pending delivery guards).
+  const handArr = state.handCards as GameCardData[];
+  if (handArr.some(c => c.id === card.id)) {
+    patch.handCards = handArr.filter(c => c.id !== card.id) as GameCardData[];
+  }
+
   if (card.onEquipEffect) {
     executeOnEquip(state, card, slotId, patch, sideEffects, enqueuedActions);
   }
@@ -2533,12 +2550,18 @@ function reduceAmplifyCardsByName(
   const newClassDeck = mapList(state.classDeck);
   if (newClassDeck !== state.classDeck) patch.classDeck = newClassDeck;
 
-  // 装备槽 / 储备
+  // 装备槽 / 储备 —— shield/monster 在槽位中时，amplify 把基础上限（armorMax / hp）+= amount
+  // 后必须立刻把当前 `armor` 也 += amount（夹到新 cap）。否则玩家看到护甲格数没变化，
+  // 体感就是「生长之盾 / 生长之刃 触发了，cap 涨了，armor 没涨」。
+  // 跟 perm-shield-bonus / temp-armor 加成一样走 `applySlotArmorBonusDelta` 统一通道。
+  // 详见 `shield-armor-vs-durability.mdc` 不变量 #4 (Immediate refill on add)。
   if (state.equipmentSlot1?.name === cardName) {
     patch.equipmentSlot1 = applyAmplifyToCard(state.equipmentSlot1, amount) as EquipmentItem;
+    applySlotArmorBonusDelta(state, 'equipmentSlot1', amount, patch);
   }
   if (state.equipmentSlot2?.name === cardName) {
     patch.equipmentSlot2 = applyAmplifyToCard(state.equipmentSlot2, amount) as EquipmentItem;
+    applySlotArmorBonusDelta(state, 'equipmentSlot2', amount, patch);
   }
   const newReserve1 = mapList(state.equipmentSlot1Reserve);
   if (newReserve1 !== state.equipmentSlot1Reserve) patch.equipmentSlot1Reserve = newReserve1 as EquipmentItem[];

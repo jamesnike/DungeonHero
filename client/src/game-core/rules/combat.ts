@@ -85,6 +85,41 @@ function markMonsterDefeatAnimation(
   patch.monsterDefeatAnimationIds = [...current, monsterId];
 }
 
+/**
+ * Tick 战痕之符 (damage-class-discover) streak.
+ *
+ * Each equipped damage-class-discover amulet ticks the counter independently
+ * (N amulets → +N progress per qualifying hit). Threshold uses the highest
+ * upgradeLevel among equipped amulets (level ≥ 1 → 6, otherwise 8).
+ *
+ * **Single source of truth**: combat reducers that deal damage to a monster
+ * (`DEAL_DAMAGE_TO_MONSTER` / `APPLY_SHIELD_REFLECT` / `PERFORM_HERO_ATTACK`)
+ * MUST call this directly. Do **not** rely on the `combat:classDamageHit`
+ * side effect to round-trip through a hook listener — that historically
+ * caused double-counting (the reducer ticked +1 inline AND the hook
+ * dispatched `RECORD_CLASS_DAMAGE_DISCOVER` which ticked +1 again).
+ */
+function applyClassDamageDiscoverTick(
+  state: GameState,
+  patch: Partial<GameState>,
+  sideEffects: SideEffect[],
+): void {
+  const discoverAmulets = (state.amuletSlots as GameCardData[]).filter(
+    s => s?.amuletEffect === 'damage-class-discover',
+  );
+  if (discoverAmulets.length === 0) return;
+  const currentStreak = patch.classDamageDiscoverStreak ?? state.classDamageDiscoverStreak ?? 0;
+  const streak = currentStreak + discoverAmulets.length;
+  const maxUpgradeLevel = Math.max(...discoverAmulets.map(a => a.upgradeLevel ?? 0));
+  const threshold = maxUpgradeLevel >= 1 ? 6 : 8;
+  if (streak >= threshold) {
+    patch.classDamageDiscoverStreak = 0;
+    sideEffects.push({ event: 'combat:classDamageDiscoverTriggered', payload: { threshold } });
+  } else {
+    patch.classDamageDiscoverStreak = streak;
+  }
+}
+
 export function reduceCombatActions(state: GameState, action: GameAction): ReduceResult | null {
   switch (action.type) {
     case 'BEGIN_COMBAT':
@@ -667,23 +702,13 @@ function reduceDealDamageToMonster(
   }
 
   // --- Class damage discover streak ---
-  // 学打之符 (damage-class-discover): N amulets each tick the streak independently.
+  // 战痕之符 (damage-class-discover): N amulets each tick the streak independently.
   // Threshold uses the highest upgradeLevel among equipped amulets.
+  // The `combat:classDamageHit` side effect is emitted for any future analytics
+  // / UI listeners; it MUST NOT be used by hooks to dispatch a follow-up
+  // increment — see `applyClassDamageDiscoverTick` doc.
   sideEffects.push({ event: 'combat:classDamageHit', payload: {} });
-  const discoverAmulets = (state.amuletSlots as GameCardData[]).filter(
-    s => s?.amuletEffect === 'damage-class-discover',
-  );
-  if (discoverAmulets.length > 0) {
-    const streak = (state.classDamageDiscoverStreak ?? 0) + discoverAmulets.length;
-    const maxUpgradeLevel = Math.max(...discoverAmulets.map(a => a.upgradeLevel ?? 0));
-    const threshold = maxUpgradeLevel >= 1 ? 4 : 6;
-    if (streak >= threshold) {
-      patch.classDamageDiscoverStreak = 0;
-      sideEffects.push({ event: 'combat:classDamageDiscoverTriggered', payload: { threshold } });
-    } else {
-      patch.classDamageDiscoverStreak = streak;
-    }
-  }
+  applyClassDamageDiscoverTick(state, patch, sideEffects);
 
   // --- Apply damage ---
   const layersBefore = monster.currentLayer ?? monster.fury ?? 1;
@@ -1641,6 +1666,7 @@ function reduceApplyShieldReflect(
 
   const sideEffects: SideEffect[] = [];
   const enqueuedActions: GameAction[] = [];
+  const patch: Partial<GameState> = {};
   let rng = state.rng;
 
   // 永恒护符·装备超频 aura (stackable)：盾反弹路径里的衍生效果（dragon retaliation /
@@ -1671,8 +1697,9 @@ function reduceApplyShieldReflect(
     payload: { type: 'combat', message: `${action.sourceName} 反弹了 ${damageTotal} 点伤害给 ${monster.name}${overclockExtraReflect > 0 ? `（装备超频×${1 + overclockExtraReflect}）` : ''}` },
   });
 
-  // Class damage discover hit
+  // Class damage discover hit (战痕之符)
   sideEffects.push({ event: 'combat:classDamageHit', payload: {} });
+  applyClassDamageDiscoverTick(state, patch, sideEffects);
 
   // Overkill (always logged, even when no effect benefits from it)
   const ae = computeAmuletEffectsForState(state);
@@ -1805,7 +1832,12 @@ function reduceApplyShieldReflect(
     });
   }
 
-  return applyPatch(state, { activeCards: activeCards as GameState['activeCards'], rng }, sideEffects, enqueuedActions);
+  return applyPatch(
+    state,
+    { ...patch, activeCards: activeCards as GameState['activeCards'], rng },
+    sideEffects,
+    enqueuedActions,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2519,6 +2551,7 @@ function reducePerformHeroAttack(
 
   if (finalDamage > 0) {
     sideEffects.push({ event: 'combat:classDamageHit', payload: {} });
+    applyClassDamageDiscoverTick(state, patch, sideEffects);
     const monsterHpBefore = workingMonster.hp ?? workingMonster.value;
     const layerBeforeHit = workingMonster.currentLayer ?? workingMonster.fury ?? 1;
     const updatedMonster = damageMonsterWithLayerOverflow(workingMonster, finalDamage, 1);

@@ -631,12 +631,14 @@ export function useCombatActions(depsRef: React.MutableRefObject<CombatActionsDe
     depsRef.current.addGameLog('combat', `${monsterCard.name ?? '怪物'}发动了遗言效果！`);
   });
 
-  useGameEvent('combat:classDamageHit', () => {
-    const d = depsRef.current;
-    if (d?.amuletEffects.damageClassDiscoverCount && d.amuletEffects.damageClassDiscoverCount > 0) {
-      dispatch({ type: 'RECORD_CLASS_DAMAGE_DISCOVER', increment: true });
-    }
-  });
+  // NOTE: 战痕之符 (damage-class-discover) streak is now ticked directly inside
+  // the combat reducers (`DEAL_DAMAGE_TO_MONSTER` / `APPLY_SHIELD_REFLECT` /
+  // `PERFORM_HERO_ATTACK`) via `applyClassDamageDiscoverTick`. Do NOT add a
+  // `useGameEvent('combat:classDamageHit')` listener that dispatches
+  // `RECORD_CLASS_DAMAGE_DISCOVER` — that round-trip caused double-counting
+  // (reducer +1 inline AND hook→economy.ts +1 again, total +2 per single hit).
+  // The `combat:classDamageHit` side effect is kept as a hook for future
+  // analytics/UI but MUST NOT mutate the streak.
 
   useGameEvent('waterfall:started', () => {
     waterfallInProgressRef.current = true;

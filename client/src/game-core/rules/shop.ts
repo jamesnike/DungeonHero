@@ -549,12 +549,43 @@ function reduceDequeueMonsterReward(state: GameState): ReduceResult {
     return noChange(state);
   }
   if (state.monsterRewardQueue.length === 0) {
-    // Nothing queued — but defensively clear any stale minimized flag so
-    // a previously-folded reward doesn't leave dangling pill state behind.
-    if (state.monsterRewardMinimized) {
-      return applyPatch(state, { monsterRewardMinimized: false });
+    // Monster reward chain finished AND ghost-blade-exile is clear — this is
+    // the canonical "blocker cleared" moment. If `pendingClassDiscoverQueue`
+    // has entries that were deferred by `reduceBeginDiscover` (战痕之符 /
+    // 咒纹刻印 / 眩学之符 amulets, or any re-entrant BEGIN_DISCOVER that
+    // landed while a reward modal was open), drain ONE entry now and enqueue
+    // the next BEGIN_DISCOVER. Subsequent entries continue to drain via the
+    // standard `SET_DISCOVER_MODAL close` / `RESOLVE_DISCOVER_SELECTION`
+    // paths once the modal opens and closes.
+    const patch: Partial<GameState> = {};
+    const enqueuedActions: GameAction[] = [];
+    if (state.pendingClassDiscoverQueue.length > 0) {
+      const [nextEntry, ...rest] = state.pendingClassDiscoverQueue;
+      patch.pendingClassDiscoverQueue = rest;
+      // Same unique-lock + magicOnly filter applied at other queue-drain sites
+      // (`SET_DISCOVER_MODAL close` / `RESOLVE_DISCOVER_SELECTION`).
+      const filtered = filterAvailableClassPool(state.classDeck, state, patch);
+      const nextPool = nextEntry.magicOnly
+        ? filtered.filter(c => c.type === 'magic' || c.type === 'hero-magic')
+        : filtered;
+      enqueuedActions.push({
+        type: 'BEGIN_DISCOVER',
+        source: nextEntry.source,
+        pool: nextPool,
+        sourceLabel: nextEntry.sourceLabel ?? undefined,
+        delivery: nextEntry.delivery,
+        postInjectTopOnRecycleRestore: nextEntry.postInjectTopOnRecycleRestore,
+      });
     }
-    return noChange(state);
+    // Defensively clear any stale minimized flag so a previously-folded
+    // reward doesn't leave dangling pill state behind.
+    if (state.monsterRewardMinimized) {
+      patch.monsterRewardMinimized = false;
+    }
+    if (Object.keys(patch).length === 0 && enqueuedActions.length === 0) {
+      return noChange(state);
+    }
+    return applyPatch(state, patch, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);
   }
   const patch = dequeueMonsterRewardPure(state);
   return applyPatch(state, patch, []);
@@ -599,6 +630,67 @@ function reduceBeginDiscover(
   const { source, pool, sourceLabel, delivery, postInjectTopOnRecycleRestore } = action;
 
   if (pool.length === 0) return noChange(state);
+
+  // --- Defer when a higher-priority modal is currently blocking ---
+  //
+  // Bug history: 战痕之符 (`damage-class-discover`) / 咒纹刻印
+  // (`magic-class-discover`) / 眩学之符 (`stun-attempt-discover`) all trigger
+  // their discover via a side-effect → hook → re-entrant dispatch pattern
+  // (`combat:classDamageDiscoverTriggered` etc. → `beginDiscoverFlow` →
+  // `dispatch(BEGIN_DISCOVER)`). Because the original dispatch's _dispatching
+  // flag is still set when the side effect fires the hook, the re-entrant
+  // BEGIN_DISCOVER lands in `_dispatchQueue` and runs AFTER the outer
+  // `_processAction` returns. By then, the original drain may already have
+  // set `activeMonsterReward` (kill-triggered monster reward) or
+  // `ghostBladeExileCards` (鬼刃 exile selection) — opening BEGIN_DISCOVER's
+  // discover modal on top would visually "squeeze out" the reward / exile
+  // modal that the player must dismiss first.
+  //
+  // Similarly, if `discoverModalOpen` is already true (another discover
+  // chain in progress, e.g. forge-reborn / 法术回响 echoed discover),
+  // overwriting `discoverOptions` here would replace the player's current
+  // candidates with the new ones — silently losing the original modal.
+  //
+  // Fix: route the discover into `pendingClassDiscoverQueue` instead. The
+  // existing chain-drain (`SET_DISCOVER_MODAL close` / `RESOLVE_DISCOVER_SELECTION`
+  // / new `DEQUEUE_MONSTER_REWARD` drain) will pop and re-fire it once the
+  // blocker clears.
+  const isBlocked =
+    state.activeMonsterReward != null ||
+    state.ghostBladeExileCards != null ||
+    state.discoverModalOpen;
+
+  if (isBlocked) {
+    // `magicOnly` is inferred from the action's source string. The two
+    // magic-only sources are 「祭坛秘术」 variants; everything else uses
+    // the full classDeck. Inferring from source avoids carrying the pool
+    // snapshot (which could be stale by drain time) and keeps the queue
+    // entry shape consistent with existing producers (forge-reborn /
+    // discard-rebuild / starter discoverClassToHand all set the same
+    // magicOnly bit).
+    const magicOnly =
+      source === 'altar-discover-class-magic' || source === 'altar-discard-discover';
+    const queueEntry: GameState['pendingClassDiscoverQueue'][number] = {
+      source,
+      sourceLabel: sourceLabel ?? null,
+      delivery,
+      magicOnly,
+      postInjectTopOnRecycleRestore,
+    };
+    const patch: Partial<GameState> = {
+      pendingClassDiscoverQueue: [...state.pendingClassDiscoverQueue, queueEntry],
+    };
+    const sideEffects: SideEffect[] = [
+      {
+        event: 'log:entry',
+        payload: {
+          type: 'skill',
+          message: `发现专属卡（${source}）：当前有其他弹窗，已排队`,
+        },
+      },
+    ];
+    return applyPatch(state, patch, sideEffects);
+  }
 
   // Universal unique-lock safety net: any caller-provided pool is filtered
   // through `filterAvailableClassPool` so cards the player has already
@@ -746,6 +838,7 @@ function reduceResolveDiscoverSelection(
       pool: nextPool,
       sourceLabel: nextEntry.sourceLabel ?? undefined,
       delivery: nextEntry.delivery,
+      postInjectTopOnRecycleRestore: nextEntry.postInjectTopOnRecycleRestore,
     });
   }
 

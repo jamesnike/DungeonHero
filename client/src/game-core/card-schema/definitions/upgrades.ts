@@ -193,10 +193,10 @@ const attackPersuadeAmulet: OnUpgradeHandler = noopUpgrade;
 const cardGainMissileAmulet: OnUpgradeHandler = noopUpgrade;
 
 // `_counterDisplay` is a live state-derived field that the formatter does not
-// own; the handler keeps the assignment. Threshold on upgrade is 4 (matches
+// own; the handler keeps the assignment. Threshold on upgrade is 6 (matches
 // combat.ts / economy.ts trigger logic).
 const damageClassDiscoverAmulet: OnUpgradeHandler = (upgraded, _newLevel, state) => {
-  upgraded._counterDisplay = `${state.classDamageDiscoverStreak ?? 0}/4`;
+  upgraded._counterDisplay = `${state.classDamageDiscoverStreak ?? 0}/6`;
 };
 
 const stunUpgradeCapAmulet: OnUpgradeHandler = noopUpgrade;
@@ -417,7 +417,7 @@ const barrageShield: OnUpgradeHandler = (upgraded, newLevel) => {
 };
 
 // 生长之盾 (knight:growth-shield)：
-//   L0 -> L1: armor / durability 不变（1 / 4）。amplifyOnFlipAmount 1 → 2
+//   L0 -> L1: armor / durability 不变（2 / 4）。amplifyOnFlipAmount 1 → 2
 //             （每次卡牌翻转，该盾按卡名累计 +2 护甲与护甲上限）。
 //             onDestroyEventCount 不变（1）。description 同步更新数字。
 //   L1 -> L2: amplifyOnFlipAmount 仍 2。onDestroyEventCount 1 → 3

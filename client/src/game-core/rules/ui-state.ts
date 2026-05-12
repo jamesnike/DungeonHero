@@ -94,7 +94,17 @@ export function reduceUIStateActions(
 
     case 'SET_GHOST_BLADE_EXILE_CARDS': {
       const enqueuedActions: GameAction[] = [];
-      if (action.payload === null && state.monsterRewardQueue.length > 0 && !state.activeMonsterReward) {
+      // When the ghost-blade exile modal closes (payload=null), drain any
+      // pending follow-ups. `reduceDequeueMonsterReward` is now the unified
+      // drain site — it advances `monsterRewardQueue` if non-empty, OR drains
+      // one entry from `pendingClassDiscoverQueue` (deferred 战痕之符 /
+      // 咒纹刻印 / 眩学之符 discovers that were blocked by an active reward
+      // or another discover modal). Enqueue it whenever there's work to do.
+      if (
+        action.payload === null &&
+        !state.activeMonsterReward &&
+        (state.monsterRewardQueue.length > 0 || state.pendingClassDiscoverQueue.length > 0)
+      ) {
         enqueuedActions.push({ type: 'DEQUEUE_MONSTER_REWARD' });
       }
       return applyPatch(state, { ghostBladeExileCards: action.payload }, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);
@@ -168,6 +178,7 @@ export function reduceUIStateActions(
           pool: nextPool,
           sourceLabel: nextEntry.sourceLabel ?? undefined,
           delivery: nextEntry.delivery,
+          postInjectTopOnRecycleRestore: nextEntry.postInjectTopOnRecycleRestore,
         });
       }
       return applyPatch(state, patch, [], enqueuedActions.length > 0 ? enqueuedActions : undefined);

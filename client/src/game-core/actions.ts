@@ -832,6 +832,9 @@ export interface PlaceBuildingInDungeonAction {
 /**
  * 标记"手牌拖到装备栏"是一次 play。
  * Reducer 负责：
+ *   - 把卡从 `state.handCards` 剔除（mirror PLAY_CARD），让任何 on-equip 触发的
+ *     follow-up 动作（如 `draw-N` 抽牌）在 drain 时基于「卡已不在手」的状态计算
+ *     手牌容量。Hook 层后续的 `consumeCardFromHand` 因此是 idempotent。
  *   - 调用 `executeOnEquip` 跑装备的 onEquipEffect（金币 +6 / 临时攻 +3 等）
  *   - 处理 `equip-empower` 永恒护符（该装备栏临时攻 +3、临时护甲 +3）
  *   - enqueue APPLY_TRANSFORM_CATEGORY 进入 transform 链

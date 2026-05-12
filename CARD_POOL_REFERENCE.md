@@ -986,7 +986,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 | 1 | 孤注之符 | lone-card | 每次瀑流时（回收前），若背包卡牌数量为 1，获得一张职业专属牌。 |
 | 2 | 降服之符 | attack-persuade-discount | 每攻击一次，下次劝降费用 -3（可叠加）。 |
 | 3 | 弹幕之符 | card-gain-missile | 每从坟场获得一次牌（同时获得多张算一次），将两张「魔弹」加入手牌。手牌已满时不生成。 |
-| 4 | 战痕之符 | damage-class-discover | 每造成 6 次伤害（武器、护符、法术等任意来源），发现一张专属牌。升级后阈值降至 4 次。 |
+| 4 | 战痕之符 | damage-class-discover | 每造成 8 次伤害（武器、护符、法术等任意来源），发现一张专属牌。升级后阈值降至 6 次。 |
 | 5 | 流转之符 | swap-upgrade | 每交换 3 次位置（乾坤挪移、维度扭曲、深层交织等），升级 1 张牌。 |
 | 6 | 震慑之符 | stun-upgrade-cap | 每击晕一次怪物，击晕上限 +8%。升级后：+12%。 |
 | 7 | 积蓄之符 | recycle-backpack-expand | 每回收 8 张牌，背包上限 +3。 |
@@ -1120,7 +1120,7 @@ Boss 变身时攻击力 +5，满血复活，保留原怪物的所有种族技能
 | 6 | 守望者之盾 | 4 | 2/2 | 格挡时，另一个装备栏获得临时护甲（等同此盾护甲值）。升级1：5 护甲，3/3 耐久（效果不变）。升级2：8 护甲，3/3 耐久（效果不变）。`knightEffect: 'guardian-link-shield'` 最高 2 级 |
 | 7 | 猛击之盾 | 2 | 4/4 | 可拖动到怪物上猛击（不造成伤害），5%×护甲值 概率击晕。每回合不限次数，有耐久即可使用。升级1：`shieldBashStunRate` 5 → 7（7%×护甲值；护甲/耐久不变）。升级2：`shieldBashStunRate` 7 → 10（10%×护甲值）。`knightEffect: 'shield-bash'` 最高 2 级 |
 | 8 | 坚韧磐盾 | 3 | 3/3 | 该护盾每回合可消耗的耐久上限 +1（怪物回合最多消耗 2 耐久）。怪物攻击该护盾后死亡时，耐久度恢复 1。升级1：5 护甲，3/3 耐久（效果不变）。升级2：`equipBlockDurabilityBonus` 1 → 2（怪物回合最多消耗 3 耐久；护甲/耐久/`shieldRefillOnMonsterDeath` 不变）。`knightEffect: 'endurance-shield'` 最高 2 级 |
-| 9 | 生长之盾 | 1 | 4/4 | 装备时：每发生一次卡牌翻转，该护盾增幅一次（按卡名累计 +1 护甲与护甲上限；所有同名「生长之盾」共享）。遗言：从坟场随机抽出一张 Event 加入手牌（无 Event 则静默失败）。升级1：`amplifyOnFlipAmount` 1 → 2（每次翻转 +2 护甲与护甲上限；护甲/耐久/遗言张数不变）。升级2：`onDestroyEventCount` 1 → 3（遗言改为随机抽出 3 张 Event；增幅量保持 2 / 翻；护甲/耐久不变）。`knightEffect: 'growth-shield'` 最高 2 级 |
+| 9 | 生长之盾 | 2 | 4/4 | 装备时：每发生一次卡牌翻转，该护盾增幅一次（按卡名累计 +1 护甲与护甲上限；所有同名「生长之盾」共享）。遗言：从坟场随机抽出一张 Event 加入手牌（无 Event 则静默失败）。升级1：`amplifyOnFlipAmount` 1 → 2（每次翻转 +2 护甲与护甲上限；护甲/耐久/遗言张数不变）。升级2：`onDestroyEventCount` 1 → 3（遗言改为随机抽出 3 张 Event；增幅量保持 2 / 翻；护甲/耐久不变）。`knightEffect: 'growth-shield'` 最高 2 级 |
 | 10 | 弹幕护盾 | 2 | 3/3 | 完美格挡时，将 2 张「魔弹」加入手牌（手牌已满则静默丢弃多余的）。升级1：4 护甲，3/3 耐久（效果不变；`perfectBlockSpawnMissiles` 仍为 2）。升级2：4 护甲，3/3 耐久，`perfectBlockSpawnMissiles` 2 → 3（完美格挡生成 3 张「魔弹」）。`knightEffect: 'barrage-shield'` 最高 2 级 |
 | 11 | 雷震守护盾 | 8 | 1/1 | 遗言：击晕上限 +8%（封顶 100%）。升级1：`onDestroyEffect` `stunCap+8` → `stunCap+10`（护甲/耐久不变）。升级2：在 L1 基础上添加 `hasEquipmentRevive: true`（首次摧毁恢复 1 耐久，第二次摧毁才触发遗言）。`knightEffect: 'thunder-guard-shield'` 最高 2 级 |
 | 12 | 共御圣盾 | 6 | 1/1 | 复生（首次摧毁恢复 1 耐久）。遗言：所有装备栏 +4 临时护甲。 |

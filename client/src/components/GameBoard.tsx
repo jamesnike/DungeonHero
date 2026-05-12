@@ -4202,7 +4202,7 @@ export default function GameBoard() {
         };
       }
       if (slot?.amuletEffect === 'damage-class-discover') {
-        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 4 : 6;
+        const threshold = (slot.upgradeLevel ?? 0) >= 1 ? 6 : 8;
         return { ...slot, _counterDisplay: `${savedDamageStreak}/${threshold}` };
       }
       if (slot?.amuletEffect === 'magic-class-discover') {
@@ -6839,7 +6839,7 @@ export default function GameBoard() {
       }
       if (card.amuletEffect === 'damage-class-discover') {
         const streak = engine.getState().classDamageDiscoverStreak ?? 0;
-        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 4 : 6;
+        const threshold = (card.upgradeLevel ?? 0) >= 1 ? 6 : 8;
         updateDamageDiscoverCounter(streak, threshold);
       }
       if (card.amuletEffect === 'magic-class-discover') {

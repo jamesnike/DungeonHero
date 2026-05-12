@@ -32,11 +32,11 @@ function makeGrowthShield(idSuffix = 'gs', overrides: Partial<GameCardData> = {}
     id: `shield-${idSuffix}`,
     type: 'shield',
     name: '生长之盾',
-    value: 1,
+    value: 2,
     image: '',
     durability: 3,
     maxDurability: 3,
-    armorMax: 1,
+    armorMax: 2,
     amplifyOnFlip: true,
     onDestroyEffect: 'graveyard-event-to-hand',
     ...overrides,
@@ -84,8 +84,8 @@ describe('生长之盾 — amplifyOnFlip', () => {
 
     const result = drain(state, [{ type: 'APPLY_CARD_FLIP', card: fwd, cellIndex: 0 } as GameAction]);
     const slot = result.state.equipmentSlot1 as any;
-    expect(slot.value).toBe(2);
-    expect(slot.armorMax).toBe(2);
+    expect(slot.value).toBe(3);
+    expect(slot.armorMax).toBe(3);
     expect(slot.amplifyBonus).toBe(1);
     expect(result.state.amplifiedCardBonus['生长之盾']).toBe(1);
   });
@@ -184,8 +184,8 @@ describe('生长之盾 — amplifyOnFlip on reverse flips (back-flip)', () => {
     // Shield amplifyBonus / armorMax bumped via the AMPLIFY_CARDS_BY_NAME pipeline.
     const slot = result.state.equipmentSlot1 as any;
     expect(slot.amplifyBonus).toBe(1);
-    expect(slot.armorMax).toBe(2);
-    expect(slot.value).toBe(2);
+    expect(slot.armorMax).toBe(3);
+    expect(slot.value).toBe(3);
     expect(result.state.amplifiedCardBonus['生长之盾']).toBe(1);
   });
 
@@ -223,7 +223,7 @@ describe('生长之盾 — amplifyOnFlip on reverse flips (back-flip)', () => {
     // Shield amplifyBonus bumped exactly once (one back-flip happened).
     const slot = result.state.equipmentSlot1 as any;
     expect(slot.amplifyBonus).toBe(1);
-    expect(slot.armorMax).toBe(2);
+    expect(slot.armorMax).toBe(3);
     expect(result.state.amplifiedCardBonus['生长之盾']).toBe(1);
   });
 
@@ -249,8 +249,8 @@ describe('生长之盾 — amplifyOnFlip on reverse flips (back-flip)', () => {
     // Shield amplifyBonus bumped twice (two back-flips happened).
     const slot = result.state.equipmentSlot1 as any;
     expect(slot.amplifyBonus).toBe(2);
-    expect(slot.armorMax).toBe(3);
-    expect(slot.value).toBe(3);
+    expect(slot.armorMax).toBe(4);
+    expect(slot.value).toBe(4);
     expect(result.state.amplifiedCardBonus['生长之盾']).toBe(2);
   });
 });
@@ -357,8 +357,8 @@ describe('生长之盾 — amplifyOnFlipAmount (升级 1/2)', () => {
     const result = drain(state, [{ type: 'APPLY_CARD_FLIP', card: fwd, cellIndex: 0 } as GameAction]);
     const slot = result.state.equipmentSlot1 as any;
     expect(slot.amplifyBonus).toBe(2);
-    expect(slot.value).toBe(3);
-    expect(slot.armorMax).toBe(3);
+    expect(slot.value).toBe(4);
+    expect(slot.armorMax).toBe(4);
     expect(result.state.amplifiedCardBonus['生长之盾']).toBe(2);
   });
 

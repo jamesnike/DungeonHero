@@ -1107,7 +1107,7 @@ describe('reducer', () => {
       const result = reduce(state, {
         type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 2, source: 'spell',
       });
-      // Threshold (unupgraded) = 6; streak 3 → 4 should NOT trigger.
+      // Threshold (unupgraded) = 8; streak 3 → 4 should NOT trigger.
       expect(result.state.classDamageDiscoverStreak).toBe(4);
       expect(result.sideEffects.some(e => e.event === 'combat:classDamageDiscoverTriggered')).toBe(false);
     });
@@ -1119,15 +1119,74 @@ describe('reducer', () => {
       const discoverAmulet = { id: 'a1', type: 'amulet' as const, name: 'Discover', value: 0, amuletEffect: 'damage-class-discover' };
       const state = makeState({
         activeCards: slots,
-        classDamageDiscoverStreak: 5,
+        classDamageDiscoverStreak: 7,
         amuletSlots: [discoverAmulet as any],
       });
       const result = reduce(state, {
         type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 2, source: 'spell',
       });
-      // Threshold (unupgraded) = 6; streak 5 → 6 should trigger and reset.
+      // Threshold (unupgraded) = 8; streak 7 → 8 should trigger and reset.
       expect(result.state.classDamageDiscoverStreak).toBe(0);
       expect(result.sideEffects.some(e => e.event === 'combat:classDamageDiscoverTriggered')).toBe(true);
+    });
+
+    // Regression: 战痕之符 used to double-count because both the reducer (inline
+    // +1) AND a hook listener on `combat:classDamageHit` (which dispatched
+    // `RECORD_CLASS_DAMAGE_DISCOVER`, ticking another +1) fired for a single
+    // DEAL_DAMAGE_TO_MONSTER. The hook listener was deleted; the reducer is now
+    // the single source of truth via `applyClassDamageDiscoverTick`. This test
+    // locks in the +1 (not +2) per single damage hit semantics.
+    it('regression: a single DEAL_DAMAGE_TO_MONSTER ticks the streak by exactly +1 (not +2)', () => {
+      const monster = makeMonster();
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const discoverAmulet = { id: 'a1', type: 'amulet' as const, name: 'Discover', value: 0, amuletEffect: 'damage-class-discover' };
+      const state = makeState({
+        activeCards: slots,
+        classDamageDiscoverStreak: 0,
+        amuletSlots: [discoverAmulet as any],
+      });
+      const result = reduce(state, {
+        type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 1, source: 'spell',
+      });
+      expect(result.state.classDamageDiscoverStreak).toBe(1);
+    });
+
+    it('APPLY_SHIELD_REFLECT also ticks the discover streak by +1', () => {
+      const monster = makeMonster({ hp: 100, maxHp: 100, currentLayer: 5, fury: 5, hpLayers: 5 });
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const discoverAmulet = { id: 'a1', type: 'amulet' as const, name: 'Discover', value: 0, amuletEffect: 'damage-class-discover' };
+      const state = makeState({
+        activeCards: slots,
+        classDamageDiscoverStreak: 0,
+        amuletSlots: [discoverAmulet as any],
+      });
+      const result = reduce(state, {
+        type: 'APPLY_SHIELD_REFLECT',
+        monsterId: 'm1',
+        damage: 1,
+        sourceName: 'TestShield',
+      });
+      expect(result.state.classDamageDiscoverStreak).toBe(1);
+    });
+
+    it('two equipped amulets tick the streak by +2 per single damage hit (linear stacking)', () => {
+      const monster = makeMonster();
+      const slots = Array.from({ length: 5 }, () => null) as any;
+      slots[0] = monster;
+      const a1 = { id: 'a1', type: 'amulet' as const, name: 'Discover1', value: 0, amuletEffect: 'damage-class-discover' };
+      const a2 = { id: 'a2', type: 'amulet' as const, name: 'Discover2', value: 0, amuletEffect: 'damage-class-discover' };
+      const state = makeState({
+        activeCards: slots,
+        classDamageDiscoverStreak: 0,
+        amuletSlots: [a1 as any, a2 as any],
+      });
+      const result = reduce(state, {
+        type: 'DEAL_DAMAGE_TO_MONSTER', monsterId: 'm1', damage: 1, source: 'spell',
+      });
+      // Per amulet-stacking-design: progress counters tick +N for N amulets.
+      expect(result.state.classDamageDiscoverStreak).toBe(2);
     });
   });
 

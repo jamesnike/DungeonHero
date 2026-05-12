@@ -1668,14 +1668,14 @@ describe('Growth Shield (生长之盾) upgrade handler', () => {
       id: 'knight-growth-shield-1',
       type: 'shield',
       name: '生长之盾',
-      value: 1,
+      value: 2,
       image: '',
       classCard: true,
       description: '装备时：每发生一次卡牌翻转，该护盾增幅一次（按卡名累计 +1 护甲）。遗言：从坟场随机抽出一张 Event 加入手牌。',
       shortDescription: '每次卡牌翻转 +1 护甲；遗言：随机入手 1 张坟场 Event',
       durability: 4,
       maxDurability: 4,
-      armorMax: 1,
+      armorMax: 2,
       amplifyOnFlip: true,
       onDestroyEffect: 'graveyard-event-to-hand',
       knightEffect: 'growth-shield',
@@ -1697,8 +1697,8 @@ describe('Growth Shield (生长之盾) upgrade handler', () => {
     expect(upgraded.upgradeLevel).toBe(1);
     expect(upgraded.amplifyOnFlipAmount).toBe(2);
     expect(upgraded.amplifyOnFlip).toBe(true);
-    expect(upgraded.value).toBe(1);
-    expect(upgraded.armorMax).toBe(1);
+    expect(upgraded.value).toBe(2);
+    expect(upgraded.armorMax).toBe(2);
     expect(upgraded.durability).toBe(4);
     expect(upgraded.maxDurability).toBe(4);
     expect(upgraded.onDestroyEffect).toBe('graveyard-event-to-hand');
@@ -1722,8 +1722,8 @@ describe('Growth Shield (生长之盾) upgrade handler', () => {
     expect(upgraded.amplifyOnFlipAmount).toBe(2);
     expect(upgraded.onDestroyEventCount).toBe(3);
     expect(upgraded.amplifyOnFlip).toBe(true);
-    expect(upgraded.value).toBe(1);
-    expect(upgraded.armorMax).toBe(1);
+    expect(upgraded.value).toBe(2);
+    expect(upgraded.armorMax).toBe(2);
     expect(upgraded.durability).toBe(4);
     expect(upgraded.maxDurability).toBe(4);
     expect(upgraded.onDestroyEffect).toBe('graveyard-event-to-hand');
@@ -1742,8 +1742,8 @@ describe('Growth Shield (生长之盾) upgrade handler', () => {
     expect(upgraded.amplifyOnFlipAmount).toBe(2);
     expect(upgraded.onDestroyEventCount).toBe(3);
     expect(upgraded.amplifyOnFlip).toBe(true);
-    expect(upgraded.value).toBe(1);
-    expect(upgraded.armorMax).toBe(1);
+    expect(upgraded.value).toBe(2);
+    expect(upgraded.armorMax).toBe(2);
     expect(upgraded.durability).toBe(4);
     expect(upgraded.maxDurability).toBe(4);
   });

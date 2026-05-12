@@ -151,7 +151,7 @@ describe('智者圣盾 入场 — PLAY_CARD 路径', () => {
 // ---------------------------------------------------------------------------
 
 describe('智者圣盾 入场 — EQUIP_FROM_HAND 路径', () => {
-  it('拖到装备栏：同样从背包抽 2 张牌进手牌', () => {
+  it('拖到装备栏：从背包抽 2 张牌进手牌（不算自己）', () => {
     const shield = makeShield({ id: 's-scholar-drag' });
     const bp1 = makeBackpackCard('bp-d1');
     const bp2 = makeBackpackCard('bp-d2');
@@ -171,15 +171,86 @@ describe('智者圣盾 入场 — EQUIP_FROM_HAND 路径', () => {
     });
     state = drain(r.state, r.enqueuedActions ?? []).state;
 
-    // EQUIP_FROM_HAND 只跑 on-equip / equip-empower / amulet-cap progress；
-    // 槽位写入与手牌剔除分别在 SET_EQUIPMENT_SLOT / UPDATE_HAND_CARDS 里
-    // （由 useCardOperations 编排），所以这里只断言抽牌 side effect 真的发生：
-    // 手牌长度从 1（shield）→ 3（shield + 2 张抽出 backpack 牌），背包 3 → 1。
-    expect(state.handCards.length).toBe(3);
-    expect(state.handCards.some(c => c.id === shield.id)).toBe(true);
-    const drawnFromBp = state.handCards.filter(c => c.id !== shield.id).map(c => c.id);
-    expect(drawnFromBp.every(id => ['bp-d1', 'bp-d2', 'bp-d3'].includes(id))).toBe(true);
-    expect(drawnFromBp.length).toBe(2);
+    // EQUIP_FROM_HAND reducer 现在先把卡从手牌剔除（mirror PLAY_CARD），
+    // 再走 executeOnEquip → enqueue DRAW_CARDS。所以 drain 后手牌里只有
+    // 2 张刚抽出来的背包牌，不含 shield。槽位写入仍由 hook 层 dispatch
+    // SET_EQUIPMENT_SLOT 完成，不在本 reducer 职责内。
+    expect(state.handCards.length).toBe(2);
+    expect(state.handCards.some(c => c.id === shield.id)).toBe(false);
+    const drawnIds = state.handCards.map(c => c.id);
+    expect(drawnIds.every(id => ['bp-d1', 'bp-d2', 'bp-d3'].includes(id))).toBe(true);
+    expect(state.backpackItems.length).toBe(1);
+  });
+
+  // Regression: 这一条就是 user 报的 bug —— 手牌满（HAND_LIMIT=7）时拖
+  // 智者圣盾入栏，应该把自己当作"staging 中"不算手牌，所以抽 2 张牌后
+  // 手牌还是 6（原本 7 - shield + 2 抽 = 8 越上限；hook 层后续会再 -1
+  // 因为 consumeCardFromHand 是 noop = idempotent，但 reducer 已经把
+  // shield 移除，所以实际是 7 - shield + 2 = 8 → 受 limit 截到 7）。
+  //
+  // 关键不变量：reduce 后**不应该有 0 张被抽出来的情况** —— shield 自己
+  // 应该让出 1 个手牌格，进而至少能抽 1 张；hand-limit 上限到 7。
+  it('regression: 手牌满 (HAND_LIMIT=7) 拖入仍按背包剩余 + 限 - 1 抽满', () => {
+    const shield = makeShield({ id: 's-scholar-full' });
+    const filler = (i: number) =>
+      ({ id: `filler-${i}`, type: 'magic', name: `filler-${i}`, value: 0, image: '', magicType: 'instant' } as GameCardData);
+    const bpA = makeBackpackCard('bp-A');
+    const bpB = makeBackpackCard('bp-B');
+
+    // 7 张手牌（含 shield，已到 HAND_LIMIT=7），背包 2 张候选
+    let state = makeState({
+      handCards: [filler(1), filler(2), filler(3), filler(4), filler(5), filler(6), shield],
+      backpackItems: [bpA, bpB],
+      equipmentSlot1: null,
+      phase: 'playerInput',
+    });
+
+    const r = reduce(state, {
+      type: 'EQUIP_FROM_HAND',
+      card: shield,
+      slotId: 'equipmentSlot1',
+    });
+    state = drain(r.state, r.enqueuedActions ?? []).state;
+
+    // shield 已从手牌移除 → 剩 6 filler；DRAW_CARDS count=2 在新 state 上
+    // 跑，HAND_LIMIT - 6 = 1 个 slot 可抽。所以 1 张被抽出来（不是 0）。
+    // 这正是 user 报的"shouldn't count self"语义：shield 自己腾出来的
+    // 这格让抽牌生效，bug 前是 0 张被抽。
+    expect(state.handCards.some(c => c.id === shield.id)).toBe(false);
+    expect(state.handCards.length).toBe(7);
+    const drawnCount = state.handCards.filter(c => ['bp-A', 'bp-B'].includes(c.id)).length;
+    expect(drawnCount).toBe(1);
+    expect(state.backpackItems.length).toBe(1);
+  });
+
+  it('regression: 手牌 6 (HAND_LIMIT - 1) 拖入抽满 2 张到 7', () => {
+    const shield = makeShield({ id: 's-scholar-near-full' });
+    const filler = (i: number) =>
+      ({ id: `filler-${i}`, type: 'magic', name: `filler-${i}`, value: 0, image: '', magicType: 'instant' } as GameCardData);
+    const bpA = makeBackpackCard('bp-A2');
+    const bpB = makeBackpackCard('bp-B2');
+    const bpC = makeBackpackCard('bp-C2');
+
+    // 6 张手牌（含 shield；HAND_LIMIT-1），背包 3 张
+    let state = makeState({
+      handCards: [filler(1), filler(2), filler(3), filler(4), filler(5), shield],
+      backpackItems: [bpA, bpB, bpC],
+      equipmentSlot1: null,
+      phase: 'playerInput',
+    });
+
+    const r = reduce(state, {
+      type: 'EQUIP_FROM_HAND',
+      card: shield,
+      slotId: 'equipmentSlot1',
+    });
+    state = drain(r.state, r.enqueuedActions ?? []).state;
+
+    // shield 出后 5 张，可抽 2 张到 7 = HAND_LIMIT。
+    expect(state.handCards.some(c => c.id === shield.id)).toBe(false);
+    expect(state.handCards.length).toBe(7);
+    const drawnCount = state.handCards.filter(c => ['bp-A2', 'bp-B2', 'bp-C2'].includes(c.id)).length;
+    expect(drawnCount).toBe(2);
     expect(state.backpackItems.length).toBe(1);
   });
 });

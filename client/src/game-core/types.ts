@@ -673,12 +673,19 @@ export interface GameState {
    *     instead of the full `classDeck`. Used by both 祭坛秘术 variants
    *     (`altar-discover-class-magic` / `altar-discard-discover`) which only
    *     discover class-magic cards.
+   *   - `postInjectTopOnRecycleRestore`: when true, the drained BEGIN_DISCOVER
+   *     re-applies the 「右翼回响」"discover + 置顶" injection so the chosen
+   *     card lands with `topOnRecycleRestore: true`. Used by `reduceBeginDiscover`
+   *     when deferring a BEGIN_DISCOVER request that had this flag set (e.g.
+   *     while `activeMonsterReward` was blocking the modal from opening
+   *     immediately) — see `recycle-to-backpack-animation` / queue defer logic.
    */
   pendingClassDiscoverQueue: Array<{
     source: string;
     sourceLabel?: string | null;
     delivery?: 'backpack' | 'hand-first';
     magicOnly?: boolean;
+    postInjectTopOnRecycleRestore?: boolean;
   }>;
   deleteModalOpen: boolean;
   upgradeModalOpen: boolean;

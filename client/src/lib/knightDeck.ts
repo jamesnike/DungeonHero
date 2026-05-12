@@ -738,7 +738,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
   pushCard({
     type: 'shield',
     name: '生长之盾',
-    value: 1,
+    value: 2,
     image: knightGrowthShieldImage,
     classCard: true,
     description: '装备时：每发生一次卡牌翻转，该护盾增幅一次（按卡名累计 +1 护甲）。遗言：从坟场随机抽出一张 Event 加入手牌。',
@@ -747,7 +747,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     onDestroyEffect: 'graveyard-event-to-hand',
     durability: 4,
     maxDurability: 4,
-    armorMax: 1,
+    armorMax: 2,
     knightEffect: 'growth-shield',
     maxUpgradeLevel: 2,
   });
@@ -1047,7 +1047,7 @@ export function generateKnightDeck(rng: RngState): [KnightCardData[], RngState] 
     image: starterAmuletDamageDiscoverImage,
     classCard: true,
     amuletEffect: 'damage-class-discover',
-    shortDescription: '每造成 6 次伤害：发现 1 张专属',
+    shortDescription: '每造成 8 次伤害：发现 1 张专属',
   });
 
   pushAmulet({
