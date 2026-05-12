@@ -58,7 +58,7 @@ describe('Monster graveyard currentLayer reset', () => {
     });
 
     it('preserves the layer cap (fury / hpLayers) from rage rule', () => {
-      // Dragon rule: base 2, interval 4 → at rageTurn 10, fury = min(4, 2 + floor(10/4)) = 4.
+      // Dragon rule: base 2, interval 5 → at rageTurn 10, fury = min(4, 2 + floor(10/5)) = 4.
       const dragon = makeMultiLayerDragon({ currentLayer: 1, rageTurn: 10 });
       const reset = resetMonsterForGraveyard(dragon);
       expect(reset.currentLayer).toBe(1);
